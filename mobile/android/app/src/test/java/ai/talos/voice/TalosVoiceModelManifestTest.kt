@@ -37,6 +37,7 @@ class TalosVoiceModelManifestTest {
         assertEquals("deadbeef", artifact.revision)
         assertEquals("Repo-A-Dir", artifact.targetDir)
         assertEquals(listOf("a.onnx", "b.json"), artifact.files.map { it.path })
+        assertEquals(listOf("a.onnx", "b.json"), artifact.files.map { it.targetPath })
         assertEquals(listOf(10L, 20L), artifact.files.map { it.size })
         assertEquals(listOf("h".repeat(64), "i".repeat(64)), artifact.files.map { it.sha256 })
     }

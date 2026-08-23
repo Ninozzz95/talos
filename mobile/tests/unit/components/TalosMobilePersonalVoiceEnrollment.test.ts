@@ -386,7 +386,11 @@ describe('TalosMobilePersonalVoiceEnrollment', () => {
     })
 
     it('PVOICE-UI-04 after all 12 phrases, encoding calls buildEnrollmentProfile with the typed name', async () => {
-        bridge.buildVoiceEnrollmentProfile.mockResolvedValue({ frameCount: 40, quantizerCount: 16, enrollmentDurationMs: 24000 })
+        bridge.buildVoiceEnrollmentProfile.mockResolvedValue({
+            backend: 'pocket-v2', profileSchemaVersion: 2, sourceSampleRate: 48000,
+            sourceSamples: 768000, referenceSamples: 576000, referenceDurationMs: 12000,
+            conditioningFrames: 150, conditioningDimension: 1024, enrollmentDurationMs: 24000, stages: [],
+        })
         const wrapper = mount(TalosMobilePersonalVoiceEnrollment, {
             props: { existingProfileCount: 0 },
             // ⛔ 22/8: il dialog ora esce con `<Teleport to="body">` (un
@@ -437,7 +441,11 @@ describe('TalosMobilePersonalVoiceEnrollment', () => {
             engineBuild: 'x'.repeat(64), compatible: true, createdAtEpochMs: 0, enrollmentDurationMs: 24000,
         }
         bridge.commitVoiceEnrollmentProfile.mockResolvedValue(summary)
-        bridge.buildVoiceEnrollmentProfile.mockResolvedValue({ frameCount: 40, quantizerCount: 16, enrollmentDurationMs: 24000 })
+        bridge.buildVoiceEnrollmentProfile.mockResolvedValue({
+            backend: 'pocket-v2', profileSchemaVersion: 2, sourceSampleRate: 48000,
+            sourceSamples: 768000, referenceSamples: 576000, referenceDurationMs: 12000,
+            conditioningFrames: 150, conditioningDimension: 1024, enrollmentDurationMs: 24000, stages: [],
+        })
         const wrapper = mount(TalosMobilePersonalVoiceEnrollment, {
             props: { existingProfileCount: 0 },
             // ⛔ 22/8: il dialog ora esce con `<Teleport to="body">` (un
