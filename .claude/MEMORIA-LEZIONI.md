@@ -21,6 +21,18 @@
 - ⛔⛔⛔⭐⭐⭐ [IL GUARDIANO ACCUSAVA LA SESSIONE DELL'OWNER](il-guardiano-accusava-la-sessione-dellowner.md) — la sorveglianza gridava «3 ORFANI, rubano CPU» e uno era **`codex resume` dell'owner, vivo**: nomina un harness, è nato dopo la corsa, e il genitore è morto perché è una shell staccata. **Due volte a un passo dall'ucciderlo**, e la seconda gli stessi tre erano un albero **vivo della campagna** su un task pagato. ⛔ **Terza forma** dello stesso difetto in un giorno: *un filtro che riconosce la MENZIONE invece della cosa*. ⭐ Cura: l'appartenenza **si prova** — l'orfano o un suo figlio devono toccare una cartella `banco-*`. ⭐ E ogni allarme porta **CHI**, non solo quanti. ⛔ Quattro banchi di prova a mano hanno MENTITO (gli escape non sopravvivono alla shell): si prova dalla **porta vera**, `unGiro()`
 - ⛔⛔⭐⭐ [IL DEBUG WIRELESS MOSTRA IL PAD DUE VOLTE](il-debug-wireless-mostra-il-pad-due-volte.md) — due trasporti per lo stesso tablet ⇒ ogni adb senza `-s` muore con *more than one device/emulator*. ⛔ `run-device-tests.mjs` **stampava** l'indirizzo e poi falliva all'install: sapere e non passare. ⭐ Riparato (seriale scelto una volta, passato ovunque, si ferma se non è collegato) e dotato di **prova a secco** `TALOS_PROVA_A_SECCO=1`: i comandi che leggono girano davvero, quelli che cambiano il telefono si stampano. ⛔ `termica.mjs` no: vuole `ANDROID_SERIAL`
 
+## ✅ Spostate qui il 23/8 (seconda tranche) — tre lezioni chiuse rimaste nell'indice sbagliato
+
+> ⛔ `MEMORY.md` era di nuovo sopra il tetto d'allarme (19.987 byte su
+> 19.900) dopo l'aggiunta del terzo documento custodito sul motore locale
+> (il piano tecnico Fase 4/5). Questi tre bullet erano già senza `🔜` — cioè
+> già lezioni chiuse, mai migrate dall'indice degli aperti. Testo
+> invariato, solo spostato e marcato ✅.
+
+- ✅⛔⭐⭐ [Plugin Capacitor terzo che crasha: si SCAVALCA con load()](plugin-capacitor-terze-parti-si-scavalca.md)
+- ✅⛔⭐⭐ [OnePlus 13: crash avvio, getPermissionState NULL](getpermissionstate-torna-null.md) — chiuso; manca il giro completo
+- ✅⛔⛔⭐⭐⭐ [ROMA a chi era a CATANIA](roma-a-chi-era-a-catania.md) — la precisa era negata e tacevamo; ⛔ la mia nota era falsa: 6 decimali, il codice ne fa 4
+
 ## ✅ CHIUSI — le lezioni che restano
 
 > ⛔ Spostate qui il 2026-08-23: `MEMORY.md` era a **20.140 byte**, SOPRA il
