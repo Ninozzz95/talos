@@ -6,13 +6,18 @@ import importlib.util
 import json
 import math
 import os
+import platform
 import time
 from pathlib import Path
 
 import numpy as np
+import onnxruntime as ort
+import scipy
+import sentencepiece as spm
 
 
 PINNED_WRAPPER_REVISION = "58a6d00cf13d239b6748cb0769f35c580a8f606c"
+PINNED_ONNX_RUNTIME_VERSION = "1.29.0"
 PINNED_UPSTREAM_SOURCES = {
     "pocket_tts_onnx.py": "4381a4396ba08b2626a25a87001e3c51dbacd136e1022d2d40a8cefb14b44be0",
     "reference_sample.wav": "88fbb0d31ec26674e97e531a71758cabe4e0e4e5b5a18dafa783021a7f5c9366",
@@ -30,6 +35,261 @@ def sha256_file(path):
         while chunk := source.read(1024 * 1024):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def runtime_provenance():
+    return {
+        "python": platform.python_version(),
+        "implementation": platform.python_implementation(),
+        "system": platform.system(),
+        "machine": platform.machine(),
+        "onnxRuntime": ort.__version__,
+        "numpy": np.__version__,
+        "scipy": scipy.__version__,
+        "sentencePiece": spm.__version__,
+    }
+
+
+def require_pinned_runtime(provenance):
+    actual = provenance.get("onnxRuntime")
+    if actual != PINNED_ONNX_RUNTIME_VERSION:
+        raise ValueError(
+            "host ONNX Runtime must be "
+            f"{PINNED_ONNX_RUNTIME_VERSION}, found {actual or '<missing>'}"
+        )
+    return provenance
+
+
+def float32_contract(values):
+    contiguous = np.ascontiguousarray(values, dtype=np.dtype("<f4"))
+    payload = contiguous.tobytes(order="C")
+    return {
+        "shape": [int(value) for value in contiguous.shape],
+        "byteLength": len(payload),
+        "sha256": sha256_bytes(payload),
+    }
+
+
+def canonical_array_bytes(values, dtype, shape):
+    dtype_map = {
+        "float32": np.dtype("<f4"),
+        "float16": np.dtype("<f2"),
+        "int64": np.dtype("<i8"),
+        "bool": np.dtype("?"),
+    }
+    if dtype not in dtype_map:
+        raise ValueError(f"unsupported state dtype: {dtype}")
+    expected_shape = tuple(int(dimension) for dimension in shape)
+    source = np.asarray(values)
+    if source.shape != expected_shape:
+        raise ValueError(
+            f"state shape differs: expected {expected_shape}, found {source.shape}"
+        )
+    expected_dtype = dtype_map[dtype]
+    if source.dtype.kind != expected_dtype.kind or source.dtype.itemsize != expected_dtype.itemsize:
+        raise ValueError(
+            f"state dtype differs: expected {dtype}, found {source.dtype}"
+        )
+    canonical = np.ascontiguousarray(source, dtype=expected_dtype)
+    return canonical.tobytes(order="C")
+
+
+def state_sha256(state, manifest):
+    expected_names = [entry["input_name"] for entry in manifest]
+    if len(expected_names) != len(set(expected_names)):
+        raise ValueError("state manifest input names are duplicated")
+    if set(state) != set(expected_names):
+        raise ValueError("state keys differ from the state manifest")
+    digest = hashlib.sha256()
+    for entry in manifest:
+        shape = [int(dimension) for dimension in entry["shape"]]
+        header = (
+            f'{entry["input_name"]}\0{entry["output_name"]}\0'
+            f'{entry["dtype"]}\0{",".join(str(value) for value in shape)}\0'
+        ).encode("utf-8")
+        digest.update(header)
+        digest.update(
+            canonical_array_bytes(
+                state[entry["input_name"]],
+                entry["dtype"],
+                shape,
+            )
+        )
+    return digest.hexdigest()
+
+
+def collect_flow_boundary_trace(engine, source, conditioning, max_frames):
+    if not isinstance(source, str) or not source.strip():
+        raise ValueError("source must be non-empty")
+    if not isinstance(max_frames, int) or not 1 <= max_frames <= MAX_ORACLE_FRAMES:
+        raise ValueError(f"maxFrames must be in [1, {MAX_ORACLE_FRAMES}]")
+    if float(engine.temperature) != 0.0:
+        raise ValueError("flow boundary trace requires temperature zero")
+    if int(engine.lsd_steps) != 1:
+        raise ValueError("flow boundary trace requires one LSD step")
+
+    chunks = engine._split_into_best_sentences(source)
+    if len(chunks) != 1:
+        raise ValueError("flow boundary trace requires exactly one text chunk")
+    chunk = chunks[0]
+    text_ids = np.ascontiguousarray(engine._tokenize(chunk), dtype=np.dtype("<i8"))
+    if text_ids.ndim != 2 or text_ids.shape[0] != 1 or text_ids.shape[1] < 1:
+        raise ValueError(f"unexpected token id shape: {text_ids.shape}")
+    voice_embeddings = np.ascontiguousarray(
+        engine._prepare_voice_embeddings(conditioning),
+        dtype=np.dtype("<f4"),
+    )
+    state = engine._init_state(engine.flow_state_manifest)
+    empty_sequence = np.zeros((1, 0, engine.latent_dim), dtype=np.float32)
+    empty_text = np.zeros((1, 0, engine.conditioning_dim), dtype=np.float32)
+
+    voice_started_at = time.perf_counter_ns()
+    result = engine.flow_lm_main.run(
+        None,
+        {
+            "sequence": empty_sequence,
+            "text_embeddings": voice_embeddings,
+            **state,
+        },
+    )
+    voice_duration_ns = time.perf_counter_ns() - voice_started_at
+    engine._update_state_from_outputs(
+        state,
+        result,
+        engine.flow_state_manifest,
+        output_offset=2,
+    )
+    voice_state_sha256 = state_sha256(state, engine.flow_state_manifest)
+
+    text_started_at = time.perf_counter_ns()
+    text_embeddings = np.ascontiguousarray(
+        engine.text_conditioner.run(None, {"token_ids": text_ids})[0],
+        dtype=np.dtype("<f4"),
+    )
+    text_duration_ns = time.perf_counter_ns() - text_started_at
+    if text_embeddings.ndim == 2:
+        text_embeddings = text_embeddings[None]
+    expected_text_shape = (1, int(text_ids.shape[1]), int(engine.conditioning_dim))
+    if text_embeddings.shape != expected_text_shape:
+        raise ValueError(
+            f"unexpected text embedding shape: expected {expected_text_shape}, "
+            f"found {text_embeddings.shape}"
+        )
+
+    text_prefill_started_at = time.perf_counter_ns()
+    result = engine.flow_lm_main.run(
+        None,
+        {
+            "sequence": empty_sequence,
+            "text_embeddings": text_embeddings,
+            **state,
+        },
+    )
+    text_prefill_duration_ns = time.perf_counter_ns() - text_prefill_started_at
+    engine._update_state_from_outputs(
+        state,
+        result,
+        engine.flow_state_manifest,
+        output_offset=2,
+    )
+    text_state_sha256 = state_sha256(state, engine.flow_state_manifest)
+
+    prepared = engine._prepare_text_prompt(chunk)
+    frames_after_eos = (
+        engine.model_recommended_frames_after_eos
+        if getattr(engine, "model_recommended_frames_after_eos", None) is not None
+        else prepared[1] + 2
+    )
+    current = np.full((1, 1, engine.latent_dim), np.nan, dtype=np.float32)
+    eos_step = None
+    frames = []
+    latents = []
+    for frame_index in range(max_frames):
+        main_started_at = time.perf_counter_ns()
+        result = engine.flow_lm_main.run(
+            None,
+            {
+                "sequence": current,
+                "text_embeddings": empty_text,
+                **state,
+            },
+        )
+        main_duration_ns = time.perf_counter_ns() - main_started_at
+        conditioning_output = np.ascontiguousarray(result[0], dtype=np.dtype("<f4"))
+        eos_output = np.ascontiguousarray(result[1], dtype=np.dtype("<f4"))
+        engine._update_state_from_outputs(
+            state,
+            result,
+            engine.flow_state_manifest,
+            output_offset=2,
+        )
+        if conditioning_output.shape != (1, engine.conditioning_dim):
+            raise ValueError(f"unexpected Flow conditioning shape: {conditioning_output.shape}")
+        if eos_output.size != 1:
+            raise ValueError(f"unexpected Flow EOS shape: {eos_output.shape}")
+        eos_logit = float(eos_output.reshape(-1)[0])
+        if eos_logit > -4.0 and eos_step is None:
+            eos_step = frame_index
+        if eos_step is not None and frame_index >= eos_step + frames_after_eos:
+            break
+
+        x = np.zeros((1, engine.latent_dim), dtype=np.float32)
+        flow_direction = None
+        flow_duration_ns = 0
+        for s_array, t_array in engine._st_buffers:
+            flow_started_at = time.perf_counter_ns()
+            flow_direction = np.ascontiguousarray(
+                engine.flow_lm_flow.run(
+                    None,
+                    {
+                        "c": conditioning_output,
+                        "s": s_array,
+                        "t": t_array,
+                        "x": x,
+                    },
+                )[0],
+                dtype=np.dtype("<f4"),
+            )
+            flow_duration_ns += time.perf_counter_ns() - flow_started_at
+            x = np.ascontiguousarray(x + flow_direction, dtype=np.dtype("<f4"))
+        if flow_direction is None or x.shape != (1, engine.latent_dim):
+            raise ValueError("unexpected Flow direction output")
+        latent = x.reshape(1, 1, engine.latent_dim)
+        frame = {
+            "frameIndex": frame_index,
+            "eosLogit": eos_logit,
+            "conditioningSha256": float32_contract(conditioning_output)["sha256"],
+            "flowDirectionSha256": float32_contract(flow_direction)["sha256"],
+            "latentSha256": float32_contract(latent)["sha256"],
+            "flowMainDurationNs": main_duration_ns,
+            "flowStepDurationNs": flow_duration_ns,
+        }
+        if frame_index < 2:
+            frame["arStateSha256"] = state_sha256(state, engine.flow_state_manifest)
+        frames.append(frame)
+        latents.append(latent)
+        current = latent
+
+    latent_values = (
+        np.concatenate(latents, axis=1)
+        if latents
+        else np.zeros((1, 0, engine.latent_dim), dtype=np.float32)
+    )
+    return {
+        "schemaVersion": 1,
+        "tokenCount": int(text_ids.shape[1]),
+        "tokenIdsSha256": sha256_bytes(canonical_array_bytes(text_ids, "int64", text_ids.shape)),
+        "preparedVoiceEmbeddings": float32_contract(voice_embeddings),
+        "voicePrefillDurationNs": voice_duration_ns,
+        "voicePrefillStateSha256": voice_state_sha256,
+        "textConditionerDurationNs": text_duration_ns,
+        "textEmbeddings": float32_contract(text_embeddings),
+        "textPrefillDurationNs": text_prefill_duration_ns,
+        "textPrefillStateSha256": text_state_sha256,
+        "frameCount": len(frames),
+        "latentSha256": float32_contract(latent_values)["sha256"],
+        "frames": frames,
+    }
 
 
 def verify_upstream_sources(root, expected=PINNED_UPSTREAM_SOURCES):
@@ -156,12 +416,7 @@ def export_public_conditioning(engine, public_voice_path):
         raise ValueError(f"unexpected conditioning shape: {conditioning.shape}")
     if not np.isfinite(conditioning).all():
         raise ValueError("conditioning contains non-finite values")
-    payload = conditioning.tobytes(order="C")
-    return conditioning, {
-        "shape": [int(value) for value in conditioning.shape],
-        "byteLength": len(payload),
-        "sha256": sha256_bytes(payload),
-    }
+    return conditioning, float32_contract(conditioning)
 
 
 def load_upstream_engine(source_root, temperature):
@@ -234,6 +489,7 @@ def parse_arguments():
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--arrays-output", required=True, type=Path)
     parser.add_argument("--conditioning-output", type=Path)
+    parser.add_argument("--latents-output", type=Path)
     parser.add_argument("--pcm-output", type=Path)
     return parser.parse_args()
 
@@ -252,23 +508,39 @@ def main():
         max_frames=selected["maxFrames"],
         temperature=arguments.temperature,
     )
+    result["runtime"] = require_pinned_runtime(runtime_provenance())
     result["upstream"] = {
         "repository": "KevinAHM/pocket-tts-onnx",
         "revision": PINNED_WRAPPER_REVISION,
         "wrapperSha256": verified_sources["pocket_tts_onnx.py"],
         "publicFixtureSha256": verified_sources["reference_sample.wav"],
     }
+    conditioning, conditioning_contract = export_public_conditioning(
+        engine,
+        arguments.source_root / "reference_sample.wav",
+    )
+    flow_boundaries = collect_flow_boundary_trace(
+        engine=engine,
+        source=selected["text"],
+        conditioning=conditioning,
+        max_frames=selected["maxFrames"],
+    )
+    if flow_boundaries["latentSha256"] != result["latentSha256"]:
+        raise ValueError("flow boundary trace does not reproduce the oracle latent output")
+    result["flowBoundaries"] = flow_boundaries
     if arguments.conditioning_output is not None:
-        conditioning, contract = export_public_conditioning(
-            engine,
-            arguments.source_root / "reference_sample.wav",
-        )
         write_float32_atomic(arguments.conditioning_output, conditioning)
-        if sha256_file(arguments.conditioning_output) != contract["sha256"]:
+        if sha256_file(arguments.conditioning_output) != conditioning_contract["sha256"]:
             raise ValueError("conditioning output changed while writing")
-        result["conditioning"] = contract
+        result["conditioning"] = conditioning_contract
     write_arrays_atomic(arguments.arrays_output, arrays)
     result["arraysSha256"] = sha256_file(arguments.arrays_output)
+    if arguments.latents_output is not None:
+        contract = float32_contract(arrays["latents"])
+        write_float32_atomic(arguments.latents_output, arrays["latents"])
+        if sha256_file(arguments.latents_output) != contract["sha256"]:
+            raise ValueError("latent output changed while writing")
+        result["latents"] = contract
     if arguments.pcm_output is not None:
         write_float32_atomic(arguments.pcm_output, arrays["pcm"])
         if sha256_file(arguments.pcm_output) != result["pcmSha256"]:
