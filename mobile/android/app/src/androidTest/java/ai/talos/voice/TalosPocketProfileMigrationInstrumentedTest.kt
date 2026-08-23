@@ -16,6 +16,38 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class TalosPocketProfileMigrationInstrumentedTest {
     @Test
+    fun migrationCommitterRejectsAChangedV1SnapshotBeforeWritingV2() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val store = TalosVoiceProfileStore(context)
+        val legacy = sampleLegacyProfile()
+        try {
+            store.save(legacy)
+            store.rename(legacy.header.profileId, "Profilo modificato durante la preview")
+            val candidate = TalosVoiceProfileV2.migratedFrom(legacy, samplePocketPayload())
+
+            assertThrows(IllegalStateException::class.java) {
+                TalosVoiceProfileStoreMigrationCommitter(store).commit(legacy, candidate)
+            }
+
+            val active = store.loadAny(legacy.header.profileId)
+            assertTrue(active is TalosStoredVoiceProfile.Legacy)
+            assertEquals(
+                "Profilo modificato durante la preview",
+                (active as TalosStoredVoiceProfile.Legacy).profile.header.displayName,
+            )
+            assertFalse(store.hasV1Rollback(legacy.header.profileId))
+            assertFalse(
+                TalosVoiceProfileCipher.hasKey(
+                    legacy.header.profileId,
+                    TalosVoiceProfileHeaderV2.SCHEMA_VERSION,
+                ),
+            )
+        } finally {
+            store.delete(legacy.header.profileId)
+        }
+    }
+
+    @Test
     fun migrationFailureRestoresTheExactV1CiphertextAndDeletesTheV2Key() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val store = TalosVoiceProfileStore(context)

@@ -221,6 +221,39 @@ internal class TalosVoiceProfileStore(private val context: Context) {
  * between candidate commit, authentication and preview cannot silently turn
  * the only readable V1 file into an unverified V2 file.
  */
+internal class TalosVoiceProfileStoreMigrationCommitter(
+    private val store: TalosVoiceProfileStore,
+) : TalosVoiceProfileMigrationCommitter {
+    override fun commit(
+        expectedLegacy: TalosVoiceProfileV1,
+        candidate: TalosVoiceProfileV2,
+    ): TalosVoiceProfileV2 {
+        check(candidate.header.profileId == expectedLegacy.header.profileId) {
+            "voice profile migration candidate changed the profile id"
+        }
+        return store.migrateV1ToV2Atomically(
+            profileId = expectedLegacy.header.profileId,
+            convert = { liveLegacy ->
+                check(liveLegacy.contentEquals(expectedLegacy)) {
+                    "voice profile V1 changed after migration preview"
+                }
+                candidate
+            },
+            verify = { authenticated ->
+                check(authenticated == candidate) { "voice profile V2 authenticated readback differs" }
+            },
+        )
+    }
+
+    private fun TalosVoiceProfileV1.contentEquals(other: TalosVoiceProfileV1): Boolean =
+        header == other.header &&
+            qualityMetrics == other.qualityMetrics &&
+            promptAudioCodes.size == other.promptAudioCodes.size &&
+            promptAudioCodes.indices.all { index ->
+                promptAudioCodes[index].contentEquals(other.promptAudioCodes[index])
+            }
+}
+
 internal object TalosVoiceProfileMigrationTransaction {
     fun <T> run(
         original: ByteArray,

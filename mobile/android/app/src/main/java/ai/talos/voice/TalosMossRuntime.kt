@@ -162,6 +162,33 @@ internal class TalosMossRuntime private constructor(
      * `_load_reference_audio` does for a mono source against a stereo
      * codec, read from that source rather than guessed.
      */
+    /**
+     * Decodes the exact enrolled MOSS prompt with the pinned full-codec
+     * graph. This is the only bridge used by the V1 -> V2 migrator: it
+     * exposes mono PCM and the manifest sample rate, never codec internals.
+     */
+    fun decodeReferenceAudio(promptAudioCodes: List<IntArray>): TalosDecodedVoiceReference {
+        require(promptAudioCodes.isNotEmpty()) { "promptAudioCodes must not be empty" }
+        require(promptAudioCodes.size <= TalosMossPromptPayload.MAX_FRAMES) {
+            "promptAudioCodes exceeds the profile frame limit"
+        }
+        val quantizerCount = manifest.ttsConfig.nVq
+        val codebookSizes = manifest.ttsConfig.audioCodebookSizes
+        require(codebookSizes.size >= quantizerCount) { "MOSS codebook metadata is incomplete" }
+        require(promptAudioCodes.all { it.size == quantizerCount }) {
+            "promptAudioCodes row width differs from the active MOSS manifest"
+        }
+        require(
+            promptAudioCodes.all { row ->
+                row.indices.all { quantizer -> row[quantizer] in 0 until codebookSizes[quantizer] }
+            },
+        ) { "promptAudioCodes contains a code outside the active MOSS codebook" }
+        return TalosDecodedVoiceReference(
+            pcmFloatMono = decodeAudioTokens(promptAudioCodes),
+            sampleRate = sampleRate,
+        )
+    }
+
     fun encodeReferenceAudio(monoPcm: FloatArray, capturedSampleRate: Int): List<IntArray> {
         require(monoPcm.isNotEmpty()) { "monoPcm must not be empty" }
         require(capturedSampleRate == sampleRate) {

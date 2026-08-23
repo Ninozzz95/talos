@@ -85,6 +85,8 @@ internal data class TalosVoiceDiagnosticOutcome(
     val fallbackReason: String? = null,
     val eventCount: Int,
     val answers: TalosVoiceDiagnosticAnswers,
+    val resolvedProfileSchemaVersion: Int? = null,
+    val profileMigrationCommitted: Boolean? = null,
 )
 
 internal data class TalosVoiceDiagnosticArtifact(
@@ -146,6 +148,8 @@ internal object TalosVoiceDiagnosticArtifactWriter {
         .put("resolvedEngine", outcome.resolvedEngine)
         .put("resolvedProfileIdSha256", hashNullable(outcome.resolvedProfileId))
         .putNullable("fallbackReason", outcome.fallbackReason)
+        .putNullable("resolvedProfileSchemaVersion", outcome.resolvedProfileSchemaVersion)
+        .putNullable("profileMigrationCommitted", outcome.profileMigrationCommitted)
 
     private fun eventToJson(value: TalosVoiceDiagnosticEvent): JSONObject = JSONObject()
         .put("sequence", value.sequence)
@@ -171,6 +175,8 @@ internal object TalosVoiceDiagnosticArtifactWriter {
     private fun outcomeToJson(value: TalosVoiceDiagnosticOutcome): JSONObject = JSONObject()
         .put("termination", value.termination)
         .put("eventCount", value.eventCount)
+        .putNullable("resolvedProfileSchemaVersion", value.resolvedProfileSchemaVersion)
+        .putNullable("profileMigrationCommitted", value.profileMigrationCommitted)
 
     private fun answersToJson(value: TalosVoiceDiagnosticAnswers): JSONObject = JSONObject()
         .put("dominant_graph", value.dominantGraph)
