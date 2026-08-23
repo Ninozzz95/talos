@@ -489,12 +489,5 @@ const stickyListClass = 'sticky top-0 z-10 -mx-4 bg-[var(--talos-window-bg,var(-
             <div :class="switchRowClass"><span><span class="block text-sm font-semibold text-[var(--talos-text)]">{{ t('appearance.pauseWhenHidden') }}</span><span class="mt-1 block text-xs text-[var(--talos-muted)]">{{ t('appearance.pauseWhenHiddenBody') }}</span></span><TalosThemedSwitch class="mt-1" :aria-label="t('appearance.pauseWhenHiddenAria')" :model-value="settings.state.motion_v6.pause_when_hidden" @update:model-value="setMotionBoolean('pause_when_hidden', $event)" @click.stop /></div>
             <div :class="switchRowClass"><span><span class="block text-sm font-semibold text-[var(--talos-text)]">{{ t('appearance.respectDataSaver') }}</span><span class="mt-1 block text-xs text-[var(--talos-muted)]">{{ t('appearance.respectDataSaverBody') }}</span></span><TalosThemedSwitch class="mt-1" :aria-label="t('appearance.respectDataSaver')" :model-value="settings.state.motion_v6.respect_data_saver" @update:model-value="setMotionBoolean('respect_data_saver', $event)" @click.stop /></div>
         </TabsContent>
-
-        <TabsContent
-            value="voice"
-            data-appearance-section="voice"
-            class="talos-motion-tab-panel pt-2 outline-none"
-        >
-        </TabsContent>
     </TalosThemedTabs>
 </template>

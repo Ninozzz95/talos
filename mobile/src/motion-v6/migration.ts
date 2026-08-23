@@ -226,10 +226,14 @@ function migrateLegacy(record: LegacyRecord): TalosThemeMotionV6MigrationResult 
         hasRendererLegacy = true
         motion = record.theme_motion
         const profile = {
-            system: [100, 65],
-            off: [100, 65],
+            // system/off/normal carry the canonical default speed+intensity
+            // inline rather than reading TALOS_MOTION_V6_DEFAULTS — updated
+            // by hand alongside it 2026-08-23, same as
+            // createMobileDefaultMotionPreferences() was.
+            system: [100, 20],
+            off: [100, 20],
             subtle: [75, 40],
-            normal: [100, 65],
+            normal: [100, 20],
             cinematic: [140, 85],
         }[motion]
         value.speed = profile[0]
