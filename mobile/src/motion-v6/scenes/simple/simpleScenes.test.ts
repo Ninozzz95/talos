@@ -1,137 +1,153 @@
-import { readFileSync } from 'node:fs'
+/**
+ * ⭐⭐⭐ "SIMPLE" SUL MOTORE COMPLEX, PROVATO NEI DUE VERSI — 2026-08-23.
+ *
+ * ⛔⛔ Non basta che `npm run typecheck` sia verde: il tipo di `SceneInstance`
+ * è un discriminante che TypeScript controlla solo a compile-time (verificato
+ * cercando "TypeScript discriminated union runtime" — il check vero vive in
+ * `stageController.ts`, `isSceneInstance()`, che guarda `Reflect.ownKeys` a
+ * runtime). Questi test provano che l'istanza vera — non solo il tipo — porta
+ * `kind: 'simple'` come proprietà PROPRIA, con ESATTAMENTE le sette chiavi che
+ * `isSceneInstance` si aspetta: se `asSimpleFactory` in `./index.ts` si
+ * rompesse tornando a un cast invece che a una ricostruzione, questi test
+ * lo direbbero, il typecheck da solo no.
+ *
+ * ⛔ Il verso contrario è il punto: una factory 'complex' NON adattata deve
+ * restare `kind:'complex'`. Senza quel confronto, un adattatore che non fa
+ * niente supererebbe lo stesso i test.
+ */
 import { describe, expect, it } from 'vitest'
 import { TALOS_MOTION_SCENE_IDS } from '../../contracts'
 import type { SceneInput } from '../../sceneRegistry'
-import { SIMPLE_LAYER_BUDGET, createSimpleSceneFactory } from '../../renderers/simpleRenderer'
 import { createSceneRegistry } from '../../sceneRegistry'
-import { TALOS_SIMPLE_SCENE_DEFINITIONS, createTalosSimpleSceneRegistrations } from './index'
+import { createComplexSceneFactory } from '../../renderers/complexRenderer'
+import { TALOS_COMPLEX_SCENE_DEFINITIONS } from '../complexAsSimple'
+import { createTalosSimpleSceneRegistrations, createTalosStaticSceneRegistrations } from './index'
 
 const roles = ['background','surface','surface_muted','surface_elevated','text','text_muted','border','border_strong','accent','accent_text','secondary','success','warning','danger','info','focus'] as const
 const palette = (base: string, accent: string) => Object.fromEntries(roles.map((role, index) => [role, index >= 8 ? accent : base])) as SceneInput['palette']['light']
 
-function input(colorMode: 'light'|'dark' = 'dark', width = 1200): SceneInput {
+function input(tier: 'low'|'balanced'|'high' = 'balanced', colorMode: 'light'|'dark' = 'dark', width = 1200): SceneInput {
     return {
         colorMode,
         palette: { light: palette('#f8fafc', '#2563eb'), dark: palette('#101820', '#d49a52') },
         viewport: { width, height: width < 600 ? 720 : 800, pixelRatio: 1 },
-        seed: 17,
+        seed: 137,
         logicalTimeMs: 0,
         deltaMs: 0,
         parameters: { speed: 100, intensity: 65, density: 100, depth: 50, trails: 35, contrast: 60, parallax: 20 },
-        effectiveQuality: { tier: 'low', fpsCap: 20, dprCap: 1, densityScale: 0.55 },
+        effectiveQuality: { tier, fpsCap: tier === 'high' ? 45 : tier === 'low' ? 20 : 30, dprCap: tier === 'high' ? 1.5 : tier === 'low' ? 1 : 1.25, densityScale: tier === 'high' ? 1.25 : tier === 'low' ? 0.55 : 1 },
     }
 }
 
-function geometryFingerprint(layers: ReturnType<(typeof TALOS_SIMPLE_SCENE_DEFINITIONS)[number]['resolve']>): string {
-    return JSON.stringify(layers.map((layer) => ({ id: layer.id, role: layer.role, transform: layer.style.transform, frames: layer.motion?.keyframes.map((frame) => frame.transform) })))
-}
-
-function platform() {
-    const calls: string[] = []
-    return {
-        calls,
-        adapter: {
-            createLayer: (id: string, role: string) => ({ id, role }),
-            appendLayer: () => calls.push('append'),
-            removeLayer: () => calls.push('remove'),
-            applyStyle: () => calls.push('style'),
-            animate: () => { calls.push('animate'); return { pause: () => {}, play: () => {}, cancel: () => {} } },
+/*
+ * ⛔ Un Proxy, non un elenco a mano: `setLineDash` mancava alla prima stesura
+ * e ha fatto fallire il test — la prova che `asSimpleFactory` disegna
+ * DAVVERO con `sceneTools.ts` di `complexAsSimple` (14 temi, superficie
+ * grande). Elencare ogni metodo Canvas2D a mano è la stessa cecità del
+ * "l'ho riletto e sembrava a posto": qui si prova che disegna, non si
+ * indovina quali metodi userà.
+ */
+function fakeContext() {
+    return new Proxy({}, {
+        get: (_target, property) => {
+            if (property === 'createLinearGradient' || property === 'createRadialGradient') {
+                return () => ({ addColorStop: () => {} })
+            }
+            return () => {}
         },
-    }
+    })
 }
 
-describe('TALOS V6 Simple scene library', () => {
-    it('contains exactly one independently addressable scene for every preset', () => {
-        expect(TALOS_SIMPLE_SCENE_DEFINITIONS.map((scene) => scene.id)).toEqual(TALOS_MOTION_SCENE_IDS)
-        expect(new Set(TALOS_SIMPLE_SCENE_DEFINITIONS.map((scene) => scene.resolve)).size).toBe(14)
+/*
+ * ⛔ Stessa piattaforma finta di `complexAsSimple/complexScenes.test.ts`, e
+ * per lo stesso motivo: `createComplexSceneFactory` valida la piattaforma
+ * con `strictRecord(platform, PLATFORM_KEYS, PLATFORM_KEYS)` — ESATTAMENTE
+ * queste sei chiavi, nessuna in più. La prima stesura aggiungeva `_surfaces`
+ * per contare le surface create, ed è bastato per far esplodere tutti e
+ * cinque i test con "Unknown or symbolic property": la stessa guardia
+ * stretta di `isSceneInstance`, sul lato della piattaforma invece che
+ * dell'istanza. Il conteggio ora vive in una chiusura esterna, non su una
+ * chiave in più dell'oggetto.
+ */
+function complexPlatform() {
+    const callbacks: Array<() => void> = []
+    const context = fakeContext()
+    const surfaces: unknown[] = []
+    const plat = {
+        scheduler: {
+            now: () => 0,
+            requestFrame: (callback: () => void) => { callbacks.push(callback); return callback },
+            cancelFrame: (callback: unknown) => { const i = callbacks.indexOf(callback as () => void); if (i >= 0) callbacks.splice(i, 1) },
+        },
+        createSurface: (id: string) => { const s = { id }; surfaces.push(s); return s },
+        appendSurface: () => {},
+        resizeSurface: () => {},
+        getContext: () => context,
+        removeSurface: () => {},
+    }
+    return { platform: plat, surfaces }
+}
+
+/**
+ * Piattaforma finta per 'static' — stesse cinque chiavi ESATTE che
+ * `simpleRenderer.ts` valida (`PLATFORM_KEYS`), nessuna in più: la stessa
+ * lezione di `complexPlatform()` sopra, sul lato DOM invece che canvas.
+ */
+function simplePlatform() {
+    return {
+        createLayer: (id: string) => ({ id }),
+        appendLayer: () => {},
+        removeLayer: () => {},
+        applyStyle: () => {},
+        animate: () => ({ cancel: () => {} }),
+    } as unknown as Parameters<typeof createTalosStaticSceneRegistrations>[0]
+}
+
+/** Mima `isSceneInstance()` di `stageController.ts`: chiavi proprie, esatte, e nient'altro. */
+const INSTANCE_KEYS = ['kind', 'mount', 'renderOrUpdate', 'resize', 'pause', 'resume', 'dispose']
+function ownKeysMatchExactly(value: object): boolean {
+    const keys = Reflect.ownKeys(value)
+    return keys.length === INSTANCE_KEYS.length && keys.every((k) => typeof k === 'string' && INSTANCE_KEYS.includes(k))
+}
+
+describe('TALOS V6 "simple" — il motore complex, etichettato simple', () => {
+    it('registra le 14 scene come kind:"simple", una per preset', () => {
+        const registrations = createTalosSimpleSceneRegistrations(complexPlatform().platform)
+        expect(registrations.map((entry) => `${entry.kind}:${entry.id}`))
+            .toEqual(TALOS_MOTION_SCENE_IDS.map((id) => `simple:${id}`))
+        expect(createSceneRegistry(registrations).snapshot()).toHaveLength(14)
     })
 
-    it('creates a complete registry-ready factory set without a parallel scene map', () => {
-        const h = platform()
-        const registrations = createTalosSimpleSceneRegistrations(h.adapter)
-        expect(registrations.map((entry) => `${entry.kind}:${entry.id}`)).toEqual(TALOS_MOTION_SCENE_IDS.map((id) => `simple:${id}`))
-        const registry = createSceneRegistry(registrations)
-        for (const id of TALOS_MOTION_SCENE_IDS) {
-            const instance = registry.create(id, 'simple', input())!
-            instance.mount({ kind: 'simple', target: {} })
-            instance.renderOrUpdate(input())
-            instance.dispose()
+    it('⭐⭐⭐ l\'istanza VERA porta kind:"simple" come proprietà propria, non solo il tipo', () => {
+        const [forge] = createTalosSimpleSceneRegistrations(complexPlatform().platform)
+        const instance = forge.factory(input())
+        expect(instance.kind).toBe('simple')
+        expect(ownKeysMatchExactly(instance)).toBe(true)
+        for (const method of ['mount', 'renderOrUpdate', 'resize', 'pause', 'resume', 'dispose'] as const) {
+            expect(typeof instance[method]).toBe('function')
         }
-        expect(registry.snapshot()).toHaveLength(14)
     })
 
-    it.each(TALOS_SIMPLE_SCENE_DEFINITIONS)('$id stays inside the low-tier budget and has moving transform/opacity keyframes', (scene) => {
-        const layers = scene.resolve(input())
-        expect(layers.length).toBeGreaterThanOrEqual(7)
-        expect(layers.length).toBeLessThanOrEqual(SIMPLE_LAYER_BUDGET.low)
-        expect(new Set(layers.map((layer) => layer.id)).size).toBe(layers.length)
-        expect(new Set(layers.map((layer) => layer.role)).size).toBeGreaterThanOrEqual(7)
-        expect(layers.some((layer) => {
-            const variables = layer.style.variables ?? {}
-            return Number.parseFloat(variables['--talos-v6-w'] ?? '0') >= 60
-                && Number.parseFloat(variables['--talos-v6-h'] ?? '0') >= 35
-        })).toBe(true)
-        expect(layers.some((layer) => layer.motion && JSON.stringify(layer.motion.keyframes[0]) !== JSON.stringify(layer.motion.keyframes.at(-1)))).toBe(true)
+    it('⛔ IL VERSO CONTRARIO: una factory complex NON adattata resta kind:"complex"', () => {
+        // Senza questo confronto, un adattatore che non facesse nulla passerebbe comunque il test sopra.
+        const rawFactory = createComplexSceneFactory(TALOS_COMPLEX_SCENE_DEFINITIONS[0], complexPlatform().platform)
+        const rawInstance = rawFactory(input())
+        expect(rawInstance.kind).toBe('complex')
+        expect(rawInstance.kind).not.toBe('simple')
     })
 
-    it('distinguishes every scene by geometry and temporal grammar rather than palette', () => {
-        const fingerprints = TALOS_SIMPLE_SCENE_DEFINITIONS.map((scene) => geometryFingerprint(scene.resolve(input())))
-        expect(new Set(fingerprints).size).toBe(14)
-    })
-
-    it.each(TALOS_SIMPLE_SCENE_DEFINITIONS)('$id resolves the active light/dark palette deterministically', (scene) => {
-        const light = JSON.stringify(scene.resolve(input('light')))
-        const dark = JSON.stringify(scene.resolve(input('dark')))
-        expect(light).toContain('#2563eb')
-        expect(dark).toContain('#d49a52')
-        expect(light).not.toBe(dark)
-    })
-
-    it.each(TALOS_SIMPLE_SCENE_DEFINITIONS)('$id connects every bounded customization parameter to output', (scene) => {
-        const baseline = JSON.stringify(scene.resolve(input()))
-        for (const key of ['speed', 'intensity', 'density', 'depth', 'trails', 'contrast', 'parallax'] as const) {
-            const changed = input()
-            changed.parameters[key] = key === 'speed' ? 150 : 10
-            expect(JSON.stringify(scene.resolve(changed)), `${scene.id}:${key}`).not.toBe(baseline)
-        }
-    })
-
-    it.each(TALOS_SIMPLE_SCENE_DEFINITIONS)('$id adapts geometry for mobile without changing stable layer identity', (scene) => {
-        const desktop = scene.resolve(input('dark', 1200))
-        const mobile = scene.resolve(input('dark', 390))
-        expect(mobile.map((layer) => layer.id)).toEqual(desktop.map((layer) => layer.id))
-        expect(geometryFingerprint(mobile)).not.toBe(geometryFingerprint(desktop))
-    })
-
-    it.each(TALOS_SIMPLE_SCENE_DEFINITIONS)('$id freezes through the real static renderer path', (scene) => {
-        const h = platform()
-        const registry = createSceneRegistry([{ id: scene.id, kind: 'simple', factory: createSimpleSceneFactory(scene, h.adapter, { animated: false }), assets: [] }])
-        const instance = registry.create(scene.id, 'simple', input())!
+    it('monta davvero sul motore canvas: crea una surface e disegna attraverso la stessa piattaforma', () => {
+        const { platform, surfaces } = complexPlatform()
+        const [forge] = createTalosSimpleSceneRegistrations(platform)
+        const instance = forge.factory(input())
         instance.mount({ kind: 'simple', target: {} })
         instance.renderOrUpdate(input())
-        expect(h.calls).not.toContain('animate')
+        expect(surfaces.length).toBe(1)
     })
 
-    it('ships CSS ownership for every emitted semantic role and avoids decorative orb roles', () => {
-        const css = readFileSync('src/css/talos-motion-v6-simple.css', 'utf8')
-        const emittedRoles = new Set(TALOS_SIMPLE_SCENE_DEFINITIONS.flatMap((scene) => scene.resolve(input()).map((layer) => layer.role)))
-        for (const role of emittedRoles) expect(css).toContain(`[data-talos-motion-layer-role="${role}"]`)
-        expect([...emittedRoles].some((role) => /orb|bokeh/i.test(role))).toBe(false)
-    })
-
-    it('encodes Ember incident state with shape and role, not color alone', () => {
-        const ember = TALOS_SIMPLE_SCENE_DEFINITIONS.find((scene) => scene.id === 'ember')!
-        expect(ember.resolve(input()).map((layer) => layer.role)).toEqual(expect.arrayContaining(['ember-incident-cross', 'ember-recovery-track']))
-    })
-
-    it('keeps semantic markers compact instead of rendering viewport-scale squares', () => {
-        const markerRole = /(node|checkpoint|cursor|hypothesis-mark|queue-mark|waypoint|focus-mark|status-mark|concept-mark|revision-mark|state-mark)$/
-        for (const scene of TALOS_SIMPLE_SCENE_DEFINITIONS) {
-            for (const layer of scene.resolve(input()).filter((candidate) => markerRole.test(candidate.role))) {
-                const variables = layer.style.variables ?? {}
-                expect(Number.parseFloat(variables['--talos-v6-w'] ?? '100'), layer.role).toBeLessThanOrEqual(4)
-                expect(Number.parseFloat(variables['--talos-v6-h'] ?? '100'), layer.role).toBeLessThanOrEqual(6)
-            }
-        }
+    it('createTalosStaticSceneRegistrations resta invariata: 14 scene kind:"static" dal deposito _legacyDom', () => {
+        const registrations = createTalosStaticSceneRegistrations(simplePlatform())
+        expect(registrations.map((entry) => `${entry.kind}:${entry.id}`))
+            .toEqual(TALOS_MOTION_SCENE_IDS.map((id) => `static:${id}`))
     })
 })
