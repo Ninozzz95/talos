@@ -13,6 +13,14 @@
 
 ## ✅ CHIUSI — le lezioni che restano
 
+> ⛔ Spostate qui il 2026-08-23: `MEMORY.md` era a **20.140 byte**, SOPRA il
+> tetto d'allarme di 19.900. Sono le due lezioni del banco chiuse fra il 22 e il
+> 23 — curate lo stesso giorno in cui sono state trovate, quindi il loro posto
+> è qui. Blocco intero, non accorciato.
+
+- ⛔⛔⛔⭐⭐⭐ [TRE RIPETIZIONI PAGATE, UNA USATA](tre-ripetizioni-pagate-una-usata.md) — l'`esito` della riga era quello dell'**ultimo giro** (`ms` era una mediana, il verdetto no), e da lì escono pass-rate, bootstrap e costo/risolto: **11 righe su 120 cambiano** e il **vincitore cambia** (dsh 12 → pi 12). ⭐ Curato nel LETTORE, non riscrivendo le righe
+- ⛔⛔⭐⭐⭐ [STRINGERE una guardia crea un FALSO NEGATIVO](stringere-una-guardia-crea-un-falso-negativo.md) — tolto un falso allarme (le mie shell contate come figlie della corsa), la sorveglianza ha smesso di vedere un `codex` **vivo da 5,7 ore** perche' ORFANO. ⛔ Dopo aver stretto una guardia si cerca il caso che ora le sfugge; e due guasti diversi vogliono due allarmi diversi, non una soglia spostata
+
 > ⛔ Spostata qui il 2026-08-22 (secondo giro): `MEMORY.md` era a **19.829 byte**
 > contro un tetto d'allarme di 19.900. Blocco intero, non accorciato.
 
