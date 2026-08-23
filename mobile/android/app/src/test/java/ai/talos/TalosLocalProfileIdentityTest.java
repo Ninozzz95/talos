@@ -83,10 +83,10 @@ public class TalosLocalProfileIdentityTest {
     public void profiliNelloStessoPuntoSonoLoStessoPunto() {
         TalosLocalProfile a = new TalosLocalProfile(
                 riferimento(), TalosBackendChoice.OPENCL, "GPUOpenCL",
-                TalosBackendChoice.Outcome.CORRECT, 11_000L, 1_000L, TalosLocalProfile.Level.Q1);
+                TalosBackendChoice.Outcome.CORRECT, 11_000L, 1_000L, TalosLocalProfile.Level.Q1, 20.0);
         TalosLocalProfile b = new TalosLocalProfile(
                 riferimento(), TalosBackendChoice.OPENCL, "GPUOpenCL",
-                TalosBackendChoice.Outcome.CORRECT, 9_500L, 2_000L, TalosLocalProfile.Level.Q1);
+                TalosBackendChoice.Outcome.CORRECT, 9_500L, 2_000L, TalosLocalProfile.Level.Q1, 20.0);
         assertTrue("stessa identità, stesso backend, stesso device — è la stessa prova rimisurata",
                 a.samePlace(b));
     }
@@ -95,10 +95,10 @@ public class TalosLocalProfileIdentityTest {
     public void backendDiversoNonELoStessoPunto() {
         TalosLocalProfile cpu = new TalosLocalProfile(
                 riferimento(), TalosBackendChoice.CPU, null,
-                TalosBackendChoice.Outcome.CORRECT, 43_200L, 1_000L, TalosLocalProfile.Level.Q1);
+                TalosBackendChoice.Outcome.CORRECT, 43_200L, 1_000L, TalosLocalProfile.Level.Q1, 20.0);
         TalosLocalProfile opencl = new TalosLocalProfile(
                 riferimento(), TalosBackendChoice.OPENCL, "GPUOpenCL",
-                TalosBackendChoice.Outcome.CORRECT, 11_000L, 1_000L, TalosLocalProfile.Level.Q1);
+                TalosBackendChoice.Outcome.CORRECT, 11_000L, 1_000L, TalosLocalProfile.Level.Q1, 20.0);
         assertFalse(cpu.samePlace(opencl));
     }
 
@@ -107,10 +107,10 @@ public class TalosLocalProfileIdentityTest {
     public void unDeviceNominatoNonELoStessoPuntoDiUnoAssente() {
         TalosLocalProfile senzaDevice = new TalosLocalProfile(
                 riferimento(), TalosBackendChoice.OPENCL, null,
-                TalosBackendChoice.Outcome.CORRECT, 11_000L, 1_000L, TalosLocalProfile.Level.Q1);
+                TalosBackendChoice.Outcome.CORRECT, 11_000L, 1_000L, TalosLocalProfile.Level.Q1, 20.0);
         TalosLocalProfile conDevice = new TalosLocalProfile(
                 riferimento(), TalosBackendChoice.OPENCL, "GPUOpenCL",
-                TalosBackendChoice.Outcome.CORRECT, 11_000L, 1_000L, TalosLocalProfile.Level.Q1);
+                TalosBackendChoice.Outcome.CORRECT, 11_000L, 1_000L, TalosLocalProfile.Level.Q1, 20.0);
         assertFalse(senzaDevice.samePlace(conDevice));
     }
 
@@ -126,10 +126,10 @@ public class TalosLocalProfileIdentityTest {
     public void livelliDiversiSulloStessoPuntoRestanoLoStessoPunto() {
         TalosLocalProfile daQ1 = new TalosLocalProfile(
                 riferimento(), TalosBackendChoice.OPENCL, "GPUOpenCL",
-                TalosBackendChoice.Outcome.CORRECT, 11_000L, 1_000L, TalosLocalProfile.Level.Q1);
+                TalosBackendChoice.Outcome.CORRECT, 11_000L, 1_000L, TalosLocalProfile.Level.Q1, 20.0);
         TalosLocalProfile daQ2 = new TalosLocalProfile(
                 riferimento(), TalosBackendChoice.OPENCL, "GPUOpenCL",
-                TalosBackendChoice.Outcome.CORRECT, 10_800L, 2_000L, TalosLocalProfile.Level.Q2);
+                TalosBackendChoice.Outcome.CORRECT, 10_800L, 2_000L, TalosLocalProfile.Level.Q2, 20.0);
         assertTrue("il livello descrive CHI ha misurato, non DOVE — non fa parte del punto",
                 daQ1.samePlace(daQ2));
     }

@@ -2860,6 +2860,7 @@ export const TALOS_EN_MESSAGES = {
         engineCpu: 'CPU',
         engineInstalled: 'Models on device',
         engineTools: 'Assistant tools with this model',
+        recommendedProfile: 'Recommended backend for this model',
         nativePlatform: 'native ({platform})',
         webPreview: 'web preview',
         storageNative: 'SQLCipher native',

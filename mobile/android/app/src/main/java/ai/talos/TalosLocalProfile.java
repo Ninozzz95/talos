@@ -54,10 +54,26 @@ public final class TalosLocalProfile {
     public final long ttftMs;
     public final long measuredAtMs;
     public final Level qualificationLevel;
+    /**
+     * P1-5 — il pezzo che mancava per il selettore break-even (design.md
+     * §21): {@code ttftMs} da solo basta per giudicare correttezza e un
+     * primo token, ma non per stimare quanto costerebbe un OUTPUT lungo su
+     * un profilo mai provato per davvero. Già calcolato oggi da
+     * {@link TalosBenchmarkHarness#judge} come {@code tokensPerSecond} —
+     * SOLO salvato prima d'ora, mai scritto qui: zero nuova strumentazione.
+     *
+     * ⛔ {@code -1} = non misurato, MAI zero — un profilo a "0 token/s"
+     * letto alla lettera bloccherebbe il selettore su una divisione che
+     * mente. Le righe scritte prima di questo blocco non hanno questo
+     * campo: {@code optDouble} in {@link TalosLocalProfileStore} le legge
+     * con questa stessa sentinella, non un numero indovinato.
+     */
+    public final double decodeTokPerSec;
 
     public TalosLocalProfile(TalosLocalProfileIdentity identity, String backendRegistry,
                               String backendDevice, TalosBackendChoice.Outcome outcome,
-                              long ttftMs, long measuredAtMs, Level qualificationLevel) {
+                              long ttftMs, long measuredAtMs, Level qualificationLevel,
+                              double decodeTokPerSec) {
         this.identity = identity;
         this.backendRegistry = backendRegistry == null ? "" : backendRegistry;
         this.backendDevice = backendDevice;
@@ -65,6 +81,7 @@ public final class TalosLocalProfile {
         this.ttftMs = ttftMs;
         this.measuredAtMs = measuredAtMs;
         this.qualificationLevel = qualificationLevel == null ? Level.Q1 : qualificationLevel;
+        this.decodeTokPerSec = decodeTokPerSec;
     }
 
     /** Stessa identità, stesso backend, stesso dispositivo — la stessa prova, misurata di nuovo. */

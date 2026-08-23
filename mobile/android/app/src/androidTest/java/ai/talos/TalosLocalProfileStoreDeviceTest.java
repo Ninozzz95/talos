@@ -77,7 +77,7 @@ public class TalosLocalProfileStoreDeviceTest {
     private static TalosLocalProfile profilo(String backend, String device, long ttftMs) {
         return new TalosLocalProfile(
                 IDENTITA, backend, device, TalosBackendChoice.Outcome.CORRECT, ttftMs,
-                123_456_789L, TalosLocalProfile.Level.Q1);
+                123_456_789L, TalosLocalProfile.Level.Q1, 20.0);
     }
 
     @Test

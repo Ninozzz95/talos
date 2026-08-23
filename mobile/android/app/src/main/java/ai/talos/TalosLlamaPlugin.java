@@ -1193,6 +1193,50 @@ public class TalosLlamaPlugin extends Plugin {
     }
 
     /**
+     * P1-5 — i profili misurati per QUESTO modello, sull'identità di ADESSO
+     * (engine/model/driver): il primo consumatore reale di
+     * {@link TalosLocalProfileStore}, scritto in P0-2 e mai letto da
+     * nessuno finché questo blocco non arriva.
+     *
+     * ⛔ `loadValid`, non `load`: un profilo misurato con un engine build
+     * diverso da quello di adesso non è "incompleto", è per un motore che
+     * non esiste più su questo telefono — non deve mai finire nel calcolo
+     * del selettore. Nessuna qualificazione parte da qui: sola lettura di
+     * ciò che è già stato misurato altrove (`qualifyBackend`).
+     */
+    @PluginMethod
+    public void localPerformanceProfiles(PluginCall call) {
+        String path = call.getString("path");
+        if (path == null || path.isEmpty() || !new File(path).isFile()) {
+            call.reject("TALOS_LLAMA_PATH_REQUIRED");
+            return;
+        }
+        qualificationWorker.execute(() -> {
+            android.content.Context context = getContext();
+            String modelSha256 = sha256Del(path);
+            if (modelSha256 == null) {
+                call.resolve(new JSObject().put("profiles", new JSArray()));
+                return;
+            }
+            TalosLocalProfileIdentity identita =
+                    TalosLocalProfileIdentity.current(modelSha256, new File(path).length());
+            JSArray profiles = new JSArray();
+            for (TalosLocalProfile profilo : TalosLocalProfileStore.loadValid(context, identita)) {
+                JSObject row = new JSObject();
+                row.put("backendRegistry", profilo.backendRegistry);
+                row.put("backendDevice", profilo.backendDevice == null ? JSObject.NULL : profilo.backendDevice);
+                row.put("outcome", profilo.outcome == TalosBackendChoice.Outcome.CORRECT ? "CORRECT" : "FAILED");
+                row.put("ttftMs", profilo.ttftMs);
+                row.put("decodeTokPerSec", profilo.decodeTokPerSec);
+                row.put("qualificationLevel", profilo.qualificationLevel.name());
+                row.put("measuredAtMs", profilo.measuredAtMs);
+                profiles.put(row);
+            }
+            call.resolve(new JSObject().put("profiles", profiles));
+        });
+    }
+
+    /**
      * P0-3 — Q0: "il motore si apre e risponde", senza il costo di
      * {@link #qualifyBackend}. Nessuno store viene toccato — vedi
      * {@link TalosLocalSmokeCheck}, che spiega perché: un verdetto PASSED
@@ -1484,7 +1528,10 @@ public class TalosLlamaPlugin extends Plugin {
             TalosLocalProfileStore.record(context, new TalosLocalProfile(
                     identitaCorrente, backend, run.backendDevice,
                     TalosBenchmarkHarness.outcomeOf(measured), run.ttftMs,
-                    System.currentTimeMillis(), TalosLocalProfile.Level.Q1));
+                    System.currentTimeMillis(), TalosLocalProfile.Level.Q1,
+                    // P1-5: già calcolato da judge() poche righe sopra, solo
+                    // loggato finora — mai una seconda misura per questo.
+                    measured.tokensPerSecond));
         }
         return true;
     }
