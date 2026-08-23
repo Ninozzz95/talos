@@ -8,6 +8,28 @@ import type {
 } from '@/lib/voice/personalVoiceContracts'
 import type { TalosSpeakOptions, TalosSpeechService } from '@/services/speech'
 
+export interface TalosVoiceEnrollmentStageMetric {
+    stage: string
+    startedAtNs: number
+    durationNs: number
+    threadName: string
+    inputFrames?: number
+    outputSamples?: number
+}
+
+export interface TalosVoiceEnrollmentBuildResult {
+    backend: 'pocket-v2'
+    profileSchemaVersion: 2
+    sourceSampleRate: number
+    sourceSamples: number
+    referenceSamples: number
+    referenceDurationMs: number
+    conditioningFrames: number
+    conditioningDimension: number
+    enrollmentDurationMs: number
+    stages: TalosVoiceEnrollmentStageMetric[]
+}
+
 /**
  * The bridge to `ai.talos.voice.TalosNeuralVoicePlugin` (Fase 4 block 2),
  * from JavaScript's side - as thin as `localEngine.ts` already is for the
@@ -71,7 +93,7 @@ interface TalosNeuralVoicePlugin {
         language: string
         style: string
         consentVersion: number
-    }): Promise<{ frameCount: number, quantizerCount: number, enrollmentDurationMs: number }>
+    }): Promise<TalosVoiceEnrollmentBuildResult>
     previewEnrollmentProfile(options: { text: string, readingId: string }): Promise<{ accepted: boolean }>
     commitEnrollmentProfile(): Promise<{ profile: TalosPersonalVoiceProfileSummary }>
     discardEnrollmentSession(): Promise<void>
@@ -269,7 +291,7 @@ export async function talosBuildVoiceEnrollmentProfile(options: {
     language: string
     style: string
     consentVersion: number
-}): Promise<{ frameCount: number, quantizerCount: number, enrollmentDurationMs: number }> {
+}): Promise<TalosVoiceEnrollmentBuildResult> {
     return plugin.buildEnrollmentProfile(options)
 }
 

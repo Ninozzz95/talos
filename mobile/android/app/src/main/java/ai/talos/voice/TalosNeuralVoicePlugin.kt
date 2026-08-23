@@ -21,6 +21,7 @@ import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import org.json.JSONObject
 
 /**
@@ -61,7 +62,8 @@ class TalosNeuralVoicePlugin : Plugin() {
     private val micLevelPeekActive = AtomicBoolean(false)
     private val enrollmentSlots = ConcurrentHashMap<Int, TalosVoiceCaptureResult>()
     private val diagnosticSessions = ConcurrentHashMap<String, TalosVoiceDiagnosticSession>()
-    @Volatile private var pendingProfile: TalosVoiceProfileV1? = null
+    @Volatile private var pendingProfile: TalosVoiceProfileV2? = null
+    private val enrollmentGeneration = AtomicLong(0L)
     private val sessionStore: TalosVoiceEnrollmentSessionStore
         get() = TalosVoiceEnrollmentSessionStore(context.applicationContext)
 
@@ -99,7 +101,7 @@ class TalosNeuralVoicePlugin : Plugin() {
     private fun modelRoot(): File =
         TalosVoiceModelManager.modelRoot(context.applicationContext.getExternalFilesDir(null)!!)
 
-    private fun enrollment(): TalosVoiceEnrollment = TalosVoiceEnrollment(context.applicationContext, modelRoot())
+    private fun enrollment(): TalosVoiceEnrollment = TalosVoiceEnrollment(context.applicationContext)
 
     // ---------------------------------------------------------------
     // Status / profiles / playback - §41's shape.
@@ -423,7 +425,7 @@ class TalosNeuralVoicePlugin : Plugin() {
         for (id in enrollment.listProfileIds()) {
             when (val stored = runCatching { store.loadAny(id) }.getOrNull()) {
                 is TalosStoredVoiceProfile.Legacy ->
-                    array.put(profileSummaryJson(enrollment, stored.profile.header))
+                    array.put(profileSummaryJson(stored.profile.header))
                 is TalosStoredVoiceProfile.Current ->
                     array.put(profileSummaryJson(stored.profile))
                 null -> Unit
@@ -589,6 +591,8 @@ class TalosNeuralVoicePlugin : Plugin() {
      */
     @PluginMethod
     fun startEnrollmentSession(call: PluginCall) {
+        enrollmentGeneration.incrementAndGet()
+        host.cancel()
         enrollmentSlots.clear()
         pendingProfile = null
         captureCancelled.set(false)
@@ -765,58 +769,40 @@ class TalosNeuralVoicePlugin : Plugin() {
             call.reject("displayName, language and consentVersion are required")
             return
         }
-        // ⭐⭐⭐ Owner 22/8, riprodotto sul Pad due volte con dati reali:
-        // `lowmemorykiller` uccide ai.talos con "process memory is leaking"
-        // durante l'encode, RSS in crescita CONTINUA per tutta la durata
-        // della chiamata - non un picco al caricamento. Ricerca: l'encoder
-        // di un codec neurale a base transformer ha un costo quadratico
-        // nella lunghezza della sequenza (self-attention) - concatenare
-        // TUTTE e 12 le frasi (whisper+normale+forte, anche 20-40s veri) in
-        // un'unica encodeReferenceAudio() è esattamente il caso che
-        // esplode. La documentazione UFFICIALE di MOSS-TTS lo conferma da
-        // un'altra direzione, indipendente dalla memoria: "optimal
-        // reference clip length is 3-10 seconds... clips longer than ~15
-        // seconds may introduce noise artifacts or degrade quality" - un
-        // riferimento più corto non è un compromesso, è quello giusto.
-        // ⇒ Le frasi 'normale' (indici 4-7 nel wizard, mai sussurrate né
-        // gridate - le più rappresentative di una voce di conversazione
-        // vera) bastano da sole, ~4 frasi invece di 12: il cancello di
-        // qualità resta invariato su TUTTE e 12 (misura la registrazione,
-        // non la scelta del riferimento), solo l'audio che finisce
-        // davvero nel codec cambia.
+        // Le frasi normali (4..7) sono la reference conversazionale. Il
+        // builder Host applica comunque il cap misurato e riporta sia i
+        // campioni sorgente sia quelli realmente passati a Mimi.
         val normalTierSlots = (NORMAL_TIER_FIRST_SLOT..NORMAL_TIER_LAST_SLOT).mapNotNull { enrollmentSlots[it] }
         val accepted = if (normalTierSlots.size == (NORMAL_TIER_LAST_SLOT - NORMAL_TIER_FIRST_SLOT + 1)) {
             normalTierSlots
         } else {
-            // Sessione anomala (mai osservata dal wizard reale, ma non si
-            // assume): meglio l'insieme intero - buildProfile() applica
-            // comunque il proprio tetto di durata più sotto.
-            enrollmentSlots.values.toList()
+            enrollmentSlots.toSortedMap().values.toList()
         }
         if (accepted.isEmpty()) {
             call.reject("no accepted phrases in this session")
             return
         }
-        enrollmentLane.execute {
-            val outcome = runCatching {
-                val runtime = TalosMossRuntime.open(modelRoot(), cpuThreads = 4)
-                try {
-                    enrollment().buildProfile(accepted, displayName, language, style, consentVersion, runtime)
-                } finally {
-                    runtime.close()
-                }
+        pendingProfile = null
+        val buildGeneration = enrollmentGeneration.incrementAndGet()
+        host.submitBuildPocketEnrollmentProfile(
+            acceptedPhrases = accepted,
+            displayName = displayName,
+            language = language,
+            style = style,
+            consentVersion = consentVersion,
+        ) { outcome ->
+            if (enrollmentGeneration.get() != buildGeneration) {
+                call.reject("enrollment build superseded")
+                return@submitBuildPocketEnrollmentProfile
             }
             outcome.fold(
-                onSuccess = { profile ->
-                    pendingProfile = profile
-                    call.resolve(
-                        JSObject()
-                            .put("frameCount", profile.header.frameCount)
-                            .put("quantizerCount", profile.header.quantizerCount)
-                            .put("enrollmentDurationMs", profile.header.enrollmentDurationMs),
-                    )
+                onSuccess = { result ->
+                    pendingProfile = result.profile
+                    call.resolve(enrollmentBuildJson(result))
                 },
-                onFailure = { e -> call.reject(e.message ?: "build failed", e as? Exception) },
+                onFailure = { error ->
+                    call.reject(error.message ?: "build failed", error as? Exception)
+                },
             )
         }
     }
@@ -835,10 +821,43 @@ class TalosNeuralVoicePlugin : Plugin() {
             call.reject("no built profile to preview - call buildEnrollmentProfile first")
             return
         }
-        host.submitSpeakStreamingWithReference(text, profile.promptAudioCodes) { result ->
+        val previewGeneration = enrollmentGeneration.get()
+        host.submitSpeakStreamingWithProfile(text, profile.header.language, profile) { rawResult ->
+            val result = rawResult.mapCatching { observed ->
+                check(observed.cancelled || observed.resolvedEngine == TalosPocketConditioningPayload.BACKEND) {
+                    "enrollment preview did not use Pocket"
+                }
+                check(observed.cancelled || observed.resolvedLocale == profile.header.language) {
+                    "enrollment preview changed the selected locale"
+                }
+                check(observed.cancelled || observed.resolvedProfileId == profile.header.profileId) {
+                    "enrollment preview changed the pending profile"
+                }
+                check(observed.cancelled || observed.resolvedProfileSchemaVersion == TalosVoiceProfileHeaderV2.SCHEMA_VERSION) {
+                    "enrollment preview did not use schema V2"
+                }
+                check(observed.cancelled || observed.fallbackReason == null) {
+                    "enrollment preview used a fallback"
+                }
+                observed
+            }
+            if (enrollmentGeneration.get() != previewGeneration) return@submitSpeakStreamingWithProfile
             val payload = result.fold(
-                onSuccess = { r -> JSObject().put("readingId", readingId).put("cancelled", r.cancelled) },
-                onFailure = { e -> JSObject().put("readingId", readingId).put("error", e.message ?: "preview failed") },
+                onSuccess = { observed ->
+                    JSObject()
+                        .put("readingId", readingId)
+                        .put("cancelled", observed.cancelled)
+                        .put("hardwareUnderruns", observed.hardwareUnderruns)
+                        .put("elapsedMs", observed.elapsedMs)
+                        .put("generatedFrames", observed.generatedFrames)
+                        .put("resolvedEngine", observed.resolvedEngine)
+                        .put("resolvedLocale", observed.resolvedLocale)
+                        .put("resolvedProfileId", observed.resolvedProfileId)
+                        .put("resolvedProfileSchemaVersion", observed.resolvedProfileSchemaVersion)
+                },
+                onFailure = { error ->
+                    JSObject().put("readingId", readingId).put("error", error.message ?: "preview failed")
+                },
             )
             notifyListeners(if (result.isSuccess) "talosNeuralVoiceDone" else "talosNeuralVoiceError", payload)
         }
@@ -852,17 +871,22 @@ class TalosNeuralVoicePlugin : Plugin() {
             call.reject("no built profile to commit - call buildEnrollmentProfile first")
             return
         }
+        val commitGeneration = enrollmentGeneration.get()
         enrollmentLane.execute {
             runCatching {
+                check(enrollmentGeneration.get() == commitGeneration && pendingProfile?.header?.profileId == profile.header.profileId) {
+                    "pending enrollment profile changed before commit"
+                }
                 val enrollment = enrollment()
                 enrollment.commit(profile)
                 enrollmentSlots.clear()
                 pendingProfile = null
+                enrollmentGeneration.incrementAndGet()
                 // Il profilo vero e cifrato esiste ora - la copia di
                 // servizio per la ripresa non serve più, stessa erasure
                 // crittografica di TalosVoiceProfileStore.delete().
                 runCatching { sessionStore.clearSession() }
-                profileSummaryJson(enrollment, profile.header)
+                profileSummaryJson(profile)
             }.fold(
                 onSuccess = { summary -> call.resolve(JSObject().put("profile", summary)) },
                 onFailure = { e -> call.reject(e.message ?: "commit failed", e as? Exception) },
@@ -872,6 +896,8 @@ class TalosNeuralVoicePlugin : Plugin() {
 
     @PluginMethod
     fun discardEnrollmentSession(call: PluginCall) {
+        enrollmentGeneration.incrementAndGet()
+        host.cancel()
         enrollmentSlots.clear()
         pendingProfile = null
         captureCancelled.set(false)
@@ -882,14 +908,17 @@ class TalosNeuralVoicePlugin : Plugin() {
         }
     }
 
-    private fun profileSummaryJson(enrollment: TalosVoiceEnrollment, header: TalosVoiceProfileHeaderV1): JSObject =
+    private fun profileSummaryJson(header: TalosVoiceProfileHeaderV1): JSObject =
         JSObject()
             .put("id", header.profileId)
             .put("name", header.displayName)
             .put("language", header.language)
             .put("style", header.style)
             .put("engineBuild", header.codecFingerprint)
-            .put("compatible", runCatching { enrollment.isProfileStillCompatible(header.profileId) }.getOrDefault(false))
+            .put(
+                "compatible",
+                runCatching { TalosVoiceProfileCompatibility.isCompatible(header, modelRoot()) }.getOrDefault(false),
+            )
             .put("createdAtEpochMs", header.createdAtEpochMs)
             .put("enrollmentDurationMs", header.enrollmentDurationMs)
 
@@ -903,6 +932,31 @@ class TalosNeuralVoicePlugin : Plugin() {
             .put("compatible", true)
             .put("createdAtEpochMs", profile.header.createdAtEpochMs)
             .put("enrollmentDurationMs", profile.header.enrollmentDurationMs)
+
+    private fun enrollmentBuildJson(result: TalosVoiceEnrollmentBuildResult): JSObject {
+        val stages = JSArray()
+        result.stageMetrics.forEach { metric ->
+            val encoded = JSObject()
+                .put("stage", metric.stage)
+                .put("startedAtNs", metric.startedAtNs)
+                .put("durationNs", metric.durationNs)
+                .put("threadName", metric.threadName)
+            metric.inputFrames?.let { encoded.put("inputFrames", it) }
+            metric.outputSamples?.let { encoded.put("outputSamples", it) }
+            stages.put(encoded)
+        }
+        return JSObject()
+            .put("backend", result.profile.header.preferredBackend)
+            .put("profileSchemaVersion", result.profile.header.schemaVersion)
+            .put("sourceSampleRate", result.sourceSampleRate)
+            .put("sourceSamples", result.sourceSamples)
+            .put("referenceSamples", result.referenceSamples)
+            .put("referenceDurationMs", result.referenceDurationMs)
+            .put("conditioningFrames", result.conditioningFrames)
+            .put("conditioningDimension", result.conditioningDimension)
+            .put("enrollmentDurationMs", result.profile.header.enrollmentDurationMs)
+            .put("stages", stages)
+    }
 
     private fun phraseVerdictJson(phrase: TalosVoicePhraseCapture): JSObject {
         val reasons = JSArray()

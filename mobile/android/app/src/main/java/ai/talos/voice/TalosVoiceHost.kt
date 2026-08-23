@@ -66,8 +66,8 @@ internal class TalosVoiceHost(
     // contratto che quella classe già dichiara.
     private val appContext: Context? = null,
     private val pocketModelStatusProvider: (() -> TalosPocketModelStatus)? = null,
-    private val pocketRuntimeFactory: (File, Int) -> TalosPocketOrtRuntime = { root, threads ->
-        TalosPocketOrtRuntime.open(root, threads)
+    private val pocketRuntimeFactory: (File, Int) -> TalosPocketHostRuntimeContract = { root, threads ->
+        TalosPocketOrtRuntimeAdapter(TalosPocketOrtRuntime.open(root, threads))
     },
     private val pcmPlayerFactory: (Int, Int) -> TalosPcmPlayer = { sampleRate, channels ->
         TalosPcmPlayer(sampleRate, channels)
@@ -84,7 +84,7 @@ internal class TalosVoiceHost(
     // EXCEPT player, which cancel() below reads from the calling thread on purpose.
     private var runtime: TalosMossRuntime? = null
     private var tokenizer: TalosVoiceTokenizer? = null
-    private var pocketRuntime: TalosPocketOrtRuntime? = null
+    private var pocketRuntime: TalosPocketHostRuntimeContract? = null
     private var pocketRuntimeRoot: File? = null
     private var pocketModelStatus: TalosPocketModelStatus? = null
     private var mossCodecFingerprint: String? = null
@@ -223,6 +223,61 @@ internal class TalosVoiceHost(
         val latch = CountDownLatch(1)
         var outcome: Result<TalosVoiceStreamResult>? = null
         submitSpeakStreamingWithReference(text, promptAudioCodes, maxFrames, seed, diagnosticRoute) { result ->
+            outcome = result
+            latch.countDown()
+        }
+        latch.await()
+        return outcome!!.getOrThrow()
+    }
+
+    /**
+     * Builds a new Pocket V2 conditioning profile on the same owner lane as
+     * every production ORT session. A build is a FLUSH operation: it cannot
+     * overlap synthesis, and a later speak/build/cancel invalidates it at
+     * the next measured phase or Pocket graph boundary.
+     */
+    fun submitBuildPocketEnrollmentProfile(
+        acceptedPhrases: List<TalosVoiceCaptureResult>,
+        displayName: String,
+        language: String,
+        style: String,
+        consentVersion: Int,
+        onComplete: (Result<TalosVoiceEnrollmentBuildResult>) -> Unit = {},
+    ): Long {
+        val ticket = queueGate.submit(TalosVoiceQueueMode.FLUSH)
+        val id = ticket.id
+        owner.execute {
+            val result = runCatching {
+                runBuildPocketEnrollmentProfile(
+                    id = id,
+                    acceptedPhrases = acceptedPhrases,
+                    displayName = displayName,
+                    language = language,
+                    style = style,
+                    consentVersion = consentVersion,
+                )
+            }
+            onComplete(result)
+        }
+        return id
+    }
+
+    internal fun buildPocketEnrollmentProfileBlocking(
+        acceptedPhrases: List<TalosVoiceCaptureResult>,
+        displayName: String,
+        language: String,
+        style: String,
+        consentVersion: Int,
+    ): TalosVoiceEnrollmentBuildResult {
+        val latch = CountDownLatch(1)
+        var outcome: Result<TalosVoiceEnrollmentBuildResult>? = null
+        submitBuildPocketEnrollmentProfile(
+            acceptedPhrases = acceptedPhrases,
+            displayName = displayName,
+            language = language,
+            style = style,
+            consentVersion = consentVersion,
+        ) { result ->
             outcome = result
             latch.countDown()
         }
@@ -730,6 +785,95 @@ internal class TalosVoiceHost(
         } finally {
             if (activeDiagnosticSession === diagnosticSession) activeDiagnosticSession = null
         }
+    }
+
+    private fun runBuildPocketEnrollmentProfile(
+        id: Long,
+        acceptedPhrases: List<TalosVoiceCaptureResult>,
+        displayName: String,
+        language: String,
+        style: String,
+        consentVersion: Int,
+    ): TalosVoiceEnrollmentBuildResult {
+        require(isItalianLocale(language)) { "Pocket enrollment requires an Italian locale, got $language" }
+        val lifecycleMetrics = mutableListOf<TalosVoiceEnrollmentStageMetric>()
+
+        fun ensureActive() {
+            if (!queueGate.isActive(id)) throw TalosVoiceEnrollmentCancelledException()
+        }
+
+        ensureActive()
+        val statusWasCached = pocketModelStatus != null
+        val pocketStatus = measuredEnrollmentStage(
+            stage = if (statusWasCached) "pocket_model_status_cache" else "pocket_model_verify",
+            metrics = lifecycleMetrics,
+        ) {
+            currentPocketModelStatus()
+        }
+        val ready = pocketStatus as? TalosPocketModelStatus.Ready
+            ?: error("Pocket enrollment unavailable: $pocketStatus")
+        check(ready.verifiedFiles > 0) { "Pocket enrollment requires a hash-verified bundle" }
+        ensureActive()
+
+        if (runtime != null || tokenizer != null) {
+            measuredEnrollmentStage("moss_state_close", lifecycleMetrics) {
+                closeMossEngineState()
+            }
+        }
+        ensureActive()
+
+        val root = ready.root.canonicalFile
+        if (pocketRuntimeRoot != root && pocketRuntime != null) {
+            measuredEnrollmentStage("pocket_runtime_close", lifecycleMetrics) {
+                closePocketEngineState()
+            }
+        }
+        pocketRuntimeRoot = root
+        val activeRuntime = pocketRuntime?.let { existing ->
+            measuredEnrollmentStage("pocket_runtime_reuse", lifecycleMetrics) { existing }
+        } ?: measuredEnrollmentStage("pocket_runtime_open", lifecycleMetrics) {
+            pocketRuntimeFactory(root, cpuThreads).also { pocketRuntime = it }
+        }
+        ensureActive()
+
+        val built = TalosPocketEnrollmentProfileBuilder(
+            encoder = TalosPocketEnrollmentReferenceEncoder { pcmFloatMono, sampleRate, onStage ->
+                ensureActive()
+                val conditioning = activeRuntime.encodeReference(
+                    pcmFloatMono = pcmFloatMono,
+                    sampleRate = sampleRate,
+                    callback = object : TalosPocketCallback {
+                        override fun onStage(metric: TalosPocketStageMetric) {
+                            ensureActive()
+                            onStage(metric.toEnrollmentStageMetric())
+                            ensureActive()
+                        }
+
+                        override fun onPcm(frame: TalosPocketFrame): Boolean = false
+                    },
+                )
+                ensureActive()
+                TalosPocketConditioningPayload(
+                    repository = TalosPocketConditioningPayload.REPOSITORY,
+                    revision = TalosPocketConditioningPayload.REVISION,
+                    sampleRate = TalosPocketConditioningPayload.SAMPLE_RATE,
+                    shape = conditioning.shape,
+                    values = conditioning.valuesCopy(),
+                )
+            },
+        ).build(
+            acceptedPhrases = acceptedPhrases,
+            displayName = displayName,
+            language = language,
+            style = style,
+            consentVersion = consentVersion,
+            cancellation = TalosVoiceEnrollmentCancellation { !queueGate.isActive(id) },
+        )
+        ensureActive()
+        return built.copy(
+            stageMetrics = (lifecycleMetrics + built.stageMetrics)
+                .sortedBy(TalosVoiceEnrollmentStageMetric::startedAtNs),
+        )
     }
 
     private fun runSpeakStreamingWithLegacyProfile(
@@ -1605,7 +1749,7 @@ internal class TalosVoiceHost(
                 pocketRuntimeRoot = root
             }
             val activeRuntime = pocketRuntime ?: pocketRuntimeFactory(root, cpuThreads).also { pocketRuntime = it }
-            TalosPocketVoiceEngine(TalosPocketOrtRuntimeAdapter(activeRuntime))
+            TalosPocketVoiceEngine(activeRuntime)
         }
         TalosMossPromptPayload.BACKEND -> {
             closePocketEngineState()
@@ -1648,6 +1792,34 @@ internal class TalosVoiceHost(
             sentenceIndex = sentenceIndex,
             frameIndex = frameIndex,
             requestedFrames = inputFrames,
+        )
+
+    private inline fun <T> measuredEnrollmentStage(
+        stage: String,
+        metrics: MutableList<TalosVoiceEnrollmentStageMetric>,
+        block: () -> T,
+    ): T {
+        val startedAtNs = System.nanoTime()
+        return try {
+            block()
+        } finally {
+            metrics += TalosVoiceEnrollmentStageMetric(
+                stage = stage,
+                startedAtNs = startedAtNs,
+                durationNs = System.nanoTime() - startedAtNs,
+                threadName = Thread.currentThread().name,
+            )
+        }
+    }
+
+    private fun TalosPocketStageMetric.toEnrollmentStageMetric(): TalosVoiceEnrollmentStageMetric =
+        TalosVoiceEnrollmentStageMetric(
+            stage = stage,
+            startedAtNs = startedAtNs,
+            durationNs = durationNs,
+            threadName = threadName,
+            inputFrames = inputFrames,
+            outputSamples = outputSamples,
         )
 
     private fun TalosPocketStageMetric.toMigrationDiagnosticEvent(): TalosVoiceDiagnosticEvent =

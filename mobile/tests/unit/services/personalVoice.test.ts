@@ -7,6 +7,7 @@ const bridge = vi.hoisted(() => ({
     deleteProfile: vi.fn(),
     speak: vi.fn(),
     stop: vi.fn(),
+    buildEnrollmentProfile: vi.fn(),
     addListener: vi.fn(),
 }))
 
@@ -17,6 +18,7 @@ vi.mock('@capacitor/core', () => ({
 const {
     talosPersonalVoiceStatus,
     talosPersonalVoiceProfiles,
+    talosBuildVoiceEnrollmentProfile,
     talosSpeakForReading,
 } = await import('@/services/personalVoice')
 
@@ -31,6 +33,7 @@ describe('personalVoice service', () => {
     beforeEach(() => {
         bridge.status.mockReset()
         bridge.profiles.mockReset()
+        bridge.buildEnrollmentProfile.mockReset()
     })
 
     // §40's own contract: ready means installed AND at least one COMPATIBLE
@@ -74,6 +77,48 @@ describe('personalVoice service', () => {
     it('PVOICE-PROFILES-01 a thrown bridge error reads as an empty list, not a crash', async () => {
         bridge.profiles.mockRejectedValue(new Error('bridge unavailable'))
         await expect(talosPersonalVoiceProfiles()).resolves.toEqual([])
+    })
+
+    it('PVOICE-ENROLL-01 returns the measured Pocket V2 build contract without MOSS quantizer fields', async () => {
+        const measured = {
+            backend: 'pocket-v2' as const,
+            profileSchemaVersion: 2 as const,
+            sourceSampleRate: 48_000,
+            sourceSamples: 768_000,
+            referenceSamples: 576_000,
+            referenceDurationMs: 12_000,
+            conditioningFrames: 150,
+            conditioningDimension: 1_024,
+            enrollmentDurationMs: 16_000,
+            stages: [
+                {
+                    stage: 'mimi_encoder',
+                    startedAtNs: 100,
+                    durationNs: 25,
+                    threadName: 'talos-voice-owner',
+                    inputFrames: 576_000,
+                    outputSamples: 150,
+                },
+            ],
+        }
+        bridge.buildEnrollmentProfile.mockResolvedValue(measured)
+
+        const result = await talosBuildVoiceEnrollmentProfile({
+            displayName: 'Antonino',
+            language: 'it-IT',
+            style: 'neutral',
+            consentVersion: 1,
+        })
+
+        expect(result).toEqual(measured)
+        expect(result).not.toHaveProperty('quantizerCount')
+        expect(result).not.toHaveProperty('frameCount')
+        expect(bridge.buildEnrollmentProfile).toHaveBeenCalledWith({
+            displayName: 'Antonino',
+            language: 'it-IT',
+            style: 'neutral',
+            consentVersion: 1,
+        })
     })
 
     // talosSpeakForReading - the real router decision through to the real
