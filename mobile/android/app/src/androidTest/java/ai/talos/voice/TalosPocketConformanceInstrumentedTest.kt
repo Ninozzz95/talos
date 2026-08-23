@@ -89,6 +89,7 @@ class TalosPocketConformanceInstrumentedTest {
                 firstDecodeFrames = 15,
                 regularDecodeFrames = 15,
                 hardMaxFramesPerSentence = 24,
+                stabilizeOnset = false,
             ),
         )
         try {

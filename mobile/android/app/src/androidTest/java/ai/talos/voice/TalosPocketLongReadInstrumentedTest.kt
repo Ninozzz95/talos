@@ -14,6 +14,7 @@ import android.util.Base64
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
+import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
@@ -58,27 +59,35 @@ class TalosPocketLongReadInstrumentedTest {
         }
 
         val raw = fixture.requireArtifact(session)
-        val drainEnd = raw.events("DRAIN_END").single()
+        val playbackBoundary = raw.events("PLAYBACK_BOUNDARY_REACHED").single()
+        val onsetEvents = raw.events("ONSET_STABILIZED")
         fixture.writeSummary(
             gate = "POCKET-PLAYBACK-01",
             suffix = "short",
             value = JSONObject()
                 .put("result", result.toJson())
                 .put("firstWriteAtNs", raw.events("AUDIO_WRITE").first().getLong("atElapsedRealtimeNs"))
-                .put("drainEndPlaybackHeadFrames", drainEnd.getLong("playbackHeadFrames"))
-                .put("drainEndQueueDepthFrames", drainEnd.getLong("queueDepthFrames"))
+                .put("playbackBoundaryFrames", playbackBoundary.getLong("playbackBoundaryFrames"))
+                .put("playbackBoundaryHeadFrames", playbackBoundary.getLong("playbackHeadFrames"))
+                .put("playbackBoundaryQueueDepthFrames", playbackBoundary.getLong("queueDepthFrames"))
+                .put("playbackCompletionSource", playbackBoundary.getString("playbackCompletionSource"))
+                .put("terminalDrainRemainingFrames", playbackBoundary.getLong("terminalDrainRemainingFrames"))
+                .put("terminalDrainExpectedNs", playbackBoundary.getLong("terminalDrainExpectedNs"))
+                .put("onsetEvents", JSONArray(onsetEvents))
                 .put("rawArtifactSha256", sha256(session.artifactFileOrNull()!!)),
         )
 
         assertExactPocketRoute(result, fixture.profile.header.profileId)
         assertFalse(result.cancelled)
         assertEquals(0, result.hardwareUnderruns)
+        assertTrue("short Pocket clip hit the harness hard cap", result.generatedFrames < SHORT_FRAMES)
+        assertOnsetEvidence(result, raw)
         assertTrue(
             "short Pocket PCM was written but playback head never advanced",
-            drainEnd.getLong("playbackHeadFrames") > 0L,
+            playbackBoundary.getLong("playbackHeadFrames") > 0L,
         )
         assertTrue("short Pocket playback did not drain", result.drainedWithinTimeout)
-        assertEquals(0L, drainEnd.getLong("queueDepthFrames"))
+        assertTerminalDrainEvidence(playbackBoundary)
     }
 
     @Test
@@ -93,8 +102,13 @@ class TalosPocketLongReadInstrumentedTest {
             maxFrames = WARMUP_FRAMES,
             seed = SEED,
         )
+        val captures = QUEUED_TEXTS.indices.map { PublicPcmCapture() }
         val sessions = QUEUED_TEXTS.indices.map { index ->
-            fixture.session("queue-$index", source = "chat")
+            fixture.session(
+                suffix = "queue-$index",
+                source = "chat",
+                acceptedPcmObserver = captures[index]::accept,
+            )
         }
         val results = arrayOfNulls<TalosVoiceStreamResult>(QUEUED_TEXTS.size)
         val failures = arrayOfNulls<String>(QUEUED_TEXTS.size)
@@ -102,7 +116,7 @@ class TalosPocketLongReadInstrumentedTest {
         val latch = CountDownLatch(QUEUED_TEXTS.size)
 
         try {
-            TalosVoiceDiagnosticProbe.armNextProductionRun(sessions.first())
+            sessions.forEach(TalosVoiceDiagnosticProbe::armNextProductionRun)
             QUEUED_TEXTS.forEachIndexed { index, text ->
                 host.submitSpeakStreamingWithProfile(
                     text = text,
@@ -118,26 +132,81 @@ class TalosPocketLongReadInstrumentedTest {
                         onFailure = { failures[index] = "${it.javaClass.simpleName}:${it.message}" },
                     )
                     completedAtNs[index] = SystemClock.elapsedRealtimeNanos()
-                    if (index + 1 < sessions.size) {
-                        TalosVoiceDiagnosticProbe.armNextProductionRun(sessions[index + 1])
-                    }
                     latch.countDown()
                 }
             }
             assertTrue("queued Pocket production calls timed out", latch.await(180, TimeUnit.SECONDS))
         } finally {
-            TalosVoiceDiagnosticProbe.disarm()
+            while (TalosVoiceDiagnosticProbe.disarm() != null) Unit
+            TalosVoiceHost.resetForTests()
+        }
+
+        val isolatedCaptures = QUEUED_TEXTS.indices.map { PublicPcmCapture() }
+        val isolatedSessions = QUEUED_TEXTS.indices.map { index ->
+            fixture.session(
+                suffix = "isolated-$index",
+                source = "chat",
+                acceptedPcmObserver = isolatedCaptures[index]::accept,
+            )
+        }
+        val isolatedResults = arrayOfNulls<TalosVoiceStreamResult>(QUEUED_TEXTS.size)
+        TalosVoiceHost.resetForTests()
+        val isolatedHost = TalosVoiceHost.get(fixture.context)
+        try {
+            QUEUED_TEXTS.forEachIndexed { index, text ->
+                TalosVoiceDiagnosticProbe.armNextProductionRun(isolatedSessions[index])
+                isolatedResults[index] = isolatedHost.speakStreamingWithProfileBlocking(
+                    text = text,
+                    locale = LOCALE,
+                    profile = fixture.profile,
+                    maxFrames = QUEUED_FRAMES,
+                    seed = SEED + index,
+                    diagnosticRoute = isolatedSessions[index].config.route,
+                )
+            }
+        } finally {
+            while (TalosVoiceDiagnosticProbe.disarm() != null) Unit
             TalosVoiceHost.resetForTests()
         }
 
         val raw = sessions.mapNotNull { session ->
             session.artifactFileOrNull()?.takeIf(File::isFile)?.let { JSONObject(it.readText(Charsets.UTF_8)) }
         }
-        val gapsMs = if (raw.size == sessions.size) {
+        fun writePcmCase(
+            mode: String,
+            index: Int,
+            capture: PublicPcmCapture,
+            result: TalosVoiceStreamResult,
+        ): JSONObject {
+            val file = File(fixture.outputDirectory, "${fixture.runId}-$mode-$index-accepted.f32le")
+            val capturedSamples = capture.writeAndClear(file)
+            assertEquals(
+                "accepted PCM does not cover every generated Pocket frame",
+                result.generatedFrames * POCKET_FRAME_SAMPLES,
+                capturedSamples + result.onsetDiscardedSamples,
+            )
+            return JSONObject()
+                .put("id", "$mode-$index")
+                .put("mode", mode)
+                .put("comparisonGroup", index)
+                .put("expectedText", QUEUED_TEXTS[index])
+                .put("pcmFile", file.name)
+                .put("pcmSha256", sha256(file))
+                .put("pcmSamples", capturedSamples)
+                .put("onsetDiscardedSamples", result.onsetDiscardedSamples)
+        }
+        val pcmCases = captures.mapIndexed { index, capture ->
+            writePcmCase("queue", index, capture, requireNotNull(results[index]))
+        } + isolatedCaptures.mapIndexed { index, capture ->
+            writePcmCase("isolated", index, capture, requireNotNull(isolatedResults[index]))
+        }
+        val asrManifest = fixture.writeAsrManifest(pcmCases)
+        val bufferedLeadAtNextWriteMs = if (raw.size == sessions.size) {
             (1 until raw.size).map { index ->
-                val previousDrainEnd = raw[index - 1].events("DRAIN_END").single().getLong("atElapsedRealtimeNs")
+                val previousBoundary = raw[index - 1].events("PLAYBACK_BOUNDARY_REACHED").single()
+                    .getLong("atElapsedRealtimeNs")
                 val nextFirstWrite = raw[index].events("AUDIO_WRITE").first().getLong("atElapsedRealtimeNs")
-                (nextFirstWrite - previousDrainEnd) / 1_000_000.0
+                (previousBoundary - nextFirstWrite) / 1_000_000.0
             }
         } else {
             emptyList()
@@ -150,7 +219,20 @@ class TalosPocketLongReadInstrumentedTest {
                 .put("results", JSONArray(results.map { it?.toJson() ?: JSONObject.NULL }))
                 .put("failures", JSONArray(failures.map { it ?: JSONObject.NULL }))
                 .put("completionAtNs", JSONArray(completedAtNs.toList()))
-                .put("drainToNextWriteGapMs", JSONArray(gapsMs))
+                .put("bufferedLeadAtNextWriteMs", JSONArray(bufferedLeadAtNextWriteMs))
+                .put("hardCapFrames", QUEUED_FRAMES)
+                .put("generatedFrames", JSONArray(results.map { it?.generatedFrames ?: JSONObject.NULL }))
+                .put("isolatedResults", JSONArray(isolatedResults.map { it?.toJson() ?: JSONObject.NULL }))
+                .put("endedBeforeHardCap", JSONArray(results.map { it?.generatedFrames?.let { frames -> frames < QUEUED_FRAMES } ?: false }))
+                .put(
+                    "queueMatchesIsolatedPcm",
+                    JSONArray(QUEUED_TEXTS.indices.map { index ->
+                        pcmCases[index].getString("pcmSha256") ==
+                            pcmCases[index + QUEUED_TEXTS.size].getString("pcmSha256")
+                    }),
+                )
+                .put("asrManifest", asrManifest.name)
+                .put("asrManifestSha256", sha256(asrManifest))
                 .put(
                     "rawArtifactSha256",
                     JSONArray(sessions.map { it.artifactFileOrNull()?.takeIf(File::isFile)?.let(::sha256) ?: JSONObject.NULL }),
@@ -158,20 +240,63 @@ class TalosPocketLongReadInstrumentedTest {
         )
 
         assertTrue("Pocket warm-up must really drain before the measured hot sequence", warmup.drainedWithinTimeout)
+        assertTrue(
+            "Pocket warm-up hit the harness hard cap instead of ending semantically: ${warmup.generatedFrames}/$WARMUP_FRAMES",
+            warmup.generatedFrames < WARMUP_FRAMES,
+        )
         assertTrue("queued Pocket run failed: ${failures.toList()}", failures.all { it == null })
         val completed = results.map { requireNotNull(it) }
+        val isolatedCompleted = isolatedResults.map { requireNotNull(it) }
         completed.forEach { result ->
             assertExactPocketRoute(result, fixture.profile.header.profileId)
             assertFalse(result.cancelled)
             assertTrue(result.drainedWithinTimeout)
             assertEquals(0, result.hardwareUnderruns)
+            assertTrue(
+                "queued Pocket sentence hit the harness hard cap instead of ending semantically: ${result.generatedFrames}/$QUEUED_FRAMES",
+                result.generatedFrames < QUEUED_FRAMES,
+            )
         }
-        assertEquals(QUEUED_TEXTS.size - 1, gapsMs.size)
-        assertTrue("a drain-to-next-write gap became negative: $gapsMs", gapsMs.all { it >= 0.0 })
+        isolatedCompleted.forEach { result ->
+            assertExactPocketRoute(result, fixture.profile.header.profileId)
+            assertFalse(result.cancelled)
+            assertTrue(result.drainedWithinTimeout)
+            assertEquals(0, result.hardwareUnderruns)
+            assertTrue(result.generatedFrames < QUEUED_FRAMES)
+        }
+        QUEUED_TEXTS.indices.forEach { index ->
+            assertEquals(
+                "queue state changed deterministic Pocket PCM for comparison group $index",
+                pcmCases[index].getString("pcmSha256"),
+                pcmCases[index + QUEUED_TEXTS.size].getString("pcmSha256"),
+            )
+        }
+        assertEquals(QUEUED_TEXTS.size - 1, bufferedLeadAtNextWriteMs.size)
         assertTrue(
-            "queued sentence boundary exceeded one 80 ms Pocket frame: $gapsMs",
-            gapsMs.all { it <= MAX_BOUNDARY_GAP_MS },
+            "the next sentence was not written while the previous sentence still owned buffered audio: $bufferedLeadAtNextWriteMs",
+            bufferedLeadAtNextWriteMs.all { it >= MIN_BUFFERED_LEAD_MS },
         )
+        raw.forEachIndexed { index, artifact ->
+            assertOnsetEvidence(requireNotNull(results[index]), artifact)
+            val reached = artifact.events("PLAYBACK_BOUNDARY_REACHED").single()
+            if (index == raw.lastIndex) {
+                assertTerminalDrainEvidence(reached)
+            } else {
+                assertEquals("PLAYBACK_HEAD", reached.getString("playbackCompletionSource"))
+                assertTrue(
+                    "playback head did not reach queued callback boundary",
+                    reached.getLong("playbackHeadFrames") >= reached.getLong("playbackBoundaryFrames"),
+                )
+            }
+            assertTrue(
+                "callback $index fired before its physical playback boundary",
+                completedAtNs[index] >= reached.getLong("atElapsedRealtimeNs"),
+            )
+        }
+        isolatedSessions.map(fixture::requireArtifact).forEachIndexed { index, artifact ->
+            assertOnsetEvidence(requireNotNull(isolatedResults[index]), artifact)
+            assertTerminalDrainEvidence(artifact.events("PLAYBACK_BOUNDARY_REACHED").single())
+        }
     }
 
     @Test
@@ -186,7 +311,12 @@ class TalosPocketLongReadInstrumentedTest {
             maxFrames = WARMUP_FRAMES,
             seed = SEED,
         )
-        val session = fixture.session("long", source = "assistant")
+        val capture = PublicPcmCapture()
+        val session = fixture.session(
+            suffix = "long",
+            source = "assistant",
+            acceptedPcmObserver = capture::accept,
+        )
         val thermalBefore = fixture.thermalSnapshot()
         val result: TalosVoiceStreamResult
         try {
@@ -196,7 +326,6 @@ class TalosPocketLongReadInstrumentedTest {
                 locale = LOCALE,
                 profile = fixture.profile,
                 maxFrames = LONG_MAX_FRAMES_PER_SENTENCE,
-                seed = SEED,
                 diagnosticRoute = session.config.route,
             )
         } finally {
@@ -209,11 +338,24 @@ class TalosPocketLongReadInstrumentedTest {
         val p95CoreRtf = percentile(perFrameCoreRtf, 0.95)
         val maxCoreRtf = perFrameCoreRtf.maxOrNull() ?: Double.POSITIVE_INFINITY
         val writes = raw.events("AUDIO_WRITE")
+        val onsetEvents = raw.events("ONSET_STABILIZED")
+        val firstOnsetResumeSamples = onsetEvents.first().getInt("onsetResumeStartSamples")
+        val firstOnsetResumeAudioMs = firstOnsetResumeSamples * 1_000.0 /
+            TalosPocketConditioningPayload.SAMPLE_RATE
+        val resolvedProductionSeed = raw.events("SAMPLING_CONFIG").single().getLong("samplingSeed")
         val firstWriteAtNs = writes.first().getLong("atElapsedRealtimeNs")
-        val drainEndAtNs = raw.events("DRAIN_END").single().getLong("atElapsedRealtimeNs")
-        val playbackSpanMs = (drainEndAtNs - firstWriteAtNs) / 1_000_000.0
-        val audioDurationMs = result.generatedFrames * FRAME_DURATION_MS
+        val playbackBoundaryAtNs = raw.events("PLAYBACK_BOUNDARY_REACHED").single()
+            .getLong("atElapsedRealtimeNs")
+        val terminalDrain = raw.events("PLAYBACK_BOUNDARY_REACHED").single()
+        val playbackSpanMs = (playbackBoundaryAtNs - firstWriteAtNs) / 1_000_000.0
+        val emittedSamples = result.generatedFrames * POCKET_FRAME_SAMPLES - result.onsetDiscardedSamples
+        val audioDurationMs = emittedSamples * 1_000.0 / TalosPocketConditioningPayload.SAMPLE_RATE
         val maxLeadFrames = writes.maxOf { it.getLong("queueDepthFrames") }
+        val limitedSampleFrames = writes.sumOf { it.getInt("limitedSampleFrames") }
+        val outputPeakAbs = writes.maxOf { it.getDouble("outputPeakAbs") }
+        val limiterGainReductionDb = writes.maxOf { it.getDouble("limiterGainReductionDb") }
+        val pcmFile = File(fixture.outputDirectory, "${fixture.runId}-long-accepted.f32le")
+        val capturedSamples = capture.writeAndClear(pcmFile)
 
         fixture.writeSummary(
             gate = "POCKET-LONG-01",
@@ -231,16 +373,46 @@ class TalosPocketLongReadInstrumentedTest {
                 .put("coreRtfMax", maxCoreRtf)
                 .put("measuredCoreFrames", perFrameCoreRtf.size)
                 .put("maxAudioTrackLeadFrames", maxLeadFrames)
+                .put("resolvedProductionSeed", resolvedProductionSeed)
+                .put("playbackCompletionSource", terminalDrain.getString("playbackCompletionSource"))
+                .put("terminalDrainRemainingFrames", terminalDrain.getLong("terminalDrainRemainingFrames"))
+                .put("terminalDrainExpectedNs", terminalDrain.getLong("terminalDrainExpectedNs"))
+                .put("outputGainDb", writes.first().getDouble("levelGainDb"))
+                .put("limiterCeilingDbfs", writes.first().getDouble("limiterCeilingDbfs"))
+                .put("outputPeakAbs", outputPeakAbs)
+                .put("limitedSampleFrames", limitedSampleFrames)
+                .put("limiterGainReductionDb", limiterGainReductionDb)
+                .put("onsetDiscardedSamples", result.onsetDiscardedSamples)
+                .put("firstOnsetResumeSamples", firstOnsetResumeSamples)
+                .put("firstOnsetResumeAudioMs", firstOnsetResumeAudioMs)
+                .put("hotTtfaBudgetMs", HOT_TTFA_MAX_MS)
+                .put("onsetEvents", JSONArray(onsetEvents))
+                .put("pcmFile", pcmFile.name)
+                .put("pcmSha256", sha256(pcmFile))
+                .put("pcmSamples", capturedSamples)
                 .put("rawArtifactSha256", sha256(session.artifactFileOrNull()!!)),
         )
 
         assertTrue("Pocket warm-up must drain before hot TTFA is measured", warmup.drainedWithinTimeout)
+        assertTrue(
+            "Pocket warm-up hit the harness hard cap instead of ending semantically: ${warmup.generatedFrames}/$WARMUP_FRAMES",
+            warmup.generatedFrames < WARMUP_FRAMES,
+        )
         assertExactPocketRoute(result, fixture.profile.header.profileId)
         assertFalse(result.cancelled)
         assertTrue("long Pocket playback did not drain", result.drainedWithinTimeout)
         assertEquals("long Pocket playback had real AudioTrack underruns", 0, result.hardwareUnderruns)
-        assertTrue("hot TTFA exceeded 250 ms: ${result.ttfaMs}", requireNotNull(result.ttfaMs) <= HOT_TTFA_MAX_MS)
+        assertTrue(
+            "hot TTFA exceeded the measured onset budget $HOT_TTFA_MAX_MS ms: ${result.ttfaMs}",
+            requireNotNull(result.ttfaMs) <= HOT_TTFA_MAX_MS,
+        )
         assertTrue("no Pocket AR frames were measured", perFrameCoreRtf.isNotEmpty())
+        assertEquals(
+            "long production PCM does not cover every accepted generated frame",
+            result.generatedFrames * POCKET_FRAME_SAMPLES,
+            capturedSamples + result.onsetDiscardedSamples,
+        )
+        assertOnsetEvidence(result, raw)
         assertTrue("Pocket core p95 RTF $p95CoreRtf exceeded $CORE_RTF_P95_MAX", p95CoreRtf <= CORE_RTF_P95_MAX)
         assertTrue("Pocket core max RTF $maxCoreRtf exceeded $CORE_RTF_MAX", maxCoreRtf <= CORE_RTF_MAX)
         assertTrue(
@@ -248,7 +420,48 @@ class TalosPocketLongReadInstrumentedTest {
             playbackSpanMs <= audioDurationMs + PLAYBACK_TOLERANCE_MS,
         )
         assertTrue("AudioTrack lead became negative", writes.all { it.getLong("queueDepthFrames") >= 0L })
+        assertTrue("an AUDIO_WRITE event reported no accepted PCM", writes.all { it.getInt("writtenFrames") > 0 })
         assertTrue("AudioTrack lead exceeded two seconds: $maxLeadFrames", maxLeadFrames <= MAX_AUDIO_LEAD_FRAMES)
+        assertTrue("Pocket output gain was not +12 dB", writes.all { it.getDouble("levelGainDb") == 12.0 })
+        assertTrue("Pocket output crossed the -1 dBFS sample ceiling: $outputPeakAbs", outputPeakAbs <= 0.891_251)
+        assertEquals("production did not use the measured default seed", 42L, resolvedProductionSeed)
+        assertTrue("terminal playback emitted an underrun event", raw.events("UNDERRUN_OBSERVED").isEmpty())
+        assertTerminalDrainEvidence(terminalDrain)
+    }
+
+    private fun assertTerminalDrainEvidence(event: JSONObject) {
+        assertEquals(TalosPcmTerminalBoundary.COMPLETION_SOURCE, event.getString("playbackCompletionSource"))
+        val head = event.getLong("playbackHeadFrames")
+        val boundary = event.getLong("playbackBoundaryFrames")
+        val remaining = event.getLong("terminalDrainRemainingFrames")
+        assertTrue("terminal drain observed a head beyond its boundary", head <= boundary)
+        assertEquals("terminal drain remaining frames do not match the observed pre-stop head", boundary - head, remaining)
+        val sampleRate = TalosPocketConditioningPayload.SAMPLE_RATE.toLong()
+        val expectedNs = (remaining * 1_000_000_000L + sampleRate - 1L) / sampleRate
+        assertEquals("terminal drain duration was not derived from exact PCM frames", expectedNs, event.getLong("terminalDrainExpectedNs"))
+    }
+
+    private fun assertOnsetEvidence(result: TalosVoiceStreamResult, artifact: JSONObject) {
+        val onsetEvents = artifact.events("ONSET_STABILIZED")
+        assertTrue("Pocket production emitted no measured onset boundary", onsetEvents.isNotEmpty())
+        assertEquals(
+            "stream result discarded-sample count differs from diagnostic onset events",
+            result.onsetDiscardedSamples,
+            onsetEvents.sumOf { it.getInt("onsetDiscardedSamples") },
+        )
+        onsetEvents.forEach { event ->
+            val gapStart = event.getInt("onsetGapStartSamples")
+            val gapEnd = event.getInt("onsetGapEndSamples")
+            val resumeStart = event.getInt("onsetResumeStartSamples")
+            assertTrue("measured onset quiet gap is empty", gapStart < gapEnd)
+            assertTrue("onset resume precedes the measured quiet gap end", gapEnd <= resumeStart)
+            assertEquals(ONSET_ANALYSIS_WINDOW_SAMPLES, event.getInt("onsetAnalysisWindowSamples"))
+            assertTrue(event.getDouble("onsetBoundaryThreshold") > 0.0)
+            assertEquals(
+                ai.talos.voice.pocket.TalosPocketOnsetStabilizer.BOUNDARY_SOURCE,
+                event.getString("onsetBoundarySource"),
+            )
+        }
     }
 
     private class Fixture private constructor(
@@ -262,7 +475,11 @@ class TalosPocketLongReadInstrumentedTest {
         val profile: TalosVoiceProfileV2,
         val outputDirectory: File,
     ) {
-        fun session(suffix: String, source: String): TalosVoiceDiagnosticSession {
+        fun session(
+            suffix: String,
+            source: String,
+            acceptedPcmObserver: ((FloatArray, Int, Int) -> Unit)? = null,
+        ): TalosVoiceDiagnosticSession {
             val traceId = "$runId-$suffix"
             val route = TalosVoiceDiagnosticRoute(
                 traceId = traceId,
@@ -273,7 +490,7 @@ class TalosPocketLongReadInstrumentedTest {
                 requestedProfileId = profile.header.profileId,
             )
             return TalosVoiceDiagnosticSession(
-                TalosVoiceDiagnosticConfig(
+                config = TalosVoiceDiagnosticConfig(
                     outputDirectory = outputDirectory,
                     route = route,
                     appVersion = context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "0.1.19",
@@ -284,7 +501,30 @@ class TalosPocketLongReadInstrumentedTest {
                     deviceFingerprint = Build.FINGERPRINT,
                     usbTransportProof = usbTransportProof,
                 ),
+                acceptedPcmObserver = acceptedPcmObserver,
             )
+        }
+
+        fun writeAsrManifest(cases: List<JSONObject>): File {
+            val manifest = JSONObject()
+                .put("schemaVersion", 1)
+                .put("runId", runId)
+                .put("sampleRate", TalosPocketConditioningPayload.SAMPLE_RATE)
+                .put("channels", 1)
+                .put("encoding", "float32le")
+                .put("locale", LOCALE)
+                .put("model", ASR_MODEL)
+                .put("modelRevision", ASR_MODEL_REVISION)
+                .put("cases", JSONArray(cases))
+            val file = File(outputDirectory, "$runId-queue-asr-manifest.json")
+            val temporary = File(outputDirectory, ".${file.name}.${System.nanoTime()}.tmp")
+            temporary.writeText(manifest.toString(2) + "\n", Charsets.UTF_8)
+            try {
+                Os.rename(temporary.absolutePath, file.absolutePath)
+            } finally {
+                if (temporary.exists()) temporary.delete()
+            }
+            return file
         }
 
         fun requireArtifact(session: TalosVoiceDiagnosticSession): JSONObject {
@@ -377,6 +617,46 @@ class TalosPocketLongReadInstrumentedTest {
         }
     }
 
+    private class PublicPcmCapture {
+        private val chunks = ArrayList<FloatArray>()
+        private var sampleRate: Int? = null
+        private var channels: Int? = null
+
+        @Synchronized
+        fun accept(pcm: FloatArray, sampleRate: Int, channels: Int) {
+            require(sampleRate == TalosPocketConditioningPayload.SAMPLE_RATE) {
+                "unexpected Pocket PCM sample rate: $sampleRate"
+            }
+            require(channels == 1) { "expected mono Pocket PCM, received $channels channels" }
+            require(this.sampleRate == null || this.sampleRate == sampleRate) { "PCM sample rate changed mid-run" }
+            require(this.channels == null || this.channels == channels) { "PCM channels changed mid-run" }
+            this.sampleRate = sampleRate
+            this.channels = channels
+            chunks += pcm
+        }
+
+        @Synchronized
+        fun writeAndClear(file: File): Int {
+            require(chunks.isNotEmpty()) { "no accepted Pocket PCM was captured" }
+            var samples = 0
+            try {
+                FileOutputStream(file).buffered().use { output ->
+                    chunks.forEach { pcm ->
+                        val bytes = ByteBuffer.allocate(pcm.size * Float.SIZE_BYTES)
+                            .order(ByteOrder.LITTLE_ENDIAN)
+                        pcm.forEach(bytes::putFloat)
+                        output.write(bytes.array())
+                        samples += pcm.size
+                    }
+                }
+                return samples
+            } finally {
+                chunks.forEach { it.fill(0f) }
+                chunks.clear()
+            }
+        }
+    }
+
     private fun assertExactPocketRoute(result: TalosVoiceStreamResult, profileId: String) {
         assertEquals(TalosPocketConditioningPayload.BACKEND, result.resolvedEngine)
         assertEquals(LOCALE, result.resolvedLocale)
@@ -397,6 +677,7 @@ class TalosPocketLongReadInstrumentedTest {
         .put("resolvedProfileIdSha256", resolvedProfileId?.let { sha256(it.toByteArray()) } ?: JSONObject.NULL)
         .put("fallbackReason", fallbackReason ?: JSONObject.NULL)
         .put("generatedFrames", generatedFrames)
+        .put("onsetDiscardedSamples", onsetDiscardedSamples)
         .put("resolvedProfileSchemaVersion", resolvedProfileSchemaVersion ?: JSONObject.NULL)
 
     private fun JSONObject.events(kind: String): List<JSONObject> {
@@ -474,19 +755,23 @@ class TalosPocketLongReadInstrumentedTest {
         const val EXPECTED_CONDITIONING_FLOATS = EXPECTED_CONDITIONING_FRAMES * 1_024
         const val EXPECTED_CONDITIONING_SHA256 = "a9d6f8507dca70928d521e4aad7ac1ae426c78442e24c0e21337586e815f3b6e"
         const val SHORT_TEXT = "Ciao."
-        const val SHORT_FRAMES = 2
+        const val SHORT_FRAMES = 96
         const val WARMUP_TEXT = "Buongiorno, questa è una breve prova italiana per scaldare il motore."
-        const val WARMUP_FRAMES = 24
-        const val QUEUED_FRAMES = 24
+        const val WARMUP_FRAMES = 96
+        const val QUEUED_FRAMES = 96
         const val LONG_MAX_FRAMES_PER_SENTENCE = 120
         const val FRAME_DURATION_MS = 80L
         const val FRAME_NS = 80_000_000L
-        const val MAX_BOUNDARY_GAP_MS = 80.0
-        const val HOT_TTFA_MAX_MS = 250L
+        const val POCKET_FRAME_SAMPLES = 1_920
+        const val ONSET_ANALYSIS_WINDOW_SAMPLES = 240
+        const val MIN_BUFFERED_LEAD_MS = 1.0
+        const val HOT_TTFA_MAX_MS = 600L
         const val CORE_RTF_P95_MAX = 0.65
         const val CORE_RTF_MAX = 0.85
         const val PLAYBACK_TOLERANCE_MS = 250.0
         const val MAX_AUDIO_LEAD_FRAMES = 48_000L
+        const val ASR_MODEL = "openai/whisper-large-v3-turbo"
+        const val ASR_MODEL_REVISION = "cf7667b3865845227378e06c611d63789cbcdcce"
 
         val QUEUED_TEXTS = listOf(
             "La prima frase attraversa la porta della chat e deve terminare senza svuotare il flusso.",

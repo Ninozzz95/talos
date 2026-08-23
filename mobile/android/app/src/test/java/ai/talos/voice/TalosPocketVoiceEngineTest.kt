@@ -40,6 +40,14 @@ class TalosPocketVoiceEngineTest {
         assertEquals(991L, runtime.seed)
         assertEquals(1_024, runtime.conditioning.valuesCopy().size)
         assertEquals(listOf("flow_main_ar"), stages.map { it.stage })
+        assertEquals(480, stages.single().onsetDiscardedSamples)
+        assertEquals(240, stages.single().onsetLeadingSilenceSamples)
+        assertEquals(360, stages.single().onsetGapStartSamples)
+        assertEquals(600, stages.single().onsetGapEndSamples)
+        assertEquals(720, stages.single().onsetResumeStartSamples)
+        assertEquals(240, stages.single().onsetAnalysisWindowSamples)
+        assertEquals(0.01f, stages.single().onsetBoundaryThreshold)
+        assertEquals("PINNED_SACRIFICIAL_PREFIX_SILENCE", stages.single().onsetBoundarySource)
         assertEquals(1, frames.size)
         assertEquals("profile-pocket", frames.single().profileId)
         assertEquals("it-IT", frames.single().locale)
@@ -49,6 +57,7 @@ class TalosPocketVoiceEngineTest {
         assertEquals("profile-pocket", result.profileId)
         assertEquals("it-IT", result.locale)
         assertEquals(TalosVoiceEngineTerminal.DONE, result.terminal)
+        assertEquals(480, result.onsetDiscardedSamples)
     }
 
     @Test
@@ -118,6 +127,14 @@ class TalosPocketVoiceEngineTest {
                     inputFrames = 1,
                     outputSamples = null,
                     residentStateBytes = 128,
+                    onsetDiscardedSamples = 480,
+                    onsetLeadingSilenceSamples = 240,
+                    onsetGapStartSamples = 360,
+                    onsetGapEndSamples = 600,
+                    onsetResumeStartSamples = 720,
+                    onsetAnalysisWindowSamples = 240,
+                    onsetBoundaryThreshold = 0.01f,
+                    onsetBoundarySource = "PINNED_SACRIFICIAL_PREFIX_SILENCE",
                 ),
             )
             cancelledAfterStage = cancellation.isCancelled()
@@ -144,6 +161,7 @@ class TalosPocketVoiceEngineTest {
                 sentenceCount = 1,
                 generatedFrames = if (cancelledAfterStage) 0 else 1,
                 emittedSamples = if (cancelledAfterStage) 0 else 2,
+                onsetDiscardedSamples = if (cancelledAfterStage) 0 else 480,
                 elapsedNs = 100,
                 producerBlockedNs = 5,
                 decoderNs = 25,

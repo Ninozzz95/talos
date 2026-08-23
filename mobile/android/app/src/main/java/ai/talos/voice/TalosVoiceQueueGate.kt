@@ -19,6 +19,7 @@ internal enum class TalosVoiceQueueMode {
 internal data class TalosVoiceQueueTicket(
     val id: Long,
     val mode: TalosVoiceQueueMode,
+    val playbackEpoch: Long,
 )
 
 /**
@@ -34,10 +35,16 @@ internal class TalosVoiceQueueGate(
     private val counter: AtomicLong = AtomicLong(0L),
 ) {
     private val active = AtomicLong(0L)
+    private val playbackEpoch = AtomicLong(0L)
 
+    @Synchronized
     fun submit(mode: TalosVoiceQueueMode): TalosVoiceQueueTicket {
-        val ticket = TalosVoiceQueueTicket(counter.incrementAndGet(), mode)
-        if (mode == TalosVoiceQueueMode.FLUSH) active.set(ticket.id)
+        val id = counter.incrementAndGet()
+        if (mode == TalosVoiceQueueMode.FLUSH) {
+            active.set(id)
+            playbackEpoch.incrementAndGet()
+        }
+        val ticket = TalosVoiceQueueTicket(id, mode, playbackEpoch.get())
         return ticket
     }
 
@@ -50,13 +57,39 @@ internal class TalosVoiceQueueGate(
         }
     }
 
+    @Synchronized
     fun cancel(): Long {
         val invalidated = counter.incrementAndGet()
         active.set(invalidated)
+        playbackEpoch.incrementAndGet()
         return invalidated
     }
 
     fun isActive(id: Long): Boolean = active.get() == id
 
     fun activeId(): Long = active.get()
+
+    /** True only when a later ADD is waiting; FLUSH/cancel already changed [active]. */
+    fun hasQueuedAfter(id: Long): Boolean = active.get() == id && counter.get() > id
+
+    /**
+     * True while any later ticket belongs to the same uninterrupted playback
+     * epoch, whether it is only reserved or already claimed by the owner lane.
+     */
+    fun hasPlaybackQueuedAfter(id: Long, epoch: Long): Boolean =
+        playbackEpoch.get() == epoch && counter.get() > id
+
+    /**
+     * Runs a short end-of-stream mutation only while [id] is still the last
+     * ticket in [epoch]. Holding the same monitor as [submit] closes the race
+     * between observing an empty queue and publishing the sealed AudioTrack.
+     */
+    @Synchronized
+    fun <T : Any> runIfPlaybackTerminal(id: Long, epoch: Long, action: () -> T): T? {
+        if (playbackEpoch.get() != epoch || counter.get() > id) return null
+        return action()
+    }
+
+    /** ADD advances the active utterance but never invalidates PCM already accepted by the shared track. */
+    fun isPlaybackEpochActive(epoch: Long): Boolean = playbackEpoch.get() == epoch
 }

@@ -8,11 +8,14 @@ import org.junit.Test
 
 
 class TalosPocketBundleTest {
-    private fun bundle(flowStates: String = VALID_STATES): JSONObject = JSONObject(
+    private fun bundle(
+        flowStates: String = VALID_STATES,
+        bundleName: String = "italian",
+    ): JSONObject = JSONObject(
         """
         {
           "schema_version": 2,
-          "bundle_name": "italian",
+          "bundle_name": "$bundleName",
           "sample_rate": 24000,
           "frame_rate": 12.5,
           "samples_per_frame": 1920,
@@ -73,6 +76,41 @@ class TalosPocketBundleTest {
         val unknownFill = VALID_STATES.replace("\"zeros\"", "\"random\"")
         assertThrows(IllegalArgumentException::class.java) { TalosPocketBundle.fromJson(bundle(unknownFill)) }
     }
+
+    @Test
+    fun `accepts the official Italian 24 layer state layout and rejects mismatched counts`() {
+        val italian = TalosPocketBundle.fromJson(bundle())
+        val italian24 = TalosPocketBundle.fromJson(bundle(bundleName = "italian_24l"))
+
+        italian.withStateCounts(flow = 18, mimi = 56).requireSupportedStateLayout()
+        italian24.withStateCounts(flow = 72, mimi = 56).requireSupportedStateLayout()
+        assertThrows(IllegalArgumentException::class.java) {
+            italian.withStateCounts(flow = 72, mimi = 56).requireSupportedStateLayout()
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            italian24.withStateCounts(flow = 18, mimi = 56).requireSupportedStateLayout()
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            italian24.withStateCounts(flow = 72, mimi = 55).requireSupportedStateLayout()
+        }
+    }
+
+    private fun TalosPocketBundle.withStateCounts(flow: Int, mimi: Int): TalosPocketBundle = copy(
+        flowStates = List(flow) { index ->
+            flowStates.first().copy(
+                index = index,
+                inputName = "state_$index",
+                outputName = "out_state_$index",
+            )
+        },
+        mimiStates = List(mimi) { index ->
+            mimiStates.first().copy(
+                index = index,
+                inputName = "state_$index",
+                outputName = "out_state_$index",
+            )
+        },
+    )
 
     private companion object {
         const val VALID_STATES = """

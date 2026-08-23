@@ -2,12 +2,14 @@ package ai.talos.voice.pocket
 
 
 data class TalosPocketConfig(
-    val temperature: Float = 0.7f,
+    val temperature: Float = 0.3f,
     val lsdSteps: Int = 1,
     val queueCapacityFrames: Int = 24,
     val firstDecodeFrames: Int = 2,
-    val regularDecodeFrames: Int = 12,
+    val regularDecodeFrames: Int = 3,
     val hardMaxFramesPerSentence: Int = 720,
+    val stabilizeOnset: Boolean = true,
+    val prependOnsetPrefix: Boolean = stabilizeOnset,
 ) {
     init {
         require(temperature.isFinite() && temperature >= 0f) { "temperature must be finite and non-negative" }
@@ -53,6 +55,14 @@ data class TalosPocketStageMetric(
     val inputFrames: Int? = null,
     val outputSamples: Int? = null,
     val residentStateBytes: Long? = null,
+    val onsetDiscardedSamples: Int? = null,
+    val onsetLeadingSilenceSamples: Int? = null,
+    val onsetGapStartSamples: Int? = null,
+    val onsetGapEndSamples: Int? = null,
+    val onsetResumeStartSamples: Int? = null,
+    val onsetAnalysisWindowSamples: Int? = null,
+    val onsetBoundaryThreshold: Float? = null,
+    val onsetBoundarySource: String? = null,
 )
 
 data class TalosPocketFrame(
@@ -73,6 +83,7 @@ data class TalosPocketSynthesisResult(
     val sentenceCount: Int,
     val generatedFrames: Int,
     val emittedSamples: Int,
+    val onsetDiscardedSamples: Int = 0,
     val elapsedNs: Long,
     val producerBlockedNs: Long,
     val decoderNs: Long,

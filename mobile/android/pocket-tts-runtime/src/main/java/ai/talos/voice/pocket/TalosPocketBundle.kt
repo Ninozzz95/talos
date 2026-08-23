@@ -96,11 +96,25 @@ data class TalosPocketBundle(
 ) {
     val frameDurationMs: Double get() = samplesPerFrame * 1_000.0 / sampleRate
 
+    internal fun requireSupportedStateLayout() {
+        val expectedFlowStates = when (language) {
+            "italian" -> 18
+            "italian_24l" -> 72
+            else -> throw IllegalArgumentException("unsupported Pocket Italian bundle: $language")
+        }
+        require(flowStates.size == expectedFlowStates) {
+            "Pocket $language requires $expectedFlowStates flow states"
+        }
+        require(mimiStates.size == 56) { "Pocket Italian v2 requires 56 Mimi states" }
+    }
+
     companion object {
         fun fromJson(json: JSONObject): TalosPocketBundle {
             require(json.getInt("schema_version") == 2) { "Pocket schema_version must be 2" }
             val language = json.getString("bundle_name")
-            require(language == "italian") { "Pocket bundle_name must be italian" }
+            require(language == "italian" || language == "italian_24l") {
+                "Pocket bundle_name must be italian or italian_24l"
+            }
             val sampleRate = json.getInt("sample_rate")
             val frameRate = json.getDouble("frame_rate")
             val samplesPerFrame = json.getInt("samples_per_frame")

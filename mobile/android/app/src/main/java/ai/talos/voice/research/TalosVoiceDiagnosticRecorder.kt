@@ -6,6 +6,7 @@ import java.time.Instant
 
 internal class TalosVoiceDiagnosticSession(
     val config: TalosVoiceDiagnosticConfig,
+    private val acceptedPcmObserver: ((FloatArray, Int, Int) -> Unit)? = null,
 ) {
     private val startedAtElapsedRealtimeNs = SystemClock.elapsedRealtimeNanos()
     private val events = ArrayList<TalosVoiceDiagnosticEvent>()
@@ -28,6 +29,13 @@ internal class TalosVoiceDiagnosticSession(
 
     @Synchronized
     fun eventCount(): Int = events.size
+
+    /** Diagnostic-only copy of PCM after the real sink accepted the complete block. */
+    @Synchronized
+    fun observeAcceptedPcm(pcm: FloatArray, sampleRate: Int, channels: Int) {
+        check(finishedFile == null) { "diagnostic session ${config.route.traceId} is already finished" }
+        acceptedPcmObserver?.invoke(pcm.copyOf(), sampleRate, channels)
+    }
 
     @Synchronized
     fun finish(outcome: TalosVoiceDiagnosticOutcome): File {
@@ -57,23 +65,23 @@ internal class TalosVoiceDiagnosticSession(
     }
 }
 
-/** One armed product request at a time; normal production carries zero recorder work. */
+/** Bounded FIFO of explicitly armed product requests; normal production carries zero recorder work. */
 internal object TalosVoiceDiagnosticProbe {
-    private var armed: TalosVoiceDiagnosticSession? = null
+    private val armed = ArrayDeque<TalosVoiceDiagnosticSession>()
 
     @Synchronized
     fun armNextProductionRun(session: TalosVoiceDiagnosticSession) {
-        check(armed == null) { "a voice diagnostic production probe is already armed" }
-        armed = session
+        check(armed.size < MAX_ARMED_RUNS) { "too many voice diagnostic production probes are armed" }
+        armed.addLast(session)
     }
 
     @Synchronized
     fun claimProductionRun(route: TalosVoiceDiagnosticRoute): TalosVoiceDiagnosticSession? {
-        val candidate = armed ?: return null
+        val candidate = armed.firstOrNull() ?: return null
         check(candidate.config.route == route) {
             "diagnostic route changed before production entry: expected=${candidate.config.route.traceId} actual=${route.traceId}"
         }
-        armed = null
+        armed.removeFirst()
         candidate.record(
             TalosVoiceDiagnosticEvent(
                 kind = TalosVoiceDiagnosticEventKind.PRODUCTION_DOOR_ENTERED,
@@ -84,6 +92,7 @@ internal object TalosVoiceDiagnosticProbe {
     }
 
     @Synchronized
-    fun disarm(): TalosVoiceDiagnosticSession? = armed.also { armed = null }
-}
+    fun disarm(): TalosVoiceDiagnosticSession? = if (armed.isEmpty()) null else armed.removeFirst()
 
+    private const val MAX_ARMED_RUNS = 32
+}

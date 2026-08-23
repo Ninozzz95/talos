@@ -3,6 +3,7 @@ package ai.talos.voice.pocket
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -62,6 +63,7 @@ class TalosPocketOrtRuntimeTest {
                 firstDecodeFrames = 2,
                 regularDecodeFrames = 2,
                 hardMaxFramesPerSentence = 8,
+                stabilizeOnset = false,
             ),
             resampler = TalosPocketResampler.forTesting(
                 RecordingResamplerBridge(FloatArray(0)),
@@ -93,6 +95,76 @@ class TalosPocketOrtRuntimeTest {
         assertEquals(3 * 1_920, result.emittedSamples)
         assertEquals(2, emitted.size)
         assertTrue(graphs.thirdArRunObservedCallback)
+        runtime.close()
+    }
+
+    @Test
+    fun `runtime counts only emitted user PCM and reports the measured onset boundary`() {
+        val rawPcm = FloatArray(5 * 1_920) { sample ->
+            when (sample) {
+                in 0 until 4_800 -> 0.5f
+                in 4_800 until 7_200 -> 0f
+                else -> 0.25f
+            }
+        }
+        val factory = FakeFactory()
+        val graphs = FakeGraphs(
+            tensors = factory,
+            arRuns = AtomicInteger(),
+            callbackReached = CountDownLatch(0),
+            decoderPcm = rawPcm,
+        )
+        val runtime = TalosPocketOrtRuntime.forTesting(
+            bundle = bundle(),
+            tokenizer = FakeTokenizer,
+            bosBeforeVoice = TalosPocketFloatTensor(longArrayOf(1, 1, 1_024), FloatArray(1_024)),
+            graphs = graphs,
+            config = TalosPocketConfig(
+                temperature = 0f,
+                queueCapacityFrames = 6,
+                firstDecodeFrames = 2,
+                regularDecodeFrames = 3,
+                hardMaxFramesPerSentence = 5,
+                stabilizeOnset = true,
+            ),
+            resampler = TalosPocketResampler.forTesting(RecordingResamplerBridge(FloatArray(0))),
+        )
+        val emitted = mutableListOf<FloatArray>()
+        val stages = mutableListOf<TalosPocketStageMetric>()
+
+        val result = runtime.synthesize(
+            source = "La terza frase chiude la verifica italiana.",
+            conditioning = TalosPocketConditioning.create(longArrayOf(1, 1, 1_024), FloatArray(1_024)),
+            maxFramesPerSentence = 5,
+            seed = 42L,
+            cancellation = TalosPocketCancellation(),
+            callback = object : TalosPocketCallback {
+                override fun onStage(metric: TalosPocketStageMetric) {
+                    stages += metric
+                }
+
+                override fun onPcm(frame: TalosPocketFrame): Boolean {
+                    emitted += frame.pcmFloatMono
+                    return true
+                }
+            },
+        )
+
+        val onset = stages.single { it.stage == "onset_stabilized" }
+        assertEquals(5, result.generatedFrames)
+        assertEquals(6_000, result.onsetDiscardedSamples)
+        assertEquals(3_600, result.emittedSamples)
+        assertEquals(5 * 1_920, result.onsetDiscardedSamples + result.emittedSamples)
+        assertEquals(6_000, onset.onsetDiscardedSamples)
+        assertEquals(1_200, onset.onsetLeadingSilenceSamples)
+        assertEquals(4_800, onset.onsetGapStartSamples)
+        assertEquals(7_200, onset.onsetGapEndSamples)
+        assertEquals(7_200, onset.onsetResumeStartSamples)
+        assertEquals(240, onset.onsetAnalysisWindowSamples)
+        assertEquals(TalosPocketOnsetStabilizer.BOUNDARY_SOURCE, onset.onsetBoundarySource)
+        val emittedPcm = emitted.fold(FloatArray(0)) { joined, chunk -> joined + chunk }
+        assertArrayEquals(FloatArray(1_200), emittedPcm.copyOfRange(0, 1_200), 0f)
+        assertArrayEquals(FloatArray(2_400) { 0.25f }, emittedPcm.copyOfRange(1_200, 3_600), 0f)
         runtime.close()
     }
 
@@ -160,7 +232,9 @@ class TalosPocketOrtRuntimeTest {
         override val tensors: FakeFactory,
         private val arRuns: AtomicInteger,
         private val callbackReached: CountDownLatch,
+        private val decoderPcm: FloatArray? = null,
     ) : TalosPocketOrtGraphs {
+        private val decodedSamples = AtomicInteger()
         @Volatile var thirdArRunObservedCallback = false
         var lastMimiInputFrames = 0L
 
@@ -194,7 +268,12 @@ class TalosPocketOrtRuntimeTest {
         override val mimiDecoder = LambdaSession { inputs ->
             val latent = inputs.getValue("latent") as FakeValue
             val frames = latent.shape[1].toInt()
-            FakeResult(mapOf("audio_frame" to FakeValue(longArrayOf(1, 1, frames.toLong() * 1_920), FloatArray(frames * 1_920))))
+            val sampleCount = frames * 1_920
+            val pcm = decoderPcm?.let { source ->
+                val start = decodedSamples.getAndAdd(sampleCount)
+                source.copyOfRange(start, start + sampleCount)
+            } ?: FloatArray(sampleCount)
+            FakeResult(mapOf("audio_frame" to FakeValue(longArrayOf(1, 1, sampleCount.toLong()), pcm)))
         }
         override fun close() = Unit
     }

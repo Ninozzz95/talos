@@ -12,14 +12,23 @@ data class TalosPocketPreparedPrompt(val source: String, val framesAfterEosGuess
 data class TalosPocketPlannedSentence(
     val index: Int,
     val source: String,
+    val synthesisSource: String,
     val tokenIds: IntArray,
     val framesAfterEos: Int,
 ) {
     override fun equals(other: Any?): Boolean = other is TalosPocketPlannedSentence &&
-        index == other.index && source == other.source && tokenIds.contentEquals(other.tokenIds) &&
+        index == other.index && source == other.source && synthesisSource == other.synthesisSource &&
+        tokenIds.contentEquals(other.tokenIds) &&
         framesAfterEos == other.framesAfterEos
 
-    override fun hashCode(): Int = 31 * source.hashCode() + tokenIds.contentHashCode()
+    override fun hashCode(): Int {
+        var result = index
+        result = 31 * result + source.hashCode()
+        result = 31 * result + synthesisSource.hashCode()
+        result = 31 * result + tokenIds.contentHashCode()
+        result = 31 * result + framesAfterEos
+        return result
+    }
 }
 
 class TalosPocketTextPlanner(
@@ -28,6 +37,7 @@ class TalosPocketTextPlanner(
     private val padWithSpacesForShortInputs: Boolean = false,
     private val removeSemicolons: Boolean = false,
     private val recommendedFramesAfterEos: Int? = null,
+    private val sacrificialPrefix: String? = null,
 ) {
     init {
         require(tokenizer.vocabSize == 4_000) { "Italian Pocket tokenizer vocab must be 4000" }
@@ -38,21 +48,26 @@ class TalosPocketTextPlanner(
         val prepared = preparePrompt(source, removeSemicolons, padWithSpacesForShortInputs)
         val tokens = tokenizer.encode(prepared.source)
         require(tokens.isNotEmpty()) { "Pocket tokenizer returned no tokens" }
+        val prefixTokens = sacrificialPrefix?.let { prefix ->
+            tokenizer.encode(preparePrompt(prefix, removeSemicolons = false).source).size
+        } ?: 0
+        val payloadTokenBudget = maxTokens - prefixTokens
+        require(payloadTokenBudget > 0) { "Pocket sacrificial prefix consumes the tokenizer budget" }
         val sentenceBoundaries = punctuationTokens(".", "!", "?")
         val commaBoundaries = punctuationTokens(",", ";", ":")
         val sentenceSegments = splitAfterBoundaries(tokens, sentenceBoundaries)
         val refined = sentenceSegments.flatMap { segment ->
-            if (segment.size <= maxTokens) listOf(segment)
+            if (segment.size <= payloadTokenBudget) listOf(segment)
             else splitAfterBoundaries(segment, commaBoundaries)
         }
-        require(refined.all { it.size <= maxTokens }) {
-            "a Pocket text segment exceeds the $maxTokens token budget without a semantic boundary"
+        require(refined.all { it.size <= payloadTokenBudget }) {
+            "a Pocket text segment exceeds the $payloadTokenBudget payload token budget without a semantic boundary"
         }
 
         val packed = mutableListOf<IntArray>()
         var current = IntArray(0)
         for (segment in refined) {
-            if (current.isNotEmpty() && current.size + segment.size > maxTokens) {
+            if (current.isNotEmpty() && current.size + segment.size > payloadTokenBudget) {
                 packed += current
                 current = segment
             } else {
@@ -63,10 +78,14 @@ class TalosPocketTextPlanner(
         return packed.mapIndexed { index, ids ->
             val decoded = tokenizer.decode(ids).trim()
             val prompt = preparePrompt(decoded, removeSemicolons, padWithSpacesForShortInputs)
+            val synthesisPrompt = sacrificialPrefix
+                ?.let { prefix -> preparePrompt(prefix + prompt.source, removeSemicolons, padWithSpacesForShortInputs) }
+                ?: prompt
             TalosPocketPlannedSentence(
                 index = index,
                 source = prompt.source,
-                tokenIds = tokenizer.encode(prompt.source),
+                synthesisSource = synthesisPrompt.source,
+                tokenIds = tokenizer.encode(synthesisPrompt.source),
                 framesAfterEos = recommendedFramesAfterEos ?: (prompt.framesAfterEosGuess + 2),
             )
         }.also { planned ->

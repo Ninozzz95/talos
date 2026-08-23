@@ -27,6 +27,7 @@ class TalosPocketOrtRuntime private constructor(
         padWithSpacesForShortInputs = bundle.padWithSpacesForShortInputs,
         removeSemicolons = bundle.removeSemicolons,
         recommendedFramesAfterEos = bundle.modelRecommendedFramesAfterEos,
+        sacrificialPrefix = TalosPocketOnsetStabilizer.SACRIFICIAL_PREFIX.takeIf { config.prependOnsetPrefix },
     )
     private val flowStateBytes = stateBytes(bundle.flowStates)
     private val mimiStateBytes = stateBytes(bundle.mimiStates)
@@ -103,6 +104,7 @@ class TalosPocketOrtRuntime private constructor(
         val random = Random(seed)
         var generatedFrames = 0
         var emittedSamples = 0
+        var onsetDiscardedSamples = 0
         var producerBlockedNs = 0L
         var decoderNs = 0L
         var highWatermark = 0
@@ -179,6 +181,39 @@ class TalosPocketOrtRuntime private constructor(
                     try {
                         var decodedFirstFrame = 0
                         var decodedBatchFrames = 0
+                        var onsetMetricEmitted = false
+                        val onsetStabilizer = if (config.stabilizeOnset) {
+                            TalosPocketOnsetStabilizer(TalosPocketOnsetConfig(bundle.sampleRate))
+                        } else {
+                            null
+                        }
+                        fun emitOnsetMetric(
+                            onset: TalosPocketOnsetResult,
+                            startedAtNs: Long,
+                            frameIndex: Int,
+                            outputSamples: Int,
+                        ) {
+                            onsetDiscardedSamples += onset.discardedSamples
+                            callback.onStage(
+                                metric(
+                                    stage = "onset_stabilized",
+                                    startedAtNs = startedAtNs,
+                                    durationNs = System.nanoTime() - startedAtNs,
+                                    sentenceIndex = sentence.index,
+                                    frameIndex = frameIndex,
+                                    outputSamples = outputSamples,
+                                    onsetDiscardedSamples = onset.discardedSamples,
+                                    onsetLeadingSilenceSamples = onset.leadingSilenceSamples,
+                                    onsetGapStartSamples = onset.gapStartSamples,
+                                    onsetGapEndSamples = onset.gapEndSamples,
+                                    onsetResumeStartSamples = onset.resumeStartSamples,
+                                    onsetAnalysisWindowSamples = onset.analysisWindowSamples,
+                                    onsetBoundaryThreshold = onset.boundaryThreshold,
+                                    onsetBoundarySource = onset.boundarySource,
+                                ),
+                            )
+                            onsetMetricEmitted = true
+                        }
                         val pipeline = TalosPocketFramePipeline(
                             capacityFrames = config.queueCapacityFrames,
                             firstDecodeFrames = config.firstDecodeFrames,
@@ -231,23 +266,67 @@ class TalosPocketOrtRuntime private constructor(
                                 pcm.values
                             },
                             consume = { pcm ->
+                                val onsetStartedAtNs = System.nanoTime()
+                                val userPcm = onsetStabilizer?.accept(pcm) ?: pcm
+                                val releasesOnset = onsetStabilizer != null && userPcm.isNotEmpty() && !onsetMetricEmitted
+                                if (releasesOnset) {
+                                    val onset = onsetStabilizer.finish()
+                                    emitOnsetMetric(
+                                        onset = onset,
+                                        startedAtNs = onsetStartedAtNs,
+                                        frameIndex = 0,
+                                        outputSamples = userPcm.size,
+                                    )
+                                }
                                 val frame = TalosPocketFrame(
                                     sentenceIndex = sentence.index,
-                                    firstFrameIndex = decodedFirstFrame,
-                                    frameCount = decodedBatchFrames,
+                                    firstFrameIndex = if (releasesOnset) 0 else decodedFirstFrame,
+                                    frameCount = if (releasesOnset) {
+                                        decodedFirstFrame + decodedBatchFrames
+                                    } else {
+                                        decodedBatchFrames
+                                    },
                                     sampleRate = bundle.sampleRate,
-                                    pcmFloatMono = pcm,
+                                    pcmFloatMono = userPcm,
                                 )
                                 decodedFirstFrame += decodedBatchFrames
-                                emittedSamples += pcm.size
-                                callback.onPcm(frame)
+                                if (userPcm.isEmpty()) {
+                                    true
+                                } else {
+                                    emittedSamples += userPcm.size
+                                    callback.onPcm(frame)
+                                }
                             },
                         )
+                        var completionRejected = false
+                        if (pipelineMetrics.terminal == TalosPocketPipelineTerminal.CANCELLED) {
+                            onsetStabilizer?.cancel()
+                        } else if (onsetStabilizer != null && !onsetMetricEmitted) {
+                            val onsetStartedAtNs = System.nanoTime()
+                            val completion = onsetStabilizer.complete()
+                            emitOnsetMetric(
+                                onset = completion.result,
+                                startedAtNs = onsetStartedAtNs,
+                                frameIndex = 0,
+                                outputSamples = completion.pcmFloatMono.size,
+                            )
+                            emittedSamples += completion.pcmFloatMono.size
+                            completionRejected = !callback.onPcm(
+                                TalosPocketFrame(
+                                    sentenceIndex = sentence.index,
+                                    firstFrameIndex = 0,
+                                    frameCount = decodedFirstFrame,
+                                    sampleRate = bundle.sampleRate,
+                                    pcmFloatMono = completion.pcmFloatMono,
+                                ),
+                            )
+                            if (completionRejected) cancellation.cancel()
+                        }
                         generatedFrames += pipelineMetrics.producedFrames
                         producerBlockedNs += pipelineMetrics.producerBlockedNs
                         decoderNs += pipelineMetrics.decodeNs
                         highWatermark = maxOf(highWatermark, pipelineMetrics.highWatermarkFrames)
-                        if (pipelineMetrics.terminal == TalosPocketPipelineTerminal.CANCELLED) {
+                        if (pipelineMetrics.terminal == TalosPocketPipelineTerminal.CANCELLED || completionRejected) {
                             terminal = TalosPocketPipelineTerminal.CANCELLED
                             break@sentenceLoop
                         }
@@ -266,6 +345,7 @@ class TalosPocketOrtRuntime private constructor(
             sentenceCount = sentences.size,
             generatedFrames = generatedFrames,
             emittedSamples = emittedSamples,
+            onsetDiscardedSamples = onsetDiscardedSamples,
             elapsedNs = System.nanoTime() - startedAtNs,
             producerBlockedNs = producerBlockedNs,
             decoderNs = decoderNs,
@@ -379,6 +459,14 @@ class TalosPocketOrtRuntime private constructor(
         inputFrames: Int? = null,
         outputSamples: Int? = null,
         stateBytes: Long? = null,
+        onsetDiscardedSamples: Int? = null,
+        onsetLeadingSilenceSamples: Int? = null,
+        onsetGapStartSamples: Int? = null,
+        onsetGapEndSamples: Int? = null,
+        onsetResumeStartSamples: Int? = null,
+        onsetAnalysisWindowSamples: Int? = null,
+        onsetBoundaryThreshold: Float? = null,
+        onsetBoundarySource: String? = null,
     ) = TalosPocketStageMetric(
         runIndex = runCounter.incrementAndGet(),
         stage = stage,
@@ -390,6 +478,14 @@ class TalosPocketOrtRuntime private constructor(
         inputFrames = inputFrames,
         outputSamples = outputSamples,
         residentStateBytes = stateBytes,
+        onsetDiscardedSamples = onsetDiscardedSamples,
+        onsetLeadingSilenceSamples = onsetLeadingSilenceSamples,
+        onsetGapStartSamples = onsetGapStartSamples,
+        onsetGapEndSamples = onsetGapEndSamples,
+        onsetResumeStartSamples = onsetResumeStartSamples,
+        onsetAnalysisWindowSamples = onsetAnalysisWindowSamples,
+        onsetBoundaryThreshold = onsetBoundaryThreshold,
+        onsetBoundarySource = onsetBoundarySource,
     )
 
     private fun <T> advanceState(
@@ -572,9 +668,7 @@ class TalosPocketOrtRuntime private constructor(
             val bundleFile = childFile(root, "bundle.json")
             require(bundleFile.length() in 1..(1024L * 1024L)) { "Pocket bundle.json size is invalid" }
             val bundle = TalosPocketBundle.fromJson(JSONObject(bundleFile.readText(Charsets.UTF_8)))
-            require(bundle.flowStates.size == 18 && bundle.mimiStates.size == 56) {
-                "Italian Pocket v2 requires 18 flow states and 56 Mimi states"
-            }
+            bundle.requireSupportedStateLayout()
             val tokenizer = TalosPocketTokenizer.open(childFile(root, bundle.tokenizerFile))
             var graphs: TalosPocketJavaOrtGraphs? = null
             try {
