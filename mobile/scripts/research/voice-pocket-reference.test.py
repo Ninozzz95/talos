@@ -35,6 +35,68 @@ class FakePocketEngine:
         return np.arange(2 * 1024, dtype=np.float32).reshape(1, 2, 1024)
 
 
+class FakeBoundarySession:
+    def __init__(self, kind):
+        self.kind = kind
+
+    def run(self, _outputs, feeds):
+        if self.kind == "text":
+            count = feeds["token_ids"].shape[1]
+            return [np.arange(count * 4, dtype=np.float32).reshape(1, count, 4)]
+        if self.kind == "main":
+            state = feeds["state_0"]
+            sequence = feeds["sequence"]
+            conditioning = np.full((1, 4), state.item(), dtype=np.float32)
+            eos = np.array([[-10.0]], dtype=np.float32)
+            return [conditioning, eos, state + np.float32(1.0 + sequence.shape[1])]
+        if self.kind == "flow":
+            return [(feeds["c"][:, :2] + feeds["x"]).astype(np.float32)]
+        raise AssertionError(f"unexpected fake session: {self.kind}")
+
+
+class FakeBoundaryEngine:
+    latent_dim = 2
+    conditioning_dim = 4
+    temperature = 0.0
+    lsd_steps = 1
+    model_recommended_frames_after_eos = 1
+    flow_state_manifest = [
+        {
+            "index": 0,
+            "input_name": "state_0",
+            "output_name": "out_state_0",
+            "dtype": "float32",
+            "shape": [1],
+            "fill": "zeros",
+        }
+    ]
+    text_conditioner = FakeBoundarySession("text")
+    flow_lm_main = FakeBoundarySession("main")
+    flow_lm_flow = FakeBoundarySession("flow")
+    _st_buffers = [
+        (np.array([[0.0]], dtype=np.float32), np.array([[1.0]], dtype=np.float32))
+    ]
+
+    def _split_into_best_sentences(self, source):
+        return [source]
+
+    def _tokenize(self, _source):
+        return np.array([[3, 4]], dtype=np.int64)
+
+    def _prepare_text_prompt(self, source):
+        return source, 1
+
+    def _prepare_voice_embeddings(self, conditioning):
+        return np.asarray(conditioning, dtype=np.float32)
+
+    def _init_state(self, _manifest):
+        return {"state_0": np.zeros((1,), dtype=np.float32)}
+
+    def _update_state_from_outputs(self, state, result, manifest, output_offset):
+        for entry in manifest:
+            state[entry["input_name"]] = result[output_offset + entry["index"]]
+
+
 class VoicePocketReferenceTest(unittest.TestCase):
     def setUp(self):
         self.reference = load_reference()
@@ -55,6 +117,28 @@ class VoicePocketReferenceTest(unittest.TestCase):
             (root / "reference_sample.wav").write_bytes(b"public-voicf")
             with self.assertRaisesRegex(ValueError, "reference_sample.wav.*sha256"):
                 self.reference.verify_upstream_sources(root, expected)
+
+    def test_runtime_provenance_fails_closed_away_from_the_pinned_onnx_runtime(self):
+        observed = self.reference.runtime_provenance()
+        for required in (
+            "python",
+            "implementation",
+            "system",
+            "machine",
+            "onnxRuntime",
+            "numpy",
+            "scipy",
+            "sentencePiece",
+        ):
+            self.assertIsInstance(observed[required], str)
+            self.assertTrue(observed[required])
+
+        wrong = dict(observed, onnxRuntime="0.0.0")
+        with self.assertRaisesRegex(ValueError, "ONNX Runtime.*1.29.0.*0.0.0"):
+            self.reference.require_pinned_runtime(wrong)
+
+        pinned = dict(observed, onnxRuntime=self.reference.PINNED_ONNX_RUNTIME_VERSION)
+        self.assertIs(pinned, self.reference.require_pinned_runtime(pinned))
 
     def test_oracle_is_seeded_and_emits_only_digests_and_metrics(self):
         first, first_arrays = self.reference.execute_oracle(
@@ -127,6 +211,78 @@ class VoicePocketReferenceTest(unittest.TestCase):
 
             self.assertEqual(values.astype("<f4").tobytes(order="C"), output.read_bytes())
             self.assertEqual([], list(output.parent.glob(".oracle.f32le.*.tmp")))
+
+    def test_raw_latent_export_preserves_exact_little_endian_bytes_shape_and_digest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "latents.f32le"
+            values = np.array(
+                [[[-1.25, 0.0], [3.5, 7.25]]],
+                dtype=np.float32,
+            )
+            contract = self.reference.float32_contract(values)
+
+            self.reference.write_float32_atomic(output, values)
+
+            expected = values.astype("<f4").tobytes(order="C")
+            self.assertEqual(expected, output.read_bytes())
+            self.assertEqual([1, 2, 2], contract["shape"])
+            self.assertEqual(len(expected), contract["byteLength"])
+            self.assertEqual(hashlib.sha256(expected).hexdigest(), contract["sha256"])
+
+    def test_state_digest_is_name_order_dtype_shape_and_bytes_bound(self):
+        manifest = [
+            {
+                "input_name": "float_state",
+                "output_name": "out_float_state",
+                "dtype": "float32",
+                "shape": [2],
+            },
+            {
+                "input_name": "step_state",
+                "output_name": "out_step_state",
+                "dtype": "int64",
+                "shape": [1],
+            },
+        ]
+        state = {
+            "float_state": np.array([1.25, -0.5], dtype=np.float32),
+            "step_state": np.array([7], dtype=np.int64),
+        }
+        baseline = self.reference.state_sha256(state, manifest)
+
+        mutated_value = dict(state, float_state=np.array([1.25, -0.25], dtype=np.float32))
+        renamed = [dict(manifest[0], output_name="other"), manifest[1]]
+        reshaped = [dict(manifest[0], shape=[1, 2]), manifest[1]]
+
+        self.assertNotEqual(baseline, self.reference.state_sha256(mutated_value, manifest))
+        self.assertNotEqual(baseline, self.reference.state_sha256(state, list(reversed(manifest))))
+        self.assertNotEqual(baseline, self.reference.state_sha256(state, renamed))
+        reshaped_state = dict(state, float_state=state["float_state"].reshape(1, 2))
+        self.assertNotEqual(baseline, self.reference.state_sha256(reshaped_state, reshaped))
+        with self.assertRaisesRegex(ValueError, "dtype"):
+            self.reference.canonical_array_bytes(state["float_state"], "int64", [2])
+
+    def test_flow_boundary_trace_names_the_recurrent_boundary_without_raw_values(self):
+        trace = self.reference.collect_flow_boundary_trace(
+            engine=FakeBoundaryEngine(),
+            source="Owner-visible fixture text must stay outside evidence.",
+            conditioning=np.zeros((1, 2, 4), dtype=np.float32),
+            max_frames=2,
+        )
+
+        self.assertEqual(1, trace["schemaVersion"])
+        self.assertEqual(2, trace["frameCount"])
+        self.assertIn("sha256", trace["textEmbeddings"])
+        self.assertIn("voicePrefillStateSha256", trace)
+        self.assertIn("textPrefillStateSha256", trace)
+        self.assertEqual([0, 1], [frame["frameIndex"] for frame in trace["frames"]])
+        self.assertTrue(all("arStateSha256" in frame for frame in trace["frames"]))
+        self.assertTrue(all("conditioningSha256" in frame for frame in trace["frames"]))
+        self.assertTrue(all("flowDirectionSha256" in frame for frame in trace["frames"]))
+
+        encoded = json.dumps(trace).lower()
+        self.assertNotIn("owner-visible fixture", encoded)
+        self.assertNotIn("values", encoded)
 
     def test_invalid_frame_bound_never_reaches_the_runtime(self):
         for invalid in (0, -1, 721):
