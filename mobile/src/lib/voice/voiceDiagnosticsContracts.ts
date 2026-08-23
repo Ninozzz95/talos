@@ -17,7 +17,7 @@ export interface TalosVoiceDiagnosticBeginRequest extends TalosVoiceDiagnosticRo
     appCommit: string
     /** Host-computed APK SHA-256; native beginDiagnostics recomputes and compares it. */
     expectedApkSha256: string
-    /** Positive host PnP evidence, for example USB\\VID...\\2ea6573c. */
+    /** Positive host PnP evidence, for example USB\\VID_xxxx&PID_xxxx\\<serial>. */
     usbTransportProof: string
 }
 

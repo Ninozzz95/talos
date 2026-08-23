@@ -34,10 +34,10 @@ describe('voiceDiagnostics production bridge', () => {
             requestedProfileId: 'a1b2c3d4-e5f6-4789-a012-3456789abcde',
             appCommit: 'a'.repeat(40),
             expectedApkSha256: 'b'.repeat(64),
-            usbTransportProof: 'USB\\VID_22D9&PID_2769\\2ea6573c',
+            usbTransportProof: 'USB\\VID_22D9&PID_2769\\deadbeef',
         }
 
-        await expect(talosBeginVoiceDiagnostics(route)).resolves.toEqual({ armed: true })
+        await expect(talosBeginVoiceDiagnostics(route, 'deadbeef')).resolves.toEqual({ armed: true })
         expect(bridge.beginDiagnostics).toHaveBeenCalledWith(route)
         expect(JSON.stringify(bridge.beginDiagnostics.mock.calls[0])).not.toContain('text')
         expect(JSON.stringify(bridge.beginDiagnostics.mock.calls[0])).not.toContain('pcm')
@@ -53,8 +53,25 @@ describe('voiceDiagnostics production bridge', () => {
             requestedProfileId: null,
             appCommit: 'a'.repeat(40),
             expectedApkSha256: 'b'.repeat(64),
-            usbTransportProof: 'USB\\VID_22D9&PID_2769\\2ea6573c',
-        })).rejects.toThrow(/traceId/)
+            usbTransportProof: 'USB\\VID_22D9&PID_2769\\deadbeef',
+        }, 'deadbeef')).rejects.toThrow(/traceId/)
+        expect(bridge.beginDiagnostics).not.toHaveBeenCalled()
+    })
+
+    it('VOICE-DIAG-TS-02B a missing or malformed authorizedUsbSerial fails before the native bridge, even with a proof that would otherwise match', async () => {
+        const route = {
+            traceId: 'voice-018fc5d8-4f44-7c22-8df1-3d15a1000002',
+            readingId: 'assistant-message-43',
+            source: 'chat' as const,
+            requestedLocale: 'it-IT',
+            requestedEngine: 'personal' as const,
+            requestedProfileId: null,
+            appCommit: 'a'.repeat(40),
+            expectedApkSha256: 'b'.repeat(64),
+            usbTransportProof: 'USB\\VID_22D9&PID_2769\\deadbeef',
+        }
+        await expect(talosBeginVoiceDiagnostics(route, '')).rejects.toThrow(/authorizedUsbSerial/)
+        await expect(talosBeginVoiceDiagnostics(route, 'not a serial!')).rejects.toThrow(/authorizedUsbSerial/)
         expect(bridge.beginDiagnostics).not.toHaveBeenCalled()
     })
 

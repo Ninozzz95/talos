@@ -43,7 +43,7 @@ class TalosVoiceDiagnosticArtifactInstrumentedTest {
                 modelRevision = "moss-rollback",
                 modelSha256 = "2".repeat(64),
                 deviceFingerprint = android.os.Build.FINGERPRINT,
-                usbTransportProof = "USB\\VID_22D9&PID_2769\\2ea6573c",
+                usbTransportProof = "USB\\VID_22D9&PID_2769\\deadbeef",
             ),
         )
         session.record(

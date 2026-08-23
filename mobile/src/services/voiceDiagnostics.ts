@@ -35,13 +35,26 @@ function validateRoute(route: TalosVoiceDiagnosticRoute): TalosVoiceDiagnosticRo
     return route
 }
 
+/**
+ * Which physical device's USB PnP instance counts as "authorized" is a
+ * caller concern, not something this shared module hardcodes: a specific
+ * device's identifier has no business sitting in committed, published
+ * source. The research campaign that drives this in practice sources it
+ * from `TALOS_RESEARCH_PAD_USB_SERIAL` (see `voice-pocket-usb-campaign.mjs`).
+ */
+const SAFE_USB_SERIAL = /^[A-Za-z0-9-]{4,64}$/
+
 export async function talosBeginVoiceDiagnostics(
     route: TalosVoiceDiagnosticBeginRequest,
+    authorizedUsbSerial: string,
 ): Promise<TalosVoiceDiagnosticBeginResult> {
     validateRoute(route)
     if (!/^[0-9a-f]{40,64}$/.test(route.appCommit)) throw new Error('appCommit must be a full lowercase Git object id')
     if (!/^[0-9a-f]{64}$/.test(route.expectedApkSha256)) throw new Error('expectedApkSha256 must be lowercase SHA-256')
-    if (!/^USB\\[^\r\n]+\\2ea6573c$/i.test(route.usbTransportProof)) {
+    if (!SAFE_USB_SERIAL.test(authorizedUsbSerial)) {
+        throw new Error('authorizedUsbSerial was not supplied or is not a plausible device identifier')
+    }
+    if (!new RegExp(`^USB\\\\[^\\r\\n]+\\\\${authorizedUsbSerial}$`, 'i').test(route.usbTransportProof)) {
         throw new Error('usbTransportProof does not identify the authorized Pad USB instance')
     }
     return plugin.beginDiagnostics(route)

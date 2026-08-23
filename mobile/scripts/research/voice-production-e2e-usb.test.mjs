@@ -62,10 +62,10 @@ test('VOICE-E2E-USB-04 lock precedes every adb probe install and instrument oper
             probeAuthorizedPadUsb: () => {
                 order.push('probe')
                 return {
-                    serial: '2ea6573c',
+                    serial: 'deadbeef',
                     model: 'OPD2415',
                     devPath: 'usb:1-1',
-                    hostUsbInstance: 'USB\\VID_22D9&PID_2769\\2ea6573c',
+                    hostUsbInstance: 'USB\\VID_22D9&PID_2769\\deadbeef',
                 }
             },
             installPreservingData: (_adb, _apk, label) => order.push(`install-${label}`),
@@ -106,10 +106,10 @@ test('VOICE-E2E-USB-05 instrumentation failure still releases the exact acquired
                     },
                 }),
                 probeAuthorizedPadUsb: () => ({
-                    serial: '2ea6573c',
+                    serial: 'deadbeef',
                     model: 'OPD2415',
                     devPath: 'usb:1-1',
-                    hostUsbInstance: 'USB\\VID_22D9&PID_2769\\2ea6573c',
+                    hostUsbInstance: 'USB\\VID_22D9&PID_2769\\deadbeef',
                 }),
                 installPreservingData: () => {},
                 selectedExec: () => {
@@ -124,7 +124,7 @@ test('VOICE-E2E-USB-05 instrumentation failure still releases the exact acquired
 })
 
 test('VOICE-E2E-USB-06 exact APK and source provenance reaches the selected test as typed arguments', () => {
-    const encodedUsbProof = Buffer.from('USB\\VID_22D9&PID_2769\\2ea6573c', 'utf8').toString('base64url')
+    const encodedUsbProof = Buffer.from('USB\\VID_22D9&PID_2769\\deadbeef', 'utf8').toString('base64url')
     assert.deepEqual(
         buildInstrumentationArgs({
             className: 'ai.talos.voice.TalosPocketLongReadInstrumentedTest',
@@ -175,7 +175,7 @@ test('VOICE-E2E-USB-07 instrumentation provenance rejects unsafe keys and contro
 })
 
 test('VOICE-E2E-USB-08 transport proof round trips without remote shell metacharacters', () => {
-    const raw = 'USB\\VID_22D9&PID_2769\\2ea6573c'
+    const raw = 'USB\\VID_22D9&PID_2769\\deadbeef'
     const encoded = encodeUsbTransportProof(raw)
     assert.match(encoded, /^[A-Za-z0-9_-]+$/)
     assert.equal(Buffer.from(encoded, 'base64url').toString('utf8'), raw)
@@ -211,10 +211,10 @@ test('VOICE-E2E-USB-09 a JUnit failure preserves the complete instrumentation re
                 resolveAdb: () => 'adb',
                 acquirePadLock: () => ({ release: () => true }),
                 probeAuthorizedPadUsb: () => ({
-                    serial: '2ea6573c',
+                    serial: 'deadbeef',
                     model: 'OPD2415',
                     devPath: 'usb:1-1',
-                    hostUsbInstance: 'USB\\VID_22D9&PID_2769\\2ea6573c',
+                    hostUsbInstance: 'USB\\VID_22D9&PID_2769\\deadbeef',
                 }),
                 installPreservingData: () => {},
                 selectedExec: () => report,
