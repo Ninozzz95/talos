@@ -542,21 +542,38 @@ async function prefissoResoDi(
  *
  * ⛔⛔ CR-09 — NON è una seconda versione del projector, ne usa lo STESSO
  * usato dalla generazione vera (`talosProjectLocalToolConversation`,
- * chiamata identica a quella di riga ~912): qui con un solo turno di
- * sistema come input, così il risultato è esattamente e SOLO il prefisso
- * immutabile, senza inventare una proiezione parallela che potrebbe
- * divergere da quella reale col tempo.
+ * chiamata identica a quella di riga ~912). `tools` NON va MAI passato di
+ * nuovo a `talosLocalEngineChatPlan`: per questo trasporto sono già dentro
+ * `projection.turns` come testo — passarli anche come parametro nativo li
+ * farebbe applicare una seconda volta, al template Jinja, producendo un
+ * prompt DIVERSO da quello che la generazione vera manda.
  *
- * ⛔ `tools` NON va MAI passato di nuovo a `talosLocalEngineChatPlan`: per
- * questo trasporto sono già dentro `projection.turns` come testo. Passarli
- * anche come parametro nativo li farebbe applicare una seconda volta, al
- * template Jinja, producendo un prompt DIVERSO da quello che la
- * generazione vera manda — esattamente il prompt-diverso-sotto-la-stessa-
- * identità che la guardia esiste per evitare.
+ * ⛔⛔⛔ VERIFICATO SUL PAD, 23/8 — un turno di sistema DA SOLO non basta.
+ * Misurato con `gemma-3-4b-it-Q4_K_M`: `chatPrompt` con un solo turno
+ * `{role:'system', ...}` rende `<start_of_turn>model\n` — 4 token, il
+ * contenuto del sistema SPARITO. La doc ufficiale lo spiega
+ * (ai.google.dev/gemma/docs/core/prompt-structure): Gemma non ha un ruolo
+ * system separato, le istruzioni vanno DENTRO il primo turno utente — e il
+ * motore, senza un turno a seguire in cui fonderle, non ha dove metterle.
+ *
+ * Un turno `{role:'system', ...}, {role:'user', content: segnaposto}`
+ * rende invece 222 token, l'intero catalogo incluso: il segnaposto NON
+ * può essere una stringa vuota — `projectPromptJson` scarta un turno
+ * utente con `content` falsy (`if (turn.content) …`), che farebbe
+ * ricomparire esattamente questo bug.
+ *
+ * ⛔ Non è un prefisso "sporco": il segnaposto è un carattere fisso, mai
+ * un vero messaggio, quindi il calcolo del prefisso comune (in-memory o
+ * su disco) si ferma comunque appena il testo VERO diverge da lui — un
+ * paio di token in più scartati, non l'intero catalogo ricalcolato.
  */
-// Esportata SOLO per il test diretto di CR-09 (il testo deve combaciare
-// bit-per-bit con quello che il projector produce per la generazione vera):
-// non è pensata per essere chiamata da fuori questo modulo in produzione.
+const TALOS_PREFIX_PLACEHOLDER_TURN = '.'
+
+// Esportata SOLO per il test diretto (il testo deve condividere un lungo
+// prefisso comune con quello che il projector produce per la generazione
+// vera, non l'intero output byte-per-byte — il segnaposto lo rende diverso
+// in coda, di proposito): non è pensata per essere chiamata da fuori
+// questo modulo in produzione.
 export async function prefissoResoDiProiettato(
     transport: TalosLocalToolTransport,
     capabilities: TalosLocalTemplateCapabilities | null | undefined,
@@ -571,7 +588,14 @@ export async function prefissoResoDiProiettato(
     if (memo !== undefined) return memo
     try {
         const projection = talosProjectLocalToolConversation({
-            transport, capabilities, turns: [{ role: 'system', content: system }], tools, locale,
+            transport,
+            capabilities,
+            turns: [
+                { role: 'system', content: system },
+                { role: 'user', content: TALOS_PREFIX_PLACEHOLDER_TURN },
+            ],
+            tools,
+            locale,
         })
         if (!projection.turns.length) return null
         const piano = await talosLocalEngineChatPlan(projection.turns, undefined, pensa)
