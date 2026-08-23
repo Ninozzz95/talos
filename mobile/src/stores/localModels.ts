@@ -86,7 +86,27 @@ const TALOS_GGUF_MAX_HEADER_BYTES = 32 * 1024 * 1024
 export type TalosSetExamination =
     | { state: 'unread' }
     | { state: 'reading' }
-    | { state: 'read'; fit: TalosModelFit; quantisation: string | null; trainedContext: number }
+    | {
+        state: 'read'
+        fit: TalosModelFit
+        quantisation: string | null
+        trainedContext: number
+        /**
+         * P2-6 (quant-aware metadata). Architectural — the parameter count is
+         * IDENTICAL across every quantisation of the same model, so it is safe
+         * to inherit across versions (see `talosEredita` below).
+         */
+        parameterCount: number | null
+        /**
+         * Quantisation-specific, like `quantisation` itself — `null` on an
+         * INHERITED examination, because the header actually read belongs to
+         * a different version and reporting its histogram here would be the
+         * same false statement the `quantisation` comment already refuses to
+         * make.
+         */
+        tensorTypeHistogram: Readonly<Record<string, number>> | null
+        quantizationVersion: number | null
+    }
     /** Named, never silent: an unreadable header is a model we will not vouch for. */
     | { state: 'unreadable'; reason: string }
 
@@ -650,10 +670,14 @@ export async function talosExamineSet(key: string): Promise<void> {
             // The header's own word, which outranks the file name it came with.
             quantisation: parsed.header.quantisation ?? set.quantisation,
             trainedContext: parsed.header.shape.trainedContext,
+            parameterCount: parsed.header.parameterCount,
+            tensorTypeHistogram: parsed.header.tensorTypeHistogram,
+            quantizationVersion: parsed.header.quantizationVersion,
         }
         letture.set(set.paths[0]!, {
             forma: parsed.header.shape,
             inizioDeiPesi: parsed.header.dataOffset,
+            parameterCount: parsed.header.parameterCount,
         })
     } catch (failure) {
         set.examination = { state: 'unreadable', reason: describe(failure) }
@@ -661,7 +685,12 @@ export async function talosExamineSet(key: string): Promise<void> {
 }
 
 /** Ciò che una lettura riuscita lascia in eredità alle altre qualità. */
-const letture = new Map<string, { forma: TalosModelShape, inizioDeiPesi: number }>()
+const letture = new Map<string, {
+    forma: TalosModelShape
+    inizioDeiPesi: number
+    /** Architetturale — vedi il commento su `talosEredita`. */
+    parameterCount: number | null
+}>()
 
 /**
  * ⭐⭐ ESAMINA UN REPOSITORY: una lettura per MODELLO, non per versione.
@@ -727,7 +756,7 @@ export async function talosExamineRepo(): Promise<void> {
  */
 function talosEredita(
     set: TalosLocalModelSet,
-    eredita: { forma: TalosModelShape, inizioDeiPesi: number },
+    eredita: { forma: TalosModelShape, inizioDeiPesi: number, parameterCount: number | null },
 ): void {
     const device = state.device
     if (!device) return
@@ -747,6 +776,16 @@ function talosEredita(
         // un'altra qualità, e riportare la sua direbbe che sono tutte uguali.
         quantisation: set.quantisation,
         trainedContext: forma.trainedContext,
+        // P2-6: il conteggio parametri è ARCHITETTURALE — identico per ogni
+        // qualità dello stesso modello — quindi eredita correttamente, a
+        // differenza di `quantisation`.
+        parameterCount: eredita.parameterCount,
+        // ⛔ Questi due invece SONO la qualità, esattamente come `quantisation`
+        // sopra: l'intestazione realmente letta appartiene a un'ALTRA
+        // versione, quindi qui sarebbero la stessa bugia che il commento su
+        // `quantisation` rifiuta già di dire. `null` è l'onestà giusta.
+        tensorTypeHistogram: null,
+        quantizationVersion: null,
     }
 }
 

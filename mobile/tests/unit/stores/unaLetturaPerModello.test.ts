@@ -221,4 +221,59 @@ describe('⛔ una lettura per MODELLO, non per versione', () => {
         // uguali — e la persona sceglierebbe fra sei righe identiche.
         expect(new Set(quality).size).toBeGreaterThan(1)
     })
+
+    /**
+     * P2-6 — il conteggio parametri è l'ECCEZIONE alla regola sopra: a
+     * differenza della qualità, il numero di parametri è ARCHITETTURALE — un
+     * Q8 e un IQ3 dello stesso modello hanno esattamente gli stessi
+     * parametri, cambiano solo i bit per parametro. Ereditarlo è corretto,
+     * non un bug gemello di quello che il test precedente esiste per stanare.
+     */
+    it('⭐ il conteggio parametri SI eredita: è la forma, non la qualità', async () => {
+        const store = await repoAperto()
+        await store.talosExamineRepo()
+
+        const conteggi = store.talosLocalModels.repo!.sets.map((set) => {
+            const esame = set.examination
+            return esame.state === 'read' ? esame.parameterCount : null
+        })
+        // Tutte e tre le qualità del 3B hanno gli stessi parametri (e le tre
+        // dell'8B pure), quindi al massimo due valori distinti in tutto —
+        // uno per modello, mai uno per file come per `quantisation`.
+        expect(new Set(conteggi).size).toBeLessThanOrEqual(2)
+        expect(conteggi.every((c) => c !== null)).toBe(true)
+    })
+
+    /**
+     * ⛔ AL CONTRARIO del conteggio parametri: l'istogramma tipo-tensore e la
+     * versione di quantizzazione SONO la qualità, esattamente come
+     * `quantisation` — riportare quelli letti dal capofila per una versione
+     * ereditata sarebbe la stessa bugia che il test sopra vieta per
+     * `quantisation`, solo in un campo diverso.
+     */
+    it('⛔ istogramma e versione di quantizzazione NON si ereditano: null sulle versioni ereditate', async () => {
+        const store = await repoAperto()
+        await store.talosExamineRepo()
+
+        const sets = store.talosLocalModels.repo!.sets
+        // I due capofila sono le versioni più leggere di ciascun modello —
+        // stesso ordine già affermato dal primo test di questo describe.
+        const capofila = sets.filter((set) => set.label.includes('IQ3_M'))
+        const ereditate = sets.filter((set) => !set.label.includes('IQ3_M'))
+        expect(capofila).toHaveLength(2)
+        expect(ereditate).toHaveLength(4)
+
+        for (const set of capofila) {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            expect(esame.tensorTypeHistogram, set.label).not.toBeNull()
+            expect(esame.quantizationVersion, set.label).not.toBeUndefined()
+        }
+        for (const set of ereditate) {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            expect(esame.tensorTypeHistogram, set.label).toBeNull()
+            expect(esame.quantizationVersion, set.label).toBeNull()
+        }
+    })
 })
