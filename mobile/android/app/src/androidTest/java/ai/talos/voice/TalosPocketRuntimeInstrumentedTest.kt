@@ -51,6 +51,7 @@ class TalosPocketRuntimeInstrumentedTest {
                 firstDecodeFrames = 1,
                 regularDecodeFrames = 1,
                 hardMaxFramesPerSentence = SMOKE_FRAMES,
+                stabilizeOnset = false,
             ),
         )
         try {

@@ -122,6 +122,7 @@ internal class TalosPocketVoiceEngine(
             sentenceCount = result.sentenceCount,
             generatedFrames = result.generatedFrames,
             emittedSamples = result.emittedSamples,
+            onsetDiscardedSamples = result.onsetDiscardedSamples,
             elapsedNs = result.elapsedNs,
             producerBlockedNs = result.producerBlockedNs,
             decoderNs = result.decoderNs,
@@ -140,5 +141,13 @@ internal class TalosPocketVoiceEngine(
         inputFrames = inputFrames,
         outputSamples = outputSamples,
         residentStateBytes = residentStateBytes,
+        onsetDiscardedSamples = onsetDiscardedSamples,
+        onsetLeadingSilenceSamples = onsetLeadingSilenceSamples,
+        onsetGapStartSamples = onsetGapStartSamples,
+        onsetGapEndSamples = onsetGapEndSamples,
+        onsetResumeStartSamples = onsetResumeStartSamples,
+        onsetAnalysisWindowSamples = onsetAnalysisWindowSamples,
+        onsetBoundaryThreshold = onsetBoundaryThreshold,
+        onsetBoundarySource = onsetBoundarySource,
     )
 }

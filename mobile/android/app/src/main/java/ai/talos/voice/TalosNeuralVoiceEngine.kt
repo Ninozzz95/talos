@@ -59,6 +59,14 @@ internal data class TalosVoiceEngineStageMetric(
     val inputFrames: Int? = null,
     val outputSamples: Int? = null,
     val residentStateBytes: Long? = null,
+    val onsetDiscardedSamples: Int? = null,
+    val onsetLeadingSilenceSamples: Int? = null,
+    val onsetGapStartSamples: Int? = null,
+    val onsetGapEndSamples: Int? = null,
+    val onsetResumeStartSamples: Int? = null,
+    val onsetAnalysisWindowSamples: Int? = null,
+    val onsetBoundaryThreshold: Float? = null,
+    val onsetBoundarySource: String? = null,
 ) {
     init {
         require(backend in TalosVoiceBackendPayload.SUPPORTED_BACKENDS) { "voice metric backend is unsupported" }
@@ -76,6 +84,7 @@ internal data class TalosVoiceEngineResult(
     val sentenceCount: Int,
     val generatedFrames: Int,
     val emittedSamples: Int,
+    val onsetDiscardedSamples: Int = 0,
     val elapsedNs: Long,
     val producerBlockedNs: Long,
     val decoderNs: Long,
@@ -84,7 +93,9 @@ internal data class TalosVoiceEngineResult(
     init {
         require(backend in TalosVoiceBackendPayload.SUPPORTED_BACKENDS) { "voice result backend is unsupported" }
         require(profileId.isNotBlank() && locale.isNotBlank()) { "voice result route is incomplete" }
-        require(sentenceCount >= 0 && generatedFrames >= 0 && emittedSamples >= 0) { "voice result counts are invalid" }
+        require(sentenceCount >= 0 && generatedFrames >= 0 && emittedSamples >= 0 && onsetDiscardedSamples >= 0) {
+            "voice result counts are invalid"
+        }
         require(elapsedNs >= 0L && producerBlockedNs >= 0L && decoderNs >= 0L) { "voice result timing is invalid" }
         require(queueHighWatermarkFrames >= 0) { "voice result queue watermark is invalid" }
     }

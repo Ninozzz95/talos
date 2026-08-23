@@ -61,6 +61,21 @@ class TalosPocketTextPlannerTest {
     }
 
     @Test
+    fun `sacrificial prefix reserves tokenizer budget without changing the user sentence`() {
+        val source = "uno due tre quattro cinque, sei sette otto nove dieci."
+        val chunks = TalosPocketTextPlanner(
+            tokenizer = tokenizer,
+            maxTokens = 9,
+            sacrificialPrefix = TalosPocketOnsetStabilizer.SACRIFICIAL_PREFIX,
+        ).plan(source)
+
+        assertTrue(chunks.size > 1)
+        assertTrue(chunks.all { tokenizer.encode(it.synthesisSource).size <= 9 })
+        assertTrue(chunks.all { it.synthesisSource.startsWith(TalosPocketOnsetStabilizer.SACRIFICIAL_PREFIX) })
+        assertTrue(chunks.all { !it.source.startsWith(TalosPocketOnsetStabilizer.SACRIFICIAL_PREFIX) })
+    }
+
+    @Test
     fun `a single segment that cannot fit fails honestly instead of truncating words`() {
         val source = "uno due tre quattro cinque sei sette"
         val error = org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {

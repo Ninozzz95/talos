@@ -76,6 +76,9 @@ internal class TalosVoiceHost(
     private val owner = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "talos-voice-owner").apply { priority = Thread.NORM_PRIORITY }
     }
+    private val playbackCompletion = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "talos-voice-playback-completion").apply { priority = Thread.NORM_PRIORITY }
+    }
 
     private val generationCounter = AtomicLong(0)
     private val queueGate = TalosVoiceQueueGate(generationCounter)
@@ -305,6 +308,7 @@ internal class TalosVoiceHost(
         val ticket = queueGate.submit(queueMode)
         val id = ticket.id
         owner.execute {
+            var completionEnqueued = false
             val result = if (queueMode == TalosVoiceQueueMode.ADD && !queueGate.claim(ticket)) {
                 Result.success(cancelledBeforeStart())
             } else {
@@ -317,10 +321,15 @@ internal class TalosVoiceHost(
                         maxFrames = maxFrames,
                         seed = seed,
                         diagnosticRoute = diagnosticRoute,
+                        playbackEpoch = ticket.playbackEpoch,
+                        onPlaybackPending = { pending ->
+                            enqueuePlaybackCompletion(pending, onComplete)
+                            completionEnqueued = true
+                        },
                     )
                 }
             }
-            onComplete(result)
+            if (!completionEnqueued) onComplete(result)
         }
         return id
     }
@@ -363,6 +372,7 @@ internal class TalosVoiceHost(
         val ticket = queueGate.submit(queueMode)
         val id = ticket.id
         owner.execute {
+            var completionEnqueued = false
             val result = if (queueMode == TalosVoiceQueueMode.ADD && !queueGate.claim(ticket)) {
                 Result.success(cancelledBeforeStart())
             } else {
@@ -376,6 +386,11 @@ internal class TalosVoiceHost(
                             maxFrames = maxFrames,
                             seed = seed,
                             diagnosticRoute = diagnosticRoute,
+                            playbackEpoch = ticket.playbackEpoch,
+                            onPlaybackPending = { pending ->
+                                enqueuePlaybackCompletion(pending, onComplete)
+                                completionEnqueued = true
+                            },
                         )
                         is TalosStoredVoiceProfile.Legacy -> runSpeakStreamingWithLegacyProfile(
                             id = id,
@@ -390,7 +405,7 @@ internal class TalosVoiceHost(
                     }
                 }
             }
-            onComplete(result)
+            if (!completionEnqueued) onComplete(result)
         }
         return id
     }
@@ -691,7 +706,7 @@ internal class TalosVoiceHost(
             outputFile = outputFile,
             voice = voice,
             maxFrames = maxFrames ?: DEFAULT_MAX_FRAMES,
-            seed = seed ?: System.nanoTime(),
+            seed = resolveTalosVoiceProductionSeed(seed),
             isCancelled = { !queueGate.isActive(id) },
         )
     }
@@ -734,7 +749,7 @@ internal class TalosVoiceHost(
                     textTokenIds = textTokenIds,
                     voice = voice,
                     maxFrames = maxFrames ?: DEFAULT_MAX_FRAMES,
-                    seed = seed ?: System.nanoTime(),
+                    seed = resolveTalosVoiceProductionSeed(seed),
                     isCancelled = { !queueGate.isActive(id) },
                     onFrame = onFrame,
                     trace = productionTrace?.recorder,
@@ -787,7 +802,7 @@ internal class TalosVoiceHost(
                     textTokenIds = textTokenIds,
                     promptAudioCodes = promptAudioCodes,
                     maxFrames = maxFrames ?: DEFAULT_MAX_FRAMES,
-                    seed = seed ?: System.nanoTime(),
+                    seed = resolveTalosVoiceProductionSeed(seed),
                     isCancelled = { !queueGate.isActive(id) },
                     onFrame = onFrame,
                     trace = productionTrace?.recorder,
@@ -1076,11 +1091,21 @@ internal class TalosVoiceHost(
         diagnosticSessionOverride: TalosVoiceDiagnosticSession? = null,
         finishDiagnosticWhenComplete: Boolean = true,
         manageDiagnosticLifecycle: Boolean = true,
+        playbackEpoch: Long? = null,
+        onPlaybackPending: ((TalosVoicePendingPlayback) -> Unit)? = null,
     ): TalosVoiceStreamResult {
         val diagnosticSession = diagnosticSessionOverride
             ?: diagnosticRoute?.let(TalosVoiceDiagnosticProbe::claimProductionRun)
         if (manageDiagnosticLifecycle) activeDiagnosticSession = diagnosticSession
         val startedAtNanos = System.nanoTime()
+        val resolvedSeed = resolveTalosVoiceProductionSeed(seed)
+        diagnosticSession?.record(
+            TalosVoiceDiagnosticEvent(
+                kind = TalosVoiceDiagnosticEventKind.SAMPLING_CONFIG,
+                stage = "sampling.seed",
+                samplingSeed = resolvedSeed,
+            ),
+        )
         var resolvedRoute: TalosVoiceEngineRoute? = null
         var runPlayer: TalosPcmPlayer? = null
         var underrunBaseline = 0
@@ -1094,7 +1119,7 @@ internal class TalosVoiceHost(
                     locale = locale,
                     profile = profile,
                     maxFramesPerSentence = maxFrames,
-                    seed = seed ?: System.nanoTime(),
+                    seed = resolvedSeed,
                     pocketStatus = currentPocketModelStatus(),
                     mossCompatible = isMossCompatible(profile),
                 ),
@@ -1111,13 +1136,33 @@ internal class TalosVoiceHost(
                             runPlayer = activePlayer
                             underrunBaseline = activePlayer.underrunCount()
                         }
+                        if (!activePlayer.prepareForWrite { !queueGate.isActive(id) }) return false
                         val requestedFrames = frame.pcmFloat.size / frame.channels
                         val writtenBefore = activePlayer.framesWritten()
                         val underrunsBefore = activePlayer.underrunCount() - underrunBaseline
                         val writeStartedAtNs = SystemClock.elapsedRealtimeNanos()
-                        val accepted = activePlayer.write(frame.pcmFloat) { !queueGate.isActive(id) }
+                        val levelProfile = if (frame.backend == TalosPocketConditioningPayload.BACKEND) {
+                            TalosPcmLevelProfile.POCKET_SPEECH
+                        } else {
+                            TalosPcmLevelProfile.PASSTHROUGH
+                        }
+                        val accepted = activePlayer.write(
+                            interleavedPcm = frame.pcmFloat,
+                            levelProfile = levelProfile,
+                            onAcceptedOutput = diagnosticSession?.let { session ->
+                                { acceptedPcm ->
+                                    session.observeAcceptedPcm(
+                                        pcm = acceptedPcm,
+                                        sampleRate = frame.sampleRate,
+                                        channels = frame.channels,
+                                    )
+                                }
+                            },
+                            isCancelled = { !queueGate.isActive(id) },
+                        )
                         val writeDurationNs = SystemClock.elapsedRealtimeNanos() - writeStartedAtNs
                         val writtenFrames = (activePlayer.framesWritten() - writtenBefore).coerceAtLeast(0L)
+                        val levelStats = activePlayer.lastWriteLevelStats()
                         if (writtenFrames > 0L && ttfaMs == null) {
                             ttfaMs = (System.nanoTime() - startedAtNanos) / 1_000_000
                         }
@@ -1134,8 +1179,16 @@ internal class TalosVoiceHost(
                                 requestedFrames = requestedFrames,
                                 writtenFrames = writtenFrames.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
                                 queueDepthFrames = leadFrames,
+                                queueCapacityFrames = activePlayer.bufferCapacityFrames().toLong(),
+                                startThresholdFrames = activePlayer.startThresholdFrames().toLong(),
                                 playbackHeadFrames = activePlayer.playbackHeadFrames(),
                                 underrunCount = underrunsAfter,
+                                levelGainDb = levelStats?.gainDb,
+                                limiterCeilingDbfs = levelStats?.limiterCeilingDbfs,
+                                inputPeakAbs = levelStats?.inputPeakAbs,
+                                outputPeakAbs = levelStats?.outputPeakAbs,
+                                limitedSampleFrames = levelStats?.limitedSampleFrames,
+                                limiterGainReductionDb = levelStats?.limiterGainReductionDb,
                             ),
                         )
                         if (underrunsAfter > underrunsBefore) {
@@ -1176,11 +1229,53 @@ internal class TalosVoiceHost(
             }
             val cancelled = outcome.synthesis.terminal == TalosVoiceEngineTerminal.CANCELLED ||
                 !queueGate.isActive(id)
+            val route = outcome.route
+            val initialResult = TalosVoiceStreamResult(
+                cancelled = cancelled,
+                ttfaMs = ttfaMs,
+                underruns = writeFailures,
+                hardwareUnderruns = activePlayer?.underrunCount()?.minus(underrunBaseline) ?: 0,
+                drainedWithinTimeout = false,
+                elapsedMs = (System.nanoTime() - startedAtNanos) / 1_000_000,
+                resolvedEngine = route.backend,
+                resolvedLocale = outcome.synthesis.locale,
+                resolvedProfileId = profile.header.profileId,
+                fallbackReason = route.fallbackReason,
+                generatedFrames = outcome.synthesis.generatedFrames,
+                onsetDiscardedSamples = outcome.synthesis.onsetDiscardedSamples,
+                resolvedProfileSchemaVersion = TalosVoiceProfileHeaderV2.SCHEMA_VERSION,
+                profileMigrationCommitted = false,
+            )
+            if (!cancelled && activePlayer != null && onPlaybackPending != null) {
+                val boundaryFrames = activePlayer.framesWritten()
+                onPlaybackPending(
+                    TalosVoicePendingPlayback(
+                        player = activePlayer,
+                        playbackBoundaryFrames = boundaryFrames,
+                        submissionId = id,
+                        playbackEpoch = requireNotNull(playbackEpoch) {
+                            "deferred playback requires the submission epoch"
+                        },
+                        underrunBaseline = underrunBaseline,
+                        startedAtNanos = startedAtNanos,
+                        diagnosticSession = diagnosticSession,
+                        result = initialResult,
+                        generatedFrameCount = outcome.synthesis.generatedFrames,
+                        profileApplied = true,
+                        resolvedEngine = route.backend,
+                        resolvedLocale = outcome.synthesis.locale,
+                        fallbackReason = route.fallbackReason,
+                    ),
+                )
+                return initialResult
+            }
             diagnosticSession?.record(
                 TalosVoiceDiagnosticEvent(
                     kind = TalosVoiceDiagnosticEventKind.DRAIN_BEGIN,
                     stage = "TalosPcmPlayer.awaitDrain",
                     queueDepthFrames = activePlayer?.let { it.framesWritten() - it.playbackHeadFrames() } ?: 0L,
+                    queueCapacityFrames = activePlayer?.bufferCapacityFrames()?.toLong(),
+                    startThresholdFrames = activePlayer?.startThresholdFrames()?.toLong(),
                     playbackHeadFrames = activePlayer?.playbackHeadFrames() ?: 0L,
                     underrunCount = activePlayer?.underrunCount()?.minus(underrunBaseline) ?: 0,
                 ),
@@ -1197,6 +1292,8 @@ internal class TalosVoiceHost(
                     stage = "TalosPcmPlayer.awaitDrain",
                     durationNs = SystemClock.elapsedRealtimeNanos() - drainStartedNs,
                     queueDepthFrames = activePlayer?.let { it.framesWritten() - it.playbackHeadFrames() } ?: 0L,
+                    queueCapacityFrames = activePlayer?.bufferCapacityFrames()?.toLong(),
+                    startThresholdFrames = activePlayer?.startThresholdFrames()?.toLong(),
                     playbackHeadFrames = activePlayer?.playbackHeadFrames() ?: 0L,
                     underrunCount = activePlayer?.underrunCount()?.minus(underrunBaseline) ?: 0,
                 ),
@@ -1210,21 +1307,10 @@ internal class TalosVoiceHost(
                     ),
                 )
             }
-            val route = outcome.route
-            val result = TalosVoiceStreamResult(
-                cancelled = cancelled,
-                ttfaMs = ttfaMs,
-                underruns = writeFailures,
+            val result = initialResult.copy(
                 hardwareUnderruns = activePlayer?.underrunCount()?.minus(underrunBaseline) ?: 0,
                 drainedWithinTimeout = drained,
                 elapsedMs = (System.nanoTime() - startedAtNanos) / 1_000_000,
-                resolvedEngine = route.backend,
-                resolvedLocale = outcome.synthesis.locale,
-                resolvedProfileId = profile.header.profileId,
-                fallbackReason = route.fallbackReason,
-                generatedFrames = outcome.synthesis.generatedFrames,
-                resolvedProfileSchemaVersion = TalosVoiceProfileHeaderV2.SCHEMA_VERSION,
-                profileMigrationCommitted = false,
             )
             if (finishDiagnosticWhenComplete) {
                 finishSuccessfulDiagnostic(
@@ -1410,6 +1496,8 @@ internal class TalosVoiceHost(
                     requestedFrames = requestedPcmFrames,
                     writtenFrames = writtenPcmFrames.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
                     queueDepthFrames = leadFramesAfter,
+                    queueCapacityFrames = activePlayer.bufferCapacityFrames().toLong(),
+                    startThresholdFrames = activePlayer.startThresholdFrames().toLong(),
                     playbackHeadFrames = activePlayer.playbackHeadFrames(),
                     underrunCount = relativeUnderrunsAfter,
                 ),
@@ -1484,6 +1572,8 @@ internal class TalosVoiceHost(
                 kind = TalosVoiceDiagnosticEventKind.DRAIN_BEGIN,
                 stage = "TalosPcmPlayer.awaitDrain",
                 queueDepthFrames = activePlayer.framesWritten() - activePlayer.playbackHeadFrames(),
+                queueCapacityFrames = activePlayer.bufferCapacityFrames().toLong(),
+                startThresholdFrames = activePlayer.startThresholdFrames().toLong(),
                 playbackHeadFrames = activePlayer.playbackHeadFrames(),
                 underrunCount = activePlayer.underrunCount() - underrunCountBefore,
             ),
@@ -1496,6 +1586,8 @@ internal class TalosVoiceHost(
                 stage = "TalosPcmPlayer.awaitDrain",
                 durationNs = SystemClock.elapsedRealtimeNanos() - drainStartedNs,
                 queueDepthFrames = activePlayer.framesWritten() - activePlayer.playbackHeadFrames(),
+                queueCapacityFrames = activePlayer.bufferCapacityFrames().toLong(),
+                startThresholdFrames = activePlayer.startThresholdFrames().toLong(),
                 playbackHeadFrames = activePlayer.playbackHeadFrames(),
                 underrunCount = activePlayer.underrunCount() - underrunCountBefore,
             ),
@@ -1560,6 +1652,177 @@ internal class TalosVoiceHost(
             profileApplied = diagnosticProfileApplied,
         )
         return result
+    }
+
+    /**
+     * Completes callbacks in utterance order without owning ORT. The owner
+     * lane can therefore prepare a later ADD while this lane observes the
+     * exact physical frame boundary of the previous utterance.
+     */
+    private fun enqueuePlaybackCompletion(
+        pending: TalosVoicePendingPlayback,
+        onComplete: (Result<TalosVoiceStreamResult>) -> Unit,
+    ) {
+        playbackCompletion.execute {
+            val completion = runCatching {
+                val waitStartedNs = SystemClock.elapsedRealtimeNanos()
+                val cancellation = { !queueGate.isPlaybackEpochActive(pending.playbackEpoch) }
+                val epochActiveAtArm = queueGate.isPlaybackEpochActive(pending.playbackEpoch)
+                val terminalBoundary = if (epochActiveAtArm) {
+                    queueGate.runIfPlaybackTerminal(pending.submissionId, pending.playbackEpoch) {
+                        pending.player.sealTerminalBoundary(pending.playbackBoundaryFrames)
+                    }
+                } else null
+                val headFramesAtArm = terminalBoundary?.headFramesAtSeal ?: pending.player.playbackHeadFrames()
+                val completionSource = terminalBoundary?.let { TalosPcmTerminalBoundary.COMPLETION_SOURCE }
+                    ?: PLAYBACK_HEAD_COMPLETION_SOURCE
+                pending.diagnosticSession?.record(
+                    TalosVoiceDiagnosticEvent(
+                        kind = TalosVoiceDiagnosticEventKind.PLAYBACK_BOUNDARY_ARMED,
+                        stage = if (terminalBoundary == null) {
+                            "TalosPcmPlayer.awaitPlaybackBoundary.queued"
+                        } else {
+                            "TalosPcmPlayer.sealTerminalBoundary"
+                        },
+                        queueDepthFrames = (pending.playbackBoundaryFrames - headFramesAtArm).coerceAtLeast(0L),
+                        queueCapacityFrames = terminalBoundary?.bufferCapacityFrames?.toLong()
+                            ?: pending.player.bufferCapacityFrames().toLong(),
+                        startThresholdFrames = terminalBoundary?.startThresholdFrames?.toLong()
+                            ?: pending.player.startThresholdFrames().toLong(),
+                        playbackHeadFrames = headFramesAtArm,
+                        playbackBoundaryFrames = pending.playbackBoundaryFrames,
+                        playbackCompletionSource = completionSource,
+                        terminalDrainRemainingFrames = terminalBoundary?.remainingFramesAtSeal,
+                        terminalDrainExpectedNs = terminalBoundary?.expectedDrainNs,
+                        underrunCount = pending.player.underrunCount() - pending.underrunBaseline,
+                    ),
+                )
+                terminalBoundary?.let { sealed ->
+                    pending.diagnosticSession?.record(
+                        TalosVoiceDiagnosticEvent(
+                            kind = TalosVoiceDiagnosticEventKind.TERMINAL_DRAIN_ARMED,
+                            stage = "AudioTrack.stop.stream_drain",
+                            queueDepthFrames = sealed.remainingFramesAtSeal,
+                            queueCapacityFrames = sealed.bufferCapacityFrames.toLong(),
+                            startThresholdFrames = sealed.startThresholdFrames.toLong(),
+                            playbackHeadFrames = sealed.headFramesAtSeal,
+                            playbackBoundaryFrames = sealed.boundaryFrames,
+                            playbackCompletionSource = TalosPcmTerminalBoundary.COMPLETION_SOURCE,
+                            terminalDrainRemainingFrames = sealed.remainingFramesAtSeal,
+                            terminalDrainExpectedNs = sealed.expectedDrainNs,
+                            underrunCount = pending.player.underrunCount() - pending.underrunBaseline,
+                        ),
+                    )
+                }
+                val terminalResult = terminalBoundary?.awaitDrain(
+                    timeoutMs = DRAIN_TIMEOUT_MS,
+                    isCancelled = cancellation,
+                )
+                val reached = terminalResult?.reached ?: pending.player.awaitPlaybackBoundary(
+                    targetFrames = pending.playbackBoundaryFrames,
+                    timeoutMs = DRAIN_TIMEOUT_MS,
+                    isCancelled = cancellation,
+                )
+                val waitDurationNs = SystemClock.elapsedRealtimeNanos() - waitStartedNs
+                val epochActive = queueGate.isPlaybackEpochActive(pending.playbackEpoch)
+                val cancelled = pending.result.cancelled || !epochActive
+                val headFrames = terminalBoundary?.headFramesAtSeal ?: pending.player.playbackHeadFrames()
+                val framesWritten = terminalBoundary?.boundaryFrames ?: pending.player.framesWritten()
+                val hardwareUnderruns = (
+                    (terminalResult?.underrunCount ?: pending.player.underrunCount()) - pending.underrunBaseline
+                ).coerceAtLeast(0)
+                if (hardwareUnderruns > pending.result.hardwareUnderruns) {
+                    pending.diagnosticSession?.record(
+                        TalosVoiceDiagnosticEvent(
+                            kind = TalosVoiceDiagnosticEventKind.UNDERRUN_OBSERVED,
+                            stage = if (terminalBoundary == null) {
+                                "AudioTrack.getUnderrunCount.playback_boundary"
+                            } else {
+                                "AudioTrack.getUnderrunCount.terminal_drain"
+                            },
+                            queueDepthFrames = (framesWritten - headFrames).coerceAtLeast(0L),
+                            playbackHeadFrames = headFrames,
+                            playbackBoundaryFrames = pending.playbackBoundaryFrames,
+                            playbackCompletionSource = completionSource,
+                            terminalDrainRemainingFrames = terminalBoundary?.remainingFramesAtSeal,
+                            terminalDrainExpectedNs = terminalBoundary?.expectedDrainNs,
+                            underrunCount = hardwareUnderruns,
+                        ),
+                    )
+                }
+                when {
+                    reached -> pending.diagnosticSession?.record(
+                        TalosVoiceDiagnosticEvent(
+                            kind = TalosVoiceDiagnosticEventKind.PLAYBACK_BOUNDARY_REACHED,
+                            stage = if (terminalBoundary == null) {
+                                "TalosPcmPlayer.awaitPlaybackBoundary"
+                            } else {
+                                "TalosPcmTerminalBoundary.awaitDrain"
+                            },
+                            durationNs = waitDurationNs,
+                            queueDepthFrames = (framesWritten - headFrames).coerceAtLeast(0L),
+                            queueCapacityFrames = terminalBoundary?.bufferCapacityFrames?.toLong()
+                                ?: pending.player.bufferCapacityFrames().toLong(),
+                            startThresholdFrames = terminalBoundary?.startThresholdFrames?.toLong()
+                                ?: pending.player.startThresholdFrames().toLong(),
+                            playbackHeadFrames = headFrames,
+                            playbackBoundaryFrames = pending.playbackBoundaryFrames,
+                            playbackCompletionSource = completionSource,
+                            terminalDrainRemainingFrames = terminalBoundary?.remainingFramesAtSeal,
+                            terminalDrainExpectedNs = terminalBoundary?.expectedDrainNs,
+                            underrunCount = hardwareUnderruns,
+                        ),
+                    )
+                    cancelled -> pending.diagnosticSession?.record(
+                        TalosVoiceDiagnosticEvent(
+                            kind = TalosVoiceDiagnosticEventKind.CANCEL_ACKNOWLEDGED,
+                            stage = "TalosPcmPlayer.awaitPlaybackBoundary.cancelled",
+                            durationNs = waitDurationNs,
+                            playbackHeadFrames = headFrames,
+                            playbackBoundaryFrames = pending.playbackBoundaryFrames,
+                            playbackCompletionSource = completionSource,
+                            terminalDrainRemainingFrames = terminalBoundary?.remainingFramesAtSeal,
+                            terminalDrainExpectedNs = terminalBoundary?.expectedDrainNs,
+                            underrunCount = hardwareUnderruns,
+                            cancellationGeneration = queueGate.activeId(),
+                        ),
+                    )
+                    else -> pending.diagnosticSession?.record(
+                        TalosVoiceDiagnosticEvent(
+                            kind = TalosVoiceDiagnosticEventKind.DRAIN_END,
+                            stage = "TalosPcmPlayer.awaitPlaybackBoundary.timeout",
+                            durationNs = waitDurationNs,
+                            queueDepthFrames = (framesWritten - headFrames).coerceAtLeast(0L),
+                            queueCapacityFrames = pending.player.bufferCapacityFrames().toLong(),
+                            startThresholdFrames = pending.player.startThresholdFrames().toLong(),
+                            playbackHeadFrames = headFrames,
+                            playbackBoundaryFrames = pending.playbackBoundaryFrames,
+                            playbackCompletionSource = completionSource,
+                            terminalDrainRemainingFrames = terminalBoundary?.remainingFramesAtSeal,
+                            terminalDrainExpectedNs = terminalBoundary?.expectedDrainNs,
+                            underrunCount = hardwareUnderruns,
+                        ),
+                    )
+                }
+                val result = pending.result.copy(
+                    cancelled = cancelled,
+                    hardwareUnderruns = hardwareUnderruns,
+                    drainedWithinTimeout = reached,
+                    elapsedMs = (System.nanoTime() - pending.startedAtNanos) / 1_000_000,
+                )
+                finishSuccessfulDiagnostic(
+                    session = pending.diagnosticSession,
+                    result = result,
+                    generatedFrameCount = pending.generatedFrameCount,
+                    profileApplied = pending.profileApplied,
+                    resolvedEngine = pending.resolvedEngine,
+                    resolvedLocale = pending.resolvedLocale,
+                    fallbackReason = pending.fallbackReason,
+                )
+                result
+            }
+            onComplete(completion)
+        }
     }
 
     private fun finishSuccessfulDiagnostic(
@@ -1814,6 +2077,7 @@ internal class TalosVoiceHost(
                     TalosVoiceDiagnosticEventKind.FLOW_MAIN
                 "flow_step" -> TalosVoiceDiagnosticEventKind.FLOW_STEP
                 "mimi_decoder", "moss_codec_decode" -> TalosVoiceDiagnosticEventKind.CODEC_DECODE
+                "onset_stabilized" -> TalosVoiceDiagnosticEventKind.ONSET_STABILIZED
                 else -> TalosVoiceDiagnosticEventKind.ENGINE_STAGE
             },
             stage = stage,
@@ -1821,6 +2085,14 @@ internal class TalosVoiceHost(
             sentenceIndex = sentenceIndex,
             frameIndex = frameIndex,
             requestedFrames = inputFrames,
+            onsetDiscardedSamples = onsetDiscardedSamples,
+            onsetLeadingSilenceSamples = onsetLeadingSilenceSamples,
+            onsetGapStartSamples = onsetGapStartSamples,
+            onsetGapEndSamples = onsetGapEndSamples,
+            onsetResumeStartSamples = onsetResumeStartSamples,
+            onsetAnalysisWindowSamples = onsetAnalysisWindowSamples,
+            onsetBoundaryThreshold = onsetBoundaryThreshold?.toDouble(),
+            onsetBoundarySource = onsetBoundarySource,
         )
 
     private inline fun <T> measuredEnrollmentStage(
@@ -1871,6 +2143,8 @@ internal class TalosVoiceHost(
 
     /** Blocks until the owner lane has actually closed model state - deterministic teardown for tests. */
     override fun close() {
+        queueGate.cancel()
+        player?.flush()
         val closed = CountDownLatch(1)
         owner.execute {
             runtime?.close()
@@ -1889,11 +2163,14 @@ internal class TalosVoiceHost(
         }
         closed.await(30, TimeUnit.SECONDS)
         owner.shutdown()
+        playbackCompletion.shutdown()
+        playbackCompletion.awaitTermination(30, TimeUnit.SECONDS)
     }
 
     companion object {
         private const val DEFAULT_MAX_FRAMES = 375
         private const val DRAIN_TIMEOUT_MS = 10_000L
+        private const val PLAYBACK_HEAD_COMPLETION_SOURCE = "PLAYBACK_HEAD"
         private const val POCKET_MANIFEST_ASSET = "voice/pocket-model-manifest.json"
 
         @Volatile private var instance: TalosVoiceHost? = null
@@ -1980,6 +2257,32 @@ private fun resolveFrameBudget(leadSeconds: Double, hasEmittedAudio: Boolean): I
     else -> 8
 }
 
+internal const val TALOS_VOICE_PRODUCTION_SEED = 42L
+
+/**
+ * Product speech must be reproducible: the ARM64 quality sweep measured 42
+ * as the best primary-corpus seed. Explicit seeds remain a research/test
+ * control and are never rewritten.
+ */
+internal fun resolveTalosVoiceProductionSeed(explicitSeed: Long?): Long =
+    explicitSeed ?: TALOS_VOICE_PRODUCTION_SEED
+
+internal data class TalosVoicePendingPlayback(
+    val player: TalosPcmPlayer,
+    val playbackBoundaryFrames: Long,
+    val submissionId: Long,
+    val playbackEpoch: Long,
+    val underrunBaseline: Int,
+    val startedAtNanos: Long,
+    val diagnosticSession: TalosVoiceDiagnosticSession?,
+    val result: TalosVoiceStreamResult,
+    val generatedFrameCount: Int,
+    val profileApplied: Boolean,
+    val resolvedEngine: String,
+    val resolvedLocale: String,
+    val fallbackReason: String?,
+)
+
 internal data class TalosVoiceStreamResult(
     val cancelled: Boolean,
     /** Submit-to-first-`AudioTrack.write()` time. Not confirmed-audible TTFA - the device quirk documented on [TalosPcmPlayer.write] means playback-head confirmation needs more than one write to be reliable on some hardware. */
@@ -1995,6 +2298,7 @@ internal data class TalosVoiceStreamResult(
     val resolvedProfileId: String? = null,
     val fallbackReason: String? = null,
     val generatedFrames: Int = 0,
+    val onsetDiscardedSamples: Int = 0,
     val resolvedProfileSchemaVersion: Int? = null,
     val profileMigrationCommitted: Boolean = false,
 )

@@ -2,6 +2,7 @@ package ai.talos.voice
 
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -28,6 +29,61 @@ class TalosVoiceQueueGateTest {
         assertTrue(gate.isActive(second.id))
         assertTrue(gate.claim(third))
         assertTrue(gate.isActive(third.id))
+    }
+
+    @Test
+    fun `ADD exposes a later queued ticket without invalidating the playback epoch`() {
+        val gate = TalosVoiceQueueGate()
+        val current = gate.submit(TalosVoiceQueueMode.FLUSH)
+        assertTrue(gate.claim(current))
+
+        gate.submit(TalosVoiceQueueMode.ADD)
+
+        assertTrue(gate.hasQueuedAfter(current.id))
+        assertTrue(gate.isPlaybackEpochActive(current.playbackEpoch))
+    }
+
+    @Test
+    fun `playback queued after remains visible after later ADD is claimed`() {
+        val gate = TalosVoiceQueueGate()
+        val current = gate.submit(TalosVoiceQueueMode.FLUSH)
+        assertTrue(gate.claim(current))
+        val later = gate.submit(TalosVoiceQueueMode.ADD)
+
+        assertTrue(gate.hasPlaybackQueuedAfter(current.id, current.playbackEpoch))
+        assertTrue(gate.claim(later))
+        assertTrue(gate.hasPlaybackQueuedAfter(current.id, current.playbackEpoch))
+        assertFalse(gate.hasPlaybackQueuedAfter(later.id, later.playbackEpoch))
+
+        gate.submit(TalosVoiceQueueMode.FLUSH)
+        assertFalse(gate.hasPlaybackQueuedAfter(current.id, current.playbackEpoch))
+    }
+
+    @Test
+    fun `terminal playback action runs only for the latest ticket in the same epoch`() {
+        val gate = TalosVoiceQueueGate()
+        val current = gate.submit(TalosVoiceQueueMode.FLUSH)
+        assertTrue(gate.claim(current))
+        val later = gate.submit(TalosVoiceQueueMode.ADD)
+
+        assertNull(gate.runIfPlaybackTerminal(current.id, current.playbackEpoch) { "wrong" })
+        assertTrue(gate.claim(later))
+        assertEquals("sealed", gate.runIfPlaybackTerminal(later.id, later.playbackEpoch) { "sealed" })
+
+        val replacement = gate.submit(TalosVoiceQueueMode.FLUSH)
+        assertNull(gate.runIfPlaybackTerminal(later.id, later.playbackEpoch) { "wrong" })
+        assertEquals("sealed-new", gate.runIfPlaybackTerminal(replacement.id, replacement.playbackEpoch) { "sealed-new" })
+    }
+
+    @Test
+    fun `a later FLUSH invalidates a pending playback boundary`() {
+        val gate = TalosVoiceQueueGate()
+        val current = gate.submit(TalosVoiceQueueMode.FLUSH)
+        assertTrue(gate.claim(current))
+
+        gate.submit(TalosVoiceQueueMode.FLUSH)
+
+        assertFalse(gate.isPlaybackEpochActive(current.playbackEpoch))
     }
 
     @Test
