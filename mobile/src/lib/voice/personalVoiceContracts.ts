@@ -37,7 +37,7 @@ export function isTalosPersonalVoiceStyle(value: unknown): value is TalosPersona
     return value === 'neutral' || value === 'warm' || value === 'calm' || value === 'energetic'
 }
 
-/** One saved `TalosVoiceProfileV1`, summarized for a list - no audio codes, no quality metrics: those stay native, read only when actually needed (rename/delete/compat-check). */
+/** One saved voice profile, summarized for a list; conditioning and quality data never cross the bridge. */
 export interface TalosPersonalVoiceProfileSummary {
     id: string
     name: string
@@ -45,23 +45,31 @@ export interface TalosPersonalVoiceProfileSummary {
     style: TalosPersonalVoiceStyle
     /** `TalosVoiceProfileCompatibility`'s codec fingerprint, truncated for display - never compared as a string in TS, the native side already owns that comparison. */
     engineBuild: string
-    /** `TalosVoiceProfileCompatibility.isCompatible()`, read fresh from the native side - never cached across app updates. */
+    /** Result of the same native production router used by synthesis. */
     compatible: boolean
+    resolvedBackend?: 'pocket-v2' | 'moss-tts-nano'
+    fallbackReason?: string
+    incompatibilityReason?: string
     createdAtEpochMs: number
     enrollmentDurationMs: number
 }
 
 /** What the settings screen and the router both need to know before offering `'personal'` at all. */
 export interface TalosPersonalVoiceStatus {
-    /** False on non-arm64-v8a or when the model files are not present (`TalosVoiceModelManager.isPresent`) - the router must fall back silently, not surface an error for a device that was never going to have this. */
+    /** Whether this build contains the Pocket runtime; installation is reported separately. */
     supported: boolean
-    /** True once the manifest/tokenizer/codec have opened successfully at least once this process. */
+    /** True only after every pinned Pocket file was hash-verified. */
     installed: boolean
     /** `installed` AND at least one compatible saved profile exists. */
     ready: boolean
     active: boolean
     failure?: string
     engineBuild?: string
+    backend?: 'pocket-v2'
+    modelState?: 'ready' | 'missing' | 'corrupt' | 'unverified'
+    verifiedFiles?: number
+    cacheHit?: boolean
+    verificationDurationMs?: number
 }
 
 export interface TalosPersonalSpeakRequest {

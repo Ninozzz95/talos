@@ -70,7 +70,7 @@ class TalosNeuralVoicePlugin : Plugin() {
     /**
      * ⛔⛔ `load()` gira sul thread CONDIVISO dei plugin — stessa nota di
      * `TalosSpeechPlugin.load()`: quello che ferma TUTTI gli altri se lo si
-     * blocca. `TalosVoiceModelActivation.recover()` fa I/O di file veri
+     * blocca. Le recovery MOSS legacy e Pocket fanno I/O di file veri
      * (rename, `deleteRecursively` su un `.previous` orfano che potrebbe
      * portare centinaia di MB) — mai chiamato inline qui dentro. Girato su
      * questa lane invece, cosi `load()` torna subito e gli altri plugin non
@@ -80,14 +80,17 @@ class TalosNeuralVoicePlugin : Plugin() {
      */
     override fun load() {
         enrollmentLane.execute {
+            val externalFilesDir = context.applicationContext.getExternalFilesDir(null) ?: return@execute
             runCatching {
-                val manifest = readManifest()
-                val externalFilesDir = context.applicationContext.getExternalFilesDir(null) ?: return@runCatching
+                val manifest = readMossManifest()
                 for (artifact in manifest.artifacts) {
                     TalosVoiceModelActivation.recover(externalFilesDir, artifact)
                 }
             }
-            // ⛔ Silenzioso di proposito: se il manifesto manca o è
+            runCatching {
+                TalosPocketModelInstaller(externalFilesDir, readPocketManifest()).recover()
+            }
+            // ⛔ Silenzioso di proposito: se un manifesto manca o è
             // malformato, `installManifest`/`activateModel` lo diranno
             // chiaramente quando qualcuno li chiama davvero. `load()` non è
             // il posto per un errore che nessuno vede — è avvio dell'app,
@@ -148,7 +151,7 @@ class TalosNeuralVoicePlugin : Plugin() {
                 require(actualApkSha256 == expectedApkSha256) {
                     "APK SHA-256 mismatch: expected=$expectedApkSha256 actual=$actualApkSha256"
                 }
-                val manifest = readManifest()
+                val manifest = readPocketManifest().toVoiceModelManifest()
                 val external = context.applicationContext.getExternalFilesDir(null)
                     ?: error("no-external-storage")
                 val session = TalosVoiceDiagnosticSession(
@@ -223,10 +226,12 @@ class TalosNeuralVoicePlugin : Plugin() {
     private fun modelManifestSha256(manifest: TalosVoiceModelManifest): String {
         val canonical = buildString {
             append(manifest.schemaVersion).append('|').append(manifest.engineBuild).append('|')
+            append(manifest.installRoot).append('|')
             manifest.artifacts.sortedBy { it.targetDir }.forEach { artifact ->
                 append(artifact.repo).append('@').append(artifact.revision).append('/').append(artifact.targetDir).append('|')
                 artifact.files.sortedBy { it.path }.forEach { file ->
-                    append(file.path).append(':').append(file.size).append(':').append(file.sha256).append('|')
+                    append(file.path).append('>').append(file.targetPath).append(':')
+                        .append(file.size).append(':').append(file.sha256).append('|')
                 }
             }
         }
@@ -251,6 +256,53 @@ class TalosNeuralVoicePlugin : Plugin() {
         .digest(bytes)
         .joinToString("") { "%02x".format(it) }
 
+    private fun modelAvailabilityJson(availability: TalosVoiceModelAvailability): JSObject =
+        JSObject()
+            .put("supported", availability.supported)
+            .put("installed", availability.installed)
+            .put("backend", availability.backend)
+            .put("engineBuild", availability.engineBuild)
+            .put("modelState", availability.modelState)
+            .put("verifiedFiles", availability.verifiedFiles)
+            .put("cacheHit", availability.cacheHit)
+            .put("verificationDurationMs", availability.verificationDurationNs / 1_000_000.0)
+            .apply { availability.failure?.let { put("failure", it) } }
+
+    private fun pocketInstallResultJson(result: TalosPocketInstallResult): JSObject {
+        val measurement = result.stageMetrics.lastOrNull { it.stage.endsWith("_verify") }
+            ?: result.stageMetrics.lastOrNull()
+        val snapshot = TalosPocketModelStatusSnapshot(
+            status = result.status,
+            cacheHit = false,
+            verificationStartedAtNs = measurement?.startedAtNs ?: System.nanoTime(),
+            verificationDurationNs = measurement?.durationNs ?: 0L,
+            verificationThreadName = measurement?.threadName ?: Thread.currentThread().name,
+        )
+        return modelAvailabilityJson(TalosVoiceAvailabilityResolver.forModel(snapshot))
+            .put("activated", result.activated)
+            .put("stages", pocketInstallStagesJson(result.stageMetrics))
+    }
+
+    private fun pocketInstallStagesJson(metrics: List<TalosPocketInstallStageMetric>): JSArray {
+        val stages = JSArray()
+        for (metric in metrics) {
+            stages.put(
+                JSObject()
+                    .put("stage", metric.stage)
+                    .put("startedAtNs", metric.startedAtNs)
+                    .put("durationNs", metric.durationNs)
+                    .put("threadName", metric.threadName)
+                    .put("outcome", metric.outcome)
+                    .apply {
+                        metric.inputFiles?.let { put("inputFiles", it) }
+                        metric.outputFiles?.let { put("outputFiles", it) }
+                        metric.detail?.let { put("detail", it) }
+                    },
+            )
+        }
+        return stages
+    }
+
     /**
      * `active` is deliberately absent here: this class has no knowledge of
      * `settings.voice.engine` (that lives in the TS store), so it cannot
@@ -261,13 +313,14 @@ class TalosNeuralVoicePlugin : Plugin() {
      */
     @PluginMethod
     fun status(call: PluginCall) {
-        val root = modelRoot()
-        val supported = TalosVoiceModelManager.isPresent(root)
-        val payload = JSObject()
-            .put("supported", supported)
-            .put("installed", supported)
-        if (!supported) payload.put("failure", TalosVoiceModelManager.describeMissing(root))
-        call.resolve(payload)
+        enrollmentLane.execute {
+            runCatching {
+                TalosVoiceAvailabilityResolver.forModel(host.pocketModelStatusBlocking(refresh = true))
+            }.fold(
+                onSuccess = { availability -> call.resolve(modelAvailabilityJson(availability)) },
+                onFailure = { error -> call.reject(error.message ?: "Pocket status failed", error as? Exception) },
+            )
+        }
     }
 
     // ---------------------------------------------------------------
@@ -282,23 +335,28 @@ class TalosNeuralVoicePlugin : Plugin() {
     // sotto, campo per campo. Nessun secondo motore di trasferimento.
     // ---------------------------------------------------------------
 
-    private fun readManifest(): TalosVoiceModelManifest {
+    private fun readMossManifest(): TalosVoiceModelManifest {
         val json = context.assets.open("voice/model-manifest.json").bufferedReader().use { it.readText() }
         return TalosVoiceModelManifest.fromJson(JSONObject(json))
     }
 
+    private fun readPocketManifest(): TalosPocketModelManifest {
+        val json = context.assets.open("voice/pocket-model-manifest.json").bufferedReader().use { it.readText() }
+        return TalosPocketModelManifest.fromJson(JSONObject(json)).requirePinnedBundle()
+    }
+
     /**
      * Il manifesto pinnato (Blocco 1), tradotto nella forma che
-     * `TalosModelTransferPlugin.start` capisce già - un oggetto per
-     * artifact, cosi il lato TS chiama `start` due volte (una per
-     * repository) e poi `status`/`activateModel` per seguirli.
+     * `TalosModelTransferPlugin.start` capisce già. Pocket pubblica il
+     * bundle italiano in un solo repository: il lato TS avvia una richiesta
+     * e poi chiama `status`/`activateModel`.
      */
     @PluginMethod
     fun installManifest(call: PluginCall) {
         val manifest = try {
-            readManifest()
+            readPocketManifest().toVoiceModelManifest()
         } catch (broken: Exception) {
-            call.reject("model-manifest.json missing or malformed", broken)
+            call.reject("pocket-model-manifest.json missing or malformed", broken)
             return
         }
         val artifacts = JSArray()
@@ -321,72 +379,43 @@ class TalosNeuralVoicePlugin : Plugin() {
 
     /**
      * ⭐⭐ L'ATTIVAZIONE ATOMICA — chiamato dal lato TS solo dopo che
-     * `TalosModelTransferPlugin.status` conferma finiti TUTTI gli artifact
-     * di [installManifest]. Mette in staging OGNI artifact prima di
-     * promuoverne anche solo uno: un download riuscito a metà (mancasse un
-     * file di UN artifact) non tocca `moss/` per niente, non solo per
-     * quell'artifact.
-     *
-     * ⛔ Onestà sul residuo: una volta iniziata la promozione, i due
-     * `promote()` restano due operazioni separate — se la seconda fallisse
-     * (un I/O raro, a valle di un download già interamente verificato) la
-     * voce resterebbe con un artifact nuovo e uno vecchio finché non si
-     * ritenta. Non è il caso di questa prima attivazione sul dispositivo di
-     * riferimento (i file "vecchi" sul Pad sono BYTE PER BYTE gli stessi
-     * pinnati nel Blocco 1 — non c'è disallineamento possibile), e per un
-     * vero aggiornamento futuro `TalosVoiceModelManager.isPresent()`
-     * continuerebbe comunque a rispondere in base ai file REALI su disco,
-     * mai a un flag che potrebbe mentire.
+     * `TalosModelTransferPlugin.status` conferma finito l'unico artifact di
+     * [installManifest]. L'installer verifica il bundle Pocket nello staging,
+     * lo promuove con rename atomico, lo verifica di nuovo nella posizione
+     * attiva e soltanto allora elimina rollback e cache sorgente. Ogni fase
+     * torna al chiamante con tempo, thread, conteggi ed esito.
      */
     @PluginMethod
     fun activateModel(call: PluginCall) {
-        val manifest = try {
-            readManifest()
-        } catch (broken: Exception) {
-            call.reject("model-manifest.json missing or malformed", broken)
-            return
-        }
-        val externalFilesDir = context.applicationContext.getExternalFilesDir(null)
-        if (externalFilesDir == null) {
-            call.reject("no-external-storage")
-            return
-        }
-
-        val staged = mutableListOf<String>()
-        for (artifact in manifest.artifacts) {
-            when (val outcome = TalosVoiceModelActivation.stage(externalFilesDir, artifact)) {
-                is TalosVoiceModelActivation.Outcome.Activated -> staged.add(artifact.targetDir)
-                is TalosVoiceModelActivation.Outcome.Incomplete -> {
-                    call.reject("not-downloaded:${artifact.targetDir}:${outcome.missingPath}")
-                    return
+        enrollmentLane.execute {
+            runCatching {
+                val externalFilesDir = context.applicationContext.getExternalFilesDir(null)
+                    ?: error("no-external-storage")
+                val result = TalosPocketModelInstaller(externalFilesDir, readPocketManifest()).activateFromCache()
+                val evidence = pocketInstallResultJson(result)
+                if (!result.activated || result.status !is TalosPocketModelStatus.Ready || result.status.verifiedFiles <= 0) {
+                    call.reject("Pocket activation did not produce a verified bundle", evidence)
+                    return@execute
                 }
-                is TalosVoiceModelActivation.Outcome.Failed -> {
-                    call.reject("stage-failed:${artifact.targetDir}:${outcome.reason}")
-                    return
+                // The active directory may have changed below an already-open
+                // ORT session. FIFO owner-lane refresh closes that state before
+                // the following hash verification can report success.
+                host.refreshPocketModel()
+                val availability = TalosVoiceAvailabilityResolver.forModel(
+                    host.pocketModelStatusBlocking(refresh = true),
+                )
+                val payload = modelAvailabilityJson(availability)
+                    .put("activated", availability.installed)
+                    .put("stages", pocketInstallStagesJson(result.stageMetrics))
+                if (!availability.installed) {
+                    call.reject("Pocket activation failed post-promotion verification", payload)
+                    return@execute
                 }
+                call.resolve(payload)
+            }.onFailure { error ->
+                call.reject(error.message ?: "Pocket activation failed", error as? Exception)
             }
         }
-
-        for (targetDir in staged) {
-            val outcome = TalosVoiceModelActivation.promote(externalFilesDir, targetDir)
-            if (outcome !is TalosVoiceModelActivation.Outcome.Activated) {
-                call.reject("promote-failed:$targetDir")
-                return
-            }
-        }
-        // ⛔ Non prima di qui: solo dopo che ENTRAMBI gli artifact sono
-        // promossi la pulizia della versione vecchia è onesta - prima
-        // sarebbe stata pulizia di un rollback che potrebbe ancora servire.
-        for (targetDir in staged) TalosVoiceModelActivation.cleanupPrevious(externalFilesDir, targetDir)
-        // ⛔⛔ Trovato 22/8, owner: senza questa riga i file voce restavano
-        // per sempre nella cache generica di `TalosModelStore` - la STESSA
-        // che `installed()` sotto legge per il picker dei modelli LLM del
-        // composer. Solo qui, mai prima: la promozione di ENTRAMBI gli
-        // artifact è certa a questo punto. Vedi il commento su
-        // `cleanupSourceCache` per la causa intera.
-        for (artifact in manifest.artifacts) TalosVoiceModelActivation.cleanupSourceCache(externalFilesDir, artifact)
-
-        call.resolve(JSObject().put("activated", true).put("supported", TalosVoiceModelManager.isPresent(modelRoot())))
     }
 
     /**
@@ -400,38 +429,69 @@ class TalosNeuralVoicePlugin : Plugin() {
      */
     @PluginMethod
     fun recoverModelInstall(call: PluginCall) {
-        val manifest = try {
-            readManifest()
-        } catch (broken: Exception) {
-            call.reject("model-manifest.json missing or malformed", broken)
-            return
+        enrollmentLane.execute {
+            runCatching {
+                val externalFilesDir = context.applicationContext.getExternalFilesDir(null)
+                    ?: error("no-external-storage")
+                val result = TalosPocketModelInstaller(externalFilesDir, readPocketManifest()).recover()
+                host.refreshPocketModel()
+                val availability = TalosVoiceAvailabilityResolver.forModel(
+                    host.pocketModelStatusBlocking(refresh = true),
+                )
+                modelAvailabilityJson(availability)
+                    .put("activated", result.activated)
+                    .put("stages", pocketInstallStagesJson(result.stageMetrics))
+            }.fold(
+                onSuccess = call::resolve,
+                onFailure = { error -> call.reject(error.message ?: "Pocket recovery failed", error as? Exception) },
+            )
         }
-        val externalFilesDir = context.applicationContext.getExternalFilesDir(null)
-        if (externalFilesDir == null) {
-            call.reject("no-external-storage")
-            return
-        }
-        for (artifact in manifest.artifacts) {
-            TalosVoiceModelActivation.recover(externalFilesDir, artifact)
-        }
-        call.resolve(JSObject().put("supported", TalosVoiceModelManager.isPresent(modelRoot())))
     }
 
     @PluginMethod
     fun profiles(call: PluginCall) {
-        val enrollment = enrollment()
-        val store = TalosVoiceProfileStore(context.applicationContext)
-        val array = JSArray()
-        for (id in enrollment.listProfileIds()) {
-            when (val stored = runCatching { store.loadAny(id) }.getOrNull()) {
-                is TalosStoredVoiceProfile.Legacy ->
-                    array.put(profileSummaryJson(stored.profile.header))
-                is TalosStoredVoiceProfile.Current ->
-                    array.put(profileSummaryJson(stored.profile))
-                null -> Unit
-            }
+        enrollmentLane.execute {
+            runCatching {
+                val enrollment = enrollment()
+                val store = TalosVoiceProfileStore(context.applicationContext)
+                val storedProfiles = enrollment.listProfileIds().mapNotNull { id ->
+                    runCatching { store.loadAny(id) }.getOrNull()
+                }
+                val pocketStatus = if (storedProfiles.isEmpty()) {
+                    null
+                } else {
+                    host.pocketModelStatusBlocking().status
+                }
+                val needsMossFingerprint = storedProfiles.any { stored ->
+                    stored is TalosStoredVoiceProfile.Legacy ||
+                        (stored is TalosStoredVoiceProfile.Current &&
+                            stored.profile.backendPayloads.any { it is TalosMossPromptPayload })
+                }
+                val mossFingerprints = if (needsMossFingerprint) activeMossFingerprints() else null
+                val array = JSArray()
+                for (stored in storedProfiles) {
+                    when (stored) {
+                        is TalosStoredVoiceProfile.Legacy -> {
+                            val compatible = isMossCompatible(stored.profile.header, mossFingerprints)
+                            array.put(profileSummaryJson(stored.profile.header, compatible))
+                        }
+                        is TalosStoredVoiceProfile.Current -> {
+                            val compatibleMoss = isMossCompatible(stored.profile, mossFingerprints)
+                            val availability = TalosVoiceAvailabilityResolver.forProfile(
+                                profile = stored.profile,
+                                pocketStatus = requireNotNull(pocketStatus),
+                                mossCompatible = compatibleMoss,
+                            )
+                            array.put(profileSummaryJson(stored.profile, availability))
+                        }
+                    }
+                }
+                JSObject().put("profiles", array)
+            }.fold(
+                onSuccess = { payload -> call.resolve(payload) },
+                onFailure = { error -> call.reject(error.message ?: "profile status failed", error as? Exception) },
+            )
         }
-        call.resolve(JSObject().put("profiles", array))
     }
 
     @PluginMethod
@@ -886,7 +946,18 @@ class TalosNeuralVoicePlugin : Plugin() {
                 // servizio per la ripresa non serve più, stessa erasure
                 // crittografica di TalosVoiceProfileStore.delete().
                 runCatching { sessionStore.clearSession() }
-                profileSummaryJson(profile)
+                val pocketStatus = host.pocketModelStatusBlocking(refresh = true).status
+                val mossFingerprints = if (profile.backendPayloads.any { it is TalosMossPromptPayload }) {
+                    activeMossFingerprints()
+                } else {
+                    null
+                }
+                val availability = TalosVoiceAvailabilityResolver.forProfile(
+                    profile = profile,
+                    pocketStatus = pocketStatus,
+                    mossCompatible = isMossCompatible(profile, mossFingerprints),
+                )
+                profileSummaryJson(profile, availability)
             }.fold(
                 onSuccess = { summary -> call.resolve(JSObject().put("profile", summary)) },
                 onFailure = { e -> call.reject(e.message ?: "commit failed", e as? Exception) },
@@ -908,30 +979,68 @@ class TalosNeuralVoicePlugin : Plugin() {
         }
     }
 
-    private fun profileSummaryJson(header: TalosVoiceProfileHeaderV1): JSObject =
+    private fun profileSummaryJson(header: TalosVoiceProfileHeaderV1, compatible: Boolean): JSObject =
         JSObject()
             .put("id", header.profileId)
             .put("name", header.displayName)
             .put("language", header.language)
             .put("style", header.style)
             .put("engineBuild", header.codecFingerprint)
-            .put(
-                "compatible",
-                runCatching { TalosVoiceProfileCompatibility.isCompatible(header, modelRoot()) }.getOrDefault(false),
-            )
+            .put("compatible", compatible)
+            .apply {
+                if (compatible) {
+                    put("resolvedBackend", TalosMossPromptPayload.BACKEND)
+                } else {
+                    put("incompatibilityReason", "active MOSS codec does not match this legacy profile")
+                }
+            }
             .put("createdAtEpochMs", header.createdAtEpochMs)
             .put("enrollmentDurationMs", header.enrollmentDurationMs)
 
-    private fun profileSummaryJson(profile: TalosVoiceProfileV2): JSObject =
-        JSObject()
+    private fun profileSummaryJson(
+        profile: TalosVoiceProfileV2,
+        availability: TalosVoiceProfileAvailability,
+    ): JSObject = JSObject()
             .put("id", profile.header.profileId)
             .put("name", profile.header.displayName)
             .put("language", profile.header.language)
             .put("style", profile.header.style)
-            .put("engineBuild", profile.header.preferredBackend)
-            .put("compatible", true)
+            .put(
+                "engineBuild",
+                profile.backendPayloads.filterIsInstance<TalosPocketConditioningPayload>().singleOrNull()?.revision
+                    ?: profile.backendPayloads.filterIsInstance<TalosMossPromptPayload>().single().codecFingerprint,
+            )
+            .put("compatible", availability.compatible)
+            .apply {
+                availability.resolvedBackend?.let { put("resolvedBackend", it) }
+                availability.fallbackReason?.let { put("fallbackReason", it) }
+                availability.incompatibilityReason?.let { put("incompatibilityReason", it) }
+            }
             .put("createdAtEpochMs", profile.header.createdAtEpochMs)
             .put("enrollmentDurationMs", profile.header.enrollmentDurationMs)
+
+    private fun activeMossFingerprints(): Pair<String, String>? = runCatching {
+        TalosVoiceProfileCompatibility.codecFingerprint(modelRoot()) to
+            TalosVoiceProfileCompatibility.promptSchemaFingerprint()
+    }.getOrNull()
+
+    private fun isMossCompatible(
+        header: TalosVoiceProfileHeaderV1,
+        active: Pair<String, String>?,
+    ): Boolean = active != null &&
+        header.codecFingerprint == active.first &&
+        header.promptSchemaFingerprint == active.second
+
+    private fun isMossCompatible(
+        profile: TalosVoiceProfileV2,
+        active: Pair<String, String>?,
+    ): Boolean {
+        val payload = profile.backendPayloads.filterIsInstance<TalosMossPromptPayload>().singleOrNull()
+            ?: return false
+        return active != null &&
+            payload.codecFingerprint == active.first &&
+            payload.promptSchemaFingerprint == active.second
+    }
 
     private fun enrollmentBuildJson(result: TalosVoiceEnrollmentBuildResult): JSObject {
         val stages = JSArray()
