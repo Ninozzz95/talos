@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
@@ -20,16 +21,26 @@ export function validateInstrumentationClass(className) {
     return className
 }
 
-export function buildInstrumentationArgs({ className, packageName = 'ai.talos' }) {
+export function buildInstrumentationArgs({ className, packageName = 'ai.talos', instrumentationArgs = {} }) {
     const selected = validateInstrumentationClass(className)
     if (!/^ai\.talos(?:\.[a-z][a-z0-9_]*)*$/.test(packageName)) {
         throw new Error(`invalid Android package name: ${packageName}`)
     }
-    return [
+    const args = [
         'shell', 'am', 'instrument', '-w', '-r',
         '-e', 'class', selected,
-        `${packageName}.test/${INSTRUMENTATION_RUNNER}`,
     ]
+    for (const [key, value] of Object.entries(instrumentationArgs).sort(([left], [right]) => left.localeCompare(right))) {
+        if (!/^talos[A-Za-z0-9]{1,63}$/.test(key)) {
+            throw new Error(`invalid instrumentation argument key: ${key}`)
+        }
+        if (typeof value !== 'string' || !/^[A-Za-z0-9_.:/=+-]{1,512}$/.test(value)) {
+            throw new Error(`invalid instrumentation argument value for ${key}`)
+        }
+        args.push('-e', key, value)
+    }
+    args.push(`${packageName}.test/${INSTRUMENTATION_RUNNER}`)
+    return args
 }
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -59,9 +70,87 @@ function requireApk(path, label) {
     }
 }
 
+export function sha256File(path) {
+    return createHash('sha256').update(readFileSync(path)).digest('hex')
+}
+
+export function encodeUsbTransportProof(value) {
+    if (typeof value !== 'string' || !value.startsWith('USB\\') || value.length > 384) {
+        throw new Error('USB transport proof is invalid')
+    }
+    return Buffer.from(value, 'utf8').toString('base64url')
+}
+
+function resolveAppCommit() {
+    const commit = execFileSync('git', ['-C', MOBILE, 'rev-parse', 'HEAD'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim()
+    if (!/^[0-9a-f]{40,64}$/.test(commit)) throw new Error(`git returned an invalid app commit: ${commit}`)
+    return commit
+}
+
 function installPreservingData(adb, apk, label) {
     const output = selectedExec(adb, ['install', '-r', apk])
     if (!/Success/.test(output)) throw new Error(`${label} install did not report Success: ${output.trim()}`)
+}
+
+export function runUsbInstrumentationCampaign({
+    className,
+    packageName = 'ai.talos',
+    paths = campaignPaths(packageName),
+    runId = `voice-e2e-${Date.now()}`,
+    instrumentationArgs,
+    dependencies = {},
+}) {
+    const requireApkForRun = dependencies.requireApk ?? requireApk
+    const resolveAdbForRun = dependencies.resolveAdb ?? resolveAdb
+    const acquirePadLockForRun = dependencies.acquirePadLock ?? acquirePadLock
+    const probeAuthorizedPadUsbForRun = dependencies.probeAuthorizedPadUsb ?? probeAuthorizedPadUsb
+    const installPreservingDataForRun = dependencies.installPreservingData ?? installPreservingData
+    const selectedExecForRun = dependencies.selectedExec ?? selectedExec
+    const sha256FileForRun = dependencies.sha256File ?? sha256File
+    const resolveAppCommitForRun = dependencies.resolveAppCommit ?? resolveAppCommit
+
+    const selectedClass = validateInstrumentationClass(className)
+    requireApkForRun(paths.appApk, 'app APK')
+    requireApkForRun(paths.testApk, 'test APK')
+    const baseInstrumentationArgs = instrumentationArgs ?? {
+        talosApkSha256: sha256FileForRun(paths.appApk),
+        talosAppCommit: resolveAppCommitForRun(),
+        talosTestApkSha256: sha256FileForRun(paths.testApk),
+    }
+    const adb = resolveAdbForRun()
+    const lock = acquirePadLockForRun(paths.lock, { runId })
+    try {
+        const identity = probeAuthorizedPadUsbForRun({ adb })
+        const usbTransportProof = identity.hostUsbInstance
+        if (typeof usbTransportProof !== 'string' || !usbTransportProof.startsWith('USB\\')) {
+            throw new Error('authorized Pad probe did not return a positive host USB instance')
+        }
+        installPreservingDataForRun(adb, paths.appApk, 'app')
+        installPreservingDataForRun(adb, paths.testApk, 'test')
+        const output = selectedExecForRun(
+            adb,
+            buildInstrumentationArgs({
+                className: selectedClass,
+                packageName,
+                instrumentationArgs: {
+                    ...baseInstrumentationArgs,
+                    talosRunId: runId,
+                    talosUsbTransportProofBase64: encodeUsbTransportProof(usbTransportProof),
+                },
+            }),
+        )
+        if (/FAILURES!!!|Process crashed|INSTRUMENTATION_FAILED|shortMsg=/.test(output)) {
+            throw new Error(`instrumentation failed for ${selectedClass}\n${output}`)
+        }
+        return { identity, output }
+    } finally {
+        if (!lock.release()) {
+            process.stderr.write(`⛔ lock ${paths.lock} was not removed because ownership changed\n`)
+        }
+    }
 }
 
 async function main() {
@@ -69,27 +158,9 @@ async function main() {
         process.argv[2] ?? 'ai.talos.voice.TalosVoiceProductionDoorInstrumentedTest',
     )
     const packageName = process.env.TALOS_PACKAGE ?? 'ai.talos'
-    const paths = campaignPaths(packageName)
-    requireApk(paths.appApk, 'app APK')
-    requireApk(paths.testApk, 'test APK')
-
-    const adb = resolveAdb()
-    const identity = probeAuthorizedPadUsb({ adb })
-    const lock = acquirePadLock(paths.lock, { runId: `voice-e2e-${Date.now()}` })
-    try {
-        process.stdout.write(`USB Pad       ${identity.serial} · ${identity.model} · ${identity.devPath}\n`)
-        installPreservingData(adb, paths.appApk, 'app APK')
-        installPreservingData(adb, paths.testApk, 'test APK')
-        const output = selectedExec(adb, buildInstrumentationArgs({ className, packageName }))
-        process.stdout.write(output)
-        if (/FAILURES!!!|Process crashed|INSTRUMENTATION_FAILED|shortMsg=/.test(output)) {
-            throw new Error(`instrumentation failed for ${className}`)
-        }
-    } finally {
-        if (!lock.release()) {
-            process.stderr.write(`⛔ lock ${paths.lock} was not removed because ownership changed\n`)
-        }
-    }
+    const result = runUsbInstrumentationCampaign({ className, packageName })
+    process.stdout.write(`USB Pad       ${result.identity.serial} · ${result.identity.model} · ${result.identity.devPath}\n`)
+    process.stdout.write(result.output)
 }
 
 const invokedPath = process.argv[1] ? pathToFileURL(process.argv[1]).href : ''
@@ -99,4 +170,3 @@ if (invokedPath === import.meta.url) {
         process.exitCode = 1
     })
 }
-
