@@ -12,36 +12,53 @@ import {
 import { randomUUID } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
 
-/** Owner constraint for the whole 0.1.19 voice campaign. No override exists. */
-export const AUTHORIZED_PAD_USB_SERIAL = '2ea6573c'
+/**
+ * Owner constraint for the whole 0.1.19 voice campaign: which physical Pad
+ * this script is allowed to drive. Declared by the environment and read at
+ * call time, never hardcoded — a specific device's identifier must never
+ * sit in committed, published source. No fallback exists: an unset
+ * `TALOS_RESEARCH_PAD_USB_SERIAL` refuses the campaign instead of running
+ * against whichever device happens to be attached.
+ */
+export function authorizedPadUsbSerial() {
+    const serial = process.env.TALOS_RESEARCH_PAD_USB_SERIAL
+    if (!serial) {
+        throw new Error(
+            'TALOS_RESEARCH_PAD_USB_SERIAL is not set: the voice campaign refuses to run '
+            + 'without a declared authorized device',
+        )
+    }
+    return serial
+}
 
 export function buildSelectedAdbArgs(args) {
     if (!Array.isArray(args) || args.length === 0) throw new Error('adb subcommand is required')
-    return ['-s', AUTHORIZED_PAD_USB_SERIAL, ...args]
+    return ['-s', authorizedPadUsbSerial(), ...args]
 }
 
 export function assertAuthorizedUsbIdentity(identity) {
-    if (identity.serial !== AUTHORIZED_PAD_USB_SERIAL) {
-        throw new Error(`voice campaign is locked to Pad ${AUTHORIZED_PAD_USB_SERIAL}; got ${identity.serial || '<empty>'}`)
+    const authorized = authorizedPadUsbSerial()
+    if (identity.serial !== authorized) {
+        throw new Error(`voice campaign is locked to Pad ${authorized}; got ${identity.serial || '<empty>'}`)
     }
     if (identity.state !== 'device') {
-        throw new Error(`Pad ${AUTHORIZED_PAD_USB_SERIAL} is ${identity.state || 'unavailable'}, not device`)
+        throw new Error(`Pad ${authorized} is ${identity.state || 'unavailable'}, not device`)
     }
     const selectedDevPathIsUsb = String(identity.devPath ?? '').startsWith('usb:')
     const hostUsbInstance = String(identity.hostUsbInstance ?? '')
     const hostProvesExactUsbInstance = new RegExp(
-        `^USB\\\\[^\\r\\n]*\\\\${AUTHORIZED_PAD_USB_SERIAL}$`,
+        `^USB\\\\[^\\r\\n]*\\\\${authorized}$`,
         'i',
     ).test(hostUsbInstance)
     if (!selectedDevPathIsUsb && !hostProvesExactUsbInstance) {
         throw new Error(
-            `Pad ${AUTHORIZED_PAD_USB_SERIAL} is not on a proven USB adb transport `
+            `Pad ${authorized} is not on a proven USB adb transport `
             + `(get-devpath=${identity.devPath || '<empty>'}, host-pnp=${hostUsbInstance || '<empty>'}); `
             + 'wireless debug is forbidden',
         )
     }
     if (!String(identity.model ?? '').trim()) {
-        throw new Error(`Pad ${AUTHORIZED_PAD_USB_SERIAL} returned an empty model identity`)
+        throw new Error(`Pad ${authorized} returned an empty model identity`)
     }
     return Object.freeze({
         serial: identity.serial,
@@ -93,7 +110,7 @@ export function probeAuthorizedPadUsb(options = {}) {
             maxBuffer: 64 * 1024 * 1024,
         }))
         hostUsbInstance = pnpOutput.match(
-            new RegExp(`USB\\\\[^\\r\\n]*\\\\${AUTHORIZED_PAD_USB_SERIAL}`, 'i'),
+            new RegExp(`USB\\\\[^\\r\\n]*\\\\${authorizedPadUsbSerial()}`, 'i'),
         )?.[0] ?? ''
     }
     const identity = {
@@ -111,7 +128,7 @@ export function acquirePadLock(path, metadata = {}) {
     const payload = {
         owner: 'codex/lane/voce-fluida',
         purpose: 'TALOS 0.1.19 voice instrumentation',
-        serial: AUTHORIZED_PAD_USB_SERIAL,
+        serial: authorizedPadUsbSerial(),
         runId: metadata.runId ?? `voice-${Date.now()}`,
         pid: metadata.pid ?? process.pid,
         createdAt: metadata.now ?? new Date().toISOString(),
