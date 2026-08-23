@@ -94,6 +94,37 @@ traduce il dialetto di un modello in chiamate strutturate — **non ha un solo
 test**, né unitario né strumentato. È l'unico anello fra ciò che il modello dice
 e ciò che TALOS capisce, e nessuna prova lo sorveglia.
 
+### ⭐⭐ E si puo' sapere PRIMA di scaricare due gigabyte
+
+L'owner ha autorizzato a scaricare altri modelli per la campagna. ⛔ Ma non
+serve scaricarli per sapere se possono usare gli strumenti: HuggingFace serve le
+richieste a intervallo (`HTTP 206`), e il `tokenizer.chat_template` sta nei
+metadati, entro i primi ~12 MB.
+
+Censiti cosi' — **12 MB ciascuno invece di 1-2 GB**, nessun dispositivo, nessun
+costo:
+
+```
+modello (ggml-org)                     tpl   tools  tool_call   verdetto
+Qwen2.5-Coder-1.5B-Instruct-Q8_0      2507     6       14       STRUMENTI NATIVI
+InternVL3-2B-Instruct                 2507     6       14       STRUMENTI NATIVI
+InternVL3-1B-Instruct                 2507     6       14       STRUMENTI NATIVI
+DeepSeek-R1-Distill-Qwen-1.5B-Q4_0    2081     -        1       NESSUNO STRUMENTO
+Qwen2-VL-2B-Instruct                  1017     -        -       NESSUNO STRUMENTO
+```
+
+⛔ **`DeepSeek-R1-Distill-Qwen-1.5B` non ha gli strumenti**, pur essendo
+derivato da Qwen — che ce li ha. La distillazione ha **tolto** il ramo. Dal nome
+non si indovina, e sarebbe entrato nella campagna come un candidato valido.
+
+⭐ I tre con `tpl 2507 · tools 6 · tool_call 14` portano lo **stesso identico
+template** — quello di Qwen, riusato. Non e' una coincidenza sospetta: e' la
+prova che il censimento legge il template vero e non il nome del repo.
+
+⇒ **Regola per la campagna:** un modello si scarica solo dopo che il suo
+template ha detto cosa sa fare. Lo strumento e'
+`scratchpad/censisci-template.mjs`, e costa un millesimo del download.
+
 ---
 
 ## Il secondo sintomo: `TALOS_LLAMA_NO_CHAT_TEMPLATE`, e una cura che non basta
