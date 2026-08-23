@@ -66,7 +66,7 @@ internal class TalosVoiceHost(
     }
 
     private val generationCounter = AtomicLong(0)
-    @Volatile private var activeGeneration = 0L
+    private val queueGate = TalosVoiceQueueGate(generationCounter)
 
     // Owner-lane only past this point - never read or written from any other thread -
     // EXCEPT player, which cancel() below reads from the calling thread on purpose.
@@ -91,8 +91,8 @@ internal class TalosVoiceHost(
         seed: Long? = null,
         onComplete: (Result<TalosMossSynthesisResult>) -> Unit = {},
     ): Long {
-        val id = generationCounter.incrementAndGet()
-        activeGeneration = id
+        val ticket = queueGate.submit(TalosVoiceQueueMode.FLUSH)
+        val id = ticket.id
         owner.execute {
             val result = runCatching { runSpeak(id, text, voice, outputFile, maxFrames, seed) }
             onComplete(result)
@@ -133,8 +133,8 @@ internal class TalosVoiceHost(
         diagnosticRoute: TalosVoiceDiagnosticRoute? = null,
         onComplete: (Result<TalosVoiceStreamResult>) -> Unit = {},
     ): Long {
-        val id = generationCounter.incrementAndGet()
-        activeGeneration = id
+        val ticket = queueGate.submit(TalosVoiceQueueMode.FLUSH)
+        val id = ticket.id
         owner.execute {
             val result = runCatching { runSpeakStreaming(id, text, voice, maxFrames, seed, diagnosticRoute) }
             onComplete(result)
@@ -176,13 +176,18 @@ internal class TalosVoiceHost(
         maxFrames: Int? = null,
         seed: Long? = null,
         diagnosticRoute: TalosVoiceDiagnosticRoute? = null,
+        queueMode: TalosVoiceQueueMode = TalosVoiceQueueMode.FLUSH,
         onComplete: (Result<TalosVoiceStreamResult>) -> Unit = {},
     ): Long {
-        val id = generationCounter.incrementAndGet()
-        activeGeneration = id
+        val ticket = queueGate.submit(queueMode)
+        val id = ticket.id
         owner.execute {
-            val result = runCatching {
-                runSpeakStreamingWithReference(id, text, promptAudioCodes, maxFrames, seed, diagnosticRoute)
+            val result = if (queueMode == TalosVoiceQueueMode.ADD && !queueGate.claim(ticket)) {
+                Result.success(cancelledBeforeStart())
+            } else {
+                runCatching {
+                    runSpeakStreamingWithReference(id, text, promptAudioCodes, maxFrames, seed, diagnosticRoute)
+                }
             }
             onComplete(result)
         }
@@ -223,7 +228,7 @@ internal class TalosVoiceHost(
      * in `write()`; `player` is `@Volatile` so this thread sees the current
      * instance. Everything that actually touches ORT state - the generation
      * itself - still only ever unwinds on the owner lane, via the
-     * invalidated `activeGeneration` id, exactly as §14 requires.
+     * invalidated queue-gate generation id, exactly as §14 requires.
      *
      * ⛔ Measured on the OnePlus Pad 3, warm (host already spoke once):
      * cancel-to-result **60 ms**, comfortably under §23.4's 150 ms p95 -
@@ -237,8 +242,7 @@ internal class TalosVoiceHost(
      * gate's "a caldo", is a warm-generation measurement.
      */
     fun cancel(): Long {
-        val invalidated = generationCounter.incrementAndGet()
-        activeGeneration = invalidated
+        val invalidated = queueGate.cancel()
         activeDiagnosticSession?.record(
             TalosVoiceDiagnosticEvent(
                 kind = TalosVoiceDiagnosticEventKind.CANCEL_REQUESTED,
@@ -448,7 +452,7 @@ internal class TalosVoiceHost(
             voice = voice,
             maxFrames = maxFrames ?: DEFAULT_MAX_FRAMES,
             seed = seed ?: System.nanoTime(),
-            isCancelled = { activeGeneration != id },
+            isCancelled = { !queueGate.isActive(id) },
         )
     }
 
@@ -491,7 +495,7 @@ internal class TalosVoiceHost(
                     voice = voice,
                     maxFrames = maxFrames ?: DEFAULT_MAX_FRAMES,
                     seed = seed ?: System.nanoTime(),
-                    isCancelled = { activeGeneration != id },
+                    isCancelled = { !queueGate.isActive(id) },
                     onFrame = onFrame,
                     trace = productionTrace?.recorder,
                 )
@@ -544,7 +548,7 @@ internal class TalosVoiceHost(
                     promptAudioCodes = promptAudioCodes,
                     maxFrames = maxFrames ?: DEFAULT_MAX_FRAMES,
                     seed = seed ?: System.nanoTime(),
-                    isCancelled = { activeGeneration != id },
+                    isCancelled = { !queueGate.isActive(id) },
                     onFrame = onFrame,
                     trace = productionTrace?.recorder,
                 )
@@ -763,7 +767,7 @@ internal class TalosVoiceHost(
             }
             generatedFrames = frames
             decodePending(force = true)
-            cancelled = wasCancelled || activeGeneration != id
+            cancelled = wasCancelled || !queueGate.isActive(id)
         } finally {
             codecStream.close()
         }
@@ -794,7 +798,7 @@ internal class TalosVoiceHost(
                 TalosVoiceDiagnosticEvent(
                     kind = TalosVoiceDiagnosticEventKind.CANCEL_ACKNOWLEDGED,
                     stage = "TalosVoiceHost.generationBoundary",
-                    cancellationGeneration = activeGeneration,
+                    cancellationGeneration = queueGate.activeId(),
                 ),
             )
         }
@@ -919,6 +923,15 @@ internal class TalosVoiceHost(
             ),
         )
     }
+
+    private fun cancelledBeforeStart(): TalosVoiceStreamResult = TalosVoiceStreamResult(
+        cancelled = true,
+        ttfaMs = null,
+        underruns = 0,
+        hardwareUnderruns = 0,
+        drainedWithinTimeout = true,
+        elapsedMs = 0L,
+    )
 
     private fun openTokenizer(): TalosVoiceTokenizer {
         val manifestPath = TalosMossManifest.resolveManifestPath(modelRoot)

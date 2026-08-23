@@ -4,6 +4,7 @@ import type {
     TalosPersonalVoiceProfileSummary,
     TalosPersonalVoiceStatus,
     TalosSpeechEngine,
+    TalosVoiceReadingSource,
 } from '@/lib/voice/personalVoiceContracts'
 import type { TalosSpeakOptions, TalosSpeechService } from '@/services/speech'
 
@@ -40,11 +41,12 @@ interface TalosNeuralVoicePlugin {
         text: string
         profileId: string
         readingId: string
+        utteranceId?: string
         rate: number
         pitch: number
         queue?: 'flush' | 'add'
         traceId?: string
-        source?: 'chat' | 'assistant' | 'manual' | 'preview' | 'instrumentation'
+        source?: TalosVoiceReadingSource
         locale?: string
     }): Promise<{ accepted: boolean, reason?: string }>
     stop(): Promise<void>
@@ -161,11 +163,12 @@ export async function talosSpeakWithPersonalVoice(options: {
     text: string
     profileId: string
     readingId: string
+    utteranceId?: string
     rate: number
     pitch: number
     queue?: 'flush' | 'add'
     traceId?: string
-    source?: 'chat' | 'assistant' | 'manual' | 'preview' | 'instrumentation'
+    source?: TalosVoiceReadingSource
     locale?: string
 }): Promise<{ accepted: boolean, reason?: string }> {
     return plugin.speak(options)
@@ -383,8 +386,10 @@ export async function talosSpeakForReading(
         pitch: number
         onend?: () => void
         onerror?: (reason?: string) => void
+        readingId?: string
+        queue?: 'flush' | 'add'
         traceId?: string
-        source?: 'chat' | 'assistant' | 'manual' | 'preview' | 'instrumentation'
+        source?: TalosVoiceReadingSource
         locale?: string
     },
 ): Promise<boolean> {
@@ -423,21 +428,34 @@ export async function talosSpeakForReading(
      * l'accettazione (a metà generazione) resta un errore mostrato: a
      * quel punto non c'è più un ripiego pulito da offrire.
      */
-    const readingId = `personal-reading-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const readingId = options.readingId ?? `personal-reading-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const utteranceId = `${readingId}-u-${Date.now()}-${Math.random().toString(36).slice(2)}`
     await armPersonalVoiceListeners()
-    const result = await talosSpeakWithPersonalVoice({
-        text,
-        profileId: route.profileId,
-        readingId,
-        rate: options.rate,
-        pitch: options.pitch,
-        traceId: options.traceId,
-        source: options.source,
-        locale: options.locale,
-    })
-    if (!result.accepted) return false
     if (options.onend || options.onerror) {
-        pendingPersonalVoiceReadings.set(readingId, { onend: options.onend, onerror: options.onerror })
+        // Arm before crossing the bridge: a very short native utterance may
+        // complete before the accepted promise returns to JavaScript.
+        pendingPersonalVoiceReadings.set(utteranceId, { onend: options.onend, onerror: options.onerror })
+    }
+    try {
+        const result = await talosSpeakWithPersonalVoice({
+            text,
+            profileId: route.profileId,
+            readingId,
+            utteranceId,
+            rate: options.rate,
+            pitch: options.pitch,
+            queue: options.queue,
+            traceId: options.traceId,
+            source: options.source,
+            locale: options.locale,
+        })
+        if (!result.accepted) {
+            pendingPersonalVoiceReadings.delete(utteranceId)
+            return false
+        }
+    } catch {
+        pendingPersonalVoiceReadings.delete(utteranceId)
+        return false
     }
     return true
 }

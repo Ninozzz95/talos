@@ -138,6 +138,32 @@ describe('personalVoice service', () => {
             }))
         })
 
+        it('PVOICE-QUEUE-01 preserves one logical reading id and a unique queued utterance id at the bridge', async () => {
+            bridge.status.mockResolvedValue({ supported: true, installed: true })
+            bridge.profiles.mockResolvedValue(READY_PROFILES)
+            bridge.speak.mockResolvedValue({ accepted: true })
+
+            const spoken = await talosSpeakForReading('personal', PROFILE_ID, 'Seconda frase.', {
+                rate: 0.95,
+                pitch: 1.05,
+                readingId: 'chat-reading-42',
+                queue: 'add',
+                source: 'chat',
+                locale: 'it-IT',
+            })
+
+            expect(spoken).toBe(true)
+            const request = bridge.speak.mock.calls[0]?.[0]
+            expect(request).toEqual(expect.objectContaining({
+                readingId: 'chat-reading-42',
+                queue: 'add',
+                source: 'chat',
+                locale: 'it-IT',
+            }))
+            expect(request.utteranceId).toMatch(/^chat-reading-42-u-/)
+            expect(request.utteranceId).not.toBe(request.readingId)
+        })
+
         it('the reading id passed to the bridge is unique per call, so two readings never share a completion event', async () => {
             bridge.status.mockResolvedValue({ supported: true, installed: true })
             bridge.profiles.mockResolvedValue(READY_PROFILES)

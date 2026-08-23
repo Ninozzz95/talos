@@ -14,6 +14,22 @@
 /** `'system'` is Android `TextToSpeech` (unchanged, `TalosSpeechPlugin`). `'personal'` is the neural engine built in `ai.talos.voice`. */
 export type TalosSpeechEngine = 'system' | 'personal'
 
+export type TalosVoiceReadingSource = 'chat' | 'assistant' | 'manual' | 'preview' | 'instrumentation'
+
+/** Immutable snapshot captured before the first word of one logical reading. */
+export interface VoiceReadingRoute {
+    readingId: string
+    engine: TalosSpeechEngine
+    personalProfileId: string | null
+    locale: string
+    source: TalosVoiceReadingSource
+    voiceUri: string | null
+    systemRate: number
+    systemPitch: number
+    personalRate: number
+    personalPitch: number
+}
+
 /** Fase 8 (multi-style voice) names these; only `'neutral'` has a producer today — a header can declare another and this type still parses it, but nothing in this app writes one yet. */
 export type TalosPersonalVoiceStyle = 'neutral' | 'warm' | 'calm' | 'energetic'
 
@@ -51,13 +67,15 @@ export interface TalosPersonalVoiceStatus {
 export interface TalosPersonalSpeakRequest {
     text: string
     profileId: string
-    /** Ties a completion event back to one reading - the same discipline `useTalosSpeech.ts` already keeps for the system engine (`ha-finito-e-una-domanda-al-motore`: `onDone` is per reading, not per app). */
+    /** Stable across all sentence jobs belonging to one logical response. */
     readingId: string
+    /** Unique completion key for this queued sentence; omitted by legacy single-utterance callers. */
+    utteranceId?: string
     rate: number
     pitch: number
     queue?: 'flush' | 'add'
     /** Present only for an armed diagnostic production route. */
     traceId?: string
-    source?: 'chat' | 'assistant' | 'manual' | 'preview' | 'instrumentation'
+    source?: TalosVoiceReadingSource
     locale?: string
 }
