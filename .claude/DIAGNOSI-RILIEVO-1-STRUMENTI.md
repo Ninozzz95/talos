@@ -127,9 +127,72 @@ Quella causa **è stata curata il 21/8** (il testo non si svuota più dentro il
 ciclo; la sostituzione avviene in `chatController`, fuori, dove nessun template
 lo rilegge).
 
-⛔⛔ **E l'owner ha visto il sintomo il 22/8, dopo la cura.** ⇒ O la cura non
-copre tutti i percorsi che possono svuotare il turno, o c'è una seconda causa.
-Questo documento **non lo sa**, e non lo indovina.
+⛔⛔ **E l'owner ha visto il sintomo il 22/8, dopo la cura.**
+
+### ⭐⭐⭐ La seconda causa, trovata il 23/8 — e la cura non poteva coprirla
+
+Letto dal template VERO di `gemma-3-4b-it`, estratto dal GGUF installato:
+
+```jinja
+{%- if (message['role'] == 'user') != (loop.index0 % 2 == 0) -%}
+    {{ raise_exception("Conversation roles must alternate user/assistant/...") }}
+{%- if (message['role'] == 'assistant') -%}{%- set role = "model" -%}
+```
+
+Gemma impone l'alternanza **POSIZIONALE**: il messaggio in posizione pari deve
+essere `user`, quello dispari no. E conosce **due soli ruoli** — `user` e
+`assistant` (rimappato in `model`) — più un `system` iniziale.
+
+⇒ Un messaggio di ruolo **`tool`** — cioè il risultato di uno strumento — non è
+`user`, si trova in una posizione dove `user` è atteso, e **sfasa la parità**.
+L'eccezione parte, `chatPrompt` torna vuoto, e il chiamante legge
+`TALOS_LLAMA_NO_CHAT_TEMPLATE`.
+
+⛔ **Non serve un turno vuoto: basta che uno strumento sia stato usato UNA
+volta.** Da lì in poi ogni turno successivo della chat fallisce.
+
+E la cura del 21/8 non poteva coprirlo, perché curava una cosa diversa: quella
+toglieva i turni **svuotati**, questa aggiunge un turno **in più**. Due difetti
+con lo stesso sintomo.
+
+⭐ E `alternati()` non lo salva: fonde due turni consecutivi dello stesso ruolo
+solo quando **nessuno dei due porta `tool_calls`** — quindi un turno con
+chiamate passa sempre intatto, e con lui il `tool` che lo segue.
+
+### ⛔⛔ E QUI LA MIA CAUSA RADICE ERA SBAGLIATA — ottava correzione
+
+Avevo scritto: *«offriamo strumenti a un modello il cui template non sa
+rappresentarli, e il risultato torna come ruolo `tool` che sfasa la parità»*.
+**Falso.** Verificato leggendo il codice invece di dedurlo dal template:
+
+```js
+// localToolPromptProtocol.ts:14 — il trasporto si sceglie dalle CAPACITÀ MISURATE
+capabilities?.supportsTools && capabilities.supportsToolCalls
+    ? 'native-template'
+    : 'prompt-json-v1'
+
+// :251 — e per un template cieco agli strumenti il risultato torna come USER
+projected.push({ role: 'user', content: toolResultEnvelope(results, locale) })
+```
+
+Il commento di quel file lo dice per esteso: *«select the transport from the
+template's measured capabilities, **never from a filename or guessed model
+family**»*. ⇒ Su Gemma il ruolo `tool` **non viene mai prodotto**, l'alternanza
+resta intatta, e la protezione che stavo per raccomandare **c'è già** — ed è
+fatta meglio di come l'avrei scritta.
+
+⇒ **Quindi `TALOS_LLAMA_NO_CHAT_TEMPLATE` su Gemma resta SENZA spiegazione.** Il
+meccanismo dell'alternanza è reale (il template lo impone davvero, ed è
+documentato qui sopra), ma il percorso che lo innescherebbe è chiuso. Serve la
+riproduzione sul dispositivo: la riga di `logcat` con l'eccezione Jinja vera
+dirà **quale** messaggio ha sfasato la parità, invece di farlo indovinare.
+
+⛔ ⇒ E la lezione, che vale più della diagnosi: **la parità posizionale di Gemma
+è una trappola reale che oggi è disinnescata da UNA riga** (`role: 'user'` al
+posto di `role: 'tool'`). Nessun test la sorveglia. Il giorno che qualcuno
+"normalizza" quella riga verso il contratto OpenAI, ogni chat con uno strumento
+su Gemma si rompe al turno dopo — e il messaggio d'errore manderà a cercare un
+template mancante.
 
 ⭐ Ma il nome dell'errore è già un difetto per conto suo: `NO_CHAT_TEMPLATE`
 manda a cercare un template mancante quando il template c'è ed è il **contenuto**
