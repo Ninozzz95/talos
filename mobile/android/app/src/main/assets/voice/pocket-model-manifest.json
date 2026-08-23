@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "engine": "pocket-v2",
+  "language": "italian",
+  "installRoot": "pocket",
+  "source": {
+    "repository": "KevinAHM/pocket-tts-onnx",
+    "revision": "58a6d00cf13d239b6748cb0769f35c580a8f606c",
+    "weightsLicense": "CC-BY-4.0",
+    "licenseUrl": "https://huggingface.co/KevinAHM/pocket-tts-onnx/blob/58a6d00cf13d239b6748cb0769f35c580a8f606c/onnx/LICENSE",
+    "upstreamCode": "kyutai-labs/pocket-tts@058886528d0b6f2f2d4022de2e244a5260729e6e"
+  },
+  "runtime": {
+    "onnxRuntime": "1.29.0",
+    "sentencePiece": "0.2.2"
+  },
+  "bundle": {
+    "sampleRate": 24000,
+    "frameRate": 12.5,
+    "samplesPerFrame": 1920,
+    "latentDim": 32,
+    "conditioningDim": 1024,
+    "maxTokenPerChunk": 50,
+    "flowStateCount": 18,
+    "mimiStateCount": 56,
+    "insertBosBeforeVoice": true
+  },
+  "files": [
+    {
+      "path": "bos_before_voice.npy",
+      "size": 4224,
+      "sha256": "212357ca66b450e7dc2ae6cb11f1efd08b49c59e25196a6979c37962fef6cd82"
+    },
+    {
+      "path": "bundle.json",
+      "size": 24365,
+      "sha256": "c779c25fd836c9b85a3fc570474774777176757bd6bec0b5bffbbe599644a9f9"
+    },
+    {
+      "path": "flow_lm_flow_int8.onnx",
+      "size": 9962530,
+      "sha256": "21b2bec2f9ae4323fc545a0c7ffb274bdfa925a699fd304ed03aba53e4ca9129"
+    },
+    {
+      "path": "flow_lm_main_int8.onnx",
+      "size": 76341079,
+      "sha256": "f43ce4d823471095a7bd6d9dcfcceb46145ea96b0f2b85b7d668f15816965055"
+    },
+    {
+      "path": "mimi_decoder_int8.onnx",
+      "size": 22684077,
+      "sha256": "f120bc5cddca9514c511f128786f5d9e6e6893b067faae5e30f5b2bd5643aa03"
+    },
+    {
+      "path": "mimi_encoder.onnx",
+      "size": 39768446,
+      "sha256": "8936e1f95baedb898941fc7a259d7ab8c031aeaf6d3746ecac3cf7b280a9adda"
+    },
+    {
+      "path": "text_conditioner.onnx",
+      "size": 16388344,
+      "sha256": "692369f5ac340006fa44252155da77fe6c8a60a859848297777e0caea534068e"
+    },
+    {
+      "path": "tokenizer.model",
+      "size": 60078,
+      "sha256": "6583b974a11b90e14d8a4c8e9c43f06c3861b9ede6e5023a4c27ab5a3a7d4c39"
+    }
+  ]
+}
