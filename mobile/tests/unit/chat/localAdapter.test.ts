@@ -1163,38 +1163,90 @@ describe('P1-3 prefissoResoDiProiettato — il prefisso AOT per prompt-json-v1',
         expect(chiamata?.[1]).toBeUndefined()
     })
 
-    it('⭐ il testo combacia bit-per-bit con quello che la generazione VERA produce per il turno di sistema', async () => {
+    /**
+     * ⛔⛔⛔ VERIFICATO SUL PAD, 23/8 — questo test è nato ROTTO in un modo
+     * grave: un turno di sistema da solo passato al motore vero produceva
+     * SOLO `<start_of_turn>model` (4 token, il contenuto SPARITO), perché
+     * Gemma non ha un ruolo system separato (ai.google.dev/gemma/docs/
+     * core/prompt-structure). Il mock di questo test — che concatenava
+     * `turns[0]?.content` — non poteva vederlo: era fedele a un'idea SBAGLIATA
+     * di cosa il motore fa con un turno solitario, non al motore vero.
+     *
+     * ⇒ La cura (un turno utente SEGNAPOSTO dopo il sistema) rende il test
+     * "bit-per-bit" concettualmente sbagliato: il testo congelato ora include
+     * anche il rendering del segnaposto, quindi non può più essere uguale al
+     * SOLO turno di sistema. L'invariante vero, quello che conta per CR-09,
+     * è che i due testi condividano un prefisso comune LUNGO (system +
+     * catalogo), divergendo solo in coda — dove il segnaposto finisce e un
+     * messaggio vero comincia.
+     */
+    it('⭐ condivide un lungo prefisso comune col rendering della generazione VERA (diverge solo dove il messaggio vero comincia)', async () => {
+        // Mock realistico: concatena i turni come farebbe un vero renderer di
+        // template, non solo il primo — un mock che ignora il secondo turno
+        // è esattamente il tipo di simulazione che ha nascosto il bug vero.
         localEngine.talosLocalEngineChatPlan.mockImplementation(async (turns: Array<{ content?: string }>) => ({
-            prompt: turns[0]?.content ?? '', promptTokens: 1, contextTokens: 4096,
+            prompt: turns.map((t) => t.content ?? '').join('|TURN|'),
+            promptTokens: 1,
+            contextTokens: 4096,
         }))
 
+        const SYSTEM_PREFISSO_COMUNE = 'Sei TALOS. [test: prefisso-comune]'
+
+        const testoCongelato = await prefissoResoDiProiettato(
+            'prompt-json-v1', CAPABILITIES_PROMPT_JSON, SYSTEM_PREFISSO_COMUNE, TOOLS, 'it', true,
+        )
+        expect(testoCongelato).toBeTruthy()
+
         // La generazione vera (localAdapter.ts riga ~912) proietta l'INTERA
-        // conversazione. Qui si simula lo stesso projector con una
-        // conversazione che ha lo stesso system/tools/locale.
-        //
-        // ⛔ `system` è UNICO per questo test: `PREFISSO_RESO_PROIETTATO` è
-        // una cache a livello di modulo che sopravvive fra i test dello
-        // stesso file — una chiave riusata da un altro test troverebbe il
-        // suo memo invece di richiamare il mock configurato qui.
-        const SYSTEM_BIT_PER_BIT = 'Sei TALOS. [test: bit-per-bit]'
+        // conversazione — qui simulata con lo STESSO system/tools/locale ma
+        // un messaggio utente VERO, diverso dal segnaposto.
         const projectionConversazioneVera = talosProjectLocalToolConversation({
             transport: 'prompt-json-v1',
             capabilities: CAPABILITIES_PROMPT_JSON,
             turns: [
-                { role: 'system', content: SYSTEM_BIT_PER_BIT },
-                { role: 'user', content: 'Una domanda qualsiasi, irrilevante per il prefisso.' },
+                { role: 'system', content: SYSTEM_PREFISSO_COMUNE },
+                { role: 'user', content: 'Un messaggio vero, diverso dal segnaposto.' },
             ],
             tools: TOOLS,
             locale: 'it',
         })
-        const turnoSistemaDellaGenerazioneVera = projectionConversazioneVera.turns[0]?.content
+        const renderConversazioneVera = projectionConversazioneVera.turns
+            .map((t) => t.content ?? '').join('|TURN|')
 
-        const testoCongelato = await prefissoResoDiProiettato(
-            'prompt-json-v1', CAPABILITIES_PROMPT_JSON, SYSTEM_BIT_PER_BIT, TOOLS, 'it', true,
-        )
+        let prefissoComune = 0
+        while (
+            prefissoComune < testoCongelato!.length
+            && prefissoComune < renderConversazioneVera.length
+            && testoCongelato![prefissoComune] === renderConversazioneVera[prefissoComune]
+        ) prefissoComune += 1
 
-        expect(testoCongelato).toBeTruthy()
-        expect(testoCongelato).toBe(turnoSistemaDellaGenerazioneVera)
+        // Il prefisso comune deve coprire l'intero system + catalogo tool
+        // (centinaia di caratteri), non fermarsi a pochi caratteri come
+        // farebbe se il segnaposto non funzionasse.
+        expect(prefissoComune).toBeGreaterThan(300)
+        // E deve fermarsi PRIMA della fine di entrambi i testi: sono
+        // volutamente diversi in coda, non identici.
+        expect(prefissoComune).toBeLessThan(testoCongelato!.length)
+        expect(prefissoComune).toBeLessThan(renderConversazioneVera.length)
+    })
+
+    it('⛔⛔ AL CONTRARIO — un segnaposto VUOTO farebbe ricomparire il bug (provato sul motore vero)', async () => {
+        // `projectPromptJson` scarta un turno utente con `content` falsy
+        // (`if (turn.content) …`): un segnaposto vuoto sparirebbe prima di
+        // raggiungere il motore, e si tornerebbe al turno-di-sistema-solo
+        // che produce `<start_of_turn>model` senza contenuto.
+        const projectionConSegnaposteVuoto = talosProjectLocalToolConversation({
+            transport: 'prompt-json-v1',
+            capabilities: CAPABILITIES_PROMPT_JSON,
+            turns: [
+                { role: 'system', content: 'Sei TALOS. [test: segnaposto-vuoto]' },
+                { role: 'user', content: '' },
+            ],
+            tools: TOOLS,
+            locale: 'it',
+        })
+        expect(projectionConSegnaposteVuoto.turns).toHaveLength(1)
+        expect(projectionConSegnaposteVuoto.turns[0]?.role).toBe('system')
     })
 
     it('nessun system → null, come il percorso nativo esistente', async () => {
