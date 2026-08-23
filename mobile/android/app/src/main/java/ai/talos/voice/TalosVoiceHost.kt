@@ -1,7 +1,17 @@
 package ai.talos.voice
 
 import ai.talos.TalosThermal
+import ai.talos.voice.research.TalosVoiceB0Probe
+import ai.talos.voice.research.TalosVoiceB0Session
+import ai.talos.voice.research.TalosVoiceOrtProfiling
+import ai.talos.voice.research.TalosVoicePhase
+import ai.talos.voice.research.TalosVoiceProductionTrace
+import ai.talos.voice.research.TalosVoiceRunTrace
+import ai.talos.voice.research.TalosVoiceRunMode
+import ai.talos.voice.research.TalosVoiceTraceArtifact
+import ai.talos.voice.research.TalosVoiceTraceRecorder
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import java.io.Closeable
 import java.io.File
@@ -219,6 +229,193 @@ internal class TalosVoiceHost(
         return invalidated
     }
 
+    /**
+     * Research-only B0 modes. T0 is intentionally absent: both T0 variants
+     * must enter through [get] plus the ordinary streaming call.
+     */
+    internal fun runB0ResearchModesBlocking(session: TalosVoiceB0Session): TalosVoiceTraceArtifact {
+        val latch = CountDownLatch(1)
+        var outcome: Result<TalosVoiceTraceArtifact>? = null
+        owner.execute {
+            outcome = runCatching { runB0ResearchModes(session) }
+            latch.countDown()
+        }
+        latch.await()
+        return outcome!!.getOrThrow()
+    }
+
+    private fun runB0ResearchModes(session: TalosVoiceB0Session): TalosVoiceTraceArtifact {
+        val existingModes = session.snapshot().runs.map { it.mode }.toSet()
+        require(TalosVoiceRunMode.T0 in existingModes && TalosVoiceRunMode.T0_DIAGNOSTICS_OFF in existingModes) {
+            "T0 and T0_DIAGNOSTICS_OFF must be written by the production loop before research modes"
+        }
+        val config = session.config
+        val activeTokenizer = tokenizer ?: openTokenizer().also { tokenizer = it }
+        val activeRuntime = runtime ?: TalosMossRuntime.open(modelRoot, cpuThreads).also { runtime = it }
+        val textTokenIds = activeTokenizer.encode(config.text)
+        require(textTokenIds.isNotEmpty()) { "tokenizer produced no ids for B0 text" }
+
+        player?.close()
+        player = null
+
+        val t1Recorder = TalosVoiceTraceRecorder(generationCounter.incrementAndGet(), TalosVoiceRunMode.T1)
+        val (t1Frames, t1Cancelled) = activeRuntime.generateAudioTokens(
+            textTokenIds = textTokenIds,
+            voice = config.voice,
+            maxFrames = config.maxFrames,
+            seed = config.seed,
+            isCancelled = { false },
+            onFrame = {},
+            trace = t1Recorder,
+        )
+        session.recordCompletedRun(
+            t1Recorder.finish(
+                finishedAtElapsedRealtimeNs = SystemClock.elapsedRealtimeNanos(),
+                generatedFrames = t1Frames,
+                cancelled = t1Cancelled,
+                diagnosticsEnabled = false,
+                qualificationOnly = false,
+            ),
+        )
+
+        session.recordCompletedRun(runB0CodecReplay(activeRuntime, t1Frames))
+
+        activeRuntime.close()
+        runtime = null
+
+        val profiledRuntime = TalosMossRuntime.open(
+            modelRoot = modelRoot,
+            cpuThreads = cpuThreads,
+            profiling = TalosVoiceOrtProfiling(config.outputDirectory, config.runId),
+        )
+        try {
+            val t3Recorder = TalosVoiceTraceRecorder(generationCounter.incrementAndGet(), TalosVoiceRunMode.T3)
+            val (t3Frames, t3Cancelled) = profiledRuntime.generateAudioTokens(
+                textTokenIds = textTokenIds,
+                voice = config.voice,
+                maxFrames = config.maxFrames,
+                seed = config.seed,
+                isCancelled = { false },
+                onFrame = {},
+                trace = t3Recorder,
+            )
+            val generationFinishedAtNs = SystemClock.elapsedRealtimeNanos()
+            val profiles = requireNotNull(profiledRuntime.finishTtsProfiling()) {
+                "T3 runtime did not return TTS profiles"
+            }
+            session.recordCompletedRun(
+                t3Recorder.finish(
+                    finishedAtElapsedRealtimeNs = generationFinishedAtNs,
+                    generatedFrames = t3Frames,
+                    cancelled = t3Cancelled,
+                    diagnosticsEnabled = false,
+                    qualificationOnly = true,
+                    ortProfiles = profiles,
+                ),
+            )
+        } finally {
+            profiledRuntime.close()
+        }
+        return session.snapshot()
+    }
+
+    private fun runB0CodecReplay(
+        activeRuntime: TalosMossRuntime,
+        frames: List<IntArray>,
+    ): TalosVoiceRunTrace {
+        val recorder = TalosVoiceTraceRecorder(generationCounter.incrementAndGet(), TalosVoiceRunMode.T2)
+        val codecStream = activeRuntime.openCodecStream()
+        val replayPlayer = TalosPcmPlayer(activeRuntime.sampleRate, activeRuntime.channels)
+        var frameOffset = 0
+        var batchIndex = 0
+        val underrunBaseline = replayPlayer.underrunCount()
+        recorder.checkpointUnderruns(
+            phase = TalosVoicePhase.UNKNOWN,
+            observedAtNs = SystemClock.elapsedRealtimeNanos(),
+            frameIndex = null,
+            batchIndex = null,
+            counter = 0,
+            bufferLeadFrames = 0,
+        )
+        try {
+            while (frameOffset < frames.size) {
+                val take = minOf(if (frameOffset == 0) 1 else 8, frames.size - frameOffset)
+                val batch = frames.subList(frameOffset, frameOffset + take)
+                val leadBefore = replayPlayer.framesWritten() - replayPlayer.playbackHeadFrames()
+                val underrunsBefore = replayPlayer.underrunCount() - underrunBaseline
+                recorder.checkpointUnderruns(
+                    phase = TalosVoicePhase.UNKNOWN,
+                    observedAtNs = SystemClock.elapsedRealtimeNanos(),
+                    frameIndex = frameOffset,
+                    batchIndex = batchIndex,
+                    counter = underrunsBefore,
+                    bufferLeadFrames = leadBefore,
+                )
+
+                val decodeStartedAtNs = SystemClock.elapsedRealtimeNanos()
+                val decoded = requireNotNull(codecStream.runFrames(batch)) {
+                    "T2 codec returned no PCM for batch $batchIndex"
+                }
+                val decodeNs = SystemClock.elapsedRealtimeNanos() - decodeStartedAtNs
+                recorder.checkpointUnderruns(
+                    phase = TalosVoicePhase.CODEC_DECODE,
+                    observedAtNs = SystemClock.elapsedRealtimeNanos(),
+                    frameIndex = frameOffset,
+                    batchIndex = batchIndex,
+                    counter = replayPlayer.underrunCount() - underrunBaseline,
+                    bufferLeadFrames = replayPlayer.framesWritten() - replayPlayer.playbackHeadFrames(),
+                )
+
+                val writeStartedAtNs = SystemClock.elapsedRealtimeNanos()
+                check(replayPlayer.write(decoded.interleavedPcm)) { "T2 AudioTrack write failed at batch $batchIndex" }
+                val writeNs = SystemClock.elapsedRealtimeNanos() - writeStartedAtNs
+                val leadAfter = replayPlayer.framesWritten() - replayPlayer.playbackHeadFrames()
+                val underrunsAfter = replayPlayer.underrunCount() - underrunBaseline
+                recorder.checkpointUnderruns(
+                    phase = TalosVoicePhase.AUDIO_WRITE,
+                    observedAtNs = SystemClock.elapsedRealtimeNanos(),
+                    frameIndex = frameOffset,
+                    batchIndex = batchIndex,
+                    counter = underrunsAfter,
+                    bufferLeadFrames = leadAfter,
+                )
+                recorder.recordCodecBatch(
+                    batchIndex = batchIndex,
+                    firstFrameIndex = frameOffset,
+                    frameCount = take,
+                    codecDecodeNs = decodeNs,
+                    audioWriteNs = writeNs,
+                    bufferLeadFramesBefore = leadBefore,
+                    bufferLeadFramesAfter = leadAfter,
+                    underrunCountBefore = underrunsBefore,
+                    underrunCountAfter = underrunsAfter,
+                )
+                frameOffset += take
+                batchIndex += 1
+            }
+
+            check(replayPlayer.awaitDrain(timeoutMs = DRAIN_TIMEOUT_MS)) { "T2 AudioTrack did not drain" }
+            recorder.checkpointUnderruns(
+                phase = TalosVoicePhase.AUDIO_DRAIN,
+                observedAtNs = SystemClock.elapsedRealtimeNanos(),
+                frameIndex = frames.lastIndex.takeIf { it >= 0 },
+                batchIndex = (batchIndex - 1).takeIf { it >= 0 },
+                counter = replayPlayer.underrunCount() - underrunBaseline,
+                bufferLeadFrames = replayPlayer.framesWritten() - replayPlayer.playbackHeadFrames(),
+            )
+            return recorder.finish(
+                finishedAtElapsedRealtimeNs = SystemClock.elapsedRealtimeNanos(),
+                generatedFrames = frames,
+                cancelled = false,
+                diagnosticsEnabled = false,
+                qualificationOnly = false,
+            )
+        } finally {
+            replayPlayer.close()
+            codecStream.close()
+        }
+    }
+
     private fun runSpeak(id: Long, text: String, voice: String, outputFile: File, maxFrames: Int?, seed: Long?): TalosMossSynthesisResult {
         val activeTokenizer = tokenizer ?: openTokenizer().also { tokenizer = it }
         val activeRuntime = runtime ?: TalosMossRuntime.open(modelRoot, cpuThreads).also { runtime = it }
@@ -235,13 +432,14 @@ internal class TalosVoiceHost(
     }
 
     private fun runSpeakStreaming(id: Long, text: String, voice: String, maxFrames: Int?, seed: Long?): TalosVoiceStreamResult {
+        val productionTrace = TalosVoiceB0Probe.claimProductionRun(id)
         val activeTokenizer = tokenizer ?: openTokenizer().also { tokenizer = it }
         val activeRuntime = runtime ?: TalosMossRuntime.open(modelRoot, cpuThreads).also { runtime = it }
         val activePlayer = player ?: TalosPcmPlayer(activeRuntime.sampleRate, activeRuntime.channels).also { player = it }
         val textTokenIds = activeTokenizer.encode(text)
         require(textTokenIds.isNotEmpty()) { "tokenizer produced no ids for non-empty text: \"$text\"" }
 
-        return driveStreamingSynthesis(id, activeRuntime, activePlayer) { onFrame ->
+        return driveStreamingSynthesis(id, activeRuntime, activePlayer, productionTrace) { onFrame ->
             activeRuntime.generateAudioTokens(
                 textTokenIds = textTokenIds,
                 voice = voice,
@@ -249,19 +447,21 @@ internal class TalosVoiceHost(
                 seed = seed ?: System.nanoTime(),
                 isCancelled = { activeGeneration != id },
                 onFrame = onFrame,
+                trace = productionTrace?.recorder,
             )
         }
     }
 
     /** Same as [runSpeakStreaming], an enrolled profile's reference codes instead of a builtin voice name - see [submitSpeakStreamingWithReference]. */
     private fun runSpeakStreamingWithReference(id: Long, text: String, promptAudioCodes: List<IntArray>, maxFrames: Int?, seed: Long?): TalosVoiceStreamResult {
+        val productionTrace = TalosVoiceB0Probe.claimProductionRun(id)
         val activeTokenizer = tokenizer ?: openTokenizer().also { tokenizer = it }
         val activeRuntime = runtime ?: TalosMossRuntime.open(modelRoot, cpuThreads).also { runtime = it }
         val activePlayer = player ?: TalosPcmPlayer(activeRuntime.sampleRate, activeRuntime.channels).also { player = it }
         val textTokenIds = activeTokenizer.encode(text)
         require(textTokenIds.isNotEmpty()) { "tokenizer produced no ids for non-empty text: \"$text\"" }
 
-        return driveStreamingSynthesis(id, activeRuntime, activePlayer) { onFrame ->
+        return driveStreamingSynthesis(id, activeRuntime, activePlayer, productionTrace) { onFrame ->
             activeRuntime.generateAudioTokensWithReference(
                 textTokenIds = textTokenIds,
                 promptAudioCodes = promptAudioCodes,
@@ -269,6 +469,7 @@ internal class TalosVoiceHost(
                 seed = seed ?: System.nanoTime(),
                 isCancelled = { activeGeneration != id },
                 onFrame = onFrame,
+                trace = productionTrace?.recorder,
             )
         }
     }
@@ -315,6 +516,7 @@ internal class TalosVoiceHost(
         id: Long,
         activeRuntime: TalosMossRuntime,
         activePlayer: TalosPcmPlayer,
+        productionTrace: TalosVoiceProductionTrace? = null,
         generate: (onFrame: (IntArray) -> Unit) -> Pair<List<IntArray>, Boolean>,
     ): TalosVoiceStreamResult {
         val codecStream = activeRuntime.openCodecStream()
@@ -323,6 +525,18 @@ internal class TalosVoiceHost(
         var ttfaMs: Long? = null
         var underruns = 0
         val pending = ArrayList<IntArray>()
+        var batchIndex = 0
+        var nextCodecFrameIndex = 0
+        val traceRecorder = productionTrace?.recorder
+
+        traceRecorder?.checkpointUnderruns(
+            phase = TalosVoicePhase.UNKNOWN,
+            observedAtNs = SystemClock.elapsedRealtimeNanos(),
+            frameIndex = null,
+            batchIndex = null,
+            counter = 0,
+            bufferLeadFrames = activePlayer.framesWritten() - activePlayer.playbackHeadFrames(),
+        )
 
         fun decodePending(force: Boolean) {
             if (pending.isEmpty()) return
@@ -333,6 +547,19 @@ internal class TalosVoiceHost(
             val take = if (force) pending.size else minOf(pending.size, budget)
             val batch = ArrayList(pending.subList(0, take))
             repeat(take) { pending.removeAt(0) }
+            val firstFrameIndex = nextCodecFrameIndex
+            nextCodecFrameIndex += take
+            val currentBatchIndex = batchIndex++
+            val leadFramesBefore = activePlayer.framesWritten() - activePlayer.playbackHeadFrames()
+            val relativeUnderrunsBefore = activePlayer.underrunCount() - underrunCountBefore
+            traceRecorder?.checkpointUnderruns(
+                phase = TalosVoicePhase.UNKNOWN,
+                observedAtNs = SystemClock.elapsedRealtimeNanos(),
+                frameIndex = firstFrameIndex,
+                batchIndex = currentBatchIndex,
+                counter = relativeUnderrunsBefore,
+                bufferLeadFrames = leadFramesBefore,
+            )
 
             // ⭐⭐⭐ Owner 22/8: separa il costo della decodifica del codec da
             // quello della generazione autoregressiva - `cpuThreads` 2→4 non
@@ -343,17 +570,48 @@ internal class TalosVoiceHost(
             // dentro `generate`), un costo sequenziale che questo timer da
             // solo non isola - ma un `decodeNanos` piccolo qui esclude il
             // codec come sospetto, lasciando solo la generazione.
-            val decodeStartNanos = System.nanoTime()
+            val decodeStartNanos = SystemClock.elapsedRealtimeNanos()
             val decoded = codecStream.runFrames(batch) ?: return
-            val decodeMs = (System.nanoTime() - decodeStartNanos) / 1_000_000
+            val decodeNanos = SystemClock.elapsedRealtimeNanos() - decodeStartNanos
+            val decodeMs = decodeNanos / 1_000_000
+            traceRecorder?.checkpointUnderruns(
+                phase = TalosVoicePhase.CODEC_DECODE,
+                observedAtNs = SystemClock.elapsedRealtimeNanos(),
+                frameIndex = firstFrameIndex,
+                batchIndex = currentBatchIndex,
+                counter = activePlayer.underrunCount() - underrunCountBefore,
+                bufferLeadFrames = activePlayer.framesWritten() - activePlayer.playbackHeadFrames(),
+            )
             if (ttfaMs == null) {
                 ttfaMs = (System.nanoTime() - startedAtNanos) / 1_000_000
             }
-            val writeStartNanos = System.nanoTime()
+            val writeStartNanos = SystemClock.elapsedRealtimeNanos()
             if (!activePlayer.write(decoded.interleavedPcm)) {
                 underruns++
             }
-            val writeMs = (System.nanoTime() - writeStartNanos) / 1_000_000
+            val writeNanos = SystemClock.elapsedRealtimeNanos() - writeStartNanos
+            val writeMs = writeNanos / 1_000_000
+            val leadFramesAfter = activePlayer.framesWritten() - activePlayer.playbackHeadFrames()
+            val relativeUnderrunsAfter = activePlayer.underrunCount() - underrunCountBefore
+            traceRecorder?.checkpointUnderruns(
+                phase = TalosVoicePhase.AUDIO_WRITE,
+                observedAtNs = SystemClock.elapsedRealtimeNanos(),
+                frameIndex = firstFrameIndex,
+                batchIndex = currentBatchIndex,
+                counter = relativeUnderrunsAfter,
+                bufferLeadFrames = leadFramesAfter,
+            )
+            traceRecorder?.recordCodecBatch(
+                batchIndex = currentBatchIndex,
+                firstFrameIndex = firstFrameIndex,
+                frameCount = take,
+                codecDecodeNs = decodeNanos,
+                audioWriteNs = writeNanos,
+                bufferLeadFramesBefore = leadFramesBefore,
+                bufferLeadFramesAfter = leadFramesAfter,
+                underrunCountBefore = relativeUnderrunsBefore,
+                underrunCountAfter = relativeUnderrunsAfter,
+            )
             // ⭐⭐⭐ Owner 22/8, seconda escalation: «stutter molto pesanti»,
             // confermato dal vivo su un testo lungo. Il riassunto finale
             // (sotto) dice QUANTI underrun ci sono stati ma non QUANDO -
@@ -364,20 +622,24 @@ internal class TalosVoiceHost(
             // letto da TalosBenchmarkHarness/TalosBackendChoice - leggerlo
             // qui non ne crea un secondo.
             val hardwareUnderrunsSoFar = activePlayer.underrunCount() - underrunCountBefore
-            Log.i(
-                "TalosVoiceHost",
-                "decodePending(): elapsedMs=${(System.nanoTime() - startedAtNanos) / 1_000_000} " +
-                    "batch=$take leadSeconds=${"%.3f".format(leadSeconds)} decodeMs=$decodeMs writeMs=$writeMs " +
-                    "hardwareUnderrunsSoFar=$hardwareUnderrunsSoFar thermal=${TalosThermal.read(appContext)}",
-            )
+            if (productionTrace?.diagnosticsEnabled != false) {
+                Log.i(
+                    "TalosVoiceHost",
+                    "decodePending(): elapsedMs=${(System.nanoTime() - startedAtNanos) / 1_000_000} " +
+                        "batch=$take leadSeconds=${"%.3f".format(leadSeconds)} decodeMs=$decodeMs writeMs=$writeMs " +
+                        "hardwareUnderrunsSoFar=$hardwareUnderrunsSoFar thermal=${TalosThermal.read(appContext)}",
+                )
+            }
         }
 
         val cancelled: Boolean
+        var generatedFrames: List<IntArray> = emptyList()
         try {
-            val (_, wasCancelled) = generate { frame ->
+            val (frames, wasCancelled) = generate { frame ->
                 pending.add(frame)
                 decodePending(force = false)
             }
+            generatedFrames = frames
             decodePending(force = true)
             cancelled = wasCancelled || activeGeneration != id
         } finally {
@@ -385,6 +647,25 @@ internal class TalosVoiceHost(
         }
 
         val drained = if (!cancelled) activePlayer.awaitDrain(timeoutMs = DRAIN_TIMEOUT_MS) else true
+        traceRecorder?.checkpointUnderruns(
+            phase = TalosVoicePhase.AUDIO_DRAIN,
+            observedAtNs = SystemClock.elapsedRealtimeNanos(),
+            frameIndex = nextCodecFrameIndex.takeIf { it > 0 }?.minus(1),
+            batchIndex = batchIndex.takeIf { it > 0 }?.minus(1),
+            counter = activePlayer.underrunCount() - underrunCountBefore,
+            bufferLeadFrames = activePlayer.framesWritten() - activePlayer.playbackHeadFrames(),
+        )
+        productionTrace?.let { trace ->
+            trace.session.recordCompletedRun(
+                trace.recorder.finish(
+                    finishedAtElapsedRealtimeNs = SystemClock.elapsedRealtimeNanos(),
+                    generatedFrames = generatedFrames,
+                    cancelled = cancelled,
+                    diagnosticsEnabled = trace.diagnosticsEnabled,
+                    qualificationOnly = false,
+                ),
+            )
+        }
         val hardwareUnderruns = activePlayer.underrunCount() - underrunCountBefore
         // ⭐⭐⭐ Owner 22/8: «molto stuttering, molto delay» - questi numeri
         // esistevano già (calcolati per ogni lettura, §16 dello stesso file)
@@ -394,11 +675,13 @@ internal class TalosVoiceHost(
         // stessa disciplina di `TalosMossRuntime`: `hardwareUnderruns` è il
         // conteggio VERO dell'HAL (mai un'inferenza dal tempismo),
         // `ttfaMs` è il tempo dalla richiesta al primo `AudioTrack.write()`.
-        Log.i(
-            "TalosVoiceHost",
-            "driveStreamingSynthesis(): ttfaMs=$ttfaMs underruns=$underruns hardwareUnderruns=$hardwareUnderruns " +
-                "drainedWithinTimeout=$drained cancelled=$cancelled elapsedMs=${(System.nanoTime() - startedAtNanos) / 1_000_000}",
-        )
+        if (productionTrace?.diagnosticsEnabled != false) {
+            Log.i(
+                "TalosVoiceHost",
+                "driveStreamingSynthesis(): ttfaMs=$ttfaMs underruns=$underruns hardwareUnderruns=$hardwareUnderruns " +
+                    "drainedWithinTimeout=$drained cancelled=$cancelled elapsedMs=${(System.nanoTime() - startedAtNanos) / 1_000_000}",
+            )
+        }
         return TalosVoiceStreamResult(
             cancelled = cancelled,
             ttfaMs = ttfaMs,
