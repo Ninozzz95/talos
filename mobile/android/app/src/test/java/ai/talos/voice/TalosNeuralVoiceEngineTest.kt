@@ -80,7 +80,7 @@ class TalosNeuralVoiceEngineTest {
     }
 
     @Test
-    fun `MOSS adapter streams first frame then bounded batches with route metadata`() {
+    fun `MOSS adapter streams bounded batches and reports locale as unknown`() {
         val runtime = FakeMossRuntime()
         val tokenizer = FakeTokenizer()
         val engine = TalosMossVoiceEngine(runtime, tokenizer)
@@ -115,8 +115,9 @@ class TalosNeuralVoiceEngineTest {
         assertEquals(32, runtime.maxFrames)
         assertEquals(listOf(1, 2), runtime.codec.batchSizes)
         assertEquals(2, frames.size)
-        assertTrue(frames.all { it.profileId == "profile-1" && it.locale == "it-IT" })
+        assertTrue(frames.all { it.profileId == "profile-1" && it.locale == "und" })
         assertEquals(TalosMossPromptPayload.BACKEND, result.backend)
+        assertEquals("und", result.locale)
         assertEquals(3, result.generatedFrames)
         assertEquals(3, result.emittedSamples)
         assertTrue(stages.any { it.stage == "moss_tokenize" })

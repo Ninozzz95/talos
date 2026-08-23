@@ -7,6 +7,7 @@ internal enum class TalosVoiceDiagnosticEventKind {
     ROUTE_ARMED,
     PRODUCTION_DOOR_ENTERED,
     ROUTE_RESOLVED,
+    ENGINE_STAGE,
     TOKENIZE,
     TEXT_CONDITIONER,
     FLOW_MAIN,
@@ -65,4 +66,3 @@ internal data class TalosVoiceDiagnosticEvent(
         val SAFE_STAGE = Regex("[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}")
     }
 }
-

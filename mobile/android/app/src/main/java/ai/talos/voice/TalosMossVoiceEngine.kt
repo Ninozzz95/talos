@@ -123,7 +123,7 @@ internal class TalosMossVoiceEngine(
                 TalosVoiceEngineFrame(
                     backend = backend,
                     profileId = request.profileId,
-                    locale = request.locale,
+                    locale = RESOLVED_LOCALE,
                     sentenceIndex = 0,
                     firstFrameIndex = firstFrameIndex,
                     frameCount = take,
@@ -165,7 +165,7 @@ internal class TalosMossVoiceEngine(
         return TalosVoiceEngineResult(
             backend = backend,
             profileId = request.profileId,
-            locale = request.locale,
+            locale = RESOLVED_LOCALE,
             terminal = terminal,
             sentenceCount = 1,
             generatedFrames = generated.size,
@@ -180,5 +180,6 @@ internal class TalosMossVoiceEngine(
     companion object {
         private const val DEFAULT_MAX_FRAMES = 375
         private const val REGULAR_DECODE_FRAMES = 8
+        private const val RESOLVED_LOCALE = "und"
     }
 }

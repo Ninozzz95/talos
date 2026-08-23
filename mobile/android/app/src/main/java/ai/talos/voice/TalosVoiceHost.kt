@@ -1,6 +1,7 @@
 package ai.talos.voice
 
 import ai.talos.TalosThermal
+import ai.talos.voice.pocket.TalosPocketOrtRuntime
 import ai.talos.voice.research.TalosVoiceB0Probe
 import ai.talos.voice.research.TalosVoiceB0Session
 import ai.talos.voice.research.TalosVoiceDiagnosticAnswers
@@ -26,6 +27,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
+import org.json.JSONObject
 
 /**
  * The single owner of TALOS's mutable neural voice state (blueprint §14).
@@ -60,6 +62,13 @@ internal class TalosVoiceHost(
     // torna `UNKNOWN` invece di inventare uno stato, esattamente il
     // contratto che quella classe già dichiara.
     private val appContext: Context? = null,
+    private val pocketModelStatusProvider: (() -> TalosPocketModelStatus)? = null,
+    private val pocketRuntimeFactory: (File, Int) -> TalosPocketOrtRuntime = { root, threads ->
+        TalosPocketOrtRuntime.open(root, threads)
+    },
+    private val pcmPlayerFactory: (Int, Int) -> TalosPcmPlayer = { sampleRate, channels ->
+        TalosPcmPlayer(sampleRate, channels)
+    },
 ) : Closeable {
     private val owner = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "talos-voice-owner").apply { priority = Thread.NORM_PRIORITY }
@@ -72,7 +81,13 @@ internal class TalosVoiceHost(
     // EXCEPT player, which cancel() below reads from the calling thread on purpose.
     private var runtime: TalosMossRuntime? = null
     private var tokenizer: TalosVoiceTokenizer? = null
+    private var pocketRuntime: TalosPocketOrtRuntime? = null
+    private var pocketRuntimeRoot: File? = null
+    private var pocketModelStatus: TalosPocketModelStatus? = null
+    private var mossCodecFingerprint: String? = null
     @Volatile private var player: TalosPcmPlayer? = null
+    private var playerSampleRate: Int? = null
+    private var playerChannels: Int? = null
     @Volatile private var activeDiagnosticSession: TalosVoiceDiagnosticSession? = null
 
     /**
@@ -213,6 +228,78 @@ internal class TalosVoiceHost(
     }
 
     /**
+     * Production personal-voice door for a V2 profile. Unlike the legacy
+     * reference-only method, this immutable request carries the selected
+     * profile and locale all the way to the backend router. Pocket remains
+     * primary only when its pinned bundle verifies; MOSS is an explicit,
+     * observable pre-audio fallback.
+     */
+    fun submitSpeakStreamingWithProfile(
+        text: String,
+        locale: String,
+        profile: TalosVoiceProfileV2,
+        maxFrames: Int? = null,
+        seed: Long? = null,
+        diagnosticRoute: TalosVoiceDiagnosticRoute? = null,
+        queueMode: TalosVoiceQueueMode = TalosVoiceQueueMode.FLUSH,
+        onComplete: (Result<TalosVoiceStreamResult>) -> Unit = {},
+    ): Long {
+        val ticket = queueGate.submit(queueMode)
+        val id = ticket.id
+        owner.execute {
+            val result = if (queueMode == TalosVoiceQueueMode.ADD && !queueGate.claim(ticket)) {
+                Result.success(cancelledBeforeStart())
+            } else {
+                runCatching {
+                    runSpeakStreamingWithProfile(
+                        id = id,
+                        text = text,
+                        locale = locale,
+                        profile = profile,
+                        maxFrames = maxFrames,
+                        seed = seed,
+                        diagnosticRoute = diagnosticRoute,
+                    )
+                }
+            }
+            onComplete(result)
+        }
+        return id
+    }
+
+    internal fun speakStreamingWithProfileBlocking(
+        text: String,
+        locale: String,
+        profile: TalosVoiceProfileV2,
+        maxFrames: Int? = null,
+        seed: Long? = null,
+        diagnosticRoute: TalosVoiceDiagnosticRoute? = null,
+    ): TalosVoiceStreamResult {
+        val latch = CountDownLatch(1)
+        var outcome: Result<TalosVoiceStreamResult>? = null
+        submitSpeakStreamingWithProfile(text, locale, profile, maxFrames, seed, diagnosticRoute) { result ->
+            outcome = result
+            latch.countDown()
+        }
+        latch.await()
+        return outcome!!.getOrThrow()
+    }
+
+    /**
+     * Invalidates the cached Pocket verification and closes its sessions on
+     * the owner lane. Calls submitted after this one observe the refreshed
+     * files in FIFO order; no caller thread ever closes ORT under a run.
+     */
+    fun refreshPocketModel() {
+        owner.execute {
+            pocketRuntime?.close()
+            pocketRuntime = null
+            pocketRuntimeRoot = null
+            pocketModelStatus = null
+        }
+    }
+
+    /**
      * Invalidates whatever generation is active AND silences whatever is
      * playing right now (§23.2 `flush`) - a cancel that only stopped future
      * TTS frames but let already-decoded audio keep playing out would not be
@@ -282,6 +369,8 @@ internal class TalosVoiceHost(
 
         player?.close()
         player = null
+        playerSampleRate = null
+        playerChannels = null
 
         val t1Recorder = TalosVoiceTraceRecorder(generationCounter.incrementAndGet(), TalosVoiceRunMode.T1)
         val (t1Frames, t1Cancelled) = activeRuntime.generateAudioTokens(
@@ -470,7 +559,7 @@ internal class TalosVoiceHost(
         try {
             val activeTokenizer = tokenizer ?: openTokenizer().also { tokenizer = it }
             val activeRuntime = runtime ?: TalosMossRuntime.open(modelRoot, cpuThreads).also { runtime = it }
-            val activePlayer = player ?: TalosPcmPlayer(activeRuntime.sampleRate, activeRuntime.channels).also { player = it }
+            val activePlayer = ensurePlayer(activeRuntime.sampleRate, activeRuntime.channels)
             val tokenizeStarted = SystemClock.elapsedRealtimeNanos()
             val textTokenIds = activeTokenizer.encode(text)
             diagnosticSession?.record(
@@ -523,7 +612,7 @@ internal class TalosVoiceHost(
         try {
             val activeTokenizer = tokenizer ?: openTokenizer().also { tokenizer = it }
             val activeRuntime = runtime ?: TalosMossRuntime.open(modelRoot, cpuThreads).also { runtime = it }
-            val activePlayer = player ?: TalosPcmPlayer(activeRuntime.sampleRate, activeRuntime.channels).also { player = it }
+            val activePlayer = ensurePlayer(activeRuntime.sampleRate, activeRuntime.channels)
             val tokenizeStarted = SystemClock.elapsedRealtimeNanos()
             val textTokenIds = activeTokenizer.encode(text)
             diagnosticSession?.record(
@@ -555,6 +644,194 @@ internal class TalosVoiceHost(
             }
         } catch (error: Throwable) {
             finishFailedDiagnostic(diagnosticSession, error)
+            throw error
+        } finally {
+            if (activeDiagnosticSession === diagnosticSession) activeDiagnosticSession = null
+        }
+    }
+
+    private fun runSpeakStreamingWithProfile(
+        id: Long,
+        text: String,
+        locale: String,
+        profile: TalosVoiceProfileV2,
+        maxFrames: Int?,
+        seed: Long?,
+        diagnosticRoute: TalosVoiceDiagnosticRoute?,
+    ): TalosVoiceStreamResult {
+        val diagnosticSession = diagnosticRoute?.let(TalosVoiceDiagnosticProbe::claimProductionRun)
+        activeDiagnosticSession = diagnosticSession
+        val startedAtNanos = System.nanoTime()
+        var resolvedRoute: TalosVoiceEngineRoute? = null
+        var runPlayer: TalosPcmPlayer? = null
+        var underrunBaseline = 0
+        var ttfaMs: Long? = null
+        var writeFailures = 0
+        try {
+            val coordinator = TalosVoiceProductionCoordinator(TalosVoiceEngineResolver(::resolveEngine))
+            val outcome = coordinator.synthesize(
+                request = TalosVoiceProductionRequest(
+                    text = text,
+                    locale = locale,
+                    profile = profile,
+                    maxFramesPerSentence = maxFrames,
+                    seed = seed ?: System.nanoTime(),
+                    pocketStatus = currentPocketModelStatus(),
+                    mossCompatible = isMossCompatible(profile),
+                ),
+                cancellation = TalosVoiceEngineCancellation { !queueGate.isActive(id) },
+                callback = object : TalosVoiceEngineCallback {
+                    override fun onStage(metric: TalosVoiceEngineStageMetric) {
+                        diagnosticSession?.record(metric.toDiagnosticEvent())
+                    }
+
+                    override fun onPcm(frame: TalosVoiceEngineFrame): Boolean {
+                        if (!queueGate.isActive(id)) return false
+                        val activePlayer = ensurePlayer(frame.sampleRate, frame.channels)
+                        if (runPlayer !== activePlayer) {
+                            runPlayer = activePlayer
+                            underrunBaseline = activePlayer.underrunCount()
+                        }
+                        val requestedFrames = frame.pcmFloat.size / frame.channels
+                        val writtenBefore = activePlayer.framesWritten()
+                        val underrunsBefore = activePlayer.underrunCount() - underrunBaseline
+                        val writeStartedAtNs = SystemClock.elapsedRealtimeNanos()
+                        val accepted = activePlayer.write(frame.pcmFloat) { !queueGate.isActive(id) }
+                        val writeDurationNs = SystemClock.elapsedRealtimeNanos() - writeStartedAtNs
+                        val writtenFrames = (activePlayer.framesWritten() - writtenBefore).coerceAtLeast(0L)
+                        if (writtenFrames > 0L && ttfaMs == null) {
+                            ttfaMs = (System.nanoTime() - startedAtNanos) / 1_000_000
+                        }
+                        if (!accepted && queueGate.isActive(id)) writeFailures += 1
+                        val underrunsAfter = activePlayer.underrunCount() - underrunBaseline
+                        val leadFrames = activePlayer.framesWritten() - activePlayer.playbackHeadFrames()
+                        diagnosticSession?.record(
+                            TalosVoiceDiagnosticEvent(
+                                kind = TalosVoiceDiagnosticEventKind.AUDIO_WRITE,
+                                stage = "AudioTrack.write",
+                                durationNs = writeDurationNs,
+                                sentenceIndex = frame.sentenceIndex,
+                                frameIndex = frame.firstFrameIndex,
+                                requestedFrames = requestedFrames,
+                                writtenFrames = writtenFrames.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                                queueDepthFrames = leadFrames,
+                                playbackHeadFrames = activePlayer.playbackHeadFrames(),
+                                underrunCount = underrunsAfter,
+                            ),
+                        )
+                        if (underrunsAfter > underrunsBefore) {
+                            diagnosticSession?.record(
+                                TalosVoiceDiagnosticEvent(
+                                    kind = TalosVoiceDiagnosticEventKind.UNDERRUN_OBSERVED,
+                                    stage = "AudioTrack.getUnderrunCount",
+                                    sentenceIndex = frame.sentenceIndex,
+                                    frameIndex = frame.firstFrameIndex,
+                                    queueDepthFrames = leadFrames,
+                                    playbackHeadFrames = activePlayer.playbackHeadFrames(),
+                                    underrunCount = underrunsAfter,
+                                ),
+                            )
+                        }
+                        return accepted && queueGate.isActive(id)
+                    }
+                },
+                onRouteResolved = { route ->
+                    resolvedRoute = route
+                    diagnosticSession?.record(
+                        TalosVoiceDiagnosticEvent(
+                            kind = TalosVoiceDiagnosticEventKind.ROUTE_RESOLVED,
+                            stage = if (route.fallbackReason == null) {
+                                "route.${route.backend.replace('-', '_')}"
+                            } else {
+                                "route.moss_fallback"
+                            },
+                        ),
+                    )
+                },
+            )
+            val activePlayer = runPlayer
+            if (outcome.route.fallbackReason?.startsWith("pocketRuntimeFailure:") == true) {
+                pocketRuntime?.close()
+                pocketRuntime = null
+                pocketRuntimeRoot = null
+            }
+            val cancelled = outcome.synthesis.terminal == TalosVoiceEngineTerminal.CANCELLED ||
+                !queueGate.isActive(id)
+            diagnosticSession?.record(
+                TalosVoiceDiagnosticEvent(
+                    kind = TalosVoiceDiagnosticEventKind.DRAIN_BEGIN,
+                    stage = "TalosPcmPlayer.awaitDrain",
+                    queueDepthFrames = activePlayer?.let { it.framesWritten() - it.playbackHeadFrames() } ?: 0L,
+                    playbackHeadFrames = activePlayer?.playbackHeadFrames() ?: 0L,
+                    underrunCount = activePlayer?.underrunCount()?.minus(underrunBaseline) ?: 0,
+                ),
+            )
+            val drainStartedNs = SystemClock.elapsedRealtimeNanos()
+            val drained = if (!cancelled && activePlayer != null) {
+                activePlayer.awaitDrain(timeoutMs = DRAIN_TIMEOUT_MS)
+            } else {
+                true
+            }
+            diagnosticSession?.record(
+                TalosVoiceDiagnosticEvent(
+                    kind = TalosVoiceDiagnosticEventKind.DRAIN_END,
+                    stage = "TalosPcmPlayer.awaitDrain",
+                    durationNs = SystemClock.elapsedRealtimeNanos() - drainStartedNs,
+                    queueDepthFrames = activePlayer?.let { it.framesWritten() - it.playbackHeadFrames() } ?: 0L,
+                    playbackHeadFrames = activePlayer?.playbackHeadFrames() ?: 0L,
+                    underrunCount = activePlayer?.underrunCount()?.minus(underrunBaseline) ?: 0,
+                ),
+            )
+            if (cancelled) {
+                diagnosticSession?.record(
+                    TalosVoiceDiagnosticEvent(
+                        kind = TalosVoiceDiagnosticEventKind.CANCEL_ACKNOWLEDGED,
+                        stage = "TalosVoiceHost.profileGenerationBoundary",
+                        cancellationGeneration = queueGate.activeId(),
+                    ),
+                )
+            }
+            val route = outcome.route
+            val result = TalosVoiceStreamResult(
+                cancelled = cancelled,
+                ttfaMs = ttfaMs,
+                underruns = writeFailures,
+                hardwareUnderruns = activePlayer?.underrunCount()?.minus(underrunBaseline) ?: 0,
+                drainedWithinTimeout = drained,
+                elapsedMs = (System.nanoTime() - startedAtNanos) / 1_000_000,
+                resolvedEngine = route.backend,
+                resolvedLocale = outcome.synthesis.locale,
+                resolvedProfileId = profile.header.profileId,
+                fallbackReason = route.fallbackReason,
+            )
+            finishSuccessfulDiagnostic(
+                session = diagnosticSession,
+                result = result,
+                generatedFrameCount = outcome.synthesis.generatedFrames,
+                profileApplied = true,
+                resolvedEngine = route.backend,
+                resolvedLocale = outcome.synthesis.locale,
+                fallbackReason = route.fallbackReason,
+            )
+            return result
+        } catch (error: Throwable) {
+            player?.flush()
+            if (
+                resolvedRoute?.backend == TalosPocketConditioningPayload.BACKEND ||
+                resolvedRoute?.fallbackReason?.startsWith("pocketRuntimeFailure:") == true
+            ) {
+                runCatching { pocketRuntime?.close() }.onFailure(error::addSuppressed)
+                pocketRuntime = null
+                pocketRuntimeRoot = null
+            }
+            finishFailedDiagnostic(
+                session = diagnosticSession,
+                error = error,
+                resolvedEngine = resolvedRoute?.backend ?: "unresolved",
+                resolvedLocale = if (resolvedRoute?.backend == TalosPocketConditioningPayload.BACKEND) locale else "und",
+                resolvedProfileId = profile.header.profileId,
+                fallbackReason = resolvedRoute?.fallbackReason,
+            )
             throw error
         } finally {
             if (activeDiagnosticSession === diagnosticSession) activeDiagnosticSession = null
@@ -859,6 +1136,9 @@ internal class TalosVoiceHost(
         result: TalosVoiceStreamResult,
         generatedFrameCount: Int,
         profileApplied: Boolean,
+        resolvedEngine: String = TalosMossPromptPayload.BACKEND,
+        resolvedLocale: String = "und",
+        fallbackReason: String? = null,
     ) {
         if (session == null || session.artifactFileOrNull() != null) return
         session.record(
@@ -870,12 +1150,14 @@ internal class TalosVoiceHost(
         )
         val audioDurationMs = generatedFrameCount.toLong() * 80L
         val requestedProfileId = session.config.route.requestedProfileId
+        val actualProfileId = result.resolvedProfileId ?: requestedProfileId.takeIf { profileApplied }
         session.finish(
             TalosVoiceDiagnosticOutcome(
                 termination = if (result.cancelled) "CANCELLED" else "DONE",
-                resolvedEngine = "personal",
-                resolvedLocale = "und",
-                resolvedProfileId = requestedProfileId.takeIf { profileApplied },
+                resolvedEngine = resolvedEngine,
+                resolvedLocale = resolvedLocale,
+                resolvedProfileId = actualProfileId,
+                fallbackReason = fallbackReason,
                 eventCount = session.eventCount(),
                 answers = TalosVoiceDiagnosticAnswers(
                     dominantGraph = "UNKNOWN_NOT_B0_CAMPAIGN",
@@ -883,8 +1165,8 @@ internal class TalosVoiceHost(
                     outsideOrt = "UNKNOWN_NOT_B0_CAMPAIGN",
                     arOnlyRtf = "UNKNOWN_NOT_B0_CAMPAIGN",
                     underrunCause = "UNKNOWN_ANDROID_CUMULATIVE_COUNTER",
-                    selectedVoiceUsed = profileApplied && requestedProfileId != null,
-                    selectedLocaleUsed = false,
+                    selectedVoiceUsed = profileApplied && requestedProfileId != null && actualProfileId == requestedProfileId,
+                    selectedLocaleUsed = resolvedLocale == session.config.route.requestedLocale,
                     italianSemanticsPreserved = null,
                     cancelTailMs = null,
                     longReadRealtime = audioDurationMs.takeIf { it > 0L }?.let { result.elapsedMs <= it },
@@ -893,7 +1175,14 @@ internal class TalosVoiceHost(
         )
     }
 
-    private fun finishFailedDiagnostic(session: TalosVoiceDiagnosticSession?, error: Throwable) {
+    private fun finishFailedDiagnostic(
+        session: TalosVoiceDiagnosticSession?,
+        error: Throwable,
+        resolvedEngine: String = TalosMossPromptPayload.BACKEND,
+        resolvedLocale: String = "und",
+        resolvedProfileId: String? = null,
+        fallbackReason: String? = null,
+    ) {
         if (session == null || session.artifactFileOrNull() != null) return
         session.record(
             TalosVoiceDiagnosticEvent(
@@ -904,9 +1193,10 @@ internal class TalosVoiceHost(
         session.finish(
             TalosVoiceDiagnosticOutcome(
                 termination = "FAILED",
-                resolvedEngine = "personal",
-                resolvedLocale = "und",
-                resolvedProfileId = null,
+                resolvedEngine = resolvedEngine,
+                resolvedLocale = resolvedLocale,
+                resolvedProfileId = resolvedProfileId,
+                fallbackReason = fallbackReason,
                 eventCount = session.eventCount(),
                 answers = TalosVoiceDiagnosticAnswers(
                     dominantGraph = "UNKNOWN_RUN_FAILED",
@@ -933,6 +1223,86 @@ internal class TalosVoiceHost(
         elapsedMs = 0L,
     )
 
+    private fun currentPocketModelStatus(): TalosPocketModelStatus {
+        pocketModelStatus?.let { return it }
+        val status = try {
+            pocketModelStatusProvider?.invoke()
+                ?: TalosPocketModelStatus.Missing("pocket-model-status-provider")
+        } catch (error: Throwable) {
+            TalosPocketModelStatus.Corrupt(
+                path = "pocket-model-status-provider",
+                reason = error.javaClass.simpleName.takeIf { it.isNotBlank() } ?: "Throwable",
+            )
+        }
+        pocketModelStatus = status
+        return status
+    }
+
+    private fun isMossCompatible(profile: TalosVoiceProfileV2): Boolean {
+        val payload = profile.backendPayloads.filterIsInstance<TalosMossPromptPayload>().singleOrNull()
+            ?: return false
+        val activeCodecFingerprint = runCatching {
+            mossCodecFingerprint ?: TalosVoiceProfileCompatibility.codecFingerprint(modelRoot).also {
+                mossCodecFingerprint = it
+            }
+        }.getOrNull() ?: return false
+        return payload.codecFingerprint == activeCodecFingerprint &&
+            payload.promptSchemaFingerprint == TalosVoiceProfileCompatibility.promptSchemaFingerprint()
+    }
+
+    private fun resolveEngine(route: TalosVoiceEngineRoute): TalosNeuralVoiceEngine = when (route.backend) {
+        TalosPocketConditioningPayload.BACKEND -> {
+            val root = requireNotNull(route.pocketModelRoot).canonicalFile
+            if (pocketRuntimeRoot != root) {
+                pocketRuntime?.close()
+                pocketRuntime = null
+                pocketRuntimeRoot = root
+            }
+            val activeRuntime = pocketRuntime ?: pocketRuntimeFactory(root, cpuThreads).also { pocketRuntime = it }
+            TalosPocketVoiceEngine(TalosPocketOrtRuntimeAdapter(activeRuntime))
+        }
+        TalosMossPromptPayload.BACKEND -> {
+            val activeTokenizer = tokenizer ?: openTokenizer().also { tokenizer = it }
+            val activeRuntime = runtime ?: TalosMossRuntime.open(modelRoot, cpuThreads).also { runtime = it }
+            TalosMossVoiceEngine(TalosMossRuntimeAdapter(activeRuntime), activeTokenizer)
+        }
+        else -> error("unsupported voice engine route ${route.backend}")
+    }
+
+    private fun ensurePlayer(sampleRate: Int, channels: Int): TalosPcmPlayer {
+        val current = player
+        if (
+            current != null && !current.isDead &&
+            playerSampleRate == sampleRate && playerChannels == channels
+        ) {
+            return current
+        }
+        current?.close()
+        val created = pcmPlayerFactory(sampleRate, channels)
+        player = created
+        playerSampleRate = sampleRate
+        playerChannels = channels
+        return created
+    }
+
+    private fun TalosVoiceEngineStageMetric.toDiagnosticEvent(): TalosVoiceDiagnosticEvent =
+        TalosVoiceDiagnosticEvent(
+            kind = when (stage) {
+                "tokenize_and_plan", "moss_tokenize" -> TalosVoiceDiagnosticEventKind.TOKENIZE
+                "text_conditioner" -> TalosVoiceDiagnosticEventKind.TEXT_CONDITIONER
+                "flow_main_voice_prefill", "flow_main_text_prefill", "flow_main_ar" ->
+                    TalosVoiceDiagnosticEventKind.FLOW_MAIN
+                "flow_step" -> TalosVoiceDiagnosticEventKind.FLOW_STEP
+                "mimi_decoder", "moss_codec_decode" -> TalosVoiceDiagnosticEventKind.CODEC_DECODE
+                else -> TalosVoiceDiagnosticEventKind.ENGINE_STAGE
+            },
+            stage = stage,
+            durationNs = durationNs,
+            sentenceIndex = sentenceIndex,
+            frameIndex = frameIndex,
+            requestedFrames = inputFrames,
+        )
+
     private fun openTokenizer(): TalosVoiceTokenizer {
         val manifestPath = TalosMossManifest.resolveManifestPath(modelRoot)
         val manifestDir = manifestPath.parentFile ?: modelRoot
@@ -946,11 +1316,17 @@ internal class TalosVoiceHost(
         val closed = CountDownLatch(1)
         owner.execute {
             runtime?.close()
+            pocketRuntime?.close()
             tokenizer?.close()
             player?.close()
             runtime = null
+            pocketRuntime = null
+            pocketRuntimeRoot = null
+            pocketModelStatus = null
             tokenizer = null
             player = null
+            playerSampleRate = null
+            playerChannels = null
             closed.countDown()
         }
         closed.await(30, TimeUnit.SECONDS)
@@ -960,6 +1336,7 @@ internal class TalosVoiceHost(
     companion object {
         private const val DEFAULT_MAX_FRAMES = 375
         private const val DRAIN_TIMEOUT_MS = 10_000L
+        private const val POCKET_MANIFEST_ASSET = "voice/pocket-model-manifest.json"
 
         @Volatile private var instance: TalosVoiceHost? = null
 
@@ -978,8 +1355,23 @@ internal class TalosVoiceHost(
             instance?.let { return it }
             synchronized(this) {
                 instance?.let { return it }
-                val modelRoot = TalosVoiceModelManager.modelRoot(context.applicationContext.getExternalFilesDir(null)!!)
-                val created = TalosVoiceHost(modelRoot, appContext = context.applicationContext)
+                val applicationContext = context.applicationContext
+                val externalFilesDir = requireNotNull(applicationContext.getExternalFilesDir(null)) {
+                    "external files directory is unavailable for voice models"
+                }
+                val modelRoot = TalosVoiceModelManager.modelRoot(externalFilesDir)
+                val pocketRoot = TalosPocketModelManager.modelRoot(externalFilesDir)
+                val created = TalosVoiceHost(
+                    modelRoot = modelRoot,
+                    appContext = applicationContext,
+                    pocketModelStatusProvider = {
+                        val manifestJson = applicationContext.assets.open(POCKET_MANIFEST_ASSET)
+                            .bufferedReader()
+                            .use { it.readText() }
+                        val manifest = TalosPocketModelManifest.fromJson(JSONObject(manifestJson)).requirePinnedBundle()
+                        TalosPocketModelManager.validate(pocketRoot, manifest)
+                    },
+                )
                 instance = created
                 return created
             }
@@ -1040,4 +1432,8 @@ internal data class TalosVoiceStreamResult(
     val hardwareUnderruns: Int,
     val drainedWithinTimeout: Boolean,
     val elapsedMs: Long,
+    val resolvedEngine: String? = null,
+    val resolvedLocale: String? = null,
+    val resolvedProfileId: String? = null,
+    val fallbackReason: String? = null,
 )

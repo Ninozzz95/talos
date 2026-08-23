@@ -418,10 +418,15 @@ class TalosNeuralVoicePlugin : Plugin() {
     @PluginMethod
     fun profiles(call: PluginCall) {
         val enrollment = enrollment()
+        val store = TalosVoiceProfileStore(context.applicationContext)
         val array = JSArray()
         for (id in enrollment.listProfileIds()) {
-            runCatching { enrollment.loadProfile(id) }.getOrNull()?.let { profile ->
-                array.put(profileSummaryJson(enrollment, profile.header))
+            when (val stored = runCatching { store.loadAny(id) }.getOrNull()) {
+                is TalosStoredVoiceProfile.Legacy ->
+                    array.put(profileSummaryJson(enrollment, stored.profile.header))
+                is TalosStoredVoiceProfile.Current ->
+                    array.put(profileSummaryJson(stored.profile))
+                null -> Unit
             }
         }
         call.resolve(JSObject().put("profiles", array))
@@ -468,8 +473,16 @@ class TalosNeuralVoicePlugin : Plugin() {
         val profileId = call.getString("profileId")
         val readingId = call.getString("readingId")
         val utteranceId = call.getString("utteranceId") ?: readingId
-        if (text.isEmpty() || profileId.isNullOrBlank() || readingId.isNullOrBlank() || utteranceId.isNullOrBlank()) {
-            call.reject("text, profileId and readingId are required")
+        val locale = call.getString("locale")?.trim()
+        if (
+            text.isEmpty() || profileId.isNullOrBlank() || readingId.isNullOrBlank() ||
+            utteranceId.isNullOrBlank() || locale.isNullOrBlank()
+        ) {
+            call.reject("text, profileId, readingId and locale are required")
+            return
+        }
+        if (!VOICE_LOCALE.matches(locale)) {
+            call.reject("locale is not a valid BCP-47 language tag")
             return
         }
         val rate = call.getFloat("rate") ?: 1f
@@ -483,9 +496,8 @@ class TalosNeuralVoicePlugin : Plugin() {
         val traceId = call.getString("traceId")
         val diagnosticRoute = if (traceId != null) {
             val source = call.getString("source")
-            val locale = call.getString("locale")
-            if (source.isNullOrBlank() || locale.isNullOrBlank()) {
-                call.reject("source and locale are required when traceId is present")
+            if (source.isNullOrBlank()) {
+                call.reject("source is required when traceId is present")
                 return
             }
             try {
@@ -505,9 +517,14 @@ class TalosNeuralVoicePlugin : Plugin() {
             null
         }
 
-        val profile = runCatching { enrollment().loadProfile(profileId) }.getOrNull()
-        if (profile == null) {
-            call.resolve(JSObject().put("accepted", false).put("reason", "profileNotFound"))
+        val profileStore = TalosVoiceProfileStore(context.applicationContext)
+        val storedProfile = runCatching { profileStore.loadAny(profileId) }.getOrElse {
+            val reason = if (runCatching { profileStore.exists(profileId) }.getOrDefault(false)) {
+                "profileUnreadable"
+            } else {
+                "profileNotFound"
+            }
+            call.resolve(JSObject().put("accepted", false).put("reason", reason))
             return
         }
 
@@ -517,25 +534,42 @@ class TalosNeuralVoicePlugin : Plugin() {
         // silently ignoring the caller's values.
         val ratePitchApplied = rate == 1f && pitch == 1f
 
-        host.submitSpeakStreamingWithReference(
-            text,
-            profile.promptAudioCodes,
-            diagnosticRoute = diagnosticRoute,
-            queueMode = queueMode,
-        ) { result ->
+        val completion: (Result<TalosVoiceStreamResult>) -> Unit = { result ->
             val payload = result.fold(
                 onSuccess = { r ->
-                    JSObject()
+                    val completed = JSObject()
                         .put("readingId", utteranceId)
                         .put("cancelled", r.cancelled)
                         .put("hardwareUnderruns", r.hardwareUnderruns)
                         .put("elapsedMs", r.elapsedMs)
+                        .put("resolvedEngine", r.resolvedEngine ?: TalosMossPromptPayload.BACKEND)
+                        .put("resolvedLocale", r.resolvedLocale ?: "und")
+                        .put("resolvedProfileId", r.resolvedProfileId ?: profileId)
+                    r.fallbackReason?.let { completed.put("fallbackReason", it) }
+                    completed
                 },
                 onFailure = { e ->
                     JSObject().put("readingId", utteranceId).put("error", e.message ?: "synthesis failed")
                 },
             )
             notifyListeners(if (result.isSuccess) "talosNeuralVoiceDone" else "talosNeuralVoiceError", payload)
+        }
+        when (storedProfile) {
+            is TalosStoredVoiceProfile.Legacy -> host.submitSpeakStreamingWithReference(
+                text = text,
+                promptAudioCodes = storedProfile.profile.promptAudioCodes,
+                diagnosticRoute = diagnosticRoute,
+                queueMode = queueMode,
+                onComplete = completion,
+            )
+            is TalosStoredVoiceProfile.Current -> host.submitSpeakStreamingWithProfile(
+                text = text,
+                locale = locale,
+                profile = storedProfile.profile,
+                diagnosticRoute = diagnosticRoute,
+                queueMode = queueMode,
+                onComplete = completion,
+            )
         }
         call.resolve(JSObject().put("accepted", true).put("ratePitchApplied", ratePitchApplied))
     }
@@ -865,6 +899,17 @@ class TalosNeuralVoicePlugin : Plugin() {
             .put("createdAtEpochMs", header.createdAtEpochMs)
             .put("enrollmentDurationMs", header.enrollmentDurationMs)
 
+    private fun profileSummaryJson(profile: TalosVoiceProfileV2): JSObject =
+        JSObject()
+            .put("id", profile.header.profileId)
+            .put("name", profile.header.displayName)
+            .put("language", profile.header.language)
+            .put("style", profile.header.style)
+            .put("engineBuild", profile.header.preferredBackend)
+            .put("compatible", true)
+            .put("createdAtEpochMs", profile.header.createdAtEpochMs)
+            .put("enrollmentDurationMs", profile.header.enrollmentDurationMs)
+
     private fun phraseVerdictJson(phrase: TalosVoicePhraseCapture): JSObject {
         val reasons = JSArray()
         phrase.verdict.rejectionReasons.forEach { reasons.put(it) }
@@ -889,6 +934,7 @@ class TalosNeuralVoicePlugin : Plugin() {
     }
 
     companion object {
+        private val VOICE_LOCALE = Regex("^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$")
         private const val DEFAULT_PHRASE_MAX_DURATION_MS = 8_000
         // Stesso ordine hardcoded lato JS (PHRASES in
         // TalosMobilePersonalVoiceEnrollment.vue): whisper 0-3, normale
