@@ -8,6 +8,7 @@ import ai.talos.voice.pocket.TalosPocketOrtRuntime
 import ai.talos.voice.pocket.TalosPocketPipelineTerminal
 import ai.talos.voice.pocket.TalosPocketStageMetric
 import ai.talos.voice.pocket.TalosPocketSynthesisResult
+import java.io.Closeable
 
 internal interface TalosPocketRuntimeContract {
     fun synthesize(
@@ -20,9 +21,24 @@ internal interface TalosPocketRuntimeContract {
     ): TalosPocketSynthesisResult
 }
 
+/** Host-owned superset: production keeps one adapter for both enrollment and synthesis. */
+internal interface TalosPocketHostRuntimeContract : TalosPocketRuntimeContract, Closeable {
+    fun encodeReference(
+        pcmFloatMono: FloatArray,
+        sampleRate: Int,
+        callback: TalosPocketCallback? = null,
+    ): TalosPocketConditioning
+}
+
 internal class TalosPocketOrtRuntimeAdapter(
     private val runtime: TalosPocketOrtRuntime,
-) : TalosPocketRuntimeContract {
+) : TalosPocketHostRuntimeContract {
+    override fun encodeReference(
+        pcmFloatMono: FloatArray,
+        sampleRate: Int,
+        callback: TalosPocketCallback?,
+    ): TalosPocketConditioning = runtime.encodeReference(pcmFloatMono, sampleRate, callback)
+
     override fun synthesize(
         source: String,
         conditioning: TalosPocketConditioning,
@@ -38,6 +54,8 @@ internal class TalosPocketOrtRuntimeAdapter(
         cancellation = cancellation,
         callback = callback,
     )
+
+    override fun close() = runtime.close()
 }
 
 internal class TalosPocketVoiceEngine(
