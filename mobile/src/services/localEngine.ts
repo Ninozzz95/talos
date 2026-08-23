@@ -156,6 +156,22 @@ interface TalosLlamaPlugin {
         decisionBackend?: string
         decisionReason?: string
     }>
+    /**
+     * P1-5 — i profili già misurati da `qualifyBackend` per questo modello,
+     * sull'identità di ADESSO. Sola lettura: non fa mai partire una misura.
+     */
+    localPerformanceProfiles(options: { path: string }): Promise<{
+        profiles: ReadonlyArray<{
+            backendRegistry: string
+            backendDevice: string | null
+            outcome: 'CORRECT' | 'FAILED'
+            ttftMs: number
+            /** -1 = non misurato (righe scritte prima di questo campo). */
+            decodeTokPerSec: number
+            qualificationLevel: 'Q0' | 'Q1' | 'Q2'
+            measuredAtMs: number
+        }>
+    }>
     open(options: {
         path: string
         threads?: number
@@ -1041,4 +1057,43 @@ export async function talosLocalEngineTimings(): Promise<TalosLocalEngineTimings
 export async function talosLocalModelDelete(path: string): Promise<boolean> {
     const { deleted } = await plugin.deleteInstalled({ path })
     return deleted
+}
+
+export interface TalosLocalPerformanceProfile {
+    backendRegistry: string
+    backendDevice: string | null
+    outcome: 'CORRECT' | 'FAILED'
+    ttftMs: number
+    /** `null` quando non misurato — mai 0, che sarebbe una velocità infinita. */
+    decodeTokPerSec: number | null
+    qualificationLevel: 'Q0' | 'Q1' | 'Q2'
+    measuredAtMs: number
+}
+
+/**
+ * P1-5 — i profili misurati per questo modello, sull'identità di adesso.
+ *
+ * Assente sul web per lo stesso motivo di `talosLocalEngineStatus`: nessun
+ * profilo esiste dove non esiste il motore che li misura. Un errore di
+ * lettura (plugin assente, file corrotto) torna un elenco vuoto — "nessun
+ * profilo" è la lettura onesta di entrambi i casi, mai un'eccezione che il
+ * selettore dovrebbe intercettare per continuare a funzionare.
+ */
+export async function talosLocalPerformanceProfiles(
+    path: string,
+): Promise<readonly TalosLocalPerformanceProfile[]> {
+    try {
+        const { profiles } = await plugin.localPerformanceProfiles({ path })
+        return profiles.map((p) => ({
+            backendRegistry: p.backendRegistry,
+            backendDevice: p.backendDevice,
+            outcome: p.outcome,
+            ttftMs: p.ttftMs,
+            decodeTokPerSec: p.decodeTokPerSec >= 0 ? p.decodeTokPerSec : null,
+            qualificationLevel: p.qualificationLevel,
+            measuredAtMs: p.measuredAtMs,
+        }))
+    } catch {
+        return []
+    }
 }

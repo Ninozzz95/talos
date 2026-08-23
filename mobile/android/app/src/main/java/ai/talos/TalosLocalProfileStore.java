@@ -121,7 +121,10 @@ final class TalosLocalProfileStore {
                     // "cpu" esisteva prima di questo blocco). Q1 era l'UNICO
                     // livello che scriveva allora — il default onesto per
                     // una riga vecchia, non un'invenzione.
-                    livelloDaTesto(riga.optString("qualificationLevel", "Q1")));
+                    livelloDaTesto(riga.optString("qualificationLevel", "Q1")),
+                    // ⛔ P1-5, stessa storia: optDouble con -1, mai un numero
+                    // indovinato per le righe scritte prima di questo campo.
+                    riga.optDouble("decodeTokPerSec", -1));
         } catch (JSONException rigaMalformata) {
             // Una riga sola corrotta non deve buttare via tutte le altre.
             return null;
@@ -151,6 +154,7 @@ final class TalosLocalProfileStore {
             o.put("ttftMs", riga.ttftMs);
             o.put("measuredAtMs", riga.measuredAtMs);
             o.put("qualificationLevel", riga.qualificationLevel.name());
+            o.put("decodeTokPerSec", riga.decodeTokPerSec);
         } catch (JSONException nonPuoAccadereConChiaviCostanti) {
             return null;
         }
