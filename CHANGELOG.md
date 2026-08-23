@@ -6,6 +6,65 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.19
+
+The personal voice no longer stutters, and the local model runs faster.
+Everything below was measured on the owner's OnePlus Pad 3 and OnePlus 13,
+none of it is estimated.
+
+### The voice engine was rebuilt on Pocket TTS
+
+The previous engine produced stutter and hardware underruns during real
+playback, and sentences that followed one another too closely would overlap
+or get their start clipped. The voice engine is now built on
+[Kyutai's Pocket TTS](https://github.com/kyutai-labs/pocket-tts) (MIT), run
+fully on-device through ONNX Runtime — no change to what stays local: your
+recordings never leave the phone.
+
+- Stutter and the measured hardware underruns are gone. Overlaps and
+  clipped sentence starts between concatenated replies are fixed.
+- Sentence starts are stabilized without making the technical lead-in
+  audible.
+- Measured on production streaming: **-23.2 LUFS**, true peak **-0.8 dBFS**,
+  Pocket gain **+12 dB** with a limiter at **-1 dBFS**.
+- Time to first audio, warm: **449–537 ms**; the engine now enforces a
+  **600 ms** honest cutoff rather than reporting a number it cannot back.
+- Italian speech recognition against 6 reference sentences: **6/6 exact,
+  zero word error rate**, no dropped first or last word.
+- The AudioTrack buffer grew to **1.205 s** to absorb the timing variance
+  that caused the underruns, without delaying playback start — the initial
+  threshold that controls when audio starts did not change.
+- Existing voice profiles migrate to the new engine automatically; nothing
+  needs to be re-recorded.
+
+### The local model runs faster
+
+Continuing work on the on-device engine (llama.cpp):
+
+- A persistent OpenCL kernel cache removes a multi-second first-generation
+  recompile that ran every time the app started.
+- The microbatch size for prompt processing moved from 192 to 512 tokens,
+  measured to shorten prompt processing without changing output quality.
+- The static parts of the system prompt are now pre-computed once (AOT)
+  instead of on every message, including a fix for models that need more
+  than a system turn alone to accept it correctly.
+- A native thread pool replaces manual thread lifecycle management. CPU
+  core affinity was measured explicitly (paired A/B campaign) and found to
+  make no measurable difference on this hardware (≤1%, inside the ~2.4%
+  run-to-run noise) — the mechanism ships as tested infrastructure, but
+  default behavior is unchanged rather than switched on speculation.
+
+### Fixed
+
+- The instruction telling a local model which language to answer in was
+  being skipped in one case, so a tool result in another language could
+  pull the reply into that language even when everything else was in
+  Italian. The instruction now always names the exception, in both the
+  short local-model prompt and the full one, and stays within the prompt's
+  measured size budget.
+- The background scene now follows the selected motion complexity on its
+  own, instead of being tied to the color theme.
+
 ## v0.1.18
 
 The app can speak in your own voice. You record a set of phrases once, the
