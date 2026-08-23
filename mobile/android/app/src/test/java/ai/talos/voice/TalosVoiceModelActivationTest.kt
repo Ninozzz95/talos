@@ -63,6 +63,34 @@ class TalosVoiceModelActivationTest {
     }
 
     @Test
+    fun `install root and target path are explicit while cache lookup keeps the remote source path`() {
+        val pocketArtifact = TalosVoiceModelManifest.Artifact(
+            repo = "Org/Pocket",
+            revision = "rev-pocket",
+            targetDir = "italian",
+            files = listOf(
+                TalosVoiceModelManifest.Artifact.File(
+                    path = "onnx/italian/model.onnx",
+                    size = 3,
+                    sha256 = "a".repeat(64),
+                    targetPath = "model.onnx",
+                ),
+            ),
+        )
+        val slot = store.slot("Org/Pocket", "rev-pocket", "onnx/italian/model.onnx")
+        slot.finished.parentFile?.mkdirs()
+        slot.finished.writeBytes(byteArrayOf(7, 8, 9))
+
+        val outcome = TalosVoiceModelActivation.stage(externalFilesDir, "pocket", pocketArtifact)
+
+        assertTrue(outcome is TalosVoiceModelActivation.Outcome.Activated)
+        val staging = (outcome as TalosVoiceModelActivation.Outcome.Activated).targetDir
+        assertEquals(File(externalFilesDir, "pocket/italian.staging").canonicalFile, staging.canonicalFile)
+        assertArrayEquals(byteArrayOf(7, 8, 9), File(staging, "model.onnx").readBytes())
+        assertFalse(File(staging, "onnx/italian/model.onnx").exists())
+    }
+
+    @Test
     fun `refuses to stage when a cache file is entirely missing`() {
         placeFinishedInCache()
         // Solo un file "arrivato": l'altro manca del tutto dalla cache.

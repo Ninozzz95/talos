@@ -217,6 +217,7 @@ watch(prompt, (testo) => voce.value?.aggiornaBozza(testo))
  */
 void import('@/composables/useTalosRispostaAVoce').then(({ useTalosRispostaAVoce }) => {
     voce.value = useTalosRispostaAVoce({
+        source: 'chat',
         streaming: () => chat.state.streamingText,
         messaggi: () => chat.messages,
         interfaccia: () => locale.value,

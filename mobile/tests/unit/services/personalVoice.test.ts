@@ -7,6 +7,7 @@ const bridge = vi.hoisted(() => ({
     deleteProfile: vi.fn(),
     speak: vi.fn(),
     stop: vi.fn(),
+    buildEnrollmentProfile: vi.fn(),
     addListener: vi.fn(),
 }))
 
@@ -17,6 +18,7 @@ vi.mock('@capacitor/core', () => ({
 const {
     talosPersonalVoiceStatus,
     talosPersonalVoiceProfiles,
+    talosBuildVoiceEnrollmentProfile,
     talosSpeakForReading,
 } = await import('@/services/personalVoice')
 
@@ -31,6 +33,7 @@ describe('personalVoice service', () => {
     beforeEach(() => {
         bridge.status.mockReset()
         bridge.profiles.mockReset()
+        bridge.buildEnrollmentProfile.mockReset()
     })
 
     // §40's own contract: ready means installed AND at least one COMPATIBLE
@@ -71,9 +74,79 @@ describe('personalVoice service', () => {
         expect(status).toEqual({ supported: false, installed: false, ready: false, active: false })
     })
 
+    it('PVOICE-STATUS-05 preserves every native Pocket verification field', async () => {
+        bridge.status.mockResolvedValue({
+            supported: true,
+            installed: true,
+            backend: 'pocket-v2',
+            engineBuild: '58a6d00cf13d239b6748cb0769f35c580a8f606c',
+            modelState: 'ready',
+            verifiedFiles: 8,
+            cacheHit: false,
+            verificationDurationMs: 321.5,
+        })
+        bridge.profiles.mockResolvedValue(READY_PROFILES)
+
+        await expect(talosPersonalVoiceStatus()).resolves.toEqual({
+            supported: true,
+            installed: true,
+            ready: true,
+            active: false,
+            failure: undefined,
+            backend: 'pocket-v2',
+            engineBuild: '58a6d00cf13d239b6748cb0769f35c580a8f606c',
+            modelState: 'ready',
+            verifiedFiles: 8,
+            cacheHit: false,
+            verificationDurationMs: 321.5,
+        })
+    })
+
     it('PVOICE-PROFILES-01 a thrown bridge error reads as an empty list, not a crash', async () => {
         bridge.profiles.mockRejectedValue(new Error('bridge unavailable'))
         await expect(talosPersonalVoiceProfiles()).resolves.toEqual([])
+    })
+
+    it('PVOICE-ENROLL-01 returns the measured Pocket V2 build contract without MOSS quantizer fields', async () => {
+        const measured = {
+            backend: 'pocket-v2' as const,
+            profileSchemaVersion: 2 as const,
+            sourceSampleRate: 48_000,
+            sourceSamples: 768_000,
+            referenceSamples: 576_000,
+            referenceDurationMs: 12_000,
+            conditioningFrames: 150,
+            conditioningDimension: 1_024,
+            enrollmentDurationMs: 16_000,
+            stages: [
+                {
+                    stage: 'mimi_encoder',
+                    startedAtNs: 100,
+                    durationNs: 25,
+                    threadName: 'talos-voice-owner',
+                    inputFrames: 576_000,
+                    outputSamples: 150,
+                },
+            ],
+        }
+        bridge.buildEnrollmentProfile.mockResolvedValue(measured)
+
+        const result = await talosBuildVoiceEnrollmentProfile({
+            displayName: 'Antonino',
+            language: 'it-IT',
+            style: 'neutral',
+            consentVersion: 1,
+        })
+
+        expect(result).toEqual(measured)
+        expect(result).not.toHaveProperty('quantizerCount')
+        expect(result).not.toHaveProperty('frameCount')
+        expect(bridge.buildEnrollmentProfile).toHaveBeenCalledWith({
+            displayName: 'Antonino',
+            language: 'it-IT',
+            style: 'neutral',
+            consentVersion: 1,
+        })
     })
 
     // talosSpeakForReading - the real router decision through to the real
@@ -114,6 +187,54 @@ describe('personalVoice service', () => {
             expect(bridge.speak).toHaveBeenCalledWith(expect.objectContaining({
                 text: 'Ciao', profileId: PROFILE_ID, rate: 1, pitch: 1,
             }))
+        })
+
+        it('PVOICE-DIAG-01 preserves the immutable diagnostic route at the native production door', async () => {
+            bridge.status.mockResolvedValue({ supported: true, installed: true })
+            bridge.profiles.mockResolvedValue(READY_PROFILES)
+            bridge.speak.mockResolvedValue({ accepted: true })
+
+            const spoken = await talosSpeakForReading('personal', PROFILE_ID, 'Ciao', {
+                rate: 1,
+                pitch: 1,
+                traceId: 'trace-0123456789abcdef',
+                source: 'chat',
+                locale: 'it-IT',
+            })
+
+            expect(spoken).toBe(true)
+            expect(bridge.speak).toHaveBeenCalledWith(expect.objectContaining({
+                profileId: PROFILE_ID,
+                traceId: 'trace-0123456789abcdef',
+                source: 'chat',
+                locale: 'it-IT',
+            }))
+        })
+
+        it('PVOICE-QUEUE-01 preserves one logical reading id and a unique queued utterance id at the bridge', async () => {
+            bridge.status.mockResolvedValue({ supported: true, installed: true })
+            bridge.profiles.mockResolvedValue(READY_PROFILES)
+            bridge.speak.mockResolvedValue({ accepted: true })
+
+            const spoken = await talosSpeakForReading('personal', PROFILE_ID, 'Seconda frase.', {
+                rate: 0.95,
+                pitch: 1.05,
+                readingId: 'chat-reading-42',
+                queue: 'add',
+                source: 'chat',
+                locale: 'it-IT',
+            })
+
+            expect(spoken).toBe(true)
+            const request = bridge.speak.mock.calls[0]?.[0]
+            expect(request).toEqual(expect.objectContaining({
+                readingId: 'chat-reading-42',
+                queue: 'add',
+                source: 'chat',
+                locale: 'it-IT',
+            }))
+            expect(request.utteranceId).toMatch(/^chat-reading-42-u-/)
+            expect(request.utteranceId).not.toBe(request.readingId)
         })
 
         it('the reading id passed to the bridge is unique per call, so two readings never share a completion event', async () => {
