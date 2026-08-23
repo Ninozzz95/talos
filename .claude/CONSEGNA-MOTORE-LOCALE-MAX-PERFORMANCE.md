@@ -56,7 +56,7 @@ serve sapere quando (e se) riparte.
 | P0-3 — Q0 smoke check, etichetta di livello | ✅ | `48c775cb` |
 | P1-2 — microbatch: misurato E applicato (512, era 192) | ✅ | `6007666` |
 | P1-4 — matrice FA×KV (f16/q8_0 × on/off, prima fetta) | ✅ | `cf4401c9` |
-| P1-1 — thread pool + affinity, tutti i blocchi | ✅ | `0e9b0a12`, `a5589cb`, `3a5b88d` |
+| P1-1 — thread pool + affinity, tutti i blocchi | ✅ | `0e9b0a12`, `a5589cb`, `1aeba69b` |
 | P1-3 — prefisso statico AOT, incl. fix Gemma system-turn-solo | ✅ | `1c347fa`, `0ee3b7b` |
 | P1-5 — selettore break-even (CR-12) | ✅ | `b543dff` |
 | **Fase 4 (P2)** | 🔒 rimandata | — |
