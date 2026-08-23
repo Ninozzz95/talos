@@ -92,7 +92,6 @@ const SURFACES = [
         views: [
             { id: 'design', labelKey: 'appearance.design' },
             { id: 'motion', labelKey: 'appearance.motion' },
-            { id: 'voice', labelKey: 'appearance.voice' },
         ],
     },
     {

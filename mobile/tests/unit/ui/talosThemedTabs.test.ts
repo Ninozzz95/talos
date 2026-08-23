@@ -22,7 +22,7 @@ describe('TalosThemedTabs', () => {
 
         expect(wrapper.get('[role="tablist"]').attributes('aria-label')).toBe('Aspetto')
         expect(wrapper.findAll('[role="tab"]').map((tab) => tab.attributes('data-talos-tab')))
-            .toEqual(['design', 'motion', 'voice'])
+            .toEqual(['design', 'motion'])
         // Two of the five strips it replaces were not exposed as tabs at all.
         expect(wrapper.get('[data-talos-tab="design"]').attributes('aria-selected')).toBe('true')
         expect(wrapper.get('[data-talos-tab="motion"]').attributes('aria-selected')).toBe('false')
@@ -189,7 +189,12 @@ describe('TalosThemedTabs swipe', () => {
         }
 
         it('moves the panel with the pointer, one pixel for one pixel', async () => {
-            const wrapper = mountTabs({ modelValue: 'motion' })
+            // 'design', not 'motion': the register only has two views since the
+            // dead Voice tab was retired 2026-08-23, so 'motion' is now the LAST
+            // one — dragging further off it would hit the edge-resistance case
+            // this test is deliberately not about. 'design' still has 'motion'
+            // beyond it either direction.
+            const wrapper = mountTabs({ modelValue: 'design' })
             await drag(wrapper, [[300, 200], [280, 202], [220, 204]])
 
             expect(panels(wrapper).style.transform).toBe('translate3d(-80px, 0, 0)')
@@ -225,7 +230,8 @@ describe('TalosThemedTabs swipe', () => {
         })
 
         it('springs back, visibly, when the drag was not far enough', async () => {
-            const wrapper = mountTabs({ modelValue: 'motion' })
+            // 'design', not 'motion' — see the note on the 1:1-follow test above.
+            const wrapper = mountTabs({ modelValue: 'design' })
             await drag(wrapper, [[300, 200], [270, 202]])
             expect(panels(wrapper).style.transform).toBe('translate3d(-30px, 0, 0)')
 
@@ -290,7 +296,7 @@ describe('TalosThemedTabs swipe', () => {
     it('stops at the ends instead of wrapping round', async () => {
         // On the last view a further swipe should feel like the end of the
         // strip, not like a jump back to the first.
-        const last = mountTabs({ modelValue: 'voice' })
+        const last = mountTabs({ modelValue: 'motion' })
         await swipe(last, 240, 110)
         expect(last.emitted('update:modelValue')).toBeUndefined()
 
