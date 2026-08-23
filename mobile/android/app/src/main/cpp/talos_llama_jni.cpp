@@ -263,6 +263,31 @@ struct talos_session {
      * ogni turno si perderebbero temperatura e filtri.
      */
     common_params_sampling sampling;
+
+    /**
+     * P1-1 blocco 2: il thread pool ESTERNO, se `talos_avvia_threadpool()`
+     * lo ha creato con successo — `nullptr` altrimenti, e in quel caso il
+     * contesto gira sul pool INTERNO di default che llama.cpp crea da solo
+     * (comportamento odierno, invariato: nessuna regressione se la
+     * creazione fallisce).
+     *
+     * ⛔ `threadpool_batch` può essere lo STESSO puntatore di `threadpool`
+     * quando i due carichi condividono un solo pool (vedi
+     * `talos_avvia_threadpool`): liberarli come se fossero sempre due
+     * oggetti distinti sarebbe una doppia `free` sullo stesso puntatore.
+     * `talos_ferma_threadpool()` lo confronta prima di liberare.
+     */
+    ggml_threadpool * threadpool       = nullptr;
+    ggml_threadpool * threadpool_batch = nullptr;
+    /**
+     * Risolto UNA VOLTA da `talos_avvia_threadpool()` via il registro dei
+     * backend (lo stesso meccanismo con cui la cura dell'abort OpenCL
+     * espone il suo setter) — mai chiamato direttamente per nome, così
+     * questo file non lega la build a una versione precisa del simbolo.
+     * `nullptr` finché nessun pool è mai stato creato: è anche il modo con
+     * cui `talos_ferma_threadpool()` sa se c'è qualcosa da fare.
+     */
+    void (*threadpool_free_fn)(ggml_threadpool *) = nullptr;
 };
 
 /**
@@ -276,6 +301,119 @@ struct talos_session {
 bool talos_deve_fermarsi(void * opaco) noexcept {
     auto * session = static_cast<talos_session *>(opaco);
     return session != nullptr && session->cancelled.load(std::memory_order_relaxed);
+}
+
+/**
+ * P1-1 blocco 2 — avvia un thread pool ESTERNO e lo aggancia al contesto.
+ *
+ * Oggi llama.cpp usa solo il pool INTERNO di default: nessuna affinity,
+ * nessun controllo di poll o priorità. Questo è il meccanismo per
+ * sostituirlo con uno gestito da noi — precondizione per l'affinity CPU
+ * vera, che è un blocco successivo. QUESTO blocco non sceglie ancora quali
+ * core: `ggml_threadpool_params_init` con una maschera tutta a zero è la
+ * stessa "nessuna affinity esplicita" di oggi. L'obiettivo qui è dimostrare
+ * che il MECCANISMO di attach/detach è sicuro, non ancora quale cpumask
+ * sia la scelta giusta — quella arriva quando la topologia di
+ * `nativeCpuTopology()` (blocco 1) diventa candidati reali da misurare.
+ *
+ * Segue la sequenza verificata nel sorgente vendored (`common/common.cpp`,
+ * `common_threadpools::init`): i pool si creano DOPO che il contesto
+ * esiste, mai prima; se i due carichi hanno lo stesso `n_threads` si crea
+ * UN pool solo e lo si condivide, e quello "batch" parte `paused = true` —
+ * vedi `ggml-org/llama.cpp#27138`, citato anche a monte nel sorgente
+ * vendored: due pool con `n_threads` diversi non si possono condividere.
+ *
+ * ⛔ Se la creazione fallisce in un punto qualsiasi, si fa cleanup e si
+ * ESCE SENZA fare l'attach: il contesto resta sul pool interno di default,
+ * l'apertura del modello non fallisce per questo. `session->threadpool*`
+ * restano `nullptr`, e `talos_ferma_threadpool()` su una sessione così è
+ * un no-op sicuro.
+ */
+void talos_avvia_threadpool(talos_session * session, llama_context * ctx,
+                            int n_threads, int n_threads_batch) noexcept {
+    if (session == nullptr || ctx == nullptr) return;
+
+    auto * cpu_dev = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU);
+    if (cpu_dev == nullptr) {
+        TALOS_LOGE("thread pool esterno: nessun backend CPU registrato, resta quello di default");
+        return;
+    }
+    auto * reg = ggml_backend_dev_backend_reg(cpu_dev);
+    auto * nuovo_fn = (decltype(ggml_threadpool_new) *)
+        ggml_backend_reg_get_proc_address(reg, "ggml_threadpool_new");
+    auto * libera_fn = (decltype(ggml_threadpool_free) *)
+        ggml_backend_reg_get_proc_address(reg, "ggml_threadpool_free");
+    if (nuovo_fn == nullptr || libera_fn == nullptr) {
+        TALOS_LOGE("thread pool esterno: simboli non risolti, resta quello di default");
+        return;
+    }
+
+    const int nt       = n_threads > 0 ? n_threads : 4;
+    const int nt_batch  = n_threads_batch > 0 ? n_threads_batch : nt;
+
+    ggml_threadpool_params parametri_batch;
+    ggml_threadpool_params_init(&parametri_batch, nt_batch);
+    ggml_threadpool_params parametri;
+    ggml_threadpool_params_init(&parametri, nt);
+
+    ggml_threadpool * pool       = nullptr;
+    ggml_threadpool * pool_batch = nullptr;
+
+    // Stesso numero per i due carichi ⇒ UN pool solo, condiviso. Crearne
+    // due con parametri identici sarebbe spreco di thread reali, non
+    // ridondanza innocua.
+    if (!ggml_threadpool_params_match(&parametri, &parametri_batch)) {
+        pool_batch = nuovo_fn(&parametri_batch);
+        if (pool_batch == nullptr) {
+            TALOS_LOGE("thread pool esterno (batch) non creato, resta quello di default");
+            return;
+        }
+        // Il pool non-batch parte in pausa: lo si risveglia solo quando
+        // tocca davvero generare, così i suoi thread non si contendono i
+        // core col prefill che sta già girando sull'altro pool.
+        parametri.paused = true;
+    }
+    pool = nuovo_fn(&parametri);
+    if (pool == nullptr) {
+        TALOS_LOGE("thread pool esterno non creato, resta quello di default");
+        if (pool_batch != nullptr) libera_fn(pool_batch);
+        return;
+    }
+
+    llama_attach_threadpool(ctx, pool, pool_batch != nullptr ? pool_batch : pool);
+    session->threadpool         = pool;
+    session->threadpool_batch   = pool_batch != nullptr ? pool_batch : pool;
+    session->threadpool_free_fn = libera_fn;
+    TALOS_LOGI("thread pool esterno agganciato: %d gen / %d prefill%s",
+               nt, nt_batch, pool_batch != nullptr ? "" : " (condiviso)");
+}
+
+/**
+ * Lo stacca dal contesto e lo libera — nell'ordine che non lascia un uso
+ * dopo la liberazione. Va chiamata PRIMA di ogni `llama_free(ctx)` che
+ * tocca un contesto su cui `talos_avvia_threadpool()` è stata chiamata: ce
+ * ne sono quattro nel file, e uno (`nativeReopenContext`) sostituisce il
+ * contesto invece di chiudere la sessione — anche lì il pool VECCHIO va
+ * fermato mentre `session->ctx` è ancora il vecchio, prima che sparisca,
+ * non dopo averlo già sostituito.
+ *
+ * No-op sicuro se non è mai stato avviato, o se `talos_avvia_threadpool()`
+ * è tornata senza attaccare niente (i puntatori sono ancora `nullptr`).
+ */
+void talos_ferma_threadpool(talos_session * session) noexcept {
+    if (session == nullptr || session->threadpool_free_fn == nullptr) return;
+    if (session->ctx != nullptr) llama_detach_threadpool(session->ctx);
+    // threadpool_batch può essere lo STESSO puntatore di threadpool (pool
+    // condiviso): liberarlo due volte sarebbe una doppia `free`.
+    if (session->threadpool_batch != nullptr && session->threadpool_batch != session->threadpool) {
+        session->threadpool_free_fn(session->threadpool_batch);
+    }
+    if (session->threadpool != nullptr) {
+        session->threadpool_free_fn(session->threadpool);
+    }
+    session->threadpool         = nullptr;
+    session->threadpool_batch   = nullptr;
+    session->threadpool_free_fn = nullptr;
 }
 
 /** Millisecondi da un istante, con un orologio che nessuno può spostare. */
@@ -1595,6 +1733,12 @@ static jlong talos_apri_modello(JNIEnv * env, jstring modelPath,
     // `llama_set_abort_callback` fa esattamente questo, e senza ricreare niente.
     llama_set_abort_callback(ctx, talos_deve_fermarsi, session);
 
+    // P1-1 blocco 2: stesso motivo dell'abort callback appena sopra — il
+    // pool si aggancia DOPO che la sessione esiste, non prima. Se fallisce,
+    // il log lo dice e il contesto resta sul pool interno di default: non
+    // è un motivo per far fallire l'apertura del modello.
+    talos_avvia_threadpool(session, ctx, ctx_params.n_threads, ctx_params.n_threads_batch);
+
     // Costruito una volta, all'apertura: compilare un template Jinja a ogni
     // messaggio sarebbe lavoro rifatto identico per tutta la conversazione.
     // Un modello senza template non è un errore fatale — la formattazione lo
@@ -2526,6 +2670,13 @@ Java_ai_talos_TalosLlamaNative_nativeReopenContext(JNIEnv * env, jclass, jlong h
         return 0;
     }
 
+    // P1-1 blocco 2: il pool VECCHIO e' agganciato al ctx VECCHIO — va
+    // fermato mentre session->ctx e' ancora lui, prima che la riga sotto lo
+    // sostituisca. Fermarlo dopo la sostituzione chiamerebbe
+    // llama_detach_threadpool sul contesto SBAGLIATO (il nuovo, che non ha
+    // ancora nessun pool esterno agganciato).
+    talos_ferma_threadpool(session);
+
     // Da qui in poi si sostituisce, e l'ordine conta: prima si stacca il
     // vecchio dalla sessione, poi lo si libera. Un contesto liberato ma ancora
     // puntato e' un uso dopo la liberazione che si manifesta a caso.
@@ -2544,6 +2695,10 @@ Java_ai_talos_TalosLlamaNative_nativeReopenContext(JNIEnv * env, jclass, jlong h
     session->cached.clear();
     if (vecchioCampionatore != nullptr) common_sampler_free(vecchioCampionatore);
     if (vecchio != nullptr) llama_free(vecchio);
+
+    // P1-1 blocco 2: session->ctx e' gia' il nuovo, qui sopra — il pool
+    // nuovo si aggancia a LUI, mai al vecchio che e' appena stato liberato.
+    talos_avvia_threadpool(session, nuovo, ctx_params.n_threads, ctx_params.n_threads_batch);
 
     llama_set_abort_callback(nuovo, talos_deve_fermarsi, session);
     g_context_rebuild_count.fetch_add(1, std::memory_order_relaxed);
@@ -3347,6 +3502,11 @@ Java_ai_talos_TalosLlamaNative_nativeClose(JNIEnv *, jclass, jlong handle) {
     std::lock_guard<std::mutex> serratura(g_motore);
     talos_session * session = as_session(handle);
     if (session == nullptr) return;
+    // P1-1 blocco 2: il pool si stacca e si libera PRIMA di llama_free —
+    // stesso ordine del percorso "targeted", stesso motivo (§2.3 della
+    // consegna: un uso dopo la liberazione che si manifesta a caso, non
+    // sempre).
+    talos_ferma_threadpool(session);
     if (session->sampler != nullptr) common_sampler_free(session->sampler);
     if (session->ctx != nullptr) llama_free(session->ctx);
     if (session->model != nullptr) llama_model_free(session->model);
