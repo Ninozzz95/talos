@@ -467,12 +467,19 @@ class TalosNeuralVoicePlugin : Plugin() {
         val text = call.getString("text")?.trim().orEmpty()
         val profileId = call.getString("profileId")
         val readingId = call.getString("readingId")
-        if (text.isEmpty() || profileId.isNullOrBlank() || readingId.isNullOrBlank()) {
+        val utteranceId = call.getString("utteranceId") ?: readingId
+        if (text.isEmpty() || profileId.isNullOrBlank() || readingId.isNullOrBlank() || utteranceId.isNullOrBlank()) {
             call.reject("text, profileId and readingId are required")
             return
         }
         val rate = call.getFloat("rate") ?: 1f
         val pitch = call.getFloat("pitch") ?: 1f
+        val queueMode = try {
+            TalosVoiceQueueMode.fromWire(call.getString("queue"))
+        } catch (error: IllegalArgumentException) {
+            call.reject(error.message ?: "invalid queue mode", error)
+            return
+        }
         val traceId = call.getString("traceId")
         val diagnosticRoute = if (traceId != null) {
             val source = call.getString("source")
@@ -514,17 +521,18 @@ class TalosNeuralVoicePlugin : Plugin() {
             text,
             profile.promptAudioCodes,
             diagnosticRoute = diagnosticRoute,
+            queueMode = queueMode,
         ) { result ->
             val payload = result.fold(
                 onSuccess = { r ->
                     JSObject()
-                        .put("readingId", readingId)
+                        .put("readingId", utteranceId)
                         .put("cancelled", r.cancelled)
                         .put("hardwareUnderruns", r.hardwareUnderruns)
                         .put("elapsedMs", r.elapsedMs)
                 },
                 onFailure = { e ->
-                    JSObject().put("readingId", readingId).put("error", e.message ?: "synthesis failed")
+                    JSObject().put("readingId", utteranceId).put("error", e.message ?: "synthesis failed")
                 },
             )
             notifyListeners(if (result.isSuccess) "talosNeuralVoiceDone" else "talosNeuralVoiceError", payload)
