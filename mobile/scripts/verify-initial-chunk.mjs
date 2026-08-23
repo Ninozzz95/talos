@@ -492,7 +492,21 @@ import { resolve } from 'node:path'
  * 611.270 - a 611.300 resterebbero 30 byte, la stessa trappola di sempre.
  * Mille lascia di nuovo margine vero.
  */
-const DEFAULT_MAXIMUM_BYTES = 612_000
+/*
+ * ⛔ 612.000 → 613.000, owner 2026-08-23, per la 0.1.19 (voce fluida).
+ *
+ * Il router vocale in `useTalosSpeech.ts` e' stato riscritto per parlare col
+ * nuovo motore Pocket TTS (stutter e underrun corretti, misurato sul Pad),
+ * e la riscrittura e' rimasta nel grafo statico come il resto del router —
+ * la stessa area gia' costata 611.000 e 612.000 nei due aumenti precedenti.
+ * Misurato: 612.640, 640 byte sopra tetto.
+ *
+ * ⛔ Owner, in sede di decisione: alza al passo tondo consueto (mille byte),
+ * non al minimo esatto — la stessa regola scritta piu' in alto in questo
+ * file: un margine di poche decine di byte non e' un margine, e' una
+ * trappola sotto la prossima riga.
+ */
+const DEFAULT_MAXIMUM_BYTES = 613_000
 const DEFAULT_MAXIMUM_CSS_BYTES = 220_000
 const DYNAMIC_BOUNDARIES = [
     {
