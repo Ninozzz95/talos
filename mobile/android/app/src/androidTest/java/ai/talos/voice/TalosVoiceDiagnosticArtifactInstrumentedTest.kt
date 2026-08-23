@@ -65,9 +65,10 @@ class TalosVoiceDiagnosticArtifactInstrumentedTest {
         val file = session.finish(
             TalosVoiceDiagnosticOutcome(
                 termination = "DONE",
-                resolvedEngine = "personal",
+                resolvedEngine = TalosPocketConditioningPayload.BACKEND,
                 resolvedLocale = "it-IT",
                 resolvedProfileId = rawProfileId,
+                fallbackReason = null,
                 eventCount = session.eventCount(),
                 answers = TalosVoiceDiagnosticAnswers(
                     dominantGraph = "UNKNOWN_NOT_PROFILED",
@@ -91,6 +92,8 @@ class TalosVoiceDiagnosticArtifactInstrumentedTest {
         assertEquals(1, root.getInt("schemaVersion"))
         assertEquals(3, root.getJSONArray("events").length())
         assertEquals(64, root.getJSONObject("route").getString("requestedProfileIdSha256").length)
+        assertTrue(root.getJSONObject("route").has("fallbackReason"))
+        assertTrue(root.getJSONObject("route").isNull("fallbackReason"))
         val answers = root.getJSONObject("answers")
         listOf(
             "dominant_graph",

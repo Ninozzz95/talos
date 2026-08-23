@@ -82,6 +82,7 @@ internal data class TalosVoiceDiagnosticOutcome(
     val resolvedEngine: String,
     val resolvedLocale: String,
     val resolvedProfileId: String?,
+    val fallbackReason: String? = null,
     val eventCount: Int,
     val answers: TalosVoiceDiagnosticAnswers,
 )
@@ -144,6 +145,7 @@ internal object TalosVoiceDiagnosticArtifactWriter {
         .put("resolvedLocale", outcome.resolvedLocale)
         .put("resolvedEngine", outcome.resolvedEngine)
         .put("resolvedProfileIdSha256", hashNullable(outcome.resolvedProfileId))
+        .putNullable("fallbackReason", outcome.fallbackReason)
 
     private fun eventToJson(value: TalosVoiceDiagnosticEvent): JSONObject = JSONObject()
         .put("sequence", value.sequence)
@@ -191,4 +193,3 @@ internal object TalosVoiceDiagnosticArtifactWriter {
     private fun JSONObject.putNullable(name: String, value: Any?): JSONObject =
         put(name, value ?: JSONObject.NULL)
 }
-
