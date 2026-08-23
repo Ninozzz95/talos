@@ -56,4 +56,8 @@ export interface TalosPersonalSpeakRequest {
     rate: number
     pitch: number
     queue?: 'flush' | 'add'
+    /** Present only for an armed diagnostic production route. */
+    traceId?: string
+    source?: 'chat' | 'assistant' | 'manual' | 'preview' | 'instrumentation'
+    locale?: string
 }

@@ -1,6 +1,11 @@
 package ai.talos.voice
 
 import android.Manifest
+import ai.talos.BuildConfig
+import ai.talos.voice.research.TalosVoiceDiagnosticConfig
+import ai.talos.voice.research.TalosVoiceDiagnosticProbe
+import ai.talos.voice.research.TalosVoiceDiagnosticRoute
+import ai.talos.voice.research.TalosVoiceDiagnosticSession
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -11,6 +16,8 @@ import com.getcapacitor.annotation.CapacitorPlugin
 import com.getcapacitor.annotation.Permission
 import com.getcapacitor.annotation.PermissionCallback
 import java.io.File
+import java.io.FileInputStream
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -53,6 +60,7 @@ class TalosNeuralVoicePlugin : Plugin() {
     private val captureCancelled = AtomicBoolean(false)
     private val micLevelPeekActive = AtomicBoolean(false)
     private val enrollmentSlots = ConcurrentHashMap<Int, TalosVoiceCaptureResult>()
+    private val diagnosticSessions = ConcurrentHashMap<String, TalosVoiceDiagnosticSession>()
     @Volatile private var pendingProfile: TalosVoiceProfileV1? = null
     private val sessionStore: TalosVoiceEnrollmentSessionStore
         get() = TalosVoiceEnrollmentSessionStore(context.applicationContext)
@@ -96,6 +104,150 @@ class TalosNeuralVoicePlugin : Plugin() {
     // ---------------------------------------------------------------
     // Status / profiles / playback - §41's shape.
     // ---------------------------------------------------------------
+
+    /**
+     * Opt-in and fail-closed. The host campaign supplies Git/APK/USB
+     * provenance; this method recomputes the installed APK hash before it
+     * arms the one-shot production probe. Normal speech never creates a
+     * session and therefore pays no diagnostic work.
+     */
+    @PluginMethod
+    fun beginDiagnostics(call: PluginCall) {
+        val traceId = call.getString("traceId")
+        val readingId = call.getString("readingId")
+        val source = call.getString("source")
+        val requestedLocale = call.getString("requestedLocale")
+        val requestedEngine = call.getString("requestedEngine")
+        val requestedProfileId = call.getString("requestedProfileId")
+        val appCommit = call.getString("appCommit")
+        val expectedApkSha256 = call.getString("expectedApkSha256")
+        val usbTransportProof = call.getString("usbTransportProof")
+        if (
+            traceId.isNullOrBlank() || readingId.isNullOrBlank() || source.isNullOrBlank() ||
+            requestedLocale.isNullOrBlank() || requestedEngine.isNullOrBlank() ||
+            appCommit.isNullOrBlank() || expectedApkSha256.isNullOrBlank() || usbTransportProof.isNullOrBlank()
+        ) {
+            call.reject("diagnostic route and provenance are required")
+            return
+        }
+
+        enrollmentLane.execute {
+            runCatching {
+                val route = TalosVoiceDiagnosticRoute(
+                    traceId = traceId,
+                    readingId = readingId,
+                    source = source,
+                    requestedLocale = requestedLocale,
+                    requestedEngine = requestedEngine,
+                    requestedProfileId = requestedProfileId,
+                )
+                val apk = File(context.applicationInfo.sourceDir)
+                val actualApkSha256 = sha256(apk)
+                require(actualApkSha256 == expectedApkSha256) {
+                    "APK SHA-256 mismatch: expected=$expectedApkSha256 actual=$actualApkSha256"
+                }
+                val manifest = readManifest()
+                val external = context.applicationContext.getExternalFilesDir(null)
+                    ?: error("no-external-storage")
+                val session = TalosVoiceDiagnosticSession(
+                    TalosVoiceDiagnosticConfig(
+                        outputDirectory = File(external, "research/voice"),
+                        route = route,
+                        appVersion = BuildConfig.VERSION_NAME,
+                        appCommit = appCommit,
+                        apkSha256 = actualApkSha256,
+                        modelRevision = manifest.engineBuild,
+                        modelSha256 = modelManifestSha256(manifest),
+                        deviceFingerprint = android.os.Build.FINGERPRINT,
+                        usbTransportProof = usbTransportProof,
+                    ),
+                )
+                check(diagnosticSessions.putIfAbsent(traceId, session) == null) {
+                    "diagnostic trace already exists: $traceId"
+                }
+                try {
+                    TalosVoiceDiagnosticProbe.armNextProductionRun(session)
+                } catch (error: Throwable) {
+                    diagnosticSessions.remove(traceId, session)
+                    throw error
+                }
+                actualApkSha256
+            }.fold(
+                onSuccess = { actualApkSha256 ->
+                    call.resolve(
+                        JSObject()
+                            .put("armed", true)
+                            .put("actualApkSha256", actualApkSha256),
+                    )
+                },
+                onFailure = { error -> call.reject(error.message ?: "begin diagnostics failed", error as? Exception) },
+            )
+        }
+    }
+
+    @PluginMethod
+    fun endDiagnostics(call: PluginCall) {
+        resolveFinishedDiagnostic(call, includeEventCount = true)
+    }
+
+    @PluginMethod
+    fun exportDiagnostics(call: PluginCall) {
+        resolveFinishedDiagnostic(call, includeEventCount = false)
+    }
+
+    private fun resolveFinishedDiagnostic(call: PluginCall, includeEventCount: Boolean) {
+        val traceId = call.getString("traceId")
+        if (traceId.isNullOrBlank()) {
+            call.reject("traceId is required")
+            return
+        }
+        val session = diagnosticSessions[traceId]
+        if (session == null) {
+            call.reject("diagnostic trace not found: $traceId")
+            return
+        }
+        val artifact = session.artifactFileOrNull()
+        if (artifact == null || !artifact.isFile) {
+            call.reject("diagnostic trace is not finished: $traceId")
+            return
+        }
+        val payload = JSObject()
+            .put("traceId", traceId)
+            .put("artifactPath", artifact.absolutePath)
+        if (includeEventCount) payload.put("eventCount", session.eventCount())
+        call.resolve(payload)
+    }
+
+    private fun modelManifestSha256(manifest: TalosVoiceModelManifest): String {
+        val canonical = buildString {
+            append(manifest.schemaVersion).append('|').append(manifest.engineBuild).append('|')
+            manifest.artifacts.sortedBy { it.targetDir }.forEach { artifact ->
+                append(artifact.repo).append('@').append(artifact.revision).append('/').append(artifact.targetDir).append('|')
+                artifact.files.sortedBy { it.path }.forEach { file ->
+                    append(file.path).append(':').append(file.size).append(':').append(file.sha256).append('|')
+                }
+            }
+        }
+        return sha256(canonical.toByteArray(Charsets.UTF_8))
+    }
+
+    private fun sha256(file: File): String {
+        require(file.isFile) { "file does not exist for SHA-256: ${file.absolutePath}" }
+        val digest = MessageDigest.getInstance("SHA-256")
+        FileInputStream(file).use { input ->
+            val buffer = ByteArray(1024 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                if (read > 0) digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
+        .digest(bytes)
+        .joinToString("") { "%02x".format(it) }
 
     /**
      * `active` is deliberately absent here: this class has no knowledge of
@@ -321,6 +473,30 @@ class TalosNeuralVoicePlugin : Plugin() {
         }
         val rate = call.getFloat("rate") ?: 1f
         val pitch = call.getFloat("pitch") ?: 1f
+        val traceId = call.getString("traceId")
+        val diagnosticRoute = if (traceId != null) {
+            val source = call.getString("source")
+            val locale = call.getString("locale")
+            if (source.isNullOrBlank() || locale.isNullOrBlank()) {
+                call.reject("source and locale are required when traceId is present")
+                return
+            }
+            try {
+                TalosVoiceDiagnosticRoute(
+                    traceId = traceId,
+                    readingId = readingId,
+                    source = source,
+                    requestedLocale = locale,
+                    requestedEngine = "personal",
+                    requestedProfileId = profileId,
+                )
+            } catch (error: IllegalArgumentException) {
+                call.reject(error.message ?: "invalid diagnostic route", error)
+                return
+            }
+        } else {
+            null
+        }
 
         val profile = runCatching { enrollment().loadProfile(profileId) }.getOrNull()
         if (profile == null) {
@@ -334,7 +510,11 @@ class TalosNeuralVoicePlugin : Plugin() {
         // silently ignoring the caller's values.
         val ratePitchApplied = rate == 1f && pitch == 1f
 
-        host.submitSpeakStreamingWithReference(text, profile.promptAudioCodes) { result ->
+        host.submitSpeakStreamingWithReference(
+            text,
+            profile.promptAudioCodes,
+            diagnosticRoute = diagnosticRoute,
+        ) { result ->
             val payload = result.fold(
                 onSuccess = { r ->
                     JSObject()
