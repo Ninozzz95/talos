@@ -129,7 +129,47 @@ export async function talosLocalEngineDoctorRows(): Promise<TalosEngineDiagnosti
         }]
         : []
 
-    return [...righeAttrezzi, ...talosEngineDiagnosticRows({
+    /**
+     * P1-5 — la RACCOMANDAZIONE del selettore break-even, non la sua
+     * applicazione: mostrata, mai imposta automaticamente (design.md §32,
+     * "niente si promuove da telemetria passiva"). Con zero o un solo
+     * profilo qualificato non c'è nulla da confrontare, e la riga non
+     * compare — un confronto fra un solo candidato non è un confronto.
+     *
+     * ⛔ `outputTokensDiRiferimento` è una lunghezza di risposta DICHIARATA,
+     * non misurata dalla conversazione corrente (questa funzione non la
+     * conosce): 256 token, una risposta di media lunghezza, non il tetto
+     * massimo — il tetto esagererebbe il vantaggio dei profili più rapidi
+     * a regime rispetto a un caso tipico.
+     */
+    const righeSelettore: TalosEngineDiagnosticRow[] = []
+    if (percorsoCaricato) {
+        const [{ talosLocalPerformanceProfiles }, { talosSelectBestProfile }] = await Promise.all([
+            import('@/services/localEngine'),
+            import('@/lib/models/localProfileSelector'),
+        ])
+        const profili = await talosLocalPerformanceProfiles(percorsoCaricato).catch(() => [])
+        if (profili.length >= 2) {
+            const OUTPUT_TOKENS_DI_RIFERIMENTO = 256
+            // ⛔ Il backend ATTIVO ora non è ancora leggibile da qui (B1 lo
+            // scrive lato nativo, nessun ponte TS lo espone ancora): `null`
+            // è l'onestà giusta, non un'invenzione — il selettore con
+            // `null` sceglie comunque il migliore per stima assoluta,
+            // senza applicare la regola del rumore a un profilo che non sa
+            // essere quello attivo.
+            const scelto = talosSelectBestProfile(profili, null, OUTPUT_TOKENS_DI_RIFERIMENTO)
+            if (scelto) {
+                righeSelettore.push({
+                    id: 'engine-profile-selector',
+                    labelKey: 'doctor.recommendedProfile',
+                    value: scelto.backendDevice ?? scelto.backendRegistry,
+                    ok: true,
+                })
+            }
+        }
+    }
+
+    return [...righeAttrezzi, ...righeSelettore, ...talosEngineDiagnosticRows({
         available: stato?.available ?? false,
         backends: stato?.backends ?? '',
         loadedPath: stato?.loadedPath ?? null,

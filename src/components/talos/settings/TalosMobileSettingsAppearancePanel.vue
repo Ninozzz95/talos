@@ -24,6 +24,8 @@ import {
     TALOS_INTERFACE_PROFILES,
     TALOS_MOTION_QUALITY_LEVELS,
     TALOS_MOTION_RENDERER_MODES,
+    TALOS_MOTION_SCENE_IDS,
+    type TalosMotionSceneId,
 } from '@/motion-v6/contracts'
 import { TALOS_FONT_SCALE_OPTIONS, type TalosFontScale } from '@/lib/talosFontScale'
 import { useSettingsStore, type TalosMotionPreferencePatch } from '@/stores/settings'
@@ -44,6 +46,19 @@ const { t } = useTalosI18n()
 const themeItems = computed(() => TALOS_THEME_PRESETS.map((preset) => ({
     value: preset.id,
     label: t(`appearance.themeLabels.${preset.id}`),
+})))
+/**
+ * Owner 2026-08-23: "posso mettere lo sfondo di terminal anche su calma" — the
+ * scene id and the color palette were already independent in
+ * `resolveTalosWorkspaceMotionV6` (`scene_override ?? themeId` picks the scene,
+ * `identity.semantic_palette` always comes from the active theme regardless).
+ * The names are shared with `themeItems` on purpose: fourteen scenes, fourteen
+ * theme ids, same set — reusing `themeLabels` keeps one name per scene instead
+ * of inventing a second vocabulary for the same fourteen things.
+ */
+const sceneOverrideItems = computed(() => TALOS_MOTION_SCENE_IDS.map((id) => ({
+    value: id,
+    label: t(`appearance.themeLabels.${id}`),
 })))
 const modeItems = computed(() => TALOS_THEME_MODE_OPTIONS.map((mode) => ({
     value: mode.value,
@@ -123,6 +138,15 @@ function changeTheme(value: string): void {
 
 function changeMode(value: string): void {
     void theme.setMode(value as TalosThemeMode)
+}
+
+/**
+ * `TalosThemedSelect`'s built-in "none" slot emits `''`, not `null` — the same
+ * idiom `composerPlus`'s disabled state and others already use. `''` here means
+ * "no override": the runtime falls back to the active theme's own scene.
+ */
+function setSceneOverride(value: string): void {
+    void settings.setMotionPreferences({ scene_override: value === '' ? null : value as TalosMotionSceneId })
 }
 
 function setChatLayout(key: 'bubble_scale' | 'composer_mode' | 'mobile_window_presentation' | 'message_style', value: string): void {
@@ -258,6 +282,21 @@ const stickyListClass = 'sticky top-0 z-10 -mx-4 bg-[var(--talos-window-bg,var(-
                         :aria-label="t('appearance.themeColorMode')"
                         @update:model-value="changeMode"
                     />
+                </label>
+                <label class="block sm:col-span-2">
+                    <span :class="selectLabelClass">{{ t('appearance.sceneOverride') }}</span>
+                    <TalosThemedSelect
+                        class="mt-2"
+                        data-testid="talos-scene-override-select"
+                        :model-value="settings.state.motion_v6.scene_override ?? ''"
+                        :items="sceneOverrideItems"
+                        :none-label="t('appearance.sceneOverrideFollowTheme')"
+                        :aria-label="t('appearance.sceneOverrideAria')"
+                        @update:model-value="setSceneOverride"
+                    />
+                    <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">
+                        {{ t('appearance.sceneOverrideBody') }}
+                    </span>
                 </label>
                 <label class="block">
                     <span :class="selectLabelClass">{{ t('appearance.fontSize') }}</span>
@@ -449,13 +488,6 @@ const stickyListClass = 'sticky top-0 z-10 -mx-4 bg-[var(--talos-window-bg,var(-
 
             <div :class="switchRowClass"><span><span class="block text-sm font-semibold text-[var(--talos-text)]">{{ t('appearance.pauseWhenHidden') }}</span><span class="mt-1 block text-xs text-[var(--talos-muted)]">{{ t('appearance.pauseWhenHiddenBody') }}</span></span><TalosThemedSwitch class="mt-1" :aria-label="t('appearance.pauseWhenHiddenAria')" :model-value="settings.state.motion_v6.pause_when_hidden" @update:model-value="setMotionBoolean('pause_when_hidden', $event)" @click.stop /></div>
             <div :class="switchRowClass"><span><span class="block text-sm font-semibold text-[var(--talos-text)]">{{ t('appearance.respectDataSaver') }}</span><span class="mt-1 block text-xs text-[var(--talos-muted)]">{{ t('appearance.respectDataSaverBody') }}</span></span><TalosThemedSwitch class="mt-1" :aria-label="t('appearance.respectDataSaver')" :model-value="settings.state.motion_v6.respect_data_saver" @update:model-value="setMotionBoolean('respect_data_saver', $event)" @click.stop /></div>
-        </TabsContent>
-
-        <TabsContent
-            value="voice"
-            data-appearance-section="voice"
-            class="talos-motion-tab-panel pt-2 outline-none"
-        >
         </TabsContent>
     </TalosThemedTabs>
 </template>

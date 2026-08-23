@@ -276,6 +276,17 @@ public final class TalosLlamaEngine implements AutoCloseable {
     }
 
     /**
+     * B1 — la snapshot unica di configurazione effettiva, in JSON grezzo.
+     * Vedi {@link TalosLlamaNative#nativeRuntimeSnapshot} per la forma.
+     *
+     * @return {@code null} se il contesto non è (più) aperto.
+     */
+    public String runtimeSnapshot() {
+        vivo("runtimeSnapshot");
+        return TalosLlamaNative.nativeRuntimeSnapshot(handle);
+    }
+
+    /**
      * Congela su disco il prefisso già calcolato, coi suoi token.
      *
      * @return i byte scritti, 0 se non c'era niente da salvare o la scrittura

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import type { TalosPersonalVoiceProfileSummary } from '@/lib/voice/personalVoiceContracts'
 
 // Cleanup pass 2026-07-24: the voice picker was the only Settings dropdown on a
 // raw native <select>; it now uses the shared TalosThemedSelect for coherence.
@@ -20,6 +21,14 @@ const settings = vi.hoisted(() => ({
             rate: 1,
             pitch: 1,
             dictation_language: 'system',
+            // ⛔ 22/8: prima di questo giro il mock non li portava affatto -
+            // `engine`/`personal_profile_id` erano sempre `undefined`, mai
+            // `'personal'`, quindi il selettore voce/personale non era
+            // MAI esercitato da un test, per costruzione del mock stesso.
+            engine: 'system' as 'system' | 'personal',
+            personal_profile_id: null as string | null,
+            personal_rate: 1,
+            personal_pitch: 1,
         },
     },
     setVoicePreferences: vi.fn(),
@@ -42,15 +51,21 @@ vi.mock('@/stores/settings', () => ({
  */
 const personalVoice = vi.hoisted(() => ({
     status: vi.fn(async () => ({ supported: false, installed: false, ready: false, active: false })),
-    profiles: vi.fn(async () => []),
+    profiles: vi.fn(async (): Promise<TalosPersonalVoiceProfileSummary[]> => []),
     renameProfile: vi.fn(async () => undefined),
     deleteProfile: vi.fn(async () => undefined),
+    // ⛔ 22/8: nuovo - il pulsante di anteprima (per-profilo e quello
+    // condiviso «Anteprima voce») lo chiama davvero, ora che una voce
+    // personale può essere la scelta attiva.
+    speak: vi.fn(async () => undefined),
+    speakAdapter: vi.fn(),
 }))
 vi.mock('@/services/personalVoice', () => ({
     talosPersonalVoiceStatus: personalVoice.status,
     talosPersonalVoiceProfiles: personalVoice.profiles,
     talosRenamePersonalVoiceProfile: personalVoice.renameProfile,
     talosDeletePersonalVoiceProfile: personalVoice.deleteProfile,
+    talosPersonalVoiceSpeechAdapter: personalVoice.speakAdapter,
 }))
 
 const voiceModelInstall = vi.hoisted(() => ({
@@ -64,16 +79,57 @@ import TalosMobileVoiceSettings from '@/components/talos/settings/TalosMobileVoi
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 
 beforeEach(() => {
+    /*
+     * ⛔⛔ 22/8, trovato STRUMENTANDO un fallimento che sembrava un difetto
+     * del componente e non lo era: `anteprimaFraPoco()` accoda un
+     * `window.setTimeout(preview, 420ms)` reale a ogni cambio di
+     * `selectedVoice` (`watch` in fondo al componente), e NESSUN test qui
+     * chiama `wrapper.unmount()` - quindi quel timeout non viene MAI
+     * ripulito (l'`onBeforeUnmount` che lo cancellerebbe non scatta mai) e
+     * resta appeso nel VERO event loop di Node. Con abbastanza test di
+     * fila la somma dei millisecondi REALI supera i 420ms, e il timer di
+     * un mount di DIVERSI test fa scattare `preview()` DENTRO l'esecuzione
+     * di un test completamente diverso — misurato con un `console.log`
+     * usa-e-getta dentro `preview()`: una chiamata con lo stato di un
+     * mount vecchio comparsa nel bel mezzo di un test nuovo. Timer finti:
+     * il timeout resta accodato per sempre finché nessuno lo fa avanzare,
+     * quindi non spara mai in un test che non lo chiede esplicitamente.
+     */
+    // ⛔ SOLO setTimeout/clearTimeout: flushPromises() di Vue Test Utils usa
+    // setImmediate internamente - un vi.useFakeTimers() senza `toFake`
+    // finge anche lui per default, e ogni `await flushPromises()` di
+    // questo file (compresi i test preesistenti) resterebbe appeso.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     service.supported.mockReturnValue(true)
     settings.state.voice.dictation_language = 'system'
     // ⛔ PVOICE-SELECT-01 lo valorizza per simulare una scelta esplicita: se
     // un test fallisse PRIMA della sua riga di reset in fondo, il valore
     // resterebbe sporco per ogni test dopo di lui nello stesso file.
     settings.state.voice.voice_uri = null
+    settings.state.voice.engine = 'system'
+    settings.state.voice.personal_profile_id = null
+    // ⛔⛔ TROVATO: la CAUSA VERA di un fallimento che sembrava spuntare da
+    // un timer fantasma (indagato per primo, e sbagliato - il fix sopra
+    // resta comunque una buona igiene, non fa male) era molto più
+    // semplice: PVOICE-DEFAULT-01/SELECT-01 mutano `document.documentElement
+    // .lang` e chiamano DAVVERO `talos-voice-preview` (`service.speak`),
+    // e NESSUNO dei due veniva mai ripulito - ogni test dopo di loro
+    // ereditava sia la lingua sporca sia la cronologia di chiamate.
+    document.documentElement.lang = ''
+    service.speak.mockClear()
     settings.setVoicePreferences.mockClear()
     personalVoice.status.mockClear().mockResolvedValue({ supported: false, installed: false, ready: false, active: false })
     personalVoice.profiles.mockClear().mockResolvedValue([])
+    personalVoice.speak.mockClear()
+    personalVoice.speakAdapter.mockClear().mockReturnValue({ speak: personalVoice.speak, stop: vi.fn() })
     voiceModelInstall.install.mockReset()
+})
+
+afterEach(() => {
+    // ⛔ Simmetrico al `useFakeTimers` sopra - senza questo, i timer finti
+    // di un test resterebbero il regime attivo anche per file di test
+    // successivi nello stesso worker.
+    vi.useRealTimers()
 })
 
 describe('TalosMobileVoiceSettings', () => {
@@ -208,6 +264,175 @@ describe('TalosMobileVoiceSettings', () => {
         expect(voci.some((v) => v.value === 'it-it-x-ite-local')).toBe(true)
 
         settings.state.voice.voice_uri = null
+    })
+})
+
+/**
+ * ⛔⛔⛔ 22/8, owner, verbatim: «non c'è modo di selezionare la voce appena
+ * registrata nel selettore delle altre voci predefinite» + «non c'è modo di
+ * avere un'anteprima» + «assicurati al 100% che la voce codificata venga
+ * effettivamente usata per la chat e per l'assistente».
+ *
+ * MISURATO nel codice prima di correggere: `engine`/`personal_profile_id`
+ * esistevano già nello schema delle preferenze e la catena fino al motore
+ * nativo esisteva già intera (`talosSpeakForReading` in
+ * `useTalosSpeech.ts`) - ma NESSUN punto dell'interfaccia li scriveva mai.
+ * Una voce personale poteva essere registrata, salvata, rinominata,
+ * eliminata: MAI scelta come quella che legge davvero. Questi test provano
+ * la parte che questa sessione ha aggiunto - il selettore unificato, il
+ * ripescaggio onesto quando il profilo sparisce, e le due anteprime.
+ */
+function personalProfile(overrides: Partial<{
+    id: string
+    name: string
+    language: string
+    compatible: boolean
+}> = {}) {
+    return {
+        id: overrides.id ?? 'a1b2c3d4-e5f6-4789-a012-3456789abcde',
+        name: overrides.name ?? 'Antonino',
+        language: overrides.language ?? 'it',
+        style: 'neutral' as const,
+        engineBuild: 'x'.repeat(64),
+        compatible: overrides.compatible ?? true,
+        createdAtEpochMs: 0,
+        enrollmentDurationMs: 24000,
+    }
+}
+
+describe('TalosMobileVoiceSettings — la voce personale nel selettore di lettura (22/8)', () => {
+    it('offers a compatible personal profile in the SAME selector as device voices, ahead of them', async () => {
+        personalVoice.status.mockResolvedValue({ supported: true, installed: true, ready: true, active: false })
+        personalVoice.profiles.mockResolvedValue([personalProfile()])
+        const wrapper = mount(TalosMobileVoiceSettings)
+        await flushPromises()
+
+        const voci = wrapper.get('[data-testid="talos-tts-controls"]')
+            .findComponent(TalosThemedSelect).props('items') as { value: string, label: string }[]
+        expect(voci[0]).toEqual({ value: 'personal:a1b2c3d4-e5f6-4789-a012-3456789abcde', label: 'Antonino (it)' })
+    })
+
+    it('an incompatible profile never appears as a selectable reading voice', async () => {
+        personalVoice.status.mockResolvedValue({ supported: true, installed: true, ready: false, active: false })
+        personalVoice.profiles.mockResolvedValue([personalProfile({ compatible: false })])
+        const wrapper = mount(TalosMobileVoiceSettings)
+        await flushPromises()
+
+        const voci = wrapper.get('[data-testid="talos-tts-controls"]')
+            .findComponent(TalosThemedSelect).props('items') as { value: string }[]
+        expect(voci.some((v) => v.value.startsWith('personal:'))).toBe(false)
+    })
+
+    it('choosing a personal profile from the selector writes engine:personal and its id, never the device voice_uri', async () => {
+        personalVoice.status.mockResolvedValue({ supported: true, installed: true, ready: true, active: false })
+        personalVoice.profiles.mockResolvedValue([personalProfile()])
+        const wrapper = mount(TalosMobileVoiceSettings)
+        await flushPromises()
+
+        wrapper.get('[data-testid="talos-tts-controls"]').findComponent(TalosThemedSelect)
+            .vm.$emit('update:modelValue', 'personal:a1b2c3d4-e5f6-4789-a012-3456789abcde')
+        expect(settings.setVoicePreferences).toHaveBeenCalledWith({
+            engine: 'personal',
+            personal_profile_id: 'a1b2c3d4-e5f6-4789-a012-3456789abcde',
+        })
+    })
+
+    it('choosing a device voice after a personal one was active switches engine back to system', async () => {
+        personalVoice.status.mockResolvedValue({ supported: true, installed: true, ready: true, active: false })
+        personalVoice.profiles.mockResolvedValue([personalProfile()])
+        const wrapper = mount(TalosMobileVoiceSettings)
+        await flushPromises()
+
+        wrapper.get('[data-testid="talos-tts-controls"]').findComponent(TalosThemedSelect)
+            .vm.$emit('update:modelValue', 'v1')
+        expect(settings.setVoicePreferences).toHaveBeenCalledWith({ engine: 'system', voice_uri: 'v1' })
+    })
+
+    it('a selected profile that vanished or turned incompatible falls back to the system voice display honestly, like the router does', async () => {
+        settings.state.voice.engine = 'personal'
+        settings.state.voice.personal_profile_id = 'ghost-0000-0000-0000-000000000000'
+        personalVoice.status.mockResolvedValue({ supported: true, installed: true, ready: false, active: false })
+        personalVoice.profiles.mockResolvedValue([]) // il profilo scelto non c'è (mai esistito, o cancellato)
+        const wrapper = mount(TalosMobileVoiceSettings)
+        await flushPromises()
+
+        const trigger = wrapper.get(
+            '[data-testid="talos-tts-controls"] [data-testid="talos-themed-select-trigger"]',
+        )
+        expect(trigger.text()).not.toBe('')
+        expect(trigger.text()).not.toContain('Select an option')
+    })
+
+    it('the shared "Anteprima voce" button speaks through the personal engine when a personal voice is the active choice', async () => {
+        settings.state.voice.engine = 'personal'
+        settings.state.voice.personal_profile_id = 'a1b2c3d4-e5f6-4789-a012-3456789abcde'
+        settings.state.voice.personal_rate = 1.1
+        settings.state.voice.personal_pitch = 0.9
+        personalVoice.status.mockResolvedValue({ supported: true, installed: true, ready: true, active: false })
+        personalVoice.profiles.mockResolvedValue([personalProfile()])
+        const wrapper = mount(TalosMobileVoiceSettings)
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-voice-preview"]').trigger('click')
+        await flushPromises()
+
+        expect(personalVoice.speakAdapter).toHaveBeenCalledWith('a1b2c3d4-e5f6-4789-a012-3456789abcde')
+        expect(personalVoice.speak).toHaveBeenCalledWith(
+            'This is how TALOS will read replies aloud.',
+            expect.objectContaining({ rate: 1.1, pitch: 0.9 }),
+        )
+        // ⛔ AL CONTRARIO: il motore di sistema non deve essere toccato affatto.
+        expect(service.speak).not.toHaveBeenCalled()
+    })
+
+    it('each profile card offers its OWN preview, independent of which voice is currently active', async () => {
+        const other = personalProfile({ id: 'ffffffff-ffff-4fff-afff-ffffffffffff', name: 'Seconda voce' })
+        personalVoice.status.mockResolvedValue({ supported: true, installed: true, ready: true, active: false })
+        personalVoice.profiles.mockResolvedValue([personalProfile(), other])
+        // La scelta attiva è la PRIMA voce - la card della SECONDA deve comunque poter suonare la propria.
+        settings.state.voice.engine = 'personal'
+        settings.state.voice.personal_profile_id = 'a1b2c3d4-e5f6-4789-a012-3456789abcde'
+        const wrapper = mount(TalosMobileVoiceSettings)
+        await flushPromises()
+
+        const cards = wrapper.findAll('[data-testid="talos-personal-voice-profile"]')
+        expect(cards).toHaveLength(2)
+        await cards[1]!.get('[data-testid="talos-personal-voice-preview"]').trigger('click')
+        await flushPromises()
+
+        expect(personalVoice.speakAdapter).toHaveBeenCalledWith('ffffffff-ffff-4fff-afff-ffffffffffff')
+    })
+
+    it('an incompatible profile offers no preview button - the engine would refuse to speak it anyway', async () => {
+        personalVoice.status.mockResolvedValue({ supported: true, installed: true, ready: false, active: false })
+        personalVoice.profiles.mockResolvedValue([personalProfile({ compatible: false })])
+        const wrapper = mount(TalosMobileVoiceSettings)
+        await flushPromises()
+
+        expect(wrapper.find('[data-testid="talos-personal-voice-preview"]').exists()).toBe(false)
+    })
+
+    it('the "in use" badge marks only the profile that is actually the active reading voice', async () => {
+        const other = personalProfile({ id: 'ffffffff-ffff-4fff-afff-ffffffffffff', name: 'Seconda voce' })
+        personalVoice.status.mockResolvedValue({ supported: true, installed: true, ready: true, active: false })
+        personalVoice.profiles.mockResolvedValue([personalProfile(), other])
+        settings.state.voice.engine = 'personal'
+        settings.state.voice.personal_profile_id = 'ffffffff-ffff-4fff-afff-ffffffffffff'
+        const wrapper = mount(TalosMobileVoiceSettings)
+        await flushPromises()
+
+        const cards = wrapper.findAll('[data-testid="talos-personal-voice-profile"]')
+        expect(cards[0]!.find('[data-testid="talos-personal-voice-in-use"]').exists()).toBe(false)
+        expect(cards[1]!.find('[data-testid="talos-personal-voice-in-use"]').exists()).toBe(true)
+    })
+
+    it('AL CONTRARIO: with engine still system, no profile ever shows as "in use", even a compatible one', async () => {
+        personalVoice.status.mockResolvedValue({ supported: true, installed: true, ready: true, active: false })
+        personalVoice.profiles.mockResolvedValue([personalProfile()])
+        const wrapper = mount(TalosMobileVoiceSettings)
+        await flushPromises()
+
+        expect(wrapper.find('[data-testid="talos-personal-voice-in-use"]').exists()).toBe(false)
     })
 })
 

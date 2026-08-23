@@ -3,47 +3,20 @@ package ai.talos.voice
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.security.MessageDigest
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * The blueprint's actual Fase 3 exit gate, proven end to end: "ad app
- * riavviata da fredda parla col profilo cifrato in cache, senza il WAV
- * grezzo" - after commit, close the runtime entirely, reopen a fresh one
- * (the closest an instrumented test gets to a cold app restart without
- * actually killing the process), load ONLY the encrypted `.tvp` back from
- * disk, and synthesize with it. No live human voice to enroll here, same
- * limitation [TalosMossRuntimeEncodeReferenceInstrumentedTest] already
- * documents - so the "captured phrases" below are two halves of a builtin
- * voice's own decoded reference audio, exercising the real multi-phrase
- * merge path in [TalosVoiceEnrollment.buildProfile] without needing a
- * person to talk on cue.
- */
+/** Real-upstream gate. It is compiled locally and runs only when the owner authorizes the USB Pad. */
 @RunWith(AndroidJUnit4::class)
 class TalosVoiceEnrollmentInstrumentedTest {
-
-    private fun modelRoot(): File {
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
-        return TalosVoiceModelManager.modelRoot(context.getExternalFilesDir(null)!!)
-    }
-
-    /**
-     * Every regular file under filesDir, relative path only - used to prove
-     * nothing but the one `.tvp` lands on disk. Deliberately filesDir only,
-     * not cacheDir too: measured on device, cacheDir is the SAME directory
-     * the app's own WebView keeps its HTTP cache, code cache, and crash
-     * reporter (`Crash Reports/ANR Variations/…`) in - files that churn on
-     * their own regardless of anything this test does, so a snapshot diff
-     * against cacheDir is inherently noisy. filesDir carries none of that
-     * (confirmed: one unrelated `profileInstalled` marker file, nothing
-     * else) and is the only directory blueprint §7.1 or this class ever
-     * proposes writing to.
-     */
     private fun diskSnapshot(): Set<String> {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val root = context.filesDir
@@ -53,13 +26,9 @@ class TalosVoiceEnrollmentInstrumentedTest {
     @Test
     fun capturingOnePhraseWiresRecorderIntoQualityUsingTheRealMicrophone() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val enrollment = TalosVoiceEnrollment(context, modelRoot())
+        val enrollment = TalosVoiceEnrollment(context)
         val phrase = enrollment.captureOnePhrase(maxDurationMs = 1500)
 
-        // Ambient noise in a test lab is unpredictable - this cannot assert
-        // `verdict.accepted`, only that capture and evaluation are really
-        // wired together on the SAME data, the thing this class adds over
-        // calling TalosVoiceRecorder and TalosVoiceQuality separately.
         assertTrue("capture should return real samples", phrase.capture.pcm16Mono.isNotEmpty())
         assertEquals(phrase.capture.clientSilencedObserved, phrase.verdict.metrics.clientSilencedObserved)
         assertEquals(phrase.capture.droppedReadCount, phrase.verdict.metrics.droppedReadCount)
@@ -68,125 +37,202 @@ class TalosVoiceEnrollmentInstrumentedTest {
     }
 
     @Test
-    fun buildProfileRejectsZeroPhrasesAndMismatchedSampleRatesBeforeTouchingTheRuntime() {
-        val root = modelRoot()
-        assumeTrue(TalosVoiceModelManager.describeMissing(root), TalosVoiceModelManager.isPresent(root))
+    fun pocketV2EnrollmentBuildsPreviewsCommitsColdReopensAndLeavesNoRawPcmOnDisk() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val enrollment = TalosVoiceEnrollment(context, root)
-        val runtime = TalosMossRuntime.open(root, cpuThreads = 4)
-        try {
-            assertThrows(IllegalArgumentException::class.java) {
-                enrollment.buildProfile(emptyList(), "x", "it-IT", "neutral", consentVersion = 1, runtime = runtime)
-            }
-
-            val a = TalosVoiceCaptureResult(shortArrayOf(1, 2, 3), sampleRate = 48000, clientSilencedObserved = false, droppedReadCount = 0, cancelled = false)
-            val b = TalosVoiceCaptureResult(shortArrayOf(4, 5, 6), sampleRate = 24000, clientSilencedObserved = false, droppedReadCount = 0, cancelled = false)
-            assertThrows(IllegalArgumentException::class.java) {
-                enrollment.buildProfile(listOf(a, b), "x", "it-IT", "neutral", consentVersion = 1, runtime = runtime)
-            }
-        } finally {
-            runtime.close()
-        }
-    }
-
-    @Test
-    fun committedProfileSurvivesACloseAndFreshReopenAndLeavesNoRawPcmOnDisk() {
-        val root = modelRoot()
-        assumeTrue(TalosVoiceModelManager.describeMissing(root), TalosVoiceModelManager.isPresent(root))
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
-
-        val manifest = TalosMossManifest.fromJson(TalosMossManifest.readJson(TalosMossManifest.resolveManifestPath(root)))
-        val builtin = manifest.builtinVoices.firstOrNull { it.promptAudioCodes.isNotEmpty() }
-            ?: error("no builtin voice with prompt_audio_codes in the manifest - cannot run this test")
+        val pocketRoot = TalosPocketModelManager.modelRoot(requireNotNull(context.getExternalFilesDir(null)))
+        val manifest = TalosPocketModelManifest.fromJson(
+            JSONObject(context.assets.open(MANIFEST_ASSET).bufferedReader().use { it.readText() }),
+        ).requirePinnedBundle()
+        val status = TalosPocketModelManager.validate(pocketRoot, manifest)
+        assertTrue("Pocket model must be hash-verified before enrollment: $status", status is TalosPocketModelStatus.Ready)
+        val referenceFile = File(pocketRoot, PUBLIC_REFERENCE)
+        assertEquals(PUBLIC_REFERENCE_SHA256, sha256(referenceFile))
+        val reference = readMonoPcm16Wav(referenceFile)
+        val half = reference.samples.size / 2
+        require(half > reference.sampleRate / 2) { "public reference is too short for two accepted phrases" }
+        val captures = listOf(
+            TalosVoiceCaptureResult(reference.samples.copyOfRange(0, half), reference.sampleRate, false, 0, false),
+            TalosVoiceCaptureResult(reference.samples.copyOfRange(half, reference.samples.size), reference.sampleRate, false, 0, false),
+        )
 
         var profileId: String? = null
         val beforeDisk = diskSnapshot()
+        TalosVoiceHost.resetForTests()
         try {
-            // --- Session 1: decode a reference, build and commit a profile, then close everything. ---
-            val runtime1 = TalosMossRuntime.open(root, cpuThreads = 4)
-            val stream = runtime1.openCodecStream()
-            val decoded = try {
-                stream.runFrames(builtin.promptAudioCodes) ?: error("decode of builtin reference produced no audio")
-            } finally {
-                stream.close()
-            }
-            val channels = runtime1.channels
-            val monoSamples = decoded.samples
-            val half = monoSamples / 2
-            require(half > 0) { "decoded reference too short to split into two phrases" }
-            fun mono(fromSample: Int, toSample: Int): ShortArray = ShortArray(toSample - fromSample) { i ->
-                val sampleIndex = fromSample + i
-                var sum = 0f
-                for (c in 0 until channels) sum += decoded.interleavedPcm[sampleIndex * channels + c]
-                ((sum / channels).coerceIn(-1f, 1f) * 32767f).toInt().toShort()
-            }
-            val phraseOne = TalosVoiceCaptureResult(mono(0, half), sampleRate = runtime1.sampleRate, clientSilencedObserved = false, droppedReadCount = 0, cancelled = false)
-            val phraseTwo = TalosVoiceCaptureResult(mono(half, monoSamples), sampleRate = runtime1.sampleRate, clientSilencedObserved = false, droppedReadCount = 0, cancelled = false)
-
-            val enrollment1 = TalosVoiceEnrollment(context, root)
-            val profile = enrollment1.buildProfile(
-                acceptedPhrases = listOf(phraseOne, phraseTwo),
-                displayName = "Voce di prova arruolamento",
+            val host = TalosVoiceHost.get(context)
+            val enrollment = TalosVoiceEnrollment(context)
+            val built = host.buildPocketEnrollmentProfileBlocking(
+                acceptedPhrases = captures,
+                displayName = "Voce Pocket V2 di prova",
                 language = "it-IT",
                 style = "neutral",
                 consentVersion = 1,
-                runtime = runtime1,
             )
+            val profile = built.profile
             profileId = profile.header.profileId
 
-            assertEquals("Voce di prova arruolamento", profile.header.displayName)
-            assertEquals(64, profile.header.codecFingerprint.length)
-            assertEquals(64, profile.header.promptSchemaFingerprint.length)
-            assertTrue("profile must carry at least one reference frame", profile.promptAudioCodes.isNotEmpty())
-            assertEquals(profile.promptAudioCodes.size, profile.header.frameCount)
-            assertEquals(profile.promptAudioCodes.first().size, profile.header.quantizerCount)
-            assertTrue("merged two-phrase duration should be close to the whole decoded reference", profile.qualityMetrics.durationMs > 0)
-            assertTrue("built profile must not yet be saved to disk", diskSnapshot() == beforeDisk)
+            assertEquals(TalosVoiceProfileHeaderV2.SCHEMA_VERSION, profile.header.schemaVersion)
+            assertEquals(TalosPocketConditioningPayload.BACKEND, profile.header.preferredBackend)
+            assertEquals(null, profile.header.migratedFromSchemaVersion)
+            assertEquals(1, profile.backendPayloads.size)
+            assertTrue(profile.backendPayloads.single() is TalosPocketConditioningPayload)
+            assertTrue(profile.backendPayloads.none { it is TalosMossPromptPayload })
+            assertEquals(reference.sampleRate, built.sourceSampleRate)
+            assertEquals(reference.samples.size, built.sourceSamples)
+            assertTrue(built.referenceSamples <= reference.sampleRate * 12)
+            assertTrue(built.stageMetrics.map { it.stage }.containsAll(REQUIRED_BUILD_STAGES))
+            assertTrue(built.stageMetrics.all { it.durationNs >= 0L && it.startedAtNs > 0L && it.threadName == "talos-voice-owner" })
+            assertEquals(beforeDisk, diskSnapshot())
 
-            enrollment1.commit(profile)
-            assertTrue("profileId must appear in listProfileIds after commit", enrollment1.listProfileIds().contains(profileId))
+            val preview = host.speakStreamingWithProfileBlocking(
+                text = PREVIEW_TEXT,
+                locale = profile.header.language,
+                profile = profile,
+                maxFrames = 4,
+                seed = 19L,
+            )
+            assertFalse(preview.cancelled)
+            assertEquals(TalosPocketConditioningPayload.BACKEND, preview.resolvedEngine)
+            assertEquals("it-IT", preview.resolvedLocale)
+            assertEquals(profile.header.profileId, preview.resolvedProfileId)
+            assertEquals(TalosVoiceProfileHeaderV2.SCHEMA_VERSION, preview.resolvedProfileSchemaVersion)
+            assertEquals(null, preview.fallbackReason)
+            assertTrue(preview.generatedFrames > 0)
 
-            runtime1.close()
+            enrollment.commit(profile)
+            assertTrue(enrollment.listProfileIds().contains(profileId))
+            val newFiles = diskSnapshot() - beforeDisk
+            assertEquals(setOf("voice/profiles/$profileId.tvp"), newFiles)
 
-            // --- Prove no raw PCM/WAV was ever written: the ONLY new file anywhere under filesDir/cacheDir is the one encrypted .tvp. ---
-            val afterCommitDisk = diskSnapshot()
-            val newFiles = afterCommitDisk - beforeDisk
-            assertEquals("exactly one new file must exist after commit - the encrypted profile, nothing raw", setOf("voice/profiles/$profileId.tvp"), newFiles)
+            TalosVoiceHost.resetForTests()
+            val reopenedEnrollment = TalosVoiceEnrollment(context)
+            val loaded = reopenedEnrollment.loadProfile(requireNotNull(profileId))
+            assertEquals(profile, loaded)
+            val reopenedHost = TalosVoiceHost.get(context)
+            val coldRead = reopenedHost.speakStreamingWithProfileBlocking(
+                text = COLD_TEXT,
+                locale = loaded.header.language,
+                profile = loaded,
+                maxFrames = 4,
+                seed = 23L,
+            )
+            assertFalse(coldRead.cancelled)
+            assertEquals(TalosPocketConditioningPayload.BACKEND, coldRead.resolvedEngine)
+            assertEquals("it-IT", coldRead.resolvedLocale)
+            assertEquals(profileId, coldRead.resolvedProfileId)
+            assertEquals(null, coldRead.fallbackReason)
 
-            // --- Session 2: a fresh runtime, "cold" - load ONLY the encrypted profile back and synthesize with it. ---
-            val runtime2 = TalosMossRuntime.open(root, cpuThreads = 4)
-            try {
-                val enrollment2 = TalosVoiceEnrollment(context, root)
-                assertTrue("profile must still be listed by a fresh TalosVoiceEnrollment instance", enrollment2.listProfileIds().contains(profileId))
-                assertTrue("codec on disk must still match what the profile was fingerprinted against", enrollment2.isProfileStillCompatible(profileId))
+            writeEvidence(
+                File(requireNotNull(context.getExternalFilesDir(null)), "research/voice/pocket-v2-enrollment.json"),
+                JSONObject()
+                    .put("schemaVersion", 1)
+                    .put("profileSchemaVersion", profile.header.schemaVersion)
+                    .put("backend", profile.header.preferredBackend)
+                    .put("sourceSampleRate", built.sourceSampleRate)
+                    .put("sourceSamples", built.sourceSamples)
+                    .put("referenceSamples", built.referenceSamples)
+                    .put("conditioningFrames", built.conditioningFrames)
+                    .put("conditioningDimension", built.conditioningDimension)
+                    .put("previewResolvedEngine", preview.resolvedEngine)
+                    .put("previewResolvedLocale", preview.resolvedLocale)
+                    .put("coldReadResolvedEngine", coldRead.resolvedEngine)
+                    .put("stages", JSONArray(built.stageMetrics.map { metric ->
+                        JSONObject()
+                            .put("stage", metric.stage)
+                            .put("startedAtNs", metric.startedAtNs)
+                            .put("durationNs", metric.durationNs)
+                            .put("threadName", metric.threadName)
+                            .apply {
+                                metric.inputFrames?.let { put("inputFrames", it) }
+                                metric.outputSamples?.let { put("outputSamples", it) }
+                            }
+                    })),
+            )
 
-                val loaded = enrollment2.loadProfile(profileId)
-                assertEquals(profile.header, loaded.header)
-                assertEquals(profile.promptAudioCodes.size, loaded.promptAudioCodes.size)
-                for (i in profile.promptAudioCodes.indices) {
-                    assertTrue(profile.promptAudioCodes[i].contentEquals(loaded.promptAudioCodes[i]))
-                }
-
-                val tokenizerModel = TalosSentencePieceModel.parse(File(root, "MOSS-TTS-Nano-100M-ONNX/tokenizer.model").readBytes())
-                val tokenizer = TalosVoiceBpeTokenizer(tokenizerModel)
-                val textTokenIds = tokenizer.encode("Questo e' un arruolamento riavviato a freddo.")
-
-                val (audioTokens, cancelled) = runtime2.generateAudioTokensWithReference(
-                    textTokenIds = textTokenIds,
-                    promptAudioCodes = loaded.promptAudioCodes,
-                    maxFrames = 64,
-                )
-                assertFalse(cancelled)
-                assertTrue("synthesis from a cold-reopened runtime using only the saved encrypted profile must produce real frames", audioTokens.size >= 4)
-
-                enrollment2.deleteProfile(profileId)
-                assertFalse(enrollment2.listProfileIds().contains(profileId))
-                profileId = null
-            } finally {
-                runtime2.close()
-            }
+            reopenedEnrollment.deleteProfile(requireNotNull(profileId))
+            assertFalse(reopenedEnrollment.listProfileIds().contains(profileId))
+            profileId = null
         } finally {
+            TalosVoiceHost.resetForTests()
             profileId?.let { TalosVoiceProfileStore(context).delete(it) }
         }
+    }
+
+    private data class Wav(val sampleRate: Int, val samples: ShortArray)
+
+    private fun readMonoPcm16Wav(file: File): Wav {
+        val bytes = file.readBytes()
+        require(bytes.size >= 44 && ascii(bytes, 0, 4) == "RIFF" && ascii(bytes, 8, 4) == "WAVE") {
+            "public reference is not RIFF/WAVE"
+        }
+        val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        var cursor = 12
+        var channels = 0
+        var sampleRate = 0
+        var bitsPerSample = 0
+        var audioFormat = 0
+        var dataOffset = -1
+        var dataSize = -1
+        while (cursor + 8 <= bytes.size) {
+            val id = ascii(bytes, cursor, 4)
+            val size = buffer.getInt(cursor + 4)
+            require(size >= 0 && cursor + 8L + size <= bytes.size.toLong()) { "invalid WAV chunk $id" }
+            if (id == "fmt ") {
+                require(size >= 16) { "WAV fmt chunk is truncated" }
+                audioFormat = buffer.getShort(cursor + 8).toInt() and 0xffff
+                channels = buffer.getShort(cursor + 10).toInt() and 0xffff
+                sampleRate = buffer.getInt(cursor + 12)
+                bitsPerSample = buffer.getShort(cursor + 22).toInt() and 0xffff
+            } else if (id == "data") {
+                dataOffset = cursor + 8
+                dataSize = size
+                break
+            }
+            cursor += 8 + size + (size and 1)
+        }
+        require(audioFormat == 1 && channels == 1 && bitsPerSample == 16 && sampleRate in 8_000..192_000) {
+            "public reference must be mono PCM16"
+        }
+        require(dataOffset >= 0 && dataSize > 0 && dataSize % 2 == 0) { "WAV data chunk is invalid" }
+        return Wav(
+            sampleRate = sampleRate,
+            samples = ShortArray(dataSize / 2) { index -> buffer.getShort(dataOffset + index * 2) },
+        )
+    }
+
+    private fun ascii(bytes: ByteArray, offset: Int, length: Int): String =
+        bytes.copyOfRange(offset, offset + length).toString(Charsets.US_ASCII)
+
+    private fun sha256(file: File): String {
+        require(file.isFile) { "missing Pocket enrollment reference: ${file.absolutePath}" }
+        return MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it.toInt() and 0xff) }
+    }
+
+    private fun writeEvidence(file: File, value: JSONObject) {
+        file.parentFile?.mkdirs()
+        val temporary = File(file.parentFile, ".${file.name}.${System.nanoTime()}.tmp")
+        temporary.outputStream().buffered().use { output ->
+            output.write((value.toString(2) + "\n").toByteArray(Charsets.UTF_8))
+        }
+        check(temporary.renameTo(file)) { "could not commit Pocket enrollment evidence" }
+    }
+
+    private companion object {
+        const val MANIFEST_ASSET = "voice/pocket-model-manifest.json"
+        const val PUBLIC_REFERENCE = "reference_sample.wav"
+        const val PUBLIC_REFERENCE_SHA256 = "88fbb0d31ec26674e97e531a71758cabe4e0e4e5b5a18dafa783021a7f5c9366"
+        const val PREVIEW_TEXT = "Questa è l'anteprima italiana della nuova voce TALOS."
+        const val COLD_TEXT = "Questa voce è stata riaperta dal profilo cifrato."
+        val REQUIRED_BUILD_STAGES = setOf(
+            "pocket_model_verify",
+            "pocket_runtime_open",
+            "enrollment_reference_assemble",
+            "enrollment_quality_gate",
+            "enrollment_pcm_convert",
+            "pocket_reference_encode",
+            "reference_resample",
+            "mimi_encoder",
+            "enrollment_pcm_zeroed",
+        )
     }
 }

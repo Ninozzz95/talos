@@ -162,8 +162,28 @@ for (const riga of giri) {
      */
     const ub = riga.microBatch ? `/ub${riga.microBatch}` : ''
     const fa = riga.flashAttn && riga.flashAttn !== 'default' ? `/fa-${riga.flashAttn}` : ''
+    /*
+     * B2 — `cacheState` entra nella chiave per la stessa ragione di
+     * microbatch/FA: C0/C1 (processo appena aperto) e C2/C3 (pesi già in
+     * memoria) sono carichi diversi per costruzione — un `openMs`/`ttftMs`
+     * che li mescola descrive la differenza fra "aprire" e "già aperto",
+     * non il rumore dentro nessuno dei due. Assente per le righe scritte
+     * prima di questo blocco (nessun `cacheState`) — la chiave resta
+     * uguale a prima per loro, backward-compatible di proposito.
+     */
+    const cache = riga.cacheState ? `/${riga.cacheState}` : ''
+    /*
+     * P1-4 — stessa ragione di microbatch/FA: la matrice FA×KV chiede di
+     * confrontare f16 e q8_0 SEPARATAMENTE, non in un'unica mediana che
+     * mescola due configurazioni diverse per costruzione. `kvRequested`
+     * esiste da prima (B2 lo scrive già in ogni riga), ma fino a qui era
+     * sempre "f16" — quindi omesso dalla chiave non cambiava niente.
+     * Compare solo quando NON è il predefinito, stessa disciplina delle
+     * altre manopole.
+     */
+    const kv = riga.kvRequested && riga.kvRequested !== 'f16' ? `/kv-${riga.kvRequested}` : ''
     const chiave = `${riga.candidate ?? '?'}/${riga.backendRequested ?? '?'}/`
-        + `${riga.config ?? '?'}${fase}${ub}${fa}`
+        + `${riga.config ?? '?'}${fase}${ub}${fa}${kv}${cache}`
     if (!gruppi.has(chiave)) gruppi.set(chiave, [])
     gruppi.get(chiave).push(riga)
 }
@@ -189,6 +209,22 @@ for (const [chiave, insieme] of [...gruppi.entries()].sort()) {
         voce.reusedTokensMax = Math.max(...riusati)
         if (voce.reusedTokensMax > 0) voce.warning = 'prefisso RIUSATO: misure non confrontabili'
     }
+
+    /*
+     * B2 — fail-closed vero, non solo un avviso: una riga CONFIG_MISMATCH
+     * (gpuLayers richiesto ma effettivo rimasto a zero - CR-01 del piano
+     * sorgente) non entra MAI nella mediana. Contata comunque, perché "0
+     * righe scartate" e "0 righe misurate" sono due frasi diverse e la
+     * prima non deve nascondere la seconda.
+     */
+    const mismatch = insieme.filter((r) => r.validity === 'CONFIG_MISMATCH')
+    // ⛔ NON `voce.warning`: quel campo dice "l'intero gruppo è da rifare"
+    // (prefisso riusato, deriva termica) — un CONFIG_MISMATCH è l'opposto,
+    // una riga scartata correttamente mentre le altre restano valide.
+    // Confonderli farebbe dire "da rifare" a una mediana che ha già fatto
+    // esattamente ciò che doveva.
+    if (mismatch.length > 0) voce.configMismatchCount = mismatch.length
+    const valide = insieme.filter((r) => r.validity !== 'CONFIG_MISMATCH')
 
     /*
      * ⛔ L'ARCO DI TEMPO, perche' il file si ACCUMULA.
@@ -289,8 +325,20 @@ for (const [chiave, insieme] of [...gruppi.entries()].sort()) {
         }
     }
 
+    /*
+     * B2 — fail-closed vero anche qui: un gruppo con motori diversi non
+     * produce NESSUNA mediana, non una mediana costruita su un sottoinsieme
+     * scelto in silenzio. Il piano sorgente lo chiede esplicito (§5.4):
+     * "campagne con engine SHA differenti sono mischiate" fa fallire
+     * l'intero gruppo, non solo avvisa.
+     */
+    if (voce.mixedEngineBuilds) {
+        riassunto.push(voce)
+        continue
+    }
+
     for (const [campo, etichetta] of CAMPI) {
-        const valori = insieme.map((r) => r[campo]).filter((v) => typeof v === 'number')
+        const valori = valide.map((r) => r[campo]).filter((v) => typeof v === 'number')
         if (valori.length === 0) continue
         const centro = mediana(valori)
         const dispersione = mad(valori)
@@ -339,6 +387,11 @@ for (const voce of riassunto) {
     scrivi(`  ${voce.key}   (${voce.runs} giri`
         + (voce.thermal ? ` · termico ${voce.thermal.join('→')}` : '') + ')')
     if (voce.warning) scrivi(`    ⛔ ${voce.warning}`)
+    if (voce.configMismatchCount) {
+        // Riga propria, non `voce.warning`: qui il gruppo non è "da rifare",
+        // solo una riga è stata scartata correttamente e le altre restano valide.
+        scrivi(`    ⛔ ${voce.configMismatchCount} riga/e CONFIG_MISMATCH escluse dalla mediana`)
+    }
     if (voce.thermalDrift) {
         scrivi('    ⛔ lo stato termico è CAMBIATO dentro l\'insieme: due telefoni diversi')
     }

@@ -1,6 +1,7 @@
 import { ref, watch } from 'vue'
 import { talosProvenienzaVoce } from '@/lib/voice/provenienzaVoce'
 import { useTalosSpeech } from '@/composables/useTalosSpeech'
+import type { TalosVoiceReadingSource } from '@/lib/voice/personalVoiceContracts'
 
 /**
  * ⭐⭐ HAI PARLATO ⇒ TI RISPONDE A VOCE, mentre la risposta si scrive.
@@ -35,6 +36,8 @@ export interface TalosRispostaAVoce {
 }
 
 export function useTalosRispostaAVoce(input: {
+    /** Product surface recorded in the immutable native route. */
+    source: Extract<TalosVoiceReadingSource, 'chat' | 'assistant'>
     /** Il testo che sta arrivando dal modello, o `null` quando è finito. */
     streaming: () => string | null
     /** I messaggi della chat, per posare il segnalino su quello vero. */
@@ -73,7 +76,7 @@ export function useTalosRispostaAVoce(input: {
     watch(input.streaming, (testo) => {
         if (!attesa.value) return
         if (testo) {
-            if (parla.speakingId.value !== ID_TURNO && !parla.apriLetturaDiVoce(ID_TURNO)) {
+            if (parla.speakingId.value !== ID_TURNO && !parla.apriLetturaDiVoce(ID_TURNO, input.source)) {
                 // Qualcosa si sta già leggendo: chi l'ha chiesto viene prima.
                 attesa.value = false
                 return

@@ -273,6 +273,23 @@ public class TalosLocalBaselineDeviceTest {
         return scelto == null ? "" : scelto;
     }
 
+    /**
+     * P1-4 — il tipo di cache KV, oggi cablato su `"f16"` in ogni apertura di
+     * questo banco: la matrice FA×KV del piano sorgente (O7/O12) non era
+     * misurabile senza questa manopola.
+     *
+     * ⛔ Solo `f16`/`q8_0`: verificato nel sorgente nativo
+     * (`talos_llama_jni.cpp`) che `q4_0` non esiste come ramo — qualunque
+     * stringa diversa da `"q8_0"` cade silenziosamente su `f16`. Aggiungere
+     * `q4_0` è lavoro nativo nuovo (§12.4 del piano: alcuni compilatori
+     * Adreno A7x più vecchi vanno in crash su varianti FA q4/q8 miste), non
+     * questo blocco.
+     */
+    private static String kvRichiesto() {
+        String scelto = InstrumentationRegistry.getArguments().getString("talosKvType", "");
+        return "q8_0".equals(scelto) ? "q8_0" : "f16";
+    }
+
     /** Quanti strati spostare. ⛔ Su CPU deve restare 0. */
     private static int stratiSuGpu() {
         return "none".equals(backendRichiesto()) ? 0 : argomentoIntero("talosGpuLayers", -1);
@@ -304,7 +321,33 @@ public class TalosLocalBaselineDeviceTest {
         return argomentoIntero("talosMicroBatch", 0);
     }
 
+    /**
+     * P0-1, SOLO RICERCA — `talosCacheDebug=1` accende il trace HIT/MISS/SAVE
+     * della cache dei binari OpenCL. Assente di default: un log per kernel
+     * (181 su Qwen3-1.7B, misurato) è rumore fuori da una campagna dedicata a
+     * misurare esattamente quello.
+     */
+    private static boolean cacheDebugRichiesto() {
+        return "1".equals(InstrumentationRegistry.getArguments().getString("talosCacheDebug", ""));
+    }
+
+    /**
+     * P0-1, SOLO RICERCA — `talosCacheOff=1` è il CONTROLLO dell'esperimento:
+     * spegne la cache per questo processo, così ogni kernel ricompila sempre.
+     * Serve a provare che il guadagno misurato con la cache accesa viene
+     * davvero da lei.
+     */
+    private static boolean cacheOffRichiesto() {
+        return "1".equals(InstrumentationRegistry.getArguments().getString("talosCacheOff", ""));
+    }
+
     private static long apriCpu(File model, int contesto, int thread) {
+        if (cacheDebugRichiesto()) {
+            TalosLlamaNative.nativeEnableOpenClCacheDebugTraceForResearch();
+        }
+        if (cacheOffRichiesto()) {
+            TalosLlamaNative.nativeDisableOpenClCacheForResearch();
+        }
         /*
          * ⛔ Prima si CHIEDE ALLA POLITICA, e non è cerimonia.
          *
@@ -325,14 +368,15 @@ public class TalosLocalBaselineDeviceTest {
                 decisa.ok());
 
         long handle = TalosLlamaNative.nativeOpenTargeted(
-                model.getAbsolutePath(), thread, contesto, stratiSuGpu(), true, thread, microBatch(), "f16",
-                backendRichiesto(), deviceRichiesto(), modalitaFa());
+                model.getAbsolutePath(), thread, contesto, stratiSuGpu(), true, thread, microBatch(),
+                kvRichiesto(), backendRichiesto(), deviceRichiesto(), modalitaFa());
         assertNotEquals("apertura fallita su `" + backendRichiesto() + "/" + deviceRichiesto()
                         + "`: " + TalosLlamaNative.nativeLastOpenError(), 0L, handle);
         Log.i(TAG, "aperto su " + backendRichiesto()
                 + (deviceRichiesto().isEmpty() ? "" : "/" + deviceRichiesto())
                 + " · strati su GPU " + stratiSuGpu()
                 + " · microbatch " + (microBatch() == 0 ? "(predefinito)" : microBatch())
+                + " · kv " + kvRichiesto()
                 + " · flash-attn " + modalitaFa());
         return handle;
     }
@@ -650,6 +694,11 @@ public class TalosLocalBaselineDeviceTest {
         riga.put("deviceBefore", prima);
         riga.put("deviceAfter", statoDispositivo());
 
+        // B2: il valore di riserva. Una riga senza tempi nativi leggibili non
+        // ha nemmeno i campi che la renderebbero VALID - "non lo so" e' onesto,
+        // "va tutto bene" non lo sarebbe.
+        riga.put("validity", "UNKNOWN");
+
         String tempi = TalosLlamaNative.nativeLastTimings(handle);
         if (tempi != null && !tempi.isEmpty()) {
             JSONObject dettaglio = new JSONObject(tempi);
@@ -670,7 +719,64 @@ public class TalosLocalBaselineDeviceTest {
             riga.put("ttftMs", primo);
             // ⛔ La prova che il prefisso non ha aiutato. Se un giorno non fosse
             // zero, ogni confronto costruito su queste righe sarebbe falso.
-            riga.put("reusedTokens", dettaglio.optInt("reusedTokens", -1));
+            int riusati = dettaglio.optInt("reusedTokens", -1);
+            riga.put("reusedTokens", riusati);
+
+            /*
+             * B2 — lo stato cache VERO, non piu' la stringa costante "cold"
+             * (mai calcolata, trovata cosi' da una ricerca dedicata prima di
+             * questo blocco). Le quattro classi del piano sorgente (§5.3)
+             * intrecciano DUE segnali: se il processo e' stato appena
+             * aperto (nativeOpensSinceStart) e se il prefisso e' stato
+             * riusato (reusedTokens). Il TERZO segnale del piano - la cache
+             * dei binari OpenCL - non esiste ancora (arriva con P0-1): su
+             * QUESTO file, che misura solo il pavimento CPU
+             * (backendRichiesto()=="none"), quel terzo asse e' comunque
+             * privo di senso - non c'e' nessuna compilazione OpenCL da
+             * mettere in cache. C0 e C1 collassano nello stesso valore qui,
+             * onestamente, non per pigrizia: la distinzione a cui servono
+             * non si applica a un giro CPU.
+             */
+            boolean processoFreddo = TalosLlamaNative.nativeOpensSinceStart() <= 1;
+            String statoCache = processoFreddo
+                ? (riusati > 0 ? "C1" : "C0")
+                : (riusati > 0 ? "C3" : "C2");
+            riga.put("cacheState", statoCache);
+
+            /*
+             * B2 — la stessa domanda che B1 ha reso possibile rispondere:
+             * la GPU che avevamo chiesto e' quella che il motore ha usato
+             * DAVVERO? Letta dalla snapshot unificata (nativeRuntimeSnapshot,
+             * B1) invece di un metodo nativo in piu' - lo stesso motivo per
+             * cui esiste. `configMismatch` e' il caso che il piano sorgente
+             * chiama CONFIG_MISMATCH (CR-01): un `gpuLayers` richiesto
+             * diverso da zero che l'effettivo dice essere rimasto a zero -
+             * la riga esatta che non deve MAI entrare in una mediana.
+             *
+             * ⛔ P1-4: lo stesso controllo, esteso al KV — trovato mancante
+             * proprio mentre si costruiva la matrice FA×KV: un `q8_0`
+             * richiesto che il motore avesse ripiegato su `f16` in silenzio
+             * (il modello non lo regge, per esempio) sarebbe finito
+             * indistinguibile da un vero `q8_0` nella stessa mediana. Stessa
+             * classe di errore di CR-01, un campo diverso.
+             */
+            String snapshotJson = TalosLlamaNative.nativeRuntimeSnapshot(handle);
+            if (snapshotJson != null) {
+                JSONObject effettivo = new JSONObject(snapshotJson);
+                riga.put("effectiveConfig", effettivo);
+                int gpuLayersRichiesti = stratiSuGpu();
+                int gpuLayersEffettivi = effettivo.optInt("gpuLayersEffective", 0);
+                String kvEffettivo = effettivo.optString("kvCacheType", "f16");
+                boolean discorda = (gpuLayersRichiesti != 0 && gpuLayersEffettivi == 0)
+                        || !kvRichiesto().equals(kvEffettivo);
+                riga.put("configMismatch", discorda);
+                riga.put("validity", discorda ? "CONFIG_MISMATCH" : "VALID");
+            } else {
+                // ⛔ Nessuna snapshot leggibile non e' "va tutto bene": e'
+                // "non lo so", e la regola su un dubbio e' non promuovere
+                // mai una riga che non si puo' verificare a VALID.
+                riga.put("validity", "UNKNOWN");
+            }
         }
         registra(riga);
     }
@@ -698,8 +804,10 @@ public class TalosLocalBaselineDeviceTest {
         riga.put("modelBytes", model.length());
         riga.put("threads", thread);
         riga.put("contextTokensRequested", contesto);
-        riga.put("kvRequested", "f16");
-        riga.put("prefixState", "cold");
+        // ⛔ P1-4: era hardcoded "f16" anche qui, indipendentemente da cosa
+        // il motore avesse davvero aperto — la stessa bugia per costruzione
+        // già corretta altrove (B2) per gpuLayers/backendDevice.
+        riga.put("kvRequested", kvRichiesto());
         riga.put("atMs", System.currentTimeMillis());
         return riga;
     }

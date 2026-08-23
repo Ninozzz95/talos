@@ -73,6 +73,52 @@ internal object TalosVoiceModelActivation {
     private const val STAGING_SUFFIX = ".staging"
     private const val PREVIOUS_SUFFIX = ".previous"
 
+    fun installRootDirectory(externalFilesDir: File, installRoot: String): File {
+        val externalRoot = externalFilesDir.canonicalFile
+        val resolved = resolveRelative(externalRoot, installRoot)
+        require(resolved.parentFile == externalRoot) { "install root must be one direct child" }
+        return resolved
+    }
+
+    fun activeDirectory(externalFilesDir: File, installRoot: String, targetDir: String): File =
+        targetDirectory(externalFilesDir, installRoot, targetDir, suffix = "")
+
+    fun stagingDirectory(externalFilesDir: File, installRoot: String, targetDir: String): File =
+        targetDirectory(externalFilesDir, installRoot, targetDir, suffix = STAGING_SUFFIX)
+
+    fun previousDirectory(externalFilesDir: File, installRoot: String, targetDir: String): File =
+        targetDirectory(externalFilesDir, installRoot, targetDir, suffix = PREVIOUS_SUFFIX)
+
+    private fun targetDirectory(
+        externalFilesDir: File,
+        installRoot: String,
+        targetDir: String,
+        suffix: String,
+    ): File {
+        val root = installRootDirectory(externalFilesDir, installRoot)
+        val resolved = resolveRelative(root, targetDir + suffix)
+        require(resolved.parentFile == root) { "target directory must be one direct child" }
+        return resolved
+    }
+
+    private fun resolveRelative(root: File, relativePath: String): File {
+        val normalized = relativePath.replace('\\', '/')
+        require(normalized.isNotBlank()) { "relative path must not be blank" }
+        require(!normalized.startsWith('/') && !Regex("^[A-Za-z]:").containsMatchIn(normalized)) {
+            "absolute path is not allowed: $relativePath"
+        }
+        val segments = normalized.split('/')
+        require(segments.none { it.isBlank() || it == "." || it == ".." }) {
+            "unsafe relative path: $relativePath"
+        }
+        val canonicalRoot = root.canonicalFile
+        val resolved = File(canonicalRoot, normalized).canonicalFile
+        require(resolved.path.startsWith(canonicalRoot.path + File.separator)) {
+            "path escapes installation root: $relativePath"
+        }
+        return resolved
+    }
+
     /**
      * Sposta ogni file finito della cache nella cartella di staging
      * dell'artifact. ⛔ Usa [TalosModelStore] per il percorso di cache — mai
@@ -84,12 +130,18 @@ internal object TalosVoiceModelActivation {
     fun stage(
         externalFilesDir: File,
         artifact: TalosVoiceModelManifest.Artifact,
+    ): Outcome = stage(externalFilesDir, "moss", artifact)
+
+    fun stage(
+        externalFilesDir: File,
+        installRoot: String,
+        artifact: TalosVoiceModelManifest.Artifact,
     ): Outcome {
         val store = TalosModelStore(externalFilesDir)
-        val mossRoot = File(externalFilesDir, "moss")
-        val staging = File(mossRoot, artifact.targetDir + STAGING_SUFFIX)
+        val staging = stagingDirectory(externalFilesDir, installRoot, artifact.targetDir)
 
         for (file in artifact.files) {
+            resolveRelative(staging, file.targetPath)
             val slot = store.slot(artifact.repo, artifact.revision, file.path)
             if (!slot.finished.isFile || slot.finished.length() != file.size) {
                 return Outcome.Incomplete(file.path)
@@ -100,7 +152,7 @@ internal object TalosVoiceModelActivation {
             if (staging.isDirectory) staging.deleteRecursively()
             for (file in artifact.files) {
                 val slot = store.slot(artifact.repo, artifact.revision, file.path)
-                val target = File(staging, file.path)
+                val target = resolveRelative(staging, file.targetPath)
                 target.parentFile?.mkdirs()
                 // ⛔ COPY, non move: la cache resta il testimone finché la
                 // promozione intera non è passata - se un file a metà elenco
@@ -124,10 +176,14 @@ internal object TalosVoiceModelActivation {
      * si trova mai con il TTS nuovo e il tokenizzatore vecchio.
      */
     fun promote(externalFilesDir: File, targetDir: String): Outcome {
-        val mossRoot = File(externalFilesDir, "moss")
-        val active = File(mossRoot, targetDir)
-        val staging = File(mossRoot, targetDir + STAGING_SUFFIX)
-        val previous = File(mossRoot, targetDir + PREVIOUS_SUFFIX)
+        return promote(externalFilesDir, "moss", targetDir)
+    }
+
+    fun promote(externalFilesDir: File, installRoot: String, targetDir: String): Outcome {
+        val root = installRootDirectory(externalFilesDir, installRoot)
+        val active = activeDirectory(externalFilesDir, installRoot, targetDir)
+        val staging = stagingDirectory(externalFilesDir, installRoot, targetDir)
+        val previous = previousDirectory(externalFilesDir, installRoot, targetDir)
 
         if (!staging.isDirectory) return Outcome.Failed("no-staging")
 
@@ -136,16 +192,36 @@ internal object TalosVoiceModelActivation {
             // lasciarla bloccare questa, ma nemmeno cancellare qualcosa che
             // potrebbe ancora servire senza prima provare a finirla - vedi
             // [recover].
-            if (previous.isDirectory) previous.deleteRecursively()
+            root.mkdirs()
+            if (previous.isDirectory && active.isDirectory && !previous.deleteRecursively()) {
+                return Outcome.Failed("previous-delete")
+            }
             if (active.isDirectory) {
                 Files.move(active.toPath(), previous.toPath(), StandardCopyOption.ATOMIC_MOVE)
-                fsync(mossRoot)
+                fsync(root)
             }
             Files.move(staging.toPath(), active.toPath(), StandardCopyOption.ATOMIC_MOVE)
-            fsync(mossRoot)
+            fsync(root)
             Outcome.Activated(active)
         } catch (io: IOException) {
             Outcome.Failed(io.message ?: "io")
+        }
+    }
+
+    /** Restores the pre-promotion version after post-promotion verification failed. */
+    fun restorePrevious(externalFilesDir: File, installRoot: String, targetDir: String): Boolean {
+        val root = installRootDirectory(externalFilesDir, installRoot)
+        val active = activeDirectory(externalFilesDir, installRoot, targetDir)
+        val previous = previousDirectory(externalFilesDir, installRoot, targetDir)
+        return try {
+            if (active.exists() && !active.deleteRecursively()) return false
+            if (previous.isDirectory) {
+                Files.move(previous.toPath(), active.toPath(), StandardCopyOption.ATOMIC_MOVE)
+            }
+            fsync(root)
+            true
+        } catch (io: IOException) {
+            false
         }
     }
 
@@ -154,10 +230,68 @@ internal object TalosVoiceModelActivation {
      * mai `.staging` - solo una promozione riuscita azzera quello.
      */
     fun cleanupPrevious(externalFilesDir: File, targetDir: String): Boolean {
-        val previous = File(File(externalFilesDir, "moss"), targetDir + PREVIOUS_SUFFIX)
+        return cleanupPrevious(externalFilesDir, "moss", targetDir)
+    }
+
+    fun cleanupPrevious(externalFilesDir: File, installRoot: String, targetDir: String): Boolean {
+        val root = installRootDirectory(externalFilesDir, installRoot)
+        val previous = previousDirectory(externalFilesDir, installRoot, targetDir)
         val removed = !previous.exists() || previous.deleteRecursively()
-        if (removed) fsync(File(externalFilesDir, "moss"))
+        if (removed) fsync(root)
         return removed
+    }
+
+    /**
+     * ⛔⛔ TROVATO 22/8, owner: gli ONNX del motore voce comparivano
+     * PERMANENTEMENTE nell'elenco dei modelli locali della CHAT — lo stesso
+     * selettore dei GGUF nel composer.
+     *
+     * Causa: [stage] COPIA (mai sposta) dalla cache generica di
+     * `TalosModelStore` — deliberato, "la cache resta il testimone finché la
+     * promozione intera non è passata" (commento sopra). Ma nessuno
+     * ripuliva quella cache DOPO che la promozione era davvero passata, e
+     * `TalosModelStore.finished()` — che `installed()` lato Kotlin usa per
+     * il picker dei modelli LLM — non distingue un artifact voce da un
+     * GGUF vero: "finito" è definito per esclusione (né `.part` né
+     * `.talosdl` né `.prefix`), e un file voce copiato con successo è
+     * esattamente questo. ⇒ ~763 MB duplicati per sempre (cache generica +
+     * `moss/` attivo), e visibili dove non dovrebbero esserlo.
+     *
+     * Chiamata solo DOPO che la promozione è certa (mai da [stage], mai a
+     * metà) — cancellare la cache prima significherebbe perdere l'unica
+     * copia se [promote] fallisse a metà. Idempotente: cancellare un file
+     * già assente è un no-op silenzioso, sicuro da richiamare a ogni
+     * [recover] — importante per chi ha installato il motore voce PRIMA di
+     * questa cura: la cache vecchia si ripulisce da sola al prossimo avvio.
+     *
+     * Pattern di pulizia confermato con ricerca web (javathinking.com,
+     * mkyong.com, baeldung.com): risalire dal file cancellato eliminando
+     * solo cartelle rimaste vuote, fermandosi alla prima non vuota.
+     */
+    fun cleanupSourceCache(externalFilesDir: File, artifact: TalosVoiceModelManifest.Artifact) {
+        val store = TalosModelStore(externalFilesDir)
+        val modelsRoot = File(externalFilesDir, "models")
+        for (file in artifact.files) {
+            val slot = store.slot(artifact.repo, artifact.revision, file.path)
+            slot.finished.delete()
+            pruneEmptyAncestors(slot.finished.parentFile, modelsRoot)
+        }
+    }
+
+    /**
+     * Risale cancellando cartelle rimaste vuote dopo un file cancellato,
+     * fermandosi a (senza mai cancellare) [stopAt] — che è sempre
+     * `externalFilesDir/models`, la radice condivisa con i GGUF veri: non
+     * va toccata nemmeno se momentaneamente vuota.
+     */
+    private fun pruneEmptyAncestors(start: File?, stopAt: File) {
+        var dir = start
+        while (dir != null && dir != stopAt && dir.isDirectory) {
+            val children = dir.listFiles() ?: break
+            if (children.isNotEmpty()) break
+            if (!dir.delete()) break
+            dir = dir.parentFile
+        }
     }
 
     /**
@@ -175,16 +309,34 @@ internal object TalosVoiceModelActivation {
      *   es. l'app è morta prima di [cleanupPrevious]) → lo ripulisce qui,
      *   non aspetta un altro giro di [TalosVoiceHost].
      */
-    fun recover(externalFilesDir: File, targetDir: String): Outcome {
-        val mossRoot = File(externalFilesDir, "moss")
-        val staging = File(mossRoot, targetDir + STAGING_SUFFIX)
+    fun recover(externalFilesDir: File, artifact: TalosVoiceModelManifest.Artifact): Outcome {
+        return recover(externalFilesDir, "moss", artifact)
+    }
+
+    fun recover(
+        externalFilesDir: File,
+        installRoot: String,
+        artifact: TalosVoiceModelManifest.Artifact,
+    ): Outcome {
+        val targetDir = artifact.targetDir
+        val staging = stagingDirectory(externalFilesDir, installRoot, targetDir)
         if (staging.isDirectory) {
-            val outcome = promote(externalFilesDir, targetDir)
-            cleanupPrevious(externalFilesDir, targetDir)
+            val outcome = promote(externalFilesDir, installRoot, targetDir)
+            if (outcome is Outcome.Activated) {
+                cleanupPrevious(externalFilesDir, installRoot, targetDir)
+                cleanupSourceCache(externalFilesDir, artifact)
+            }
             return outcome
         }
-        cleanupPrevious(externalFilesDir, targetDir)
-        val active = File(mossRoot, targetDir)
+        cleanupPrevious(externalFilesDir, installRoot, targetDir)
+        val active = activeDirectory(externalFilesDir, installRoot, targetDir)
+        // ⛔ Anche nel ramo quieto (niente da promuovere): un processo può
+        // essere morto DOPO promote() ma PRIMA della pulizia della cache
+        // generica di una corsa precedente, o l'attivazione può essere
+        // riuscita in una build senza questa cura - senza questa riga la
+        // cache resterebbe piena per sempre. cleanupSourceCache è
+        // idempotente.
+        if (active.isDirectory) cleanupSourceCache(externalFilesDir, artifact)
         return if (active.isDirectory) Outcome.Activated(active) else Outcome.Failed("not-installed")
     }
 

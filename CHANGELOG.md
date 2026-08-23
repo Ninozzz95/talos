@@ -6,6 +6,65 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.19
+
+The personal voice no longer stutters, and the local model runs faster.
+Everything below was measured on the owner's OnePlus Pad 3 and OnePlus 13,
+none of it is estimated.
+
+### The voice engine was rebuilt on Pocket TTS
+
+The previous engine produced stutter and hardware underruns during real
+playback, and sentences that followed one another too closely would overlap
+or get their start clipped. The voice engine is now built on
+[Kyutai's Pocket TTS](https://github.com/kyutai-labs/pocket-tts) (MIT), run
+fully on-device through ONNX Runtime — no change to what stays local: your
+recordings never leave the phone.
+
+- Stutter and the measured hardware underruns are gone. Overlaps and
+  clipped sentence starts between concatenated replies are fixed.
+- Sentence starts are stabilized without making the technical lead-in
+  audible.
+- Measured on production streaming: **-23.2 LUFS**, true peak **-0.8 dBFS**,
+  Pocket gain **+12 dB** with a limiter at **-1 dBFS**.
+- Time to first audio, warm: **449–537 ms**; the engine now enforces a
+  **600 ms** honest cutoff rather than reporting a number it cannot back.
+- Italian speech recognition against 6 reference sentences: **6/6 exact,
+  zero word error rate**, no dropped first or last word.
+- The AudioTrack buffer grew to **1.205 s** to absorb the timing variance
+  that caused the underruns, without delaying playback start — the initial
+  threshold that controls when audio starts did not change.
+- Existing voice profiles migrate to the new engine automatically; nothing
+  needs to be re-recorded.
+
+### The local model runs faster
+
+Continuing work on the on-device engine (llama.cpp):
+
+- A persistent OpenCL kernel cache removes a multi-second first-generation
+  recompile that ran every time the app started.
+- The microbatch size for prompt processing moved from 192 to 512 tokens,
+  measured to shorten prompt processing without changing output quality.
+- The static parts of the system prompt are now pre-computed once (AOT)
+  instead of on every message, including a fix for models that need more
+  than a system turn alone to accept it correctly.
+- A native thread pool replaces manual thread lifecycle management. CPU
+  core affinity was measured explicitly (paired A/B campaign) and found to
+  make no measurable difference on this hardware (≤1%, inside the ~2.4%
+  run-to-run noise) — the mechanism ships as tested infrastructure, but
+  default behavior is unchanged rather than switched on speculation.
+
+### Fixed
+
+- The instruction telling a local model which language to answer in was
+  being skipped in one case, so a tool result in another language could
+  pull the reply into that language even when everything else was in
+  Italian. The instruction now always names the exception, in both the
+  short local-model prompt and the full one, and stays within the prompt's
+  measured size budget.
+- The background scene now follows the selected motion complexity on its
+  own, instead of being tied to the color theme.
+
 ## v0.1.18
 
 The app can speak in your own voice. You record a set of phrases once, the
@@ -62,7 +121,83 @@ redo the consent screen or the microphone check. Verified twice: once with a
 forced stop, and once with a genuine crash that happened while chasing the bug
 above.
 
+### A personal voice can now actually be chosen — and it works
+
+Recording a voice, and reading with it, used to be two separate stories. The
+voice showed up in "Voice personale" with rename and delete, and that was the
+end of it: nothing let you pick it as the voice that reads replies, and there
+was no way to hear it again once the wizard closed.
+
+Both are fixed. A recorded voice now appears at the top of the same picker
+that lists the device's own voices — pick it and it becomes the one that
+reads, exactly like picking any other voice. Every profile also gets its own
+"Listen" button, independent of which voice is currently active, and the one
+actually in use is marked so on its card. Verified on the owner's Pad with a
+real recorded voice, not a mock: selecting it writes to the real settings
+store, and pressing "Listen" or the speaker icon on a real chat reply both
+measurably load and run the neural engine (a resident-memory jump from about
+560 MB to about 1.9 GB, the same jump either way). That memory jump alone
+turned out to prove only that synthesis had started, not that it finished —
+two of the fixes below were found this same way, by listening to what the
+device actually said rather than trusting the jump as success. With those
+closed, the chain now runs end to end for real.
+
+A voice you record is now also tagged with the phone's actual system
+language rather than whatever language the app's interface happened to be
+set to at the time — those can differ, and only the system one is what
+should be on the label.
+
 ### Fixes
+
+**Talking to it used the stock voice even with a personal voice chosen.**
+When a reply is read aloud automatically because you spoke to it — the
+"you talk, it answers back in voice" path — the app always used the stock
+system voice, even with a personal voice selected. Deliberate at the time:
+that path speaks sentence by sentence as the reply streams in, queuing each
+one behind the last, and the personal engine had no real queue to speak
+into — a second sentence sent there would have cut the first one off
+instead of following it. It now waits for the reply to finish streaming
+and reads the whole thing in one call to the personal engine, the same way
+pressing the speaker icon on a finished message already did. You lose the
+word-by-word start; you gain that the voice you actually chose is the one
+you hear, which matters more.
+
+**A file name or code term with an underscore was read as
+"underscore".** `documento_complesso` came out as "documento underscore
+complesso" — a known symptom of handing a TTS engine raw text straight from
+a markdown-formatted reply. Underscores, `**bold**`, `*italics*`, and
+`` `inline code` `` markers are stripped before anything reaches either
+voice engine now; the words themselves are never touched.
+
+**A voice that had been renamed since you picked it read nothing.** If
+the personal voice your settings pointed at no longer matched a saved
+profile — renamed, or replaced by a new recording — pressing the
+speaker icon produced only a generic error instead of reading the
+reply. It now falls back to the stock voice silently, the same way it
+already did when no personal voice had ever been chosen.
+
+**The device voice you actually heard could be a different one than the
+one you chose.** Applying a chosen voice to the system engine can be
+refused — most often a network voice when the network is not reachable
+at that instant — and that refusal was never checked: reading went
+ahead anyway, on whichever voice the engine happened to have already. A
+refusal now retries once against a voice that does not depend on the
+network. Separately, the very first reading of a fresh app launch could
+run before the device's own voice list had finished loading, silently
+skipping the choice altogether — reading always landed correctly from
+the second attempt in the same session, never the first. Both were
+real, found by listening to the device rather than trusting a memory
+measurement that had only confirmed the engine started, not that it
+finished successfully.
+
+**The voice engine's files were showing up as chat models.** After
+installing the voice engine, its two files sat forever in the same on-device
+folder the chat's own model downloader uses, so both the settings' "Local
+models" list and the model picker in the chat composer offered them
+alongside real language models — selecting one there could not have worked.
+They are cleaned up now, immediately, including on a phone that installed
+the voice engine before this fix (~800 MB reclaimed on the owner's Pad,
+automatically, at the next launch, no reinstall needed).
 
 **The voice wizard filled only half a tablet screen.** On a real tablet the
 setup dialog stayed trapped inside the settings panel, with the category list
@@ -86,11 +221,20 @@ the same thing.
 
 ### What this release does not do yet
 
-The personal voice has not been through a full end-to-end run with a human
-voice on a device — the pieces are each verified, the whole chain is not. Read-
-aloud does not yet stream ahead of the text it is reading. The stock system
-voice remains the fallback and is unchanged: if you never set up a personal
-voice, nothing about the app sounds different.
+Read-aloud does not yet stream ahead of the text it is reading with a personal
+voice — it waits for the whole reply, where the stock voice can start mid-
+stream. The stock system voice remains the fallback and is unchanged: if you
+never set up a personal voice, nothing about the app sounds different.
+
+On a long reply the personal voice can still stutter — measured, not a
+guess: on the owner's Pad, a roughly two-hundred-word reply produced
+audible glitches once every one to two seconds for its whole length, on a
+device that was not thermally throttled at the time. Isolated to the
+generation step itself running behind real time, not to the playback
+buffer, batch size, or CPU thread count — all three were measured and
+ruled out one at a time. A short reply is unaffected. Fixing the
+generation step itself is bigger work than this release; it is not
+started yet.
 
 ## v0.1.17
 

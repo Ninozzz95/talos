@@ -5,6 +5,12 @@ import ai.onnxruntime.OnnxTensorLike
 import ai.onnxruntime.OnnxValue
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
+import ai.talos.voice.research.TalosVoiceOrtProfileFiles
+import ai.talos.voice.research.TalosVoiceOrtProfiling
+import ai.talos.voice.research.TalosVoiceTraceRecorder
+import android.os.Build
+import android.os.Debug
+import android.os.SystemClock
 import android.util.Log
 import java.io.Closeable
 import java.io.File
@@ -53,7 +59,9 @@ internal class TalosMossRuntime private constructor(
     private val ttsMeta: TalosMossTtsMeta,
     private val codecMeta: TalosMossCodecMeta,
     val sampleRate: Int,
+    private val ttsProfilingEnabled: Boolean,
 ) : Closeable {
+    private var ttsProfilingFinished = false
 
     /** How many channels [openCodecStream] and [decodeAudioTokens] both produce - from the codec metadata, not assumed. */
     val channels: Int get() = codecMeta.channels
@@ -104,8 +112,15 @@ internal class TalosMossRuntime private constructor(
         seed: Long = System.nanoTime(),
         isCancelled: () -> Boolean = { false },
         onFrame: (IntArray) -> Unit = {},
+        trace: TalosVoiceTraceRecorder? = null,
     ): Pair<List<IntArray>, Boolean> = generateAudioTokensWithReference(
-        textTokenIds, selectBuiltinVoicePromptAudioCodes(voice), maxFrames, seed, isCancelled, onFrame,
+        textTokenIds,
+        selectBuiltinVoicePromptAudioCodes(voice),
+        maxFrames,
+        seed,
+        isCancelled,
+        onFrame,
+        trace,
     )
 
     /**
@@ -121,6 +136,7 @@ internal class TalosMossRuntime private constructor(
         seed: Long = System.nanoTime(),
         isCancelled: () -> Boolean = { false },
         onFrame: (IntArray) -> Unit = {},
+        trace: TalosVoiceTraceRecorder? = null,
     ): Pair<List<IntArray>, Boolean> {
         require(textTokenIds.isNotEmpty()) { "textTokenIds must not be empty" }
         require(promptAudioCodes.isNotEmpty()) { "promptAudioCodes must not be empty" }
@@ -128,7 +144,7 @@ internal class TalosMossRuntime private constructor(
         val generation = TalosMossGeneration(random = java.util.Random(seed), nVq = manifest.ttsConfig.nVq)
         try {
             runPrefill(inputRows, generation)
-            val cancelled = runDecode(generation, maxFrames, isCancelled, onFrame)
+            val cancelled = runDecode(generation, maxFrames, isCancelled, onFrame, trace)
             return Pair(generation.audioTokens, cancelled)
         } finally {
             generation.close()
@@ -146,6 +162,33 @@ internal class TalosMossRuntime private constructor(
      * `_load_reference_audio` does for a mono source against a stereo
      * codec, read from that source rather than guessed.
      */
+    /**
+     * Decodes the exact enrolled MOSS prompt with the pinned full-codec
+     * graph. This is the only bridge used by the V1 -> V2 migrator: it
+     * exposes mono PCM and the manifest sample rate, never codec internals.
+     */
+    fun decodeReferenceAudio(promptAudioCodes: List<IntArray>): TalosDecodedVoiceReference {
+        require(promptAudioCodes.isNotEmpty()) { "promptAudioCodes must not be empty" }
+        require(promptAudioCodes.size <= TalosMossPromptPayload.MAX_FRAMES) {
+            "promptAudioCodes exceeds the profile frame limit"
+        }
+        val quantizerCount = manifest.ttsConfig.nVq
+        val codebookSizes = manifest.ttsConfig.audioCodebookSizes
+        require(codebookSizes.size >= quantizerCount) { "MOSS codebook metadata is incomplete" }
+        require(promptAudioCodes.all { it.size == quantizerCount }) {
+            "promptAudioCodes row width differs from the active MOSS manifest"
+        }
+        require(
+            promptAudioCodes.all { row ->
+                row.indices.all { quantizer -> row[quantizer] in 0 until codebookSizes[quantizer] }
+            },
+        ) { "promptAudioCodes contains a code outside the active MOSS codebook" }
+        return TalosDecodedVoiceReference(
+            pcmFloatMono = decodeAudioTokens(promptAudioCodes),
+            sampleRate = sampleRate,
+        )
+    }
+
     fun encodeReferenceAudio(monoPcm: FloatArray, capturedSampleRate: Int): List<IntArray> {
         require(monoPcm.isNotEmpty()) { "monoPcm must not be empty" }
         require(capturedSampleRate == sampleRate) {
@@ -181,6 +224,7 @@ internal class TalosMossRuntime private constructor(
     }
 
     override fun close() {
+        if (ttsProfilingEnabled && !ttsProfilingFinished) runCatching { finishTtsProfiling() }
         codecEncodeSession.close()
         codecDecodeStepSession.close()
         codecDecodeSession.close()
@@ -188,6 +232,18 @@ internal class TalosMossRuntime private constructor(
         decodeSession.close()
         prefillSession.close()
         sessionOptions.close()
+    }
+
+    fun finishTtsProfiling(): TalosVoiceOrtProfileFiles? {
+        if (!ttsProfilingEnabled) return null
+        check(!ttsProfilingFinished) { "TTS profiling has already ended" }
+        val files = TalosVoiceOrtProfileFiles(
+            prefill = File(prefillSession.endProfiling()),
+            decodeStep = File(decodeSession.endProfiling()),
+            localFixedSampledFrame = File(localFixedFrameSession.endProfiling()),
+        )
+        ttsProfilingFinished = true
+        return files
     }
 
     private fun buildInputRows(textTokenIds: IntArray, promptAudioCodes: List<IntArray>): InputRows {
@@ -257,17 +313,26 @@ internal class TalosMossRuntime private constructor(
         maxFrames: Int,
         isCancelled: () -> Boolean,
         onFrame: (IntArray) -> Unit = {},
+        trace: TalosVoiceTraceRecorder? = null,
     ): Boolean {
         val cfg = manifest.ttsConfig
         val rowWidth = cfg.nVq + 1
         val cappedMaxFrames = maxFrames.coerceAtMost(manifest.generationDefaults.maxNewFrames)
         val decodePastInputNames = ttsMeta.decodeInputNames.drop(2)
         val decodePresentOutputNames = ttsMeta.decodeOutputNames.drop(1)
+        val tracing = trace != null
 
         for (step in 0 until cappedMaxFrames) {
             if (isCancelled()) return true
-            val frameResult = runLocalFixedSampledFrame(generation)
+            val stepStartedAtNs = if (tracing) SystemClock.elapsedRealtimeNanos() else 0L
+            val pastValidLength = generation.pastValidLengths
+            val localStartedAtNs = stepStartedAtNs
+            val frameResult = runLocalFixedSampledFrame(generation, measureOrtRun = tracing)
+            val localFinishedAtNs = if (tracing) SystemClock.elapsedRealtimeNanos() else 0L
             if (!frameResult.shouldContinue) break
+
+            var globalInputPrepNs = 0L
+            val rowPrepStartedAtNs = if (tracing) SystemClock.elapsedRealtimeNanos() else 0L
             val audioRow = IntArray(rowWidth) { index ->
                 if (index == 0) cfg.audioAssistantSlotTokenId else cfg.audioPadTokenId
             }
@@ -277,32 +342,88 @@ internal class TalosMossRuntime private constructor(
                 generation.previousTokenSets[quantizer].add(token)
             }
             generation.audioTokens += frameResult.frame
-            onFrame(frameResult.frame)
+            if (tracing) globalInputPrepNs += SystemClock.elapsedRealtimeNanos() - rowPrepStartedAtNs
 
-            OnnxTensor.createTensor(env, IntBuffer.wrap(audioRow), longArrayOf(1, 1, rowWidth.toLong())).use { inputTensor ->
-                OnnxTensor.createTensor(env, IntBuffer.wrap(intArrayOf(generation.pastValidLengths)), longArrayOf(1)).use { pastTensor ->
-                    val feeds = linkedMapOf<String, OnnxTensorLike>(
-                        "input_ids" to inputTensor,
-                        "past_valid_lengths" to pastTensor,
-                    )
-                    val previousPastResult = generation.pastResult ?: error("Missing decode KV cache")
-                    for (index in decodePastInputNames.indices) {
-                        feeds[decodePastInputNames[index]] = previousPastResult.requiredTensor(decodePresentOutputNames[index])
-                    }
-                    val outputs = decodeSession.run(feeds)
-                    val nextGlobalHidden = extractLastHiddenTensor(outputs.requiredTensor("global_hidden"))
-                    generation.globalHidden?.close()
-                    previousPastResult.close()
-                    generation.pastResult = outputs
-                    generation.globalHidden = nextGlobalHidden
-                    generation.pastValidLengths += 1
+            val callbackStartedAtNs = if (tracing) SystemClock.elapsedRealtimeNanos() else 0L
+            onFrame(frameResult.frame)
+            val callbackFinishedAtNs = if (tracing) SystemClock.elapsedRealtimeNanos() else 0L
+
+            var inputTensor: OnnxTensor? = null
+            var pastTensor: OnnxTensor? = null
+            var unownedOutputs: OrtSession.Result? = null
+            var globalDecodeNs = 0L
+            var kvTransitionNs = 0L
+            val tensorPrepStartedAtNs = if (tracing) SystemClock.elapsedRealtimeNanos() else 0L
+            try {
+                inputTensor = OnnxTensor.createTensor(env, IntBuffer.wrap(audioRow), longArrayOf(1, 1, rowWidth.toLong()))
+                pastTensor = OnnxTensor.createTensor(
+                    env,
+                    IntBuffer.wrap(intArrayOf(generation.pastValidLengths)),
+                    longArrayOf(1),
+                )
+                val feeds = linkedMapOf<String, OnnxTensorLike>(
+                    "input_ids" to inputTensor,
+                    "past_valid_lengths" to pastTensor,
+                )
+                val previousPastResult = generation.pastResult ?: error("Missing decode KV cache")
+                for (index in decodePastInputNames.indices) {
+                    feeds[decodePastInputNames[index]] = previousPastResult.requiredTensor(decodePresentOutputNames[index])
                 }
+                if (tracing) globalInputPrepNs += SystemClock.elapsedRealtimeNanos() - tensorPrepStartedAtNs
+
+                val decodeStartedAtNs = if (tracing) SystemClock.elapsedRealtimeNanos() else 0L
+                val outputs = decodeSession.run(feeds)
+                unownedOutputs = outputs
+                if (tracing) globalDecodeNs = SystemClock.elapsedRealtimeNanos() - decodeStartedAtNs
+
+                val kvStartedAtNs = if (tracing) SystemClock.elapsedRealtimeNanos() else 0L
+                val nextGlobalHidden = extractLastHiddenTensor(outputs.requiredTensor("global_hidden"))
+                generation.globalHidden?.close()
+                previousPastResult.close()
+                generation.pastResult = outputs
+                unownedOutputs = null
+                generation.globalHidden = nextGlobalHidden
+                generation.pastValidLengths += 1
+                if (tracing) kvTransitionNs = SystemClock.elapsedRealtimeNanos() - kvStartedAtNs
+            } finally {
+                val cleanupStartedAtNs = if (tracing) SystemClock.elapsedRealtimeNanos() else 0L
+                unownedOutputs?.close()
+                pastTensor?.close()
+                inputTensor?.close()
+                if (tracing) globalInputPrepNs += SystemClock.elapsedRealtimeNanos() - cleanupStartedAtNs
+            }
+
+            if (trace != null) {
+                val stepFinishedAtNs = SystemClock.elapsedRealtimeNanos()
+                val javaRuntime = Runtime.getRuntime()
+                val gcCount = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    Debug.getRuntimeStat("art.gc.gc-count")?.toLongOrNull()
+                } else {
+                    null
+                }
+                trace.recordStep(
+                    frameIndex = step,
+                    pastValidLength = pastValidLength,
+                    localSampleNs = localFinishedAtNs - localStartedAtNs,
+                    localOrtRunNs = frameResult.ortRunNs,
+                    callbackNs = callbackFinishedAtNs - callbackStartedAtNs,
+                    globalInputPrepNs = globalInputPrepNs,
+                    globalDecodeNs = globalDecodeNs,
+                    kvTransitionNs = kvTransitionNs,
+                    totalStepNs = stepFinishedAtNs - stepStartedAtNs,
+                    javaHeapBytes = javaRuntime.totalMemory() - javaRuntime.freeMemory(),
+                    nativeHeapBytes = Debug.getNativeHeapAllocatedSize(),
+                    gcCount = gcCount,
+                )
             }
         }
         return false
     }
 
-    private fun runLocalFixedSampledFrame(generation: TalosMossGeneration): LocalFrameResult {
+    private fun runLocalFixedSampledFrame(
+        generation: TalosMossGeneration,
+        measureOrtRun: Boolean,
+    ): LocalFrameResult {
         val cfg = manifest.ttsConfig
         val globalHidden = generation.globalHidden ?: error("No prefill/decode result to sample from")
         val audioCodebookSize = cfg.audioCodebookSizes.firstOrNull() ?: 1024
@@ -319,17 +440,21 @@ internal class TalosMossRuntime private constructor(
         OnnxTensor.createTensor(env, IntBuffer.wrap(seenMask), longArrayOf(1, cfg.nVq.toLong(), audioCodebookSize.toLong())).use { seenTensor ->
             OnnxTensor.createTensor(env, FloatBuffer.wrap(assistantRandom), longArrayOf(1)).use { assistantTensor ->
                 OnnxTensor.createTensor(env, FloatBuffer.wrap(audioRandom), longArrayOf(1, cfg.nVq.toLong())).use { audioTensor ->
-                    localFixedFrameSession.run(
+                    val runStartedAtNs = if (measureOrtRun) SystemClock.elapsedRealtimeNanos() else 0L
+                    val outputs = localFixedFrameSession.run(
                         mapOf(
                             "global_hidden" to globalHidden,
                             "repetition_seen_mask" to seenTensor,
                             "assistant_random_u" to assistantTensor,
                             "audio_random_u" to audioTensor,
                         ),
-                    ).use {
+                    )
+                    val ortRunNs = if (measureOrtRun) SystemClock.elapsedRealtimeNanos() - runStartedAtNs else 0L
+                    outputs.use {
                         return LocalFrameResult(
                             shouldContinue = it.requiredTensor("should_continue").scalarInt() > 0,
                             frame = it.requiredTensor("frame_token_ids").intArrayValue(),
+                            ortRunNs = ortRunNs,
                         )
                     }
                 }
@@ -365,14 +490,22 @@ internal class TalosMossRuntime private constructor(
     }
 
     private data class InputRows(val inputIds: Array<IntArray>, val attentionMask: IntArray)
-    private data class LocalFrameResult(val shouldContinue: Boolean, val frame: IntArray)
+    private data class LocalFrameResult(
+        val shouldContinue: Boolean,
+        val frame: IntArray,
+        val ortRunNs: Long,
+    )
 
     companion object {
         /**
          * Opens the four MOSS graphs from the manifest under `modelRoot`. Model
          * lifetime starts here; nothing about a specific request is touched.
          */
-        fun open(modelRoot: File, cpuThreads: Int): TalosMossRuntime {
+        fun open(
+            modelRoot: File,
+            cpuThreads: Int,
+            profiling: TalosVoiceOrtProfiling? = null,
+        ): TalosMossRuntime {
             val env = OrtEnvironment.getEnvironment()
             val manifestPath = TalosMossManifest.resolveManifestPath(modelRoot)
             val manifestDir = manifestPath.parentFile ?: modelRoot
@@ -408,9 +541,21 @@ internal class TalosMossRuntime private constructor(
                 // per un prossimo passo, non dimenticato.
                 setCPUArenaAllocator(false)
             }
-            fun openSession(file: File): OrtSession {
+            profiling?.outputDirectory?.mkdirs()
+            fun openSession(file: File, profileName: String? = null): OrtSession {
                 require(file.isFile) { "Missing ONNX file: ${file.absolutePath}" }
-                return env.createSession(file.absolutePath, sessionOptions)
+                if (profileName != null) {
+                    val prefix = File(
+                        requireNotNull(profiling).outputDirectory,
+                        "voice-ort-${profiling.runId}-$profileName",
+                    )
+                    sessionOptions.enableProfiling(prefix.absolutePath)
+                }
+                return try {
+                    env.createSession(file.absolutePath, sessionOptions)
+                } finally {
+                    if (profileName != null) sessionOptions.disableProfiling()
+                }
             }
             // ⭐⭐⭐ Owner 22/8: log temporanei ma non usa-e-getta - il crash
             // OOM riprodotto due volte non ha detto DA SOLO se la crescita
@@ -419,11 +564,14 @@ internal class TalosMossRuntime private constructor(
             // prossima volta che qualcosa si gonfia qui, questi timestamp
             // sono la prima cosa da guardare, non un'ipotesi.
             Log.i("TalosMossRuntime", "open(): inizio apertura sessioni ONNX")
-            val prefillSession = openSession(File(ttsDir, ttsMeta.prefillFile))
+            val prefillSession = openSession(File(ttsDir, ttsMeta.prefillFile), profiling?.let { "prefill" })
             Log.i("TalosMossRuntime", "open(): prefillSession aperta")
-            val decodeSession = openSession(File(ttsDir, ttsMeta.decodeStepFile))
+            val decodeSession = openSession(File(ttsDir, ttsMeta.decodeStepFile), profiling?.let { "decode-step" })
             Log.i("TalosMossRuntime", "open(): decodeSession aperta")
-            val localFixedFrameSession = openSession(File(ttsDir, ttsMeta.localFixedSampledFrameFile))
+            val localFixedFrameSession = openSession(
+                File(ttsDir, ttsMeta.localFixedSampledFrameFile),
+                profiling?.let { "local-fixed-sampled-frame" },
+            )
             Log.i("TalosMossRuntime", "open(): localFixedFrameSession aperta")
             val codecDecodeSession = openSession(File(codecDir, codecMeta.decodeFullFile))
             Log.i("TalosMossRuntime", "open(): codecDecodeSession aperta")
@@ -445,6 +593,7 @@ internal class TalosMossRuntime private constructor(
                 ttsMeta = ttsMeta,
                 codecMeta = codecMeta,
                 sampleRate = codecMeta.sampleRate,
+                ttsProfilingEnabled = profiling != null,
             )
         }
 

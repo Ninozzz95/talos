@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "locale": "it-IT",
+  "license": "CC0-1.0",
+  "cases": [
+    {
+      "id": "smoke-short",
+      "categories": ["routing", "warm-start"],
+      "text": "Buongiorno, questa è la voce italiana di TALOS.",
+      "expectedNormalizedTranscript": "buongiorno questa è la voce italiana di talos",
+      "maxFrames": 24
+    },
+    {
+      "id": "phonemes-core",
+      "categories": ["gli", "gn", "sce", "sci", "ci", "ge"],
+      "text": "Gli gnocchi agli spinaci scendono sulla scena; Giorgio sceglie ciliegie e gelato.",
+      "expectedNormalizedTranscript": "gli gnocchi agli spinaci scendono sulla scena giorgio sceglie ciliegie e gelato",
+      "maxFrames": 64
+    },
+    {
+      "id": "accents-apostrophes",
+      "categories": ["accenti", "apostrofi", "elisioni"],
+      "text": "L'amica è già lì: perché Niccolò non dà un po' d'acqua all'anziana?",
+      "expectedNormalizedTranscript": "l amica è già lì perché niccolò non dà un po d acqua all anziana",
+      "maxFrames": 64
+    },
+    {
+      "id": "numbers-dates-currency",
+      "categories": ["issue-234", "numeri", "date", "ora", "valuta", "percentuali"],
+      "text": "Il 23 agosto 2026 alle 18:45, il totale è 1.234,56 euro, con IVA al 22 per cento.",
+      "expectedNormalizedTranscript": "il ventitré agosto duemilaventisei alle diciotto e quarantacinque il totale è mille duecentotrentaquattro euro e cinquantasei centesimi con iva al ventidue per cento",
+      "maxFrames": 80
+    },
+    {
+      "id": "long-digits",
+      "categories": ["issue-234", "sequenza-cifre"],
+      "text": "Il codice di verifica è 390184726501; ripeto: 390184726501.",
+      "expectedNormalizedTranscript": "il codice di verifica è tre nove zero uno otto quattro sette due sei cinque zero uno ripeto tre nove zero uno otto quattro sette due sei cinque zero uno",
+      "maxFrames": 72
+    },
+    {
+      "id": "url-acronyms-code-switch",
+      "categories": ["url", "sigle", "code-switch"],
+      "text": "Apri https://talos.ai/docs, poi leggi API, USB e machine learning senza cambiare voce.",
+      "expectedNormalizedTranscript": "apri talos punto ai barra docs poi leggi api usb e machine learning senza cambiare voce",
+      "maxFrames": 80
+    },
+    {
+      "id": "issue-221-long-narration",
+      "categories": ["issue-221", "narrazione-lunga", "inserzioni", "ripetizioni", "omissioni"],
+      "text": "Quando il treno lasciò lentamente la stazione, Marta rimase accanto al finestrino e osservò i tetti bagnati. Non aveva fretta di arrivare: desiderava ascoltare il ritmo regolare delle ruote, seguire i campi che cambiavano colore e ricordare ogni dettaglio del viaggio. Dopo il ponte comparve un paese raccolto intorno a una torre chiara. Un cane attraversò la piazza, il fornaio sollevò la serranda e due bambini corsero verso la scuola. Marta aprì il taccuino, scrisse tre righe e poi si fermò. La storia non chiedeva parole nuove, ma attenzione. Più tardi il cielo si aprì e una lama di sole illuminò il fiume. Nessuna frase doveva sparire, nessuna parola doveva tornare due volte, nessun suono estraneo doveva insinuarsi fra un periodo e il successivo. Quando il controllore annunciò l'ultima fermata, Marta chiuse il taccuino, controllò di avere la valigia e sorrise: il viaggio era terminato esattamente come era cominciato, con calma.",
+      "expectedNormalizedTranscript": "quando il treno lasciò lentamente la stazione marta rimase accanto al finestrino e osservò i tetti bagnati non aveva fretta di arrivare desiderava ascoltare il ritmo regolare delle ruote seguire i campi che cambiavano colore e ricordare ogni dettaglio del viaggio dopo il ponte comparve un paese raccolto intorno a una torre chiara un cane attraversò la piazza il fornaio sollevò la serranda e due bambini corsero verso la scuola marta aprì il taccuino scrisse tre righe e poi si fermò la storia non chiedeva parole nuove ma attenzione più tardi il cielo si aprì e una lama di sole illuminò il fiume nessuna frase doveva sparire nessuna parola doveva tornare due volte nessun suono estraneo doveva insinuarsi fra un periodo e il successivo quando il controllore annunciò l ultima fermata marta chiuse il taccuino controllò di avere la valigia e sorrise il viaggio era terminato esattamente come era cominciato con calma",
+      "maxFrames": 720
+    }
+  ]
+}

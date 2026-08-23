@@ -3,6 +3,7 @@ package ai.talos;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -150,6 +151,62 @@ public class TalosLlamaEngineDeviceTest {
         Log.i(TAG, "backend ggml registrati: " + backends);
         assertTrue("nessun backend ggml registrato: ggml_backend_load_all non ha trovato nulla",
                 backends != null && !backends.isEmpty());
+    }
+
+    /**
+     * P1-1 — la topologia CPU letta dal processo nativo combacia coi fatti
+     * che Android stesso conosce di sé, non solo col proprio JSON.
+     *
+     * ⛔⛔ AL CONTRARIO, non solo "il JSON si legge": il numero di core
+     * `online` che questa funzione conta deve combaciare con
+     * {@link Runtime#availableProcessors()} — due fonti INDIPENDENTI (un
+     * file per core sotto `/sys` contro una API Java che la JVM calcola per
+     * conto suo) che devono dire la stessa cosa su un device reale, o una
+     * delle due sta mentendo.
+     */
+    @Test
+    public void cpuTopologyCombaciaConCioCheAndroidStessoDichiara() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        TalosLlamaNative.ensureReady(context);
+        String raw = TalosLlamaNative.nativeCpuTopology();
+        assertNotNull("nativeCpuTopology è tornata null", raw);
+        JSONObject topologia = new JSONObject(raw);
+        Log.i(TAG, "topologia CPU: " + raw);
+
+        org.json.JSONArray cores = topologia.getJSONArray("cores");
+        assertTrue("nessun core letto", cores.length() > 0);
+
+        int online = 0;
+        for (int indice = 0; indice < cores.length(); indice += 1) {
+            JSONObject core = cores.getJSONObject(indice);
+            assertEquals("gli indici devono essere in ordine, come i file /sys che li producono",
+                    indice, core.getInt("index"));
+            if (core.getBoolean("online")) online += 1;
+            // capacity può essere -1 (kernel che non la espone) ma deve
+            // esserci: un campo assente sarebbe un dato mai scritto, non
+            // "questo kernel non lo dice".
+            assertTrue("capacity manca per il core " + indice, core.has("capacity"));
+            assertTrue("allowed manca per il core " + indice, core.has("allowed"));
+        }
+
+        int dichiaratiDallaJvm = Runtime.getRuntime().availableProcessors();
+        assertEquals("il conteggio online di /sys deve combaciare con ciò che la JVM vede",
+                dichiaratiDallaJvm, online);
+
+        if (topologia.getBoolean("affinityReadable")) {
+            // Questo stesso test gira su un core del set consentito — se
+            // sched_getaffinity funziona, ALMENO un core deve risultare
+            // allowed=true, o il processo non sarebbe in esecuzione affatto.
+            boolean almenoUnoConsentito = false;
+            for (int indice = 0; indice < cores.length(); indice += 1) {
+                if (cores.getJSONObject(indice).optBoolean("allowed", false)) {
+                    almenoUnoConsentito = true;
+                    break;
+                }
+            }
+            assertTrue("sched_getaffinity leggibile ma NESSUN core consentito — "
+                    + "questo processo non potrebbe essere in esecuzione", almenoUnoConsentito);
+        }
     }
 
     /**
@@ -435,6 +492,101 @@ public class TalosLlamaEngineDeviceTest {
             assertTrue("il risultato prompt-json è stato perso prima del GGUF",
                     prompt.contains("TALOS_PROMPT_NONCE_848"));
             Log.i(TAG, "round-trip prompt-json-v1: " + file.getName());
+        }
+    }
+
+    /**
+     * B1 — la snapshot unica concorda con i vecchi metodi separati che
+     * sostituisce (kvCacheType/contextTokens/runtimeConfig), e i due campi
+     * nuovi (gpuLayersEffective/flashAttnEffective/backendDevice) esistono
+     * davvero - non variabili C++ scartate, come erano fino a questo blocco.
+     */
+    @Test
+    public void runtimeSnapshotAgreesWithTheSeparateGettersItReplaces() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File file = model(context);
+        Assume.assumeTrue(
+                "modello di prova assente: spingilo in " + (file == null ? "?" : file.getAbsolutePath()),
+                file != null && file.isFile());
+
+        TalosLlamaEngine engine = TalosLlamaEngine.open(context, file.getAbsolutePath(), 4, 4096, 0, true);
+        assertNotNull("il modello non si è aperto — guarda logcat, tag TalosLlama", engine);
+
+        try {
+            String raw = engine.runtimeSnapshot();
+            assertNotNull("runtimeSnapshot è tornata null su un contesto aperto", raw);
+            JSONObject snapshot = new JSONObject(raw);
+            Log.i(TAG, "runtimeSnapshot: " + raw);
+
+            assertEquals(1, snapshot.getInt("schema"));
+            assertEquals("i due varchi devono concordare su kvCacheType",
+                    engine.kvCacheType(), snapshot.getString("kvCacheType"));
+            assertEquals("i due varchi devono concordare su contextTokens",
+                    engine.contextTokens(), snapshot.getInt("contextTokens"));
+            long[] oldRuntime = engine.runtimeConfig();
+            assertNotNull("runtimeConfig() tornava null: non c'è più niente da confrontare", oldRuntime);
+            assertEquals("threads", oldRuntime[0], snapshot.getInt("threads"));
+            assertEquals("threadsBatch", oldRuntime[1], snapshot.getInt("threadsBatch"));
+            assertEquals("microBatch", oldRuntime[2], snapshot.getInt("microBatch"));
+
+            // ⛔⛔⛔ AL CONTRARIO — questa build (assembleDebug, nessun
+            // -PtalosResearchBackend) non porta libggml-opencl.so: chiesto
+            // gpuLayers=0 qui sopra, nessun bersaglio acceleratore può
+            // essersi risolto. La snapshot deve dirlo onestamente, non
+            // ripetere silenziosamente la richiesta.
+            assertEquals("gpuLayersEffective deve essere 0 su un'apertura CPU pura",
+                    0, snapshot.getInt("gpuLayersEffective"));
+            assertTrue("backendDevice deve essere assente o null senza un bersaglio risolto",
+                    snapshot.isNull("backendDevice") || !snapshot.has("backendDevice"));
+            assertTrue("flashAttnEffective mancante dalla snapshot", snapshot.has("flashAttnEffective"));
+            String fa = snapshot.getString("flashAttnEffective");
+            assertTrue("flashAttnEffective ha un valore inatteso: " + fa,
+                    fa.equals("auto") || fa.equals("disabled") || fa.equals("enabled"));
+        } finally {
+            engine.close();
+        }
+    }
+
+    /**
+     * B2, AL CONTRARIO — il ramo che il test sopra NON copriva. `open()`
+     * lascia `backend`/`device` vuoti, e questo esercita solo il sentinella
+     * "auto" di {@code talos_risolvi_bersaglio()}. Il banco di prova
+     * (`TalosLocalBaselineDeviceTest`) traduce invece la richiesta vuota in
+     * "none" ESPLICITO prima di scendere — un SECONDO sentinella — e una riga
+     * vera scritta da quel banco sul Pad portava {@code backendDevice:"none"}
+     * (stringa!) invece di null. Qui si chiama `nativeOpenTargeted`
+     * direttamente, come fa il banco, per riprodurre esattamente quel
+     * percorso e non lasciare che la correzione sia provata solo sull'altro.
+     */
+    @Test
+    public void runtimeSnapshotSaysNoneExplicitlyRequestedIsStillNoBackend() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File file = model(context);
+        Assume.assumeTrue(
+                "modello di prova assente: spingilo in " + (file == null ? "?" : file.getAbsolutePath()),
+                file != null && file.isFile());
+
+        TalosLlamaNative.ensureReady(context);
+        long handle = TalosLlamaNative.nativeOpenTargeted(
+                file.getAbsolutePath(), 4, 4096, 0, true, 4, 0, "f16",
+                "none", "", "default");
+        assertNotEquals("apertura CPU esplicita (\"none\") fallita: "
+                + TalosLlamaNative.nativeLastOpenError(), 0L, handle);
+
+        try {
+            String raw = TalosLlamaNative.nativeRuntimeSnapshot(handle);
+            assertNotNull("runtimeSnapshot è tornata null su un handle aperto", raw);
+            JSONObject snapshot = new JSONObject(raw);
+            Log.i(TAG, "runtimeSnapshot (backend=none esplicito): " + raw);
+
+            assertEquals("gpuLayersEffective deve essere 0 su backend=\"none\" esplicito",
+                    0, snapshot.getInt("gpuLayersEffective"));
+            assertTrue("backendDevice deve essere assente o null anche quando \"none\" è stato "
+                    + "chiesto ESPLICITAMENTE, non solo quando non si chiede nulla — il campo "
+                    + "dice \"c'è offload?\", non \"la richiesta era vuota?\"",
+                    snapshot.isNull("backendDevice") || !snapshot.has("backendDevice"));
+        } finally {
+            TalosLlamaNative.nativeClose(handle);
         }
     }
 

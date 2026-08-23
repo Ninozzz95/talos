@@ -187,6 +187,7 @@ const scelta = ref<boolean | null>(null)
 const guardo = computed(() => scelta.value ?? contestoDisponibile.value)
 
 const voce = useTalosRispostaAVoce({
+    source: 'assistant',
     streaming: () => chat.state.streamingText,
     messaggi: () => chat.messages,
     interfaccia: () => locale.value,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useTalosI18n } from '@/i18n'
+import { useTalosI18n, useTalosLocalization } from '@/i18n'
 import { ArrowLeft, Check, Mic, Pause, Play, RefreshCw, Volume1, Volume2, VolumeX } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMicWaveform from '@/components/brand/TalosMicWaveform.vue'
@@ -48,7 +48,22 @@ import type { TalosPersonalVoiceProfileSummary } from '@/lib/voice/personalVoice
 
 const props = withDefaults(defineProps<{ existingProfileCount: number }>(), { existingProfileCount: 0 })
 const emit = defineEmits<{ close: [], committed: [profile: TalosPersonalVoiceProfileSummary] }>()
-const { t, locale } = useTalosI18n()
+const { t } = useTalosI18n()
+/**
+ * ⛔⛔ Owner 22/8: «la voce codificata deve seguire la lingua di SISTEMA».
+ * MISURATO nel codice, non dedotto: `useTalosI18n().locale` (usato prima
+ * qui) è la lingua dell'INTERFACCIA, che una persona può impostare
+ * esplicitamente diversa dal sistema (`Impostazioni > Lingua`) — a quel
+ * punto smette di essere il sistema. `useTalosLocalization` porta invece
+ * `state.systemLocale`, calcolato una sola volta all'avvio dai tag di
+ * lingua VERI del dispositivo (`hydrateTalosLocaleEnvironment`, non da
+ * `mode`), indipendente da qualunque scelta fatta sull'interfaccia. Le
+ * frasi mostrate/lette nel wizard (`PHRASES` sotto, via `t()`) restano
+ * nella lingua dell'interfaccia — è quella in cui la persona sta
+ * leggendo, davvero — solo l'etichetta REGISTRATA sul profilo usa il
+ * sistema.
+ */
+const localization = useTalosLocalization()
 
 type Tier = 'whisper' | 'normal' | 'loud'
 interface Phrase { tier: Tier, text: string }
@@ -246,7 +261,7 @@ async function encodeVoice(): Promise<void> {
     try {
         await talosBuildVoiceEnrollmentProfile({
             displayName: name,
-            language: locale.value,
+            language: localization.state.systemLocale,
             style: 'neutral',
             consentVersion: CONSENT_VERSION,
         })
@@ -264,7 +279,16 @@ async function playPreview(): Promise<void> {
     previewing.value = true
     previewReadingId = `personal-voice-preview-${Date.now()}`
     try {
-        const result = await talosPreviewVoiceEnrollmentProfile(t('personalVoice.previewPhrase'), previewReadingId)
+        // ⛔⛔ Trovato 22/8, testando l'anteprima sul dispositivo:
+        // `personalVoice.previewPhrase` non esiste in NESSUN locale (grep
+        // su it.ts/en.ts, zero occorrenze) - vue-i18n senza chiave torna la
+        // chiave stessa come stringa, e il motore la sintetizzava alla
+        // lettera. `voice.previewPhrase` esiste già, dice esattamente la
+        // cosa giusta ("Ecco come TALOS leggerà le risposte ad alta voce"),
+        // ed è la stessa frase che l'anteprima del selettore voci userà per
+        // un profilo personale (vedi TalosMobileVoiceSettings.vue) - una
+        // sola frase, non due da tenere allineate.
+        const result = await talosPreviewVoiceEnrollmentProfile(t('voice.previewPhrase'), previewReadingId)
         if (!result.accepted) previewing.value = false
     } catch {
         previewing.value = false

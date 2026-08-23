@@ -17,6 +17,7 @@ import java.io.File;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -150,10 +151,6 @@ public class TalosLlamaPlugin extends Plugin {
         TalosLlamaEngine aperto = openEngine.get();
         JSObject shape = shapeOf(aperto);
         if (shape != null) result.put("shape", shape);
-        // Il tipo di cache viaggia con lo stato per la stessa ragione della
-        // forma: chi calcola quanto contesto ci sta lo chiede insieme al resto,
-        // e deve leggere quello CREATO, non quello chiesto.
-        if (aperto != null) result.put("kvCacheType", aperto.kvCacheType());
         // Quante aperture da quando il processo e' partito: due in un invio solo
         // vogliono dire che si stanno ricaricando pesi gia' in memoria.
         if (TalosLlamaNative.AVAILABLE) {
@@ -175,21 +172,36 @@ public class TalosLlamaPlugin extends Plugin {
             result.put("lastOpenReusedWeights", lastOpenReusedWeights);
         }
         /*
-         * I numeri con cui il modello sta girando DAVVERO.
+         * B1 — la snapshot unica, letta con UNA chiamata nativa invece di
+         * tre separate (kvCacheType/contextTokens/runtimeConfig prima).
+         * Ogni campo qui è ciò che il motore ha DAVVERO applicato, non ciò
+         * che qualcuno gli aveva chiesto — stessa disciplina di prima, un
+         * varco nativo solo invece di tre.
          *
-         * Chiesti al contesto e non ripetuti da ciò che era stato chiesto: fra
-         * la richiesta e la realtà c'è un ripiego possibile — un contesto che non
-         * si alloca, una cache che il modello non regge — e una diagnostica che
-         * mostra la richiesta invece del risultato racconta la stessa bugia che
-         * esiste per scoprire.
+         * ⛔ Un JSON malformato/mancante non è un "no" silenzioso qui
+         * nemmeno lui: `available` resta vero, gli altri campi restano
+         * quelli che si sono già scritti sopra, e nessuno di questi campi
+         * compare — la stessa regola di `deviceOffersOpenCl()`, "un dubbio
+         * non offre, non inventa".
          */
         if (aperto != null) {
-            result.put("contextTokens", aperto.contextTokens());
-            long[] runtime = aperto.runtimeConfig();
-            if (runtime != null && runtime.length >= 3) {
-                result.put("threads", runtime[0]);
-                result.put("threadsBatch", runtime[1]);
-                result.put("microBatch", runtime[2]);
+            String snapshotJson = aperto.runtimeSnapshot();
+            if (snapshotJson != null) {
+                try {
+                    JSONObject snapshot = new JSONObject(snapshotJson);
+                    result.put("kvCacheType", snapshot.getString("kvCacheType"));
+                    result.put("contextTokens", snapshot.getInt("contextTokens"));
+                    result.put("threads", snapshot.getInt("threads"));
+                    result.put("threadsBatch", snapshot.getInt("threadsBatch"));
+                    result.put("microBatch", snapshot.getInt("microBatch"));
+                    result.put("gpuLayersEffective", snapshot.getInt("gpuLayersEffective"));
+                    result.put("flashAttnEffective", snapshot.getString("flashAttnEffective"));
+                    if (!snapshot.isNull("backendDevice")) {
+                        result.put("backendDevice", snapshot.getString("backendDevice"));
+                    }
+                } catch (JSONException malformed) {
+                    android.util.Log.w("TalosLlama", "runtimeSnapshot malformata", malformed);
+                }
             }
         }
         call.resolve(result);
@@ -977,6 +989,21 @@ public class TalosLlamaPlugin extends Plugin {
         });
     }
 
+    /**
+     * ⛔⛔ SOLO RICERCA — imposta la famiglia di affinity CPU per il PROSSIMO
+     * open/reopen. Bypassa `TalosLlamaEngine`: chiama il nativo direttamente,
+     * lo stesso pattern degli altri export "SOLO RICERCA" (cache OpenCL, FA
+     * override) — non fa parte del percorso di produzione, esiste solo per
+     * la campagna di misura di P1-1.
+     */
+    @PluginMethod
+    public void setAffinityFamilyForResearch(PluginCall call) {
+        final int famigliaDecode = call.getInt("familyDecode", 0);
+        final int famigliaPrefill = call.getInt("familyPrefill", 0);
+        TalosLlamaNative.nativeSetAffinityFamilyForResearch(famigliaDecode, famigliaPrefill);
+        call.resolve();
+    }
+
     /** Stops the current generation. What was produced so far still stands. */
     @PluginMethod
     public void cancel(PluginCall call) {
@@ -1136,8 +1163,15 @@ public class TalosLlamaPlugin extends Plugin {
      * finestra di misura. Ogni tentativo scalda il chip un po' di più, quindi
      * pochi tentativi bastano; non è un numero a caso, è quanti ne sono
      * serviti a convergere qui.
+     *
+     * ⛔ Package-private, non `private`: P0-3/CR-06 vieta esplicitamente "un
+     * 9-run/sustained sweep automatico al primo 'ciao'" — questa è la riga
+     * che lo rispetta o lo rompe, e {@link TalosLlamaPluginQualificationBudgetTest}
+     * deve poterla leggere per accorgersi se qualcuno la alza verso la
+     * soglia da laboratorio (9, il numero di Q2) senza passare da un
+     * cancello esplicito.
      */
-    private static final int MAX_PROBE_ATTEMPTS = 4;
+    static final int MAX_PROBE_ATTEMPTS = 4;
 
     /**
      * Fa girare il sondaggio, se e quanto serve davvero, e restituisce cosa
@@ -1156,6 +1190,187 @@ public class TalosLlamaPlugin extends Plugin {
             return;
         }
         qualificationWorker.execute(() -> call.resolve(runQualification(path)));
+    }
+
+    /**
+     * P1-5 — i profili misurati per QUESTO modello, sull'identità di ADESSO
+     * (engine/model/driver): il primo consumatore reale di
+     * {@link TalosLocalProfileStore}, scritto in P0-2 e mai letto da
+     * nessuno finché questo blocco non arriva.
+     *
+     * ⛔ `loadValid`, non `load`: un profilo misurato con un engine build
+     * diverso da quello di adesso non è "incompleto", è per un motore che
+     * non esiste più su questo telefono — non deve mai finire nel calcolo
+     * del selettore. Nessuna qualificazione parte da qui: sola lettura di
+     * ciò che è già stato misurato altrove (`qualifyBackend`).
+     */
+    @PluginMethod
+    public void localPerformanceProfiles(PluginCall call) {
+        String path = call.getString("path");
+        if (path == null || path.isEmpty() || !new File(path).isFile()) {
+            call.reject("TALOS_LLAMA_PATH_REQUIRED");
+            return;
+        }
+        qualificationWorker.execute(() -> {
+            android.content.Context context = getContext();
+            String modelSha256 = sha256Del(path);
+            if (modelSha256 == null) {
+                call.resolve(new JSObject().put("profiles", new JSArray()));
+                return;
+            }
+            TalosLocalProfileIdentity identita =
+                    TalosLocalProfileIdentity.current(modelSha256, new File(path).length());
+            JSArray profiles = new JSArray();
+            for (TalosLocalProfile profilo : TalosLocalProfileStore.loadValid(context, identita)) {
+                JSObject row = new JSObject();
+                row.put("backendRegistry", profilo.backendRegistry);
+                row.put("backendDevice", profilo.backendDevice == null ? JSObject.NULL : profilo.backendDevice);
+                row.put("outcome", profilo.outcome == TalosBackendChoice.Outcome.CORRECT ? "CORRECT" : "FAILED");
+                row.put("ttftMs", profilo.ttftMs);
+                row.put("decodeTokPerSec", profilo.decodeTokPerSec);
+                row.put("qualificationLevel", profilo.qualificationLevel.name());
+                row.put("measuredAtMs", profilo.measuredAtMs);
+                profiles.put(row);
+            }
+            call.resolve(new JSObject().put("profiles", profiles));
+        });
+    }
+
+    /**
+     * P0-3 — Q0: "il motore si apre e risponde", senza il costo di
+     * {@link #qualifyBackend}. Nessuno store viene toccato — vedi
+     * {@link TalosLocalSmokeCheck}, che spiega perché: un verdetto PASSED
+     * qui non è una qualificazione, è l'assenza di un guasto grossolano.
+     */
+    @PluginMethod
+    public void smokeCheckLocalBackend(PluginCall call) {
+        String path = call.getString("path");
+        if (path == null || path.isEmpty() || !new File(path).isFile()) {
+            call.reject("TALOS_LLAMA_PATH_REQUIRED");
+            return;
+        }
+        if (!TalosLlamaNative.AVAILABLE) {
+            call.reject("TALOS_LLAMA_UNAVAILABLE");
+            return;
+        }
+        qualificationWorker.execute(() -> call.resolve(runSmokeCheck(path)));
+    }
+
+    /**
+     * L'orchestrazione di Q0: apre col backend che la chat userebbe DAVVERO
+     * in questo momento (stessa {@link TalosBackendChoice#choose} del
+     * percorso `open()` normale, non un nuovo criterio inventato qui), poi
+     * DUE giri sullo stesso motore — il golden completo, mai troncato, e lo
+     * Stop, in un secondo giro dedicato — e lascia a
+     * {@link TalosLocalSmokeCheck#judge} l'intera decisione.
+     *
+     * ⛔⛔⛔ MISURATO sul Pad, due volte, non dedotto:
+     *
+     * 1. Il primo tentativo creava un thread apposito per chiamare
+     *    {@code engine.run(...)}, con l'idea che il thread di questo metodo
+     *    restasse libero di chiamare {@code engine.cancel()} dopo un delay.
+     *    È esploso al primo giro reale — `TALOS_LLAMA_FUORI_DALL_ATTORE`,
+     *    `TalosLlamaEngine` impone che OGNI chiamata (tranne le vedette
+     *    elencate al campo {@code attore}: cancel, tokensProduced,
+     *    textSoFar, lastTimings) avvenga sul thread che ha aperto il
+     *    motore. La cura: {@code run()} resta sul thread CORRENTE; il
+     *    thread nuovo fa SOLO il delay e chiama {@code cancel()}.
+     * 2. Il secondo tentativo faceva golden e Stop nello STESSO giro —
+     *    genera, e a metà chiede il cancel. Un giro reale con questo prompt
+     *    di otto token ha prodotto GOLDEN_MISMATCH: il cancel non era
+     *    caduto durante il prefill come con il prompt più lungo di Q1, ma
+     *    DOPO che qualche token era già uscito — il verdetto sembrava dire
+     *    "il modello ha sbagliato" quando la verità era "l'ho interrotto
+     *    prima che finisse". La cura: due giri separati, vedi
+     *    {@link #misuraLatenzaStop}.
+     */
+    private JSObject runSmokeCheck(String path) {
+        android.content.Context context = getContext();
+        int gpuLayers = TalosBackendChoice.gpuLayers(TalosBackendChoice.choose(
+                android.os.Build.FINGERPRINT, TalosThermal.read(context),
+                TalosBackendEvidenceStore.load(context)));
+
+        TalosLlamaEngine.OpenAttempt attempt = TalosLlamaEngine.tryOpen(
+                context, path, 4, 4096, gpuLayers, true);
+        TalosLlamaEngine engine = attempt.engine();
+        if (engine == null) {
+            return esitoSmoke(TalosLocalSmokeCheck.Verdict.OPEN_FAILED, 0, null);
+        }
+        try {
+            // Fase 1 — il golden: un giro COMPLETO, mai troncato dal cancel.
+            TalosLlamaEngine.Run golden;
+            try {
+                golden = engine.run(
+                        TalosLocalSmokeCheck.PROMPT, TalosLocalSmokeCheck.MAX_TOKENS,
+                        () -> TalosThermal.read(context), TalosLlamaEngine.Mode.BENCHMARK);
+            } catch (InterruptedException interrottaDurantelaGenerazione) {
+                Thread.currentThread().interrupt();
+                golden = null;
+            }
+            String testo = golden == null ? null : golden.text;
+
+            // Fase 2 — lo Stop: un secondo giro, dedicato. Cosa produce non
+            // conta qui, solo quanto ci mette il motore a tornare.
+            long latenzaStopMs = misuraLatenzaStop(engine, context);
+
+            return esitoSmoke(TalosLocalSmokeCheck.judge(testo, latenzaStopMs), latenzaStopMs, testo);
+        } finally {
+            engine.close();
+        }
+    }
+
+    /**
+     * Chiede lo Stop a metà di un secondo giro e misura quanto ci mette il
+     * motore a tornare. {@code STOP_BUDGET_MS + 1} — sopra soglia per
+     * costruzione — se il cancellatore stesso non è mai tornato: un guasto
+     * diverso da "lento", ma {@link TalosLocalSmokeCheck#judge} lo vede
+     * comunque come "non ce l'ha fatta", non come un falso PASSED silenzioso.
+     */
+    private static long misuraLatenzaStop(TalosLlamaEngine engine, android.content.Context context) {
+        AtomicLong chiestoA = new AtomicLong(0);
+        Thread cancellatore = new Thread(() -> {
+            try {
+                Thread.sleep(TalosLocalSmokeCheck.STOP_DELAY_MS);
+            } catch (InterruptedException interrottoPrimaDelDelay) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            chiestoA.set(System.currentTimeMillis());
+            engine.cancel();
+        }, "talos-smoke-stop");
+        cancellatore.start();
+        try {
+            // Sul thread CORRENTE — stesso motivo della fase 1.
+            engine.run(TalosLocalSmokeCheck.PROMPT, TalosLocalSmokeCheck.MAX_TOKENS,
+                    () -> TalosThermal.read(context), TalosLlamaEngine.Mode.BENCHMARK);
+        } catch (InterruptedException interrottaDurantelaGenerazione) {
+            Thread.currentThread().interrupt();
+        }
+        try {
+            cancellatore.join(TalosLocalSmokeCheck.STOP_BUDGET_MS + 5_000);
+        } catch (InterruptedException interrottaDurantelAttesa) {
+            Thread.currentThread().interrupt();
+        }
+        if (cancellatore.isAlive() || chiestoA.get() == 0) {
+            return TalosLocalSmokeCheck.STOP_BUDGET_MS + 1;
+        }
+        return System.currentTimeMillis() - chiestoA.get();
+    }
+
+    private static JSObject esitoSmoke(
+            TalosLocalSmokeCheck.Verdict verdetto, long stopLatencyMs, String golden) {
+        return new JSObject()
+                .put("verdict", verdetto.name())
+                .put("passed", verdetto == TalosLocalSmokeCheck.Verdict.PASSED)
+                .put("stopLatencyMs", stopLatencyMs)
+                // ⛔ Diagnostico, non decorativo: un GOLDEN_MISMATCH senza
+                // dire COSA ha risposto il modello lascia a chi legge la
+                // scheda solo un "no" senza il perché — misurato qui
+                // stesso, dove senza questo campo ho dovuto rileggere il
+                // logcat a mano per scoprire che il primo PROMPT (non il
+                // motore) era il problema: vedi il commento su
+                // TalosLocalSmokeCheck.PROMPT.
+                .put("goldenText", golden == null ? JSONObject.NULL : golden);
     }
 
     private JSObject runQualification(String path) {
@@ -1179,6 +1394,18 @@ public class TalosLlamaPlugin extends Plugin {
             return result.put("reason", "already-proven");
         }
 
+        // P0-2: UNA sola lettura del file per l'intera qualificazione — CPU e
+        // GPU condividono lo stesso modello, e ricalcolare l'hash due volte
+        // sarebbe leggere lo stesso gigabyte due volte per lo stesso numero.
+        // Null propaga silenziosamente a entrambe le chiamate sotto: la
+        // qualificazione classica (TalosBackendEvidenceStore) non dipende da
+        // questo e continua comunque.
+        TalosLocalProfileIdentity identitaCorrente = null;
+        String modelSha256 = sha256Del(path);
+        if (modelSha256 != null) {
+            identitaCorrente = TalosLocalProfileIdentity.current(modelSha256, new File(path).length());
+        }
+
         // Il riferimento per giudicare la GPU è il testo della CPU di QUESTA
         // stessa chiamata, non uno vecchio: due corse a distanza di giorni
         // potrebbero cadere su prompt diversi se mai lo diventasse.
@@ -1199,7 +1426,8 @@ public class TalosLlamaPlugin extends Plugin {
             if (cpuRun == null) break;
             cpuText = cpuRun.text;
             boolean cpuOk = TalosLlamaProbe.referenceIsUsable(cpuText);
-            cpuRecorded = recordIfConclusive(context, TalosBackendChoice.CPU, driver, cpuRun, cpuOk);
+            cpuRecorded = recordIfConclusive(
+                    context, TalosBackendChoice.CPU, driver, cpuRun, cpuOk, identitaCorrente);
             cpuInconclusive = !cpuRecorded;
         }
         result.put("probedCpu", cpuRecorded);
@@ -1212,7 +1440,8 @@ public class TalosLlamaPlugin extends Plugin {
                 ProbeRun gpuRun = runOne(path, -1);
                 if (gpuRun == null) break;
                 boolean gpuOk = TalosLlamaProbe.agreesWithReference(cpuText, gpuRun.text);
-                gpuRecorded = recordIfConclusive(context, TalosBackendChoice.OPENCL, driver, gpuRun, gpuOk);
+                gpuRecorded = recordIfConclusive(
+                        context, TalosBackendChoice.OPENCL, driver, gpuRun, gpuOk, identitaCorrente);
                 gpuInconclusive = !gpuRecorded;
             }
         }
@@ -1269,7 +1498,7 @@ public class TalosLlamaPlugin extends Plugin {
      */
     private boolean recordIfConclusive(
             android.content.Context context, String backend, String driver,
-            ProbeRun run, boolean answerCorrect) {
+            ProbeRun run, boolean answerCorrect, TalosLocalProfileIdentity identitaCorrente) {
         TalosBenchmarkHarness.Result measured =
                 TalosBenchmarkHarness.judge(run.samples, answerCorrect, run.ttftMs);
         boolean conclusive = measured.verdict == TalosBenchmarkHarness.Verdict.VALID
@@ -1286,7 +1515,51 @@ public class TalosLlamaPlugin extends Plugin {
                 + (conclusive ? "" : " campioni=" + samplesDump));
         if (!conclusive) return false;
         TalosBackendEvidenceStore.record(context, TalosLlamaProbe.evidenceOf(backend, driver, measured));
+        // P0-2: layer PARALLELO, non un sostituto — TalosBackendChoice.choose
+        // continua a leggere solo lo store sopra, invariato. Null quando
+        // l'hash del modello non si è calcolato (vedi sha256Del): un profilo
+        // scritto con un'identità che non si può fidare sarebbe peggio di
+        // nessun profilo.
+        if (identitaCorrente != null) {
+            // Q1: questo È runQualification, il probe bounded dietro
+            // consenso — vedi TalosLlamaPluginQualificationBudgetTest per
+            // il cancello che tiene MAX_PROBE_ATTEMPTS lontano dai nove
+            // giri di Q2.
+            TalosLocalProfileStore.record(context, new TalosLocalProfile(
+                    identitaCorrente, backend, run.backendDevice,
+                    TalosBenchmarkHarness.outcomeOf(measured), run.ttftMs,
+                    System.currentTimeMillis(), TalosLocalProfile.Level.Q1,
+                    // P1-5: già calcolato da judge() poche righe sopra, solo
+                    // loggato finora — mai una seconda misura per questo.
+                    measured.tokensPerSecond));
+        }
         return true;
+    }
+
+    /**
+     * P0-2 — l'hash che dà a un modello un'identità che non è il suo nome
+     * file. Null se il file non si legge: un profilo con un'identità
+     * indovinata sarebbe peggio di nessun profilo, e la qualificazione
+     * classica ({@link TalosBackendEvidenceStore}) continua comunque — solo
+     * il layer nuovo resta senza questa riga.
+     *
+     * ⛔ Riusa {@link TalosResumableSha256}, non un secondo hash: è già
+     * l'implementazione con cui questo repo verifica un GGUF scaricato, e
+     * l'esadecimale minuscolo che produce è la stessa forma con cui
+     * HuggingFace pubblica `lfs.oid`.
+     */
+    private static String sha256Del(String path) {
+        TalosResumableSha256 digest = new TalosResumableSha256();
+        byte[] buffer = new byte[64 * 1024];
+        try (java.io.FileInputStream in = new java.io.FileInputStream(path)) {
+            int letti;
+            while ((letti = in.read(buffer)) >= 0) {
+                if (letti > 0) digest.update(buffer, 0, letti);
+            }
+            return digest.hex();
+        } catch (java.io.IOException illeggibile) {
+            return null;
+        }
     }
 
     /** Un campione per riga, per leggere a occhio dove il divario di tempo o di token si è rotto. */
@@ -1310,7 +1583,10 @@ public class TalosLlamaPlugin extends Plugin {
                     TalosLlamaProbe.PROMPT, TalosLlamaProbe.TOKENS,
                     () -> TalosThermal.read(getContext()), TalosLlamaEngine.Mode.BENCHMARK);
             if (run == null) return null;
-            return new ProbeRun(run.text, run.samples, run.ttftMs);
+            // P0-2: va letto ORA — l'handle nativo muore nel finally qui
+            // sotto, e uno snapshot chiesto dopo troverebbe solo un motore
+            // già chiuso.
+            return new ProbeRun(run.text, run.samples, run.ttftMs, backendDeviceDi(engine));
         } catch (InterruptedException interrotta) {
             Thread.currentThread().interrupt();
             return null;
@@ -1319,15 +1595,36 @@ public class TalosLlamaPlugin extends Plugin {
         }
     }
 
+    /**
+     * P0-2 — quale dispositivo di offload il motore ha DAVVERO usato in
+     * questa corsa, dalla snapshot unificata di B1. Non lo stesso dato che
+     * {@link #deviceOffersOpenCl} guarda: quello dice se un acceleratore
+     * ESISTE su questa build, questo dice se QUESTA apertura lo ha usato.
+     * Null se il motore è CPU pura o se la snapshot non si legge — "non lo
+     * so" resta null, mai una stringa inventata.
+     */
+    private static String backendDeviceDi(TalosLlamaEngine engine) {
+        try {
+            String snapshot = engine.runtimeSnapshot();
+            if (snapshot == null) return null;
+            JSONObject o = new JSONObject(snapshot);
+            return o.isNull("backendDevice") ? null : o.getString("backendDevice");
+        } catch (JSONException snapshotMalformata) {
+            return null;
+        }
+    }
+
     private static final class ProbeRun {
         final String text;
         final TalosBenchmarkHarness.Sample[] samples;
         final long ttftMs;
+        final String backendDevice;
 
-        ProbeRun(String text, TalosBenchmarkHarness.Sample[] samples, long ttftMs) {
+        ProbeRun(String text, TalosBenchmarkHarness.Sample[] samples, long ttftMs, String backendDevice) {
             this.text = text;
             this.samples = samples;
             this.ttftMs = ttftMs;
+            this.backendDevice = backendDevice;
         }
     }
 }

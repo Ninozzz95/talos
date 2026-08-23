@@ -35,7 +35,14 @@ internal data class TalosVoiceModelManifest(
         val targetDir: String,
         val files: List<File>,
     ) {
-        data class File(val path: String, val size: Long, val sha256: String)
+        data class File(
+            /** Exact path requested from the pinned upstream repository. */
+            val path: String,
+            val size: Long,
+            val sha256: String,
+            /** Relative path below the active artifact directory; defaults to the upstream layout. */
+            val targetPath: String = path,
+        )
     }
 
     /**

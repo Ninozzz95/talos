@@ -19,6 +19,7 @@ import {
     talosLocalEngineOpen,
     talosLocalEngineOpenWithFallback,
     talosLocalEngineStatus,
+    talosLocalEngineTimings,
     talosLocalInstalledModels,
     talosFreezePrefix,
     talosThawPrefix,
@@ -26,6 +27,7 @@ import {
     type TalosLocalTemplateCapabilities,
     type TalosLocalToolTransport,
 } from '@/services/localEngine'
+import { talosLocalTrace, talosNewLocalTraceId } from '@/lib/chat/providers/localTrace'
 import {
     talosPrefixCacheFileName,
     talosShouldFreezePrefix,
@@ -409,6 +411,8 @@ async function talosTuningKeyFor(
  */
 const IDENTITA_FILE = new Map<string, { bytes: number, modifiedAt: number }>()
 const PREFISSO_RESO = new Map<string, string>()
+/** Come `PREFISSO_RESO`, ma per il testo GIA' proiettato — vedi `prefissoResoDiProiettato`. */
+const PREFISSO_RESO_PROIETTATO = new Map<string, string>()
 interface TalosTemplateTransportDecision {
     transport: TalosLocalToolTransport
     capabilities: TalosLocalTemplateCapabilities | null
@@ -530,6 +534,78 @@ async function prefissoResoDi(
     }
 }
 
+/**
+ * P1-3 — come `prefissoResoDi`, ma per il trasporto che NON passa i tool al
+ * template nativo: `prompt-json-v1` inietta il catalogo dentro il testo del
+ * turno di sistema, e finora questo era il motivo per cui quel prefisso non
+ * si congelava mai (vedi il commento sulla guardia, più sotto).
+ *
+ * ⛔⛔ CR-09 — NON è una seconda versione del projector, ne usa lo STESSO
+ * usato dalla generazione vera (`talosProjectLocalToolConversation`,
+ * chiamata identica a quella di riga ~912). `tools` NON va MAI passato di
+ * nuovo a `talosLocalEngineChatPlan`: per questo trasporto sono già dentro
+ * `projection.turns` come testo — passarli anche come parametro nativo li
+ * farebbe applicare una seconda volta, al template Jinja, producendo un
+ * prompt DIVERSO da quello che la generazione vera manda.
+ *
+ * ⛔⛔⛔ VERIFICATO SUL PAD, 23/8 — un turno di sistema DA SOLO non basta.
+ * Misurato con `gemma-3-4b-it-Q4_K_M`: `chatPrompt` con un solo turno
+ * `{role:'system', ...}` rende `<start_of_turn>model\n` — 4 token, il
+ * contenuto del sistema SPARITO. La doc ufficiale lo spiega
+ * (ai.google.dev/gemma/docs/core/prompt-structure): Gemma non ha un ruolo
+ * system separato, le istruzioni vanno DENTRO il primo turno utente — e il
+ * motore, senza un turno a seguire in cui fonderle, non ha dove metterle.
+ *
+ * Un turno `{role:'system', ...}, {role:'user', content: segnaposto}`
+ * rende invece 222 token, l'intero catalogo incluso: il segnaposto NON
+ * può essere una stringa vuota — `projectPromptJson` scarta un turno
+ * utente con `content` falsy (`if (turn.content) …`), che farebbe
+ * ricomparire esattamente questo bug.
+ *
+ * ⛔ Non è un prefisso "sporco": il segnaposto è un carattere fisso, mai
+ * un vero messaggio, quindi il calcolo del prefisso comune (in-memory o
+ * su disco) si ferma comunque appena il testo VERO diverge da lui — un
+ * paio di token in più scartati, non l'intero catalogo ricalcolato.
+ */
+const TALOS_PREFIX_PLACEHOLDER_TURN = '.'
+
+// Esportata SOLO per il test diretto (il testo deve condividere un lungo
+// prefisso comune con quello che il projector produce per la generazione
+// vera, non l'intero output byte-per-byte — il segnaposto lo rende diverso
+// in coda, di proposito): non è pensata per essere chiamata da fuori
+// questo modulo in produzione.
+export async function prefissoResoDiProiettato(
+    transport: TalosLocalToolTransport,
+    capabilities: TalosLocalTemplateCapabilities | null | undefined,
+    system: string | undefined,
+    tools: readonly unknown[] | undefined,
+    locale: string | null | undefined,
+    pensa: boolean,
+): Promise<string | null> {
+    if (!system) return null
+    const chiave = `${transport}\0${system}\0${JSON.stringify(tools ?? [])}\0${locale ?? ''}\0${pensa}`
+    const memo = PREFISSO_RESO_PROIETTATO.get(chiave)
+    if (memo !== undefined) return memo
+    try {
+        const projection = talosProjectLocalToolConversation({
+            transport,
+            capabilities,
+            turns: [
+                { role: 'system', content: system },
+                { role: 'user', content: TALOS_PREFIX_PLACEHOLDER_TURN },
+            ],
+            tools,
+            locale,
+        })
+        if (!projection.turns.length) return null
+        const piano = await talosLocalEngineChatPlan(projection.turns, undefined, pensa)
+        PREFISSO_RESO_PROIETTATO.set(chiave, piano.prompt)
+        return piano.prompt
+    } catch {
+        return null
+    }
+}
+
 /** Dove vive il file: accanto al modello, con l'impronta per nome. */
 function accantoAlModello(modelPath: string, nomeFile: string): string {
     const taglio = modelPath.lastIndexOf('/')
@@ -583,6 +659,47 @@ async function prefissoCongelatoDi(
          * non sa dichiararla: lì si resta prudenti, cioè si invalida troppo
          * invece che troppo poco.
          */
+        engineBuild: status.engineBuild ?? TALOS_APP_BUILD,
+        prefixText: prompt,
+    }
+    return {
+        percorso: accantoAlModello(modelPath, talosPrefixCacheFileName(identita)),
+        prompt,
+        identita,
+    }
+}
+
+/**
+ * P1-3 — come `prefissoCongelatoDi`, ma per il testo GIA' proiettato.
+ *
+ * L'identità resta lo stesso `TalosPrefixIdentity` di sempre: la protezione
+ * "l'impronta è il testo" (`prefixCache.ts`) non ha bisogno di sapere quale
+ * dei due percorsi ha prodotto `prefixText` — un testo diverso produce già
+ * un nome di file diverso, per costruzione. Cambia solo COME si ottiene il
+ * testo, non come lo si custodisce.
+ */
+async function prefissoCongelatoDiProiettato(
+    modelPath: string,
+    transport: TalosLocalToolTransport,
+    capabilities: TalosLocalTemplateCapabilities | null | undefined,
+    system: string | undefined,
+    tools: readonly unknown[] | undefined,
+    locale: string | null | undefined,
+    status: TalosLocalEngineStatus,
+    contextTokens: number,
+    pensa: boolean,
+): Promise<TalosPrefissoCongelato | null> {
+    const [file, prompt] = await Promise.all([
+        identitaFileDi(modelPath),
+        prefissoResoDiProiettato(transport, capabilities, system, tools, locale, pensa),
+    ])
+    if (!file || !prompt) return null
+    const identita: TalosPrefixIdentity = {
+        modelPath,
+        modelBytes: file.bytes,
+        modelModifiedAt: file.modifiedAt,
+        contextTokens,
+        kvCacheType: status.kvCacheType ?? 'f16',
         engineBuild: status.engineBuild ?? TALOS_APP_BUILD,
         prefixText: prompt,
     }
@@ -837,11 +954,60 @@ async function pianoDiApertura(
         : { contextTokens: TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS, kvCacheType: 'q8_0' }
 }
 
+/**
+ * B1 — il confine di cancellazione, separato dal corpo di `run()` invece di
+ * avvolgerlo tutto in un try/finally: `runBody` sotto è già 250+ righe, e
+ * reindentarle tutte per un try/finally era il modo più facile di introdurre
+ * un difetto vero in un file che nessun typecheck avrebbe potuto vedere
+ * (rientri sbagliati non sono un errore di sintassi).
+ *
+ * ⛔ `cancel_requested`/`cancel_effective` con lo STESSO id di `runBody`, non
+ * due eventi anonimi. Prima di questo blocco l'annullamento viveva del tutto
+ * fuori da `run()` (dentro `streamComplete`, sotto), dove nessun `traceId`
+ * esisteva ancora - lo stesso genere di distanza per cui
+ * `talosLocalEngineCancel` fu trovata senza chiamante il 6/8: un pezzo
+ * separato dal resto della generazione è un pezzo che si dimentica di
+ * collegare.
+ */
 async function run(
     input: TalosMobileCompletionInput,
     onChunk?: (text: string) => void,
     onReasoning?: (text: string) => void,
+    signal?: AbortSignal,
 ): Promise<TalosMobileCompletionResult> {
+    const traceId = talosNewLocalTraceId()
+    if (signal?.aborted) throw new Error('TALOS_LOCAL_ABORTED')
+    const fermaIlMotore = (): void => {
+        talosLocalTrace(traceId, 'cancel_requested')
+        void Promise.resolve(talosLocalEngineCancel())
+            .then(() => talosLocalTrace(traceId, 'cancel_effective'))
+            .catch(() => talosLocalTrace(traceId, 'cancel_effective error'))
+    }
+    signal?.addEventListener('abort', fermaIlMotore, { once: true })
+    try {
+        return await runBody(input, onChunk, onReasoning, traceId)
+    } finally {
+        signal?.removeEventListener('abort', fermaIlMotore)
+    }
+}
+
+async function runBody(
+    input: TalosMobileCompletionInput,
+    onChunk: ((text: string) => void) | undefined,
+    onReasoning: ((text: string) => void) | undefined,
+    traceId: string,
+): Promise<TalosMobileCompletionResult> {
+    /**
+     * B1 — un id che lega tutti gli eventi di QUESTA generazione, dal primo
+     * istante in cui l'adattatore la prende in carico. Prima di questo
+     * blocco: zero id di correlazione in tutto il repo (grep esaustivo).
+     * `adapter_start` è l'evento più vicino a "la persona ha premuto
+     * invio" che questo file può misurare da sé - il tempo PRIMA di qui
+     * (dalla battitura al submit) appartiene a `chatController`, non
+     * ancora tracciato: dichiarato, non nascosto.
+     */
+    talosLocalTrace(traceId, 'adapter_start')
+
     /**
      * I tool, nella STESSA forma che ricevono i provider di rete.
      *
@@ -854,6 +1020,7 @@ async function run(
      * Il filtro sulle capacità del modello resta al suo posto: è lì che si
      * decide se questo modello può chiamare qualcosa, e non qui.
      */
+    talosLocalTrace(traceId, 'template_project_start')
     const offered = talosModelSupportsToolCalling(input.model) ? input.tools : undefined
     const wireTools = offered?.length ? talosToolsForLocalEngine(offered) : undefined
     const template = await trasportoToolDi(input.model.id)
@@ -864,6 +1031,7 @@ async function run(
         tools: wireTools,
         locale: input.locale,
     })
+    talosLocalTrace(traceId, 'template_project_done')
     const turns = projection.turns
     const tools = projection.templateTools
 
@@ -891,7 +1059,13 @@ async function run(
      */
     const pensa = input.thinking !== false
     const anticipo = await talosLocalEnginePlanPrompt(input.model.id, turns, tools, pensa)
+    talosLocalTrace(traceId, 'native_open_start')
     const status = await ensureLoaded(input.model.id, await pianoDiApertura(anticipo))
+    // ⛔ Un evento onesto, non un tempo di ricarica garantito: `ensureLoaded`
+    // può non fare nulla se il modello era già aperto - e allora la durata
+    // fra i due eventi è quella che DICE che non ha ricaricato niente,
+    // invece di lasciarlo indovinare a chi legge il log.
+    talosLocalTrace(traceId, 'native_open_done')
     const ceiling = await localContextCeiling(status.shape)
     let plan = await talosLocalEngineChatPlan(turns, tools, pensa)
     const targetContext = talosLocalEscalatedContextTokens(
@@ -953,15 +1127,22 @@ async function run(
      * volta e dopo ogni cambio di modello, di contesto o di testo. Si calcola,
      * che è ciò che si faceva prima di tutto questo.
      */
-    // `prompt-json-v1` injects its catalog into the projected system turn; the
-    // native prefix freezer only knows the original input.system. Until that
-    // profile has its own verified prefix identity, do not freeze a different
-    // prompt and risk thawing it into another conversation.
+    // P1-3: `prompt-json-v1` injects its catalog into the projected system
+    // turn. Freezing used to refuse this transport outright — the native
+    // freezer only knew the original `input.system`, and caching THAT under
+    // the same identity as the projected prompt would have been a different
+    // prompt behind the same name. The guard is not weaker now: it still
+    // never freezes `input.system` for this transport. It freezes the exact
+    // projected text instead, built by the SAME projector the generation
+    // below calls (CR-09) — never a second version of it.
     const congelato = template.transport === 'native-template' || !wireTools?.length
         ? await prefissoCongelatoDi(
             input.model.id, input.system, tools, status, plan.contextTokens, pensa,
         )
-        : null
+        : await prefissoCongelatoDiProiettato(
+            input.model.id, template.transport, template.capabilities,
+            input.system, wireTools, input.locale, status, plan.contextTokens, pensa,
+        )
     if (congelato) await talosThawPrefix(congelato.percorso)
 
     let generation
@@ -996,13 +1177,25 @@ async function run(
          * la persona vede - ed e' invisibile a chi controlla dopo.
          */
         const trattieni = talosTrattieniLeChiamate()
+        // ⛔ Un flag locale, non un evento per fetta: `first_visible_token`
+        // conta una volta sola, la prima, altrimenti la riga di log
+        // annegherebbe fra decine di eventi per una risposta lunga - la
+        // stessa disciplina di `talosTrattieniLeChiamate` un livello sopra.
+        let primoTokenVisibileTracciato = false
+        talosLocalTrace(traceId, 'generate_start')
         generation = await talosLocalEngineGenerate(
             plan.prompt,
             (delta) => {
                 const fetta = separatore.push(delta)
                 if (fetta.text) {
                     const visibile = trattieni.push(fetta.text)
-                    if (visibile) onChunk?.(visibile)
+                    if (visibile) {
+                        if (!primoTokenVisibileTracciato) {
+                            primoTokenVisibileTracciato = true
+                            talosLocalTrace(traceId, 'first_visible_token')
+                        }
+                        onChunk?.(visibile)
+                    }
                 }
                 if (fetta.reasoning) onReasoning?.(fetta.reasoning)
             },
@@ -1020,7 +1213,20 @@ async function run(
         const coda = trattieni.flush()
         if (coda) onChunk?.(coda)
         if (ultima.reasoning) onReasoning?.(ultima.reasoning)
+        talosLocalTrace(traceId, 'complete')
+        /**
+         * ⛔⛔⛔ B1 — questi numeri esistevano già (il cronometro nativo,
+         * `talos_cronometro` in talos_llama_jni.cpp), ma non finivano MAI
+         * in un posto leggibile: l'unico riferimento a `lastTimings` in
+         * tutto `mobile/src` era questa stessa funzione che non la
+         * chiamava. Un blob misurato e mai letto è la stessa forma di
+         * `funzione-con-i-test-e-nessun-chiamante` - stavolta sui dati,
+         * non sul codice.
+         */
+        const tempi = await talosLocalEngineTimings()
+        if (tempi) talosLocalTrace(traceId, `native_timings ${JSON.stringify(tempi)}`)
     } catch (error) {
+        talosLocalTrace(traceId, `error ${error instanceof Error ? error.message : String(error)}`)
         if (error instanceof TalosLocalEngineGenerationError) {
             throw actionableGenerationFailure(error)
         }
@@ -1309,23 +1515,11 @@ export const localAdapter: TalosMobileProviderAdapter = {
          * L'annullamento resta per la GENERAZIONE e non per il caricamento:
          * interrompere un caricamento a metà lascia gigabyte mappati a metà, e
          * quella è davvero la parte che non conviene toccare.
+         *
+         * B1: il collegamento fra segnale e `talosLocalEngineCancel` vive
+         * ora dentro `run()`, dove esiste il `traceId` da tracciare insieme
+         * a `cancel_requested`/`cancel_effective` - qui resta solo passarlo.
          */
-        if (handlers.signal?.aborted) throw new Error('TALOS_LOCAL_ABORTED')
-        const fermaIlMotore = () => {
-            // Un annullamento che fallisce non deve rovesciare la risposta già
-            // ricevuta: il peggio che può capitare è che il motore finisca da
-            // solo, cioè esattamente com'era prima di questa correzione.
-            // `Promise.resolve` attorno: il ponte nativo può restituire
-            // `undefined` invece di una promessa, e un annullamento che va in
-            // eccezione mentre si sta annullando è il modo più stupido di
-            // perdere una risposta già ricevuta.
-            void Promise.resolve(talosLocalEngineCancel()).catch(() => {})
-        }
-        handlers.signal?.addEventListener('abort', fermaIlMotore, { once: true })
-        try {
-            return await run(input, handlers.onChunk, handlers.onReasoning)
-        } finally {
-            handlers.signal?.removeEventListener('abort', fermaIlMotore)
-        }
+        return run(input, handlers.onChunk, handlers.onReasoning, handlers.signal)
     },
 }

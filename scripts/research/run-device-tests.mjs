@@ -141,6 +141,25 @@ annuncia(`pacchetto     ${PACCHETTO}`)
  * ⛔ Se la firma non combacia — un debug sopra un rilascio — l'installazione
  * fallisce con INSTALL_FAILED_UPDATE_INCOMPATIBLE. È l'esito GIUSTO: la cura
  * non è disinstallare di nascosto, è che qualcuno decida.
+ *
+ * ⛔⛔ P0-1, MISURATO il 2026-08-22: "i suoi dati" NON include `code_cache`.
+ * Due corse consecutive di QUESTO script, stesso modello, stesso backend,
+ * hanno riscritto ENTRAMBE 174-175 kernel OpenCL su 175, come se la cache
+ * fosse sempre fredda — nonostante i `.clbin` della prima corsa fossero
+ * ancora fisicamente sul disco quando la seconda è partita (verificato con
+ * `ls` fra le due). Causa: OGNI corsa di questo script fa `install -r`
+ * dell'APK **prima** di eseguire, e su Android questo BASTA a svuotare
+ * `code_cache` — la stessa cartella che la documentazione descrive come
+ * "ripulita quando l'app si aggiorna", e un reinstall bit-identico conta
+ * comunque come aggiornamento agli occhi del gestore pacchetti per quella
+ * cartella specifica. Chiamare `am instrument` DIRETTAMENTE (bypassando
+ * questo script, niente install in mezzo) sullo stesso APK già installato
+ * ha invece impiegato 9,8 s contro 44,7-55,6 s — la prova che la cache
+ * persiste DAVVERO fra riavvii di processo REALI (il caso dell'utente, che
+ * non reinstalla l'app ad ogni avvio). ⇒ Questo script misura fedelmente
+ * tutto il resto, ma NON è lo strumento giusto per misurare la persistenza
+ * della cache OpenCL fra due corse: quella richiede due `am instrument`
+ * senza reinstallazione in mezzo.
  */
 function installa(apk, etichetta) {
     annuncia(`installo     ${etichetta}`)

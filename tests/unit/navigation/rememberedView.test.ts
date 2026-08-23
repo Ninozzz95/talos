@@ -44,10 +44,10 @@ describe('the remembered view', () => {
 
     it('keeps each surface in its own slot', () => {
         const storage = fakeStorage()
-        talosRememberView('appearance', 'voice', storage)
+        talosRememberView('appearance', 'motion', storage)
         talosRememberView('doctor', 'advanced', storage)
 
-        expect(talosRememberedView('appearance', storage)).toBe('voice')
+        expect(talosRememberedView('appearance', storage)).toBe('motion')
         expect(talosRememberedView('doctor', storage)).toBe('advanced')
     })
 

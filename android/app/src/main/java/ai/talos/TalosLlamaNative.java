@@ -44,15 +44,44 @@ final class TalosLlamaNative {
      * su Android sono `/system/bin` e `/`. Senza questa chiamata il registro
      * resta vuoto e ogni modello «non si apre», con un messaggio che manda a
      * cercare la causa altrove.
+     *
+     * ⛔ P0-1 — passa giù ANCHE una cartella per la cache dei binari OpenCL
+     * compilati. `getCodeCacheDir()`, non `getCacheDir()`: la documentazione
+     * Android la descrive esplicitamente per "codice compilato/ottimizzato
+     * generato a runtime" — esattamente cosa sono questi `.clbin` — e viene
+     * ripulita da sola ad ogni aggiornamento di app o piattaforma, il momento
+     * in cui un pin diverso di llama.cpp potrebbe cambiare i kernel sorgente e
+     * lasciare orfani i vecchi binari. Il nativo la crea se manca
+     * (`cl-program-cache.cpp`, upstream); qui basta il percorso.
      */
     static synchronized void ensureReady(android.content.Context context) {
         if (prepared || !AVAILABLE) return;
         String directory = context == null ? "" : context.getApplicationInfo().nativeLibraryDir;
-        nativeInit(directory == null ? "" : directory);
+        String openClCacheDir = context == null ? ""
+                : new java.io.File(context.getCodeCacheDir(), "ggml-opencl-cache").getAbsolutePath();
+        nativeInit(directory == null ? "" : directory, openClCacheDir);
         prepared = true;
     }
 
-    private static native void nativeInit(String nativeLibraryDir);
+    private static native void nativeInit(String nativeLibraryDir, String openClCacheDir);
+
+    /**
+     * ⛔ SOLO RICERCA — accende il trace HIT/MISS/SAVE della cache P0-1 su
+     * logcat (tag TalosLlama, verificato: NON "TALOS"). Un log per kernel
+     * compilato non è per la produzione. Va chiamata dopo {@link #ensureReady}
+     * e prima di aprire un modello con offload: la cache legge la variabile
+     * una volta sola, alla prima allocazione sul backend OpenCL.
+     */
+    static native void nativeEnableOpenClCacheDebugTraceForResearch();
+
+    /**
+     * ⛔ SOLO RICERCA — il CONTROLLO dell'esperimento cache: spegne
+     * esplicitamente {@code GGML_OPENCL_KERNEL_CACHE_DIR} per QUESTO
+     * processo, sovrascrivendo quanto {@link #ensureReady} ha già impostato.
+     * Ogni kernel ricompila sempre, senza eccezioni — la controprova che i
+     * guadagni misurati a cache accesa vengono davvero da lei.
+     */
+    static native void nativeDisableOpenClCacheForResearch();
 
     /** I backend ggml registrati, separati da virgola. Vuoto se nessuno. */
     static native String nativeBackends();
@@ -74,6 +103,39 @@ final class TalosLlamaNative {
      * che un modello esista.
      */
     static native String nativeBackendInventory();
+
+    /**
+     * P1-1 — la topologia CPU VERA, letta dal processo nativo, non un nome
+     * di chip scritto a mano (piano sorgente, §9.4: "Do not hardcode 'cores
+     * 6 and 7 are big'").
+     *
+     * Forma: {@code {"cores":[{"index":0,"online":true,"capacity":446,
+     * "allowed":true},...],"affinityReadable":true}}.
+     *
+     * ⛔ {@code capacity=-1} è "questo kernel non lo espone", non zero core.
+     * {@code allowed=null} (non {@code false}) è "sched_getaffinity non ha
+     * risposto per il processo intero", diverso da "questo core specifico è
+     * escluso" — non confondere le due assenze.
+     *
+     * Diagnostico puro: non crea nessun thread pool, non tocca nessuna
+     * sessione. Il lifecycle dei pool nativi (CR-07 del piano sorgente:
+     * rischio reale di use-after-free/deadlock) resta un blocco separato.
+     */
+    static native String nativeCpuTopology();
+
+    /**
+     * ⛔⛔ SOLO RICERCA — la famiglia di affinity CPU per la PROSSIMA apertura
+     * o ricostruzione di contesto. Valori: {@code 0} DEFAULT (nessuna
+     * maschera, il comportamento di produzione), {@code 1} tutti i core
+     * consentiti, {@code 2} solo i core forti, {@code 3} solo i deboli,
+     * {@code 4} tutti tranne il più debole — tradotti in una cpumask vera
+     * dalla topologia letta ADESSO, mai una lista scritta a mano.
+     *
+     * ⛔ Non tocca un contesto già aperto: serve rifarlo (stesso vincolo di
+     * {@code microBatch}). Zero effetto su un'apertura normale che non
+     * chiama mai questo metodo.
+     */
+    static native void nativeSetAffinityFamilyForResearch(int famigliaDecode, int famigliaPrefill);
 
     /**
      * ⛔ SOLO RICERCA — PERCHE' un backend manca dall'inventario.
@@ -171,6 +233,28 @@ final class TalosLlamaNative {
 
     /** La cache creata DAVVERO: {@code "q8_0"} oppure {@code "f16"}. */
     static native String nativeKvCacheType(long handle);
+
+    /**
+     * B1 — un'unica snapshot versionata di ciò che il motore ha DAVVERO
+     * applicato, invece di un metodo nativo per ogni campo (il piano
+     * sorgente del programma MAX PERFORMANCE lo chiede esplicitamente).
+     *
+     * Forma: {@code {"schema":1,"backendDevice":string|null,
+     * "gpuLayersEffective":int,"flashAttnEffective":string,
+     * "kvCacheType":string,"contextTokens":int,"threads":int,
+     * "threadsBatch":int,"microBatch":int}}.
+     *
+     * ⛔ {@code gpuLayersEffective} NON è un conteggio per-strato reale
+     * dell'offload (quello richiede instrumentation del graph placement di
+     * ggml, non ancora scritta) - è la richiesta, ma SOLO se un
+     * dispositivo acceleratore è stato davvero risolto all'apertura. Zero
+     * altrimenti, anche con un {@code gpuLayers} richiesto diverso da
+     * zero: il caso che oggi il codice nasconde in silenzio.
+     *
+     * @return {@code null} se l'handle non è valido o il contesto non è
+     *     (più) aperto.
+     */
+    static native String nativeRuntimeSnapshot(long handle);
 
     /**
      * ⛔ SOLO RICERCA — la grammatica dell'ultimo template applicato, in JSON.

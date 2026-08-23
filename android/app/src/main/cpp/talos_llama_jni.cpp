@@ -14,12 +14,14 @@
 
 #include <jni.h>
 #include <android/log.h>
+#include <sched.h>  // sched_getaffinity — P1-1, la topologia CPU
 #include <sys/stat.h>
 
 #include <algorithm>
 #include <cctype>   // std::tolower, per il confronto dei nomi di backend
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>  // setenv — P0-1, la cache dei binari OpenCL
 #include <atomic>
 #include <cstring>
 // Per la sonda di caricamento dei backend: elenca la cartella nativa e prova
@@ -112,6 +114,45 @@ struct talos_session {
      * una conversazione che poi non entra in memoria.
      */
     std::string kv_type = "f16";
+
+    /**
+     * ⭐⭐⭐ B1 — «gpuLayersEffective»/«flashAttnEffective» esistevano solo
+     * come variabili locali dentro `talos_apri_modello`, scartate al ritorno
+     * della funzione: in NESSUNA API, a nessun livello, chi apriva un
+     * modello poteva rileggere quanti strati fossero DAVVERO su un
+     * acceleratore invece che sulla CPU (verificato con una ricerca
+     * dedicata prima di scrivere questi campi - CR-01 del piano sorgente:
+     * "due percorsi di apertura possono far ricomparire il bug misurato-ma-
+     * non-usato").
+     *
+     * ⛔ `gpu_layers_effective` NON è un conteggio per-strato reale (quello
+     * richiede instrumentation del graph placement di ggml, fuori scope
+     * finché non arriva P2-4 "partial offload frontier" - il piano
+     * sorgente lo dice esplicitamente, CR-03): l'header pubblico di
+     * llama.cpp non espone un contatore, solo una riga di log
+     * ("llm_load_tensors: offloaded X/Y layers"), confermato cercando prima
+     * di scrivere questo campo. Quello che l'header GARANTISCE, però:
+     * `llama_model_load_from_file` con un `n_gpu_layers` che non ci sta in
+     * memoria FALLISCE al caricamento (nessun ripiego parziale silenzioso)
+     * - quindi "il modello si è aperto, richiesto un acceleratore, un
+     * dispositivo è stato risolto" implica che la richiesta è stata
+     * onorata per intero, non un'approssimazione ottimistica. Zero se
+     * nessun dispositivo è stato risolto, anche con `gpuLayers` diverso da
+     * zero richiesto - il caso che oggi il codice nasconde in silenzio.
+     */
+    int gpu_layers_effective = 0;
+
+    /** Il bersaglio di offload DAVVERO risolto - vuoto se nessuno (CPU pura). */
+    std::string backend_target_effective;
+
+    /**
+     * Flash Attention, la modalità con cui il contesto è stato DAVVERO
+     * creato - letta da `ctx_params.flash_attn_type` dopo che
+     * `llama_init_from_model` è tornato, non dedotta dai rami che l'hanno
+     * impostata. Cambia a ogni ricostruzione del contesto
+     * (`nativeReopenContext`), quindi si aggiorna anche lì.
+     */
+    std::string flash_attn_effective = "auto";
 
     /**
      * Il testo prodotto finora, e il lucchetto che lo rende leggibile da fuori.
@@ -222,6 +263,31 @@ struct talos_session {
      * ogni turno si perderebbero temperatura e filtri.
      */
     common_params_sampling sampling;
+
+    /**
+     * P1-1 blocco 2: il thread pool ESTERNO, se `talos_avvia_threadpool()`
+     * lo ha creato con successo — `nullptr` altrimenti, e in quel caso il
+     * contesto gira sul pool INTERNO di default che llama.cpp crea da solo
+     * (comportamento odierno, invariato: nessuna regressione se la
+     * creazione fallisce).
+     *
+     * ⛔ `threadpool_batch` può essere lo STESSO puntatore di `threadpool`
+     * quando i due carichi condividono un solo pool (vedi
+     * `talos_avvia_threadpool`): liberarli come se fossero sempre due
+     * oggetti distinti sarebbe una doppia `free` sullo stesso puntatore.
+     * `talos_ferma_threadpool()` lo confronta prima di liberare.
+     */
+    ggml_threadpool * threadpool       = nullptr;
+    ggml_threadpool * threadpool_batch = nullptr;
+    /**
+     * Risolto UNA VOLTA da `talos_avvia_threadpool()` via il registro dei
+     * backend (lo stesso meccanismo con cui la cura dell'abort OpenCL
+     * espone il suo setter) — mai chiamato direttamente per nome, così
+     * questo file non lega la build a una versione precisa del simbolo.
+     * `nullptr` finché nessun pool è mai stato creato: è anche il modo con
+     * cui `talos_ferma_threadpool()` sa se c'è qualcosa da fare.
+     */
+    void (*threadpool_free_fn)(ggml_threadpool *) = nullptr;
 };
 
 /**
@@ -235,6 +301,321 @@ struct talos_session {
 bool talos_deve_fermarsi(void * opaco) noexcept {
     auto * session = static_cast<talos_session *>(opaco);
     return session != nullptr && session->cancelled.load(std::memory_order_relaxed);
+}
+
+/**
+ * Un core, con i tre fatti che contano — MAI un nome di chip scritto a
+ * mano. Piano sorgente, §9.4/10.1: "Do not hardcode 'cores 6 and 7 are
+ * big'. Read capacity/online/allowed masks every time the device
+ * fingerprint changes."
+ *
+ *  - `online`: `/sys/.../cpuN/online` — assente è "sempre online" (il caso
+ *    normale per `cpu0` su molti kernel, che non espone il file perché non
+ *    è hot-pluggabile), non un errore da propagare.
+ *  - `capacity`: `/sys/.../cpuN/cpu_capacity`, 1024 = il core più forte —
+ *    stessa fonte già letta lato Java in `TalosDeviceCapacityPlugin`, qui
+ *    duplicata perché il thread pool nativo la usa nel momento in cui crea
+ *    il pool, non con un giro di andata e ritorno verso JS che potrebbe
+ *    leggere uno stato non più attuale.
+ *  - `allowed`: `sched_getaffinity` sul processo CORRENTE — quali core il
+ *    cgroup/cpuset del sistema concede DAVVERO a questo processo, un fatto
+ *    che `cpu_capacity` da solo non dice (un core può essere forte E fuori
+ *    dal cpuset consentito).
+ */
+struct talos_core_cpu {
+    int  index    = -1;
+    bool online   = true;
+    int  capacity = -1;   // -1 = illeggibile, mai indovinato
+    bool allowed  = false;
+};
+
+/**
+ * Legge UN core dalle tre fonti — fail-closed per campo, non per l'intera
+ * lettura: un file illeggibile per questo core diventa `capacity: -1` per
+ * lui soltanto, la stessa disciplina di `nativeBackendInventory` dove un
+ * campo mancante è un campo assente, mai un numero indovinato.
+ */
+talos_core_cpu talos_leggi_core_cpu(long indice, const cpu_set_t & consentiti, bool affinitaLeggibile) {
+    talos_core_cpu core;
+    core.index = (int) indice;
+
+    std::string percorsoOnline = "/sys/devices/system/cpu/cpu" + std::to_string(indice) + "/online";
+    FILE * fileOnline = fopen(percorsoOnline.c_str(), "r");
+    if (fileOnline != nullptr) {
+        char riga[8] = {0};
+        if (fgets(riga, sizeof(riga), fileOnline) != nullptr) core.online = riga[0] == '1';
+        fclose(fileOnline);
+    }
+
+    std::string percorsoCapacity = "/sys/devices/system/cpu/cpu" + std::to_string(indice) + "/cpu_capacity";
+    FILE * fileCapacity = fopen(percorsoCapacity.c_str(), "r");
+    if (fileCapacity != nullptr) {
+        if (fscanf(fileCapacity, "%d", &core.capacity) != 1) core.capacity = -1;
+        fclose(fileCapacity);
+    }
+
+    core.allowed = affinitaLeggibile && CPU_ISSET(indice, &consentiti);
+    return core;
+}
+
+/**
+ * La topologia intera — la fonte comune per la diagnostica
+ * (`nativeCpuTopology`) e per le famiglie di affinity qui sotto, cosi' le
+ * due non possono raccontare due storie diverse dello stesso dispositivo.
+ */
+std::vector<talos_core_cpu> talos_leggi_topologia_cpu(bool * affinitaLeggibileOut = nullptr) {
+    std::vector<talos_core_cpu> cores;
+    long configurati = sysconf(_SC_NPROCESSORS_CONF);
+    if (configurati < 0) configurati = 0;
+
+    cpu_set_t consentiti;
+    CPU_ZERO(&consentiti);
+    bool affinitaLeggibile = sched_getaffinity(0, sizeof(consentiti), &consentiti) == 0;
+    if (affinitaLeggibileOut != nullptr) *affinitaLeggibileOut = affinitaLeggibile;
+
+    cores.reserve((size_t) configurati);
+    for (long indice = 0; indice < configurati; indice += 1) {
+        cores.push_back(talos_leggi_core_cpu(indice, consentiti, affinitaLeggibile));
+    }
+    return cores;
+}
+
+/**
+ * P1-1 blocco 3 — le famiglie di affinity, tradotte da un NUMERO a una
+ * cpumask VERA solo quando serve, mai scritte a mano una volta per tutte.
+ *
+ * `DEFAULT` è il comportamento del blocco 2 (nessuna maschera esplicita) —
+ * resta il default di produzione finché non esiste una campagna di misura
+ * che dica quale altra famiglia vince (P1-1 blocco 5, non questo).
+ */
+enum talos_affinity_famiglia {
+    TALOS_AFFINITY_DEFAULT          = 0,
+    TALOS_AFFINITY_TUTTI_CONSENTITI = 1,
+    TALOS_AFFINITY_SOLO_FORTI       = 2,
+    TALOS_AFFINITY_SOLO_DEBOLI      = 3,
+    TALOS_AFFINITY_TUTTI_MENO_UNO   = 4,
+};
+
+/**
+ * Riempie `parametri.cpumask` per la famiglia richiesta, leggendo la
+ * topologia di QUESTO dispositivo ADESSO — mai una lista di indici scritta
+ * a mano una volta e poi riusata. "Forte"/"debole" è relativo al massimo
+ * CONSENTITO misurato in questo giro, con la stessa soglia del 90% già in
+ * uso lato TS (`talosStrongCores`, `engineTuning.ts`): due letture dello
+ * stesso fatto che userebbero soglie diverse sarebbero un difetto silenzioso
+ * più tardi, non un dettaglio.
+ *
+ * @return false se la famiglia produce un insieme VUOTO (chip omogeneo
+ *     senza core "deboli", affinity non leggibile, o `DEFAULT` stesso) — il
+ *     chiamante deve allora ricadere sul comportamento di default, mai
+ *     costruire un pool con zero core consentiti.
+ */
+bool talos_applica_famiglia_affinity(int famiglia, ggml_threadpool_params & parametri) {
+    if (famiglia == TALOS_AFFINITY_DEFAULT) return false;
+
+    bool affinitaLeggibile = false;
+    std::vector<talos_core_cpu> topologia = talos_leggi_topologia_cpu(&affinitaLeggibile);
+    if (!affinitaLeggibile) return false;
+
+    int massimoCapacity = -1;
+    bool haConsentiti = false;
+    for (const auto & core : topologia) {
+        if (!core.online || !core.allowed) continue;
+        haConsentiti = true;
+        if (core.capacity > massimoCapacity) massimoCapacity = core.capacity;
+    }
+    if (!haConsentiti) return false;
+
+    std::vector<int> scelti;
+    switch (famiglia) {
+        case TALOS_AFFINITY_TUTTI_CONSENTITI:
+            for (const auto & core : topologia) {
+                if (core.online && core.allowed) scelti.push_back(core.index);
+            }
+            break;
+        case TALOS_AFFINITY_SOLO_FORTI:
+            for (const auto & core : topologia) {
+                if (core.online && core.allowed && massimoCapacity > 0
+                    && core.capacity >= massimoCapacity * 0.9) {
+                    scelti.push_back(core.index);
+                }
+            }
+            break;
+        case TALOS_AFFINITY_SOLO_DEBOLI:
+            for (const auto & core : topologia) {
+                if (core.online && core.allowed && massimoCapacity > 0
+                    && core.capacity < massimoCapacity * 0.9) {
+                    scelti.push_back(core.index);
+                }
+            }
+            break;
+        case TALOS_AFFINITY_TUTTI_MENO_UNO: {
+            // Esclude il core con la capacity PIU' BASSA fra i consentiti -
+            // quello che oggi lo scheduler e' libero di scegliere da solo,
+            // qui lo si rende esplicito.
+            int debolIndice = -1;
+            int debolCapacity = INT32_MAX;
+            for (const auto & core : topologia) {
+                if (!core.online || !core.allowed) continue;
+                scelti.push_back(core.index);
+                int capacitaConosciuta = core.capacity >= 0 ? core.capacity : 0;
+                if (capacitaConosciuta <= debolCapacity) {
+                    debolCapacity = capacitaConosciuta;
+                    debolIndice   = core.index;
+                }
+            }
+            if (scelti.size() > 1 && debolIndice >= 0) {
+                scelti.erase(std::remove(scelti.begin(), scelti.end(), debolIndice), scelti.end());
+            }
+            break;
+        }
+        default:
+            return false;
+    }
+    if (scelti.empty()) return false;
+
+    for (int i = 0; i < GGML_MAX_N_THREADS; i += 1) parametri.cpumask[i] = false;
+    for (int indice : scelti) {
+        if (indice >= 0 && indice < GGML_MAX_N_THREADS) parametri.cpumask[indice] = true;
+    }
+    return true;
+}
+
+/**
+ * ⛔⛔ SOLO RICERCA — la famiglia di affinity da usare per generazione e
+ * prefill, DETTA e non dedotta — stesso pattern del bersaglio di offload
+ * (`talos_backend_target_ricerca` più sotto) e della cache OpenCL: zero
+ * effetto sulla produzione finché nessuno chiama l'export che le imposta.
+ *
+ * Due variabili, non una: il piano prevede famiglie DIVERSE per i due
+ * carichi (D0-D3 per decode, P0-P3 per prefill) perché sono carichi
+ * opposti, la stessa ragione per cui `n_threads`/`n_threads_batch` sono
+ * già due numeri e non uno.
+ */
+std::atomic<int> g_famiglia_affinity_decode{TALOS_AFFINITY_DEFAULT};
+std::atomic<int> g_famiglia_affinity_prefill{TALOS_AFFINITY_DEFAULT};
+
+/**
+ * P1-1 — avvia un thread pool ESTERNO e lo aggancia al contesto.
+ *
+ * Oggi llama.cpp usa solo il pool INTERNO di default: nessuna affinity,
+ * nessun controllo di poll o priorità. Questo è il meccanismo per
+ * sostituirlo con uno gestito da noi. Blocco 2: il MECCANISMO di
+ * attach/detach, senza scegliere ancora i core — verificato sicuro con 30
+ * cicli reali sul Pad prima di questo blocco. Blocco 3 (qui): la cpumask
+ * VERA, ma SOLO quando `g_famiglia_affinity_*` la chiede esplicitamente —
+ * `TALOS_AFFINITY_DEFAULT` (il valore di riposo, zero effetto finché
+ * nessuno chiama l'export di ricerca) produce la STESSA maschera vuota del
+ * blocco 2, non un comportamento nuovo per la produzione.
+ *
+ * Segue la sequenza verificata nel sorgente vendored (`common/common.cpp`,
+ * `common_threadpools::init`): i pool si creano DOPO che il contesto
+ * esiste, mai prima; se i due carichi hanno lo stesso `n_threads` si crea
+ * UN pool solo e lo si condivide, e quello "batch" parte `paused = true` —
+ * vedi `ggml-org/llama.cpp#27138`, citato anche a monte nel sorgente
+ * vendored: due pool con `n_threads` diversi non si possono condividere.
+ *
+ * ⛔ Se la creazione fallisce in un punto qualsiasi, si fa cleanup e si
+ * ESCE SENZA fare l'attach: il contesto resta sul pool interno di default,
+ * l'apertura del modello non fallisce per questo. `session->threadpool*`
+ * restano `nullptr`, e `talos_ferma_threadpool()` su una sessione così è
+ * un no-op sicuro.
+ */
+void talos_avvia_threadpool(talos_session * session, llama_context * ctx,
+                            int n_threads, int n_threads_batch) noexcept {
+    if (session == nullptr || ctx == nullptr) return;
+
+    auto * cpu_dev = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU);
+    if (cpu_dev == nullptr) {
+        TALOS_LOGE("thread pool esterno: nessun backend CPU registrato, resta quello di default");
+        return;
+    }
+    auto * reg = ggml_backend_dev_backend_reg(cpu_dev);
+    auto * nuovo_fn = (decltype(ggml_threadpool_new) *)
+        ggml_backend_reg_get_proc_address(reg, "ggml_threadpool_new");
+    auto * libera_fn = (decltype(ggml_threadpool_free) *)
+        ggml_backend_reg_get_proc_address(reg, "ggml_threadpool_free");
+    if (nuovo_fn == nullptr || libera_fn == nullptr) {
+        TALOS_LOGE("thread pool esterno: simboli non risolti, resta quello di default");
+        return;
+    }
+
+    const int nt       = n_threads > 0 ? n_threads : 4;
+    const int nt_batch  = n_threads_batch > 0 ? n_threads_batch : nt;
+
+    ggml_threadpool_params parametri_batch;
+    ggml_threadpool_params_init(&parametri_batch, nt_batch);
+    ggml_threadpool_params parametri;
+    ggml_threadpool_params_init(&parametri, nt);
+
+    // ⛔⛔ SOLO RICERCA: a riposo (DEFAULT) non fa niente, la maschera resta
+    // quella vuota di sempre. Le due famiglie sono indipendenti — prefill e
+    // decode possono chiedere affinity diverse, ed E' quello il punto.
+    const bool affinitaPrefillApplicata = talos_applica_famiglia_affinity(
+        g_famiglia_affinity_prefill.load(std::memory_order_relaxed), parametri_batch);
+    const bool affinitaDecodeApplicata = talos_applica_famiglia_affinity(
+        g_famiglia_affinity_decode.load(std::memory_order_relaxed), parametri);
+
+    ggml_threadpool * pool       = nullptr;
+    ggml_threadpool * pool_batch = nullptr;
+
+    // Stesso numero per i due carichi ⇒ UN pool solo, condiviso. Crearne
+    // due con parametri identici sarebbe spreco di thread reali, non
+    // ridondanza innocua.
+    if (!ggml_threadpool_params_match(&parametri, &parametri_batch)) {
+        pool_batch = nuovo_fn(&parametri_batch);
+        if (pool_batch == nullptr) {
+            TALOS_LOGE("thread pool esterno (batch) non creato, resta quello di default");
+            return;
+        }
+        // Il pool non-batch parte in pausa: lo si risveglia solo quando
+        // tocca davvero generare, così i suoi thread non si contendono i
+        // core col prefill che sta già girando sull'altro pool.
+        parametri.paused = true;
+    }
+    pool = nuovo_fn(&parametri);
+    if (pool == nullptr) {
+        TALOS_LOGE("thread pool esterno non creato, resta quello di default");
+        if (pool_batch != nullptr) libera_fn(pool_batch);
+        return;
+    }
+
+    llama_attach_threadpool(ctx, pool, pool_batch != nullptr ? pool_batch : pool);
+    session->threadpool         = pool;
+    session->threadpool_batch   = pool_batch != nullptr ? pool_batch : pool;
+    session->threadpool_free_fn = libera_fn;
+    TALOS_LOGI("thread pool esterno agganciato: %d gen / %d prefill%s, affinity gen=%s prefill=%s",
+               nt, nt_batch, pool_batch != nullptr ? "" : " (condiviso)",
+               affinitaDecodeApplicata ? "esplicita" : "default",
+               affinitaPrefillApplicata ? "esplicita" : "default");
+}
+
+/**
+ * Lo stacca dal contesto e lo libera — nell'ordine che non lascia un uso
+ * dopo la liberazione. Va chiamata PRIMA di ogni `llama_free(ctx)` che
+ * tocca un contesto su cui `talos_avvia_threadpool()` è stata chiamata: ce
+ * ne sono quattro nel file, e uno (`nativeReopenContext`) sostituisce il
+ * contesto invece di chiudere la sessione — anche lì il pool VECCHIO va
+ * fermato mentre `session->ctx` è ancora il vecchio, prima che sparisca,
+ * non dopo averlo già sostituito.
+ *
+ * No-op sicuro se non è mai stato avviato, o se `talos_avvia_threadpool()`
+ * è tornata senza attaccare niente (i puntatori sono ancora `nullptr`).
+ */
+void talos_ferma_threadpool(talos_session * session) noexcept {
+    if (session == nullptr || session->threadpool_free_fn == nullptr) return;
+    if (session->ctx != nullptr) llama_detach_threadpool(session->ctx);
+    // threadpool_batch può essere lo STESSO puntatore di threadpool (pool
+    // condiviso): liberarlo due volte sarebbe una doppia `free`.
+    if (session->threadpool_batch != nullptr && session->threadpool_batch != session->threadpool) {
+        session->threadpool_free_fn(session->threadpool_batch);
+    }
+    if (session->threadpool != nullptr) {
+        session->threadpool_free_fn(session->threadpool);
+    }
+    session->threadpool         = nullptr;
+    session->threadpool_batch   = nullptr;
+    session->threadpool_free_fn = nullptr;
 }
 
 /** Millisecondi da un istante, con un orologio che nessuno può spostare. */
@@ -354,8 +735,8 @@ void portaStderrNelLog() {
 }
 
 
-void talos_init_once(const std::string & library_dir) {
-    std::call_once(g_init_once, [&library_dir]() {
+void talos_init_once(const std::string & library_dir, const std::string & opencl_cache_dir) {
+    std::call_once(g_init_once, [&library_dir, &opencl_cache_dir]() {
         llama_log_set(talos_log_bridge, nullptr);
         // Con GGML_BACKEND_DL i backend sono .so caricati a runtime, e ggml li
         // cerca ELENCANDO una cartella (`fs::directory_iterator` in
@@ -365,6 +746,33 @@ void talos_init_once(const std::string & library_dir) {
         // Quindi il percorso glielo diciamo noi, ed è quello che Android
         // riserva alle librerie di QUESTA applicazione.
         portaStderrNelLog();
+        /**
+         * P0-1 — la cache dei binari OpenCL compilati (`cl-program-cache.cpp`,
+         * upstream, invariata da settimane) è completa e gratis, MA su Android
+         * il suo percorso di default legge `std::filesystem::temp_directory_
+         * path()`, che a sua volta cerca `TMPDIR` — mai impostata in un
+         * contesto app Android (verificato leggendo `default_cache_dir()`: il
+         * commento stesso del sorgente upstream lo dice esplicitamente). Senza
+         * questa riga la cache si autodisabilita in silenzio ad ogni processo,
+         * ed è quasi certamente la causa dei 4,7-6,6 s di ricompilazione
+         * misurati al primo messaggio (vedi design.md).
+         *
+         * ⛔ DEVE avvenire prima di qualunque possibile allocazione di un
+         * buffer OpenCL — `cl_program_cache_init()` viene chiamato da
+         * `ggml_backend_opencl_buffer_type_alloc_buffer()` (verificato nel
+         * sorgente vendored), che è ben più tardi nel flusso (alla prima
+         * apertura di un modello con offload). Qui, in `talos_init_once`,
+         * arriva con ampio margine — e una volta sola per processo, come
+         * `call_once` garantisce per tutto il resto di questa funzione.
+         *
+         * ⛔ `setenv`, non un parametro nascosto: `GGML_OPENCL_KERNEL_CACHE_DIR`
+         * è l'unico varco che il codice vendored legge (`std::getenv`) — non
+         * esiste un parametro C++ equivalente da passare più in basso senza
+         * toccare il submodule, che il piano sorgente vieta esplicitamente.
+         */
+        if (!opencl_cache_dir.empty()) {
+            setenv("GGML_OPENCL_KERNEL_CACHE_DIR", opencl_cache_dir.c_str(), 1);
+        }
         if (!library_dir.empty()) {
             ggml_backend_load_all_from_path(library_dir.c_str());
         } else {
@@ -654,10 +1062,58 @@ extern "C" {
 /**
  * Registra i backend, una volta sola, dalla cartella delle librerie dell'app.
  * Va chiamata prima di ogni altra cosa; chiamarla due volte non fa niente.
+ *
+ * @param openClCacheDir P0-1 — una cartella scrivibile e persistente fra
+ *     processi per i binari OpenCL compilati, oppure vuota per lasciare la
+ *     cache al suo destino di sempre (disabilitata su Android, vedi
+ *     talos_init_once). Il chiamante Java la calcola da
+ *     {@code Context.getCodeCacheDir()}: qui non esiste un Context da cui
+ *     dedurla.
  */
 JNIEXPORT void JNICALL
-Java_ai_talos_TalosLlamaNative_nativeInit(JNIEnv * env, jclass, jstring libraryDir) {
-    talos_init_once(jstring_to_utf8(env, libraryDir));
+Java_ai_talos_TalosLlamaNative_nativeInit(JNIEnv * env, jclass, jstring libraryDir,
+                                          jstring openClCacheDir) {
+    talos_init_once(jstring_to_utf8(env, libraryDir), jstring_to_utf8(env, openClCacheDir));
+}
+
+/**
+ * ⛔ SOLO RICERCA — il trace HIT/MISS/SAVE della cache di P0-1, a richiesta.
+ *
+ * `GGML_OPENCL_KERNEL_CACHE_DEBUG=1` fa scrivere a `cl-program-cache.cpp` una
+ * riga per kernel su stderr, con un contatore che vive quanto il processo —
+ * `portaStderrNelLog()` la porta a logcat, tag TalosLlama (verificato: NON
+ * "TALOS" — il primo tentativo di leggerla ha cercato il tag sbagliato).
+ * Non è nella produzione:
+ * un log per kernel (qui, 181 su un modello da 1,7B) sarebbe rumore per
+ * chiunque non stia misurando esattamente questo.
+ *
+ * ⛔ Va chiamata DOPO `nativeInit` (che ha già impostato la env var della
+ * cartella) e PRIMA della prima apertura di un modello con offload — la
+ * stessa finestra di `talos_esiste_dispositivo_offload`, perché
+ * `cl_program_cache_init()` legge `getenv` una volta sola, alla prima
+ * `alloc_buffer` del backend OpenCL.
+ */
+JNIEXPORT void JNICALL
+Java_ai_talos_TalosLlamaNative_nativeEnableOpenClCacheDebugTraceForResearch(JNIEnv *, jclass) {
+    setenv("GGML_OPENCL_KERNEL_CACHE_DEBUG", "1", 1);
+}
+
+/**
+ * ⛔ SOLO RICERCA — il CONTROLLO dell'esperimento A/B/C del piano sorgente
+ * (§6.5): con la cache esplicitamente spenta, ogni kernel deve ricompilare
+ * SEMPRE, ad ogni processo, senza eccezioni — è la riprova che i guadagni
+ * misurati con la cache accesa vengono davvero da lei, non da qualcos'altro
+ * (un binario del modello già caldo, un driver che cachea per conto suo).
+ *
+ * ⛔ SOVRASCRIVE quanto impostato da `nativeInit` per QUESTO processo:
+ * `talos_init_once` gira una volta sola (`call_once`), quindi va chiamata
+ * DOPO `ensureReady` per avere l'ultima parola — stessa finestra di
+ * `nativeEnableOpenClCacheDebugTraceForResearch`, prima della prima apertura
+ * con offload.
+ */
+JNIEXPORT void JNICALL
+Java_ai_talos_TalosLlamaNative_nativeDisableOpenClCacheForResearch(JNIEnv *, jclass) {
+    setenv("GGML_OPENCL_KERNEL_CACHE_DIR", "off", 1);
 }
 
 /** La build di llama.cpp, per l'impronta dei prefissi congelati. */
@@ -860,6 +1316,60 @@ Java_ai_talos_TalosLlamaNative_nativeBackendInventory(JNIEnv * env, jclass) {
 }
 
 /**
+ * ⛔⛔ SOLO RICERCA — P1-1, la topologia CPU VERA, non un nome di chip scritto
+ * a mano.
+ *
+ * Diagnostico puro: non alloca niente, non crea nessun thread pool. Il
+ * lifecycle rischioso (CR-07 del piano sorgente: use-after-free/deadlock su
+ * pool nativi) resta un blocco separato, costruito DOPO che questa lettura è
+ * verificata sul dispositivo vero.
+ */
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeCpuTopology(JNIEnv * env, jclass) {
+    bool affinitaLeggibile = false;
+    std::vector<talos_core_cpu> topologia = talos_leggi_topologia_cpu(&affinitaLeggibile);
+
+    nlohmann::ordered_json out;
+    nlohmann::ordered_json cores = nlohmann::ordered_json::array();
+    for (const auto & core : topologia) {
+        nlohmann::ordered_json riga;
+        riga["index"]    = core.index;
+        riga["online"]   = core.online;
+        riga["capacity"] = core.capacity;
+        // `allowed` resta `null` quando l'affinity non si legge affatto -
+        // `false` direbbe "vietato", `null` dice "non lo sappiamo", e sono
+        // due fatti diversi.
+        riga["allowed"] = affinitaLeggibile ? nlohmann::ordered_json(core.allowed) : nlohmann::ordered_json(nullptr);
+        cores.push_back(riga);
+    }
+
+    out["cores"] = cores;
+    out["affinityReadable"] = affinitaLeggibile;
+    return env->NewStringUTF(out.dump().c_str());
+}
+
+/**
+ * ⛔⛔ SOLO RICERCA — impone la famiglia di affinity da usare alla PROSSIMA
+ * apertura (o ricostruzione) di contesto. Vale per i valori dell'enum
+ * `talos_affinity_famiglia` — `0` (DEFAULT) torna al comportamento di
+ * produzione, nessuna maschera esplicita.
+ *
+ * ⛔ Non tocca un contesto già aperto: il pool si crea/ricrea solo
+ * dentro `talos_avvia_threadpool`, chiamata da `talos_apri_modello` e
+ * `nativeReopenContext`. Per cambiare l'affinity di un motore già in
+ * piedi, chi chiama deve rifare il contesto — lo stesso vincolo che vale
+ * già per `microBatch`.
+ */
+JNIEXPORT void JNICALL
+Java_ai_talos_TalosLlamaNative_nativeSetAffinityFamilyForResearch(
+        JNIEnv *, jclass, jint famigliaDecode, jint famigliaPrefill) {
+    g_famiglia_affinity_decode.store((int) famigliaDecode, std::memory_order_relaxed);
+    g_famiglia_affinity_prefill.store((int) famigliaPrefill, std::memory_order_relaxed);
+    TALOS_LOGI("famiglia affinity di ricerca impostata: decode=%d prefill=%d",
+               (int) famigliaDecode, (int) famigliaPrefill);
+}
+
+/**
  * ⛔⛔ SOLO RICERCA — il bersaglio dell'offload, DETTO e non dedotto.
  *
  * `n_gpu_layers` dice QUANTI strati spostare, non DOVE. Finché c'è un solo
@@ -893,6 +1403,36 @@ Java_ai_talos_TalosLlamaNative_nativeBackendInventory(JNIEnv * env, jclass) {
  *     `llama_model_load_from_file`: il motore riceve `data()`, non una copia.
  * @return vero se il bersaglio è stato risolto; falso con `errore` compilato.
  */
+
+/**
+ * ⭐⭐⭐ B1 — la domanda che conta per `gpuLayersEffective` NON è "è stato
+ * chiesto un bersaglio esplicito" - `talos_risolvi_bersaglio` torna
+ * `scelto="auto"` (non vuoto!) anche nel percorso di produzione, quello che
+ * NON chiede niente e lascia decidere a `llama.cpp` da sé
+ * (`model_params.devices = nullptr`, vedi il commento sopra). Un test
+ * strumentato REALE l'ha scoperto (`runtimeSnapshotAgreesWithTheSeparate
+ * GettersItReplaces`, fallito la prima volta con `bersaglioScelto="auto"`
+ * su un'apertura CPU pura) - non dedotto rileggendo il codice.
+ *
+ * La domanda giusta: esiste ALMENO UN dispositivo non-CPU registrato in
+ * QUESTA build? Se la risposta è no (questa build di debug, senza
+ * `-PtalosResearchBackend=opencl`, non ha `libggml-opencl.so`), nessun
+ * `gpuLayers` richiesto - esplicito o «auto» - può aver spostato niente:
+ * non c'è nessun posto dove spostarlo.
+ */
+static bool talos_esiste_dispositivo_offload() {
+    for (size_t reg_index = 0; reg_index < ggml_backend_reg_count(); reg_index += 1) {
+        ggml_backend_reg_t reg = ggml_backend_reg_get(reg_index);
+        if (reg == nullptr) continue;
+        for (size_t dev_index = 0; dev_index < ggml_backend_reg_dev_count(reg); dev_index += 1) {
+            ggml_backend_dev_t device = ggml_backend_reg_dev_get(reg, dev_index);
+            if (device == nullptr) continue;
+            if (ggml_backend_dev_type(device) != GGML_BACKEND_DEVICE_TYPE_CPU) return true;
+        }
+    }
+    return false;
+}
+
 static bool talos_risolvi_bersaglio(const std::string & backend,
                                     const std::string & dispositivo,
                                     std::vector<ggml_backend_dev_t> & dispositivi,
@@ -1330,11 +1870,47 @@ static jlong talos_apri_modello(JNIEnv * env, jstring modelPath,
     // contesto ci sta deve sapere quanto pesa un token davvero, e dopo un
     // ripiego silenzioso i due numeri sarebbero diversi.
     session->kv_type = ctx_params.type_k == GGML_TYPE_Q8_0 ? "q8_0" : "f16";
+    // B1: il modello e il contesto sono aperti a questo punto - se
+    // gpuLayers!=0 era richiesto e un vero acceleratore e' registrato in
+    // questa build, llama_model_load_from_file sarebbe FALLITO invece di
+    // ripiegare in silenzio su meno strati (verificato prima di scrivere
+    // questo campo). ⛔ NON si controlla `bersaglioScelto.empty()`: un test
+    // strumentato REALE ha scoperto che vale "auto" (non vuoto!) anche sul
+    // percorso di produzione che non chiede nulla di esplicito - la domanda
+    // giusta e' se un acceleratore esiste DAVVERO in questa build, vedi
+    // talos_esiste_dispositivo_offload().
+    session->gpu_layers_effective =
+        (gpuLayers != 0 && talos_esiste_dispositivo_offload()) ? (int) gpuLayers : 0;
+    // ⛔⛔ B2, scoperto da una riga VERA scritta dal banco di prova, non da
+    // rilettura: `bersaglioScelto == "auto"` non basta. `talos_risolvi_
+    // bersaglio()` ha un SECONDO valore sentinella - "none" - quando il
+    // chiamante chiede esplicitamente backend="none"/"cpu" (e' la strada
+    // presa da OGNI riga del banco: TalosLocalBaselineDeviceTest.
+    // backendRichiesto() traduce la richiesta vuota in "none" prima di
+    // scendere). Una riga reale sul Pad portava backendDevice:"none"
+    // (stringa) invece di null su un'apertura CPU pura - lo stesso difetto
+    // di "auto", una seconda volta, con un nome diverso. Cercata online
+    // un'API upstream che dica direttamente "nessun device reale in questo
+    // llama_model_params" (nessuna, nell'header pubblico): la cura resta
+    // locale. Non e' aggiungere una seconda stringa da confrontare: e'
+    // smettere di confrontare stringhe. La domanda vera e' se `dispositivi`
+    // porta un device reale - vuoto (auto) e [nullptr] (none/cpu) dicono
+    // entrambi "nessuno"; ogni ramo che risolve un bersaglio vero lo mette
+    // SEMPRE per primo (tre volte, sopra in questo file).
+    bool haBersaglioEffettivo = !dispositivi.empty() && dispositivi.front() != nullptr;
+    session->backend_target_effective = haBersaglioEffettivo ? bersaglioScelto : "";
+    session->flash_attn_effective = llama_flash_attn_type_name(ctx_params.flash_attn_type);
 
     // Armata QUI e non nei parametri del contesto: la callback ha bisogno
     // dell'indirizzo della sessione, che un istante fa non esisteva ancora.
     // `llama_set_abort_callback` fa esattamente questo, e senza ricreare niente.
     llama_set_abort_callback(ctx, talos_deve_fermarsi, session);
+
+    // P1-1 blocco 2: stesso motivo dell'abort callback appena sopra — il
+    // pool si aggancia DOPO che la sessione esiste, non prima. Se fallisce,
+    // il log lo dice e il contesto resta sul pool interno di default: non
+    // è un motivo per far fallire l'apertura del modello.
+    talos_avvia_threadpool(session, ctx, ctx_params.n_threads, ctx_params.n_threads_batch);
 
     // Costruito una volta, all'apertura: compilare un template Jinja a ogni
     // messaggio sarebbe lavoro rifatto identico per tutta la conversazione.
@@ -2267,6 +2843,13 @@ Java_ai_talos_TalosLlamaNative_nativeReopenContext(JNIEnv * env, jclass, jlong h
         return 0;
     }
 
+    // P1-1 blocco 2: il pool VECCHIO e' agganciato al ctx VECCHIO — va
+    // fermato mentre session->ctx e' ancora lui, prima che la riga sotto lo
+    // sostituisca. Fermarlo dopo la sostituzione chiamerebbe
+    // llama_detach_threadpool sul contesto SBAGLIATO (il nuovo, che non ha
+    // ancora nessun pool esterno agganciato).
+    talos_ferma_threadpool(session);
+
     // Da qui in poi si sostituisce, e l'ordine conta: prima si stacca il
     // vecchio dalla sessione, poi lo si libera. Un contesto liberato ma ancora
     // puntato e' un uso dopo la liberazione che si manifesta a caso.
@@ -2276,11 +2859,19 @@ Java_ai_talos_TalosLlamaNative_nativeReopenContext(JNIEnv * env, jclass, jlong h
     session->sampler = campionatore;
     session->sampling = sampling;
     session->kv_type = ctx_params.type_k == GGML_TYPE_Q8_0 ? "q8_0" : "f16";
+    // B1: gpuLayers/backend NON cambiano qui - session->model non viene
+    // ricaricato, solo il contesto. Flash Attention invece si ricalcola a
+    // ogni ricostruzione, come kv_type sulla riga sopra.
+    session->flash_attn_effective = llama_flash_attn_type_name(ctx_params.flash_attn_type);
     // ⛔ La cache e' nuova, quindi VUOTA. Non azzerare qui vorrebbe dire che il
     // turno successivo calcola il prefisso comune su token che non esistono piu'.
     session->cached.clear();
     if (vecchioCampionatore != nullptr) common_sampler_free(vecchioCampionatore);
     if (vecchio != nullptr) llama_free(vecchio);
+
+    // P1-1 blocco 2: session->ctx e' gia' il nuovo, qui sopra — il pool
+    // nuovo si aggancia a LUI, mai al vecchio che e' appena stato liberato.
+    talos_avvia_threadpool(session, nuovo, ctx_params.n_threads, ctx_params.n_threads_batch);
 
     llama_set_abort_callback(nuovo, talos_deve_fermarsi, session);
     g_context_rebuild_count.fetch_add(1, std::memory_order_relaxed);
@@ -2331,6 +2922,37 @@ Java_ai_talos_TalosLlamaNative_nativeKvCacheType(JNIEnv * env, jclass, jlong han
     talos_session * session = as_session(handle);
     if (session == nullptr) return nullptr;
     return env->NewStringUTF(session->kv_type.c_str());
+}
+
+/**
+ * B1 — un'unica snapshot versionata, invece di un JNI method per ogni knob
+ * (il piano sorgente lo chiede esplicitamente, §4.5: "creare un'unica
+ * snapshot versionata, invece di aggiungere un JNI method per ogni knob").
+ *
+ * Ogni campo qui è ciò che il motore ha DAVVERO applicato, letto dalla
+ * sessione o dal contesto vivo - mai ciò che qualcuno gli aveva chiesto.
+ * `schema` esiste perché un domani un campo nuovo non deve essere confuso
+ * con `false`/`0`: un lettore vecchio vede solo `schema:1` e sa di non
+ * aspettarsi i campi di uno schema successivo.
+ */
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeRuntimeSnapshot(JNIEnv * env, jclass, jlong handle) {
+    std::lock_guard<std::mutex> serratura(g_motore);
+    talos_session * session = as_session(handle);
+    if (session == nullptr || session->ctx == nullptr) return nullptr;
+
+    nlohmann::ordered_json out;
+    out["schema"] = 1;
+    out["backendDevice"] = session->backend_target_effective.empty()
+        ? nullptr : nlohmann::ordered_json(session->backend_target_effective);
+    out["gpuLayersEffective"] = session->gpu_layers_effective;
+    out["flashAttnEffective"] = session->flash_attn_effective;
+    out["kvCacheType"] = session->kv_type;
+    out["contextTokens"] = (uint32_t) llama_n_ctx(session->ctx);
+    out["threads"] = llama_n_threads(session->ctx);
+    out["threadsBatch"] = llama_n_threads_batch(session->ctx);
+    out["microBatch"] = (uint32_t) llama_n_ubatch(session->ctx);
+    return env->NewStringUTF(out.dump().c_str());
 }
 
 /**
@@ -3053,6 +3675,11 @@ Java_ai_talos_TalosLlamaNative_nativeClose(JNIEnv *, jclass, jlong handle) {
     std::lock_guard<std::mutex> serratura(g_motore);
     talos_session * session = as_session(handle);
     if (session == nullptr) return;
+    // P1-1 blocco 2: il pool si stacca e si libera PRIMA di llama_free —
+    // stesso ordine del percorso "targeted", stesso motivo (§2.3 della
+    // consegna: un uso dopo la liberazione che si manifesta a caso, non
+    // sempre).
+    talos_ferma_threadpool(session);
     if (session->sampler != nullptr) common_sampler_free(session->sampler);
     if (session->ctx != nullptr) llama_free(session->ctx);
     if (session->model != nullptr) llama_model_free(session->model);

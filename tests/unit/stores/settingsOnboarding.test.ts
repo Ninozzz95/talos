@@ -6,6 +6,7 @@ import {
     TALOS_MOBILE_SETTINGS_KEY,
 } from '@/stores/settings'
 import { Preferences } from '@capacitor/preferences'
+import { TALOS_MOTION_V6_DEFAULTS } from '@/motion-v6/defaults'
 
 // F2-T6 — versioned intro contract (mobile-local mirror of the desktop spec):
 // { onboarding: { intro_version, intro_outcome, setup_dismissed } } persisted
@@ -107,9 +108,10 @@ describe('security preferences (F2-T6 app lock)', () => {
     })
 })
 
-describe('mobile motion defaults (F3-T1 owner #7)', () => {
-    it('ships background intensity at the range minimum out of the box', () => {
-        expect(parseTalosMobileSettings(null).motion_v6.intensity).toBe(0)
+describe('mobile motion defaults (F3-T1 owner #7, intensity divergence retired 2026-08-23)', () => {
+    it('ships background intensity at the owner-tuned default, same as the engine contract', () => {
+        expect(parseTalosMobileSettings(null).motion_v6.intensity).toBe(TALOS_MOTION_V6_DEFAULTS.intensity)
+        expect(parseTalosMobileSettings(null).motion_v6.intensity).toBe(20)
     })
 
     it('persisted user intensity always wins over the mobile default', () => {
