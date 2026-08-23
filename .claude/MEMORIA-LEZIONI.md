@@ -11,6 +11,16 @@
 > `~/.claude/projects/C--Users-Antonino-Desktop-projects-AVM/memory/`.
 > Si aprono per nome, come dall'altro indice.
 
+## ✅ Le CHIUSE del 23/8 — il banco che misura se stesso, e il guardiano che accusava
+
+> ⛔ Aggiunte qui e non in `MEMORY.md`: quello era a **19.354 byte** su un tetto
+> d'allarme di 19.900, e sono lezioni **chiuse**. In `MEMORY.md` resta la sola
+> riga vincolante, quella sull'uccidere un processo.
+
+- ⛔⛔⛔⭐⭐⭐ [LA COLONNA DEL COSTO HA UNA RISOLUZIONE](la-colonna-del-costo-ha-una-risoluzione.md) — `(nessuno)` non chiama nessuna API **per costruzione**, e gli erano attribuiti **$0,0276**: il banco aveva addosso da sempre una sonda di taratura mai letta. ⇒ **risoluzione $0,0021 per riga**, e **talos ($0,0014) e aider ($0,0016) stanno SOTTO**: il confronto fra i due non ha contenuto. ⭐ L'errore **scivola in avanti** — la baseline corre dopo codex ed è il 6-23% della sua spesa sullo stesso task, 13 su 13, mai negativo (r = 0,545): è fatturazione in ritardo, `ATTESA_DEL_CREDITO_MS = 4_000` è troppo corta. ⛔ La cura NON è allungare l'attesa (nessuna la garantisce): è **dichiarare la risoluzione**, perché «sotto la risoluzione» non è «economico». ⛔ E il totale di aider ($0,0273) è della **stessa taglia** dell'errore: il primo in classifica sta dentro il rumore
+- ⛔⛔⛔⭐⭐⭐ [IL GUARDIANO ACCUSAVA LA SESSIONE DELL'OWNER](il-guardiano-accusava-la-sessione-dellowner.md) — la sorveglianza gridava «3 ORFANI, rubano CPU» e uno era **`codex resume` dell'owner, vivo**: nomina un harness, è nato dopo la corsa, e il genitore è morto perché è una shell staccata. **Due volte a un passo dall'ucciderlo**, e la seconda gli stessi tre erano un albero **vivo della campagna** su un task pagato. ⛔ **Terza forma** dello stesso difetto in un giorno: *un filtro che riconosce la MENZIONE invece della cosa*. ⭐ Cura: l'appartenenza **si prova** — l'orfano o un suo figlio devono toccare una cartella `banco-*`. ⭐ E ogni allarme porta **CHI**, non solo quanti. ⛔ Quattro banchi di prova a mano hanno MENTITO (gli escape non sopravvivono alla shell): si prova dalla **porta vera**, `unGiro()`
+- ⛔⛔⭐⭐ [IL DEBUG WIRELESS MOSTRA IL PAD DUE VOLTE](il-debug-wireless-mostra-il-pad-due-volte.md) — due trasporti per lo stesso tablet ⇒ ogni adb senza `-s` muore con *more than one device/emulator*. ⛔ `run-device-tests.mjs` **stampava** l'indirizzo e poi falliva all'install: sapere e non passare. ⭐ Riparato (seriale scelto una volta, passato ovunque, si ferma se non è collegato) e dotato di **prova a secco** `TALOS_PROVA_A_SECCO=1`: i comandi che leggono girano davvero, quelli che cambiano il telefono si stampano. ⛔ `termica.mjs` no: vuole `ANDROID_SERIAL`
+
 ## ✅ CHIUSI — le lezioni che restano
 
 > ⛔ Spostate qui il 2026-08-23: `MEMORY.md` era a **20.140 byte**, SOPRA il
@@ -60,38 +70,3 @@
 - ✅⛔⛔⭐⭐⭐ **0.1.16 — la UI Ricerca approfondita: FATTA** (20/8): contesa aperta sul rapporto, tenuta nel tempo, BibTeX/RIS, fonti+token in testata. ⛔ La contesa NON POTEVA esistere — [funzione coi test e nessun chiamante](funzione-con-i-test-e-nessun-chiamante.md). Resta fuori: «estendi con una linea» → [ledger](ricerche-custodite-fuori-dal-repo.md)
 - ✅⛔⭐⭐⭐ [Lo STOP sotto GPU — CHIUSO il 21/8](stop-sotto-gpu-non-interrompe.md) — la cura in `ggml-opencl` porta 1.430 → **32/36/36 ms** al microbatch PIENO **512**: il 192 non serve piu. ⛔ Il costo della cura e **per GRAFO**, non per token ⇒ un riferimento «senza cura» dentro un confronto fra configurazioni e un **fantasma**
 - ✅⭐⭐⭐ [L'ABORT su GPU e' una FUNZIONE MANCANTE — **implementata il 21/8**, non una legge](labort-su-gpu-e-una-funzione-mancante.md) — la implementano solo CPU e **Metal**; `ggml-opencl` ha `get_proc_address = NULL`. Cura ~30 righe a **costo zero**, e upstream #10509 e' **stale**
-
-## Regole di ingegneria — spostate qui il 2026-08-22
-
-> ⛔ Stesso motivo delle altre migrazioni: `MEMORY.md` si riavvicinava al
-> tetto. Blocco intero spostato, non accorciato.
-
-- ⛔⛔⭐⭐⭐ [Una corsa FALLITA riporta i numeri di IERI](una-corsa-fallita-riporta-i-numeri-di-ieri.md) — due volte in un giorno: il runner esce 1 e lo script legge il file della campagna prima. ⛔ **Numeri troppo uguali sono un allarme**, non una conferma
-- ⛔⛔⭐⭐⭐ [Il banco non vede CHI MANCA](il-banco-non-vede-chi-manca.md) — `(nessuno)` prova che il banco misura qualcosa; **niente** prova che li abbia guardati tutti. Un concorrente e rimasto fuori **quattro giorni** senza che un rapporto protestasse. ⇒ Chi costruisce una misura costruisce anche la riga che dice **chi non c e**
-- ⛔⛔⭐⭐ [Una ESCLUSIONE si misura come un ESITO](dsh-escluso-su-una-premessa-falsa.md) — avevo tolto DSH dal banco su una mia occhiata, contro un audit del sorgente che diceva l opposto. ⛔ Quando una mia nota contraddice una ricerca dell owner, **vince la ricerca** finche non ho una misura
-- ⛔⛔⭐⭐ [La consegna NON entra nella riga di comando](la-consegna-non-entra-nella-riga-di-comando.md) — i backtick di un task **eseguiti da bash** prima che l harness lo vedesse. Il testo viaggia in una variabile e si espande con `"$VAR"`; per WSL serve `WSLENV=NOME/u'
-- ⛔⭐⭐ [Scrivere un file da Python lo converte in CRLF](scrivere-un-file-da-python-lo-converte-in-crlf.md) — tutto il file, e un test che legge il sorgente nativo diventa rosso
-- ⛔⛔⭐⭐⭐ [IL PROMEMORIA DOVE GUARDA PER ULTIMO](il-promemoria-dove-guarda-per-ultimo.md) — 3 su 3 in una notte: non riscrivere la regola, SPOSTARLA
-- ⛔⛔ [Una frase sola prova UNA FRASE SOLA](una-frase-sola-prova-una-frase-sola.md) — servono **tre-quattro formulazioni diverse**
-- ⛔⛔ [Il buco non era una cosa MANCANTE](il-buco-non-era-una-cosa-mancante.md) · ⛔⛔ [MAI azzoppare l'app per far tornare un tetto](mai-azzoppare-lapp-per-un-tetto.md) — il tetto **si alza**
-- ⛔ [NIENTE SCRITTO A MANO](nothing-hardcoded-must-adapt.md) — un fatto sul telefono **si misura** · ⛔ [Una grammatica sola per i permessi](permissions-single-global-grammar.md) — sempre/chiedi/nega
-- ⛔⛔⭐⭐ [MAI MODELLI DI PUNTA: sempre fascia flash](mai-modelli-di-punta-sempre-flash.md) - owner 20/8. ⛔ «non troppo» economici: un modello debole fa misurare IL MODELLO. Haiku $0,0358/task contro Opus $0,351. ⛔ Il costo lo dice il CREDITO del provider, non il CLI
-- ⛔ [Le prove col modello A CHIAVE](per-le-prove-modelli-a-chiave.md) — i locali si allineano DOPO
-- ⛔ [L'andata e ritorno NON prova la compatibilità](andata-ritorno-non-prova-compatibilita.md) — si **ricalcola l'atteso a mano** · [Assert outcome](assert-outcome-not-the-call.md) — PROVA che il test morde
-- ⛔⭐⭐ [Vitest legge il Java: toccato il nativo, lancia vitest](vitest-legge-il-java-va-lanciato.md) — 2 release fallite
-- ⛔ [Il typecheck a mano non controlla niente](typecheck-vuoto-tsconfig-root.md) — solo `npm run typecheck`; ⛔ non i test
-- [Tutta la pipeline](analyze-whole-component-pipeline.md) — IPER-BLOCCANTE · [End to end](end-to-end-or-not-at-all.md) · [frontend-design SEMPRE](always-use-frontend-design-plugin.md)
-- [Avviabili dalla chat](features-startable-from-chat.md) — DUE porte · [Niente statico](app-distributed-nothing-static.md) · [Windows shell & gate](windows-shell-and-gate-discipline.md) · [Per-user installs](per-user-installs-only.md)
-- ⛔ [Una corsa da ore si STACCA dalla sessione](corsa-lunga-si-stacca-dalla-sessione.md) — `run_in_background` muore
-
-## 🔧 La CATENA fino al telefono — spostate qui il 2026-08-21
-
-> ⛔ Non sono state buttate: `MEMORY.md` aveva superato i **19,9 KB** e la
-> regola dice di spostare un BLOCCO INTERO invece di accorciare le glosse.
-> Queste quattro riguardano tutte la stessa cosa — il tratto fra «ho
-> compilato» e «sta girando sul Pad» — e restano vincolanti come prima.
-
-- ⛔⛔⭐⭐⭐ [Una cartella creata da ADB e' INVISIBILE all'app](una-cartella-creata-da-adb-e-invisibile-allapp.md) — il GGUF c'e', l'impronta e' giusta, e l'app non lo vede: cartelle di `shell` 0770
-- ⛔⛔⛔⭐⭐⭐ [connectedAndroidTest DISINSTALLA e porta via i modelli](connectedandroidtest-disinstalla-e-porta-via-i-modelli.md) — 20/8: BUILD SUCCESSFUL, e sul Pad non c'era piu' ne' l'app ne' un solo GGUF
-- ⛔⛔⭐⭐⭐ [Il build NON arriva al telefono](il-build-non-arriva-al-telefono.md) — senza `npx cap copy android` ogni sonda misura il build PRECEDENTE, con numeri plausibili e **nessun errore**
-- ⛔⛔⭐⭐ [I test verdi in NODE non parlano del telefono](i-test-verdi-in-node-non-parlano-del-telefono.md) — Node ha ripieghi che il browser non ha
