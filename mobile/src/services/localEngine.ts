@@ -674,6 +674,51 @@ export async function talosLocalEngineOpenWithFallback(
     throw new TalosLocalEngineOpenError('unknown', 'TALOS_LLAMA_OPEN_FAILED')
 }
 
+/**
+ * P3-1 — apre un modello locale PRIMA che il primo messaggio lo richieda,
+ * silenziosamente. Zero giudizio ambientale qui (vedi `localWarmTrigger.ts`
+ * per il perché): questa porta esegue, non decide.
+ *
+ * ## La guardia di concorrenza, e perché serve
+ *
+ * TALOS tiene un solo modello alla volta — se l'utente sceglie un modello
+ * locale, poi un altro, prima che la prima apertura sia finita, DUE
+ * `open()` native in volo insieme sono esattamente la classe di corsa che
+ * TalosLlamaEngine non tollera (un solo thread attore, P0-3). La guardia
+ * qui sotto elimina il rischio lato TS senza dover sapere nulla del
+ * lifecycle nativo: al massimo un warm in volo per volta, e un secondo
+ * trigger arrivato nel frattempo aspetta il primo prima di partire — non
+ * lo salta, altrimenti l'ultima scelta dell'utente perderebbe la corsa.
+ *
+ * ## Perché nessun errore esce da qui
+ *
+ * Un warm-load fallito non è un fallimento per l'utente: il primo
+ * messaggio, quando arriverà davvero, riapre nel percorso normale
+ * (`ensureLoaded` in `localAdapter.ts`) esattamente come se il warm non
+ * fosse mai partito. È un'ottimizzazione silenziosa, non una promessa —
+ * stesso principio già in uso per il congelamento del prefisso.
+ */
+let talosWarmInFlight: Promise<void> | null = null
+
+export async function talosWarmLocalModel(path: string): Promise<void> {
+    if (talosWarmInFlight) await talosWarmInFlight.catch(() => undefined)
+    const eseguito = (async () => {
+        try {
+            const status = await talosLocalEngineStatus()
+            if (!status.available || status.loadedPath === path) return
+            await talosLocalEngineOpenWithFallback(path)
+        } catch {
+            // Vedi sopra: un'ottimizzazione, non una promessa.
+        }
+    })()
+    talosWarmInFlight = eseguito
+    try {
+        await eseguito
+    } finally {
+        if (talosWarmInFlight === eseguito) talosWarmInFlight = null
+    }
+}
+
 export interface TalosLocalModelFile {
     path: string
     bytes: number

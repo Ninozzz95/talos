@@ -36,6 +36,30 @@ const deviceFileSave = vi.hoisted(() => ({
 vi.mock('@/services/saveVaultFileToDevice', () => deviceFileSave)
 
 /**
+ * P3-1 — mockato come OGNI altro file che lo usa (`localModels.test.ts`,
+ * `unaLetturaPerModello.test.ts`): il modulo reale chiama `Capacitor.
+ * isNativePlatform()`, e lasciarlo vero in un file che non lo mocka mai
+ * altrove è la stessa classe di rischio silenzioso della guardia non
+ * collegata citata sopra — qui l'ha reso visibile un `vi.waitFor` che non
+ * arrivava mai a convergere, non un errore esplicito.
+ */
+const deviceCapacity = vi.hoisted(() => ({
+    talosMeasureDevice: vi.fn(async () => ({
+        totalRamBytes: 8_000_000_000,
+        availableRamBytes: 5_000_000_000,
+        lowMemoryThresholdBytes: 300_000_000,
+        freeStorageBytes: 60_000_000_000,
+        abiSupported: true,
+        thermal: 'none' as const,
+        memoryBandwidthBytesPerSecond: 60_000_000_000,
+        deviceModel: 'test-device',
+        androidSdk: 36,
+    })),
+    talosCurrentThermalState: vi.fn(async () => 'none' as const),
+}))
+vi.mock('@/services/deviceCapacity', () => deviceCapacity)
+
+/**
  * The bridge to the native engine, standing in for a device.
  *
  * Only `talosLocalInstalledModels` matters below: it is the far end of the
@@ -62,6 +86,10 @@ const localEngine = vi.hoisted(() => ({
         ran: true, reason: null, probedCpu: true, cpuInconclusive: false,
         probedGpu: false, gpuInconclusive: false, decisionBackend: 'cpu', decisionReason: 'unproven',
     })),
+    // P3-1 — mai atteso da `selectModel` (fire-and-forget): un mock che
+    // risolve subito basta a non far esplodere il modulo mockato per
+    // intero, come già capitato al primo giro di questo file.
+    talosWarmLocalModel: vi.fn(async () => undefined),
 }))
 vi.mock('@/services/localEngine', () => localEngine)
 
