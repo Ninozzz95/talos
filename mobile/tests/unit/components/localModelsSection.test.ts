@@ -769,7 +769,7 @@ describe('the verdict', () => {
                 id: 'unsloth/Qwen3-4B-GGUF',
                 revision: 'main',
                 loading: false,
-                sets: [set({ examination: { state: 'read', fit: fit(), ledger: ledger(), quantisation: 'Q4_K_M', trainedContext: 131_072 } })],
+                sets: [set({ examination: { state: 'read', fit: fit(), ledger: ledger(), kvCacheTypeLabel: 'f16', quantisation: 'Q4_K_M', trainedContext: 131_072 } })],
             },
         }) as never
         const wrapper = await screen()
@@ -796,6 +796,7 @@ describe('the verdict', () => {
                         state: 'read',
                         fit: fit({ band: 'wont-run', reason: 'context', maxContext: 8192 }),
                         ledger: ledger(),
+                        kvCacheTypeLabel: 'f16',
                         quantisation: 'Q4_K_M',
                         trainedContext: 131_072,
                     },
@@ -816,7 +817,7 @@ describe('the verdict', () => {
                 id: 'a/b',
                 revision: 'main',
                 loading: false,
-                sets: [set({ examination: { state: 'read', fit: fit({ tokensPerSecond: null }), ledger: ledger(), quantisation: null, trainedContext: 4096 } })],
+                sets: [set({ examination: { state: 'read', fit: fit({ tokensPerSecond: null }), ledger: ledger(), kvCacheTypeLabel: 'f16', quantisation: null, trainedContext: 4096 } })],
             },
         }) as never
         const wrapper = await screen()
@@ -860,7 +861,7 @@ describe('what is refused and what is merely warned about', () => {
                 id: 'a/b',
                 revision: 'main',
                 loading: false,
-                sets: [set({ examination: { state: 'read', fit: fit({ band: 'wont-run', reason: 'memory' }), ledger: ledger(), quantisation: null, trainedContext: 4096 } })],
+                sets: [set({ examination: { state: 'read', fit: fit({ band: 'wont-run', reason: 'memory' }), ledger: ledger(), kvCacheTypeLabel: 'f16', quantisation: null, trainedContext: 4096 } })],
             },
         }) as never
         const wrapper = await screen()

@@ -6,6 +6,7 @@ import { useTalosI18n } from '@/i18n'
 import type { TalosHuggingFaceModel } from '@/lib/models/huggingFace'
 import type { TalosFitTone } from '@/lib/models/fitBadge'
 import { talosModelLicenceId } from '@/lib/models/licensePolicy'
+import { talosFormatCompactCount, talosFormatParameterCount } from '@/lib/models/presentation'
 import TalosModelFitBar from '@/components/talos/models/TalosModelFitBar.vue'
 
 const props = defineProps<{
@@ -48,17 +49,8 @@ const publisherInitials = computed(() => {
     const owner = routeTarget.value?.params.owner ?? props.model.id.split('/')[0] ?? ''
     return owner.slice(0, 2).toUpperCase()
 })
-const parameters = computed(() => {
-    const total = props.model.gguf?.parameters
-    if (!total) return null
-    if (total >= 1e12) return `${(total / 1e12).toFixed(1).replace(/\.0$/, '')}T`
-    if (total >= 1e9) return `${Math.round(total / 1e9)}B`
-    return `${Math.round(total / 1e6)}M`
-})
-const downloads = computed(() => new Intl.NumberFormat(locale.value, {
-    notation: 'compact',
-    maximumFractionDigits: 1,
-}).format(props.model.downloads))
+const parameters = computed(() => talosFormatParameterCount(props.model.gguf?.parameters))
+const downloads = computed(() => talosFormatCompactCount(props.model.downloads, locale.value))
 </script>
 
 <template>

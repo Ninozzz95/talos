@@ -2259,6 +2259,9 @@ export const TALOS_EN_MESSAGES = {
             auto: 'Automatic',
             f16: 'F16',
             q8_0: 'Q8_0',
+            // item 7 — the header declared a value that is neither known
+            // type: honest to say so, not to guess a label.
+            other: 'Other',
         },
         // Model Lab Blocco 4 — the provenance ledger: never a number without
         // saying where it comes from. The eight labels are the same eight
@@ -2268,6 +2271,23 @@ export const TALOS_EN_MESSAGES = {
         runtimeConfigTitle: 'Configure the runtime',
         speedStatLabel: 'Predicted speed',
         maxContextStatLabel: 'Calculated max context',
+        // Restyle Blocco 6, mockup closure — item 1/2/3/4/5/6.
+        tabsGroupLabel: 'Repository sections',
+        tabQuantizzazioni: 'Quantizations',
+        tabScheda: 'Model card',
+        tabFile: 'Files',
+        noReadme: 'This repository does not publish a README.',
+        openOnHuggingFace: 'Open on Hugging Face',
+        copyLink: 'Copy the repository link',
+        linkCopied: 'Link copied.',
+        linkCopyFailed: 'Could not copy the link.',
+        analysisBannerTitle: 'TALOS repository analysis:',
+        analysisBannerBody: 'one GGUF header read per model — not per version — and weight shape and offset are reused to recompute every quantization, the same way talosExamineRepo() does in the store.',
+        downloadNamed: 'Download {label} · {size}',
+        // A format acronym, not a word that changes with language — still
+        // routed through the catalog: I18N-05 forbids static text outside
+        // the catalogs, same choice already made for F16/Q8_0 above.
+        ggufFormatTag: 'GGUF',
         ledgerTitle: 'Where every byte comes from',
         ledger: {
             weights: 'Model weights',

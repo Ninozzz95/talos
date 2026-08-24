@@ -14,6 +14,7 @@ import {
 import { TALOS_GGUF_FIRST_READ_BYTES, talosReadGgufHeader } from '@/lib/models/gguf'
 import {
     talosModelFit,
+    talosResolvedKvCacheType,
     talosResourceLedger,
     type TalosKvCacheTypeOverride,
     type TalosModelFit,
@@ -106,6 +107,13 @@ export type TalosSetExamination =
          * esattamente lo stato che questo store gia' possiede.
          */
         ledger: TalosResourceLedgerRow[]
+        /**
+         * Restyle Blocco 6 (mockup, item 7) — la stessa domanda a cui
+         * risponde la riga `kvCache` del ledger, ma come etichetta invece
+         * che come byte: quale tipo è EFFETTIVAMENTE in vigore, anche
+         * quando il selettore è su AUTOMATICA.
+         */
+        kvCacheTypeLabel: 'f16' | 'q8_0' | 'other'
         quantisation: string | null
         trainedContext: number
         /**
@@ -699,6 +707,7 @@ export async function talosExamineSet(key: string): Promise<void> {
                 context: state.context,
                 kvCacheTypeOverride: state.kvCacheType,
             }),
+            kvCacheTypeLabel: talosResolvedKvCacheType(parsed.header.shape, state.kvCacheType),
             // The header's own word, which outranks the file name it came with.
             quantisation: parsed.header.quantisation ?? set.quantisation,
             trainedContext: parsed.header.shape.trainedContext,
@@ -821,6 +830,7 @@ function talosEredita(
             context: state.context,
             kvCacheTypeOverride: state.kvCacheType,
         }),
+        kvCacheTypeLabel: talosResolvedKvCacheType(forma, state.kvCacheType),
         // ⛔ Qui il nome del file è l'UNICA fonte: l'intestazione letta è di
         // un'altra qualità, e riportare la sua direbbe che sono tutte uguali.
         quantisation: set.quantisation,
@@ -889,6 +899,11 @@ function talosRicalcolaEsaminati(): void {
                 context: state.context,
                 kvCacheTypeOverride: state.kvCacheType,
             }),
+            // ⛔ Senza questa riga l'etichetta resterebbe quella VECCHIA
+            // (lo spread sopra la porta avanti da set.examination): lo
+            // stesso difetto già trovato e corretto su `ledger` stesso in
+            // questa stessa funzione, qui sul campo gemello.
+            kvCacheTypeLabel: talosResolvedKvCacheType(forma, state.kvCacheType),
         }
     }
 }
