@@ -6,12 +6,11 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
-## v0.1.19
+## v0.1.20
 
-The personal voice no longer stutters, the local model runs faster, and
-browsing models on Hugging Face got a rebuild. Everything below was
-measured on the owner's OnePlus Pad 3 and OnePlus 13, none of it is
-estimated.
+Browsing models on Hugging Face got a rebuild, the local model engine
+gained a working Stop button during GPU decoding, and the Doctor screen
+can now see the personal voice engine instead of staying silent about it.
 
 ### Browsing models on Hugging Face
 
@@ -32,6 +31,24 @@ page opens, instead of waiting for a tap on each one.
   instead of a bare track.
 - A rounding bug that showed predicted speed as a fifteen-decimal number
   is fixed.
+
+### Fixed
+
+- Stop no longer freezes while the local model is decoding on the GPU
+  (OpenCL). The engine now checks for a stop request between graph nodes
+  during a multi-token prompt, the same way it already did on CPU and
+  Metal.
+- The Doctor screen had no way to see the personal voice engine at all —
+  only speech recognition was checked, never speech synthesis. It now
+  shows whether the engine is installed, whether a usable voice profile
+  exists, and a short log of the last few read requests, so a silent
+  playback failure can be diagnosed from the report instead of guessed at.
+
+## v0.1.19
+
+The personal voice no longer stutters, and the local model runs faster.
+Everything below was measured on the owner's OnePlus Pad 3 and OnePlus 13,
+none of it is estimated.
 
 ### The voice engine was rebuilt on Pocket TTS
 
