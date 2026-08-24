@@ -2248,6 +2248,14 @@ export const TALOS_EN_MESSAGES = {
         reasonKilled: 'This phone has already run out of memory with this model once.',
         counterOffer: 'At {context} tokens of context it fits.',
         contextLabel: 'Context length',
+        // Model Lab Blocco 2 — the global control above the variant list,
+        // not the per-row counter-offer button.
+        kvCacheTypeLabel: 'KV cache',
+        kvCacheType: {
+            auto: 'Automatic',
+            f16: 'F16',
+            q8_0: 'Q8_0',
+        },
         // Downloading.
         download: 'Download',
         downloading: 'Downloading',

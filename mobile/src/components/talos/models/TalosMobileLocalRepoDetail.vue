@@ -4,6 +4,7 @@ import { AlertTriangle, ChevronDown, Download, ShieldAlert } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosModelFitBar from '@/components/talos/models/TalosModelFitBar.vue'
 import TalosMobileMessageContent from '@/components/chat/TalosMobileMessageContent.vue'
+import TalosThemedFilter from '@/components/talos/ui/TalosThemedFilter.vue'
 import { useTalosI18n } from '@/i18n'
 import { talosModelCardMarkdown } from '@/lib/models/modelCardMarkdown'
 import { talosEstimatedCapacity } from '@/lib/models/fit'
@@ -17,6 +18,7 @@ import {
 } from '@/lib/models/presentation'
 import { talosModelSpeaks } from '@/lib/models/modelLanguages'
 import { talosReadmeSummary } from '@/lib/models/readmeSummary'
+import { talosSortChipClass } from '@/lib/sortChip'
 import { talosDiscardModelTransfer } from '@/services/modelTransfer'
 import {
     talosCloseModelRepo,
@@ -29,6 +31,7 @@ import {
     talosRefreshHuggingFaceToken,
     talosRefreshLeftovers,
     talosSetLocalContext,
+    talosSetLocalKvCacheType,
 } from '@/stores/localModels'
 
 const props = defineProps<{
@@ -147,6 +150,48 @@ async function acceptCounterOffer(key: string, context: number): Promise<void> {
     await talosExamineSet(key)
 }
 
+/**
+ * Controllo globale, Model Lab Blocco 2 — non sostituisce
+ * `acceptCounterOffer`: quello resta la risposta PRECISA a "questo modello
+ * non sta al contesto attuale, prova esattamente questo" per una riga sola;
+ * questo e' l'esplorazione libera su TUTTE le varianti insieme, prima di
+ * scaricare qualunque cosa. Due bisogni diversi, non uno che scavalca
+ * l'altro.
+ *
+ * 2K-128K passo 256: lo stesso passo di `talosMaxContextFor` (fit.ts) - un
+ * arrotondamento diverso qui e li' sarebbe due fonti di verita' sullo
+ * stesso numero. 131072 e' anche il trainedContext piu' comune negli header
+ * reali visti da questo repository (Llama/Qwen/Gemma recenti).
+ */
+const CONTEXT_MIN = 2048
+const CONTEXT_MAX = 131_072
+const CONTEXT_STEP = 256
+
+function onContextChange(event: Event): void {
+    const target = event.target
+    if (!(target instanceof HTMLInputElement)) return
+    const next = Number(target.value)
+    if (!Number.isFinite(next)) return
+    talosSetLocalContext(next)
+}
+
+const kvCacheOptions = computed(() => ([
+    { value: 'auto', label: t('localModels.kvCacheType.auto'), testId: 'talos-models-kv-auto' },
+    { value: 'f16', label: t('localModels.kvCacheType.f16'), testId: 'talos-models-kv-f16' },
+    { value: 'q8_0', label: t('localModels.kvCacheType.q8_0'), testId: 'talos-models-kv-q8_0' },
+]))
+
+/**
+ * `TalosThemedFilter` emette una stringa qualunque per contratto (e'
+ * generico, riusato anche per l'ordinamento della lista installati): la
+ * guardia qui e' cio' che restringe al tipo vero prima di passarlo allo
+ * store, non un controllo ridondante.
+ */
+function onKvCacheTypeChange(value: string): void {
+    if (value !== 'auto' && value !== 'f16' && value !== 'q8_0') return
+    talosSetLocalKvCacheType(value)
+}
+
 async function reclaim(): Promise<void> {
     for (const leftover of store.leftovers.items) await talosDiscardModelTransfer(leftover.path)
     await talosRefreshLeftovers()
@@ -189,6 +234,46 @@ async function reclaim(): Promise<void> {
         <p v-if="repo?.sets.length" class="font-mono text-2xs uppercase tracking-wider text-[var(--talos-muted)]">
             {{ t('localModels.variants') }}<template v-if="freeMemory"> · {{ t('models.fitFree', { free: freeMemory }) }}</template>
         </p>
+
+        <!-- Model Lab Blocco 2 — controllo globale, non per riga: cambia
+             contesto o cache KV una volta, ogni variante gia' esaminata si
+             ricalcola sul posto (talosRicalcolaEsaminati in localModels.ts),
+             mai una nuova lettura di rete. Il bottone di controproposta
+             dentro ogni riga resta: risponde a una domanda diversa, "questo
+             modello preciso a che contesto ci sta". -->
+        <div
+            v-if="repo?.sets.length"
+            data-testid="talos-models-global-controls"
+            class="flex flex-col gap-[var(--talos-space-control)] rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-[var(--talos-space-control)]"
+        >
+            <label class="flex flex-col gap-[calc(var(--talos-space-inline)/2)]">
+                <span class="flex items-center justify-between font-mono text-2xs uppercase tracking-wider text-[var(--talos-muted)]">
+                    {{ t('localModels.contextLabel') }}
+                    <span data-testid="talos-models-context-value" class="tabular-nums text-[var(--talos-text)]">{{ store.context }}</span>
+                </span>
+                <input
+                    type="range"
+                    data-testid="talos-models-context-slider"
+                    class="talos-context-slider"
+                    :min="CONTEXT_MIN"
+                    :max="CONTEXT_MAX"
+                    :step="CONTEXT_STEP"
+                    :value="store.context"
+                    :aria-label="t('localModels.contextLabel')"
+                    :aria-valuetext="`${store.context} token`"
+                    @change="onContextChange"
+                >
+            </label>
+            <TalosThemedFilter
+                data-testid="talos-models-kv-cache-type"
+                group-class="flex gap-[var(--talos-space-inline)]"
+                :model-value="store.kvCacheType"
+                :options="kvCacheOptions"
+                :group-label="t('localModels.kvCacheTypeLabel')"
+                :option-class="talosSortChipClass"
+                @update:model-value="onKvCacheTypeChange"
+            />
+        </div>
 
         <p v-if="!repo || repo.loading" class="py-[var(--talos-space-page)] text-center text-sm text-[var(--talos-muted)]">{{ t('localModels.loadingFiles') }}</p>
         <p v-else-if="repo.failure" role="alert" data-testid="talos-models-repo-failed" class="py-[var(--talos-space-page)] text-center text-sm text-[var(--talos-danger)]">{{ t('localModels.repoFailed') }} {{ explain(repo.failure) }}</p>
@@ -263,3 +348,75 @@ async function reclaim(): Promise<void> {
         <p v-if="refused" role="alert" data-testid="talos-models-refused" class="text-xs text-[var(--talos-danger)]">{{ refused }}</p>
     </div>
 </template>
+
+<style scoped>
+/*
+ * Slider di contesto, Model Lab Blocco 2. Nessun precedente in questo
+ * albero (nessun altro componente talos/ usa <input type="range">): niente
+ * da riusare. Le pseudo-classi vendor (::-webkit-*, ::-moz-*) non hanno
+ * equivalente nelle classi utility di Tailwind, motivo per cui questo file
+ * guadagna il suo primo blocco <style> — il solo altro precedente
+ * nell'albero e' TalosConsensoAutonomia.vue, per lo stesso motivo:
+ * animazione/pseudo-elementi che le utility non esprimono. Stile minimo,
+ * sugli stessi token --talos-* di ogni altro controllo di questa pagina.
+ *
+ * Ricerca di questo blocco: rimuovere l'appearance nativa, stilare
+ * -webkit-slider-thumb/-moz-range-thumb e -webkit-slider-runnable-track/
+ * -moz-range-track separatamente (i browser non condividono un selettore),
+ * mantenere il focus-visible nativo — mai perdere tastiera/touch/screen
+ * reader mentre si ridisegna solo l'aspetto.
+ */
+.talos-context-slider {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 100%;
+    /* Area toccabile piena altezza; il track visivo resta sottile sotto. */
+    height: var(--talos-touch-target);
+    background: transparent;
+    cursor: pointer;
+}
+
+.talos-context-slider::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 9999px;
+    background: var(--talos-border);
+}
+
+.talos-context-slider::-moz-range-track {
+    height: 4px;
+    border-radius: 9999px;
+    background: var(--talos-border);
+}
+
+.talos-context-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    margin-top: -8px;
+    border-radius: 9999px;
+    background: var(--talos-accent);
+    border: none;
+}
+
+.talos-context-slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 9999px;
+    background: var(--talos-accent);
+    border: none;
+}
+
+.talos-context-slider:focus-visible {
+    outline: 2px solid var(--talos-ring, var(--talos-accent));
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .talos-context-slider::-webkit-slider-thumb { transition: transform 120ms ease-out; }
+    .talos-context-slider::-moz-range-thumb { transition: transform 120ms ease-out; }
+}
+
+.talos-context-slider:active::-webkit-slider-thumb { transform: scale(1.1); }
+.talos-context-slider:active::-moz-range-thumb { transform: scale(1.1); }
+</style>

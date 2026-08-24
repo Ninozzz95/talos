@@ -28,6 +28,7 @@ vi.mock('@/stores/localModels', () => ({
     talosDownloadSet: harness.download,
     talosResumeLocalDownload: harness.resume,
     talosSetLocalContext: vi.fn(),
+    talosSetLocalKvCacheType: vi.fn(),
     talosStopLocalDownload: vi.fn(async () => undefined),
     talosRefreshDeviceCapacity: vi.fn(async () => undefined),
     talosRefreshTransfer: vi.fn(async () => undefined),
@@ -36,6 +37,10 @@ vi.mock('@/stores/localModels', () => ({
 }))
 
 import TalosMobileLocalRepoDetail from '@/components/talos/models/TalosMobileLocalRepoDetail.vue'
+// Le stesse funzioni mockate sopra: importarle qui (dopo vi.mock, che Vitest
+// solleva comunque in cima al file) da' la referenza allo stesso vi.fn() che
+// il componente chiama, per potervi asserire sopra.
+import { talosSetLocalContext, talosSetLocalKvCacheType } from '@/stores/localModels'
 
 function modelSet() {
     return {
@@ -50,10 +55,13 @@ beforeEach(() => {
     harness.open.mockClear()
     harness.close.mockClear()
     harness.describe.mockClear()
+    vi.mocked(talosSetLocalContext).mockClear()
+    vi.mocked(talosSetLocalKvCacheType).mockClear()
     harness.state = reactive({
         repo: { id: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha', loading: false, failure: null, sets: [modelSet()] },
         device: { availableRamBytes: 5 * 1024 ** 3, freeStorageBytes: 20 * 1024 ** 3, lowMemoryThresholdBytes: 0 },
         context: 4096,
+        kvCacheType: 'auto',
         transfer: { active: false, paused: false, modelName: null, haveBytes: 0, totalBytes: 0, runner: null, networkBound: true, failure: null },
         leftovers: { items: [], totalBytes: 0 },
     }) as never
@@ -172,5 +180,83 @@ describe('TalosMobileLocalRepoDetail', () => {
         expect(disclosure.attributes('open')).toBeUndefined()
         expect(disclosure.get('summary').text()).toContain('Details')
         expect(disclosure.find('[data-testid="talos-models-examine"]').exists()).toBe(true)
+    })
+
+    /**
+     * Model Lab Blocco 2 — il controllo globale, non il bottone di
+     * controproposta per riga (già coperto sopra da altri test). Vive in
+     * `talos-models-global-controls`, una sola volta per pagina, non dentro
+     * il `<details>` di ogni variante.
+     */
+    describe('Model Lab Blocco 2 — controllo globale di contesto e cache KV', () => {
+        it('mostra lo slider con i bordi 2K-128K passo 256 e il valore corrente dello store', async () => {
+            harness.state.context = 16_384
+            const wrapper = mount(TalosMobileLocalRepoDetail, {
+                props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+            })
+            await flushPromises()
+
+            const slider = wrapper.get('[data-testid="talos-models-context-slider"]')
+            expect(slider.attributes('type')).toBe('range')
+            expect(slider.attributes('min')).toBe('2048')
+            expect(slider.attributes('max')).toBe('131072')
+            expect(slider.attributes('step')).toBe('256')
+            expect((slider.element as HTMLInputElement).value).toBe('16384')
+            expect(wrapper.get('[data-testid="talos-models-context-value"]').text()).toBe('16384')
+        })
+
+        it('muovere lo slider chiama talosSetLocalContext col nuovo valore, non talosSetLocalKvCacheType', async () => {
+            const wrapper = mount(TalosMobileLocalRepoDetail, {
+                props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+            })
+            await flushPromises()
+
+            const slider = wrapper.get('[data-testid="talos-models-context-slider"]')
+            const elemento = slider.element as HTMLInputElement
+            elemento.value = '32768'
+            await slider.trigger('change')
+
+            expect(talosSetLocalContext).toHaveBeenCalledWith(32_768)
+            expect(talosSetLocalKvCacheType).not.toHaveBeenCalled()
+        })
+
+        it('mostra le tre sole opzioni AUTO/F16/Q8_0, mai Q4_0, con quella corrente marcata aria-checked', async () => {
+            harness.state.kvCacheType = 'f16'
+            const wrapper = mount(TalosMobileLocalRepoDetail, {
+                props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+            })
+            await flushPromises()
+
+            const gruppo = wrapper.get('[data-testid="talos-models-kv-cache-type"]')
+            expect(gruppo.attributes('role')).toBe('radiogroup')
+            const opzioni = gruppo.findAll('[role="radio"]')
+            expect(opzioni).toHaveLength(3)
+            expect(opzioni.map((o) => o.attributes('data-talos-filter-option'))).toEqual(['auto', 'f16', 'q8_0'])
+            const attiva = gruppo.get('[data-talos-filter-option="f16"]')
+            expect(attiva.attributes('aria-checked')).toBe('true')
+            expect(gruppo.get('[data-talos-filter-option="auto"]').attributes('aria-checked')).toBe('false')
+        })
+
+        it('scegliere Q8_0 chiama talosSetLocalKvCacheType, non talosSetLocalContext', async () => {
+            const wrapper = mount(TalosMobileLocalRepoDetail, {
+                props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+            })
+            await flushPromises()
+
+            await wrapper.get('[data-talos-filter-option="q8_0"]').trigger('click')
+
+            expect(talosSetLocalKvCacheType).toHaveBeenCalledWith('q8_0')
+            expect(talosSetLocalContext).not.toHaveBeenCalled()
+        })
+
+        it('sparisce quando il repository non ha ancora varianti, invece di mostrare un controllo inutile', async () => {
+            harness.state.repo.sets = []
+            const wrapper = mount(TalosMobileLocalRepoDetail, {
+                props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+            })
+            await flushPromises()
+
+            expect(wrapper.find('[data-testid="talos-models-global-controls"]').exists()).toBe(false)
+        })
     })
 })

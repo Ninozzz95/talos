@@ -341,4 +341,82 @@ describe('⛔ Model Lab Blocco 2 — la cache KV forzata raggiunge OGNI verdetto
 
         expect(conAuto).toEqual(senzaTocco)
     })
+
+    /**
+     * Il caso che conta per il controllo GLOBALE del Blocco 2 (slider di
+     * contesto + selettore cache KV in cima alla pagina di dettaglio, non il
+     * bottone di controproposta per riga): cambiare il selettore DOPO che le
+     * varianti sono già state esaminate deve ricalcolare tutto sul posto,
+     * MAI rileggere la rete. `talosExamineSet` non ha una scorciatoia per
+     * "questo file l'ho già letto" — richiama sempre `readHead` — quindi
+     * senza `talosRicalcolaEsaminati` questo stesso identico test
+     * conterebbe altre due letture (una per modello) invece di zero.
+     */
+    it('cambiare il tipo DOPO aver esaminato ricalcola sul posto, senza una sola lettura in più', async () => {
+        const store = await repoAperto()
+        await store.talosExamineRepo()
+        const primaDelCambio = [...letture]
+        const baseline = store.talosLocalModels.repo!.sets.map((set) => {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            return esame.fit.kvCacheBytes
+        })
+
+        store.talosSetLocalKvCacheType('q8_0')
+
+        // ⛔ La riga che morde: zero richieste nuove. Se qualcuno rimpiazzasse
+        // `talosRicalcolaEsaminati` con una nuova `talosExamineRepo()` "per
+        // semplicità", `letture` crescerebbe di due e questo fallirebbe.
+        expect(letture).toEqual(primaDelCambio)
+
+        const dopoIlCambio = store.talosLocalModels.repo!.sets.map((set) => {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            return esame.fit.kvCacheBytes
+        })
+        expect(dopoIlCambio).toHaveLength(6)
+        for (let i = 0; i < baseline.length; i += 1) {
+            expect(dopoIlCambio[i], `set #${i}`).toBeCloseTo(baseline[i]! * (17 / 32), 0)
+        }
+
+        // AL CONTRARIO: tornare ad 'auto' ricalcola di nuovo, sempre senza
+        // rete, e riporta esattamente il valore di partenza.
+        store.talosSetLocalKvCacheType('auto')
+        expect(letture).toEqual(primaDelCambio)
+        const tornatoAuto = store.talosLocalModels.repo!.sets.map((set) => {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            return esame.fit.kvCacheBytes
+        })
+        expect(tornatoAuto).toEqual(baseline)
+    })
+
+    /** Lo stesso, sul percorso del contesto — `talosSetLocalContext` promette "without re-reading" da prima del Blocco 2: qui diventa vero anche in pratica. */
+    it('cambiare il CONTESTO dopo aver esaminato ricalcola sul posto, senza una lettura in più', async () => {
+        const store = await repoAperto()
+        await store.talosExamineRepo()
+        const primaDelCambio = [...letture]
+        const baseline = store.talosLocalModels.repo!.sets.map((set) => {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            return esame.fit.kvCacheBytes
+        })
+
+        // TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS (localContextPolicy.ts) e' 4096:
+        // il quadruplo, non un numero a caso, per un rapporto atteso pulito.
+        store.talosSetLocalContext(16_384)
+
+        expect(letture).toEqual(primaDelCambio)
+        const dopoIlCambio = store.talosLocalModels.repo!.sets.map((set) => {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            return esame.fit.kvCacheBytes
+        })
+        // La cache KV scala linearmente col contesto (fit.ts: e' un fattore
+        // moltiplicativo diretto): al quadruplo del contesto di partenza
+        // corrisponde il quadruplo della cache, capofila E ereditate.
+        for (let i = 0; i < baseline.length; i += 1) {
+            expect(dopoIlCambio[i], `set #${i}`).toBeCloseTo(baseline[i]! * 4, 0)
+        }
+    })
 })
