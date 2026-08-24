@@ -277,3 +277,68 @@ describe('⛔ una lettura per MODELLO, non per versione', () => {
         }
     })
 })
+
+describe('⛔ Model Lab Blocco 2 — la cache KV forzata raggiunge OGNI verdetto, capofila e ereditato', () => {
+    /**
+     * `talosSetLocalKvCacheType()` tocca due punti diversi dentro lo store:
+     * la lettura del capofila (`talosExamineSet`, chiamata da
+     * `talosExamineRepo` una volta per modello) e l'eredità (`talosEredita`,
+     * per ogni versione che non tocca la rete). Un test che guardasse solo
+     * il capofila non proverebbe niente sul secondo punto — la stessa
+     * svista che il describe sopra esiste per stanare sui campi ereditati
+     * (P2-6): qui la riga che morde è la versione ereditata, non la prima.
+     *
+     * `gguf.ts` mette sempre `kvBytesPerElement: 2` (f16) quando legge un
+     * header vero — nessun campo GGUF dichiara il tipo della cache KV, è
+     * una scelta a tempo di inferenza, non del file. Quindi 'auto' su
+     * questo fixture equivale sempre a f16, ed è per questo che il
+     * rapporto atteso forzando q8_0 è esattamente 17/32 (= (34/32) / 2),
+     * mai "un po' meno".
+     */
+    it('forzare q8_0 restringe la cache KV di tutte le sei versioni rispetto ad auto, capofila E ereditate', async () => {
+        const auto = await repoAperto()
+        await auto.talosExamineRepo()
+        const baseline = auto.talosLocalModels.repo!.sets.map((set) => {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            return esame.fit.kvCacheBytes
+        })
+
+        vi.resetModules()
+        letture = []
+        const forzato = await repoAperto()
+        forzato.talosSetLocalKvCacheType('q8_0')
+        await forzato.talosExamineRepo()
+        const conQ8 = forzato.talosLocalModels.repo!.sets.map((set) => {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            return esame.fit.kvCacheBytes
+        })
+
+        expect(conQ8).toHaveLength(6)
+        for (let i = 0; i < baseline.length; i += 1) {
+            expect(conQ8[i], `set #${i}`).toBeCloseTo(baseline[i]! * (17 / 32), 0)
+        }
+    })
+
+    it("'auto' non cambia niente rispetto a non aver mai chiamato il selettore", async () => {
+        const mai = await repoAperto()
+        await mai.talosExamineRepo()
+        const senzaTocco = mai.talosLocalModels.repo!.sets.map((set) => {
+            const esame = set.examination
+            return esame.state === 'read' ? esame.fit.kvCacheBytes : null
+        })
+
+        vi.resetModules()
+        letture = []
+        const esplicito = await repoAperto()
+        esplicito.talosSetLocalKvCacheType('auto')
+        await esplicito.talosExamineRepo()
+        const conAuto = esplicito.talosLocalModels.repo!.sets.map((set) => {
+            const esame = set.examination
+            return esame.state === 'read' ? esame.fit.kvCacheBytes : null
+        })
+
+        expect(conAuto).toEqual(senzaTocco)
+    })
+})
