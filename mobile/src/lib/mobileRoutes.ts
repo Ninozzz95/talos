@@ -9,6 +9,7 @@ export type TalosMobileRouteName =
     | 'context' | 'settings'
     | 'settings-models' | 'settings-models-providers'
     | 'settings-models-catalog' | 'settings-models-local' | 'settings-models-local-repo'
+    | 'harness' | 'harness-session'
 
 export interface TalosMobileRoute {
     name: TalosMobileRouteName
@@ -41,6 +42,11 @@ const loadResearchReportScreen = () => import('@/screens/ResearchReportScreen.vu
 const loadResearchClaimScreen = () => import('@/screens/ResearchClaimScreen.vue').then((module) => module.default)
 const loadResearchSourceScreen = () => import('@/screens/ResearchSourceScreen.vue').then((module) => module.default)
 const loadContextScreen = () => import('@/screens/ContextScreen.vue').then((module) => module.default)
+// Harness UI (24/8): debug-only coding-harness mockup — a native list plus a
+// thin trampoline that reuses the top-level navigation already decided
+// against the CSP (`frame-src 'none'`) when the Settings link first shipped.
+const loadHarnessScreen = () => import('@/screens/HarnessScreen.vue').then((module) => module.default)
+const loadHarnessSessionScreen = () => import('@/screens/HarnessSessionScreen.vue').then((module) => module.default)
 const loadSettingsScreen = () => import('@/screens/SettingsScreen.vue').then((module) => module.default)
 const loadSettingsModelsScreen = () => import('@/screens/SettingsModelsScreen.vue').then((module) => module.default)
 const loadSettingsModelsProvidersScreen = () => import('@/screens/SettingsModelsProvidersScreen.vue').then((module) => module.default)
@@ -117,6 +123,8 @@ export const TALOS_MOBILE_ROUTES: readonly TalosMobileRoute[] = Object.freeze([
     { name: 'research-claim', path: '/research/:id/claim/:index', desktop_station_id: 'research', component: loadResearchClaimScreen, parent: 'research-report' },
     { name: 'research-source', path: '/research/:id/source/:index', desktop_station_id: 'research', component: loadResearchSourceScreen, parent: 'research-report' },
     { name: 'context', path: '/context', desktop_station_id: 'context_vault', component: loadContextScreen },
+    { name: 'harness', path: '/harness', desktop_station_id: 'harness', component: loadHarnessScreen },
+    { name: 'harness-session', path: '/harness/:id', desktop_station_id: 'harness', component: loadHarnessSessionScreen, parent: 'harness' },
     { name: 'settings', path: '/settings', desktop_station_id: 'settings', component: loadSettingsScreen },
     { name: 'settings-models', path: '/settings/models', desktop_station_id: 'settings', component: loadSettingsModelsScreen, parent: 'settings' },
     { name: 'settings-models-providers', path: '/settings/models/providers', desktop_station_id: 'settings', component: loadSettingsModelsProvidersScreen, parent: 'settings-models' },

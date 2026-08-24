@@ -57,7 +57,7 @@ describe('router wiring', () => {
             'notes', 'note-new', 'note-item',
             'doctor',
             'research', 'research-new', 'research-report', 'research-claim', 'research-source',
-            'context', 'settings',
+            'context', 'harness', 'harness-session', 'settings',
             'settings-models', 'settings-models-providers',
             'settings-models-catalog', 'settings-models-local', 'settings-models-local-repo',
             // Il controllo del telefono: sotto le Impostazioni, non fra le stazioni.

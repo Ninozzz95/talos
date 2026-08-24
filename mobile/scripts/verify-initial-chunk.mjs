@@ -506,7 +506,35 @@ import { resolve } from 'node:path'
  * file: un margine di poche decine di byte non e' un margine, e' una
  * trappola sotto la prossima riga.
  */
-const DEFAULT_MAXIMUM_BYTES = 613_000
+/*
+ * ⛔ 613.000 → 614.000, il 2026-08-24, per le due rotte nuove di Harness UI
+ * (`harness`/`harness-session` in mobileRoutes.ts — lista nativa + trampolino
+ * verso il mockup statico gia' esistente, dietro lo stesso cancello
+ * debug-only del vecchio link in Impostazioni).
+ *
+ * Misurato: 613.535, 535 byte sopra tetto. Prima di alzare, l'ordine di
+ * sempre (righe piu' in alto in questo file):
+ *
+ *   1. togliere peso vero — non c'e': i due loader e le due voci
+ *      nell'array sono gia' la forma minima, IDENTICA a quella di ogni
+ *      altra rotta in questo stesso file (research/research-report,
+ *      settings-privilege, i quattro del Model Lab...).
+ *   2. spostare nel pigro — gia' fatto: HarnessScreen.vue e
+ *      HarnessSessionScreen.vue sono i loro chunk separati
+ *      (`HarnessScreen-*.js` 2,54 kB, `HarnessSessionScreen-*.js` 1,00 kB),
+ *      come qualunque altro screens/*.vue tranne Chat. Il resto del peso
+ *      e' nella tabella delle rotte stessa — che deve stare intera
+ *      nell'avvio perche' Vue Router matcha un percorso solo con
+ *      l'array intero in mano — e nelle due righe di SHEET_TITLE_KEY in
+ *      App.vue, un Record completo per costruzione.
+ *   3. mai accorciare un contratto — non c'entra qui: nessun prompt,
+ *      nessuna descrizione, nessuna guardia.
+ *
+ * ⇒ 614.000 e non 613.600: quattrocento byte di margine sono la stessa
+ * trappola sotto la prossima riga descritta piu' volte in questo file.
+ * Mille lascia margine vero.
+ */
+const DEFAULT_MAXIMUM_BYTES = 614_000
 const DEFAULT_MAXIMUM_CSS_BYTES = 220_000
 const DYNAMIC_BOUNDARIES = [
     {

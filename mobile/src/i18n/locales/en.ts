@@ -80,6 +80,7 @@ export const TALOS_EN_MESSAGES = {
         goBack: 'Go back',
         primary: 'Primary navigation',
         modelLab: 'Model Lab',
+        harness: 'Harness',
     },
     language: {
         title: 'Language',
@@ -1100,12 +1101,19 @@ export const TALOS_EN_MESSAGES = {
         codeCopied: 'Code copied.',
         codeCopyFailed: 'Code copy failed.',
     },
-    // Harness UI (Codex, 24/8): debug-only link to the reused desktop
-    // mockup + Board, hidden entirely in release builds — see
-    // services/harnessUi.ts for how "hidden" is guaranteed.
-    harnessUi: {
-        linkLabel: 'Harness UI (debug)',
-        linkHint: 'The coding-harness mockup and campaign Board, same build as desktop.',
+    // Harness UI (24/8): real route (list + session trampoline), still
+    // behind the same debug-only gate as the old Settings link — see
+    // services/harnessUi.ts.
+    harness: {
+        demoNotice: 'Demo sessions, not wired to a real backend — the navigation structure is real, the data is not.',
+        groups: {
+            today: 'Today',
+            yesterday: 'Yesterday',
+            week: 'Last 7 days',
+        },
+        openingMockup: 'Opening Harness UI…',
+        unavailable: "Harness UI isn't available in this build.",
+        loadFailed: "Harness UI didn't open. Try again.",
     },
     privilege: {
         keepAlive: 'Keep it alive',

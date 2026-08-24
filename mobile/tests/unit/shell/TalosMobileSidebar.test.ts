@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { Capacitor } from '@capacitor/core'
 import type { TalosLocalChatSession } from '@/repositories/chatRepository'
 import TalosMobileSidebar from '@/components/shell/TalosMobileSidebar.vue'
 import { DrawerContent } from '@/components/ui/drawer'
@@ -173,5 +174,32 @@ describe('TalosMobileSidebar (F1-T3)', () => {
         await flushPromises()
         // The choice rides along: the chat, and whether its Library files go too.
         expect(wrapper.emitted('delete')).toEqual([['chat-2', { deleteMedia: false }]])
+    })
+})
+
+/**
+ * Harness UI (24/8) — debug-only entry, appended to TOOL_DEFINITIONS rather
+ * than baked in, so the six-entry F2-RED-20 test above stays exactly as it
+ * was (it never mocks Capacitor, so `talosHarnessUiAvailable()` resolves to
+ * the real, unavailable-in-jsdom answer there — matching a release build).
+ */
+describe('TalosMobileSidebar — Harness UI debug-only entry (24/8)', () => {
+    afterEach(() => { vi.restoreAllMocks() })
+
+    it('stays absent when the native plugin is unavailable, same as a release build', async () => {
+        mountSidebar()
+        await flushPromises()
+        expect(document.querySelector('[data-testid="talos-mobile-sidebar"] [aria-label="Open Harness"]')).toBeNull()
+    })
+
+    it('appears and navigates when the native plugin is available (debug build)', async () => {
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+        const wrapper = mountSidebar()
+        await flushPromises()
+        const row = document.querySelector('[data-testid="talos-mobile-sidebar"] [aria-label="Open Harness"]') as HTMLElement
+        expect(row).toBeTruthy()
+        row.click()
+        await flushPromises()
+        expect(wrapper.emitted('navigate')).toEqual([['harness']])
     })
 })
