@@ -131,6 +131,18 @@ final class TalosLlamaNative {
     static native String nativeCpuFeaturesForResearch();
 
     /**
+     * ⛔⛔ SOLO RICERCA — P2-1 blocco A. Costruisce lo speculatore
+     * {@code ngram-mod} su una sessione GIA' APERTA da {@code handle}.
+     * Nessuna chiamata da {@link #nativeOpen} lo fa mai — questo metodo è
+     * l'UNICA porta, e costruisce soltanto: nessun effetto sul testo che
+     * quella sessione genera (il blocco B collega la decodifica vera).
+     *
+     * @return true se lo speculatore è pronto; false se l'handle non è
+     *     valido o la costruzione nativa è fallita.
+     */
+    static native boolean nativeConstructSpeculatorForResearch(long handle, int nMatch, int nMax);
+
+    /**
      * ⛔⛔ SOLO RICERCA — la famiglia di affinity CPU per la PROSSIMA apertura
      * o ricostruzione di contesto. Valori: {@code 0} DEFAULT (nessuna
      * maschera, il comportamento di produzione), {@code 1} tutti i core

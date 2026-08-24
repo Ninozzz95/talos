@@ -29,6 +29,7 @@
 #include <dirent.h>
 #include <cerrno>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -44,6 +45,8 @@
 #include "ggml-backend.h"
 #include "sampling.h"
 #include "chat.h"
+
+#include "talos_speculator.hpp"  // P2-1 blocco A — involucro nostro, non vendored
 
 /**
  * ⛔ L'identita' della BUILD di llama.cpp, non dell'app.
@@ -107,6 +110,19 @@ struct talos_session {
      * su una bugia.
      */
     std::vector<llama_token> cached;
+
+    /**
+     * ⛔⛔ SOLO RICERCA — P2-1 blocco A. Presente SOLO se un chiamante di
+     * ricerca l'ha costruito esplicitamente dopo l'apertura (mai da
+     * `nativeOpen`, il percorso di produzione — vedi
+     * `nativeConstructSpeculatorForResearch`). Costruito e distrutto, MAI
+     * ancora usato nel giro di decodifica: il blocco B (CR-11, la
+     * verifica/accettazione) lo collegherà davvero. `unique_ptr` perché
+     * la sessione può chiudersi senza che nessuno lo abbia mai richiesto
+     * — un campo assente resta `nullptr`, zero costo, zero cleanup da
+     * ricordare a mano in `nativeClose`.
+     */
+    std::unique_ptr<TalosSpeculator> speculator;
 
     /**
      * Il tipo di cache che è stato DAVVERO creato.
@@ -1506,6 +1522,36 @@ Java_ai_talos_TalosLlamaNative_nativeCpuFeaturesForResearch(JNIEnv * env, jclass
     talos_metti(out, "sme", talos_ha_sme(h));
     talos_metti(out, "sme2", talos_ha_sme2(h));
     return env->NewStringUTF(out.dump().c_str());
+}
+
+/**
+ * ⛔⛔ SOLO RICERCA — P2-1 blocco A. Costruisce lo speculatore `ngram-mod`
+ * su una sessione GIÀ APERTA e lo appende alla sessione stessa — nessuna
+ * chiamata da `nativeOpen` lo fa mai, questo export è l'UNICA porta.
+ *
+ * ⛔ Costruisce e basta: nessun `begin`/`process`/`draft`/`accept` qui, e
+ * quindi nessun effetto sul testo generato da questa sessione — il blocco
+ * B collegherà quel lato. Questo export prova solo che il lifecycle
+ * (costruzione, e poi distruzione a `nativeClose` via `unique_ptr`) è
+ * sicuro col motore reale, non un mock.
+ *
+ * @return true se lo speculatore è pronto; false se l'handle non è
+ *     valido o `common_speculative_init` è tornato nullptr.
+ */
+JNIEXPORT jboolean JNICALL
+Java_ai_talos_TalosLlamaNative_nativeConstructSpeculatorForResearch(
+        JNIEnv *, jclass, jlong handle, jint nMatch, jint nMax) {
+    std::lock_guard<std::mutex> serratura(g_motore);
+    talos_session * session = as_session(handle);
+    if (session == nullptr) return JNI_FALSE;
+
+    session->speculator = std::make_unique<TalosSpeculator>((int32_t) nMatch, (int32_t) nMax);
+    if (!session->speculator->pronto()) {
+        TALOS_LOGE("speculatore ngram-mod non costruito");
+        session->speculator.reset();
+        return JNI_FALSE;
+    }
+    return JNI_TRUE;
 }
 
 /**
