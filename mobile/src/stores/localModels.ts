@@ -12,7 +12,12 @@ import {
     type TalosGgufSet,
 } from '@/lib/models/ggufSet'
 import { TALOS_GGUF_FIRST_READ_BYTES, talosReadGgufHeader } from '@/lib/models/gguf'
-import { talosModelFit, type TalosModelFit, type TalosModelShape } from '@/lib/models/fit'
+import {
+    talosModelFit,
+    type TalosKvCacheTypeOverride,
+    type TalosModelFit,
+    type TalosModelShape,
+} from '@/lib/models/fit'
 import { TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS } from '@/lib/models/localContextPolicy'
 import { talosMeasureDevice, type TalosMeasuredDevice } from '@/services/deviceCapacity'
 import { clearProviderKey, getProviderKey, setProviderKey } from '@/services/secureKeyStore'
@@ -189,6 +194,13 @@ export interface TalosLocalModelsState {
     } | null
     device: TalosMeasuredDevice | null
     context: number
+    /**
+     * ⭐ Model Lab, Blocco 2. Come `context`: solo in memoria, mai persistito —
+     * è un'esplorazione di "cosa succederebbe", non una preferenza durevole.
+     * `'auto'` lascia `talosModelFit` fidarsi dell'header, esattamente come
+     * prima che questo campo esistesse.
+     */
+    kvCacheType: TalosKvCacheTypeOverride
     /** Whether one exists — never the token itself, which stays in the Keystore. */
     hasToken: boolean
     /**
@@ -242,6 +254,7 @@ const state = reactive<TalosLocalModelsState>({
     repo: null,
     device: null,
     context: TALOS_DEFAULT_LOCAL_CONTEXT,
+    kvCacheType: 'auto',
     hasToken: false,
     catalogue: {
         state: 'idle',
@@ -666,6 +679,7 @@ export async function talosExamineSet(key: string): Promise<void> {
                 device,
                 context: state.context,
                 fileBytes: set.totalBytes,
+                kvCacheTypeOverride: state.kvCacheType,
             }),
             // The header's own word, which outranks the file name it came with.
             quantisation: parsed.header.quantisation ?? set.quantisation,
@@ -771,6 +785,7 @@ function talosEredita(
             device,
             context: state.context,
             fileBytes: set.totalBytes,
+            kvCacheTypeOverride: state.kvCacheType,
         }),
         // ⛔ Qui il nome del file è l'UNICA fonte: l'intestazione letta è di
         // un'altra qualità, e riportare la sua direbbe che sono tutte uguali.
@@ -792,6 +807,25 @@ function talosEredita(
 /** Re-answer every examined set at a new context length, without re-reading. */
 export function talosSetLocalContext(context: number): void {
     state.context = context
+}
+
+/**
+ * Forza (o smette di forzare) il tipo di cache KV — Model Lab, Blocco 2.
+ *
+ * Come `talosSetLocalContext`: nessuna nuova lettura di rete, l'header di
+ * ogni variante già esaminata resta in memoria (`letture`/`set.examination`),
+ * e il chiamante ricalcola il verdetto passando questo valore a
+ * `talosModelFit`/`talosResourceLedger`.
+ *
+ * ⛔ Non ancora collegato al motore di inferenza vero: `localEngine.open()`
+ * (che accetta `kvCacheType` per davvero, testato in 4 file) viene chiamato
+ * SOLO da `lib/chat/providers/localAdapter.ts` — file su cui Agente 19 ha
+ * lavoro dal vivo non committato stanotte (Fase 4/5). Portare la scelta fatta
+ * QUI fino a quella chiamata è l'ultimo miglio di questo blocco, rimandato
+ * finché quel file non è di nuovo stabile — non una svista.
+ */
+export function talosSetLocalKvCacheType(kvCacheType: TalosKvCacheTypeOverride): void {
+    state.kvCacheType = kvCacheType
 }
 
 export type TalosDownloadRefusal =
