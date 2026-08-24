@@ -2260,6 +2260,23 @@ export const TALOS_EN_MESSAGES = {
             f16: 'F16',
             q8_0: 'Q8_0',
         },
+        // Model Lab Blocco 4 — the provenance ledger: never a number without
+        // saying where it comes from. The eight labels are the same eight
+        // entries talosResourceLedger() (fit.ts) returns, same fixed order.
+        ledgerTitle: 'Where every byte comes from',
+        ledger: {
+            weights: 'Model weights',
+            kvCache: 'KV cache',
+            compute: 'Compute',
+            runtime: 'Runtime',
+            safetyMargin: 'Safety margin',
+            totalRuntime: 'Total while running',
+            availableRam: 'Available RAM',
+            margin: 'Remaining margin',
+            provenanceExact: 'measured',
+            provenancePredicted: 'predicted',
+            provenancePolicy: 'fixed',
+        },
         // Downloading.
         download: 'Download',
         downloading: 'Downloading',
