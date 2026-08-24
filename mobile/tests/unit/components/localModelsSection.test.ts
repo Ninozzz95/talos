@@ -774,9 +774,10 @@ describe('the verdict', () => {
         }) as never
         const wrapper = await screen()
 
-        const verdict = wrapper.get('[data-testid="talos-models-verdict"]').text()
-        expect(verdict).toContain('Memory: room to spare')
-        expect(verdict).toContain('13.8')
+        // Restyle Blocco 6: la velocità è uscita dalla frase del verdetto,
+        // è la sua casella statistica dedicata (mockup: "VELOCITÀ PREVISTA").
+        expect(wrapper.get('[data-testid="talos-models-verdict"]').text()).toContain('Memory: room to spare')
+        expect(wrapper.get('[data-testid="talos-models-speed-stat"]').text()).toContain('13.8')
     })
 
     /**
@@ -820,7 +821,9 @@ describe('the verdict', () => {
         }) as never
         const wrapper = await screen()
 
-        expect(wrapper.get('[data-testid="talos-models-verdict"]').text()).toContain('speed unknown')
+        // Restyle Blocco 6: stessa mossa del test sopra — la velocità (qui
+        // "sconosciuta") è nella casella statistica, non nel verdetto.
+        expect(wrapper.get('[data-testid="talos-models-speed-stat"]').text()).toContain('speed unknown')
     })
 })
 

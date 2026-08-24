@@ -2331,6 +2331,12 @@ export const TALOS_IT_MESSAGES = {
         // Model Lab Blocco 4 — il ledger di provenienza: mai un numero senza
         // dire da dove viene. Le otto etichette sono le stesse otto voci di
         // talosResourceLedger() (fit.ts), nello stesso ordine fisso.
+        // Restyle Blocco 6 — pannello a due colonne (config + ledger) sotto
+        // la rail, sostituisce l'elenco verticale con un tocco "Dettagli"
+        // per riga.
+        runtimeConfigTitle: 'Configura il runtime',
+        speedStatLabel: 'Velocità prevista',
+        maxContextStatLabel: 'Contesto massimo calcolato',
         ledgerTitle: 'Da dove viene ogni byte',
         ledger: {
             weights: 'Pesi del modello',
