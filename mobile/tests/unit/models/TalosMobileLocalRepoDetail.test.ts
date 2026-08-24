@@ -15,6 +15,7 @@ const harness = vi.hoisted(() => ({
         readme: '# Qwen\n\nThis model is built for long coding sessions with tools and careful instruction following across large repositories.\n\n## Full notes\nThe complete card remains available here.',
     })),
     examine: vi.fn(async () => undefined),
+    examineRepo: vi.fn(async () => undefined),
     download: vi.fn(async () => ({ ok: true as const })),
     resume: vi.fn(async () => ({ ok: true as const })),
 }))
@@ -25,6 +26,7 @@ vi.mock('@/stores/localModels', () => ({
     talosCloseModelRepo: harness.close,
     talosDescribeModelRepo: harness.describe,
     talosExamineSet: harness.examine,
+    talosExamineRepo: harness.examineRepo,
     talosDownloadSet: harness.download,
     talosResumeLocalDownload: harness.resume,
     talosSetLocalContext: vi.fn(),
@@ -55,6 +57,7 @@ beforeEach(() => {
     harness.open.mockClear()
     harness.close.mockClear()
     harness.describe.mockClear()
+    harness.examineRepo.mockClear()
     vi.mocked(talosSetLocalContext).mockClear()
     vi.mocked(talosSetLocalKvCacheType).mockClear()
     harness.state = reactive({
@@ -257,6 +260,78 @@ describe('TalosMobileLocalRepoDetail', () => {
             await flushPromises()
 
             expect(wrapper.find('[data-testid="talos-models-global-controls"]').exists()).toBe(false)
+        })
+    })
+
+    /**
+     * Model Lab Blocco 3 — l'esame non aspetta piu' un tocco. `talosExamineRepo`
+     * resta mockato in blocco (raggruppamento capofila/eredita' e' gia'
+     * coperto, sul vero, da unaLetturaPerModello.test.ts): qui si prova
+     * solo che IL COMPONENTE lo richiama da solo e mostra/nasconde
+     * l'indicatore nel momento giusto.
+     */
+    describe('Model Lab Blocco 3 — esame automatico all\'apertura', () => {
+        it('chiama talosExamineRepo da solo dopo il caricamento, senza un tocco', async () => {
+            const wrapper = mount(TalosMobileLocalRepoDetail, {
+                props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+            })
+            await flushPromises()
+
+            expect(harness.examineRepo).toHaveBeenCalledTimes(1)
+            wrapper.unmount()
+        })
+
+        it('mostra l\'indicatore di sottofondo mentre gira, lo spegne quando finisce', async () => {
+            let sciogli: (() => void) | null = null
+            harness.examineRepo.mockImplementationOnce(() => new Promise((resolve) => {
+                sciogli = () => resolve(undefined)
+            }))
+            const wrapper = mount(TalosMobileLocalRepoDetail, {
+                props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+            })
+            await flushPromises()
+
+            expect(wrapper.get('[data-testid="talos-models-examining-repo"]').attributes('role')).toBe('status')
+
+            sciogli?.()
+            await flushPromises()
+
+            expect(wrapper.find('[data-testid="talos-models-examining-repo"]').exists()).toBe(false)
+            wrapper.unmount()
+        })
+
+        /**
+         * ⛔ AL CONTRARIO: la riga che prova la guardia di generazione in
+         * `examineAutomatically`. Senza `if (generation === loadGeneration)`
+         * nel `finally`, un esame VECCHIO che si risolve in ritardo
+         * spegnerebbe l'indicatore di un caricamento NUOVO ancora in corso.
+         */
+        it('un esame vecchio che si risolve in ritardo non spegne l\'indicatore del caricamento nuovo', async () => {
+            let sciogliPrimo: (() => void) | null = null
+            let sciogliSecondo: (() => void) | null = null
+            harness.examineRepo
+                .mockImplementationOnce(() => new Promise((resolve) => { sciogliPrimo = () => resolve(undefined) }))
+                .mockImplementationOnce(() => new Promise((resolve) => { sciogliSecondo = () => resolve(undefined) }))
+
+            const wrapper = mount(TalosMobileLocalRepoDetail, {
+                props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+            })
+            await flushPromises()
+            expect(wrapper.find('[data-testid="talos-models-examining-repo"]').exists()).toBe(true)
+
+            harness.state.repo = { id: 'other/repo', revision: 'sha2', loading: false, failure: null, sets: [] }
+            await wrapper.setProps({ repoId: 'other/repo', revision: 'sha2' })
+            await flushPromises()
+            expect(wrapper.find('[data-testid="talos-models-examining-repo"]').exists()).toBe(true)
+
+            sciogliPrimo?.()
+            await flushPromises()
+            expect(wrapper.find('[data-testid="talos-models-examining-repo"]').exists()).toBe(true)
+
+            sciogliSecondo?.()
+            await flushPromises()
+            expect(wrapper.find('[data-testid="talos-models-examining-repo"]').exists()).toBe(false)
+            wrapper.unmount()
         })
     })
 })

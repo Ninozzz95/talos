@@ -24,6 +24,7 @@ import {
     talosCloseModelRepo,
     talosDescribeModelRepo,
     talosDownloadSet,
+    talosExamineRepo,
     talosExamineSet,
     talosLocalModels,
     talosOpenModelRepo,
@@ -50,6 +51,13 @@ const card = ref<{
     updatedAt: string | null
 } | null>(null)
 let loadGeneration = 0
+/**
+ * Model Lab Blocco 3 — vero SOLO mentre l'esame automatico gira in
+ * sottofondo dopo l'apertura. Non riflette le riletture manuali per riga
+ * (bottone "Ricontrolla"/controproposta): quelle restano quello che erano,
+ * il `set.examination.state === 'reading'` per riga basta li'.
+ */
+const examiningRepo = ref(false)
 
 const repo = computed(() => store.repo?.id === props.repoId ? store.repo : null)
 const summary = computed(() => talosReadmeSummary(card.value?.readme ?? ''))
@@ -125,6 +133,40 @@ async function load(): Promise<void> {
     ])
     const nextCard = await description
     if (generation === loadGeneration) card.value = nextCard
+
+    /**
+     * Model Lab Blocco 3 — l'esame non aspetta piu' un tocco per riga.
+     *
+     * NON atteso qui di proposito: la lista deve comparire subito con ogni
+     * set "unread", e ogni riga transita a "reading" poi "read" da sola man
+     * mano che `talosExamineRepo` la completa — lo stesso schema reattivo
+     * gia' usato per il bottone manuale, solo innescato dal caricamento
+     * invece che dal tocco. `talosExamineRepo` raggruppa gia' per modello
+     * (una lettura di rete condivisa, non una per versione), quindi
+     * "automatico su tutte" non moltiplica il costo di rete.
+     */
+    if (generation === loadGeneration) void examineAutomatically(generation)
+}
+
+async function examineAutomatically(generation: number): Promise<void> {
+    examiningRepo.value = true
+    try {
+        await talosExamineRepo()
+    } catch {
+        /*
+         * Non raggiungibile nella pratica: `talosExamineSet`, che
+         * `talosExamineRepo` chiama per ogni capofila, ha gia' il suo
+         * try/catch e trasforma ogni guaio reale in
+         * `examination = { state: 'unreadable', reason }` per riga — quella
+         * e' la superficie che l'utente vede gia'. Qui solo per non lasciare
+         * un rifiuto di promessa non gestito se qualcosa di davvero
+         * inatteso sfuggisse.
+         */
+    } finally {
+        // Non l'ultimo `load()` in corso: chi ha navigato altrove non deve
+        // vedere spegnersi un indicatore che non e' piu' il suo.
+        if (generation === loadGeneration) examiningRepo.value = false
+    }
 }
 
 watch(() => [props.repoId, props.revision] as const, () => { void load() }, { immediate: true })
@@ -274,6 +316,19 @@ async function reclaim(): Promise<void> {
                 @update:model-value="onKvCacheTypeChange"
             />
         </div>
+
+        <!-- Model Lab Blocco 3 — piccolo, mai un overlay che copre la
+             lista: le righe sono gia' visibili e leggibili, questo dice
+             solo che il resto sta ancora arrivando in sottofondo. -->
+        <p
+            v-if="examiningRepo"
+            role="status"
+            data-testid="talos-models-examining-repo"
+            class="flex items-center gap-[var(--talos-space-inline)] font-mono text-2xs text-[var(--talos-muted)]"
+        >
+            <span class="size-[calc(var(--talos-icon-size)/2)] shrink-0 animate-pulse rounded-full bg-[var(--talos-accent)] motion-reduce:animate-none" aria-hidden="true" />
+            {{ t('localModels.examiningRepo') }}
+        </p>
 
         <p v-if="!repo || repo.loading" class="py-[var(--talos-space-page)] text-center text-sm text-[var(--talos-muted)]">{{ t('localModels.loadingFiles') }}</p>
         <p v-else-if="repo.failure" role="alert" data-testid="talos-models-repo-failed" class="py-[var(--talos-space-page)] text-center text-sm text-[var(--talos-danger)]">{{ t('localModels.repoFailed') }} {{ explain(repo.failure) }}</p>

@@ -2226,6 +2226,10 @@ export const TALOS_EN_MESSAGES = {
         // The examination, which is the whole point of the screen.
         examine: 'Check this phone',
         examining: 'Reading the model…',
+        // Model Lab Blocco 3 — indicator shown ONCE per page, above the
+        // list: examination now starts on its own when the repo opens,
+        // grouped by model. Distinct from `examining` (per row) on purpose.
+        examiningRepo: 'Examining variants in the background…',
         unreadable: 'Cannot check this one:',
         incompleteSet: 'This repository is missing {missing} of {total} parts, so the model cannot be assembled.',
         unverifiable: 'This repository publishes no checksum for this file, so the download cannot be proved.',
