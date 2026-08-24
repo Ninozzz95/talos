@@ -135,6 +135,57 @@ public class TalosSpeculatorDeviceTest {
     }
 
     /**
+     * ⛔⛔⛔ P2-1 blocco B — la prova che conta di più. CR-11: con
+     * campionamento deterministico (greedy), la speculazione deve produrre
+     * un testo BYTE-IDENTICO al ramo ordinario — è solo un modo più veloce
+     * di calcolare lo STESSO argmax, mai una risposta diversa. `apri()`
+     * apre già `deterministic=true` (quinto argomento posizionale).
+     * Confermato via ricerca web che è esattamente il criterio riconosciuto
+     * fuori da questa sessione ("bit-exact greedy agreement", "confirmed by
+     * hashing the generations") — non un'invenzione del banco di prova.
+     *
+     * Due sessioni separate sullo stesso modello, non una riaperta: la KV
+     * di una generazione precedente non deve influenzare il confronto.
+     */
+    @Test
+    public void generazioneSpeculativaEDeterministicaCoincidono() {
+        pronta();
+        File model = modello();
+        final String prompt = "The capital of France is";
+        final int maxTokens = 24;
+
+        long handleOrdinario = apri(model);
+        assertApertoOk(handleOrdinario);
+        String testoOrdinario;
+        try {
+            testoOrdinario = TalosLlamaNative.nativeGenerate(
+                    handleOrdinario, prompt, maxTokens, false, false);
+        } finally {
+            TalosLlamaNative.nativeClose(handleOrdinario);
+        }
+        assertTrue("generazione ordinaria fallita", testoOrdinario != null);
+
+        long handleSpeculativo = apri(model);
+        assertApertoOk(handleSpeculativo);
+        String testoSpeculativo;
+        try {
+            assertTrue("speculatore non pronto",
+                    TalosLlamaNative.nativeConstructSpeculatorForResearch(handleSpeculativo, 24, 64));
+            testoSpeculativo = TalosLlamaNative.nativeGenerate(
+                    handleSpeculativo, prompt, maxTokens, false, false);
+        } finally {
+            TalosLlamaNative.nativeClose(handleSpeculativo);
+        }
+        assertTrue("generazione speculativa fallita", testoSpeculativo != null);
+
+        android.util.Log.i("TalosSpeculator", "ordinario  = " + testoOrdinario);
+        android.util.Log.i("TalosSpeculator", "speculativo= " + testoSpeculativo);
+        org.junit.Assert.assertEquals(
+                "CR-11: deterministico deve essere byte-identico fra i due rami",
+                testoOrdinario, testoSpeculativo);
+    }
+
+    /**
      * AL CONTRARIO: due costruzioni sulla STESSA sessione. La seconda
      * assegnazione a `session->speculator` distrugge la prima istanza
      * (unique_ptr::operator=) prima di costruire la nuova — esattamente
