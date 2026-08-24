@@ -8,9 +8,30 @@ Numbers in this file are measured on a device, not estimated.
 
 ## v0.1.19
 
-The personal voice no longer stutters, and the local model runs faster.
-Everything below was measured on the owner's OnePlus Pad 3 and OnePlus 13,
-none of it is estimated.
+The personal voice no longer stutters, the local model runs faster, and
+browsing models on Hugging Face got a rebuild. Everything below was
+measured on the owner's OnePlus Pad 3 and OnePlus 13, none of it is
+estimated.
+
+### Browsing models on Hugging Face
+
+The model detail page is now three tabs instead of one long scroll:
+quantizations, the full model card, and the raw file list. Every
+quantization is checked against your device automatically as soon as the
+page opens, instead of waiting for a tap on each one.
+
+- A resource ledger shows exactly where the memory estimate for a model
+  comes from — weights and file size are exact, the KV cache size is
+  exact once the header is read, compute and runtime overhead are the
+  app's own safety policy — instead of a single unexplained number.
+- The KV cache type (F16 or Q8_0) can be forced globally instead of only
+  reading whatever the file's header happened to use, and the resolved
+  type is always shown next to the control, even on Automatic.
+- A direct link to the model's Hugging Face page, and a button to copy it.
+- The context-length slider shows its 2K/32K/64K/128K reference points
+  instead of a bare track.
+- A rounding bug that showed predicted speed as a fifteen-decimal number
+  is fixed.
 
 ### The voice engine was rebuilt on Pocket TTS
 
