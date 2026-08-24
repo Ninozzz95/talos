@@ -8,6 +8,7 @@ const bridge = vi.hoisted(() => ({
     addListener: vi.fn(),
     qualifyBackend: vi.fn(),
     available: vi.fn(),
+    performanceSignals: vi.fn(),
 }))
 
 vi.mock('@capacitor/core', () => ({
@@ -22,6 +23,7 @@ const {
     talosLocalEngineGenerate,
     talosLocalEngineOpen,
     talosLocalEngineOpenWithFallback,
+    talosLocalPerformanceSignals,
     talosQualifyLocalBackend,
     talosWarmLocalModel,
 } = await import('@/services/localEngine')
@@ -291,5 +293,36 @@ describe('talosWarmLocalModel — l\'apertura anticipata, silenziosa', () => {
 
         expect(massimoParallele).toBe(1)
         expect(bridge.open).toHaveBeenCalledTimes(2)
+    })
+})
+
+describe('talosLocalPerformanceSignals — P2-3, passa attraverso senza toccare', () => {
+    it('restituisce esattamente quello che il ponte nativo risponde', async () => {
+        bridge.performanceSignals.mockResolvedValue({
+            cpuHeadroom: 42, gpuHeadroom: null, thermalHeadroom: 80, thermalForecast: 75,
+            thermalStatus: 'light', sampledAtElapsedMs: 123456,
+        })
+
+        const segnali = await talosLocalPerformanceSignals()
+
+        expect(segnali).toEqual({
+            cpuHeadroom: 42, gpuHeadroom: null, thermalHeadroom: 80, thermalForecast: 75,
+            thermalStatus: 'light', sampledAtElapsedMs: 123456,
+        })
+    })
+
+    it('⛔ AL CONTRARIO — tutti i campi null (device sotto la soglia API) non vengono riscritti a un altro valore', async () => {
+        bridge.performanceSignals.mockResolvedValue({
+            cpuHeadroom: null, gpuHeadroom: null, thermalHeadroom: null, thermalForecast: null,
+            thermalStatus: null, sampledAtElapsedMs: 1,
+        })
+
+        const segnali = await talosLocalPerformanceSignals()
+
+        expect(segnali.cpuHeadroom).toBeNull()
+        expect(segnali.gpuHeadroom).toBeNull()
+        expect(segnali.thermalHeadroom).toBeNull()
+        expect(segnali.thermalForecast).toBeNull()
+        expect(segnali.thermalStatus).toBeNull()
     })
 })
