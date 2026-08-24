@@ -744,6 +744,11 @@ const SHEET_TITLE_KEY: Record<TalosMobileRouteName, string> = {
     'research-claim': 'research.claimTitle',
     'research-source': 'research.sourceTitle',
     context: 'navigation.library',
+    // Harness UI (24/8): the "detail" is a trampoline, not a page anyone
+    // reads a distinct title on — reuse the same key as the list, like
+    // memory/memory-item, tasks/task-item, notes/note-item do.
+    harness: 'navigation.harness',
+    'harness-session': 'navigation.harness',
     settings: 'stations.settingsCenterTitle',
     'settings-models': 'models.labTitle',
     'settings-models-providers': 'models.providerAccessTitle',

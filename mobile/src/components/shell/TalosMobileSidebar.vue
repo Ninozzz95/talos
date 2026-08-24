@@ -2,7 +2,7 @@
 import { computed, defineAsyncComponent, nextTick, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import {
-    BookMarked, BookOpen, Check, CheckSquare, StickyNote, Stethoscope, FileArchive, MessageSquareText,
+    BookMarked, BookOpen, Check, CheckSquare, FlaskConical, StickyNote, Stethoscope, FileArchive, MessageSquareText,
     Pencil, Trash2, X,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/drawer'
 import type { TalosLocalChatSession } from '@/repositories/chatRepository'
 import type { TalosMobileRouteName } from '@/lib/mobileRoutes'
+import { talosHarnessUiAvailable } from '@/services/harnessUi'
 
 const TalosMobileNotificationBell = defineAsyncComponent(
     () => import('@/components/shell/TalosMobileNotificationBell.vue'),
@@ -55,6 +56,10 @@ const emit = defineEmits<{
 
 const account = useTalosAccountStore()
 const { t } = useTalosI18n()
+// Harness UI (24/8): same gate as HarnessSessionScreen.vue and the removed
+// Settings link — evaluated once per mount, same as every other native
+// (Capacitor.isPluginAvailable) read in this app.
+const harnessAvailable = talosHarnessUiAvailable()
 
 const TOOL_DEFINITIONS: Array<{ key: string; route: TalosMobileRouteName; icon: unknown }> = [
     { key: 'navigation.memory', route: 'memory', icon: BookMarked },
@@ -64,7 +69,17 @@ const TOOL_DEFINITIONS: Array<{ key: string; route: TalosMobileRouteName; icon: 
     { key: 'navigation.research', route: 'research', icon: BookOpen },
     { key: 'navigation.library', route: 'context', icon: FileArchive },
 ]
-const tools = computed(() => TOOL_DEFINITIONS.map(tool => ({ ...tool, label: t(tool.key) })))
+// Appended, not baked into TOOL_DEFINITIONS: the six above are the F2-RED-20
+// parity set (see TalosMobileSidebar.test.ts) and stay untouched. Harness is
+// debug-only — invisible in a release build, where `harnessAvailable` is
+// false by construction (the native plugin does not compile into release).
+const HARNESS_TOOL_DEFINITION: { key: string; route: TalosMobileRouteName; icon: unknown } = {
+    key: 'navigation.harness', route: 'harness', icon: FlaskConical,
+}
+const tools = computed(() => {
+    const base = TOOL_DEFINITIONS.map(tool => ({ ...tool, label: t(tool.key) }))
+    return harnessAvailable ? [...base, { ...HARNESS_TOOL_DEFINITION, label: t(HARNESS_TOOL_DEFINITION.key) }] : base
+})
 
 const renameTarget = ref<TalosLocalChatSession | null>(null)
 const renameValue = ref('')
