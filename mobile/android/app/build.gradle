@@ -339,6 +339,24 @@ android {
                     println "⛔ BUILD DI RICERCA: backend `${scelto}`. Non è la build che si spedisce."
                 }
                 /*
+                 * ⛔⛔ SOLO RICERCA — P2-5: `-PtalosLlamaCandidateSrc=<percorso>`
+                 * compila da un CHECKOUT ISOLATO di llama.cpp — un candidato
+                 * diverso dal pin di produzione, preparato da
+                 * `scripts/research/qualify-llama-candidate.mjs` (un
+                 * `git worktree`, mai `third_party/llama.cpp` stesso). Senza
+                 * la proprietà non cambia niente: `CMakeLists.txt` legge il
+                 * pin di sempre.
+                 *
+                 * ⛔ Il percorso arriva da Node/Windows con `\`: CMake vuole
+                 * `/`, stesso `.replace('\\', '/')` già in uso qui sopra per
+                 * i percorsi Vulkan.
+                 */
+                if (project.hasProperty('talosLlamaCandidateSrc')) {
+                    def candidato = project.property('talosLlamaCandidateSrc').toString().replace('\\', '/')
+                    arguments "-DTALOS_LLAMA_CANDIDATE_SRC=${candidato}".toString()
+                    println "⛔ BUILD DI RICERCA: sorgente candidato ${candidato}, non il pin di produzione."
+                }
+                /*
                  * ⛔⛔⛔ HWASAN, SOLO A RICHIESTA: `-PtalosHwasan`.
                  *
                  * I test in Java provano che nessuno PUÒ arrivare al codice
