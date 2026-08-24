@@ -52,7 +52,7 @@
     <aside class="sessions-panel" id="sessionsPanel" aria-label="Sessioni TALOS" data-demo-surface="sessions">
       <div class="brand-row">
         <button class="icon-btn nav-close" data-close-panel="sessions" aria-label="Chiudi sessioni"><svg><use href="#i-x"/></svg></button>
-        <div class="brand-mark" aria-hidden="true">T</div>
+        <div class="brand-mark" aria-hidden="true"><span class="brand-glyph-mark"></span></div>
         <div class="brand-copy"><strong>TALOS</strong><span>Harness</span></div>
         <button class="icon-btn" aria-label="Notifiche"><svg><use href="#i-bell"/></svg><span class="badge-dot">2</span></button>
       </div>
@@ -96,16 +96,18 @@
       </div>
 
       <div class="sidebar-footer">
-        <div class="avatar">T</div>
+        <div class="avatar"><span class="brand-glyph-mark"></span></div>
         <div><strong>Workspace locale</strong><small>Calm · TALOS</small></div>
         <button class="icon-btn" data-open-view="settings" aria-label="Impostazioni"><svg><use href="#i-settings"/></svg></button>
       </div>
+      <div class="panel-resize-handle" id="sessionsResizeHandle" data-resize="sessions" role="separator" aria-orientation="vertical" aria-label="Ridimensiona il pannello sessioni" tabindex="0"></div>
     </aside>
 
     <main class="workspace-shell">
       <header class="topbar">
         <div class="topbar-left">
           <button class="icon-btn mobile-only" data-open-panel="sessions" aria-label="Apri sessioni"><svg><use href="#i-menu"/></svg></button>
+          <button class="icon-btn desktop-only" id="sessionsCollapseBtn" aria-label="Comprimi o espandi le sessioni" aria-expanded="true"><svg><use href="#i-menu"/></svg></button>
           <button class="title-button" id="sessionTitleButton" data-open-sheet="sessionTree" aria-haspopup="dialog" aria-label="Apri dettagli e albero della sessione">
             <span><strong id="sessionTitle">Refactor auth flow</strong><small>talos / mobile-harness</small></span>
             <svg><use href="#i-chevron"/></svg>
@@ -162,7 +164,7 @@
             </article>
 
             <article class="message assistant-message">
-              <div class="assistant-meta"><span class="talos-glyph">T</span><span>TALOS · gpt-5.6-sol</span><span>1 min fa</span></div>
+              <div class="assistant-meta"><span class="talos-glyph"><span class="brand-glyph-mark"></span></span><span>TALOS · gpt-5.6-sol</span><span>1 min fa</span></div>
               <div class="assistant-copy">
                 Ho isolato il problema: il composer usa una gerarchia desktop anche sotto 600 px. Sto trasformando i controlli secondari in capability sheet e mantenendo nel bordo inferiore solo contesto essenziale, invio e interrupt.
               </div>
@@ -217,7 +219,7 @@
             </article>
 
             <article class="message assistant-message compact-message">
-              <div class="assistant-meta"><span class="talos-glyph">T</span><span>TALOS</span><span>ora</span></div>
+              <div class="assistant-meta"><span class="talos-glyph"><span class="brand-glyph-mark"></span></span><span>TALOS</span><span>ora</span></div>
               <div class="assistant-copy">Sto completando il controllo responsive. Al termine apro automaticamente la review dei file modificati e il gate di verifica.</div>
             </article>
           </div>
@@ -297,10 +299,10 @@ $ <span class="cursor"> </span></code></pre>
             <div class="device-preview">
               <div class="phone-frame">
                 <div class="phone-status"><span>09:41</span><span>5G · 87%</span></div>
-                <div class="phone-header"><span class="mini-brand">T</span><strong>TALOS</strong><span>•••</span></div>
+                <div class="phone-header"><span class="mini-brand"><span class="brand-glyph-mark"></span></span><strong>TALOS</strong><span>•••</span></div>
                 <div class="phone-chat">
                   <div class="phone-user">Sistema il composer e non perdere contesto.</div>
-                  <div class="phone-agent"><span class="mini-brand">T</span><p>Ho preservato modello, permessi e branch in un'area compatta e sempre accessibile.</p></div>
+                  <div class="phone-agent"><span class="mini-brand"><span class="brand-glyph-mark"></span></span><p>Ho preservato modello, permessi e branch in un'area compatta e sempre accessibile.</p></div>
                   <div class="phone-tool"><span>✓ Edit</span><strong>TalosComposer.vue</strong><small>+28 −19</small></div>
                 </div>
                 <div class="phone-composer"><span>Scrivi a TALOS...</span><button>↑</button><div class="phone-composer-meta"><span>+ </span><span>gpt-5.6-sol</span><span>workspace</span></div></div>
@@ -382,6 +384,7 @@ $ <span class="cursor"> </span></code></pre>
     </main>
 
     <aside class="inspector-panel" id="inspectorPanel" aria-label="Inspector">
+      <div class="panel-resize-handle" id="inspectorResizeHandle" data-resize="inspector" role="separator" aria-orientation="vertical" aria-label="Ridimensiona l'inspector" tabindex="0"></div>
       <div class="inspector-head">
         <div><span class="eyebrow">Context rail</span><strong>Sessione</strong></div>
         <button class="icon-btn nav-close" data-close-panel="inspector" aria-label="Chiudi inspector"><svg><use href="#i-x"/></svg></button>
