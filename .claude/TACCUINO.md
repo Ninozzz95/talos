@@ -229,3 +229,44 @@
   aggiornata al passaggio a Pocket — corretta a "circa 160 MB" (misurato:
   158 MB reali), owner l'ha segnalato IN TEMPO REALE guardando la sessione
   ("quello di pocket pesa solo 120mb").
+
+## 2026-08-24 — v0.1.20, un difetto vero nella pipeline di rilascio
+- ⛔⛔⛔ **`rilascia.ps1` PERDE `origin` e la cronologia intera di
+  AVM-PUBBLICA**, ogni volta che lo step 5 gira: lo script sposta via
+  `$Copia` PRIMA di chiamare `prepara-la-pubblicazione.ps1` — ma quello
+  script decide "riuso la cronologia" guardando se `$Destinazione` esiste
+  GIÀ con un `.git`+`origin`. Spostata via da `rilascia.ps1`, la cartella
+  risulta assente, e `prepara-la-pubblicazione.ps1` fa SEMPRE `git init` da
+  zero: un orfano di un commit, senza `origin`, che un push a forza avrebbe
+  cancellato TUTTA la cronologia pubblica (v0.1.0→v0.1.19) sotto i piedi di
+  chiunque avesse clonato. Non eseguito: trovato al gate 6
+  (`fatal: 'origin' does not appear to be a git repository`), prima di
+  qualunque push. Mai capitato prima perché nessuno aveva ancora rilasciato
+  chiamando `prepara-la-pubblicazione.ps1` indirettamente TRAMITE
+  `rilascia.ps1` con un `-Repo` diverso da quello di default — ⇒ **il
+  bug era già lì da sempre**, semplicemente non ancora incontrato.
+  Recuperato: la copia rotta messa da parte (mai cancellata),
+  quella vera ripristinata dal backup di `rilascia.ps1` stesso
+  (`AVM-PUBBLICA.precedente-*`), e `prepara-la-pubblicazione.ps1`
+  richiamato DIRETTAMENTE (non tramite `rilascia.ps1`) — questa volta ha
+  visto `origin` ed è andato sul ramo giusto: "riprendo la cronologia già
+  pubblicata". ⛔ Non ancora corretto NELLO SCRIPT — richiede una decisione
+  dell'owner su come vuole che `rilascia.ps1` calcoli `$Destinazione`
+  quando `-Repo` è esplicito.
+- ⛔⛔ **Tre file locali, mai tracciati da git, servono al rilascio e
+  nessuno lo scriveva da nessuna parte**: `mobile/android/app/src/main/res/xml/config.xml`
+  (generato da `npx cap sync android`, serve `dist/` quindi `npm run build`
+  prima), `mobile/docs/immagini/APPROVATE.txt` (le firme reali dell'owner
+  sugli screenshot, accumulate nel tempo, MAI committate), e le due cartelle
+  `mobile/tools/{android-assets,git-bash-launcher}` hanno un **proprio**
+  `node_modules` isolato (`npm ci` separato, non basta quello alla radice di
+  `mobile/`) — senza, `androidAssetsConformance` e `gitBashLauncherConformance`
+  falliscono con errori che sembrano regressioni vere e non lo sono. Un
+  worktree pulito da `git worktree add` non li eredita: vanno ricostruiti a
+  mano, ogni volta.
+- ⭐⭐⭐ La cura trovata: **worktree isolato + cherry-pick chirurgico**, non
+  toccare mai `AVM/` (dove Agente 19 scrive dal vivo). Trovata la base esatta
+  con l'orario (AVM-PUBBLICA `1d23b20` = 23:34:20, AVM `94f1e2f8` = 23:33:47,
+  33 s prima — lo script di pubblicazione impiega quello), 3 commit
+  cherry-pickati sopra (`5b40c235`, `0a71d707`, `20b6bc80`), zero conflitti,
+  diff finale contro quella base: **esattamente 8 file**, nessuno di Fase 4/5.
