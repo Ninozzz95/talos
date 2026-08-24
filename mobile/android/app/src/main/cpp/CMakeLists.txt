@@ -25,6 +25,21 @@ if(DEFINED ANDROID_ABI)
 endif()
 
 set(LLAMA_SRC ${CMAKE_CURRENT_LIST_DIR}/../../../../../third_party/llama.cpp)
+
+# ⛔ SOLO RICERCA — P2-5: compilare un CANDIDATO isolato di llama.cpp (un
+# altro SHA, in un checkout separato costruito da
+# `scripts/research/qualify-llama-candidate.mjs`, mai il pin di produzione)
+# senza toccare `third_party/llama.cpp`. `app/build.gradle` passa questa
+# variabile SOLO con `-PtalosLlamaCandidateSrc=<percorso>` esplicito — senza
+# la proprietà LLAMA_SRC resta quello di sempre, riga sopra. Confermato via
+# ricerca (documentazione CMake, "Configuration and Cache Variables"): una
+# `-D<var>` sulla riga di comando crea una voce di cache che `if(DEFINED
+# ...)` vede — lo stesso pattern "il genitore ha la prima parola" che i
+# maintainer di CMake stessi descrivono per un sottoprogetto annidato.
+if(DEFINED TALOS_LLAMA_CANDIDATE_SRC)
+    set(LLAMA_SRC ${TALOS_LLAMA_CANDIDATE_SRC})
+endif()
+
 if(NOT EXISTS ${LLAMA_SRC}/CMakeLists.txt)
     # Il sottomodulo è la cosa che un clone non porta se non gliela chiedi. Un
     # errore che lo dice per nome costa un minuto; uno che parla di header
