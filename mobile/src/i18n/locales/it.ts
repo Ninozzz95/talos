@@ -1125,6 +1125,13 @@ export const TALOS_IT_MESSAGES = {
         codeCopied: 'Codice copiato.',
         codeCopyFailed: 'Impossibile copiare il codice.',
     },
+    // Harness UI (Codex, 24/8): link solo-debug al mockup desktop riusato +
+    // Board, nascosto per intero nelle build di release — come, vedi
+    // services/harnessUi.ts.
+    harnessUi: {
+        linkLabel: 'Harness UI (debug)',
+        linkHint: 'Il mockup dell\'harness di coding e la Board delle campagne, stessa build del desktop.',
+    },
     privilege: {
         keepAlive: 'Mantieni acceso',
         /*

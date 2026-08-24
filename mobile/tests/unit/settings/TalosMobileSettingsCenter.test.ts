@@ -3,6 +3,22 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
+
+/**
+ * Harness UI (Codex, 24/8) — solo il link, non un mock dell'intero
+ * plugin: `harnessUiAvailable` legge `Capacitor.isPluginAvailable` una
+ * volta per istanza montata (const, non computed — vedi il componente),
+ * quindi basta cambiare `nativo.disponibile` PRIMA di ogni `mount()`.
+ * Default `false`, come il comportamento reale di oggi senza il plugin
+ * nativo: ogni test già esistente in questo file vede lo stesso link
+ * assente di sempre, a meno che non lo alzi esplicitamente.
+ */
+const nativo = vi.hoisted(() => ({ disponibile: false }))
+vi.mock('@capacitor/core', () => ({
+    Capacitor: { isPluginAvailable: () => nativo.disponibile, isNativePlatform: () => false },
+    registerPlugin: () => ({}),
+}))
+
 import TalosMobileSettingsCenter from '@/components/talos/settings/TalosMobileSettingsCenter.vue'
 
 if (!Element.prototype.scrollIntoView) {
@@ -379,5 +395,35 @@ describe('TalosMobileSettingsCenter md breakpoint', () => {
         expect(nav.subView.value).toBeNull()
         wrapper.unmount()
         vi.unstubAllGlobals()
+    })
+})
+
+/**
+ * Owner 24/8: «harness ci deve essere sia su mobile che su desktop,
+ * mockup visibile solo nella apk di debug». Il link stesso È il
+ * cancello: nessun altro modo di arrivarci se non è montato.
+ */
+describe('TalosMobileSettingsCenter — Harness UI debug link', () => {
+    afterEach(() => { nativo.disponibile = false })
+
+    it('non esiste quando il plugin nativo non è disponibile (build di release, il caso di oggi)', () => {
+        nativo.disponibile = false
+        const wrapper = mountCenter()
+
+        expect(wrapper.find('[data-testid="settings-harness-ui-link"]').exists()).toBe(false)
+        wrapper.unmount()
+    })
+
+    it('appare e punta al mockup statico locale quando il plugin nativo è disponibile (build di debug)', () => {
+        nativo.disponibile = true
+        const wrapper = mountCenter()
+
+        const link = wrapper.get('[data-testid="settings-harness-ui-link"]')
+        expect(link.attributes('href')).toBe('/harness-ui/index.html')
+        // Nessun target="_blank": è un documento locale nello stesso
+        // WebView (frame-src 'none' blocca solo l'incorporamento, non la
+        // navigazione — verificato via ricerca, non un iframe comunque).
+        expect(link.attributes('target')).toBeUndefined()
+        wrapper.unmount()
     })
 })

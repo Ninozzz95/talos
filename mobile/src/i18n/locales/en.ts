@@ -1100,6 +1100,13 @@ export const TALOS_EN_MESSAGES = {
         codeCopied: 'Code copied.',
         codeCopyFailed: 'Code copy failed.',
     },
+    // Harness UI (Codex, 24/8): debug-only link to the reused desktop
+    // mockup + Board, hidden entirely in release builds — see
+    // services/harnessUi.ts for how "hidden" is guaranteed.
+    harnessUi: {
+        linkLabel: 'Harness UI (debug)',
+        linkHint: 'The coding-harness mockup and campaign Board, same build as desktop.',
+    },
     privilege: {
         keepAlive: 'Keep it alive',
         /*
