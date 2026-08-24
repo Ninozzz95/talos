@@ -4,10 +4,12 @@ import {
     TALOS_DETTAGLI_STRUMENTO,
     talosDimenticaSvelati,
     talosIndiceCompatto,
+    talosPreVelatiSempreVisibili,
     talosRichiestaDirettaSenzaTool,
     talosRispostaDirettaDeterministica,
     talosStrumentoDettagli,
     talosSvelatiIn,
+    talosSvelatiInConSempreVisibili,
     talosToolDelCatalogoEseguibile,
     talosTurnoDiretto,
 } from '@/lib/tools/catalogoCompatto'
@@ -154,6 +156,72 @@ describe('cio che e stato svelato resta svelato', () => {
         talosSvelatiIn('chat-c').add('device_torch')
         talosDimenticaSvelati('chat-c')
         expect(talosSvelatiIn('chat-c').size).toBe(0)
+    })
+})
+
+/**
+ * ⛔⛔ IL GAP TROVATO IL 24/8: il ramo Anthropic (`aperturaProgressiva.ts`)
+ * ha quattro nomi che non pagano mai il giro `tool_details`; il catalogo
+ * locale non ne aveva — ogni prima chiamata a QUALUNQUE strumento in una
+ * chat nuova pagava un giro intero, anche per uno banale come l'ora.
+ */
+describe('talosPreVelatiSempreVisibili — il locale riusa la stessa lista', () => {
+    const oraCorrente = defineTalosTool<Record<string, never>>({
+        name: 'time_now',
+        title: 'Current time',
+        description: 'Return the current date and time on the phone.',
+        action: 'read',
+        input: z.object({}),
+        run: async () => ({ ok: true, content: '' }),
+    }) as TalosToolDefinition<never>
+
+    it('pre-svela un nome sempre-in-vista SOLO se è fra gli offerti', () => {
+        const offerti = talosPreVelatiSempreVisibili([oraCorrente, torcia])
+        expect(offerti).toEqual(['time_now'])
+    })
+
+    it('⛔ AL CONTRARIO — un nome sempre-in-vista MAI offerto non compare', () => {
+        // Nessuno dei due strumenti qui sotto si chiama come i quattro della
+        // lista Anthropic: coerente con `web_search` assente quando nessun
+        // motore di ricerca è configurato (WEB-SENZA-MOTORE-01).
+        const offerti = talosPreVelatiSempreVisibili([torcia, notifiche])
+        expect(offerti).toEqual([])
+    })
+
+    it('⛔ AL CONTRARIO — un tool offerto ma non sempre-in-vista resta fuori', () => {
+        const offerti = talosPreVelatiSempreVisibili([torcia])
+        expect(offerti).not.toContain('device_torch')
+    })
+
+    it('più nomi sempre-in-vista offerti insieme: tutti tornano', () => {
+        const ricercaLibreria = defineTalosTool<{ query: string }>({
+            name: 'library_search',
+            title: 'Library search',
+            description: 'Search the library.',
+            action: 'read',
+            input: z.object({ query: z.string() }),
+            run: async () => ({ ok: true, content: '' }),
+        }) as TalosToolDefinition<never>
+        const offerti = talosPreVelatiSempreVisibili([oraCorrente, ricercaLibreria, torcia])
+        expect(offerti).toEqual(['time_now', 'library_search'])
+    })
+
+    it('talosSvelatiInConSempreVisibili pre-svela dal PRIMO messaggio', () => {
+        const sessione = 'sessione-ora'
+        talosDimenticaSvelati(sessione)
+        const svelati = talosSvelatiInConSempreVisibili(sessione, [oraCorrente, torcia])
+        // Nessun tool_details chiamato: eppure e' gia' chiamabile.
+        expect(svelati.has('time_now')).toBe(true)
+        expect(svelati.has('device_torch')).toBe(false)
+    })
+
+    it('talosSvelatiInConSempreVisibili non cancella ciò che era già svelato', () => {
+        const sessione = 'sessione-mista'
+        talosDimenticaSvelati(sessione)
+        talosSvelatiIn(sessione).add('device_torch')
+        const svelati = talosSvelatiInConSempreVisibili(sessione, [oraCorrente, torcia])
+        expect(svelati.has('device_torch')).toBe(true)
+        expect(svelati.has('time_now')).toBe(true)
     })
 })
 
