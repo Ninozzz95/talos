@@ -2295,6 +2295,10 @@ export const TALOS_IT_MESSAGES = {
         variantDetails: 'Dettagli',
         examine: 'Controlla questo telefono',
         examining: 'Leggo il modello…',
+        // Model Lab Blocco 3 — indicatore UNA VOLTA per pagina, sopra
+        // l'elenco: l'esame parte da solo all'apertura, raggruppato per
+        // modello. Diverso da `examining` (per riga, singolare) apposta.
+        examiningRepo: 'Sto esaminando le varianti in sottofondo…',
         unreadable: 'Non posso controllarlo:',
         incompleteSet: 'A questo repository mancano {missing} parti su {total}, quindi il modello non si può ricomporre.',
         unverifiable: 'Questo repository non pubblica una somma di controllo per questo file, quindi il download non è dimostrabile.',
