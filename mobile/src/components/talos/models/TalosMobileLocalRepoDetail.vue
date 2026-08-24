@@ -3,6 +3,7 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { AlertTriangle, ChevronDown, Download, ShieldAlert } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosModelFitBar from '@/components/talos/models/TalosModelFitBar.vue'
+import TalosModelResourceLedger from '@/components/talos/models/TalosModelResourceLedger.vue'
 import TalosMobileMessageContent from '@/components/chat/TalosMobileMessageContent.vue'
 import TalosThemedFilter from '@/components/talos/ui/TalosThemedFilter.vue'
 import { useTalosI18n } from '@/i18n'
@@ -389,6 +390,10 @@ async function reclaim(): Promise<void> {
                             <p data-testid="talos-models-context" class="text-3xs text-[var(--talos-muted)]">{{ t('localModels.contextExplain', { context: store.context }) }}</p>
                             <button v-if="row.verdict.counterOfferContext" type="button" data-testid="talos-models-counteroffer" class="talos-pressable min-h-touch text-left text-2xs text-[var(--talos-accent)] underline" @click="acceptCounterOffer(row.key, row.verdict.counterOfferContext)">{{ t('localModels.counterOffer', { context: row.verdict.counterOfferContext }) }}</button>
                         </template>
+                        <!-- Model Lab Blocco 4 — il ledger di provenienza,
+                             una sola volta esaminato: stessi dati di
+                             row.verdict, nessun secondo calcolo. -->
+                        <TalosModelResourceLedger v-if="row.set.examination.state === 'read'" :rows="row.set.examination.ledger" />
                         <p v-else-if="row.set.examination.state === 'unreadable'" class="text-2xs text-[var(--talos-muted)]">{{ t('localModels.unreadable') }} {{ explain(row.set.examination.reason) }}</p>
                         <Button v-if="row.set.examination.state !== 'reading'" type="button" data-testid="talos-models-examine" class="talos-pressable min-h-touch self-start rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-control)] text-xs text-[var(--talos-text)]" @click="talosExamineSet(row.key)">{{ row.set.examination.state === 'unread' ? t('localModels.examine') : t('localModels.recheck') }}</Button>
                     </div>

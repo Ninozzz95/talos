@@ -14,9 +14,11 @@ import {
 import { TALOS_GGUF_FIRST_READ_BYTES, talosReadGgufHeader } from '@/lib/models/gguf'
 import {
     talosModelFit,
+    talosResourceLedger,
     type TalosKvCacheTypeOverride,
     type TalosModelFit,
     type TalosModelShape,
+    type TalosResourceLedgerRow,
 } from '@/lib/models/fit'
 import { TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS } from '@/lib/models/localContextPolicy'
 import { talosMeasureDevice, type TalosMeasuredDevice } from '@/services/deviceCapacity'
@@ -94,6 +96,16 @@ export type TalosSetExamination =
     | {
         state: 'read'
         fit: TalosModelFit
+        /**
+         * Model Lab Blocco 4 — la stessa decomposizione byte-per-byte di
+         * `fit`, mai un secondo calcolo indipendente: entrambi nascono dallo
+         * stesso `talosModelFit`/`talosResourceLedger` con lo stesso input,
+         * qui e in `talosEredita`/`talosRicalcolaEsaminati`. Un componente di
+         * sola presentazione la legge da qui — non chiama `talosResourceLedger`
+         * da solo, che vorrebbe di nuovo `model`/`device`/`context`, cioe'
+         * esattamente lo stato che questo store gia' possiede.
+         */
+        ledger: TalosResourceLedgerRow[]
         quantisation: string | null
         trainedContext: number
         /**
@@ -681,6 +693,12 @@ export async function talosExamineSet(key: string): Promise<void> {
                 fileBytes: set.totalBytes,
                 kvCacheTypeOverride: state.kvCacheType,
             }),
+            ledger: talosResourceLedger({
+                model: parsed.header.shape,
+                device,
+                context: state.context,
+                kvCacheTypeOverride: state.kvCacheType,
+            }),
             // The header's own word, which outranks the file name it came with.
             quantisation: parsed.header.quantisation ?? set.quantisation,
             trainedContext: parsed.header.shape.trainedContext,
@@ -797,6 +815,12 @@ function talosEredita(
             fileBytes: set.totalBytes,
             kvCacheTypeOverride: state.kvCacheType,
         }),
+        ledger: talosResourceLedger({
+            model: forma,
+            device,
+            context: state.context,
+            kvCacheTypeOverride: state.kvCacheType,
+        }),
         // ⛔ Qui il nome del file è l'UNICA fonte: l'intestazione letta è di
         // un'altra qualità, e riportare la sua direbbe che sono tutte uguali.
         quantisation: set.quantisation,
@@ -849,13 +873,20 @@ function talosRicalcolaEsaminati(): void {
         if (!eredita) continue
         const pesi = set.totalBytes - eredita.inizioDeiPesi
         if (pesi <= 0) continue
+        const forma: TalosModelShape = { ...eredita.forma, weightBytes: pesi }
         set.examination = {
             ...set.examination,
             fit: talosModelFit({
-                model: { ...eredita.forma, weightBytes: pesi },
+                model: forma,
                 device,
                 context: state.context,
                 fileBytes: set.totalBytes,
+                kvCacheTypeOverride: state.kvCacheType,
+            }),
+            ledger: talosResourceLedger({
+                model: forma,
+                device,
+                context: state.context,
                 kvCacheTypeOverride: state.kvCacheType,
             }),
         }

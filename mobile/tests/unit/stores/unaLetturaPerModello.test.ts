@@ -420,3 +420,99 @@ describe('⛔ Model Lab Blocco 2 — la cache KV forzata raggiunge OGNI verdetto
         }
     })
 })
+
+describe('⛔ Model Lab Blocco 4 — il ledger di provenienza raggiunge OGNI verdetto, capofila e ereditato', () => {
+    /**
+     * `examination.ledger` e' un campo NUOVO (Blocco 4): senza questo blocco
+     * di prove, un domani qualcuno potrebbe toccare talosExamineSet o
+     * talosEredita e dimenticare la meta' "ledger" della coppia
+     * fit/ledger — esattamente lo stesso rischio gia' preso per
+     * kvCacheTypeOverride, sullo stesso file, la stessa notte.
+     */
+    it('ogni set "read" porta un ledger di otto righe, capofila E ereditate', async () => {
+        const store = await repoAperto()
+        await store.talosExamineRepo()
+
+        const sets = store.talosLocalModels.repo!.sets
+        expect(sets).toHaveLength(6)
+        for (const set of sets) {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            expect(esame.ledger, set.label).toHaveLength(8)
+            expect(esame.ledger.map((row) => row.label)).toEqual([
+                'weights', 'kvCache', 'compute', 'runtime', 'safetyMargin',
+                'totalRuntime', 'availableRam', 'margin',
+            ])
+        }
+    })
+
+    /**
+     * ⛔ Il controllo che conta: due strutture calcolate dallo stesso input
+     * (talosModelFit e talosResourceLedger, chiamate una accanto all'altra
+     * in talosExamineSet/talosEredita) non devono MAI raccontare due storie
+     * diverse sullo stesso numero.
+     */
+    it('la riga kvCache del ledger coincide ESATTAMENTE con fit.kvCacheBytes, su ogni riga', async () => {
+        const store = await repoAperto()
+        await store.talosExamineRepo()
+
+        for (const set of store.talosLocalModels.repo!.sets) {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            const kvCache = esame.ledger.find((row) => row.label === 'kvCache')
+            expect(kvCache?.bytes, set.label).toBe(esame.fit.kvCacheBytes)
+        }
+    })
+
+    it('forzare q8_0 etichetta la riga kvCache del ledger "predicted", capofila E ereditate', async () => {
+        const store = await repoAperto()
+        store.talosSetLocalKvCacheType('q8_0')
+        await store.talosExamineRepo()
+
+        for (const set of store.talosLocalModels.repo!.sets) {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            const kvCache = esame.ledger.find((row) => row.label === 'kvCache')
+            expect(kvCache?.provenance, set.label).toBe('predicted')
+        }
+    })
+
+    /**
+     * Il ledger e' la meta' del Blocco 4 che manca al test precedente:
+     * quello provava che `talosRicalcolaEsaminati` ricalcola `fit` senza
+     * rilettura, capofila e ereditati. Questo prova che ricalcola ANCHE
+     * `ledger` — un campo diverso, nella stessa funzione, aggiunto nella
+     * stessa notte: uno scritto e l'altro dimenticato e' esattamente il
+     * tipo di svista che questo file esiste per stanare.
+     */
+    it('cambiare il tipo KV dopo l\'esame ricalcola anche il ledger, capofila e ereditati, senza rilettura', async () => {
+        const store = await repoAperto()
+        await store.talosExamineRepo()
+        const primaDelCambio = [...letture]
+        const baseline = store.talosLocalModels.repo!.sets.map((set) => {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            return esame.ledger.find((row) => row.label === 'kvCache')?.bytes
+        })
+
+        store.talosSetLocalKvCacheType('q8_0')
+
+        // ⛔ Zero letture nuove: lo stesso principio gia' provato per `fit`,
+        // qui applicato al campo `ledger`.
+        expect(letture).toEqual(primaDelCambio)
+
+        const sets = store.talosLocalModels.repo!.sets
+        for (let i = 0; i < sets.length; i += 1) {
+            const esame = sets[i]!.examination
+            if (esame.state !== 'read') throw new Error(`${sets[i]!.label} non letto`)
+            const kvCache = esame.ledger.find((row) => row.label === 'kvCache')
+            expect(kvCache?.bytes, `set #${i}`).toBeCloseTo(baseline[i]! * (17 / 32), 0)
+            expect(kvCache?.provenance, `set #${i}`).toBe('predicted')
+            // La somma delle righe resta coerente con fit anche dopo il
+            // ricalcolo: stessa garanzia di resourceLedger.test.ts (Blocco
+            // 1), qui esercitata sul percorso di ricalcolo, non solo sulla
+            // prima lettura.
+            expect(kvCache?.bytes, `set #${i}`).toBe(esame.fit.kvCacheBytes)
+        }
+    })
+})

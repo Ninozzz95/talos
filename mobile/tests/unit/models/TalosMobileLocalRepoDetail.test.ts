@@ -334,4 +334,76 @@ describe('TalosMobileLocalRepoDetail', () => {
             wrapper.unmount()
         })
     })
+
+    /**
+     * Model Lab Blocco 4 — il ledger dentro la pagina vera, non isolato.
+     * TalosModelResourceLedger.test.ts prova il componente da solo; qui si
+     * prova solo che la pagina lo MONTA con le righe giuste quando una
+     * variante e' "read", e non lo monta affatto altrimenti.
+     */
+    describe('Model Lab Blocco 4 — il ledger di provenienza dentro il dettaglio variante', () => {
+        function letta() {
+            return {
+                state: 'read' as const,
+                fit: {
+                    band: 'comfortable' as const,
+                    reason: 'fits' as const,
+                    kvCacheBytes: 268_435_456,
+                    requiredBytes: 768_435_456,
+                    residentBytes: 6_000_000_000,
+                    deficitBytes: 0,
+                    tokensPerSecond: 12,
+                    maxContext: 32_768,
+                },
+                ledger: [
+                    { label: 'weights' as const, bytes: 2_500_000_000, provenance: 'exact' as const },
+                    { label: 'kvCache' as const, bytes: 268_435_456, provenance: 'exact' as const },
+                    { label: 'compute' as const, bytes: 335_544_320, provenance: 'policy' as const },
+                    { label: 'runtime' as const, bytes: 67_108_864, provenance: 'policy' as const },
+                    { label: 'safetyMargin' as const, bytes: 268_435_456, provenance: 'policy' as const },
+                    { label: 'totalRuntime' as const, bytes: 3_439_523_840, provenance: 'policy' as const },
+                    { label: 'availableRam' as const, bytes: 5_000_000_000, provenance: 'exact' as const },
+                    { label: 'margin' as const, bytes: 1_291_042_144, provenance: 'policy' as const },
+                ],
+                quantisation: 'Q4_K_M',
+                trainedContext: 131_072,
+                parameterCount: 4_000_000_000,
+                tensorTypeHistogram: null,
+                quantizationVersion: null,
+            }
+        }
+
+        async function dettaglioAperto() {
+            harness.state.repo.sets[0].examination = letta()
+            const wrapper = mount(TalosMobileLocalRepoDetail, {
+                props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+            })
+            await flushPromises()
+            const disclosure = wrapper.get('[data-testid="talos-models-variant-details"]')
+            ;(disclosure.element as HTMLDetailsElement).open = true
+            await disclosure.trigger('toggle')
+            return wrapper
+        }
+
+        it('monta il ledger con tutte e otto le righe quando la variante e\' gia\' esaminata', async () => {
+            const wrapper = await dettaglioAperto()
+
+            const ledger = wrapper.get('[data-testid="talos-model-resource-ledger"]')
+            expect(ledger.findAll('[data-testid^="talos-ledger-row-"]')).toHaveLength(8)
+            wrapper.unmount()
+        })
+
+        it('non monta il ledger quando la variante non e\' ancora stata esaminata', async () => {
+            const wrapper = mount(TalosMobileLocalRepoDetail, {
+                props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+            })
+            await flushPromises()
+            const disclosure = wrapper.get('[data-testid="talos-models-variant-details"]')
+            ;(disclosure.element as HTMLDetailsElement).open = true
+            await disclosure.trigger('toggle')
+
+            expect(wrapper.find('[data-testid="talos-model-resource-ledger"]').exists()).toBe(false)
+            wrapper.unmount()
+        })
+    })
 })

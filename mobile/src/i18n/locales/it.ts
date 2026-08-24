@@ -2328,6 +2328,23 @@ export const TALOS_IT_MESSAGES = {
             f16: 'F16',
             q8_0: 'Q8_0',
         },
+        // Model Lab Blocco 4 — il ledger di provenienza: mai un numero senza
+        // dire da dove viene. Le otto etichette sono le stesse otto voci di
+        // talosResourceLedger() (fit.ts), nello stesso ordine fisso.
+        ledgerTitle: 'Da dove viene ogni byte',
+        ledger: {
+            weights: 'Pesi del modello',
+            kvCache: 'Cache KV',
+            compute: 'Calcolo',
+            runtime: 'Runtime',
+            safetyMargin: 'Margine di sicurezza',
+            totalRuntime: 'Totale in esecuzione',
+            availableRam: 'RAM disponibile',
+            margin: 'Margine residuo',
+            provenanceExact: 'misurato',
+            provenancePredicted: 'previsto',
+            provenancePolicy: 'fisso',
+        },
         download: 'Scarica',
         downloading: 'Sto scaricando',
         stop: 'Metti in pausa',
