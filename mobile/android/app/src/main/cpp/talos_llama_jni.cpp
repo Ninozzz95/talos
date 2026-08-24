@@ -3362,10 +3362,26 @@ static void talos_genera_speculativo(talos_session * session, int limit, bool st
     llama_memory_t        memoria = llama_get_memory(session->ctx);
     const int             budget  = (int) llama_n_ctx(session->ctx);
 
-    // `n_past` non è implicito come nel ramo `llama_batch_get_one`: qui ogni
-    // token porta la SUA posizione esplicita (`common_batch_add`), quindi va
-    // tracciato a mano. `session->cached` ha già il prompt PIÙ il primo
-    // token generato (il chiamante lo ha già inserito prima di entrare qui).
+    /*
+     * ⛔⛔⛔ RISCRITTA sul device dopo DUE giri falliti, non a tavolino.
+     *
+     * Giro 1: `id_last` arrivava già decodificato dal bootstrap (il ramo
+     * ordinario lo scrive nella KV PRIMA di passare qui) — ridecodificarlo
+     * "una casella dopo" apriva un buco mai scritto: `Paris` giusto, poi
+     * divergenza netta, zero errori in log (corruzione silenziosa).
+     * Giro 2: corretta la posizione a "una casella prima", ma `id_last` era
+     * ANCORA già nella KV da quella stessa posizione — `llama_decode` ha
+     * rifiutato il batch (`ret=-1`, "failed to initialize batch"): scrivere
+     * due volte alla STESSA posizione non è tollerato, non solo sprecato.
+     *
+     * ⇒ La causa vera in entrambi i casi era la stessa: il chiamante
+     * (`nativeGenerate`) decodificava SEMPRE il primo token generato prima
+     * di offrire il ramo speculativo. Questa funzione ora si aspetta
+     * `id_last` MAI ancora decodificato — il chiamante campiona e basta,
+     * la decodifica (insieme alla bozza, nello stesso batch) è compito
+     * esclusivo di qui, esattamente come fa l'esempio upstream (il loro
+     * `id_last` non è MAI decodificato fuori dal ciclo speculativo).
+     */
     int n_past = (int) session->cached.size();
 
     common_speculative_begin(spec, seq_id, session->cached);
@@ -3373,8 +3389,9 @@ static void talos_genera_speculativo(talos_session * session, int limit, bool st
     llama_batch     batch_tgt = llama_batch_init((int32_t) llama_n_batch(session->ctx), 0, 1);
     llama_tokens    draft;
     char            piece[256];
+    bool            fine = false;
 
-    while (produced < limit) {
+    while (!fine && produced < limit) {
         if (session->cancelled.load(std::memory_order_relaxed)) break;
 
         int n_draft_max = budget - n_past - 2;
@@ -3391,6 +3408,11 @@ static void talos_genera_speculativo(talos_session * session, int limit, bool st
         };
         common_speculative_draft(spec);
 
+        // `id_last` alla SUA posizione vera (`n_past`, mai scritta prima
+        // d'ora), poi la bozza subito dopo — la stessa forma dell'esempio
+        // upstream, senza il loro trucco del post-incremento su `n_past`:
+        // qui resta esplicito, `n_past` non cambia finché non lo dice la
+        // riga dedicata più sotto.
         common_batch_clear(batch_tgt);
         common_batch_add(batch_tgt, id_last, n_past, { seq_id }, true);
         for (size_t i = 0; i < draft.size(); ++i) {
@@ -3424,13 +3446,24 @@ static void talos_genera_speculativo(talos_session * session, int limit, bool st
                 session->sampler, session->ctx, draft);
         common_speculative_accept(spec, seq_id, (uint16_t) (ids.size() - 1));
 
-        n_past += (int) ids.size();
-        bool fine = false;
+        /*
+         * ⭐ Perché "spingi il VECCHIO id_last, poi assegna il nuovo" — non
+         * "spingi ids[i]" direttamente. Ogni `ids[i]` tranne l'ultimo È
+         * davvero confermato alla sua posizione dal decode qui sopra (ha
+         * combaciato con la bozza). L'ULTIMO `ids[]`, invece, non lo è mai:
+         * o è la correzione di un disaccordo (la sua posizione nella KV
+         * contiene ancora il token di bozza SBAGLIATO), o è la previsione
+         * dopo l'ultima bozza accettata (la sua posizione non è mai stata
+         * scritta). In entrambi i casi resta "in sospeso" come nuovo
+         * `id_last`, decodificato per davvero al PROSSIMO giro — mai
+         * spinto in `cached` finché non lo è.
+         */
         for (size_t i = 0; i < ids.size() && produced < limit; ++i) {
-            session->cached.push_back(ids[i]);
-            if (stopAtEndOfGeneration && llama_vocab_is_eog(session->vocab, ids[i])) { fine = true; break; }
+            session->cached.push_back(id_last);
+            id_last = ids[i];
+            if (stopAtEndOfGeneration && llama_vocab_is_eog(session->vocab, id_last)) { fine = true; break; }
 
-            const int written = llama_token_to_piece(session->vocab, ids[i], piece, sizeof(piece), 0, true);
+            const int written = llama_token_to_piece(session->vocab, id_last, piece, sizeof(piece), 0, true);
             if (written < 0) { TALOS_LOGE("token speculativo non convertibile in testo"); fine = true; break; }
             answer.append(piece, (size_t) written);
             {
@@ -3439,21 +3472,24 @@ static void talos_genera_speculativo(talos_session * session, int limit, bool st
             }
             produced += 1;
             session->produced.store(produced, std::memory_order_relaxed);
-            id_last = ids[i];
         }
+        n_past += (int) ids.size();
         draft.clear();
 
-        // Il batch ha decodificato id_last + TUTTA la bozza, ma solo `ids`
-        // sono stati confermati: la KV oltre l'ultimo confermato descrive
-        // token che il campionatore vero ha RIFIUTATO — vanno tolti, o il
-        // giro dopo li troverebbe ancora lì.
+        // Tutto ciò che il decode ha scritto OLTRE l'ultimo confermato
+        // descrive bozza RIFIUTATA (o non ancora richiesta) — va tolto, o
+        // il giro dopo la troverebbe ancora lì.
         if (!llama_memory_seq_rm(memoria, seq_id, (llama_pos) n_past, -1)) {
             llama_memory_clear(memoria, true);
             session->cached.clear();
             fine = true;
         }
-        if (fine) break;
     }
+
+    // `id_last` finale È nella KV per davvero (decodificato in un batch di
+    // un giro qualunque sopra) ma mai spinto in `cached`: il prossimo turno
+    // lo aspetta lì, o il prefisso comune lo perderebbe.
+    session->cached.push_back(id_last);
 
     llama_batch_free(batch_tgt);
     if (tempo_primo_token < 0) tempo_primo_token = talos_da(avvio);
@@ -3701,6 +3737,24 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
         // contatore non deve mai vedere un token che non esiste ancora.
         session->produced.store(produced, std::memory_order_relaxed);
 
+        /*
+         * ⛔⛔⛔ SOLO RICERCA — P2-1 blocco B. Il primo token resta il
+         * percorso ordinario: campionato e cronometrato come sempre, ma
+         * QUI — PRIMA di essere decodificato — se `session->speculator`
+         * esiste (SOLO dopo una chiamata esplicita a
+         * `nativeConstructSpeculatorForResearch`, mai in produzione) il
+         * resto della generazione passa a `talos_genera_speculativo`, che
+         * possiede la SUA decodifica per intero (mai duplicata qui — un
+         * secondo `llama_decode` sullo stesso token, alla stessa posizione,
+         * è quello che ha rifiutato il batch la prima volta che ci ho
+         * provato: `ret=-1`, "failed to initialize batch").
+         */
+        if (session->speculator && session->speculator->pronto()) {
+            talos_genera_speculativo(session, limit, stopAtEndOfGeneration, sampled,
+                                     produced, answer, tempo_primo_token, avvio);
+            break;
+        }
+
         // Il contesto è un tetto duro: superarlo non è un degrado, è un errore.
         // Controllato PRIMA di dare in pasto il token appena campionato, perché
         // è quella decodifica a occupare la casella successiva.
@@ -3722,21 +3776,6 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
         // registra, il turno dopo calcolerebbe il prefisso comune su una
         // fotografia più corta della realtà e taglierebbe nel posto sbagliato.
         session->cached.push_back(sampled);
-
-        /*
-         * ⛔⛔⛔ SOLO RICERCA — P2-1 blocco B. Il primo token resta il
-         * percorso ordinario qui sopra (già cronometrato, già provato) —
-         * `session->speculator` esiste SOLO dopo una chiamata esplicita a
-         * `nativeConstructSpeculatorForResearch`, mai in produzione. Da qui
-         * in poi il resto della generazione passa a
-         * `talos_genera_speculativo`, che continua da sé fino a `limit` o
-         * cancellazione — chiamata una volta sola, non a ogni giro.
-         */
-        if (session->speculator && session->speculator->pronto()) {
-            talos_genera_speculativo(session, limit, stopAtEndOfGeneration, sampled,
-                                     produced, answer, tempo_primo_token, avvio);
-            break;
-        }
     }
 
     {
