@@ -30,10 +30,14 @@
 #include <cerrno>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <unistd.h>
 #include <vector>
+
+#include <sys/auxv.h>
+#include <asm/hwcap.h>  // P2-2 — bit HWCAP*, lo snapshot di ricerca KleidiAI (vedi commento sotto)
 
 #include "llama.h"
 #include "gguf.h"
@@ -1345,6 +1349,162 @@ Java_ai_talos_TalosLlamaNative_nativeCpuTopology(JNIEnv * env, jclass) {
 
     out["cores"] = cores;
     out["affinityReadable"] = affinitaLeggibile;
+    return env->NewStringUTF(out.dump().c_str());
+}
+
+/**
+ * ⛔⛔ SOLO RICERCA — P2-2, le feature CPU VERE, mai dedotte dal nome
+ * commerciale del SoC (design.md §9.3: "do not infer features from SoC
+ * marketing names").
+ *
+ * ⛔⛔⛔ CAMBIO DI ROTTA rispetto al piano, scoperto SUL CODICE prima di
+ * scrivere produzione: il piano diceva "dalle API ggml reali"
+ * (`ggml_cpu_has_neon()` e affini) — ma quelle funzioni vivono SOLO dentro
+ * `ggml-cpu.c`, ricompilato una volta per CIASCUNA delle librerie-variante
+ * di `GGML_CPU_ALL_VARIANTS=ON` (`ggml-cpu-android_armv8.0_1` ...
+ * `android_armv9.2_2`, verificate nel log di build), mai linkate
+ * direttamente in `talos_llama` (`target_link_libraries` porta solo
+ * `llama llama-common android log`, verificato in CMakeLists.txt — 7
+ * `undefined symbol` a conferma). Anche forzando il link di UNA variante,
+ * la risposta sarebbe quella COMPILATA in quella variante (es. sempre
+ * `dotprod=0` nella variante armv8.0), non quella del device reale — un
+ * dato plausibile ma FALSO, peggio di nessun dato.
+ *
+ * ⭐ Sostituito con lettura diretta del kernel via `getauxval(AT_HWCAP /
+ * AT_HWCAP2)` (bionic, da API 18 — minSdk qui è 26; pattern confermato su
+ * developer.android.com/ndk/guides/cpu-features), la stessa famiglia di
+ * tecnica già in uso in `nativeCpuTopology()` sopra (leggere il sistema
+ * invece di passare da ggml). Ogni feature prova prima `HWCAP_X`, poi
+ * `HWCAP2_X`: due fonti indipendenti (kernel.org, header uapi grezzo)
+ * concordavano sui NOMI ma non su QUALE dei due vettori porta ciascun bit
+ * — con la catena `#elif defined(...)` il codice resta corretto in
+ * entrambi i casi, e se l'header dell'NDK non definisce nessuno dei due
+ * nomi il campo torna `null` (mai un `false` silenzioso spacciato per "il
+ * device non ce l'ha" — stessa disciplina di `quantizationVersion: null`
+ * in P2-6).
+ *
+ * ⛔ `sveBytes` (lunghezza vettore SVE, `prctl(PR_SVE_GET_VL)`) OMESSO:
+ * interfaccia non verificata da fonte primaria in questo giro di ricerca
+ * web — un campo assente è meglio di un campo inventato.
+ *
+ * ⛔ `kleidiBackendRegistered` NON è in questo snapshot: la funzione
+ * pubblica `ggml_backend_cpu_kleidiai_buffer_type()` vive in un header
+ * privato di `ggml-cpu/kleidiai/`, mai esposto nelle directory di include
+ * di questo target, e collegarlo richiederebbe toccare l'API pubblica di
+ * ggml — fuori scope per un blocco di sola lettura. CR-18 (bytes/tensori
+ * per buffer type, la prova vera che i kernel sono usati) resta un blocco
+ * successivo dichiarato, non questo.
+ */
+// Il file è dentro un `extern "C" { ... }` (riga 1064): senza riaprire
+// linkage C++ qui, questi helper interni erediterebbero linkage C, e
+// `std::optional<bool>` come tipo di ritorno non ha un ABI C definito
+// (warning reale del compilatore, non cosmetico — mai chiamati da fuori
+// questa unità di compilazione, ma la firma resta scorretta finché non
+// torna C++).
+extern "C++" {
+namespace {
+
+struct TalosHwcap {
+    unsigned long base;   // getauxval(AT_HWCAP)
+    unsigned long estesa; // getauxval(AT_HWCAP2)
+};
+
+TalosHwcap talos_leggi_hwcap() {
+    return TalosHwcap{ getauxval(AT_HWCAP), getauxval(AT_HWCAP2) };
+}
+
+std::optional<bool> talos_ha_neon(const TalosHwcap &h) {
+#if defined(HWCAP_ASIMD)
+    return (h.base & HWCAP_ASIMD) != 0;
+#elif defined(HWCAP2_ASIMD)
+    return (h.estesa & HWCAP2_ASIMD) != 0;
+#else
+    return std::nullopt;
+#endif
+}
+
+std::optional<bool> talos_ha_dotprod(const TalosHwcap &h) {
+#if defined(HWCAP_ASIMDDP)
+    return (h.base & HWCAP_ASIMDDP) != 0;
+#elif defined(HWCAP2_ASIMDDP)
+    return (h.estesa & HWCAP2_ASIMDDP) != 0;
+#else
+    return std::nullopt;
+#endif
+}
+
+std::optional<bool> talos_ha_matmul_int8(const TalosHwcap &h) {
+#if defined(HWCAP_I8MM)
+    return (h.base & HWCAP_I8MM) != 0;
+#elif defined(HWCAP2_I8MM)
+    return (h.estesa & HWCAP2_I8MM) != 0;
+#else
+    return std::nullopt;
+#endif
+}
+
+std::optional<bool> talos_ha_sve(const TalosHwcap &h) {
+#if defined(HWCAP_SVE)
+    return (h.base & HWCAP_SVE) != 0;
+#elif defined(HWCAP2_SVE)
+    return (h.estesa & HWCAP2_SVE) != 0;
+#else
+    return std::nullopt;
+#endif
+}
+
+std::optional<bool> talos_ha_sve2(const TalosHwcap &h) {
+#if defined(HWCAP_SVE2)
+    return (h.base & HWCAP_SVE2) != 0;
+#elif defined(HWCAP2_SVE2)
+    return (h.estesa & HWCAP2_SVE2) != 0;
+#else
+    return std::nullopt;
+#endif
+}
+
+std::optional<bool> talos_ha_sme(const TalosHwcap &h) {
+#if defined(HWCAP_SME)
+    return (h.base & HWCAP_SME) != 0;
+#elif defined(HWCAP2_SME)
+    return (h.estesa & HWCAP2_SME) != 0;
+#else
+    return std::nullopt;
+#endif
+}
+
+std::optional<bool> talos_ha_sme2(const TalosHwcap &h) {
+#if defined(HWCAP_SME2)
+    return (h.base & HWCAP_SME2) != 0;
+#elif defined(HWCAP2_SME2)
+    return (h.estesa & HWCAP2_SME2) != 0;
+#else
+    return std::nullopt;
+#endif
+}
+
+void talos_metti(nlohmann::ordered_json &out, const char *chiave, std::optional<bool> valore) {
+    if (valore.has_value()) {
+        out[chiave] = *valore;
+    } else {
+        out[chiave] = nullptr;
+    }
+}
+
+} // namespace
+} // extern "C++" — da qui in poi si torna dentro l'`extern "C"` di riga 1064
+
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeCpuFeaturesForResearch(JNIEnv * env, jclass) {
+    const TalosHwcap h = talos_leggi_hwcap();
+    nlohmann::ordered_json out;
+    talos_metti(out, "neon", talos_ha_neon(h));
+    talos_metti(out, "dotprod", talos_ha_dotprod(h));
+    talos_metti(out, "matmulInt8", talos_ha_matmul_int8(h));
+    talos_metti(out, "sve", talos_ha_sve(h));
+    talos_metti(out, "sve2", talos_ha_sve2(h));
+    talos_metti(out, "sme", talos_ha_sme(h));
+    talos_metti(out, "sme2", talos_ha_sme2(h));
     return env->NewStringUTF(out.dump().c_str());
 }
 

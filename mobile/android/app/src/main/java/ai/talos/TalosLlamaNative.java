@@ -124,6 +124,13 @@ final class TalosLlamaNative {
     static native String nativeCpuTopology();
 
     /**
+     * ⛔⛔ SOLO RICERCA — P2-2, le feature CPU vere (NEON/dotprod/matmulInt8/
+     * SVE/SME/SME2) dalle API ggml, mai dedotte dal nome del SoC. Vedi il
+     * commento nel JNI per cosa NON c'è ancora (`kleidiBackendRegistered`).
+     */
+    static native String nativeCpuFeaturesForResearch();
+
+    /**
      * ⛔⛔ SOLO RICERCA — la famiglia di affinity CPU per la PROSSIMA apertura
      * o ricostruzione di contesto. Valori: {@code 0} DEFAULT (nessuna
      * maschera, il comportamento di produzione), {@code 1} tutti i core
