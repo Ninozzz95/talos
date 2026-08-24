@@ -143,6 +143,21 @@ final class TalosLlamaNative {
     static native boolean nativeConstructSpeculatorForResearch(long handle, int nMatch, int nMax);
 
     /**
+     * ⛔⛔ SOLO RICERCA — P2-1, decide la forma del blocco B: questo
+     * contesto toglie solo un pezzo di sequenza ({@code "part"}/{@code
+     * "rs"}) o solo tutta in blocco ({@code "full"}, serve la macchina di
+     * checkpoint completa)? Verificato dal motore vero, mai assunto.
+     *
+     * ⛔⛔⛔ Effetto collaterale reale: la sonda upstream SVUOTA la memoria
+     * del contesto. Chiamare solo su una sessione appena aperta, mai su
+     * una con una conversazione vera in corso.
+     *
+     * @return {@code "no"}/{@code "part"}/{@code "full"}/{@code "rs"}, o
+     *     stringa vuota se l'handle non è valido.
+     */
+    static native String nativeContextSeqRmCapabilityForResearch(long handle);
+
+    /**
      * ⛔⛔ SOLO RICERCA — la famiglia di affinity CPU per la PROSSIMA apertura
      * o ricostruzione di contesto. Valori: {@code 0} DEFAULT (nessuna
      * maschera, il comportamento di produzione), {@code 1} tutti i core
