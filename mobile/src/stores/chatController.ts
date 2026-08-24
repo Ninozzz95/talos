@@ -3673,11 +3673,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 : null
             /*
              * ⛔ Vive quanto la CONVERSAZIONE, non quanto l'invio: uno
-             * strumento gia' svelato resta chiamabile al messaggio dopo. La
-             * ragione, con la misura, sta in `catalogoCompatto.ts`.
+             * strumento gia' svelato resta chiamabile al messaggio dopo, e i
+             * pochi sempre-in-vista (24/8: il gap che il locale aveva e
+             * Anthropic no) non pagano mai il giro. La ragione, con la
+             * misura, sta in `catalogoCompatto.ts`.
              */
             const svelati = catalogo
-                ? catalogo.talosSvelatiIn(sendIdentity.sessionId)
+                ? catalogo.talosSvelatiInConSempreVisibili(sendIdentity.sessionId, offeredTools as never)
                 : new Set<string>()
             const dettagliStrumento = catalogo
                 ? catalogo.talosStrumentoDettagli(

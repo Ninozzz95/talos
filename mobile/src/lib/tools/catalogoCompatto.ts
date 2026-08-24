@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { defineTalosTool, type TalosToolDefinition } from '@/lib/tools/registry'
+import { TALOS_ATTREZZI_SEMPRE_IN_VISTA } from '@/lib/tools/aperturaProgressiva'
 
 /**
  * ⭐⭐ IL CATALOGO COMPATTO: tutti i tool nominati, gli schemi a richiesta.
@@ -91,6 +92,49 @@ export function talosSvelatiIn(sessione: string | null): Set<string> {
 /** Per i test, e per quando una conversazione viene cancellata. */
 export function talosDimenticaSvelati(sessione: string | null): void {
     SVELATI.delete(sessione ?? '(nessuna)')
+}
+
+/**
+ * ⛔⛔ IL GAP TROVATO IL 24/8: `aperturaProgressiva.ts` (il ramo Anthropic)
+ * ha `TALOS_ATTREZZI_SEMPRE_IN_VISTA` — quattro nomi che non pagano MAI il
+ * giro `tool_details`, perché "rispondono, non agiscono". Questo catalogo
+ * non aveva un equivalente: `svelati` parte sempre vuoto per ogni
+ * conversazione nuova (vedi sopra), quindi anche «che ore sono» pagava un
+ * giro intero sul primo messaggio di ogni chat.
+ *
+ * ⛔ Riusa la STESSA lista, non una copia: stesso registro
+ * (`readTools.ts`: `time_now`/`memory_search`/`library_search` vivono in
+ * `all = createTalosReadTools(sources)`, sempre presenti quando abilitati,
+ * indipendenti dal provider — verificato), e la stessa ragione vale
+ * identica per il locale. Due liste separate sullo stesso concetto
+ * sarebbero due verità che un giorno divergono — la lezione già scritta
+ * sopra per `talosIndiceCompatto` sulla descrizione, qui per l'elenco.
+ *
+ * ⛔ Filtra su ciò che è REALMENTE offerto in QUESTO turno: `web_search`
+ * sparisce dall'elenco offerto quando nessun motore è configurato
+ * (`toolset.ts`, WEB-SENZA-MOTORE-01) — un nome assente non fa danno se
+ * pre-svelato, ma è rumore inutile, e il filtro lo tiene fuori.
+ */
+export function talosPreVelatiSempreVisibili(
+    tools: ReadonlyArray<TalosToolDefinition<never>>,
+): readonly string[] {
+    const offerti = new Set(tools.map((tool) => tool.name))
+    return TALOS_ATTREZZI_SEMPRE_IN_VISTA.filter((nome) => offerti.has(nome))
+}
+
+/**
+ * `talosSvelatiIn` più la seed dei sempre-in-vista, in una chiamata sola —
+ * il chiamante (`chatController.ts`) è nel grafo statico d'avvio (compito
+ * #51: meno di cento byte di margine), quindi la logica vive TUTTA qui,
+ * nel pezzo già caricato a richiesta, non nel controller.
+ */
+export function talosSvelatiInConSempreVisibili(
+    sessione: string | null,
+    tools: ReadonlyArray<TalosToolDefinition<never>>,
+): Set<string> {
+    const svelati = talosSvelatiIn(sessione)
+    for (const nome of talosPreVelatiSempreVisibili(tools)) svelati.add(nome)
+    return svelati
 }
 
 /** Il nome che il modello usa per chiedere la forma di uno strumento. */
