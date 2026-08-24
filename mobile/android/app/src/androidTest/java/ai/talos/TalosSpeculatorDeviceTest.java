@@ -100,6 +100,29 @@ public class TalosSpeculatorDeviceTest {
     }
 
     /**
+     * ⛔⛔ La domanda che decide la forma del blocco B — quale famiglia di
+     * rimozione sequenza espone il contesto di QUESTO modello (non
+     * assunta uguale per Llama/Qwen/Gemma). `-e talosModelPath <path>`
+     * sceglie il GGUF; lanciata a mano una volta per famiglia.
+     */
+    @Test
+    public void capacitaSeqRm() {
+        pronta();
+        File model = modello();
+        long handle = apri(model);
+        assertApertoOk(handle);
+        try {
+            String capacita = TalosLlamaNative.nativeContextSeqRmCapabilityForResearch(handle);
+            android.util.Log.i("TalosSpeculator", "seqRm(" + model.getName() + ") = " + capacita);
+            assertTrue("risposta vuota o inattesa: " + capacita,
+                    capacita.equals("no") || capacita.equals("part")
+                            || capacita.equals("full") || capacita.equals("rs"));
+        } finally {
+            TalosLlamaNative.nativeClose(handle);
+        }
+    }
+
+    /**
      * AL CONTRARIO: un handle inesistente non deve costruire niente, e
      * soprattutto non deve far cadere il processo — `as_session` torna
      * `nullptr` e la funzione nativa esce prima di toccare `unique_ptr`.

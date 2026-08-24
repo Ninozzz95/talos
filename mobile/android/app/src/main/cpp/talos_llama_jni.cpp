@@ -41,6 +41,7 @@
 #include <asm/hwcap.h>  // P2-2 — bit HWCAP*, lo snapshot di ricerca KleidiAI (vedi commento sotto)
 
 #include "llama.h"
+#include "common.h"  // P2-1 — common_context_can_seq_rm/common_context_seq_rm_type
 #include "gguf.h"
 #include "ggml-backend.h"
 #include "sampling.h"
@@ -1552,6 +1553,42 @@ Java_ai_talos_TalosLlamaNative_nativeConstructSpeculatorForResearch(
         return JNI_FALSE;
     }
     return JNI_TRUE;
+}
+
+/**
+ * ⛔⛔ SOLO RICERCA — P2-1, la domanda che decide la forma del blocco B:
+ * questo contesto sa togliere solo un PEZZO di sequenza (`PART`/`RS` — il
+ * giro di verifica speculativa può limitarsi a un `llama_memory_seq_rm`
+ * dopo un rifiuto parziale), o solo TUTTA la sequenza in blocco (`FULL` —
+ * serve la macchina di checkpoint/snapshot completa dell'esempio
+ * upstream, `common_prompt_checkpoint`)? Verificato dal motore vero
+ * (`common_context_can_seq_rm`, `common/common.cpp`), mai assunto da un
+ * nome di modello: due famiglie diverse potrebbero rispondere diverso.
+ *
+ * ⛔⛔⛔ EFFETTO COLLATERALE REALE, non cosmetico: la sonda upstream
+ * **svuota la memoria del contesto** (`llama_memory_clear`, due volte,
+ * prima e dopo un decode di prova) per poter provare la rimozione. Da
+ * chiamare SOLO su una sessione appena aperta, mai su una con una
+ * conversazione vera in corso — esattamente come la usa questo export,
+ * su un handle appena tornato da `nativeOpenTargeted`.
+ *
+ * @return "no" · "part" · "full" · "rs" (vedi `common_context_seq_rm_type`)
+ *     — oppure stringa vuota se l'handle non è valido.
+ */
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeContextSeqRmCapabilityForResearch(
+        JNIEnv * env, jclass, jlong handle) {
+    std::lock_guard<std::mutex> serratura(g_motore);
+    talos_session * session = as_session(handle);
+    if (session == nullptr || session->ctx == nullptr) return env->NewStringUTF("");
+
+    switch (common_context_can_seq_rm(session->ctx)) {
+        case COMMON_CONTEXT_SEQ_RM_TYPE_NO:   return env->NewStringUTF("no");
+        case COMMON_CONTEXT_SEQ_RM_TYPE_PART: return env->NewStringUTF("part");
+        case COMMON_CONTEXT_SEQ_RM_TYPE_FULL: return env->NewStringUTF("full");
+        case COMMON_CONTEXT_SEQ_RM_TYPE_RS:   return env->NewStringUTF("rs");
+    }
+    return env->NewStringUTF("");
 }
 
 /**
