@@ -83,6 +83,15 @@ final class TalosLlamaNative {
      */
     static native void nativeDisableOpenClCacheForResearch();
 
+    /**
+     * ⛔ SOLO RICERCA — P2-4/CR-03: accende il log per-nodo dello scheduler
+     * upstream ({@code GGML_SCHED_DEBUG}, {@code livello=2} per il dettaglio
+     * completo). Legge la variabile una volta sola, alla creazione dello
+     * scheduler: va chiamata prima della prima apertura di un modello in
+     * questo processo.
+     */
+    static native void nativeSetSchedDebugForResearch(int livello);
+
     /** I backend ggml registrati, separati da virgola. Vuoto se nessuno. */
     static native String nativeBackends();
 
