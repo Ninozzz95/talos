@@ -8,9 +8,8 @@ Numbers in this file are measured on a device, not estimated.
 
 ## v0.1.21
 
-Browsing models on Hugging Face got a rebuild, the local model engine
-gained a working Stop button during GPU decoding, and the Doctor screen
-can now see the personal voice engine instead of staying silent about it.
+Browsing models on Hugging Face got a rebuild, and the Doctor screen can
+now see the personal voice engine instead of staying silent about it.
 
 ### Browsing models on Hugging Face
 
@@ -34,10 +33,6 @@ page opens, instead of waiting for a tap on each one.
 
 ### Fixed
 
-- Stop no longer freezes while the local model is decoding on the GPU
-  (OpenCL). The engine now checks for a stop request between graph nodes
-  during a multi-token prompt, the same way it already did on CPU and
-  Metal.
 - The Doctor screen had no way to see the personal voice engine at all —
   only speech recognition was checked, never speech synthesis. It now
   shows whether the engine is installed, whether a usable voice profile
