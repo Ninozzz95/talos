@@ -1,5 +1,6 @@
 import { registerPlugin } from '@capacitor/core'
 import { planTalosVoiceReading } from '@/lib/voice/personalVoiceRouter'
+import { talosIstante, talosTracciaFuori } from '@/lib/device/traccia'
 import type {
     TalosPersonalVoiceProfileSummary,
     TalosPersonalVoiceStatus,
@@ -7,6 +8,47 @@ import type {
     TalosVoiceReadingSource,
 } from '@/lib/voice/personalVoiceContracts'
 import type { TalosSpeakOptions, TalosSpeechService } from '@/services/speech'
+
+/**
+ * Owner 24/8, terza volta segnalato: codifica la voce, la codifica va a
+ * buon fine, ma né l'anteprima né la lettura in chat producono suono —
+ * e prima di questo diario il Doctor non aveva UNA riga sulla voce
+ * personale (verificato sul JSON incollato: `speech` c'è, la sintesi no).
+ *
+ * Stesso schema di `talosDettaturaDiario`/`talosDettaturaAnnota`
+ * (`services/dictation.ts`): un anello corto in memoria, e OGNI riga esce
+ * anche verso `logcat` via `talosTracciaFuori` — MISURATO l'11/8 che
+ * `console.info` dalla WebView non arriva in `logcat` per niente, quindi
+ * senza questo canale un log scritto qui sarebbe visibile SOLO dentro il
+ * Doctor, mai mentre si riproduce il difetto guardando `adb logcat`.
+ *
+ * ⛔ Ricerca di questa riga: le cause note di un AudioTrack che scrive
+ * "con successo" e non suona affatto includono una traccia "morta" lato
+ * AudioFlinger che continua ad accettare write() — il sintomo non è
+ * distinguibile da qui SENZA sapere se il nativo ha mai dichiarato
+ * `accepted` E MAI generato `done`/`error` dopo. Per questo il diario
+ * registra ENTRAMBI i lati (richiesta accettata E il suo esito finale),
+ * non solo l'accettazione: un buco fra i due è la prova che la sintesi
+ * comincia e non finisce mai, non un'ipotesi.
+ *
+ * Registra il PUNTO (richiesta accettata/rifiutata dal nativo, evento
+ * `done`/`error` arrivato) non il TESTO letto — la frase dell'utente non
+ * appartiene a un diario diagnostico.
+ */
+const VOICE_DIARIO_MAX = 16
+const voiceDiario: string[] = []
+
+function talosVoceDiarioAnnota(evento: string): void {
+    const ora = talosIstante()
+    voiceDiario.push(`${ora} ${evento}`)
+    if (voiceDiario.length > VOICE_DIARIO_MAX) voiceDiario.shift()
+    talosTracciaFuori(`[voce] ${evento}`, ora)
+}
+
+/** Le ultime transizioni della voce personale, dalla più vecchia. Vuoto se non è mai stata usata in questa sessione dell'app. */
+export function talosPersonalVoiceDiario(): readonly string[] {
+    return [...voiceDiario]
+}
 
 export interface TalosVoiceEnrollmentStageMetric {
     stage: string
@@ -341,7 +383,14 @@ export async function talosBuildVoiceEnrollmentProfile(options: {
 }
 
 export async function talosPreviewVoiceEnrollmentProfile(text: string, readingId: string): Promise<{ accepted: boolean }> {
-    return plugin.previewEnrollmentProfile({ text, readingId })
+    // ⛔ Owner 24/8: proprio QUESTO percorso — l'anteprima nel wizard di
+    // arruolamento — è quello segnalato come muto. Prima registrazione
+    // possibile: se `accepted` è già `false` qui, il nativo ha rifiutato
+    // subito e il silenzio non è mai arrivato alla sintesi.
+    await armPersonalVoiceListeners()
+    const result = await plugin.previewEnrollmentProfile({ text, readingId })
+    talosVoceDiarioAnnota(`preview:${readingId} accepted:${result.accepted}`)
+    return result
 }
 
 export async function talosCommitVoiceEnrollmentProfile(): Promise<TalosPersonalVoiceProfileSummary> {
@@ -371,10 +420,12 @@ function armPersonalVoiceListeners(): Promise<void> {
     if (!personalVoiceListenersArmed) {
         personalVoiceListenersArmed = Promise.all([
             talosOnPersonalVoiceDone((readingId) => {
+                talosVoceDiarioAnnota(`done:${readingId}`)
                 pendingPersonalVoiceReadings.get(readingId)?.onend?.()
                 pendingPersonalVoiceReadings.delete(readingId)
             }),
             talosOnPersonalVoiceError((readingId, error) => {
+                talosVoceDiarioAnnota(`errore:${readingId}${error ? ` ${error}` : ''}`)
                 pendingPersonalVoiceReadings.get(readingId)?.onerror?.(error)
                 pendingPersonalVoiceReadings.delete(readingId)
             }),
@@ -417,6 +468,7 @@ export function talosPersonalVoiceSpeechAdapter(profileId: string): TalosSpeechS
                 pitch: options.pitch ?? 1,
                 queue: options.queue,
             })
+            talosVoceDiarioAnnota(`speak(adapter):${readingId} accepted:${result.accepted}${result.reason ? ` reason:${result.reason}` : ''}`)
             if (!result.accepted) {
                 pendingPersonalVoiceReadings.delete(readingId)
                 options.onerror?.(result.reason)
@@ -516,11 +568,13 @@ export async function talosSpeakForReading(
             source: options.source,
             locale: options.locale,
         })
+        talosVoceDiarioAnnota(`speak(${options.source ?? 'chat'}):${utteranceId} accepted:${result.accepted}${result.reason ? ` reason:${result.reason}` : ''}`)
         if (!result.accepted) {
             pendingPersonalVoiceReadings.delete(utteranceId)
             return false
         }
-    } catch {
+    } catch (cause) {
+        talosVoceDiarioAnnota(`speak(${options.source ?? 'chat'}):${utteranceId} lanciato:${String(cause).slice(0, 120)}`)
         pendingPersonalVoiceReadings.delete(utteranceId)
         return false
     }
