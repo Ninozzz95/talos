@@ -166,3 +166,41 @@
   o `rottoAltrove`. Non e' un confronto prima/dopo (talos non aveva mai
   corso questo task nella campagna originale), ma prova che Stadio A non
   impedisce di risolvere un task vero quando il ragionamento regge.
+
+## 2026-08-24 — voce personale, "Codifica la voce" rotta al 100%, non un caso raro
+- Screenshot dal Pad: `TalosPocketEnrollmentProfileBuilder.kt:90-92` aveva
+  `require(acceptedPhrases.none(::cancelled)) { "a cancelled capture cannot
+  be used for voice enrollment" }`, mostrato GREZZO in inglese sullo schermo
+  italiano (`buildError.value = cause.message`, tre siti nello stesso file).
+- Tracciato end-to-end, 6 file: `TalosVoiceRecorder.kt` marca
+  `cancelled=true` ogni volta che il ciclo si ferma perche' `isCancelled()`
+  torna true — ed `e' esattamente il segnale che parte a OGNI `pointerup`
+  (rilascio deliberato del pulsante "tieni premuto per registrare"), non
+  solo su un'interruzione vera. `TalosVoiceQuality.evaluate()` non legge mai
+  `.cancelled`. `TalosNeuralVoicePlugin.kt` non filtra `enrollmentSlots` per
+  quel campo. ⇒ **ogni frase registrata nel modo previsto (rilascio del
+  pulsante) porta `cancelled=true` fino al build**, e il `require()` la
+  respingeva SEMPRE, non in un caso limite. Confermato via ricerca web (spec
+  W3C Pointer Events): `pointerup` = rilascio deliberato, `pointercancel` =
+  interruzione di sistema — semanticamente diversi, ma
+  `TalosMobilePersonalVoiceEnrollment.vue` li instradava allo stesso
+  `stopRecording()`, perdendo la distinzione prima che raggiungesse il nativo.
+- Zero test, in nessuna direzione, esercitavano quel `require()` (verificato
+  a grep sull'intero file di test) — il difetto non poteva essere visto
+  finché qualcuno non registrava 12 frasi vere.
+- Cura: rimosso il `require()` rotto (la vera protezione resta
+  `TalosVoiceQuality.evaluate()`, che già copre durata/silenzio/clipping/DC
+  offset), due chiavi i18n nuove (`buildFailed`/`saveFailed`, it+en) al posto
+  del messaggio grezzo, 2 test di regressione nuovi (PVOICE-UI-12/13) che
+  provano SIA il testo localizzato SIA l'assenza della stringa nativa a
+  schermo — prima non esisteva nessuna prova in nessuna delle due direzioni.
+  Verificato: Kotlin 8/8, vitest componente 13/13, `npm run build` pulito
+  (612.822 B, sotto i 613.000), typecheck pulito. APK debug consegnato
+  spezzato per conferma sul Pad — non ancora verificato da una voce reale.
+- Trovato guardando lo STESSO screenshot, non ancora curato: il banner verde
+  "Verifica sull'insieme superata" (`reviewTitle`/`reviewPassed`) e' mostrato
+  SEMPRE allo stage 'review', senza nessuna chiamata reale dietro — il vero
+  cancello sull'insieme unito gira solo dentro `build()`, DOPO. E il catch di
+  `onMounted` scrive `buildError` mentre lo stage e' ancora 'consent', dove
+  il template non lo mostra mai: un errore di avvio del plugin sparirebbe
+  in silenzio.

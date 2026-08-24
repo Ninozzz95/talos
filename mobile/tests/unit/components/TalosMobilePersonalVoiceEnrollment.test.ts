@@ -472,4 +472,71 @@ describe('TalosMobilePersonalVoiceEnrollment', () => {
         expect(wrapper.emitted('committed')?.[0]).toEqual([summary])
         expect(wrapper.emitted('close')).toBeTruthy()
     })
+
+    /**
+     * ⛔⛔⛔ Trovato 24/8, live sul Pad: uno screenshot mostrava il messaggio
+     * nativo Kotlin GREZZO ("a cancelled capture cannot be used for voice
+     * enrollment") in mezzo a uno schermo italiano - `encodeVoice()` scriveva
+     * `cause.message` direttamente in `buildError`. Prima di questa prova,
+     * NESSUN test in questo file mandava `buildVoiceEnrollmentProfile` in
+     * rifiuto: il cammino d'errore non aveva copertura in nessuna direzione.
+     * Il messaggio finto qui sotto è VERO - lo stesso testo esatto che il
+     * `require()` nativo produceva prima della cura in
+     * `TalosPocketEnrollmentProfileBuilder.kt`.
+     */
+    it('PVOICE-UI-12 a failed encode shows the localized message, never the raw native string', async () => {
+        bridge.buildVoiceEnrollmentProfile.mockRejectedValueOnce(
+            new Error('a cancelled capture cannot be used for voice enrollment'),
+        )
+        const wrapper = mount(TalosMobilePersonalVoiceEnrollment, {
+            props: { existingProfileCount: 0 },
+            global: { stubs: { teleport: true } },
+        })
+        await flushPromises()
+        await advanceToWizard(wrapper)
+        for (let i = 0; i < 12; i++) {
+            await recordOnePhrase(wrapper)
+            await wrapper.get('[data-testid="talos-personal-voice-next"]').trigger('click')
+        }
+        await wrapper.get('[data-testid="talos-personal-voice-name"]').setValue('Antonino')
+
+        await wrapper.get('[data-testid="talos-personal-voice-encode"]').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.text()).toContain('The encoding did not finish. Try again.')
+        expect(wrapper.text()).not.toContain('cancelled capture')
+        // ⛔ Torna a 'review', non resta bloccato su 'process' - la persona
+        // deve poter riprovare, non fissare uno spinner morto.
+        expect(wrapper.find('[data-testid="talos-personal-voice-encode"]').exists()).toBe(true)
+    })
+
+    it('PVOICE-UI-13 a failed save shows the localized message, never the raw native string', async () => {
+        bridge.buildVoiceEnrollmentProfile.mockResolvedValue({
+            backend: 'pocket-v2', profileSchemaVersion: 2, sourceSampleRate: 48000,
+            sourceSamples: 768000, referenceSamples: 576000, referenceDurationMs: 12000,
+            conditioningFrames: 150, conditioningDimension: 1024, enrollmentDurationMs: 24000, stages: [],
+        })
+        bridge.commitVoiceEnrollmentProfile.mockRejectedValueOnce(new Error('profile store write failed'))
+        const wrapper = mount(TalosMobilePersonalVoiceEnrollment, {
+            props: { existingProfileCount: 0 },
+            global: { stubs: { teleport: true } },
+        })
+        await flushPromises()
+        await advanceToWizard(wrapper)
+        for (let i = 0; i < 12; i++) {
+            await recordOnePhrase(wrapper)
+            await wrapper.get('[data-testid="talos-personal-voice-next"]').trigger('click')
+        }
+        await wrapper.get('[data-testid="talos-personal-voice-name"]').setValue('Antonino')
+        await wrapper.get('[data-testid="talos-personal-voice-encode"]').trigger('click')
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-personal-voice-save"]').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.text()).toContain('Saving did not finish. Try again.')
+        expect(wrapper.text()).not.toContain('profile store write failed')
+        expect(wrapper.emitted('committed')).toBeUndefined()
+        expect(wrapper.emitted('close')).toBeUndefined()
+    })
 })
