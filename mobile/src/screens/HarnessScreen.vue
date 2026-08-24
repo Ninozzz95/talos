@@ -12,42 +12,28 @@
  * the CSP (`frame-src 'none'`) already forbids embedding it, so this is not
  * a fresh mechanism, only a real router entry reaching the one already
  * decided when the debug Settings link first shipped.
+ *
+ * `embedded` (24/8, sidebar refactor): owner, after watching the real Claude
+ * app — one physical sidebar slot, contextual content, not two panels side
+ * by side. TalosTabletSidebar.vue mounts THIS component here, in place of
+ * ChatsScreen, when the active station is Harness — same idiom ChatsScreen
+ * already uses for its own `embedded` prop (no TalosMobileScreen chrome:
+ * that shell's own H1/opaque background are right for a routed station, and
+ * wrong for a panel that already lives inside the rail's translucent header).
+ * Demo data lives in `@/lib/harnessDemoSessions` (not declared here anymore)
+ * so the tablet redirect below (App.vue, mirroring talosTabletLeavesChatsRoute)
+ * reads the SAME list a person actually sees, never a second hardcoded id.
  */
 import { useRouter } from 'vue-router'
 import { useTalosI18n } from '@/i18n'
 import { FlaskConical } from '@lucide/vue'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
+import { HARNESS_DEMO_GROUPS, harnessDemoSessionsIn, type HarnessDemoSession } from '@/lib/harnessDemoSessions'
+
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 
 const router = useRouter()
 const { t } = useTalosI18n()
-
-/**
- * Demo content, on purpose not translated per locale: these are meant to
- * read like real engineering session names (a git branch, a task title),
- * exactly as they appear inside the mockup itself — translating them would
- * invent a fact ("this session exists in Italian too") that isn't true.
- */
-interface HarnessDemoSession {
-    id: string
-    title: string
-    meta: string
-    time: string
-    group: 'today' | 'yesterday' | 'week'
-}
-
-const DEMO_SESSIONS: readonly HarnessDemoSession[] = [
-    { id: 'refactor-auth-flow', title: 'Refactor auth flow', meta: '3 tool attivi · 1 min fa', time: '09:12', group: 'today' },
-    { id: 'audit-api-permissions', title: 'Audit API permissions', meta: 'review · 8 min fa', time: '08:42', group: 'today' },
-    { id: 'fix-mobile-composer', title: 'Fix mobile composer', meta: 'workspace · 9 h fa', time: '08:30', group: 'today' },
-    { id: 'prepare-release-notes', title: 'Prepare release notes', meta: 'archiviata · 15 h fa', time: '15:25', group: 'yesterday' },
-    { id: 'investigate-flaky-tests', title: 'Investigate flaky tests', meta: 'branch: fix/tests', time: 'Mar', group: 'week' },
-]
-
-const GROUPS = ['today', 'yesterday', 'week'] as const
-
-function sessionsIn(group: typeof GROUPS[number]): readonly HarnessDemoSession[] {
-    return DEMO_SESSIONS.filter((session) => session.group === group)
-}
 
 function openSession(session: HarnessDemoSession): void {
     void router.push({ name: 'harness-session', params: { id: session.id } })
@@ -55,7 +41,7 @@ function openSession(session: HarnessDemoSession): void {
 </script>
 
 <template>
-    <TalosMobileScreen :title="t('navigation.harness')" data-testid="talos-harness-screen">
+    <TalosMobileScreen :title="t('navigation.harness')" :embedded="embedded" data-testid="talos-harness-screen">
         <div class="flex flex-col gap-4">
             <p
                 data-testid="talos-harness-demo-notice"
@@ -65,13 +51,13 @@ function openSession(session: HarnessDemoSession): void {
                 <span>{{ t('harness.demoNotice') }}</span>
             </p>
 
-            <div v-for="group in GROUPS" :key="group">
-                <template v-if="sessionsIn(group).length">
+            <div v-for="group in HARNESS_DEMO_GROUPS" :key="group">
+                <template v-if="harnessDemoSessionsIn(group).length">
                     <p class="px-1 pb-1 text-2xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
                         {{ t(`harness.groups.${group}`) }}
                     </p>
                     <ul class="flex flex-col gap-0.5">
-                        <li v-for="session in sessionsIn(group)" :key="session.id">
+                        <li v-for="session in harnessDemoSessionsIn(group)" :key="session.id">
                             <button
                                 type="button"
                                 data-testid="talos-harness-row"

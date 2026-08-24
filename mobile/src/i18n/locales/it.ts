@@ -3440,6 +3440,10 @@ export const TALOS_IT_MESSAGES = {
         dismissNotification: 'Chiudi notifica',
         loadingTalos: 'Caricamento di TALOS',
         chatsPanel: 'Pannello chat',
+        // F6, refactor sidebar (24/8): l'etichetta del rail tablet quando
+        // mostra le sessioni Harness invece della chat — deve dire cosa c'è
+        // davvero a schermo, stesso principio di chatsPanel sopra.
+        harnessPanel: 'Pannello Harness',
     },
     shell: {
         sidebarDescription: 'Chat, strumenti e impostazioni',

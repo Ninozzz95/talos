@@ -4,6 +4,7 @@ import {
     TALOS_TABLET_SIDEBAR_MAX,
     TALOS_TABLET_SIDEBAR_MIN,
     clampTalosTabletSidebarWidth,
+    talosTabletLeavesHarnessListRoute,
 } from '@/lib/tabletLayout'
 import {
     parseTalosMobileSettings,
@@ -52,6 +53,33 @@ describe('clampTalosTabletSidebarWidth (F6)', () => {
         expect(clampTalosTabletSidebarWidth(Number.NaN)).toBe(TALOS_TABLET_SIDEBAR_DEFAULT)
         expect(clampTalosTabletSidebarWidth(Number.POSITIVE_INFINITY)).toBe(TALOS_TABLET_SIDEBAR_DEFAULT)
         expect(clampTalosTabletSidebarWidth(null)).toBe(TALOS_TABLET_SIDEBAR_DEFAULT)
+    })
+})
+
+// F6 sidebar refactor (24/8): mirrors talosTabletLeavesChatsRoute's own tests
+// below (same shape, same reason — the rail is now contextual and already
+// shows this list, so the bare route in the main pane would duplicate it).
+describe('talosTabletLeavesHarnessListRoute (F6 sidebar refactor)', () => {
+    it('leaves the bare harness list route on tablet', () => {
+        expect(talosTabletLeavesHarnessListRoute(true, 'harness')).toBe(true)
+    })
+
+    it('stays on harness-session (the detail route) even on tablet', () => {
+        expect(talosTabletLeavesHarnessListRoute(true, 'harness-session')).toBe(false)
+    })
+
+    it('never redirects on phone', () => {
+        expect(talosTabletLeavesHarnessListRoute(false, 'harness')).toBe(false)
+    })
+
+    it('never redirects other stations', () => {
+        expect(talosTabletLeavesHarnessListRoute(true, 'chats')).toBe(false)
+        expect(talosTabletLeavesHarnessListRoute(true, 'memory')).toBe(false)
+    })
+
+    it('a route name not yet resolved does not decide (first router tick)', () => {
+        expect(talosTabletLeavesHarnessListRoute(true, null)).toBe(false)
+        expect(talosTabletLeavesHarnessListRoute(true, undefined)).toBe(false)
     })
 })
 

@@ -18,8 +18,21 @@ withDefaults(defineProps<{
      * Compact/mobile layout retains this shell's established gutter/scroller.
      */
     tabletEdgeToEdge?: boolean
+    /**
+     * F6 sidebar refactor (24/8): mounted as a persistent panel's OWN content
+     * (the tablet rail showing Harness instead of chats — TalosTabletSidebar.vue),
+     * not as a routed/sheeted station. Same reason `insideSheet` already hides
+     * this shell's H1 ("one title per surface"): the rail already has a brand
+     * header. Also drops the opaque background — the rail is translucent
+     * (`bg-[var(--talos-sidebar)]/60 backdrop-blur-sm`), and painting over it
+     * would defeat the blur, exactly the "un casino" look the owner rejected
+     * for the mockup's own duplicate sidebar. ChatsScreen, the rail's other
+     * variant, never had this problem because it never used this shell at all.
+     */
+    embedded?: boolean
 }>(), {
     tabletEdgeToEdge: false,
+    embedded: false,
 })
 const insideSheet = inject(TALOS_SHEET_CONTEXT_KEY, false)
 </script>
@@ -32,9 +45,10 @@ const insideSheet = inject(TALOS_SHEET_CONTEXT_KEY, false)
     <section
         data-testid="mobile-screen"
         :aria-label="title"
-        class="flex h-full flex-col bg-[var(--talos-background)] text-[var(--talos-text)]"
+        class="flex h-full flex-col text-[var(--talos-text)]"
+        :class="embedded ? '' : 'bg-[var(--talos-background)]'"
     >
-        <header v-if="!insideSheet" class="border-b border-[var(--talos-border)] p-4">
+        <header v-if="!insideSheet && !embedded" class="border-b border-[var(--talos-border)] p-4">
             <p
                 v-if="eyebrow"
                 data-testid="mobile-screen-eyebrow"

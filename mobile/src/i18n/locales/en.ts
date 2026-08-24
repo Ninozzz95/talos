@@ -3313,6 +3313,10 @@ export const TALOS_EN_MESSAGES = {
         dismissNotification: 'Dismiss notification',
         loadingTalos: 'Loading TALOS',
         chatsPanel: 'Chats panel',
+        // F6 sidebar refactor (24/8): the tablet rail's label when it shows
+        // Harness sessions instead of chats — must say what is actually on
+        // screen, same principle as chatsPanel above.
+        harnessPanel: 'Harness panel',
     },
     shell: {
         sidebarDescription: 'Chats, tools and settings',

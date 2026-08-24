@@ -533,6 +533,16 @@ import { resolve } from 'node:path'
  * ⇒ 614.000 e non 613.600: quattrocento byte di margine sono la stessa
  * trappola sotto la prossima riga descritta piu' volte in questo file.
  * Mille lascia margine vero.
+ *
+ * ⛔ Stesso giorno, refactor della sidebar (owner: rail tablet contestuale,
+ * TalosTabletSidebar.vue mostra HarnessScreen invece della chat quando la
+ * stazione e' Harness). Rimisurato PRIMA di toccare questo tetto: il peso
+ * nuovo era `HARNESS_DEFAULT_SESSION_ID` importato da App.vue (eager) da
+ * `harnessDemoSessions.ts` — che pero' porta con se', a runtime, l'intero
+ * array delle cinque sessioni demo (Rollup non puo' costante-piegare una
+ * lettura per indice). Tolto il peso vero: la costante ora vive da sola in
+ * `harnessDefaultSession.ts`, mai importata insieme all'array. Misurato
+ * dopo: 613.751 — dentro il tetto attuale, tetto INVARIATO.
  */
 const DEFAULT_MAXIMUM_BYTES = 614_000
 const DEFAULT_MAXIMUM_CSS_BYTES = 220_000

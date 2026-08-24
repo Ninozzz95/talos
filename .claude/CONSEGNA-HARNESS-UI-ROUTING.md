@@ -481,4 +481,92 @@ leggendo i byte PNG reali, non il nome del file (vedi "Correzione" sopra).
   prova — fatto per il telefono TALOS (entrambi gli orientamenti) e per
   i due file di correzione Claude; resta da fare per il tablet TALOS con
   l'architettura finale.
-- `git status --short` + commit (non ancora fatto in questa sessione).
+- ✅ `git status --short` + commit — fatto, tre commit scoped (routing/
+  sidebar/screens nativi; shadow root + fusione mockup + font; consegna),
+  lasciati intatti i file di un altro lavoro in corso nello stesso repo
+  (`.claude/CONSEGNA-MOTORE-LOCALE-MAX-PERFORMANCE.md`,
+  `.claude/DECISIONI-CODEX-HARNESS-UI.md` e i quattro documenti di
+  coordinamento Codex — nessuno toccato).
+
+## Sidebar contestuale — il refactor vero, owner 24/8 «procedi da solo»
+
+La proposta lasciata aperta sopra ("non ancora deciso/implementato") è
+stata approvata e implementata: **la stessa fetta di sidebar tablet
+(`TalosTabletSidebar.vue`) ora mostra contenuto diverso secondo la
+stazione attiva**, invece di un rail chat sempre uguale accanto a
+Harness. Stesso pattern osservato su Claude vero (ricognizione sopra):
+un solo slot, contenuto contestuale, mai due pannelli affiancati.
+
+**Come funziona**: `App.vue` calcola `tabletRailVariant` dalla STESSA
+funzione che già decide `tabletChatRailVisible`/`isStation`
+(`talosMobileStationOf(activeRoute)` — mai una seconda lettura di
+rotta) e lo passa come prop `variant` a `TalosTabletSidebar`, che monta
+`<HarnessScreen embedded>` invece di `<ChatsScreen embedded>` quando
+`variant === 'harness'`. L'header del rail (hamburger, wordmark, campanella)
+resta fisso in entrambi i casi — solo il corpo cambia, esattamente come
+l'hamburger di Claude resta lì mentre il contenuto sotto cambia.
+
+**`HarnessScreen.vue` ha ora un prop `embedded`** (stesso nome/idioma di
+`ChatsScreen`), che disattiva la chrome di `TalosMobileScreen` (niente
+H1 proprio, niente sfondo opaco — il rail è già `bg-[var(--talos-sidebar)]/60
+backdrop-blur-sm`, uno sfondo opaco sopra avrebbe vanificato la sfocatura,
+lo stesso "casino" già corretto altrove) invece di duplicare la struttura
+in due rami di template: `TalosMobileScreen.vue` stesso ha guadagnato il
+prop `embedded` (default `false`, **zero regressione per gli altri ~10
+consumatori** — Settings, Memoria, Note, ecc. non lo passano mai).
+
+**LISTA-DOPPIA-01, di nuovo, per Harness**: la stessa domanda già
+risposta per `chats`→`chat` (il rail mostra già l'elenco, restare sulla
+rotta-elenco nuda nel riquadro principale lo disegnerebbe due volte) si
+ripropone identica per `harness`. Nuova funzione gemella
+`talosTabletLeavesHarnessListRoute` in `tabletLayout.ts`, stesso
+watcher in App.vue: su tablet, `/harness` nudo reindirizza a
+`harness-session` con `HARNESS_DEFAULT_SESSION_ID` (il primo demo,
+"Refactor auth flow").
+
+**Il peso eager, misurato PRIMA di alzare il tetto (di nuovo)**: il primo
+tentativo di build ha sforato il tetto (614.000 → 614.413). Causa:
+`HARNESS_DEFAULT_SESSION_ID` derivato da `HARNESS_DEMO_SESSIONS[0].id`
+dentro `harnessDemoSessions.ts`, importato da App.vue (eager) — Rollup
+non può costante-piegare una lettura per indice, quindi l'intero array
+delle cinque sessioni demo (titoli/meta/orari) viaggiava nel chunk
+iniziale solo per UNA stringa. Tolto il peso vero: la costante vive ora
+da sola in `harnessDefaultSession.ts` (mai importato insieme
+all'array); `harnessDemoSessions.test.ts` asserisce che le due
+restino uguali, cosi il taglio non puo' derivare in silenzio. Misurato
+dopo: 613.751 — tetto INVARIATO a 614.000, nessun bisogno di alzarlo.
+
+**Verificato sul Pad reale, tablet verticale E orizzontale** (screenshot
++ letture dirette del DOM via CDP, non solo l'occhio):
+- `data-talos-tablet-sidebar-variant` sull'`<aside>` passa da `chat` a
+  `harness` correttamente; `aria-label` passa da "Pannello chat" a
+  "Pannello Harness" (mai un'etichetta che dichiara il contrario di
+  cosa c'e' a schermo, la stessa disciplina gia' applicata allo
+  screenshot Claude corretto sopra).
+- Tocco vero sulla voce "Harness" del cassetto (hamburger del rail) →
+  atterra DIRETTAMENTE su una sessione (mai sulla lista nuda duplicata),
+  confermato leggendo `location.href` via CDP:
+  `.../harness/refactor-auth-flow`.
+- Tocco vero su una riga diversa nel rail incorporato ("Audit API
+  permissions") → il riquadro principale naviga alla sessione giusta
+  (`location.href` → `.../harness/audit-api-permissions`); il contenuto
+  visivo del mockup non cambia — limite GIA' documentato e fuori ambito
+  (§5 del piano originale: "un solo documento statico, l'id si legge
+  solo per diagnosi"), non una regressione di oggi.
+- Nessuna doppia sidebar, nessun pannello sessioni duplicato: `hasChatsScreen`
+  e' `false` quando il variant e' `harness`, e viceversa — mai insieme.
+- Telefono verticale: percorso NON incorporato invariato (il rail non
+  esiste sul telefono), nessuna regressione visiva sulla lista Harness
+  originale.
+
+**Rilievo incidentale, NON di oggi, NON corretto (fuori ambito)**: toccare
+una chat ESISTENTE dal cassetto hamburger (`TalosMobileSidebar.vue`,
+MAI toccato in questo refactor) mentre la stazione attiva e' Harness non
+naviga via a `chat` — confermato non essere un mio errore di mira
+(un `.click()` reale via CDP sull'elemento giusto da' lo stesso esito,
+`location.href` invariato). Le voci STRUMENTI dello stesso cassetto
+(Harness, Ricerca approfondita) navigano correttamente dallo stesso
+cassetto, quindi il difetto e' ristretto alla selezione di una chat
+gia' esistente, non al cassetto in generale. Segnalato per l'owner,
+non indagato oltre: componente diverso da quello di questo refactor,
+nessun ordine di toccarlo.
