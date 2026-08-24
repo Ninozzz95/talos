@@ -1,4 +1,18 @@
-:root {
+/*
+ * Owner 24/8: `:root` → `:host` in tutto il file (5 occorrenze). Montato
+ * dentro uno shadow root da `HarnessSessionScreen.vue`, `:root` in un
+ * foglio di questo shadow root punterebbe SEMPRE all'`<html>` reale della
+ * pagina — non all'host — e le variabili di tema finirebbero sul documento
+ * sbagliato (o peggio: `:host` dichiara le proprietà DIRETTAMENTE
+ * sull'host, e una dichiarazione diretta batte sempre un valore ereditato,
+ * quindi qualunque tentativo di leggerle/scriverle da `document.documentElement`
+ * in app.js sarebbe stato sovrascritto in silenzio). Vedi `HOST()` in
+ * app.js. Le proprietà personalizzate attraversano il confine dello shadow
+ * DOM per ereditarietà normale: dichiararle su `:host` le rende visibili a
+ * tutti i discendenti dentro l'albero, esattamente come faceva `:root` per
+ * l'intera pagina prima.
+ */
+:host {
   --bg: #1e1f22;
   --bg-deep: #17181b;
   --surface: #25262a;
@@ -34,6 +48,97 @@
   --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
+/*
+ * Font files, real ones — MISURATO il 24/8: senza queste regole
+ * `document.fonts.size` era 0 su questo documento (verificato via CDP), quindi
+ * "Instrument Sans"/"JetBrains Mono" nella dichiarazione qui sopra non
+ * caricavano MAI niente — cadevano silenziosamente sul sans-serif/monospace
+ * di sistema. Stessi file, stessi pesi (400/500/600 UI, 400/500 mono) che
+ * l'app reale porta con se' (@fontsource/instrument-sans,
+ * @fontsource/jetbrains-mono) — copiati qui perche' questo documento e'
+ * statico e non passa dal bundler che darebbe loro un nome con hash.
+ */
+@font-face {
+  font-family: 'Instrument Sans';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url(./fonts/instrument-sans-latin-ext-400-normal.woff2) format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Instrument Sans';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url(./fonts/instrument-sans-latin-400-normal.woff2) format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+  font-family: 'Instrument Sans';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url(./fonts/instrument-sans-latin-ext-500-normal.woff2) format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Instrument Sans';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url(./fonts/instrument-sans-latin-500-normal.woff2) format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+  font-family: 'Instrument Sans';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url(./fonts/instrument-sans-latin-ext-600-normal.woff2) format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Instrument Sans';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url(./fonts/instrument-sans-latin-600-normal.woff2) format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url(./fonts/jetbrains-mono-latin-ext-400-normal.woff2) format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url(./fonts/jetbrains-mono-latin-400-normal.woff2) format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url(./fonts/jetbrains-mono-latin-ext-500-normal.woff2) format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url(./fonts/jetbrains-mono-latin-500-normal.woff2) format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+
 * { box-sizing: border-box; }
 
 [data-demo-surface] { position: relative; }
@@ -56,9 +161,17 @@
   pointer-events: none;
   box-shadow: 0 4px 16px rgb(0 0 0 / .18);
 }
-html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-ui); }
-html { scrollbar-color: var(--line-strong) var(--bg); overflow: hidden; }
-body { min-height: 100dvh; overflow: hidden; }
+/*
+ * Owner 24/8: qui c'erano `html`/`body` come selettori nudi — puntano
+ * SEMPRE al vero `<html>`/`<body>` della pagina, mai a un antenato dentro
+ * lo shadow root; dentro il foglio di questo componente non avrebbero
+ * selezionato niente del componente stesso. Tradotti in `:host`, l'elemento
+ * che QUESTO shadow root veste davvero. `100dvh` (l'intero schermo)
+ * diventa `height:100%` — il componente ora vive dentro un contenitore che
+ * gli da Vue (sotto l'intestazione di TalosMobileToolSheet), non è più lui
+ * il documento intero.
+ */
+:host { display: block; margin: 0; min-height: 100%; height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-ui); scrollbar-color: var(--line-strong) var(--bg); overflow: hidden; }
 button, input, textarea { font: inherit; }
 button { color: inherit; }
 button, [role="button"] { -webkit-tap-highlight-color: transparent; }
@@ -83,8 +196,26 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 
 .brand-row, .topbar, .inspector-head { min-height: var(--topbar-h); display: flex; align-items: center; }
 .brand-row { padding: 0 16px; gap: 10px; border-bottom: 1px solid rgba(255,255,255,.025); }
-.brand-mark, .talos-glyph, .mini-brand { color: var(--accent-2); font-weight: 800; font-style: italic; letter-spacing: -.08em; }
-.brand-mark { font-size: 27px; width: 30px; text-align: center; }
+.brand-mark, .talos-glyph, .mini-brand { color: var(--accent-2); }
+.brand-mark { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; }
+.mini-brand { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; vertical-align: -5px; }
+/*
+ * Il marchio vero, non piu' la lettera "T" — MISURATO il 24/8: il brief
+ * (§3.4/3.6) chiede asset reali, e questo era un placeholder testuale mentre
+ * l'app vera disegna il totem di mobile/public/talos/brand/logo-short.svg via
+ * CSS mask (.talos-short-logo-mark in mobile/src/style.css). Stesso file,
+ * stesso meccanismo — servito dalla stessa origine di questo documento.
+ */
+.brand-glyph-mark {
+  display: block;
+  background: currentColor;
+  mask: url('/talos/brand/logo-short.svg') center / contain no-repeat;
+  -webkit-mask: url('/talos/brand/logo-short.svg') center / contain no-repeat;
+}
+.brand-mark .brand-glyph-mark { width: 20px; height: 20px; }
+.talos-glyph .brand-glyph-mark { width: 14px; height: 14px; }
+.mini-brand .brand-glyph-mark { width: 13px; height: 13px; }
+.avatar .brand-glyph-mark { width: 20px; height: 20px; }
 .brand-copy { display: flex; flex-direction: column; line-height: 1; margin-right: auto; }
 .brand-copy strong { font-size: 18px; letter-spacing: .02em; }
 .brand-copy span { font-size: 10px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .16em; }
@@ -142,7 +273,20 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 .title-button strong { max-width: 270px; font-size: 13px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .title-button small { color: var(--muted); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .title-button svg { width: 16px; height: 16px; color: var(--muted); }
-.context-chip { min-height: 36px; max-width: 230px; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); border-radius: 10px; display: inline-flex; align-items: center; gap: 7px; padding: 0 10px; cursor: pointer; font-size: 11px; }
+/*
+ * TROVATO il 24/8 con un ridimensionamento vero: allargando le sessioni
+ * a 365px (dentro il limite 220–420, non un estremo), il chip del branch
+ * finiva sopra il tab "Board" — `elementFromPoint` lo confermava, 17px di
+ * sovrapposizione reale. Causa: `.topbar-right` è un figlio flex, ha già
+ * `min-width:0` (sopra), ma il chip stesso no — un elemento flex, senza
+ * `min-width:0` proprio, non si restringe mai sotto la dimensione del suo
+ * contenuto, qualunque cosa dica `text-overflow` sullo span (quella regola
+ * esiste già, riga sotto, ma non scattava mai perché il chip non si
+ * restringeva abbastanza da averne bisogno). Prima del 24/8 la larghezza
+ * delle sessioni era fissa (292 o, sotto i 1280px, 268) — questo squeeze
+ * non era mai raggiungibile finché il trascinamento non l'ha reso reale.
+ */
+.context-chip { min-height: 36px; max-width: 230px; min-width: 0; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); border-radius: 10px; display: inline-flex; align-items: center; gap: 7px; padding: 0 10px; cursor: pointer; font-size: 11px; }
 .context-chip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .context-chip svg { width: 16px; height: 16px; }
 .mobile-only { display: none; }
@@ -474,7 +618,7 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 @keyframes toast-in { from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1} }
 
 @media (max-width: 1280px) {
-  :root { --sidebar: 268px; --inspector: 310px; }
+  :host { --sidebar: 268px; --inspector: 310px; }
   .environment-chip { display: none; }
   .mission-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
@@ -489,9 +633,18 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
   .settings-grid { grid-template-columns: 1fr 1fr; }
 }
 
-@media (min-width: 781px) and (max-width: 1100px) {
+/*
+ * Owner 24/8: il tetto originale (max-width:1100px) presumeva che oltre
+ * quella soglia il badge tornasse a stare comodo col posizionamento base
+ * (top:8px;right:8px) — ma quel numero (68px) è tarato sull'altezza di
+ * `.brand-row` (`var(--topbar-h)`, 64px + 4px di margine), non sulla
+ * larghezza del pannello, che non cambia sopra i 1100px. Tetto tolto:
+ * la deroga vale da 781px in su, senza fine. Vedi il commento sopra
+ * `.topbar, .brand-row, .inspector-head` per la scoperta sul dispositivo.
+ */
+@media (min-width: 781px) {
   .sessions-panel[data-demo-surface="sessions"] > .demo-surface-badge {
-    top: 68px;
+    top: calc(var(--topbar-h) + env(safe-area-inset-top) + 4px);
     right: auto;
     left: 14px;
   }
@@ -499,7 +652,7 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 }
 
 @media (max-width: 780px) {
-  body { overflow: hidden; }
+  :host { overflow: hidden; }
   .app-shell { display: block; }
   .sessions-panel { position: fixed; top: 0; left: 0; bottom: 0; width: min(330px, 88vw); transform: translateX(-102%); transition: transform .22s ease; z-index: 90; box-shadow: var(--shadow); }
   .sessions-panel.open { transform: translateX(0); }
@@ -590,7 +743,7 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 }
 
 @media (max-width: 430px) {
-  :root { --mobile-nav-h: 64px; }
+  :host { --mobile-nav-h: 64px; }
   .topbar { min-height: 56px; }
   .title-button strong { max-width: 48vw; }
   .mission-grid { grid-template-columns: 1fr 1fr; }
@@ -622,7 +775,15 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }
 
-body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+/*
+ * Owner 24/8: `body.reduce-motion`/`body.keyboard-open` (qui e più sotto)
+ * diventano `:host-context(body.X)` — l'unico modo per una regola DENTRO
+ * questo shadow root di reagire a una classe sul `<body>` reale, che sta
+ * FUORI dall'albero. `app.js` continua a scrivere quella classe sul body
+ * vero apposta (vedi HOST()/ROOT() più sopra in app.js): non è un refuso,
+ * è l'antenato che `:host-context` sa raggiungere.
+ */
+:host-context(body.reduce-motion) *, :host-context(body.reduce-motion) *::before, :host-context(body.reduce-motion) *::after { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 
 /* Feature-parity additions: session graph + GUI control plane */
 .session-topology { overflow: hidden; }
@@ -659,16 +820,131 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after 
   .topology-actions { grid-template-columns: 1fr; }
 }
 
+/*
+ * Sicurezza dell'area — MISURATO il 24/8 su un tablet vero (OnePlus Pad 3,
+ * OxygenOS 16): un TOCCO REALE (adb input tap, non un .click() sintetico)
+ * su "Board" non arrivava a destinazione, nonostante coordinate ed elemento
+ * fossero esatti — perché a quella Y il tocco fisico cadeva SOTTO la barra
+ * di stato di sistema (env(safe-area-inset-top) misura 40px su questo
+ * dispositivo). La regola sotto i 780px lo sapeva già (righe più sopra);
+ * qui — desktop/tablet — no. È esattamente il buco che un emulatore
+ * "mobile" del browser nasconde (inietta l'inset solo sui profili telefono)
+ * e un tablet vero mostra. Vedi [[tocchi-reali-adb-obbligatori]].
+ */
+.topbar, .brand-row, .inspector-head {
+  padding-top: env(safe-area-inset-top);
+  min-height: calc(var(--topbar-h) + env(safe-area-inset-top));
+}
+
+/*
+ * Stesso buco, un fratello diverso — TROVATO il 24/8 guardando lo
+ * screenshot vero (non ipotizzato): il badge "Demo UI · non collegato"
+ * delle sessioni (`.demo-surface-badge`) è `position:absolute` dentro
+ * `.sessions-panel`, non un figlio nel FLUSSO di `.brand-row` — la regola
+ * sopra sposta giù il contenuto di brand-row, ma non tocca questo
+ * fratello assoluto, che restava a `top:8px` dal bordo del pannello.
+ * Quando il pannello inizia al bordo fisico dello schermo (>1100px,
+ * nessuna delle due deroghe già scritte più sotto in questo file copre
+ * questa larghezza) il badge finiva SOTTO la barra di stato, a leggere
+ * sopra l'orologio di sistema invece che sopra "TALOS Harness".
+ *
+ * Prima cura (stesso giorno): spostare SOLO `top` di `env(safe-area-inset-top)`,
+ * lasciando `right:8px` della regola base. RIPROVATO sul dispositivo —
+ * usciva dalla barra di stato ma finiva DENTRO "TALOS · Harness": stesso
+ * spostamento di 40px applicato a un fratello assoluto che non condivide
+ * la riga del fratello nel flusso, due cose che si spostano di conserva
+ * non è la stessa cosa che due cose che restano compatibili.
+ *
+ * Cura vera: la deroga 781–1100px (sotto, `top:68px;left:14px` +
+ * `margin-top:26px` su `.session-actions`) risolve GIÀ la stessa
+ * collisione badge/brand-row — sposta il badge SOTTO la riga del marchio
+ * invece che sopra, e apre lo spazio nel flusso perché nessuno lo
+ * ricopra. Quel numero (68px) è tarato su `var(--topbar-h)` (64px) + 4px
+ * di margine, non sulla larghezza dello schermo — non aveva ragione di
+ * fermarsi a 1100px. Tolto il tetto superiore e reso `top` dipendente da
+ * `env()`: a inset zero torna esattamente 68px, identico a prima.
+ */
+
+/*
+ * Sessioni e inspector: comprimibili ED ridimensionabili con limiti —
+ * owner 24/8. L'inspector aveva già un comprimi (via il tasto nel topbar,
+ * .desktop-context-toggle → .inspector-collapsed più sotto in questo
+ * file); qui arriva lo stesso per le sessioni, e per entrambi il
+ * ridimensionamento a trascinamento reale, non solo i preset dei breakpoint.
+ */
+.desktop-only { display: inline-grid; }
+@media (max-width: 1040px) { .desktop-only { display: none; } }
+
+/*
+ * TROVATO il 24/8 con un trascinamento vero (adb input swipe), non
+ * ipotizzato: `elementFromPoint` sul centro esatto della maniglia
+ * restituiva `.chat-view`, mai la maniglia — lo `z-index:6` sotto non
+ * bastava. Causa: `.sessions-panel`/`.inspector-panel` hanno già
+ * `backdrop-filter` (sopra, riga ~170), che DA SOLO crea un contesto di
+ * stacking nuovo — indipendente da `position`+`z-index`. Senza uno
+ * z-index proprio sul pannello, l'INTERO pannello (maniglia compresa)
+ * resta nel livello "auto" e perde per ordine nel DOM contro `.chat-view`
+ * (anch'esso assoluto, anch'esso "auto", ma dichiarato dopo). Lo
+ * z-index:6 della maniglia non usciva mai da quel contenitore per
+ * competere. Cura: uno z-index esplicito qui, sul pannello stesso.
+ *
+ * ⛔⛔⛔ TROVATO il 24/8, stesso giro del telefono (owner: «te lo sei
+ * dimenticato»): questa regola era SENZA deroga, quindi il suo
+ * `position:relative` vinceva ANCHE sotto i 1040px — dove il pannello
+ * NON è più una colonna della griglia ma un cassetto (`.inspector-panel`
+ * diventa `position:fixed;transform:translateX(102%)`, sopra i 1040px
+ * quella regola non esiste). Uguale specificità, e questa riga viene
+ * DOPO nel file ⇒ vince lei, il cassetto resta `position:relative` e non
+ * scivola mai in scena: si tocca "Altro" nella nav mobile, lo sfondo si
+ * scurisce (`.overlay-backdrop.show`, tocca un'altra regola, invariata)
+ * ma il pannello non appare — schermo scuro senza via d'uscita visibile.
+ * La maniglia che questa regola protegge è comunque `display:none` sotto
+ * i 1040px (vedi `.panel-resize-handle` più sotto) — non serve lì.
+ */
+@media (min-width: 1041px) {
+  .sessions-panel, .inspector-panel { position: relative; z-index: 1; }
+}
+.panel-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 6;
+  background: transparent;
+}
+.panel-resize-handle:hover, .panel-resize-handle:focus-visible, .panel-resize-handle.dragging {
+  background: var(--accent-soft);
+  outline: none;
+}
+.sessions-panel .panel-resize-handle { right: -4px; }
+.inspector-panel .panel-resize-handle { left: -4px; }
+@media (max-width: 1040px) { .panel-resize-handle { display: none; } }
+
+/*
+ * Scoperto SOLO da 1041px in su, la stessa soglia della maniglia qui
+ * sopra: sotto, le sessioni sono già un pannello a comparsa
+ * (position:fixed più sotto in questo file) e il pulsante che aziona
+ * questa classe è nascosto (.desktop-only) — quindi la classe non è mai
+ * innescabile in quel range, e le regole già esistenti per il mobile
+ * restano le sole a decidere, senza che questa le scavalchi.
+ */
+@media (min-width: 1041px) {
+  .app-shell.sessions-collapsed { grid-template-columns: 0 minmax(0,1fr) var(--inspector); }
+  .app-shell.sessions-collapsed .sessions-panel { opacity: 0; pointer-events: none; overflow: hidden; border-right-color: transparent; }
+  .app-shell.sessions-collapsed.inspector-collapsed { grid-template-columns: 0 minmax(0,1fr) 0; }
+}
+
 /* --------------------------------------------------------------------------
    UI review pass 2026-08 — interaction, accessibility and responsive polish
    -------------------------------------------------------------------------- */
-:root {
+:host {
   --ease-standard: cubic-bezier(.2,.7,.2,1);
   --ease-emphasized: cubic-bezier(.16,1,.3,1);
 }
 
-html { text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
-body { overscroll-behavior: none; }
+:host { text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; overscroll-behavior: none; }
 ::selection { background: rgba(192,139,60,.32); color: var(--text); }
 .sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important; }
 
@@ -756,7 +1032,7 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 }
 
 @media (max-width: 780px) {
-  :root { --mobile-control: 44px; }
+  :host { --mobile-control: 44px; }
   .workspace-shell { height: 100dvh; min-height: 100dvh; }
   .topbar { min-height: calc(58px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
   .sessions-panel, .inspector-panel { padding-bottom: env(safe-area-inset-bottom); }
@@ -789,9 +1065,9 @@ button:disabled { cursor: not-allowed; opacity: .48; }
   .mobile-nav button { min-height: 52px; }
   .mobile-nav button[aria-current="page"] { color: var(--accent-2); background: var(--accent-soft); }
 
-  body.keyboard-open .mobile-nav { opacity: 0; transform: translateY(calc(100% + env(safe-area-inset-bottom))); pointer-events: none; }
-  body.keyboard-open .composer-wrap { bottom: 0; }
-  body.keyboard-open .conversation { padding-bottom: 160px; }
+  :host-context(body.keyboard-open) .mobile-nav { opacity: 0; transform: translateY(calc(100% + env(safe-area-inset-bottom))); pointer-events: none; }
+  :host-context(body.keyboard-open) .composer-wrap { bottom: 0; }
+  :host-context(body.keyboard-open) .conversation { padding-bottom: 160px; }
 
   .sheet-option { min-height: 60px; grid-template-columns: 42px minmax(0,1fr) auto; }
   .sheet-option .sheet-icon { width: 40px; height: 40px; }
@@ -880,4 +1156,54 @@ button:disabled { cursor: not-allowed; opacity: .48; }
   .campaign-summary { grid-template-columns: 1fr 1fr; gap: 6px; }
   .campaign-runs, .campaign-report, .legacy-dashboard-widgets { padding: 9px; }
   .campaign-run-detail { grid-template-columns: 1fr; }
+}
+
+/*
+ * Owner 24/8, dopo aver VISTO il mockup incorporato in TALOS mobile: due
+ * sidebar contemporaneamente — quella vera dell'app (chat, sempre presente
+ * su tablet: `TalosTabletSidebar.vue`, "Claude split-view pattern") e
+ * questa (sessioni), con marchio/campanella duplicati e, sul tablet, la
+ * larghezza reale ridotta a ~972px invece dei 1292 che questo file presume
+ * (le colonne leggono `window.innerWidth`, non quanto spazio le dà
+ * DAVVERO l'host — un limite noto delle media query contro un componente
+ * incorporato). Cercato lo stato dell'arte (micro-frontends.tech): il
+ * guscio possiede layout E navigazione, il contenuto incorporato non porta
+ * la sua — "critical for avoiding multiple navigation components
+ * rendering simultaneously". Fuse in una: `HarnessSessionScreen.vue`
+ * marca il suo host `.talos-embedded` PRIMA di iniettare questo foglio;
+ * `:host(.talos-embedded)` (lo schema che MDN documenta per "stessa web
+ * component, comportamento diverso dato dal genitore") fa sparire SOLO il
+ * pannello sessioni quando è incorporato — sfogliarle resta un tocco su
+ * `HarnessScreen.vue`, nativo, già costruito. L'apertura diretta del file
+ * per la revisione design (senza questa classe) resta il mockup completo
+ * di Codex, invariata.
+ *
+ * ⛔⛔⛔ TROVATO il 24/8, provando DAVVERO il viewport telefono (owner:
+ * «te lo sei dimenticato, è importantissimo») — non solo il tablet: la
+ * regola sotto per `.app-shell` era SENZA deroga di larghezza, quindi
+ * vinceva ANCHE sotto i 1040px, dove il mockup vuole l'inspector come
+ * cassetto fuori schermo (`position:fixed; transform:translateX(102%)`),
+ * non una colonna della griglia. Risultato misurato a 872px reali:
+ * `grid-template-columns: 462.7px 410px` — 410px riservati e VUOTI,
+ * perché il vero pannello era già stato spostato fuori dallo schermo dalla
+ * regola del mockup, lasciando un buco nero a metà telefono. La cura
+ * precedente presumeva "incorporato ⇒ sempre due colonne"; falso sotto i
+ * 1040px, dove il mockup sa già fare di meglio da solo — qui si toglie
+ * SOLO la colonna delle sessioni (ormai sempre nascosta), senza toccare
+ * il comportamento a cassetto dell'inspector.
+ */
+:host(.talos-embedded) .sessions-panel { display: none; }
+:host(.talos-embedded) #sessionsCollapseBtn,
+:host(.talos-embedded) [data-open-panel="sessions"] { display: none; }
+
+@media (min-width: 1041px) {
+  :host(.talos-embedded) .app-shell { grid-template-columns: minmax(0,1fr) var(--inspector); }
+  :host(.talos-embedded) .app-shell.inspector-collapsed { grid-template-columns: minmax(0,1fr) 0; }
+}
+
+@media (max-width: 1040px) {
+  /* Sessioni già a `display:none`: la griglia del mockup (252px per lei +
+     il resto) lascerebbe 252px vuoti. Una sola colonna, tutta al main —
+     l'inspector qui è già un cassetto fuori schermo per conto suo. */
+  :host(.talos-embedded) .app-shell { grid-template-columns: minmax(0,1fr); }
 }

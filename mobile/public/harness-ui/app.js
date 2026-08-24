@@ -1,8 +1,30 @@
 (() => {
   'use strict';
 
-  const $ = (selector, root = document) => root.querySelector(selector);
-  const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+  /*
+   * Owner 24/8: montato dentro uno shadow root da `HarnessSessionScreen.vue`
+   * (non più un documento a sé tramite `window.location.assign` — la stessa
+   * pagina resta la SPA, la cronologia resta condivisa, il tasto Indietro
+   * torna a essere quello vero di sempre). `HarnessSessionScreen.vue` pianta
+   * `window.__talosHarnessRoot` PRIMA di aggiungere questo script; ROOT()
+   * torna a `document` se qualcuno lo apre com'era prima (nessuna regressione
+   * per un test/anteprima diretto del file).
+   */
+  function ROOT() { return window.__talosHarnessRoot || document; }
+  /*
+   * `:root` nel CSS di questo file è diventato `:host` (vedi styles.css) —
+   * `:root` dentro un foglio di stile di uno shadow root punta SEMPRE
+   * all'`<html>` reale della pagina, non all'host: le variabili --sidebar
+   * ecc. sarebbero finite sul documento sbagliato, o peggio, `:host` le
+   * dichiara direttamente sull'host e una dichiarazione diretta batte
+   * SEMPRE un valore ereditato — scrivere su document.documentElement non
+   * avrebbe avuto alcun effetto visibile, sovrascritto in silenzio da
+   * `:host`. HOST() punta all'elemento giusto per leggere/scrivere queste
+   * proprietà personalizzate.
+   */
+  function HOST() { return window.__talosHarnessHost || document.documentElement; }
+  const $ = (selector, root = ROOT()) => root.querySelector(selector);
+  const $$ = (selector, root = ROOT()) => [...root.querySelectorAll(selector)];
 
   const state = {
     view: 'chat',
@@ -56,6 +78,7 @@
   const runStrip = $('.run-strip');
   const runStateToggle = $('#runStateToggle');
   const desktopInspectorToggle = $('.desktop-context-toggle');
+  const sessionsCollapseBtn = $('#sessionsCollapseBtn');
   const commandEmpty = $('#commandEmpty');
   const diffPath = $('#diffPath');
   const diffCode = $('#diffCode');
@@ -133,6 +156,22 @@
     }
     appShell.classList.toggle('inspector-collapsed');
     syncInspectorToggle();
+  }
+
+  // Owner 24/8: la sidebar sessioni comprimibile quanto l'inspector — stesso
+  // schema esatto, un solo pulsante desktop-only, nessuna scorciatoia nuova.
+  function syncSessionsToggle() {
+    const expanded = window.innerWidth <= 1040 || !appShell.classList.contains('sessions-collapsed');
+    sessionsCollapseBtn?.setAttribute('aria-expanded', String(expanded));
+  }
+
+  function toggleSessionsPanel() {
+    if (window.innerWidth <= 1040) {
+      openPanel('sessions');
+      return;
+    }
+    appShell.classList.toggle('sessions-collapsed');
+    syncSessionsToggle();
   }
 
   function openPanel(name) {
@@ -758,7 +797,11 @@
     const viewport = window.visualViewport;
     const rawOffset = viewport ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop) : 0;
     const keyboardOffset = rawOffset > 80 ? rawOffset : 0;
-    const composerFocused = document.activeElement === composerInput;
+    // ROOT().activeElement, non document.activeElement: dentro uno shadow
+    // root il focus reale si legge da lì (Document e ShadowRoot condividono
+    // l'interfaccia DocumentOrShadowRoot) — document.activeElement da fuori
+    // vedrebbe solo l'host, mai composerInput.
+    const composerFocused = ROOT().activeElement === composerInput;
     document.body.classList.toggle('keyboard-open', composerFocused && keyboardOffset > 0 && window.innerWidth <= 780);
   }
 
@@ -1017,7 +1060,7 @@
 
   $$('[data-collapse-target]').forEach((button) => {
     button.addEventListener('click', () => {
-      const target = document.getElementById(button.dataset.collapseTarget);
+      const target = ROOT().getElementById(button.dataset.collapseTarget);
       if (!target) return;
       const collapsed = target.classList.toggle('collapsed');
       button.setAttribute('aria-expanded', String(!collapsed));
@@ -1029,7 +1072,17 @@
     button.addEventListener('click', () => toggleToolDetail(button));
   });
 
-  document.addEventListener('click', (event) => {
+  /*
+   * Owner 24/8: era `document.addEventListener` — su tutta la pagina andava
+   * bene perché la pagina ERA il mockup. Montato nello shadow root, un
+   * ascoltatore su `document` riceverebbe l'evento RIETICHETTATO (event.target
+   * diventa l'host, non il bottone vero dentro — retargeting di spec) e
+   * continuerebbe ad ascoltare anche quando l'utente è altrove nell'app.
+   * Sullo shadow root invece l'evento porta il target vero, e l'ascoltatore
+   * smette di ricevere nulla da solo quando lo shadow root muore col
+   * componente Vue — nessuna pulizia esplicita necessaria per questi due.
+   */
+  ROOT().addEventListener('click', (event) => {
     const copyButton = event.target.closest('[data-copy-message]');
     if (copyButton) {
       const message = copyButton.closest('.message');
@@ -1214,7 +1267,7 @@
   });
   $('[data-action="clear-evidence"]')?.addEventListener('click', clearCampaignEvidence);
 
-  document.addEventListener('keydown', (event) => {
+  ROOT().addEventListener('keydown', (event) => {
     const mod = event.metaKey || event.ctrlKey;
     if (mod && event.key.toLowerCase() === 'k') {
       event.preventDefault();
@@ -1227,7 +1280,18 @@
     if (event.key === 'Escape' && (sessionsPanel.classList.contains('open') || inspectorPanel.classList.contains('open'))) closePanels();
   });
 
-  window.addEventListener('resize', () => {
+  /*
+   * Owner 24/8: questi tre, a differenza dei due sopra, vivono su `window` —
+   * escono dallo shadow root e NON muoiono col componente Vue. Prima (pagina
+   * a sé, `window.location.assign`) lasciare la pagina uccideva l'intero
+   * contesto JS, pulizia gratis. Ora no: se l'utente esce da Harness e resta
+   * su questi tre, `onResize` continuerebbe a leggere/scrivere pannelli di
+   * uno shadow root ormai smontato. `window.__talosHarnessDestroy()` li
+   * rimuove — `HarnessSessionScreen.vue` la chiama nel suo `onBeforeUnmount`,
+   * lo stesso contratto del "destroyer" che le app incorporate reali usano
+   * (es. PagerDuty: https://www.pagerduty.com/eng/react-embedded-apps/).
+   */
+  function onResize() {
     if (window.innerWidth > 1040) {
       inspectorPanel.classList.remove('open');
       backdrop.classList.remove('show');
@@ -1237,17 +1301,122 @@
     if (window.innerWidth > 780) sessionsPanel.classList.remove('open');
     syncInspectorToggle();
     syncVisualViewport();
-  });
-
+  }
+  window.addEventListener('resize', onResize);
   window.visualViewport?.addEventListener('resize', syncVisualViewport);
   window.visualViewport?.addEventListener('scroll', syncVisualViewport);
+  window.__talosHarnessDestroy = () => {
+    window.removeEventListener('resize', onResize);
+    window.visualViewport?.removeEventListener('resize', syncVisualViewport);
+    window.visualViewport?.removeEventListener('scroll', syncVisualViewport);
+    delete window.__talosHarnessDestroy;
+  };
   composerInput.addEventListener('focus', () => window.setTimeout(syncVisualViewport, 30));
   composerInput.addEventListener('blur', () => window.setTimeout(syncVisualViewport, 60));
+
+  sessionsCollapseBtn?.addEventListener('click', toggleSessionsPanel);
+
+  // Ridimensionamento reale delle due sidebar, con limiti — owner 24/8.
+  // Un trascinamento vero (pointer capture) e la stessa cosa da tastiera,
+  // perché una maniglia raggiungibile solo dal dito non lo è da chi non
+  // può trascinare. Persistito per-viewer in localStorage, come le altre
+  // comodità di sola interfaccia di questo mockup (non è dato reale).
+  const PANEL_RESIZE_LIMITS = { sessions: [220, 420], inspector: [280, 480] };
+  const PANEL_RESIZE_STORAGE_KEY = 'talos-harness-panel-widths';
+  const PANEL_RESIZE_VAR = { sessions: '--sidebar', inspector: '--inspector' };
+  const PANEL_RESIZE_DEFAULT = { sessions: 292, inspector: 340 };
+
+  function readSavedPanelWidths() {
+    try {
+      return JSON.parse(window.localStorage.getItem(PANEL_RESIZE_STORAGE_KEY) || '{}');
+    } catch {
+      return {};
+    }
+  }
+
+  function savePanelWidth(which, px) {
+    try {
+      const saved = readSavedPanelWidths();
+      saved[which] = px;
+      window.localStorage.setItem(PANEL_RESIZE_STORAGE_KEY, JSON.stringify(saved));
+    } catch {
+      // Un mockup che perde una preferenza di comodo non deve rompersi per questo.
+    }
+  }
+
+  function applyPanelWidth(which, px) {
+    const [min, max] = PANEL_RESIZE_LIMITS[which];
+    const clamped = Math.min(max, Math.max(min, Math.round(px)));
+    HOST().style.setProperty(PANEL_RESIZE_VAR[which], `${clamped}px`);
+    return clamped;
+  }
+
+  function loadPanelWidths() {
+    const saved = readSavedPanelWidths();
+    for (const which of Object.keys(PANEL_RESIZE_VAR)) {
+      if (typeof saved[which] === 'number') applyPanelWidth(which, saved[which]);
+    }
+  }
+
+  function setupPanelResize() {
+    $$('.panel-resize-handle').forEach((handle) => {
+      const which = handle.dataset.resize;
+      if (!PANEL_RESIZE_LIMITS[which]) return;
+      const panel = which === 'sessions' ? sessionsPanel : inspectorPanel;
+
+      handle.addEventListener('pointerdown', (event) => {
+        if (window.innerWidth <= 1040) return;
+        event.preventDefault();
+        handle.setPointerCapture(event.pointerId);
+        handle.classList.add('dragging');
+        const startX = event.clientX;
+        const startWidth = panel.getBoundingClientRect().width;
+
+        function onMove(moveEvent) {
+          const delta = which === 'sessions' ? moveEvent.clientX - startX : startX - moveEvent.clientX;
+          applyPanelWidth(which, startWidth + delta);
+        }
+        function onUp() {
+          handle.classList.remove('dragging');
+          handle.releasePointerCapture(event.pointerId);
+          savePanelWidth(which, panel.getBoundingClientRect().width);
+          window.removeEventListener('pointermove', onMove);
+          window.removeEventListener('pointerup', onUp);
+        }
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+      });
+
+      handle.addEventListener('keydown', (event) => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+        event.preventDefault();
+        const growsOnArrowRight = which === 'sessions';
+        const sign = (event.key === 'ArrowRight') === growsOnArrowRight ? 1 : -1;
+        const current = parseInt(getComputedStyle(HOST()).getPropertyValue(PANEL_RESIZE_VAR[which]), 10)
+          || PANEL_RESIZE_DEFAULT[which];
+        const next = applyPanelWidth(which, current + sign * 12);
+        savePanelWidth(which, next);
+      });
+    });
+  }
+
+  /*
+   * Owner 24/8, RIVISTO dopo l'architettura a shadow DOM: qui c'era un
+   * listener 'backButton' scritto apposta, perché la pagina viveva da sola
+   * (`window.location.assign`) e il tasto Indietro non tornava alla SPA né
+   * usciva dall'app — vedi [[tocchi-reali-adb-obbligatori]] per come è
+   * stato trovato. Montato dentro `HarnessSessionScreen.vue` invece, la
+   * pagina non cambia mai: è la STESSA cronologia Vue Router già verificata
+   * su `/memoria` (Indietro → `/`), niente da reinventare qui.
+   */
 
   ensureDemoLabels();
   applyQaState();
   syncNavigationState();
   syncInspectorToggle();
+  syncSessionsToggle();
+  loadPanelWidths();
+  setupPanelResize();
   setQueueMode(false);
   setRunState(true);
   setInspectorTab($('.inspector-tabs button.active'));
