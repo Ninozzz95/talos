@@ -83,6 +83,15 @@ final class TalosLlamaNative {
      */
     static native void nativeDisableOpenClCacheForResearch();
 
+    /**
+     * ⛔ SOLO RICERCA — P2-4/CR-03: accende il log per-nodo dello scheduler
+     * upstream ({@code GGML_SCHED_DEBUG}, {@code livello=2} per il dettaglio
+     * completo). Legge la variabile una volta sola, alla creazione dello
+     * scheduler: va chiamata prima della prima apertura di un modello in
+     * questo processo.
+     */
+    static native void nativeSetSchedDebugForResearch(int livello);
+
     /** I backend ggml registrati, separati da virgola. Vuoto se nessuno. */
     static native String nativeBackends();
 
@@ -122,6 +131,40 @@ final class TalosLlamaNative {
      * rischio reale di use-after-free/deadlock) resta un blocco separato.
      */
     static native String nativeCpuTopology();
+
+    /**
+     * ⛔⛔ SOLO RICERCA — P2-2, le feature CPU vere (NEON/dotprod/matmulInt8/
+     * SVE/SME/SME2) dalle API ggml, mai dedotte dal nome del SoC. Vedi il
+     * commento nel JNI per cosa NON c'è ancora (`kleidiBackendRegistered`).
+     */
+    static native String nativeCpuFeaturesForResearch();
+
+    /**
+     * ⛔⛔ SOLO RICERCA — P2-1 blocco A. Costruisce lo speculatore
+     * {@code ngram-mod} su una sessione GIA' APERTA da {@code handle}.
+     * Nessuna chiamata da {@link #nativeOpen} lo fa mai — questo metodo è
+     * l'UNICA porta, e costruisce soltanto: nessun effetto sul testo che
+     * quella sessione genera (il blocco B collega la decodifica vera).
+     *
+     * @return true se lo speculatore è pronto; false se l'handle non è
+     *     valido o la costruzione nativa è fallita.
+     */
+    static native boolean nativeConstructSpeculatorForResearch(long handle, int nMatch, int nMax);
+
+    /**
+     * ⛔⛔ SOLO RICERCA — P2-1, decide la forma del blocco B: questo
+     * contesto toglie solo un pezzo di sequenza ({@code "part"}/{@code
+     * "rs"}) o solo tutta in blocco ({@code "full"}, serve la macchina di
+     * checkpoint completa)? Verificato dal motore vero, mai assunto.
+     *
+     * ⛔⛔⛔ Effetto collaterale reale: la sonda upstream SVUOTA la memoria
+     * del contesto. Chiamare solo su una sessione appena aperta, mai su
+     * una con una conversazione vera in corso.
+     *
+     * @return {@code "no"}/{@code "part"}/{@code "full"}/{@code "rs"}, o
+     *     stringa vuota se l'handle non è valido.
+     */
+    static native String nativeContextSeqRmCapabilityForResearch(long handle);
 
     /**
      * ⛔⛔ SOLO RICERCA — la famiglia di affinity CPU per la PROSSIMA apertura

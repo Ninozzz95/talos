@@ -47,6 +47,17 @@ vi.mock('@/services/dictationDiagnostica', () => ({
         buildId: 'test-build', pluginLoaded: true, available: true, error: null, trace: '',
     }),
 }))
+// Voice synthesis row (24/8): stessa scelta di dictationDiagnostica sopra —
+// si mocka il MODULO di diagnosi, non la catena di registerPlugin che sta
+// dietro (personalVoice.ts la userebbe per davvero, e questo file di test
+// non vuole saperne la forma).
+vi.mock('@/services/personalVoiceDiagnostica', () => ({
+    talosPersonalVoiceDiagnostics: () => Promise.resolve({
+        registered: true, supported: true, installed: true, ready: false,
+        backend: null, engineBuild: null, modelState: null, failure: null,
+        profileCount: 0, compatibleProfileCount: 0, diario: [], trace: '', error: null,
+    }),
+}))
 vi.mock('@/services/databaseProtection', () => ({
     talosDatabaseLockState: () => 'engaged',
     talosDatabaseLockFailure: () => null,

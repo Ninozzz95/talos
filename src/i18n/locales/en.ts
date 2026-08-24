@@ -1100,6 +1100,13 @@ export const TALOS_EN_MESSAGES = {
         codeCopied: 'Code copied.',
         codeCopyFailed: 'Code copy failed.',
     },
+    // Harness UI (Codex, 24/8): debug-only link to the reused desktop
+    // mockup + Board, hidden entirely in release builds — see
+    // services/harnessUi.ts for how "hidden" is guaranteed.
+    harnessUi: {
+        linkLabel: 'Harness UI (debug)',
+        linkHint: 'The coding-harness mockup and campaign Board, same build as desktop.',
+    },
     privilege: {
         keepAlive: 'Keep it alive',
         /*
@@ -2226,6 +2233,10 @@ export const TALOS_EN_MESSAGES = {
         // The examination, which is the whole point of the screen.
         examine: 'Check this phone',
         examining: 'Reading the model…',
+        // Model Lab Blocco 3 — indicator shown ONCE per page, above the
+        // list: examination now starts on its own when the repo opens,
+        // grouped by model. Distinct from `examining` (per row) on purpose.
+        examiningRepo: 'Examining variants in the background…',
         unreadable: 'Cannot check this one:',
         incompleteSet: 'This repository is missing {missing} of {total} parts, so the model cannot be assembled.',
         unverifiable: 'This repository publishes no checksum for this file, so the download cannot be proved.',
@@ -2248,6 +2259,56 @@ export const TALOS_EN_MESSAGES = {
         reasonKilled: 'This phone has already run out of memory with this model once.',
         counterOffer: 'At {context} tokens of context it fits.',
         contextLabel: 'Context length',
+        // Model Lab Blocco 2 — the global control above the variant list,
+        // not the per-row counter-offer button.
+        kvCacheTypeLabel: 'KV cache',
+        kvCacheType: {
+            auto: 'Automatic',
+            f16: 'F16',
+            q8_0: 'Q8_0',
+            // item 7 — the header declared a value that is neither known
+            // type: honest to say so, not to guess a label.
+            other: 'Other',
+        },
+        // Model Lab Blocco 4 — the provenance ledger: never a number without
+        // saying where it comes from. The eight labels are the same eight
+        // entries talosResourceLedger() (fit.ts) returns, same fixed order.
+        // Restyle Blocco 6 — two-column panel (config + ledger) below the
+        // rail, replaces the vertical list with a "Details" tap per row.
+        runtimeConfigTitle: 'Configure the runtime',
+        speedStatLabel: 'Predicted speed',
+        maxContextStatLabel: 'Calculated max context',
+        // Restyle Blocco 6, mockup closure — item 1/2/3/4/5/6.
+        tabsGroupLabel: 'Repository sections',
+        tabQuantizzazioni: 'Quantizations',
+        tabScheda: 'Model card',
+        tabFile: 'Files',
+        noReadme: 'This repository does not publish a README.',
+        openOnHuggingFace: 'Open on Hugging Face',
+        copyLink: 'Copy the repository link',
+        linkCopied: 'Link copied.',
+        linkCopyFailed: 'Could not copy the link.',
+        analysisBannerTitle: 'TALOS repository analysis:',
+        analysisBannerBody: 'one GGUF header read per model — not per version — and weight shape and offset are reused to recompute every quantization, the same way talosExamineRepo() does in the store.',
+        downloadNamed: 'Download {label} · {size}',
+        // A format acronym, not a word that changes with language — still
+        // routed through the catalog: I18N-05 forbids static text outside
+        // the catalogs, same choice already made for F16/Q8_0 above.
+        ggufFormatTag: 'GGUF',
+        ledgerTitle: 'Where every byte comes from',
+        ledger: {
+            weights: 'Model weights',
+            kvCache: 'KV cache',
+            compute: 'Compute',
+            runtime: 'Runtime',
+            safetyMargin: 'Safety margin',
+            totalRuntime: 'Total while running',
+            availableRam: 'Available RAM',
+            margin: 'Remaining margin',
+            provenanceExact: 'measured',
+            provenancePredicted: 'predicted',
+            provenancePolicy: 'fixed',
+        },
         // Downloading.
         download: 'Download',
         downloading: 'Downloading',
@@ -2863,6 +2924,7 @@ export const TALOS_EN_MESSAGES = {
         engineInstalled: 'Models on device',
         engineTools: 'Assistant tools with this model',
         recommendedProfile: 'Recommended backend for this model',
+        performanceHeadroom: 'CPU/GPU/thermal headroom (Android 16)',
         nativePlatform: 'native ({platform})',
         webPreview: 'web preview',
         storageNative: 'SQLCipher native',
@@ -2879,6 +2941,8 @@ export const TALOS_EN_MESSAGES = {
         lockRecoveryRequired: 'The stored key was not cleared — lock the app again to retry',
         unknown: 'unknown',
         speechValue: 'plugin {plugin} · recognizer {recognizer}{error}',
+        voice: 'Personal voice synthesis',
+        voiceValue: 'plugin {plugin} · model {model} · profiles {profiles}{diario}{error}',
         loaded: 'loaded',
         missing: 'MISSING',
         available: 'available',

@@ -144,6 +144,19 @@ public class MainActivity extends BridgeActivity {
         } catch (ClassNotFoundException assente) {
             // È la produzione: la bolla non esiste, e va bene così.
         }
+        // Harness UI (Codex, 24/8): stessa storia della bolla sopra, stesso
+        // meccanismo — la classe vive SOLO nel source set `debug`
+        // (ai.talos.harness.TalosHarnessUiPlugin), quindi in release
+        // Class.forName trova ClassNotFoundException per costruzione, non
+        // per un controllo aggirabile. Owner: «mockup visibile solo nella
+        // apk di debug, in quello di release lo nascondiamo».
+        try {
+            //noinspection unchecked
+            registerPlugin((Class<? extends com.getcapacitor.Plugin>)
+                Class.forName("ai.talos.harness.TalosHarnessUiPlugin"));
+        } catch (ClassNotFoundException assente) {
+            // È la produzione: l'harness UI non esiste, e va bene così.
+        }
         long tSuper = android.os.SystemClock.uptimeMillis();
         super.onCreate(savedInstanceState);
         Log.i("TalosAvvio", "super.onCreate: " + (android.os.SystemClock.uptimeMillis() - tSuper) + " ms");

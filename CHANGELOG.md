@@ -6,45 +6,32 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
-## v0.1.20
-
-Three real bugs in the personal voice setup, found on-device and fixed the
-same way: reproduced on the OnePlus Pad 3, root-caused in the actual code
-path, verified end to end after the fix — including one recorded with a real
-microphone hold, not a simulated tap.
-
-### Encoding a voice always failed after all 12 phrases were accepted
-
-Every phrase recorded the normal way — hold the button, release when you're
-done speaking — reached the final "Encode the voice" step carrying a native
-flag meant for aborted recordings, because releasing the button and
-genuinely aborting used the same signal internally. A safety check then
-rejected it every time, and showed the raw native error text on screen
-instead of a translated message. The check is gone (it could never
-distinguish the two cases it was meant to catch); the real protection
-against a broken recording — minimum duration, near-silence, clipping — was
-never the part that was broken. Verified by recording 12 real phrases and
-encoding them successfully on-device, twice.
-
-### The enrollment screen could appear before the voice engine was installed
-
-A newly installed build could show "Create your voice" — and let a person
-record all 12 phrases — before the on-device engine was actually downloaded,
-because the screen checked "can this device support it" instead of "is it
-installed right now." The failure only surfaced at the very last step, as a
-raw native exception. Fixed by tracking the two facts separately.
-
-### The download-size estimate was still the old engine's
-
-The prompt before downloading the voice engine said "about 730 MB" — the
-size of the previous ONNX-based engine. The current Pocket engine is
-measured at 158 MB on a real device; the prompt now says "about 160 MB."
-
 ## v0.1.19
 
-The personal voice no longer stutters, and the local model runs faster.
-Everything below was measured on the owner's OnePlus Pad 3 and OnePlus 13,
-none of it is estimated.
+The personal voice no longer stutters, the local model runs faster, and
+browsing models on Hugging Face got a rebuild. Everything below was
+measured on the owner's OnePlus Pad 3 and OnePlus 13, none of it is
+estimated.
+
+### Browsing models on Hugging Face
+
+The model detail page is now three tabs instead of one long scroll:
+quantizations, the full model card, and the raw file list. Every
+quantization is checked against your device automatically as soon as the
+page opens, instead of waiting for a tap on each one.
+
+- A resource ledger shows exactly where the memory estimate for a model
+  comes from — weights and file size are exact, the KV cache size is
+  exact once the header is read, compute and runtime overhead are the
+  app's own safety policy — instead of a single unexplained number.
+- The KV cache type (F16 or Q8_0) can be forced globally instead of only
+  reading whatever the file's header happened to use, and the resolved
+  type is always shown next to the control, even on Automatic.
+- A direct link to the model's Hugging Face page, and a button to copy it.
+- The context-length slider shows its 2K/32K/64K/128K reference points
+  instead of a bare track.
+- A rounding bug that showed predicted speed as a fifteen-decimal number
+  is fixed.
 
 ### The voice engine was rebuilt on Pocket TTS
 

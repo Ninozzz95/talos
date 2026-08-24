@@ -1237,6 +1237,65 @@ public class TalosLlamaPlugin extends Plugin {
     }
 
     /**
+     * P2-3 blocco 2 — {@link TalosPerformanceSignals#sample}, raggiungibile
+     * da JS. Girato su {@code qualificationWorker}, non su {@code worker}:
+     * stessa ragione di {@code localPerformanceProfiles} sopra — legge
+     * segnali del sistema, zero relazione con lo stato del motore nativo
+     * che {@code worker} possiede — e le API headroom fanno Binder
+     * sincrono (>1 ms documentato da Android) che non deve mai contendere
+     * col thread che genera token.
+     *
+     * ⛔ NaN → {@code null} al confine JSON: {@code org.json.JSONObject.
+     * put(String, double)} lancia un'eccezione sui valori non finiti, e
+     * NaN è esattamente l'esito documentato "non disponibile ora" delle
+     * API headroom (vedi {@link TalosPerformanceSignals}) — {@code null}
+     * è lo stesso vocabolario che questo ponte usa già per "non misurato"
+     * ({@code backendDevice} sopra), non un'invenzione nuova qui.
+     */
+    @PluginMethod
+    public void performanceSignals(PluginCall call) {
+        qualificationWorker.execute(() -> {
+            TalosPerformanceSignals segnali = TalosPerformanceSignals.sample(getContext());
+            JSObject result = new JSObject();
+            result.put("cpuHeadroom", finitoONullo(segnali.cpuHeadroom));
+            result.put("gpuHeadroom", finitoONullo(segnali.gpuHeadroom));
+            result.put("thermalHeadroom", finitoONullo(segnali.thermalHeadroom));
+            result.put("thermalForecast", finitoONullo(segnali.thermalForecast));
+            result.put("thermalStatus", segnali.thermalStatus == null ? JSObject.NULL : segnali.thermalStatus);
+            result.put("sampledAtElapsedMs", segnali.sampledAtElapsedMs);
+            call.resolve(result);
+        });
+    }
+
+    /** NaN → {@link JSObject#NULL}: org.json rifiuta i valori non finiti nel JSON. */
+    private static Object finitoONullo(float valore) {
+        return Float.isNaN(valore) ? JSObject.NULL : (double) valore;
+    }
+
+    /**
+     * ⛔⛔ SOLO RICERCA — P2-2, il primo lettore reale di
+     * {@code nativeCpuFeaturesForResearch()}: bug gia' chiuso una volta in
+     * questo stesso file (P1-1 blocco 3, export nativo senza
+     * {@code @PluginMethod} corrispondente, irraggiungibile da JS) —
+     * collegato SUBITO qui, non lasciato scritto e non chiamato.
+     *
+     * Girato su {@code qualificationWorker}, non su {@code worker}: legge
+     * feature statiche della CPU, zero relazione con lo stato del motore
+     * nativo che {@code worker} possiede — lo stesso motivo per cui
+     * {@code localPerformanceProfiles} sopra usa lo stesso executor.
+     */
+    @PluginMethod
+    public void cpuFeaturesForResearch(PluginCall call) {
+        qualificationWorker.execute(() -> {
+            try {
+                call.resolve(new JSObject(TalosLlamaNative.nativeCpuFeaturesForResearch()));
+            } catch (org.json.JSONException malformato) {
+                call.reject("TALOS_LLAMA_CPU_FEATURES_MALFORMED: " + malformato.getMessage());
+            }
+        });
+    }
+
+    /**
      * P0-3 — Q0: "il motore si apre e risponde", senza il costo di
      * {@link #qualifyBackend}. Nessuno store viene toccato — vedi
      * {@link TalosLocalSmokeCheck}, che spiega perché: un verdetto PASSED

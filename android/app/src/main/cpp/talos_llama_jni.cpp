@@ -29,17 +29,25 @@
 #include <dirent.h>
 #include <cerrno>
 #include <map>
+#include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <unistd.h>
 #include <vector>
 
+#include <sys/auxv.h>
+#include <asm/hwcap.h>  // P2-2 — bit HWCAP*, lo snapshot di ricerca KleidiAI (vedi commento sotto)
+
 #include "llama.h"
+#include "common.h"  // P2-1 — common_context_can_seq_rm/common_context_seq_rm_type
 #include "gguf.h"
 #include "ggml-backend.h"
 #include "sampling.h"
 #include "chat.h"
+
+#include "talos_speculator.hpp"  // P2-1 blocco A — involucro nostro, non vendored
 
 /**
  * ⛔ L'identita' della BUILD di llama.cpp, non dell'app.
@@ -103,6 +111,19 @@ struct talos_session {
      * su una bugia.
      */
     std::vector<llama_token> cached;
+
+    /**
+     * ⛔⛔ SOLO RICERCA — P2-1 blocco A. Presente SOLO se un chiamante di
+     * ricerca l'ha costruito esplicitamente dopo l'apertura (mai da
+     * `nativeOpen`, il percorso di produzione — vedi
+     * `nativeConstructSpeculatorForResearch`). Costruito e distrutto, MAI
+     * ancora usato nel giro di decodifica: il blocco B (CR-11, la
+     * verifica/accettazione) lo collegherà davvero. `unique_ptr` perché
+     * la sessione può chiudersi senza che nessuno lo abbia mai richiesto
+     * — un campo assente resta `nullptr`, zero costo, zero cleanup da
+     * ricordare a mano in `nativeClose`.
+     */
+    std::unique_ptr<TalosSpeculator> speculator;
 
     /**
      * Il tipo di cache che è stato DAVVERO creato.
@@ -1116,6 +1137,25 @@ Java_ai_talos_TalosLlamaNative_nativeDisableOpenClCacheForResearch(JNIEnv *, jcl
     setenv("GGML_OPENCL_KERNEL_CACHE_DIR", "off", 1);
 }
 
+/**
+ * ⛔ SOLO RICERCA — P2-4, la sonda per CR-03: il piazzamento REALE dei nodi
+ * del grafo per backend, dal log dello scheduler upstream
+ * (`ggml_backend_sched_print_assignments`, `ggml-backend.cpp`), non da
+ * un'ipotesi. `livello=1` stampa solo gli split, `livello=2` anche il
+ * dettaglio per nodo (op, tensore, backend assegnato) — quello che CR-03
+ * chiede. Confermato via ricerca web che è la stessa leva nota fuori da
+ * questa sessione (discussione ggml-org/llama.cpp #10780).
+ *
+ * ⛔ `getenv("GGML_SCHED_DEBUG")` si legge UNA VOLTA SOLA, dentro
+ * `ggml_backend_sched_new` — che gira alla creazione del contesto, non ad
+ * ogni compute. Va chiamata PRIMA della prima apertura di un modello in
+ * questo processo, o non ha alcun effetto su quella sessione.
+ */
+JNIEXPORT void JNICALL
+Java_ai_talos_TalosLlamaNative_nativeSetSchedDebugForResearch(JNIEnv *, jclass, jint livello) {
+    setenv("GGML_SCHED_DEBUG", std::to_string(livello).c_str(), 1);
+}
+
 /** La build di llama.cpp, per l'impronta dei prefissi congelati. */
 JNIEXPORT jstring JNICALL
 Java_ai_talos_TalosLlamaNative_nativeEngineBuild(JNIEnv * env, jclass) {
@@ -1346,6 +1386,228 @@ Java_ai_talos_TalosLlamaNative_nativeCpuTopology(JNIEnv * env, jclass) {
     out["cores"] = cores;
     out["affinityReadable"] = affinitaLeggibile;
     return env->NewStringUTF(out.dump().c_str());
+}
+
+/**
+ * ⛔⛔ SOLO RICERCA — P2-2, le feature CPU VERE, mai dedotte dal nome
+ * commerciale del SoC (design.md §9.3: "do not infer features from SoC
+ * marketing names").
+ *
+ * ⛔⛔⛔ CAMBIO DI ROTTA rispetto al piano, scoperto SUL CODICE prima di
+ * scrivere produzione: il piano diceva "dalle API ggml reali"
+ * (`ggml_cpu_has_neon()` e affini) — ma quelle funzioni vivono SOLO dentro
+ * `ggml-cpu.c`, ricompilato una volta per CIASCUNA delle librerie-variante
+ * di `GGML_CPU_ALL_VARIANTS=ON` (`ggml-cpu-android_armv8.0_1` ...
+ * `android_armv9.2_2`, verificate nel log di build), mai linkate
+ * direttamente in `talos_llama` (`target_link_libraries` porta solo
+ * `llama llama-common android log`, verificato in CMakeLists.txt — 7
+ * `undefined symbol` a conferma). Anche forzando il link di UNA variante,
+ * la risposta sarebbe quella COMPILATA in quella variante (es. sempre
+ * `dotprod=0` nella variante armv8.0), non quella del device reale — un
+ * dato plausibile ma FALSO, peggio di nessun dato.
+ *
+ * ⭐ Sostituito con lettura diretta del kernel via `getauxval(AT_HWCAP /
+ * AT_HWCAP2)` (bionic, da API 18 — minSdk qui è 26; pattern confermato su
+ * developer.android.com/ndk/guides/cpu-features), la stessa famiglia di
+ * tecnica già in uso in `nativeCpuTopology()` sopra (leggere il sistema
+ * invece di passare da ggml). Ogni feature prova prima `HWCAP_X`, poi
+ * `HWCAP2_X`: due fonti indipendenti (kernel.org, header uapi grezzo)
+ * concordavano sui NOMI ma non su QUALE dei due vettori porta ciascun bit
+ * — con la catena `#elif defined(...)` il codice resta corretto in
+ * entrambi i casi, e se l'header dell'NDK non definisce nessuno dei due
+ * nomi il campo torna `null` (mai un `false` silenzioso spacciato per "il
+ * device non ce l'ha" — stessa disciplina di `quantizationVersion: null`
+ * in P2-6).
+ *
+ * ⛔ `sveBytes` (lunghezza vettore SVE, `prctl(PR_SVE_GET_VL)`) OMESSO:
+ * interfaccia non verificata da fonte primaria in questo giro di ricerca
+ * web — un campo assente è meglio di un campo inventato.
+ *
+ * ⛔ `kleidiBackendRegistered` NON è in questo snapshot: la funzione
+ * pubblica `ggml_backend_cpu_kleidiai_buffer_type()` vive in un header
+ * privato di `ggml-cpu/kleidiai/`, mai esposto nelle directory di include
+ * di questo target, e collegarlo richiederebbe toccare l'API pubblica di
+ * ggml — fuori scope per un blocco di sola lettura. CR-18 (bytes/tensori
+ * per buffer type, la prova vera che i kernel sono usati) resta un blocco
+ * successivo dichiarato, non questo.
+ */
+// Il file è dentro un `extern "C" { ... }` (riga 1064): senza riaprire
+// linkage C++ qui, questi helper interni erediterebbero linkage C, e
+// `std::optional<bool>` come tipo di ritorno non ha un ABI C definito
+// (warning reale del compilatore, non cosmetico — mai chiamati da fuori
+// questa unità di compilazione, ma la firma resta scorretta finché non
+// torna C++).
+extern "C++" {
+namespace {
+
+struct TalosHwcap {
+    unsigned long base;   // getauxval(AT_HWCAP)
+    unsigned long estesa; // getauxval(AT_HWCAP2)
+};
+
+TalosHwcap talos_leggi_hwcap() {
+    return TalosHwcap{ getauxval(AT_HWCAP), getauxval(AT_HWCAP2) };
+}
+
+std::optional<bool> talos_ha_neon(const TalosHwcap &h) {
+#if defined(HWCAP_ASIMD)
+    return (h.base & HWCAP_ASIMD) != 0;
+#elif defined(HWCAP2_ASIMD)
+    return (h.estesa & HWCAP2_ASIMD) != 0;
+#else
+    return std::nullopt;
+#endif
+}
+
+std::optional<bool> talos_ha_dotprod(const TalosHwcap &h) {
+#if defined(HWCAP_ASIMDDP)
+    return (h.base & HWCAP_ASIMDDP) != 0;
+#elif defined(HWCAP2_ASIMDDP)
+    return (h.estesa & HWCAP2_ASIMDDP) != 0;
+#else
+    return std::nullopt;
+#endif
+}
+
+std::optional<bool> talos_ha_matmul_int8(const TalosHwcap &h) {
+#if defined(HWCAP_I8MM)
+    return (h.base & HWCAP_I8MM) != 0;
+#elif defined(HWCAP2_I8MM)
+    return (h.estesa & HWCAP2_I8MM) != 0;
+#else
+    return std::nullopt;
+#endif
+}
+
+std::optional<bool> talos_ha_sve(const TalosHwcap &h) {
+#if defined(HWCAP_SVE)
+    return (h.base & HWCAP_SVE) != 0;
+#elif defined(HWCAP2_SVE)
+    return (h.estesa & HWCAP2_SVE) != 0;
+#else
+    return std::nullopt;
+#endif
+}
+
+std::optional<bool> talos_ha_sve2(const TalosHwcap &h) {
+#if defined(HWCAP_SVE2)
+    return (h.base & HWCAP_SVE2) != 0;
+#elif defined(HWCAP2_SVE2)
+    return (h.estesa & HWCAP2_SVE2) != 0;
+#else
+    return std::nullopt;
+#endif
+}
+
+std::optional<bool> talos_ha_sme(const TalosHwcap &h) {
+#if defined(HWCAP_SME)
+    return (h.base & HWCAP_SME) != 0;
+#elif defined(HWCAP2_SME)
+    return (h.estesa & HWCAP2_SME) != 0;
+#else
+    return std::nullopt;
+#endif
+}
+
+std::optional<bool> talos_ha_sme2(const TalosHwcap &h) {
+#if defined(HWCAP_SME2)
+    return (h.base & HWCAP_SME2) != 0;
+#elif defined(HWCAP2_SME2)
+    return (h.estesa & HWCAP2_SME2) != 0;
+#else
+    return std::nullopt;
+#endif
+}
+
+void talos_metti(nlohmann::ordered_json &out, const char *chiave, std::optional<bool> valore) {
+    if (valore.has_value()) {
+        out[chiave] = *valore;
+    } else {
+        out[chiave] = nullptr;
+    }
+}
+
+} // namespace
+} // extern "C++" — da qui in poi si torna dentro l'`extern "C"` di riga 1064
+
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeCpuFeaturesForResearch(JNIEnv * env, jclass) {
+    const TalosHwcap h = talos_leggi_hwcap();
+    nlohmann::ordered_json out;
+    talos_metti(out, "neon", talos_ha_neon(h));
+    talos_metti(out, "dotprod", talos_ha_dotprod(h));
+    talos_metti(out, "matmulInt8", talos_ha_matmul_int8(h));
+    talos_metti(out, "sve", talos_ha_sve(h));
+    talos_metti(out, "sve2", talos_ha_sve2(h));
+    talos_metti(out, "sme", talos_ha_sme(h));
+    talos_metti(out, "sme2", talos_ha_sme2(h));
+    return env->NewStringUTF(out.dump().c_str());
+}
+
+/**
+ * ⛔⛔ SOLO RICERCA — P2-1 blocco A. Costruisce lo speculatore `ngram-mod`
+ * su una sessione GIÀ APERTA e lo appende alla sessione stessa — nessuna
+ * chiamata da `nativeOpen` lo fa mai, questo export è l'UNICA porta.
+ *
+ * ⛔ Costruisce e basta: nessun `begin`/`process`/`draft`/`accept` qui, e
+ * quindi nessun effetto sul testo generato da questa sessione — il blocco
+ * B collegherà quel lato. Questo export prova solo che il lifecycle
+ * (costruzione, e poi distruzione a `nativeClose` via `unique_ptr`) è
+ * sicuro col motore reale, non un mock.
+ *
+ * @return true se lo speculatore è pronto; false se l'handle non è
+ *     valido o `common_speculative_init` è tornato nullptr.
+ */
+JNIEXPORT jboolean JNICALL
+Java_ai_talos_TalosLlamaNative_nativeConstructSpeculatorForResearch(
+        JNIEnv *, jclass, jlong handle, jint nMatch, jint nMax) {
+    std::lock_guard<std::mutex> serratura(g_motore);
+    talos_session * session = as_session(handle);
+    if (session == nullptr) return JNI_FALSE;
+
+    session->speculator = std::make_unique<TalosSpeculator>((int32_t) nMatch, (int32_t) nMax);
+    if (!session->speculator->pronto()) {
+        TALOS_LOGE("speculatore ngram-mod non costruito");
+        session->speculator.reset();
+        return JNI_FALSE;
+    }
+    return JNI_TRUE;
+}
+
+/**
+ * ⛔⛔ SOLO RICERCA — P2-1, la domanda che decide la forma del blocco B:
+ * questo contesto sa togliere solo un PEZZO di sequenza (`PART`/`RS` — il
+ * giro di verifica speculativa può limitarsi a un `llama_memory_seq_rm`
+ * dopo un rifiuto parziale), o solo TUTTA la sequenza in blocco (`FULL` —
+ * serve la macchina di checkpoint/snapshot completa dell'esempio
+ * upstream, `common_prompt_checkpoint`)? Verificato dal motore vero
+ * (`common_context_can_seq_rm`, `common/common.cpp`), mai assunto da un
+ * nome di modello: due famiglie diverse potrebbero rispondere diverso.
+ *
+ * ⛔⛔⛔ EFFETTO COLLATERALE REALE, non cosmetico: la sonda upstream
+ * **svuota la memoria del contesto** (`llama_memory_clear`, due volte,
+ * prima e dopo un decode di prova) per poter provare la rimozione. Da
+ * chiamare SOLO su una sessione appena aperta, mai su una con una
+ * conversazione vera in corso — esattamente come la usa questo export,
+ * su un handle appena tornato da `nativeOpenTargeted`.
+ *
+ * @return "no" · "part" · "full" · "rs" (vedi `common_context_seq_rm_type`)
+ *     — oppure stringa vuota se l'handle non è valido.
+ */
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeContextSeqRmCapabilityForResearch(
+        JNIEnv * env, jclass, jlong handle) {
+    std::lock_guard<std::mutex> serratura(g_motore);
+    talos_session * session = as_session(handle);
+    if (session == nullptr || session->ctx == nullptr) return env->NewStringUTF("");
+
+    switch (common_context_can_seq_rm(session->ctx)) {
+        case COMMON_CONTEXT_SEQ_RM_TYPE_NO:   return env->NewStringUTF("no");
+        case COMMON_CONTEXT_SEQ_RM_TYPE_PART: return env->NewStringUTF("part");
+        case COMMON_CONTEXT_SEQ_RM_TYPE_FULL: return env->NewStringUTF("full");
+        case COMMON_CONTEXT_SEQ_RM_TYPE_RS:   return env->NewStringUTF("rs");
+    }
+    return env->NewStringUTF("");
 }
 
 /**
@@ -3046,6 +3308,194 @@ Java_ai_talos_TalosLlamaNative_nativePromptTokens(JNIEnv * env, jclass, jlong ha
 }
 
 /**
+ * ⛔⛔⛔ SOLO RICERCA — P2-1 blocco B (CR-11). Raggiungibile SOLO se
+ * `session->speculator` esiste, cioè SOLO dopo una chiamata esplicita a
+ * `nativeConstructSpeculatorForResearch` — mai da `nativeOpen`, il percorso
+ * di produzione (vedi `talos_speculator.hpp`, blocco A). Zero effetto su
+ * ogni sessione che non l'abbia richiesto esplicitamente.
+ *
+ * Segue `examples/speculative-simple/speculative-simple.cpp` upstream riga
+ * per riga per la SEQUENZA delle chiamate (begin/draft/decode/process/
+ * sample_and_accept_n/accept) — CR-11 vieta di reinventare la semantica di
+ * accettazione, e questa non lo fa. Confermato via ricerca web che questa è
+ * la sequenza riconosciuta anche fuori da questa sessione (draft → batch
+ * [id_last, bozza...] → decode → sample_and_accept_n → seq_rm di ciò che
+ * non è stato accettato) — nessuna sorpresa, nessun passo mancante.
+ *
+ * ⛔ Tre semplificazioni DICHIARATE rispetto all'esempio intero, non
+ * sviste:
+ * 1. **Ramo SEMPLICE di rimozione sequenza, mai i checkpoint**
+ *    (`common_prompt_checkpoint`, `use_ckpt_tgt`/`use_ckpt_dft`
+ *    dell'esempio). Confermato sufficiente dal diagnostico P2-1: i tre
+ *    modelli spediti tornano tutti `"part"` per `common_context_can_seq_rm`,
+ *    mai `"full"` — la macchina a checkpoint esiste nell'esempio solo per
+ *    chi ha `"full"`, non è il nostro caso, verificato prima di scrivere
+ *    questa funzione, non presunto.
+ * 2. **Il primo token generato resta il percorso ESISTENTE**: campionato
+ *    subito dopo il prefill (il chiamante lo fa PRIMA di entrare qui),
+ *    zero decode aggiuntivo — esattamente come il ramo non speculativo.
+ *    Solo dal secondo token in poi il ciclo diventa bozza/verifica. Evita
+ *    di riscrivere il prefill (già provato, già misurato) e i due percorsi
+ *    restano identici sul primo token: `tempo_primo_token` non cambia
+ *    significato.
+ * 3. **Lo speculatore non viene innescato dal prompt**
+ *    (`common_speculative_process` sul prefill, come fa l'esempio su
+ *    `batch_prompt`): ngram-mod è self-speculativo e si scalda da solo sui
+ *    token GENERATI nello stesso giro. Le prime bozze di un turno saranno
+ *    vuote — non un guasto: `draft.empty()` è il ramo iniziale ORDINARIO
+ *    anche nell'esempio upstream, non un caso d'eccezione. Innescare anche
+ *    dal prompt resta un miglioramento possibile, non fatto qui.
+ *
+ * ⛔ Stop: il controllo di cancellazione resta UNA VOLTA per ciclo
+ * bozza/verifica, non per token — un ciclo produce al più `n_draft_max + 1`
+ * token fra un controllo e l'altro, non uno solo come nel ramo ordinario.
+ * Dichiarato nel piano sorgente stesso ("la speculazione allunga il lavoro
+ * fra due controlli di cancellazione — Stop va rimisurato"): la misura
+ * reale resta da fare sul device, non assunta qui.
+ */
+static void talos_genera_speculativo(talos_session * session, int limit, bool stopAtEndOfGeneration,
+                                     llama_token id_last, int & produced, std::string & answer,
+                                     long long & tempo_primo_token,
+                                     const std::chrono::steady_clock::time_point & avvio) {
+    common_speculative * spec = session->speculator->handle();
+    const llama_seq_id   seq_id = 0;
+    llama_memory_t        memoria = llama_get_memory(session->ctx);
+    const int             budget  = (int) llama_n_ctx(session->ctx);
+
+    /*
+     * ⛔⛔⛔ RISCRITTA sul device dopo DUE giri falliti, non a tavolino.
+     *
+     * Giro 1: `id_last` arrivava già decodificato dal bootstrap (il ramo
+     * ordinario lo scrive nella KV PRIMA di passare qui) — ridecodificarlo
+     * "una casella dopo" apriva un buco mai scritto: `Paris` giusto, poi
+     * divergenza netta, zero errori in log (corruzione silenziosa).
+     * Giro 2: corretta la posizione a "una casella prima", ma `id_last` era
+     * ANCORA già nella KV da quella stessa posizione — `llama_decode` ha
+     * rifiutato il batch (`ret=-1`, "failed to initialize batch"): scrivere
+     * due volte alla STESSA posizione non è tollerato, non solo sprecato.
+     *
+     * ⇒ La causa vera in entrambi i casi era la stessa: il chiamante
+     * (`nativeGenerate`) decodificava SEMPRE il primo token generato prima
+     * di offrire il ramo speculativo. Questa funzione ora si aspetta
+     * `id_last` MAI ancora decodificato — il chiamante campiona e basta,
+     * la decodifica (insieme alla bozza, nello stesso batch) è compito
+     * esclusivo di qui, esattamente come fa l'esempio upstream (il loro
+     * `id_last` non è MAI decodificato fuori dal ciclo speculativo).
+     */
+    int n_past = (int) session->cached.size();
+
+    common_speculative_begin(spec, seq_id, session->cached);
+
+    llama_batch     batch_tgt = llama_batch_init((int32_t) llama_n_batch(session->ctx), 0, 1);
+    llama_tokens    draft;
+    char            piece[256];
+    bool            fine = false;
+
+    while (!fine && produced < limit) {
+        if (session->cancelled.load(std::memory_order_relaxed)) break;
+
+        int n_draft_max = budget - n_past - 2;
+        n_draft_max = std::min(n_draft_max, limit - produced - 1);
+        n_draft_max = std::max(n_draft_max, 0);
+
+        common_speculative_get_draft_params(spec, seq_id) = {
+            /* .drafting = */ true,
+            /* .n_max    = */ n_draft_max,
+            /* .n_past   = */ n_past,
+            /* .id_last  = */ id_last,
+            /* .prompt   = */ &session->cached,
+            /* .result   = */ &draft,
+        };
+        common_speculative_draft(spec);
+
+        // `id_last` alla SUA posizione vera (`n_past`, mai scritta prima
+        // d'ora), poi la bozza subito dopo — la stessa forma dell'esempio
+        // upstream, senza il loro trucco del post-incremento su `n_past`:
+        // qui resta esplicito, `n_past` non cambia finché non lo dice la
+        // riga dedicata più sotto.
+        common_batch_clear(batch_tgt);
+        common_batch_add(batch_tgt, id_last, n_past, { seq_id }, true);
+        for (size_t i = 0; i < draft.size(); ++i) {
+            common_batch_add(batch_tgt, draft[i], n_past + 1 + (int) i, { seq_id }, true);
+        }
+
+        if (llama_decode(session->ctx, batch_tgt) != 0) {
+            // Stessa cura del ramo ordinario: la KV va riportata su ciò che
+            // `cached` dice, mai lasciata a metà di un batch mai confermato.
+            if (!llama_memory_seq_rm(memoria, seq_id, (llama_pos) session->cached.size(), -1)) {
+                llama_memory_clear(memoria, true);
+                session->cached.clear();
+            }
+            TALOS_LOGE("decode speculativo fallito dopo %d token", produced);
+            break;
+        }
+
+        if (!common_speculative_process(spec, batch_tgt)) {
+            TALOS_LOGE("common_speculative_process fallito, fine speculazione");
+            break;
+        }
+
+        // ⛔ sample_and_accept_n GIÀ chiama common_sampler_accept() per ogni
+        // token che restituisce (verificato leggendo `sampling.cpp` prima di
+        // scrivere questa riga, non presunto) — chiamarlo di nuovo qui
+        // sarebbe un doppio accept sullo stesso token: le penalità di
+        // ripetizione lo conterebbero due volte per uno. Torna SEMPRE almeno
+        // un token: quello che il campionatore vero avrebbe prodotto
+        // comunque, bozza accettata o no.
+        std::vector<llama_token> ids = common_sampler_sample_and_accept_n(
+                session->sampler, session->ctx, draft);
+        common_speculative_accept(spec, seq_id, (uint16_t) (ids.size() - 1));
+
+        /*
+         * ⭐ Perché "spingi il VECCHIO id_last, poi assegna il nuovo" — non
+         * "spingi ids[i]" direttamente. Ogni `ids[i]` tranne l'ultimo È
+         * davvero confermato alla sua posizione dal decode qui sopra (ha
+         * combaciato con la bozza). L'ULTIMO `ids[]`, invece, non lo è mai:
+         * o è la correzione di un disaccordo (la sua posizione nella KV
+         * contiene ancora il token di bozza SBAGLIATO), o è la previsione
+         * dopo l'ultima bozza accettata (la sua posizione non è mai stata
+         * scritta). In entrambi i casi resta "in sospeso" come nuovo
+         * `id_last`, decodificato per davvero al PROSSIMO giro — mai
+         * spinto in `cached` finché non lo è.
+         */
+        for (size_t i = 0; i < ids.size() && produced < limit; ++i) {
+            session->cached.push_back(id_last);
+            id_last = ids[i];
+            if (stopAtEndOfGeneration && llama_vocab_is_eog(session->vocab, id_last)) { fine = true; break; }
+
+            const int written = llama_token_to_piece(session->vocab, id_last, piece, sizeof(piece), 0, true);
+            if (written < 0) { TALOS_LOGE("token speculativo non convertibile in testo"); fine = true; break; }
+            answer.append(piece, (size_t) written);
+            {
+                std::lock_guard<std::mutex> guard(session->text_lock);
+                session->text.append(piece, (size_t) written);
+            }
+            produced += 1;
+            session->produced.store(produced, std::memory_order_relaxed);
+        }
+        n_past += (int) ids.size();
+        draft.clear();
+
+        // Tutto ciò che il decode ha scritto OLTRE l'ultimo confermato
+        // descrive bozza RIFIUTATA (o non ancora richiesta) — va tolto, o
+        // il giro dopo la troverebbe ancora lì.
+        if (!llama_memory_seq_rm(memoria, seq_id, (llama_pos) n_past, -1)) {
+            llama_memory_clear(memoria, true);
+            session->cached.clear();
+            fine = true;
+        }
+    }
+
+    // `id_last` finale È nella KV per davvero (decodificato in un batch di
+    // un giro qualunque sopra) ma mai spinto in `cached`: il prossimo turno
+    // lo aspetta lì, o il prefisso comune lo perderebbe.
+    session->cached.push_back(id_last);
+
+    llama_batch_free(batch_tgt);
+    if (tempo_primo_token < 0) tempo_primo_token = talos_da(avvio);
+}
+
+/**
  * Genera, e restituisce il testo prodotto. `null` significa fallimento e non
  * "niente da dire": il chiamante deve poterli distinguere, perché uno è un
  * backend rotto e l'altro è un modello silenzioso.
@@ -3286,6 +3736,24 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
         // Pubblicato DOPO che il testo è nell'accumulatore: chi interroga il
         // contatore non deve mai vedere un token che non esiste ancora.
         session->produced.store(produced, std::memory_order_relaxed);
+
+        /*
+         * ⛔⛔⛔ SOLO RICERCA — P2-1 blocco B. Il primo token resta il
+         * percorso ordinario: campionato e cronometrato come sempre, ma
+         * QUI — PRIMA di essere decodificato — se `session->speculator`
+         * esiste (SOLO dopo una chiamata esplicita a
+         * `nativeConstructSpeculatorForResearch`, mai in produzione) il
+         * resto della generazione passa a `talos_genera_speculativo`, che
+         * possiede la SUA decodifica per intero (mai duplicata qui — un
+         * secondo `llama_decode` sullo stesso token, alla stessa posizione,
+         * è quello che ha rifiutato il batch la prima volta che ci ho
+         * provato: `ret=-1`, "failed to initialize batch").
+         */
+        if (session->speculator && session->speculator->pronto()) {
+            talos_genera_speculativo(session, limit, stopAtEndOfGeneration, sampled,
+                                     produced, answer, tempo_primo_token, avvio);
+            break;
+        }
 
         // Il contesto è un tetto duro: superarlo non è un degrado, è un errore.
         // Controllato PRIMA di dare in pasto il token appena campionato, perché

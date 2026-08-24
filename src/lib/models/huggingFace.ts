@@ -301,6 +301,18 @@ export interface TalosHuggingFaceCard {
     /** Il README, per intero e non interpretato. */
     readme: string
     updatedAt: string | null
+    /**
+     * Restyle Blocco 6 (mockup, item 8) — le stesse pillole che la riga
+     * sfogliata già mostra (parametri/download/like), qui per la pagina di
+     * dettaglio. Verificato via WebFetch su un repository vero
+     * (unsloth/Qwen3-4B-GGUF, 24/8): `downloads`, `likes` e `gguf` sono già
+     * campi di primo livello della STESSA risposta `/api/models/{repo}` che
+     * questa funzione scarica per author/license/languages — nessuna
+     * seconda richiesta, nessun nuovo endpoint.
+     */
+    downloads: number
+    likes: number
+    gguf: TalosHuggingFaceModel['gguf']
 }
 
 /**
@@ -566,6 +578,9 @@ export function talosCreateHuggingFaceClient(
                 // Un README che manca non e' un guasto: certi repo non ne hanno.
                 readme: readme.ok ? await readme.text() : '',
                 updatedAt: typeof row.lastModified === 'string' ? row.lastModified : null,
+                downloads: Number(row.downloads ?? 0),
+                likes: Number(row.likes ?? 0),
+                gguf: leggiGguf(row.gguf),
             }
         },
         async listGgufFiles(repo, revision) {

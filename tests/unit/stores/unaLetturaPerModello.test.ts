@@ -221,4 +221,298 @@ describe('⛔ una lettura per MODELLO, non per versione', () => {
         // uguali — e la persona sceglierebbe fra sei righe identiche.
         expect(new Set(quality).size).toBeGreaterThan(1)
     })
+
+    /**
+     * P2-6 — il conteggio parametri è l'ECCEZIONE alla regola sopra: a
+     * differenza della qualità, il numero di parametri è ARCHITETTURALE — un
+     * Q8 e un IQ3 dello stesso modello hanno esattamente gli stessi
+     * parametri, cambiano solo i bit per parametro. Ereditarlo è corretto,
+     * non un bug gemello di quello che il test precedente esiste per stanare.
+     */
+    it('⭐ il conteggio parametri SI eredita: è la forma, non la qualità', async () => {
+        const store = await repoAperto()
+        await store.talosExamineRepo()
+
+        const conteggi = store.talosLocalModels.repo!.sets.map((set) => {
+            const esame = set.examination
+            return esame.state === 'read' ? esame.parameterCount : null
+        })
+        // Tutte e tre le qualità del 3B hanno gli stessi parametri (e le tre
+        // dell'8B pure), quindi al massimo due valori distinti in tutto —
+        // uno per modello, mai uno per file come per `quantisation`.
+        expect(new Set(conteggi).size).toBeLessThanOrEqual(2)
+        expect(conteggi.every((c) => c !== null)).toBe(true)
+    })
+
+    /**
+     * ⛔ AL CONTRARIO del conteggio parametri: l'istogramma tipo-tensore e la
+     * versione di quantizzazione SONO la qualità, esattamente come
+     * `quantisation` — riportare quelli letti dal capofila per una versione
+     * ereditata sarebbe la stessa bugia che il test sopra vieta per
+     * `quantisation`, solo in un campo diverso.
+     */
+    it('⛔ istogramma e versione di quantizzazione NON si ereditano: null sulle versioni ereditate', async () => {
+        const store = await repoAperto()
+        await store.talosExamineRepo()
+
+        const sets = store.talosLocalModels.repo!.sets
+        // I due capofila sono le versioni più leggere di ciascun modello —
+        // stesso ordine già affermato dal primo test di questo describe.
+        const capofila = sets.filter((set) => set.label.includes('IQ3_M'))
+        const ereditate = sets.filter((set) => !set.label.includes('IQ3_M'))
+        expect(capofila).toHaveLength(2)
+        expect(ereditate).toHaveLength(4)
+
+        for (const set of capofila) {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            expect(esame.tensorTypeHistogram, set.label).not.toBeNull()
+            expect(esame.quantizationVersion, set.label).not.toBeUndefined()
+        }
+        for (const set of ereditate) {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            expect(esame.tensorTypeHistogram, set.label).toBeNull()
+            expect(esame.quantizationVersion, set.label).toBeNull()
+        }
+    })
+})
+
+describe('⛔ Model Lab Blocco 2 — la cache KV forzata raggiunge OGNI verdetto, capofila e ereditato', () => {
+    /**
+     * `talosSetLocalKvCacheType()` tocca due punti diversi dentro lo store:
+     * la lettura del capofila (`talosExamineSet`, chiamata da
+     * `talosExamineRepo` una volta per modello) e l'eredità (`talosEredita`,
+     * per ogni versione che non tocca la rete). Un test che guardasse solo
+     * il capofila non proverebbe niente sul secondo punto — la stessa
+     * svista che il describe sopra esiste per stanare sui campi ereditati
+     * (P2-6): qui la riga che morde è la versione ereditata, non la prima.
+     *
+     * `gguf.ts` mette sempre `kvBytesPerElement: 2` (f16) quando legge un
+     * header vero — nessun campo GGUF dichiara il tipo della cache KV, è
+     * una scelta a tempo di inferenza, non del file. Quindi 'auto' su
+     * questo fixture equivale sempre a f16, ed è per questo che il
+     * rapporto atteso forzando q8_0 è esattamente 17/32 (= (34/32) / 2),
+     * mai "un po' meno".
+     */
+    it('forzare q8_0 restringe la cache KV di tutte le sei versioni rispetto ad auto, capofila E ereditate', async () => {
+        const auto = await repoAperto()
+        await auto.talosExamineRepo()
+        const baseline = auto.talosLocalModels.repo!.sets.map((set) => {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            return esame.fit.kvCacheBytes
+        })
+
+        vi.resetModules()
+        letture = []
+        const forzato = await repoAperto()
+        forzato.talosSetLocalKvCacheType('q8_0')
+        await forzato.talosExamineRepo()
+        const conQ8 = forzato.talosLocalModels.repo!.sets.map((set) => {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            return esame.fit.kvCacheBytes
+        })
+
+        expect(conQ8).toHaveLength(6)
+        for (let i = 0; i < baseline.length; i += 1) {
+            expect(conQ8[i], `set #${i}`).toBeCloseTo(baseline[i]! * (17 / 32), 0)
+        }
+    })
+
+    it("'auto' non cambia niente rispetto a non aver mai chiamato il selettore", async () => {
+        const mai = await repoAperto()
+        await mai.talosExamineRepo()
+        const senzaTocco = mai.talosLocalModels.repo!.sets.map((set) => {
+            const esame = set.examination
+            return esame.state === 'read' ? esame.fit.kvCacheBytes : null
+        })
+
+        vi.resetModules()
+        letture = []
+        const esplicito = await repoAperto()
+        esplicito.talosSetLocalKvCacheType('auto')
+        await esplicito.talosExamineRepo()
+        const conAuto = esplicito.talosLocalModels.repo!.sets.map((set) => {
+            const esame = set.examination
+            return esame.state === 'read' ? esame.fit.kvCacheBytes : null
+        })
+
+        expect(conAuto).toEqual(senzaTocco)
+    })
+
+    /**
+     * Il caso che conta per il controllo GLOBALE del Blocco 2 (slider di
+     * contesto + selettore cache KV in cima alla pagina di dettaglio, non il
+     * bottone di controproposta per riga): cambiare il selettore DOPO che le
+     * varianti sono già state esaminate deve ricalcolare tutto sul posto,
+     * MAI rileggere la rete. `talosExamineSet` non ha una scorciatoia per
+     * "questo file l'ho già letto" — richiama sempre `readHead` — quindi
+     * senza `talosRicalcolaEsaminati` questo stesso identico test
+     * conterebbe altre due letture (una per modello) invece di zero.
+     */
+    it('cambiare il tipo DOPO aver esaminato ricalcola sul posto, senza una sola lettura in più', async () => {
+        const store = await repoAperto()
+        await store.talosExamineRepo()
+        const primaDelCambio = [...letture]
+        const baseline = store.talosLocalModels.repo!.sets.map((set) => {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            return esame.fit.kvCacheBytes
+        })
+
+        store.talosSetLocalKvCacheType('q8_0')
+
+        // ⛔ La riga che morde: zero richieste nuove. Se qualcuno rimpiazzasse
+        // `talosRicalcolaEsaminati` con una nuova `talosExamineRepo()` "per
+        // semplicità", `letture` crescerebbe di due e questo fallirebbe.
+        expect(letture).toEqual(primaDelCambio)
+
+        const dopoIlCambio = store.talosLocalModels.repo!.sets.map((set) => {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            return esame.fit.kvCacheBytes
+        })
+        expect(dopoIlCambio).toHaveLength(6)
+        for (let i = 0; i < baseline.length; i += 1) {
+            expect(dopoIlCambio[i], `set #${i}`).toBeCloseTo(baseline[i]! * (17 / 32), 0)
+        }
+
+        // AL CONTRARIO: tornare ad 'auto' ricalcola di nuovo, sempre senza
+        // rete, e riporta esattamente il valore di partenza.
+        store.talosSetLocalKvCacheType('auto')
+        expect(letture).toEqual(primaDelCambio)
+        const tornatoAuto = store.talosLocalModels.repo!.sets.map((set) => {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            return esame.fit.kvCacheBytes
+        })
+        expect(tornatoAuto).toEqual(baseline)
+    })
+
+    /** Lo stesso, sul percorso del contesto — `talosSetLocalContext` promette "without re-reading" da prima del Blocco 2: qui diventa vero anche in pratica. */
+    it('cambiare il CONTESTO dopo aver esaminato ricalcola sul posto, senza una lettura in più', async () => {
+        const store = await repoAperto()
+        await store.talosExamineRepo()
+        const primaDelCambio = [...letture]
+        const baseline = store.talosLocalModels.repo!.sets.map((set) => {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            return esame.fit.kvCacheBytes
+        })
+
+        // TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS (localContextPolicy.ts) e' 4096:
+        // il quadruplo, non un numero a caso, per un rapporto atteso pulito.
+        store.talosSetLocalContext(16_384)
+
+        expect(letture).toEqual(primaDelCambio)
+        const dopoIlCambio = store.talosLocalModels.repo!.sets.map((set) => {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            return esame.fit.kvCacheBytes
+        })
+        // La cache KV scala linearmente col contesto (fit.ts: e' un fattore
+        // moltiplicativo diretto): al quadruplo del contesto di partenza
+        // corrisponde il quadruplo della cache, capofila E ereditate.
+        for (let i = 0; i < baseline.length; i += 1) {
+            expect(dopoIlCambio[i], `set #${i}`).toBeCloseTo(baseline[i]! * 4, 0)
+        }
+    })
+})
+
+describe('⛔ Model Lab Blocco 4 — il ledger di provenienza raggiunge OGNI verdetto, capofila e ereditato', () => {
+    /**
+     * `examination.ledger` e' un campo NUOVO (Blocco 4): senza questo blocco
+     * di prove, un domani qualcuno potrebbe toccare talosExamineSet o
+     * talosEredita e dimenticare la meta' "ledger" della coppia
+     * fit/ledger — esattamente lo stesso rischio gia' preso per
+     * kvCacheTypeOverride, sullo stesso file, la stessa notte.
+     */
+    it('ogni set "read" porta un ledger di otto righe, capofila E ereditate', async () => {
+        const store = await repoAperto()
+        await store.talosExamineRepo()
+
+        const sets = store.talosLocalModels.repo!.sets
+        expect(sets).toHaveLength(6)
+        for (const set of sets) {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            expect(esame.ledger, set.label).toHaveLength(8)
+            expect(esame.ledger.map((row) => row.label)).toEqual([
+                'weights', 'kvCache', 'compute', 'runtime', 'safetyMargin',
+                'totalRuntime', 'availableRam', 'margin',
+            ])
+        }
+    })
+
+    /**
+     * ⛔ Il controllo che conta: due strutture calcolate dallo stesso input
+     * (talosModelFit e talosResourceLedger, chiamate una accanto all'altra
+     * in talosExamineSet/talosEredita) non devono MAI raccontare due storie
+     * diverse sullo stesso numero.
+     */
+    it('la riga kvCache del ledger coincide ESATTAMENTE con fit.kvCacheBytes, su ogni riga', async () => {
+        const store = await repoAperto()
+        await store.talosExamineRepo()
+
+        for (const set of store.talosLocalModels.repo!.sets) {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            const kvCache = esame.ledger.find((row) => row.label === 'kvCache')
+            expect(kvCache?.bytes, set.label).toBe(esame.fit.kvCacheBytes)
+        }
+    })
+
+    it('forzare q8_0 etichetta la riga kvCache del ledger "predicted", capofila E ereditate', async () => {
+        const store = await repoAperto()
+        store.talosSetLocalKvCacheType('q8_0')
+        await store.talosExamineRepo()
+
+        for (const set of store.talosLocalModels.repo!.sets) {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            const kvCache = esame.ledger.find((row) => row.label === 'kvCache')
+            expect(kvCache?.provenance, set.label).toBe('predicted')
+        }
+    })
+
+    /**
+     * Il ledger e' la meta' del Blocco 4 che manca al test precedente:
+     * quello provava che `talosRicalcolaEsaminati` ricalcola `fit` senza
+     * rilettura, capofila e ereditati. Questo prova che ricalcola ANCHE
+     * `ledger` — un campo diverso, nella stessa funzione, aggiunto nella
+     * stessa notte: uno scritto e l'altro dimenticato e' esattamente il
+     * tipo di svista che questo file esiste per stanare.
+     */
+    it('cambiare il tipo KV dopo l\'esame ricalcola anche il ledger, capofila e ereditati, senza rilettura', async () => {
+        const store = await repoAperto()
+        await store.talosExamineRepo()
+        const primaDelCambio = [...letture]
+        const baseline = store.talosLocalModels.repo!.sets.map((set) => {
+            const esame = set.examination
+            if (esame.state !== 'read') throw new Error(`${set.label} non letto`)
+            return esame.ledger.find((row) => row.label === 'kvCache')?.bytes
+        })
+
+        store.talosSetLocalKvCacheType('q8_0')
+
+        // ⛔ Zero letture nuove: lo stesso principio gia' provato per `fit`,
+        // qui applicato al campo `ledger`.
+        expect(letture).toEqual(primaDelCambio)
+
+        const sets = store.talosLocalModels.repo!.sets
+        for (let i = 0; i < sets.length; i += 1) {
+            const esame = sets[i]!.examination
+            if (esame.state !== 'read') throw new Error(`${sets[i]!.label} non letto`)
+            const kvCache = esame.ledger.find((row) => row.label === 'kvCache')
+            expect(kvCache?.bytes, `set #${i}`).toBeCloseTo(baseline[i]! * (17 / 32), 0)
+            expect(kvCache?.provenance, `set #${i}`).toBe('predicted')
+            // La somma delle righe resta coerente con fit anche dopo il
+            // ricalcolo: stessa garanzia di resourceLedger.test.ts (Blocco
+            // 1), qui esercitata sul percorso di ricalcolo, non solo sulla
+            // prima lettura.
+            expect(kvCache?.bytes, `set #${i}`).toBe(esame.fit.kvCacheBytes)
+        }
+    })
 })

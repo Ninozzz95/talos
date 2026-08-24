@@ -8,11 +8,18 @@ const bridge = vi.hoisted(() => ({
     speak: vi.fn(),
     stop: vi.fn(),
     buildEnrollmentProfile: vi.fn(),
+    previewEnrollmentProfile: vi.fn(),
     addListener: vi.fn(),
 }))
 
 vi.mock('@capacitor/core', () => ({
     registerPlugin: () => bridge,
+    // Il diario `talosVoceDiarioAnnota` (24/8) chiama `talosTracciaFuori`,
+    // che legge `Capacitor.Plugins.TalosDictation?.traccia` — senza questa
+    // chiave il mock non ha `Capacitor` affatto e la lettura lancia PRIMA
+    // di arrivare all'optional chaining. Vuoto qui: questi test non
+    // provano il canale verso logcat, solo che chiamarlo non rompe nulla.
+    Capacitor: { Plugins: {} },
 }))
 
 const {
@@ -20,6 +27,8 @@ const {
     talosPersonalVoiceProfiles,
     talosBuildVoiceEnrollmentProfile,
     talosSpeakForReading,
+    talosPersonalVoiceDiario,
+    talosPreviewVoiceEnrollmentProfile,
 } = await import('@/services/personalVoice')
 
 const PROFILE_ID = 'a1b2c3d4-e5f6-4789-a012-3456789abcde'
@@ -283,6 +292,46 @@ describe('personalVoice service', () => {
             const spoken = await talosSpeakForReading('personal', PROFILE_ID, 'Ciao', { rate: 1, pitch: 1, onend, onerror })
             expect(spoken).toBe(true) // gestito: nessun ripiego a metà lettura
             expect(bridge.addListener).toHaveBeenCalled() // il canale di completamento è armato per quando arriverà l'esito vero
+        })
+    })
+
+    /**
+     * Owner 24/8, terza segnalazione: voce codificata, anteprima e chat
+     * mute, e il Doctor non aveva NIENTE sulla sintesi per capire dove.
+     * Questo diario è la cura — qui si prova che REGISTRA, non che risolve
+     * il muto (quello vuole il Pad, non c'è qui).
+     */
+    describe('diario (Doctor, 24/8)', () => {
+        it('registra una richiesta di lettura accettata E una rifiutata, con la ragione', async () => {
+            bridge.status.mockResolvedValue({ supported: true, installed: true })
+            bridge.profiles.mockResolvedValue(READY_PROFILES)
+
+            bridge.speak.mockResolvedValueOnce({ accepted: true })
+            await talosSpeakForReading('personal', PROFILE_ID, 'Ciao', { rate: 1, pitch: 1 })
+            expect(talosPersonalVoiceDiario().some((riga) => riga.includes('accepted:true'))).toBe(true)
+
+            bridge.speak.mockResolvedValueOnce({ accepted: false, reason: 'engineBusy' })
+            await talosSpeakForReading('personal', PROFILE_ID, 'Ciao', { rate: 1, pitch: 1 })
+            const ultima = talosPersonalVoiceDiario()
+            expect(ultima.some((riga) => riga.includes('accepted:false') && riga.includes('engineBusy'))).toBe(true)
+        })
+
+        /**
+         * AL CONTRARIO: proprio il percorso segnalato — l'anteprima
+         * dell'arruolamento — prima di questo file NON armava nemmeno i
+         * listener di completamento (vedi talosPreviewVoiceEnrollmentProfile
+         * nel sorgente). Qui si prova che ora registra anche un rifiuto.
+         */
+        it('registra un\'anteprima rifiutata dal nativo', async () => {
+            bridge.previewEnrollmentProfile.mockResolvedValueOnce({ accepted: false })
+            await talosPreviewVoiceEnrollmentProfile('prova', 'preview-1')
+            expect(talosPersonalVoiceDiario().some((riga) => riga.includes('preview:preview-1') && riga.includes('accepted:false'))).toBe(true)
+        })
+
+        it('non cresce oltre le ultime 16 righe', async () => {
+            bridge.previewEnrollmentProfile.mockResolvedValue({ accepted: true })
+            for (let i = 0; i < 20; i += 1) await talosPreviewVoiceEnrollmentProfile('prova', `preview-cap-${i}`)
+            expect(talosPersonalVoiceDiario().length).toBeLessThanOrEqual(16)
         })
     })
 })

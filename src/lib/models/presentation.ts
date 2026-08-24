@@ -106,6 +106,26 @@ export function talosFormatBytes(bytes: number): string {
 }
 
 /**
+ * "30B", "4B", "235M" — mai il numero per intero, che nessuno legge.
+ *
+ * Estratta da `TalosMobileLocalModelRow.vue` durante il restyle Blocco 6
+ * (mockup, item 8): la pagina di dettaglio aveva bisogno della STESSA
+ * formattazione per le sue pillole, e "due copie di una regola sono una
+ * regola e un futuro bug" (`sortChip.ts`, stesso principio applicato qui).
+ */
+export function talosFormatParameterCount(total: number | null | undefined): string | null {
+    if (!total) return null
+    if (total >= 1e12) return `${(total / 1e12).toFixed(1).replace(/\.0$/, '')}T`
+    if (total >= 1e9) return `${Math.round(total / 1e9)}B`
+    return `${Math.round(total / 1e6)}M`
+}
+
+/** "4,9 M", "309,6 K" — la stessa notazione compatta ovunque un conteggio grande si mostra. */
+export function talosFormatCompactCount(value: number, locale: string): string {
+    return new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 }).format(value)
+}
+
+/**
  * What must be said before a download is offered.
  *
  * Warnings, not blocks. The only thing actually refused is a set the repository

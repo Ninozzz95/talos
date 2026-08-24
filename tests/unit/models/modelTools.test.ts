@@ -69,6 +69,28 @@ function fit(over: Record<string, unknown> = {}) {
     }
 }
 
+/**
+ * Model Lab Blocco 4 — `examination.ledger` è un campo obbligatorio del tipo
+ * reale, ma questo file non è coperto dal typecheck (`tests/**`): un fixture
+ * senza `ledger` compila silenziosamente. Nessun test qui monta il
+ * componente ledger (questo file prova gli strumenti per il modello, non la
+ * UI), quindi non crasherebbe — ma un fixture disonesto rispetto al
+ * contratto reale resta un fixture da correggere, non da lasciare finché
+ * qualcosa lo scopre nel modo brutto.
+ */
+function ledger() {
+    return [
+        { label: 'weights', bytes: 2.5 * 1024 ** 3, provenance: 'exact' },
+        { label: 'kvCache', bytes: 500_000_000, provenance: 'exact' },
+        { label: 'compute', bytes: 335_544_320, provenance: 'policy' },
+        { label: 'runtime', bytes: 67_108_864, provenance: 'policy' },
+        { label: 'safetyMargin', bytes: 268_435_456, provenance: 'policy' },
+        { label: 'totalRuntime', bytes: 3_671_088_640, provenance: 'policy' },
+        { label: 'availableRam', bytes: 4_000_000_000, provenance: 'exact' },
+        { label: 'margin', bytes: 1_000_000_000, provenance: 'policy' },
+    ]
+}
+
 function set(over: Record<string, unknown> = {}) {
     return {
         label: 'Q4_K_M',
@@ -80,7 +102,7 @@ function set(over: Record<string, unknown> = {}) {
         expectedShards: 1,
         foundShards: 1,
         security: 'safe',
-        examination: { state: 'read', fit: fit(), quantisation: 'Q4_K_M', trainedContext: 131_072 },
+        examination: { state: 'read', fit: fit(), ledger: ledger(), kvCacheTypeLabel: 'f16', quantisation: 'Q4_K_M', trainedContext: 131_072 },
         ...over,
     }
 }
@@ -253,6 +275,8 @@ describe('inspecting', () => {
                     examination: {
                         state: 'read',
                         fit: fit({ band: 'wont-run', reason: 'context', maxContext: 8192 }),
+                        ledger: ledger(),
+                        kvCacheTypeLabel: 'f16',
                         quantisation: 'Q4_K_M',
                         trainedContext: 131_072,
                     },

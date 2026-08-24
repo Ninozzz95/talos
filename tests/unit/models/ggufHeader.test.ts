@@ -79,7 +79,8 @@ interface Field {
 
 function gguf(options: {
     fields: Field[]
-    tensors?: Array<{ name: string; dims: number[] }>
+    /** `type` is the `ggml_type` (see GGML_TYPE_NAMES) — defaults to 12, Q4_K. */
+    tensors?: Array<{ name: string; dims: number[]; type?: number }>
     magic?: string
     version?: number
     truncateTo?: number
@@ -109,7 +110,7 @@ function gguf(options: {
         writer.text(tensor.name)
         writer.u32(tensor.dims.length)
         for (const dimension of tensor.dims) writer.u64(dimension)
-        writer.u32(12) // ggml type; the parser must not need to understand it
+        writer.u32(tensor.type ?? 12) // ggml type — P2-6 reads this now, see gguf.ts
         writer.u64(0)
     }
 
@@ -335,6 +336,99 @@ describe('reading a GGUF header', () => {
     /** Big enough that a header almost never needs a second request. */
     it('reads enough on the first request to cover an ordinary header', () => {
         expect(TALOS_GGUF_FIRST_READ_BYTES).toBeGreaterThanOrEqual(1024 * 1024)
+    })
+})
+
+describe('P2-6 — quant-aware metadata: parameter count and tensor type histogram', () => {
+    /**
+     * No GGUF metadata key carries this directly — verified against the
+     * vendored `gguf-py` (`total_params` is a caller-supplied argument in
+     * every writer/metadata function, never a stored field). The only
+     * honest source is summing every tensor's own element count.
+     */
+    it('sums element counts across every tensor, not just the first', () => {
+        const result = talosReadGgufHeader(gguf({
+            fields: LLAMA,
+            tensors: [
+                { name: 'token_embd.weight', dims: [4096, 32000], type: 0 },
+                { name: 'blk.0.attn_norm.weight', dims: [128, 128], type: 1 },
+            ],
+        }), 4_000_000_000)
+
+        expect(result.ok).toBe(true)
+        if (!result.ok) return
+        expect(result.header.parameterCount).toBe(4096 * 32000 + 128 * 128)
+    })
+
+    /** AL CONTRARIO — a header with fields but zero tensors reports `null`, not a silent 0. */
+    it('reports null, not zero, when no tensor exists to sum', () => {
+        const result = talosReadGgufHeader(gguf({ fields: LLAMA, tensors: [] }), 4_000_000_000)
+
+        expect(result.ok).toBe(true)
+        if (!result.ok) return
+        expect(result.header.parameterCount).toBeNull()
+        expect(result.header.tensorTypeHistogram).toEqual({})
+    })
+
+    /**
+     * `file_type` (`Q4_K_M`) names a whole model's recipe; a single tensor is
+     * only ever one plain `ggml_type` (`Q4_K`, never `_M`). Different
+     * vocabularies, and the histogram must use the tensor one.
+     */
+    it('names each tensor by its OWN ggml_type, not the model file_type', () => {
+        const result = talosReadGgufHeader(gguf({
+            fields: LLAMA, // general.file_type = 15 -> "Q4_K_M"
+            tensors: [
+                { name: 'a', dims: [4], type: 12 }, // Q4_K
+                { name: 'b', dims: [4], type: 12 }, // Q4_K
+                { name: 'c', dims: [4], type: 1 },  // F16
+            ],
+        }), 4_000_000_000)
+
+        expect(result.ok).toBe(true)
+        if (!result.ok) return
+        expect(result.header.tensorTypeHistogram).toEqual({ Q4_K: 2, F16: 1 })
+    })
+
+    /**
+     * The format adds `ggml_type` values faster than any app can track them
+     * (MXFP4/NVFP4 arrived in the same window this header parser was
+     * written). A type this table has never seen must not sink the whole
+     * model — it degrades to a labelled unknown, same principle as the
+     * value-type stepper above refusing to guess a width it has never seen.
+     */
+    it('AL CONTRARIO — an unrecognised ggml_type degrades to a label, never a refusal', () => {
+        const result = talosReadGgufHeader(gguf({
+            fields: LLAMA,
+            tensors: [{ name: 'token_embd.weight', dims: [4096, 32000], type: 99 }],
+        }), 4_000_000_000)
+
+        expect(result.ok).toBe(true)
+        if (!result.ok) return
+        expect(result.header.tensorTypeHistogram).toEqual({ 'unknown-99': 1 })
+        // The element count is still real — an unrecognised TYPE says nothing about SIZE.
+        expect(result.header.parameterCount).toBe(4096 * 32000)
+    })
+
+    it('reads general.quantization_version when the header declares it', () => {
+        const withVersion = [
+            ...LLAMA,
+            { key: 'general.quantization_version', type: Type.UINT32, value: 2 },
+        ]
+        const result = talosReadGgufHeader(gguf({ fields: withVersion }), 4_000_000_000)
+
+        expect(result.ok).toBe(true)
+        if (!result.ok) return
+        expect(result.header.quantizationVersion).toBe(2)
+    })
+
+    /** AL CONTRARIO — most real headers omit it; absence must read as unmeasured, not as 0. */
+    it('reports null, not zero, when quantization_version is absent', () => {
+        const result = talosReadGgufHeader(gguf({ fields: LLAMA }), 4_000_000_000)
+
+        expect(result.ok).toBe(true)
+        if (!result.ok) return
+        expect(result.header.quantizationVersion).toBeNull()
     })
 })
 

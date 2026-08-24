@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch, type Component } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { Bell, Bot, BrainCircuit, ChevronRight, Globe2, Languages, Mail, Palette, Search, Settings, Shield, ShieldCheck, Smartphone, DatabaseBackup, User, Volume2, Wrench } from '@lucide/vue'
+import { Bell, Bot, BrainCircuit, ChevronRight, FlaskConical, Globe2, Languages, Mail, Palette, Search, Settings, Shield, ShieldCheck, Smartphone, DatabaseBackup, User, Volume2, Wrench } from '@lucide/vue'
+import { talosHarnessUiAvailable, TALOS_HARNESS_UI_PATH } from '@/services/harnessUi'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
 import { useTalosMediaQuery } from '@/composables/useTalosMediaQuery'
 import { useTalosAccountStore } from '@/stores/account'
@@ -72,6 +73,13 @@ const resolvedGroups = computed(() => TALOS_MOBILE_SETTINGS_GROUPS.map((group) =
 })))
 const account = useTalosAccountStore()
 const developmentMode = import.meta.env.DEV
+/**
+ * Owner 24/8: «harness ci deve essere sia su mobile che su desktop,
+ * mockup visibile solo nella apk di debug». Il link stesso e' l'unico
+ * cancello lato UI (lo schermo non ha un altro modo di arrivarci): niente
+ * da nascondere se il collegamento non c'e' affatto.
+ */
+const harnessUiAvailable = talosHarnessUiAvailable()
 
 // Owner 2026-07-24: drive the sheet header — in a detail pane the header shows
 // the subsection name and its Back returns to the categories list (ONE back,
@@ -299,6 +307,33 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
                                 </span>
                                 <ChevronRight class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
                             </RouterLink>
+                            <!--
+                                Harness UI (Codex, 24/8) — mockup statico +
+                                Board, riusati byte-per-byte da AVM-harness-ui.
+                                Solo in build di debug: `harnessUiAvailable`
+                                legge la presenza di un plugin nativo che in
+                                release non compila affatto (vedi
+                                services/harnessUi.ts), non un flag che si
+                                potrebbe scavalcare. Navigazione TOP-LEVEL,
+                                non un iframe: `frame-src 'none'` nella CSP
+                                dell'app blocca l'incorporamento ma non un
+                                link verso un altro documento (verificato via
+                                ricerca — MDN, frame-src riguarda SOLO
+                                <frame>/<iframe>, non window.location/<a>).
+                            -->
+                            <a
+                                v-if="harnessUiAvailable && group.chiave === 'Intelligence'"
+                                :href="TALOS_HARNESS_UI_PATH"
+                                data-testid="settings-harness-ui-link"
+                                class="talos-pressable flex min-h-touch w-full items-center gap-[var(--talos-space-inline)] px-[var(--talos-space-card)] text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--talos-ring)]"
+                            >
+                                <FlaskConical class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                                <span class="min-w-0 flex-1">
+                                    <span class="block truncate text-sm text-[var(--talos-text)]">{{ t('harnessUi.linkLabel') }}</span>
+                                    <span class="block truncate text-2xs text-[var(--talos-muted)]">{{ t('harnessUi.linkHint') }}</span>
+                                </span>
+                                <ChevronRight class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
+                            </a>
                         <template v-for="tab in group.tabs" :key="tab.id">
                             <RouterLink
                                 v-if="tab.id === TALOS_MOBILE_SETTINGS_MODEL_LAB_TAB"

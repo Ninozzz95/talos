@@ -107,10 +107,54 @@ const FILE_TYPES: Record<number, string> = {
     32: 'BF16',
 }
 
+/**
+ * `ggml_type`, from `ggml/include/ggml.h` in the vendored submodule —
+ * verified against the pinned source, not the general `general.file_type`
+ * enum above (a DIFFERENT vocabulary: `file_type` names a whole model's
+ * quantisation RECIPE, like `Q4_K_M`, which mixes several per-tensor types;
+ * a tensor itself is only ever one plain `Q4_K`, never `_M`/`_S`/`_L`).
+ *
+ * P2-6 (quant-aware model metadata): "4-bit" is not a performance profile —
+ * a tensor histogram is the only honest way to say what a model actually
+ * contains, because a mixed recipe can dispatch to very different kernels
+ * per tensor. Numbers with no name below fall back to `unknown-<n>` rather
+ * than being dropped — a format this actively developed adds types faster
+ * than any app tracks them, and a model is still readable without one.
+ */
+const GGML_TYPE_NAMES: Record<number, string> = {
+    0: 'F32', 1: 'F16', 2: 'Q4_0', 3: 'Q4_1', 6: 'Q5_0', 7: 'Q5_1', 8: 'Q8_0', 9: 'Q8_1',
+    10: 'Q2_K', 11: 'Q3_K', 12: 'Q4_K', 13: 'Q5_K', 14: 'Q6_K', 15: 'Q8_K',
+    16: 'IQ2_XXS', 17: 'IQ2_XS', 18: 'IQ3_XXS', 19: 'IQ1_S', 20: 'IQ4_NL', 21: 'IQ3_S',
+    22: 'IQ2_S', 23: 'IQ4_XS', 24: 'I8', 25: 'I16', 26: 'I32', 27: 'I64', 28: 'F64',
+    29: 'IQ1_M', 30: 'BF16', 34: 'TQ1_0', 35: 'TQ2_0', 39: 'MXFP4', 40: 'NVFP4',
+    41: 'Q1_0', 42: 'Q2_0',
+}
+
 export interface TalosGgufHeader {
     architecture: string
     /** From the header, never from the file name. Null for a type we do not know. */
     quantisation: string | null
+    /**
+     * `general.quantization_version` — the GGML_QUANT_VERSION the file was
+     * produced against (2, at the time of writing). `null` when the field is
+     * absent, which is a real and common case, not a parse failure.
+     */
+    quantizationVersion: number | null
+    /**
+     * The sum of every tensor's element count — computed here because GGUF
+     * carries no direct `general.parameter_count` key (verified against the
+     * vendored `gguf-py`: `total_params` is always a CALLER-supplied number
+     * in every writer/metadata path, never a stored field). `null` only if
+     * no tensor could be read at all, which the `incomplete` case above
+     * already rules out for anything that reaches this point.
+     */
+    parameterCount: number | null
+    /**
+     * How many tensors carry each `ggml_type` — see {@link GGML_TYPE_NAMES}.
+     * A build that "enables" a faster kernel path is not evidence that path
+     * is actually used on THIS model; a histogram is.
+     */
+    tensorTypeHistogram: Readonly<Record<string, number>>
     /** Where the weights begin: everything past this is tensor data. */
     dataOffset: number
     shape: TalosModelShape
@@ -308,14 +352,27 @@ export function talosReadGgufHeader(bytes: ArrayBuffer, fileBytes: number): Talo
         const declaredType = String(fields.get('general.type') ?? 'model')
         if (declaredType !== 'model') return { ok: false, reason: 'not-a-model', kind: declaredType }
 
-        // Tensor infos are walked, not read: their sizes are implied by the
-        // data that follows, and the only thing needed from them is where they
-        // end.
+        /**
+         * Tensor infos are walked, not skipped whole: P2-6 needs the element
+         * count (for `parameterCount`) and the per-tensor `ggml_type` (for
+         * `tensorTypeHistogram`), so both are read now instead of stepped
+         * over. Only the trailing offset (8 bytes) is still skipped — it is
+         * where the tensor's DATA begins, not metadata, and nothing here
+         * needs it. Names are still discarded: no consumer keys anything by
+         * per-tensor name today, and keeping them would grow this map with
+         * every layer of every model for zero use.
+         */
+        const tensorTypeHistogram: Record<string, number> = {}
+        let parameterCount = 0
         for (let index = 0; index < tensorCount; index += 1) {
             reader.text()
             const dimensions = reader.u32()
-            reader.skip(dimensions * 8)
-            reader.skip(4)
+            let elements = 1
+            for (let dimension = 0; dimension < dimensions; dimension += 1) elements *= reader.u64()
+            parameterCount += elements
+            const tensorType = reader.u32()
+            const typeName = GGML_TYPE_NAMES[tensorType] ?? `unknown-${tensorType}`
+            tensorTypeHistogram[typeName] = (tensorTypeHistogram[typeName] ?? 0) + 1
             reader.skip(8)
         }
 
@@ -363,11 +420,19 @@ export function talosReadGgufHeader(bytes: ArrayBuffer, fileBytes: number): Talo
         const fileType = Number(fields.get('general.file_type'))
         const quantisation = FILE_TYPES[fileType] ?? null
 
+        const declaredQuantVersion = Number(fields.get('general.quantization_version'))
+        const quantizationVersion = Number.isFinite(declaredQuantVersion) ? declaredQuantVersion : null
+
         return {
             ok: true,
             header: {
                 architecture,
                 quantisation,
+                quantizationVersion,
+                // No tensor read at all is not "a model with zero parameters" —
+                // it is a number this header cannot honestly give.
+                parameterCount: tensorCount > 0 ? parameterCount : null,
+                tensorTypeHistogram,
                 dataOffset,
                 shape: {
                     weightBytes: Math.max(0, fileBytes - dataOffset),

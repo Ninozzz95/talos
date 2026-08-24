@@ -121,6 +121,26 @@ export interface TalosLocalEngineChatPlan {
     contextTokens: number
 }
 
+/**
+ * P2-3 — i segnali di prestazione reali di Android 16, letti ADESSO.
+ * `null` sotto la soglia API di quel campo, o quando il device non sa
+ * rispondere in questo istante (rate-limit, carico insufficiente per le
+ * headroom CPU/GPU — l'esito documentato dell'API, non un guasto).
+ */
+export interface TalosPerformanceSignals {
+    /** [0,100], 0 = nessuna risorsa CPU concedibile. `null` sotto API 36. */
+    cpuHeadroom: number | null
+    /** Come `cpuHeadroom`, per la GPU. */
+    gpuHeadroom: number | null
+    /** [0,100], previsione ADESSO. `null` sotto API 30. */
+    thermalHeadroom: number | null
+    /** Come `thermalHeadroom`, previsto qualche secondo avanti. */
+    thermalForecast: number | null
+    thermalStatus: 'none' | 'light' | 'moderate' | 'severe' | 'critical' | null
+    /** `SystemClock.elapsedRealtime()` di QUANDO è stata presa questa lettura. */
+    sampledAtElapsedMs: number
+}
+
 interface TalosLlamaPlugin {
     available(): Promise<{
         available: boolean
@@ -172,6 +192,12 @@ interface TalosLlamaPlugin {
             measuredAtMs: number
         }>
     }>
+    /**
+     * P2-3 — CPU/GPU/termico ADESSO, letti da Android 16 dove esistono
+     * (`SystemHealthManager`/`PowerManager`). Girato fuori dal thread che
+     * genera token: sicuro da chiamare spesso.
+     */
+    performanceSignals(): Promise<TalosPerformanceSignals>
     open(options: {
         path: string
         threads?: number
@@ -674,6 +700,51 @@ export async function talosLocalEngineOpenWithFallback(
     throw new TalosLocalEngineOpenError('unknown', 'TALOS_LLAMA_OPEN_FAILED')
 }
 
+/**
+ * P3-1 — apre un modello locale PRIMA che il primo messaggio lo richieda,
+ * silenziosamente. Zero giudizio ambientale qui (vedi `localWarmTrigger.ts`
+ * per il perché): questa porta esegue, non decide.
+ *
+ * ## La guardia di concorrenza, e perché serve
+ *
+ * TALOS tiene un solo modello alla volta — se l'utente sceglie un modello
+ * locale, poi un altro, prima che la prima apertura sia finita, DUE
+ * `open()` native in volo insieme sono esattamente la classe di corsa che
+ * TalosLlamaEngine non tollera (un solo thread attore, P0-3). La guardia
+ * qui sotto elimina il rischio lato TS senza dover sapere nulla del
+ * lifecycle nativo: al massimo un warm in volo per volta, e un secondo
+ * trigger arrivato nel frattempo aspetta il primo prima di partire — non
+ * lo salta, altrimenti l'ultima scelta dell'utente perderebbe la corsa.
+ *
+ * ## Perché nessun errore esce da qui
+ *
+ * Un warm-load fallito non è un fallimento per l'utente: il primo
+ * messaggio, quando arriverà davvero, riapre nel percorso normale
+ * (`ensureLoaded` in `localAdapter.ts`) esattamente come se il warm non
+ * fosse mai partito. È un'ottimizzazione silenziosa, non una promessa —
+ * stesso principio già in uso per il congelamento del prefisso.
+ */
+let talosWarmInFlight: Promise<void> | null = null
+
+export async function talosWarmLocalModel(path: string): Promise<void> {
+    if (talosWarmInFlight) await talosWarmInFlight.catch(() => undefined)
+    const eseguito = (async () => {
+        try {
+            const status = await talosLocalEngineStatus()
+            if (!status.available || status.loadedPath === path) return
+            await talosLocalEngineOpenWithFallback(path)
+        } catch {
+            // Vedi sopra: un'ottimizzazione, non una promessa.
+        }
+    })()
+    talosWarmInFlight = eseguito
+    try {
+        await eseguito
+    } finally {
+        if (talosWarmInFlight === eseguito) talosWarmInFlight = null
+    }
+}
+
 export interface TalosLocalModelFile {
     path: string
     bytes: number
@@ -769,6 +840,16 @@ export async function talosLocalEngineChatPlan(
         promptTokens: integerOf(plan.promptTokens) ?? 0,
         contextTokens: integerOf(plan.contextTokens) ?? 0,
     }
+}
+
+/**
+ * P2-3 — una lettura, adesso. Non lancia mai: un servizio assente o una
+ * chiamata che il device rifiuta tornano già `null` campo per campo dal
+ * lato nativo (vedi `TalosPerformanceSignals.java`), non un'eccezione che
+ * spegnerebbe un segnale opzionale.
+ */
+export async function talosLocalPerformanceSignals(): Promise<TalosPerformanceSignals> {
+    return plugin.performanceSignals()
 }
 
 /**
