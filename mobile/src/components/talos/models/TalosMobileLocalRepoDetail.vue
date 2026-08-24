@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
-import { AlertTriangle, Download, ShieldAlert } from '@lucide/vue'
+import { AlertTriangle, ClipboardCopy, Download, ExternalLink, ShieldAlert } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosModelFitBar from '@/components/talos/models/TalosModelFitBar.vue'
 import TalosModelResourceLedger from '@/components/talos/models/TalosModelResourceLedger.vue'
@@ -10,16 +10,20 @@ import { useTalosI18n } from '@/i18n'
 import { talosModelCardMarkdown } from '@/lib/models/modelCardMarkdown'
 import { talosEstimatedCapacity } from '@/lib/models/fit'
 import { talosFitBadge } from '@/lib/models/fitBadge'
+import type { TalosHuggingFaceCard } from '@/lib/models/huggingFace'
 import {
     talosFailureKey,
     talosFitVerdict,
     talosFormatBytes,
+    talosFormatCompactCount,
+    talosFormatParameterCount,
     talosRetryAfterSeconds,
     talosSetWarnings,
 } from '@/lib/models/presentation'
 import { talosModelSpeaks } from '@/lib/models/modelLanguages'
 import { talosReadmeSummary } from '@/lib/models/readmeSummary'
 import { talosSortChipClass } from '@/lib/sortChip'
+import { writeTalosClipboardText } from '@/services/clipboard'
 import { talosDiscardModelTransfer } from '@/services/modelTransfer'
 import {
     talosCloseModelRepo,
@@ -44,13 +48,7 @@ const props = defineProps<{
 const { t, locale } = useTalosI18n()
 const store = talosLocalModels
 const refused = ref<string | null>(null)
-const card = ref<{
-    author: string | null
-    license: string | null
-    languages: readonly string[]
-    readme: string
-    updatedAt: string | null
-} | null>(null)
+const card = ref<TalosHuggingFaceCard | null>(null)
 let loadGeneration = 0
 /**
  * Model Lab Blocco 3 — vero SOLO mentre l'esame automatico gira in
@@ -62,10 +60,76 @@ const examiningRepo = ref(false)
 
 const repo = computed(() => store.repo?.id === props.repoId ? store.repo : null)
 const summary = computed(() => talosReadmeSummary(card.value?.readme ?? ''))
-const schedaAperta = ref(false)
 const schedaLeggibile = computed(() => talosModelCardMarkdown(card.value?.readme ?? ''))
 const cardTags = computed(() => [card.value?.author, card.value?.license]
     .filter((value): value is string => typeof value === 'string' && value.length > 0))
+
+/**
+ * Restyle Blocco 6 (mockup, item 8) — le pillole complete: parametri e
+ * formato accanto a publisher/licenza, download e like nella stessa riga
+ * dei tag. `card.value` viene da `talosDescribeModelRepo`, che ora legge
+ * anche `downloads`/`likes`/`gguf` dalla STESSA risposta HF già scaricata
+ * per autore/licenza (huggingFace.ts, verificato su un repository vero via
+ * WebFetch prima di scriverlo) — non e' una seconda richiesta di rete.
+ */
+const parameterCountLabel = computed(() => talosFormatParameterCount(card.value?.gguf?.parameters))
+const downloadsLabel = computed(() => card.value
+    ? talosFormatCompactCount(card.value.downloads, locale.value)
+    : null)
+
+/** Restyle Blocco 6 (mockup, item 3) — il link esce SEMPRE, anche prima che la scheda arrivi: costruito dal solo repoId. */
+const hfUrl = computed(() => `https://huggingface.co/${props.repoId}`)
+
+/**
+ * Restyle Blocco 6 (mockup, item 1) — le tre sezioni della pagina.
+ * "Quantizzazioni" resta quella di sempre (rail + config + ledger);
+ * "Scheda modello" e' la stessa `card` gia' scaricata, solo spostata
+ * dentro un tab invece di stare sempre aperta in cima; "File" elenca i
+ * percorsi VERI di ogni variante GGUF (row.set.paths) — dati che questo
+ * store ha gia', non un elenco inventato ne' un secondo endpoint per
+ * l'intero contenuto del repository.
+ */
+const activeTab = ref<'quantizzazioni' | 'scheda' | 'file'>('quantizzazioni')
+const tabOptions = computed(() => ([
+    { value: 'quantizzazioni', label: t('localModels.tabQuantizzazioni'), testId: 'talos-models-tab-quant' },
+    { value: 'scheda', label: t('localModels.tabScheda'), testId: 'talos-models-tab-scheda' },
+    { value: 'file', label: t('localModels.tabFile'), testId: 'talos-models-tab-file' },
+]))
+function onTabChange(value: string): void {
+    if (value !== 'quantizzazioni' && value !== 'scheda' && value !== 'file') return
+    activeTab.value = value
+}
+const allFiles = computed(() => (repo.value?.sets ?? []).flatMap((set) => set.paths))
+
+/**
+ * Restyle Blocco 6 (mockup, item 5) — un'unica azione reale dietro il
+ * menu "altro", non un elenco con voci finte: copiare l'indirizzo del
+ * repository. Stesso schema di DoctorScreen.vue (`copied`/`copyError`,
+ * timer di due secondi, nessun toast nostro perche' Android 13+ mostra
+ * gia' la propria conferma di sistema).
+ */
+const linkCopied = ref(false)
+const linkCopyError = ref(false)
+let linkCopyTimer: ReturnType<typeof setTimeout> | null = null
+async function copyHfLink(): Promise<void> {
+    linkCopyError.value = false
+    try {
+        await writeTalosClipboardText(hfUrl.value)
+        linkCopied.value = true
+        if (linkCopyTimer !== null) clearTimeout(linkCopyTimer)
+        linkCopyTimer = setTimeout(() => { linkCopied.value = false }, 2_000)
+    } catch {
+        linkCopyError.value = true
+    }
+}
+
+/**
+ * Restyle Blocco 6 (mockup, item 6) — le tacche dello slider. Valori
+ * tondi DENTRO il range vero di questo blocco (CONTEXT_MIN/MAX qui
+ * sotto), non i 2K/8K/16K/32K del mockup: quelli erano per il suo range
+ * dimostrativo (max 32K), il nostro arriva a 131072.
+ */
+const CONTEXT_TICKS = [2_048, 32_768, 65_536, 131_072] as const
 
 /**
  * Se questo modello dichiara di parlare la lingua dell'interfaccia.
@@ -151,11 +215,12 @@ async function load(): Promise<void> {
     const generation = ++loadGeneration
     refused.value = null
     card.value = null
-    // Un altro modello è un'altra scheda: chiusa, come la si trova la prima volta.
-    schedaAperta.value = false
     // Restyle Blocco 6 — un altro repository è un'altra rail: nessuna
     // variante del vecchio repo resta "selezionata" su quello nuovo.
     selectedKey.value = null
+    // Un altro repository riparte dalla prima sezione, non da quella dove
+    // si era fermato il precedente.
+    activeTab.value = 'quantizzazioni'
 
     const description = Promise.resolve()
         .then(() => talosDescribeModelRepo(props.repoId))
@@ -291,6 +356,18 @@ function rowByKey(key: string) {
     return rows.value.find((row) => row.key === key) ?? null
 }
 
+/**
+ * Restyle Blocco 6 (mockup, item 1) — stile a sottolineatura per i tre
+ * tab, non a pillola: stesso `TalosThemedFilter` di rail/KV/ordina, un
+ * terzo primitivo visivo per lo stesso radiogroup accessibile.
+ */
+function tabOptionClass(selected: boolean): string {
+    const base = 'talos-pressable min-h-touch shrink-0 border-b-2 px-[calc(var(--talos-space-inline)/2)] text-sm font-medium transition-colors'
+    return selected
+        ? `${base} border-[var(--talos-accent)] text-[var(--talos-text)]`
+        : `${base} border-transparent text-[var(--talos-muted)]`
+}
+
 async function reclaim(): Promise<void> {
     for (const leftover of store.leftovers.items) await talosDiscardModelTransfer(leftover.path)
     await talosRefreshLeftovers()
@@ -301,9 +378,19 @@ async function reclaim(): Promise<void> {
     <div data-testid="talos-models-repo-detail" class="flex min-w-0 flex-col gap-[var(--talos-space-section)]">
         <h1 data-testid="talos-models-repo-title" class="break-words font-mono text-base font-semibold leading-snug text-[var(--talos-text)]">{{ repoId }}</h1>
 
+        <!-- Blocco SEMPRE visibile, sopra le sezioni: tag, descrizione,
+             link a Hugging Face. Restyle Blocco 6 (mockup) — nel mockup
+             questo sta sopra i tab, non dentro "Scheda modello". -->
         <section v-if="card" data-testid="talos-models-card" class="flex min-w-0 flex-col gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-[var(--talos-space-control)]">
             <div class="flex flex-wrap gap-[var(--talos-space-inline)]">
                 <span v-for="tag in cardTags" :key="tag" class="rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-inline)] py-[calc(var(--talos-space-inline)/2)] font-mono text-2xs text-[var(--talos-muted)]">{{ tag }}</span>
+                <!-- item 8: parametri e formato, come publisher/licenza sopra. -->
+                <span v-if="parameterCountLabel" data-testid="talos-models-card-params" class="rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-inline)] py-[calc(var(--talos-space-inline)/2)] font-mono text-2xs text-[var(--talos-muted)]">{{ parameterCountLabel }}</span>
+                <span class="rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-inline)] py-[calc(var(--talos-space-inline)/2)] font-mono text-2xs text-[var(--talos-muted)]">{{ t('localModels.ggufFormatTag') }}</span>
+            </div>
+            <div v-if="card" class="flex flex-wrap items-center gap-x-[var(--talos-space-inline)] font-mono text-2xs tabular-nums text-[var(--talos-muted)]">
+                <span v-if="downloadsLabel" data-testid="talos-models-card-downloads">{{ t('localModels.downloadsShort', { count: downloadsLabel }) }}</span>
+                <span v-if="card.likes">{{ card.likes }} ★</span>
             </div>
             <!-- L'avviso di lingua. Solo quando il modello DICHIARA le sue
                  lingue e la tua non c'e': un «non si sa» qui sarebbe rumore, e
@@ -315,21 +402,75 @@ async function reclaim(): Promise<void> {
                 class="flex min-w-0 items-start gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] border border-[var(--talos-warning)]/40 bg-[var(--talos-warning)]/10 px-[var(--talos-space-inline)] py-[calc(var(--talos-space-inline)/2)] text-xs leading-5 text-[var(--talos-text)]"
             >{{ t('localModels.languageWarning', { languages: (card?.languages ?? []).join(', ') }) }}</p>
             <p v-if="summary" data-testid="talos-models-readme-summary" class="line-clamp-2 text-xs leading-5 text-[var(--talos-text)]">{{ summary }}</p>
-            <!-- La scheda si legge, non si guarda in sorgente. Il contenuto si
-                 monta solo quando il pannello è aperto: un README del Hub arriva
-                 anche a centomila caratteri, e pagarne il rendering per chi non
-                 lo apre sarebbe pagarlo sempre. -->
-            <details
-                v-if="schedaLeggibile"
-                data-testid="talos-models-readme-full"
-                class="border-t border-[var(--talos-border)] pt-[var(--talos-space-inline)]"
-                @toggle="schedaAperta = ($event.target as HTMLDetailsElement).open"
-            >
-                <summary class="flex min-h-touch cursor-pointer items-center text-xs font-semibold text-[var(--talos-accent)]">{{ t('localModels.fullReadme') }}</summary>
-                <TalosMobileMessageContent v-if="schedaAperta" class="text-xs" :content="schedaLeggibile" />
-            </details>
+
+            <!-- item 3 + item 5: apri su Hugging Face, e l'unica azione
+                 reale dietro "altro" — copiare il link. -->
+            <div class="flex items-center gap-[var(--talos-space-inline)]">
+                <a
+                    :href="hfUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="talos-models-open-hf"
+                    class="talos-pressable flex min-h-touch flex-1 items-center justify-center gap-[calc(var(--talos-space-inline)/2)] rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-control)] text-sm font-semibold text-[var(--talos-text)]"
+                >
+                    {{ t('localModels.openOnHuggingFace') }}
+                    <ExternalLink class="size-[var(--talos-icon-size)] shrink-0" aria-hidden="true" />
+                </a>
+                <button
+                    type="button"
+                    data-testid="talos-models-copy-link"
+                    :aria-label="t('localModels.copyLink')"
+                    class="talos-pressable inline-flex size-[var(--talos-touch-target)] shrink-0 items-center justify-center rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] text-[var(--talos-text)]"
+                    @click="copyHfLink"
+                >
+                    <ClipboardCopy class="size-[var(--talos-icon-size)]" aria-hidden="true" />
+                </button>
+            </div>
+            <p v-if="linkCopied" role="status" data-testid="talos-models-copy-confirm" class="text-2xs text-[var(--talos-success)]">{{ t('localModels.linkCopied') }}</p>
+            <p v-if="linkCopyError" role="alert" class="text-2xs text-[var(--talos-danger)]">{{ t('localModels.linkCopyFailed') }}</p>
         </section>
 
+        <!-- item 2: il riquadro di spiegazione. Sempre visibile sopra i
+             tab, come nel mockup — non ripete nulla che il ledger o il
+             verdetto dicano gia', spiega il MECCANISMO. -->
+        <p
+            v-if="repo?.sets.length"
+            data-testid="talos-models-analysis-banner"
+            class="rounded-[var(--talos-radius-card)] border border-[var(--talos-accent)]/40 bg-[var(--talos-accent-soft)] px-[var(--talos-space-control)] py-[var(--talos-space-inline)] text-xs leading-5 text-[var(--talos-text)]"
+        >
+            <strong class="text-[var(--talos-accent)]">{{ t('localModels.analysisBannerTitle') }}</strong>
+            {{ t('localModels.analysisBannerBody') }}
+        </p>
+
+        <!-- item 1: i tre tab. Stesso radiogroup accessibile di rail/KV
+             (TalosThemedFilter), stile a sottolineatura invece che a
+             scheda — un primitivo di stile diverso, la stessa semantica. -->
+        <TalosThemedFilter
+            v-if="repo?.sets.length || card"
+            data-testid="talos-models-tabs"
+            :model-value="activeTab"
+            :options="tabOptions"
+            :group-label="t('localModels.tabsGroupLabel')"
+            group-class="flex gap-[var(--talos-space-control)] border-b border-[var(--talos-border)]"
+            :option-class="tabOptionClass"
+            @update:model-value="onTabChange"
+        />
+
+        <!-- Tab "Scheda modello" — il README per intero, prima dietro una
+             divulgazione dentro la card, ora la sua sezione: stesso
+             montaggio pigro (si legge solo quando il tab è attivo). -->
+        <section v-if="activeTab === 'scheda'" data-testid="talos-models-readme-full">
+            <TalosMobileMessageContent v-if="schedaLeggibile" class="text-xs" :content="schedaLeggibile" />
+            <p v-else class="text-sm text-[var(--talos-muted)]">{{ t('localModels.noReadme') }}</p>
+        </section>
+
+        <!-- Tab "File" — item 1: i percorsi VERI di ogni variante GGUF, non un elenco inventato. -->
+        <ul v-else-if="activeTab === 'file'" data-testid="talos-models-file-tab" class="flex min-w-0 flex-col divide-y divide-[var(--talos-border)] rounded-[var(--talos-radius-card)] border border-[var(--talos-border)]">
+            <li v-for="path in allFiles" :key="path" class="min-w-0 truncate px-[var(--talos-space-control)] py-[var(--talos-space-inline)] font-mono text-2xs text-[var(--talos-text)]">{{ path }}</li>
+            <li v-if="!allFiles.length" class="px-[var(--talos-space-control)] py-[var(--talos-space-inline)] text-2xs text-[var(--talos-muted)]">{{ t('localModels.emptyRepo') }}</li>
+        </ul>
+
+        <template v-else-if="activeTab === 'quantizzazioni'">
         <p v-if="repo?.sets.length" class="font-mono text-2xs uppercase tracking-wider text-[var(--talos-muted)]">
             {{ t('localModels.variants') }}<template v-if="freeMemory"> · {{ t('models.fitFree', { free: freeMemory }) }}</template>
         </p>
@@ -404,17 +545,22 @@ async function reclaim(): Promise<void> {
                             <span data-testid="talos-models-variant-label" class="block truncate font-mono text-sm font-semibold text-[var(--talos-text)]">{{ selectedRow.set.label }}</span>
                             <span data-testid="talos-models-variant-size" class="font-mono text-2xs tabular-nums text-[var(--talos-muted)]">{{ selectedRow.size }}</span>
                         </span>
-                        <button
-                            type="button"
-                            data-testid="talos-models-download"
-                            :aria-label="`${t('localModels.download')} ${selectedRow.set.label}`"
-                            :disabled="selectedRow.set.incomplete"
-                            class="talos-pressable inline-flex size-[var(--talos-touch-target)] shrink-0 items-center justify-center rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] text-[var(--talos-accent-text)] disabled:opacity-50"
-                            @click="start(selectedRow.key, `${repoId.split('/').pop()} ${selectedRow.set.label}`)"
-                        >
-                            <Download class="size-[var(--talos-icon-size)]" aria-hidden="true" />
-                        </button>
                     </div>
+
+                    <!-- item 4: il bottone porta il nome della variante e
+                         la taglia, come nel mockup ("Scarica Q6_K ·
+                         3.31 GB") — non piu' una sola icona. -->
+                    <button
+                        type="button"
+                        data-testid="talos-models-download"
+                        :aria-label="`${t('localModels.download')} ${selectedRow.set.label}`"
+                        :disabled="selectedRow.set.incomplete"
+                        class="talos-pressable flex min-h-touch w-full items-center justify-center gap-[calc(var(--talos-space-inline)/2)] rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-[var(--talos-space-control)] text-sm font-semibold text-[var(--talos-accent-text)] disabled:opacity-50"
+                        @click="start(selectedRow.key, `${repoId.split('/').pop()} ${selectedRow.set.label}`)"
+                    >
+                        <Download class="size-[var(--talos-icon-size)] shrink-0" aria-hidden="true" />
+                        {{ t('localModels.downloadNamed', { label: selectedRow.set.label, size: selectedRow.size }) }}
+                    </button>
 
                     <p class="text-2xs leading-4 text-[var(--talos-muted)]">{{ t(selectedRow.badge.reasonKey, selectedRow.badge.delta === null ? {} : (selectedRow.badge.hasHeadroom ? { left: selectedRow.badge.delta } : { missing: selectedRow.badge.delta })) }}</p>
                     <p v-if="selectedRow.warnings.incomplete" data-testid="talos-models-incomplete" class="flex items-start gap-[var(--talos-space-inline)] text-2xs text-[var(--talos-danger)]">
@@ -448,16 +594,28 @@ async function reclaim(): Promise<void> {
                             :aria-valuetext="`${store.context} token`"
                             @change="onContextChange"
                         >
+                        <!-- item 6: le tacche numeriche sotto lo slider. -->
+                        <span data-testid="talos-models-context-ticks" class="flex justify-between font-mono text-3xs text-[var(--talos-muted)]">
+                            <span v-for="tick in CONTEXT_TICKS" :key="tick">{{ tick >= 1024 ? `${Math.round(tick / 1024)}K` : tick }}</span>
+                        </span>
                     </label>
-                    <TalosThemedFilter
-                        data-testid="talos-models-kv-cache-type"
-                        group-class="flex gap-[var(--talos-space-inline)]"
-                        :model-value="store.kvCacheType"
-                        :options="kvCacheOptions"
-                        :group-label="t('localModels.kvCacheTypeLabel')"
-                        :option-class="talosSortChipClass"
-                        @update:model-value="onKvCacheTypeChange"
-                    />
+                    <div class="flex flex-col gap-[calc(var(--talos-space-inline)/2)]">
+                        <!-- item 7: il tipo risolto DAVVERO, anche in
+                             AUTOMATICA — non solo il nome del selettore. -->
+                        <span class="flex items-center justify-between font-mono text-2xs uppercase tracking-wider text-[var(--talos-muted)]">
+                            {{ t('localModels.kvCacheTypeLabel') }}
+                            <span v-if="selectedRow.set.examination.state === 'read'" data-testid="talos-models-kv-resolved" class="tabular-nums text-[var(--talos-text)]">{{ t(`localModels.kvCacheType.${selectedRow.set.examination.kvCacheTypeLabel}`) }}</span>
+                        </span>
+                        <TalosThemedFilter
+                            data-testid="talos-models-kv-cache-type"
+                            group-class="flex gap-[var(--talos-space-inline)]"
+                            :model-value="store.kvCacheType"
+                            :options="kvCacheOptions"
+                            :group-label="t('localModels.kvCacheTypeLabel')"
+                            :option-class="talosSortChipClass"
+                            @update:model-value="onKvCacheTypeChange"
+                        />
+                    </div>
 
                     <!-- Caselle statistiche — i due numeri che contano di
                          piu' tirati fuori dalla frase, non affogati dentro,
@@ -499,6 +657,7 @@ async function reclaim(): Promise<void> {
                     <p v-else class="text-2xs text-[var(--talos-muted)]">{{ t('localModels.ledgerTitle') }}</p>
                 </div>
             </div>
+        </template>
         </template>
 
         <div v-if="store.leftovers.totalBytes > 0" data-testid="talos-models-leftovers" class="flex flex-wrap items-center gap-[var(--talos-space-inline)] text-2xs text-[var(--talos-muted)]">

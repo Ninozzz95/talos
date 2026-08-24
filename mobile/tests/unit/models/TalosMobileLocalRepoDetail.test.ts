@@ -13,6 +13,13 @@ const harness = vi.hoisted(() => ({
         license: 'apache-2.0',
         updatedAt: '2026-08-05T00:00:00Z',
         readme: '# Qwen\n\nThis model is built for long coding sessions with tools and careful instruction following across large repositories.\n\n## Full notes\nThe complete card remains available here.',
+        // Restyle Blocco 6 (mockup, item 8): TalosHuggingFaceCard porta
+        // anche questi tre campi da quando describeModel() li legge dalla
+        // stessa risposta HF di author/license — senza, downloadsLabel
+        // formatterebbe `undefined` in «NaN», trovato dalla suite intera.
+        downloads: 309_648,
+        likes: 234,
+        gguf: { parameters: 4_000_000_000, repositoryFileBytes: null, contextLength: 131_072, architecture: 'qwen3' },
     })),
     examine: vi.fn(async () => undefined),
     examineRepo: vi.fn(async () => undefined),
@@ -37,6 +44,10 @@ vi.mock('@/stores/localModels', () => ({
     talosRefreshLeftovers: vi.fn(async () => undefined),
     talosRefreshHuggingFaceToken: vi.fn(async () => undefined),
 }))
+
+// Restyle Blocco 6 (mockup, item 5) — l'unica azione dietro "copia link".
+const clipboard = vi.hoisted(() => ({ write: vi.fn(async () => undefined) }))
+vi.mock('@/services/clipboard', () => ({ writeTalosClipboardText: clipboard.write }))
 
 import TalosMobileLocalRepoDetail from '@/components/talos/models/TalosMobileLocalRepoDetail.vue'
 // Le stesse funzioni mockate sopra: importarle qui (dopo vi.mock, che Vitest
@@ -114,7 +125,15 @@ describe('TalosMobileLocalRepoDetail', () => {
         expect(wrapper.get('[data-testid="talos-models-variant-rail"]').findAll('[role="radio"]')).toHaveLength(1)
     })
 
-    it('shows a cleaned summary first and keeps the complete README behind a native disclosure', async () => {
+    /**
+     * Restyle Blocco 6 (mockup, item 1) — sostituisce il vecchio test sulla
+     * `<details>` nativa: il README per intero ora vive nel tab "Scheda
+     * modello", non piu' dietro una divulgazione dentro la card. Stessa
+     * garanzia di prima (non si monta finche' nessuno lo chiede — un
+     * README del Hub arriva a centomila caratteri), il meccanismo che la
+     * garantisce e' cambiato da `<details>` a `activeTab`.
+     */
+    it('mostra un riassunto compatto sopra i tab, e il README intero solo nel tab Scheda modello', async () => {
         const wrapper = mount(TalosMobileLocalRepoDetail, {
             props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
         })
@@ -123,21 +142,16 @@ describe('TalosMobileLocalRepoDetail', () => {
         const summary = wrapper.get('[data-testid="talos-models-readme-summary"]')
         expect(summary.text()).toContain('long coding sessions')
         expect(summary.classes()).toContain('line-clamp-2')
-        const disclosure = wrapper.get('[data-testid="talos-models-readme-full"]')
-        expect(disclosure.element.tagName).toBe('DETAILS')
-        // Chiusa, la scheda non costa niente: un README del Hub arriva a
-        // centomila caratteri e nessuno li ha ancora chiesti.
-        expect(disclosure.find('[data-testid="talos-mobile-message-content"]').exists()).toBe(false)
+        // Di default siamo su "Quantizzazioni": il README intero non è montato.
+        expect(wrapper.find('[data-testid="talos-mobile-message-content"]').exists()).toBe(false)
 
-        const dettagli = disclosure.element as HTMLDetailsElement
-        dettagli.open = true
-        await disclosure.trigger('toggle')
+        await wrapper.get('[data-testid="talos-models-tab-scheda"]').trigger('click')
 
-        const scheda = disclosure.get('[data-testid="talos-mobile-message-content"]')
+        const scheda = wrapper.get('[data-testid="talos-models-readme-full"]').get('[data-testid="talos-mobile-message-content"]')
         expect(scheda.text()).toContain('The complete card remains available here.')
         // ⛔ Il difetto che questa prova sorveglia: la scheda si LEGGE. Niente
         // sorgente in un `pre`, e i titoli sono titoli.
-        expect(disclosure.find('pre').exists()).toBe(false)
+        expect(wrapper.find('pre').exists()).toBe(false)
         expect(scheda.find('h2').exists()).toBe(true)
         expect(scheda.text()).not.toContain('## Full notes')
     })
@@ -150,9 +164,10 @@ describe('TalosMobileLocalRepoDetail', () => {
      * mockup. La rail è il nuovo master del pattern master-detail
      * (ricerca web nel commento del componente), e la variante scelta
      * porta il proprio bottone di download nel pannello di configurazione,
-     * non più nella riga.
+     * non più nella riga. Il bottone stesso porta ora nome e taglia
+     * (item 4 della chiusura mockup, 24/8) — non più icona sola.
      */
-    it('la rail sostituisce l\'elenco, e il bottone di download resta accessibile e minimo', async () => {
+    it('la rail sostituisce l\'elenco, e il bottone di download porta nome e taglia', async () => {
         const wrapper = mount(TalosMobileLocalRepoDetail, {
             props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
         })
@@ -164,8 +179,10 @@ describe('TalosMobileLocalRepoDetail', () => {
 
         const download = wrapper.get('[data-testid="talos-models-download"]')
         expect(download.attributes('aria-label')).toContain('Q4_K_M')
-        expect(download.classes()).toContain('size-[var(--talos-touch-target)]')
-        expect(download.text()).not.toContain('Download')
+        expect(download.classes()).toContain('w-full')
+        expect(download.text()).toContain('Q4_K_M')
+        // 2_500_000_000 byte formattati da talosFormatBytes: 2.3 GiB, non 2.5 GB decimali.
+        expect(download.text()).toContain('2.3 GB')
     })
 
     it('un suffisso di backend nel nome resta leggibile per intero nel pannello di configurazione', async () => {
@@ -377,6 +394,12 @@ describe('TalosMobileLocalRepoDetail', () => {
                     { label: 'availableRam' as const, bytes: 5_000_000_000, provenance: 'exact' as const },
                     { label: 'margin' as const, bytes: 1_291_042_144, provenance: 'policy' as const },
                 ],
+                // Restyle Blocco 6 (mockup, item 7): campo aggiunto allo
+                // stesso stato "read" dopo che questo fixture era gia'
+                // scritto — senza, il tipo risolto sarebbe `undefined` a
+                // runtime (i test non passano dal typecheck, tests/** non
+                // e' nel suo `include`).
+                kvCacheTypeLabel: 'f16' as const,
                 quantisation: 'Q4_K_M',
                 trainedContext: 131_072,
                 parameterCount: 4_000_000_000,
@@ -434,6 +457,153 @@ describe('TalosMobileLocalRepoDetail', () => {
             expect(casella).toContain('15.6')
             expect(casella).not.toContain('15.602726935797765')
             wrapper.unmount()
+        })
+    })
+
+    /**
+     * Chiusura mockup, 24/8 — gli otto punti trovati confrontando i
+     * mobile veri col mockup ("app reale non è allineata al mockup" →
+     * owner, "chiudi tutti i punti"). Un test a testa, sul comportamento
+     * osservabile, non sulla classe CSS che li disegna.
+     */
+    describe('Chiusura mockup 24/8 — otto punti', () => {
+        it('item 1: i tre tab esistono, e cambiano cosa si vede sotto', async () => {
+            const wrapper = mount(TalosMobileLocalRepoDetail, {
+                props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+            })
+            await flushPromises()
+
+            expect(wrapper.get('[data-testid="talos-models-tab-quant"]').attributes('aria-checked')).toBe('true')
+            expect(wrapper.find('[data-testid="talos-models-variant-rail"]').exists()).toBe(true)
+            expect(wrapper.find('[data-testid="talos-models-readme-full"]').exists()).toBe(false)
+            expect(wrapper.find('[data-testid="talos-models-file-tab"]').exists()).toBe(false)
+
+            await wrapper.get('[data-testid="talos-models-tab-file"]').trigger('click')
+            expect(wrapper.find('[data-testid="talos-models-variant-rail"]').exists()).toBe(false)
+            const file = wrapper.get('[data-testid="talos-models-file-tab"]')
+            // item 1: percorsi VERI (set.paths), non un elenco inventato.
+            expect(file.text()).toContain('model-Q4_K_M.gguf')
+            wrapper.unmount()
+        })
+
+        it('item 2: il riquadro di spiegazione è sempre visibile sopra i tab', async () => {
+            const wrapper = mount(TalosMobileLocalRepoDetail, {
+                props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+            })
+            await flushPromises()
+
+            expect(wrapper.get('[data-testid="talos-models-analysis-banner"]').text()).toContain('talosExamineRepo')
+        })
+
+        it('item 3: il link a Hugging Face punta al repository vero', async () => {
+            const wrapper = mount(TalosMobileLocalRepoDetail, {
+                props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+            })
+            await flushPromises()
+
+            const link = wrapper.get('[data-testid="talos-models-open-hf"]')
+            expect(link.attributes('href')).toBe('https://huggingface.co/unsloth/a-very-long-qwen-coder-repository-name-for-mobile')
+            expect(link.attributes('target')).toBe('_blank')
+            expect(link.attributes('rel')).toContain('noopener')
+        })
+
+        // item 4 (nome+taglia sul bottone di download) è già coperto sopra da
+        // "la rail sostituisce l'elenco, e il bottone di download porta nome e
+        // taglia" — una seconda prova identica sarebbe la copia che diventa un
+        // futuro bug, non una garanzia in più.
+
+        it('item 5: copia il link vero negli appunti, e lo conferma a schermo', async () => {
+            const wrapper = mount(TalosMobileLocalRepoDetail, {
+                props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+            })
+            await flushPromises()
+
+            await wrapper.get('[data-testid="talos-models-copy-link"]').trigger('click')
+            await flushPromises()
+
+            expect(clipboard.write).toHaveBeenCalledWith('https://huggingface.co/unsloth/a-very-long-qwen-coder-repository-name-for-mobile')
+            expect(wrapper.find('[data-testid="talos-models-copy-confirm"]').exists()).toBe(true)
+        })
+
+        /** AL CONTRARIO del test sopra: quando il copia-appunti fallisce, si dichiara il fallimento, non un successo finto. */
+        it('item 5, al contrario: un copia-appunti fallito mostra l\'errore, non una finta conferma', async () => {
+            clipboard.write.mockRejectedValueOnce(new Error('TALOS_CLIPBOARD_UNAVAILABLE'))
+            const wrapper = mount(TalosMobileLocalRepoDetail, {
+                props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+            })
+            await flushPromises()
+
+            await wrapper.get('[data-testid="talos-models-copy-link"]').trigger('click')
+            await flushPromises()
+
+            expect(wrapper.find('[data-testid="talos-models-copy-confirm"]').exists()).toBe(false)
+            expect(wrapper.text()).toContain('Could not copy the link')
+        })
+
+        it('item 6: lo slider porta le tacche numeriche del range vero (2K…128K)', async () => {
+            const wrapper = mount(TalosMobileLocalRepoDetail, {
+                props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+            })
+            await flushPromises()
+
+            const tacche = wrapper.get('[data-testid="talos-models-context-ticks"]').text()
+            expect(tacche).toContain('2K')
+            expect(tacche).toContain('128K')
+        })
+
+        /**
+         * Fixture minima e locale a questo blocco: la `letta()` che porta lo
+         * stesso ledger a otto righe vive dentro il describe "Model Lab
+         * Blocco 4" qui sopra e non è visibile da fuori — questa ne è la
+         * forma ridotta, sufficiente per superare `state === 'read'` nel
+         * template senza duplicare le otto righe del ledger che qui non
+         * servono a nulla.
+         */
+        function esaminataCon(kvCacheTypeLabel: 'f16' | 'q8_0' | 'other') {
+            return {
+                state: 'read' as const,
+                fit: {
+                    band: 'comfortable' as const, reason: 'fits' as const,
+                    kvCacheBytes: 268_435_456, requiredBytes: 768_435_456, residentBytes: 6_000_000_000,
+                    deficitBytes: 0, tokensPerSecond: 12, maxContext: 32_768,
+                },
+                ledger: [{ label: 'weights' as const, bytes: 2_500_000_000, provenance: 'exact' as const }],
+                kvCacheTypeLabel,
+                quantisation: 'Q4_K_M', trainedContext: 131_072, parameterCount: 4_000_000_000,
+                tensorTypeHistogram: null, quantizationVersion: null,
+            }
+        }
+
+        it('item 7: il tipo di cache KV risolto si vede accanto all\'etichetta, anche in AUTOMATICA', async () => {
+            harness.state.repo.sets[0].examination = esaminataCon('q8_0')
+            const wrapper = mount(TalosMobileLocalRepoDetail, {
+                props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+            })
+            await flushPromises()
+
+            expect(wrapper.get('[data-testid="talos-models-kv-resolved"]').text()).toBe('Q8_0')
+        })
+
+        /** AL CONTRARIO: un header con un valore che non è nè F16 nè Q8_0 dichiara "Altro", non mente su uno dei due. */
+        it('item 7, al contrario: un tipo KV non riconosciuto si dichiara "Altro", mai una scelta a caso fra F16/Q8_0', async () => {
+            harness.state.repo.sets[0].examination = esaminataCon('other')
+            const wrapper = mount(TalosMobileLocalRepoDetail, {
+                props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+            })
+            await flushPromises()
+
+            expect(wrapper.get('[data-testid="talos-models-kv-resolved"]').text()).toBe('Other')
+        })
+
+        it('item 8: le pillole mostrano parametri, formato, download e like veri', async () => {
+            const wrapper = mount(TalosMobileLocalRepoDetail, {
+                props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+            })
+            await flushPromises()
+
+            expect(wrapper.get('[data-testid="talos-models-card-params"]').text()).toBe('4B')
+            expect(wrapper.get('[data-testid="talos-models-card-downloads"]').text()).toContain('309.6K')
+            expect(wrapper.text()).toContain('234 ★')
         })
     })
 })

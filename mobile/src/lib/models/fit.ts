@@ -221,6 +221,27 @@ function modelWithKvOverride(
 }
 
 /**
+ * Restyle Blocco 6 (mockup, item 7) — quale tipo di cache KV è EFFETTIVAMENTE
+ * in vigore, in AUTO come in forzato: la UI del mockup scrive "Q8" accanto
+ * all'etichetta anche quando il selettore è su AUTOMATICA, e quel valore
+ * deve venire dalla STESSA tabella che decide i byte, mai da una copia.
+ *
+ * `'other'` non è un caso teorico: un header può dichiarare un
+ * kvBytesPerElement che non coincide con nessuno dei due tipi noti (lo
+ * stesso motivo per cui `talosKvBytesPerElement` in localEngine.ts ha un
+ * fallback), e la UI deve poterlo dire invece di mentire "F16" o "Q8_0".
+ */
+export function talosResolvedKvCacheType(
+    model: TalosModelShape,
+    override?: TalosKvCacheTypeOverride,
+): 'f16' | 'q8_0' | 'other' {
+    const resolved = modelWithKvOverride(model, override)
+    if (resolved.kvBytesPerElement === KV_BYTES_PER_ELEMENT_BY_TYPE.f16) return 'f16'
+    if (Math.abs(resolved.kvBytesPerElement - KV_BYTES_PER_ELEMENT_BY_TYPE.q8_0!) < 1e-9) return 'q8_0'
+    return 'other'
+}
+
+/**
  * The counter-offer, computed even when the answer is no.
  *
  * The context is the free variable in the whole calculation, so a model that

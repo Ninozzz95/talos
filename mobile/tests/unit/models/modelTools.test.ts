@@ -102,7 +102,7 @@ function set(over: Record<string, unknown> = {}) {
         expectedShards: 1,
         foundShards: 1,
         security: 'safe',
-        examination: { state: 'read', fit: fit(), ledger: ledger(), quantisation: 'Q4_K_M', trainedContext: 131_072 },
+        examination: { state: 'read', fit: fit(), ledger: ledger(), kvCacheTypeLabel: 'f16', quantisation: 'Q4_K_M', trainedContext: 131_072 },
         ...over,
     }
 }
@@ -276,6 +276,7 @@ describe('inspecting', () => {
                         state: 'read',
                         fit: fit({ band: 'wont-run', reason: 'context', maxContext: 8192 }),
                         ledger: ledger(),
+                        kvCacheTypeLabel: 'f16',
                         quantisation: 'Q4_K_M',
                         trainedContext: 131_072,
                     },
