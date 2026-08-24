@@ -137,6 +137,43 @@ function byteLeggibili(bytes: number): string {
     return `${Math.round(bytes)} B`
 }
 
+function talosPercentualeHeadroom(valore: number | null): string {
+    return valore === null ? '—' : `${Math.round(valore)}%`
+}
+
+/**
+ * P2-3 — una riga sola, coi segnali GREZZI (non lo stato dell'isteresi,
+ * che ha bisogno di più campioni nel tempo — vedi
+ * `localPerformanceGovernor.ts`). `null` se il device non ha dato
+ * nessuna lettura per nessun campo: mostrare una riga di soli «—» non
+ * cambierebbe cosa fa dopo chi legge, quindi non è una riga (§ "se
+ * dicesse un valore diverso" in testa a questo file).
+ */
+export function talosPerformanceHeadroomRow(segnali: {
+    cpuHeadroom: number | null
+    gpuHeadroom: number | null
+    thermalHeadroom: number | null
+    thermalStatus: 'none' | 'light' | 'moderate' | 'severe' | 'critical' | null
+}): TalosEngineDiagnosticRow | null {
+    if (segnali.cpuHeadroom === null && segnali.gpuHeadroom === null
+        && segnali.thermalHeadroom === null && segnali.thermalStatus === null) {
+        return null
+    }
+    const pressioneTermicaReale = segnali.thermalStatus === 'severe' || segnali.thermalStatus === 'critical'
+    return {
+        id: 'engine-performance-headroom',
+        labelKey: 'doctor.performanceHeadroom',
+        value: `CPU ${talosPercentualeHeadroom(segnali.cpuHeadroom)} · `
+            + `GPU ${talosPercentualeHeadroom(segnali.gpuHeadroom)} · `
+            + `termico ${talosPercentualeHeadroom(segnali.thermalHeadroom)} `
+            + `(${segnali.thermalStatus ?? 'n/d'})`,
+        // `false` solo con una VERA pressione termica: '—' per un'API sotto
+        // soglia non è un problema da segnalare in rosso, è semplicemente un
+        // dato che questo device non sa dare.
+        ok: !pressioneTermicaReale,
+    }
+}
+
 export function talosEngineDiagnosticRows(facts: TalosEngineFacts): TalosEngineDiagnosticRow[] {
     const rows: TalosEngineDiagnosticRow[] = []
 

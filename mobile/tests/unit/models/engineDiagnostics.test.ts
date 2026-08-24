@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
     talosEngineDiagnosticRows,
     talosKvBytesPerTokenOf,
+    talosPerformanceHeadroomRow,
     type TalosEngineFacts,
 } from '@/lib/models/engineDiagnostics'
 
@@ -319,5 +320,55 @@ describe('quello che le righe dicono', () => {
         expect(riga(spento, 'engine-model')?.value).toBe('—')
         // E «nessun modello aperto» NON è un guasto: si apre al primo messaggio.
         expect(riga(spento, 'engine-model')?.ok).toBe(true)
+    })
+})
+
+describe('talosPerformanceHeadroomRow — P2-3, i segnali grezzi nel Doctor', () => {
+    it('nessuna riga se il device non ha dato NESSUNA lettura', () => {
+        const riga = talosPerformanceHeadroomRow({
+            cpuHeadroom: null, gpuHeadroom: null, thermalHeadroom: null, thermalStatus: null,
+        })
+        expect(riga).toBeNull()
+    })
+
+    it('mostra i numeri disponibili e «—» per quelli assenti', () => {
+        const riga = talosPerformanceHeadroomRow({
+            cpuHeadroom: 42, gpuHeadroom: null, thermalHeadroom: 80.6, thermalStatus: 'light',
+        })
+        expect(riga?.value).toBe('CPU 42% · GPU — · termico 81% (light)')
+    })
+
+    it('⛔ una riga basta anche con un SOLO campo presente', () => {
+        const riga = talosPerformanceHeadroomRow({
+            cpuHeadroom: null, gpuHeadroom: null, thermalHeadroom: null, thermalStatus: 'none',
+        })
+        expect(riga).not.toBeNull()
+        expect(riga?.value).toBe('CPU — · GPU — · termico — (none)')
+    })
+
+    it('ok è vero senza pressione termica reale, anche a headroom basso', () => {
+        const riga = talosPerformanceHeadroomRow({
+            cpuHeadroom: 3, gpuHeadroom: 3, thermalHeadroom: 3, thermalStatus: 'moderate',
+        })
+        expect(riga?.ok).toBe(true)
+    })
+
+    it('⭐ AL CONTRARIO — ok è falso SOLO con pressione termica severa o critica', () => {
+        const severo = talosPerformanceHeadroomRow({
+            cpuHeadroom: 90, gpuHeadroom: 90, thermalHeadroom: 90, thermalStatus: 'severe',
+        })
+        expect(severo?.ok).toBe(false)
+
+        const critico = talosPerformanceHeadroomRow({
+            cpuHeadroom: 90, gpuHeadroom: 90, thermalHeadroom: 90, thermalStatus: 'critical',
+        })
+        expect(critico?.ok).toBe(false)
+    })
+
+    it('la chiave i18n esiste in entrambe le lingue (doctor.performanceHeadroom)', () => {
+        const riga = talosPerformanceHeadroomRow({
+            cpuHeadroom: 1, gpuHeadroom: null, thermalHeadroom: null, thermalStatus: null,
+        })
+        expect(riga?.labelKey).toBe('doctor.performanceHeadroom')
     })
 })

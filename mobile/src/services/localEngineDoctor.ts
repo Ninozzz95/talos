@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core'
 import {
     talosEngineDiagnosticRows,
+    talosPerformanceHeadroomRow,
     type TalosEngineDiagnosticRow,
 } from '@/lib/models/engineDiagnostics'
 
@@ -27,7 +28,7 @@ export async function talosLocalEngineDoctorRows(): Promise<TalosEngineDiagnosti
     if (!Capacitor.isNativePlatform()) return []
 
     const [{ talosLocalEngineStatus, talosLocalEngineTimings, talosLocalInstalledModels,
-        talosPrefixCacheUsage, talosLocalEngineTemplateCapabilities },
+        talosPrefixCacheUsage, talosLocalEngineTemplateCapabilities, talosLocalPerformanceSignals },
         { talosMeasureDevice },
         { talosMaxContextFor }] = await Promise.all([
         import('@/services/localEngine'),
@@ -42,7 +43,7 @@ export async function talosLocalEngineDoctorRows(): Promise<TalosEngineDiagnosti
      * cosa meno utile che possa esistere.
      */
     const [statoEsito, tempiEsito, deviceEsito, installatiEsito, statoGrezzoEsito,
-        prefissiEsito] =
+        prefissiEsito, segnaliEsito] =
         await Promise.allSettled([
             talosLocalEngineStatus(),
             talosLocalEngineTimings(),
@@ -53,6 +54,8 @@ export async function talosLocalEngineDoctorRows(): Promise<TalosEngineDiagnosti
             // mostrato: un baratto che conviene resta un baratto, e chi lo
             // paga deve poterlo vedere.
             talosPrefixCacheUsage(),
+            // P2-3 — una lettura sola dei segnali di prestazione Android 16.
+            talosLocalPerformanceSignals(),
         ])
 
     const stato = statoEsito.status === 'fulfilled' ? statoEsito.value : null
@@ -63,6 +66,7 @@ export async function talosLocalEngineDoctorRows(): Promise<TalosEngineDiagnosti
         : []
     const grezzo = statoGrezzoEsito.status === 'fulfilled' ? statoGrezzoEsito.value : null
     const prefissi = prefissiEsito.status === 'fulfilled' ? prefissiEsito.value : null
+    const segnali = segnaliEsito.status === 'fulfilled' ? segnaliEsito.value : null
 
     /**
      * ⛔ I pesi vanno RIMESSI nella memoria disponibile prima di chiedere il
@@ -169,7 +173,20 @@ export async function talosLocalEngineDoctorRows(): Promise<TalosEngineDiagnosti
         }
     }
 
-    return [...righeAttrezzi, ...righeSelettore, ...talosEngineDiagnosticRows({
+    /**
+     * P2-3 — una lettura sola, non lo stato dell'isteresi
+     * (`talosAdvancePerformanceGovernor`, `localPerformanceGovernor.ts`):
+     * quello ha bisogno di più campioni veri nel tempo per dire qualcosa,
+     * e il Doctor apre una volta sola quando la persona guarda questa
+     * schermata — un tracker che riparte da zero a ogni apertura
+     * mostrerebbe quasi sempre "balanced" per costruzione, non un dato
+     * onesto. La riga qui sotto mostra i segnali GREZZI: quello che c'è
+     * da vedere oggi.
+     */
+    const rigaSegnali = segnali ? talosPerformanceHeadroomRow(segnali) : null
+    const righeSegnali: TalosEngineDiagnosticRow[] = rigaSegnali ? [rigaSegnali] : []
+
+    return [...righeAttrezzi, ...righeSelettore, ...righeSegnali, ...talosEngineDiagnosticRows({
         available: stato?.available ?? false,
         backends: stato?.backends ?? '',
         loadedPath: stato?.loadedPath ?? null,
