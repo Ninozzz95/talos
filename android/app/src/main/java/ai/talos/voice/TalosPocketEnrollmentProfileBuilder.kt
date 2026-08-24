@@ -87,9 +87,23 @@ internal class TalosPocketEnrollmentProfileBuilder(
     ): TalosVoiceEnrollmentBuildResult {
         require(acceptedPhrases.isNotEmpty()) { "cannot build a profile from zero accepted phrases" }
         require(isItalianLocale(language)) { "Pocket enrollment requires an Italian locale, got $language" }
-        require(acceptedPhrases.none(TalosVoiceCaptureResult::cancelled)) {
-            "a cancelled capture cannot be used for voice enrollment"
-        }
+        // ⛔ Trovato 24/8, dal vivo sul Pad: QUI c'era `require(acceptedPhrases.none(::cancelled))`
+        // ("a cancelled capture cannot be used for voice enrollment"), e falliva SEMPRE - non
+        // su un caso raro. `TalosVoiceRecorder.captureWithMicrophoneAlreadyCeded` marca
+        // `cancelled = true` ogni volta che il ciclo di lettura si ferma perché `isCancelled()`
+        // torna true - ed `isCancelled()` è esattamente il segnale che il wizard invia a OGNI
+        // rilascio del pulsante "tieni premuto per registrare" (`pointerup`), non solo su
+        // un'interruzione vera. Confermato (ricerca web, spec W3C Pointer Events, 24/8):
+        // `pointerup` è un rilascio DELIBERATO dell'utente, semanticamente diverso da
+        // `pointercancel` (interruzione di sistema) - ma `TalosMobilePersonalVoiceEnrollment.vue`
+        // instrada entrambi allo stesso `stopRecording()`, quindi il nativo non può più
+        // distinguerli quando arriva qui. Un `cancelled=true` prodotto da un rilascio normale
+        // non significa "scarta questa cattura": significa solo "il ciclo si è fermato prima
+        // del tetto di sicurezza (`maxDurationMs`)", che è il comportamento ATTESO di ogni
+        // frase registrata normalmente. La vera protezione contro una cattura inutilizzabile
+        // resta `TalosVoiceQuality.evaluate()` (durata minima, segnale quasi nullo, silenzio
+        // eccessivo, clipping, offset DC) - applicata PRIMA che una frase entri fra le accettate,
+        // sia per ogni frase singola sia sull'insieme unito (`mergedQuality` sotto).
         val sampleRate = acceptedPhrases.first().sampleRate
         require(sampleRate in 8_000..192_000) { "voice enrollment sample rate is invalid: $sampleRate" }
         require(acceptedPhrases.all { it.sampleRate == sampleRate }) {

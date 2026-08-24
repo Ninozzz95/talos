@@ -440,7 +440,7 @@ export const TALOS_EN_MESSAGES = {
     personalVoice: {
         title: 'Personal voice',
         body: 'Record 12 guided phrases — about 3 minutes — and TALOS can read in your own voice, always on this device.',
-        installBody: 'Before you record your voice, TALOS needs to download the engine that will use it — about 730 MB, once.',
+        installBody: 'Before you record your voice, TALOS needs to download the engine that will use it — about 160 MB, once.',
         install: 'Download the voice engine',
         installing: 'Downloading…',
         installProgress: '{percent}% downloaded',
@@ -494,6 +494,8 @@ export const TALOS_EN_MESSAGES = {
         previewBody: 'This is a real preview, not saved yet. You can redo the training if it doesn\'t convince you.',
         nameLabel: 'Voice name',
         save: 'Save voice',
+        buildFailed: 'The encoding did not finish. Try again.',
+        saveFailed: 'Saving did not finish. Try again.',
         rejectNearZero: 'Level too low, nearly silent',
         rejectClipping: 'Level too high, the sound distorts',
         rejectSilence: 'Too much silence in the recording',

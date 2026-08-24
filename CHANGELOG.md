@@ -6,6 +6,40 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.20
+
+Three real bugs in the personal voice setup, found on-device and fixed the
+same way: reproduced on the OnePlus Pad 3, root-caused in the actual code
+path, verified end to end after the fix — including one recorded with a real
+microphone hold, not a simulated tap.
+
+### Encoding a voice always failed after all 12 phrases were accepted
+
+Every phrase recorded the normal way — hold the button, release when you're
+done speaking — reached the final "Encode the voice" step carrying a native
+flag meant for aborted recordings, because releasing the button and
+genuinely aborting used the same signal internally. A safety check then
+rejected it every time, and showed the raw native error text on screen
+instead of a translated message. The check is gone (it could never
+distinguish the two cases it was meant to catch); the real protection
+against a broken recording — minimum duration, near-silence, clipping — was
+never the part that was broken. Verified by recording 12 real phrases and
+encoding them successfully on-device, twice.
+
+### The enrollment screen could appear before the voice engine was installed
+
+A newly installed build could show "Create your voice" — and let a person
+record all 12 phrases — before the on-device engine was actually downloaded,
+because the screen checked "can this device support it" instead of "is it
+installed right now." The failure only surfaced at the very last step, as a
+raw native exception. Fixed by tracking the two facts separately.
+
+### The download-size estimate was still the old engine's
+
+The prompt before downloading the voice engine said "about 730 MB" — the
+size of the previous ONNX-based engine. The current Pocket engine is
+measured at 158 MB on a real device; the prompt now says "about 160 MB."
+
 ## v0.1.19
 
 The personal voice no longer stutters, and the local model runs faster.

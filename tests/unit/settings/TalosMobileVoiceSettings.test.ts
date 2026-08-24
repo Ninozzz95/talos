@@ -48,9 +48,19 @@ vi.mock('@/stores/settings', () => ({
  * cui ogni test qui ha sempre visto la sezione "non supportata" (ora:
  * "installa") senza che nessuno l'avesse deciso apposta. Il mock esplicito
  * rende ENTRAMBI gli stati controllabili invece di uno solo per caso.
+ *
+ * ⛔⛔ 23/8 — `supported:true, installed:false`, non più
+ * `supported:false, installed:false`. Il default precedente combaciava per
+ * caso con un difetto vero (il componente leggeva solo `supported` per
+ * decidere fra "crea" e "installa"): un dispositivo REALE che deve vedere
+ * "Installa" è capace (`supported:true`) e non ancora scaricato
+ * (`installed:false`) — non incapace. Con `supported:false` qui, la sezione
+ * andrebbe nascosta DEL TUTTO (vedi il test dedicato più sotto), non
+ * mostrare "Installa": tenerlo avrebbe fatto passare questo file mentre il
+ * componente restava rotto.
  */
 const personalVoice = vi.hoisted(() => ({
-    status: vi.fn(async () => ({ supported: false, installed: false, ready: false, active: false })),
+    status: vi.fn(async () => ({ supported: true, installed: false, ready: false, active: false })),
     profiles: vi.fn(async (): Promise<TalosPersonalVoiceProfileSummary[]> => []),
     renameProfile: vi.fn(async () => undefined),
     deleteProfile: vi.fn(async () => undefined),
@@ -118,7 +128,7 @@ beforeEach(() => {
     document.documentElement.lang = ''
     service.speak.mockClear()
     settings.setVoicePreferences.mockClear()
-    personalVoice.status.mockClear().mockResolvedValue({ supported: false, installed: false, ready: false, active: false })
+    personalVoice.status.mockClear().mockResolvedValue({ supported: true, installed: false, ready: false, active: false })
     personalVoice.profiles.mockClear().mockResolvedValue([])
     personalVoice.speak.mockClear()
     personalVoice.speakAdapter.mockClear().mockReturnValue({ speak: personalVoice.speak, stop: vi.fn() })
@@ -460,6 +470,32 @@ describe('TalosMobileVoiceSettings — installare il motore voce (Fase 5)', () =
         await flushPromises()
         expect(wrapper.find('[data-testid="talos-personal-voice-install"]').exists()).toBe(false)
         expect(wrapper.find('[data-testid="talos-personal-voice-create"]').exists()).toBe(true)
+    })
+
+    /**
+     * ⛔⛔ Trovato 23/8 sul Pad, un pacchetto affiancato appena installato:
+     * `supported` e `installed` erano entrambi veri o entrambi falsi in
+     * OGNI test qui sopra, quindi un codice che leggeva solo `supported`
+     * passava questi due test lo stesso — la combinazione vera (capace ma
+     * non ancora scaricato) non era mai stata provata. È la combinazione
+     * che un dispositivo reale mostra SEMPRE, almeno una volta: subito dopo
+     * l'installazione dell'app, prima del primo "Installa".
+     */
+    it('CR-VOICE-INSTALL-01 shows the install button, not create-voice, on a capable device that has NOT downloaded the model yet', async () => {
+        personalVoice.status.mockResolvedValue({ supported: true, installed: false, ready: false, active: false })
+        const wrapper = mount(TalosMobileVoiceSettings)
+        await flushPromises()
+        expect(wrapper.find('[data-testid="talos-personal-voice-install"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-personal-voice-install-start"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-personal-voice-create"]').exists()).toBe(false)
+    })
+
+    it('CR-VOICE-INSTALL-02 hides the whole section, not even the install button, on a device that is not supported at all', async () => {
+        personalVoice.status.mockResolvedValue({ supported: false, installed: false, ready: false, active: false })
+        const wrapper = mount(TalosMobileVoiceSettings)
+        await flushPromises()
+        expect(wrapper.find('[data-testid="talos-personal-voice-install"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="talos-personal-voice-create"]').exists()).toBe(false)
     })
 
     it('tapping install calls the real orchestrator, and follows its progress', async () => {
