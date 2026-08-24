@@ -121,6 +121,26 @@ export interface TalosLocalEngineChatPlan {
     contextTokens: number
 }
 
+/**
+ * P2-3 — i segnali di prestazione reali di Android 16, letti ADESSO.
+ * `null` sotto la soglia API di quel campo, o quando il device non sa
+ * rispondere in questo istante (rate-limit, carico insufficiente per le
+ * headroom CPU/GPU — l'esito documentato dell'API, non un guasto).
+ */
+export interface TalosPerformanceSignals {
+    /** [0,100], 0 = nessuna risorsa CPU concedibile. `null` sotto API 36. */
+    cpuHeadroom: number | null
+    /** Come `cpuHeadroom`, per la GPU. */
+    gpuHeadroom: number | null
+    /** [0,100], previsione ADESSO. `null` sotto API 30. */
+    thermalHeadroom: number | null
+    /** Come `thermalHeadroom`, previsto qualche secondo avanti. */
+    thermalForecast: number | null
+    thermalStatus: 'none' | 'light' | 'moderate' | 'severe' | 'critical' | null
+    /** `SystemClock.elapsedRealtime()` di QUANDO è stata presa questa lettura. */
+    sampledAtElapsedMs: number
+}
+
 interface TalosLlamaPlugin {
     available(): Promise<{
         available: boolean
@@ -172,6 +192,12 @@ interface TalosLlamaPlugin {
             measuredAtMs: number
         }>
     }>
+    /**
+     * P2-3 — CPU/GPU/termico ADESSO, letti da Android 16 dove esistono
+     * (`SystemHealthManager`/`PowerManager`). Girato fuori dal thread che
+     * genera token: sicuro da chiamare spesso.
+     */
+    performanceSignals(): Promise<TalosPerformanceSignals>
     open(options: {
         path: string
         threads?: number
@@ -814,6 +840,16 @@ export async function talosLocalEngineChatPlan(
         promptTokens: integerOf(plan.promptTokens) ?? 0,
         contextTokens: integerOf(plan.contextTokens) ?? 0,
     }
+}
+
+/**
+ * P2-3 — una lettura, adesso. Non lancia mai: un servizio assente o una
+ * chiamata che il device rifiuta tornano già `null` campo per campo dal
+ * lato nativo (vedi `TalosPerformanceSignals.java`), non un'eccezione che
+ * spegnerebbe un segnale opzionale.
+ */
+export async function talosLocalPerformanceSignals(): Promise<TalosPerformanceSignals> {
+    return plugin.performanceSignals()
 }
 
 /**
