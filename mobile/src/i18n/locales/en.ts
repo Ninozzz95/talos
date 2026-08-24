@@ -440,7 +440,7 @@ export const TALOS_EN_MESSAGES = {
     personalVoice: {
         title: 'Personal voice',
         body: 'Record 12 guided phrases — about 3 minutes — and TALOS can read in your own voice, always on this device.',
-        installBody: 'Before you record your voice, TALOS needs to download the engine that will use it — about 730 MB, once.',
+        installBody: 'Before you record your voice, TALOS needs to download the engine that will use it — about 160 MB, once.',
         install: 'Download the voice engine',
         installing: 'Downloading…',
         installProgress: '{percent}% downloaded',
