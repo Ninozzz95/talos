@@ -444,7 +444,10 @@ export const TALOS_IT_MESSAGES = {
         title: 'Voce personale',
         body: 'Registra 12 frasi guidate — circa 3 minuti — e TALOS potrà leggere con la tua voce, sempre sul dispositivo.',
         // ⭐⭐⭐ Fase 5, Blocco 3c — il download del motore, non più adb push a mano.
-        installBody: 'Prima di registrare la tua voce, TALOS deve scaricare il motore che la userà — circa 730 MB, una volta sola.',
+        // ⛔ Trovato 24/8: misurato sul Pad, il motore Pocket REALE scaricato
+        // pesa 158 MB (/sdcard/Android/data/ai.talos/files/pocket) - "730 MB"
+        // era la taglia del vecchio motore ONNX, mai aggiornata al cambio.
+        installBody: 'Prima di registrare la tua voce, TALOS deve scaricare il motore che la userà — circa 160 MB, una volta sola.',
         install: 'Scarica il motore voce',
         installing: 'Sto scaricando…',
         installProgress: '{percent}% scaricato',
@@ -498,6 +501,11 @@ export const TALOS_IT_MESSAGES = {
         previewBody: 'Questa è un’anteprima vera, non ancora salvata. Puoi rifare l’allenamento se non ti convince.',
         nameLabel: 'Nome della voce',
         save: 'Salva la voce',
+        // ⛔ Trovato 24/8 sul Pad: `buildError`/`encodeVoice`/`saveVoice` mostravano
+        // `cause.message` grezzo - la stringa inglese lato nativo, letterale, in mezzo
+        // a uno schermo tutto italiano. Due chiavi nuove, stesso stile di `installFailed`.
+        buildFailed: 'La codifica non è riuscita. Riprova.',
+        saveFailed: 'Il salvataggio non è riuscito. Riprova.',
         rejectNearZero: 'Livello troppo basso, quasi silenzio',
         rejectClipping: 'Livello troppo alto, il suono si distorce',
         rejectSilence: 'Troppo silenzio nella registrazione',

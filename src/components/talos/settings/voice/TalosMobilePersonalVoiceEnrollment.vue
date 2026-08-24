@@ -267,7 +267,12 @@ async function encodeVoice(): Promise<void> {
         })
         stage.value = 'preview'
     } catch (cause) {
-        buildError.value = cause instanceof Error ? cause.message : String(cause)
+        // ⛔ Trovato 24/8 sul Pad: qui c'era `cause.message` grezzo - un
+        // `require()` nativo Kotlin (inglese) mostrato a schermo, in mezzo a
+        // un dialogo interamente italiano. Il dettaglio vero resta in
+        // console per la diagnosi; a schermo solo il messaggio localizzato.
+        console.error('[personalVoice] encodeVoice failed', cause)
+        buildError.value = t('personalVoice.buildFailed')
         stage.value = 'review'
     } finally {
         building.value = false
@@ -304,7 +309,8 @@ async function saveVoice(): Promise<void> {
         emit('committed', profile)
         emit('close')
     } catch (cause) {
-        buildError.value = cause instanceof Error ? cause.message : String(cause)
+        console.error('[personalVoice] saveVoice failed', cause)
+        buildError.value = t('personalVoice.saveFailed')
     } finally {
         committing.value = false
     }

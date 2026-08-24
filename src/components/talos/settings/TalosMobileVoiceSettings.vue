@@ -386,8 +386,21 @@ const confirmingDeleteId = ref<string | null>(null)
  * without the arm64-v8a model files (`TalosVoiceModelManager.isPresent`)
  * must never offer "Create your voice" only to have every real call inside
  * the wizard fail one screen later.
+ *
+ * ⛔⛔ Trovato 23/8, testando sul Pad un pacchetto affiancato appena
+ * installato: `supported` e `installed` sono DUE fatti diversi (il tipo
+ * `TalosPocketModelEvidence` li tiene separati apposta) - un dispositivo
+ * arm64 (`supported: true`) senza il modello Pocket scaricato ancora
+ * (`installed: false`) leggeva SOLO `supported` qui, quindi "Crea la tua
+ * voce" appariva comunque. La persona registrava le 12 frasi, superava la
+ * verifica, e solo all'ULTIMO passo il nativo scopriva che il modello non
+ * c'era - un messaggio Kotlin grezzo (`Missing(path=bos_before_voice.npy)`)
+ * al posto del bottone "Installa" che avrebbe dovuto vedere per primo.
+ * `personalVoiceModelInstalled` tiene il secondo fatto separato, e sotto la
+ * sezione si sceglie in base a ENTRAMBI.
  */
 const personalVoiceSupported = ref(false)
+const personalVoiceModelInstalled = ref(false)
 
 /**
  * ⭐⭐⭐ FASE 5, BLOCCO 3c — il bottone che scarica il motore, invece di
@@ -417,7 +430,7 @@ async function beginModelInstall(): Promise<void> {
         const { talosInstallPersonalVoiceModel } = await import('@/services/voiceModelInstall')
         const result = await talosInstallPersonalVoiceModel((progress) => { installProgress.value = progress })
         if (result.ok) {
-            personalVoiceSupported.value = true
+            personalVoiceModelInstalled.value = true
             installProgress.value = null
         } else {
             // ⛔ Non ci si fida che l'ultimo avviso di `onProgress` avesse già
@@ -441,7 +454,10 @@ async function refreshPersonalProfiles(): Promise<void> {
     personalProfilesLoaded.value = true
 }
 onMounted(() => {
-    void talosPersonalVoiceStatus().then((status) => { personalVoiceSupported.value = status.supported })
+    void talosPersonalVoiceStatus().then((status) => {
+        personalVoiceSupported.value = status.supported
+        personalVoiceModelInstalled.value = status.installed
+    })
     void refreshPersonalProfiles()
 })
 
@@ -511,7 +527,7 @@ function onEnrollmentCommitted(): void {
             />
         </div>
 
-        <div v-if="personalVoiceSupported" data-testid="talos-personal-voice" class="mt-4 border-t border-[var(--talos-border)] pt-3">
+        <div v-if="personalVoiceSupported && personalVoiceModelInstalled" data-testid="talos-personal-voice" class="mt-4 border-t border-[var(--talos-border)] pt-3">
             <h5 class="flex items-center gap-2 text-xs font-semibold text-[var(--talos-text)]">
                 <User class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('personalVoice.title') }}
             </h5>
@@ -636,8 +652,15 @@ function onEnrollmentCommitted(): void {
             ⭐⭐⭐ Fase 5, Blocco 3c — prima questa sezione spariva e basta
             quando il modello non c'era (Blocco 4, quando non esisteva un
             installer). Ora offre di scaricarlo davvero.
+
+            ⛔ `v-else-if`, non `v-else`: un dispositivo con `supported:
+            false` (architettura incompatibile, non solo "modello non
+            ancora scaricato") non deve vedere nemmeno il bottone
+            "Installa" — fallirebbe comunque, e la regola scritta più in
+            alto in questo file è "onestamente nascosto quando non
+            supportato", non "nascosto solo quando manca il profilo".
         -->
-        <div v-else data-testid="talos-personal-voice-install" class="mt-4 border-t border-[var(--talos-border)] pt-3">
+        <div v-else-if="personalVoiceSupported" data-testid="talos-personal-voice-install" class="mt-4 border-t border-[var(--talos-border)] pt-3">
             <h5 class="flex items-center gap-2 text-xs font-semibold text-[var(--talos-text)]">
                 <User class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('personalVoice.title') }}
             </h5>
