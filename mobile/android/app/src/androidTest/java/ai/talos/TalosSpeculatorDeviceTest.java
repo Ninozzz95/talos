@@ -1,0 +1,135 @@
+package ai.talos;
+
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import android.content.Context;
+
+import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.platform.app.InstrumentationRegistry;
+
+import org.junit.Assume;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+
+import java.io.File;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * ⛔⛔ SOLO RICERCA — P2-1 blocco A. Prova che il lifecycle
+ * dell'involucro RAII attorno a {@code common_speculative_*}
+ * (`TalosSpeculator`, `talos_speculator.hpp`) è sicuro col motore REALE,
+ * non un mock — costruzione e distruzione, mai ancora begin/process/
+ * draft/accept (blocco B, CR-11).
+ *
+ * ⛔ {@link TalosLlamaNative#nativeConstructSpeculatorForResearch} è
+ * l'UNICA porta: {@link TalosLlamaNative#nativeOpen}, il percorso di
+ * produzione, non lo chiama mai. Zero effetto su una sessione aperta
+ * normalmente da chi non chiama questa classe.
+ */
+@RunWith(AndroidJUnit4.class)
+public class TalosSpeculatorDeviceTest {
+
+    private static Context context() {
+        return InstrumentationRegistry.getInstrumentation().getTargetContext();
+    }
+
+    private static void pronta() {
+        assertTrue("libtalos_llama.so non è nell'APK", TalosLlamaNative.AVAILABLE);
+        TalosLlamaNative.ensureReady(context());
+    }
+
+    private static void raccogli(File directory, List<File> into) {
+        try (java.nio.file.DirectoryStream<java.nio.file.Path> stream =
+                     Files.newDirectoryStream(directory.toPath())) {
+            for (java.nio.file.Path entry : stream) {
+                File file = entry.toFile();
+                if (file.isDirectory()) raccogli(file, into);
+                else if (file.getName().endsWith(".gguf")) into.add(file);
+            }
+        } catch (java.nio.file.NoSuchFileException assente) {
+            // Vuoto è un esito, non un guasto.
+        } catch (Exception ignorato) {
+            // Stessa tolleranza di TalosLocalBaselineDeviceTest.fixture().
+        }
+    }
+
+    private static File modello() {
+        String indicato = InstrumentationRegistry.getArguments().getString("talosModelPath", "");
+        File model;
+        if (indicato != null && !indicato.isEmpty()) {
+            model = new File(indicato);
+        } else {
+            File root = context().getExternalFilesDir(null);
+            List<File> trovati = new ArrayList<>();
+            if (root != null) raccogli(new File(root, "models"), trovati);
+            model = trovati.isEmpty() ? null : trovati.get(0);
+        }
+        Assume.assumeTrue("nessun GGUF leggibile sotto files/models", model != null && model.isFile());
+        return model;
+    }
+
+    private static long apri(File model) {
+        return TalosLlamaNative.nativeOpenTargeted(
+                model.getAbsolutePath(), 4, 4096, 0, true, 4, 0,
+                "f16", "none", "", "default");
+    }
+
+    private static void assertApertoOk(long handle) {
+        assertTrue("apertura fallita: " + TalosLlamaNative.nativeLastOpenError(), handle != 0);
+    }
+
+    /** Il caso base: costruzione su una sessione vera, poi chiusura pulita. */
+    @Test
+    public void costruzioneEChiusura() {
+        pronta();
+        File model = modello();
+        long handle = apri(model);
+        assertApertoOk(handle);
+        try {
+            boolean pronto = TalosLlamaNative.nativeConstructSpeculatorForResearch(handle, 24, 64);
+            assertTrue("speculatore ngram-mod non pronto", pronto);
+        } finally {
+            // La distruzione vera è qui dentro, via unique_ptr in `delete
+            // session` — se il lifecycle avesse un difetto, l'app
+            // morirebbe su questa riga, non su un'asserzione.
+            TalosLlamaNative.nativeClose(handle);
+        }
+    }
+
+    /**
+     * AL CONTRARIO: un handle inesistente non deve costruire niente, e
+     * soprattutto non deve far cadere il processo — `as_session` torna
+     * `nullptr` e la funzione nativa esce prima di toccare `unique_ptr`.
+     */
+    @Test
+    public void handleInvalidoNonCostruisceENonCade() {
+        pronta();
+        boolean pronto = TalosLlamaNative.nativeConstructSpeculatorForResearch(0L, 24, 64);
+        assertFalse("un handle 0 non doveva costruire niente", pronto);
+    }
+
+    /**
+     * AL CONTRARIO: due costruzioni sulla STESSA sessione. La seconda
+     * assegnazione a `session->speculator` distrugge la prima istanza
+     * (unique_ptr::operator=) prima di costruire la nuova — esattamente
+     * il caso che il piano P1-1 chiama CR-07 (rischio reale di
+     * use-after-free) per il thread pool. Qui si prova che vale anche
+     * per questo secondo meccanismo RAII, sul motore reale.
+     */
+    @Test
+    public void doppiaCostruzioneSullaStessaSessioneNonCade() {
+        pronta();
+        File model = modello();
+        long handle = apri(model);
+        assertApertoOk(handle);
+        try {
+            assertTrue(TalosLlamaNative.nativeConstructSpeculatorForResearch(handle, 24, 64));
+            assertTrue(TalosLlamaNative.nativeConstructSpeculatorForResearch(handle, 12, 32));
+        } finally {
+            TalosLlamaNative.nativeClose(handle);
+        }
+    }
+}
