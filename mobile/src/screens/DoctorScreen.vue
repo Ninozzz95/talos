@@ -17,6 +17,7 @@ import { talosLocalEngineDoctorRows } from '@/services/localEngineDoctor'
 import { useChatController } from '@/stores/chatController'
 import { useSettingsStore } from '@/stores/settings'
 import { talosDictationDiagnostics } from '@/services/dictationDiagnostica'
+import { talosPersonalVoiceDiagnostics } from '@/services/personalVoiceDiagnostica'
 import { talosDatabaseLockFailure, talosDatabaseLockState } from '@/services/databaseProtection'
 import { talosDeviceIssues, talosWithTimeout, type TalosDeviceIssue } from '@/lib/talosDeviceLog'
 import { biometricUnlockAvailable } from '@/services/appLock'
@@ -330,6 +331,29 @@ async function scan(): Promise<void> {
             })
             : t('doctor.probeFailed'),
         ok: Boolean(dictation?.pluginLoaded && dictation.available !== false && !dictation.error),
+    })
+
+    // Owner 24/8, terza segnalazione: voce personale codificata, anteprima
+    // e chat mute — e finora nessuna riga qui ne parlava, solo `speech`
+    // (riconoscimento). Vedi services/personalVoiceDiagnostica.ts per il
+    // perché di ogni campo, incluso il diario delle ultime richieste.
+    const voice = await talosWithTimeout(talosPersonalVoiceDiagnostics(), 12000, 'TALOS_DOCTOR_VOICE').catch(() => null)
+    collected.push({
+        id: 'voice',
+        label: t('doctor.voice'),
+        value: voice
+            ? t('doctor.voiceValue', {
+                plugin: t(voice.registered ? 'doctor.loaded' : 'doctor.missing'),
+                model: voice.modelState ?? t('doctor.unknown'),
+                profiles: `${voice.compatibleProfileCount}/${voice.profileCount}`,
+                diario: voice.diario.length > 0 ? ` · ${voice.diario.join(' | ')}` : '',
+                error: voice.failure ? ` · ${voice.failure}` : settings.state.shell.debug_diagnostics ? ` · ${voice.trace}` : '',
+            })
+            : t('doctor.probeFailed'),
+        // ok resta vero anche senza un profilo pronto: "nessuna voce ancora
+        // arruolata" non è un guasto, lo stesso principio della riga
+        // "engine-model" — il valore già dice cosa manca.
+        ok: Boolean(voice?.registered),
     })
 
     const biometric = await talosWithTimeout(biometricUnlockAvailable(), 5000, 'TALOS_DOCTOR_BIOMETRIC').catch(() => false)

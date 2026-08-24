@@ -2941,6 +2941,8 @@ export const TALOS_EN_MESSAGES = {
         lockRecoveryRequired: 'The stored key was not cleared — lock the app again to retry',
         unknown: 'unknown',
         speechValue: 'plugin {plugin} · recognizer {recognizer}{error}',
+        voice: 'Personal voice synthesis',
+        voiceValue: 'plugin {plugin} · model {model} · profiles {profiles}{diario}{error}',
         loaded: 'loaded',
         missing: 'MISSING',
         available: 'available',

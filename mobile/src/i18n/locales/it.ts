@@ -3017,6 +3017,8 @@ export const TALOS_IT_MESSAGES = {
         lockRecoveryRequired: 'La chiave salvata non è stata rimossa — riblocca l\'app per riprovare',
         unknown: 'sconosciuto',
         speechValue: 'plugin {plugin} · riconoscimento {recognizer}{error}',
+        voice: 'Sintesi voce personale',
+        voiceValue: 'plugin {plugin} · modello {model} · profili {profiles}{diario}{error}',
         loaded: 'caricato',
         missing: 'MANCANTE',
         available: 'disponibile',
