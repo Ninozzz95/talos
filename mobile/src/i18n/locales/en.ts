@@ -2863,6 +2863,7 @@ export const TALOS_EN_MESSAGES = {
         engineInstalled: 'Models on device',
         engineTools: 'Assistant tools with this model',
         recommendedProfile: 'Recommended backend for this model',
+        performanceHeadroom: 'CPU/GPU/thermal headroom (Android 16)',
         nativePlatform: 'native ({platform})',
         webPreview: 'web preview',
         storageNative: 'SQLCipher native',
