@@ -509,8 +509,33 @@ async function trasportoToolDi(path: string): Promise<TalosTemplateTransportDeci
  * rilegge, o le impronte non corrispondono e non se ne accorge nessuno — la
  * ricerca su llama.cpp dice che il riuso salta **in silenzio**. Per questo è
  * una funzione sola, chiamata da entrambe le parti.
+ *
+ * ⛔⛔⛔ TROVATO IL 24/8, STESSO BUG DI `prefissoResoDiProiettato` — un
+ * turno di sistema DA SOLO, con `tools` attaccati, non basta per OGNI
+ * famiglia: Llama-3.2 (trasporto nativo, questa funzione — non
+ * `prompt-json-v1`, che aveva già la cura) rifiuta con `Cannot put tools
+ * in the first user message when there's no first user message!` — il
+ * suo template Jinja mette gli schemi DENTRO il primo turno utente
+ * renderizzato, e senza un turno a seguire non ha dove metterli.
+ *
+ * ⛔ Non è un difetto di llama.cpp da segnalare a monte: è il template
+ * UFFICIALE di Llama-3.2 (`tools_in_user_message`), lo stesso vincolo
+ * documentato nel template di riferimento vLLM e in più segnalazioni
+ * indipendenti contro runtime diversi (llama.cpp, LM Studio, Ollama) —
+ * ricerca web fatta prima di questa correzione, non assunta. Chi chiama
+ * deve garantire quella forma, esattamente come già fa
+ * `prefissoResoDiProiettato` per il trasporto testuale.
+ *
+ * ⛔ Il `catch` sottostante lo rendeva silenzioso — il prefisso non si
+ * congelava mai per NESSUN modello a trasporto nativo, pagando il
+ * ricalcolo completo a ogni messaggio invece del riuso di P1-3, senza
+ * che nessun log lo dicesse a chi non guarda `logcat`.
+ *
+ * Esportata SOLO per il test diretto, stesso motivo di
+ * `prefissoResoDiProiettato`: non è pensata per essere chiamata da fuori
+ * questo modulo in produzione.
  */
-async function prefissoResoDi(
+export async function prefissoResoDi(
     system: string | undefined,
     tools: readonly unknown[] | undefined,
     pensa: boolean,
@@ -525,7 +550,11 @@ async function prefissoResoDi(
     if (memo !== undefined) return memo
     try {
         const piano = await talosLocalEngineChatPlan(
-            [{ role: 'system', content: system }], tools, pensa,
+            [
+                { role: 'system', content: system },
+                { role: 'user', content: TALOS_PREFIX_PLACEHOLDER_TURN },
+            ],
+            tools, pensa,
         )
         PREFISSO_RESO.set(chiave, piano.prompt)
         return piano.prompt

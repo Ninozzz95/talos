@@ -12,7 +12,15 @@ import {
     type TalosGgufSet,
 } from '@/lib/models/ggufSet'
 import { TALOS_GGUF_FIRST_READ_BYTES, talosReadGgufHeader } from '@/lib/models/gguf'
-import { talosModelFit, type TalosModelFit, type TalosModelShape } from '@/lib/models/fit'
+import {
+    talosModelFit,
+    talosResolvedKvCacheType,
+    talosResourceLedger,
+    type TalosKvCacheTypeOverride,
+    type TalosModelFit,
+    type TalosModelShape,
+    type TalosResourceLedgerRow,
+} from '@/lib/models/fit'
 import { TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS } from '@/lib/models/localContextPolicy'
 import { talosMeasureDevice, type TalosMeasuredDevice } from '@/services/deviceCapacity'
 import { clearProviderKey, getProviderKey, setProviderKey } from '@/services/secureKeyStore'
@@ -86,7 +94,44 @@ const TALOS_GGUF_MAX_HEADER_BYTES = 32 * 1024 * 1024
 export type TalosSetExamination =
     | { state: 'unread' }
     | { state: 'reading' }
-    | { state: 'read'; fit: TalosModelFit; quantisation: string | null; trainedContext: number }
+    | {
+        state: 'read'
+        fit: TalosModelFit
+        /**
+         * Model Lab Blocco 4 — la stessa decomposizione byte-per-byte di
+         * `fit`, mai un secondo calcolo indipendente: entrambi nascono dallo
+         * stesso `talosModelFit`/`talosResourceLedger` con lo stesso input,
+         * qui e in `talosEredita`/`talosRicalcolaEsaminati`. Un componente di
+         * sola presentazione la legge da qui — non chiama `talosResourceLedger`
+         * da solo, che vorrebbe di nuovo `model`/`device`/`context`, cioe'
+         * esattamente lo stato che questo store gia' possiede.
+         */
+        ledger: TalosResourceLedgerRow[]
+        /**
+         * Restyle Blocco 6 (mockup, item 7) — la stessa domanda a cui
+         * risponde la riga `kvCache` del ledger, ma come etichetta invece
+         * che come byte: quale tipo è EFFETTIVAMENTE in vigore, anche
+         * quando il selettore è su AUTOMATICA.
+         */
+        kvCacheTypeLabel: 'f16' | 'q8_0' | 'other'
+        quantisation: string | null
+        trainedContext: number
+        /**
+         * P2-6 (quant-aware metadata). Architectural — the parameter count is
+         * IDENTICAL across every quantisation of the same model, so it is safe
+         * to inherit across versions (see `talosEredita` below).
+         */
+        parameterCount: number | null
+        /**
+         * Quantisation-specific, like `quantisation` itself — `null` on an
+         * INHERITED examination, because the header actually read belongs to
+         * a different version and reporting its histogram here would be the
+         * same false statement the `quantisation` comment already refuses to
+         * make.
+         */
+        tensorTypeHistogram: Readonly<Record<string, number>> | null
+        quantizationVersion: number | null
+    }
     /** Named, never silent: an unreadable header is a model we will not vouch for. */
     | { state: 'unreadable'; reason: string }
 
@@ -169,6 +214,13 @@ export interface TalosLocalModelsState {
     } | null
     device: TalosMeasuredDevice | null
     context: number
+    /**
+     * ⭐ Model Lab, Blocco 2. Come `context`: solo in memoria, mai persistito —
+     * è un'esplorazione di "cosa succederebbe", non una preferenza durevole.
+     * `'auto'` lascia `talosModelFit` fidarsi dell'header, esattamente come
+     * prima che questo campo esistesse.
+     */
+    kvCacheType: TalosKvCacheTypeOverride
     /** Whether one exists — never the token itself, which stays in the Keystore. */
     hasToken: boolean
     /**
@@ -222,6 +274,7 @@ const state = reactive<TalosLocalModelsState>({
     repo: null,
     device: null,
     context: TALOS_DEFAULT_LOCAL_CONTEXT,
+    kvCacheType: 'auto',
     hasToken: false,
     catalogue: {
         state: 'idle',
@@ -646,14 +699,26 @@ export async function talosExamineSet(key: string): Promise<void> {
                 device,
                 context: state.context,
                 fileBytes: set.totalBytes,
+                kvCacheTypeOverride: state.kvCacheType,
             }),
+            ledger: talosResourceLedger({
+                model: parsed.header.shape,
+                device,
+                context: state.context,
+                kvCacheTypeOverride: state.kvCacheType,
+            }),
+            kvCacheTypeLabel: talosResolvedKvCacheType(parsed.header.shape, state.kvCacheType),
             // The header's own word, which outranks the file name it came with.
             quantisation: parsed.header.quantisation ?? set.quantisation,
             trainedContext: parsed.header.shape.trainedContext,
+            parameterCount: parsed.header.parameterCount,
+            tensorTypeHistogram: parsed.header.tensorTypeHistogram,
+            quantizationVersion: parsed.header.quantizationVersion,
         }
         letture.set(set.paths[0]!, {
             forma: parsed.header.shape,
             inizioDeiPesi: parsed.header.dataOffset,
+            parameterCount: parsed.header.parameterCount,
         })
     } catch (failure) {
         set.examination = { state: 'unreadable', reason: describe(failure) }
@@ -661,7 +726,12 @@ export async function talosExamineSet(key: string): Promise<void> {
 }
 
 /** Ciò che una lettura riuscita lascia in eredità alle altre qualità. */
-const letture = new Map<string, { forma: TalosModelShape, inizioDeiPesi: number }>()
+const letture = new Map<string, {
+    forma: TalosModelShape
+    inizioDeiPesi: number
+    /** Architetturale — vedi il commento su `talosEredita`. */
+    parameterCount: number | null
+}>()
 
 /**
  * ⭐⭐ ESAMINA UN REPOSITORY: una lettura per MODELLO, non per versione.
@@ -727,13 +797,23 @@ export async function talosExamineRepo(): Promise<void> {
  */
 function talosEredita(
     set: TalosLocalModelSet,
-    eredita: { forma: TalosModelShape, inizioDeiPesi: number },
+    eredita: { forma: TalosModelShape, inizioDeiPesi: number, parameterCount: number | null },
 ): void {
     const device = state.device
     if (!device) return
     const pesi = set.totalBytes - eredita.inizioDeiPesi
     // Un file più piccolo dell'intestazione non è una versione: è un residuo.
     if (pesi <= 0) return
+    /**
+     * ⛔ Raggiungibile anche dal PROPRIO percorso, non solo da quello del
+     * capofila. Senza questa riga `letture` ha voce solo per i capofila (chi
+     * ha davvero chiamato `readHead`), e `talosRicalcolaEsaminati` — che
+     * cerca `letture.get(set.paths[0])` per OGNI riga "read" — non trova
+     * mai le versioni ereditate: restano al verdetto vecchio quando il
+     * context o la cache KV cambiano dopo l'esame. Trovato da questo stesso
+     * blocco di test, non per ispezione.
+     */
+    letture.set(set.paths[0]!, eredita)
     const forma: TalosModelShape = { ...eredita.forma, weightBytes: pesi }
     set.examination = {
         state: 'read',
@@ -742,17 +822,114 @@ function talosEredita(
             device,
             context: state.context,
             fileBytes: set.totalBytes,
+            kvCacheTypeOverride: state.kvCacheType,
         }),
+        ledger: talosResourceLedger({
+            model: forma,
+            device,
+            context: state.context,
+            kvCacheTypeOverride: state.kvCacheType,
+        }),
+        kvCacheTypeLabel: talosResolvedKvCacheType(forma, state.kvCacheType),
         // ⛔ Qui il nome del file è l'UNICA fonte: l'intestazione letta è di
         // un'altra qualità, e riportare la sua direbbe che sono tutte uguali.
         quantisation: set.quantisation,
         trainedContext: forma.trainedContext,
+        // P2-6: il conteggio parametri è ARCHITETTURALE — identico per ogni
+        // qualità dello stesso modello — quindi eredita correttamente, a
+        // differenza di `quantisation`.
+        parameterCount: eredita.parameterCount,
+        // ⛔ Questi due invece SONO la qualità, esattamente come `quantisation`
+        // sopra: l'intestazione realmente letta appartiene a un'ALTRA
+        // versione, quindi qui sarebbero la stessa bugia che il commento su
+        // `quantisation` rifiuta già di dire. `null` è l'onestà giusta.
+        tensorTypeHistogram: null,
+        quantizationVersion: null,
+    }
+}
+
+/**
+ * Ricalcola il verdetto di ogni variante GIÀ letta, con il context e il
+ * kvCacheType CORRENTI — mai una nuova lettura di rete.
+ *
+ * ## Perché esiste separata da `talosExamineSet`
+ *
+ * `talosExamineSet` non ha una scorciatoia per "questo file l'ho già letto":
+ * richiama SEMPRE `readHead` (resolve + range GET), anche se l'intestazione
+ * è identica a un attimo fa. Va bene per un click isolato su UN file — è il
+ * caso raro, deliberato, del bottone di controproposta — ma un controllo
+ * globale di contesto o cache KV che toccasse così ogni riga già esaminata a
+ * ogni variazione moltiplicherebbe le letture di rete per il numero di
+ * varianti lette, esattamente il difetto che `talosEredita` esiste già per
+ * evitare dal lato opposto (una lettura per modello, non per versione — vedi
+ * `talosExamineRepo`). Con l'esame automatico del Blocco 3, dove un
+ * repository intero può avere decine di righe "read" insieme, la differenza
+ * smette di essere teorica.
+ *
+ * Riusa `letture`, la stessa mappa che alimenta `talosEredita`: ogni riga
+ * "read" ha lasciato lì la sua intestazione, quindi il ricalcolo è puro
+ * calcolo locale (`talosModelFit`), zero I/O — lo stesso principio di
+ * "cache dei dati grezzi, ricalcolo della vista derivata al cambio filtro"
+ * che evita la ririchiesta di rete (ricerca web di questo blocco: dati
+ * grezzi in cache + filtro riapplicato in locale, non un nuovo fetch).
+ */
+function talosRicalcolaEsaminati(): void {
+    const repo = state.repo
+    const device = state.device
+    if (!repo || !device) return
+    for (const set of repo.sets) {
+        if (set.examination.state !== 'read') continue
+        const eredita = letture.get(set.paths[0]!)
+        if (!eredita) continue
+        const pesi = set.totalBytes - eredita.inizioDeiPesi
+        if (pesi <= 0) continue
+        const forma: TalosModelShape = { ...eredita.forma, weightBytes: pesi }
+        set.examination = {
+            ...set.examination,
+            fit: talosModelFit({
+                model: forma,
+                device,
+                context: state.context,
+                fileBytes: set.totalBytes,
+                kvCacheTypeOverride: state.kvCacheType,
+            }),
+            ledger: talosResourceLedger({
+                model: forma,
+                device,
+                context: state.context,
+                kvCacheTypeOverride: state.kvCacheType,
+            }),
+            // ⛔ Senza questa riga l'etichetta resterebbe quella VECCHIA
+            // (lo spread sopra la porta avanti da set.examination): lo
+            // stesso difetto già trovato e corretto su `ledger` stesso in
+            // questa stessa funzione, qui sul campo gemello.
+            kvCacheTypeLabel: talosResolvedKvCacheType(forma, state.kvCacheType),
+        }
     }
 }
 
 /** Re-answer every examined set at a new context length, without re-reading. */
 export function talosSetLocalContext(context: number): void {
     state.context = context
+    talosRicalcolaEsaminati()
+}
+
+/**
+ * Forza (o smette di forzare) il tipo di cache KV — Model Lab, Blocco 2.
+ *
+ * Come `talosSetLocalContext`: nessuna nuova lettura di rete, ogni variante
+ * già esaminata si ricalcola sul posto da `talosRicalcolaEsaminati`.
+ *
+ * ⛔ Non ancora collegato al motore di inferenza vero: `localEngine.open()`
+ * (che accetta `kvCacheType` per davvero, testato in 4 file) viene chiamato
+ * SOLO da `lib/chat/providers/localAdapter.ts` — file su cui Agente 19 ha
+ * lavoro dal vivo non committato stanotte (Fase 4/5). Portare la scelta fatta
+ * QUI fino a quella chiamata è l'ultimo miglio di questo blocco, rimandato
+ * finché quel file non è di nuovo stabile — non una svista.
+ */
+export function talosSetLocalKvCacheType(kvCacheType: TalosKvCacheTypeOverride): void {
+    state.kvCacheType = kvCacheType
+    talosRicalcolaEsaminati()
 }
 
 export type TalosDownloadRefusal =

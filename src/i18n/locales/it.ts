@@ -1125,6 +1125,13 @@ export const TALOS_IT_MESSAGES = {
         codeCopied: 'Codice copiato.',
         codeCopyFailed: 'Impossibile copiare il codice.',
     },
+    // Harness UI (Codex, 24/8): link solo-debug al mockup desktop riusato +
+    // Board, nascosto per intero nelle build di release — come, vedi
+    // services/harnessUi.ts.
+    harnessUi: {
+        linkLabel: 'Harness UI (debug)',
+        linkHint: 'Il mockup dell\'harness di coding e la Board delle campagne, stessa build del desktop.',
+    },
     privilege: {
         keepAlive: 'Mantieni acceso',
         /*
@@ -2295,6 +2302,10 @@ export const TALOS_IT_MESSAGES = {
         variantDetails: 'Dettagli',
         examine: 'Controlla questo telefono',
         examining: 'Leggo il modello…',
+        // Model Lab Blocco 3 — indicatore UNA VOLTA per pagina, sopra
+        // l'elenco: l'esame parte da solo all'apertura, raggruppato per
+        // modello. Diverso da `examining` (per riga, singolare) apposta.
+        examiningRepo: 'Sto esaminando le varianti in sottofondo…',
         unreadable: 'Non posso controllarlo:',
         incompleteSet: 'A questo repository mancano {missing} parti su {total}, quindi il modello non si può ricomporre.',
         unverifiable: 'Questo repository non pubblica una somma di controllo per questo file, quindi il download non è dimostrabile.',
@@ -2316,6 +2327,58 @@ export const TALOS_IT_MESSAGES = {
         reasonKilled: 'Questo telefono ha già esaurito la memoria con questo modello una volta.',
         counterOffer: 'A {context} token di contesto ci sta.',
         contextLabel: 'Lunghezza di contesto',
+        // Model Lab Blocco 2 — il controllo globale sopra l'elenco delle
+        // varianti, non il bottone di controproposta per riga.
+        kvCacheTypeLabel: 'Cache KV',
+        kvCacheType: {
+            auto: 'Automatica',
+            f16: 'F16',
+            q8_0: 'Q8_0',
+            // item 7 — l'header ha dichiarato un valore che non è nessuno
+            // dei due tipi noti: onesto dirlo, non indovinare un'etichetta.
+            other: 'Altro',
+        },
+        // Model Lab Blocco 4 — il ledger di provenienza: mai un numero senza
+        // dire da dove viene. Le otto etichette sono le stesse otto voci di
+        // talosResourceLedger() (fit.ts), nello stesso ordine fisso.
+        // Restyle Blocco 6 — pannello a due colonne (config + ledger) sotto
+        // la rail, sostituisce l'elenco verticale con un tocco "Dettagli"
+        // per riga.
+        runtimeConfigTitle: 'Configura il runtime',
+        speedStatLabel: 'Velocità prevista',
+        maxContextStatLabel: 'Contesto massimo calcolato',
+        // Restyle Blocco 6, chiusura mockup — item 1/2/3/4/5/6.
+        tabsGroupLabel: 'Sezioni del repository',
+        tabQuantizzazioni: 'Quantizzazioni',
+        tabScheda: 'Scheda modello',
+        tabFile: 'File',
+        noReadme: 'Questo repository non pubblica un README.',
+        openOnHuggingFace: 'Apri su Hugging Face',
+        copyLink: 'Copia il link del repository',
+        linkCopied: 'Link copiato.',
+        linkCopyFailed: 'Non sono riuscito a copiare il link.',
+        analysisBannerTitle: 'Analisi repository TALOS:',
+        analysisBannerBody: 'una lettura dell\'intestazione GGUF per modello — non per versione — e forma e offset dei pesi vengono riutilizzati per ricalcolare tutte le quantizzazioni, come fa talosExamineRepo() nello store.',
+        downloadNamed: 'Scarica {label} · {size}',
+        // Un acronimo di formato, non una parola che cambia con la lingua —
+        // instradato dal catalogo comunque: I18N-05 vieta testo statico
+        // fuori dai cataloghi, e questa e' la stessa scelta gia' fatta per
+        // F16/Q8_0 in kvCacheType qui sopra.
+        ggufFormatTag: 'GGUF',
+        ledgerTitle: 'Da dove viene ogni byte',
+        ledger: {
+            weights: 'Pesi del modello',
+            kvCache: 'Cache KV',
+            compute: 'Calcolo',
+            runtime: 'Runtime',
+            safetyMargin: 'Margine di sicurezza',
+            totalRuntime: 'Totale in esecuzione',
+            availableRam: 'RAM disponibile',
+            margin: 'Margine residuo',
+            provenanceExact: 'misurato',
+            provenancePredicted: 'previsto',
+            provenancePolicy: 'fisso',
+        },
         download: 'Scarica',
         downloading: 'Sto scaricando',
         stop: 'Metti in pausa',
@@ -2937,6 +3000,7 @@ export const TALOS_IT_MESSAGES = {
         engineInstalled: 'Modelli sul dispositivo',
         engineTools: 'Strumenti dell’assistente con questo modello',
         recommendedProfile: 'Backend consigliato per questo modello',
+        performanceHeadroom: 'Margine CPU/GPU/termico (Android 16)',
         nativePlatform: 'nativa ({platform})',
         webPreview: 'anteprima web',
         storageNative: 'SQLCipher nativo',
@@ -2953,6 +3017,8 @@ export const TALOS_IT_MESSAGES = {
         lockRecoveryRequired: 'La chiave salvata non è stata rimossa — riblocca l\'app per riprovare',
         unknown: 'sconosciuto',
         speechValue: 'plugin {plugin} · riconoscimento {recognizer}{error}',
+        voice: 'Sintesi voce personale',
+        voiceValue: 'plugin {plugin} · modello {model} · profili {profiles}{diario}{error}',
         loaded: 'caricato',
         missing: 'MANCANTE',
         available: 'disponibile',

@@ -6,6 +6,7 @@ import { useTalosI18n } from '@/i18n'
 import type { TalosHuggingFaceModel } from '@/lib/models/huggingFace'
 import type { TalosFitTone } from '@/lib/models/fitBadge'
 import { talosModelLicenceId } from '@/lib/models/licensePolicy'
+import { talosFormatCompactCount, talosFormatParameterCount } from '@/lib/models/presentation'
 import TalosModelFitBar from '@/components/talos/models/TalosModelFitBar.vue'
 
 const props = defineProps<{
@@ -36,17 +37,20 @@ const routeTarget = computed(() => {
 })
 
 const licence = computed(() => talosModelLicenceId(props.model.tags, props.model.licence))
-const parameters = computed(() => {
-    const total = props.model.gguf?.parameters
-    if (!total) return null
-    if (total >= 1e12) return `${(total / 1e12).toFixed(1).replace(/\.0$/, '')}T`
-    if (total >= 1e9) return `${Math.round(total / 1e9)}B`
-    return `${Math.round(total / 1e6)}M`
+
+/**
+ * Restyle Blocco 5 — l'iniziale del publisher, come nel mockup ("UN",
+ * "BA", "GG"): due lettere, non un colore per publisher (nessuna
+ * funzione di hash-a-colore nel mockup né altrove in questo albero — non
+ * se ne inventa una qui). Deriva dallo stesso `owner` di `routeTarget`,
+ * mai un secondo parsing dell'id.
+ */
+const publisherInitials = computed(() => {
+    const owner = routeTarget.value?.params.owner ?? props.model.id.split('/')[0] ?? ''
+    return owner.slice(0, 2).toUpperCase()
 })
-const downloads = computed(() => new Intl.NumberFormat(locale.value, {
-    notation: 'compact',
-    maximumFractionDigits: 1,
-}).format(props.model.downloads))
+const parameters = computed(() => talosFormatParameterCount(props.model.gguf?.parameters))
+const downloads = computed(() => talosFormatCompactCount(props.model.downloads, locale.value))
 </script>
 
 <template>
@@ -62,11 +66,19 @@ const downloads = computed(() => new Intl.NumberFormat(locale.value, {
     >
         <span v-if="!routeTarget" data-testid="talos-model-row-invalid" aria-disabled="true" class="sr-only">{{ model.id }}</span>
         <span class="flex min-w-0 items-center gap-[var(--talos-space-inline)]">
+            <!-- Restyle Blocco 5 — l'iniziale del publisher, come nel
+                 mockup: aiuta a scorrere un elenco raggruppato quando le
+                 sole due lettere bastano a riconoscere chi l'ha pubblicato. -->
+            <span
+                data-testid="talos-model-row-avatar"
+                aria-hidden="true"
+                class="flex size-8 shrink-0 items-center justify-center rounded-full border border-[var(--talos-border)] font-mono text-2xs font-semibold text-[var(--talos-muted)]"
+            >{{ publisherInitials }}</span>
             <span class="min-w-0 flex-1">
                 <span data-testid="talos-model-row-title" class="line-clamp-2 break-words font-mono text-sm font-semibold leading-snug text-[var(--talos-text)]">{{ model.id }}</span>
-                <span data-testid="talos-model-row-metadata" class="mt-[calc(var(--talos-space-inline)/2)] flex flex-wrap items-center gap-x-[var(--talos-space-inline)] font-mono text-2xs tabular-nums text-[var(--talos-muted)]">
-                    <template v-if="licence"><span>{{ licence }}</span><span class="opacity-40">·</span></template>
-                    <template v-if="parameters"><span>{{ parameters }}</span><span class="opacity-40">·</span></template>
+                <span data-testid="talos-model-row-metadata" class="mt-[calc(var(--talos-space-inline)/2)] flex flex-wrap items-center gap-[calc(var(--talos-space-inline)/2)] font-mono text-2xs tabular-nums text-[var(--talos-muted)]">
+                    <span v-if="licence" class="rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[calc(var(--talos-space-inline)/2)]">{{ licence }}</span>
+                    <span v-if="parameters" class="rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[calc(var(--talos-space-inline)/2)]">{{ parameters }}</span>
                     <span>{{ t('localModels.downloadsShort', { count: downloads }) }}</span>
                     <template v-if="model.likes"><span class="opacity-40">·</span><span>{{ model.likes }} ★</span></template>
                     <span v-if="model.gated" class="rounded-full bg-[var(--talos-active)] px-[var(--talos-space-inline)] font-semibold uppercase tracking-wide">{{ t('localModels.gated') }}</span>

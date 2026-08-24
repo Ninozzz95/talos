@@ -170,6 +170,77 @@ function kvBytesPerToken(model: TalosModelShape): number {
     return model.layers * model.kvHeads * model.headDim * 2 * model.kvBytesPerElement
 }
 
+export type TalosKvCacheTypeOverride = 'auto' | 'f16' | 'q8_0'
+
+/**
+ * Quanto pesa un elemento della cache per il tipo SCELTO, non quello
+ * dell'header — la stessa tabella di `services/localEngine.ts`
+ * (`TALOS_KV_BYTES_PER_ELEMENT`), copiata qui e non importata.
+ *
+ * ⛔ Deliberato, non una svista: `localEngine.ts` importa già `TalosModelShape`
+ * DA QUI (`import type { TalosModelShape } from '@/lib/models/fit'`) — importare
+ * all'indietro chiuderebbe un ciclo, e tirerebbe `@capacitor/core`
+ * (`registerPlugin`, in testa a quel file) dentro un modulo che dichiara "no
+ * I/O, no platform calls" nel suo stesso commento di apertura. `localAdapter.ts`
+ * ha in questo momento lavoro non committato che dipende dalla copia in
+ * `localEngine.ts`: toccare quel file stanotte non è di questa consegna.
+ *
+ * Le due copie non possono divergere in silenzio: `kvCacheTypeOverrideParity.
+ * test.ts` chiama entrambe sullo stesso input e pretende lo stesso numero.
+ *
+ * Solo due voci vere, come nel motore reale — non le quattro del mockup.
+ * `q4_0` non esiste ancora lato nativo (misurato: un tipo sconosciuto torna
+ * f16 anche in `localEngine.ts`), quindi non è nell'union `TalosKvCacheTypeOverride`
+ * a monte: chi chiama non può nemmeno scrivere il caso sbagliato.
+ */
+const KV_BYTES_PER_ELEMENT_BY_TYPE: Readonly<Record<string, number>> = {
+    f16: 2,
+    q8_0: 34 / 32,
+}
+
+function kvBytesPerElementForOverride(type: string): number {
+    return KV_BYTES_PER_ELEMENT_BY_TYPE[type] ?? KV_BYTES_PER_ELEMENT_BY_TYPE.f16!
+}
+
+/**
+ * La forma con la cache KV del tipo scelto al posto di quella dell'header.
+ *
+ * `'auto'` (o `undefined`) non cambia niente: resta `model.kvBytesPerElement`
+ * cosi' come l'header l'ha dichiarato, esattamente il comportamento di sempre.
+ * Solo `'f16'`/`'q8_0'` sostituiscono davvero — ed e' l'unica cosa che cambia:
+ * layers, kvHeads, headDim, trainedContext, weightBytes restano quelli veri.
+ */
+function modelWithKvOverride(
+    model: TalosModelShape,
+    override: TalosKvCacheTypeOverride | undefined,
+): TalosModelShape {
+    if (!override || override === 'auto') return model
+    const kvBytesPerElement = kvBytesPerElementForOverride(override)
+    if (kvBytesPerElement === model.kvBytesPerElement) return model
+    return { ...model, kvBytesPerElement }
+}
+
+/**
+ * Restyle Blocco 6 (mockup, item 7) — quale tipo di cache KV è EFFETTIVAMENTE
+ * in vigore, in AUTO come in forzato: la UI del mockup scrive "Q8" accanto
+ * all'etichetta anche quando il selettore è su AUTOMATICA, e quel valore
+ * deve venire dalla STESSA tabella che decide i byte, mai da una copia.
+ *
+ * `'other'` non è un caso teorico: un header può dichiarare un
+ * kvBytesPerElement che non coincide con nessuno dei due tipi noti (lo
+ * stesso motivo per cui `talosKvBytesPerElement` in localEngine.ts ha un
+ * fallback), e la UI deve poterlo dire invece di mentire "F16" o "Q8_0".
+ */
+export function talosResolvedKvCacheType(
+    model: TalosModelShape,
+    override?: TalosKvCacheTypeOverride,
+): 'f16' | 'q8_0' | 'other' {
+    const resolved = modelWithKvOverride(model, override)
+    if (resolved.kvBytesPerElement === KV_BYTES_PER_ELEMENT_BY_TYPE.f16) return 'f16'
+    if (Math.abs(resolved.kvBytesPerElement - KV_BYTES_PER_ELEMENT_BY_TYPE.q8_0!) < 1e-9) return 'q8_0'
+    return 'other'
+}
+
 /**
  * The counter-offer, computed even when the answer is no.
  *
@@ -372,8 +443,14 @@ export function talosModelFit(input: {
     context: number
     /** The size on disk, which is a storage question and never a memory one. */
     fileBytes: number
+    /**
+     * Forza il tipo di cache KV invece di fidarsi di quello dell'header.
+     * Omesso o `'auto'`: comportamento di sempre, nessun cambiamento.
+     */
+    kvCacheTypeOverride?: TalosKvCacheTypeOverride
 }): TalosModelFit {
-    const { model, device, context } = input
+    const { device, context, kvCacheTypeOverride } = input
+    const model = modelWithKvOverride(input.model, kvCacheTypeOverride)
 
     const kvCacheBytes = talosKvCacheBytes(model, context)
     const requiredBytes = kvCacheBytes + COMPUTE_OVERHEAD + RUNTIME_OVERHEAD
@@ -472,4 +549,90 @@ export function talosModelFit(input: {
         tokensPerSecond,
         maxContext,
     }
+}
+
+/**
+ * `'exact'`: misurato o letto dall'header, non dedotto.
+ * `'predicted'`: dipende da una scelta ipotetica di chi guarda (qui: aver
+ * forzato un tipo di cache KV diverso da quello dell'header).
+ * `'policy'`: una costante di TALOS (margini, overhead) — vera per
+ * costruzione, ma e' una scelta nostra, non una misura del modello o del
+ * telefono.
+ *
+ * Non esiste un quarto valore qui per un profilo dimostrativo: in produzione
+ * `device` viene SEMPRE da `talosMeasureDevice()`, mai da dati finti — se un
+ * giorno esistesse un vero stato "anteprima senza device", la sua etichetta
+ * e' una responsabilita' di chi lo esporrebbe (la UI), non di questo calcolo
+ * puro, che non deve poter fingere una misura che non ha.
+ */
+export type TalosResourceLedgerProvenance = 'exact' | 'predicted' | 'policy'
+
+export interface TalosResourceLedgerRow {
+    label:
+        | 'weights'
+        | 'kvCache'
+        | 'compute'
+        | 'runtime'
+        | 'safetyMargin'
+        | 'totalRuntime'
+        | 'availableRam'
+        | 'margin'
+    bytes: number
+    provenance: TalosResourceLedgerProvenance
+}
+
+/**
+ * Il ledger risorse: OGNI byte del conto, con la sua etichetta di provenienza.
+ *
+ * `talosModelFit` risponde SI/NO/QUANTO; questo risponde DA DOVE VIENE OGNI
+ * NUMERO — la stessa disciplina che il resto di TALOS applica sempre (mai un
+ * numero senza dire se e' misurato o dedotto), qui voce per voce invece che
+ * con un solo flag `estimated` complessivo.
+ *
+ * Puro come `talosModelFit`, e non lo sostituisce: lo DECORA con le stesse
+ * costanti (`COMPUTE_OVERHEAD`/`RUNTIME_OVERHEAD`/`SAFETY_MARGIN`) e la stessa
+ * aritmetica — se un domani quei numeri cambiassero qui, il ledger li
+ * rifletterebbe da solo, non ne tiene una seconda copia.
+ */
+export function talosResourceLedger(input: {
+    model: TalosModelShape
+    device: TalosDeviceCapacity
+    context: number
+    kvCacheTypeOverride?: TalosKvCacheTypeOverride
+}): TalosResourceLedgerRow[] {
+    const model = modelWithKvOverride(input.model, input.kvCacheTypeOverride)
+    const { device, context } = input
+
+    const kvCacheBytes = talosKvCacheBytes(model, context)
+    const requiredBytes = kvCacheBytes + COMPUTE_OVERHEAD + RUNTIME_OVERHEAD
+    const residentBytes = device.availableRamBytes
+        - device.lowMemoryThresholdBytes
+        - requiredBytes
+        - SAFETY_MARGIN
+
+    const kvForced = input.kvCacheTypeOverride !== undefined && input.kvCacheTypeOverride !== 'auto'
+
+    return [
+        { label: 'weights', bytes: model.weightBytes, provenance: 'exact' },
+        {
+            label: 'kvCache',
+            bytes: kvCacheBytes,
+            // 'exact' quando la cache e' quella che l'header ha dichiarato per
+            // davvero; 'predicted' quando e' stata FORZATA a un tipo diverso —
+            // a quel punto e' un'ipotesi su cosa succederebbe, non una misura.
+            provenance: kvForced ? 'predicted' : 'exact',
+        },
+        { label: 'compute', bytes: COMPUTE_OVERHEAD, provenance: 'policy' },
+        { label: 'runtime', bytes: RUNTIME_OVERHEAD, provenance: 'policy' },
+        { label: 'safetyMargin', bytes: SAFETY_MARGIN, provenance: 'policy' },
+        // Somme composte: includono sempre almeno una costante di policy, mai
+        // 'exact' anche quando la cache non e' stata forzata.
+        {
+            label: 'totalRuntime',
+            bytes: model.weightBytes + requiredBytes + SAFETY_MARGIN,
+            provenance: 'policy',
+        },
+        { label: 'availableRam', bytes: device.availableRamBytes, provenance: 'exact' },
+        { label: 'margin', bytes: residentBytes - model.weightBytes, provenance: 'policy' },
+    ]
 }

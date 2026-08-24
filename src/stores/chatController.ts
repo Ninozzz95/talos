@@ -1,6 +1,7 @@
 import { computed, reactive, readonly, ref, type ComputedRef, type Ref } from 'vue'
 import { talosBytesToBase64 } from '@/lib/bytesToBase64'
 import { talosDettaturaAnnota } from '@/services/dictation'
+import { talosLocalEngineLazy } from '@/services/localEngineLazy'
 import { talosT, useTalosLocalization } from '@/i18n'
 import type { TalosTranslate } from '@/i18n/contracts'
 import { talosTranslatableErrorMessage } from '@/i18n/uiErrors'
@@ -3672,11 +3673,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 : null
             /*
              * ⛔ Vive quanto la CONVERSAZIONE, non quanto l'invio: uno
-             * strumento gia' svelato resta chiamabile al messaggio dopo. La
-             * ragione, con la misura, sta in `catalogoCompatto.ts`.
+             * strumento gia' svelato resta chiamabile al messaggio dopo, e i
+             * pochi sempre-in-vista (24/8: il gap che il locale aveva e
+             * Anthropic no) non pagano mai il giro. La ragione, con la
+             * misura, sta in `catalogoCompatto.ts`.
              */
             const svelati = catalogo
-                ? catalogo.talosSvelatiIn(sendIdentity.sessionId)
+                ? catalogo.talosSvelatiInConSempreVisibili(sendIdentity.sessionId, offeredTools as never)
                 : new Set<string>()
             const dettagliStrumento = catalogo
                 ? catalogo.talosStrumentoDettagli(
@@ -5662,11 +5665,23 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         // non ha scelto niente in questa sessione. Guardia scritta e non
         // collegata vale come non scritta — vedi `il-difetto-e-che-non-li-chiamano`.
         const profiloScelto = profiles.value.find((candidate) => candidate.id === id)
-        if (
-            profiloScelto?.provider === 'local'
-            && deps.settings.state.local_engine_probe.consent === 'unset'
-        ) {
-            pendingLocalEngineProbeConsent.value = { path: profiloScelto.model }
+        if (profiloScelto?.provider === 'local') {
+            if (deps.settings.state.local_engine_probe.consent === 'unset') {
+                pendingLocalEngineProbeConsent.value = { path: profiloScelto.model }
+            }
+            // P3-1 — nasconde la latenza di apertura (2,9-3,6 s misurati sul
+            // Pad, campagna C0) dietro QUESTA scelta esplicita, mai dietro il
+            // lancio dell'app (§20.7 — e la guida Android Developers "Don't
+            // Prewarm App Features" dice lo stesso per lo stesso motivo: il
+            // costo va pagato su un segnale di intento reale, non a carico di
+            // chi non lo userà mai). SENZA await, stesso principio del
+            // sondaggio sopra: la chat non aspetta un'ottimizzazione che
+            // nessuno ha chiesto di aspettare. Import dinamico: il corpo
+            // vive in `lib/models/localWarmSelectedModel.ts`, non qui — vedi
+            // il commento in testa a quel file sul perché.
+            void import('@/lib/models/localWarmSelectedModel').then(
+                ({ talosWarmSelectedLocalModel }) => talosWarmSelectedLocalModel(profiloScelto.model),
+            )
         }
         const operations: Promise<unknown>[] = [persistComposerDefaults()]
         if (chat.activeSession.value) operations.push(chat.setActiveModelProfile(id))
@@ -5703,7 +5718,12 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         if (decision === 'granted' && pending) {
             // ⛔ SENZA await — §1-bis: «non blocca la chat». Il primo
             // messaggio parte come sempre, il sondaggio corre per conto suo.
-            void import('@/services/localEngine').then(
+            // ⛔⛔ `talosLocalEngineLazy()` (`services/localEngineLazy.ts`),
+            // non un `import()` diretto: due `import()` indipendenti dello
+            // stesso modulo mockato, in volo insieme (questo e il warm-load
+            // di P3-1 sotto), sono un deadlock riprodotto, non un'ipotesi —
+            // vedi il commento nel suo file.
+            void talosLocalEngineLazy().then(
                 ({ talosQualifyLocalBackend }) => talosQualifyLocalBackend(pending.path),
             )
         }

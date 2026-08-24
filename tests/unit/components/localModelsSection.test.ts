@@ -114,6 +114,28 @@ function fit(over: Record<string, unknown> = {}) {
     }
 }
 
+/**
+ * Model Lab Blocco 4 — `examination.ledger` è un campo obbligatorio del tipo
+ * reale (`TalosSetExamination`, 'read'), ma questo file non è coperto dal
+ * typecheck (`tests/**` non è in `tsconfig.app.json`): un fixture "read"
+ * senza `ledger` compila silenziosamente qui e crasha solo quando
+ * `TalosModelResourceLedger` prova a `.map()`rci sopra — trovato dalla
+ * suite intera, non dal typecheck. Valori minimi ma plausibili, nello
+ * stesso ordine fisso di `talosResourceLedger()`.
+ */
+function ledger() {
+    return [
+        { label: 'weights', bytes: 2.5 * 1024 ** 3, provenance: 'exact' },
+        { label: 'kvCache', bytes: 500_000_000, provenance: 'exact' },
+        { label: 'compute', bytes: 335_544_320, provenance: 'policy' },
+        { label: 'runtime', bytes: 67_108_864, provenance: 'policy' },
+        { label: 'safetyMargin', bytes: 268_435_456, provenance: 'policy' },
+        { label: 'totalRuntime', bytes: 3_671_088_640, provenance: 'policy' },
+        { label: 'availableRam', bytes: 4_000_000_000, provenance: 'exact' },
+        { label: 'margin', bytes: 1_000_000_000, provenance: 'policy' },
+    ]
+}
+
 function set(over: Record<string, unknown> = {}) {
     return {
         label: 'Q4_K_M',
@@ -747,14 +769,15 @@ describe('the verdict', () => {
                 id: 'unsloth/Qwen3-4B-GGUF',
                 revision: 'main',
                 loading: false,
-                sets: [set({ examination: { state: 'read', fit: fit(), quantisation: 'Q4_K_M', trainedContext: 131_072 } })],
+                sets: [set({ examination: { state: 'read', fit: fit(), ledger: ledger(), kvCacheTypeLabel: 'f16', quantisation: 'Q4_K_M', trainedContext: 131_072 } })],
             },
         }) as never
         const wrapper = await screen()
 
-        const verdict = wrapper.get('[data-testid="talos-models-verdict"]').text()
-        expect(verdict).toContain('Memory: room to spare')
-        expect(verdict).toContain('13.8')
+        // Restyle Blocco 6: la velocità è uscita dalla frase del verdetto,
+        // è la sua casella statistica dedicata (mockup: "VELOCITÀ PREVISTA").
+        expect(wrapper.get('[data-testid="talos-models-verdict"]').text()).toContain('Memory: room to spare')
+        expect(wrapper.get('[data-testid="talos-models-speed-stat"]').text()).toContain('13.8')
     })
 
     /**
@@ -772,6 +795,8 @@ describe('the verdict', () => {
                     examination: {
                         state: 'read',
                         fit: fit({ band: 'wont-run', reason: 'context', maxContext: 8192 }),
+                        ledger: ledger(),
+                        kvCacheTypeLabel: 'f16',
                         quantisation: 'Q4_K_M',
                         trainedContext: 131_072,
                     },
@@ -792,12 +817,14 @@ describe('the verdict', () => {
                 id: 'a/b',
                 revision: 'main',
                 loading: false,
-                sets: [set({ examination: { state: 'read', fit: fit({ tokensPerSecond: null }), quantisation: null, trainedContext: 4096 } })],
+                sets: [set({ examination: { state: 'read', fit: fit({ tokensPerSecond: null }), ledger: ledger(), kvCacheTypeLabel: 'f16', quantisation: null, trainedContext: 4096 } })],
             },
         }) as never
         const wrapper = await screen()
 
-        expect(wrapper.get('[data-testid="talos-models-verdict"]').text()).toContain('speed unknown')
+        // Restyle Blocco 6: stessa mossa del test sopra — la velocità (qui
+        // "sconosciuta") è nella casella statistica, non nel verdetto.
+        expect(wrapper.get('[data-testid="talos-models-speed-stat"]').text()).toContain('speed unknown')
     })
 })
 
@@ -834,7 +861,7 @@ describe('what is refused and what is merely warned about', () => {
                 id: 'a/b',
                 revision: 'main',
                 loading: false,
-                sets: [set({ examination: { state: 'read', fit: fit({ band: 'wont-run', reason: 'memory' }), quantisation: null, trainedContext: 4096 } })],
+                sets: [set({ examination: { state: 'read', fit: fit({ band: 'wont-run', reason: 'memory' }), ledger: ledger(), kvCacheTypeLabel: 'f16', quantisation: null, trainedContext: 4096 } })],
             },
         }) as never
         const wrapper = await screen()

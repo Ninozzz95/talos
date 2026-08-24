@@ -306,6 +306,11 @@ describe('examining a model before committing to it', () => {
         expect(set.examination.trainedContext).toBe(131_072)
         // From the header, which outranks the name it came with.
         expect(set.examination.quantisation).toBe('Q4_K_M')
+        // P2-6: one tensor, [4096, 32000], ggml_type 12 (Q4_K) — see ggufBytes().
+        expect(set.examination.parameterCount).toBe(4096 * 32_000)
+        expect(set.examination.tensorTypeHistogram).toEqual({ Q4_K: 1 })
+        // general.quantization_version is absent from this fixture on purpose.
+        expect(set.examination.quantizationVersion).toBeNull()
     })
 
     /**

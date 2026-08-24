@@ -339,6 +339,24 @@ android {
                     println "⛔ BUILD DI RICERCA: backend `${scelto}`. Non è la build che si spedisce."
                 }
                 /*
+                 * ⛔⛔ SOLO RICERCA — P2-5: `-PtalosLlamaCandidateSrc=<percorso>`
+                 * compila da un CHECKOUT ISOLATO di llama.cpp — un candidato
+                 * diverso dal pin di produzione, preparato da
+                 * `scripts/research/qualify-llama-candidate.mjs` (un
+                 * `git worktree`, mai `third_party/llama.cpp` stesso). Senza
+                 * la proprietà non cambia niente: `CMakeLists.txt` legge il
+                 * pin di sempre.
+                 *
+                 * ⛔ Il percorso arriva da Node/Windows con `\`: CMake vuole
+                 * `/`, stesso `.replace('\\', '/')` già in uso qui sopra per
+                 * i percorsi Vulkan.
+                 */
+                if (project.hasProperty('talosLlamaCandidateSrc')) {
+                    def candidato = project.property('talosLlamaCandidateSrc').toString().replace('\\', '/')
+                    arguments "-DTALOS_LLAMA_CANDIDATE_SRC=${candidato}".toString()
+                    println "⛔ BUILD DI RICERCA: sorgente candidato ${candidato}, non il pin di produzione."
+                }
+                /*
                  * ⛔⛔⛔ HWASAN, SOLO A RICHIESTA: `-PtalosHwasan`.
                  *
                  * I test in Java provano che nessuno PUÒ arrivare al codice
@@ -380,6 +398,33 @@ android {
                             '-DCMAKE_CXX_FLAGS=-fsanitize=hwaddress -fno-omit-frame-pointer',
                             '-DCMAKE_SHARED_LINKER_FLAGS=-fsanitize=hwaddress',
                             '-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=hwaddress'
+                }
+                /*
+                 * ⛔⛔ SOLO RICERCA — P2-2: `-PtalosCpuKleidiAI=true`.
+                 *
+                 * Senza la proprietà non cambia niente: il flag upstream
+                 * `GGML_CPU_KLEIDIAI` è OFF di default (verificato in
+                 * `ggml/CMakeLists.txt`), come ogni altra corsia di ricerca
+                 * qui sopra.
+                 *
+                 * ⛔ Non è vendored: attivarlo fa scaricare a CMake il
+                 * sorgente KleidiAI da GitHub Releases (`FetchContent`, URL
+                 * fisso `v1.24.0`, verificato con hash MD5 pinnato nello
+                 * script upstream) — la prima build con questo flag richiede
+                 * rete, quelle successive riusano la cache di
+                 * `FetchContent` nella cartella di build finché non viene
+                 * pulita.
+                 *
+                 * ⛔ CR-18 (revisione avversariale del programma): "enabled"
+                 * non prova che i kernel siano usati — questo flag da solo
+                 * qualifica SOLO se il backend si registra, mai se un
+                 * modello reale ci passa attraverso. Il conteggio
+                 * bytes/tensori per buffer type resta un blocco separato,
+                 * dichiarato esplicitamente non ancora costruito.
+                 */
+                if (project.hasProperty('talosCpuKleidiAI')) {
+                    arguments '-DGGML_CPU_KLEIDIAI=ON'
+                    println "⛔ BUILD DI RICERCA: KleidiAI attivo. Non è la build che si spedisce."
                 }
             }
         }
