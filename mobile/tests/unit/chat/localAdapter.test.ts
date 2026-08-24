@@ -81,7 +81,7 @@ const SMALL_PHONE = {
     abiSupported: true,
 }
 
-const { localAdapter, prefissoResoDiProiettato } = await import('@/lib/chat/providers/localAdapter')
+const { localAdapter, prefissoResoDi, prefissoResoDiProiettato } = await import('@/lib/chat/providers/localAdapter')
 const { talosProjectLocalToolConversation } = await import('@/lib/chat/localToolPromptProtocol')
 
 /**
@@ -1280,6 +1280,146 @@ describe('P1-3 prefissoResoDiProiettato — il prefisso AOT per prompt-json-v1',
         )
         const secondo = await prefissoResoDiProiettato(
             'prompt-json-v1', CAPABILITIES_PROMPT_JSON, SYSTEM_AL_CONTRARIO, [...TOOLS, TOOLS[0]!], 'it', true,
+        )
+
+        expect(primo).not.toBe(secondo)
+        expect(localEngine.talosLocalEngineChatPlan).toHaveBeenCalledTimes(2)
+    })
+})
+
+/**
+ * ⛔⛔⛔ TROVATO IL 24/8 sul Pad reale, non da un test: `prefissoResoDi`
+ * (il gemello di `prefissoResoDiProiettato` per il trasporto NATIVO —
+ * Llama-3.2 e ogni altro modello che riceve `tools` passati al template
+ * Jinja invece che dentro il testo) aveva lo STESSO bug del turno di
+ * sistema solitario, mai corretto qui. Sintomo diverso: non testo
+ * sparito, un'eccezione esplicita del template (`Cannot put tools in
+ * the first user message when there's no first user message!`),
+ * catturata in silenzio dal `catch` — il prefisso semplicemente non si
+ * congelava mai per nessun modello a trasporto nativo.
+ */
+describe('P1-3 prefissoResoDi — stesso bug del turno solitario, trasporto nativo', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+    })
+
+    const TOOLS_NATIVI = [{
+        name: 'talos_diagnostic_echo',
+        description: 'Return one diagnostic value.',
+        parameters: { type: 'object', properties: { value: { type: 'string' } } },
+    }]
+
+    it('produce un prefisso non nullo con i tool passati NATIVAMENTE', async () => {
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: 'testo-reso-nativo', promptTokens: 900, contextTokens: 4096,
+        })
+
+        const testo = await prefissoResoDi('Sei TALOS. [test: nativo-non-nullo]', TOOLS_NATIVI, true)
+
+        expect(testo).toBe('testo-reso-nativo')
+        expect(localEngine.talosLocalEngineChatPlan).toHaveBeenCalledTimes(1)
+    })
+
+    it('⛔⛔ manda un turno utente SEGNAPOSTO dopo il sistema — questo è esattamente la cura', async () => {
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: 'x', promptTokens: 1, contextTokens: 4096,
+        })
+
+        await prefissoResoDi('Sei TALOS. [test: segnaposto-nativo]', TOOLS_NATIVI, true)
+
+        const chiamata = localEngine.talosLocalEngineChatPlan.mock.calls.at(-1)
+        const turni = chiamata?.[0] as Array<{ role: string, content: string }>
+        expect(turni).toHaveLength(2)
+        expect(turni[0]).toMatchObject({ role: 'system' })
+        // Non una stringa vuota: un turno utente senza contenuto sarebbe
+        // ambiguo quanto nessun turno affatto per lo stesso template.
+        expect(turni[1]?.role).toBe('user')
+        expect(turni[1]?.content).toBeTruthy()
+    })
+
+    it('a differenza del trasporto proiettato, i tool VANNO passati nativamente (non sono già nel testo)', async () => {
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: 'x', promptTokens: 1, contextTokens: 4096,
+        })
+
+        await prefissoResoDi('Sei TALOS. [test: tool-nativi]', TOOLS_NATIVI, true)
+
+        const chiamata = localEngine.talosLocalEngineChatPlan.mock.calls.at(-1)
+        // Secondo argomento di talosLocalEngineChatPlan è `tools`: qui, a
+        // differenza di CR-09 sul trasporto proiettato, DEVE essere quello
+        // vero — è l'unico posto in cui il modello li riceve per questo
+        // trasporto.
+        expect(chiamata?.[1]).toBe(TOOLS_NATIVI)
+    })
+
+    it('⭐ condivide un lungo prefisso comune col rendering della generazione VERA (diverge solo dove il messaggio vero comincia)', async () => {
+        localEngine.talosLocalEngineChatPlan.mockImplementation(async (turns: Array<{ content?: string }>) => ({
+            prompt: turns.map((t) => t.content ?? '').join('|TURN|'),
+            promptTokens: 1,
+            contextTokens: 4096,
+        }))
+
+        const SYSTEM_PREFISSO_COMUNE_NATIVO = 'Sei TALOS. [test: prefisso-comune-nativo]'
+
+        const testoCongelato = await prefissoResoDi(SYSTEM_PREFISSO_COMUNE_NATIVO, TOOLS_NATIVI, true)
+        expect(testoCongelato).toBeTruthy()
+
+        // La generazione vera manda lo stesso system, poi il messaggio VERO
+        // dell'utente al posto del segnaposto — nessun projector di mezzo
+        // per questo trasporto, i turni vanno diretti al motore. Stesso
+        // mock di sopra (`mockImplementation` concatena i turni), chiamato
+        // direttamente qui per simulare il percorso vero.
+        const { prompt: renderConversazioneVera } = await localEngine.talosLocalEngineChatPlan(
+            [
+                { role: 'system', content: SYSTEM_PREFISSO_COMUNE_NATIVO },
+                { role: 'user', content: 'Un messaggio vero, diverso dal segnaposto.' },
+            ],
+            TOOLS_NATIVI,
+            true,
+        )
+
+        let prefissoComune = 0
+        while (
+            prefissoComune < testoCongelato!.length
+            && prefissoComune < renderConversazioneVera.length
+            && testoCongelato![prefissoComune] === renderConversazioneVera[prefissoComune]
+        ) prefissoComune += 1
+
+        // Calcolato dai pezzi veri, non a occhio (stessa disciplina di
+        // "assert outcome, not the call"): entrambi i testi condividono
+        // `system + '|TURN|'` per intero — il mock unisce i CONTENUTI dei
+        // turni, mai i ruoli — e divergono esattamente al carattere dopo,
+        // dove il segnaposto ('.') e il messaggio vero ('U'...) differiscono.
+        expect(prefissoComune).toBe(`${SYSTEM_PREFISSO_COMUNE_NATIVO}|TURN|`.length)
+        expect(prefissoComune).toBeLessThan(testoCongelato!.length)
+        expect(prefissoComune).toBeLessThan(renderConversazioneVera.length)
+    })
+
+    it('nessun system → null, nessuna chiamata al motore', async () => {
+        const testo = await prefissoResoDi(undefined, TOOLS_NATIVI, true)
+        expect(testo).toBeNull()
+        expect(localEngine.talosLocalEngineChatPlan).not.toHaveBeenCalled()
+    })
+
+    it('memoizza: due chiamate identiche interrogano il motore una volta sola', async () => {
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: 'memo-nativo', promptTokens: 1, contextTokens: 4096,
+        })
+
+        await prefissoResoDi('Sei TALOS. [test: memoizza-nativo]', TOOLS_NATIVI, true)
+        await prefissoResoDi('Sei TALOS. [test: memoizza-nativo]', TOOLS_NATIVI, true)
+
+        expect(localEngine.talosLocalEngineChatPlan).toHaveBeenCalledTimes(1)
+    })
+
+    it('AL CONTRARIO — cambiare i tool cambia la chiave: non è la stessa cache', async () => {
+        localEngine.talosLocalEngineChatPlan
+            .mockResolvedValueOnce({ prompt: 'con-un-tool-nativo', promptTokens: 1, contextTokens: 4096 })
+            .mockResolvedValueOnce({ prompt: 'con-due-tool-nativi', promptTokens: 1, contextTokens: 4096 })
+
+        const primo = await prefissoResoDi('Sei TALOS. [test: al-contrario-nativo]', TOOLS_NATIVI, true)
+        const secondo = await prefissoResoDi(
+            'Sei TALOS. [test: al-contrario-nativo]', [...TOOLS_NATIVI, TOOLS_NATIVI[0]!], true,
         )
 
         expect(primo).not.toBe(secondo)
