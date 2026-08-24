@@ -11,6 +11,16 @@
 > `~/.claude/projects/C--Users-Antonino-Desktop-projects-AVM/memory/`.
 > Si aprono per nome, come dall'altro indice.
 
+## ✅ Chiusa il 24/8 — il buco RTF non spiegato
+
+> ⛔ Spostata qui dagli APERTI di `MEMORY.md` il 24/8: l'indice era a 19.819
+> byte, sopra il tetto d'allarme di 19.900. Il motore Pocket TTS che questa
+> voce descriveva come rotto è lo stesso che `CHANGELOG.md` v0.1.19 (scritto
+> lo stesso giorno) dichiara riparato — stutter e underrun misurati spariti,
+> tempo al primo audio 449-537 ms — quindi la voce è chiusa, non solo spostata.
+
+- ✅⛔⛔⭐⭐⭐ [0.1.19 — il buco NON SPIEGATO era più grande del deficit](il-buco-non-spiegato-era-piu-grande-del-deficit.md) — il file prediceva RTF 0,73-0,89, il Pad misurava **1,5**: ~50 ms/frame attribuiti a niente contro i **40** che servivano. Causa candidata verificata alla fonte (`torch.cat` a ogni frame, O(T²)). Chiusa nel rifacimento del motore su Pocket TTS, v0.1.19
+
 ## ✅ Le CHIUSE del 23/8 — il banco che misura se stesso, e il guardiano che accusava
 
 > ⛔ Aggiunte qui e non in `MEMORY.md`: quello era a **19.354 byte** su un tetto
