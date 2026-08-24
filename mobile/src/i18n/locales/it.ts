@@ -2316,6 +2316,14 @@ export const TALOS_IT_MESSAGES = {
         reasonKilled: 'Questo telefono ha già esaurito la memoria con questo modello una volta.',
         counterOffer: 'A {context} token di contesto ci sta.',
         contextLabel: 'Lunghezza di contesto',
+        // Model Lab Blocco 2 — il controllo globale sopra l'elenco delle
+        // varianti, non il bottone di controproposta per riga.
+        kvCacheTypeLabel: 'Cache KV',
+        kvCacheType: {
+            auto: 'Automatica',
+            f16: 'F16',
+            q8_0: 'Q8_0',
+        },
         download: 'Scarica',
         downloading: 'Sto scaricando',
         stop: 'Metti in pausa',

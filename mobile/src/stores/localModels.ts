@@ -777,6 +777,16 @@ function talosEredita(
     const pesi = set.totalBytes - eredita.inizioDeiPesi
     // Un file più piccolo dell'intestazione non è una versione: è un residuo.
     if (pesi <= 0) return
+    /**
+     * ⛔ Raggiungibile anche dal PROPRIO percorso, non solo da quello del
+     * capofila. Senza questa riga `letture` ha voce solo per i capofila (chi
+     * ha davvero chiamato `readHead`), e `talosRicalcolaEsaminati` — che
+     * cerca `letture.get(set.paths[0])` per OGNI riga "read" — non trova
+     * mai le versioni ereditate: restano al verdetto vecchio quando il
+     * context o la cache KV cambiano dopo l'esame. Trovato da questo stesso
+     * blocco di test, non per ispezione.
+     */
+    letture.set(set.paths[0]!, eredita)
     const forma: TalosModelShape = { ...eredita.forma, weightBytes: pesi }
     set.examination = {
         state: 'read',
@@ -804,18 +814,65 @@ function talosEredita(
     }
 }
 
+/**
+ * Ricalcola il verdetto di ogni variante GIÀ letta, con il context e il
+ * kvCacheType CORRENTI — mai una nuova lettura di rete.
+ *
+ * ## Perché esiste separata da `talosExamineSet`
+ *
+ * `talosExamineSet` non ha una scorciatoia per "questo file l'ho già letto":
+ * richiama SEMPRE `readHead` (resolve + range GET), anche se l'intestazione
+ * è identica a un attimo fa. Va bene per un click isolato su UN file — è il
+ * caso raro, deliberato, del bottone di controproposta — ma un controllo
+ * globale di contesto o cache KV che toccasse così ogni riga già esaminata a
+ * ogni variazione moltiplicherebbe le letture di rete per il numero di
+ * varianti lette, esattamente il difetto che `talosEredita` esiste già per
+ * evitare dal lato opposto (una lettura per modello, non per versione — vedi
+ * `talosExamineRepo`). Con l'esame automatico del Blocco 3, dove un
+ * repository intero può avere decine di righe "read" insieme, la differenza
+ * smette di essere teorica.
+ *
+ * Riusa `letture`, la stessa mappa che alimenta `talosEredita`: ogni riga
+ * "read" ha lasciato lì la sua intestazione, quindi il ricalcolo è puro
+ * calcolo locale (`talosModelFit`), zero I/O — lo stesso principio di
+ * "cache dei dati grezzi, ricalcolo della vista derivata al cambio filtro"
+ * che evita la ririchiesta di rete (ricerca web di questo blocco: dati
+ * grezzi in cache + filtro riapplicato in locale, non un nuovo fetch).
+ */
+function talosRicalcolaEsaminati(): void {
+    const repo = state.repo
+    const device = state.device
+    if (!repo || !device) return
+    for (const set of repo.sets) {
+        if (set.examination.state !== 'read') continue
+        const eredita = letture.get(set.paths[0]!)
+        if (!eredita) continue
+        const pesi = set.totalBytes - eredita.inizioDeiPesi
+        if (pesi <= 0) continue
+        set.examination = {
+            ...set.examination,
+            fit: talosModelFit({
+                model: { ...eredita.forma, weightBytes: pesi },
+                device,
+                context: state.context,
+                fileBytes: set.totalBytes,
+                kvCacheTypeOverride: state.kvCacheType,
+            }),
+        }
+    }
+}
+
 /** Re-answer every examined set at a new context length, without re-reading. */
 export function talosSetLocalContext(context: number): void {
     state.context = context
+    talosRicalcolaEsaminati()
 }
 
 /**
  * Forza (o smette di forzare) il tipo di cache KV — Model Lab, Blocco 2.
  *
- * Come `talosSetLocalContext`: nessuna nuova lettura di rete, l'header di
- * ogni variante già esaminata resta in memoria (`letture`/`set.examination`),
- * e il chiamante ricalcola il verdetto passando questo valore a
- * `talosModelFit`/`talosResourceLedger`.
+ * Come `talosSetLocalContext`: nessuna nuova lettura di rete, ogni variante
+ * già esaminata si ricalcola sul posto da `talosRicalcolaEsaminati`.
  *
  * ⛔ Non ancora collegato al motore di inferenza vero: `localEngine.open()`
  * (che accetta `kvCacheType` per davvero, testato in 4 file) viene chiamato
@@ -826,6 +883,7 @@ export function talosSetLocalContext(context: number): void {
  */
 export function talosSetLocalKvCacheType(kvCacheType: TalosKvCacheTypeOverride): void {
     state.kvCacheType = kvCacheType
+    talosRicalcolaEsaminati()
 }
 
 export type TalosDownloadRefusal =
