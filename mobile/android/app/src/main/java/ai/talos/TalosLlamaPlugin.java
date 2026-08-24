@@ -1237,6 +1237,29 @@ public class TalosLlamaPlugin extends Plugin {
     }
 
     /**
+     * ⛔⛔ SOLO RICERCA — P2-2, il primo lettore reale di
+     * {@code nativeCpuFeaturesForResearch()}: bug gia' chiuso una volta in
+     * questo stesso file (P1-1 blocco 3, export nativo senza
+     * {@code @PluginMethod} corrispondente, irraggiungibile da JS) —
+     * collegato SUBITO qui, non lasciato scritto e non chiamato.
+     *
+     * Girato su {@code qualificationWorker}, non su {@code worker}: legge
+     * feature statiche della CPU, zero relazione con lo stato del motore
+     * nativo che {@code worker} possiede — lo stesso motivo per cui
+     * {@code localPerformanceProfiles} sopra usa lo stesso executor.
+     */
+    @PluginMethod
+    public void cpuFeaturesForResearch(PluginCall call) {
+        qualificationWorker.execute(() -> {
+            try {
+                call.resolve(new JSObject(TalosLlamaNative.nativeCpuFeaturesForResearch()));
+            } catch (org.json.JSONException malformato) {
+                call.reject("TALOS_LLAMA_CPU_FEATURES_MALFORMED: " + malformato.getMessage());
+            }
+        });
+    }
+
+    /**
      * P0-3 — Q0: "il motore si apre e risponde", senza il costo di
      * {@link #qualifyBackend}. Nessuno store viene toccato — vedi
      * {@link TalosLocalSmokeCheck}, che spiega perché: un verdetto PASSED
