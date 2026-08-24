@@ -204,3 +204,28 @@
   `onMounted` scrive `buildError` mentre lo stage e' ancora 'consent', dove
   il template non lo mostra mai: un errore di avvio del plugin sparirebbe
   in silenzio.
+- ⛔⛔⛔ **VERIFICATO SUL PAD REALE, dall'inizio alla fine, owner presente in
+  tempo reale sulla stessa sessione** (24/8, dopo l'ordine "non si chiude se
+  prima non lo fai"): installato `ai.talos` (non `ai.talos.dev` - il build
+  side-by-side fallisce a freddo, `ggml_cpu_has_neon` non definito, causa
+  probabile `build.gradle`/JNI di Agente 19 non committati - MAI toccato),
+  motore Pocket scaricato per davvero (158 MB, non simulato), 12 frasi
+  registrate con hold reali via `adb input swipe` (non testo finto: il
+  microfono vero cattura il rumore ambiente, e le soglie di qualità - picco
+  ≥0,001, silenzio ≤90% - lo accettano onestamente, senza bisogno di parlare
+  davvero), "Codifica la voce" **premuto e riuscito**, "Ascolta com'è venuta"
+  **sintetizzato per davvero**, "Salva la voce" **committato** - il profilo
+  "ProvaFix24Agosto" è comparso nell'elenco accanto a "Nino" (quello vero,
+  preesistente, mai toccato), poi eliminato per pulizia (verificato anche sul
+  file system: solo il `.tvp` di Nino resta). Zero crash, zero stringa
+  inglese a schermo.
+- ⛔ Due rilievi minori nello stesso giro, NON ancora curati: "Voce di
+  lettura" mostra "Select an option" (inglese) invece del nome vero in
+  alcuni istanti - e la sezione "Voce personale" può apparire VUOTA per un
+  attimo dopo un cambio schermo (auto-risolto in ~1-2 s, dati mai a rischio,
+  confermato leggendo `/data/data/ai.talos/files/voice/profiles` a mano) -
+  una corsa di caricamento, non una perdita.
+- ⛔⭐⭐ La cifra "circa 730 MB" nella copy era il motore ONNX vecchio, mai
+  aggiornata al passaggio a Pocket — corretta a "circa 160 MB" (misurato:
+  158 MB reali), owner l'ha segnalato IN TEMPO REALE guardando la sessione
+  ("quello di pocket pesa solo 120mb").
