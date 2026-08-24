@@ -2263,6 +2263,11 @@ export const TALOS_EN_MESSAGES = {
         // Model Lab Blocco 4 — the provenance ledger: never a number without
         // saying where it comes from. The eight labels are the same eight
         // entries talosResourceLedger() (fit.ts) returns, same fixed order.
+        // Restyle Blocco 6 — two-column panel (config + ledger) below the
+        // rail, replaces the vertical list with a "Details" tap per row.
+        runtimeConfigTitle: 'Configure the runtime',
+        speedStatLabel: 'Predicted speed',
+        maxContextStatLabel: 'Calculated max context',
         ledgerTitle: 'Where every byte comes from',
         ledger: {
             weights: 'Model weights',

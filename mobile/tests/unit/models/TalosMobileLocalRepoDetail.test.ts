@@ -109,7 +109,9 @@ describe('TalosMobileLocalRepoDetail', () => {
         expect(wrapper.get('[data-testid="talos-models-repo-title"]').classes()).toContain('break-words')
         expect(wrapper.find('[data-testid="talos-models-back"]').exists()).toBe(false)
         expect(wrapper.find('[data-testid="talos-model-lab-device"]').exists()).toBe(false)
-        expect(wrapper.findAll('[data-testid="talos-models-set"]')).toHaveLength(1)
+        // Restyle Blocco 6: talos-models-set (la vecchia riga) e' sparito
+        // con l'elenco verticale — una sola scheda sulla rail e' l'equivalente.
+        expect(wrapper.get('[data-testid="talos-models-variant-rail"]').findAll('[role="radio"]')).toHaveLength(1)
     })
 
     it('shows a cleaned summary first and keeps the complete README behind a native disclosure', async () => {
@@ -140,49 +142,59 @@ describe('TalosMobileLocalRepoDetail', () => {
         expect(scheda.text()).not.toContain('## Full notes')
     })
 
-    it('C45-RED-14 renders one continuous variant list with a primary row download', async () => {
+    /**
+     * Restyle Blocco 6 — sostituisce C45-RED-14. L'elenco verticale
+     * divide-y (la scoperta originale di C45) non esiste più su questa
+     * pagina di proposito: owner, 24/8, dopo aver confrontato il mockup
+     * col Pad vero — "DETTAGLIO E LISTA" andavano riportate al layout del
+     * mockup. La rail è il nuovo master del pattern master-detail
+     * (ricerca web nel commento del componente), e la variante scelta
+     * porta il proprio bottone di download nel pannello di configurazione,
+     * non più nella riga.
+     */
+    it('la rail sostituisce l\'elenco, e il bottone di download resta accessibile e minimo', async () => {
         const wrapper = mount(TalosMobileLocalRepoDetail, {
             props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
         })
         await flushPromises()
 
-        const list = wrapper.get('[data-testid="talos-models-variant-list"]')
-        const row = wrapper.get('[data-testid="talos-models-set"]')
-        expect(list.classes()).toContain('divide-y')
-        expect(row.classes()).not.toContain('rounded-[var(--talos-radius-card)]')
-        expect(row.classes()).not.toContain('border')
+        const rail = wrapper.get('[data-testid="talos-models-variant-rail"]')
+        expect(rail.attributes('role')).toBe('radiogroup')
+        expect(rail.findAll('[role="radio"]')).toHaveLength(1)
 
-        const download = row.get('[data-testid="talos-models-download"]')
+        const download = wrapper.get('[data-testid="talos-models-download"]')
         expect(download.attributes('aria-label')).toContain('Q4_K_M')
         expect(download.classes()).toContain('size-[var(--talos-touch-target)]')
         expect(download.text()).not.toContain('Download')
     })
 
-    it('C45-RED-14C gives a backend suffix the full identity column without increasing the action row', async () => {
+    it('un suffisso di backend nel nome resta leggibile per intero nel pannello di configurazione', async () => {
         harness.state.repo.sets[0].label = 'Q4_K_M · HIP optimized'
         const wrapper = mount(TalosMobileLocalRepoDetail, {
             props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
         })
         await flushPromises()
 
-        const primary = wrapper.get('[data-testid="talos-models-variant-primary"]')
-        expect(primary.classes()).toContain('grid-cols-[minmax(0,1fr)_var(--talos-touch-target)]')
-        const identity = primary.get('[data-testid="talos-models-variant-identity"]')
+        const identity = wrapper.get('[data-testid="talos-models-variant-identity"]')
         expect(identity.get('[data-testid="talos-models-variant-label"]').text()).toBe('Q4_K_M · HIP optimized')
         expect(identity.find('[data-testid="talos-models-variant-size"]').exists()).toBe(true)
     })
 
-    it('C45-RED-14 keeps secondary diagnostics behind a per-variant disclosure', async () => {
+    /**
+     * Restyle Blocco 6 — sostituisce C45-RED-14 "behind a disclosure": è
+     * l'esatto contrario che l'owner ha chiesto guardando il mockup. Il
+     * bottone Esamina/Ricontrolla e il resto della configurazione sono ora
+     * SEMPRE visibili per la variante scelta, senza un tocco in più.
+     */
+    it('il bottone Esamina/Ricontrolla è visibile subito, non dietro una divulgazione', async () => {
         const wrapper = mount(TalosMobileLocalRepoDetail, {
             props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
         })
         await flushPromises()
 
-        const disclosure = wrapper.get('[data-testid="talos-models-variant-details"]')
-        expect(disclosure.element.tagName).toBe('DETAILS')
-        expect(disclosure.attributes('open')).toBeUndefined()
-        expect(disclosure.get('summary').text()).toContain('Details')
-        expect(disclosure.find('[data-testid="talos-models-examine"]').exists()).toBe(true)
+        const config = wrapper.get('[data-testid="talos-models-runtime-config"]')
+        expect(config.find('[data-testid="talos-models-examine"]').exists()).toBe(true)
+        expect(wrapper.find('details[data-testid="talos-models-variant-details"]').exists()).toBe(false)
     })
 
     /**
@@ -373,20 +385,22 @@ describe('TalosMobileLocalRepoDetail', () => {
             }
         }
 
-        async function dettaglioAperto() {
-            harness.state.repo.sets[0].examination = letta()
+        /**
+         * Restyle Blocco 6 — il ledger vive nel proprio pannello, sempre
+         * visibile per la variante scelta: niente più `<details>` da
+         * aprire prima di poterlo leggere.
+         */
+        async function repoAperto() {
             const wrapper = mount(TalosMobileLocalRepoDetail, {
                 props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
             })
             await flushPromises()
-            const disclosure = wrapper.get('[data-testid="talos-models-variant-details"]')
-            ;(disclosure.element as HTMLDetailsElement).open = true
-            await disclosure.trigger('toggle')
             return wrapper
         }
 
         it('monta il ledger con tutte e otto le righe quando la variante e\' gia\' esaminata', async () => {
-            const wrapper = await dettaglioAperto()
+            harness.state.repo.sets[0].examination = letta()
+            const wrapper = await repoAperto()
 
             const ledger = wrapper.get('[data-testid="talos-model-resource-ledger"]')
             expect(ledger.findAll('[data-testid^="talos-ledger-row-"]')).toHaveLength(8)
@@ -394,15 +408,31 @@ describe('TalosMobileLocalRepoDetail', () => {
         })
 
         it('non monta il ledger quando la variante non e\' ancora stata esaminata', async () => {
-            const wrapper = mount(TalosMobileLocalRepoDetail, {
-                props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
-            })
-            await flushPromises()
-            const disclosure = wrapper.get('[data-testid="talos-models-variant-details"]')
-            ;(disclosure.element as HTMLDetailsElement).open = true
-            await disclosure.trigger('toggle')
+            const wrapper = await repoAperto()
 
             expect(wrapper.find('[data-testid="talos-model-resource-ledger"]').exists()).toBe(false)
+            wrapper.unmount()
+        })
+
+        /**
+         * Trovato guardando lo schermo vero (screenshot 13-variante-reale,
+         * Pad, 24/8): la casella "Velocità prevista" mostrava
+         * "15.602726935797765 token al secondo" — il numero GREZZO di
+         * fit.tokensPerSecond, non quello arrotondato che
+         * talosFitVerdict già calcola (Math.round(x*10)/10,
+         * presentation.ts). La correzione legge da selectedRow.verdict,
+         * non da examination.fit direttamente — questo test prova che non
+         * torna a succedere.
+         */
+        it('la velocità prevista è arrotondata a una cifra, mai il numero grezzo', async () => {
+            const esaminata = letta()
+            esaminata.fit = { ...esaminata.fit, tokensPerSecond: 15.602726935797765 }
+            harness.state.repo.sets[0].examination = esaminata
+            const wrapper = await repoAperto()
+
+            const casella = wrapper.get('[data-testid="talos-models-speed-stat"]').text()
+            expect(casella).toContain('15.6')
+            expect(casella).not.toContain('15.602726935797765')
             wrapper.unmount()
         })
     })

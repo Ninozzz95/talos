@@ -70,6 +70,33 @@ describe('TalosMobileLocalModelRow', () => {
         expect(row.text()).toContain('4.9M')
     })
 
+    /**
+     * Restyle Blocco 5 — la sigla del publisher, come nel mockup ("UN",
+     * "BA", "GG"): due lettere maiuscole dal proprietario, mai un
+     * secondo parsing indipendente dell'id (si legge da routeTarget,
+     * la stessa fonte già provata sopra per owner/repo).
+     */
+    it('mostra le due iniziali del publisher come avatar, sempre maiuscole', () => {
+        const wrapper = mount(TalosMobileLocalModelRow, {
+            props: { model: { ...model, id: 'unsloth/Qwen3.5-4B-GGUF' }, capacity },
+            global: { stubs: { RouterLink: { props: ['to'], template: '<a><slot /></a>' } } },
+        })
+
+        expect(wrapper.get('[data-testid="talos-model-row-avatar"]').text()).toBe('UN')
+    })
+
+    it('licenza e parametri sono pillole bordate, non testo separato da punti', () => {
+        const wrapper = mount(TalosMobileLocalModelRow, {
+            props: { model, capacity },
+            global: { stubs: { RouterLink: { props: ['to'], template: '<a><slot /></a>' } } },
+        })
+
+        const metadata = wrapper.get('[data-testid="talos-model-row-metadata"]')
+        const pillole = metadata.findAll('span').filter((span) =>
+            span.classes().includes('border') && ['apache-2.0', '30B'].includes(span.text()))
+        expect(pillole.map((p) => p.text())).toEqual(['apache-2.0', '30B'])
+    })
+
     it('does not make a malformed repository id navigable', () => {
         const wrapper = mount(TalosMobileLocalModelRow, {
             props: { model: { ...model, id: 'missing-owner-boundary' }, capacity },

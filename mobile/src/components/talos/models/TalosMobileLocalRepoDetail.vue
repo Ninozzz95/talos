@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
-import { AlertTriangle, ChevronDown, Download, ShieldAlert } from '@lucide/vue'
+import { AlertTriangle, Download, ShieldAlert } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosModelFitBar from '@/components/talos/models/TalosModelFitBar.vue'
 import TalosModelResourceLedger from '@/components/talos/models/TalosModelResourceLedger.vue'
@@ -107,6 +107,39 @@ const rows = computed(() => (repo.value?.sets ?? []).map((set) => {
     }
 }))
 
+/**
+ * Restyle Blocco 6 — quale variante mostra la rail come "aperta" nel
+ * pannello a due colonne (config + ledger), pattern master-detail
+ * standard: la rail è il master, il pannello sotto è il detail dello
+ * stesso stato, mai un secondo giro di dati.
+ *
+ * `null` finché l'utente non tocca una scheda della rail — a quel punto
+ * `selectedRow` ripiega sulla prima variante, così il pannello non è mai
+ * vuoto quando ci sono varianti da mostrare.
+ */
+const selectedKey = ref<string | null>(null)
+
+const selectedRow = computed(() => {
+    if (selectedKey.value) {
+        const trovata = rows.value.find((row) => row.key === selectedKey.value)
+        if (trovata) return trovata
+    }
+    return rows.value[0] ?? null
+})
+
+function selectVariant(key: string): void {
+    selectedKey.value = key
+}
+
+const railOptions = computed(() => rows.value.map((row) => ({
+    value: row.key,
+    // Il nome vero è nella slot #option (serve anche la taglia e il
+    // bollino): questa label resta come nome accessibile di riserva per
+    // il caso raro in cui la slot non renderizzi nulla di leggibile.
+    label: row.set.label,
+    testId: `talos-models-rail-${row.key}`,
+})))
+
 function explain(reason: string): string {
     const key = talosFailureKey(reason)
     const seconds = talosRetryAfterSeconds(reason)
@@ -120,6 +153,9 @@ async function load(): Promise<void> {
     card.value = null
     // Un altro modello è un'altra scheda: chiusa, come la si trova la prima volta.
     schedaAperta.value = false
+    // Restyle Blocco 6 — un altro repository è un'altra rail: nessuna
+    // variante del vecchio repo resta "selezionata" su quello nuovo.
+    selectedKey.value = null
 
     const description = Promise.resolve()
         .then(() => talosDescribeModelRepo(props.repoId))
@@ -235,6 +271,26 @@ function onKvCacheTypeChange(value: string): void {
     talosSetLocalKvCacheType(value)
 }
 
+/**
+ * Restyle Blocco 6 — stile della scheda della rail, non un pill di
+ * ordinamento: card più larga, bordo pieno quando selezionata. Funzione a
+ * parte da `talosSortChipClass` di proposito: quella è per i chip di una
+ * riga di testo (ordina/KV), questa per una card multi-riga con nome,
+ * taglia e barra — un primitivo visivo diverso, non lo stesso riusato a
+ * forza.
+ */
+function railChipClass(selected: boolean): string {
+    const base = 'talos-pressable min-w-[9.5rem] shrink-0 rounded-[var(--talos-radius-card)] p-[var(--talos-space-inline)] text-left transition-colors'
+    return selected
+        ? `${base} border-2 border-[var(--talos-accent)] bg-[var(--talos-accent-soft)]`
+        : `${base} border border-[var(--talos-border)] bg-[var(--talos-panel)]`
+}
+
+/** La slot della rail riceve solo {value,label}: qui si recupera il resto (taglia, bollino, avvisi). */
+function rowByKey(key: string) {
+    return rows.value.find((row) => row.key === key) ?? null
+}
+
 async function reclaim(): Promise<void> {
     for (const leftover of store.leftovers.items) await talosDiscardModelTransfer(leftover.path)
     await talosRefreshLeftovers()
@@ -278,48 +334,8 @@ async function reclaim(): Promise<void> {
             {{ t('localModels.variants') }}<template v-if="freeMemory"> · {{ t('models.fitFree', { free: freeMemory }) }}</template>
         </p>
 
-        <!-- Model Lab Blocco 2 — controllo globale, non per riga: cambia
-             contesto o cache KV una volta, ogni variante gia' esaminata si
-             ricalcola sul posto (talosRicalcolaEsaminati in localModels.ts),
-             mai una nuova lettura di rete. Il bottone di controproposta
-             dentro ogni riga resta: risponde a una domanda diversa, "questo
-             modello preciso a che contesto ci sta". -->
-        <div
-            v-if="repo?.sets.length"
-            data-testid="talos-models-global-controls"
-            class="flex flex-col gap-[var(--talos-space-control)] rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-[var(--talos-space-control)]"
-        >
-            <label class="flex flex-col gap-[calc(var(--talos-space-inline)/2)]">
-                <span class="flex items-center justify-between font-mono text-2xs uppercase tracking-wider text-[var(--talos-muted)]">
-                    {{ t('localModels.contextLabel') }}
-                    <span data-testid="talos-models-context-value" class="tabular-nums text-[var(--talos-text)]">{{ store.context }}</span>
-                </span>
-                <input
-                    type="range"
-                    data-testid="talos-models-context-slider"
-                    class="talos-context-slider"
-                    :min="CONTEXT_MIN"
-                    :max="CONTEXT_MAX"
-                    :step="CONTEXT_STEP"
-                    :value="store.context"
-                    :aria-label="t('localModels.contextLabel')"
-                    :aria-valuetext="`${store.context} token`"
-                    @change="onContextChange"
-                >
-            </label>
-            <TalosThemedFilter
-                data-testid="talos-models-kv-cache-type"
-                group-class="flex gap-[var(--talos-space-inline)]"
-                :model-value="store.kvCacheType"
-                :options="kvCacheOptions"
-                :group-label="t('localModels.kvCacheTypeLabel')"
-                :option-class="talosSortChipClass"
-                @update:model-value="onKvCacheTypeChange"
-            />
-        </div>
-
         <!-- Model Lab Blocco 3 — piccolo, mai un overlay che copre la
-             lista: le righe sono gia' visibili e leggibili, questo dice
+             rail: le schede sono gia' visibili e leggibili, questo dice
              solo che il resto sta ancora arrivando in sottofondo. -->
         <p
             v-if="examiningRepo"
@@ -335,71 +351,155 @@ async function reclaim(): Promise<void> {
         <p v-else-if="repo.failure" role="alert" data-testid="talos-models-repo-failed" class="py-[var(--talos-space-page)] text-center text-sm text-[var(--talos-danger)]">{{ t('localModels.repoFailed') }} {{ explain(repo.failure) }}</p>
         <p v-else-if="!repo.sets.length" class="py-[var(--talos-space-page)] text-center text-sm text-[var(--talos-muted)]">{{ t('localModels.emptyRepo') }}</p>
 
-        <ul
-            v-else
-            data-testid="talos-models-variant-list"
-            class="min-w-0 overflow-hidden rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)] divide-y divide-[var(--talos-border)]"
-        >
-            <li v-for="row in rows" :key="row.key" data-testid="talos-models-set" class="min-w-0 bg-[var(--talos-panel)] px-[var(--talos-space-control)] py-[var(--talos-space-inline)]">
-                <div data-testid="talos-models-variant-primary" class="grid min-w-0 grid-cols-[minmax(0,1fr)_var(--talos-touch-target)] items-center gap-[var(--talos-space-inline)]">
-                    <span data-testid="talos-models-variant-identity" class="flex min-w-0 flex-col justify-center">
-                        <span class="flex min-w-0 items-center gap-[var(--talos-space-inline)]">
-                            <span data-testid="talos-models-variant-label" class="truncate font-mono text-sm font-semibold text-[var(--talos-text)]">{{ row.set.label }}</span>
-                            <AlertTriangle v-if="row.warnings.incomplete" class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-danger)]" aria-hidden="true" />
-                            <ShieldAlert v-else-if="row.warnings.flagged" class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-danger)]" aria-hidden="true" />
+        <template v-else>
+            <!-- RESTYLE Blocco 6 — la rail (master del pattern master-detail,
+                 ricerca in testa a questo blocco). Sostituisce l'elenco
+                 verticale con tocco "Dettagli" per riga: stessi `rows`,
+                 stesso TalosModelFitBar dentro la slot, cambia solo il
+                 contenitore. Radiogroup accessibile riusato da
+                 TalosThemedFilter (stesso di sort/KV), con contenuto ricco
+                 nella slot #option — esattamente il caso che quella slot
+                 esiste per coprire. -->
+            <TalosThemedFilter
+                data-testid="talos-models-variant-rail"
+                :model-value="selectedRow?.key ?? ''"
+                :options="railOptions"
+                :group-label="t('localModels.variants')"
+                group-class="flex gap-[var(--talos-space-inline)] overflow-x-auto pb-[calc(var(--talos-space-inline)/2)]"
+                :option-class="railChipClass"
+                @update:model-value="selectVariant"
+            >
+                <template #option="{ option, selected }">
+                    <span class="flex min-w-0 flex-col gap-[calc(var(--talos-space-inline)/2)]">
+                        <span class="flex min-w-0 items-center gap-[calc(var(--talos-space-inline)/2)]">
+                            <span
+                                class="truncate font-mono text-xs font-semibold"
+                                :class="selected ? 'text-[var(--talos-accent-text)]' : 'text-[var(--talos-text)]'"
+                            >{{ option.label }}</span>
+                            <AlertTriangle v-if="rowByKey(option.value)?.warnings.incomplete" class="size-[calc(var(--talos-icon-size)*0.75)] shrink-0 text-[var(--talos-danger)]" aria-hidden="true" />
+                            <ShieldAlert v-else-if="rowByKey(option.value)?.warnings.flagged" class="size-[calc(var(--talos-icon-size)*0.75)] shrink-0 text-[var(--talos-danger)]" aria-hidden="true" />
                         </span>
-                        <span data-testid="talos-models-variant-size" class="font-mono text-2xs tabular-nums text-[var(--talos-muted)]">{{ row.size }}</span>
+                        <span class="font-mono text-3xs tabular-nums text-[var(--talos-muted)]">{{ rowByKey(option.value)?.size }}</span>
+                        <TalosModelFitBar
+                            v-if="rowByKey(option.value)"
+                            class="w-full"
+                            :tone="rowByKey(option.value)!.badge.tone"
+                            :ratio="rowByKey(option.value)!.badge.ratio"
+                            :label="t(rowByKey(option.value)!.badge.labelKey)"
+                        />
                     </span>
-                    <button
-                        type="button"
-                        data-testid="talos-models-download"
-                        :aria-label="`${t('localModels.download')} ${row.set.label}`"
-                        :disabled="row.set.incomplete"
-                        class="talos-pressable inline-flex size-[var(--talos-touch-target)] items-center justify-center rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] text-[var(--talos-accent-text)] disabled:opacity-50"
-                        @click="start(row.key, `${repoId.split('/').pop()} ${row.set.label}`)"
-                    >
-                        <Download class="size-[var(--talos-icon-size)]" aria-hidden="true" />
-                    </button>
+                </template>
+            </TalosThemedFilter>
+
+            <!-- Pannello a due colonne per la variante selezionata: config a
+                 sinistra, ledger a destra su schermi larghi, impilati su
+                 stretti (pattern master-detail standard, ricerca web di
+                 questo blocco). -->
+            <div v-if="selectedRow" class="grid min-w-0 gap-[var(--talos-space-section)] lg:grid-cols-2">
+                <div data-testid="talos-models-runtime-config" class="flex min-w-0 flex-col gap-[var(--talos-space-control)] rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-[var(--talos-space-control)]">
+                    <h2 class="font-mono text-2xs uppercase tracking-wider text-[var(--talos-muted)]">{{ t('localModels.runtimeConfigTitle') }}</h2>
+
+                    <div class="flex min-w-0 items-center justify-between gap-[var(--talos-space-inline)]">
+                        <span data-testid="talos-models-variant-identity" class="min-w-0">
+                            <span data-testid="talos-models-variant-label" class="block truncate font-mono text-sm font-semibold text-[var(--talos-text)]">{{ selectedRow.set.label }}</span>
+                            <span data-testid="talos-models-variant-size" class="font-mono text-2xs tabular-nums text-[var(--talos-muted)]">{{ selectedRow.size }}</span>
+                        </span>
+                        <button
+                            type="button"
+                            data-testid="talos-models-download"
+                            :aria-label="`${t('localModels.download')} ${selectedRow.set.label}`"
+                            :disabled="selectedRow.set.incomplete"
+                            class="talos-pressable inline-flex size-[var(--talos-touch-target)] shrink-0 items-center justify-center rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] text-[var(--talos-accent-text)] disabled:opacity-50"
+                            @click="start(selectedRow.key, `${repoId.split('/').pop()} ${selectedRow.set.label}`)"
+                        >
+                            <Download class="size-[var(--talos-icon-size)]" aria-hidden="true" />
+                        </button>
+                    </div>
+
+                    <p class="text-2xs leading-4 text-[var(--talos-muted)]">{{ t(selectedRow.badge.reasonKey, selectedRow.badge.delta === null ? {} : (selectedRow.badge.hasHeadroom ? { left: selectedRow.badge.delta } : { missing: selectedRow.badge.delta })) }}</p>
+                    <p v-if="selectedRow.warnings.incomplete" data-testid="talos-models-incomplete" class="flex items-start gap-[var(--talos-space-inline)] text-2xs text-[var(--talos-danger)]">
+                        <AlertTriangle class="size-[var(--talos-icon-size)] shrink-0" aria-hidden="true" />
+                        {{ t('localModels.incompleteSet', { missing: selectedRow.warnings.incomplete.missing, total: selectedRow.warnings.incomplete.total }) }}
+                    </p>
+                    <p v-if="selectedRow.warnings.flagged" class="flex items-start gap-[var(--talos-space-inline)] text-2xs text-[var(--talos-danger)]">
+                        <ShieldAlert class="size-[var(--talos-icon-size)] shrink-0" aria-hidden="true" /> {{ t('localModels.flagged') }} {{ selectedRow.warnings.flagged }}
+                    </p>
+                    <p v-if="selectedRow.warnings.unverifiable" data-testid="talos-models-unverifiable" class="text-2xs text-[var(--talos-muted)]">{{ t('localModels.unverifiable') }}</p>
+
+                    <!-- Model Lab Blocco 2 — controllo globale, non per
+                         variante: cambia contesto o cache KV una volta, ogni
+                         variante gia' esaminata si ricalcola sul posto
+                         (talosRicalcolaEsaminati in localModels.ts), mai una
+                         nuova lettura di rete. -->
+                    <label class="flex flex-col gap-[calc(var(--talos-space-inline)/2)]">
+                        <span class="flex items-center justify-between font-mono text-2xs uppercase tracking-wider text-[var(--talos-muted)]">
+                            {{ t('localModels.contextLabel') }}
+                            <span data-testid="talos-models-context-value" class="tabular-nums text-[var(--talos-text)]">{{ store.context }}</span>
+                        </span>
+                        <input
+                            type="range"
+                            data-testid="talos-models-context-slider"
+                            class="talos-context-slider"
+                            :min="CONTEXT_MIN"
+                            :max="CONTEXT_MAX"
+                            :step="CONTEXT_STEP"
+                            :value="store.context"
+                            :aria-label="t('localModels.contextLabel')"
+                            :aria-valuetext="`${store.context} token`"
+                            @change="onContextChange"
+                        >
+                    </label>
+                    <TalosThemedFilter
+                        data-testid="talos-models-kv-cache-type"
+                        group-class="flex gap-[var(--talos-space-inline)]"
+                        :model-value="store.kvCacheType"
+                        :options="kvCacheOptions"
+                        :group-label="t('localModels.kvCacheTypeLabel')"
+                        :option-class="talosSortChipClass"
+                        @update:model-value="onKvCacheTypeChange"
+                    />
+
+                    <!-- Caselle statistiche — i due numeri che contano di
+                         piu' tirati fuori dalla frase, non affogati dentro,
+                         solo quando la variante e' stata esaminata. -->
+                    <div v-if="selectedRow.verdict" class="grid grid-cols-2 gap-[var(--talos-space-inline)]">
+                        <div data-testid="talos-models-speed-stat" class="rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] p-[var(--talos-space-inline)]">
+                            <p class="font-mono text-3xs uppercase tracking-wider text-[var(--talos-muted)]">{{ t('localModels.speedStatLabel') }}</p>
+                            <p class="font-mono text-sm font-semibold tabular-nums text-[var(--talos-text)]">
+                                {{ selectedRow.verdict.tokensPerSecond === null ? t('localModels.speedUnknown') : t('localModels.speed', { rate: selectedRow.verdict.tokensPerSecond }) }}
+                            </p>
+                        </div>
+                        <div data-testid="talos-models-max-context-stat" class="rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] p-[var(--talos-space-inline)]">
+                            <p class="font-mono text-3xs uppercase tracking-wider text-[var(--talos-muted)]">{{ t('localModels.maxContextStatLabel') }}</p>
+                            <p class="font-mono text-sm font-semibold tabular-nums text-[var(--talos-text)]">{{ selectedRow.set.examination.state === 'read' ? selectedRow.set.examination.fit.maxContext : '—' }}</p>
+                        </div>
+                    </div>
+
+                    <p v-if="selectedRow.verdict" data-testid="talos-models-verdict" class="text-xs font-semibold" :class="{ 'text-[var(--talos-success)]': selectedRow.verdict.tone === 'good', 'text-[var(--talos-warning)]': selectedRow.verdict.tone === 'warn', 'text-[var(--talos-danger)]': selectedRow.verdict.tone === 'bad' }">
+                        {{ t(selectedRow.verdict.bandKey) }}
+                    </p>
+                    <template v-if="selectedRow.verdict">
+                        <p v-if="selectedRow.verdict.reasonKey" class="text-2xs text-[var(--talos-muted)]">{{ t(selectedRow.verdict.reasonKey) }}</p>
+                        <p data-testid="talos-models-context" class="text-3xs text-[var(--talos-muted)]">{{ t('localModels.contextExplain', { context: store.context }) }}</p>
+                        <button v-if="selectedRow.verdict.counterOfferContext" type="button" data-testid="talos-models-counteroffer" class="talos-pressable min-h-touch text-left text-2xs text-[var(--talos-accent)] underline" @click="acceptCounterOffer(selectedRow.key, selectedRow.verdict.counterOfferContext)">{{ t('localModels.counterOffer', { context: selectedRow.verdict.counterOfferContext }) }}</button>
+                    </template>
+                    <p v-else-if="selectedRow.set.examination.state === 'reading'" class="text-2xs text-[var(--talos-muted)]">{{ t('localModels.examining') }}</p>
+                    <p v-else-if="selectedRow.set.examination.state === 'unreadable'" class="text-2xs text-[var(--talos-muted)]">{{ t('localModels.unreadable') }} {{ explain(selectedRow.set.examination.reason) }}</p>
+
+                    <Button v-if="selectedRow.set.examination.state !== 'reading'" type="button" data-testid="talos-models-examine" class="talos-pressable min-h-touch self-start rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-control)] text-xs text-[var(--talos-text)]" @click="talosExamineSet(selectedRow.key)">{{ selectedRow.set.examination.state === 'unread' ? t('localModels.examine') : t('localModels.recheck') }}</Button>
                 </div>
 
-                <TalosModelFitBar class="mt-[var(--talos-space-inline)]" :tone="row.badge.tone" :ratio="row.badge.ratio" :label="t(row.badge.labelKey)" />
-
-                <p v-if="row.verdict" data-testid="talos-models-verdict" class="mt-[calc(var(--talos-space-inline)/2)] text-xs font-semibold" :class="{ 'text-[var(--talos-success)]': row.verdict.tone === 'good', 'text-[var(--talos-warning)]': row.verdict.tone === 'warn', 'text-[var(--talos-danger)]': row.verdict.tone === 'bad' }">
-                    {{ t(row.verdict.bandKey) }}
-                    <span class="font-normal text-[var(--talos-muted)]"> · {{ row.verdict.tokensPerSecond === null ? t('localModels.speedUnknown') : t('localModels.speed', { rate: row.verdict.tokensPerSecond }) }}</span>
-                </p>
-                <p v-else-if="row.set.examination.state === 'reading'" class="mt-[calc(var(--talos-space-inline)/2)] text-2xs text-[var(--talos-muted)]">{{ t('localModels.examining') }}</p>
-
-                <details data-testid="talos-models-variant-details" class="group mt-[calc(var(--talos-space-inline)/2)] border-t border-[var(--talos-border)]">
-                    <summary class="flex min-h-touch cursor-pointer items-center justify-between gap-[var(--talos-space-inline)] text-2xs font-semibold text-[var(--talos-accent)]">
-                        {{ t('localModels.variantDetails') }}
-                        <ChevronDown class="size-[var(--talos-icon-size)] shrink-0 transition-transform duration-[var(--talos-motion-duration-disclosure)] group-open:rotate-180 motion-reduce:transition-none" aria-hidden="true" />
-                    </summary>
-                    <div class="flex min-w-0 flex-col gap-[var(--talos-space-inline)] pb-[var(--talos-space-inline)]">
-                        <p class="text-2xs leading-4 text-[var(--talos-muted)]">{{ t(row.badge.reasonKey, row.badge.delta === null ? {} : (row.badge.hasHeadroom ? { left: row.badge.delta } : { missing: row.badge.delta })) }}</p>
-                        <p v-if="row.warnings.incomplete" data-testid="talos-models-incomplete" class="flex items-start gap-[var(--talos-space-inline)] text-2xs text-[var(--talos-danger)]">
-                            <AlertTriangle class="size-[var(--talos-icon-size)] shrink-0" aria-hidden="true" />
-                            {{ t('localModels.incompleteSet', { missing: row.warnings.incomplete.missing, total: row.warnings.incomplete.total }) }}
-                        </p>
-                        <p v-if="row.warnings.flagged" class="flex items-start gap-[var(--talos-space-inline)] text-2xs text-[var(--talos-danger)]">
-                            <ShieldAlert class="size-[var(--talos-icon-size)] shrink-0" aria-hidden="true" /> {{ t('localModels.flagged') }} {{ row.warnings.flagged }}
-                        </p>
-                        <p v-if="row.warnings.unverifiable" data-testid="talos-models-unverifiable" class="text-2xs text-[var(--talos-muted)]">{{ t('localModels.unverifiable') }}</p>
-                        <template v-if="row.verdict">
-                            <p v-if="row.verdict.reasonKey" class="text-2xs text-[var(--talos-muted)]">{{ t(row.verdict.reasonKey) }}</p>
-                            <p data-testid="talos-models-context" class="text-3xs text-[var(--talos-muted)]">{{ t('localModels.contextExplain', { context: store.context }) }}</p>
-                            <button v-if="row.verdict.counterOfferContext" type="button" data-testid="talos-models-counteroffer" class="talos-pressable min-h-touch text-left text-2xs text-[var(--talos-accent)] underline" @click="acceptCounterOffer(row.key, row.verdict.counterOfferContext)">{{ t('localModels.counterOffer', { context: row.verdict.counterOfferContext }) }}</button>
-                        </template>
-                        <!-- Model Lab Blocco 4 — il ledger di provenienza,
-                             una sola volta esaminato: stessi dati di
-                             row.verdict, nessun secondo calcolo. -->
-                        <TalosModelResourceLedger v-if="row.set.examination.state === 'read'" :rows="row.set.examination.ledger" />
-                        <p v-else-if="row.set.examination.state === 'unreadable'" class="text-2xs text-[var(--talos-muted)]">{{ t('localModels.unreadable') }} {{ explain(row.set.examination.reason) }}</p>
-                        <Button v-if="row.set.examination.state !== 'reading'" type="button" data-testid="talos-models-examine" class="talos-pressable min-h-touch self-start rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-control)] text-xs text-[var(--talos-text)]" @click="talosExamineSet(row.key)">{{ row.set.examination.state === 'unread' ? t('localModels.examine') : t('localModels.recheck') }}</Button>
-                    </div>
-                </details>
-            </li>
-        </ul>
+                <!-- Model Lab Blocco 4 — il ledger di provenienza, sempre
+                     visibile per la variante scelta (non piu' dietro un
+                     tocco "Dettagli"): stessi dati di selectedRow.verdict,
+                     nessun secondo calcolo. -->
+                <div data-testid="talos-models-ledger-panel" class="min-w-0 rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-[var(--talos-space-control)]">
+                    <TalosModelResourceLedger v-if="selectedRow.set.examination.state === 'read'" :rows="selectedRow.set.examination.ledger" />
+                    <p v-else-if="selectedRow.set.examination.state === 'reading'" class="text-2xs text-[var(--talos-muted)]">{{ t('localModels.examining') }}</p>
+                    <p v-else class="text-2xs text-[var(--talos-muted)]">{{ t('localModels.ledgerTitle') }}</p>
+                </div>
+            </div>
+        </template>
 
         <div v-if="store.leftovers.totalBytes > 0" data-testid="talos-models-leftovers" class="flex flex-wrap items-center gap-[var(--talos-space-inline)] text-2xs text-[var(--talos-muted)]">
             <span>{{ t('localModels.leftovers', { size: talosFormatBytes(store.leftovers.totalBytes) }) }}</span>

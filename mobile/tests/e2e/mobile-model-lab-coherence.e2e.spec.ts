@@ -145,7 +145,9 @@ test('repository detail owns its URL, reload, README disclosure, and single head
     await expect(page).toHaveURL(/\/settings\/models\/local\/unsloth\/Qwen(?:%20| )Coder/)
     await expect(page.getByTestId('settings-models-local-repo-screen')).toBeVisible()
     await expect(page.getByTestId('talos-models-repo-title')).toContainText(REPO_ID)
-    await expect(page.getByTestId('talos-models-set')).toHaveCount(1)
+    // Restyle Blocco 6: talos-models-set (la riga dell'elenco verticale) è
+    // sparito con l'elenco stesso — una sola scheda sulla rail è l'equivalente.
+    await expect(page.locator('[data-testid="talos-models-variant-rail"] [role="radio"]')).toHaveCount(1)
     await expect(page.getByTestId('talos-models-readme-summary')).toContainText('long coding sessions')
     await expect(page.getByTestId('talos-models-readme-full')).toContainText('complete README remains available')
     await expect(page.getByTestId('talos-models-back')).toHaveCount(0)
@@ -155,7 +157,9 @@ test('repository detail owns its URL, reload, README disclosure, and single head
 
     await page.reload()
     await expect(page.getByTestId('talos-models-repo-title')).toContainText(REPO_ID)
-    await expect(page.getByTestId('talos-models-set')).toHaveCount(1)
+    // Restyle Blocco 6: talos-models-set (la riga dell'elenco verticale) è
+    // sparito con l'elenco stesso — una sola scheda sulla rail è l'equivalente.
+    await expect(page.locator('[data-testid="talos-models-variant-rail"] [role="radio"]')).toHaveCount(1)
     expect(await page.getByTestId('settings-models-local-repo-screen').evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true)
 
     await page.getByTestId('talos-sheet-back').click()
