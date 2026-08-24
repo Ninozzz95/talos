@@ -6,7 +6,7 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
-## v0.1.20
+## v0.1.21
 
 Browsing models on Hugging Face got a rebuild, the local model engine
 gained a working Stop button during GPU decoding, and the Doctor screen
