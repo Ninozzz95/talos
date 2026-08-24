@@ -6,7 +6,7 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
-## v0.1.21
+## v0.1.22
 
 Browsing models on Hugging Face got a rebuild, and the Doctor screen can
 now see the personal voice engine instead of staying silent about it.
