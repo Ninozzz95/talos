@@ -3308,6 +3308,158 @@ Java_ai_talos_TalosLlamaNative_nativePromptTokens(JNIEnv * env, jclass, jlong ha
 }
 
 /**
+ * ⛔⛔⛔ SOLO RICERCA — P2-1 blocco B (CR-11). Raggiungibile SOLO se
+ * `session->speculator` esiste, cioè SOLO dopo una chiamata esplicita a
+ * `nativeConstructSpeculatorForResearch` — mai da `nativeOpen`, il percorso
+ * di produzione (vedi `talos_speculator.hpp`, blocco A). Zero effetto su
+ * ogni sessione che non l'abbia richiesto esplicitamente.
+ *
+ * Segue `examples/speculative-simple/speculative-simple.cpp` upstream riga
+ * per riga per la SEQUENZA delle chiamate (begin/draft/decode/process/
+ * sample_and_accept_n/accept) — CR-11 vieta di reinventare la semantica di
+ * accettazione, e questa non lo fa. Confermato via ricerca web che questa è
+ * la sequenza riconosciuta anche fuori da questa sessione (draft → batch
+ * [id_last, bozza...] → decode → sample_and_accept_n → seq_rm di ciò che
+ * non è stato accettato) — nessuna sorpresa, nessun passo mancante.
+ *
+ * ⛔ Tre semplificazioni DICHIARATE rispetto all'esempio intero, non
+ * sviste:
+ * 1. **Ramo SEMPLICE di rimozione sequenza, mai i checkpoint**
+ *    (`common_prompt_checkpoint`, `use_ckpt_tgt`/`use_ckpt_dft`
+ *    dell'esempio). Confermato sufficiente dal diagnostico P2-1: i tre
+ *    modelli spediti tornano tutti `"part"` per `common_context_can_seq_rm`,
+ *    mai `"full"` — la macchina a checkpoint esiste nell'esempio solo per
+ *    chi ha `"full"`, non è il nostro caso, verificato prima di scrivere
+ *    questa funzione, non presunto.
+ * 2. **Il primo token generato resta il percorso ESISTENTE**: campionato
+ *    subito dopo il prefill (il chiamante lo fa PRIMA di entrare qui),
+ *    zero decode aggiuntivo — esattamente come il ramo non speculativo.
+ *    Solo dal secondo token in poi il ciclo diventa bozza/verifica. Evita
+ *    di riscrivere il prefill (già provato, già misurato) e i due percorsi
+ *    restano identici sul primo token: `tempo_primo_token` non cambia
+ *    significato.
+ * 3. **Lo speculatore non viene innescato dal prompt**
+ *    (`common_speculative_process` sul prefill, come fa l'esempio su
+ *    `batch_prompt`): ngram-mod è self-speculativo e si scalda da solo sui
+ *    token GENERATI nello stesso giro. Le prime bozze di un turno saranno
+ *    vuote — non un guasto: `draft.empty()` è il ramo iniziale ORDINARIO
+ *    anche nell'esempio upstream, non un caso d'eccezione. Innescare anche
+ *    dal prompt resta un miglioramento possibile, non fatto qui.
+ *
+ * ⛔ Stop: il controllo di cancellazione resta UNA VOLTA per ciclo
+ * bozza/verifica, non per token — un ciclo produce al più `n_draft_max + 1`
+ * token fra un controllo e l'altro, non uno solo come nel ramo ordinario.
+ * Dichiarato nel piano sorgente stesso ("la speculazione allunga il lavoro
+ * fra due controlli di cancellazione — Stop va rimisurato"): la misura
+ * reale resta da fare sul device, non assunta qui.
+ */
+static void talos_genera_speculativo(talos_session * session, int limit, bool stopAtEndOfGeneration,
+                                     llama_token id_last, int & produced, std::string & answer,
+                                     long long & tempo_primo_token,
+                                     const std::chrono::steady_clock::time_point & avvio) {
+    common_speculative * spec = session->speculator->handle();
+    const llama_seq_id   seq_id = 0;
+    llama_memory_t        memoria = llama_get_memory(session->ctx);
+    const int             budget  = (int) llama_n_ctx(session->ctx);
+
+    // `n_past` non è implicito come nel ramo `llama_batch_get_one`: qui ogni
+    // token porta la SUA posizione esplicita (`common_batch_add`), quindi va
+    // tracciato a mano. `session->cached` ha già il prompt PIÙ il primo
+    // token generato (il chiamante lo ha già inserito prima di entrare qui).
+    int n_past = (int) session->cached.size();
+
+    common_speculative_begin(spec, seq_id, session->cached);
+
+    llama_batch     batch_tgt = llama_batch_init((int32_t) llama_n_batch(session->ctx), 0, 1);
+    llama_tokens    draft;
+    char            piece[256];
+
+    while (produced < limit) {
+        if (session->cancelled.load(std::memory_order_relaxed)) break;
+
+        int n_draft_max = budget - n_past - 2;
+        n_draft_max = std::min(n_draft_max, limit - produced - 1);
+        n_draft_max = std::max(n_draft_max, 0);
+
+        common_speculative_get_draft_params(spec, seq_id) = {
+            /* .drafting = */ true,
+            /* .n_max    = */ n_draft_max,
+            /* .n_past   = */ n_past,
+            /* .id_last  = */ id_last,
+            /* .prompt   = */ &session->cached,
+            /* .result   = */ &draft,
+        };
+        common_speculative_draft(spec);
+
+        common_batch_clear(batch_tgt);
+        common_batch_add(batch_tgt, id_last, n_past, { seq_id }, true);
+        for (size_t i = 0; i < draft.size(); ++i) {
+            common_batch_add(batch_tgt, draft[i], n_past + 1 + (int) i, { seq_id }, true);
+        }
+
+        if (llama_decode(session->ctx, batch_tgt) != 0) {
+            // Stessa cura del ramo ordinario: la KV va riportata su ciò che
+            // `cached` dice, mai lasciata a metà di un batch mai confermato.
+            if (!llama_memory_seq_rm(memoria, seq_id, (llama_pos) session->cached.size(), -1)) {
+                llama_memory_clear(memoria, true);
+                session->cached.clear();
+            }
+            TALOS_LOGE("decode speculativo fallito dopo %d token", produced);
+            break;
+        }
+
+        if (!common_speculative_process(spec, batch_tgt)) {
+            TALOS_LOGE("common_speculative_process fallito, fine speculazione");
+            break;
+        }
+
+        // ⛔ sample_and_accept_n GIÀ chiama common_sampler_accept() per ogni
+        // token che restituisce (verificato leggendo `sampling.cpp` prima di
+        // scrivere questa riga, non presunto) — chiamarlo di nuovo qui
+        // sarebbe un doppio accept sullo stesso token: le penalità di
+        // ripetizione lo conterebbero due volte per uno. Torna SEMPRE almeno
+        // un token: quello che il campionatore vero avrebbe prodotto
+        // comunque, bozza accettata o no.
+        std::vector<llama_token> ids = common_sampler_sample_and_accept_n(
+                session->sampler, session->ctx, draft);
+        common_speculative_accept(spec, seq_id, (uint16_t) (ids.size() - 1));
+
+        n_past += (int) ids.size();
+        bool fine = false;
+        for (size_t i = 0; i < ids.size() && produced < limit; ++i) {
+            session->cached.push_back(ids[i]);
+            if (stopAtEndOfGeneration && llama_vocab_is_eog(session->vocab, ids[i])) { fine = true; break; }
+
+            const int written = llama_token_to_piece(session->vocab, ids[i], piece, sizeof(piece), 0, true);
+            if (written < 0) { TALOS_LOGE("token speculativo non convertibile in testo"); fine = true; break; }
+            answer.append(piece, (size_t) written);
+            {
+                std::lock_guard<std::mutex> guard(session->text_lock);
+                session->text.append(piece, (size_t) written);
+            }
+            produced += 1;
+            session->produced.store(produced, std::memory_order_relaxed);
+            id_last = ids[i];
+        }
+        draft.clear();
+
+        // Il batch ha decodificato id_last + TUTTA la bozza, ma solo `ids`
+        // sono stati confermati: la KV oltre l'ultimo confermato descrive
+        // token che il campionatore vero ha RIFIUTATO — vanno tolti, o il
+        // giro dopo li troverebbe ancora lì.
+        if (!llama_memory_seq_rm(memoria, seq_id, (llama_pos) n_past, -1)) {
+            llama_memory_clear(memoria, true);
+            session->cached.clear();
+            fine = true;
+        }
+        if (fine) break;
+    }
+
+    llama_batch_free(batch_tgt);
+    if (tempo_primo_token < 0) tempo_primo_token = talos_da(avvio);
+}
+
+/**
  * Genera, e restituisce il testo prodotto. `null` significa fallimento e non
  * "niente da dire": il chiamante deve poterli distinguere, perché uno è un
  * backend rotto e l'altro è un modello silenzioso.
@@ -3570,6 +3722,21 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
         // registra, il turno dopo calcolerebbe il prefisso comune su una
         // fotografia più corta della realtà e taglierebbe nel posto sbagliato.
         session->cached.push_back(sampled);
+
+        /*
+         * ⛔⛔⛔ SOLO RICERCA — P2-1 blocco B. Il primo token resta il
+         * percorso ordinario qui sopra (già cronometrato, già provato) —
+         * `session->speculator` esiste SOLO dopo una chiamata esplicita a
+         * `nativeConstructSpeculatorForResearch`, mai in produzione. Da qui
+         * in poi il resto della generazione passa a
+         * `talos_genera_speculativo`, che continua da sé fino a `limit` o
+         * cancellazione — chiamata una volta sola, non a ogni giro.
+         */
+        if (session->speculator && session->speculator->pronto()) {
+            talos_genera_speculativo(session, limit, stopAtEndOfGeneration, sampled,
+                                     produced, answer, tempo_primo_token, avvio);
+            break;
+        }
     }
 
     {
