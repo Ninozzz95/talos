@@ -6,6 +6,7 @@ import {
     talosMaxContextFor,
     talosModelFit,
     type TalosDeviceCapacity,
+    type TalosKvCacheTypeOverride,
     type TalosModelShape,
 } from '@/lib/models/fit'
 
@@ -350,5 +351,80 @@ describe('the counter-offer, which must survive being taken', () => {
     it('never exceeds the trained context', () => {
         expect(talosMaxContextFor(SEVEN_B, MIDRANGE))
             .toBeLessThanOrEqual(SEVEN_B.trainedContext)
+    })
+})
+
+/**
+ * The KV cache override — Model Lab, Blocco 1.
+ *
+ * The header's own `kvBytesPerElement` stays the default: `'auto'` (or
+ * omitting the field) must be a complete no-op, byte for byte, against every
+ * existing test above. Forcing a type only changes what the SAME arithmetic
+ * is fed, never a second code path with its own rules.
+ */
+describe('kvCacheTypeOverride — forcing a KV type instead of trusting the header', () => {
+    it('omitted or "auto" changes nothing at all', () => {
+        const baseline = fit()
+        const omitted = talosModelFit({
+            model: SMALL, device: MIDRANGE, context: 8192, fileBytes: SMALL.weightBytes + 8 * MIB,
+        })
+        const explicit = talosModelFit({
+            model: SMALL, device: MIDRANGE, context: 8192, fileBytes: SMALL.weightBytes + 8 * MIB,
+            kvCacheTypeOverride: 'auto',
+        })
+        expect(omitted).toEqual(baseline)
+        expect(explicit).toEqual(baseline)
+    })
+
+    it('forcing q8_0 on a header that said f16 halves the KV cache, not the weights', () => {
+        const header = fit(undefined, undefined, 32768) // SMALL declares kvBytesPerElement: 2 (f16)
+        const forced = talosModelFit({
+            model: SMALL, device: MIDRANGE, context: 32768, fileBytes: SMALL.weightBytes + 8 * MIB,
+            kvCacheTypeOverride: 'q8_0',
+        })
+        expect(forced.kvCacheBytes).toBeLessThan(header.kvCacheBytes)
+        expect(forced.kvCacheBytes).toBeCloseTo(header.kvCacheBytes * (34 / 32) / 2, 0)
+    })
+
+    /** The AL-CONTRARIO case: forcing f16 when the header already said f16 is a true no-op. */
+    it('forcing f16 on a header that already said f16 changes nothing', () => {
+        const header = fit()
+        const forced = talosModelFit({
+            model: SMALL, device: MIDRANGE, context: 8192, fileBytes: SMALL.weightBytes + 8 * MIB,
+            kvCacheTypeOverride: 'f16',
+        })
+        expect(forced).toEqual(header)
+    })
+
+    /**
+     * The counter-offer must respect the override too — not just the verdict.
+     * `talosMaxContextFor` reads `model.kvBytesPerElement` on its own; a fix
+     * that only patched `talosKvCacheBytes` would leave this one lying.
+     */
+    it('a lighter forced cache also raises the counter-offer context, not only the verdict', () => {
+        const heavy = talosMaxContextFor(SEVEN_B, MIDRANGE)
+        const lightFit = talosModelFit({
+            model: SEVEN_B, device: MIDRANGE, context: 8192, fileBytes: SEVEN_B.weightBytes + 8 * MIB,
+            kvCacheTypeOverride: 'q8_0',
+        })
+        expect(lightFit.maxContext).toBeGreaterThan(heavy)
+    })
+
+    /** An unrecognised type (a stale persisted value) is never silent: it behaves as f16, provably. */
+    it('an unrecognised override behaves exactly like f16, not like a crash or a silent zero', () => {
+        const asF16 = talosModelFit({
+            model: SMALL, device: MIDRANGE, context: 8192, fileBytes: SMALL.weightBytes + 8 * MIB,
+            kvCacheTypeOverride: 'f16',
+        })
+        // A cast, not a literal the type union would accept: simulates a value
+        // arriving from an untyped boundary (a persisted setting read back as a
+        // plain string), the exact case the runtime fallback exists for —
+        // TypeScript alone cannot stop a stale string valid in an older release.
+        const corrupted = 'q4_0' as unknown as TalosKvCacheTypeOverride
+        const unknown = talosModelFit({
+            model: SMALL, device: MIDRANGE, context: 8192, fileBytes: SMALL.weightBytes + 8 * MIB,
+            kvCacheTypeOverride: corrupted,
+        })
+        expect(unknown).toEqual(asF16)
     })
 })
