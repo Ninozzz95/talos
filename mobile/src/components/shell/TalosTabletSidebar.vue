@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { defineAsyncComponent } from 'vue'
+import { computed, defineAsyncComponent } from 'vue'
+import { useTalosI18n } from '@/i18n'
 import { Menu } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 /*
@@ -11,6 +12,9 @@ import { Button } from '@/components/ui/button'
  * nessuno li vedesse mai.
  */
 const ChatsScreen = defineAsyncComponent(() => import('@/screens/ChatsScreen.vue'))
+// F6 sidebar refactor (24/8): stesso ragionamento — tablet-only E Harness-only
+// (dietro il cancello debug-only), l'ultimo dei tre da pagare.
+const HarnessScreen = defineAsyncComponent(() => import('@/screens/HarnessScreen.vue'))
 const TalosMobileNotificationBell = defineAsyncComponent(
     () => import('@/components/shell/TalosMobileNotificationBell.vue'),
 )
@@ -19,25 +23,44 @@ const TalosMobileDownloadCenterTrigger = defineAsyncComponent(
 )
 
 /**
- * F6 — persistent tablet chat panel (Claude split-view pattern, owner's
- * screenshot): the full ChatsScreen (search + New chat + ordered list with the
- * hold dropdown + archived section) embedded as the left rail, with the brand
- * header and the hamburger for tools/settings. The width is driven by the
- * shell (drag divider + persisted setting).
+ * F6 — persistent tablet rail (Claude split-view pattern, owner's screenshot).
+ * Brand header (hamburger + wordmark + notifications) stays fixed; the BODY
+ * is now contestuale — owner 24/8, dopo un giro tecnico sull'app Claude vera:
+ * un solo slot di sidebar, mai due affiancate, il cui contenuto cambia con la
+ * stazione attiva (in Claude: Chat ↔ "Codice" mostra Dispositivi/sessioni
+ * reali nello STESSO pannello, mai accanto). `variant` arriva da App.vue
+ * (talosMobileStationOf(activeRoute) — la stessa funzione che decide già
+ * tabletChatRailVisible/isStation), non da una lettura di rotta locale: la
+ * domanda "che stazione è questa" ha già UNA risposta nel codice, e va
+ * fatta lì, non duplicata qui. The width is driven by the shell (drag
+ * divider + persisted setting).
  */
-defineProps<{ width: number }>()
+const props = withDefaults(defineProps<{ width: number; variant?: 'chat' | 'harness' }>(), {
+    variant: 'chat',
+})
 
 const emit = defineEmits<{
     activated: []
     openMenu: []
 }>()
+
+const { t } = useTalosI18n()
+// L'etichetta d'accessibilità deve dire cosa c'è DAVVERO nel pannello — un
+// lettore di schermo che annuncia "pannello chat" su un elenco di sessioni di
+// coding sarebbe lo stesso difetto (dichiarare il contrario di ciò che si
+// vede) già trovato e corretto altrove in questa sessione, qui sull'etichetta
+// invece che sullo screenshot.
+const panelLabel = computed(() => (
+    props.variant === 'harness' ? t('accessibility.harnessPanel') : t('accessibility.chatsPanel')
+))
 </script>
 
 <template>
     <!-- SF6-F6: honor a left cutout/notch in landscape via safe-area-left. -->
     <aside
         data-testid="talos-tablet-sidebar"
-        :aria-label="$t('accessibility.chatsPanel')"
+        :data-talos-tablet-sidebar-variant="variant"
+        :aria-label="panelLabel"
         class="relative z-20 flex min-h-0 shrink-0 flex-col border-r border-transparent bg-[var(--talos-sidebar)]/60 pl-[env(safe-area-inset-left)] backdrop-blur-sm"
         :style="{ width: `${width}px` }"
     >
@@ -57,6 +80,7 @@ const emit = defineEmits<{
             <div class="ml-auto"><TalosMobileNotificationBell />
             <TalosMobileDownloadCenterTrigger /></div>
         </div>
-        <ChatsScreen embedded class="min-h-0 flex-1" @activated="emit('activated')" />
+        <HarnessScreen v-if="variant === 'harness'" embedded class="min-h-0 flex-1" />
+        <ChatsScreen v-else embedded class="min-h-0 flex-1" @activated="emit('activated')" />
     </aside>
 </template>

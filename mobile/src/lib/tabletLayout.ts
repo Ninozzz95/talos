@@ -52,3 +52,20 @@ export function talosTabletLeavesChatsRoute(
     if (!routeName) return false
     return isTablet && routeName === 'chats'
 }
+
+/**
+ * Stessa domanda di `talosTabletLeavesChatsRoute`, per Harness — nata dal
+ * refactor della sidebar del 24/8: la barra laterale ora è CONTESTUALE
+ * (TalosTabletSidebar.vue mostra la lista di Harness invece della chat
+ * quando la stazione è Harness), quindi mostra già l'elenco delle sessioni.
+ * Restare sulla rotta-elenco nuda nel riquadro principale la disegnerebbe
+ * una seconda volta, affiancata a se stessa — esattamente LISTA-DOPPIA-01,
+ * un'altra stazione.
+ */
+export function talosTabletLeavesHarnessListRoute(
+    isTablet: boolean,
+    routeName: string | null | undefined,
+): boolean {
+    if (!routeName) return false
+    return isTablet && routeName === 'harness'
+}

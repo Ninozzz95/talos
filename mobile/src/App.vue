@@ -46,7 +46,8 @@ import { applyTalosFontScale } from '@/lib/talosFontScale'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
-import { clampTalosTabletSidebarWidth, talosTabletLeavesChatsRoute } from '@/lib/tabletLayout'
+import { clampTalosTabletSidebarWidth, talosTabletLeavesChatsRoute, talosTabletLeavesHarnessListRoute } from '@/lib/tabletLayout'
+import { HARNESS_DEFAULT_SESSION_ID } from '@/lib/harnessDefaultSession'
 import { useLauncherIconController } from '@/services/launcherIcon'
 import { parseTalosSessionLibraryContextPolicy } from '@/lib/chat/libraryPolicy'
 const router = useRouter()
@@ -707,6 +708,15 @@ const tabletChatRailVisible = computed(() => (
     tabletLayout.isTablet.value && talosMobileStationOf(activeRoute.value) !== 'settings'
 ))
 
+// F6 sidebar refactor (24/8): quale contenuto mostra il rail persistente.
+// Ferma alla stessa domanda già risposta sopra (talosMobileStationOf), non
+// una seconda lettura di rotta — solo Harness sostituisce la chat; ogni
+// altra stazione (Memoria, Note, ecc.) resta un foglio SOPRA il rail chat,
+// invariato.
+const tabletRailVariant = computed<'chat' | 'harness'>(() => (
+    talosMobileStationOf(activeRoute.value) === 'harness' ? 'harness' : 'chat'
+))
+
 const SHEET_TITLE_KEY: Record<TalosMobileRouteName, string> = {
     'settings-privilege': 'privilege.pageTitle',
     chat: 'navigation.chat',
@@ -788,6 +798,12 @@ watch(
     () => [tabletLayout.isTablet.value, activeRoute.value] as const,
     ([isTablet, rotta]) => {
         if (talosTabletLeavesChatsRoute(isTablet, rotta)) void router.replace(pathFor('chat'))
+        // Stessa domanda, per Harness: la barra laterale ora mostra il suo
+        // elenco (vedi tabletRailVariant) quando la stazione è Harness, quindi
+        // la rotta-elenco nuda nel riquadro principale la duplicherebbe.
+        else if (talosTabletLeavesHarnessListRoute(isTablet, rotta)) {
+            void router.replace({ name: 'harness-session', params: { id: HARNESS_DEFAULT_SESSION_ID } })
+        }
     },
     { immediate: true },
 )
@@ -1245,6 +1261,7 @@ onBeforeUnmount(async () => {
                 <template v-if="tabletChatRailVisible">
                     <TalosTabletSidebar
                         :width="tabletSidebarWidth"
+                        :variant="tabletRailVariant"
                         @activated="onTabletActivated"
                         @open-menu="sidebarOpen = true"
                     />
