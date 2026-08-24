@@ -1137,6 +1137,25 @@ Java_ai_talos_TalosLlamaNative_nativeDisableOpenClCacheForResearch(JNIEnv *, jcl
     setenv("GGML_OPENCL_KERNEL_CACHE_DIR", "off", 1);
 }
 
+/**
+ * ⛔ SOLO RICERCA — P2-4, la sonda per CR-03: il piazzamento REALE dei nodi
+ * del grafo per backend, dal log dello scheduler upstream
+ * (`ggml_backend_sched_print_assignments`, `ggml-backend.cpp`), non da
+ * un'ipotesi. `livello=1` stampa solo gli split, `livello=2` anche il
+ * dettaglio per nodo (op, tensore, backend assegnato) — quello che CR-03
+ * chiede. Confermato via ricerca web che è la stessa leva nota fuori da
+ * questa sessione (discussione ggml-org/llama.cpp #10780).
+ *
+ * ⛔ `getenv("GGML_SCHED_DEBUG")` si legge UNA VOLTA SOLA, dentro
+ * `ggml_backend_sched_new` — che gira alla creazione del contesto, non ad
+ * ogni compute. Va chiamata PRIMA della prima apertura di un modello in
+ * questo processo, o non ha alcun effetto su quella sessione.
+ */
+JNIEXPORT void JNICALL
+Java_ai_talos_TalosLlamaNative_nativeSetSchedDebugForResearch(JNIEnv *, jclass, jint livello) {
+    setenv("GGML_SCHED_DEBUG", std::to_string(livello).c_str(), 1);
+}
+
 /** La build di llama.cpp, per l'impronta dei prefissi congelati. */
 JNIEXPORT jstring JNICALL
 Java_ai_talos_TalosLlamaNative_nativeEngineBuild(JNIEnv * env, jclass) {
