@@ -85,6 +85,28 @@ describe('TalosMobileToolSheet (station sheet over chat)', () => {
         expect(body.classes()).toContain('overflow-y-auto')
         expect(body.classes()).not.toContain('overflow-hidden')
     })
+
+    it('CODE-SESSION-FIRST-HEADER-01 starts Codice from the session topbar without duplicate sheet chrome', () => {
+        const w = mount(TalosMobileToolSheet, {
+            props: { title: 'Code', lockBodyScroll: true, hideChrome: true } as never,
+            slots: { default: '<div data-testid="session-topbar">Refactor auth flow</div>' },
+        })
+
+        const dialog = w.get('[data-testid="talos-mobile-tool-sheet"]')
+        expect(dialog.attributes('aria-label')).toBe('Code')
+        expect(w.find('.talos-mobile-tool-sheet-header').exists()).toBe(false)
+        expect(w.find('[data-testid="talos-sheet-back"]').exists()).toBe(false)
+        expect(w.get('[data-testid="talos-mobile-sheet-body"]').classes())
+            .toContain('talos-mobile-tool-sheet-body-chromeless')
+        expect(w.get('[data-testid="session-topbar"]').text()).toBe('Refactor auth flow')
+    })
+
+    it('CODE-OTHER-STATIONS-CHROME-01 keeps the established header on every ordinary station', () => {
+        const w = mount(TalosMobileToolSheet, { props: { title: 'Library' } })
+
+        expect(w.get('.talos-mobile-tool-sheet-header').text()).toContain('Library')
+        expect(w.get('[data-testid="talos-sheet-back"]').exists()).toBe(true)
+    })
 })
 
 // F3-T2 (owner #4/#8): the sheet honours the presentation preference —
@@ -114,7 +136,7 @@ describe('presentation modes (F3-T2)', () => {
         expect(wrapper.get('[data-testid="talos-mobile-tool-sheet"]').attributes('data-presentation')).toBe('fullscreen')
     })
 
-    it('HARNESS-PHONE-NAV-WIDE-SHORT-01 keeps exactly one shell back control in a short fullscreen', () => {
+    it('HARNESS-PHONE-NAV-WIDE-SHORT-01 keeps exactly one shell back control in an ordinary short fullscreen', () => {
         const wrapper = mount(TalosMobileToolSheet, {
             props: { title: 'Harness', presentation: 'fullscreen', lockBodyScroll: true } as never,
         })

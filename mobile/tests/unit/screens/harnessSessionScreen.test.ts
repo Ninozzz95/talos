@@ -34,6 +34,11 @@ vi.mock('vue-router', () => ({
 
 import HarnessSessionScreen from '@/screens/HarnessSessionScreen.vue'
 import { HARNESS_DEMO_SESSIONS } from '@/lib/harnessDemoSessions'
+import {
+    __resetTalosOverlayBackForTests,
+    handleTalosOverlayBack,
+    talosOverlayBackActive,
+} from '@/composables/useTalosOverlayBack'
 
 const FAKE_MOCKUP_HTML = '<!doctype html><html><head></head><body>'
     + '<svg class="icon-sprite" aria-hidden="true"><symbol id="i-test" viewBox="0 0 24 24"></symbol></svg>'
@@ -56,6 +61,7 @@ async function resolveScriptLoad(host: HTMLElement): Promise<void> {
 
 describe('HarnessSessionScreen (24/8) — shadow root inside the SPA, not a trampoline out of it', () => {
     beforeEach(() => {
+        __resetTalosOverlayBackForTests()
         mockState.params = { id: 'refactor-auth-flow' }
         mockState.routerPush.mockReset()
         keyboardMock.listeners.clear()
@@ -65,16 +71,19 @@ describe('HarnessSessionScreen (24/8) — shadow root inside the SPA, not a tram
             value: { ...window.location, assign: vi.fn() },
         })
         vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-            if (String(input).endsWith('/harness-ui/index.html')) return new Response(FAKE_MOCKUP_HTML, { status: 200 })
+            const url = new URL(String(input), 'https://localhost')
+            if (url.pathname === '/harness-ui/index.html') return new Response(FAKE_MOCKUP_HTML, { status: 200 })
             return new Response('', { status: 404 })
         }))
     })
 
     afterEach(() => {
+        __resetTalosOverlayBackForTests()
         delete (window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot
         delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
         delete (window as unknown as { __talosHarnessDestroy?: unknown }).__talosHarnessDestroy
         delete (window as unknown as { __talosHarnessUiRuntime?: unknown }).__talosHarnessUiRuntime
+        delete (window as unknown as { __talosHarnessHostBack?: unknown }).__talosHarnessHostBack
         vi.unstubAllGlobals()
         vi.restoreAllMocks()
     })
@@ -89,8 +98,9 @@ describe('HarnessSessionScreen (24/8) — shadow root inside the SPA, not a tram
         expect(host.shadowRoot).not.toBeNull()
         expect(host.shadowRoot?.querySelector('.icon-sprite')).not.toBeNull()
         const link = host.shadowRoot?.querySelector('link[rel="stylesheet"]')
-        expect(link?.getAttribute('href')).toBe('/harness-ui/styles.css')
-        expect(host.shadowRoot?.querySelector('script')?.getAttribute('src')).toBe('/harness-ui/app.js')
+        expect(window.fetch).toHaveBeenCalledWith('/harness-ui/index.html?build=dev', { cache: 'no-cache' })
+        expect(link?.getAttribute('href')).toBe('/harness-ui/styles.css?build=dev')
+        expect(host.shadowRoot?.querySelector('script')?.getAttribute('src')).toBe('/harness-ui/app.js?build=dev')
         // the fetched document's own trailing <script> must NOT have been
         // carried over verbatim — a second, tracked one replaces it.
         expect(host.shadowRoot?.querySelectorAll('script').length).toBe(1)
@@ -121,6 +131,15 @@ describe('HarnessSessionScreen (24/8) — shadow root inside the SPA, not a tram
         vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
         const w = mount(HarnessSessionScreen)
         expect(w.get('[data-testid="talos-harness-session-screen"]').attributes('data-harness-session-id')).toBe('audit-api-permissions')
+    })
+
+    it('CODE-MOBILE-GUTTER-01 uses the Code surface as the single owner of horizontal gutters', () => {
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+        const w = mount(HarnessSessionScreen)
+        const body = w.get('[data-testid="mobile-screen-body"]')
+
+        expect(body.classes()).toContain('p-0')
+        expect(body.classes()).not.toContain('px-4')
     })
 
     it.each(HARNESS_DEMO_SESSIONS)(
@@ -163,6 +182,7 @@ describe('HarnessSessionScreen (24/8) — shadow root inside the SPA, not a tram
         await w.get('[data-testid="talos-harness-session-unknown-back"]').trigger('click')
 
         expect(w.get('[data-testid="talos-harness-session-unknown-title"]').text()).not.toBe('')
+        expect(w.get('[data-testid="talos-harness-session-unknown-back"]').text()).toBe('Back to Code')
         expect(mockState.routerPush).toHaveBeenCalledWith({ name: 'harness' })
     })
 
@@ -208,5 +228,48 @@ describe('HarnessSessionScreen (24/8) — shadow root inside the SPA, not a tram
         await flushPromises()
         expect(keyboardMock.removers.get('keyboardWillShow')).toHaveBeenCalledTimes(1)
         expect(keyboardMock.removers.get('keyboardWillHide')).toHaveBeenCalledTimes(1)
+    })
+
+    it('HARNESS-PALETTE-BACK-02 registers only an open Code layer in the shared TALOS back stack', () => {
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+        let open = true
+        const dismissTransientLayers = vi.fn(() => {
+            if (!open) return false
+            open = false
+            return true
+        })
+        ;(window as unknown as {
+            __talosHarnessUiRuntime?: {
+                dismissTransientLayers: () => boolean
+                transientLayersActive: () => boolean
+            }
+        }).__talosHarnessUiRuntime = {
+            dismissTransientLayers,
+            transientLayersActive: () => open,
+        }
+
+        const w = mount(HarnessSessionScreen)
+        expect(talosOverlayBackActive()).toBe(true)
+        expect(handleTalosOverlayBack()).toBe(true)
+        expect(dismissTransientLayers).toHaveBeenCalledTimes(1)
+        expect(talosOverlayBackActive()).toBe(false)
+        w.unmount()
+    })
+
+    it('CODE-PHONE-UP-01 exposes one host-owned return to the Code list and removes it on unmount', async () => {
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+        const w = mount(HarnessSessionScreen)
+        const host = w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement
+        await resolveScriptLoad(host)
+
+        const hostBack = (window as unknown as { __talosHarnessHostBack?: () => void })
+            .__talosHarnessHostBack
+        expect(hostBack).toBeTypeOf('function')
+        hostBack?.()
+        expect(mockState.routerPush).toHaveBeenCalledWith({ name: 'harness' })
+
+        w.unmount()
+        expect((window as unknown as { __talosHarnessHostBack?: unknown }).__talosHarnessHostBack)
+            .toBeUndefined()
     })
 })

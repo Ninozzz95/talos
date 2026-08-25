@@ -67,7 +67,7 @@ describe('TalosTabletSidebar (F6 sidebar refactor) — one rail, contextual cont
 
         const harness = mountSidebar({ variant: 'harness' })
         await flushPromises()
-        expect(harness.get('[data-testid="talos-tablet-sidebar"]').attributes('aria-label')).toBe('Harness panel')
+        expect(harness.get('[data-testid="talos-tablet-sidebar"]').attributes('aria-label')).toBe('Code panel')
     })
 
     it('the brand header (hamburger + wordmark) stays put in both variants', async () => {
@@ -91,7 +91,7 @@ describe('TalosTabletSidebar (F6 sidebar refactor) — one rail, contextual cont
         expect(w.find('[data-testid="stub-harness-screen"]').exists()).toBe(false)
         expect(w.find('[data-testid="stub-chats-screen"]').exists()).toBe(false)
         expect(w.find('[data-testid="talos-tablet-menu"]').exists()).toBe(true)
-        expect(w.get('[data-testid="talos-tablet-harness-toggle"]').attributes('aria-label')).toBe('Expand Harness sessions')
+        expect(w.get('[data-testid="talos-tablet-harness-toggle"]').attributes('aria-label')).toBe('Expand Code sessions')
 
         await w.get('[data-testid="talos-tablet-harness-toggle"]').trigger('click')
         expect(w.emitted('toggleCollapsed')).toEqual([[]])
@@ -102,7 +102,7 @@ describe('TalosTabletSidebar (F6 sidebar refactor) — one rail, contextual cont
         await flushPromises()
 
         expect(w.find('[data-testid="stub-harness-screen"]').exists()).toBe(true)
-        expect(w.get('[data-testid="talos-tablet-harness-toggle"]').attributes('aria-label')).toBe('Collapse Harness sessions')
+        expect(w.get('[data-testid="talos-tablet-harness-toggle"]').attributes('aria-label')).toBe('Collapse Code sessions')
     })
 
     it('HARNESS-TABLET-RAIL-COLLAPSE-01 never collapses the chat rail', async () => {

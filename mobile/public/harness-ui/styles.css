@@ -144,12 +144,12 @@
 [data-demo-surface] { position: relative; }
 
 .demo-surface-badge {
-  position: absolute;
-  z-index: 8;
-  top: 8px;
-  right: 8px;
+  position: static;
   display: inline-flex;
   align-items: center;
+  width: max-content;
+  flex: 0 0 auto;
+  margin: 8px;
   min-height: 24px;
   padding: 3px 8px;
   border: 1px solid color-mix(in srgb, var(--amber) 42%, transparent);
@@ -290,6 +290,7 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 .context-chip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .context-chip svg { width: 16px; height: 16px; }
 .mobile-only { display: none; }
+.embedded-session-back-icon { display: none; }
 
 .run-strip { min-height: 46px; display: grid; grid-template-columns: auto minmax(120px,1fr) auto 44px; align-items: center; gap: 14px; padding: 0 14px 0 18px; border-bottom: 1px solid var(--line); background: rgba(23,24,27,.55); }
 .run-state { display: flex; align-items: center; color: var(--text-2); font-size: 11px; white-space: nowrap; }
@@ -375,12 +376,14 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 .inline-diff { background: #18191c; border-bottom: 1px solid var(--line); }
 .diff-head { min-height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 14px; border-bottom: 1px solid rgba(54,55,59,.7); font-family: var(--font-mono); font-size: 9px; color: var(--muted); }
 .inline-diff pre, .diff-panel pre { margin: 0; overflow: auto; padding: 12px 14px; font: 10px/1.7 var(--font-mono); color: var(--text-2); }
+.inline-diff pre { overscroll-behavior-x: contain; overscroll-behavior-y: auto; }
 .inline-diff code span, .diff-panel code span { display: block; white-space: pre; padding: 0 6px; }
 .del { color: #d9958c; background: rgba(216,125,114,.06); }
 .add { color: #9ec8aa; background: rgba(119,168,132,.06); }
 .ctx { color: var(--muted); }
 
 .approval-card { margin: 24px 0; padding: 14px; display: grid; grid-template-columns: 42px 1fr auto; gap: 12px; align-items: center; border-color: rgba(192,139,60,.34); background: linear-gradient(135deg, rgba(192,139,60,.08), rgba(255,255,255,.01)); }
+.approval-card > .demo-surface-badge { grid-column: 1 / -1; margin: 0 0 4px; }
 .approval-icon { width: 42px; height: 42px; border-radius: 11px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-2); }
 .approval-copy h3 { margin: 4px 0; font-size: 13px; font-weight: 650; }
 .approval-copy p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
@@ -407,7 +410,8 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 .send-btn { width: 42px; height: 42px; border: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer; background: var(--accent); color: #171511; flex: 0 0 auto; }
 .send-btn svg { width: 18px; height: 18px; }
 .queued-message { display: none; align-items: center; justify-content: space-between; gap: 10px; min-height: 36px; margin: 0 8px -4px; padding: 0 12px 4px; border-radius: 10px 10px 0 0; background: #292a2e; border: 1px solid var(--line); border-bottom: 0; color: var(--muted); font-size: 10px; }
-.queued-message.show { display: flex; }
+.queued-message.show { display: flex; flex-wrap: wrap; padding: 6px 8px; }
+.queued-message > .demo-surface-badge { flex-basis: 100%; margin: 0 0 4px; }
 .queued-message b { color: var(--text-2); }
 .composer-status { display: flex; align-items: center; gap: 12px; justify-content: center; margin-top: 6px; color: var(--muted-2); font: 9px var(--font-mono); }
 
@@ -490,7 +494,7 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .phone-tool { margin: 14px 0 0 28px; min-height: 46px; border: 1px solid var(--line); border-radius: 9px; padding: 8px; display: grid; grid-template-columns: auto 1fr; gap: 3px 8px; font-size: 8px; }
 .phone-tool span { color: var(--success); }.phone-tool small { grid-column: 2; color: var(--muted); }
 .phone-composer { position: absolute; left: 9px; right: 9px; bottom: 9px; min-height: 92px; border: 1px solid var(--line-strong); background: #26272b; border-radius: 13px; padding: 11px 45px 10px 10px; font-size: 9px; color: var(--muted); }
-.phone-composer button { position: absolute; right: 8px; bottom: 8px; width: 32px; height: 32px; border: 0; border-radius: 50%; background: var(--accent); color: #171511; }
+.phone-send-preview { position: absolute; right: 8px; bottom: 8px; width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: #171511; display: grid; place-items: center; }
 .phone-composer-meta { position: absolute; left: 10px; right: 46px; bottom: 8px; display: flex; align-items: center; gap: 5px; }
 .phone-composer-meta span { min-height: 25px; display: inline-flex; align-items: center; padding: 0 7px; border-radius: 8px; border: 1px solid var(--line); color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -557,7 +561,7 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .campaign-runs > [data-action="load-more-runs"] { margin-top: 8px; }
 .campaign-report pre { max-height: 520px; min-height: 224px; margin: 0; padding: 11px; border: 1px solid var(--line); border-radius: 9px; background: #17181a; color: var(--text-2); white-space: pre-wrap; overflow: auto; overflow-wrap: anywhere; font: 9px/1.6 var(--font-mono); }
 .legacy-dashboard-widgets { margin-top: 10px; padding-top: 16px; }
-.legacy-dashboard-widgets > .demo-surface-badge { top: 9px; }
+.legacy-dashboard-widgets > .demo-surface-badge { margin: 0 0 12px; }
 
 .automation-list { display: grid; gap: 9px; }
 .automation-row { min-height: 72px; display: grid; grid-template-columns: 42px minmax(0,1fr) auto auto; gap: 10px; align-items: center; padding: 11px; }
@@ -590,6 +594,7 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .command-search svg { color: var(--muted); }
 .command-results { max-height: 430px; overflow: auto; padding: 7px; }
 .command-results button { width: 100%; min-height: 46px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 0; border-radius: 9px; background: transparent; color: var(--text-2); padding: 0 9px; cursor: pointer; }
+.command-results button[hidden] { display: none !important; }
 .command-results button:hover, .command-results button:focus-visible { background: var(--surface-3); }
 .command-results button > span { display: flex; align-items: center; gap: 9px; }
 .command-results svg { width: 17px; height: 17px; color: var(--muted); }
@@ -637,23 +642,9 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
   .settings-grid { grid-template-columns: 1fr 1fr; }
 }
 
-/*
- * Owner 24/8: il tetto originale (max-width:1100px) presumeva che oltre
- * quella soglia il badge tornasse a stare comodo col posizionamento base
- * (top:8px;right:8px) — ma quel numero (68px) è tarato sull'altezza di
- * `.brand-row` (`var(--topbar-h)`, 64px + 4px di margine), non sulla
- * larghezza del pannello, che non cambia sopra i 1100px. Tetto tolto:
- * la deroga vale da 781px in su, senza fine. Vedi il commento sopra
- * `.topbar, .brand-row, .inspector-head` per la scoperta sul dispositivo.
- */
-@media (min-width: 781px) {
-  .sessions-panel[data-demo-surface="sessions"] > .demo-surface-badge {
-    top: calc(var(--topbar-h) + env(safe-area-inset-top) + 4px);
-    right: auto;
-    left: 14px;
-  }
-  .sessions-panel[data-demo-surface="sessions"] > .session-actions { margin-top: 26px; }
-}
+.sessions-panel[data-demo-surface="sessions"] > .demo-surface-badge { margin: 8px 14px; }
+.chat-view .conversation > .demo-surface-badge { margin: 0 0 12px; }
+.inspector-panel > .demo-surface-badge { margin: 8px 12px; }
 
 @media (max-width: 780px) {
   :host { overflow: hidden; }
@@ -730,17 +721,7 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
   .sheet-dialog { width: 100vw; max-width: none; margin: auto 0 0; border-radius: 18px 18px 0 0; border-bottom: 0; padding-bottom: max(0px, env(safe-area-inset-bottom)); }
   .sheet-handle { display: block; width: 36px; height: 4px; border-radius: 99px; background: var(--line-strong); margin: 7px auto 0; }
   .sheet-head { min-height: 62px; }
-  .sheet-dialog[data-demo-surface="dynamic-sheet"] > .demo-surface-badge {
-    top: 64px;
-    right: auto;
-    left: 16px;
-  }
-  .sheet-dialog[data-demo-surface="dynamic-sheet"] .sheet-head {
-    min-height: 94px;
-    align-items: flex-start;
-    padding-top: 10px;
-    padding-bottom: 32px;
-  }
+  .sheet-dialog[data-demo-surface="dynamic-sheet"] > .demo-surface-badge { margin: 8px 16px 0; }
   .sheet-body { max-height: 68dvh; padding-bottom: 18px; }
   .toast-region { left: 10px; right: 10px; bottom: calc(var(--mobile-nav-h) + 10px); }
   .toast { min-width: 0; width: 100%; max-width: none; }
@@ -840,34 +821,8 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
   min-height: calc(var(--topbar-h) + env(safe-area-inset-top));
 }
 
-/*
- * Stesso buco, un fratello diverso — TROVATO il 24/8 guardando lo
- * screenshot vero (non ipotizzato): il badge "Demo UI · non collegato"
- * delle sessioni (`.demo-surface-badge`) è `position:absolute` dentro
- * `.sessions-panel`, non un figlio nel FLUSSO di `.brand-row` — la regola
- * sopra sposta giù il contenuto di brand-row, ma non tocca questo
- * fratello assoluto, che restava a `top:8px` dal bordo del pannello.
- * Quando il pannello inizia al bordo fisico dello schermo (>1100px,
- * nessuna delle due deroghe già scritte più sotto in questo file copre
- * questa larghezza) il badge finiva SOTTO la barra di stato, a leggere
- * sopra l'orologio di sistema invece che sopra "TALOS Harness".
- *
- * Prima cura (stesso giorno): spostare SOLO `top` di `env(safe-area-inset-top)`,
- * lasciando `right:8px` della regola base. RIPROVATO sul dispositivo —
- * usciva dalla barra di stato ma finiva DENTRO "TALOS · Harness": stesso
- * spostamento di 40px applicato a un fratello assoluto che non condivide
- * la riga del fratello nel flusso, due cose che si spostano di conserva
- * non è la stessa cosa che due cose che restano compatibili.
- *
- * Cura vera: la deroga 781–1100px (sotto, `top:68px;left:14px` +
- * `margin-top:26px` su `.session-actions`) risolve GIÀ la stessa
- * collisione badge/brand-row — sposta il badge SOTTO la riga del marchio
- * invece che sopra, e apre lo spazio nel flusso perché nessuno lo
- * ricopra. Quel numero (68px) è tarato su `var(--topbar-h)` (64px) + 4px
- * di margine, non sulla larghezza dello schermo — non aveva ragione di
- * fermarsi a 1100px. Tolto il tetto superiore e reso `top` dipendente da
- * `env()`: a inset zero torna esattamente 68px, identico a prima.
- */
+/* I badge demo restano nel flusso del pannello che descrivono: così non
+   possono coprire marchio, azioni o contenuti quando cambia la viewport. */
 
 /*
  * Sessioni e inspector: comprimibili ED ridimensionabili con limiti —
@@ -1197,35 +1152,76 @@ button:disabled { cursor: not-allowed; opacity: .48; }
  * il comportamento a cassetto dell'inspector.
  */
 :host(.talos-embedded) .sessions-panel { display: none; }
-:host(.talos-embedded) #sessionsCollapseBtn,
-:host(.talos-embedded) [data-open-panel="sessions"] { display: none; }
+:host(.talos-embedded) #sessionsCollapseBtn { display: none; }
+:host(.talos-embedded) [data-open-panel="sessions"] .sessions-menu-icon { display: none; }
+:host(.talos-embedded) .embedded-session-back-icon { display: block; }
 
-/* The outer TALOS sheet already owns the dynamic viewport. The embedded
-   document must consume the exact shadow-host rectangle below that header;
-   the standalone mockup intentionally keeps its original 100dvh contract. */
+/* The embedded session is the first visible surface in the chromeless TALOS
+   sheet, so its own topbar consumes the device safe area. */
 :host(.talos-embedded) .app-shell { height: 100%; }
 :host(.talos-embedded) .workspace-shell { height: 100%; min-height: 0; }
-:host(.talos-embedded) .topbar { min-height: var(--topbar-h); padding-top: 0; }
+:host(.talos-embedded) .topbar { min-height: calc(var(--topbar-h) + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
 
 @media (max-width: 780px) {
-  /* TalosMobileToolSheet has already consumed the OS top safe area. */
-  :host(.talos-embedded) .topbar { min-height: 58px; padding-top: 0; }
+  :host(.talos-embedded) .topbar { min-height: calc(58px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
 }
 
 @media (max-width: 430px) {
-  :host(.talos-embedded) .topbar { min-height: 56px; }
+  :host(.talos-embedded) .topbar { min-height: calc(56px + env(safe-area-inset-top)); }
 }
 
 /* A phone in landscape can be wider than the mockup's 780px media query while
    its embedded host is only ~300px tall. The runtime derives this class from
    the actual host rectangle, not from the global viewport or Vue tablet gate. */
 :host(.talos-embedded-wide-short) {
-  --mobile-nav-h: 56px;
-  --mobile-control: 44px;
+  --wide-short-composer-h: 72px;
+  --wide-short-run-h: 49px;
+  --wide-short-toast-gap: 8px;
 }
-:host(.talos-embedded-wide-short) .topbar { min-height: 52px; padding: 0 8px; }
+:host(.talos-embedded-wide-short) .command-dialog {
+  margin-top: 8px;
+  max-height: calc(100dvh - 40px);
+}
+:host(.talos-embedded-wide-short) .command-results {
+  max-height: calc(100dvh - 140px);
+}
+:host(.talos-embedded-wide-short) .toast-region {
+  top: calc(52px + env(safe-area-inset-top) + var(--wide-short-run-h) + var(--wide-short-toast-gap));
+  right: 8px;
+  bottom: auto;
+  left: auto;
+  width: min(380px, calc(100vw - 24px));
+}
+:host(.talos-embedded-wide-short) .toast {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+:host(.talos-embedded-wide-short) .toast strong {
+  flex: 0 0 auto;
+  margin-bottom: 0;
+}
+:host(.talos-embedded-wide-short) .toast span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:host(.talos-embedded-wide-short) .diff-panel pre {
+  min-height: min(180px, calc(100dvh - 180px));
+}
+:host(.talos-embedded-wide-short) .topbar { min-height: calc(52px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) 8px 0; }
+:host(.talos-embedded-wide-short) [data-open-panel="sessions"] { display: grid; }
 :host(.talos-embedded-wide-short) .run-strip { min-height: 42px; }
-:host(.talos-embedded-wide-short) .content-stage { padding-bottom: var(--mobile-nav-h); }
+:host(.talos-embedded-wide-short) .view-pane:not(.chat-view) {
+  padding-bottom: var(--mobile-nav-h);
+  scroll-padding-bottom: var(--mobile-nav-h);
+}
+:host(.talos-embedded-wide-short) .browser-shell { padding-bottom: 0; }
 :host(.talos-embedded-wide-short) .conversation {
   width: calc(100% - 24px);
   padding: 8px 0 132px;
@@ -1313,6 +1309,10 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 }
 :host(.talos-embedded-wide-short):host-context(body.keyboard-open) .content-stage { padding-bottom: 0; }
 :host(.talos-embedded-wide-short):host-context(body.keyboard-open) .composer-wrap { bottom: 0; }
+:host(.talos-embedded-wide-short):host-context(body.keyboard-open) .toast-region {
+  top: auto;
+  bottom: calc(var(--wide-short-composer-h) + var(--wide-short-toast-gap));
+}
 :host(.talos-embedded-wide-short):host-context(body.keyboard-open) .conversation {
   padding-bottom: 76px;
   scroll-padding-bottom: 76px;

@@ -55,6 +55,9 @@ const props = withDefaults(defineProps<{
     /** The embedded station owns its internal scrollports; the shell must not
      * create a second, competing vertical scroller around it. */
     lockBodyScroll?: boolean
+    /** Hide the redundant station-sheet chrome when the embedded surface
+     * already owns the visible session header. The dialog keeps its name. */
+    hideChrome?: boolean
 }>(), {
     presentation: 'fullscreen',
     parentBack: null,
@@ -156,7 +159,7 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
             <!-- Owner 2026-07-24: ONE contextual back. When a station pushes a
                  sub-view, the header shows the subsection title and Back returns
                  to the station (not a second in-body arrow). -->
-            <header class="talos-mobile-tool-sheet-header flex shrink-0 items-center gap-2 border-b border-[var(--talos-border)] bg-transparent px-2 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
+            <header v-if="!hideChrome" class="talos-mobile-tool-sheet-header flex shrink-0 items-center gap-2 border-b border-[var(--talos-border)] bg-transparent px-2 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
                 <!--
                     Owner 2026-08-04, provato sul telefono: «il pulsante
                     indietro in alto a sinistra fa chiudere tutto».
@@ -205,9 +208,12 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
             <div
                 data-testid="talos-mobile-sheet-body"
                 class="min-h-0 flex-1"
-                :class="lockBodyScroll
-                    ? 'overflow-hidden'
-                    : 'overflow-y-auto overscroll-contain pb-[max(0.75rem,env(safe-area-inset-bottom))]'"
+                :class="[
+                    lockBodyScroll
+                        ? 'overflow-hidden'
+                        : 'overflow-y-auto overscroll-contain pb-[max(0.75rem,env(safe-area-inset-bottom))]',
+                    hideChrome ? 'talos-mobile-tool-sheet-body-chromeless' : '',
+                ]"
             >
                 <slot />
             </div>
@@ -225,6 +231,10 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
     }
 
     body.keyboard-open .talos-mobile-tool-sheet-header + [data-testid="talos-mobile-sheet-body"] {
+        padding-top: env(safe-area-inset-top);
+    }
+
+    body.keyboard-open .talos-mobile-tool-sheet-body-chromeless {
         padding-top: env(safe-area-inset-top);
     }
 }

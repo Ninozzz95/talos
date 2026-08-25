@@ -42,6 +42,18 @@ describe('TalosMobileScreen', () => {
         expect(body.classes()).toContain('md:overflow-hidden')
     })
 
+    it('CODE-MOBILE-GUTTER-01 can hand all viewport gutters to an embedded surface', () => {
+        const wrapper = mount(TalosMobileScreen, {
+            props: { title: 'Code', edgeToEdge: true },
+            slots: { default: '<p>code</p>' },
+        })
+        const body = wrapper.get('[data-testid="mobile-screen-body"]')
+
+        expect(body.classes()).toContain('p-0')
+        expect(body.classes()).toContain('overflow-hidden')
+        expect(body.classes()).not.toContain('px-4')
+    })
+
     it('labels the screen region with its title for assistive tech', () => {
         const wrapper = mount(TalosMobileScreen, { props: { title: 'Library' } })
         expect(wrapper.get('[data-testid="mobile-screen"]').attributes('aria-label')).toBe('Library')

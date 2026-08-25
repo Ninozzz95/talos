@@ -83,7 +83,7 @@ export const TALOS_IT_MESSAGES = {
         goBack: 'Torna indietro',
         primary: 'Navigazione principale',
         modelLab: 'Laboratorio modelli',
-        harness: 'Harness',
+        harness: 'Codice',
     },
     language: {
         title: 'Lingua',
@@ -1136,12 +1136,12 @@ export const TALOS_IT_MESSAGES = {
             yesterday: 'Ieri',
             week: 'Ultimi 7 giorni',
         },
-        openingMockup: 'Apertura di Harness UI…',
-        unavailable: 'Harness UI non è disponibile in questa build.',
-        loadFailed: 'Harness UI non si è aperta. Riprova.',
+        openingMockup: 'Apertura di Codice…',
+        unavailable: 'Codice non è disponibile in questa build.',
+        loadFailed: 'Codice non si è aperto. Riprova.',
         unknownTitle: 'Sessione non trovata',
-        unknownSession: 'Questa sessione demo non esiste. Torna a Harness e scegline una dalla lista.',
-        unknownBack: 'Torna a Harness',
+        unknownSession: 'Questa sessione demo non esiste. Torna a Codice e scegline una dalla lista.',
+        unknownBack: 'Torna a Codice',
     },
     privilege: {
         keepAlive: 'Mantieni acceso',
@@ -3446,9 +3446,9 @@ export const TALOS_IT_MESSAGES = {
         // F6, refactor sidebar (24/8): l'etichetta del rail tablet quando
         // mostra le sessioni Harness invece della chat — deve dire cosa c'è
         // davvero a schermo, stesso principio di chatsPanel sopra.
-        harnessPanel: 'Pannello Harness',
-        collapseHarnessSessions: 'Comprimi sessioni Harness',
-        expandHarnessSessions: 'Espandi sessioni Harness',
+        harnessPanel: 'Pannello Codice',
+        collapseHarnessSessions: 'Comprimi sessioni Codice',
+        expandHarnessSessions: 'Espandi sessioni Codice',
     },
     shell: {
         sidebarDescription: 'Chat, strumenti e impostazioni',
