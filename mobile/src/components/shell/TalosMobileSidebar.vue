@@ -177,7 +177,7 @@ const deletePlan = computed<TalosSessionCleanupPlan>(() => (
                 </Button>
             </DrawerHeader>
 
-            <div class="flex min-h-0 flex-1 flex-col">
+            <div class="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
                 <!-- F3-T3 (owner #12, Claude pattern): on phones the Chats entry
                      opens the dedicated list page; tablets keep the inline list.
                      Owner 2026-07-24: the single "New chat" affordance is the

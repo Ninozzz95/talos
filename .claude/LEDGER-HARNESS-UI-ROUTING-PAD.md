@@ -184,8 +184,7 @@ a montare soltanto con `variant === 'chat'`. RED: entrambi gli stub assenti.
 
 ## Fase 3 — host, composer e tastiera
 
-Produzione: `mobile/src/components/shell/TalosMobileToolSheet.vue`,
-`mobile/src/screens/HarnessSessionScreen.vue`,
+Produzione: `mobile/src/screens/HarnessSessionScreen.vue`,
 `mobile/public/harness-ui/styles.css`, `mobile/public/harness-ui/app.js`.
 
 RED: `HARNESS-EMBEDDED-HEIGHT-01`, `HARNESS-COMPOSER-BOTTOM-01`,
@@ -197,6 +196,129 @@ controllo coperto. GREEN: `npx vitest run tests/unit/screens/harnessSessionScree
 Pad: transcript/Board/Review/palette agli estremi, tastiera aperta/chiusa,
 quattro forme. Commit:
 `fix(harness-ui): composer e tastiera seguono il riquadro reale`.
+
+Amendamento strumentato 25/8 prima del RED: `TalosMobileToolSheet` misura già
+correttamente il viewport e la sua freccia indietro è visibile nelle due forme
+telefono; non va modificato né duplicato. Il rettangolo errato è dentro lo
+shadow host. A telefono verticale, senza tastiera, il DOM reale misura host
+761px ma `.app-shell`/`.workspace-shell` 873px; il composer termina a y=904
+contro il fondo host y=857. Con tastiera nativa aperta, `innerHeight` e
+`visualViewport.height` diventano entrambi 544px: l'euristica basata sulla loro
+differenza resta zero, `body.keyboard-open` non viene applicata, app-shell è
+545px dentro un host di 433px e il composer termina a y=576, sotto il viewport.
+
+Causa e contratto GREEN:
+
+- nell'incorporamento, app-shell e workspace consumano `height:100%` del vero
+  host, mai `100dvh`; `100dvh` resta corretto soltanto per il mockup statico;
+- l'header esterno ha già consumato la safe area superiore: il topbar embedded
+  non somma una seconda volta `env(safe-area-inset-top)` (95px misurati oggi);
+- `HarnessSessionScreen` inoltra gli eventi ufficiali Capacitor Keyboard al
+  ponte AVM già tipizzato; il runtime espone realmente `setKeyboardOpen`,
+  conserva lo stato nativo contro i successivi resize e lo pulisce al destroy;
+- `HARNESS-PHONE-NAV-WIDE-SHORT-01` diventa una prova di non regressione: una
+  sola freccia shell resta visibile in landscape, nessuna seconda freccia
+  viene aggiunta dentro Harness.
+
+Scenari permanenti aggiunti: `HARNESS-EMBEDDED-SAFE-AREA-01` e
+`HARNESS-KEYBOARD-NATIVE-RESIZE-01`. `TalosMobileToolSheet.vue` esce quindi
+dall'elenco produzione della fase: l'ispezione reale ne ha dimostrato la
+correttezza; modificarlo sarebbe intervenire sul contenitore sano.
+
+Amendamento build 25/8: `HARNESS-KEYBOARD-LISTENER-TYPES-01`. Capacitor espone
+overload distinti per `keyboardWillShow` e `keyboardWillHide`; un helper che
+accettava l'unione dei nomi era verde in Vitest ma correttamente respinto da
+`vue-tsc` con TS2769. Nessun cast: le due chiamate restano nei rispettivi
+overload ufficiali e condividono soltanto la funzione che conserva/rimuove il
+`PluginListenerHandle`. Gate permanente: `npm run build`.
+
+Amendamento Pad 25/8, telefono landscape dopo il primo GREEN parziale:
+`HARNESS-WIDE-SHORT-HOST-01`. Misure reali a freddo: `innerWidth=872`,
+`innerHeight=392`, `tablet=false`, host 872x297. Il mockup resta però nel ramo
+desktop perché usa soltanto `max-width:780`: topbar 103px (safe area superiore
+consumata di nuovo), nav inferiore assente e composer 160px che copre l'intero
+stage. Con tastiera nativa: `innerHeight=144`, header shell 96px, host 49px;
+il composer termina fuori dall'area visibile e nello screenshot restano solo
+header, run-strip e tastiera.
+
+Correzione del piano: `TalosMobileToolSheet.vue` rientra nella produzione della
+fase esclusivamente per il caso tastiera+landscape. La freccia non era errata e
+resta unica nello stato normale; mentre la tastiera è aperta e l'altezza è
+critica, l'header cede temporaneamente lo spazio al composer e ritorna al hide.
+Il runtime misura il rettangolo del vero host con `ResizeObserver`, applica una
+classe wide-short sotto 900x500 e la rimuove al destroy; nessuna soglia tablet
+Vue viene duplicata. CSS wide-short: safe area interna azzerata, topbar/run più
+compatti, nav inferiore presente, composer a una riga con target essenziali;
+con tastiera nav/topbar/run spariscono e il composer resta interamente visibile.
+Screenshot RED conservati: `phase3-phone-landscape-wide-short-red.png` e
+`phase3-phone-landscape-keyboard-red.png`.
+
+Regressione visiva del primo wide-short GREEN:
+`HARNESS-KEYBOARD-LANDSCAPE-SAFE-AREA-01`. Il composer era finalmente visibile,
+ma la rimozione temporanea dell'header faceva iniziare il corpo station a y=0:
+missione e badge demo finivano sotto orologio, rete e batteria Android. Quando
+l'header cede, il body della station conserva quindi un solo
+`env(safe-area-inset-top)`; nessun contenuto Harness può occupare la status bar.
+
+Amendamento Pad 25/8 durante l'ispezione integrale della navigazione globale:
+`GLOBAL-SIDEBAR-SHORT-LANDSCAPE-01`. Nella forma telefono landscape il drawer
+globale misura 393px CSS di altezza, ma il suo contenitore centrale misura
+293px con 489px di contenuto e `overflow-y:visible`; nessun antenato è
+scrollabile. La voce Harness è presente nel DOM a y=456–504, quindi fuori dal
+viewport, e uno swipe reale non sposta l'elenco. Il problema rende la rotta
+irraggiungibile proprio nella forma che questa fase deve accettare.
+
+Il file di produzione `mobile/src/components/shell/TalosMobileSidebar.vue` e il
+test `mobile/tests/unit/shell/TalosMobileSidebar.test.ts` entrano quindi nella
+Fase 3. RED: il contenitore flex che possiede Chat/Recenti/Strumenti/footer non
+ha `overflow-y-auto overscroll-contain`. GREEN: quel contenitore è l'unico
+scrollport di fallback quando la sua altezza non basta; a portrait il footer
+resta in fondo tramite `mt-auto`, mentre a landscape tutte le voci, Harness e
+footer diventano raggiungibili. Prova Pad: apertura drawer, scroll fino a
+Harness, navigazione reale e ritorno, nella forma telefono landscape.
+
+Amendamento Pad 25/8, prova contraria con quattro swipe fino al fondo:
+`HARNESS-COMPOSER-AFTER-SCROLL-01`. Il primo screenshot portrait mostrava il
+composer nel punto giusto, ma dopo 612px di scroll il suo rettangolo passava da
+y=648–793 a y=37–181 e spariva sopra il viewport. Misura DOM: `.composer-wrap`
+è `position:absolute` dentro `.chat-view`, ma `.chat-view` è anche lo
+scrollport (`scrollTop=611.6`); quindi il composer scorre insieme al transcript.
+
+RED permanente in `mobile/tests/unit/harness/harnessUiFrontend.test.ts`:
+`.chat-view` non separa ancora il contenitore fisso dal contenuto scorrevole.
+GREEN: `.chat-view` possiede geometria e composer con `overflow:hidden`;
+`.conversation` diventa lo scrollport alto 100% con `overflow-y:auto`. Il
+padding finale già esistente resta il cuscinetto che porta l'ultimo messaggio
+sopra il composer. Prova Pad obbligatoria: inizio, quattro swipe, fondo reale,
+composer sempre visibile e ultimo contenuto interamente raggiungibile.
+
+Esito strumentato finale della matrice 25/8: nelle quattro forme il composer
+resta nel rettangolo Harness a inizio e dopo lo scroll; in telefono landscape
+il fondo reale misura `scrollTop=1181.45` su un massimo di 1182 e il rettangolo
+del composer resta invariato a y=264.73–336.73 CSS. Con la tastiera nativa
+aperta, header e nav non essenziali cedono spazio, il composer resta intero
+sopra Gboard e la status bar Android rimane libera. Tutti i 42 PNG, compresi i
+RED e i GREEN intermedi, sono stati aperti e ispezionati per intero; nessun
+fotogramma intermedio viene usato come prova finale.
+
+La lettura certosina ha scoperto cinque scenari distinti che non appartengono
+alla geometria host/composer e vengono aggiunti, senza anticiparne il fix, alla
+Fase 5:
+
+- `HARNESS-PALETTE-BADGE-COLLISION-01`: il badge demo copre/affolla la X della
+  palette in telefono landscape, con e senza tastiera;
+- `HARNESS-PALETTE-BACK-01`: Back Android con palette aperta chiude il layer
+  transitorio ma propaga anche la navigazione dal dettaglio alla lista; il
+  primo Back deve soltanto chiudere il layer;
+- `HARNESS-NESTED-SCROLL-TRAP-01`: uno swipe iniziato nel diff `<pre>` resta
+  intrappolato perché il figlio usa `overscroll-behavior:contain`; il transcript
+  non avanza finché il gesto non parte fuori dal codice;
+- `HARNESS-BOARD-MOBILE-HONESTY-01`: Board mobile parla di campagne
+  TALOS-BANCO e server locale non disponibile senza dichiarare subito che
+  l'intera superficie è demo-only e non collegata;
+- `HARNESS-DEMO-BADGE-CONTENT-01`: oltre alla palette, il badge si sovrappone
+  al testo della conversazione in landscape e con tastiera, quindi il gate
+  collisioni deve coprire contenuto dinamico, non soltanto pulsanti.
 
 ## Fase 4 — rotta e sessione coincidono
 
@@ -222,7 +344,9 @@ Produzione: `mobile/public/harness-ui/index.html`,
 RED: `HARNESS-COMMAND-FILTER-01`, `HARNESS-COMMAND-KEYBOARD-01`,
 `HARNESS-MIC-HONEST-01`, `HARNESS-DEMO-BADGE-NO-COLLISION-01`,
 `HARNESS-QUEUE-NO-OVERLAP-01`, `HARNESS-ALL-CONTROLS-01`,
-`HARNESS-ALL-SCROLL-ENDS-01`.
+`HARNESS-ALL-SCROLL-ENDS-01`, `HARNESS-PALETTE-BADGE-COLLISION-01`,
+`HARNESS-PALETTE-BACK-01`, `HARNESS-NESTED-SCROLL-TRAP-01`,
+`HARNESS-BOARD-MOBILE-HONESTY-01`, `HARNESS-DEMO-BADGE-CONTENT-01`.
 
 Fallimento atteso: filtro visibile, mic inerte, badge/coda sovrapposti, ultimi
 controlli coperti. GREEN: `npx vitest run tests/unit/harness/harnessUiAssetContract.test.ts tests/unit/harness/harnessUiFrontend.test.ts`.

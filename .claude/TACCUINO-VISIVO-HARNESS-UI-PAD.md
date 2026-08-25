@@ -99,7 +99,7 @@ Fase 1 non sono stati riutilizzati.
 
 | ID | Cosa si vede | Viewport/prova | Gravità | Destinazione | Stato |
 |---|---|---|---|---|---|
-| VIS-PHONE-DETAIL-NAV-01 | Nel dettaglio Harness su telefono non è visibile un comando di ritorno o un'intestazione di navigazione. Il tasto Back di sistema funziona, ma la via d'uscita non è scoperta dall'interfaccia. In verticale resta anche un'ampia fascia vuota prima del titolo; in orizzontale una banda superiore priva di funzione. | `phase2-phone-portrait-detail-cold.png`, `phase2-phone-landscape-detail-cold.png` | Critica | Fase 3 | Aperta |
+| VIS-PHONE-DETAIL-RHYTHM-01 | La freccia indietro e il titolo Harness sono visibili e corretti in entrambe le forme. Il difetto reale è l'ampia fascia verticale vuota tra quell'header TALOS e il contenuto Harness; in landscape sottrae una quota critica a un'altezza già ridotta. | `phase2-phone-portrait-detail-cold.png`, `phase2-phone-landscape-detail-cold.png` | Alta | Fase 3 | Aperta |
 | VIS-CHEVRON-SEMANTICS-01 | Nel tablet a rail aperto, il chevron di compressione e la freccia indietro della station appaiono nella stessa fascia superiore e puntano entrambi a sinistra. Le etichette accessibili sono corrette, ma il significato visivo è distinguibile quasi soltanto dal contenitore. | `phase2-tablet-landscape-expanded-fixed.png`, `phase2-tablet-portrait-expanded-fixed.png` | Media | Fase 6 | Aperta |
 | VIS-LIST-SCROLL-SHORT-01 | Nella lista telefono orizzontale l'ultima sessione (`Prepare release notes`) resta parzialmente tagliata al bordo inferiore. Occorre provare lo scroll fino alla fine e lasciare visibile l'ultima riga, non dedurlo dal fatto che esista nel DOM. | `phase2-phone-landscape-list-cold.png` | Alta | Fase 5 | Aperta |
 | VIS-INCIDENTAL-CHAT-01 | Lo stato Chat usato per provare che il suo rail non cambia mostra due errori `TALOS_LLAMA_NO_CHAT_TEMPLATE` e percorsi grezzi del modello. È una condizione preesistente della Chat, estranea alla Harness e non toccata. | `phase2-tablet-landscape-chat-unaffected.png` | Alta, fuori perimetro | Segnalazione owner | Aperta, non autorizza fix |
@@ -108,5 +108,60 @@ Restano inoltre confermate, non attenuate dalle immagini favorevoli,
 `VIS-COMPOSER-01`, `VIS-KEYBOARD-01`, `VIS-STEPS-01`,
 `VIS-VERTICAL-RHYTHM-01` e `VIS-TYPOGRAPHY-01`. In particolare il composer è
 ancora tagliato/coperto dal bordo inferiore nelle forme telefono e il dettaglio
-telefono non usa bene l'altezza disponibile. Sono il blocco esplicito della
-Fase 3, non lavoro dichiarato concluso nella Fase 2.
+telefono non usa bene l'altezza disponibile. La freccia indietro è presente:
+non va duplicata. Sono il blocco esplicito della Fase 3, non lavoro dichiarato
+concluso nella Fase 2.
+
+## Fase 3 — host, composer, tastiera e veri scrollport
+
+Prove:
+`C:\Users\Antonino\AppData\Local\Temp\talos-harness-fixes-20260825-phase3`.
+Quarantadue PNG sono stati aperti e ispezionati integralmente il 25/8, inclusi
+i fotogrammi RED e le correzioni intermedie. Le prove finali coprono tablet e
+telefono, portrait e landscape, stato iniziale, fondo reale del transcript e
+tastiera nativa. I fotogrammi Board, Review, palette e drawer globale sono
+stati controllati anche quando servivano a scoprire problemi di una fase
+successiva.
+
+### Esiti chiusi nella fase
+
+- Il contenuto Harness usa l'altezza del riquadro reale, non l'altezza teorica
+  dello schermo. Composer e barra inferiore non escono più sotto la station.
+- Il composer resta ancorato dopo lo scroll. Nella prova telefono landscape il
+  transcript ha raggiunto `1181.45/1182px` e la sua posizione è rimasta
+  invariata; sul telefono portrait è stato raggiunto anche il vero ultimo
+  messaggio, non soltanto il fondo apparente dentro il diff.
+- La tastiera nativa viene comunicata esplicitamente da Capacitor. In portrait
+  il composer sale sopra Gboard e la nav ritorna alla chiusura; in landscape
+  header, run strip e nav cedono temporaneamente lo spazio necessario e la
+  status bar resta libera.
+- Il layout telefono largo e basso non cade più nel ramo desktop: mantiene una
+  nav touch e un composer compatto. Il drawer globale corto è ora realmente
+  scrollabile fino alla voce Harness e al footer.
+- Tablet portrait e landscape conservano struttura completa, rail Harness e
+  context rail quando lo spazio lo consente. Board e Review restano
+  raggiungibili; le loro incongruenze specifiche sono annotate sotto.
+
+### Discrepanze annotate durante l'intera ispezione
+
+| ID | Cosa si vede | Viewport/prova | Gravità | Destinazione | Stato |
+|---|---|---|---|---|---|
+| VIS-DEMO-BADGE-TEXT-01 | Il badge `Demo UI · non collegato` si sovrappone al testo del transcript in telefono landscape; con la tastiera aperta la collisione è evidente sull'unica riga utile. | `phase3-phone-landscape-scroll-end-final.png`, `phase3-phone-landscape-keyboard-final-scrollfix.png` | Alta | Fase 5 | Aperta |
+| VIS-PALETTE-X-COLLISION-01 | Nella palette il badge demo affolla/copre la X di chiusura in landscape, sia con tastiera sia senza. | `phase3-phone-landscape-command-palette.png`, `phase3-phone-landscape-palette-keyboard-hidden.png` | Alta | Fase 5 | Aperta |
+| VIS-PALETTE-BACK-01 | Il tasto Back Android chiude la palette ma nello stesso evento torna anche dal dettaglio alla lista Harness. Manca il consumo esclusivo del primo Back. | `phase3-phone-landscape-after-palette-back.png` e navigazione osservata | Alta/funzionale | Fase 5 | Aperta |
+| VIS-NESTED-SCROLL-TRAP-01 | Uno swipe che parte dentro il diff non muove il transcript: il codice trattiene il gesto. Lo scroll arriva al fondo soltanto partendo da una riga esterna al `<pre>`. | telefono portrait, confronto `scroll-end*`/`scroll-true-end-final` | Alta | Fase 5 | Aperta |
+| VIS-BOARD-HONESTY-01 | La Board mobile parla di campagne TALOS-BANCO, allowlist e server locale non disponibile, ma non dichiara subito che tutta la superficie è demo-only e senza backend mobile. | `phase3-tablet-landscape-board-final.png` | Alta/prodotto | Fase 5 | Aperta |
+| VIS-REVIEW-BADGE-BUTTON-01 | Il badge demo invade il margine superiore del pulsante `Approva tutto`. | `phase3-tablet-landscape-review-final.png` | Alta | Fase 5 | Aperta |
+| VIS-BADGE-MULTI-SURFACE-01 | Altre collisioni già osservate: badge sul meta del bundle Browser, sull'intestazione `PERMESSO RICHIESTO` e sull'icona link di `Ambiente`. Non è un caso isolato della Chat. | telefono portrait e rail Context durante la matrice | Alta | Fase 5 | Aperta |
+| VIS-COMPOSER-LANDSCAPE-DENSITY-01 | Anche corretto, il composer a una riga occupa una quota molto alta della piccola area landscape; è funzionale ma lascia una sola riga di contenuto. Modello e permessi non sono visibili direttamente. | `phase3-phone-landscape-base-final-scrollfix.png` | Media | Fase 5/6 | Aperta; verificare sheet capability |
+| VIS-STEPS-CLIP-02 | La timeline `Responsive pass` resta parzialmente tagliata con una scrollbar orizzontale poco leggibile sul telefono portrait. | `phase3-phone-portrait-base-scrollfix-final.png` | Media | Fase 5 | Aperta |
+| VIS-CHAT-ERROR-LONG-PATH-01 | Nella Chat estranea alla Harness, il percorso locale del modello esce visivamente dalla card di errore. È stato visto mentre si controllava il ritorno dalla station. | `phase3-tablet-landscape-chat-return.png` | Media, fuori perimetro | Segnalazione owner | Aperta, nessun fix autorizzato |
+
+### Correzioni rispetto alle prime baseline
+
+`VIS-COMPOSER-01`, `VIS-KEYBOARD-01`, `VIS-VERTICAL-RHYTHM-01` e
+`VIS-DRAWER-SHORT-01` sono risolte per la geometria coperta dalla Fase 3. La
+riduzione dello spazio vuoto non elimina il problema generale di densità e
+continuità visiva, che resta correttamente assegnato alla Fase 6. Il badge
+demo resta presente e onesto, ma la sua collocazione non è ancora sicura:
+visibilità e assenza di collisioni sono requisiti distinti.

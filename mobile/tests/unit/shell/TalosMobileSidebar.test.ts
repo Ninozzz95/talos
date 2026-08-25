@@ -51,6 +51,15 @@ function mountSidebar(props: Record<string, unknown> = {}) {
 }
 
 describe('TalosMobileSidebar (F1-T3)', () => {
+    it('GLOBAL-SIDEBAR-SHORT-LANDSCAPE-01 keeps every navigation row reachable in a short viewport', async () => {
+        mountSidebar()
+        await flushPromises()
+        const tools = document.querySelector('[data-testid="talos-sidebar-tools"]') as HTMLElement
+        const navigationFlow = tools.parentElement as HTMLElement
+        expect(navigationFlow.className).toContain('overflow-y-auto')
+        expect(navigationFlow.className).toContain('overscroll-contain')
+    })
+
     it('GLOBAL-SIDEBAR-ABOVE-HARNESS-01 raises both the drawer and its overlay above station surfaces', async () => {
         mountSidebar()
         await flushPromises()

@@ -814,6 +814,18 @@
     }
   }
 
+  let nativeKeyboardOpen = null;
+
+  function applyKeyboardOpen(open) {
+    document.body.classList.toggle('keyboard-open', Boolean(open));
+  }
+
+  function setKeyboardOpen(open) {
+    nativeKeyboardOpen = Boolean(open);
+    applyKeyboardOpen(nativeKeyboardOpen);
+    if (!nativeKeyboardOpen && ROOT().activeElement === composerInput) composerInput.blur();
+  }
+
   function syncVisualViewport() {
     const viewport = window.visualViewport;
     const rawOffset = viewport ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop) : 0;
@@ -823,7 +835,8 @@
     // l'interfaccia DocumentOrShadowRoot) — document.activeElement da fuori
     // vedrebbe solo l'host, mai composerInput.
     const composerFocused = ROOT().activeElement === composerInput;
-    document.body.classList.toggle('keyboard-open', composerFocused && keyboardOffset > 0 && window.innerWidth <= 780);
+    const viewportKeyboardOpen = composerFocused && keyboardOffset > 0 && window.innerWidth <= 780;
+    applyKeyboardOpen(nativeKeyboardOpen ?? viewportKeyboardOpen);
   }
 
   const toolDetails = {
@@ -1314,6 +1327,18 @@
    * lo stesso contratto del "destroyer" che le app incorporate reali usano
    * (es. PagerDuty: https://www.pagerduty.com/eng/react-embedded-apps/).
    */
+  let hostResizeObserver = null;
+
+  function syncHostLayout() {
+    const host = HOST();
+    const rect = host.getBoundingClientRect();
+    const wideShort = host.classList.contains('talos-embedded')
+      && rect.width > 780
+      && rect.width <= 900
+      && rect.height <= 500;
+    host.classList.toggle('talos-embedded-wide-short', wideShort);
+  }
+
   function onResize() {
     if (window.innerWidth > 1040) {
       inspectorPanel.classList.remove('open');
@@ -1323,16 +1348,26 @@
     }
     if (window.innerWidth > 780) sessionsPanel.classList.remove('open');
     syncInspectorToggle();
+    syncHostLayout();
     syncVisualViewport();
   }
   window.addEventListener('resize', onResize);
   window.visualViewport?.addEventListener('resize', syncVisualViewport);
   window.visualViewport?.addEventListener('scroll', syncVisualViewport);
-  window.__talosHarnessUiRuntime = { dismissTransientLayers };
+  if (typeof ResizeObserver === 'function') {
+    hostResizeObserver = new ResizeObserver(syncHostLayout);
+    hostResizeObserver.observe(HOST());
+  }
+  window.__talosHarnessUiRuntime = { dismissTransientLayers, setKeyboardOpen };
   window.__talosHarnessDestroy = () => {
     window.removeEventListener('resize', onResize);
     window.visualViewport?.removeEventListener('resize', syncVisualViewport);
     window.visualViewport?.removeEventListener('scroll', syncVisualViewport);
+    hostResizeObserver?.disconnect();
+    hostResizeObserver = null;
+    HOST().classList.remove('talos-embedded-wide-short');
+    nativeKeyboardOpen = null;
+    applyKeyboardOpen(false);
     delete window.__talosHarnessUiRuntime;
     delete window.__talosHarnessDestroy;
   };
@@ -1442,6 +1477,7 @@
   syncSessionsToggle();
   loadPanelWidths();
   setupPanelResize();
+  syncHostLayout();
   setQueueMode(false);
   setRunState(true);
   setInspectorTab($('.inspector-tabs button.active'));

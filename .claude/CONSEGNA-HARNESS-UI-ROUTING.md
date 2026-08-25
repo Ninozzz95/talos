@@ -772,9 +772,112 @@ Al termine della matrice il Pad è stato ripristinato ai valori fisici
 (`accelerometer_rotation=1`, `user_rotation=1`).
 
 Discrepanze che la fase ha reso precise ma non ha nascosto: sul dettaglio
-telefono manca una navigazione visibile e resta molto spazio morto; il composer
-è ancora tagliato/coperto in basso; l'ultima sessione della lista orizzontale è
+telefono la navigazione è visibile e corretta, ma resta molto spazio morto tra
+header e contenuto; il composer è ancora tagliato/coperto in basso; l'ultima sessione della lista orizzontale è
 parzialmente fuori schermo; i due chevron tablet (comprimi e torna indietro)
 sono semanticamente vicini; nella prova Chat sono presenti errori runtime
 preesistenti e percorsi grezzi, annotati fuori perimetro. I primi problemi
 Harness passano alle Fasi 3, 5 e 6; nessun fix Chat è stato eseguito.
+
+### Fase 3 — composer, tastiera e altezza reale del riquadro
+
+Stato: **completata e verificata sul Pad reale**.
+
+#### Riassunto semplice ma esaustivo
+
+Prima il contenuto Harness calcolava la propria altezza come se occupasse
+l'intero schermo, mentre in realtà vive dentro il riquadro TALOS. Per questo il
+composer scivolava sotto il bordo, dopo lo scroll saliva insieme ai messaggi e
+con la tastiera poteva sparire quasi completamente. Ora Harness usa il
+rettangolo che possiede davvero: i messaggi scorrono in una zona interna, il
+composer resta fermo al fondo e sale sopra la tastiera quando questa compare.
+
+Nel telefono orizzontale, dove l'altezza è minima, l'interfaccia passa a una
+forma compatta: nasconde temporaneamente gli elementi non indispensabili con
+la tastiera aperta, conserva il composer e non invade l'orologio o le icone di
+sistema. Quando la tastiera si chiude, header e barra di navigazione ritornano.
+Sul tablet la struttura completa e il pannello Context restano disponibili.
+
+Durante questa fase è stato trovato e corretto anche un problema della sidebar
+globale: sul telefono orizzontale la voce Harness esisteva ma rimaneva oltre il
+fondo e non era raggiungibile. Ora la parte centrale del menu scorre fino a
+Harness e al footer, mentre la sidebar globale continua a stare sopra tutto.
+
+La prova contraria sullo scroll ha scoperto un secondo errore: il composer
+sembrava corretto all'inizio, ma dopo circa 612px scorreva via insieme al
+transcript. La causa è stata trasformata nel test permanente
+`HARNESS-COMPOSER-AFTER-SCROLL-01`; il vero scrollport è ora la conversazione,
+non l'intera superficie che contiene anche il composer.
+
+#### File di produzione modificati
+
+- `mobile/src/screens/HarnessSessionScreen.vue`
+- `mobile/src/components/shell/TalosMobileToolSheet.vue`
+- `mobile/src/components/shell/TalosMobileSidebar.vue`
+- `mobile/public/harness-ui/styles.css`
+- `mobile/public/harness-ui/app.js`
+
+Il collegamento tastiera usa gli eventi ufficiali già forniti da Capacitor e li
+inoltra al ponte Harness esistente. Il runtime misura il proprio host con
+`ResizeObserver`; nessun backend, processo, TALOS-BANCO o execution plane è
+stato aggiunto.
+
+#### Test permanenti modificati o aggiunti
+
+- `mobile/tests/unit/screens/harnessSessionScreen.test.ts`
+- `mobile/tests/unit/harness/harnessUiFrontend.test.ts`
+- `mobile/tests/unit/shell/TalosMobileToolSheet.test.ts`
+- `mobile/tests/unit/shell/TalosMobileSidebar.test.ts`
+
+Scenari coperti: listener tastiera e rimozione, altezza embedded, safe area,
+forma larga e bassa, nav telefono, composer prima/dopo scroll, drawer globale
+corto e ripristino dopo la chiusura della tastiera.
+
+#### Prove automatiche fresche
+
+- gruppo mirato: 5 file, **37 test passati**, zero falliti;
+- `npm run typecheck`: exit 0;
+- `node --check public/harness-ui/app.js`: exit 0;
+- `npm run build`: exit 0, 3.625 moduli; JavaScript iniziale
+  **613.757/614.000 byte**, CSS **214.709/220.000 byte**;
+- verifica parity: 18/18 passata;
+- `npx cap copy android`: exit 0;
+- compilazioni debug Kotlin e release Java: **BUILD SUCCESSFUL**, 513 task;
+- `git diff --check`: exit 0.
+
+#### Prove reali e ispezione visiva completa
+
+Sul Pad side-by-side sono stati provati tablet portrait, tablet landscape,
+telefono portrait e telefono landscape. Per ogni forma sono stati controllati
+stato iniziale, scroll, fondo reale e tastiera aperta/chiusa; inoltre Board,
+Review, palette, ritorno a Chat e sidebar globale sono stati aperti quando
+necessari alla verifica dell'intero schermo.
+
+In telefono landscape il fondo è stato misurato, non intuito:
+`scrollTop=1181.45` su un massimo di `1182`; il composer è rimasto nello stesso
+rettangolo. Tutti i **42 screenshot** della cartella, compresi gli stati RED e
+le correzioni intermedie, sono stati aperti e ispezionati per intero con la
+disciplina `frontend-design`. Evidenze:
+`C:\Users\Antonino\AppData\Local\Temp\talos-harness-fixes-20260825-phase3`.
+
+Il Pad è stato ripristinato alla configurazione fisica: 2400x3392, density 420,
+rotazione automatica attiva.
+
+#### Discrepanze trovate, non nascoste
+
+La Fase 3 chiude la geometria del riquadro, non l'intero prodotto. L'ispezione
+ha registrato per la Fase 5: badge demo sovrapposto al testo e alla X della
+palette; Back Android che chiude la palette e torna anche alla lista nello
+stesso gesto; swipe intrappolato dentro il diff; Board mobile che parla di
+TALOS-BANCO senza chiarire subito che è interamente demo; badge che invade
+Review, approvazione, Browser e Context. In landscape il composer corretto
+resta inoltre molto dominante e modello/permessi dovranno essere raggiungibili
+in modo esplicito tramite i relativi pannelli.
+
+Fuori perimetro, nella Chat vista durante il controllo di ritorno, un percorso
+locale molto lungo esce dalla card di errore. È annotato nel taccuino ma non è
+stato corretto perché questa fase autorizza soltanto Harness e il suo guscio.
+
+Il registro dettagliato, con ID, gravità, viewport e destinazione di ogni
+rilievo, è `.claude/TACCUINO-VISIVO-HARNESS-UI-PAD.md`; il ledger contiene ora
+i nuovi scenari permanenti della Fase 5.

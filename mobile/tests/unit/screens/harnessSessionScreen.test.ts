@@ -4,6 +4,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { Capacitor } from '@capacitor/core'
 
+const keyboardMock = vi.hoisted(() => ({
+    listeners: new Map<string, (...args: unknown[]) => void>(),
+    removers: new Map<string, ReturnType<typeof vi.fn>>(),
+}))
+vi.mock('@capacitor/keyboard', () => ({
+    Keyboard: {
+        addListener: vi.fn(async (eventName: string, listener: (...args: unknown[]) => void) => {
+            const remove = vi.fn()
+            keyboardMock.listeners.set(eventName, listener)
+            keyboardMock.removers.set(eventName, remove)
+            return { remove }
+        }),
+    },
+}))
+
 // Harness UI (24/8): NOT a trampoline anymore — `useRoute` is mocked directly
 // (rather than mounted under a real router) because the only thing this
 // screen reads from it is `params.id`, kept purely for diagnosis — see the
@@ -32,6 +47,8 @@ async function resolveScriptLoad(host: HTMLElement): Promise<void> {
 describe('HarnessSessionScreen (24/8) — shadow root inside the SPA, not a trampoline out of it', () => {
     beforeEach(() => {
         mockState.params = { id: 'refactor-auth-flow' }
+        keyboardMock.listeners.clear()
+        keyboardMock.removers.clear()
         Object.defineProperty(window, 'location', {
             configurable: true,
             value: { ...window.location, assign: vi.fn() },
@@ -46,6 +63,7 @@ describe('HarnessSessionScreen (24/8) — shadow root inside the SPA, not a tram
         delete (window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot
         delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
         delete (window as unknown as { __talosHarnessDestroy?: unknown }).__talosHarnessDestroy
+        delete (window as unknown as { __talosHarnessUiRuntime?: unknown }).__talosHarnessUiRuntime
         vi.unstubAllGlobals()
         vi.restoreAllMocks()
     })
@@ -110,5 +128,31 @@ describe('HarnessSessionScreen (24/8) — shadow root inside the SPA, not a tram
 
         expect(destroy).toHaveBeenCalledTimes(1)
         expect((window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot).toBeUndefined()
+    })
+
+    it('HARNESS-KEYBOARD-NATIVE-RESIZE-01 forwards native show/hide and removes both listeners', async () => {
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+        const setKeyboardOpen = vi.fn()
+        ;(window as unknown as {
+            __talosHarnessUiRuntime?: { setKeyboardOpen(open: boolean): void }
+        }).__talosHarnessUiRuntime = { setKeyboardOpen }
+
+        const w = mount(HarnessSessionScreen)
+        await flushPromises()
+
+        expect([...keyboardMock.listeners.keys()].sort()).toEqual([
+            'keyboardWillHide',
+            'keyboardWillShow',
+        ])
+
+        keyboardMock.listeners.get('keyboardWillShow')?.({ keyboardHeight: 320 })
+        keyboardMock.listeners.get('keyboardWillHide')?.()
+        expect(setKeyboardOpen).toHaveBeenNthCalledWith(1, true)
+        expect(setKeyboardOpen).toHaveBeenNthCalledWith(2, false)
+
+        w.unmount()
+        await flushPromises()
+        expect(keyboardMock.removers.get('keyboardWillShow')).toHaveBeenCalledTimes(1)
+        expect(keyboardMock.removers.get('keyboardWillHide')).toHaveBeenCalledTimes(1)
     })
 })
