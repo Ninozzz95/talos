@@ -699,3 +699,82 @@ spacciate per risolte qui: rail sessioni tablet non comprimibile (Fase 2),
 composer/tastiera/nav inferiore nelle forme telefono (Fase 3), selezione rotta
 non sincronizzata col mockup (Fase 4), controlli/collisioni (Fase 5) e token
 tema live (Fase 6).
+
+### Fase 2 — rail Harness comprimibile e local-first
+
+Stato: **completata e verificata sul Pad reale**.
+
+In parole semplici: sul tablet la lista delle sessioni Harness può ora essere
+ridotta a una barra stretta da 72px e riaperta quando serve. La scelta viene
+salvata sul dispositivo e sopravvive alla chiusura e riapertura dell'app,
+senza rete. Questa preferenza riguarda soltanto Harness: la lista Chat conserva
+larghezza, ricerca e contenuto normali.
+
+La prima prova sul Pad ha trovato una regressione reale: dopo la compressione
+l'app montava per errore la lista Chat dentro i 72px, rendendola illeggibile.
+La fase è stata fermata; il fotogramma difettoso è stato conservato, la causa
+nel ramo Vue è diventata il test permanente
+`HARNESS-COLLAPSED-NO-CHAT-CONTENT-01`, quindi il fix è stato riprovato sul
+dispositivo. Il rail compresso finale non monta né Harness né Chat: mostra solo
+hamburger ed espansione, mentre il contenuto centrale usa lo spazio liberato.
+
+File di produzione chiusi in questa fase:
+
+- `mobile/src/App.vue`
+- `mobile/src/components/shell/TalosTabletSidebar.vue`
+- `mobile/src/lib/tabletLayout.ts`
+- `mobile/src/stores/settings.ts`
+- `mobile/src/i18n/locales/en.ts`
+- `mobile/src/i18n/locales/it.ts`
+
+Test permanenti aggiornati o aggiunti:
+
+- `mobile/tests/unit/lib/tabletLayout.test.ts`
+- `mobile/tests/unit/shell/TalosTabletSidebar.test.ts`
+
+La nuova preferenza `tablet_harness_sidebar_collapsed` usa lo store Settings e
+Capacitor Preferences già adottati dal prodotto: è locale al device, viene
+validata in modo fail-closed e non modifica il contratto Chat. La larghezza
+effettiva è calcolata da `talosTabletSidebarEffectiveWidth`; il variant Harness
+espone il toggle, il variant Chat lo ignora.
+
+Il primo GREEN automatico ha anche fatto scattare correttamente il budget del
+bundle iniziale: 614.590 byte contro il massimo 614.000. La soglia non è stata
+alzata. Il dialogo di consenso immagini, già opzionale, viene ora caricato solo
+quando serve tramite lo stesso confine asincrono degli altri dialoghi; build
+finale della fase 613.656/614.000 byte.
+
+Prove automatiche fresche della fase:
+
+- gruppo mirato: 4 file, **40 test passati**, zero falliti;
+- `npm run build`: exit 0, JavaScript iniziale 613.656/614.000 byte;
+- verifica parity del bundle Harness: 18/18 passata;
+- `npx cap copy android`: exit 0;
+- compilazioni debug Kotlin e release Java: BUILD SUCCESSFUL;
+- installazione debug side-by-side sul Pad: BUILD SUCCESSFUL.
+
+Prove reali e ispezione visiva:
+
+- tablet orizzontale 3392x2400: rail aperto, compresso, persistenza dopo
+  riavvio, riapertura e Chat invariata;
+- tablet verticale 2400x3392: rail aperto e compresso;
+- telefono orizzontale 2400x1080: lista e dettaglio dopo avvio a freddo,
+  `tablet:false` verificato nel DOM;
+- telefono verticale 1080x2400: lista e dettaglio dopo avvio a freddo,
+  `tablet:false` verificato nel DOM.
+
+Tutti i tredici PNG, inclusi quelli difettosi intermedi, sono stati ispezionati
+per intero in due passaggi con la disciplina `frontend-design`. Evidenze:
+`C:\Users\Antonino\AppData\Local\Temp\talos-harness-fixes-20260825-phase2`.
+Il registro completo è `.claude/TACCUINO-VISIVO-HARNESS-UI-PAD.md`.
+Al termine della matrice il Pad è stato ripristinato ai valori fisici
+2400x3392, density 420, rotazione automatica attiva
+(`accelerometer_rotation=1`, `user_rotation=1`).
+
+Discrepanze che la fase ha reso precise ma non ha nascosto: sul dettaglio
+telefono manca una navigazione visibile e resta molto spazio morto; il composer
+è ancora tagliato/coperto in basso; l'ultima sessione della lista orizzontale è
+parzialmente fuori schermo; i due chevron tablet (comprimi e torna indietro)
+sono semanticamente vicini; nella prova Chat sono presenti errori runtime
+preesistenti e percorsi grezzi, annotati fuori perimetro. I primi problemi
+Harness passano alle Fasi 3, 5 e 6; nessun fix Chat è stato eseguito.

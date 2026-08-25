@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+    TALOS_TABLET_HARNESS_RAIL_COLLAPSED,
     TALOS_TABLET_SIDEBAR_DEFAULT,
     TALOS_TABLET_SIDEBAR_MAX,
     TALOS_TABLET_SIDEBAR_MIN,
     clampTalosTabletSidebarWidth,
+    talosTabletSidebarEffectiveWidth,
     talosTabletLeavesHarnessListRoute,
 } from '@/lib/tabletLayout'
 import {
@@ -53,6 +55,15 @@ describe('clampTalosTabletSidebarWidth (F6)', () => {
         expect(clampTalosTabletSidebarWidth(Number.NaN)).toBe(TALOS_TABLET_SIDEBAR_DEFAULT)
         expect(clampTalosTabletSidebarWidth(Number.POSITIVE_INFINITY)).toBe(TALOS_TABLET_SIDEBAR_DEFAULT)
         expect(clampTalosTabletSidebarWidth(null)).toBe(TALOS_TABLET_SIDEBAR_DEFAULT)
+    })
+})
+
+describe('Harness tablet rail collapse', () => {
+    it('HARNESS-TABLET-RAIL-COLLAPSE-01 only collapses the Harness variant', () => {
+        expect(TALOS_TABLET_HARNESS_RAIL_COLLAPSED).toBe(72)
+        expect(talosTabletSidebarEffectiveWidth(372, 'harness', true)).toBe(72)
+        expect(talosTabletSidebarEffectiveWidth(372, 'harness', false)).toBe(372)
+        expect(talosTabletSidebarEffectiveWidth(372, 'chat', true)).toBe(372)
     })
 })
 
@@ -107,6 +118,28 @@ describe('shell.tablet_sidebar_width persistence (F6)', () => {
         // ⛔ 2026-08-17: questo magazzino nasce senza niente di salvato, quindi
         // e un'installazione NUOVA e prende il predefinito nuovo.
         expect(fresh.state.shell.composer_shape).toBe('compact')
+    })
+})
+
+describe('shell.tablet_harness_sidebar_collapsed persistence', () => {
+    it('HARNESS-TABLET-RAIL-LOCAL-FIRST-01 defaults closed safely and rejects corrupt values', () => {
+        expect(parseTalosMobileSettings(null).shell.tablet_harness_sidebar_collapsed).toBe(false)
+        const corrupt = parseTalosMobileSettings(JSON.stringify({
+            shell: { tablet_harness_sidebar_collapsed: 'yes' },
+        }))
+        expect(corrupt.shell.tablet_harness_sidebar_collapsed).toBe(false)
+    })
+
+    it('HARNESS-TABLET-RAIL-LOCAL-FIRST-01 survives a store reset and native hydrate', async () => {
+        const store = useSettingsStore()
+        await store.setShell({ tablet_harness_sidebar_collapsed: true })
+        __resetSettingsStoreForTests()
+
+        const fresh = useSettingsStore()
+        await fresh.hydrate()
+
+        expect(fresh.state.shell.tablet_harness_sidebar_collapsed).toBe(true)
+        expect(fresh.state.shell.tablet_sidebar_width).toBe(TALOS_TABLET_SIDEBAR_DEFAULT)
     })
 })
 

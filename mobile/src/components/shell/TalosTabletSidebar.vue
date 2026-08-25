@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { Menu } from '@lucide/vue'
+import { ChevronLeft, ChevronRight, Menu } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 /*
  * L'elenco delle chat arriva quando la barra si mostra, non all'avvio.
@@ -35,13 +35,19 @@ const TalosMobileDownloadCenterTrigger = defineAsyncComponent(
  * fatta lì, non duplicata qui. The width is driven by the shell (drag
  * divider + persisted setting).
  */
-const props = withDefaults(defineProps<{ width: number; variant?: 'chat' | 'harness' }>(), {
+const props = withDefaults(defineProps<{
+    width: number
+    variant?: 'chat' | 'harness'
+    collapsed?: boolean
+}>(), {
     variant: 'chat',
+    collapsed: false,
 })
 
 const emit = defineEmits<{
     activated: []
     openMenu: []
+    toggleCollapsed: []
 }>()
 
 const { t } = useTalosI18n()
@@ -53,6 +59,7 @@ const { t } = useTalosI18n()
 const panelLabel = computed(() => (
     props.variant === 'harness' ? t('accessibility.harnessPanel') : t('accessibility.chatsPanel')
 ))
+const harnessCollapsed = computed(() => props.variant === 'harness' && props.collapsed)
 </script>
 
 <template>
@@ -60,11 +67,15 @@ const panelLabel = computed(() => (
     <aside
         data-testid="talos-tablet-sidebar"
         :data-talos-tablet-sidebar-variant="variant"
+        :data-talos-tablet-sidebar-collapsed="String(harnessCollapsed)"
         :aria-label="panelLabel"
         class="relative z-20 flex min-h-0 shrink-0 flex-col border-r border-transparent bg-[var(--talos-sidebar)]/60 pl-[env(safe-area-inset-left)] backdrop-blur-sm"
         :style="{ width: `${width}px` }"
     >
-        <div class="flex items-center gap-2 px-4 pb-1 pt-[max(0.75rem,env(safe-area-inset-top))]">
+        <div
+            class="flex items-center pb-1 pt-[max(0.75rem,env(safe-area-inset-top))]"
+            :class="harnessCollapsed ? 'flex-col gap-1 px-2' : 'gap-2 px-4'"
+        >
             <Button
                 type="button"
                 size="icon-lg"
@@ -76,11 +87,25 @@ const panelLabel = computed(() => (
             >
                 <Menu aria-hidden="true" />
             </Button>
-            <span class="talos-orbitron-brand text-sm tracking-[0.2em] text-[var(--talos-text)]">TALOS</span>
-            <div class="ml-auto"><TalosMobileNotificationBell />
+            <Button
+                v-if="variant === 'harness'"
+                type="button"
+                size="icon-lg"
+                variant="ghost"
+                data-testid="talos-tablet-harness-toggle"
+                class="min-h-touch min-w-touch"
+                :aria-label="$t(harnessCollapsed ? 'accessibility.expandHarnessSessions' : 'accessibility.collapseHarnessSessions')"
+                :aria-expanded="String(!harnessCollapsed)"
+                @click="emit('toggleCollapsed')"
+            >
+                <ChevronRight v-if="harnessCollapsed" aria-hidden="true" />
+                <ChevronLeft v-else aria-hidden="true" />
+            </Button>
+            <span v-if="!harnessCollapsed" class="talos-orbitron-brand text-sm tracking-[0.2em] text-[var(--talos-text)]">TALOS</span>
+            <div v-if="!harnessCollapsed" class="ml-auto"><TalosMobileNotificationBell />
             <TalosMobileDownloadCenterTrigger /></div>
         </div>
-        <HarnessScreen v-if="variant === 'harness'" embedded class="min-h-0 flex-1" />
-        <ChatsScreen v-else embedded class="min-h-0 flex-1" @activated="emit('activated')" />
+        <HarnessScreen v-if="variant === 'harness' && !harnessCollapsed" embedded class="min-h-0 flex-1" />
+        <ChatsScreen v-else-if="variant === 'chat'" embedded class="min-h-0 flex-1" @activated="emit('activated')" />
     </aside>
 </template>

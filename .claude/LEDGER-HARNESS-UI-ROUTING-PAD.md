@@ -27,6 +27,7 @@ Stato: approvato dall'owner, esecuzione con TDD e gate real-device.
 5. `mobile/tests/unit/harness/harnessUiAssetContract.test.ts`
 6. `mobile/tests/unit/harness/harnessUiFrontend.test.ts`
 7. `mobile/tests/e2e/mobile-harness-ui.e2e.spec.ts`
+8. `.claude/TACCUINO-VISIVO-HARNESS-UI-PAD.md`
 
 ### Modificare
 
@@ -154,6 +155,32 @@ Fallimento atteso: prop/evento/preferenza assenti; larghezza sempre 260–480.
 GREEN: `npx vitest run tests/unit/lib/tabletLayout.test.ts tests/unit/shell/TalosTabletSidebar.test.ts tests/unit/shell/appShell.test.ts`.
 Pad: comprimi, naviga, riavvia; quattro forme. Commit:
 `feat(harness-ui): comprimi la lista sessioni sul tablet`.
+
+Amendamento 25/8 dopo il primo GREEN: la Fase 1 aveva lasciato il chunk iniziale
+a 613.909 byte su un massimo invariato di 614.000. La nuova logica local-first
+ha portato il dato a 614.590: test e typecheck verdi, ma build correttamente
+rossa. La soglia non viene alzata. `TalosMobileConfirmDialog`, già mostrato solo
+quando esiste una richiesta di consenso immagine, passa allo stesso confine
+asincrono degli altri dialoghi opzionali di `App.vue`; il comportamento resta
+invariato e il suo codice non grava più sul primo paint. Gate aggiunto:
+`INITIAL-CHUNK-BUDGET-01`, `npm run build` deve restare <= 614.000 byte.
+
+Amendamento visivo 25/8: ogni screenshot del piano entra nel taccuino dedicato
+con due passaggi obbligatori — composizione intera e poi dettagli/interazioni.
+Per ogni file si registrano dimensioni reali, stato mostrato, difetti anche
+fuori fase e destinazione della cura. Nessun nome file vale come prova. Nella
+forma telefono orizzontale il processo viene riavviato dopo `wm size`: la
+protezione anti-rimbalzo da tastiera del composable tablet può altrimenti
+conservare lo split precedente e produrre uno screenshot etichettato in modo
+falso. Gate permanente: `PAD-VIEWPORT-COLD-START-01`.
+
+Regressione scoperta sul Pad 25/8 dopo il riavvio local-first:
+`HARNESS-COLLAPSED-NO-CHAT-CONTENT-01`. Il ramo `v-else` di
+`TalosTabletSidebar` montava `ChatsScreen` quando la condizione composta
+`variant === 'harness' && !collapsed` diventava falsa. Risultato reale: lista
+Chat compressa in 72px sotto i soli due controlli Harness. Il rail Harness
+compresso non deve montare né `HarnessScreen` né `ChatsScreen`; Chat continua
+a montare soltanto con `variant === 'chat'`. RED: entrambi gli stub assenti.
 
 ## Fase 3 — host, composer e tastiera
 

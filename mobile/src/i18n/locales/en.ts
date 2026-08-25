@@ -3317,6 +3317,8 @@ export const TALOS_EN_MESSAGES = {
         // Harness sessions instead of chats — must say what is actually on
         // screen, same principle as chatsPanel above.
         harnessPanel: 'Harness panel',
+        collapseHarnessSessions: 'Collapse Harness sessions',
+        expandHarnessSessions: 'Expand Harness sessions',
     },
     shell: {
         sidebarDescription: 'Chats, tools and settings',

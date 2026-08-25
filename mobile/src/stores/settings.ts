@@ -342,6 +342,8 @@ export interface TalosMobileShellPreferences {
     debug_diagnostics: boolean
     /** F6 — persisted tablet split-view sidebar width (px, clamped 260–480). */
     tablet_sidebar_width: number
+    /** Harness-only rail state, stored locally with the rest of the shell. */
+    tablet_harness_sidebar_collapsed: boolean
 }
 
 // Owner #15 (2026-07-23): immersive chrome and the Claude-style composer
@@ -394,6 +396,7 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     streaming_animation: 'typewriter',
     debug_diagnostics: false,
     tablet_sidebar_width: TALOS_TABLET_SIDEBAR_DEFAULT,
+    tablet_harness_sidebar_collapsed: false,
 }
 
 function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
@@ -490,6 +493,9 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         // cannot start showing internals to a user who never asked.
         debug_diagnostics: record.debug_diagnostics === true,
         tablet_sidebar_width: clampTalosTabletSidebarWidth(record.tablet_sidebar_width),
+        tablet_harness_sidebar_collapsed: typeof record.tablet_harness_sidebar_collapsed === 'boolean'
+            ? record.tablet_harness_sidebar_collapsed
+            : DEFAULT_SHELL_PREFERENCES.tablet_harness_sidebar_collapsed,
     }
 }
 
