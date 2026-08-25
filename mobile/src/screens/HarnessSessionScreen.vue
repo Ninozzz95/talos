@@ -53,7 +53,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { PluginListenerHandle } from '@capacitor/core'
 import { Keyboard } from '@capacitor/keyboard'
-import { CircleAlert } from '@lucide/vue'
+import { CircleAlert, ShieldCheck } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
 import TalosMobileComposer from '@/components/chat/TalosMobileComposer.vue'
@@ -104,6 +104,7 @@ const codeEffort = ref<TalosMobileEffortLevel>('high')
 const codeThinking = ref(false)
 const codeBrowseMode = ref(false)
 const codeView = ref('chat')
+const codePermission = ref('Workspace write')
 
 const CODE_MODEL_PROFILES: TalosMobileModelProfileView[] = [{
     id: 'code-gpt-5-6-sol',
@@ -127,7 +128,7 @@ const codeCanSend = computed(() => codePrompt.value.trim().length > 0)
 let scriptEl: HTMLScriptElement | null = null
 let mounted = false
 const keyboardListeners: PluginListenerHandle[] = []
-let composerResizeObserver: ResizeObserver | null = null
+let composerLayoutObserver: ResizeObserver | null = null
 
 async function retainKeyboardListener(registration: Promise<PluginListenerHandle>): Promise<void> {
     try {
@@ -149,14 +150,14 @@ async function attachKeyboardBridge(): Promise<void> {
             'keyboardWillShow',
             () => {
                 setTalosHarnessUiKeyboardOpen(true)
-                void nextTick(syncComposerClearance)
+                void nextTick(syncComposerLayout)
             },
         )),
         retainKeyboardListener(Keyboard.addListener(
             'keyboardWillHide',
             () => {
                 setTalosHarnessUiKeyboardOpen(false)
-                void nextTick(syncComposerClearance)
+                void nextTick(syncComposerLayout)
             },
         )),
     ])
@@ -181,17 +182,42 @@ function syncComposerClearance(): void {
     )
 }
 
-function observeComposerClearance(): void {
-    composerResizeObserver?.disconnect()
-    composerResizeObserver = null
+function syncComposerWorkspaceBounds(): void {
+    const host = hostEl.value
     const dock = composerDockEl.value
-    if (!dock || typeof ResizeObserver !== 'function') {
-        syncComposerClearance()
+    if (!host || !dock) return
+    const workspace = host.shadowRoot?.querySelector<HTMLElement>('.workspace-shell')
+    if (!workspace) {
+        dock.style.left = '0px'
+        dock.style.right = '0px'
         return
     }
-    composerResizeObserver = new ResizeObserver(syncComposerClearance)
-    composerResizeObserver.observe(dock)
+    const hostRect = host.getBoundingClientRect()
+    const workspaceRect = workspace.getBoundingClientRect()
+    dock.style.left = `${Math.max(0, workspaceRect.left - hostRect.left)}px`
+    dock.style.right = `${Math.max(0, hostRect.right - workspaceRect.right)}px`
+}
+
+function syncComposerLayout(): void {
+    syncComposerWorkspaceBounds()
     syncComposerClearance()
+}
+
+function observeComposerLayout(): void {
+    composerLayoutObserver?.disconnect()
+    composerLayoutObserver = null
+    const host = hostEl.value
+    const dock = composerDockEl.value
+    const workspace = host?.shadowRoot?.querySelector<HTMLElement>('.workspace-shell')
+    if (!host || !dock || typeof ResizeObserver !== 'function') {
+        syncComposerLayout()
+        return
+    }
+    composerLayoutObserver = new ResizeObserver(syncComposerLayout)
+    composerLayoutObserver.observe(host)
+    composerLayoutObserver.observe(dock)
+    if (workspace) composerLayoutObserver.observe(workspace)
+    syncComposerLayout()
 }
 
 function updateCodePrompt(value: string): void {
@@ -238,6 +264,7 @@ function teardown(): void {
     delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
     delete (window as unknown as { __talosHarnessHostBack?: unknown }).__talosHarnessHostBack
     delete (window as unknown as { __talosHarnessHostViewChange?: unknown }).__talosHarnessHostViewChange
+    delete (window as unknown as { __talosHarnessHostPermissionChange?: unknown }).__talosHarnessHostPermissionChange
     scriptEl?.remove()
     scriptEl = null
 }
@@ -303,6 +330,8 @@ async function mountMockup(): Promise<void> {
         ;(window as unknown as { __talosHarnessHostBack?: () => void }).__talosHarnessHostBack = returnToHarnessList
         ;(window as unknown as { __talosHarnessHostViewChange?: (view: string) => void })
             .__talosHarnessHostViewChange = (view) => { codeView.value = view }
+        ;(window as unknown as { __talosHarnessHostPermissionChange?: (permission: string) => void })
+            .__talosHarnessHostPermissionChange = (permission) => { codePermission.value = permission }
 
         await new Promise<void>((resolve, reject) => {
             const script = document.createElement('script')
@@ -321,7 +350,7 @@ async function mountMockup(): Promise<void> {
     } finally {
         loading.value = false
         await nextTick()
-        observeComposerClearance()
+        observeComposerLayout()
     }
 }
 
@@ -348,14 +377,14 @@ watch(selectedSession, (selection) => {
     }
 }, { flush: 'post' })
 
-watch(composerDockEl, observeComposerClearance, { flush: 'post' })
-watch(codeView, () => { void nextTick(syncComposerClearance) })
+watch(composerDockEl, observeComposerLayout, { flush: 'post' })
+watch(codeView, () => { void nextTick(syncComposerLayout) })
 
 onBeforeUnmount(() => {
     mounted = false
     void detachKeyboardBridge()
-    composerResizeObserver?.disconnect()
-    composerResizeObserver = null
+    composerLayoutObserver?.disconnect()
+    composerLayoutObserver = null
     teardown()
 })
 </script>
@@ -446,7 +475,20 @@ onBeforeUnmount(() => {
                     @enhance-prompt="announceCodeComposerAction('enhance')"
                     @enhance-blocked="announceCodeComposerAction('enhance-blocked')"
                     @open-browser-url="announceCodeComposerAction('browser-url')"
-                />
+                >
+                    <button
+                        type="button"
+                        data-testid="talos-code-autonomy-chip"
+                        :aria-label="`${t('autonomia.titolo')}: ${codePermission}`"
+                        :title="codePermission"
+                        aria-haspopup="dialog"
+                        class="talos-pressable flex min-h-touch max-w-40 shrink-0 items-center gap-1.5 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2.5 text-xs text-[var(--talos-muted)]"
+                        @click="announceCodeComposerAction('permissions')"
+                    >
+                        <ShieldCheck class="size-3.5 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                        <span class="hidden min-w-0 truncate md:inline">{{ codePermission }}</span>
+                    </button>
+                </TalosMobileComposer>
             </div>
         </template>
     </TalosMobileScreen>
@@ -467,6 +509,10 @@ onBeforeUnmount(() => {
 
 .talos-code-composer-dock :deep([data-testid="talos-mobile-composer"]) {
     pointer-events: auto;
+    box-sizing: border-box;
+    width: calc(100% - 1.5rem);
+    max-width: 920px;
+    margin-inline: auto;
 }
 
 @media (max-width: 780px), (max-height: 500px) {

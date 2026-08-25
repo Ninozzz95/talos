@@ -402,6 +402,72 @@ a ricordare soltanto il minimo necessario (nome, parametri, provenienza dalla
 sidebar). Pin invariati; nessuna dipendenza. RED permanente:
 `CODE-SETTINGS-RETURN-SESSION-01`.
 
+### Stabilità della testata durante un fling — regressione owner 25/8
+
+- https://www.w3.org/TR/2025/WD-cssom-view-1-20250916/#scrolling-events
+- https://developer.mozilla.org/en-US/docs/Web/API/Document/scroll_event
+
+La CSSOM View 2025 specifica che gli eventi `scroll` vengono emessi anche
+quando lo spostamento non nasce da un nuovo gesto dell'utente: qualunque
+variazione della scrolling box entra nella stessa coda di eventi. MDN ricorda
+inoltre che gli eventi possono arrivare ad alta frequenza durante uno scroll
+veloce. Il codice precedente confrontava soltanto due valori consecutivi di
+`scrollTop`, quindi scambiava per inversione dell'utente anche il ricalcolo
+prodotto dalla propria animazione.
+
+La prova reale sul Pad rende la causa deterministica. Il primo fling verso il
+basso applica `.is-scroll-hidden`; la topbar riduce la propria altezza e il
+contenitore acquista spazio verticale. Se il transcript era vicino al fondo,
+il nuovo massimo di scroll diventa più piccolo e il browser riporta
+automaticamente `scrollTop` entro quel massimo. Il delta risulta negativo pur
+senza alcun gesto verso l'alto: la testata viene riaperta e il layout torna a
+spostarsi, generando il lampeggio compatta/espansa segnalato dall'owner. Due
+screenshot consecutivi con soli fling verso il basso mostrano rispettivamente
+topbar nascosta e poi riapparsa.
+
+Decisione upstream: **adattare direttamente la semantica della scrolling box**
+senza nuova dipendenza. Un delta negativo riapre la testata soltanto quando lo
+scrollport non è ancora ancorato al suo fondo corrente
+(`scrollHeight - clientHeight - scrollTop` oltre una piccola tolleranza CSS).
+La riduzione imposta dal layout, che termina esattamente al nuovo massimo, non
+è un'intenzione dell'utente e viene ignorata. Appena un vero gesto risale,
+`scrollTop` si stacca dal massimo e la testata torna. Sono respinti sia un timer
+cieco (ritarderebbe anche un vero gesto inverso), sia una topbar solo traslata
+che conserverebbe il vuoto verticale già esplicitamente rifiutato dall'owner.
+Pin invariati; nessuna dipendenza. RED permanente:
+`CODE-TOPBAR-NO-FLAP-01`.
+
+### Composer limitato alla colonna di conversazione — correzione owner 25/8
+
+- https://www.w3.org/TR/resize-observer/
+- https://developer.mozilla.org/en-US/docs/Web/API/Resize_Observer_API
+- https://developer.mozilla.org/en-US/docs/Web/API/Element/getBoundingClientRect
+
+L'ispezione completa richiesta dall'owner ha invalidato il precedente esito
+tablet landscape: il composer Vue condiviso era ancorato ai due bordi della
+surface TALOS, mentre dentro lo Shadow DOM la griglia Codice divide quella
+stessa surface in `workspace-shell` e `inspector-panel`. Di conseguenza il
+composer passava sotto la colonna Contesto per tutta la sua larghezza. Il vecchio
+RED `CODE-COMPOSER-TABLET-RAIL-01` proteggeva soltanto il rail globale sinistro e
+non esprimeva il confine destro; era quindi necessario ma incompleto.
+
+W3C definisce `ResizeObserver` come l'API per osservare i cambi di dimensione di
+un elemento, e MDN conferma che `getBoundingClientRect()` restituisce dimensione
+e posizione nello stesso sistema di coordinate del viewport. Decisione
+upstream: **adottare direttamente entrambe le primitive native**, senza package
+o timer. L'adattatore Vue misura il rettangolo dell'host e quello della sua
+`.workspace-shell`, converte le differenze nei due inset del dock e osserva host,
+workspace e composer. In questo modo il componente resta esattamente
+`TalosMobileComposer.vue`, ma segue anche apertura, chiusura e ridimensionamento
+animato della colonna Contesto. Sotto 1041px la workspace coincide con l'host e
+gli inset tornano naturalmente a zero.
+
+Respinti: un valore fisso da 310/340px, perché il Context rail è ridimensionabile;
+un nuovo composer interno allo Shadow DOM, perché violerebbe la fonte unica già
+decisa; un ritaglio con `overflow`, perché nasconderebbe controlli e hit target
+senza correggere la geometria. Pin invariati, nessuna nuova dipendenza. RED
+permanente: `CODE-COMPOSER-CONTEXT-RAIL-01`.
+
 ## Decisione prodotto owner 25/8 — «Codice»
 
 Ogni riferimento visibile al nome prodotto Harness diventa **Codice** in
@@ -625,6 +691,50 @@ restano invariati.
 
 ## Pin upstream
 
+## Conformità Drawer globale
+
+La suite completa ha scoperto che l'adattamento Harness di
+`DrawerContent.vue` era funzionale e già verificato sul Pad, ma non dichiarato
+nel manifest upstream. La ricerca dedicata è in
+`mobile/docs/superpowers/research/2026-08-25-harness-drawer-layering-conformance.md`.
+Fonti primarie: documentazione Drawer e repository ufficiali shadcn-vue;
+pin npm verificato `2.8.0`, integrità identica al manifest, licenza MIT.
+
+Decisione: **adattare**. L'hash upstream resta immutabile; l'hash accettato
+registra solo la prop `overlayClass` inoltrata all'overlay del portal. Il test
+mantiene un elenco esatto di quattro adattamenti e un dossier esatto per
+destinazione. Nessun bypass e nessuna accettazione aperta del drift.
+
+RED permanente: `HARNESS-DRAWER-UPSTREAM-ADAPTATION-01`.
+
+## Larghezza estrinseca del composer quando i rail sono chiusi
+
+Fonti ufficiali consultate il 25/8:
+
+- W3C CSS Box Sizing Module Level 3, proprietà di dimensione massima:
+  https://www.w3.org/TR/css-sizing-3/
+- MDN, allineamento dei blocchi con margini automatici:
+  https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Box_alignment/In_block_abspos_tables
+- MDN, `calc()` per sottrarre il margine minimo dalla larghezza disponibile:
+  https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Values/calc
+
+La specifica stabilisce che `max-width` limita la dimensione preferita del box;
+i margini inline `auto` assorbono lo spazio residuo. È quindi possibile
+esprimere interamente in CSS il contratto richiesto: larghezza fluida nelle
+viewport strette, tetto massimo e centratura nelle workspace larghe.
+
+Decisione upstream: **adottare direttamente** `width`, `max-width` e
+`margin-inline:auto` sulla stessa istanza condivisa di
+`TalosMobileComposer.vue`, confinata dalla regola scoped di Codice. Il pin
+prodotto è `920px`, già presente in `public/harness-ui/styles.css` per
+`.conversation` e `.composer-wrap`; non viene introdotto un nuovo numero di
+design. Respinti un listener JS per la larghezza, un secondo composer e un
+limite sul dock intero: il primo duplicherebbe il layout CSS, il secondo
+violerebbe la fonte unica Chat, il terzo romperebbe l'aggancio dinamico al
+Context rail.
+
+RED permanente: `CODE-COMPOSER-MAX-WIDTH-01`.
+
 - `vue@3.5.40`
 - `vue-router@5.2.0`
 - `@capacitor/core@8.4.2`
@@ -635,6 +745,60 @@ restano invariati.
 
 Nessuna nuova dipendenza. Media Queries, `:has()`, Container Queries,
 ResizeObserver, Shadow DOM e top-layer sono API native del browser target.
+
+## Composer Codice — ripristino autonomia agente
+
+Ricerca svolta il 25/8 dopo aver verificato il flusso locale:
+
+- Vue 3, named slots: https://vuejs.org/guide/components/slots.html
+- HTML Living Standard, `dialog` e `close` event:
+  https://html.spec.whatwg.org/multipage/interactive-elements.html#the-dialog-element
+- MDN, `HTMLDialogElement`:
+  https://developer.mozilla.org/en-US/docs/Web/API/HTMLDialogElement
+
+Il pin applicativo resta `vue@3.5.40`. Vue definisce il named slot come outlet
+del frammento posseduto dal genitore; lo Standard HTML garantisce che la
+chiusura di un `dialog` tramite il suo contratto nativo emetta `close`. Nel
+progetto il runtime statico possiede già il dialog completo con le quattro
+policy e `TalosMobileComposer.vue` possiede già i due layout della toolbar.
+
+Decisione upstream: **adottare direttamente** lo slot Vue e il dialog nativo
+esistente. Si aggiunge il solo outlet predefinito in entrambi i layout
+del composer; Codice fornisce la pill e il runtime esistente resta unica fonte
+delle opzioni. Respinti un nuovo drawer Vue, la copia delle quattro policy e un
+secondo composer: tutti duplicherebbero comportamento già presente.
+
+RED permanenti: `CODE-COMPOSER-AUTONOMY-PILL-01` e
+`CODE-COMPOSER-AUTONOMY-SHEET-01`.
+
+Il primo build ha misurato 614.024 byte su un tetto di 614.000 usando il named
+slot. Poiché non esiste un secondo contenuto da distinguere, il default slot è
+la forma standard più corta e conserva lo stesso contratto; il budget resta
+invariato.
+
+## Clipping della surface globale senza pan invisibile
+
+Ricerca svolta il 25/8 dopo la misura reale
+`scrollWidth=745px / clientWidth=393px / scrollLeft=49,09px`:
+
+- CSS Overflow Module Level 3, §3.1:
+  https://drafts.csswg.org/css-overflow/#propdef-overflow
+- MDN, proprietà `overflow`:
+  https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/overflow
+
+Lo standard classifica `hidden` fra i valori scrollabili: il box resta uno
+scroll container. MDN esplicita che focus, `scrollLeft` e `scrollTo()` possono
+muoverlo anche senza scrollbar. `clip` è invece non scrollabile e impedisce lo
+scroll programmatico conservando il clipping.
+
+Decisione upstream: **adottare direttamente `overflow:clip`** sulla surface
+esterna di `TalosMobileToolSheet`. È la più piccola correzione della proprietà
+reale: la surface non è la sede dello scroll, perché lo scroll verticale
+appartiene già al body figlio. Respinti un listener di focus, un reset
+`scrollLeft=0` e una compensazione negativa del dialog: curerebbero singoli
+sintomi lasciando scrollabile l'antenato condiviso.
+
+RED permanente: `CODE-MODAL-NO-HORIZONTAL-PAN-01`.
 
 ## Alternative respinte
 

@@ -132,9 +132,7 @@ const props = withDefaults(defineProps<{
     routingProfiles: () => [],
     selectedModelProfileId: null,
     selectedRoutingProfileId: null,
-    sendDisabledReason: '',
     loadingModels: false,
-    loadingRoutes: false,
     refreshingModels: false,
     attachments: () => [],
     attachmentBusy: false,
@@ -877,6 +875,7 @@ watch(() => props.prompt, () => {
                     >{{ reasoningLabel }}</span>
                 </template>
             </button>
+            <slot />
             <button
                 v-if="showLibraryChip"
                 ref="libraryChip"
@@ -950,6 +949,7 @@ watch(() => props.prompt, () => {
                     />
                     <BrainCircuit v-else class="size-4" aria-hidden="true" />
                 </Button>
+                <slot />
                 <Button
                     v-if="effortAvailable"
                     ref="effortTrigger"

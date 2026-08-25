@@ -1258,3 +1258,300 @@ e corretto prima della consegna. Le prove specifiche Codice e le compilazioni
 sono tutte verdi. Restano due rossi generali già esistenti fuori da Codice e i
 nove debiti mobili appena richiesti, esplicitamente registrati per il lavoro
 successivo.
+
+### Riapertura dopo Fase 7 — regressione testata durante scroll veloce
+
+Stato: **riaperta e bloccante**. L'owner ha segnalato che, scorrendo
+velocemente verso il basso in Codice, la testata alterna compatta ed espansa.
+La regressione è stata riprodotta sul Pad con due fling reali nella stessa
+direzione. Il primo screenshot mostra la testata correttamente ritirata; il
+secondo, senza alcuna inversione, la mostra di nuovo aperta.
+
+La causa non è il token di animazione: è il valore usato per decidere la
+direzione. Quando la testata si ritira, il transcript diventa più alto; vicino
+al fondo il browser abbassa automaticamente la posizione massima di scroll.
+Quel movimento interno veniva scambiato per un dito che risale e riapriva la
+testata, facendo ripartire il ciclo.
+
+Il dossier e il ledger ora impongono un RED permanente:
+`CODE-TOPBAR-NO-FLAP-01`. La correzione distinguerà il riassestamento ancora
+ancorato al fondo da una vera risalita dell'utente. Nessun timer arbitrario,
+nessun vuoto conservato sotto la testata e nessuna nuova dipendenza. I nove
+debiti post-Codice restano sospesi finché questa riapertura non supera di nuovo
+test, build e matrice Pad completa.
+
+#### Riassunto semplice della riapertura
+
+Il problema è confermato: non dipende dalla velocità del dito in sé, ma dal
+fatto che la testata, chiudendosi, cambia lo spazio disponibile e inganna il
+controllo della direzione. Ho fermato il lavoro successivo e registrato file,
+test e prova visiva esatti. Ora si corregge prima questo comportamento; Codice
+non verrà richiuso finché più scroll verso il basso resteranno stabili e la
+testata tornerà soltanto quando si risale davvero.
+
+### Seconda fermata owner — composer troppo largo in tablet landscape
+
+Stato: **riaperto e bloccante**. Guardando nuovamente gli screenshot completi,
+l'owner ha rilevato un errore che la mia precedente ispezione aveva mancato: il
+composer non termina alla fine della conversazione, ma continua sotto la colonna
+Contesto. La precedente dichiarazione visiva di larghezza corretta è ritirata.
+
+La causa è ora misurata nel codice: il componente è quello condiviso della Chat,
+come richiesto, ma il suo dock è largo quanto l'intera finestra Codice. La
+conversazione e il Context rail vengono invece separati dentro lo Shadow DOM;
+nessun vincolo collegava finora il bordo destro del dock al bordo reale della
+conversazione. Il vecchio test proteggeva soltanto dal doppio offset della
+sidebar globale sinistra e non poteva rilevare questa invasione destra.
+
+Il dossier e il ledger aggiungono il RED permanente
+`CODE-COMPOSER-CONTEXT-RAIL-01`. Il fix non crea né copia un composer: misura la
+colonna centrale reale e vincola lì la stessa istanza di
+`TalosMobileComposer.vue`, seguendone i cambi quando Contesto si apre, si chiude
+o viene ridimensionato. La matrice ripartirà dal tablet landscape; finché quello
+screenshot completo non è pulito, Codice resta aperto.
+
+#### Riassunto semplice della seconda fermata
+
+Hai visto correttamente un difetto importante: la barra di scrittura invade una
+zona che non le appartiene. Non basta accorciarla a occhio, perché la colonna a
+destra può cambiare misura. La legherò quindi al bordo vero della conversazione;
+prima lo rendo un test che oggi fallisce, poi installo una nuova APK e ricontrollo
+per primo il tablet orizzontale.
+
+### Esito della correzione — GREEN tecnico, landscape fisico ancora aperto
+
+Il test nuovo è fallito sul difetto preciso (`right` assente al posto dei 340px
+del Context rail) e passa dopo il collegamento dinamico alla workspace. Sono
+verdi 21/21 test della schermata, 71/71 regressioni Codice, typecheck, build,
+8/8 E2E e le compilazioni Android debug/release. La nuova APK è stata installata
+sul Pad.
+
+La prova logica 3392×2400 ha coperto Context aperto, chiuso e riaperto. Il
+composer è sempre lo stesso componente della Chat e ora occupa soltanto la
+colonna conversazione: non entra più sotto il Context rail e mantiene margini
+uguali ai due lati. Tre fling verso il basso hanno lasciato la testata nascosta;
+una risalita reale l'ha ripristinata. Tutti gli screenshot sono stati
+ispezionati per intero e non mostrano scrollbar, collisioni con la barra di
+sistema, sidebar sotto Codice o discontinuità dello sfondo animato.
+
+Percorso prove:
+`C:\Users\Antonino\AppData\Local\Temp\talos-code-context-rail-20260825\`.
+File: `tablet-landscape-context-open.png`,
+`tablet-landscape-context-closed.png`, `tablet-landscape-down-1.png`,
+`tablet-landscape-down-2.png`, `tablet-landscape-down-3.png`,
+`tablet-landscape-up.png`. L'owner ha poi rilevato che il Pad era fisicamente
+verticale: quei PNG non valgono come prova reale del tablet orizzontale e la
+precedente etichetta GREEN è ritirata. Dimostrano soltanto la geometria della
+viewport simulata. Codice non è chiuso finché non passano tablet portrait reale,
+tablet landscape con dispositivo materialmente ruotato e le due forme telefono.
+
+#### Riassunto semplice della fase
+
+La barra di scrittura supera test e simulazione: quando il pannello a destra c'è,
+si ferma prima; quando sparisce, usa lo spazio liberato. Anche la testata è
+stabile nella simulazione. Ma il Pad non era fisicamente girato, quindi non
+chiamo questa una verifica reale orizzontale. Riparto dal portrait fisico e
+rifarò il landscape soltanto con il dispositivo davvero ruotato.
+
+### Verifica successiva — tablet portrait fisico
+
+Ripristinati dimensione e densità fisiche del Pad, il portrait reale 2400×3392
+ha superato la sequenza della testata: aperta all'ingresso, stabilmente nascosta
+dopo tre fling nella stessa direzione, riaperta soltanto da una risalita. I file
+sono `tablet-portrait-physical-open.png`,
+`tablet-portrait-physical-down-1.png`, `-down-2.png`, `-down-3.png` e
+`tablet-portrait-physical-up.png` nella stessa cartella di prove.
+
+Questo passaggio non viene usato per approvare la larghezza del composer: come
+precisato dall'owner, quel difetto appartiene al landscape. Approva soltanto la
+stabilità della testata e l'assenza di collisioni nel portrait fisico. Il gate
+del composer landscape resta intenzionalmente aperto.
+
+#### Riassunto semplice della fase portrait
+
+In verticale la testata ora si comporta bene anche con scroll molto veloci. Non
+sto usando questa prova per dire che la larghezza orizzontale è risolta: quella
+verrà giudicata soltanto con il Pad davvero girato.
+
+### Verifica telefono portrait — GREEN topbar
+
+La prima configurazione è stata scartata perché il file risultava realmente
+2400×1080. Dopo correzione, riavvio a freddo e nuova lettura byte, il telefono
+portrait è 1080×2400. I cinque screenshot `phone-portrait-open.png`,
+`phone-portrait-down-1.png`, `-down-2.png`, `-down-3.png` e
+`phone-portrait-up.png` dimostrano la testata stabile su tre fling e riaperta da
+una vera risalita. Il contenuto del consenso passa completamente sopra il
+composer al secondo scroll, quindi resta raggiungibile; bottom nav e safe area
+sono libere.
+
+#### Riassunto semplice della fase telefono verticale
+
+Ho verificato prima le dimensioni vere, poi il comportamento: in telefono
+verticale la testata non lampeggia più e tutto il contenuto può scorrere sopra la
+barra di scrittura. Questo non sostituisce in alcun modo la prova della larghezza
+in landscape.
+
+### Terza riapertura owner — composer troppo largo con tutti i rail chiusi
+
+Stato: **aperto e bloccante**. La correzione del Context rail decide fino a
+dove il dock può arrivare, ma non stabilisce quanto debba diventare larga la
+barra di scrittura quando tutto lo spazio è libero. Con entrambe le sidebar
+chiuse il composer condiviso si allarga quindi troppo.
+
+La soluzione registrata nel ledger non cambia né duplica il componente Chat:
+Codice conserva `TalosMobileComposer.vue`, gli stessi controlli e le stesse
+animazioni, ma lo centra e gli applica il limite di 920px già usato dalla sua
+conversazione di riferimento. Il nuovo RED permanente è
+`CODE-COMPOSER-MAX-WIDTH-01`. Il gate reale richiede il Pad fisicamente
+orizzontale con Context e lista sessioni aperti/chiusi, screenshot ispezionati
+per intero e sequenza di fling della testata.
+
+#### Riassunto semplice della terza riapertura
+
+Il composer ora sa dove deve fermarsi quando c'è un pannello, ma senza pannelli
+usa troppo spazio. Gli aggiungo un tetto coerente con la chat Codice e lo tengo
+centrato: sui telefoni continuerà a usare quasi tutta la larghezza, sul tablet
+non diventerà una barra sproporzionata. Prima lo proteggo con un test che oggi
+fallisce, poi verifico la nuova APK sul Pad davvero orizzontale.
+
+### Esito terza riapertura — GREEN sul Pad fisicamente landscape
+
+La cura è applicata senza modificare `TalosMobileComposer.vue`: la sola istanza
+visibile dentro Codice riceve larghezza fluida, massimo 920px e centratura.
+Il test `CODE-COMPOSER-MAX-WIDTH-01` è passato dal rosso al verde. Sono verdi
+22/22 test della schermata, 90/90 regressioni Harness/Codice, typecheck, build,
+E2E Codice 8/8 e compilazioni Android debug/release; la nuova APK è installata.
+
+Il Pad era materialmente orizzontale e tutti i PNG risultano 3392×2400. Con
+entrambi i rail chiusi la misura reale è: workspace 1220,19px, composer 920px,
+margini uguali 150,095px. Riaprendo lista sessioni e Context: workspace 752,19px,
+composer 728,19px, margini 12/12px. Tre fling verso il basso non fanno più
+lampeggiare la testata; una risalita vera la riporta. Gli screenshot completi
+non mostrano scrollbar, collisioni, pannelli sotto Codice o discontinuità dello
+sfondo animato.
+
+Prove:
+`C:\Users\Antonino\AppData\Local\Temp\talos-code-context-rail-20260825\` —
+`code-max-width-context-closed.png`,
+`code-max-width-all-rails-closed.png`,
+`code-max-width-all-closed-down-1.png`, `-down-2.png`, `-down-3.png`,
+`code-max-width-all-closed-up.png` e
+`code-max-width-rails-reopened-final.png`.
+
+Durante la misura la prima query aveva preso il composer Chat sottostante,
+nascosto ma ancora nel DOM. La prova non è stata accettata finché la sonda non
+è stata vincolata al dock Codice: l'istanza visibile è quella da 920px. Nessun
+falso verde è rimasto nel dossier.
+
+#### Riassunto semplice della fase larghezza
+
+Quando chiudi tutto, la barra di scrittura ora resta proporzionata e centrata;
+quando riapri i pannelli, si restringe automaticamente e lascia 12px per lato.
+È sempre lo stesso componente della Chat, non una copia. Anche gli scroll rapidi
+e lo sfondo animato restano corretti sul Pad davvero orizzontale.
+
+### Riapertura owner — pill autonomia agente
+
+Il composer condiviso è corretto, ma nel passaggio dal mockup ha perso il
+selettore `Workspace write / Read only / On request / Full access` che stava
+accanto al modello. Il pannello originale è ancora presente e funzionante:
+verrà riaperto dalla nuova pill dentro lo stesso `TalosMobileComposer.vue`, non
+copiato in un secondo componente. Sono registrati due RED e una nuova prova
+completa sul Pad. Codice resta aperto finché questo controllo non è verde.
+
+#### Riassunto semplice della riapertura
+
+La barra di scrittura è quella giusta, ma le mancava un comando del mockup:
+scegliere quanto può agire l'agente. Lo rimetto accanto al modello riusando il
+pannello che esiste già, poi ricontrollo che non stringa o rompa il composer in
+nessuna delle quattro forme.
+
+### Chiusura della forma telefono landscape
+
+Il Pad è rimasto materialmente orizzontale e la forma telefono è stata simulata
+con dimensioni scambiate, perché questo specifico OS ruota a sua volta i valori
+di `wm size`. Il primo tentativo è stato scartato quando il file risultava
+1080×2400. La configurazione valida ha prodotto cinque PNG reali 2400×1080:
+`phone-landscape-physical-open.png`, `-down-1.png`, `-down-2.png`,
+`-down-3.png` e `phone-landscape-physical-up.png`.
+
+Il composer usa la forma compatta a una riga, resta sopra la bottom navigation
+e non perde i controlli essenziali. Tre scroll discendenti tengono la testata
+nascosta e portano prima il messaggio utente, poi quello assistente,
+completamente sopra il dock; la risalita ripristina la testata. Nessuna
+scrollbar, collisione o stato tablet residuo. Al termine size e density sono
+stati ripristinati ai valori fisici 2400×3392 e 420.
+
+#### Riassunto semplice della forma telefono orizzontale
+
+La prova ora è reale e non soltanto nominale: il file è davvero largo e basso.
+La barra resta compatta, i messaggi si possono leggere tutti scorrendo e la
+testata non lampeggia. Il Pad è stato infine riportato alle sue impostazioni
+fisiche, senza lasciare simulazioni attive.
+
+### Esito autonomia agente — controllo ripristinato e matrice visiva GREEN
+
+Il composer Codice continua a essere lo stesso componente della Chat. Accanto
+al modello ora compare di nuovo il controllo dell'autonomia: su tablet mostra
+`Workspace write`, su telefono stretto conserva la stessa area di tocco e si
+riduce all'icona. Apre il pannello originale con `Read only`, `Workspace write`,
+`On request` e `Full access`; una scelta aggiorna immediatamente la pill, mentre
+Back chiude senza cambiare valore.
+
+Durante l'ispezione del telefono portrait è stato trovato e corretto un difetto
+ulteriore: dopo il focus l'intera finestra Codice poteva scivolare di 49px a
+sinistra, tagliando il pannello e facendo riapparire il Context rail a destra.
+La causa non era il pannello, ma il contenitore globale invisibilmente
+scrollabile. La correzione usa il clipping nativo non scrollabile; la misura
+prima/dopo è `scrollLeft 49,09px → 0`.
+
+I quattro screenshot conclusivi, tutti ispezionati integralmente, sono in
+`C:\Users\Antonino\AppData\Local\Temp\talos-code-autonomy-20260825`:
+
+- telefono portrait 1080×2400;
+- telefono landscape 2400×1080;
+- tablet portrait 2400×3392;
+- tablet landscape 3392×2400.
+
+Non risultano tagli laterali, scrollbar, sovrapposizioni con status bar,
+invasioni del Context rail o variazioni di larghezza del composer. Il pannello
+landscape scorre fino agli scope; il valore sopravvive a chiusura e collasso dei
+rail durante la sessione. Il riavvio riparte onestamente da `Workspace write`,
+perché i dati sono ancora demo.
+
+Nuova APK installata sul Pad e copiata anche in
+`C:\Users\Antonino\Downloads\TALOS-dev-2026-08-25.apk`: 54.903.445 byte,
+SHA-256 `4cd3bf0c8c3e3f86d1b985ca3975a83b3fcdc769fb1aab1eaad8e594a7500071`.
+Il Pad è stato ripristinato a 2400×3392, densità 420.
+
+#### Riassunto semplice della fase autonomia
+
+Ora puoi scegliere davvero quanto può agire l'agente dal composer Codice,
+senza aprire un componente diverso dalla Chat. Ho controllato anche il difetto
+che avrebbe potuto far slittare tutta la schermata sui telefoni: non succede
+più. Le quattro forme sono visivamente pulite e il Pad non è rimasto in una
+modalità simulata. Resta soltanto il controllo automatico completo prima di
+chiudere e committare la fase Codice.
+
+### Chiusura automatica Fase 8
+
+Il controllo completo è terminato senza errori:
+
+- 6.335 test unitari verdi; 10 esclusi intenzionalmente;
+- typecheck e controllo sintassi verdi;
+- build entro i limiti congelati (JavaScript 613.995/614.000 byte, CSS
+  215.338/220.000 byte) e parità 18/18;
+- test end-to-end Codice 8/8 verdi;
+- compilazione Android debug/release e installazione reale verdi;
+- `git diff --check` verde.
+
+Anche il precedente debito di conformità shadcn è ora chiuso con un adattamento
+esatto e documentato, non con un'eccezione generica. La fase Codice è pronta per
+il commit isolato; i nove debiti mobile esterni restano separati e non sono
+stati mescolati a questo lavoro.
+
+#### Riassunto semplice della chiusura
+
+Non restano controlli rossi per Codice: funzione, aspetto, scroll, build e APK
+sono stati verificati. Il prossimo gesto è soltanto salvare questo blocco in un
+commit pulito; dopo si può iniziare il primo debito mobile separato.

@@ -6,6 +6,131 @@ Metodo: revisione `frontend-design` in due passaggi, prima composizione e
 gerarchia dell'intero schermo, poi tipografia, spaziatura, token, collisioni,
 stati, controlli, scroll, tastiera e safe area.
 
+## Riapertura 25/8 — testata instabile durante fling
+
+| ID | Cosa si vede | Viewport/prova | Gravità | Destinazione | Stato |
+|---|---|---|---|---|---|
+| VIS-TOPBAR-FLAP-01 | Due fling reali consecutivi entrambi verso il basso producono prima la testata nascosta e poi la stessa testata nuovamente visibile. Il secondo stato è falso: non c'è stato alcun gesto verso l'alto. | Pad, tablet landscape, `code-topbar-spasm-before.png`, `code-topbar-spasm-fling-1.png`, `code-topbar-spasm-fling-2.png` | Bloccante | `CODE-TOPBAR-NO-FLAP-01` | Aperto |
+
+Correzione dell'ispezione dopo la fermata owner: rail sessioni e context rail
+restano sopra il fondo animato, ma il composer **non** è correttamente ancorato:
+si estende sotto l'intera colonna Contesto. La precedente frase «composer
+ancorato e intero» era un falso positivo e viene ritirata. Safe area e run strip
+non collidono; nessuna scrollbar è visibile. Le regressioni nuove sono quindi
+due: la testata che riappare mentre la posizione del transcript continua ad
+avanzare e il dock agganciato al contenitore esterno invece che alla sola
+conversazione. La
+sequenza dimostra anche la causa: il difetto si presenta vicino al fondo, dove
+la maggiore altezza disponibile forza il browser a ridurre il massimo di
+scroll. Il gate di chiusura richiede la stessa sequenza ripetuta in tutte le
+quattro forme e una vera inversione che faccia riapparire la testata una volta
+sola.
+
+| ID | Cosa si vede | Viewport/prova | Gravità | Destinazione | Stato |
+|---|---|---|---|---|---|
+| VIS-COMPOSER-CONTEXT-01 | Il composer condiviso attraversava il bordo fra conversazione e Contesto e occupava quasi tutta la larghezza inferiore del rail. Non era una scelta di densità: il dock usava i confini della tool surface, non quelli della `.workspace-shell`. | RED: `tablet-landscape-open.png`. GREEN solo logico/simulato: `tablet-landscape-context-open.png`, `tablet-landscape-context-closed.png` | Bloccante | `CODE-COMPOSER-CONTEXT-RAIL-01` | GREEN tecnico; landscape fisico ancora rosso |
+| VIS-COMPOSER-MAX-WIDTH-01 | Con entrambi i rail chiusi il composer seguiva correttamente la workspace, ma diventava eccessivamente largo rispetto alla colonna conversazione. Ora si ferma al limite già progettato di 920px e resta centrato, senza cambiare componente. | Pad fisicamente landscape: `code-max-width-all-rails-closed.png`, `code-max-width-all-closed-down-1.png`, `-down-2.png`, `-down-3.png`, `code-max-width-all-closed-up.png`, `code-max-width-rails-reopened-final.png` | Bloccante | `CODE-COMPOSER-MAX-WIDTH-01` | GREEN |
+
+La matrice resta sospesa. La prima prova GREEN deve essere nuovamente tablet
+landscape con Context rail aperto, chiuso e riaperto; l'intero fotogramma verrà
+ispezionato prima di promuovere qualunque altra forma.
+
+### Esito tablet landscape fisico — larghezza massima e stabilità
+
+Il Pad è stato ruotato materialmente; ogni PNG della nuova sequenza è stato
+letto dai byte come 3392×2400 e ispezionato per intero. Con entrambi i rail
+chiusi il composer visibile misura 920 CSS px dentro una workspace di 1220,19px,
+con 150,095px liberi e uguali su entrambi i lati. Visivamente è allineato alla
+colonna delle schede e dei messaggi, non ai bordi dell'intero schermo. Con lista
+sessioni e Context riaperti torna fluido: 728,19px dentro 752,19px, margini
+12/12px, nessuna invasione del rail.
+
+La sonda iniziale aveva letto la prima delle due istanze DOM, il composer Chat
+sottostante e nascosto con `visibility:hidden`; per questo riportava
+erroneamente 1196,19px e `max-width:none`. L'enumerazione completa ha mostrato
+la seconda istanza, visibile e contenuta nel dock Codice, larga esattamente
+920px. La sonda è stata quindi ancorata al dock prima di accettare il gate.
+
+Nei tre frame `code-max-width-all-closed-down-1/2/3.png` la testata resta
+ritratta senza spasmi; `code-max-width-all-closed-up.png` la ripristina soltanto
+dopo la vera risalita. Composer, run strip, sfondo procedurale, consenso e
+status bar restano puliti; nessuna scrollbar o contenuto irraggiungibile.
+Esito: **GREEN tablet landscape fisico** per
+`CODE-COMPOSER-MAX-WIDTH-01`, `CODE-COMPOSER-CONTEXT-RAIL-01` e
+`CODE-TOPBAR-NO-FLAP-01`.
+
+### Esito telefono landscape con Pad fisicamente orizzontale
+
+La prima configurazione è stata scartata: su questo Pad ruotato l'OS scambia le
+dimensioni richieste e `wm size 2400x1080` aveva prodotto davvero 1080×2400.
+Con l'override inverso `wm size 1080x2400`, density 440 e riavvio a freddo, il
+PNG è risultato realmente 2400×1080; nav telefono presente e nessun rail tablet
+residuo. Tutti i frame sono stati ispezionati per intero.
+
+`phone-landscape-physical-open.png` mostra il composer condiviso nella forma
+compatta a una riga, interamente sopra la bottom navigation. Nei tre frame
+`phone-landscape-physical-down-1/2/3.png` la testata resta nascosta e il
+contenuto passa progressivamente sopra il dock: al secondo scroll il messaggio
+utente è intero, al terzo lo è quello assistente. Nessun contenuto resta quindi
+irraggiungibile dietro composer o nav. `phone-landscape-physical-up.png`
+ripristina la testata soltanto alla vera risalita. Sfondo, status bar, run strip,
+testo e azioni restano puliti; nessuna scrollbar visibile.
+
+Esito: **GREEN telefono landscape**. Al termine sono stati eseguiti
+`wm size reset` e `wm density reset`; il device riporta nuovamente dimensione
+fisica 2400×3392 e density 420.
+
+### Esito viewport landscape simulata dopo la correzione
+
+Tutti i sei PNG sono stati letti dai byte come 3392×2400 e ispezionati per
+intero. L'owner ha però chiarito che il Pad era fisicamente verticale: questi
+fotogrammi sono quindi prova di layout logico, **non prova reale del tablet
+orizzontale**. Con Context aperto il composer ha margini omogenei dentro la sola
+workspace e termina prima della linea verticale del rail; Context e sidebar
+globale restano completamente liberi. Con Context chiuso il dock si allarga
+fino al bordo destro della workspace, conservando lo stesso margine; riaprendo
+torna alla misura precedente. Lo sfondo procedurale resta visibile soltanto
+come fondale e non altera il contrasto di testo o pannelli.
+
+`tablet-landscape-down-1.png`, `-down-2.png` e `-down-3.png` mostrano la topbar
+ritratta e stabile dopo tre fling nella stessa direzione. Run strip, Context
+rail e composer non cambiano posizione né larghezza. `tablet-landscape-up.png`
+mostra la testata nuovamente visibile dopo una vera risalita. Nessuna scrollbar,
+collisione con la barra di sistema, sovrapposizione del composer o ricomparsa
+spuria della testata. Esito: **GREEN simulato**; gate del dispositivo
+orizzontale ancora rosso e da ripetere dopo rotazione fisica.
+
+### Esito tablet portrait fisico
+
+Il Pad è stato riportato a `wm size reset` e `wm density reset`, nella sua
+posizione fisica verticale. I cinque PNG sono 2400×3392:
+`tablet-portrait-physical-open.png`, `tablet-portrait-physical-down-1.png`,
+`-down-2.png`, `-down-3.png`, `tablet-portrait-physical-up.png`.
+
+La larghezza del composer non viene giudicata qui, perché la regressione owner
+si manifesta in landscape. Per `CODE-TOPBAR-NO-FLAP-01`, invece, la prova è
+valida: tre fling consecutivi verso il basso mantengono la testata ritratta; la
+risalita la ripristina. Sidebar globale, run strip, sfondo procedurale, consenso,
+activity feed, composer e barra di sistema sono stati ispezionati per intero:
+nessuna scrollbar, sovrapposizione o tremolio. Esito tablet portrait fisico:
+**GREEN per la regressione topbar**.
+
+### Esito telefono portrait simulato sul Pad verticale
+
+Dopo un primo override scartato perché il PNG era 2400×1080, il valore è stato
+corretto a `wm size 1080x2400`, density 440, con riavvio a freddo. Il byte header
+di `phone-portrait-open.png` conferma 1080×2400. Anche
+`phone-portrait-down-1.png`, `-down-2.png`, `-down-3.png` e
+`phone-portrait-up.png` sono stati ispezionati integralmente.
+
+La topbar resta ritratta in tutti e tre i fling discendenti e torna al gesto
+inverso. Il primo frame durante il movimento mostra la parte inferiore del
+consenso dietro il composer fisso; il frame successivo porta l'intera card e i
+due pulsanti sopra il dock, quindi il contenuto resta raggiungibile e la
+clearance non è persa. Safe area, run strip, sfondo, composer e bottom navigation
+restano stabili; nessuna scrollbar. Esito telefono portrait: **GREEN per
+`CODE-TOPBAR-NO-FLAP-01`**. Nessuna inferenza sulla regressione width landscape.
+
 ## Regola di prova
 
 Ogni screenshot deve avere: dimensioni PNG lette dai byte; viewport dichiarato;
@@ -425,6 +550,15 @@ e usa la grammatica Chat reale. La chiusura della tastiera lascia ancora il
 focus nel textarea: non è una regressione di questo fix, è il debito mobile
 separato `DEBT-MOBILE-006`, registrato per il lavoro post-Codice.
 
+## Debito riaperto dal confronto owner — autonomia composer
+
+Le prove precedenti hanno confermato geometria, scroll e riuso del composer
+Chat, ma hanno mancato una differenza funzionale visibile rispetto al mockup:
+accanto al modello non compare più la pill della policy agente. Il mockup
+originale mostra `Workspace write` e apre quattro scelte (`Read only`,
+`Workspace write`, `On request`, `Full access`). Va ripristinata e riprovata in
+tutta la matrice; fino ad allora la superficie Codice non è chiusa.
+
 ## Matrice conclusiva Fase 6
 
 Directory prove:
@@ -444,3 +578,42 @@ o riserva spazio; tutti gli scrollport verificati conservano range reale.
 
 Il Pad è stato infine ripristinato a `wm size reset` = 2400×3392 e
 `wm density reset` = 420.
+
+## Fase 8 — RED scoperto nel pannello autonomia, telefono portrait
+
+Screenshot ispezionato integralmente:
+`code-autonomy-phone-portrait-sheet.png` (1080×2400).
+
+`VIS-CODE-AUTONOMY-PORTRAIT-PAN-01` è bloccante: il dialog permessi è tagliato
+a sinistra e una fascia del Context rail compare a destra. La sonda CDP ha
+misurato la causa sulla surface globale, non sul dialog: viewport/host
+392,73px, tool sheet `scrollWidth=745px`, `clientWidth=393px`,
+`scrollLeft=49,09px`; host e dialog risultano quindi da −49,09 a 343,64px.
+Chiudere dialog e tastiera non azzera il pan. La matrice non è verde finché la
+surface resta scrollabile orizzontalmente o il difetto riappare in una delle
+altre tre forme.
+
+## Fase 8 — GREEN autonomia e clipping nelle quattro forme
+
+Directory prove:
+`C:\Users\Antonino\AppData\Local\Temp\talos-code-autonomy-20260825`.
+
+Screenshot GREEN ispezionati integralmente dopo la nuova APK:
+
+- `code-autonomy-phone-portrait-sheet-green.png` (1080×2400);
+- `code-autonomy-phone-landscape-sheet-green.png` (2400×1080);
+- `code-autonomy-tablet-portrait-sheet-green.png` (2400×3392);
+- `code-autonomy-tablet-landscape-sheet-green.png` (3392×2400).
+
+| ID | Osservazione completa | Esito |
+|---|---|---|
+| VIS-CODE-AUTONOMY-PORTRAIT-PAN-01 | Dopo focus e apertura permessi, tool sheet e host restano 0–392,73px; `scrollWidth` resta 745px per il rail fuori schermo ma `overflow:clip` impedisce il pan e `scrollLeft` resta 0. Il dialog occupa esattamente 0–392,73px; nessuna fascia del Context rail è visibile. | GREEN reale sul Pad. |
+| VIS-CODE-AUTONOMY-LANDSCAPE-SCROLL-01 | Il pannello basso/orizzontale mostra le quattro policy; uno swipe verticale porta agli scope correnti senza spostare la superficie globale. | GREEN; sheet scorrevole, surface ferma. |
+| VIS-CODE-AUTONOMY-TABLET-01 | In portrait e landscape il dialog è centrato, intero, separato da status/navigation bar; backdrop e animazione restano coerenti e il contenuto sottostante non cambia geometria. | GREEN in entrambe le forme. |
+| VIS-CODE-AUTONOMY-COMPOSER-01 | Tablet mostra etichetta accanto al modello; telefono portrait riduce la pill alla sola icona con nome accessibile completo; landscape torna alla grammatica estesa quando Gboard si chiude. | GREEN, stesso `TalosMobileComposer.vue`. |
+
+Sono stati controllati anche i percorsi inversi: Back chiude senza cambiare la
+policy; la selezione reale `Full access` aggiorna la pill; collasso/riapertura
+del rail non perde il valore nella sessione; un riavvio riparte dal dichiarato
+default demo `Workspace write`. Il Pad è stato ripristinato a size fisica
+2400×3392 e densità 420.

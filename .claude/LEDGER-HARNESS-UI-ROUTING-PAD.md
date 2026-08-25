@@ -757,6 +757,116 @@ ritratte; viewport e fondo composer con Gboard entrambi 544,73px, gap 0px.
 Prove visive nominate nel taccuino. Il gate complessivo resta aperto finché le
 stesse invarianti non sono verificate nelle altre tre forme.
 
+### Riapertura owner 25/8 — `CODE-TOPBAR-NO-FLAP-01`
+
+Regressione riprodotta dopo la chiusura Fase 7: con due fling consecutivi verso
+il basso la topbar passa da visibile a nascosta e poi torna visibile senza che
+l'utente abbia mai invertito il gesto. La compressione aumenta `clientHeight`;
+vicino al fondo il browser riduce `scrollTop` al nuovo massimo e il vecchio
+confronto interpreta quel clamp di layout come scroll verso l'alto.
+
+Inventario esatto:
+
+1. Modificare `mobile/tests/unit/harness/harnessUiFrontend.test.ts`: aggiungere
+   il RED `CODE-TOPBAR-NO-FLAP-01`. Simulare il primo delta positivo, quindi il
+   clamp negativo ancora ancorato a
+   `scrollHeight - clientHeight`, infine una vera risalita che si stacca dal
+   fondo. Atteso prima del GREEN: al clamp la classe `is-scroll-hidden` viene
+   rimossa erroneamente.
+2. Modificare `mobile/public/harness-ui/app.js`: aggiungere la funzione privata
+   `embeddedScrollerAtEnd(scroller, current)` e usarla in
+   `handleEmbeddedContentScroll(event)`. Il ramo origine `current <= 4`, il
+   ritorno su vera inversione, la discesa e il cleanup restano compatibili.
+3. Modificare
+   `.claude/DOSSIER-RICERCA-HARNESS-UI-ROUTING-PAD.md`,
+   `.claude/TACCUINO-VISIVO-HARNESS-UI-PAD.md` e
+   `.claude/CONSEGNA-HARNESS-UI-ROUTING.md` con causa, prove prima/dopo e stato.
+
+GREEN focalizzato:
+
+`npx vitest run tests/unit/harness/harnessUiFrontend.test.ts`
+
+Regressioni interessate:
+
+`npx vitest run tests/unit/harness/harnessUiFrontend.test.ts tests/unit/harness/harnessUiAssetContract.test.ts tests/unit/screens/harnessSessionScreen.test.ts`
+
+Gate tecnici: `npm run typecheck`, `node --check public/harness-ui/app.js`,
+`npm run build`, parity asset, 8 E2E Codice e `git diff --check`.
+
+Gate umano: nuova APK sul Pad; fling ripetuti e inversione vera in telefono e
+tablet, portrait e landscape. Per ogni forma catturare testata aperta, stabile
+nascosta dopo più fling e riapparsa dopo gesto inverso; ispezionare l'intero
+fotogramma, incluse safe area, run strip, rail, composer e fondo transcript.
+
+Real-upstream gate: comportamento coerente con la scrolling box CSSOM View;
+nessun timer o pacchetto. Rollback: revert del solo commit di questa riapertura;
+il commit Fase 7 `b17491c` resta base integra.
+
+### Correzione owner 25/8 — `CODE-COMPOSER-CONTEXT-RAIL-01`
+
+L'owner ha fermato la matrice sul tablet landscape: il composer copre anche la
+colonna Contesto. La rilettura del DOM conferma il confine errato. Il dock ha
+`left:0; right:0` rispetto all'intera tool surface, mentre la conversazione
+termina prima di `.inspector-panel`. Il precedente
+`CODE-COMPOSER-TABLET-RAIL-01` provava correttamente l'assenza del doppio offset
+del rail globale sinistro, ma non provava affatto il confine destro. Il suo esito
+resta valido solo per quella regressione ed è **insufficiente** per dichiarare
+corretta la larghezza complessiva.
+
+Inventario esatto prima del codice prodotto:
+
+1. Modificare `mobile/tests/unit/screens/harnessSessionScreen.test.ts`: il fixture
+   statico acquisisce una vera `.workspace-shell`; aggiungere il RED
+   `CODE-COMPOSER-CONTEXT-RAIL-01`, che monta la schermata, fornisce rettangoli
+   letterali host/workspace e richiede `right:340px`, poi `right:0` quando la
+   workspace torna larga quanto l'host. La mutazione che deve farlo fallire è la
+   rimozione dell'allineamento dinamico, cioè il ritorno del dock a tutta surface.
+2. Modificare `mobile/src/screens/HarnessSessionScreen.vue`: mantenere invariati
+   classe pubblica `.talos-code-composer-dock`, componente
+   `TalosMobileComposer`, prop ed eventi. Rinominare il solo osservatore privato
+   in `composerLayoutObserver`; aggiungere le funzioni private
+   `syncComposerWorkspaceBounds()`, `syncComposerLayout()` e
+   `observeComposerLayout()`. Gli inset sono la differenza fra i rettangoli reali
+   di host e `.workspace-shell`; osservare host, workspace e dock, disconnettere
+   allo smontaggio.
+3. Modificare dossier, taccuino e consegna con la correzione dell'esito visivo
+   precedente, prove RED/GREEN e percorsi screenshot.
+
+RED atteso: il dock conserva `right:0`/nessun valore inline invece dei 340px
+richiesti dal fixture tablet. GREEN focalizzato:
+
+`npx vitest run tests/unit/screens/harnessSessionScreen.test.ts`
+
+Regressioni interessate: i test Harness frontend/asset, typecheck, build/parity,
+gli 8 E2E Codice e `git diff --check`.
+
+Gate umano bloccante, prima di qualunque altra viewport: nuova APK sul Pad in
+tablet landscape, Context rail aperto. Il bordo sinistro del composer coincide
+con la colonna conversazione e il bordo destro si arresta prima del rail con lo
+stesso ritmo visivo; nessuna parte del composer compare sotto Sessione,
+Contesto o sidebar globale. Ripetere rail Contesto chiuso/aperto e
+ridimensionamento, poi riprendere tablet portrait e le due forme telefono.
+
+Real-upstream gate: `ResizeObserver` e `getBoundingClientRect()` nativi, nessuna
+dipendenza. Rollback: revert del solo commit di riapertura; `b17491c` resta la
+base precedente, ma non costituisce più un esito visivo sufficiente.
+
+Esito GREEN tecnico e prova geometrica simulata: RED mirato fallito con `right` vuoto
+invece di `340px`; GREEN 1/1, file schermata 21/21, regressioni Codice 71/71,
+typecheck, build, E2E Codice 8/8, debug/release compile e installazione Pad
+verdi. Con il Pad fisicamente verticale ma viewport logica 3392×2400 il composer si ferma al bordo
+della workspace con Context aperto, occupa la workspace intera con Context
+chiuso e torna al confine corretto dopo la riapertura. Screenshot:
+`tablet-landscape-context-open.png`,
+`tablet-landscape-context-closed.png`. Tre fling verso il basso conservano la
+testata nascosta e una risalita reale la riapre:
+`tablet-landscape-down-1.png`, `tablet-landscape-down-2.png`,
+`tablet-landscape-down-3.png`, `tablet-landscape-up.png`. La regressione
+specifica è GREEN a livello tecnico e di layout simulato. **Non è una prova
+tablet landscape reale**: l'owner ha rilevato che il dispositivo non era
+fisicamente ruotato. Il gate landscape resta rosso finché il Pad non viene
+materialmente disposto in orizzontale e l'intera sequenza viene ripetuta.
+
 Regressione Pad `CODE-COMPOSER-LANDSCAPE-IME-SAFE-01`: telefono landscape con
 Gboard lascia 144,36px di viewport, mentre il componente condiviso espanso ne
 occupa 148,18px e parte a -3,82px. La stessa misura e la stessa collisione con
@@ -864,6 +974,88 @@ e model chip ripristinato alla chiusura.
 
 ## Checklist finale
 
+## Gate di conformità riaperto — Drawer globale sopra Codice
+
+Scenario permanente: `HARNESS-DRAWER-UPSTREAM-ADAPTATION-01`.
+
+RED riprodotto: `mobile/src/components/ui/drawer/DrawerContent.vue` ha hash
+locale `bcb7ce…` contro upstream `4b6261…`. La differenza è la prop tipizzata
+`overlayClass` e il suo inoltro a `DrawerOverlay`, introdotti dal commit Harness
+`9e939800`; il manifest non li aveva registrati fra le varianti consentite.
+
+Ledger minimo:
+
+1. `mobile/docs/superpowers/research/2026-08-25-harness-drawer-layering-conformance.md`:
+   pin, licenza, fonti ufficiali, alternativa e rollback.
+2. `mobile/upstream/shadcn-vue-2.8.0-manifest.json`: conservare immutabile
+   l'hash upstream e aggiungere un unico adattamento `DrawerContent.vue` con
+   accepted hash `bcb7ce…`, motivo e dossier.
+3. `mobile/tests/unit/upstream/shadcnConformance.test.ts`: l'elenco resta
+   chiuso, ora quattro destinazioni esatte; la ricerca attesa viene verificata
+   per destinazione invece di imporre erroneamente il dossier localizzazione a
+   ogni futura variante.
+4. GREEN: test focalizzato 3/3, suite completa unit e gate Codice; prova visiva
+   già coperta dalla sidebar globale sopra tutte le superfici.
+5. Rollback: revert del record manifest e del contratto test soltanto insieme
+   al revert di `overlayClass`; non lasciare mai un hash accettato orfano.
+
+Decisione upstream: **adattare dietro il wrapper TALOS posseduto**. Pin
+`shadcn-vue@2.8.0`, integrità npm e licenza MIT verificati il 25/8.
+
+## Riapertura owner — larghezza massima del composer a rail chiusi
+
+Scenario permanente: `CODE-COMPOSER-MAX-WIDTH-01`.
+
+Problema misurato: `CODE-COMPOSER-CONTEXT-RAIL-01` impedisce correttamente al
+composer di invadere il Context rail, ma quando rail sessioni e Context sono
+entrambi chiusi la workspace può diventare molto più larga della colonna di
+conversazione. Lo stesso `TalosMobileComposer.vue` si dilata allora fino ai
+bordi disponibili e perde la densità della chat Codice. Il limite non è
+arbitrario: `public/harness-ui/styles.css` assegna già alla conversazione e al
+composer del riferimento una colonna massima di `920px`.
+
+Ledger minimo prima del GREEN:
+
+1. `mobile/tests/unit/screens/harnessSessionScreen.test.ts`: RED
+   `CODE-COMPOSER-MAX-WIDTH-01`; il CSS compilato deve imporre al composer vero
+   `width:calc(100% - 1.5rem)`, `max-width:920px` e `margin-inline:auto`.
+2. `mobile/src/screens/HarnessSessionScreen.vue`: nessuna copia, prop o variante
+   del composer; soltanto la regola locale del dock limita e centra la stessa
+   istanza di `TalosMobileComposer.vue`. Il dock continua a seguire tramite
+   `ResizeObserver` i bordi della `.workspace-shell`.
+3. Focused GREEN: test nominato, intera suite `HarnessSessionScreen`, regressioni
+   Codice, typecheck, build ed E2E Codice.
+4. Gate reale prioritario: Pad fisicamente landscape, Context aperto, chiuso e
+   rail sessioni chiuso; misurare che il composer non superi 920 CSS px, resti
+   centrato e non invada alcun rail. Ripetere tre fling verso il basso e una
+   risalita per escludere il ritorno di `CODE-TOPBAR-NO-FLAP-01`.
+5. Rollback: rimuovere soltanto le tre dichiarazioni della regola locale e il
+   test associato; nessun contratto del componente Chat cambia.
+
+Ricerca upstream: W3C CSS Box Sizing Level 3 definisce `max-width` come limite
+massimo della dimensione del box; CSS Box Alignment/MDN confermano che i margini
+inline automatici assorbono lo spazio residuo e centrano il blocco. Decisione:
+**adottare direttamente CSS standard**, senza dipendenze o JavaScript nuovo.
+
+Esito del 25/8: **GREEN**. Il RED mirato è fallito perché la regola conteneva
+soltanto `pointer-events:auto`; dopo la cura passa, insieme a 22/22 test della
+schermata, 90/90 regressioni Harness/Codice, typecheck, build, E2E Codice 8/8 e
+compilazioni Android debug/release. APK installata e provata sul Pad fisicamente
+landscape, PNG 3392×2400. Misura CDP con entrambi i rail chiusi: workspace e
+dock 1220,19px, composer visibile 920px, margini 150,095/150,095px. Con sessioni
+e Context riaperti: workspace 752,19px, composer 728,19px e margini 12/12px.
+Tre fling discendenti mantengono la testata nascosta; una risalita reale la
+ripristina. La prima sonda `document.querySelector` aveva letto il composer
+Chat sottostante (`visibility:hidden`): enumerare entrambe le istanze e ancorare
+la misura al dock Codice ha confermato che il componente visibile è quello
+corretto e rispetta il limite.
+
+Gate forma telefono landscape: **GREEN** dopo correzione strumentata dello
+scambio dimensioni imposto dall'OS sul Pad fisicamente orizzontale. PNG reali
+2400×1080: ingresso, tre scroll discendenti e risalita. Composer compatto sopra
+la nav, contenuto interamente raggiungibile, testata stabile. Override rimossi:
+device finale `Physical size: 2400x3392`, `Physical density: 420`.
+
 - Drawer globale, rail/lista cinque sessioni, titolo e tree.
 - Chat/Split/Board, run queue/stop, follow-up/cancel.
 - Azioni messaggio/tool/approvazione.
@@ -884,6 +1076,140 @@ e model chip ripristinato alla chiusura.
 - Commit isolato per fase; rollback con revert del solo commit, mai reset.
 - Ogni regressione ferma la fase e diventa test permanente.
 - La consegna viene aggiornata alla fine di ogni fase, anche se bloccata.
+
+## Riapertura Fase 8 — selettore autonomia nel composer Codice
+
+Scenario permanente: `CODE-COMPOSER-AUTONOMY-PILL-01`.
+
+Il confronto col mockup originale ha scoperto una perdita reale: sostituendo il
+composer statico con `TalosMobileComposer.vue` sono rimasti modello e sforzo,
+ma non la pill immediatamente successiva che apre `Read only`, `Workspace
+write`, `On request` e `Full access`. Il pannello originale e il suo stato
+locale esistono ancora nel runtime statico; non vanno duplicati.
+
+File esatti:
+
+- modifica `mobile/src/components/chat/TalosMobileComposer.vue`: aggiunge lo
+  slot pubblico predefinito nei due layout della stessa toolbar; props,
+  emit e metodi pubblici esistenti restano invariati;
+- modifica `mobile/src/screens/HarnessSessionScreen.vue`: monta nello slot la
+  pill `talos-code-autonomy-chip`, conserva la sola etichetta locale
+  `codePermission`, inoltra l'apertura al runtime e registra/rimuove il callback
+  host `window.__talosHarnessHostPermissionChange`;
+- modifica `mobile/public/harness-ui/app.js`: `announceComposerAction` apre il
+  pannello `permissions` già esistente e la scelta notifica l'host;
+- modifica `mobile/tests/unit/screens/harnessSessionScreen.test.ts`: RED
+  `CODE-COMPOSER-AUTONOMY-PILL-01`, oggi fallisce perché la pill non esiste;
+- modifica `mobile/tests/unit/harness/harnessUiFrontend.test.ts`: RED
+  `CODE-COMPOSER-AUTONOMY-SHEET-01`, oggi fallisce perché l'azione produce solo
+  feedback generico e non apre il pannello;
+- aggiornamento documentale in questo ledger,
+  `.claude/DOSSIER-RICERCA-HARNESS-UI-ROUTING-PAD.md`,
+  `.claude/TACCUINO-VISIVO-HARNESS-UI-PAD.md` e
+  `.claude/CONSEGNA-HARNESS-UI-ROUTING.md`.
+
+Nessun file creato o eliminato. Nessuna nuova classe, schema, API, dipendenza o
+backend. Il contratto compatibile è il composer Chat invariato quando lo slot
+non viene fornito.
+
+Gate:
+
+1. RED mirati con i due scenari sopra.
+2. GREEN mirati, quindi intere suite composer/Harness, typecheck, build e suite
+   Codice E2E.
+3. Prova umana sul Pad: pill accanto al modello; apertura, tutte e quattro le
+   scelte, aggiornamento etichetta e chiusura; telefono/tablet portrait e
+   landscape, inclusi compact/expanded, scroll e tastiera.
+4. Fallimento/cancel: chiudere il pannello senza scegliere conserva il valore;
+   reload riparte dall'onesto default demo `Workspace write`; release continua
+   a non esporre Codice.
+5. Rollback: rimuovere i due slot outlet, il solo contenuto slot Codice e le due
+   righe del ponte; nessun componente permessi alternativo da ripulire.
+
+Ricerca: Vue ufficiale `3.5.40` per gli slot; HTML Living Standard e MDN
+per il `close` event del dialog. Decisione upstream: **adottare direttamente**
+lo slot Vue e riusare il dialog nativo già esistente, senza una nuova drawer.
+
+Amendamento strumentato: il primo build ha prodotto 614.024 byte contro il
+tetto 614.000. Lo slot non deve essere nominato perché il composer non accetta
+altro contenuto; usare il default elimina metadati inutili senza cambiare DOM o
+API funzionale. Il budget non viene aumentato.
+
+Seconda misura: 614.016 byte. Viene eliminato soltanto il default runtime
+ridondante `sendDisabledReason: ''`: la prop è già opzionale e ogni consumo usa
+la sua falsità, quindi assenza e stringa vuota hanno lo stesso esito. Il
+contratto pubblico resta stabile e il gate typecheck/regressioni deve provarlo.
+
+Terza misura: 614.006 byte. Si elimina anche il default ridondante
+`loadingRoutes: false`; la prop è opzionale lungo tutta la catena composer →
+drawer → picker e viene usata soltanto come booleano. Nessun budget o limite
+viene modificato.
+
+## Regressione scoperta nella matrice Fase 8 — pan orizzontale del tool sheet
+
+Scenario permanente: `CODE-MODAL-NO-HORIZONTAL-PAN-01`.
+
+Nel telefono portrait, dopo il focus del composer, la superficie globale
+`TalosMobileToolSheet` resta un contenitore di scroll orizzontale invisibile:
+`overflow:hidden`, larghezza client 393px, scrollWidth 745px per l'inspector
+Codice fuori schermo e `scrollLeft=49,09px`. Il browser può quindi scorrerlo
+automaticamente verso un discendente focalizzato. Il pannello permessi appare
+tagliato a sinistra e 49px del Context rail riaffiorano a destra. Non è un
+problema del dialog: chiuso il dialog, lo stesso scrollLeft resta misurabile.
+
+Ledger minimo prima del GREEN:
+
+1. modifica `mobile/tests/unit/shell/TalosMobileToolSheet.test.ts`: RED
+   `CODE-MODAL-NO-HORIZONTAL-PAN-01`; la surface condivisa deve usare il
+   clipping non scrollabile e non la utility `overflow-hidden`;
+2. modifica `mobile/src/components/shell/TalosMobileToolSheet.vue`: sostituire
+   sulla sola surface condivisa `overflow-hidden` con `overflow-clip`. Il body
+   figlio conserva i propri `overflow-y-auto`/`overflow-hidden`; props, emit,
+   slot, focus trap, animazioni e firma pubblica non cambiano;
+3. aggiornare questo ledger, dossier, taccuino e consegna; nessun altro file
+   prodotto viene creato o eliminato;
+4. focused GREEN: test nominato e intera suite del tool sheet; regressioni
+   composer/Harness, typecheck, build ed E2E Codice;
+5. prova umana: telefono portrait, focus composer, apertura/chiusura pannello
+   permessi; la surface deve mantenere `scrollLeft=0`, il dialog deve coprire
+   esattamente 0–392,73 CSS px e il Context rail restare interamente fuori;
+   ripetere telefono landscape e tablet portrait/landscape;
+6. inversa: il body delle stazioni ordinarie deve continuare a scorrere in
+   verticale quando `lockBodyScroll=false`; il contenuto Codice e i suoi dialog
+   continuano a scorrere nei rispettivi elementi figli;
+7. rollback: ripristinare la sola utility `overflow-hidden` e il test; nessuna
+   migrazione, dipendenza o stato da ripulire.
+
+Ricerca upstream del 25/8: CSS Overflow Module Level 3 e MDN distinguono
+`hidden` (contenitore ancora scrollabile, anche via focus/`scrollLeft`) da
+`clip` (clipping senza scroll container né scrolling programmatico). Decisione:
+**adottare direttamente `overflow:clip`**, nativo nel Chrome 151 del Pad; niente
+listener JS, reset imperativo o nuova dipendenza.
+
+## Esito Fase 8 — autonomia agente e pan globale chiusi
+
+- RED mirati: `CODE-COMPOSER-AUTONOMY-PILL-01`,
+  `CODE-COMPOSER-AUTONOMY-SHEET-01` e
+  `CODE-MODAL-NO-HORIZONTAL-PAN-01` hanno fallito prima delle rispettive cure e
+  sono ora GREEN.
+- Suite unit completa: 674 file GREEN, 3 skip; 6.335 test GREEN, 10 skip.
+- Typecheck e syntax check `public/harness-ui/app.js`: GREEN.
+- Build/parity: GREEN; JS iniziale 613.995/614.000 byte, CSS
+  215.338/220.000 byte, parity 18/18.
+- E2E Codice: 8/8 GREEN.
+- Android: `compileDebugKotlin`, `compileReleaseJavaWithJavac` e `installDebug
+  -PtalosSideBySide` GREEN; installazione su entrambi gli endpoint ADB del Pad.
+- Gate visivo: GREEN nei PNG 1080×2400, 2400×1080, 2400×3392 e 3392×2400;
+  telefono portrait misurato `scrollLeft=0`, host/dialog 0–392,73px; sheet
+  landscape scorre fino agli scope; selezione e cancel inverso provati.
+- APK PC: `C:\Users\Antonino\Downloads\TALOS-dev-2026-08-25.apk`,
+  54.903.445 byte, SHA-256
+  `4cd3bf0c8c3e3f86d1b985ca3975a83b3fcdc769fb1aab1eaad8e594a7500071`.
+- `git diff --check`: GREEN. Nessun push autorizzato.
+
+Il rosso shadcn documentato nella Fase 7 è chiuso dalla variante upstream
+esplicitamente registrata nel manifest e dal test completo ora verde; non è
+stato allargato alcun hash gate.
 
 ## Esito Fase 7 — 25/8
 

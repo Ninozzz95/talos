@@ -154,7 +154,7 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
             data-testid="talos-mobile-tool-sheet"
             :data-presentation="presentation"
             :data-scene-background="String(sceneBackground === true || hideChrome === true)"
-            class="talos-mobile-tool-sheet-surface relative z-10 flex flex-col overflow-hidden border-[var(--talos-border)] text-[var(--talos-text)] outline-none"
+            class="talos-mobile-tool-sheet-surface relative z-10 flex flex-col overflow-clip border-[var(--talos-border)] text-[var(--talos-text)] outline-none"
             @keydown.escape="emit('close')"
             :class="[
                 presentation === 'fullscreen'

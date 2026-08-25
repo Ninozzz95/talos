@@ -43,9 +43,24 @@ import {
 
 const FAKE_MOCKUP_HTML = '<!doctype html><html><head></head><body>'
     + '<svg class="icon-sprite" aria-hidden="true"><symbol id="i-test" viewBox="0 0 24 24"></symbol></svg>'
-    + '<div id="app" class="app-shell">stub sessions/chat/inspector</div>'
+    + '<div id="app" class="app-shell"><main class="workspace-shell">stub chat</main>'
+    + '<aside class="inspector-panel">stub inspector</aside></div>'
     + '<script src="app.js"></script>'
     + '</body></html>'
+
+function fixedRect(left: number, right: number, top = 0, bottom = 800): DOMRect {
+    return {
+        x: left,
+        y: top,
+        top,
+        right,
+        bottom,
+        left,
+        width: right - left,
+        height: bottom - top,
+        toJSON: () => ({}),
+    }
+}
 
 /** app.js never really runs under jsdom (no script execution configured) —
  * this simulates the ONE contract HarnessSessionScreen.vue depends on it
@@ -85,6 +100,7 @@ describe('HarnessSessionScreen (24/8) — shadow root inside the SPA, not a tram
         delete (window as unknown as { __talosHarnessDestroy?: unknown }).__talosHarnessDestroy
         delete (window as unknown as { __talosHarnessUiRuntime?: unknown }).__talosHarnessUiRuntime
         delete (window as unknown as { __talosHarnessHostBack?: unknown }).__talosHarnessHostBack
+        delete (window as unknown as { __talosHarnessHostPermissionChange?: unknown }).__talosHarnessHostPermissionChange
         vi.unstubAllGlobals()
         vi.restoreAllMocks()
     })
@@ -155,6 +171,35 @@ describe('HarnessSessionScreen (24/8) — shadow root inside the SPA, not a tram
         expect(source.default).not.toContain('useChatController')
     })
 
+    it('CODE-COMPOSER-AUTONOMY-PILL-01 keeps the mockup policy selector beside the model in the shared composer', async () => {
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+        const announceComposerAction = vi.fn(() => true)
+        ;(window as unknown as {
+            __talosHarnessUiRuntime?: {
+                selectSession(): void
+                announceComposerAction(action: string): boolean
+            }
+        }).__talosHarnessUiRuntime = { selectSession: vi.fn(), announceComposerAction }
+
+        const w = mount(HarnessSessionScreen)
+        const host = w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement
+        await resolveScriptLoad(host)
+
+        const composer = w.get('[data-testid="talos-mobile-composer"]')
+        await composer.get('textarea').trigger('focus')
+        const autonomy = composer.get('[data-testid="talos-code-autonomy-chip"]')
+        expect(autonomy.text()).toContain('Workspace write')
+
+        await autonomy.trigger('click')
+        expect(announceComposerAction).toHaveBeenCalledWith('permissions')
+
+        ;(window as unknown as {
+            __talosHarnessHostPermissionChange?: (permission: string) => void
+        }).__talosHarnessHostPermissionChange?.('Full access')
+        await flushPromises()
+        expect(autonomy.text()).toContain('Full access')
+    })
+
     it('CODE-COMPOSER-DEMO-SEND-01 forwards a local prompt to Code and clears the shared component', async () => {
         vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
         const submitPrompt = vi.fn(() => true)
@@ -201,6 +246,58 @@ describe('HarnessSessionScreen (24/8) — shadow root inside the SPA, not a tram
         expect(dockRule).toContain('position: absolute')
         expect(dockRule).toContain('left: 0')
         expect(dockRule).not.toContain('--talos-tablet-rail')
+    })
+
+    it('CODE-COMPOSER-MAX-WIDTH-01 caps and centers the shared composer when both rails collapse', async () => {
+        const source = await import('@/screens/HarnessSessionScreen.vue?raw')
+        const { descriptor } = parse(source.default, { filename: 'HarnessSessionScreen.vue' })
+        const style = descriptor.styles.find((candidate) => candidate.scoped)
+        expect(style).toBeDefined()
+
+        const compiled = compileStyle({
+            filename: 'HarnessSessionScreen.vue',
+            id: 'data-v-code-composer-width',
+            scoped: true,
+            source: style?.content ?? '',
+        })
+
+        expect(compiled.errors).toHaveLength(0)
+        const composerRule = compiled.code.match(/\.talos-code-composer-dock[^}]*\[data-testid="talos-mobile-composer"\][^{]*\{([^}]*)\}/s)?.[1] ?? ''
+        expect(composerRule).toContain('width: calc(100% - 1.5rem)')
+        expect(composerRule).toContain('max-width: 920px')
+        expect(composerRule).toContain('margin-inline: auto')
+        expect(composerRule).toContain('box-sizing: border-box')
+    })
+
+    it('CODE-COMPOSER-CONTEXT-RAIL-01 stops at the live workspace edge and follows Context collapse', async () => {
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+        let resizeCallback: ResizeObserverCallback | null = null
+        vi.stubGlobal('ResizeObserver', class {
+            constructor(callback: ResizeObserverCallback) { resizeCallback = callback }
+            observe(): void {}
+            unobserve(): void {}
+            disconnect(): void {}
+        })
+
+        const w = mount(HarnessSessionScreen)
+        await flushPromises()
+        const host = w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement
+        const dock = w.get('[data-testid="talos-code-composer-dock"]').element as HTMLElement
+        const workspace = host.shadowRoot?.querySelector<HTMLElement>('.workspace-shell')
+        expect(workspace).not.toBeNull()
+
+        let workspaceRect = fixedRect(0, 860)
+        vi.spyOn(host, 'getBoundingClientRect').mockImplementation(() => fixedRect(0, 1200))
+        vi.spyOn(workspace as HTMLElement, 'getBoundingClientRect').mockImplementation(() => workspaceRect)
+        await resolveScriptLoad(host)
+
+        expect(dock.style.right).toBe('340px')
+        expect(dock.style.left).toBe('0px')
+
+        workspaceRect = fixedRect(0, 1200)
+        resizeCallback?.([], {} as ResizeObserver)
+        await flushPromises()
+        expect(dock.style.right).toBe('0px')
     })
 
     it.each(HARNESS_DEMO_SESSIONS)(
