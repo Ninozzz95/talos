@@ -2,7 +2,8 @@
 
 Owner: Antonino
 
-Stato: registrati, **non ancora in lavorazione**
+Stato: **DEBT-MOBILE-001 verde su landscape, portrait fisico pendente**;
+DEBT-MOBILE-002…009 registrati
 
 Ordine vincolante: iniziare diagnosi, ricerca, ledger e fix soltanto dopo la
 chiusura completa delle fasi Codice/Harness in corso.
@@ -16,6 +17,9 @@ chiusura completa delle fasi Codice/Harness in corso.
   salvata» e 418 modelli disponibili.
 
 ## DEBT-MOBILE-001 — Safe area del documento appena generato
+
+Stato: fix minimo applicato, regressioni larghe verdi e Pad verde su landscape;
+portrait fisico pendente.
 
 Se si tocca la scheda del file `.md` appena generato, la testata entra nella
 status bar del dispositivo. Aprendo lo stesso contenuto dalla Libreria il
