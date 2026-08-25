@@ -156,7 +156,7 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
             <!-- Owner 2026-07-24: ONE contextual back. When a station pushes a
                  sub-view, the header shows the subsection title and Back returns
                  to the station (not a second in-body arrow). -->
-            <header class="flex shrink-0 items-center gap-2 border-b border-[var(--talos-border)] bg-transparent px-2 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
+            <header class="talos-mobile-tool-sheet-header flex shrink-0 items-center gap-2 border-b border-[var(--talos-border)] bg-transparent px-2 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
                 <!--
                     Owner 2026-08-04, provato sul telefono: «il pulsante
                     indietro in alto a sinistra fa chiudere tutto».
@@ -214,3 +214,18 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
         </section>
     </div>
 </template>
+
+<style>
+/* With the landscape keyboard open the native resize leaves less height than
+   this header alone consumes. Harness already exposes its own focused composer;
+   temporarily yield the sheet chrome, then restore it on keyboardWillHide. */
+@media (max-height: 500px) and (orientation: landscape) {
+    body.keyboard-open .talos-mobile-tool-sheet-header {
+        display: none;
+    }
+
+    body.keyboard-open .talos-mobile-tool-sheet-header + [data-testid="talos-mobile-sheet-body"] {
+        padding-top: env(safe-area-inset-top);
+    }
+}
+</style>

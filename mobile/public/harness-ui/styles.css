@@ -305,7 +305,9 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 .content-stage { min-height: 0; flex: 1; position: relative; overflow: hidden; }
 .view-pane { position: absolute; inset: 0; overflow: auto; display: none; }
 .view-pane.active { display: block; }
+.chat-view { overflow: hidden; }
 .chat-view.active { display: flex; flex-direction: column; }
+.chat-view .conversation { height: 100%; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .conversation { width: min(920px, calc(100% - 40px)); margin: 0 auto; padding: 24px 0 190px; }
 
 .mission-card, .activity-bundle, .approval-card, .widget, .settings-card, .automation-row, .inspector-card { border: 1px solid var(--line); background: linear-gradient(180deg, rgba(255,255,255,.022), rgba(255,255,255,.008)); border-radius: var(--radius-card); }
@@ -1197,6 +1199,124 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 :host(.talos-embedded) .sessions-panel { display: none; }
 :host(.talos-embedded) #sessionsCollapseBtn,
 :host(.talos-embedded) [data-open-panel="sessions"] { display: none; }
+
+/* The outer TALOS sheet already owns the dynamic viewport. The embedded
+   document must consume the exact shadow-host rectangle below that header;
+   the standalone mockup intentionally keeps its original 100dvh contract. */
+:host(.talos-embedded) .app-shell { height: 100%; }
+:host(.talos-embedded) .workspace-shell { height: 100%; min-height: 0; }
+:host(.talos-embedded) .topbar { min-height: var(--topbar-h); padding-top: 0; }
+
+@media (max-width: 780px) {
+  /* TalosMobileToolSheet has already consumed the OS top safe area. */
+  :host(.talos-embedded) .topbar { min-height: 58px; padding-top: 0; }
+}
+
+@media (max-width: 430px) {
+  :host(.talos-embedded) .topbar { min-height: 56px; }
+}
+
+/* A phone in landscape can be wider than the mockup's 780px media query while
+   its embedded host is only ~300px tall. The runtime derives this class from
+   the actual host rectangle, not from the global viewport or Vue tablet gate. */
+:host(.talos-embedded-wide-short) {
+  --mobile-nav-h: 56px;
+  --mobile-control: 44px;
+}
+:host(.talos-embedded-wide-short) .topbar { min-height: 52px; padding: 0 8px; }
+:host(.talos-embedded-wide-short) .run-strip { min-height: 42px; }
+:host(.talos-embedded-wide-short) .content-stage { padding-bottom: var(--mobile-nav-h); }
+:host(.talos-embedded-wide-short) .conversation {
+  width: calc(100% - 24px);
+  padding: 8px 0 132px;
+  scroll-padding-bottom: 132px;
+}
+:host(.talos-embedded-wide-short) .composer-wrap {
+  bottom: var(--mobile-nav-h);
+  padding: 4px 8px;
+}
+:host(.talos-embedded-wide-short) .composer {
+  display: block;
+  height: 64px;
+  min-height: 64px;
+  padding: 4px;
+}
+:host(.talos-embedded-wide-short) .composer textarea {
+  height: 54px;
+  min-height: 54px;
+  max-height: 54px;
+  padding: 14px 104px 8px 52px;
+  font-size: 16px;
+}
+:host(.talos-embedded-wide-short) .composer-toolbar {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  padding: 10px 6px;
+  pointer-events: none;
+}
+:host(.talos-embedded-wide-short) .composer-toolbar > * { pointer-events: auto; }
+:host(.talos-embedded-wide-short) .composer-toolbar .selector-pill,
+:host(.talos-embedded-wide-short) .composer-toolbar .queue-toggle,
+:host(.talos-embedded-wide-short) .composer-toolbar .composer-spacer { display: none; }
+:host(.talos-embedded-wide-short) .composer-toolbar .round-btn,
+:host(.talos-embedded-wide-short) .composer-toolbar .send-btn {
+  width: var(--mobile-control);
+  height: var(--mobile-control);
+}
+:host(.talos-embedded-wide-short) .composer-toolbar .send-btn { margin-left: auto; }
+:host(.talos-embedded-wide-short) .composer-mic {
+  top: 10px;
+  right: 54px;
+  width: var(--mobile-control);
+  height: var(--mobile-control);
+  z-index: 3;
+}
+:host(.talos-embedded-wide-short) .composer-status { display: none; }
+:host(.talos-embedded-wide-short) .mobile-nav {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  min-height: var(--mobile-nav-h);
+  padding: 4px max(5px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(5px, env(safe-area-inset-left));
+  border-top: 1px solid var(--line);
+  background: rgba(29,30,33,.96);
+  backdrop-filter: blur(18px);
+  z-index: 70;
+}
+:host(.talos-embedded-wide-short) .mobile-nav button {
+  min-width: 0;
+  min-height: 48px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 9px;
+}
+:host(.talos-embedded-wide-short) .mobile-nav button.active,
+:host(.talos-embedded-wide-short) .mobile-nav button[aria-current="page"] {
+  color: var(--accent-2);
+  background: var(--accent-soft);
+}
+:host(.talos-embedded-wide-short):host-context(body.keyboard-open) .topbar,
+:host(.talos-embedded-wide-short):host-context(body.keyboard-open) .run-strip,
+:host(.talos-embedded-wide-short):host-context(body.keyboard-open) .mobile-nav {
+  display: none;
+}
+:host(.talos-embedded-wide-short):host-context(body.keyboard-open) .content-stage { padding-bottom: 0; }
+:host(.talos-embedded-wide-short):host-context(body.keyboard-open) .composer-wrap { bottom: 0; }
+:host(.talos-embedded-wide-short):host-context(body.keyboard-open) .conversation {
+  padding-bottom: 76px;
+  scroll-padding-bottom: 76px;
+}
 
 @media (min-width: 1041px) {
   :host(.talos-embedded) .app-shell { grid-template-columns: minmax(0,1fr) var(--inspector); }

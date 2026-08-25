@@ -48,8 +48,11 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import type { PluginListenerHandle } from '@capacitor/core'
+import { Keyboard } from '@capacitor/keyboard'
 import { useTalosI18n } from '@/i18n'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
+import { setTalosHarnessUiKeyboardOpen } from '@/lib/harnessUiBridge'
 import { talosHarnessUiAvailable } from '@/services/harnessUi'
 
 const TALOS_HARNESS_UI_BASE = '/harness-ui'
@@ -64,6 +67,41 @@ const loading = ref(true)
 const loadError = ref(false)
 
 let scriptEl: HTMLScriptElement | null = null
+let mounted = false
+const keyboardListeners: PluginListenerHandle[] = []
+
+async function retainKeyboardListener(registration: Promise<PluginListenerHandle>): Promise<void> {
+    try {
+        const handle = await registration
+        if (!mounted) {
+            await handle.remove()
+            return
+        }
+        keyboardListeners.push(handle)
+    } catch {
+        // Harness remains usable without the enhancement; visualViewport is
+        // retained by the static runtime as the browser fallback.
+    }
+}
+
+async function attachKeyboardBridge(): Promise<void> {
+    await Promise.all([
+        retainKeyboardListener(Keyboard.addListener(
+            'keyboardWillShow',
+            () => { setTalosHarnessUiKeyboardOpen(true) },
+        )),
+        retainKeyboardListener(Keyboard.addListener(
+            'keyboardWillHide',
+            () => { setTalosHarnessUiKeyboardOpen(false) },
+        )),
+    ])
+}
+
+async function detachKeyboardBridge(): Promise<void> {
+    setTalosHarnessUiKeyboardOpen(false)
+    const listeners = keyboardListeners.splice(0)
+    await Promise.allSettled(listeners.map((listener) => listener.remove()))
+}
 
 /** Vedi la nota d'apertura: pulisce solo ciò che sopravvive al componente
  * (i due ascoltatori su `window`/`visualViewport` — lo shadow root e i suoi
@@ -151,11 +189,19 @@ async function mountMockup(): Promise<void> {
 }
 
 onMounted(() => {
-    if (available) void mountMockup()
+    mounted = true
+    if (available) {
+        void mountMockup()
+        void attachKeyboardBridge()
+    }
     else loading.value = false
 })
 
-onBeforeUnmount(teardown)
+onBeforeUnmount(() => {
+    mounted = false
+    void detachKeyboardBridge()
+    teardown()
+})
 </script>
 
 <template>

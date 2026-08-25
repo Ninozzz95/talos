@@ -2,6 +2,8 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 import TalosMobileToolSheet from '@/components/shell/TalosMobileToolSheet.vue'
 
@@ -110,5 +112,17 @@ describe('presentation modes (F3-T2)', () => {
     it('defaults to fullscreen when no presentation is passed', () => {
         const wrapper = mount(TalosMobileToolSheet, { props: { title: 'Settings' } })
         expect(wrapper.get('[data-testid="talos-mobile-tool-sheet"]').attributes('data-presentation')).toBe('fullscreen')
+    })
+
+    it('HARNESS-PHONE-NAV-WIDE-SHORT-01 keeps exactly one shell back control in a short fullscreen', () => {
+        const wrapper = mount(TalosMobileToolSheet, {
+            props: { title: 'Harness', presentation: 'fullscreen', lockBodyScroll: true } as never,
+        })
+
+        expect(wrapper.findAll('[data-testid="talos-sheet-back"]')).toHaveLength(1)
+        expect(wrapper.get('[data-testid="talos-mobile-tool-sheet"] header').classes()).toContain('talos-mobile-tool-sheet-header')
+        const source = readFileSync(resolve(process.cwd(), 'src', 'components', 'shell', 'TalosMobileToolSheet.vue'), 'utf8')
+        expect(source).toContain('body.keyboard-open .talos-mobile-tool-sheet-header')
+        expect(source).toContain('padding-top: env(safe-area-inset-top)')
     })
 })
