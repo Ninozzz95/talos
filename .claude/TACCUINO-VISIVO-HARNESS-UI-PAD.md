@@ -165,3 +165,46 @@ riduzione dello spazio vuoto non elimina il problema generale di densità e
 continuità visiva, che resta correttamente assegnato alla Fase 6. Il badge
 demo resta presente e onesto, ma la sua collocazione non è ancora sicura:
 visibilità e assenza di collisioni sono requisiti distinti.
+
+## Fase 4 — la rotta e la sessione mostrata coincidono
+
+Prove:
+`C:\Users\Antonino\AppData\Local\Temp\talos-harness-fixes-20260825-phase4`.
+Quindici PNG sono stati aperti e ispezionati integralmente il 25/8. La matrice
+comprende tutte e cinque le sessioni nel tablet landscape, una sessione valida
+e il deep-link invalido in tablet portrait, telefono portrait e telefono
+landscape, più il ritorno reale dall'empty-state. I due screenshot RED dello
+stato invalido grezzo sono conservati e non usati come prova finale.
+
+### Esiti chiusi nella fase
+
+- Ogni riga nativa cambia davvero l'URL Vue, la riga evidenziata nel rail, il
+  titolo Harness, la selezione del runtime statico e il titolo principale di
+  `Session topology`. Le cinque identità sono state misurate nel DOM oltre che
+  lette a schermo.
+- Il rail tablet mostra una sola riga corrente con evidenziazione e
+  `aria-current="page"`; quando l'id è invalido nessuna riga finge di essere
+  selezionata.
+- Lo stesso componente Vue viene riusato passando da una sessione all'altra:
+  il mockup non viene abbandonato e non c'è navigazione top-level.
+- Un id sconosciuto non carica né esegue il bundle statico. Mostra un
+  empty-state TALOS centrato, con titolo, spiegazione e pulsante reale. Sul
+  tablet il ritorno segue il contratto esistente e apre la sessione predefinita
+  accanto al rail; sul telefono torna alla lista.
+- L'empty-state finale entra interamente nelle quattro forme, non invade safe
+  area o bordo e mantiene una gerarchia leggibile anche nel telefono
+  landscape.
+
+### Discrepanze e limiti annotati
+
+| ID | Cosa si vede | Viewport/prova | Gravità | Destinazione | Stato |
+|---|---|---|---|---|---|
+| VIS-UNKNOWN-RAW-01 | Il primo stato invalido era una riga di testo appoggiata sotto l'header, senza gerarchia né azione e con quasi tutto lo schermo vuoto. | `tablet-landscape-unknown-session.png` | Alta | Fase 4 | Risolta e verificata |
+| VIS-SESSION-BODY-IDENTICAL-01 | Le cinque identità aggiornano correttamente navigazione e titoli, ma Missione, transcript, branch e strumenti restano la stessa fixture. È una limitazione visibile della demo, non cinque sessioni reali. | Tutti i cinque `tablet-landscape-*.png` validi | Media/prodotto | Contratto demo owner | Accettata finché resta il badge demo; nessun backend finto |
+| VIS-SESSION-SELECTOR-TRUNCATION-01 | Con rail tablet aperto, i selettori modello/permessi/branch del composer centrale vengono abbreviati molto; restano toccabili ma la leggibilità del contesto dipende dai relativi sheet. | tablet portrait e landscape validi | Media | Fase 5/6 | Aperta |
+
+Restano confermate le collisioni badge/Context, la timeline troncata e la
+densità del composer già assegnate alle Fasi 5 e 6. La Fase 4 non le ha
+peggiorate né mascherate. Il fatto che il corpo demo sia condiviso è dichiarato
+qui esplicitamente: collegare dati reali o inventare cinque backend diversi è
+fuori perimetro e contrario alla decisione owner.

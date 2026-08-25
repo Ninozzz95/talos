@@ -23,10 +23,17 @@ vi.mock('@capacitor/keyboard', () => ({
 // (rather than mounted under a real router) because the only thing this
 // screen reads from it is `params.id`, kept purely for diagnosis — see the
 // component's opening comment for why it moved off `window.location.assign`.
-const mockState = vi.hoisted(() => ({ params: { id: 'refactor-auth-flow' } as Record<string, string> }))
-vi.mock('vue-router', () => ({ useRoute: () => ({ params: mockState.params }) }))
+const mockState = vi.hoisted(() => ({
+    params: { id: 'refactor-auth-flow' } as Record<string, string>,
+    routerPush: vi.fn(),
+}))
+vi.mock('vue-router', () => ({
+    useRoute: () => ({ params: mockState.params }),
+    useRouter: () => ({ push: mockState.routerPush }),
+}))
 
 import HarnessSessionScreen from '@/screens/HarnessSessionScreen.vue'
+import { HARNESS_DEMO_SESSIONS } from '@/lib/harnessDemoSessions'
 
 const FAKE_MOCKUP_HTML = '<!doctype html><html><head></head><body>'
     + '<svg class="icon-sprite" aria-hidden="true"><symbol id="i-test" viewBox="0 0 24 24"></symbol></svg>'
@@ -39,6 +46,9 @@ const FAKE_MOCKUP_HTML = '<!doctype html><html><head></head><body>'
  * for: the load event that resolves `mountMockup()`'s awaited promise. */
 async function resolveScriptLoad(host: HTMLElement): Promise<void> {
     await flushPromises()
+    ;(window as unknown as {
+        __talosHarnessUiRuntime?: { selectSession(selection: { id: string; title: string }): void }
+    }).__talosHarnessUiRuntime ??= { selectSession: vi.fn() }
     const script = host.shadowRoot?.querySelector('script')
     script?.dispatchEvent(new Event('load'))
     await flushPromises()
@@ -47,6 +57,7 @@ async function resolveScriptLoad(host: HTMLElement): Promise<void> {
 describe('HarnessSessionScreen (24/8) — shadow root inside the SPA, not a trampoline out of it', () => {
     beforeEach(() => {
         mockState.params = { id: 'refactor-auth-flow' }
+        mockState.routerPush.mockReset()
         keyboardMock.listeners.clear()
         keyboardMock.removers.clear()
         Object.defineProperty(window, 'location', {
@@ -110,6 +121,49 @@ describe('HarnessSessionScreen (24/8) — shadow root inside the SPA, not a tram
         vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
         const w = mount(HarnessSessionScreen)
         expect(w.get('[data-testid="talos-harness-session-screen"]').attributes('data-harness-session-id')).toBe('audit-api-permissions')
+    })
+
+    it.each(HARNESS_DEMO_SESSIONS)(
+        'HARNESS-ROUTE-SESSION-SYNC-01 forwards route $id to the mounted mockup runtime',
+        async (session) => {
+            mockState.params = { id: session.id }
+            vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+            const selectSession = vi.fn()
+            const w = mount(HarnessSessionScreen)
+            const host = w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement
+
+            await flushPromises()
+            ;(window as unknown as {
+                __talosHarnessUiRuntime?: { selectSession(selection: { id: string; title: string }): void }
+            }).__talosHarnessUiRuntime = { selectSession }
+            host.shadowRoot?.querySelector('script')?.dispatchEvent(new Event('load'))
+            await flushPromises()
+
+            expect(selectSession).toHaveBeenCalledWith({ id: session.id, title: session.title })
+        },
+    )
+
+    it('HARNESS-UNKNOWN-SESSION-01 shows an explicit state without loading the static runtime', async () => {
+        mockState.params = { id: 'not-a-demo-session' }
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+
+        const w = mount(HarnessSessionScreen)
+        await flushPromises()
+
+        expect(w.find('[data-testid="talos-harness-session-unknown"]').exists()).toBe(true)
+        expect(w.find('[data-testid="talos-harness-session-host"]').exists()).toBe(false)
+        expect(window.fetch).not.toHaveBeenCalled()
+    })
+
+    it('HARNESS-UNKNOWN-SESSION-VISUAL-01 offers the TALOS empty-state action back to the list', async () => {
+        mockState.params = { id: 'not-a-demo-session' }
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+
+        const w = mount(HarnessSessionScreen)
+        await w.get('[data-testid="talos-harness-session-unknown-back"]').trigger('click')
+
+        expect(w.get('[data-testid="talos-harness-session-unknown-title"]').text()).not.toBe('')
+        expect(mockState.routerPush).toHaveBeenCalledWith({ name: 'harness' })
     })
 
     it('calls the destroyer contract on unmount, so window-level listeners cannot outlive the screen', async () => {

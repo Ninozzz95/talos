@@ -324,17 +324,44 @@ Fase 5:
 
 Produzione: `mobile/src/lib/harnessDemoSessions.ts`,
 `mobile/src/lib/harnessUiBridge.ts`, `mobile/src/screens/HarnessSessionScreen.vue`,
-`mobile/public/harness-ui/index.html`, `mobile/public/harness-ui/app.js`.
+`mobile/public/harness-ui/index.html`, `mobile/public/harness-ui/app.js`,
+`mobile/src/screens/HarnessScreen.vue`, `mobile/src/i18n/locales/en.ts`,
+`mobile/src/i18n/locales/it.ts`.
+
+Simboli pubblici/compatibili: aggiungere
+`findHarnessDemoSession(id: string): HarnessDemoSession | null`; mantenere
+`HARNESS_DEMO_SESSIONS`, `harnessDemoSessionsIn`,
+`TalosHarnessSessionSelection` e `selectTalosHarnessUiSession` stabili. Il
+runtime statico implementa `selectSession(selection)` sul contratto già
+tipizzato; nessun secondo bridge e nessun nuovo formato di sessione.
 
 RED:
 
 - `HARNESS-ROUTE-SESSION-SYNC-01`: tutti i cinque id aggiornano titolo/selezione.
-- `HARNESS-UNKNOWN-SESSION-01`: id sconosciuto mostra stato esplicito.
+- `HARNESS-UNKNOWN-SESSION-01`: id sconosciuto mostra stato esplicito e non
+  carica/esegue il mockup.
+- `HARNESS-NATIVE-RAIL-ACTIVE-01`: il rail Harness nativo espone visivamente e
+  semanticamente la riga che coincide con `route.params.id`.
+- `HARNESS-SESSION-LABEL-DRIFT-01`: header, riga attiva e ogni etichetta
+  `Session topology` visibile riportano lo stesso titolo selezionato.
+- `HARNESS-UNKNOWN-SESSION-VISUAL-01`: il deep-link invalido usa l'empty-state
+  TALOS centrato, con titolo, spiegazione e azione reale di ritorno alla lista;
+  nessun testo grezzo appoggiato al bordo del riquadro.
 
 Fallimento atteso: id diagnostico, titolo statico. GREEN:
-`npx vitest run tests/unit/lib/harnessDemoSessions.test.ts tests/unit/lib/harnessUiBridge.test.ts tests/unit/screens/harnessSessionScreen.test.ts`.
+`npx vitest run tests/unit/lib/harnessDemoSessions.test.ts tests/unit/lib/harnessUiBridge.test.ts tests/unit/screens/harnessScreen.test.ts tests/unit/screens/harnessSessionScreen.test.ts tests/unit/harness/harnessUiFrontend.test.ts`.
 Pad: tutte le righe e deep-link invalido. Commit:
 `fix(harness-ui): la rotta seleziona la sessione mostrata`.
+
+Esito strumentato 25/8: i cinque id hanno prodotto tuple coerenti
+`URL = data-harness-session-id nativo = data-session-id statico`; titolo e
+ogni `[data-current-session-title]` coincidono. Il primo deep-link invalido era
+funzionalmente fail-closed ma visivamente grezzo: scenario permanente
+`HARNESS-UNKNOWN-SESSION-VISUAL-01`, passato a GREEN con empty-state TALOS e
+azione di ritorno reale. Matrice: 15 PNG ispezionati integralmente; tutte e
+quattro le forme coperte, cinque sessioni nel tablet landscape, valido+invalido
+nelle altre tre. Il corpo conversazione condiviso resta una fixture demo
+esplicitamente documentata, non un backend inventato.
 
 ## Fase 5 — controlli demo e collisioni
 

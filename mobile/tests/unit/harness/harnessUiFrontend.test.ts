@@ -118,4 +118,26 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         expect(css).toMatch(/\.chat-view\s*\{[^}]*overflow:\s*hidden/s)
         expect(css).toMatch(/\.chat-view\s+\.conversation\s*\{[^}]*height:\s*100%[^}]*overflow-y:\s*auto/s)
     })
+
+    it.each([
+        ['refactor-auth-flow', 'Refactor auth flow'],
+        ['audit-api-permissions', 'Audit API permissions'],
+        ['fix-mobile-composer', 'Fix mobile composer'],
+        ['prepare-release-notes', 'Prepare release notes'],
+        ['investigate-flaky-tests', 'Investigate flaky tests'],
+    ])('HARNESS-ROUTE-SESSION-SYNC-01 selects %s through the public runtime', (id, title) => {
+        mountStaticRuntime()
+        const runtime = (window as unknown as {
+            __talosHarnessUiRuntime?: { selectSession?(selection: { id: string; title: string }): void }
+        }).__talosHarnessUiRuntime
+
+        expect(runtime?.selectSession).toBeTypeOf('function')
+        runtime?.selectSession?.({ id, title })
+
+        expect(document.querySelector('#sessionTitle')?.textContent).toBe(title)
+        expect(document.querySelector('.session-item.active')?.getAttribute('data-session-id')).toBe(id)
+        const synchronizedLabels = [...document.querySelectorAll('[data-current-session-title]')]
+        expect(synchronizedLabels.length).toBeGreaterThan(0)
+        expect(synchronizedLabels.every((label) => label.textContent === title)).toBe(true)
+    })
 })

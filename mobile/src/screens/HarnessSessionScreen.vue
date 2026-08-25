@@ -43,25 +43,30 @@
  * rotta resta raggiungibile da un URL diretto anche quando la voce di
  * navigazione è nascosta.
  *
- * L'`:id` si legge solo per diagnosi — un solo documento statico, collegare
- * `id` a QUALE sessione demo mostra è wiring di backend, fuori ambito qui.
+ * L'`:id` seleziona una delle cinque sessioni demo canoniche nel documento
+ * statico tramite il ponte AVM tipizzato. Non è wiring di backend: cambia solo
+ * lo stato locale dichiaratamente demo già presente nel mockup.
  */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import type { PluginListenerHandle } from '@capacitor/core'
 import { Keyboard } from '@capacitor/keyboard'
+import { CircleAlert } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
-import { setTalosHarnessUiKeyboardOpen } from '@/lib/harnessUiBridge'
+import { findHarnessDemoSession } from '@/lib/harnessDemoSessions'
+import { selectTalosHarnessUiSession, setTalosHarnessUiKeyboardOpen } from '@/lib/harnessUiBridge'
 import { talosHarnessUiAvailable } from '@/services/harnessUi'
 
 const TALOS_HARNESS_UI_BASE = '/harness-ui'
 
 const route = useRoute()
+const router = useRouter()
 const { t } = useTalosI18n()
 
 const available = talosHarnessUiAvailable()
 const sessionId = computed(() => String(route.params.id ?? ''))
+const selectedSession = computed(() => findHarnessDemoSession(sessionId.value))
 const hostEl = ref<HTMLDivElement | null>(null)
 const loading = ref(true)
 const loadError = ref(false)
@@ -101,6 +106,10 @@ async function detachKeyboardBridge(): Promise<void> {
     setTalosHarnessUiKeyboardOpen(false)
     const listeners = keyboardListeners.splice(0)
     await Promise.allSettled(listeners.map((listener) => listener.remove()))
+}
+
+function returnToHarnessList(): void {
+    void router.push({ name: 'harness' })
 }
 
 /** Vedi la nota d'apertura: pulisce solo ciò che sopravvive al componente
@@ -181,6 +190,10 @@ async function mountMockup(): Promise<void> {
             scriptEl = script
             shadowRoot.appendChild(script)
         })
+        const selection = selectedSession.value
+        if (!selection || !selectTalosHarnessUiSession({ id: selection.id, title: selection.title })) {
+            throw new Error('harness-ui session selection unavailable')
+        }
     } catch {
         loadError.value = true
     } finally {
@@ -191,11 +204,25 @@ async function mountMockup(): Promise<void> {
 onMounted(() => {
     mounted = true
     if (available) {
-        void mountMockup()
         void attachKeyboardBridge()
+        if (selectedSession.value) void mountMockup()
+        else loading.value = false
     }
     else loading.value = false
 })
+
+watch(selectedSession, (selection) => {
+    if (!mounted || !available) return
+    if (!selection) {
+        teardown()
+        loading.value = false
+        loadError.value = false
+        return
+    }
+    if (!selectTalosHarnessUiSession({ id: selection.id, title: selection.title })) {
+        void mountMockup()
+    }
+}, { flush: 'post' })
 
 onBeforeUnmount(() => {
     mounted = false
@@ -214,6 +241,31 @@ onBeforeUnmount(() => {
         <p v-if="!available" data-testid="talos-harness-session-unavailable" class="text-sm text-[var(--talos-muted)]">
             {{ t('harness.unavailable') }}
         </p>
+        <div
+            v-else-if="!selectedSession"
+            data-testid="talos-harness-session-unknown"
+            class="flex h-full items-center justify-center p-6"
+        >
+            <div class="flex w-full max-w-md flex-col items-center gap-3 rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)] p-[var(--talos-space-card)] text-center">
+                <span class="flex size-10 items-center justify-center rounded-full bg-[var(--talos-warning-soft)] text-[var(--talos-warning)]">
+                    <CircleAlert class="size-5" aria-hidden="true" />
+                </span>
+                <p data-testid="talos-harness-session-unknown-title" class="text-sm font-semibold text-[var(--talos-text)]">
+                    {{ t('harness.unknownTitle') }}
+                </p>
+                <p class="max-w-sm text-xs leading-5 text-[var(--talos-muted)]">
+                    {{ t('harness.unknownSession') }}
+                </p>
+                <button
+                    type="button"
+                    data-testid="talos-harness-session-unknown-back"
+                    class="talos-pressable min-h-touch rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-control)] text-sm font-semibold text-[var(--talos-text)]"
+                    @click="returnToHarnessList"
+                >
+                    {{ t('harness.unknownBack') }}
+                </button>
+            </div>
+        </div>
         <template v-else>
             <p v-if="loading" data-testid="talos-harness-session-opening" class="text-sm text-[var(--talos-muted)]">
                 {{ t('harness.openingMockup') }}

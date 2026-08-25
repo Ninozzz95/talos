@@ -24,7 +24,7 @@
  * so the tablet redirect below (App.vue, mirroring talosTabletLeavesChatsRoute)
  * reads the SAME list a person actually sees, never a second hardcoded id.
  */
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useTalosI18n } from '@/i18n'
 import { FlaskConical } from '@lucide/vue'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
@@ -33,10 +33,15 @@ import { HARNESS_DEMO_GROUPS, harnessDemoSessionsIn, type HarnessDemoSession } f
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 
 const router = useRouter()
+const route = useRoute()
 const { t } = useTalosI18n()
 
 function openSession(session: HarnessDemoSession): void {
     void router.push({ name: 'harness-session', params: { id: session.id } })
+}
+
+function isCurrentSession(session: HarnessDemoSession): boolean {
+    return route.name === 'harness-session' && String(route.params.id ?? '') === session.id
 }
 </script>
 
@@ -62,7 +67,10 @@ function openSession(session: HarnessDemoSession): void {
                                 type="button"
                                 data-testid="talos-harness-row"
                                 :data-harness-session-id="session.id"
+                                :data-harness-active="isCurrentSession(session) ? 'true' : undefined"
+                                :aria-current="isCurrentSession(session) ? 'page' : undefined"
                                 class="talos-pressable flex min-h-touch w-full items-center gap-2 rounded-lg px-2 text-left hover:bg-[var(--talos-active)]"
+                                :class="{ 'bg-[var(--talos-active)]': isCurrentSession(session) }"
                                 @click="openSession(session)"
                             >
                                 <span class="flex min-w-0 flex-1 flex-col">

@@ -6,13 +6,21 @@ import { mount } from '@vue/test-utils'
 // Harness UI (24/8): the list, native — same router-mock convention as
 // chatsScreen.test.ts (a real push call asserted on its argument, not on
 // navigation actually happening — that belongs to harnessSessionScreen.test.ts).
-const mockState = vi.hoisted(() => ({ routerPush: vi.fn() }))
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: mockState.routerPush }) }))
+const mockState = vi.hoisted(() => ({
+    routerPush: vi.fn(),
+    route: { name: 'harness' as string, params: {} as Record<string, string> },
+}))
+vi.mock('vue-router', () => ({
+    useRoute: () => mockState.route,
+    useRouter: () => ({ push: mockState.routerPush }),
+}))
 
 import HarnessScreen from '@/screens/HarnessScreen.vue'
 
 beforeEach(() => {
     mockState.routerPush.mockReset()
+    mockState.route.name = 'harness'
+    mockState.route.params = {}
 })
 
 function mountScreen() {
@@ -36,6 +44,18 @@ describe('HarnessScreen (24/8) — demo session list, real structure over fake d
         const w = mountScreen()
         await w.get('[data-harness-session-id="refactor-auth-flow"]').trigger('click')
         expect(mockState.routerPush).toHaveBeenCalledWith({ name: 'harness-session', params: { id: 'refactor-auth-flow' } })
+    })
+
+    it('HARNESS-NATIVE-RAIL-ACTIVE-01 marks only the row selected by the route', () => {
+        mockState.route.name = 'harness-session'
+        mockState.route.params = { id: 'fix-mobile-composer' }
+
+        const w = mount(HarnessScreen, { props: { embedded: true } })
+        const active = w.get('[data-harness-session-id="fix-mobile-composer"]')
+
+        expect(active.attributes('aria-current')).toBe('page')
+        expect(active.attributes('data-harness-active')).toBe('true')
+        expect(w.findAll('[aria-current="page"]')).toHaveLength(1)
     })
 
     // F6 sidebar refactor (24/8): TalosTabletSidebar.vue mounts this screen

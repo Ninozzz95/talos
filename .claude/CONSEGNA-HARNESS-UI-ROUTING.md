@@ -881,3 +881,85 @@ stato corretto perché questa fase autorizza soltanto Harness e il suo guscio.
 Il registro dettagliato, con ID, gravità, viewport e destinazione di ogni
 rilievo, è `.claude/TACCUINO-VISIVO-HARNESS-UI-PAD.md`; il ledger contiene ora
 i nuovi scenari permanenti della Fase 5.
+
+### Fase 4 — la rotta seleziona davvero la sessione mostrata
+
+Stato: **completata e verificata sul Pad reale**.
+
+#### Riassunto semplice ma esaustivo
+
+Prima l’elenco apriva URL diversi, ma il dettaglio continuava sempre a mostrare
+“Refactor auth flow”: l’id serviva soltanto come etichetta diagnostica. Ora le
+cinque righe sono collegate allo stato locale del mockup. Quando se ne sceglie
+una cambiano insieme l’indirizzo Vue, la riga evidenziata, il titolo in alto e
+il nome della sessione nel pannello di topologia. La SPA non viene abbandonata
+e non viene aggiunto alcun backend.
+
+Un indirizzo con una sessione inesistente viene respinto prima di caricare il
+mockup. Il primo tentativo mostrava soltanto una riga di testo su una grande
+superficie vuota: l’ispezione visiva lo ha respinto. Lo stato finale usa il
+pattern TALOS già presente nel prodotto, con icona, titolo, spiegazione e un
+pulsante vero per tornare a Harness. Sul tablet il comportamento esistente
+porta alla sessione predefinita accanto al rail; sul telefono riapre la lista.
+
+#### File di produzione modificati
+
+- `mobile/src/lib/harnessDemoSessions.ts`
+- `mobile/src/screens/HarnessScreen.vue`
+- `mobile/src/screens/HarnessSessionScreen.vue`
+- `mobile/src/i18n/locales/en.ts`
+- `mobile/src/i18n/locales/it.ts`
+- `mobile/public/harness-ui/index.html`
+- `mobile/public/harness-ui/app.js`
+
+`findHarnessDemoSession()` usa l’elenco demo già canonico e fallisce chiuso per
+gli id sconosciuti. Il runtime implementa il `selectSession` già previsto dal
+ponte tipizzato: non è stato creato un secondo contratto. Il rail nativo espone
+una sola riga corrente; header e `Session topology` consumano la stessa
+selezione.
+
+#### Test permanenti modificati o aggiunti
+
+- `mobile/tests/unit/lib/harnessDemoSessions.test.ts`
+- `mobile/tests/unit/screens/harnessScreen.test.ts`
+- `mobile/tests/unit/screens/harnessSessionScreen.test.ts`
+- `mobile/tests/unit/harness/harnessUiFrontend.test.ts`
+
+Scenari: risoluzione dei cinque id, rifiuto dell’id sconosciuto, nessun fetch
+nel caso invalido, inoltro al runtime, riga attiva nativa, sincronizzazione di
+tutte le etichette visibili e azione reale dell’empty-state.
+
+#### Prove automatiche fresche
+
+- gruppo mirato: 5 file, **38 test passati**, zero falliti;
+- `npm run build`: exit 0, 3.625 moduli e parity 18/18;
+- JavaScript iniziale **613.806/614.000 byte**, CSS
+  **214.709/220.000 byte**;
+- `node --check public/harness-ui/app.js`: exit 0;
+- `npx cap copy android`: exit 0;
+- installazione debug side-by-side: **BUILD SUCCESSFUL** sul Pad;
+- compilazioni debug Kotlin e release Java: **BUILD SUCCESSFUL**, 513 task;
+- `git diff --check`: exit 0.
+
+#### Prove reali e ispezione visiva completa
+
+Nel tablet landscape sono state provate singolarmente `Refactor auth flow`,
+`Audit API permissions`, `Fix mobile composer`, `Prepare release notes` e
+`Investigate flaky tests`. Per ciascuna sono stati confrontati URL, riga nativa
+attiva, riga statica attiva, titolo e topologia. Le altre tre forme hanno
+verificato una sessione valida e il deep-link invalido; il pulsante di ritorno
+è stato azionato realmente.
+
+Tutti i **15 screenshot** della fase sono stati aperti e ispezionati per intero
+con la disciplina `frontend-design`, inclusi i RED scartati. Evidenze:
+`C:\Users\Antonino\AppData\Local\Temp\talos-harness-fixes-20260825-phase4`.
+Il Pad è stato ripristinato a 2400x3392, density 420 e rotazione automatica.
+
+#### Limite dichiarato, non nascosto
+
+Le cinque sessioni hanno identità e navigazione corrette ma condividono ancora
+la stessa Missione, lo stesso transcript e gli stessi strumenti: è una fixture
+demo dichiarata, non cinque esecuzioni reali. Il badge demo rende esplicito il
+confine; non sono stati inventati dati o backend diversi per farle sembrare
+vere. Le abbreviazioni dei selettori nel composer con rail aperto e le
+collisioni del badge restano assegnate alle Fasi 5 e 6.

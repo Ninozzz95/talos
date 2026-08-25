@@ -65,25 +65,25 @@
       <div class="sidebar-caption">Tieni premuta una chat per le azioni.</div>
       <nav class="session-list" id="sessionList">
         <div class="list-heading">Oggi</div>
-        <button class="session-item active" data-session="Refactor auth flow">
+<button class="session-item active" data-session-id="refactor-auth-flow" data-session="Refactor auth flow">
           <span class="session-main"><strong>Refactor auth flow</strong><small><span class="status-pulse"></span>3 tool attivi · 1 min fa</small></span>
           <span class="session-meta">09:12<svg><use href="#i-more"/></svg></span>
         </button>
-        <button class="session-item" data-session="Audit API permissions">
+<button class="session-item" data-session-id="audit-api-permissions" data-session="Audit API permissions">
           <span class="session-main"><strong>Audit API permissions</strong><small>review · 8 min fa</small></span>
           <span class="session-meta">08:42<svg><use href="#i-more"/></svg></span>
         </button>
-        <button class="session-item" data-session="Fix mobile composer">
+<button class="session-item" data-session-id="fix-mobile-composer" data-session="Fix mobile composer">
           <span class="session-main"><strong>Fix mobile composer</strong><small>workspace · 9 h fa</small></span>
           <span class="session-meta">08:30<svg><use href="#i-more"/></svg></span>
         </button>
         <div class="list-heading">Ieri</div>
-        <button class="session-item" data-session="Prepare release notes">
+<button class="session-item" data-session-id="prepare-release-notes" data-session="Prepare release notes">
           <span class="session-main"><strong>Prepare release notes</strong><small>archiviata · 15 h fa</small></span>
           <span class="session-meta">15:25<svg><use href="#i-more"/></svg></span>
         </button>
         <div class="list-heading">Ultimi 7 giorni</div>
-        <button class="session-item" data-session="Investigate flaky tests">
+<button class="session-item" data-session-id="investigate-flaky-tests" data-session="Investigate flaky tests">
           <span class="session-main"><strong>Investigate flaky tests</strong><small>branch: fix/tests</small></span>
           <span class="session-meta">Mar<svg><use href="#i-more"/></svg></span>
         </button>
@@ -109,7 +109,7 @@
           <button class="icon-btn mobile-only" data-open-panel="sessions" aria-label="Apri sessioni"><svg><use href="#i-menu"/></svg></button>
           <button class="icon-btn desktop-only" id="sessionsCollapseBtn" aria-label="Comprimi o espandi le sessioni" aria-expanded="true"><svg><use href="#i-menu"/></svg></button>
           <button class="title-button" id="sessionTitleButton" data-open-sheet="sessionTree" aria-haspopup="dialog" aria-label="Apri dettagli e albero della sessione">
-            <span><strong id="sessionTitle">Refactor auth flow</strong><small>talos / mobile-harness</small></span>
+            <span><strong id="sessionTitle" data-current-session-title>Refactor auth flow</strong><small>talos / mobile-harness</small></span>
             <svg><use href="#i-chevron"/></svg>
           </button>
         </div>
@@ -412,7 +412,7 @@ $ <span class="cursor"> </span></code></pre>
           </div>
           <div class="inspector-card session-topology">
             <div class="card-title"><span>Session topology</span><svg><use href="#i-branch"/></svg></div>
-            <div class="topology-row root"><span class="topology-node"></span><div><strong>Refactor auth flow</strong><small>main thread · live</small></div></div>
+            <div class="topology-row root"><span class="topology-node"></span><div><strong data-current-session-title>Refactor auth flow</strong><small>main thread · live</small></div></div>
             <div class="topology-row child"><span class="topology-node"></span><div><strong>Responsive audit</strong><small>side thread · A1</small></div></div>
             <div class="topology-row child"><span class="topology-node"></span><div><strong>A11y review</strong><small>fork · ready</small></div></div>
             <div class="topology-actions"><button class="secondary-btn compact" data-open-sheet="sessionTree">Albero</button><button class="secondary-btn compact" data-session-action="side">+ Side</button><button class="secondary-btn compact" data-session-action="fork">Fork</button></div>
