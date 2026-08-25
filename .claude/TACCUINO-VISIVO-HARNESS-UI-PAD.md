@@ -208,3 +208,92 @@ densità del composer già assegnate alle Fasi 5 e 6. La Fase 4 non le ha
 peggiorate né mascherate. Il fatto che il corpo demo sia condiviso è dichiarato
 qui esplicitamente: collegare dati reali o inventare cinque backend diversi è
 fuori perimetro e contrario alla decisione owner.
+
+## Fase 5 — Codice completo lato UI, collisioni e verità degli stati
+
+Prove:
+`C:\Users\Antonino\AppData\Local\Temp\talos-code-phase5-20260825`.
+Gli **88 PNG** presenti nella cartella sono stati aperti e ispezionati per
+intero il 25/8, compresi gli stati RED e le correzioni intermedie. La matrice
+finale copre tablet e telefono, portrait e landscape, liste, dettagli, inizio e
+fine di ogni scroll, tastiera reale, drawer globale, rail sessioni, inspector,
+palette e tutte le superfici del mockup.
+
+### Esiti chiusi nella fase
+
+- Ogni testo prodotto visibile usa `Codice` in italiano o `Code` in inglese.
+  Gli identificatori tecnici Harness restano interni per non rompere contratti.
+- La testata duplicata è stata rimossa: il dettaglio inizia direttamente da
+  `Refactor auth flow` o dal titolo della sessione selezionata. Il telefono ha
+  un solo ritorno; il tablet non ne duplica uno.
+- Il padding esterno della station è stato eliminato soltanto per Codice. La
+  Chat centrale usa ora il gutter interno responsive e non appare più come un
+  riquadro stretto dentro un secondo riquadro.
+- Il drawer globale è realmente sopra contenuto Codice, rail delle sessioni e
+  inspector. Le prove tablet portrait e landscape mostrano backdrop e pannello
+  davanti a tutta la station, non sotto la finestra centrale.
+- Il rail delle sessioni resta comprimibile e riapribile sul tablet. Telefono
+  portrait e landscape usano lista e dettaglio, senza rail tablet residuo.
+- Composer e navigazione restano ancorati; Gboard sposta il composer sopra la
+  tastiera e la chiusura restituisce il layout originario.
+- Chat, Split, Board, Review, Terminale, Browser, Automazioni, Impostazioni,
+  inspector, palette, pannelli e comandi sono stati azionati. Le azioni demo
+  mostrano feedback locale onesto; non fingono processi, rete o salvataggi.
+- Board dichiara subito che non usa TALOS-BANCO sul telefono; Terminale mostra
+  `pty demo`, non una PTY attiva inesistente. Impostazioni è raggiungibile dal
+  pannello di controllo anche quando la sidebar statica non viene montata.
+- Palette, badge demo e toast non coprono più X, testo, composer, bottoni o nav.
+  Nella forma larga e bassa il toast resta in una riga contenuta nel viewport;
+  la prova inversa su Automazioni lascia 8px dal primo controllo.
+- Review, Browser e tutte le viste non-Chat raggiungono il loro vero fondo
+  senza coda vuota né contenuto nascosto sotto la nav. Gli swipe nel diff non
+  intrappolano più lo scroll esterno.
+- I tre pulsanti di modalità dichiarano uno stato vero: in Browser, Review,
+  Terminale, Automazioni o Impostazioni nessuno finge che Chat sia attiva;
+  tornando a Chat, solo Chat torna selezionata e `aria-pressed=true`.
+- Il Back Android chiude prima il livello transitorio più interno e non
+  attraversa due livelli nello stesso gesto.
+
+### Misure e fotogrammi decisivi
+
+- Toast Chat landscape: `x=484.7–864.7` dentro viewport da 872px;
+  `y=148–187.95`, senza collisione con composer o nav.
+- Toast Automazioni landscape: fondo `195.95px`; primo controllo a
+  `203.73px`, quindi 8px di separazione reale.
+- Browser landscape al fondo: preview e shell terminano a `324.81px`, mentre
+  la nav inizia a `324.73px`; la piccola sovrapposizione di bordo non nasconde
+  contenuto o controlli.
+- Palette landscape: fondo elenco raggiunto a `405/405`; ultimo comando e bordo
+  del dialog restano dentro il viewport dinamico.
+- Prove rappresentative finali: `code-phone-landscape-final-chat.png`,
+  `code-phone-landscape-final-toast-contained.png`,
+  `code-phone-landscape-final-toast-automations.png`,
+  `code-phone-landscape-final-browser-no-tail.png`,
+  `code-phone-portrait-chat-keyboard2.png`,
+  `code-phone-portrait-settings-bottom.png`,
+  `code-tablet-portrait-global-sidebar-over2.png`,
+  `code-tablet-landscape-global-over-sessions.png` e
+  `code-tablet-landscape-browser-mode-truth.png`.
+
+### Registro delle discrepanze della fase
+
+| ID | Cosa è stato osservato | Esito |
+|---|---|---|
+| VIS-CODE-OUTER-GUTTER-01 | Il dettaglio telefono aveva un padding TALOS esterno più il padding del mockup, restringendo visibilmente la Chat. | Risolta e verificata nelle due forme telefono. |
+| VIS-CODE-GLOBAL-Z-01 | Drawer globale dietro finestra centrale, rail o inspector. | Risolta: stack DOM e screenshot provano il drawer sopra tutte e tre le superfici. |
+| VIS-CODE-TOAST-OVERFLOW-01 | Dopo aver liberato i controlli, il toast landscape usciva lateralmente dal viewport. | Risolta con larghezza confinata ed ellissi; testo e icona restano leggibili. |
+| VIS-CODE-NONCHAT-NAV-01 | Browser e altre viste potevano terminare sotto la bottom nav; Browser conservava anche una coda vuota. | Risolta e provata al fondo reale. |
+| VIS-CODE-MODE-LIE-01 | Browser visibile mentre Chat restava evidenziata. | Risolta; test automatico e misura DOM sul Pad. |
+| VIS-CODE-NESTED-PHONE-SLICE-01 | Nel telefono landscape, l'anteprima di telefono dentro Browser è inevitabilmente molto bassa: dopo lo scroll tutti i controlli sono raggiungibili, ma la conversazione annidata resta visibile solo a porzioni. | Limite accettato della demo annidata; nessun controllo perso e nessun dato finto. |
+| VIS-TYPOGRAPHY-01 | La gerarchia cromatica e tipografica non segue ancora in diretta tutti i temi TALOS. | Aperta, blocco esplicito della Fase 6. |
+| VIS-CHEVRON-SEMANTICS-01 | Il chevron del rail e il ritorno possono ancora apparire semanticamente vicini nel tablet. | Aperta per riesame visivo Fase 6; le etichette accessibili sono già distinte. |
+
+Le discrepanze storiche `VIS-DEMO-BADGE-TEXT-01`,
+`VIS-PALETTE-X-COLLISION-01`, `VIS-PALETTE-BACK-01`,
+`VIS-NESTED-SCROLL-TRAP-01`, `VIS-BOARD-HONESTY-01`,
+`VIS-REVIEW-BADGE-BUTTON-01`, `VIS-BADGE-MULTI-SURFACE-01`,
+`VIS-STEPS-CLIP-02`, `VIS-LIST-SCROLL-SHORT-01` e
+`VIS-DRAWER-SHORT-01` sono chiuse dalla matrice Fase 5. La compattezza dei
+selettori nel composer resta accettabile perché i relativi pannelli sono stati
+aperti fino al fondo nelle quattro forme; la continuità stilistica resta invece
+correttamente separata e assegnata alla Fase 6.

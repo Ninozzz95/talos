@@ -963,3 +963,105 @@ demo dichiarata, non cinque esecuzioni reali. Il badge demo rende esplicito il
 confine; non sono stati inventati dati o backend diversi per farle sembrare
 vere. Le abbreviazioni dei selettori nel composer con rail aperto e le
 collisioni del badge restano assegnate alle Fasi 5 e 6.
+
+### Fase 5 — Codice completo e verificato lato interfaccia
+
+Stato: **completata e verificata sul Pad reale**.
+
+#### Riassunto semplice ma esaustivo
+
+La sezione non si presenta più come un prodotto separato chiamato Harness:
+all'esterno parla di **Codice**, entra direttamente nella sessione selezionata
+e non ripete una seconda testata. Sul telefono è stato tolto il doppio margine
+orizzontale segnalato dall'owner; il contenuto centrale usa quindi molto meglio
+la larghezza disponibile.
+
+La sidebar globale ora è proprietaria dello schermo: quando viene aperta sta
+davanti alla finestra Codice, alla lista sessioni e all'inspector. La lista
+sessioni del tablet si può comprimere e riaprire; sul telefono si naviga dalla
+lista al dettaglio con un solo ritorno. Composer, navigazione e tastiera non si
+coprono più a vicenda.
+
+Tutte le superfici demo sono state percorse e azionate: Chat, Split, Board,
+Review, Terminale, Browser, Automazioni, Impostazioni, inspector, palette e
+pannelli. Ogni feedback dichiara ciò che succede davvero soltanto nella UI. La
+Board non finge il collegamento a TALOS-BANCO; il Terminale non finge una PTY;
+Browser, Review e gli altri pannelli raggiungono il fondo senza finire dietro
+la barra inferiore. Quando è visibile Browser o un'altra superficie, Chat non
+resta falsamente evidenziata.
+
+#### File modificati nella fase
+
+- `mobile/public/harness-ui/app.js`
+- `mobile/public/harness-ui/index.html`
+- `mobile/public/harness-ui/styles.css`
+- `mobile/src/App.vue`
+- `mobile/src/components/shell/TalosMobileScreen.vue`
+- `mobile/src/components/shell/TalosMobileToolSheet.vue`
+- `mobile/src/i18n/locales/en.ts`
+- `mobile/src/i18n/locales/it.ts`
+- `mobile/src/lib/harnessUiBridge.ts`
+- `mobile/src/screens/HarnessSessionScreen.vue`
+
+Il plugin Android debug-only non è stato modificato: il tentativo provvisorio
+di intervenire sulla cache nativa è stato rimosso dopo aver misurato la vera
+causa, cioè l'installazione del pacchetto `ai.talos` mentre CDP osservava ancora
+`ai.talos.dev`. La superficie Codice versiona invece i suoi tre asset con il
+build id già esistente, senza cancellare preferenze o dati locali.
+
+#### Test permanenti modificati o aggiunti
+
+- `mobile/tests/unit/harness/harnessUiAssetContract.test.ts`
+- `mobile/tests/unit/harness/harnessUiFrontend.test.ts`
+- `mobile/tests/unit/lib/harnessUiBridge.test.ts`
+- `mobile/tests/unit/screens/harnessScreen.test.ts`
+- `mobile/tests/unit/screens/harnessSessionScreen.test.ts`
+- `mobile/tests/unit/shell/TalosMobileScreen.test.ts`
+- `mobile/tests/unit/shell/TalosMobileSidebar.test.ts`
+- `mobile/tests/unit/shell/TalosMobileToolSheet.test.ts`
+- `mobile/tests/unit/shell/TalosTabletSidebar.test.ts`
+- `mobile/tests/unit/shell/appShell.test.ts`
+
+Oltre ai controlli pianificati, gli screenshot hanno prodotto regressioni
+permanenti per: toast contenuto nel viewport e lontano dai controlli, scroll
+non-Chat sopra la nav, assenza della coda vuota Browser e verità dello stato
+attivo dei pulsanti Chat/Split/Board.
+
+#### Prove automatiche fresche
+
+- gruppo mirato: 10 file, **111 test passati**, zero falliti;
+- `npm run typecheck`: exit 0;
+- `node --check public/harness-ui/app.js`: exit 0;
+- `npm run build`: exit 0, 3.625 moduli e parity 18/18;
+- JavaScript iniziale **613.866/614.000 byte**, CSS
+  **214.709/220.000 byte**;
+- `npx cap copy android`: exit 0;
+- compilazioni debug Kotlin e release Java: **BUILD SUCCESSFUL**, 513 task;
+- `git diff --check`: exit 0.
+
+#### Prove reali e ispezione visiva completa
+
+Sul Pad side-by-side sono state verificate tutte le quattro forme: tablet e
+telefono, verticale e orizzontale. Sono stati controllati lista e dettaglio,
+rail compresso/aperto, drawer globale, inizio e fine di ogni scroll, tastiera
+reale, tutti i tab dell'inspector, tutti i pannelli e almeno un'azione in ogni
+superficie. Geometria e stato attivo sono stati misurati nel DOM, non dedotti
+dall'immagine.
+
+Gli **88 screenshot** della cartella, inclusi RED e passaggi intermedi, sono
+stati aperti e ispezionati per intero con la disciplina `frontend-design`:
+`C:\Users\Antonino\AppData\Local\Temp\talos-code-phase5-20260825`.
+Il taccuino conserva ogni discrepanza, anche quelle corrette durante la fase.
+
+L'APK side-by-side più recente è stato verificato come pacchetto
+`ai.talos.dev`, installato sul Pad e copiato anche in
+`C:\Users\Antonino\Downloads\TALOS-dev-2026-08-25.apk`.
+
+#### Limiti rimasti, senza nasconderli
+
+La forma telefono landscape lascia per natura poca altezza all'anteprima di un
+telefono annidato dentro Browser: i controlli sono tutti raggiungibili, ma la
+conversazione interna si vede a porzioni. Non è contenuto perso. Restano invece
+deliberatamente aperti per la Fase 6 il collegamento live ai token dei temi,
+la continuità cromatica/tipografica e il riesame del significato visivo del
+chevron del rail. Non restano bug funzionali noti della Fase 5.

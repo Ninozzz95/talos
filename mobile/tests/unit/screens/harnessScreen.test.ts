@@ -40,6 +40,13 @@ describe('HarnessScreen (24/8) — demo session list, real structure over fake d
         expect(w.find('[data-testid="talos-harness-demo-notice"]').exists()).toBe(true)
     })
 
+    it('CODE-PRODUCT-NAME-01 presents the feature as Code, never as Harness', () => {
+        const w = mountScreen()
+
+        expect(w.get('[data-testid="talos-harness-screen"]').attributes('aria-label')).toBe('Code')
+        expect(w.text()).not.toMatch(/Harness/i)
+    })
+
     it('pushes a real router navigation to harness-session with the row\'s id — never a window.location', async () => {
         const w = mountScreen()
         await w.get('[data-harness-session-id="refactor-auth-flow"]').trigger('click')

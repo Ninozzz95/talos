@@ -80,7 +80,7 @@ export const TALOS_EN_MESSAGES = {
         goBack: 'Go back',
         primary: 'Primary navigation',
         modelLab: 'Model Lab',
-        harness: 'Harness',
+        harness: 'Code',
     },
     language: {
         title: 'Language',
@@ -1111,12 +1111,12 @@ export const TALOS_EN_MESSAGES = {
             yesterday: 'Yesterday',
             week: 'Last 7 days',
         },
-        openingMockup: 'Opening Harness UI…',
-        unavailable: "Harness UI isn't available in this build.",
-        loadFailed: "Harness UI didn't open. Try again.",
+        openingMockup: 'Opening Code…',
+        unavailable: "Code isn't available in this build.",
+        loadFailed: "Code didn't open. Try again.",
         unknownTitle: 'Session not found',
-        unknownSession: 'This demo session does not exist. Go back to Harness and choose one from the list.',
-        unknownBack: 'Back to Harness',
+        unknownSession: 'This demo session does not exist. Go back to Code and choose one from the list.',
+        unknownBack: 'Back to Code',
     },
     privilege: {
         keepAlive: 'Keep it alive',
@@ -3319,9 +3319,9 @@ export const TALOS_EN_MESSAGES = {
         // F6 sidebar refactor (24/8): the tablet rail's label when it shows
         // Harness sessions instead of chats — must say what is actually on
         // screen, same principle as chatsPanel above.
-        harnessPanel: 'Harness panel',
-        collapseHarnessSessions: 'Collapse Harness sessions',
-        expandHarnessSessions: 'Expand Harness sessions',
+        harnessPanel: 'Code panel',
+        collapseHarnessSessions: 'Collapse Code sessions',
+        expandHarnessSessions: 'Expand Code sessions',
     },
     shell: {
         sidebarDescription: 'Chats, tools and settings',

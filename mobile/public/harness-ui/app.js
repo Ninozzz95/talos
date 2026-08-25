@@ -32,7 +32,7 @@
     queueMode: false,
     permissions: 'Workspace write',
     model: 'gpt-5.6-sol · high',
-    environment: 'wt/auth-61c · feat/mobile-harness',
+    environment: 'wt/auth-61c · feat/mobile-code',
     session: 'Refactor auth flow',
     running: true,
     board: {
@@ -94,6 +94,15 @@
   const campaignReportState = $('#campaignReportState');
   const loadMoreRunsButton = $('[data-action="load-more-runs"]');
   const refreshCampaignButton = $('[data-action="refresh-campaign"]');
+  const boardEyebrow = $('#boardEyebrow');
+  const boardTitle = $('#boardTitle');
+  const boardDescription = $('#boardDescription');
+  const composerMic = $('.composer-mic');
+  const embeddedSessionBack = $('[data-open-panel="sessions"]');
+
+  if (HOST().classList.contains('talos-embedded')) {
+    embeddedSessionBack?.setAttribute('aria-label', 'Torna alle sessioni Codice');
+  }
 
   function icon(id) {
     return `<svg aria-hidden="true"><use href="#${id}"/></svg>`;
@@ -101,12 +110,14 @@
 
   function ensureDemoLabels() {
     $$('[data-demo-surface]').forEach((surface) => {
-      if (surface.querySelector(':scope > .demo-surface-badge')) return;
+      if (surface.querySelector('.demo-surface-badge')) return;
       const badge = document.createElement('span');
       badge.className = 'demo-surface-badge';
       badge.textContent = 'Demo UI · non collegato';
       badge.setAttribute('aria-label', `Demo UI non collegata: ${surface.dataset.demoSurface || 'superficie'}`);
-      surface.prepend(badge);
+      if (surface.classList.contains('chat-view')) surface.querySelector('.conversation')?.prepend(badge);
+      else if (surface.classList.contains('sessions-panel')) surface.querySelector('.brand-row')?.after(badge);
+      else surface.prepend(badge);
     });
   }
 
@@ -138,7 +149,9 @@
     if (!target) return;
     state.view = view;
     if (options.mode) state.mode = options.mode;
-    else state.mode = view === 'dashboard' ? 'dashboard' : 'chat';
+    else if (view === 'dashboard') state.mode = 'dashboard';
+    else if (view === 'chat') state.mode = 'chat';
+    else state.mode = null;
     views.forEach((pane) => pane.classList.toggle('active', pane === target));
     syncNavigationState();
     target.scrollTop = 0;
@@ -206,10 +219,19 @@
     syncEmbeddedDialogBackdrop();
   }
 
+  function transientLayersActive() {
+    return commandDialog.open
+      || sheetDialog.open
+      || sessionsPanel.classList.contains('open')
+      || inspectorPanel.classList.contains('open');
+  }
+
   function dismissTransientLayers() {
+    if (!transientLayersActive()) return false;
     closeEmbeddedDialog(commandDialog);
     closeEmbeddedDialog(sheetDialog);
     closePanels();
+    return true;
   }
 
   function toast(title, message = '') {
@@ -245,7 +267,7 @@
 
   function boardErrorMessage(error) {
     if (error?.code && typeof error.message === 'string' && error.message) return error.message;
-    return 'Il server locale non risponde. Avvia Harness UI e riprova.';
+    return 'Il server locale non risponde. Apri Codice sul PC e riprova.';
   }
 
   function formatCost(value, estimated = false) {
@@ -475,7 +497,7 @@
   }
 
   async function loadCampaigns() {
-    setConnectionState('loading', 'Connessione locale', 'Leggo la allowlist dal server Harness UI.');
+    setConnectionState('loading', 'Connessione locale', 'Leggo la allowlist dal server Codice.');
     const campaigns = await apiGet('/api/v1/campaigns');
     state.board.campaigns = campaigns;
     const available = campaigns.filter((campaign) => campaign.available);
@@ -489,7 +511,37 @@
     await refreshCampaign();
   }
 
+  function renderEmbeddedBoardDemo(announce = false) {
+    state.board.initialized = true;
+    state.board.campaign = null;
+    state.board.campaigns = [];
+    state.board.runs = [];
+    state.board.nextCursor = null;
+    state.board.totalMatched = 0;
+    boardEyebrow.textContent = 'Board Codice · Demo UI';
+    boardTitle.textContent = 'Anteprima campagne';
+    boardDescription.textContent = 'Questa superficie mobile non ha un backend: nessun dato TALOS-BANCO viene letto o simulato.';
+    campaignSelect.replaceChildren(new Option('Demo non collegata', ''));
+    campaignSelect.disabled = true;
+    harnessFilter.replaceChildren(new Option('Tutti', ''));
+    harnessFilter.disabled = true;
+    outcomeFilter.replaceChildren(new Option('Tutti', ''));
+    outcomeFilter.disabled = true;
+    renderCampaignSummary(null);
+    renderCampaignRuns([]);
+    renderCampaignReport(null, 'REPORT_UNAVAILABLE');
+    $('.board-empty', campaignRunList).textContent = 'Nessun dato mobile collegato.';
+    campaignReportState.textContent = 'Demo';
+    campaignReportText.textContent = 'Nessun rapporto mobile collegato';
+    setConnectionState('demo', 'Demo UI · non collegato', 'Nessun backend mobile è configurato per Codice.');
+    if (announce) toast('Board demo non collegata', 'Nessuna richiesta di rete è stata eseguita.');
+  }
+
   function ensureCampaignBoard() {
+    if (HOST().classList.contains('talos-embedded')) {
+      renderEmbeddedBoardDemo();
+      return Promise.resolve();
+    }
     if (state.board.initialized || state.board.bootstrapPromise) return state.board.bootstrapPromise;
     state.board.bootstrapPromise = loadCampaigns()
       .catch((error) => {
@@ -518,6 +570,10 @@
   }
 
   function clearCampaignEvidence() {
+    if (HOST().classList.contains('talos-embedded')) {
+      toast('Nessuna evidenza collegata', 'La Board mobile è una Demo UI senza backend.');
+      return;
+    }
     for (const row of state.board.runs) row.detto = null;
     $$('.run-evidence', campaignRunList).forEach((element) => element.remove());
     $$('.campaign-run-detail', campaignRunList).forEach((detail) => { detail.hidden = true; });
@@ -609,8 +665,8 @@
       html: () => `
         <div class="sheet-section">
           <span class="sheet-label">Ambiente attivo</span>
-          <button class="sheet-option active">
-            <span class="sheet-icon">${icon('i-branch')}</span><span><strong>wt/auth-61c · feat/mobile-harness</strong><small>~/dev/talos/.worktrees/auth-61c</small></span><span>Attivo</span>
+          <button class="sheet-option active" data-environment-choice="active">
+            <span class="sheet-icon">${icon('i-branch')}</span><span><strong>wt/auth-61c · feat/mobile-code</strong><small>~/dev/talos/.worktrees/auth-61c</small></span><span>Attivo</span>
           </button>
           <button class="sheet-option" data-environment-choice="local">
             <span class="sheet-icon">${icon('i-git')}</span><span><strong>Local · main</strong><small>~/dev/talos</small></span><span>pulito</span>
@@ -670,6 +726,7 @@
           <button class="sheet-option" data-control-action="agents"><span class="sheet-icon">${icon('i-robot')}</span><span><strong>Agents</strong><small>Subagent, deleghe, isolamento e limiti</small></span><span>2</span></button>
           <button class="sheet-option" data-control-action="hooks"><span class="sheet-icon">${icon('i-bolt')}</span><span><strong>Hooks</strong><small>Pre/Post tool, stop, notify e policy</small></span><span>4</span></button>
           <button class="sheet-option" data-control-action="doctor"><span class="sheet-icon">${icon('i-check')}</span><span><strong>Doctor</strong><small>Runtime, provider, shell, git e browser</small></span><span>Healthy</span></button>
+          <button class="sheet-option" data-control-action="settings"><span class="sheet-icon">${icon('i-settings')}</span><span><strong>Impostazioni Codice</strong><small>Aspetto, interazione e preferenze demo</small></span><span>Apri</span></button>
         </div>
         <div class="sheet-section">
           <span class="sheet-label">Approval policy</span>
@@ -752,6 +809,7 @@
       button.addEventListener('click', () => {
         const action = button.dataset.controlAction;
         if (action === 'agents') { closeEmbeddedDialog(sheetDialog); openPanel('inspector'); const agents = $('[data-inspector-tab="agents"]'); agents?.click(); }
+        else if (action === 'settings') { closeEmbeddedDialog(sheetDialog); setView('settings'); }
         else toast(action === 'doctor' ? 'Doctor: Healthy' : 'Hook center aperto', action === 'doctor' ? 'Provider, shell, git, browser e workspace verificati.' : '4 hook configurati per questa sessione.');
       });
     });
@@ -981,7 +1039,7 @@
       session: state.session,
       model: state.model,
       permissions: state.permissions,
-      branch: 'feat/mobile-harness',
+      branch: 'feat/mobile-code',
       worktree: 'wt/auth-61c',
       note: 'Interactive TALOS frontend mockup export',
     };
@@ -994,7 +1052,7 @@
   }
 
   async function shareSession() {
-    const text = `TALOS · ${state.session} · feat/mobile-harness`;
+    const text = `TALOS · ${state.session} · feat/mobile-code`;
     try {
       if (navigator.share) await navigator.share({ title: state.session, text });
       else if (navigator.clipboard) { await navigator.clipboard.writeText(text); toast('Snapshot copiato', 'Pronto da condividere.'); }
@@ -1002,6 +1060,10 @@
     } catch (error) {
       if (error?.name !== 'AbortError') toast('Condivisione non disponibile', text);
     }
+  }
+
+  function announceVoiceUnavailable() {
+    toast('Voce demo non collegata', 'Il microfono non registra e non invia audio in questa superficie.');
   }
 
   function visibleCommandButtons() {
@@ -1060,7 +1122,9 @@
   }
 
   $$('[data-open-panel]').forEach((button) => button.addEventListener('click', () => {
-    if (button.classList.contains('desktop-context-toggle') && button.dataset.openPanel === 'inspector' && window.innerWidth > 1040) toggleDesktopInspector();
+    if (button.dataset.openPanel === 'sessions' && HOST().classList.contains('talos-embedded')) {
+      window.__talosHarnessHostBack?.();
+    } else if (button.classList.contains('desktop-context-toggle') && button.dataset.openPanel === 'inspector' && window.innerWidth > 1040) toggleDesktopInspector();
     else openPanel(button.dataset.openPanel);
   }));
   $$('[data-close-panel]').forEach((button) => button.addEventListener('click', closePanels));
@@ -1158,6 +1222,20 @@
     toast(labels[button.dataset.browserAction] || 'Browser', 'Azione simulata nel mockup locale.');
   }));
 
+  const demoActionCopy = {
+    notifications: ['Notifiche demo', 'La superficie non è collegata a notifiche reali.'],
+    widget: ['Widget demo', 'L’aggiunta sarà disponibile quando questa Board avrà un backend.'],
+    delegate: ['Delega demo', 'Nessun subagent è stato avviato da questa interfaccia.'],
+  };
+  $$('[data-demo-action]').forEach((button) => button.addEventListener('click', () => {
+    toast(...(demoActionCopy[button.dataset.demoAction] || ['Demo UI · non collegato', 'Nessuna azione reale eseguita.']));
+  }));
+
+  $$('[data-file-entry]').forEach((button) => button.addEventListener('click', () => {
+    $$('[data-file-entry]').forEach((entry) => entry.classList.toggle('active', entry === button));
+    toast('Elemento selezionato', button.textContent.trim());
+  }));
+
   $$('[data-automation-action]').forEach((button) => button.addEventListener('click', () => {
     const action = button.dataset.automationAction;
     const labels = { new: ['Nuova automazione', 'Editor di schedulazione pronto.'], run: ['Run avviato', 'Nightly smoke eseguito in worktree isolato.'], edit: ['Automazione aperta', 'Modifica pianificazione, modello e destinazione.'] };
@@ -1219,6 +1297,7 @@
   });
 
   queueToggle.addEventListener('click', () => setQueueMode(!state.queueMode));
+  composerMic?.addEventListener('click', announceVoiceUnavailable);
 
   composerForm.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -1292,7 +1371,8 @@
   harnessFilter?.addEventListener('change', reloadRunsFromFilters);
   outcomeFilter?.addEventListener('change', reloadRunsFromFilters);
   refreshCampaignButton?.addEventListener('click', () => {
-    if (state.board.initialized) refreshCampaign();
+    if (HOST().classList.contains('talos-embedded')) renderEmbeddedBoardDemo(true);
+    else if (state.board.initialized) refreshCampaign();
     else ensureCampaignBoard();
   });
   loadMoreRunsButton?.addEventListener('click', async () => {
@@ -1371,7 +1451,12 @@
     hostResizeObserver = new ResizeObserver(syncHostLayout);
     hostResizeObserver.observe(HOST());
   }
-  window.__talosHarnessUiRuntime = { selectSession, dismissTransientLayers, setKeyboardOpen };
+  window.__talosHarnessUiRuntime = {
+    selectSession,
+    dismissTransientLayers,
+    transientLayersActive,
+    setKeyboardOpen,
+  };
   window.__talosHarnessDestroy = () => {
     window.removeEventListener('resize', onResize);
     window.visualViewport?.removeEventListener('resize', syncVisualViewport);

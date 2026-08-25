@@ -207,15 +207,16 @@ describe('TalosMobileSidebar — Harness UI debug-only entry (24/8)', () => {
     it('stays absent when the native plugin is unavailable, same as a release build', async () => {
         mountSidebar()
         await flushPromises()
-        expect(document.querySelector('[data-testid="talos-mobile-sidebar"] [aria-label="Open Harness"]')).toBeNull()
+        expect(document.querySelector('[data-testid="talos-mobile-sidebar"] [aria-label="Open Code"]')).toBeNull()
     })
 
     it('appears and navigates when the native plugin is available (debug build)', async () => {
         vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
         const wrapper = mountSidebar()
         await flushPromises()
-        const row = document.querySelector('[data-testid="talos-mobile-sidebar"] [aria-label="Open Harness"]') as HTMLElement
+        const row = document.querySelector('[data-testid="talos-mobile-sidebar"] [aria-label="Open Code"]') as HTMLElement
         expect(row).toBeTruthy()
+        expect(row.textContent).not.toMatch(/Harness/i)
         row.click()
         await flushPromises()
         expect(wrapper.emitted('navigate')).toEqual([['harness']])

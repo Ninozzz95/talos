@@ -636,7 +636,6 @@ function focusModelLabRoute(element: Element): void {
 // over it — the mobile mirror of the desktop windowed workspace.
 const isStation = computed(() => activeRoute.value !== 'chat')
 const stationLocksBodyScroll = computed(() => activeRoute.value === 'harness-session')
-
 /**
  * Recorded when the STATION changes, never when you move within one: going from
  * the research list to a report is not entering a station, and treating it as
@@ -1368,6 +1367,7 @@ onBeforeUnmount(async () => {
                     :shell-back="talosIndietro"
                     :parent-title="stationParentTitle"
                     :lock-body-scroll="stationLocksBodyScroll"
+                    :hide-chrome="activeRoute === 'harness-session'"
                     @close="navigate('chat')"
                 >
                     <RouterView v-slot="{ Component, route: renderedRoute }">

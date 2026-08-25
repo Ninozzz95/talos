@@ -33,11 +33,13 @@
  *     esempi reali dello stesso schema Vue + shadow DOM.
  *
  * `<link rel="stylesheet">` dentro lo shadow root, non CSS inline: i 10
- * `@font-face` del mockup usano percorsi RELATIVI (`./fonts/*.woff2`) — un
- * `<link href="/harness-ui/styles.css">` li risolve rispetto al file vero;
+ * `@font-face` del mockup usano percorsi RELATIVI (`./fonts/*.woff2`) — il
+ * link a `/harness-ui/styles.css?build=...` li risolve rispetto al file vero;
  * del testo CSS iniettato a mano risolverebbe rispetto al documento
- * sbagliato. `app.js` resta un file vero caricato con `<script src>` (mai
- * inline/eval: `script-src 'self'` nella CSP non ha `'unsafe-inline'`).
+ * sbagliato. La query usa il build id AVM: un aggiornamento APK non può
+ * riaccoppiare HTML nuovo e CSS/JS rimasti nella cache WebView. `app.js` resta
+ * un file vero caricato con `<script src>` (mai inline/eval: `script-src
+ * 'self'` nella CSP non ha `'unsafe-inline'`).
  *
  * `talosHarnessUiAvailable()` verificato qui, non solo alla sidebar: la
  * rotta resta raggiungibile da un URL diretto anche quando la voce di
@@ -54,17 +56,33 @@ import { Keyboard } from '@capacitor/keyboard'
 import { CircleAlert } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
+import { TALOS_APP_BUILD } from '@/lib/appBuild'
 import { findHarnessDemoSession } from '@/lib/harnessDemoSessions'
-import { selectTalosHarnessUiSession, setTalosHarnessUiKeyboardOpen } from '@/lib/harnessUiBridge'
+import {
+    dismissTalosHarnessUiTransientLayers,
+    selectTalosHarnessUiSession,
+    setTalosHarnessUiKeyboardOpen,
+    talosHarnessUiTransientLayersActive,
+} from '@/lib/harnessUiBridge'
+import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
 import { talosHarnessUiAvailable } from '@/services/harnessUi'
 
 const TALOS_HARNESS_UI_BASE = '/harness-ui'
+const TALOS_HARNESS_UI_BUILD_QUERY = `?build=${encodeURIComponent(TALOS_APP_BUILD)}`
+
+function harnessUiAssetUrl(fileName: 'index.html' | 'styles.css' | 'app.js'): string {
+    return `${TALOS_HARNESS_UI_BASE}/${fileName}${TALOS_HARNESS_UI_BUILD_QUERY}`
+}
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useTalosI18n()
 
 const available = talosHarnessUiAvailable()
+useTalosOverlayBack(
+    () => { dismissTalosHarnessUiTransientLayers() },
+    talosHarnessUiTransientLayersActive,
+)
 const sessionId = computed(() => String(route.params.id ?? ''))
 const selectedSession = computed(() => findHarnessDemoSession(sessionId.value))
 const hostEl = ref<HTMLDivElement | null>(null)
@@ -119,6 +137,7 @@ function teardown(): void {
     ;(window as unknown as { __talosHarnessDestroy?: () => void }).__talosHarnessDestroy?.()
     delete (window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot
     delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
+    delete (window as unknown as { __talosHarnessHostBack?: unknown }).__talosHarnessHostBack
     scriptEl?.remove()
     scriptEl = null
 }
@@ -130,7 +149,7 @@ async function mountMockup(): Promise<void> {
     loadError.value = false
     teardown()
     try {
-        const html = await fetch(`${TALOS_HARNESS_UI_BASE}/index.html`).then((response) => {
+        const html = await fetch(harnessUiAssetUrl('index.html'), { cache: 'no-cache' }).then((response) => {
             if (!response.ok) throw new Error(`harness-ui index.html: ${response.status}`)
             return response.text()
         })
@@ -162,7 +181,7 @@ async function mountMockup(): Promise<void> {
 
         const link = document.createElement('link')
         link.rel = 'stylesheet'
-        link.href = `${TALOS_HARNESS_UI_BASE}/styles.css`
+        link.href = harnessUiAssetUrl('styles.css')
         shadowRoot.appendChild(link)
 
         // `index.html` finisce con <script src="app.js"> — saltato qui,
@@ -181,10 +200,11 @@ async function mountMockup(): Promise<void> {
         // di primo livello li leggono appena lo script parte.
         ;(window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot = shadowRoot
         ;(window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost = host
+        ;(window as unknown as { __talosHarnessHostBack?: () => void }).__talosHarnessHostBack = returnToHarnessList
 
         await new Promise<void>((resolve, reject) => {
             const script = document.createElement('script')
-            script.src = `${TALOS_HARNESS_UI_BASE}/app.js`
+            script.src = harnessUiAssetUrl('app.js')
             script.addEventListener('load', () => resolve())
             script.addEventListener('error', () => reject(new Error('harness-ui app.js: load error')))
             scriptEl = script
@@ -237,6 +257,7 @@ onBeforeUnmount(() => {
         data-testid="talos-harness-session-screen"
         :data-harness-session-id="sessionId"
         tablet-edge-to-edge
+        edge-to-edge
     >
         <p v-if="!available" data-testid="talos-harness-session-unavailable" class="text-sm text-[var(--talos-muted)]">
             {{ t('harness.unavailable') }}

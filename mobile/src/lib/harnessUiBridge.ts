@@ -6,7 +6,8 @@ export interface TalosHarnessSessionSelection {
 
 export interface TalosHarnessUiRuntime {
     selectSession?(selection: TalosHarnessSessionSelection): void
-    dismissTransientLayers?(): void
+    dismissTransientLayers?(): boolean
+    transientLayersActive?(): boolean
     setKeyboardOpen?(open: boolean): void
 }
 
@@ -26,8 +27,11 @@ export function selectTalosHarnessUiSession(selection: TalosHarnessSessionSelect
 export function dismissTalosHarnessUiTransientLayers(): boolean {
     const runtime = currentTalosHarnessUiRuntime()
     if (!runtime?.dismissTransientLayers) return false
-    runtime.dismissTransientLayers()
-    return true
+    return runtime.dismissTransientLayers()
+}
+
+export function talosHarnessUiTransientLayersActive(): boolean {
+    return currentTalosHarnessUiRuntime()?.transientLayersActive?.() === true
 }
 
 export function setTalosHarnessUiKeyboardOpen(open: boolean): boolean {

@@ -365,8 +365,40 @@ esplicitamente documentata, non un backend inventato.
 
 ## Fase 5 — controlli demo e collisioni
 
-Produzione: `mobile/public/harness-ui/index.html`,
-`mobile/public/harness-ui/styles.css`, `mobile/public/harness-ui/app.js`.
+Produzione:
+
+1. `mobile/src/App.vue`
+2. `mobile/src/components/shell/TalosMobileToolSheet.vue`
+3. `mobile/src/lib/harnessUiBridge.ts`
+4. `mobile/src/i18n/locales/en.ts`
+5. `mobile/src/i18n/locales/it.ts`
+6. `mobile/public/harness-ui/index.html`
+7. `mobile/public/harness-ui/styles.css`
+8. `mobile/public/harness-ui/app.js`
+9. `mobile/src/components/shell/TalosMobileScreen.vue`
+10. `mobile/src/screens/HarnessSessionScreen.vue`
+
+Test:
+
+1. `mobile/tests/unit/lib/harnessUiBridge.test.ts`
+2. `mobile/tests/unit/shell/TalosMobileToolSheet.test.ts`
+3. `mobile/tests/unit/shell/TalosMobileSidebar.test.ts`
+4. `mobile/tests/unit/shell/TalosTabletSidebar.test.ts`
+5. `mobile/tests/unit/shell/appShell.test.ts`
+6. `mobile/tests/unit/screens/harnessScreen.test.ts`
+7. `mobile/tests/unit/screens/harnessSessionScreen.test.ts`
+8. `mobile/tests/unit/harness/harnessUiAssetContract.test.ts`
+9. `mobile/tests/unit/harness/harnessUiFrontend.test.ts`
+10. `mobile/tests/unit/shell/TalosMobileScreen.test.ts`
+
+Simboli pubblici modificati: `TalosMobileToolSheet.hideChrome?: boolean`,
+`TalosMobileScreen.edgeToEdge?: boolean` e
+`TalosHarnessUiRuntime.dismissTransientLayers?(): boolean`. Il simbolo adapter
+`dismissTalosHarnessUiTransientLayers(): boolean` resta stabile ma ora riporta
+l'esito reale. In `App.vue` si aggiunge il computed interno
+`stationHidesSheetChrome`; `wireSheetActions(type)` aggiunge soltanto la
+navigazione locale `control -> settings`. `TalosHarnessUiPlugin` resta il puro
+cancello debug-only preesistente e non cambia. Nessuna rotta o API cambia.
 
 RED: `HARNESS-COMMAND-FILTER-01`, `HARNESS-COMMAND-KEYBOARD-01`,
 `HARNESS-MIC-HONEST-01`, `HARNESS-DEMO-BADGE-NO-COLLISION-01`,
@@ -375,10 +407,93 @@ RED: `HARNESS-COMMAND-FILTER-01`, `HARNESS-COMMAND-KEYBOARD-01`,
 `HARNESS-PALETTE-BACK-01`, `HARNESS-NESTED-SCROLL-TRAP-01`,
 `HARNESS-BOARD-MOBILE-HONESTY-01`, `HARNESS-DEMO-BADGE-CONTENT-01`.
 
-Fallimento atteso: filtro visibile, mic inerte, badge/coda sovrapposti, ultimi
-controlli coperti. GREEN: `npx vitest run tests/unit/harness/harnessUiAssetContract.test.ts tests/unit/harness/harnessUiFrontend.test.ts`.
+Decisioni owner e scenari aggiunti 25/8:
+
+- `CODE-PRODUCT-NAME-01`: tutte le stringhe prodotto visibili dicono Codice/Code;
+  identificatori tecnici compatibili restano invariati.
+- `CODE-SESSION-FIRST-HEADER-01`: nel dettaglio non viene resa la testata del
+  foglio; la prima riga visibile è la topbar della sessione selezionata.
+- `CODE-SINGLE-SAFE-AREA-01`: rimuovendo la testata esterna, la topbar Codice
+  consuma una sola volta la safe-area e non finisce sotto la status bar.
+- `CODE-OTHER-STATIONS-CHROME-01`: tutte le altre stazioni conservano testata,
+  Back e azioni esistenti.
+- `CODE-PHONE-UP-01`: nel dettaglio telefono un unico Back/Up visibile precede
+  il titolo sessione e torna con Vue Router alla lista Codice; la testata
+  esterna non ricompare, il tablet non duplica il controllo e il callback host
+  viene rimosso allo smontaggio.
+- `CODE-MOBILE-GUTTER-01`: il corpo host Codice elimina il gutter esterno da
+  16px su telefono e conserva soltanto quello interno responsive; le altre
+  stazioni mantengono il padding storico e il tablet edge-to-edge non cambia.
+- `CODE-PALETTE-LANDSCAPE-01`: nella forma telefono larga e bassa l'intero
+  dialog comandi, inclusi bordo inferiore e ultimo scroll raggiungibile, resta
+  dentro il viewport dinamico. RED misurato sul Pad: bottom `399.85px` con
+  viewport `392px`; GREEN CSS: margine superiore 8px e altezza massima
+  `calc(100dvh - 40px)` per il dialog e
+  `calc(100dvh - 140px)` per l'elenco risultati. La misura GREEN reale al fondo
+  e' `scrollTop 405/405`, ultimo pulsante a `352.27px` e bordo contenitore a
+  `359.45px`, dentro il viewport da `392px`.
+- `CODE-TOAST-WIDE-SHORT-01`: ogni azione demo nella forma telefono larga e
+  bassa mostra il proprio feedback interamente sopra la bottom navigation.
+  RED reale: toast presente nel DOM a `320.67–380.12px` ma coperto dalla nav;
+  GREEN: `bottom: calc(var(--mobile-nav-h) + 8px)`, build/deploy e screenshot
+  completo richiesti.
+- `CODE-TOAST-NO-CONTROL-OVERLAP-01`: lo screenshot con timer congelato ha
+  mostrato il toast finalmente sopra la nav ma ancora sopra microfono e invio
+  del composer (`toast 277.27–336.73px`, `composer 264.73–336.73px`). Nella
+  prima correzione l'offset sopra composer ha liberato i controlli Chat, ma la
+  prova inversa Automazioni ha mostrato il toast `189.27–248.73px` sopra
+  `Nuova automazione` (`203.73–239.73px`). Correzione finale wide-short: toast
+  compatto su una riga, subito sotto topbar + run strip e allineato a destra;
+  con tastiera aperta, dove quei due blocchi spariscono, sopra il composer.
+  Prova inversa obbligatoria nelle altre tre forme.
+- `CODE-REVIEW-WIDE-SHORT-01`: lo scroll massimo di Review deve lasciare
+  visibile l'ultima riga reale del diff, senza una coda vuota prodotta dal
+  minimo desktop di 420px. GREEN limitato alla forma larga e bassa:
+  `min-height: min(180px, calc(100dvh - 180px))`; prova inversa su tablet e
+  telefono portrait obbligatoria.
+- `CODE-TERMINAL-DEMO-TRUTH-01`: la superficie statica non deve mai dichiarare
+  una PTY reale attiva. RED: `pty attiva`; GREEN: badge neutro `pty demo`, con
+  assenza permanente della stringa precedente e screenshot nelle quattro forme.
+- `CODE-SETTINGS-REACHABLE-01`: in modalita' embedded la schermata Impostazioni
+  deve essere raggiungibile senza la sidebar sessioni nascosta. Il comando
+  esistente `Agents, hook e doctor` apre il pannello di controllo, che espone
+  `Impostazioni Codice`; il tocco chiude il pannello e attiva
+  `[data-view="settings"]`. RED comportamentale in
+  `mobile/tests/unit/harness/harnessUiFrontend.test.ts`; GREEN con prova Pad in
+  tutte le quattro forme, toggle movimento e scroll fino all'ultima card.
+- `CODE-ASSET-CACHE-01`: `HarnessSessionScreen.vue` deriva gli URL di
+  `index.html`, `styles.css` e `app.js` dal `TALOS_APP_BUILD` e richiede l'HTML
+  con `cache: no-cache`. Il primo allarme sull'entry principale era un errore di
+  procedura: `assembleDebug` senza `-PtalosSideBySide` aveva prodotto e
+  installato `ai.talos`, mentre CDP osservava il vecchio processo
+  `ai.talos.dev` (ultimo aggiornamento 12:55). Non era una cache WebView e non
+  giustifica alcun bypass nativo. Test permanente in
+  `harnessSessionScreen.test.ts`; gate reale: APK verificato con `aapt2` come
+  `ai.talos.dev`, reinstallazione senza `pm clear`, nuova entry/chunk misurati,
+  CSSOM con le regole nuove e screenshot del toast realmente sopra la nav.
+- `CODE-WIDE-SHORT-SCROLL-01`: ogni vista non-Chat della forma larga e bassa
+  conserva padding e `scroll-padding-bottom` pari alla nav persistente; il
+  Browser non aggiunge il vecchio fondo vuoto. RED reale: fine della preview
+  nascosta/coda di circa 80px. GREEN Pad: preview e shell a `324.81px`, nav a
+  `324.73px`, ultimo contenuto raggiungibile.
+- `CODE-MODE-STATE-TRUTH-01`: i toggle Chat/Split/Board espongono selezione e
+  `aria-pressed=true` soltanto quando quella superficie è realmente visibile.
+  RED: Browser visibile con Chat ancora attiva. GREEN: Browser produce zero
+  toggle attivi e tre `aria-pressed=false`; il comando Chat ripristina una sola
+  selezione vera.
+
+Fallimento atteso: nome Harness ancora visibile, doppia testata, filtro
+visibile, mic inerte, badge/coda sovrapposti, Back propagato e ultimi controlli
+coperti. GREEN: `npx vitest run tests/unit/lib/harnessUiBridge.test.ts tests/unit/shell/TalosMobileToolSheet.test.ts tests/unit/shell/TalosMobileSidebar.test.ts tests/unit/shell/TalosTabletSidebar.test.ts tests/unit/shell/appShell.test.ts tests/unit/screens/harnessScreen.test.ts tests/unit/screens/harnessSessionScreen.test.ts tests/unit/harness/harnessUiAssetContract.test.ts tests/unit/harness/harnessUiFrontend.test.ts`.
 Pad: checklist controlli/scroll completa, quattro forme. Commit:
-`fix(harness-ui): tutti i controlli demo rispondono senza sovrapporsi`.
+`fix(harness-ui): Codice risponde senza testate o sovrapposizioni duplicate`.
+
+Stato 25/8: implementazione e matrice Pad completate. Gli 88 screenshot sotto
+`C:\Users\Antonino\AppData\Local\Temp\talos-code-phase5-20260825` sono stati
+ispezionati integralmente. Gate mirato fresco: 10 file e 111 test passati;
+typecheck, syntax check, build/parity, Capacitor copy e compilazioni debug
+Kotlin/release Java e `git diff --check` verdi. Documentazione di fase
+consolidata; resta soltanto il commit isolato prima di aprire la Fase 6.
 
 ## Fase 6 — theme engine TALOS
 

@@ -259,9 +259,9 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
     })
 
     it('HARNESS-TOP-LAYER-DISMISS-01 dismisses Harness transient layers before opening the global sidebar', async () => {
-        const dismissTransientLayers = vi.fn()
+        const dismissTransientLayers = vi.fn(() => true)
         ;(window as unknown as {
-            __talosHarnessUiRuntime?: { dismissTransientLayers: () => void }
+            __talosHarnessUiRuntime?: { dismissTransientLayers: () => boolean }
         }).__talosHarnessUiRuntime = { dismissTransientLayers }
         const router = makeRouter('/harness/refactor-auth-flow')
         const wrapper = mount(App, { global: { plugins: [router] }, attachTo: document.body })
@@ -279,6 +279,19 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
             delete (window as unknown as { __talosHarnessUiRuntime?: unknown }).__talosHarnessUiRuntime
         }
         expect(dismissCalls).toBe(1)
+    })
+
+    it('CODE-SESSION-FIRST-HEADER-01 removes only the duplicate sheet header from a Code detail', async () => {
+        const router = makeRouter('/harness/refactor-auth-flow')
+        const wrapper = mount(App, { global: { plugins: [router] }, attachTo: document.body })
+        try {
+            await flushPromises()
+            const sheet = wrapper.get('[data-testid="talos-mobile-tool-sheet"]')
+            expect(sheet.attributes('aria-label')).toBe('Code')
+            expect(wrapper.find('.talos-mobile-tool-sheet-header').exists()).toBe(false)
+        } finally {
+            wrapper.unmount()
+        }
     })
 
     it('P1-CTX-UI-03 binds the active chat policy to its media panel', async () => {
