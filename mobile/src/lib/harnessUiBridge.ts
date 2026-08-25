@@ -9,6 +9,8 @@ export interface TalosHarnessUiRuntime {
     dismissTransientLayers?(): boolean
     transientLayersActive?(): boolean
     setKeyboardOpen?(open: boolean): void
+    submitPrompt?(text: string): boolean
+    announceComposerAction?(action: string): boolean
 }
 
 export function currentTalosHarnessUiRuntime(): TalosHarnessUiRuntime | null {
@@ -39,4 +41,16 @@ export function setTalosHarnessUiKeyboardOpen(open: boolean): boolean {
     if (!runtime?.setKeyboardOpen) return false
     runtime.setKeyboardOpen(open)
     return true
+}
+
+export function submitTalosHarnessUiPrompt(text: string): boolean {
+    const runtime = currentTalosHarnessUiRuntime()
+    if (!runtime?.submitPrompt) return false
+    return runtime.submitPrompt(text)
+}
+
+export function announceTalosHarnessUiComposerAction(action: string): boolean {
+    const runtime = currentTalosHarnessUiRuntime()
+    if (!runtime?.announceComposerAction) return false
+    return runtime.announceComposerAction(action)
 }

@@ -49,23 +49,31 @@
  * statico tramite il ponte AVM tipizzato. Non è wiring di backend: cambia solo
  * lo stato locale dichiaratamente demo già presente nel mockup.
  */
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { PluginListenerHandle } from '@capacitor/core'
 import { Keyboard } from '@capacitor/keyboard'
 import { CircleAlert } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
+import TalosMobileComposer from '@/components/chat/TalosMobileComposer.vue'
+import type { TalosMobileModelProfileView } from '@/components/chat/mobileChatTypes'
 import { TALOS_APP_BUILD } from '@/lib/appBuild'
+import { talosComposerFlags } from '@/lib/composerStyle'
 import { findHarnessDemoSession } from '@/lib/harnessDemoSessions'
 import {
+    announceTalosHarnessUiComposerAction,
     dismissTalosHarnessUiTransientLayers,
     selectTalosHarnessUiSession,
     setTalosHarnessUiKeyboardOpen,
+    submitTalosHarnessUiPrompt,
     talosHarnessUiTransientLayersActive,
 } from '@/lib/harnessUiBridge'
 import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
 import { talosHarnessUiAvailable } from '@/services/harnessUi'
+import { useSettingsStore } from '@/stores/settings'
+import type { TalosMobileEffortLevel } from '@/lib/mobileEffort'
+import type { TalosMobileCommandId } from '@/lib/mobileCommandRegistry'
 
 const TALOS_HARNESS_UI_BASE = '/harness-ui'
 const TALOS_HARNESS_UI_BUILD_QUERY = `?build=${encodeURIComponent(TALOS_APP_BUILD)}`
@@ -77,6 +85,7 @@ function harnessUiAssetUrl(fileName: 'index.html' | 'styles.css' | 'app.js'): st
 const route = useRoute()
 const router = useRouter()
 const { t } = useTalosI18n()
+const settings = useSettingsStore()
 
 const available = talosHarnessUiAvailable()
 useTalosOverlayBack(
@@ -86,12 +95,39 @@ useTalosOverlayBack(
 const sessionId = computed(() => String(route.params.id ?? ''))
 const selectedSession = computed(() => findHarnessDemoSession(sessionId.value))
 const hostEl = ref<HTMLDivElement | null>(null)
+const composerDockEl = ref<HTMLDivElement | null>(null)
 const loading = ref(true)
 const loadError = ref(false)
+const codePrompt = ref('')
+const codeModelProfileId = ref('code-gpt-5-6-sol')
+const codeEffort = ref<TalosMobileEffortLevel>('high')
+const codeThinking = ref(false)
+const codeBrowseMode = ref(false)
+const codeView = ref('chat')
+
+const CODE_MODEL_PROFILES: TalosMobileModelProfileView[] = [{
+    id: 'code-gpt-5-6-sol',
+    provider: 'openai',
+    model: 'gpt-5.6-sol',
+    display_name: 'gpt-5.6-sol',
+    status: 'healthy',
+    has_secret: true,
+    effort_levels: ['low', 'medium', 'high', 'xhigh', 'max'],
+    supports_thinking: true,
+    show_in_composer: true,
+    capabilities: null,
+    probe_ok: true,
+}]
+const codeComposerShape = computed(() => talosComposerFlags(
+    settings.state.shell.composer_shape,
+    settings.state.shell.composer_plus,
+))
+const codeCanSend = computed(() => codePrompt.value.trim().length > 0)
 
 let scriptEl: HTMLScriptElement | null = null
 let mounted = false
 const keyboardListeners: PluginListenerHandle[] = []
+let composerResizeObserver: ResizeObserver | null = null
 
 async function retainKeyboardListener(registration: Promise<PluginListenerHandle>): Promise<void> {
     try {
@@ -111,11 +147,17 @@ async function attachKeyboardBridge(): Promise<void> {
     await Promise.all([
         retainKeyboardListener(Keyboard.addListener(
             'keyboardWillShow',
-            () => { setTalosHarnessUiKeyboardOpen(true) },
+            () => {
+                setTalosHarnessUiKeyboardOpen(true)
+                void nextTick(syncComposerClearance)
+            },
         )),
         retainKeyboardListener(Keyboard.addListener(
             'keyboardWillHide',
-            () => { setTalosHarnessUiKeyboardOpen(false) },
+            () => {
+                setTalosHarnessUiKeyboardOpen(false)
+                void nextTick(syncComposerClearance)
+            },
         )),
     ])
 }
@@ -124,6 +166,63 @@ async function detachKeyboardBridge(): Promise<void> {
     setTalosHarnessUiKeyboardOpen(false)
     const listeners = keyboardListeners.splice(0)
     await Promise.allSettled(listeners.map((listener) => listener.remove()))
+}
+
+function syncComposerClearance(): void {
+    const host = hostEl.value
+    const dock = composerDockEl.value
+    if (!host || !dock) return
+    const navVisible = !document.body.classList.contains('keyboard-open')
+        && (window.innerWidth <= 780 || window.innerHeight <= 500)
+    const navClearance = navVisible ? 68 : 0
+    host.style.setProperty(
+        '--talos-code-composer-clearance',
+        `${Math.ceil(dock.getBoundingClientRect().height + navClearance + 12)}px`,
+    )
+}
+
+function observeComposerClearance(): void {
+    composerResizeObserver?.disconnect()
+    composerResizeObserver = null
+    const dock = composerDockEl.value
+    if (!dock || typeof ResizeObserver !== 'function') {
+        syncComposerClearance()
+        return
+    }
+    composerResizeObserver = new ResizeObserver(syncComposerClearance)
+    composerResizeObserver.observe(dock)
+    syncComposerClearance()
+}
+
+function updateCodePrompt(value: string): void {
+    codePrompt.value = value
+    if (/@$/.test(value)) announceTalosHarnessUiComposerAction('references')
+}
+
+function submitCodePrompt(): void {
+    const text = codePrompt.value.trim()
+    if (!text || !submitTalosHarnessUiPrompt(text)) return
+    codePrompt.value = ''
+}
+
+function announceCodeComposerAction(action: string): void {
+    announceTalosHarnessUiComposerAction(action)
+}
+
+function selectCodeCommand(command: TalosMobileCommandId): void {
+    if (command === 'send_message') { submitCodePrompt(); return }
+    if (command === 'open_browse') {
+        codeBrowseMode.value = true
+        announceCodeComposerAction('browse')
+        return
+    }
+    if (command === 'open_context_vault') { void router.push({ name: 'context' }); return }
+    if (command === 'open_model_center') { void router.push({ name: 'settings-models' }); return }
+    if (command === 'open_doctor') { void router.push({ name: 'doctor' }); return }
+    if (command === 'open_notes') { void router.push({ name: 'notes' }); return }
+    if (command === 'open_tasks') { void router.push({ name: 'tasks' }); return }
+    if (command === 'new_session') codePrompt.value = ''
+    announceCodeComposerAction(command)
 }
 
 function returnToHarnessList(): void {
@@ -138,6 +237,7 @@ function teardown(): void {
     delete (window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot
     delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
     delete (window as unknown as { __talosHarnessHostBack?: unknown }).__talosHarnessHostBack
+    delete (window as unknown as { __talosHarnessHostViewChange?: unknown }).__talosHarnessHostViewChange
     scriptEl?.remove()
     scriptEl = null
 }
@@ -201,6 +301,8 @@ async function mountMockup(): Promise<void> {
         ;(window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot = shadowRoot
         ;(window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost = host
         ;(window as unknown as { __talosHarnessHostBack?: () => void }).__talosHarnessHostBack = returnToHarnessList
+        ;(window as unknown as { __talosHarnessHostViewChange?: (view: string) => void })
+            .__talosHarnessHostViewChange = (view) => { codeView.value = view }
 
         await new Promise<void>((resolve, reject) => {
             const script = document.createElement('script')
@@ -218,6 +320,8 @@ async function mountMockup(): Promise<void> {
         loadError.value = true
     } finally {
         loading.value = false
+        await nextTick()
+        observeComposerClearance()
     }
 }
 
@@ -244,9 +348,14 @@ watch(selectedSession, (selection) => {
     }
 }, { flush: 'post' })
 
+watch(composerDockEl, observeComposerClearance, { flush: 'post' })
+watch(codeView, () => { void nextTick(syncComposerClearance) })
+
 onBeforeUnmount(() => {
     mounted = false
     void detachKeyboardBridge()
+    composerResizeObserver?.disconnect()
+    composerResizeObserver = null
     teardown()
 })
 </script>
@@ -258,6 +367,7 @@ onBeforeUnmount(() => {
         :data-harness-session-id="sessionId"
         tablet-edge-to-edge
         edge-to-edge
+        embedded
     >
         <p v-if="!available" data-testid="talos-harness-session-unavailable" class="text-sm text-[var(--talos-muted)]">
             {{ t('harness.unavailable') }}
@@ -300,6 +410,78 @@ onBeforeUnmount(() => {
                 data-testid="talos-harness-session-host"
                 class="h-full w-full"
             />
+            <div
+                v-show="!loading && !loadError && codeView === 'chat'"
+                ref="composerDockEl"
+                data-testid="talos-code-composer-dock"
+                class="talos-code-composer-dock"
+            >
+                <TalosMobileComposer
+                    :prompt="codePrompt"
+                    :model-profiles="CODE_MODEL_PROFILES"
+                    :selected-model-profile-id="codeModelProfileId"
+                    :selected-effort="codeEffort"
+                    :thinking="codeThinking"
+                    :can-send="codeCanSend"
+                    :sending="false"
+                    :drawer-mode="codeComposerShape.drawerMode"
+                    :immersive-composer="codeComposerShape.immersiveComposer"
+                    :plus-dropdown="codeComposerShape.plusDropdown"
+                    :browse-mode="codeBrowseMode"
+                    :attachments-available="true"
+                    :context-available="true"
+                    @update:prompt="updateCodePrompt"
+                    @send="submitCodePrompt"
+                    @select-model-profile="codeModelProfileId = $event"
+                    @select-effort="codeEffort = $event"
+                    @select-thinking="codeThinking = $event"
+                    @toggle-browse="codeBrowseMode = $event"
+                    @select-slash-command="selectCodeCommand"
+                    @attach="announceCodeComposerAction('attach')"
+                    @take-photo="announceCodeComposerAction('photo')"
+                    @pick-photos="announceCodeComposerAction('photos')"
+                    @open-context="void router.push({ name: 'context' })"
+                    @open-model-lab="void router.push({ name: 'settings-models' })"
+                    @refresh-models="announceCodeComposerAction('refresh-models')"
+                    @enhance-prompt="announceCodeComposerAction('enhance')"
+                    @enhance-blocked="announceCodeComposerAction('enhance-blocked')"
+                    @open-browser-url="announceCodeComposerAction('browser-url')"
+                />
+            </div>
         </template>
     </TalosMobileScreen>
 </template>
+
+<style scoped>
+.talos-code-composer-dock {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    pointer-events: none;
+    transition:
+        opacity var(--talos-motion-duration-composer-expand, 180ms) var(--talos-motion-ease-composer-expand, ease-out),
+        transform var(--talos-motion-duration-composer-expand, 180ms) var(--talos-motion-ease-composer-expand, ease-out);
+}
+
+.talos-code-composer-dock :deep([data-testid="talos-mobile-composer"]) {
+    pointer-events: auto;
+}
+
+@media (max-width: 780px), (max-height: 500px) {
+    .talos-code-composer-dock {
+        bottom: 68px;
+    }
+}
+
+:global(body.keyboard-open .talos-code-composer-dock) {
+    bottom: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .talos-code-composer-dock {
+        transition-duration: 0ms;
+    }
+}
+</style>

@@ -8,6 +8,8 @@ function asset(name: string): string {
     return readFileSync(resolve(process.cwd(), 'public', 'harness-ui', name), 'utf8')
 }
 
+const originalElementAnimate = Element.prototype.animate
+
 function mountStaticRuntime(): void {
     const parsed = new DOMParser().parseFromString(asset('index.html'), 'text/html')
     parsed.querySelectorAll('script').forEach((script) => script.remove())
@@ -34,6 +36,11 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         document.body.replaceChildren()
         document.body.className = ''
         document.documentElement.className = ''
+        document.documentElement.style.removeProperty('--talos-motion-duration-surface-exit')
+        Object.defineProperty(Element.prototype, 'animate', {
+            configurable: true,
+            value: originalElementAnimate,
+        })
         vi.unstubAllGlobals()
     })
 
@@ -184,6 +191,35 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         expect(css).toMatch(/\.chat-view\s+\.conversation\s*\{[^}]*height:\s*100%[^}]*overflow-y:\s*auto/s)
     })
 
+    it('CODE-TOPBAR-ENTER-ALWAYS-01 hides on downward content scroll, returns upward and detaches on destroy', () => {
+        document.documentElement.classList.add('talos-embedded')
+        mountStaticRuntime()
+        const conversation = document.querySelector<HTMLElement>('.conversation')
+        const topbar = document.querySelector<HTMLElement>('.topbar')
+        expect(conversation).not.toBeNull()
+        expect(topbar).not.toBeNull()
+
+        if (!conversation || !topbar) return
+        conversation.scrollTop = 48
+        conversation.dispatchEvent(new Event('scroll'))
+        expect(topbar.classList.contains('is-scroll-hidden')).toBe(true)
+
+        conversation.scrollTop = 36
+        conversation.dispatchEvent(new Event('scroll'))
+        expect(topbar.classList.contains('is-scroll-hidden')).toBe(false)
+
+        conversation.scrollTop = 64
+        conversation.dispatchEvent(new Event('scroll'))
+        expect(topbar.classList.contains('is-scroll-hidden')).toBe(true)
+        document.querySelector<HTMLButtonElement>('[data-mobile-view="browser"]')?.click()
+        expect(topbar.classList.contains('is-scroll-hidden')).toBe(false)
+
+        ;(window as unknown as { __talosHarnessDestroy?: () => void }).__talosHarnessDestroy?.()
+        conversation.scrollTop = 96
+        conversation.dispatchEvent(new Event('scroll'))
+        expect(topbar.classList.contains('is-scroll-hidden')).toBe(false)
+    })
+
     it.each([
         ['refactor-auth-flow', 'Refactor auth flow'],
         ['audit-api-permissions', 'Audit API permissions'],
@@ -236,6 +272,75 @@ describe('Harness UI embedded host and keyboard runtime', () => {
 
         expect(microphone?.getAttribute('aria-pressed')).not.toBe('true')
         expect(document.querySelector('#toastRegion')?.textContent).toContain('Voce demo non collegata')
+    })
+
+    it('CODE-MOTION-EXIT-01 removes approval feedback only after its exit animation finishes', async () => {
+        let finishAnimation: (() => void) | undefined
+        const cancel = vi.fn()
+        const animate = vi.fn(() => ({
+            cancel,
+            finished: new Promise<void>((resolve) => { finishAnimation = resolve }),
+        }))
+        Object.defineProperty(Element.prototype, 'animate', {
+            configurable: true,
+            value: animate,
+        })
+        document.documentElement.style.setProperty('--talos-motion-duration-surface-exit', '120ms')
+        mountStaticRuntime()
+
+        const deny = document.querySelector<HTMLButtonElement>('[data-deny]')
+        const card = deny?.closest('.approval-card')
+        deny?.click()
+
+        expect(animate).toHaveBeenCalled()
+        expect(card?.isConnected).toBe(true)
+        finishAnimation?.()
+        await Promise.resolve()
+        await Promise.resolve()
+        expect(card?.isConnected).toBe(false)
+    })
+
+    it('CODE-MOTION-REDUCED-01 removes immediately when the app motion token is zero', () => {
+        const animate = vi.fn()
+        Object.defineProperty(Element.prototype, 'animate', {
+            configurable: true,
+            value: animate,
+        })
+        document.documentElement.style.setProperty('--talos-motion-duration-surface-exit', '0ms')
+        mountStaticRuntime()
+
+        const deny = document.querySelector<HTMLButtonElement>('[data-deny]')
+        const card = deny?.closest('.approval-card')
+        deny?.click()
+
+        expect(animate).not.toHaveBeenCalled()
+        expect(card?.isConnected).toBe(false)
+    })
+
+    it('CODE-COMPOSER-DEMO-SEND-01 accepts the shared Vue composer through the runtime without a network request', () => {
+        const fetchMock = vi.fn()
+        vi.stubGlobal('fetch', fetchMock)
+        mountStaticRuntime()
+        const runtime = (window as unknown as {
+            __talosHarnessUiRuntime?: { submitPrompt?(text: string): boolean }
+        }).__talosHarnessUiRuntime
+
+        expect(runtime?.submitPrompt?.('Prompt from the real composer')).toBe(true)
+        const userMessages = document.querySelectorAll('.user-message')
+        expect(userMessages.item(userMessages.length - 1).textContent)
+            .toContain('Prompt from the real composer')
+        expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('CODE-COMPOSER-DEMO-SEND-01 preserves ! and !! as honest local terminal demonstrations', () => {
+        mountStaticRuntime()
+        const runtime = (window as unknown as {
+            __talosHarnessUiRuntime?: { submitPrompt?(text: string): boolean }
+        }).__talosHarnessUiRuntime
+
+        expect(runtime?.submitPrompt?.('!! pwd')).toBe(true)
+        expect(document.querySelector('[data-view="terminal"]')?.classList.contains('active')).toBe(true)
+        expect(document.querySelector('#toastRegion')?.textContent).toContain('Shell eseguita senza contesto')
     })
 
     it('HARNESS-BOARD-MOBILE-HONESTY-01 never calls a local backend from the embedded mobile demo', async () => {

@@ -334,6 +334,74 @@ diversa è visibile, nessuno dei tre è premuto. Tornando a uno dei tre modi,
 stile attivo e `aria-pressed` cambiano insieme. Nessuna nuova dipendenza. RED
 permanente: `CODE-MODE-STATE-TRUTH-01`.
 
+### Theme engine attraverso il confine Shadow DOM
+
+- https://www.w3.org/TR/css-shadow-parts-1/
+- https://www.w3.org/TR/css-variables-1/
+- https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Values/color_value/color-mix
+- https://www.w3.org/community/reports/design-tokens/CG-FINAL-format-20251028/
+
+L'ispezione del codice vero ha misurato un confine già completo nel prodotto:
+`applyTalosTheme()` applica sul `document.documentElement` la palette canonica,
+i font, la densità, i raggi, i token di stato e gli alias
+`--talos-effective-*`; il cambio preset riscrive lo stesso root a componente
+montato. Lo Shadow DOM eredita le custom properties dall'host, ma
+`styles.css` dichiarava direttamente su `:host` tutti gli alias con valori
+Calm. Una dichiarazione diretta sull'host prevale sul valore ereditato: per
+questo Codice restava scuro anche dentro Paper.
+
+CSS Shadow Parts indica le custom properties come il canale intenzionale con
+cui una pagina esterna tematizza gli internals di uno shadow tree. La
+specifica Design Tokens 2025.10 definisce gli alias come riferimenti alla
+stessa decisione di design; duplicare i valori invece del riferimento produce
+deriva. `color-mix()` è disponibile nel Chrome/WebView target e permette di
+derivare livelli e trasparenze senza reintrodurre una tavolozza fissa.
+
+Decisione upstream: **adottare direttamente** ereditarietà e alias CSS. Il
+vocabolario locale del mockup resta un adapter piccolo e stabile, ma ogni alias
+punta prima al corrispondente `--talos-*`; Calm sopravvive soltanto come
+fallback per il documento statico standalone. Superfici elevate, hover,
+overlay, ombre e bagliori sono derivate dagli alias con `color-mix()`, non da
+bianco/nero/ambra codificati. Nessun MutationObserver, bridge JavaScript o
+nuovo store: il cambio live è già garantito dalla cascata del browser e dal
+theme engine esistente. Pin invariati; nessuna dipendenza nuova.
+
+Alternative respinte:
+
+- copiare i token computati via JavaScript a ogni cambio: duplica il lifecycle
+  del theme store e può perdere aggiornamenti o custom theme;
+- aggiungere classi Paper/Telemetry dentro il mockup: crea una seconda fonte
+  di verità e non copre gli altri preset o i temi nominati;
+- lasciare i raw color purché il fondo cambi: produce superfici ibride e non
+  soddisfa il contratto owner sui token stilistici;
+- rimuovere tutti i fallback: rompe l'apertura standalone usata per revisione.
+
+RED permanenti: `CODE-THEME-ALIASES-01`, `CODE-THEME-CHROME-01`,
+`CODE-THEME-COPY-TRUTH-01`, `HARNESS-THEME-LIVE-01` e
+`CODE-THEME-INVERSE-STANDALONE-01`.
+
+### Ritorno da Impostazioni a una rotta dinamica
+
+- https://router.vuejs.org/guide/essentials/named-routes
+- https://router.vuejs.org/guide/essentials/navigation.html
+- https://developer.android.com/design/ui/mobile/guides/patterns/predictive-back
+
+La prova Pad ha trovato un URL impossibile: tornando da Impostazioni alla
+sessione Codice, il guscio naviga a `/harness/:id`. La causa è misurata nel
+contratto locale: `TalosStationEntry` conserva soltanto il nome
+`harness-session`, mentre `navigate()` passa a Vue Router il pattern dichiarato
+come se fosse un path già risolto. La documentazione ufficiale Vue Router
+richiede invece una navigazione per `name` + `params` per i segmenti dinamici;
+inoltre i parametri sono ignorati se si passa `path`. Le linee guida Android
+richiedono che Back rappresenti una destinazione reale e prevedibile.
+
+Decisione upstream: **adottare direttamente** la navigazione nominata di Vue
+Router e preservare i parametri della porta di ingresso. Niente URL costruiti a
+mano e nessun default silenzioso che possa cambiare sessione. Lo stato continua
+a ricordare soltanto il minimo necessario (nome, parametri, provenienza dalla
+sidebar). Pin invariati; nessuna dipendenza. RED permanente:
+`CODE-SETTINGS-RETURN-SESSION-01`.
+
 ## Decisione prodotto owner 25/8 — «Codice»
 
 Ogni riferimento visibile al nome prodotto Harness diventa **Codice** in
@@ -348,6 +416,213 @@ del dettaglio è quella della sessione, a partire da «Refactor auth flow» (o d
 titolo selezionato). La shell TALOS e la sidebar globale restano proprietarie
 della navigazione e devono continuare a sovrapporsi alla superficie Codice.
 
+### Continuità dello sfondo, gutter della conversazione e motion contract
+
+- https://www.w3.org/TR/css-backgrounds-3/
+- https://www.w3.org/TR/CSS22/zindex.html
+- https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/backdrop-filter
+- https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/scrollbar-width
+- https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/scrollbar-gutter
+- https://www.w3.org/TR/web-animations-1/
+- https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/At-rules/@media/prefers-reduced-motion
+- https://developer.mozilla.org/en-US/docs/Web/Performance/Guides/Animation_performance_and_frame_rate
+
+La misura reale sul Pad, forma telefono portrait 392×872 CSS, spiega lo
+screenshot owner senza interpretazioni: `.chat-view` riservava 8px con
+`scrollbar-gutter: stable` pur essendo un contenitore `overflow:hidden`; la
+conversazione interna riservava altri 8px per la propria scrollbar e il calcolo
+`width:calc(100% - 24px)` aggiungeva 12px di margine. Risultato: il bordo della
+missione finiva a 28px dal limite destro della vista, con 20px ancora vuoti
+dopo il bordo esterno della scrollbar. A sinistra il margine intenzionale era
+soltanto 12px. Non è simmetria: è una doppia riserva annidata.
+
+Nello stesso stato il foglio TALOS misurava un `background-color` opaco, l'host
+Shadow un secondo colore opaco e `.app-shell` un terzo fondo opaco. Il renderer
+`TalosMobileBackground` era presente dietro la stazione, ma quei tre livelli lo
+coprivano completamente. CSS Backgrounds e l'ordine di painting confermano che
+un discendente opaco dipinge sopra gli strati precedenti; MDN precisa inoltre
+che il backdrop può essere percepito solo attraverso una superficie almeno
+parzialmente trasparente.
+
+Decisione upstream: **adottare direttamente** il compositing CSS esistente,
+senza creare un secondo sfondo in Codice. Solo la stazione Codice chiede al
+`TalosMobileToolSheet` una superficie trasparente; l'host embedded e la sua
+`.app-shell` non dipingono un fondo pieno. Topbar, pannelli, schede e composer
+restano superfici semantiche traslucide collegate ai token TALOS, quindi testo e
+controlli restano leggibili mentre l'unico renderer animato dell'app resta
+visibile. In standalone i fallback e il fondo proprio rimangono invariati.
+
+La prima correzione aveva lasciato una sola scrollbar da 8px nello scrollport
+vero. L'owner l'ha poi superata il 25/8 con un requisito più preciso: in Codice
+embedded nessuna scrollbar deve essere visibile o occupare spazio, mentre lo
+scroll deve restare. MDN definisce `scrollbar-width:none` proprio come «nessuna
+scrollbar mostrata, elemento ancora scorrevole»; `scrollbar-gutter:auto` evita
+la riserva stabile quando la barra non viene resa. Decisione upstream:
+**adottare direttamente il contratto CSS standard**, con il selettore WebKit
+equivalente per la WebView Android target. Le proprietà `overflow:auto` e
+`overflow-y:auto` esistenti non vengono cambiate. La regola è confinata a
+`:host(.talos-embedded)` e copre conversazione, liste, sheet, inspector,
+risultati e blocchi preformattati; la preview standalone conserva la propria
+indicazione visiva. Il test browser prova sia `none/auto` sia uno `scrollTop`
+positivo, quindi non confonde una barra invisibile con uno scroll disabilitato.
+
+Il codice locale usava durate indipendenti (`.14s`, `.16s`, `.18s`, `.22s`,
+`.24s`, `1.2s`) e cambi di DOM istantanei. Web Animations definisce
+esplicitamente il caso "attendere la fine prima di rimuovere l'elemento"; le
+indicazioni di performance privilegiano `transform` e `opacity`, mentre
+`prefers-reduced-motion` richiede una via senza moto. Decisione upstream:
+**adottare il motion contract TALOS già applicato al root**. Gli alias locali
+puntano a `--talos-motion-duration-*`, `--talos-motion-ease*` e ai transform
+canonici. CSS gestisce gli stati che restano nel DOM; un adapter Web Animations
+minimo conserva toast, approvazioni e dettagli durante l'uscita e applica poi
+lo stato finale. Se `Element.animate` non esiste o la durata computata è 0ms,
+il risultato finale è sincrono. Ogni animazione attiva viene cancellata dal
+destroyer embedded. Nessuna dipendenza e nessun secondo motion engine.
+
+RED permanenti: `CODE-BG-CONTINUITY-01`, `CODE-MOBILE-SCROLLBAR-HIDDEN-01`,
+`CODE-MOTION-TOKENS-01`, `CODE-MOTION-SURFACES-01`, `CODE-MOTION-EXIT-01` e
+`CODE-MOTION-REDUCED-01`.
+
+### Un solo composer reale fra Chat e Codice
+
+- https://vuejs.org/guide/essentials/component-basics
+- https://vuejs.org/guide/components/props
+- https://vuejs.org/guide/components/events
+- https://vuejs.org/guide/components/v-model.html
+
+L'ispezione del codice ha confermato che il mockup Codice contiene un secondo
+composer HTML/CSS/JS (`#composerForm`, `.composer`, `#composerInput`) mentre la
+Chat monta il componente prodotto `mobile/src/components/chat/TalosMobileComposer.vue`.
+Il componente vero possiede già: forma classic/standard/compact, superficie `+`
+drawer/menu, model/effort picker, thinking, Browse, slash menu, allegati,
+contesto, prompt enhancer, dictation policy, safe-area, token tema e motion.
+Continuare a sincronizzare il duplicato non può soddisfare “identico”: ogni
+evoluzione della Chat ricreerebbe subito deriva.
+
+Vue definisce il componente come unità riusabile con flusso props-down ed
+events-up. Decisione upstream: **adottare direttamente la stessa SFC**, senza
+wrapper visivo alternativo e senza copiare markup o stile. `HarnessSessionScreen`
+monta `TalosMobileComposer` come figlio Vue e usa le stesse preferenze
+`talosComposerFlags()` della Chat. L'adapter Codice possiede soltanto stato demo
+locale (bozza, profilo, effort, thinking, Browse) e traduce gli eventi nel
+runtime statico onesto: invio aggiunge il messaggio alla conversazione demo;
+`!`/`!!` conservano il passaggio al terminale; le azioni prive di backend
+mostrano feedback “Demo UI · non collegato”; le destinazioni TALOS già reali
+usano Vue Router. Non viene chiamato l'API Chat e non viene mutata la bozza della
+chat reale.
+
+Il composer duplicato resta nel documento soltanto per l'anteprima standalone
+del mockup, ma `:host(.talos-embedded)` lo esclude completamente da layout,
+accessibility tree e hit testing. Un ResizeObserver sull'istanza vera aggiorna
+un solo token di clearance dell'host, così transcript, tastiera e bottom nav non
+si coprono quando il composer passa da compatto a espanso. Nessuna nuova
+dipendenza e nessun fork di `TalosMobileComposer.vue`.
+
+RED permanenti: `CODE-COMPOSER-SINGLE-SOURCE-01`,
+`CODE-COMPOSER-GRAMMAR-01`, `CODE-COMPOSER-DEMO-SEND-01`,
+`CODE-COMPOSER-NO-CHAT-BACKEND-01` e `CODE-COMPOSER-CLEARANCE-01`.
+
+### Testata Codice enter-always e simmetria dopo la rimozione scrollbar
+
+- https://developer.android.com/develop/ui/compose/components/app-bars
+- https://developer.android.com/reference/kotlin/androidx/compose/material3/TopAppBarDefaults
+
+Il requisito owner del 25/8 chiede due cose collegate alla superficie mobile:
+ora che nessuna scrollbar occupa più la destra, il contenuto deve conservare lo
+stesso inset reale di 12px sui due lati; inoltre la testata sessione deve
+ritirarsi quando il contenuto sale e riapparire appena il gesto torna verso il
+basso. La documentazione Android definisce questo comportamento
+`enterAlwaysScrollBehavior`: l'app bar collassa quando l'utente tira verso
+l'alto il contenuto e riappare immediatamente quando lo tira verso il basso.
+
+Decisione upstream: **adattare il comportamento Material dietro il runtime
+Codice esistente**, senza introdurre Compose o una libreria JavaScript. Gli
+scrollport principali già posseduti dal componente emettono `scroll`; un
+adapter privato confronta la posizione corrente con la precedente, ignora il
+rumore sub-pixel, nasconde dopo l'avvio reale dello scroll e mostra subito alla
+prima inversione verso l'origine. Vicino all'inizio la testata è sempre
+visibile. Il cambio vista la ripristina; il destroy rimuove tutti i listener.
+CSS collassa realmente l'altezza della `.topbar` e muove la striscia di stato e
+il contenuto, invece di lasciare un rettangolo vuoto; durata ed easing derivano
+dai token disclosure/surface TALOS e 0ms resta il percorso reduced-motion.
+
+RED permanenti: `CODE-CONTENT-INSET-SYMMETRY-01`,
+`CODE-TOPBAR-ENTER-ALWAYS-01`, `CODE-TOPBAR-MOTION-01` e il rafforzato
+`CODE-COMPOSER-KEYBOARD-01` che verifica il CSS compilato, non il solo sorgente.
+
+### Composer condiviso in viewport landscape ridotto dalla tastiera
+
+- https://developer.mozilla.org/en-US/docs/Web/CSS/@media/height
+- https://developer.mozilla.org/en-US/docs/Web/CSS/env
+
+La prova fisica telefono landscape ha misurato un viewport WebView alto
+144,36px con Gboard aperta. Il `TalosMobileComposer` espanso occupa 148,18px:
+inizia a -3,82px e invade la status bar. La controprova sulla rotta Chat mostra
+lo stesso identico difetto e la stessa geometria; non è un problema del wrapper
+Codice e non va corretto con una variante locale.
+
+MDN definisce la media feature `height` come query sull'altezza del viewport,
+con `max-height` disponibile e interoperabile; `env(safe-area-inset-top)`
+definisce invece il rettangolo in cui il contenuto resta visibile senza essere
+coperto dall'interfaccia del dispositivo. Sul WebView reale la query
+`(max-height:180px) and (orientation:landscape)` cambia a `true` soltanto nello
+stato estremo con tastiera.
+
+Decisione upstream: **adottare direttamente la media query standard tramite
+il composable AVM già esistente `useTalosMediaQuery`**. Lo stesso
+`TalosMobileComposer.vue`, sia in Chat sia in Codice, mantiene la forma compatta
+quando il prompt è vuoto e il viewport landscape è troppo basso, anche se il
+campo ha focus. Restano sempre disponibili input, `+` e azione destra; modello
+e ragionamento tornano appena la tastiera si chiude o il viewport supera la
+soglia. Nessuna duplicazione, nessuna prop Code-only, nessun nuovo listener
+manuale e nessuna dipendenza.
+
+RED permanente: `CODE-COMPOSER-LANDSCAPE-IME-SAFE-01`.
+
+Amendamento dopo il primo GREEN unitario: il collegamento reattivo tramite
+`useTalosMediaQuery` è stato respinto dal gate di distribuzione, non dal gusto.
+Pur passando 61 test, portava il chunk iniziale a 614.414 byte contro il limite
+614.000 (+414). MDN documenta anche `:has()` come selettore interoperabile dal
+2023 e raccomanda ancore specifiche e combinatori diretti per limitarne il
+costo: https://developer.mozilla.org/en-US/docs/Web/CSS/:has
+
+Decisione finale upstream: **adottare direttamente CSS `@media height` e
+`:has(> child)`**, ancorati esclusivamente al piccolo
+`[data-testid="talos-mobile-composer"]`. Nello stato corto, la riga già esistente
+che contiene `+` e model chip diventa assoluta: il `+` si sovrappone nella sua
+posizione canonica al campo, model chip e filler vengono nascosti, il campo
+resta alto 48px e il root è limitato all'area sicura con scroll invisibile.
+Nessun byte JavaScript, nessun listener, nessuna nuova prop; chiusa la tastiera,
+la media query non corrisponde e il DOM torna identico senza stato da pulire.
+
+## Ricerca aggiuntiva — dock fisso dentro la superficie traslata
+
+La matrice Pad tablet portrait ha misurato un doppio offset: rail 323px, tool
+surface da x=323px, dock da x=646px. La causa è normativa, non specifica del
+WebView: secondo CSS Transforms Level 1 e la documentazione MDN corrente, un
+antenato con `transform` oppure con le proprietà individuali `translate`,
+`rotate` o `scale` diverse da `none` crea il containing block dei discendenti
+`position:fixed`. `TalosMobileToolSheet` mantiene `translate-y-0`, quindi il
+dock è già relativo alla superficie spostata; applicargli anche
+`left:var(--talos-tablet-rail)` somma una seconda volta il rail.
+
+Fonti primarie/ufficiali consultate il 25/8:
+
+- W3C CSS Transforms Level 1, containing block dei discendenti fixed:
+  https://www.w3.org/TR/css-transforms-1/
+- MDN `position`, fixed positioning containing block:
+  https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/position
+- MDN `transform`, stacking context e containing block:
+  https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/transform
+- MDN Containing block, incluse le proprietà individuali di trasformazione:
+  https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Display/Containing_block
+
+Decisione upstream: **adattare senza dipendenze**. Il dock non deve possedere
+la geometria globale che il tool surface ha già applicato. Diventa assoluto
+rispetto alla superficie `position:relative`, con `left:0;right:0;bottom:0`.
+Il componente Chat, il rail, il motion della surface e i contratti tastiera
+restano invariati.
+
 ## Pin upstream
 
 - `vue@3.5.40`
@@ -358,19 +633,25 @@ della navigazione e devono continuare a sovrapporsi alla superficie Codice.
 - `vaul-vue@0.4.1`
 - `reka-ui@2.10.1`
 
-Nessuna nuova dipendenza. Container Queries, ResizeObserver, Shadow DOM e
-top-layer sono API native del browser target.
+Nessuna nuova dipendenza. Media Queries, `:has()`, Container Queries,
+ResizeObserver, Shadow DOM e top-layer sono API native del browser target.
 
 ## Alternative respinte
 
 - Iframe: viola `frame-src 'none'` e separa nuovamente la SPA.
 - Nuovo framework/microfrontend package: non risolve il contratto dell'host.
-- Media query viewport-only: non misura lo spazio reale di Harness.
+- Media query viewport-only per il layout interno Harness: non misura lo spazio
+  reale del suo host. È invece appropriata per il composer condiviso quando il
+  dato da misurare è precisamente il viewport ridotto dalla tastiera.
 - Solo aumento di z-index: non supera il browser top layer.
 - Solo Back hardware Android: lascia la gerarchia senza un comando visibile e
   non copre iOS.
 - Nuovo backend/TALOS-BANCO: fuori perimetro owner.
 - Tema Calm fissato: superato dalla decisione owner sui token TALOS.
+- Conservare `position:fixed` e compensare il doppio offset con calcoli o
+  variabili negative: dipenderebbe incidentalmente dal containing block creato
+  dal motion. L'ancoraggio assoluto alla surface esprime invece la proprietà
+  reale richiesta.
 
 Se una prova invalida il ledger, dossier e ledger vengono aggiornati prima di
 proseguire. Nuove dipendenze o confini richiedono una nuova decisione owner.

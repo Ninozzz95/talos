@@ -2,6 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { compileStyle, parse } from '@vue/compiler-sfc'
 import { Capacitor } from '@capacitor/core'
 
 const keyboardMock = vi.hoisted(() => ({
@@ -140,6 +141,66 @@ describe('HarnessSessionScreen (24/8) — shadow root inside the SPA, not a tram
 
         expect(body.classes()).toContain('p-0')
         expect(body.classes()).not.toContain('px-4')
+    })
+
+    it('CODE-COMPOSER-SINGLE-SOURCE-01 mounts the exact chat composer instead of a rewritten Code clone', async () => {
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+        const w = mount(HarnessSessionScreen)
+        const host = w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement
+        await resolveScriptLoad(host)
+
+        expect(w.get('[data-testid="talos-mobile-composer"]').exists()).toBe(true)
+        const source = await import('@/screens/HarnessSessionScreen.vue?raw')
+        expect(source.default).toContain("import TalosMobileComposer from '@/components/chat/TalosMobileComposer.vue'")
+        expect(source.default).not.toContain('useChatController')
+    })
+
+    it('CODE-COMPOSER-DEMO-SEND-01 forwards a local prompt to Code and clears the shared component', async () => {
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+        const submitPrompt = vi.fn(() => true)
+        ;(window as unknown as {
+            __talosHarnessUiRuntime?: { selectSession(): void, submitPrompt(text: string): boolean }
+        }).__talosHarnessUiRuntime = { selectSession: vi.fn(), submitPrompt }
+        const w = mount(HarnessSessionScreen)
+        const host = w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement
+        await resolveScriptLoad(host)
+
+        const composer = w.get('[data-testid="talos-mobile-composer"]')
+        await composer.get('textarea').setValue('Local Code prompt')
+        await composer.get('[data-testid="talos-composer-action"]').trigger('click')
+
+        expect(submitPrompt).toHaveBeenCalledWith('Local Code prompt')
+        expect((composer.get('textarea').element as HTMLTextAreaElement).value).toBe('')
+    })
+
+    it('CODE-COMPOSER-KEYBOARD-01 compiles the keyboard selector onto the composer instead of body', async () => {
+        const source = await import('@/screens/HarnessSessionScreen.vue?raw')
+        const { descriptor } = parse(source.default, { filename: 'HarnessSessionScreen.vue' })
+        const style = descriptor.styles.find((candidate) => candidate.scoped)
+        expect(style).toBeDefined()
+
+        const compiled = compileStyle({
+            filename: 'HarnessSessionScreen.vue',
+            id: 'data-v-code-keyboard',
+            scoped: true,
+            source: style?.content ?? '',
+        })
+
+        expect(compiled.errors).toHaveLength(0)
+        expect(compiled.code).toMatch(/body\.keyboard-open\s+\.talos-code-composer-dock(?:\[[^\]]+\])?\s*\{[^}]*bottom:\s*0/s)
+        expect(compiled.code).not.toMatch(/body\.keyboard-open\s*\{[^}]*bottom:\s*0/s)
+    })
+
+    it('CODE-COMPOSER-TABLET-RAIL-01 anchors the dock once inside the already-offset tool surface', async () => {
+        const source = await import('@/screens/HarnessSessionScreen.vue?raw')
+        const { descriptor } = parse(source.default, { filename: 'HarnessSessionScreen.vue' })
+        const style = descriptor.styles.find((candidate) => candidate.scoped)
+        expect(style).toBeDefined()
+
+        const dockRule = style?.content.match(/\.talos-code-composer-dock\s*\{([^}]*)\}/s)?.[1] ?? ''
+        expect(dockRule).toContain('position: absolute')
+        expect(dockRule).toContain('left: 0')
+        expect(dockRule).not.toContain('--talos-tablet-rail')
     })
 
     it.each(HARNESS_DEMO_SESSIONS)(

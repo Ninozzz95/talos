@@ -1153,3 +1153,51 @@ watch(() => props.prompt, () => {
         />
     </section>
 </template>
+
+<style>
+/*
+ * Gboard leaves 144px to the WebView on a phone-shaped landscape viewport,
+ * while the normal focused composer is 148px before the Android top inset.
+ * Keep the exact shared component and its real controls; only reflow its
+ * existing model row into the single-line grammar while the viewport is that
+ * short. The :has anchor is the small composer surface and its direct child.
+ */
+@media (orientation: landscape) and (max-height: 180px) {
+    [data-testid="talos-mobile-composer"] {
+        max-height: calc(100dvh - env(safe-area-inset-top));
+        margin-bottom: 0;
+        overflow-y: auto;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    [data-testid="talos-mobile-composer"]::-webkit-scrollbar {
+        display: none;
+        width: 0;
+        height: 0;
+    }
+
+    [data-testid="talos-mobile-composer"] textarea {
+        height: 48px !important;
+        min-height: 48px;
+        max-height: 48px;
+        padding-left: 48px;
+    }
+
+    [data-testid="talos-mobile-composer"] > div:has(> [data-testid="talos-composer-model-chip"]) {
+        position: absolute;
+        z-index: 10;
+        top: 10px;
+        left: 10px;
+        height: 48px;
+        margin: 0;
+        padding: 0;
+        border: 0;
+    }
+
+    [data-testid="talos-mobile-composer"] > div:has(> [data-testid="talos-composer-model-chip"])
+        > :not(:first-child) {
+        display: none;
+    }
+}
+</style>

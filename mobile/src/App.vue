@@ -641,13 +641,18 @@ const stationLocksBodyScroll = computed(() => activeRoute.value === 'harness-ses
  * the research list to a report is not entering a station, and treating it as
  * one would make Back navigate the list to itself.
  */
-watch(activeRoute, (to, from) => {
+watch([activeRoute, () => route.params] as const, ([to], [from, fromParams]) => {
     if (isModelLabRouteName(to) && isModelLabRouteName(from)) {
         modelLabTransitionDirection.value = MODEL_LAB_ROUTE_DEPTH[to] >= MODEL_LAB_ROUTE_DEPTH[from]
             ? 'forward'
             : 'back'
     }
-    stationEntry.value = talosStationEntryAfter(stationEntry.value, { to, from, viaSidebar: enteringViaSidebar })
+    stationEntry.value = talosStationEntryAfter(stationEntry.value, {
+        to,
+        from,
+        fromParams,
+        viaSidebar: enteringViaSidebar,
+    })
     enteringViaSidebar = false
 })
 
@@ -677,7 +682,7 @@ async function followNotificationRoute(target: string): Promise<void> {
 /** Back at a station top: undo the move that brought you here. */
 function leaveStation(): void {
     const exit = talosStationExit(stationEntry.value)
-    void navigate(exit.route as TalosMobileRouteName)
+    void navigate(exit.route as TalosMobileRouteName, {}, exit.params)
     sidebarOpen.value = exit.sidebar
 }
 /**
@@ -836,8 +841,12 @@ watch(
     { immediate: true },
 )
 
-async function navigate(name: TalosMobileRouteName, query: LocationQueryRaw = {}): Promise<void> {
-    await router.push({ path: pathFor(name), query })
+async function navigate(
+    name: TalosMobileRouteName,
+    query: LocationQueryRaw = {},
+    params: Readonly<Record<string, string | string[]>> = {},
+): Promise<void> {
+    await router.push({ name, params, query })
     await preferences.setLastRoute(name)
 }
 
@@ -1303,7 +1312,10 @@ onBeforeUnmount(async () => {
                     />
                 </template>
 
-                <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
+                <div
+                    class="relative flex min-h-0 min-w-0 flex-1 flex-col"
+                    :class="{ invisible: stationLocksBodyScroll }"
+                >
                     <TalosMobileHeader
                         v-if="!immersiveHeader"
                         :title="headerTitle"
@@ -1354,10 +1366,7 @@ onBeforeUnmount(async () => {
 
             <TalosLauncherIconDialog v-if="launcherIcon.state.pending" />
 
-            <Transition
-                leave-active-class="transition duration-200 ease-in"
-                leave-to-class="opacity-0 translate-y-4"
-            >
+            <Transition name="station">
                 <TalosMobileToolSheet
                     v-if="isStation"
                     :title="sheetTitle"
@@ -1367,7 +1376,7 @@ onBeforeUnmount(async () => {
                     :shell-back="talosIndietro"
                     :parent-title="stationParentTitle"
                     :lock-body-scroll="stationLocksBodyScroll"
-                    :hide-chrome="activeRoute === 'harness-session'"
+                    :hide-chrome="stationLocksBodyScroll"
                     @close="navigate('chat')"
                 >
                     <RouterView v-slot="{ Component, route: renderedRoute }">

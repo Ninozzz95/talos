@@ -2,10 +2,12 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+    announceTalosHarnessUiComposerAction,
     currentTalosHarnessUiRuntime,
     dismissTalosHarnessUiTransientLayers,
     selectTalosHarnessUiSession,
     setTalosHarnessUiKeyboardOpen,
+    submitTalosHarnessUiPrompt,
     talosHarnessUiTransientLayersActive,
 } from '@/lib/harnessUiBridge'
 
@@ -20,6 +22,8 @@ describe('Harness UI bridge', () => {
         expect(dismissTalosHarnessUiTransientLayers()).toBe(false)
         expect(talosHarnessUiTransientLayersActive()).toBe(false)
         expect(setTalosHarnessUiKeyboardOpen(true)).toBe(false)
+        expect(submitTalosHarnessUiPrompt('hello')).toBe(false)
+        expect(announceTalosHarnessUiComposerAction('attach')).toBe(false)
     })
 
     it('forwards only the normalized AVM contract to the mounted runtime', () => {
@@ -27,13 +31,24 @@ describe('Harness UI bridge', () => {
         const dismissTransientLayers = vi.fn(() => true)
         const setKeyboardOpen = vi.fn()
         const transientLayersActive = vi.fn(() => true)
-        const runtime = { selectSession, dismissTransientLayers, transientLayersActive, setKeyboardOpen }
+        const submitPrompt = vi.fn(() => true)
+        const announceComposerAction = vi.fn(() => true)
+        const runtime = {
+            selectSession,
+            dismissTransientLayers,
+            transientLayersActive,
+            setKeyboardOpen,
+            submitPrompt,
+            announceComposerAction,
+        }
         ;(window as unknown as { __talosHarnessUiRuntime?: typeof runtime }).__talosHarnessUiRuntime = runtime
 
         expect(selectTalosHarnessUiSession({ id: 'audit-api-permissions', title: 'Audit API permissions' })).toBe(true)
         expect(dismissTalosHarnessUiTransientLayers()).toBe(true)
         expect(talosHarnessUiTransientLayersActive()).toBe(true)
         expect(setTalosHarnessUiKeyboardOpen(true)).toBe(true)
+        expect(submitTalosHarnessUiPrompt('hello')).toBe(true)
+        expect(announceTalosHarnessUiComposerAction('attach')).toBe(true)
         expect(selectSession).toHaveBeenCalledWith({
             id: 'audit-api-permissions',
             title: 'Audit API permissions',
@@ -41,6 +56,8 @@ describe('Harness UI bridge', () => {
         expect(dismissTransientLayers).toHaveBeenCalledTimes(1)
         expect(transientLayersActive).toHaveBeenCalledTimes(1)
         expect(setKeyboardOpen).toHaveBeenCalledWith(true)
+        expect(submitPrompt).toHaveBeenCalledWith('hello')
+        expect(announceComposerAction).toHaveBeenCalledWith('attach')
     })
 
     it('fails closed while an older or partially loaded runtime exposes only one capability', () => {

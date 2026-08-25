@@ -1065,3 +1065,196 @@ conversazione interna si vede a porzioni. Non è contenuto perso. Restano invece
 deliberatamente aperti per la Fase 6 il collegamento live ai token dei temi,
 la continuità cromatica/tipografica e il riesame del significato visivo del
 chevron del rail. Non restano bug funzionali noti della Fase 5.
+
+### Fase 6 — checkpoint automatico dopo la richiesta scrollbar
+
+Stato: **implementazione e prove browser completate; verifica Pad in corso**.
+
+#### Riassunto semplice ma esaustivo
+
+La scrollbar della sezione Codice è stata eliminata davvero, non colorata o
+nascosta lasciando il suo spazio vuoto. Tutte le aree continuano a scorrere,
+ma il contenuto recupera la corsia a destra: nella forma telefono la scheda
+Missione arriva ora a circa 4px dal bordo previsto invece dei 14px intermedi.
+La regola riguarda soltanto Codice dentro l'app; l'anteprima separata resta
+utilizzabile come prima.
+
+Il requisito è diventato un test permanente che controlla entrambe le metà:
+nessuna barra e nessuna corsia, ma range di scorrimento reale e posizione che
+avanza. Sono verdi 19 test del contratto asset, 6 prove browser in verticale e
+orizzontale, controllo tipi, controllo JavaScript e build completa. Il bundle
+resta entro i limiti: 613.965/614.000 byte JavaScript iniziali e
+214.598/220.000 byte CSS. La fase non è ancora dichiarata conclusa perché manca
+la nuova APK sul Pad e l'ispezione visiva delle quattro forme.
+
+#### Estensione owner: simmetria, testata dinamica e tastiera
+
+Il margine mobile finale è ora 12px a sinistra e 12px a destra. La testata col
+nome della sessione si ritira scorrendo verso il basso e torna appena il gesto
+risale; la striscia «In esecuzione» e il contenuto recuperano davvero lo spazio,
+senza un vuoto trasparente. Il movimento usa gli stessi tempi dell'app.
+
+La prima APK della sottofase ha inoltre mostrato sul Pad un difetto che il
+vecchio test sorgente non poteva vedere: con Gboard aperta il composer restava
+67,27px troppo in alto. Il compilatore Vue trasformava il selettore tastiera in
+una regola sul `body`. Il test ora compila davvero lo style scoped e rifiuta
+quell'output; la regola corretta appartiene al composer. Il GREEN corrente è:
+68 test unitari mirati, 8 prove browser, typecheck, syntax check e build/parity.
+La build corretta è ora installata e il telefono portrait è GREEN sul Pad:
+inset 12/12, scrollbar assente ma scroll funzionante, testata che si ritira
+senza invadere la barra Android e ritorna all'inversione del gesto, composer
+condiviso aderente a Gboard con gap misurato 0px. I quattro screenshot finali
+sono nel taccuino e sono stati ispezionati per intero. Restano da ripetere gli
+stessi controlli in telefono landscape, tablet portrait e tablet landscape.
+
+#### Riassunto semplice del checkpoint Pad portrait
+
+La zona vuota a destra è sparita e i bordi interni sono omogenei. Scorrendo in
+basso, la testata libera spazio senza finire sotto orario e batteria; appena si
+risale torna visibile. Il composer non è una copia: è il componente Chat reale,
+si apre con i suoi controlli completi e si appoggia direttamente alla tastiera.
+Questo è provato sull'APK fisico; le altre tre forme schermo restano ancora da
+certificare prima di chiudere la fase.
+
+#### Nuovo RED scoperto nella matrice telefono landscape
+
+Con Gboard aperta il viewport scende a 144,36px e il composer espanso, alto
+148,18px, invade la status bar di 3,82px. La controprova nella Chat canonica ha
+riprodotto lo stesso difetto: è il medesimo componente, non un disallineamento
+del wrapper Codice. Il ledger ora impone una sola correzione condivisa tramite
+la media query standard e il composable AVM esistente, con test prima del
+codice. Nessuna variante o copia dedicata a Codice sarà introdotta.
+
+Il primo GREEN unitario non è stato promosso: la build ha rifiutato 614.414
+byte contro il tetto 614.000, uno sforamento di 414 byte. La consegna registra
+quindi il percorso come scartato. Il nuovo ledger usa soltanto CSS standard,
+senza aggiungere logica al pacchetto iniziale; finché bundle e Pad non tornano
+verdi, il punto resta aperto.
+
+#### Chiusura del RED telefono landscape
+
+Il percorso CSS condiviso è ora GREEN. Con Gboard aperta, sia Chat sia Codice
+mostrano lo stesso composer reale in una forma compatta alta 69,45px, compresa
+tra 74,91px e il fondo del viewport a 144,36px: nessuna parte entra nella
+status bar. Restano il vero pulsante `+`, la textarea e l'azione destra; non
+esiste una copia Codice. Chiudendo la tastiera, la query si disattiva e il
+selettore modello torna visibile nella forma completa. Il chunk iniziale è
+613.965/614.000 byte, quindi anche il gate di peso resta verde.
+
+#### Riassunto semplice del checkpoint Pad landscape
+
+Il problema scoperto era comune a Chat e Codice e ora è risolto una volta sola
+nel loro componente condiviso. Con la tastiera aperta tutto resta sotto orario,
+rete e batteria; chiudendola ricompaiono automaticamente tutti i controlli.
+Anche il fotogramma completo senza tastiera è stato controllato: nessuna barra
+di scorrimento visibile, nessuna corsia vuota a destra e nessuna collisione con
+la navigazione inferiore. Restano da certificare le due forme tablet e la suite
+finale completa.
+
+#### Nuovo RED scoperto nel tablet portrait
+
+Con il rail sessioni espanso, il tool surface parte già dopo i suoi 323px, ma
+il dock del composer aggiungeva di nuovo la stessa variabile: x=646px. Il
+componente Chat risultava geometricamente largo, ma la metà sinistra restava
+sotto l'host Codice e non riceveva tocchi. Scroll, assenza scrollbar, testata e
+spazio finale sono verdi; il composer dimezzato è invece bloccante.
+
+La ricerca W3C/MDN ha confermato la causa: `translate-y-0` crea comunque il
+containing block del discendente fixed. Il ledger ora prescrive un ancoraggio
+assoluto alla surface già spostata, senza seconda compensazione del rail e senza
+alcuna modifica al componente Chat condiviso. Il test RED permanente è
+`CODE-COMPOSER-TABLET-RAIL-01`.
+
+#### Riassunto semplice del checkpoint tablet portrait
+
+Lo schermo scorre bene, non mostra barre e la testata rispetta orario e
+batteria. L'ispezione certosina ha però scoperto che, con la lista sessioni
+aperta, soltanto la metà destra del composer era davvero in primo piano e
+toccabile. La causa è stata misurata e documentata; la matrice resta ferma
+finché il composer non torna intero senza cambiare il componente della Chat.
+
+#### Chiusura del RED tablet rail
+
+Il dock ora è relativo alla tool surface già posizionata, non al viewport con
+una seconda compensazione. Tablet portrait e landscape sono verdi con rail
+aperto e compresso: il composer resta intero, ha 12px uguali sui due lati e
+riceve tocchi su `+` e textarea anche nella metà sinistra. Il tocco reale sul
+`+` ha aperto il drawer canonico del componente Chat, ispezionato per intero.
+
+La correzione non ha modificato `TalosMobileComposer`: test mirato 20/20,
+regressioni interessate 97/97, typecheck, build/parity e 8/8 E2E sono verdi; il
+chunk resta 613.965/614.000 byte. I due gate tastiera telefono sono stati
+ripetuti sull'APK: portrait aderisce a Gboard; landscape resta sotto la status
+bar e riporta il selettore modello alla chiusura.
+
+#### Riassunto semplice della chiusura rail
+
+La lista sessioni può essere aperta o compressa senza più tagliare il composer:
+il campo e tutti i comandi occupano sempre la larghezza giusta e sono davvero
+toccabili. La cura è nel solo punto che posiziona il componente, quindi Chat e
+Codice continuano a condividere esattamente lo stesso composer. Telefono e
+tablet, verticali e orizzontali, hanno superato la controprova. Il focus che
+resta dopo aver nascosto la tastiera è stato annotato come debito mobile 006 e,
+come ordinato dall'owner, sarà affrontato dopo la chiusura Codice.
+
+### Fase 7 — consegna finale Codice
+
+La superficie Codice è chiusa per il perimetro approvato. I riferimenti visibili
+sono «Codice»; la testata ridondante è rimossa; sfondo e tema sono quelli vivi
+della Chat; le scrollbar embedded sono nascoste senza disabilitare lo scroll;
+gli inset mobile sono 12/12; la testata sessione si ritira verso il basso e
+ritorna verso l'alto rispettando la safe area; rail sessioni e sidebar globale
+hanno gerarchia corretta; il composer è l'esatto `TalosMobileComposer.vue` della
+Chat e non una replica.
+
+#### Prove finali
+
+- Quattro forme sul Pad: telefono/tablet, portrait/landscape, screenshot
+  ispezionati integralmente e misure nel taccuino.
+- Rail sessioni 323px e 72px: composer sempre intero, 12px per lato, hit test
+  reale su `+` e textarea.
+- Telefono con Gboard: portrait dock al fondo 544,73px; landscape dock
+  74,91–144,36px, senza invasione della status bar; model chip ripristinato
+  alla chiusura.
+- Scroll Chat/Board/Context fino in fondo: range reale, zero spazio scrollbar,
+  ultimo contenuto sopra il composer.
+- Sidebar globale sopra Codice e relativo Context rail; drawer del composer
+  sopra tutta la scena con backdrop.
+- Motion: famiglie complete coperte dai contratti
+  `CODE-MOTION-TOKENS-01`, `CODE-MOTION-SURFACES-01`,
+  `CODE-MOTION-EXIT-01` e `CODE-MOTION-REDUCED-01`; nessuna durata grezza
+  ammessa nelle superfici Codice.
+
+#### Gate automatici
+
+- 97/97 regressioni Codice e 8/8 E2E Codice verdi.
+- Typecheck, syntax check, build/parity, `git diff --check` verdi.
+- Bundle: JS 613.965/614.000; CSS 215.309/220.000; parity 18/18.
+- Android debug/release verdi; APK installato e provato.
+- Suite completa unit: 6.328 verdi, 10 skip, un rosso esterno sul manifest
+  shadcn di `DrawerContent.vue`, file non modificato da questa sessione.
+- Playwright completo: 79 verdi, 27 skip, un rosso esterno e riproducibile sulla
+  geometria telefono della scheda Hugging Face, fuori dai file Codice.
+
+#### Artefatti e debiti separati
+
+- APK PC:
+  `C:\Users\Antonino\Downloads\TALOS-dev-2026-08-25.apk`
+  (55.027.716 byte).
+- Screenshot Fase 6:
+  `C:\Users\Antonino\AppData\Local\Temp\talos-code-phase6-scrollbar-20260825`.
+- Nove richieste post-Codice dell'owner registrate, senza iniziarne il fix, in
+  `.claude/DEBITI-MOBILE-POST-CODICE-2026-08-25.md`.
+- Pad ripristinato a 2400×3392, densità 420.
+
+#### Riassunto semplice finale
+
+Codice ora si comporta come una parte della stessa app: usa sfondo, spazi,
+movimenti e composer reali di TALOS. Non c'è più la barra visibile che rubava
+spazio; destra e sinistra sono bilanciate; la testata libera spazio mentre si
+scorre; lista sessioni, pannelli e drawer non finiscono più uno sotto l'altro.
+Il difetto del composer dimezzato sul tablet è stato scoperto durante la prova
+e corretto prima della consegna. Le prove specifiche Codice e le compilazioni
+sono tutte verdi. Restano due rossi generali già esistenti fuori da Codice e i
+nove debiti mobili appena richiesti, esplicitamente registrati per il lavoro
+successivo.

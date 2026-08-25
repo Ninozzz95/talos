@@ -497,14 +497,316 @@ consolidata; resta soltanto il commit isolato prima di aprire la Fase 6.
 
 ## Fase 6 — theme engine TALOS
 
-Produzione: `mobile/public/harness-ui/styles.css`,
-`mobile/public/harness-ui/app.js`.
+Produzione:
 
-RED `HARNESS-THEME-LIVE-01`: i valori computati seguono token host senza
-rimontaggio. Fallimento: alias ancora esadecimali Calm. GREEN:
+1. `mobile/public/harness-ui/styles.css`
+2. `mobile/public/harness-ui/index.html`
+3. `mobile/public/harness-ui/app.js`
+
+Test:
+
+1. `mobile/tests/unit/harness/harnessUiAssetContract.test.ts`
+2. `mobile/tests/unit/harness/harnessUiFrontend.test.ts`
+3. `mobile/tests/unit/screens/harnessSessionScreen.test.ts`
+
+Nessun simbolo TypeScript o contratto runtime pubblico cambia. Il contratto
+CSS locale `--bg/--surface/--text/--accent/...` resta stabile per tutto il
+mockup, ma diventa un adapter verso i token canonici già applicati dal theme
+engine (`--talos-background`, `--talos-panel`, `--talos-text`,
+`--talos-accent`, token stato, font, raggi e touch target). I valori Calm
+restano soltanto fallback dell'apertura statica standalone; non possono più
+vincere su un valore TALOS ereditato nell'host embedded.
+
+Scenari RED permanenti:
+
+- `CODE-THEME-ALIASES-01`: ogni alias semantico principale dipende da un token
+  `--talos-*`, con fallback standalone; vietate definizioni Calm dirette come
+  valore primario su `:host`.
+- `CODE-THEME-CHROME-01`: pannelli, hover, overlay, nav, toast, ombre e bagliori
+  derivano dagli alias semantici; nessun `rgba(255,255,255,...)`,
+  `rgba(0,0,0,...)` o `rgba(192,139,60,...)` resta nel chrome adattivo.
+- `CODE-THEME-COPY-TRUTH-01`: la UI generica non dichiara `Calm` mentre il
+  theme engine mostra Paper, Telemetry o un altro preset; i riferimenti demo
+  diventano `Tema TALOS`/`Theme tokens` e il toast Movimento dice soltanto
+  Standard/Ridotto.
+- `HARNESS-THEME-LIVE-01`: cambiando i token root a componente già montato,
+  i valori computati di sfondo, pannello, testo, accento e font cambiano senza
+  un secondo fetch o rimontaggio del runtime.
+- `CODE-THEME-INVERSE-STANDALONE-01`: senza token TALOS l'apertura statica
+  conserva i fallback Calm leggibili; l'adapter non rende il mockup trasparente
+  o privo di font.
+
+Fallimento atteso: alias Calm fissi, pannelli scuri dentro Paper, testo `Calm`
+in un tema diverso o fetch/remount al cambio. GREEN:
 `npx vitest run tests/unit/harness/harnessUiAssetContract.test.ts tests/unit/harness/harnessUiFrontend.test.ts tests/unit/screens/harnessSessionScreen.test.ts`.
-Pad: Calm → Paper/Telemetry → tema originario, quattro forme. Commit:
+Regressione: `node --check public/harness-ui/app.js`, typecheck e build/parity.
+Gate Pad: cambio live Calm → Paper → Telemetry → tema originario senza uscire
+da Codice; screenshot interi in tablet/telefono portrait/landscape, più prova
+standalone/fallback. Rollback: revert del solo commit Fase 6. Commit:
 `fix(harness-ui): il mockup eredita il tema TALOS`.
+
+### Regressione scoperta sul Pad durante Fase 6
+
+- `CODE-SETTINGS-RETURN-SESSION-01`: da `/harness/refactor-auth-flow`, aprire
+  la sidebar globale, entrare in Impostazioni e usare Indietro deve tornare
+  esattamente alla stessa sessione. Il difetto misurato porta invece al path
+  letterale `/harness/:id`, perché l'ingresso nella stazione conserva il nome
+  della rotta ma perde i parametri e `navigate()` usa il pattern come URL.
+- Produzione coinvolta: `mobile/src/lib/backNavigation.ts` preserva i parametri
+  della destinazione di ritorno; `mobile/src/App.vue` osserva nome e parametri
+  della rotta precedente e naviga per nome+params. Nessun altro contratto di
+  stazione cambia.
+- RED: `mobile/tests/unit/lib/backNavigation.test.ts`, scenario nominato sopra.
+  GREEN mirato: lo stesso file più `mobile/tests/unit/shell/appShell.test.ts`.
+  Gate reale: sessione `refactor-auth-flow` → Impostazioni → Indietro → URL,
+  titolo e runtime della medesima sessione; poi ripresa della matrice temi.
+- Rollback: revert delle sole modifiche a `backNavigation.ts`, `App.vue` e test.
+
+### Correzioni owner aggiunte durante Fase 6 — fondo, gutter e movimento totale
+
+Produzione da modificare, senza wildcard:
+
+1. `mobile/src/App.vue`: passa alla sola rotta `harness-session` il contratto
+   `scene-background` del foglio e usa classi di uscita collegate ai token.
+2. `mobile/src/components/shell/TalosMobileToolSheet.vue`: aggiunge il prop
+   pubblico `sceneBackground?: boolean`; `talos-mobile-tool-sheet-surface` e
+   `talos-mobile-tool-sheet-backdrop` usano i token canonici di entrata/uscita;
+   la superficie Codice è trasparente, le altre stazioni restano opache.
+3. `mobile/public/harness-ui/styles.css`: aggiunge gli alias motion TALOS,
+   trasparenza embedded, elimina barra e gutter da ogni scrollport embedded
+   senza disabilitare lo scroll e collega tutti gli stati visivi interattivi a
+   durata/easing/transform canonici.
+4. `mobile/public/harness-ui/app.js`: aggiunge gli helper privati
+   `motionMilliseconds(name)`, `animateExit(element, options, finalize)`,
+   `cancelMotionAnimations()` e applica uscite reali prima di rimozione/chiusura
+   a dialog, toast, dettagli tool, approvazioni e disclosure dinamiche. I
+   percorsi senza WAAPI o con 0ms chiudono sincronicamente.
+
+Test da modificare:
+
+1. `mobile/tests/unit/shell/TalosMobileToolSheet.test.ts`
+2. `mobile/tests/unit/shell/appShell.test.ts`
+3. `mobile/tests/unit/harness/harnessUiAssetContract.test.ts`
+4. `mobile/tests/unit/harness/harnessUiFrontend.test.ts`
+5. `mobile/tests/e2e/mobile-harness-ui.e2e.spec.ts`
+
+Documentazione aggiornata nella stessa fase:
+
+1. `.claude/DOSSIER-RICERCA-HARNESS-UI-ROUTING-PAD.md`
+2. `.claude/LEDGER-HARNESS-UI-ROUTING-PAD.md`
+3. `.claude/TACCUINO-VISIVO-HARNESS-UI-PAD.md`
+4. `.claude/CONSEGNA-HARNESS-UI-ROUTING.md`
+
+Scenari permanenti:
+
+- `CODE-BG-CONTINUITY-01`: Codice riusa l'unico
+  `TalosMobileBackground`; sheet, host embedded e app-shell non lo coprono e
+  non ne creano uno nuovo. Standalone e stazioni diverse restano opache.
+- `CODE-MOBILE-SCROLLBAR-HIDDEN-01`: in Codice embedded ogni scrollport ha
+  `scrollbar-width:none` e `scrollbar-gutter:auto`; il fallback WebKit ha barra
+  0×0. Nessuna corsia resta visibile o riservata, ma `overflow-y:auto`, range
+  positivo e mutazione reale di `scrollTop` provano che touch/rotella/script
+  continuano a scorrere. A 392px il bordo Missione passa dal RED di 28px, poi
+  dall'intermedio di 12px, ai 4px finali richiesti. Standalone resta invariato.
+- `CODE-MOTION-TOKENS-01`: nessuna durata UI adattiva Codice resta indipendente;
+  gli alias dipendono dai token `--talos-motion-*` con fallback standalone.
+- `CODE-MOTION-SURFACES-01`: shell, viste, drawer sessioni/inspector, backdrop,
+  dialog, sheet, tab, composer, bottom nav, messaggi, tool feed, queue, toast,
+  approvazioni, disclosure, review, Board e feedback hanno entrata/uscita o
+  transizione assegnata all'intento canonico appropriato.
+- `CODE-MOTION-EXIT-01`: un nodo rimosso rimane fino a `animation.finished`,
+  poi viene eliminato; destroy cancella ogni animazione; WAAPI assente non
+  lascia controlli o overlay sospesi.
+- `CODE-MOTION-REDUCED-01`: token 0ms, preferenza OS e toggle locale conservano
+  lo stato finale eliminando traslazioni/fade e scroll animato.
+
+RED: unit contract + frontend behavior + geometria Playwright. GREEN mirato:
+`npx vitest run tests/unit/shell/TalosMobileToolSheet.test.ts tests/unit/shell/appShell.test.ts tests/unit/harness/harnessUiAssetContract.test.ts tests/unit/harness/harnessUiFrontend.test.ts`; poi typecheck, build/parity e Playwright Codice.
+
+Gate Pad obbligatorio in tablet/telefono portrait/landscape: due frame dello
+stesso sfondo animato dentro Chat e Codice; misura CDP dei tre background,
+dell'assenza barra/gutter e dello scroll ancora attivo; entrata/uscita di
+stazione, sidebar globale, rail sessioni, inspector,
+palette, sheet, tab, vista, bundle, dettaglio tool, queue, approvazione, toast e
+composer; prova inversa con Movimento ridotto. Ogni screenshot viene letto per
+intero e registrato nel taccuino. Rollback: revert del solo commit Fase 6.
+
+### Vincolo owner aggiunto — il composer Codice È quello della Chat
+
+Produzione aggiuntiva, senza duplicare il componente:
+
+1. `mobile/src/screens/HarnessSessionScreen.vue`: importa e monta direttamente
+   `TalosMobileComposer`; aggiunge soltanto stato/handler demo privati
+   `codePrompt`, `codeModelProfileId`, `codeEffort`, `codeThinking`,
+   `codeBrowseMode`, `submitCodePrompt()`, `selectCodeCommand()` e
+   `announceCodeComposerAction()`. Usa `useSettingsStore()` e
+   `talosComposerFlags()` come `ChatScreen.vue`. Un ResizeObserver aggiorna
+   `--talos-code-composer-clearance` sull'host e viene disconnesso in teardown.
+2. `mobile/src/lib/harnessUiBridge.ts`: estende `TalosHarnessUiRuntime` con
+   `submitPrompt?(text): boolean`, `announceComposerAction?(action): boolean`
+   e aggiunge gli adapter fail-closed `submitTalosHarnessUiPrompt()` e
+   `announceTalosHarnessUiComposerAction()`.
+3. `mobile/public/harness-ui/app.js`: implementa gli stessi due metodi sul
+   runtime usando `appendUserMessage`, la semantica esistente `!`/`!!`,
+   `setView('terminal')` e `toast`; nessun fetch o processo.
+4. `mobile/public/harness-ui/styles.css`: nasconde il composer statico solo in
+   embedded e usa `--talos-code-composer-clearance` sul transcript; standalone
+   conserva il composer originale per la preview isolata.
+
+Test aggiuntivi:
+
+1. `mobile/tests/unit/lib/harnessUiBridge.test.ts`
+2. `mobile/tests/unit/screens/harnessSessionScreen.test.ts`
+3. `mobile/tests/unit/harness/harnessUiAssetContract.test.ts`
+4. `mobile/tests/unit/harness/harnessUiFrontend.test.ts`
+5. `mobile/tests/e2e/mobile-harness-ui.e2e.spec.ts`
+
+Scenari:
+
+- `CODE-COMPOSER-SINGLE-SOURCE-01`: la schermata Codice monta proprio
+  `TalosMobileComposer.vue`; nessun nuovo componente composer e il clone statico
+  è `display:none` soltanto nell'host embedded.
+- `CODE-COMPOSER-GRAMMAR-01`: Codice deriva shape e superficie `+` dalle stesse
+  due preferenze e passa allo stesso componente tema, motion, profilo, effort,
+  thinking e Browse reattivi.
+- `CODE-COMPOSER-DEMO-SEND-01`: invio non vuoto aggiunge il messaggio alla
+  conversazione Codice e svuota la bozza; `!`/`!!` aprono Terminale e mostrano
+  feedback demo; azioni senza backend rispondono senza fingere successo reale.
+- `CODE-COMPOSER-NO-CHAT-BACKEND-01`: l'adapter non importa il chat controller
+  e l'invio non produce richieste di rete.
+- `CODE-COMPOSER-CLEARANCE-01`: compatto/espanso, keyboard e quattro forme non
+  coprono l'ultimo messaggio né la nav; il ResizeObserver viene disconnesso.
+
+RED mirato prima di produzione; GREEN aggiunge `harnessUiBridge.test.ts` e
+`harnessSessionScreen.test.ts` ai comandi già elencati. Gate Pad: confronto
+side-by-side Chat/Codice nella stessa preferenza composer, poi apertura `+`,
+model, effort, thinking, Browse, `/`, invio normale, `!`, `!!`, tastiera e
+compattazione in quattro forme. Rollback: revert del solo commit Fase 6.
+
+### Checkpoint automatico 25/8 — barra Codice rimossa senza perdere lo scroll
+
+- RED fresco: `CODE-MOBILE-SCROLLBAR-HIDDEN-01` falliva perché mancavano le
+  regole embedded; la preview `dist` precedente misurava ancora 14px a destra.
+- GREEN fresco: asset contract 19/19; Playwright Codice 6/6 in telefono
+  portrait/landscape. Il browser misura `scrollbar-width:none`,
+  `scrollbar-gutter:auto`, bordo Missione a 3–5px, range di scroll positivo e
+  `scrollTop` realmente avanzato.
+- Gate di compilazione: typecheck, syntax check, build/parity verdi;
+  JavaScript iniziale 613.965/614.000 byte e CSS 214.598/220.000 byte.
+- Gate ancora aperto: installazione APK e matrice visiva completa sul Pad nelle
+  quattro forme, inclusi tastiera e tutti gli scrollport.
+
+### Estensione owner 25/8 — inset simmetrico e testata enter-always
+
+Produzione, file e simboli esatti:
+
+1. `mobile/public/harness-ui/styles.css`: cambia le due regole mobile
+   `.conversation` da `margin:0 4px 0 12px` a `margin:0 12px`; aggiunge lo
+   stato `.topbar.is-scroll-hidden` e la transizione di altezza, padding,
+   opacità, transform e bordo collegata a `--motion-disclosure`,
+   `--motion-enter`, `--motion-ease` e `--motion-ease-exit`. Embedded soltanto;
+   standalone e barra di esecuzione restano invariati.
+2. `mobile/public/harness-ui/app.js`: aggiunge gli elementi privati
+   `topbar`, `embeddedHeaderScrollers`, `embeddedHeaderScrollPositions`; le
+   funzioni private `setEmbeddedTopbarHidden(hidden)`,
+   `resetEmbeddedTopbarScroll(scroller?)` e
+   `handleEmbeddedContentScroll(event)`. Registra listener passivi sui veri
+   scrollport main, mostra la testata al cambio vista e li rimuove tutti in
+   `window.__talosHarnessDestroy()`.
+3. `mobile/src/screens/HarnessSessionScreen.vue`: sostituisce il selettore
+   scoped mal compilato `:global(body.keyboard-open) .talos-code-composer-dock`
+   con il selettore globale complesso
+   `:global(body.keyboard-open .talos-code-composer-dock)`, così `bottom:0`
+   appartiene realmente al composer e non al `body`.
+4. `mobile/tests/unit/harness/harnessUiAssetContract.test.ts`: scenario
+   `CODE-CONTENT-INSET-SYMMETRY-01` e contratto CSS motion della testata.
+5. `mobile/tests/unit/harness/harnessUiFrontend.test.ts`: scenario
+   `CODE-TOPBAR-ENTER-ALWAYS-01` su discesa, inversione, origine, cambio vista
+   e rimozione listener.
+6. `mobile/tests/unit/screens/harnessSessionScreen.test.ts`: rafforza
+   `CODE-COMPOSER-KEYBOARD-01` compilando davvero lo style scoped con
+   `@vue/compiler-sfc` e rifiutando `body.keyboard-open{bottom:0}`.
+7. `mobile/tests/e2e/mobile-harness-ui.e2e.spec.ts`: misura inset 12/12,
+   scrollbar/gutter assenti, scroll attivo e topbar che collassa/riappare.
+
+RED misurati: il Pad lascia ancora 67,27px fra composer e Gboard; il CSS
+compilato contiene `body.keyboard-open{bottom:0}`; il contenuto ha inset 12/4;
+nessun listener modifica la testata. GREEN mirato: i tre file unit sopra,
+typecheck, build/parity e 6 E2E Codice. Gate reale: screenshot e misure Pad
+telefono portrait con topbar visibile/nascosta/riapparsa e tastiera senza gap,
+poi replica telefono landscape e tablet portrait/landscape; swipe reale fino
+agli estremi. Rollback: revert del solo commit Fase 6.
+
+Stato automatico 25/8: GREEN mirato **68/68**, Playwright Codice **8/8**,
+typecheck, syntax check e build/parity verdi. Il runtime E2E ora carica davvero
+`app.js` dentro lo Shadow DOM; la vecchia fixture solo HTML/CSS non poteva
+provare il comportamento enter-always. Gate Pad della build aggiornata ancora
+aperto.
+
+Regressione Pad `CODE-TOPBAR-SAFE-AREA-01`: il primo GREEN browser collassava
+la topbar a 0px; sul device `env(safe-area-inset-top)` vale circa 39px e la
+striscia «In esecuzione» finiva sotto ora, Wi‑Fi e batteria. Correzione nel solo
+`mobile/public/harness-ui/styles.css`: lo stato nascosto conserva
+`min-height/max-height:env(safe-area-inset-top)` e ritira soltanto il chrome
+della sessione. RED asset contract; GREEN unit/build/E2E; gate reale con
+`run-strip.top >= safe-area` in tutte le quattro forme. Rollback invariato.
+
+Gate reale telefono portrait del 25/8: **GREEN**. Misure: inset 12/12;
+scroll 0→356→82,55px; topbar/run strip 95/95px aperte, track/run strip 39/39px
+ritratte; viewport e fondo composer con Gboard entrambi 544,73px, gap 0px.
+Prove visive nominate nel taccuino. Il gate complessivo resta aperto finché le
+stesse invarianti non sono verificate nelle altre tre forme.
+
+Regressione Pad `CODE-COMPOSER-LANDSCAPE-IME-SAFE-01`: telefono landscape con
+Gboard lascia 144,36px di viewport, mentre il componente condiviso espanso ne
+occupa 148,18px e parte a -3,82px. La stessa misura e la stessa collisione con
+ora/batteria sono state riprodotte nella Chat canonica: vietata una correzione
+solo Codice.
+
+Ledger minimo della correzione condivisa:
+
+1. `mobile/tests/unit/chat/TalosMobileComposer.drawer.test.ts`: nuovo RED
+   `CODE-COMPOSER-LANDSCAPE-IME-SAFE-01`; un `MediaQueryList` controllato prova
+   che focus vuoto resta compatto nello stato short-landscape e che torna
+   espanso quando la query diventa falsa.
+2. `mobile/src/components/chat/TalosMobileComposer.vue`: importa e usa la
+   funzione pubblica già stabile `useTalosMediaQuery(query)`; aggiunge la
+   costante privata `COMPOSER_SHORT_LANDSCAPE_MEDIA_QUERY` e il ref privato
+   `shortLandscapeViewport`; estende `composerCompact` senza nuove prop né
+   eventi pubblici.
+3. Regressioni: suite completa composer, `HarnessSessionScreen`, Chat/App shell,
+   typecheck, build/parity ed E2E Code.
+4. Gate reale: screenshot Chat e Codice, telefono landscape con Gboard;
+   `composer.top >= safe-area-inset-top`, `composer.bottom == visualViewport`
+   e input/`+`/azione destra tutti raggiungibili. Prova inversa: chiudendo
+   Gboard il model chip torna disponibile.
+5. Rollback: revert del solo commit Fase 6; nessun cambiamento di contratto o
+   dipendenza.
+
+Amendamento obbligatorio: il punto 2 basato su `useTalosMediaQuery` è annullato
+perché la build reale ha prodotto
+`TALOS_INITIAL_CHUNK_BUDGET_EXCEEDED: 614414 > 614000`. Il RED resta valido,
+ma produzione e test diventano:
+
+1. `mobile/src/components/chat/TalosMobileComposer.vue`: nessun cambio script;
+   stile non scoped con `@media (orientation:landscape) and (max-height:180px)`,
+   selettore specifico del root e `:has(> [data-testid="talos-composer-model-chip"])`;
+   riga controlli resa assoluta, solo `+` visibile, textarea fissata a 48px,
+   root confinato sotto `env(safe-area-inset-top)` e scroll interno invisibile.
+2. `mobile/tests/unit/chat/TalosMobileComposer.drawer.test.ts`: contratto sorgente
+   del CSS standard, inclusi area sicura, testo a 48px, riga assoluta, model chip
+   nascosto, `+` conservato e nessuna importazione `useTalosMediaQuery`.
+3. Gate bundle esplicito: chunk iniziale `<=614000`; il resto del gate reale e
+   del rollback resta invariato.
+
+Esito del 25/8: **GREEN**. Le suite mirate sono 61/61, typecheck pulito, E2E
+Codice 8/8 e build/parity 18/18; chunk iniziale 613.965/614.000 byte. Sul Pad,
+Chat e Codice hanno entrambi viewport Gboard 144,36px e dock 74,91–144,36px,
+quindi nessuna invasione della status bar. La prova inversa chiude Gboard,
+riporta il viewport a 392px e rende nuovamente visibile il model chip. Prove:
+`chat-canonical-phone-landscape-keyboard-green.png`,
+`code-phase6-phone-landscape-keyboard-green.png` e
+`code-phase6-phone-landscape-keyboard-closed-green.png`.
 
 ## Fase 7 — gate completo e consegna
 
@@ -526,6 +828,39 @@ Comandi:
 
 Gate reale: `dumpsys` pacchetto/focus; quattro forme; dimensioni byte PNG
 lette prima dell'etichetta; screenshot ispezionati interamente.
+
+### Regressione Fase 6 — composer e rail tablet
+
+`CODE-COMPOSER-TABLET-RAIL-01` è stata scoperta sul Pad in tablet portrait e
+riprodotta via geometria DOM: rail 323px, tool surface x=323px, dock x=646px.
+La porzione sinistra del composer condiviso viene dipinta sotto l'host Codice e
+non riceve hit test. Screenshot RED:
+`code-phase6-tablet-portrait-scroll-end.png`.
+
+Ledger minimo prima del GREEN:
+
+1. `mobile/tests/unit/screens/harnessSessionScreen.test.ts`: RED sorgente
+   nominato `CODE-COMPOSER-TABLET-RAIL-01`, richiede dock assoluto, `left:0` e
+   vieta `--talos-tablet-rail` nel dock.
+2. `mobile/src/screens/HarnessSessionScreen.vue`: il simbolo CSS pubblico
+   `.talos-code-composer-dock` passa da `position:fixed` a `position:absolute`
+   e si ancora una volta sola alla surface già traslata; nessun cambio a
+   `TalosMobileComposer`, prop, evento o runtime demo.
+3. Focused GREEN: `harnessSessionScreen.test.ts`, typecheck, build/parity ed E2E
+   Codice.
+4. Gate reale: tablet portrait e landscape, rail espanso e collassato;
+   `composer.left == toolSurface.left + 12px`, `composer.right ==
+   toolSurface.right - 12px`, hit test sul `+` e textarea anche nella metà
+   sinistra; tastiera telefono portrait/landscape nuovamente verdi.
+5. Rollback: revert della sola correzione dock; nessun cambio dati o backend.
+
+Esito: **GREEN**. RED 1/20 mirato prima della cura; GREEN
+`harnessSessionScreen.test.ts` 20/20, regressioni mirate 97/97, typecheck,
+build/parity, E2E Codice 8/8 e chunk iniziale 613.965/614.000. Sul Pad, rail
+aperto/chiuso in portrait e landscape produce sempre dock coincidente con tool
+surface, composer a 12/12px e hit test vero nella metà sinistra. I gate tastiera
+telefono sono stati ripetuti: portrait fondo 544,73px; landscape fondo 144,36px
+e model chip ripristinato alla chiusura.
 
 ## Checklist finale
 
@@ -549,3 +884,27 @@ lette prima dell'etichetta; screenshot ispezionati interamente.
 - Commit isolato per fase; rollback con revert del solo commit, mai reset.
 - Ogni regressione ferma la fase e diventa test permanente.
 - La consegna viene aggiornata alla fine di ogni fase, anche se bloccata.
+
+## Esito Fase 7 — 25/8
+
+- Typecheck: GREEN.
+- Syntax check `public/harness-ui/app.js`: GREEN.
+- Build/parity: GREEN; JS iniziale 613.965/614.000, CSS 215.309/220.000;
+  parity 18/18.
+- Regressioni Codice: 97/97 GREEN; E2E Codice 8/8 GREEN.
+- Android: `assembleDebug -PtalosSideBySide`, `compileDebugKotlin` e
+  `compileReleaseJavaWithJavac` GREEN; APK installato e provato sul Pad.
+- `git diff --check`: GREEN.
+- Suite unit completa: 6.328 GREEN, 10 skip, un rosso esterno su
+  `tests/unit/upstream/shadcnConformance.test.ts` perché il file tracciato e non
+  modificato `components/ui/drawer/DrawerContent.vue` non coincide col manifest.
+- Playwright completo: 79 GREEN, 27 skip, un rosso esterno riprodotto isolato
+  in `mobile-model-lab-filters.e2e.spec.ts` sulla geometria telefono della
+  scheda Hugging Face (status x=65px, copy x=74,4px). Nessun file Model Lab è
+  stato modificato dalla fase Codice.
+- APK consegnato in
+  `C:\Users\Antonino\Downloads\TALOS-dev-2026-08-25.apk`, 55.027.716 byte.
+
+I due rossi generali non autorizzano modifiche fuori perimetro e sono riportati
+esplicitamente nella consegna. Il gate Codice e la matrice reale sono chiusi;
+nessun push è autorizzato.

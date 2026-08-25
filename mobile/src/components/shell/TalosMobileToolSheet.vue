@@ -17,8 +17,8 @@ const TalosMobileDownloadCenterTrigger = defineAsyncComponent(
 // title/description, close, scrollable body honoring the safe-area insets.
 // F3-T2 (owner #4/#8/#3): honours the `mobile_window_presentation` preference —
 // fullscreen (default) covers the viewport; drawer keeps ONE fixed tall height
-// so every station matches — and animates in (slide-up + backdrop fade, 250ms,
-// globally zeroed under reduced-motion).
+// so every station matches. Motion timing comes from the canonical TALOS
+// interaction contract; a 0ms resolved token settles the final state directly.
 const props = withDefaults(defineProps<{
     title: string
     description?: string
@@ -58,6 +58,9 @@ const props = withDefaults(defineProps<{
     /** Hide the redundant station-sheet chrome when the embedded surface
      * already owns the visible session header. The dialog keeps its name. */
     hideChrome?: boolean
+    /** Let the one app-level procedural scene remain visible through a station
+     * whose own panels already provide the necessary readable glass surfaces. */
+    sceneBackground?: boolean
 }>(), {
     presentation: 'fullscreen',
     parentBack: null,
@@ -134,8 +137,11 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
     <div class="pointer-events-auto fixed inset-y-0 right-0 z-[70] flex flex-col justify-end" :style="{ left: 'var(--talos-tablet-rail, 0px)' }">
         <div
             data-testid="talos-mobile-sheet-backdrop"
-            class="absolute inset-0 bg-black/30 backdrop-blur-[2px] transition-opacity duration-250"
-            :class="entered ? 'opacity-100' : 'opacity-0'"
+            class="talos-mobile-tool-sheet-backdrop absolute inset-0 bg-black/30 backdrop-blur-[2px]"
+            :class="[
+                entered ? 'opacity-100' : 'opacity-0',
+                sceneBackground || hideChrome ? 'talos-mobile-tool-sheet-backdrop-scene' : '',
+            ]"
             aria-hidden="true"
             @click="emit('close')"
         ></div>
@@ -147,13 +153,15 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
             tabindex="-1"
             data-testid="talos-mobile-tool-sheet"
             :data-presentation="presentation"
-            class="relative z-10 flex flex-col overflow-hidden border-[var(--talos-border)] bg-[var(--talos-window-bg)] text-[var(--talos-text)] outline-none transition-transform duration-250 ease-out"
+            :data-scene-background="String(sceneBackground === true || hideChrome === true)"
+            class="talos-mobile-tool-sheet-surface relative z-10 flex flex-col overflow-hidden border-[var(--talos-border)] text-[var(--talos-text)] outline-none"
             @keydown.escape="emit('close')"
             :class="[
                 presentation === 'fullscreen'
                     ? 'h-[100dvh] max-h-none rounded-none border-0'
                     : 'h-[88dvh] max-h-[900px] rounded-t-2xl border-t',
                 entered ? 'translate-y-0' : 'translate-y-6',
+                sceneBackground || hideChrome ? 'talos-mobile-tool-sheet-scene' : '',
             ]"
         >
             <!-- Owner 2026-07-24: ONE contextual back. When a station pushes a
@@ -222,6 +230,43 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
 </template>
 
 <style>
+.talos-mobile-tool-sheet-backdrop {
+    transition: opacity var(--talos-motion-duration-surface-enter, 250ms) var(--talos-motion-ease, ease-out);
+}
+
+.talos-mobile-tool-sheet-surface {
+    background: var(--talos-window-bg);
+    transition: transform var(--talos-motion-duration-surface-enter, 250ms) var(--talos-motion-ease, ease-out);
+}
+
+.talos-mobile-tool-sheet-scene {
+    background: transparent;
+}
+
+.talos-mobile-tool-sheet-backdrop-scene {
+    background: transparent;
+    backdrop-filter: none;
+}
+
+.station-leave-active {
+    transition:
+        opacity var(--talos-motion-duration-surface-exit, 200ms) var(--talos-motion-ease-exit, ease-in),
+        transform var(--talos-motion-duration-surface-exit, 200ms) var(--talos-motion-ease-exit, ease-in);
+}
+
+.station-leave-to {
+    opacity: 0;
+    transform: translateY(var(--talos-motion-tab-change-x, 1rem));
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .talos-mobile-tool-sheet-backdrop,
+    .talos-mobile-tool-sheet-surface,
+    .station-leave-active {
+        transition-duration: 0ms;
+    }
+}
+
 /* With the landscape keyboard open the native resize leaves less height than
    this header alone consumes. Harness already exposes its own focused composer;
    temporarily yield the sheet chrome, then restore it on keyboardWillHide. */

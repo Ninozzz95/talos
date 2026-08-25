@@ -297,3 +297,150 @@ Le discrepanze storiche `VIS-DEMO-BADGE-TEXT-01`,
 selettori nel composer resta accettabile perché i relativi pannelli sono stati
 aperti fino al fondo nelle quattro forme; la continuità stilistica resta invece
 correttamente separata e assegnata alla Fase 6.
+
+## Fase 6 — prima ispezione scrollbar/composer e RED tastiera
+
+Prove:
+`C:\Users\Antonino\AppData\Local\Temp\talos-code-phase6-scrollbar-20260825`.
+Screenshot aperti e letti integralmente:
+`code-phase6-phone-portrait-top.png` e
+`code-phase6-phone-portrait-bottom.png`.
+
+| ID | Cosa è stato osservato | Misura/esito |
+|---|---|---|
+| VIS-CODE-SCROLLBAR-REMOVED-01 | Nel telefono portrait la barra verticale non è più visibile e lo sfondo TALOS prosegue dietro Codice. Lo scroll raggiunge il vero fondo e il composer condiviso non copre l'ultimo messaggio. | Scroll range 925px, avanzamento 0→160 e fondo 924,73/925; clearance ultimo contenuto→composer 29,60px. Risolta nella build ispezionata. |
+| VIS-CODE-INSET-INTERMEDIATE-01 | Dopo aver tolto la barra il bordo destro era 4px mentre il sinistro restava 12px. | Owner ha richiesto 12/12; corretto e verde in browser, nuova APK da verificare. |
+| VIS-CODE-PLAN-HORIZONTAL-01 | La quinta fase del piano esce dal primo fotogramma, ma il relativo scroller orizzontale conserva 82px di corsa e raggiunge l'estremo. | Nessun dato perso; la barra resta nascosta per decisione owner. Da riprovare con swipe reale nella matrice finale. |
+| VIS-CODE-COMPOSER-KEYBOARD-GAP-01 | Con Gboard aperta il composer condiviso restava sopra una fascia vuota alta quanto la nav nascosta. | RED reale: viewport 544,73px, fondo dock 476,73px, gap 67,27px. Causa: Vue compilava `bottom:0` su `body.keyboard-open`; test compilato e correzione verdi, nuova APK da verificare. |
+
+Il fotogramma alto conferma inoltre che non esiste più una seconda testata
+«Harness/Codice», il titolo è direttamente `Fix mobile composer`, lo sfondo
+animato è quello della Chat e il composer è visivamente la stessa superficie
+TALOS. Nessuno di questi punti è ancora dichiarato chiuso nelle quattro forme:
+questa è una prova intermedia, conservata proprio per non cancellare il RED.
+
+`code-phase6-phone-portrait-header-hidden.png` è stato poi ispezionato per
+intero. Nuova discrepanza critica `VIS-CODE-TOPBAR-SAFE-AREA-01`: la testata si
+ritira davvero (altezza 95→0px e striscia 95→0px), ma «In esecuzione» si
+sovrappone a ora, rete e batteria. Inset 12/12 e scrollbar assente restano
+corretti. Destinazione immediata: conservare la sola safe-area superiore mentre
+si ritira il chrome; nessuna prosecuzione della matrice prima del nuovo GREEN.
+
+### Fase 6 — GREEN Pad telefono portrait
+
+Screenshot aperti e ispezionati integralmente:
+
+- `code-phase6-phone-portrait-top-final.png`;
+- `code-phase6-phone-portrait-header-hidden-safe.png`;
+- `code-phase6-phone-portrait-header-restored.png`;
+- `code-phase6-phone-portrait-keyboard.png`.
+
+| ID | Cosa è stato osservato | Misura/esito |
+|---|---|---|
+| VIS-CODE-INSET-FINAL-01 | Dopo la rimozione completa della scrollbar, il contenuto usa lo stesso respiro sui due lati. Nessuna corsia grigia o fascia vuota rimane a destra. | `.conversation` e `.mission-card`: 12px sinistra e 12px destra, con il solo arrotondamento sub-pixel del WebView (meno di un pixel CSS). GREEN. |
+| VIS-CODE-TOPBAR-SAFE-AREA-01 | Scorrendo verso il basso, titolo e comandi sessione escono; la striscia «In esecuzione» si ferma sotto orario, rete e batteria. Invertendo il gesto, la testata torna subito. | Stato aperto: topbar/run strip 95/95px. Stato ritratto: track sicuro 39px, topbar traslata fuori, run strip a 39px. Ritorno: 95/95px con scroll ancora a 82,55px. GREEN reale. |
+| VIS-CODE-COMPOSER-KEYBOARD-GAP-01 | Il componente condiviso passa alla propria forma completa quando riceve il focus: allegati, modello, invio e grammatica TALOS restano intatti. | Viewport con Gboard 544,73px; fondo composer 544,73px; gap 0px. GREEN reale. |
+| VIS-CODE-SCROLLBAR-REMOVED-01 | Lo scroll verticale resta pienamente operativo durante hide/show della testata, senza barra visibile e senza spazio riservato. | Range verticale 925px; gesto reale 0→356→82,55px. GREEN telefono portrait. |
+
+L'ispezione completa non ha trovato collisioni con la status bar, la tastiera o
+la bottom navigation. La matrice resta aperta per telefono landscape, tablet
+portrait e tablet landscape; questo checkpoint chiude soltanto il caso telefono
+portrait e conserva separatamente il precedente RED.
+
+### Fase 6 — RED telefono landscape con Gboard
+
+Screenshot ispezionati integralmente:
+
+- `code-phase6-phone-landscape-keyboard.png`;
+- `chat-canonical-phone-landscape-keyboard-red.png`.
+
+`VIS-COMPOSER-LANDSCAPE-IME-SAFE-01` è aperta e bloccante. In entrambe le
+superfici, non solo in Codice, il viewport con Gboard è 144,36px ma il dock
+espanso è alto 148,18px e parte a -3,82px. Il bordo superiore viene tagliato e
+testo/azione destra entrano nella zona di orario, rete e batteria. La prova
+inversa conferma che senza tastiera la forma landscape è utilizzabile e la
+testata Codice continua a ritirarsi/rientrare correttamente (39px safe-area,
+scroll reale 0→92,36→21,09px). La correzione deve appartenere al componente
+Chat condiviso, non a Codice.
+
+### Fase 6 — GREEN telefono landscape con Gboard
+
+Screenshot ispezionati integralmente:
+
+- `chat-canonical-phone-landscape-keyboard-green.png`;
+- `code-phase6-phone-landscape-keyboard-green.png`;
+- `code-phase6-phone-landscape-keyboard-closed-green.png`.
+
+| ID | Cosa è stato osservato | Misura/esito |
+|---|---|---|
+| VIS-COMPOSER-LANDSCAPE-IME-SAFE-01 | Chat e Codice montano lo stesso componente e, con Gboard aperta, mostrano la stessa forma compatta: `+`, textarea e azione destra reali restano utilizzabili senza entrare nella status bar. | Viewport 144,36px; dock da 74,91px a 144,36px; textarea e `+` alti 48px; collisione 0px. GREEN su entrambe le superfici. |
+| VIS-COMPOSER-LANDSCAPE-INVERSE-01 | Chiudendo Gboard la media query short-landscape si disattiva e il composer torna automaticamente alla grammatica completa, compreso il selettore modello. | Viewport 392px; query falsa; model chip `display:flex`; dock 176,55–324,73px. GREEN reale. |
+| VIS-CODE-LANDSCAPE-CHROME-01 | Nell'intero fotogramma senza tastiera non compaiono scrollbar, corsie riservate o sovrapposizioni con status bar e bottom navigation. La testata, la striscia di esecuzione, il badge demo e il composer condiviso restano separati. | Screenshot 2400×1080 ispezionato per intero. GREEN. |
+
+La soluzione è CSS nel componente Chat canonico: durante la sola condizione
+landscape estremamente bassa riordina i controlli già esistenti, senza creare
+un secondo composer e senza cambiare eventi o comportamento. Chiusa la
+tastiera, la forma originale ricompare integralmente.
+
+### Fase 6 — RED tablet portrait, rail espanso
+
+Screenshot ispezionati integralmente:
+
+- `code-phase6-tablet-portrait-top.png`;
+- `code-phase6-tablet-portrait-scroll-end.png`.
+
+`VIS-COMPOSER-TABLET-RAIL-01` è aperta e bloccante. Il contenuto Codice usa
+correttamente 20px per lato, la scrollbar è assente, lo scroll arriva alla fine
+e la testata conserva 40px di safe area. Il composer, però, non è interamente
+sopra la superficie: tool surface e host iniziano a 323px, mentre il dock
+inizia a 646px. Il rettangolo interno dichiara 335–902px, ma l'hit test nella
+parte sinistra restituisce l'host Codice; soltanto da circa x=646px il composer
+sale realmente sopra. L'ultimo contenuto conserva 12,45px di spazio rispetto
+al rettangolo teorico, ma il controllo visibile/toccabile è dimezzato.
+
+Il difetto deriva dal doppio offset del rail e non dal componente Chat. Va
+corretto nel solo dock host e poi ricontrollato in tutte le quattro forme.
+
+### Fase 6 — GREEN composer e rail nelle quattro forme
+
+Screenshot ispezionati integralmente:
+
+- `code-phase6-tablet-portrait-composer-green.png`;
+- `code-phase6-tablet-portrait-composer-plus-green.png`;
+- `code-phase6-tablet-portrait-rail-collapsed-green.png`;
+- `code-phase6-tablet-landscape-composer-green.png`;
+- `code-phase6-phone-portrait-keyboard-post-rail-fix.png`;
+- `code-phase6-phone-landscape-keyboard-post-rail-fix.png`.
+
+| ID | Cosa è stato osservato | Misura/esito |
+|---|---|---|
+| VIS-COMPOSER-TABLET-RAIL-01 | Nel tablet portrait il dock coincide ora con la tool surface, sia con lista sessioni aperta sia compressa. La metà sinistra riceve davvero gli eventi: il tocco sul `+` apre il drawer canonico «Aggiungi alla chat». | Rail aperto: surface/dock x=323px, composer 335–902px. Rail chiuso: surface/dock x=72px, composer 84–902px. Inset 12/12 e hit test GREEN. |
+| VIS-COMPOSER-TABLET-LANDSCAPE-01 | Nel tablet landscape la stessa invariante vale con rail 72px e 323px; composer intero sopra contenuto e Context rail, senza sovrapposizioni laterali. | Rail aperto: surface/dock x=323px, composer 335–1280px. Rail chiuso: surface/dock x=72px, composer 84–1280px. Inset 12/12 e hit test GREEN. |
+| VIS-COMPOSER-PHONE-INVERSE-AFTER-RAIL-01 | Il nuovo ancoraggio non regredisce la tastiera. Portrait mantiene il dock al fondo del viewport Gboard; landscape mantiene dock 74,91–144,36px, textarea 48px e model chip nascosto soltanto nello stato corto. | Portrait viewport/dock bottom 544,73px. Landscape viewport/dock bottom 144,36px; chiusura Gboard: query falsa e model chip `display:flex`. GREEN. |
+| VIS-CODE-TABLET-SCROLL-END-01 | In entrambi i tablet lo scroll arriva all'ultimo elemento, senza scrollbar; testata ritratta a 40px e ultimo contenuto separato dal composer. | Portrait clearance 12,35–12,45px; landscape 12,54px. Scrollbar occupata 0px. GREEN. |
+
+Il drawer del composer è stato controllato per intero: sfondo e rail Codice
+restano sotto il backdrop, la superficie è centrata, non entra nella status bar
+e usa la grammatica Chat reale. La chiusura della tastiera lascia ancora il
+focus nel textarea: non è una regressione di questo fix, è il debito mobile
+separato `DEBT-MOBILE-006`, registrato per il lavoro post-Codice.
+
+## Matrice conclusiva Fase 6
+
+Directory prove:
+`C:\Users\Antonino\AppData\Local\Temp\talos-code-phase6-scrollbar-20260825`.
+
+| Forma reale simulata sul Pad | PNG fisico | Esito superfici toccate |
+|---|---:|---|
+| Telefono portrait | 1080×2400 | inset 12/12; nessuna scrollbar; testata hide/show con safe area 39px; scroll reale; composer Chat vero e Gboard; GREEN. |
+| Telefono landscape | 2400×1080 | testata hide/show; composer short-IME 74,91–144,36px; ritorno del model chip alla chiusura; nessuna collisione status bar; GREEN. |
+| Tablet portrait | 2400×3392 | rail 323/72px; composer intero 12/12 e drawer `+`; scroll fino al fondo; topbar sicura 40px; GREEN. |
+| Tablet landscape | 3392×2400 | rail 323/72px; Chat e Board fino al fondo; Context rail fino al fondo; sidebar globale sopra tutto; composer 12/12; GREEN. |
+
+Sono stati riesaminati per intero anche Board iniziale/fondo, Context rail,
+drawer «Aggiungi alla chat», sidebar globale con backdrop, rail sessioni aperto
+e compresso e i fotogrammi con tastiera. Nessuna scrollbar embedded è visibile
+o riserva spazio; tutti gli scrollport verificati conservano range reale.
+
+Il Pad è stato infine ripristinato a `wm size reset` = 2400×3392 e
+`wm density reset` = 420.
