@@ -58,6 +58,7 @@
 
   const appShell = $('#app');
   const views = $$('.view-pane');
+  const chatConversation = $('.conversation');
   const mobileViewButtons = $$('[data-mobile-view]');
   const modeTabs = $$('.mode-tab');
   const backdrop = $('#overlayBackdrop');
@@ -99,9 +100,66 @@
   const boardDescription = $('#boardDescription');
   const composerMic = $('.composer-mic');
   const embeddedSessionBack = $('[data-open-panel="sessions"]');
+  const topbar = $('.topbar');
+  const embeddedHeaderScrollers = [...new Set([...views, chatConversation].filter(Boolean))];
+  const embeddedHeaderScrollPositions = new WeakMap();
 
   if (HOST().classList.contains('talos-embedded')) {
     embeddedSessionBack?.setAttribute('aria-label', 'Torna alle sessioni Codice');
+  }
+
+  const motionAnimations = new Set();
+
+  function motionMilliseconds(name, fallback = 0) {
+    if (document.body.classList.contains('reduce-motion')) return 0;
+    const raw = getComputedStyle(HOST()).getPropertyValue(name).trim();
+    if (!raw) return fallback;
+    const value = Number.parseFloat(raw);
+    if (!Number.isFinite(value)) return fallback;
+    return raw.endsWith('s') && !raw.endsWith('ms') ? value * 1000 : value;
+  }
+
+  function animateExit(element, options = {}, finalize = () => {}) {
+    if (!element) { finalize(); return null; }
+    const durationToken = options.durationToken || '--talos-motion-duration-surface-exit';
+    const duration = motionMilliseconds(durationToken, 180);
+    if (duration <= 0 || typeof element.animate !== 'function') {
+      finalize();
+      return null;
+    }
+    const style = getComputedStyle(HOST());
+    const easing = options.easing
+      || style.getPropertyValue('--talos-motion-ease-exit').trim()
+      || 'ease-in';
+    const transform = options.transform || 'translateY(6px)';
+    element.classList.add('motion-exit');
+    const animation = element.animate(
+      [{ opacity: 1, transform: 'none' }, { opacity: 0, transform }],
+      { duration, easing, fill: 'none' },
+    );
+    motionAnimations.add(animation);
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      motionAnimations.delete(animation);
+      element.classList.remove('motion-exit');
+      finalize();
+    };
+    animation.finished.then(finish, finish);
+    return animation;
+  }
+
+  function cancelMotionAnimations() {
+    for (const animation of motionAnimations) animation.cancel();
+    motionAnimations.clear();
+  }
+
+  function markMotionEnter(element) {
+    if (!element) return;
+    element.classList.remove('motion-exit');
+    element.classList.add('motion-enter');
+    element.addEventListener('animationend', () => element.classList.remove('motion-enter'), { once: true });
   }
 
   function icon(id) {
@@ -144,17 +202,56 @@
     });
   }
 
+  function setEmbeddedTopbarHidden(hidden) {
+    if (!HOST().classList.contains('talos-embedded')) return;
+    topbar?.classList.toggle('is-scroll-hidden', hidden);
+  }
+
+  function resetEmbeddedTopbarScroll(scroller = null) {
+    setEmbeddedTopbarHidden(false);
+    if (scroller) embeddedHeaderScrollPositions.set(scroller, Math.max(0, scroller.scrollTop));
+    else embeddedHeaderScrollers.forEach((element) => {
+      embeddedHeaderScrollPositions.set(element, Math.max(0, element.scrollTop));
+    });
+  }
+
+  function handleEmbeddedContentScroll(event) {
+    if (!HOST().classList.contains('talos-embedded')) return;
+    const scroller = event.currentTarget;
+    const current = Math.max(0, scroller.scrollTop);
+    const previous = embeddedHeaderScrollPositions.get(scroller) ?? current;
+    const delta = current - previous;
+    embeddedHeaderScrollPositions.set(scroller, current);
+    if (current <= 4 || delta < -1) {
+      setEmbeddedTopbarHidden(false);
+      return;
+    }
+    if (current > 12 && delta > 2) setEmbeddedTopbarHidden(true);
+  }
+
   function setView(view, options = {}) {
     const target = $(`[data-view="${view}"]`);
     if (!target) return;
+    const previous = views.find((pane) => pane.classList.contains('active'));
     state.view = view;
     if (options.mode) state.mode = options.mode;
     else if (view === 'dashboard') state.mode = 'dashboard';
     else if (view === 'chat') state.mode = 'chat';
     else state.mode = null;
-    views.forEach((pane) => pane.classList.toggle('active', pane === target));
+    views.forEach((pane) => {
+      if (pane !== target && pane !== previous) pane.classList.remove('active', 'motion-enter', 'motion-exit');
+    });
+    if (previous && previous !== target) {
+      animateExit(previous, { durationToken: '--talos-motion-duration-tab-change', transform: 'translateX(-8px)' }, () => {
+        previous.classList.remove('active');
+      });
+    }
+    target.classList.add('active');
+    if (previous !== target) markMotionEnter(target);
     syncNavigationState();
     target.scrollTop = 0;
+    resetEmbeddedTopbarScroll(view === 'chat' ? chatConversation : target);
+    window.__talosHarnessHostViewChange?.(view);
     if (view === 'dashboard') ensureCampaignBoard();
   }
 
@@ -206,17 +303,32 @@
   }
 
   function syncEmbeddedDialogBackdrop() {
-    harnessDialogBackdrop.hidden = !commandDialog.open && !sheetDialog.open;
+    const shouldShow = commandDialog.open || sheetDialog.open;
+    if (shouldShow) {
+      harnessDialogBackdrop.hidden = false;
+      markMotionEnter(harnessDialogBackdrop);
+      return;
+    }
+    if (harnessDialogBackdrop.hidden || harnessDialogBackdrop.classList.contains('motion-exit')) return;
+    animateExit(
+      harnessDialogBackdrop,
+      { durationToken: '--talos-motion-duration-popover', transform: 'none' },
+      () => { harnessDialogBackdrop.hidden = true; },
+    );
   }
 
   function showEmbeddedDialog(dialog) {
     if (!dialog.open) dialog.show();
+    markMotionEnter(dialog);
     syncEmbeddedDialogBackdrop();
   }
 
   function closeEmbeddedDialog(dialog) {
-    if (dialog.open) dialog.close();
-    syncEmbeddedDialogBackdrop();
+    if (!dialog.open || dialog.classList.contains('motion-exit')) return;
+    animateExit(dialog, { durationToken: '--talos-motion-duration-popover' }, () => {
+      if (dialog.open) dialog.close();
+      syncEmbeddedDialogBackdrop();
+    });
   }
 
   function transientLayersActive() {
@@ -235,7 +347,10 @@
   }
 
   function toast(title, message = '') {
-    while (toastRegion.children.length >= 3) toastRegion.firstElementChild?.remove();
+    if (toastRegion.children.length >= 3) {
+      const oldest = toastRegion.firstElementChild;
+      animateExit(oldest, {}, () => oldest?.remove());
+    }
     const el = document.createElement('div');
     el.className = 'toast';
     el.setAttribute('role', 'status');
@@ -248,7 +363,8 @@
       el.appendChild(span);
     }
     toastRegion.appendChild(el);
-    window.setTimeout(() => el.remove(), 3300);
+    markMotionEnter(el);
+    window.setTimeout(() => animateExit(el, {}, () => el.remove()), 3300);
   }
 
   // REAL_DATA_RENDER_START
@@ -373,9 +489,14 @@
 
     toggle.addEventListener('click', () => {
       const opening = detail.hidden;
-      detail.hidden = !opening;
       toggle.setAttribute('aria-expanded', String(opening));
-      if (opening && !detail.querySelector('.run-evidence')) {
+      if (!opening) {
+        animateExit(detail, { durationToken: '--talos-motion-duration-disclosure' }, () => { detail.hidden = true; });
+        return;
+      }
+      detail.hidden = false;
+      markMotionEnter(detail);
+      if (!detail.querySelector('.run-evidence')) {
         const evidence = textElement(
           row.detto === null || row.detto === undefined ? 'p' : 'pre',
           'run-evidence',
@@ -911,10 +1032,12 @@
     $$('.tool-row[aria-expanded="true"]').forEach((row) => {
       if (row !== button) row.setAttribute('aria-expanded', 'false');
     });
-    $$('.tool-inline-detail').forEach((detail) => { if (detail !== existing) detail.remove(); });
+    $$('.tool-inline-detail').forEach((detail) => {
+      if (detail !== existing) animateExit(detail, { durationToken: '--talos-motion-duration-disclosure' }, () => detail.remove());
+    });
     if (existing) {
-      existing.remove();
       button.setAttribute('aria-expanded', 'false');
+      animateExit(existing, { durationToken: '--talos-motion-duration-disclosure' }, () => existing.remove());
       return;
     }
     const [title, detail] = toolDetails[key] || ['Dettaglio tool', 'Nessun dettaglio aggiuntivo disponibile.'];
@@ -922,6 +1045,7 @@
     row.className = 'tool-inline-detail';
     row.innerHTML = `<strong>${title}</strong><span>${detail}</span>`;
     button.insertAdjacentElement('afterend', row);
+    markMotionEnter(row);
     button.setAttribute('aria-expanded', 'true');
   }
 
@@ -973,6 +1097,7 @@
       span.textContent = text;
       return span;
     }));
+    markMotionEnter(diffCode);
   }
 
   function setInspectorTab(button) {
@@ -985,21 +1110,71 @@
       const active = section.dataset.inspectorSection === button.dataset.inspectorTab;
       section.classList.toggle('active', active);
       section.hidden = !active;
+      if (active) markMotionEnter(section);
     });
   }
 
   function appendUserMessage(text) {
     const conversation = $('#conversation');
     const article = document.createElement('article');
-    article.className = 'message user-message';
+    article.className = 'message user-message motion-enter';
     article.innerHTML = `<div class="message-bubble"></div><div class="message-meta"><span>Tu · ora</span><button class="mini-icon" aria-label="Copia">${icon('i-copy')}</button></div>`;
     $('.message-bubble', article).textContent = text;
     conversation.appendChild(article);
     const assistant = document.createElement('article');
-    assistant.className = 'message assistant-message compact-message';
+    assistant.className = 'message assistant-message compact-message motion-enter';
     assistant.innerHTML = `<div class="assistant-meta"><span class="talos-glyph">T</span><span>TALOS · ${state.model.split(' · ')[0]}</span><span>ora</span></div><div class="assistant-copy">Ricevuto. Ho aggiunto il messaggio al run corrente mantenendo ambiente, permessi e contesto visibili.</div><div class="message-actions"><button data-message-action="copy" aria-label="Copia risposta">${icon('i-copy')}</button><button data-message-action="like" aria-label="Risposta utile" aria-pressed="false">👍</button><button data-message-action="dislike" aria-label="Risposta non utile" aria-pressed="false">👎</button><button data-message-action="retry" aria-label="Rigenera risposta">${icon('i-history')}</button></div>`;
     conversation.appendChild(assistant);
     window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'center' }), 40);
+  }
+
+  function submitPrompt(text) {
+    const value = String(text || '').trim();
+    if (!value) return false;
+    if (value.startsWith('!')) {
+      const hidden = value.startsWith('!!');
+      toast(hidden ? 'Shell eseguita senza contesto' : 'Shell inviata al terminale', value.replace(/^!!?/, '').trim());
+      setView('terminal');
+      return true;
+    }
+    if (state.queueMode) {
+      queuedMessage.classList.add('show', 'motion-enter');
+      const queuedCopy = $('#queuedMessage span');
+      queuedCopy.textContent = '';
+      const queuedLabel = document.createElement('b');
+      queuedLabel.textContent = 'Follow-up in coda';
+      queuedCopy.append(queuedLabel, document.createTextNode(` · ${value}`));
+      toast('Follow-up accodato', 'Verrà consegnato dopo il run corrente.');
+    } else {
+      appendUserMessage(value);
+    }
+    return true;
+  }
+
+  function announceComposerAction(action) {
+    if (action === 'references') {
+      openSheet('references');
+      return true;
+    }
+    if (action === 'new_session') {
+      createNewSession();
+      return true;
+    }
+    const copy = {
+      attach: ['Allegato demo', 'Il selettore è UI locale e non carica file reali.'],
+      photo: ['Fotocamera demo', 'Nessuna foto è stata acquisita.'],
+      photos: ['Galleria demo', 'Nessuna immagine è stata importata.'],
+      browse: ['Browse demo', 'Lo stato resta locale a questa sessione Codice.'],
+      enhance: ['Miglioramento demo', 'Nessun modello è stato chiamato.'],
+      'enhance-blocked': ['Miglioramento non collegato', 'Questa superficie resta locale.'],
+      'refresh-models': ['Profili demo', 'Nessuna discovery di rete eseguita.'],
+      'browser-url': ['Browser demo', 'Nessuna navigazione esterna eseguita.'],
+      attach_file: ['Allegato demo', 'Il selettore è UI locale e non carica file reali.'],
+      export_report: ['Export demo', 'Nessun rapporto reale è stato prodotto.'],
+    };
+    const feedback = copy[action] || ['Demo UI · non collegato', 'Azione locale registrata senza backend.'];
+    toast(...feedback);
+    return true;
   }
 
   function autoGrowTextarea() {
@@ -1175,8 +1350,14 @@
     button.addEventListener('click', () => {
       const target = ROOT().getElementById(button.dataset.collapseTarget);
       if (!target) return;
-      const collapsed = target.classList.toggle('collapsed');
-      button.setAttribute('aria-expanded', String(!collapsed));
+      const collapsed = target.classList.contains('collapsed');
+      button.setAttribute('aria-expanded', String(collapsed));
+      if (collapsed) {
+        target.classList.remove('collapsed');
+        markMotionEnter(target);
+      } else {
+        animateExit(target, { durationToken: '--talos-motion-duration-disclosure' }, () => target.classList.add('collapsed'));
+      }
     });
   });
 
@@ -1302,36 +1483,22 @@
   composerForm.addEventListener('submit', (event) => {
     event.preventDefault();
     const text = composerInput.value.trim();
-    if (!text) return;
-    if (text.startsWith('!')) {
-      const hidden = text.startsWith('!!');
-      toast(hidden ? 'Shell eseguita senza contesto' : 'Shell inviata al terminale', text.replace(/^!!?/, '').trim());
-      composerInput.value = ''; autoGrowTextarea(); setView('terminal'); return;
-    }
-    if (state.queueMode) {
-      queuedMessage.classList.add('show');
-      const queuedCopy = $('#queuedMessage span');
-      queuedCopy.textContent = '';
-      const queuedLabel = document.createElement('b');
-      queuedLabel.textContent = 'Follow-up in coda';
-      queuedCopy.append(queuedLabel, document.createTextNode(` · ${text}`));
-      toast('Follow-up accodato', 'Verrà consegnato dopo il run corrente.');
-    } else {
-      appendUserMessage(text);
-    }
+    if (!submitPrompt(text)) return;
     composerInput.value = '';
     autoGrowTextarea();
   });
 
   $('#cancelQueued').addEventListener('click', () => {
-    queuedMessage.classList.remove('show');
+    animateExit(queuedMessage, { durationToken: '--talos-motion-duration-composer-collapse' }, () => {
+      queuedMessage.classList.remove('show');
+    });
     toast('Follow-up annullato');
   });
 
   $$('[data-approve], [data-allow-session], [data-deny]').forEach((button) => {
     button.addEventListener('click', () => {
       const card = button.closest('.approval-card');
-      card?.remove();
+      animateExit(card, {}, () => card?.remove());
       if (button.hasAttribute('data-deny')) toast('Permesso negato', 'Il browser locale non verrà aperto.');
       else toast(button.hasAttribute('data-allow-session') ? 'Permesso per sessione' : 'Permesso concesso', 'Browser locale autorizzato.');
     });
@@ -1359,7 +1526,7 @@
 
   $('#reducedMotionToggle').addEventListener('change', (event) => {
     document.body.classList.toggle('reduce-motion', event.target.checked);
-    toast('Movimento', event.target.checked ? 'Ridotto' : 'Standard Calm');
+    toast('Movimento', event.target.checked ? 'Ridotto' : 'Standard');
   });
 
   campaignSelect?.addEventListener('change', () => {
@@ -1447,6 +1614,12 @@
   window.addEventListener('resize', onResize);
   window.visualViewport?.addEventListener('resize', syncVisualViewport);
   window.visualViewport?.addEventListener('scroll', syncVisualViewport);
+  if (HOST().classList.contains('talos-embedded')) {
+    embeddedHeaderScrollers.forEach((scroller) => {
+      embeddedHeaderScrollPositions.set(scroller, Math.max(0, scroller.scrollTop));
+      scroller.addEventListener('scroll', handleEmbeddedContentScroll, { passive: true });
+    });
+  }
   if (typeof ResizeObserver === 'function') {
     hostResizeObserver = new ResizeObserver(syncHostLayout);
     hostResizeObserver.observe(HOST());
@@ -1456,8 +1629,16 @@
     dismissTransientLayers,
     transientLayersActive,
     setKeyboardOpen,
+    submitPrompt,
+    announceComposerAction,
   };
   window.__talosHarnessDestroy = () => {
+    cancelMotionAnimations();
+    setEmbeddedTopbarHidden(false);
+    embeddedHeaderScrollers.forEach((scroller) => {
+      scroller.removeEventListener('scroll', handleEmbeddedContentScroll);
+      embeddedHeaderScrollPositions.delete(scroller);
+    });
     window.removeEventListener('resize', onResize);
     window.visualViewport?.removeEventListener('resize', syncVisualViewport);
     window.visualViewport?.removeEventListener('scroll', syncVisualViewport);

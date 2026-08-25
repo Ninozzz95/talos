@@ -107,6 +107,35 @@ describe('TalosMobileToolSheet (station sheet over chat)', () => {
         expect(w.get('.talos-mobile-tool-sheet-header').text()).toContain('Library')
         expect(w.get('[data-testid="talos-sheet-back"]').exists()).toBe(true)
     })
+
+    it('CODE-BG-CONTINUITY-01 lets only an explicitly scene-backed station reveal the shared background', () => {
+        const code = mount(TalosMobileToolSheet, {
+            props: { title: 'Code', hideChrome: true, sceneBackground: true } as never,
+        })
+        const ordinary = mount(TalosMobileToolSheet, { props: { title: 'Library' } })
+
+        expect(code.get('[data-testid="talos-mobile-tool-sheet"]')
+            .attributes('data-scene-background')).toBe('true')
+        expect(code.get('[data-testid="talos-mobile-tool-sheet"]').classes())
+            .toContain('talos-mobile-tool-sheet-scene')
+        expect(code.get('[data-testid="talos-mobile-sheet-backdrop"]').classes())
+            .toContain('talos-mobile-tool-sheet-backdrop-scene')
+        expect(ordinary.get('[data-testid="talos-mobile-tool-sheet"]')
+            .attributes('data-scene-background')).toBe('false')
+        expect(ordinary.get('[data-testid="talos-mobile-tool-sheet"]').classes())
+            .not.toContain('talos-mobile-tool-sheet-scene')
+        expect(ordinary.get('[data-testid="talos-mobile-sheet-backdrop"]').classes())
+            .not.toContain('talos-mobile-tool-sheet-backdrop-scene')
+    })
+
+    it('CODE-MOTION-TOKENS-01 drives sheet and backdrop entry from canonical motion variables', () => {
+        const source = readFileSync(resolve(process.cwd(), 'src', 'components', 'shell', 'TalosMobileToolSheet.vue'), 'utf8')
+
+        expect(source).toContain('--talos-motion-duration-surface-enter')
+        expect(source).toContain('--talos-motion-duration-surface-exit')
+        expect(source).toContain('--talos-motion-ease')
+        expect(source).not.toContain('duration-250')
+    })
 })
 
 // F3-T2 (owner #4/#8): the sheet honours the presentation preference —

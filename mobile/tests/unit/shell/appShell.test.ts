@@ -294,6 +294,27 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
         }
     })
 
+    it('CODE-BG-CONTINUITY-01 delegates the existing animated scene through the Code sheet only', async () => {
+        const router = makeRouter('/harness/refactor-auth-flow')
+        const wrapper = mount(App, { global: { plugins: [router] }, attachTo: document.body })
+        try {
+            await flushPromises()
+            expect(wrapper.get('[data-testid="talos-mobile-tool-sheet"]')
+                .attributes('data-scene-background')).toBe('true')
+            expect(wrapper.get('main.relative.flex-1.overflow-hidden').element.parentElement?.classList)
+                .toContain('invisible')
+
+            await router.push('/memory')
+            await flushPromises()
+            expect(wrapper.get('[data-testid="talos-mobile-tool-sheet"]')
+                .attributes('data-scene-background')).toBe('false')
+            expect(wrapper.get('main.relative.flex-1.overflow-hidden').element.parentElement?.classList)
+                .not.toContain('invisible')
+        } finally {
+            wrapper.unmount()
+        }
+    })
+
     it('P1-CTX-UI-03 binds the active chat policy to its media panel', async () => {
         const controller = mockState.controller as ReturnType<typeof makeController>
         const sessionPolicy = {
