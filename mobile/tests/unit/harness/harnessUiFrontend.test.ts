@@ -33,6 +33,7 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         delete (window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot
         delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
         delete (window as unknown as { __talosHarnessUiRuntime?: unknown }).__talosHarnessUiRuntime
+        delete (window as unknown as { __talosHarnessHostPermissionChange?: unknown }).__talosHarnessHostPermissionChange
         document.body.replaceChildren()
         document.body.className = ''
         document.documentElement.className = ''
@@ -167,6 +168,28 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         expect(document.querySelector('[data-view="settings"]')?.classList.contains('active')).toBe(true)
     })
 
+    it('CODE-COMPOSER-AUTONOMY-SHEET-01 opens the original policy sheet and reports its selection to Vue', () => {
+        const permissionChanged = vi.fn()
+        ;(window as unknown as {
+            __talosHarnessHostPermissionChange?: (permission: string) => void
+        }).__talosHarnessHostPermissionChange = permissionChanged
+        mountStaticRuntime()
+        const runtime = (window as unknown as {
+            __talosHarnessUiRuntime?: { announceComposerAction?(action: string): boolean }
+        }).__talosHarnessUiRuntime
+
+        expect(runtime?.announceComposerAction?.('permissions')).toBe(true)
+        const sheet = document.querySelector<HTMLDialogElement>('#sheetDialog')
+        expect(sheet?.open).toBe(true)
+        const fullAccess = [...(sheet?.querySelectorAll<HTMLButtonElement>('[data-permission-choice]') ?? [])]
+            .find((button) => button.dataset.permissionChoice === 'Full access')
+        expect(fullAccess).toBeDefined()
+
+        fullAccess?.click()
+        expect(permissionChanged).toHaveBeenCalledWith('Full access')
+        expect(sheet?.open).toBe(false)
+    })
+
     it('CODE-MODE-STATE-TRUTH-01 never leaves Chat selected while another surface is visible', () => {
         mountStaticRuntime()
 
@@ -216,6 +239,39 @@ describe('Harness UI embedded host and keyboard runtime', () => {
 
         ;(window as unknown as { __talosHarnessDestroy?: () => void }).__talosHarnessDestroy?.()
         conversation.scrollTop = 96
+        conversation.dispatchEvent(new Event('scroll'))
+        expect(topbar.classList.contains('is-scroll-hidden')).toBe(false)
+    })
+
+    it('CODE-TOPBAR-NO-FLAP-01 ignores the layout clamp at the new bottom but still returns on a real upward scroll', () => {
+        document.documentElement.classList.add('talos-embedded')
+        mountStaticRuntime()
+        const conversation = document.querySelector<HTMLElement>('.conversation')
+        const topbar = document.querySelector<HTMLElement>('.topbar')
+        expect(conversation).not.toBeNull()
+        expect(topbar).not.toBeNull()
+
+        if (!conversation || !topbar) return
+        Object.defineProperties(conversation, {
+            scrollHeight: { configurable: true, value: 1_000 },
+            clientHeight: { configurable: true, value: 300 },
+        })
+
+        conversation.scrollTop = 650
+        conversation.dispatchEvent(new Event('scroll'))
+        expect(topbar.classList.contains('is-scroll-hidden')).toBe(true)
+
+        // Collapsing the topbar gives the transcript 64px more room. Near the
+        // end, the browser clamps scrollTop to the new maximum (636): that
+        // negative delta is layout feedback, not a finger reversing direction.
+        Object.defineProperty(conversation, 'clientHeight', { configurable: true, value: 364 })
+        conversation.scrollTop = 636
+        conversation.dispatchEvent(new Event('scroll'))
+        expect(topbar.classList.contains('is-scroll-hidden')).toBe(true)
+
+        // A real upward gesture leaves the maximum instead, so the header must
+        // return immediately and exactly once.
+        conversation.scrollTop = 600
         conversation.dispatchEvent(new Event('scroll'))
         expect(topbar.classList.contains('is-scroll-hidden')).toBe(false)
     })

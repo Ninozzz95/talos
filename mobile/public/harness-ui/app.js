@@ -215,6 +215,11 @@
     });
   }
 
+  function embeddedScrollerAtEnd(scroller, current) {
+    const maximum = scroller.scrollHeight - scroller.clientHeight;
+    return maximum > 0 && maximum - current <= 2;
+  }
+
   function handleEmbeddedContentScroll(event) {
     if (!HOST().classList.contains('talos-embedded')) return;
     const scroller = event.currentTarget;
@@ -222,8 +227,16 @@
     const previous = embeddedHeaderScrollPositions.get(scroller) ?? current;
     const delta = current - previous;
     embeddedHeaderScrollPositions.set(scroller, current);
-    if (current <= 4 || delta < -1) {
+    if (current <= 4) {
       setEmbeddedTopbarHidden(false);
+      return;
+    }
+    if (delta < -1) {
+      // Collapsing the topbar increases the scrollport height. Near the end,
+      // the browser then clamps scrollTop to its smaller maximum and emits a
+      // negative delta even though the person is still flinging downward.
+      // A real upward gesture leaves that maximum, so only that case reopens.
+      if (!embeddedScrollerAtEnd(scroller, current)) setEmbeddedTopbarHidden(false);
       return;
     }
     if (current > 12 && delta > 2) setEmbeddedTopbarHidden(true);
@@ -907,6 +920,7 @@
       button.addEventListener('click', () => {
         state.permissions = button.dataset.permissionChoice;
         $$('.selector-pill span').filter((span) => ['Workspace write', 'Read only', 'On request', 'Full access'].includes(span.textContent)).forEach((span) => { span.textContent = state.permissions; });
+        window.__talosHarnessHostPermissionChange?.(state.permissions);
         toast('Policy aggiornata', state.permissions);
         closeEmbeddedDialog(sheetDialog);
       });
@@ -1154,6 +1168,10 @@
   function announceComposerAction(action) {
     if (action === 'references') {
       openSheet('references');
+      return true;
+    }
+    if (action === 'permissions') {
+      openSheet('permissions');
       return true;
     }
     if (action === 'new_session') {

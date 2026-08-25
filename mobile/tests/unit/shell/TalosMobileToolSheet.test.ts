@@ -86,6 +86,16 @@ describe('TalosMobileToolSheet (station sheet over chat)', () => {
         expect(body.classes()).not.toContain('overflow-hidden')
     })
 
+    it('CODE-MODAL-NO-HORIZONTAL-PAN-01 clips the surface without making it a hidden scroll container', () => {
+        const w = mount(TalosMobileToolSheet, {
+            props: { title: 'Code', lockBodyScroll: true, hideChrome: true } as never,
+        })
+        const surface = w.get('[data-testid="talos-mobile-tool-sheet"]')
+
+        expect(surface.classes()).toContain('overflow-clip')
+        expect(surface.classes()).not.toContain('overflow-hidden')
+    })
+
     it('CODE-SESSION-FIRST-HEADER-01 starts Codice from the session topbar without duplicate sheet chrome', () => {
         const w = mount(TalosMobileToolSheet, {
             props: { title: 'Code', lockBodyScroll: true, hideChrome: true } as never,

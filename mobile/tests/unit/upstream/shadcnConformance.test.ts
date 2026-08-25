@@ -71,7 +71,18 @@ describe('shadcn upstream conformance', () => {
             'mobile/src/components/ui/dialog/DialogContent.vue',
             'mobile/src/components/ui/dialog/DialogFooter.vue',
             'mobile/src/components/ui/dialog/DialogScrollContent.vue',
+            'mobile/src/components/ui/drawer/DrawerContent.vue',
         ]
+        const expectedResearch = new Map([
+            ...expectedDestinations.slice(0, 3).map((destination) => [
+                destination,
+                'mobile/docs/superpowers/research/2026-07-29-p0-localization-conformance-closure-research.md',
+            ]),
+            [
+                'mobile/src/components/ui/drawer/DrawerContent.vue',
+                'mobile/docs/superpowers/research/2026-08-25-harness-drawer-layering-conformance.md',
+            ],
+        ])
         expect(manifest.adaptations.map((row: { destination: string }) => row.destination).sort())
             .toEqual(expectedDestinations)
 
@@ -91,7 +102,7 @@ describe('shadcn upstream conformance', () => {
             expect(row.accepted_sha256).toMatch(/^[0-9a-f]{64}$/)
             expect(row.accepted_sha256).not.toBe(row.upstream_sha256)
             expect(row.reason.trim().length).toBeGreaterThan(20)
-            expect(row.research).toBe('mobile/docs/superpowers/research/2026-07-29-p0-localization-conformance-closure-research.md')
+            expect(row.research).toBe(expectedResearch.get(row.destination))
             /*
              * ⛔ QUESTA META' DELLA REGOLA VALE SOLO DOVE LE RICERCHE CI SONO.
              *
