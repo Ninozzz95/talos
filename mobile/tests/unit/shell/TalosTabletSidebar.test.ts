@@ -80,4 +80,37 @@ describe('TalosTabletSidebar (F6 sidebar refactor) — one rail, contextual cont
         // alias App.vue's template uses to listen for it.
         expect(w.emitted('openMenu')).toHaveLength(1)
     })
+
+    it('HARNESS-TABLET-RAIL-COLLAPSE-01 hides only the Harness list and leaves two reachable controls', async () => {
+        const w = mountSidebar({ variant: 'harness', collapsed: true, width: 72 })
+        await flushPromises()
+
+        const rail = w.get('[data-testid="talos-tablet-sidebar"]')
+        expect(rail.attributes('data-talos-tablet-sidebar-collapsed')).toBe('true')
+        expect(rail.attributes('style')).toContain('width: 72px')
+        expect(w.find('[data-testid="stub-harness-screen"]').exists()).toBe(false)
+        expect(w.find('[data-testid="stub-chats-screen"]').exists()).toBe(false)
+        expect(w.find('[data-testid="talos-tablet-menu"]').exists()).toBe(true)
+        expect(w.get('[data-testid="talos-tablet-harness-toggle"]').attributes('aria-label')).toBe('Expand Harness sessions')
+
+        await w.get('[data-testid="talos-tablet-harness-toggle"]').trigger('click')
+        expect(w.emitted('toggleCollapsed')).toEqual([[]])
+    })
+
+    it('HARNESS-TABLET-RAIL-COLLAPSE-01 exposes collapse while expanded', async () => {
+        const w = mountSidebar({ variant: 'harness', collapsed: false })
+        await flushPromises()
+
+        expect(w.find('[data-testid="stub-harness-screen"]').exists()).toBe(true)
+        expect(w.get('[data-testid="talos-tablet-harness-toggle"]').attributes('aria-label')).toBe('Collapse Harness sessions')
+    })
+
+    it('HARNESS-TABLET-RAIL-COLLAPSE-01 never collapses the chat rail', async () => {
+        const w = mountSidebar({ variant: 'chat', collapsed: true })
+        await flushPromises()
+
+        expect(w.get('[data-testid="talos-tablet-sidebar"]').attributes('data-talos-tablet-sidebar-collapsed')).toBe('false')
+        expect(w.find('[data-testid="stub-chats-screen"]').exists()).toBe(true)
+        expect(w.find('[data-testid="talos-tablet-harness-toggle"]').exists()).toBe(false)
+    })
 })

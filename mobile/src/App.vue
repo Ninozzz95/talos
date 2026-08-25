@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import { talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
 import { talosChatDiscardedByModeSwitch } from '@/lib/chat/modeSwitch'
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
@@ -46,7 +45,7 @@ import { applyTalosFontScale } from '@/lib/talosFontScale'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
-import { clampTalosTabletSidebarWidth, talosTabletLeavesChatsRoute, talosTabletLeavesHarnessListRoute } from '@/lib/tabletLayout'
+import { clampTalosTabletSidebarWidth, talosTabletLeavesChatsRoute, talosTabletLeavesHarnessListRoute, talosTabletSidebarEffectiveWidth } from '@/lib/tabletLayout'
 import { HARNESS_DEFAULT_SESSION_ID } from '@/lib/harnessDefaultSession'
 import { useLauncherIconController } from '@/services/launcherIcon'
 import { parseTalosSessionLibraryContextPolicy } from '@/lib/chat/libraryPolicy'
@@ -93,6 +92,11 @@ const TalosMobileImmersiveChrome = defineAsyncComponent(
 // tool sheet only when a station opens — neither belongs to the first paint.
 const TalosMobileSidebar = defineAsyncComponent(
     () => import('@/components/shell/TalosMobileSidebar.vue'),
+)
+// Image consent is exceptional, so its dialog belongs outside the first-paint
+// chunk just like the other optional shell overlays below.
+const TalosMobileConfirmDialog = defineAsyncComponent(
+    () => import('@/components/shell/TalosMobileConfirmDialog.vue'),
 )
 const TalosMobileToolSheet = defineAsyncComponent(
     () => import('@/components/shell/TalosMobileToolSheet.vue'),
@@ -152,8 +156,8 @@ const interactionMotionStyle = computed(() => talosInteractionMotionStyleV6({
 // station owns the full tablet width while retaining the saved rail dimension.
 const shellStyle = computed(() => ({
     ...interactionMotionStyle.value,
-    '--talos-tablet-rail': tabletChatRailVisible.value ? `${tabletSidebarWidth.value}px` : '0px',
-    '--talos-tablet-sidebar-width': `${tabletSidebarWidth.value}px`,
+    '--talos-tablet-rail': tabletChatRailVisible.value ? `${tabletEffectiveRailWidth.value}px` : '0px',
+    '--talos-tablet-sidebar-width': `${tabletEffectiveRailWidth.value}px`,
 }))
 
 // F1-T3 (D5/D6): hamburger sidebar state + the ChatScreen exposed session actions
@@ -727,6 +731,20 @@ const tabletChatRailVisible = computed(() => (
 const tabletRailVariant = computed<'chat' | 'harness'>(() => (
     talosMobileStationOf(activeRoute.value) === 'harness' ? 'harness' : 'chat'
 ))
+const tabletHarnessRailCollapsed = computed(() => (
+    tabletRailVariant.value === 'harness'
+    && settingsStore.state.shell.tablet_harness_sidebar_collapsed
+))
+const tabletEffectiveRailWidth = computed(() => talosTabletSidebarEffectiveWidth(
+    tabletSidebarWidth.value,
+    tabletRailVariant.value,
+    tabletHarnessRailCollapsed.value,
+))
+function toggleTabletHarnessRail(): void {
+    void settingsStore.setShell({
+        tablet_harness_sidebar_collapsed: !settingsStore.state.shell.tablet_harness_sidebar_collapsed,
+    }).catch(() => undefined)
+}
 
 const SHEET_TITLE_KEY: Record<TalosMobileRouteName, string> = {
     'settings-privilege': 'privilege.pageTitle',
@@ -1271,13 +1289,16 @@ onBeforeUnmount(async () => {
             <div class="relative z-10 flex min-h-0 flex-1">
                 <template v-if="tabletChatRailVisible">
                     <TalosTabletSidebar
-                        :width="tabletSidebarWidth"
+                        :width="tabletEffectiveRailWidth"
                         :variant="tabletRailVariant"
+                        :collapsed="tabletHarnessRailCollapsed"
                         @activated="onTabletActivated"
                         @open-menu="openGlobalSidebar"
+                        @toggle-collapsed="toggleTabletHarnessRail"
                     />
                     <TalosTabletDivider
-                        :width="tabletSidebarWidth"
+                        v-if="!tabletHarnessRailCollapsed"
+                        :width="tabletEffectiveRailWidth"
                         @resize="onTabletResize"
                         @commit="commitTabletWidth"
                     />
