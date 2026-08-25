@@ -578,9 +578,11 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .overlay-backdrop { display: none; position: fixed; inset: 0; z-index: 79; border: 0; background: rgba(0,0,0,.52); backdrop-filter: blur(2px); }
 .overlay-backdrop.show { display: block; }
 
-.command-dialog, .sheet-dialog { padding: 0; border: 1px solid var(--line-strong); background: #232428; color: var(--text); box-shadow: var(--shadow); }
-.command-dialog { width: min(620px, calc(100vw - 32px)); max-height: min(620px, calc(100dvh - 40px)); border-radius: 14px; margin-top: 12vh; }
-.command-dialog::backdrop, .sheet-dialog::backdrop { background: rgba(0,0,0,.54); backdrop-filter: blur(5px); }
+.harness-dialog-backdrop { position: fixed; inset: 0; z-index: 198; border: 0; background: rgba(0,0,0,.54); backdrop-filter: blur(5px); }
+.harness-dialog-backdrop[hidden] { display: none; }
+.command-dialog, .sheet-dialog { position: fixed; z-index: 199; padding: 0; border: 1px solid var(--line-strong); background: #232428; color: var(--text); box-shadow: var(--shadow); }
+.command-dialog { inset: 0 0 auto; width: min(620px, calc(100vw - 32px)); max-height: min(620px, calc(100dvh - 40px)); border-radius: 14px; margin: 12vh auto 0; }
+.command-dialog::backdrop, .sheet-dialog::backdrop { background: transparent; }
 .command-search { min-height: 58px; display: grid; grid-template-columns: 22px minmax(0,1fr) auto; align-items: center; gap: 9px; padding: 0 13px; border-bottom: 1px solid var(--line); }
 .command-search input { height: 44px; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 14px; }
 .command-search svg { color: var(--muted); }
@@ -590,7 +592,7 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .command-results button > span { display: flex; align-items: center; gap: 9px; }
 .command-results svg { width: 17px; height: 17px; color: var(--muted); }
 
-.sheet-dialog { width: min(600px, calc(100vw - 24px)); border-radius: 16px; }
+.sheet-dialog { inset: 0; width: min(600px, calc(100vw - 24px)); border-radius: 16px; margin: auto; }
 .sheet-handle { display: none; }
 .sheet-head { min-height: 70px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px 0 16px; border-bottom: 1px solid var(--line); }
 .sheet-head h2 { margin: 4px 0 0; font-size: 17px; font-weight: 650; }

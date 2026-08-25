@@ -239,6 +239,7 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
     })
     afterEach(() => {
         window.__TALOS_M1_DISABLE__ = undefined
+        delete (window as unknown as { __talosHarnessUiRuntime?: unknown }).__talosHarnessUiRuntime
         window.localStorage.clear()
     })
 
@@ -255,6 +256,29 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
         expect(w.find('[data-testid="talos-mobile-tool-sheet"]').exists()).toBe(false)
         // bottom-nav is gone
         expect(w.find('[data-testid="ui-fallback"]').exists()).toBe(false)
+    })
+
+    it('HARNESS-TOP-LAYER-DISMISS-01 dismisses Harness transient layers before opening the global sidebar', async () => {
+        const dismissTransientLayers = vi.fn()
+        ;(window as unknown as {
+            __talosHarnessUiRuntime?: { dismissTransientLayers: () => void }
+        }).__talosHarnessUiRuntime = { dismissTransientLayers }
+        const router = makeRouter('/harness/refactor-auth-flow')
+        const wrapper = mount(App, { global: { plugins: [router] }, attachTo: document.body })
+        let dismissCalls = -1
+        try {
+            await flushPromises()
+            await wrapper.get('[aria-label="Open menu"]').trigger('click')
+            await vi.waitFor(() => expect(dismissTransientLayers).toHaveBeenCalledTimes(1))
+            dismissCalls = dismissTransientLayers.mock.calls.length
+            await vi.waitFor(() => {
+                expect(document.body.querySelector('[data-testid="talos-mobile-sidebar"]')).not.toBeNull()
+            })
+        } finally {
+            wrapper.unmount()
+            delete (window as unknown as { __talosHarnessUiRuntime?: unknown }).__talosHarnessUiRuntime
+        }
+        expect(dismissCalls).toBe(1)
     })
 
     it('P1-CTX-UI-03 binds the active chat policy to its media panel', async () => {

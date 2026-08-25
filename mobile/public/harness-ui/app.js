@@ -66,6 +66,7 @@
   const commandDialog = $('#commandDialog');
   const commandSearch = $('#commandSearch');
   const sheetDialog = $('#sheetDialog');
+  const harnessDialogBackdrop = $('#harnessDialogBackdrop');
   const sheetTitle = $('#sheetTitle');
   const sheetEyebrow = $('#sheetEyebrow');
   const sheetBody = $('#sheetBody');
@@ -189,6 +190,26 @@
     sessionsPanel.classList.remove('open');
     inspectorPanel.classList.remove('open');
     backdrop.classList.remove('show');
+  }
+
+  function syncEmbeddedDialogBackdrop() {
+    harnessDialogBackdrop.hidden = !commandDialog.open && !sheetDialog.open;
+  }
+
+  function showEmbeddedDialog(dialog) {
+    if (!dialog.open) dialog.show();
+    syncEmbeddedDialogBackdrop();
+  }
+
+  function closeEmbeddedDialog(dialog) {
+    if (dialog.open) dialog.close();
+    syncEmbeddedDialogBackdrop();
+  }
+
+  function dismissTransientLayers() {
+    closeEmbeddedDialog(commandDialog);
+    closeEmbeddedDialog(sheetDialog);
+    closePanels();
   }
 
   function toast(title, message = '') {
@@ -532,7 +553,7 @@
     sheetEyebrow.textContent = content.eyebrow;
     sheetTitle.textContent = content.title;
     sheetBody.innerHTML = content.html();
-    if (!sheetDialog.open) sheetDialog.showModal();
+    showEmbeddedDialog(sheetDialog);
     wireSheetActions(type);
   }
 
@@ -701,7 +722,7 @@
         state.model = button.dataset.modelChoice;
         $$('.selector-pill span').filter((span) => span.textContent.includes('gpt-') || span.textContent.includes('claude-') || span.textContent.includes('deepseek-') || span.textContent.includes('gemini-')).forEach((span) => { span.textContent = state.model; });
         toast('Modello aggiornato', state.model);
-        sheetDialog.close();
+        closeEmbeddedDialog(sheetDialog);
       });
     });
     $$('[data-permission-choice]', sheetBody).forEach((button) => {
@@ -709,13 +730,13 @@
         state.permissions = button.dataset.permissionChoice;
         $$('.selector-pill span').filter((span) => ['Workspace write', 'Read only', 'On request', 'Full access'].includes(span.textContent)).forEach((span) => { span.textContent = state.permissions; });
         toast('Policy aggiornata', state.permissions);
-        sheetDialog.close();
+        closeEmbeddedDialog(sheetDialog);
       });
     });
     $$('[data-capability-action]', sheetBody).forEach((button) => {
       button.addEventListener('click', () => {
         toast(button.dataset.capabilityAction === 'file' ? 'File picker simulato' : 'Cattura visiva pronta', 'Il mockup rappresenta il flusso senza backend.');
-        sheetDialog.close();
+        closeEmbeddedDialog(sheetDialog);
       });
     });
     $$('[data-environment-choice]', sheetBody).forEach((button) => {
@@ -724,13 +745,13 @@
         const chip = $('.environment-chip span');
         if (chip) chip.textContent = state.environment;
         toast('Environment selezionato', state.environment);
-        sheetDialog.close();
+        closeEmbeddedDialog(sheetDialog);
       });
     });
     $$('[data-control-action]', sheetBody).forEach((button) => {
       button.addEventListener('click', () => {
         const action = button.dataset.controlAction;
-        if (action === 'agents') { sheetDialog.close(); openPanel('inspector'); const agents = $('[data-inspector-tab="agents"]'); agents?.click(); }
+        if (action === 'agents') { closeEmbeddedDialog(sheetDialog); openPanel('inspector'); const agents = $('[data-inspector-tab="agents"]'); agents?.click(); }
         else toast(action === 'doctor' ? 'Doctor: Healthy' : 'Hook center aperto', action === 'doctor' ? 'Provider, shell, git, browser e workspace verificati.' : '4 hook configurati per questa sessione.');
       });
     });
@@ -738,7 +759,7 @@
       button.addEventListener('click', () => {
         const action = button.dataset.sessionAction;
         toast(action === 'new-side' ? 'Side thread creato' : 'Thread selezionato', action === 'fork' ? 'Fork indipendente con contesto ereditato.' : 'Il contesto resta isolato ma collegato al task principale.');
-        if (sheetDialog.open) sheetDialog.close();
+        closeEmbeddedDialog(sheetDialog);
       });
     });
     $$('[data-reference-file]', sheetBody).forEach((button) => {
@@ -746,7 +767,7 @@
         const file = button.dataset.referenceFile;
         composerInput.value = `${composerInput.value.replace(/@[^\s]*$/, '')}@${file} `;
         autoGrowTextarea();
-        sheetDialog.close();
+        closeEmbeddedDialog(sheetDialog);
         composerInput.focus();
       });
     });
@@ -755,7 +776,7 @@
     if (renameForm) {
       const input = $('#renameSessionInput', renameForm);
       window.setTimeout(() => { input?.focus(); input?.select(); }, 30);
-      $('[data-rename-cancel]', renameForm)?.addEventListener('click', () => sheetDialog.close());
+      $('[data-rename-cancel]', renameForm)?.addEventListener('click', () => closeEmbeddedDialog(sheetDialog));
       renameForm.addEventListener('submit', (event) => {
         event.preventDefault();
         const next = input?.value.trim();
@@ -764,7 +785,7 @@
         sessionTitle.textContent = state.session;
         const activeSession = $('.session-item.active .session-main strong');
         if (activeSession) activeSession.textContent = state.session;
-        sheetDialog.close();
+        closeEmbeddedDialog(sheetDialog);
         toast('Sessione rinominata', state.session);
       });
     }
@@ -965,7 +986,7 @@
   }
 
   function openCommandPalette() {
-    if (!commandDialog.open) commandDialog.showModal();
+    showEmbeddedDialog(commandDialog);
     commandSearch.value = '';
     filterCommands('');
     window.setTimeout(() => commandSearch.focus(), 20);
@@ -990,7 +1011,7 @@
   }
 
   function executeCommand(command) {
-    commandDialog.close();
+    closeEmbeddedDialog(commandDialog);
     switch (command) {
       case 'new': createNewSession(); break;
       case 'review': setView('diff'); break;
@@ -1043,7 +1064,7 @@
   }));
   $('#capabilityBtn').addEventListener('click', () => openSheet('capabilities'));
   $('#manageCapabilitiesBtn').addEventListener('click', () => openSheet('capabilities'));
-  $('#closeSheet').addEventListener('click', () => sheetDialog.close());
+  $('#closeSheet').addEventListener('click', () => closeEmbeddedDialog(sheetDialog));
 
   $$('.inspector-tabs button').forEach((button) => {
     button.addEventListener('click', () => setInspectorTab(button));
@@ -1142,7 +1163,8 @@
 
   $('#newSessionBtn').addEventListener('click', createNewSession);
   $('#commandPaletteBtn').addEventListener('click', openCommandPalette);
-  $('#closeCommand')?.addEventListener('click', () => commandDialog.close());
+  $('#closeCommand')?.addEventListener('click', () => closeEmbeddedDialog(commandDialog));
+  harnessDialogBackdrop.addEventListener('click', dismissTransientLayers);
   commandSearch.addEventListener('input', () => filterCommands(commandSearch.value));
   commandSearch.addEventListener('keydown', (event) => {
     if (event.key === 'ArrowDown') { event.preventDefault(); moveActiveCommand(1); }
@@ -1277,7 +1299,8 @@
       event.preventDefault();
       createNewSession();
     }
-    if (event.key === 'Escape' && (sessionsPanel.classList.contains('open') || inspectorPanel.classList.contains('open'))) closePanels();
+    if (event.key === 'Escape' && (commandDialog.open || sheetDialog.open)) dismissTransientLayers();
+    else if (event.key === 'Escape' && (sessionsPanel.classList.contains('open') || inspectorPanel.classList.contains('open'))) closePanels();
   });
 
   /*
@@ -1305,10 +1328,12 @@
   window.addEventListener('resize', onResize);
   window.visualViewport?.addEventListener('resize', syncVisualViewport);
   window.visualViewport?.addEventListener('scroll', syncVisualViewport);
+  window.__talosHarnessUiRuntime = { dismissTransientLayers };
   window.__talosHarnessDestroy = () => {
     window.removeEventListener('resize', onResize);
     window.visualViewport?.removeEventListener('resize', syncVisualViewport);
     window.visualViewport?.removeEventListener('scroll', syncVisualViewport);
+    delete window.__talosHarnessUiRuntime;
     delete window.__talosHarnessDestroy;
   };
   composerInput.addEventListener('focus', () => window.setTimeout(syncVisualViewport, 30));

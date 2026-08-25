@@ -570,3 +570,132 @@ cassetto, quindi il difetto e' ristretto alla selezione di una chat
 gia' esistente, non al cassetto in generale. Segnalato per l'owner,
 non indagato oltre: componente diverso da quello di questo refactor,
 nessun ordine di toccarlo.
+
+## Ripresa Codex 25/8 — piano owner approvato
+
+Owner: approvazione esplicita ricevuta il 25/8 con ordine `GO` e richiesta di
+aggiornare questo documento alla fine di ogni fase.
+
+### Fase 0 — ricerca e ledger
+
+Stato: **in corso** fino alla verifica RED dei primi scenari; nessun cambio di
+comportamento applicativo è stato ancora eseguito.
+
+Creati due documenti distinti, senza sovrascrivere dossier e ledger Codex
+preesistenti:
+
+- `.claude/DOSSIER-RICERCA-HARNESS-UI-ROUTING-PAD.md`
+- `.claude/LEDGER-HARNESS-UI-ROUTING-PAD.md`
+
+Il dossier registra fonti ufficiali correnti, pin già presenti e decisione
+`adopt/adapt/reject`. Il ledger enumera file, simboli, test RED, comandi GREEN,
+prove Pad e rollback per tutte le fasi.
+
+Correzione di gerarchia decisionale: la vecchia frase di questa consegna
+"Harness resta fissato su Calm" è superata dalla decisione owner successiva,
+approvata nel piano 25/8: Harness deve consumare i token stilistici e seguire
+il theme engine TALOS. La cronologia sopra resta intatta come testimonianza del
+punto precedente; non è più il requisito finale.
+
+Baseline ereditata prima dei RED:
+
+- `npm run typecheck`: exit 0.
+- suite focalizzata Harness/shell: 8 file, 46 test, zero falliti.
+- `node --check public/harness-ui/app.js`: exit 0.
+- full Vitest e build non sono attribuiti a questa ripresa finché non vengono
+  rilanciati freschi nella Fase 7.
+
+Pad ripristinato dopo l'audit di sola lettura: 2400x3392, density 420,
+rotazione automatica attiva. Repository prima delle modifiche: branch
+`lane/voce-personale`, ahead 35; i documenti sporchi di altre sessioni restano
+fuori dagli add.
+
+#### Chiusura Fase 0
+
+Stato: **completata**. Nessuna produzione modificata.
+
+RED osservati il 25/8 con Vitest 4.1.10:
+
+- `GLOBAL-SIDEBAR-ABOVE-HARNESS-01`: ricevuto ancora `z-50` invece del livello
+  globale previsto.
+- `HARNESS-TOP-LAYER-DISMISS-01`: il runtime Harness ha ricevuto 0 chiamate di
+  dismiss invece di 1.
+- `HARNESS-OUTER-SCROLL-01`: body ancora `overflow-y-auto`, nessun
+  `overflow-hidden` per Harness.
+
+Esito mirato: 3 test falliti per la causa prevista, 29 test già verdi. Un
+fallimento estraneo comparso nel primo giro era contaminazione di teardown del
+nuovo test RED; corretta soltanto la pulizia del test e ripetuto il comando,
+lasciando rossi esclusivamente i tre scenari reali.
+
+Commit: nessuno, perché una suite intenzionalmente rossa non viene committata.
+I test entreranno nel commit della Fase 1 soltanto dopo il GREEN e le prove Pad.
+
+### Fase 1 — navigazione globale sopra Harness
+
+Stato: **completata e verificata sul Pad reale**.
+
+In parole semplici: prima una finestra aperta dentro Harness poteva diventare
+più importante dell'intera app e intercettare il dito; la sidebar globale
+restava sotto. Ora palette e pannelli Harness sono confinati dentro il riquadro
+Harness. Un solo tocco sull'hamburger chiude la finestra locale e apre il menu
+globale, che copre correttamente ogni superficie e conserva la X utilizzabile.
+Il riquadro Harness possiede inoltre il proprio scorrimento: il contenitore
+esterno della station non scorre più una seconda volta.
+
+La prima prova contraria sul Pad ha trovato un buco che i test DOM non potevano
+simulare: il `<dialog>.showModal()` nativo entrava nel top layer del browser e
+impediva fisicamente al tocco di raggiungere Vue. La fase è stata fermata,
+il ledger è stato corretto e la regressione permanente
+`HARNESS-NATIVE-TOP-LAYER-HITTEST-01` è passata da RED a GREEN. Il bundle ora
+usa finestre locali non modali con un backdrop Harness esplicito; nessun
+`showModal()` è ammesso negli asset incorporati.
+
+File di produzione chiusi in questa fase:
+
+- `mobile/src/lib/harnessUiBridge.ts`
+- `mobile/src/App.vue`
+- `mobile/src/components/shell/TalosMobileToolSheet.vue`
+- `mobile/src/components/shell/TalosMobileSidebar.vue`
+- `mobile/src/components/ui/drawer/DrawerContent.vue`
+- `mobile/src/style.css`
+- `mobile/public/harness-ui/index.html`
+- `mobile/public/harness-ui/styles.css`
+- `mobile/public/harness-ui/app.js`
+
+Prove automatiche fresche:
+
+- gruppo mirato: 5 file, **36 test passati**, zero falliti;
+- `npm run typecheck`: exit 0;
+- `node --check public/harness-ui/app.js`: exit 0;
+- `npm run build`: exit 0, 3.624 moduli; JavaScript iniziale
+  613.909/614.000 byte e CSS 214.709/220.000 byte;
+- verifica parity: 18/18 passata;
+- `npx cap copy android`: exit 0;
+- `:app:compileDebugKotlin :app:compileReleaseJavaWithJavac`: BUILD SUCCESSFUL,
+  513 task;
+- `:app:installDebug -PtalosSideBySide`: BUILD SUCCESSFUL;
+- `git diff --check`: exit 0.
+
+Prove reali, tutte lette dai byte PNG e ispezionate per intero:
+
+- tablet orizzontale 3392x2400: palette aperta → un tocco reale sull'hamburger
+  → palette chiusa, drawer globale sopra tutto, X realmente toccabile;
+- tablet verticale 2400x3392: stesso percorso e stesso esito;
+- telefono orizzontale 2400x1080: la larghezza supera il breakpoint tablet;
+  stesso percorso palette → hamburger → drawer sopra tutto;
+- telefono verticale 1080x2400: il dettaglio station espone per contratto la
+  freccia indietro e non un hamburger. Verificate palette e backdrop locali,
+  ritorno a Harness/chat e drawer globale completo con voce Harness e X
+  toccabile, senza aggiungere un controllo incoerente con le altre station.
+
+Evidenze temporanee locali:
+`C:\Users\Antonino\AppData\Local\Temp\talos-harness-fixes-20260825-phase1`.
+Il Pad è stato ripristinato a 2400x3392, density 420, rotazione automatica
+attiva (`accelerometer_rotation=1`, `user_rotation=1`).
+
+Discrepanze rimaste visibili e già assegnate alle fasi successive, non
+spacciate per risolte qui: rail sessioni tablet non comprimibile (Fase 2),
+composer/tastiera/nav inferiore nelle forme telefono (Fase 3), selezione rotta
+non sincronizzata col mockup (Fase 4), controlli/collisioni (Fase 5) e token
+tema live (Fase 6).

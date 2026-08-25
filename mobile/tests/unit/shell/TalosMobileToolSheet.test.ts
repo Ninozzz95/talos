@@ -66,6 +66,23 @@ describe('TalosMobileToolSheet (station sheet over chat)', () => {
         await w.get('[data-testid="talos-mobile-sheet-backdrop"]').trigger('click')
         expect(w.emitted('close')).toHaveLength(1)
     })
+
+    it('HARNESS-OUTER-SCROLL-01 locks the station body when the embedded surface owns scrolling', () => {
+        const w = mount(TalosMobileToolSheet, {
+            props: { title: 'Harness', lockBodyScroll: true } as never,
+            slots: { default: '<div>embedded harness</div>' },
+        })
+        const body = w.get('[data-testid="talos-mobile-sheet-body"]')
+        expect(body.classes()).toContain('overflow-hidden')
+        expect(body.classes()).not.toContain('overflow-y-auto')
+    })
+
+    it('HARNESS-OUTER-SCROLL-01 keeps ordinary station bodies scrollable', () => {
+        const w = mount(TalosMobileToolSheet, { props: { title: 'Library' } })
+        const body = w.get('[data-testid="talos-mobile-sheet-body"]')
+        expect(body.classes()).toContain('overflow-y-auto')
+        expect(body.classes()).not.toContain('overflow-hidden')
+    })
 })
 
 // F3-T2 (owner #4/#8): the sheet honours the presentation preference —
