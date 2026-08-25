@@ -133,6 +133,8 @@
     --talos-space-inline: 0.5rem;
     --talos-icon-size: 1rem;
     --talos-touch-target: 3rem;
+    --talos-z-station: 70;
+    --talos-z-global-navigation: 110;
     --talos-radius-card: 0rem;
     --talos-radius-control: 0rem;
 

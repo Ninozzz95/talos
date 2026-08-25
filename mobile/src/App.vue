@@ -159,6 +159,16 @@ const shellStyle = computed(() => ({
 // F1-T3 (D5/D6): hamburger sidebar state + the ChatScreen exposed session actions
 // (attachment revocation + draft scoping stay orchestrated in one place).
 const sidebarOpen = ref(false)
+async function openGlobalSidebar(): Promise<void> {
+    // A modal <dialog> inside Harness lives in the browser top layer: no
+    // z-index can place the global drawer above it. Close that transient layer
+    // first, then open the one navigation surface that owns the whole app.
+    if (activeRoute.value === 'harness-session') {
+        const bridge = await import('@/lib/harnessUiBridge')
+        bridge.dismissTalosHarnessUiTransientLayers()
+    }
+    sidebarOpen.value = true
+}
 // Interface text size: one variable on <html> drives Tailwind UI tokens.
 // Message prose has its own root-relative chat_layout.bubble_scale boundary.
 watch(() => settingsStore.state.shell.ui_font_scale, (scale) => {
@@ -621,6 +631,7 @@ function focusModelLabRoute(element: Element): void {
 // Chat is the persistent base; every other tab presents its screen in a sheet
 // over it — the mobile mirror of the desktop windowed workspace.
 const isStation = computed(() => activeRoute.value !== 'chat')
+const stationLocksBodyScroll = computed(() => activeRoute.value === 'harness-session')
 
 /**
  * Recorded when the STATION changes, never when you move within one: going from
@@ -1263,7 +1274,7 @@ onBeforeUnmount(async () => {
                         :width="tabletSidebarWidth"
                         :variant="tabletRailVariant"
                         @activated="onTabletActivated"
-                        @open-menu="sidebarOpen = true"
+                        @open-menu="openGlobalSidebar"
                     />
                     <TalosTabletDivider
                         :width="tabletSidebarWidth"
@@ -1279,7 +1290,7 @@ onBeforeUnmount(async () => {
                         :creating-session="sessionBusy || chatController.chat.state.persistenceStatus !== 'ready'"
                         :hide-menu="tabletLayout.isTablet.value"
                         :hide-app-actions="tabletLayout.isTablet.value"
-                        @open-menu="sidebarOpen = true"
+                        @open-menu="openGlobalSidebar"
                         @new-chat="sidebarNewChat"
                 @temporary-chat="sidebarTemporaryChat"
                 @normal-mode="sidebarNormalMode"
@@ -1299,7 +1310,7 @@ onBeforeUnmount(async () => {
                         :busy="sessionBusy"
                         :hide-menu="tabletLayout.isTablet.value"
                         :hide-app-actions="tabletLayout.isTablet.value"
-                        @open-menu="sidebarOpen = true"
+                        @open-menu="openGlobalSidebar"
                         @new-chat="sidebarNewChat"
                 @temporary-chat="sidebarTemporaryChat"
                 @normal-mode="sidebarNormalMode"
@@ -1335,6 +1346,7 @@ onBeforeUnmount(async () => {
                     :parent-back="stationParent ? goToStationParent : null"
                     :shell-back="talosIndietro"
                     :parent-title="stationParentTitle"
+                    :lock-body-scroll="stationLocksBodyScroll"
                     @close="navigate('chat')"
                 >
                     <RouterView v-slot="{ Component, route: renderedRoute }">

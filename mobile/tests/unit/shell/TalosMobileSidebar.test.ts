@@ -51,6 +51,15 @@ function mountSidebar(props: Record<string, unknown> = {}) {
 }
 
 describe('TalosMobileSidebar (F1-T3)', () => {
+    it('GLOBAL-SIDEBAR-ABOVE-HARNESS-01 raises both the drawer and its overlay above station surfaces', async () => {
+        mountSidebar()
+        await flushPromises()
+        const sidebar = document.querySelector('[data-testid="talos-mobile-sidebar"]') as HTMLElement
+        const overlay = document.querySelector('[data-slot="drawer-overlay"]') as HTMLElement
+        expect(sidebar.className).toContain('var(--talos-z-global-navigation)')
+        expect(overlay.className).toContain('var(--talos-z-global-navigation)')
+    })
+
     it('opens as a full-width dialog with the chat-first section order', async () => {
         // Owner 2026-07-24: the single New-chat affordance is the bottom FAB
         // (inside the settings bar) — no duplicate outline button up top.

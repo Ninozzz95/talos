@@ -52,6 +52,9 @@ const props = withDefaults(defineProps<{
     hideAppActions?: boolean
     /** Il nome del posto dove si torna, per dirlo invece di farlo indovinare. */
     parentTitle?: string
+    /** The embedded station owns its internal scrollports; the shell must not
+     * create a second, competing vertical scroller around it. */
+    lockBodyScroll?: boolean
 }>(), {
     presentation: 'fullscreen',
     parentBack: null,
@@ -201,7 +204,10 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
             </header>
             <div
                 data-testid="talos-mobile-sheet-body"
-                class="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+                class="min-h-0 flex-1"
+                :class="lockBodyScroll
+                    ? 'overflow-hidden'
+                    : 'overflow-y-auto overscroll-contain pb-[max(0.75rem,env(safe-area-inset-bottom))]'"
             >
                 <slot />
             </div>
