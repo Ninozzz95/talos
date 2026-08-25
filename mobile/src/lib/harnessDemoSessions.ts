@@ -34,3 +34,7 @@ export const HARNESS_DEMO_GROUPS = ['today', 'yesterday', 'week'] as const
 export function harnessDemoSessionsIn(group: typeof HARNESS_DEMO_GROUPS[number]): readonly HarnessDemoSession[] {
     return HARNESS_DEMO_SESSIONS.filter((session) => session.group === group)
 }
+
+export function findHarnessDemoSession(id: string): HarnessDemoSession | null {
+    return HARNESS_DEMO_SESSIONS.find((session) => session.id === id) ?? null
+}

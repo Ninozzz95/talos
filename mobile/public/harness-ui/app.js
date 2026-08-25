@@ -684,7 +684,7 @@
       html: () => `
         <div class="sheet-section session-tree-sheet">
           <span class="sheet-label">Thread e fork</span>
-          <button class="sheet-option active" data-session-action="main"><span class="sheet-icon">${icon('i-list')}</span><span><strong>Refactor auth flow</strong><small>Main · contesto 18.7k · live</small></span><span>●</span></button>
+          <button class="sheet-option active" data-session-action="main"><span class="sheet-icon">${icon('i-list')}</span><span><strong data-current-session-title>${state.session.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}</strong><small>Main · contesto 18.7k · live</small></span><span>●</span></button>
           <button class="sheet-option" data-session-action="side"><span class="sheet-icon">${icon('i-branch')}</span><span><strong>Responsive audit</strong><small>Side thread · subagent A1</small></span><span>↗</span></button>
           <button class="sheet-option" data-session-action="fork"><span class="sheet-icon">${icon('i-branch')}</span><span><strong>A11y review</strong><small>Fork dal turn 14 · pronto</small></span><span>✓</span></button>
         </div>
@@ -959,6 +959,21 @@
     composerInput.focus();
   }
 
+  function selectSession(selection) {
+    if (!selection || typeof selection.id !== 'string' || typeof selection.title !== 'string') return false;
+    const item = $$('.session-item').find((candidate) => candidate.dataset.sessionId === selection.id);
+    if (!item) return false;
+    $$('.session-item').forEach((other) => other.classList.remove('active'));
+    item.classList.add('active');
+    state.session = selection.title;
+    $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
+    const itemTitle = $('.session-main strong', item);
+    if (itemTitle) itemTitle.textContent = state.session;
+    closePanels();
+    setView('chat');
+    return true;
+  }
+
   function exportSession() {
     const payload = {
       schema: 'talos_mock_session_v1',
@@ -1165,12 +1180,10 @@
 
   $$('.session-item').forEach((item) => {
     item.addEventListener('click', () => {
-      $$('.session-item').forEach((other) => other.classList.remove('active'));
-      item.classList.add('active');
-      state.session = item.dataset.session;
-      sessionTitle.textContent = state.session;
-      closePanels();
-      setView('chat');
+      selectSession({
+        id: item.dataset.sessionId || '',
+        title: item.dataset.session || item.querySelector('.session-main strong')?.textContent || '',
+      });
     });
   });
 
@@ -1358,7 +1371,7 @@
     hostResizeObserver = new ResizeObserver(syncHostLayout);
     hostResizeObserver.observe(HOST());
   }
-  window.__talosHarnessUiRuntime = { dismissTransientLayers, setKeyboardOpen };
+  window.__talosHarnessUiRuntime = { selectSession, dismissTransientLayers, setKeyboardOpen };
   window.__talosHarnessDestroy = () => {
     window.removeEventListener('resize', onResize);
     window.visualViewport?.removeEventListener('resize', syncVisualViewport);

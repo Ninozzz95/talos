@@ -1139,6 +1139,9 @@ export const TALOS_IT_MESSAGES = {
         openingMockup: 'Apertura di Harness UI…',
         unavailable: 'Harness UI non è disponibile in questa build.',
         loadFailed: 'Harness UI non si è aperta. Riprova.',
+        unknownTitle: 'Sessione non trovata',
+        unknownSession: 'Questa sessione demo non esiste. Torna a Harness e scegline una dalla lista.',
+        unknownBack: 'Torna a Harness',
     },
     privilege: {
         keepAlive: 'Mantieni acceso',
