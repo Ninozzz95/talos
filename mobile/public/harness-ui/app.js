@@ -45,6 +45,28 @@
       totalMatched: 0,
       generation: 0,
     },
+    /*
+     * ⭐⭐⭐ 26/8 — riconciliazione desktop→mobile, DEC-053 (owner, 24/8:
+     * "harness deve essere fatto sia per mobile che desktop... quando
+     * riprenderemo il desktop lo legheremo al desktop"). Stessa forma di
+     * `state.realSession` già viva su `lane/harness-ui` (AVM-harness-ui,
+     * pipeline AG-UI reale): qui arriva SOLO la parte di consumo eventi
+     * (vedi handleRealEvent più sotto), non ancora agganciata a nessun
+     * pulsante — vedi la nota davanti a startRealSession per il perché.
+     */
+    realSession: {
+      id: null,
+      taskId: null,
+      generation: 0,
+      eventSource: null,
+      messageElements: new Map(),
+      runCount: 0,
+      taskBubbleMostrata: false,
+      /** Piano §1.3, riga Review — percorso -> {path, code, nuovo}, UNA voce per file scritto, non solo l'ultima. */
+      reviewFiles: new Map(),
+      /** Piano §1.3, riga "Contesto workspace" — la cartella corrente sfogliata nell'albero file reale, '' = radice. */
+      treePercorso: '',
+    },
   };
 
   const QA_VIEWPORTS = Object.freeze({
@@ -551,6 +573,29 @@
       method: 'GET',
       headers: { Accept: 'application/json' },
       cache: 'no-store',
+    });
+    let envelope;
+    try {
+      envelope = await response.json();
+    } catch {
+      const error = new Error('Risposta locale non valida');
+      error.code = 'INTERNAL_ERROR';
+      throw error;
+    }
+    if (!response.ok || !envelope?.ok) {
+      const error = new Error(envelope?.error?.message || 'Richiesta locale non riuscita');
+      error.code = envelope?.error?.code || 'INTERNAL_ERROR';
+      throw error;
+    }
+    return envelope.data;
+  }
+
+  /** ⭐ 26/8, riconciliazione desktop→mobile — stesso contratto envelope di apiGet, per POST /api/v1/sessions/*. */
+  async function apiPost(pathname, body) {
+    const response = await fetch(pathname, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     });
     let envelope;
     try {
@@ -1102,7 +1147,11 @@
   };
 
   function renderReviewFile(key) {
-    const file = reviewFiles[key];
+    // ⭐ 26/8, riconciliazione desktop→mobile — le voci reali vivono in
+    // state.realSession.reviewFiles (una per percorso scritto), non nel
+    // fisso `reviewFiles` demo: chiave "real:<percorso>" le distingue,
+    // stesso schema già in produzione su lane/harness-ui.
+    const file = key.startsWith('real:') ? state.realSession.reviewFiles.get(key.slice(5)) : reviewFiles[key];
     if (!file || !diffPath || !diffCode) return;
     diffPath.textContent = file.path;
     diffCode.replaceChildren(...file.code.map(([kind, text]) => {
@@ -1126,6 +1175,387 @@
       section.hidden = !active;
       if (active) markMotionEnter(section);
     });
+  }
+
+  /*
+   * ⭐⭐⭐ 26/8 — LA SESSIONE VERA, riconciliazione desktop→mobile (DEC-053).
+   * Porta da `lane/harness-ui` (AVM-harness-ui/harness-ui/public/app.js) la
+   * pipeline di CONSUMO eventi AG-UI: stessa API `/api/v1/sessions/*`, stesso
+   * contratto envelope (apiGet/apiPost sopra), zero dipendenze nuove — solo
+   * `$`/`$$` al posto di `document.querySelector` dov'era bare, il resto
+   * (createElement/createElementNS/createTextNode/setTimeout) funziona già
+   * identico dentro uno shadow root, quindi resta invariato.
+   *
+   * ⛔ NON portato in questo giro (dichiarato, non taciuto):
+   * - forkSession / resumeSession / compactSession / passaASessione — su
+   *   desktop pescano da un elenco sessioni DENTRO questo stesso bundle
+   *   (#sessionList). Su mobile quell'elenco è nativo Vue
+   *   (HarnessScreen.vue / harnessDemoSessions.ts), fuori da questo file:
+   *   serve un ponte bundle↔Vue che non esiste ancora, non un porting 1:1.
+   * - contenitoreSessioniReali / aggiornaElencoSessioniReali — stesso
+   *   motivo, mai chiamate da queste funzioni per questo giro.
+   * - openRealTaskSheet — desktop apre il dialog col metodo nativo
+   *   dell'elemento <dialog> (bloccante per l'hit-test del top layer,
+   *   HARNESS-NATIVE-TOP-LAYER-HITTEST-01, harnessUiAssetContract.test.ts),
+   *   qui vietato: si userebbe showEmbeddedDialog(sheetDialog), come già
+   *   fa openSheet sopra. E soprattutto: mobile non
+   *   ha ancora NESSUN punto d'ingresso per "avvia un task reale" — dove va
+   *   (una sheet nuova? "Nuova sessione" ridefinita?) è una decisione UX
+   *   sulla superficie Codice già iterata per otto fasi, non mia da
+   *   prendere da sola.
+   *
+   * ⇒ Questo blocco è vero ma NON ANCORA RAGGIUNGIBILE da nessun tocco:
+   * nessun chiamante esistente invoca startRealSession. Zero rischio di
+   * regressione sulla suite Pad-verificata di Codice; il prossimo passo è
+   * la decisione UX sopra, poi il ponte verso l'elenco sessioni nativo.
+   */
+
+  function appendRealTaskStart(task) {
+    const conversation = $('#conversation');
+    const article = document.createElement('article');
+    article.className = 'message user-message';
+    const bubble = document.createElement('div');
+    bubble.className = 'message-bubble';
+    bubble.textContent = task.consegna || task.consegnaCorta || task.id;
+    const meta = document.createElement('div');
+    meta.className = 'message-meta';
+    const span = document.createElement('span');
+    span.textContent = `Task reale · ${task.id}`;
+    meta.appendChild(span);
+    article.append(bubble, meta);
+    conversation.appendChild(article);
+    markMotionEnter(article);
+    window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'center' }), 40);
+    state.realSession.taskBubbleMostrata = true;
+  }
+
+  function ensureAssistantMessageElement(messageId) {
+    const existing = state.realSession.messageElements.get(messageId);
+    if (existing) return existing;
+    const conversation = $('#conversation');
+    const article = document.createElement('article');
+    article.className = 'message assistant-message compact-message';
+    const meta = document.createElement('div');
+    meta.className = 'assistant-meta';
+    const glyph = document.createElement('span');
+    glyph.className = 'talos-glyph';
+    glyph.appendChild(textElement('span', 'brand-glyph-mark', ''));
+    meta.append(glyph, document.createTextNode('TALOS · sessione reale'));
+    const copy = document.createElement('div');
+    copy.className = 'assistant-copy';
+    article.append(meta, copy);
+    conversation.appendChild(article);
+    markMotionEnter(article);
+    state.realSession.messageElements.set(messageId, article);
+    return article;
+  }
+
+  function appendToolNote(text) {
+    const conversation = $('#conversation');
+    const article = document.createElement('article');
+    article.className = 'message assistant-message compact-message real-tool-note';
+    const meta = document.createElement('div');
+    meta.className = 'assistant-meta';
+    const glyph = document.createElement('span');
+    glyph.className = 'talos-glyph';
+    glyph.textContent = '⚙';
+    meta.append(glyph, document.createTextNode('Attrezzo'));
+    const copy = document.createElement('div');
+    copy.className = 'assistant-copy';
+    copy.textContent = text;
+    article.append(meta, copy);
+    conversation.appendChild(article);
+    markMotionEnter(article);
+    window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
+  }
+
+  function appendStatusNote(text, isError = false) {
+    const conversation = $('#conversation');
+    const article = document.createElement('article');
+    article.className = `message assistant-message compact-message real-session-status${isError ? ' real-session-error' : ''}`;
+    const meta = document.createElement('div');
+    meta.className = 'assistant-meta';
+    const glyph = document.createElement('span');
+    glyph.className = 'talos-glyph';
+    glyph.textContent = isError ? '!' : '✓';
+    meta.append(glyph, document.createTextNode(isError ? 'TALOS · errore' : 'TALOS · concluso'));
+    const copy = document.createElement('div');
+    copy.className = 'assistant-copy';
+    copy.textContent = text;
+    article.append(meta, copy);
+    conversation.appendChild(article);
+    markMotionEnter(article);
+    window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
+  }
+
+  /**
+   * ⭐ Piano §1.3, riga Review — ogni scrittura reale aggiorna la scheda
+   * Review già esistente, non solo la conversazione. Una voce PER
+   * percorso, così un task che scrive più file resta tutto ispezionabile.
+   *
+   * ⛔ `value` è il contenuto INTERO del file, mai un vero diff riga per
+   * riga: talosHarness.mjs non passa il "prima" a onScrittura oggi, solo il
+   * "dopo" — 'add' mostra righe verdi (file nuovo), 'replace' righe neutre
+   * (file toccato, contenuto attuale) invece di inventare +/- che non ha.
+   */
+  function updateRealReview(delta) {
+    const operazione = delta?.[0];
+    if (!operazione || typeof operazione.path !== 'string') return;
+    const percorso = operazione.path.replace(/^\/file\//, '');
+    state.realSession.reviewFiles.set(percorso, {
+      path: percorso,
+      nuovo: operazione.op === 'add',
+      code: String(operazione.value ?? '').split('\n').map((riga) => [operazione.op === 'add' ? 'add' : 'ctx', riga]),
+    });
+    renderRealReviewList();
+    renderReviewFile(`real:${percorso}`);
+  }
+
+  /**
+   * ⭐ Ricostruisce `.file-review-list` con UNA voce per file reale scritto
+   * finora in questa sessione, sostituendo le voci demo la prima volta che
+   * esiste almeno una scrittura vera.
+   */
+  function renderRealReviewList() {
+    const contenitore = $('[data-view="diff"] .file-review-list');
+    if (!contenitore) return;
+    const voci = [...state.realSession.reviewFiles.values()];
+    const ultimoPercorso = voci.at(-1)?.path;
+    contenitore.replaceChildren(...voci.map((file) => {
+      const attiva = file.path === ultimoPercorso;
+      const button = document.createElement('button');
+      button.className = `file-review${attiva ? ' active' : ''}`;
+      button.dataset.reviewFile = `real:${file.path}`;
+      button.setAttribute('aria-pressed', String(attiva));
+      const etichetta = document.createElement('span');
+      const svgNs = 'http://www.w3.org/2000/svg';
+      const icona = document.createElementNS(svgNs, 'svg');
+      const uso = document.createElementNS(svgNs, 'use');
+      uso.setAttribute('href', '#i-diff'); // ⛔ mai innerHTML: costruito nodo per nodo
+      icona.append(uso);
+      etichetta.append(icona, textElement('strong', '', file.path.split('/').pop()));
+      button.append(etichetta, textElement('span', 'diff-stats', `${file.nuovo ? 'nuovo' : 'modificato'} · ${file.code.length} righe`));
+      button.addEventListener('click', () => {
+        $$('.file-review', contenitore).forEach((f) => { f.classList.remove('active'); f.setAttribute('aria-pressed', 'false'); });
+        button.classList.add('active');
+        button.setAttribute('aria-pressed', 'true');
+        renderReviewFile(button.dataset.reviewFile);
+      });
+      return button;
+    }));
+    const titolo = $('[data-view="diff"] .view-heading h2');
+    if (titolo) titolo.textContent = `${voci.length} file modificat${voci.length === 1 ? 'o' : 'i'}`;
+  }
+
+  /**
+   * ⭐ Piano §1.3, riga "Contesto workspace" — l'albero file REALE, un
+   * livello alla volta (GET /api/v1/sessions/:id/tree?percorso=...): le
+   * cartelle sono bottoni che scendono di un livello, ".. (su)" risale.
+   */
+  async function aggiornaAlberoReale(percorso = '') {
+    if (!state.realSession.id) return;
+    const contenitore = $('#inspector-files .file-tree');
+    if (!contenitore) return;
+    let voci;
+    try {
+      voci = (await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree?percorso=${encodeURIComponent(percorso)}`)).voci;
+    } catch {
+      return; // ⛔ un fallimento qui non è un'azione richiesta, non merita un toast
+    }
+    state.realSession.treePercorso = percorso;
+    const demoBadge = $('.demo-surface-badge', $('[data-inspector-section="files"]'));
+    if (demoBadge) demoBadge.hidden = true;
+
+    const svgNs = 'http://www.w3.org/2000/svg';
+    const iconaCon = (id) => {
+      const svg = document.createElementNS(svgNs, 'svg');
+      const uso = document.createElementNS(svgNs, 'use');
+      uso.setAttribute('href', `#${id}`);
+      svg.append(uso);
+      return svg;
+    };
+
+    const radice = document.createElement('div');
+    radice.className = 'tree-root';
+    radice.append(iconaCon('i-files'), textElement('strong', '', percorso || state.realSession.taskId || 'workspace'));
+    const pezzi = [radice];
+
+    if (percorso) {
+      const su = document.createElement('button');
+      su.textContent = '.. (su)';
+      const genitore = percorso.split('/').slice(0, -1).join('/');
+      su.addEventListener('click', () => aggiornaAlberoReale(genitore));
+      pezzi.push(su);
+    }
+    for (const voce of voci) {
+      const button = document.createElement('button');
+      if (voce.cartella) button.className = 'nested';
+      button.textContent = voce.cartella ? `${voce.nome}/` : voce.nome;
+      if (voce.cartella) {
+        const dentro = percorso ? `${percorso}/${voce.nome}` : voce.nome;
+        button.addEventListener('click', () => aggiornaAlberoReale(dentro));
+      }
+      pezzi.push(button);
+    }
+    contenitore.replaceChildren(...pezzi);
+  }
+
+  /**
+   * ⭐ Il pannello "Ambiente" del Context Rail — prima statico/demo.
+   * `branch`/`worktree` mostrano "—" quando non applicabili — un trattino
+   * onesto, MAI il valore demo lasciato al suo posto.
+   */
+  function aggiornaPannelloAmbiente(contesto) {
+    const workspace = $('#envWorkspace');
+    const branch = $('#envBranch');
+    const worktree = $('#envWorktree');
+    const root = $('#envRoot');
+    if (workspace) workspace.textContent = contesto.progetto || '—';
+    if (branch) branch.textContent = contesto.branch || '—';
+    if (worktree) worktree.textContent = '—'; // mai un repository git nel corpus di oggi, vedi doc in workspace-context.mjs
+    if (root) root.textContent = contesto.cartella;
+    const sezione = $('[data-inspector-section="context"]');
+    const demoBadge = sezione && $('.demo-surface-badge', sezione);
+    if (demoBadge) demoBadge.hidden = true;
+  }
+
+  function handleRealEvent(evento, generation) {
+    if (generation !== state.realSession.generation) return; // sessione più vecchia: scartato, non renderizzato
+    switch (evento.type) {
+      case 'RunStarted': {
+        state.realSession.runCount = (state.realSession.runCount || 0) + 1;
+        if (!state.realSession.taskBubbleMostrata && evento.input) {
+          appendRealTaskStart(evento.input);
+        } else if (state.realSession.runCount > 1) {
+          appendStatusNote('Nuovo giro iniziato sulla stessa conversazione.');
+        }
+        if (evento.contesto) aggiornaPannelloAmbiente(evento.contesto);
+        aggiornaAlberoReale('');
+        break;
+      }
+      case 'TextMessageContent': {
+        const element = ensureAssistantMessageElement(evento.messageId);
+        $('.assistant-copy', element).textContent += evento.delta;
+        break;
+      }
+      case 'ToolCallStart': {
+        appendToolNote(`🔧 ${evento.toolCallName}(…)`);
+        break;
+      }
+      case 'ToolCallArgs': {
+        const ultima = $$('.real-tool-note .assistant-copy').at(-1);
+        if (ultima) ultima.textContent += `\n${evento.delta}`;
+        break;
+      }
+      case 'ToolCallResult': {
+        appendToolNote(`→ ${String(evento.content).slice(0, 2000)}`);
+        break;
+      }
+      case 'StateDelta': {
+        updateRealReview(evento.delta);
+        aggiornaAlberoReale(state.realSession.treePercorso);
+        appendStatusNote('✏️ File scritto — vedi la scheda Review per il contenuto intero.');
+        break;
+      }
+      case 'RunFinished': {
+        appendStatusNote(evento.result?.detto || 'Task concluso.');
+        closeRealSession(generation);
+        // ⛔ NON chiama aggiornaElencoSessioniReali(): quella lista è nativa
+        // Vue su mobile (vedi nota di testa), non esiste in questo bundle.
+        break;
+      }
+      case 'RunError': {
+        appendStatusNote(`${evento.code ? `[${evento.code}] ` : ''}${evento.message}`, true);
+        closeRealSession(generation);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  function closeRealSession(generation) {
+    if (generation !== state.realSession.generation) return;
+    state.realSession.eventSource?.close();
+    state.realSession.eventSource = null;
+  }
+
+  /** Apre l'EventSource per una sessione GIÀ avviata sul server e collega gli eventi al rendering reale. */
+  function collegaEventiSessione(sessionId, generation) {
+    state.realSession.id = sessionId;
+    const source = new EventSource(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`);
+    state.realSession.eventSource = source;
+    source.onmessage = (message) => {
+      let evento;
+      try { evento = JSON.parse(message.data); } catch { return; }
+      handleRealEvent(evento, generation);
+    };
+    source.onerror = () => {
+      // ⛔ EventSource riprova DA SOLO su una caduta di rete — il server tiene
+      // viva la sessione finché non chiude lo stream lui stesso su
+      // RunFinished/RunError. Un avviso solo quando il browser ha già
+      // smesso di riconnettersi per davvero.
+      if (generation === state.realSession.generation && source.readyState === EventSource.CLOSED) {
+        appendStatusNote('Connessione agli eventi interrotta.', true);
+      }
+    };
+  }
+
+  /** Chiude l'EventSource corrente (se c'è) e apre una nuova generazione. */
+  function nuovaGenerazioneSessione({ continua = false } = {}) {
+    if (state.realSession.eventSource) {
+      state.realSession.eventSource.close();
+      state.realSession.eventSource = null;
+    }
+    if (!continua) {
+      $('#conversation').replaceChildren();
+      state.realSession.messageElements = new Map();
+      state.realSession.runCount = 0;
+      state.realSession.taskBubbleMostrata = false;
+      state.realSession.reviewFiles = new Map();
+      state.realSession.treePercorso = '';
+    }
+    state.realSession.id = null;
+    return (state.realSession.generation += 1);
+  }
+
+  /**
+   * ⛔ Nessun chiamante ancora: vedi la nota di testa del blocco "LA
+   * SESSIONE VERA" — manca il punto d'ingresso UX su mobile. Pronta a
+   * essere invocata non appena quella decisione arriva.
+   */
+  async function startRealSession(task) {
+    const generation = nuovaGenerazioneSessione();
+    state.realSession.taskId = task.id;
+    state.session = `Task reale · ${task.id}`;
+    sessionTitle.textContent = state.session;
+    setView('chat');
+    closePanels();
+    appendRealTaskStart(task);
+    toast('Avvio in corso', `${task.id} · checkout del progetto sul PC che serve questa pagina.`);
+
+    let sessionId;
+    try {
+      const data = await apiPost('/api/v1/sessions', { taskId: task.id });
+      sessionId = data.sessionId;
+    } catch (error) {
+      if (generation !== state.realSession.generation) return;
+      appendStatusNote(`Avvio non riuscito: ${error.message}`, true);
+      toast('Avvio non riuscito', error.message);
+      return;
+    }
+    if (generation !== state.realSession.generation) return;
+    collegaEventiSessione(sessionId, generation);
+  }
+
+  async function stopRealSession() {
+    if (!state.realSession.id) { toast('Nessuna sessione reale attiva'); return; }
+    try {
+      await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/stop`, {});
+      toast('Stop richiesto', 'La sessione si ferma al prossimo giro.');
+    } catch (error) {
+      toast('Stop non riuscito', error.message);
+    }
   }
 
   function appendUserMessage(text) {
@@ -1649,6 +2079,12 @@
     setKeyboardOpen,
     submitPrompt,
     announceComposerAction,
+    // ⭐ 26/8, riconciliazione desktop→mobile — esposti per i test dedicati
+    // (stesso schema di sopra: internals reali, non un secondo contratto).
+    startRealSession,
+    stopRealSession,
+    handleRealEvent,
+    realSessionState: state.realSession,
   };
   window.__talosHarnessDestroy = () => {
     cancelMotionAnimations();
