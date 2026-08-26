@@ -661,6 +661,15 @@
       ]);
       if (generation !== state.board.generation) return;
       setConnectionState('ready', 'Dati reali · sola lettura');
+      // ⭐ 26/8, riconciliazione desktop→mobile — trovato con una prova vera
+      // (browser reale contro il server vero, non ipotizzato): il badge
+      // "Demo UI" della Board restava visibile anche a dati reali caricati,
+      // difetto preesistente MAI notato perché su mobile embedded questo
+      // ramo non veniva mai raggiunto. Stesso principio già applicato ad
+      // aggiornaAlberoReale/aggiornaPannelloAmbiente: dati reali arrivati,
+      // l'etichetta demo deve sparire.
+      const demoBadgeBoard = $('.demo-surface-badge', $('[data-view="dashboard"]'));
+      if (demoBadgeBoard) demoBadgeBoard.hidden = true;
     } catch (error) {
       if (generation !== state.board.generation) return;
       state.board.runs = [];
