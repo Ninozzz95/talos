@@ -2,12 +2,15 @@
 
 Owner: Antonino
 
-Stato: **gate software verde; DEBT-MOBILE-001…012 con fix codice GREEN e
-campagna Pad parziale, non ancora chiusi end-to-end**. DEBT-MOBILE-001 ha ora
-evidenza tablet/telefono in entrambe le forme; DEBT-MOBILE-002 mantiene la
-prova Privacy già registrata. Restano da esercitare in una sola campagna gli
-stati puliti, i provider OpenRouter/Gemini, lo streaming `think/tool`, la
-scheda Hugging Face con rete e la gesture della sidebar globale.
+Stato: **CHIUSO 2026-08-26 (notte) — DEBT-MOBILE-001…015 tutti chiusi
+end-to-end con evidenza reale sul Pad**. Gli ultimi tre gate fisici
+(continuità download, streaming locale pulito, tablet portrait reale) sono
+stati chiusi nella stessa sera dall'agente mobile, con verifica indipendente
+del commit precedente da parte del coordinatore. Dettaglio completo, per
+debito, nelle sezioni sotto e nel ledger tecnico
+(`.claude/LEDGER-DEBITI-MOBILE-POST-CODICE-2026-08-25.md`). Commit:
+`04d798f5` (014/015) e `64d17ea` (portrait) su `lane/voce-personale`, **non
+spinti**: il push resta subordinato a un sì esplicito e fresco dell'owner.
 
 Ordine vincolante: iniziare diagnosi, ricerca, ledger e fix soltanto dopo la
 chiusura completa delle fasi Codice/Harness in corso.
@@ -29,8 +32,14 @@ chiusura completa delle fasi Codice/Harness in corso.
 
 ## DEBT-MOBILE-001 — Safe area del documento appena generato
 
-Stato: fix minimo applicato, regressioni larghe verdi e Pad verde su landscape;
-portrait fisico pendente.
+Stato: **chiuso 2026-08-26 (notte)**. Fix minimo applicato, regressioni larghe
+verdi, Pad verde su landscape e telefono in entrambe le forme; il gate
+portrait, rimasto pendente più a lungo di tutti perché richiede la rotazione
+fisica del Pad, è stato chiuso la sera del 26/8 con la sequenza
+`accelerometer_rotation`/`user_rotation` (l'owner non era davanti al
+dispositivo) — vedi il ledger tecnico per la prova completa, screenshot
+`final-tablet-portrait-real-model-lab.png` e
+`final-tablet-portrait-real-chat-rail-full-response.png`.
 
 Se si tocca la scheda del file `.md` appena generato, la testata entra nella
 status bar del dispositivo. Aprendo lo stesso contenuto dalla Libreria il
@@ -276,3 +285,58 @@ del bundle `614278 > 614000`, già esistente.
 Prova Pad: `C:\Users\Antonino\Desktop\projects\AVM\.claude\pad-debt-campaign-2026-08-26\effort-slider-phone-portrait-final-label-visible.png`.
 APK: `C:\Users\Antonino\Downloads\talos-mobile-effort-slider-20260826-162452-8001a3c7f224.apk`.
 SHA-256: `8001a3c7f2241cc057fcd934f24b383b23e1dbc85ced55af1fe1a78bf4623bde`.
+
+## DEBT-MOBILE-014 — Continuità download nel Model Lab tablet
+
+Stato: **chiuso 2026-08-26 (notte)**, agente mobile, commit `04d798f5`.
+
+Su tablet, le stazioni senza rail chat persistente (Model Lab, Impostazioni)
+nascondevano comunque le azioni di testata come se la rail fosse montata:
+niente icona del centro download, niente popover. Nella pagina di dettaglio
+di una variante, il bottone «Scarica» restava statico anche quando un
+trasferimento reale per quella stessa variante era già in corso.
+
+Fix: `hide-app-actions` dipende ora dalla presenza *reale* della rail chat
+(`tabletChatRailVisible`), non solo da `isTablet`; il bottone della variante
+selezionata proietta lo stato del trasferimento corrispondente
+(repo+revision+paths) dallo store condiviso e diventa `role=progressbar` con
+bytes reali; il popover del centro download usa un token di z-index sopra la
+navigazione globale e la sidebar passa a drawer non modale, per restare
+cliccabile anche con la sidebar aperta.
+
+Precisazione owner durante la chiusura: il bottone della variante doveva
+portare anche i comandi **pausa/riprendi/annulla**, non solo la percentuale
+— aggiunti riusando le funzioni già presenti nello store `modelTransfers.ts`
+(nessun poller nuovo), con la logica di stato condivisa fra il pannello e il
+Centro download in un modulo comune (`lib/models/presentation.ts`) così i
+due punti non possono mai raccontare stati diversi per lo stesso
+trasferimento.
+
+Gate reale sul Pad (repo `MaziyarPanahi/Qwen3-0.6B-GGUF`, mai scaricato
+prima): download avviato → barra con bytes reali in movimento (0%→36%→52%)
+→ Pausa premuta e verificata (la card passa a Riprendi) → Riprendi → Annulla
+con conferma → tornato al bottone «Scarica». Evidenza e gate automatici
+completi nel ledger tecnico.
+
+## DEBT-MOBILE-015 — Blocchi `think` e tool call nel prefisso già aperto
+
+Stato: **chiuso 2026-08-26 (notte)**, agente mobile, commit `04d798f5`.
+
+Erede diretto di DEBT-MOBILE-011: il parser locale (`thinkStream.ts`)
+funzionava per marker che *arrivano* nello stream, ma il template LFM2/LFM2.5
+può chiudere il prompt già dentro `<think>` — il primo delta nativo nasce
+quindi già in quello stato, senza ripetere l'apertura, e il vecchio parser
+lasciava passare quel primo tratto come testo pubblico.
+
+Fix: `talosCreateThinkSplitter(startsInReasoning?)` può iniziare direttamente
+nello stato `ragionamento`; l'adapter locale deriva quello stato SOLO dal
+prompt realmente renderizzato (`plan.prompt.trimEnd().endsWith('<think>')`),
+senza euristiche su nome/provider/modello.
+
+Gate reale sul Pad con `LFM2.5-2.6B-Q8_0` e Ragionamento esteso attivo: due
+prompt (uno breve, uno lungo per avere margine di osservazione), screenshot
+catturati **durante** la generazione a intervalli di ~1 secondo — nessun
+`<think>`/`</think>`/`<|tool_call_start|>` mai visibile nella bolla pubblica
+in nessun frame osservato; il ragionamento resta in un blocco separato e
+richiudibile. Dopo `force-stop` e riavvio dell'app la risposta persistita è
+rimasta identica e pulita.

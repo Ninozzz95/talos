@@ -1186,28 +1186,31 @@
    * (createElement/createElementNS/createTextNode/setTimeout) funziona già
    * identico dentro uno shadow root, quindi resta invariato.
    *
-   * ⛔ NON portato in questo giro (dichiarato, non taciuto):
-   * - forkSession / resumeSession / compactSession / passaASessione — su
-   *   desktop pescano da un elenco sessioni DENTRO questo stesso bundle
-   *   (#sessionList). Su mobile quell'elenco è nativo Vue
-   *   (HarnessScreen.vue / harnessDemoSessions.ts), fuori da questo file:
-   *   serve un ponte bundle↔Vue che non esiste ancora, non un porting 1:1.
-   * - contenitoreSessioniReali / aggiornaElencoSessioniReali — stesso
-   *   motivo, mai chiamate da queste funzioni per questo giro.
-   * - openRealTaskSheet — desktop apre il dialog col metodo nativo
-   *   dell'elemento <dialog> (bloccante per l'hit-test del top layer,
-   *   HARNESS-NATIVE-TOP-LAYER-HITTEST-01, harnessUiAssetContract.test.ts),
-   *   qui vietato: si userebbe showEmbeddedDialog(sheetDialog), come già
-   *   fa openSheet sopra. E soprattutto: mobile non
-   *   ha ancora NESSUN punto d'ingresso per "avvia un task reale" — dove va
-   *   (una sheet nuova? "Nuova sessione" ridefinita?) è una decisione UX
-   *   sulla superficie Codice già iterata per otto fasi, non mia da
-   *   prendere da sola.
+   * ⭐ 26/8, seconda metà dello stesso giorno: forkSession / resumeSession /
+   * compactSession / passaASessione / contenitoreSessioniReali /
+   * aggiornaElencoSessioniReali / openRealTaskSheet sono state portate
+   * anche loro (vedi il blocco dopo stopRealSession, poco più sotto) — su
+   * desktop pescano/scrivono #sessionList, lo stesso elemento che esiste
+   * IDENTICO in questo bundle; il vincolo "serve un ponte verso la sidebar
+   * nativa Vue" vale solo quando il bundle è EMBEDDED
+   * (`:host(.talos-embedded)` in styles.css nasconde già #sessionList per
+   * quel caso, stesso meccanismo della Board demo) — standalone (il caso
+   * desktop) non c'è nessuna sidebar nativa da sostituire, quindi niente
+   * ponte da costruire prima di portarle.
    *
-   * ⇒ Questo blocco è vero ma NON ANCORA RAGGIUNGIBILE da nessun tocco:
-   * nessun chiamante esistente invoca startRealSession. Zero rischio di
-   * regressione sulla suite Pad-verificata di Codice; il prossimo passo è
-   * la decisione UX sopra, poi il ponte verso l'elenco sessioni nativo.
+   * ⛔ NON ANCORA fatto (dichiarato, non taciuto): nessuna di queste — né
+   * startRealSession né le sette appena elencate — è agganciata a un
+   * tocco. openRealTaskSheet userebbe showEmbeddedDialog(sheetDialog), mai
+   * il metodo nativo bloccante dell'elemento <dialog> (vietato,
+   * HARNESS-NATIVE-TOP-LAYER-HITTEST-01), ma manca ancora il bottone che la
+   * apre: su mobile "dove va" resta la
+   * stessa decisione UX già rimandata (superficie Codice iterata per otto
+   * fasi, non mia da decidere sola); sul desktop standalone il vincolo
+   * tecnico non c'è, ma la scelta di COSA far fare a "Nuova sessione" in
+   * quel contesto è comunque un prodotto, non un'ovvietà.
+   *
+   * ⇒ Zero rischio di regressione sulla suite Pad-verificata di Codice: il
+   * prossimo passo è la decisione UX del trigger, non altro porting.
    */
 
   function appendRealTaskStart(task) {
@@ -1460,8 +1463,7 @@
       case 'RunFinished': {
         appendStatusNote(evento.result?.detto || 'Task concluso.');
         closeRealSession(generation);
-        // ⛔ NON chiama aggiornaElencoSessioniReali(): quella lista è nativa
-        // Vue su mobile (vedi nota di testa), non esiste in questo bundle.
+        aggiornaElencoSessioniReali(); // lo stato in #sessionList passa da "in corso" a "concluso" (visibile solo standalone, vedi nota di testa)
         break;
       }
       case 'RunError': {
@@ -1546,6 +1548,7 @@
     }
     if (generation !== state.realSession.generation) return;
     collegaEventiSessione(sessionId, generation);
+    aggiornaElencoSessioniReali();
   }
 
   async function stopRealSession() {
@@ -1556,6 +1559,216 @@
     } catch (error) {
       toast('Stop non riuscito', error.message);
     }
+  }
+
+  /*
+   * ⭐⭐⭐ 26/8 — seconda metà del porting desktop→mobile: fork/resume/compact/
+   * l'elenco sessioni e l'avvio da corpus. Esclusi dal primo giro perché
+   * pescano/scrivono su #sessionList — su mobile EMBEDDED quel pannello è
+   * nascosto in favore della sidebar nativa Vue (:host(.talos-embedded) in
+   * styles.css lo nasconde già, stesso meccanismo della Board demo). Fuori
+   * da un mount embedded (bundle aperto standalone, il caso desktop) quel
+   * limite non esiste: #sessionList è lo stesso identico elemento visibile
+   * che aveva la copia desktop separata — nessuna duplicazione, nessun
+   * secondo elenco da inventare.
+   *
+   * ⛔ Ancora NON agganciate a createNewSession: cambiare cosa fa "Nuova
+   * sessione" è la stessa decisione UX già rimandata (vedi il blocco sopra),
+   * solo posticipata al perimetro standalone invece che a quello embedded —
+   * non è più ovvia solo perché il vincolo tecnico è diverso.
+   */
+
+  /**
+   * ⭐ Fork reale quando c'è una sessione reale CONCLUSA attiva. Il server
+   * rifiuta con SESSION_NOT_READY (409) su una sessione ancora in corso.
+   */
+  async function forkSession() {
+    if (!state.realSession.id) {
+      toast('Fork creato', 'Nuovo ramo di conversazione da questo punto.');
+      return;
+    }
+    const idOrigine = state.realSession.id;
+    const taskIdOrigine = state.realSession.taskId;
+    try {
+      const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(idOrigine)}/fork`, {});
+      const generation = nuovaGenerazioneSessione();
+      state.realSession.taskId = taskIdOrigine;
+      state.session = `Task reale · ${taskIdOrigine} (fork)`;
+      sessionTitle.textContent = state.session;
+      appendStatusNote(`Fork avviato dalla sessione ${idOrigine.slice(0, 8)}… — stessa cartella, stessa storia.`);
+      collegaEventiSessione(dati.sessionId, generation);
+      aggiornaElencoSessioniReali();
+      toast('Fork creato', 'Nuovo ramo di conversazione da questo punto.');
+    } catch (error) {
+      toast('Fork non riuscito', error.message);
+    }
+  }
+
+  /**
+   * ⭐ Resume reale quando c'è una sessione reale CONCLUSA attiva. A
+   * differenza del fork, torna LO STESSO sessionId: riprende un giro in più
+   * sulla stessa conversazione, non ne crea una nuova.
+   */
+  async function resumeSession() {
+    if (!state.realSession.id) { toast('Nessuna sessione reale da riprendere'); return; }
+    const sessionId = state.realSession.id;
+    const taskId = state.realSession.taskId;
+    try {
+      await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/resume`, {});
+      // continua:true — STESSA vista: il "Nuovo giro iniziato" lo mostra
+      // handleRealEvent quando arriva il RunStarted del giro ripreso.
+      const generation = nuovaGenerazioneSessione({ continua: true });
+      state.realSession.taskId = taskId;
+      collegaEventiSessione(sessionId, generation);
+      aggiornaElencoSessioniReali();
+      toast('Sessione ripresa', 'Un nuovo giro è iniziato sulla stessa conversazione.');
+    } catch (error) {
+      toast('Resume non riuscito', error.message);
+    }
+  }
+
+  /**
+   * ⭐ "Compatta ora" reale quando c'è una sessione reale CONCLUSA attiva.
+   * Non avvia nessun giro nuovo: sostituisce ciò che una PROSSIMA
+   * resume/fork erediterebbe — la conversazione già mostrata non cambia.
+   */
+  async function compactSession() {
+    if (!state.realSession.id) {
+      toast('Contesto compattato', '18.7k -> 9.3k token equivalenti.');
+      return;
+    }
+    try {
+      const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/compact`, {});
+      toast(
+        dati.compattato ? 'Contesto compattato' : 'Compattazione saltata',
+        dati.compattato
+          ? 'Il prossimo resume o fork riparte dal riassunto.'
+          : 'Il modello non ha risposto: la conversazione resta quella intera.',
+      );
+    } catch (error) {
+      toast('Compattazione non riuscita', error.message);
+    }
+  }
+
+  /**
+   * ⭐⭐⭐ "Cronologia": passa a una sessione GIÀ esistente (viva o conclusa)
+   * invece di avviarne una nuova. Non serve leggere la sua storia a parte:
+   * aprire l'EventSource la riproduce da sola (iscriviti() nel registro
+   * rimanda TUTTI gli eventi già accaduti a chi si collega).
+   */
+  function passaASessione(sessionId, taskId, nome) {
+    if (sessionId === state.realSession.id) { setView('chat'); closePanels(); return; }
+    const generation = nuovaGenerazioneSessione();
+    state.realSession.taskId = taskId;
+    state.session = nome || `Task reale · ${taskId}`; // ⭐ un nome scelto dall'owner vince sul taskId
+    sessionTitle.textContent = state.session;
+    setView('chat');
+    closePanels();
+    collegaEventiSessione(sessionId, generation);
+    aggiornaElencoSessioniReali();
+  }
+
+  function formattaOraSessione(iso) {
+    try {
+      return new Date(iso).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '';
+    }
+  }
+
+  function contenitoreSessioniReali() {
+    let contenitore = $('#realSessionsBlock');
+    if (!contenitore) {
+      contenitore = document.createElement('div');
+      contenitore.id = 'realSessionsBlock';
+      $('#sessionList')?.prepend(contenitore);
+    }
+    return contenitore;
+  }
+
+  /**
+   * ⭐⭐⭐ La "cronologia" reale della sidebar — sostituisce (in un blocco
+   * suo, sopra le voci demo che restano invariate) un elenco vuoto con
+   * quello vero appena almeno una sessione reale esiste. Su mobile
+   * EMBEDDED #sessionList resta nascosto da styles.css: questa funzione
+   * scrive comunque nel DOM (nessun guard qui, il guard è visivo/CSS,
+   * stesso principio già in uso per renderCampaignRuns/Board), pronta a
+   * comparire appena il ponte verso la sidebar nativa Vue esisterà.
+   */
+  async function aggiornaElencoSessioniReali() {
+    const contenitore = contenitoreSessioniReali();
+    let elenco;
+    try {
+      elenco = (await apiGet('/api/v1/sessions')).items;
+    } catch {
+      return; // ⛔ un aggiornamento sidebar fallito non è un'azione richiesta, non merita un toast
+    }
+    if (elenco.length === 0) { contenitore.replaceChildren(); return; }
+
+    const pezzi = [textElement('div', 'list-heading', 'Sessioni reali')];
+    for (const sessione of elenco) {
+      const button = document.createElement('button');
+      button.className = `session-item real-session-item${sessione.sessionId === state.realSession.id ? ' active' : ''}`;
+      button.dataset.realSessionId = sessione.sessionId;
+      const main = document.createElement('span');
+      main.className = 'session-main';
+      const etichetta = sessione.nome || sessione.taskId; // ⭐ un nome scelto dall'owner vince sempre sul taskId
+      main.append(
+        textElement('strong', '', sessione.forkDa ? `${etichetta} · fork` : etichetta),
+        textElement('small', '', sessione.conclusa ? 'concluso' : 'in corso · live'),
+      );
+      const meta = document.createElement('span');
+      meta.className = 'session-meta';
+      meta.textContent = formattaOraSessione(sessione.avviataAlle);
+      button.append(main, meta);
+      button.addEventListener('click', () => passaASessione(sessione.sessionId, sessione.taskId, sessione.nome));
+      pezzi.push(button);
+    }
+    contenitore.replaceChildren(...pezzi);
+  }
+
+  /**
+   * ⭐ Il foglio "Avvia un task dal corpus". Adattato dall'originale
+   * desktop: il metodo nativo bloccante del dialog sostituito con
+   * `showEmbeddedDialog`/`closeEmbeddedDialog` (già usati da openSheet),
+   * l'unico modo ammesso di aprire #sheetDialog in questo bundle (guardia
+   * HARNESS-NATIVE-TOP-LAYER-HITTEST-01) — funziona identico standalone e
+   * in shadow root, dialog.show()/dialog.close() non hanno bisogno del
+   * comportamento modale nativo qui.
+   */
+  async function openRealTaskSheet() {
+    sheetEyebrow.textContent = 'Task reale';
+    sheetTitle.textContent = 'Avvia un task dal corpus';
+    sheetBody.replaceChildren(textElement('p', 'board-empty', 'Carico l’elenco dal server…'));
+    const demoBadge = $('.demo-surface-badge', sheetDialog);
+    if (demoBadge) demoBadge.hidden = true;
+    showEmbeddedDialog(sheetDialog);
+
+    let tasks;
+    try {
+      tasks = (await apiGet('/api/v1/tasks')).items;
+    } catch (error) {
+      sheetBody.replaceChildren(textElement('p', 'board-empty', `Elenco non disponibile: ${error.message}`));
+      return;
+    }
+
+    const section = document.createElement('div');
+    section.className = 'sheet-section';
+    section.appendChild(textElement('span', 'sheet-label', `${tasks.length} task dal corpus progetti/ — checkout ed esecuzione reali`));
+    for (const task of tasks) {
+      const button = document.createElement('button');
+      button.className = 'sheet-option';
+      button.dataset.startTask = task.id;
+      const iconWrap = document.createElement('span');
+      iconWrap.className = 'sheet-icon';
+      iconWrap.innerHTML = icon('i-play');
+      const textWrap = document.createElement('span');
+      textWrap.append(textElement('strong', '', task.id), textElement('small', '', task.consegnaCorta));
+      button.append(iconWrap, textWrap, textElement('span', '', `difficoltà ${task.difficolta}`));
+      button.addEventListener('click', () => { closeEmbeddedDialog(sheetDialog); startRealSession(task); });
+      section.appendChild(button);
+    }
+    sheetBody.replaceChildren(section);
   }
 
   function appendUserMessage(text) {
@@ -2084,6 +2297,12 @@
     startRealSession,
     stopRealSession,
     handleRealEvent,
+    forkSession,
+    resumeSession,
+    compactSession,
+    passaASessione,
+    openRealTaskSheet,
+    aggiornaElencoSessioniReali,
     realSessionState: state.realSession,
   };
   window.__talosHarnessDestroy = () => {
