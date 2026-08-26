@@ -40,6 +40,7 @@ describe('⭐⭐⭐ i predefiniti di un\'installazione NUOVA', () => {
 
     it('⛔ i testi dell interfaccia partono a PREDEFINITA, non grande', () => {
         expect(appenaInstallata().shell.ui_font_scale).toBe('default')
+        expect(appenaInstallata().chat_layout.bubble_scale).toBe('xcompact')
     })
 
     it('⛔ il compositore parte COMPATTO', () => {
@@ -60,6 +61,7 @@ describe('⭐⭐⭐ i predefiniti di un\'installazione NUOVA', () => {
     it('⛔ e lo stesso arrivando da uno stato SALVATO ma vuoto', () => {
         const daVuoto = parseTalosMobileSettings('{}')
         expect(daVuoto.shell.ui_font_scale).toBe('default')
+        expect(daVuoto.chat_layout.bubble_scale).toBe('xcompact')
         expect(daVuoto.shell.composer_shape).toBe('compact')
         expect(daVuoto.shell.launcher_icon_follows_theme).toBe(true)
     })

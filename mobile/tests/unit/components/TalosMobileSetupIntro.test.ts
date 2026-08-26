@@ -22,6 +22,7 @@ const state = vi.hoisted(() => ({
     /** Le azioni che la persona ha DECISO, distinte dai valori ereditati. */
     toolsChosen: [] as string[],
     toolPermissions: [] as Array<Record<string, string>>,
+    agentTools: [] as Array<{ tool: string, enabled: boolean }>,
     shell: [] as Array<Record<string, unknown>>,
     secrets: {} as Record<string, boolean>,
     account: { display_name: '' },
@@ -49,6 +50,9 @@ vi.mock('@/stores/settings', () => ({
             for (const action of Object.keys(patch)) {
                 if (!state.toolsChosen.includes(action)) state.toolsChosen.push(action)
             }
+        }),
+        setAgentToolEnabled: vi.fn(async (tool: string, enabled: boolean) => {
+            state.agentTools.push({ tool, enabled })
         }),
         setShell: vi.fn(async (patch: Record<string, unknown>) => {
             state.shell.push(patch)
@@ -129,6 +133,7 @@ beforeEach(() => {
     state.memoryExisting = false
     state.toolsChosen.length = 0
     state.toolPermissions.length = 0
+    state.agentTools.length = 0
     state.shell.length = 0
     for (const key of Object.keys(state.secrets)) delete state.secrets[key]
 })
@@ -624,6 +629,10 @@ describe('⭐⭐⭐ il consenso ampio accende la Libreria', () => {
         await flushPromises()
 
         expect(state.shell).toEqual([{ library_context_enabled: true }])
+        expect(state.agentTools).toEqual([
+            { tool: 'library_context_policy_update', enabled: true },
+            { tool: 'device_screen_drive', enabled: true },
+        ])
         wrapper.unmount()
     })
 

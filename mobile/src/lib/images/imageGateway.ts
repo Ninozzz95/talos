@@ -359,21 +359,23 @@ function walk(node: unknown, found: TalosGeneratedImage[], depth: number): void 
     // OpenAI: data[].b64_json
     const b64 = record.b64_json
     if (typeof b64 === 'string' && b64 !== '') {
+        const normalized = normalizeBase64Bytes(b64, false)
         const declared = record.media_type ?? record.mime_type ?? record.mimeType
         const mediaType = declared === undefined
             ? 'image/png'
             : declared === 'image/png' || declared === 'image/jpeg' || declared === 'image/webp'
                 ? declared
                 : null
-        if (mediaType) found.push({ base64: b64, mediaType })
+        if (normalized && mediaType) found.push({ base64: normalized, mediaType })
         return
     }
     // Gemini: output_image.data, and inlineData.data on interleaved steps.
     const data = record.data
     const mime = record.mime_type ?? record.mimeType
-    if (typeof data === 'string' && looksLikeImageBytes(data)) {
+    const normalizedData = typeof data === 'string' ? normalizeBase64Bytes(data, true) : null
+    if (normalizedData) {
         found.push({
-            base64: data,
+            base64: normalizedData,
             mediaType: typeof mime === 'string' && mime.startsWith('image/') ? mime : 'image/png',
         })
         return
@@ -387,8 +389,10 @@ function walk(node: unknown, found: TalosGeneratedImage[], depth: number): void 
  * `data` is a common field name. Without this, a response carrying a text field
  * called `data` would be saved as a picture and shown as a broken one.
  */
-function looksLikeImageBytes(value: string): boolean {
-    return value.length > 512 && /^[A-Za-z0-9+/=\r\n]+$/.test(value.slice(0, 512))
+function normalizeBase64Bytes(value: string, requireImageSize: boolean): string | null {
+    const compact = value.replace(/\s+/g, '')
+    if (!compact || !/^[A-Za-z0-9+/=]+$/.test(compact)) return null
+    return !requireImageSize || compact.length > 512 ? compact : null
 }
 
 /**
@@ -431,7 +435,10 @@ export function pickTalosImageModel(
         if (/embed|vision|edit/i.test(model.id)) return false
         if (provider === 'openai') return /^gpt-image/i.test(model.id)
         if (provider === 'gemini') return /^gemini-[a-z0-9.-]*image[a-z0-9.-]*$/i.test(model.id)
-        return model.outputModalities?.includes('image') ?? true
+        // OpenRouter's text catalogue contains models such as Gemini 3.7
+        // Flash beside the image models. An untyped candidate is not evidence
+        // that it can draw; fail closed and use the image floor instead.
+        return model.outputModalities?.includes('image') ?? false
     })
     if (candidates.length === 0) return IMAGE_MODEL_FLOOR[provider]
 

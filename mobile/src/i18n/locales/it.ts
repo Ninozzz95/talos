@@ -303,6 +303,7 @@ export const TALOS_IT_MESSAGES = {
             bubbles: 'Bolle',
         },
         fontScales: {
+            xsmall: 'Molto piccola',
             small: 'Piccola',
             default: 'Predefinita',
             large: 'Grande',

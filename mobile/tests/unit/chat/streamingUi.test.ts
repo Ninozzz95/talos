@@ -162,6 +162,21 @@ describe('TalosMobileStreamingReply (F2-T4 / R1-5)', () => {
         }
     })
 
+    it('DEBT-MOBILE-003 RED: a streaming table never gets the prompt caret', async () => {
+        const table = [
+            '| Campo | Valore |',
+            '| --- | --- |',
+            '| stato | pronto |',
+        ].join(LF)
+        const wrapper = mountStreaming(true, table)
+
+        await vi.waitFor(() => {
+            expect(wrapper.get('.talos-message-table-scroll').exists()).toBe(true)
+        }, { timeout: 4000 })
+
+        expect(wrapper.find('[data-testid="talos-stream-caret"]').exists()).toBe(false)
+    })
+
     it('owner 2026-07-25: waiting shows the mark ALONE — no bubble, no container', () => {
         const wrapper = mountStreaming(true, null)
         const waiting = wrapper.get('[data-testid="talos-mobile-typing"]')

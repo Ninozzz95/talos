@@ -8,8 +8,8 @@ import {
     parseTalosFontScale,
     talosFontScaleFactor,
     TALOS_DEFAULT_FONT_SCALE,
-    TALOS_FONT_SCALE_OPTIONS,
 } from '@/lib/talosFontScale'
+import { TALOS_FONT_SCALE_OPTIONS } from '@/lib/talosFontScaleOptions'
 
 // Owner 2026-07-25: "il font size DEVE impattare anche il font dei menù e di
 // tutto il sistema non solo chat." The scale reaches the whole UI only because
@@ -28,6 +28,7 @@ describe('talosFontScale', () => {
     it('every offered option maps to a distinct, monotonically growing factor', () => {
         const factors = TALOS_FONT_SCALE_OPTIONS.map((option) => talosFontScaleFactor(option.value))
         expect(new Set(factors).size).toBe(factors.length)
+        expect(talosFontScaleFactor('xsmall')).toBeLessThan(talosFontScaleFactor('small'))
         expect([...factors].sort((a, b) => a - b)).toEqual(factors)
         expect(factors.every((factor) => factor > 0)).toBe(true)
     })

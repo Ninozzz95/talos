@@ -460,7 +460,7 @@ async function reclaim(): Promise<void> {
              divulgazione dentro la card, ora la sua sezione: stesso
              montaggio pigro (si legge solo quando il tab è attivo). -->
         <section v-if="activeTab === 'scheda'" data-testid="talos-models-readme-full">
-            <TalosMobileMessageContent v-if="schedaLeggibile" class="text-xs" :content="schedaLeggibile" />
+            <TalosMobileMessageContent v-if="schedaLeggibile" class="text-xs" :content="schedaLeggibile" allow-external-images />
             <p v-else class="text-sm text-[var(--talos-muted)]">{{ t('localModels.noReadme') }}</p>
         </section>
 

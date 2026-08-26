@@ -116,6 +116,19 @@ describe('C45-RED-19N think splitter', () => {
         expect(esito.text).not.toMatch(/TOOL_CODE|memory_search|args:|query:/)
         expect(esito.reasoning).toBe('')
     })
+
+    it('DEBT-MOBILE-011 RED: streaming think and LFM2.5 tool markers stay hidden', () => {
+        const esito = attraverso([
+            '<think>ragiono',
+            '</think>Ciao. <|tool_call_sta',
+            'rt|>[library_search(query="x")]<|tool_call_end|> Fine.',
+        ])
+
+        expect(esito.text).toBe('Ciao.  Fine.')
+        expect(esito.reasoning).toBe('ragiono')
+        expect(esito.text).not.toMatch(/think|tool_call|library_search/)
+    })
+
 })
 
 /**
