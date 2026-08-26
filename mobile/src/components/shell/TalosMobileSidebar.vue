@@ -284,10 +284,19 @@ const deletePlan = computed<TalosSessionCleanupPlan>(() => (
 </script>
 
 <template>
+    <Teleport to="body">
+        <div
+            v-if="props.open"
+            data-slot="drawer-overlay"
+            aria-hidden="true"
+            class="pointer-events-none fixed inset-0 z-[var(--talos-z-global-navigation)] bg-black/10 supports-backdrop-filter:backdrop-blur-xs"
+        ></div>
+    </Teleport>
     <Drawer
         :open="props.open"
         direction="left"
         :dismissible="false"
+        :modal="false"
         @update:open="emit('update:open', $event)"
     >
         <!-- F3-T1 (owner #5): the vendored DrawerContent forces w-3/4 +

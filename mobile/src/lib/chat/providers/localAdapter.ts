@@ -1191,7 +1191,10 @@ async function runBody(
          * i provider di rete lo riempiono via `onReasoning`. Il modello locale
          * era l'unico che non lo faceva.
          */
-        const separatore = talosCreateThinkSplitter()
+        // Alcuni template (LFM2/LFM2.5) lasciano già aperto <think> nel
+        // generation prompt: il primo delta nativo è quindi ragionamento,
+        // senza un secondo tag di apertura da aspettare nello stream.
+        const separatore = talosCreateThinkSplitter(plan.prompt.trimEnd().endsWith('<think>'))
         /*
          * ⭐⭐⭐ E il JSON di una chiamata non deve SCORRERE a schermo.
          *
