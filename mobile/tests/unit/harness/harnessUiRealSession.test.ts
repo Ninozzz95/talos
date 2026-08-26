@@ -142,6 +142,33 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(runtime().realSessionState.id).toBe('sess-abc123')
     })
 
+    it('REAL-SESSION-START-01b il badge "Demo UI" della chat sparisce con una sessione vera, e MAI quello di una superficie diversa', async () => {
+        // ⛔ nuovaGenerazioneSessione() svuota #conversation con replaceChildren():
+        // il badge della chat (dentro #conversation) e quello di .approval-card
+        // (idem) spariscono con lui — resta solo quello di .queued-message, FUORI
+        // da #conversation. Un fix che cerca "il primo badge sotto .chat-view"
+        // colpirebbe quello per coincidenza: qui si prova che non lo tocca.
+        const badgeCoda = document.querySelector('[data-demo-surface="queue"] .demo-surface-badge') as HTMLElement
+        expect(badgeCoda).not.toBeNull()
+        expect(badgeCoda.hidden).toBe(false)
+
+        const fetchMock = mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-abc123' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-0b81c88', consegna: 'Sistema il test rosso.' })
+
+        expect(fetchMock).toHaveBeenCalled()
+        expect(document.querySelector('#conversation .demo-surface-badge')).toBeNull()
+        expect(badgeCoda.hidden).toBe(false) // AL CONTRARIO: una superficie non correlata resta intatta
+    })
+
+    it('REAL-SESSION-START-01c AL CONTRARIO: nessuna sessione mai partita, il badge resta visibile', () => {
+        const badge = document.querySelector('.chat-view .demo-surface-badge') as HTMLElement | null
+        expect(badge).not.toBeNull()
+        expect(badge!.hidden).toBe(false)
+    })
+
     it('REAL-SESSION-START-02 AL CONTRARIO: un avvio fallito non apre nessuno stream e non finge un id', async () => {
         mockFetch([
             { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { code: 'BAD_TASK', message: 'task ignoto' }, ok: false, status: 404 },

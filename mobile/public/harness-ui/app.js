@@ -1492,8 +1492,36 @@
   }
 
   /** Apre l'EventSource per una sessione GIÀ avviata sul server e collega gli eventi al rendering reale. */
+  /*
+   * ⛔ 27/8, buco trovato eseguendo la PRIMA sessione vera end-to-end
+   * (piano §1.3-BIS, blocco 1): il badge "Demo UI · non collegato" della
+   * chat restava visibile anche con una conversazione reale a schermo —
+   * a differenza di Board/contesto/file-tree/foglio, la chat non aveva
+   * MAI un punto che lo nascondesse. `collegaEventiSessione` è l'unico
+   * luogo comune a `startRealSession` E `passaASessione` (la seconda non
+   * passa da `handleRealEvent`/RunStarted se la sessione è già conclusa
+   * e si sta solo rivedendo la sua cronologia) — un solo punto, non due.
+   *
+   * ⛔⛔ Prima versione cercava il PRIMO `.demo-surface-badge` sotto
+   * `.chat-view` — sbagliato, scoperto da un test scritto apposta:
+   * `nuovaGenerazioneSessione()` (chiamata da entrambi i chiamanti PRIMA
+   * di questa funzione) svuota `#conversation` con `replaceChildren()`,
+   * portando via CON SÉ sia il badge della chat sia quello di
+   * `.approval-card` (entrambi vivono lì dentro) — il primo badge ancora
+   * in piedi sotto `.chat-view` a quel punto è quello di `.queued-message`
+   * (fuori da `#conversation`, dentro `.composer-wrap`), una superficie
+   * SENZA relazione con "la chat è collegata". Il selettore ora risale
+   * dal badge al suo `[data-demo-surface]` più vicino e lo accetta solo
+   * se è ESATTAMENTE "chat" — mai un altro badge per coincidenza di
+   * posizione. Nel caso comune (badge già svuotato dal wipe) trova
+   * `undefined` e non fa niente: l'assenza del badge è già l'esito
+   * corretto, cercare non serve più ma non deve nuocere.
+   */
   function collegaEventiSessione(sessionId, generation) {
     state.realSession.id = sessionId;
+    const demoBadgeChat = $$('.demo-surface-badge', $('.chat-view'))
+      .find((badge) => badge.closest('[data-demo-surface]')?.dataset.demoSurface === 'chat');
+    if (demoBadgeChat) demoBadgeChat.hidden = true;
     const source = new EventSource(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`);
     state.realSession.eventSource = source;
     source.onmessage = (message) => {
