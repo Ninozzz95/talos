@@ -20,6 +20,7 @@ import { randomUUID } from 'node:crypto';
 import {
   chiamaConRitenta,
   compattaConversazione as compattaConversazioneReale,
+  eseguiComandoSandboxato as eseguiComandoSandboxatoReale,
   talosLavora as talosLavoraReale,
 } from '../../../AVM-harness/mobile/scripts/harness-talos/talosHarness.mjs';
 import { leggiContestoWorkspace as leggiContestoWorkspaceReale } from './workspace-context.mjs';
@@ -30,6 +31,8 @@ import {
   runError,
   runFinished,
   runStarted,
+  toolCallArgs,
+  toolCallStart,
 } from './agui-events.mjs';
 
 /**
@@ -172,4 +175,36 @@ export async function compattaSessione({
     modello, chiave, messaggi: richiesta, attrezzi: [], fetchDiRete,
   });
   return compattaConversazioneFn(messaggiFinali, chiamaModello);
+}
+
+/**
+ * Il comando diretto (`!comando` nel composer, piano §1.3-BIS.T seconda
+ * metà) — esegue UN comando nella cartella di una sessione, FUORI dal ciclo
+ * di `talosLavora`: nessun modello coinvolto, l'owner sceglie il comando,
+ * non un attrezzo che il modello sceglie di chiamare.
+ *
+ * ⛔ Riusa `eseguiComandoSandboxato` (talosHarness.mjs) — STESSA funzione
+ * che l'attrezzo `shell` chiama dentro il ciclo, stessi due livelli onesti
+ * (`wsl2`/`none`), mai una seconda implementazione che diverge in silenzio.
+ *
+ * ⛔ Emette un RunStarted/RunFinished che avvolge un SOLO ToolCallStart/
+ * Args/Result — non un vero "run" nel senso di talosLavora, ma lo stesso
+ * vocabolario di eventi: chi ascolta (handleRealEvent in app.js) non ha
+ * bisogno di un ramo nuovo, funziona già per come è scritto oggi.
+ */
+export async function eseguiComandoDiretto({
+  cartella, comando, onEvento,
+  eseguiComandoSandboxatoFn = eseguiComandoSandboxatoReale,
+}) {
+  const threadId = randomUUID();
+  const runId = randomUUID();
+  const toolCallId = randomUUID();
+  onEvento(runStarted({ threadId, runId, input: { comandoDiretto: comando } }));
+  onEvento(toolCallStart({ toolCallId, toolCallName: 'shell' }));
+  onEvento(toolCallArgs({ toolCallId, delta: JSON.stringify({ comando }) }));
+  const risultato = await eseguiComandoSandboxatoFn(comando, cartella);
+  const content = `exit ${risultato.codice} [sandbox: ${risultato.enforcement}]\n${risultato.testo}`;
+  onEvento(eventoPerEsitoTool({ messageId: randomUUID(), toolCallId, content }));
+  onEvento(runFinished({ threadId, runId, outcome: { type: 'success' }, result: { detto: content } }));
+  return { ok: true, codice: risultato.codice, enforcement: risultato.enforcement };
 }

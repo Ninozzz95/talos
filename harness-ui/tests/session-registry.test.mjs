@@ -561,3 +561,111 @@ test('⛔⛔⛔ se avviaSessione (contro il suo stesso contratto) RIGETTA invece
   assert.equal(ricevuti[0].type, 'RunError');
   assert.equal(ricevuti[0].code, 'internal-error');
 });
+
+// shell() — il comando diretto (`!comando`, piano §1.3-BIS.T seconda metà).
+
+test('⛔ shell() su un id inesistente: NOT_FOUND', () => {
+  const registro = createSessionRegistry({ preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  assert.equal(registro.shell('mai-esistito', 'echo x').code, 'NOT_FOUND');
+});
+
+test('⛔ shell() su una sessione ANCORA IN CORSO: SESSION_NOT_READY, eseguiComandoDirettoFn mai chiamato', async () => {
+  const finta = sessioneControllabile();
+  let chiamate = 0;
+  const eseguiComandoDirettoFn = async () => { chiamate += 1; return { ok: true }; };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, eseguiComandoDirettoFn, modello: 'm', chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const risultato = registro.shell(sessionId, 'echo x');
+  assert.equal(risultato.code, 'SESSION_NOT_READY');
+  assert.equal(chiamate, 0, 'una sessione dal vivo non deve mai raggiungere eseguiComandoDirettoFn — correrebbe contro lo stesso talosLavora sulla stessa cartella');
+
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }); // pulizia
+  await new Promise((r) => setImmediate(r));
+});
+
+test('shell() su una sessione conclusa: chiama eseguiComandoDirettoFn con la cartella giusta, torna {ok:true} SENZA aspettare l\'esecuzione', async () => {
+  const finta = sessioneControllabile();
+  let risolviComando;
+  const attesaComando = new Promise((r) => { risolviComando = r; });
+  let inputCatturato = null;
+  const eseguiComandoDirettoFn = async (input) => {
+    inputCatturato = input;
+    input.onEvento({ type: 'RunStarted', threadId: 't2', runId: 'r2' });
+    await attesaComando; // resta appeso finché il test non lo risolve
+    input.onEvento({ type: 'RunFinished', threadId: 't2', runId: 'r2', outcome: { type: 'success' } });
+    return { ok: true, codice: 0, enforcement: 'wsl2' };
+  };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, eseguiComandoDirettoFn, modello: 'm', chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await new Promise((r) => setImmediate(r));
+
+  const risultato = registro.shell(sessionId, 'echo x');
+
+  assert.equal(risultato.ok, true, 'torna subito — non aspetta eseguiComandoDirettoFn, stesso principio di avviaESegui');
+  assert.equal(inputCatturato.cartella, '/tmp/x');
+  assert.equal(inputCatturato.comando, 'echo x');
+  risolviComando();
+  await new Promise((r) => setImmediate(r));
+});
+
+test('⭐⭐⭐ shell() apre una finestra "dal vivo": chi si iscrive DOPO averla chiamata (come farà app.js — POST poi una connessione FRESCA, stesso schema di startRealSession) vede gli eventi mentre accadono', async () => {
+  const finta = sessioneControllabile();
+  let emettiEventoShell;
+  const eseguiComandoDirettoFn = async (input) => {
+    emettiEventoShell = input.onEvento;
+    // come la vera eseguiComandoDiretto (agent-service.mjs): emette RunStarted
+    // SINCRONO, prima di qualunque await — run-to-first-await di JS, stesso
+    // principio già documentato sopra avviaESegui.
+    input.onEvento({ type: 'RunStarted', threadId: 't2', runId: 'r2' });
+    return new Promise(() => {}); // resta appeso: il test decide il resto
+  };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, eseguiComandoDirettoFn, modello: 'm', chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await new Promise((r) => setImmediate(r));
+
+  registro.shell(sessionId, 'echo x'); // RunStarted del comando diretto già nel buffer al ritorno
+
+  // il client si iscrive DOPO, come farà app.js: POST /shell, POI apre l'EventSource —
+  // mai il contrario, e mai riusando una connessione vecchia attraverso il confine.
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e.type));
+  assert.deepEqual(ricevuti, ['RunStarted', 'RunFinished', 'RunStarted'],
+    'il replay del primo giro, PIÙ il RunStarted del comando diretto — senza voce.conclusa=false dentro shell(), quest\'ultimo non ci sarebbe MAI, nemmeno nel replay');
+
+  emettiEventoShell({ type: 'ToolCallStart', toolCallId: 'c1', toolCallName: 'shell' });
+  assert.deepEqual(ricevuti, ['RunStarted', 'RunFinished', 'RunStarted', 'ToolCallStart'],
+    'e questo arriva DAL VIVO, non da un replay: la sottoscrizione è avvenuta mentre voce.conclusa era ancora false');
+});
+
+test('⛔ limite noto, non silenzioso: una connessione GIÀ APERTA da PRIMA della chiamata a shell() non riceve i suoi eventi dal vivo — per questo app.js deve aprirne una nuova dopo la POST, mai riusare quella vecchia', async () => {
+  const finta = sessioneControllabile();
+  let emettiEventoShell;
+  const eseguiComandoDirettoFn = async (input) => {
+    emettiEventoShell = input.onEvento;
+    return new Promise(() => {});
+  };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, eseguiComandoDirettoFn, modello: 'm', chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await new Promise((r) => setImmediate(r));
+
+  const ricevutiPrimaDiShell = [];
+  registro.iscriviti(sessionId, (e) => ricevutiPrimaDiShell.push(e.type)); // già concluso: replay, MAI ascoltatore live
+
+  registro.shell(sessionId, 'echo x');
+  emettiEventoShell({ type: 'ToolCallStart', toolCallId: 'c1', toolCallName: 'shell' });
+
+  assert.deepEqual(ricevutiPrimaDiShell, ['RunStarted', 'RunFinished'],
+    'nessun evento nuovo: la connessione vecchia non diventa mai live perché la sua iscrizione è avvenuta a sessione ancora conclusa');
+});

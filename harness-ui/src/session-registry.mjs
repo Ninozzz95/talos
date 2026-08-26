@@ -18,7 +18,11 @@
  */
 import { randomUUID } from 'node:crypto';
 
-import { avviaSessione as avviaSessioneReale, compattaSessione as compattaSessioneReale } from './agent-service.mjs';
+import {
+  avviaSessione as avviaSessioneReale,
+  compattaSessione as compattaSessioneReale,
+  eseguiComandoDiretto as eseguiComandoDirettoReale,
+} from './agent-service.mjs';
 import { TaskCatalogError, preparaEsecuzione as preparaEsecuzioneReale } from './task-catalog.mjs';
 import { leggiAlberoWorkspace as leggiAlberoWorkspaceReale, WorkspaceTreeError } from './workspace-tree.mjs';
 
@@ -28,6 +32,7 @@ export function createSessionRegistry({
   avviaSessioneFn = avviaSessioneReale,
   preparaEsecuzioneFn = preparaEsecuzioneReale,
   compattaSessioneFn = compattaSessioneReale,
+  eseguiComandoDirettoFn = eseguiComandoDirettoReale,
   leggiAlberoWorkspaceFn = leggiAlberoWorkspaceReale,
   modello,
   chiave,
@@ -227,6 +232,47 @@ export function createSessionRegistry({
       const risultato = await compattaSessioneFn({ messaggiFinali: voce.messaggiFinali, modello, chiave });
       if (risultato.compattato) voce.messaggiFinali = risultato.messaggi;
       return { ok: true, compattato: risultato.compattato };
+    },
+
+    /**
+     * ⭐ Il comando diretto (`!comando` nel composer, piano §1.3-BIS.T
+     * seconda metà) — esegue UN comando nella cartella della sessione,
+     * FUORI dal ciclo di `talosLavora`. Stesso scope dichiarato di
+     * `forka`/`resume`/`compatta`: solo su una sessione già CONCLUSA, per
+     * non correre contro un `talosLavora` ancora in corso sulla STESSA
+     * cartella (nessun nuovo checkout: stessi file, stesso principio del
+     * fork).
+     *
+     * ⛔ `voce.conclusa = false` PRIMA di eseguire — stesso motivo di
+     * `avviaESegui`: senza, un client che si riconnette (l'EventSource
+     * del browser lo fa DA SOLO ogni volta che il server chiude lo stream
+     * su RunFinished, vedi app.js) troverebbe la sessione già "conclusa" e
+     * `iscriviti()` gli darebbe solo il replay, mai un ascolto dal vivo —
+     * gli eventi di QUESTO comando arriverebbero al buffer ma a nessuno.
+     *
+     * ⛔ NON await sull'esecuzione intera — stesso motivo di `avviaESegui`:
+     * un comando può girare fino a 120 s (stesso tetto di `prova`), e una
+     * POST che resta appesa fino ad allora è un client che sembra bloccato.
+     * RunStarted è già nel buffer al ritorno (run-to-first-await di JS,
+     * documentato sopra `avviaESegui`), il resto arriva via SSE.
+     *
+     * @returns {{ok:true}|{erroreAvvio:string, code:string}}
+     */
+    shell(sessionId, comando) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (!voce.conclusa) {
+        return { erroreAvvio: 'La sessione è ancora in corso: aspetta che concluda prima di un comando diretto', code: 'SESSION_NOT_READY' };
+      }
+      voce.conclusa = false;
+      eseguiComandoDirettoFn({
+        cartella: voce.cartella, comando, onEvento: (evento) => broadcast(voce, evento),
+      }).catch((errore) => {
+        if (!voce.conclusa) {
+          broadcast(voce, { type: 'RunError', message: errore instanceof Error ? errore.message : String(errore), code: 'internal-error' });
+        }
+      });
+      return { ok: true };
     },
 
     /**
