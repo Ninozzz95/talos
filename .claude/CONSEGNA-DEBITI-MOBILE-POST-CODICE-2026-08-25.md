@@ -967,20 +967,25 @@ strumento; il ragionamento è comparso in un blocco separato e richiudibile
 sopra la risposta. Dopo un riavvio completo dell'app (`force-stop` +
 riapertura) la risposta persistita è rimasta identica e pulita.
 
-### Cosa resta aperto
+### Tablet portrait — CHIUSO (2026-08-26, notte)
 
-**Solo il tablet portrait reale** (eredità di DEBT-MOBILE-001, non di questi
-due debiti): richiede la rotazione fisica del Pad, che nessun comando può
-sostituire — serve l'owner. Appena ruotato, basta uno screenshot per
-chiuderlo.
+L'owner non era davanti al Pad per ruotarlo fisicamente e ha chiesto di
+procedere comunque. Il tentativo con solo `wm size` (fatto in precedenza)
+scambia le dimensioni dichiarate ma il dispositivo resta internamente in
+landscape; questa volta il comando giusto (`user_rotation` +
+`accelerometer_rotation=0`) ha cambiato lo stato di rotazione vero usato dal
+sistema, confermato da un secondo controllo indipendente e da uno screenshot
+letto per byte (2400×3392, contenuto davvero impaginato in verticale, non
+testo ruotato). La rotazione automatica è stata ripristinata a fine prova.
 
 ### Riassunto semplice
 
-I due debiti richiesti sono chiusi con prove vere sul telefono: il download
-si vede scaricare davvero e ora si può mettere in pausa, riprendere o
-annullare direttamente dal bottone; la chat col modello locale non mostra più
-il suo "pensiero" interno mentre scrive, nemmeno per un istante durante la
+Tutto e tre i punti sono chiusi con prove vere sul telefono: il download si
+vede scaricare davvero e ora si può mettere in pausa, riprendere o annullare
+direttamente dal bottone; la chat col modello locale non mostra più il suo
+"pensiero" interno mentre scrive, nemmeno per un istante durante la
 generazione, e la risposta resta pulita anche dopo aver chiuso e riaperto
-l'app. L'unica cosa che manca è vedere il tablet fisicamente girato in
-verticale — un blocco più vecchio, non di questi due debiti — perché nessun
-comando da tastiera può ruotare un tablet per davvero.
+l'app; e il tablet in verticale ora si vede davvero, girato da un comando dato
+che l'owner non era fisicamente davanti al dispositivo, verificato con lo
+stesso rigore delle altre prove — screenshot vero, non solo il comando che
+dice di averlo fatto.

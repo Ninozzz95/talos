@@ -1011,16 +1011,43 @@ pubblico, non l'esattezza aritmetica.
   `talos-debug-2026-08-26-post-code-debts-final.apk`,
   SHA-256 `AEE53F439E71A5CEA16AD16098F46B34CCDC8AF58C149D1B4075F2D304F4677E`.
 
-### Il solo gate ancora aperto — tablet portrait reale (DEBT-MOBILE-001, non 014/015)
+### Tablet portrait reale — CHIUSO 2026-08-26 (notte), DEBT-MOBILE-001
 
-Non riguarda DEBT-MOBILE-014/015: è un gate ereditato da DEBT-MOBILE-001,
-mai chiuso perché richiede la rotazione **fisica** del Pad, non riproducibile
-da programma. Il Pad ha reso tablet landscape e le due forme telefono; la
-richiesta tablet portrait via `wm size`/`user_rotation` ha prodotto di nuovo
-un frame landscape perché il dispositivo riportava rotazione `1` e ignorava
-lo scambio dimensioni — `final-tablet-portrait-requested-loaded.png` non è
-evidenza portrait valida, come già registrato. Nessun comando adb sostituisce
-la rotazione fisica del dispositivo: serve l'owner.
+Chiuso senza rotazione fisica: l'owner non era davanti al Pad e ha chiesto di
+procedere comunque. Il tentativo precedente nella stessa giornata
+(`final-tablet-portrait-requested-loaded.png`, non valido) aveva usato
+`wm size` da solo, che scambia le dimensioni dichiarate ma lascia
+`mCurrentRotation=ROTATION_90`: il contenuto resta renderizzato in landscape
+dentro una tela dalle proporzioni scambiate. Questa volta la sequenza è stata
+
+```
+settings put system accelerometer_rotation 0
+settings put system user_rotation 0
+```
+
+che cambia lo stato di rotazione vero usato da WindowManager, non solo le
+dimensioni dichiarate: `dumpsys window displays` conferma
+`mCurrentRotation=ROTATION_0`, e — regola del progetto, mai fidarsi del solo
+comando — lo **screenshot reale letto dai byte** conferma un file
+`2400×3392` (il formato fisico portrait del pannello) con il contenuto
+genuinamente impaginato in verticale, non testo ruotato dentro una tela
+scambiata.
+
+Evidenza ispezionata per intero:
+
+- `final-tablet-portrait-real-model-lab.png` — Model Lab in portrait, RAM/
+  spazio/riserva e le tre card (Provider, Catalogo, Modelli locali) impilate
+  verticalmente, testata "← Model Lab" sotto la barra di sistema.
+- `final-tablet-portrait-real-chat-rail-full-response.png` — la Chat con la
+  rail persistente **ancora a due colonne** anche in portrait (2400px CSS
+  resta sopra la soglia tablet, non degrada a singola colonna come sul
+  telefono): rail sinistra con le 13 conversazioni, colonna destra con la
+  risposta LFM2.5 completa (10 punti) leggibile per intero, composer in
+  basso.
+
+Rotazione riportata ad automatica a fine prova
+(`accelerometer_rotation=1`, `user_rotation` invariato) per non lasciare il
+dispositivo in uno stato manuale permanente.
 
 ### File esatti ancora non committati — aggiornato 2026-08-26 (sera)
 
