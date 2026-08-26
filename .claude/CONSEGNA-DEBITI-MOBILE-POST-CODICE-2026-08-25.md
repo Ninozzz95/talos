@@ -815,3 +815,172 @@ Il fix tecnico esiste e supera tutti i test locali. Per dire che il debito è
 chiuso manca una sola prova: generare davvero un'immagine con OpenRouter dal
 Pad e verificare salvataggio, visualizzazione e reload. Questa prova non è
 stata simulata né lanciata senza il tuo consenso, perché può consumare credito.
+
+## Consegna di arresto al main agent — DEBT-MOBILE-014/015 — 2026-08-26
+
+### Risultato già presente nel worktree
+
+Il lavoro corrente risolve due regressioni senza introdurre nuove dipendenze.
+
+Per i download del Model Lab, le azioni di testata non vengono più nascoste
+automaticamente su qualunque tablet: vengono nascoste soltanto quando la rail
+tablet che le ospita esiste davvero. Nella pagina della variante, il pulsante
+di download viene sostituito nello stesso punto da una barra collegata al
+trasferimento reale corrispondente per repository, revisione e file. Il menu
+download è sopra la sidebar globale e resta cliccabile; la sidebar mantiene il
+proprio livello, il proprio sfondo e il trascinamento.
+
+Per lo streaming locale, il parser TypeScript ora conosce il caso in cui il
+template abbia già inserito `<think>` alla fine del prompt. In quel caso il
+primo token nasce nel canale del ragionamento e non nella risposta pubblica.
+La soluzione non dipende dal nome LFM, non filtra il DOM e non modifica il
+bridge C++: usa il prompt reale già prodotto dall'adapter.
+
+### File di prodotto e test modificati
+
+- `mobile/src/App.vue`
+- `mobile/src/components/shell/TalosMobileDownloadCenterTrigger.vue`
+- `mobile/src/components/shell/TalosMobileSidebar.vue`
+- `mobile/src/components/talos/models/TalosMobileLocalRepoDetail.vue`
+- `mobile/src/lib/chat/providers/localAdapter.ts`
+- `mobile/src/lib/chat/thinkStream.ts`
+- `mobile/src/style.css`
+- `mobile/tests/e2e/mobile-model-download-center.e2e.spec.ts`
+- `mobile/tests/unit/chat/localAdapter.test.ts`
+- `mobile/tests/unit/chat/thinkStream.test.ts`
+- `mobile/tests/unit/models/TalosMobileLocalRepoDetail.test.ts`
+- `mobile/tests/unit/shell/TalosMobileDownloadCenterTrigger.test.ts`
+- `mobile/tests/unit/shell/TalosMobileSidebar.test.ts`
+
+### Verifiche già eseguite
+
+- test focalizzati: **106 passati, 0 falliti**;
+- test sidebar finali: verdi;
+- `npm run typecheck`: verde;
+- `npx vitest run`: **6.363 passati, 10 saltati, 0 falliti**;
+- `npx playwright test tests/e2e/mobile-model-download-center.e2e.spec.ts`:
+  **5 passati**;
+- `npx vite build`: verde;
+- `npx cap copy android`: verde;
+- Gradle `:app:compileDebugKotlin :app:compileReleaseJavaWithJavac`: verde;
+- Gradle `:app:assembleDebug`: verde;
+- `git diff --check`: verde, con soli avvisi di normalizzazione CRLF/LF.
+
+`npm run build` resta rosso soltanto sul controllo globale della dimensione
+iniziale: **614288 byte contro limite 614000**. La build Vite termina e la
+soglia non è stata alterata.
+
+### APK finale
+
+- Percorso:
+  `C:\Users\Antonino\Downloads\talos-debug-2026-08-26-post-code-debts-final.apk`
+- SHA-256:
+  `AEE53F439E71A5CEA16AD16098F46B34CCDC8AF58C149D1B4075F2D304F4677E`
+- Installazione sul Pad `2ea6573c`: riuscita (`ai.talos/.MainActivity`).
+
+### Evidenza Pad già raccolta e ispezionata
+
+Cartella completa:
+`C:\Users\Antonino\Desktop\projects\AVM\.claude\pad-debt-campaign-2026-08-26`.
+
+Catture finali più utili:
+
+- `final-tablet-landscape-loaded.png`
+- `final-phone-landscape.png`
+- `final-phone-portrait.png`
+- `final-code-navigation.png`
+- `final-code-list-loaded.png`
+- `final-library-route.png`
+- `final-settings-route.png`
+- `final-model-lab-header.png`
+- `final-models-local-header.png`
+- `05-sidebar-open-atomic.png`
+- `06-sidebar-body-swipe-atomic.png`
+
+Il layout Codice, il composer, la navigazione, la sidebar e il Model Lab sono
+stati ispezionati. La scrollbar Codice resta nascosta, lo scroll resta attivo,
+il composer resta contenuto e il gesto dal body chiude la sidebar.
+
+### Cosa non deve essere dichiarato chiuso
+
+1. **Tablet portrait:** sul Pad la richiesta portrait ha prodotto nuovamente
+   un'immagine landscape. Il dispositivo riportava rotazione `1` e non ha
+   applicato la forma richiesta; `final-tablet-portrait-requested-loaded.png`
+   non è una prova portrait valida.
+2. **Download reale attivo:** non c'era un trasferimento disponibile durante
+   la campagna finale. Il progresso e il menu sopra sidebar sono coperti da
+   unit/E2E, ma manca la cattura Pad con bytes reali in movimento.
+3. **Streaming LFM2.5 reale:** il fix ha test sintetici e regressione completa
+   verdi, ma non è stata avviata una generazione locale finale osservando
+   thinking e tool call durante lo streaming e dopo reload.
+4. **Budget iniziale:** il tripwire 614000 resta rosso; non alzare la soglia
+   per nasconderlo.
+
+### Stato Git
+
+- Branch: `lane/voce-personale`.
+- Base corrente: `8dc14d74 chore(mobile): consolida fix e consegne debiti`.
+- Modifiche correnti: non committate.
+- Push: mai autorizzato.
+- L'owner aveva autorizzato il commit in questa sessione, ma ha poi ordinato
+  lo stop immediato; questa consegna non ha eseguito né commit né push.
+
+### Riassunto semplice
+
+Il codice dei due ultimi debiti è pronto e tutti i test automatici passano.
+L'APK finale è già nei Download ed è stata installata sul Pad. Prima di dire
+"finito" mancano tre prove visibili precise: un vero tablet portrait, un
+download reale in corso e una risposta LFM2.5 osservata mentre viene generata.
+Tutto il resto, inclusi file, test, APK, screenshot e limite del bundle, è
+registrato qui e nel prompt di ripresa.
+
+## Chiusura DEBT-MOBILE-014/015 — agente mobile, 2026-08-26 (sera)
+
+### Precisazione owner e nuovo lavoro
+
+Durante la sessione l'owner ha chiarito un punto della consegna: il bottone
+per scaricare una variante, quando diventa la barra di avanzamento, deve
+portare anche i comandi **pausa/riprendi/annulla**, non solo la percentuale —
+esattamente come già fa il Centro download in testata. È stato aggiunto
+riusando le stesse funzioni già esistenti nello store dei trasferimenti
+(nessun nuovo poller, nessuna nuova dipendenza): premuto realmente sul Pad,
+il ciclo Scarica → Pausa → Riprendi → Annulla (con conferma) funziona per
+intero. Dettagli tecnici, ricerca e file toccati nel ledger e nel dossier.
+
+### DEBT-MOBILE-014 — CHIUSO
+
+Sul Pad, un download vero (repo `MaziyarPanahi/Qwen3-0.6B-GGUF`, mai
+scaricato prima) ha mostrato: icona attiva in testata, bottone trasformato
+nella stessa barra con bytes reali in movimento (0% → 36% → 52%, 232 MB su
+462 MB), il nuovo pulsante Pausa che ha davvero fermato il download (la card
+è passata a "Riprendi"), Riprendi che l'ha rimesso in moto, e Annulla con
+conferma che ha cancellato il file e riportato il bottone allo stato
+iniziale. I modelli di prova sono stati rimossi al termine.
+
+### DEBT-MOBILE-015 — CHIUSO
+
+Sul Pad, con il modello locale LFM2.5-2.6B-Q8_0 e Ragionamento esteso attivo,
+due domande reali hanno mostrato lo streaming dal vivo: durante la
+generazione (catturata a intervalli, non solo alla fine) la bolla pubblica
+non ha mai mostrato `<think>`, marker di chiusura o sintassi di chiamata
+strumento; il ragionamento è comparso in un blocco separato e richiudibile
+sopra la risposta. Dopo un riavvio completo dell'app (`force-stop` +
+riapertura) la risposta persistita è rimasta identica e pulita.
+
+### Cosa resta aperto
+
+**Solo il tablet portrait reale** (eredità di DEBT-MOBILE-001, non di questi
+due debiti): richiede la rotazione fisica del Pad, che nessun comando può
+sostituire — serve l'owner. Appena ruotato, basta uno screenshot per
+chiuderlo.
+
+### Riassunto semplice
+
+I due debiti richiesti sono chiusi con prove vere sul telefono: il download
+si vede scaricare davvero e ora si può mettere in pausa, riprendere o
+annullare direttamente dal bottone; la chat col modello locale non mostra più
+il suo "pensiero" interno mentre scrive, nemmeno per un istante durante la
+generazione, e la risposta resta pulita anche dopo aver chiuso e riaperto
+l'app. L'unica cosa che manca è vedere il tablet fisicamente girato in
+verticale — un blocco più vecchio, non di questi due debiti — perché nessun
+comando da tastiera può ruotare un tablet per davvero.

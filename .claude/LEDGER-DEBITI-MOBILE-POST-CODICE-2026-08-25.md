@@ -789,3 +789,268 @@ Override `wm size` e `wm density` ripristinati ai valori fisici dopo la prova.
 APK finale installata sul Pad e copiata nei Download del PC:
 `C:\Users\Antonino\Downloads\talos-mobile-effort-slider-20260826-162452-8001a3c7f224.apk`.
 SHA-256 `8001a3c7f2241cc057fcd934f24b383b23e1dbc85ced55af1fe1a78bf4623bde`.
+
+## DEBT-MOBILE-014 — continuità download nel Model Lab tablet
+
+### Causa misurata
+
+- `App.vue` passa `hideAppActions=true` a `TalosMobileToolSheet` su ogni
+  tablet. Nelle stazioni Impostazioni, però, `tabletChatRailVisible=false`:
+  quindi né la testata del foglio né la rail tablet montano il centro download.
+- `TalosMobileLocalRepoDetail.vue` mostra sempre il bottone statico
+  `talos-models-download`, anche quando `talosModelTransfers.items` contiene
+  già il trasferimento della variante selezionata.
+- Il popover del centro download usa `z-[100]`, mentre la sidebar globale usa
+  `--talos-z-global-navigation: 110`: il portale esce dal DOM locale ma non
+  annulla questo ordine esplicito. Inoltre Vaul in modalità modal applica
+  `pointer-events: none` al resto del body: anche un livello più alto non è
+  cliccabile finché la sidebar resta aperta.
+
+### Perimetro esatto e simboli
+
+- Modificare `mobile/src/App.vue`: la prop `hide-app-actions` deve nascondere
+  le azioni solo quando la rail tablet che le possiede è davvero visibile.
+- Modificare `mobile/src/components/talos/models/TalosMobileLocalRepoDetail.vue`:
+  aggiungere le sole proiezioni computate della variante selezionata su
+  `talosLocalModels.transfer.items`; il bottone si trasforma nello stesso posto
+  in `role=progressbar`, senza nuovo poller e senza stato duplicato.
+- Modificare `mobile/src/style.css` e
+  `mobile/src/components/shell/TalosMobileDownloadCenterTrigger.vue`: definire
+  e usare un token di overlay sopra la navigazione globale.
+- Modificare `mobile/src/components/shell/TalosMobileSidebar.vue`: mantenere
+  l'overlay e il drawer sopra il contenuto, ma disattivare solo la modalità
+  modal Vaul, che impedisce al popover portaled di ricevere puntatori.
+- Test RED: `mobile/tests/unit/models/TalosMobileLocalRepoDetail.test.ts`,
+  `mobile/tests/unit/shell/TalosMobileDownloadCenterTrigger.test.ts` e
+  `mobile/tests/unit/shell/TalosMobileToolSheet.test.ts`; estendere
+  `mobile/tests/e2e/mobile-model-download-center.e2e.spec.ts` per il percorso
+  Model Lab dettaglio → avvio → barra live → centro download.
+
+### Contratto e gate
+
+- Il match del trasferimento usa `repo`, `revision` e `paths`, non il nome
+  visuale. `haveBytes/totalBytes` alimentano `aria-valuenow`; senza totale il
+  progresso resta indeterminato e non inventa una percentuale.
+- RED: in tablet Impostazioni le azioni app restano presenti; un item reale
+  della variante elimina il bottone e mostra avanzamento; il popover dichiara
+  il layer sopra `--talos-z-global-navigation`.
+- GREEN focalizzato: test unitari sopra e Playwright download-center.
+- Gate finale: typecheck, Vitest completo, build Vite, Gradle debug/release e
+  una sola campagna atomica sul Pad in tablet/telefono portrait/landscape.
+- Rollback: ripristinare la prop, il ramo progress e il solo token overlay; lo
+  store trasferimenti e il backend nativo restano invariati.
+
+Decisione overlay: adattare il root Vaul con `modal=false`. L'overlay e il suo
+z-index restano sopra il fondo, la sidebar resta non dismissibile, ma il browser
+non applica il blocco globale dei puntatori che rende irraggiungibile il menu
+portaled.
+
+### Emendamento owner 2026-08-26 (sera) — pausa/riprendi/annulla nel bottone stesso
+
+Precisazione owner dopo la prima prova Pad: la barra di avanzamento nel
+pannello di dettaglio della variante deve portare anche i comandi di
+pausa/riprendi/annulla, non solo la percentuale — «la sua barra integrata di
+download, stop, annulla, eccetera eccetera». Il pulsante del centro download
+in testata quando l'header globale non è montato era già presente e
+verificato prima di questa richiesta.
+
+Perimetro esatto dell'aggiunta:
+
+- `mobile/src/lib/models/presentation.ts` — nuove funzioni pure condivise
+  `talosTransferCanPause`/`talosTransferCanResume`, spostate qui dal trigger
+  perché ora due componenti devono concordare sullo stesso giudizio sullo
+  stesso `id` di trasferimento.
+- `mobile/src/components/shell/TalosMobileDownloadCenterTrigger.vue` —
+  riusa le due funzioni condivise al posto delle copie locali; nessun
+  comportamento cambiato.
+- `mobile/src/components/talos/models/TalosMobileLocalRepoDetail.vue` —
+  la card della variante selezionata guadagna una riga di comandi
+  (Pausa/Riprendi + Annulla) sotto la barra `role=progressbar` esistente
+  (che resta un contenitore separato: un widget `progressbar` non deve
+  avere figli interattivi, W3C ARIA APG) e una conferma di annullamento
+  identica a quella del Centro download, con le stesse chiavi i18n già
+  presenti (`localModels.downloadCenter.*`, nessuna stringa nuova).
+  `talosPauseManagedModelTransfer`/`talosResumeManagedModelTransfer`/
+  `talosCancelManagedModelTransfer` sono le stesse funzioni dello store
+  condiviso `modelTransfers.ts` già usate dal Centro download: nessun nuovo
+  poller, nessun nuovo stato duplicato.
+
+Decisione upstream: **non** adottare il pattern APG "toggle button con
+`aria-pressed`" per pausa/riprendi (ricerca fatta: W3C ARIA APG Button/Toggle
+consiglia un'etichetta invariata con stato booleano). Riusare invece il
+pattern già in produzione nel Centro download (bottoni distinti che si
+scambiano per stato) perché introdurre un secondo pattern per la stessa
+identica azione, in un secondo punto che governa lo stesso `id` condiviso,
+avrebbe creato un'incoerenza di prodotto peggiore della non conformità APG.
+
+RED/GREEN: quattro scenari nuovi in
+`mobile/tests/unit/models/TalosMobileLocalRepoDetail.test.ts` (pausa chiama
+il comando sull'id giusto, riprendi sostituisce pausa, annulla chiede
+conferma e "continua a conservarlo" la evita, nessun trasferimento non mostra
+comandi). Focalizzati **38/38** verdi (repo detail + trigger). Suite completa
+**675 file passati, 3 saltati; 6.367 test passati, 10 saltati** — 4 in più dei
+6.363 precedenti, zero rossi. Typecheck verde. `git diff --check` pulito.
+
+Gate Pad reale (Q4_K_M poi Q6_K, repo `MaziyarPanahi/Qwen3-0.6B-GGUF`, non
+ancora scaricati): bottone → barra reale con bytes in movimento (0%→36%→52%,
+232 MB/462 MB) → **Metti in pausa** cliccato realmente → la card è passata a
+**Riprendi** (prova che la pausa ha avuto effetto) → **Riprendi** cliccato →
+torna a **Metti in pausa** → **Annulla** cliccato → conferma con lo stesso
+testo del Centro download → **Elimina il download** → il pulsante torna a
+"Scarica Q6_K · 594 MB". Screenshot ispezionati per intero:
+`final-download-014-active-0percent-controls.png`,
+`final-download-014-active-36percent.png`,
+`final-download-014-active-52percent-real-bytes.png`,
+`final-download-014-waiting-cancel-only.png`,
+`final-download-014-paused-resume-button.png`,
+`final-download-014-resumed-pause-button.png`,
+`final-download-014-cancel-confirmation.png`,
+`final-download-014-cancelled-back-to-download-button.png`.
+
+Modelli di prova (Q2_K, Q3_K_M, Q4_K_M dello stesso repo) eliminati dal
+dispositivo al termine della prova: il Pad è tornato ai quattro modelli
+originali.
+
+## DEBT-MOBILE-015 — il prefisso di chat ha già aperto il ragionamento
+
+### Causa misurata
+
+Il parser LFM2/LFM2.5 vendorizzato in
+`mobile/third_party/llama.cpp/common/chat.cpp` dichiara `<think>` come apertura
+del ragionamento e conserva separatamente `generation_prompt`. Il template può
+chiudere il prompt con `<think>`: il primo delta nativo nasce quindi già dentro
+quel blocco e non ripete l'apertura. `talosCreateThinkSplitter()` partiva sempre
+da `testo`, così l'analisi interna e gli eventuali marker tool restavano nella
+bolla fino a `</think>`; solo il risultato finale veniva poi corretto dal parser
+nativo.
+
+### Perimetro esatto e simboli
+
+- Modificare `mobile/src/lib/chat/thinkStream.ts`:
+  `talosCreateThinkSplitter(startsInReasoning?: boolean)` conserva il default
+  compatibile e può iniziare nello stato `ragionamento`.
+- Modificare `mobile/src/lib/chat/providers/localAdapter.ts`: derivare il solo
+  stato iniziale dal prompt reale già renderizzato (`trimEnd().endsWith('<think>')`),
+  senza euristiche su nome/provider/modello.
+- Test RED sintetici in `mobile/tests/unit/chat/thinkStream.test.ts` e
+  `mobile/tests/unit/chat/localAdapter.test.ts`: prompt che termina in
+  `<think>`, primo delta senza apertura, chiusura spezzata, risposta pubblica e
+  marker tool successivi.
+
+### Contratto e gate
+
+- Il ragionamento continua ad arrivare a `onReasoning`; non viene cancellato.
+- La risposta pubblica riceve soltanto il contenuto dopo `</think>` e nessun
+  `<|tool_call_start|>...<|tool_call_end|>`.
+- Prompt che non termina nell'apertura conserva il comportamento attuale: il
+  testo normale non viene inghiottito.
+- GREEN focalizzato: `thinkStream.test.ts` e `localAdapter.test.ts`; regressione
+  su `toolCallNonAschermo.test.ts`, `protocolloFuoriDallaChat.test.ts` e UI
+  streaming. Il Pad finale usa il modello LFM2.5 reale e controlla sia la fase
+  live sia la risposta persistita.
+- Rollback: rimuovere il parametro iniziale e il solo argomento nell'adapter;
+  nessuna modifica al bridge Java/C++ o al formato salvato.
+
+## Stato di arresto e passaggio al main agent — 2026-08-26
+
+L'owner aveva ordinato di interrompere ogni ulteriore implementazione e prova;
+questa sezione fotografava lo stato del worktree a quel momento. È superata
+dalla chiusura sotto: entrambi i debiti hanno ora tutta l'evidenza richiesta,
+raccolta dall'agente mobile nella stessa giornata.
+
+### DEBT-MOBILE-014 — CHIUSO 2026-08-26 (sera)
+
+Implementazione e test automatici erano già verdi (vedi sopra); il gate reale
+mancante — un trasferimento attivo osservato con bytes in movimento — è stato
+eseguito ed è verde, insieme ai comandi pausa/riprendi/annulla aggiunti dopo
+la precisazione owner (emendamento sopra). Evidenza completa nella sezione
+dedicata di questo ledger.
+
+### DEBT-MOBILE-015 — CHIUSO 2026-08-26 (sera)
+
+Gate Pad reale eseguito: modello locale `LFM2.5-2.6B-Q8_0` selezionato con
+Ragionamento esteso attivo, due prompt reali inviati (uno breve, uno lungo per
+avere più margine di osservazione durante lo streaming). Screenshot multipli
+catturati **durante** la generazione (non solo alla fine), a intervalli di
+~1 secondo:
+
+- `final-streaming-015-live-frame-no-think-markers.png` — frame a metà
+  streaming (punti 6-8 di 10, cursore attivo visibile a fine riga): testo
+  pubblico pulito, nessun `<think>`/`</think>`/`<|tool_call_start|>` in
+  nessun punto osservato.
+- `final-streaming-015-reasoning-block-collapsed-separate.png` — il
+  ragionamento vive in un blocco "🧠 Ragionamento" separato e collassato
+  (freccia per espanderlo), sopra la risposta pubblica; non fa parte del
+  testo della bolla.
+- `final-streaming-015-completed-clean-response.png` — risposta finale
+  completa (10 punti), pulita.
+- `final-streaming-015-clean-after-reload.png` — dopo `am force-stop` e
+  riavvio dell'app, la chat si riapre sulla stessa sessione con la risposta
+  persistita identica, ancora pulita.
+
+Il modello ha interpretato "sette per otto" come divisione (7÷8 = 0,875) nel
+primo prompt di prova — comportamento del modello, non un difetto della UI;
+irrilevante ai fini del debito, che riguarda l'assenza dei marker nel canale
+pubblico, non l'esattezza aritmetica.
+
+### Gate globali e limite noto — aggiornato 2026-08-26 (sera)
+
+- `npm run typecheck`: verde.
+- `npx vitest run`: **675 file passati, 3 saltati; 6.367 test passati, 10
+  saltati, 0 falliti**.
+- `git diff --check`: verde; restano soltanto avvisi CRLF/LF non bloccanti.
+- `npx vite build` + `npx cap copy android`: verdi. `npm run build` continua a
+  fermarsi solo sul tripwire globale preesistente del chunk iniziale
+  (~614.29 kB contro 614.000 byte); soglia non toccata, fuori dal perimetro di
+  questi due debiti.
+- Gradle `:app:assembleDebug`: `BUILD SUCCESSFUL`.
+- APK finale installata sul Pad e copiata nei Download del PC:
+  `C:\Users\Antonino\Downloads\talos-mobile-debt014-controlli-download-20260826-194641-d49c7bd8b7e9.apk`.
+- SHA-256: `d49c7bd8b7e93e5bcc8d5fcdc6135efe9b6059877522068eee386d6cf5060131`.
+- Build precedente (senza i controlli pausa/riprendi/annulla), per riferimento:
+  `talos-debug-2026-08-26-post-code-debts-final.apk`,
+  SHA-256 `AEE53F439E71A5CEA16AD16098F46B34CCDC8AF58C149D1B4075F2D304F4677E`.
+
+### Il solo gate ancora aperto — tablet portrait reale (DEBT-MOBILE-001, non 014/015)
+
+Non riguarda DEBT-MOBILE-014/015: è un gate ereditato da DEBT-MOBILE-001,
+mai chiuso perché richiede la rotazione **fisica** del Pad, non riproducibile
+da programma. Il Pad ha reso tablet landscape e le due forme telefono; la
+richiesta tablet portrait via `wm size`/`user_rotation` ha prodotto di nuovo
+un frame landscape perché il dispositivo riportava rotazione `1` e ignorava
+lo scambio dimensioni — `final-tablet-portrait-requested-loaded.png` non è
+evidenza portrait valida, come già registrato. Nessun comando adb sostituisce
+la rotazione fisica del dispositivo: serve l'owner.
+
+### File esatti ancora non committati — aggiornato 2026-08-26 (sera)
+
+- `.claude/DOSSIER-RICERCA-DEBITI-MOBILE-POST-CODICE-2026-08-25.md`
+- `.claude/LEDGER-DEBITI-MOBILE-POST-CODICE-2026-08-25.md`
+- `.claude/CONSEGNA-DEBITI-MOBILE-POST-CODICE-2026-08-25.md`
+- `mobile/src/App.vue`
+- `mobile/src/components/shell/TalosMobileDownloadCenterTrigger.vue`
+- `mobile/src/components/shell/TalosMobileSidebar.vue`
+- `mobile/src/components/talos/models/TalosMobileLocalRepoDetail.vue`
+- `mobile/src/lib/chat/providers/localAdapter.ts`
+- `mobile/src/lib/chat/thinkStream.ts`
+- `mobile/src/lib/models/presentation.ts`
+- `mobile/src/style.css`
+- `mobile/tests/e2e/mobile-model-download-center.e2e.spec.ts`
+- `mobile/tests/unit/chat/localAdapter.test.ts`
+- `mobile/tests/unit/chat/thinkStream.test.ts`
+- `mobile/tests/unit/models/TalosMobileLocalRepoDetail.test.ts`
+- `mobile/tests/unit/shell/TalosMobileDownloadCenterTrigger.test.ts`
+- `mobile/tests/unit/shell/TalosMobileSidebar.test.ts`
+
+I due prompt di ripresa della sessione precedente
+(`PROMPT-RIPRESA-MAIN-AGENT-DEBITI-MOBILE-2026-08-26.md` e
+`PROMPT-CLAUDE-MOBILE-DEBITI-014-015-2026-08-26.md`) restano non tracciati sul
+disco per riferimento storico, senza essere aggiunti al commit: sono materiale
+di consegna fra sessioni, non parte del prodotto.
+
+Le immagini/XML sotto `.claude/pad-debt-campaign-2026-08-26/` sono evidenze
+non tracciate. Le catture finali selezionate per questa chiusura hanno il
+prefisso `final-download-014-*` e `final-streaming-015-*`; le decine di
+catture esplorative (`gate2-*`, `gate3-*`, `verify*`, `stream*`, `live*`,
+`nav*`, `cleanup*`, `ui-*.xml`) restano sul disco per tracciabilità ma non
+entrano nel commit.

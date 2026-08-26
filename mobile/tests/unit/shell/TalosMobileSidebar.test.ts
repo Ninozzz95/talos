@@ -67,6 +67,7 @@ describe('TalosMobileSidebar (F1-T3)', () => {
         const overlay = document.querySelector('[data-slot="drawer-overlay"]') as HTMLElement
         expect(sidebar.className).toContain('var(--talos-z-global-navigation)')
         expect(overlay.className).toContain('var(--talos-z-global-navigation)')
+        expect(overlay.className).toContain('pointer-events-none')
     })
 
     it('DEBT-MOBILE-008: Vaul does not compete with the explicit sidebar gesture', async () => {

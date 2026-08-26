@@ -440,3 +440,69 @@ immagini caricate usano `cdn-uploads.huggingface.co`. La scheda converte solo
 quel tag `<img>` in Markdown, poi il renderer esistente abilita `img` soltanto
 per quel contesto e DOMPurify mantiene la allow-list/validazione URI; la Chat
 continua a omettere le immagini esterne.
+
+## Aggiornamento ricerca — DEBT-MOBILE-014/015 — 2026-08-26
+
+### Download, progresso e livelli
+
+- WAI-ARIA `progressbar`: il valore è readonly; `aria-valuenow` va omesso
+  quando il totale non è determinabile:
+  `https://www.w3.org/TR/wai-aria/#progressbar`.
+- WAI-ARIA APG, proprietà di range: `aria-valuemin`, `aria-valuemax` e valore
+  corrente devono descrivere il progresso reale:
+  `https://www.w3.org/WAI/ARIA/apg/practices/range-related-properties/`.
+- Reka UI Popover: il contenuto viene portato con `PopoverPortal`, ma la
+  posizione di livello resta responsabilità CSS dell'app:
+  `https://reka-ui.com/docs/components/popover`.
+- MDN, stacking context: un `z-index` maggiore nello stesso contesto/top-level
+  dipende dall'ordine numerico esplicito, non dal fatto che il nodo sia stato
+  portato altrove:
+  `https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Positioned_layout/Stacking_context`.
+
+Decisione: adattare i componenti esistenti, senza nuove dipendenze. Riutilizzare
+lo store trasferimenti e il suo poller; la pagina dettaglio è solo una
+proiezione. Introdurre un token TALOS sopra la navigazione globale invece di un
+altro numero locale.
+
+### Streaming e prefisso di ragionamento
+
+- llama.cpp `common/chat.h`: `generation_prompt` è il prefisso assistant già
+  inserito nel prompt ed è usato per determinare lo stato iniziale del parser:
+  `https://github.com/ggml-org/llama.cpp/blob/master/common/chat.h`.
+- llama.cpp `common/chat.cpp`: il parser specializzato LFM2/LFM2.5 dichiara
+  `<think>`/`</think>`, `generation_prompt` e marker tool LFM:
+  `https://github.com/ggml-org/llama.cpp/blob/master/common/chat.cpp`.
+- Hugging Face, Chat Response Parsing: quando il prefisso ha già aperto una
+  regione thinking, il parser streaming espone eventi iniziali prima dei byte
+  generati; non si può aspettare un secondo marker dal modello:
+  `https://huggingface.co/docs/transformers/main/en/chat_response_parsing`.
+- Hugging Face, Chat Templates: un generation prompt/prefill può lasciare
+  aperto il campo di ragionamento che il modello continua:
+  `https://huggingface.co/docs/transformers/main/en/chat_templating`.
+
+Decisione: adattare il separatore AVM esistente con un solo stato iniziale
+esplicito derivato dal prompt effettivo. Non duplicare il parser C++, non
+riconoscere modelli per nome e non filtrare il DOM dopo il rendering.
+
+## Aggiornamento ricerca — controlli pausa/riprendi/annulla — 2026-08-26 (sera)
+
+### Fonte primaria consultata
+
+- W3C WAI-ARIA Authoring Practices Guide, pattern Button (toggle button):
+  un bottone toggle mantiene l'etichetta invariata e comunica lo stato con
+  `aria-pressed`, non scambiando testo/icona.
+  `https://www.w3.org/WAI/ARIA/apg/patterns/button/`
+
+### Decisione applicata
+
+Il pattern APG puro (etichetta fissa + `aria-pressed`) non è stato adottato:
+il repo ha già un controllo pausa/riprendi in produzione
+(`TalosMobileDownloadCenterTrigger.vue`) che usa bottoni distinti scambiati
+per stato, passato per la propria ricerca in una fase precedente del debito.
+Introdurre il pattern APG *solo* nel nuovo punto di accesso allo stesso `id`
+di trasferimento condiviso avrebbe reso lo stesso comando visivamente/
+semanticamente diverso a seconda di dove viene toccato — un'incoerenza di
+prodotto giudicata peggiore della non conformità letterale all'APG. La logica
+di stato (`talosTransferCanPause`/`talosTransferCanResume`) è stata invece
+estratta in un modulo condiviso (`lib/models/presentation.ts`) così i due
+punti non possono mai mostrare stati diversi per lo stesso trasferimento.

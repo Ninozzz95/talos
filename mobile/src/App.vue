@@ -1370,7 +1370,7 @@ onBeforeUnmount(async () => {
                 <TalosMobileToolSheet
                     v-if="isStation"
                     :title="sheetTitle"
-                    :hide-app-actions="tabletLayout.isTablet.value"
+                    :hide-app-actions="tabletLayout.isTablet.value && tabletChatRailVisible"
                     :presentation="settingsStore.state.chat_layout.mobile_window_presentation"
                     :parent-back="stationParent ? goToStationParent : null"
                     :shell-back="talosIndietro"
