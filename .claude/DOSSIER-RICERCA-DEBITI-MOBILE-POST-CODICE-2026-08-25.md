@@ -1,5 +1,57 @@
 # Dossier di ricerca — debiti mobile post-Codice — 2026-08-25
 
+## DEBT-MOBILE-002 — Verifica GPU: diagnosi e ricerca (fase 1)
+
+### Percorso reale verificato
+
+- La prima scelta di un profilo locale passa da
+  `mobile/src/stores/chatController.ts::decideLocalEngineProbeConsent`.
+  Con `granted` la modale si chiude subito e il sondaggio parte in background
+  tramite `talosLocalEngineLazy().then(...qualify...)`.
+- La modale è
+  `mobile/src/components/shell/TalosLocalEngineProbeConsentSheet.vue`: non
+  riceve né espone uno stato di esecuzione; il pulsante «Sì, verifica ora»
+  emette soltanto `granted`.
+- Il comando delle impostazioni è
+  `mobile/src/components/talos/settings/TalosMobileSettingsPrivacyPanel.vue::runLocalEngineProbeFromSettings`.
+  Mostra «In corso…» finché la Promise torna, ma non ha un ramo `catch`: un
+  rifiuto del ponte nativo resetta `busy` nel `finally` e lascia la scheda senza
+  esito né errore.
+- La qualificazione reale è `mobile/src/services/localEngine.ts::talosQualifyLocalBackend`
+  e il ponte Android è
+  `mobile/android/app/src/main/java/ai/talos/TalosLlamaPlugin.java::qualifyBackend`.
+  Sul Pad la CPU ha prodotto nel logcat un verdetto `VALID` in circa 5 secondi;
+  quindi il percorso nativo esiste e il lavoro è reale, non un dummy. Nel test
+  osservato l'esito UI non è comparso dopo il completamento nativo perché la
+  superficie era stata lasciata/riaperta durante la corsa: il percorso non
+  possiede uno stato persistente o un errore osservabile fuori dal componente.
+
+### Ricerca web ufficiale (2026-08-25)
+
+- Android Developers, **Foreground services overview**, aggiornato
+  2026-08-14: un'operazione lunga e percepibile deve rendere visibile il fatto
+  che sta consumando risorse tramite stato/notifica; non si deve presentare
+  come completata mentre corre.
+  https://developer.android.com/develop/background-work/services/fgs
+- Android Developers, **Services overview**: il lavoro bloccante deve stare
+  fuori dal thread principale e il servizio non fornisce da solo una UI.
+  https://developer.android.com/develop/background-work/services
+- Android Developers, **Observe intermediate worker progress**: quando un
+  lavoro espone avanzamento, la UI deve osservarlo; per questa qualificazione
+  breve non esiste una percentuale nativa affidabile, quindi lo stato corretto
+  è `running` fino all'esito, non una percentuale inventata.
+  https://developer.android.com/develop/background-work/background-tasks/persistent/how-to/observe
+
+### Decisione upstream
+
+Adattare il pattern ufficiale di stato osservabile senza introdurre un nuovo
+WorkManager/foreground-service: la verifica viene avviata da una schermata
+visibile, è bounded e già eseguita su `qualificationWorker`; aggiungere un
+servizio per questa singola corsa allargherebbe il perimetro e non risolverebbe
+il difetto UI. La UI riceverà uno stato osservabile `running/success/error` e
+renderizzerà sempre l'esito, anche quando il ponte rifiuta la chiamata. Nessuna
+percentuale finta.
+
 Owner: Antonino  
 Sottosistema: TALOS UI mobile (`mobile/`)  
 Pin temporale delle fonti: 2026-08-25

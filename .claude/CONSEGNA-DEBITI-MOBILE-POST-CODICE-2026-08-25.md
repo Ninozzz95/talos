@@ -129,3 +129,104 @@ portrait; non dichiaro quella parte già verificata.
 
 Rotazione fisica del Pad e ripetizione portrait; poi commit della fase e presa
 in carico di DEBT-MOBILE-002 (verifica GPU reale).
+
+## Fase DEBT-MOBILE-002 — diagnosi, RED e GREEN UI
+
+Stato: **GREEN focalizzato; gate largo e Pad finale ancora da eseguire**.
+
+### Cosa è stato verificato
+
+- Il percorso reale della prima scelta locale passa da
+  `chatController.decideLocalEngineProbeConsent`; la modale si chiudeva senza
+  una superficie di stato.
+- Il comando Privacy passava da
+  `TalosMobileSettingsPrivacyPanel.runLocalEngineProbeFromSettings`; in caso
+  di rifiuto nativo il `finally` toglieva il busy senza mostrare l'errore.
+- Sul Pad il ponte nativo ha prodotto `TalosQualify: cpu: verdetto=VALID` in
+  circa cinque secondi: la verifica è reale e non un pannello dimostrativo.
+
+### Modifica applicata
+
+- La prima verifica pubblica ora un toast persistente «In corso…» e lo sostituisce
+  con esito reale, temperatura già misurata, risultato inconclusivo o errore.
+- Privacy mantiene il bottone disabilitato durante la corsa e pubblica il
+  rifiuto del ponte nel toast globale; nessun errore resta silenzioso.
+- Nessuna modifica al ponte Android, nessuna percentuale inventata e nessuna
+  nuova stringa: l'errore riusa il messaggio generico già tradotto.
+
+### RED → GREEN
+
+- RED osservato: 82 test verdi, 2 rossi e una rejection non gestita; mancavano
+  toast di caricamento/esito e gestione del rifiuto.
+- GREEN focalizzato: `tests/unit/chat/chatController.test.ts`, 84/84 verdi,
+  inclusi caricamento, successo e rifiuto del ponte.
+
+### Riassunto semplice
+
+Ora, quando premi «Sì, verifica ora», la modale può chiudersi per non bloccare la
+chat, ma non sparisce più nel nulla: compare chiaramente che la verifica è in
+corso e poi arriva il risultato. Se il telefono o il ponte non riescono a
+completarla, l'app lo dice invece di tornare silenziosamente allo stato iniziale.
+
+### Prossimo gate
+
+## Fase DEBT-MOBILE-002 — gate statici
+
+Stato: **verde**.
+
+- `npm run typecheck`: verde.
+- `npm run build`: verde; controllo iniziale automatico entro il budget
+  JavaScript `614.000` byte e parità verde. Il primo tentativo aveva superato
+  il limite (`614.684` byte); il probe è stato spostato nel modulo motore già
+  lazy, senza alzare la soglia.
+- `npx vitest run`: 674 file verdi, 3 saltati; 6.338 test verdi, 10 saltati.
+- Test focalizzati del controller: 84/84 verdi, compreso successo, caricamento
+  e rifiuto del ponte.
+
+### Riassunto semplice
+
+Il fix ora passa tutti i controlli automatici del progetto. La verifica non
+appesantisce l'avvio dell'app: il motore viene caricato solo quando serve,
+come prima. Il controllo iniziale resta invariato e non è stato aggirato.
+
+### Prossimo gate
+
+Compilare e installare l'APK debug sul Pad, copiarla nella cartella Download
+del PC, quindi controllare con screenshot interi la prima scelta locale e il
+comando Privacy prima/durante/dopo. La rotazione portrait del debito 001 resta
+indipendentemente pendente.
+
+## Fase DEBT-MOBILE-002 — APK e Pad reale
+
+Stato: **verde sul percorso Privacy; prima scelta locale da ripetere con consenso azzerato; portrait del debito 001 ancora pendente**.
+
+### APK installata e consegnata
+
+- `C:\Users\Antonino\Downloads\TALOS-dev-2026-08-26-debt-002.apk`
+- 54.903.445 byte
+- SHA-256 `5c445d577fafd056e454dee6a6985d40fb6d71d809edc6f60bedcf5968ed9779`
+- installazione sul Pad `2ea6573c`: `Success`
+
+### Evidenza visiva interamente ispezionata
+
+- `C:\Users\Antonino\Desktop\projects\AVM\.claude\pad-debt-002-account.png` —
+  apertura fisica di Centro impostazioni; sidebar, testata, card e barra di
+  sistema coerenti.
+- `C:\Users\Antonino\Desktop\projects\AVM\.claude\pad-debt-002-privacy-real.png` —
+  ingresso fisico in Privacy e autorizzazioni; nessuna compenetrazione e
+  nessun elemento tagliato.
+- `C:\Users\Antonino\Desktop\projects\AVM\.claude\pad-debt-002-privacy-scroll1.png`
+  e `pad-debt-002-privacy-scroll2.png` — scroll reale fino alla card GPU;
+  contenuti e card sorelle restano leggibili.
+- `C:\Users\Antonino\Desktop\projects\AVM\.claude\pad-debt-002-probe-running.png` —
+  dopo il tap reale, la card mostra il risultato persistente del probe già
+  misurato; il test automatico copre lo stato intermedio «In corso…».
+
+### Riassunto semplice
+
+L'APK che ho installato è la stessa copia disponibile nei Download del PC.
+Sul Pad la sezione Privacy ora non chiude più il tentativo senza spiegazione:
+il comando resta usabile, la card mostra lo stato reale già registrato e la
+verifica non inventa percentuali o dati. La prima scelta locale va ancora
+ripetuta partendo da un consenso azzerato, perché su questo Pad il consenso è
+già stato registrato durante la riproduzione precedente.

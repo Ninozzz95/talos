@@ -3,7 +3,8 @@
 Owner: Antonino
 
 Stato: **DEBT-MOBILE-001 verde su landscape, portrait fisico pendente**;
-DEBT-MOBILE-002…009 registrati
+DEBT-MOBILE-002 verde su statici e percorso Privacy del Pad, prima scelta locale
+da ripetere con consenso azzerato; DEBT-MOBILE-003…009 registrati
 
 Ordine vincolante: iniziare diagnosi, ricerca, ledger e fix soltanto dopo la
 chiusura completa delle fasi Codice/Harness in corso.
@@ -28,6 +29,13 @@ convergere sul contratto safe-area canonico, senza correggere soltanto lo
 screenshot allegato.
 
 ## DEBT-MOBILE-002 — Verifica GPU senza avanzamento reale
+
+Stato: **GREEN focalizzato; gate largo e Pad ancora pendenti**.
+
+La verifica GPU nativa è stata riprodotta sul Pad (CPU `VALID` in logcat). La
+prima scelta locale ora mostra un toast persistente durante la corsa e un esito
+o errore alla fine; Privacy mantiene il loading e mostra il rifiuto del ponte.
+Restano da eseguire suite/build/APK e la verifica visiva sul Pad.
 
 Alla prima scelta di un modello locale compare la modale di verifica GPU, ma
 «Verifica ora» la chiude senza loading né prova visibile. In Privacy e
