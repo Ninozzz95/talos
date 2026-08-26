@@ -5723,9 +5723,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             // stesso modulo mockato, in volo insieme (questo e il warm-load
             // di P3-1 sotto), sono un deadlock riprodotto, non un'ipotesi —
             // vedi il commento nel suo file.
-            void talosLocalEngineLazy().then(
-                ({ talosQualifyLocalBackend }) => talosQualifyLocalBackend(pending.path),
-            )
+            void talosLocalEngineLazy()
+                .then(({ talosRunProbe }) => talosRunProbe(pending.path))
         }
     }
 

@@ -23,6 +23,7 @@ import {
 } from '@/services/devicePermissions'
 import { useChatController } from '@/stores/chatController'
 import { useSettingsStore } from '@/stores/settings'
+import { useTalosMobileToasts } from '@/stores/toasts'
 import type { TalosLocalBackendQualification } from '@/services/localEngine'
 
 /**
@@ -212,6 +213,7 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
  */
 const controller = useChatController()
 const settings = useSettingsStore()
+const toasts = useTalosMobileToasts()
 // `?? 'unset'`: uno store finto in un test che non conosce ancora questo
 // campo non deve far cadere l'intera pagina — la riga tace col suo stato di
 // partenza vero, non con un errore.
@@ -255,6 +257,8 @@ async function runLocalEngineProbeFromSettings(): Promise<void> {
             getConsent: () => localEngineProbeConsent.value,
             setConsent: (consent) => settings.setLocalEngineProbeConsent({ consent }),
         })
+    } catch {
+        toasts.push({ message: t('rejectGeneric'), durationMs: 10000 })
     } finally {
         localEngineProbeRunning.value = false
     }
