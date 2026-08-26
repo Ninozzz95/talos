@@ -708,6 +708,8 @@ export const TALOS_IT_MESSAGES = {
         messagePlaceholderEllipsis: 'Scrivi a TALOS...',
         sendMessage: 'Invia messaggio',
         stopGenerating: 'Interrompi generazione',
+        expandComposer: 'Espandi a tutto schermo',
+        collapseComposer: 'Torna alla dimensione normale',
         attachFiles: 'Allega file',
         takePhoto: 'Scatta una foto',
         chooseFromLibrary: 'Scegli dalla Libreria',
@@ -797,6 +799,7 @@ export const TALOS_IT_MESSAGES = {
         discardDictation: 'Annulla la dettatura',
         stopDictation: 'Interrompi dettatura',
         dictate: 'Detta',
+        dictateAppend: 'Detta altro, aggiungendolo al testo',
         startingDictation: 'Avvio dettatura…',
         dictationErrors: {
             permissionDenied: 'Consenti l’accesso al microfono per usare la dettatura.',
