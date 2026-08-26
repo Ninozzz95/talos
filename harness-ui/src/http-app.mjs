@@ -215,6 +215,17 @@ function requireNomeBody(body) {
   return body.nome;
 }
 
+/** ⛔ Un'allowlist di UNA chiave sola, come requireTaskIdBody — solo la FORMA, mai vuoto (un comando vuoto non esegue niente di utile ed è un segno di un chiamante rotto). */
+function requireComandoBody(body) {
+  const chiavi = Object.keys(body ?? {});
+  if (chiavi.length !== 1 || chiavi[0] !== 'comando' || typeof body.comando !== 'string' || body.comando.trim().length === 0) {
+    const errore = new Error('Corpo non valido: atteso {comando}');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  return body.comando;
+}
+
 /** Scrive un evento AG-UI come frame SSE. Torna false (e non scrive) se la risposta è già chiusa. */
 function scriviEventoSse(res, evento) {
   if (res.writableEnded || res.destroyed) return false;
@@ -413,6 +424,35 @@ export function createHttpApp({
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ compattato: esito.compattato }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    const shellMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/shell$/.exec(url.pathname);
+    if (shellMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try {
+          sessionId = decodeURIComponent(shellMatch[1]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const corpo = await leggiCorpoJson(req);
+        const comando = requireComandoBody(corpo);
+        const esito = sessionRegistry.shell(sessionId, comando);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { avviaSessione, compattaSessione } from '../src/agent-service.mjs';
+import { avviaSessione, compattaSessione, eseguiComandoDiretto } from '../src/agent-service.mjs';
 
 // `talosLavoraFn` finto: agent-service.mjs non deve mai far girare un vero
 // talosLavora per essere provato — quello ha già i suoi 33 test in
@@ -257,4 +257,44 @@ test('⛔ verso contrario: se il modello rifiuta (401, non ritentabile), compatt
 
   assert.equal(risultato.compattato, false);
   assert.deepEqual(risultato.messaggi, messaggiFinali);
+});
+
+// eseguiComandoDiretto — `!comando` nel composer (piano §1.3-BIS.T, seconda
+// metà). Mai un vero wsl.exe/spawn in questi test: eseguiComandoSandboxatoFn
+// iniettata, come talosLavoraFn sopra.
+
+test('eseguiComandoDiretto emette RunStarted, ToolCallStart/Args, ToolCallResult, RunFinished — in quest\'ordine', async () => {
+  const eventi = [];
+  const eseguiComandoSandboxatoFn = async (comando, cartella) => {
+    assert.equal(comando, 'echo ciao');
+    assert.equal(cartella, '/tmp/cartella-sessione');
+    return { codice: 0, testo: 'ciao\n', enforcement: 'wsl2' };
+  };
+
+  const risultato = await eseguiComandoDiretto({
+    cartella: '/tmp/cartella-sessione', comando: 'echo ciao', onEvento: (e) => eventi.push(e), eseguiComandoSandboxatoFn,
+  });
+
+  assert.deepEqual(eventi.map((e) => e.type), ['RunStarted', 'ToolCallStart', 'ToolCallArgs', 'ToolCallResult', 'RunFinished']);
+  assert.equal(eventi[1].toolCallName, 'shell', 'lo stesso nome attrezzo che il modello userebbe dentro talosLavora — un solo vocabolario');
+  assert.equal(eventi[1].toolCallId, eventi[2].toolCallId, 'ToolCallArgs deve riferirsi allo STESSO toolCallId di ToolCallStart');
+  assert.equal(eventi[1].toolCallId, eventi[3].toolCallId, 'e ToolCallResult pure');
+  assert.match(eventi[3].content, /exit 0 \[sandbox: wsl2\]/, 'il livello usato e\' dichiarato nel testo, mai taciuto');
+  assert.match(eventi[3].content, /ciao/);
+  assert.deepEqual(eventi[4].outcome, { type: 'success' });
+  assert.equal(risultato.ok, true);
+  assert.equal(risultato.enforcement, 'wsl2');
+});
+
+test('⛔ verso contrario: un\'uscita diversa da zero NON diventa un RunError — solo un\'informazione nel testo, come per "prova"', async () => {
+  const eventi = [];
+  const eseguiComandoSandboxatoFn = async () => ({ codice: 1, testo: 'comando fallito', enforcement: 'none' });
+
+  await eseguiComandoDiretto({
+    cartella: '/tmp/x', comando: 'false', onEvento: (e) => eventi.push(e), eseguiComandoSandboxatoFn,
+  });
+
+  const finale = eventi.at(-1);
+  assert.equal(finale.type, 'RunFinished', 'un\'uscita non-zero è informazione, non un guasto del SERVIZIO — vedi la stessa distinzione già in esitoInEventoFinale');
+  assert.deepEqual(finale.outcome, { type: 'success' });
 });
