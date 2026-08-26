@@ -1852,7 +1852,25 @@
     composerInput.rows = Math.min(5, Math.max(1, explicitLines));
   }
 
+  /*
+   * ⭐⭐⭐ 26/8 — il trigger su desktop standalone. Owner: "abbiamo già la
+   * grammatica... va adattata", non una decisione UX da inventare da zero.
+   * La grammatica è openRealTaskSheet() (26/8, mattina: porta i task veri
+   * dal corpus, mai collegata a un tocco) — su mobile resta non collegata
+   * perché la superficie "Codice" è negoziata in OTTO fasi (non è mia da
+   * riaprire), ma su desktop standalone non c'è quel vincolo: il backend
+   * oggi sa far partire SOLO un task del corpus (talosLavora vuole una
+   * `cartella` e una `consegna` note, non un prompt libero — piano
+   * `elegant-spinning-dongarra.md` §1.5, Opzione B esplicitamente fuori
+   * fase), quindi mostrare qui il reset da chat vuota sarebbe demo, non
+   * realtà. embedded (mobile) invariato bit per bit — stesso identico
+   * comportamento di sempre, zero rischio sulla suite Pad-verificata.
+   */
   function createNewSession() {
+    if (!HOST().classList.contains('talos-embedded')) {
+      openRealTaskSheet();
+      return;
+    }
     state.session = 'Nuova sessione';
     sessionTitle.textContent = state.session;
     $$('.session-item').forEach((item) => item.classList.remove('active'));
