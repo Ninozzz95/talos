@@ -2445,4 +2445,16 @@
   renderReviewFile('composer');
   autoGrowTextarea();
   syncVisualViewport();
+  /*
+   * ⛔ 26/8 — provato e SCARTATO: aggiungere qui una chiamata a
+   * aggiornaElencoSessioniReali() per sincronizzare la sidebar all'avvio.
+   * Sembrava un buco (le sette funzioni di sessione la richiamano dopo
+   * ogni azione, ma nessuna all'avvio), ma DUE test lo smentiscono:
+   * CODE-COMPOSER-DEMO-SEND-01 (mount standalone, senza `talos-embedded`)
+   * e HARNESS-BOARD-MOBILE-HONESTY-01 (mount embedded) pretendono ENTRAMBI
+   * zero fetch al mount — non solo in embedded. È lo stesso principio
+   * della Board (ensureCampaignBoard/loadCampaigns, mai chiamate al boot,
+   * solo al cambio vista): il boot non fa MAI una chiamata di rete propria,
+   * a prescindere da standalone/embedded. Non un buco: design deliberato.
+   */
 })();
