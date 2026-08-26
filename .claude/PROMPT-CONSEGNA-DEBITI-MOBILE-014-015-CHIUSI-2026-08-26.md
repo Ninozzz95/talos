@@ -20,7 +20,7 @@ pubblica (015), tablet portrait reale (001, mai chiuso prima) — sono stati
 completati in questa sessione. Due commit su `lane/voce-personale`, **nessun
 push**.
 
-## I due commit, non spinti
+## I due commit di codice, non spinti
 
 ```
 64d17ea fix(mobile): chiude il gate tablet portrait reale (DEBT-MOBILE-001)
@@ -34,6 +34,45 @@ verificato **indipendentemente** durante la sessione da chi ha rivisto il
 lavoro (typecheck pulito, `git diff --check` pulito, i 5 file di test dei
 due debiti rilanciati a mano — 110/110 verdi) e dichiarato approvato così
 com'è, nessuna correzione richiesta.
+
+### ⛔ Incidente di sincronizzazione — la terza modifica (documentazione)
+
+Questa stessa working directory (`AVM` su `lane/voce-personale`) è condivisa
+in scrittura con una sessione parallela sul filone Harness UI (commit
+`e3ede324`, `c6ecf153`, poi `5128838b` durante questa chiusura). Il terzo
+giro di questa sessione — l'aggiornamento del registro
+`.claude/DEBITI-MOBILE-POST-CODICE-2026-08-25.md` e la scrittura di questo
+stesso prompt — è stato messo in staging con `git add` esplicito sui due
+soli file, ma **prima che arrivasse il mio `git commit`, la sessione
+harness-ui ha committato lei stessa** (`5128838b`, "porta fork/resume/
+compact/elenco sessioni/avvio da corpus"): il suo commit ha fotografato
+l'INTERO indice condiviso in quel momento, inglobando anche i miei due file
+già staged. Il mio `git commit` successivo ha trovato l'indice vuoto
+("nothing to commit") perché era già stato commesso — da un altro commit,
+sotto un altro messaggio.
+
+**Contenuto verificato integro**: `git show 5128838b -- .claude/DEBITI-MOBILE-POST-CODICE-2026-08-25.md`
+mostra esattamente il diff atteso (le due sezioni DEBT-MOBILE-014/015 più
+l'aggiornamento dello stato), e il file di questo prompt è presente per
+intero (185 righe). Nessun dato perso, nessun contenuto alterato — solo il
+messaggio di commit non descrive questo lavoro, e la cronologia mescola due
+filoni indipendenti in un unico commit.
+
+**Non ho riscritto la cronologia** (`reset`/`rebase`) per separare i due
+lavori: un'altra sessione era ancora attiva sullo stesso branch nello stesso
+istante, e riscrivere la storia sotto i suoi piedi sarebbe stato più
+pericoloso del problema stesso. Il fatto resta solo documentato qui.
+
+**Da segnalare a chi coordina le sessioni parallele**: due sessioni Claude
+che condividono la stessa working directory git (non worktree separati)
+possono intrecciare i propri commit quando entrambe fanno `git add` seguito
+da `git commit` in una finestra temporale vicina — l'indice è unico e
+condiviso, non isolato per sessione. Se il pattern si ripete, la cura è
+`git worktree add` per ogni sessione parallela (branch diversi che
+convergono con merge/rebase espliciti), non la disciplina già seguita qui
+(percorsi espliciti, mai `-A`) che protegge dal raccogliere lavoro
+*ALTRUI dentro il proprio commit*, ma non dal fenomeno opposto — il proprio
+lavoro raccolto dentro *un commit altrui*.
 
 **Il push resta l'unica azione non eseguita.** Regola vincolante del
 progetto (`.claude/MEMORIA-REGOLE.md` → «I COMMIT SÌ, il PUSH si CHIEDE»):
