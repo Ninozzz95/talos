@@ -84,6 +84,7 @@ const TOOL_CHIUSURA = '</tool_call>'
 const DA_BUTTARE = [
     { apre: TOOL_APERTURA, chiude: TOOL_CHIUSURA },
     { apre: '<tools>', chiude: '</tools>' },
+    { apre: '<|tool_call_start|>', chiude: '<|tool_call_end|>' },
 ] as const
 
 /** La prima delle aperture da buttare che compare, con la sua chiusura. */

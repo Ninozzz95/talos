@@ -5,12 +5,246 @@ Sottosistema proprietario: TALOS UI mobile (`mobile/`)
 
 ## Regole di avanzamento
 
-- Un debito alla volta, nell'ordine DEBT-MOBILE-001…009.
+- I fix di codice vengono chiusi nell'ordine DEBT-MOBILE-001…012; il Pad non
+  viene più usato come gate intermedio.
 - Ogni debito: riproduzione, ricerca primaria, ledger emendato, RED, GREEN,
   regressioni, build, Pad reale e aggiornamento consegna.
 - Ogni regressione scoperta riceve nome stabile e test automatico.
 - Ogni APK installato sul Pad viene copiato anche in
   `C:\Users\Antonino\Downloads` con hash SHA-256 registrato.
+
+## Gate build — riduzione chunk iniziale
+
+Perimetro file esatto:
+
+- `mobile/src/lib/talosFontScale.ts` — mantiene solo il contratto usato dal
+  boot (`TALOS_FONT_SCALES`, default e funzioni runtime).
+- `mobile/src/lib/talosFontScaleOptions.ts` — elenco visuale lazy delle opzioni
+  dell'impostazione.
+- `mobile/src/components/talos/settings/TalosMobileSettingsAppearancePanel.vue`
+  — importa l'elenco soltanto nel pannello impostazioni.
+- `mobile/tests/unit/lib/talosFontScale.test.ts` — importa l'elenco dal modulo
+  lazy e mantiene il test di monotonicità.
+- `mobile/upstream/desktop-ported-libs-manifest.json` — hash e riconciliazione
+  della divergenza mobile-only del renderer HF.
+
+RED: build a `614.051/614.000` byte. GREEN: l'elenco viene escluso dal chunk
+iniziale senza cambiare il comportamento; build misurata a `613.869/614.000`,
+CSS `215.338/220.000`, parità verde. Rollback: riunire l'elenco nel modulo
+originale e ripristinare il budget precedente soltanto se il contratto lazy
+viene rimosso.
+
+## DEBT-MOBILE-010 — Immagine HTML nella model card Hugging Face
+
+Evidenza: `C:\Users\Antonino\Downloads\aaa.jpg`.
+
+### Perimetro file esatto
+
+- `mobile/src/lib/models/modelCardMarkdown.ts`
+- `mobile/src/lib/talosMessageMarkdown.ts`
+- `mobile/src/components/chat/TalosMobileMessageContent.vue`
+- `mobile/src/components/talos/models/TalosMobileLocalRepoDetail.vue`
+- `mobile/tests/unit/models/modelCardMarkdown.test.ts`
+
+### Contratto, RED e GREEN
+
+La scheda trasforma un `<img>` del CDN ufficiale in Markdown e abilita
+esplicitamente le immagini solo per quel riuso del renderer. Il renderer
+accetta esclusivamente URL HTTPS con host esatto
+`cdn-uploads.huggingface.co`, conserva `html:false`, sanifica con DOMPurify e
+aggiunge `img/src/alt/loading/decoding` alla allowlist soltanto quando l'opzione
+è attiva. La Chat resta sul comportamento “immagine esterna omessa”.
+
+RED: `DEBT-MOBILE-010 RED: renders a trusted Hugging Face model-card image`;
+prima del fix l'HTML finale era vuoto. GREEN: test model card 14/14, inclusa
+prova inversa su host non autorizzato.
+
+### Gate e rollback
+
+Nel gate Pad finale: immagine reale, dimensionamento responsive, scroll,
+fallback URL rifiutato e scheda senza immagini. Rollback: rimuovere l'opzione
+del renderer e ripristinare la rimozione delle immagini nel pre-processore.
+
+## DEBT-MOBILE-011 — Blocchi `think` e tool call esposti durante lo streaming
+
+### Perimetro file esatto
+
+- `mobile/src/lib/chat/thinkStream.ts`
+- `mobile/tests/unit/chat/thinkStream.test.ts`
+- `.claude/DOSSIER-RICERCA-DEBITI-MOBILE-POST-CODICE-2026-08-25.md`
+- `.claude/LEDGER-DEBITI-MOBILE-POST-CODICE-2026-08-25.md`
+- `.claude/CONSEGNA-DEBITI-MOBILE-POST-CODICE-2026-08-25.md`
+
+La riproduzione ha confermato che il punto unico già usato dal percorso locale
+è `talosCreateThinkSplitter`; non servono file Android, provider-specifici o
+un filtro nel renderer.
+
+### Contratto
+
+I delimitatori `<think>`/`</think>` e `<tool_call_start>`/`<tool_call_end>`
+possono arrivare in più chunk. Finché uno dei blocchi è aperto il contenuto va
+tenuto nello stato interno e non nel testo pubblico; la chiusura va consumata;
+il testo successivo va emesso normalmente. La risposta finale deve essere
+identica a quella già corretta a stream completo. Input senza blocchi e marker
+spezzati restano compatibili.
+
+### RED, GREEN e regressioni
+
+- RED nominato: `DEBT-MOBILE-011 RED: streaming think and tool markers stay
+  hidden`; deve fallire sui percorsi riprodotti da `abc.jpg` e `tool.jpg`,
+  inclusi marker divisi tra chunk.
+- GREEN: estendere la sola macchina di stato nel parser condiviso ai marker
+  LFM2.5 `<|tool_call_start|>`/`<|tool_call_end|>`, senza filtrare a posteriori
+  il DOM e senza dipendere dal nome del modello.
+- Regressioni: stream semplice, Markdown/table, think e tool call nello stesso
+  chunk, marker spezzati, stream terminato dentro un blocco e risposta finale
+  già persistita.
+
+### Gate e rollback
+
+Ricerca primaria su contratto di streaming e parser Markdown prima dell'edit;
+vitest focalizzato, typecheck e suite completa dopo tutti i debiti. Il gate
+umano finale userà il modello dell'evidenza e un modello senza think. Rollback:
+ripristinare il parser precedente e il solo test RED/GREEN, senza cambiare il
+contratto provider.
+
+## DEBT-MOBILE-012 — Persistenza immagine OpenRouter/Gemini
+
+### Perimetro chiuso dal tracing locale
+
+Il risultato reale attraversa `mobile/src/lib/images/imageGateway.ts` e poi il
+callback `sources.save` in `mobile/src/stores/chatController.ts`; il wrapper
+`mobile/src/lib/images/imageTools.ts` traduce ogni throw del salvataggio in
+`TALOS_IMAGE_PERSIST_FAILED`. Il fix tocca solo il parser/picker condiviso e il
+test del gateway; nessun file Android o provider generico entra nel perimetro.
+
+File esatti modificati:
+
+- `mobile/src/lib/images/imageGateway.ts` — `walk`, nuovo
+  `normalizeBase64Bytes`, `pickTalosImageModel`.
+- `mobile/tests/unit/images/imageGateway.test.ts` — due test DEBT-MOBILE-012
+  (base64 con line-break e modello testuale Gemini 3.7).
+- `mobile/tests/unit/chat/chatController.test.ts` — il percorso OpenRouter
+  completo usa un `b64_json` spezzato e verifica che la `data:` URL consegnata
+  al decoder sia compatta, poi persistenza, rendering e reload.
+- questo ledger, dossier e consegna.
+
+### Contratto, RED e GREEN
+
+Il contratto ufficiale Image API è base64 grezzo in `data[].b64_json` (PNG può
+omettere `media_type`); il server tool è un contratto diverso e restituisce
+un URL al modello. RED nominati:
+
+- `DEBT-MOBILE-012 RED: normalizes wrapped OpenRouter base64 before
+  persistence` — falliva lasciando il line-break nella `data:` URL.
+- `DEBT-MOBILE-012 RED: never treats the selected Gemini 3.7 text model as an
+  image model` — falliva scegliendo un candidato OpenRouter non tipizzato.
+
+Il test di integrazione esistente `IMAGE-OR-05 IMAGE-DUR-01/02/03
+DEBT-MOBILE-012` esercita anche il percorso completo controller → Image API →
+decoder → vault → messaggio → reload, con il base64 spezzato.
+
+GREEN: il parser compone una stringa base64 compatta prima del decoder e il
+picker OpenRouter richiede la capacità `image`; `6 file, 60 test` nella suite
+immagini e `4 file, 54 test` nel focus corrente. La verifica Pad deve ancora
+provare bytes reali, repository cifrato, reload e rendering; non viene simulata
+da un mock.
+
+### Gate e rollback
+
+Ricerca primaria completata prima dell'edit su Image Generation, server tool,
+Models API e List image models. Focalizzati RED → GREEN completati; restano
+typecheck, suite completa e una sola verifica Pad finale con il modello chat
+Gemini 3.7 (che deve delegare al modello immagine scoperto) e un provider
+immagine alternativo. Rollback: rimuovere `normalizeBase64Bytes`, ripristinare
+il filtro precedente e i due test nominati, senza alterare il contratto dei
+tool non immagine.
+
+### Aggiornamento gate reale — 2026-08-26
+
+L'evidenza allegata dell'owner conferma `TALOS_IMAGE_PERSIST_FAILED` sul
+percorso OpenRouter/Gemini. I gate locali restano verdi (115 test focalizzati;
+suite completa 6.351 passati, 10 saltati, 0 falliti). La prova Pad con una
+generazione reale è ancora **BLOCCATA per autorizzazione/costo**: non è
+presente `TALOS_TEST_OPENROUTER_API_KEY` e la chiave applicativa non viene
+usata implicitamente per chiamate che possono consumare credito.
+
+### Emendamento dopo prova reale — persistenza binaria oltre il limite bridge
+
+La prova autorizzata sul Pad ha riprodotto il fallimento: il provider ha
+risposto, ma `saveGeneratedBinary` è terminato in `TALOS_IMAGE_PERSIST_FAILED`.
+La causa più probabile e misurabile al confine successivo è il passaggio di un
+base64 intero a `Filesystem.writeFile`: su Android il payload attraversa il
+bridge in una singola transazione. Il contratto Capacitor dichiara inoltre che
+`Blob` è supportato solo sul Web; perciò non si può sostituire la stringa con un
+Blob come scorciatoia nativa ([Filesystem API](https://capacitorjs.com/docs/apis/filesystem)).
+
+Fix autorizzato da preparare: in `mobile/src/services/attachmentFileStore.ts`
+scrivere il base64 in blocchi con `writeFile` per il primo blocco e
+`appendFile` per i successivi, mantenendo lo stesso percorso privato e la
+verifica byte-per-byte. Aggiungere il contratto `appendFile` a
+`TalosFilesystemPort` e il test permanente in
+`mobile/tests/unit/services/attachmentFileStore.test.ts` per un payload sopra
+la dimensione del blocco. Nessun nuovo plugin o endpoint.
+
+RED: il test deve fallire con il writer monolitico quando il mock rifiuta un
+blocco oltre il limite; GREEN: la stessa immagine viene scritta a blocchi,
+letta identica e resa disponibile al Vault. Gate Pad: una sola nuova
+generazione reale dopo la build, quindi reload e Libreria.
+
+### GREEN finale dopo prova reale — 2026-08-26
+
+File e simboli chiusi:
+
+- `mobile/src/services/attachmentFileStore.ts` — `TalosFilesystemPort.appendFile`,
+  `BASE64_WRITE_CHUNK`, scrittura iniziale e append a blocchi.
+- `mobile/src/stores/chatController.ts` — `sources.save`, fallback locale quando
+  la data URL viene rifiutata da WebView.
+- `mobile/src/lib/images/imageMultipart.ts` — `base64ToBytes` riusato dal
+  percorso immagini (nessun nuovo endpoint).
+- `mobile/tests/unit/services/attachmentFileStore.test.ts` — scenario permanente
+  `DEBT-MOBILE-012` per file binario oltre 256 KiB base64.
+- `mobile/tests/unit/chat/chatController.test.ts` — il test OpenRouter forza il
+  rifiuto della data URL e verifica bytes, persistenza, rendering e reload.
+
+RED reale: sul Pad `2ea6573c`, APK precedente, OpenRouter ha restituito
+`TALOS_IMAGE_PERSIST_FAILED` dopo la risposta positiva del provider. GREEN
+reale: con APK `403964f0ac74`, la generazione autorizzata del triangolo è stata
+salvata e mostrata; dopo force-stop/reload l'immagine è rimasta visibile; la
+Libreria l'ha elencata come file generato JPG.
+
+Gate locali: focus `88/88`, suite completa `6.352 passati, 10 saltati, 0
+falliti`, typecheck verde. Gradle debug/release verde. Il solo warning è il
+budget JS iniziale misurato a 614.068 contro soglia preesistente 614.000; la
+build Vite e il copy Capacitor sono riusciti.
+
+Rollback: ripristinare la scrittura monolitica e rimuovere il fallback solo se
+il bridge nativo viene sostituito da un contratto binario ufficiale; mantenere
+il test RED per impedire la regressione.
+
+## DEBT-MOBILE-007 — Pinch-to-zoom illimitato nella Chat
+
+### Perimetro file esatto
+
+- `mobile/src/screens/ChatScreen.vue`
+- `mobile/tests/unit/screens/chatScreen.test.ts`
+- dossier e consegna di questa campagna
+
+### Ricerca, RED e GREEN
+
+La ricerca primaria MDN/W3C sul contratto `touch-action` stabilisce che
+`pan-y` consente lo scroll verticale a un dito e non abilita il pinch-zoom
+sulla regione. Il RED nominato è `DEBT-MOBILE-007 RED: chat thread allows
+vertical scroll but not viewport pinch zoom`; falliva perché il thread non
+aveva `touch-pan-y`. GREEN: aggiunta della sola utility esistente
+`touch-pan-y` al contenitore `data-testid="talos-chat-scroll"`; nessun meta
+viewport globale e nessun nuovo listener.
+
+### Gate e rollback
+
+Focalizzato verde: `tests/unit/screens/chatScreen.test.ts` (42/42). La prova
+Pad finale dovrà confermare scroll verticale, pinch ignorato e accesso al
+composer in tutte le quattro forme; rollback = rimuovere la utility e il test.
 
 ## DEBT-MOBILE-001 — Safe area del viewer Markdown
 
@@ -74,6 +308,201 @@ Eliminare: nessun file.
 
 - Revert del commit dedicato DEBT-MOBILE-001. La modifica comportamentale è
   confinata a una classe della testata del viewer e al relativo test.
+
+## DEBT-MOBILE-003 — Strutture Markdown senza caret prompt
+
+### Perimetro file esatto
+
+Modificare:
+
+- `mobile/src/components/chat/TalosMobileStreamingReply.vue`
+- `mobile/tests/unit/chat/streamingUi.test.ts`
+- `.claude/DOSSIER-RICERCA-DEBITI-MOBILE-POST-CODICE-2026-08-25.md`
+- `.claude/LEDGER-DEBITI-MOBILE-POST-CODICE-2026-08-25.md`
+- `.claude/CONSEGNA-DEBITI-MOBILE-POST-CODICE-2026-08-25.md`
+
+Eliminare: nessun file. Dipendenze nuove: nessuna.
+
+### Simboli e contratti
+
+- `tailTarget`, `ensureTail`, `appendChars` e `syncTail` restano privati al
+  componente; il contratto è che un tail strutturale non crea
+  `[data-testid="talos-stream-caret"]` e usa la classe fade.
+- `TalosMobileMessageContent` e `stabilizeStreamingTalosMarkdown` restano
+  invariati: il parser e il renderer esistenti continuano a possedere il
+  markup strutturale.
+
+### RED/GREEN e regressioni
+
+- RED: `DEBT-MOBILE-003 RED: a streaming table never gets the prompt caret` in
+  `mobile/tests/unit/chat/streamingUi.test.ts`; prima del fix falliva perché
+  il caret veniva aggiunto dopo la tabella.
+- GREEN: `rtk npm exec vitest run tests/unit/chat/streamingUi.test.ts`, 18/18.
+- Suite interessate: intera `npx vitest run`, `npm run typecheck`, `npm run
+  build`, `git diff --check` dopo la chiusura del lotto.
+
+### Gate umano e rollback
+
+Nel gate Pad finale: streaming di testo, tabella completa/incompleta e
+riduzione movimento; screenshot interi prima/durante/dopo, senza caret nella
+struttura e senza salti di layout. Rollback: revert delle sole modifiche ai
+due file di prodotto/test, senza cambiare il parser.
+
+## DEBT-MOBILE-008 — Chiusura gestuale della sidebar globale
+
+### Perimetro file esatto
+
+- `mobile/src/components/shell/TalosMobileSidebar.vue`
+- `mobile/tests/unit/shell/TalosMobileSidebar.test.ts`
+- dossier e consegna di questa campagna
+
+### Ricerca, RED e GREEN
+
+La ricerca primaria sul comportamento Vaul conferma che una drawer con
+`direction="left"` riceve il gesto sulla propria superficie e si chiude con
+uno spostamento da destra verso sinistra. Il RED è
+`DEBT-MOBILE-008 RED: the sidebar drawer is dismissible by dragging its
+component right-to-left`: falliva perché durante `busy` il componente passava
+`dismissible=false`, mentre il pulsante X continuava a chiudere.
+GREEN: la sidebar resta esplicitamente dismissible; la direzione sinistra già
+presente nel componente governa il drag nativo e non introduce un secondo
+listener o una gesture duplicata.
+
+### Contratto e gate
+
+Il gesto valido deve iniziare sulla componente sidebar visibile, non sul
+contenuto sotto l'overlay. X e drag devono emettere la stessa chiusura anche
+durante una risposta in corso; il gate Pad finale proverà entrambi, scroll
+verticale interno e gesto Back. Focalizzato verde: test sidebar 12/12.
+Rollback: ripristinare il solo binding `dismissible` precedente e il test.
+
+## DEBT-MOBILE-009 — Stato OAuth OpenRouter contraddittorio
+
+### Perimetro file esatto
+
+- `mobile/src/components/talos/models/TalosMobileProviderRuntimePanel.vue`
+- `mobile/tests/unit/models/TalosMobileProviderRuntimePanel.test.ts`
+- dossier e consegna di questa campagna
+
+### Ricerca, RED e GREEN
+
+Il flusso resta OAuth PKCE e la chiave continua a essere salvata nel percorso
+provider esistente; non viene aggiunto un token o un endpoint nuovo. Il RED
+`DEBT-MOBILE-009 RED: a stale OAuth error is not shown once OpenRouter has a
+saved key` riproduceva l'avviso di scambio fallito con chiave OpenRouter già
+presente e catalogo pronto. GREEN: l'avviso OAuth transitorio viene mostrato
+solo quando `controller.secrets.openrouter` è falso; gli errori correnti del
+catalogo restano visibili nel loro punto specifico.
+
+### Gate e rollback
+
+Focalizzato verde: test provider runtime 6/6. Il gate Pad finale verificherà
+fallimento OAuth, chiave appena aggiunta, reload, catalogo pronto e retry. Il
+rollback rimuove la guardia di visibilità e il test nominato, senza toccare il
+protocollo PKCE.
+
+## DEBT-MOBILE-004 — Default «Molto piccola» alla prima installazione
+
+### Perimetro file esatto
+
+Modificare:
+
+- `mobile/src/lib/talosFontScale.ts`
+- `mobile/src/i18n/locales/it.ts`
+- `mobile/src/i18n/locales/en.ts`
+- `mobile/tests/unit/stores/predefinitiInstallazioneNuova.test.ts`
+- `mobile/tests/unit/lib/talosFontScale.test.ts`
+- `.claude/DOSSIER-RICERCA-DEBITI-MOBILE-POST-CODICE-2026-08-25.md`
+- `.claude/LEDGER-DEBITI-MOBILE-POST-CODICE-2026-08-25.md`
+- `.claude/CONSEGNA-DEBITI-MOBILE-POST-CODICE-2026-08-25.md`
+
+Eliminare: nessun file. Dipendenze nuove: nessuna.
+
+### Simboli e contratti
+
+- `TALOS_FONT_SCALES` aggiunge `xsmall`; `TALOS_DEFAULT_FONT_SCALE` diventa
+  `xsmall`; `talosFontScaleFactor` assegna `0.8`.
+- `parseTalosFontScale` continua a fail-closed; le scelte persistite
+  `small/default/large/xlarge` restano valide.
+- Le chiavi i18n `appearance.fontScales.xsmall` restano parallele in italiano
+  e inglese.
+
+### RED/GREEN e regressioni
+
+- RED: i test di nuova installazione pretendevano `xsmall` e fallivano con
+  `default`; il test dei fattori pretendeva un valore sotto `small`.
+- GREEN: i due file focalizzati sono 13/13 verdi.
+- Gate largo: `npx vitest run`, `npm run typecheck`, `npm run build`,
+  `git diff --check` a fine lotto.
+
+### Gate umano e rollback
+
+Nel gate Pad finale: installazione pulita, schermata Impostazioni → Aspetto,
+label «Molto piccola», primo frame e passaggio a ogni gradino; poi reload con
+una scelta esplicita diversa. Rollback: ripristinare la lista e la costante
+precedenti, senza rimuovere le preferenze già salvate.
+
+## DEBT-MOBILE-005 — «Autorizza tutti · Sempre» e switch Strumenti agente
+
+### Perimetro file esatto
+
+Modificare:
+
+- `mobile/src/components/intro/TalosMobileSetupIntro.vue`
+- `mobile/tests/unit/components/TalosMobileSetupIntro.test.ts`
+- `.claude/DOSSIER-RICERCA-DEBITI-MOBILE-POST-CODICE-2026-08-25.md`
+- `.claude/LEDGER-DEBITI-MOBILE-POST-CODICE-2026-08-25.md`
+- `.claude/CONSEGNA-DEBITI-MOBILE-POST-CODICE-2026-08-25.md`
+
+Eliminare: nessun file. Dipendenze nuove: nessuna.
+
+### Simboli e contratti
+
+- `TalosMobileSetupIntro::next` mantiene il gate `tutteSempre` e, solo in quel
+  ramo, chiama `settings.setAgentToolEnabled` per
+  `library_context_policy_update` e `device_screen_drive`.
+- Il pannello Strumenti agente, `TALOS_DEFAULT_AGENT_TOOL_ENABLED` e il
+  catalogo restano invariati; `app_azione` non è un alias del controllo richiesto.
+
+### RED/GREEN e regressioni
+
+- RED: il test del percorso «Sempre» osservava la Libreria accesa ma nessun
+  aggiornamento dei due switch agente.
+- GREEN: `rtk npm exec vitest run tests/unit/components/TalosMobileSetupIntro.test.ts` — 26/26.
+- Prove inverse «Chiedi», «Nega» e passaggio senza tocco restano verdi.
+- Gate largo: suite mobile, typecheck, build e `git diff --check` a fine lotto.
+
+### Gate umano e rollback
+
+Nel gate Pad finale: intro nuova, «Autorizza tutti» + «Sempre», apertura di
+Impostazioni → Strumenti agente e verifica visiva dei due switch; poi prova
+«Chiedi»/«Nega» su stato pulito. Rollback: rimuovere le due chiamate del ramo
+`tutteSempre`, senza alterare i tre permessi principali.
+
+## DEBT-MOBILE-006 — Tastiera nascosta, focus e composer compatto
+
+### Perimetro verificato
+
+Nessun file di prodotto da modificare in questa fase: il comportamento è già
+centralizzato in:
+
+- `mobile/src/services/nativeFraming.ts`
+- `mobile/src/components/chat/TalosMobileComposer.vue`
+- `mobile/tests/unit/services/nativeFraming.test.ts`
+- `mobile/tests/unit/chat/TalosMobileComposer.drawer.test.ts`
+
+La consegna e il dossier sono aggiornati; nessun file viene creato o eliminato.
+
+### Contratto, GREEN e gate
+
+- `configureNativeFraming` ascolta `keyboardDidHide` e rilascia il focus di
+  input/textarea; `composerFocused` riceve il blur e `composerCompact` torna
+  vero solo quando il campo è vuoto e la modalità lo prevede.
+- GREEN: i due file focalizzati sono 36/36 verdi.
+- Gate Pad finale: back/gesture, testo vuoto e non vuoto, riapertura tastiera,
+  screenshot interi e prova inversa senza perdita della bozza.
+- Rollback: nessuno; se il gate reale smentisce il contratto, si apre un
+  emendamento sul listener globale, senza duplicarlo nel composer.
 
 ## DEBT-MOBILE-002…009
 
@@ -165,3 +594,198 @@ modificati nel diff finale: il messaggio d'errore riusa `rejectGeneric`.
 Il tentativo inline è stato respinto dal gate iniziale (`614.684` byte); la
 versione finale riusa `talosLocalEngineLazy()` e il modulo motore già lazy,
 mantenendo il budget a `<= 614.000` senza modificare la soglia.
+
+## Chiusura di fase DEBT-MOBILE-008 — sidebar dal body
+
+- File modificati: `mobile/src/components/shell/TalosMobileSidebar.vue`,
+  `mobile/tests/unit/shell/TalosMobileSidebar.test.ts`.
+- Causa misurata: `pointercancel` interrompe il percorso pointer quando il
+  body prende lo scroll; il successivo `touchmove` non aveva più l'origine.
+- Fix minimo: `onSidebarPointerCancel` non azzera il punto condiviso; il
+  `touchend` lo chiude normalmente. `Drawer` resta `dismissible=false` per non
+  far competere Vaul con il gesto esplicito.
+- RED/GREEN: la sequenza pointerdown → touchstart → pointercancel → touchmove
+  falliva prima e passa dopo; suite sidebar 15/15.
+- Gate: typecheck verde; suite completa 674 file passati, 3 saltati, 6.349
+  test passati, 10 saltati; build Vite e parità verdi; Gradle
+  `assembleDebug` + `compileReleaseJavaWithJavac` `BUILD SUCCESSFUL`.
+- Prova umana: Pad `2ea6573c`, applicationId `ai.talos`; apertura dalla
+  testata e chiusura con swipe iniziato nel body verificata negli screenshot
+  `sidebar-open-final-apk.png` e `sidebar-body-swipe-final-apk.png`.
+- APK riproducibile e copiata nei Download del PC:
+  `C:\Users\Antonino\Downloads\talos-mobile-debt-audit-20260826-132724-e2322111fa4d.apk`
+  (SHA-256 `e2322111fa4d35fcc04fbc9d5f574c78666cca4fbf08e9df08b3e68b00f8f2eb`).
+
+## Regressione DEBT-MOBILE-008B — il pannello deve seguire il dito
+
+### File e simboli
+
+- Modificare `mobile/src/components/shell/TalosMobileSidebar.vue`:
+  `startSidebarSwipe`, `maybeCloseSidebarSwipe`, `finishSidebarSwipe` e lo
+  stato del trascinamento. Nessuna nuova dipendenza o componente.
+- Modificare `mobile/tests/unit/shell/TalosMobileSidebar.test.ts`: scenario
+  permanente `DEBT-MOBILE-008B` sulla trasformazione intermedia e sul ritorno
+  in sede sotto soglia.
+
+### Ricerca upstream e decisione
+
+- Pin reale installato: `vaul-vue@0.4.1`.
+- Upstream ufficiale `unovue/vaul-vue`: progetto non più mantenuto e sostituito
+  per i nuovi lavori dal Drawer di Reka UI. Il port corrente usa solo pointer
+  events; Android WebView cancella quel flusso sul body scrollabile.
+- Decisione: **adattare dietro il componente AVM esistente**, senza migrare ora
+  tutta la libreria e senza aggiungere pacchetti. Durante `touchmove` il pannello
+  usa `translate3d` con distanza clampata; al rilascio chiude oltre soglia o
+  torna a zero usando `--talos-motion-duration-control` e
+  `--talos-motion-ease`. Riduzione movimento: posizione sotto il dito invariata,
+  ritorno finale senza durata.
+
+### RED, GREEN e prova umana
+
+- RED: a metà gesto il drawer deve avere una trasformazione negativa coerente
+  con la distanza percorsa ma non deve ancora emettere la chiusura; sotto soglia
+  `touchend` deve rimetterlo a zero.
+- GREEN focalizzato: `npx vitest run tests/unit/shell/TalosMobileSidebar.test.ts`.
+- Regressioni: `npm run typecheck`, suite completa, build Vite/parità e Gradle
+  debug/release.
+- Pad: trascinamento lento dal body e dalla testata, con screenshot a metà
+  gesto e dopo il rilascio; il bordo del pannello deve coincidere con il dito,
+  non partire da solo.
+- Rollback: rimuovere solo l'applicazione/reset della trasformazione manuale;
+  la chiusura con X e la navigazione restano indipendenti.
+
+### GREEN finale DEBT-MOBILE-008B — 2026-08-26
+
+- Implementazione verificata in `TalosMobileSidebar.vue`: trasformazione
+  diretta durante il gesto, soglia valutata al rilascio, ritorno animato sotto
+  soglia.
+- Test: `TalosMobileSidebar.test.ts` verde; suite completa **6.351 passati,
+  10 saltati, 0 falliti**.
+- Pad `2ea6573c`, APK `d9cd32dbf381...`: `sidebar-drag-mid-200-latest.png`
+  mostra lo spostamento di 200 px prima del rilascio e
+  `sidebar-drag-after-latest.png` mostra la chiusura.
+
+## Chiusura DEBT-MOBILE-010 — immagini multilinea nelle model card
+
+- Causa: il README Hugging Face reale usa un tag `<img>` su più righe; la
+  normalizzazione per riga lo lasciava escapato.
+- Fix minimo: `modelCardMarkdown.ts` ricompone il tag multilinea e riusa il
+  renderer immagine già allow-listato (`https` + `cdn-uploads.huggingface.co`).
+- Test aggiunti: tag singolo, tag multilinea e host esterno rifiutato; test
+  del componente `TalosMobileLocalRepoDetail` verifica l'`img` risultante.
+- Prova Pad: `model-card-img-fixed.png` mostra il logo Liquid reale nella
+  scheda modello.
+- Rollback: rimuovere il raccoglitore multilinea e i test DEBT-MOBILE-010;
+  lasciare invariato il renderer sanitizzato.
+
+## DEBT-MOBILE-013 — effort selector slider nel drawer del composer
+
+### Perimetro esatto
+
+Artefatto owner: `C:\Users\Antonino\Downloads\talos-effort-slider-dropin.zip`
+(SHA-256 `35C7C508E0349EEC46A64BDC91FA73FA4AD8221559906D82AAB029A6914184B4`).
+Il pacchetto è ancorato al commit upstream `e7760d8fac95b84c0bda0e710be8df6d0d9ba74d`.
+
+File da sostituire/creare nel lane mobile:
+
+- sostituire `mobile/src/components/chat/TalosMobileEffortPicker.vue` con il
+  drop-in `DROP_IN/src/components/chat/TalosMobileEffortPicker.vue`;
+- creare `mobile/src/components/talos/ui/TalosThemedSegmentedSlider.vue` dal
+  drop-in omonimo;
+- sostituire `mobile/tests/unit/chat/TalosMobileEffortPicker.test.ts`;
+- creare `mobile/tests/unit/ui/TalosThemedSegmentedSlider.test.ts`;
+- aggiornare questo ledger e la consegna, senza modificare
+  `mobile/src/lib/mobileEffort.ts`, traduzioni, package manifest o stato del
+  composer. A seguito della richiesta owner 2026-08-26, il parent è stato
+  toccato solo per rimuovere l'intestazione ridondante "Ragionamento" sopra
+  "Livello di ragionamento".
+
+### Contratto e simboli stabili
+
+`TalosMobileEffortPicker` conserva props `effortLevels`, `selectedEffort`,
+`supportsThinking`, `thinking` ed eventi `selectEffort`, `selectThinking`,
+`requestClose`. `TalosThemedSegmentedSlider` aggiunge il wrapper controllato
+con `modelValue`, `options`, `ariaLabel`, `testId`, `disabled` ed evento
+`update:modelValue`. `mobileEffortLadderFromLevels()` resta l'autorità per
+ordine e capacità del modello; il parent resta l'unico proprietario dello
+stato.
+
+### Ricerca upstream e decisione
+
+Ricerca primaria completata prima dell'edit: Reka UI Slider 2.10.1 già
+presente nel repo ([docs](https://reka-ui.com/docs/components/slider),
+[API SliderRoot](https://reka-ui.com/meta/SliderRoot)) e pattern slider
+WAI-ARIA ([APG](https://www.w3.org/WAI/ARIA/apg/patterns/slider/)).
+Decisione: adottare direttamente il primitivo Reka già pinned dietro un wrapper
+TALOS a token, senza nuova dipendenza e senza pointer engine custom. Il
+drop-in è la fonte di verità visuale e strutturale; preview e script del pacchetto
+sono strumenti di validazione, non asset runtime.
+
+### RED/GREEN e gate
+
+RED nominato: `DEBT-MOBILE-013 RED: effort picker is a single controlled slider`
+(la versione attuale espone `role=radiogroup` e più bottoni). GREEN deve
+verificare ladder canonica dinamica, una sola thumb/tab stop, `aria-valuetext`,
+click/drag, Arrow/Home/End, controlled state, switch thinking invariato,
+Escape, deduplica e scala a sette livelli.
+
+Comandi: `cd mobile && npx vitest run tests/unit/chat/TalosMobileEffortPicker.test.ts tests/unit/ui/TalosThemedSegmentedSlider.test.ts`,
+`npm run typecheck`, suite `npx vitest run`, `npm run build`, Gradle
+`:app:assembleDebug :app:compileReleaseJavaWithJavac`, quindi installazione
+debug sul Pad `2ea6573c` e screenshot interi in tablet/telefono portrait e
+landscape. Verificare anche ridotta animazione, forced-colors, focus e ritorno
+del drawer.
+
+### Rollback
+
+Ripristinare i quattro file alla versione precedente; nessun rollback del
+contratto effort o delle traduzioni; se necessario ripristinare anche la sola
+rimozione dell'h3 in `TalosMobileModelEffortDrawer.vue`.
+
+### Aggiornamento owner — posizione toggle e verifica 2026-08-26
+
+Il toggle `TalosMobileSwitch` per `chat.extendedThinking` è stato posizionato
+nella testata del valore selezionato (accanto a "Basso/Medio/Alto" cangiante),
+non nella rail e non sotto il controllo. La rail resta il drop-in originale.
+È stata rimossa la sola intestazione parent ridondante `chat.reasoning`.
+
+Prove: typecheck verde; test focalizzati **14/14**; build Vite e Gradle
+`assembleDebug` verdi. Sul Pad `2ea6573c`, con screenshot ispezionato per
+intero, il valore selezionato e il toggle condividono la stessa riga senza
+sovrapposizioni in viewport telefono portrait; la rail mantiene quattro stop
+distinti. Screenshot:
+`C:\Users\Antonino\Desktop\projects\AVM\.claude\pad-debt-campaign-2026-08-26\effort-slider-phone-portrait-header-toggle.png`.
+
+Nota gate storica (superata dall'aggiornamento finale sotto): il primo run
+completo aveva segnalato `talosFontScale`; dopo la tokenizzazione del font il
+test focalizzato è verde. `npm run build` resta bloccato dal tripwire
+esistente 614.278 > 614.000; `vite build` e APK sono riusciti.
+
+### Chiusura tecnica DEBT-MOBILE-013 — evidenza finale 2026-08-26
+
+La richiesta owner sul label è ora applicata: `chat.extendedThinking` viene
+renderizzato accanto allo switch nella stessa testata del valore selezionato,
+non nella rail. Il titolo parent `chat.reasoning` resta rimosso; rimane una
+sola intestazione, `chat.reasoningEffort`.
+
+RED/GREEN aggiornato: suite focalizzata picker, slider, composer e font-scale
+**36/36**; `npm run typecheck` verde. Suite completa: **6.358 passati,
+1 fallito, 10 saltati**; l'unico rosso attuale è il test già esistente
+`tests/unit/chat/streamingUi.test.ts` (`DEBT-MOBILE-003 RED`), fuori dal
+perimetro del selettore e non toccato da questa modifica.
+
+Prove packaging: `vite build` e `npx cap copy android` verdi; il comando
+`npm run build` esegue il build ma si ferma sul tripwire globale esistente
+`614278 > 614000`, senza modifica della soglia. Gradle
+`:app:assembleDebug :app:compileReleaseJavaWithJavac --rerun-tasks` verde.
+
+Prova Pad `2ea6573c` (override telefono portrait `2400x1080`): il drawer
+mostra per intero la riga `DISATTIVATO — Ragionamento esteso — switch`, la
+rail e i quattro livelli, senza sovrapposizioni. Screenshot ispezionato per
+intero:
+`C:\Users\Antonino\Desktop\projects\AVM\.claude\pad-debt-campaign-2026-08-26\effort-slider-phone-portrait-final-label-visible.png`.
+Override `wm size` e `wm density` ripristinati ai valori fisici dopo la prova.
+
+APK finale installata sul Pad e copiata nei Download del PC:
+`C:\Users\Antonino\Downloads\talos-mobile-effort-slider-20260826-162452-8001a3c7f224.apk`.
+SHA-256 `8001a3c7f2241cc057fcd934f24b383b23e1dbc85ced55af1fe1a78bf4623bde`.

@@ -1645,7 +1645,7 @@ describe('chatController', () => {
         expect(new TextDecoder('utf-8', { fatal: true }).decode(saved.bytes)).toBe(body)
     })
 
-    it('IMAGE-OR-05 IMAGE-DUR-01/02/03 returns, stores, renders, and reloads an OpenRouter tool image', async () => {
+    it('IMAGE-OR-05 IMAGE-DUR-01/02/03 DEBT-MOBILE-012 returns, stores, renders, and reloads an OpenRouter tool image', async () => {
         const { deps, store, settings, request, chatRepository } = makeDeps()
         store.set('openrouter', 'router-key')
         Object.assign(settings.state.tools, { write: 'allow', outbound: 'allow' })
@@ -1764,7 +1764,7 @@ describe('chatController', () => {
                     status: 200,
                     data: {
                         data: [{
-                            b64_json: 'A'.repeat(600),
+                            b64_json: `${'A'.repeat(300)}\n${'A'.repeat(300)}`,
                             media_type: 'image/png',
                         }],
                     },
@@ -1809,9 +1809,9 @@ describe('chatController', () => {
         })
         vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
             if (String(input).startsWith('data:image/')) {
-                return {
-                    arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
-                }
+                // Android WebView can reject a large data URL; the controller
+                // must decode the same bytes locally and continue to the Vault.
+                throw new TypeError('data URL too large')
             }
             throw new TypeError('stream unavailable')
         }))
@@ -1833,7 +1833,7 @@ describe('chatController', () => {
             expect(createGeneratedBinary).toHaveBeenCalledWith(
                 expect.objectContaining({
                     mediaType: 'image/png',
-                    bytes: new Uint8Array([1, 2, 3]),
+                    bytes: new Uint8Array(450),
                 }),
                 expect.objectContaining({ sessionId: expect.any(String), toolName: 'generate_image' }),
             )

@@ -6,6 +6,10 @@ import { flushPromises, mount } from '@vue/test-utils'
 
 const state = vi.hoisted(() => ({ controller: null as unknown }))
 vi.mock('@/stores/chatController', () => ({ useChatController: () => state.controller }))
+vi.mock('@/services/openRouterLogin', () => ({
+    talosLoginWithOpenRouter: vi.fn().mockResolvedValue({ ok: false, reason: 'exchange' }),
+    talosRiprendiAccessoOpenRouter: vi.fn().mockResolvedValue(null),
+}))
 
 import TalosMobileProviderRuntimePanel from '@/components/talos/models/TalosMobileProviderRuntimePanel.vue'
 
@@ -80,6 +84,23 @@ describe('TalosMobileProviderRuntimePanel', () => {
 
         expect(target.removeEndpoint).toHaveBeenCalledWith('openai')
         expect(target.refreshProvider).toHaveBeenCalledWith('anthropic')
+    })
+
+    it('DEBT-MOBILE-009 RED: a stale OAuth error is not shown once OpenRouter has a saved key', async () => {
+        const { talosRiprendiAccessoOpenRouter } = await import('@/services/openRouterLogin')
+        vi.mocked(talosRiprendiAccessoOpenRouter).mockResolvedValue({ ok: false, reason: 'exchange' })
+        const target = controller()
+        target.secrets.openrouter = true
+        target.catalogs.openrouter.configured = true
+        target.catalogs.openrouter.status = 'ready'
+        target.catalogs.openrouter.models = [{ id: 'openrouter-live' }]
+        state.controller = target
+        const wrapper = mount(TalosMobileProviderRuntimePanel, { attachTo: document.body })
+        await wrapper.get('[data-provider="openrouter"] button[aria-controls="provider-openrouter-body"]').trigger('click')
+        await wrapper.get('[data-testid="talos-provider-oauth-openrouter"]').trigger('click')
+        await flushPromises()
+        expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+        wrapper.unmount()
     })
 })
 

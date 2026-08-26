@@ -703,7 +703,7 @@ dipendenza tecnica da `mobile/` (l'app TALOS):
   responsive si collega anche a quello — non una riscrittura, una seconda
   base.
 
-### DEC-054 — TALOS-BANCO resta fuori (sostituisce DEC-015/016/017/018)
+### DEC-054 — TALOS-BANCO resta fuori (conferma DEC-015; sostituisce DEC-016/017/018)
 
 **Decisione A.** L'owner, testuale: *"non so tu cosa consigli? io avevo
 detto a codex solo UI."* — cioè: nessuna istruzione dell'owner autorizzava
@@ -714,6 +714,22 @@ di toccare TALOS-BANCO. **DEC-016, DEC-017 e DEC-018 sono ANNULLATE.**
   righe di `esiti-*/*.jsonl` (i campi elencati lì, non altri) e l'output
   testuale di `rapportoCampagna.mjs`, trattato come blocco preformattato,
   mai riparsato campo per campo.
+- **DEC-015 resta valida e non era in discussione:** Harness UI non esegue
+  `rapportoCampagna.mjs`, non usa `child_process`, `exec` o `spawn` e si limita
+  a leggere. Per ciascuna campagna, il proprietario della corsa produce
+  `<campagna>/rapporto.txt` al momento opportuno mediante un puro redirect di
+  shell dell'output di `rapportoCampagna.mjs`. Questo non cambia alcuna riga di
+  codice di TALOS-BANCO e non è un'operazione della lane Harness UI.
+- Al 2026-08-24 i due `rapporto.txt` dell'allowlist non esistono ancora perché
+  Stadio B è in taratura in un'altra sessione. La loro produzione è una
+  dipendenza esplicita del gate reale, non una decisione architetturale aperta
+  e non può essere dichiarata già soddisfatta.
+- **DEC-026 resta valida insieme alle altre DEC-019…028:** i file esistenti
+  `<harness>.costo.json` sono la fonte canonica primaria del costo e Harness UI
+  può leggerli in sola lettura. Se un file manca, usa la somma `costoUsd` delle
+  righe marcandola come stima `~`; costo assente significa `null`, mai zero.
+  Questa è lettura del contratto esistente, non costruzione di un contratto
+  nuovo e non modifica TALOS-BANCO.
 - Non esiste nessun `rapporto.v1.json` da progettare, non esiste nessuna
   domanda su come versionare TALOS-BANCO (DEC-018 non si applica: non c'è
   niente lì da modificare).
@@ -763,6 +779,15 @@ DEC-023/024 il trattamento sicuro di `detto` e `cambiamenti`, DEC-029/030
 il server loopback configurabile, DEC-050 commit piccoli e mai push,
 DEC-052 il gate di chiusura) **resta valido**. Non erano in discussione, e
 sono letture corrette del disegno approvato o precisazioni sensate.
+
+### DEC-057 — Riepilogo obbligatorio alla chiusura di ogni step
+
+**Decisione esplicita dell'owner, 2026-08-24.** Alla fine di ogni step il main
+agent deve fornire un riepilogo semplice ma esaustivo, non tecnico e tuttavia
+esplicativo. Il riepilogo deve rendere chiari almeno: che cosa è stato fatto,
+che cosa comporta per l'owner, quali prove o risultati sono disponibili e che
+cosa resta da decidere o da eseguire. Questa regola vale durante ricerca,
+ledger, implementazione, verifica e consegna finale.
 
 ### Effetto pratico immediato
 

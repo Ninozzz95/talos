@@ -16,7 +16,7 @@
  * largest step cannot push controls off a small screen (Android splits the same
  * way — "Font size" vs "Display size").
  */
-export const TALOS_FONT_SCALES = ['small', 'default', 'large', 'xlarge'] as const
+export const TALOS_FONT_SCALES = ['xsmall', 'small', 'default', 'large', 'xlarge'] as const
 
 export type TalosFontScale = (typeof TALOS_FONT_SCALES)[number]
 
@@ -35,18 +35,12 @@ export type TalosFontScale = (typeof TALOS_FONT_SCALES)[number]
 export const TALOS_DEFAULT_FONT_SCALE: TalosFontScale = 'default'
 
 const FACTORS: Record<TalosFontScale, number> = {
+    xsmall: 0.8,
     small: 0.9,
     default: 1,
     large: 1.15,
     xlarge: 1.3,
 }
-
-export const TALOS_FONT_SCALE_OPTIONS: Array<{ value: TalosFontScale; label: string }> = [
-    { value: 'small', label: 'Small' },
-    { value: 'default', label: 'Default' },
-    { value: 'large', label: 'Large' },
-    { value: 'xlarge', label: 'Extra large' },
-]
 
 /** Fail-safe: anything unrecognised reads as the default, never as 0. */
 export function parseTalosFontScale(value: unknown): TalosFontScale {

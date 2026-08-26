@@ -10,6 +10,7 @@ function filesystem(): TalosFilesystemPort {
         mkdir: vi.fn().mockResolvedValue(undefined),
         readFile: vi.fn().mockResolvedValue({ data: 'aGVsbG8=' }),
         writeFile: vi.fn().mockResolvedValue(undefined),
+        appendFile: vi.fn().mockResolvedValue(undefined),
         deleteFile: vi.fn().mockResolvedValue(undefined),
     }
 }
@@ -67,5 +68,24 @@ describe('createAttachmentFileStore', () => {
         await expect(store.copyToPrivate(file, 'vault-file-3'))
             .rejects.toThrow('TALOS_ATTACHMENT_FILE_TOO_LARGE')
         expect(fs.readFile).not.toHaveBeenCalled()
+    })
+
+    it('DEBT-MOBILE-012 writes large generated binaries in bridge-safe chunks', async () => {
+        const fs = filesystem()
+        const bytes = new Uint8Array(300_000).fill(255)
+        const file: TalosPickedFile = {
+            name: 'generated.png',
+            declaredMediaType: 'image/png',
+            sizeBytes: bytes.byteLength,
+            source: { kind: 'web-blob', blob: new Blob([bytes], { type: 'image/png' }) },
+        }
+        const store = createAttachmentFileStore({ filesystem: fs })
+
+        await store.copyToPrivate(file, 'vault-large')
+
+        expect(fs.writeFile).toHaveBeenCalledTimes(1)
+        expect((fs.writeFile.mock.calls[0]![0].data as string).length).toBeLessThanOrEqual(256 * 1024)
+        expect(fs.appendFile).toHaveBeenCalled()
+        expect(fs.appendFile.mock.calls.every(([call]) => call.data.length <= 256 * 1024)).toBe(true)
     })
 })

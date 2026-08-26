@@ -12,7 +12,7 @@ const harness = vi.hoisted(() => ({
         author: 'unsloth',
         license: 'apache-2.0',
         updatedAt: '2026-08-05T00:00:00Z',
-        readme: '# Qwen\n\nThis model is built for long coding sessions with tools and careful instruction following across large repositories.\n\n## Full notes\nThe complete card remains available here.',
+        readme: '# Qwen\n\nThis model is built for long coding sessions with tools and careful instruction following across large repositories.\n\n<img src="https://cdn-uploads.huggingface.co/production/uploads/liquid.png" alt="Liquid AI" />\n\n## Full notes\nThe complete card remains available here.',
         // Restyle Blocco 6 (mockup, item 8): TalosHuggingFaceCard porta
         // anche questi tre campi da quando describeModel() li legge dalla
         // stessa risposta HF di author/license — senza, downloadsLabel
@@ -154,6 +154,7 @@ describe('TalosMobileLocalRepoDetail', () => {
         expect(wrapper.find('pre').exists()).toBe(false)
         expect(scheda.find('h2').exists()).toBe(true)
         expect(scheda.text()).not.toContain('## Full notes')
+        expect(scheda.find('img').attributes('src')).toBe('https://cdn-uploads.huggingface.co/production/uploads/liquid.png')
     })
 
     /**

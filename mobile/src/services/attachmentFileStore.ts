@@ -17,6 +17,11 @@ export interface TalosFilesystemPort {
         directory?: Directory
         recursive?: boolean
     }): Promise<unknown>
+    appendFile(options: {
+        path: string
+        data: string
+        directory?: Directory
+    }): Promise<unknown>
     deleteFile(options: { path: string; directory?: Directory }): Promise<unknown>
     /** Presence without reading: card capture asks before any network call. */
     stat(options: { path: string; directory?: Directory }): Promise<unknown>
@@ -43,6 +48,10 @@ const ALLOWED_EXTENSIONS = new Set([
     'hpp', 'cs', 'sh', 'bash', 'zsh', 'ps1', 'sql', 'yaml', 'yml', 'toml', 'ini',
 ])
 const PRIVATE_PREFIX = 'talos-vault/files/'
+// Android's Capacitor bridge carries each call in one Binder transaction.
+// Keep binary chunks comfortably below that ceiling; the file itself remains
+// one durable object on disk.
+const BASE64_WRITE_CHUNK = 256 * 1024
 
 function extension(name: string): string {
     const candidate = name.split('.').at(-1)?.toLowerCase() ?? ''
@@ -128,12 +137,20 @@ export function createAttachmentFileStore(
                     recursive: true,
                 }).catch(() => undefined)
                 wrote = true
+                const encoded = base64FromBytes(bytes)
                 await filesystem.writeFile({
                     path: target,
-                    data: base64FromBytes(bytes),
+                    data: encoded.slice(0, BASE64_WRITE_CHUNK),
                     directory: Directory.Data,
                     recursive: true,
                 })
+                for (let offset = BASE64_WRITE_CHUNK; offset < encoded.length; offset += BASE64_WRITE_CHUNK) {
+                    await filesystem.appendFile({
+                        path: target,
+                        data: encoded.slice(offset, offset + BASE64_WRITE_CHUNK),
+                        directory: Directory.Data,
+                    })
+                }
                 return { privateUri: target, bytes }
             } catch (error) {
                 if (wrote) {

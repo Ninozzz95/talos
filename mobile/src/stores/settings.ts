@@ -34,7 +34,7 @@ import {
 } from '@/lib/composerStyle'
 
 /** Owner 2026-07-25: "di default large font size e small chat font size". */
-const TALOS_MOBILE_DEFAULT_BUBBLE_SCALE = 'compact' as const
+const TALOS_MOBILE_DEFAULT_BUBBLE_SCALE = 'xcompact' as const
 import type { TalosChatLayoutPreferences } from '@/lib/talosTypes'
 import {
     parseTalosMotionV6Preferences,
@@ -961,6 +961,12 @@ export function parseTalosMobileSettings(raw: string | null): TalosMobileSetting
             chatLayout.bubble_scale = TALOS_MOBILE_DEFAULT_BUBBLE_SCALE
         }
     }
+    // Owner 2026-08-26: the small default belongs to CHAT TEXT only. The
+    // earlier mobile default accidentally shrank the whole interface.
+    if (value.font_v2 !== true) {
+        if (shellParsed.ui_font_scale === 'xsmall') shellParsed.ui_font_scale = TALOS_DEFAULT_FONT_SCALE
+        if (chatLayout.bubble_scale === 'compact') chatLayout.bubble_scale = TALOS_MOBILE_DEFAULT_BUBBLE_SCALE
+    }
     /**
      * The composer settled into TWO settings — the bar's shape, and where the
      * "+" opens (see lib/composerStyle). There are two older shapes of this on
@@ -1081,6 +1087,7 @@ export function useSettingsStore(): SettingsStore {
                 // deliberata di spegnerlo non reggerebbe mai.
                 library_autosave_defaults_v2: true,
                 type_defaults_v1: true,
+                font_v2: true,
                 composer_split_v1: true,
                 shell: next.shell,
                 onboarding: next.onboarding,

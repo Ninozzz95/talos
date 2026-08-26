@@ -11,6 +11,7 @@ export interface TalosRenderedMessage {
 
 export interface TalosMarkdownRenderOptions {
     origin?: string
+    allowExternalImages?: boolean
     labels?: Partial<TalosMarkdownLabels>
 }
 
@@ -43,11 +44,22 @@ const allowedTags = [
     'hr', 'li', 'ol', 'p', 'pre', 'span', 'strong', 'table', 'tbody', 'td', 'th',
     'thead', 'tr', 'ul',
 ]
+const externalImageTags = [...allowedTags, 'img']
 
 const allowedAttributes = [
     'aria-label', 'class', 'data-talos-copy-code', 'href', 'rel', 'role', 'tabindex',
     'target', 'type',
 ]
+const externalImageAttributes = [...allowedAttributes, 'alt', 'decoding', 'loading', 'src']
+
+function isAllowedExternalImage(value: string): boolean {
+    try {
+        const url = new URL(value)
+        return url.protocol === 'https:' && url.hostname === 'cdn-uploads.huggingface.co'
+    } catch {
+        return false
+    }
+}
 
 function isAllowedLink(value: string): boolean {
     const href = value.trim()
@@ -164,6 +176,11 @@ function createMarkdownRenderer(): MarkdownIt {
     md.renderer.rules.table_close = () => '</table></div>'
     md.renderer.rules.image = (tokens, index, _options, environment) => {
         const labels = labelsFromEnvironment(environment)
+        const source = tokens[index]!.attrGet('src') ?? ''
+        if (environment.allowExternalImages === true && isAllowedExternalImage(source)) {
+            const alt = md.utils.escapeHtml(tokens[index]!.content.trim() || labels.image)
+            return `<img src="${md.utils.escapeHtml(source)}" alt="${alt}" loading="lazy" decoding="async">`
+        }
         const alt = tokens[index]!.content.trim() || labels.image
         return `<span class="talos-external-image-omitted">${md.utils.escapeHtml(labels.externalImageOmitted)} ${md.utils.escapeHtml(alt)}</span>`
     }
@@ -208,11 +225,13 @@ export function renderTalosMarkdown(
         : boundedSource)
     const html = markdown.render(normalized, {
         origin: resolvedOrigin(options),
+        allowExternalImages: options.allowExternalImages === true,
         labels,
     })
+    const allowExternalImages = options.allowExternalImages === true
     const clean = DOMPurify.sanitize(html, {
-        ALLOWED_ATTR: allowedAttributes,
-        ALLOWED_TAGS: allowedTags,
+        ALLOWED_ATTR: allowExternalImages ? externalImageAttributes : allowedAttributes,
+        ALLOWED_TAGS: allowExternalImages ? externalImageTags : allowedTags,
         ALLOW_DATA_ATTR: false,
         ALLOW_UNKNOWN_PROTOCOLS: false,
     })
