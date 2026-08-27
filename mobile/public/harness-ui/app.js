@@ -126,6 +126,14 @@
       followUpBubbleInAttesa: false,
       /** ⭐⭐⭐ 27/8, owner: "non esiste nessun loading quando il modello elabora... fa sembrare che si sia piantato" — l'elemento DOM della bolla di attesa (porta di TalosLineLoader.vue, mobile), o null quando non ce n'è una a schermo. Vedi mostraAttesaRisposta()/nascondiAttesaRisposta(). */
       attesaBubble: null,
+      /** ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 — l'ultimo
+       * StateDelta path /usage visto (forma OpenRouter: prompt_tokens,
+       * completion_tokens, prompt_tokens_details.cached_tokens, giri),
+       * null finché nessun giro ha mai riportato consumo — mai un
+       * contatore finto, la stessa onestà di IGNOTO-vs-GRATIS già in uso
+       * lato kernel. Vedi il case 'StateDelta' e la riga "Main" nel
+       * foglio Albero sessione. */
+      usage: null,
     },
   };
 
@@ -472,6 +480,27 @@
     return element;
   }
 
+  /**
+   * ⭐⭐⭐ 28/8, owner: "la schermata iniziale non deve essere una chat
+   * vuota, deve essere esattamente come fa il mobile" — stesso impianto
+   * del brand hero HTML (index.html, #conversationEmptyState), qui in
+   * versione JS per l'unico altro punto che ricrea l'empty-state dopo
+   * `nuovaGenerazioneSessione()` (`avviaSessionePendente`, sotto). Un
+   * solo posto per la struttura, non due copie che possono divergere.
+   */
+  function costruisciConversationHero(titolo, sottotitolo) {
+    const hero = document.createElement('div');
+    hero.className = 'conversation-hero';
+    hero.id = 'conversationEmptyState';
+    const logo = document.createElement('span');
+    logo.className = 'hero-logo';
+    logo.setAttribute('aria-hidden', 'true');
+    logo.appendChild(textElement('span', 'hero-logo-mark', ''));
+    hero.append(logo, textElement('span', 'hero-wordmark', 'TALOS'), textElement('p', 'hero-welcome-title', titolo));
+    if (sottotitolo) hero.appendChild(textElement('p', 'hero-subtitle', sottotitolo));
+    return hero;
+  }
+
   /*
    * ⛔⛔⛔ 27/8, owner: "le risposte non sono formattate, cioè le basi" —
    * `.assistant-copy` riceveva il testo del modello con `.textContent +=`:
@@ -530,6 +559,8 @@
     while (i < righe.length) {
       const riga = righe[i];
       const fenceMatch = /^```/.test(riga.trim());
+      // ⭐ 28/8, owner: "l'output della chat ha --- come separatore, formatta anche quello" — riga isolata di 3+ trattini/asterischi/underscore, nessun altro carattere: la sintassi Markdown per un separatore orizzontale. "---" non ha lo spazio dopo il primo trattino richiesto da listaMatch sotto, quindi le due regex non collidono su questa sintassi.
+      const hrMatch = /^(-{3,}|\*{3,}|_{3,})\s*$/.test(riga.trim());
       const listaMatch = /^(\s*)([-*])\s+(.*)$/.exec(riga);
       const listaNumMatch = /^(\s*)(\d+)\.\s+(.*)$/.exec(riga);
       const titoloMatch = /^(#{1,6})\s+(.*)$/.exec(riga);
@@ -543,6 +574,12 @@
         pre.appendChild(textElement('code', '', righeCodice.join('\n')));
         frammento.appendChild(pre);
         i += 1; // salta la riga di chiusura ```
+        continue;
+      }
+      if (hrMatch) {
+        chiudiParagrafo();
+        frammento.appendChild(document.createElement('hr'));
+        i += 1;
         continue;
       }
       if (titoloMatch) {
@@ -596,6 +633,34 @@
     if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
     const amount = value.toFixed(9).replace(/\.?0+$/, '');
     return `${estimated ? '~' : ''}$${amount}`;
+  }
+
+  /**
+   * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 — il
+   * contatore costo/token per una sessione VIVA (oggi esiste solo per le
+   * righe storiche della Board campagne). Solo token, MAI un costo in
+   * dollari: calcolarlo richiederebbe sapere con certezza quale modello
+   * ha girato QUESTO giro (il server può ricadere sul suo default senza
+   * dirlo al client) — mostrare un numero solo perché "probabilmente"
+   * giusto sarebbe un bluff, lo stesso principio che vieta un
+   * `enforcement` finto altrove in questo progetto. Token contati sono
+   * sempre veri, indipendentemente dal prezzo.
+   */
+  function formattaUsageBreve(usage) {
+    if (!usage) return 'contesto ignoto · in attesa del primo giro';
+    const prompt = Number(usage.prompt_tokens ?? 0) || 0;
+    const completion = Number(usage.completion_tokens ?? 0) || 0;
+    const cache = Number(usage.prompt_tokens_details?.cached_tokens ?? 0) || 0;
+    const totale = prompt + completion;
+    const kilo = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+    const cacheParte = cache > 0 ? ` · cache ${kilo(cache)}` : '';
+    return `${kilo(totale)} token · ${usage.giri} gir${usage.giri === 1 ? 'o' : 'i'}${cacheParte} · live`;
+  }
+
+  /** Ripatcha la riga "Main" del foglio Albero sessione SE è già aperto — non riapre né forza un redraw di tutto il foglio, stesso principio di aggiornaPillolaModello(). */
+  function aggiornaContatoreUsage() {
+    const nodo = $('[data-usage-summary]');
+    if (nodo) nodo.textContent = `Main · ${formattaUsageBreve(state.realSession.usage)}`;
   }
 
   function formatPassRate(value) {
@@ -1451,7 +1516,7 @@
       html: () => `
         <div class="sheet-section session-tree-sheet">
           <span class="sheet-label">Thread e fork</span>
-          <button class="sheet-option active" data-session-action="main"><span class="sheet-icon">${icon('i-list')}</span><span><strong data-current-session-title>${state.session.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}</strong><small>Main · contesto 18.7k · live</small></span><span>●</span></button>
+          <button class="sheet-option active" data-session-action="main"><span class="sheet-icon">${icon('i-list')}</span><span><strong data-current-session-title>${state.session.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}</strong><small data-usage-summary>Main · ${formattaUsageBreve(state.realSession.usage)}</small></span><span>●</span></button>
           <button class="sheet-option" data-session-action="side"><span class="sheet-icon">${icon('i-branch')}</span><span><strong>Responsive audit</strong><small>Side thread · subagent A1</small></span><span>↗</span></button>
           <button class="sheet-option" data-session-action="fork"><span class="sheet-icon">${icon('i-branch')}</span><span><strong>A11y review</strong><small>Fork dal turn 14 · pronto</small></span><span>✓</span></button>
         </div>
@@ -3031,8 +3096,23 @@
         break;
       }
       case 'StateDelta': {
+        /*
+         * ⛔⛔⛔ Riconciliazione Fase 3 (piano procedi-col-generare-un-snoopy-neumann.md,
+         * 27/8) — prima di questo giro OGNI StateDelta veniva trattato
+         * come una scrittura file, incondizionatamente: il path era
+         * sempre `/file/*`, mai altro, quindi funzionava per caso. Ora
+         * che esiste anche `/usage` (Fase 3), il path decide il ramo —
+         * mai più il bottone "✏️ File scritto" su un aggiornamento di
+         * token, e mai il contatore aggiornato su una scrittura vera.
+         */
+        const path = evento.delta?.[0]?.path;
+        if (path === '/usage') {
+          state.realSession.usage = evento.delta[0].value;
+          aggiornaContatoreUsage();
+          break;
+        }
         updateRealReview(evento.delta);
-        const percorsoScritto = evento.delta?.[0]?.path?.replace(/^\/file\//, '');
+        const percorsoScritto = path?.replace(/^\/file\//, '');
         if (percorsoScritto) segnalaScritturaNellAlbero(percorsoScritto);
         appendStatusNote('✏️ File scritto — vedi la scheda Review per il contenuto intero.');
         break;
@@ -3165,6 +3245,7 @@
       state.realSession.ragionamentoBubble = new Map();
       state.realSession.followUpBubbleInAttesa = false;
       state.realSession.attesaBubble = null; // il nodo è già sparito con replaceChildren() qui sopra
+      state.realSession.usage = null; // Fase 3 — un resume (continua:true) TIENE il conto, una sessione nuova riparte da IGNOTO
       // ⛔ 27/8 — Terminale/Browser tengono il loro "già reale" nel DOM
       // (dataset), non in state.realSession: senza questo, restavano
       // mostrati per sempre, mescolati con la sessione successiva.
@@ -3713,14 +3794,7 @@
     setView('chat');
     closePanels();
     // ⛔ nuovaGenerazioneSessione() ha appena svuotato #conversation (replaceChildren) — l'empty-state originale non esiste più nel DOM, va ricreato, non cercato.
-    const vuoto = document.createElement('div');
-    vuoto.className = 'board-empty conversation-empty';
-    vuoto.id = 'conversationEmptyState';
-    vuoto.append(
-      textElement('p', '', `Sessione pronta su ${nomeCartella}.`),
-      textElement('p', '', 'Scrivi qui sotto cosa deve fare TALOS per iniziare.'),
-    );
-    $('#conversation').appendChild(vuoto);
+    $('#conversation').appendChild(costruisciConversationHero(`Sessione pronta su ${nomeCartella}.`, 'Scrivi qui sotto cosa deve fare TALOS per iniziare.'));
     window.setTimeout(() => composerInput.focus(), 0);
   }
 
