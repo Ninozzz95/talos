@@ -27,12 +27,13 @@ type RuntimeGlobals = {
         stopRealSession(): Promise<void>
         handleRealEvent(evento: Record<string, unknown>, generation: number): void
         forkSession(): Promise<void>
-        resumeSession(): Promise<void>
+        resumeSession(messaggioFollowUp?: string): Promise<void>
         compactSession(): Promise<void>
         passaASessione(sessionId: string, taskId: string, nome?: string): void
         openRealTaskSheet(): Promise<void>
         aggiornaElencoSessioniReali(): Promise<void>
         runDirectShell(comando: string, silenzioso: boolean): Promise<void>
+        submitPrompt(text: string): boolean
         realSessionState: {
             id: string | null
             taskId: string | null
@@ -40,6 +41,7 @@ type RuntimeGlobals = {
             eventSource: FakeEventSource | null
             messageElements: Map<string, HTMLElement>
             reviewFiles: Map<string, { path: string, nuovo: boolean, code: [string, string][] }>
+            eventoTerminaleVisto: boolean
         }
     }
 }
@@ -267,6 +269,21 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(conversationText).toContain('Comando diretto')
     })
 
+    // ⛔⛔⛔ 27/8, trovato ricaricando la pagina (F5) su una sessione VERA di
+    // "compito libero": lo stesso RunStarted, replayato dopo il reload (non
+    // più coperto dal bubble ottimista di avviaSessionePendente), mostrava
+    // "Comando diretto" per una conversazione reale — task.consegna esiste
+    // (custom-task.mjs: {consegna, consegnaCorta, progetto}, NESSUN .id).
+    it('⛔ REAL-SESSION-COMANDO-DIRETTO-02 AL CONTRARIO: un RunStarted di un compito libero (consegna, senza id) dichiara "Compito libero", mai "Comando diretto"', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'RunStarted', input: { consegna: 'Ciao, chi sei?', consegnaCorta: 'Ciao, chi sei?', progetto: 'talos-prova-harness' } }, generation)
+
+        const conversationText = document.querySelector('#conversation')?.textContent ?? ''
+        expect(conversationText).not.toContain('Comando diretto')
+        expect(conversationText).toContain('Compito libero')
+        expect(conversationText).toContain('talos-prova-harness')
+    })
+
     it('REAL-SESSION-STALE-01 un evento di una generazione VECCHIA viene scartato, mai renderizzato', () => {
         const generazioneAttuale = runtime().realSessionState.generation
         const generazioneVecchia = generazioneAttuale - 1
@@ -417,6 +434,53 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(FakeEventSource.instances).toHaveLength(2)
         expect(FakeEventSource.instances[1].url).toBe('/api/v1/sessions/sess-riprendi/events')
         expect(runtime().realSessionState.id).toBe('sess-riprendi')
+    })
+
+    // ⛔⛔⛔ 27/8, owner: "non riesco ad avere una conversazione base col
+    // modello" — submitPrompt() rifiutava SEMPRE un secondo messaggio con
+    // una sessione reale avviata, anche a run CONCLUSO: il composer
+    // diventava inutilizzabile dopo la primissima risposta.
+    it('REAL-SESSION-RESUME-02 un follow-up su una sessione CONCLUSA chiama /resume con il messaggio, e lo mostra subito in chat', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-concluso' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-concluso' })
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'RunFinished', result: { detto: 'Fatto.' } }, generation)
+        expect(runtime().realSessionState.eventoTerminaleVisto).toBe(true)
+
+        const fetchMock = mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions/sess-concluso/resume', corpo: {} },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        expect(runtime().submitPrompt('Un\'altra domanda')).toBe(true)
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions/sess-concluso/resume', expect.objectContaining({
+            method: 'POST', body: JSON.stringify({ messaggio: "Un'altra domanda" }),
+        }))
+        expect(document.querySelector('#conversation')?.textContent).toContain("Un'altra domanda")
+        expect(runtime().realSessionState.id).toBe('sess-concluso') // STESSO id, non una sessione nuova
+    })
+
+    it('⛔ REAL-SESSION-RESUME-03 AL CONTRARIO: un follow-up su una sessione ANCORA IN CORSO non chiama /resume, rifiuto onesto', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-in-corso' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-in-corso' })
+        expect(runtime().realSessionState.eventoTerminaleVisto).toBe(false) // nessun RunFinished ancora
+
+        const fetchMock = vi.spyOn(window, 'fetch')
+        const chiamateSuResume = () => fetchMock.mock.calls.filter(([u]) => String(u).includes('/resume')).length
+        const prima = chiamateSuResume()
+
+        expect(runtime().submitPrompt('Domanda mentre gira')).toBe(true)
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(chiamateSuResume()).toBe(prima) // zero chiamate a /resume
+        expect(document.querySelector('#toastRegion')?.textContent).toContain('Messaggio non consegnato')
     })
 
     it('REAL-SESSION-SHELL-01 runDirectShell senza sessione attiva non chiama niente — rifiuto onesto, mai una finta esecuzione', async () => {

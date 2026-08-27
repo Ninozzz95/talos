@@ -447,7 +447,8 @@ describe('Harness UI embedded host and keyboard runtime', () => {
 
         expect(after).toBe(before) // mai un messaggio finto aggiunto alla conversazione
         expect(document.querySelector('#queuedMessage')?.classList.contains('show')).toBe(false) // mai il banner "Follow-up in coda"
-        expect(document.querySelector('#toastRegion')?.textContent).toContain('Follow-up non ancora implementato')
+        // ⛔ 27/8 — testo aggiornato: submitPrompt ora distingue sessione IN CORSO (questo caso, rifiuto onesto invariato nella sostanza) da sessione CONCLUSA (resumeSession(testo), vedi harnessUiRealSession.test.ts).
+        expect(document.querySelector('#toastRegion')?.textContent).toContain('Messaggio non consegnato')
         expect(fetchMock).not.toHaveBeenCalled()
 
         // ⛔ AL CONTRARIO: nemmeno il toggle "Follow-up" si attiva mentre una sessione reale è viva — lo stesso rifiuto onesto, non solo al momento dell'invio.

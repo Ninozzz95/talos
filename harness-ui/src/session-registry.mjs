@@ -233,9 +233,21 @@ export function createSessionRegistry({
      * CONCLUSA, per lo stesso motivo (i `messaggi` di un giro ancora in
      * corso non sono raggiungibili da fuori la sua chiusura).
      *
+     * ⛔⛔⛔ 27/8, owner: "non riesco ad avere una conversazione base col
+     * modello" — senza `nuovoMessaggioUtente`, un resume rilanciava
+     * `talosLavora` sugli STESSI `messaggiFinali` che avevano già prodotto
+     * "concluso": il modello si ritrovava la propria ultima risposta come
+     * ultimo messaggio, senza una domanda nuova a cui rispondere — non è
+     * MAI stato un vero "continua la conversazione", solo bookkeeping per
+     * riprendere un giro interrotto. `nuovoMessaggioUtente`, se presente,
+     * si appende a `messaggiFinali` PRIMA di ripartire: è quello che rende
+     * un resume anche il meccanismo di un secondo turno di chat reale (vedi
+     * submitPrompt in app.js) — stesso `avviaESegui`, zero duplicazione.
+     *
+     * @param {string} [nuovoMessaggioUtente]
      * @returns {{sessionId:string}|{erroreAvvio:string, code:string}}
      */
-    resume(sessionId) {
+    resume(sessionId, nuovoMessaggioUtente = null) {
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       if (!voce.messaggiFinali) {
@@ -246,9 +258,12 @@ export function createSessionRegistry({
           code: 'SESSION_NOT_READY',
         };
       }
+      const messaggiIniziali = nuovoMessaggioUtente
+        ? [...voce.messaggiFinali, { role: 'user', content: nuovoMessaggioUtente }]
+        : voce.messaggiFinali;
       return avviaESegui({
         sessionId, taskId: voce.taskId, cartella: voce.cartella, task: voce.task,
-        comandoProva: voce.comandoProva, messaggiIniziali: voce.messaggiFinali,
+        comandoProva: voce.comandoProva, messaggiIniziali,
         forkDa: voce.forkDa, voceEsistente: voce,
       });
     },
@@ -374,11 +389,29 @@ export function createSessionRegistry({
      * tardi), poi ogni evento NUOVO man mano che arriva. Torna una funzione
      * di disiscrizione — un no-op se la sessione non esiste o è già conclusa
      * (niente altro arriverà mai, niente da disiscrivere).
+     *
+     * ⛔⛔⛔ 27/8, owner: "ricevo risposte duplicate", poi ricerca web (SSE
+     * reconnection best practice, 27/8): la prima cura (`_sequenza` nel
+     * payload, dedup lato client) FUNZIONA ma è un doppione fatto in casa
+     * di un meccanismo che SSE ha già — `Last-Event-ID`. Senza, ogni
+     * riconnessione (frequente su mobile: schermo spento, handoff wifi↔dati)
+     * ritrasmetteva l'INTERO buffer via rete, sprecando banda esattamente
+     * dove è più preziosa — solo il rendering veniva scartato, non il
+     * traffico. `daSequenza`, se presente, salta ogni evento con
+     * `_sequenza <= daSequenza`: replay più corto, stessa correttezza.
+     * `_sequenza` lato client resta — un client che non manda
+     * `Last-Event-ID` (fetch manuale, un test) è comunque protetto.
+     *
+     * @param {number} [daSequenza] — id dell'ultimo evento già ricevuto dal
+     *   client (da `Last-Event-ID`); assente = replay completo, come prima.
      */
-    iscriviti(sessionId, ascoltatore) {
+    iscriviti(sessionId, ascoltatore, daSequenza = 0) {
       const voce = sessioni.get(sessionId);
       if (!voce) return () => {};
-      for (const evento of voce.eventi) ascoltatore(evento);
+      for (const evento of voce.eventi) {
+        if (typeof evento._sequenza === 'number' && evento._sequenza <= daSequenza) continue;
+        ascoltatore(evento);
+      }
       if (voce.conclusa) return () => {};
       voce.ascoltatori.add(ascoltatore);
       return () => voce.ascoltatori.delete(ascoltatore);
