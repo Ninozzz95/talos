@@ -51,6 +51,17 @@ export function createSessionRegistry({
   chiave,
   cartelleProgetto = [],
   clock = () => new Date(),
+  /*
+   * ⭐⭐⭐ 28/8, owner: "l'harness desktop diventa l'unica chat, con tutti i
+   * tool come la generazione di artefatti oppure la ricerca web" — sempre
+   * offerti, non una scelta per sessione (a differenza di `modello`): è
+   * la superficie stessa che cambia, non un'opzione dentro la superficie
+   * di sempre. `ricercaWeb` invece resta di configurazione server (§config.mjs,
+   * `undefined` se non impostata — il tool resta offerto ma dichiara
+   * onestamente "not configured", mai un tentativo senza credenziali).
+   */
+  strumentiEstesi = ['web_search', 'artifact_create'],
+  ricercaWeb,
 } = {}) {
   const sessioni = new Map();
 
@@ -142,6 +153,7 @@ export function createSessionRegistry({
       reasoning: reasoningEffettivo ?? undefined,
       segnaleStop: controller.signal,
       mobile: voce.mobile,
+      strumentiEstesi, ricercaWeb,
       onEvento: (evento) => broadcast(voce, evento),
     }).then((risultato) => {
       /*

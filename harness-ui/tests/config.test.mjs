@@ -157,3 +157,44 @@ test('modelloRichiestaValido accetta i 12 alias reali "-latest" di OpenRouter (p
   assert.equal(modelloRichiestaValido('vendor/~nel-mezzo'), false);
   assert.equal(modelloRichiestaValido('~vendor/'), false);
 });
+
+/*
+ * ⭐⭐⭐ 28/8 — owner: "l'harness desktop diventa l'unica chat, con tutti i
+ * tool come... la ricerca web". `ricercaWeb` è config di SERVER (non per
+ * sessione), stesso principio onesto di `chiaveApi`: assente = il tool
+ * resta offerto ma il kernel dichiara onestamente "not configured".
+ */
+test('⛔ config.ricercaWeb è undefined quando nessuna credenziale/endpoint è impostata (default onesto, mai un provider inventato)', (t) => {
+  const bancoDir = makeBanco(t);
+  const config = loadConfig({ TALOS_BANCO_DIR: bancoDir }, import.meta.url);
+  assert.equal(config.ricercaWeb, undefined);
+});
+
+test('⭐ config.ricercaWeb con solo TALOS_HARNESS_SEARCH_API_KEY: provider di default tavily', (t) => {
+  const bancoDir = makeBanco(t);
+  const config = loadConfig({ TALOS_BANCO_DIR: bancoDir, TALOS_HARNESS_SEARCH_API_KEY: 'k' }, import.meta.url);
+  assert.deepEqual(config.ricercaWeb, { provider: 'tavily', apiKey: 'k' });
+});
+
+test('⭐ config.ricercaWeb con provider esplicito + endpoint, senza chiave (searxng)', (t) => {
+  const bancoDir = makeBanco(t);
+  const config = loadConfig({
+    TALOS_BANCO_DIR: bancoDir,
+    TALOS_HARNESS_SEARCH_PROVIDER: 'searxng',
+    TALOS_HARNESS_SEARCH_ENDPOINT: 'https://searx.esempio.it',
+  }, import.meta.url);
+  assert.deepEqual(config.ricercaWeb, { provider: 'searxng', endpoint: 'https://searx.esempio.it' });
+});
+
+test('⛔⛔ un TALOS_HARNESS_SEARCH_PROVIDER ignoto è rifiutato — ma SOLO se una credenziale/endpoint è davvero impostata', (t) => {
+  const bancoDir = makeBanco(t);
+  // AL CONTRARIO: un provider scritto male ma SENZA chiave/endpoint non fa fallire l'avvio del server — la stessa disciplina di chiaveApi assente.
+  const senzaCredenziali = loadConfig({ TALOS_BANCO_DIR: bancoDir, TALOS_HARNESS_SEARCH_PROVIDER: 'inventato' }, import.meta.url);
+  assert.equal(senzaCredenziali.ricercaWeb, undefined);
+  assert.throws(
+    () => loadConfig({
+      TALOS_BANCO_DIR: bancoDir, TALOS_HARNESS_SEARCH_PROVIDER: 'inventato', TALOS_HARNESS_SEARCH_API_KEY: 'k',
+    }, import.meta.url),
+    ConfigurationError,
+  );
+});

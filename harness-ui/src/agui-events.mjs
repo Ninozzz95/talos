@@ -97,6 +97,20 @@ export function stateDelta({ delta }) {
 }
 
 /**
+ * ⭐⭐⭐ 28/8 — `ArtifactCreated`. ⛔ NON è nello schema pubblico AG-UI
+ * (verificato il 24/8 su docs.ag-ui.com/concepts/events per gli eventi
+ * sopra: non esiste un evento per "un documento HTML autosufficiente da
+ * mostrare"): stessa estensione dichiarata di `contesto` su RunStarted,
+ * stesso spirito "loose event format matching". `html` viaggia intero
+ * (mai troncato — un frontend che sandboxa un frammento di tag rotto è
+ * un rischio, non un risparmio; il tetto di dimensione vive a monte, in
+ * agent-service.mjs).
+ */
+export function artifactCreated({ messageId, id, titolo, html }) {
+    return { type: 'ArtifactCreated', messageId, id, titolo, html }
+}
+
+/**
  * ⭐ Da una risposta grezza del modello (la stessa forma OpenAI che
  * talosLavora già costruisce — {role, content, tool_calls}, vedi
  * talosHarness.mjs riga ~761) all'elenco ORDINATO di eventi AG-UI per

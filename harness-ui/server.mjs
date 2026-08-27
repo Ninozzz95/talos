@@ -35,6 +35,7 @@ async function startServer() {
     modello: config.modello,
     chiave: config.chiaveApi,
     cartelleProgetto: config.cartelleProgetto,
+    ricercaWeb: config.ricercaWeb,
   });
   /*
    * ⭐⭐⭐ 27/8 — blocco 7, la vera schedulazione. Owner: "hai il mio via
