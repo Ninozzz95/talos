@@ -1,9 +1,10 @@
 import type { TalosChatRepository } from '@/repositories/chatRepository'
 import type { TalosToolDefinition, TalosToolResult } from '@/lib/tools/registry'
 import type { TalosToolSecurity } from '@/lib/tools/security'
+import type { TalosScheda } from '@/lib/tools/tracciaAzione'
 import type {
     ForgeCapabilityContext, ForgeCapabilityDescriptor, ForgeCapabilityRuntime, ForgeCredentialRequirement,
-    ForgeModelExecutionResult, ForgeModelRequirements, ForgeModelRuntime, TalosLocalToolManifestV1,
+    ForgeCreatedRecord, ForgeModelExecutionResult, ForgeModelRequirements, ForgeModelRuntime, TalosLocalToolManifestV1,
 } from './contracts'
 import { defaultForgeCapability } from './capabilityCatalog'
 import { executeTalosLocalTool } from './interpreter'
@@ -65,6 +66,45 @@ function createLocalCapabilities(repository: TalosChatRepository): ForgeCapabili
 }
 
 const mapRisk = (risk: 'R1'|'R2'|'R3'|'R4'): TalosToolSecurity['risk'] => risk as TalosToolSecurity['risk']
+
+/**
+ * ⛔⛔⛔ Owner 2026-08-27 — «hai anche testato quella cosa di ChatGPT? creare
+ * un tool UI che ti trasforma una lista in un elemento in chat
+ * interattivo?». Non l'Apps SDK di OpenAI (iframe, incompatibile con
+ * ADR-001): la stessa `TalosScheda` che le sette capacità native già usano
+ * (`tasksWriteTools.ts` ecc.), qui costruita per un tool FORGIATO, che oggi
+ * non ne produceva mai — vedi `ForgeCreatedRecord` in `contracts.ts`.
+ *
+ * ⛔ Le rotte sono quelle VERE (`mobileRoutes.ts`), non inventate — `memory`
+ * ne ha una (`/memory/:id`, `memory-item`) anche se la scheda nativa
+ * `memory_write` non la usa: quel tool passa dalla sua astrazione `sources`,
+ * che non espone l'id al chiamante; qui `repository.createMemory(...)` è
+ * chiamato direttamente e l'id c'è per davvero.
+ */
+const FORGE_RECORD_KIND_ROUTE: Record<ForgeCreatedRecord['recordKind'], (id: string) => string> = {
+    task: (id) => `/tasks/${id}`,
+    note: (id) => `/notes/${id}`,
+    memory: (id) => `/memory/${id}`,
+}
+const FORGE_RECORD_KIND_GENERE: Record<ForgeCreatedRecord['recordKind'], string> = {
+    task: 'Attività', note: 'Nota', memory: 'Memoria',
+}
+
+/**
+ * ⛔ Una voce sola → `creato` (la forma già esistente, zero disegno nuovo per
+ * il caso comune). Più di una → `creati`. Zero voci → nessuna scheda: un
+ * `undefined` qui non disegna niente, non è un'omissione.
+ */
+function buildForgeScheda(created: readonly ForgeCreatedRecord[]): TalosScheda | undefined {
+    if (created.length === 0) return undefined
+    const voci = created.map((r) => ({
+        titolo: r.title,
+        genere: FORGE_RECORD_KIND_GENERE[r.recordKind],
+        ...(r.id ? { dove: FORGE_RECORD_KIND_ROUTE[r.recordKind](r.id) } : {}),
+    }))
+    if (voci.length === 1) return { tipo: 'creato' as const, titolo: voci[0].titolo, genere: voci[0].genere, ...(voci[0].dove ? { dove: voci[0].dove } : {}) }
+    return { tipo: 'creati' as const, voci }
+}
 
 /**
  * ⛔⛔⛔ Owner 2026-08-27 — premesse/verify per un tool forgiato, vedi
@@ -186,8 +226,14 @@ export async function createInstalledDynamicTools(options: {
             async run(input, context): Promise<TalosToolResult> {
                 const inputErrors = validateJsonSchemaValue(manifest.inputSchema, input); if (inputErrors.length) return { ok: false, content: inputErrors.join('; '), code: 'TALOS_FORGE_INPUT_INVALID' }
                 const result = await executeTalosLocalTool(manifest, input, { capabilities, model }, { signal: context.signal })
-                if (result.status !== 'succeeded') return { ok: false, content: result.error?.message ?? 'Dynamic tool failed.', code: result.status === 'recovery_required' ? 'TALOS_FORGE_RECOVERY_REQUIRED' : (result.error?.code ?? 'TALOS_FORGE_FAILED'), evidence: { forge: { status: result.status, trace: result.trace } } }
-                return { ok: true, content: typeof result.output === 'string' ? result.output : JSON.stringify(result.output), evidence: { forge: { status: result.status, tool_id: manifest.id, version: manifest.version, trace: result.trace } } }
+                // ⛔ Owner 2026-08-27: costruita PRIMA del ramo ok/non-ok e
+                // usata in ENTRAMBI — un `foreach` che fallisce a metà ha
+                // comunque creato le voci precedenti per davvero (vedi
+                // `ForgeExecutionResult.created`), e nasconderle sul ramo
+                // `ok:false` sarebbe la stessa bugia del «Fatto» capovolta.
+                const scheda = buildForgeScheda(result.created)
+                if (result.status !== 'succeeded') return { ok: false, content: result.error?.message ?? 'Dynamic tool failed.', code: result.status === 'recovery_required' ? 'TALOS_FORGE_RECOVERY_REQUIRED' : (result.error?.code ?? 'TALOS_FORGE_FAILED'), evidence: { forge: { status: result.status, trace: result.trace } }, ...(scheda ? { scheda } : {}) }
+                return { ok: true, content: typeof result.output === 'string' ? result.output : JSON.stringify(result.output), evidence: { forge: { status: result.status, tool_id: manifest.id, version: manifest.version, trace: result.trace } }, ...(scheda ? { scheda } : {}) }
             },
         }
         tools.push(tool as TalosToolDefinition<never>)

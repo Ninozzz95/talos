@@ -23,13 +23,13 @@ import type { ForgeCapabilityDescriptor, ForgeRisk } from './contracts'
  */
 const CATALOG: ForgeCapabilityDescriptor[] = [
     { id: 'tasks.list', actions: ['read'], risk: 'R1', network: 'none', reversible: true, maxInputBytes: 1_024, description: 'Read local TALOS tasks.' },
-    { id: 'tasks.create', actions: ['write'], risk: 'R2', network: 'none', reversible: true, maxInputBytes: 16_384, description: 'Create a local TALOS task.' },
+    { id: 'tasks.create', actions: ['write'], risk: 'R2', network: 'none', reversible: true, maxInputBytes: 16_384, description: 'Create a local TALOS task.', recordKind: 'task' },
     { id: 'tasks.setStatus', actions: ['write'], risk: 'R2', network: 'none', reversible: true, maxInputBytes: 1_024, description: 'Change local task status.' },
     { id: 'notes.list', actions: ['read'], risk: 'R1', network: 'none', reversible: true, maxInputBytes: 1_024, description: 'Read local TALOS notes.' },
-    { id: 'notes.create', actions: ['write'], risk: 'R2', network: 'none', reversible: true, maxInputBytes: 32_768, description: 'Create a local TALOS note.' },
+    { id: 'notes.create', actions: ['write'], risk: 'R2', network: 'none', reversible: true, maxInputBytes: 32_768, description: 'Create a local TALOS note.', recordKind: 'note' },
     { id: 'notes.update', actions: ['write'], risk: 'R2', network: 'none', reversible: true, maxInputBytes: 32_768, description: 'Update a local TALOS note.' },
     { id: 'memory.search', actions: ['read'], risk: 'R2', network: 'none', reversible: true, maxInputBytes: 1_024, description: 'Search active local TALOS memories.' },
-    { id: 'memory.create', actions: ['write'], risk: 'R3', network: 'none', reversible: true, maxInputBytes: 32_768, description: 'Create durable TALOS memory.' },
+    { id: 'memory.create', actions: ['write'], risk: 'R3', network: 'none', reversible: true, maxInputBytes: 32_768, description: 'Create durable TALOS memory.', recordKind: 'memory' },
     // ⛔⛔⛔ Owner 2026-08-27, Fase 7 — trovato leggendo `talosIntegration.ts`
     // insieme al piano: `web.search` stava dichiarata qui ma
     // `createLocalCapabilities()` non le ha MAI dato un handler — a

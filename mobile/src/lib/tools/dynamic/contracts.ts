@@ -36,6 +36,36 @@ export interface ForgeCapabilityDescriptor {
      */
     compensatesFor?: string
     description: string
+    /**
+     * ⛔ Owner 2026-08-27 — «hai anche testato quella cosa di ChatGPT? creare
+     * un tool UI che ti trasforma una lista in un elemento in chat
+     * interattivo?». L'Apps SDK di OpenAI la risolve con un iframe e codice
+     * generato: incompatibile con ADR-001 ("mai eseguire codice influenzato
+     * dal modello"). Ricerca 2026 (CopilotKit, A2UI/agentwiki.org): il
+     * pattern sicuro è "Declarative Generative UI" — l'agente restituisce
+     * una specifica strutturata, il frontend la disegna coi PROPRI vincoli —
+     * esattamente ciò che `TalosScheda` già è, non un'architettura nuova.
+     *
+     * `recordKind` marca le capability il cui successo È la creazione di
+     * qualcosa che resta (non un aggiornamento, non una lettura): solo le
+     * tre `*.create` qui sotto lo dichiarano. L'interprete lo legge in
+     * `callCapability` per aggregare `ForgeExecutionResult.created` —
+     * struttura dichiarata, non indovinare dalla forma del risultato.
+     */
+    recordKind?: 'task' | 'note' | 'memory'
+}
+
+/**
+ * ⛔ Una voce di `ForgeExecutionResult.created` — vedi `recordKind` sopra.
+ * `id` è assente quando la capability non lo restituisce (`memory.create`,
+ * per lo stesso motivo onesto già documentato nella scheda `creato` di
+ * `memoryWriteTools.ts`: niente pulsante che non saprebbe dove andare).
+ */
+export interface ForgeCreatedRecord {
+    capability: string
+    recordKind: 'task' | 'note' | 'memory'
+    id?: string
+    title: string
 }
 
 export type ForgeRef = { $ref: string }
@@ -197,4 +227,12 @@ export interface ForgeExecutionResult {
     error?: { code: string; message: string }
     trace: ForgeTraceEvent[]
     variables: Record<string, unknown>
+    /**
+     * ⛔ Owner 2026-08-27 — presente su OGNI esito, non solo `succeeded`: un
+     * `foreach` che crea 2 attività e fallisce alla terza ha comunque scritto
+     * quelle 2 sul disco (v1 non ha compensazioni reali per `*.create`, vedi
+     * `capabilityCatalog.ts`) — nasconderle sarebbe la stessa bugia del
+     * «Fatto» su una cosa non fatta, capovolta.
+     */
+    created: ForgeCreatedRecord[]
 }

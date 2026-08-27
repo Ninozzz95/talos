@@ -842,3 +842,74 @@ describe('⭐⭐⭐ la scheda di un MD si apre, formattata', () => {
         expect(visualizzatore.text()).not.toContain('##')
     })
 })
+
+/**
+ * ⭐⭐⭐ PIÙ DI UNA COSA CREATA IN UN GIRO SOLO — owner 2026-08-27, «hai anche
+ * testato quella cosa di ChatGPT? creare un tool UI che ti trasforma una
+ * lista in un elemento in chat interattivo?». Non l'Apps SDK di OpenAI: la
+ * STESSA scheda `creato` sopra, ripetuta per voce — vedi `tracciaAzione.ts`.
+ *
+ * ⛔ Nessun tocco su una voce con `dove` in questi test: il componente chiama
+ * `useRouter()` senza un plugin router installato in questa suite (nessun
+ * test esistente di `creato` lo fa neanche per la sua rotta) — provare il
+ * tag/il chevron/l'assenza di crash sulla voce SENZA `dove` copre lo stesso
+ * ramo di codice senza dipendere da un router che qui non c'è.
+ */
+describe('⭐⭐⭐ la scheda "creati" — più voci nella stessa card', () => {
+    const conVoci = (voci: Array<Record<string, unknown>>) => mount(TalosMobileSchedaAzione, {
+        props: {
+            metadata: { cards: [{ tipo: 'creati', voci }] },
+        },
+    })
+
+    it('una riga per voce, col titolo e il genere di ciascuna', () => {
+        const w = conVoci([
+            { titolo: 'Prima nota', genere: 'Nota', dove: '/notes/1' },
+            { titolo: 'Seconda nota', genere: 'Nota', dove: '/notes/2' },
+        ])
+        const righe = w.findAll('[data-testid="talos-scheda-creati-voce"]')
+        expect(righe).toHaveLength(2)
+        expect(righe[0]!.text()).toContain('Prima nota')
+        expect(righe[0]!.text()).toContain('Nota')
+        expect(righe[1]!.text()).toContain('Seconda nota')
+    })
+
+    it('⛔ con `dove` la voce è un BOTTONE col chevron', () => {
+        const w = conVoci([{ titolo: 'Prima nota', genere: 'Nota', dove: '/notes/1' }])
+        const riga = w.get('[data-testid="talos-scheda-creati-voce"]')
+        expect(riga.element.tagName).toBe('BUTTON')
+        expect(riga.text()).toContain('›')
+    })
+
+    /*
+     * ⛔⛔ AL CONTRARIO: la stessa regola di `creato` singolare — senza rotta
+     * resta un riquadro muto, mai un bottone che non porta da nessuna parte.
+     */
+    it('⛔⛔ senza `dove` la voce resta un riquadro, non un bottone, e il tocco non fa niente', async () => {
+        const w = conVoci([{ titolo: 'Una memoria', genere: 'Memoria' }])
+        const riga = w.get('[data-testid="talos-scheda-creati-voce"]')
+        expect(riga.element.tagName).toBe('DIV')
+        expect(riga.text()).not.toContain('›')
+        await expect(riga.trigger('click')).resolves.not.toThrow()
+    })
+
+    it('genere per voce: due voci di specie diversa nella stessa card, mai un genere condiviso', () => {
+        const w = conVoci([
+            { titolo: 'Comprare il latte', genere: 'Attività', dove: '/tasks/1' },
+            { titolo: 'Idea per il weekend', genere: 'Nota', dove: '/notes/9' },
+        ])
+        const righe = w.findAll('[data-testid="talos-scheda-creati-voce"]')
+        expect(righe[0]!.text()).toContain('Attività')
+        expect(righe[1]!.text()).toContain('Nota')
+    })
+
+    /*
+     * ⛔ Zero voci non si disegna — stessa regola di `agenda`/`quale-app`: un
+     * tool che dichiara la scheda senza aver creato niente non deve mostrare
+     * una card vuota, sarebbe la bugia opposta del «Fatto».
+     */
+    it('⛔ un elenco VUOTO non disegna nessuna scheda', () => {
+        const w = conVoci([])
+        expect(w.find('[data-testid="talos-scheda-azione"]').exists()).toBe(false)
+    })
+})

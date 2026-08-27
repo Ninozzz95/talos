@@ -113,3 +113,66 @@ describe('Tool Forge interpreter — idempotenza collegata per davvero', () => {
         expect(state.calls).toBe(2)
     })
 })
+
+/**
+ * ⛔⛔⛔ Owner 2026-08-27 — «hai anche testato quella cosa di ChatGPT? creare
+ * un tool UI che ti trasforma una lista in un elemento in chat
+ * interattivo?». `ForgeExecutionResult.created` è il canale che alimenta
+ * quella scheda (`talosIntegration.ts` la trasforma in `creato`/`creati`).
+ * Qui si prova SOLO l'aggregazione, non il disegno — la stessa distinzione
+ * fra `interpreter.ts` (capacità-agnostico) e `talosIntegration.ts`
+ * (conosce le rotte) mantenuta ovunque nel Forge.
+ */
+describe('Tool Forge interpreter — aggregazione dei record creati', () => {
+    it('una capability con recordKind e un risultato {id,title} finisce in created', async () => {
+        const runtime = fakeCapabilityRuntime(async () => ({ id: 'note-1', title: 'Compra il latte' }))
+        const manifest = manifestWithCapability({ title: 'Compra il latte', content: 'x' })
+        manifest.flow.nodes[0] = { ...manifest.flow.nodes[0], capability: 'notes.create' } as never
+        const result = await executeTalosLocalTool(manifest, {}, { capabilities: runtime })
+        expect(result.status).toBe('succeeded')
+        expect(result.created).toEqual([{ capability: 'notes.create', recordKind: 'note', id: 'note-1', title: 'Compra il latte' }])
+    })
+
+    it('⛔ verso contrario: una capability SENZA recordKind non finisce mai in created, anche con un risultato a forma di record', async () => {
+        // notes.list non ha recordKind — è una LETTURA — anche se il finto
+        // runtime qui sotto restituisse una forma identica a un record creato.
+        const runtime = fakeCapabilityRuntime(async () => ({ id: 'note-1', title: 'Sembra un record ma non lo è' }))
+        const result = await executeTalosLocalTool(manifestWithCapability(), {}, { capabilities: runtime })
+        expect(result.status).toBe('succeeded')
+        expect(result.created).toEqual([])
+    })
+
+    it('⛔ un risultato senza titolo leggibile non produce una voce vuota', async () => {
+        const runtime = fakeCapabilityRuntime(async () => ({ id: 'note-1' }))
+        const manifest = manifestWithCapability({ title: 'x', content: 'x' })
+        manifest.flow.nodes[0] = { ...manifest.flow.nodes[0], capability: 'notes.create' } as never
+        const result = await executeTalosLocalTool(manifest, {}, { capabilities: runtime })
+        expect(result.created).toEqual([])
+    })
+
+    it('un fallimento a metà conserva ciò che è già stato creato prima — v1 non ha compensazioni reali per *.create', async () => {
+        const manifest: TalosLocalToolManifestV1 = {
+            schema: 'talos.local-tool.v1', id: 'partial_create_tool', version: 1, title: 'Partial',
+            description: 'Two writes, the second fails', createdAt: new Date().toISOString(), parentVersion: null,
+            execution: 'declarative-flow', installScope: 'device',
+            network: { mode: 'forbidden', domains: [] }, credentialRequirements: [],
+            flow: {
+                entry: 'first', maxTransitions: 8,
+                nodes: [
+                    { id: 'first', type: 'capability', capability: 'notes.create', input: { title: 'Prima', content: 'x' }, next: 'second' },
+                    { id: 'second', type: 'capability', capability: 'notes.create', input: { title: 'Seconda', content: 'x' }, next: 'done' },
+                    { id: 'done', type: 'return', value: null },
+                ],
+            },
+        }
+        let calls = 0
+        const runtime = fakeCapabilityRuntime(async () => {
+            calls += 1
+            if (calls === 2) throw new Error('boom')
+            return { id: 'note-1', title: 'Prima' }
+        })
+        const result = await executeTalosLocalTool(manifest, {}, { capabilities: runtime })
+        expect(result.status).not.toBe('succeeded')
+        expect(result.created).toEqual([{ capability: 'notes.create', recordKind: 'note', id: 'note-1', title: 'Prima' }])
+    })
+})

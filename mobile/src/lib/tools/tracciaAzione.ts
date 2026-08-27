@@ -355,6 +355,33 @@ export type TalosScheda =
          */
         readonly mdFileId?: string
     }
+    /**
+     * ⭐⭐⭐ PIÙ DI UNA COSA CREATA IN UN GIRO SOLO.
+     *
+     * Owner 2026-08-27 — «hai anche testato quella cosa di ChatGPT? creare un
+     * tool UI che ti trasforma una lista in un elemento in chat
+     * interattivo?». Non è l'Apps SDK (iframe, codice generato,
+     * incompatibile con ADR-001): è questa stessa famiglia, `creato`, al
+     * plurale — perché un tool del Forge con un `foreach` (es. "aggiungi tre
+     * attività") produceva N chiamate a `tasks.create` e ZERO tracce a
+     * schermo: solo un badge di testo "Fatto: bulk tasks", la stessa faccia
+     * di un tool che non ha creato niente. Vedi `ForgeCreatedRecord` in
+     * `dynamic/contracts.ts` per come si aggrega, e `talosIntegration.ts`
+     * per come diventa questa scheda (una sola voce → `creato`, com'era
+     * già; più di una → questa).
+     *
+     * ⛔ Ogni voce porta il proprio `genere`: un tool può creare cose diverse
+     * nello stesso giro (un'attività E una nota), e forzare un genere
+     * condiviso sarebbe una verità inventata per la metà delle voci.
+     */
+    | {
+        readonly tipo: 'creati'
+        readonly voci: ReadonlyArray<{
+            readonly titolo: string
+            readonly genere: string
+            readonly dove?: string
+        }>
+    }
     | {
         readonly tipo: 'quale-app'
         /** La capacità da richiamare con l'app scelta. */
