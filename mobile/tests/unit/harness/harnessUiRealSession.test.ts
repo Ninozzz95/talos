@@ -596,8 +596,12 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         const terminaleDopo = document.querySelector('[data-view="terminal"] .terminal-window code') as HTMLElement | null
         expect(terminaleDopo?.textContent).not.toContain('marcatore-sessione-precedente')
         expect(terminaleDopo?.dataset.reale).toBeUndefined()
+        // ⛔ 27/8, seconda passata: il reset mostra uno stato ONESTO E VUOTO
+        // ("Nessun comando eseguito..."), non più il demo originale — il
+        // badge resta nascosto perché non è un dato finto da segnalare.
+        expect(terminaleDopo?.textContent).toContain('Nessun comando eseguito')
         const badge = document.querySelector('[data-view="terminal"] .demo-surface-badge') as HTMLElement | null
-        expect(badge?.hidden).toBe(false)
+        expect(badge?.hidden).toBe(true)
     })
 
     // ⛔⛔⛔ 27/8, trovato nell'ispezione visiva finale (owner: "IMPORTANTISSIMA"):
