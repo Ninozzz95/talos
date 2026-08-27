@@ -230,6 +230,44 @@ test('⭐⭐ e AL CONTRARIO: senza modello esplicito, avviaLibero() eredita il d
   assert.equal(finta.ultimoInput.modello, 'default/modello');
 });
 
+/*
+ * ⛔⛔⛔ Riconciliazione Fase 1 (branch merge, 27/8) — trovato dal VIVO sul
+ * Pad, non a unit test: un "compito libero" avviato dal tunnel mobile
+ * eseguiva `!comando` sulla PC (`sandbox: none`) invece che sul telefono,
+ * perché `avviaLibero()` non passava mai `mobile` ad `avviaESegui()` — la
+ * funzione predata la riconciliazione, quando "libero" era raggiungibile
+ * solo da desktop. Ora lo è anche dal mobile (stesso app.js, tre branch
+ * divergenti dello stesso file, non tre file), quindi lo stesso segnale di
+ * `avvia()` deve valere anche qui. Manca un test per il verso positivo
+ * PRIMA di questo giro — è la ragione per cui il buco è passato inosservato
+ * fino alla prova dal vivo, non un caso.
+ */
+test('⭐⭐⭐ avviaLibero({mobile:true}) porta mobile fino alla voce, come avvia() — il buco trovato dal vivo sul Pad', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
+    cartelleProgetto: [{ id: '0', percorso: '/tmp/progetto-vero', nome: 'progetto-vero' }],
+    modello: 'default/modello', chiave: 'k',
+  });
+
+  registro.avviaLibero({ cartellaId: '0', consegna: 'fai qualcosa', mobile: true });
+
+  assert.equal(finta.ultimoInput.mobile, true);
+});
+
+test('⛔ AL CONTRARIO: avviaLibero() senza mobile esplicito resta false, comportamento di sempre', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
+    cartelleProgetto: [{ id: '0', percorso: '/tmp/progetto-vero', nome: 'progetto-vero' }],
+    modello: 'default/modello', chiave: 'k',
+  });
+
+  registro.avviaLibero({ cartellaId: '0', consegna: 'fai qualcosa' });
+
+  assert.equal(finta.ultimoInput.mobile, false);
+});
+
 test('⭐ elenca() torna vuoto finché nessuna sessione è mai partita', () => {
   const registro = createSessionRegistry({ preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
   assert.deepEqual(registro.elenca(), []);

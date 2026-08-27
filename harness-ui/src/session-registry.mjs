@@ -197,7 +197,7 @@ export function createSessionRegistry({
      * corpus benchmark — scrive DIRETTAMENTE sul progetto vero, nessuna
      * copia usa-e-getta (vedi la doc di `custom-task.mjs` sul perché).
      */
-    avviaLibero({ cartellaId, consegna, comandoProva, modello: modelloScelto = null, reasoning: reasoningScelto = null }) {
+    avviaLibero({ cartellaId, consegna, comandoProva, modello: modelloScelto = null, reasoning: reasoningScelto = null, mobile = false }) {
       let preparato;
       try {
         preparato = preparaEsecuzioneLiberaFn(cartelleProgetto, { cartellaId, consegna, comandoProva });
@@ -207,7 +207,7 @@ export function createSessionRegistry({
       }
       return avviaESegui({
         taskId: `libero:${cartellaId}`, cartella: preparato.cartella, task: preparato.task,
-        comandoProva: preparato.comandoProva, modelloRichiesta: modelloScelto, reasoningRichiesto: reasoningScelto,
+        comandoProva: preparato.comandoProva, modelloRichiesta: modelloScelto, reasoningRichiesto: reasoningScelto, mobile,
       });
     },
 
