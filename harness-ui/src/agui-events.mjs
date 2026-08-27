@@ -58,6 +58,26 @@ export function textMessageEnd({ messageId }) {
     return { type: 'TextMessageEnd', messageId }
 }
 
+/**
+ * ⭐⭐⭐ 27/8, piano sezione "RICOGNIZIONE COMPETITIVA" (R1) — verificato
+ * su docs.ag-ui.com/concepts/events (WebFetch, non assunto): questi TRE
+ * eventi esistono davvero nello schema pubblico, stesso schema
+ * Start/Content/End di TextMessage*, `role:'reasoning'` fisso. La doc
+ * segnala che i vecchi eventi `THINKING_*` sono deprecati a favore di
+ * questi — REASONING_* è la forma corrente.
+ */
+export function reasoningMessageStart({ messageId }) {
+    return { type: 'ReasoningMessageStart', messageId, role: 'reasoning' }
+}
+
+export function reasoningMessageContent({ messageId, delta }) {
+    return { type: 'ReasoningMessageContent', messageId, delta }
+}
+
+export function reasoningMessageEnd({ messageId }) {
+    return { type: 'ReasoningMessageEnd', messageId }
+}
+
 export function toolCallStart({ toolCallId, toolCallName, parentMessageId }) {
     const evento = { type: 'ToolCallStart', toolCallId, toolCallName }
     if (parentMessageId !== undefined) evento.parentMessageId = parentMessageId
@@ -82,19 +102,31 @@ export function stateDelta({ delta }) {
  * talosHarness.mjs riga ~761) all'elenco ORDINATO di eventi AG-UI per
  * quel giro.
  *
- * ⛔ Zero eventi di streaming a chunk: talosLavora riceve la risposta
- * già completa da chiamaConRitenta (il piano lo dichiara in §1.2), quindi
- * ogni messaggio di testo è uno Start+Content+End con UN SOLO delta, non
- * N — non è una scorciatoia, è la verità di come i dati arrivano oggi.
+ * ⛔ Zero eventi di streaming a chunk QUI: questa funzione traduce la
+ * risposta GIÀ COMPLETA che `onGiro` riceve a fine giro (talosHarness.mjs),
+ * quindi ogni messaggio di testo resta uno Start+Content+End con UN SOLO
+ * delta. ⭐ 27/8 — lo streaming vero (testo E ragionamento, a pezzi,
+ * PRIMA che il giro finisca) esiste ora come canale SEPARATO: vedi
+ * `reasoningMessageStart/Content/End` sopra e `onDelta` in
+ * agent-service.mjs — non sostituisce questa funzione, la precede nel
+ * tempo (i delta arrivano durante il giro, questa traduce cosa resta a
+ * fine giro).
  *
  * `messageId` è responsabilità del CHIAMANTE (chi ha lo stato per
  * generarne uno univoco, es. agent-service.mjs con crypto.randomUUID) —
  * questa funzione resta pura e deterministica per essere provata senza
  * mock di generatori casuali.
+ *
+ * ⛔ `testoGiaStreamato` — ⭐ 27/8, R1: quando `onDelta` ha già mandato il
+ * testo di QUESTO giro a pezzi (Start, N Content, End — dal vivo, prima
+ * ancora che il giro finisse — vedi agent-service.mjs), rimandarlo qui INTERO
+ * duplicherebbe il messaggio in chat — stessa famiglia di difetto già
+ * trovata e chiusa stanotte per RunFinished. Le tool-call restano emesse
+ * comunque: quelle non sono ancora streamate (dichiarato, non un bug).
  */
-export function eventiPerRisposta(risposta, { messageId, parentMessageId } = {}) {
+export function eventiPerRisposta(risposta, { messageId, parentMessageId, testoGiaStreamato = false } = {}) {
     const eventi = []
-    if (risposta?.content) {
+    if (risposta?.content && !testoGiaStreamato) {
         eventi.push(textMessageStart({ messageId, role: risposta.role ?? 'assistant' }))
         eventi.push(textMessageContent({ messageId, delta: String(risposta.content) }))
         eventi.push(textMessageEnd({ messageId }))

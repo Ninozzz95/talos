@@ -107,6 +107,26 @@ export function modelloRichiestaValido(raw) {
   return typeof raw === 'string' && FORMATO_MODELLO_RICHIESTA.test(raw);
 }
 
+/*
+ * ⭐⭐⭐ 27/8, R1 — valori VERI di OpenRouter (docs.ag-ui.com/openrouter,
+ * verificato via WebSearch nel piano, sezione "RICOGNIZIONE COMPETITIVA"),
+ * non inventati: `effort` controlla il budget di token di ragionamento,
+ * `summary` la verbosità di quanto ne viene mostrato.
+ */
+const EFFORT_AMMESSI = new Set(['xhigh', 'high', 'medium', 'low', 'minimal', 'none']);
+const SUMMARY_AMMESSI = new Set(['auto', 'concise', 'detailed']);
+
+/** Stesso principio di modelloRichiestaValido: pura, nessun throw. */
+export function reasoningRichiestaValido(raw) {
+  if (raw === null || raw === undefined) return true; // assente è sempre valido: nessun reasoning richiesto
+  if (typeof raw !== 'object' || Array.isArray(raw)) return false;
+  const chiavi = Object.keys(raw);
+  if (chiavi.length === 0 || !chiavi.every((k) => k === 'effort' || k === 'summary')) return false;
+  if ('effort' in raw && !EFFORT_AMMESSI.has(raw.effort)) return false;
+  if ('summary' in raw && !SUMMARY_AMMESSI.has(raw.summary)) return false;
+  return true;
+}
+
 /**
  * ⭐⭐⭐ 27/8 — owner: "per adesso un allowlist per testare, ma in futuro
  * esattamente come i competitor, accesso libero, con limiti estremi" — una

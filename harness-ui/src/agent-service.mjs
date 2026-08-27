@@ -28,9 +28,15 @@ import {
   eventiPerRisposta,
   eventoPerEsitoTool,
   eventoPerScrittura,
+  reasoningMessageContent,
+  reasoningMessageEnd,
+  reasoningMessageStart,
   runError,
   runFinished,
   runStarted,
+  textMessageContent,
+  textMessageEnd,
+  textMessageStart,
   toolCallArgs,
   toolCallStart,
 } from './agui-events.mjs';
@@ -69,6 +75,9 @@ function esitoInEventoFinale({ threadId, runId, esito }) {
  * @param {(evento:object)=>void} input.onEvento
  * @param {AbortSignal} [input.segnaleStop]
  * @param {Array<object>} [input.messaggiIniziali] — per resume/fork (§1.4)
+ * @param {{effort?:string, summary?:string}} [input.reasoning] — ⭐ 27/8, R1:
+ *   passato così com'è a talosLavora/OpenRouter. Assente: nessun ragionamento
+ *   richiesto, nessun evento Reasoning*, comportamento di prima.
  * @param {typeof talosLavoraReale} [input.talosLavoraFn] — SOLO per test: la
  *   funzione reale è il default, iniettarne una finta evita di dover far
  *   girare un vero ciclo (già provato per conto suo in AVM-harness) solo per
@@ -81,7 +90,7 @@ function esitoInEventoFinale({ threadId, runId, esito }) {
  */
 export async function avviaSessione({
   cartella, task, modello, chiave, comandoProva,
-  onEvento, segnaleStop, messaggiIniziali,
+  onEvento, segnaleStop, messaggiIniziali, reasoning,
   talosLavoraFn = talosLavoraReale,
   leggiContestoWorkspaceFn = leggiContestoWorkspaceReale,
 }) {
@@ -101,10 +110,54 @@ export async function avviaSessione({
 
   onEvento(runStarted({ threadId, runId, input: task, contesto }));
 
+  /*
+   * ⭐⭐⭐ 27/8, R1 — un messageId per il testo e uno per il ragionamento,
+   * PER GIRO (una Map, non due variabili: `talosLavora` numera i giri da
+   * 0, e un giro può ripassare da qui più volte in task lunghi). Aperto
+   * al PRIMO delta di quel tipo per quel giro, chiuso quando `onGiro`
+   * segnala che il giro è concluso — mai aperto due volte per lo stesso
+   * giro (altrimenti TextMessageStart/ReasoningMessageStart duplicati,
+   * stesso difetto già chiuso stanotte per i bubble duplicati via
+   * `_sequenza`/replay SSE, causa diversa stessa famiglia).
+   */
+  const messaggiTestoPerGiro = new Map();
+  const messaggiRagionamentoPerGiro = new Map();
+  /*
+   * ⭐ SEMPRE passato (non condizionato da `reasoning`): chiedere lo
+   * streaming del TESTO è a costo zero — stessi token, consegnati a
+   * pezzi invece che in un colpo solo — mentre `reasoning` da solo
+   * cambia comportamento/costo del modello ed è per questo opzionale.
+   * Le due cose sono indipendenti in chiamaConRitenta (vedi la sua doc).
+   */
+  const onDelta = (evento) => {
+    const mappa = evento.tipo === 'testo' ? messaggiTestoPerGiro : messaggiRagionamentoPerGiro;
+    let messageId = mappa.get(evento.giro);
+    if (!messageId) {
+      messageId = randomUUID();
+      mappa.set(evento.giro, messageId);
+      onEvento(evento.tipo === 'testo'
+        ? textMessageStart({ messageId })
+        : reasoningMessageStart({ messageId }));
+    }
+    onEvento(evento.tipo === 'testo'
+      ? textMessageContent({ messageId, delta: evento.delta })
+      : reasoningMessageContent({ messageId, delta: evento.delta }));
+  };
+
   const onGiro = (evento) => {
     if (evento.tipo === 'risposta') {
+      /*
+       * ⛔ Chiude PRIMA di tradurre la risposta finale: un consumer che
+       * legge gli eventi in ordine deve vedere End prima del prossimo
+       * Start (di un giro successivo), mai i due mescolati.
+       */
+      const messageIdTesto = messaggiTestoPerGiro.get(evento.giro);
+      if (messageIdTesto) { onEvento(textMessageEnd({ messageId: messageIdTesto })); messaggiTestoPerGiro.delete(evento.giro); }
+      const messageIdRagionamento = messaggiRagionamentoPerGiro.get(evento.giro);
+      if (messageIdRagionamento) { onEvento(reasoningMessageEnd({ messageId: messageIdRagionamento })); messaggiRagionamentoPerGiro.delete(evento.giro); }
+
       const messageId = randomUUID();
-      for (const e of eventiPerRisposta(evento.risposta, { messageId })) onEvento(e);
+      for (const e of eventiPerRisposta(evento.risposta, { messageId, testoGiaStreamato: Boolean(messageIdTesto) })) onEvento(e);
       return;
     }
     if (evento.tipo === 'tool-esito') {
@@ -135,7 +188,7 @@ export async function avviaSessione({
   try {
     const esito = await talosLavoraFn({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali,
-      onGiro, onScrittura,
+      onGiro, onScrittura, onDelta, reasoning,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));
     return { threadId, runId, ok: esito.comeFinita === 'concluso', esito, erroreInterno: null };
