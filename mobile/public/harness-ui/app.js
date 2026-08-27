@@ -26,17 +26,6 @@
   const $ = (selector, root = ROOT()) => root.querySelector(selector);
   const $$ = (selector, root = ROOT()) => [...root.querySelectorAll(selector)];
 
-  /**
-   * ⭐ 27/8 — stesso pattern del server (`config.mjs`, `modelloRichiestaValido`),
-   * duplicato qui solo per un feedback immediato nel form: la validazione
-   * che CONTA resta lato server, questa è solo UX, mai l'unica guardia.
-   * ⛔⛔ Trovato dalla pipeline QA visiva: senza `~?` opzionale, il form
-   * rifiutava gli alias "-latest" reali di OpenRouter (es.
-   * `~anthropic/claude-sonnet-latest`) — la stessa correzione, fatta
-   * PRIMA lato server (config.mjs), duplicata qui.
-   */
-  const FORMATO_MODELLO_OPENROUTER = /^~?[a-z0-9](?:[a-z0-9._-]{0,63}[a-z0-9])?\/[a-z0-9](?:[a-z0-9._:-]{0,63}[a-z0-9])?$/i;
-
   const state = {
     view: 'chat',
     mode: 'chat',
@@ -827,7 +816,7 @@
    * silenzioso — stessa disciplina del componente mobile.
    * @returns {{elemento: HTMLElement, getValore: () => string}}
    */
-  function creaModelPicker({ valoreIniziale = '' } = {}) {
+  function creaModelPicker({ valoreIniziale = '', apriSubito = false, alSelezionato } = {}) {
     const wrap = document.createElement('div');
     wrap.className = 'model-picker';
 
@@ -968,6 +957,7 @@
             aggiornaTriggerLabel();
             aggiornaPillolaModello();
             chiudi();
+            alSelezionato?.(modello.id);
           });
           pezzi.push(opt);
         }
@@ -1012,9 +1002,31 @@
       if (!wrap.isConnected) { document.removeEventListener('click', onDocumentClick); return; }
       if (aperto && !wrap.contains(event.target)) chiudi();
     }
-    document.addEventListener('click', onDocumentClick);
+    /*
+     * ⛔⛔⛔ 27/8, trovato provando `apriSubito` dal vivo: se questo
+     * ascoltatore si registra SUBITO, e `creaModelPicker()` viene chiamata
+     * dentro il gestore di click di UN ALTRO bottone (la pillola del
+     * composer, che apre il foglio nello stesso click), lo stesso identico
+     * evento click — ancora in fase di bubbling — raggiunge `document`
+     * DOPO essersi registrato: `onDocumentClick` lo vede, `wrap` non
+     * contiene quel bottone (è un elemento diverso), e chiude il pannello
+     * un istante dopo averlo aperto. `setTimeout(...,0)` rimanda la
+     * registrazione al giro di eventi successivo — lo stesso pattern
+     * usato ovunque per "click fuori per chiudere".
+     */
+    window.setTimeout(() => document.addEventListener('click', onDocumentClick), 0);
 
     aggiornaTriggerLabel();
+    /*
+     * ⭐⭐⭐ 27/8, owner: "quando clicco la pillola del modello si deve
+     * riaprire lo stesso componente della selezione del modello" — la
+     * pillola apre un FOGLIO il cui unico scopo è scegliere un modello:
+     * il trigger collassato (utile in "Nuova sessione", un campo fra
+     * altri) sarebbe qui un secondo click ridondante. `apriSubito`
+     * nasconde il trigger e tiene il pannello sempre aperto — stesso
+     * componente, stessa lista vera, montaggio diverso.
+     */
+    if (apriSubito) { trigger.hidden = true; apri(); }
     return { elemento: wrap, getValore: () => valoreScelto };
   }
 
@@ -1219,6 +1231,27 @@
     wireSheetActions(type);
     if (type === 'control') refreshDoctorBadge();
     /*
+     * ⭐⭐⭐ 27/8, owner: "riaprire lo stesso componente della selezione del
+     * modello" — montato qui (non in sheetTemplates.model.html, che è una
+     * stringa) perché creaModelPicker torna un elemento DOM vero, non un
+     * pezzo di markup. `apriSubito` tiene il pannello sempre aperto (il
+     * foglio stesso è già "aperto", un trigger da ri-aprire sarebbe un
+     * secondo click ridondante); `alSelezionato` chiude l'INTERO foglio
+     * appena si sceglie, stesso comportamento di ogni altra scelta in
+     * questi fogli (permessi, ambiente, ...).
+     */
+    if (type === 'model') {
+      const mount = $('#modelPickerMount', sheetBody);
+      if (mount) {
+        const picker = creaModelPicker({
+          valoreIniziale: state.model || '',
+          apriSubito: true,
+          alSelezionato: () => closeEmbeddedDialog(sheetDialog),
+        });
+        mount.replaceChildren(picker.elemento);
+      }
+    }
+    /*
      * ⛔ Il badge è UN elemento condiviso da tredici tipi di foglio (vive
      * nel `sheetDialog`, non dentro `#sheetBody` che viene svuotato e
      * riscritto ogni apertura) — `.hidden` va impostato ESPLICITAMENTE
@@ -1235,30 +1268,16 @@
       eyebrow: 'Runtime',
       title: 'Modello',
       /*
-       * ⛔⛔⛔ 27/8 — owner: "rendi il composer funzionante al 100%... poter
-       * scegliere almeno tutti i modelli openrouter e deepseek, per
-       * testare, poi estendiamo a tutti i provider supportati, nessuna
-       * eccezione". I quattro pulsanti di prima erano nomi INVENTATI
-       * ("gpt-5.6-sol", "claude-opus-4.6" — non esistono) che non
-       * cambiavano niente di reale. TALOS chiama sempre lo stesso
-       * endpoint OpenRouter (`talosHarness.mjs`), che instrada già
-       * qualunque `vendor/nome-modello` — DeepSeek incluso, col prefisso
-       * `deepseek/` — quindi "tutti i modelli OpenRouter" non è un
-       * elenco da tenere aggiornato a mano: è un campo libero. Le
-       * scorciatoie sotto sono comodità, non un limite — cliccarle
-       * riempie il campo, non lo sostituiscono con qualcos'altro.
+       * ⛔⛔⛔ 27/8, owner: "la stessa modale deve essere riprodotta nel chat
+       * composer... si deve riaprire lo stesso componente della selezione
+       * del modello" — questo foglio mostrava un campo di testo libero con
+       * SETTE scorciatoie scritte a mano, un componente DIVERSO da
+       * `creaModelPicker` (il catalogo vero di OpenRouter, ricerca,
+       * raggruppato per provider, usato in "Nuova sessione"). Qui resta
+       * solo un punto di montaggio: `openSheet()` ci monta lo STESSO
+       * componente, non una sua copia — vedi lì per il perché.
        */
-      html: () => `
-        <form class="sheet-section" id="modelSelectForm">
-          <label class="sheet-label" for="modelSelectInput">ID modello (formato OpenRouter: vendor/nome-modello)</label>
-          <input class="sheet-input" id="modelSelectInput" value="${(state.model || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}" placeholder="es. deepseek/deepseek-chat" maxlength="120" autocomplete="off" spellcheck="false">
-          <small class="sheet-hint">${state.model ? `In uso: ${state.model}` : 'Nessuna scelta esplicita — la sessione userà il modello predefinito del server.'}</small>
-          <div class="sheet-chip-row">
-            ${['deepseek/deepseek-chat', 'deepseek/deepseek-r1', 'qwen/qwen3.7-flash', 'z-ai/glm-4.7-flash', 'openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet', 'google/gemini-2.0-flash-001'].map((id) => `
-              <button type="button" class="chip" data-model-shortcut="${id}">${id}</button>`).join('')}
-          </div>
-          <button type="submit" class="primary-btn compact full">Usa questo modello</button>
-        </form>`,
+      html: () => '<div class="sheet-section" id="modelPickerMount"></div>',
     },
     permissions: {
       eyebrow: 'Safety lens',
@@ -1445,27 +1464,6 @@
   }
 
   function wireSheetActions(type) {
-    const modelForm = $('#modelSelectForm', sheetBody);
-    if (modelForm) {
-      const input = $('#modelSelectInput', modelForm);
-      window.setTimeout(() => { input?.focus(); }, 30);
-      $$('[data-model-shortcut]', modelForm).forEach((chip) => {
-        chip.addEventListener('click', () => { if (input) { input.value = chip.dataset.modelShortcut; input.focus(); } });
-      });
-      modelForm.addEventListener('submit', (event) => {
-        event.preventDefault();
-        const scelto = input?.value.trim() ?? '';
-        if (scelto && !FORMATO_MODELLO_OPENROUTER.test(scelto)) {
-          toast('ID modello non valido', 'Formato atteso: vendor/nome-modello (es. deepseek/deepseek-chat)');
-          input?.focus();
-          return;
-        }
-        state.model = scelto;
-        aggiornaPillolaModello();
-        toast(scelto ? 'Modello aggiornato' : 'Torna al modello predefinito', scelto || 'Il server sceglie per te.');
-        closeEmbeddedDialog(sheetDialog);
-      });
-    }
     $$('[data-permission-choice]', sheetBody).forEach((button) => {
       button.addEventListener('click', () => {
         state.permissions = button.dataset.permissionChoice;
