@@ -101,13 +101,18 @@ export function stateDelta({ delta }) {
  * (verificato il 24/8 su docs.ag-ui.com/concepts/events per gli eventi
  * sopra: non esiste un evento per "un documento HTML autosufficiente da
  * mostrare"): stessa estensione dichiarata di `contesto` su RunStarted,
- * stesso spirito "loose event format matching". `html` viaggia intero
- * (mai troncato — un frontend che sandboxa un frammento di tag rotto è
- * un rischio, non un risparmio; il tetto di dimensione vive a monte, in
- * agent-service.mjs).
+ * stesso spirito "loose event format matching".
+ *
+ * ⛔⛔ NIENTE `html` qui dentro — cambiato dopo la prima versione,
+ * misurato dal vivo: `html` viaggiava nell'evento SSE e il frontend lo
+ * passava a `iframe.srcdoc`, ma un `srcdoc` eredita la CSP della pagina
+ * (vedi artifact-store.mjs) — lo script del modello non partiva mai.
+ * La cura è servire l'HTML da una rotta HTTP vera
+ * (`GET /api/v1/artifacts/:id`, la sua CSP dedicata), quindi qui basta
+ * l'`id`: il frontend punta `iframe.src` lì, il browser fa il resto.
  */
-export function artifactCreated({ messageId, id, titolo, html }) {
-    return { type: 'ArtifactCreated', messageId, id, titolo, html }
+export function artifactCreated({ messageId, id, titolo }) {
+    return { type: 'ArtifactCreated', messageId, id, titolo }
 }
 
 /**

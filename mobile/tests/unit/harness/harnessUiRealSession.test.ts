@@ -457,6 +457,43 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(runtime().realSessionState.usage).toBeNull()
     })
 
+    /*
+     * ⭐⭐⭐ 28/8 — owner: "tutti i tool come la generazione di artefatti".
+     * L'HTML entra SOLO come `srcdoc` di un iframe sandboxato: mai
+     * innerHTML sul documento reale, mai eseguito nel contesto della
+     * pagina — verificato leggendo gli attributi veri dell'elemento, non
+     * assunto dal solo fatto che la card compaia.
+     */
+    /*
+     * ⭐⭐⭐ 28/8, riscritto dopo la scoperta dal vivo: `srcdoc` EREDITA la
+     * CSP della pagina (script-src 'self' di questo bundle), quindi lo
+     * script di un artefatto non partiva mai — vedi la doc in
+     * artifact-store.mjs (harness-ui/src). La cura: `frame.src` punta a
+     * `/api/v1/artifacts/:id`, una risposta HTTP con la SUA CSP. Qui si
+     * prova SOLO che il frontend costruisca l'URL/gli attributi giusti —
+     * la risposta vera (e la sua CSP) è provata in http-app.test.mjs.
+     */
+    it('⭐⭐⭐ ARTIFACT-01 ArtifactCreated monta un iframe sandboxato con src verso /api/v1/artifacts/:id, MAI srcdoc', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ArtifactCreated', messageId: 'm1', id: 'a1', titolo: 'Spirografo' }, generation)
+
+        const frame = document.querySelector<HTMLIFrameElement>('#conversation .artifact-card-frame')
+        expect(frame).not.toBeNull()
+        expect(frame!.getAttribute('sandbox')).toBe('allow-scripts')
+        // ⛔ AL CONTRARIO del confine giusto: allow-same-origin/allow-top-navigation/allow-popups NON devono mai comparire nel valore.
+        expect(frame!.getAttribute('sandbox')).not.toMatch(/allow-same-origin|allow-top-navigation|allow-popups|allow-forms/)
+        expect(frame!.getAttribute('src')).toBe('/api/v1/artifacts/a1')
+        expect(frame!.getAttribute('srcdoc')).toBeNull()
+        expect(document.querySelector('#conversation .artifact-card-title')?.textContent).toBe('Spirografo')
+    })
+
+    it('⛔ AL CONTRARIO: ARTIFACT-02 senza titolo, la card mostra comunque un\'etichetta onesta, mai vuota', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ArtifactCreated', messageId: 'm2', id: 'a2', titolo: '' }, generation)
+
+        expect(document.querySelector('#conversation .artifact-card-title')?.textContent).toBe('Artefatto')
+    })
+
     it('REAL-SESSION-REVIEW-03 StateDelta SENZA "prima" (chiamante vecchio) resta onesto: nessun diff inventato, diffVero:false — verso contrario del test sopra', () => {
         const generation = runtime().realSessionState.generation
         runtime().handleRealEvent({

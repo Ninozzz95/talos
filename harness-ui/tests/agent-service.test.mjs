@@ -587,30 +587,42 @@ test('⛔ AL CONTRARIO: senza strumentiEstesi/ricercaWeb, talosLavoraFn li ricev
   assert.equal(inputCatturato.ricercaWeb, undefined);
 });
 
-test('⭐⭐⭐ un artefatto creato dal kernel diventa un evento ArtifactCreated, con un id VERO (randomUUID, non quello di fallback del kernel)', async () => {
+test('⭐⭐⭐ un artefatto creato dal kernel viene salvato E diventa un evento ArtifactCreated senza html (solo id/titolo — vedi artifact-store.mjs)', async () => {
   const eventi = [];
+  const salvati = [];
   const html = '<!doctype html><html><body>ciao</body></html>';
   const talosLavoraFn = talosLavoraFinto({
     script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, artefatti: [{ titolo: 'Grafico', html }] },
   });
 
-  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn });
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn,
+    salvaArtefattoFn: (id, h) => salvati.push({ id, html: h }),
+  });
 
   const evento = eventi.find((e) => e.type === 'ArtifactCreated');
   assert.ok(evento, 'un evento ArtifactCreated deve essere emesso');
   assert.equal(evento.titolo, 'Grafico');
-  assert.equal(evento.html, html, 'html intero, mai troncato');
+  assert.equal('html' in evento, false, 'MAI html nell\'evento — solo id, il frontend lo fetcha via /api/v1/artifacts/:id');
   assert.match(evento.id, /^[0-9a-f-]{36}$/, 'un vero UUID, non l\'id di fallback del kernel');
+  assert.equal(salvati.length, 1);
+  assert.equal(salvati[0].id, evento.id, 'lo stesso id salvato e nell\'evento');
+  assert.equal(salvati[0].html, html, 'html VERO passato al salvataggio, intero');
 });
 
-test('⛔⛔⛔ un artefatto oltre il tetto di dimensione NON emette un evento — mai un HTML enorme in un payload SSE', async () => {
+test('⛔⛔⛔ un artefatto oltre il tetto di dimensione NON viene salvato e NON emette un evento', async () => {
   const eventi = [];
+  const salvati = [];
   const htmlEnorme = `<!doctype html><html><body>${'x'.repeat(400_001)}</body></html>`;
   const talosLavoraFn = talosLavoraFinto({
     script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, artefatti: [{ titolo: 'Troppo grande', html: htmlEnorme }] },
   });
 
-  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn });
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn,
+    salvaArtefattoFn: (id, h) => salvati.push({ id, html: h }),
+  });
 
   assert.equal(eventi.find((e) => e.type === 'ArtifactCreated'), undefined);
+  assert.equal(salvati.length, 0, 'niente salvato: un id-solo di rifiuto non deve lasciare tracce nello store');
 });
