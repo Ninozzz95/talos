@@ -311,6 +311,7 @@
     if (options.mode) state.mode = options.mode;
     else if (view === 'dashboard') state.mode = 'dashboard';
     else if (view === 'chat') state.mode = 'chat';
+    else if (view === 'terminal') state.mode = 'terminal'; // ⭐ 27/8 — il tab "Terminale" (ex "Split", che non affiancava niente) evidenzia se stesso anche quando ci si arriva da altrove (⌘T, `!comando`)
     else state.mode = null;
     views.forEach((pane) => {
       if (pane !== target && pane !== previous) pane.classList.remove('active', 'motion-enter', 'motion-exit');
@@ -3336,9 +3337,8 @@
       if (button.dataset.mode === 'chat') {
         setView('chat', { mode: 'chat' });
         if (window.innerWidth <= 1040) closePanels();
-      } else if (button.dataset.mode === 'split') {
-        setView('chat', { mode: 'split' });
-        openPanel('inspector');
+      } else if (button.dataset.mode === 'terminal') {
+        setView('terminal');
       } else {
         setView('dashboard', { mode: 'dashboard' });
       }
