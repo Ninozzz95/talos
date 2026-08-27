@@ -1155,6 +1155,11 @@
   }
 
   function setQueueMode(enabled, announce = false) {
+    /* ⛔ 27/8 — stessa guardia di submitPrompt: attivare il modo non serve a niente su una sessione reale (talosLavora non lo consegnerebbe mai), quindi non si finge nemmeno il toggle. */
+    if (enabled && state.realSession.id) {
+      toast('Follow-up non ancora implementato', 'Una sessione reale non accetta oggi un messaggio a metà esecuzione.');
+      return;
+    }
     state.queueMode = Boolean(enabled);
     queueToggle.classList.toggle('active', state.queueMode);
     queueToggle.setAttribute('aria-pressed', String(state.queueMode));
@@ -2349,6 +2354,26 @@
       setView('terminal');
       if (!comando) { toast('Comando vuoto', 'Scrivi qualcosa dopo "!".'); return true; }
       runDirectShell(comando, hidden);
+      return true;
+    }
+    /*
+     * ⛔ 27/8 — con una sessione REALE avviata (state.realSession.id), il
+     * composer principale non ha alcun modo di consegnarle un messaggio:
+     * talosLavora non accetta oggi un follow-up a metà esecuzione (nessun
+     * parametro equivalente a segnaleStop per INIETTARE, solo per fermare
+     * — verificato leggendo talosHarness.mjs). Prima di questo fix, sia
+     * l'invio normale (appendUserMessage) sia "Follow-up" (queueMode)
+     * fingevano un esito che poi non arrivava mai da nessuna parte:
+     * esattamente la fuffa che il resto di questo blocco ha già rimosso
+     * altrove. Stessa onestà già dichiarata in Impostazioni/Agentico
+     * ("steering queue: non ancora implementata"), applicata qui al
+     * punto dove l'utente scrive davvero. Fail-safe verso l'onestà: nel
+     * caso limite in cui l'id resti da una sessione reale precedente
+     * mentre si guarda ancora la demo, si perde solo un messaggio finto
+     * — molto meglio di far sparire in silenzio un messaggio reale.
+     */
+    if (state.realSession.id) {
+      toast('Follow-up non ancora implementato', 'Una sessione reale non accetta oggi un messaggio a metà esecuzione. Aspetta la fine del run, poi usa Fork o Resume.');
       return true;
     }
     if (state.queueMode) {

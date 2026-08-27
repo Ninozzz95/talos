@@ -402,6 +402,34 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         expect(fetchMock).not.toHaveBeenCalled()
     })
 
+    it('CODE-COMPOSER-QUEUE-HONEST-01 with a real session active, the composer refuses honestly instead of faking a queued follow-up that never arrives — talosLavora accepts no mid-run injection today', () => {
+        const fetchMock = vi.fn()
+        vi.stubGlobal('fetch', fetchMock)
+        mountStaticRuntime()
+        const runtime = (window as unknown as {
+            __talosHarnessUiRuntime?: {
+                submitPrompt?(text: string): boolean
+                realSessionState?: { id: string | null }
+            }
+        }).__talosHarnessUiRuntime
+        expect(runtime?.realSessionState).toBeTruthy()
+        // ⛔ stesso oggetto di state.realSession (assegnazione diretta, non una copia) — impostarlo qui muove lo stato reale del modulo.
+        runtime!.realSessionState!.id = 'sess-fake-for-test'
+
+        const before = document.querySelectorAll('#conversation .user-message').length
+        expect(runtime?.submitPrompt?.('follow-up mentre gira una sessione reale')).toBe(true)
+        const after = document.querySelectorAll('#conversation .user-message').length
+
+        expect(after).toBe(before) // mai un messaggio finto aggiunto alla conversazione
+        expect(document.querySelector('#queuedMessage')?.classList.contains('show')).toBe(false) // mai il banner "Follow-up in coda"
+        expect(document.querySelector('#toastRegion')?.textContent).toContain('Follow-up non ancora implementato')
+        expect(fetchMock).not.toHaveBeenCalled()
+
+        // ⛔ AL CONTRARIO: nemmeno il toggle "Follow-up" si attiva mentre una sessione reale è viva — lo stesso rifiuto onesto, non solo al momento dell'invio.
+        document.querySelector<HTMLButtonElement>('#queueToggle')?.click()
+        expect(document.querySelector('#queueToggle')?.classList.contains('active')).toBe(false)
+    })
+
     it('HARNESS-BOARD-MOBILE-HONESTY-01 never calls a local backend from the embedded mobile demo', async () => {
         document.documentElement.classList.add('talos-embedded')
         const fetchMock = vi.fn()
