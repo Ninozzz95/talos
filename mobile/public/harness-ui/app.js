@@ -2124,8 +2124,17 @@
     return true;
   }
 
-  function exportSession() {
-    const payload = {
+  /**
+   * ⭐ Blocco 9, trovato verificando la palette comandi — 27/8. Esportava
+   * SEMPRE dati inventati (`branch: 'feat/mobile-code'`, un `note` che
+   * dichiara sé stesso "mockup export") anche con una sessione REALE
+   * attiva, il cui export vero (`GET .../export`, già scritto e testato
+   * in `session-registry.mjs`) non veniva mai chiamato da nessuna parte
+   * del frontend. Ora: sessione reale attiva → il suo export vero;
+   * altrimenti il comportamento demo, invariato.
+   */
+  async function exportSession() {
+    let payload = {
       schema: 'talos_mock_session_v1',
       exported_at: new Date().toISOString(),
       session: state.session,
@@ -2135,6 +2144,14 @@
       worktree: 'wt/auth-61c',
       note: 'Interactive TALOS frontend mockup export',
     };
+    if (state.realSession.id) {
+      try {
+        payload = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/export`);
+      } catch {
+        toast('Esportazione non riuscita', 'La sessione reale non ha risposto.');
+        return;
+      }
+    }
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
