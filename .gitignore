@@ -212,3 +212,9 @@ keystore.properties
 # ricerche: vive in TALOS-BANCO/ e non deve rientrare per sbaglio. La storia e'
 # stata riscritta una volta per toglierlo; questa riga evita il secondo giro.
 banco/
+
+# ⭐ 28/8, coordinamento fra sessioni Claude sullo stesso worktree condiviso
+# (due collisioni reali la stessa notte: commit intrecciati in app.js, quasi
+# in talosHarness.mjs). Marcatore locale "ci sto lavorando io" — MAI
+# committato, un controllo in più a costo zero prima di scrivere qui.
+.claude/SESSIONE-ATTIVA.local.md
