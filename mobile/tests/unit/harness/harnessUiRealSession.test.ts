@@ -220,6 +220,40 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(copies).toContain('Leggo il file.')
     })
 
+    // ⛔⛔⛔ 27/8, owner: "le risposte non sono formattate, cioè le basi" — il
+    // testo del modello arrivava con .textContent += : un elenco puntato
+    // diventava una riga sola senza a-capo, nessun grassetto/corsivo/codice.
+    it('REAL-SESSION-TEXT-02 un elenco puntato del modello diventa una lista VERA (<li>), non una riga sola', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'TextMessageContent', messageId: 'm-lista', delta: 'Posso:\n- Uno\n- Due\n- Tre' }, generation)
+
+        const elemento = document.querySelector('.assistant-copy ul')
+        expect(elemento).not.toBeNull()
+        const voci = [...document.querySelectorAll('.assistant-copy ul li')].map((el) => el.textContent)
+        expect(voci).toEqual(['Uno', 'Due', 'Tre'])
+    })
+
+    it('REAL-SESSION-TEXT-03 grassetto/corsivo/codice inline diventano nodi veri, non asterischi a schermo', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'TextMessageContent', messageId: 'm-inline', delta: 'Uso **grassetto**, *corsivo* e `codice()`.' }, generation)
+
+        const copia = document.querySelector('.assistant-copy')
+        expect(copia?.querySelector('strong')?.textContent).toBe('grassetto')
+        expect(copia?.querySelector('em')?.textContent).toBe('corsivo')
+        expect(copia?.querySelector('code')?.textContent).toBe('codice()')
+        expect(copia?.textContent).not.toContain('**') // mai asterischi letterali a schermo
+    })
+
+    it('⛔ REAL-SESSION-TEXT-04 AL CONTRARIO: testo del modello che sembra HTML resta testo letterale, mai eseguito', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'TextMessageContent', messageId: 'm-xss', delta: '<img src=x onerror="window.__provaXss=true">' }, generation)
+
+        const copia = document.querySelector('.assistant-copy')
+        expect(copia?.querySelector('img')).toBeNull() // mai un <img> VERO nel DOM
+        expect(copia?.textContent).toContain('<img') // il testo letterale resta visibile
+        expect((window as unknown as { __provaXss?: boolean }).__provaXss).toBeUndefined()
+    })
+
     // ⛔⛔ 27/8, trovato dalla pipeline QA visiva: un RunStarted per un comando
     // diretto (agent-service.mjs: input:{comandoDiretto:comando}, niente id
     // né consegna) mostrava "Task reale · undefined" — un undefined crudo,

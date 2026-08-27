@@ -96,6 +96,13 @@
       toolCallNomi: new Map(),
       /** ⛔ 27/8 — vero se l'ULTIMO evento visto su questa connessione era RunFinished/RunError: dice a onerror se la chiusura che sta per arrivare è attesa (niente da segnalare) o una vera interruzione. Vedi collegaEventiSessione. */
       eventoTerminaleVisto: false,
+      /** ⛔⛔⛔ 27/8, owner: "le risposte non sono formattate" — testo GREZZO
+       * accumulato per messageId, così renderizzaMarkdownSemplice() lavora
+       * sempre sul markdown intero visto finora, non su un singolo delta:
+       * `.assistant-copy` mostra il RENDER, non è più la fonte del testo. */
+      testoGrezzoMessaggi: new Map(),
+      /** ⛔⛔⛔ 27/8, owner: "ricevo risposte duplicate" — ogni evento.`_sequenza` (assegnato dal server, vedi session-registry.mjs broadcast()) entra qui la PRIMA volta che passa da handleRealEvent; una riconnessione (EventSource nativo dopo una caduta, o runDirectShell che ne apre una fresca) rimanda l'intero buffer da capo, e questo Set lo riconosce e lo scarta invece di duplicare bubble/testo. Sopravvive a un `continua:true` (stessa sessione, nuovo giro) — si azzera SOLO per una sessione davvero diversa. */
+      sequenzeViste: new Set(),
     },
   };
 
@@ -439,6 +446,115 @@
     if (className) element.className = className;
     element.textContent = value === null || value === undefined ? '—' : String(value);
     return element;
+  }
+
+  /*
+   * ⛔⛔⛔ 27/8, owner: "le risposte non sono formattate, cioè le basi" —
+   * `.assistant-copy` riceveva il testo del modello con `.textContent +=`:
+   * un elenco puntato del modello ("- Uno\n- Due") arrivava a schermo come
+   * "- Uno - Due" su una riga sola — nessun a-capo, nessun elenco, nessun
+   * grassetto. Le "basi" che mancavano: paragrafi, elenchi puntati/
+   * numerati, blocchi di codice, grassetto, corsivo, codice inline.
+   *
+   * ⛔ Non un parser Markdown completo (niente tabelle, niente link, niente
+   * markdown annidato dentro un elenco) — deliberatamente "le basi", non di
+   * più: un motore CommonMark vero sarebbe una dipendenza nuova in un bundle
+   * che dichiara "zero npm install" (vedi il README del progetto). Il resto
+   * dell'app TALOS usa `markdown-it` (mobile/package.json) — qui niente
+   * pacchetto, un renderer minimo scritto a mano, sufficiente per ciò che
+   * un modello di solito produce in una risposta di chat.
+   *
+   * ⛔ MAI innerHTML con testo non fidato (il testo arriva dal modello, non
+   * da noi): ogni nodo è costruito con createElement/createTextNode — una
+   * stringa come "<img onerror=...>" nel testo del modello resta testo
+   * letterale a schermo, mai eseguito.
+   */
+  function renderizzaMarkdownSemplice(testoGrezzo) {
+    const frammento = document.createDocumentFragment();
+    const testo = String(testoGrezzo ?? '');
+    const righe = testo.split('\n');
+
+    function applicaInline(contenitore, segmento) {
+      // grassetto **x**, corsivo *x*/_x_, codice inline `x` — un solo giro,
+      // nessuna combinazione annidata (le "basi", non un parser a stati).
+      const pattern = /\*\*([^*]+)\*\*|`([^`]+)`|\*([^*]+)\*|_([^_]+)_/g;
+      let ultimo = 0;
+      let match;
+      while ((match = pattern.exec(segmento))) {
+        if (match.index > ultimo) contenitore.appendChild(document.createTextNode(segmento.slice(ultimo, match.index)));
+        if (match[1] !== undefined) contenitore.appendChild(textElement('strong', '', match[1]));
+        else if (match[2] !== undefined) contenitore.appendChild(textElement('code', '', match[2]));
+        else contenitore.appendChild(textElement('em', '', match[3] !== undefined ? match[3] : match[4]));
+        ultimo = pattern.lastIndex;
+      }
+      if (ultimo < segmento.length) contenitore.appendChild(document.createTextNode(segmento.slice(ultimo)));
+    }
+
+    let i = 0;
+    let paragrafoCorrente = [];
+    function chiudiParagrafo() {
+      if (paragrafoCorrente.length === 0) return;
+      const p = document.createElement('p');
+      paragrafoCorrente.forEach((riga, indice) => {
+        if (indice > 0) p.appendChild(document.createElement('br'));
+        applicaInline(p, riga);
+      });
+      frammento.appendChild(p);
+      paragrafoCorrente = [];
+    }
+
+    while (i < righe.length) {
+      const riga = righe[i];
+      const fenceMatch = /^```/.test(riga.trim());
+      const listaMatch = /^(\s*)([-*])\s+(.*)$/.exec(riga);
+      const listaNumMatch = /^(\s*)(\d+)\.\s+(.*)$/.exec(riga);
+      const titoloMatch = /^(#{1,6})\s+(.*)$/.exec(riga);
+
+      if (fenceMatch) {
+        chiudiParagrafo();
+        const righeCodice = [];
+        i += 1;
+        while (i < righe.length && !/^```/.test(righe[i].trim())) { righeCodice.push(righe[i]); i += 1; }
+        const pre = document.createElement('pre');
+        pre.appendChild(textElement('code', '', righeCodice.join('\n')));
+        frammento.appendChild(pre);
+        i += 1; // salta la riga di chiusura ```
+        continue;
+      }
+      if (titoloMatch) {
+        chiudiParagrafo();
+        const livello = Math.min(titoloMatch[1].length, 6);
+        const h = document.createElement(`h${livello}`);
+        applicaInline(h, titoloMatch[2]);
+        frammento.appendChild(h);
+        i += 1;
+        continue;
+      }
+      if (listaMatch || listaNumMatch) {
+        chiudiParagrafo();
+        const ordinata = !!listaNumMatch;
+        const lista = document.createElement(ordinata ? 'ol' : 'ul');
+        while (i < righe.length) {
+          const m = ordinata ? /^(\s*)(\d+)\.\s+(.*)$/.exec(righe[i]) : /^(\s*)([-*])\s+(.*)$/.exec(righe[i]);
+          if (!m) break;
+          const li = document.createElement('li');
+          applicaInline(li, m[3]);
+          lista.appendChild(li);
+          i += 1;
+        }
+        frammento.appendChild(lista);
+        continue;
+      }
+      if (riga.trim() === '') {
+        chiudiParagrafo();
+        i += 1;
+        continue;
+      }
+      paragrafoCorrente.push(riga);
+      i += 1;
+    }
+    chiudiParagrafo();
+    return frammento;
   }
 
   function setConnectionState(value, label, detail) {
@@ -1957,6 +2073,23 @@
 
   function handleRealEvent(evento, generation) {
     if (generation !== state.realSession.generation) return; // sessione più vecchia: scartato, non renderizzato
+    /*
+     * ⛔⛔⛔ 27/8, owner: "ricevo risposte duplicate" — riprodotto: ogni
+     * riconnessione SSE sulla stessa sessione (l'EventSource nativo dopo una
+     * caduta di rete, o runDirectShell che ne apre una fresca apposta)
+     * rimanda l'INTERO buffer della sessione da capo (iscriviti(), lato
+     * server). appendToolNote/appendStatusNote non erano idempotenti: ogni
+     * replay aggiungeva bubble duplicati; ensureAssistantMessageElement
+     * TROVA lo stesso messageId ma `+= evento.delta` raddoppiava comunque il
+     * TESTO dentro il bubble esistente. `_sequenza` (assegnato una sola
+     * volta dal server, stabile su ogni replay dello stesso evento) è il
+     * punto UNICO per riconoscerlo e scartarlo, invece di rincorrere ogni
+     * handler sotto uno per uno.
+     */
+    if (typeof evento._sequenza === 'number') {
+      if (state.realSession.sequenzeViste.has(evento._sequenza)) return;
+      state.realSession.sequenzeViste.add(evento._sequenza);
+    }
     switch (evento.type) {
       case 'RunStarted': {
         state.realSession.runCount = (state.realSession.runCount || 0) + 1;
@@ -1971,7 +2104,14 @@
       }
       case 'TextMessageContent': {
         const element = ensureAssistantMessageElement(evento.messageId);
-        $('.assistant-copy', element).textContent += evento.delta;
+        // ⛔⛔⛔ 27/8 — testo GREZZO accumulato a parte (mai letto da
+        // .textContent, che ora contiene il RENDER): renderizzaMarkdownSemplice()
+        // rilavora sempre il markdown intero visto finora, un delta grezzo
+        // in mezzo a un ```blocco di codice``` non basta da solo a capirlo.
+        const testoGrezzo = (state.realSession.testoGrezzoMessaggi.get(evento.messageId) || '') + evento.delta;
+        state.realSession.testoGrezzoMessaggi.set(evento.messageId, testoGrezzo);
+        const copia = $('.assistant-copy', element);
+        copia.replaceChildren(renderizzaMarkdownSemplice(testoGrezzo));
         break;
       }
       case 'ToolCallStart': {
@@ -2015,7 +2155,20 @@
         break;
       }
       case 'RunFinished': {
-        appendStatusNote(evento.result?.detto || 'Task concluso.');
+        /*
+         * ⛔⛔⛔ 27/8, owner: "non riesco ad avere una conversazione base col
+         * modello" — la causa PRINCIPALE della "risposta duplicata" non era
+         * (solo) il replay SSE: `result.detto` qui è LO STESSO testo già
+         * mostrato — la risposta finale del giro normale è già arrivata via
+         * TextMessageContent/ensureAssistantMessageElement (agent-service.mjs,
+         * onGiro→eventiPerRisposta), e per un comando diretto (`!comando`) è
+         * la STESSA `content` già mostrata come esito dell'attrezzo
+         * (eseguiComandoDiretto: `eventoPerEsitoTool({content})` poi
+         * `runFinished({result:{detto: content}})`, stessa variabile). Un
+         * secondo bubble che ripete l'intero testo non aggiunge niente — su
+         * OGNI singolo giro concluso, non solo dopo una riconnessione. Tolto:
+         * lo stato "concluso" resta segnato (sotto) senza ripetere il testo.
+         */
         /*
          * ⛔⛔ 27/8, trovato verificando il comando diretto: QUI si chiudeva
          * l'EventSource lato browser (closeRealSession, rimossa) — giusto
@@ -2121,6 +2274,8 @@
       state.realSession.taskBubbleMostrata = false;
       state.realSession.reviewFiles = new Map();
       state.realSession.treePercorso = '';
+      state.realSession.sequenzeViste = new Set();
+      state.realSession.testoGrezzoMessaggi = new Map();
       // ⛔ 27/8 — Terminale/Browser tengono il loro "già reale" nel DOM
       // (dataset), non in state.realSession: senza questo, restavano
       // mostrati per sempre, mescolati con la sessione successiva.
