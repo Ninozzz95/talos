@@ -663,9 +663,21 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
              * predefinito prudente vale anche per un tool che non l'ha
              * dichiarato, e un piano che mostrasse come innocuo un tool
              * sconosciuto sarebbe la bugia peggiore di questa schermata.
+             *
+             * ⛔ Owner 2026-08-27, Tool Forge: `tool.security` (solo sui tool
+             * REGISTRATI A RUNTIME, vedi registry.ts) vince sul catalogo
+             * statico quando presente — un tool forgiato ha un `name`
+             * generato che non può mai essere una chiave nota a
+             * compile-time di `TALOS_TOOL_SECURITY`, quindi cadeva SEMPRE
+             * sul fallback (R3, irreversibile, trasmette) anche quando il
+             * Forge aveva già calcolato un rischio vero e più basso dal
+             * grafo delle capability raggiungibili. Un tool statico non
+             * dichiara mai questo campo, quindi per lui il comportamento
+             * resta identico a prima.
              */
             const security: TalosToolSecurity =
-                TALOS_TOOL_SECURITY[name as keyof typeof TALOS_TOOL_SECURITY]
+                tool.security
+                ?? TALOS_TOOL_SECURITY[name as keyof typeof TALOS_TOOL_SECURITY]
                 ?? TALOS_TOOL_SECURITY_FALLBACK
             /*
              * `allowed` guarda ENTRAMBE le porte, come fa l'esecutore:
