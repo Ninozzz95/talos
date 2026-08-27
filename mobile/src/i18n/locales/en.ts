@@ -715,6 +715,8 @@ export const TALOS_EN_MESSAGES = {
         messagePlaceholderEllipsis: 'Message TALOS...',
         sendMessage: 'Send message',
         stopGenerating: 'Stop generating',
+        expandComposer: 'Expand to full screen',
+        collapseComposer: 'Return to normal size',
         attachFiles: 'Attach files',
         takePhoto: 'Take photo',
         chooseFromLibrary: 'Choose from Library',
@@ -804,6 +806,7 @@ export const TALOS_EN_MESSAGES = {
         discardDictation: 'Discard dictation',
         stopDictation: 'Stop dictation',
         dictate: 'Dictate',
+        dictateAppend: 'Dictate more, adding it to the text',
         startingDictation: 'Starting dictation…',
         dictationErrors: {
             permissionDenied: 'Allow microphone access to use dictation.',

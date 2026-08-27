@@ -17,6 +17,10 @@
 > ⛔ Stesso motivo delle altre migrazioni: `MEMORY.md` si riavvicinava al
 > tetto. Blocco intero spostato, non accorciato.
 
+- ⛔⛔⛔ [DUE SESSIONI, STESSA CARTELLA, intrecciano i commit](due-sessioni-stessa-cartella-intrecciano-i-commit.md) — 26/8: `git commit` fotografa l'INTERO indice condiviso, non solo i file appena aggiunti da chi lo lancia. Cura strutturale, non disciplina da ricordare: `git worktree add` per ogni sessione parallela sullo stesso progetto
+- ✅⭐⭐⭐ [STADIO B CHIUSO — tre condizioni scartate](stadio-b-tre-condizioni-scartate.md) — 26/8: `GIRI_MASSIMI=32` da solo (mai confrontato fino in fondo), nudge `cerca` da solo (stima identica, 0,875) e i due insieme (0,75, ma n=1 e IC sovrapposti) — nessuno supera la soglia di distinguibilità del bootstrap. Rollback a 24 in `talosHarness.mjs` (`94a08cd`): è il rollback che il design "validato, con rollback" prevede, non un'autorizzazione a parte
+- ⛔⭐⭐ [`wm size` NON ruota davvero: serve accelerometer](wm-size-non-ruota-davvero-serve-accelerometer.md) — 26/8, tablet portrait chiuso da remoto (owner non davanti al Pad): `accelerometer_rotation 0` + `user_rotation 0`, verificato sui byte dello screenshot (2400×3392). Corregge una lettura sbagliata tenuta per giorni («serve il tocco fisico»)
+
 - ⛔⛔⭐⭐⭐ [Una corsa FALLITA riporta i numeri di IERI](una-corsa-fallita-riporta-i-numeri-di-ieri.md) — due volte in un giorno: il runner esce 1 e lo script legge il file della campagna prima. ⛔ **Numeri troppo uguali sono un allarme**, non una conferma
 - ⛔⛔⭐⭐⭐ [Il banco non vede CHI MANCA](il-banco-non-vede-chi-manca.md) — `(nessuno)` prova che il banco misura qualcosa; **niente** prova che li abbia guardati tutti. Un concorrente e rimasto fuori **quattro giorni** senza che un rapporto protestasse. ⇒ Chi costruisce una misura costruisce anche la riga che dice **chi non c e**
 - ⛔⛔⭐⭐ [Una ESCLUSIONE si misura come un ESITO](dsh-escluso-su-una-premessa-falsa.md) — avevo tolto DSH dal banco su una mia occhiata, contro un audit del sorgente che diceva l opposto. ⛔ Quando una mia nota contraddice una ricerca dell owner, **vince la ricerca** finche non ho una misura
