@@ -34,6 +34,7 @@ import {
 } from '@/lib/tools/libraryContextPolicyTools'
 import { createTalosLocalModelTools } from '@/lib/models/modelTools'
 import { createInstalledDynamicTools } from '@/lib/tools/dynamic/talosIntegration'
+import { createTalosForgeCreateTool } from '@/lib/tools/dynamic/forgeCreateTool'
 import { dynamicToolIdFromName } from '@/lib/tools/dynamic/ids'
 import type { TalosToolAuditRow } from '@/lib/tools/executor'
 import type { TalosToolConsentRequest } from '@/lib/tools/executor'
@@ -675,6 +676,14 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
      */
     const modelTools = createTalosLocalModelTools()
     /**
+     * ⛔⛔⛔ Owner 2026-08-27 — «un utente finale, che magari non ha idea di
+     * cosa sia un JSON, come fa a creare un tool da solo?». Incondizionato
+     * come `modelTools`: non c'è niente da collegare, il tool valida e
+     * scrive nel registro del Forge da sé (`forgeCreateTool.ts`). Vedi il
+     * commento in testa a quel file per il perché è sicuro per costruzione.
+     */
+    const forgeCreateTools = [createTalosForgeCreateTool()]
+    /**
      * ⛔⛔⛔ Owner 2026-08-27, Fase 8 — l'INNESTO. Fino a qui
      * `createInstalledDynamicTools()` esisteva, era testato, e non era
      * chiamato da nessuno: un tool forgiato, abilitato dalla stazione,
@@ -716,7 +725,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
             console.error('[toolset] dynamic tools unavailable, continuing without them', error)
             return []
         })
-    const tutti = [...all, ...libraryExports, ...policyTools, ...modelTools, ...calendarTools, ...dynamicTools]
+    const tutti = [...all, ...libraryExports, ...policyTools, ...modelTools, ...calendarTools, ...forgeCreateTools, ...dynamicTools]
     return {
         tools: tutti,
         isEnabled,
@@ -829,6 +838,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                 // all'API (chatController.ts) — senza questa riga il tool
                 // sarebbe comparso nel pannello permessi come «esiste» e non
                 // sarebbe mai stato chiamabile.
+                ...forgeCreateTools,
                 ...dynamicTools,
                 ...(web ? createTalosWebTools(web) : []),
                 /*

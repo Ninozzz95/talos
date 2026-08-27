@@ -69,6 +69,25 @@ describe('composer drawer mode (F3-T4bis)', () => {
         expect(wrapper.find('[data-testid="talos-composer-drawer"]').exists()).toBe(true)
     })
 
+    /**
+     * ⛔⛔ Owner 2026-08-27, segnalato dal vivo: il drawer "+" aveva la SUA
+     * implementazione a bottoni per l'effort — mai passata al segmented
+     * slider (`TalosMobileEffortPicker`) che il drawer "Model & reasoning"
+     * usa dal refactor `b86bdd46`. Due superfici della stessa scelta con due
+     * linguaggi diversi. Questo prova che ora sono lo STESSO componente.
+     */
+    it('il drawer "+" usa lo stesso slider condiviso del drawer "Model & reasoning", non bottoni suoi', async () => {
+        const wrapper = mountComposer({ drawerMode: true })
+        await wrapper.get('[aria-label="Add to chat"]').trigger('click')
+        await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-composer-drawer"]').exists()).toBe(true))
+        expect(wrapper.find('[data-testid="talos-mobile-effort-picker"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-mobile-effort-slider"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-mobile-thinking-toggle"]').exists()).toBe(true)
+        // I vecchi bottoni non esistono più: un solo linguaggio, non due.
+        expect(wrapper.find('[data-testid="talos-drawer-thinking"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid^="talos-drawer-effort-"]').exists()).toBe(false)
+    })
+
     it('the model chip opens the dedicated model & reasoning drawer', async () => {
         const wrapper = mountComposer({ drawerMode: true })
         await wrapper.get('[data-testid="talos-composer-model-chip"]').trigger('click')

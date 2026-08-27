@@ -20,6 +20,7 @@ import { createTalosNotificationTools } from '@/lib/tools/notificationTools'
 import { createTalosSchermoTools } from '@/lib/tools/schermoTools'
 import { talosIntentiTools } from '@/lib/tools/intentiTools'
 import { createTalosCalendarTools } from '@/lib/tools/calendarioTools'
+import { createTalosForgeCreateTool } from '@/lib/tools/dynamic/forgeCreateTool'
 import {
     talosToolRequiredActions,
     talosToolsForAnthropic,
@@ -163,6 +164,12 @@ function everyExecutableTool() {
             vi.fn(async () => ({ stato: 'letto' as const, eventi: [] })),
             vi.fn(async () => ({ stato: 'scritto' as const, calendario: 'x' })),
         ),
+        /*
+         * ⭐ IL TOOL CHE CREA TOOL — 2026-08-27. Incondizionato come i
+         * modelli locali qui sopra: nessuna sorgente da iniettare, valida e
+         * scrive nel registro del Forge da sé.
+         */
+        createTalosForgeCreateTool(),
     ]
 }
 
@@ -409,6 +416,22 @@ describe('Agent Tools control registry', () => {
              * contratto di un tool che c'era gia'. Il fatto che torni lo esclude.
              */
             'device_location',
+            /*
+             * ⭐⭐⭐ 2026-08-27, IL TOOL CHE CREA TOOL: `tool_create`.
+             *
+             * «un utente finale, che magari non ha idea di cosa sia un
+             * JSON, come fa a creare un tool da solo?» — non ci arrivava:
+             * fino a qui l'unica via era il foglio d'importazione di Fase
+             * 6, cioè JSON scritto a mano.
+             *
+             * ⛔ Stessa domanda di sempre: se togliendolo l'impronta storica
+             * NON tornasse, vorrebbe dire che aggiungendo questo tool ho
+             * mosso il contratto di uno che c'era già — e in questo giro ho
+             * toccato `securityCatalog`, `toolControls`, `toolControlCatalog`
+             * e le due lingue, quindi la domanda conta doppio. Il fatto che
+             * torni `369a6da1…` byte per byte lo esclude.
+             */
+            'tool_create',
         ].includes(tool.name))
         expect(digestOf(controlPlaneOf(withoutNotesWrite)))
             .toBe('369a6da1a52e717bbe9e92b780151ac3da57352d21177064cf399a81356fff67')
@@ -552,9 +575,16 @@ describe('Agent Tools control registry', () => {
          * contenga, ed è marcato `readsPrivateData: true` in `securityCatalog` —
          * l'unico `device_*` che lo sia. Chi rilegge questa riga deve vedere
          * anche questo dichiarato, non scoprirlo da un'impronta cambiata.
+         *
+         * ⛔ 2026-08-27: si muove ancora, e stavolta per `tool_create` — il
+         * tool che ne crea altri, «un utente finale... come fa a creare un
+         * tool da solo?». Il gesto deliberato, di nuovo: il piano di
+         * controllo adesso contiene un attrezzo che PROPONE un tool nuovo
+         * per il Forge, e chi rilegge questa riga deve vederlo dichiarato,
+         * non scoprirlo da un'impronta cambiata.
          */
         expect(digestOf(controlPlane))
-            .toBe('625228fa20749020001a37577d8b09de504a137c31c0f878a12e5891bfcb64be')
+            .toBe('f90970308552ee90ed13dbffa3d9fcf596b7e70695fb3565d31f34e600e47627')
         /*
          * ⭐ Ri-fissato 2026-08-08 per i TRE tool delle NOTIFICHE:
          * `device_notifications_list`, `device_notification_reply`,
@@ -916,12 +946,24 @@ describe('Agent Tools control registry', () => {
          * è l'impronta STORICA qui sopra, che dopo aver escluso il tool nuovo
          * torna `369a6da1…` byte per byte. Se avessi mosso il contratto di un
          * attrezzo già esistente, quella non tornerebbe.
+         *
+         * ⛔ 2026-08-27: si muove ancora per `tool_create`. Stessa prova:
+         * l'impronta STORICA qui sopra, che esclude anche questo tool per
+         * nome, torna `369a6da1…` byte per byte — quindi il movimento qui
+         * sotto è SOLO l'aggiunta, non un contratto esistente spostato.
+         *
+         * ⛔ E si muove UNA SECONDA VOLTA, stesso giorno: `tool_create`
+         * riusava `forgeFlowSchema` (ricorsivo, `z.lazy()`) — Gemini lo
+         * rifiuta con `PROVIDER_HTTP_400` (JSON Schema con `$ref`/`$defs`
+         * non supportato nei function-calling schema, riprodotto sul Pad).
+         * Riscritto senza ricorsione, stesse capacità — il contratto degli
+         * ALTRI tool non si è mosso, solo la forma di questo.
          */
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('9410c23f6293b683eb6f20d6a2a763ade5bda89b2a1fd9e5ddbd490ec6859843')
+            .toBe('6b88a9ce002330e73b10883f3ed040a515ae9386550436eabf1f01d4f5453250')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('0469e951548ed52a335f76416bea7ea4124850c71f7b9846e259b2e890abefee')
+            .toBe('18297fe251b2b43c2ba1402697bd81f12b984d13307a666e9c9f48ebb4b36a49')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('1baf044ff544096f955b8f1ffdf8bb63f0287b29a95514b5d91235945838668f')
+            .toBe('799f0a3a4d327959d1d3afbc0992a031fb87236512d10be5241d3035425a0b97')
     })
 })
