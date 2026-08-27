@@ -118,7 +118,7 @@ That is also the house rule for what does **not** ship by default: Flash Attenti
 
 ## Know whether a model fits before downloading it
 
-<img src="docs/immagini/tablet-6-local-catalogue.png" alt="Browsing Hugging Face with a fits-in-memory filter">
+<img src="docs/immagini/tablet-10-huggingface-list.png" alt="Browsing Hugging Face with the fits-in-memory filter active, twelve matching models">
 
 TALOS can browse Hugging Face from the phone and filter models by what **this device** can actually hold. Each model includes a memory verdict, while publisher, licence, parameter band and popularity help make the choice explicit.
 
