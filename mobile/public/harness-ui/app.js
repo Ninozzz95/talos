@@ -105,6 +105,8 @@
       sequenzeViste: new Set(),
       /** ⛔⛔⛔ 27/8, owner: "verifica che i messaggi... persistano dopo il refresh" — vero SOLO fra l'appendUserFollowUp ottimista di resumeSession() e il RunStarted (seguito:true) che arriva davvero: consumato una volta, evita che handleRealEvent mostri lo stesso follow-up due volte dal vivo. Vedi il case RunStarted per il perché non è sempre così. */
       followUpBubbleInAttesa: false,
+      /** ⭐⭐⭐ 27/8, owner: "non esiste nessun loading quando il modello elabora... fa sembrare che si sia piantato" — l'elemento DOM della bolla di attesa (porta di TalosLineLoader.vue, mobile), o null quando non ce n'è una a schermo. Vedi mostraAttesaRisposta()/nascondiAttesaRisposta(). */
+      attesaBubble: null,
     },
   };
 
@@ -1753,6 +1755,58 @@
     window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
   }
 
+  /**
+   * ⭐⭐⭐ 27/8, owner: "mettere il loading della risposta quando il modello
+   * sta elaborando... usa lo stesso del mobile... fa sembrare che si sia
+   * piantato". Porta di `TalosLineLoader.vue` (mobile/src/components/brand/):
+   * stessa identica geometria SVG (traccia+sweep+3 nodi), stesse classi CSS
+   * (`.talos-line-loader*`, portate in styles.css) — non un componente
+   * nuovo inventato qui, lo stesso disegno del mobile con un `viewBox`
+   * identico. Mostrata SOLO nella finestra "ho mandato, non è ancora
+   * arrivato niente" (come `sending && !revealed && !haRagionamento &&
+   * !runningTools.length` su mobile): il primo token di testo o il primo
+   * tool-call la rimuovono (vedi TextMessageContent/ToolCallStart sotto).
+   */
+  function mostraAttesaRisposta() {
+    if (state.realSession.attesaBubble) return; // già a schermo, non raddoppiare
+    const conversation = $('#conversation');
+    const article = document.createElement('article');
+    article.className = 'message assistant-message compact-message real-waiting-note';
+    article.setAttribute('role', 'status');
+    article.setAttribute('aria-live', 'polite');
+    const svgNs = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNs, 'svg');
+    svg.setAttribute('class', 'talos-line-loader');
+    svg.setAttribute('viewBox', '0 0 96 16');
+    svg.setAttribute('width', '44');
+    svg.setAttribute('height', '7');
+    svg.setAttribute('aria-hidden', 'true');
+    const traccia = document.createElementNS(svgNs, 'line');
+    traccia.setAttribute('class', 'talos-line-loader-track');
+    traccia.setAttribute('x1', '4'); traccia.setAttribute('y1', '8'); traccia.setAttribute('x2', '92'); traccia.setAttribute('y2', '8');
+    const sweep = document.createElementNS(svgNs, 'line');
+    sweep.setAttribute('class', 'talos-line-loader-sweep');
+    sweep.setAttribute('x1', '4'); sweep.setAttribute('y1', '8'); sweep.setAttribute('x2', '92'); sweep.setAttribute('y2', '8');
+    svg.append(traccia, sweep);
+    for (const cx of [16, 48, 80]) {
+      const nodo = document.createElementNS(svgNs, 'circle');
+      nodo.setAttribute('class', 'talos-line-loader-node');
+      nodo.setAttribute('cx', String(cx)); nodo.setAttribute('cy', '8'); nodo.setAttribute('r', '4');
+      svg.append(nodo);
+    }
+    article.append(svg, textElement('span', 'sr-only', 'TALOS sta elaborando la risposta…'));
+    conversation.appendChild(article);
+    state.realSession.attesaBubble = article;
+    markMotionEnter(article);
+    window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
+  }
+
+  function nascondiAttesaRisposta() {
+    if (!state.realSession.attesaBubble) return;
+    state.realSession.attesaBubble.remove();
+    state.realSession.attesaBubble = null;
+  }
+
   function ensureAssistantMessageElement(messageId) {
     const existing = state.realSession.messageElements.get(messageId);
     if (existing) return existing;
@@ -2360,6 +2414,7 @@
         break;
       }
       case 'TextMessageContent': {
+        nascondiAttesaRisposta(); // il primo token vero: la ruota di attesa ha fatto il suo lavoro
         const element = ensureAssistantMessageElement(evento.messageId);
         // ⛔⛔⛔ 27/8 — testo GREZZO accumulato a parte (mai letto da
         // .textContent, che ora contiene il RENDER): renderizzaMarkdownSemplice()
@@ -2372,6 +2427,7 @@
         break;
       }
       case 'ToolCallStart': {
+        nascondiAttesaRisposta(); // il primo attrezzo chiamato: sappiamo già cosa sta facendo, la ruota non serve più
         const bubble = appendToolNote(riassuntoAttrezzo(evento.toolCallName, null));
         /*
          * ⭐ nome + riferimenti DOM (summaryText/detail) tenuti per
@@ -2455,11 +2511,13 @@
          * senza un giro dal vivo dietro) — si segna solo che l'ultimo
          * evento era terminale, per onerror.
          */
+        nascondiAttesaRisposta(); // rete di sicurezza: un giro che chiude senza aver mai prodotto testo/tool-call (raro, non impossibile) non deve lasciare la ruota a girare per sempre
         state.realSession.eventoTerminaleVisto = true;
         aggiornaElencoSessioniReali(); // lo stato in #sessionList passa da "in corso" a "concluso" (visibile solo standalone, vedi nota di testa)
         break;
       }
       case 'RunError': {
+        nascondiAttesaRisposta();
         appendStatusNote(`${evento.code ? `[${evento.code}] ` : ''}${evento.message}`, true);
         state.realSession.eventoTerminaleVisto = true;
         break;
@@ -2550,6 +2608,7 @@
       state.realSession.sequenzeViste = new Set();
       state.realSession.testoGrezzoMessaggi = new Map();
       state.realSession.followUpBubbleInAttesa = false;
+      state.realSession.attesaBubble = null; // il nodo è già sparito con replaceChildren() qui sopra
       // ⛔ 27/8 — Terminale/Browser tengono il loro "già reale" nel DOM
       // (dataset), non in state.realSession: senza questo, restavano
       // mostrati per sempre, mescolati con la sessione successiva.
@@ -2574,6 +2633,7 @@
     setView('chat');
     closePanels();
     appendRealTaskStart(task);
+    mostraAttesaRisposta();
     toast('Avvio in corso', `${task.id} · checkout del progetto sul PC che serve questa pagina.`);
 
     let sessionId;
@@ -2584,6 +2644,7 @@
       sessionId = data.sessionId;
     } catch (error) {
       if (generation !== state.realSession.generation) return;
+      nascondiAttesaRisposta();
       appendStatusNote(`Avvio non riuscito: ${error.message}`, true);
       toast('Avvio non riuscito', error.message);
       /* ⛔ 27/8, trovato dalla pipeline QA visiva: il titolo restava "ottimista" (il nome della sessione appena tentata) anche quando la POST falliva — la sessione non è mai esistita lato server (state.realSession.id resta null). */
@@ -2668,6 +2729,7 @@
     const sessionId = state.realSession.id;
     const taskId = state.realSession.taskId;
     if (messaggioFollowUp) { appendUserFollowUp(messaggioFollowUp); state.realSession.followUpBubbleInAttesa = true; }
+    mostraAttesaRisposta(); // sia il follow-up sia un resume senza messaggio riavviano un giro vero
     try {
       await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/resume`, messaggioFollowUp ? { messaggio: messaggioFollowUp } : {});
       // continua:true — STESSA vista: la conversazione resta a schermo, il
@@ -2678,6 +2740,7 @@
       aggiornaElencoSessioniReali();
       if (!messaggioFollowUp) toast('Sessione ripresa', 'Un nuovo giro è iniziato sulla stessa conversazione.');
     } catch (error) {
+      nascondiAttesaRisposta();
       if (messaggioFollowUp) appendStatusNote(`Invio non riuscito: ${error.message}`, true); // il bubble utente resta — l'ha scritto davvero, solo non e' arrivato
       toast(messaggioFollowUp ? 'Invio non riuscito' : 'Resume non riuscito', error.message);
     }
@@ -3111,6 +3174,7 @@
     setView('chat');
     closePanels();
     appendRealTaskStart(taskSintetico);
+    mostraAttesaRisposta();
     toast('Avvio in corso', `${nomeCartella} · esecuzione diretta sulla cartella vera, nessuna copia.`);
 
     let sessionId;
@@ -3123,6 +3187,7 @@
       sessionId = data.sessionId;
     } catch (error) {
       if (generation !== state.realSession.generation) return;
+      nascondiAttesaRisposta();
       appendStatusNote(`Avvio non riuscito: ${error.message}`, true);
       toast('Avvio non riuscito', error.message);
       /* ⛔ 27/8, trovato dalla pipeline QA visiva: il titolo restava "ottimista" (il nome della sessione appena tentata) anche quando la POST falliva — la sessione non è mai esistita lato server (state.realSession.id resta null). */
