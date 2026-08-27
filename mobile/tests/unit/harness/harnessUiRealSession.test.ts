@@ -143,6 +143,34 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(runtime().realSessionState.id).toBe('sess-abc123')
     })
 
+    it('REAL-SESSION-AUTOMATION-01 "Esegui ora" su una riga con data-task-id avvia per davvero quel task (standalone)', async () => {
+        const fetchMock = mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-automazione' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        const bottone = document.querySelector('[data-automation-action="run"][data-task-id]') as HTMLButtonElement
+        expect(bottone).not.toBeNull()
+
+        bottone.click()
+        await new Promise((r) => setTimeout(r, 0)) // il click non è awaitable dall'esterno: si aspetta che startRealSession finisca da sé
+
+        expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions',
+            expect.objectContaining({ method: 'POST', body: JSON.stringify({ taskId: bottone.dataset.taskId }) }))
+        expect(runtime().realSessionState.id).toBe('sess-automazione')
+    })
+
+    it('⛔ REAL-SESSION-AUTOMATION-02 AL CONTRARIO: sullo stesso bottone, embedded mobile non chiama MAI il backend', async () => {
+        document.documentElement.classList.add('talos-embedded')
+        const fetchMock = mockFetch([])
+        const bottone = document.querySelector('[data-automation-action="run"][data-task-id]') as HTMLButtonElement
+
+        bottone.click()
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fetchMock).not.toHaveBeenCalled()
+        expect(runtime().realSessionState.id).toBeNull()
+    })
+
     it('REAL-SESSION-START-01b il badge "Demo UI" della chat sparisce con una sessione vera, e MAI quello di una superficie diversa', async () => {
         // ⛔ nuovaGenerazioneSessione() svuota #conversation con replaceChildren():
         // il badge della chat (dentro #conversation) e quello di .approval-card

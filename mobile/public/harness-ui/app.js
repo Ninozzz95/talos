@@ -2241,10 +2241,27 @@
     toast('Elemento selezionato', button.textContent.trim());
   }));
 
+  /*
+   * ⭐ 27/8, piano §1.3-BIS, blocco Automazioni — riusa startRealSession
+   * (già reale, già testata) invece di un toast: "Esegui ora" su una riga
+   * con data-task-id avvia per davvero quel task del corpus, la stessa
+   * strada di "Nuova sessione". La SCHEDULAZIONE vera (un cron che parte
+   * da solo, senza un tocco) resta dichiaratamente fuori — spenderebbe
+   * credito reale senza nessuno a guardare, una cosa diversa da un
+   * bottone premuto apposta, e vuole la sua stessa persistenza che oggi
+   * non c'è (session-registry.mjs, "solo in memoria, deliberato").
+   */
   $$('[data-automation-action]').forEach((button) => button.addEventListener('click', () => {
     const action = button.dataset.automationAction;
-    const labels = { new: ['Nuova automazione', 'Editor di schedulazione pronto.'], run: ['Run avviato', 'Nightly smoke eseguito in worktree isolato.'], edit: ['Automazione aperta', 'Modifica pianificazione, modello e destinazione.'] };
-    toast(...(labels[action] || ['Automazione', 'Azione simulata.']));
+    // ⛔ Stesso cancello di createNewSession(): su mobile embedded non c'è un
+    // backend raggiungibile per costruzione, mai un fetch lì (HARNESS-BOARD-
+    // MOBILE-HONESTY-01, stesso principio applicato qui).
+    if (action === 'run' && button.dataset.taskId && !HOST().classList.contains('talos-embedded')) {
+      startRealSession({ id: button.dataset.taskId });
+      return;
+    }
+    const labels = { new: ['Nuova automazione', 'Il mockup rappresenta il flusso senza backend.'], run: ['Run avviato', 'Il mockup rappresenta il flusso senza backend.'], edit: ['Automazione aperta', 'Il mockup rappresenta il flusso senza backend.'] };
+    toast(...(labels[action] || ['Automazione', 'Il mockup rappresenta il flusso senza backend.']));
   }));
 
   $('.stop-run')?.addEventListener('click', () => {
