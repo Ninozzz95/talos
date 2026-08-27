@@ -1701,18 +1701,53 @@
      * {comandoDiretto: comando}})) questo `task` non ha né `.consegna` né
      * `.id` — mostrava "undefined" crudo in chat. Mai un valore inventato
      * o un undefined visibile: se non è un vero task, si dichiara cosa è.
+     *
+     * ⛔⛔⛔ 27/8, secondo giro, trovato ricaricando la pagina (F5): un
+     * "compito libero" (custom-task.mjs, preparaEsecuzioneLibera) ha
+     * `.consegna`/`.progetto` ma NESSUN `.id` — la stessa logica etichettava
+     * "Comando diretto" anche una vera conversazione. Sul MOMENTO non si
+     * vedeva mai (avviaSessionePendente mostra il suo bubble ottimista
+     * PRIMA che l'evento vero arrivi, e taskBubbleMostrata blocca il
+     * secondo) — solo un F5/resume, che riparte da zero e replica
+     * l'evento VERO, lo rivelava. Tre forme distinte, tre etichette oneste.
      */
     bubble.textContent = task.consegna || task.consegnaCorta || task.comandoDiretto || (task.id ? task.id : 'Comando diretto');
     const meta = document.createElement('div');
     meta.className = 'message-meta';
     const span = document.createElement('span');
-    span.textContent = task.id ? `Task reale · ${task.id}` : 'Comando diretto';
+    span.textContent = task.id
+      ? `Task reale · ${task.id}`
+      : (task.consegna || task.consegnaCorta)
+        ? `Compito libero${task.progetto ? ` · ${task.progetto}` : ''}`
+        : 'Comando diretto';
     meta.appendChild(span);
     article.append(bubble, meta);
     conversation.appendChild(article);
     markMotionEnter(article);
     window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'center' }), 40);
     state.realSession.taskBubbleMostrata = true;
+  }
+
+  /**
+   * ⛔⛔⛔ 27/8 — la bolla del SECONDO turno di una conversazione reale
+   * (resumeSession con un testo): stesso stile di appendRealTaskStart, ma
+   * "Follow-up" invece di "Task reale · <id>" — non è il compito che ha
+   * aperto la sessione, è quello che la continua.
+   */
+  function appendUserFollowUp(text) {
+    const conversation = $('#conversation');
+    const article = document.createElement('article');
+    article.className = 'message user-message';
+    const bubble = document.createElement('div');
+    bubble.className = 'message-bubble';
+    bubble.textContent = text;
+    const meta = document.createElement('div');
+    meta.className = 'message-meta';
+    meta.appendChild(textElement('span', '', 'Follow-up'));
+    article.append(bubble, meta);
+    conversation.appendChild(article);
+    markMotionEnter(article);
+    window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
   }
 
   function ensureAssistantMessageElement(messageId) {
@@ -2382,21 +2417,30 @@
    * differenza del fork, torna LO STESSO sessionId: riprende un giro in più
    * sulla stessa conversazione, non ne crea una nuova.
    */
-  async function resumeSession() {
+  /**
+   * @param {string} [messaggioFollowUp] — ⛔⛔⛔ 27/8, owner: "non riesco ad
+   * avere una conversazione base col modello". Senza argomento: il resume
+   * di sempre (riprende un giro interrotto). Con un testo: è un secondo
+   * turno di chat reale — vedi submitPrompt(), unico chiamante di questo
+   * secondo caso. Stesso endpoint, stessa funzione: nessuna duplicazione.
+   */
+  async function resumeSession(messaggioFollowUp) {
     if (!state.realSession.id) { toast('Nessuna sessione reale da riprendere'); return; }
     const sessionId = state.realSession.id;
     const taskId = state.realSession.taskId;
+    if (messaggioFollowUp) appendUserFollowUp(messaggioFollowUp);
     try {
-      await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/resume`, {});
+      await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/resume`, messaggioFollowUp ? { messaggio: messaggioFollowUp } : {});
       // continua:true — STESSA vista: il "Nuovo giro iniziato" lo mostra
       // handleRealEvent quando arriva il RunStarted del giro ripreso.
       const generation = nuovaGenerazioneSessione({ continua: true });
       state.realSession.taskId = taskId;
       collegaEventiSessione(sessionId, generation);
       aggiornaElencoSessioniReali();
-      toast('Sessione ripresa', 'Un nuovo giro è iniziato sulla stessa conversazione.');
+      if (!messaggioFollowUp) toast('Sessione ripresa', 'Un nuovo giro è iniziato sulla stessa conversazione.');
     } catch (error) {
-      toast('Resume non riuscito', error.message);
+      if (messaggioFollowUp) appendStatusNote(`Invio non riuscito: ${error.message}`, true); // il bubble utente resta — l'ha scritto davvero, solo non e' arrivato
+      toast(messaggioFollowUp ? 'Invio non riuscito' : 'Resume non riuscito', error.message);
     }
   }
 
@@ -2839,23 +2883,25 @@
       return true;
     }
     /*
-     * ⛔ 27/8 — con una sessione REALE avviata (state.realSession.id), il
-     * composer principale non ha alcun modo di consegnarle un messaggio:
-     * talosLavora non accetta oggi un follow-up a metà esecuzione (nessun
-     * parametro equivalente a segnaleStop per INIETTARE, solo per fermare
-     * — verificato leggendo talosHarness.mjs). Prima di questo fix, sia
-     * l'invio normale (appendUserMessage) sia "Follow-up" (queueMode)
-     * fingevano un esito che poi non arrivava mai da nessuna parte:
-     * esattamente la fuffa che il resto di questo blocco ha già rimosso
-     * altrove. Stessa onestà già dichiarata in Impostazioni/Agentico
-     * ("steering queue: non ancora implementata"), applicata qui al
-     * punto dove l'utente scrive davvero. Fail-safe verso l'onestà: nel
-     * caso limite in cui l'id resti da una sessione reale precedente
-     * mentre si guarda ancora la demo, si perde solo un messaggio finto
-     * — molto meglio di far sparire in silenzio un messaggio reale.
+     * ⛔⛔⛔ 27/8, owner: "non riesco ad avere una conversazione base col
+     * modello" — con una sessione REALE avviata (state.realSession.id) e
+     * ANCORA IN CORSO, il composer non ha modo di consegnarle un messaggio:
+     * talosLavora non accetta un follow-up a metà esecuzione (nessun
+     * parametro equivalente a segnaleStop per INIETTARE, solo per fermare —
+     * verificato leggendo talosHarness.mjs). Quel rifiuto onesto resta.
+     * ⛔ Ma una sessione CONCLUSA è un'altra cosa: resumeSession(testo) fa
+     * esattamente ciò che una conversazione normale richiede — appende il
+     * messaggio a messaggiFinali e riparte, STESSO sessionId (vedi
+     * session-registry.mjs resume(), esteso apposta). Prima di questo fix
+     * ANCHE una sessione conclusa veniva rifiutata: il composer diventava
+     * inutilizzabile dopo la primissima risposta, ogni volta.
      */
-    if (state.realSession.id) {
-      toast('Follow-up non ancora implementato', 'Una sessione reale non accetta oggi un messaggio a metà esecuzione. Aspetta la fine del run, poi usa Fork o Resume.');
+    if (state.realSession.id && !state.realSession.eventoTerminaleVisto) {
+      toast('Messaggio non consegnato', 'Una sessione reale non accetta oggi un messaggio a metà esecuzione — aspetta la fine del run.');
+      return true;
+    }
+    if (state.realSession.id && state.realSession.eventoTerminaleVisto) {
+      resumeSession(value);
       return true;
     }
     /*
@@ -3570,6 +3616,28 @@
    */
 
   ensureDemoLabels();
+  /*
+   * ⛔⛔⛔ 27/8, owner: "il caricamento della pagina non deve azzerare le
+   * sessioni in corso... se aggiorno adesso le sessioni passate spariscono".
+   * Prima di questo fix la sidebar restava vuota fino alla PRIMA azione di
+   * sessione (era un design deliberato per un motivo diverso — vedi il
+   * commento di `aggiornaElencoSessioniReali` — ma un F5 non è mai
+   * un'azione di sessione: azzerava la vista senza che il server avesse
+   * perso niente). `setTimeout(…, 0)` invece di una chiamata diretta: un
+   * boot sincrono non deve bloccarsi su una fetch di rete, e i test che
+   * montano il runtime con un fetch finto restano sincroni fino alla loro
+   * ultima asserzione — questa chiamata parte DOPO, non li tocca.
+   * ⛔ Solo standalone: embedded (mobile, dentro HarnessSessionScreen.vue)
+   * non ha oggi NESSUN backend raggiungibile (nessun tunnel adb reverse) —
+   * stessa guardia già in uso per la Board (HARNESS-BOARD-MOBILE-HONESTY-01),
+   * qui applicata alla lista sessioni: zero fetch fantasma su un bridge che
+   * per costruzione non risponderà mai.
+   */
+  window.setTimeout(() => {
+    // ⛔ verificato al MOMENTO del fire, non alla schedulazione: un test (o
+    // un embed reale) può marcare talos-embedded fra i due istanti.
+    if (!HOST().classList.contains('talos-embedded')) aggiornaElencoSessioniReali();
+  }, 0);
   aggiornaPillolaModello(); // ⭐ 27/8 — sincronizza SUBITO la pillola con lo stato vero (state.model === ''), invece di lasciare "gpt-5.6-sol · high" scritto a mano nell'HTML statico
   applyQaState();
   syncNavigationState();

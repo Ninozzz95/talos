@@ -334,9 +334,18 @@ function requireComandoBody(body) {
   return body.comando;
 }
 
-/** Scrive un evento AG-UI come frame SSE. Torna false (e non scrive) se la risposta è già chiusa. */
+/*
+ * Scrive un evento AG-UI come frame SSE. Torna false (e non scrive) se la
+ * risposta è già chiusa.
+ *
+ * ⛔⛔ 27/8, ricerca web (SSE reconnection): una riga `id:` PRIMA di `data:`
+ * è ciò che fa scattare `Last-Event-ID` sulla riconnessione NATIVA del
+ * browser — senza, EventSource non ha nulla da mandare indietro e ogni
+ * riconnessione ripete l'intero buffer via rete (vedi iscriviti()).
+ */
 function scriviEventoSse(res, evento) {
   if (res.writableEnded || res.destroyed) return false;
+  if (typeof evento._sequenza === 'number') res.write(`id: ${evento._sequenza}\n`);
   res.write(`data: ${JSON.stringify(evento)}\n\n`);
   return true;
 }
@@ -597,7 +606,19 @@ export function createHttpApp({
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
           return;
         }
-        const esito = sessionRegistry.resume(sessionId);
+        /*
+         * ⛔⛔⛔ 27/8 — `messaggio` OPZIONALE: senza, resta il resume di
+         * sempre (riprende un giro interrotto, nessuna domanda nuova). Con
+         * un `messaggio` stringa non vuota, è un secondo turno di chat
+         * reale — vedi la doc su session-registry.mjs resume(). Mai un
+         * campo diverso da stringa: un body malformato resta silenziosamente
+         * "nessun messaggio nuovo" invece di rompere il resume classico.
+         */
+        const corpoResume = await leggiCorpoJson(req);
+        const nuovoMessaggioUtente = typeof corpoResume?.messaggio === 'string' && corpoResume.messaggio.trim()
+          ? corpoResume.messaggio.trim()
+          : null;
+        const esito = sessionRegistry.resume(sessionId, nuovoMessaggioUtente);
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
           errore.code = esito.code;
@@ -812,11 +833,20 @@ export function createHttpApp({
              * NON c'è un giro in corso dietro (sessionRegistry.inCorso），
              * si chiude comunque — subito dopo, non a metà.
              */
+            /*
+             * ⛔⛔ 27/8, ricerca web (SSE reconnection, Last-Event-ID): Node
+             * abbassa sempre il nome header a minuscolo — 'last-event-id',
+             * mai il case originale del client. Un valore non numerico (o
+             * assente, prima connessione) ricade su 0 — replay completo,
+             * comportamento identico a prima di questa ottimizzazione.
+             */
+            const ultimoVistoDalClient = Number.parseInt(req.headers['last-event-id'], 10);
+            const daSequenza = Number.isFinite(ultimoVistoDalClient) ? ultimoVistoDalClient : 0;
             let inReplay = true;
             const disiscrivi = sessionRegistry.iscriviti(sessionId, (evento) => {
               const scritto = scriviEventoSse(res, evento);
               if (scritto && !inReplay && (evento.type === 'RunFinished' || evento.type === 'RunError')) res.end();
-            });
+            }, daSequenza);
             inReplay = false;
             if (!sessionRegistry.inCorso(sessionId) && !res.writableEnded) res.end();
             res.on('close', disiscrivi);
