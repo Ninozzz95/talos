@@ -30,7 +30,17 @@ const CATALOG: ForgeCapabilityDescriptor[] = [
     { id: 'notes.update', actions: ['write'], risk: 'R2', network: 'none', reversible: true, maxInputBytes: 32_768, description: 'Update a local TALOS note.' },
     { id: 'memory.search', actions: ['read'], risk: 'R2', network: 'none', reversible: true, maxInputBytes: 1_024, description: 'Search active local TALOS memories.' },
     { id: 'memory.create', actions: ['write'], risk: 'R3', network: 'none', reversible: true, maxInputBytes: 32_768, description: 'Create durable TALOS memory.' },
-    { id: 'web.search', actions: ['outbound'], risk: 'R3', network: 'allowlisted', reversible: true, maxInputBytes: 2_048, description: 'Perform an explicitly allow-listed web search.' },
+    // ⛔⛔⛔ Owner 2026-08-27, Fase 7 — trovato leggendo `talosIntegration.ts`
+    // insieme al piano: `web.search` stava dichiarata qui ma
+    // `createLocalCapabilities()` non le ha MAI dato un handler — a
+    // runtime `describe('web.search')` torna `null` e ogni chiamata
+    // fallirebbe con `FORGE_CAPABILITY_UNAVAILABLE`. Esattamente la
+    // "promessa rotta" che il piano vieta esplicitamente ("Scope tenuto
+    // fermo": *"web.search dichiarata nel catalogo ma non implementata
+    // resta rimossa dal catalogo finché non è vera, non lasciata come
+    // promessa rotta"*) — mai fatto in Fase 0-6. Rimossa: un manifest che
+    // la nomina ora si rifiuta all'installazione (`FORGE_CAPABILITY_UNKNOWN`),
+    // non al primo uso.
 ]
 
 const MAP = new Map(CATALOG.map((entry) => [entry.id, Object.freeze({ ...entry, actions: Object.freeze([...entry.actions]) })]))

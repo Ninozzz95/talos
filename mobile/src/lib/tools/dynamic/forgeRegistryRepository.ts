@@ -76,8 +76,23 @@ async function transaction<T>(operation: (db: TalosSqlConnection) => Promise<T>)
     return chained
 }
 
-function parseManifest(json: string): TalosLocalToolManifestV1 {
-    return JSON.parse(json) as TalosLocalToolManifestV1
+/**
+ * ⛔⛔ Owner 2026-08-27, Fase 7 (avversariale — registro corrotto): prima
+ * era `JSON.parse` nudo. Un manifest genuinamente TRONCATO/corrotto sul
+ * disco (non "sintatticamente valido ma semanticamente sbagliato" — quello
+ * lo prende già `validateTalosLocalTool` — proprio JSON rotto) lanciava un
+ * `SyntaxError` che NESSUNO dei chiamanti (`loadRecord`, `loadVersions`)
+ * catturava: si sarebbe propagato fuori da `listForgeTools`/`getForgeTool`
+ * come un'eccezione non gestita invece di un record scartato. Stesso
+ * principio del fuzzing (ricerca 2026): input malformato si rifiuta con
+ * pulizia, non fa esplodere il chiamante.
+ */
+function parseManifest(json: string): TalosLocalToolManifestV1 | null {
+    try {
+        return JSON.parse(json) as TalosLocalToolManifestV1
+    } catch {
+        return null
+    }
 }
 
 async function loadVersions(db: TalosSqlConnection, toolId: string): Promise<TalosLocalToolManifestV1[]> {
@@ -85,7 +100,11 @@ async function loadVersions(db: TalosSqlConnection, toolId: string): Promise<Tal
         'SELECT manifest_json FROM talos_forge_tool_versions WHERE tool_id = ? ORDER BY version ASC',
         [toolId],
     )
-    return rows.map((row) => parseManifest(String((row as TalosSqlRow).manifest_json)))
+    // Una versione corrotta viene scartata, non fa fallire la lettura
+    // dell'intera storia — le altre versioni, e il record corrente, restano leggibili.
+    return rows
+        .map((row) => parseManifest(String((row as TalosSqlRow).manifest_json)))
+        .filter((manifest): manifest is TalosLocalToolManifestV1 => manifest !== null)
 }
 
 async function loadRecord(db: TalosSqlConnection, toolId: string): Promise<ForgeInstalledRecord | null> {
@@ -99,7 +118,7 @@ async function loadRecord(db: TalosSqlConnection, toolId: string): Promise<Forge
     // scritto da una versione precedente del validator (o corrotto sul
     // disco) non deve tornare "valido" solo perché passò l'installazione.
     const manifest = parseManifest(String(row.manifest_json))
-    if (row.id !== manifest.id || !validateTalosLocalTool(manifest).ok) return null
+    if (!manifest || row.id !== manifest.id || !validateTalosLocalTool(manifest).ok) return null
     return {
         manifest,
         enabled: Number(row.enabled) === 1,

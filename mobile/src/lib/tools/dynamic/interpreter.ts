@@ -25,6 +25,14 @@ class ForgeRuntimeError extends Error {
 }
 
 const wait = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
+    // ⛔ Owner 2026-08-27, Fase 7 (avversariale — abort in OGNI fase):
+    // prima si controllava SOLO l'evento 'abort' futuro. Un segnale già
+    // abortito PRIMA di chiamare `wait()` non fa mai scattare quell'evento
+    // — `addEventListener` su un AbortSignal già segnalato non richiama
+    // l'ascoltatore in ritardo — quindi l'attesa proseguiva fino in fondo
+    // come se niente fosse. Stesso controllo che il ciclo principale già
+    // fa (`options.signal?.aborted` in testa al while), qui all'ingresso.
+    if (signal?.aborted) return reject(new ForgeRuntimeError('FORGE_ABORTED', 'Execution aborted.'))
     if (ms <= 0) return resolve()
     const timer = setTimeout(resolve, ms)
     signal?.addEventListener('abort', () => { clearTimeout(timer); reject(new ForgeRuntimeError('FORGE_ABORTED', 'Execution aborted.')) }, { once: true })
@@ -258,6 +266,16 @@ export async function executeTalosLocalTool(
                     if (!Array.isArray(source)) throw new ForgeRuntimeError('FORGE_FOREACH_SOURCE', `Node ${node.id} expected an array.`)
                     if (source.length > node.maxItems) throw new ForgeRuntimeError('FORGE_FOREACH_LIMIT', `Node ${node.id} received ${source.length} items; max is ${node.maxItems}.`)
                     for (let i = 0; i < source.length; i++) {
+                        // ⛔ Owner 2026-08-27, Fase 7 (avversariale — abort
+                        // in OGNI fase): il ciclo esterno controlla
+                        // `signal.aborted` solo fra un NODO e il successivo.
+                        // Un `foreach` con molti elementi, ognuno con una
+                        // chiamata a capability, non se ne accorgeva finché
+                        // l'intero nodo non finiva — bounded da `maxItems`,
+                        // non catastrofico, ma un annullamento reale
+                        // aspettava fino a `maxItems` chiamate invece di
+                        // fermarsi all'elemento in corso.
+                        if (options.signal?.aborted) throw new ForgeRuntimeError('FORGE_ABORTED', 'Execution aborted.')
                         setPath(vars, node.itemVar, source[i]); if (node.indexVar) setPath(vars, node.indexVar, i)
                         for (const child of node.body) await runInline(node.id, child)
                     }

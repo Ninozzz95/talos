@@ -166,6 +166,93 @@ describe('forgeRegistryRepository — rilettura rivalida, non si fida solo della
         expect(await getForgeTool('corrupt')).toBeNull()
         expect(await listForgeTools()).toEqual([])
     })
+
+    /**
+     * ⛔⛔⛔ Fase 7 (avversariale — registro corrotto), trovato progettando
+     * questo test, non ipotizzato: `parseManifest` era `JSON.parse` nudo.
+     * Un manifest genuinamente TRONCATO (non "sintatticamente valido ma
+     * semanticamente sbagliato", quello sopra) lanciava un `SyntaxError`
+     * che NESSUN chiamante catturava — si sarebbe propagato fuori da
+     * `listForgeTools`/`getForgeTool` come un'eccezione non gestita.
+     * Corretto in `parseManifest` (try/catch → null, scartato come
+     * qualunque altro manifest non valido).
+     */
+    it('JSON genuinamente TRONCATO (non solo semanticamente sbagliato) non fa esplodere la lettura', async () => {
+        const now = new Date().toISOString()
+        await connection!.run(
+            'INSERT INTO talos_forge_tools (id, manifest_json, version, enabled, installed_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)',
+            ['truncated', '{"schema":"talos.local-tool.v1","id":"tru', 1, now, now],
+        )
+        await expect(getForgeTool('truncated')).resolves.toBeNull()
+        await expect(listForgeTools()).resolves.toEqual([])
+    })
+
+    it('una VERSIONE precedente con JSON troncato viene scartata dalla storia, senza far fallire il record corrente', async () => {
+        await installForgeTool(manifest('tool-a', 1))
+        await installForgeTool(manifest('tool-a', 2))
+        // Corrompe la riga di storia che `installForgeTool` ha appena
+        // archiviato per la v1, scrivendo sopra direttamente.
+        await connection!.run(
+            'UPDATE talos_forge_tool_versions SET manifest_json = ? WHERE tool_id = ? AND version = ?',
+            ['{not even json', 'tool-a', 1],
+        )
+        const record = await getForgeTool('tool-a')
+        expect(record?.manifest.version).toBe(2) // il record corrente resta leggibile
+        expect(record?.previousVersions).toEqual([]) // la versione corrotta è scartata, non fa fallire tutto
+    })
+
+    it('il CHECK dello schema rifiuta un `enabled` fuori da {0,1} — l\'invariante è del database, non solo del codice sopra', async () => {
+        const now = new Date().toISOString()
+        await expect(connection!.run(
+            'INSERT INTO talos_forge_tools (id, manifest_json, version, enabled, installed_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+            ['bad-enabled', JSON.stringify(manifest('bad-enabled')), 1, 2, now, now],
+        )).rejects.toThrow()
+    })
+
+    it('il registro d\'audit SOPRAVVIVE alla rimozione del tool — l\'unica traccia che "questo È STATO installato" dopo che è sparito', async () => {
+        await installForgeTool(manifest('tool-a'))
+        await removeForgeTool('tool-a')
+        const audit = await connection!.query('SELECT kind FROM talos_forge_audit WHERE tool_id = ? ORDER BY rowid ASC', ['tool-a'])
+        expect(audit.map((row: any) => row.kind)).toEqual(['install', 'remove'])
+    })
+})
+
+describe('forgeRegistryRepository — concorrenza oltre Fase 3 (avversariale, Fase 7)', () => {
+    it('rollback e remove concorrenti sullo STESSO tool non lasciano uno stato a metà: il risultato finale è SEMPRE leggibile in modo pulito', async () => {
+        await installForgeTool(manifest('tool-a', 1))
+        await installForgeTool(manifest('tool-a', 2))
+        await Promise.all([
+            rollbackForgeTool('tool-a').catch(() => undefined),
+            removeForgeTool('tool-a').catch(() => undefined),
+        ])
+        // Qualunque sia l'ordine in cui la coda serializzata li ha
+        // eseguiti — mai un'eccezione non gestita, e lo stato finale è
+        // O completamente rimosso, O un record valido, MAI una via di
+        // mezzo corrotta (`getForgeTool` non lancia in nessun caso).
+        const after = await getForgeTool('tool-a')
+        if (after) {
+            expect(after.manifest.version).toBeGreaterThan(0)
+        } else {
+            const versions = await connection!.query('SELECT * FROM talos_forge_tool_versions WHERE tool_id = ?', ['tool-a'])
+            expect(versions).toHaveLength(0) // rimosso vuol dire rimosso DAVVERO, CASCADE incluso
+        }
+    })
+
+    it('due install della STESSA versione in corsa: uno vince, l\'altro riceve TALOS_FORGE_VERSION_NOT_NEWER — la coda serializzata previene un lost update, non solo lo dichiara', async () => {
+        await installForgeTool(manifest('tool-a', 1))
+        const results = await Promise.allSettled([
+            installForgeTool(manifest('tool-a', 2)),
+            installForgeTool(manifest('tool-a', 2)),
+        ])
+        const fulfilled = results.filter((r) => r.status === 'fulfilled')
+        const rejected = results.filter((r) => r.status === 'rejected')
+        expect(fulfilled).toHaveLength(1)
+        expect(rejected).toHaveLength(1)
+        expect(String((rejected[0] as PromiseRejectedResult).reason)).toContain('TALOS_FORGE_VERSION_NOT_NEWER')
+        // E la versione superata è archiviata UNA volta sola, non due.
+        const record = await getForgeTool('tool-a')
+        expect(record?.previousVersions.map((m) => m.version)).toEqual([1])
+    })
 })
 
 describe('forgeRegistryRepository — listForgeAudit (Fase 6, la storia mai riletta)', () => {
