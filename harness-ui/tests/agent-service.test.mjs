@@ -195,6 +195,65 @@ test('⭐⭐⭐ e AL CONTRARIO: le tool-call restano emesse anche se il testo di
     'niente un secondo TextMessage* per il testo, ma la tool-call arriva comunque');
 });
 
+/*
+ * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 4 — gli
+ * argomenti delle tool-call a pezzi, il canale che mancava. Stesso
+ * schema del test "ragionamento" sopra: `tool-inizio` una volta,
+ * `tool-args` per ogni frammento, e la risposta finale NON li ripete
+ * (toolCallsGiaStreamate salta l'id già visto).
+ */
+test('⭐⭐⭐ onDelta "tool-inizio"/"tool-args" produce ToolCallStart/Args LIVE, e la risposta finale non li ripete', async () => {
+  const eventi = [];
+  const talosLavoraFn = talosLavoraFinto({
+    script: {
+      esito: { comeFinita: 'concluso', detto: 'fatto' },
+      deltas: [
+        { giro: 0, tipo: 'tool-inizio', indice: 0, toolCallId: 'c1', nome: 'leggi' },
+        { giro: 0, tipo: 'tool-args', indice: 0, toolCallId: 'c1', delta: '{"percorso":"a.' },
+        { giro: 0, tipo: 'tool-args', indice: 0, toolCallId: 'c1', delta: 'txt"}' },
+      ],
+      risposta: {
+        role: 'assistant', content: '',
+        tool_calls: [{ id: 'c1', function: { name: 'leggi', arguments: '{"percorso":"a.txt"}' } }],
+      },
+    },
+  });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn });
+
+  const tipi = eventi.map((e) => e.type);
+  assert.deepEqual(tipi, ['RunStarted', 'ToolCallStart', 'ToolCallArgs', 'ToolCallArgs', 'RunFinished'],
+    'niente un secondo ToolCallStart/Args dalla risposta finale — solo quelli live');
+  const args = eventi.filter((e) => e.type === 'ToolCallArgs');
+  assert.deepEqual(args.map((e) => e.delta), ['{"percorso":"a.', 'txt"}']);
+});
+
+test('⭐⭐ e con DUE tool-call nello stesso giro: una streamata live, l\'altra no (es. un fornitore che non manda delta per tutte) — entrambe arrivano, mai duplicate', async () => {
+  const eventi = [];
+  const talosLavoraFn = talosLavoraFinto({
+    script: {
+      esito: { comeFinita: 'concluso', detto: 'fatto' },
+      deltas: [
+        { giro: 0, tipo: 'tool-inizio', indice: 0, toolCallId: 'c1', nome: 'leggi' },
+        { giro: 0, tipo: 'tool-args', indice: 0, toolCallId: 'c1', delta: '{}' },
+      ],
+      risposta: {
+        role: 'assistant', content: '',
+        tool_calls: [
+          { id: 'c1', function: { name: 'leggi', arguments: '{}' } },
+          { id: 'c2', function: { name: 'cerca', arguments: '{"q":"x"}' } },
+        ],
+      },
+    },
+  });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn });
+
+  const startati = eventi.filter((e) => e.type === 'ToolCallStart').map((e) => e.toolCallId);
+  assert.deepEqual(startati, ['c1', 'c2'], 'c1 arriva dal canale live, c2 dalla risposta finale — nessuna delle due si perde o si duplica');
+  assert.equal(eventi.filter((e) => e.type === 'ToolCallStart' && e.toolCallId === 'c1').length, 1);
+});
+
 test('⛔ e AL CONTRARIO: senza NESSUN delta, il comportamento resta quello di sempre — un solo blocco di testo, dalla risposta finale', async () => {
   const eventi = [];
   const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } } });

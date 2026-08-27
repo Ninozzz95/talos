@@ -136,6 +136,17 @@ export async function avviaSessione({
   const messaggiTestoPerGiro = new Map();
   const messaggiRagionamentoPerGiro = new Map();
   /*
+   * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 4 — un
+   * `Set` di toolCallId PER GIRO (non una Map messageId-per-giro come
+   * sopra: una tool-call non ha un "messaggio", ha un `toolCallId` già
+   * suo — vedi `talosHarness.mjs`, `tipo:'tool-inizio'`/`'tool-args'`).
+   * Popolato al primo `tool-inizio` di un id, letto (e svuotato) quando
+   * `onGiro` segnala la fine del giro — stesso ciclo di vita delle due
+   * Map sopra, stessa ragione: mai un ToolCallStart/Args duplicato
+   * quando `eventiPerRisposta` traduce la risposta finale.
+   */
+  const toolCallIdStreamatiPerGiro = new Map();
+  /*
    * ⭐ SEMPRE passato (non condizionato da `reasoning`): chiedere lo
    * streaming del TESTO è a costo zero — stessi token, consegnati a
    * pezzi invece che in un colpo solo — mentre `reasoning` da solo
@@ -143,6 +154,24 @@ export async function avviaSessione({
    * Le due cose sono indipendenti in chiamaConRitenta (vedi la sua doc).
    */
   const onDelta = (evento) => {
+    if (evento.tipo === 'tool-inizio' || evento.tipo === 'tool-args') {
+      /*
+       * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 4 —
+       * argomenti di tool-call a pezzi, il canale che mancava (prima
+       * d'ora `ToolCallArgs` arrivava tutto insieme, a fine giro — vedi
+       * `eventiPerRisposta`). `app.js` gestisce già oggi argomenti
+       * parziali con ri-parse tollerante: zero modifiche frontend.
+       */
+      let streamati = toolCallIdStreamatiPerGiro.get(evento.giro);
+      if (!streamati) { streamati = new Set(); toolCallIdStreamatiPerGiro.set(evento.giro, streamati); }
+      if (evento.tipo === 'tool-inizio') {
+        streamati.add(evento.toolCallId);
+        onEvento(toolCallStart({ toolCallId: evento.toolCallId, toolCallName: evento.nome }));
+        return;
+      }
+      onEvento(toolCallArgs({ toolCallId: evento.toolCallId, delta: evento.delta }));
+      return;
+    }
     const mappa = evento.tipo === 'testo' ? messaggiTestoPerGiro : messaggiRagionamentoPerGiro;
     let messageId = mappa.get(evento.giro);
     if (!messageId) {
@@ -168,9 +197,19 @@ export async function avviaSessione({
       if (messageIdTesto) { onEvento(textMessageEnd({ messageId: messageIdTesto })); messaggiTestoPerGiro.delete(evento.giro); }
       const messageIdRagionamento = messaggiRagionamentoPerGiro.get(evento.giro);
       if (messageIdRagionamento) { onEvento(reasoningMessageEnd({ messageId: messageIdRagionamento })); messaggiRagionamentoPerGiro.delete(evento.giro); }
+      /*
+       * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 4 —
+       * stesso principio delle due righe sopra, applicato alle
+       * tool-call: `toolCallsGiaStreamate` dice a `eventiPerRisposta`
+       * quali id non ri-emettere (già mandati a pezzi da onDelta sopra).
+       * Letto QUI, poi tolto — un giro successivo riparte da un Set
+       * vuoto, mai quello del giro precedente.
+       */
+      const toolCallsGiaStreamate = toolCallIdStreamatiPerGiro.get(evento.giro);
+      if (toolCallsGiaStreamate) toolCallIdStreamatiPerGiro.delete(evento.giro);
 
       const messageId = randomUUID();
-      for (const e of eventiPerRisposta(evento.risposta, { messageId, testoGiaStreamato: Boolean(messageIdTesto) })) onEvento(e);
+      for (const e of eventiPerRisposta(evento.risposta, { messageId, testoGiaStreamato: Boolean(messageIdTesto), toolCallsGiaStreamate })) onEvento(e);
       /*
        * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 —
        * `evento.totali`, quando presente (talosHarness.mjs lo omette
