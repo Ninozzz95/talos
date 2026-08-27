@@ -28,6 +28,7 @@ import {
   eventiPerRisposta,
   eventoPerEsitoTool,
   eventoPerScrittura,
+  eventoPerUsage,
   reasoningMessageContent,
   reasoningMessageEnd,
   reasoningMessageStart,
@@ -54,7 +55,15 @@ function esitoInEventoFinale({ threadId, runId, esito }) {
       threadId,
       runId,
       outcome: { type: 'success' },
-      result: { detto: esito.detto, compattazioni: esito.compattazioni, premesseNegate: esito.premesseNegate },
+      /*
+       * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 —
+       * `esito.usage` esisteva già in `talosHarness.mjs` (accumulato per
+       * TALOS-BANCO) ma veniva scartato qui: mai tradotto in nessun
+       * evento, quindi mai visibile a chi guarda una sessione HTTP. `null`
+       * quando nessun giro l'ha mai riportato — inoltrato com'è, mai
+       * inventato.
+       */
+      result: { detto: esito.detto, compattazioni: esito.compattazioni, premesseNegate: esito.premesseNegate, usage: esito.usage ?? null },
     });
   }
   return runError({ message: esito.detto, code: esito.comeFinita });
@@ -162,6 +171,15 @@ export async function avviaSessione({
 
       const messageId = randomUUID();
       for (const e of eventiPerRisposta(evento.risposta, { messageId, testoGiaStreamato: Boolean(messageIdTesto) })) onEvento(e);
+      /*
+       * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 —
+       * `evento.totali`, quando presente (talosHarness.mjs lo omette
+       * finché nessun giro ha mai riportato `usage`), è già la somma
+       * cumulativa fino a questo giro: inoltrato com'è, dopo gli eventi
+       * della risposta (un consumer vede prima il testo/tool-call del
+       * giro, poi il totale aggiornato — mai il contrario).
+       */
+      if (evento.totali) onEvento(eventoPerUsage(evento.totali));
       return;
     }
     if (evento.tipo === 'tool-esito') {

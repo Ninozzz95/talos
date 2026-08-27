@@ -46,6 +46,7 @@ type RuntimeGlobals = {
             followUpBubbleInAttesa: boolean
             treeCache: Map<string, Array<{ nome: string, cartella: boolean }>>
             treeOpen: Set<string>
+            usage: { prompt_tokens: number, completion_tokens: number, prompt_tokens_details?: { cached_tokens: number }, giri: number } | null
         }
     }
 }
@@ -428,6 +429,32 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(tipi).toContain('add')
         expect(voce!.code.some(([, testo]) => testo.includes('- export const prezzo = 1'))).toBe(true)
         expect(voce!.code.some(([, testo]) => testo.includes('+ export const prezzo = 2'))).toBe(true)
+    })
+
+    /*
+     * ⭐⭐⭐ Riconciliazione Fase 3 (piano procedi-col-generare-un-snoopy-neumann.md,
+     * 27/8) — il contatore costo/token per una sessione VIVA, prima
+     * assente. path /usage è uno smistamento NUOVO nel case 'StateDelta':
+     * deve popolare realSessionState.usage, e MAI toccare reviewFiles
+     * (che REVIEW-01/02 sopra già provano per /file/*).
+     */
+    it('⭐⭐⭐ USAGE-01 StateDelta path /usage popola realSessionState.usage, non reviewFiles', () => {
+        const generation = runtime().realSessionState.generation
+        const totali = { prompt_tokens: 900, completion_tokens: 100, prompt_tokens_details: { cached_tokens: 50 }, giri: 3 }
+        runtime().handleRealEvent({ type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: totali }] }, generation)
+
+        expect(runtime().realSessionState.usage).toEqual(totali)
+        expect(runtime().realSessionState.reviewFiles.size).toBe(0)
+    })
+
+    it('⛔ AL CONTRARIO: USAGE-02 uno StateDelta /file/* non tocca mai realSessionState.usage', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({
+            type: 'StateDelta',
+            delta: [{ op: 'add', path: '/file/altro.mjs', value: 'x' }],
+        }, generation)
+
+        expect(runtime().realSessionState.usage).toBeNull()
     })
 
     it('REAL-SESSION-REVIEW-03 StateDelta SENZA "prima" (chiamante vecchio) resta onesto: nessun diff inventato, diffVero:false — verso contrario del test sopra', () => {
