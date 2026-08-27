@@ -518,6 +518,8 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .browser-nav button { width: 34px; height: 34px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
 .browser-url { min-width: 0; height: 34px; border: 1px solid var(--line); border-radius: 8px; display: flex; align-items: center; padding: 0 10px; color: var(--muted); font: 10px var(--font-mono); }
 .device-preview { min-height: calc(100dvh - 190px); border: 1px solid var(--line); border-top: 0; border-radius: 0 0 12px 12px; background: radial-gradient(circle at 50% 30%, var(--surface-3), var(--bg-deep) 65%); display: grid; place-items: center; padding: 30px; }
+/* ⭐ Blocco 6, stralcio onesto — l'esito reale di `naviga` è testo, non un telefono da centrare: si scrolla come il Terminale, non si comprime al centro. */
+.browser-real-output { width: 100%; height: 100%; margin: 0; overflow: auto; text-align: left; white-space: pre-wrap; word-break: break-word; color: var(--text-2); font: 12px/1.7 var(--font-mono); }
 .phone-frame { width: min(390px, 100%); aspect-ratio: 390 / 844; max-height: calc(100dvh - 250px); border-radius: 31px; border: 7px solid var(--bg-deep); background: var(--bg); box-shadow: var(--shadow); overflow: hidden; position: relative; display: flex; flex-direction: column; }
 .phone-status { height: 28px; padding: 0 15px; display: flex; justify-content: space-between; align-items: center; font-size: 8px; color: var(--muted); }
 .phone-header { min-height: 45px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 28px 1fr auto; align-items: center; padding: 0 13px; font-size: 10px; }
