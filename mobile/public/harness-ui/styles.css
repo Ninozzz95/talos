@@ -414,6 +414,8 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 .assistant-meta { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 10px; margin-bottom: 9px; }
 .talos-glyph { width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; background: var(--accent-soft); }
 .assistant-copy { color: var(--text-2); font-size: 14px; line-height: 1.7; }
+/* ⭐ 28/8, owner: "--- come separatore, formatta anche quello" — il default del browser (bordo inset/outset grigio) stona sul tema scuro; una riga sola, coerente con --line già usato per gli altri separatori del bundle. */
+.assistant-copy hr { margin: 14px 0; border: 0; border-top: 1px solid var(--line); }
 
 /* ⭐ 27/8, owner: "ogni comando... va messo come fa Claude e ChatGPT" (screenshot allegati) — riga collassata di default, riassunto leggibile, chevron per espandere il dettaglio grezzo formattato. */
 .tool-note-summary { display: flex; align-items: center; gap: 8px; width: 100%; padding: 0; margin-bottom: 0; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px; text-align: left; cursor: pointer; border-radius: 8px; }
@@ -619,7 +621,19 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
  * un albero pieno di icone sempre visibili è più rumore che aiuto,
  * stesso principio delle azioni-riga di ogni file manager reale.
  */
-.ft-actions-btn { flex-shrink: 0; width: 22px; height: 22px; display: none; align-items: center; justify-content: center; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; margin-left: auto; }
+/*
+ * ⛔ 28/8, trovato dal vivo con getComputedStyle: `.file-tree button`
+ * (una regola legacy di un albero più vecchio, sopra in questo file) ha
+ * specificità (0,1,1) contro (0,1,0) di `.ft-actions-btn` da solo —
+ * vinceva lei, il bottone restava SEMPRE `display:flex;width:100%` e
+ * divorava tutto lo spazio flessibile della riga, schiacciando
+ * `.ft-name` a 0px (il nome era nel DOM, solo invisibile). Selettore
+ * scoping `.file-tree .ft-actions-btn` (specificità 0,2,0) batte la
+ * regola legacy su OGNI proprietà, non solo display — niente
+ * `!important`, niente tocco alla regola legacy (potrebbe servire
+ * altrove).
+ */
+.file-tree .ft-actions-btn { flex-shrink: 0; width: 22px; height: 22px; display: none; align-items: center; justify-content: center; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; margin-left: auto; }
 .ft-row:hover .ft-actions-btn, .ft-row:focus-within .ft-actions-btn, .ft-row.ft-selected .ft-actions-btn { display: inline-flex; }
 .ft-actions-btn:hover { background: var(--surface-2); color: var(--text); }
 .ft-actions-btn svg { width: 14px; height: 14px; }
@@ -730,6 +744,30 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .campaign-section-head > span { color: var(--muted); font: 9px var(--font-mono); text-align: right; }
 .campaign-run-list { display: grid; gap: 6px; }
 .board-empty { margin: 0; padding: 28px 12px; border: 1px dashed var(--line); border-radius: 9px; color: var(--muted); text-align: center; font-size: 10px; }
+
+/*
+ * ⭐⭐⭐ 28/8, owner: "la schermata iniziale non deve essere una chat
+ * vuota, deve essere esattamente come fa il mobile" — porta il "brand
+ * hero" del mobile (logo TALOS + frase di benvenuto, mobile/src/
+ * screens/ChatScreen.vue:1090-1130 + style.css:262-318) qui, ADATTATO
+ * alle convenzioni di questo bundle (var(--accent)/var(--text)/
+ * var(--font-ui) con lo stesso fallback della loro versione, non le
+ * variabili Tailwind --talos-* che qui non esistono — stesso principio
+ * DEC-053 di ogni altro porting mobile↔desktop di questo filone). Il
+ * marchio arriva dallo STESSO asset reale: /talos/brand/logo-short.svg
+ * è già servito da questo server (static-files.mjs riga 33, fratello di
+ * harness-ui/), zero copie nuove. Il testo NON è preso dal mobile
+ * verbatim — il fallback lì ("Quale affermazione vuoi misurare?") è
+ * per un prodotto di fact-checking, fuori contesto per un harness di
+ * coding — resta il testo che questo file già scriveva prima di questa
+ * modifica, solo vestito con lo stesso impianto visivo.
+ */
+.conversation-hero { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; max-width: 32rem; margin: 0 auto; padding: 15vh 16px 40px; text-align: center; }
+.hero-logo { display: inline-flex; width: 3.5rem; height: 3.5rem; flex: 0 0 auto; align-items: center; justify-content: center; color: var(--accent); }
+.hero-logo-mark { display: block; width: 92%; height: 92%; background: currentColor; mask: url('/talos/brand/logo-short.svg') center / contain no-repeat; -webkit-mask: url('/talos/brand/logo-short.svg') center / contain no-repeat; }
+.hero-wordmark { margin-top: 10px; font-family: var(--font-ui); font-weight: 700; font-size: 22px; letter-spacing: 0.04em; line-height: 1; color: var(--text); }
+.hero-welcome-title { margin: 16px 0 0; font-size: 17px; font-weight: 600; line-height: 1.35; color: var(--text); }
+.hero-subtitle { margin: 8px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
 .campaign-run { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); overflow: hidden; }
 .campaign-run-toggle { width: 100%; min-height: 60px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 7px 12px; align-items: center; border: 0; background: transparent; color: var(--text-2); padding: 9px 10px; text-align: left; cursor: pointer; }
 .campaign-run-toggle:hover { background: var(--surface-highlight-subtle); }
