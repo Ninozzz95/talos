@@ -87,7 +87,6 @@ export async function avviaSessione({
 }) {
   const threadId = randomUUID();
   const runId = randomUUID();
-  const scrittiFinora = new Set();
 
   /*
    * ⭐ Il pannello "Ambiente" del Context Rail — prima statico/demo (§1.3 del
@@ -113,9 +112,16 @@ export async function avviaSessione({
     }
   };
 
-  const onScrittura = (percorso, contenuto) => {
-    const esisteva = scrittiFinora.has(percorso);
-    scrittiFinora.add(percorso);
+  /*
+   * ⭐ 27/8 — `esisteva` ora arriva DIRETTAMENTE da `talosHarness.mjs`
+   * (`premessaDellaScrittura`, che lo calcola comunque leggendo `prima`
+   * per il cancello semantico): dice se il file era già sul disco PRIMA
+   * di questa scrittura. Prima di questa riga era una approssimazione
+   * per sessione (un `Set` di percorsi già scritti IN QUESTA sessione),
+   * che etichettava "nuovo" ogni file toccato per la prima volta nel
+   * run anche se esisteva da sempre su disco — bug del pannello Review.
+   */
+  const onScrittura = (percorso, contenuto, esisteva) => {
     onEvento(eventoPerScrittura({ percorso, contenuto, esisteva }));
   };
 
