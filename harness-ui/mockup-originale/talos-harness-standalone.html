@@ -1,0 +1,2079 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#1e1f22" />
+  <title>TALOS Agentic Harness - Responsive Mockup</title>
+  <style>
+:root {
+  --bg: #1e1f22;
+  --bg-deep: #17181b;
+  --surface: #25262a;
+  --surface-2: #2b2c30;
+  --surface-3: #313237;
+  --surface-elevated: #34353a;
+  --text: #f3f0e9;
+  --text-2: #d6d2ca;
+  --muted: #9c9da2;
+  --muted-2: #777980;
+  --line: #36373b;
+  --line-strong: #4a4b50;
+  --accent: #c08b3c;
+  --accent-2: #d7a554;
+  --accent-soft: rgba(192, 139, 60, .14);
+  --accent-strong: rgba(192, 139, 60, .34);
+  --success: #77a884;
+  --success-soft: rgba(119,168,132,.13);
+  --danger: #d87d72;
+  --danger-soft: rgba(216,125,114,.13);
+  --info: #7f9fc4;
+  --focus: #d8a650;
+  --shadow: 0 18px 52px rgba(0,0,0,.28);
+  --shadow-sm: 0 8px 24px rgba(0,0,0,.18);
+  --radius-card: 12px;
+  --radius-control: 12px;
+  --touch: 48px;
+  --sidebar: 292px;
+  --inspector: 340px;
+  --topbar-h: 64px;
+  --mobile-nav-h: 68px;
+  --font-ui: "Instrument Sans", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-ui); }
+html { scrollbar-color: var(--line-strong) var(--bg); overflow: hidden; }
+body { min-height: 100dvh; overflow: hidden; }
+button, input, textarea { font: inherit; }
+button { color: inherit; }
+button, [role="button"] { -webkit-tap-highlight-color: transparent; }
+button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+.app-shell {
+  display: grid;
+  grid-template-columns: var(--sidebar) minmax(0, 1fr) var(--inspector);
+  height: 100dvh;
+  min-width: 0;
+  background:
+    radial-gradient(circle at 58% -12%, rgba(255,255,255,.035), transparent 32%),
+    var(--bg);
+}
+
+.sessions-panel, .inspector-panel { background: rgba(27,28,31,.92); backdrop-filter: blur(18px); min-height: 0; }
+.sessions-panel { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; }
+.inspector-panel { border-left: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; }
+.workspace-shell { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }
+
+.brand-row, .topbar, .inspector-head { min-height: var(--topbar-h); display: flex; align-items: center; }
+.brand-row { padding: 0 16px; gap: 10px; border-bottom: 1px solid rgba(255,255,255,.025); }
+.brand-mark, .talos-glyph, .mini-brand { color: var(--accent-2); font-weight: 800; font-style: italic; letter-spacing: -.08em; }
+.brand-mark { font-size: 27px; width: 30px; text-align: center; }
+.brand-copy { display: flex; flex-direction: column; line-height: 1; margin-right: auto; }
+.brand-copy strong { font-size: 18px; letter-spacing: .02em; }
+.brand-copy span { font-size: 10px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .16em; }
+.badge-dot { position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 17px; height: 17px; border-radius: 99px; background: var(--accent); color: #181713; font-size: 10px; font-weight: 800; }
+
+.icon-btn, .mini-icon, .round-btn { border: 0; background: transparent; display: inline-grid; place-items: center; cursor: pointer; }
+.icon-btn { width: var(--touch); height: var(--touch); border-radius: var(--radius-control); position: relative; color: var(--text-2); }
+.icon-btn:hover { background: rgba(255,255,255,.04); color: var(--text); }
+.nav-close { display: none; }
+
+.session-actions { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px; padding: 14px 14px 8px; }
+.search-field { height: var(--touch); display: grid; grid-template-columns: 20px minmax(0,1fr) auto; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); color: var(--muted); }
+.search-field input { min-width: 0; width: 100%; border: 0; outline: 0; color: var(--text); background: transparent; font-size: 14px; }
+kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); background: rgba(255,255,255,.02); }
+.primary-btn, .secondary-btn, .text-btn { border: 0; cursor: pointer; }
+.primary-btn { min-height: var(--touch); padding: 0 16px; border-radius: var(--radius-control); background: var(--accent); color: #151411; font-weight: 750; display: inline-flex; align-items: center; justify-content: center; gap: 8px; box-shadow: inset 0 1px rgba(255,255,255,.13), 0 6px 18px rgba(192,139,60,.12); }
+.primary-btn:hover { background: var(--accent-2); }
+.primary-btn.compact, .secondary-btn.compact { min-height: 36px; height: 36px; padding: 0 12px; border-radius: 10px; font-size: 13px; }
+.secondary-btn { min-height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text-2); }
+.secondary-btn:hover { border-color: var(--line-strong); background: var(--surface-3); }
+.secondary-btn.full { width: 100%; margin-top: 10px; }
+.text-btn { background: transparent; color: var(--accent-2); padding: 6px 0; font-size: 13px; font-weight: 650; }
+.sidebar-caption { color: var(--muted-2); font-size: 11px; padding: 0 16px 8px; }
+
+.session-list { overflow: auto; padding: 2px 9px 14px; min-height: 0; flex: 1; }
+.list-heading { color: var(--muted-2); text-transform: uppercase; letter-spacing: .1em; font-size: 10px; margin: 14px 10px 7px; }
+.session-item { width: 100%; min-height: 66px; border: 1px solid transparent; border-radius: 11px; background: transparent; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 10px 9px 10px 11px; text-align: left; cursor: pointer; color: var(--text-2); }
+.session-item:hover { background: rgba(255,255,255,.025); }
+.session-item.active { background: linear-gradient(90deg, rgba(192,139,60,.17), rgba(192,139,60,.08)); border-color: rgba(192,139,60,.14); box-shadow: inset 2px 0 var(--accent); }
+.session-main { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.session-main strong { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 650; }
+.session-main small { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.session-meta { align-self: stretch; display: grid; grid-template-rows: auto 1fr; justify-items: end; color: var(--muted); font-size: 11px; padding-top: 3px; }
+.session-meta svg { width: 17px; height: 17px; margin-top: auto; }
+.status-pulse { display: inline-block; width: 7px; height: 7px; border-radius: 99px; background: var(--success); box-shadow: 0 0 0 4px rgba(119,168,132,.08); margin-right: 6px; }
+.attention-card { margin: 0 12px 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); display: grid; grid-template-columns: 32px 1fr auto; align-items: center; gap: 10px; padding: 10px; }
+.attention-card > div:first-child { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 9px; background: var(--accent-soft); color: var(--accent-2); }
+.attention-card strong, .attention-card span { display: block; }
+.attention-card strong { font-size: 12px; }
+.attention-card span { color: var(--muted); font-size: 10px; margin-top: 3px; }
+.sidebar-footer { min-height: 70px; border-top: 1px solid var(--line); display: grid; grid-template-columns: 38px 1fr 48px; align-items: center; gap: 8px; padding: 10px 12px; }
+.avatar { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; background: var(--accent-soft); color: var(--accent-2); font-weight: 800; }
+.sidebar-footer strong, .sidebar-footer small { display: block; }
+.sidebar-footer strong { font-size: 13px; }
+.sidebar-footer small { font-size: 10px; color: var(--muted); margin-top: 3px; }
+
+.topbar { padding: 0 12px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; background: rgba(30,31,34,.86); backdrop-filter: blur(20px); z-index: 20; }
+.topbar-left, .topbar-right, .topbar-center { display: flex; align-items: center; min-width: 0; }
+.topbar-right { justify-content: flex-end; gap: 4px; }
+.topbar-center { background: rgba(255,255,255,.025); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+.mode-tab { border: 0; background: transparent; color: var(--muted); min-height: 32px; padding: 0 12px; border-radius: 7px; cursor: pointer; font-size: 12px; }
+.mode-tab.active { background: var(--surface-3); color: var(--text); box-shadow: inset 0 0 0 1px rgba(255,255,255,.02); }
+.title-button { display: flex; align-items: center; min-width: 0; gap: 8px; border: 0; background: transparent; color: var(--text); padding: 4px 8px; border-radius: 9px; cursor: pointer; text-align: left; }
+.title-button span { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.title-button strong { max-width: 270px; font-size: 13px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.title-button small { color: var(--muted); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.title-button svg { width: 16px; height: 16px; color: var(--muted); }
+.context-chip { min-height: 36px; max-width: 230px; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); border-radius: 10px; display: inline-flex; align-items: center; gap: 7px; padding: 0 10px; cursor: pointer; font-size: 11px; }
+.context-chip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.context-chip svg { width: 16px; height: 16px; }
+.mobile-only { display: none; }
+
+.run-strip { min-height: 46px; display: grid; grid-template-columns: auto minmax(120px,1fr) auto 44px; align-items: center; gap: 14px; padding: 0 14px 0 18px; border-bottom: 1px solid var(--line); background: rgba(23,24,27,.55); }
+.run-state { display: flex; align-items: center; color: var(--text-2); font-size: 11px; white-space: nowrap; }
+.run-state strong { margin-right: 6px; }
+.run-state > span:last-child { color: var(--muted); font-family: var(--font-mono); }
+.run-progress { height: 5px; border-radius: 99px; overflow: hidden; background: #2a2b2f; }
+.run-progress span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--accent), #d0a35c); }
+.run-kpis { display: flex; align-items: center; gap: 12px; font-size: 10px; color: var(--muted); white-space: nowrap; }
+.run-kpis b { color: var(--text-2); font-weight: 650; }
+.stop-run { color: var(--danger); }
+
+.content-stage { min-height: 0; flex: 1; position: relative; overflow: hidden; }
+.view-pane { position: absolute; inset: 0; overflow: auto; display: none; }
+.view-pane.active { display: block; }
+.chat-view.active { display: flex; flex-direction: column; }
+.conversation { width: min(920px, calc(100% - 40px)); margin: 0 auto; padding: 24px 0 190px; }
+
+.mission-card, .activity-bundle, .approval-card, .widget, .settings-card, .automation-row, .inspector-card { border: 1px solid var(--line); background: linear-gradient(180deg, rgba(255,255,255,.022), rgba(255,255,255,.008)); border-radius: var(--radius-card); }
+.mission-card { padding: 16px; margin-bottom: 24px; }
+.mission-head { display: flex; align-items: flex-start; gap: 12px; }
+.mission-head > div { flex: 1; min-width: 0; }
+.eyebrow { display: block; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .14em; font-weight: 750; }
+.mission-head h2, .view-heading h2 { margin: 5px 0 0; font-size: 18px; line-height: 1.28; font-weight: 650; letter-spacing: -.015em; }
+.mission-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; margin-top: 14px; }
+.mission-grid > div { min-width: 0; background: rgba(255,255,255,.02); border-radius: 9px; padding: 9px 10px; }
+.mission-grid span { display: block; color: var(--muted); font-size: 9px; margin-bottom: 4px; }
+.mission-grid strong { display: block; font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plan-inline { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 12px; display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; }
+.plan-label { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 10px; }
+.plan-label svg { width: 15px; height: 15px; }
+.plan-label b { color: var(--text-2); }
+.plan-steps { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 5px; }
+.plan-steps span { position: relative; padding-top: 10px; color: var(--muted-2); font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plan-steps span:before { content:""; position: absolute; left: 0; right: 0; top: 0; height: 3px; border-radius: 99px; background: var(--line); }
+.plan-steps .done { color: var(--text-2); }
+.plan-steps .done:before { background: var(--success); }
+.plan-steps .current { color: var(--accent-2); }
+.plan-steps .current:before { background: var(--accent); box-shadow: 0 0 10px rgba(192,139,60,.25); }
+
+.message { margin: 22px 0; }
+.user-message { display: flex; flex-direction: column; align-items: flex-end; }
+.message-bubble { width: fit-content; max-width: min(75%, 680px); padding: 13px 15px; border-radius: 15px 15px 4px 15px; background: var(--accent); color: #171511; font-size: 14px; line-height: 1.55; box-shadow: var(--shadow-sm); }
+.message-meta { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--muted); font-size: 10px; }
+.mini-icon { width: 28px; height: 28px; border-radius: 8px; color: var(--muted); }
+.mini-icon svg { width: 14px; height: 14px; }
+.assistant-message { max-width: 760px; }
+.assistant-meta { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 10px; margin-bottom: 9px; }
+.talos-glyph { width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; background: var(--accent-soft); }
+.assistant-copy { color: var(--text-2); font-size: 14px; line-height: 1.7; }
+.message-actions { display: flex; gap: 4px; margin-top: 8px; }
+.message-actions button { width: 34px; height: 32px; display: grid; place-items: center; border-radius: 8px; border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 12px; }
+.message-actions button:hover { background: rgba(255,255,255,.035); color: var(--text); }
+.message-actions svg { width: 15px; height: 15px; }
+.compact-message { margin-bottom: 0; }
+
+.activity-bundle { overflow: hidden; margin: 26px 0; }
+.bundle-header { width: 100%; min-height: 60px; border: 0; background: rgba(255,255,255,.012); display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 10px 14px; cursor: pointer; text-align: left; }
+.bundle-title { display: flex; align-items: center; gap: 10px; }
+.tool-icon { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-2); }
+.tool-icon svg { width: 17px; height: 17px; }
+.bundle-title strong, .bundle-title small { display: block; }
+.bundle-title strong { font-size: 12px; }
+.bundle-title small { margin-top: 3px; color: var(--muted); font-size: 10px; }
+.bundle-status { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 10px; white-space: nowrap; }
+.bundle-status svg { width: 14px; height: 14px; }
+.bundle-content { border-top: 1px solid var(--line); }
+.bundle-content.collapsed { display: none; }
+.tool-row { width: 100%; min-height: 46px; border: 0; border-bottom: 1px solid rgba(54,55,59,.7); background: transparent; display: grid; grid-template-columns: 28px minmax(0,1fr) auto; align-items: center; gap: 7px; padding: 6px 14px; text-align: left; cursor: pointer; }
+.tool-row:hover, .tool-row.expanded { background: rgba(255,255,255,.018); }
+.tool-state { width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; }
+.tool-state svg { width: 13px; height: 13px; }
+.tool-state.success { background: var(--success-soft); color: var(--success); }
+.tool-state.running { background: var(--accent-soft); }
+.tool-state.running span { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-2); animation: pulse 1.2s infinite; }
+.tool-copy { min-width: 0; }
+.tool-copy strong, .tool-copy small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tool-copy strong { font-size: 11px; font-weight: 650; }
+.tool-copy small { color: var(--muted); font-family: var(--font-mono); font-size: 9px; margin-top: 2px; }
+.tool-time { font-family: var(--font-mono); color: var(--muted); font-size: 9px; }
+.inline-diff { background: #18191c; border-bottom: 1px solid var(--line); }
+.diff-head { min-height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 14px; border-bottom: 1px solid rgba(54,55,59,.7); font-family: var(--font-mono); font-size: 9px; color: var(--muted); }
+.inline-diff pre, .diff-panel pre { margin: 0; overflow: auto; padding: 12px 14px; font: 10px/1.7 var(--font-mono); color: var(--text-2); }
+.inline-diff code span, .diff-panel code span { display: block; white-space: pre; padding: 0 6px; }
+.del { color: #d9958c; background: rgba(216,125,114,.06); }
+.add { color: #9ec8aa; background: rgba(119,168,132,.06); }
+.ctx { color: var(--muted); }
+
+.approval-card { margin: 24px 0; padding: 14px; display: grid; grid-template-columns: 42px 1fr auto; gap: 12px; align-items: center; border-color: rgba(192,139,60,.34); background: linear-gradient(135deg, rgba(192,139,60,.08), rgba(255,255,255,.01)); }
+.approval-icon { width: 42px; height: 42px; border-radius: 11px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-2); }
+.approval-copy h3 { margin: 4px 0; font-size: 13px; font-weight: 650; }
+.approval-copy p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.approval-copy code { font-family: var(--font-mono); color: var(--text-2); }
+.approval-actions { display: flex; gap: 6px; align-items: center; }
+
+.composer-wrap { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px max(20px, calc((100% - 920px)/2)) 12px; background: linear-gradient(180deg, rgba(30,31,34,0), rgba(30,31,34,.96) 22%, var(--bg) 48%); z-index: 10; pointer-events: none; }
+.composer, .queued-message, .composer-status { pointer-events: auto; }
+.composer { container-type: inline-size; min-height: 116px; border: 1px solid var(--line-strong); background: rgba(35,36,40,.96); backdrop-filter: blur(20px); border-radius: 15px; box-shadow: var(--shadow); padding: 13px 54px 10px 12px; display: grid; grid-template-rows: minmax(38px,auto) auto; position: relative; }
+.composer:focus-within { border-color: rgba(192,139,60,.62); box-shadow: var(--shadow), 0 0 0 1px rgba(192,139,60,.08); }
+.composer textarea { width: 100%; min-height: 38px; max-height: 120px; resize: none; overflow-y: auto; border: 0; background: transparent; color: var(--text); outline: 0; padding: 5px 3px 7px; font-size: 14px; line-height: 1.5; }
+.composer textarea::placeholder { color: #8c8d92; }
+.composer-mic { position: absolute; top: 7px; right: 8px; width: 40px; height: 40px; }
+.composer-toolbar { min-width: 0; display: flex; align-items: center; gap: 7px; }
+.round-btn { width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 50%; color: var(--text-2); flex: 0 0 auto; }
+.round-btn:hover { background: var(--surface-3); }
+.selector-pill { min-width: 0; max-width: 230px; height: 38px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.015); color: var(--text-2); display: inline-flex; align-items: center; gap: 7px; padding: 0 10px; cursor: pointer; }
+.selector-pill span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
+.selector-pill svg { width: 15px; height: 15px; flex: 0 0 auto; }
+.composer-spacer { flex: 1; }
+.queue-toggle { height: 34px; border-radius: 9px; border: 0; background: transparent; color: var(--muted); font-size: 10px; cursor: pointer; padding: 0 8px; }
+.queue-toggle.active { color: var(--accent-2); background: var(--accent-soft); }
+.send-btn { width: 42px; height: 42px; border: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer; background: var(--accent); color: #171511; flex: 0 0 auto; }
+.send-btn svg { width: 18px; height: 18px; }
+.queued-message { display: none; align-items: center; justify-content: space-between; gap: 10px; min-height: 36px; margin: 0 8px -4px; padding: 0 12px 4px; border-radius: 10px 10px 0 0; background: #292a2e; border: 1px solid var(--line); border-bottom: 0; color: var(--muted); font-size: 10px; }
+.queued-message.show { display: flex; }
+.queued-message b { color: var(--text-2); }
+.composer-status { display: flex; align-items: center; gap: 12px; justify-content: center; margin-top: 6px; color: var(--muted-2); font: 9px var(--font-mono); }
+
+.inspector-head { justify-content: space-between; padding: 0 12px 0 16px; border-bottom: 1px solid var(--line); }
+.inspector-head > div { display: flex; flex-direction: column; gap: 4px; }
+.inspector-head strong { font-size: 13px; }
+.inspector-tabs { display: grid; grid-template-columns: repeat(3,1fr); padding: 8px; gap: 4px; border-bottom: 1px solid var(--line); }
+.inspector-tabs button { height: 34px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; font-size: 11px; }
+.inspector-tabs button.active { background: var(--surface-2); color: var(--text); }
+.inspector-body { min-height: 0; overflow: auto; padding: 12px; }
+.inspector-section { display: none; }
+.inspector-section.active { display: block; }
+.inspector-card { padding: 12px; margin-bottom: 10px; }
+.card-title { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-2); margin-bottom: 10px; }
+.card-title svg { width: 16px; height: 16px; color: var(--muted); }
+dl { margin: 0; }
+dl > div { display: grid; grid-template-columns: 90px 1fr; gap: 8px; min-height: 28px; align-items: center; font-size: 10px; }
+dt { color: var(--muted); }
+dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); color: var(--text-2); }
+.capability-row { min-height: 30px; display: flex; justify-content: space-between; align-items: center; font-size: 10px; border-bottom: 1px solid rgba(54,55,59,.6); }
+.capability-row span { color: var(--muted); }
+.capability-row b { font-weight: 600; }
+.muted-copy { margin: 0 0 10px; color: var(--muted); font-size: 10px; line-height: 1.55; }
+.memory-chip { display: inline-flex; align-items: center; min-height: 28px; padding: 0 9px; margin: 3px 4px 0 0; border-radius: 8px; background: rgba(255,255,255,.03); color: var(--text-2); font: 9px var(--font-mono); }
+.file-tree { font-size: 11px; }
+.tree-root, .file-tree button { min-height: 36px; width: 100%; display: flex; align-items: center; gap: 8px; border: 0; background: transparent; color: var(--text-2); border-radius: 8px; text-align: left; cursor: pointer; }
+.tree-root { padding: 0 8px; }
+.tree-root svg { width: 16px; height: 16px; }
+.file-tree button { padding: 0 8px; }
+.file-tree button:hover, .file-tree button.active { background: var(--surface-2); }
+.file-tree button span { margin-left: auto; color: var(--muted); font: 8px var(--font-mono); }
+.file-tree .nested { padding-left: 26px; }
+.file-tree .deep { padding-left: 42px; }
+.agent-card { min-height: 58px; border: 1px solid var(--line); border-radius: 10px; display: grid; grid-template-columns: 34px minmax(0,1fr) auto; gap: 9px; align-items: center; padding: 9px; margin-bottom: 8px; }
+.agent-avatar { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: #2e3034; color: var(--accent-2); font: 10px var(--font-mono); }
+.agent-card strong, .agent-card small { display: block; }
+.agent-card strong { font-size: 11px; }
+.agent-card small { color: var(--muted); font-size: 9px; margin-top: 4px; }
+.agent-card svg { width: 16px; height: 16px; color: var(--success); }
+
+.review-shell, .terminal-shell, .browser-shell, .dashboard-shell, .generic-shell { width: min(1040px, calc(100% - 40px)); margin: 0 auto; padding: 24px 0 80px; }
+.view-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; margin-bottom: 18px; }
+.view-heading p { margin: 6px 0 0; color: var(--muted); font-size: 11px; }
+.review-summary { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin-bottom: 14px; }
+.review-summary > div { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 12px; }
+.review-summary span, .review-summary small { display: block; }
+.review-summary span { font-size: 17px; font-weight: 650; }
+.review-summary small { color: var(--muted); font-size: 9px; margin-top: 4px; }
+.file-review-list { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 8px; padding-bottom: 2px; }
+.file-review { min-width: 190px; min-height: 42px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 10px; cursor: pointer; color: var(--text-2); }
+.file-review.active { border-color: rgba(192,139,60,.45); background: var(--accent-soft); }
+.file-review span:first-child { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.file-review strong { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-review svg { width: 14px; height: 14px; }
+.diff-stats { color: var(--muted); font: 9px var(--font-mono); white-space: nowrap; }
+.diff-panel { border: 1px solid var(--line); border-radius: 12px; background: #17181a; overflow: hidden; }
+.diff-toolbar { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 12px; border-bottom: 1px solid var(--line); color: var(--muted); font: 10px var(--font-mono); }
+.diff-toolbar > div { display: flex; gap: 6px; }
+.diff-panel pre { min-height: 420px; font-size: 11px; }
+
+.terminal-window { min-height: calc(100dvh - 210px); margin: 0; border: 1px solid var(--line); border-radius: 12px; background: #111214; padding: 18px; overflow: auto; color: #d6d1c5; font: 12px/1.7 var(--font-mono); box-shadow: inset 0 0 80px rgba(255,255,255,.01); }
+.prompt { color: #cda15e; }.path { color: #8daaa2; }.branch { color: #9e8cc0; }
+.cursor { display: inline-block; width: 8px; height: 16px; background: #e5e1d8; vertical-align: -2px; animation: blink 1.1s steps(1) infinite; }
+.status-chip { display: inline-flex; align-items: center; min-height: 25px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: rgba(255,255,255,.02); font-size: 9px; }
+.status-chip.success { color: var(--success); border-color: rgba(119,168,132,.25); background: var(--success-soft); }
+
+.browser-shell { width: min(1100px, calc(100% - 32px)); }
+.browser-bar { min-height: 50px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 12px 12px 0 0; background: var(--surface); padding: 6px 8px; }
+.browser-nav, .browser-tools { display: flex; gap: 4px; }
+.browser-nav button { width: 34px; height: 34px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
+.browser-url { min-width: 0; height: 34px; border: 1px solid var(--line); border-radius: 8px; display: flex; align-items: center; padding: 0 10px; color: var(--muted); font: 10px var(--font-mono); }
+.device-preview { min-height: calc(100dvh - 190px); border: 1px solid var(--line); border-top: 0; border-radius: 0 0 12px 12px; background: radial-gradient(circle at 50% 30%, #2c2d31, #1b1c1f 65%); display: grid; place-items: center; padding: 30px; }
+.phone-frame { width: min(390px, 100%); aspect-ratio: 390 / 844; max-height: calc(100dvh - 250px); border-radius: 31px; border: 7px solid #0c0d0f; background: #1e1f22; box-shadow: 0 28px 70px rgba(0,0,0,.5); overflow: hidden; position: relative; display: flex; flex-direction: column; }
+.phone-status { height: 28px; padding: 0 15px; display: flex; justify-content: space-between; align-items: center; font-size: 8px; color: var(--muted); }
+.phone-header { min-height: 45px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 28px 1fr auto; align-items: center; padding: 0 13px; font-size: 10px; }
+.phone-chat { flex: 1; min-height: 0; overflow: hidden; padding: 16px 14px 120px; }
+.phone-user { margin-left: auto; width: 77%; border-radius: 12px 12px 4px 12px; padding: 10px; background: var(--accent); color: #161511; font-size: 9px; line-height: 1.4; }
+.phone-agent { margin-top: 18px; display: grid; grid-template-columns: 20px 1fr; gap: 8px; align-items: start; font-size: 9px; color: var(--text-2); line-height: 1.5; }
+.phone-agent p { margin: 0; }
+.phone-tool { margin: 14px 0 0 28px; min-height: 46px; border: 1px solid var(--line); border-radius: 9px; padding: 8px; display: grid; grid-template-columns: auto 1fr; gap: 3px 8px; font-size: 8px; }
+.phone-tool span { color: var(--success); }.phone-tool small { grid-column: 2; color: var(--muted); }
+.phone-composer { position: absolute; left: 9px; right: 9px; bottom: 9px; min-height: 92px; border: 1px solid var(--line-strong); background: #26272b; border-radius: 13px; padding: 11px 45px 10px 10px; font-size: 9px; color: var(--muted); }
+.phone-composer button { position: absolute; right: 8px; bottom: 8px; width: 32px; height: 32px; border: 0; border-radius: 50%; background: var(--accent); color: #171511; }
+.phone-composer-meta { position: absolute; left: 10px; right: 46px; bottom: 8px; display: flex; align-items: center; gap: 5px; }
+.phone-composer-meta span { min-height: 25px; display: inline-flex; align-items: center; padding: 0 7px; border-radius: 8px; border: 1px solid var(--line); color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.widget-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.widget { min-height: 175px; padding: 14px; }
+.widget.wide { grid-column: 1 / -1; }
+.widget-head { min-height: 26px; display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 10px; }
+.widget-head svg { width: 16px; height: 16px; }
+.metric-xl { font-size: 34px; font-weight: 650; margin: 16px 0 9px; letter-spacing: -.04em; }
+.widget > strong { display: block; font-size: 14px; margin-top: 15px; }
+.widget > p { color: var(--muted); font-size: 10px; }
+.widget > small { display: block; color: var(--muted); font-size: 9px; margin-top: 8px; }
+.agent-row { min-height: 52px; display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 9px; border-top: 1px solid var(--line); }
+.agent-row:first-of-type { margin-top: 10px; }
+.agent-row strong, .agent-row small { display: block; }
+.agent-row strong { font-size: 11px; }.agent-row small { color: var(--muted); font-size: 9px; margin-top: 3px; }
+.agent-row svg { width: 16px; height: 16px; color: var(--success); }
+.context-ring { width: 94px; height: 94px; margin: 12px auto 0; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--accent) 0 15%, var(--line) 15% 100%); position: relative; }
+.context-ring:after { content:""; width: 72px; height: 72px; border-radius: 50%; background: var(--surface); position: absolute; }
+.context-ring span { z-index: 1; font-weight: 650; }
+
+.automation-list { display: grid; gap: 9px; }
+.automation-row { min-height: 72px; display: grid; grid-template-columns: 42px minmax(0,1fr) auto auto; gap: 10px; align-items: center; padding: 11px; }
+.automation-icon { width: 42px; height: 42px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-2); display: grid; place-items: center; }
+.automation-icon svg { width: 17px; height: 17px; }
+.automation-row strong, .automation-row small { display: block; }
+.automation-row strong { font-size: 12px; }.automation-row small { color: var(--muted); font-size: 9px; margin-top: 4px; }
+.settings-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; }
+.settings-card { padding: 14px; min-height: 190px; }
+.settings-card h3 { margin: 0 0 14px; font-size: 13px; }
+.setting-line, .settings-card label { min-height: 38px; display: flex; justify-content: space-between; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); font-size: 10px; color: var(--muted); }
+.setting-line strong { color: var(--text-2); }
+.settings-card input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px; }
+.theme-swatch { display: grid; grid-template-columns: repeat(4,1fr); gap: 5px; margin-top: 14px; }
+.theme-swatch span { height: 36px; border-radius: 8px; border: 1px solid var(--line); }
+.theme-swatch span:nth-child(1){background:#1e1f22}.theme-swatch span:nth-child(2){background:#c08b3c}.theme-swatch span:nth-child(3){background:#8e9095}.theme-swatch span:nth-child(4){background:#36373b}
+.settings-card small { display: block; margin-top: 9px; color: var(--muted); font-size: 9px; }
+
+.mobile-nav { display: none; }
+.overlay-backdrop { display: none; position: fixed; inset: 0; z-index: 79; border: 0; background: rgba(0,0,0,.52); backdrop-filter: blur(2px); }
+.overlay-backdrop.show { display: block; }
+
+.command-dialog, .sheet-dialog { padding: 0; border: 1px solid var(--line-strong); background: #232428; color: var(--text); box-shadow: var(--shadow); }
+.command-dialog { width: min(620px, calc(100vw - 32px)); max-height: min(620px, calc(100dvh - 40px)); border-radius: 14px; margin-top: 12vh; }
+.command-dialog::backdrop, .sheet-dialog::backdrop { background: rgba(0,0,0,.54); backdrop-filter: blur(5px); }
+.command-search { min-height: 58px; display: grid; grid-template-columns: 22px minmax(0,1fr) auto; align-items: center; gap: 9px; padding: 0 13px; border-bottom: 1px solid var(--line); }
+.command-search input { height: 44px; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 14px; }
+.command-search svg { color: var(--muted); }
+.command-results { max-height: 430px; overflow: auto; padding: 7px; }
+.command-results button { width: 100%; min-height: 46px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 0; border-radius: 9px; background: transparent; color: var(--text-2); padding: 0 9px; cursor: pointer; }
+.command-results button:hover, .command-results button:focus-visible { background: var(--surface-3); }
+.command-results button > span { display: flex; align-items: center; gap: 9px; }
+.command-results svg { width: 17px; height: 17px; color: var(--muted); }
+
+.sheet-dialog { width: min(600px, calc(100vw - 24px)); border-radius: 16px; }
+.sheet-handle { display: none; }
+.sheet-head { min-height: 70px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px 0 16px; border-bottom: 1px solid var(--line); }
+.sheet-head h2 { margin: 4px 0 0; font-size: 17px; font-weight: 650; }
+.sheet-body { max-height: min(580px, calc(100dvh - 120px)); overflow: auto; padding: 12px; }
+.sheet-section { margin-bottom: 16px; }
+.sheet-label { display: block; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .12em; margin: 0 0 7px 3px; }
+.sheet-option { width: 100%; min-height: 54px; display: grid; grid-template-columns: 38px minmax(0,1fr) auto; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--text-2); padding: 7px 10px; margin-bottom: 6px; text-align: left; cursor: pointer; }
+.sheet-option:hover, .sheet-option.active { border-color: rgba(192,139,60,.4); background: var(--accent-soft); }
+.sheet-option .sheet-icon { width: 36px; height: 36px; border-radius: 9px; background: var(--surface-3); display: grid; place-items: center; color: var(--accent-2); }
+.sheet-option .sheet-icon svg { width: 16px; height: 16px; }
+.sheet-option strong, .sheet-option small { display: block; }
+.sheet-option strong { font-size: 11px; }
+.sheet-option small { color: var(--muted); font-size: 9px; margin-top: 3px; }
+.sheet-option > span:last-child { color: var(--muted); font-size: 10px; }
+.sheet-toggle-row { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--line); font-size: 11px; }
+.sheet-toggle-row span { color: var(--text-2); }
+.sheet-toggle-row input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+.toast-region { position: fixed; right: 16px; bottom: 16px; z-index: 120; display: grid; gap: 8px; pointer-events: none; }
+.toast { min-width: 240px; max-width: 360px; border: 1px solid var(--line-strong); border-radius: 10px; background: #2a2b2f; box-shadow: var(--shadow-sm); padding: 11px 12px; color: var(--text-2); font-size: 11px; animation: toast-in .24s ease both; }
+.toast strong { display: block; margin-bottom: 3px; color: var(--text); }
+
+@keyframes pulse { 0%,100%{transform:scale(.8);opacity:.6}50%{transform:scale(1.2);opacity:1} }
+@keyframes blink { 50%{opacity:0} }
+@keyframes toast-in { from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1} }
+
+@media (max-width: 1280px) {
+  :root { --sidebar: 268px; --inspector: 310px; }
+  .environment-chip { display: none; }
+  .mission-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+
+@media (max-width: 1040px) {
+  .app-shell { grid-template-columns: 252px minmax(0,1fr); }
+  .inspector-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(380px, 88vw); transform: translateX(102%); transition: transform .22s ease; z-index: 90; box-shadow: var(--shadow); }
+  .inspector-panel.open { transform: translateX(0); }
+  .inspector-panel .nav-close { display: grid; }
+  .desktop-context-toggle { display: grid; }
+  .hide-on-mid { display: none; }
+  .settings-grid { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 780px) {
+  body { overflow: hidden; }
+  .app-shell { display: block; }
+  .sessions-panel { position: fixed; top: 0; left: 0; bottom: 0; width: min(330px, 88vw); transform: translateX(-102%); transition: transform .22s ease; z-index: 90; box-shadow: var(--shadow); }
+  .sessions-panel.open { transform: translateX(0); }
+  .sessions-panel .nav-close { display: grid; }
+  .brand-row { padding-left: 6px; }
+  .workspace-shell { height: 100dvh; }
+  .mobile-only { display: grid; }
+  .topbar { min-height: 58px; grid-template-columns: minmax(0,1fr) auto; padding: 0 8px; }
+  .topbar-center { display: none; }
+  .topbar-left { min-width: 0; }
+  .title-button { min-width: 0; padding-left: 2px; }
+  .title-button strong { max-width: 44vw; }
+  .title-button small { display: none; }
+  .topbar-right .icon-btn { width: 42px; height: 42px; }
+  .run-strip { min-height: 42px; grid-template-columns: auto 1fr 38px; gap: 9px; padding: 0 8px 0 13px; }
+  .run-kpis { display: none; }
+  .run-state { font-size: 10px; }
+  .run-state > span:last-child { display: none; }
+  .content-stage { padding-bottom: var(--mobile-nav-h); }
+  .conversation { width: calc(100% - 24px); padding: 16px 0 205px; }
+  .mission-card { padding: 12px; margin-bottom: 16px; }
+  .mission-head h2 { font-size: 15px; }
+  .mission-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .mission-grid > div:nth-child(n+3) { display: none; }
+  .plan-inline { grid-template-columns: 1fr; gap: 8px; }
+  .plan-steps { grid-template-columns: repeat(6,68px); overflow-x: auto; padding-bottom: 2px; }
+  .message { margin: 17px 0; }
+  .message-bubble { max-width: 88%; font-size: 13px; }
+  .assistant-copy { font-size: 13px; line-height: 1.62; }
+  .bundle-header { min-height: 54px; padding: 9px 10px; }
+  .bundle-status { font-size: 0; }
+  .bundle-status svg { font-size: initial; }
+  .tool-row { padding: 6px 10px; }
+  .inline-diff pre { font-size: 9px; }
+  .approval-card { grid-template-columns: 38px 1fr; padding: 11px; }
+  .approval-icon { width: 38px; height: 38px; }
+  .approval-actions { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; }
+  .approval-actions .secondary-btn:first-child { display: none; }
+  .approval-actions .primary-btn { min-height: 40px; }
+  .composer-wrap { bottom: var(--mobile-nav-h); padding: 12px 8px 7px; }
+  .composer { min-height: 106px; padding: 11px 48px 8px 9px; border-radius: 14px; }
+  .composer textarea { font-size: 16px; }
+  .composer-mic { right: 4px; top: 4px; }
+  .hide-on-narrow { display: none; }
+  .selector-pill { max-width: min(56vw, 250px); }
+  .queue-toggle { display: none; }
+  .composer-status { margin-top: 4px; }
+  .mobile-nav { display: grid; grid-template-columns: repeat(5,1fr); position: fixed; left: 0; right: 0; bottom: 0; min-height: var(--mobile-nav-h); padding: 5px max(5px, env(safe-area-inset-right)) max(5px, env(safe-area-inset-bottom)) max(5px, env(safe-area-inset-left)); border-top: 1px solid var(--line); background: rgba(29,30,33,.96); backdrop-filter: blur(18px); z-index: 70; }
+  .mobile-nav button { min-width: 0; border: 0; background: transparent; color: var(--muted); border-radius: 9px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; cursor: pointer; font-size: 9px; }
+  .mobile-nav button.active { color: var(--accent-2); background: var(--accent-soft); }
+  .mobile-nav svg { width: 18px; height: 18px; }
+  .review-shell, .terminal-shell, .browser-shell, .dashboard-shell, .generic-shell { width: calc(100% - 20px); padding: 14px 0 calc(var(--mobile-nav-h) + 24px); }
+  .view-heading { align-items: center; margin-bottom: 12px; }
+  .view-heading h2 { font-size: 16px; }
+  .view-heading p { display: none; }
+  .review-summary { grid-template-columns: repeat(2,1fr); }
+  .diff-toolbar { align-items: flex-start; flex-direction: column; padding: 9px 10px; }
+  .diff-panel pre { min-height: 420px; font-size: 9px; }
+  .terminal-window { min-height: calc(100dvh - 175px - var(--mobile-nav-h)); font-size: 10px; }
+  .browser-shell { width: calc(100% - 12px); }
+  .browser-bar { grid-template-columns: auto minmax(0,1fr); }
+  .browser-tools { display: none; }
+  .device-preview { min-height: calc(100dvh - 120px - var(--mobile-nav-h)); padding: 13px; }
+  .phone-frame { max-height: calc(100dvh - 165px - var(--mobile-nav-h)); }
+  .widget-grid { grid-template-columns: 1fr; }
+  .widget.wide { grid-column: auto; }
+  .automation-row { grid-template-columns: 42px minmax(0,1fr) auto; }
+  .automation-row .secondary-btn { grid-column: 2 / -1; width: 100%; }
+  .settings-grid { grid-template-columns: 1fr; }
+  .command-dialog { margin-top: 7vh; }
+  .sheet-dialog { width: 100vw; max-width: none; margin: auto 0 0; border-radius: 18px 18px 0 0; border-bottom: 0; padding-bottom: max(0px, env(safe-area-inset-bottom)); }
+  .sheet-handle { display: block; width: 36px; height: 4px; border-radius: 99px; background: var(--line-strong); margin: 7px auto 0; }
+  .sheet-head { min-height: 62px; }
+  .sheet-body { max-height: 68dvh; padding-bottom: 18px; }
+  .toast-region { left: 10px; right: 10px; bottom: calc(var(--mobile-nav-h) + 10px); }
+  .toast { min-width: 0; width: 100%; max-width: none; }
+}
+
+@media (max-width: 430px) {
+  :root { --mobile-nav-h: 64px; }
+  .topbar { min-height: 56px; }
+  .title-button strong { max-width: 48vw; }
+  .mission-grid { grid-template-columns: 1fr 1fr; }
+  .plan-label { justify-content: space-between; }
+  .message-bubble { max-width: 92%; }
+  .composer-wrap { padding-left: 6px; padding-right: 6px; }
+  .composer-toolbar { gap: 5px; }
+  .round-btn { width: 38px; height: 38px; }
+  .selector-pill { max-width: calc(100vw - 150px); }
+  .composer-spacer { display: none; }
+  .send-btn { margin-left: auto; }
+  .approval-actions { grid-template-columns: 1fr; }
+  .approval-actions .secondary-btn { width: 100%; }
+  .review-summary span { font-size: 15px; }
+  .mobile-nav span { font-size: 8px; }
+}
+
+@media (max-width: 360px) {
+  .session-actions { grid-template-columns: 1fr; }
+  .primary-btn { width: 100%; }
+  .mission-card { border-radius: 10px; }
+  .mission-grid { grid-template-columns: 1fr; }
+  .mission-grid > div:nth-child(2) { display: none; }
+  .selector-pill span { max-width: 135px; }
+  .composer-status { gap: 7px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+}
+
+body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+
+/* Feature-parity additions: session graph + GUI control plane */
+.session-topology { overflow: hidden; }
+.topology-row { position: relative; min-height: 46px; display: grid; grid-template-columns: 18px minmax(0,1fr); gap: 8px; align-items: center; color: var(--text-2); }
+.topology-row::before { content: ""; position: absolute; left: 8px; top: -14px; bottom: 22px; width: 1px; background: var(--line-strong); }
+.topology-row.root::before { top: 50%; }
+.topology-row.child { padding-left: 14px; }
+.topology-row.child::before { left: 22px; }
+.topology-row.child::after { content: ""; position: absolute; left: 22px; top: 22px; width: 14px; height: 1px; background: var(--line-strong); }
+.topology-node { position: relative; z-index: 1; width: 9px; height: 9px; border-radius: 50%; background: var(--bg-deep); border: 2px solid var(--accent); box-shadow: 0 0 0 3px rgba(192,139,60,.08); }
+.topology-row strong, .topology-row small { display: block; }
+.topology-row strong { font-size: 11px; }
+.topology-row small { margin-top: 3px; color: var(--muted); font-size: 9px; }
+.topology-actions { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 5px; margin-top: 7px; }
+.topology-actions .secondary-btn { padding: 0 6px; min-width: 0; }
+.control-plane-card { grid-column: span 3; }
+.control-plane-card > p { margin: 0 0 12px; }
+.control-grid { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 6px; }
+.control-grid button { min-height: 46px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); color: var(--text-2); cursor: pointer; font-size: 11px; }
+.control-grid button:hover { border-color: var(--accent-strong); background: var(--accent-soft); color: var(--text); }
+.session-tree-sheet .sheet-option { position: relative; }
+.reference-option strong { font-family: var(--font-mono); font-size: 10px; }
+
+@media (max-width: 1040px) {
+  .control-plane-card { grid-column: span 2; }
+  .control-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
+}
+@media (max-width: 780px) {
+  .control-plane-card { grid-column: auto; }
+  .control-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
+}
+@media (max-width: 360px) {
+  .control-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .topology-actions { grid-template-columns: 1fr; }
+}
+
+/* --------------------------------------------------------------------------
+   UI review pass 2026-08 — interaction, accessibility and responsive polish
+   -------------------------------------------------------------------------- */
+:root {
+  --ease-standard: cubic-bezier(.2,.7,.2,1);
+  --ease-emphasized: cubic-bezier(.16,1,.3,1);
+  --keyboard-offset: 0px;
+}
+
+html { text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+body { overscroll-behavior: none; }
+::selection { background: rgba(192,139,60,.32); color: var(--text); }
+.sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important; }
+
+button { user-select: none; }
+button:disabled { cursor: not-allowed; opacity: .48; }
+.view-pane, .session-list, .inspector-body, .sheet-body, .command-results, pre { overscroll-behavior: contain; }
+.view-pane, .session-list, .inspector-body, .sheet-body, .command-results { scrollbar-gutter: stable; }
+* { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+.app-shell { transition: grid-template-columns .24s var(--ease-emphasized); }
+.inspector-panel { transition: opacity .18s ease, border-color .18s ease; }
+.app-shell.inspector-collapsed { grid-template-columns: var(--sidebar) minmax(0, 1fr) 0; }
+.app-shell.inspector-collapsed .inspector-panel { opacity: 0; pointer-events: none; overflow: hidden; border-left-color: transparent; }
+
+.title-button { min-height: 44px; transition: background-color .16s ease; }
+.title-button:hover { background: rgba(255,255,255,.035); }
+.mode-tab { min-height: 36px; transition: color .16s ease, background-color .16s ease; }
+.mode-tab:hover { color: var(--text-2); }
+.context-chip { transition: border-color .16s ease, background-color .16s ease; }
+.context-chip:hover { border-color: var(--line-strong); background: var(--surface-2); }
+
+.run-state { min-height: 36px; margin: 0; padding: 0 8px 0 0; border: 0; border-radius: 8px; background: transparent; cursor: pointer; font: inherit; transition: background-color .16s ease; }
+.run-state:hover { background: rgba(255,255,255,.03); }
+.run-state[aria-pressed="true"] { color: var(--accent-2); }
+.run-strip.is-stopped .status-pulse { background: var(--danger); box-shadow: 0 0 0 4px var(--danger-soft); }
+.run-strip.is-stopped .run-progress span { background: var(--muted-2); }
+
+.mission-card, .activity-bundle, .approval-card, .widget, .settings-card, .automation-row, .inspector-card,
+.composer, .sheet-option, .file-review, .diff-panel { transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease; }
+.mission-card:hover, .activity-bundle:hover { border-color: rgba(255,255,255,.14); }
+
+.bundle-header[aria-expanded="false"] .bundle-status svg { transform: rotate(-90deg); }
+.bundle-status svg { transition: transform .18s var(--ease-standard); }
+.tool-row { cursor: pointer; }
+.tool-row[aria-expanded="true"] { background: rgba(255,255,255,.022); }
+.tool-inline-detail { display: grid; grid-template-columns: 28px minmax(0,1fr); gap: 8px; padding: 10px 14px 11px 49px; border-bottom: 1px solid rgba(54,55,59,.7); background: rgba(0,0,0,.11); color: var(--muted); font: 10px/1.55 var(--font-mono); }
+.tool-inline-detail strong { color: var(--text-2); font-weight: 600; }
+.tool-inline-detail code { color: var(--text-2); word-break: break-word; }
+
+.message-actions button, .mini-icon { transition: color .14s ease, background-color .14s ease, transform .14s ease; }
+.message-actions button[aria-pressed="true"] { color: var(--accent-2); background: var(--accent-soft); }
+
+.composer-wrap { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+.composer { box-shadow: 0 18px 48px rgba(0,0,0,.24), inset 0 1px rgba(255,255,255,.025); }
+.composer:focus-within { border-color: rgba(192,139,60,.72); box-shadow: 0 18px 48px rgba(0,0,0,.28), 0 0 0 2px rgba(192,139,60,.09); }
+.composer textarea { caret-color: var(--accent-2); }
+.queue-toggle { border: 1px solid transparent; }
+.queue-toggle:hover { border-color: var(--line); color: var(--text-2); }
+.queue-toggle.active, .queue-toggle[aria-pressed="true"] { border-color: rgba(192,139,60,.18); }
+.send-btn { box-shadow: inset 0 1px rgba(255,255,255,.16), 0 5px 14px rgba(192,139,60,.18); transition: transform .14s ease, background-color .14s ease; }
+.send-btn:hover { background: var(--accent-2); }
+
+.file-review[aria-pressed="true"] { border-color: rgba(192,139,60,.52); background: var(--accent-soft); }
+.diff-panel pre { scroll-padding: 16px; }
+
+.inspector-tabs button { min-height: 38px; }
+.inspector-tabs button[aria-selected="true"] { background: var(--surface-2); color: var(--text); }
+.inspector-section[hidden] { display: none !important; }
+
+.command-dialog, .sheet-dialog { overflow: clip; }
+.command-search { grid-template-columns: 22px minmax(0,1fr) 42px; }
+.command-close { width: 38px; height: 38px; border: 0; border-radius: 9px; display: grid; place-items: center; background: transparent; color: var(--muted); cursor: pointer; }
+.command-close:hover { color: var(--text); background: var(--surface-3); }
+.command-close svg { width: 17px; height: 17px; }
+.command-results button.command-active { background: var(--surface-3); color: var(--text); }
+.command-empty { padding: 26px 14px 30px; text-align: center; color: var(--muted); font-size: 12px; }
+.sheet-dialog, .command-dialog { animation: dialog-enter .18s var(--ease-emphasized) both; }
+.sheet-option:focus-visible, .command-results button:focus-visible { outline-offset: -2px; }
+
+.toast-region { max-width: min(380px, calc(100vw - 24px)); }
+.toast { backdrop-filter: blur(18px); background: rgba(42,43,47,.94); }
+
+@keyframes dialog-enter { from { opacity: 0; transform: translateY(8px) scale(.99); } to { opacity: 1; transform: none; } }
+
+@media (hover: hover) and (pointer: fine) {
+  .icon-btn:active, .round-btn:active, .send-btn:active, .primary-btn:active, .secondary-btn:active, .mode-tab:active { transform: translateY(1px); }
+}
+
+@media (max-width: 1040px) {
+  .app-shell.inspector-collapsed { grid-template-columns: 252px minmax(0,1fr); }
+  .app-shell.inspector-collapsed .inspector-panel { opacity: 1; pointer-events: auto; overflow: auto; border-left-color: var(--line); }
+}
+
+@media (max-width: 780px) {
+  :root { --mobile-control: 44px; }
+  .workspace-shell { height: 100dvh; min-height: 100dvh; }
+  .topbar { min-height: calc(58px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
+  .sessions-panel, .inspector-panel { padding-bottom: env(safe-area-inset-bottom); }
+  .sessions-panel { padding-top: env(safe-area-inset-top); }
+
+  .topbar .icon-btn { width: var(--mobile-control); height: var(--mobile-control); }
+  .title-button { min-height: var(--mobile-control); }
+  .run-state { min-height: var(--mobile-control); padding-right: 5px; }
+  .stop-run { width: var(--mobile-control); height: var(--mobile-control); }
+
+  .eyebrow { font-size: 10px; }
+  .mission-grid span, .plan-steps span, .tool-copy small, .tool-time, .diff-head, .assistant-meta, .message-meta { font-size: 10px; }
+  .mission-grid strong, .tool-copy strong { font-size: 11px; }
+  .plan-label { font-size: 11px; }
+  .message-meta { min-height: 36px; }
+  .message-meta .mini-icon { width: 44px; height: 44px; margin-right: -8px; }
+  .message-actions { margin-top: 5px; }
+  .message-actions button { width: 44px; height: 44px; }
+
+  .composer-wrap { bottom: calc(var(--mobile-nav-h) + var(--keyboard-offset)); padding-top: 10px; padding-bottom: 7px; transition: bottom .18s var(--ease-standard); }
+  .composer { min-height: 112px; padding-right: 52px; }
+  .composer-mic { width: var(--mobile-control); height: var(--mobile-control); right: 4px; top: 4px; }
+  .round-btn, .selector-pill { min-height: var(--mobile-control); height: var(--mobile-control); }
+  .send-btn { width: var(--mobile-control); height: var(--mobile-control); }
+  .composer-status { font-size: 9.5px; line-height: 1.2; }
+  .content-stage { padding-bottom: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom)); }
+  .conversation { padding-bottom: 220px; scroll-padding-bottom: 220px; }
+
+  .mobile-nav { min-height: var(--mobile-nav-h); transition: opacity .18s ease, transform .18s var(--ease-standard); }
+  .mobile-nav button { min-height: 52px; }
+  .mobile-nav button[aria-current="page"] { color: var(--accent-2); background: var(--accent-soft); }
+
+  body.keyboard-open .mobile-nav { opacity: 0; transform: translateY(calc(100% + env(safe-area-inset-bottom))); pointer-events: none; }
+  body.keyboard-open .composer-wrap { bottom: var(--keyboard-offset); }
+  body.keyboard-open .conversation { padding-bottom: 160px; }
+
+  .sheet-option { min-height: 60px; grid-template-columns: 42px minmax(0,1fr) auto; }
+  .sheet-option .sheet-icon { width: 40px; height: 40px; }
+  .sheet-option strong { font-size: 12px; }
+  .sheet-option small { font-size: 10px; line-height: 1.35; }
+  .sheet-option > span:last-child { font-size: 11px; }
+  .sheet-toggle-row { min-height: 52px; font-size: 12px; }
+  .sheet-toggle-row input { width: 22px; height: 22px; }
+  .sheet-body { max-height: min(72dvh, calc(100dvh - 96px)); }
+
+  .command-dialog { max-height: calc(100dvh - max(20px, env(safe-area-inset-top)) - 12px); }
+  .command-results button { min-height: 52px; font-size: 12px; }
+  .command-search input { font-size: 16px; }
+  .session-actions input { font-size: 16px; }
+
+  .tool-inline-detail { padding-left: 45px; font-size: 9.5px; }
+  .text-btn { min-height: 40px; display: inline-flex; align-items: center; }
+}
+
+@media (max-width: 430px) {
+  .topbar { min-height: calc(56px + env(safe-area-inset-top)); }
+  .title-button strong { max-width: 50vw; }
+  .composer { padding-left: 8px; padding-right: 50px; }
+  .composer-toolbar { gap: 6px; }
+  .round-btn { width: 44px; height: 44px; }
+  .selector-pill { max-width: calc(100vw - 154px); }
+  .command-dialog { width: calc(100vw - 12px); margin-top: max(8px, env(safe-area-inset-top)); border-radius: 14px; }
+  .command-results { max-height: calc(100dvh - 92px - env(safe-area-inset-top)); }
+}
+
+@media (max-width: 360px) {
+  .title-button strong { max-width: 46vw; }
+  .selector-pill span { max-width: 128px; }
+  .composer-status span:nth-child(n+3) { display: none; }
+  .tool-inline-detail { padding-left: 12px; grid-template-columns: 1fr; }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .sessions-panel, .inspector-panel, .topbar, .composer, .mobile-nav, .toast { background: var(--surface); }
+}
+
+.sheet-input { width: 100%; min-height: 48px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); padding: 0 12px; outline: 0; font-size: 14px; }
+.sheet-input:focus { border-color: rgba(192,139,60,.72); box-shadow: 0 0 0 2px rgba(192,139,60,.09); }
+.sheet-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.sheet-actions .secondary-btn, .sheet-actions .primary-btn { min-height: 44px; }
+@media (max-width: 780px) {
+  .sheet-input { min-height: 52px; font-size: 16px; }
+  .sheet-actions { display: grid; grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 780px) {
+  .composer textarea { min-height: 44px; }
+  .round-btn { width: 44px; }
+  .text-btn { min-height: 44px; }
+  .mobile-nav button, .mobile-nav button span { font-size: 10px; }
+}
+
+  </style>
+</head>
+<body>
+  <svg class="icon-sprite" aria-hidden="true">
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 9-3 3 3 3M16 9l3 3-3 3M14 5l-4 14"/></symbol>
+    <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M12 15h5"/></symbol>
+    <symbol id="i-files" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></symbol>
+    <symbol id="i-git" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="8" cy="19" r="2"/><path d="M6 7v4a4 4 0 0 0 4 4h2a6 6 0 0 0 6-6V8M8 17v-6"/></symbol>
+    <symbol id="i-branch" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="6" cy="19" r="2"/><path d="M6 7v10M8 17c5 0 8-2 8-9"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m9 6 9 6-9 6V6Z"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="m4 4 17 8-17 8 3-8-3-8Z"/><path d="M7 12h14"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m8 10 4 4 4-4"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a7 7 0 0 0-1.7-1L14.5 3h-5L9.2 6a7 7 0 0 0-1.7 1l-2.4-1-2 3.4L5.1 11a7 7 0 0 0 0 2L3 14.5l2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 3.1h5l.4-3.1a7 7 0 0 0 1.7-1l2.4 1 2-3.4L18.9 13a7 7 0 0 0 .1-1Z"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 9a6 6 0 1 1 12 0c0 7 3 7 3 8H3c0-1 3-1 3-8ZM10 21h4"/></symbol>
+    <symbol id="i-command" viewBox="0 0 24 24"><path d="M9 6V5a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v14a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6Z"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4.5 6v5.5c0 4.6 3 7.8 7.5 9.5 4.5-1.7 7.5-4.9 7.5-9.5V6L12 3Z"/><path d="m9 12 2 2 4-5"/></symbol>
+    <symbol id="i-brain" viewBox="0 0 24 24"><path d="M9 4a4 4 0 0 0-4 4v1a4 4 0 0 0 1 7.9V18a3 3 0 0 0 5 2.2V4.8A3 3 0 0 0 9 4ZM15 4a4 4 0 0 1 4 4v1a4 4 0 0 1-1 7.9V18a3 3 0 0 1-5 2.2V4.8A3 3 0 0 1 15 4Z"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></symbol>
+    <symbol id="i-layout" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M9 10h12"/></symbol>
+    <symbol id="i-robot" viewBox="0 0 24 24"><rect x="5" y="7" width="14" height="12" rx="3"/><path d="M12 3v4M9 12h.01M15 12h.01M8 16h8"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a5 5 0 0 1 0-7l1-1a5 5 0 0 1 7 7l-1 1M14 10a5 5 0 0 1 0 7l-1 1a5 5 0 0 1-7-7l1-1"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m5 18 5-5 3 3 2-2 4 4"/></symbol>
+    <symbol id="i-web" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></symbol>
+    <symbol id="i-diff" viewBox="0 0 24 24"><path d="M6 3v12M6 7h6a4 4 0 0 1 4 4v2M4 18h4M16 17v4M14 19h4"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></symbol>
+  </svg>
+
+  <div id="app" class="app-shell">
+    <button class="overlay-backdrop" id="overlayBackdrop" aria-label="Chiudi pannelli"></button>
+
+    <aside class="sessions-panel" id="sessionsPanel" aria-label="Sessioni TALOS">
+      <div class="brand-row">
+        <button class="icon-btn nav-close" data-close-panel="sessions" aria-label="Chiudi sessioni"><svg><use href="#i-x"/></svg></button>
+        <div class="brand-mark" aria-hidden="true">T</div>
+        <div class="brand-copy"><strong>TALOS</strong><span>Harness</span></div>
+        <button class="icon-btn" aria-label="Notifiche"><svg><use href="#i-bell"/></svg><span class="badge-dot">2</span></button>
+      </div>
+
+      <div class="session-actions">
+        <label class="search-field"><svg><use href="#i-search"/></svg><input id="sessionSearch" type="search" placeholder="Cerca chat..." aria-label="Cerca chat"/><kbd>⌘K</kbd></label>
+        <button class="primary-btn" id="newSessionBtn"><svg><use href="#i-plus"/></svg><span>Nuova</span></button>
+      </div>
+
+      <div class="sidebar-caption">Tieni premuta una chat per le azioni.</div>
+      <nav class="session-list" id="sessionList">
+        <div class="list-heading">Oggi</div>
+        <button class="session-item active" data-session="Refactor auth flow">
+          <span class="session-main"><strong>Refactor auth flow</strong><small><span class="status-pulse"></span>3 tool attivi · 1 min fa</small></span>
+          <span class="session-meta">09:12<svg><use href="#i-more"/></svg></span>
+        </button>
+        <button class="session-item" data-session="Audit API permissions">
+          <span class="session-main"><strong>Audit API permissions</strong><small>review · 8 min fa</small></span>
+          <span class="session-meta">08:42<svg><use href="#i-more"/></svg></span>
+        </button>
+        <button class="session-item" data-session="Fix mobile composer">
+          <span class="session-main"><strong>Fix mobile composer</strong><small>workspace · 9 h fa</small></span>
+          <span class="session-meta">08:30<svg><use href="#i-more"/></svg></span>
+        </button>
+        <div class="list-heading">Ieri</div>
+        <button class="session-item" data-session="Prepare release notes">
+          <span class="session-main"><strong>Prepare release notes</strong><small>archiviata · 15 h fa</small></span>
+          <span class="session-meta">15:25<svg><use href="#i-more"/></svg></span>
+        </button>
+        <div class="list-heading">Ultimi 7 giorni</div>
+        <button class="session-item" data-session="Investigate flaky tests">
+          <span class="session-main"><strong>Investigate flaky tests</strong><small>branch: fix/tests</small></span>
+          <span class="session-meta">Mar<svg><use href="#i-more"/></svg></span>
+        </button>
+      </nav>
+
+      <div class="attention-card">
+        <div><svg><use href="#i-clock"/></svg></div>
+        <div><strong>2 automazioni</strong><span>Prossima esecuzione 10:00</span></div>
+        <button class="text-btn" data-open-view="automations">Apri</button>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="avatar">T</div>
+        <div><strong>Workspace locale</strong><small>Calm · TALOS</small></div>
+        <button class="icon-btn" data-open-view="settings" aria-label="Impostazioni"><svg><use href="#i-settings"/></svg></button>
+      </div>
+    </aside>
+
+    <main class="workspace-shell">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="icon-btn mobile-only" data-open-panel="sessions" aria-label="Apri sessioni"><svg><use href="#i-menu"/></svg></button>
+          <button class="title-button" id="sessionTitleButton" data-open-sheet="sessionTree" aria-haspopup="dialog" aria-label="Apri dettagli e albero della sessione">
+            <span><strong id="sessionTitle">Refactor auth flow</strong><small>talos / mobile-harness</small></span>
+            <svg><use href="#i-chevron"/></svg>
+          </button>
+        </div>
+        <div class="topbar-center">
+          <button class="mode-tab active" data-mode="chat" aria-pressed="true">Chat</button>
+          <button class="mode-tab" data-mode="split" aria-pressed="false">Split</button>
+          <button class="mode-tab" data-mode="dashboard" aria-pressed="false">Board</button>
+        </div>
+        <div class="topbar-right">
+          <button class="context-chip environment-chip" data-open-sheet="environment"><svg><use href="#i-branch"/></svg><span>wt/auth · feat/mobile</span></button>
+          <button class="icon-btn" id="commandPaletteBtn" aria-label="Comandi"><svg><use href="#i-command"/></svg></button>
+          <button class="icon-btn desktop-context-toggle" data-open-panel="inspector" aria-label="Mostra o nascondi inspector" aria-expanded="true"><svg><use href="#i-layout"/></svg></button>
+        </div>
+      </header>
+
+      <section class="run-strip" aria-label="Stato esecuzione">
+        <button class="run-state" id="runStateToggle" type="button" aria-pressed="false" aria-label="Attiva o disattiva la coda follow-up"><span class="status-pulse"></span><strong>In esecuzione</strong><span>01:42</span></button>
+        <div class="run-progress" role="progressbar" aria-label="Avanzamento run" aria-valuemin="0" aria-valuemax="100" aria-valuenow="72"><span style="width:72%"></span></div>
+        <div class="run-kpis">
+          <span><b>4/6</b> step</span>
+          <span><b>18.7k</b> ctx</span>
+          <span><b>0</b> errori</span>
+        </div>
+        <button class="icon-btn stop-run" aria-label="Interrompi esecuzione"><svg><use href="#i-stop"/></svg></button>
+      </section>
+
+      <div class="content-stage" id="contentStage">
+        <section class="chat-view view-pane active" data-view="chat">
+          <div class="conversation" id="conversation">
+            <article class="mission-card">
+              <div class="mission-head">
+                <div><span class="eyebrow">Missione</span><h2>Rendi il composer mobile robusto e accessibile</h2></div>
+                <button class="icon-btn" data-open-sheet="control" aria-label="Altre azioni della missione"><svg><use href="#i-more"/></svg></button>
+              </div>
+              <div class="mission-grid">
+                <div><span>Workspace</span><strong>talos</strong></div>
+                <div><span>Branch</span><strong>feat/mobile-harness</strong></div>
+                <div><span>Permessi</span><strong>Workspace write</strong></div>
+                <div><span>Modello</span><strong>gpt-5.6-sol</strong></div>
+              </div>
+              <div class="plan-inline">
+                <div class="plan-label"><svg><use href="#i-list"/></svg><span>Plan</span><b>4 / 6</b></div>
+                <div class="plan-steps">
+                  <span class="done">Audit layout</span><span class="done">Tokens Calm</span><span class="done">Composer</span><span class="done">Tool feed</span><span class="current">Responsive pass</span><span>Review</span>
+                </div>
+              </div>
+            </article>
+
+            <article class="message user-message">
+              <div class="message-bubble">Analizza il layout attuale di Talos, sistema il composer mobile e mantieni visibili branch, permessi e stato dell'esecuzione.</div>
+              <div class="message-meta"><span>Tu · 09:12</span><button class="mini-icon" data-copy-message aria-label="Copia messaggio"><svg><use href="#i-copy"/></svg></button></div>
+            </article>
+
+            <article class="message assistant-message">
+              <div class="assistant-meta"><span class="talos-glyph">T</span><span>TALOS · gpt-5.6-sol</span><span>1 min fa</span></div>
+              <div class="assistant-copy">
+                Ho isolato il problema: il composer usa una gerarchia desktop anche sotto 600 px. Sto trasformando i controlli secondari in capability sheet e mantenendo nel bordo inferiore solo contesto essenziale, invio e interrupt.
+              </div>
+              <div class="message-actions"><button data-message-action="copy" aria-label="Copia risposta"><svg><use href="#i-copy"/></svg></button><button data-message-action="like" aria-label="Risposta utile" aria-pressed="false">👍</button><button data-message-action="dislike" aria-label="Risposta non utile" aria-pressed="false">👎</button><button data-message-action="retry" aria-label="Rigenera risposta"><svg><use href="#i-history"/></svg></button></div>
+            </article>
+
+            <section class="activity-bundle" aria-label="Attivita strumenti">
+              <button class="bundle-header" data-collapse-target="toolBundle" aria-expanded="true" aria-controls="toolBundle">
+                <span class="bundle-title"><span class="tool-icon"><svg><use href="#i-bolt"/></svg></span><span><strong>Attivita</strong><small>6 operazioni · 14.2s</small></span></span>
+                <span class="bundle-status">5 completate · 1 in corso <svg><use href="#i-chevron"/></svg></span>
+              </button>
+              <div class="bundle-content" id="toolBundle">
+                <button class="tool-row" data-tool-detail="read">
+                  <span class="tool-state success"><svg><use href="#i-check"/></svg></span>
+                  <span class="tool-copy"><strong>Read</strong><small>src/components/chat/TalosComposer.vue</small></span>
+                  <span class="tool-time">0.3s</span>
+                </button>
+                <button class="tool-row" data-tool-detail="search">
+                  <span class="tool-state success"><svg><use href="#i-check"/></svg></span>
+                  <span class="tool-copy"><strong>Search</strong><small>mobile breakpoints, safe-area, touch targets</small></span>
+                  <span class="tool-time">0.6s</span>
+                </button>
+                <button class="tool-row expanded" data-tool-detail="edit">
+                  <span class="tool-state success"><svg><use href="#i-check"/></svg></span>
+                  <span class="tool-copy"><strong>Edit</strong><small>TalosComposer.vue · +28 −19</small></span>
+                  <span class="tool-time">1.2s</span>
+                </button>
+                <div class="inline-diff" aria-label="Diff codice">
+                  <div class="diff-head"><span>src/components/chat/TalosComposer.vue</span><button class="text-btn" data-open-view="diff">Apri review</button></div>
+                  <pre><code><span class="del">- grid-template-columns: 48px 1fr auto auto;</span>
+<span class="add">+ grid-template-columns: 48px minmax(0,1fr) 48px;</span>
+<span class="add">+ padding-bottom: max(12px, env(safe-area-inset-bottom));</span>
+<span class="add">+ @container composer (max-width: 560px) { ... }</span></code></pre>
+                </div>
+                <button class="tool-row" data-tool-detail="bash">
+                  <span class="tool-state success"><svg><use href="#i-check"/></svg></span>
+                  <span class="tool-copy"><strong>Test</strong><small>npm run test:unit -- composer</small></span>
+                  <span class="tool-time">8.4s</span>
+                </button>
+                <button class="tool-row running" data-tool-detail="browser">
+                  <span class="tool-state running"><span></span></span>
+                  <span class="tool-copy"><strong>Browser check</strong><small>390 × 844 · touch + keyboard</small></span>
+                  <span class="tool-time">live</span>
+                </button>
+              </div>
+            </section>
+
+            <article class="approval-card">
+              <div class="approval-icon"><svg><use href="#i-shield"/></svg></div>
+              <div class="approval-copy"><span class="eyebrow">Permesso richiesto</span><h3>Aprire il browser locale di test?</h3><p>Solo <code>http://127.0.0.1:4173</code>. Nessun accesso rete esterno.</p></div>
+              <div class="approval-actions"><button class="secondary-btn" data-deny>Nega</button><button class="secondary-btn" data-allow-session>Consenti per sessione</button><button class="primary-btn compact" data-approve>Consenti una volta</button></div>
+            </article>
+
+            <article class="message assistant-message compact-message">
+              <div class="assistant-meta"><span class="talos-glyph">T</span><span>TALOS</span><span>ora</span></div>
+              <div class="assistant-copy">Sto completando il controllo responsive. Al termine apro automaticamente la review dei file modificati e il gate di verifica.</div>
+            </article>
+          </div>
+
+          <div class="composer-wrap">
+            <div class="queued-message" id="queuedMessage"><span><b>Follow-up in coda</b> · dopo il run corrente</span><button class="text-btn" id="cancelQueued">Annulla</button></div>
+            <form class="composer" id="composerForm">
+              <textarea id="composerInput" rows="1" placeholder="Scrivi a TALOS..." aria-label="Messaggio"></textarea>
+              <button class="icon-btn composer-mic" type="button" aria-label="Voce"><svg><use href="#i-mic"/></svg></button>
+              <div class="composer-toolbar">
+                <button class="round-btn" type="button" id="capabilityBtn" aria-label="Aggiungi contesto"><svg><use href="#i-plus"/></svg></button>
+                <button class="selector-pill" type="button" data-open-sheet="model"><svg><use href="#i-brain"/></svg><span>gpt-5.6-sol · high</span><svg><use href="#i-chevron"/></svg></button>
+                <button class="selector-pill hide-on-narrow" type="button" data-open-sheet="permissions"><svg><use href="#i-shield"/></svg><span>Workspace write</span><svg><use href="#i-chevron"/></svg></button>
+                <button class="selector-pill hide-on-mid" type="button" data-open-sheet="environment"><svg><use href="#i-branch"/></svg><span>feat/mobile-harness</span></button>
+                <div class="composer-spacer"></div>
+                <button class="queue-toggle" type="button" id="queueToggle" title="Invia come follow-up" aria-pressed="false">Follow-up</button>
+                <button class="send-btn" type="submit" aria-label="Invia"><svg><use href="#i-send"/></svg></button>
+              </div>
+            </form>
+            <div class="composer-status">
+              <span>Calm · locale</span><span>18.7k / 128k</span><span class="desktop-only">↑ 142 tok/s</span><span class="desktop-only">cache 78%</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="view-pane" data-view="diff">
+          <div class="review-shell">
+            <div class="view-heading"><div><span class="eyebrow">Review center</span><h2>3 file modificati</h2><p>Gate prima del completamento: diff, test e rischio.</p></div><button class="primary-btn compact" id="approveAllDiffs">Approva tutto</button></div>
+            <div class="review-summary">
+              <div><span>+68</span><small>aggiunte</small></div><div><span>−31</span><small>rimozioni</small></div><div><span>6/6</span><small>test</small></div><div><span>Basso</span><small>rischio</small></div>
+            </div>
+            <div class="file-review-list">
+              <button class="file-review active" data-review-file="composer" aria-pressed="true"><span><svg><use href="#i-diff"/></svg><strong>TalosComposer.vue</strong></span><span class="diff-stats">+28 −19</span></button>
+              <button class="file-review" data-review-file="layout" aria-pressed="false"><span><svg><use href="#i-diff"/></svg><strong>chat-layout.css</strong></span><span class="diff-stats">+32 −8</span></button>
+              <button class="file-review" data-review-file="tests" aria-pressed="false"><span><svg><use href="#i-diff"/></svg><strong>composer.spec.ts</strong></span><span class="diff-stats">+8 −4</span></button>
+            </div>
+            <div class="diff-panel">
+              <div class="diff-toolbar"><span id="diffPath">src/components/chat/TalosComposer.vue</span><div><button class="secondary-btn compact" data-review-action="comment">Commenta</button><button class="secondary-btn compact" data-review-action="open">Apri file</button></div></div>
+              <pre><code id="diffCode"><span class="ctx">@@ composer layout @@</span>
+<span class="del">- .composer { grid-template-columns: 48px 1fr auto auto; }</span>
+<span class="add">+ .composer { container-type: inline-size; }</span>
+<span class="add">+ .composer-toolbar { grid-template-columns: 48px minmax(0, 1fr) 48px; }</span>
+<span class="add">+ @container (max-width: 560px) {</span>
+<span class="add">+   .secondary-context { display: none; }</span>
+<span class="add">+ }</span>
+<span class="ctx"> </span>
+<span class="ctx">@@ safe area @@</span>
+<span class="add">+ padding-bottom: max(12px, env(safe-area-inset-bottom));</span></code></pre>
+            </div>
+          </div>
+        </section>
+
+        <section class="view-pane" data-view="terminal">
+          <div class="terminal-shell">
+            <div class="view-heading"><div><span class="eyebrow">Terminale integrato</span><h2>talos · feat/mobile-harness</h2></div><span class="status-chip success">pty attiva</span></div>
+            <pre class="terminal-window"><code><span class="prompt">antonino@talos</span> <span class="path">~/dev/talos</span> <span class="branch">feat/mobile-harness</span>
+$ npm run test:unit -- composer
+
+ PASS  tests/unit/chat/composer.spec.ts
+  ✓ keeps 48px touch targets at 360px
+  ✓ respects safe-area inset
+  ✓ hides secondary pills under 560px
+  ✓ command palette remains keyboard reachable
+
+ Test Files  1 passed (1)
+ Tests       6 passed (6)
+ Duration    8.42s
+
+<span class="prompt">antonino@talos</span> <span class="path">~/dev/talos</span> <span class="branch">feat/mobile-harness</span>
+$ <span class="cursor"> </span></code></pre>
+          </div>
+        </section>
+
+        <section class="view-pane" data-view="browser">
+          <div class="browser-shell">
+            <div class="browser-bar"><div class="browser-nav"><button data-browser-action="back" aria-label="Indietro">‹</button><button data-browser-action="forward" aria-label="Avanti">›</button><button data-browser-action="reload" aria-label="Ricarica">↻</button></div><div class="browser-url"><span class="status-pulse"></span>127.0.0.1:4173/chat</div><div class="browser-tools"><button class="secondary-btn compact" data-browser-action="annotate">Annota</button><button class="secondary-btn compact" data-browser-action="inspect">Ispeziona</button></div></div>
+            <div class="device-preview">
+              <div class="phone-frame">
+                <div class="phone-status"><span>09:41</span><span>5G · 87%</span></div>
+                <div class="phone-header"><span class="mini-brand">T</span><strong>TALOS</strong><span>•••</span></div>
+                <div class="phone-chat">
+                  <div class="phone-user">Sistema il composer e non perdere contesto.</div>
+                  <div class="phone-agent"><span class="mini-brand">T</span><p>Ho preservato modello, permessi e branch in un'area compatta e sempre accessibile.</p></div>
+                  <div class="phone-tool"><span>✓ Edit</span><strong>TalosComposer.vue</strong><small>+28 −19</small></div>
+                </div>
+                <div class="phone-composer"><span>Scrivi a TALOS...</span><button>↑</button><div class="phone-composer-meta"><span>+ </span><span>gpt-5.6-sol</span><span>workspace</span></div></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view-pane" data-view="dashboard">
+          <div class="dashboard-shell">
+            <div class="view-heading"><div><span class="eyebrow">Session board</span><h2>Refactor auth flow</h2><p>Widget operativi persistenti, stessi dati della sessione.</p></div><button class="secondary-btn compact">+ Widget</button></div>
+            <div class="widget-grid">
+              <article class="widget"><div class="widget-head"><span>Run health</span><span class="status-chip success">Healthy</span></div><div class="metric-xl">72%</div><div class="run-progress"><span style="width:72%"></span></div><small>4 di 6 step completati</small></article>
+              <article class="widget"><div class="widget-head"><span>Git</span><svg><use href="#i-git"/></svg></div><strong>feat/mobile-harness</strong><p>3 file · +68 −31</p><button class="text-btn" data-open-view="diff">Apri review</button></article>
+              <article class="widget wide"><div class="widget-head"><span>Subagent</span><span class="status-chip">UI audit</span></div><div class="agent-row"><span class="agent-avatar">A1</span><div><strong>Responsive auditor</strong><small>Controllo 360 / 390 / 430 / 768 px</small></div><span class="status-pulse"></span></div><div class="agent-row"><span class="agent-avatar">A2</span><div><strong>Accessibility reviewer</strong><small>Focus, contrasto, touch target</small></div><svg><use href="#i-check"/></svg></div></article>
+              <article class="widget"><div class="widget-head"><span>Context</span><span>18.7k</span></div><div class="context-ring"><span>15%</span></div><small>Compatto automaticamente oltre 80%</small></article>
+              <article class="widget"><div class="widget-head"><span>Automation</span><svg><use href="#i-clock"/></svg></div><strong>Nightly smoke</strong><p>Ogni giorno · 02:30</p><button class="text-btn" data-open-view="automations">Gestisci</button></article>
+            </div>
+          </div>
+        </section>
+
+        <section class="view-pane" data-view="automations">
+          <div class="generic-shell">
+            <div class="view-heading"><div><span class="eyebrow">Automazioni</span><h2>Run programmati</h2><p>Task isolati con stato, cronologia e modello dedicato.</p></div><button class="primary-btn compact" data-automation-action="new">Nuova automazione</button></div>
+            <div class="automation-list">
+              <article class="automation-row"><div class="automation-icon"><svg><use href="#i-clock"/></svg></div><div><strong>Nightly smoke</strong><small>0 2 * * * · worktree isolato</small></div><span class="status-chip success">Attiva</span><button class="secondary-btn compact" data-automation-action="run">Esegui ora</button></article>
+              <article class="automation-row"><div class="automation-icon"><svg><use href="#i-history"/></svg></div><div><strong>Weekly dependency audit</strong><small>Lun 08:00 · report nella sessione</small></div><span class="status-chip">Pausa</span><button class="secondary-btn compact" data-automation-action="edit">Modifica</button></article>
+            </div>
+          </div>
+        </section>
+
+        <section class="view-pane" data-view="settings">
+          <div class="generic-shell">
+            <div class="view-heading"><div><span class="eyebrow">TALOS</span><h2>Impostazioni harness</h2><p>Calm resta il preset visivo predefinito.</p></div></div>
+            <div class="settings-grid">
+              <article class="settings-card"><h3>Aspetto</h3><div class="setting-line"><span>Preset</span><strong>Calm</strong></div><div class="theme-swatch"><span></span><span></span><span></span><span></span></div><small>Grey paper · graphite · refined bronze</small></article>
+              <article class="settings-card"><h3>Interazione</h3><label><span>Riduci movimento</span><input type="checkbox" id="reducedMotionToggle"/></label><label><span>Diff espansi di default</span><input type="checkbox" checked/></label><label><span>Tool activity compatta</span><input type="checkbox" checked/></label></article>
+              <article class="settings-card"><h3>Agentico</h3><label><span>Verifica prima di "done"</span><input type="checkbox" checked/></label><label><span>Mostra subagent</span><input type="checkbox" checked/></label><label><span>Steering queue</span><input type="checkbox" checked/></label></article>
+              <article class="settings-card control-plane-card"><h3>Control plane</h3><p class="muted-copy">Parità CLI senza costringere l'utente al terminale.</p><div class="control-grid"><button data-open-sheet="control">Agents</button><button data-open-sheet="control">Hooks</button><button data-open-sheet="capabilities">Skills</button><button data-open-sheet="capabilities">Plugins</button><button data-open-sheet="capabilities">MCP</button><button data-control-action="doctor">Doctor</button></div></article>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <aside class="inspector-panel" id="inspectorPanel" aria-label="Inspector">
+      <div class="inspector-head">
+        <div><span class="eyebrow">Context rail</span><strong>Sessione</strong></div>
+        <button class="icon-btn nav-close" data-close-panel="inspector" aria-label="Chiudi inspector"><svg><use href="#i-x"/></svg></button>
+      </div>
+      <div class="inspector-tabs" role="tablist" aria-label="Inspector sessione">
+        <button class="active" id="inspector-tab-context" role="tab" aria-selected="true" aria-controls="inspector-context" data-inspector-tab="context">Context</button>
+        <button id="inspector-tab-files" role="tab" aria-selected="false" aria-controls="inspector-files" data-inspector-tab="files">Files</button>
+        <button id="inspector-tab-agents" role="tab" aria-selected="false" aria-controls="inspector-agents" data-inspector-tab="agents">Agents</button>
+      </div>
+      <div class="inspector-body">
+        <section class="inspector-section active" id="inspector-context" role="tabpanel" aria-labelledby="inspector-tab-context" data-inspector-section="context">
+          <div class="inspector-card">
+            <div class="card-title"><span>Ambiente</span><svg><use href="#i-branch"/></svg></div>
+            <dl><div><dt>Workspace</dt><dd>talos</dd></div><div><dt>Branch</dt><dd>feat/mobile-harness</dd></div><div><dt>Worktree</dt><dd>wt/auth-61c</dd></div><div><dt>Root</dt><dd>~/dev/talos</dd></div></dl>
+          </div>
+          <div class="inspector-card">
+            <div class="card-title"><span>Capability</span><svg><use href="#i-link"/></svg></div>
+            <div class="capability-row"><span>Skills</span><b>6</b></div><div class="capability-row"><span>MCP</span><b>3</b></div><div class="capability-row"><span>Web search</span><b>On</b></div><div class="capability-row"><span>Browser</span><b>Scoped</b></div>
+            <button class="secondary-btn full" id="manageCapabilitiesBtn">Gestisci capability</button>
+          </div>
+          <div class="inspector-card">
+            <div class="card-title"><span>Memory</span><svg><use href="#i-brain"/></svg></div>
+            <p class="muted-copy">2 memorie di progetto applicate. Nessun conflitto rilevato.</p>
+            <div class="memory-chip">design-system.md</div><div class="memory-chip">mobile-rules.md</div>
+          </div>
+          <div class="inspector-card session-topology">
+            <div class="card-title"><span>Session topology</span><svg><use href="#i-branch"/></svg></div>
+            <div class="topology-row root"><span class="topology-node"></span><div><strong>Refactor auth flow</strong><small>main thread · live</small></div></div>
+            <div class="topology-row child"><span class="topology-node"></span><div><strong>Responsive audit</strong><small>side thread · A1</small></div></div>
+            <div class="topology-row child"><span class="topology-node"></span><div><strong>A11y review</strong><small>fork · ready</small></div></div>
+            <div class="topology-actions"><button class="secondary-btn compact" data-open-sheet="sessionTree">Albero</button><button class="secondary-btn compact" data-session-action="side">+ Side</button><button class="secondary-btn compact" data-session-action="fork">Fork</button></div>
+          </div>
+        </section>
+        <section class="inspector-section" id="inspector-files" role="tabpanel" aria-labelledby="inspector-tab-files" data-inspector-section="files">
+          <div class="file-tree">
+            <div class="tree-root"><svg><use href="#i-files"/></svg><strong>talos</strong></div>
+            <button>src/</button><button class="nested">components/</button><button class="nested deep active">TalosComposer.vue <span>+28 −19</span></button><button class="nested deep">ChatShell.vue</button><button>tests/</button><button class="nested">composer.spec.ts <span>+8 −4</span></button>
+          </div>
+        </section>
+        <section class="inspector-section" id="inspector-agents" role="tabpanel" aria-labelledby="inspector-tab-agents" data-inspector-section="agents">
+          <div class="agent-card"><span class="agent-avatar">A1</span><div><strong>Responsive auditor</strong><small>In corso · 00:38</small></div><span class="status-pulse"></span></div>
+          <div class="agent-card"><span class="agent-avatar">A2</span><div><strong>A11y reviewer</strong><small>Completato · 4 note</small></div><svg><use href="#i-check"/></svg></div>
+          <button class="secondary-btn full">+ Delega subagent</button>
+        </section>
+      </div>
+    </aside>
+
+    <nav class="mobile-nav" aria-label="Navigazione mobile">
+      <button class="active" data-mobile-view="chat" aria-current="page"><svg><use href="#i-list"/></svg><span>Chat</span></button>
+      <button data-mobile-view="diff"><svg><use href="#i-diff"/></svg><span>Review</span></button>
+      <button data-mobile-view="terminal"><svg><use href="#i-terminal"/></svg><span>Terminal</span></button>
+      <button data-mobile-view="browser"><svg><use href="#i-web"/></svg><span>Browser</span></button>
+      <button data-open-panel="inspector"><svg><use href="#i-grid"/></svg><span>Altro</span></button>
+    </nav>
+  </div>
+
+  <dialog class="command-dialog" id="commandDialog" aria-labelledby="commandDialogTitle">
+    <h2 class="sr-only" id="commandDialogTitle">Comandi TALOS</h2>
+    <div class="command-search"><svg><use href="#i-search"/></svg><input id="commandSearch" aria-label="Cerca comando o azione" placeholder="Cerca comando o azione..." autocomplete="off"/><button class="command-close" id="closeCommand" type="button" aria-label="Chiudi comandi"><svg><use href="#i-x"/></svg></button></div>
+    <div class="command-results" id="commandResults">
+      <button data-command="new"><span><svg><use href="#i-plus"/></svg>Nuova sessione</span><kbd>⌘N</kbd></button>
+      <button data-command="review"><span><svg><use href="#i-diff"/></svg>Apri review</span><kbd>⌘R</kbd></button>
+      <button data-command="terminal"><span><svg><use href="#i-terminal"/></svg>Apri terminale</span><kbd>⌘T</kbd></button>
+      <button data-command="browser"><span><svg><use href="#i-web"/></svg>Apri browser</span><kbd>⌘B</kbd></button>
+      <button data-command="fork"><span><svg><use href="#i-branch"/></svg>Fork sessione</span><kbd>F</kbd></button>
+      <button data-command="compact"><span><svg><use href="#i-brain"/></svg>Compatta contesto</span><kbd>C</kbd></button>
+      <button data-command="permissions"><span><svg><use href="#i-shield"/></svg>Permessi</span><kbd>P</kbd></button>
+      <button data-command="dashboard"><span><svg><use href="#i-grid"/></svg>Session board</span><kbd>D</kbd></button>
+      <button data-command="tree"><span><svg><use href="#i-branch"/></svg>Albero sessione e side thread</span><kbd>Y</kbd></button>
+      <button data-command="skills"><span><svg><use href="#i-bolt"/></svg>Skills, MCP, plugin e gateway</span><kbd>S</kbd></button>
+      <button data-command="control"><span><svg><use href="#i-settings"/></svg>Agents, hooks e doctor</span><kbd>G</kbd></button>
+      <button data-command="rename"><span><svg><use href="#i-list"/></svg>Rinomina sessione</span><kbd>N</kbd></button>
+      <button data-command="export"><span><svg><use href="#i-copy"/></svg>Esporta sessione</span><kbd>E</kbd></button>
+      <button data-command="share"><span><svg><use href="#i-link"/></svg>Condividi snapshot</span><kbd>H</kbd></button>
+      <div class="command-empty" id="commandEmpty" hidden>Nessun comando corrisponde alla ricerca.</div>
+    </div>
+  </dialog>
+
+  <dialog class="sheet-dialog" id="sheetDialog" aria-labelledby="sheetTitle">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head"><div><span class="eyebrow" id="sheetEyebrow">Contesto</span><h2 id="sheetTitle">Capability</h2></div><button class="icon-btn" id="closeSheet" aria-label="Chiudi pannello"><svg><use href="#i-x"/></svg></button></div>
+    <div class="sheet-body" id="sheetBody"></div>
+  </dialog>
+
+  <div class="toast-region" id="toastRegion" aria-live="polite"></div>
+  <script>
+(() => {
+  'use strict';
+
+  const $ = (selector, root = document) => root.querySelector(selector);
+  const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+
+  const state = {
+    view: 'chat',
+    mode: 'chat',
+    queueMode: false,
+    permissions: 'Workspace write',
+    model: 'gpt-5.6-sol · high',
+    environment: 'wt/auth-61c · feat/mobile-harness',
+    session: 'Refactor auth flow',
+    running: true,
+  };
+
+  const appShell = $('#app');
+  const views = $$('.view-pane');
+  const mobileViewButtons = $$('[data-mobile-view]');
+  const modeTabs = $$('.mode-tab');
+  const backdrop = $('#overlayBackdrop');
+  const sessionsPanel = $('#sessionsPanel');
+  const inspectorPanel = $('#inspectorPanel');
+  const commandDialog = $('#commandDialog');
+  const commandSearch = $('#commandSearch');
+  const sheetDialog = $('#sheetDialog');
+  const sheetTitle = $('#sheetTitle');
+  const sheetEyebrow = $('#sheetEyebrow');
+  const sheetBody = $('#sheetBody');
+  const composerInput = $('#composerInput');
+  const composerForm = $('#composerForm');
+  const queueToggle = $('#queueToggle');
+  const queuedMessage = $('#queuedMessage');
+  const sessionTitle = $('#sessionTitle');
+  const toastRegion = $('#toastRegion');
+  const runStrip = $('.run-strip');
+  const runStateToggle = $('#runStateToggle');
+  const desktopInspectorToggle = $('.desktop-context-toggle');
+  const commandEmpty = $('#commandEmpty');
+  const diffPath = $('#diffPath');
+  const diffCode = $('#diffCode');
+
+  function icon(id) {
+    return `<svg aria-hidden="true"><use href="#${id}"/></svg>`;
+  }
+
+  function syncNavigationState() {
+    mobileViewButtons.forEach((button) => {
+      const active = button.dataset.mobileView === state.view;
+      button.classList.toggle('active', active);
+      if (active) button.setAttribute('aria-current', 'page');
+      else button.removeAttribute('aria-current');
+    });
+    modeTabs.forEach((button) => {
+      const active = button.dataset.mode === state.mode;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+  }
+
+  function setView(view, options = {}) {
+    const target = $(`[data-view="${view}"]`);
+    if (!target) return;
+    state.view = view;
+    if (options.mode) state.mode = options.mode;
+    else state.mode = view === 'dashboard' ? 'dashboard' : 'chat';
+    views.forEach((pane) => pane.classList.toggle('active', pane === target));
+    syncNavigationState();
+    target.scrollTop = 0;
+  }
+
+  function syncInspectorToggle() {
+    const expanded = window.innerWidth <= 1040 || !appShell.classList.contains('inspector-collapsed');
+    desktopInspectorToggle?.setAttribute('aria-expanded', String(expanded));
+  }
+
+  function toggleDesktopInspector() {
+    if (window.innerWidth <= 1040) {
+      openPanel('inspector');
+      return;
+    }
+    appShell.classList.toggle('inspector-collapsed');
+    syncInspectorToggle();
+  }
+
+  function openPanel(name) {
+    if (name === 'inspector' && window.innerWidth > 1040) {
+      appShell.classList.remove('inspector-collapsed');
+      syncInspectorToggle();
+      return;
+    }
+    if (name === 'sessions') sessionsPanel.classList.add('open');
+    if (name === 'inspector') inspectorPanel.classList.add('open');
+    backdrop.classList.add('show');
+  }
+
+  function closePanels() {
+    sessionsPanel.classList.remove('open');
+    inspectorPanel.classList.remove('open');
+    backdrop.classList.remove('show');
+  }
+
+  function toast(title, message = '') {
+    while (toastRegion.children.length >= 3) toastRegion.firstElementChild?.remove();
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.setAttribute('role', 'status');
+    const strong = document.createElement('strong');
+    strong.textContent = String(title);
+    el.appendChild(strong);
+    if (message) {
+      const span = document.createElement('span');
+      span.textContent = String(message);
+      el.appendChild(span);
+    }
+    toastRegion.appendChild(el);
+    window.setTimeout(() => el.remove(), 3300);
+  }
+
+  async function copyText(text, success = 'Copiato negli appunti') {
+    const value = String(text || '').trim();
+    if (!value) return;
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(value);
+      else {
+        const area = document.createElement('textarea');
+        area.value = value;
+        area.setAttribute('readonly', '');
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        area.select();
+        document.execCommand('copy');
+        area.remove();
+      }
+      toast(success);
+    } catch {
+      toast('Copia non disponibile', 'Seleziona manualmente il contenuto.');
+    }
+  }
+
+  function openSheet(type) {
+    const content = sheetTemplates[type];
+    if (!content) return;
+    sheetEyebrow.textContent = content.eyebrow;
+    sheetTitle.textContent = content.title;
+    sheetBody.innerHTML = content.html();
+    if (!sheetDialog.open) sheetDialog.showModal();
+    wireSheetActions(type);
+  }
+
+  const sheetTemplates = {
+    model: {
+      eyebrow: 'Runtime',
+      title: 'Modello e ragionamento',
+      html: () => `
+        <div class="sheet-section">
+          <span class="sheet-label">Modelli disponibili</span>
+          ${[
+            ['gpt-5.6-sol · high', 'OpenAI', 'Attivo', 'i-brain'],
+            ['claude-opus-4.6 · high', 'Anthropic', '128k', 'i-brain'],
+            ['deepseek-v4-flash · high', 'DeepSeek', 'fast', 'i-bolt'],
+            ['gemini-3.1-pro · medium', 'Google', 'local route', 'i-brain'],
+          ].map(([name, provider, note, ico]) => `
+            <button class="sheet-option ${name === state.model ? 'active' : ''}" data-model-choice="${name}">
+              <span class="sheet-icon">${icon(ico)}</span><span><strong>${name}</strong><small>${provider}</small></span><span>${note}</span>
+            </button>`).join('')}
+        </div>
+        <div class="sheet-section">
+          <span class="sheet-label">Comportamento</span>
+          <div class="sheet-toggle-row"><span>Mostra ragionamento sintetico</span><input type="checkbox" checked></div>
+          <div class="sheet-toggle-row"><span>Compatta contesto automaticamente</span><input type="checkbox" checked></div>
+        </div>`,
+    },
+    permissions: {
+      eyebrow: 'Safety lens',
+      title: 'Permessi di esecuzione',
+      html: () => `
+        <div class="sheet-section">
+          <span class="sheet-label">Policy sessione</span>
+          ${[
+            ['Read only', 'Legge progetto e comandi non mutanti.', 'Minimo rischio'],
+            ['Workspace write', 'Scrive solo nel workspace/worktree corrente.', 'Consigliato'],
+            ['On request', 'Chiede prima delle azioni sensibili.', 'Controllato'],
+            ['Full access', 'Filesystem e rete senza gate ordinari.', 'Alto rischio'],
+          ].map(([name, desc, note]) => `
+            <button class="sheet-option ${name === state.permissions ? 'active' : ''}" data-permission-choice="${name}">
+              <span class="sheet-icon">${icon('i-shield')}</span><span><strong>${name}</strong><small>${desc}</small></span><span>${note}</span>
+            </button>`).join('')}
+        </div>
+        <div class="sheet-section">
+          <span class="sheet-label">Scope corrente</span>
+          <div class="sheet-toggle-row"><span>Rete esterna</span><input type="checkbox"></div>
+          <div class="sheet-toggle-row"><span>Browser locale 127.0.0.1</span><input type="checkbox" checked></div>
+          <div class="sheet-toggle-row"><span>Git push</span><input type="checkbox"></div>
+        </div>`,
+    },
+    environment: {
+      eyebrow: 'Environment proof',
+      title: 'Workspace e worktree',
+      html: () => `
+        <div class="sheet-section">
+          <span class="sheet-label">Ambiente attivo</span>
+          <button class="sheet-option active">
+            <span class="sheet-icon">${icon('i-branch')}</span><span><strong>wt/auth-61c · feat/mobile-harness</strong><small>~/dev/talos/.worktrees/auth-61c</small></span><span>Attivo</span>
+          </button>
+          <button class="sheet-option" data-environment-choice="local">
+            <span class="sheet-icon">${icon('i-git')}</span><span><strong>Local · main</strong><small>~/dev/talos</small></span><span>pulito</span>
+          </button>
+          <button class="sheet-option" data-environment-choice="docker">
+            <span class="sheet-icon">${icon('i-terminal')}</span><span><strong>Docker sandbox</strong><small>talos-dev:latest · isolated</small></span><span>pronto</span>
+          </button>
+          <button class="sheet-option" data-environment-choice="ssh">
+            <span class="sheet-icon">${icon('i-link')}</span><span><strong>SSH remote</strong><small>devbox · /workspace/talos</small></span><span>offline</span>
+          </button>
+          <button class="sheet-option" data-environment-choice="cloud">
+            <span class="sheet-icon">${icon('i-web')}</span><span><strong>Cloud sandbox</strong><small>ephemeral · hibernate when idle</small></span><span>+</span>
+          </button>
+        </div>
+        <div class="sheet-section">
+          <span class="sheet-label">Regole</span>
+          <div class="sheet-toggle-row"><span>Mostra branch sempre</span><input type="checkbox" checked></div>
+          <div class="sheet-toggle-row"><span>Crea worktree per task</span><input type="checkbox" checked></div>
+          <div class="sheet-toggle-row"><span>Setup non bloccante</span><input type="checkbox" checked></div>
+        </div>`,
+    },
+    capabilities: {
+      eyebrow: 'Capability hub',
+      title: 'Strumenti, skill e connettori',
+      html: () => `
+        <div class="sheet-section">
+          <span class="sheet-label">Sessione</span>
+          ${[
+            ['Skills', '6 abilitate · frontend, review, testing', 'i-bolt', true],
+            ['MCP', '3 server · filesystem, docs, browser', 'i-link', true],
+            ['Plugin market', 'Plugin installabili e aggiornabili', 'i-grid', true],
+            ['Toolsets', 'Set di tool per task e profilo', 'i-code', true],
+            ['Web search', 'Ricerca e fetch gestiti', 'i-search', true],
+            ['Browser', 'Naviga, ispeziona, annota', 'i-web', true],
+            ['Computer use', 'Disattivato per questa sessione', 'i-layout', false],
+            ['Images', 'Paste / drag / screenshot context', 'i-image', true],
+            ['Voice', 'Memo, dettatura e trascrizione', 'i-mic', true],
+            ['Gateways', 'Telegram · Discord · Slack · WhatsApp', 'i-link', false],
+            ['Profiles', 'Persona / SOUL / project profile', 'i-robot', true],
+          ].map(([name, desc, ico, checked]) => `
+            <div class="sheet-option" role="group">
+              <span class="sheet-icon">${icon(ico)}</span><span><strong>${name}</strong><small>${desc}</small></span><span><input aria-label="${name}" type="checkbox" ${checked ? 'checked' : ''}></span>
+            </div>`).join('')}
+        </div>
+        <div class="sheet-section">
+          <span class="sheet-label">Input rapido</span>
+          <button class="sheet-option" data-capability-action="file"><span class="sheet-icon">${icon('i-files')}</span><span><strong>Allega file</strong><small>Seleziona dal workspace o dispositivo</small></span><span>+</span></button>
+          <button class="sheet-option" data-capability-action="image"><span class="sheet-icon">${icon('i-image')}</span><span><strong>Screenshot / immagine</strong><small>Contesto visivo per il task</small></span><span>+</span></button>
+        </div>`,
+    },
+    control: {
+      eyebrow: 'Control plane',
+      title: 'Agents, hook e diagnostica',
+      html: () => `
+        <div class="sheet-section">
+          <span class="sheet-label">Agent runtime</span>
+          <button class="sheet-option" data-control-action="agents"><span class="sheet-icon">${icon('i-robot')}</span><span><strong>Agents</strong><small>Subagent, deleghe, isolamento e limiti</small></span><span>2</span></button>
+          <button class="sheet-option" data-control-action="hooks"><span class="sheet-icon">${icon('i-bolt')}</span><span><strong>Hooks</strong><small>Pre/Post tool, stop, notify e policy</small></span><span>4</span></button>
+          <button class="sheet-option" data-control-action="doctor"><span class="sheet-icon">${icon('i-check')}</span><span><strong>Doctor</strong><small>Runtime, provider, shell, git e browser</small></span><span>Healthy</span></button>
+        </div>
+        <div class="sheet-section">
+          <span class="sheet-label">Approval policy</span>
+          <div class="sheet-toggle-row"><span>Auto-approve read</span><input type="checkbox" checked></div>
+          <div class="sheet-toggle-row"><span>Diff gate prima di done</span><input type="checkbox" checked></div>
+          <div class="sheet-toggle-row"><span>Chiedi per rete / push / esterno</span><input type="checkbox" checked></div>
+        </div>`,
+    },
+    sessionTree: {
+      eyebrow: 'Conversation graph',
+      title: 'Albero sessione',
+      html: () => `
+        <div class="sheet-section session-tree-sheet">
+          <span class="sheet-label">Thread e fork</span>
+          <button class="sheet-option active" data-session-action="main"><span class="sheet-icon">${icon('i-list')}</span><span><strong>Refactor auth flow</strong><small>Main · contesto 18.7k · live</small></span><span>●</span></button>
+          <button class="sheet-option" data-session-action="side"><span class="sheet-icon">${icon('i-branch')}</span><span><strong>Responsive audit</strong><small>Side thread · subagent A1</small></span><span>↗</span></button>
+          <button class="sheet-option" data-session-action="fork"><span class="sheet-icon">${icon('i-branch')}</span><span><strong>A11y review</strong><small>Fork dal turn 14 · pronto</small></span><span>✓</span></button>
+        </div>
+        <div class="sheet-section">
+          <button class="primary-btn full" data-session-action="new-side">+ Nuovo side thread</button>
+        </div>`,
+    },
+    rename: {
+      eyebrow: 'Sessione',
+      title: 'Rinomina sessione',
+      html: () => `
+        <form class="sheet-section rename-form" id="renameSessionForm">
+          <label class="sheet-label" for="renameSessionInput">Nome sessione</label>
+          <input class="sheet-input" id="renameSessionInput" value="${state.session.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}" maxlength="80" autocomplete="off">
+          <div class="sheet-actions">
+            <button type="button" class="secondary-btn" data-rename-cancel>Annulla</button>
+            <button type="submit" class="primary-btn">Salva</button>
+          </div>
+        </form>`,
+    },
+    references: {
+      eyebrow: 'Context reference',
+      title: 'Aggiungi file con @',
+      html: () => `
+        <div class="sheet-section">
+          <span class="sheet-label">Suggerimenti workspace</span>
+          ${['src/components/chat/TalosComposer.vue','src/style.css','src/lib/talosThemes.ts','tests/unit/chat/composer.spec.ts','AGENTS.md'].map((file) => `<button class="sheet-option reference-option" data-reference-file="${file}"><span class="sheet-icon">${icon('i-files')}</span><span><strong>${file}</strong><small>Aggiungi al contesto del messaggio</small></span><span>@</span></button>`).join('')}
+        </div>`,
+    },
+  };
+
+  function wireSheetActions(type) {
+    $$('[data-model-choice]', sheetBody).forEach((button) => {
+      button.addEventListener('click', () => {
+        state.model = button.dataset.modelChoice;
+        $$('.selector-pill span').filter((span) => span.textContent.includes('gpt-') || span.textContent.includes('claude-') || span.textContent.includes('deepseek-') || span.textContent.includes('gemini-')).forEach((span) => { span.textContent = state.model; });
+        toast('Modello aggiornato', state.model);
+        sheetDialog.close();
+      });
+    });
+    $$('[data-permission-choice]', sheetBody).forEach((button) => {
+      button.addEventListener('click', () => {
+        state.permissions = button.dataset.permissionChoice;
+        $$('.selector-pill span').filter((span) => ['Workspace write', 'Read only', 'On request', 'Full access'].includes(span.textContent)).forEach((span) => { span.textContent = state.permissions; });
+        toast('Policy aggiornata', state.permissions);
+        sheetDialog.close();
+      });
+    });
+    $$('[data-capability-action]', sheetBody).forEach((button) => {
+      button.addEventListener('click', () => {
+        toast(button.dataset.capabilityAction === 'file' ? 'File picker simulato' : 'Cattura visiva pronta', 'Il mockup rappresenta il flusso senza backend.');
+        sheetDialog.close();
+      });
+    });
+    $$('[data-environment-choice]', sheetBody).forEach((button) => {
+      button.addEventListener('click', () => {
+        state.environment = button.querySelector('strong')?.textContent || 'Runtime aggiornato';
+        const chip = $('.environment-chip span');
+        if (chip) chip.textContent = state.environment;
+        toast('Environment selezionato', state.environment);
+        sheetDialog.close();
+      });
+    });
+    $$('[data-control-action]', sheetBody).forEach((button) => {
+      button.addEventListener('click', () => {
+        const action = button.dataset.controlAction;
+        if (action === 'agents') { sheetDialog.close(); openPanel('inspector'); const agents = $('[data-inspector-tab="agents"]'); agents?.click(); }
+        else toast(action === 'doctor' ? 'Doctor: Healthy' : 'Hook center aperto', action === 'doctor' ? 'Provider, shell, git, browser e workspace verificati.' : '4 hook configurati per questa sessione.');
+      });
+    });
+    $$('[data-session-action]', sheetBody).forEach((button) => {
+      button.addEventListener('click', () => {
+        const action = button.dataset.sessionAction;
+        toast(action === 'new-side' ? 'Side thread creato' : 'Thread selezionato', action === 'fork' ? 'Fork indipendente con contesto ereditato.' : 'Il contesto resta isolato ma collegato al task principale.');
+        if (sheetDialog.open) sheetDialog.close();
+      });
+    });
+    $$('[data-reference-file]', sheetBody).forEach((button) => {
+      button.addEventListener('click', () => {
+        const file = button.dataset.referenceFile;
+        composerInput.value = `${composerInput.value.replace(/@[^\s]*$/, '')}@${file} `;
+        autoGrowTextarea();
+        sheetDialog.close();
+        composerInput.focus();
+      });
+    });
+
+    const renameForm = $('#renameSessionForm', sheetBody);
+    if (renameForm) {
+      const input = $('#renameSessionInput', renameForm);
+      window.setTimeout(() => { input?.focus(); input?.select(); }, 30);
+      $('[data-rename-cancel]', renameForm)?.addEventListener('click', () => sheetDialog.close());
+      renameForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const next = input?.value.trim();
+        if (!next) { input?.focus(); return; }
+        state.session = next;
+        sessionTitle.textContent = state.session;
+        const activeSession = $('.session-item.active .session-main strong');
+        if (activeSession) activeSession.textContent = state.session;
+        sheetDialog.close();
+        toast('Sessione rinominata', state.session);
+      });
+    }
+  }
+
+  function setQueueMode(enabled, announce = false) {
+    state.queueMode = Boolean(enabled);
+    queueToggle.classList.toggle('active', state.queueMode);
+    queueToggle.setAttribute('aria-pressed', String(state.queueMode));
+    queueToggle.textContent = state.queueMode ? 'In coda' : 'Follow-up';
+    runStateToggle?.setAttribute('aria-pressed', String(state.queueMode));
+    if (announce) toast(state.queueMode ? 'Steering queue attiva' : 'Steering queue disattivata');
+  }
+
+  function setRunState(running) {
+    state.running = Boolean(running);
+    runStrip?.classList.toggle('is-stopped', !state.running);
+    const label = $('strong', runStateToggle);
+    const timer = runStateToggle?.querySelector('span:last-child');
+    if (label) label.textContent = state.running ? 'In esecuzione' : 'Interrotto';
+    if (timer) timer.textContent = state.running ? '01:42' : '—';
+    const stopButton = $('.stop-run');
+    if (stopButton) {
+      stopButton.disabled = !state.running;
+      stopButton.setAttribute('aria-label', state.running ? 'Interrompi esecuzione' : 'Esecuzione interrotta');
+    }
+  }
+
+  function syncVisualViewport() {
+    const viewport = window.visualViewport;
+    const rawOffset = viewport ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop) : 0;
+    const keyboardOffset = rawOffset > 80 ? rawOffset : 0;
+    document.documentElement.style.setProperty('--keyboard-offset', `${Math.round(keyboardOffset)}px`);
+    const composerFocused = document.activeElement === composerInput;
+    document.body.classList.toggle('keyboard-open', composerFocused && keyboardOffset > 0 && window.innerWidth <= 780);
+  }
+
+  const toolDetails = {
+    read: ['File letto', 'TalosComposer.vue · 214 righe · nessun conflitto rilevato.'],
+    search: ['Ricerca completata', 'Trovati breakpoint 360/430/780, safe-area e 11 target interattivi da rifinire.'],
+    edit: ['Patch applicata', '+28 −19 · layout composer convertito a container-aware responsive surface.'],
+    bash: ['Test completati', '6/6 test superati in 8.4s · touch target, safe-area e command palette verificati.'],
+    browser: ['Browser check live', '390×844 · viewport dinamico, composer, drawer e bottom navigation sotto osservazione.'],
+  };
+
+  function toggleToolDetail(button) {
+    const key = button.dataset.toolDetail;
+    const existing = button.nextElementSibling?.classList.contains('tool-inline-detail') ? button.nextElementSibling : null;
+    $$('.tool-row[aria-expanded="true"]').forEach((row) => {
+      if (row !== button) row.setAttribute('aria-expanded', 'false');
+    });
+    $$('.tool-inline-detail').forEach((detail) => { if (detail !== existing) detail.remove(); });
+    if (existing) {
+      existing.remove();
+      button.setAttribute('aria-expanded', 'false');
+      return;
+    }
+    const [title, detail] = toolDetails[key] || ['Dettaglio tool', 'Nessun dettaglio aggiuntivo disponibile.'];
+    const row = document.createElement('div');
+    row.className = 'tool-inline-detail';
+    row.innerHTML = `<strong>${title}</strong><span>${detail}</span>`;
+    button.insertAdjacentElement('afterend', row);
+    button.setAttribute('aria-expanded', 'true');
+  }
+
+  const reviewFiles = {
+    composer: {
+      path: 'src/components/chat/TalosComposer.vue',
+      code: [
+        ['ctx', '@@ composer layout @@'],
+        ['del', '- .composer { grid-template-columns: 48px 1fr auto auto; }'],
+        ['add', '+ .composer { container-type: inline-size; }'],
+        ['add', '+ .composer-toolbar { grid-template-columns: 48px minmax(0, 1fr) 48px; }'],
+        ['add', '+ @container (max-width: 560px) {'],
+        ['add', '+   .secondary-context { display: none; }'],
+        ['add', '+ }'],
+        ['ctx', ' '],
+        ['ctx', '@@ safe area @@'],
+        ['add', '+ padding-bottom: max(12px, env(safe-area-inset-bottom));'],
+      ],
+    },
+    layout: {
+      path: 'src/styles/chat-layout.css',
+      code: [
+        ['ctx', '@@ mobile interaction density @@'],
+        ['del', '- .message-actions button { width: 34px; height: 32px; }'],
+        ['add', '+ .message-actions button { width: 44px; height: 44px; }'],
+        ['add', '+ .view-pane { overscroll-behavior: contain; }'],
+        ['add', '+ .mobile-nav { padding-bottom: env(safe-area-inset-bottom); }'],
+      ],
+    },
+    tests: {
+      path: 'tests/unit/chat/composer.spec.ts',
+      code: [
+        ['ctx', '@@ responsive guardrails @@'],
+        ['add', '+ expect(target.height).toBeGreaterThanOrEqual(44)'],
+        ['add', '+ expect(document.documentElement.scrollWidth).toBe(innerWidth)'],
+        ['add', '+ expect(dialog.getAttribute("aria-labelledby")).toBeTruthy()'],
+        ['add', '+ expect(queueButton.getAttribute("aria-pressed")).toBe("true")'],
+      ],
+    },
+  };
+
+  function renderReviewFile(key) {
+    const file = reviewFiles[key];
+    if (!file || !diffPath || !diffCode) return;
+    diffPath.textContent = file.path;
+    diffCode.replaceChildren(...file.code.map(([kind, text]) => {
+      const span = document.createElement('span');
+      span.className = kind;
+      span.textContent = text;
+      return span;
+    }));
+  }
+
+  function setInspectorTab(button) {
+    $$('.inspector-tabs button').forEach((tab) => {
+      const active = tab === button;
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-selected', String(active));
+    });
+    $$('.inspector-section').forEach((section) => {
+      const active = section.dataset.inspectorSection === button.dataset.inspectorTab;
+      section.classList.toggle('active', active);
+      section.hidden = !active;
+    });
+  }
+
+  function appendUserMessage(text) {
+    const conversation = $('#conversation');
+    const article = document.createElement('article');
+    article.className = 'message user-message';
+    article.innerHTML = `<div class="message-bubble"></div><div class="message-meta"><span>Tu · ora</span><button class="mini-icon" aria-label="Copia">${icon('i-copy')}</button></div>`;
+    $('.message-bubble', article).textContent = text;
+    conversation.appendChild(article);
+    const assistant = document.createElement('article');
+    assistant.className = 'message assistant-message compact-message';
+    assistant.innerHTML = `<div class="assistant-meta"><span class="talos-glyph">T</span><span>TALOS · ${state.model.split(' · ')[0]}</span><span>ora</span></div><div class="assistant-copy">Ricevuto. Ho aggiunto il messaggio al run corrente mantenendo ambiente, permessi e contesto visibili.</div><div class="message-actions"><button data-message-action="copy" aria-label="Copia risposta">${icon('i-copy')}</button><button data-message-action="like" aria-label="Risposta utile" aria-pressed="false">👍</button><button data-message-action="dislike" aria-label="Risposta non utile" aria-pressed="false">👎</button><button data-message-action="retry" aria-label="Rigenera risposta">${icon('i-history')}</button></div>`;
+    conversation.appendChild(assistant);
+    window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'center' }), 40);
+  }
+
+  function autoGrowTextarea() {
+    composerInput.style.height = 'auto';
+    composerInput.style.height = `${Math.min(composerInput.scrollHeight, 120)}px`;
+  }
+
+  function createNewSession() {
+    state.session = 'Nuova sessione';
+    sessionTitle.textContent = state.session;
+    $$('.session-item').forEach((item) => item.classList.remove('active'));
+    setView('chat');
+    closePanels();
+    toast('Nuova sessione', 'La sessione verrà creata al primo invio.');
+    composerInput.focus();
+  }
+
+  function exportSession() {
+    const payload = {
+      schema: 'talos_mock_session_v1',
+      exported_at: new Date().toISOString(),
+      session: state.session,
+      model: state.model,
+      permissions: state.permissions,
+      branch: 'feat/mobile-harness',
+      worktree: 'wt/auth-61c',
+      note: 'Interactive TALOS frontend mockup export',
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'talos-session-export.json'; a.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 500);
+    toast('Sessione esportata', 'JSON pronto.');
+  }
+
+  async function shareSession() {
+    const text = `TALOS · ${state.session} · feat/mobile-harness`;
+    try {
+      if (navigator.share) await navigator.share({ title: state.session, text });
+      else if (navigator.clipboard) { await navigator.clipboard.writeText(text); toast('Snapshot copiato', 'Pronto da condividere.'); }
+      else toast('Snapshot pronto', text);
+    } catch (error) {
+      if (error?.name !== 'AbortError') toast('Condivisione non disponibile', text);
+    }
+  }
+
+  function visibleCommandButtons() {
+    return $$('#commandResults button[data-command]').filter((button) => !button.hidden);
+  }
+
+  function setActiveCommand(button) {
+    $$('#commandResults button[data-command]').forEach((item) => item.classList.toggle('command-active', item === button));
+    button?.scrollIntoView({ block: 'nearest' });
+  }
+
+  function openCommandPalette() {
+    if (!commandDialog.open) commandDialog.showModal();
+    commandSearch.value = '';
+    filterCommands('');
+    window.setTimeout(() => commandSearch.focus(), 20);
+  }
+
+  function filterCommands(query) {
+    const q = query.trim().toLowerCase();
+    $$('#commandResults button[data-command]').forEach((button) => {
+      button.hidden = Boolean(q && !button.textContent.toLowerCase().includes(q));
+    });
+    const visible = visibleCommandButtons();
+    if (commandEmpty) commandEmpty.hidden = visible.length > 0;
+    setActiveCommand(visible[0] || null);
+  }
+
+  function moveActiveCommand(delta) {
+    const visible = visibleCommandButtons();
+    if (!visible.length) return;
+    const current = visible.findIndex((button) => button.classList.contains('command-active'));
+    const next = visible[(current + delta + visible.length) % visible.length];
+    setActiveCommand(next);
+  }
+
+  function executeCommand(command) {
+    commandDialog.close();
+    switch (command) {
+      case 'new': createNewSession(); break;
+      case 'review': setView('diff'); break;
+      case 'terminal': setView('terminal'); break;
+      case 'browser': setView('browser'); break;
+      case 'permissions': openSheet('permissions'); break;
+      case 'dashboard': setView('dashboard'); break;
+      case 'fork': toast('Fork creato', 'Nuovo ramo di conversazione da questo punto.'); break;
+      case 'compact': toast('Contesto compattato', '18.7k -> 9.3k token equivalenti.'); break;
+      case 'tree': openSheet('sessionTree'); break;
+      case 'skills': openSheet('capabilities'); break;
+      case 'control': openSheet('control'); break;
+      case 'rename': openSheet('rename'); break;
+      case 'export': exportSession(); break;
+      case 'share': shareSession(); break;
+      default: break;
+    }
+  }
+
+  $$('[data-open-panel]').forEach((button) => button.addEventListener('click', () => {
+    if (button.classList.contains('desktop-context-toggle') && button.dataset.openPanel === 'inspector' && window.innerWidth > 1040) toggleDesktopInspector();
+    else openPanel(button.dataset.openPanel);
+  }));
+  $$('[data-close-panel]').forEach((button) => button.addEventListener('click', closePanels));
+  backdrop.addEventListener('click', closePanels);
+
+  $$('[data-open-view]').forEach((button) => button.addEventListener('click', () => { setView(button.dataset.openView); closePanels(); }));
+  mobileViewButtons.forEach((button) => button.addEventListener('click', () => setView(button.dataset.mobileView)));
+
+  modeTabs.forEach((button) => {
+    button.addEventListener('click', () => {
+      if (button.dataset.mode === 'chat') {
+        setView('chat', { mode: 'chat' });
+        if (window.innerWidth <= 1040) closePanels();
+      } else if (button.dataset.mode === 'split') {
+        setView('chat', { mode: 'split' });
+        openPanel('inspector');
+      } else {
+        setView('dashboard', { mode: 'dashboard' });
+      }
+    });
+  });
+
+  $$('[data-open-sheet]').forEach((button) => button.addEventListener('click', () => openSheet(button.dataset.openSheet)));
+  $$('[data-session-action]').forEach((button) => button.addEventListener('click', () => {
+    toast(button.dataset.sessionAction === 'fork' ? 'Fork creato' : 'Side thread creato', 'Contesto isolato, collegamento mantenuto nel grafo sessione.');
+  }));
+  $$('[data-control-action]').forEach((button) => button.addEventListener('click', () => {
+    if (button.dataset.controlAction === 'doctor') toast('Doctor: Healthy', 'Provider, shell, git, browser e workspace verificati.');
+  }));
+  $('#capabilityBtn').addEventListener('click', () => openSheet('capabilities'));
+  $('#manageCapabilitiesBtn').addEventListener('click', () => openSheet('capabilities'));
+  $('#closeSheet').addEventListener('click', () => sheetDialog.close());
+
+  $$('.inspector-tabs button').forEach((button) => {
+    button.addEventListener('click', () => setInspectorTab(button));
+    button.addEventListener('keydown', (event) => {
+      if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+      event.preventDefault();
+      const tabs = $$('.inspector-tabs button');
+      const index = tabs.indexOf(button);
+      const next = tabs[(index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
+      next.focus();
+      setInspectorTab(next);
+    });
+  });
+
+  $$('[data-collapse-target]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const target = document.getElementById(button.dataset.collapseTarget);
+      if (!target) return;
+      const collapsed = target.classList.toggle('collapsed');
+      button.setAttribute('aria-expanded', String(!collapsed));
+    });
+  });
+
+  $$('[data-tool-detail]').forEach((button) => {
+    button.setAttribute('aria-expanded', 'false');
+    button.addEventListener('click', () => toggleToolDetail(button));
+  });
+
+  document.addEventListener('click', (event) => {
+    const copyButton = event.target.closest('[data-copy-message]');
+    if (copyButton) {
+      const message = copyButton.closest('.message');
+      copyText($('.message-bubble, .assistant-copy', message)?.textContent || '', 'Messaggio copiato');
+      return;
+    }
+    const actionButton = event.target.closest('[data-message-action]');
+    if (!actionButton) return;
+    const message = actionButton.closest('.assistant-message');
+    const action = actionButton.dataset.messageAction;
+    if (action === 'copy') copyText($('.assistant-copy', message)?.textContent || '', 'Risposta copiata');
+    if (action === 'retry') toast('Rigenerazione avviata', 'Il contesto e i permessi della sessione restano invariati.');
+    if (action === 'like' || action === 'dislike') {
+      const group = $$('.message-actions [data-message-action="like"], .message-actions [data-message-action="dislike"]', message);
+      const wasPressed = actionButton.getAttribute('aria-pressed') === 'true';
+      group.forEach((button) => button.setAttribute('aria-pressed', 'false'));
+      actionButton.setAttribute('aria-pressed', String(!wasPressed));
+      toast(!wasPressed ? 'Feedback registrato' : 'Feedback rimosso');
+    }
+  });
+
+  $$('[data-browser-action]').forEach((button) => button.addEventListener('click', () => {
+    const labels = { back: 'Indietro', forward: 'Avanti', reload: 'Preview ricaricata', annotate: 'Modalità annotazione', inspect: 'Inspector browser' };
+    toast(labels[button.dataset.browserAction] || 'Browser', 'Azione simulata nel mockup locale.');
+  }));
+
+  $$('[data-automation-action]').forEach((button) => button.addEventListener('click', () => {
+    const action = button.dataset.automationAction;
+    const labels = { new: ['Nuova automazione', 'Editor di schedulazione pronto.'], run: ['Run avviato', 'Nightly smoke eseguito in worktree isolato.'], edit: ['Automazione aperta', 'Modifica pianificazione, modello e destinazione.'] };
+    toast(...(labels[action] || ['Automazione', 'Azione simulata.']));
+  }));
+
+  $('.stop-run')?.addEventListener('click', () => {
+    if (!state.running) return;
+    setRunState(false);
+    setQueueMode(false);
+    toast('Esecuzione interrotta', 'Stato, diff e output restano disponibili per la review.');
+  });
+
+  runStateToggle?.addEventListener('click', () => setQueueMode(!state.queueMode, true));
+
+  $('#sessionSearch').addEventListener('input', (event) => {
+    const q = event.target.value.toLowerCase().trim();
+    $$('.session-item').forEach((item) => item.hidden = q && !item.textContent.toLowerCase().includes(q));
+  });
+
+  $$('.session-item').forEach((item) => {
+    item.addEventListener('click', () => {
+      $$('.session-item').forEach((other) => other.classList.remove('active'));
+      item.classList.add('active');
+      state.session = item.dataset.session;
+      sessionTitle.textContent = state.session;
+      closePanels();
+      setView('chat');
+    });
+  });
+
+  $('#newSessionBtn').addEventListener('click', createNewSession);
+  $('#commandPaletteBtn').addEventListener('click', openCommandPalette);
+  $('#closeCommand')?.addEventListener('click', () => commandDialog.close());
+  commandSearch.addEventListener('input', () => filterCommands(commandSearch.value));
+  commandSearch.addEventListener('keydown', (event) => {
+    if (event.key === 'ArrowDown') { event.preventDefault(); moveActiveCommand(1); }
+    else if (event.key === 'ArrowUp') { event.preventDefault(); moveActiveCommand(-1); }
+    else if (event.key === 'Enter') {
+      const active = $('#commandResults .command-active[data-command]');
+      if (active) { event.preventDefault(); executeCommand(active.dataset.command); }
+    }
+  });
+  $$('#commandResults button[data-command]').forEach((button) => {
+    button.addEventListener('mouseenter', () => setActiveCommand(button));
+    button.addEventListener('click', () => executeCommand(button.dataset.command));
+  });
+
+  composerInput.addEventListener('input', () => {
+    autoGrowTextarea();
+    const value = composerInput.value;
+    if (value === '/') openCommandPalette();
+    if (/@[^\s]*$/.test(value) && value.endsWith('@')) openSheet('references');
+  });
+  composerInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+      event.preventDefault();
+      composerForm.requestSubmit();
+    }
+  });
+
+  queueToggle.addEventListener('click', () => setQueueMode(!state.queueMode));
+
+  composerForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const text = composerInput.value.trim();
+    if (!text) return;
+    if (text.startsWith('!')) {
+      const hidden = text.startsWith('!!');
+      toast(hidden ? 'Shell eseguita senza contesto' : 'Shell inviata al terminale', text.replace(/^!!?/, '').trim());
+      composerInput.value = ''; autoGrowTextarea(); setView('terminal'); return;
+    }
+    if (state.queueMode) {
+      queuedMessage.classList.add('show');
+      const queuedCopy = $('#queuedMessage span');
+      queuedCopy.textContent = '';
+      const queuedLabel = document.createElement('b');
+      queuedLabel.textContent = 'Follow-up in coda';
+      queuedCopy.append(queuedLabel, document.createTextNode(` · ${text}`));
+      toast('Follow-up accodato', 'Verrà consegnato dopo il run corrente.');
+    } else {
+      appendUserMessage(text);
+    }
+    composerInput.value = '';
+    autoGrowTextarea();
+  });
+
+  $('#cancelQueued').addEventListener('click', () => {
+    queuedMessage.classList.remove('show');
+    toast('Follow-up annullato');
+  });
+
+  $$('[data-approve], [data-allow-session], [data-deny]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const card = button.closest('.approval-card');
+      card?.remove();
+      if (button.hasAttribute('data-deny')) toast('Permesso negato', 'Il browser locale non verrà aperto.');
+      else toast(button.hasAttribute('data-allow-session') ? 'Permesso per sessione' : 'Permesso concesso', 'Browser locale autorizzato.');
+    });
+  });
+
+  $('#approveAllDiffs').addEventListener('click', () => {
+    toast('Review approvata', '3 file pronti per il gate finale.');
+    $$('.file-review').forEach((file) => { file.classList.remove('active'); file.setAttribute('aria-pressed', 'false'); });
+  });
+
+  $$('.file-review').forEach((button) => {
+    button.addEventListener('click', () => {
+      $$('.file-review').forEach((file) => {
+        const active = file === button;
+        file.classList.toggle('active', active);
+        file.setAttribute('aria-pressed', String(active));
+      });
+      renderReviewFile(button.dataset.reviewFile);
+    });
+  });
+
+  $$('[data-review-action]').forEach((button) => button.addEventListener('click', () => {
+    toast(button.dataset.reviewAction === 'comment' ? 'Commento inline pronto' : 'File aperto nel workspace', diffPath?.textContent || 'Review');
+  }));
+
+  $('#reducedMotionToggle').addEventListener('change', (event) => {
+    document.body.classList.toggle('reduce-motion', event.target.checked);
+    toast('Movimento', event.target.checked ? 'Ridotto' : 'Standard Calm');
+  });
+
+  document.addEventListener('keydown', (event) => {
+    const mod = event.metaKey || event.ctrlKey;
+    if (mod && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      openCommandPalette();
+    }
+    if (mod && event.key.toLowerCase() === 'n') {
+      event.preventDefault();
+      createNewSession();
+    }
+    if (event.key === 'Escape' && (sessionsPanel.classList.contains('open') || inspectorPanel.classList.contains('open'))) closePanels();
+  });
+
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 1040) {
+      inspectorPanel.classList.remove('open');
+      backdrop.classList.remove('show');
+    } else {
+      appShell.classList.remove('inspector-collapsed');
+    }
+    if (window.innerWidth > 780) sessionsPanel.classList.remove('open');
+    syncInspectorToggle();
+    syncVisualViewport();
+  });
+
+  window.visualViewport?.addEventListener('resize', syncVisualViewport);
+  window.visualViewport?.addEventListener('scroll', syncVisualViewport);
+  composerInput.addEventListener('focus', () => window.setTimeout(syncVisualViewport, 30));
+  composerInput.addEventListener('blur', () => window.setTimeout(syncVisualViewport, 60));
+
+  syncNavigationState();
+  syncInspectorToggle();
+  setQueueMode(false);
+  setRunState(true);
+  setInspectorTab($('.inspector-tabs button.active'));
+  renderReviewFile('composer');
+  autoGrowTextarea();
+  syncVisualViewport();
+})();
+
+  </script>
+</body>
+</html>
