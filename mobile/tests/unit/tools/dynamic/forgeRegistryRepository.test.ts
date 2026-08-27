@@ -99,6 +99,17 @@ describe('forgeRegistryRepository — install/list/get', () => {
         expect(record?.previousVersions).toHaveLength(10)
         expect(record?.previousVersions.map((m) => m.version)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
     })
+
+    /**
+     * ⛔ Owner 2026-08-27, confrontando col pacchetto "hardened final":
+     * nessun tetto sul NUMERO di tool installati, mai imposto prima.
+     */
+    it('rifiuta il 65-esimo tool NUOVO (TALOS_FORGE_REGISTRY_FULL), ma una nuova versione di uno ESISTENTE non conta contro il tetto', async () => {
+        for (let i = 0; i < 64; i++) await installForgeTool(manifest(`tool-${i}`))
+        await expect(installForgeTool(manifest('tool-65'))).rejects.toThrow('TALOS_FORGE_REGISTRY_FULL')
+        // Il tetto vale per i NUOVI tool, non per aggiornare uno che c'è già.
+        await expect(installForgeTool(manifest('tool-0', 2))).resolves.toBeUndefined()
+    })
 })
 
 describe('forgeRegistryRepository — enable/disable', () => {

@@ -64,3 +64,50 @@ describe('Tool Forge — grammatica di path sicura (prototype pollution)', () =>
         expect(forgePathViolation('a$b')).toMatch(/alphanumeric/)
     })
 })
+
+/**
+ * ⛔⛔ Owner 2026-08-27 — due difese adottate confrontando col pacchetto
+ * "hardened final" dell'owner, entrambe difetti REALI del mio codice
+ * precedente, non ipotetici.
+ */
+describe('Tool Forge — input/runtime sono di sola lettura per il DAG', () => {
+    it('setPath rifiuta un target che punta a $.input o $.runtime — solo $.state resta scrivibile', () => {
+        expect(() => setPath({}, '$.input.hacked', 'evil')).toThrow('TALOS_FORGE_PATH_UNSAFE')
+        expect(() => setPath({}, '$.runtime.executionId', 'evil')).toThrow('TALOS_FORGE_PATH_UNSAFE')
+        // Bare (senza `$.`, la forma che itemVar/indexVar usano davvero):
+        expect(() => setPath({}, 'input', 'evil')).toThrow('TALOS_FORGE_PATH_UNSAFE')
+        expect(() => setPath({}, 'runtime', 'evil')).toThrow('TALOS_FORGE_PATH_UNSAFE')
+    })
+
+    it('il verso contrario: $.state resta scrivibile, e leggere $.input/$.runtime non è mai vietato', () => {
+        const vars: Record<string, unknown> = { input: { x: 1 }, state: {}, runtime: { executionId: 'e1' } }
+        expect(() => setPath(vars, '$.state.foo', 'ok')).not.toThrow()
+        expect((vars.state as Record<string, unknown>).foo).toBe('ok')
+        // getPath (lettura) su input/runtime resta permesso — la
+        // restrizione è SOLO sulla scrittura.
+        expect(getPath(vars, '$.input.x')).toBe(1)
+        expect(getPath(vars, '$.runtime.executionId')).toBe('e1')
+    })
+
+    it('forgePathViolation distingue lettura (mai vietata) da scrittura (input/runtime vietati)', () => {
+        expect(forgePathViolation('$.input.x')).toBeNull()
+        expect(forgePathViolation('$.input.x', { writable: true })).toMatch(/read-only/)
+        expect(forgePathViolation('$.state.x', { writable: true })).toBeNull()
+    })
+})
+
+describe('Tool Forge — getPath non legge mai lungo la catena del prototipo', () => {
+    it('un segmento come "toString" su un oggetto senza quella chiave propria torna undefined, non la funzione ereditata', () => {
+        // ⛔ Prima di questo fix, `getPath` indicizzava `current[segment]`
+        // senza `hasOwnProperty`: per un oggetto SENZA una chiave propria
+        // "toString", questo restituiva silenziosamente
+        // `Object.prototype.toString` — una funzione, non `undefined`.
+        expect(getPath({ real: 1 }, '$.toString')).toBeUndefined()
+        expect(getPath({ real: 1 }, '$.hasOwnProperty')).toBeUndefined()
+        expect(getPath({ real: 1 }, '$.valueOf')).toBeUndefined()
+    })
+
+    it('il verso contrario: una chiave PROPRIA chiamata "toString" resta leggibile per davvero', () => {
+        expect(getPath({ toString: 'not a function, a real value' }, '$.toString')).toBe('not a function, a real value')
+    })
+})
