@@ -565,10 +565,33 @@ export function createHttpApp({
           try {
             if (method === 'HEAD') { res.end(); return; }
             res.write(':ok\n\n');
+            /*
+             * ⛔⛔⛔ 27/8, trovato verificando il comando diretto (shell()):
+             * una sessione con PIÙ giri conclusi nel buffer (il task
+             * originale, poi un resume o un comando diretto) troncava il
+             * replay al PRIMO RunFinished incontrato — gli eventi successivi
+             * (il secondo giro per intero) restavano nel buffer ma non
+             * arrivavano mai a un client che si ri-collega dopo che ENTRAMBI
+             * i giri sono già finiti. La stessa callback serviva sia il
+             * replay (sincrono, dentro iscriviti()) sia il futuro live: un
+             * RunFinished rimasto nel buffer da un giro VECCHIO chiudeva lo
+             * stream prima che il resto del replay potesse scriversi.
+             *
+             * `inReplay` distingue i due casi per timing: tutto ciò che
+             * arriva PRIMA che iscriviti() ritorni è replay (sincrono, per
+             * costruzione — vedi la doc sopra broadcast/avviaESegui); tutto
+             * ciò che arriva dopo è dal vivo. Solo un RunFinished/RunError
+             * dal vivo chiude lo stream sul momento; se il replay finisce e
+             * NON c'è un giro in corso dietro (sessionRegistry.inCorso），
+             * si chiude comunque — subito dopo, non a metà.
+             */
+            let inReplay = true;
             const disiscrivi = sessionRegistry.iscriviti(sessionId, (evento) => {
               const scritto = scriviEventoSse(res, evento);
-              if (scritto && (evento.type === 'RunFinished' || evento.type === 'RunError')) res.end();
+              if (scritto && !inReplay && (evento.type === 'RunFinished' || evento.type === 'RunError')) res.end();
             });
+            inReplay = false;
+            if (!sessionRegistry.inCorso(sessionId) && !res.writableEnded) res.end();
             res.on('close', disiscrivi);
           } catch {
             if (!res.writableEnded) res.end();
