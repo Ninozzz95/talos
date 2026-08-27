@@ -1822,32 +1822,37 @@
    * sessione A (con un comando shell finto, marcatore incluso) alla sessione
    * B, il Terminale della sessione B mostrava ANCORA il marcatore di A,
    * concatenato con l'output vero di B — una sessione che mostra la storia
-   * di un'altra, non solo "niente fuffa" ma dati sbagliati. Snapshot preso
-   * una sola volta all'avvio (prima che qualunque sessione lo sovrascriva);
-   * resettaSuperficiRealiDedicate() lo restituisce ad ogni cambio sessione.
+   * di un'altra, non solo "niente fuffa" ma dati sbagliati.
+   *
+   * ⛔⛔⛔ 27/8, seconda passata (ispezione visiva IMPORTANTISSIMA): la prima
+   * cura restituiva il markup DEMO originale (composer.spec.ts, un
+   * "device preview" con TalosComposer.vue +28-19) — stesso "pty demo"/
+   * badge visibile, ma pur sempre DATI INVENTATI a schermo per una
+   * sessione VERA che semplicemente non ha ancora usato quell'attrezzo.
+   * Confrontato con la cura poco sotto per il Review (che mostra
+   * onestamente "0 file modificati", mai un demo) — stessa famiglia di
+   * difetto, incoerente fra le due. Ora entrambe le viste, al reset,
+   * mostrano uno stato onesto E VUOTO — non il demo, non i dati di
+   * un'altra sessione — esattamente come il Review.
    */
-  const terminalWindowPristineHtml = $('[data-view="terminal"] .terminal-window')?.innerHTML ?? '';
-  const browserUrlPristineHtml = $('[data-view="browser"] .browser-url')?.innerHTML ?? '';
-  const browserPreviewPristineHtml = $('[data-view="browser"] .device-preview')?.innerHTML ?? '';
-
   function resettaSuperficiRealiDedicate() {
     const terminalWindow = $('[data-view="terminal"] .terminal-window');
     if (terminalWindow) {
-      terminalWindow.innerHTML = terminalWindowPristineHtml;
-      const code = terminalWindow.querySelector('code');
-      if (code) delete code.dataset.reale;
+      const code = document.createElement('code');
+      code.textContent = 'Nessun comando eseguito in questa sessione.';
+      terminalWindow.replaceChildren(code);
       const demoBadge = $('.demo-surface-badge', $('[data-view="terminal"]'));
-      if (demoBadge) demoBadge.hidden = false;
+      if (demoBadge) demoBadge.hidden = true; // onesto e vuoto, non "demo": non è un dato finto da segnalare
     }
     const browserShell = $('[data-view="browser"] .browser-shell');
     if (browserShell) {
       delete browserShell.dataset.reale;
       const barraUrl = $('[data-view="browser"] .browser-url');
-      if (barraUrl) barraUrl.innerHTML = browserUrlPristineHtml;
+      if (barraUrl) barraUrl.replaceChildren(document.createTextNode('—'));
       const anteprima = $('[data-view="browser"] .device-preview');
-      if (anteprima) anteprima.innerHTML = browserPreviewPristineHtml;
+      if (anteprima) anteprima.replaceChildren(textElement('p', 'board-empty', 'Nessuna pagina letta in questa sessione.'));
       const demoBadge = $('.demo-surface-badge', $('[data-view="browser"]'));
-      if (demoBadge) demoBadge.hidden = false;
+      if (demoBadge) demoBadge.hidden = true;
     }
     /*
      * ⛔⛔⛔ 27/8, trovato nell'ispezione visiva finale: una sessione VERA
