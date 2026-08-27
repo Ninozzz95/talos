@@ -43,7 +43,26 @@ export function createSessionRegistry({
 } = {}) {
   const sessioni = new Map();
 
+  /*
+   * ⛔⛔⛔ 27/8, owner: "ricevo risposte duplicate" — riprodotto e trovato.
+   * `iscriviti()` (sotto) rimanda SEMPRE tutto `voce.eventi` a un nuovo
+   * ascoltatore, e QUALUNQUE nuova connessione SSE sulla stessa sessione ne
+   * apre una — non solo un client che si ricollega dopo una caduta di rete
+   * (l'EventSource nativo lo fa DA SOLO, senza che app.js lo richieda), ma
+   * anche `runDirectShell()` (`!comando`), che apre una connessione FRESCA
+   * apposta. In entrambi i casi il buffer intero riparte dall'evento 1: i
+   * bubble di tool/stato già a schermo (mai idempotenti — vedi
+   * appendToolNote/appendStatusNote) si duplicano, e il testo già scritto in
+   * un bubble esistente (`ensureAssistantMessageElement`, che INVECE trova
+   * lo stesso messageId) si RADDOPPIA dentro lo stesso bubble.
+   * ⇒ Ogni evento porta un `_sequenza` monotono, unico per sessione,
+   * assegnato UNA sola volta qui — lo stesso oggetto viene ri-servito ad
+   * ogni replay, quindi il numero resta identico. Il frontend
+   * (handleRealEvent) lo usa per scartare un evento già visto, invece di
+   * provare a rendere idempotente ogni singolo handler separatamente.
+   */
   function broadcast(voce, evento) {
+    evento._sequenza = (voce.prossimaSequenza = (voce.prossimaSequenza ?? 0) + 1);
     voce.eventi.push(evento);
     for (const ascoltatore of voce.ascoltatori) ascoltatore(evento);
     if (evento.type === 'RunFinished' || evento.type === 'RunError') voce.conclusa = true;
