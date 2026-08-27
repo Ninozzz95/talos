@@ -422,7 +422,14 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
    questo bundle gira embedded nel telefono, e lo stesso fallback quando
    gira standalone su desktop. */
 .real-waiting-note { display: flex; align-items: center; padding: 4px 0; }
-.talos-line-loader { display: block; }
+/* ⛔ 27/8, trovato verificando le dimensioni vere (non solo "appare/sparisce"):
+   la regola cieca `svg { width:20px; height:20px }` più sotto in questo
+   stesso foglio vince sugli attributi HTML width/height inline dell'SVG
+   (una CSS di QUALUNQUE specificità batte sempre un attributo di
+   presentazione) — la ruota veniva schiacciata a 20×20 invece della sua
+   geometria vera 44×7. Esplicitata qui per non dipendere dall'ordine
+   delle regole nel foglio. */
+.talos-line-loader { display: block; width: 44px; height: 7px; }
 .talos-line-loader-track { stroke: var(--accent); stroke-opacity: .18; stroke-width: 2; stroke-linecap: round; }
 .talos-line-loader-sweep { stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 88; stroke-dashoffset: 88; animation: talosLineSweep 1.6s ease-in-out infinite; }
 .talos-line-loader-node { fill: transparent; stroke: var(--accent); stroke-width: 2; animation: talosLineNodeFill 1.6s ease-in-out infinite; }
