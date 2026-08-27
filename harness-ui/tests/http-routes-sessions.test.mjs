@@ -176,6 +176,13 @@ test('⛔ POST /api/v1/sessions rifiuta un corpo che non è ESATTAMENTE {taskId}
  * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 (§3.2 del
  * prompt) — `client:'mobile'` è l'unico valore che cambia qualcosa: il
  * server lo traduce in `{mobile:true}` verso `sessionRegistry.avvia()`.
+ *
+ * ⛔ Riconciliazione Fase 1 (branch merge, 27/8): `avvia()` ora accetta un
+ * oggetto opzioni con TRE campi (`modelloScelto`/`reasoningScelto`/`mobile`,
+ * lavoro R1 del branch desktop unito qui) — `requireTaskIdBody` li passa
+ * SEMPRE tutti e tre, `null` quando assenti dal corpo. L'asserzione
+ * verifica l'oggetto INTERO, non solo `mobile`, per restare vera contro la
+ * firma reale invece di una vecchia più stretta.
  */
 test('POST /api/v1/sessions con client:\'mobile\' passa {mobile:true} a sessionRegistry.avvia', async (t) => {
   const { base, sessionRegistry } = await listen(t);
@@ -185,7 +192,7 @@ test('POST /api/v1/sessions con client:\'mobile\' passa {mobile:true} a sessionR
     body: JSON.stringify({ taskId: 'sconto-a-scaglioni', client: 'mobile' }),
   });
   assert.equal(risposta.status, 200);
-  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { mobile: true });
+  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, reasoningScelto: null, mobile: true });
 });
 
 test('⛔ AL CONTRARIO: client:\'desktop\' ESPLICITO e client ASSENTE producono entrambi {mobile:false} — nessuna differenza di comportamento', async (t) => {
@@ -195,13 +202,13 @@ test('⛔ AL CONTRARIO: client:\'desktop\' ESPLICITO e client ASSENTE producono 
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ taskId: 'sconto-a-scaglioni', client: 'desktop' }),
   });
-  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { mobile: false });
+  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, reasoningScelto: null, mobile: false });
 
   await fetch(`${base}/api/v1/sessions`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ taskId: 'sconto-a-scaglioni' }),
   });
-  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { mobile: false });
+  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, reasoningScelto: null, mobile: false });
 });
 
 test('⛔ POST /api/v1/sessions su un task fuori allowlist: 404 TASK_NOT_ALLOWED, mai una sessione', async (t) => {
