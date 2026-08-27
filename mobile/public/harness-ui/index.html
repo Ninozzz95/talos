@@ -397,15 +397,13 @@ $ <span class="cursor"> </span></code></pre>
           </div>
           <div class="inspector-card">
             <div class="card-title"><span>Memory</span><svg><use href="#i-brain"/></svg></div>
-            <p class="muted-copy">2 memorie di progetto applicate. Nessun conflitto rilevato.</p>
-            <div class="memory-chip">design-system.md</div><div class="memory-chip">mobile-rules.md</div>
+            <p class="muted-copy">Non ancora implementato — questo agente non ha oggi un sistema di memoria di progetto.</p>
           </div>
           <div class="inspector-card session-topology">
             <div class="card-title"><span>Session topology</span><svg><use href="#i-branch"/></svg></div>
-            <div class="topology-row root"><span class="topology-node"></span><div><strong data-current-session-title>Refactor auth flow</strong><small>main thread · live</small></div></div>
-            <div class="topology-row child"><span class="topology-node"></span><div><strong>Responsive audit</strong><small>side thread · A1</small></div></div>
-            <div class="topology-row child"><span class="topology-node"></span><div><strong>A11y review</strong><small>fork · ready</small></div></div>
-            <div class="topology-actions"><button class="secondary-btn compact" data-open-sheet="sessionTree">Albero</button><button class="secondary-btn compact" data-session-action="side">+ Side</button><button class="secondary-btn compact" data-session-action="fork">Fork</button></div>
+            <div class="topology-row root"><span class="topology-node"></span><div><strong data-current-session-title>Refactor auth flow</strong><small>sessione corrente</small></div></div>
+            <p class="muted-copy">Sotto-thread non ancora implementati — talosLavora è un ciclo singolo, nessuna vera delega parallela oggi.</p>
+            <div class="topology-actions"><button class="secondary-btn compact" data-action="fork-session">Fork questa sessione</button></div>
           </div>
         </section>
         <section class="inspector-section" id="inspector-files" role="tabpanel" aria-labelledby="inspector-tab-files" data-inspector-section="files" data-demo-surface="inspector-files">
@@ -415,9 +413,7 @@ $ <span class="cursor"> </span></code></pre>
           </div>
         </section>
         <section class="inspector-section" id="inspector-agents" role="tabpanel" aria-labelledby="inspector-tab-agents" data-inspector-section="agents" data-demo-surface="inspector-agents">
-          <div class="agent-card"><span class="agent-avatar">A1</span><div><strong>Responsive auditor</strong><small>In corso · 00:38</small></div><span class="status-pulse"></span></div>
-          <div class="agent-card"><span class="agent-avatar">A2</span><div><strong>A11y reviewer</strong><small>Completato · 4 note</small></div><svg><use href="#i-check"/></svg></div>
-          <button class="secondary-btn full" data-demo-action="delegate">+ Delega subagent</button>
+          <p class="board-empty">Non ancora implementato — TALOS non delega a sotto-agenti oggi, un solo modello guida l'intero task.</p>
         </section>
       </div>
     </aside>
