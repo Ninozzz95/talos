@@ -637,11 +637,12 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .command-results button > span { display: flex; align-items: center; gap: 9px; }
 .command-results svg { width: 17px; height: 17px; color: var(--muted); }
 
-.sheet-dialog { inset: 0; width: min(600px, calc(100vw - 24px)); border-radius: 16px; margin: auto; }
+/* ⛔ 27/8 — owner: "la modale nuova sessione deve essere più larga e alta, il dropdown viene tagliato". 600px/580px erano tarati sui fogli corti di prima (poche righe) — "Nuova sessione" ora porta cartella + modello + compito, e il picker modello da solo può contenere centinaia di righe. */
+.sheet-dialog { inset: 0; width: min(720px, calc(100vw - 24px)); border-radius: 16px; margin: auto; }
 .sheet-handle { display: none; }
 .sheet-head { min-height: 70px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px 0 16px; border-bottom: 1px solid var(--line); }
 .sheet-head h2 { margin: 4px 0 0; font-size: 17px; font-weight: 650; }
-.sheet-body { max-height: min(580px, calc(100dvh - 120px)); overflow: auto; padding: 12px; }
+.sheet-body { max-height: min(760px, calc(100dvh - 96px)); overflow: auto; padding: 12px; }
 .sheet-section { margin-bottom: 16px; }
 .sheet-label { display: block; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .12em; margin: 0 0 7px 3px; }
 .sheet-option { width: 100%; min-height: 54px; display: grid; grid-template-columns: 38px minmax(0,1fr) auto; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--text-2); padding: 7px 10px; margin-bottom: 6px; text-align: left; cursor: pointer; }
@@ -1144,16 +1145,26 @@ button:disabled { cursor: not-allowed; opacity: .48; }
  * per provider, cercabile. Riusa .sheet-input/.sheet-option/.text-btn
  * già esistenti invece di inventare un secondo linguaggio visivo.
  */
-.model-picker { position: relative; margin-bottom: 12px; }
+/*
+ * ⛔⛔ 27/8 — owner: "il dropdown viene tagliato". Causa vera: il pannello
+ * era `position: absolute`, cioè FUORI dal flusso del documento — non
+ * faceva crescere l'altezza scrollabile di `.sheet-body`, restava
+ * semplicemente sospeso sotto il trigger e finiva tagliato da
+ * `.sheet-dialog { overflow: clip }` non appena superava il bordo della
+ * modale, senza modo di scorrere per rivederlo. In flusso normale, il
+ * pannello spinge giù il resto del form e `.sheet-body` (già più alto,
+ * vedi sopra) lo scrolla correttamente insieme a tutto il resto.
+ */
+.model-picker { margin-bottom: 12px; }
 .model-picker-trigger { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; text-align: left; }
 .model-picker-trigger-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px var(--font-mono); }
 .model-picker-chevron svg { width: 14px; height: 14px; color: var(--muted); flex: 0 0 auto; }
 .model-picker-trigger[aria-expanded="true"] .model-picker-chevron svg { transform: rotate(180deg); }
-.model-picker-panel { position: absolute; z-index: 20; top: calc(100% + 6px); left: 0; right: 0; display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface-elevated); box-shadow: var(--shadow); max-height: 60vh; }
+.model-picker-panel { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; padding: 10px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface-elevated); box-shadow: var(--shadow); }
 .model-picker-search { position: relative; display: block; flex: 0 0 auto; }
 .model-picker-search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--muted); pointer-events: none; }
 .model-picker-search input { padding-left: 32px; }
-.model-picker-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.model-picker-list { max-height: 42vh; overflow-y: auto; }
 .model-picker-group-header { width: 100%; display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 4px; border: 0; background: transparent; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; cursor: pointer; }
 .model-picker-group-header:hover { color: var(--text-2); }
 .model-picker-group-count { color: var(--muted); font-weight: 500; text-transform: none; letter-spacing: 0; }
