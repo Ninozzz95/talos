@@ -50,6 +50,8 @@
      * nomeCartella, modello} oppure null quando non c'è nulla in attesa.
      */
     pendingCustomSession: null,
+    /** ⭐ 27/8 — {percorso, nome} del file bersaglio quando si apre il foglio Apri/Rinomina/Elimina dall'albero, null altrimenti. I fogli sono statici (sheetTemplates), questo li parametrizza. */
+    alberoFileTarget: null,
     board: {
       initialized: false,
       bootstrapPromise: null,
@@ -1220,7 +1222,7 @@
    * resta, correttamente. Whitelist esplicita, non un "nascondi sempre":
    * solo i tipi verificati stanotte riga per riga.
    */
-  const TIPI_FOGLIO_INTERAMENTE_ONESTI = new Set(['model', 'capabilities', 'control']);
+  const TIPI_FOGLIO_INTERAMENTE_ONESTI = new Set(['model', 'capabilities', 'control', 'fileViewer', 'renameFile', 'deleteFile']);
   function openSheet(type) {
     const content = sheetTemplates[type];
     if (!content) return;
@@ -1455,6 +1457,43 @@
           ${['src/components/chat/TalosComposer.vue','src/style.css','src/lib/talosThemes.ts','tests/unit/chat/composer.spec.ts','AGENTS.md'].map((file) => `<button class="sheet-option reference-option" data-reference-file="${file}"><span class="sheet-icon">${icon('i-files')}</span><span><strong>${file}</strong><small>Aggiungi al contesto del messaggio</small></span><span>@</span></button>`).join('')}
         </div>`,
     },
+    /*
+     * ⭐⭐⭐ 27/8, owner: "aprire i file" — sola lettura, un'anteprima non
+     * un editor (workspace-files.mjs ha il suo tetto dichiarato, 512 KB).
+     * Mount-point come `model`: il contenuto arriva da una fetch, non da
+     * una stringa statica — `openSheet()` lo popola dopo l'apertura.
+     */
+    fileViewer: {
+      eyebrow: 'Anteprima',
+      title: 'File', // ⛔ sovrascritto dinamicamente in openSheet() col nome vero — sheetTemplates.title è una stringa ovunque altrove, non una funzione
+      html: () => '<div class="sheet-section" id="fileViewerMount"><p class="board-empty">Carico…</p></div>',
+    },
+    renameFile: {
+      eyebrow: 'Albero workspace',
+      title: 'Rinomina file',
+      html: () => `
+        <form class="sheet-section rename-form" id="renameFileForm">
+          <label class="sheet-label" for="renameFileInput">Nuovo nome</label>
+          <input class="sheet-input" id="renameFileInput" value="${(state.alberoFileTarget?.nome ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}" maxlength="255" autocomplete="off" spellcheck="false">
+          <div class="sheet-actions">
+            <button type="button" class="secondary-btn" data-rename-file-cancel>Annulla</button>
+            <button type="submit" class="primary-btn">Rinomina</button>
+          </div>
+        </form>`,
+    },
+    /** ⛔ Distruttiva — la conferma è QUESTO stesso foglio (un secondo passaggio esplicito, mai un click solo), stessa disciplina "hard to reverse actions get confirmed" del resto del prodotto. */
+    deleteFile: {
+      eyebrow: 'Albero workspace',
+      title: 'Elimina file',
+      html: () => `
+        <div class="sheet-section">
+          <p class="board-empty">Eliminare <strong>${(state.alberoFileTarget?.nome ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}</strong>? L'azione scrive DAVVERO sul disco e non si annulla da qui.</p>
+          <div class="sheet-actions">
+            <button type="button" class="secondary-btn" data-delete-file-cancel>Annulla</button>
+            <button type="button" class="primary-btn danger" id="deleteFileConfirm">Elimina</button>
+          </div>
+        </div>`,
+    },
   };
 
   /** Aggiorna la pillola del composer che apre il foglio Modello — selettore stabile (`data-open-sheet="model"`), non un confronto sul testo attuale come faceva il codice precedente. */
@@ -1529,6 +1568,44 @@
         if (activeSession) activeSession.textContent = state.session;
         closeEmbeddedDialog(sheetDialog);
         toast('Sessione rinominata', state.session);
+      });
+    }
+
+    const renameFileForm = $('#renameFileForm', sheetBody);
+    if (renameFileForm) {
+      const input = $('#renameFileInput', renameFileForm);
+      window.setTimeout(() => { input?.focus(); input?.select(); }, 30);
+      $('[data-rename-file-cancel]', renameFileForm)?.addEventListener('click', () => closeEmbeddedDialog(sheetDialog));
+      renameFileForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const nuovoNome = input?.value.trim();
+        const bersaglio = state.alberoFileTarget;
+        if (!nuovoNome || !bersaglio) { input?.focus(); return; }
+        try {
+          await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/rename`, { percorso: bersaglio.percorso, nuovoNome });
+          closeEmbeddedDialog(sheetDialog);
+          toast('File rinominato', `${bersaglio.nome} → ${nuovoNome}`);
+          await invalidaLivelloGenitoreAlbero(bersaglio.percorso);
+        } catch (error) {
+          toast('Rinomina non riuscita', error.message);
+        }
+      });
+    }
+
+    const deleteFileConfirm = $('#deleteFileConfirm', sheetBody);
+    if (deleteFileConfirm) {
+      $('[data-delete-file-cancel]', sheetBody)?.addEventListener('click', () => closeEmbeddedDialog(sheetDialog));
+      deleteFileConfirm.addEventListener('click', async () => {
+        const bersaglio = state.alberoFileTarget;
+        if (!bersaglio) return;
+        try {
+          await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/delete`, { percorso: bersaglio.percorso });
+          closeEmbeddedDialog(sheetDialog);
+          toast('File eliminato', bersaglio.nome);
+          await invalidaLivelloGenitoreAlbero(bersaglio.percorso);
+        } catch (error) {
+          toast('Eliminazione non riuscita', error.message);
+        }
       });
     }
   }
@@ -2455,6 +2532,26 @@
       row.appendChild(dot);
     }
 
+    /*
+     * ⭐⭐⭐ 27/8, owner: "non ha nessun'opzione per rinominare i file, per
+     * aprire i file, per aprirli nel visualizza file explorer di Windows.
+     * Non ha opzioni per eliminarlo, per allegarlo nella chat" — un
+     * bottone "···" per file (le cartelle restano solo esplorabili, come
+     * ogni file manager reale: le azioni sotto sono sul singolo file).
+     */
+    if (!cartella) {
+      const azioniBtn = document.createElement('button');
+      azioniBtn.type = 'button';
+      azioniBtn.className = 'ft-actions-btn';
+      azioniBtn.setAttribute('aria-label', `Azioni su ${nome}`);
+      azioniBtn.appendChild(iconaSvgAlbero('i-more'));
+      azioniBtn.addEventListener('click', (event) => {
+        event.stopPropagation(); // non selezionare la riga sotto
+        apriMenuAzioniFile(percorsoCompleto, nome, azioniBtn);
+      });
+      row.appendChild(azioniBtn);
+    }
+
     li.appendChild(row);
     contenitoreUl.appendChild(li);
 
@@ -2479,6 +2576,107 @@
       await apriCartellaAlbero(li, icon, childUl, percorsoCompleto, profondita);
     }
     return li;
+  }
+
+  /**
+   * ⭐⭐⭐ 27/8, owner: le cinque azioni sul singolo file dell'albero. Un
+   * menu fuori dal flusso normale del DOM (appeso a `document.body`, non
+   * dentro `.file-tree`) — il pannello ha `overflow-y:auto`, un menu
+   * figlio verrebbe tagliato dal proprio contenitore appena sfora.
+   */
+  function apriMenuAzioniFile(percorsoCompleto, nome, ancoraEl) {
+    document.querySelector('.ft-actions-menu')?.remove();
+
+    const menu = document.createElement('div');
+    menu.className = 'ft-actions-menu';
+    menu.setAttribute('role', 'menu');
+
+    const voci = [
+      { etichetta: 'Apri', icona: 'i-eye', azione: () => apriFileAlbero(percorsoCompleto, nome) },
+      { etichetta: 'Allega alla chat', icona: 'i-link', azione: () => allegaFileAllaChat(percorsoCompleto) },
+      { etichetta: 'Rinomina', icona: 'i-edit', azione: () => avviaRinominaFile(percorsoCompleto, nome) },
+      { etichetta: 'Rivela in Esplora File', icona: 'i-folder-open', azione: () => rivelaFileInEsploraFile(percorsoCompleto) },
+      { etichetta: 'Elimina', icona: 'i-trash', azione: () => avviaEliminaFile(percorsoCompleto, nome), pericoloso: true },
+    ];
+    for (const voce of voci) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `ft-actions-menu-item${voce.pericoloso ? ' ft-actions-menu-item-danger' : ''}`;
+      btn.setAttribute('role', 'menuitem');
+      btn.appendChild(iconaSvgAlbero(voce.icona));
+      btn.appendChild(textElement('span', '', voce.etichetta));
+      btn.addEventListener('click', () => { chiudiMenu(); voce.azione(); });
+      menu.appendChild(btn);
+    }
+    document.body.appendChild(menu);
+
+    const rect = ancoraEl.getBoundingClientRect();
+    menu.style.top = `${rect.bottom + 4}px`;
+    menu.style.right = `${Math.max(8, window.innerWidth - rect.right)}px`;
+
+    function chiudiMenu() {
+      menu.remove();
+      document.removeEventListener('click', onDocumentClick);
+      document.removeEventListener('keydown', onKeydown);
+    }
+    function onDocumentClick(event) { if (!menu.contains(event.target)) chiudiMenu(); }
+    function onKeydown(event) { if (event.key === 'Escape') { chiudiMenu(); ancoraEl.focus(); } }
+    /* ⛔ setTimeout(...,0): STESSO difetto già trovato e corretto stanotte sul model-picker — il click che apre QUESTO menu è ancora in bubbling verso document quando la funzione ritorna; registrare subito chiuderebbe il menu nello stesso istante in cui si apre. */
+    window.setTimeout(() => {
+      document.addEventListener('click', onDocumentClick);
+      document.addEventListener('keydown', onKeydown);
+    }, 0);
+  }
+
+  /** Dopo rinomina/elimina: il livello GENITORE nell'albero non riflette più il disco — stesso invalidamento mirato di segnalaScritturaNellAlbero, non un ricaricamento cieco di tutto. */
+  async function invalidaLivelloGenitoreAlbero(percorsoCompleto) {
+    const genitore = percorsoCompleto.includes('/') ? percorsoCompleto.split('/').slice(0, -1).join('/') : '';
+    state.realSession.treeCache.delete(genitore);
+    await renderizzaAlberoReale();
+  }
+
+  async function apriFileAlbero(percorsoCompleto, nome) {
+    state.alberoFileTarget = { percorso: percorsoCompleto, nome };
+    openSheet('fileViewer');
+    sheetTitle.textContent = nome; // sheetTemplates.title è una stringa statica ovunque altrove: il nome vero si scrive qui
+    const mount = $('#fileViewerMount', sheetBody);
+    try {
+      const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/file?percorso=${encodeURIComponent(percorsoCompleto)}`);
+      if (!mount.isConnected) return; // il foglio è già stato chiuso mentre la fetch era in volo
+      const pre = document.createElement('pre');
+      pre.className = 'tool-result-block';
+      pre.appendChild(textElement('code', '', dati.contenuto));
+      mount.replaceChildren(pre);
+    } catch (error) {
+      if (!mount.isConnected) return;
+      mount.replaceChildren(textElement('p', 'board-empty', `Non leggibile: ${error.message}`));
+    }
+  }
+
+  function allegaFileAllaChat(percorsoCompleto) {
+    composerInput.value = `${composerInput.value.replace(/@[^\s]*$/, '')}@${percorsoCompleto} `;
+    autoGrowTextarea();
+    composerInput.focus();
+    toast('Allegato alla chat', percorsoCompleto);
+  }
+
+  function avviaRinominaFile(percorsoCompleto, nome) {
+    state.alberoFileTarget = { percorso: percorsoCompleto, nome };
+    openSheet('renameFile');
+  }
+
+  function avviaEliminaFile(percorsoCompleto, nome) {
+    state.alberoFileTarget = { percorso: percorsoCompleto, nome };
+    openSheet('deleteFile');
+  }
+
+  async function rivelaFileInEsploraFile(percorsoCompleto) {
+    try {
+      await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/reveal`, { percorso: percorsoCompleto });
+      toast('Aperto in Esplora File', percorsoCompleto);
+    } catch (error) {
+      toast('Non riuscito', error.message);
+    }
   }
 
   /** Piano §1.3, riga "Contesto workspace" — l'albero file REALE, radice + tutto ciò che era già aperto (treeOpen), riscaricato dal vivo. */
