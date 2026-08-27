@@ -110,6 +110,14 @@ function eUnaScheda(valore: unknown): valore is TalosScheda {
                 && typeof (v as Record<string, unknown>)?.genere === 'string'
                 && (v as Record<string, unknown>).genere !== '')
     }
+    /**
+     * ⛔ `id` OBBLIGATORIO: senza, il tocco non saprebbe quale artefatto
+     * aprire — stessa regola di `pacchetto` in `quale-app`.
+     */
+    if (r.tipo === 'artefatto') {
+        return typeof r.titolo === 'string' && r.titolo !== ''
+            && typeof r.id === 'string' && r.id !== ''
+    }
 
     /*
      * ⛔ `app` e `partito` sono OBBLIGATORI, e `partito` deve essere un
@@ -168,6 +176,8 @@ type SchedaCreato = Extract<TalosScheda, { tipo: 'creato' }>
 const eCreato = (s: TalosScheda): s is SchedaCreato => s.tipo === 'creato'
 type SchedaCreati = Extract<TalosScheda, { tipo: 'creati' }>
 const eCreati = (s: TalosScheda): s is SchedaCreati => s.tipo === 'creati'
+type SchedaArtefatto = Extract<TalosScheda, { tipo: 'artefatto' }>
+const eArtefatto = (s: TalosScheda): s is SchedaArtefatto => s.tipo === 'artefatto'
 
 /**
  * ⛔ La rotta arriva dall'attrezzo che ha creato la cosa, e resta INTERNA: si
@@ -403,6 +413,33 @@ async function scegli(s: SchedaQualeApp, pacchetto: string): Promise<void> {
 const esitoFile = ref<Record<string, 'manda' | 'mandato' | 'rifiutato'>>({})
 
 /**
+ * ⭐⭐⭐ L'ARTEFATTO SI APRE COL DITO, stesso schema di `esitoFile` — keyed
+ * per id, non un booleano solo: più artefatti nella stessa chat hanno stati
+ * indipendenti.
+ *
+ * ⛔ `rifiutato` è un esito onesto, non un'ipotesi: `talosApriArtefattoDaScheda`
+ * torna `false` quando `TalosArtifactActivity` rifiuta di aprirsi (dispositivo
+ * senza `MULTI_PROFILE`/`MULTI_PROCESS` — fail-closed, mai un downgrade
+ * silenzioso, vedi `TalosArtifactActivity.kt`) — e la persona deve saperlo,
+ * non restare davanti a un tocco che non ha fatto niente.
+ */
+const esitoArtefatto = ref<Record<string, 'apre' | 'rifiutato'>>({})
+async function apriArtefatto(id: string): Promise<void> {
+    if (esitoArtefatto.value[id] === 'apre') return
+    esitoArtefatto.value = { ...esitoArtefatto.value, [id]: 'apre' }
+    try {
+        const { talosApriArtefattoDaScheda } = await import('@/lib/tools/schedaComandi')
+        const fatto = await talosApriArtefattoDaScheda(id)
+        const nuovo = { ...esitoArtefatto.value }
+        if (fatto) delete nuovo[id]
+        else nuovo[id] = 'rifiutato'
+        esitoArtefatto.value = nuovo
+    } catch {
+        esitoArtefatto.value = { ...esitoArtefatto.value, [id]: 'rifiutato' }
+    }
+}
+
+/**
  * ⭐⭐⭐ IL PDF CHE SI APRE — owner 2026-08-17, «il PDF bisogna poterlo
  * visualizzare dentro la app».
  *
@@ -609,6 +646,39 @@ const parolaStato = (acceso: boolean): string => (acceso
                     <span v-if="voce.dove" class="talos-freccia flex-none" aria-hidden="true">›</span>
                 </component>
             </template>
+
+            <!--
+                ⭐⭐⭐ L'ARTEFATTO HTML — owner 2026-08-27, «creare artefatti
+                con schemi avanzati e interagibili in chat, come fa ChatGPT».
+
+                ⛔ Non è un `dove`: il tocco apre `TalosArtifactActivity`, una
+                Activity Android nativa separata — WebView e profilo propri,
+                verificata sul Pad a non avere accesso né al ponte Capacitor
+                né alla rete. Vedi `apriArtefatto` sopra e
+                `TalosArtifactActivity.kt` per la catena intera.
+
+                ⛔ La riga dell'esito c'è SEMPRE, anche vuota — stessa regola
+                di `apriImpostazioni`: un lettore di schermo deve averla già
+                osservata prima che cambi.
+            -->
+            <button
+                v-if="eArtefatto(s)"
+                type="button"
+                class="talos-controllo flex w-full items-center gap-2 border border-border bg-muted text-left talos-pressable"
+                :aria-busy="esitoArtefatto[s.id] === 'apre'"
+                :disabled="esitoArtefatto[s.id] === 'apre'"
+                data-testid="talos-scheda-artefatto"
+                @click="apriArtefatto(s.id)"
+            >
+                <span class="talos-nome min-w-0 flex-1">
+                    <span class="block truncate">{{ s.titolo }}</span>
+                    <span
+                        class="talos-esito mt-px block text-xs text-muted-foreground"
+                        aria-live="polite"
+                    >{{ esitoArtefatto[s.id] === 'rifiutato' ? t('chat.cardAppRefused') : '' }}</span>
+                </span>
+                <span class="talos-freccia flex-none" aria-hidden="true">›</span>
+            </button>
 
             <!--
                 ⭐⭐⭐ È PARTITO, O NO — e questa riga vince sulla prosa.

@@ -10,6 +10,7 @@ import { createTalosTasksWriteTools } from '@/lib/tools/tasksWriteTools'
 import { createTalosWebTools } from '@/lib/search/webTools'
 import { createTalosDocumentTools } from '@/lib/documents/documentTools'
 import { createTalosImageTools } from '@/lib/images/imageTools'
+import { createTalosVisualArtifactTools } from '@/lib/tools/artifactTools'
 import { createTalosLibraryExportTools } from '@/lib/tools/libraryExportTools'
 import { createTalosLibraryWriteTools } from '@/lib/tools/libraryWriteTools'
 import { createTalosLibraryContextPolicyTools } from '@/lib/tools/libraryContextPolicyTools'
@@ -96,6 +97,9 @@ function everyExecutableTool() {
             provider: vi.fn(() => 'gemini'),
             generate: vi.fn(),
             save: vi.fn(),
+        }),
+        ...createTalosVisualArtifactTools({
+            create: vi.fn(async () => ({ id: 'a1' })),
         }),
         ...createTalosLibraryExportTools({
             listCandidates: vi.fn(async () => []),
@@ -432,6 +436,23 @@ describe('Agent Tools control registry', () => {
              * torni `369a6da1…` byte per byte lo esclude.
              */
             'tool_create',
+            /*
+             * ⭐⭐⭐ 2026-08-27, L'ARTEFATTO HTML: `artifact_create`.
+             *
+             * «creare artefatti HTML con schemi avanzati e interagibili in
+             * chat, come fa ChatGPT» — reso in `TalosArtifactActivity`,
+             * un'Activity Android separata (WebView e profilo propri, mai
+             * il ponte Capacitor), verificata sul Pad a non avere accesso
+             * né al ponte né alla rete.
+             *
+             * ⛔ Stessa domanda di sempre: se togliendolo l'impronta storica
+             * NON tornasse, vorrebbe dire che aggiungendo questo tool ho
+             * mosso il contratto di uno che c'era già — e in questo giro ho
+             * toccato `securityCatalog`, `toolControls`, `toolControlCatalog`
+             * e le due lingue, quindi la domanda conta doppio. Il fatto che
+             * torni `369a6da1…` byte per byte lo esclude.
+             */
+            'artifact_create',
         ].includes(tool.name))
         expect(digestOf(controlPlaneOf(withoutNotesWrite)))
             .toBe('369a6da1a52e717bbe9e92b780151ac3da57352d21177064cf399a81356fff67')
@@ -582,9 +603,16 @@ describe('Agent Tools control registry', () => {
          * controllo adesso contiene un attrezzo che PROPONE un tool nuovo
          * per il Forge, e chi rilegge questa riga deve vederlo dichiarato,
          * non scoprirlo da un'impronta cambiata.
+         *
+         * ⛔ 2026-08-27 (secondo giro, stesso giorno): si muove ancora, per
+         * `artifact_create` — «creare artefatti HTML interattivi in chat,
+         * come fa ChatGPT». Il piano di controllo adesso contiene un
+         * attrezzo che scrive un documento HTML e lo mostra isolato in una
+         * WebView/Activity Android separata (mai il ponte Capacitor, mai
+         * la rete — verificato sul Pad). Gesto deliberato, dichiarato qui.
          */
         expect(digestOf(controlPlane))
-            .toBe('f90970308552ee90ed13dbffa3d9fcf596b7e70695fb3565d31f34e600e47627')
+            .toBe('fd2191d88e645a3fd141c693ae431b2988b4954645ae82f0fd76c18e53f07bfb')
         /*
          * ⭐ Ri-fissato 2026-08-08 per i TRE tool delle NOTIFICHE:
          * `device_notifications_list`, `device_notification_reply`,
@@ -958,12 +986,18 @@ describe('Agent Tools control registry', () => {
          * non supportato nei function-calling schema, riprodotto sul Pad).
          * Riscritto senza ricorsione, stesse capacità — il contratto degli
          * ALTRI tool non si è mosso, solo la forma di questo.
+         *
+         * ⛔ 2026-08-27, terzo movimento: `artifact_create` — «creare
+         * artefatti HTML interattivi in chat». Stessa prova: l'impronta
+         * STORICA sopra (che esclude anche questo tool per nome) torna
+         * `369a6da1…` byte per byte — il movimento qui sotto è SOLO
+         * l'aggiunta.
          */
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('6b88a9ce002330e73b10883f3ed040a515ae9386550436eabf1f01d4f5453250')
+            .toBe('36fe3503dcdac4348ba14a7ec079aec04c62de275e0065f761c7bbd19e7b3f82')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('18297fe251b2b43c2ba1402697bd81f12b984d13307a666e9c9f48ebb4b36a49')
+            .toBe('b9ad62db3c944d54b71c9e0755a229004d1f9a7255b08f73ecc80f59c0181310')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('799f0a3a4d327959d1d3afbc0992a031fb87236512d10be5241d3035425a0b97')
+            .toBe('252df34773424a7ed2b34230d9d7ae14d87be38bb06ca1d04f30c16a87ffb669')
     })
 })

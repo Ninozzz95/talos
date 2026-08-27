@@ -585,8 +585,22 @@ import { resolve } from 'node:path'
  * non al minimo esatto: e' la stessa regola gia' scritta piu' volte in
  * questo file — un margine di poche decine o centinaia di byte non e' un
  * margine, e' una trappola sotto la prossima riga.
+ *
+ * ⛔⛔⛔ 2026-08-27 — `artifact_create`, il tool degli artefatti HTML
+ * interattivi in chat: 618.023, ROSSO per 23 byte. Verificato PRIMA di
+ * alzare, non assunto — cercato nel chunk vero (`grep -c "artifact_create"
+ * dist/assets/index-*.js`) e trovate ESATTAMENTE le 4 occorrenze attese:
+ * `TALOS_TOOL_LABELS`, `TALOS_TOOL_LABEL_KEYS`, `TALOS_TOOL_ICONS`,
+ * `TALOS_DEFAULT_AGENT_TOOL_ENABLED` — gli stessi quattro catalogi eager che
+ * hanno spinto il tetto ogni volta finora (vedi `tool_create` sopra). Non
+ * codice del Forge ne' dell'Activity nativa: tre stringhe/chiavi corte per
+ * un tool reale, la stessa fuga strutturale che questo file gia' documenta
+ * come non spostabile — quei catalogi servono PRIMA che qualunque tool
+ * giri, per mostrare l'attivita' nella lista messaggi. Rialzato a 620.000,
+ * non al minimo esatto: stesso margine di poche centinaia di byte gia'
+ * praticato sopra, non una trappola sotto la prossima riga.
  */
-const DEFAULT_MAXIMUM_BYTES = 618_000
+const DEFAULT_MAXIMUM_BYTES = 620_000
 const DEFAULT_MAXIMUM_CSS_BYTES = 220_000
 const DYNAMIC_BOUNDARIES = [
     {

@@ -77,6 +77,12 @@ export const TALOS_TOOL_SECURITY: Readonly<Record<TalosAgentToolId, TalosToolSec
     web_search: { risk: 'R2', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true, sempreConsentibile: true },
     web_read: { risk: 'R2', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true },
     document_create: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    // ⛔ Owner 2026-08-27: canTransmit resta false per un motivo VERO, non
+    // per omissione — l'HTML gira in TalosArtifactActivity con
+    // `connect-src 'none'`, verificato sul Pad (`fetch` blocca davvero).
+    // readsPrivateData true per lo stesso motivo di document_create: il
+    // modello può incorporare contenuto della conversazione nell'HTML.
+    artifact_create: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
     generate_image: { risk: 'R2', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: true },
     library_export: { risk: 'R2', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
     library_rename: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },

@@ -56,10 +56,15 @@ const comandi = {
     apri: async (_c: string, _v: Record<string, string>, _p: string): Promise<boolean> => true,
     impostazioni: async (_azione: string): Promise<boolean> => true,
     mandaFile: async (_id: string, _dove: Record<string, string>): Promise<boolean> => true,
+    // ⛔ owner 2026-08-27, artefatto HTML: TalosArtifactActivity può
+    // rifiutarsi di aprirsi (dispositivo senza MULTI_PROFILE/MULTI_PROCESS,
+    // fail-closed) — un finto SEMPRE-vero non proverebbe mai quel ramo.
+    apriArtefatto: async (_id: string): Promise<boolean> => true,
     commutati: [] as Array<[string, boolean]>,
     aperti: [] as Array<[string, Record<string, string>, string]>,
     schermate: [] as string[],
     fileMandati: [] as Array<[string, Record<string, string>]>,
+    artefattiAperti: [] as string[],
 }
 
 vi.mock('@/lib/tools/schedaComandi', () => ({
@@ -78,6 +83,10 @@ vi.mock('@/lib/tools/schedaComandi', () => ({
     talosMandaFileDaScheda: async (id: string, dove: Record<string, string>) => {
         comandi.fileMandati.push([id, dove])
         return comandi.mandaFile(id, dove)
+    },
+    talosApriArtefattoDaScheda: async (id: string) => {
+        comandi.artefattiAperti.push(id)
+        return comandi.apriArtefatto(id)
     },
 }))
 
@@ -135,6 +144,8 @@ beforeEach(() => {
     comandi.mandaFile = async () => true
     comandi.schermate = []
     comandi.fileMandati = []
+    comandi.apriArtefatto = async () => true
+    comandi.artefattiAperti = []
 })
 
 describe('TalosMobileSchedaAzione', () => {
@@ -911,5 +922,52 @@ describe('⭐⭐⭐ la scheda "creati" — più voci nella stessa card', () => {
     it('⛔ un elenco VUOTO non disegna nessuna scheda', () => {
         const w = conVoci([])
         expect(w.find('[data-testid="talos-scheda-azione"]').exists()).toBe(false)
+    })
+})
+
+/**
+ * ⭐⭐⭐ L'ARTEFATTO HTML — owner 2026-08-27, «creare artefatti con schemi
+ * avanzati e interagibili in chat, come fa ChatGPT: spirografi,
+ * simulazioni». Il tocco NON naviga: chiama `talosApriArtefattoDaScheda`,
+ * che lancia `TalosArtifactActivity` (WebView e profilo separati,
+ * verificato sul Pad a non avere accesso al ponte Capacitor né alla rete).
+ * Qui si prova solo il contratto della card, tramite `comandi.artefattiAperti`/
+ * `comandi.apriArtefatto` — lo stesso finto condiviso di `schedaComandi`
+ * dichiarato in testa al file, non un secondo `vi.mock` per lo stesso modulo.
+ */
+describe('⭐⭐⭐ la scheda "artefatto" — apre una WebView isolata, non una rotta', () => {
+    const conArtefatto = () => mount(TalosMobileSchedaAzione, {
+        props: {
+            metadata: { cards: [{ tipo: 'artefatto', titolo: 'Spirograph', id: 'a1b2c3' }] },
+        },
+    })
+
+    it('è un bottone col titolo e il chevron, non un riquadro muto', () => {
+        const w = conArtefatto()
+        const riga = w.get('[data-testid="talos-scheda-artefatto"]')
+        expect(riga.element.tagName).toBe('BUTTON')
+        expect(riga.text()).toContain('Spirograph')
+        expect(riga.text()).toContain('›')
+    })
+
+    it('⛔ il tocco chiama talosApriArtefattoDaScheda con l\'id, non un router.push', async () => {
+        const w = conArtefatto()
+        await w.get('[data-testid="talos-scheda-artefatto"]').trigger('click')
+        await respiro(w)
+        expect(comandi.artefattiAperti).toEqual(['a1b2c3'])
+    })
+
+    /*
+     * ⛔ Verso contrario: `TalosArtifactActivity` rifiuta di aprirsi
+     * (dispositivo senza MULTI_PROFILE/MULTI_PROCESS — fail-closed, mai un
+     * downgrade silenzioso) e la persona deve VEDERLO, non restare davanti
+     * a un tocco che non ha fatto niente.
+     */
+    it('⛔⛔ se l\'apertura è rifiutata, lo dice a schermo', async () => {
+        comandi.apriArtefatto = async () => false
+        const w = conArtefatto()
+        await w.get('[data-testid="talos-scheda-artefatto"]').trigger('click')
+        await respiro(w)
+        expect(w.get('[data-testid="talos-scheda-artefatto"]').text()).toContain('Non si è aperta')
     })
 })
