@@ -60,16 +60,22 @@ export function createSessionRegistry({
    */
   function avviaESegui({
     sessionId = randomUUID(), taskId, cartella, task, comandoProva, messaggiIniziali,
-    forkDa = null, voceEsistente = null,
+    forkDa = null, voceEsistente = null, mobile = false,
   }) {
     if (typeof chiave !== 'string' || chiave.length === 0) {
       return { erroreAvvio: 'Chiave API non configurata sul server (OPENROUTER_API_KEY)', code: 'CONFIG_INVALID' };
     }
 
     const controller = new AbortController();
+    /*
+     * ⛔ `mobile` entra nella voce SOLO quando se ne crea una nuova — un
+     * resume (`voceEsistente` presente) la riusa com'era, mai sovrascritta:
+     * la "mobilità" di una sessione si decide una volta sola, all'avvio
+     * (piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 3).
+     */
     const voce = voceEsistente ?? {
       eventi: [], ascoltatori: new Set(), taskId, cartella, task, comandoProva, forkDa,
-      avviataAlle: clock().toISOString(), messaggiFinali: null,
+      avviataAlle: clock().toISOString(), messaggiFinali: null, mobile,
     };
     voce.controller = controller;
     voce.conclusa = false;
@@ -83,6 +89,7 @@ export function createSessionRegistry({
     avviaSessioneFn({
       cartella, task, modello, chiave, comandoProva, messaggiIniziali,
       segnaleStop: controller.signal,
+      mobile: voce.mobile,
       onEvento: (evento) => broadcast(voce, evento),
     }).then((risultato) => {
       /*
@@ -117,7 +124,7 @@ export function createSessionRegistry({
      * un throw: un id fuori allowlist o una chiave assente sono risposte
      * attese di un endpoint HTTP, non un guasto del registro.
      */
-    avvia(taskId) {
+    avvia(taskId, { mobile = false } = {}) {
       let preparato;
       try {
         preparato = preparaEsecuzioneFn(taskId);
@@ -126,7 +133,7 @@ export function createSessionRegistry({
         throw errore;
       }
       return avviaESegui({
-        taskId, cartella: preparato.cartella, task: preparato.task, comandoProva: preparato.comandoProva,
+        taskId, cartella: preparato.cartella, task: preparato.task, comandoProva: preparato.comandoProva, mobile,
       });
     },
 
@@ -161,7 +168,7 @@ export function createSessionRegistry({
       return avviaESegui({
         taskId: originale.taskId, cartella: originale.cartella, task: originale.task,
         comandoProva: originale.comandoProva, messaggiIniziali: originale.messaggiFinali,
-        forkDa: sessionIdOrigine,
+        forkDa: sessionIdOrigine, mobile: originale.mobile,
       });
     },
 
@@ -266,7 +273,7 @@ export function createSessionRegistry({
       }
       voce.conclusa = false;
       eseguiComandoDirettoFn({
-        cartella: voce.cartella, comando, onEvento: (evento) => broadcast(voce, evento),
+        cartella: voce.cartella, comando, mobile: voce.mobile, onEvento: (evento) => broadcast(voce, evento),
       }).catch((errore) => {
         if (!voce.conclusa) {
           broadcast(voce, { type: 'RunError', message: errore instanceof Error ? errore.message : String(errore), code: 'internal-error' });

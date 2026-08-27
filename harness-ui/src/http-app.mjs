@@ -193,15 +193,31 @@ function leggiCorpoJson(req, limiteByte = MAX_REQUEST_BODY_BYTES) {
   });
 }
 
-/** ⛔ Un'allowlist di UNA chiave sola: {taskId}, niente altro — mai modello/chiave dal client, vedi createHttpApp. */
+/**
+ * ⛔ Un'allowlist di due chiavi al massimo: `taskId` (sempre) e `client`
+ * (opzionale) — mai modello/chiave dal client, vedi createHttpApp.
+ *
+ * Piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 3 (§3.2 del
+ * prompt): `client` distingue una sessione avviata dal telefono da una
+ * avviata sul PC. Un parametro esplicito nella richiesta, non un'euristica
+ * sullo User-Agent (più onesto, come richiesto dal prompt originale) —
+ * assente o `'desktop'` è il comportamento di SEMPRE, `'mobile'` è l'unico
+ * valore che cambia qualcosa (vedi session-registry.avvia).
+ */
 function requireTaskIdBody(body) {
   const chiavi = Object.keys(body ?? {});
-  if (chiavi.length !== 1 || chiavi[0] !== 'taskId' || typeof body.taskId !== 'string' || body.taskId.length === 0) {
-    const errore = new Error('Corpo non valido: atteso {taskId}');
+  const haCliente = chiavi.includes('client');
+  const chiaviAttese = haCliente ? 2 : 1;
+  if (
+    chiavi.length !== chiaviAttese || !chiavi.includes('taskId')
+    || typeof body.taskId !== 'string' || body.taskId.length === 0
+    || (haCliente && body.client !== 'desktop' && body.client !== 'mobile')
+  ) {
+    const errore = new Error('Corpo non valido: atteso {taskId} o {taskId, client}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
-  return body.taskId;
+  return { taskId: body.taskId, mobile: body.client === 'mobile' };
 }
 
 /** ⛔ Un'allowlist di UNA chiave sola, come requireTaskIdBody — la validazione FINE del nome (trim, 1-80) resta in session-registry.rinomina(), qui si controlla solo la FORMA del corpo. */
@@ -309,8 +325,8 @@ export function createHttpApp({
       try {
         requireNoQuery(url);
         const corpo = await leggiCorpoJson(req);
-        const taskId = requireTaskIdBody(corpo);
-        const esito = sessionRegistry.avvia(taskId);
+        const { taskId, mobile } = requireTaskIdBody(corpo);
+        const esito = sessionRegistry.avvia(taskId, { mobile });
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
           errore.code = esito.code;
