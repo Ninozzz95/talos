@@ -25,6 +25,7 @@ const API_ERROR_CODES = new Set([
   'NOT_FOUND',
   'TASK_NOT_ALLOWED',
   'SESSION_NOT_READY',
+  'AUTOMATION_INVALID',
   'INTERNAL_ERROR',
 ]);
 
@@ -41,6 +42,8 @@ const STATUS_BY_CODE = Object.freeze({
   TASK_NOT_ALLOWED: 404,
   /** ⭐ 409 Conflict: la sessione origine esiste ma non è nello stato giusto per un fork (ancora in corso, o senza storia). */
   SESSION_NOT_READY: 409,
+  /** ⭐ 27/8 — un tetto duro dell'automazione violato (intervallo/limite fuori range) è un errore di CONTENUTO, non di forma: stesso status di ROW_INVALID. */
+  AUTOMATION_INVALID: 422,
   INTERNAL_ERROR: 500,
 });
 
@@ -56,6 +59,7 @@ const MESSAGE_BY_CODE = Object.freeze({
   NOT_FOUND: 'Risorsa non trovata',
   TASK_NOT_ALLOWED: 'Task non ammesso',
   SESSION_NOT_READY: 'Sessione non pronta per questa azione',
+  AUTOMATION_INVALID: 'Parametri automazione non validi',
   INTERNAL_ERROR: 'Errore interno',
 });
 
@@ -251,6 +255,41 @@ function requireCustomTaskBody(body) {
   };
 }
 
+/**
+ * ⭐ 27/8 — corpo di POST /api/v1/automations: {taskId, nome?,
+ * intervalloMinuti, limiteAlGiorno?}. Solo la FORMA (tipi, chiavi
+ * ammesse) — i tetti duri (intervallo minimo, limite massimo) restano
+ * validati in automation-store.crea(), l'unico posto che li dichiara.
+ */
+function requireAutomationCreateBody(body) {
+  const AMMESSE = ['taskId', 'nome', 'intervalloMinuti', 'limiteAlGiorno'];
+  const chiavi = Object.keys(body ?? {});
+  const soloAmmesse = chiavi.length > 0 && chiavi.every((k) => AMMESSE.includes(k))
+    && chiavi.includes('taskId') && chiavi.includes('intervalloMinuti');
+  if (!soloAmmesse || typeof body.taskId !== 'string' || typeof body.intervalloMinuti !== 'number') {
+    const errore = new Error('Corpo non valido: atteso {taskId, intervalloMinuti, nome?, limiteAlGiorno?}');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  return {
+    taskId: body.taskId,
+    nome: typeof body.nome === 'string' ? body.nome : undefined,
+    intervalloMinuti: body.intervalloMinuti,
+    limiteAlGiorno: typeof body.limiteAlGiorno === 'number' ? body.limiteAlGiorno : undefined,
+  };
+}
+
+/** ⛔ Un'allowlist di UNA chiave sola: {attiva}, un booleano — niente altro. */
+function requireAutomationToggleBody(body) {
+  const chiavi = Object.keys(body ?? {});
+  if (chiavi.length !== 1 || chiavi[0] !== 'attiva' || typeof body.attiva !== 'boolean') {
+    const errore = new Error('Corpo non valido: atteso {attiva: boolean}');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  return body.attiva;
+}
+
 /** ⛔ Un'allowlist di UNA chiave sola, come requireTaskIdBody — la validazione FINE del nome (trim, 1-80) resta in session-registry.rinomina(), qui si controlla solo la FORMA del corpo. */
 function requireNomeBody(body) {
   const chiavi = Object.keys(body ?? {});
@@ -293,7 +332,7 @@ function scriviEventoSse(res, evento) {
  */
 export function createHttpApp({
   campaignService, staticHandler, sessionRegistry = null, listaTaskDisponibili = () => [],
-  elencaCartelleProgetto = () => [], clock = () => new Date(),
+  elencaCartelleProgetto = () => [], automationStore = null, clock = () => new Date(),
 }) {
   async function handle(req, res) {
     if (req.aborted || res.destroyed) return;
@@ -362,6 +401,78 @@ export function createHttpApp({
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ sessionId: esito.sessionId }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    /*
+     * ⭐⭐⭐ 27/8 — blocco 7 (Automazioni), la vera schedulazione. Owner:
+     * "hai il mio via libera". Tre rotte, stesso stile POST-per-azione già
+     * in uso ovunque in questo file (mai un vero DELETE HTTP, coerenza
+     * prima di purezza REST).
+     */
+    if (method === 'POST' && automationStore && url.pathname === '/api/v1/automations') {
+      try {
+        requireNoQuery(url);
+        const corpo = await leggiCorpoJson(req);
+        const richiesta = requireAutomationCreateBody(corpo);
+        const voce = await automationStore.crea(richiesta);
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope(voce, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    const automationToggleMatch = method === 'POST' && automationStore
+      && /^\/api\/v1\/automations\/([^/]+)\/toggle$/.exec(url.pathname);
+    if (automationToggleMatch) {
+      try {
+        requireNoQuery(url);
+        let automationId;
+        try {
+          automationId = decodeURIComponent(automationToggleMatch[1]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const corpo = await leggiCorpoJson(req);
+        const attivaValore = requireAutomationToggleBody(corpo);
+        const voce = await automationStore.imposta(automationId, attivaValore);
+        if (!voce) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope(voce, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    const automationEliminaMatch = method === 'POST' && automationStore
+      && /^\/api\/v1\/automations\/([^/]+)\/elimina$/.exec(url.pathname);
+    if (automationEliminaMatch) {
+      try {
+        requireNoQuery(url);
+        let automationId;
+        try {
+          automationId = decodeURIComponent(automationEliminaMatch[1]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const corpo = await leggiCorpoJson(req);
+        if (Object.keys(corpo ?? {}).length !== 0) {
+          const errore = new Error('Corpo non valido: atteso {}'); errore.code = 'QUERY_INVALID'; throw errore;
+        }
+        await automationStore.elimina(automationId);
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
@@ -554,6 +665,9 @@ export function createHttpApp({
         requireNoQuery(url);
         /* ⭐ 27/8 — le cartelle libere ammesse (TALOS_HARNESS_UI_PROJECT_DIRS): mai il percorso assoluto, solo id/nome — vedi custom-task.mjs. */
         data = { items: elencaCartelleProgetto() };
+      } else if (url.pathname === '/api/v1/automations') {
+        requireNoQuery(url);
+        data = { items: automationStore ? await automationStore.elenca() : [] };
       } else if (url.pathname === '/api/v1/sessions') {
         requireNoQuery(url);
         /* ⛔ Elenco vuoto, non un errore, se sessionRegistry non è configurato — stesso principio già seguito per le altre rotte di sessione. */

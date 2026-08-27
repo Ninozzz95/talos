@@ -304,6 +304,7 @@
     resetEmbeddedTopbarScroll(view === 'chat' ? chatConversation : target);
     window.__talosHarnessHostViewChange?.(view);
     if (view === 'dashboard') ensureCampaignBoard();
+    if (view === 'automations') renderAutomationsReali();
   }
 
   function syncInspectorToggle() {
@@ -2017,6 +2018,136 @@
   }
 
   /**
+   * ⭐⭐⭐ 27/8 — blocco 7, la vera schedulazione. Owner: "hai il mio via
+   * libera". Sostituisce la riga demo statica ("Weekly dependency audit",
+   * "Lun 08:00" — mai esistita davvero) con l'elenco VERO da
+   * GET /api/v1/automations, e nasconde il badge della vista appena ne
+   * esiste almeno una — stesso principio già usato per #sessionsPanel.
+   */
+  async function renderAutomationsReali() {
+    const contenitore = $('#automationListReal');
+    if (!contenitore) return;
+    let elenco;
+    try {
+      elenco = (await apiGet('/api/v1/automations')).items;
+    } catch {
+      return; // ⛔ un refresh fallito non è un'azione richiesta, non merita un toast
+    }
+    if (elenco.length > 0) {
+      const demoBadge = $('.demo-surface-badge', $('[data-view="automations"]'));
+      if (demoBadge) demoBadge.hidden = true;
+    }
+    const pezzi = elenco.map((automazione) => {
+      const article = document.createElement('article');
+      article.className = 'automation-row';
+      const iconWrap = document.createElement('div');
+      iconWrap.className = 'automation-icon';
+      iconWrap.innerHTML = icon(automazione.attiva ? 'i-clock' : 'i-history');
+      const testo = document.createElement('div');
+      const stato = automazione.attiva
+        ? `attiva · ogni ${automazione.intervalloMinuti} min · max ${automazione.limiteAlGiorno}/giorno · prossima ${formattaOraSessione(automazione.prossimaEsecuzione)}`
+        : `in pausa · ogni ${automazione.intervalloMinuti} min · max ${automazione.limiteAlGiorno}/giorno`;
+      testo.append(textElement('strong', '', automazione.nome), textElement('small', '', stato));
+      const chip = document.createElement('span');
+      chip.className = `status-chip${automazione.attiva ? ' success' : ''}`;
+      chip.textContent = automazione.attiva ? 'Attiva' : 'Pausa';
+      const toggleBtn = document.createElement('button');
+      toggleBtn.className = 'secondary-btn compact';
+      toggleBtn.textContent = automazione.attiva ? 'Pausa' : 'Attiva';
+      toggleBtn.addEventListener('click', async () => {
+        try {
+          await apiPost(`/api/v1/automations/${encodeURIComponent(automazione.id)}/toggle`, { attiva: !automazione.attiva });
+          toast(automazione.attiva ? 'Automazione in pausa' : 'Automazione attivata', automazione.nome);
+          renderAutomationsReali();
+        } catch (error) {
+          toast('Operazione non riuscita', error.message);
+        }
+      });
+      const eliminaBtn = document.createElement('button');
+      eliminaBtn.className = 'secondary-btn compact';
+      eliminaBtn.textContent = 'Elimina';
+      eliminaBtn.addEventListener('click', async () => {
+        try {
+          await apiPost(`/api/v1/automations/${encodeURIComponent(automazione.id)}/elimina`, {});
+          toast('Automazione eliminata', automazione.nome);
+          renderAutomationsReali();
+        } catch (error) {
+          toast('Operazione non riuscita', error.message);
+        }
+      });
+      article.append(iconWrap, testo, chip, toggleBtn, eliminaBtn);
+      return article;
+    });
+    contenitore.replaceChildren(...pezzi);
+  }
+
+  /** Il foglio "Nuova automazione": task dal corpus + intervallo + limite giornaliero, gli stessi tetti duri validati anche lato server. */
+  async function openNewAutomationSheet() {
+    sheetEyebrow.textContent = 'Automazioni';
+    sheetTitle.textContent = 'Nuova automazione';
+    sheetBody.replaceChildren(textElement('p', 'board-empty', 'Carico l’elenco dal server…'));
+    showEmbeddedDialog(sheetDialog);
+
+    let tasks;
+    try {
+      tasks = (await apiGet('/api/v1/tasks')).items;
+    } catch (error) {
+      sheetBody.replaceChildren(textElement('p', 'board-empty', `Elenco non disponibile: ${error.message}`));
+      return;
+    }
+
+    const form = document.createElement('form');
+    form.className = 'sheet-section';
+    form.appendChild(textElement('span', 'sheet-label', 'Task del corpus'));
+    const selectTask = document.createElement('select');
+    selectTask.className = 'sheet-input';
+    for (const task of tasks) {
+      const opzione = document.createElement('option');
+      opzione.value = task.id;
+      opzione.textContent = `${task.id} · difficoltà ${task.difficolta}`;
+      selectTask.appendChild(opzione);
+    }
+    form.appendChild(selectTask);
+    form.appendChild(textElement('span', 'sheet-label', 'Ogni quanti minuti'));
+    const inputIntervallo = document.createElement('input');
+    inputIntervallo.className = 'sheet-input';
+    inputIntervallo.type = 'number';
+    inputIntervallo.min = '5';
+    inputIntervallo.value = '30';
+    form.appendChild(inputIntervallo);
+    form.appendChild(textElement('span', 'sheet-label', 'Massimo esecuzioni al giorno'));
+    const inputLimite = document.createElement('input');
+    inputLimite.className = 'sheet-input';
+    inputLimite.type = 'number';
+    inputLimite.min = '1';
+    inputLimite.max = '10';
+    inputLimite.value = '3';
+    form.appendChild(inputLimite);
+    form.appendChild(textElement('small', 'sheet-hint', 'Nasce sempre in pausa: la attivi tu dall\'elenco quando vuoi che parta da sola.'));
+    const submit = document.createElement('button');
+    submit.type = 'submit';
+    submit.className = 'primary-btn compact full';
+    submit.textContent = 'Crea automazione';
+    form.appendChild(submit);
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      try {
+        await apiPost('/api/v1/automations', {
+          taskId: selectTask.value,
+          intervalloMinuti: Number(inputIntervallo.value),
+          limiteAlGiorno: Number(inputLimite.value),
+        });
+        closeEmbeddedDialog(sheetDialog);
+        toast('Automazione creata', 'In pausa — attivala dall\'elenco quando vuoi.');
+        renderAutomationsReali();
+      } catch (error) {
+        toast('Creazione non riuscita', error.message);
+      }
+    });
+    sheetBody.replaceChildren(form);
+  }
+
+  /**
    * ⭐ Il foglio "Avvia un task dal corpus". Adattato dall'originale
    * desktop: il metodo nativo bloccante del dialog sostituito con
    * `showEmbeddedDialog`/`closeEmbeddedDialog` (già usati da openSheet),
@@ -2511,6 +2642,11 @@
     // MOBILE-HONESTY-01, stesso principio applicato qui).
     if (action === 'run' && button.dataset.taskId && !HOST().classList.contains('talos-embedded')) {
       startRealSession({ id: button.dataset.taskId });
+      return;
+    }
+    // ⭐ 27/8 — "Nuova automazione" apre il vero form (blocco 7, via libera dell'owner), non più un toast che finge.
+    if (action === 'new' && !HOST().classList.contains('talos-embedded')) {
+      openNewAutomationSheet();
       return;
     }
     const labels = { new: ['Nuova automazione', 'Il mockup rappresenta il flusso senza backend.'], run: ['Run avviato', 'Il mockup rappresenta il flusso senza backend.'], edit: ['Automazione aperta', 'Il mockup rappresenta il flusso senza backend.'] };
