@@ -1041,11 +1041,20 @@ export interface SettingsStore {
     /** Owner 2026-07-25: what the model may do without asking. */
     setToolPermissions(patch: Partial<TalosToolPermissions>): Promise<void>
     setAgentToolEnabled(tool: TalosAgentToolId, enabled: boolean): Promise<void>
+    /**
+     * ⛔ 2026-08-27: `tool` era `TalosAgentToolId` — un tool forgiato
+     * (`dynamic:*`) non può mai esserlo per costruzione, quindi "Consenti
+     * sempre" falliva sempre per un tool del Forge. Allargato a `string`,
+     * validato a runtime da `isTalosAuthorizableToolName` dentro
+     * `applyTalosToolAuthorizationGrant`/`revokeTalosToolAuthorizationGrant`
+     * — vedi il commento su quella funzione per il perché non si allarga
+     * l'enum `TalosAgentToolId` stesso.
+     */
     grantToolAuthorization(
-        tool: TalosAgentToolId,
+        tool: string,
         actions: readonly TalosToolAction[],
     ): Promise<void>
-    revokeToolAuthorization(tool: TalosAgentToolId): Promise<void>
+    revokeToolAuthorization(tool: string): Promise<void>
     setSearchPreferences(patch: Partial<TalosMobileSearchPreferences>): Promise<void>
     setResearchModels(patch: Partial<TalosResearchModelPreferences>): Promise<void>
     setTone(preset: TalosToneId): Promise<void>

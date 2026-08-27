@@ -207,4 +207,11 @@ export const TALOS_AGENT_TOOL_CONTROLS = Object.freeze([
      */
     { id: 'calendar_read', group: 'personal', actions: ['read'] },
     { id: 'calendar_write', group: 'personal', actions: ['write'] },
+    // Crea un ARTEFATTO nuovo (un tool), non un contenuto per la persona —
+    // gruppo 'create' come document_create/generate_image (il pannello
+    // raggruppa per `group`, non per posizione nell'elenco: qui sta
+    // ALLA FINE per combaciare con l'ordine reale in `toolset.ts`, dove
+    // vive appena prima dei tool forgiati — l'ultimo innesto prima del
+    // Forge, coerente con "un utente finale crea un tool con questo".
+    { id: 'tool_create', group: 'create', actions: ['write'] },
 ] as const satisfies readonly TalosAgentToolControl[])

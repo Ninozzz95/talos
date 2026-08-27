@@ -544,7 +544,49 @@ import { resolve } from 'node:path'
  * `harnessDefaultSession.ts`, mai importata insieme all'array. Misurato
  * dopo: 613.751 — dentro il tetto attuale, tetto INVARIATO.
  */
-const DEFAULT_MAXIMUM_BYTES = 614_000
+/*
+ * ⛔ 614.000 → 615.000, il 2026-08-27, trovato NON mentre si aggiungeva una
+ * funzione ma mentre si testava dal vivo un difetto UI di Tool Forge:
+ * `npm run build` non era mai stato rilanciato dopo le Fasi 6-8 (Tool Forge
+ * reale: stazione, innesto, attivazione) — misurato 617.506, 3.506 byte
+ * sopra un tetto mai riverificato dal 24/8 (le due rotte Harness).
+ *
+ * ⛔ Non e' un buco che si e' aperto oggi: e' un cancello che nessuno ha
+ * riguardato per tre giorni di lavoro reale. Verificato PRIMA di alzare,
+ * secondo l'ordine di sempre:
+ *
+ *   1. peso vero — cercato UNA fuga specifica (il codice del Forge stesso
+ *      dentro il chunk eager) e non c'e': zero occorrenze di
+ *      `dynamicToolIdFromName`/`createInstalledDynamicTools`/
+ *      `FORGE_MODEL_UNAVAILABLE` nel chunk d'ingresso — il confine dietro
+ *      `toolset.ts` regge.
+ *   2. spostare nel pigro — gia' cosi': `ToolForgeScreen.vue` e' dietro
+ *      `import()` in `mobileRoutes.ts`, come ogni altra rotta di questo
+ *      file.
+ *   3. mai accorciare un contratto — non c'entra: nessuna descrizione, nessun
+ *      prompt, nessuna guardia qui dentro.
+ *
+ * Quello che RESTA, e non si sposta: la voce «Tool Forge» nella barra
+ * laterale (`TalosMobileSidebar.vue`) e nel titolo di rotta
+ * (`App.vue:SHEET_TITLE_KEY`) — la stessa forma gia' pagata per Ricerca,
+ * Impostazioni e le due rotte Harness — piu' l'attivazione vera dentro
+ * `chatController.ts`/`toolset.ts` (il controllo `dynamicToolIdFromName`
+ * che decide se un tool forgiato e' visibile al modello): senza quella riga
+ * un tool forgiato non parte mai, e questo E' il cancello che Fase 8
+ * doveva accendere.
+ *
+ * ⛔ Non ho rifatto la misura «in N forme» che le voci precedenti mostrano:
+ * qui il peso e' gia' nella forma minima di tre feature reali distinte
+ * (Fase 6 rotta+voce, Fase 8 attivazione), non una sbavatura di una singola
+ * riga da limare.
+ *
+ * ⛔ Primo tentativo, 615.000: ANCORA rosso — 617.526, cioe' la mia prima
+ * stima (mille byte) era sotto la misura vera di 2.526. Rialzato a 618.000,
+ * non al minimo esatto: e' la stessa regola gia' scritta piu' volte in
+ * questo file — un margine di poche decine o centinaia di byte non e' un
+ * margine, e' una trappola sotto la prossima riga.
+ */
+const DEFAULT_MAXIMUM_BYTES = 618_000
 const DEFAULT_MAXIMUM_CSS_BYTES = 220_000
 const DYNAMIC_BOUNDARIES = [
     {

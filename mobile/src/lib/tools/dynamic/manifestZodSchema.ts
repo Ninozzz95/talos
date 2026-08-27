@@ -113,13 +113,17 @@ const forgeNodeSchema: z.ZodType<ForgeNode> = z.lazy(() => z.discriminatedUnion(
     z.strictObject({ id: z.string(), type: z.literal('fail'), code: z.string(), message: z.string() }),
 ]))
 
-const forgeFlowSchema = z.strictObject({
+// ⛔ 2026-08-27 — esportati (erano privati al modulo): `forgeCreateTool.ts`
+// li riusa TALI E QUALI per lo schema d'ingresso del tool che crea tool,
+// invece di duplicare la grammatica del DSL una seconda volta. Se il DSL
+// cambia, cambia in un solo posto e i due schemi non possono divergere.
+export const forgeFlowSchema = z.strictObject({
     entry: z.string(),
     maxTransitions: z.number(),
     nodes: z.array(forgeNodeSchema),
 })
 
-const jsonSchemaSubsetSchema: z.ZodType<JsonSchemaSubset> = z.lazy(() => z.strictObject({
+export const jsonSchemaSubsetSchema: z.ZodType<JsonSchemaSubset> = z.lazy(() => z.strictObject({
     type: z.enum(['object', 'array', 'string', 'number', 'integer', 'boolean', 'null']).optional(),
     properties: z.record(z.string(), jsonSchemaSubsetSchema).optional(),
     required: z.array(z.string()).optional(),

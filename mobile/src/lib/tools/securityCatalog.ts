@@ -87,6 +87,13 @@ export const TALOS_TOOL_SECURITY: Readonly<Record<TalosAgentToolId, TalosToolSec
     local_models_search: { risk: 'R1', reversibility: 'read-only', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true },
     local_model_inspect: { risk: 'R1', reversibility: 'read-only', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true },
     local_model_download: { risk: 'R2', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true },
+    // ⛔ 2026-08-27 — un gradino più cauto di notes_create/tasks_create
+    // (R1): il "prodotto" di questa scrittura è esso stesso un futuro
+    // attore capace di altre scritture, non solo un dato. Resta comunque
+    // reversibile (si elimina dalla Stazione) e non tocca rete o dati
+    // privati — il tool creato parte SEMPRE disabilitato, un secondo
+    // cancello separato prima che possa fare qualunque cosa.
+    tool_create: { risk: 'R2', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
     local_models_status: { risk: 'R0', reversibility: 'read-only', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
     device_status: { risk: 'R0', reversibility: 'read-only', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
     /*

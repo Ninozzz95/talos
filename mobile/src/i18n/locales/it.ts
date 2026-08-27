@@ -1016,7 +1016,7 @@ export const TALOS_IT_MESSAGES = {
         // letta. La ragione è l'unica cosa che distingue le due.
         authorizationAlwaysUnavailable: '«Consenti sempre» non c’è per questa azione: non si può annullare, quindi resta una decisione da prendere ogni volta.',
         authorizationLater: 'Decidi più tardi',
-        authorizationFromChat: 'Richiesto da {title}',
+        authorizationFromChat: 'Richiesto da',
         pendingAuthorizationCount: '{count} in attesa',
         reviewAuthorizations: 'Controlla richieste strumenti ({count})',
         reviewToolActions: 'Controlla azioni degli strumenti ({count})',
@@ -1319,6 +1319,7 @@ export const TALOS_IT_MESSAGES = {
     },
     toolActivity: {
         toolDetails: 'Cerco come si fa',
+        toolCreate: 'Creo uno strumento personalizzato',
         // Cosa legge una PERSONA quando un tool non riesce. Il motivo vero è
         // scritto per il modello — vedi avvisoDiTool.ts — e non arriva qui.
         /*
@@ -1459,6 +1460,10 @@ export const TALOS_IT_MESSAGES = {
         notesCreate: {
             title: 'Scrivi una nota',
             description: 'Salva una nota nuova in questo spazio di lavoro locale, perché tu la rilegga.',
+        },
+        toolCreate: {
+            title: 'Crea uno strumento personalizzato',
+            description: 'Aggiunge un nuovo strumento che TALOS può usare da ora in poi, costruito da quanto appena descritto. Resta spento finché non lo accendi tu.',
         },
         notesUpdate: {
             title: 'Modifica una nota',
@@ -2795,6 +2800,7 @@ export const TALOS_IT_MESSAGES = {
             web_read: { title: 'Leggi una pagina web', description: 'Scarica una pagina e archivia una copia del testo leggibile.' },
             document_create: { title: 'Crea un documento', description: 'Crea e verifica un documento per questa conversazione.' },
             generate_image: { title: 'Genera un’immagine', description: 'Chiede al provider configurato di creare e salvare un’immagine.' },
+            tool_create: { title: 'Crea uno strumento personalizzato', description: 'Aggiunge un nuovo strumento che TALOS può usare da ora in poi, descritto in parole semplici invece che in JSON scritto a mano. Resta spento finché non lo accendi tu.' },
             library_export: { title: 'Salva un file della Libreria', description: 'Salva nella memoria del dispositivo un file scelto dalla Libreria.' },
             library_context_policy_update: { title: 'Gestisci la policy Libreria', description: 'Consente all’agente di proporre modifiche confermate alla policy Libreria globale, della chat o della singola risposta.' },
             local_models_search: { title: 'Trova modelli per questo telefono', description: 'Manda le tue parole a huggingface.co ed elenca i modelli che potrebbero girare qui.' },

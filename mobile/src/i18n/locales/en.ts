@@ -995,7 +995,13 @@ export const TALOS_EN_MESSAGES = {
         authorizationAlways: 'Always allow',
         authorizationAlwaysUnavailable: '“Always allow” is not offered for this action: it cannot be undone, so it stays a decision you make each time.',
         authorizationLater: 'Decide later',
-        authorizationFromChat: 'Requested by {title}',
+        // ⛔⛔ Owner 2026-08-27 — found live on device: `escapeParameter` is on
+        // across the app (src/i18n/index.ts), and interpolating a free-form
+        // chat title here rewrote its apostrophes to `&apos;`, visible verbatim
+        // because the three callers render this as plain text (`{{ }}`), never
+        // `v-html`. No placeholder: the title is concatenated OUTSIDE `t()`,
+        // same pattern as `TalosTaskScheduleFields.vue`'s `quando`.
+        authorizationFromChat: 'Requested by',
         pendingAuthorizationCount: '{count} pending',
         reviewAuthorizations: 'Review tool requests ({count})',
         reviewToolActions: 'Review tool actions ({count})',
@@ -1274,6 +1280,7 @@ export const TALOS_EN_MESSAGES = {
     },
     toolActivity: {
         toolDetails: 'Looking up how to do that',
+        toolCreate: 'Creating a custom tool',
         // What a PERSON is told when a tool fails. The reason itself is written
         // for the model — see avvisoDiTool.ts — and never reaches this screen.
         failedNotice: 'Did not work: {tool}.',
@@ -1390,6 +1397,10 @@ export const TALOS_EN_MESSAGES = {
         notesCreate: {
             title: 'Write a note',
             description: 'Save a new note in this local workspace, for you to read later.',
+        },
+        toolCreate: {
+            title: 'Create a custom tool',
+            description: 'Add a new tool TALOS can call from now on, built from what was just described. It stays off until you turn it on.',
         },
         notesUpdate: {
             title: 'Edit a note',
@@ -2721,6 +2732,7 @@ export const TALOS_EN_MESSAGES = {
             web_read: { title: 'Read a web page', description: 'Fetch one page and archive its readable snapshot.' },
             document_create: { title: 'Create a document', description: 'Create and verify a document for this conversation.' },
             generate_image: { title: 'Generate an image', description: 'Ask the configured image provider to create and save an image.' },
+            tool_create: { title: 'Create a custom tool', description: 'Add a new tool TALOS can call from now on, described in plain terms instead of hand-written JSON. It stays off until you turn it on.' },
             library_export: { title: 'Save a Library file', description: 'Save a user-selected Library file to device storage.' },
             library_context_policy_update: { title: 'Manage Library context policy', description: 'Let the agent propose confirmed global, chat, or single-response Library policy changes.' },
             local_models_search: { title: 'Find models for this phone', description: 'Send your words to huggingface.co and list models that could run here.' },

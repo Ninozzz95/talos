@@ -89,6 +89,100 @@ export const FASE8_CANDIDATES: Record<string, TalosLocalToolManifestV1> = {
             ],
         },
     },
+    /**
+     * ⛔ Owner 2026-08-27, un gradino più complesso — la richiesta
+     * dell'owner di provare tool via via più complessi, funzionalità E UI.
+     * I tre sopra erano tutti LINEARI (una sola strada dall'entry al
+     * return); questo è il primo che usa `if`/diramazione DAVVERO, con due
+     * rami che convergono, e il primo il cui input ha un campo booleano
+     * (mai provato prima come la scheda di consenso lo rende a schermo).
+     *
+     * Un limite REALE del DSL scoperto progettando questo: `if` non ha
+     * modo di CERCARE un elemento in un array per campo (`contains` fa
+     * `Object.is` sull'intero elemento, non un confronto per chiave), né
+     * di derivare un valore da una stringa (lunghezza, sottostringa) — un
+     * "if" valido nel DSL può solo diramare su un valore che il CHIAMANTE
+     * ha già deciso e passato come input, non su una ricerca o un calcolo
+     * fatto dentro il DAG stesso. Per questo il ramo vero/falso finisce su
+     * due nodi `tasks.create` quasi identici (l'unica differenza è il
+     * letterale `priority`), non su un unico nodo con un valore derivato.
+     */
+    priorityTask: {
+        schema: 'talos.local-tool.v1', id: 'priority-task', version: 1,
+        title: 'Priority task',
+        description: 'Creates a task at high priority when it\'s urgent, normal otherwise — one decision, no back-and-forth.',
+        createdAt: '2026-08-27T00:00:00.000Z', parentVersion: null,
+        execution: 'declarative-flow', installScope: 'device',
+        network: { mode: 'forbidden', domains: [] }, credentialRequirements: [],
+        inputSchema: {
+            type: 'object',
+            properties: { title: { type: 'string' }, urgent: { type: 'boolean' } },
+            required: ['title', 'urgent'],
+        },
+        flow: {
+            entry: 'check', maxTransitions: 8,
+            nodes: [
+                { id: 'check', type: 'if', condition: { left: { $ref: '$.input.urgent' }, op: 'truthy' }, then: 'high', else: 'normal' },
+                { id: 'high', type: 'capability', capability: 'tasks.create', input: { title: { $ref: '$.input.title' }, priority: 'high' }, target: '$.state.task', next: 'ret' },
+                { id: 'normal', type: 'capability', capability: 'tasks.create', input: { title: { $ref: '$.input.title' }, priority: 'normal' }, target: '$.state.task', next: 'ret' },
+                { id: 'ret', type: 'return', value: { $ref: '$.state.task' } },
+            ],
+        },
+    },
+    /**
+     * ⛔ Owner 2026-08-27, un gradino ANCORA più complesso: il primo
+     * `foreach` mai provato dal vivo (solo in unit test finora), e il
+     * primo input con un campo ARRAY — mai visto come la scheda di
+     * consenso reale lo rende a schermo.
+     */
+    bulkTasks: {
+        schema: 'talos.local-tool.v1', id: 'bulk-tasks', version: 1,
+        title: 'Bulk tasks',
+        description: 'Creates several tasks at once from a list of titles — one confirmation instead of one per item.',
+        createdAt: '2026-08-27T00:00:00.000Z', parentVersion: null,
+        execution: 'declarative-flow', installScope: 'device',
+        network: { mode: 'forbidden', domains: [] }, credentialRequirements: [],
+        inputSchema: {
+            type: 'object',
+            properties: { titles: { type: 'array', items: { type: 'string' } } },
+            required: ['titles'],
+        },
+        flow: {
+            entry: 'loop', maxTransitions: 32,
+            nodes: [
+                {
+                    id: 'loop', type: 'foreach', source: { $ref: '$.input.titles' }, itemVar: 'title', maxItems: 20, next: 'ret',
+                    body: [{ type: 'capability', capability: 'tasks.create', input: { title: { $ref: '$.title' } } }],
+                },
+                { id: 'ret', type: 'return', value: { $ref: '$.input.titles' } },
+            ],
+        },
+    },
+    /**
+     * ⛔ Owner 2026-08-27 — il gradino che prova il CONFINE dichiarato
+     * onestamente in Fase 8: `toolset.ts` attiva i tool forgiati con
+     * `model: null` — nessun binding verso un runtime di modello reale
+     * ancora. Un tool con un nodo `llm` deve fallire PULITO
+     * (`FORGE_MODEL_UNAVAILABLE`), non restare silenziosamente rotto. Non
+     * un tool "in più": è la prova che il confine scritto nel piano è
+     * vero sul dispositivo, non solo in un commento.
+     */
+    summarizeNote: {
+        schema: 'talos.local-tool.v1', id: 'summarize-note', version: 1,
+        title: 'Summarize note',
+        description: 'Summarizes a piece of text down to its essential point using TALOS\'s own model.',
+        createdAt: '2026-08-27T00:00:00.000Z', parentVersion: null,
+        execution: 'declarative-flow', installScope: 'device',
+        network: { mode: 'forbidden', domains: [] }, credentialRequirements: [],
+        inputSchema: { type: 'object', properties: { content: { type: 'string' } }, required: ['content'] },
+        flow: {
+            entry: 'summarize', maxTransitions: 8,
+            nodes: [
+                { id: 'summarize', type: 'llm', op: 'summarize', input: { $ref: '$.input.content' }, target: '$.state.summary', next: 'ret' },
+                { id: 'ret', type: 'return', value: { $ref: '$.state.summary' } },
+            ],
+        },
+    },
 }
 
 describe('Fase 8 — i tre candidati sono REALMENTE validi, non solo progettati sulla carta', () => {

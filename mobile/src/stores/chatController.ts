@@ -31,7 +31,7 @@ import {
     talosToolConsentCopy,
     type TalosToolActivity,
 } from '@/lib/tools/toolLabels'
-import type { TalosAgentToolEnabled, TalosAgentToolId } from '@/lib/tools/toolControls'
+import type { TalosAgentToolEnabled } from '@/lib/tools/toolControls'
 import { talosLibrarySearchTerms } from '@/lib/librarySearchText'
 import { talosClassifyProviderEndpoint } from '@/lib/network/localEndpointPolicy'
 import { TalosUiError } from '@/i18n/uiErrors'
@@ -737,11 +737,14 @@ export interface ChatControllerDeps {
             patch: import('@/lib/chat/libraryPolicy').TalosLibraryContextPolicyPatch,
             expectedRevision: number,
         ): Promise<TalosLibraryContextPolicyV1>
+        // ⛔ 2026-08-27: `string`, non `TalosAgentToolId` — un tool forgiato
+        // deve poter ricevere "Consenti sempre" quanto un built-in. Vedi il
+        // commento gemello sull'interfaccia reale in `stores/settings.ts`.
         grantToolAuthorization(
-            tool: TalosAgentToolId,
+            tool: string,
             actions: readonly TalosToolAction[],
         ): Promise<void>
-        revokeToolAuthorization(tool: TalosAgentToolId): Promise<void>
+        revokeToolAuthorization(tool: string): Promise<void>
         /**
          * The permissions in force, which are not always the ones stored.
          *
