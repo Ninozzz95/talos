@@ -457,6 +457,43 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(runtime().realSessionState.usage).toBeNull()
     })
 
+    /*
+     * ⭐⭐⭐ 28/8 — owner: "tutti i tool come la generazione di artefatti".
+     * L'HTML entra SOLO come `srcdoc` di un iframe sandboxato: mai
+     * innerHTML sul documento reale, mai eseguito nel contesto della
+     * pagina — verificato leggendo gli attributi veri dell'elemento, non
+     * assunto dal solo fatto che la card compaia.
+     */
+    /*
+     * ⭐⭐⭐ 28/8, riscritto dopo la scoperta dal vivo: `srcdoc` EREDITA la
+     * CSP della pagina (script-src 'self' di questo bundle), quindi lo
+     * script di un artefatto non partiva mai — vedi la doc in
+     * artifact-store.mjs (harness-ui/src). La cura: `frame.src` punta a
+     * `/api/v1/artifacts/:id`, una risposta HTTP con la SUA CSP. Qui si
+     * prova SOLO che il frontend costruisca l'URL/gli attributi giusti —
+     * la risposta vera (e la sua CSP) è provata in http-app.test.mjs.
+     */
+    it('⭐⭐⭐ ARTIFACT-01 ArtifactCreated monta un iframe sandboxato con src verso /api/v1/artifacts/:id, MAI srcdoc', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ArtifactCreated', messageId: 'm1', id: 'a1', titolo: 'Spirografo' }, generation)
+
+        const frame = document.querySelector<HTMLIFrameElement>('#conversation .artifact-card-frame')
+        expect(frame).not.toBeNull()
+        expect(frame!.getAttribute('sandbox')).toBe('allow-scripts')
+        // ⛔ AL CONTRARIO del confine giusto: allow-same-origin/allow-top-navigation/allow-popups NON devono mai comparire nel valore.
+        expect(frame!.getAttribute('sandbox')).not.toMatch(/allow-same-origin|allow-top-navigation|allow-popups|allow-forms/)
+        expect(frame!.getAttribute('src')).toBe('/api/v1/artifacts/a1')
+        expect(frame!.getAttribute('srcdoc')).toBeNull()
+        expect(document.querySelector('#conversation .artifact-card-title')?.textContent).toBe('Spirografo')
+    })
+
+    it('⛔ AL CONTRARIO: ARTIFACT-02 senza titolo, la card mostra comunque un\'etichetta onesta, mai vuota', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ArtifactCreated', messageId: 'm2', id: 'a2', titolo: '' }, generation)
+
+        expect(document.querySelector('#conversation .artifact-card-title')?.textContent).toBe('Artefatto')
+    })
+
     it('REAL-SESSION-REVIEW-03 StateDelta SENZA "prima" (chiamante vecchio) resta onesto: nessun diff inventato, diffVero:false — verso contrario del test sopra', () => {
         const generation = runtime().realSessionState.generation
         runtime().handleRealEvent({
@@ -1123,10 +1160,58 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(FakeEventSource.instances.at(-1)?.url).toBe('/api/v1/sessions/sess-libero/events')
     })
 
+    /*
+     * ⛔ 28/8 — riscritto dopo la cura "la sessione non parte quando
+     * scrivo dal composer": submitPrompt() ora controlla QUANTE cartelle
+     * sono configurate prima di rifiutare (GET /api/v1/projects,
+     * asincrono) — con zero configurate (nessun mockFetch qui, stesso
+     * setup di prima) il rifiuto onesto resta identico, solo dopo un
+     * giro di eventi invece che subito.
+     */
     it('REAL-SESSION-TASKSHEET-03 senza una sessione pendente, il composer resta onesto (nessun campo compito nella modale a cui affidarsi)', async () => {
         const composerInput = document.querySelector<HTMLTextAreaElement>('#composerInput')!
         composerInput.value = 'qualcosa scritto senza mai aprire Nuova'
         document.querySelector<HTMLFormElement>('#composerForm')!.requestSubmit()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        expect(document.querySelector('#toastRegion')?.textContent).toContain('Nessuna sessione attiva')
+        expect(FakeEventSource.instances.length).toBe(0)
+    })
+
+    /*
+     * ⭐⭐⭐ 28/8, owner: "la sessione non parte quando scrivo semplicemente
+     * dal composer, devo per forza premere nuova sessione" — verso
+     * POSITIVO del test sopra: con ESATTAMENTE una cartella configurata,
+     * scrivere subito nel composer (senza mai aprire "Nuova") avvia
+     * DAVVERO una sessione, come un vero terminale con un solo cwd.
+     */
+    it('⭐⭐⭐ REAL-SESSION-COMPOSER-IMPLICIT-01 con UNA sola cartella configurata, scrivere subito nel composer avvia la sessione senza passare da "Nuova"', async () => {
+        mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: '0', nome: 'unico-progetto' }] } },
+            { metodo: 'POST', percorso: '/api/v1/sessions/custom', corpo: { sessionId: 'sess-implicita' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        const composerInput = document.querySelector<HTMLTextAreaElement>('#composerInput')!
+        composerInput.value = 'aggiungi una funzione di prova'
+        document.querySelector<HTMLFormElement>('#composerForm')!.requestSubmit()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        expect(FakeEventSource.instances.at(-1)?.url).toBe('/api/v1/sessions/sess-implicita/events')
+        expect(document.querySelector('#toastRegion')?.textContent ?? '').not.toContain('Nessuna sessione attiva')
+    })
+
+    /*
+     * ⛔ AL CONTRARIO: con PIÙ cartelle configurate l'ambiguità è reale —
+     * resta il rifiuto onesto di sempre, mai una scelta indovinata.
+     */
+    it('⛔ REAL-SESSION-COMPOSER-IMPLICIT-02 con PIÙ cartelle configurate, scrivere subito nel composer resta un rifiuto onesto — l\'ambiguità è vera', async () => {
+        mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: '0', nome: 'a' }, { id: '1', nome: 'b' }] } },
+        ])
+        const composerInput = document.querySelector<HTMLTextAreaElement>('#composerInput')!
+        composerInput.value = 'qualcosa'
+        document.querySelector<HTMLFormElement>('#composerForm')!.requestSubmit()
+        await new Promise((resolve) => setTimeout(resolve, 0))
 
         expect(document.querySelector('#toastRegion')?.textContent).toContain('Nessuna sessione attiva')
         expect(FakeEventSource.instances.length).toBe(0)
@@ -1200,5 +1285,74 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         await new Promise((r) => setTimeout(r, 0))
 
         expect(document.querySelector('.model-picker-list')?.textContent).toContain('rete giù')
+    })
+
+    /*
+     * ⭐⭐⭐ 28/8, owner: "nella modale della nuova sessione e nella pill del
+     * modello metti lo slider del selettore effort" — stesso schema di
+     * MODEL-PICKER-01 sopra: presenza del controllo, interazione,
+     * verifica che il valore viaggi DAVVERO nella POST.
+     */
+    it('⭐⭐⭐ EFFORT-PICKER-01 lo slider è nella modale accanto al model picker, e la scelta viaggia nella POST come reasoning.effort', async () => {
+        mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } },
+        ])
+        await runtime().openRealTaskSheet()
+
+        const range = document.querySelector<HTMLInputElement>('.effort-picker-range')!
+        expect(range).not.toBeNull()
+        expect(document.querySelector('.effort-picker-selected')?.textContent).toBe('Predefinito del server') // mai toccato ancora
+
+        range.value = '1' // 'minimal'
+        range.dispatchEvent(new Event('input', { bubbles: true }))
+        expect(document.querySelector('.effort-picker-selected')?.textContent).toBe('Minimo')
+
+        document.querySelector<HTMLFormElement>('#customTaskForm')!.requestSubmit()
+
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions/custom', corpo: { sessionId: 'sess-effort' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        const postSpy = vi.spyOn(window, 'fetch')
+        document.querySelector<HTMLTextAreaElement>('#composerInput')!.value = 'usa questo livello di ragionamento'
+        document.querySelector<HTMLFormElement>('#composerForm')!.requestSubmit()
+        await new Promise((r) => setTimeout(r, 0))
+
+        const chiamataPost = postSpy.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'POST')
+        const corpoInviato = JSON.parse(String((chiamataPost?.[1] as RequestInit).body))
+        expect(corpoInviato.reasoning).toEqual({ effort: 'minimal' })
+    })
+
+    it('⛔ AL CONTRARIO: EFFORT-PICKER-02 senza mai toccare lo slider, la POST non porta MAI il campo reasoning — comportamento di sempre', async () => {
+        mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } },
+        ])
+        await runtime().openRealTaskSheet()
+        document.querySelector<HTMLFormElement>('#customTaskForm')!.requestSubmit()
+
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions/custom', corpo: { sessionId: 'sess-senza-effort' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        const postSpy = vi.spyOn(window, 'fetch')
+        document.querySelector<HTMLTextAreaElement>('#composerInput')!.value = 'nessuna scelta di ragionamento'
+        document.querySelector<HTMLFormElement>('#composerForm')!.requestSubmit()
+        await new Promise((r) => setTimeout(r, 0))
+
+        const chiamataPost = postSpy.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'POST')
+        const corpoInviato = JSON.parse(String((chiamataPost?.[1] as RequestInit).body))
+        expect('reasoning' in corpoInviato).toBe(false)
+    })
+
+    it('⭐ EFFORT-PICKER-03 lo stesso slider è ANCHE nella pill del modello (foglio aperto dal composer), non solo nella modale "Nuova sessione"', async () => {
+        mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } },
+        ])
+        await runtime().openRealTaskSheet()
+        document.querySelector<HTMLFormElement>('#customTaskForm')!.requestSubmit() // pendingCustomSession, mai un fetch qui
+
+        document.querySelector<HTMLButtonElement>('[data-open-sheet="model"]')!.click()
+
+        expect(document.querySelector('#modelPickerMount .effort-picker-range')).not.toBeNull()
     })
 })

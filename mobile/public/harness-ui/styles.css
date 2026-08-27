@@ -439,6 +439,16 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 .real-reasoning-note .tool-note-summary-text { font-style: italic; }
 .real-reasoning-note .tool-note-detail { font-style: italic; color: var(--muted); }
 
+/* ⭐⭐⭐ 28/8 — la card dell'artefatto (attrezzo artifact_create): titolo +
+   iframe sandboxato (vedi app.js, confezionaArtefattoSicuro/appendArtifactCard
+   per il perché è sicuro). Altezza fissa ragionevole con scroll interno
+   invece di crescere senza limite — un artefatto alto quanto vuole non deve
+   spingere il composer fuori schermo. */
+.real-artifact-card { padding: 0; overflow: hidden; }
+.artifact-card-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line-soft); color: var(--muted); font-size: 10px; }
+.artifact-card-title { font-size: 13px; font-weight: 500; color: var(--text-2); }
+.artifact-card-frame { display: block; width: 100%; height: min(60vh, 480px); border: 0; background: #fff; }
+
 /* ⭐⭐⭐ 27/8, owner: "il loading della risposta... usa lo stesso del mobile" —
    porta di TalosLineLoader.vue (mobile/src/components/brand/, style.css
    .talos-line-loader*): stessa geometria (traccia+sweep+3 nodi), stessa
@@ -601,7 +611,8 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .ft-chevron { width: 15px; height: 15px; flex-shrink: 0; display: grid; place-items: center; color: var(--muted); transition: transform var(--motion-disclosure) ease; }
 .ft-chevron svg { width: 9px; height: 9px; stroke: currentColor; fill: none; stroke-width: 2.4; }
 .ft-node.ft-open > .ft-row > .ft-chevron { transform: rotate(90deg); }
-.ft-row.ft-leaf .ft-chevron { visibility: hidden; }
+/* ⛔ 28/8, owner: "non ha senso mettere una freccia in un file" — bug reale, non solo estetico: la riga sotto diceva `.ft-leaf`, ma costruisciNodoAlbero (app.js) assegna ai file la classe `ft-row-leaf`, mai `ft-leaf` da sola — la regola non aveva MAI potuto scattare, stesso difetto di forma già visto stanotte su `.file-tree button`/`.ft-actions-btn`. */
+.ft-row-leaf .ft-chevron { visibility: hidden; }
 .ft-icon { width: 15px; height: 15px; flex-shrink: 0; display: grid; place-items: center; }
 .ft-icon svg { width: 14px; height: 14px; stroke-width: 1.6; fill: none; }
 .ft-icon-folder svg { stroke: var(--accent-2); }
@@ -633,10 +644,11 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
  * `!important`, niente tocco alla regola legacy (potrebbe servire
  * altrove).
  */
-.file-tree .ft-actions-btn { flex-shrink: 0; width: 22px; height: 22px; display: none; align-items: center; justify-content: center; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; margin-left: auto; }
+/* ⛔ 28/8, owner: "i puntini... sono minuscoli" — bottone 22→24px, icona 14→17px (il simbolo #i-more ha anche i cerchi ingranditi, r 1→1.8), colore a riposo --muted→--text-2 (troppo tenue per tre puntini così piccoli). */
+.file-tree .ft-actions-btn { flex-shrink: 0; width: 24px; height: 24px; display: none; align-items: center; justify-content: center; border: 0; border-radius: 6px; background: transparent; color: var(--text-2); cursor: pointer; margin-left: auto; }
 .ft-row:hover .ft-actions-btn, .ft-row:focus-within .ft-actions-btn, .ft-row.ft-selected .ft-actions-btn { display: inline-flex; }
 .ft-actions-btn:hover { background: var(--surface-2); color: var(--text); }
-.ft-actions-btn svg { width: 14px; height: 14px; }
+.ft-actions-btn svg { width: 17px; height: 17px; }
 .ft-actions-menu { position: fixed; z-index: 40; min-width: 200px; display: flex; flex-direction: column; padding: 6px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface-elevated); box-shadow: var(--shadow); }
 .ft-actions-menu-item { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: var(--text-2); font-size: 13px; text-align: left; cursor: pointer; }
 .ft-actions-menu-item:hover { background: var(--surface-2); color: var(--text); }
@@ -1381,6 +1393,26 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .model-picker-footer .text-btn { display: inline-flex; align-items: center; gap: 5px; }
 .model-picker-footer .text-btn svg { width: 13px; height: 13px; }
 .model-picker-meta { color: var(--muted); font-size: 10px; }
+
+/*
+ * ⭐⭐⭐ 28/8 — effort picker (livello di ragionamento), porta
+ * TalosMobileEffortPicker.vue/TalosThemedSegmentedSlider.vue: stesso
+ * ruolo visivo (testata etichetta+valore, binario a scatti, tacche
+ * sotto), `<input type="range">` NATIVO al posto di reka-ui (zero
+ * dipendenze nel bundle) — il browser possiede drag/tastiera/touch,
+ * noi solo i token di tema, stessa filosofia dichiarata dal componente
+ * mobile stesso.
+ */
+.effort-picker { margin-top: 6px; padding: 10px 12px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.effort-picker-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.effort-picker-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.effort-picker-selected { color: var(--accent); font-size: 13px; font-weight: 600; }
+.effort-picker-range { width: 100%; margin: 10px 0 2px; accent-color: var(--accent); cursor: pointer; }
+.effort-picker-labels { position: relative; height: 15px; margin-top: 2px; }
+.effort-picker-tick { position: absolute; top: 0; transform: translateX(-50%); color: var(--muted); font-size: 9.5px; white-space: nowrap; transition: color var(--motion-disclosure) ease, font-weight var(--motion-disclosure) ease; }
+.effort-picker-tick:first-child { transform: none; }
+.effort-picker-tick:last-child { transform: translateX(-100%); }
+.effort-picker-tick-selected { color: var(--accent); font-weight: 600; }
 @media (max-width: 780px) {
   .sheet-input { min-height: 52px; font-size: 16px; }
   .sheet-actions { display: grid; grid-template-columns: 1fr 1fr; }

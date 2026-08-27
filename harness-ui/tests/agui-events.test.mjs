@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  artifactCreated,
   eventiPerRisposta,
   eventoPerEsitoTool,
   eventoPerScrittura,
@@ -107,6 +108,18 @@ test('toolCallResult — ruolo di default tool', () => {
 test('stateDelta porta il delta RFC 6902 così com\'è', () => {
   const delta = [{ op: 'replace', path: '/file/a.ts', value: 'x' }];
   assert.deepStrictEqual(stateDelta({ delta }), { type: 'StateDelta', delta });
+});
+
+// ⭐⭐⭐ 28/8 — ArtifactCreated NON è nello schema pubblico AG-UI (vedi la doc
+// sopra la funzione in agui-events.mjs): un'estensione dichiarata, provata
+// come tutte le altre — puro, byte-per-byte.
+// ⛔ NIENTE html qui: l'evento porta solo l'id, il frontend punta
+// iframe.src a /api/v1/artifacts/:id — vedi artifact-store.mjs per il perché.
+test('artifactCreated porta type/messageId/id/titolo così come sono, MAI un campo html', () => {
+  assert.deepStrictEqual(
+    artifactCreated({ messageId: 'm1', id: 'a1', titolo: 'Grafico' }),
+    { type: 'ArtifactCreated', messageId: 'm1', id: 'a1', titolo: 'Grafico' },
+  );
 });
 
 test('eventiPerRisposta — solo testo, nessun tool_call', () => {
