@@ -26,6 +26,13 @@ import {
 import { CustomTaskError, preparaEsecuzioneLibera as preparaEsecuzioneLiberaReale } from './custom-task.mjs';
 import { TaskCatalogError, preparaEsecuzione as preparaEsecuzioneReale } from './task-catalog.mjs';
 import { leggiAlberoWorkspace as leggiAlberoWorkspaceReale, WorkspaceTreeError } from './workspace-tree.mjs';
+import {
+  eliminaFile as eliminaFileReale,
+  leggiContenutoFile as leggiContenutoFileReale,
+  rinominaFile as rinominaFileReale,
+  rivelaInEsploraFile as rivelaInEsploraFileReale,
+  WorkspaceFileError,
+} from './workspace-files.mjs';
 
 export const EXPORT_SCHEMA = 'talos.harness-ui.session-export.v1';
 
@@ -36,6 +43,10 @@ export function createSessionRegistry({
   compattaSessioneFn = compattaSessioneReale,
   eseguiComandoDirettoFn = eseguiComandoDirettoReale,
   leggiAlberoWorkspaceFn = leggiAlberoWorkspaceReale,
+  leggiContenutoFileFn = leggiContenutoFileReale,
+  rinominaFileFn = rinominaFileReale,
+  eliminaFileFn = eliminaFileReale,
+  rivelaInEsploraFileFn = rivelaInEsploraFileReale,
   modello,
   chiave,
   cartelleProgetto = [],
@@ -388,6 +399,61 @@ export function createSessionRegistry({
         return { ok: true, voci };
       } catch (errore) {
         if (errore instanceof WorkspaceTreeError) return { erroreAvvio: errore.message, code: errore.code };
+        throw errore;
+      }
+    },
+
+    /*
+     * ⭐⭐⭐ 27/8, owner: "non ha nessun'opzione per rinominare i file, per
+     * aprire i file, per aprirli nel visualizza file explorer di Windows.
+     * Non ha opzioni per eliminarlo" — quattro azioni sul singolo file
+     * dell'albero, stesso schema di `albero()` sopra: risolve `sessionId`
+     * a `voce.cartella` qui, la validazione del PERCORSO vive tutta in
+     * workspace-files.mjs (mai duplicata). Nessun guard su `conclusa`:
+     * queste sono azioni dell'OWNER sul workspace, non sul ciclo
+     * dell'agente — hanno senso anche a sessione ancora in corso o già
+     * chiusa da tempo.
+     */
+    async apriFile(sessionId, percorso) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      try {
+        return { ok: true, ...(await leggiContenutoFileFn({ cartella: voce.cartella, percorso })) };
+      } catch (errore) {
+        if (errore instanceof WorkspaceFileError) return { erroreAvvio: errore.message, code: errore.code };
+        throw errore;
+      }
+    },
+
+    async rinominaFile(sessionId, percorso, nuovoNome) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      try {
+        return { ok: true, ...(await rinominaFileFn({ cartella: voce.cartella, percorso, nuovoNome })) };
+      } catch (errore) {
+        if (errore instanceof WorkspaceFileError) return { erroreAvvio: errore.message, code: errore.code };
+        throw errore;
+      }
+    },
+
+    async eliminaFile(sessionId, percorso) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      try {
+        return { ok: true, ...(await eliminaFileFn({ cartella: voce.cartella, percorso })) };
+      } catch (errore) {
+        if (errore instanceof WorkspaceFileError) return { erroreAvvio: errore.message, code: errore.code };
+        throw errore;
+      }
+    },
+
+    async rivelaFile(sessionId, percorso) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      try {
+        return { ok: true, ...(await rivelaInEsploraFileFn({ cartella: voce.cartella, percorso })) };
+      } catch (errore) {
+        if (errore instanceof WorkspaceFileError) return { erroreAvvio: errore.message, code: errore.code };
         throw errore;
       }
     },

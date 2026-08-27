@@ -5,6 +5,7 @@ import { createSessionRegistry } from '../src/session-registry.mjs';
 import { CustomTaskError } from '../src/custom-task.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
 import { WorkspaceTreeError } from '../src/workspace-tree.mjs';
+import { WorkspaceFileError } from '../src/workspace-files.mjs';
 
 // Ne' avviaSessione ne' talosLavora girano MAI qui, veri o finti a metà: si
 // inietta avviaSessioneFn/preparaEsecuzioneFn interamente controllati dal
@@ -598,6 +599,86 @@ test('⛔⛔ verso contrario: un errore IMPREVISTO (non WorkspaceTreeError — u
   await assert.rejects(() => registro.albero(sessionId, 'x'), /disco pieno, bug vero/);
 
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }); // pulizia
+  await new Promise((r) => setImmediate(r));
+});
+
+/*
+ * ⭐⭐⭐ 27/8, owner: rinomina/apri/rivela-in-Explorer/elimina — stesso
+ * schema di albero() sopra, stessa profondità di prova: qui si prova
+ * SOLO il collegamento (sessionId->cartella, WorkspaceFileError->{erroreAvvio,code}),
+ * non la validazione del percorso — quella ha già 16 prove dedicate in
+ * workspace-files.test.mjs, ripeterle qui sarebbe la stessa prova due volte.
+ */
+test('⛔ apriFile/rinominaFile/eliminaFile/rivelaFile su un id inesistente: NOT_FOUND per tutti e quattro', async () => {
+  const registro = createSessionRegistry({ preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  assert.equal((await registro.apriFile('mai-esistito', 'a.txt')).code, 'NOT_FOUND');
+  assert.equal((await registro.rinominaFile('mai-esistito', 'a.txt', 'b.txt')).code, 'NOT_FOUND');
+  assert.equal((await registro.eliminaFile('mai-esistito', 'a.txt')).code, 'NOT_FOUND');
+  assert.equal((await registro.rivelaFile('mai-esistito', 'a.txt')).code, 'NOT_FOUND');
+});
+
+test('⭐⭐ apriFile passa cartella/percorso VERI a leggiContenutoFileFn e torna il contenuto', async () => {
+  const finta = sessioneControllabile();
+  let catturato = null;
+  const leggiContenutoFileFn = async (input) => { catturato = input; return { contenuto: 'ciao', dimensione: 4 }; };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, leggiContenutoFileFn, modello: 'm', chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const risultato = await registro.apriFile(sessionId, 'a.txt');
+
+  assert.deepEqual(catturato, { cartella: '/tmp/x', percorso: 'a.txt' });
+  assert.deepEqual(risultato, { ok: true, contenuto: 'ciao', dimensione: 4 });
+
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await new Promise((r) => setImmediate(r));
+});
+
+test('⭐⭐ rinominaFile passa cartella/percorso/nuovoNome VERI a rinominaFileFn e torna il nuovo percorso', async () => {
+  const finta = sessioneControllabile();
+  let catturato = null;
+  const rinominaFileFn = async (input) => { catturato = input; return { nuovoPercorso: 'b.txt' }; };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, rinominaFileFn, modello: 'm', chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const risultato = await registro.rinominaFile(sessionId, 'a.txt', 'b.txt');
+
+  assert.deepEqual(catturato, { cartella: '/tmp/x', percorso: 'a.txt', nuovoNome: 'b.txt' });
+  assert.deepEqual(risultato, { ok: true, nuovoPercorso: 'b.txt' });
+
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await new Promise((r) => setImmediate(r));
+});
+
+test('⛔ eliminaFile: un WorkspaceFileError VERO (es. FILE_NOT_FOUND) diventa {erroreAvvio, code}, mai un throw fino all\'HTTP', async () => {
+  const finta = sessioneControllabile();
+  const eliminaFileFn = async () => { throw new WorkspaceFileError('File non trovato', 'FILE_NOT_FOUND'); };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, eliminaFileFn, modello: 'm', chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const risultato = await registro.eliminaFile(sessionId, 'mai-esistito.txt');
+  assert.deepEqual(risultato, { erroreAvvio: 'File non trovato', code: 'FILE_NOT_FOUND' });
+
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await new Promise((r) => setImmediate(r));
+});
+
+test('⛔⛔ rivelaFile: AL CONTRARIO, un errore IMPREVISTO (non WorkspaceFileError) si PROPAGA, mai inghiottito', async () => {
+  const finta = sessioneControllabile();
+  const rivelaInEsploraFileFn = async () => { throw new Error('bug vero, non un WorkspaceFileError'); };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, rivelaInEsploraFileFn, modello: 'm', chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  await assert.rejects(() => registro.rivelaFile(sessionId, 'a.txt'), /bug vero, non un WorkspaceFileError/);
+
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
   await new Promise((r) => setImmediate(r));
 });
 
