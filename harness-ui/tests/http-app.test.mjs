@@ -73,14 +73,57 @@ test('api serves the exact five GET resources and HEAD', async (t) => {
   assert.equal((await fetch(`${base}/api/v1/nope`)).status, 404);
 });
 
-test('api rejects POST PUT PATCH DELETE and OPTIONS with 405 and no CORS', async (t) => {
+test('api rejects POST PUT PATCH DELETE with 405 and no CORS when Origin is absent', async (t) => {
   const { base } = await listen(t);
-  for (const method of ['POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']) {
+  for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
     const response = await fetch(`${base}/api/v1/health`, { method });
     assert.equal(response.status, 405, method);
     assert.equal(response.headers.has('access-control-allow-origin'), false);
     assert.equal((await response.json()).error.code, 'METHOD_NOT_ALLOWED');
   }
+});
+
+/**
+ * ⛔ Piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 3: `OPTIONS`
+ * era prima nel gruppo "rifiutato con 405" sopra — ora è un preflight CORS
+ * vero, perché il mobile (`app.js` montato nel documento TALOS, origine
+ * Capacitor) è cross-origin per davvero verso questo server via
+ * `adb reverse`. Desktop resta invariato: senza `Origin` nessuna
+ * intestazione CORS compare, stesso comportamento di sempre.
+ */
+test('OPTIONS answers a CORS preflight, and Access-Control-Allow-Origin reflects Origin only when present', async (t) => {
+  // Nessuna chiamata a campaignService in questo test (health + un preflight
+  // che non raggiunge mai il routing) — uno stub basta, evita la dipendenza
+  // da tests/fixtures/banco/ (assente in questo ambiente, nota già in
+  // "errors never expose absolute paths" qui sopra, stesso schema riusato).
+  const { base } = await listen(t, createHttpApp({
+    campaignService: {},
+    staticHandler: createStaticHandler(publicDir),
+  }));
+
+  const preflight = await fetch(`${base}/api/v1/sessions`, {
+    method: 'OPTIONS',
+    headers: { Origin: 'http://localhost', 'Access-Control-Request-Method': 'POST' },
+  });
+  assert.equal(preflight.status, 204);
+  assert.equal(preflight.headers.get('access-control-allow-origin'), 'http://localhost');
+  assert.equal(preflight.headers.get('access-control-allow-methods'), 'GET, HEAD, POST');
+  assert.equal(preflight.headers.get('access-control-allow-headers'), 'Content-Type');
+  assert.equal(await preflight.text(), '');
+
+  const withOrigin = await fetch(`${base}/api/v1/health`, { headers: { Origin: 'http://localhost' } });
+  assert.equal(withOrigin.headers.get('access-control-allow-origin'), 'http://localhost');
+  assert.equal(withOrigin.headers.get('vary'), 'Origin');
+
+  const withoutOrigin = await fetch(`${base}/api/v1/health`);
+  assert.equal(withoutOrigin.headers.has('access-control-allow-origin'), false);
+
+  // ⛔ Verso contrario: OPTIONS senza Origin resta un preflight valido (204),
+  // non un errore — un client che non manda Origin non deve mai vedere un
+  // 405 dove prima lo vedeva un'altra rotta valida.
+  const optionsNoOrigin = await fetch(`${base}/api/v1/health`, { method: 'OPTIONS' });
+  assert.equal(optionsNoOrigin.status, 204);
+  assert.equal(optionsNoOrigin.headers.has('access-control-allow-origin'), false);
 });
 
 test('static handler serves only the mapped assets (HTML/CSS/JS + real fonts + real logo) and has no directory listing', async (t) => {

@@ -25,6 +25,18 @@
   function HOST() { return window.__talosHarnessHost || document.documentElement; }
   const $ = (selector, root = ROOT()) => root.querySelector(selector);
   const $$ = (selector, root = ROOT()) => [...root.querySelectorAll(selector)];
+  /*
+   * Piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 3 (`adb reverse`).
+   * Su desktop questa pagina gira DENTRO ciò che `server.mjs` serve da
+   * `http://localhost:4174/` — un percorso relativo (`/api/v1/...`) risolve
+   * lì per costruzione, `window.__talosHarnessApiBase` non esiste,
+   * `API()` torna il percorso invariato: ZERO cambio di comportamento
+   * desktop. Su mobile `HarnessSessionScreen.vue` pianta quella variabile
+   * PRIMA di eseguire questo script (stesso momento di ROOT()/HOST()) con
+   * `http://localhost:4174` — l'origine reale del tunnel `adb reverse`,
+   * diversa dall'origine Capacitor da cui questo script gira.
+   */
+  function API(pathname) { return `${window.__talosHarnessApiBase || ''}${pathname}`; }
 
   const state = {
     view: 'chat',
@@ -573,7 +585,7 @@
   }
 
   async function apiGet(pathname) {
-    const response = await fetch(pathname, {
+    const response = await fetch(API(pathname), {
       method: 'GET',
       headers: { Accept: 'application/json' },
       cache: 'no-store',
@@ -596,7 +608,7 @@
 
   /** ⭐ 26/8, riconciliazione desktop→mobile — stesso contratto envelope di apiGet, per POST /api/v1/sessions/*. */
   async function apiPost(pathname, body) {
-    const response = await fetch(pathname, {
+    const response = await fetch(API(pathname), {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -1613,7 +1625,7 @@
     const demoBadgeChat = $$('.demo-surface-badge', $('.chat-view'))
       .find((badge) => badge.closest('[data-demo-surface]')?.dataset.demoSurface === 'chat');
     if (demoBadgeChat) demoBadgeChat.hidden = true;
-    const source = new EventSource(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`);
+    const source = new EventSource(API(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`));
     state.realSession.eventSource = source;
     source.onmessage = (message) => {
       let evento;
