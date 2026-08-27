@@ -2534,6 +2534,8 @@
   $$('[data-session-action]').forEach((button) => button.addEventListener('click', () => {
     toast(button.dataset.sessionAction === 'fork' ? 'Fork creato' : 'Side thread creato', 'Contesto isolato, collegamento mantenuto nel grafo sessione.');
   }));
+  /* ⭐ 27/8 — card "Session topology": il pulsante Fork chiama la VERA forkSession() (già reale per il blocco 1), non un toast finto — stesso attrezzo, un secondo punto d'accesso onesto. */
+  $$('[data-action="fork-session"]').forEach((button) => button.addEventListener('click', () => forkSession()));
   $$('[data-control-action]').forEach((button) => button.addEventListener('click', () => {
     if (button.dataset.controlAction === 'doctor') toast('Doctor: Healthy', 'Provider, shell, git, browser e workspace verificati.');
   }));
