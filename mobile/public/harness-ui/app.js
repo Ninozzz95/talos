@@ -883,24 +883,49 @@
     capabilities: {
       eyebrow: 'Capability hub',
       title: 'Strumenti, skill e connettori',
+      /*
+       * ⛔⛔⛔ 27/8 — Questo foglio elencava 11 voci (Skills, MCP, Plugin
+       * market, Toolsets, Web search, Browser, Computer use, Images, Voice,
+       * Gateways, Profiles), tutte con conteggi e checkbox inventati — "3
+       * server MCP" quando nessun client MCP esiste, un interruttore che
+       * accende/spegne qualcosa che non fa niente. Corretto col principio
+       * già in uso per `naviga`/`shell` (enforcement dichiarato, mai un
+       * bluff): la prima sezione sono i SETTE attrezzi VERI dell'harness
+       * (stessi nomi/descrizioni di ATTREZZI in talosHarness.mjs, non
+       * riscritti), con la checkbox `disabled` — sono sempre attivi perché
+       * non esiste ancora un cancello di permesso per-tool lato harness,
+       * non perché la UI finga una scelta che non ha effetto. La seconda
+       * sezione è tutto il resto, onestamente "non ancora implementato":
+       * costruirlo per intero (client MCP, sistema plugin, quattro gateway
+       * di chat) è il blocco più grande dei rimasti, non uno stralcio.
+       */
       html: () => `
         <div class="sheet-section">
-          <span class="sheet-label">Sessione</span>
+          <span class="sheet-label">Attrezzi dell'harness · sempre attivi, nessun permesso per-tool ancora</span>
           ${[
-            ['Skills', '6 abilitate · frontend, review, testing', 'i-bolt', true],
-            ['MCP', '3 server · filesystem, docs, browser', 'i-link', true],
-            ['Plugin market', 'Plugin installabili e aggiornabili', 'i-grid', true],
-            ['Toolsets', 'Set di tool per task e profilo', 'i-code', true],
-            ['Web search', 'Ricerca e fetch gestiti', 'i-search', true],
-            ['Browser', 'Naviga, ispeziona, annota', 'i-web', true],
-            ['Computer use', 'Disattivato per questa sessione', 'i-layout', false],
-            ['Images', 'Paste / drag / screenshot context', 'i-image', true],
-            ['Voice', 'Memo, dettatura e trascrizione', 'i-mic', true],
-            ['Gateways', 'Telegram · Discord · Slack · WhatsApp', 'i-link', false],
-            ['Profiles', 'Persona / SOUL / project profile', 'i-robot', true],
-          ].map(([name, desc, ico, checked]) => `
+            ['elenca', 'Elenca i file del workspace, con le dimensioni', 'i-list'],
+            ['cerca', 'Trova file ovunque nel workspace, per testo o nome', 'i-search'],
+            ['leggi', 'Legge un file del workspace', 'i-eye'],
+            ['scrivi', 'Scrive un file, sostituendolo per intero — passa dal cancello semantico', 'i-code'],
+            ['prova', 'Esegue la suite di test del progetto: è il giudice', 'i-check'],
+            ['shell', 'Comando di shell nella cartella progetto — WSL2 se c’è, altrimenti dichiarato', 'i-terminal'],
+            ['naviga', 'Legge una pagina web pubblica — DNS pinnato, solo http/https', 'i-web'],
+          ].map(([name, desc, ico]) => `
             <div class="sheet-option" role="group">
-              <span class="sheet-icon">${icon(ico)}</span><span><strong>${name}</strong><small>${desc}</small></span><span><input aria-label="${name}" type="checkbox" ${checked ? 'checked' : ''}></span>
+              <span class="sheet-icon">${icon(ico)}</span><span><strong>${name}</strong><small>${desc}</small></span><span><input aria-label="${name}, sempre attivo" type="checkbox" checked disabled></span>
+            </div>`).join('')}
+        </div>
+        <div class="sheet-section">
+          <span class="sheet-label">Non ancora implementato</span>
+          ${[
+            ['Skills', 'i-bolt'], ['MCP', 'i-link'], ['Plugin market', 'i-grid'],
+            ['Toolsets', 'i-code'], ['Web search', 'i-search'], ['Computer use', 'i-layout'],
+            ['Images', 'i-image'], ['Voice', 'i-mic'],
+            ['Gateways · Telegram, Discord, Slack, WhatsApp', 'i-link'],
+            ['Profiles', 'i-robot'],
+          ].map(([name, ico]) => `
+            <div class="sheet-option" role="group">
+              <span class="sheet-icon">${icon(ico)}</span><span><strong>${name}</strong><small>Non ancora implementato</small></span><span><input aria-label="${name}, non implementato" type="checkbox" disabled></span>
             </div>`).join('')}
         </div>
         <div class="sheet-section">
