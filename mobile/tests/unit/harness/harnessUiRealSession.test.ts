@@ -123,10 +123,39 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         ;(window as unknown as { __talosHarnessDestroy?: () => void }).__talosHarnessDestroy?.()
         delete (window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot
         delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
+        delete (window as unknown as { __talosHarnessApiBase?: unknown }).__talosHarnessApiBase
         document.body.replaceChildren()
         document.body.className = ''
         vi.unstubAllGlobals()
         vi.restoreAllMocks()
+    })
+
+    /**
+     * ⭐⭐⭐ Piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 3
+     * (`adb reverse`). Su desktop `window.__talosHarnessApiBase` non esiste
+     * (nessuno lo pianta, esattamente come in ogni altro test di questo
+     * file) — `API()` torna il percorso invariato, che è esattamente ciò
+     * che REAL-SESSION-START-01 già prova senza saperlo (nessuna modifica
+     * a quel test: è la prova "AL CONTRARIO" di questa coppia). Qui si
+     * prova l'altro verso: quando `HarnessSessionScreen.vue` pianta la
+     * base PRIMA di eseguire `app.js` (stesso momento di ROOT()/HOST()),
+     * ogni fetch/EventSource verso `/api/v1/...` diventa assoluto.
+     */
+    it('API-BASE-01 con window.__talosHarnessApiBase impostato, fetch e EventSource usano l\'URL assoluto (mobile)', async () => {
+        // API() legge window.__talosHarnessApiBase AD OGNI chiamata, non solo
+        // al caricamento dello script (come ROOT()/HOST()) — impostarlo dopo
+        // il mount di beforeEach, prima di agire, prova esattamente questo.
+        ;(window as unknown as { __talosHarnessApiBase?: string }).__talosHarnessApiBase = 'http://localhost:4174'
+        const fetchMock = mockFetch([
+            { metodo: 'POST', percorso: 'http://localhost:4174/api/v1/sessions', corpo: { sessionId: 'sess-mobile' } },
+            { metodo: 'GET', percorso: 'http://localhost:4174/api/v1/sessions', corpo: { items: [] } },
+        ])
+
+        await runtime().startRealSession({ id: 'storia-0b81c88', consegna: 'Sistema il test rosso.' })
+
+        expect(fetchMock).toHaveBeenCalledWith('http://localhost:4174/api/v1/sessions', expect.objectContaining({ method: 'POST' }))
+        expect(FakeEventSource.instances).toHaveLength(1)
+        expect(FakeEventSource.instances[0].url).toBe('http://localhost:4174/api/v1/sessions/sess-mobile/events')
     })
 
     it('REAL-SESSION-START-01 posts to /api/v1/sessions and opens the SSE stream for the returned id', async () => {

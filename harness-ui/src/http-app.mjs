@@ -251,6 +251,36 @@ export function createHttpApp({
     if (req.aborted || res.destroyed) return;
     const method = req.method || 'GET';
 
+    /*
+     * ⛔ CORS — piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 3.
+     * Desktop (Chrome che carica la pagina DA questo stesso server) non ne
+     * ha bisogno: stessa origine, `Origin` assente o già coincidente,
+     * questa intestazione non cambia nulla. Mobile (`app.js` montato dentro
+     * il documento TALOS, origine Capacitor — `http://localhost` su
+     * Android) è cross-origin per davvero: senza questa intestazione il
+     * browser bloccherebbe la LETTURA della risposta anche col tunnel
+     * `adb reverse` attivo, per `fetch` e per `EventSource` allo stesso
+     * modo. Riflette `Origin` invece di un `*` fisso o di indovinare lo
+     * schema Capacitor: il perimetro di sicurezza resta "raggiungibile solo
+     * via loopback/tunnel già posseduto dall'owner" (`README.md`), riflettere
+     * l'origine non lo allarga — chi non può già raggiungere `127.0.0.1:4174`
+     * non può nemmeno mandare la richiesta che leggerebbe questa intestazione.
+     */
+    const requestOrigin = req.headers.origin;
+    if (requestOrigin) {
+      res.setHeader('Access-Control-Allow-Origin', requestOrigin);
+      res.setHeader('Vary', 'Origin');
+    }
+    if (method === 'OPTIONS') {
+      res.writeHead(204, {
+        'Access-Control-Allow-Methods': 'GET, HEAD, POST',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Max-Age': '600',
+      });
+      res.end();
+      return;
+    }
+
     const requestTarget = req.url || '/';
     if (Buffer.byteLength(requestTarget, 'utf8') > MAX_REQUEST_TARGET_BYTES) {
       sendJson(res, 413, errorEnvelope('PAYLOAD_LIMIT', clock), method);
