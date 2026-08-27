@@ -64,6 +64,39 @@ function parseModello(raw) {
   return raw;
 }
 
+/**
+ * ⭐⭐⭐ 27/8, owner: "rendi il composer funzionante al 100%... poter
+ * scegliere almeno tutti i modelli openrouter e deepseek, per testare, poi
+ * estendiamo a tutti i provider supportati, nessuna eccezione".
+ *
+ * ⛔ Diversa da `MODELLI_AMMESSI`/`parseModello` sopra apposta: quelli
+ * restano il DEFAULT del server (whitelist stretta, la regola "mai modelli
+ * di punta" applicata al valore di partenza quando nessuno ha scelto
+ * niente). Questa valida una scelta ESPLICITA dell'owner per una singola
+ * sessione — "nessuna eccezione" vuol dire qualunque ID modello
+ * OpenRouter valido, non un elenco scritto a mano che invecchia. TALOS
+ * chiama SEMPRE `https://openrouter.ai/api/v1/chat/completions`
+ * (`talosHarness.mjs`), che instrada già DeepSeek (`deepseek/...`) e
+ * decine di altri vendor allo stesso endpoint — non serve un secondo
+ * adattatore per "OpenRouter e DeepSeek insieme", solo smettere di
+ * limitare quale ID si può chiedere.
+ *
+ * Il pattern è quello reale degli ID OpenRouter: `vendor/nome`, con
+ * varianti tipo `:free`/`:beta` ammesse dopo il nome. Non un whitelist di
+ * vendor — un controllo di FORMA, per escludere iniezioni/spazi/righe
+ * vuote, mai di CONTENUTO.
+ */
+const FORMATO_MODELLO_RICHIESTA = /^[a-z0-9](?:[a-z0-9._-]{0,63}[a-z0-9])?\/[a-z0-9](?:[a-z0-9._:-]{0,63}[a-z0-9])?$/i;
+
+/**
+ * Pura — nessun throw, chi chiama decide il `code`/status HTTP giusto per
+ * il proprio contesto (stesso principio delle `require*Body` di
+ * `http-app.mjs`, che tengono `QUERY_INVALID` locale a quel file).
+ */
+export function modelloRichiestaValido(raw) {
+  return typeof raw === 'string' && FORMATO_MODELLO_RICHIESTA.test(raw);
+}
+
 function parsePort(raw) {
   if (raw === undefined || raw === '') return DEFAULT_PORT;
   if (typeof raw !== 'string' || !/^\d+$/.test(raw)) {

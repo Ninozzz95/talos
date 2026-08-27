@@ -60,16 +60,27 @@ export function createSessionRegistry({
    */
   function avviaESegui({
     sessionId = randomUUID(), taskId, cartella, task, comandoProva, messaggiIniziali,
-    forkDa = null, voceEsistente = null,
+    forkDa = null, voceEsistente = null, modelloRichiesta = null,
   }) {
     if (typeof chiave !== 'string' || chiave.length === 0) {
       return { erroreAvvio: 'Chiave API non configurata sul server (OPENROUTER_API_KEY)', code: 'CONFIG_INVALID' };
     }
 
     const controller = new AbortController();
+    /*
+     * ⭐ 27/8 — modello PER SESSIONE, owner: "poter scegliere almeno tutti i
+     * modelli openrouter e deepseek... nessuna eccezione". `modelloRichiesta`
+     * arriva già validato in FORMA da `http-app.mjs` (vedi
+     * `modelloRichiestaValido`) — qui si sceglie solo se usarlo o ricadere
+     * sul default del server. Un fork/resume (che non passa mai
+     * `modelloRichiesta`) eredita sempre il modello della voce originale,
+     * mai quello di chiusura silenziosamente: coerenza della sessione prima
+     * di tutto.
+     */
+    const modelloEffettivo = modelloRichiesta || voceEsistente?.modello || modello;
     const voce = voceEsistente ?? {
       eventi: [], ascoltatori: new Set(), taskId, cartella, task, comandoProva, forkDa,
-      avviataAlle: clock().toISOString(), messaggiFinali: null,
+      avviataAlle: clock().toISOString(), messaggiFinali: null, modello: modelloEffettivo,
     };
     voce.controller = controller;
     voce.conclusa = false;
@@ -81,7 +92,7 @@ export function createSessionRegistry({
      * RunStarted è già nel buffer (run-to-first-await di JS, non una gara).
      */
     avviaSessioneFn({
-      cartella, task, modello, chiave, comandoProva, messaggiIniziali,
+      cartella, task, modello: modelloEffettivo, chiave, comandoProva, messaggiIniziali,
       segnaleStop: controller.signal,
       onEvento: (evento) => broadcast(voce, evento),
     }).then((risultato) => {
@@ -117,7 +128,7 @@ export function createSessionRegistry({
      * un throw: un id fuori allowlist o una chiave assente sono risposte
      * attese di un endpoint HTTP, non un guasto del registro.
      */
-    avvia(taskId) {
+    avvia(taskId, modelloScelto = null) {
       let preparato;
       try {
         preparato = preparaEsecuzioneFn(taskId);
@@ -127,6 +138,7 @@ export function createSessionRegistry({
       }
       return avviaESegui({
         taskId, cartella: preparato.cartella, task: preparato.task, comandoProva: preparato.comandoProva,
+        modelloRichiesta: modelloScelto,
       });
     },
 
@@ -372,6 +384,7 @@ export function createSessionRegistry({
           avviataAlle: voce.avviataAlle,
           conclusa: voce.conclusa,
           forkDa: voce.forkDa,
+          modello: voce.modello ?? null,
         }))
         .sort((a, b) => b.avviataAlle.localeCompare(a.avviataAlle));
     },
@@ -393,6 +406,7 @@ export function createSessionRegistry({
         avviataAlle: voce.avviataAlle,
         conclusa: voce.conclusa,
         forkDa: voce.forkDa,
+        modello: voce.modello ?? null,
         eventi: voce.eventi,
       };
     },

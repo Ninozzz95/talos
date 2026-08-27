@@ -1128,6 +1128,11 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 
 .sheet-input { width: 100%; min-height: 48px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); padding: 0 12px; outline: 0; font-size: 14px; }
 .sheet-input:focus { border-color: var(--focus); box-shadow: 0 0 0 2px var(--focus-soft); }
+/* ⭐ 27/8, foglio Modello — scorciatoie di comodità (riempiono il campo) e la spiegazione di cosa succede se resta vuoto. */
+.sheet-hint { display: block; margin: 8px 3px 0; color: var(--muted); font-size: 11px; }
+.sheet-chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.chip { min-height: 30px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); font: 10px var(--font-mono); cursor: pointer; }
+.chip:hover { color: var(--text); border-color: var(--focus); }
 .sheet-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 .sheet-actions .secondary-btn, .sheet-actions .primary-btn { min-height: 44px; }
 @media (max-width: 780px) {
