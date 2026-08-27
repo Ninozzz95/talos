@@ -159,6 +159,40 @@ test('eventiPerRisposta — risposta assente o senza contenuto e senza tool_call
   assert.deepStrictEqual(eventiPerRisposta({ role: 'assistant', content: '' }, { messageId: 'm1' }), []);
 });
 
+/*
+ * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 4 —
+ * `toolCallsGiaStreamate`, stessa famiglia di `testoGiaStreamato`: una
+ * tool-call già mandata a pezzi da onDelta non va ripetuta qui.
+ */
+test('eventiPerRisposta — toolCallsGiaStreamate salta SOLO le tool_call il cui id è nel Set, le altre restano emesse', () => {
+  const risposta = {
+    role: 'assistant',
+    content: '',
+    tool_calls: [
+      { id: 'c1', function: { name: 'leggi', arguments: '{"percorso":"a.ts"}' } },
+      { id: 'c2', function: { name: 'cerca', arguments: '{"q":"x"}' } },
+    ],
+  };
+  assert.deepStrictEqual(
+    eventiPerRisposta(risposta, { messageId: 'm1', toolCallsGiaStreamate: new Set(['c1']) }),
+    [
+      { type: 'ToolCallStart', toolCallId: 'c2', toolCallName: 'cerca' },
+      { type: 'ToolCallArgs', toolCallId: 'c2', delta: '{"q":"x"}' },
+    ],
+  );
+});
+
+test('⛔ AL CONTRARIO: senza toolCallsGiaStreamate (chiamante vecchio), TUTTE le tool_call restano emesse — retrocompatibilità byte-per-byte', () => {
+  const risposta = { role: 'assistant', content: '', tool_calls: [{ id: 'c1', function: { name: 'elenca', arguments: '{}' } }] };
+  assert.deepStrictEqual(
+    eventiPerRisposta(risposta, { messageId: 'm1' }),
+    [
+      { type: 'ToolCallStart', toolCallId: 'c1', toolCallName: 'elenca' },
+      { type: 'ToolCallArgs', toolCallId: 'c1', delta: '{}' },
+    ],
+  );
+});
+
 test('eventoPerEsitoTool traduce l\'esito di un attrezzo in ToolCallResult', () => {
   assert.deepStrictEqual(
     eventoPerEsitoTool({ messageId: 'm2', toolCallId: 'c1', content: 'exit 0\nok' }),

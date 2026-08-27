@@ -121,17 +121,29 @@ export function stateDelta({ delta }) {
  * testo di QUESTO giro a pezzi (Start, N Content, End — dal vivo, prima
  * ancora che il giro finisse — vedi agent-service.mjs), rimandarlo qui INTERO
  * duplicherebbe il messaggio in chat — stessa famiglia di difetto già
- * trovata e chiusa stanotte per RunFinished. Le tool-call restano emesse
- * comunque: quelle non sono ancora streamate (dichiarato, non un bug).
+ * trovata e chiusa stanotte per RunFinished.
+ *
+ * ⛔ `toolCallsGiaStreamate` — Piano procedi-col-generare-un-snoopy-neumann.md,
+ * Fase 4: STESSA famiglia di difetto, applicata alle tool-call. Prima
+ * di questa fase erano dichiarate "non ancora streamate" (vedi il
+ * commento che questa riga sostituisce) — ora che `onDelta` le manda a
+ * pezzi (agent-service.mjs), rimandarle qui INTERE le duplicherebbe. Un
+ * `Set`/array di `toolCallId` (non un booleano unico: un giro può avere
+ * PIÙ tool-call, a differenza del testo/ragionamento che ne hanno al
+ * più uno) — ogni tool-call il cui id è dentro viene saltata qui,
+ * l'altre (fornitori/percorsi che non passano da `onDelta`, es. la
+ * risposta non-streaming) restano emesse come sempre.
  */
-export function eventiPerRisposta(risposta, { messageId, parentMessageId, testoGiaStreamato = false } = {}) {
+export function eventiPerRisposta(risposta, { messageId, parentMessageId, testoGiaStreamato = false, toolCallsGiaStreamate } = {}) {
     const eventi = []
     if (risposta?.content && !testoGiaStreamato) {
         eventi.push(textMessageStart({ messageId, role: risposta.role ?? 'assistant' }))
         eventi.push(textMessageContent({ messageId, delta: String(risposta.content) }))
         eventi.push(textMessageEnd({ messageId }))
     }
+    const streamate = toolCallsGiaStreamate ?? new Set()
     for (const chiamata of risposta?.tool_calls ?? []) {
+        if (streamate.has(chiamata.id)) continue
         eventi.push(toolCallStart({
             toolCallId: chiamata.id,
             toolCallName: chiamata.function?.name,
