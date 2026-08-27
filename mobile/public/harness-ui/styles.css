@@ -195,6 +195,19 @@
   box-shadow: var(--shadow-sm);
 }
 /*
+ * ⛔⛔⛔ 27/8, trovato verificando dal vivo il badge "sessions" e
+ * "inspector-context" durante il porting R1 (query `getComputedStyle`,
+ * non solo `.hidden`): `display: inline-flex` sopra vinceva SEMPRE su
+ * `[hidden]` — ogni `demoBadge.hidden = true` di stasera (sessions,
+ * board, terminal, browser, diff, automations, inspector-context,
+ * inspector-files, dynamic-sheet, model, capabilities, control) ha
+ * SEMPRE impostato la proprietà DOM giusta, ma NESSUNA di quelle
+ * scritture ha mai nascosto visivamente niente — stesso identico difetto
+ * di `.attention-card` (commento qui sotto, stessa notte), stavolta sul
+ * meccanismo più usato di tutti. La riga sotto è la stessa cura.
+ */
+.demo-surface-badge[hidden] { display: none; }
+/*
  * Owner 24/8: qui c'erano `html`/`body` come selettori nudi — puntano
  * SEMPRE al vero `<html>`/`<body>` della pagina, mai a un antenato dentro
  * lo shadow root; dentro il foglio di questo componente non avrebbero
@@ -412,6 +425,14 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 .tool-arg-row:last-child { margin-bottom: 0; }
 .tool-arg-key { color: var(--muted); font: 10px var(--font-mono); text-transform: uppercase; letter-spacing: .04em; margin-top: 6px; }
 .tool-result-block { margin: 4px 0 0; overflow: auto; max-height: 340px; padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--bg-deep); font: 11px/1.6 var(--font-mono); color: var(--text-2); }
+
+/* ⭐⭐⭐ 27/8, R1 — il ragionamento riusa la bolla collassabile delle
+   tool-call (stesso markup, .real-tool-note), ma deve leggersi come una
+   cosa DIVERSA a colpo d'occhio: corsivo, leggermente più tenue — lo
+   stesso principio del "gray italic text" che la ricerca del piano ha
+   trovato in Claude Code stesso (Ctrl+O), qui però visibile di default. */
+.real-reasoning-note .tool-note-summary-text { font-style: italic; }
+.real-reasoning-note .tool-note-detail { font-style: italic; color: var(--muted); }
 
 /* ⭐⭐⭐ 27/8, owner: "il loading della risposta... usa lo stesso del mobile" —
    porta di TalosLineLoader.vue (mobile/src/components/brand/, style.css

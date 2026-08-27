@@ -103,6 +103,8 @@
        * sempre sul markdown intero visto finora, non su un singolo delta:
        * `.assistant-copy` mostra il RENDER, non è più la fonte del testo. */
       testoGrezzoMessaggi: new Map(),
+      /** ⭐⭐⭐ 27/8, R1 — messageId(ragionamento) -> {summaryText, detail, grezzo}, la bolla collassabile che ospita il ragionamento in streaming (riusa la stessa forma di appendToolNote, non un componente nuovo). Il testo grezzo si accumula qui per lo stesso motivo di testoGrezzoMessaggi: renderizzaMarkdownSemplice lavora sul totale, non sul delta. */
+      ragionamentoBubble: new Map(),
       /** ⛔⛔⛔ 27/8, owner: "ricevo risposte duplicate" — ogni evento.`_sequenza` (assegnato dal server, vedi session-registry.mjs broadcast()) entra qui la PRIMA volta che passa da handleRealEvent; una riconnessione (EventSource nativo dopo una caduta, o runDirectShell che ne apre una fresca) rimanda l'intero buffer da capo, e questo Set lo riconosce e lo scarta invece di duplicare bubble/testo. Sopravvive a un `continua:true` (stessa sessione, nuovo giro) — si azzera SOLO per una sessione davvero diversa. */
       sequenzeViste: new Set(),
       /** ⛔⛔⛔ 27/8, owner: "verifica che i messaggi... persistano dopo il refresh" — vero SOLO fra l'appendUserFollowUp ottimista di resumeSession() e il RunStarted (seguito:true) che arriva davvero: consumato una volta, evita che handleRealEvent mostri lo stesso follow-up due volte dal vivo. Vedi il case RunStarted per il perché non è sempre così. */
@@ -1890,17 +1892,17 @@
    * IN PLACE — vedi handleRealEvent, che tiene il riferimento in
    * state.realSession.toolCallNomi.
    */
-  function appendToolNote(riassuntoIniziale) {
+  function appendToolNote(riassuntoIniziale, { classeExtra = '', glifo = '⚙' } = {}) {
     const conversation = $('#conversation');
     const article = document.createElement('article');
-    article.className = 'message assistant-message compact-message real-tool-note';
+    article.className = `message assistant-message compact-message real-tool-note${classeExtra ? ` ${classeExtra}` : ''}`;
     const summary = document.createElement('button');
     summary.type = 'button';
     summary.className = 'tool-note-summary';
     summary.setAttribute('aria-expanded', 'false');
     const glyph = document.createElement('span');
     glyph.className = 'talos-glyph';
-    glyph.textContent = '⚙';
+    glyph.textContent = glifo;
     const summaryText = document.createElement('span');
     summaryText.className = 'tool-note-summary-text';
     summaryText.textContent = riassuntoIniziale;
@@ -2705,6 +2707,41 @@
         copia.replaceChildren(renderizzaMarkdownSemplice(testoGrezzo));
         break;
       }
+      /*
+       * ⛔ Nessun case per TextMessageStart/End: ensureAssistantMessageElement
+       * crea il bubble pigramente al primo Content per quel messageId, e
+       * TextMessageContent accumula per messageId — Start/End non portano
+       * niente che il codice esistente non gestisca già. Non un buco, una
+       * semplificazione onesta: verificata coi test di agent-service.mjs
+       * (Start SEMPRE prima del primo Content, End SEMPRE dopo l'ultimo).
+       */
+      /*
+       * ⭐⭐⭐ 27/8, R1 — il ragionamento è un canale SEPARATO dal testo
+       * (piano, sezione "RICOGNIZIONE COMPETITIVA"): riusa appendToolNote,
+       * la STESSA bolla collassabile già in uso per le tool-call — non un
+       * componente nuovo, lo stesso idioma. Visibile per DEFAULT (a
+       * differenza di Claude Code, che lo nasconde dietro Ctrl+O — la
+       * ricerca del piano cita proprio questo come il difetto da non
+       * ripetere), ma collassato: chi non è interessato scorre oltre senza
+       * doverlo chiudere lui stesso.
+       */
+      case 'ReasoningMessageStart': {
+        nascondiAttesaRisposta(); // il ragionamento è la prima prova che il modello ha iniziato, anche prima del testo
+        const bubble = appendToolNote('Ragionamento', { classeExtra: 'real-reasoning-note', glifo: '💭' });
+        state.realSession.ragionamentoBubble.set(evento.messageId, { ...bubble, grezzo: '' });
+        break;
+      }
+      case 'ReasoningMessageContent': {
+        const voce = state.realSession.ragionamentoBubble.get(evento.messageId);
+        if (!voce) break; // difensivo: un Content senza il suo Start non deve far crashare la sessione
+        voce.grezzo += evento.delta;
+        voce.detail.replaceChildren(renderizzaMarkdownSemplice(voce.grezzo));
+        break;
+      }
+      case 'ReasoningMessageEnd': {
+        state.realSession.ragionamentoBubble.delete(evento.messageId); // la bolla resta a schermo, solo non si aggiorna più
+        break;
+      }
       case 'ToolCallStart': {
         nascondiAttesaRisposta(); // il primo attrezzo chiamato: sappiamo già cosa sta facendo, la ruota non serve più
         const bubble = appendToolNote(riassuntoAttrezzo(evento.toolCallName, null));
@@ -2888,6 +2925,7 @@
       state.realSession.treeOpen = new Set();
       state.realSession.sequenzeViste = new Set();
       state.realSession.testoGrezzoMessaggi = new Map();
+      state.realSession.ragionamentoBubble = new Map();
       state.realSession.followUpBubbleInAttesa = false;
       state.realSession.attesaBubble = null; // il nodo è già sparito con replaceChildren() qui sopra
       // ⛔ 27/8 — Terminale/Browser tengono il loro "già reale" nel DOM
