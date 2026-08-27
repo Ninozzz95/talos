@@ -286,6 +286,7 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 .session-meta svg { width: 17px; height: 17px; margin-top: auto; }
 .status-pulse { display: inline-block; width: 7px; height: 7px; border-radius: 99px; background: var(--success); box-shadow: 0 0 0 4px var(--success-soft); margin-right: 6px; }
 .attention-card { margin: 0 12px 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); display: grid; grid-template-columns: 32px 1fr auto; align-items: center; gap: 10px; padding: 10px; }
+.attention-card[hidden] { display: none; } /* ⭐ 27/8 — stesso pattern già in uso per .run-strip/.tool-note-detail/etc.: senza questa riga, `display: grid` sopra vince su [hidden] e card.hidden = true non nasconde niente */
 .attention-card > div:first-child { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 9px; background: var(--accent-soft); color: var(--accent-2); }
 .attention-card strong, .attention-card span { display: block; }
 .attention-card strong { font-size: 12px; }
