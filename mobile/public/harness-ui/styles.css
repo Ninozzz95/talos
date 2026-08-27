@@ -1391,6 +1391,26 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .model-picker-footer .text-btn { display: inline-flex; align-items: center; gap: 5px; }
 .model-picker-footer .text-btn svg { width: 13px; height: 13px; }
 .model-picker-meta { color: var(--muted); font-size: 10px; }
+
+/*
+ * ⭐⭐⭐ 28/8 — effort picker (livello di ragionamento), porta
+ * TalosMobileEffortPicker.vue/TalosThemedSegmentedSlider.vue: stesso
+ * ruolo visivo (testata etichetta+valore, binario a scatti, tacche
+ * sotto), `<input type="range">` NATIVO al posto di reka-ui (zero
+ * dipendenze nel bundle) — il browser possiede drag/tastiera/touch,
+ * noi solo i token di tema, stessa filosofia dichiarata dal componente
+ * mobile stesso.
+ */
+.effort-picker { margin-top: 6px; padding: 10px 12px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.effort-picker-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.effort-picker-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.effort-picker-selected { color: var(--accent); font-size: 13px; font-weight: 600; }
+.effort-picker-range { width: 100%; margin: 10px 0 2px; accent-color: var(--accent); cursor: pointer; }
+.effort-picker-labels { position: relative; height: 15px; margin-top: 2px; }
+.effort-picker-tick { position: absolute; top: 0; transform: translateX(-50%); color: var(--muted); font-size: 9.5px; white-space: nowrap; transition: color var(--motion-disclosure) ease, font-weight var(--motion-disclosure) ease; }
+.effort-picker-tick:first-child { transform: none; }
+.effort-picker-tick:last-child { transform: translateX(-100%); }
+.effort-picker-tick-selected { color: var(--accent); font-weight: 600; }
 @media (max-width: 780px) {
   .sheet-input { min-height: 52px; font-size: 16px; }
   .sheet-actions { display: grid; grid-template-columns: 1fr 1fr; }
