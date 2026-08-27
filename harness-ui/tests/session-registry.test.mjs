@@ -59,6 +59,33 @@ test('avvia(): RunStarted è già nel buffer al RITORNO, non dopo — provato co
   await Promise.resolve();
 });
 
+/*
+ * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 — 'mobile'
+ * entra nella voce all'avvio e viaggia fino ad avviaSessioneFn/talosLavora
+ * (e più sotto, a eseguiComandoDirettoFn per shell()). Zero comportamento
+ * nuovo per una sessione desktop: 'mobile' assente o esplicito false è lo
+ * stesso identico input di sempre.
+ */
+test('avvia(taskId, {mobile:true}) passa mobile:true ad avviaSessioneFn', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+
+  registro.avvia('task-vero', { mobile: true });
+
+  assert.equal(finta.ultimoInput.mobile, true);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔ AL CONTRARIO: avvia(taskId) senza opzioni resta mobile:false, il comportamento di sempre', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+
+  registro.avvia('task-vero');
+
+  assert.equal(finta.ultimoInput.mobile, false);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
 test('⭐ un iscritto DURANTE la corsa riceve prima la storia, poi i nuovi eventi dal vivo', async () => {
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
@@ -372,6 +399,33 @@ test('⭐⭐⭐ forka() su una sessione CONCLUSA: nuova sessione, stessa cartell
   assert.equal(registro.esporta(idOrigine).forkDa, null, 'l\'origine non è un fork di nessuno');
 });
 
+/**
+ * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 — un fork
+ * di una sessione mobile resta mobile: la voce del fork è NUOVA (a
+ * differenza di resume, che riusa la stessa), quindi senza questo la
+ * "mobilità" andrebbe persa in silenzio ad ogni fork.
+ */
+test('⭐⭐⭐ forka() eredita mobile:true dalla sessione origine', async () => {
+  const origine = sessioneControllabile();
+  const delFork = sessioneControllabile();
+  let chiamataNumero = 0;
+  const avviaSessioneFnCombinato = (input) => {
+    chiamataNumero += 1;
+    return chiamataNumero === 1 ? origine.avviaSessioneFn(input) : delFork.avviaSessioneFn(input);
+  };
+  const registro = createSessionRegistry({ avviaSessioneFn: avviaSessioneFnCombinato, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+
+  const { sessionId: idOrigine } = registro.avvia('task-vero', { mobile: true });
+  origine.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: [{ role: 'user', content: 'c' }] } });
+  await new Promise((r) => setImmediate(r));
+
+  registro.forka(idOrigine);
+
+  assert.equal(delFork.ultimoInput.mobile, true);
+  delFork.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await new Promise((r) => setImmediate(r));
+});
+
 test('⛔ resume() su un id inesistente: NOT_FOUND', () => {
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
@@ -428,6 +482,33 @@ test('⭐⭐⭐ resume() su una sessione CONCLUSA: STESSO sessionId, un giro in 
   assert.deepEqual(registro.esporta(sessionId).eventi.map((e) => e.type),
     ['RunStarted', 'RunFinished', 'RunStarted', 'RunFinished'],
     'export mostra ENTRAMBI i giri, in ordine, mai solo l\'ultimo');
+});
+
+/**
+ * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 — a
+ * differenza di forka() (voce NUOVA), resume() riusa la STESSA voce
+ * (`voceEsistente`): `avviaESegui` non deve MAI sovrascriverne `mobile`
+ * col default `false` del suo parametro.
+ */
+test('⭐⭐⭐ resume() preserva mobile:true della sessione, senza sovrascriverlo', async () => {
+  const primoGiro = sessioneControllabile();
+  const secondoGiro = sessioneControllabile();
+  let chiamataNumero = 0;
+  const avviaSessioneFnCombinato = (input) => {
+    chiamataNumero += 1;
+    return chiamataNumero === 1 ? primoGiro.avviaSessioneFn(input) : secondoGiro.avviaSessioneFn(input);
+  };
+  const registro = createSessionRegistry({ avviaSessioneFn: avviaSessioneFnCombinato, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+
+  const { sessionId } = registro.avvia('task-vero', { mobile: true });
+  primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: [{ role: 'user', content: 'c' }] } });
+  await new Promise((r) => setImmediate(r));
+
+  registro.resume(sessionId);
+
+  assert.equal(secondoGiro.ultimoInput.mobile, true);
+  secondoGiro.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' });
+  await new Promise((r) => setImmediate(r));
 });
 
 test('⭐ ferma() dopo un resume aborta il controller del giro NUOVO, non quello vecchio già concluso', async () => {
@@ -744,8 +825,39 @@ test('shell() su una sessione conclusa: chiama eseguiComandoDirettoFn con la car
   assert.equal(risultato.ok, true, 'torna subito — non aspetta eseguiComandoDirettoFn, stesso principio di avviaESegui');
   assert.equal(inputCatturato.cartella, '/tmp/x');
   assert.equal(inputCatturato.comando, 'echo x');
+  // ⛔ AL CONTRARIO: una sessione desktop (nessun mobile passato ad avvia())
+  // non deve MAI far scattare adb-shell-on-device sul lato talosHarness.
+  assert.equal(inputCatturato.mobile, false);
   risolviComando();
   await new Promise((r) => setImmediate(r));
+});
+
+/**
+ * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 — shell()
+ * legge voce.mobile (impostato all'avvio) e lo passa a
+ * eseguiComandoDirettoFn: il comando diretto (`!comando`) di una sessione
+ * mobile deve raggiungere il TELEFONO, non il PC, esattamente come
+ * l'attrezzo `shell` dentro il ciclo dello stesso task.
+ */
+test('shell() su una sessione mobile passa mobile:true a eseguiComandoDirettoFn', async () => {
+  const finta = sessioneControllabile();
+  let inputCatturato = null;
+  const eseguiComandoDirettoFn = async (input) => {
+    inputCatturato = input;
+    input.onEvento({ type: 'RunStarted', threadId: 't2', runId: 'r2' });
+    input.onEvento({ type: 'RunFinished', threadId: 't2', runId: 'r2', outcome: { type: 'success' } });
+    return { ok: true, codice: 0, enforcement: 'adb-shell-on-device' };
+  };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, eseguiComandoDirettoFn, modello: 'm', chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero', { mobile: true });
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await new Promise((r) => setImmediate(r));
+
+  registro.shell(sessionId, 'pm list packages');
+
+  assert.equal(inputCatturato.mobile, true);
 });
 
 test('⭐⭐⭐ shell() apre una finestra "dal vivo": chi si iscrive DOPO averla chiamata (come farà app.js — POST poi una connessione FRESCA, stesso schema di startRealSession) vede gli eventi mentre accadono', async () => {

@@ -161,10 +161,44 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         ;(window as unknown as { __talosHarnessDestroy?: () => void }).__talosHarnessDestroy?.()
         delete (window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot
         delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
+        delete (window as unknown as { __talosHarnessApiBase?: unknown }).__talosHarnessApiBase
         document.body.replaceChildren()
         document.body.className = ''
         vi.unstubAllGlobals()
         vi.restoreAllMocks()
+    })
+
+    /**
+     * ⭐⭐⭐ Piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 3
+     * (`adb reverse`). Su desktop `window.__talosHarnessApiBase` non esiste
+     * (nessuno lo pianta, esattamente come in ogni altro test di questo
+     * file) — `API()` torna il percorso invariato, che è esattamente ciò
+     * che REAL-SESSION-START-01 già prova senza saperlo (nessuna modifica
+     * a quel test: è la prova "AL CONTRARIO" di questa coppia). Qui si
+     * prova l'altro verso: quando `HarnessSessionScreen.vue` pianta la
+     * base PRIMA di eseguire `app.js` (stesso momento di ROOT()/HOST()),
+     * ogni fetch/EventSource verso `/api/v1/...` diventa assoluto.
+     */
+    it('API-BASE-01 con window.__talosHarnessApiBase impostato, fetch e EventSource usano l\'URL assoluto (mobile)', async () => {
+        // API() legge window.__talosHarnessApiBase AD OGNI chiamata, non solo
+        // al caricamento dello script (come ROOT()/HOST()) — impostarlo dopo
+        // il mount di beforeEach, prima di agire, prova esattamente questo.
+        ;(window as unknown as { __talosHarnessApiBase?: string }).__talosHarnessApiBase = 'http://localhost:4174'
+        const fetchMock = mockFetch([
+            { metodo: 'POST', percorso: 'http://localhost:4174/api/v1/sessions', corpo: { sessionId: 'sess-mobile' } },
+            { metodo: 'GET', percorso: 'http://localhost:4174/api/v1/sessions', corpo: { items: [] } },
+        ])
+
+        await runtime().startRealSession({ id: 'storia-0b81c88', consegna: 'Sistema il test rosso.' })
+
+        expect(fetchMock).toHaveBeenCalledWith('http://localhost:4174/api/v1/sessions', expect.objectContaining({
+            method: 'POST',
+            // ⭐ 'client' riusa lo STESSO segnale di __talosHarnessApiBase —
+            // il server sa che questa sessione è mobile senza un secondo flag.
+            body: JSON.stringify({ taskId: 'storia-0b81c88', client: 'mobile' }),
+        }))
+        expect(FakeEventSource.instances).toHaveLength(1)
+        expect(FakeEventSource.instances[0].url).toBe('http://localhost:4174/api/v1/sessions/sess-mobile/events')
     })
 
     it('REAL-SESSION-START-01 posts to /api/v1/sessions and opens the SSE stream for the returned id', async () => {
@@ -192,12 +226,15 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         bottone.click()
         await new Promise((r) => setTimeout(r, 0)) // il click non è awaitable dall'esterno: si aspetta che startRealSession finisca da sé
 
+        // Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3: 'client'
+        // riusa lo stesso segnale di window.__talosHarnessApiBase (Fase 1) —
+        // assente qui, quindi 'desktop', il valore di sempre.
         expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions',
-            expect.objectContaining({ method: 'POST', body: JSON.stringify({ taskId: bottone.dataset.taskId }) }))
+            expect.objectContaining({ method: 'POST', body: JSON.stringify({ taskId: bottone.dataset.taskId, client: 'desktop' }) }))
         expect(runtime().realSessionState.id).toBe('sess-automazione')
     })
 
-    it('⛔ REAL-SESSION-AUTOMATION-02 AL CONTRARIO: sullo stesso bottone, embedded mobile non chiama MAI il backend', async () => {
+    it('⛔ REAL-SESSION-AUTOMATION-02 AL CONTRARIO: sullo stesso bottone, embedded SENZA tunnel non chiama MAI il backend', async () => {
         document.documentElement.classList.add('talos-embedded')
         const fetchMock = mockFetch([])
         const bottone = document.querySelector('[data-automation-action="run"][data-task-id]') as HTMLButtonElement
@@ -207,6 +244,34 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
         expect(fetchMock).not.toHaveBeenCalled()
         expect(runtime().realSessionState.id).toBeNull()
+    })
+
+    /**
+     * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 4 — trovato
+     * verificando dal vivo (owner, in sessione: "il moka è completamente non
+     * funzionante... basta collegarlo ai componenti front end"): il cancello
+     * `talos-embedded` da solo bloccava OGNI fetch reale su mobile, ANCHE col
+     * tunnel Fase 1-3 attivo. embeddedDemoOnly() lo corregge — embedded E CON
+     * window.__talosHarnessApiBase impostato (tunnel attivo) DEVE chiamare il
+     * backend vero, esattamente come standalone.
+     */
+    it('REAL-SESSION-AUTOMATION-03 embedded CON tunnel attivo (window.__talosHarnessApiBase) chiama il backend per davvero', async () => {
+        document.documentElement.classList.add('talos-embedded')
+        ;(window as unknown as { __talosHarnessApiBase?: string }).__talosHarnessApiBase = 'http://localhost:4174'
+        const fetchMock = mockFetch([
+            { metodo: 'POST', percorso: 'http://localhost:4174/api/v1/sessions', corpo: { sessionId: 'sess-mobile-tunnel' } },
+            { metodo: 'GET', percorso: 'http://localhost:4174/api/v1/sessions', corpo: { items: [] } },
+        ])
+        const bottone = document.querySelector('[data-automation-action="run"][data-task-id]') as HTMLButtonElement
+
+        bottone.click()
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fetchMock).toHaveBeenCalledWith('http://localhost:4174/api/v1/sessions', expect.objectContaining({
+            method: 'POST',
+            body: JSON.stringify({ taskId: bottone.dataset.taskId, client: 'mobile' }),
+        }))
+        expect(runtime().realSessionState.id).toBe('sess-mobile-tunnel')
     })
 
     it('REAL-SESSION-START-01b il badge "Demo UI" della chat sparisce con una sessione vera, e MAI quello di una superficie diversa', async () => {
@@ -846,6 +911,43 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
         expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions/sess-compatta/compact', expect.objectContaining({ method: 'POST' }))
         expect(FakeEventSource.instances).toHaveLength(1) // nessun giro nuovo avviato
+    })
+
+    /**
+     * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 4 — lo
+     * stesso cancello di REAL-SESSION-AUTOMATION-03, ma sul bottone "Nuova
+     * sessione" vero (#newSessionBtn -> createNewSession()): col tunnel
+     * attivo apre il foglio dei task veri, non più il reset demo.
+     *
+     * ⛔ Riconciliazione Fase 1 (branch merge, 27/8): l'endpoint atteso qui
+     * era `/api/v1/tasks`, scritto PRIMA che l'owner chiedesse di togliere
+     * l'elenco corpus dalla modale "Nuova sessione" (vedi il commento sopra
+     * REAL-SESSION-TASKSHEET-01 sotto). `createNewSession()` chiama
+     * `openRealTaskSheet()`, che oggi fetcha `/api/v1/projects` — corretto
+     * qui per restare vero contro il codice attuale, non contro quello di
+     * quando l'ho scritto.
+     */
+    it('NEWSESSION-EMBEDDED-01 col tunnel attivo, "Nuova sessione" apre il foglio dei task veri (GET /api/v1/projects), non il reset demo', async () => {
+        document.documentElement.classList.add('talos-embedded')
+        ;(window as unknown as { __talosHarnessApiBase?: string }).__talosHarnessApiBase = 'http://localhost:4174'
+        const fetchMock = mockFetch([
+            { metodo: 'GET', percorso: 'http://localhost:4174/api/v1/projects', corpo: { items: [] } },
+        ])
+
+        ;(document.querySelector('#newSessionBtn') as HTMLButtonElement).click()
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fetchMock).toHaveBeenCalledWith('http://localhost:4174/api/v1/projects', expect.objectContaining({ method: 'GET' }))
+    })
+
+    it('⛔ NEWSESSION-EMBEDDED-02 AL CONTRARIO: stesso bottone, embedded SENZA tunnel resta il reset demo, zero fetch', async () => {
+        document.documentElement.classList.add('talos-embedded')
+        const fetchMock = mockFetch([])
+
+        ;(document.querySelector('#newSessionBtn') as HTMLButtonElement).click()
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fetchMock).not.toHaveBeenCalled()
     })
 
     // ⛔ 27/8 — owner: "quando faccio nuova dalla modale devi levare tutte

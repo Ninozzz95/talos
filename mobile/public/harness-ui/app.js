@@ -25,6 +25,30 @@
   function HOST() { return window.__talosHarnessHost || document.documentElement; }
   const $ = (selector, root = ROOT()) => root.querySelector(selector);
   const $$ = (selector, root = ROOT()) => [...root.querySelectorAll(selector)];
+  /*
+   * Piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 3 (`adb reverse`).
+   * Su desktop questa pagina gira DENTRO ciò che `server.mjs` serve da
+   * `http://localhost:4174/` — un percorso relativo (`/api/v1/...`) risolve
+   * lì per costruzione, `window.__talosHarnessApiBase` non esiste,
+   * `API()` torna il percorso invariato: ZERO cambio di comportamento
+   * desktop. Su mobile `HarnessSessionScreen.vue` pianta quella variabile
+   * PRIMA di eseguire questo script (stesso momento di ROOT()/HOST()) con
+   * `http://localhost:4174` — l'origine reale del tunnel `adb reverse`,
+   * diversa dall'origine Capacitor da cui questo script gira.
+   */
+  function API(pathname) { return `${window.__talosHarnessApiBase || ''}${pathname}`; }
+  /*
+   * Piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 4 — trovato
+   * verificando dal vivo, non ipotizzato: `talos-embedded` da solo
+   * significava "mai un fetch qui" ovunque nel file (HARNESS-BOARD-MOBILE-
+   * HONESTY-01 e le sue sorelle, scritte PRIMA che un backend mobile
+   * esistesse — onesto allora, ma ora blocca esattamente il tunnel che la
+   * Fase 1-3 ha costruito). La domanda giusta non è più "sono embedded?"
+   * ma "sono embedded E SENZA un backend da raggiungere?" — quando
+   * `API()` ha una base reale (mobile col tunnel attivo), il comportamento
+   * torna quello vero, identico al desktop.
+   */
+  function embeddedDemoOnly() { return HOST().classList.contains('talos-embedded') && !window.__talosHarnessApiBase; }
 
   const state = {
     view: 'chat',
@@ -716,7 +740,7 @@
   }
 
   async function apiGet(pathname) {
-    const response = await fetch(pathname, {
+    const response = await fetch(API(pathname), {
       method: 'GET',
       headers: { Accept: 'application/json' },
       cache: 'no-store',
@@ -739,7 +763,7 @@
 
   /** ⭐ 26/8, riconciliazione desktop→mobile — stesso contratto envelope di apiGet, per POST /api/v1/sessions/*. */
   async function apiPost(pathname, body) {
-    const response = await fetch(pathname, {
+    const response = await fetch(API(pathname), {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -1145,7 +1169,7 @@
   }
 
   function ensureCampaignBoard() {
-    if (HOST().classList.contains('talos-embedded')) {
+    if (embeddedDemoOnly()) {
       renderEmbeddedBoardDemo();
       return Promise.resolve();
     }
@@ -1177,7 +1201,7 @@
   }
 
   function clearCampaignEvidence() {
-    if (HOST().classList.contains('talos-embedded')) {
+    if (embeddedDemoOnly()) {
       toast('Nessuna evidenza collegata', 'La Board mobile è una Demo UI senza backend.');
       return;
     }
@@ -3072,7 +3096,7 @@
     const demoBadgeChat = $$('.demo-surface-badge', $('.chat-view'))
       .find((badge) => badge.closest('[data-demo-surface]')?.dataset.demoSurface === 'chat');
     if (demoBadgeChat) demoBadgeChat.hidden = true;
-    const source = new EventSource(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`);
+    const source = new EventSource(API(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`));
     state.realSession.eventSource = source;
     source.onmessage = (message) => {
       let evento;
@@ -3153,8 +3177,20 @@
 
     let sessionId;
     try {
-      /* ⭐ 27/8 — il modello scelto nel foglio "Modello" viaggia con l'avvio: state.model vuoto = nessuna scelta esplicita, il server usa il suo default. */
-      const corpo = state.model ? { taskId: task.id, modello: state.model } : { taskId: task.id };
+      /*
+       * ⭐ 27/8 — il modello scelto nel foglio "Modello" viaggia con l'avvio:
+       * state.model vuoto = nessuna scelta esplicita, il server usa il suo
+       * default.
+       *
+       * Piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 3. Riusa lo
+       * stesso segnale di `window.__talosHarnessApiBase` (Fase 1) invece di
+       * un secondo flag: se questa pagina gira su mobile ha già una base
+       * assoluta piantata, il client non deve dichiararlo due volte in modo
+       * diverso. Assente/vuota su desktop → `'desktop'`, il valore di
+       * sempre — nessun comportamento nuovo lì.
+       */
+      const client = window.__talosHarnessApiBase ? 'mobile' : 'desktop';
+      const corpo = state.model ? { taskId: task.id, modello: state.model, client } : { taskId: task.id, client };
       const data = await apiPost('/api/v1/sessions', corpo);
       sessionId = data.sessionId;
     } catch (error) {
@@ -3828,11 +3864,17 @@
    * seconda sezione "Compito libero" quando il server ne ha almeno una
    * configurata. Il reset da chat vuota (sotto, ramo embedded) resta
    * comunque demo — non è quello il punto in cui l'Opzione B si aggancia.
-   * embedded (mobile) invariato bit per bit — stesso identico
-   * comportamento di sempre, zero rischio sulla suite Pad-verificata.
+   *
+   * ⛔ Corretto in Fase 4 di `procedi-col-generare-un-snoopy-neumann.md`:
+   * QUESTO commento diceva "su mobile resta non collegata... non è mia
+   * da riaprire" — vero finché il mobile non aveva modo di raggiungere un
+   * backend. Ora ce l'ha (Fase 1-3, `adb reverse` + API assoluta): il
+   * cancello è `embeddedDemoOnly()` (embedded E SENZA
+   * `window.__talosHarnessApiBase`), non più `talos-embedded` da solo —
+   * col tunnel attivo il mobile apre lo stesso foglio vero del desktop.
    */
   function createNewSession() {
-    if (!HOST().classList.contains('talos-embedded')) {
+    if (!embeddedDemoOnly()) {
       openRealTaskSheet();
       return;
     }
@@ -4103,10 +4145,11 @@
    */
   $$('[data-automation-action]').forEach((button) => button.addEventListener('click', () => {
     const action = button.dataset.automationAction;
-    // ⛔ Stesso cancello di createNewSession(): su mobile embedded non c'è un
-    // backend raggiungibile per costruzione, mai un fetch lì (HARNESS-BOARD-
-    // MOBILE-HONESTY-01, stesso principio applicato qui).
-    if (action === 'run' && button.dataset.taskId && !HOST().classList.contains('talos-embedded')) {
+    // ⛔ Stesso cancello di createNewSession(): un fetch reale solo se c'è
+    // DAVVERO un backend da raggiungere (HARNESS-BOARD-MOBILE-HONESTY-01,
+    // rivisto in Fase 4 di procedi-col-generare-un-snoopy-neumann.md —
+    // "embedded" da solo non basta più a dire "niente da raggiungere").
+    if (action === 'run' && button.dataset.taskId && !embeddedDemoOnly()) {
       startRealSession({ id: button.dataset.taskId });
       return;
     }
@@ -4234,7 +4277,7 @@
   harnessFilter?.addEventListener('change', reloadRunsFromFilters);
   outcomeFilter?.addEventListener('change', reloadRunsFromFilters);
   refreshCampaignButton?.addEventListener('click', () => {
-    if (HOST().classList.contains('talos-embedded')) renderEmbeddedBoardDemo(true);
+    if (embeddedDemoOnly()) renderEmbeddedBoardDemo(true);
     else if (state.board.initialized) refreshCampaign();
     else ensureCampaignBoard();
   });

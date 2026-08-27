@@ -31,7 +31,7 @@ import {
     talosToolConsentCopy,
     type TalosToolActivity,
 } from '@/lib/tools/toolLabels'
-import type { TalosAgentToolEnabled, TalosAgentToolId } from '@/lib/tools/toolControls'
+import type { TalosAgentToolEnabled } from '@/lib/tools/toolControls'
 import { talosLibrarySearchTerms } from '@/lib/librarySearchText'
 import { talosClassifyProviderEndpoint } from '@/lib/network/localEndpointPolicy'
 import { TalosUiError } from '@/i18n/uiErrors'
@@ -327,6 +327,7 @@ const unavailableFilePicker: TalosNativeFilePicker = {
 
 import { talosChainFor } from '@/lib/tools/chainStore'
 import { talosChiudiSuStop } from '@/lib/chat/stopSuAttesa'
+import { dynamicToolIdFromName } from '@/lib/tools/dynamic/ids'
 import { talosPlanReplacesConsent, type TalosPlan } from '@/lib/tools/plan'
 import { talosPlanFor } from '@/lib/tools/planStore'
 import { TALOS_TOOL_SECURITY_FALLBACK as PIANO_SICUREZZA_PRUDENTE } from '@/lib/tools/security'
@@ -736,11 +737,14 @@ export interface ChatControllerDeps {
             patch: import('@/lib/chat/libraryPolicy').TalosLibraryContextPolicyPatch,
             expectedRevision: number,
         ): Promise<TalosLibraryContextPolicyV1>
+        // ⛔ 2026-08-27: `string`, non `TalosAgentToolId` — un tool forgiato
+        // deve poter ricevere "Consenti sempre" quanto un built-in. Vedi il
+        // commento gemello sull'interfaccia reale in `stores/settings.ts`.
         grantToolAuthorization(
-            tool: TalosAgentToolId,
+            tool: string,
             actions: readonly TalosToolAction[],
         ): Promise<void>
-        revokeToolAuthorization(tool: TalosAgentToolId): Promise<void>
+        revokeToolAuthorization(tool: string): Promise<void>
         /**
          * The permissions in force, which are not always the ones stored.
          *
@@ -869,6 +873,8 @@ export interface ChatController {
     readonly promptEnhancement: Readonly<Ref<TalosMobilePromptEnhancementResult | null>>
     readonly promptEnhancementError: Readonly<Ref<string | null>>
     readonly attachments: TalosMobileAttachmentsController
+    /** ⛔ Owner 2026-08-27 — salva un artefatto HTML nella Libreria; vedi la definizione per il perché. */
+    saveArtifactToLibrary(id: string, titolo: string): Promise<{ ok: true, fileId: string } | { ok: false, reason: string }>
     readonly chat: ChatStore<unknown>
     readonly secrets: Readonly<Record<string, boolean>>
     init(): Promise<void>
@@ -1566,6 +1572,49 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             model: profile?.model ?? null,
             provider: profile?.provider ?? null,
             ...extra,
+        }
+    }
+
+    /**
+     * ⛔⛔⛔ Owner 2026-08-27 — «salvare l'artefatto nella Libreria,
+     * esportarlo come file HTML — dà una spinta forte». Azione della
+     * PERSONA, non del modello: nessun tool nuovo, nessuna chiamata
+     * agente — la scheda `artefatto` la chiama quando qualcuno tocca
+     * «Salva nella Libreria», esattamente come `hydrateText` per il
+     * visualizzatore Markdown.
+     *
+     * ⛔ Riusa `attachments.saveGeneratedBinary`, la STESSA via di
+     * `document_create` — non una seconda strada per scrivere nella
+     * Libreria. Una volta lì, l'export come file `.html` è già gratis:
+     * `library_export` sa già esportare qualunque file della Libreria,
+     * non serve una funzione di export dedicata per gli artefatti.
+     *
+     * ⛔ `sessionId`/`model`/`provider` a `null`: non c'è un turno del
+     * modello in corso quando la persona tocca «salva» — `generatedOrigin`
+     * gestisce già questo caso (nessun profilo trovato ⇒ null), qui lo
+     * stesso, dichiarato esplicitamente invece di inventare un contesto.
+     */
+    async function saveArtifactToLibrary(
+        id: string,
+        titolo: string,
+    ): Promise<{ ok: true, fileId: string } | { ok: false, reason: string }> {
+        let html: string
+        try {
+            const { TalosArtifactBridge } = await import('@/lib/device/artifactPlugin')
+            html = (await TalosArtifactBridge.read({ id })).html
+        } catch (error) {
+            const detail = error instanceof Error ? error.message : String(error)
+            return { ok: false, reason: /^TALOS_[A-Z0-9_]+$/.test(detail) ? detail : 'TALOS_ARTIFACT_READ_FAILED' }
+        }
+        try {
+            const saved = await attachments.saveGeneratedBinary(
+                { name: `${titolo}.html`, mediaType: 'text/html', bytes: new TextEncoder().encode(html) },
+                false,
+                generatedOrigin(null, null, { toolName: 'artifact_create' }),
+            )
+            return { ok: true, fileId: saved.id }
+        } catch {
+            return { ok: false, reason: 'TALOS_ARTIFACT_SAVE_FAILED' }
         }
     }
 
@@ -3449,6 +3498,20 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         },
                     }),
                     /**
+                     * ⛔⛔⛔ Owner 2026-08-27 — «creare artefatti HTML
+                     * interattivi in chat». Sempre presente (a differenza di
+                     * `documents`/`images`, non serve nessun provider
+                     * configurato): il `TalosArtifactBridge` è nativo,
+                     * fallisce onestamente per-chiamata se il dispositivo
+                     * non isola abbastanza (vedi `TalosArtifactActivity.kt`).
+                     */
+                    artifact: () => ({
+                        async create(title: string, html: string) {
+                            const { TalosArtifactBridge } = await import('@/lib/device/artifactPlugin')
+                            return TalosArtifactBridge.create({ title, html })
+                        },
+                    }),
+                    /**
                      * F1 — the web tools exist only when a source is configured
                      * (D3). Evaluated per send, so choosing a source in Settings
                      * takes effect on the next message rather than the next
@@ -3995,6 +4058,30 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                  * abbia spento. C'è una riga di test che lo tiene fermo.
                  */
                 name === 'tool_details'
+                /*
+                 * ⛔⛔⛔ Owner 2026-08-27, Fase 8 — trovato SUL DISPOSITIVO, non
+                 * nel codice a tavolino: un tool forgiato ABILITATO dalla
+                 * stazione Tool Forge tornava "disabled in Agent Tools
+                 * settings" quando il modello lo chiamava davvero. Il fix
+                 * a `toolset.ts`'s `isEnabled()` (Fase 8, stesso giorno) non
+                 * bastava — QUESTA funzione lo scavalca comunque: le prime
+                 * DUE condizioni sotto (`sendRuntime.agentTools[name]`,
+                 * `deps.settings.state.agent_tools[name]`) sono mappe
+                 * indicizzate per nome, tipizzate su `TalosAgentToolEnabled`
+                 * — l'elenco FISSO dei tool statici. Un nome `dynamic:*` non
+                 * ci può mai comparire, quindi quelle due condizioni sono
+                 * `undefined === true` ⇒ sempre `false`, PRIMA ancora di
+                 * arrivare a `toolset.isEnabled(...)` (che pure funziona,
+                 * dal fix di prima). Tre punti che dovevano dire la STESSA
+                 * cosa, e due di loro non sapevano che il terzo esisteva —
+                 * esattamente il pattern "valutare il flag in un solo posto"
+                 * (ricerca 27/8). Un tool forgiato ha l'interruttore vero
+                 * SOLO nel registro Tool Forge (`record.enabled`, già
+                 * verificato prima che il tool comparisse nell'offerta):
+                 * ripetere il giudizio contro due mappe che non lo conoscono
+                 * lo negherebbe SEMPRE, in silenzio.
+                 */
+                || dynamicToolIdFromName(name) !== null
                 || (
                     sendRuntime.agentTools[name as keyof TalosAgentToolEnabled] === true
                     && deps.settings.state.agent_tools[name as keyof TalosAgentToolEnabled] === true
@@ -7180,6 +7267,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         promptEnhancement: readonly(promptEnhancement),
         promptEnhancementError: readonly(promptEnhancementError),
         attachments,
+        saveArtifactToLibrary,
         chat,
         secrets: readonly(secrets),
         init,

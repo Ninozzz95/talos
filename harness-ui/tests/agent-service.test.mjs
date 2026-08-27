@@ -310,7 +310,7 @@ test('⭐⭐ senza iniezione, il contesto workspace è QUELLO VERO (nessun mock)
   assert.ok(eventi[0].contesto.branch.length > 0);
 });
 
-test('avviaSessione passa cartella/modello/chiave/comandoProva/segnaleStop/messaggiIniziali intatti a talosLavora', async () => {
+test('avviaSessione passa cartella/modello/chiave/comandoProva/segnaleStop/messaggiIniziali/mobile intatti a talosLavora', async () => {
   let catturato = null;
   const controller = new AbortController();
   const messaggiIniziali = [{ role: 'system', content: 's' }];
@@ -321,7 +321,7 @@ test('avviaSessione passa cartella/modello/chiave/comandoProva/segnaleStop/messa
 
   await avviaSessione({
     cartella: '/tmp/progetto', task: TASK, modello: 'z-ai/glm-4.7-flash', chiave: 'segreta',
-    comandoProva: 'npm run test:unit', segnaleStop: controller.signal, messaggiIniziali,
+    comandoProva: 'npm run test:unit', segnaleStop: controller.signal, messaggiIniziali, mobile: true,
     onEvento: () => {}, talosLavoraFn,
   });
 
@@ -331,6 +331,21 @@ test('avviaSessione passa cartella/modello/chiave/comandoProva/segnaleStop/messa
   assert.equal(catturato.comandoProva, 'npm run test:unit');
   assert.equal(catturato.segnaleStop, controller.signal);
   assert.equal(catturato.messaggiIniziali, messaggiIniziali);
+  // ⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 — talosLavora
+  // riceve 'mobile' così com'è, senza che questo file lo interpreti.
+  assert.equal(catturato.mobile, true);
+});
+
+test('⛔ AL CONTRARIO: senza mobile, talosLavora riceve mobile:false — il comportamento desktop di sempre', async () => {
+  let catturato = null;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn });
+
+  assert.equal(catturato.mobile, false);
 });
 
 // compattaSessione — "compatta ora" (piano §1.4). Stesso principio delle
@@ -440,4 +455,38 @@ test('⛔ verso contrario: un\'uscita diversa da zero NON diventa un RunError �
   const finale = eventi.at(-1);
   assert.equal(finale.type, 'RunFinished', 'un\'uscita non-zero è informazione, non un guasto del SERVIZIO — vedi la stessa distinzione già in esitoInEventoFinale');
   assert.deepEqual(finale.outcome, { type: 'success' });
+});
+
+/**
+ * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 — il
+ * comando diretto (`!comando`) di una sessione mobile deve passare
+ * {mobile:true} a eseguiComandoSandboxatoFn, ESATTAMENTE come l'attrezzo
+ * `shell` dentro il ciclo (stessa funzione, vedi la doc in agent-service.mjs).
+ */
+test('eseguiComandoDiretto passa {mobile:true} a eseguiComandoSandboxatoFn quando la sessione è mobile', async () => {
+  let opzioniCatturate = null;
+  const eseguiComandoSandboxatoFn = async (comando, cartella, opzioni) => {
+    opzioniCatturate = opzioni;
+    return { codice: 0, testo: '', enforcement: 'adb-shell-on-device' };
+  };
+
+  await eseguiComandoDiretto({
+    cartella: '/tmp/x', comando: 'pm list packages', onEvento: () => {}, mobile: true, eseguiComandoSandboxatoFn,
+  });
+
+  assert.deepEqual(opzioniCatturate, { mobile: true });
+});
+
+test('⛔ AL CONTRARIO: senza mobile, eseguiComandoSandboxatoFn riceve {mobile:false} — il comportamento desktop di sempre', async () => {
+  let opzioniCatturate = null;
+  const eseguiComandoSandboxatoFn = async (comando, cartella, opzioni) => {
+    opzioniCatturate = opzioni;
+    return { codice: 0, testo: '', enforcement: 'wsl2' };
+  };
+
+  await eseguiComandoDiretto({
+    cartella: '/tmp/x', comando: 'echo x', onEvento: () => {}, eseguiComandoSandboxatoFn,
+  });
+
+  assert.deepEqual(opzioniCatturate, { mobile: false });
 });
