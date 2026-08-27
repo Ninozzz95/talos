@@ -29,6 +29,11 @@ const API_ERROR_CODES = new Set([
   'CATALOG_UNREACHABLE',
   'CATALOG_UPSTREAM_ERROR',
   'INTERNAL_ERROR',
+  /* ⭐ 27/8 — le quattro azioni sul file dell'albero (owner: rinomina, apri, rivela in Esplora File, elimina), vedi workspace-files.mjs. */
+  'FILE_NOT_FOUND',
+  'FILE_TOO_LARGE',
+  'FILE_EXISTS',
+  'PLATFORM_UNSUPPORTED',
 ]);
 
 const STATUS_BY_CODE = Object.freeze({
@@ -50,6 +55,12 @@ const STATUS_BY_CODE = Object.freeze({
   CATALOG_UNREACHABLE: 503,
   CATALOG_UPSTREAM_ERROR: 503,
   INTERNAL_ERROR: 500,
+  FILE_NOT_FOUND: 404,
+  /** ⭐ 27/8 — stesso status di PAYLOAD_LIMIT: un'anteprima troppo grande è la stessa famiglia di "contenuto oltre il limite". */
+  FILE_TOO_LARGE: 413,
+  /** ⭐ 27/8 — stesso status di SESSION_NOT_READY: la richiesta è legittima ma lo stato attuale (un file già lì) la blocca. */
+  FILE_EXISTS: 409,
+  PLATFORM_UNSUPPORTED: 501,
 });
 
 const MESSAGE_BY_CODE = Object.freeze({
@@ -68,6 +79,10 @@ const MESSAGE_BY_CODE = Object.freeze({
   CATALOG_UNREACHABLE: 'Catalogo modelli non raggiungibile',
   CATALOG_UPSTREAM_ERROR: 'Catalogo modelli non disponibile',
   INTERNAL_ERROR: 'Errore interno',
+  FILE_NOT_FOUND: 'File non trovato',
+  FILE_TOO_LARGE: 'File troppo grande per l\'anteprima',
+  FILE_EXISTS: 'Esiste già un file con questo nome',
+  PLATFORM_UNSUPPORTED: 'Non disponibile su questa piattaforma',
 });
 
 const SECURITY_HEADERS = Object.freeze({
@@ -335,6 +350,29 @@ function requireNomeBody(body) {
   return body.nome;
 }
 
+/** ⭐ 27/8 — {percorso}, per elimina/rivela: la validazione FINE del percorso resta in workspace-files.mjs, qui solo la forma. */
+function requirePercorsoBody(body) {
+  const chiavi = Object.keys(body ?? {});
+  if (chiavi.length !== 1 || chiavi[0] !== 'percorso' || typeof body.percorso !== 'string') {
+    const errore = new Error('Corpo non valido: atteso {percorso}');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  return body.percorso;
+}
+
+/** ⭐ 27/8 — {percorso, nuovoNome}, per rinomina. */
+function requireRinominaBody(body) {
+  const chiavi = Object.keys(body ?? {});
+  const attese = ['percorso', 'nuovoNome'];
+  if (chiavi.length !== 2 || !attese.every((k) => chiavi.includes(k)) || typeof body.percorso !== 'string' || typeof body.nuovoNome !== 'string') {
+    const errore = new Error('Corpo non valido: atteso {percorso, nuovoNome}');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  return { percorso: body.percorso, nuovoNome: body.nuovoNome };
+}
+
 /** ⛔ Un'allowlist di UNA chiave sola, come requireTaskIdBody — solo la FORMA, mai vuoto (un comando vuoto non esegue niente di utile ed è un segno di un chiamante rotto). */
 function requireComandoBody(body) {
   const chiavi = Object.keys(body ?? {});
@@ -553,6 +591,100 @@ export function createHttpApp({
       return;
     }
 
+    /*
+     * ⭐⭐⭐ 27/8, owner: "non ha opzioni per rinominare i file... per
+     * eliminarlo... per aprirli nel visualizza file explorer di Windows"
+     * — tre azioni sul FILE dell'albero (non sulla sessione, come
+     * renameMatch sopra), stesso schema POST-per-azione già in uso
+     * ovunque in questo file.
+     */
+    const renameFileMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/tree\/rename$/.exec(url.pathname);
+    if (renameFileMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try {
+          sessionId = decodeURIComponent(renameFileMatch[1]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const corpo = await leggiCorpoJson(req);
+        const { percorso, nuovoNome } = requireRinominaBody(corpo);
+        const esito = await sessionRegistry.rinominaFile(sessionId, percorso, nuovoNome);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ nuovoPercorso: esito.nuovoPercorso }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    const deleteFileMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/tree\/delete$/.exec(url.pathname);
+    if (deleteFileMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try {
+          sessionId = decodeURIComponent(deleteFileMatch[1]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const corpo = await leggiCorpoJson(req);
+        const percorso = requirePercorsoBody(corpo);
+        const esito = await sessionRegistry.eliminaFile(sessionId, percorso);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ eliminato: true }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    const revealFileMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/tree\/reveal$/.exec(url.pathname);
+    if (revealFileMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try {
+          sessionId = decodeURIComponent(revealFileMatch[1]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const corpo = await leggiCorpoJson(req);
+        const percorso = requirePercorsoBody(corpo);
+        const esito = await sessionRegistry.rivelaFile(sessionId, percorso);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ rivelato: true }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
     const stopMatch = method === 'POST' && sessionRegistry
       && /^\/api\/v1\/sessions\/([^/]+)\/stop$/.exec(url.pathname);
     if (stopMatch) {
@@ -745,6 +877,7 @@ export function createHttpApp({
         const eventsMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/events$/.exec(url.pathname);
         const exportMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/export$/.exec(url.pathname);
         const treeMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/tree$/.exec(url.pathname);
+        const treeFileMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/tree\/file$/.exec(url.pathname);
 
         if (treeMatch) {
           let sessionId;
@@ -762,6 +895,23 @@ export function createHttpApp({
             throw errore;
           }
           data = { voci: esito.voci };
+        } else if (treeFileMatch) {
+          /* ⭐ 27/8 — "Apri" un file dell'albero: stessa forma di treeMatch, endpoint separato perché la risposta porta contenuto, non un elenco. */
+          let sessionId;
+          try {
+            sessionId = decodeURIComponent(treeFileMatch[1]);
+          } catch {
+            sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+            return;
+          }
+          const percorso = parseTreeQuery(url);
+          const esito = await sessionRegistry.apriFile(sessionId, percorso);
+          if ('erroreAvvio' in esito) {
+            const errore = new Error(esito.erroreAvvio);
+            errore.code = esito.code;
+            throw errore;
+          }
+          data = { percorso, contenuto: esito.contenuto, dimensione: esito.dimensione };
         } else if (exportMatch) {
           requireNoQuery(url);
           let sessionId;
