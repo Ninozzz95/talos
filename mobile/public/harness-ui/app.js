@@ -1979,6 +1979,19 @@
     } catch {
       return; // ⛔ un aggiornamento sidebar fallito non è un'azione richiesta, non merita un toast
     }
+    /*
+     * ⭐ 27/8, trovato analizzando quali badge non si spengono MAI: questa
+     * funzione aggiungeva sessioni vere in un blocco separato senza mai
+     * nascondere il badge del pannello INTERO (`data-demo-surface="sessions"`
+     * su #sessionsPanel) — "Demo UI · non collegato" restava scritto sopra
+     * sessioni realmente in corso. Le voci demo statiche restano sotto per
+     * riferimento (non è quello il bug), ma l'etichetta in cima deve
+     * smettere di mentire appena ne esiste almeno una vera.
+     */
+    if (elenco.length > 0) {
+      const demoBadge = $('.demo-surface-badge', $('#sessionsPanel'));
+      if (demoBadge) demoBadge.hidden = true;
+    }
     if (elenco.length === 0) { contenitore.replaceChildren(); return; }
 
     const pezzi = [textElement('div', 'list-heading', 'Sessioni reali')];
