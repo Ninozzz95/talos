@@ -97,6 +97,19 @@ function eUnaScheda(valore: unknown): valore is TalosScheda {
         return typeof r.titolo === 'string' && r.titolo !== ''
             && typeof r.genere === 'string' && r.genere !== ''
     }
+    /**
+     * ⛔ Stesse regole di `creato`, per ogni voce — e un elenco VUOTO non si
+     * disegna, stessa ragione di `agenda`/`quale-app`: zero voci non è
+     * «niente da mostrare», è un tool che ha dichiarato una scheda senza
+     * aver creato niente, e mostrarla sarebbe la bugia opposta del «Fatto».
+     */
+    if (r.tipo === 'creati') {
+        return Array.isArray(r.voci) && r.voci.length > 0
+            && r.voci.every((v) => typeof (v as Record<string, unknown>)?.titolo === 'string'
+                && (v as Record<string, unknown>).titolo !== ''
+                && typeof (v as Record<string, unknown>)?.genere === 'string'
+                && (v as Record<string, unknown>).genere !== '')
+    }
 
     /*
      * ⛔ `app` e `partito` sono OBBLIGATORI, e `partito` deve essere un
@@ -153,6 +166,8 @@ const eQualeApp = (s: TalosScheda): s is SchedaQualeApp => s.tipo === 'quale-app
 const eQualeFile = (s: TalosScheda): s is SchedaQualeFile => s.tipo === 'quale-file'
 type SchedaCreato = Extract<TalosScheda, { tipo: 'creato' }>
 const eCreato = (s: TalosScheda): s is SchedaCreato => s.tipo === 'creato'
+type SchedaCreati = Extract<TalosScheda, { tipo: 'creati' }>
+const eCreati = (s: TalosScheda): s is SchedaCreati => s.tipo === 'creati'
 
 /**
  * ⛔ La rotta arriva dall'attrezzo che ha creato la cosa, e resta INTERNA: si
@@ -567,6 +582,35 @@ const parolaStato = (acceso: boolean): string => (acceso
             </component>
 
             <!--
+                ⭐⭐⭐ PIÙ DI UNA COSA CREATA — la stessa scheda sopra, ripetuta
+                per ogni voce. Vedi `tracciaAzione.ts` per il perché: un
+                `foreach` del Forge (es. "aggiungi tre attività") produceva
+                N creazioni vere e ZERO righe qui, solo un badge di testo.
+
+                ⛔ Nessun elemento nuovo: stessa classe `talos-controllo`,
+                stesso bottone-solo-col-`dove` di `creato` — è la STESSA
+                scheda, non una seconda forma da imparare a leggere.
+            -->
+            <template v-if="eCreati(s)">
+                <component
+                    v-for="(voce, vi) in s.voci"
+                    :key="`${voce.titolo}-${vi}`"
+                    :is="voce.dove ? 'button' : 'div'"
+                    :type="voce.dove ? 'button' : undefined"
+                    class="talos-controllo flex w-full items-center gap-2 border border-border bg-muted text-left"
+                    :class="voce.dove ? 'talos-pressable' : ''"
+                    data-testid="talos-scheda-creati-voce"
+                    @click="voce.dove ? apri(voce.dove) : undefined"
+                >
+                    <span class="talos-nome min-w-0 flex-1">
+                        <span class="block truncate">{{ voce.titolo }}</span>
+                        <span class="mt-px block text-xs text-muted-foreground">{{ voce.genere }}</span>
+                    </span>
+                    <span v-if="voce.dove" class="talos-freccia flex-none" aria-hidden="true">›</span>
+                </component>
+            </template>
+
+            <!--
                 ⭐⭐⭐ È PARTITO, O NO — e questa riga vince sulla prosa.
 
                 MISURATO sul Pad il 2026-08-17, con la lettura dello schermo
@@ -903,6 +947,10 @@ const parolaStato = (acceso: boolean): string => (acceso
     padding: var(--talos-space-control);
     border-radius: var(--talos-radius-control);
 }
+/* ⛔ Serve SOLO da quando `creati` ripete `.talos-controllo` per riga —
+   prima non esisteva un caso con più di uno stesso comando in una scheda.
+   Stessa misura di `.talos-voce + .talos-voce` e `.talos-app + .talos-app`. */
+.talos-controllo + .talos-controllo { margin-block-start: 0.35rem; }
 /*
  * ⭐ La riga di un impegno. Stessa scatola del comando — stesso raggio, stesso
  * respiro — perché a schermo sono due forme della stessa scheda.

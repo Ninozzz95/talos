@@ -210,6 +210,97 @@ describe('talosIntegration — credential resolver, fail-closed', () => {
     })
 })
 
+/**
+ * ⛔⛔⛔ Owner 2026-08-27 — «hai anche testato quella cosa di ChatGPT? creare
+ * un tool UI che ti trasforma una lista in un elemento in chat
+ * interattivo?». Non l'Apps SDK (iframe, incompatibile con ADR-001): la
+ * `TalosScheda` che le sette capacità native già usano, ora anche per un
+ * tool FORGIATO — che oggi non ne produceva mai nessuna (confermato via
+ * grep prima di scrivere questa fase: zero occorrenze di `scheda` in
+ * `talosIntegration.ts`/`interpreter.ts`).
+ */
+function bulkNotesManifest(id: string): TalosLocalToolManifestV1 {
+    return {
+        schema: 'talos.local-tool.v1', id, version: 1, title: `Tool ${id}`,
+        description: 'creates one note per title', createdAt: new Date().toISOString(), parentVersion: null,
+        execution: 'declarative-flow', installScope: 'device',
+        network: { mode: 'forbidden', domains: [] }, credentialRequirements: [],
+        flow: {
+            entry: 'loop', maxTransitions: 16,
+            nodes: [
+                {
+                    id: 'loop', type: 'foreach', source: { $ref: '$.input.titles' }, itemVar: '$.title', maxItems: 10, next: 'done',
+                    body: [{ type: 'capability', capability: 'notes.create', input: { title: { $ref: '$.title' }, content: 'x' } }],
+                },
+                { id: 'done', type: 'return', value: null },
+            ],
+        },
+    } as never
+}
+
+function twoNotesManifest(id: string): TalosLocalToolManifestV1 {
+    return {
+        schema: 'talos.local-tool.v1', id, version: 1, title: `Tool ${id}`,
+        description: 'two writes, the second fails', createdAt: new Date().toISOString(), parentVersion: null,
+        execution: 'declarative-flow', installScope: 'device',
+        network: { mode: 'forbidden', domains: [] }, credentialRequirements: [],
+        flow: {
+            entry: 'first', maxTransitions: 8,
+            nodes: [
+                { id: 'first', type: 'capability', capability: 'notes.create', input: { title: 'Prima', content: 'x' }, next: 'second' },
+                { id: 'second', type: 'capability', capability: 'notes.create', input: { title: 'Seconda', content: 'x' }, next: 'done' },
+                { id: 'done', type: 'return', value: null },
+            ],
+        },
+    }
+}
+
+describe('talosIntegration — la scheda creato/creati di un tool forgiato', () => {
+    it('un foreach che crea più note produce "creati", una voce per nota, con la rotta vera', async () => {
+        await withOneEnabledTool(bulkNotesManifest('bulk_notes_tool'))
+        const [tool] = await createInstalledDynamicTools({ repository: createMemoryChatRepository() })
+        const result = await tool!.run({ titles: ['Prima', 'Seconda', 'Terza'] } as never, { sessionId: null })
+        expect(result.ok).toBe(true)
+        expect(result.scheda?.tipo).toBe('creati')
+        if (result.scheda?.tipo === 'creati') {
+            const voci = result.scheda.voci
+            expect(voci.map((v: { titolo: string }) => v.titolo)).toEqual(['Prima', 'Seconda', 'Terza'])
+            expect(voci.every((v: { genere: string }) => v.genere === 'Nota')).toBe(true)
+            expect(voci.every((v: { dove?: string }) => typeof v.dove === 'string' && v.dove.startsWith('/notes/'))).toBe(true)
+        }
+    })
+
+    it('una sola creazione resta "creato" (singolare) — nessuna scheda nuova per il caso comune', async () => {
+        await withOneEnabledTool(passthroughManifest('single_create_tool', 'notes.create'))
+        const [tool] = await createInstalledDynamicTools({ repository: createMemoryChatRepository() })
+        const result = await tool!.run({ title: 'Una nota sola', content: 'x' } as never, { sessionId: null })
+        expect(result.ok).toBe(true)
+        expect(result.scheda).toMatchObject({ tipo: 'creato', genere: 'Nota', titolo: 'Una nota sola' })
+    })
+
+    it('⛔ verso contrario: un tool di sola lettura non produce mai una scheda', async () => {
+        await withOneEnabledTool(passthroughManifest('list_tool2', 'notes.list'))
+        const [tool] = await createInstalledDynamicTools({ repository: createMemoryChatRepository() })
+        const result = await tool!.run({} as never, { sessionId: null })
+        expect(result.ok).toBe(true)
+        expect(result.scheda).toBeUndefined()
+    })
+
+    it('un fallimento a metà porta comunque la scheda di ciò che è stato creato prima del guasto', async () => {
+        await withOneEnabledTool(twoNotesManifest('partial_tool'))
+        const base = createMemoryChatRepository()
+        let calls = 0
+        const failing: TalosChatRepository = {
+            ...base,
+            async createNote(input: Parameters<TalosChatRepository['createNote']>[0]) { calls += 1; if (calls === 2) throw new Error('boom'); return base.createNote(input) },
+        }
+        const [tool] = await createInstalledDynamicTools({ repository: failing })
+        const result = await tool!.run({} as never, { sessionId: null })
+        expect(result.ok).toBe(false)
+        expect(result.scheda).toMatchObject({ tipo: 'creato', titolo: 'Prima', genere: 'Nota' })
+    })
+})
+
 describe('talosIntegration — l\'errore del repository non finisce grezzo nel trace', () => {
     it('un errore del repository diventa un codice pubblico, non il messaggio originale', async () => {
         await withOneEnabledTool(passthroughManifest('create_tool', 'tasks.create'))

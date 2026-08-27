@@ -1,5 +1,5 @@
 import type {
-    ForgeCapabilityRuntime, ForgeExecutionResult, ForgeInlineNode, ForgeModelRequirements,
+    ForgeCapabilityRuntime, ForgeCreatedRecord, ForgeExecutionResult, ForgeInlineNode, ForgeModelRequirements,
     ForgeModelRuntime, ForgeTraceEvent, JsonSchemaSubset, TalosLocalToolManifestV1,
 } from './contracts'
 import { evaluateCondition, resolveExpr, setPath } from './expr'
@@ -64,9 +64,9 @@ export async function executeTalosLocalTool(
     options: { executionId?: string; signal?: AbortSignal } = {},
 ): Promise<ForgeExecutionResult> {
     const validated = validateTalosLocalTool(manifest)
-    if (!validated.ok) return { status: 'failed', error: { code: 'FORGE_MANIFEST_INVALID', message: validated.diagnostics.filter((d) => d.level === 'error').map((d) => `${d.path}: ${d.message}`).join('; ') }, trace: [], variables: {} }
+    if (!validated.ok) return { status: 'failed', error: { code: 'FORGE_MANIFEST_INVALID', message: validated.diagnostics.filter((d) => d.level === 'error').map((d) => `${d.path}: ${d.message}`).join('; ') }, trace: [], variables: {}, created: [] }
     const inputErrors = validateJsonSchemaValue(manifest.inputSchema, input)
-    if (inputErrors.length) return { status: 'failed', error: { code: 'FORGE_INPUT_INVALID', message: inputErrors.join('; ') }, trace: [], variables: {} }
+    if (inputErrors.length) return { status: 'failed', error: { code: 'FORGE_INPUT_INVALID', message: inputErrors.join('; ') }, trace: [], variables: {}, created: [] }
 
     const executionId = options.executionId ?? `forge-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
     const now = deps.now ?? (() => new Date().toISOString())
@@ -79,6 +79,11 @@ export async function executeTalosLocalTool(
     })
     const nodes = new Map(manifest.flow.nodes.map((node) => [node.id, node]))
     const trace: ForgeTraceEvent[] = []
+    // ⛔ Owner 2026-08-27 — vedi `ForgeCapabilityDescriptor.recordKind` in
+    // contracts.ts per il perché: qui è dove si popola, l'unico posto che
+    // vede sia il descrittore (chi dichiara "questo crea qualcosa") sia il
+    // risultato vero della capability, per ogni chiamata riuscita.
+    const created: ForgeCreatedRecord[] = []
     const compensations: CompensationEntry[] = []
     let crossedIrreversible = false
     let transitions = 0
@@ -143,6 +148,20 @@ export async function executeTalosLocalTool(
                 deps.circuitBreaker?.success(capability)
                 await deps.idempotency?.put(idempotencyKey, result)
                 event(nodeId, 'capability', true, { capability, attempt })
+                // ⛔ Owner 2026-08-27: `recordKind` è dichiarato sulla
+                // capability, non indovinato dalla forma del risultato — ma
+                // il risultato deve comunque avere un titolo leggibile,
+                // altrimenti una scheda con un titolo vuoto sarebbe la
+                // stessa bugia del «Fatto» senza dire cosa.
+                if (descriptor.recordKind && result && typeof result === 'object' && !Array.isArray(result)) {
+                    const row = result as Record<string, unknown>
+                    if (typeof row.title === 'string' && row.title !== '') {
+                        created.push({
+                            capability, recordKind: descriptor.recordKind, title: row.title,
+                            ...(typeof row.id === 'string' && row.id !== '' ? { id: row.id } : {}),
+                        })
+                    }
+                }
                 return result
             } catch (error) {
                 last = error
@@ -293,7 +312,7 @@ export async function executeTalosLocalTool(
                         throw new ForgeRuntimeError('FORGE_OUTPUT_TOO_LARGE', `Output is ${outputBytes} bytes; max is ${MAX_OUTPUT_BYTES}.`)
                     }
                     event(node.id, 'return', true)
-                    return { status: 'succeeded', output, trace, variables: vars }
+                    return { status: 'succeeded', output, trace, variables: vars, created }
                 }
                 case 'fail': throw new ForgeRuntimeError(node.code, node.message)
             }
@@ -302,6 +321,6 @@ export async function executeTalosLocalTool(
         const runtimeError = error instanceof ForgeRuntimeError ? error : new ForgeRuntimeError('FORGE_RUNTIME_FAILED', error instanceof Error ? error.message : String(error))
         const compensated = await compensate()
         const recovery = runtimeError.recoveryRequired || crossedIrreversible || !compensated
-        return { status: recovery ? 'recovery_required' : 'failed', error: { code: runtimeError.code, message: runtimeError.message }, trace, variables: vars }
+        return { status: recovery ? 'recovery_required' : 'failed', error: { code: runtimeError.code, message: runtimeError.message }, trace, variables: vars, created }
     }
 }
