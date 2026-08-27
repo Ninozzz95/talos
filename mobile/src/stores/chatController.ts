@@ -327,6 +327,7 @@ const unavailableFilePicker: TalosNativeFilePicker = {
 
 import { talosChainFor } from '@/lib/tools/chainStore'
 import { talosChiudiSuStop } from '@/lib/chat/stopSuAttesa'
+import { dynamicToolIdFromName } from '@/lib/tools/dynamic/ids'
 import { talosPlanReplacesConsent, type TalosPlan } from '@/lib/tools/plan'
 import { talosPlanFor } from '@/lib/tools/planStore'
 import { TALOS_TOOL_SECURITY_FALLBACK as PIANO_SICUREZZA_PRUDENTE } from '@/lib/tools/security'
@@ -3995,6 +3996,30 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                  * abbia spento. C'è una riga di test che lo tiene fermo.
                  */
                 name === 'tool_details'
+                /*
+                 * ⛔⛔⛔ Owner 2026-08-27, Fase 8 — trovato SUL DISPOSITIVO, non
+                 * nel codice a tavolino: un tool forgiato ABILITATO dalla
+                 * stazione Tool Forge tornava "disabled in Agent Tools
+                 * settings" quando il modello lo chiamava davvero. Il fix
+                 * a `toolset.ts`'s `isEnabled()` (Fase 8, stesso giorno) non
+                 * bastava — QUESTA funzione lo scavalca comunque: le prime
+                 * DUE condizioni sotto (`sendRuntime.agentTools[name]`,
+                 * `deps.settings.state.agent_tools[name]`) sono mappe
+                 * indicizzate per nome, tipizzate su `TalosAgentToolEnabled`
+                 * — l'elenco FISSO dei tool statici. Un nome `dynamic:*` non
+                 * ci può mai comparire, quindi quelle due condizioni sono
+                 * `undefined === true` ⇒ sempre `false`, PRIMA ancora di
+                 * arrivare a `toolset.isEnabled(...)` (che pure funziona,
+                 * dal fix di prima). Tre punti che dovevano dire la STESSA
+                 * cosa, e due di loro non sapevano che il terzo esisteva —
+                 * esattamente il pattern "valutare il flag in un solo posto"
+                 * (ricerca 27/8). Un tool forgiato ha l'interruttore vero
+                 * SOLO nel registro Tool Forge (`record.enabled`, già
+                 * verificato prima che il tool comparisse nell'offerta):
+                 * ripetere il giudizio contro due mappe che non lo conoscono
+                 * lo negherebbe SEMPRE, in silenzio.
+                 */
+                || dynamicToolIdFromName(name) !== null
                 || (
                     sendRuntime.agentTools[name as keyof TalosAgentToolEnabled] === true
                     && deps.settings.state.agent_tools[name as keyof TalosAgentToolEnabled] === true
