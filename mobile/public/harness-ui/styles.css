@@ -293,6 +293,9 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 .primary-btn { min-height: var(--touch); padding: 0 16px; border-radius: var(--radius-control); background: var(--accent); color: var(--on-accent); font-weight: 750; display: inline-flex; align-items: center; justify-content: center; gap: 8px; box-shadow: inset 0 1px var(--surface-highlight-strong), 0 6px 18px var(--accent-soft); }
 .primary-btn:hover { background: var(--accent-2); }
 .primary-btn.compact, .secondary-btn.compact { min-height: 36px; height: 36px; padding: 0 12px; border-radius: 10px; font-size: 13px; }
+/* ⭐ 27/8 — "Elimina" nel foglio di conferma dell'albero file: stessi token --danger già in uso altrove (.del, .stop-run), non un rosso inventato qui. */
+.primary-btn.danger { background: var(--danger); box-shadow: inset 0 1px var(--surface-highlight-strong), 0 6px 18px var(--danger-soft); }
+.primary-btn.danger:hover { background: var(--danger); filter: brightness(1.08); }
 .secondary-btn { min-height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text-2); }
 .secondary-btn:hover { border-color: var(--line-strong); background: var(--surface-3); }
 .secondary-btn.full { width: 100%; margin-top: 10px; }
@@ -609,6 +612,24 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .ft-status-dot.ft-new { background: var(--success); }
 .ft-status-dot.ft-modified { background: var(--accent); }
 .ft-loading { padding: 6px 3px; font-size: 10.5px; color: var(--muted-2); }
+/*
+ * ⭐⭐⭐ 27/8, owner: le cinque azioni sul file dell'albero (apri,
+ * rinomina, rivela in Esplora File, elimina, allega alla chat). Il
+ * bottone "···" resta nascosto finché la riga non è in hover/focus —
+ * un albero pieno di icone sempre visibili è più rumore che aiuto,
+ * stesso principio delle azioni-riga di ogni file manager reale.
+ */
+.ft-actions-btn { flex-shrink: 0; width: 22px; height: 22px; display: none; align-items: center; justify-content: center; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; margin-left: auto; }
+.ft-row:hover .ft-actions-btn, .ft-row:focus-within .ft-actions-btn, .ft-row.ft-selected .ft-actions-btn { display: inline-flex; }
+.ft-actions-btn:hover { background: var(--surface-2); color: var(--text); }
+.ft-actions-btn svg { width: 14px; height: 14px; }
+.ft-actions-menu { position: fixed; z-index: 40; min-width: 200px; display: flex; flex-direction: column; padding: 6px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface-elevated); box-shadow: var(--shadow); }
+.ft-actions-menu-item { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: var(--text-2); font-size: 13px; text-align: left; cursor: pointer; }
+.ft-actions-menu-item:hover { background: var(--surface-2); color: var(--text); }
+.ft-actions-menu-item svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--muted); }
+.ft-actions-menu-item-danger { color: var(--danger); }
+.ft-actions-menu-item-danger svg { color: var(--danger); }
+.ft-actions-menu-item-danger:hover { background: var(--danger-soft); }
 .agent-card { min-height: 58px; border: 1px solid var(--line); border-radius: 10px; display: grid; grid-template-columns: 34px minmax(0,1fr) auto; gap: 9px; align-items: center; padding: 9px; margin-bottom: 8px; }
 .agent-avatar { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: var(--surface-3); color: var(--accent-2); font: 10px var(--font-mono); }
 .agent-card strong, .agent-card small { display: block; }
