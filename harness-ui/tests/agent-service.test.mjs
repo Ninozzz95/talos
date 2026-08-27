@@ -36,6 +36,10 @@ function talosLavoraFinto({ script, cattura = () => {} }) {
     for (const toolEsito of script.toolEsiti ?? []) {
       input.onGiro?.({ tipo: 'tool-esito', giro: 0, toolCallId: toolEsito.toolCallId, content: toolEsito.content });
     }
+    // ⭐⭐⭐ 28/8 — come per onScrittura sopra: il finto chiama onArtefatto ESATTAMENTE come farebbe il kernel vero (talosHarness.mjs), risultato incluso.
+    for (const artefatto of script.artefatti ?? []) {
+      await input.onArtefatto?.(artefatto.titolo, artefatto.html);
+    }
     return script.esito;
   };
 }
@@ -545,4 +549,68 @@ test('⛔ AL CONTRARIO: senza mobile, eseguiComandoSandboxatoFn riceve {mobile:f
   });
 
   assert.deepEqual(opzioniCatturate, { mobile: false });
+});
+
+/*
+ * ⭐⭐⭐ 28/8 — owner: "l'harness desktop diventa l'unica chat, con tutti i
+ * tool come la generazione di artefatti oppure la ricerca web". Stessa
+ * disciplina di prova di onScrittura/onDelta: il finto chiama onArtefatto
+ * come farebbe il kernel vero, si prova SOLO la traduzione qui.
+ */
+test('⭐ avviaSessione inoltra strumentiEstesi/ricercaWeb a talosLavoraFn così come sono', async () => {
+  let inputCatturato = null;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { inputCatturato = input; },
+  });
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    strumentiEstesi: ['web_search', 'artifact_create'], ricercaWeb: { provider: 'tavily', apiKey: 'k' },
+  });
+
+  assert.deepEqual(inputCatturato.strumentiEstesi, ['web_search', 'artifact_create']);
+  assert.deepEqual(inputCatturato.ricercaWeb, { provider: 'tavily', apiKey: 'k' });
+  assert.equal(typeof inputCatturato.onArtefatto, 'function');
+});
+
+test('⛔ AL CONTRARIO: senza strumentiEstesi/ricercaWeb, talosLavoraFn li riceve undefined — nessuna invenzione', async () => {
+  let inputCatturato = null;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { inputCatturato = input; },
+  });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn });
+
+  assert.equal(inputCatturato.strumentiEstesi, undefined);
+  assert.equal(inputCatturato.ricercaWeb, undefined);
+});
+
+test('⭐⭐⭐ un artefatto creato dal kernel diventa un evento ArtifactCreated, con un id VERO (randomUUID, non quello di fallback del kernel)', async () => {
+  const eventi = [];
+  const html = '<!doctype html><html><body>ciao</body></html>';
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, artefatti: [{ titolo: 'Grafico', html }] },
+  });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn });
+
+  const evento = eventi.find((e) => e.type === 'ArtifactCreated');
+  assert.ok(evento, 'un evento ArtifactCreated deve essere emesso');
+  assert.equal(evento.titolo, 'Grafico');
+  assert.equal(evento.html, html, 'html intero, mai troncato');
+  assert.match(evento.id, /^[0-9a-f-]{36}$/, 'un vero UUID, non l\'id di fallback del kernel');
+});
+
+test('⛔⛔⛔ un artefatto oltre il tetto di dimensione NON emette un evento — mai un HTML enorme in un payload SSE', async () => {
+  const eventi = [];
+  const htmlEnorme = `<!doctype html><html><body>${'x'.repeat(400_001)}</body></html>`;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, artefatti: [{ titolo: 'Troppo grande', html: htmlEnorme }] },
+  });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn });
+
+  assert.equal(eventi.find((e) => e.type === 'ArtifactCreated'), undefined);
 });

@@ -251,5 +251,35 @@ export function loadConfig(
      * sola, non una copia con un nome diverso che potrebbe disallinearsi.
      */
     chiaveApi: typeof env.OPENROUTER_API_KEY === 'string' ? env.OPENROUTER_API_KEY : undefined,
+    ricercaWeb: parseRicercaWeb(env),
   });
+}
+
+const PROVIDER_RICERCA_AMMESSI = new Set(['tavily', 'brave', 'searxng', 'custom']);
+
+/**
+ * ⭐⭐⭐ 28/8, owner: "l'harness desktop diventa l'unica chat, con tutti i
+ * tool come... la ricerca web" — stesso quattro-fonti già scelto per il
+ * mobile (`ATTREZZI_ESTESI` in talosHarness.mjs, D1 24/8: Tavily prima
+ * porta). `undefined` quando non configurato — stesso principio onesto di
+ * `chiaveApi`: il server resta usabile, il tool `web_search` dichiara "not
+ * configured" invece di tentare una chiamata senza credenziali (vedi il
+ * dispatcher in talosHarness.mjs).
+ */
+function parseRicercaWeb(env) {
+  const provider = typeof env.TALOS_HARNESS_SEARCH_PROVIDER === 'string' && env.TALOS_HARNESS_SEARCH_PROVIDER.trim()
+    ? env.TALOS_HARNESS_SEARCH_PROVIDER.trim().toLowerCase()
+    : 'tavily';
+  const apiKey = typeof env.TALOS_HARNESS_SEARCH_API_KEY === 'string' && env.TALOS_HARNESS_SEARCH_API_KEY.trim()
+    ? env.TALOS_HARNESS_SEARCH_API_KEY.trim()
+    : undefined;
+  const endpoint = typeof env.TALOS_HARNESS_SEARCH_ENDPOINT === 'string' && env.TALOS_HARNESS_SEARCH_ENDPOINT.trim()
+    ? env.TALOS_HARNESS_SEARCH_ENDPOINT.trim()
+    : undefined;
+  // Nessuna credenziale/endpoint: web_search resta offerto (parità di attrezzi) ma il dispatcher del kernel lo dichiara onestamente non configurato — nessun tentativo di rete.
+  if (!apiKey && !endpoint) return undefined;
+  if (!PROVIDER_RICERCA_AMMESSI.has(provider)) {
+    fail(`TALOS_HARNESS_SEARCH_PROVIDER deve essere uno fra: ${[...PROVIDER_RICERCA_AMMESSI].join(', ')}`);
+  }
+  return Object.freeze({ provider, ...(apiKey ? { apiKey } : {}), ...(endpoint ? { endpoint } : {}) });
 }
