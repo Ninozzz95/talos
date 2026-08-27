@@ -43,6 +43,8 @@ type RuntimeGlobals = {
             reviewFiles: Map<string, { path: string, nuovo: boolean, diffVero: boolean, code: [string, string][] }>
             eventoTerminaleVisto: boolean
             followUpBubbleInAttesa: boolean
+            treeCache: Map<string, Array<{ nome: string, cartella: boolean }>>
+            treeOpen: Set<string>
         }
     }
 }
@@ -93,6 +95,39 @@ function mockFetch(regole: RegolaFetch[]) {
             { status: regola.status ?? 200 },
         )
     })
+}
+
+/**
+ * ⭐⭐⭐ 27/8 — l'albero VERO chiama LO STESSO endpoint
+ * (/api/v1/sessions/:id/tree) con `?percorso=` diverso per ogni livello:
+ * `mockFetch` sopra confronta solo il pathname (senza query), quindi non
+ * può dare risposte diverse a root e a una sottocartella sullo STESSO
+ * endpoint. Questo aiutante confronta la query per intero, e conta le
+ * chiamate per livello — la prova che la cache NON ri-scarica un livello
+ * già visto passa da questo conteggio, non da un'supposizione.
+ */
+function mockFetchAlbero(livelli: Record<string, Array<{ nome: string, cartella: boolean }>>, extra: RegolaFetch[] = []) {
+    const chiamatePerLivello: Record<string, number> = {}
+    const spia = vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+        const url = typeof input === 'string' ? input : String(input)
+        const metodo = (init?.method ?? 'GET').toUpperCase()
+        const [percorsoBase, query] = url.split('?')
+        const treeMatch = /^\/api\/v1\/sessions\/[^/]+\/tree$/.exec(percorsoBase)
+        if (metodo === 'GET' && treeMatch) {
+            const parametri = new URLSearchParams(query ?? '')
+            const livello = parametri.get('percorso') ?? ''
+            chiamatePerLivello[livello] = (chiamatePerLivello[livello] ?? 0) + 1
+            if (!(livello in livelli)) throw new Error(`nessuna risposta finta per il livello "${livello}"`)
+            return new Response(JSON.stringify({ ok: true, data: { voci: livelli[livello] } }), { status: 200 })
+        }
+        const regola = extra.find((r) => r.metodo === metodo && percorsoBase === r.percorso)
+        if (!regola) throw new Error(`nessuna risposta finta per ${metodo} ${percorsoBase}`)
+        return new Response(
+            JSON.stringify(regola.ok === false ? { ok: false, error: regola.corpo } : { ok: true, data: regola.corpo }),
+            { status: regola.status ?? 200 },
+        )
+    })
+    return { spia, chiamatePerLivello }
 }
 
 function mountStaticRuntime(): void {
@@ -339,6 +374,141 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         const voce = runtime().realSessionState.reviewFiles.get('src/senza-prima.mjs')
         expect(voce?.diffVero).toBe(false)
         expect(voce!.code.every(([tipo]) => tipo !== 'del')).toBe(true)
+    })
+
+    /*
+     * ⭐⭐⭐ 27/8, owner: "un componente allo stato dell'arte" per Files,
+     * "renditelo funzionante" — il pannello Files reale: albero vero
+     * (più cartelle aperte insieme, non un livello con su/giù), stato
+     * git incrociato con reviewFiles, cache per livello, ricerca dal vivo.
+     */
+    describe('FILE-TREE — il pannello Files reale', () => {
+        async function avviaSessioneConAlbero(livelli: Record<string, Array<{ nome: string, cartella: boolean }>>) {
+            const { chiamatePerLivello } = mockFetchAlbero(livelli, [
+                { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-ft' } },
+                { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+            ])
+            await runtime().startRealSession({ id: 'talos-prova-harness', consegna: 'test albero' })
+            const generation = runtime().realSessionState.generation
+            runtime().handleRealEvent({ type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'test albero' } }, generation)
+            await vi.waitFor(() => { expect(document.querySelector('.ft-tree .ft-row')).toBeTruthy() })
+            return { chiamatePerLivello, generation }
+        }
+
+        const LIVELLO_RADICE = [
+            { nome: 'src', cartella: true },
+            { nome: 'README.md', cartella: false },
+        ]
+        const LIVELLO_SRC = [
+            { nome: 'app.js', cartella: false },
+            { nome: 'styles.css', cartella: false },
+        ]
+
+        it('FILE-TREE-01 la radice mostra cartelle PRIMA dei file, con i ruoli ARIA giusti — role=tree/treeitem, un solo tabstop', async () => {
+            await avviaSessioneConAlbero({ '': LIVELLO_RADICE })
+
+            const albero = document.querySelector('.ft-tree')!
+            expect(albero.getAttribute('role')).toBe('tree')
+            const righe = [...albero.querySelectorAll('.ft-row')]
+            expect(righe.map((r) => r.querySelector('.ft-name')?.textContent)).toEqual(['src', 'README.md'])
+            expect(righe[0].closest('.ft-node')?.getAttribute('role')).toBe('treeitem')
+            // un solo tabstop nell'intero albero (pattern ARIA APG), non uno per riga
+            expect(righe.filter((r) => r.getAttribute('tabindex') === '0')).toHaveLength(1)
+            expect(righe[0].getAttribute('tabindex')).toBe('0')
+        })
+
+        it('FILE-TREE-02 espandere una cartella scarica i suoi figli UNA volta sola — richiuderla e riaprirla NON ripete la richiesta (cache)', async () => {
+            const { chiamatePerLivello } = await avviaSessioneConAlbero({ '': LIVELLO_RADICE, src: LIVELLO_SRC })
+
+            const rigaSrc = [...document.querySelectorAll('.ft-row-folder')].find((r) => r.querySelector('.ft-name')?.textContent === 'src')!
+            rigaSrc.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+            await vi.waitFor(() => { expect(document.querySelector('.ft-node[data-percorso="src/app.js"]')).toBeTruthy() })
+            expect(chiamatePerLivello.src).toBe(1)
+
+            // richiudi, riapri: la cache tiene, zero seconda richiesta
+            rigaSrc.dispatchEvent(new MouseEvent('click', { bubbles: true })) // chiude
+            expect(document.querySelector('.ft-node[data-percorso="src"]')?.classList.contains('ft-open')).toBe(false)
+            rigaSrc.dispatchEvent(new MouseEvent('click', { bubbles: true })) // riapre
+            expect(document.querySelector('.ft-node[data-percorso="src"]')?.classList.contains('ft-open')).toBe(true)
+            expect(chiamatePerLivello.src).toBe(1)
+        })
+
+        it('FILE-TREE-03 un file scritto in questa sessione porta il pallino di stato giusto — nuovo vs modificato, nessun pallino se non toccato', async () => {
+            await avviaSessioneConAlbero({ '': [{ nome: 'src', cartella: true }, { nome: 'giatoccato.txt', cartella: false }, { nome: 'maitoccato.txt', cartella: false }] })
+            const generation = runtime().realSessionState.generation
+
+            runtime().handleRealEvent({ type: 'StateDelta', delta: [{ op: 'add', path: '/file/giatoccato.txt', value: 'x' }] }, generation)
+            await vi.waitFor(() => {
+                const riga = [...document.querySelectorAll('.ft-row')].find((r) => r.querySelector('.ft-name')?.textContent === 'giatoccato.txt')!
+                expect(riga.querySelector('.ft-status-dot.ft-new')).toBeTruthy()
+            })
+            const rigaIntoccato = [...document.querySelectorAll('.ft-row')].find((r) => r.querySelector('.ft-name')?.textContent === 'maitoccato.txt')!
+            expect(rigaIntoccato.querySelector('.ft-status-dot')).toBeFalsy()
+        })
+
+        it('FILE-TREE-04 un file NUOVO scritto dentro una cartella già aperta invalida SOLO quel livello e ricompare — verso contrario del test 02', async () => {
+            const { chiamatePerLivello } = await avviaSessioneConAlbero({ '': LIVELLO_RADICE, src: LIVELLO_SRC })
+            const generation = runtime().realSessionState.generation
+
+            const rigaSrc = [...document.querySelectorAll('.ft-row-folder')].find((r) => r.querySelector('.ft-name')?.textContent === 'src')!
+            rigaSrc.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+            await vi.waitFor(() => { expect(document.querySelector('.ft-node[data-percorso="src/app.js"]')).toBeTruthy() })
+            expect(chiamatePerLivello.src).toBe(1)
+            expect(document.querySelector('.ft-node[data-percorso="src/nuovo.mjs"]')).toBeFalsy()
+
+            // il PROSSIMO fetch di "src" (dopo l'invalidazione) porta il file nuovo
+            LIVELLO_SRC.push({ nome: 'nuovo.mjs', cartella: false })
+            runtime().handleRealEvent({ type: 'StateDelta', delta: [{ op: 'add', path: '/file/src/nuovo.mjs', value: 'x' }] }, generation)
+            await vi.waitFor(() => {
+                expect(document.querySelector('.ft-node[data-percorso="src/nuovo.mjs"]')).toBeTruthy()
+            })
+            expect(chiamatePerLivello.src).toBe(2) // esattamente un secondo fetch, non uno per ogni scrittura futura
+            LIVELLO_SRC.pop() // non inquina gli altri test: l'array è condiviso per riferimento
+        })
+
+        it('FILE-TREE-05 un file GIÀ noto a quel livello NON invalida niente — solo il pallino si aggiorna, zero fetch in più', async () => {
+            const { chiamatePerLivello } = await avviaSessioneConAlbero({ '': LIVELLO_RADICE, src: LIVELLO_SRC })
+            const generation = runtime().realSessionState.generation
+            const rigaSrc = [...document.querySelectorAll('.ft-row-folder')].find((r) => r.querySelector('.ft-name')?.textContent === 'src')!
+            rigaSrc.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+            await vi.waitFor(() => { expect(document.querySelector('.ft-node[data-percorso="src/app.js"]')).toBeTruthy() })
+            expect(chiamatePerLivello.src).toBe(1)
+
+            runtime().handleRealEvent({ type: 'StateDelta', delta: [{ op: 'replace', path: '/file/src/app.js', value: 'x2' }] }, generation)
+            await vi.waitFor(() => {
+                const riga = [...document.querySelectorAll('.ft-row')].find((r) => r.querySelector('.ft-name')?.textContent === 'app.js')!
+                expect(riga.querySelector('.ft-status-dot.ft-modified')).toBeTruthy()
+            })
+            expect(chiamatePerLivello.src).toBe(1) // il file era già nella lista: nessun secondo fetch serviva
+        })
+
+        it('FILE-TREE-06 la ricerca sottolinea i risultati, attenua gli altri, e riapre una cartella già caricata ma chiusa che contiene un risultato', async () => {
+            const { chiamatePerLivello } = await avviaSessioneConAlbero({ '': LIVELLO_RADICE, src: LIVELLO_SRC })
+            const rigaSrc = [...document.querySelectorAll('.ft-row-folder')].find((r) => r.querySelector('.ft-name')?.textContent === 'src')!
+            rigaSrc.dispatchEvent(new MouseEvent('click', { bubbles: true })) // apre e cachea src/
+            await vi.waitFor(() => { expect(document.querySelector('.ft-node[data-percorso="src/app.js"]')).toBeTruthy() })
+            expect(chiamatePerLivello.src).toBe(1)
+            rigaSrc.dispatchEvent(new MouseEvent('click', { bubbles: true })) // richiude — ma resta in cache
+            expect(document.querySelector('.ft-node[data-percorso="src"]')?.classList.contains('ft-open')).toBe(false)
+
+            const input = document.getElementById('fileTreeFilter') as HTMLInputElement
+            input.value = 'app.js'
+            input.dispatchEvent(new Event('input', { bubbles: true }))
+
+            expect(document.querySelector('.ft-node[data-percorso="src"]')?.classList.contains('ft-open')).toBe(true) // riaperta da sola
+            const rigaApp = [...document.querySelectorAll('.ft-row')].find((r) => r.querySelector('.ft-name')?.textContent?.includes('app.js'))!
+            expect(rigaApp.classList.contains('ft-match')).toBe(true)
+            expect(rigaApp.querySelector('mark')?.textContent).toBe('app.js')
+            const rigaReadme = [...document.querySelectorAll('.ft-row')].find((r) => r.querySelector('.ft-name')?.textContent === 'README.md')!
+            expect(rigaReadme.classList.contains('ft-dimmed')).toBe(true)
+            expect(document.getElementById('fileTreeFilterHint')?.textContent).toContain('1')
+            expect(chiamatePerLivello.src).toBe(1) // riaprire dalla ricerca non ha ri-scaricato: era già in cache
+
+            input.value = ''
+            input.dispatchEvent(new Event('input', { bubbles: true }))
+            expect(rigaReadme.classList.contains('ft-dimmed')).toBe(false)
+            expect(document.getElementById('fileTreeFilterHint')?.textContent).toBe('')
+        })
     })
 
     it('REAL-SESSION-STOP-01 stopRealSession non fa nulla senza una sessione reale attiva (nessun POST)', async () => {

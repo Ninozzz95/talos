@@ -45,6 +45,10 @@
     <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></symbol>
     <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></symbol>
     <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></symbol>
+    <symbol id="i-folder-open" viewBox="0 0 24 24"><path d="M3 8a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2l-1.5 7a2 2 0 0 1-2 1.6H6.5a2 2 0 0 1-2-1.6L3 8Z"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v4h4"/></symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
   </svg>
 
   <div id="app" class="app-shell">
@@ -306,6 +310,15 @@ $ <span class="cursor"> </span></code></pre>
           </div>
         </section>
         <section class="inspector-section" id="inspector-files" role="tabpanel" aria-labelledby="inspector-tab-files" data-inspector-section="files" data-demo-surface="inspector-files">
+          <div class="ft-search-row">
+            <svg class="ft-search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+            <input type="text" id="fileTreeFilter" class="ft-search-input" placeholder="Filtra i file caricati…" aria-label="Filtra i file per nome" autocomplete="off" spellcheck="false">
+          </div>
+          <p class="ft-search-hint" id="fileTreeFilterHint" aria-live="polite"></p>
+          <div class="ft-legend">
+            <span class="ft-legend-new"><i></i>nuovo</span>
+            <span class="ft-legend-modified"><i></i>modificato</span>
+          </div>
           <div class="file-tree">
             <div class="tree-root"><svg><use href="#i-files"/></svg><strong>talos</strong></div>
             <button data-file-entry="src">src/</button><button class="nested" data-file-entry="components">components/</button><button class="nested deep active" data-file-entry="composer">TalosComposer.vue <span>+28 −19</span></button><button class="nested deep" data-file-entry="chat-shell">ChatShell.vue</button><button data-file-entry="tests">tests/</button><button class="nested" data-file-entry="composer-tests">composer.spec.ts <span>+8 −4</span></button>

@@ -91,7 +91,9 @@
       /** Piano §1.3, riga Review — percorso -> {path, code, nuovo}, UNA voce per file scritto, non solo l'ultima. */
       reviewFiles: new Map(),
       /** Piano §1.3, riga "Contesto workspace" — la cartella corrente sfogliata nell'albero file reale, '' = radice. */
-      treePercorso: '',
+      /** ⭐⭐⭐ 27/8 — l'albero VERO: cache per livello (percorso -> voci già scaricate, mai ributtate finché non cambia qualcosa) + quali cartelle sono aperte (persiste fra un redraw e l'altro, così riaprire un run non richiude tutto). Sostituisce treePercorso, il vecchio modello "un livello alla volta con su/giù". */
+      treeCache: new Map(),
+      treeOpen: new Set(),
       /** Piano §1.3-BIS.T — toolCallId -> nome attrezzo, SOLO per riconoscere quando un ToolCallResult appartiene a "shell" e specchiarlo nella vista Terminale. Non tocca il rendering generico della chat, già esistente. */
       toolCallNomi: new Map(),
       /** ⛔ 27/8 — vero se l'ULTIMO evento visto su questa connessione era RunFinished/RunError: dice a onerror se la chiusura che sta per arrivare è attesa (niente da segnalare) o una vera interruzione. Vedi collegaEventiSessione. */
@@ -2288,56 +2290,296 @@
   }
 
   /**
-   * ⭐ Piano §1.3, riga "Contesto workspace" — l'albero file REALE, un
-   * livello alla volta (GET /api/v1/sessions/:id/tree?percorso=...): le
-   * cartelle sono bottoni che scendono di un livello, ".. (su)" risale.
+   * ⭐⭐⭐ 27/8, owner: "un componente allo stato dell'arte" per il pannello
+   * Files, "legato al tema attuale" — sostituisce il vecchio "un livello
+   * con su/giù" con un albero VERO: più cartelle aperte insieme, stato
+   * git (nuovo/modificato, incrociato con reviewFiles — la stessa mappa
+   * che la Review già usa), ricerca dal vivo. Approvato dall'owner su
+   * mockup dopo ricerca web (ARIA APG treeview — role=tree/treeitem, UN
+   * tabstop; GitHub Primer TreeView — chevron compatto, icone leading
+   * coerenti, stato mai solo a colore; virtualizzazione per repo grandi —
+   * react-arborist/headless-tree, non necessaria qui per il motivo sotto).
+   *
+   * ⛔ Il caricamento resta A RICHIESTA, un livello alla volta
+   * (GET /api/v1/sessions/:id/tree?percorso=..., leggiAlberoWorkspace in
+   * workspace-tree.mjs, INVARIATA) — la lezione già in memoria
+   * (talos-non-vede-i-file-del-corpus-storia: un dump ricorsivo esplode
+   * PRIMA di essere utile a guardare) non cambia con un componente più
+   * bello. `treeCache` ricorda i livelli già scaricati in QUESTA sessione
+   * (mai due fetch per la stessa cartella finché non cambia qualcosa
+   * sotto), `treeOpen` ricorda quali sono aperti — così un redraw (dopo
+   * una nuova scrittura) riapre da solo tutto quello che l'utente aveva
+   * già aperto, senza richiedere niente di nuovo alla rete.
+   *
+   * ⛔ La RICERCA filtra SOLO ciò che è già stato caricato — dichiarato
+   * onestamente nell'hint, mai un "cerca ovunque" che in realtà scarica
+   * tutto il workspace pur di rispondere: sarebbe lo stesso dump
+   * ricorsivo vietato sopra, solo nascosto dietro una barra di ricerca.
    */
-  async function aggiornaAlberoReale(percorso = '') {
+  function statoFileAlbero(percorsoCompleto) {
+    const voce = state.realSession.reviewFiles.get(percorsoCompleto);
+    if (!voce) return null;
+    return voce.nuovo ? 'new' : 'modified';
+  }
+
+  function iconaSvgAlbero(nomeSimbolo) {
+    const svgNs = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNs, 'svg');
+    const uso = document.createElementNS(svgNs, 'use');
+    uso.setAttribute('href', `#${nomeSimbolo}`);
+    svg.append(uso);
+    return svg;
+  }
+
+  const ESTENSIONI_CODICE_ALBERO = new Set(['js', 'mjs', 'cjs', 'ts', 'tsx', 'jsx', 'vue', 'py', 'java', 'kt', 'go', 'rs', 'c', 'cpp', 'h', 'rb', 'php', 'swift']);
+  function categoriaFileAlbero(nome) {
+    const m = /\.([a-z0-9]+)$/i.exec(nome);
+    return m && ESTENSIONI_CODICE_ALBERO.has(m[1].toLowerCase()) ? 'code' : 'file';
+  }
+
+  async function caricaLivelloAlbero(percorso, forza = false) {
+    const cache = state.realSession.treeCache;
+    if (!forza && cache.has(percorso)) return cache.get(percorso);
+    const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree?percorso=${encodeURIComponent(percorso)}`);
+    cache.set(percorso, dati.voci);
+    return dati.voci;
+  }
+
+  function righeVisibiliAlbero(ul) {
+    return [...ul.querySelectorAll('.ft-row')].filter((r) => r.offsetParent !== null);
+  }
+  function impostaFocusRigaAlbero(ul, row) {
+    righeVisibiliAlbero(ul).forEach((r) => { r.tabIndex = -1; });
+    row.tabIndex = 0;
+    row.focus();
+  }
+
+  async function apriCartellaAlbero(li, iconEl, childUl, percorsoCompleto, profondita) {
+    state.realSession.treeOpen.add(percorsoCompleto);
+    li.classList.add('ft-open');
+    li.setAttribute('aria-expanded', 'true');
+    iconEl.classList.add('ft-open');
+    iconEl.replaceChildren(iconaSvgAlbero('i-folder-open'));
+    if (childUl.childElementCount > 0) return; // già caricata in questa sessione
+    childUl.appendChild(textElement('li', 'ft-loading', 'Carico…'));
+    let voci;
+    try {
+      voci = await caricaLivelloAlbero(percorsoCompleto);
+    } catch {
+      childUl.replaceChildren(textElement('li', 'ft-loading', 'Non leggibile.'));
+      return;
+    }
+    childUl.replaceChildren();
+    for (const voce of voci) {
+      const percorsoFiglio = percorsoCompleto ? `${percorsoCompleto}/${voce.nome}` : voce.nome;
+      // eslint-disable-next-line no-await-in-loop -- ogni figlio può ricorrere in apriCartellaAlbero se già in treeOpen: l'ordine dei figli deve restare quello del filesystem, non quello di risposta delle fetch
+      await costruisciNodoAlbero(voce.nome, percorsoFiglio, Boolean(voce.cartella), profondita + 1, childUl);
+    }
+  }
+
+  function chiudiCartellaAlbero(li, iconEl) {
+    li.classList.remove('ft-open');
+    li.setAttribute('aria-expanded', 'false');
+    iconEl.classList.remove('ft-open');
+    iconEl.replaceChildren(iconaSvgAlbero('i-folder'));
+    state.realSession.treeOpen.delete(li.dataset.percorso);
+  }
+
+  async function costruisciNodoAlbero(nome, percorsoCompleto, cartella, profondita, contenitoreUl) {
+    const li = document.createElement('li');
+    li.className = 'ft-node';
+    li.setAttribute('role', 'treeitem');
+    li.setAttribute('aria-level', String(profondita));
+    li.dataset.percorso = percorsoCompleto;
+    if (cartella) li.setAttribute('aria-expanded', 'false');
+
+    const row = document.createElement('div');
+    row.className = `ft-row ${cartella ? 'ft-row-folder' : 'ft-row-leaf'}`;
+    row.tabIndex = -1;
+
+    const chev = document.createElement('span');
+    chev.className = 'ft-chevron';
+    chev.appendChild(iconaSvgAlbero('i-chevron-right'));
+    row.appendChild(chev);
+
+    const icon = document.createElement('span');
+    const categoria = cartella ? 'folder' : categoriaFileAlbero(nome);
+    icon.className = `ft-icon ft-icon-${categoria}`;
+    icon.appendChild(iconaSvgAlbero(cartella ? 'i-folder' : categoria === 'code' ? 'i-code' : 'i-file'));
+    row.appendChild(icon);
+
+    row.appendChild(textElement('span', 'ft-name', nome));
+
+    const stato = !cartella ? statoFileAlbero(percorsoCompleto) : null;
+    if (stato) {
+      const dot = document.createElement('span');
+      dot.className = `ft-status-dot ft-${stato}`;
+      dot.title = stato === 'new' ? 'Nuovo' : 'Modificato';
+      row.appendChild(dot);
+    }
+
+    li.appendChild(row);
+    contenitoreUl.appendChild(li);
+
+    if (!cartella) {
+      row.addEventListener('click', () => {
+        row.closest('.ft-tree').querySelectorAll('.ft-row.ft-selected').forEach((r) => r.classList.remove('ft-selected'));
+        row.classList.add('ft-selected');
+        impostaFocusRigaAlbero(row.closest('.ft-tree'), row);
+      });
+      return li;
+    }
+
+    const childUl = document.createElement('ul');
+    childUl.setAttribute('role', 'group');
+    li.appendChild(childUl);
+    row.addEventListener('click', () => {
+      if (li.classList.contains('ft-open')) chiudiCartellaAlbero(li, icon);
+      else apriCartellaAlbero(li, icon, childUl, percorsoCompleto, profondita);
+      impostaFocusRigaAlbero(row.closest('.ft-tree'), row);
+    });
+    if (state.realSession.treeOpen.has(percorsoCompleto)) {
+      await apriCartellaAlbero(li, icon, childUl, percorsoCompleto, profondita);
+    }
+    return li;
+  }
+
+  /** Piano §1.3, riga "Contesto workspace" — l'albero file REALE, radice + tutto ciò che era già aperto (treeOpen), riscaricato dal vivo. */
+  async function renderizzaAlberoReale() {
     if (!state.realSession.id) return;
     const contenitore = $('#inspector-files .file-tree');
     if (!contenitore) return;
-    let voci;
-    try {
-      voci = (await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree?percorso=${encodeURIComponent(percorso)}`)).voci;
-    } catch {
-      return; // ⛔ un fallimento qui non è un'azione richiesta, non merita un toast
-    }
-    state.realSession.treePercorso = percorso;
     const demoBadge = $('.demo-surface-badge', $('[data-inspector-section="files"]'));
     if (demoBadge) demoBadge.hidden = true;
 
-    const svgNs = 'http://www.w3.org/2000/svg';
-    const iconaCon = (id) => {
-      const svg = document.createElementNS(svgNs, 'svg');
-      const uso = document.createElementNS(svgNs, 'use');
-      uso.setAttribute('href', `#${id}`);
-      svg.append(uso);
-      return svg;
-    };
-
     const radice = document.createElement('div');
     radice.className = 'tree-root';
-    radice.append(iconaCon('i-files'), textElement('strong', '', percorso || state.realSession.taskId || 'workspace'));
-    const pezzi = [radice];
+    radice.append(iconaSvgAlbero('i-files'), textElement('strong', '', state.realSession.taskId || 'workspace'));
 
-    if (percorso) {
-      const su = document.createElement('button');
-      su.textContent = '.. (su)';
-      const genitore = percorso.split('/').slice(0, -1).join('/');
-      su.addEventListener('click', () => aggiornaAlberoReale(genitore));
-      pezzi.push(su);
+    const ul = document.createElement('ul');
+    ul.className = 'ft-tree';
+    ul.setAttribute('role', 'tree');
+    ul.setAttribute('aria-label', 'File del workspace');
+    ul.addEventListener('keydown', (e) => {
+      const righe = righeVisibiliAlbero(ul);
+      const i = righe.indexOf(document.activeElement);
+      if (i === -1) return;
+      const row = righe[i];
+      const li = row.closest('.ft-node');
+      const eCartella = li.hasAttribute('aria-expanded');
+      if (e.key === 'ArrowDown') { e.preventDefault(); if (righe[i + 1]) impostaFocusRigaAlbero(ul, righe[i + 1]); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); if (righe[i - 1]) impostaFocusRigaAlbero(ul, righe[i - 1]); }
+      else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        if (eCartella && li.getAttribute('aria-expanded') === 'false') row.click();
+        else if (righe[i + 1]) impostaFocusRigaAlbero(ul, righe[i + 1]);
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        if (eCartella && li.getAttribute('aria-expanded') === 'true') row.click();
+        else { const genitoreLi = li.parentElement.closest('.ft-node'); if (genitoreLi) impostaFocusRigaAlbero(ul, $(':scope > .ft-row', genitoreLi)); }
+      } else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); row.click(); }
+      else if (e.key === 'Home') { e.preventDefault(); if (righe[0]) impostaFocusRigaAlbero(ul, righe[0]); }
+      else if (e.key === 'End') { e.preventDefault(); if (righe.length) impostaFocusRigaAlbero(ul, righe[righe.length - 1]); }
+    });
+
+    contenitore.replaceChildren(radice, ul);
+
+    let voci;
+    try {
+      voci = await caricaLivelloAlbero('');
+    } catch {
+      ul.appendChild(textElement('li', 'ft-loading', 'Albero non disponibile.'));
+      return;
     }
     for (const voce of voci) {
-      const button = document.createElement('button');
-      if (voce.cartella) button.className = 'nested';
-      button.textContent = voce.cartella ? `${voce.nome}/` : voce.nome;
-      if (voce.cartella) {
-        const dentro = percorso ? `${percorso}/${voce.nome}` : voce.nome;
-        button.addEventListener('click', () => aggiornaAlberoReale(dentro));
-      }
-      pezzi.push(button);
+      // eslint-disable-next-line no-await-in-loop -- vedi la nota gemella in apriCartellaAlbero
+      await costruisciNodoAlbero(voce.nome, voce.nome, Boolean(voce.cartella), 1, ul);
     }
-    contenitore.replaceChildren(...pezzi);
+    const prima = ul.querySelector('.ft-row');
+    if (prima) prima.tabIndex = 0;
+    filtraAlberoReale($('#fileTreeFilter')?.value || '');
+  }
+
+  /** Aggiorna SOLO i pallini di stato dei file già a schermo — nessuna richiesta di rete, reviewFiles è già aggiornato. */
+  function aggiornaPuntiniStatoAlbero() {
+    const ul = $('#inspector-files .ft-tree');
+    if (!ul) return;
+    for (const li of ul.querySelectorAll('.ft-node')) {
+      if (li.hasAttribute('aria-expanded')) continue; // solo file, mai cartelle
+      const row = $(':scope > .ft-row', li);
+      const stato = statoFileAlbero(li.dataset.percorso);
+      let dot = $('.ft-status-dot', row);
+      if (stato) {
+        if (!dot) { dot = document.createElement('span'); row.appendChild(dot); }
+        dot.className = `ft-status-dot ft-${stato}`;
+        dot.title = stato === 'new' ? 'Nuovo' : 'Modificato';
+      } else if (dot) {
+        dot.remove();
+      }
+    }
+  }
+
+  /** Dopo una scrittura reale: i pallini si aggiornano subito (gratis); un file MAI visto prima in un livello già mostrato invalida solo quel livello e ridisegna. */
+  async function segnalaScritturaNellAlbero(percorsoCompleto) {
+    if (!state.realSession.id) return;
+    aggiornaPuntiniStatoAlbero();
+    const genitore = percorsoCompleto.includes('/') ? percorsoCompleto.split('/').slice(0, -1).join('/') : '';
+    const cache = state.realSession.treeCache;
+    if (!cache.has(genitore)) return; // livello mai aperto: corretto già la prima volta che l'utente ci arriva
+    const nomeFile = percorsoCompleto.split('/').pop();
+    if (cache.get(genitore).some((v) => v.nome === nomeFile)) return; // già presente, i pallini bastavano
+    cache.delete(genitore);
+    await renderizzaAlberoReale();
+  }
+
+  /** ⭐ Ricerca dal vivo — SOLO fra i nodi già caricati in questa sessione (vedi la doc sopra renderizzaAlberoReale sul perché). Apre gli antenati di ogni risultato, sottolinea la porzione trovata. */
+  function filtraAlberoReale(query) {
+    const ul = $('#inspector-files .ft-tree');
+    const hint = $('#fileTreeFilterHint');
+    if (!ul || !hint) return;
+    const q = query.trim().toLowerCase();
+    const nodi = [...ul.querySelectorAll('.ft-node')];
+    if (!q) {
+      nodi.forEach((li) => {
+        const row = $(':scope > .ft-row', li);
+        row.classList.remove('ft-dimmed', 'ft-match');
+        const name = $('.ft-name', row);
+        if (name.dataset.raw) name.textContent = name.dataset.raw;
+      });
+      hint.textContent = '';
+      return;
+    }
+    let trovati = 0;
+    nodi.forEach((li) => {
+      const row = $(':scope > .ft-row', li);
+      const name = $('.ft-name', row);
+      if (!name.dataset.raw) name.dataset.raw = name.textContent;
+      const raw = name.dataset.raw;
+      const idx = raw.toLowerCase().indexOf(q);
+      const combacia = idx !== -1;
+      row.classList.toggle('ft-match', combacia);
+      row.classList.toggle('ft-dimmed', !combacia);
+      if (!combacia) { name.textContent = raw; return; }
+      trovati += 1;
+      name.replaceChildren(
+        document.createTextNode(raw.slice(0, idx)),
+        textElement('mark', '', raw.slice(idx, idx + q.length)),
+        document.createTextNode(raw.slice(idx + q.length)),
+      );
+      let antenato = li.parentElement.closest('.ft-node');
+      while (antenato) {
+        if (!antenato.classList.contains('ft-open')) $(':scope > .ft-row', antenato).click();
+        $(':scope > .ft-row', antenato).classList.remove('ft-dimmed');
+        antenato = antenato.parentElement.closest('.ft-node');
+      }
+    });
+    hint.replaceChildren();
+    if (trovati > 0) {
+      hint.appendChild(textElement('b', '', String(trovati)));
+      hint.appendChild(document.createTextNode(` risultat${trovati === 1 ? 'o' : 'i'} fra i file già caricati`));
+    } else {
+      hint.textContent = 'Nessun file caricato corrisponde — apri altre cartelle per includerle.';
+    }
   }
 
   /**
@@ -2410,7 +2652,7 @@
           }
         }
         if (evento.contesto) aggiornaPannelloAmbiente(evento.contesto);
-        aggiornaAlberoReale('');
+        renderizzaAlberoReale();
         break;
       }
       case 'TextMessageContent': {
@@ -2479,7 +2721,8 @@
       }
       case 'StateDelta': {
         updateRealReview(evento.delta);
-        aggiornaAlberoReale(state.realSession.treePercorso);
+        const percorsoScritto = evento.delta?.[0]?.path?.replace(/^\/file\//, '');
+        if (percorsoScritto) segnalaScritturaNellAlbero(percorsoScritto);
         appendStatusNote('✏️ File scritto — vedi la scheda Review per il contenuto intero.');
         break;
       }
@@ -2604,7 +2847,8 @@
       state.realSession.runCount = 0;
       state.realSession.taskBubbleMostrata = false;
       state.realSession.reviewFiles = new Map();
-      state.realSession.treePercorso = '';
+      state.realSession.treeCache = new Map();
+      state.realSession.treeOpen = new Set();
       state.realSession.sequenzeViste = new Set();
       state.realSession.testoGrezzoMessaggi = new Map();
       state.realSession.followUpBubbleInAttesa = false;
@@ -3846,6 +4090,7 @@
   };
   composerInput.addEventListener('focus', () => window.setTimeout(syncVisualViewport, 30));
   composerInput.addEventListener('blur', () => window.setTimeout(syncVisualViewport, 60));
+  $('#fileTreeFilter')?.addEventListener('input', (e) => filtraAlberoReale(e.target.value));
 
   sessionsCollapseBtn?.addEventListener('click', toggleSessionsPanel);
 
