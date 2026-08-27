@@ -1658,6 +1658,46 @@
     window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
   }
 
+  /*
+   * ⛔⛔ 27/8, trovato dalla pipeline QA visiva (zero costo, iniettando un
+   * ToolCallResult finto via window.__talosHarnessUiRuntime.handleRealEvent
+   * per non pagare una chiamata vera): `code.dataset.reale`/`shell.dataset.reale`
+   * qui sotto diventano "1" alla PRIMA volta e non tornano MAI indietro —
+   * nuovaGenerazioneSessione() resetta la chat/reviewFiles/albero, ma non
+   * queste due viste dedicate, perché il loro stato "già reale" vive nel DOM
+   * (dataset), non in `state.realSession`. Risultato misurato: passando dalla
+   * sessione A (con un comando shell finto, marcatore incluso) alla sessione
+   * B, il Terminale della sessione B mostrava ANCORA il marcatore di A,
+   * concatenato con l'output vero di B — una sessione che mostra la storia
+   * di un'altra, non solo "niente fuffa" ma dati sbagliati. Snapshot preso
+   * una sola volta all'avvio (prima che qualunque sessione lo sovrascriva);
+   * resettaSuperficiRealiDedicate() lo restituisce ad ogni cambio sessione.
+   */
+  const terminalWindowPristineHtml = $('[data-view="terminal"] .terminal-window')?.innerHTML ?? '';
+  const browserUrlPristineHtml = $('[data-view="browser"] .browser-url')?.innerHTML ?? '';
+  const browserPreviewPristineHtml = $('[data-view="browser"] .device-preview')?.innerHTML ?? '';
+
+  function resettaSuperficiRealiDedicate() {
+    const terminalWindow = $('[data-view="terminal"] .terminal-window');
+    if (terminalWindow) {
+      terminalWindow.innerHTML = terminalWindowPristineHtml;
+      const code = terminalWindow.querySelector('code');
+      if (code) delete code.dataset.reale;
+      const demoBadge = $('.demo-surface-badge', $('[data-view="terminal"]'));
+      if (demoBadge) demoBadge.hidden = false;
+    }
+    const browserShell = $('[data-view="browser"] .browser-shell');
+    if (browserShell) {
+      delete browserShell.dataset.reale;
+      const barraUrl = $('[data-view="browser"] .browser-url');
+      if (barraUrl) barraUrl.innerHTML = browserUrlPristineHtml;
+      const anteprima = $('[data-view="browser"] .device-preview');
+      if (anteprima) anteprima.innerHTML = browserPreviewPristineHtml;
+      const demoBadge = $('.demo-surface-badge', $('[data-view="browser"]'));
+      if (demoBadge) demoBadge.hidden = false;
+    }
+  }
+
   /**
    * ⭐ Piano §1.3-BIS.T (seconda metà) — la vista Terminale dedicata smette
    * di essere demo la prima volta che un comando VERO gira. Non un vero
@@ -2081,6 +2121,10 @@
       state.realSession.taskBubbleMostrata = false;
       state.realSession.reviewFiles = new Map();
       state.realSession.treePercorso = '';
+      // ⛔ 27/8 — Terminale/Browser tengono il loro "già reale" nel DOM
+      // (dataset), non in state.realSession: senza questo, restavano
+      // mostrati per sempre, mescolati con la sessione successiva.
+      resettaSuperficiRealiDedicate();
     }
     state.realSession.id = null;
     return (state.realSession.generation += 1);

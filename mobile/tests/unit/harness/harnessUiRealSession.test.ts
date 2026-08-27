@@ -433,6 +433,34 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(document.querySelector('[data-view="terminal"] .terminal-window code')?.textContent).toBe(contenutoPrima)
     })
 
+    // ⛔⛔ 27/8, trovato dalla pipeline QA visiva (iniettando un ToolCallResult
+    // finto via handleRealEvent, zero costo — mai una chiamata vera al
+    // modello per una prova che deve solo verificare il reset del DOM):
+    // passando dalla sessione A (che aveva usato "shell") alla sessione B,
+    // il Terminale mostrava ANCORA l'output di A, concatenato con quello di
+    // B — nuovaGenerazioneSessione() resettava conversazione/reviewFiles/
+    // albero ma non il dataset.reale di Terminale/Browser, che vive nel DOM
+    // e non in state.realSession.
+    it('⛔⛔ REAL-SESSION-SHELL-05 AL CONTRARIO: una NUOVA sessione reale non eredita l\'output shell della sessione precedente nella vista Terminale', async () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 'c3', toolCallName: 'shell' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallArgs', toolCallId: 'c3', delta: JSON.stringify({ comando: 'echo marcatore-sessione-precedente' }) }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: 'c3', content: 'marcatore-sessione-precedente-output' }, generation)
+        expect(document.querySelector('[data-view="terminal"] .terminal-window code')?.textContent).toContain('marcatore-sessione-precedente')
+
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-nuova-pulita' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-nuova-pulita' })
+
+        const terminaleDopo = document.querySelector('[data-view="terminal"] .terminal-window code') as HTMLElement | null
+        expect(terminaleDopo?.textContent).not.toContain('marcatore-sessione-precedente')
+        expect(terminaleDopo?.dataset.reale).toBeUndefined()
+        const badge = document.querySelector('[data-view="terminal"] .demo-surface-badge') as HTMLElement | null
+        expect(badge?.hidden).toBe(false)
+    })
+
     it('REAL-SESSION-COMPACT-01 con sessione attiva chiama /compact senza aprire nessuno stream nuovo', async () => {
         mockFetch([
             { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-compatta' } },

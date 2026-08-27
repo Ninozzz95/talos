@@ -315,10 +315,18 @@ const SCENARI = {
     p.nota(`modello selezionato: ${modelloScelto}`);
     await p.screenshot('model-picker-scelto', { nota: 'trigger aggiornato, pannello chiuso' });
 
-    await p.digita('#customTaskConsegna', 'Add and export a function `sottrai(a, b)` in src/matematica.mjs that returns a - b. Add a test for it in test/matematica.test.mjs, following the style of the existing somma test.');
-    await p.screenshot('compito-scritto', { nota: 'prima dell\'invio' });
-
+    // ⛔ 27/8, secondo giro — la modale non chiede più il compito (owner: "quello si fa
+    // direttamente da interfaccia chat"). Il form qui sceglie SOLO cartella+modello;
+    // il submit chiama avviaSessionePendente() e apre la chat vuota, il compito si scrive
+    // nel composer normale, che lo consuma al primo invio (state.pendingCustomSession).
     await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat vuota pronta dopo la scelta cartella+modello' });
+    await p.screenshot('sessione-pronta-vuota', { nota: 'nessuna sessione lato server ancora — solo cartella+modello scelti' });
+
+    await p.digita('#composerInput', 'Add and export a function `sottrai(a, b)` in src/matematica.mjs that returns a - b. Add a test for it in test/matematica.test.mjs, following the style of the existing somma test.');
+    await p.screenshot('compito-scritto', { nota: 'prima dell\'invio, nel composer normale' });
+
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
     p.nota('sessione avviata — inizia il ciclo di attesa con screenshot periodici DURANTE l\'esecuzione');
 
     const massimoAttesaMs = 120_000;
