@@ -108,7 +108,7 @@ describe('Harness UI static asset contract', () => {
         expect(html).not.toMatch(/\bCalm\b/)
         expect(js).not.toMatch(/Standard Calm/)
         expect(html).toContain('Tema TALOS')
-        expect(html).toContain('Theme tokens')
+        expect(html).toContain('Token colore')
     })
 
     it('CODE-BG-CONTINUITY-01 reveals the one TALOS scene only in embedded mode', () => {
