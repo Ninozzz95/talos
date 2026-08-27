@@ -223,7 +223,19 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
     var(--bg);
 }
 
-.sessions-panel, .inspector-panel { background: var(--surface-glass); backdrop-filter: blur(18px); min-height: 0; }
+/* ⭐⭐⭐ 27/8, owner: "le animazioni vanno a scatti... troppo pesante" —
+   ricerca web fatta (27/8): il blur di `backdrop-filter` è il filtro più
+   costoso che esiste (campiona un kernel largo di pixel ATTORNO
+   all'elemento), e qui erano impilate CINQUE superfici sempre visibili
+   che lo usano insieme (sidebar+inspector 18px, topbar 20px, composer
+   20px, nav mobile 18px) — "evita di impilare più elementi con
+   backdrop-filter, ognuno è un passaggio di compositing separato" è
+   esattamente la guida corrente. `will-change: backdrop-filter` sposta
+   ciascuna su un proprio layer GPU calcolato UNA volta, invece di
+   ri-sfocare il contenuto sotto a ogni fotogramma di scroll — il
+   suggerimento esplicito per "superfici vetro persistenti", non per
+   ogni elemento (costerebbe memoria video se usato ovunque). */
+.sessions-panel, .inspector-panel { background: var(--surface-glass); backdrop-filter: blur(18px); will-change: backdrop-filter; min-height: 0; }
 .sessions-panel { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; }
 .inspector-panel { border-left: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; }
 .workspace-shell { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }
@@ -297,7 +309,7 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 .sidebar-footer strong { font-size: 13px; }
 .sidebar-footer small { font-size: 10px; color: var(--muted); margin-top: 3px; }
 
-.topbar { padding: 0 12px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; background: var(--bg-glass); backdrop-filter: blur(20px); z-index: 20; }
+.topbar { padding: 0 12px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; background: var(--bg-glass); backdrop-filter: blur(20px); will-change: backdrop-filter; z-index: 20; }
 .topbar-left, .topbar-right, .topbar-center { display: flex; align-items: center; min-width: 0; }
 .topbar-right { justify-content: flex-end; gap: 4px; }
 .topbar-center { background: var(--surface-highlight-subtle); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
@@ -470,7 +482,7 @@ body.reduce-motion .talos-line-loader-node { animation: none; fill: var(--accent
 
 .composer-wrap { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px max(20px, calc((100% - 920px)/2)) 12px; background: linear-gradient(180deg, transparent, var(--bg-glass-strong) 22%, var(--bg) 48%); z-index: 10; pointer-events: none; }
 .composer, .queued-message, .composer-status { pointer-events: auto; }
-.composer { container-type: inline-size; min-height: 116px; border: 1px solid var(--line-strong); background: var(--surface-glass-strong); backdrop-filter: blur(20px); border-radius: 15px; box-shadow: var(--shadow); padding: 13px 54px 10px 12px; display: grid; grid-template-rows: minmax(38px,auto) auto; position: relative; }
+.composer { container-type: inline-size; min-height: 116px; border: 1px solid var(--line-strong); background: var(--surface-glass-strong); backdrop-filter: blur(20px); will-change: backdrop-filter; border-radius: 15px; box-shadow: var(--shadow); padding: 13px 54px 10px 12px; display: grid; grid-template-rows: minmax(38px,auto) auto; position: relative; }
 .composer:focus-within { border-color: var(--focus); box-shadow: var(--shadow), 0 0 0 1px var(--focus-soft); }
 .composer textarea { width: 100%; min-height: 38px; max-height: 120px; field-sizing: content; resize: none; overflow-y: auto; border: 0; background: transparent; color: var(--text); outline: 0; padding: 5px 3px 7px; font-size: 14px; line-height: 1.5; }
 .composer textarea::placeholder { color: var(--muted); }
@@ -707,10 +719,10 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .settings-card small { display: block; margin-top: 9px; color: var(--muted); font-size: 9px; }
 
 .mobile-nav { display: none; }
-.overlay-backdrop { display: block; position: fixed; inset: 0; z-index: 79; border: 0; background: var(--scrim); backdrop-filter: blur(2px); opacity: 0; visibility: hidden; pointer-events: none; transition: opacity var(--motion-enter) var(--motion-ease), visibility 0ms linear var(--motion-exit); }
+.overlay-backdrop { display: block; position: fixed; inset: 0; z-index: 79; border: 0; background: var(--scrim); backdrop-filter: blur(2px); will-change: opacity; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity var(--motion-enter) var(--motion-ease), visibility 0ms linear var(--motion-exit); }
 .overlay-backdrop.show { opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0ms; }
 
-.harness-dialog-backdrop { position: fixed; inset: 0; z-index: 198; border: 0; background: var(--scrim); backdrop-filter: blur(5px); transition: opacity var(--motion-popover) var(--motion-ease); }
+.harness-dialog-backdrop { position: fixed; inset: 0; z-index: 198; border: 0; background: var(--scrim); backdrop-filter: blur(5px); will-change: opacity; transition: opacity var(--motion-popover) var(--motion-ease); }
 .harness-dialog-backdrop[hidden] { display: none; }
 .command-dialog, .sheet-dialog { position: fixed; z-index: 199; padding: 0; border: 1px solid var(--line-strong); background: var(--surface-elevated); color: var(--text); box-shadow: var(--shadow); }
 .command-dialog { inset: 0 0 auto; width: min(620px, calc(100vw - 32px)); max-height: min(620px, calc(100dvh - 40px)); border-radius: 14px; margin: 12vh auto 0; }
@@ -822,7 +834,7 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
   .selector-pill { max-width: min(56vw, 250px); }
   .queue-toggle { display: none; }
   .composer-status { margin-top: 4px; }
-  .mobile-nav { display: grid; grid-template-columns: repeat(5,1fr); position: fixed; left: 0; right: 0; bottom: 0; min-height: var(--mobile-nav-h); padding: 5px max(5px, env(safe-area-inset-right)) max(5px, env(safe-area-inset-bottom)) max(5px, env(safe-area-inset-left)); border-top: 1px solid var(--line); background: var(--bg-glass-strong); backdrop-filter: blur(18px); z-index: 70; }
+  .mobile-nav { display: grid; grid-template-columns: repeat(5,1fr); position: fixed; left: 0; right: 0; bottom: 0; min-height: var(--mobile-nav-h); padding: 5px max(5px, env(safe-area-inset-right)) max(5px, env(safe-area-inset-bottom)) max(5px, env(safe-area-inset-left)); border-top: 1px solid var(--line); background: var(--bg-glass-strong); backdrop-filter: blur(18px); will-change: backdrop-filter; z-index: 70; }
   .mobile-nav button { min-width: 0; border: 0; background: transparent; color: var(--muted); border-radius: 9px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; cursor: pointer; font-size: 9px; }
   .mobile-nav button.active { color: var(--accent-2); background: var(--accent-soft); }
   .mobile-nav svg { width: 18px; height: 18px; }
