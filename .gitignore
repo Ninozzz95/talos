@@ -154,7 +154,18 @@ HANDOFF-CODEX-*.md
 # Documentazione generata nella corsia mobile: non entra nell'indice Git.
 # I file già tracciati restano versionati finché l'owner non chiede
 # esplicitamente di rimuoverli dall'indice con una modifica separata.
-mobile/docs/
+#
+# ⛔⛔ 27/8 — trovato mentre si aggiungeva il primo screenshot nuovo dal 16/8:
+# questa esclusione di DIRECTORY vince sempre su una negazione più specifica
+# scritta in un .gitignore annidato (mobile/.gitignore ha `!docs/immagini/*.png`
+# apposta per gli screenshot approvati, ma non basta — git non scende nemmeno
+# a valutarla, una volta che la cartella madre è esclusa qui). Dall'introduzione
+# di questa riga (18/8, commit 9af9f13f) NESSUNO screenshot nuovo sarebbe mai
+# entrato nell'indice con un `git add` normale. Riaperta qui, esplicitamente,
+# per la sola cartella che il flusso di approvazione presume tracciabile.
+# Vedi memoria: gitignore-mobile-docs-blocca-screenshot-nuovi.md
+mobile/docs/*
+!mobile/docs/immagini/
 
 # Rifiuto di Git Bash su Windows: un dump di crash della shell, non nostro.
 *.stackdump
