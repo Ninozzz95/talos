@@ -52,6 +52,15 @@
     // ⛔ 27/8, trovato dalla pipeline QA visiva: la card "Session topology" leggeva questo valore come stato iniziale — restava "Refactor auth flow" finché nessuna funzione lo toccava, cioè sempre, all'apertura della pagina.
     session: 'Nessuna sessione',
     running: true,
+    /*
+     * ⭐⭐⭐ 27/8, secondo giro — owner: "nella modale nuova sessione non
+     * deve esserci il campo text... quello si fa direttamente da
+     * interfaccia chat". "Nuova" sceglie cartella+modello e basta; questo
+     * campo porta quella scelta fino al primo messaggio scritto nel
+     * composer normale, che avvia la sessione vera — {cartellaId,
+     * nomeCartella, modello} oppure null quando non c'è nulla in attesa.
+     */
+    pendingCustomSession: null,
     board: {
       initialized: false,
       bootstrapPromise: null,
@@ -1570,11 +1579,18 @@
     article.className = 'message user-message';
     const bubble = document.createElement('div');
     bubble.className = 'message-bubble';
-    bubble.textContent = task.consegna || task.consegnaCorta || task.id;
+    /*
+     * ⛔⛔ 27/8, trovato dalla pipeline QA visiva: per un comando diretto
+     * (agent-service.mjs, eseguiComandoDiretto → runStarted({input:
+     * {comandoDiretto: comando}})) questo `task` non ha né `.consegna` né
+     * `.id` — mostrava "undefined" crudo in chat. Mai un valore inventato
+     * o un undefined visibile: se non è un vero task, si dichiara cosa è.
+     */
+    bubble.textContent = task.consegna || task.consegnaCorta || task.comandoDiretto || (task.id ? task.id : 'Comando diretto');
     const meta = document.createElement('div');
     meta.className = 'message-meta';
     const span = document.createElement('span');
-    span.textContent = `Task reale · ${task.id}`;
+    span.textContent = task.id ? `Task reale · ${task.id}` : 'Comando diretto';
     meta.appendChild(span);
     article.append(bubble, meta);
     conversation.appendChild(article);
@@ -2464,9 +2480,18 @@
    * sempre lo stesso compito misurabile) restano l'unico posto che lo
    * usa, col proprio foglio dedicato.
    */
+  /*
+   * ⭐⭐⭐ 27/8, secondo giro — owner: "nella modale nuova sessione non deve
+   * esserci il campo text per cosa chiedere al agente, quello si fa
+   * direttamente da interfaccia chat". Corretto: prima chiedeva cartella
+   * + modello + compito tutti insieme; ora chiede SOLO cartella + modello
+   * — il compito si scrive nel composer normale, come in OGNI competitor
+   * verificato (Claude Code, Codex CLI, Cline, Aider, Cursor: il testo
+   * libero è SEMPRE nella chat, mai in un modulo a parte prima di essa).
+   */
   async function openRealTaskSheet() {
     sheetEyebrow.textContent = 'Nuova sessione';
-    sheetTitle.textContent = 'Cosa deve fare TALOS?';
+    sheetTitle.textContent = 'Su quale progetto lavora TALOS?';
     sheetBody.replaceChildren(textElement('p', 'board-empty', 'Carico l’elenco dal server…'));
     const demoBadge = $('.demo-surface-badge', sheetDialog);
     if (demoBadge) demoBadge.hidden = true;
@@ -2482,11 +2507,11 @@
 
     const corpoFoglio = [];
 
-    // --- PRIMARIA: compito libero, come Claude Code/Codex/Cline/Aider/Devin. ---
+    // --- Cartella + modello, come Claude Code/Codex/Cline/Aider/Devin. Il compito si scrive DOPO, nella chat. ---
     const customSection = document.createElement('form');
     customSection.className = 'sheet-section';
     customSection.id = 'customTaskForm';
-    customSection.appendChild(textElement('span', 'sheet-label', 'Compito libero — scrive DIRETTAMENTE sulla cartella vera, nessuna copia'));
+    customSection.appendChild(textElement('span', 'sheet-label', 'Cartella — TALOS scrive DIRETTAMENTE lì, nessuna copia'));
     if (progetti.length === 0) {
       customSection.appendChild(textElement('p', 'board-empty', 'Nessuna cartella di progetto configurata sul server. Imposta TALOS_HARNESS_UI_PROJECT_DIRS con i percorsi assoluti ammessi e riavvia il server per usare un compito libero.'));
     } else {
@@ -2500,32 +2525,23 @@
         selectCartella.appendChild(opzione);
       }
       const modelPicker = creaModelPicker({ valoreIniziale: state.model || '' });
-      const consegnaInput = document.createElement('textarea');
-      consegnaInput.className = 'sheet-input';
-      consegnaInput.id = 'customTaskConsegna';
-      consegnaInput.rows = 3;
-      consegnaInput.placeholder = 'Cosa deve fare TALOS su questo progetto?';
-      consegnaInput.maxLength = 4000;
       customSection.append(
         selectCartella,
         textElement('span', 'sheet-label', 'Modello'),
         modelPicker.elemento,
-        consegnaInput,
       );
       const submit = document.createElement('button');
       submit.type = 'submit';
       submit.className = 'primary-btn compact full';
-      submit.textContent = 'Avvia sulla cartella vera';
+      submit.textContent = 'Continua nella chat';
       customSection.appendChild(submit);
       customSection.addEventListener('submit', (event) => {
         event.preventDefault();
-        const consegna = consegnaInput.value.trim();
-        if (!consegna) { consegnaInput.focus(); return; }
         const cartellaId = selectCartella.value;
         const nomeCartella = progetti.find((p) => p.id === cartellaId)?.nome ?? cartellaId;
         const modello = modelPicker.getValore();
         closeEmbeddedDialog(sheetDialog);
-        startCustomSession({ cartellaId, nomeCartella, consegna, modello });
+        avviaSessionePendente({ cartellaId, nomeCartella, modello });
       });
     }
     corpoFoglio.push(customSection);
@@ -2533,13 +2549,41 @@
     sheetBody.replaceChildren(...corpoFoglio);
     /*
      * ⛔ 27/8, trovato dalla pipeline QA visiva: l'attributo HTML `autofocus`
-     * sulla textarea non scatta perché il <dialog> è già aperto quando il
-     * form viene inserito (showEmbeddedDialog gira PRIMA del fetch) — il
+     * non scatta da solo perché il <dialog> è già aperto quando il form
+     * viene inserito (showEmbeddedDialog gira PRIMA del fetch) — il
      * browser aveva già messo il focus sul bottone di chiusura, il primo
      * elemento focusable nel markup del foglio. Un focus esplicito dopo
      * l'inserimento nel DOM è l'unico modo affidabile.
      */
-    $('#customTaskConsegna')?.focus();
+    $('#customTaskCartella')?.focus();
+  }
+
+  /**
+   * ⭐⭐⭐ 27/8, secondo giro — "Nuova sessione" sceglie SOLO cartella+
+   * modello; questa funzione porta quella scelta fino al composer
+   * normale, senza avviare nessuna vera sessione lato server (talosLavora
+   * parte solo quando c'è un compito — il primo messaggio scritto nella
+   * chat, intercettato da submitPrompt via state.pendingCustomSession).
+   */
+  function avviaSessionePendente({ cartellaId, nomeCartella, modello }) {
+    nuovaGenerazioneSessione();
+    state.pendingCustomSession = { cartellaId, nomeCartella, modello };
+    if (modello) { state.model = modello; aggiornaPillolaModello(); }
+    state.session = `Nuova · ${nomeCartella}`;
+    sessionTitle.textContent = state.session;
+    $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
+    setView('chat');
+    closePanels();
+    // ⛔ nuovaGenerazioneSessione() ha appena svuotato #conversation (replaceChildren) — l'empty-state originale non esiste più nel DOM, va ricreato, non cercato.
+    const vuoto = document.createElement('div');
+    vuoto.className = 'board-empty conversation-empty';
+    vuoto.id = 'conversationEmptyState';
+    vuoto.append(
+      textElement('p', '', `Sessione pronta su ${nomeCartella}.`),
+      textElement('p', '', 'Scrivi qui sotto cosa deve fare TALOS per iniziare.'),
+    );
+    $('#conversation').appendChild(vuoto);
+    window.setTimeout(() => composerInput.focus(), 0);
   }
 
   /**
@@ -2613,6 +2657,22 @@
      */
     if (state.realSession.id) {
       toast('Follow-up non ancora implementato', 'Una sessione reale non accetta oggi un messaggio a metà esecuzione. Aspetta la fine del run, poi usa Fork o Resume.');
+      return true;
+    }
+    /*
+     * ⭐⭐⭐ 27/8, secondo giro — owner: "nella modale nuova sessione non
+     * deve esserci il campo text per cosa chiedere, quello si fa
+     * direttamente da interfaccia chat". "Nuova" ora sceglie SOLO
+     * cartella+modello (avviaSessionePendente) e apre una chat vuota —
+     * il primo messaggio scritto QUI è il compito vero, esattamente come
+     * Claude Code/Codex/Cline/Aider (composer vuoto, non un modulo a
+     * parte). Se una cartella è stata scelta e non c'è ancora nessuna
+     * sessione reale, questo primo messaggio la avvia per davvero.
+     */
+    if (state.pendingCustomSession) {
+      const { cartellaId, nomeCartella, modello } = state.pendingCustomSession;
+      state.pendingCustomSession = null;
+      startCustomSession({ cartellaId, nomeCartella, consegna: value, modello });
       return true;
     }
     /*
