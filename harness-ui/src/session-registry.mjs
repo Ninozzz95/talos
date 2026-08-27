@@ -303,6 +303,18 @@ export function createSessionRegistry({
     },
 
     /**
+     * ⭐ 27/8 — usata da http-app.mjs per sapere, SUBITO DOPO il replay di
+     * `iscriviti()`, se aspettarsi ancora eventi (un giro dal vivo dietro)
+     * o chiudere lo stream perché non arriverà mai più niente. `false` sia
+     * per un id inesistente sia per uno concluso: stessa risposta, motivi
+     * diversi, e chi chiama non ha bisogno di distinguerli qui.
+     */
+    inCorso(sessionId) {
+      const voce = sessioni.get(sessionId);
+      return !!voce && !voce.conclusa;
+    },
+
+    /**
      * Rimanda TUTTI gli eventi già accaduti (mai un buco per chi si collega
      * tardi), poi ogni evento NUOVO man mano che arriva. Torna una funzione
      * di disiscrizione — un no-op se la sessione non esiste o è già conclusa
