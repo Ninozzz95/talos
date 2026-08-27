@@ -334,7 +334,7 @@ A future optional backend/sync architecture is intended as **replication and exe
 
 # Your own voice, not a stock one
 
-<img src="docs/immagini/phone-6-voice-training.png" alt="Voice training wizard mid-recording, with a live waveform and the phrase to read">
+<img src="docs/immagini/phone-6-voice-training.png" alt="Voice training wizard mid-recording, with a live waveform and the phrase to read" width="320">
 
 You record twelve short phrases once, on-device. TALOS builds a voice profile from them, and from then on a reply can be read back in *your* voice instead of a generic text-to-speech voice.
 
