@@ -153,7 +153,12 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
         await runtime().startRealSession({ id: 'storia-0b81c88', consegna: 'Sistema il test rosso.' })
 
-        expect(fetchMock).toHaveBeenCalledWith('http://localhost:4174/api/v1/sessions', expect.objectContaining({ method: 'POST' }))
+        expect(fetchMock).toHaveBeenCalledWith('http://localhost:4174/api/v1/sessions', expect.objectContaining({
+            method: 'POST',
+            // ⭐ 'client' riusa lo STESSO segnale di __talosHarnessApiBase —
+            // il server sa che questa sessione è mobile senza un secondo flag.
+            body: JSON.stringify({ taskId: 'storia-0b81c88', client: 'mobile' }),
+        }))
         expect(FakeEventSource.instances).toHaveLength(1)
         expect(FakeEventSource.instances[0].url).toBe('http://localhost:4174/api/v1/sessions/sess-mobile/events')
     })
@@ -183,8 +188,11 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         bottone.click()
         await new Promise((r) => setTimeout(r, 0)) // il click non è awaitable dall'esterno: si aspetta che startRealSession finisca da sé
 
+        // Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3: 'client'
+        // riusa lo stesso segnale di window.__talosHarnessApiBase (Fase 1) —
+        // assente qui, quindi 'desktop', il valore di sempre.
         expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions',
-            expect.objectContaining({ method: 'POST', body: JSON.stringify({ taskId: bottone.dataset.taskId }) }))
+            expect.objectContaining({ method: 'POST', body: JSON.stringify({ taskId: bottone.dataset.taskId, client: 'desktop' }) }))
         expect(runtime().realSessionState.id).toBe('sess-automazione')
     })
 

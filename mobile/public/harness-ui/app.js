@@ -1693,7 +1693,16 @@
 
     let sessionId;
     try {
-      const data = await apiPost('/api/v1/sessions', { taskId: task.id });
+      /*
+       * Piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 3. Riusa lo
+       * stesso segnale di `window.__talosHarnessApiBase` (Fase 1) invece di
+       * un secondo flag: se questa pagina gira su mobile ha già una base
+       * assoluta piantata, il client non deve dichiararlo due volte in modo
+       * diverso. Assente/vuota su desktop → `'desktop'`, il valore di
+       * sempre — nessun comportamento nuovo lì.
+       */
+      const client = window.__talosHarnessApiBase ? 'mobile' : 'desktop';
+      const data = await apiPost('/api/v1/sessions', { taskId: task.id, client });
       sessionId = data.sessionId;
     } catch (error) {
       if (generation !== state.realSession.generation) return;

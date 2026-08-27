@@ -12,7 +12,9 @@ function registroFinto() {
   const sessioni = new Map();
   let contatore = 0;
   return {
-    avvia(taskId) {
+    ultimeOpzioniAvvio: null,
+    avvia(taskId, opzioni = {}) {
+      this.ultimeOpzioniAvvio = opzioni;
       if (taskId === 'task-vietato') return { erroreAvvio: 'non ammesso', code: 'TASK_NOT_ALLOWED' };
       if (taskId === 'task-senza-chiave') return { erroreAvvio: 'chiave assente', code: 'CONFIG_INVALID' };
       contatore += 1;
@@ -145,7 +147,7 @@ test('POST /api/v1/sessions con un taskId valido torna 200 e un sessionId', asyn
   assert.ok(corpo.data.sessionId.length > 0);
 });
 
-test('⛔ POST /api/v1/sessions rifiuta un corpo che non è ESATTAMENTE {taskId}', async (t) => {
+test('⛔ POST /api/v1/sessions rifiuta un corpo che non è ESATTAMENTE {taskId} o {taskId, client}', async (t) => {
   const { base } = await listen(t);
   const corpiCattivi = [
     {}, // manca taskId
@@ -153,6 +155,11 @@ test('⛔ POST /api/v1/sessions rifiuta un corpo che non è ESATTAMENTE {taskId}
     { taskId: '' }, // vuoto
     { taskId: 'x', modello: 'qualcosa' }, // ⛔ mai modello dal client
     { taskId: 'x', chiave: 'segreta' }, // ⛔ mai la chiave dal client
+    // ⛔ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 — 'client'
+    // è un'allowlist di due soli valori, non una stringa libera.
+    { taskId: 'x', client: 'bogus' },
+    { taskId: 'x', client: 123 },
+    { taskId: 'x', client: '' },
   ];
   for (const corpo of corpiCattivi) {
     const risposta = await fetch(`${base}/api/v1/sessions`, {
@@ -163,6 +170,38 @@ test('⛔ POST /api/v1/sessions rifiuta un corpo che non è ESATTAMENTE {taskId}
     assert.equal(risposta.status, 400, JSON.stringify(corpo));
     assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
   }
+});
+
+/**
+ * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 (§3.2 del
+ * prompt) — `client:'mobile'` è l'unico valore che cambia qualcosa: il
+ * server lo traduce in `{mobile:true}` verso `sessionRegistry.avvia()`.
+ */
+test('POST /api/v1/sessions con client:\'mobile\' passa {mobile:true} a sessionRegistry.avvia', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taskId: 'sconto-a-scaglioni', client: 'mobile' }),
+  });
+  assert.equal(risposta.status, 200);
+  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { mobile: true });
+});
+
+test('⛔ AL CONTRARIO: client:\'desktop\' ESPLICITO e client ASSENTE producono entrambi {mobile:false} — nessuna differenza di comportamento', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+
+  await fetch(`${base}/api/v1/sessions`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taskId: 'sconto-a-scaglioni', client: 'desktop' }),
+  });
+  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { mobile: false });
+
+  await fetch(`${base}/api/v1/sessions`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taskId: 'sconto-a-scaglioni' }),
+  });
+  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { mobile: false });
 });
 
 test('⛔ POST /api/v1/sessions su un task fuori allowlist: 404 TASK_NOT_ALLOWED, mai una sessione', async (t) => {

@@ -69,6 +69,10 @@ function esitoInEventoFinale({ threadId, runId, esito }) {
  * @param {(evento:object)=>void} input.onEvento
  * @param {AbortSignal} [input.segnaleStop]
  * @param {Array<object>} [input.messaggiIniziali] — per resume/fork (§1.4)
+ * @param {boolean} [input.mobile] — piano `procedi-col-generare-un-snoopy-neumann.md`,
+ *   Fase 3: sessione avviata da un client mobile. Solo l'attrezzo `shell`
+ *   se ne accorge (vedi talosHarness.mjs, `eseguiComandoSandboxato`) — ogni
+ *   altro attrezzo si comporta identico, `false` è il default di sempre.
  * @param {typeof talosLavoraReale} [input.talosLavoraFn] — SOLO per test: la
  *   funzione reale è il default, iniettarne una finta evita di dover far
  *   girare un vero ciclo (già provato per conto suo in AVM-harness) solo per
@@ -81,7 +85,7 @@ function esitoInEventoFinale({ threadId, runId, esito }) {
  */
 export async function avviaSessione({
   cartella, task, modello, chiave, comandoProva,
-  onEvento, segnaleStop, messaggiIniziali,
+  onEvento, segnaleStop, messaggiIniziali, mobile = false,
   talosLavoraFn = talosLavoraReale,
   leggiContestoWorkspaceFn = leggiContestoWorkspaceReale,
 }) {
@@ -121,7 +125,7 @@ export async function avviaSessione({
 
   try {
     const esito = await talosLavoraFn({
-      cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali,
+      cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
       onGiro, onScrittura,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));
@@ -184,8 +188,9 @@ export async function compattaSessione({
  * non un attrezzo che il modello sceglie di chiamare.
  *
  * ⛔ Riusa `eseguiComandoSandboxato` (talosHarness.mjs) — STESSA funzione
- * che l'attrezzo `shell` chiama dentro il ciclo, stessi due livelli onesti
- * (`wsl2`/`none`), mai una seconda implementazione che diverge in silenzio.
+ * che l'attrezzo `shell` chiama dentro il ciclo, stessi livelli onesti
+ * (`wsl2`/`adb-shell-on-device`/`none`), mai una seconda implementazione
+ * che diverge in silenzio.
  *
  * ⛔ Emette un RunStarted/RunFinished che avvolge un SOLO ToolCallStart/
  * Args/Result — non un vero "run" nel senso di talosLavora, ma lo stesso
@@ -193,7 +198,7 @@ export async function compattaSessione({
  * bisogno di un ramo nuovo, funziona già per come è scritto oggi.
  */
 export async function eseguiComandoDiretto({
-  cartella, comando, onEvento,
+  cartella, comando, onEvento, mobile = false,
   eseguiComandoSandboxatoFn = eseguiComandoSandboxatoReale,
 }) {
   const threadId = randomUUID();
@@ -202,7 +207,7 @@ export async function eseguiComandoDiretto({
   onEvento(runStarted({ threadId, runId, input: { comandoDiretto: comando } }));
   onEvento(toolCallStart({ toolCallId, toolCallName: 'shell' }));
   onEvento(toolCallArgs({ toolCallId, delta: JSON.stringify({ comando }) }));
-  const risultato = await eseguiComandoSandboxatoFn(comando, cartella);
+  const risultato = await eseguiComandoSandboxatoFn(comando, cartella, { mobile });
   const content = `exit ${risultato.codice} [sandbox: ${risultato.enforcement}]\n${risultato.testo}`;
   onEvento(eventoPerEsitoTool({ messageId: randomUUID(), toolCallId, content }));
   onEvento(runFinished({ threadId, runId, outcome: { type: 'success' }, result: { detto: content } }));
