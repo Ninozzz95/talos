@@ -83,6 +83,7 @@ export const TALOS_IT_MESSAGES = {
         goBack: 'Torna indietro',
         primary: 'Navigazione principale',
         modelLab: 'Laboratorio modelli',
+        harness: 'Codice',
     },
     language: {
         title: 'Lingua',
@@ -302,6 +303,7 @@ export const TALOS_IT_MESSAGES = {
             bubbles: 'Bolle',
         },
         fontScales: {
+            xsmall: 'Molto piccola',
             small: 'Piccola',
             default: 'Predefinita',
             large: 'Grande',
@@ -706,6 +708,8 @@ export const TALOS_IT_MESSAGES = {
         messagePlaceholderEllipsis: 'Scrivi a TALOS...',
         sendMessage: 'Invia messaggio',
         stopGenerating: 'Interrompi generazione',
+        expandComposer: 'Espandi a tutto schermo',
+        collapseComposer: 'Torna alla dimensione normale',
         attachFiles: 'Allega file',
         takePhoto: 'Scatta una foto',
         chooseFromLibrary: 'Scegli dalla Libreria',
@@ -795,6 +799,7 @@ export const TALOS_IT_MESSAGES = {
         discardDictation: 'Annulla la dettatura',
         stopDictation: 'Interrompi dettatura',
         dictate: 'Detta',
+        dictateAppend: 'Detta altro, aggiungendolo al testo',
         startingDictation: 'Avvio dettatura…',
         dictationErrors: {
             permissionDenied: 'Consenti l’accesso al microfono per usare la dettatura.',
@@ -1125,12 +1130,22 @@ export const TALOS_IT_MESSAGES = {
         codeCopied: 'Codice copiato.',
         codeCopyFailed: 'Impossibile copiare il codice.',
     },
-    // Harness UI (Codex, 24/8): link solo-debug al mockup desktop riusato +
-    // Board, nascosto per intero nelle build di release — come, vedi
-    // services/harnessUi.ts.
-    harnessUi: {
-        linkLabel: 'Harness UI (debug)',
-        linkHint: 'Il mockup dell\'harness di coding e la Board delle campagne, stessa build del desktop.',
+    // Harness UI (24/8): rotta reale (lista + trampolino di sessione),
+    // sempre dietro lo stesso cancello debug-only del vecchio link in
+    // Impostazioni — vedi services/harnessUi.ts.
+    harness: {
+        demoNotice: 'Sessioni demo, non collegate a un backend reale — la struttura di navigazione è vera, i dati no.',
+        groups: {
+            today: 'Oggi',
+            yesterday: 'Ieri',
+            week: 'Ultimi 7 giorni',
+        },
+        openingMockup: 'Apertura di Codice…',
+        unavailable: 'Codice non è disponibile in questa build.',
+        loadFailed: 'Codice non si è aperto. Riprova.',
+        unknownTitle: 'Sessione non trovata',
+        unknownSession: 'Questa sessione demo non esiste. Torna a Codice e scegline una dalla lista.',
+        unknownBack: 'Torna a Codice',
     },
     privilege: {
         keepAlive: 'Mantieni acceso',
@@ -3432,6 +3447,12 @@ export const TALOS_IT_MESSAGES = {
         dismissNotification: 'Chiudi notifica',
         loadingTalos: 'Caricamento di TALOS',
         chatsPanel: 'Pannello chat',
+        // F6, refactor sidebar (24/8): l'etichetta del rail tablet quando
+        // mostra le sessioni Harness invece della chat — deve dire cosa c'è
+        // davvero a schermo, stesso principio di chatsPanel sopra.
+        harnessPanel: 'Pannello Codice',
+        collapseHarnessSessions: 'Comprimi sessioni Codice',
+        expandHarnessSessions: 'Espandi sessioni Codice',
     },
     shell: {
         sidebarDescription: 'Chat, strumenti e impostazioni',

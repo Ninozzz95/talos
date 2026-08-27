@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { talosCreateThinkSplitter, talosSplitFinalThink } from '@/lib/chat/thinkStream'
 
 /** Manda una risposta a pezzi e raccoglie le due metà. */
-function attraverso(pezzi: readonly string[]) {
-    const splitter = talosCreateThinkSplitter()
+function attraverso(pezzi: readonly string[], startsInReasoning = false) {
+    const splitter = talosCreateThinkSplitter(startsInReasoning)
     let text = ''
     let reasoning = ''
     for (const pezzo of pezzi) {
@@ -116,6 +116,33 @@ describe('C45-RED-19N think splitter', () => {
         expect(esito.text).not.toMatch(/TOOL_CODE|memory_search|args:|query:/)
         expect(esito.reasoning).toBe('')
     })
+
+    it('DEBT-MOBILE-011 RED: streaming think and LFM2.5 tool markers stay hidden', () => {
+        const esito = attraverso([
+            '<think>ragiono',
+            '</think>Ciao. <|tool_call_sta',
+            'rt|>[library_search(query="x")]<|tool_call_end|> Fine.',
+        ])
+
+        expect(esito.text).toBe('Ciao.  Fine.')
+        expect(esito.reasoning).toBe('ragiono')
+        expect(esito.text).not.toMatch(/think|tool_call|library_search/)
+    })
+
+    it('DEBT-MOBILE-015 RED: routes a reasoning block already opened by the prompt', () => {
+        const esito = attraverso([
+            'The user asks for a recipe. ',
+            'I should answer in Italian.</thi',
+            'nk>Ciao! <|tool_call_start|>[library_search(query="x")]',
+            '<|tool_call_end|> Ecco la ricetta.',
+        ], true)
+
+        expect(esito).toEqual({
+            text: 'Ciao!  Ecco la ricetta.',
+            reasoning: 'The user asks for a recipe. I should answer in Italian.',
+        })
+    })
+
 })
 
 /**

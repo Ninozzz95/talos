@@ -74,7 +74,7 @@ watch(() => props.fileId, () => { void carica() })
         :aria-label="props.nome"
         data-testid="talos-markdown-viewer"
     >
-        <header class="flex items-center gap-2 px-4 py-3">
+        <header class="flex items-center gap-2 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
             <p class="min-w-0 flex-1 truncate text-sm text-[var(--talos-text)]">{{ props.nome }}</p>
             <button
                 type="button"

@@ -3386,14 +3386,12 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                                 }
                             },
                             async save(image, prompt) {
-                                // Decoded by the platform, not by a JS loop.
-                                // Self-review 2026-07-27: `atob` plus a
-                                // char-by-char loop over a multi-megabyte image
-                                // runs on the UI thread and freezes the app for
-                                // the length of the picture. `fetch` on a data
-                                // URL does the same work natively.
-                                const decoded = await fetch(`data:${image.mediaType};base64,${image.base64}`)
-                                const bytes = new Uint8Array(await decoded.arrayBuffer())
+                                // Android WebView can reject oversized data URLs;
+                                // decode the same bytes locally when that happens.
+                                const bytes = await fetch(`data:${image.mediaType};base64,${image.base64}`)
+                                    .then((response) => response.arrayBuffer())
+                                    .then((buffer) => new Uint8Array(buffer), () =>
+                                        Uint8Array.from(atob(image.base64), (char) => char.charCodeAt(0)))
                                 // Named after what it shows, so the Library is
                                 // browsable later; a timestamped blob is not.
                                 const stem = await talosSafeFileStem(prompt, 48, 'image')
@@ -5723,9 +5721,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             // stesso modulo mockato, in volo insieme (questo e il warm-load
             // di P3-1 sotto), sono un deadlock riprodotto, non un'ipotesi —
             // vedi il commento nel suo file.
-            void talosLocalEngineLazy().then(
-                ({ talosQualifyLocalBackend }) => talosQualifyLocalBackend(pending.path),
-            )
+            void talosLocalEngineLazy()
+                .then(({ talosRunProbe }) => talosRunProbe(pending.path))
         }
     }
 

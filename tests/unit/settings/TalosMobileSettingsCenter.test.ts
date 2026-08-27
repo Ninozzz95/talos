@@ -397,33 +397,3 @@ describe('TalosMobileSettingsCenter md breakpoint', () => {
         vi.unstubAllGlobals()
     })
 })
-
-/**
- * Owner 24/8: «harness ci deve essere sia su mobile che su desktop,
- * mockup visibile solo nella apk di debug». Il link stesso È il
- * cancello: nessun altro modo di arrivarci se non è montato.
- */
-describe('TalosMobileSettingsCenter — Harness UI debug link', () => {
-    afterEach(() => { nativo.disponibile = false })
-
-    it('non esiste quando il plugin nativo non è disponibile (build di release, il caso di oggi)', () => {
-        nativo.disponibile = false
-        const wrapper = mountCenter()
-
-        expect(wrapper.find('[data-testid="settings-harness-ui-link"]').exists()).toBe(false)
-        wrapper.unmount()
-    })
-
-    it('appare e punta al mockup statico locale quando il plugin nativo è disponibile (build di debug)', () => {
-        nativo.disponibile = true
-        const wrapper = mountCenter()
-
-        const link = wrapper.get('[data-testid="settings-harness-ui-link"]')
-        expect(link.attributes('href')).toBe('/harness-ui/index.html')
-        // Nessun target="_blank": è un documento locale nello stesso
-        // WebView (frame-src 'none' blocca solo l'incorporamento, non la
-        // navigazione — verificato via ricerca, non un iframe comunque).
-        expect(link.attributes('target')).toBeUndefined()
-        wrapper.unmount()
-    })
-})

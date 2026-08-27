@@ -207,6 +207,11 @@ test('the same center is reachable from drawer, Model Lab and the tablet rail wi
 
     const drawer = page.getByTestId('talos-mobile-sidebar')
     await expect(drawer.getByTestId('talos-download-center-trigger')).toBeVisible()
+    await drawer.getByTestId('talos-download-center-trigger').click()
+    const drawerCenter = page.getByTestId('talos-download-center-content')
+    await expect(drawerCenter).toBeVisible()
+    await drawerCenter.getByLabel('Close').click()
+    await expect(drawerCenter).toHaveCount(0)
     await drawer.getByRole('button', { name: 'Open Settings' }).click()
     const sheet = page.getByTestId('talos-mobile-tool-sheet')
     await expect(sheet.getByTestId('talos-download-center-trigger')).toBeVisible()
@@ -222,6 +227,7 @@ test('the same center is reachable from drawer, Model Lab and the tablet rail wi
     // chat rail, which Settings deliberately replaces on tablets.
     const restoredSheet = page.getByTestId('talos-mobile-tool-sheet')
     await expect(restoredSheet).toBeVisible()
+    await expect(restoredSheet.getByTestId('talos-download-center-trigger')).toBeVisible()
     await restoredSheet.getByRole('button', { name: 'Close Settings Center' }).click()
     await expect(restoredSheet).toHaveCount(0)
     const tablet = page.getByTestId('talos-tablet-sidebar')

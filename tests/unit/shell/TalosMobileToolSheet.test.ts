@@ -2,6 +2,8 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 import TalosMobileToolSheet from '@/components/shell/TalosMobileToolSheet.vue'
 
@@ -66,6 +68,84 @@ describe('TalosMobileToolSheet (station sheet over chat)', () => {
         await w.get('[data-testid="talos-mobile-sheet-backdrop"]').trigger('click')
         expect(w.emitted('close')).toHaveLength(1)
     })
+
+    it('HARNESS-OUTER-SCROLL-01 locks the station body when the embedded surface owns scrolling', () => {
+        const w = mount(TalosMobileToolSheet, {
+            props: { title: 'Harness', lockBodyScroll: true } as never,
+            slots: { default: '<div>embedded harness</div>' },
+        })
+        const body = w.get('[data-testid="talos-mobile-sheet-body"]')
+        expect(body.classes()).toContain('overflow-hidden')
+        expect(body.classes()).not.toContain('overflow-y-auto')
+    })
+
+    it('HARNESS-OUTER-SCROLL-01 keeps ordinary station bodies scrollable', () => {
+        const w = mount(TalosMobileToolSheet, { props: { title: 'Library' } })
+        const body = w.get('[data-testid="talos-mobile-sheet-body"]')
+        expect(body.classes()).toContain('overflow-y-auto')
+        expect(body.classes()).not.toContain('overflow-hidden')
+    })
+
+    it('CODE-MODAL-NO-HORIZONTAL-PAN-01 clips the surface without making it a hidden scroll container', () => {
+        const w = mount(TalosMobileToolSheet, {
+            props: { title: 'Code', lockBodyScroll: true, hideChrome: true } as never,
+        })
+        const surface = w.get('[data-testid="talos-mobile-tool-sheet"]')
+
+        expect(surface.classes()).toContain('overflow-clip')
+        expect(surface.classes()).not.toContain('overflow-hidden')
+    })
+
+    it('CODE-SESSION-FIRST-HEADER-01 starts Codice from the session topbar without duplicate sheet chrome', () => {
+        const w = mount(TalosMobileToolSheet, {
+            props: { title: 'Code', lockBodyScroll: true, hideChrome: true } as never,
+            slots: { default: '<div data-testid="session-topbar">Refactor auth flow</div>' },
+        })
+
+        const dialog = w.get('[data-testid="talos-mobile-tool-sheet"]')
+        expect(dialog.attributes('aria-label')).toBe('Code')
+        expect(w.find('.talos-mobile-tool-sheet-header').exists()).toBe(false)
+        expect(w.find('[data-testid="talos-sheet-back"]').exists()).toBe(false)
+        expect(w.get('[data-testid="talos-mobile-sheet-body"]').classes())
+            .toContain('talos-mobile-tool-sheet-body-chromeless')
+        expect(w.get('[data-testid="session-topbar"]').text()).toBe('Refactor auth flow')
+    })
+
+    it('CODE-OTHER-STATIONS-CHROME-01 keeps the established header on every ordinary station', () => {
+        const w = mount(TalosMobileToolSheet, { props: { title: 'Library' } })
+
+        expect(w.get('.talos-mobile-tool-sheet-header').text()).toContain('Library')
+        expect(w.get('[data-testid="talos-sheet-back"]').exists()).toBe(true)
+    })
+
+    it('CODE-BG-CONTINUITY-01 lets only an explicitly scene-backed station reveal the shared background', () => {
+        const code = mount(TalosMobileToolSheet, {
+            props: { title: 'Code', hideChrome: true, sceneBackground: true } as never,
+        })
+        const ordinary = mount(TalosMobileToolSheet, { props: { title: 'Library' } })
+
+        expect(code.get('[data-testid="talos-mobile-tool-sheet"]')
+            .attributes('data-scene-background')).toBe('true')
+        expect(code.get('[data-testid="talos-mobile-tool-sheet"]').classes())
+            .toContain('talos-mobile-tool-sheet-scene')
+        expect(code.get('[data-testid="talos-mobile-sheet-backdrop"]').classes())
+            .toContain('talos-mobile-tool-sheet-backdrop-scene')
+        expect(ordinary.get('[data-testid="talos-mobile-tool-sheet"]')
+            .attributes('data-scene-background')).toBe('false')
+        expect(ordinary.get('[data-testid="talos-mobile-tool-sheet"]').classes())
+            .not.toContain('talos-mobile-tool-sheet-scene')
+        expect(ordinary.get('[data-testid="talos-mobile-sheet-backdrop"]').classes())
+            .not.toContain('talos-mobile-tool-sheet-backdrop-scene')
+    })
+
+    it('CODE-MOTION-TOKENS-01 drives sheet and backdrop entry from canonical motion variables', () => {
+        const source = readFileSync(resolve(process.cwd(), 'src', 'components', 'shell', 'TalosMobileToolSheet.vue'), 'utf8')
+
+        expect(source).toContain('--talos-motion-duration-surface-enter')
+        expect(source).toContain('--talos-motion-duration-surface-exit')
+        expect(source).toContain('--talos-motion-ease')
+        expect(source).not.toContain('duration-250')
+    })
 })
 
 // F3-T2 (owner #4/#8): the sheet honours the presentation preference —
@@ -93,5 +173,17 @@ describe('presentation modes (F3-T2)', () => {
     it('defaults to fullscreen when no presentation is passed', () => {
         const wrapper = mount(TalosMobileToolSheet, { props: { title: 'Settings' } })
         expect(wrapper.get('[data-testid="talos-mobile-tool-sheet"]').attributes('data-presentation')).toBe('fullscreen')
+    })
+
+    it('HARNESS-PHONE-NAV-WIDE-SHORT-01 keeps exactly one shell back control in an ordinary short fullscreen', () => {
+        const wrapper = mount(TalosMobileToolSheet, {
+            props: { title: 'Harness', presentation: 'fullscreen', lockBodyScroll: true } as never,
+        })
+
+        expect(wrapper.findAll('[data-testid="talos-sheet-back"]')).toHaveLength(1)
+        expect(wrapper.get('[data-testid="talos-mobile-tool-sheet"] header').classes()).toContain('talos-mobile-tool-sheet-header')
+        const source = readFileSync(resolve(process.cwd(), 'src', 'components', 'shell', 'TalosMobileToolSheet.vue'), 'utf8')
+        expect(source).toContain('body.keyboard-open .talos-mobile-tool-sheet-header')
+        expect(source).toContain('padding-top: env(safe-area-inset-top)')
     })
 })

@@ -294,7 +294,14 @@ async function next(): Promise<void> {
                  */
                 const tutteSempre = (['read', 'write', 'outbound'] as const)
                     .every((azione) => toolPermissions.value[azione] === 'allow')
-                if (tutteSempre) await settings.setShell({ library_context_enabled: true })
+                if (tutteSempre) {
+                    await settings.setShell({ library_context_enabled: true })
+                    // The one-shot grant also enables the two agent switches
+                    // that are otherwise conservative by default: managing
+                    // Library policy and driving another app for the user.
+                    await settings.setAgentToolEnabled('library_context_policy_update', true)
+                    await settings.setAgentToolEnabled('device_screen_drive', true)
+                }
             }
         } finally {
             decidingAutonomy.value = false

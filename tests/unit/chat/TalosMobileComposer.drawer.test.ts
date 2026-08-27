@@ -203,6 +203,18 @@ describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
         expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(false)
     })
 
+    it('CODE-COMPOSER-LANDSCAPE-IME-SAFE-01 reflows the same component below the status bar without runtime branching', async () => {
+        const source = (await import('@/components/chat/TalosMobileComposer.vue?raw')).default
+
+        expect(source).toContain('@media (orientation: landscape) and (max-height: 180px)')
+        expect(source).toMatch(/max-height:\s*calc\(100dvh - env\(safe-area-inset-top\)\)/)
+        expect(source).toMatch(/textarea\s*\{[^}]*height:\s*48px !important[^}]*padding-left:\s*48px/s)
+        expect(source).toMatch(/div:has\(> \[data-testid="talos-composer-model-chip"\]\)\s*\{[^}]*position:\s*absolute/s)
+        expect(source).toMatch(/div:has\(> \[data-testid="talos-composer-model-chip"\]\)[\s\S]*> :not\(:first-child\)\s*\{[^}]*display:\s*none/s)
+        expect(source).toMatch(/scrollbar-width:\s*none/)
+        expect(source).not.toContain('useTalosMediaQuery')
+    })
+
     it('immersive: stays expanded when there is content (never collapses over a draft)', async () => {
         const wrapper = mountComposer({ drawerMode: true, immersiveComposer: true, prompt: 'hello' })
         expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(true)

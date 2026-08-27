@@ -58,12 +58,35 @@ export async function configureNativeFraming(options: ConfigureNativeFramingOpti
         options.onError?.(new NativeFramingError('NATIVE_STATUSBAR_FAILED', messageOf(error)))
     }
 
+    // ⛔ Misurato sul Pad 2026-08-27: `Keyboard.setResizeMode` su Android è uno
+    // stub — `KeyboardPlugin.java` chiama `call.unimplemented()` per
+    // `setResizeMode`/`getResizeMode`/`setStyle`/`setAccessoryBarVisible`/
+    // `setScroll`, SEMPRE, per costruzione (github.com/ionic-team/capacitor/
+    // issues/8018: Android non ha mai avuto questi resize mode). Il resize
+    // vero su Android arriva da `android:windowSoftInputMode="adjustResize"`
+    // nel manifest, non da questa chiamata — qui sotto è solo best-effort per
+    // iOS, dove il plugin lo implementa davvero.
+    //
+    // ⛔⛔ Il bug che questo spiega: finché questa chiamata viveva nello STESSO
+    // try del listener `keyboardDidHide` (fix owner 2026-07-25), il suo
+    // fallimento GARANTITO su Android impediva anche la registrazione del
+    // listener — mai un errore visto, perché il catch li copriva entrambi.
+    // Risultato: il fix del 25/7 non ha MAI funzionato su Android. Riprodotto
+    // sul Pad: gesture di back con tastiera aperta chiude la tastiera nativa
+    // (`mInputShown=false`) ma `document.activeElement` resta la textarea.
     try {
         await Keyboard.setResizeMode({ mode: KeyboardResize.Native })
+    } catch (error) {
+        options.onError?.(new NativeFramingError('NATIVE_KEYBOARD_FAILED', messageOf(error)))
+    }
+
+    try {
         // Owner device 2026-07-25: dismissing the keyboard (gesture / system back)
         // hides it natively but leaves DOM focus on the field, so the composer
         // stayed in its focused/expanded state with no keyboard. Capacitor's
-        // keyboardDidHide is the documented hook; release focus there.
+        // keyboardDidHide is the documented hook; release focus there. Kept in
+        // its OWN try/catch (see above) so a setResizeMode failure never blocks
+        // this registration again.
         // https://capacitorjs.com/docs/apis/keyboard
         if (!keyboardHideListenerAttached) {
             keyboardHideListenerAttached = true
@@ -75,6 +98,8 @@ export async function configureNativeFraming(options: ConfigureNativeFramingOpti
             })
         }
     } catch (error) {
+        // Allow a later configureNativeFraming call (theme change) to retry.
+        keyboardHideListenerAttached = false
         options.onError?.(new NativeFramingError('NATIVE_KEYBOARD_FAILED', messageOf(error)))
     }
 }

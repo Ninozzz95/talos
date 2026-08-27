@@ -313,6 +313,11 @@ describe('ChatScreen (functional, local-first)', () => {
         expect(wrapper.find('[data-testid="talos-mobile-composer"]').exists()).toBe(true)
     })
 
+    it('DEBT-MOBILE-007 RED: chat thread allows vertical scroll but not viewport pinch zoom', () => {
+        const wrapper = mount(ChatScreen)
+        expect(wrapper.get('[data-testid="talos-chat-scroll"]').classes()).toContain('touch-pan-y')
+    })
+
     it('replaces the hero with the message thread once the conversation starts', () => {
         mockState.controller = makeController([
             { id: '1', role: 'user', content: 'benchmark this', created_at: '', state: 'persisted' },

@@ -10,7 +10,10 @@ defineOptions({
   inheritAttrs: false,
 })
 
-const props = defineProps<DialogContentProps & { class?: HTMLAttributes['class'] }>()
+const props = defineProps<DialogContentProps & {
+  class?: HTMLAttributes['class']
+  overlayClass?: HTMLAttributes['class']
+}>()
 const emits = defineEmits<DialogContentEmits>()
 
 const forwarded = useForwardPropsEmits(props, emits)
@@ -18,7 +21,7 @@ const forwarded = useForwardPropsEmits(props, emits)
 
 <template>
   <DrawerPortal>
-    <DrawerOverlay />
+    <DrawerOverlay :class="props.overlayClass" />
     <DrawerContent
       data-slot="drawer-content"
       v-bind="{ ...$attrs, ...forwarded }"

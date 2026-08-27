@@ -54,6 +54,14 @@ describe('TalosMobileMarkdownViewer', () => {
         expect(w.emitted('chiudi')).toHaveLength(1)
     })
 
+    it('DEBT-MOBILE-001 tiene nome e chiusura sotto la status bar', () => {
+        hydrateText.mockResolvedValue('testo')
+        const w = mount(TalosMobileMarkdownViewer, { props: { fileId: 'f1', nome: 'appunti.md' } })
+
+        expect(w.get('header').classes())
+            .toContain('pt-[max(0.75rem,env(safe-area-inset-top))]')
+    })
+
     /*
      * ⛔ AL CONTRARIO: `hydrateText` che torna `null` (il file non c'è più, o
      * non è leggibile) deve dire IL MOTIVO, non mostrare un riquadro vuoto -

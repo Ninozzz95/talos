@@ -204,7 +204,7 @@ describe('TalosMobileComposer', () => {
         expect(view.find('[data-testid="talos-model-drawer"]').exists()).toBe(true)
 
         // And a second choice, in the same visit, which is the whole point.
-        await view.get('[data-talos-filter-option="high"]').trigger('click')
+        await view.get('[role="slider"]').trigger('keydown', { key: 'End' })
         expect(view.emitted('selectEffort')).toEqual([['high']])
         expect(view.find('[data-testid="talos-model-drawer"]').exists()).toBe(true)
     })

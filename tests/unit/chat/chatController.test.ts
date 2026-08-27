@@ -23,6 +23,7 @@ import {
     TALOS_DEFAULT_TOOL_PERMISSIONS,
     talosEffectiveToolPermissions,
 } from '@/lib/tools/permissionTypes'
+import { __resetToastsForTests, useTalosMobileToasts } from '@/stores/toasts'
 
 const webSearchRuntime = vi.hoisted(() => ({
     runTalosSearch: vi.fn(),
@@ -86,6 +87,20 @@ const localEngine = vi.hoisted(() => ({
         ran: true, reason: null, probedCpu: true, cpuInconclusive: false,
         probedGpu: false, gpuInconclusive: false, decisionBackend: 'cpu', decisionReason: 'unproven',
     })),
+    talosRunProbe: vi.fn(async (_path: string, running?: number) => {
+        const toasts = useTalosMobileToasts()
+        const runningId = running ?? toasts.push({ message: 'Running…' })
+        try {
+            const result = await localEngine.talosQualifyLocalBackend(_path)
+            toasts.push({ message: result.ran
+                ? 'Done. This phone answers local models fastest on the CPU.'
+                : 'That run was not steady enough to trust — you can try again.' })
+        } catch {
+            toasts.push({ message: "That didn't work, try again" })
+        } finally {
+            toasts.dismiss(runningId)
+        }
+    }),
     // P3-1 — mai atteso da `selectModel` (fire-and-forget): un mock che
     // risolve subito basta a non far esplodere il modulo mockato per
     // intero, come già capitato al primo giro di questo file.
@@ -1630,7 +1645,7 @@ describe('chatController', () => {
         expect(new TextDecoder('utf-8', { fatal: true }).decode(saved.bytes)).toBe(body)
     })
 
-    it('IMAGE-OR-05 IMAGE-DUR-01/02/03 returns, stores, renders, and reloads an OpenRouter tool image', async () => {
+    it('IMAGE-OR-05 IMAGE-DUR-01/02/03 DEBT-MOBILE-012 returns, stores, renders, and reloads an OpenRouter tool image', async () => {
         const { deps, store, settings, request, chatRepository } = makeDeps()
         store.set('openrouter', 'router-key')
         Object.assign(settings.state.tools, { write: 'allow', outbound: 'allow' })
@@ -1749,7 +1764,7 @@ describe('chatController', () => {
                     status: 200,
                     data: {
                         data: [{
-                            b64_json: 'A'.repeat(600),
+                            b64_json: `${'A'.repeat(300)}\n${'A'.repeat(300)}`,
                             media_type: 'image/png',
                         }],
                     },
@@ -1794,9 +1809,9 @@ describe('chatController', () => {
         })
         vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
             if (String(input).startsWith('data:image/')) {
-                return {
-                    arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
-                }
+                // Android WebView can reject a large data URL; the controller
+                // must decode the same bytes locally and continue to the Vault.
+                throw new TypeError('data URL too large')
             }
             throw new TypeError('stream unavailable')
         }))
@@ -1818,7 +1833,7 @@ describe('chatController', () => {
             expect(createGeneratedBinary).toHaveBeenCalledWith(
                 expect.objectContaining({
                     mediaType: 'image/png',
-                    bytes: new Uint8Array([1, 2, 3]),
+                    bytes: new Uint8Array(450),
                 }),
                 expect.objectContaining({ sessionId: expect.any(String), toolName: 'generate_image' }),
             )
@@ -5003,6 +5018,49 @@ describe('il sondaggio GPU della 0.1.17, agganciato alla PRIMA scelta locale', (
         // avvio invece di assumerlo già avvenuto.
         await vi.waitFor(() => expect(localEngine.talosQualifyLocalBackend)
             .toHaveBeenCalledWith('/models/local-test/smollm2-135m.gguf'))
+    })
+
+    it("mantiene visibile il caricamento e pubblica l'esito della verifica", async () => {
+        __resetToastsForTests()
+        const probe = deferred<{
+            ran: boolean
+            reason: null
+            probedCpu: boolean
+            cpuInconclusive: boolean
+            probedGpu: boolean
+            gpuInconclusive: boolean
+            decisionBackend: string
+            decisionReason: string
+        }>()
+        localEngine.talosQualifyLocalBackend.mockImplementationOnce(() => probe.promise)
+        const { controller } = await withLocalModelDiscovered()
+        await controller.selectModel('local:/models/local-test/smollm2-135m.gguf')
+
+        await controller.decideLocalEngineProbeConsent('granted')
+        const toasts = useTalosMobileToasts()
+        await vi.waitFor(() => expect(toasts.items.value.map((toast) => toast.message)).toContain('Running…'))
+
+        probe.resolve({
+            ran: true, reason: null, probedCpu: true, cpuInconclusive: false,
+            probedGpu: false, gpuInconclusive: false, decisionBackend: 'cpu', decisionReason: 'unproven',
+        })
+        await vi.waitFor(() => expect(toasts.items.value.map((toast) => toast.message))
+            .toContain('Done. This phone answers local models fastest on the CPU.'))
+        expect(toasts.items.value.map((toast) => toast.message)).not.toContain('Running…')
+        __resetToastsForTests()
+    })
+
+    it('rende visibile un rifiuto del ponte invece di una Promise silenziosa', async () => {
+        __resetToastsForTests()
+        localEngine.talosQualifyLocalBackend.mockRejectedValueOnce(new Error('TALOS_LLAMA_UNAVAILABLE'))
+        const { controller } = await withLocalModelDiscovered()
+        await controller.selectModel('local:/models/local-test/smollm2-135m.gguf')
+
+        await controller.decideLocalEngineProbeConsent('granted')
+        const toasts = useTalosMobileToasts()
+        await vi.waitFor(() => expect(toasts.items.value.map((toast) => toast.message))
+            .toContain("That didn't work, try again"))
+        __resetToastsForTests()
     })
 
     it("'declined' scrive il consenso e NON fa partire niente", async () => {

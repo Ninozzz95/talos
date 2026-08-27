@@ -42,8 +42,42 @@ describe('TalosMobileScreen', () => {
         expect(body.classes()).toContain('md:overflow-hidden')
     })
 
+    it('CODE-MOBILE-GUTTER-01 can hand all viewport gutters to an embedded surface', () => {
+        const wrapper = mount(TalosMobileScreen, {
+            props: { title: 'Code', edgeToEdge: true },
+            slots: { default: '<p>code</p>' },
+        })
+        const body = wrapper.get('[data-testid="mobile-screen-body"]')
+
+        expect(body.classes()).toContain('p-0')
+        expect(body.classes()).toContain('overflow-hidden')
+        expect(body.classes()).not.toContain('px-4')
+    })
+
     it('labels the screen region with its title for assistive tech', () => {
         const wrapper = mount(TalosMobileScreen, { props: { title: 'Library' } })
         expect(wrapper.get('[data-testid="mobile-screen"]').attributes('aria-label')).toBe('Library')
+    })
+
+    // F6 sidebar refactor (24/8): `embedded` mounts this shell as a persistent
+    // panel's own content (the tablet rail showing Harness) — no own H1 (the
+    // panel already has a brand header) and no opaque background (the panel
+    // is translucent; painting over it would defeat the blur).
+    it('embedded: hides its own H1 and drops the opaque background', () => {
+        const wrapper = mount(TalosMobileScreen, {
+            props: { title: 'Harness', embedded: true },
+            slots: { default: '<p data-testid="panel-body">sessions</p>' },
+        })
+        expect(wrapper.findAll('h1')).toHaveLength(0)
+        expect(wrapper.get('[data-testid="mobile-screen"]').classes()).not.toContain('bg-[var(--talos-background)]')
+        // Still labeled for assistive tech even without a visible H1.
+        expect(wrapper.get('[data-testid="mobile-screen"]').attributes('aria-label')).toBe('Harness')
+        expect(wrapper.find('[data-testid="panel-body"]').exists()).toBe(true)
+    })
+
+    it('non-embedded keeps the H1 and the opaque background (no regression)', () => {
+        const wrapper = mount(TalosMobileScreen, { props: { title: 'Library' } })
+        expect(wrapper.findAll('h1')).toHaveLength(1)
+        expect(wrapper.get('[data-testid="mobile-screen"]').classes()).toContain('bg-[var(--talos-background)]')
     })
 })

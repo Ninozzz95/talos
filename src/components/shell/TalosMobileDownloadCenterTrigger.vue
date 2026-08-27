@@ -8,7 +8,7 @@ import {
     PopoverTrigger,
 } from 'reka-ui'
 import { useTalosI18n } from '@/i18n'
-import { talosFormatBytes } from '@/lib/models/presentation'
+import { talosFormatBytes, talosTransferCanPause, talosTransferCanResume } from '@/lib/models/presentation'
 import type { TalosTransferItem } from '@/services/modelTransfer'
 import {
     talosCancelManagedModelTransfer,
@@ -73,16 +73,6 @@ function progressLabel(item: TalosTransferItem): string {
     return `${talosFormatBytes(item.haveBytes)} / ${talosFormatBytes(item.totalBytes)}`
 }
 
-function canPause(item: TalosTransferItem): boolean {
-    return item.phase === 'queued'
-        || item.phase === 'running'
-        || item.phase === 'verifying'
-}
-
-function canResume(item: TalosTransferItem): boolean {
-    return item.resumable && (item.phase === 'paused' || item.phase === 'failed')
-}
-
 function acting(id: string): boolean {
     return actingIds.value.has(id)
 }
@@ -138,7 +128,7 @@ async function cancel(id: string): Promise<void> {
                 :side-offset="8"
                 :collision-padding="12"
                 data-talos-motion-intent="menu-open"
-                class="isolate z-[100] w-[min(24rem,calc(100vw-(var(--talos-space-page)*2)))] overflow-hidden rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-window-bg)] text-[var(--talos-text)] outline-none"
+                class="isolate z-[var(--talos-z-app-overlay)] w-[min(24rem,calc(100vw-(var(--talos-space-page)*2)))] overflow-hidden rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-window-bg)] text-[var(--talos-text)] outline-none"
             >
                 <header class="flex min-w-0 items-center gap-[var(--talos-space-inline)] p-[var(--talos-space-card)]">
                     <span class="grid size-[var(--talos-touch-target)] shrink-0 place-items-center rounded-[var(--talos-radius-control)] bg-[var(--talos-active)] text-[var(--talos-accent)]">
@@ -180,7 +170,7 @@ async function cancel(id: string): Promise<void> {
                             </div>
                             <div class="flex shrink-0 items-center gap-[calc(var(--talos-space-inline)/2)]">
                                 <button
-                                    v-if="canPause(item)"
+                                    v-if="talosTransferCanPause(item)"
                                     type="button"
                                     data-testid="talos-download-center-pause"
                                     :aria-label="t('localModels.downloadCenter.pauseModel', { model: modelName(item) })"
@@ -191,7 +181,7 @@ async function cancel(id: string): Promise<void> {
                                     <Pause class="size-[var(--talos-icon-size)]" aria-hidden="true" />
                                 </button>
                                 <button
-                                    v-else-if="canResume(item)"
+                                    v-else-if="talosTransferCanResume(item)"
                                     type="button"
                                     data-testid="talos-download-center-resume"
                                     :aria-label="t('localModels.downloadCenter.resumeModel', { model: modelName(item) })"

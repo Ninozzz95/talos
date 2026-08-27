@@ -12,7 +12,7 @@ const harness = vi.hoisted(() => ({
         author: 'unsloth',
         license: 'apache-2.0',
         updatedAt: '2026-08-05T00:00:00Z',
-        readme: '# Qwen\n\nThis model is built for long coding sessions with tools and careful instruction following across large repositories.\n\n## Full notes\nThe complete card remains available here.',
+        readme: '# Qwen\n\nThis model is built for long coding sessions with tools and careful instruction following across large repositories.\n\n<img src="https://cdn-uploads.huggingface.co/production/uploads/liquid.png" alt="Liquid AI" />\n\n## Full notes\nThe complete card remains available here.',
         // Restyle Blocco 6 (mockup, item 8): TalosHuggingFaceCard porta
         // anche questi tre campi da quando describeModel() li legge dalla
         // stessa risposta HF di author/license — senza, downloadsLabel
@@ -25,6 +25,18 @@ const harness = vi.hoisted(() => ({
     examineRepo: vi.fn(async () => undefined),
     download: vi.fn(async () => ({ ok: true as const })),
     resume: vi.fn(async () => ({ ok: true as const })),
+    // DEBT-MOBILE-014 — stesso store del Centro download (TalosMobileDownloadCenterTrigger.test.ts
+    // usa lo stesso pattern): pausa/riprendi/annulla sono comandi reali sul
+    // ponte nativo, mockati qui perche' jsdom non ha il plugin Capacitor.
+    pauseTransfer: vi.fn(async () => ({ ok: true as const })),
+    resumeTransfer: vi.fn(async () => ({ ok: true as const })),
+    cancelTransfer: vi.fn(async () => ({ ok: true as const })),
+}))
+
+vi.mock('@/stores/modelTransfers', () => ({
+    talosPauseManagedModelTransfer: harness.pauseTransfer,
+    talosResumeManagedModelTransfer: harness.resumeTransfer,
+    talosCancelManagedModelTransfer: harness.cancelTransfer,
 }))
 
 vi.mock('@/stores/localModels', () => ({
@@ -54,6 +66,11 @@ import TalosMobileLocalRepoDetail from '@/components/talos/models/TalosMobileLoc
 // solleva comunque in cima al file) da' la referenza allo stesso vi.fn() che
 // il componente chiama, per potervi asserire sopra.
 import { talosSetLocalContext, talosSetLocalKvCacheType } from '@/stores/localModels'
+import {
+    talosCancelManagedModelTransfer,
+    talosPauseManagedModelTransfer,
+    talosResumeManagedModelTransfer,
+} from '@/stores/modelTransfers'
 
 function modelSet() {
     return {
@@ -76,13 +93,18 @@ beforeEach(() => {
         device: { availableRamBytes: 5 * 1024 ** 3, freeStorageBytes: 20 * 1024 ** 3, lowMemoryThresholdBytes: 0 },
         context: 4096,
         kvCacheType: 'auto',
-        transfer: { active: false, paused: false, modelName: null, haveBytes: 0, totalBytes: 0, runner: null, networkBound: true, failure: null },
+        transfer: { items: [], active: false, paused: false, modelName: null, haveBytes: 0, totalBytes: 0, runner: null, networkBound: true, failure: null },
         leftovers: { items: [], totalBytes: 0 },
     }) as never
 })
 
 describe('TalosMobileLocalRepoDetail', () => {
-    it('leaves polling and transfer controls to the global Download Center', async () => {
+    // DEBT-MOBILE-014 (owner 26/8): superato dal contratto sotto — i comandi
+    // pausa/riprendi/annulla vivono ORA anche qui, non solo nel Centro
+    // download globale. La sola garanzia che resta vera e' che nessun
+    // secondo poller nasce: `talos-models-transfer`/`-stop`/`-resume` non
+    // sono mai esistiti in questo componente, prima o dopo.
+    it('non apre un secondo poller — i comandi restano sullo stesso store del Centro download', async () => {
         harness.state.transfer = {
             active: true,
             paused: false,
@@ -154,6 +176,7 @@ describe('TalosMobileLocalRepoDetail', () => {
         expect(wrapper.find('pre').exists()).toBe(false)
         expect(scheda.find('h2').exists()).toBe(true)
         expect(scheda.text()).not.toContain('## Full notes')
+        expect(scheda.find('img').attributes('src')).toBe('https://cdn-uploads.huggingface.co/production/uploads/liquid.png')
     })
 
     /**
@@ -183,6 +206,140 @@ describe('TalosMobileLocalRepoDetail', () => {
         expect(download.text()).toContain('Q4_K_M')
         // 2_500_000_000 byte formattati da talosFormatBytes: 2.3 GiB, non 2.5 GB decimali.
         expect(download.text()).toContain('2.3 GB')
+    })
+
+    it('DEBT-MOBILE-014 RED: the selected download button becomes its live progress bar', async () => {
+        harness.state.transfer.items = [{
+            id: 'transfer-q4',
+            jobId: 101,
+            createdAtMs: 1,
+            phase: 'running',
+            active: true,
+            repo: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile',
+            revision: 'sha',
+            paths: ['model-Q4_K_M.gguf'],
+            modelName: 'Qwen Q4_K_M',
+            haveBytes: 625_000_000,
+            totalBytes: 2_500_000_000,
+            runner: 'USER_INITIATED_JOB',
+            networkBound: true,
+            failure: null,
+            resumable: true,
+        }]
+        const wrapper = mount(TalosMobileLocalRepoDetail, {
+            props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+        })
+        await flushPromises()
+
+        expect(wrapper.find('[data-testid="talos-models-download"]').exists()).toBe(false)
+        const progress = wrapper.get('[data-testid="talos-models-download-progress"]')
+        expect(progress.attributes('role')).toBe('progressbar')
+        expect(progress.attributes('aria-valuenow')).toBe('25')
+        expect(progress.text()).toContain('Q4_K_M')
+        expect(progress.text()).toContain('596 MB')
+        expect(progress.text()).toContain('2.3 GB')
+    })
+
+    describe('DEBT-MOBILE-014 — pausa/riprendi/annulla integrati nel pannello (owner 26/8)', () => {
+        function runningTransfer(overrides: Record<string, unknown> = {}) {
+            return {
+                id: 'transfer-q4',
+                jobId: 101,
+                createdAtMs: 1,
+                phase: 'running',
+                active: true,
+                repo: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile',
+                revision: 'sha',
+                paths: ['model-Q4_K_M.gguf'],
+                modelName: 'Qwen Q4_K_M',
+                haveBytes: 625_000_000,
+                totalBytes: 2_500_000_000,
+                runner: 'USER_INITIATED_JOB',
+                networkBound: true,
+                failure: null,
+                resumable: true,
+                ...overrides,
+            }
+        }
+
+        beforeEach(() => {
+            vi.mocked(talosPauseManagedModelTransfer).mockClear()
+            vi.mocked(talosResumeManagedModelTransfer).mockClear()
+            vi.mocked(talosCancelManagedModelTransfer).mockClear()
+        })
+
+        it('un trasferimento in corso porta il pulsante Pausa, che chiama lo stesso comando del Centro download sullo stesso id', async () => {
+            harness.state.transfer.items = [runningTransfer()]
+            const wrapper = mount(TalosMobileLocalRepoDetail, {
+                props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+            })
+            await flushPromises()
+
+            expect(wrapper.find('[data-testid="talos-models-download-resume"]').exists()).toBe(false)
+            const pause = wrapper.get('[data-testid="talos-models-download-pause"]')
+            expect(pause.attributes('aria-label')).toContain('Q4_K_M')
+
+            await pause.trigger('click')
+            await flushPromises()
+
+            expect(talosPauseManagedModelTransfer).toHaveBeenCalledWith('transfer-q4')
+        })
+
+        it('un trasferimento in pausa porta il pulsante Riprendi al posto di Pausa', async () => {
+            harness.state.transfer.items = [runningTransfer({ phase: 'paused', active: false })]
+            const wrapper = mount(TalosMobileLocalRepoDetail, {
+                props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+            })
+            await flushPromises()
+
+            expect(wrapper.find('[data-testid="talos-models-download-pause"]').exists()).toBe(false)
+            const resume = wrapper.get('[data-testid="talos-models-download-resume"]')
+            expect(resume.attributes('aria-label')).toContain('Q4_K_M')
+
+            await resume.trigger('click')
+            await flushPromises()
+
+            expect(talosResumeManagedModelTransfer).toHaveBeenCalledWith('transfer-q4')
+        })
+
+        it('Annulla chiede conferma prima di chiamare il comando, ed "Continua a conservarlo" lo evita', async () => {
+            harness.state.transfer.items = [runningTransfer()]
+            const wrapper = mount(TalosMobileLocalRepoDetail, {
+                props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+            })
+            await flushPromises()
+
+            await wrapper.get('[data-testid="talos-models-download-cancel"]').trigger('click')
+            await flushPromises()
+            expect(wrapper.find('[data-testid="talos-models-download-cancel-warning"]').exists()).toBe(true)
+            expect(talosCancelManagedModelTransfer).not.toHaveBeenCalled()
+
+            // "Continua a conservarlo" — primo bottone della conferma — chiude senza annullare.
+            await wrapper.get('[data-testid="talos-models-download-cancel-warning"]').get('button').trigger('click')
+            await flushPromises()
+            expect(wrapper.find('[data-testid="talos-models-download-cancel-warning"]').exists()).toBe(false)
+            expect(talosCancelManagedModelTransfer).not.toHaveBeenCalled()
+
+            // Riapre e conferma per davvero questa volta.
+            await wrapper.get('[data-testid="talos-models-download-cancel"]').trigger('click')
+            await flushPromises()
+            await wrapper.get('[data-testid="talos-models-download-cancel-confirm"]').trigger('click')
+            await flushPromises()
+
+            expect(talosCancelManagedModelTransfer).toHaveBeenCalledWith('transfer-q4')
+        })
+
+        it('senza un trasferimento attivo non mostra alcun comando di pausa/riprendi/annulla', async () => {
+            harness.state.transfer.items = []
+            const wrapper = mount(TalosMobileLocalRepoDetail, {
+                props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+            })
+            await flushPromises()
+
+            expect(wrapper.find('[data-testid="talos-models-download-pause"]').exists()).toBe(false)
+            expect(wrapper.find('[data-testid="talos-models-download-resume"]').exists()).toBe(false)
+            expect(wrapper.find('[data-testid="talos-models-download-cancel"]').exists()).toBe(false)
+        })
     })
 
     it('un suffisso di backend nel nome resta leggibile per intero nel pannello di configurazione', async () => {

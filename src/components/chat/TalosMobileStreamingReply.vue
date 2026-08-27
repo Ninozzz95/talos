@@ -229,7 +229,7 @@ function tailTarget(): HTMLElement | null {
     }
 }
 
-function ensureTail(): HTMLElement | null {
+function ensureTail(structural = false): HTMLElement | null {
     const target = tailTarget()
     if (!target) return null
     if (!tailHost) {
@@ -242,7 +242,11 @@ function ensureTail(): HTMLElement | null {
     // tail machinery regardless of mode — and a blinking cursor IS the
     // typewriter. Fade means the text simply appears; nothing points at where
     // the next letter will land.
-    if (!caretEl && !fadeMode.value) {
+    if (structural && caretEl) {
+        caretEl.remove()
+        caretEl = null
+    }
+    if (!caretEl && !fadeMode.value && !structural) {
         caretEl = document.createElement('span')
         caretEl.className = 'talos-stream-caret'
         caretEl.setAttribute('data-testid', 'talos-stream-caret')
@@ -253,7 +257,7 @@ function ensureTail(): HTMLElement | null {
     return tailHost
 }
 
-function appendChars(host: HTMLElement, text: string): void {
+function appendChars(host: HTMLElement, text: string, structural = false): void {
     /**
      * Batch each delivered fragment at whitespace boundaries.
      *
@@ -270,7 +274,9 @@ function appendChars(host: HTMLElement, text: string): void {
     const flush = (): void => {
         if (word === '') return
         const span = document.createElement('span')
-        span.className = fadeMode.value ? 'talos-stream-char talos-stream-char--fade' : 'talos-stream-char'
+        span.className = fadeMode.value || structural
+            ? 'talos-stream-char talos-stream-char--fade'
+            : 'talos-stream-char'
         span.textContent = word
         host.insertBefore(span, caretEl ?? null)
         word = ''
@@ -292,6 +298,7 @@ function appendChars(host: HTMLElement, text: string): void {
 function syncTail(): void {
     if (!sending.value) return
     const pending = revealed.value.slice(parsedSource.value.length)
+    const tail = pending
     // SF-MAJOR: everything after a newline is BLOCK syntax (`- `, `## `, `|`,
     // `---`). Painted as raw text into the previous block it shows the markers
     // and lands in the wrong container (inside the last <li>, the last <td>)
@@ -302,16 +309,22 @@ function syncTail(): void {
         parseNow(revealed.value)
         return
     }
-    const host = ensureTail()
+    const target = tailTarget()
+    const lastTag = target?.lastElementChild?.tagName ?? ''
+    // Tables and their sibling structural blocks own their layout. A caret
+    // painted after one is read as a prompt inside the table, not as answer
+    // progress. Structural fragments use the same fade ink as the selected
+    // fade mode, while the Markdown parser remains the source of truth.
+    const structural = TAIL_REFUSED.has(lastTag) || /^\s*\|/.test(tail)
+    const host = ensureTail(structural)
     if (!host) return
-    const tail = pending
     if (tail === paintedTail) return
     if (!tail.startsWith(paintedTail)) {
         // The parse absorbed the tail (or the reply reset): start it over.
         while (host.firstChild && host.firstChild !== caretEl) host.firstChild.remove()
         paintedTail = ''
     }
-    appendChars(host, tail.slice(paintedTail.length))
+    appendChars(host, tail.slice(paintedTail.length), structural)
     paintedTail = tail
 }
 

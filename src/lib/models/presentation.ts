@@ -1,4 +1,5 @@
 import type { TalosModelFit, TalosModelBand, TalosModelFitReason } from '@/lib/models/fit'
+import type { TalosTransferItem } from '@/services/modelTransfer'
 
 /**
  * What the download centre says, decided apart from how it looks.
@@ -226,4 +227,20 @@ export function talosSetWarnings(set: {
         // it has not looked, which is not the same and is not a warning either.
         flagged: set.security !== null && set.security !== 'safe' ? set.security : null,
     }
+}
+
+/**
+ * Un solo giudice per "questo trasferimento si mette in pausa/riparte",
+ * condiviso dal Centro download globale e dal pannello di dettaglio della
+ * variante (DEBT-MOBILE-014, owner 26/8: "anche il bottone per scaricare il
+ * modello abbia la sua barra integrata"). Prima vivevano due copie identiche,
+ * una per componente: i due punti potevano derivare, per una svista futura,
+ * due risposte diverse sullo STESSO `id` di trasferimento.
+ */
+export function talosTransferCanPause(item: Pick<TalosTransferItem, 'phase'>): boolean {
+    return item.phase === 'queued' || item.phase === 'running' || item.phase === 'verifying'
+}
+
+export function talosTransferCanResume(item: Pick<TalosTransferItem, 'phase' | 'resumable'>): boolean {
+    return item.resumable && (item.phase === 'paused' || item.phase === 'failed')
 }
