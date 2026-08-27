@@ -120,9 +120,16 @@ export async function avviaSessione({
    * per sessione (un `Set` di percorsi già scritti IN QUESTA sessione),
    * che etichettava "nuovo" ogni file toccato per la prima volta nel
    * run anche se esisteva da sempre su disco — bug del pannello Review.
+   *
+   * ⭐⭐⭐ 27/8 (secondo giro) — `contenutoPrima`, quarto argomento:
+   * stessa storia di `esisteva`, un livello più in la. `talosHarness.mjs`
+   * ora tiene (invece di buttare) il testo che legge comunque dal disco
+   * per calcolare `esisteva` — questo file lo inoltra cosi' com'e', zero
+   * logica qui: la traduzione in un formato di evento vive tutta in
+   * `agui-events.mjs`, come per `esisteva`.
    */
-  const onScrittura = (percorso, contenuto, esisteva) => {
-    onEvento(eventoPerScrittura({ percorso, contenuto, esisteva }));
+  const onScrittura = (percorso, contenuto, esisteva, contenutoPrima) => {
+    onEvento(eventoPerScrittura({ percorso, contenuto, esisteva, contenutoPrima }));
   };
 
   try {

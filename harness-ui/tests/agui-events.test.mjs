@@ -175,3 +175,23 @@ test('eventoPerScrittura — file nuovo produce "add", file esistente produce "r
     { type: 'StateDelta', delta: [{ op: 'replace', path: '/file/gia-li.ts', value: 'y' }] },
   );
 });
+
+test('eventoPerScrittura — contenutoPrima assente non aggiunge la chiave "prima" (retrocompatibilità byte-per-byte con i due casi sopra)', () => {
+  assert.deepStrictEqual(
+    eventoPerScrittura({ percorso: 'x.ts', contenuto: 'v', esisteva: true, contenutoPrima: undefined }),
+    { type: 'StateDelta', delta: [{ op: 'replace', path: '/file/x.ts', value: 'v' }] },
+    'contenutoPrima:undefined esplicito deve produrre lo stesso oggetto di non passarlo affatto',
+  );
+});
+
+test('eventoPerScrittura — contenutoPrima presente porta il campo "prima" nel delta, per il diff vero — 27/8', () => {
+  assert.deepStrictEqual(
+    eventoPerScrittura({ percorso: 'x.ts', contenuto: 'v2', esisteva: true, contenutoPrima: 'v1' }),
+    { type: 'StateDelta', delta: [{ op: 'replace', path: '/file/x.ts', value: 'v2', prima: 'v1' }] },
+  );
+  assert.deepStrictEqual(
+    eventoPerScrittura({ percorso: 'nuovo.ts', contenuto: 'v1', esisteva: false, contenutoPrima: null }),
+    { type: 'StateDelta', delta: [{ op: 'add', path: '/file/nuovo.ts', value: 'v1', prima: null }] },
+    'un file nuovo porta prima:null esplicito, non lo nasconde: chi ascolta sa che non c\'è un "prima" da mostrare',
+  );
+});
