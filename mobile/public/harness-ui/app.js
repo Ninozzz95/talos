@@ -66,6 +66,10 @@
       reviewFiles: new Map(),
       /** Piano §1.3, riga "Contesto workspace" — la cartella corrente sfogliata nell'albero file reale, '' = radice. */
       treePercorso: '',
+      /** Piano §1.3-BIS.T — toolCallId -> nome attrezzo, SOLO per riconoscere quando un ToolCallResult appartiene a "shell" e specchiarlo nella vista Terminale. Non tocca il rendering generico della chat, già esistente. */
+      toolCallNomi: new Map(),
+      /** ⛔ 27/8 — vero se l'ULTIMO evento visto su questa connessione era RunFinished/RunError: dice a onerror se la chiusura che sta per arrivare è attesa (niente da segnalare) o una vera interruzione. Vedi collegaEventiSessione. */
+      eventoTerminaleVisto: false,
     },
   };
 
@@ -1301,6 +1305,68 @@
   }
 
   /**
+   * ⭐ Piano §1.3-BIS.T (seconda metà) — la vista Terminale dedicata smette
+   * di essere demo la prima volta che un comando VERO gira. Non un vero
+   * emulatore (niente cursore che si muove, niente ANSI): un prompt riga
+   * per riga, stesso stile visivo del mockup (span .prompt/.path/.cursor),
+   * ma con l'output reale.
+   *
+   * ⛔ Non tocca il rendering generico della chat (appendToolNote già
+   * mostra lo stesso tool-call lì) — questa è un'AGGIUNTA, non una
+   * sostituzione: lo stesso comando compare in entrambe le viste, come nel
+   * mockup originale (Terminale è una vista dedicata, non l'unica prova
+   * che qualcosa è girato).
+   */
+  function appendTerminalEntry(comando, testo) {
+    const code = $('[data-view="terminal"] .terminal-window code');
+    if (!code) return;
+    if (!code.dataset.reale) {
+      code.replaceChildren();
+      code.dataset.reale = '1';
+      const demoBadge = $('.demo-surface-badge', $('[data-view="terminal"]'));
+      if (demoBadge) demoBadge.hidden = true;
+    }
+    const workspace = $('#envWorkspace')?.textContent || 'talos';
+    const rigaPrompt = document.createElement('span');
+    rigaPrompt.append(
+      textElement('span', 'prompt', 'talos'),
+      document.createTextNode(' '),
+      textElement('span', 'path', `~/${workspace}`),
+    );
+    code.append(rigaPrompt, document.createTextNode(`\n$ ${comando}\n\n${testo}\n\n`));
+    const contenitore = code.closest('.terminal-window');
+    if (contenitore) contenitore.scrollTop = contenitore.scrollHeight;
+  }
+
+  /**
+   * ⭐ Piano §1.3-BIS.T (seconda metà) — il comando diretto (`!comando` nel
+   * composer): un endpoint dedicato (`POST .../shell`), FUORI dal ciclo del
+   * modello — l'owner sceglie il comando, non un attrezzo che il modello
+   * decide di chiamare. Riusa esattamente lo schema già in uso per
+   * `resumeSession`: POST, poi una connessione SSE FRESCA (mai quella
+   * vecchia — provato nel backend che una connessione già aperta da prima
+   * non riceve questi eventi dal vivo).
+   */
+  async function runDirectShell(comando, silenzioso) {
+    if (!state.realSession.id) {
+      toast('Nessuna sessione reale attiva', 'Avvia un task dal corpus prima di usare un comando diretto.');
+      return;
+    }
+    const sessionId = state.realSession.id;
+    const taskId = state.realSession.taskId;
+    try {
+      await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/shell`, { comando });
+      const generation = nuovaGenerazioneSessione({ continua: true });
+      state.realSession.taskId = taskId;
+      collegaEventiSessione(sessionId, generation);
+      aggiornaElencoSessioniReali();
+      if (!silenzioso) toast('Comando inviato', comando);
+    } catch (error) {
+      toast('Comando non eseguito', error.message);
+    }
+  }
+
+  /**
    * ⭐ Piano §1.3, riga Review — ogni scrittura reale aggiorna la scheda
    * Review già esistente, non solo la conversazione. Una voce PER
    * percorso, così un task che scrive più file resta tutto ispezionabile.
@@ -1452,14 +1518,31 @@
       }
       case 'ToolCallStart': {
         appendToolNote(`🔧 ${evento.toolCallName}(…)`);
+        /*
+         * ⭐ Ricordato SOLO per riconoscere in ToolCallResult se questa
+         * chiamata era "shell" (dal modello, dentro un task, O dal
+         * comando diretto dell'owner — stesso attrezzo, stesso evento) e
+         * specchiarla nella vista Terminale. Non cambia il rendering
+         * generico sopra, già esistente.
+         */
+        state.realSession.toolCallNomi.set(evento.toolCallId, { nome: evento.toolCallName, argomenti: '' });
         break;
       }
       case 'ToolCallArgs': {
         const ultima = $$('.real-tool-note .assistant-copy').at(-1);
         if (ultima) ultima.textContent += `\n${evento.delta}`;
+        const info = state.realSession.toolCallNomi.get(evento.toolCallId);
+        if (info) info.argomenti += evento.delta;
         break;
       }
       case 'ToolCallResult': {
+        const info = state.realSession.toolCallNomi.get(evento.toolCallId);
+        if (info?.nome === 'shell') {
+          let comando = '(comando)';
+          try { comando = JSON.parse(info.argomenti).comando || comando; } catch { /* args incompleti o non ancora arrivati: meglio un'etichetta onesta che un crash */ }
+          appendTerminalEntry(comando, String(evento.content));
+        }
+        state.realSession.toolCallNomi.delete(evento.toolCallId);
         appendToolNote(`→ ${String(evento.content).slice(0, 2000)}`);
         break;
       }
@@ -1471,24 +1554,31 @@
       }
       case 'RunFinished': {
         appendStatusNote(evento.result?.detto || 'Task concluso.');
-        closeRealSession(generation);
+        /*
+         * ⛔⛔ 27/8, trovato verificando il comando diretto: QUI si chiudeva
+         * l'EventSource lato browser (closeRealSession, rimossa) — giusto
+         * quando una sessione aveva un giro solo, sbagliato ora che può
+         * averne di più (un resume, un comando diretto): durante il REPLAY
+         * di una cronologia con due giri, questo troncava la vista alla
+         * fine del PRIMO RunFinished, esattamente come il gemello lato
+         * server corretto poco fa in http-app.mjs (stessa famiglia di
+         * difetto, due lati). Ora si aspetta che sia il SERVER a chiudere
+         * lo stream (lo fa già, correttamente, solo a replay finito e
+         * senza un giro dal vivo dietro) — si segna solo che l'ultimo
+         * evento era terminale, per onerror.
+         */
+        state.realSession.eventoTerminaleVisto = true;
         aggiornaElencoSessioniReali(); // lo stato in #sessionList passa da "in corso" a "concluso" (visibile solo standalone, vedi nota di testa)
         break;
       }
       case 'RunError': {
         appendStatusNote(`${evento.code ? `[${evento.code}] ` : ''}${evento.message}`, true);
-        closeRealSession(generation);
+        state.realSession.eventoTerminaleVisto = true;
         break;
       }
       default:
         break;
     }
-  }
-
-  function closeRealSession(generation) {
-    if (generation !== state.realSession.generation) return;
-    state.realSession.eventSource?.close();
-    state.realSession.eventSource = null;
   }
 
   /** Apre l'EventSource per una sessione GIÀ avviata sul server e collega gli eventi al rendering reale. */
@@ -1519,6 +1609,7 @@
    */
   function collegaEventiSessione(sessionId, generation) {
     state.realSession.id = sessionId;
+    state.realSession.eventoTerminaleVisto = false;
     const demoBadgeChat = $$('.demo-surface-badge', $('.chat-view'))
       .find((badge) => badge.closest('[data-demo-surface]')?.dataset.demoSurface === 'chat');
     if (demoBadgeChat) demoBadgeChat.hidden = true;
@@ -1529,12 +1620,27 @@
       try { evento = JSON.parse(message.data); } catch { return; }
       handleRealEvent(evento, generation);
     };
+    /*
+     * ⛔⛔ 27/8 — riscritto insieme al fix gemello lato server (vedi
+     * handleRealEvent, caso RunFinished): EventSource riprova DA SOLO ad
+     * OGNI caduta di connessione, inclusa quella che il server fa apposta
+     * quando lo stream è davvero finito — per spec non esiste un
+     * "readyState CLOSED da solo", solo un client che chiama .close() lo
+     * ottiene. Prima lo faceva closeRealSession (rimossa) appena vedeva UN
+     * RunFinished — sbagliato con più giri nel buffer, chiudeva al primo.
+     * Ora: se l'ULTIMO evento visto era terminale, questa caduta era attesa
+     * (il server ha appena chiuso lo stream a posta fatta) — si chiude qui,
+     * niente avviso. Altrimenti è una caduta vera: si lascia che
+     * EventSource riprovi da solo, un avviso solo se ha già rinunciato.
+     */
     source.onerror = () => {
-      // ⛔ EventSource riprova DA SOLO su una caduta di rete — il server tiene
-      // viva la sessione finché non chiude lo stream lui stesso su
-      // RunFinished/RunError. Un avviso solo quando il browser ha già
-      // smesso di riconnettersi per davvero.
-      if (generation === state.realSession.generation && source.readyState === EventSource.CLOSED) {
+      if (generation !== state.realSession.generation) return;
+      if (state.realSession.eventoTerminaleVisto) {
+        source.close();
+        state.realSession.eventSource = null;
+        return;
+      }
+      if (source.readyState === EventSource.CLOSED) {
         appendStatusNote('Connessione agli eventi interrotta.', true);
       }
     };
@@ -1827,8 +1933,10 @@
     if (!value) return false;
     if (value.startsWith('!')) {
       const hidden = value.startsWith('!!');
-      toast(hidden ? 'Shell eseguita senza contesto' : 'Shell inviata al terminale', value.replace(/^!!?/, '').trim());
+      const comando = value.replace(/^!!?/, '').trim();
       setView('terminal');
+      if (!comando) { toast('Comando vuoto', 'Scrivi qualcosa dopo "!".'); return true; }
+      runDirectShell(comando, hidden);
       return true;
     }
     if (state.queueMode) {
@@ -2358,6 +2466,7 @@
     passaASessione,
     openRealTaskSheet,
     aggiornaElencoSessioniReali,
+    runDirectShell,
     realSessionState: state.realSession,
   };
   window.__talosHarnessDestroy = () => {

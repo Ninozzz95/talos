@@ -32,6 +32,7 @@ type RuntimeGlobals = {
         passaASessione(sessionId: string, taskId: string, nome?: string): void
         openRealTaskSheet(): Promise<void>
         aggiornaElencoSessioniReali(): Promise<void>
+        runDirectShell(comando: string, silenzioso: boolean): Promise<void>
         realSessionState: {
             id: string | null
             taskId: string | null
@@ -218,7 +219,14 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(fetchMock).not.toHaveBeenCalled()
     })
 
-    it('REAL-SESSION-FINISH-01 RunFinished chiude lo stream della sua generazione', async () => {
+    it('REAL-SESSION-FINISH-01 RunFinished NON chiude subito lo stream — solo quando la connessione cade DAVVERO, e senza avviso', async () => {
+        // ⛔ 27/8: chiudere subito su un RunFinished era il difetto — una
+        // cronologia con PIÙ giri (resume, comando diretto) troncava il
+        // replay al primo. Ora RunFinished si limita a segnare "visto un
+        // terminale"; è onerror (il segnale reale che la connessione è
+        // caduta — qui simulato) a chiudere, e solo SE quel segnale arriva
+        // dopo un terminale: mai un "connessione interrotta" per una fine
+        // attesa.
         mockFetch([
             { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-fine' } },
             { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [{ sessionId: 'sess-fine', taskId: 'storia-x', conclusa: true, avviataAlle: '2026-08-26T10:00:00.000Z' }] } },
@@ -228,9 +236,29 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         const source = FakeEventSource.instances.at(-1)
 
         runtime().handleRealEvent({ type: 'RunFinished', result: { detto: 'Fatto.' } }, generation)
+        // RunFinished da solo non chiude più niente: potrebbero seguire altri eventi (un secondo giro) sulla stessa connessione.
+        expect(source?.readyState).toBe(FakeEventSource.OPEN)
+        expect(runtime().realSessionState.eventSource).not.toBeNull()
+
+        source?.onerror?.() // il server ha chiuso lo stream per davvero, ora che il replay/giro è finito
 
         expect(source?.readyState).toBe(FakeEventSource.CLOSED)
         expect(runtime().realSessionState.eventSource).toBeNull()
+        expect(document.querySelector('#conversation')?.textContent).not.toContain('interrotta')
+    })
+
+    it('⛔ REAL-SESSION-FINISH-02 AL CONTRARIO: una connessione che cade PRIMA di qualunque evento terminale mostra l\'avviso di interruzione', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-caduta' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-y' })
+        const source = FakeEventSource.instances.at(-1)
+        source!.readyState = FakeEventSource.CLOSED // la caduta di rete vera: il browser ha già rinunciato
+
+        source?.onerror?.()
+
+        expect(document.querySelector('#conversation')?.textContent).toContain('interrotta')
     })
 
     it('REAL-SESSION-LIST-01 aggiornaElencoSessioniReali popola #sessionList con un blocco "Sessioni reali"', async () => {
@@ -314,6 +342,54 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(FakeEventSource.instances).toHaveLength(2)
         expect(FakeEventSource.instances[1].url).toBe('/api/v1/sessions/sess-riprendi/events')
         expect(runtime().realSessionState.id).toBe('sess-riprendi')
+    })
+
+    it('REAL-SESSION-SHELL-01 runDirectShell senza sessione attiva non chiama niente — rifiuto onesto, mai una finta esecuzione', async () => {
+        const fetchMock = mockFetch([])
+        await runtime().runDirectShell('echo x', false)
+        expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('REAL-SESSION-SHELL-02 con sessione attiva chiama POST .../shell e apre una connessione FRESCA sullo STESSO id — mai quella vecchia', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-shell' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-shell' })
+
+        const fetchMock = mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions/sess-shell/shell', corpo: { ok: true } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().runDirectShell('npm test', false)
+
+        expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions/sess-shell/shell',
+            expect.objectContaining({ method: 'POST', body: JSON.stringify({ comando: 'npm test' }) }))
+        expect(FakeEventSource.instances).toHaveLength(2)
+        expect(FakeEventSource.instances[1].url).toBe('/api/v1/sessions/sess-shell/events')
+        expect(runtime().realSessionState.id).toBe('sess-shell')
+    })
+
+    it('REAL-SESSION-SHELL-03 il risultato di un tool-call "shell" arriva anche nella vista Terminale dedicata, non solo nella chat', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 'c1', toolCallName: 'shell' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallArgs', toolCallId: 'c1', delta: JSON.stringify({ comando: 'echo prova' }) }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: 'c1', content: 'exit 0 [sandbox: wsl2]\nprova\n' }, generation)
+
+        const terminale = document.querySelector('[data-view="terminal"] .terminal-window code')
+        expect(terminale?.textContent).toContain('echo prova')
+        expect(terminale?.textContent).toContain('exit 0 [sandbox: wsl2]')
+        const badge = document.querySelector('[data-view="terminal"] .demo-surface-badge') as HTMLElement | null
+        expect(badge?.hidden).toBe(true)
+    })
+
+    it('⛔ REAL-SESSION-SHELL-04 AL CONTRARIO: il risultato di un tool-call DIVERSO da "shell" (es. "leggi") NON tocca la vista Terminale', () => {
+        const contenutoPrima = document.querySelector('[data-view="terminal"] .terminal-window code')?.textContent
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 'c2', toolCallName: 'leggi' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: 'c2', content: 'contenuto del file' }, generation)
+
+        expect(document.querySelector('[data-view="terminal"] .terminal-window code')?.textContent).toBe(contenutoPrima)
     })
 
     it('REAL-SESSION-COMPACT-01 con sessione attiva chiama /compact senza aprire nessuno stream nuovo', async () => {

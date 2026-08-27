@@ -388,7 +388,9 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         expect(fetchMock).not.toHaveBeenCalled()
     })
 
-    it('CODE-COMPOSER-DEMO-SEND-01 preserves ! and !! as honest local terminal demonstrations', () => {
+    it('CODE-COMPOSER-DEMO-SEND-01 "!"/"!!" switch to the terminal view and, without an active real session, refuse honestly instead of faking success', () => {
+        const fetchMock = vi.fn()
+        vi.stubGlobal('fetch', fetchMock)
         mountStaticRuntime()
         const runtime = (window as unknown as {
             __talosHarnessUiRuntime?: { submitPrompt?(text: string): boolean }
@@ -396,7 +398,8 @@ describe('Harness UI embedded host and keyboard runtime', () => {
 
         expect(runtime?.submitPrompt?.('!! pwd')).toBe(true)
         expect(document.querySelector('[data-view="terminal"]')?.classList.contains('active')).toBe(true)
-        expect(document.querySelector('#toastRegion')?.textContent).toContain('Shell eseguita senza contesto')
+        expect(document.querySelector('#toastRegion')?.textContent).toContain('Nessuna sessione reale attiva')
+        expect(fetchMock).not.toHaveBeenCalled()
     })
 
     it('HARNESS-BOARD-MOBILE-HONESTY-01 never calls a local backend from the embedded mobile demo', async () => {
