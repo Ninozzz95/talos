@@ -1364,6 +1364,42 @@
   }
 
   /**
+   * ⭐ Blocco 6 (Browser), stralcio onesto — 27/8. Stesso pattern già in uso
+   * per il Terminale: `naviga` (7° attrezzo, chiuso) è già visibile nella
+   * chat generica come qualunque tool-call, ma la superficie DEDICATA
+   * (`data-view="browser"`) mostrava un "device preview" fisso e finto — un
+   * telefono con `TalosComposer.vue +28 −19`, un URL `127.0.0.1:4173/chat`
+   * mai raggiunto davvero. Non è un iframe che carica la pagina vera
+   * (`naviga` legge testo, non produce un DOM renderizzabile in sicurezza
+   * qui) — è l'esito REALE della lettura, stesso testo che il modello ha
+   * ricevuto, al posto dell'anteprima inventata.
+   */
+  function appendBrowserEntry(url, testo) {
+    const shell = $('[data-view="browser"] .browser-shell');
+    if (!shell) return;
+    if (!shell.dataset.reale) {
+      shell.dataset.reale = '1';
+      const demoBadge = $('.demo-surface-badge', $('[data-view="browser"]'));
+      if (demoBadge) demoBadge.hidden = true;
+    }
+    const barraUrl = $('[data-view="browser"] .browser-url');
+    if (barraUrl) {
+      barraUrl.replaceChildren();
+      const pulse = document.createElement('span');
+      pulse.className = 'status-pulse';
+      barraUrl.append(pulse, document.createTextNode(url));
+    }
+    const anteprima = $('[data-view="browser"] .device-preview');
+    if (anteprima) {
+      anteprima.replaceChildren();
+      const blocco = document.createElement('pre');
+      blocco.className = 'browser-real-output';
+      blocco.textContent = testo;
+      anteprima.append(blocco);
+    }
+  }
+
+  /**
    * ⭐ Piano §1.3-BIS.T (seconda metà) — il comando diretto (`!comando` nel
    * composer): un endpoint dedicato (`POST .../shell`), FUORI dal ciclo del
    * modello — l'owner sceglie il comando, non un attrezzo che il modello
@@ -1594,6 +1630,10 @@
           let comando = '(comando)';
           try { comando = JSON.parse(info.argomenti).comando || comando; } catch { /* args incompleti o non ancora arrivati: meglio un'etichetta onesta che un crash */ }
           appendTerminalEntry(comando, String(evento.content));
+        } else if (info?.nome === 'naviga') {
+          let url = '(url)';
+          try { url = JSON.parse(info.argomenti).url || url; } catch { /* args incompleti o non ancora arrivati: meglio un'etichetta onesta che un crash */ }
+          appendBrowserEntry(url, String(evento.content));
         }
         state.realSession.toolCallNomi.delete(evento.toolCallId);
         appendToolNote(`→ ${String(evento.content).slice(0, 2000)}`);
