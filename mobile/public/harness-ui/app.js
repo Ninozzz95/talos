@@ -2127,11 +2127,19 @@
     }
     switch (evento.type) {
       case 'RunStarted': {
+        /*
+         * ⛔⛔⛔ 27/8, owner: "'Nuovo giro iniziato sulla stessa
+         * conversazione' ovviamente non deve comparire" — era rumore
+         * interno (utile solo mentre si verificava che resume/comando
+         * diretto funzionassero) lasciato visibile in una conversazione
+         * reale. runCount resta tracciato (altri punti lo leggono), il
+         * secondo RunStarted di un resume/follow-up non produce più un
+         * bubble: il follow-up dell'utente e la risposta che segue bastano
+         * a raccontare cosa è successo, come in qualunque chat vera.
+         */
         state.realSession.runCount = (state.realSession.runCount || 0) + 1;
         if (!state.realSession.taskBubbleMostrata && evento.input) {
           appendRealTaskStart(evento.input);
-        } else if (state.realSession.runCount > 1) {
-          appendStatusNote('Nuovo giro iniziato sulla stessa conversazione.');
         }
         if (evento.contesto) aggiornaPannelloAmbiente(evento.contesto);
         aggiornaAlberoReale('');
@@ -2431,8 +2439,8 @@
     if (messaggioFollowUp) appendUserFollowUp(messaggioFollowUp);
     try {
       await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/resume`, messaggioFollowUp ? { messaggio: messaggioFollowUp } : {});
-      // continua:true — STESSA vista: il "Nuovo giro iniziato" lo mostra
-      // handleRealEvent quando arriva il RunStarted del giro ripreso.
+      // continua:true — STESSA vista: la conversazione resta a schermo, il
+      // follow-up già mostrato (sopra) e la risposta che arriva bastano.
       const generation = nuovaGenerazioneSessione({ continua: true });
       state.realSession.taskId = taskId;
       collegaEventiSessione(sessionId, generation);
