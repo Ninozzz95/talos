@@ -110,6 +110,8 @@ export const TALOS_AGENT_TOOL_CONTROLS = Object.freeze([
     { id: 'document_create', group: 'create', actions: ['write'] },
     // Il prompt esce verso il provider: è trasmissione, anche se sembra creazione.
     { id: 'generate_image', group: 'create', actions: ['write','outbound'] },
+    // L'HTML gira isolato (TalosArtifactActivity, connect-src 'none'): mai trasmissione, verificato sul Pad.
+    { id: 'artifact_create', group: 'create', actions: ['write'] },
     // Esce dalla sandbox ma resta sul dispositivo. Canale obliquo noto: un file esportato può finire in una cartella sincronizzata — da rivedere se nasce la sincronizzazione.
     { id: 'library_export', group: 'library', actions: ['write','read'] },
     // Nel gruppo `library` e non in `personal`: chi toglie l'accesso alla

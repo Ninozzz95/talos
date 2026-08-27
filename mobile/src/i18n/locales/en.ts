@@ -1324,6 +1324,7 @@ export const TALOS_EN_MESSAGES = {
         webSearch: 'Searching the web',
         webRead: 'Reading a web page',
         documentCreate: 'Making a document',
+        artifactCreate: 'Making an interactive visual',
         generateImage: 'Generating an image',
         libraryExport: 'Saving a file to your device',
         libraryContextPolicyUpdate: 'Changing Library context policy',
@@ -1473,6 +1474,10 @@ export const TALOS_EN_MESSAGES = {
         generateImage: {
             title: 'Generate an image',
             description: 'Send the description to the image provider and save the result in the encrypted Library and chat.',
+        },
+        artifactCreate: {
+            title: 'Create an interactive visual',
+            description: 'Show a self-contained interactive HTML visual in the chat, isolated from the app and from the network — it cannot read your data or send anything anywhere.',
         },
         libraryExport: {
             title: 'Save a file to the device',
@@ -2732,6 +2737,7 @@ export const TALOS_EN_MESSAGES = {
             web_read: { title: 'Read a web page', description: 'Fetch one page and archive its readable snapshot.' },
             document_create: { title: 'Create a document', description: 'Create and verify a document for this conversation.' },
             generate_image: { title: 'Generate an image', description: 'Ask the configured image provider to create and save an image.' },
+            artifact_create: { title: 'Create an interactive visual', description: 'Write a self-contained HTML visual and show it isolated in the chat — a diagram, chart, or small interactive drawing.' },
             tool_create: { title: 'Create a custom tool', description: 'Add a new tool TALOS can call from now on, described in plain terms instead of hand-written JSON. It stays off until you turn it on.' },
             library_export: { title: 'Save a Library file', description: 'Save a user-selected Library file to device storage.' },
             library_context_policy_update: { title: 'Manage Library context policy', description: 'Let the agent propose confirmed global, chat, or single-response Library policy changes.' },

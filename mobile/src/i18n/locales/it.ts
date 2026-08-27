@@ -1381,6 +1381,7 @@ export const TALOS_IT_MESSAGES = {
         webRead: 'Lettura di una pagina web',
         documentCreate: 'Creazione di un documento',
         generateImage: 'Generazione di un’immagine',
+        artifactCreate: 'Creazione di un elemento visivo interattivo',
         libraryExport: 'Salvataggio di un file sul dispositivo',
         libraryContextPolicyUpdate: 'Modifica della policy Libreria',
         localModelsSearch: 'Cerco modelli che questo telefono può far girare',
@@ -1536,6 +1537,10 @@ export const TALOS_IT_MESSAGES = {
         generateImage: {
             title: 'Genera un’immagine',
             description: 'Invia la descrizione al provider di immagini e salva il risultato nella Libreria cifrata e nella chat.',
+        },
+        artifactCreate: {
+            title: 'Crea un elemento visivo interattivo',
+            description: 'Mostra in chat un elemento HTML interattivo e autosufficiente, isolato dall’app e dalla rete — non può leggere i tuoi dati né mandare niente da nessuna parte.',
         },
         libraryExport: {
             title: 'Salva un file sul dispositivo',
@@ -2800,6 +2805,7 @@ export const TALOS_IT_MESSAGES = {
             web_read: { title: 'Leggi una pagina web', description: 'Scarica una pagina e archivia una copia del testo leggibile.' },
             document_create: { title: 'Crea un documento', description: 'Crea e verifica un documento per questa conversazione.' },
             generate_image: { title: 'Genera un’immagine', description: 'Chiede al provider configurato di creare e salvare un’immagine.' },
+            artifact_create: { title: 'Crea un elemento visivo interattivo', description: 'Scrive un elemento HTML autosufficiente e lo mostra isolato nella chat — un diagramma, un grafico, un piccolo disegno interattivo.' },
             tool_create: { title: 'Crea uno strumento personalizzato', description: 'Aggiunge un nuovo strumento che TALOS può usare da ora in poi, descritto in parole semplici invece che in JSON scritto a mano. Resta spento finché non lo accendi tu.' },
             library_export: { title: 'Salva un file della Libreria', description: 'Salva nella memoria del dispositivo un file scelto dalla Libreria.' },
             library_context_policy_update: { title: 'Gestisci la policy Libreria', description: 'Consente all’agente di proporre modifiche confermate alla policy Libreria globale, della chat o della singola risposta.' },

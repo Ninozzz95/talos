@@ -41,6 +41,7 @@ export const TALOS_TOOL_LABELS: Record<string, string> = {
     web_read: 'Reading a web page',
     document_create: 'Making a document',
     generate_image: 'Generating an image',
+    artifact_create: 'Making an interactive visual',
     library_export: 'Saving a file to your device',
     library_context_policy_update: 'Changing Library context policy',
     research_list: 'Looking at your researches',
@@ -136,6 +137,7 @@ export const TALOS_TOOL_LABEL_KEYS: Record<string, string> = {
     web_read: 'toolActivity.webRead',
     document_create: 'toolActivity.documentCreate',
     generate_image: 'toolActivity.generateImage',
+    artifact_create: 'toolActivity.artifactCreate',
     library_export: 'toolActivity.libraryExport',
     library_context_policy_update: 'toolActivity.libraryContextPolicyUpdate',
     research_list: 'toolActivity.researchList',
@@ -370,6 +372,9 @@ export const TALOS_TOOL_ICONS: Record<string, TalosToolIconName> = {
     web_read: 'web',
     document_create: 'document',
     generate_image: 'image',
+    // Nessuna icona propria nell'elenco chiuso sopra: 'image' è la più
+    // vicina a un output visivo, stessa scelta di generate_image.
+    artifact_create: 'image',
     library_export: 'download',
     library_context_policy_update: 'library',
     // ⛔ Una ricerca approfondita raggiunge il web, ma NON è una ricerca web:

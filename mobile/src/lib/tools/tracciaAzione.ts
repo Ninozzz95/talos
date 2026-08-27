@@ -356,6 +356,27 @@ export type TalosScheda =
         readonly mdFileId?: string
     }
     /**
+     * ⭐⭐⭐ L'ARTEFATTO HTML — «creare artefatti con schemi avanzati e
+     * interagibili in chat, come fa ChatGPT: spirografi, simulazioni».
+     *
+     * Owner 2026-08-27. Stessa famiglia di `pdf`/`mdFileId`: il tocco NON è
+     * una rotta interna (`dove`) — apre `TalosArtifactActivity`, una
+     * Activity Android nativa con una WebView e un profilo SEPARATI,
+     * verificata sul Pad a non avere alcun accesso al ponte Capacitor
+     * (`bridge=undefined`, misurato) né alla rete (`connect-src 'none'`,
+     * `fetch` bloccato, misurato). Vedi `TalosArtifactActivity.kt` per la
+     * catena intera, e `artifactTools.ts` per il tool che la produce.
+     *
+     * ⛔ Solo `id`: l'HTML non viaggia mai nella scheda né nei metadati del
+     * messaggio — resta nello storage privato dell'app, letto da
+     * `TalosArtifactPathHandler` solo quando la persona tocca la scheda.
+     */
+    | {
+        readonly tipo: 'artefatto'
+        readonly titolo: string
+        readonly id: string
+    }
+    /**
      * ⭐⭐⭐ PIÙ DI UNA COSA CREATA IN UN GIRO SOLO.
      *
      * Owner 2026-08-27 — «hai anche testato quella cosa di ChatGPT? creare un

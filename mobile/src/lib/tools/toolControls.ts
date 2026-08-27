@@ -44,6 +44,9 @@ export const TALOS_DEFAULT_AGENT_TOOL_ENABLED = Object.freeze({
     web_read: true,
     document_create: true,
     generate_image: true,
+    // Owner 2026-08-27: artefatti HTML interattivi in chat — isolati in
+    // TalosArtifactActivity, mai il ponte Capacitor, mai la rete.
+    artifact_create: true,
     library_export: true,
     library_context_policy_update: false,
     // The second door onto the on-device models. Searching and inspecting reach

@@ -24,6 +24,7 @@ import {
 } from '@/lib/tools/researchTools'
 import { createTalosDocumentTools, type TalosDocumentToolSources } from '@/lib/documents/documentTools'
 import { createTalosImageTools, type TalosImageToolSources } from '@/lib/images/imageTools'
+import { createTalosVisualArtifactTools, type TalosArtifactToolSources } from '@/lib/tools/artifactTools'
 import {
     createTalosLibraryExportTools,
     type TalosLibraryExportCandidate,
@@ -195,6 +196,15 @@ export interface TalosToolsetDeps {
      * rather than offered and failing.
      */
     images?(): TalosImageToolSources | null
+    /**
+     * ⛔⛔⛔ Owner 2026-08-27 — «creare artefatti HTML interattivi in chat».
+     * Sempre presente su Android (nessun provider da configurare, a
+     * differenza di `images`): il tool esiste ovunque `TalosArtifactBridge`
+     * possa girare, e fallisce onestamente per-chiamata se il dispositivo
+     * non isola abbastanza (vedi `TalosArtifactActivity.kt`), non per
+     * assenza dichiarata qui.
+     */
+    artifact?(): TalosArtifactToolSources | null
     /**
      * Durable user-visible Save-As. Absent means the current platform has no
      * honest export boundary, so `library_export` is not advertised.
@@ -813,6 +823,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
             const tasksWrite = deps.tasksWrite?.() ?? null
             const documents = deps.documents?.() ?? null
             const images = deps.images?.() ?? null
+            const artifact = deps.artifact?.() ?? null
             /*
              * Il valore iniettato vince; altrimenti si costruisce qui — vedi il
              * perché sotto, accanto ai tool privilegiati.
@@ -910,6 +921,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                 ...(tasksWrite ? createTalosTasksWriteTools(tasksWrite) : []),
                 ...(documents ? createTalosDocumentTools(documents) : []),
                 ...(images ? createTalosImageTools(images) : []),
+                ...(artifact ? createTalosVisualArtifactTools(artifact) : []),
             ]
                 .filter((tool) => isEnabled(tool.name, enabledTools))
                 // SF-MAJOR: the gate refused at EXECUTION but the schemas were

@@ -3453,6 +3453,20 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         },
                     }),
                     /**
+                     * ⛔⛔⛔ Owner 2026-08-27 — «creare artefatti HTML
+                     * interattivi in chat». Sempre presente (a differenza di
+                     * `documents`/`images`, non serve nessun provider
+                     * configurato): il `TalosArtifactBridge` è nativo,
+                     * fallisce onestamente per-chiamata se il dispositivo
+                     * non isola abbastanza (vedi `TalosArtifactActivity.kt`).
+                     */
+                    artifact: () => ({
+                        async create(title: string, html: string) {
+                            const { TalosArtifactBridge } = await import('@/lib/device/artifactPlugin')
+                            return TalosArtifactBridge.create({ title, html })
+                        },
+                    }),
+                    /**
                      * F1 — the web tools exist only when a source is configured
                      * (D3). Evaluated per send, so choosing a source in Settings
                      * takes effect on the next message rather than the next
