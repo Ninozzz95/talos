@@ -33,6 +33,8 @@ import {
     type TalosLibraryContextPolicyToolSources,
 } from '@/lib/tools/libraryContextPolicyTools'
 import { createTalosLocalModelTools } from '@/lib/models/modelTools'
+import { createInstalledDynamicTools } from '@/lib/tools/dynamic/talosIntegration'
+import { dynamicToolIdFromName } from '@/lib/tools/dynamic/ids'
 import type { TalosToolAuditRow } from '@/lib/tools/executor'
 import type { TalosToolConsentRequest } from '@/lib/tools/executor'
 import { decideTalosToolPermission, type TalosToolPermissions } from '@/lib/tools/permissionTypes'
@@ -336,14 +338,36 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
     const isEnabled = (
         name: string,
         enabledTools: Readonly<TalosAgentToolEnabled>,
-    ): boolean => isTalosAgentToolEnabled(name, enabledTools)
-        && (
-            name === 'library_context_policy_update'
-            || !name.startsWith('library_')
-            // Su `deny` spariscono; su `ask` restano, ed e' il cartellino a
-            // decidere. Prima sparivano anche su `ask`, ed era il difetto.
-            || libraryAllowed()
-        )
+    ): boolean =>
+        // ⛔⛔ Owner 2026-08-27, Fase 8 — trovato ATTIVANDO i tool forgiati,
+        // non ipotizzato: `isTalosAgentToolEnabled` nega SEMPRE un nome che
+        // non è nell'elenco statico `TALOS_AGENT_TOOL_IDS` ("Unknown tool
+        // IDs are denied", il commento è già nel file che lo dichiara). Un
+        // nome forgiato (`dynamic:<id>`) non può MAI comparire in quella
+        // lista — è generato a runtime dall'id del manifest, non dichiarato
+        // a compile-time. Senza questo controllo, `describe()` avrebbe
+        // sempre mostrato `allowed:false` e `offer()` non l'avrebbe MAI
+        // offerto al modello, nonostante la persona l'avesse abilitato
+        // dalla stazione Tool Forge — un interruttore che non spegne
+        // niente perché non c'era mai stato niente da spegnere.
+        //
+        // L'interruttore VERO per un tool forgiato è già altrove:
+        // `createInstalledDynamicTools()` scarta ogni record con
+        // `enabled: false` PRIMA che il tool arrivi qui (vedi
+        // `talosIntegration.ts`) — se il nome è comparso in `tutti`/`offer()`,
+        // è perché il registro l'ha già giudicato acceso. Ripetere quel
+        // giudizio contro un catalogo statico che non lo conosce non
+        // aggiungerebbe sicurezza: lo negherebbe sempre, in silenzio.
+        dynamicToolIdFromName(name) !== null
+            ? true
+            : isTalosAgentToolEnabled(name, enabledTools)
+                && (
+                    name === 'library_context_policy_update'
+                    || !name.startsWith('library_')
+                    // Su `deny` spariscono; su `ask` restano, ed e' il cartellino a
+                    // decidere. Prima sparivano anche su `ask`, ed era il difetto.
+                    || libraryAllowed()
+                )
 
     /**
      * Explicit Library tools search what the Library surface promises:
@@ -650,7 +674,49 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
      * and in the notification — one of everything, and no seam to get wrong.
      */
     const modelTools = createTalosLocalModelTools()
-    const tutti = [...all, ...libraryExports, ...policyTools, ...modelTools, ...calendarTools]
+    /**
+     * ⛔⛔⛔ Owner 2026-08-27, Fase 8 — l'INNESTO. Fino a qui
+     * `createInstalledDynamicTools()` esisteva, era testato, e non era
+     * chiamato da nessuno: un tool forgiato, abilitato dalla stazione,
+     * restava invisibile al modello — esattamente il gap che la Fase 0
+     * aveva lasciato aperto di proposito, in attesa che Fase 7 chiudesse
+     * gli avversariali prima di accendere l'interruttore.
+     *
+     * `model: null`: nessun binding verso un runtime di modello reale è
+     * collegato qui ancora — i tool forgiati con un nodo `llm` esistono e
+     * sono testati (Fase 5), ma finché non c'è un adattatore verso il
+     * provider VERO di TALOS, un manifest che dichiara `llm` fallirebbe
+     * con `FORGE_MODEL_UNAVAILABLE` invece di restare silenziosamente
+     * rotto — fail-closed, non una promessa vuota. I tool a sola
+     * capability (letture/scritture locali) funzionano comunque per
+     * intero: sono quelli su cui la Fase 8 fa la prova vera sul
+     * dispositivo.
+     *
+     * ⛔ Confine onesto, non nascosto: computato UNA volta qui, come
+     * `modelTools`/`calendarTools` accanto — un tool abilitato a metà di
+     * una conversazione compare alla prossima ricostruzione del toolset,
+     * non al messaggio immediatamente successivo. Stessa cadenza di
+     * aggiornamento che questi due vicini hanno sempre avuto.
+     *
+     * ⛔⛔⛔ Trovato ATTIVANDO per davvero, non nel codice a tavolino:
+     * `createInstalledDynamicTools` legge dal registro SQLite
+     * (`talosSqliteRuntime()`), che NON è sempre pronto — prima che il PIN
+     * sblocchi il database, in un test che non registra un runtime, in
+     * qualunque momento in cui il registro non è disponibile per un
+     * motivo che il Forge non controlla. Senza il try/catch, un database
+     * non pronto faceva fallire `createTalosToolset` INTERO — non solo i
+     * tool forgiati, l'intera offerta di strumenti della chat, inclusi
+     * tutti quelli che non hanno niente a che fare col Forge. Un difetto
+     * additivo non può diventare un singolo punto di rottura per tutto il
+     * resto: fallisce chiuso SOLO sulla sua parte, un array vuoto, mai
+     * un'eccezione che si porta via il resto del toolset.
+     */
+    const dynamicTools = await createInstalledDynamicTools({ repository: deps.repository, model: null })
+        .catch((error) => {
+            console.error('[toolset] dynamic tools unavailable, continuing without them', error)
+            return []
+        })
+    const tutti = [...all, ...libraryExports, ...policyTools, ...modelTools, ...calendarTools, ...dynamicTools]
     return {
         tools: tutti,
         isEnabled,
@@ -756,6 +822,14 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                 ...policyTools,
                 ...modelTools,
                 ...calendarTools,
+                // ⛔ Fase 8: gli stessi tool forgiati già in `tutti` — mai
+                // offerti al modello prima di questa riga, nonostante fossero
+                // già in `tutti`. `describe()` legge da `tutti`, ma è
+                // `offer()` a decidere gli SCHEMI che arrivano davvero
+                // all'API (chatController.ts) — senza questa riga il tool
+                // sarebbe comparso nel pannello permessi come «esiste» e non
+                // sarebbe mai stato chiamabile.
+                ...dynamicTools,
                 ...(web ? createTalosWebTools(web) : []),
                 /*
                  * ⛔⛔ WEB-SENZA-MOTORE-01 — ciò che AVVIA una ricerca sparisce
