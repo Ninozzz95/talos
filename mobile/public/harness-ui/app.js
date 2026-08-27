@@ -3730,7 +3730,15 @@
 
     let sessionId;
     try {
-      const corpo = { cartellaId, consegna };
+      /*
+       * ⛔ Riconciliazione Fase 1 (branch merge, 27/8): trovato dal vivo, non
+       * ipotizzato — un "compito libero" avviato dal tunnel mobile mandava
+       * `!comando` sulla PC (`sandbox: none`) invece che sul telefono,
+       * perché QUESTO corpo non portava mai `client`. Stesso segnale già
+       * usato da `startRealSession` (Fase 3).
+       */
+      const client = window.__talosHarnessApiBase ? 'mobile' : 'desktop';
+      const corpo = { cartellaId, consegna, client };
       if (comandoProva) corpo.comandoProva = comandoProva;
       const modelloEffettivo = modello || state.model; // ⭐ la scelta fatta nel picker della modale ha priorità
       if (modelloEffettivo) corpo.modello = modelloEffettivo;

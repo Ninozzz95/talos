@@ -287,14 +287,23 @@ function requireTaskIdBody(body) {
  * opzionali: la validazione FINE (cartellaId nell'allowlist, consegna non
  * vuota) resta in `custom-task.mjs`/`session-registry.avviaLibero` — qui
  * solo la FORMA del corpo, stesso principio di `requireTaskIdBody`.
+ *
+ * ⛔ Riconciliazione Fase 1 (branch merge, 27/8) — trovato dal vivo: un
+ * "compito libero" avviato dal tunnel mobile mandava `!comando` sulla PC
+ * invece che sul telefono, perché QUESTO corpo non portava mai `client`
+ * (aggiunto in origine solo a `requireTaskIdBody`, mai qui, prima della
+ * riconciliazione `avviaLibero` non era raggiungibile dal mobile).
  */
 function requireCustomTaskBody(body) {
-  const AMMESSE = ['cartellaId', 'consegna', 'comandoProva', 'modello', 'reasoning'];
+  const AMMESSE = ['cartellaId', 'consegna', 'comandoProva', 'modello', 'reasoning', 'client'];
   const chiavi = Object.keys(body ?? {});
   const soloAmmesse = chiavi.length > 0 && chiavi.every((k) => AMMESSE.includes(k))
     && chiavi.includes('cartellaId') && chiavi.includes('consegna');
-  if (!soloAmmesse || typeof body.cartellaId !== 'string' || typeof body.consegna !== 'string') {
-    const errore = new Error('Corpo non valido: atteso {cartellaId, consegna, comandoProva?, modello?, reasoning?}');
+  if (
+    !soloAmmesse || typeof body.cartellaId !== 'string' || typeof body.consegna !== 'string'
+    || ('client' in body && body.client !== 'desktop' && body.client !== 'mobile')
+  ) {
+    const errore = new Error('Corpo non valido: atteso {cartellaId, consegna, comandoProva?, modello?, reasoning?, client?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -314,6 +323,7 @@ function requireCustomTaskBody(body) {
     comandoProva: 'comandoProva' in body ? body.comandoProva : undefined,
     modello: 'modello' in body ? body.modello : null,
     reasoning: 'reasoning' in body ? body.reasoning : null,
+    mobile: body.client === 'mobile',
   };
 }
 
