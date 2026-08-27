@@ -1155,9 +1155,20 @@
   }
 
   function setQueueMode(enabled, announce = false) {
-    /* ⛔ 27/8 — stessa guardia di submitPrompt: attivare il modo non serve a niente su una sessione reale (talosLavora non lo consegnerebbe mai), quindi non si finge nemmeno il toggle. */
+    /*
+     * ⛔ 27/8 — stessa guardia di submitPrompt, estesa: il "Follow-up" non
+     * ha oggi NESSUN percorso reale — né su una sessione già in corso
+     * (talosLavora non lo consegnerebbe mai) né senza nessuna sessione
+     * (non esiste più una conversazione demo da riempire, rimossa da
+     * index.html). Si rifiuta onestamente in entrambi i casi, mai un
+     * toggle che si accende senza che nulla lo segua davvero.
+     */
     if (enabled && state.realSession.id) {
       toast('Follow-up non ancora implementato', 'Una sessione reale non accetta oggi un messaggio a metà esecuzione.');
+      return;
+    }
+    if (enabled && !state.realSession.id) {
+      toast('Nessuna sessione attiva', 'Il follow-up si mette in coda solo durante una sessione in corso — apri prima «Nuova».');
       return;
     }
     state.queueMode = Boolean(enabled);
@@ -2209,9 +2220,28 @@
    * in shadow root, dialog.show()/dialog.close() non hanno bisogno del
    * comportamento modale nativo qui.
    */
+  /*
+   * ⭐⭐⭐ 27/8 — owner, testuale: "il pulsante nuova deve aprire una nuova
+   * sessione VUOTA, IL COMPITO LO DECIDO IO". Verificato con una ricerca
+   * web vera, documentazione ufficiale, non ipotizzato: Claude Code
+   * (`claude` -> composer vuoto, nessuna lista), Codex CLI (`codex` senza
+   * argomenti -> TUI col composer vuoto, developers.openai.com/codex/cli),
+   * Cline ("+"/`/newtask` -> "the composer becomes ready for free-form
+   * input... no predefined task templates", docs.cline.bot), Aider
+   * (prompt `>` vuoto, "no predefined task lists", aider.chat/docs),
+   * Cursor Composer (nuova chat = sessione isolata, si scrive subito).
+   * Devin e' l'unico che chiede un passo prima del testo libero, ma quel
+   * passo e' "scegli il repository", MAI un elenco di compiti gia scritti
+   * ("click New Session, select Agent, and choose your repository", poi
+   * il compito resta testo libero). Nessun competitor mostra un elenco
+   * di task predefiniti come primo schermo. L'elenco task del corpus
+   * (storia/progetti) e' un concetto interno di TALOS-BANCO (misurare
+   * sempre lo stesso compito, per confrontare harness): resta uno
+   * strumento reale, ma secondario, sotto il compito libero, mai il default.
+   */
   async function openRealTaskSheet() {
-    sheetEyebrow.textContent = 'Task reale';
-    sheetTitle.textContent = 'Avvia un task dal corpus';
+    sheetEyebrow.textContent = 'Nuova sessione';
+    sheetTitle.textContent = 'Cosa deve fare TALOS?';
     sheetBody.replaceChildren(textElement('p', 'board-empty', 'Carico l’elenco dal server…'));
     const demoBadge = $('.demo-surface-badge', sheetDialog);
     if (demoBadge) demoBadge.hidden = true;
@@ -2229,36 +2259,16 @@
       return;
     }
 
-    const section = document.createElement('div');
-    section.className = 'sheet-section';
-    section.appendChild(textElement('span', 'sheet-label', `${tasks.length} task dal corpus progetti/ — checkout ed esecuzione reali`));
-    for (const task of tasks) {
-      const button = document.createElement('button');
-      button.className = 'sheet-option';
-      button.dataset.startTask = task.id;
-      const iconWrap = document.createElement('span');
-      iconWrap.className = 'sheet-icon';
-      iconWrap.innerHTML = icon('i-play');
-      const textWrap = document.createElement('span');
-      textWrap.append(textElement('strong', '', task.id), textElement('small', '', task.consegnaCorta));
-      button.append(iconWrap, textWrap, textElement('span', '', `difficoltà ${task.difficolta}`));
-      button.addEventListener('click', () => { closeEmbeddedDialog(sheetDialog); startRealSession(task); });
-      section.appendChild(button);
-    }
+    const corpoFoglio = [];
 
-    const corpoFoglio = [section];
-    /*
-     * ⭐⭐⭐ 27/8 — l'Opzione B del piano (§1.5), owner: "per adesso un
-     * allowlist per testare... come se fosse Claude Code". Compare SOLO se
-     * il server ha almeno una cartella in TALOS_HARNESS_UI_PROJECT_DIRS —
-     * fail-closed anche qui: nessuna UI per una funzionalità non
-     * configurata, non un form che poi il server rifiuta sempre.
-     */
-    if (progetti.length > 0) {
-      const customSection = document.createElement('form');
-      customSection.className = 'sheet-section';
-      customSection.id = 'customTaskForm';
-      customSection.appendChild(textElement('span', 'sheet-label', 'Compito libero — scrive DIRETTAMENTE sulla cartella vera, nessuna copia'));
+    // --- PRIMARIA: compito libero, come Claude Code/Codex/Cline/Aider/Devin. ---
+    const customSection = document.createElement('form');
+    customSection.className = 'sheet-section';
+    customSection.id = 'customTaskForm';
+    customSection.appendChild(textElement('span', 'sheet-label', 'Compito libero — scrive DIRETTAMENTE sulla cartella vera, nessuna copia'));
+    if (progetti.length === 0) {
+      customSection.appendChild(textElement('p', 'board-empty', 'Nessuna cartella di progetto configurata sul server. Imposta TALOS_HARNESS_UI_PROJECT_DIRS con i percorsi assoluti ammessi e riavvia il server per usare un compito libero.'));
+    } else {
       const selectCartella = document.createElement('select');
       selectCartella.className = 'sheet-input';
       selectCartella.id = 'customTaskCartella';
@@ -2289,8 +2299,27 @@
         closeEmbeddedDialog(sheetDialog);
         startCustomSession({ cartellaId, nomeCartella, consegna });
       });
-      corpoFoglio.push(customSection);
     }
+    corpoFoglio.push(customSection);
+
+    // --- SECONDARIA: i task del corpus TALOS-BANCO, per confrontare l'harness a parità di compito. ---
+    const section = document.createElement('div');
+    section.className = 'sheet-section';
+    section.appendChild(textElement('span', 'sheet-label', `Oppure prova un task del banco (${tasks.length}, checkout ed esecuzione reali)`));
+    for (const task of tasks) {
+      const button = document.createElement('button');
+      button.className = 'sheet-option';
+      button.dataset.startTask = task.id;
+      const iconWrap = document.createElement('span');
+      iconWrap.className = 'sheet-icon';
+      iconWrap.innerHTML = icon('i-play');
+      const textWrap = document.createElement('span');
+      textWrap.append(textElement('strong', '', task.id), textElement('small', '', task.consegnaCorta));
+      button.append(iconWrap, textWrap, textElement('span', '', `difficoltà ${task.difficolta}`));
+      button.addEventListener('click', () => { closeEmbeddedDialog(sheetDialog); startRealSession(task); });
+      section.appendChild(button);
+    }
+    corpoFoglio.push(section);
 
     sheetBody.replaceChildren(...corpoFoglio);
   }
@@ -2331,20 +2360,6 @@
     aggiornaElencoSessioniReali();
   }
 
-  function appendUserMessage(text) {
-    const conversation = $('#conversation');
-    const article = document.createElement('article');
-    article.className = 'message user-message motion-enter';
-    article.innerHTML = `<div class="message-bubble"></div><div class="message-meta"><span>Tu · ora</span><button class="mini-icon" aria-label="Copia">${icon('i-copy')}</button></div>`;
-    $('.message-bubble', article).textContent = text;
-    conversation.appendChild(article);
-    const assistant = document.createElement('article');
-    assistant.className = 'message assistant-message compact-message motion-enter';
-    assistant.innerHTML = `<div class="assistant-meta"><span class="talos-glyph">T</span><span>TALOS · ${(state.model || 'gpt-5.6-sol').split(' · ')[0]}</span><span>ora</span></div><div class="assistant-copy">Ricevuto. Ho aggiunto il messaggio al run corrente mantenendo ambiente, permessi e contesto visibili.</div><div class="message-actions"><button data-message-action="copy" aria-label="Copia risposta">${icon('i-copy')}</button><button data-message-action="like" aria-label="Risposta utile" aria-pressed="false">👍</button><button data-message-action="dislike" aria-label="Risposta non utile" aria-pressed="false">👎</button><button data-message-action="retry" aria-label="Rigenera risposta">${icon('i-history')}</button></div>`;
-    conversation.appendChild(assistant);
-    window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'center' }), 40);
-  }
-
   function submitPrompt(text) {
     const value = String(text || '').trim();
     if (!value) return false;
@@ -2376,17 +2391,18 @@
       toast('Follow-up non ancora implementato', 'Una sessione reale non accetta oggi un messaggio a metà esecuzione. Aspetta la fine del run, poi usa Fork o Resume.');
       return true;
     }
-    if (state.queueMode) {
-      queuedMessage.classList.add('show', 'motion-enter');
-      const queuedCopy = $('#queuedMessage span');
-      queuedCopy.textContent = '';
-      const queuedLabel = document.createElement('b');
-      queuedLabel.textContent = 'Follow-up in coda';
-      queuedCopy.append(queuedLabel, document.createTextNode(` · ${value}`));
-      toast('Follow-up accodato', 'Verrà consegnato dopo il run corrente.');
-    } else {
-      appendUserMessage(value);
-    }
+    /*
+     * ⛔⛔ 27/8 — owner: "cancella tutte le sessioni mockup". Non c'è più
+     * una conversazione demo pre-caricata da riempire (era "Refactor auth
+     * flow", rimossa da index.html): senza una sessione reale avviata,
+     * questo campo non ha una cartella su cui agire, quindi non deve
+     * fingere una risposta (appendUserMessage generava sempre lo stesso
+     * "Ricevuto..." hardcoded). Stesso pattern confermato via ricerca su
+     * ogni competitor (Claude Code/Codex/Cline/Aider/Cursor/Devin): si
+     * scrive SOLO dentro una sessione già avviata — qui l'avvio passa da
+     * "Nuova sessione", che sceglie la cartella prima del testo libero.
+     */
+    toast('Nessuna sessione attiva', 'Premi «Nuova» in alto per scegliere una cartella e iniziare.');
     return true;
   }
 
@@ -2458,7 +2474,8 @@
 
   function selectSession(selection) {
     if (!selection || typeof selection.id !== 'string' || typeof selection.title !== 'string') return false;
-    const item = $$('.session-item').find((candidate) => candidate.dataset.sessionId === selection.id);
+    // ⛔ 27/8 — le sessioni demo statiche (dataset.sessionId) non esistono più: le uniche voci reali della sidebar hanno dataset.realSessionId (aggiornaElencoSessioniReali). Un router che chiama questa funzione deve trovarle comunque.
+    const item = $$('.session-item').find((candidate) => candidate.dataset.sessionId === selection.id || candidate.dataset.realSessionId === selection.id);
     if (!item) return false;
     $$('.session-item').forEach((other) => other.classList.remove('active'));
     item.classList.add('active');

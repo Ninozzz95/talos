@@ -277,13 +277,24 @@ describe('Harness UI embedded host and keyboard runtime', () => {
     })
 
     it.each([
-        ['refactor-auth-flow', 'Refactor auth flow'],
-        ['audit-api-permissions', 'Audit API permissions'],
-        ['fix-mobile-composer', 'Fix mobile composer'],
-        ['prepare-release-notes', 'Prepare release notes'],
-        ['investigate-flaky-tests', 'Investigate flaky tests'],
+        ['sess-refactor-auth-flow', 'Refactor auth flow'],
+        ['sess-audit-api-permissions', 'Audit API permissions'],
+        ['sess-fix-mobile-composer', 'Fix mobile composer'],
+        ['sess-prepare-release-notes', 'Prepare release notes'],
+        ['sess-investigate-flaky-tests', 'Investigate flaky tests'],
     ])('HARNESS-ROUTE-SESSION-SYNC-01 selects %s through the public runtime', (id, title) => {
         mountStaticRuntime()
+        // ⛔ 27/8 — le sessioni demo statiche sono state rimosse dall'index.html
+        // (owner: "cancella tutte le sessioni mockup"). La sidebar mostra oggi
+        // SOLO sessioni reali, popolate da aggiornaElencoSessioniReali() con
+        // l'attributo data-real-session-id — quello che il router mobile
+        // sincronizza attraverso selectSession() deve poter trovare.
+        const item = document.createElement('button')
+        item.className = 'session-item real-session-item'
+        item.dataset.realSessionId = id
+        item.innerHTML = '<span class="session-main"><strong>placeholder</strong></span>'
+        document.querySelector('#sessionList')?.appendChild(item)
+
         const runtime = (window as unknown as {
             __talosHarnessUiRuntime?: { selectSession?(selection: { id: string; title: string }): void }
         }).__talosHarnessUiRuntime
@@ -292,7 +303,7 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         runtime?.selectSession?.({ id, title })
 
         expect(document.querySelector('#sessionTitle')?.textContent).toBe(title)
-        expect(document.querySelector('.session-item.active')?.getAttribute('data-session-id')).toBe(id)
+        expect(document.querySelector('.session-item.active')?.getAttribute('data-real-session-id')).toBe(id)
         const synchronizedLabels = [...document.querySelectorAll('[data-current-session-title]')]
         expect(synchronizedLabels.length).toBeGreaterThan(0)
         expect(synchronizedLabels.every((label) => label.textContent === title)).toBe(true)
@@ -330,7 +341,14 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         expect(document.querySelector('#toastRegion')?.textContent).toContain('Voce demo non collegata')
     })
 
-    it('CODE-MOTION-EXIT-01 removes approval feedback only after its exit animation finishes', async () => {
+    // ⛔ 27/8 — l'approval-card demo (che questi due test usavano come veicolo)
+    // è stata rimossa da index.html (owner: "cancella tutte le sessioni
+    // mockup"). animateExit() con la durata di default (surface-exit) e una
+    // rimozione dal DOM resta un meccanismo REALE altrove: il toast più
+    // vecchio, quando ce ne sono già 3, usa esattamente lo stesso percorso
+    // (vedi toast() in app.js). announceComposerAction('attach') è la via
+    // pubblica per generarne uno.
+    it('CODE-MOTION-EXIT-01 removes the oldest toast only after its exit animation finishes', async () => {
         let finishAnimation: (() => void) | undefined
         const cancel = vi.fn()
         const animate = vi.fn(() => ({
@@ -343,17 +361,21 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         })
         document.documentElement.style.setProperty('--talos-motion-duration-surface-exit', '120ms')
         mountStaticRuntime()
+        const runtime = (window as unknown as {
+            __talosHarnessUiRuntime?: { announceComposerAction?(action: string): boolean }
+        }).__talosHarnessUiRuntime
 
-        const deny = document.querySelector<HTMLButtonElement>('[data-deny]')
-        const card = deny?.closest('.approval-card')
-        deny?.click()
+        for (let i = 0; i < 3; i += 1) runtime?.announceComposerAction?.('attach')
+        const oldest = document.querySelector('#toastRegion')?.firstElementChild
+        animate.mockClear()
+        runtime?.announceComposerAction?.('attach') // il 4° toast fa scattare la rimozione animata del più vecchio
 
         expect(animate).toHaveBeenCalled()
-        expect(card?.isConnected).toBe(true)
+        expect(oldest?.isConnected).toBe(true)
         finishAnimation?.()
         await Promise.resolve()
         await Promise.resolve()
-        expect(card?.isConnected).toBe(false)
+        expect(oldest?.isConnected).toBe(false)
     })
 
     it('CODE-MOTION-REDUCED-01 removes immediately when the app motion token is zero', () => {
@@ -364,16 +386,19 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         })
         document.documentElement.style.setProperty('--talos-motion-duration-surface-exit', '0ms')
         mountStaticRuntime()
+        const runtime = (window as unknown as {
+            __talosHarnessUiRuntime?: { announceComposerAction?(action: string): boolean }
+        }).__talosHarnessUiRuntime
 
-        const deny = document.querySelector<HTMLButtonElement>('[data-deny]')
-        const card = deny?.closest('.approval-card')
-        deny?.click()
+        for (let i = 0; i < 3; i += 1) runtime?.announceComposerAction?.('attach')
+        const oldest = document.querySelector('#toastRegion')?.firstElementChild
+        runtime?.announceComposerAction?.('attach')
 
         expect(animate).not.toHaveBeenCalled()
-        expect(card?.isConnected).toBe(false)
+        expect(oldest?.isConnected).toBe(false)
     })
 
-    it('CODE-COMPOSER-DEMO-SEND-01 accepts the shared Vue composer through the runtime without a network request', () => {
+    it('CODE-COMPOSER-DEMO-SEND-01 without any active session, refuses honestly instead of faking a reply — no demo conversation is preloaded any more', () => {
         const fetchMock = vi.fn()
         vi.stubGlobal('fetch', fetchMock)
         mountStaticRuntime()
@@ -381,10 +406,10 @@ describe('Harness UI embedded host and keyboard runtime', () => {
             __talosHarnessUiRuntime?: { submitPrompt?(text: string): boolean }
         }).__talosHarnessUiRuntime
 
+        const before = document.querySelectorAll('.user-message').length
         expect(runtime?.submitPrompt?.('Prompt from the real composer')).toBe(true)
-        const userMessages = document.querySelectorAll('.user-message')
-        expect(userMessages.item(userMessages.length - 1).textContent)
-            .toContain('Prompt from the real composer')
+        expect(document.querySelectorAll('.user-message').length).toBe(before) // mai un messaggio finto aggiunto
+        expect(document.querySelector('#toastRegion')?.textContent).toContain('Nessuna sessione attiva')
         expect(fetchMock).not.toHaveBeenCalled()
     })
 
