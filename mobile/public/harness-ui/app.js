@@ -30,8 +30,12 @@
    * ⭐ 27/8 — stesso pattern del server (`config.mjs`, `modelloRichiestaValido`),
    * duplicato qui solo per un feedback immediato nel form: la validazione
    * che CONTA resta lato server, questa è solo UX, mai l'unica guardia.
+   * ⛔⛔ Trovato dalla pipeline QA visiva: senza `~?` opzionale, il form
+   * rifiutava gli alias "-latest" reali di OpenRouter (es.
+   * `~anthropic/claude-sonnet-latest`) — la stessa correzione, fatta
+   * PRIMA lato server (config.mjs), duplicata qui.
    */
-  const FORMATO_MODELLO_OPENROUTER = /^[a-z0-9](?:[a-z0-9._-]{0,63}[a-z0-9])?\/[a-z0-9](?:[a-z0-9._:-]{0,63}[a-z0-9])?$/i;
+  const FORMATO_MODELLO_OPENROUTER = /^~?[a-z0-9](?:[a-z0-9._-]{0,63}[a-z0-9])?\/[a-z0-9](?:[a-z0-9._:-]{0,63}[a-z0-9])?$/i;
 
   const state = {
     view: 'chat',
@@ -45,7 +49,8 @@
      */
     model: '',
     environment: 'wt/auth-61c · feat/mobile-code',
-    session: 'Refactor auth flow',
+    // ⛔ 27/8, trovato dalla pipeline QA visiva: la card "Session topology" leggeva questo valore come stato iniziale — restava "Refactor auth flow" finché nessuna funzione lo toccava, cioè sempre, all'apertura della pagina.
+    session: 'Nessuna sessione',
     running: true,
     board: {
       initialized: false,
@@ -676,6 +681,209 @@
     if (badgeEl) badgeEl.textContent = badge;
   }
 
+  /**
+   * ⭐⭐⭐ 27/8 — owner: "un picker per il modello, dropdown stilizzato
+   * (l'abbiamo già fatto nel mobile)". Stesso pattern di
+   * TalosMobileComposerModelPicker.vue (AVM/mobile/src/components/chat/),
+   * adattato in vanilla JS: raggruppato per provider, cercabile, ogni
+   * riga nome+id+contesto+prezzo, spunta sulla selezione — il catalogo
+   * VERO di GET /api/v1/models (417 modelli OpenRouter oggi), non le 7
+   * scorciatoie scritte a mano. Un errore di rete è dichiarato
+   * (CATALOG_UNREACHABLE/CATALOG_UPSTREAM_ERROR), mai "zero modelli"
+   * silenzioso — stessa disciplina del componente mobile.
+   * @returns {{elemento: HTMLElement, getValore: () => string}}
+   */
+  function creaModelPicker({ valoreIniziale = '' } = {}) {
+    const wrap = document.createElement('div');
+    wrap.className = 'model-picker';
+
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'sheet-input model-picker-trigger';
+    trigger.setAttribute('aria-haspopup', 'listbox');
+    trigger.setAttribute('aria-expanded', 'false');
+    const triggerLabel = document.createElement('span');
+    triggerLabel.className = 'model-picker-trigger-label';
+    const chevronSpan = document.createElement('span');
+    chevronSpan.className = 'model-picker-chevron';
+    chevronSpan.innerHTML = icon('i-chevron');
+    trigger.append(triggerLabel, chevronSpan);
+
+    const panel = document.createElement('div');
+    panel.className = 'model-picker-panel';
+    panel.hidden = true;
+    panel.setAttribute('role', 'listbox');
+
+    const searchLabel = document.createElement('label');
+    searchLabel.className = 'model-picker-search';
+    const searchIconSpan = document.createElement('span');
+    searchIconSpan.innerHTML = icon('i-search');
+    const searchInput = document.createElement('input');
+    searchInput.type = 'search';
+    searchInput.className = 'sheet-input';
+    searchInput.placeholder = 'Cerca modello o provider…';
+    searchLabel.append(searchIconSpan, searchInput);
+
+    const listEl = document.createElement('div');
+    listEl.className = 'model-picker-list';
+
+    const footer = document.createElement('div');
+    footer.className = 'model-picker-footer';
+    const refreshBtn = document.createElement('button');
+    refreshBtn.type = 'button';
+    refreshBtn.className = 'text-btn';
+    const refreshIconSpan = document.createElement('span');
+    refreshIconSpan.innerHTML = icon('i-history');
+    refreshBtn.append(refreshIconSpan, document.createTextNode('Aggiorna'));
+    const metaSpan = document.createElement('span');
+    metaSpan.className = 'model-picker-meta';
+    footer.append(refreshBtn, metaSpan);
+
+    panel.append(searchLabel, listEl, footer);
+    wrap.append(trigger, panel);
+
+    let modelliCache = null;
+    let valoreScelto = valoreIniziale;
+    let aperto = false;
+    let caricato = false;
+    const gruppiAperti = new Set();
+
+    function aggiornaTriggerLabel() {
+      triggerLabel.textContent = valoreScelto || 'Predefinito del server';
+    }
+
+    function filtraModelli(query) {
+      if (!modelliCache) return [];
+      const q = query.trim().toLowerCase();
+      if (!q) return modelliCache;
+      return modelliCache.filter((m) => m.id.toLowerCase().includes(q) || m.nome.toLowerCase().includes(q) || m.provider.toLowerCase().includes(q));
+    }
+
+    function raggruppaPerProvider(modelli) {
+      const mappa = new Map();
+      for (const m of modelli) {
+        if (!mappa.has(m.provider)) mappa.set(m.provider, []);
+        mappa.get(m.provider).push(m);
+      }
+      return [...mappa.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    }
+
+    function renderLista() {
+      const query = searchInput.value;
+      if (!modelliCache) {
+        listEl.replaceChildren(textElement('p', 'board-empty', 'Carico il catalogo da OpenRouter…'));
+        return;
+      }
+      const filtrati = filtraModelli(query);
+      if (filtrati.length === 0) {
+        listEl.replaceChildren(textElement('p', 'board-empty', query.trim() ? `Nessun modello corrisponde a "${query.trim()}".` : 'Nessun modello disponibile.'));
+        return;
+      }
+      const cercando = query.trim() !== '';
+      const pezzi = [];
+      for (const [provider, modelli] of raggruppaPerProvider(filtrati)) {
+        const aprireGruppo = cercando || gruppiAperti.has(provider);
+        const header = document.createElement('button');
+        header.type = 'button';
+        header.className = 'model-picker-group-header';
+        header.setAttribute('aria-expanded', String(aprireGruppo));
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'model-picker-group-name';
+        nameSpan.textContent = provider;
+        const countSpan = document.createElement('span');
+        countSpan.className = 'model-picker-group-count';
+        countSpan.textContent = String(modelli.length);
+        const groupChevron = document.createElement('span');
+        groupChevron.className = 'model-picker-group-chevron';
+        groupChevron.innerHTML = icon('i-chevron');
+        header.append(nameSpan, countSpan, groupChevron);
+        header.addEventListener('click', () => {
+          if (gruppiAperti.has(provider)) gruppiAperti.delete(provider); else gruppiAperti.add(provider);
+          renderLista();
+        });
+        pezzi.push(header);
+        if (!aprireGruppo) continue;
+        for (const modello of modelli) {
+          const opt = document.createElement('button');
+          opt.type = 'button';
+          opt.className = 'sheet-option model-picker-option';
+          opt.setAttribute('role', 'option');
+          opt.setAttribute('aria-selected', String(modello.id === valoreScelto));
+          if (modello.id === valoreScelto) opt.classList.add('active');
+          const iconWrap = document.createElement('span');
+          iconWrap.className = 'sheet-icon';
+          iconWrap.innerHTML = icon('i-brain');
+          const textWrap = document.createElement('span');
+          const dettagli = [];
+          if (modello.alias) dettagli.push('ultima versione'); // ⭐ 27/8 — il gruppo è già quello giusto (senza ~), l'informazione "è un alias fluttuante" resta comunque visibile qui
+          if (modello.contextLength) dettagli.push(`${Math.round(modello.contextLength / 1000)}k ctx`);
+          if (modello.prezzoPrompt) dettagli.push(`$${(Number(modello.prezzoPrompt) * 1_000_000).toFixed(2)}/M in`);
+          textWrap.append(
+            textElement('strong', '', modello.nome),
+            textElement('small', '', dettagli.length ? `${modello.id} · ${dettagli.join(' · ')}` : modello.id),
+          );
+          opt.append(iconWrap, textWrap);
+          if (modello.id === valoreScelto) {
+            const checkSpan = document.createElement('span');
+            checkSpan.innerHTML = icon('i-check');
+            opt.appendChild(checkSpan);
+          }
+          opt.addEventListener('click', () => {
+            valoreScelto = modello.id;
+            state.model = modello.id; // ⭐ un'unica fonte di verità: la pillola del composer e il foglio "Modello" restano sincronizzati
+            aggiornaTriggerLabel();
+            aggiornaPillolaModello();
+            chiudi();
+          });
+          pezzi.push(opt);
+        }
+      }
+      listEl.replaceChildren(...pezzi);
+    }
+
+    async function carica({ forza = false } = {}) {
+      listEl.replaceChildren(textElement('p', 'board-empty', 'Carico il catalogo da OpenRouter…'));
+      try {
+        const dati = await apiGet(`/api/v1/models${forza ? '?forza=1' : ''}`);
+        modelliCache = dati.modelli;
+        caricato = true;
+        metaSpan.textContent = `${dati.modelli.length} modelli${dati.daCache ? ' · da cache' : ''}`;
+        renderLista();
+      } catch (error) {
+        listEl.replaceChildren(textElement('p', 'board-empty', `Catalogo non disponibile: ${error.message}`));
+        metaSpan.textContent = '';
+      }
+    }
+
+    function apri() {
+      aperto = true;
+      panel.hidden = false;
+      trigger.setAttribute('aria-expanded', 'true');
+      if (!caricato) carica();
+      window.setTimeout(() => searchInput.focus(), 0);
+    }
+    function chiudi() {
+      aperto = false;
+      panel.hidden = true;
+      trigger.setAttribute('aria-expanded', 'false');
+    }
+
+    trigger.addEventListener('click', () => { if (aperto) chiudi(); else apri(); });
+    searchInput.addEventListener('input', renderLista);
+    refreshBtn.addEventListener('click', (event) => { event.preventDefault(); carica({ forza: true }); });
+    panel.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); chiudi(); trigger.focus(); }
+    });
+    function onDocumentClick(event) {
+      if (!wrap.isConnected) { document.removeEventListener('click', onDocumentClick); return; }
+      if (aperto && !wrap.contains(event.target)) chiudi();
+    }
+    document.addEventListener('click', onDocumentClick);
+
+    aggiornaTriggerLabel();
+    return { elemento: wrap, getValore: () => valoreScelto };
+  }
+
   function runsPath(cursor = null) {
     const params = new URLSearchParams({ limit: '40' });
     if (harnessFilter.value) params.set('harness', harnessFilter.value);
@@ -1146,6 +1354,8 @@
         if (!next) { input?.focus(); return; }
         state.session = next;
         sessionTitle.textContent = state.session;
+    /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
+    $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
         const activeSession = $('.session-item.active .session-main strong');
         if (activeSession) activeSession.textContent = state.session;
         closeEmbeddedDialog(sheetDialog);
@@ -1870,6 +2080,8 @@
     state.realSession.taskId = task.id;
     state.session = `Task reale · ${task.id}`;
     sessionTitle.textContent = state.session;
+    /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
+    $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
     setView('chat');
     closePanels();
     appendRealTaskStart(task);
@@ -1885,6 +2097,9 @@
       if (generation !== state.realSession.generation) return;
       appendStatusNote(`Avvio non riuscito: ${error.message}`, true);
       toast('Avvio non riuscito', error.message);
+      /* ⛔ 27/8, trovato dalla pipeline QA visiva: il titolo restava "ottimista" (il nome della sessione appena tentata) anche quando la POST falliva — la sessione non è mai esistita lato server (state.realSession.id resta null). */
+      state.session = 'Nessuna sessione';
+      $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
       return;
     }
     if (generation !== state.realSession.generation) return;
@@ -1936,6 +2151,8 @@
       state.realSession.taskId = taskIdOrigine;
       state.session = `Task reale · ${taskIdOrigine} (fork)`;
       sessionTitle.textContent = state.session;
+    /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
+    $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
       appendStatusNote(`Fork avviato dalla sessione ${idOrigine.slice(0, 8)}… — stessa cartella, stessa storia.`);
       collegaEventiSessione(dati.sessionId, generation);
       aggiornaElencoSessioniReali();
@@ -2003,6 +2220,8 @@
     state.realSession.taskId = taskId;
     state.session = nome || `Task reale · ${taskId}`; // ⭐ un nome scelto dall'owner vince sul taskId
     sessionTitle.textContent = state.session;
+    /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
+    $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
     setView('chat');
     closePanels();
     collegaEventiSessione(sessionId, generation);
@@ -2234,10 +2453,16 @@
    * passo e' "scegli il repository", MAI un elenco di compiti gia scritti
    * ("click New Session, select Agent, and choose your repository", poi
    * il compito resta testo libero). Nessun competitor mostra un elenco
-   * di task predefiniti come primo schermo. L'elenco task del corpus
-   * (storia/progetti) e' un concetto interno di TALOS-BANCO (misurare
-   * sempre lo stesso compito, per confrontare harness): resta uno
-   * strumento reale, ma secondario, sotto il compito libero, mai il default.
+   * di task predefiniti come primo schermo.
+   *
+   * ⛔⛔ 27/8, secondo giro — owner: "non ci siamo... devi levare tutte le
+   * prove per banco". La sezione secondaria "Oppure prova un task del
+   * banco" (aggiunta la mattina) era ancora un compromesso non richiesto:
+   * l'elenco task del corpus (storia/progetti) resta uno strumento VERO,
+   * ma è un concetto interno di TALOS-BANCO — non appartiene al punto
+   * dove un owner avvia una sessione. Le automazioni (che DEVONO ripetere
+   * sempre lo stesso compito misurabile) restano l'unico posto che lo
+   * usa, col proprio foglio dedicato.
    */
   async function openRealTaskSheet() {
     sheetEyebrow.textContent = 'Nuova sessione';
@@ -2247,13 +2472,9 @@
     if (demoBadge) demoBadge.hidden = true;
     showEmbeddedDialog(sheetDialog);
 
-    let tasks;
     let progetti;
     try {
-      [tasks, progetti] = await Promise.all([
-        apiGet('/api/v1/tasks').then((r) => r.items),
-        apiGet('/api/v1/projects').then((r) => r.items).catch(() => []), // ⛔ un elenco vuoto/non raggiungibile non deve bloccare i task del corpus
-      ]);
+      progetti = await apiGet('/api/v1/projects').then((r) => r.items);
     } catch (error) {
       sheetBody.replaceChildren(textElement('p', 'board-empty', `Elenco non disponibile: ${error.message}`));
       return;
@@ -2278,13 +2499,19 @@
         opzione.textContent = progetto.nome;
         selectCartella.appendChild(opzione);
       }
+      const modelPicker = creaModelPicker({ valoreIniziale: state.model || '' });
       const consegnaInput = document.createElement('textarea');
       consegnaInput.className = 'sheet-input';
       consegnaInput.id = 'customTaskConsegna';
       consegnaInput.rows = 3;
       consegnaInput.placeholder = 'Cosa deve fare TALOS su questo progetto?';
       consegnaInput.maxLength = 4000;
-      customSection.append(selectCartella, consegnaInput);
+      customSection.append(
+        selectCartella,
+        textElement('span', 'sheet-label', 'Modello'),
+        modelPicker.elemento,
+        consegnaInput,
+      );
       const submit = document.createElement('button');
       submit.type = 'submit';
       submit.className = 'primary-btn compact full';
@@ -2296,32 +2523,23 @@
         if (!consegna) { consegnaInput.focus(); return; }
         const cartellaId = selectCartella.value;
         const nomeCartella = progetti.find((p) => p.id === cartellaId)?.nome ?? cartellaId;
+        const modello = modelPicker.getValore();
         closeEmbeddedDialog(sheetDialog);
-        startCustomSession({ cartellaId, nomeCartella, consegna });
+        startCustomSession({ cartellaId, nomeCartella, consegna, modello });
       });
     }
     corpoFoglio.push(customSection);
 
-    // --- SECONDARIA: i task del corpus TALOS-BANCO, per confrontare l'harness a parità di compito. ---
-    const section = document.createElement('div');
-    section.className = 'sheet-section';
-    section.appendChild(textElement('span', 'sheet-label', `Oppure prova un task del banco (${tasks.length}, checkout ed esecuzione reali)`));
-    for (const task of tasks) {
-      const button = document.createElement('button');
-      button.className = 'sheet-option';
-      button.dataset.startTask = task.id;
-      const iconWrap = document.createElement('span');
-      iconWrap.className = 'sheet-icon';
-      iconWrap.innerHTML = icon('i-play');
-      const textWrap = document.createElement('span');
-      textWrap.append(textElement('strong', '', task.id), textElement('small', '', task.consegnaCorta));
-      button.append(iconWrap, textWrap, textElement('span', '', `difficoltà ${task.difficolta}`));
-      button.addEventListener('click', () => { closeEmbeddedDialog(sheetDialog); startRealSession(task); });
-      section.appendChild(button);
-    }
-    corpoFoglio.push(section);
-
     sheetBody.replaceChildren(...corpoFoglio);
+    /*
+     * ⛔ 27/8, trovato dalla pipeline QA visiva: l'attributo HTML `autofocus`
+     * sulla textarea non scatta perché il <dialog> è già aperto quando il
+     * form viene inserito (showEmbeddedDialog gira PRIMA del fetch) — il
+     * browser aveva già messo il focus sul bottone di chiusura, il primo
+     * elemento focusable nel markup del foglio. Un focus esplicito dopo
+     * l'inserimento nel DOM è l'unico modo affidabile.
+     */
+    $('#customTaskConsegna')?.focus();
   }
 
   /**
@@ -2331,12 +2549,14 @@
    * collegaEventiSessione), corpo POST diverso (/sessions/custom con
    * cartellaId+consegna invece di /sessions con taskId).
    */
-  async function startCustomSession({ cartellaId, nomeCartella, consegna, comandoProva }) {
+  async function startCustomSession({ cartellaId, nomeCartella, consegna, comandoProva, modello }) {
     const generation = nuovaGenerazioneSessione();
     const taskSintetico = { id: `libero:${nomeCartella}`, consegna };
     state.realSession.taskId = taskSintetico.id;
     state.session = `Compito libero · ${nomeCartella}`;
     sessionTitle.textContent = state.session;
+    /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
+    $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
     setView('chat');
     closePanels();
     appendRealTaskStart(taskSintetico);
@@ -2346,13 +2566,17 @@
     try {
       const corpo = { cartellaId, consegna };
       if (comandoProva) corpo.comandoProva = comandoProva;
-      if (state.model) corpo.modello = state.model;
+      const modelloEffettivo = modello || state.model; // ⭐ la scelta fatta nel picker della modale ha priorità
+      if (modelloEffettivo) corpo.modello = modelloEffettivo;
       const data = await apiPost('/api/v1/sessions/custom', corpo);
       sessionId = data.sessionId;
     } catch (error) {
       if (generation !== state.realSession.generation) return;
       appendStatusNote(`Avvio non riuscito: ${error.message}`, true);
       toast('Avvio non riuscito', error.message);
+      /* ⛔ 27/8, trovato dalla pipeline QA visiva: il titolo restava "ottimista" (il nome della sessione appena tentata) anche quando la POST falliva — la sessione non è mai esistita lato server (state.realSession.id resta null). */
+      state.session = 'Nessuna sessione';
+      $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
       return;
     }
     if (generation !== state.realSession.generation) return;
@@ -2465,6 +2689,8 @@
     }
     state.session = 'Nuova sessione';
     sessionTitle.textContent = state.session;
+    /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
+    $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
     $$('.session-item').forEach((item) => item.classList.remove('active'));
     setView('chat');
     closePanels();
