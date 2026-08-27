@@ -85,8 +85,18 @@ function parseModello(raw) {
  * varianti tipo `:free`/`:beta` ammesse dopo il nome. Non un whitelist di
  * vendor — un controllo di FORMA, per escludere iniezioni/spazi/righe
  * vuote, mai di CONTENUTO.
+ *
+ * ⛔⛔ 27/8 — trovato dalla pipeline QA visiva (scripts/qa-visual-pipeline.mjs),
+ * non ipotizzato: 12 dei 417 modelli VERI di OpenRouter oggi sono alias
+ * "sempre l'ultima versione" con un prefisso `~` (es.
+ * `~anthropic/claude-sonnet-latest`, `~deepseek/deepseek-v4-flash-latest`)
+ * — verificato con GET https://openrouter.ai/api/v1/models. Senza il `~?`
+ * opzionale, scegliere uno di questi nel picker produceva SEMPRE un 400
+ * su /api/v1/sessions/custom: la regola "tutti i modelli OpenRouter,
+ * nessuna eccezione" (owner, 27/8 mattina) era rotta esattamente sugli
+ * alias più comodi da scegliere.
  */
-const FORMATO_MODELLO_RICHIESTA = /^[a-z0-9](?:[a-z0-9._-]{0,63}[a-z0-9])?\/[a-z0-9](?:[a-z0-9._:-]{0,63}[a-z0-9])?$/i;
+const FORMATO_MODELLO_RICHIESTA = /^~?[a-z0-9](?:[a-z0-9._-]{0,63}[a-z0-9])?\/[a-z0-9](?:[a-z0-9._:-]{0,63}[a-z0-9])?$/i;
 
 /**
  * Pura — nessun throw, chi chiama decide il `code`/status HTTP giusto per

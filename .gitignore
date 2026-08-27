@@ -8,6 +8,11 @@ node_modules/
 # generati sul disco di chi fa girare il server, non da versionare.
 harness-ui/.automations/
 
+# ⭐ 27/8 — output della pipeline QA visiva (screenshot + report.json +
+# taccuino.md per corsa): dati di UNA verifica, non lo strumento che li
+# produce. Lo script (scripts/qa-visual-pipeline.mjs) resta versionato.
+harness-ui/.qa-runs/
+
 core/vendor/
 validator/node_modules/
 control-plane/vendor/

@@ -138,3 +138,22 @@ test('modelloRichiestaValido accetta il formato OpenRouter vendor/nome, e AL CON
   assert.equal(modelloRichiestaValido(null), false);
   assert.equal(modelloRichiestaValido(42), false);
 });
+
+/*
+ * ⛔⛔⛔ 27/8 — trovato dalla pipeline QA visiva (scripts/qa-visual-pipeline.mjs)
+ * mentre provava il picker con una richiesta VERA: scegliere uno dei 12
+ * alias reali "-latest" di OpenRouter (verificato con GET
+ * https://openrouter.ai/api/v1/models) produceva SEMPRE un 400. Questi
+ * 4 id sono ESATTAMENTE quelli visti nel catalogo il 27/8, non inventati.
+ */
+test('modelloRichiestaValido accetta i 12 alias reali "-latest" di OpenRouter (prefisso ~), e AL CONTRARIO rifiuta una tilde fuori posto', () => {
+  assert.equal(modelloRichiestaValido('~anthropic/claude-sonnet-latest'), true);
+  assert.equal(modelloRichiestaValido('~deepseek/deepseek-v4-flash-latest'), true);
+  assert.equal(modelloRichiestaValido('~openai/gpt-latest'), true);
+  assert.equal(modelloRichiestaValido('~google/gemini-flash-latest'), true);
+  assert.equal(modelloRichiestaValido('~'), false);
+  assert.equal(modelloRichiestaValido('~/'), false);
+  assert.equal(modelloRichiestaValido('~~doppia/tilde'), false);
+  assert.equal(modelloRichiestaValido('vendor/~nel-mezzo'), false);
+  assert.equal(modelloRichiestaValido('~vendor/'), false);
+});

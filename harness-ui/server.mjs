@@ -14,6 +14,7 @@ import { createStaticHandler } from './src/static-files.mjs';
 import { listaTaskDisponibili } from './src/task-catalog.mjs';
 import { elencaCartelleProgetto } from './src/custom-task.mjs';
 import { diagnosi } from './src/doctor.mjs';
+import { createModelCatalog } from './src/model-catalog.mjs';
 
 async function startServer() {
   const config = loadConfig(process.env, import.meta.url);
@@ -52,6 +53,15 @@ async function startServer() {
     store: automationStore,
     sessionRegistry,
   });
+  /*
+   * ⭐⭐⭐ 27/8 — owner: "un picker per il modello, dropdown stilizzato
+   * (l'abbiamo già fatto nel mobile)". Il catalogo VERO di OpenRouter
+   * (417 modelli oggi, pubblico, nessuna chiave richiesta per leggerlo),
+   * non le 7 scorciatoie scritte a mano — una sola istanza condivisa,
+   * cache in-memory 10 minuti, così il foglio "Nuova sessione" non
+   * richiama OpenRouter a ogni apertura.
+   */
+  const modelCatalog = createModelCatalog();
   const app = createHttpApp({
     campaignService,
     staticHandler: createStaticHandler(config.publicDir),
@@ -60,6 +70,7 @@ async function startServer() {
     elencaCartelleProgetto: () => elencaCartelleProgetto(config.cartelleProgetto),
     automationStore,
     diagnosiFn: () => diagnosi({ chiaveConfigurata: Boolean(config.chiaveApi) }),
+    catalogoModelliFn: (opts) => modelCatalog.ottieni(opts),
   });
   const server = createServer(app);
 

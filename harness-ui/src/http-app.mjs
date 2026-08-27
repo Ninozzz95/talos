@@ -26,6 +26,8 @@ const API_ERROR_CODES = new Set([
   'TASK_NOT_ALLOWED',
   'SESSION_NOT_READY',
   'AUTOMATION_INVALID',
+  'CATALOG_UNREACHABLE',
+  'CATALOG_UPSTREAM_ERROR',
   'INTERNAL_ERROR',
 ]);
 
@@ -44,6 +46,9 @@ const STATUS_BY_CODE = Object.freeze({
   SESSION_NOT_READY: 409,
   /** ⭐ 27/8 — un tetto duro dell'automazione violato (intervallo/limite fuori range) è un errore di CONTENUTO, non di forma: stesso status di ROW_INVALID. */
   AUTOMATION_INVALID: 422,
+  /** ⭐ 27/8 — il catalogo modelli dipende da OpenRouter: quando è irraggiungibile o risponde male non è colpa del client, stesso trattamento di CAMPAIGN_UNREADABLE. */
+  CATALOG_UNREACHABLE: 503,
+  CATALOG_UPSTREAM_ERROR: 503,
   INTERNAL_ERROR: 500,
 });
 
@@ -60,6 +65,8 @@ const MESSAGE_BY_CODE = Object.freeze({
   TASK_NOT_ALLOWED: 'Task non ammesso',
   SESSION_NOT_READY: 'Sessione non pronta per questa azione',
   AUTOMATION_INVALID: 'Parametri automazione non validi',
+  CATALOG_UNREACHABLE: 'Catalogo modelli non raggiungibile',
+  CATALOG_UPSTREAM_ERROR: 'Catalogo modelli non disponibile',
   INTERNAL_ERROR: 'Errore interno',
 });
 
@@ -140,6 +147,21 @@ function parseRunsQuery(url) {
     if (value !== '') query[key] = value;
   }
   return query;
+}
+
+/** ⛔ Allowlist di UNA chiave — "forza" rifà davvero la fetch a OpenRouter (il pulsante Refresh del picker), ignorando la cache dentro il TTL. */
+function parseModelsQuery(url) {
+  const allowed = new Set(['forza']);
+  const query = {};
+  for (const [key, value] of url.searchParams) {
+    if (!allowed.has(key) || Object.hasOwn(query, key) || value.length > 1024) {
+      const error = new Error('Query non valida');
+      error.code = value.length > 1024 ? 'PAYLOAD_LIMIT' : 'QUERY_INVALID';
+      throw error;
+    }
+    query[key] = value;
+  }
+  return query.forza === '1';
 }
 
 /** ⛔ Un'allowlist di UNA chiave sola, come le altre query di questo file — la validazione FINE (niente "..", niente assoluto) resta in workspace-tree.leggiAlberoWorkspace(), qui si controlla solo la FORMA. */
@@ -332,7 +354,8 @@ function scriviEventoSse(res, evento) {
  */
 export function createHttpApp({
   campaignService, staticHandler, sessionRegistry = null, listaTaskDisponibili = () => [],
-  elencaCartelleProgetto = () => [], automationStore = null, diagnosiFn = null, clock = () => new Date(),
+  elencaCartelleProgetto = () => [], automationStore = null, diagnosiFn = null,
+  catalogoModelliFn = null, clock = () => new Date(),
 }) {
   async function handle(req, res) {
     if (req.aborted || res.destroyed) return;
@@ -668,6 +691,12 @@ export function createHttpApp({
       } else if (url.pathname === '/api/v1/automations') {
         requireNoQuery(url);
         data = { items: automationStore ? await automationStore.elenca() : [] };
+      } else if (url.pathname === '/api/v1/models') {
+        const forzaAggiornamento = parseModelsQuery(url);
+        if (!catalogoModelliFn) {
+          const errore = new Error('Catalogo modelli non configurato'); errore.code = 'REPORT_UNAVAILABLE'; throw errore;
+        }
+        data = await catalogoModelliFn({ forzaAggiornamento });
       } else if (url.pathname === '/api/v1/doctor') {
         requireNoQuery(url);
         if (!diagnosiFn) {

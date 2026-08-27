@@ -436,9 +436,14 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(FakeEventSource.instances).toHaveLength(1) // nessun giro nuovo avviato
     })
 
-    it('REAL-SESSION-TASKSHEET-01 openRealTaskSheet elenca i task e li avvia SENZA .showModal() nativo', async () => {
+    // ⛔ 27/8 — owner: "quando faccio nuova dalla modale devi levare tutte
+    // le prove per banco". openRealTaskSheet() non elenca più i task del
+    // corpus (rimossi da app.js): fetcha SOLO /api/v1/projects e mostra
+    // il form "Compito libero" — stesso pattern di Claude Code/Codex/
+    // Cline/Aider (nessun elenco predefinito, testo libero).
+    it('REAL-SESSION-TASKSHEET-01 openRealTaskSheet mostra il compito libero (non i task del banco) e lo avvia SENZA .showModal() nativo', async () => {
         mockFetch([
-            { metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [{ id: 'storia-t1', consegnaCorta: 'Sistema il test', difficolta: 2 }] } },
+            { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } },
         ])
         const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
         const showModalSpy = vi.fn()
@@ -448,17 +453,91 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
         expect(showModalSpy).not.toHaveBeenCalled()
         expect(sheetDialog.hasAttribute('open')).toBe(true)
-        const bottone = document.querySelector<HTMLButtonElement>('[data-start-task="storia-t1"]')
-        expect(bottone).not.toBeNull()
+        expect(document.querySelector('[data-start-task]')).toBeNull() // nessuna prova per banco
+        const form = document.querySelector<HTMLFormElement>('#customTaskForm')
+        expect(form).not.toBeNull()
+        const cartellaSelect = document.querySelector<HTMLSelectElement>('#customTaskCartella')
+        expect(cartellaSelect?.options.length).toBe(1)
+        expect(document.querySelector('.model-picker')).not.toBeNull() // il picker del modello è nella modale
+        const consegnaInput = document.querySelector<HTMLTextAreaElement>('#customTaskConsegna')!
+        consegnaInput.value = 'aggiungi una funzione sottrai(a, b)'
 
         mockFetch([
-            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-da-sheet' } },
+            { metodo: 'POST', percorso: '/api/v1/sessions/custom', corpo: { sessionId: 'sess-libero' } },
             { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
         ])
-        bottone!.click()
+        form!.requestSubmit()
         await new Promise((r) => setTimeout(r, 0))
 
         expect(sheetDialog.hasAttribute('open')).toBe(false)
-        expect(FakeEventSource.instances.at(-1)?.url).toBe('/api/v1/sessions/sess-da-sheet/events')
+        expect(FakeEventSource.instances.at(-1)?.url).toBe('/api/v1/sessions/sess-libero/events')
+    })
+
+    it('REAL-SESSION-TASKSHEET-02 senza cartelle configurate, mostra un messaggio onesto invece di un form rotto', async () => {
+        mockFetch([{ metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [] } }])
+
+        await runtime().openRealTaskSheet()
+
+        expect(document.querySelector('#customTaskCartella')).toBeNull()
+        expect(document.querySelector('#sheetBody')?.textContent).toContain('TALOS_HARNESS_UI_PROJECT_DIRS')
+    })
+
+    it('MODEL-PICKER-01 apre il catalogo vero (GET /api/v1/models), raggruppato per provider, e la scelta viaggia nella POST', async () => {
+        mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } },
+        ])
+        await runtime().openRealTaskSheet()
+
+        mockFetch([
+            {
+                metodo: 'GET',
+                percorso: '/api/v1/models',
+                corpo: {
+                    modelli: [
+                        { id: 'deepseek/deepseek-chat', provider: 'deepseek', nome: 'DeepSeek: Chat', contextLength: 64000, prezzoPrompt: '0.0000002', prezzoCompletion: '0.0000006' },
+                        { id: 'qwen/qwen3.8-flash', provider: 'qwen', nome: 'Qwen: Qwen3.8 Flash', contextLength: 1000000, prezzoPrompt: '0.00000015', prezzoCompletion: '0.00000047' },
+                    ],
+                    daCache: false,
+                    aggiornatoAlle: '2026-08-27T10:00:00.000Z',
+                },
+            },
+        ])
+        document.querySelector<HTMLButtonElement>('.model-picker-trigger')!.click()
+        await new Promise((r) => setTimeout(r, 0))
+
+        const gruppi = [...document.querySelectorAll('.model-picker-group-name')].map((el) => el.textContent)
+        expect(gruppi).toEqual(['deepseek', 'qwen']) // ordinati per provider
+
+        document.querySelector<HTMLButtonElement>('.model-picker-group-header')!.click() // apre il gruppo "deepseek"
+        const opzione = document.querySelector<HTMLButtonElement>('.model-picker-option')!
+        expect(opzione.textContent).toContain('deepseek/deepseek-chat')
+        opzione.click()
+
+        expect(document.querySelector('.model-picker-trigger-label')?.textContent).toBe('deepseek/deepseek-chat')
+        expect(document.querySelector('.model-picker-panel')?.hasAttribute('hidden')).toBe(true) // si chiude da solo
+
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions/custom', corpo: { sessionId: 'sess-modello' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        const postSpy = vi.spyOn(window, 'fetch')
+        document.querySelector<HTMLTextAreaElement>('#customTaskConsegna')!.value = 'usa questo modello'
+        document.querySelector<HTMLFormElement>('#customTaskForm')!.requestSubmit()
+        await new Promise((r) => setTimeout(r, 0))
+
+        const chiamataPost = postSpy.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'POST')
+        const corpoInviato = JSON.parse(String((chiamataPost?.[1] as RequestInit).body))
+        expect(corpoInviato.modello).toBe('deepseek/deepseek-chat')
+    })
+
+    it('MODEL-PICKER-02 un errore di rete sul catalogo è dichiarato, mai "zero modelli" silenzioso', async () => {
+        mockFetch([{ metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto' }] } }])
+        await runtime().openRealTaskSheet()
+
+        vi.spyOn(window, 'fetch').mockRejectedValueOnce(new Error('rete giù'))
+        document.querySelector<HTMLButtonElement>('.model-picker-trigger')!.click()
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(document.querySelector('.model-picker-list')?.textContent).toContain('rete giù')
     })
 })
