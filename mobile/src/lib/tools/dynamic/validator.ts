@@ -71,8 +71,18 @@ function validateCapability(node: Extract<ForgeNode | ForgeInlineNode, {type:'ca
  * il tool gira. Cammina lo stesso albero di `resolveExpr`/`collectForgeRefPaths`,
  * ma per produrre diagnostici invece di lanciare.
  */
-function validatePath(path: string, contextPath: string, code: string, diagnostics: ForgeDiagnostic[]): void {
-    const violation = forgePathViolation(path)
+/**
+ * ⛔ Owner 2026-08-27 — `writable` distingue un path che il DAG LEGGE (un
+ * `$ref`, sempre `false`) da uno che il DAG SCRIVE (un `target`/`itemVar`/
+ * `indexVar`, sempre `true`). Solo il secondo può violare
+ * `RESERVED_WRITE_ROOTS` (expr.ts): un manifest che punta un target a
+ * `$.input.*`/`$.runtime.*` ora si rifiuta QUI, all'installazione, non la
+ * prima volta che gira — stesso principio del resto di questo file
+ * (struttura pericolosa rifiutata con un diagnostico pulito, mai scoperta
+ * a runtime).
+ */
+function validatePath(path: string, contextPath: string, code: string, diagnostics: ForgeDiagnostic[], options: { writable?: boolean } = {}): void {
+    const violation = forgePathViolation(path, options)
     if (violation) diag(diagnostics, 'error', code, contextPath, `Unsafe path: ${violation}`)
 }
 
@@ -83,16 +93,16 @@ function validateExprPaths(expr: unknown, contextPath: string, diagnostics: Forg
 function validateNodePaths(node: ForgeNode | ForgeInlineNode, path: string, diagnostics: ForgeDiagnostic[]): void {
     switch (node.type) {
         case 'set':
-            validatePath(node.target, `${path}.target`, 'FORGE_TARGET_UNSAFE', diagnostics)
+            validatePath(node.target, `${path}.target`, 'FORGE_TARGET_UNSAFE', diagnostics, { writable: true })
             validateExprPaths(node.value, `${path}.value`, diagnostics)
             break
         case 'capability':
-            if (node.target) validatePath(node.target, `${path}.target`, 'FORGE_TARGET_UNSAFE', diagnostics)
+            if (node.target) validatePath(node.target, `${path}.target`, 'FORGE_TARGET_UNSAFE', diagnostics, { writable: true })
             validateExprPaths(node.input, `${path}.input`, diagnostics)
             if (node.compensation) validateExprPaths(node.compensation.input, `${path}.compensation.input`, diagnostics)
             break
         case 'llm':
-            validatePath(node.target, `${path}.target`, 'FORGE_TARGET_UNSAFE', diagnostics)
+            validatePath(node.target, `${path}.target`, 'FORGE_TARGET_UNSAFE', diagnostics, { writable: true })
             validateExprPaths(node.input, `${path}.input`, diagnostics)
             break
         case 'if':
@@ -102,9 +112,10 @@ function validateNodePaths(node: ForgeNode | ForgeInlineNode, path: string, diag
         case 'foreach':
             validateExprPaths(node.source, `${path}.source`, diagnostics)
             // itemVar/indexVar diventano segmenti di path in setPath a runtime
-            // (interpreter.ts): stessa grammatica, un path di un solo segmento.
-            validatePath(node.itemVar, `${path}.itemVar`, 'FORGE_VAR_UNSAFE', diagnostics)
-            if (node.indexVar) validatePath(node.indexVar, `${path}.indexVar`, 'FORGE_VAR_UNSAFE', diagnostics)
+            // (interpreter.ts): stessa grammatica, un path di un solo segmento,
+            // e la STESSA restrizione di scrittura di ogni altro target.
+            validatePath(node.itemVar, `${path}.itemVar`, 'FORGE_VAR_UNSAFE', diagnostics, { writable: true })
+            if (node.indexVar) validatePath(node.indexVar, `${path}.indexVar`, 'FORGE_VAR_UNSAFE', diagnostics, { writable: true })
             node.body.forEach((child, childIndex) => validateNodePaths(child, `${path}.body[${childIndex}]`, diagnostics))
             break
         case 'return':

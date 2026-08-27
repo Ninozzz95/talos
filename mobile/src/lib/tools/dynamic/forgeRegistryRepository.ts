@@ -41,6 +41,9 @@ export interface ForgeAuditEntry {
 /** Stessa politica di prima (`previousVersions.slice(-10)`), ora una vera
  * riga per versione invece di un array dentro il JSON. */
 const MAX_KEPT_VERSIONS = 10
+/** Owner 2026-08-27, confrontando col pacchetto "hardened final": un tetto
+ * di buon senso sul NUMERO di tool installati, mai imposto prima. */
+const MAX_INSTALLED_TOOLS = 64
 
 async function connection(): Promise<TalosSqlConnection> {
     const runtime = talosSqliteRuntime()
@@ -162,6 +165,18 @@ export async function installForgeTool(manifest: TalosLocalToolManifestV1, now =
         const existingRows = await db.query('SELECT manifest_json, version FROM talos_forge_tools WHERE id = ? LIMIT 1', [manifest.id])
         const existing = existingRows[0] as TalosSqlRow | undefined
         if (existing && manifest.version <= Number(existing.version)) throw new Error('TALOS_FORGE_VERSION_NOT_NEWER')
+        // ⛔ Owner 2026-08-27 — confrontando col pacchetto "hardened final"
+        // dell'owner: nessun tetto al NUMERO di tool installabili. Un
+        // registro senza limite non è pericoloso di per sé (ogni tool
+        // resta comunque validato/disabilitato di default), ma è un
+        // ceiling di buon senso mai imposto — la stessa disciplina già
+        // applicata a byte/nodi/transizioni di un SINGOLO manifest, qui
+        // sull'INSIEME. Solo per un tool NUOVO: sostituire una versione
+        // esistente non deve mai bloccarsi contro il proprio stesso tetto.
+        if (!existing) {
+            const countRow = (await db.query('SELECT COUNT(*) AS n FROM talos_forge_tools'))[0] as TalosSqlRow
+            if (Number(countRow.n) >= MAX_INSTALLED_TOOLS) throw new Error('TALOS_FORGE_REGISTRY_FULL')
+        }
         if (existing) {
             // La versione RIMPIAZZATA diventa una riga vera in
             // talos_forge_tool_versions, non un array in memoria.
