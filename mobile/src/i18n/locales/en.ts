@@ -81,6 +81,7 @@ export const TALOS_EN_MESSAGES = {
         primary: 'Primary navigation',
         modelLab: 'Model Lab',
         harness: 'Code',
+        toolForge: 'Tool Forge',
     },
     language: {
         title: 'Language',
@@ -3403,6 +3404,60 @@ export const TALOS_EN_MESSAGES = {
         attachLibraryLoading: 'Reading the Library…',
         attachRemove: 'Remove {name}',
         attachFailed: 'The attachment did not go through.',
+    },
+    /**
+     * ⛔ Owner 2026-08-27, Tool Forge Fase 6: la stazione vera, sostituisce
+     * la bozza di Fase 1. Il rischio riusa `chat.plan.risk.*` (stessa
+     * frase già mostrata quando TALOS chiede conferma di un piano) invece
+     * di duplicarla qui — vedi TalosToolForgeStation.vue.
+     */
+    toolForge: {
+        title: 'Tool Forge',
+        intro: 'Tools TALOS can use, built from a manifest — not from code the model writes.',
+        installedSummary: '{n} tools installed · new imports stay disabled until you enable them.',
+        installedSummaryOne: '1 tool installed · new imports stay disabled until you enable them.',
+        enable: 'Enable',
+        disable: 'Disable',
+        enableNamed: 'Enable {title}',
+        disableNamed: 'Disable {title}',
+        history: 'History',
+        historyNamed: 'History for {title}',
+        export: 'Export',
+        exportNamed: 'Export {title}',
+        delete: 'Delete',
+        deleteNamed: 'Delete {title}',
+        versionLabel: 'v{version}',
+        justImported: 'Just imported',
+        blockedCredential: 'Missing access — cannot run yet',
+        emptyTitle: 'No tools yet',
+        emptyBody: 'Import a .talostool file to add the first one — it stays disabled until you enable it.',
+        importCta: 'Import .talostool',
+        importFromFile: 'Choose a file',
+        importHeading: 'Import .talostool',
+        importPlaceholder: 'Paste the .talostool JSON artifact',
+        importAction: 'Validate and import',
+        importInvalidJson: 'This is not valid JSON.',
+        importIssuesHeading: 'Won\'t install — {n} issues',
+        importIssuesHeadingOne: 'Won\'t install — 1 issue',
+        importFixToContinue: 'Fix these to continue',
+        importSuccess: '{title} imported. It stays disabled until you enable it.',
+        deleteTitle: 'Delete {title}?',
+        deleteBody: 'This removes the tool and its version history from this device. TALOS will no longer be able to use it.',
+        rollbackAction: 'Roll back to this version',
+        rollbackConfirmTitle: 'Roll back {title} to v{version}?',
+        rollbackConfirmBody: 'This replaces the current version and disables the tool again, so you can review it before it runs.',
+        rollbackCta: 'Roll back',
+        rollbackSuccess: 'Rolled back to v{version}.',
+        noHistory: 'No earlier versions yet.',
+        auditHeading: 'What happened',
+        noAudit: 'Nothing recorded yet.',
+        audit: {
+            install: 'Installed',
+            enable: 'Enabled',
+            disable: 'Disabled',
+            rollback: 'Rolled back',
+            remove: 'Deleted',
+        },
     },
 } as const
 

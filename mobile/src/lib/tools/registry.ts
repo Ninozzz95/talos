@@ -18,6 +18,7 @@ import { z, type ZodType } from 'zod'
  */
 export type { TalosToolAction } from '@/lib/tools/permissionTypes'
 import type { TalosToolAction } from '@/lib/tools/permissionTypes'
+import type { TalosToolSecurity } from '@/lib/tools/security'
 
 export interface TalosToolResult {
     ok: boolean
@@ -112,6 +113,26 @@ export interface TalosToolDefinition<Input = unknown> {
      * allow and saved grants; deny and disabled state still win.
      */
     confirmation?: 'policy' | 'always'
+    /**
+     * ⛔ Solo per i tool REGISTRATI A RUNTIME (oggi: Tool Forge,
+     * `lib/tools/dynamic/`), il cui `name` non può essere una chiave nota
+     * a compile-time di `TALOS_TOOL_SECURITY` in `securityCatalog.ts`.
+     *
+     * `toolset.ts#describe()` legge `tool.security` PRIMA del catalogo
+     * statico, quando presente — così un tool forgiato mostra il suo
+     * rischio VERO (calcolato dal Forge dal grafo delle capability
+     * raggiungibili) invece di cadere sempre su
+     * `TALOS_TOOL_SECURITY_FALLBACK` (R3, irreversibile, trasmette): quel
+     * fallback fallisce SEMPRE verso il prudente, ma un tool forgiato
+     * davvero read-only mostrato come irreversibile insegna a ignorare
+     * l'avviso — lo stesso danno di un avviso troppo frequente.
+     *
+     * ⛔ I tool statici NON lo dichiarano: restano sul catalogo statico,
+     * che resta la fonte di verità per loro. Un tool statico che
+     * dichiarasse anche questo campo avrebbe due fonti di rischio in
+     * disaccordo silenzioso — peggio di averne una sola.
+     */
+    security?: TalosToolSecurity
     input: ZodType<Input>
     run(input: Input, context: TalosToolContext): Promise<TalosToolResult>
     /**
