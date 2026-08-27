@@ -220,6 +220,19 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(copies).toContain('Leggo il file.')
     })
 
+    // ⛔⛔ 27/8, trovato dalla pipeline QA visiva: un RunStarted per un comando
+    // diretto (agent-service.mjs: input:{comandoDiretto:comando}, niente id
+    // né consegna) mostrava "Task reale · undefined" — un undefined crudo,
+    // mai un fatto dichiarato — la prima volta che appare in una sessione.
+    it('REAL-SESSION-COMANDO-DIRETTO-01 un RunStarted senza id/consegna (comando diretto) non mostra mai "undefined", dichiara "Comando diretto"', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'RunStarted', input: { comandoDiretto: 'echo test' } }, generation)
+
+        const conversationText = document.querySelector('#conversation')?.textContent ?? ''
+        expect(conversationText).not.toContain('undefined')
+        expect(conversationText).toContain('Comando diretto')
+    })
+
     it('REAL-SESSION-STALE-01 un evento di una generazione VECCHIA viene scartato, mai renderizzato', () => {
         const generazioneAttuale = runtime().realSessionState.generation
         const generazioneVecchia = generazioneAttuale - 1
@@ -441,7 +454,11 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
     // corpus (rimossi da app.js): fetcha SOLO /api/v1/projects e mostra
     // il form "Compito libero" — stesso pattern di Claude Code/Codex/
     // Cline/Aider (nessun elenco predefinito, testo libero).
-    it('REAL-SESSION-TASKSHEET-01 openRealTaskSheet mostra il compito libero (non i task del banco) e lo avvia SENZA .showModal() nativo', async () => {
+    // ⛔⛔ 27/8, secondo giro — owner: "nella modale nuova sessione non deve
+    // esserci il campo text per cosa chiedere, quello si fa direttamente da
+    // interfaccia chat". La modale ora chiede SOLO cartella+modello; il
+    // compito si scrive nel composer normale, che avvia la sessione vera.
+    it('REAL-SESSION-TASKSHEET-01 openRealTaskSheet chiede SOLO cartella+modello (non i task del banco, non un campo compito) e il primo messaggio in chat avvia la sessione vera', async () => {
         mockFetch([
             { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } },
         ])
@@ -459,18 +476,35 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         const cartellaSelect = document.querySelector<HTMLSelectElement>('#customTaskCartella')
         expect(cartellaSelect?.options.length).toBe(1)
         expect(document.querySelector('.model-picker')).not.toBeNull() // il picker del modello è nella modale
-        const consegnaInput = document.querySelector<HTMLTextAreaElement>('#customTaskConsegna')!
-        consegnaInput.value = 'aggiungi una funzione sottrai(a, b)'
+        expect(document.querySelector('#customTaskConsegna')).toBeNull() // niente campo compito qui
+
+        form!.requestSubmit()
+        await new Promise((r) => setTimeout(r, 0))
+
+        // la modale si chiude, ma NESSUNA sessione è ancora partita — solo cartella+modello sono in attesa
+        expect(sheetDialog.hasAttribute('open')).toBe(false)
+        expect(FakeEventSource.instances.length).toBe(0)
+        expect(document.querySelector('#conversationEmptyState')?.textContent).toContain('Progetto di prova')
 
         mockFetch([
             { metodo: 'POST', percorso: '/api/v1/sessions/custom', corpo: { sessionId: 'sess-libero' } },
             { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
         ])
-        form!.requestSubmit()
+        const composerInput = document.querySelector<HTMLTextAreaElement>('#composerInput')!
+        composerInput.value = 'aggiungi una funzione sottrai(a, b)'
+        document.querySelector<HTMLFormElement>('#composerForm')!.requestSubmit()
         await new Promise((r) => setTimeout(r, 0))
 
-        expect(sheetDialog.hasAttribute('open')).toBe(false)
         expect(FakeEventSource.instances.at(-1)?.url).toBe('/api/v1/sessions/sess-libero/events')
+    })
+
+    it('REAL-SESSION-TASKSHEET-03 senza una sessione pendente, il composer resta onesto (nessun campo compito nella modale a cui affidarsi)', async () => {
+        const composerInput = document.querySelector<HTMLTextAreaElement>('#composerInput')!
+        composerInput.value = 'qualcosa scritto senza mai aprire Nuova'
+        document.querySelector<HTMLFormElement>('#composerForm')!.requestSubmit()
+
+        expect(document.querySelector('#toastRegion')?.textContent).toContain('Nessuna sessione attiva')
+        expect(FakeEventSource.instances.length).toBe(0)
     })
 
     it('REAL-SESSION-TASKSHEET-02 senza cartelle configurate, mostra un messaggio onesto invece di un form rotto', async () => {
@@ -516,13 +550,15 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(document.querySelector('.model-picker-trigger-label')?.textContent).toBe('deepseek/deepseek-chat')
         expect(document.querySelector('.model-picker-panel')?.hasAttribute('hidden')).toBe(true) // si chiude da solo
 
+        document.querySelector<HTMLFormElement>('#customTaskForm')!.requestSubmit() // conferma cartella+modello — il compito si scrive nel composer, non qui
+
         mockFetch([
             { metodo: 'POST', percorso: '/api/v1/sessions/custom', corpo: { sessionId: 'sess-modello' } },
             { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
         ])
         const postSpy = vi.spyOn(window, 'fetch')
-        document.querySelector<HTMLTextAreaElement>('#customTaskConsegna')!.value = 'usa questo modello'
-        document.querySelector<HTMLFormElement>('#customTaskForm')!.requestSubmit()
+        document.querySelector<HTMLTextAreaElement>('#composerInput')!.value = 'usa questo modello'
+        document.querySelector<HTMLFormElement>('#composerForm')!.requestSubmit()
         await new Promise((r) => setTimeout(r, 0))
 
         const chiamataPost = postSpy.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'POST')

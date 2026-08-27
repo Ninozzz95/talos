@@ -177,6 +177,19 @@ class Pipeline {
     if (!trovato) throw new Error(`Form non trovato: ${selettoreForm}`);
   }
 
+  /** Per bottoni generati dinamicamente senza selettore stabile (es. "Pausa"/"Elimina" di una riga automazione) — trova per testo dentro un contenitore. */
+  async clickByText(selettoreContenitore, testoContenuto) {
+    const trovato = await this.cdp.evaluate(`(() => {
+      const contenitore = document.querySelector(${j(selettoreContenitore)});
+      if (!contenitore) return false;
+      const el = [...contenitore.querySelectorAll('button')].find((b) => b.textContent.includes(${j(testoContenuto)}));
+      if (!el) return false;
+      el.click();
+      return true;
+    })()`);
+    if (!trovato) throw new Error(`Nessun bottone con testo "${testoContenuto}" dentro ${selettoreContenitore}`);
+  }
+
   async testo(selettore) {
     return this.cdp.evaluate(`document.querySelector(${j(selettore)})?.textContent?.trim() ?? null`);
   }
@@ -349,6 +362,147 @@ const SCENARI = {
     // ⭐ ogni eccezione JS o richiesta HTTP fallita vista durante l'intera corsa entra nel taccuino come difetto, non solo nel report.json.
     for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
     for (const r of p.cdp.richiesteFallite) p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+  },
+
+  /*
+   * ⭐⭐⭐ 27/8 — owner: "procedi al testing umano". Copre il resto del
+   * ciclo di vita di una sessione e le superfici non toccate dallo
+   * scenario precedente — navigazione sidebar, terminale diretto (`!`),
+   * fork, export, automazioni, doctor, impostazioni, capability hub — la
+   * maggior parte GRATUITA (nessuna chiamata al modello): fork è solo
+   * bookkeeping, export legge dati già persistiti, automazioni/doctor/
+   * settings non toccano mai talosLavora. Un solo resume VERO (a
+   * pagamento) per confermare che continua davvero una sessione conclusa.
+   */
+  async 'sessione-lifecycle-completo'(p) {
+    await p.attendi(1500);
+    await p.screenshot('sidebar-al-boot', { nota: 'design deliberato (26/8, vedi il commento di testa in app.js): zero fetch al mount, la sidebar resta vuota finché nessuna azione di sessione la aggiorna' });
+    if (await p.esiste('.session-item.real-session-item')) {
+      p.difetto('la sidebar mostra sessioni reali subito al boot, senza nessuna azione — comportamento diverso da quello DELIBERATO e testato (CODE-COMPOSER-DEMO-SEND-01/HARNESS-BOARD-MOBILE-HONESTY-01, "zero fetch al mount")', { severita: 'nota' });
+    } else {
+      p.nota('confermato: sidebar vuota al boot, per design — un umano che riapre la pagina non rivede le sessioni precedenti finché non ne avvia/apre una. Segnalato, non corretto: decisione esplicita già presa il 26/8 con due test a supporto.');
+    }
+    // Prerequisito del RESTO di questo scenario (fork/review/export su una sessione VERA):
+    // stessa funzione che ogni azione di sessione richiama già da sola — non sto aggirando
+    // niente, sto solo simulando l'azione minima che un umano farebbe per popolare la sidebar.
+    await p.cdp.evaluate("window.__talosHarnessUiRuntime.aggiornaElencoSessioniReali()");
+    await p.attendiCondizione("!!document.querySelector('.session-item.real-session-item')", { descrizione: 'sidebar popolata dopo aggiornaElencoSessioniReali()' });
+    await p.screenshot('sidebar-sessioni-reali', { nota: 'sessioni concluse dai giri precedenti, persistite su disco' });
+
+    // --- Navigazione: passa alla prima sessione reale ---
+    await p.click('.session-item.real-session-item');
+    await p.attendi(400);
+    await p.screenshot('sessione-selezionata', { nota: 'passaASessione — storia riprodotta dall\'EventSource' });
+
+    // --- Review della sessione reale (se ha file) ---
+    await p.click('#commandPaletteBtn');
+    await p.attendi(200);
+    await p.click('[data-command="review"]');
+    await p.attendi(400);
+    await p.screenshot('review-sessione-esistente');
+
+    // --- Terminale DIRETTO: "!comando", mai passato dal modello ---
+    await p.digita('#composerInput', '!echo verifica-terminale-umano');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendiCondizione(
+      "document.querySelector('.terminal-window')?.textContent?.includes('verifica-terminale-umano')",
+      { timeoutMs: 10000, descrizione: 'output del comando diretto nel terminale' },
+    );
+    await p.screenshot('terminale-comando-diretto', { nota: '!echo — bypassa il modello, va dritto alla shell' });
+    const terminaleTesto = await p.testo('.terminal-window');
+    if (!terminaleTesto?.includes('verifica-terminale-umano')) {
+      p.difetto('il terminale non mostra l\'output del comando diretto', { severita: 'blocco' });
+    }
+
+    // --- Fork (gratis: nessuna chiamata al modello, solo bookkeeping) ---
+    // ⛔ niente click su [data-open-panel="inspector"]: aria-expanded="true" di default su desktop, il Context Rail è già visibile — cliccarlo lo avrebbe CHIUSO (toggle).
+    const contaSessioniPrimaDelFork = await p.cdp.evaluate("document.querySelectorAll('.session-item.real-session-item').length");
+    await p.click('[data-action="fork-session"]');
+    await p.attendiCondizione(
+      `document.querySelectorAll('.session-item.real-session-item').length > ${contaSessioniPrimaDelFork}`,
+      { descrizione: 'la sidebar mostra la sessione forkata' },
+    );
+    await p.screenshot('fork-completato', { nota: 'nuova sessione, stessa storia — zero chiamate al modello' });
+
+    // --- Export: intercetta il blob scaricato, verifica lo schema ---
+    const exportOk = await p.cdp.evaluate(`(() => {
+      window.__ultimoBlobEsportato = null;
+      const originale = URL.createObjectURL;
+      URL.createObjectURL = (blob) => { window.__ultimoBlobEsportato = blob; return originale.call(URL, blob); };
+      return true;
+    })()`);
+    if (!exportOk) p.difetto('impossibile intercettare URL.createObjectURL per verificare l\'export', { severita: 'nota' });
+    await p.click('#commandPaletteBtn');
+    await p.attendi(200);
+    await p.click('[data-command="export"]');
+    await p.attendi(300);
+    const exportTesto = await p.cdp.evaluate(`(async () => {
+      if (!window.__ultimoBlobEsportato) return null;
+      return await window.__ultimoBlobEsportato.text();
+    })()`);
+    if (exportTesto) {
+      let corpoExport;
+      try { corpoExport = JSON.parse(exportTesto); } catch { corpoExport = null; }
+      p.nota(`export schema: ${corpoExport?.schema ?? corpoExport?.note ?? '(non riconosciuto)'}`);
+      if (!corpoExport?.schema?.startsWith?.('talos.harness-ui.session-export')) {
+        p.difetto(`l'export non ha lo schema reale atteso — ricevuto: ${JSON.stringify(corpoExport).slice(0, 200)}`, { severita: 'blocco' });
+      }
+    } else {
+      p.difetto('nessun blob intercettato per l\'export — il comando ha chiamato URL.createObjectURL?', { severita: 'nota' });
+    }
+    await p.screenshot('export-eseguito');
+
+    // --- Automazioni: crea, verifica listata, metti in pausa, elimina — tutto gratis ---
+    await p.click('[data-open-view="automations"]');
+    await p.attendi(300);
+    await p.screenshot('automazioni-vista');
+    await p.click('[data-automation-action="new"]');
+    await p.attendiCondizione("!document.querySelector('#sheetBody')?.textContent?.includes('Carico')", { descrizione: 'foglio nuova automazione caricato' });
+    await p.digita('#sheetBody input[type="number"]', '5'); // intervallo minimo consentito
+    await p.attendi(150);
+    await p.click('#sheetBody button[type="submit"], #sheetBody .primary-btn');
+    await p.attendiCondizione("!!document.querySelector('#automationListReal .automation-row')", { descrizione: 'automazione creata e listata' });
+    await p.screenshot('automazione-creata');
+    await p.clickByText('#automationListReal', 'Attiva');
+    await p.attendi(300);
+    await p.screenshot('automazione-attivata');
+    await p.clickByText('#automationListReal', 'Elimina');
+    await p.attendiCondizione("!document.querySelector('#automationListReal .automation-row')", { descrizione: 'automazione eliminata dalla lista' });
+    p.nota('automazione creata, attivata ed eliminata — ciclo completo verificato');
+
+    // --- Impostazioni: Riduci movimento, Doctor ---
+    await p.click('[data-open-view="settings"]');
+    await p.attendi(300);
+    await p.click('#reducedMotionToggle');
+    await p.attendi(150);
+    const motionOn = await p.cdp.evaluate("document.body.classList.contains('reduce-motion')");
+    p.nota(`reduce-motion dopo il toggle: ${motionOn}`);
+    await p.click('#reducedMotionToggle'); // ripristina
+    await p.click('[data-control-action="doctor"]');
+    await p.attendiCondizione("document.querySelector('#toastRegion')?.textContent?.includes('Doctor:')", { descrizione: 'toast Doctor con esito reale' });
+    const doctorToast = await p.testo('#toastRegion');
+    p.nota(`Doctor: ${doctorToast}`);
+    await p.screenshot('impostazioni-doctor');
+
+    // --- Capability hub ---
+    await p.click('[data-mode="chat"]'); // ⛔ non "[data-open-view=chat]": quell'attributo non esiste, la vista Chat si sceglie coi tab Chat/Split/Board
+    await p.attendi(200);
+    await p.click('#capabilityBtn');
+    await p.attendi(300);
+    await p.screenshot('capability-hub');
+    await p.click('#closeSheet');
+
+    // --- Resume/Compact: VERIFICATO nel codice PRIMA di questo passo (mai un selettore indovinato) —
+    // nessun elemento in index.html chiama resumeSession()/compactSession(). Le due funzioni esistono,
+    // sono testate a unità, ma un umano non ha ALCUN bottone per raggiungerle oggi: non è un passo
+    // saltato per pigrizia, è il test stesso ("come farebbe un umano") che non trova nulla da premere.
+    p.difetto('Resume e Compact: nessun elemento della UI chiama resumeSession()/compactSession() — le funzioni esistono e sono testate a unità, ma un umano non ha alcun bottone per raggiungerle', { severita: 'blocco' });
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue; // già dichiarato, cosmetico
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
   },
 };
 
