@@ -4,9 +4,15 @@ import test from 'node:test';
 import { avviaSessione, compattaSessione, eseguiComandoDiretto } from '../src/agent-service.mjs';
 
 // `talosLavoraFn` finto: agent-service.mjs non deve mai far girare un vero
-// talosLavora per essere provato — quello ha già i suoi 33 test in
+// talosLavora per essere provato — quello ha già i suoi 65 test in
 // AVM-harness. Qui si prova SOLO la traduzione: quali eventi arrivano, in
 // che ordine, con quali campi.
+//
+// ⛔ 27/8 — `esisteva` (terzo argomento di onScrittura) ora arriva SEMPRE da
+// talosLavora stesso (letto dal disco vero, mai una approssimazione qui
+// dentro — vedi talosHarness.mjs, premessaDellaScrittura): questo finto deve
+// dichiararlo esplicitamente in ogni voce di `scritture`, non può più
+// inventarlo, esattamente come il vero talosLavora non lo inventa.
 
 function talosLavoraFinto({ script, cattura = () => {} }) {
   return async (input) => {
@@ -14,7 +20,7 @@ function talosLavoraFinto({ script, cattura = () => {} }) {
     if (script.tipo === 'lancia') throw script.errore;
     input.onGiro?.({ tipo: 'risposta', giro: 0, risposta: { role: 'assistant', content: 'ciao', tool_calls: [] } });
     for (const scrittura of script.scritture ?? []) {
-      input.onScrittura?.(scrittura.percorso, scrittura.contenuto);
+      input.onScrittura?.(scrittura.percorso, scrittura.contenuto, scrittura.esisteva);
     }
     for (const toolEsito of script.toolEsiti ?? []) {
       input.onGiro?.({ tipo: 'tool-esito', giro: 0, toolCallId: toolEsito.toolCallId, content: toolEsito.content });
@@ -69,15 +75,15 @@ test('onGiro "tool-esito" diventa ToolCallResult', async () => {
   assert.equal(risultatoTool.content, 'exit 0');
 });
 
-test('onScrittura: la STESSA sessione vede "add" la prima volta su un percorso, "replace" la seconda', async () => {
+test('onScrittura: "esisteva" (letto DA talosLavora, non da questo file) sceglie "add" o "replace" nel delta', async () => {
   const eventi = [];
   const talosLavoraFn = talosLavoraFinto({
     script: {
       esito: { comeFinita: 'concluso', detto: 'fatto' },
       scritture: [
-        { percorso: 'a.ts', contenuto: 'v1' },
-        { percorso: 'a.ts', contenuto: 'v2' },
-        { percorso: 'b.ts', contenuto: 'v1' },
+        { percorso: 'a.ts', contenuto: 'v1', esisteva: false },
+        { percorso: 'a.ts', contenuto: 'v2', esisteva: true },
+        { percorso: 'b.ts', contenuto: 'v1', esisteva: false },
       ],
     },
   });
