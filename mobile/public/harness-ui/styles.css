@@ -439,6 +439,16 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 .real-reasoning-note .tool-note-summary-text { font-style: italic; }
 .real-reasoning-note .tool-note-detail { font-style: italic; color: var(--muted); }
 
+/* ⭐⭐⭐ 28/8 — la card dell'artefatto (attrezzo artifact_create): titolo +
+   iframe sandboxato (vedi app.js, confezionaArtefattoSicuro/appendArtifactCard
+   per il perché è sicuro). Altezza fissa ragionevole con scroll interno
+   invece di crescere senza limite — un artefatto alto quanto vuole non deve
+   spingere il composer fuori schermo. */
+.real-artifact-card { padding: 0; overflow: hidden; }
+.artifact-card-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line-soft); color: var(--muted); font-size: 10px; }
+.artifact-card-title { font-size: 13px; font-weight: 500; color: var(--text-2); }
+.artifact-card-frame { display: block; width: 100%; height: min(60vh, 480px); border: 0; background: #fff; }
+
 /* ⭐⭐⭐ 27/8, owner: "il loading della risposta... usa lo stesso del mobile" —
    porta di TalosLineLoader.vue (mobile/src/components/brand/, style.css
    .talos-line-loader*): stessa geometria (traccia+sweep+3 nodi), stessa

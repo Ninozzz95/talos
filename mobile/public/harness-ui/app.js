@@ -2107,6 +2107,52 @@
     return { summaryText, detail };
   }
 
+  /*
+   * ⭐⭐⭐ 28/8 — owner: "l'harness desktop diventa l'unica chat, con tutti i
+   * tool come la generazione di artefatti". Ricerca fatta prima di
+   * scrivere (bloom.security, "Inside Claude Artifacts", 28/8): l'origine
+   * isolata + CSP restrittiva sono la difesa reale, non una promessa nel
+   * testo del tool.
+   *
+   * ⛔⛔⛔ NON `srcdoc` — cambiato dopo la prima versione, trovato dal vivo:
+   * un `about:srcdoc` EREDITA la CSP della pagina che lo crea (regola
+   * dello standard), e questa pagina manda `script-src 'self'`
+   * (SECURITY_HEADERS, http-app.mjs) — un `<meta>` CSP permissivo scritto
+   * dentro il srcdoc veniva IGNORATO: script del modello mai eseguito,
+   * nessuno stile applicato. Verificato con una sonda cross-frame
+   * (postMessage dall'interno), tre varianti, zero falsi positivi. La
+   * cura: `frame.src` punta a `/api/v1/artifacts/:id`, una risposta HTTP
+   * VERA con la SUA propria CSP (vedi artifact-store.mjs) — nessuna
+   * eredità dalla pagina che la incorpora, stessa architettura di
+   * Claude Artifacts (origine/risposta separata).
+   *
+   * `sandbox="allow-scripts"` SENZA `allow-same-origin`/
+   * `allow-top-navigation`/`allow-popups`/`allow-forms` resta invariato:
+   * script permessi, ogni via di fuga negata — il confine vero.
+   */
+  function appendArtifactCard(titolo, id) {
+    const conversation = $('#conversation');
+    const article = document.createElement('article');
+    article.className = 'message assistant-message compact-message real-artifact-card';
+    const header = document.createElement('div');
+    header.className = 'artifact-card-header';
+    const glyph = document.createElement('span');
+    glyph.className = 'talos-glyph';
+    glyph.textContent = '🧩';
+    header.append(glyph, textElement('span', 'artifact-card-title', titolo || 'Artefatto'));
+    const frame = document.createElement('iframe');
+    frame.className = 'artifact-card-frame';
+    frame.setAttribute('sandbox', 'allow-scripts');
+    frame.setAttribute('referrerpolicy', 'no-referrer');
+    frame.setAttribute('title', titolo || 'Artefatto');
+    frame.src = API(`/api/v1/artifacts/${encodeURIComponent(id)}`);
+    article.append(header, frame);
+    conversation.appendChild(article);
+    markMotionEnter(article);
+    window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
+    return { frame };
+  }
+
   /** Riassunto umano di un tool-call — "Scritto x.mjs", non "scrivi(...)"·. Gli argomenti sono opzionali (non ancora arrivati al momento di ToolCallStart). */
   function riassuntoAttrezzo(nome, argomenti) {
     const a = argomenti || {};
@@ -3115,6 +3161,11 @@
         const percorsoScritto = path?.replace(/^\/file\//, '');
         if (percorsoScritto) segnalaScritturaNellAlbero(percorsoScritto);
         appendStatusNote('✏️ File scritto — vedi la scheda Review per il contenuto intero.');
+        break;
+      }
+      case 'ArtifactCreated': {
+        nascondiAttesaRisposta();
+        appendArtifactCard(evento.titolo, evento.id);
         break;
       }
       case 'RunFinished': {

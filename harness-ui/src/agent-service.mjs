@@ -23,6 +23,7 @@ import {
   eseguiComandoSandboxato as eseguiComandoSandboxatoReale,
   talosLavora as talosLavoraReale,
 } from '../../../AVM-harness/mobile/scripts/harness-talos/talosHarness.mjs';
+import { salvaArtefatto as salvaArtefattoReale } from './artifact-store.mjs';
 import { leggiContestoWorkspace as leggiContestoWorkspaceReale } from './workspace-context.mjs';
 import {
   artifactCreated,
@@ -118,6 +119,7 @@ export async function avviaSessione({
   strumentiEstesi, ricercaWeb,
   talosLavoraFn = talosLavoraReale,
   leggiContestoWorkspaceFn = leggiContestoWorkspaceReale,
+  salvaArtefattoFn = salvaArtefattoReale,
 }) {
   const threadId = randomUUID();
   const runId = randomUUID();
@@ -230,11 +232,12 @@ export async function avviaSessione({
    */
   const onArtefatto = async (titolo, html) => {
     if (Buffer.byteLength(html, 'utf8') > ARTEFATTO_MAX_BYTE) {
-      // ⛔ Nessun evento: il tool torna comunque un id (il modello non deve credere che nulla sia successo), ma la UI non riceve mai un artefatto troncato/enorme.
+      // ⛔ Nessun evento, niente salvato: il tool torna comunque un id (il modello non deve credere che nulla sia successo), ma la UI non riceve mai un artefatto troncato/enorme.
       return { id: `artefatto-rifiutato-troppo-grande-${randomUUID()}` };
     }
     const id = randomUUID();
-    onEvento(artifactCreated({ messageId: randomUUID(), id, titolo, html }));
+    salvaArtefattoFn(id, html);
+    onEvento(artifactCreated({ messageId: randomUUID(), id, titolo }));
     return { id };
   };
 

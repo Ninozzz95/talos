@@ -225,3 +225,42 @@ test('client abort closes work cleanly', async (t) => {
   await new Promise((resolve) => setTimeout(resolve, 40));
   assert.equal(resolved, true);
 });
+
+/*
+ * ⭐⭐⭐ 28/8 — GET /api/v1/artifacts/:id, la rotta che risolve il difetto
+ * srcdoc-eredita-la-CSP (vedi la doc in artifact-store.mjs): risposta HTTP
+ * VERA con la SUA propria intestazione, mai quella globale SECURITY_HEADERS
+ * (che vieterebbe lo script inline del modello).
+ */
+test('⭐⭐⭐ GET /api/v1/artifacts/:id: HTML intero, CON la sua CSP permissiva — MAI quella globale script-src \'self\'', async (t) => {
+  const { base } = await listen(t, createHttpApp({
+    campaignService: { async listCampaigns() { return [] } },
+    staticHandler: createStaticHandler(publicDir),
+    leggiArtefattoFn: (id) => (id === 'a1' ? '<!doctype html><html><body>ciao</body></html>' : null),
+  }));
+  const response = await fetch(`${base}/api/v1/artifacts/a1`);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('content-type'), 'text/html; charset=utf-8');
+  const csp = response.headers.get('content-security-policy');
+  assert.match(csp, /script-src 'unsafe-inline'/, 'permissiva per lo script del modello, qui e SOLO qui');
+  assert.doesNotMatch(csp, /script-src 'self'/, 'MAI l\'intestazione globale del resto di Harness UI');
+  assert.equal(response.headers.get('x-frame-options'), 'SAMEORIGIN', 'diverso da DENY: la NOSTRA pagina deve poterlo incorporare');
+  assert.equal(await response.text(), '<!doctype html><html><body>ciao</body></html>');
+});
+
+test('⛔ GET /api/v1/artifacts/:id con un id ignoto: 404 onesto, non un 200 vuoto', async (t) => {
+  const { base } = await listen(t, createHttpApp({
+    campaignService: { async listCampaigns() { return [] } },
+    staticHandler: createStaticHandler(publicDir),
+    leggiArtefattoFn: () => null,
+  }));
+  const response = await fetch(`${base}/api/v1/artifacts/non-esiste`);
+  assert.equal(response.status, 404);
+  assert.equal((await response.json()).error.code, 'NOT_FOUND');
+});
+
+test('⛔⛔ AL CONTRARIO: senza leggiArtefattoFn iniettato (il default reale), un id mai salvato resta 404 — nessuna scorciatoia nei test che nasconda un bug', async (t) => {
+  const { base } = await listen(t); // realApp(): usa il vero leggiArtefatto, store vuoto per costruzione in questo processo di test
+  const response = await fetch(`${base}/api/v1/artifacts/${crypto.randomUUID()}`);
+  assert.equal(response.status, 404);
+});
