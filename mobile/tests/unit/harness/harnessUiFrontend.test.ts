@@ -34,6 +34,7 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
         delete (window as unknown as { __talosHarnessUiRuntime?: unknown }).__talosHarnessUiRuntime
         delete (window as unknown as { __talosHarnessHostPermissionChange?: unknown }).__talosHarnessHostPermissionChange
+        delete (window as unknown as { __talosHarnessApiBase?: unknown }).__talosHarnessApiBase
         document.body.replaceChildren()
         document.body.className = ''
         document.documentElement.className = ''
@@ -468,6 +469,27 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         expect(fetchMock).not.toHaveBeenCalled()
         expect(document.querySelector('[data-connection-state]')?.textContent).toBe('Demo UI · non collegato')
         expect(document.querySelector('#campaignReadMeta')?.textContent).toContain('backend mobile')
+    })
+
+    /**
+     * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 4 — la
+     * Board mobile è la STESSA superficie che §3.1 punto 4 del piano
+     * promette raggiungibile col tunnel, senza nuovo codice — tranne
+     * questo cancello, trovato solo verificando dal vivo. Col tunnel
+     * attivo la Board fa la stessa richiesta reale del desktop.
+     */
+    it('HARNESS-BOARD-MOBILE-HONESTY-02 col tunnel attivo (window.__talosHarnessApiBase) la Board chiama il backend vero', async () => {
+        document.documentElement.classList.add('talos-embedded')
+        ;(window as unknown as { __talosHarnessApiBase?: string }).__talosHarnessApiBase = 'http://localhost:4174'
+        const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 }))
+        vi.stubGlobal('fetch', fetchMock)
+        mountStaticRuntime()
+
+        document.querySelector<HTMLElement>('[data-mode="dashboard"]')?.click()
+        await Promise.resolve()
+        await Promise.resolve()
+
+        expect(fetchMock).toHaveBeenCalledWith('http://localhost:4174/api/v1/campaigns', expect.anything())
     })
 
     it('HARNESS-ALL-CONTROLS-01 leaves no decorative or inert element exposed as an enabled button', () => {

@@ -77,6 +77,12 @@ export const TALOS_TOOL_SECURITY: Readonly<Record<TalosAgentToolId, TalosToolSec
     web_search: { risk: 'R2', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true, sempreConsentibile: true },
     web_read: { risk: 'R2', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true },
     document_create: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    // ⛔ Owner 2026-08-27: canTransmit resta false per un motivo VERO, non
+    // per omissione — l'HTML gira in TalosArtifactActivity con
+    // `connect-src 'none'`, verificato sul Pad (`fetch` blocca davvero).
+    // readsPrivateData true per lo stesso motivo di document_create: il
+    // modello può incorporare contenuto della conversazione nell'HTML.
+    artifact_create: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
     generate_image: { risk: 'R2', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: true },
     library_export: { risk: 'R2', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
     library_rename: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
@@ -87,6 +93,13 @@ export const TALOS_TOOL_SECURITY: Readonly<Record<TalosAgentToolId, TalosToolSec
     local_models_search: { risk: 'R1', reversibility: 'read-only', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true },
     local_model_inspect: { risk: 'R1', reversibility: 'read-only', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true },
     local_model_download: { risk: 'R2', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true },
+    // ⛔ 2026-08-27 — un gradino più cauto di notes_create/tasks_create
+    // (R1): il "prodotto" di questa scrittura è esso stesso un futuro
+    // attore capace di altre scritture, non solo un dato. Resta comunque
+    // reversibile (si elimina dalla Stazione) e non tocca rete o dati
+    // privati — il tool creato parte SEMPRE disabilitato, un secondo
+    // cancello separato prima che possa fare qualunque cosa.
+    tool_create: { risk: 'R2', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
     local_models_status: { risk: 'R0', reversibility: 'read-only', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
     device_status: { risk: 'R0', reversibility: 'read-only', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
     /*

@@ -101,6 +101,7 @@ describe('HarnessSessionScreen (24/8) — shadow root inside the SPA, not a tram
         delete (window as unknown as { __talosHarnessUiRuntime?: unknown }).__talosHarnessUiRuntime
         delete (window as unknown as { __talosHarnessHostBack?: unknown }).__talosHarnessHostBack
         delete (window as unknown as { __talosHarnessHostPermissionChange?: unknown }).__talosHarnessHostPermissionChange
+        delete (window as unknown as { __talosHarnessApiBase?: unknown }).__talosHarnessApiBase
         vi.unstubAllGlobals()
         vi.restoreAllMocks()
     })
@@ -123,6 +124,33 @@ describe('HarnessSessionScreen (24/8) — shadow root inside the SPA, not a tram
         expect(host.shadowRoot?.querySelectorAll('script').length).toBe(1)
         expect(w.find('[data-testid="talos-harness-session-opening"]').exists()).toBe(false)
         expect(w.find('[data-testid="talos-harness-session-error"]').exists()).toBe(false)
+    })
+
+    /**
+     * ⭐⭐⭐ Piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 3
+     * (`adb reverse`) — la base che `app.js` legge tramite `API()` per
+     * distinguere desktop (URL relativi, invariati) da mobile (assoluti,
+     * verso il tunnel). Pianta PRIMA che lo script esegua, stesso momento
+     * di `__talosHarnessRoot`/`__talosHarnessHost`.
+     */
+    it('HARNESS-API-BASE-01 pianta window.__talosHarnessApiBase su piattaforma nativa (mobile)', async () => {
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+        vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true)
+        const w = mount(HarnessSessionScreen)
+        const host = w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement
+        await resolveScriptLoad(host)
+
+        expect((window as unknown as { __talosHarnessApiBase?: string }).__talosHarnessApiBase).toBe('http://localhost:4174')
+    })
+
+    it('HARNESS-API-BASE-02 AL CONTRARIO: su web/desktop resta una stringa vuota, MAI l\'URL del tunnel', async () => {
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+        vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(false)
+        const w = mount(HarnessSessionScreen)
+        const host = w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement
+        await resolveScriptLoad(host)
+
+        expect((window as unknown as { __talosHarnessApiBase?: string }).__talosHarnessApiBase).toBe('')
     })
 
     it('shows an honest "not available" state and never fetches when the plugin is absent (release build)', async () => {

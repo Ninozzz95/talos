@@ -9,7 +9,7 @@ import {
     talosHaAzioniDaMostrare,
 } from '@/lib/tools/tracciaAzione'
 
-import { TALOS_TOOL_LABEL_KEYS } from '@/lib/tools/toolLabels'
+import { TALOS_TOOL_LABEL_KEYS, talosDynamicToolFallbackLabel } from '@/lib/tools/toolLabels'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 import TalosMobileMessageActions from '@/components/chat/TalosMobileMessageActions.vue'
 /*
@@ -132,7 +132,7 @@ function azioniFatte(metadata: unknown): string[] {
     return righe.map((riga) => {
         const nome = (riga as { tool?: string })?.tool ?? ''
         const chiave = TALOS_TOOL_LABEL_KEYS[nome]
-        return chiave ? t(chiave) : nome
+        return chiave ? t(chiave) : (talosDynamicToolFallbackLabel(nome) ?? nome)
     })
 }
 /**

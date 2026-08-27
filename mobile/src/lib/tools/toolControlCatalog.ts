@@ -110,6 +110,8 @@ export const TALOS_AGENT_TOOL_CONTROLS = Object.freeze([
     { id: 'document_create', group: 'create', actions: ['write'] },
     // Il prompt esce verso il provider: è trasmissione, anche se sembra creazione.
     { id: 'generate_image', group: 'create', actions: ['write','outbound'] },
+    // L'HTML gira isolato (TalosArtifactActivity, connect-src 'none'): mai trasmissione, verificato sul Pad.
+    { id: 'artifact_create', group: 'create', actions: ['write'] },
     // Esce dalla sandbox ma resta sul dispositivo. Canale obliquo noto: un file esportato può finire in una cartella sincronizzata — da rivedere se nasce la sincronizzazione.
     { id: 'library_export', group: 'library', actions: ['write','read'] },
     // Nel gruppo `library` e non in `personal`: chi toglie l'accesso alla
@@ -207,4 +209,11 @@ export const TALOS_AGENT_TOOL_CONTROLS = Object.freeze([
      */
     { id: 'calendar_read', group: 'personal', actions: ['read'] },
     { id: 'calendar_write', group: 'personal', actions: ['write'] },
+    // Crea un ARTEFATTO nuovo (un tool), non un contenuto per la persona —
+    // gruppo 'create' come document_create/generate_image (il pannello
+    // raggruppa per `group`, non per posizione nell'elenco: qui sta
+    // ALLA FINE per combaciare con l'ordine reale in `toolset.ts`, dove
+    // vive appena prima dei tool forgiati — l'ultimo innesto prima del
+    // Forge, coerente con "un utente finale crea un tool con questo".
+    { id: 'tool_create', group: 'create', actions: ['write'] },
 ] as const satisfies readonly TalosAgentToolControl[])

@@ -792,6 +792,7 @@ const SHEET_TITLE_KEY: Record<TalosMobileRouteName, string> = {
     // memory/memory-item, tasks/task-item, notes/note-item do.
     harness: 'navigation.harness',
     'harness-session': 'navigation.harness',
+    toolforge: 'navigation.toolForge',
     settings: 'stations.settingsCenterTitle',
     'settings-models': 'models.labTitle',
     'settings-models-providers': 'models.providerAccessTitle',
@@ -1359,6 +1360,26 @@ onBeforeUnmount(async () => {
                     <main class="relative flex-1 overflow-hidden">
                         <ChatScreen ref="chatScreen" @export="exportSheetOpen = true" />
                     </main>
+
+                    <!--
+                        ⛔ Owner 2026-08-27: stessa richiesta del velo in testa
+                        (`TalosMobileImmersiveChrome.vue`) ma per la striscia
+                        GEMELLA in fondo — la vera barra di sistema del
+                        telefono (`env(safe-area-inset-bottom)`, il gesto di
+                        navigazione), non il compositore. Il compositore è
+                        già opaco al 95% per suo conto; questo velo copre
+                        solo lo spazio fra il suo bordo tondo e il bordo vero
+                        dello schermo, dove prima non c'era NESSUNA sfumatura
+                        — la richiesta era di scurirne una esistente, ma qui
+                        non esisteva ancora. Stessa grammatica del gemello in
+                        alto: tre fermate, MAI blur, `pointer-events-none`
+                        cosi' il tocco passa al compositore sotto.
+                    -->
+                    <div
+                        aria-hidden="true"
+                        data-testid="talos-mobile-bottom-veil"
+                        class="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-[calc(env(safe-area-inset-bottom)+2rem)] bg-gradient-to-t from-[var(--talos-background)]/92 via-[var(--talos-background)]/60 to-transparent"
+                    />
                 </div>
             </div>
 

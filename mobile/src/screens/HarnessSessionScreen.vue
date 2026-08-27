@@ -51,6 +51,7 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { Capacitor } from '@capacitor/core'
 import type { PluginListenerHandle } from '@capacitor/core'
 import { Keyboard } from '@capacitor/keyboard'
 import { CircleAlert, ShieldCheck } from '@lucide/vue'
@@ -77,6 +78,19 @@ import type { TalosMobileCommandId } from '@/lib/mobileCommandRegistry'
 
 const TALOS_HARNESS_UI_BASE = '/harness-ui'
 const TALOS_HARNESS_UI_BUILD_QUERY = `?build=${encodeURIComponent(TALOS_APP_BUILD)}`
+/**
+ * ⛔ Piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 3 (`adb reverse`).
+ * Su desktop `app.js` gira DENTRO la pagina servita da `server.mjs` su
+ * `http://localhost:4174/` — un URL relativo (`/api/v1/...`) risolve lì per
+ * costruzione. Su mobile `app.js` è compilato nell'APK e montato in uno
+ * shadow root DENTRO il documento TALOS (origine Capacitor,
+ * `http://localhost` su Android, verificato via ricerca web) — un URL
+ * relativo colpirebbe quell'origine, mai la porta 4174 del PC, anche col
+ * tunnel `adb reverse` attivo. Questa base, letta da `app.js` tramite
+ * `API()` (stesso schema di `ROOT()`/`HOST()`), è l'unica differenza fra i
+ * due ambienti.
+ */
+const TALOS_HARNESS_UI_API_BASE = Capacitor.isNativePlatform() ? 'http://localhost:4174' : ''
 
 function harnessUiAssetUrl(fileName: 'index.html' | 'styles.css' | 'app.js'): string {
     return `${TALOS_HARNESS_UI_BASE}/${fileName}${TALOS_HARNESS_UI_BUILD_QUERY}`
@@ -265,6 +279,7 @@ function teardown(): void {
     delete (window as unknown as { __talosHarnessHostBack?: unknown }).__talosHarnessHostBack
     delete (window as unknown as { __talosHarnessHostViewChange?: unknown }).__talosHarnessHostViewChange
     delete (window as unknown as { __talosHarnessHostPermissionChange?: unknown }).__talosHarnessHostPermissionChange
+    delete (window as unknown as { __talosHarnessApiBase?: unknown }).__talosHarnessApiBase
     scriptEl?.remove()
     scriptEl = null
 }
@@ -332,6 +347,7 @@ async function mountMockup(): Promise<void> {
             .__talosHarnessHostViewChange = (view) => { codeView.value = view }
         ;(window as unknown as { __talosHarnessHostPermissionChange?: (permission: string) => void })
             .__talosHarnessHostPermissionChange = (permission) => { codePermission.value = permission }
+        ;(window as unknown as { __talosHarnessApiBase?: string }).__talosHarnessApiBase = TALOS_HARNESS_UI_API_BASE
 
         await new Promise<void>((resolve, reject) => {
             const script = document.createElement('script')

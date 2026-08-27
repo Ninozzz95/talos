@@ -217,6 +217,36 @@
         </activity>
 
         <!--
+            ⭐⭐⭐ TalosArtifactActivity — l'HTML che scrive il modello, isolato
+            dal ponte Capacitor.
+
+            Owner 2026-08-27: «creare artefatti HTML con schemi avanzati e
+            interagibili in chat». Ricerca commissionata e verificata contro
+            il sorgente vero (vedi il commento in testa al file Kotlin):
+            `addJavascriptInterface` inietta per ISTANZA di WebView, non per
+            origine, quindi il ponte nativo di `MainActivity` non deve MAI
+            condividere la WebView con questo contenuto — un'Activity
+            separata, non un iframe dentro quella esistente.
+
+            ⛔ `android:exported="false"`: nessuna app sul telefono deve poter
+            lanciarla passando un `talos_artifact_id` a piacere — solo TALOS
+            stesso, dallo stesso processo/firma.
+
+            ⛔ `taskAffinity=""` + `excludeFromRecents`: stessa ragione della
+            barra qui sotto — un artefatto e' un contenuto della chat, non
+            una schermata a se' che deve comparire fra le app recenti.
+        -->
+        <activity
+            android:name="ai.talos.artifact.TalosArtifactActivity"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:label="@string/app_name"
+            android:exported="false"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density">
+        </activity>
+
+        <!--
             ⭐⭐ LA BARRA: TALOS sopra l'app che stai usando.
 
             ⛔ `taskAffinity=""` e `excludeFromRecents`: la barra vive in un task

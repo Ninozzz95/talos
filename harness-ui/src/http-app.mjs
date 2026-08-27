@@ -236,19 +236,31 @@ function leggiCorpoJson(req, limiteByte = MAX_REQUEST_BODY_BYTES) {
   });
 }
 
-/** ⛔ Un'allowlist di UNA chiave sola: {taskId}, niente altro — mai modello/chiave dal client, vedi createHttpApp. */
 /**
- * ⭐ 27/8 — `modello` è opzionale: `{taskId}` da solo resta valido come
- * sempre (usa il default del server), `{taskId, modello}` sceglie un
- * modello per QUESTA sessione. Nessun'altra chiave: stessa allowlist
- * stretta di prima, solo con un secondo campo nominato.
+ * ⭐ 27/8 — `modello`/`reasoning` opzionali: `{taskId}` da solo resta valido
+ * come sempre (usa il default del server), `{taskId, modello}` sceglie un
+ * modello per QUESTA sessione, `{taskId, reasoning}` accende lo streaming
+ * del ragionamento.
+ *
+ * ⛔ Un'allowlist di quattro chiavi al massimo: `taskId` (sempre), `modello`,
+ * `reasoning`, `client` — mai la chiave API dal client, vedi createHttpApp.
+ *
+ * Piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 3 (§3.2 del
+ * prompt): `client` distingue una sessione avviata dal telefono da una
+ * avviata sul PC. Un parametro esplicito nella richiesta, non un'euristica
+ * sullo User-Agent (più onesto, come richiesto dal prompt originale) —
+ * assente o `'desktop'` è il comportamento di SEMPRE, `'mobile'` è l'unico
+ * valore che cambia qualcosa (vedi session-registry.avvia).
  */
 function requireTaskIdBody(body) {
   const chiavi = Object.keys(body ?? {});
-  const chiaviAmmesse = ['taskId', 'modello', 'reasoning'];
-  const soloAmmesse = chiavi.length > 0 && chiavi.length <= 3 && chiavi.every((k) => chiaviAmmesse.includes(k)) && chiavi.includes('taskId');
-  if (!soloAmmesse || typeof body.taskId !== 'string' || body.taskId.length === 0) {
-    const errore = new Error('Corpo non valido: atteso {taskId, modello?, reasoning?}');
+  const chiaviAmmesse = ['taskId', 'modello', 'reasoning', 'client'];
+  const soloAmmesse = chiavi.length > 0 && chiavi.length <= 4 && chiavi.every((k) => chiaviAmmesse.includes(k)) && chiavi.includes('taskId');
+  if (
+    !soloAmmesse || typeof body.taskId !== 'string' || body.taskId.length === 0
+    || ('client' in body && body.client !== 'desktop' && body.client !== 'mobile')
+  ) {
+    const errore = new Error('Corpo non valido: atteso {taskId, modello?, reasoning?, client?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -266,6 +278,7 @@ function requireTaskIdBody(body) {
     taskId: body.taskId,
     modello: 'modello' in body && body.modello !== undefined ? body.modello : null,
     reasoning: 'reasoning' in body ? body.reasoning : null,
+    mobile: body.client === 'mobile',
   };
 }
 
@@ -420,6 +433,36 @@ export function createHttpApp({
     if (req.aborted || res.destroyed) return;
     const method = req.method || 'GET';
 
+    /*
+     * ⛔ CORS — piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 3.
+     * Desktop (Chrome che carica la pagina DA questo stesso server) non ne
+     * ha bisogno: stessa origine, `Origin` assente o già coincidente,
+     * questa intestazione non cambia nulla. Mobile (`app.js` montato dentro
+     * il documento TALOS, origine Capacitor — `http://localhost` su
+     * Android) è cross-origin per davvero: senza questa intestazione il
+     * browser bloccherebbe la LETTURA della risposta anche col tunnel
+     * `adb reverse` attivo, per `fetch` e per `EventSource` allo stesso
+     * modo. Riflette `Origin` invece di un `*` fisso o di indovinare lo
+     * schema Capacitor: il perimetro di sicurezza resta "raggiungibile solo
+     * via loopback/tunnel già posseduto dall'owner" (`README.md`), riflettere
+     * l'origine non lo allarga — chi non può già raggiungere `127.0.0.1:4174`
+     * non può nemmeno mandare la richiesta che leggerebbe questa intestazione.
+     */
+    const requestOrigin = req.headers.origin;
+    if (requestOrigin) {
+      res.setHeader('Access-Control-Allow-Origin', requestOrigin);
+      res.setHeader('Vary', 'Origin');
+    }
+    if (method === 'OPTIONS') {
+      res.writeHead(204, {
+        'Access-Control-Allow-Methods': 'GET, HEAD, POST',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Max-Age': '600',
+      });
+      res.end();
+      return;
+    }
+
     const requestTarget = req.url || '/';
     if (Buffer.byteLength(requestTarget, 'utf8') > MAX_REQUEST_TARGET_BYTES) {
       sendJson(res, 413, errorEnvelope('PAYLOAD_LIMIT', clock), method);
@@ -448,8 +491,8 @@ export function createHttpApp({
       try {
         requireNoQuery(url);
         const corpo = await leggiCorpoJson(req);
-        const { taskId, modello, reasoning } = requireTaskIdBody(corpo);
-        const esito = sessionRegistry.avvia(taskId, modello, reasoning);
+        const { taskId, modello, reasoning, mobile } = requireTaskIdBody(corpo);
+        const esito = sessionRegistry.avvia(taskId, { modelloScelto: modello, reasoningScelto: reasoning, mobile });
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
           errore.code = esito.code;
