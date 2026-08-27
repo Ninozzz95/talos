@@ -23,8 +23,10 @@ import {
   eseguiComandoSandboxato as eseguiComandoSandboxatoReale,
   talosLavora as talosLavoraReale,
 } from '../../../AVM-harness/mobile/scripts/harness-talos/talosHarness.mjs';
+import { salvaArtefatto as salvaArtefattoReale } from './artifact-store.mjs';
 import { leggiContestoWorkspace as leggiContestoWorkspaceReale } from './workspace-context.mjs';
 import {
+  artifactCreated,
   eventiPerRisposta,
   eventoPerEsitoTool,
   eventoPerScrittura,
@@ -41,6 +43,16 @@ import {
   toolCallArgs,
   toolCallStart,
 } from './agui-events.mjs';
+
+/**
+ * ⭐⭐⭐ 28/8 — un artefatto molto grande sarebbe un evento SSE molto grande
+ * (l'html non passa dal tetto di 8.000 caratteri che il kernel applica al
+ * TESTO tornato al modello — quel tetto riguarda `esito`, non l'html grezzo
+ * inoltrato qui via `onArtefatto`, side-channel separato, stesso principio
+ * di `onScrittura`). Rifiutato PRIMA di costruire l'evento, mai troncato in
+ * silenzio: un HTML troncato a metà tag è peggio di un rifiuto dichiarato.
+ */
+const ARTEFATTO_MAX_BYTE = 400_000; // stesso tetto di artifactTools.ts mobile
 
 /**
  * ⛔ 'giri-esauriti' e 'fermato' sono ENTRAMBI RunError, non solo il primo:
@@ -104,8 +116,10 @@ function esitoInEventoFinale({ threadId, runId, esito }) {
 export async function avviaSessione({
   cartella, task, modello, chiave, comandoProva,
   onEvento, segnaleStop, messaggiIniziali, reasoning, mobile = false,
+  strumentiEstesi, ricercaWeb,
   talosLavoraFn = talosLavoraReale,
   leggiContestoWorkspaceFn = leggiContestoWorkspaceReale,
+  salvaArtefattoFn = salvaArtefattoReale,
 }) {
   const threadId = randomUUID();
   const runId = randomUUID();
@@ -246,10 +260,31 @@ export async function avviaSessione({
     onEvento(eventoPerScrittura({ percorso, contenuto, esisteva, contenutoPrima }));
   };
 
+  /*
+   * ⭐⭐⭐ 28/8 — side-channel dell'attrezzo `artifact_create` (talosHarness.mjs),
+   * STESSO principio di `onScrittura`: il tool torna al modello una riga di
+   * testo ("created: ..."), l'HTML vero arriva qui, separato, per diventare
+   * un evento AG-UI che il frontend può renderizzare (iframe sandboxato —
+   * vedi app.js). Se assente (nessun `talosLavora` la offre mai a
+   * TALOS-BANCO), il kernel usa un id locale deterministico: qui SEMPRE
+   * presente, quindi SEMPRE questo id vince, mai quello di fallback.
+   */
+  const onArtefatto = async (titolo, html) => {
+    if (Buffer.byteLength(html, 'utf8') > ARTEFATTO_MAX_BYTE) {
+      // ⛔ Nessun evento, niente salvato: il tool torna comunque un id (il modello non deve credere che nulla sia successo), ma la UI non riceve mai un artefatto troncato/enorme.
+      return { id: `artefatto-rifiutato-troppo-grande-${randomUUID()}` };
+    }
+    const id = randomUUID();
+    salvaArtefattoFn(id, html);
+    onEvento(artifactCreated({ messageId: randomUUID(), id, titolo }));
+    return { id };
+  };
+
   try {
     const esito = await talosLavoraFn({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
       onGiro, onScrittura, onDelta, reasoning,
+      strumentiEstesi, ricercaWeb, onArtefatto,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));
     return { threadId, runId, ok: esito.comeFinita === 'concluso', esito, erroreInterno: null };

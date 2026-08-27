@@ -1,3 +1,4 @@
+import { leggiArtefatto as leggiArtefattoReale } from './artifact-store.mjs';
 import { modelloRichiestaValido, reasoningRichiestaValido } from './config.mjs';
 
 export const API_SCHEMA = 'talos.harness-ui.api.v1';
@@ -437,7 +438,7 @@ function scriviEventoSse(res, evento) {
 export function createHttpApp({
   campaignService, staticHandler, sessionRegistry = null, listaTaskDisponibili = () => [],
   elencaCartelleProgetto = () => [], automationStore = null, diagnosiFn = null,
-  catalogoModelliFn = null, clock = () => new Date(),
+  catalogoModelliFn = null, clock = () => new Date(), leggiArtefattoFn = leggiArtefattoReale,
 }) {
   async function handle(req, res) {
     if (req.aborted || res.destroyed) return;
@@ -931,6 +932,8 @@ export function createHttpApp({
         const exportMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/export$/.exec(url.pathname);
         const treeMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/tree$/.exec(url.pathname);
         const treeFileMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/tree\/file$/.exec(url.pathname);
+        // ⭐⭐⭐ 28/8 — non SESSION-scoped: un artefatto ha un id UUID già globalmente unico (agent-service.mjs), stesso principio di /api/v1/models.
+        const artifactMatch = /^\/api\/v1\/artifacts\/([^/]+)$/.exec(url.pathname);
 
         if (treeMatch) {
           let sessionId;
@@ -1068,6 +1071,32 @@ export function createHttpApp({
           } catch {
             if (!res.writableEnded) res.end();
           }
+          return;
+        } else if (artifactMatch) {
+          /*
+           * ⭐⭐⭐ 28/8 — risposta HTTP VERA con la SUA propria CSP,
+           * permissiva SOLO qui (mai `srcdoc`: vedi artifact-store.mjs per
+           * il perché, misurato dal vivo). `frame-ancestors 'self'`
+           * autorizza SOLO il nostro stesso iframe a incorporarla — non un
+           * link diretto da aprire in scheda, un artefatto isolato.
+           */
+          requireNoQuery(url);
+          let id;
+          try {
+            id = decodeURIComponent(artifactMatch[1]);
+          } catch {
+            sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+            return;
+          }
+          const html = leggiArtefattoFn(id);
+          if (html === null) {
+            sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+            return;
+          }
+          send(res, 200, 'text/html; charset=utf-8', html, method, {
+            'Content-Security-Policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; frame-ancestors 'self'",
+            'X-Frame-Options': 'SAMEORIGIN',
+          });
           return;
         } else if (url.pathname.startsWith('/api/')) {
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);

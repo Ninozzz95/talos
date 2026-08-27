@@ -97,6 +97,25 @@ export function stateDelta({ delta }) {
 }
 
 /**
+ * ⭐⭐⭐ 28/8 — `ArtifactCreated`. ⛔ NON è nello schema pubblico AG-UI
+ * (verificato il 24/8 su docs.ag-ui.com/concepts/events per gli eventi
+ * sopra: non esiste un evento per "un documento HTML autosufficiente da
+ * mostrare"): stessa estensione dichiarata di `contesto` su RunStarted,
+ * stesso spirito "loose event format matching".
+ *
+ * ⛔⛔ NIENTE `html` qui dentro — cambiato dopo la prima versione,
+ * misurato dal vivo: `html` viaggiava nell'evento SSE e il frontend lo
+ * passava a `iframe.srcdoc`, ma un `srcdoc` eredita la CSP della pagina
+ * (vedi artifact-store.mjs) — lo script del modello non partiva mai.
+ * La cura è servire l'HTML da una rotta HTTP vera
+ * (`GET /api/v1/artifacts/:id`, la sua CSP dedicata), quindi qui basta
+ * l'`id`: il frontend punta `iframe.src` lì, il browser fa il resto.
+ */
+export function artifactCreated({ messageId, id, titolo }) {
+    return { type: 'ArtifactCreated', messageId, id, titolo }
+}
+
+/**
  * ⭐ Da una risposta grezza del modello (la stessa forma OpenAI che
  * talosLavora già costruisce — {role, content, tool_calls}, vedi
  * talosHarness.mjs riga ~761) all'elenco ORDINATO di eventi AG-UI per

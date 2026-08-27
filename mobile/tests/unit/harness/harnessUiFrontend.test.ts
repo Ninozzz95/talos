@@ -399,7 +399,17 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         expect(oldest?.isConnected).toBe(false)
     })
 
-    it('CODE-COMPOSER-DEMO-SEND-01 without any active session, refuses honestly instead of faking a reply — no demo conversation is preloaded any more', () => {
+    /*
+     * ⛔ 28/8, riscritto dopo la cura "la sessione non parte quando scrivo
+     * dal composer" (owner) — submitPrompt() ora controlla QUANTE
+     * cartelle sono configurate (GET /api/v1/projects) prima di rifiutare:
+     * con zero (o un fetch che fallisce, come qui: fetchMock senza
+     * implementazione) resta il rifiuto onesto di sempre, ma il controllo
+     * è ASINCRONO — serve un giro di eventi prima che il toast compaia.
+     * `fetchMock` viene chiamato ora (non più mai): è il comportamento
+     * NUOVO e corretto, non una regressione.
+     */
+    it('CODE-COMPOSER-DEMO-SEND-01 without any active session, refuses honestly instead of faking a reply — no demo conversation is preloaded any more', async () => {
         const fetchMock = vi.fn()
         vi.stubGlobal('fetch', fetchMock)
         mountStaticRuntime()
@@ -409,9 +419,10 @@ describe('Harness UI embedded host and keyboard runtime', () => {
 
         const before = document.querySelectorAll('.user-message').length
         expect(runtime?.submitPrompt?.('Prompt from the real composer')).toBe(true)
+        await new Promise((resolve) => setTimeout(resolve, 0))
         expect(document.querySelectorAll('.user-message').length).toBe(before) // mai un messaggio finto aggiunto
         expect(document.querySelector('#toastRegion')?.textContent).toContain('Nessuna sessione attiva')
-        expect(fetchMock).not.toHaveBeenCalled()
+        expect(fetchMock).toHaveBeenCalled() // ⭐ NUOVO: controlla se esiste una sola cartella prima di rifiutare
     })
 
     it('CODE-COMPOSER-DEMO-SEND-01 "!"/"!!" switch to the terminal view and, without an active real session, refuse honestly instead of faking success', () => {
