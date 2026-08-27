@@ -630,6 +630,52 @@
     return envelope.data;
   }
 
+  /**
+   * ⭐ 27/8 — blocco Settings/diagnostica: il pulsante Doctor mostrava
+   * SEMPRE "Doctor: Healthy", hardcoded in due punti, indipendentemente
+   * da qualunque stato reale del sistema (owner: "analizza bene...
+   * eliminare tutti i mockup"). Ora legge GET /api/v1/doctor — i 4
+   * controlli VERI di harness-ui/src/doctor.mjs (chiave API, shell
+   * sandboxato via la stessa eseguiComandoSandboxato che l'attrezzo
+   * `shell` usa davvero, git, naviga) — e riporta onestamente cosa
+   * manca, mai un bluff.
+   */
+  function riassuntoDoctor(risultato) {
+    const problemi = [];
+    if (!risultato.chiaveApi) problemi.push('chiave API assente');
+    if (risultato.shell !== 'wsl2') problemi.push(`shell ${risultato.shell === 'none' ? 'non sandboxata' : risultato.shell}`);
+    if (!risultato.git) problemi.push('git non trovato');
+    if (!risultato.naviga) problemi.push('browser non disponibile');
+    return problemi.length === 0
+      ? { badge: 'Healthy', dettaglio: `Chiave API ok · shell ${risultato.shell} · git ok · browser ok.` }
+      : { badge: `${problemi.length} da rivedere`, dettaglio: `${problemi.join(' · ')}.` };
+  }
+
+  /** Aggiorna lo stato accanto al bottone Doctor dentro il foglio "control", se è aperto — stesso principio di refresh automatico già in uso per le Automazioni. */
+  async function refreshDoctorBadge() {
+    const badgeEl = $('[data-doctor-status]', sheetBody);
+    if (!badgeEl) return;
+    try {
+      badgeEl.textContent = riassuntoDoctor(await apiGet('/api/v1/doctor')).badge;
+    } catch {
+      badgeEl.textContent = 'Non disponibile';
+    }
+  }
+
+  async function eseguiDoctor() {
+    let risultato;
+    try {
+      risultato = await apiGet('/api/v1/doctor');
+    } catch (error) {
+      toast('Doctor non disponibile', error.message);
+      return;
+    }
+    const { badge, dettaglio } = riassuntoDoctor(risultato);
+    toast(`Doctor: ${badge}`, dettaglio);
+    const badgeEl = $('[data-doctor-status]', sheetBody);
+    if (badgeEl) badgeEl.textContent = badge;
+  }
+
   function runsPath(cursor = null) {
     const params = new URLSearchParams({ limit: '40' });
     if (harnessFilter.value) params.set('harness', harnessFilter.value);
@@ -816,6 +862,7 @@
     sheetBody.innerHTML = content.html();
     showEmbeddedDialog(sheetDialog);
     wireSheetActions(type);
+    if (type === 'control') refreshDoctorBadge();
   }
 
   const sheetTemplates = {
@@ -962,7 +1009,7 @@
           <span class="sheet-label">Agent runtime</span>
           <button class="sheet-option" data-control-action="agents"><span class="sheet-icon">${icon('i-robot')}</span><span><strong>Agents</strong><small>Subagent, deleghe, isolamento e limiti</small></span><span>2</span></button>
           <button class="sheet-option" data-control-action="hooks"><span class="sheet-icon">${icon('i-bolt')}</span><span><strong>Hooks</strong><small>Pre/Post tool, stop, notify e policy</small></span><span>4</span></button>
-          <button class="sheet-option" data-control-action="doctor"><span class="sheet-icon">${icon('i-check')}</span><span><strong>Doctor</strong><small>Runtime, provider, shell, git e browser</small></span><span>Healthy</span></button>
+          <button class="sheet-option" data-control-action="doctor"><span class="sheet-icon">${icon('i-check')}</span><span><strong>Doctor</strong><small>Runtime, provider, shell, git e browser</small></span><span data-doctor-status>Verifica…</span></button>
           <button class="sheet-option" data-control-action="settings"><span class="sheet-icon">${icon('i-settings')}</span><span><strong>Impostazioni Codice</strong><small>Aspetto, interazione e preferenze demo</small></span><span>Apri</span></button>
         </div>
         <div class="sheet-section">
@@ -1067,7 +1114,8 @@
         const action = button.dataset.controlAction;
         if (action === 'agents') { closeEmbeddedDialog(sheetDialog); openPanel('inspector'); const agents = $('[data-inspector-tab="agents"]'); agents?.click(); }
         else if (action === 'settings') { closeEmbeddedDialog(sheetDialog); setView('settings'); }
-        else toast(action === 'doctor' ? 'Doctor: Healthy' : 'Hook center aperto', action === 'doctor' ? 'Provider, shell, git, browser e workspace verificati.' : '4 hook configurati per questa sessione.');
+        else if (action === 'doctor') eseguiDoctor();
+        else toast('Hook center aperto', '4 hook configurati per questa sessione.');
       });
     });
     $$('[data-session-action]', sheetBody).forEach((button) => {
@@ -2537,7 +2585,7 @@
   /* ⭐ 27/8 — card "Session topology": il pulsante Fork chiama la VERA forkSession() (già reale per il blocco 1), non un toast finto — stesso attrezzo, un secondo punto d'accesso onesto. */
   $$('[data-action="fork-session"]').forEach((button) => button.addEventListener('click', () => forkSession()));
   $$('[data-control-action]').forEach((button) => button.addEventListener('click', () => {
-    if (button.dataset.controlAction === 'doctor') toast('Doctor: Healthy', 'Provider, shell, git, browser e workspace verificati.');
+    if (button.dataset.controlAction === 'doctor') eseguiDoctor();
   }));
   $('#capabilityBtn').addEventListener('click', () => openSheet('capabilities'));
   $('#manageCapabilitiesBtn').addEventListener('click', () => openSheet('capabilities'));

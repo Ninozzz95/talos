@@ -332,7 +332,7 @@ function scriviEventoSse(res, evento) {
  */
 export function createHttpApp({
   campaignService, staticHandler, sessionRegistry = null, listaTaskDisponibili = () => [],
-  elencaCartelleProgetto = () => [], automationStore = null, clock = () => new Date(),
+  elencaCartelleProgetto = () => [], automationStore = null, diagnosiFn = null, clock = () => new Date(),
 }) {
   async function handle(req, res) {
     if (req.aborted || res.destroyed) return;
@@ -668,6 +668,12 @@ export function createHttpApp({
       } else if (url.pathname === '/api/v1/automations') {
         requireNoQuery(url);
         data = { items: automationStore ? await automationStore.elenca() : [] };
+      } else if (url.pathname === '/api/v1/doctor') {
+        requireNoQuery(url);
+        if (!diagnosiFn) {
+          const errore = new Error('Doctor non configurato'); errore.code = 'REPORT_UNAVAILABLE'; throw errore;
+        }
+        data = await diagnosiFn();
       } else if (url.pathname === '/api/v1/sessions') {
         requireNoQuery(url);
         /* ⛔ Elenco vuoto, non un errore, se sessionRegistry non è configurato — stesso principio già seguito per le altre rotte di sessione. */
