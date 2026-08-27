@@ -1387,6 +1387,34 @@
     });
     renderRealReviewList();
     renderReviewFile(`real:${percorso}`);
+    aggiornaSommarioReviewReale();
+  }
+
+  /**
+   * ⭐ Le quattro cifre in testa alla Review erano demo fisse (+68/−31/6-6-
+   * test/Basso) anche durante una sessione vera — la stessa disonestà
+   * dell'etichetta "nuovo" già corretta sopra, un livello più in alto.
+   * ⛔ "aggiunte"/"rimozioni" (righe di un diff vero) restano fuori: come
+   * documentato sopra `updateRealReview`, `talosHarness.mjs` non passa il
+   * "prima" a `onScrittura`, quindi non esiste un diff riga-per-riga da
+   * contare — inventarlo sarebbe lo stesso bluff che questa riga corregge.
+   * Ciò che è REALMENTE noto oggi è quanti file sono nuovi e quanti
+   * modificati (lo stesso conteggio già dietro l'etichetta per-file).
+   * ⛔ "test"/"rischio" restano onestamente "—": l'esito di `prova` è
+   * testo libero, non ancora strutturato (piano §1.3, riga Review) — un
+   * numero qui sarebbe inventato, non misurato.
+   */
+  function aggiornaSommarioReviewReale() {
+    const voci = [...state.realSession.reviewFiles.values()];
+    const nuovi = voci.filter((f) => f.nuovo).length;
+    const modificati = voci.length - nuovi;
+    const impostaTesto = (id, testo) => { const el = $(`#${id}`); if (el) el.textContent = testo; };
+    impostaTesto('reviewSummaryNuovi', String(nuovi));
+    impostaTesto('reviewSummaryModificati', String(modificati));
+    impostaTesto('reviewSummaryTest', '—');
+    impostaTesto('reviewSummaryRischio', '—');
+    const demoBadge = $('.demo-surface-badge', $('[data-view="diff"]'));
+    if (demoBadge) demoBadge.hidden = true;
   }
 
   /**
