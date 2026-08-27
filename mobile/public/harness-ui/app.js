@@ -1194,6 +1194,19 @@
     }
   }
 
+  /*
+   * ⛔⛔ 27/8, trovato nell'inventario "legare ogni componente visivo":
+   * `sheetDialog` è CONDIVISO fra tredici tipi di foglio, e il suo unico
+   * badge "Demo UI · non collegato" veniva nascosto solo dal flusso
+   * "nuovo task" (openRealTaskSheet) — screenshottato aprendo il foglio
+   * "control" appena reso onesto: il badge restava lì sopra un
+   * contenuto ormai vero al 100%. Non tutti i fogli sono onesti allo
+   * stesso modo, però: `sessionTree` mostra ANCORA due righe fork/side-
+   * thread inventate (nessuna delega reale oggi) — per quello il badge
+   * resta, correttamente. Whitelist esplicita, non un "nascondi sempre":
+   * solo i tipi verificati stanotte riga per riga.
+   */
+  const TIPI_FOGLIO_INTERAMENTE_ONESTI = new Set(['model', 'capabilities', 'control']);
   function openSheet(type) {
     const content = sheetTemplates[type];
     if (!content) return;
@@ -1203,6 +1216,16 @@
     showEmbeddedDialog(sheetDialog);
     wireSheetActions(type);
     if (type === 'control') refreshDoctorBadge();
+    /*
+     * ⛔ Il badge è UN elemento condiviso da tredici tipi di foglio (vive
+     * nel `sheetDialog`, non dentro `#sheetBody` che viene svuotato e
+     * riscritto ogni apertura) — `.hidden` va impostato ESPLICITAMENTE
+     * in entrambe le direzioni ad ogni apertura, altrimenti un foglio
+     * onesto aperto prima lascerebbe il badge nascosto anche per un
+     * foglio ancora demo aperto subito dopo.
+     */
+    const demoBadge = $('.demo-surface-badge', sheetDialog);
+    if (demoBadge) demoBadge.hidden = TIPI_FOGLIO_INTERAMENTE_ONESTI.has(type);
   }
 
   const sheetTemplates = {
@@ -1344,19 +1367,35 @@
     control: {
       eyebrow: 'Control plane',
       title: 'Agents, hook e diagnostica',
+      /*
+       * ⛔⛔ 27/8, trovato nell'inventario "legare ogni componente
+       * visivo": "Agents" e "Hooks" mostravano contatori inventati (2 e
+       * 4) senza nessun sistema dietro — "Hooks" non aveva nemmeno un
+       * gestore di click (bottone morto), "Agents" portava a una scheda
+       * che dichiara essa stessa "Non ancora implementato". "Approval
+       * policy" erano tre checkbox sempre `checked`, mai lette né
+       * scritte da nessuna riga di JS — nessuna grammatica di permesso
+       * per-tool esiste oggi (verificato: `dist/kernelPerIlBanco.js` non
+       * ha un hook di permesso sui comandi). Stesso principio già
+       * applicato al Capability hub (blocco 8): reale con un numero
+       * vero, o onestamente "non ancora implementato" — mai un bluff.
+       */
       html: () => `
         <div class="sheet-section">
           <span class="sheet-label">Agent runtime</span>
-          <button class="sheet-option" data-control-action="agents"><span class="sheet-icon">${icon('i-robot')}</span><span><strong>Agents</strong><small>Subagent, deleghe, isolamento e limiti</small></span><span>2</span></button>
-          <button class="sheet-option" data-control-action="hooks"><span class="sheet-icon">${icon('i-bolt')}</span><span><strong>Hooks</strong><small>Pre/Post tool, stop, notify e policy</small></span><span>4</span></button>
           <button class="sheet-option" data-control-action="doctor"><span class="sheet-icon">${icon('i-check')}</span><span><strong>Doctor</strong><small>Runtime, provider, shell, git e browser</small></span><span data-doctor-status>Verifica…</span></button>
-          <button class="sheet-option" data-control-action="settings"><span class="sheet-icon">${icon('i-settings')}</span><span><strong>Impostazioni Codice</strong><small>Aspetto, interazione e preferenze demo</small></span><span>Apri</span></button>
+          <button class="sheet-option" data-control-action="settings"><span class="sheet-icon">${icon('i-settings')}</span><span><strong>Impostazioni Codice</strong><small>Aspetto, interazione e preferenze</small></span><span>Apri</span></button>
         </div>
         <div class="sheet-section">
-          <span class="sheet-label">Approval policy</span>
-          <div class="sheet-toggle-row"><span>Auto-approve read</span><input type="checkbox" checked></div>
-          <div class="sheet-toggle-row"><span>Diff gate prima di done</span><input type="checkbox" checked></div>
-          <div class="sheet-toggle-row"><span>Chiedi per rete / push / esterno</span><input type="checkbox" checked></div>
+          <span class="sheet-label">Non ancora implementato</span>
+          ${[
+            ['Agents', 'Subagent, deleghe, isolamento e limiti', 'i-robot'],
+            ['Hooks', 'Pre/Post tool, stop, notify e policy', 'i-bolt'],
+            ['Approval policy per-tool', 'Nessuna grammatica di permesso per-tool oggi — il cancello semantico su scrivi è sempre attivo, non è opzionale', 'i-shield'],
+          ].map(([name, desc, ico]) => `
+            <div class="sheet-option" role="group">
+              <span class="sheet-icon">${icon(ico)}</span><span><strong>${name}</strong><small>${desc}</small></span><span><input aria-label="${name}, non implementato" type="checkbox" disabled></span>
+            </div>`).join('')}
         </div>`,
     },
     sessionTree: {
@@ -1452,10 +1491,8 @@
     $$('[data-control-action]', sheetBody).forEach((button) => {
       button.addEventListener('click', () => {
         const action = button.dataset.controlAction;
-        if (action === 'agents') { closeEmbeddedDialog(sheetDialog); openPanel('inspector'); const agents = $('[data-inspector-tab="agents"]'); agents?.click(); }
-        else if (action === 'settings') { closeEmbeddedDialog(sheetDialog); setView('settings'); }
+        if (action === 'settings') { closeEmbeddedDialog(sheetDialog); setView('settings'); }
         else if (action === 'doctor') eseguiDoctor();
-        else toast('Hook center aperto', '4 hook configurati per questa sessione.');
       });
     });
     $$('[data-session-action]', sheetBody).forEach((button) => {
