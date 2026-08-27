@@ -18,7 +18,11 @@ function talosLavoraFinto({ script, cattura = () => {} }) {
   return async (input) => {
     cattura(input);
     if (script.tipo === 'lancia') throw script.errore;
-    input.onGiro?.({ tipo: 'risposta', giro: 0, risposta: { role: 'assistant', content: 'ciao', tool_calls: [] } });
+    // ⭐ 27/8, R1 — i delta (se il finto ne dichiara) arrivano PRIMA della
+    // risposta finale del giro, come nel vero talosLavora (onDelta durante
+    // lo stream, onGiro dopo che chiamaConRitenta è tornata).
+    for (const delta of script.deltas ?? []) input.onDelta?.(delta);
+    input.onGiro?.({ tipo: 'risposta', giro: 0, risposta: script.risposta ?? { role: 'assistant', content: 'ciao', tool_calls: [] } });
     for (const scrittura of script.scritture ?? []) {
       input.onScrittura?.(scrittura.percorso, scrittura.contenuto, scrittura.esisteva, scrittura.contenutoPrima);
     }
@@ -56,6 +60,118 @@ test('onGiro "risposta" viene tradotto e inoltrato nell\'ordine (testo, poi even
   const tipi = eventi.map((e) => e.type);
   assert.deepEqual(tipi, ['RunStarted', 'TextMessageStart', 'TextMessageContent', 'TextMessageEnd', 'RunFinished']);
   assert.equal(eventi[2].delta, 'ciao');
+});
+
+/*
+ * ⭐⭐⭐ R1 — piano `elegant-spinning-dongarra.md`, sezione "RICOGNIZIONE
+ * COMPETITIVA" (27/8). `onDelta` arriva DURANTE il giro (prima di
+ * onGiro('risposta')) — qui si prova che agent-service.mjs lo traduce in
+ * Text/ReasoningMessage Start, N Content, End VERI, e — cruciale — che il
+ * testo finale di eventiPerRisposta NON lo ripete: stessa famiglia del
+ * difetto "RunFinished ripeteva l'intera risposta" già chiuso stanotte.
+ */
+test('⭐⭐⭐ onDelta "testo" produce TextMessageStart/Content*/End dal vivo, e la risposta finale NON lo ripete', async () => {
+  const eventi = [];
+  const talosLavoraFn = talosLavoraFinto({
+    script: {
+      esito: { comeFinita: 'concluso', detto: 'fatto' },
+      deltas: [{ giro: 0, tipo: 'testo', delta: 'Cia' }, { giro: 0, tipo: 'testo', delta: 'o!' }],
+      risposta: { role: 'assistant', content: 'Ciao!', tool_calls: [] },
+    },
+  });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn });
+
+  const tipi = eventi.map((e) => e.type);
+  assert.deepEqual(tipi, ['RunStarted', 'TextMessageStart', 'TextMessageContent', 'TextMessageContent', 'TextMessageEnd', 'RunFinished'],
+    'un SOLO Start/End per giro, un Content per delta — la risposta finale non aggiunge un secondo blocco di testo');
+  assert.equal(eventi[2].delta, 'Cia');
+  assert.equal(eventi[3].delta, 'o!');
+  const messageIdStart = eventi[1].messageId;
+  assert.equal(eventi[2].messageId, messageIdStart, 'stesso messageId per tutti i pezzi dello stesso giro');
+  assert.equal(eventi[4].messageId, messageIdStart, 'End chiude lo STESSO messaggio aperto da Start');
+});
+
+test('⭐⭐ onDelta "ragionamento" produce ReasoningMessage* — un canale SEPARATO dal testo, mai mischiati', async () => {
+  const eventi = [];
+  const talosLavoraFn = talosLavoraFinto({
+    script: {
+      esito: { comeFinita: 'concluso', detto: 'fatto' },
+      deltas: [
+        { giro: 0, tipo: 'ragionamento', delta: 'Penso ' },
+        { giro: 0, tipo: 'ragionamento', delta: 'un po.' },
+        { giro: 0, tipo: 'testo', delta: '4' },
+      ],
+      risposta: { role: 'assistant', content: '4', tool_calls: [] },
+    },
+  });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn });
+
+  const tipi = eventi.map((e) => e.type);
+  assert.deepEqual(tipi, [
+    'RunStarted',
+    'ReasoningMessageStart', 'ReasoningMessageContent', 'ReasoningMessageContent',
+    'TextMessageStart', 'TextMessageContent',
+    'TextMessageEnd', 'ReasoningMessageEnd', // testo chiuso prima, poi ragionamento — ordine deterministico di agent-service.mjs
+    'RunFinished',
+  ]);
+  assert.equal(eventi.find((e) => e.type === 'ReasoningMessageStart').role, 'reasoning');
+});
+
+test('⭐⭐⭐ e AL CONTRARIO: le tool-call restano emesse anche se il testo di quel giro era già streamato', async () => {
+  const eventi = [];
+  const talosLavoraFn = talosLavoraFinto({
+    script: {
+      esito: { comeFinita: 'concluso', detto: 'fatto' },
+      deltas: [{ giro: 0, tipo: 'testo', delta: 'Uso un attrezzo.' }],
+      risposta: {
+        role: 'assistant', content: 'Uso un attrezzo.',
+        tool_calls: [{ id: 'c1', function: { name: 'leggi', arguments: '{"percorso":"a.txt"}' } }],
+      },
+    },
+  });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn });
+
+  const tipi = eventi.map((e) => e.type);
+  assert.deepEqual(tipi, ['RunStarted', 'TextMessageStart', 'TextMessageContent', 'TextMessageEnd', 'ToolCallStart', 'ToolCallArgs', 'RunFinished'],
+    'niente un secondo TextMessage* per il testo, ma la tool-call arriva comunque');
+});
+
+test('⛔ e AL CONTRARIO: senza NESSUN delta, il comportamento resta quello di sempre — un solo blocco di testo, dalla risposta finale', async () => {
+  const eventi = [];
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } } });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn });
+
+  const tipi = eventi.map((e) => e.type);
+  assert.deepEqual(tipi, ['RunStarted', 'TextMessageStart', 'TextMessageContent', 'TextMessageEnd', 'RunFinished']);
+});
+
+test('⭐ reasoning passa intatto fino a talosLavora, assente di default', async () => {
+  let visto;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { visto = input.reasoning; },
+  });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn });
+  assert.equal(visto, undefined, 'senza che il chiamante lo chieda, nessun reasoning');
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, reasoning: { effort: 'high' } });
+  assert.deepEqual(visto, { effort: 'high' });
+});
+
+test('⭐ onDelta è SEMPRE passato a talosLavora (streaming del testo a costo zero), anche senza reasoning', async () => {
+  let visto;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { visto = typeof input.onDelta; },
+  });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn });
+  assert.equal(visto, 'function');
 });
 
 test('onGiro "tool-esito" diventa ToolCallResult', async () => {

@@ -82,7 +82,7 @@ export function createSessionRegistry({
    */
   function avviaESegui({
     sessionId = randomUUID(), taskId, cartella, task, comandoProva, messaggiIniziali,
-    forkDa = null, voceEsistente = null, modelloRichiesta = null,
+    forkDa = null, voceEsistente = null, modelloRichiesta = null, reasoningRichiesto = null,
   }) {
     if (typeof chiave !== 'string' || chiave.length === 0) {
       return { erroreAvvio: 'Chiave API non configurata sul server (OPENROUTER_API_KEY)', code: 'CONFIG_INVALID' };
@@ -100,9 +100,16 @@ export function createSessionRegistry({
      * di tutto.
      */
     const modelloEffettivo = modelloRichiesta || voceEsistente?.modello || modello;
+    /*
+     * ⭐ 27/8, R1 — stessa disciplina di `modelloEffettivo`: un fork/resume
+     * eredita il `reasoning` della voce originale (mai perso in silenzio a
+     * metà conversazione), un avvio nuovo usa quello richiesto o nessuno.
+     */
+    const reasoningEffettivo = reasoningRichiesto ?? voceEsistente?.reasoning ?? null;
     const voce = voceEsistente ?? {
       eventi: [], ascoltatori: new Set(), taskId, cartella, task, comandoProva, forkDa,
       avviataAlle: clock().toISOString(), messaggiFinali: null, modello: modelloEffettivo,
+      reasoning: reasoningEffettivo,
     };
     voce.controller = controller;
     voce.conclusa = false;
@@ -115,6 +122,7 @@ export function createSessionRegistry({
      */
     avviaSessioneFn({
       cartella, task, modello: modelloEffettivo, chiave, comandoProva, messaggiIniziali,
+      reasoning: reasoningEffettivo ?? undefined,
       segnaleStop: controller.signal,
       onEvento: (evento) => broadcast(voce, evento),
     }).then((risultato) => {
@@ -150,7 +158,7 @@ export function createSessionRegistry({
      * un throw: un id fuori allowlist o una chiave assente sono risposte
      * attese di un endpoint HTTP, non un guasto del registro.
      */
-    avvia(taskId, modelloScelto = null) {
+    avvia(taskId, modelloScelto = null, reasoningScelto = null) {
       let preparato;
       try {
         preparato = preparaEsecuzioneFn(taskId);
@@ -160,7 +168,7 @@ export function createSessionRegistry({
       }
       return avviaESegui({
         taskId, cartella: preparato.cartella, task: preparato.task, comandoProva: preparato.comandoProva,
-        modelloRichiesta: modelloScelto,
+        modelloRichiesta: modelloScelto, reasoningRichiesto: reasoningScelto,
       });
     },
 
@@ -171,7 +179,7 @@ export function createSessionRegistry({
      * corpus benchmark — scrive DIRETTAMENTE sul progetto vero, nessuna
      * copia usa-e-getta (vedi la doc di `custom-task.mjs` sul perché).
      */
-    avviaLibero({ cartellaId, consegna, comandoProva, modello: modelloScelto = null }) {
+    avviaLibero({ cartellaId, consegna, comandoProva, modello: modelloScelto = null, reasoning: reasoningScelto = null }) {
       let preparato;
       try {
         preparato = preparaEsecuzioneLiberaFn(cartelleProgetto, { cartellaId, consegna, comandoProva });
@@ -181,7 +189,7 @@ export function createSessionRegistry({
       }
       return avviaESegui({
         taskId: `libero:${cartellaId}`, cartella: preparato.cartella, task: preparato.task,
-        comandoProva: preparato.comandoProva, modelloRichiesta: modelloScelto,
+        comandoProva: preparato.comandoProva, modelloRichiesta: modelloScelto, reasoningRichiesto: reasoningScelto,
       });
     },
 

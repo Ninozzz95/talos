@@ -1,4 +1,4 @@
-import { modelloRichiestaValido } from './config.mjs';
+import { modelloRichiestaValido, reasoningRichiestaValido } from './config.mjs';
 
 export const API_SCHEMA = 'talos.harness-ui.api.v1';
 
@@ -230,22 +230,28 @@ function leggiCorpoJson(req, limiteByte = MAX_REQUEST_BODY_BYTES) {
  */
 function requireTaskIdBody(body) {
   const chiavi = Object.keys(body ?? {});
-  const chiaviAmmesse = chiavi.length === 1 ? ['taskId'] : ['taskId', 'modello'];
-  const soloAmmesse = chiavi.length > 0 && chiavi.length <= 2 && chiavi.every((k) => chiaviAmmesse.includes(k)) && chiavi.includes('taskId');
+  const chiaviAmmesse = ['taskId', 'modello', 'reasoning'];
+  const soloAmmesse = chiavi.length > 0 && chiavi.length <= 3 && chiavi.every((k) => chiaviAmmesse.includes(k)) && chiavi.includes('taskId');
   if (!soloAmmesse || typeof body.taskId !== 'string' || body.taskId.length === 0) {
-    const errore = new Error('Corpo non valido: atteso {taskId} o {taskId, modello}');
+    const errore = new Error('Corpo non valido: atteso {taskId, modello?, reasoning?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
-  if ('modello' in body && body.modello !== undefined) {
-    if (!modelloRichiestaValido(body.modello)) {
-      const errore = new Error('modello deve avere la forma "vendor/nome-modello" (formato OpenRouter)');
-      errore.code = 'QUERY_INVALID';
-      throw errore;
-    }
-    return { taskId: body.taskId, modello: body.modello };
+  if ('modello' in body && body.modello !== undefined && !modelloRichiestaValido(body.modello)) {
+    const errore = new Error('modello deve avere la forma "vendor/nome-modello" (formato OpenRouter)');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
   }
-  return { taskId: body.taskId, modello: null };
+  if ('reasoning' in body && !reasoningRichiestaValido(body.reasoning)) {
+    const errore = new Error('reasoning deve essere {effort?, summary?} coi valori ammessi da OpenRouter');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  return {
+    taskId: body.taskId,
+    modello: 'modello' in body && body.modello !== undefined ? body.modello : null,
+    reasoning: 'reasoning' in body ? body.reasoning : null,
+  };
 }
 
 /**
@@ -255,12 +261,12 @@ function requireTaskIdBody(body) {
  * solo la FORMA del corpo, stesso principio di `requireTaskIdBody`.
  */
 function requireCustomTaskBody(body) {
-  const AMMESSE = ['cartellaId', 'consegna', 'comandoProva', 'modello'];
+  const AMMESSE = ['cartellaId', 'consegna', 'comandoProva', 'modello', 'reasoning'];
   const chiavi = Object.keys(body ?? {});
   const soloAmmesse = chiavi.length > 0 && chiavi.every((k) => AMMESSE.includes(k))
     && chiavi.includes('cartellaId') && chiavi.includes('consegna');
   if (!soloAmmesse || typeof body.cartellaId !== 'string' || typeof body.consegna !== 'string') {
-    const errore = new Error('Corpo non valido: atteso {cartellaId, consegna, comandoProva?, modello?}');
+    const errore = new Error('Corpo non valido: atteso {cartellaId, consegna, comandoProva?, modello?, reasoning?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -269,11 +275,17 @@ function requireCustomTaskBody(body) {
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
+  if ('reasoning' in body && !reasoningRichiestaValido(body.reasoning)) {
+    const errore = new Error('reasoning deve essere {effort?, summary?} coi valori ammessi da OpenRouter');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
   return {
     cartellaId: body.cartellaId,
     consegna: body.consegna,
     comandoProva: 'comandoProva' in body ? body.comandoProva : undefined,
     modello: 'modello' in body ? body.modello : null,
+    reasoning: 'reasoning' in body ? body.reasoning : null,
   };
 }
 
@@ -398,8 +410,8 @@ export function createHttpApp({
       try {
         requireNoQuery(url);
         const corpo = await leggiCorpoJson(req);
-        const { taskId, modello } = requireTaskIdBody(corpo);
-        const esito = sessionRegistry.avvia(taskId, modello);
+        const { taskId, modello, reasoning } = requireTaskIdBody(corpo);
+        const esito = sessionRegistry.avvia(taskId, modello, reasoning);
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
           errore.code = esito.code;
