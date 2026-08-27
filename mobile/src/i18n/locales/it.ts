@@ -975,6 +975,9 @@ export const TALOS_IT_MESSAGES = {
          * alla persona la mossa ovvia — provarne un'altra dell'elenco.
          */
         cardAppRefused: 'Non si è aperta',
+        cardSaveToLibrary: 'Salva nella Libreria',
+        cardSavedToLibrary: 'Salvato nella Libreria',
+        cardSaveFailed: 'Non è stato possibile salvarlo',
         memoryUsedOne: '1 memoria usata',
         memoryUsedMany: '{count} memorie usate',
         attachedFiles: 'File allegati',
@@ -2069,6 +2072,8 @@ export const TALOS_IT_MESSAGES = {
         imagePreview: 'Anteprima immagine',
         previewAlt: 'Anteprima',
         openOriginalPage: 'Apri la pagina originale nel browser',
+        viewAsPage: 'Vedi come pagina',
+        viewAsPageFailed: 'Non è stato possibile mostrare "{name}" come pagina su questo dispositivo',
         noPreviewText: 'Nessun testo di anteprima disponibile per questo file.',
         deleteFileTitle: 'Eliminare il file?',
         deleteFileDescription: '{name} verrà rimosso dal dispositivo. La cronologia chat esistente conserverà soltanto l’etichetta sicura del file.',
