@@ -26,12 +26,24 @@
   const $ = (selector, root = ROOT()) => root.querySelector(selector);
   const $$ = (selector, root = ROOT()) => [...root.querySelectorAll(selector)];
 
+  /**
+   * ⭐ 27/8 — stesso pattern del server (`config.mjs`, `modelloRichiestaValido`),
+   * duplicato qui solo per un feedback immediato nel form: la validazione
+   * che CONTA resta lato server, questa è solo UX, mai l'unica guardia.
+   */
+  const FORMATO_MODELLO_OPENROUTER = /^[a-z0-9](?:[a-z0-9._-]{0,63}[a-z0-9])?\/[a-z0-9](?:[a-z0-9._:-]{0,63}[a-z0-9])?$/i;
+
   const state = {
     view: 'chat',
     mode: 'chat',
     queueMode: false,
     permissions: 'Workspace write',
-    model: 'gpt-5.6-sol · high',
+    /*
+     * ⭐ 27/8 — stringa vuota = nessuna scelta esplicita, non un modello
+     * demo inventato. `aggiornaPillolaModello()` mostra "Predefinito del
+     * server" finché l'owner non sceglie qualcosa dal foglio Modello.
+     */
+    model: '',
     environment: 'wt/auth-61c · feat/mobile-code',
     session: 'Refactor auth flow',
     running: true,
@@ -808,25 +820,32 @@
   const sheetTemplates = {
     model: {
       eyebrow: 'Runtime',
-      title: 'Modello e ragionamento',
+      title: 'Modello',
+      /*
+       * ⛔⛔⛔ 27/8 — owner: "rendi il composer funzionante al 100%... poter
+       * scegliere almeno tutti i modelli openrouter e deepseek, per
+       * testare, poi estendiamo a tutti i provider supportati, nessuna
+       * eccezione". I quattro pulsanti di prima erano nomi INVENTATI
+       * ("gpt-5.6-sol", "claude-opus-4.6" — non esistono) che non
+       * cambiavano niente di reale. TALOS chiama sempre lo stesso
+       * endpoint OpenRouter (`talosHarness.mjs`), che instrada già
+       * qualunque `vendor/nome-modello` — DeepSeek incluso, col prefisso
+       * `deepseek/` — quindi "tutti i modelli OpenRouter" non è un
+       * elenco da tenere aggiornato a mano: è un campo libero. Le
+       * scorciatoie sotto sono comodità, non un limite — cliccarle
+       * riempie il campo, non lo sostituiscono con qualcos'altro.
+       */
       html: () => `
-        <div class="sheet-section">
-          <span class="sheet-label">Modelli disponibili</span>
-          ${[
-            ['gpt-5.6-sol · high', 'OpenAI', 'Attivo', 'i-brain'],
-            ['claude-opus-4.6 · high', 'Anthropic', '128k', 'i-brain'],
-            ['deepseek-v4-flash · high', 'DeepSeek', 'fast', 'i-bolt'],
-            ['gemini-3.1-pro · medium', 'Google', 'local route', 'i-brain'],
-          ].map(([name, provider, note, ico]) => `
-            <button class="sheet-option ${name === state.model ? 'active' : ''}" data-model-choice="${name}">
-              <span class="sheet-icon">${icon(ico)}</span><span><strong>${name}</strong><small>${provider}</small></span><span>${note}</span>
-            </button>`).join('')}
-        </div>
-        <div class="sheet-section">
-          <span class="sheet-label">Comportamento</span>
-          <div class="sheet-toggle-row"><span>Mostra ragionamento sintetico</span><input type="checkbox" checked></div>
-          <div class="sheet-toggle-row"><span>Compatta contesto automaticamente</span><input type="checkbox" checked></div>
-        </div>`,
+        <form class="sheet-section" id="modelSelectForm">
+          <label class="sheet-label" for="modelSelectInput">ID modello (formato OpenRouter: vendor/nome-modello)</label>
+          <input class="sheet-input" id="modelSelectInput" value="${(state.model || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}" placeholder="es. deepseek/deepseek-chat" maxlength="120" autocomplete="off" spellcheck="false">
+          <small class="sheet-hint">${state.model ? `In uso: ${state.model}` : 'Nessuna scelta esplicita — la sessione userà il modello predefinito del server.'}</small>
+          <div class="sheet-chip-row">
+            ${['deepseek/deepseek-chat', 'deepseek/deepseek-r1', 'qwen/qwen3.7-flash', 'z-ai/glm-4.7-flash', 'openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet', 'google/gemini-2.0-flash-001'].map((id) => `
+              <button type="button" class="chip" data-model-shortcut="${id}">${id}</button>`).join('')}
+          </div>
+          <button type="submit" class="primary-btn compact full">Usa questo modello</button>
+        </form>`,
     },
     permissions: {
       eyebrow: 'Safety lens',
@@ -990,15 +1009,34 @@
     },
   };
 
+  /** Aggiorna la pillola del composer che apre il foglio Modello — selettore stabile (`data-open-sheet="model"`), non un confronto sul testo attuale come faceva il codice precedente. */
+  function aggiornaPillolaModello() {
+    const span = $('[data-open-sheet="model"] span');
+    if (span) span.textContent = state.model || 'Predefinito del server';
+  }
+
   function wireSheetActions(type) {
-    $$('[data-model-choice]', sheetBody).forEach((button) => {
-      button.addEventListener('click', () => {
-        state.model = button.dataset.modelChoice;
-        $$('.selector-pill span').filter((span) => span.textContent.includes('gpt-') || span.textContent.includes('claude-') || span.textContent.includes('deepseek-') || span.textContent.includes('gemini-')).forEach((span) => { span.textContent = state.model; });
-        toast('Modello aggiornato', state.model);
+    const modelForm = $('#modelSelectForm', sheetBody);
+    if (modelForm) {
+      const input = $('#modelSelectInput', modelForm);
+      window.setTimeout(() => { input?.focus(); }, 30);
+      $$('[data-model-shortcut]', modelForm).forEach((chip) => {
+        chip.addEventListener('click', () => { if (input) { input.value = chip.dataset.modelShortcut; input.focus(); } });
+      });
+      modelForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const scelto = input?.value.trim() ?? '';
+        if (scelto && !FORMATO_MODELLO_OPENROUTER.test(scelto)) {
+          toast('ID modello non valido', 'Formato atteso: vendor/nome-modello (es. deepseek/deepseek-chat)');
+          input?.focus();
+          return;
+        }
+        state.model = scelto;
+        aggiornaPillolaModello();
+        toast(scelto ? 'Modello aggiornato' : 'Torna al modello predefinito', scelto || 'Il server sceglie per te.');
         closeEmbeddedDialog(sheetDialog);
       });
-    });
+    }
     $$('[data-permission-choice]', sheetBody).forEach((button) => {
       button.addEventListener('click', () => {
         state.permissions = button.dataset.permissionChoice;
@@ -1774,7 +1812,9 @@
 
     let sessionId;
     try {
-      const data = await apiPost('/api/v1/sessions', { taskId: task.id });
+      /* ⭐ 27/8 — il modello scelto nel foglio "Modello" viaggia con l'avvio: state.model vuoto = nessuna scelta esplicita, il server usa il suo default. */
+      const corpo = state.model ? { taskId: task.id, modello: state.model } : { taskId: task.id };
+      const data = await apiPost('/api/v1/sessions', corpo);
       sessionId = data.sessionId;
     } catch (error) {
       if (generation !== state.realSession.generation) return;
@@ -2016,7 +2056,7 @@
     conversation.appendChild(article);
     const assistant = document.createElement('article');
     assistant.className = 'message assistant-message compact-message motion-enter';
-    assistant.innerHTML = `<div class="assistant-meta"><span class="talos-glyph">T</span><span>TALOS · ${state.model.split(' · ')[0]}</span><span>ora</span></div><div class="assistant-copy">Ricevuto. Ho aggiunto il messaggio al run corrente mantenendo ambiente, permessi e contesto visibili.</div><div class="message-actions"><button data-message-action="copy" aria-label="Copia risposta">${icon('i-copy')}</button><button data-message-action="like" aria-label="Risposta utile" aria-pressed="false">👍</button><button data-message-action="dislike" aria-label="Risposta non utile" aria-pressed="false">👎</button><button data-message-action="retry" aria-label="Rigenera risposta">${icon('i-history')}</button></div>`;
+    assistant.innerHTML = `<div class="assistant-meta"><span class="talos-glyph">T</span><span>TALOS · ${(state.model || 'gpt-5.6-sol').split(' · ')[0]}</span><span>ora</span></div><div class="assistant-copy">Ricevuto. Ho aggiunto il messaggio al run corrente mantenendo ambiente, permessi e contesto visibili.</div><div class="message-actions"><button data-message-action="copy" aria-label="Copia risposta">${icon('i-copy')}</button><button data-message-action="like" aria-label="Risposta utile" aria-pressed="false">👍</button><button data-message-action="dislike" aria-label="Risposta non utile" aria-pressed="false">👎</button><button data-message-action="retry" aria-label="Rigenera risposta">${icon('i-history')}</button></div>`;
     conversation.appendChild(assistant);
     window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'center' }), 40);
   }
@@ -2714,6 +2754,7 @@
    */
 
   ensureDemoLabels();
+  aggiornaPillolaModello(); // ⭐ 27/8 — sincronizza SUBITO la pillola con lo stato vero (state.model === ''), invece di lasciare "gpt-5.6-sol · high" scritto a mano nell'HTML statico
   applyQaState();
   syncNavigationState();
   syncInspectorToggle();

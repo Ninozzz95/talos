@@ -1,3 +1,5 @@
+import { modelloRichiestaValido } from './config.mjs';
+
 export const API_SCHEMA = 'talos.harness-ui.api.v1';
 
 const MAX_REQUEST_TARGET_BYTES = 4096;
@@ -194,14 +196,30 @@ function leggiCorpoJson(req, limiteByte = MAX_REQUEST_BODY_BYTES) {
 }
 
 /** ⛔ Un'allowlist di UNA chiave sola: {taskId}, niente altro — mai modello/chiave dal client, vedi createHttpApp. */
+/**
+ * ⭐ 27/8 — `modello` è opzionale: `{taskId}` da solo resta valido come
+ * sempre (usa il default del server), `{taskId, modello}` sceglie un
+ * modello per QUESTA sessione. Nessun'altra chiave: stessa allowlist
+ * stretta di prima, solo con un secondo campo nominato.
+ */
 function requireTaskIdBody(body) {
   const chiavi = Object.keys(body ?? {});
-  if (chiavi.length !== 1 || chiavi[0] !== 'taskId' || typeof body.taskId !== 'string' || body.taskId.length === 0) {
-    const errore = new Error('Corpo non valido: atteso {taskId}');
+  const chiaviAmmesse = chiavi.length === 1 ? ['taskId'] : ['taskId', 'modello'];
+  const soloAmmesse = chiavi.length > 0 && chiavi.length <= 2 && chiavi.every((k) => chiaviAmmesse.includes(k)) && chiavi.includes('taskId');
+  if (!soloAmmesse || typeof body.taskId !== 'string' || body.taskId.length === 0) {
+    const errore = new Error('Corpo non valido: atteso {taskId} o {taskId, modello}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
-  return body.taskId;
+  if ('modello' in body && body.modello !== undefined) {
+    if (!modelloRichiestaValido(body.modello)) {
+      const errore = new Error('modello deve avere la forma "vendor/nome-modello" (formato OpenRouter)');
+      errore.code = 'QUERY_INVALID';
+      throw errore;
+    }
+    return { taskId: body.taskId, modello: body.modello };
+  }
+  return { taskId: body.taskId, modello: null };
 }
 
 /** ⛔ Un'allowlist di UNA chiave sola, come requireTaskIdBody — la validazione FINE del nome (trim, 1-80) resta in session-registry.rinomina(), qui si controlla solo la FORMA del corpo. */
@@ -279,8 +297,8 @@ export function createHttpApp({
       try {
         requireNoQuery(url);
         const corpo = await leggiCorpoJson(req);
-        const taskId = requireTaskIdBody(corpo);
-        const esito = sessionRegistry.avvia(taskId);
+        const { taskId, modello } = requireTaskIdBody(corpo);
+        const esito = sessionRegistry.avvia(taskId, modello);
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
           errore.code = esito.code;
