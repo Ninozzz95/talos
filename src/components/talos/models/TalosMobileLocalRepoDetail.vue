@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
-import { AlertTriangle, ClipboardCopy, Download, ExternalLink, ShieldAlert } from '@lucide/vue'
+import { AlertTriangle, ClipboardCopy, Download, ExternalLink, Pause, Play, ShieldAlert, Trash2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosModelFitBar from '@/components/talos/models/TalosModelFitBar.vue'
 import TalosModelResourceLedger from '@/components/talos/models/TalosModelResourceLedger.vue'
@@ -19,6 +19,8 @@ import {
     talosFormatParameterCount,
     talosRetryAfterSeconds,
     talosSetWarnings,
+    talosTransferCanPause,
+    talosTransferCanResume,
 } from '@/lib/models/presentation'
 import { talosModelSpeaks } from '@/lib/models/modelLanguages'
 import { talosReadmeSummary } from '@/lib/models/readmeSummary'
@@ -39,6 +41,14 @@ import {
     talosSetLocalContext,
     talosSetLocalKvCacheType,
 } from '@/stores/localModels'
+// DEBT-MOBILE-014 (owner 26/8) — pausa/riprendi/annulla vivono già nello
+// store condiviso col Centro download globale (TalosMobileDownloadCenterTrigger.vue);
+// nessun poller o stato nuovo, solo lo stesso comando sul medesimo `id`.
+import {
+    talosCancelManagedModelTransfer,
+    talosPauseManagedModelTransfer,
+    talosResumeManagedModelTransfer,
+} from '@/stores/modelTransfers'
 
 const props = defineProps<{
     repoId: string
@@ -190,6 +200,59 @@ const selectedRow = computed(() => {
     }
     return rows.value[0] ?? null
 })
+
+const selectedTransfer = computed(() => {
+    const row = selectedRow.value
+    if (!row) return null
+    return (store.transfer.items ?? []).find((item) => item.repo === props.repoId
+        && item.revision === props.revision
+        && item.paths.includes(row.key)) ?? null
+})
+
+function transferPercent(item: NonNullable<typeof selectedTransfer.value>): number | null {
+    if (item.totalBytes <= 0) return null
+    return Math.max(0, Math.min(100, Math.round(item.haveBytes / item.totalBytes * 100)))
+}
+
+/**
+ * DEBT-MOBILE-014 — la barra della variante selezionata porta ora gli
+ * stessi comandi del Centro download (pausa/riprendi/annulla), non solo la
+ * percentuale: owner 26/8, "il bottone per scaricare il modello abbia la
+ * sua barra integrata di download, stop, annulla". `talosTransferCanPause`/
+ * `talosTransferCanResume` sono lo stesso giudice condiviso col trigger
+ * globale — i due punti non possono mai mostrare due stati diversi per lo
+ * stesso `id`. Un solo trasferimento e' attivo per riga selezionata, quindi
+ * un booleano basta (il Centro globale usa un Set perche' ne mostra molti).
+ */
+const transferActionBusy = ref(false)
+const confirmingTransferCancel = ref(false)
+
+watch(selectedTransfer, (next) => {
+    if (!next) confirmingTransferCancel.value = false
+})
+
+async function runTransferAction(action: () => Promise<{ ok: boolean }>): Promise<void> {
+    if (transferActionBusy.value) return
+    transferActionBusy.value = true
+    try {
+        await action()
+    } finally {
+        transferActionBusy.value = false
+    }
+}
+
+function pauseSelectedTransfer(id: string): void {
+    void runTransferAction(() => talosPauseManagedModelTransfer(id))
+}
+
+function resumeSelectedTransfer(id: string): void {
+    void runTransferAction(() => talosResumeManagedModelTransfer(id))
+}
+
+async function confirmCancelSelectedTransfer(id: string): Promise<void> {
+    await runTransferAction(() => talosCancelManagedModelTransfer(id))
+    confirmingTransferCancel.value = false
+}
 
 function selectVariant(key: string): void {
     selectedKey.value = key
@@ -460,7 +523,7 @@ async function reclaim(): Promise<void> {
              divulgazione dentro la card, ora la sua sezione: stesso
              montaggio pigro (si legge solo quando il tab è attivo). -->
         <section v-if="activeTab === 'scheda'" data-testid="talos-models-readme-full">
-            <TalosMobileMessageContent v-if="schedaLeggibile" class="text-xs" :content="schedaLeggibile" />
+            <TalosMobileMessageContent v-if="schedaLeggibile" class="text-xs" :content="schedaLeggibile" allow-external-images />
             <p v-else class="text-sm text-[var(--talos-muted)]">{{ t('localModels.noReadme') }}</p>
         </section>
 
@@ -550,7 +613,96 @@ async function reclaim(): Promise<void> {
                     <!-- item 4: il bottone porta il nome della variante e
                          la taglia, come nel mockup ("Scarica Q6_K ·
                          3.31 GB") — non piu' una sola icona. -->
+                    <div v-if="selectedTransfer" class="flex min-w-0 flex-col gap-[calc(var(--talos-space-inline)/2)]">
+                        <div
+                            data-testid="talos-models-download-progress"
+                            role="progressbar"
+                            :aria-label="`${t('localModels.downloading')} ${selectedRow.set.label}`"
+                            :aria-valuemin="transferPercent(selectedTransfer) === null ? undefined : 0"
+                            :aria-valuemax="transferPercent(selectedTransfer) === null ? undefined : 100"
+                            :aria-valuenow="transferPercent(selectedTransfer) ?? undefined"
+                            class="flex min-h-touch w-full flex-col justify-center gap-[calc(var(--talos-space-inline)/2)] rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-panel)] px-[var(--talos-space-control)] text-sm text-[var(--talos-text)]"
+                        >
+                            <span class="flex items-center justify-between gap-[var(--talos-space-inline)]">
+                                <span class="truncate font-semibold">{{ t('localModels.downloading') }} · {{ selectedRow.set.label }}</span>
+                                <span v-if="transferPercent(selectedTransfer) !== null" class="font-mono text-2xs tabular-nums text-[var(--talos-muted)]">{{ transferPercent(selectedTransfer) }}%</span>
+                            </span>
+                            <span class="h-2 overflow-hidden rounded-full bg-[var(--talos-active)]" aria-hidden="true">
+                                <span
+                                    class="block h-full rounded-full bg-[var(--talos-accent)] transition-[width] duration-[var(--talos-motion-duration-activity-progress)] motion-reduce:transition-none"
+                                    :style="transferPercent(selectedTransfer) === null ? undefined : { width: `${transferPercent(selectedTransfer)}%` }"
+                                ></span>
+                            </span>
+                            <span class="font-mono text-2xs tabular-nums text-[var(--talos-muted)]">{{ talosFormatBytes(selectedTransfer.haveBytes) }} / {{ talosFormatBytes(selectedTransfer.totalBytes) }}</span>
+                        </div>
+
+                        <!-- DEBT-MOBILE-014 (owner 26/8) — stessi comandi del
+                             Centro download, integrati qui: nessuna corsa in
+                             piu' va aperta in un altro foglio per fermarla. -->
+                        <div class="flex items-center gap-[calc(var(--talos-space-inline)/2)]">
+                            <button
+                                v-if="talosTransferCanPause(selectedTransfer)"
+                                type="button"
+                                data-testid="talos-models-download-pause"
+                                :aria-label="t('localModels.downloadCenter.pauseModel', { model: selectedRow.set.label })"
+                                :disabled="transferActionBusy"
+                                class="talos-pressable flex min-h-touch flex-1 items-center justify-center gap-[calc(var(--talos-space-inline)/2)] rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-control)] text-xs font-semibold text-[var(--talos-text)] disabled:opacity-50"
+                                @click="pauseSelectedTransfer(selectedTransfer.id)"
+                            >
+                                <Pause class="size-[var(--talos-icon-size)] shrink-0" aria-hidden="true" />
+                                {{ t('localModels.downloadCenter.pause') }}
+                            </button>
+                            <button
+                                v-else-if="talosTransferCanResume(selectedTransfer)"
+                                type="button"
+                                data-testid="talos-models-download-resume"
+                                :aria-label="t('localModels.downloadCenter.resumeModel', { model: selectedRow.set.label })"
+                                :disabled="transferActionBusy"
+                                class="talos-pressable flex min-h-touch flex-1 items-center justify-center gap-[calc(var(--talos-space-inline)/2)] rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-control)] text-xs font-semibold text-[var(--talos-text)] disabled:opacity-50"
+                                @click="resumeSelectedTransfer(selectedTransfer.id)"
+                            >
+                                <Play class="size-[var(--talos-icon-size)] shrink-0" aria-hidden="true" />
+                                {{ t('localModels.downloadCenter.resume') }}
+                            </button>
+                            <button
+                                type="button"
+                                data-testid="talos-models-download-cancel"
+                                :aria-label="t('localModels.downloadCenter.cancelModel', { model: selectedRow.set.label })"
+                                :disabled="transferActionBusy"
+                                class="talos-pressable flex min-h-touch items-center justify-center gap-[calc(var(--talos-space-inline)/2)] rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-control)] text-xs font-semibold text-[var(--talos-danger)] disabled:opacity-50"
+                                @click="confirmingTransferCancel = true"
+                            >
+                                <Trash2 class="size-[var(--talos-icon-size)] shrink-0" aria-hidden="true" />
+                                {{ t('localModels.downloadCenter.cancel') }}
+                            </button>
+                        </div>
+
+                        <div
+                            v-if="confirmingTransferCancel"
+                            data-testid="talos-models-download-cancel-warning"
+                            class="rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] p-[var(--talos-space-control)]"
+                        >
+                            <p class="text-2xs leading-4 text-[var(--talos-muted)]">{{ t('localModels.downloadCenter.cancelWarning') }}</p>
+                            <div class="mt-[var(--talos-space-inline)] grid grid-cols-2 gap-[var(--talos-space-inline)]">
+                                <button
+                                    type="button"
+                                    :aria-label="t('localModels.downloadCenter.keepModel', { model: selectedRow.set.label })"
+                                    class="talos-pressable min-h-touch rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-control)] text-xs"
+                                    @click="confirmingTransferCancel = false"
+                                >{{ t('localModels.downloadCenter.keep') }}</button>
+                                <button
+                                    type="button"
+                                    data-testid="talos-models-download-cancel-confirm"
+                                    :aria-label="t('localModels.downloadCenter.confirmCancelModel', { model: selectedRow.set.label })"
+                                    :disabled="transferActionBusy"
+                                    class="talos-pressable min-h-touch rounded-[var(--talos-radius-control)] border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] px-[var(--talos-space-control)] text-xs font-semibold text-[var(--talos-danger)] disabled:opacity-50"
+                                    @click="confirmCancelSelectedTransfer(selectedTransfer.id)"
+                                >{{ t('localModels.downloadCenter.confirmCancel') }}</button>
+                            </div>
+                        </div>
+                    </div>
                     <button
+                        v-else
                         type="button"
                         data-testid="talos-models-download"
                         :aria-label="`${t('localModels.download')} ${selectedRow.set.label}`"

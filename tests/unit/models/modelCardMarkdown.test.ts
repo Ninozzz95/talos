@@ -88,6 +88,19 @@ describe('la sorgente della scheda modello', () => {
         expect(renderTalosMarkdown(preparato).html).toContain('<br>')
     })
 
+    it('DEBT-MOBILE-010 RED: renders a trusted Hugging Face model-card image', () => {
+        const src = 'https://cdn-uploads.huggingface.co/production/uploads/liquid.png'
+        const prepared = talosModelCardMarkdown(`<img src="${src}" alt="Liquid AI" style="width:100%" />`)
+        expect(renderTalosMarkdown(prepared, { allowExternalImages: true }).html).toContain(`<img src="${src}"`)
+        expect(renderTalosMarkdown('![bad](https://evil.example/image.png)', { allowExternalImages: true }).html).not.toContain('<img')
+    })
+
+    it('DEBT-MOBILE-010 RED: renders a multiline Hugging Face image tag', () => {
+        const src = 'https://cdn-uploads.huggingface.co/production/uploads/liquid.png'
+        const prepared = talosModelCardMarkdown(`<div align="center">\n  <img\n    src="${src}"\n    alt="Liquid AI"\n  />\n</div>`)
+        expect(renderTalosMarkdown(prepared, { allowExternalImages: true }).html).toContain(`<img src="${src}"`)
+    })
+
     /**
      * ⛔ MISURATO sul Pad, sulla scheda di `unsloth/Qwen3-4B-GGUF`: due
      * paragrafi comparivano in monospaziato dentro un riquadro. Nel README

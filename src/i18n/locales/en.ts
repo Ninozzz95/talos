@@ -80,6 +80,7 @@ export const TALOS_EN_MESSAGES = {
         goBack: 'Go back',
         primary: 'Primary navigation',
         modelLab: 'Model Lab',
+        harness: 'Code',
     },
     language: {
         title: 'Language',
@@ -299,6 +300,7 @@ export const TALOS_EN_MESSAGES = {
             bubbles: 'Bubbles',
         },
         fontScales: {
+            xsmall: 'Extra small',
             small: 'Small',
             default: 'Default',
             large: 'Large',
@@ -713,6 +715,8 @@ export const TALOS_EN_MESSAGES = {
         messagePlaceholderEllipsis: 'Message TALOS...',
         sendMessage: 'Send message',
         stopGenerating: 'Stop generating',
+        expandComposer: 'Expand to full screen',
+        collapseComposer: 'Return to normal size',
         attachFiles: 'Attach files',
         takePhoto: 'Take photo',
         chooseFromLibrary: 'Choose from Library',
@@ -802,6 +806,7 @@ export const TALOS_EN_MESSAGES = {
         discardDictation: 'Discard dictation',
         stopDictation: 'Stop dictation',
         dictate: 'Dictate',
+        dictateAppend: 'Dictate more, adding it to the text',
         startingDictation: 'Starting dictation…',
         dictationErrors: {
             permissionDenied: 'Allow microphone access to use dictation.',
@@ -1100,12 +1105,22 @@ export const TALOS_EN_MESSAGES = {
         codeCopied: 'Code copied.',
         codeCopyFailed: 'Code copy failed.',
     },
-    // Harness UI (Codex, 24/8): debug-only link to the reused desktop
-    // mockup + Board, hidden entirely in release builds — see
-    // services/harnessUi.ts for how "hidden" is guaranteed.
-    harnessUi: {
-        linkLabel: 'Harness UI (debug)',
-        linkHint: 'The coding-harness mockup and campaign Board, same build as desktop.',
+    // Harness UI (24/8): real route (list + session trampoline), still
+    // behind the same debug-only gate as the old Settings link — see
+    // services/harnessUi.ts.
+    harness: {
+        demoNotice: 'Demo sessions, not wired to a real backend — the navigation structure is real, the data is not.',
+        groups: {
+            today: 'Today',
+            yesterday: 'Yesterday',
+            week: 'Last 7 days',
+        },
+        openingMockup: 'Opening Code…',
+        unavailable: "Code isn't available in this build.",
+        loadFailed: "Code didn't open. Try again.",
+        unknownTitle: 'Session not found',
+        unknownSession: 'This demo session does not exist. Go back to Code and choose one from the list.',
+        unknownBack: 'Back to Code',
     },
     privilege: {
         keepAlive: 'Keep it alive',
@@ -3305,6 +3320,12 @@ export const TALOS_EN_MESSAGES = {
         dismissNotification: 'Dismiss notification',
         loadingTalos: 'Loading TALOS',
         chatsPanel: 'Chats panel',
+        // F6 sidebar refactor (24/8): the tablet rail's label when it shows
+        // Harness sessions instead of chats — must say what is actually on
+        // screen, same principle as chatsPanel above.
+        harnessPanel: 'Code panel',
+        collapseHarnessSessions: 'Collapse Code sessions',
+        expandHarnessSessions: 'Expand Code sessions',
     },
     shell: {
         sidebarDescription: 'Chats, tools and settings',

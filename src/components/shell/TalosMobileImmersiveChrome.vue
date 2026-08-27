@@ -100,10 +100,25 @@ const emit = defineEmits<{
             cui il fondo diventa trasparente. Senza, il velo finirebbe di netto
             e si vedrebbe il bordo.
         -->
+        <!--
+            ⛔ Owner 2026-08-27, misurato via CDP sul Pad: il velo precedente
+            (`from-40%`) era un BLOCCO PIENO opaco per il primo 40% della sua
+            altezza, poi un salto secco al 70%, poi la sfumatura — non un fade,
+            un rettangolo grigio con un bordo. Il testo che ci scorreva sotto
+            spariva di netto e ricompariva leggibile-ma-sporco esattamente
+            sul bordo. Confrontato con ChatGPT (owner, screenshot): loro non
+            hanno nessun blocco, solo pillole isolate su nero nudo.
+
+            ⛔⛔ Owner, correzione esplicita: NIENTE `backdrop-filter: blur`. Il
+            testo che scorre sotto deve restare LEGGIBILE, solo attenuato dalla
+            trasparenza — un velo, non una sfocatura. Tre fermate distribuite
+            in automatico (0/50/100%) bastano per un'interpolazione continua
+            dal pieno al trasparente, senza bordo.
+        -->
         <div class="relative pb-6">
             <div
                 aria-hidden="true"
-                class="absolute inset-0 bg-gradient-to-b from-[var(--talos-background)] from-40% via-[var(--talos-background)]/70 to-transparent"
+                class="absolute inset-0 bg-gradient-to-b from-[var(--talos-background)]/70 via-[var(--talos-background)]/30 to-transparent"
             />
             <div class="relative flex items-start justify-between px-3 pt-[max(0.5rem,env(safe-area-inset-top))]">
             <Button

@@ -12,6 +12,7 @@ import { writeTalosClipboardText } from '@/services/clipboard'
 // REMOVED, not dormant — no blur path exists for any metadata flag.
 const props = defineProps<{
     content: string
+    allowExternalImages?: boolean
 }>()
 
 const { t } = useTalosI18n()
@@ -52,6 +53,7 @@ const blocks = computed(() => splitTalosMarkdownBlocks(props.content))
  */
 const renderedBlocks = computed(() => blocks.value.map(source => renderTalosMarkdownBlock(source, {
     labels: markdownLabels.value,
+    allowExternalImages: props.allowExternalImages === true,
 })))
 
 async function handleContentClick(event: MouseEvent): Promise<void> {
@@ -165,6 +167,7 @@ async function handleContentClick(event: MouseEvent): Promise<void> {
  */
 [data-message-kind="user"] .talos-message-content a { color: currentColor; }
 .talos-message-content a:focus-visible { border-radius: 3px; outline: 2px solid var(--talos-ring); outline-offset: 2px; }
+.talos-message-content img { display: block; max-width: 100%; height: auto; margin: 0.7rem 0; border-radius: var(--talos-radius-control); }
 .talos-message-content :not(pre) > code { border: 1px solid var(--talos-border); border-radius: 4px; background: var(--talos-panel); padding: 0.08rem 0.3rem; font-size: 0.84em; }
 .talos-message-content .talos-code-block { min-width: 0; max-width: 100%; overflow: hidden; border: 1px solid var(--talos-code-border); border-radius: 6px; background: var(--talos-code-bg); color: var(--talos-code-text); }
 .talos-message-content .talos-code-block-header { display: flex; min-height: 2rem; align-items: center; justify-content: space-between; gap: 0.75rem; border-bottom: 1px solid var(--talos-code-border); border-left: 2px solid var(--talos-code-accent); background: var(--talos-code-surface); padding: 0 0.65rem; color: var(--talos-muted); font-size: 0.8em; text-transform: uppercase; }

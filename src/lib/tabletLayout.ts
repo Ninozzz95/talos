@@ -7,6 +7,10 @@
 export const TALOS_TABLET_SIDEBAR_MIN = 260
 export const TALOS_TABLET_SIDEBAR_MAX = 480
 export const TALOS_TABLET_SIDEBAR_DEFAULT = 320
+/** Harness keeps global navigation reachable while its session list is folded. */
+export const TALOS_TABLET_HARNESS_RAIL_COLLAPSED = 72
+
+export type TalosTabletSidebarVariant = 'chat' | 'harness'
 
 /**
  * Tablet layout engages at the md breakpoint (shared with Tailwind's md:).
@@ -19,6 +23,15 @@ export const TALOS_TABLET_MEDIA_QUERY = `${TALOS_TABLET_WIDTH_MEDIA_QUERY} and (
 export function clampTalosTabletSidebarWidth(value: unknown): number {
     if (typeof value !== 'number' || !Number.isFinite(value)) return TALOS_TABLET_SIDEBAR_DEFAULT
     return Math.min(TALOS_TABLET_SIDEBAR_MAX, Math.max(TALOS_TABLET_SIDEBAR_MIN, Math.round(value)))
+}
+
+export function talosTabletSidebarEffectiveWidth(
+    savedWidth: unknown,
+    variant: TalosTabletSidebarVariant,
+    collapsed: boolean,
+): number {
+    if (variant === 'harness' && collapsed) return TALOS_TABLET_HARNESS_RAIL_COLLAPSED
+    return clampTalosTabletSidebarWidth(savedWidth)
 }
 
 /**
@@ -51,4 +64,21 @@ export function talosTabletLeavesChatsRoute(
     // pagina che la persona non ha nemmeno visto.
     if (!routeName) return false
     return isTablet && routeName === 'chats'
+}
+
+/**
+ * Stessa domanda di `talosTabletLeavesChatsRoute`, per Harness — nata dal
+ * refactor della sidebar del 24/8: la barra laterale ora è CONTESTUALE
+ * (TalosTabletSidebar.vue mostra la lista di Harness invece della chat
+ * quando la stazione è Harness), quindi mostra già l'elenco delle sessioni.
+ * Restare sulla rotta-elenco nuda nel riquadro principale la disegnerebbe
+ * una seconda volta, affiancata a se stessa — esattamente LISTA-DOPPIA-01,
+ * un'altra stazione.
+ */
+export function talosTabletLeavesHarnessListRoute(
+    isTablet: boolean,
+    routeName: string | null | undefined,
+): boolean {
+    if (!routeName) return false
+    return isTablet && routeName === 'harness'
 }

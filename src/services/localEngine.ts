@@ -5,6 +5,8 @@ import {
 } from '@/lib/models/localContextPolicy'
 import type { TalosModelShape } from '@/lib/models/fit'
 import { talosPrefixesToEvict } from '@/lib/models/prefixCache'
+import { talosT } from '@/i18n'
+import { useTalosMobileToasts } from '@/stores/toasts'
 
 /**
  * The on-device engine, from JavaScript's side of the bridge.
@@ -565,6 +567,29 @@ export async function talosQualifyLocalBackend(path: string): Promise<TalosLocal
         }
     } catch {
         return TALOS_LOCAL_BACKEND_QUALIFICATION_UNAVAILABLE
+    }
+}
+
+/** Feedback for the consent sheet's background run; the sheet closes immediately. */
+export async function talosRunProbe(path: string, running?: number): Promise<void> {
+    const toasts = useTalosMobileToasts()
+    const runningId = running ?? toasts.push({ message: talosT('privacyPermissions.localEngineProbe.running') })
+    try {
+        const result = await talosQualifyLocalBackend(path)
+        const backend = result.decisionBackend === 'opencl' ? 'GPU'
+            : result.decisionBackend === 'cpu' ? 'CPU' : null
+        const message = result.ran && backend
+            ? talosT('privacyPermissions.localEngineProbe.resultRan', { backend })
+            : result.reason === 'hot'
+                ? talosT('privacyPermissions.localEngineProbe.resultNotRun.hot')
+                : result.reason === 'already-proven'
+                    ? talosT('privacyPermissions.localEngineProbe.resultNotRun.alreadyProven')
+                    : talosT('privacyPermissions.localEngineProbe.resultInconclusive')
+        toasts.push({ message, durationMs: 10000 })
+    } catch {
+        toasts.push({ message: talosT('rejectGeneric'), durationMs: 10000 })
+    } finally {
+        toasts.dismiss(runningId)
     }
 }
 

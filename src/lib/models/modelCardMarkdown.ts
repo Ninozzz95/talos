@@ -53,8 +53,9 @@ const HTML_COMMENT = /<!--[\s\S]*?-->/g
  */
 const HTML_TAG = /<\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^<>]*)?\/?>/g
 const HTML_BREAK = /<br\s*\/?>/gi
-const MARKDOWN_IMAGE = /!\[[^\]]*\]\([^)\s]*(?:\s+"[^"]*")?\)/g
+const MARKDOWN_IMAGE = /!\[([^\]]*)\]\(([^)\s]*)(?:\s+"[^"]*")?\)/g
 const EMPTY_LINK = /\[\s*\]\([^)\s]*(?:\s+"[^"]*")?\)/g
+const HUGGING_FACE_IMAGE = /(?:<img\b[^>]*>|&lt;img\b[\s\S]*?&gt;)/gi
 /** Un fence: tre o più backtick o tilde, con al più tre spazi di rientro. */
 const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/
 /** Le sequenze fra apici: `codice`, ``con un apice dentro``. */
@@ -73,10 +74,29 @@ export function talosStripReadmeFrontmatter(readme: string): string {
 
 function pulisciTesto(testo: string): string {
     return testo
-        .replace(MARKDOWN_IMAGE, '')
+        .replace(MARKDOWN_IMAGE, (match, _alt: string, url: string) => {
+            try {
+                return new URL(url, 'https://huggingface.co').hostname.endsWith('shields.io') ? '' : match
+            } catch {
+                return match
+            }
+        })
         .replace(EMPTY_LINK, '')
         .replace(HTML_BREAK, '  \n')
         .replace(HTML_TAG, '')
+}
+
+function conservaImmagineHuggingFace(testo: string): string {
+    return testo.replace(HUGGING_FACE_IMAGE, (tag) => {
+        const normalized = tag
+            .replace(/^&lt;/i, '<')
+            .replace(/&gt;$/i, '>')
+            .replace(/&quot;/gi, '"')
+        const source = /\bsrc\s*=\s*["'](https:\/\/cdn-uploads\.huggingface\.co\/[^"']+)["']/i.exec(normalized)?.[1]
+        if (!source) return ''
+        const alt = /\balt\s*=\s*["']([^"']*)["']/i.exec(normalized)?.[1] ?? ''
+        return `![${alt}](${source})`
+    })
 }
 
 /**
@@ -91,10 +111,10 @@ function pulisciRiga(riga: string): string {
     let ultimo = 0
     INLINE_CODE.lastIndex = 0
     for (let trovato = INLINE_CODE.exec(riga); trovato; trovato = INLINE_CODE.exec(riga)) {
-        risultato += pulisciTesto(riga.slice(ultimo, trovato.index)) + trovato[0]
+        risultato += pulisciTesto(conservaImmagineHuggingFace(riga.slice(ultimo, trovato.index))) + trovato[0]
         ultimo = trovato.index + trovato[0].length
     }
-    risultato += pulisciTesto(riga.slice(ultimo))
+    risultato += pulisciTesto(conservaImmagineHuggingFace(riga.slice(ultimo)))
 
     /**
      * ⛔ Il rientro dell'HTML non è il rientro del Markdown.
@@ -123,6 +143,7 @@ export function talosModelCardMarkdown(readme: string): string {
     const risultato: string[] = []
     let fenceAperto: string | null = null
     let dentroCommento = false
+    let immagineAperta: string | null = null
 
     for (const riga of righe) {
         const fence = FENCE.exec(riga)
@@ -142,6 +163,19 @@ export function talosModelCardMarkdown(readme: string): string {
         }
 
         let testo = riga
+        if (immagineAperta !== null) {
+            immagineAperta += `\n${testo}`
+            if (!/(?:\/\s*(?:>|&gt;)|(?:>|&gt;))/i.test(testo)) continue
+            testo = immagineAperta
+            immagineAperta = null
+        } else {
+            const inizioImmagine = /(?:<img\b|&lt;img\b)/i.exec(testo)?.index
+            if (inizioImmagine !== undefined
+                && !/(?:\/\s*(?:>|&gt;)|(?:>|&gt;))/i.test(testo.slice(inizioImmagine))) {
+                immagineAperta = testo
+                continue
+            }
+        }
         if (dentroCommento) {
             const fine = testo.indexOf('-->')
             if (fine < 0) continue
@@ -156,6 +190,9 @@ export function talosModelCardMarkdown(readme: string): string {
         }
         risultato.push(pulisciRiga(testo))
     }
+
+    // Un tag troncato non diventa HTML attivo: resta testo leggibile e inerte.
+    if (immagineAperta !== null) risultato.push(pulisciRiga(immagineAperta))
 
     // Tre righe vuote di fila non aggiungono niente, e dopo aver tolto badge e
     // `<div>` ne restano parecchie.

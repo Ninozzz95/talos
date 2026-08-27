@@ -672,6 +672,47 @@ describe('C45-RED-19N reasoning is routed while it streams', () => {
         // Nessun pezzo intermedio contiene il marcatore: è il punto di tutto.
         for (const pezzo of testo) expect(pezzo).not.toMatch(/<|>/)
     })
+
+    it('DEBT-MOBILE-015 RED: honours an opening think tag already rendered in the prompt', async () => {
+        localEngine.talosLocalEngineOpenWithFallback.mockResolvedValue({ contextTokens: 4096 })
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: '<|im_start|>assistant\n<think>\n',
+            promptTokens: 100,
+            contextTokens: 4096,
+        })
+        localEngine.talosLocalEngineGenerate.mockImplementation(
+            async (_prompt: string, onDelta: (delta: string) => void) => {
+                for (const piece of [
+                    'The user wants a recipe. ',
+                    'I should answer in Italian.</thi',
+                    'nk>Ciao! <|tool_call_start|>[library_search(query="x")]',
+                    '<|tool_call_end|> Ecco la ricetta.',
+                ]) onDelta(piece)
+                return { text: 'Ciao! Ecco la ricetta.', tokens: 8 }
+            },
+        )
+        localEngine.talosLocalEngineStatus.mockResolvedValue({
+            available: true, backends: 'CPU', loadedPath: null, shape: null,
+        })
+        deviceCapacity.talosMeasureDevice.mockResolvedValue(null)
+
+        const publicChunks: string[] = []
+        const reasoningChunks: string[] = []
+        await localAdapter.streamComplete(
+            { ...richiesta(), thinking: true } as never,
+            { apiKey: null, endpoint: null },
+            {
+                onChunk: (text: string) => publicChunks.push(text),
+                onReasoning: (text: string) => reasoningChunks.push(text),
+            } as never,
+        )
+
+        expect(publicChunks.join('')).toBe('Ciao!  Ecco la ricetta.')
+        expect(reasoningChunks.join('')).toBe(
+            'The user wants a recipe. I should answer in Italian.',
+        )
+        expect(publicChunks.join('')).not.toMatch(/The user|tool_call|library_search|think/)
+    })
 })
 
 /** La stessa richiesta usata dagli altri gruppi, qui a portata di questo. */

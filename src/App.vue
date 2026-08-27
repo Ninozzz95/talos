@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import { talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
 import { talosChatDiscardedByModeSwitch } from '@/lib/chat/modeSwitch'
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
@@ -46,7 +45,8 @@ import { applyTalosFontScale } from '@/lib/talosFontScale'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
-import { clampTalosTabletSidebarWidth, talosTabletLeavesChatsRoute } from '@/lib/tabletLayout'
+import { clampTalosTabletSidebarWidth, talosTabletLeavesChatsRoute, talosTabletLeavesHarnessListRoute, talosTabletSidebarEffectiveWidth } from '@/lib/tabletLayout'
+import { HARNESS_DEFAULT_SESSION_ID } from '@/lib/harnessDefaultSession'
 import { useLauncherIconController } from '@/services/launcherIcon'
 import { parseTalosSessionLibraryContextPolicy } from '@/lib/chat/libraryPolicy'
 const router = useRouter()
@@ -92,6 +92,11 @@ const TalosMobileImmersiveChrome = defineAsyncComponent(
 // tool sheet only when a station opens — neither belongs to the first paint.
 const TalosMobileSidebar = defineAsyncComponent(
     () => import('@/components/shell/TalosMobileSidebar.vue'),
+)
+// Image consent is exceptional, so its dialog belongs outside the first-paint
+// chunk just like the other optional shell overlays below.
+const TalosMobileConfirmDialog = defineAsyncComponent(
+    () => import('@/components/shell/TalosMobileConfirmDialog.vue'),
 )
 const TalosMobileToolSheet = defineAsyncComponent(
     () => import('@/components/shell/TalosMobileToolSheet.vue'),
@@ -151,13 +156,23 @@ const interactionMotionStyle = computed(() => talosInteractionMotionStyleV6({
 // station owns the full tablet width while retaining the saved rail dimension.
 const shellStyle = computed(() => ({
     ...interactionMotionStyle.value,
-    '--talos-tablet-rail': tabletChatRailVisible.value ? `${tabletSidebarWidth.value}px` : '0px',
-    '--talos-tablet-sidebar-width': `${tabletSidebarWidth.value}px`,
+    '--talos-tablet-rail': tabletChatRailVisible.value ? `${tabletEffectiveRailWidth.value}px` : '0px',
+    '--talos-tablet-sidebar-width': `${tabletEffectiveRailWidth.value}px`,
 }))
 
 // F1-T3 (D5/D6): hamburger sidebar state + the ChatScreen exposed session actions
 // (attachment revocation + draft scoping stay orchestrated in one place).
 const sidebarOpen = ref(false)
+async function openGlobalSidebar(): Promise<void> {
+    // A modal <dialog> inside Harness lives in the browser top layer: no
+    // z-index can place the global drawer above it. Close that transient layer
+    // first, then open the one navigation surface that owns the whole app.
+    if (activeRoute.value === 'harness-session') {
+        const bridge = await import('@/lib/harnessUiBridge')
+        bridge.dismissTalosHarnessUiTransientLayers()
+    }
+    sidebarOpen.value = true
+}
 // Interface text size: one variable on <html> drives Tailwind UI tokens.
 // Message prose has its own root-relative chat_layout.bubble_scale boundary.
 watch(() => settingsStore.state.shell.ui_font_scale, (scale) => {
@@ -620,19 +635,24 @@ function focusModelLabRoute(element: Element): void {
 // Chat is the persistent base; every other tab presents its screen in a sheet
 // over it — the mobile mirror of the desktop windowed workspace.
 const isStation = computed(() => activeRoute.value !== 'chat')
-
+const stationLocksBodyScroll = computed(() => activeRoute.value === 'harness-session')
 /**
  * Recorded when the STATION changes, never when you move within one: going from
  * the research list to a report is not entering a station, and treating it as
  * one would make Back navigate the list to itself.
  */
-watch(activeRoute, (to, from) => {
+watch([activeRoute, () => route.params] as const, ([to], [from, fromParams]) => {
     if (isModelLabRouteName(to) && isModelLabRouteName(from)) {
         modelLabTransitionDirection.value = MODEL_LAB_ROUTE_DEPTH[to] >= MODEL_LAB_ROUTE_DEPTH[from]
             ? 'forward'
             : 'back'
     }
-    stationEntry.value = talosStationEntryAfter(stationEntry.value, { to, from, viaSidebar: enteringViaSidebar })
+    stationEntry.value = talosStationEntryAfter(stationEntry.value, {
+        to,
+        from,
+        fromParams,
+        viaSidebar: enteringViaSidebar,
+    })
     enteringViaSidebar = false
 })
 
@@ -662,7 +682,7 @@ async function followNotificationRoute(target: string): Promise<void> {
 /** Back at a station top: undo the move that brought you here. */
 function leaveStation(): void {
     const exit = talosStationExit(stationEntry.value)
-    void navigate(exit.route as TalosMobileRouteName)
+    void navigate(exit.route as TalosMobileRouteName, {}, exit.params)
     sidebarOpen.value = exit.sidebar
 }
 /**
@@ -707,6 +727,29 @@ const tabletChatRailVisible = computed(() => (
     tabletLayout.isTablet.value && talosMobileStationOf(activeRoute.value) !== 'settings'
 ))
 
+// F6 sidebar refactor (24/8): quale contenuto mostra il rail persistente.
+// Ferma alla stessa domanda già risposta sopra (talosMobileStationOf), non
+// una seconda lettura di rotta — solo Harness sostituisce la chat; ogni
+// altra stazione (Memoria, Note, ecc.) resta un foglio SOPRA il rail chat,
+// invariato.
+const tabletRailVariant = computed<'chat' | 'harness'>(() => (
+    talosMobileStationOf(activeRoute.value) === 'harness' ? 'harness' : 'chat'
+))
+const tabletHarnessRailCollapsed = computed(() => (
+    tabletRailVariant.value === 'harness'
+    && settingsStore.state.shell.tablet_harness_sidebar_collapsed
+))
+const tabletEffectiveRailWidth = computed(() => talosTabletSidebarEffectiveWidth(
+    tabletSidebarWidth.value,
+    tabletRailVariant.value,
+    tabletHarnessRailCollapsed.value,
+))
+function toggleTabletHarnessRail(): void {
+    void settingsStore.setShell({
+        tablet_harness_sidebar_collapsed: !settingsStore.state.shell.tablet_harness_sidebar_collapsed,
+    }).catch(() => undefined)
+}
+
 const SHEET_TITLE_KEY: Record<TalosMobileRouteName, string> = {
     'settings-privilege': 'privilege.pageTitle',
     chat: 'navigation.chat',
@@ -744,6 +787,11 @@ const SHEET_TITLE_KEY: Record<TalosMobileRouteName, string> = {
     'research-claim': 'research.claimTitle',
     'research-source': 'research.sourceTitle',
     context: 'navigation.library',
+    // Harness UI (24/8): the "detail" is a trampoline, not a page anyone
+    // reads a distinct title on — reuse the same key as the list, like
+    // memory/memory-item, tasks/task-item, notes/note-item do.
+    harness: 'navigation.harness',
+    'harness-session': 'navigation.harness',
     settings: 'stations.settingsCenterTitle',
     'settings-models': 'models.labTitle',
     'settings-models-providers': 'models.providerAccessTitle',
@@ -783,12 +831,22 @@ watch(
     () => [tabletLayout.isTablet.value, activeRoute.value] as const,
     ([isTablet, rotta]) => {
         if (talosTabletLeavesChatsRoute(isTablet, rotta)) void router.replace(pathFor('chat'))
+        // Stessa domanda, per Harness: la barra laterale ora mostra il suo
+        // elenco (vedi tabletRailVariant) quando la stazione è Harness, quindi
+        // la rotta-elenco nuda nel riquadro principale la duplicherebbe.
+        else if (talosTabletLeavesHarnessListRoute(isTablet, rotta)) {
+            void router.replace({ name: 'harness-session', params: { id: HARNESS_DEFAULT_SESSION_ID } })
+        }
     },
     { immediate: true },
 )
 
-async function navigate(name: TalosMobileRouteName, query: LocationQueryRaw = {}): Promise<void> {
-    await router.push({ path: pathFor(name), query })
+async function navigate(
+    name: TalosMobileRouteName,
+    query: LocationQueryRaw = {},
+    params: Readonly<Record<string, string | string[]>> = {},
+): Promise<void> {
+    await router.push({ name, params, query })
     await preferences.setLastRoute(name)
 }
 
@@ -1239,25 +1297,32 @@ onBeforeUnmount(async () => {
             <div class="relative z-10 flex min-h-0 flex-1">
                 <template v-if="tabletChatRailVisible">
                     <TalosTabletSidebar
-                        :width="tabletSidebarWidth"
+                        :width="tabletEffectiveRailWidth"
+                        :variant="tabletRailVariant"
+                        :collapsed="tabletHarnessRailCollapsed"
                         @activated="onTabletActivated"
-                        @open-menu="sidebarOpen = true"
+                        @open-menu="openGlobalSidebar"
+                        @toggle-collapsed="toggleTabletHarnessRail"
                     />
                     <TalosTabletDivider
-                        :width="tabletSidebarWidth"
+                        v-if="!tabletHarnessRailCollapsed"
+                        :width="tabletEffectiveRailWidth"
                         @resize="onTabletResize"
                         @commit="commitTabletWidth"
                     />
                 </template>
 
-                <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
+                <div
+                    class="relative flex min-h-0 min-w-0 flex-1 flex-col"
+                    :class="{ invisible: stationLocksBodyScroll }"
+                >
                     <TalosMobileHeader
                         v-if="!immersiveHeader"
                         :title="headerTitle"
                         :creating-session="sessionBusy || chatController.chat.state.persistenceStatus !== 'ready'"
                         :hide-menu="tabletLayout.isTablet.value"
                         :hide-app-actions="tabletLayout.isTablet.value"
-                        @open-menu="sidebarOpen = true"
+                        @open-menu="openGlobalSidebar"
                         @new-chat="sidebarNewChat"
                 @temporary-chat="sidebarTemporaryChat"
                 @normal-mode="sidebarNormalMode"
@@ -1277,7 +1342,7 @@ onBeforeUnmount(async () => {
                         :busy="sessionBusy"
                         :hide-menu="tabletLayout.isTablet.value"
                         :hide-app-actions="tabletLayout.isTablet.value"
-                        @open-menu="sidebarOpen = true"
+                        @open-menu="openGlobalSidebar"
                         @new-chat="sidebarNewChat"
                 @temporary-chat="sidebarTemporaryChat"
                 @normal-mode="sidebarNormalMode"
@@ -1301,18 +1366,17 @@ onBeforeUnmount(async () => {
 
             <TalosLauncherIconDialog v-if="launcherIcon.state.pending" />
 
-            <Transition
-                leave-active-class="transition duration-200 ease-in"
-                leave-to-class="opacity-0 translate-y-4"
-            >
+            <Transition name="station">
                 <TalosMobileToolSheet
                     v-if="isStation"
                     :title="sheetTitle"
-                    :hide-app-actions="tabletLayout.isTablet.value"
+                    :hide-app-actions="tabletLayout.isTablet.value && tabletChatRailVisible"
                     :presentation="settingsStore.state.chat_layout.mobile_window_presentation"
                     :parent-back="stationParent ? goToStationParent : null"
                     :shell-back="talosIndietro"
                     :parent-title="stationParentTitle"
+                    :lock-body-scroll="stationLocksBodyScroll"
+                    :hide-chrome="stationLocksBodyScroll"
                     @close="navigate('chat')"
                 >
                     <RouterView v-slot="{ Component, route: renderedRoute }">

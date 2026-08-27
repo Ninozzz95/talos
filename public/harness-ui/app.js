@@ -1,8 +1,30 @@
 (() => {
   'use strict';
 
-  const $ = (selector, root = document) => root.querySelector(selector);
-  const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+  /*
+   * Owner 24/8: montato dentro uno shadow root da `HarnessSessionScreen.vue`
+   * (non più un documento a sé tramite `window.location.assign` — la stessa
+   * pagina resta la SPA, la cronologia resta condivisa, il tasto Indietro
+   * torna a essere quello vero di sempre). `HarnessSessionScreen.vue` pianta
+   * `window.__talosHarnessRoot` PRIMA di aggiungere questo script; ROOT()
+   * torna a `document` se qualcuno lo apre com'era prima (nessuna regressione
+   * per un test/anteprima diretto del file).
+   */
+  function ROOT() { return window.__talosHarnessRoot || document; }
+  /*
+   * `:root` nel CSS di questo file è diventato `:host` (vedi styles.css) —
+   * `:root` dentro un foglio di stile di uno shadow root punta SEMPRE
+   * all'`<html>` reale della pagina, non all'host: le variabili --sidebar
+   * ecc. sarebbero finite sul documento sbagliato, o peggio, `:host` le
+   * dichiara direttamente sull'host e una dichiarazione diretta batte
+   * SEMPRE un valore ereditato — scrivere su document.documentElement non
+   * avrebbe avuto alcun effetto visibile, sovrascritto in silenzio da
+   * `:host`. HOST() punta all'elemento giusto per leggere/scrivere queste
+   * proprietà personalizzate.
+   */
+  function HOST() { return window.__talosHarnessHost || document.documentElement; }
+  const $ = (selector, root = ROOT()) => root.querySelector(selector);
+  const $$ = (selector, root = ROOT()) => [...root.querySelectorAll(selector)];
 
   const state = {
     view: 'chat',
@@ -10,7 +32,7 @@
     queueMode: false,
     permissions: 'Workspace write',
     model: 'gpt-5.6-sol · high',
-    environment: 'wt/auth-61c · feat/mobile-harness',
+    environment: 'wt/auth-61c · feat/mobile-code',
     session: 'Refactor auth flow',
     running: true,
     board: {
@@ -22,6 +44,32 @@
       nextCursor: null,
       totalMatched: 0,
       generation: 0,
+    },
+    /*
+     * ⭐⭐⭐ 26/8 — riconciliazione desktop→mobile, DEC-053 (owner, 24/8:
+     * "harness deve essere fatto sia per mobile che desktop... quando
+     * riprenderemo il desktop lo legheremo al desktop"). Stessa forma di
+     * `state.realSession` già viva su `lane/harness-ui` (AVM-harness-ui,
+     * pipeline AG-UI reale): qui arriva SOLO la parte di consumo eventi
+     * (vedi handleRealEvent più sotto), non ancora agganciata a nessun
+     * pulsante — vedi la nota davanti a startRealSession per il perché.
+     */
+    realSession: {
+      id: null,
+      taskId: null,
+      generation: 0,
+      eventSource: null,
+      messageElements: new Map(),
+      runCount: 0,
+      taskBubbleMostrata: false,
+      /** Piano §1.3, riga Review — percorso -> {path, code, nuovo}, UNA voce per file scritto, non solo l'ultima. */
+      reviewFiles: new Map(),
+      /** Piano §1.3, riga "Contesto workspace" — la cartella corrente sfogliata nell'albero file reale, '' = radice. */
+      treePercorso: '',
+      /** Piano §1.3-BIS.T — toolCallId -> nome attrezzo, SOLO per riconoscere quando un ToolCallResult appartiene a "shell" e specchiarlo nella vista Terminale. Non tocca il rendering generico della chat, già esistente. */
+      toolCallNomi: new Map(),
+      /** ⛔ 27/8 — vero se l'ULTIMO evento visto su questa connessione era RunFinished/RunError: dice a onerror se la chiusura che sta per arrivare è attesa (niente da segnalare) o una vera interruzione. Vedi collegaEventiSessione. */
+      eventoTerminaleVisto: false,
     },
   };
 
@@ -36,6 +84,7 @@
 
   const appShell = $('#app');
   const views = $$('.view-pane');
+  const chatConversation = $('.conversation');
   const mobileViewButtons = $$('[data-mobile-view]');
   const modeTabs = $$('.mode-tab');
   const backdrop = $('#overlayBackdrop');
@@ -44,6 +93,7 @@
   const commandDialog = $('#commandDialog');
   const commandSearch = $('#commandSearch');
   const sheetDialog = $('#sheetDialog');
+  const harnessDialogBackdrop = $('#harnessDialogBackdrop');
   const sheetTitle = $('#sheetTitle');
   const sheetEyebrow = $('#sheetEyebrow');
   const sheetBody = $('#sheetBody');
@@ -56,6 +106,7 @@
   const runStrip = $('.run-strip');
   const runStateToggle = $('#runStateToggle');
   const desktopInspectorToggle = $('.desktop-context-toggle');
+  const sessionsCollapseBtn = $('#sessionsCollapseBtn');
   const commandEmpty = $('#commandEmpty');
   const diffPath = $('#diffPath');
   const diffCode = $('#diffCode');
@@ -70,6 +121,72 @@
   const campaignReportState = $('#campaignReportState');
   const loadMoreRunsButton = $('[data-action="load-more-runs"]');
   const refreshCampaignButton = $('[data-action="refresh-campaign"]');
+  const boardEyebrow = $('#boardEyebrow');
+  const boardTitle = $('#boardTitle');
+  const boardDescription = $('#boardDescription');
+  const composerMic = $('.composer-mic');
+  const embeddedSessionBack = $('[data-open-panel="sessions"]');
+  const topbar = $('.topbar');
+  const embeddedHeaderScrollers = [...new Set([...views, chatConversation].filter(Boolean))];
+  const embeddedHeaderScrollPositions = new WeakMap();
+
+  if (HOST().classList.contains('talos-embedded')) {
+    embeddedSessionBack?.setAttribute('aria-label', 'Torna alle sessioni Codice');
+  }
+
+  const motionAnimations = new Set();
+
+  function motionMilliseconds(name, fallback = 0) {
+    if (document.body.classList.contains('reduce-motion')) return 0;
+    const raw = getComputedStyle(HOST()).getPropertyValue(name).trim();
+    if (!raw) return fallback;
+    const value = Number.parseFloat(raw);
+    if (!Number.isFinite(value)) return fallback;
+    return raw.endsWith('s') && !raw.endsWith('ms') ? value * 1000 : value;
+  }
+
+  function animateExit(element, options = {}, finalize = () => {}) {
+    if (!element) { finalize(); return null; }
+    const durationToken = options.durationToken || '--talos-motion-duration-surface-exit';
+    const duration = motionMilliseconds(durationToken, 180);
+    if (duration <= 0 || typeof element.animate !== 'function') {
+      finalize();
+      return null;
+    }
+    const style = getComputedStyle(HOST());
+    const easing = options.easing
+      || style.getPropertyValue('--talos-motion-ease-exit').trim()
+      || 'ease-in';
+    const transform = options.transform || 'translateY(6px)';
+    element.classList.add('motion-exit');
+    const animation = element.animate(
+      [{ opacity: 1, transform: 'none' }, { opacity: 0, transform }],
+      { duration, easing, fill: 'none' },
+    );
+    motionAnimations.add(animation);
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      motionAnimations.delete(animation);
+      element.classList.remove('motion-exit');
+      finalize();
+    };
+    animation.finished.then(finish, finish);
+    return animation;
+  }
+
+  function cancelMotionAnimations() {
+    for (const animation of motionAnimations) animation.cancel();
+    motionAnimations.clear();
+  }
+
+  function markMotionEnter(element) {
+    if (!element) return;
+    element.classList.remove('motion-exit');
+    element.classList.add('motion-enter');
+    element.addEventListener('animationend', () => element.classList.remove('motion-enter'), { once: true });
+  }
 
   function icon(id) {
     return `<svg aria-hidden="true"><use href="#${id}"/></svg>`;
@@ -77,12 +194,14 @@
 
   function ensureDemoLabels() {
     $$('[data-demo-surface]').forEach((surface) => {
-      if (surface.querySelector(':scope > .demo-surface-badge')) return;
+      if (surface.querySelector('.demo-surface-badge')) return;
       const badge = document.createElement('span');
       badge.className = 'demo-surface-badge';
       badge.textContent = 'Demo UI · non collegato';
       badge.setAttribute('aria-label', `Demo UI non collegata: ${surface.dataset.demoSurface || 'superficie'}`);
-      surface.prepend(badge);
+      if (surface.classList.contains('chat-view')) surface.querySelector('.conversation')?.prepend(badge);
+      else if (surface.classList.contains('sessions-panel')) surface.querySelector('.brand-row')?.after(badge);
+      else surface.prepend(badge);
     });
   }
 
@@ -109,15 +228,69 @@
     });
   }
 
+  function setEmbeddedTopbarHidden(hidden) {
+    if (!HOST().classList.contains('talos-embedded')) return;
+    topbar?.classList.toggle('is-scroll-hidden', hidden);
+  }
+
+  function resetEmbeddedTopbarScroll(scroller = null) {
+    setEmbeddedTopbarHidden(false);
+    if (scroller) embeddedHeaderScrollPositions.set(scroller, Math.max(0, scroller.scrollTop));
+    else embeddedHeaderScrollers.forEach((element) => {
+      embeddedHeaderScrollPositions.set(element, Math.max(0, element.scrollTop));
+    });
+  }
+
+  function embeddedScrollerAtEnd(scroller, current) {
+    const maximum = scroller.scrollHeight - scroller.clientHeight;
+    return maximum > 0 && maximum - current <= 2;
+  }
+
+  function handleEmbeddedContentScroll(event) {
+    if (!HOST().classList.contains('talos-embedded')) return;
+    const scroller = event.currentTarget;
+    const current = Math.max(0, scroller.scrollTop);
+    const previous = embeddedHeaderScrollPositions.get(scroller) ?? current;
+    const delta = current - previous;
+    embeddedHeaderScrollPositions.set(scroller, current);
+    if (current <= 4) {
+      setEmbeddedTopbarHidden(false);
+      return;
+    }
+    if (delta < -1) {
+      // Collapsing the topbar increases the scrollport height. Near the end,
+      // the browser then clamps scrollTop to its smaller maximum and emits a
+      // negative delta even though the person is still flinging downward.
+      // A real upward gesture leaves that maximum, so only that case reopens.
+      if (!embeddedScrollerAtEnd(scroller, current)) setEmbeddedTopbarHidden(false);
+      return;
+    }
+    if (current > 12 && delta > 2) setEmbeddedTopbarHidden(true);
+  }
+
   function setView(view, options = {}) {
     const target = $(`[data-view="${view}"]`);
     if (!target) return;
+    const previous = views.find((pane) => pane.classList.contains('active'));
     state.view = view;
     if (options.mode) state.mode = options.mode;
-    else state.mode = view === 'dashboard' ? 'dashboard' : 'chat';
-    views.forEach((pane) => pane.classList.toggle('active', pane === target));
+    else if (view === 'dashboard') state.mode = 'dashboard';
+    else if (view === 'chat') state.mode = 'chat';
+    else state.mode = null;
+    views.forEach((pane) => {
+      if (pane !== target && pane !== previous) pane.classList.remove('active', 'motion-enter', 'motion-exit');
+    });
+    if (previous && previous !== target) {
+      animateExit(previous, { durationToken: '--talos-motion-duration-tab-change', transform: 'translateX(-8px)' }, () => {
+        previous.classList.remove('active');
+      });
+    }
+    target.classList.add('active');
+    if (previous !== target) markMotionEnter(target);
     syncNavigationState();
     target.scrollTop = 0;
+    resetEmbeddedTopbarScroll(view === 'chat' ? chatConversation : target);
+    window.__talosHarnessHostViewChange?.(view);
     if (view === 'dashboard') ensureCampaignBoard();
   }
 
@@ -133,6 +306,22 @@
     }
     appShell.classList.toggle('inspector-collapsed');
     syncInspectorToggle();
+  }
+
+  // Owner 24/8: la sidebar sessioni comprimibile quanto l'inspector — stesso
+  // schema esatto, un solo pulsante desktop-only, nessuna scorciatoia nuova.
+  function syncSessionsToggle() {
+    const expanded = window.innerWidth <= 1040 || !appShell.classList.contains('sessions-collapsed');
+    sessionsCollapseBtn?.setAttribute('aria-expanded', String(expanded));
+  }
+
+  function toggleSessionsPanel() {
+    if (window.innerWidth <= 1040) {
+      openPanel('sessions');
+      return;
+    }
+    appShell.classList.toggle('sessions-collapsed');
+    syncSessionsToggle();
   }
 
   function openPanel(name) {
@@ -152,8 +341,55 @@
     backdrop.classList.remove('show');
   }
 
+  function syncEmbeddedDialogBackdrop() {
+    const shouldShow = commandDialog.open || sheetDialog.open;
+    if (shouldShow) {
+      harnessDialogBackdrop.hidden = false;
+      markMotionEnter(harnessDialogBackdrop);
+      return;
+    }
+    if (harnessDialogBackdrop.hidden || harnessDialogBackdrop.classList.contains('motion-exit')) return;
+    animateExit(
+      harnessDialogBackdrop,
+      { durationToken: '--talos-motion-duration-popover', transform: 'none' },
+      () => { harnessDialogBackdrop.hidden = true; },
+    );
+  }
+
+  function showEmbeddedDialog(dialog) {
+    if (!dialog.open) dialog.show();
+    markMotionEnter(dialog);
+    syncEmbeddedDialogBackdrop();
+  }
+
+  function closeEmbeddedDialog(dialog) {
+    if (!dialog.open || dialog.classList.contains('motion-exit')) return;
+    animateExit(dialog, { durationToken: '--talos-motion-duration-popover' }, () => {
+      if (dialog.open) dialog.close();
+      syncEmbeddedDialogBackdrop();
+    });
+  }
+
+  function transientLayersActive() {
+    return commandDialog.open
+      || sheetDialog.open
+      || sessionsPanel.classList.contains('open')
+      || inspectorPanel.classList.contains('open');
+  }
+
+  function dismissTransientLayers() {
+    if (!transientLayersActive()) return false;
+    closeEmbeddedDialog(commandDialog);
+    closeEmbeddedDialog(sheetDialog);
+    closePanels();
+    return true;
+  }
+
   function toast(title, message = '') {
-    while (toastRegion.children.length >= 3) toastRegion.firstElementChild?.remove();
+    if (toastRegion.children.length >= 3) {
+      const oldest = toastRegion.firstElementChild;
+      animateExit(oldest, {}, () => oldest?.remove());
+    }
     const el = document.createElement('div');
     el.className = 'toast';
     el.setAttribute('role', 'status');
@@ -166,7 +402,8 @@
       el.appendChild(span);
     }
     toastRegion.appendChild(el);
-    window.setTimeout(() => el.remove(), 3300);
+    markMotionEnter(el);
+    window.setTimeout(() => animateExit(el, {}, () => el.remove()), 3300);
   }
 
   // REAL_DATA_RENDER_START
@@ -185,7 +422,7 @@
 
   function boardErrorMessage(error) {
     if (error?.code && typeof error.message === 'string' && error.message) return error.message;
-    return 'Il server locale non risponde. Avvia Harness UI e riprova.';
+    return 'Il server locale non risponde. Apri Codice sul PC e riprova.';
   }
 
   function formatCost(value, estimated = false) {
@@ -291,9 +528,14 @@
 
     toggle.addEventListener('click', () => {
       const opening = detail.hidden;
-      detail.hidden = !opening;
       toggle.setAttribute('aria-expanded', String(opening));
-      if (opening && !detail.querySelector('.run-evidence')) {
+      if (!opening) {
+        animateExit(detail, { durationToken: '--talos-motion-duration-disclosure' }, () => { detail.hidden = true; });
+        return;
+      }
+      detail.hidden = false;
+      markMotionEnter(detail);
+      if (!detail.querySelector('.run-evidence')) {
         const evidence = textElement(
           row.detto === null || row.detto === undefined ? 'p' : 'pre',
           'run-evidence',
@@ -335,6 +577,29 @@
       method: 'GET',
       headers: { Accept: 'application/json' },
       cache: 'no-store',
+    });
+    let envelope;
+    try {
+      envelope = await response.json();
+    } catch {
+      const error = new Error('Risposta locale non valida');
+      error.code = 'INTERNAL_ERROR';
+      throw error;
+    }
+    if (!response.ok || !envelope?.ok) {
+      const error = new Error(envelope?.error?.message || 'Richiesta locale non riuscita');
+      error.code = envelope?.error?.code || 'INTERNAL_ERROR';
+      throw error;
+    }
+    return envelope.data;
+  }
+
+  /** ⭐ 26/8, riconciliazione desktop→mobile — stesso contratto envelope di apiGet, per POST /api/v1/sessions/*. */
+  async function apiPost(pathname, body) {
+    const response = await fetch(pathname, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     });
     let envelope;
     try {
@@ -400,6 +665,15 @@
       ]);
       if (generation !== state.board.generation) return;
       setConnectionState('ready', 'Dati reali · sola lettura');
+      // ⭐ 26/8, riconciliazione desktop→mobile — trovato con una prova vera
+      // (browser reale contro il server vero, non ipotizzato): il badge
+      // "Demo UI" della Board restava visibile anche a dati reali caricati,
+      // difetto preesistente MAI notato perché su mobile embedded questo
+      // ramo non veniva mai raggiunto. Stesso principio già applicato ad
+      // aggiornaAlberoReale/aggiornaPannelloAmbiente: dati reali arrivati,
+      // l'etichetta demo deve sparire.
+      const demoBadgeBoard = $('.demo-surface-badge', $('[data-view="dashboard"]'));
+      if (demoBadgeBoard) demoBadgeBoard.hidden = true;
     } catch (error) {
       if (generation !== state.board.generation) return;
       state.board.runs = [];
@@ -415,7 +689,7 @@
   }
 
   async function loadCampaigns() {
-    setConnectionState('loading', 'Connessione locale', 'Leggo la allowlist dal server Harness UI.');
+    setConnectionState('loading', 'Connessione locale', 'Leggo la allowlist dal server Codice.');
     const campaigns = await apiGet('/api/v1/campaigns');
     state.board.campaigns = campaigns;
     const available = campaigns.filter((campaign) => campaign.available);
@@ -429,7 +703,37 @@
     await refreshCampaign();
   }
 
+  function renderEmbeddedBoardDemo(announce = false) {
+    state.board.initialized = true;
+    state.board.campaign = null;
+    state.board.campaigns = [];
+    state.board.runs = [];
+    state.board.nextCursor = null;
+    state.board.totalMatched = 0;
+    boardEyebrow.textContent = 'Board Codice · Demo UI';
+    boardTitle.textContent = 'Anteprima campagne';
+    boardDescription.textContent = 'Questa superficie mobile non ha un backend: nessun dato TALOS-BANCO viene letto o simulato.';
+    campaignSelect.replaceChildren(new Option('Demo non collegata', ''));
+    campaignSelect.disabled = true;
+    harnessFilter.replaceChildren(new Option('Tutti', ''));
+    harnessFilter.disabled = true;
+    outcomeFilter.replaceChildren(new Option('Tutti', ''));
+    outcomeFilter.disabled = true;
+    renderCampaignSummary(null);
+    renderCampaignRuns([]);
+    renderCampaignReport(null, 'REPORT_UNAVAILABLE');
+    $('.board-empty', campaignRunList).textContent = 'Nessun dato mobile collegato.';
+    campaignReportState.textContent = 'Demo';
+    campaignReportText.textContent = 'Nessun rapporto mobile collegato';
+    setConnectionState('demo', 'Demo UI · non collegato', 'Nessun backend mobile è configurato per Codice.');
+    if (announce) toast('Board demo non collegata', 'Nessuna richiesta di rete è stata eseguita.');
+  }
+
   function ensureCampaignBoard() {
+    if (HOST().classList.contains('talos-embedded')) {
+      renderEmbeddedBoardDemo();
+      return Promise.resolve();
+    }
     if (state.board.initialized || state.board.bootstrapPromise) return state.board.bootstrapPromise;
     state.board.bootstrapPromise = loadCampaigns()
       .catch((error) => {
@@ -458,6 +762,10 @@
   }
 
   function clearCampaignEvidence() {
+    if (HOST().classList.contains('talos-embedded')) {
+      toast('Nessuna evidenza collegata', 'La Board mobile è una Demo UI senza backend.');
+      return;
+    }
     for (const row of state.board.runs) row.detto = null;
     $$('.run-evidence', campaignRunList).forEach((element) => element.remove());
     $$('.campaign-run-detail', campaignRunList).forEach((detail) => { detail.hidden = true; });
@@ -493,7 +801,7 @@
     sheetEyebrow.textContent = content.eyebrow;
     sheetTitle.textContent = content.title;
     sheetBody.innerHTML = content.html();
-    if (!sheetDialog.open) sheetDialog.showModal();
+    showEmbeddedDialog(sheetDialog);
     wireSheetActions(type);
   }
 
@@ -549,8 +857,8 @@
       html: () => `
         <div class="sheet-section">
           <span class="sheet-label">Ambiente attivo</span>
-          <button class="sheet-option active">
-            <span class="sheet-icon">${icon('i-branch')}</span><span><strong>wt/auth-61c · feat/mobile-harness</strong><small>~/dev/talos/.worktrees/auth-61c</small></span><span>Attivo</span>
+          <button class="sheet-option active" data-environment-choice="active">
+            <span class="sheet-icon">${icon('i-branch')}</span><span><strong>wt/auth-61c · feat/mobile-code</strong><small>~/dev/talos/.worktrees/auth-61c</small></span><span>Attivo</span>
           </button>
           <button class="sheet-option" data-environment-choice="local">
             <span class="sheet-icon">${icon('i-git')}</span><span><strong>Local · main</strong><small>~/dev/talos</small></span><span>pulito</span>
@@ -610,6 +918,7 @@
           <button class="sheet-option" data-control-action="agents"><span class="sheet-icon">${icon('i-robot')}</span><span><strong>Agents</strong><small>Subagent, deleghe, isolamento e limiti</small></span><span>2</span></button>
           <button class="sheet-option" data-control-action="hooks"><span class="sheet-icon">${icon('i-bolt')}</span><span><strong>Hooks</strong><small>Pre/Post tool, stop, notify e policy</small></span><span>4</span></button>
           <button class="sheet-option" data-control-action="doctor"><span class="sheet-icon">${icon('i-check')}</span><span><strong>Doctor</strong><small>Runtime, provider, shell, git e browser</small></span><span>Healthy</span></button>
+          <button class="sheet-option" data-control-action="settings"><span class="sheet-icon">${icon('i-settings')}</span><span><strong>Impostazioni Codice</strong><small>Aspetto, interazione e preferenze demo</small></span><span>Apri</span></button>
         </div>
         <div class="sheet-section">
           <span class="sheet-label">Approval policy</span>
@@ -624,7 +933,7 @@
       html: () => `
         <div class="sheet-section session-tree-sheet">
           <span class="sheet-label">Thread e fork</span>
-          <button class="sheet-option active" data-session-action="main"><span class="sheet-icon">${icon('i-list')}</span><span><strong>Refactor auth flow</strong><small>Main · contesto 18.7k · live</small></span><span>●</span></button>
+          <button class="sheet-option active" data-session-action="main"><span class="sheet-icon">${icon('i-list')}</span><span><strong data-current-session-title>${state.session.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}</strong><small>Main · contesto 18.7k · live</small></span><span>●</span></button>
           <button class="sheet-option" data-session-action="side"><span class="sheet-icon">${icon('i-branch')}</span><span><strong>Responsive audit</strong><small>Side thread · subagent A1</small></span><span>↗</span></button>
           <button class="sheet-option" data-session-action="fork"><span class="sheet-icon">${icon('i-branch')}</span><span><strong>A11y review</strong><small>Fork dal turn 14 · pronto</small></span><span>✓</span></button>
         </div>
@@ -662,21 +971,22 @@
         state.model = button.dataset.modelChoice;
         $$('.selector-pill span').filter((span) => span.textContent.includes('gpt-') || span.textContent.includes('claude-') || span.textContent.includes('deepseek-') || span.textContent.includes('gemini-')).forEach((span) => { span.textContent = state.model; });
         toast('Modello aggiornato', state.model);
-        sheetDialog.close();
+        closeEmbeddedDialog(sheetDialog);
       });
     });
     $$('[data-permission-choice]', sheetBody).forEach((button) => {
       button.addEventListener('click', () => {
         state.permissions = button.dataset.permissionChoice;
         $$('.selector-pill span').filter((span) => ['Workspace write', 'Read only', 'On request', 'Full access'].includes(span.textContent)).forEach((span) => { span.textContent = state.permissions; });
+        window.__talosHarnessHostPermissionChange?.(state.permissions);
         toast('Policy aggiornata', state.permissions);
-        sheetDialog.close();
+        closeEmbeddedDialog(sheetDialog);
       });
     });
     $$('[data-capability-action]', sheetBody).forEach((button) => {
       button.addEventListener('click', () => {
         toast(button.dataset.capabilityAction === 'file' ? 'File picker simulato' : 'Cattura visiva pronta', 'Il mockup rappresenta il flusso senza backend.');
-        sheetDialog.close();
+        closeEmbeddedDialog(sheetDialog);
       });
     });
     $$('[data-environment-choice]', sheetBody).forEach((button) => {
@@ -685,13 +995,14 @@
         const chip = $('.environment-chip span');
         if (chip) chip.textContent = state.environment;
         toast('Environment selezionato', state.environment);
-        sheetDialog.close();
+        closeEmbeddedDialog(sheetDialog);
       });
     });
     $$('[data-control-action]', sheetBody).forEach((button) => {
       button.addEventListener('click', () => {
         const action = button.dataset.controlAction;
-        if (action === 'agents') { sheetDialog.close(); openPanel('inspector'); const agents = $('[data-inspector-tab="agents"]'); agents?.click(); }
+        if (action === 'agents') { closeEmbeddedDialog(sheetDialog); openPanel('inspector'); const agents = $('[data-inspector-tab="agents"]'); agents?.click(); }
+        else if (action === 'settings') { closeEmbeddedDialog(sheetDialog); setView('settings'); }
         else toast(action === 'doctor' ? 'Doctor: Healthy' : 'Hook center aperto', action === 'doctor' ? 'Provider, shell, git, browser e workspace verificati.' : '4 hook configurati per questa sessione.');
       });
     });
@@ -699,7 +1010,7 @@
       button.addEventListener('click', () => {
         const action = button.dataset.sessionAction;
         toast(action === 'new-side' ? 'Side thread creato' : 'Thread selezionato', action === 'fork' ? 'Fork indipendente con contesto ereditato.' : 'Il contesto resta isolato ma collegato al task principale.');
-        if (sheetDialog.open) sheetDialog.close();
+        closeEmbeddedDialog(sheetDialog);
       });
     });
     $$('[data-reference-file]', sheetBody).forEach((button) => {
@@ -707,7 +1018,7 @@
         const file = button.dataset.referenceFile;
         composerInput.value = `${composerInput.value.replace(/@[^\s]*$/, '')}@${file} `;
         autoGrowTextarea();
-        sheetDialog.close();
+        closeEmbeddedDialog(sheetDialog);
         composerInput.focus();
       });
     });
@@ -716,7 +1027,7 @@
     if (renameForm) {
       const input = $('#renameSessionInput', renameForm);
       window.setTimeout(() => { input?.focus(); input?.select(); }, 30);
-      $('[data-rename-cancel]', renameForm)?.addEventListener('click', () => sheetDialog.close());
+      $('[data-rename-cancel]', renameForm)?.addEventListener('click', () => closeEmbeddedDialog(sheetDialog));
       renameForm.addEventListener('submit', (event) => {
         event.preventDefault();
         const next = input?.value.trim();
@@ -725,7 +1036,7 @@
         sessionTitle.textContent = state.session;
         const activeSession = $('.session-item.active .session-main strong');
         if (activeSession) activeSession.textContent = state.session;
-        sheetDialog.close();
+        closeEmbeddedDialog(sheetDialog);
         toast('Sessione rinominata', state.session);
       });
     }
@@ -754,12 +1065,29 @@
     }
   }
 
+  let nativeKeyboardOpen = null;
+
+  function applyKeyboardOpen(open) {
+    document.body.classList.toggle('keyboard-open', Boolean(open));
+  }
+
+  function setKeyboardOpen(open) {
+    nativeKeyboardOpen = Boolean(open);
+    applyKeyboardOpen(nativeKeyboardOpen);
+    if (!nativeKeyboardOpen && ROOT().activeElement === composerInput) composerInput.blur();
+  }
+
   function syncVisualViewport() {
     const viewport = window.visualViewport;
     const rawOffset = viewport ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop) : 0;
     const keyboardOffset = rawOffset > 80 ? rawOffset : 0;
-    const composerFocused = document.activeElement === composerInput;
-    document.body.classList.toggle('keyboard-open', composerFocused && keyboardOffset > 0 && window.innerWidth <= 780);
+    // ROOT().activeElement, non document.activeElement: dentro uno shadow
+    // root il focus reale si legge da lì (Document e ShadowRoot condividono
+    // l'interfaccia DocumentOrShadowRoot) — document.activeElement da fuori
+    // vedrebbe solo l'host, mai composerInput.
+    const composerFocused = ROOT().activeElement === composerInput;
+    const viewportKeyboardOpen = composerFocused && keyboardOffset > 0 && window.innerWidth <= 780;
+    applyKeyboardOpen(nativeKeyboardOpen ?? viewportKeyboardOpen);
   }
 
   const toolDetails = {
@@ -776,10 +1104,12 @@
     $$('.tool-row[aria-expanded="true"]').forEach((row) => {
       if (row !== button) row.setAttribute('aria-expanded', 'false');
     });
-    $$('.tool-inline-detail').forEach((detail) => { if (detail !== existing) detail.remove(); });
+    $$('.tool-inline-detail').forEach((detail) => {
+      if (detail !== existing) animateExit(detail, { durationToken: '--talos-motion-duration-disclosure' }, () => detail.remove());
+    });
     if (existing) {
-      existing.remove();
       button.setAttribute('aria-expanded', 'false');
+      animateExit(existing, { durationToken: '--talos-motion-duration-disclosure' }, () => existing.remove());
       return;
     }
     const [title, detail] = toolDetails[key] || ['Dettaglio tool', 'Nessun dettaglio aggiuntivo disponibile.'];
@@ -787,6 +1117,7 @@
     row.className = 'tool-inline-detail';
     row.innerHTML = `<strong>${title}</strong><span>${detail}</span>`;
     button.insertAdjacentElement('afterend', row);
+    markMotionEnter(row);
     button.setAttribute('aria-expanded', 'true');
   }
 
@@ -829,7 +1160,11 @@
   };
 
   function renderReviewFile(key) {
-    const file = reviewFiles[key];
+    // ⭐ 26/8, riconciliazione desktop→mobile — le voci reali vivono in
+    // state.realSession.reviewFiles (una per percorso scritto), non nel
+    // fisso `reviewFiles` demo: chiave "real:<percorso>" le distingue,
+    // stesso schema già in produzione su lane/harness-ui.
+    const file = key.startsWith('real:') ? state.realSession.reviewFiles.get(key.slice(5)) : reviewFiles[key];
     if (!file || !diffPath || !diffCode) return;
     diffPath.textContent = file.path;
     diffCode.replaceChildren(...file.code.map(([kind, text]) => {
@@ -838,6 +1173,7 @@
       span.textContent = text;
       return span;
     }));
+    markMotionEnter(diffCode);
   }
 
   function setInspectorTab(button) {
@@ -850,21 +1186,801 @@
       const active = section.dataset.inspectorSection === button.dataset.inspectorTab;
       section.classList.toggle('active', active);
       section.hidden = !active;
+      if (active) markMotionEnter(section);
     });
+  }
+
+  /*
+   * ⭐⭐⭐ 26/8 — LA SESSIONE VERA, riconciliazione desktop→mobile (DEC-053).
+   * Porta da `lane/harness-ui` (AVM-harness-ui/harness-ui/public/app.js) la
+   * pipeline di CONSUMO eventi AG-UI: stessa API `/api/v1/sessions/*`, stesso
+   * contratto envelope (apiGet/apiPost sopra), zero dipendenze nuove — solo
+   * `$`/`$$` al posto di `document.querySelector` dov'era bare, il resto
+   * (createElement/createElementNS/createTextNode/setTimeout) funziona già
+   * identico dentro uno shadow root, quindi resta invariato.
+   *
+   * ⭐ 26/8, seconda metà dello stesso giorno: forkSession / resumeSession /
+   * compactSession / passaASessione / contenitoreSessioniReali /
+   * aggiornaElencoSessioniReali / openRealTaskSheet sono state portate
+   * anche loro (vedi il blocco dopo stopRealSession, poco più sotto) — su
+   * desktop pescano/scrivono #sessionList, lo stesso elemento che esiste
+   * IDENTICO in questo bundle; il vincolo "serve un ponte verso la sidebar
+   * nativa Vue" vale solo quando il bundle è EMBEDDED
+   * (`:host(.talos-embedded)` in styles.css nasconde già #sessionList per
+   * quel caso, stesso meccanismo della Board demo) — standalone (il caso
+   * desktop) non c'è nessuna sidebar nativa da sostituire, quindi niente
+   * ponte da costruire prima di portarle.
+   *
+   * ⛔ NON ANCORA fatto (dichiarato, non taciuto): nessuna di queste — né
+   * startRealSession né le sette appena elencate — è agganciata a un
+   * tocco. openRealTaskSheet userebbe showEmbeddedDialog(sheetDialog), mai
+   * il metodo nativo bloccante dell'elemento <dialog> (vietato,
+   * HARNESS-NATIVE-TOP-LAYER-HITTEST-01), ma manca ancora il bottone che la
+   * apre: su mobile "dove va" resta la
+   * stessa decisione UX già rimandata (superficie Codice iterata per otto
+   * fasi, non mia da decidere sola); sul desktop standalone il vincolo
+   * tecnico non c'è, ma la scelta di COSA far fare a "Nuova sessione" in
+   * quel contesto è comunque un prodotto, non un'ovvietà.
+   *
+   * ⇒ Zero rischio di regressione sulla suite Pad-verificata di Codice: il
+   * prossimo passo è la decisione UX del trigger, non altro porting.
+   */
+
+  function appendRealTaskStart(task) {
+    const conversation = $('#conversation');
+    const article = document.createElement('article');
+    article.className = 'message user-message';
+    const bubble = document.createElement('div');
+    bubble.className = 'message-bubble';
+    bubble.textContent = task.consegna || task.consegnaCorta || task.id;
+    const meta = document.createElement('div');
+    meta.className = 'message-meta';
+    const span = document.createElement('span');
+    span.textContent = `Task reale · ${task.id}`;
+    meta.appendChild(span);
+    article.append(bubble, meta);
+    conversation.appendChild(article);
+    markMotionEnter(article);
+    window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'center' }), 40);
+    state.realSession.taskBubbleMostrata = true;
+  }
+
+  function ensureAssistantMessageElement(messageId) {
+    const existing = state.realSession.messageElements.get(messageId);
+    if (existing) return existing;
+    const conversation = $('#conversation');
+    const article = document.createElement('article');
+    article.className = 'message assistant-message compact-message';
+    const meta = document.createElement('div');
+    meta.className = 'assistant-meta';
+    const glyph = document.createElement('span');
+    glyph.className = 'talos-glyph';
+    glyph.appendChild(textElement('span', 'brand-glyph-mark', ''));
+    meta.append(glyph, document.createTextNode('TALOS · sessione reale'));
+    const copy = document.createElement('div');
+    copy.className = 'assistant-copy';
+    article.append(meta, copy);
+    conversation.appendChild(article);
+    markMotionEnter(article);
+    state.realSession.messageElements.set(messageId, article);
+    return article;
+  }
+
+  function appendToolNote(text) {
+    const conversation = $('#conversation');
+    const article = document.createElement('article');
+    article.className = 'message assistant-message compact-message real-tool-note';
+    const meta = document.createElement('div');
+    meta.className = 'assistant-meta';
+    const glyph = document.createElement('span');
+    glyph.className = 'talos-glyph';
+    glyph.textContent = '⚙';
+    meta.append(glyph, document.createTextNode('Attrezzo'));
+    const copy = document.createElement('div');
+    copy.className = 'assistant-copy';
+    copy.textContent = text;
+    article.append(meta, copy);
+    conversation.appendChild(article);
+    markMotionEnter(article);
+    window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
+  }
+
+  function appendStatusNote(text, isError = false) {
+    const conversation = $('#conversation');
+    const article = document.createElement('article');
+    article.className = `message assistant-message compact-message real-session-status${isError ? ' real-session-error' : ''}`;
+    const meta = document.createElement('div');
+    meta.className = 'assistant-meta';
+    const glyph = document.createElement('span');
+    glyph.className = 'talos-glyph';
+    glyph.textContent = isError ? '!' : '✓';
+    meta.append(glyph, document.createTextNode(isError ? 'TALOS · errore' : 'TALOS · concluso'));
+    const copy = document.createElement('div');
+    copy.className = 'assistant-copy';
+    copy.textContent = text;
+    article.append(meta, copy);
+    conversation.appendChild(article);
+    markMotionEnter(article);
+    window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
+  }
+
+  /**
+   * ⭐ Piano §1.3-BIS.T (seconda metà) — la vista Terminale dedicata smette
+   * di essere demo la prima volta che un comando VERO gira. Non un vero
+   * emulatore (niente cursore che si muove, niente ANSI): un prompt riga
+   * per riga, stesso stile visivo del mockup (span .prompt/.path/.cursor),
+   * ma con l'output reale.
+   *
+   * ⛔ Non tocca il rendering generico della chat (appendToolNote già
+   * mostra lo stesso tool-call lì) — questa è un'AGGIUNTA, non una
+   * sostituzione: lo stesso comando compare in entrambe le viste, come nel
+   * mockup originale (Terminale è una vista dedicata, non l'unica prova
+   * che qualcosa è girato).
+   */
+  function appendTerminalEntry(comando, testo) {
+    const code = $('[data-view="terminal"] .terminal-window code');
+    if (!code) return;
+    if (!code.dataset.reale) {
+      code.replaceChildren();
+      code.dataset.reale = '1';
+      const demoBadge = $('.demo-surface-badge', $('[data-view="terminal"]'));
+      if (demoBadge) demoBadge.hidden = true;
+    }
+    const workspace = $('#envWorkspace')?.textContent || 'talos';
+    const rigaPrompt = document.createElement('span');
+    rigaPrompt.append(
+      textElement('span', 'prompt', 'talos'),
+      document.createTextNode(' '),
+      textElement('span', 'path', `~/${workspace}`),
+    );
+    code.append(rigaPrompt, document.createTextNode(`\n$ ${comando}\n\n${testo}\n\n`));
+    const contenitore = code.closest('.terminal-window');
+    if (contenitore) contenitore.scrollTop = contenitore.scrollHeight;
+  }
+
+  /**
+   * ⭐ Piano §1.3-BIS.T (seconda metà) — il comando diretto (`!comando` nel
+   * composer): un endpoint dedicato (`POST .../shell`), FUORI dal ciclo del
+   * modello — l'owner sceglie il comando, non un attrezzo che il modello
+   * decide di chiamare. Riusa esattamente lo schema già in uso per
+   * `resumeSession`: POST, poi una connessione SSE FRESCA (mai quella
+   * vecchia — provato nel backend che una connessione già aperta da prima
+   * non riceve questi eventi dal vivo).
+   */
+  async function runDirectShell(comando, silenzioso) {
+    if (!state.realSession.id) {
+      toast('Nessuna sessione reale attiva', 'Avvia un task dal corpus prima di usare un comando diretto.');
+      return;
+    }
+    const sessionId = state.realSession.id;
+    const taskId = state.realSession.taskId;
+    try {
+      await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/shell`, { comando });
+      const generation = nuovaGenerazioneSessione({ continua: true });
+      state.realSession.taskId = taskId;
+      collegaEventiSessione(sessionId, generation);
+      aggiornaElencoSessioniReali();
+      if (!silenzioso) toast('Comando inviato', comando);
+    } catch (error) {
+      toast('Comando non eseguito', error.message);
+    }
+  }
+
+  /**
+   * ⭐ Piano §1.3, riga Review — ogni scrittura reale aggiorna la scheda
+   * Review già esistente, non solo la conversazione. Una voce PER
+   * percorso, così un task che scrive più file resta tutto ispezionabile.
+   *
+   * ⛔ `value` è il contenuto INTERO del file, mai un vero diff riga per
+   * riga: talosHarness.mjs non passa il "prima" a onScrittura oggi, solo il
+   * "dopo" — 'add' mostra righe verdi (file nuovo), 'replace' righe neutre
+   * (file toccato, contenuto attuale) invece di inventare +/- che non ha.
+   */
+  function updateRealReview(delta) {
+    const operazione = delta?.[0];
+    if (!operazione || typeof operazione.path !== 'string') return;
+    const percorso = operazione.path.replace(/^\/file\//, '');
+    state.realSession.reviewFiles.set(percorso, {
+      path: percorso,
+      nuovo: operazione.op === 'add',
+      code: String(operazione.value ?? '').split('\n').map((riga) => [operazione.op === 'add' ? 'add' : 'ctx', riga]),
+    });
+    renderRealReviewList();
+    renderReviewFile(`real:${percorso}`);
+  }
+
+  /**
+   * ⭐ Ricostruisce `.file-review-list` con UNA voce per file reale scritto
+   * finora in questa sessione, sostituendo le voci demo la prima volta che
+   * esiste almeno una scrittura vera.
+   */
+  function renderRealReviewList() {
+    const contenitore = $('[data-view="diff"] .file-review-list');
+    if (!contenitore) return;
+    const voci = [...state.realSession.reviewFiles.values()];
+    const ultimoPercorso = voci.at(-1)?.path;
+    contenitore.replaceChildren(...voci.map((file) => {
+      const attiva = file.path === ultimoPercorso;
+      const button = document.createElement('button');
+      button.className = `file-review${attiva ? ' active' : ''}`;
+      button.dataset.reviewFile = `real:${file.path}`;
+      button.setAttribute('aria-pressed', String(attiva));
+      const etichetta = document.createElement('span');
+      const svgNs = 'http://www.w3.org/2000/svg';
+      const icona = document.createElementNS(svgNs, 'svg');
+      const uso = document.createElementNS(svgNs, 'use');
+      uso.setAttribute('href', '#i-diff'); // ⛔ mai innerHTML: costruito nodo per nodo
+      icona.append(uso);
+      etichetta.append(icona, textElement('strong', '', file.path.split('/').pop()));
+      button.append(etichetta, textElement('span', 'diff-stats', `${file.nuovo ? 'nuovo' : 'modificato'} · ${file.code.length} righe`));
+      button.addEventListener('click', () => {
+        $$('.file-review', contenitore).forEach((f) => { f.classList.remove('active'); f.setAttribute('aria-pressed', 'false'); });
+        button.classList.add('active');
+        button.setAttribute('aria-pressed', 'true');
+        renderReviewFile(button.dataset.reviewFile);
+      });
+      return button;
+    }));
+    const titolo = $('[data-view="diff"] .view-heading h2');
+    if (titolo) titolo.textContent = `${voci.length} file modificat${voci.length === 1 ? 'o' : 'i'}`;
+  }
+
+  /**
+   * ⭐ Piano §1.3, riga "Contesto workspace" — l'albero file REALE, un
+   * livello alla volta (GET /api/v1/sessions/:id/tree?percorso=...): le
+   * cartelle sono bottoni che scendono di un livello, ".. (su)" risale.
+   */
+  async function aggiornaAlberoReale(percorso = '') {
+    if (!state.realSession.id) return;
+    const contenitore = $('#inspector-files .file-tree');
+    if (!contenitore) return;
+    let voci;
+    try {
+      voci = (await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree?percorso=${encodeURIComponent(percorso)}`)).voci;
+    } catch {
+      return; // ⛔ un fallimento qui non è un'azione richiesta, non merita un toast
+    }
+    state.realSession.treePercorso = percorso;
+    const demoBadge = $('.demo-surface-badge', $('[data-inspector-section="files"]'));
+    if (demoBadge) demoBadge.hidden = true;
+
+    const svgNs = 'http://www.w3.org/2000/svg';
+    const iconaCon = (id) => {
+      const svg = document.createElementNS(svgNs, 'svg');
+      const uso = document.createElementNS(svgNs, 'use');
+      uso.setAttribute('href', `#${id}`);
+      svg.append(uso);
+      return svg;
+    };
+
+    const radice = document.createElement('div');
+    radice.className = 'tree-root';
+    radice.append(iconaCon('i-files'), textElement('strong', '', percorso || state.realSession.taskId || 'workspace'));
+    const pezzi = [radice];
+
+    if (percorso) {
+      const su = document.createElement('button');
+      su.textContent = '.. (su)';
+      const genitore = percorso.split('/').slice(0, -1).join('/');
+      su.addEventListener('click', () => aggiornaAlberoReale(genitore));
+      pezzi.push(su);
+    }
+    for (const voce of voci) {
+      const button = document.createElement('button');
+      if (voce.cartella) button.className = 'nested';
+      button.textContent = voce.cartella ? `${voce.nome}/` : voce.nome;
+      if (voce.cartella) {
+        const dentro = percorso ? `${percorso}/${voce.nome}` : voce.nome;
+        button.addEventListener('click', () => aggiornaAlberoReale(dentro));
+      }
+      pezzi.push(button);
+    }
+    contenitore.replaceChildren(...pezzi);
+  }
+
+  /**
+   * ⭐ Il pannello "Ambiente" del Context Rail — prima statico/demo.
+   * `branch`/`worktree` mostrano "—" quando non applicabili — un trattino
+   * onesto, MAI il valore demo lasciato al suo posto.
+   */
+  function aggiornaPannelloAmbiente(contesto) {
+    const workspace = $('#envWorkspace');
+    const branch = $('#envBranch');
+    const worktree = $('#envWorktree');
+    const root = $('#envRoot');
+    if (workspace) workspace.textContent = contesto.progetto || '—';
+    if (branch) branch.textContent = contesto.branch || '—';
+    if (worktree) worktree.textContent = '—'; // mai un repository git nel corpus di oggi, vedi doc in workspace-context.mjs
+    if (root) root.textContent = contesto.cartella;
+    const sezione = $('[data-inspector-section="context"]');
+    const demoBadge = sezione && $('.demo-surface-badge', sezione);
+    if (demoBadge) demoBadge.hidden = true;
+  }
+
+  function handleRealEvent(evento, generation) {
+    if (generation !== state.realSession.generation) return; // sessione più vecchia: scartato, non renderizzato
+    switch (evento.type) {
+      case 'RunStarted': {
+        state.realSession.runCount = (state.realSession.runCount || 0) + 1;
+        if (!state.realSession.taskBubbleMostrata && evento.input) {
+          appendRealTaskStart(evento.input);
+        } else if (state.realSession.runCount > 1) {
+          appendStatusNote('Nuovo giro iniziato sulla stessa conversazione.');
+        }
+        if (evento.contesto) aggiornaPannelloAmbiente(evento.contesto);
+        aggiornaAlberoReale('');
+        break;
+      }
+      case 'TextMessageContent': {
+        const element = ensureAssistantMessageElement(evento.messageId);
+        $('.assistant-copy', element).textContent += evento.delta;
+        break;
+      }
+      case 'ToolCallStart': {
+        appendToolNote(`🔧 ${evento.toolCallName}(…)`);
+        /*
+         * ⭐ Ricordato SOLO per riconoscere in ToolCallResult se questa
+         * chiamata era "shell" (dal modello, dentro un task, O dal
+         * comando diretto dell'owner — stesso attrezzo, stesso evento) e
+         * specchiarla nella vista Terminale. Non cambia il rendering
+         * generico sopra, già esistente.
+         */
+        state.realSession.toolCallNomi.set(evento.toolCallId, { nome: evento.toolCallName, argomenti: '' });
+        break;
+      }
+      case 'ToolCallArgs': {
+        const ultima = $$('.real-tool-note .assistant-copy').at(-1);
+        if (ultima) ultima.textContent += `\n${evento.delta}`;
+        const info = state.realSession.toolCallNomi.get(evento.toolCallId);
+        if (info) info.argomenti += evento.delta;
+        break;
+      }
+      case 'ToolCallResult': {
+        const info = state.realSession.toolCallNomi.get(evento.toolCallId);
+        if (info?.nome === 'shell') {
+          let comando = '(comando)';
+          try { comando = JSON.parse(info.argomenti).comando || comando; } catch { /* args incompleti o non ancora arrivati: meglio un'etichetta onesta che un crash */ }
+          appendTerminalEntry(comando, String(evento.content));
+        }
+        state.realSession.toolCallNomi.delete(evento.toolCallId);
+        appendToolNote(`→ ${String(evento.content).slice(0, 2000)}`);
+        break;
+      }
+      case 'StateDelta': {
+        updateRealReview(evento.delta);
+        aggiornaAlberoReale(state.realSession.treePercorso);
+        appendStatusNote('✏️ File scritto — vedi la scheda Review per il contenuto intero.');
+        break;
+      }
+      case 'RunFinished': {
+        appendStatusNote(evento.result?.detto || 'Task concluso.');
+        /*
+         * ⛔⛔ 27/8, trovato verificando il comando diretto: QUI si chiudeva
+         * l'EventSource lato browser (closeRealSession, rimossa) — giusto
+         * quando una sessione aveva un giro solo, sbagliato ora che può
+         * averne di più (un resume, un comando diretto): durante il REPLAY
+         * di una cronologia con due giri, questo troncava la vista alla
+         * fine del PRIMO RunFinished, esattamente come il gemello lato
+         * server corretto poco fa in http-app.mjs (stessa famiglia di
+         * difetto, due lati). Ora si aspetta che sia il SERVER a chiudere
+         * lo stream (lo fa già, correttamente, solo a replay finito e
+         * senza un giro dal vivo dietro) — si segna solo che l'ultimo
+         * evento era terminale, per onerror.
+         */
+        state.realSession.eventoTerminaleVisto = true;
+        aggiornaElencoSessioniReali(); // lo stato in #sessionList passa da "in corso" a "concluso" (visibile solo standalone, vedi nota di testa)
+        break;
+      }
+      case 'RunError': {
+        appendStatusNote(`${evento.code ? `[${evento.code}] ` : ''}${evento.message}`, true);
+        state.realSession.eventoTerminaleVisto = true;
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  /** Apre l'EventSource per una sessione GIÀ avviata sul server e collega gli eventi al rendering reale. */
+  /*
+   * ⛔ 27/8, buco trovato eseguendo la PRIMA sessione vera end-to-end
+   * (piano §1.3-BIS, blocco 1): il badge "Demo UI · non collegato" della
+   * chat restava visibile anche con una conversazione reale a schermo —
+   * a differenza di Board/contesto/file-tree/foglio, la chat non aveva
+   * MAI un punto che lo nascondesse. `collegaEventiSessione` è l'unico
+   * luogo comune a `startRealSession` E `passaASessione` (la seconda non
+   * passa da `handleRealEvent`/RunStarted se la sessione è già conclusa
+   * e si sta solo rivedendo la sua cronologia) — un solo punto, non due.
+   *
+   * ⛔⛔ Prima versione cercava il PRIMO `.demo-surface-badge` sotto
+   * `.chat-view` — sbagliato, scoperto da un test scritto apposta:
+   * `nuovaGenerazioneSessione()` (chiamata da entrambi i chiamanti PRIMA
+   * di questa funzione) svuota `#conversation` con `replaceChildren()`,
+   * portando via CON SÉ sia il badge della chat sia quello di
+   * `.approval-card` (entrambi vivono lì dentro) — il primo badge ancora
+   * in piedi sotto `.chat-view` a quel punto è quello di `.queued-message`
+   * (fuori da `#conversation`, dentro `.composer-wrap`), una superficie
+   * SENZA relazione con "la chat è collegata". Il selettore ora risale
+   * dal badge al suo `[data-demo-surface]` più vicino e lo accetta solo
+   * se è ESATTAMENTE "chat" — mai un altro badge per coincidenza di
+   * posizione. Nel caso comune (badge già svuotato dal wipe) trova
+   * `undefined` e non fa niente: l'assenza del badge è già l'esito
+   * corretto, cercare non serve più ma non deve nuocere.
+   */
+  function collegaEventiSessione(sessionId, generation) {
+    state.realSession.id = sessionId;
+    state.realSession.eventoTerminaleVisto = false;
+    const demoBadgeChat = $$('.demo-surface-badge', $('.chat-view'))
+      .find((badge) => badge.closest('[data-demo-surface]')?.dataset.demoSurface === 'chat');
+    if (demoBadgeChat) demoBadgeChat.hidden = true;
+    const source = new EventSource(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`);
+    state.realSession.eventSource = source;
+    source.onmessage = (message) => {
+      let evento;
+      try { evento = JSON.parse(message.data); } catch { return; }
+      handleRealEvent(evento, generation);
+    };
+    /*
+     * ⛔⛔ 27/8 — riscritto insieme al fix gemello lato server (vedi
+     * handleRealEvent, caso RunFinished): EventSource riprova DA SOLO ad
+     * OGNI caduta di connessione, inclusa quella che il server fa apposta
+     * quando lo stream è davvero finito — per spec non esiste un
+     * "readyState CLOSED da solo", solo un client che chiama .close() lo
+     * ottiene. Prima lo faceva closeRealSession (rimossa) appena vedeva UN
+     * RunFinished — sbagliato con più giri nel buffer, chiudeva al primo.
+     * Ora: se l'ULTIMO evento visto era terminale, questa caduta era attesa
+     * (il server ha appena chiuso lo stream a posta fatta) — si chiude qui,
+     * niente avviso. Altrimenti è una caduta vera: si lascia che
+     * EventSource riprovi da solo, un avviso solo se ha già rinunciato.
+     */
+    source.onerror = () => {
+      if (generation !== state.realSession.generation) return;
+      if (state.realSession.eventoTerminaleVisto) {
+        source.close();
+        state.realSession.eventSource = null;
+        return;
+      }
+      if (source.readyState === EventSource.CLOSED) {
+        appendStatusNote('Connessione agli eventi interrotta.', true);
+      }
+    };
+  }
+
+  /** Chiude l'EventSource corrente (se c'è) e apre una nuova generazione. */
+  function nuovaGenerazioneSessione({ continua = false } = {}) {
+    if (state.realSession.eventSource) {
+      state.realSession.eventSource.close();
+      state.realSession.eventSource = null;
+    }
+    if (!continua) {
+      $('#conversation').replaceChildren();
+      state.realSession.messageElements = new Map();
+      state.realSession.runCount = 0;
+      state.realSession.taskBubbleMostrata = false;
+      state.realSession.reviewFiles = new Map();
+      state.realSession.treePercorso = '';
+    }
+    state.realSession.id = null;
+    return (state.realSession.generation += 1);
+  }
+
+  /**
+   * ⛔ Nessun chiamante ancora: vedi la nota di testa del blocco "LA
+   * SESSIONE VERA" — manca il punto d'ingresso UX su mobile. Pronta a
+   * essere invocata non appena quella decisione arriva.
+   */
+  async function startRealSession(task) {
+    const generation = nuovaGenerazioneSessione();
+    state.realSession.taskId = task.id;
+    state.session = `Task reale · ${task.id}`;
+    sessionTitle.textContent = state.session;
+    setView('chat');
+    closePanels();
+    appendRealTaskStart(task);
+    toast('Avvio in corso', `${task.id} · checkout del progetto sul PC che serve questa pagina.`);
+
+    let sessionId;
+    try {
+      const data = await apiPost('/api/v1/sessions', { taskId: task.id });
+      sessionId = data.sessionId;
+    } catch (error) {
+      if (generation !== state.realSession.generation) return;
+      appendStatusNote(`Avvio non riuscito: ${error.message}`, true);
+      toast('Avvio non riuscito', error.message);
+      return;
+    }
+    if (generation !== state.realSession.generation) return;
+    collegaEventiSessione(sessionId, generation);
+    aggiornaElencoSessioniReali();
+  }
+
+  async function stopRealSession() {
+    if (!state.realSession.id) { toast('Nessuna sessione reale attiva'); return; }
+    try {
+      await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/stop`, {});
+      toast('Stop richiesto', 'La sessione si ferma al prossimo giro.');
+    } catch (error) {
+      toast('Stop non riuscito', error.message);
+    }
+  }
+
+  /*
+   * ⭐⭐⭐ 26/8 — seconda metà del porting desktop→mobile: fork/resume/compact/
+   * l'elenco sessioni e l'avvio da corpus. Esclusi dal primo giro perché
+   * pescano/scrivono su #sessionList — su mobile EMBEDDED quel pannello è
+   * nascosto in favore della sidebar nativa Vue (:host(.talos-embedded) in
+   * styles.css lo nasconde già, stesso meccanismo della Board demo). Fuori
+   * da un mount embedded (bundle aperto standalone, il caso desktop) quel
+   * limite non esiste: #sessionList è lo stesso identico elemento visibile
+   * che aveva la copia desktop separata — nessuna duplicazione, nessun
+   * secondo elenco da inventare.
+   *
+   * ⛔ Ancora NON agganciate a createNewSession: cambiare cosa fa "Nuova
+   * sessione" è la stessa decisione UX già rimandata (vedi il blocco sopra),
+   * solo posticipata al perimetro standalone invece che a quello embedded —
+   * non è più ovvia solo perché il vincolo tecnico è diverso.
+   */
+
+  /**
+   * ⭐ Fork reale quando c'è una sessione reale CONCLUSA attiva. Il server
+   * rifiuta con SESSION_NOT_READY (409) su una sessione ancora in corso.
+   */
+  async function forkSession() {
+    if (!state.realSession.id) {
+      toast('Fork creato', 'Nuovo ramo di conversazione da questo punto.');
+      return;
+    }
+    const idOrigine = state.realSession.id;
+    const taskIdOrigine = state.realSession.taskId;
+    try {
+      const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(idOrigine)}/fork`, {});
+      const generation = nuovaGenerazioneSessione();
+      state.realSession.taskId = taskIdOrigine;
+      state.session = `Task reale · ${taskIdOrigine} (fork)`;
+      sessionTitle.textContent = state.session;
+      appendStatusNote(`Fork avviato dalla sessione ${idOrigine.slice(0, 8)}… — stessa cartella, stessa storia.`);
+      collegaEventiSessione(dati.sessionId, generation);
+      aggiornaElencoSessioniReali();
+      toast('Fork creato', 'Nuovo ramo di conversazione da questo punto.');
+    } catch (error) {
+      toast('Fork non riuscito', error.message);
+    }
+  }
+
+  /**
+   * ⭐ Resume reale quando c'è una sessione reale CONCLUSA attiva. A
+   * differenza del fork, torna LO STESSO sessionId: riprende un giro in più
+   * sulla stessa conversazione, non ne crea una nuova.
+   */
+  async function resumeSession() {
+    if (!state.realSession.id) { toast('Nessuna sessione reale da riprendere'); return; }
+    const sessionId = state.realSession.id;
+    const taskId = state.realSession.taskId;
+    try {
+      await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/resume`, {});
+      // continua:true — STESSA vista: il "Nuovo giro iniziato" lo mostra
+      // handleRealEvent quando arriva il RunStarted del giro ripreso.
+      const generation = nuovaGenerazioneSessione({ continua: true });
+      state.realSession.taskId = taskId;
+      collegaEventiSessione(sessionId, generation);
+      aggiornaElencoSessioniReali();
+      toast('Sessione ripresa', 'Un nuovo giro è iniziato sulla stessa conversazione.');
+    } catch (error) {
+      toast('Resume non riuscito', error.message);
+    }
+  }
+
+  /**
+   * ⭐ "Compatta ora" reale quando c'è una sessione reale CONCLUSA attiva.
+   * Non avvia nessun giro nuovo: sostituisce ciò che una PROSSIMA
+   * resume/fork erediterebbe — la conversazione già mostrata non cambia.
+   */
+  async function compactSession() {
+    if (!state.realSession.id) {
+      toast('Contesto compattato', '18.7k -> 9.3k token equivalenti.');
+      return;
+    }
+    try {
+      const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/compact`, {});
+      toast(
+        dati.compattato ? 'Contesto compattato' : 'Compattazione saltata',
+        dati.compattato
+          ? 'Il prossimo resume o fork riparte dal riassunto.'
+          : 'Il modello non ha risposto: la conversazione resta quella intera.',
+      );
+    } catch (error) {
+      toast('Compattazione non riuscita', error.message);
+    }
+  }
+
+  /**
+   * ⭐⭐⭐ "Cronologia": passa a una sessione GIÀ esistente (viva o conclusa)
+   * invece di avviarne una nuova. Non serve leggere la sua storia a parte:
+   * aprire l'EventSource la riproduce da sola (iscriviti() nel registro
+   * rimanda TUTTI gli eventi già accaduti a chi si collega).
+   */
+  function passaASessione(sessionId, taskId, nome) {
+    if (sessionId === state.realSession.id) { setView('chat'); closePanels(); return; }
+    const generation = nuovaGenerazioneSessione();
+    state.realSession.taskId = taskId;
+    state.session = nome || `Task reale · ${taskId}`; // ⭐ un nome scelto dall'owner vince sul taskId
+    sessionTitle.textContent = state.session;
+    setView('chat');
+    closePanels();
+    collegaEventiSessione(sessionId, generation);
+    aggiornaElencoSessioniReali();
+  }
+
+  function formattaOraSessione(iso) {
+    try {
+      return new Date(iso).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '';
+    }
+  }
+
+  function contenitoreSessioniReali() {
+    let contenitore = $('#realSessionsBlock');
+    if (!contenitore) {
+      contenitore = document.createElement('div');
+      contenitore.id = 'realSessionsBlock';
+      $('#sessionList')?.prepend(contenitore);
+    }
+    return contenitore;
+  }
+
+  /**
+   * ⭐⭐⭐ La "cronologia" reale della sidebar — sostituisce (in un blocco
+   * suo, sopra le voci demo che restano invariate) un elenco vuoto con
+   * quello vero appena almeno una sessione reale esiste. Su mobile
+   * EMBEDDED #sessionList resta nascosto da styles.css: questa funzione
+   * scrive comunque nel DOM (nessun guard qui, il guard è visivo/CSS,
+   * stesso principio già in uso per renderCampaignRuns/Board), pronta a
+   * comparire appena il ponte verso la sidebar nativa Vue esisterà.
+   */
+  async function aggiornaElencoSessioniReali() {
+    const contenitore = contenitoreSessioniReali();
+    let elenco;
+    try {
+      elenco = (await apiGet('/api/v1/sessions')).items;
+    } catch {
+      return; // ⛔ un aggiornamento sidebar fallito non è un'azione richiesta, non merita un toast
+    }
+    if (elenco.length === 0) { contenitore.replaceChildren(); return; }
+
+    const pezzi = [textElement('div', 'list-heading', 'Sessioni reali')];
+    for (const sessione of elenco) {
+      const button = document.createElement('button');
+      button.className = `session-item real-session-item${sessione.sessionId === state.realSession.id ? ' active' : ''}`;
+      button.dataset.realSessionId = sessione.sessionId;
+      const main = document.createElement('span');
+      main.className = 'session-main';
+      const etichetta = sessione.nome || sessione.taskId; // ⭐ un nome scelto dall'owner vince sempre sul taskId
+      main.append(
+        textElement('strong', '', sessione.forkDa ? `${etichetta} · fork` : etichetta),
+        textElement('small', '', sessione.conclusa ? 'concluso' : 'in corso · live'),
+      );
+      const meta = document.createElement('span');
+      meta.className = 'session-meta';
+      meta.textContent = formattaOraSessione(sessione.avviataAlle);
+      button.append(main, meta);
+      button.addEventListener('click', () => passaASessione(sessione.sessionId, sessione.taskId, sessione.nome));
+      pezzi.push(button);
+    }
+    contenitore.replaceChildren(...pezzi);
+  }
+
+  /**
+   * ⭐ Il foglio "Avvia un task dal corpus". Adattato dall'originale
+   * desktop: il metodo nativo bloccante del dialog sostituito con
+   * `showEmbeddedDialog`/`closeEmbeddedDialog` (già usati da openSheet),
+   * l'unico modo ammesso di aprire #sheetDialog in questo bundle (guardia
+   * HARNESS-NATIVE-TOP-LAYER-HITTEST-01) — funziona identico standalone e
+   * in shadow root, dialog.show()/dialog.close() non hanno bisogno del
+   * comportamento modale nativo qui.
+   */
+  async function openRealTaskSheet() {
+    sheetEyebrow.textContent = 'Task reale';
+    sheetTitle.textContent = 'Avvia un task dal corpus';
+    sheetBody.replaceChildren(textElement('p', 'board-empty', 'Carico l’elenco dal server…'));
+    const demoBadge = $('.demo-surface-badge', sheetDialog);
+    if (demoBadge) demoBadge.hidden = true;
+    showEmbeddedDialog(sheetDialog);
+
+    let tasks;
+    try {
+      tasks = (await apiGet('/api/v1/tasks')).items;
+    } catch (error) {
+      sheetBody.replaceChildren(textElement('p', 'board-empty', `Elenco non disponibile: ${error.message}`));
+      return;
+    }
+
+    const section = document.createElement('div');
+    section.className = 'sheet-section';
+    section.appendChild(textElement('span', 'sheet-label', `${tasks.length} task dal corpus progetti/ — checkout ed esecuzione reali`));
+    for (const task of tasks) {
+      const button = document.createElement('button');
+      button.className = 'sheet-option';
+      button.dataset.startTask = task.id;
+      const iconWrap = document.createElement('span');
+      iconWrap.className = 'sheet-icon';
+      iconWrap.innerHTML = icon('i-play');
+      const textWrap = document.createElement('span');
+      textWrap.append(textElement('strong', '', task.id), textElement('small', '', task.consegnaCorta));
+      button.append(iconWrap, textWrap, textElement('span', '', `difficoltà ${task.difficolta}`));
+      button.addEventListener('click', () => { closeEmbeddedDialog(sheetDialog); startRealSession(task); });
+      section.appendChild(button);
+    }
+    sheetBody.replaceChildren(section);
   }
 
   function appendUserMessage(text) {
     const conversation = $('#conversation');
     const article = document.createElement('article');
-    article.className = 'message user-message';
+    article.className = 'message user-message motion-enter';
     article.innerHTML = `<div class="message-bubble"></div><div class="message-meta"><span>Tu · ora</span><button class="mini-icon" aria-label="Copia">${icon('i-copy')}</button></div>`;
     $('.message-bubble', article).textContent = text;
     conversation.appendChild(article);
     const assistant = document.createElement('article');
-    assistant.className = 'message assistant-message compact-message';
+    assistant.className = 'message assistant-message compact-message motion-enter';
     assistant.innerHTML = `<div class="assistant-meta"><span class="talos-glyph">T</span><span>TALOS · ${state.model.split(' · ')[0]}</span><span>ora</span></div><div class="assistant-copy">Ricevuto. Ho aggiunto il messaggio al run corrente mantenendo ambiente, permessi e contesto visibili.</div><div class="message-actions"><button data-message-action="copy" aria-label="Copia risposta">${icon('i-copy')}</button><button data-message-action="like" aria-label="Risposta utile" aria-pressed="false">👍</button><button data-message-action="dislike" aria-label="Risposta non utile" aria-pressed="false">👎</button><button data-message-action="retry" aria-label="Rigenera risposta">${icon('i-history')}</button></div>`;
     conversation.appendChild(assistant);
     window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'center' }), 40);
+  }
+
+  function submitPrompt(text) {
+    const value = String(text || '').trim();
+    if (!value) return false;
+    if (value.startsWith('!')) {
+      const hidden = value.startsWith('!!');
+      const comando = value.replace(/^!!?/, '').trim();
+      setView('terminal');
+      if (!comando) { toast('Comando vuoto', 'Scrivi qualcosa dopo "!".'); return true; }
+      runDirectShell(comando, hidden);
+      return true;
+    }
+    if (state.queueMode) {
+      queuedMessage.classList.add('show', 'motion-enter');
+      const queuedCopy = $('#queuedMessage span');
+      queuedCopy.textContent = '';
+      const queuedLabel = document.createElement('b');
+      queuedLabel.textContent = 'Follow-up in coda';
+      queuedCopy.append(queuedLabel, document.createTextNode(` · ${value}`));
+      toast('Follow-up accodato', 'Verrà consegnato dopo il run corrente.');
+    } else {
+      appendUserMessage(value);
+    }
+    return true;
+  }
+
+  function announceComposerAction(action) {
+    if (action === 'references') {
+      openSheet('references');
+      return true;
+    }
+    if (action === 'permissions') {
+      openSheet('permissions');
+      return true;
+    }
+    if (action === 'new_session') {
+      createNewSession();
+      return true;
+    }
+    const copy = {
+      attach: ['Allegato demo', 'Il selettore è UI locale e non carica file reali.'],
+      photo: ['Fotocamera demo', 'Nessuna foto è stata acquisita.'],
+      photos: ['Galleria demo', 'Nessuna immagine è stata importata.'],
+      browse: ['Browse demo', 'Lo stato resta locale a questa sessione Codice.'],
+      enhance: ['Miglioramento demo', 'Nessun modello è stato chiamato.'],
+      'enhance-blocked': ['Miglioramento non collegato', 'Questa superficie resta locale.'],
+      'refresh-models': ['Profili demo', 'Nessuna discovery di rete eseguita.'],
+      'browser-url': ['Browser demo', 'Nessuna navigazione esterna eseguita.'],
+      attach_file: ['Allegato demo', 'Il selettore è UI locale e non carica file reali.'],
+      export_report: ['Export demo', 'Nessun rapporto reale è stato prodotto.'],
+    };
+    const feedback = copy[action] || ['Demo UI · non collegato', 'Azione locale registrata senza backend.'];
+    toast(...feedback);
+    return true;
   }
 
   function autoGrowTextarea() {
@@ -872,7 +1988,25 @@
     composerInput.rows = Math.min(5, Math.max(1, explicitLines));
   }
 
+  /*
+   * ⭐⭐⭐ 26/8 — il trigger su desktop standalone. Owner: "abbiamo già la
+   * grammatica... va adattata", non una decisione UX da inventare da zero.
+   * La grammatica è openRealTaskSheet() (26/8, mattina: porta i task veri
+   * dal corpus, mai collegata a un tocco) — su mobile resta non collegata
+   * perché la superficie "Codice" è negoziata in OTTO fasi (non è mia da
+   * riaprire), ma su desktop standalone non c'è quel vincolo: il backend
+   * oggi sa far partire SOLO un task del corpus (talosLavora vuole una
+   * `cartella` e una `consegna` note, non un prompt libero — piano
+   * `elegant-spinning-dongarra.md` §1.5, Opzione B esplicitamente fuori
+   * fase), quindi mostrare qui il reset da chat vuota sarebbe demo, non
+   * realtà. embedded (mobile) invariato bit per bit — stesso identico
+   * comportamento di sempre, zero rischio sulla suite Pad-verificata.
+   */
   function createNewSession() {
+    if (!HOST().classList.contains('talos-embedded')) {
+      openRealTaskSheet();
+      return;
+    }
     state.session = 'Nuova sessione';
     sessionTitle.textContent = state.session;
     $$('.session-item').forEach((item) => item.classList.remove('active'));
@@ -882,6 +2016,21 @@
     composerInput.focus();
   }
 
+  function selectSession(selection) {
+    if (!selection || typeof selection.id !== 'string' || typeof selection.title !== 'string') return false;
+    const item = $$('.session-item').find((candidate) => candidate.dataset.sessionId === selection.id);
+    if (!item) return false;
+    $$('.session-item').forEach((other) => other.classList.remove('active'));
+    item.classList.add('active');
+    state.session = selection.title;
+    $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
+    const itemTitle = $('.session-main strong', item);
+    if (itemTitle) itemTitle.textContent = state.session;
+    closePanels();
+    setView('chat');
+    return true;
+  }
+
   function exportSession() {
     const payload = {
       schema: 'talos_mock_session_v1',
@@ -889,7 +2038,7 @@
       session: state.session,
       model: state.model,
       permissions: state.permissions,
-      branch: 'feat/mobile-harness',
+      branch: 'feat/mobile-code',
       worktree: 'wt/auth-61c',
       note: 'Interactive TALOS frontend mockup export',
     };
@@ -902,7 +2051,7 @@
   }
 
   async function shareSession() {
-    const text = `TALOS · ${state.session} · feat/mobile-harness`;
+    const text = `TALOS · ${state.session} · feat/mobile-code`;
     try {
       if (navigator.share) await navigator.share({ title: state.session, text });
       else if (navigator.clipboard) { await navigator.clipboard.writeText(text); toast('Snapshot copiato', 'Pronto da condividere.'); }
@@ -910,6 +2059,10 @@
     } catch (error) {
       if (error?.name !== 'AbortError') toast('Condivisione non disponibile', text);
     }
+  }
+
+  function announceVoiceUnavailable() {
+    toast('Voce demo non collegata', 'Il microfono non registra e non invia audio in questa superficie.');
   }
 
   function visibleCommandButtons() {
@@ -922,7 +2075,7 @@
   }
 
   function openCommandPalette() {
-    if (!commandDialog.open) commandDialog.showModal();
+    showEmbeddedDialog(commandDialog);
     commandSearch.value = '';
     filterCommands('');
     window.setTimeout(() => commandSearch.focus(), 20);
@@ -947,7 +2100,7 @@
   }
 
   function executeCommand(command) {
-    commandDialog.close();
+    closeEmbeddedDialog(commandDialog);
     switch (command) {
       case 'new': createNewSession(); break;
       case 'review': setView('diff'); break;
@@ -968,7 +2121,9 @@
   }
 
   $$('[data-open-panel]').forEach((button) => button.addEventListener('click', () => {
-    if (button.classList.contains('desktop-context-toggle') && button.dataset.openPanel === 'inspector' && window.innerWidth > 1040) toggleDesktopInspector();
+    if (button.dataset.openPanel === 'sessions' && HOST().classList.contains('talos-embedded')) {
+      window.__talosHarnessHostBack?.();
+    } else if (button.classList.contains('desktop-context-toggle') && button.dataset.openPanel === 'inspector' && window.innerWidth > 1040) toggleDesktopInspector();
     else openPanel(button.dataset.openPanel);
   }));
   $$('[data-close-panel]').forEach((button) => button.addEventListener('click', closePanels));
@@ -1000,7 +2155,7 @@
   }));
   $('#capabilityBtn').addEventListener('click', () => openSheet('capabilities'));
   $('#manageCapabilitiesBtn').addEventListener('click', () => openSheet('capabilities'));
-  $('#closeSheet').addEventListener('click', () => sheetDialog.close());
+  $('#closeSheet').addEventListener('click', () => closeEmbeddedDialog(sheetDialog));
 
   $$('.inspector-tabs button').forEach((button) => {
     button.addEventListener('click', () => setInspectorTab(button));
@@ -1017,10 +2172,16 @@
 
   $$('[data-collapse-target]').forEach((button) => {
     button.addEventListener('click', () => {
-      const target = document.getElementById(button.dataset.collapseTarget);
+      const target = ROOT().getElementById(button.dataset.collapseTarget);
       if (!target) return;
-      const collapsed = target.classList.toggle('collapsed');
-      button.setAttribute('aria-expanded', String(!collapsed));
+      const collapsed = target.classList.contains('collapsed');
+      button.setAttribute('aria-expanded', String(collapsed));
+      if (collapsed) {
+        target.classList.remove('collapsed');
+        markMotionEnter(target);
+      } else {
+        animateExit(target, { durationToken: '--talos-motion-duration-disclosure' }, () => target.classList.add('collapsed'));
+      }
     });
   });
 
@@ -1029,7 +2190,17 @@
     button.addEventListener('click', () => toggleToolDetail(button));
   });
 
-  document.addEventListener('click', (event) => {
+  /*
+   * Owner 24/8: era `document.addEventListener` — su tutta la pagina andava
+   * bene perché la pagina ERA il mockup. Montato nello shadow root, un
+   * ascoltatore su `document` riceverebbe l'evento RIETICHETTATO (event.target
+   * diventa l'host, non il bottone vero dentro — retargeting di spec) e
+   * continuerebbe ad ascoltare anche quando l'utente è altrove nell'app.
+   * Sullo shadow root invece l'evento porta il target vero, e l'ascoltatore
+   * smette di ricevere nulla da solo quando lo shadow root muore col
+   * componente Vue — nessuna pulizia esplicita necessaria per questi due.
+   */
+  ROOT().addEventListener('click', (event) => {
     const copyButton = event.target.closest('[data-copy-message]');
     if (copyButton) {
       const message = copyButton.closest('.message');
@@ -1056,10 +2227,41 @@
     toast(labels[button.dataset.browserAction] || 'Browser', 'Azione simulata nel mockup locale.');
   }));
 
+  const demoActionCopy = {
+    notifications: ['Notifiche demo', 'La superficie non è collegata a notifiche reali.'],
+    widget: ['Widget demo', 'L’aggiunta sarà disponibile quando questa Board avrà un backend.'],
+    delegate: ['Delega demo', 'Nessun subagent è stato avviato da questa interfaccia.'],
+  };
+  $$('[data-demo-action]').forEach((button) => button.addEventListener('click', () => {
+    toast(...(demoActionCopy[button.dataset.demoAction] || ['Demo UI · non collegato', 'Nessuna azione reale eseguita.']));
+  }));
+
+  $$('[data-file-entry]').forEach((button) => button.addEventListener('click', () => {
+    $$('[data-file-entry]').forEach((entry) => entry.classList.toggle('active', entry === button));
+    toast('Elemento selezionato', button.textContent.trim());
+  }));
+
+  /*
+   * ⭐ 27/8, piano §1.3-BIS, blocco Automazioni — riusa startRealSession
+   * (già reale, già testata) invece di un toast: "Esegui ora" su una riga
+   * con data-task-id avvia per davvero quel task del corpus, la stessa
+   * strada di "Nuova sessione". La SCHEDULAZIONE vera (un cron che parte
+   * da solo, senza un tocco) resta dichiaratamente fuori — spenderebbe
+   * credito reale senza nessuno a guardare, una cosa diversa da un
+   * bottone premuto apposta, e vuole la sua stessa persistenza che oggi
+   * non c'è (session-registry.mjs, "solo in memoria, deliberato").
+   */
   $$('[data-automation-action]').forEach((button) => button.addEventListener('click', () => {
     const action = button.dataset.automationAction;
-    const labels = { new: ['Nuova automazione', 'Editor di schedulazione pronto.'], run: ['Run avviato', 'Nightly smoke eseguito in worktree isolato.'], edit: ['Automazione aperta', 'Modifica pianificazione, modello e destinazione.'] };
-    toast(...(labels[action] || ['Automazione', 'Azione simulata.']));
+    // ⛔ Stesso cancello di createNewSession(): su mobile embedded non c'è un
+    // backend raggiungibile per costruzione, mai un fetch lì (HARNESS-BOARD-
+    // MOBILE-HONESTY-01, stesso principio applicato qui).
+    if (action === 'run' && button.dataset.taskId && !HOST().classList.contains('talos-embedded')) {
+      startRealSession({ id: button.dataset.taskId });
+      return;
+    }
+    const labels = { new: ['Nuova automazione', 'Il mockup rappresenta il flusso senza backend.'], run: ['Run avviato', 'Il mockup rappresenta il flusso senza backend.'], edit: ['Automazione aperta', 'Il mockup rappresenta il flusso senza backend.'] };
+    toast(...(labels[action] || ['Automazione', 'Il mockup rappresenta il flusso senza backend.']));
   }));
 
   $('.stop-run')?.addEventListener('click', () => {
@@ -1078,18 +2280,17 @@
 
   $$('.session-item').forEach((item) => {
     item.addEventListener('click', () => {
-      $$('.session-item').forEach((other) => other.classList.remove('active'));
-      item.classList.add('active');
-      state.session = item.dataset.session;
-      sessionTitle.textContent = state.session;
-      closePanels();
-      setView('chat');
+      selectSession({
+        id: item.dataset.sessionId || '',
+        title: item.dataset.session || item.querySelector('.session-main strong')?.textContent || '',
+      });
     });
   });
 
   $('#newSessionBtn').addEventListener('click', createNewSession);
   $('#commandPaletteBtn').addEventListener('click', openCommandPalette);
-  $('#closeCommand')?.addEventListener('click', () => commandDialog.close());
+  $('#closeCommand')?.addEventListener('click', () => closeEmbeddedDialog(commandDialog));
+  harnessDialogBackdrop.addEventListener('click', dismissTransientLayers);
   commandSearch.addEventListener('input', () => filterCommands(commandSearch.value));
   commandSearch.addEventListener('keydown', (event) => {
     if (event.key === 'ArrowDown') { event.preventDefault(); moveActiveCommand(1); }
@@ -1118,40 +2319,27 @@
   });
 
   queueToggle.addEventListener('click', () => setQueueMode(!state.queueMode));
+  composerMic?.addEventListener('click', announceVoiceUnavailable);
 
   composerForm.addEventListener('submit', (event) => {
     event.preventDefault();
     const text = composerInput.value.trim();
-    if (!text) return;
-    if (text.startsWith('!')) {
-      const hidden = text.startsWith('!!');
-      toast(hidden ? 'Shell eseguita senza contesto' : 'Shell inviata al terminale', text.replace(/^!!?/, '').trim());
-      composerInput.value = ''; autoGrowTextarea(); setView('terminal'); return;
-    }
-    if (state.queueMode) {
-      queuedMessage.classList.add('show');
-      const queuedCopy = $('#queuedMessage span');
-      queuedCopy.textContent = '';
-      const queuedLabel = document.createElement('b');
-      queuedLabel.textContent = 'Follow-up in coda';
-      queuedCopy.append(queuedLabel, document.createTextNode(` · ${text}`));
-      toast('Follow-up accodato', 'Verrà consegnato dopo il run corrente.');
-    } else {
-      appendUserMessage(text);
-    }
+    if (!submitPrompt(text)) return;
     composerInput.value = '';
     autoGrowTextarea();
   });
 
   $('#cancelQueued').addEventListener('click', () => {
-    queuedMessage.classList.remove('show');
+    animateExit(queuedMessage, { durationToken: '--talos-motion-duration-composer-collapse' }, () => {
+      queuedMessage.classList.remove('show');
+    });
     toast('Follow-up annullato');
   });
 
   $$('[data-approve], [data-allow-session], [data-deny]').forEach((button) => {
     button.addEventListener('click', () => {
       const card = button.closest('.approval-card');
-      card?.remove();
+      animateExit(card, {}, () => card?.remove());
       if (button.hasAttribute('data-deny')) toast('Permesso negato', 'Il browser locale non verrà aperto.');
       else toast(button.hasAttribute('data-allow-session') ? 'Permesso per sessione' : 'Permesso concesso', 'Browser locale autorizzato.');
     });
@@ -1179,7 +2367,7 @@
 
   $('#reducedMotionToggle').addEventListener('change', (event) => {
     document.body.classList.toggle('reduce-motion', event.target.checked);
-    toast('Movimento', event.target.checked ? 'Ridotto' : 'Standard Calm');
+    toast('Movimento', event.target.checked ? 'Ridotto' : 'Standard');
   });
 
   campaignSelect?.addEventListener('change', () => {
@@ -1191,7 +2379,8 @@
   harnessFilter?.addEventListener('change', reloadRunsFromFilters);
   outcomeFilter?.addEventListener('change', reloadRunsFromFilters);
   refreshCampaignButton?.addEventListener('click', () => {
-    if (state.board.initialized) refreshCampaign();
+    if (HOST().classList.contains('talos-embedded')) renderEmbeddedBoardDemo(true);
+    else if (state.board.initialized) refreshCampaign();
     else ensureCampaignBoard();
   });
   loadMoreRunsButton?.addEventListener('click', async () => {
@@ -1214,7 +2403,7 @@
   });
   $('[data-action="clear-evidence"]')?.addEventListener('click', clearCampaignEvidence);
 
-  document.addEventListener('keydown', (event) => {
+  ROOT().addEventListener('keydown', (event) => {
     const mod = event.metaKey || event.ctrlKey;
     if (mod && event.key.toLowerCase() === 'k') {
       event.preventDefault();
@@ -1224,10 +2413,34 @@
       event.preventDefault();
       createNewSession();
     }
-    if (event.key === 'Escape' && (sessionsPanel.classList.contains('open') || inspectorPanel.classList.contains('open'))) closePanels();
+    if (event.key === 'Escape' && (commandDialog.open || sheetDialog.open)) dismissTransientLayers();
+    else if (event.key === 'Escape' && (sessionsPanel.classList.contains('open') || inspectorPanel.classList.contains('open'))) closePanels();
   });
 
-  window.addEventListener('resize', () => {
+  /*
+   * Owner 24/8: questi tre, a differenza dei due sopra, vivono su `window` —
+   * escono dallo shadow root e NON muoiono col componente Vue. Prima (pagina
+   * a sé, `window.location.assign`) lasciare la pagina uccideva l'intero
+   * contesto JS, pulizia gratis. Ora no: se l'utente esce da Harness e resta
+   * su questi tre, `onResize` continuerebbe a leggere/scrivere pannelli di
+   * uno shadow root ormai smontato. `window.__talosHarnessDestroy()` li
+   * rimuove — `HarnessSessionScreen.vue` la chiama nel suo `onBeforeUnmount`,
+   * lo stesso contratto del "destroyer" che le app incorporate reali usano
+   * (es. PagerDuty: https://www.pagerduty.com/eng/react-embedded-apps/).
+   */
+  let hostResizeObserver = null;
+
+  function syncHostLayout() {
+    const host = HOST();
+    const rect = host.getBoundingClientRect();
+    const wideShort = host.classList.contains('talos-embedded')
+      && rect.width > 780
+      && rect.width <= 900
+      && rect.height <= 500;
+    host.classList.toggle('talos-embedded-wide-short', wideShort);
+  }
+
+  function onResize() {
     if (window.innerWidth > 1040) {
       inspectorPanel.classList.remove('open');
       backdrop.classList.remove('show');
@@ -1236,22 +2449,184 @@
     }
     if (window.innerWidth > 780) sessionsPanel.classList.remove('open');
     syncInspectorToggle();
+    syncHostLayout();
     syncVisualViewport();
-  });
-
+  }
+  window.addEventListener('resize', onResize);
   window.visualViewport?.addEventListener('resize', syncVisualViewport);
   window.visualViewport?.addEventListener('scroll', syncVisualViewport);
+  if (HOST().classList.contains('talos-embedded')) {
+    embeddedHeaderScrollers.forEach((scroller) => {
+      embeddedHeaderScrollPositions.set(scroller, Math.max(0, scroller.scrollTop));
+      scroller.addEventListener('scroll', handleEmbeddedContentScroll, { passive: true });
+    });
+  }
+  if (typeof ResizeObserver === 'function') {
+    hostResizeObserver = new ResizeObserver(syncHostLayout);
+    hostResizeObserver.observe(HOST());
+  }
+  window.__talosHarnessUiRuntime = {
+    selectSession,
+    dismissTransientLayers,
+    transientLayersActive,
+    setKeyboardOpen,
+    submitPrompt,
+    announceComposerAction,
+    // ⭐ 26/8, riconciliazione desktop→mobile — esposti per i test dedicati
+    // (stesso schema di sopra: internals reali, non un secondo contratto).
+    startRealSession,
+    stopRealSession,
+    handleRealEvent,
+    forkSession,
+    resumeSession,
+    compactSession,
+    passaASessione,
+    openRealTaskSheet,
+    aggiornaElencoSessioniReali,
+    runDirectShell,
+    realSessionState: state.realSession,
+  };
+  window.__talosHarnessDestroy = () => {
+    cancelMotionAnimations();
+    setEmbeddedTopbarHidden(false);
+    embeddedHeaderScrollers.forEach((scroller) => {
+      scroller.removeEventListener('scroll', handleEmbeddedContentScroll);
+      embeddedHeaderScrollPositions.delete(scroller);
+    });
+    window.removeEventListener('resize', onResize);
+    window.visualViewport?.removeEventListener('resize', syncVisualViewport);
+    window.visualViewport?.removeEventListener('scroll', syncVisualViewport);
+    hostResizeObserver?.disconnect();
+    hostResizeObserver = null;
+    HOST().classList.remove('talos-embedded-wide-short');
+    nativeKeyboardOpen = null;
+    applyKeyboardOpen(false);
+    delete window.__talosHarnessUiRuntime;
+    delete window.__talosHarnessDestroy;
+  };
   composerInput.addEventListener('focus', () => window.setTimeout(syncVisualViewport, 30));
   composerInput.addEventListener('blur', () => window.setTimeout(syncVisualViewport, 60));
+
+  sessionsCollapseBtn?.addEventListener('click', toggleSessionsPanel);
+
+  // Ridimensionamento reale delle due sidebar, con limiti — owner 24/8.
+  // Un trascinamento vero (pointer capture) e la stessa cosa da tastiera,
+  // perché una maniglia raggiungibile solo dal dito non lo è da chi non
+  // può trascinare. Persistito per-viewer in localStorage, come le altre
+  // comodità di sola interfaccia di questo mockup (non è dato reale).
+  const PANEL_RESIZE_LIMITS = { sessions: [220, 420], inspector: [280, 480] };
+  const PANEL_RESIZE_STORAGE_KEY = 'talos-harness-panel-widths';
+  const PANEL_RESIZE_VAR = { sessions: '--sidebar', inspector: '--inspector' };
+  const PANEL_RESIZE_DEFAULT = { sessions: 292, inspector: 340 };
+
+  function readSavedPanelWidths() {
+    try {
+      return JSON.parse(window.localStorage.getItem(PANEL_RESIZE_STORAGE_KEY) || '{}');
+    } catch {
+      return {};
+    }
+  }
+
+  function savePanelWidth(which, px) {
+    try {
+      const saved = readSavedPanelWidths();
+      saved[which] = px;
+      window.localStorage.setItem(PANEL_RESIZE_STORAGE_KEY, JSON.stringify(saved));
+    } catch {
+      // Un mockup che perde una preferenza di comodo non deve rompersi per questo.
+    }
+  }
+
+  function applyPanelWidth(which, px) {
+    const [min, max] = PANEL_RESIZE_LIMITS[which];
+    const clamped = Math.min(max, Math.max(min, Math.round(px)));
+    HOST().style.setProperty(PANEL_RESIZE_VAR[which], `${clamped}px`);
+    return clamped;
+  }
+
+  function loadPanelWidths() {
+    const saved = readSavedPanelWidths();
+    for (const which of Object.keys(PANEL_RESIZE_VAR)) {
+      if (typeof saved[which] === 'number') applyPanelWidth(which, saved[which]);
+    }
+  }
+
+  function setupPanelResize() {
+    $$('.panel-resize-handle').forEach((handle) => {
+      const which = handle.dataset.resize;
+      if (!PANEL_RESIZE_LIMITS[which]) return;
+      const panel = which === 'sessions' ? sessionsPanel : inspectorPanel;
+
+      handle.addEventListener('pointerdown', (event) => {
+        if (window.innerWidth <= 1040) return;
+        event.preventDefault();
+        handle.setPointerCapture(event.pointerId);
+        handle.classList.add('dragging');
+        const startX = event.clientX;
+        const startWidth = panel.getBoundingClientRect().width;
+
+        function onMove(moveEvent) {
+          const delta = which === 'sessions' ? moveEvent.clientX - startX : startX - moveEvent.clientX;
+          applyPanelWidth(which, startWidth + delta);
+        }
+        function onUp() {
+          handle.classList.remove('dragging');
+          handle.releasePointerCapture(event.pointerId);
+          savePanelWidth(which, panel.getBoundingClientRect().width);
+          window.removeEventListener('pointermove', onMove);
+          window.removeEventListener('pointerup', onUp);
+        }
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+      });
+
+      handle.addEventListener('keydown', (event) => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+        event.preventDefault();
+        const growsOnArrowRight = which === 'sessions';
+        const sign = (event.key === 'ArrowRight') === growsOnArrowRight ? 1 : -1;
+        const current = parseInt(getComputedStyle(HOST()).getPropertyValue(PANEL_RESIZE_VAR[which]), 10)
+          || PANEL_RESIZE_DEFAULT[which];
+        const next = applyPanelWidth(which, current + sign * 12);
+        savePanelWidth(which, next);
+      });
+    });
+  }
+
+  /*
+   * Owner 24/8, RIVISTO dopo l'architettura a shadow DOM: qui c'era un
+   * listener 'backButton' scritto apposta, perché la pagina viveva da sola
+   * (`window.location.assign`) e il tasto Indietro non tornava alla SPA né
+   * usciva dall'app — vedi [[tocchi-reali-adb-obbligatori]] per come è
+   * stato trovato. Montato dentro `HarnessSessionScreen.vue` invece, la
+   * pagina non cambia mai: è la STESSA cronologia Vue Router già verificata
+   * su `/memoria` (Indietro → `/`), niente da reinventare qui.
+   */
 
   ensureDemoLabels();
   applyQaState();
   syncNavigationState();
   syncInspectorToggle();
+  syncSessionsToggle();
+  loadPanelWidths();
+  setupPanelResize();
+  syncHostLayout();
   setQueueMode(false);
   setRunState(true);
   setInspectorTab($('.inspector-tabs button.active'));
   renderReviewFile('composer');
   autoGrowTextarea();
   syncVisualViewport();
+  /*
+   * ⛔ 26/8 — provato e SCARTATO: aggiungere qui una chiamata a
+   * aggiornaElencoSessioniReali() per sincronizzare la sidebar all'avvio.
+   * Sembrava un buco (le sette funzioni di sessione la richiamano dopo
+   * ogni azione, ma nessuna all'avvio), ma DUE test lo smentiscono:
+   * CODE-COMPOSER-DEMO-SEND-01 (mount standalone, senza `talos-embedded`)
+   * e HARNESS-BOARD-MOBILE-HONESTY-01 (mount embedded) pretendono ENTRAMBI
+   * zero fetch al mount — non solo in embedded. È lo stesso principio
+   * della Board (ensureCampaignBoard/loadCampaigns, mai chiamate al boot,
+   * solo al cambio vista): il boot non fa MAI una chiamata di rete propria,
+   * a prescindere da standalone/embedded. Non un buco: design deliberato.
+   */
 })();

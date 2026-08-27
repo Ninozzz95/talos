@@ -31,6 +31,18 @@ if (typeof Element !== 'undefined' && typeof Element.prototype.scrollIntoView !=
     Element.prototype.scrollIntoView = () => {}
 }
 
+// Reka UI's slider measures its track through ResizeObserver. jsdom has no
+// layout engine, so keep the observer inert while preserving the production
+// code path (the real browser supplies measurements).
+if (typeof ResizeObserver === 'undefined') {
+    class JsdomResizeObserver {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+    }
+    globalThis.ResizeObserver = JsdomResizeObserver as unknown as typeof ResizeObserver
+}
+
 /**
  * La cattura del puntatore: jsdom non la implementa, e senza di essa NESSUN
  * selettore di questa app si e' mai potuto aprire in un test.

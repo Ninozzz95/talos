@@ -30,6 +30,13 @@
             "accepted_sha256": "ace8dea99d3606f7a55679ba2f9f6642086757b681b1ef9b0062643d1241437e",
             "reason": "TALOS localizes the scroll-dialog assistive close label through the complete app locale catalog.",
             "research": "mobile/docs/superpowers/research/2026-07-29-p0-localization-conformance-closure-research.md"
+        },
+        {
+            "destination": "mobile/src/components/ui/drawer/DrawerContent.vue",
+            "upstream_sha256": "4b6261a328f0eca2171c61b382c6241b54996c2c5366f24bf4c1502f8834c531",
+            "accepted_sha256": "bcb7ce90f3d336b3d0850fffa4d1490c0a88eee48053d2e8a49050cb7efe5e01",
+            "reason": "TALOS exposes the drawer overlay class so global navigation remains above embedded tool surfaces.",
+            "research": "mobile/docs/superpowers/research/2026-08-25-harness-drawer-layering-conformance.md"
         }
     ],
     "files": [

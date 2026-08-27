@@ -79,7 +79,7 @@ TALOS can research, compare sources and present structured results without turni
 | **System controls** | Wi-Fi, Bluetooth, airplane mode, power saving, Do Not Disturb and selected system settings where permitted |
 | **Notifications & mail** | Unread-mail state, notification listing, reply and dismiss flows |
 | **Cross-app actions** | Accessibility-driven screen understanding and actions inside other Android apps |
-| **Voice** | Local wake word and speech input/output |
+| **Voice** | Local wake word, dictation, and replies read back in your own trained voice |
 | **Diagnostics** | Runtime capability checks that distinguish unavailable features from successful ones |
 
 Android ROMs expose different capabilities. TALOS treats **unsupported**, **denied**, **failed** and **verified success** as distinct states.
@@ -106,9 +106,15 @@ Provider adapters are lazy-loaded, so a local conversation does not need every c
 
 With a compatible GGUF loaded, inference happens on-device.
 
-The local path includes native llama.cpp integration, device/model-specific runtime tuning, KV-cache selection, persistent prefix-state caching, local tool-schema simplification for constrained grammars and progressive tool disclosure.
+The local path includes native llama.cpp integration, an OpenCL GPU backend that is offered only after the device passes a real qualification check (never assumed from a chipset name), device/model-specific runtime tuning, KV-cache selection, persistent prefix-state caching, local tool-schema simplification for constrained grammars and progressive tool disclosure.
 
 Local and cloud models can use different harness settings because they operate under different performance constraints.
+
+### The engine keeps getting faster, and every claim here is a measurement
+
+A persistent OpenCL kernel cache removed a multi-second first-generation recompile that used to run on every app start. Prompt processing moved to a larger microbatch, measured to shorten it rather than assumed to help. The static part of the system prompt is now pre-computed once instead of on every message. A native thread pool replaced manual thread lifecycle management, and CPU core affinity was tested with a paired A/B campaign rather than switched on because it sounded right — it made no measurable difference on the reference hardware, so the default did not change on the strength of a hunch.
+
+That is also the house rule for what does **not** ship by default: Flash Attention is not force-enabled globally, "use every core" is not a universal default, and the KV-cache type is not chosen from free RAM alone. Where a change could not clear that bar, it stayed off — a negative result is still a result.
 
 ## Know whether a model fits before downloading it
 
@@ -116,9 +122,13 @@ Local and cloud models can use different harness settings because they operate u
 
 TALOS can browse Hugging Face from the phone and filter models by what **this device** can actually hold. Each model includes a memory verdict, while publisher, licence, parameter band and popularity help make the choice explicit.
 
+Opening a model splits it into three tabs — quantizations, the full model card, and the raw file list — instead of one long scroll. Every quantization is checked against your device automatically as soon as the page opens.
+
 ### Every quantisation, measured against your RAM
 
-<img src="docs/immagini/tablet-5-local-quantisations.png" alt="Quantisations of one model, each with its memory bar and measured speed">
+<img src="docs/immagini/tablet-8-model-detail.png" alt="Model detail page with Quantizations, Model card and Files tabs, and the runtime configuration panel">
+
+A resource ledger shows exactly where each memory estimate comes from — weights and file size are exact, the KV-cache size is exact once the header is read, compute and runtime overhead are the app's own declared safety margin — instead of a single unexplained number. The KV-cache type can be forced globally (F16 or Q8_0) instead of only reading whatever the file happened to ship with, and the resolved type is always shown, even on Automatic.
 
 Quantisations are shown against the device's actual memory:
 
@@ -322,6 +332,18 @@ A future optional backend/sync architecture is intended as **replication and exe
 
 ---
 
+# Your own voice, not a stock one
+
+<img src="docs/immagini/phone-6-voice-training.png" alt="Voice training wizard mid-recording, with a live waveform and the phrase to read">
+
+You record twelve short phrases once, on-device. TALOS builds a voice profile from them, and from then on a reply can be read back in *your* voice instead of a generic text-to-speech voice.
+
+A live waveform moves with your voice while you record, and a quiet-room check runs before the wizard starts so you know the room is actually quiet before you speak. Recordings never leave the device: they are encrypted with a key held in the phone's hardware keystore, and once the profile is built the raw audio is destroyed — what remains is the profile, not the recording.
+
+The synthesis engine is [Kyutai's Pocket TTS](https://github.com/kyutai-labs/pocket-tts) (MIT), running fully on-device through ONNX Runtime. Measured on production streaming: **-23.2 LUFS**, true peak **-0.8 dBFS**, time to first audio **449–537 ms** warm. Italian speech recognition against a 6-sentence reference set: **6/6 exact, zero word error rate**.
+
+---
+
 # Android is an agent environment
 
 TALOS can inspect real device state and expose Android capabilities through typed tools:
@@ -372,6 +394,22 @@ Some operations require Android system permissions, Accessibility or the optiona
 
 ---
 
+# Coming soon: a coding agent, built on the same rules
+
+<img src="docs/immagini/tablet-9-coding-agent.png" alt="The coding agent harness UI mid-session, with a live tool feed and a context rail">
+
+*(Internal build shown in Italian — the UI text is being translated to English before this ships.)*
+
+TALOS's own coding agent is under active development, on the same principles as the rest of the project: typed tools, explicit authority, and results that are checked instead of assumed.
+
+It already runs against real projects today — read/search/edit/test, a sandboxed shell (WSL2 first, honestly labelled `none` when no isolation is available, never a silent bluff), and an SSRF-safe page reader ported from TALOS's own on-device web-reading policy (DNS pinning, redirect revalidation, no private-network access) — driven through the same kind of typed-tool loop already shipping in the app, benchmarked against other coding agents on cost-per-solved-task rather than vibes.
+
+What's still ahead: bringing it into the phone itself, a persisted session model with fork/resume/compact, and the same UI surfacing on both the desktop tooling and the mobile app instead of two implementations of the same idea.
+
+**This is a roadmap direction. It does not run inside the shipped Android app yet.**
+
+---
+
 # Current engineering direction
 
 TALOS is moving toward a **next-generation adaptive harness**, rather than tighter coupling to one model:
@@ -392,12 +430,13 @@ The goal is to give different models different tool surfaces, context policies a
 
 Active directions also include:
 
-- a coding workspace;
+- the coding agent harness described above;
+- a per-device performance profile that reads real headroom (CPU/GPU/thermal margin) instead of guessing from a chipset name;
+- a controlled qualification lane for candidate engine updates, so a change to the inference engine is verified before it becomes the default rather than after;
 - code intelligence and execution backends;
 - durable task/operation state;
 - stronger proof and reversible changes;
-- optional backend/device synchronization;
-- desktop/CLI surfaces.
+- optional backend/device synchronization.
 
 **These are roadmap directions, not claims about shipped functionality.**
 

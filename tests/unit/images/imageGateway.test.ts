@@ -144,6 +144,13 @@ describe('finding the picture in the answer', () => {
         })).toEqual([{ base64: bytes, mediaType: 'image/webp' }])
     })
 
+    it('DEBT-MOBILE-012 RED: normalizes wrapped OpenRouter base64 before persistence', () => {
+        const wrapped = `${bytes.slice(0, 300)}\n${bytes.slice(300)}`
+        expect(parseTalosGeneratedImages({
+            data: [{ b64_json: wrapped, media_type: 'image/png' }],
+        })).toEqual([{ base64: bytes, mediaType: 'image/png' }])
+    })
+
     it('reads the Gemini shape, and the interleaved one too', () => {
         expect(parseTalosGeneratedImages({ output_image: { data: bytes, mime_type: 'image/jpeg' } }))
             .toEqual([{ base64: bytes, mediaType: 'image/jpeg' }])
@@ -228,10 +235,21 @@ describe('which model draws', () => {
         expect(pickTalosImageModel(
             'openrouter' as never,
             [
-                { id: 'zeta/new-image', createdAt: 200 },
-                { id: 'google/gemini-3.1-flash-image', createdAt: 100 },
+                { id: 'zeta/new-image', createdAt: 200, outputModalities: ['image'] },
+                { id: 'google/gemini-3.1-flash-image', createdAt: 100, outputModalities: ['image'] },
             ] as never,
             'google/gemini-3.6-flash',
+        )).toBe('google/gemini-3.1-flash-image')
+    })
+
+    it('DEBT-MOBILE-012 RED: never treats the selected Gemini 3.7 text model as an image model', () => {
+        expect(pickTalosImageModel(
+            'openrouter' as never,
+            [
+                { id: 'google/gemini-3.7-flash' },
+                { id: 'google/gemini-3.1-flash-image', outputModalities: ['image'] },
+            ] as never,
+            'google/gemini-3.7-flash',
         )).toBe('google/gemini-3.1-flash-image')
     })
 

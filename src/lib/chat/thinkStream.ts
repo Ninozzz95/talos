@@ -84,6 +84,7 @@ const TOOL_CHIUSURA = '</tool_call>'
 const DA_BUTTARE = [
     { apre: TOOL_APERTURA, chiude: TOOL_CHIUSURA },
     { apre: '<tools>', chiude: '</tools>' },
+    { apre: '<|tool_call_start|>', chiude: '<|tool_call_end|>' },
 ] as const
 
 /** La prima delle aperture da buttare che compare, con la sua chiusura. */
@@ -222,14 +223,16 @@ function creaFiltroBloccoToolCode(): (delta: string, chiudendo: boolean) => stri
     }
 }
 
-export function talosCreateThinkSplitter(): TalosThinkSplitter {
+export function talosCreateThinkSplitter(startsInReasoning = false): TalosThinkSplitter {
     /**
      * Tre stati e non un booleano, da quando i marcatori sono due paia:
      * `testo` cerca l'una o l'altra apertura, `ragionamento` e `chiamata`
      * cercano la propria chiusura. Un booleano non saprebbe DA COSA sta
      * uscendo, e uscirebbe dalla cosa sbagliata.
      */
-    let stato: 'testo' | 'ragionamento' | 'chiamata' = 'testo'
+    let stato: 'testo' | 'ragionamento' | 'chiamata' = startsInReasoning
+        ? 'ragionamento'
+        : 'testo'
     let sospeso = ''
     const filtraTesto = creaFiltroRigaToolDetails()
     const filtraRagionamento = creaFiltroRigaToolDetails()

@@ -9,6 +9,7 @@ import { Loader2, ArrowUp,
     Gauge,
     Globe2,
     ExternalLink,
+    Maximize2,
     Mic,
     Paperclip,
     SlidersHorizontal,
@@ -77,6 +78,14 @@ const TalosMobileLibraryContextSheet = defineAsyncComponent(
 const TalosMobileEnhancerDrawer = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileEnhancerDrawer.vue'),
 )
+/**
+ * Owner 2026-08-27 — l'espansione a tutto schermo si vede solo quando serve
+ * ("per i testi più grandi"): pesa zero al grafo d'avvio finché nessuno
+ * scrive un messaggio lungo, stesso schema pigro degli altri cassetti sopra.
+ */
+const TalosMobileComposerExpanded = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileComposerExpanded.vue'),
+)
 
 const props = withDefaults(defineProps<{
     prompt: string
@@ -132,9 +141,7 @@ const props = withDefaults(defineProps<{
     routingProfiles: () => [],
     selectedModelProfileId: null,
     selectedRoutingProfileId: null,
-    sendDisabledReason: '',
     loadingModels: false,
-    loadingRoutes: false,
     refreshingModels: false,
     attachments: () => [],
     attachmentBusy: false,
@@ -415,6 +422,23 @@ const rightActionDisabled = computed(() => {
     if (rightAction.value === 'mic') return !props.dictationSupported
     return false
 })
+/**
+ * Owner 2026-08-27: il mic principale sparisce (diventa Invia) appena il
+ * composer ha del testo — `rightAction` sopra, di proposito (owner
+ * 2026-07-25: «content present → ALWAYS the send affordance»). Corretto per
+ * l'invio, ma senza un secondo mic non c'era più modo di ACCODARE altra
+ * dettatura a un testo già scritto: bisognava cancellare tutto per riavere
+ * il microfono. La dettatura già accoda da sola
+ * (`useTalosMobileDictation`: `capturedBase` + trascrizione, mai una
+ * sostituzione) — mancava solo un modo di richiamarla con del testo dentro.
+ * Compare SOLO quando serve: composer pieno, dettatura disponibile e non
+ * già in corso (mentre si detta la barra dedicata sostituisce l'intera riga).
+ */
+const showAppendMic = computed(() => (
+    props.dictationSupported
+    && composerHasContent.value
+    && !(props.dictationListening || props.dictationStarting)
+))
 function onRightAction(): void {
     if (rightAction.value === 'stop') { emit('stop'); return }
     if (rightAction.value === 'send') { requestSend(); return }
@@ -434,6 +458,38 @@ function resizePrompt(): void {
     // line and stay correct as the field grows.
     const floor = 48
     field.style.height = `${Math.max(floor, Math.min(field.scrollHeight, 192))}px`
+    measurePromptTall(field)
+}
+
+/**
+ * Owner 2026-08-27 — il pulsante "espandi a tutto schermo" compare solo
+ * oltre 2-3 righe, per non affollare la barra su un messaggio corto.
+ * MISURATO, non contato a caratteri: stesso principio già usato altrove nel
+ * repo per la stessa identica domanda ("questo campo è alto più di una
+ * riga?") — vedi `TalosBarraRoot.vue::misuraIlCampo`. `scrollHeight` include
+ * il padding verticale, quindi va sottratto prima di confrontarlo con
+ * `lineHeight`; la soglia sale a 2.5 righe (contro l'1.5 della barra)
+ * perché qui l'intento è "testo grande", non "più di una riga sola".
+ */
+const promptTall = ref(false)
+function measurePromptTall(field: HTMLTextAreaElement): void {
+    const style = getComputedStyle(field)
+    const lineHeight = Number.parseFloat(style.lineHeight) || 24
+    const padding = (Number.parseFloat(style.paddingTop) || 0)
+        + (Number.parseFloat(style.paddingBottom) || 0)
+    promptTall.value = (field.scrollHeight - padding) > lineHeight * 2.5
+}
+
+const composerExpanded = ref(false)
+function openComposerExpanded(): void {
+    composerExpanded.value = true
+}
+function closeComposerExpanded(): void {
+    composerExpanded.value = false
+    // Owner 2026-08-27: chi collassa vuole continuare a scrivere lì dove
+    // era rimasto — il ripristino del focus di `useTalosModalSurface` da
+    // solo tornerebbe sul bottone che ha aperto l'overlay, non sul campo.
+    void nextTick(() => promptField.value?.focus())
 }
 /**
  * FLIP only the fixed composer surface: Vue commits the final text layout
@@ -736,7 +792,11 @@ watch(() => props.prompt, () => {
                 class="block max-h-48 w-full resize-none overflow-y-auto bg-transparent text-sm leading-6 text-[var(--talos-text,var(--foreground))] outline-none placeholder:text-[var(--talos-muted,var(--muted-foreground))]"
                 :class="[
                     'min-h-12 py-3',
-                    composerCompact || (plusDropdown && !drawerMode) ? 'pl-12 pr-14' : 'px-2 pr-14',
+                    composerCompact || (plusDropdown && !drawerMode) ? 'pl-12' : 'px-2',
+                    // Owner 2026-08-27: il secondo mic (accoda) occupa lo
+                    // stesso angolo del bottone che invia — il testo gli
+                    // deve lasciare spazio quando c'è, non gli finisce sotto.
+                    showAppendMic ? 'pr-24' : 'pr-14',
                 ]"
                 @input="updatePrompt"
                 @keydown="onPromptKeydown"
@@ -790,6 +850,32 @@ watch(() => props.prompt, () => {
                     <ArrowUp v-else-if="rightAction === 'send'" key="send" class="size-5" aria-hidden="true" />
                     <Mic v-else key="mic" class="size-5" aria-hidden="true" />
                 </Transition>
+            </Button>
+
+            <!--
+                Owner 2026-08-27: il secondo mic — vedi `showAppendMic` sopra.
+                Nome accessibile DIVERSO da quello del mic principale (che
+                dice solo "chat.dictate"): due controlli con lo stesso nome
+                a schermo insieme sarebbero indistinguibili per chi naviga a
+                voce o con lo screen reader. Stesso evento del mic
+                principale (`toggleDictation`) — la dettatura accoda già da
+                sola (`useTalosMobileDictation`), qui serve solo renderla
+                raggiungibile con del testo già scritto.
+            -->
+            <Button
+                v-if="showAppendMic"
+                data-testid="talos-composer-append-mic"
+                type="button"
+                size="icon"
+                variant="ghost"
+                data-mobile-icon-only="true"
+                :aria-label="$t('chat.dictateAppend')"
+                :title="$t('chat.dictateAppend')"
+                class="talos-pressable absolute bottom-0.5 right-14 min-h-touch min-w-touch rounded-2xl text-[var(--talos-text,var(--foreground))]"
+                @pointerdown.prevent
+                @click="promptField?.blur(); composerFocused = false; emit('toggleDictation')"
+            >
+                <Mic class="size-5" aria-hidden="true" />
             </Button>
 
             <!-- Owner 2026-07-24: ChatGPT-style "+" dropdown, anchored above the
@@ -877,6 +963,7 @@ watch(() => props.prompt, () => {
                     >{{ reasoningLabel }}</span>
                 </template>
             </button>
+            <slot />
             <button
                 v-if="showLibraryChip"
                 ref="libraryChip"
@@ -911,9 +998,27 @@ watch(() => props.prompt, () => {
                 </span>
             </button>
             <span class="flex-1" aria-hidden="true" />
+            <!-- Owner 2026-08-27: compare solo per un testo davvero grande —
+                 vedi `promptTall`. -->
+            <Button
+                v-if="promptTall"
+                type="button"
+                size="icon"
+                variant="ghost"
+                data-mobile-icon-only="true"
+                data-testid="talos-composer-expand"
+                :aria-label="$t('chat.expandComposer')"
+                :title="$t('chat.expandComposer')"
+                class="talos-pressable min-h-touch min-w-touch shrink-0 rounded-2xl"
+                @click="openComposerExpanded"
+            >
+                <Maximize2 class="size-4" aria-hidden="true" />
+            </Button>
             <!-- The mic lives ONLY on the morphing right button (owner 2026-07-25):
                  a second control with the same accessible name was ambiguous for
-                 assistive tech and gave the user two different mics to tap. -->
+                 assistive tech and gave the user two different mics to tap. The
+                 append mic (owner 2026-08-27) is the one exception, and it lives
+                 on the field itself, not here — see `showAppendMic`. -->
         </div>
 
         <div v-else-if="!composerCompact" class="mt-1 flex min-w-0 items-center justify-between gap-2 border-t border-[var(--talos-border,var(--border))] pt-2" @mousedown.prevent>
@@ -950,6 +1055,7 @@ watch(() => props.prompt, () => {
                     />
                     <BrainCircuit v-else class="size-4" aria-hidden="true" />
                 </Button>
+                <slot />
                 <Button
                     v-if="effortAvailable"
                     ref="effortTrigger"
@@ -1046,6 +1152,22 @@ watch(() => props.prompt, () => {
                     @click="emit('openModelLab')"
                 >
                     <SlidersHorizontal class="size-4" aria-hidden="true" />
+                </Button>
+                <!-- Owner 2026-08-27: compare solo per un testo davvero
+                     grande — vedi `promptTall`. -->
+                <Button
+                    v-if="promptTall"
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    data-mobile-icon-only="true"
+                    data-testid="talos-composer-expand"
+                    :aria-label="$t('chat.expandComposer')"
+                    :title="$t('chat.expandComposer')"
+                    class="min-h-touch min-w-touch"
+                    @click="openComposerExpanded"
+                >
+                    <Maximize2 class="size-4" aria-hidden="true" />
                 </Button>
             </div>
         </div>
@@ -1151,5 +1273,64 @@ watch(() => props.prompt, () => {
             @close="closeLibrarySheet"
             @update:override="emit('updateLibraryTurnOverride', $event)"
         />
+
+        <TalosMobileComposerExpanded
+            v-if="composerExpanded"
+            :prompt="prompt"
+            :sending="sending"
+            :can-submit="canSubmit"
+            @update:prompt="emit('update:prompt', $event)"
+            @send="requestSend(prompt); closeComposerExpanded()"
+            @stop="emit('stop')"
+            @close="closeComposerExpanded"
+        />
     </section>
 </template>
+
+<style>
+/*
+ * Gboard leaves 144px to the WebView on a phone-shaped landscape viewport,
+ * while the normal focused composer is 148px before the Android top inset.
+ * Keep the exact shared component and its real controls; only reflow its
+ * existing model row into the single-line grammar while the viewport is that
+ * short. The :has anchor is the small composer surface and its direct child.
+ */
+@media (orientation: landscape) and (max-height: 180px) {
+    [data-testid="talos-mobile-composer"] {
+        max-height: calc(100dvh - env(safe-area-inset-top));
+        margin-bottom: 0;
+        overflow-y: auto;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    [data-testid="talos-mobile-composer"]::-webkit-scrollbar {
+        display: none;
+        width: 0;
+        height: 0;
+    }
+
+    [data-testid="talos-mobile-composer"] textarea {
+        height: 48px !important;
+        min-height: 48px;
+        max-height: 48px;
+        padding-left: 48px;
+    }
+
+    [data-testid="talos-mobile-composer"] > div:has(> [data-testid="talos-composer-model-chip"]) {
+        position: absolute;
+        z-index: 10;
+        top: 10px;
+        left: 10px;
+        height: 48px;
+        margin: 0;
+        padding: 0;
+        border: 0;
+    }
+
+    [data-testid="talos-mobile-composer"] > div:has(> [data-testid="talos-composer-model-chip"])
+        > :not(:first-child) {
+        display: none;
+    }
+}
+</style>

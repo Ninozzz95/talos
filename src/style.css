@@ -118,6 +118,7 @@
 .text-\[0\.8rem\] { font-size: calc(0.8rem * var(--talos-ui-scale, 1)); }
 
 :root {
+    --talos-z-app-overlay: 120;
     --talos-ui-scale: 1;
     --talos-font-ui: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
     --talos-font-display: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
@@ -133,6 +134,8 @@
     --talos-space-inline: 0.5rem;
     --talos-icon-size: 1rem;
     --talos-touch-target: 3rem;
+    --talos-z-station: 70;
+    --talos-z-global-navigation: 110;
     --talos-radius-card: 0rem;
     --talos-radius-control: 0rem;
 

@@ -139,6 +139,14 @@ describe('TalosMobileDownloadCenterTrigger', () => {
         wrapper.unmount()
     })
 
+    it('DEBT-MOBILE-014 RED: its portalled surface uses the app-overlay layer', async () => {
+        const wrapper = await mountOpen()
+        const content = document.querySelector('[data-testid="talos-download-center-content"]') as HTMLElement
+
+        expect(content.classList.contains('z-[var(--talos-z-app-overlay)]')).toBe(true)
+        wrapper.unmount()
+    })
+
     it('keeps pause, resume and cancel inside the row they control', async () => {
         const wrapper = await mountOpen()
         const first = document.querySelector('[data-transfer-id="transfer-a"]') as HTMLElement

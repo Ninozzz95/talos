@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, ref } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import {
-    BookMarked, BookOpen, Check, CheckSquare, StickyNote, Stethoscope, FileArchive, MessageSquareText,
+    BookMarked, BookOpen, Check, CheckSquare, FlaskConical, StickyNote, Stethoscope, FileArchive, MessageSquareText,
     Pencil, Trash2, X,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/drawer'
 import type { TalosLocalChatSession } from '@/repositories/chatRepository'
 import type { TalosMobileRouteName } from '@/lib/mobileRoutes'
+import { talosHarnessUiAvailable } from '@/services/harnessUi'
 
 const TalosMobileNotificationBell = defineAsyncComponent(
     () => import('@/components/shell/TalosMobileNotificationBell.vue'),
@@ -55,6 +56,10 @@ const emit = defineEmits<{
 
 const account = useTalosAccountStore()
 const { t } = useTalosI18n()
+// Harness UI (24/8): same gate as HarnessSessionScreen.vue and the removed
+// Settings link — evaluated once per mount, same as every other native
+// (Capacitor.isPluginAvailable) read in this app.
+const harnessAvailable = talosHarnessUiAvailable()
 
 const TOOL_DEFINITIONS: Array<{ key: string; route: TalosMobileRouteName; icon: unknown }> = [
     { key: 'navigation.memory', route: 'memory', icon: BookMarked },
@@ -64,13 +69,157 @@ const TOOL_DEFINITIONS: Array<{ key: string; route: TalosMobileRouteName; icon: 
     { key: 'navigation.research', route: 'research', icon: BookOpen },
     { key: 'navigation.library', route: 'context', icon: FileArchive },
 ]
-const tools = computed(() => TOOL_DEFINITIONS.map(tool => ({ ...tool, label: t(tool.key) })))
+// Appended, not baked into TOOL_DEFINITIONS: the six above are the F2-RED-20
+// parity set (see TalosMobileSidebar.test.ts) and stay untouched. Harness is
+// debug-only — invisible in a release build, where `harnessAvailable` is
+// false by construction (the native plugin does not compile into release).
+const HARNESS_TOOL_DEFINITION: { key: string; route: TalosMobileRouteName; icon: unknown } = {
+    key: 'navigation.harness', route: 'harness', icon: FlaskConical,
+}
+const tools = computed(() => {
+    const base = TOOL_DEFINITIONS.map(tool => ({ ...tool, label: t(tool.key) }))
+    return harnessAvailable ? [...base, { ...HARNESS_TOOL_DEFINITION, label: t(HARNESS_TOOL_DEFINITION.key) }] : base
+})
 
 const renameTarget = ref<TalosLocalChatSession | null>(null)
 const renameValue = ref('')
 const renameInput = ref<HTMLInputElement | null>(null)
 const deleteTarget = ref<TalosLocalChatSession | null>(null)
 const restoreSidebarFocusOnClose = ref(true)
+const sidebarSwipeStart = ref<{ x: number; y: number } | null>(null)
+const sidebarSwipeClosed = ref(false)
+let sidebarSwipeDistance = 0
+let sidebarSwipeCloseTimer: ReturnType<typeof setTimeout> | null = null
+
+function sidebarDrawerElement(): HTMLElement | null {
+    return document.querySelector<HTMLElement>('[data-testid="talos-mobile-sidebar"]')
+}
+
+function setSidebarSwipeTransform(distance: number, animated: boolean): void {
+    const drawer = sidebarDrawerElement()
+    if (!drawer) return
+    drawer.style.transition = animated
+        ? 'transform var(--talos-motion-duration-control) var(--talos-motion-ease)'
+        : 'none'
+    const offset = Math.max(0, distance)
+    drawer.style.transform = `translate3d(${offset === 0 ? 0 : -offset}px, 0, 0)`
+}
+
+function startSidebarSwipe(clientX: number, clientY: number): void {
+    if (sidebarSwipeCloseTimer !== null) clearTimeout(sidebarSwipeCloseTimer)
+    sidebarSwipeCloseTimer = null
+    sidebarSwipeStart.value = { x: clientX, y: clientY }
+    sidebarSwipeClosed.value = false
+    sidebarSwipeDistance = 0
+    setSidebarSwipeTransform(0, false)
+}
+
+function updateSidebarSwipe(clientX: number, clientY: number): void {
+    const start = sidebarSwipeStart.value
+    if (!start || sidebarSwipeClosed.value) return
+    const dx = start.x - clientX
+    const dy = Math.abs(start.y - clientY)
+    if (dx <= 0 || dx <= dy) return
+    const drawer = sidebarDrawerElement()
+    const maxDistance = drawer?.getBoundingClientRect().width || window.innerWidth
+    sidebarSwipeDistance = Math.min(dx, maxDistance)
+    setSidebarSwipeTransform(sidebarSwipeDistance, false)
+}
+
+function finishSidebarSwipe(clientX: number, clientY: number): void {
+    updateSidebarSwipe(clientX, clientY)
+    const shouldClose = sidebarSwipeDistance > 80
+    sidebarSwipeStart.value = null
+    if (shouldClose) {
+        sidebarSwipeClosed.value = true
+        emit('update:open', false)
+        sidebarSwipeCloseTimer = setTimeout(() => {
+            sidebarSwipeCloseTimer = null
+            if (props.open) emit('update:open', false)
+        }, 180)
+        return
+    }
+    setSidebarSwipeTransform(0, true)
+    sidebarSwipeDistance = 0
+}
+
+function onSidebarPointerDown(event: PointerEvent): void {
+    startSidebarSwipe(event.clientX, event.clientY)
+}
+
+function onSidebarPointerUp(event: PointerEvent): void {
+    finishSidebarSwipe(event.clientX, event.clientY)
+}
+
+function onSidebarPointerMove(event: PointerEvent): void {
+    updateSidebarSwipe(event.clientX, event.clientY)
+}
+
+function onSidebarTouchStart(event: TouchEvent): void {
+    const touch = event.touches[0]
+    if (touch) {
+        startSidebarSwipe(touch.clientX, touch.clientY)
+    }
+}
+
+function onSidebarTouchEnd(event: TouchEvent): void {
+    const touch = event.changedTouches[0]
+    if (touch) finishSidebarSwipe(touch.clientX, touch.clientY)
+}
+
+function onSidebarTouchMove(event: TouchEvent): void {
+    const touch = event.touches[0]
+    if (touch) updateSidebarSwipe(touch.clientX, touch.clientY)
+}
+
+function onDocumentPointerDown(event: PointerEvent): void {
+    if (props.open) onSidebarPointerDown(event)
+}
+
+function onDocumentPointerMove(event: PointerEvent): void {
+    if (props.open) onSidebarPointerMove(event)
+}
+
+function onDocumentPointerUp(event: PointerEvent): void {
+    if (props.open) onSidebarPointerUp(event)
+}
+
+function onDocumentTouchStart(event: TouchEvent): void {
+    if (props.open) onSidebarTouchStart(event)
+}
+
+function onDocumentTouchMove(event: TouchEvent): void {
+    if (props.open) onSidebarTouchMove(event)
+}
+
+function onDocumentTouchEnd(event: TouchEvent): void {
+    if (props.open) onSidebarTouchEnd(event)
+}
+
+onMounted(() => {
+    document.addEventListener('pointerdown', onDocumentPointerDown, true)
+    document.addEventListener('pointermove', onDocumentPointerMove, true)
+    document.addEventListener('pointerup', onDocumentPointerUp, true)
+    document.addEventListener('touchstart', onDocumentTouchStart, true)
+    document.addEventListener('touchmove', onDocumentTouchMove, true)
+    document.addEventListener('touchend', onDocumentTouchEnd, true)
+})
+
+onBeforeUnmount(() => {
+    if (sidebarSwipeCloseTimer !== null) clearTimeout(sidebarSwipeCloseTimer)
+    document.removeEventListener('pointerdown', onDocumentPointerDown, true)
+    document.removeEventListener('pointermove', onDocumentPointerMove, true)
+    document.removeEventListener('pointerup', onDocumentPointerUp, true)
+    document.removeEventListener('touchstart', onDocumentTouchStart, true)
+    document.removeEventListener('touchmove', onDocumentTouchMove, true)
+    document.removeEventListener('touchend', onDocumentTouchEnd, true)
+})
+
+function onSidebarPointerCancel(): void {
+    // Android WebView cancels the pointer stream when a scroll surface
+    // takes over; keep the shared start point so the continuing touchmove
+    // stream can still complete the horizontal close gesture.
+}
 
 function suppressSidebarFocusRestore(): void {
     restoreSidebarFocusOnClose.value = false
@@ -135,10 +284,19 @@ const deletePlan = computed<TalosSessionCleanupPlan>(() => (
 </script>
 
 <template>
+    <Teleport to="body">
+        <div
+            v-if="props.open"
+            data-slot="drawer-overlay"
+            aria-hidden="true"
+            class="pointer-events-none fixed inset-0 z-[var(--talos-z-global-navigation)] bg-black/10 supports-backdrop-filter:backdrop-blur-xs"
+        ></div>
+    </Teleport>
     <Drawer
         :open="props.open"
         direction="left"
-        :dismissible="!props.busy"
+        :dismissible="false"
+        :modal="false"
         @update:open="emit('update:open', $event)"
     >
         <!-- F3-T1 (owner #5): the vendored DrawerContent forces w-3/4 +
@@ -146,9 +304,22 @@ const deletePlan = computed<TalosSessionCleanupPlan>(() => (
              override with the SAME variants so full-width really applies. -->
         <DrawerContent
             data-testid="talos-mobile-sidebar"
-            class="h-[100dvh] w-full max-w-none rounded-none border-0 bg-[var(--talos-sidebar)] text-[var(--talos-text)] data-[vaul-drawer-direction=left]:w-full data-[vaul-drawer-direction=left]:max-w-none data-[vaul-drawer-direction=left]:rounded-none data-[vaul-drawer-direction=left]:border-0 data-[vaul-drawer-direction=left]:sm:max-w-none md:!w-[380px] md:!max-w-[380px] md:!border-r md:border-[var(--talos-border)]"
+            class="!z-[var(--talos-z-global-navigation)] h-[100dvh] w-full max-w-none rounded-none border-0 bg-[var(--talos-sidebar)] text-[var(--talos-text)] data-[vaul-drawer-direction=left]:w-full data-[vaul-drawer-direction=left]:max-w-none data-[vaul-drawer-direction=left]:rounded-none data-[vaul-drawer-direction=left]:border-0 data-[vaul-drawer-direction=left]:sm:max-w-none md:!w-[380px] md:!max-w-[380px] md:!border-r md:border-[var(--talos-border)]"
+            overlay-class="!z-[var(--talos-z-global-navigation)]"
             @close-auto-focus="onSidebarCloseAutoFocus"
         >
+            <div
+                data-testid="talos-sidebar-swipe-surface"
+                class="flex h-full min-h-0 flex-col"
+                @pointerdown.capture="onSidebarPointerDown"
+                @pointermove.capture="onSidebarPointerMove"
+                @pointerup.capture="onSidebarPointerUp"
+                @pointercancel.capture="onSidebarPointerCancel"
+                @touchstart.capture="onSidebarTouchStart"
+                @touchmove.capture="onSidebarTouchMove"
+                @touchend.capture="onSidebarTouchEnd"
+                @touchcancel.capture="onSidebarPointerCancel"
+            >
             <DrawerHeader class="flex-row items-center gap-3 border-b border-[var(--talos-border)] px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] text-left">
                 <div class="min-w-0 flex-1">
                     <DrawerTitle class="talos-orbitron-brand text-base tracking-[0.2em] text-[var(--talos-text)]">TALOS</DrawerTitle>
@@ -161,7 +332,7 @@ const deletePlan = computed<TalosSessionCleanupPlan>(() => (
                 </Button>
             </DrawerHeader>
 
-            <div class="flex min-h-0 flex-1 flex-col">
+            <div data-testid="talos-sidebar-scroll-surface" class="flex min-h-0 flex-1 touch-pan-y flex-col overflow-y-auto overscroll-contain">
                 <!-- F3-T3 (owner #12, Claude pattern): on phones the Chats entry
                      opens the dedicated list page; tablets keep the inline list.
                      Owner 2026-07-24: the single "New chat" affordance is the
@@ -276,6 +447,7 @@ const deletePlan = computed<TalosSessionCleanupPlan>(() => (
                         @chat="emit('newChat')"
                     />
                 </div>
+            </div>
             </div>
         </DrawerContent>
     </Drawer>

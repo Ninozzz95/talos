@@ -84,6 +84,7 @@ describe('parseTalosMobileSettings', () => {
         motion.mode = 'complex'
         motion.speed = 150
         const parsed = parseTalosMobileSettings(JSON.stringify({
+            font_v2: true,
             chat_layout: { bubble_scale: 'compact', composer_mode: 'minimal', mobile_window_presentation: 'fullscreen', advanced_rail_expanded: true },
             ai_defaults: { utility_model_mode: 'default_profile', research_model_mode: 'nonsense', vision_enabled: false },
             composer_defaults: { model_profile_id: 'openrouter:model-a', effort: 'medium', thinking: true },

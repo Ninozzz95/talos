@@ -34,7 +34,7 @@ import {
 } from '@/lib/composerStyle'
 
 /** Owner 2026-07-25: "di default large font size e small chat font size". */
-const TALOS_MOBILE_DEFAULT_BUBBLE_SCALE = 'compact' as const
+const TALOS_MOBILE_DEFAULT_BUBBLE_SCALE = 'xcompact' as const
 import type { TalosChatLayoutPreferences } from '@/lib/talosTypes'
 import {
     parseTalosMotionV6Preferences,
@@ -342,6 +342,8 @@ export interface TalosMobileShellPreferences {
     debug_diagnostics: boolean
     /** F6 — persisted tablet split-view sidebar width (px, clamped 260–480). */
     tablet_sidebar_width: number
+    /** Harness-only rail state, stored locally with the rest of the shell. */
+    tablet_harness_sidebar_collapsed: boolean
 }
 
 // Owner #15 (2026-07-23): immersive chrome and the Claude-style composer
@@ -394,6 +396,7 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     streaming_animation: 'typewriter',
     debug_diagnostics: false,
     tablet_sidebar_width: TALOS_TABLET_SIDEBAR_DEFAULT,
+    tablet_harness_sidebar_collapsed: false,
 }
 
 function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
@@ -490,6 +493,9 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         // cannot start showing internals to a user who never asked.
         debug_diagnostics: record.debug_diagnostics === true,
         tablet_sidebar_width: clampTalosTabletSidebarWidth(record.tablet_sidebar_width),
+        tablet_harness_sidebar_collapsed: typeof record.tablet_harness_sidebar_collapsed === 'boolean'
+            ? record.tablet_harness_sidebar_collapsed
+            : DEFAULT_SHELL_PREFERENCES.tablet_harness_sidebar_collapsed,
     }
 }
 
@@ -955,6 +961,12 @@ export function parseTalosMobileSettings(raw: string | null): TalosMobileSetting
             chatLayout.bubble_scale = TALOS_MOBILE_DEFAULT_BUBBLE_SCALE
         }
     }
+    // Owner 2026-08-26: the small default belongs to CHAT TEXT only. The
+    // earlier mobile default accidentally shrank the whole interface.
+    if (value.font_v2 !== true) {
+        if (shellParsed.ui_font_scale === 'xsmall') shellParsed.ui_font_scale = TALOS_DEFAULT_FONT_SCALE
+        if (chatLayout.bubble_scale === 'compact') chatLayout.bubble_scale = TALOS_MOBILE_DEFAULT_BUBBLE_SCALE
+    }
     /**
      * The composer settled into TWO settings — the bar's shape, and where the
      * "+" opens (see lib/composerStyle). There are two older shapes of this on
@@ -1075,6 +1087,7 @@ export function useSettingsStore(): SettingsStore {
                 // deliberata di spegnerlo non reggerebbe mai.
                 library_autosave_defaults_v2: true,
                 type_defaults_v1: true,
+                font_v2: true,
                 composer_split_v1: true,
                 shell: next.shell,
                 onboarding: next.onboarding,

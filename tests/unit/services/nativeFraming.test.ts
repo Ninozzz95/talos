@@ -113,4 +113,34 @@ describe('native framing', () => {
         expect(document.activeElement).not.toBe(field)
         field.remove()
     })
+
+    // Misurato sul Pad 2026-08-27: `Keyboard.setResizeMode` su Android è uno
+    // stub (`KeyboardPlugin.java` chiama `call.unimplemented()`) — SEMPRE
+    // rifiutato. Il vecchio codice registrava il listener `keyboardDidHide`
+    // nello stesso try/catch di `setResizeMode`: quel rifiuto garantito
+    // impediva la registrazione, senza mai un errore visibile. Su un vero
+    // Pad Android, la gesture di back con tastiera aperta chiudeva la
+    // tastiera ma lasciava il focus sulla textarea. Questo test riproduce
+    // esattamente quel fallimento del doppio: senza la separazione dei due
+    // try, sarebbe rosso.
+    it('registers the keyboardDidHide listener even when setResizeMode is rejected, as it always is on Android', async () => {
+        keyboard.setResizeMode.mockRejectedValueOnce(new Error('not implemented'))
+        const onError = vi.fn()
+        await configureNativeFraming({ scheme: 'dark', background: '#000000', onError })
+
+        expect(onError).toHaveBeenCalledTimes(1)
+        expect(onError.mock.calls[0][0].code).toBe('NATIVE_KEYBOARD_FAILED')
+
+        const registered = keyboard.addListener.mock.calls.find(([event]) => event === 'keyboardDidHide')
+        expect(registered).toBeDefined()
+
+        const field = document.createElement('textarea')
+        document.body.appendChild(field)
+        field.focus()
+        expect(document.activeElement).toBe(field)
+
+        ;(registered![1] as () => void)()
+        expect(document.activeElement).not.toBe(field)
+        field.remove()
+    })
 })

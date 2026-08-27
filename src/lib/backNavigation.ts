@@ -85,6 +85,8 @@ export function resolveTalosBackAction(state: TalosBackState): TalosBackAction {
  */
 export interface TalosStationEntry {
     readonly from: string
+    /** Dynamic segments of the exact route that was underneath the station. */
+    readonly fromParams: Readonly<Record<string, string | string[]>>
     readonly viaSidebar: boolean
 }
 
@@ -97,19 +99,36 @@ export interface TalosStationEntry {
  */
 export function talosStationEntryAfter(
     previous: TalosStationEntry | null,
-    move: { readonly to: string, readonly from: string, readonly viaSidebar: boolean },
+    move: {
+        readonly to: string
+        readonly from: string
+        readonly fromParams?: Readonly<Record<string, string | string[]>>
+        readonly viaSidebar: boolean
+    },
 ): TalosStationEntry | null {
     if (move.to === 'chat') return null
     if (talosMobileStationOf(move.to) === talosMobileStationOf(move.from)) return previous
-    return { from: move.from, viaSidebar: move.viaSidebar }
+    return {
+        from: move.from,
+        fromParams: move.fromParams ?? {},
+        viaSidebar: move.viaSidebar,
+    }
 }
 
 /** Where Back lands, and whether the main menu comes back with it. */
-export function talosStationExit(entry: TalosStationEntry | null): { route: string, sidebar: boolean } {
+export function talosStationExit(entry: TalosStationEntry | null): {
+    route: string
+    params: Readonly<Record<string, string | string[]>>
+    sidebar: boolean
+} {
     // With nothing recorded — a cold start straight into a station — the
     // 2026-07-24 answer stands: a station is opened from the main menu, so the
     // main menu is where leaving it goes.
-    return { route: entry?.from ?? 'chat', sidebar: entry?.viaSidebar ?? true }
+    return {
+        route: entry?.from ?? 'chat',
+        params: entry?.fromParams ?? {},
+        sidebar: entry?.viaSidebar ?? true,
+    }
 }
 
 /**

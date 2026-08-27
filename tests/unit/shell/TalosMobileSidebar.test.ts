@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { Capacitor } from '@capacitor/core'
 import type { TalosLocalChatSession } from '@/repositories/chatRepository'
 import TalosMobileSidebar from '@/components/shell/TalosMobileSidebar.vue'
-import { DrawerContent } from '@/components/ui/drawer'
+import { Drawer, DrawerContent } from '@/components/ui/drawer'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
 // Il ventaglio in fondo alla sidebar naviga, quindi la sidebar ora vive dentro
@@ -50,6 +51,104 @@ function mountSidebar(props: Record<string, unknown> = {}) {
 }
 
 describe('TalosMobileSidebar (F1-T3)', () => {
+    it('GLOBAL-SIDEBAR-SHORT-LANDSCAPE-01 keeps every navigation row reachable in a short viewport', async () => {
+        mountSidebar()
+        await flushPromises()
+        const tools = document.querySelector('[data-testid="talos-sidebar-tools"]') as HTMLElement
+        const navigationFlow = tools.parentElement as HTMLElement
+        expect(navigationFlow.className).toContain('overflow-y-auto')
+        expect(navigationFlow.className).toContain('overscroll-contain')
+    })
+
+    it('GLOBAL-SIDEBAR-ABOVE-HARNESS-01 raises both the drawer and its overlay above station surfaces', async () => {
+        mountSidebar()
+        await flushPromises()
+        const sidebar = document.querySelector('[data-testid="talos-mobile-sidebar"]') as HTMLElement
+        const overlay = document.querySelector('[data-slot="drawer-overlay"]') as HTMLElement
+        expect(sidebar.className).toContain('var(--talos-z-global-navigation)')
+        expect(overlay.className).toContain('var(--talos-z-global-navigation)')
+        expect(overlay.className).toContain('pointer-events-none')
+    })
+
+    it('DEBT-MOBILE-008: Vaul does not compete with the explicit sidebar gesture', async () => {
+        const wrapper = mountSidebar({ busy: true })
+        await flushPromises()
+        expect(wrapper.findComponent(Drawer).props('dismissible')).toBe(false)
+    })
+
+    it('DEBT-MOBILE-008: the sidebar body keeps vertical scroll and horizontal drag', async () => {
+        mountSidebar({ busy: true })
+        await flushPromises()
+        expect(document.querySelector('[data-testid="talos-sidebar-scroll-surface"]')?.className)
+            .toContain('touch-pan-y')
+    })
+
+    it('DEBT-MOBILE-008B RED: the drawer follows the finger before release', async () => {
+        const wrapper = mountSidebar({ busy: true })
+        await flushPromises()
+        const content = document.querySelector('[data-testid="talos-sidebar-swipe-surface"]') as HTMLElement
+        const drawer = document.querySelector('[data-testid="talos-mobile-sidebar"]') as HTMLElement
+        const touch = (type: string, clientX: number): Event => {
+            const event = new Event(type, { bubbles: true })
+            Object.defineProperties(event, {
+                touches: { value: type === 'touchstart' || type === 'touchmove' ? [{ clientX, clientY: 400 }] : [] },
+                changedTouches: { value: type === 'touchend' ? [{ clientX, clientY: 400 }] : [] },
+            })
+            return event
+        }
+        content.dispatchEvent(touch('touchstart', 900))
+        content.dispatchEvent(touch('touchmove', 700))
+        await flushPromises()
+        expect(drawer.style.transform).toContain('translate3d(-200px')
+        expect(wrapper.emitted('update:open')).not.toContainEqual([false])
+        content.dispatchEvent(touch('touchend', 700))
+        await flushPromises()
+        expect(wrapper.emitted('update:open')).toContainEqual([false])
+    })
+
+    it('DEBT-MOBILE-008B RED: a short drag returns the drawer to its resting position', async () => {
+        const wrapper = mountSidebar({ busy: true })
+        await flushPromises()
+        const content = document.querySelector('[data-testid="talos-sidebar-swipe-surface"]') as HTMLElement
+        const drawer = document.querySelector('[data-testid="talos-mobile-sidebar"]') as HTMLElement
+        const touch = (type: string, clientX: number): Event => {
+            const event = new Event(type, { bubbles: true })
+            Object.defineProperties(event, {
+                touches: { value: type === 'touchstart' || type === 'touchmove' ? [{ clientX, clientY: 400 }] : [] },
+                changedTouches: { value: type === 'touchend' ? [{ clientX, clientY: 400 }] : [] },
+            })
+            return event
+        }
+        content.dispatchEvent(touch('touchstart', 900))
+        content.dispatchEvent(touch('touchmove', 860))
+        content.dispatchEvent(touch('touchend', 860))
+        await flushPromises()
+        expect(drawer.style.transform).toContain('translate3d(0px')
+        expect(drawer.style.transition).toContain('var(--talos-motion-duration-control')
+        expect(wrapper.emitted('update:open')).not.toContainEqual([false])
+    })
+
+    it('DEBT-MOBILE-008 RED: pointercancel from the scroll surface does not discard the touch swipe', async () => {
+        const wrapper = mountSidebar({ busy: true })
+        await flushPromises()
+        const content = document.querySelector('[data-testid="talos-sidebar-swipe-surface"]') as HTMLElement
+        const event = (type: string, clientX: number): Event => {
+            const result = new Event(type, { bubbles: true })
+            Object.defineProperties(result, {
+                touches: { value: type === 'touchstart' || type === 'touchmove' ? [{ clientX, clientY: 400 }] : [] },
+                changedTouches: { value: type === 'touchend' ? [{ clientX, clientY: 400 }] : [] },
+            })
+            return result
+        }
+        content.dispatchEvent(event('pointerdown', 900))
+        content.dispatchEvent(event('touchstart', 900))
+        content.dispatchEvent(event('pointercancel', 900))
+        content.dispatchEvent(event('touchmove', 100))
+        content.dispatchEvent(event('touchend', 100))
+        await flushPromises()
+        expect(wrapper.emitted('update:open')).toContainEqual([false])
+    })
+
     it('opens as a full-width dialog with the chat-first section order', async () => {
         // Owner 2026-07-24: the single New-chat affordance is the bottom FAB
         // (inside the settings bar) — no duplicate outline button up top.
@@ -173,5 +272,33 @@ describe('TalosMobileSidebar (F1-T3)', () => {
         await flushPromises()
         // The choice rides along: the chat, and whether its Library files go too.
         expect(wrapper.emitted('delete')).toEqual([['chat-2', { deleteMedia: false }]])
+    })
+})
+
+/**
+ * Harness UI (24/8) — debug-only entry, appended to TOOL_DEFINITIONS rather
+ * than baked in, so the six-entry F2-RED-20 test above stays exactly as it
+ * was (it never mocks Capacitor, so `talosHarnessUiAvailable()` resolves to
+ * the real, unavailable-in-jsdom answer there — matching a release build).
+ */
+describe('TalosMobileSidebar — Harness UI debug-only entry (24/8)', () => {
+    afterEach(() => { vi.restoreAllMocks() })
+
+    it('stays absent when the native plugin is unavailable, same as a release build', async () => {
+        mountSidebar()
+        await flushPromises()
+        expect(document.querySelector('[data-testid="talos-mobile-sidebar"] [aria-label="Open Code"]')).toBeNull()
+    })
+
+    it('appears and navigates when the native plugin is available (debug build)', async () => {
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+        const wrapper = mountSidebar()
+        await flushPromises()
+        const row = document.querySelector('[data-testid="talos-mobile-sidebar"] [aria-label="Open Code"]') as HTMLElement
+        expect(row).toBeTruthy()
+        expect(row.textContent).not.toMatch(/Harness/i)
+        row.click()
+        await flushPromises()
+        expect(wrapper.emitted('navigate')).toEqual([['harness']])
     })
 })

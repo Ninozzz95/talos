@@ -179,7 +179,7 @@ async function resetEndpoint(provider: TalosMobileProviderId): Promise<void> {
 
 <template>
     <div data-testid="settings-provider-keys" class="space-y-[var(--talos-space-section)]">
-        <p v-if="error" role="alert" class="rounded-[var(--talos-radius-control)] border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-[var(--talos-space-control)] text-sm text-[var(--talos-text)]">
+        <p v-if="error && !controller.secrets.openrouter" role="alert" class="rounded-[var(--talos-radius-control)] border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-[var(--talos-space-control)] text-sm text-[var(--talos-text)]">
             {{ error }}
         </p>
 

@@ -95,21 +95,36 @@ describe('resolveTalosBackAction', () => {
  * took the Settings Center with it on the way out.
  */
 describe('leaving a station the way you came into it', () => {
+    it('CODE-SETTINGS-RETURN-SESSION-01 preserves the selected Code session when Settings is closed', () => {
+        const entry = talosStationEntryAfter(null, {
+            to: 'settings',
+            from: 'harness-session',
+            fromParams: { id: 'refactor-auth-flow' },
+            viaSidebar: true,
+        })
+
+        expect(talosStationExit(entry)).toEqual({
+            route: 'harness-session',
+            params: { id: 'refactor-auth-flow' },
+            sidebar: true,
+        })
+    })
+
     it('remembers the door, so the main menu comes back with you', () => {
         const entry = talosStationEntryAfter(null, { to: 'research', from: 'chat', viaSidebar: true })
-        expect(talosStationExit(entry)).toEqual({ route: 'chat', sidebar: true })
+        expect(talosStationExit(entry)).toEqual({ route: 'chat', params: {}, sidebar: true })
     })
 
     it('does not throw away what was underneath', () => {
         // Settings open, research opened from the menu over the top of it.
         const entry = talosStationEntryAfter(null, { to: 'research', from: 'settings', viaSidebar: true })
-        expect(talosStationExit(entry)).toEqual({ route: 'settings', sidebar: true })
+        expect(talosStationExit(entry)).toEqual({ route: 'settings', params: {}, sidebar: true })
     })
 
     it('leaves the menu shut when the menu was not the door', () => {
         // Reached from the chat's own composer rather than from the drawer.
         const entry = talosStationEntryAfter(null, { to: 'library', from: 'chat', viaSidebar: false })
-        expect(talosStationExit(entry)).toEqual({ route: 'chat', sidebar: false })
+        expect(talosStationExit(entry)).toEqual({ route: 'chat', params: {}, sidebar: false })
     })
 
     it('ignores moves INSIDE one station, which are not an entrance', () => {
@@ -131,7 +146,7 @@ describe('leaving a station the way you came into it', () => {
     it('falls back to the main menu when nothing was recorded at all', () => {
         // A cold start straight into a station: the 2026-07-24 rule stands,
         // because a station IS opened from the main menu.
-        expect(talosStationExit(null)).toEqual({ route: 'chat', sidebar: true })
+        expect(talosStationExit(null)).toEqual({ route: 'chat', params: {}, sidebar: true })
     })
 })
 

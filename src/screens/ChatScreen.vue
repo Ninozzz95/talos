@@ -1058,7 +1058,7 @@ onBeforeUnmount(() => {
 
         <div
             ref="chatScroll"
-            class="flex-1 overflow-y-auto overscroll-contain"
+            class="flex-1 touch-pan-y overflow-y-auto overscroll-contain"
             :class="settings.state.shell.immersive_header ? 'pt-[calc(3.5rem+env(safe-area-inset-top))]' : ''"
             data-testid="talos-chat-scroll"
             @scroll.passive="onChatScroll"

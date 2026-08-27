@@ -27,7 +27,8 @@ import {
     TALOS_MOTION_SCENE_IDS,
     type TalosMotionSceneId,
 } from '@/motion-v6/contracts'
-import { TALOS_FONT_SCALE_OPTIONS, type TalosFontScale } from '@/lib/talosFontScale'
+import type { TalosFontScale } from '@/lib/talosFontScale'
+import { TALOS_FONT_SCALE_OPTIONS } from '@/lib/talosFontScaleOptions'
 import { useSettingsStore, type TalosMotionPreferencePatch } from '@/stores/settings'
 import {
     TALOS_COMPOSER_PLUS_SURFACES,
