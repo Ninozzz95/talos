@@ -1291,10 +1291,17 @@ button:disabled { cursor: not-allowed; opacity: .48; }
  */
 .model-picker { margin-bottom: 12px; }
 .model-picker-trigger { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; text-align: left; }
+/* ⭐ 27/8 — stessa cautela imparata stasera su .model-picker-panel: ogni display esplicito vuole il suo [hidden], scritto SUBITO e non aspettando di trovarlo rotto. */
+.model-picker-trigger[hidden] { display: none; }
 .model-picker-trigger-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px var(--font-mono); }
 .model-picker-chevron svg { width: 14px; height: 14px; color: var(--muted); flex: 0 0 auto; }
 .model-picker-trigger[aria-expanded="true"] .model-picker-chevron svg { transform: rotate(180deg); }
 .model-picker-panel { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; padding: 10px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface-elevated); box-shadow: var(--shadow); }
+/* ⛔⛔⛔ 27/8, owner: "clicco il modello, il drop-down non scompare, copre
+   il bottone Continua" — STESSA causa di .demo-surface-badge trovata poco
+   fa nello stesso giro: `display: flex` sopra vince su [hidden], chiudi()
+   impostava panel.hidden = true correttamente ma non nascondeva niente. */
+.model-picker-panel[hidden] { display: none; }
 .model-picker-search { position: relative; display: block; flex: 0 0 auto; }
 .model-picker-search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--muted); pointer-events: none; }
 .model-picker-search input { padding-left: 32px; }
