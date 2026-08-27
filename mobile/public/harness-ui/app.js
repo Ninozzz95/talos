@@ -61,6 +61,8 @@
      * server" finché l'owner non sceglie qualcosa dal foglio Modello.
      */
     model: '',
+    // ⭐ 28/8 — stesso principio di `model`: null = nessuna scelta esplicita, "reasoning" resta assente dal corpo della richiesta (comportamento di sempre). Un valore fra quelli di LIVELLI_RAGIONAMENTO appena l'owner tocca lo slider dell'effort picker.
+    effort: null,
     environment: 'wt/auth-61c · feat/mobile-code',
     // ⛔ 27/8, trovato dalla pipeline QA visiva: la card "Session topology" leggeva questo valore come stato iniziale — restava "Refactor auth flow" finché nessuna funzione lo toccava, cioè sempre, all'apertura della pagina.
     session: 'Nessuna sessione',
@@ -1121,6 +1123,87 @@
     return { elemento: wrap, getValore: () => valoreScelto };
   }
 
+  /*
+   * ⭐⭐⭐ 28/8, owner: "nella modale della nuova sessione e nella pill del
+   * modello metti lo slider del selettore effort più ragionamento esteso
+   * (usa lo stesso component usato sul mobile)" — porta
+   * TalosMobileEffortPicker.vue/TalosThemedSegmentedSlider.vue (mobile,
+   * `reka-ui`), adattato: qui non c'è un framework né una libreria di
+   * slider, quindi lo slider è un `<input type="range">` NATIVO — stessa
+   * filosofia del componente mobile ("il piattaforma possiede il drag, la
+   * tastiera, il touch"), non uno hand-rolled. Sei livelli, quelli VERI
+   * di OpenRouter già validati server-side (`config.mjs`,
+   * `EFFORT_AMMESSI`) — non i sette del mobile (`off/minimal/low/medium/
+   * high/xhigh/max`): niente 'max' (non esiste su OpenRouter), 'none' al
+   * posto di 'off' (stesso significato, nome vero dell'API).
+   *
+   * ⛔ NIENTE toggle "ragionamento esteso" separato (il thinking booleano
+   * del mobile, per Anthropic diretto): sul nostro harness `reasoning` è
+   * SOLO `{effort, summary}` — `effort:'none'` È già "nessun
+   * ragionamento", un secondo controllo duplicherebbe la stessa cosa con
+   * un nome diverso. I livelli alti (high/xhigh) SONO il "ragionamento
+   * esteso" richiesto.
+   */
+  const LIVELLI_RAGIONAMENTO = [
+    { valore: 'none', etichetta: 'Off' },
+    { valore: 'minimal', etichetta: 'Minimo' },
+    { valore: 'low', etichetta: 'Basso' },
+    { valore: 'medium', etichetta: 'Medio' },
+    { valore: 'high', etichetta: 'Alto' },
+    { valore: 'xhigh', etichetta: 'Massimo' },
+  ];
+
+  function creaEffortPicker({ valoreIniziale = null, alCambiato } = {}) {
+    const wrap = document.createElement('div');
+    wrap.className = 'effort-picker';
+
+    const head = document.createElement('div');
+    head.className = 'effort-picker-head';
+    const label = textElement('span', 'effort-picker-label', 'Ragionamento');
+    const selected = textElement('span', 'effort-picker-selected', '');
+    head.append(label, selected);
+
+    const range = document.createElement('input');
+    range.type = 'range';
+    range.className = 'effort-picker-range';
+    range.min = '0';
+    range.max = String(LIVELLI_RAGIONAMENTO.length - 1);
+    range.step = '1';
+    range.setAttribute('aria-label', 'Livello di ragionamento');
+
+    const labelsRow = document.createElement('div');
+    labelsRow.className = 'effort-picker-labels';
+    const labelEls = LIVELLI_RAGIONAMENTO.map((l, i) => {
+      const el = textElement('span', 'effort-picker-tick', l.etichetta);
+      el.style.left = `${(i / (LIVELLI_RAGIONAMENTO.length - 1)) * 100}%`;
+      labelsRow.appendChild(el);
+      return el;
+    });
+
+    wrap.append(head, range, labelsRow);
+
+    let indice = LIVELLI_RAGIONAMENTO.findIndex((l) => l.valore === valoreIniziale);
+    // ⭐ nessuna scelta esplicita ancora: "toccato" resta false finché l'utente non muove lo slider — getValore() torna null, il corpo della richiesta non porta "reasoning" affatto, comportamento identico a prima di questo componente. La posizione VISIVA di partenza (Alto, come il mobile) è solo estetica.
+    let toccato = indice >= 0;
+    if (indice < 0) indice = LIVELLI_RAGIONAMENTO.findIndex((l) => l.valore === 'high');
+
+    function aggiorna() {
+      range.value = String(indice);
+      selected.textContent = toccato ? LIVELLI_RAGIONAMENTO[indice].etichetta : 'Predefinito del server';
+      labelEls.forEach((el, i) => el.classList.toggle('effort-picker-tick-selected', i === indice));
+    }
+    aggiorna();
+
+    range.addEventListener('input', () => {
+      indice = Number(range.value);
+      toccato = true;
+      aggiorna();
+      alCambiato?.(LIVELLI_RAGIONAMENTO[indice].valore);
+    });
+
+    return { elemento: wrap, getValore: () => (toccato ? LIVELLI_RAGIONAMENTO[indice].valore : null) };
+  }
+
   function runsPath(cursor = null) {
     const params = new URLSearchParams({ limit: '40' });
     if (harnessFilter.value) params.set('harness', harnessFilter.value);
@@ -1339,7 +1422,20 @@
           apriSubito: true,
           alSelezionato: () => closeEmbeddedDialog(sheetDialog),
         });
-        mount.replaceChildren(picker.elemento);
+        /*
+         * ⭐⭐⭐ 28/8, owner: "nella pill del modello metti lo slider
+         * dell'effort" — STESSO componente di "Nuova sessione"
+         * (creaEffortPicker), montato qui sotto il picker modello. Cambia
+         * `state.effort` dal vivo (non c'è un "submit" in questo foglio:
+         * la sessione o è già avviata — la scelta vale dal PROSSIMO
+         * resume/fork — o partirà con la prossima "Nuova"/primo
+         * messaggio, che legge state.effort al momento dell'avvio).
+         */
+        const effortPicker = creaEffortPicker({
+          valoreIniziale: state.effort,
+          alCambiato: (valore) => { state.effort = valore; },
+        });
+        mount.replaceChildren(picker.elemento, effortPicker.elemento);
       }
     }
     /*
@@ -2167,6 +2263,8 @@
       case 'prova': return 'Esecuzione dei test…';
       case 'shell': return a.comando ? `Comando: ${a.comando}` : 'Comando shell…';
       case 'naviga': return a.url ? `Pagina web: ${a.url}` : 'Lettura pagina web…';
+      case 'web_search': return a.query ? `Ricerca web: "${a.query}"` : 'Ricerca web…';
+      case 'artifact_create': return a.titolo ? `Artefatto: ${a.titolo}` : 'Creazione artefatto…';
       default: return `${nome}(…)`;
     }
   }
@@ -3795,10 +3893,12 @@
         selectCartella.appendChild(opzione);
       }
       const modelPicker = creaModelPicker({ valoreIniziale: state.model || '' });
+      const effortPicker = creaEffortPicker({ valoreIniziale: state.effort });
       customSection.append(
         selectCartella,
         textElement('span', 'sheet-label', 'Modello'),
         modelPicker.elemento,
+        effortPicker.elemento,
       );
       const submit = document.createElement('button');
       submit.type = 'submit';
@@ -3810,8 +3910,9 @@
         const cartellaId = selectCartella.value;
         const nomeCartella = progetti.find((p) => p.id === cartellaId)?.nome ?? cartellaId;
         const modello = modelPicker.getValore();
+        const effort = effortPicker.getValore();
         closeEmbeddedDialog(sheetDialog);
-        avviaSessionePendente({ cartellaId, nomeCartella, modello });
+        avviaSessionePendente({ cartellaId, nomeCartella, modello, effort });
       });
     }
     corpoFoglio.push(customSection);
@@ -3835,10 +3936,11 @@
    * parte solo quando c'è un compito — il primo messaggio scritto nella
    * chat, intercettato da submitPrompt via state.pendingCustomSession).
    */
-  function avviaSessionePendente({ cartellaId, nomeCartella, modello }) {
+  function avviaSessionePendente({ cartellaId, nomeCartella, modello, effort }) {
     nuovaGenerazioneSessione();
-    state.pendingCustomSession = { cartellaId, nomeCartella, modello };
+    state.pendingCustomSession = { cartellaId, nomeCartella, modello, effort };
     if (modello) { state.model = modello; aggiornaPillolaModello(); }
+    if (effort) state.effort = effort;
     state.session = `Nuova · ${nomeCartella}`;
     sessionTitle.textContent = state.session;
     $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
@@ -3856,7 +3958,7 @@
    * collegaEventiSessione), corpo POST diverso (/sessions/custom con
    * cartellaId+consegna invece di /sessions con taskId).
    */
-  async function startCustomSession({ cartellaId, nomeCartella, consegna, comandoProva, modello }) {
+  async function startCustomSession({ cartellaId, nomeCartella, consegna, comandoProva, modello, effort }) {
     const generation = nuovaGenerazioneSessione();
     const taskSintetico = { id: `libero:${nomeCartella}`, consegna };
     state.realSession.taskId = taskSintetico.id;
@@ -3884,6 +3986,9 @@
       if (comandoProva) corpo.comandoProva = comandoProva;
       const modelloEffettivo = modello || state.model; // ⭐ la scelta fatta nel picker della modale ha priorità
       if (modelloEffettivo) corpo.modello = modelloEffettivo;
+      // ⭐ 28/8 — stesso principio del modello: la scelta esplicita dell'effort picker ha priorità, altrimenti quella già impostata sulla sessione (pillola/foglio); assente se l'owner non ha mai toccato lo slider.
+      const effortEffettivo = effort || state.effort;
+      if (effortEffettivo) corpo.reasoning = { effort: effortEffettivo };
       const data = await apiPost('/api/v1/sessions/custom', corpo);
       sessionId = data.sessionId;
     } catch (error) {
@@ -3945,9 +4050,9 @@
      * sessione reale, questo primo messaggio la avvia per davvero.
      */
     if (state.pendingCustomSession) {
-      const { cartellaId, nomeCartella, modello } = state.pendingCustomSession;
+      const { cartellaId, nomeCartella, modello, effort } = state.pendingCustomSession;
       state.pendingCustomSession = null;
-      startCustomSession({ cartellaId, nomeCartella, consegna: value, modello });
+      startCustomSession({ cartellaId, nomeCartella, consegna: value, modello, effort });
       return true;
     }
     /*
@@ -3961,8 +4066,37 @@
      * scrive SOLO dentro una sessione già avviata — qui l'avvio passa da
      * "Nuova sessione", che sceglie la cartella prima del testo libero.
      */
-    toast('Nessuna sessione attiva', 'Premi «Nuova» in alto per scegliere una cartella e iniziare.');
+    /*
+     * ⭐⭐⭐ 28/8, owner: "la sessione non parte quando scrivo semplicemente
+     * dal composer, devo per forza premere nuova sessione" — quando esiste
+     * UNA SOLA cartella di progetto configurata (il caso comune oggi, vedi
+     * TALOS_HARNESS_UI_PROJECT_DIRS), non c'è nessuna scelta reale da fare:
+     * un vero terminale (claude/codex/aider lanciati da una cartella) non
+     * chiede MAI "quale cartella?" quando ce n'è una sola — lo stesso
+     * principio competitivo già citato sopra, applicato al caso non
+     * ambiguo. Con PIÙ cartelle l'ambiguità resta vera: fallback identico
+     * a prima, serve "Nuova". La ricerca è QUI (async, in risposta
+     * all'azione dell'utente), non al boot — vedi la nota "provato e
+     * SCARTATO" più sotto in questo file: due test pretendono ZERO
+     * chiamate di rete al mount.
+     */
+    avviaSessioneImplicitaSeUnaSolaCartella(value);
     return true;
+  }
+
+  async function avviaSessioneImplicitaSeUnaSolaCartella(consegna) {
+    let progetti;
+    try {
+      progetti = await apiGet('/api/v1/projects').then((r) => r.items);
+    } catch {
+      progetti = [];
+    }
+    if (progetti.length !== 1) {
+      toast('Nessuna sessione attiva', 'Premi «Nuova» in alto per scegliere una cartella e iniziare.');
+      return;
+    }
+    const [{ id: cartellaId, nome: nomeCartella }] = progetti;
+    startCustomSession({ cartellaId, nomeCartella, consegna, modello: state.model, effort: state.effort });
   }
 
   function announceComposerAction(action) {
