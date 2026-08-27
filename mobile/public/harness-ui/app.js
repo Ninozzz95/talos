@@ -2078,23 +2078,92 @@
   }
 
   /**
+   * ⭐⭐⭐ 27/8, owner: "un vero formattatore diff, importantissimo".
+   * LCS classico (programmazione dinamica) fra le righe di `prima` e
+   * `dopo` — lo stesso significato di un diff unificato (`git diff`), non
+   * inventato qui: righe uguali restano 'ctx', quelle solo in `prima`
+   * diventano 'del' (rosse), quelle solo in `dopo` 'add' (verdi).
+   *
+   * ⛔ Guardia di taglia, non un dettaglio: la DP costa O(righePrima ×
+   * righeDopo) in tempo E in spazio. `RIGHE_MASSIME_DIFF` è un punto di
+   * partenza dichiarato come tale (stesso spirito di
+   * `SOGLIA_SCRITTURE_SENZA_PROVA` in talosHarness.mjs — non una misura),
+   * non ricalcolato su un caso reale. Sopra la soglia si torna al
+   * comportamento onesto di prima di oggi (righe tutte 'add'/'ctx', mai
+   * '-'): un tentativo di diff parziale che sembri completo e non lo sia
+   * sarebbe la stessa fuffa già tolta ovunque in questo file.
+   */
+  const RIGHE_MASSIME_DIFF = 1500;
+
+  function calcolaDiffRighe(prima, dopo) {
+    const a = prima.split('\n');
+    const b = dopo.split('\n');
+    if (a.length > RIGHE_MASSIME_DIFF || b.length > RIGHE_MASSIME_DIFF) return null;
+    const n = a.length;
+    const m = b.length;
+    const lcs = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+    for (let i = n - 1; i >= 0; i--) {
+      for (let j = m - 1; j >= 0; j--) {
+        lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+      }
+    }
+    const righe = [];
+    let i = 0;
+    let j = 0;
+    while (i < n && j < m) {
+      if (a[i] === b[j]) { righe.push(['ctx', a[i]]); i += 1; j += 1; }
+      else if (lcs[i + 1][j] >= lcs[i][j + 1]) { righe.push(['del', a[i]]); i += 1; }
+      else { righe.push(['add', b[j]]); j += 1; }
+    }
+    while (i < n) { righe.push(['del', a[i]]); i += 1; }
+    while (j < m) { righe.push(['add', b[j]]); j += 1; }
+    return righe;
+  }
+
+  /**
+   * Numero di riga (del file DOPO la scrittura — 'ctx'/'add' lo hanno, una
+   * riga 'del' no: non esiste più in quel file, non un numero inventato) +
+   * un marcatore +/-/spazio, come prefisso testuale della riga stessa —
+   * stesso pattern di `renderReviewFile` sotto (uno `<span>` per riga,
+   * nessuna colonna CSS dedicata da costruire).
+   */
+  function formattaRigheConNumero(righe) {
+    let numero = 0;
+    return righe.map(([tipo, testo]) => {
+      if (tipo !== 'del') numero += 1;
+      const colNumero = tipo === 'del' ? ''.padStart(4) : String(numero).padStart(4);
+      const marcatore = tipo === 'add' ? '+' : tipo === 'del' ? '-' : ' ';
+      return [tipo, `${colNumero} ${marcatore} ${testo}`];
+    });
+  }
+
+  /**
    * ⭐ Piano §1.3, riga Review — ogni scrittura reale aggiorna la scheda
    * Review già esistente, non solo la conversazione. Una voce PER
    * percorso, così un task che scrive più file resta tutto ispezionabile.
    *
-   * ⛔ `value` è il contenuto INTERO del file, mai un vero diff riga per
-   * riga: talosHarness.mjs non passa il "prima" a onScrittura oggi, solo il
-   * "dopo" — 'add' mostra righe verdi (file nuovo), 'replace' righe neutre
-   * (file toccato, contenuto attuale) invece di inventare +/- che non ha.
+   * ⭐⭐⭐ 27/8 — `operazione.prima` (quando presente: vedi agui-events.mjs,
+   * campo non-standard aggiunto apposta) è il contenuto VERO del file
+   * prima di questa scrittura. Un file nuovo ha `prima: null` — diff
+   * contro stringa vuota, ogni riga naturalmente 'add', stesso identico
+   * risultato di prima senza un caso speciale in più da mantenere.
    */
   function updateRealReview(delta) {
     const operazione = delta?.[0];
     if (!operazione || typeof operazione.path !== 'string') return;
     const percorso = operazione.path.replace(/^\/file\//, '');
+    const dopo = String(operazione.value ?? '');
+    const haPrima = 'prima' in operazione;
+    const righeGrezze = haPrima ? calcolaDiffRighe(operazione.prima ?? '', dopo) : null;
+    const righe = righeGrezze
+      // ⛔ senza "prima" (chiamante vecchio, o file troppo grande per la DP): stesso
+      // comportamento onesto di prima di oggi, MAI un diff che sembra vero e non lo è.
+      ?? dopo.split('\n').map((riga) => [operazione.op === 'add' ? 'add' : 'ctx', riga]);
     state.realSession.reviewFiles.set(percorso, {
       path: percorso,
       nuovo: operazione.op === 'add',
-      code: String(operazione.value ?? '').split('\n').map((riga) => [operazione.op === 'add' ? 'add' : 'ctx', riga]),
+      diffVero: righeGrezze !== null,
+      code: formattaRigheConNumero(righe),
     });
     renderRealReviewList();
     renderReviewFile(`real:${percorso}`);

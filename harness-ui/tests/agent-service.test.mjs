@@ -20,7 +20,7 @@ function talosLavoraFinto({ script, cattura = () => {} }) {
     if (script.tipo === 'lancia') throw script.errore;
     input.onGiro?.({ tipo: 'risposta', giro: 0, risposta: { role: 'assistant', content: 'ciao', tool_calls: [] } });
     for (const scrittura of script.scritture ?? []) {
-      input.onScrittura?.(scrittura.percorso, scrittura.contenuto, scrittura.esisteva);
+      input.onScrittura?.(scrittura.percorso, scrittura.contenuto, scrittura.esisteva, scrittura.contenutoPrima);
     }
     for (const toolEsito of script.toolEsiti ?? []) {
       input.onGiro?.({ tipo: 'tool-esito', giro: 0, toolCallId: toolEsito.toolCallId, content: toolEsito.content });
@@ -96,6 +96,27 @@ test('onScrittura: "esisteva" (letto DA talosLavora, non da questo file) sceglie
     { op: 'replace', path: '/file/a.ts', value: 'v2' },
     { op: 'add', path: '/file/b.ts', value: 'v1' },
   ]);
+});
+
+test('onScrittura: contenutoPrima (quarto argomento, letto DA talosLavora) arriva fino al delta come "prima" — 27/8, il formattatore diff', async () => {
+  const eventi = [];
+  const talosLavoraFn = talosLavoraFinto({
+    script: {
+      esito: { comeFinita: 'concluso', detto: 'fatto' },
+      scritture: [
+        { percorso: 'a.ts', contenuto: 'v1', esisteva: false, contenutoPrima: null },
+        { percorso: 'a.ts', contenuto: 'v2', esisteva: true, contenutoPrima: 'v1' },
+      ],
+    },
+  });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn });
+
+  const delte = eventi.filter((e) => e.type === 'StateDelta').map((e) => e.delta[0]);
+  assert.deepEqual(delte, [
+    { op: 'add', path: '/file/a.ts', value: 'v1', prima: null },
+    { op: 'replace', path: '/file/a.ts', value: 'v2', prima: 'v1' },
+  ], 'il "prima" della seconda scrittura è ciò che ha scritto la prima ("v1"), non un valore inventato qui');
 });
 
 test('comeFinita "concluso" produce RunFinished con outcome success', async () => {

@@ -129,13 +129,24 @@ export function eventoPerEsitoTool({ messageId, toolCallId, content }) {
  * `replace` se il file esisteva già in `prima`, `add` se è nuovo.
  * Formato scelto dalla ricerca del piano §0.1 (`StateDelta` — RFC 6902
  * JSON Patch), non inventato qui.
+ *
+ * ⭐⭐⭐ 27/8, owner: "un vero formattatore diff, importantissimo".
+ * `contenutoPrima` — quinto campo, NON standard RFC 6902 (la spec non lo
+ * vieta: un consumer che non lo conosce lo ignora) — è il testo del file
+ * un istante prima di questa scrittura, ora tornato da
+ * `premessaDellaScrittura` (vedi AVM-harness). ⛔ Aggiunto SOLO quando
+ * presente (`contenutoPrima !== undefined`): un chiamante vecchio che non
+ * lo passa produce l'identico oggetto di prima, byte per byte — nessuna
+ * chiave fantasma `prima: undefined` che romperebbe un
+ * `assert.deepStrictEqual` già scritto altrove.
  */
-export function eventoPerScrittura({ percorso, contenuto, esisteva }) {
+export function eventoPerScrittura({ percorso, contenuto, esisteva, contenutoPrima }) {
     return stateDelta({
         delta: [{
             op: esisteva ? 'replace' : 'add',
             path: `/file/${percorso}`,
             value: contenuto,
+            ...(contenutoPrima !== undefined ? { prima: contenutoPrima } : {}),
         }],
     })
 }

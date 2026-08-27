@@ -40,7 +40,7 @@ type RuntimeGlobals = {
             generation: number
             eventSource: FakeEventSource | null
             messageElements: Map<string, HTMLElement>
-            reviewFiles: Map<string, { path: string, nuovo: boolean, code: [string, string][] }>
+            reviewFiles: Map<string, { path: string, nuovo: boolean, diffVero: boolean, code: [string, string][] }>
             eventoTerminaleVisto: boolean
             followUpBubbleInAttesa: boolean
         }
@@ -304,6 +304,41 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(runtime().realSessionState.reviewFiles.has('src/prezzo.mjs')).toBe(true)
         const voce = runtime().realSessionState.reviewFiles.get('src/prezzo.mjs')
         expect(voce?.nuovo).toBe(true)
+    })
+
+    it('REAL-SESSION-REVIEW-02 StateDelta con "prima" produce un diff VERO — righe rosse/verdi/neutre, non tutto "add" — 27/8, il formattatore diff', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({
+            type: 'StateDelta',
+            delta: [{
+                op: 'replace', path: '/file/src/prezzo.mjs',
+                value: 'export const prezzo = 2\nexport const iva = 1\n',
+                prima: 'export const prezzo = 1\n',
+            }],
+        }, generation)
+
+        const voce = runtime().realSessionState.reviewFiles.get('src/prezzo.mjs')
+        expect(voce?.diffVero).toBe(true)
+        // la riga invariata è testo diverso solo perché il valore è cambiato — qui
+        // NIENTE è invariato riga per riga (prezzo passa da 1 a 2), quindi la
+        // prova vera è: c'è almeno una riga marcata '-' (rimossa) e una '+' (aggiunta).
+        const tipi = voce!.code.map(([tipo]) => tipo)
+        expect(tipi).toContain('del')
+        expect(tipi).toContain('add')
+        expect(voce!.code.some(([, testo]) => testo.includes('- export const prezzo = 1'))).toBe(true)
+        expect(voce!.code.some(([, testo]) => testo.includes('+ export const prezzo = 2'))).toBe(true)
+    })
+
+    it('REAL-SESSION-REVIEW-03 StateDelta SENZA "prima" (chiamante vecchio) resta onesto: nessun diff inventato, diffVero:false — verso contrario del test sopra', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({
+            type: 'StateDelta',
+            delta: [{ op: 'replace', path: '/file/src/senza-prima.mjs', value: 'x\n' }],
+        }, generation)
+
+        const voce = runtime().realSessionState.reviewFiles.get('src/senza-prima.mjs')
+        expect(voce?.diffVero).toBe(false)
+        expect(voce!.code.every(([tipo]) => tipo !== 'del')).toBe(true)
     })
 
     it('REAL-SESSION-STOP-01 stopRealSession non fa nulla senza una sessione reale attiva (nessun POST)', async () => {
