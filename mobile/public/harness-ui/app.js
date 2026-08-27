@@ -2735,6 +2735,30 @@
    * GET /api/v1/automations, e nasconde il badge della vista appena ne
    * esiste almeno una — stesso principio già usato per #sessionsPanel.
    */
+  /**
+   * ⭐ 27/8, trovato nel sweep Fase B: la card "attention" della sidebar
+   * diceva SEMPRE "2 automazioni · Prossima esecuzione 10:00" — testo
+   * statico in index.html, mai toccato da una riga di JS, indipendente da
+   * quante automazioni esistano davvero (la vista reale ne mostrava 1, non
+   * 2). Stessa famiglia di bug già chiusa oggi per il Capability hub e il
+   * badge Doctor: un mockup lasciato acceso invece di leggere lo stato
+   * vero. Nessuna automazione -> la card sparisce (nessun invito a
+   * un'azione che non c'è), non resta a dire "0".
+   */
+  function aggiornaWidgetAutomazioni(elenco) {
+    const card = $('.attention-card');
+    if (!card) return;
+    if (!elenco || elenco.length === 0) { card.hidden = true; return; }
+    card.hidden = false;
+    const titolo = $('strong', card);
+    const sottotitolo = $('span', card);
+    if (titolo) titolo.textContent = `${elenco.length} automazion${elenco.length === 1 ? 'e' : 'i'}`;
+    if (sottotitolo) {
+      const prossime = elenco.filter((a) => a.attiva && a.prossimaEsecuzione).map((a) => a.prossimaEsecuzione).sort();
+      sottotitolo.textContent = prossime.length > 0 ? `Prossima esecuzione ${formattaOraSessione(prossime[0])}` : 'Nessuna attiva';
+    }
+  }
+
   async function renderAutomationsReali() {
     const contenitore = $('#automationListReal');
     if (!contenitore) return;
@@ -2744,6 +2768,7 @@
     } catch {
       return; // ⛔ un refresh fallito non è un'azione richiesta, non merita un toast
     }
+    aggiornaWidgetAutomazioni(elenco);
     if (elenco.length > 0) {
       const demoBadge = $('.demo-surface-badge', $('[data-view="automations"]'));
       if (demoBadge) demoBadge.hidden = true;
@@ -3805,7 +3830,10 @@
   window.setTimeout(() => {
     // ⛔ verificato al MOMENTO del fire, non alla schedulazione: un test (o
     // un embed reale) può marcare talos-embedded fra i due istanti.
-    if (!HOST().classList.contains('talos-embedded')) aggiornaElencoSessioniReali();
+    if (!HOST().classList.contains('talos-embedded')) {
+      aggiornaElencoSessioniReali();
+      renderAutomationsReali(); // ⭐ 27/8 — la card automazioni della sidebar è live da subito, non solo dopo aver aperto la vista
+    }
   }, 0);
   aggiornaPillolaModello(); // ⭐ 27/8 — sincronizza SUBITO la pillola con lo stato vero (state.model === ''), invece di lasciare "gpt-5.6-sol · high" scritto a mano nell'HTML statico
   applyQaState();
