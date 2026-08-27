@@ -182,3 +182,18 @@ export function eventoPerScrittura({ percorso, contenuto, esisteva, contenutoPri
         }],
     })
 }
+
+/**
+ * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 — il
+ * contatore costo/token per una sessione VIVA (oggi esiste solo per le
+ * righe storiche della Board campagne). Stesso formato StateDelta di
+ * `eventoPerScrittura` sopra, stesso path-prefix `/usage` (mai
+ * `/file/*`): `replace` sempre, perché `totali` da `talosHarness.mjs`
+ * è già una SOMMA cumulativa a ogni giro, non un delta da sommare qui —
+ * un secondo consumer che sommasse di nuovo raddoppierebbe il conto.
+ */
+export function eventoPerUsage(totali) {
+    return stateDelta({
+        delta: [{ op: 'replace', path: '/usage', value: totali }],
+    })
+}

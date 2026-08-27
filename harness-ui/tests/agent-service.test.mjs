@@ -22,7 +22,14 @@ function talosLavoraFinto({ script, cattura = () => {} }) {
     // risposta finale del giro, come nel vero talosLavora (onDelta durante
     // lo stream, onGiro dopo che chiamaConRitenta è tornata).
     for (const delta of script.deltas ?? []) input.onDelta?.(delta);
-    input.onGiro?.({ tipo: 'risposta', giro: 0, risposta: script.risposta ?? { role: 'assistant', content: 'ciao', tool_calls: [] } });
+    input.onGiro?.({
+      tipo: 'risposta', giro: 0, risposta: script.risposta ?? { role: 'assistant', content: 'ciao', tool_calls: [] },
+      // ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 — come nel
+      // vero talosHarness.mjs, ENTRAMBI i campi sono assenti quando lo script
+      // non li dichiara (mai {usage:undefined}), stessa forma additiva.
+      ...(script.usageGiro ? { usage: script.usageGiro } : {}),
+      ...(script.totaliGiro ? { totali: script.totaliGiro } : {}),
+    });
     for (const scrittura of script.scritture ?? []) {
       input.onScrittura?.(scrittura.percorso, scrittura.contenuto, scrittura.esisteva, scrittura.contenutoPrima);
     }
@@ -60,6 +67,55 @@ test('onGiro "risposta" viene tradotto e inoltrato nell\'ordine (testo, poi even
   const tipi = eventi.map((e) => e.type);
   assert.deepEqual(tipi, ['RunStarted', 'TextMessageStart', 'TextMessageContent', 'TextMessageEnd', 'RunFinished']);
   assert.equal(eventi[2].delta, 'ciao');
+});
+
+/*
+ * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 — il
+ * contatore costo/token per una sessione VIVA. `evento.totali` (già una
+ * somma cumulativa da talosHarness.mjs) diventa un unico StateDelta
+ * /usage, DOPO gli eventi di quel giro — mai prima, un consumer deve
+ * vedere prima il testo/tool-call, poi il totale aggiornato.
+ */
+test('onGiro "risposta" con totali presenti emette StateDelta /usage, DOPO gli eventi del giro', async () => {
+  const eventi = [];
+  const totaliGiro = { prompt_tokens: 900, completion_tokens: 100, prompt_tokens_details: { cached_tokens: 50 }, giri: 1 };
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, totaliGiro } });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn });
+
+  const tipi = eventi.map((e) => e.type);
+  assert.deepEqual(tipi, ['RunStarted', 'TextMessageStart', 'TextMessageContent', 'TextMessageEnd', 'StateDelta', 'RunFinished']);
+  assert.deepStrictEqual(eventi[4].delta, [{ op: 'replace', path: '/usage', value: totaliGiro }]);
+});
+
+test('⛔ AL CONTRARIO: onGiro "risposta" SENZA totali (script non li dichiara) non emette nessuno StateDelta — mai un contatore inventato', async () => {
+  const eventi = [];
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } } });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn });
+
+  assert.ok(!eventi.some((e) => e.type === 'StateDelta'), 'nessun evento StateDelta quando talosHarness.mjs non ha mai riportato usage');
+});
+
+test('⭐⭐⭐ RunFinished porta esito.usage nel result, quando talosLavora lo riporta', async () => {
+  const eventi = [];
+  const usage = { prompt_tokens: 900, completion_tokens: 100, prompt_tokens_details: { cached_tokens: 50 }, giri: 3 };
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto', usage } } });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn });
+
+  const runFinished = eventi.find((e) => e.type === 'RunFinished');
+  assert.deepStrictEqual(runFinished.result.usage, usage);
+});
+
+test('⛔ AL CONTRARIO: RunFinished porta usage:null quando talosLavora non lo riporta (esito.usage assente) — mai undefined, mai un valore inventato', async () => {
+  const eventi = [];
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } } });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn });
+
+  const runFinished = eventi.find((e) => e.type === 'RunFinished');
+  assert.equal(runFinished.result.usage, null);
 });
 
 /*

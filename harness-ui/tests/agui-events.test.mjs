@@ -5,6 +5,7 @@ import {
   eventiPerRisposta,
   eventoPerEsitoTool,
   eventoPerScrittura,
+  eventoPerUsage,
   runError,
   runFinished,
   runStarted,
@@ -194,4 +195,20 @@ test('eventoPerScrittura — contenutoPrima presente porta il campo "prima" nel 
     { type: 'StateDelta', delta: [{ op: 'add', path: '/file/nuovo.ts', value: 'v1', prima: null }] },
     'un file nuovo porta prima:null esplicito, non lo nasconde: chi ascolta sa che non c\'è un "prima" da mostrare',
   );
+});
+
+// ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 — il contatore
+// costo/token per una sessione VIVA.
+test('eventoPerUsage — StateDelta "replace" su /usage, mai /file/*', () => {
+  const totali = { prompt_tokens: 900, completion_tokens: 100, prompt_tokens_details: { cached_tokens: 50 }, giri: 3 };
+  assert.deepStrictEqual(
+    eventoPerUsage(totali),
+    { type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: totali }] },
+  );
+});
+
+test('⛔ AL CONTRARIO: eventoPerUsage non tocca mai il campo "prima" ne\' un path /file — schema completamente separato da eventoPerScrittura', () => {
+  const evento = eventoPerUsage({ prompt_tokens: 1, completion_tokens: 1, prompt_tokens_details: { cached_tokens: 0 }, giri: 1 });
+  assert.equal(evento.delta[0].path.startsWith('/file/'), false);
+  assert.equal('prima' in evento.delta[0], false);
 });
