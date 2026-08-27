@@ -13,6 +13,7 @@ import { createSessionRegistry } from './src/session-registry.mjs';
 import { createStaticHandler } from './src/static-files.mjs';
 import { listaTaskDisponibili } from './src/task-catalog.mjs';
 import { elencaCartelleProgetto } from './src/custom-task.mjs';
+import { diagnosi } from './src/doctor.mjs';
 
 async function startServer() {
   const config = loadConfig(process.env, import.meta.url);
@@ -58,6 +59,7 @@ async function startServer() {
     listaTaskDisponibili,
     elencaCartelleProgetto: () => elencaCartelleProgetto(config.cartelleProgetto),
     automationStore,
+    diagnosiFn: () => diagnosi({ chiaveConfigurata: Boolean(config.chiaveApi) }),
   });
   const server = createServer(app);
 
