@@ -1773,23 +1773,131 @@
     return article;
   }
 
-  function appendToolNote(text) {
+  /*
+   * ⛔⛔⛔ 27/8, owner: "formatta in ux e ui prod friendly tutte le tool
+   * call" — prima di questa cura, gli argomenti di uno scrivi(...)
+   * arrivavano come JSON grezzo (`{"percorso":"...","contenuto":"riga
+   * 1\nriga 2"}`) dumpato con .textContent dentro un <div>: gli \n DENTRO
+   * la stringa JSON restano lettera per lettera "\n" a schermo (non sono
+   * newline veri finché non si fa JSON.parse), e un <div> comunque non
+   * preserva gli spazi bianchi anche quando lo sono. L'esito di `prova`
+   * (righe vere, ✓/✗ una per test) finiva schiacciato sulla stessa riga
+   * per lo stesso motivo. Risultato: un muro di testo illeggibile — non
+   * "niente fuffa", ma "vero e illeggibile", ugualmente lontano da
+   * prod-ready.
+   */
+  /**
+   * ⭐ 27/8, owner: "ogni comando al server... va messo come fa Claude e
+   * ChatGPT" (screenshot allegati) — una riga COLLASSATA con un riassunto
+   * leggibile ("Scritto src/formatatore.mjs"), un chevron per espandere,
+   * il dettaglio grezzo formattato dentro, chiuso finché non lo apri tu.
+   * Un solo bubble per tool-call (non più uno per lo start e uno per il
+   * risultato): ToolCallStart lo crea, ToolCallArgs/Result lo aggiornano
+   * IN PLACE — vedi handleRealEvent, che tiene il riferimento in
+   * state.realSession.toolCallNomi.
+   */
+  function appendToolNote(riassuntoIniziale) {
     const conversation = $('#conversation');
     const article = document.createElement('article');
     article.className = 'message assistant-message compact-message real-tool-note';
-    const meta = document.createElement('div');
-    meta.className = 'assistant-meta';
+    const summary = document.createElement('button');
+    summary.type = 'button';
+    summary.className = 'tool-note-summary';
+    summary.setAttribute('aria-expanded', 'false');
     const glyph = document.createElement('span');
     glyph.className = 'talos-glyph';
     glyph.textContent = '⚙';
-    meta.append(glyph, document.createTextNode('Attrezzo'));
-    const copy = document.createElement('div');
-    copy.className = 'assistant-copy';
-    copy.textContent = text;
-    article.append(meta, copy);
+    const summaryText = document.createElement('span');
+    summaryText.className = 'tool-note-summary-text';
+    summaryText.textContent = riassuntoIniziale;
+    const chevron = document.createElement('span');
+    chevron.className = 'tool-note-chevron';
+    chevron.textContent = '›';
+    chevron.setAttribute('aria-hidden', 'true');
+    summary.append(glyph, summaryText, chevron);
+    const detail = document.createElement('div');
+    detail.className = 'assistant-copy tool-note-detail';
+    detail.hidden = true;
+    summary.addEventListener('click', () => {
+      const aperto = summary.getAttribute('aria-expanded') === 'true';
+      summary.setAttribute('aria-expanded', String(!aperto));
+      detail.hidden = aperto;
+    });
+    article.append(summary, detail);
     conversation.appendChild(article);
     markMotionEnter(article);
     window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
+    return { summaryText, detail };
+  }
+
+  /** Riassunto umano di un tool-call — "Scritto x.mjs", non "scrivi(...)"·. Gli argomenti sono opzionali (non ancora arrivati al momento di ToolCallStart). */
+  function riassuntoAttrezzo(nome, argomenti) {
+    const a = argomenti || {};
+    switch (nome) {
+      case 'scrivi': return a.percorso ? `Scritto ${a.percorso}` : 'Scrittura file…';
+      case 'leggi': return a.percorso ? `Letto ${a.percorso}` : 'Lettura file…';
+      case 'cerca': {
+        const criteri = [a.nome, a.testo].filter(Boolean).map((v) => `"${v}"`).join(' · ');
+        return criteri ? `Cercato ${criteri}` : 'Ricerca nel progetto…';
+      }
+      case 'elenca': return 'Elenco dei file del progetto';
+      case 'prova': return 'Esecuzione dei test…';
+      case 'shell': return a.comando ? `Comando: ${a.comando}` : 'Comando shell…';
+      case 'naviga': return a.url ? `Pagina web: ${a.url}` : 'Lettura pagina web…';
+      default: return `${nome}(…)`;
+    }
+  }
+
+  /*
+   * ⭐ Raffina il riassunto quando arriva l'ESITO — solo `prova` porta un
+   * numero che vale la pena mostrare in testa (pass/fail), letto dal
+   * testo reale del test runner (`node --test`, stesso formato ovunque
+   * in questo progetto: "ℹ pass N" / "ℹ fail N"), mai inventato.
+   */
+  function riassuntoEsitoAttrezzo(nome, riassuntoBase, testoEsito) {
+    if (nome !== 'prova') return riassuntoBase;
+    const pass = /ℹ?\s*pass\s+(\d+)/i.exec(testoEsito)?.[1];
+    const fail = /ℹ?\s*fail\s+(\d+)/i.exec(testoEsito)?.[1];
+    if (pass === undefined || fail === undefined) return riassuntoBase;
+    return fail === '0' ? `✓ Test verdi — ${pass}/${pass}` : `✗ Test falliti — ${fail} su ${Number(pass) + Number(fail)}`;
+  }
+
+  /**
+   * Argomenti di un tool-call, formattati: se il JSON è valido (lo è
+   * sempre a fine trasmissione — questo backend manda gli argomenti in
+   * un unico delta, non a token), ogni campo diventa "chiave: valore";
+   * un valore multi-riga o lungo va in un blocco <pre><code> — newline
+   * VERI, decodificati dal JSON.parse, non l'escape letterale. Se il
+   * parse fallisce (un delta ancora incompleto, raro con questo
+   * backend ma non impossibile), il testo grezzo resta leggibile in un
+   * <pre> invece di sparire — mai un crash per un problema di forma.
+   */
+  function renderizzaArgomentiAttrezzo(contenitore, jsonGrezzo) {
+    contenitore.replaceChildren();
+    let argomenti;
+    try { argomenti = JSON.parse(jsonGrezzo); } catch { argomenti = null; }
+    if (!argomenti || typeof argomenti !== 'object') {
+      const pre = document.createElement('pre');
+      pre.className = 'tool-result-block';
+      pre.appendChild(textElement('code', '', jsonGrezzo));
+      contenitore.appendChild(pre);
+      return;
+    }
+    for (const [chiave, valore] of Object.entries(argomenti)) {
+      const riga = document.createElement('div');
+      riga.className = 'tool-arg-row';
+      const testoValore = typeof valore === 'string' ? valore : JSON.stringify(valore);
+      riga.appendChild(textElement('span', 'tool-arg-key', `${chiave}:`));
+      if (testoValore.includes('\n') || testoValore.length > 80) {
+        const pre = document.createElement('pre');
+        pre.className = 'tool-result-block';
+        pre.appendChild(textElement('code', '', testoValore));
+        riga.appendChild(pre);
+      } else {
+        riga.appendChild(document.createTextNode(` ${testoValore}`));
+      }
+      contenitore.appendChild(riga);
+    }
   }
 
   function appendStatusNote(text, isError = false) {
@@ -2194,22 +2302,27 @@
         break;
       }
       case 'ToolCallStart': {
-        appendToolNote(`🔧 ${evento.toolCallName}(…)`);
+        const bubble = appendToolNote(riassuntoAttrezzo(evento.toolCallName, null));
         /*
-         * ⭐ Ricordato SOLO per riconoscere in ToolCallResult se questa
-         * chiamata era "shell" (dal modello, dentro un task, O dal
-         * comando diretto dell'owner — stesso attrezzo, stesso evento) e
-         * specchiarla nella vista Terminale. Non cambia il rendering
-         * generico sopra, già esistente.
+         * ⭐ nome + riferimenti DOM (summaryText/detail) tenuti per
+         * toolCallId: ToolCallArgs e ToolCallResult aggiornano LO STESSO
+         * bubble invece di crearne uno nuovo — un solo collassabile per
+         * tool-call, come Claude Code (screenshot owner, 27/8). Il campo
+         * `nome` serve ANCHE a riconoscere shell/naviga per specchiarli
+         * nella vista Terminale/Browser, invariato.
          */
-        state.realSession.toolCallNomi.set(evento.toolCallId, { nome: evento.toolCallName, argomenti: '' });
+        state.realSession.toolCallNomi.set(evento.toolCallId, { nome: evento.toolCallName, argomenti: '', ...bubble });
         break;
       }
       case 'ToolCallArgs': {
-        const ultima = $$('.real-tool-note .assistant-copy').at(-1);
-        if (ultima) ultima.textContent += `\n${evento.delta}`;
         const info = state.realSession.toolCallNomi.get(evento.toolCallId);
-        if (info) info.argomenti += evento.delta;
+        if (info) {
+          info.argomenti += evento.delta;
+          let argomentiParsati = null;
+          try { argomentiParsati = JSON.parse(info.argomenti); } catch { /* delta ancora incompleto: il riassunto resta quello generico finché non arriva tutto */ }
+          if (argomentiParsati && info.summaryText) info.summaryText.textContent = riassuntoAttrezzo(info.nome, argomentiParsati);
+          if (info.detail) renderizzaArgomentiAttrezzo(info.detail, info.argomenti);
+        }
         break;
       }
       case 'ToolCallResult': {
@@ -2223,8 +2336,19 @@
           try { url = JSON.parse(info.argomenti).url || url; } catch { /* args incompleti o non ancora arrivati: meglio un'etichetta onesta che un crash */ }
           appendBrowserEntry(url, String(evento.content));
         }
+        const testoEsito = String(evento.content).slice(0, 4000);
+        if (info?.summaryText) info.summaryText.textContent = riassuntoEsitoAttrezzo(info.nome, info.summaryText.textContent, testoEsito);
+        if (info?.detail) {
+          const separatore = document.createElement('div');
+          separatore.className = 'tool-arg-key';
+          separatore.textContent = 'Esito:';
+          info.detail.appendChild(separatore);
+          const pre = document.createElement('pre');
+          pre.className = 'tool-result-block';
+          pre.appendChild(textElement('code', '', testoEsito));
+          info.detail.appendChild(pre);
+        }
         state.realSession.toolCallNomi.delete(evento.toolCallId);
-        appendToolNote(`→ ${String(evento.content).slice(0, 2000)}`);
         break;
       }
       case 'StateDelta': {
