@@ -1580,10 +1580,27 @@
       const input = $('#renameSessionInput', renameForm);
       window.setTimeout(() => { input?.focus(); input?.select(); }, 30);
       $('[data-rename-cancel]', renameForm)?.addEventListener('click', () => closeEmbeddedDialog(sheetDialog));
-      renameForm.addEventListener('submit', (event) => {
+      renameForm.addEventListener('submit', async (event) => {
         event.preventDefault();
         const next = input?.value.trim();
         if (!next) { input?.focus(); return; }
+        /*
+         * ⛔⛔⛔ Riconciliazione Fase 2 (piano procedi-col-generare-un-snoopy-neumann.md,
+         * 27/8) — trovato dal vivo: questo foglio mutava solo lo stato
+         * client, MAI l'endpoint reale (`POST .../rename`, già scritto e
+         * già provato in `http-app.mjs`/`session-registry.rinomina()`) —
+         * il nome tornava a quello vecchio a ogni ricostruzione della
+         * sidebar/refresh. Senza sessione reale, resta lo stesso rename
+         * solo-client di sempre (demo).
+         */
+        if (state.realSession.id) {
+          try {
+            await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/rename`, { nome: next });
+          } catch (error) {
+            toast('Rinomina non riuscita', error.message);
+            return;
+          }
+        }
         state.session = next;
         sessionTitle.textContent = state.session;
     /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
@@ -4007,8 +4024,18 @@
       case 'browser': setView('browser'); break;
       case 'permissions': openSheet('permissions'); break;
       case 'dashboard': setView('dashboard'); break;
-      case 'fork': toast('Fork creato', 'Nuovo ramo di conversazione da questo punto.'); break;
-      case 'compact': toast('Contesto compattato', '18.7k -> 9.3k token equivalenti.'); break;
+      /*
+       * ⛔⛔⛔ Riconciliazione Fase 2 (piano procedi-col-generare-un-snoopy-neumann.md,
+       * 27/8) — trovato dal vivo: fino a qui il palette mostrava sempre lo
+       * stesso toast finto, ANCHE con una sessione reale in corso, invece
+       * di chiamare le funzioni vere già scritte e già cablate altrove
+       * (`forkSession()` sul bottone "Fork questa sessione", `compactSession()`
+       * esposta su `window.__talosHarnessUiRuntime` per i test automatici).
+       * Entrambe già ricadono da sole sullo stesso toast finto quando non
+       * c'è una sessione reale — zero duplicazione necessaria qui.
+       */
+      case 'fork': forkSession(); break;
+      case 'compact': compactSession(); break;
       case 'tree': openSheet('sessionTree'); break;
       case 'skills': openSheet('capabilities'); break;
       case 'control': openSheet('control'); break;
@@ -4390,6 +4417,10 @@
     openRealTaskSheet,
     aggiornaElencoSessioniReali,
     runDirectShell,
+    // ⭐ Riconciliazione Fase 2, 27/8 — il command palette (⌘K) è dove il
+    // bug fork/compatta-finti è stato trovato: esposto per provare la
+    // dispatch reale, non solo le funzioni che chiama.
+    executeCommand,
     realSessionState: state.realSession,
   };
   window.__talosHarnessDestroy = () => {

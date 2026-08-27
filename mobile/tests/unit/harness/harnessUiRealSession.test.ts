@@ -34,6 +34,7 @@ type RuntimeGlobals = {
         aggiornaElencoSessioniReali(): Promise<void>
         runDirectShell(comando: string, silenzioso: boolean): Promise<void>
         submitPrompt(text: string): boolean
+        executeCommand(command: string): void
         realSessionState: {
             id: string | null
             taskId: string | null
@@ -911,6 +912,102 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
         expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions/sess-compatta/compact', expect.objectContaining({ method: 'POST' }))
         expect(FakeEventSource.instances).toHaveLength(1) // nessun giro nuovo avviato
+    })
+
+    /*
+     * ⛔⛔⛔ Riconciliazione Fase 2 (piano procedi-col-generare-un-snoopy-neumann.md,
+     * 27/8) — trovato dal vivo: il command palette (⌘K) mostrava sempre lo
+     * stesso toast finto per "compatta"/"fork", ANCHE con una sessione
+     * reale attiva, perché non chiamava mai le funzioni vere. Buco senza
+     * un test dedicato prima di questo giro — ecco perché è passato
+     * inosservato: REAL-SESSION-COMPACT-01 sopra chiama compactSession()
+     * direttamente, mai attraverso il palette.
+     */
+    it('⭐⭐⭐ PALETTE-COMPACT-01: executeCommand(\'compact\') con sessione attiva chiama /compact per davvero, non il toast finto', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-palette-compatta' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-compact-palette' })
+
+        const fetchMock = mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions/sess-palette-compatta/compact', corpo: { compattato: true } },
+        ])
+        runtime().executeCommand('compact')
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions/sess-palette-compatta/compact', expect.objectContaining({ method: 'POST' }))
+    })
+
+    it('⭐⭐⭐ PALETTE-FORK-01: executeCommand(\'fork\') con sessione attiva chiama /fork per davvero, non il toast finto', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-palette-fork' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-fork-palette' })
+
+        const fetchMock = mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions/sess-palette-fork/fork', corpo: { sessionId: 'sess-palette-fork-2' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        runtime().executeCommand('fork')
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions/sess-palette-fork/fork', expect.objectContaining({ method: 'POST' }))
+    })
+
+    it('⛔ AL CONTRARIO: executeCommand(\'compact\'/\'fork\') SENZA sessione reale non chiama nessun fetch (resta il toast demo)', async () => {
+        const fetchMock = mockFetch([])
+        runtime().executeCommand('compact')
+        runtime().executeCommand('fork')
+        await new Promise((r) => setTimeout(r, 0))
+        expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    /*
+     * ⛔⛔⛔ Riconciliazione Fase 2, 27/8 — trovato dal vivo: il foglio
+     * "Rinomina sessione" mutava solo lo stato client, l'endpoint reale
+     * (`POST .../rename`, già scritto e già provato lato backend) non
+     * veniva MAI chiamato — il nome tornava a quello vecchio a ogni
+     * ricostruzione della sidebar/refresh pagina.
+     */
+    it('⭐⭐⭐ PALETTE-RENAME-01: il foglio rinomina, con sessione attiva, chiama /rename per davvero', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-palette-rename' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-rename-palette' })
+
+        const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
+        sheetDialog.showModal = vi.fn()
+        runtime().executeCommand('rename')
+
+        const fetchMock = mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions/sess-palette-rename/rename', corpo: { ok: true } },
+        ])
+        const input = document.querySelector<HTMLInputElement>('#renameSessionInput')!
+        input.value = 'Nome scelto dal vivo'
+        document.querySelector<HTMLFormElement>('#renameSessionForm')!.requestSubmit()
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            '/api/v1/sessions/sess-palette-rename/rename',
+            expect.objectContaining({ method: 'POST', body: JSON.stringify({ nome: 'Nome scelto dal vivo' }) }),
+        )
+    })
+
+    it('⛔ AL CONTRARIO: il foglio rinomina SENZA sessione reale non chiama nessun fetch (resta il rename solo-client, demo)', async () => {
+        const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
+        sheetDialog.showModal = vi.fn()
+        runtime().executeCommand('rename')
+
+        const fetchMock = mockFetch([])
+        const input = document.querySelector<HTMLInputElement>('#renameSessionInput')!
+        input.value = 'Nome demo'
+        document.querySelector<HTMLFormElement>('#renameSessionForm')!.requestSubmit()
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fetchMock).not.toHaveBeenCalled()
     })
 
     /**
