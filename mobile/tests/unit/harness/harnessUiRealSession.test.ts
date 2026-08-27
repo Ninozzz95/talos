@@ -196,7 +196,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(runtime().realSessionState.id).toBe('sess-automazione')
     })
 
-    it('⛔ REAL-SESSION-AUTOMATION-02 AL CONTRARIO: sullo stesso bottone, embedded mobile non chiama MAI il backend', async () => {
+    it('⛔ REAL-SESSION-AUTOMATION-02 AL CONTRARIO: sullo stesso bottone, embedded SENZA tunnel non chiama MAI il backend', async () => {
         document.documentElement.classList.add('talos-embedded')
         const fetchMock = mockFetch([])
         const bottone = document.querySelector('[data-automation-action="run"][data-task-id]') as HTMLButtonElement
@@ -206,6 +206,34 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
         expect(fetchMock).not.toHaveBeenCalled()
         expect(runtime().realSessionState.id).toBeNull()
+    })
+
+    /**
+     * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 4 — trovato
+     * verificando dal vivo (owner, in sessione: "il moka è completamente non
+     * funzionante... basta collegarlo ai componenti front end"): il cancello
+     * `talos-embedded` da solo bloccava OGNI fetch reale su mobile, ANCHE col
+     * tunnel Fase 1-3 attivo. embeddedDemoOnly() lo corregge — embedded E CON
+     * window.__talosHarnessApiBase impostato (tunnel attivo) DEVE chiamare il
+     * backend vero, esattamente come standalone.
+     */
+    it('REAL-SESSION-AUTOMATION-03 embedded CON tunnel attivo (window.__talosHarnessApiBase) chiama il backend per davvero', async () => {
+        document.documentElement.classList.add('talos-embedded')
+        ;(window as unknown as { __talosHarnessApiBase?: string }).__talosHarnessApiBase = 'http://localhost:4174'
+        const fetchMock = mockFetch([
+            { metodo: 'POST', percorso: 'http://localhost:4174/api/v1/sessions', corpo: { sessionId: 'sess-mobile-tunnel' } },
+            { metodo: 'GET', percorso: 'http://localhost:4174/api/v1/sessions', corpo: { items: [] } },
+        ])
+        const bottone = document.querySelector('[data-automation-action="run"][data-task-id]') as HTMLButtonElement
+
+        bottone.click()
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fetchMock).toHaveBeenCalledWith('http://localhost:4174/api/v1/sessions', expect.objectContaining({
+            method: 'POST',
+            body: JSON.stringify({ taskId: bottone.dataset.taskId, client: 'mobile' }),
+        }))
+        expect(runtime().realSessionState.id).toBe('sess-mobile-tunnel')
     })
 
     it('REAL-SESSION-START-01b il badge "Demo UI" della chat sparisce con una sessione vera, e MAI quello di una superficie diversa', async () => {
@@ -471,6 +499,35 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
         expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions/sess-compatta/compact', expect.objectContaining({ method: 'POST' }))
         expect(FakeEventSource.instances).toHaveLength(1) // nessun giro nuovo avviato
+    })
+
+    /**
+     * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 4 — lo
+     * stesso cancello di REAL-SESSION-AUTOMATION-03, ma sul bottone "Nuova
+     * sessione" vero (#newSessionBtn -> createNewSession()): col tunnel
+     * attivo apre il foglio dei task veri, non più il reset demo.
+     */
+    it('NEWSESSION-EMBEDDED-01 col tunnel attivo, "Nuova sessione" apre il foglio dei task veri (GET /api/v1/tasks), non il reset demo', async () => {
+        document.documentElement.classList.add('talos-embedded')
+        ;(window as unknown as { __talosHarnessApiBase?: string }).__talosHarnessApiBase = 'http://localhost:4174'
+        const fetchMock = mockFetch([
+            { metodo: 'GET', percorso: 'http://localhost:4174/api/v1/tasks', corpo: { items: [] } },
+        ])
+
+        ;(document.querySelector('#newSessionBtn') as HTMLButtonElement).click()
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fetchMock).toHaveBeenCalledWith('http://localhost:4174/api/v1/tasks', expect.objectContaining({ method: 'GET' }))
+    })
+
+    it('⛔ NEWSESSION-EMBEDDED-02 AL CONTRARIO: stesso bottone, embedded SENZA tunnel resta il reset demo, zero fetch', async () => {
+        document.documentElement.classList.add('talos-embedded')
+        const fetchMock = mockFetch([])
+
+        ;(document.querySelector('#newSessionBtn') as HTMLButtonElement).click()
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fetchMock).not.toHaveBeenCalled()
     })
 
     it('REAL-SESSION-TASKSHEET-01 openRealTaskSheet elenca i task e li avvia SENZA .showModal() nativo', async () => {

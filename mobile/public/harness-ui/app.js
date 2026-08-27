@@ -37,6 +37,18 @@
    * diversa dall'origine Capacitor da cui questo script gira.
    */
   function API(pathname) { return `${window.__talosHarnessApiBase || ''}${pathname}`; }
+  /*
+   * Piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 4 — trovato
+   * verificando dal vivo, non ipotizzato: `talos-embedded` da solo
+   * significava "mai un fetch qui" ovunque nel file (HARNESS-BOARD-MOBILE-
+   * HONESTY-01 e le sue sorelle, scritte PRIMA che un backend mobile
+   * esistesse — onesto allora, ma ora blocca esattamente il tunnel che la
+   * Fase 1-3 ha costruito). La domanda giusta non è più "sono embedded?"
+   * ma "sono embedded E SENZA un backend da raggiungere?" — quando
+   * `API()` ha una base reale (mobile col tunnel attivo), il comportamento
+   * torna quello vero, identico al desktop.
+   */
+  function embeddedDemoOnly() { return HOST().classList.contains('talos-embedded') && !window.__talosHarnessApiBase; }
 
   const state = {
     view: 'chat',
@@ -742,7 +754,7 @@
   }
 
   function ensureCampaignBoard() {
-    if (HOST().classList.contains('talos-embedded')) {
+    if (embeddedDemoOnly()) {
       renderEmbeddedBoardDemo();
       return Promise.resolve();
     }
@@ -774,7 +786,7 @@
   }
 
   function clearCampaignEvidence() {
-    if (HOST().classList.contains('talos-embedded')) {
+    if (embeddedDemoOnly()) {
       toast('Nessuna evidenza collegata', 'La Board mobile è una Demo UI senza backend.');
       return;
     }
@@ -2013,18 +2025,22 @@
    * ⭐⭐⭐ 26/8 — il trigger su desktop standalone. Owner: "abbiamo già la
    * grammatica... va adattata", non una decisione UX da inventare da zero.
    * La grammatica è openRealTaskSheet() (26/8, mattina: porta i task veri
-   * dal corpus, mai collegata a un tocco) — su mobile resta non collegata
-   * perché la superficie "Codice" è negoziata in OTTO fasi (non è mia da
-   * riaprire), ma su desktop standalone non c'è quel vincolo: il backend
-   * oggi sa far partire SOLO un task del corpus (talosLavora vuole una
-   * `cartella` e una `consegna` note, non un prompt libero — piano
-   * `elegant-spinning-dongarra.md` §1.5, Opzione B esplicitamente fuori
-   * fase), quindi mostrare qui il reset da chat vuota sarebbe demo, non
-   * realtà. embedded (mobile) invariato bit per bit — stesso identico
-   * comportamento di sempre, zero rischio sulla suite Pad-verificata.
+   * dal corpus). Il backend sa far partire SOLO un task del corpus
+   * (talosLavora vuole una `cartella` e una `consegna` note, non un
+   * prompt libero — piano `elegant-spinning-dongarra.md` §1.5, Opzione B
+   * esplicitamente fuori fase), quindi mostrare qui il reset da chat
+   * vuota sarebbe demo, non realtà.
+   *
+   * ⛔ Corretto in Fase 4 di `procedi-col-generare-un-snoopy-neumann.md`:
+   * QUESTO commento diceva "su mobile resta non collegata... non è mia
+   * da riaprire" — vero finché il mobile non aveva modo di raggiungere un
+   * backend. Ora ce l'ha (Fase 1-3, `adb reverse` + API assoluta): il
+   * cancello è `embeddedDemoOnly()` (embedded E SENZA
+   * `window.__talosHarnessApiBase`), non più `talos-embedded` da solo —
+   * col tunnel attivo il mobile apre lo stesso foglio vero del desktop.
    */
   function createNewSession() {
-    if (!HOST().classList.contains('talos-embedded')) {
+    if (!embeddedDemoOnly()) {
       openRealTaskSheet();
       return;
     }
@@ -2274,10 +2290,11 @@
    */
   $$('[data-automation-action]').forEach((button) => button.addEventListener('click', () => {
     const action = button.dataset.automationAction;
-    // ⛔ Stesso cancello di createNewSession(): su mobile embedded non c'è un
-    // backend raggiungibile per costruzione, mai un fetch lì (HARNESS-BOARD-
-    // MOBILE-HONESTY-01, stesso principio applicato qui).
-    if (action === 'run' && button.dataset.taskId && !HOST().classList.contains('talos-embedded')) {
+    // ⛔ Stesso cancello di createNewSession(): un fetch reale solo se c'è
+    // DAVVERO un backend da raggiungere (HARNESS-BOARD-MOBILE-HONESTY-01,
+    // rivisto in Fase 4 di procedi-col-generare-un-snoopy-neumann.md —
+    // "embedded" da solo non basta più a dire "niente da raggiungere").
+    if (action === 'run' && button.dataset.taskId && !embeddedDemoOnly()) {
       startRealSession({ id: button.dataset.taskId });
       return;
     }
@@ -2400,7 +2417,7 @@
   harnessFilter?.addEventListener('change', reloadRunsFromFilters);
   outcomeFilter?.addEventListener('change', reloadRunsFromFilters);
   refreshCampaignButton?.addEventListener('click', () => {
-    if (HOST().classList.contains('talos-embedded')) renderEmbeddedBoardDemo(true);
+    if (embeddedDemoOnly()) renderEmbeddedBoardDemo(true);
     else if (state.board.initialized) refreshCampaign();
     else ensureCampaignBoard();
   });
