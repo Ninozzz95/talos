@@ -2021,8 +2021,12 @@
     showEmbeddedDialog(sheetDialog);
 
     let tasks;
+    let progetti;
     try {
-      tasks = (await apiGet('/api/v1/tasks')).items;
+      [tasks, progetti] = await Promise.all([
+        apiGet('/api/v1/tasks').then((r) => r.items),
+        apiGet('/api/v1/projects').then((r) => r.items).catch(() => []), // ⛔ un elenco vuoto/non raggiungibile non deve bloccare i task del corpus
+      ]);
     } catch (error) {
       sheetBody.replaceChildren(textElement('p', 'board-empty', `Elenco non disponibile: ${error.message}`));
       return;
@@ -2044,7 +2048,90 @@
       button.addEventListener('click', () => { closeEmbeddedDialog(sheetDialog); startRealSession(task); });
       section.appendChild(button);
     }
-    sheetBody.replaceChildren(section);
+
+    const corpoFoglio = [section];
+    /*
+     * ⭐⭐⭐ 27/8 — l'Opzione B del piano (§1.5), owner: "per adesso un
+     * allowlist per testare... come se fosse Claude Code". Compare SOLO se
+     * il server ha almeno una cartella in TALOS_HARNESS_UI_PROJECT_DIRS —
+     * fail-closed anche qui: nessuna UI per una funzionalità non
+     * configurata, non un form che poi il server rifiuta sempre.
+     */
+    if (progetti.length > 0) {
+      const customSection = document.createElement('form');
+      customSection.className = 'sheet-section';
+      customSection.id = 'customTaskForm';
+      customSection.appendChild(textElement('span', 'sheet-label', 'Compito libero — scrive DIRETTAMENTE sulla cartella vera, nessuna copia'));
+      const selectCartella = document.createElement('select');
+      selectCartella.className = 'sheet-input';
+      selectCartella.id = 'customTaskCartella';
+      for (const progetto of progetti) {
+        const opzione = document.createElement('option');
+        opzione.value = progetto.id;
+        opzione.textContent = progetto.nome;
+        selectCartella.appendChild(opzione);
+      }
+      const consegnaInput = document.createElement('textarea');
+      consegnaInput.className = 'sheet-input';
+      consegnaInput.id = 'customTaskConsegna';
+      consegnaInput.rows = 3;
+      consegnaInput.placeholder = 'Cosa deve fare TALOS su questo progetto?';
+      consegnaInput.maxLength = 4000;
+      customSection.append(selectCartella, consegnaInput);
+      const submit = document.createElement('button');
+      submit.type = 'submit';
+      submit.className = 'primary-btn compact full';
+      submit.textContent = 'Avvia sulla cartella vera';
+      customSection.appendChild(submit);
+      customSection.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const consegna = consegnaInput.value.trim();
+        if (!consegna) { consegnaInput.focus(); return; }
+        const cartellaId = selectCartella.value;
+        const nomeCartella = progetti.find((p) => p.id === cartellaId)?.nome ?? cartellaId;
+        closeEmbeddedDialog(sheetDialog);
+        startCustomSession({ cartellaId, nomeCartella, consegna });
+      });
+      corpoFoglio.push(customSection);
+    }
+
+    sheetBody.replaceChildren(...corpoFoglio);
+  }
+
+  /**
+   * ⭐⭐⭐ 27/8 — la gemella di `startRealSession`, per un compito LIBERO
+   * (Opzione B del piano, ora aperta con un'allowlist esplicita): stesso
+   * schema (stato, appendRealTaskStart riusata con un task sintetico,
+   * collegaEventiSessione), corpo POST diverso (/sessions/custom con
+   * cartellaId+consegna invece di /sessions con taskId).
+   */
+  async function startCustomSession({ cartellaId, nomeCartella, consegna, comandoProva }) {
+    const generation = nuovaGenerazioneSessione();
+    const taskSintetico = { id: `libero:${nomeCartella}`, consegna };
+    state.realSession.taskId = taskSintetico.id;
+    state.session = `Compito libero · ${nomeCartella}`;
+    sessionTitle.textContent = state.session;
+    setView('chat');
+    closePanels();
+    appendRealTaskStart(taskSintetico);
+    toast('Avvio in corso', `${nomeCartella} · esecuzione diretta sulla cartella vera, nessuna copia.`);
+
+    let sessionId;
+    try {
+      const corpo = { cartellaId, consegna };
+      if (comandoProva) corpo.comandoProva = comandoProva;
+      if (state.model) corpo.modello = state.model;
+      const data = await apiPost('/api/v1/sessions/custom', corpo);
+      sessionId = data.sessionId;
+    } catch (error) {
+      if (generation !== state.realSession.generation) return;
+      appendStatusNote(`Avvio non riuscito: ${error.message}`, true);
+      toast('Avvio non riuscito', error.message);
+      return;
+    }
+    if (generation !== state.realSession.generation) return;
+    collegaEventiSessione(sessionId, generation);
+    aggiornaElencoSessioniReali();
   }
 
   function appendUserMessage(text) {
@@ -2127,12 +2214,15 @@
    * La grammatica è openRealTaskSheet() (26/8, mattina: porta i task veri
    * dal corpus, mai collegata a un tocco) — su mobile resta non collegata
    * perché la superficie "Codice" è negoziata in OTTO fasi (non è mia da
-   * riaprire), ma su desktop standalone non c'è quel vincolo: il backend
-   * oggi sa far partire SOLO un task del corpus (talosLavora vuole una
-   * `cartella` e una `consegna` note, non un prompt libero — piano
-   * `elegant-spinning-dongarra.md` §1.5, Opzione B esplicitamente fuori
-   * fase), quindi mostrare qui il reset da chat vuota sarebbe demo, non
-   * realtà. embedded (mobile) invariato bit per bit — stesso identico
+   * riaprire), ma su desktop standalone non c'è quel vincolo.
+   *
+   * ⛔ 27/8 — l'Opzione B (§1.5) che questo commento dichiarava "fuori
+   * fase" è ora APERTA, con un'allowlist esplicita
+   * (`TALOS_HARNESS_UI_PROJECT_DIRS`): `openRealTaskSheet()` mostra una
+   * seconda sezione "Compito libero" quando il server ne ha almeno una
+   * configurata. Il reset da chat vuota (sotto, ramo embedded) resta
+   * comunque demo — non è quello il punto in cui l'Opzione B si aggancia.
+   * embedded (mobile) invariato bit per bit — stesso identico
    * comportamento di sempre, zero rischio sulla suite Pad-verificata.
    */
   function createNewSession() {

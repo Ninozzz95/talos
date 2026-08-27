@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createSessionRegistry } from '../src/session-registry.mjs';
+import { CustomTaskError } from '../src/custom-task.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
 import { WorkspaceTreeError } from '../src/workspace-tree.mjs';
 
@@ -147,6 +148,58 @@ test('⛔⛔ chiave API assente: stesso trattamento, zero chiamate ad avviaSessi
 
   assert.equal(risultato.code, 'CONFIG_INVALID');
   assert.equal(finta.chiamate, 0);
+});
+
+// ⭐⭐⭐ 27/8 — avviaLibero(): stesso schema di avvia(), su una cartella
+// dell'allowlist invece di un taskId. preparaEsecuzioneLiberaFn finta,
+// stesso principio di preparaEsecuzioneFinta sopra.
+function preparaEsecuzioneLiberaFinta(cartelleProgetto, { cartellaId, consegna }) {
+  const voce = cartelleProgetto.find((c) => c.id === cartellaId);
+  if (!voce) throw new CustomTaskError(`Cartella non ammessa: ${cartellaId}`);
+  return { cartella: voce.percorso, comandoProva: 'npm test', task: { consegna, consegnaCorta: consegna } };
+}
+
+test('⭐ avviaLibero() su una cartellaId ammessa chiama avviaSessione con la cartella VERA, e passa attraverso il modello scelto', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
+    cartelleProgetto: [{ id: '0', percorso: '/tmp/progetto-vero', nome: 'progetto-vero' }],
+    modello: 'default/modello', chiave: 'k',
+  });
+
+  const risultato = registro.avviaLibero({ cartellaId: '0', consegna: 'fai qualcosa', modello: 'deepseek/deepseek-chat' });
+
+  assert.ok(risultato.sessionId);
+  assert.equal(finta.chiamate, 1);
+  assert.equal(finta.ultimoInput.cartella, '/tmp/progetto-vero');
+  assert.equal(finta.ultimoInput.modello, 'deepseek/deepseek-chat', 'il modello scelto vince sul default del server');
+});
+
+test('⛔⛔ ALLOWLIST: avviaLibero() su una cartellaId non ammessa non chiama MAI avviaSessione', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
+    cartelleProgetto: [{ id: '0', percorso: '/tmp/progetto-vero', nome: 'progetto-vero' }],
+    modello: 'm', chiave: 'k',
+  });
+
+  const risultato = registro.avviaLibero({ cartellaId: 'non-esiste', consegna: 'fai qualcosa' });
+
+  assert.equal(risultato.code, 'PROJECT_NOT_ALLOWED');
+  assert.equal(finta.chiamate, 0);
+});
+
+test('⭐⭐ e AL CONTRARIO: senza modello esplicito, avviaLibero() eredita il default del server', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
+    cartelleProgetto: [{ id: '0', percorso: '/tmp/progetto-vero', nome: 'progetto-vero' }],
+    modello: 'default/modello', chiave: 'k',
+  });
+
+  registro.avviaLibero({ cartellaId: '0', consegna: 'fai qualcosa' });
+
+  assert.equal(finta.ultimoInput.modello, 'default/modello');
 });
 
 test('⭐ elenca() torna vuoto finché nessuna sessione è mai partita', () => {

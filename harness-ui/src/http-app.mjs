@@ -222,6 +222,35 @@ function requireTaskIdBody(body) {
   return { taskId: body.taskId, modello: null };
 }
 
+/**
+ * ⭐ 27/8 — {cartellaId, consegna} obbligatori, {comandoProva, modello}
+ * opzionali: la validazione FINE (cartellaId nell'allowlist, consegna non
+ * vuota) resta in `custom-task.mjs`/`session-registry.avviaLibero` — qui
+ * solo la FORMA del corpo, stesso principio di `requireTaskIdBody`.
+ */
+function requireCustomTaskBody(body) {
+  const AMMESSE = ['cartellaId', 'consegna', 'comandoProva', 'modello'];
+  const chiavi = Object.keys(body ?? {});
+  const soloAmmesse = chiavi.length > 0 && chiavi.every((k) => AMMESSE.includes(k))
+    && chiavi.includes('cartellaId') && chiavi.includes('consegna');
+  if (!soloAmmesse || typeof body.cartellaId !== 'string' || typeof body.consegna !== 'string') {
+    const errore = new Error('Corpo non valido: atteso {cartellaId, consegna, comandoProva?, modello?}');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  if ('modello' in body && body.modello !== undefined && !modelloRichiestaValido(body.modello)) {
+    const errore = new Error('modello deve avere la forma "vendor/nome-modello" (formato OpenRouter)');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  return {
+    cartellaId: body.cartellaId,
+    consegna: body.consegna,
+    comandoProva: 'comandoProva' in body ? body.comandoProva : undefined,
+    modello: 'modello' in body ? body.modello : null,
+  };
+}
+
 /** ⛔ Un'allowlist di UNA chiave sola, come requireTaskIdBody — la validazione FINE del nome (trim, 1-80) resta in session-registry.rinomina(), qui si controlla solo la FORMA del corpo. */
 function requireNomeBody(body) {
   const chiavi = Object.keys(body ?? {});
@@ -263,7 +292,8 @@ function scriviEventoSse(res, evento) {
  * @param {()=>Array<object>} [deps.listaTaskDisponibili]
  */
 export function createHttpApp({
-  campaignService, staticHandler, sessionRegistry = null, listaTaskDisponibili = () => [], clock = () => new Date(),
+  campaignService, staticHandler, sessionRegistry = null, listaTaskDisponibili = () => [],
+  elencaCartelleProgetto = () => [], clock = () => new Date(),
 }) {
   async function handle(req, res) {
     if (req.aborted || res.destroyed) return;
@@ -299,6 +329,32 @@ export function createHttpApp({
         const corpo = await leggiCorpoJson(req);
         const { taskId, modello } = requireTaskIdBody(corpo);
         const esito = sessionRegistry.avvia(taskId, modello);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ sessionId: esito.sessionId }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    /*
+     * ⭐⭐⭐ 27/8 — un compito LIBERO su una cartella dell'allowlist, owner:
+     * "per adesso un allowlist per testare... come se fosse Claude Code".
+     * Stesso stile dell'endpoint sopra, corpo diverso: {cartellaId,
+     * consegna, comandoProva?, modello?} invece di {taskId, modello?}.
+     */
+    if (method === 'POST' && sessionRegistry && url.pathname === '/api/v1/sessions/custom') {
+      try {
+        requireNoQuery(url);
+        const corpo = await leggiCorpoJson(req);
+        const richiesta = requireCustomTaskBody(corpo);
+        const esito = sessionRegistry.avviaLibero(richiesta);
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
           errore.code = esito.code;
@@ -494,6 +550,10 @@ export function createHttpApp({
       } else if (url.pathname === '/api/v1/tasks') {
         requireNoQuery(url);
         data = { items: listaTaskDisponibili() };
+      } else if (url.pathname === '/api/v1/projects') {
+        requireNoQuery(url);
+        /* ⭐ 27/8 — le cartelle libere ammesse (TALOS_HARNESS_UI_PROJECT_DIRS): mai il percorso assoluto, solo id/nome — vedi custom-task.mjs. */
+        data = { items: elencaCartelleProgetto() };
       } else if (url.pathname === '/api/v1/sessions') {
         requireNoQuery(url);
         /* ⛔ Elenco vuoto, non un errore, se sessionRegistry non è configurato — stesso principio già seguito per le altre rotte di sessione. */

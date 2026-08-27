@@ -97,6 +97,54 @@ export function modelloRichiestaValido(raw) {
   return typeof raw === 'string' && FORMATO_MODELLO_RICHIESTA.test(raw);
 }
 
+/**
+ * ⭐⭐⭐ 27/8 — owner: "per adesso un allowlist per testare, ma in futuro
+ * esattamente come i competitor, accesso libero, con limiti estremi" — una
+ * cartella libera (non il corpus benchmark) su cui far girare un compito
+ * VERO, DIRETTAMENTE (non una copia usa-e-getta come `task-catalog.mjs`:
+ * qui l'obiettivo dichiarato è vedere l'effetto su un progetto reale,
+ * esattamente come un Claude Code/Pi/Hermes puntato su una cartella).
+ *
+ * ⛔ Fail-closed per costruzione: `TALOS_HARNESS_UI_PROJECT_DIRS` assente =
+ * ZERO cartelle libere ammesse, non "qualunque cartella passi" — stesso
+ * principio già in uso per `TASK_NOT_ALLOWED` in `task-catalog.mjs`.
+ * L'"accesso libero" del futuro è un lavoro SUO, con la sua ricerca sui
+ * limiti dei competitor (owner l'ha chiesta esplicitamente) — non
+ * anticipato qui scrivendo un percorso a piacere dal browser.
+ *
+ * Elenco separato da `;` (come PATH su Windows, mai virgola: un percorso
+ * reale può contenerne una). Ogni percorso deve esistere, essere una
+ * directory, leggibile E scrivibile — un agente che ci scrive davvero
+ * su una cartella non scrivibile fallirebbe a metà lavoro, meglio
+ * scoprirlo all'avvio del server che a sessione già in corso.
+ */
+function parseCartelleProgetto(raw) {
+  if (raw === undefined || raw === '') return Object.freeze([]);
+  if (typeof raw !== 'string') fail('TALOS_HARNESS_UI_PROJECT_DIRS non valida');
+
+  const richiesti = raw.split(';').map((valore) => valore.trim()).filter((valore) => valore.length > 0);
+  const cartelle = richiesti.map((percorsoInput, indice) => {
+    if (!isAbsolute(percorsoInput)) fail(`TALOS_HARNESS_UI_PROJECT_DIRS[${indice}] deve essere assoluta: ${percorsoInput}`);
+    let percorso;
+    try {
+      percorso = realpathSync(percorsoInput);
+      if (!statSync(percorso).isDirectory()) fail(`TALOS_HARNESS_UI_PROJECT_DIRS[${indice}] non è una directory: ${percorsoInput}`);
+      accessSync(percorso, constants.R_OK | constants.W_OK);
+    } catch (error) {
+      if (error instanceof ConfigurationError) throw error;
+      fail(`TALOS_HARNESS_UI_PROJECT_DIRS[${indice}] non esiste o non è leggibile/scrivibile: ${percorsoInput}`);
+    }
+    return Object.freeze({ id: String(indice), percorso, nome: percorso.split(/[\\/]/).pop() || percorso });
+  });
+
+  const duplicati = new Set();
+  for (const { percorso } of cartelle) {
+    if (duplicati.has(percorso)) fail(`TALOS_HARNESS_UI_PROJECT_DIRS ripete la stessa cartella: ${percorso}`);
+    duplicati.add(percorso);
+  }
+  return Object.freeze(cartelle);
+}
+
 function parsePort(raw) {
   if (raw === undefined || raw === '') return DEFAULT_PORT;
   if (typeof raw !== 'string' || !/^\d+$/.test(raw)) {
@@ -163,6 +211,7 @@ export function loadConfig(
     port: parsePort(env.TALOS_HARNESS_UI_PORT),
     publicDir,
     modello: parseModello(env.TALOS_HARNESS_UI_MODEL),
+    cartelleProgetto: parseCartelleProgetto(env.TALOS_HARNESS_UI_PROJECT_DIRS),
     /*
      * ⛔ Nessun fail() se manca: Harness UI resta usabile in sola lettura
      * (campagne, elenco task) anche senza una chiave configurata — è
