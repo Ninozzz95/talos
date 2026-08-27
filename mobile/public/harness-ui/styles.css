@@ -344,8 +344,14 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 .view-pane.active { display: block; }
 .chat-view { overflow: hidden; }
 .chat-view.active { display: flex; flex-direction: column; }
-.chat-view .conversation { height: 100%; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
-.conversation { width: min(920px, calc(100% - 40px)); margin: 0 auto; padding: 24px 0 190px; }
+.chat-view .conversation { height: 100%; width: 100%; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+/* ⭐ 27/8, owner: la barra di scorrimento va sull'orlo destro del riquadro
+   (contro il Context Rail), non contro il bordo della colonna di testo
+   centrata. Il contenitore che scorre è quindi a piena larghezza, e a
+   CENTRARE il testo ci pensa il padding orizzontale — stesso identico
+   calcolo già in uso da `.composer-wrap` qui sotto, non un valore nuovo
+   inventato: risultato pixel-per-pixel identico al vecchio `width: min(920px, …)`. */
+.conversation { padding: 24px max(20px, calc((100% - 920px)/2)) 190px; }
 
 .mission-card, .activity-bundle, .approval-card, .widget, .settings-card, .automation-row, .inspector-card { border: 1px solid var(--line); background: linear-gradient(180deg, var(--surface-highlight-subtle), var(--surface-highlight-faint)); border-radius: var(--radius-card); }
 .mission-card { padding: 16px; margin-bottom: 24px; }
@@ -720,7 +726,7 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
   .run-state { font-size: 10px; }
   .run-state > span:last-child { display: none; }
   .content-stage { padding-bottom: var(--mobile-nav-h); }
-  .conversation { width: auto; margin: 0 12px; padding: 16px 0 205px; }
+  .conversation { padding: 16px 12px 205px; }
   .mission-card { padding: 12px; margin-bottom: 16px; }
   .mission-head h2 { font-size: 15px; }
   .mission-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
