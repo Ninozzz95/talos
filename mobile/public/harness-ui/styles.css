@@ -400,6 +400,27 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 .tool-arg-row:last-child { margin-bottom: 0; }
 .tool-arg-key { color: var(--muted); font: 10px var(--font-mono); text-transform: uppercase; letter-spacing: .04em; margin-top: 6px; }
 .tool-result-block { margin: 4px 0 0; overflow: auto; max-height: 340px; padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--bg-deep); font: 11px/1.6 var(--font-mono); color: var(--text-2); }
+
+/* ⭐⭐⭐ 27/8, owner: "il loading della risposta... usa lo stesso del mobile" —
+   porta di TalosLineLoader.vue (mobile/src/components/brand/, style.css
+   .talos-line-loader*): stessa geometria (traccia+sweep+3 nodi), stessa
+   temporizzazione, `--accent` al posto di `--talos-accent` diretto — sono
+   la STESSA variabile (vedi la definizione di `--accent` in testa a
+   questo file, dentro l'adattatore `:host`): lo stesso colore quando
+   questo bundle gira embedded nel telefono, e lo stesso fallback quando
+   gira standalone su desktop. */
+.real-waiting-note { display: flex; align-items: center; padding: 4px 0; }
+.talos-line-loader { display: block; }
+.talos-line-loader-track { stroke: var(--accent); stroke-opacity: .18; stroke-width: 2; stroke-linecap: round; }
+.talos-line-loader-sweep { stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 88; stroke-dashoffset: 88; animation: talosLineSweep 1.6s ease-in-out infinite; }
+.talos-line-loader-node { fill: transparent; stroke: var(--accent); stroke-width: 2; animation: talosLineNodeFill 1.6s ease-in-out infinite; }
+.talos-line-loader-node:nth-of-type(1) { animation-delay: 0s; }
+.talos-line-loader-node:nth-of-type(2) { animation-delay: .36s; }
+.talos-line-loader-node:nth-of-type(3) { animation-delay: .73s; }
+@keyframes talosLineSweep { 0% { stroke-dashoffset: 88; } 70%, 100% { stroke-dashoffset: 0; } }
+@keyframes talosLineNodeFill { 0%, 12% { fill: transparent; } 22%, 82% { fill: var(--accent); } 100% { fill: transparent; } }
+body.reduce-motion .talos-line-loader-sweep { animation: none; stroke-dashoffset: 0; }
+body.reduce-motion .talos-line-loader-node { animation: none; fill: var(--accent); opacity: .7; }
 .message-actions { display: flex; gap: 4px; margin-top: 8px; }
 .message-actions button { width: 34px; height: 32px; display: grid; place-items: center; border-radius: 8px; border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 12px; }
 .message-actions button:hover { background: var(--surface-highlight); color: var(--text); }
@@ -818,6 +839,7 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0ms !important; animation-iteration-count: 1 !important; transition-duration: 0ms !important; }
+  .talos-line-loader-node { fill: var(--accent); opacity: .7; } /* stesso motivo del :host-context gemello qui sopra */
 }
 
 /*
@@ -829,6 +851,11 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
  * è l'antenato che `:host-context` sa raggiungere.
  */
 :host-context(body.reduce-motion) *, :host-context(body.reduce-motion) *::before, :host-context(body.reduce-motion) *::after { scroll-behavior: auto !important; animation-duration: 0ms !important; animation-iteration-count: 1 !important; transition-duration: 0ms !important; }
+/* ⛔ Senza queste due righe, la regola cieca qui sopra e quella in @media
+   (prefers-reduced-motion) sotto lascerebbero i tre nodi del line-loader
+   sul fotogramma 100% del loro keyframe — che per `talosLineNodeFill` è
+   `fill: transparent`: tre cerchi invisibili invece di tre nodi pieni. */
+:host-context(body.reduce-motion) .talos-line-loader-node { fill: var(--accent); opacity: .7; }
 
 /* Feature-parity additions: session graph + GUI control plane */
 .session-topology { overflow: hidden; }
