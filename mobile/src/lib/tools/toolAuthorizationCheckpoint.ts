@@ -8,6 +8,7 @@ import {
     type TalosToolAuthorizationRequestV1,
 } from '@/lib/tools/toolAuthorizations'
 import { isTalosAgentToolId, type TalosAgentToolId } from '@/lib/tools/toolControls'
+import { dynamicToolIdFromName } from '@/lib/tools/dynamic/ids'
 import type { TalosToolAction } from '@/lib/tools/permissionTypes'
 import {
     cloneJsonObject,
@@ -226,21 +227,34 @@ function parseRequest(value: unknown): TalosToolAuthorizationRequestV1 | null {
     ) {
         return null
     }
-    const grants = parseTalosToolAuthorizationGrants({
-        schema_version: 1,
-        revision: 0,
-        grants: {
-            [record.tool]: {
-                schema_version: 1,
-                tool: record.tool,
-                actions,
-                scope: 'device',
-                granted_at: record.created_at,
-            },
-        },
-    })
-    const tool = Object.keys(grants.grants)[0] as TalosAgentToolId | undefined
-    if (!tool || tool !== record.tool) return null
+    /*
+     * ⛔⛔⛔ Owner 2026-08-27, Fase 8 — trovato SUL DISPOSITIVO, non a
+     * tavolino: ogni richiesta di autorizzazione per un tool FORGIATO
+     * falliva qui, con `TALOS_TOOL_AUTHORIZATION_CHECKPOINT_INVALID`
+     * (motivo `request_invalid`) — anche per un tool a sola lettura, anche
+     * dopo aver già corretto `toolset.ts` e `chatController.ts`.
+     *
+     * La forma PRECEDENTE riusava `parseTalosToolAuthorizationGrants` (una
+     * funzione pensata per costruire l'INSIEME PERSISTENTE dei consensi
+     * "sempre", non per validare la struttura di UNA richiesta) come un
+     * modo indiretto di controllare "`record.tool` è un id riconosciuto".
+     * Quella funzione scarta ogni chiave che non sia un `TalosAgentToolId`
+     * statico (`toolAuthorizations.ts:167`) — un nome `dynamic:*` veniva
+     * silenziosamente rimosso dall'oggetto `grants`, `Object.keys(...)[0]`
+     * diventava `undefined`, e l'INTERA richiesta tornava `null`: non un
+     * rifiuto per "non abilitato", un rifiuto per "non esiste", anche per
+     * un tool installato, abilitato e appena chiamato dal modello.
+     *
+     * Il controllo vero che serve — "questo nome è un id di tool
+     * riconosciuto, statico O forgiato" — ora è diretto ed esplicito,
+     * senza il giro indiretto. Gli altri controlli che quel giro faceva
+     * (forma del grant, timestamp, azioni) sono già garantiti sopra da
+     * `parseActions(record.actions)` e `timestamp(record.created_at)`:
+     * l'UNICA cosa persa rimuovendo l'indiretto era il riconoscimento del
+     * nome, ora qui.
+     */
+    if (!isTalosAgentToolId(record.tool) && dynamicToolIdFromName(record.tool) === null) return null
+    const tool = record.tool
     try {
         // Validates I-JSON now; hydrate additionally verifies the digest.
         canonicalizeTalosToolAuthorizationInput(record.input)
