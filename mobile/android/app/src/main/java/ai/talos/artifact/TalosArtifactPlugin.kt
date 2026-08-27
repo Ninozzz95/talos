@@ -69,4 +69,34 @@ class TalosArtifactPlugin : Plugin() {
         payload.put("opened", true)
         call.resolve(payload)
     }
+
+    /**
+     * ⛔⛔⛔ Owner 2026-08-27 — «salvare l'artefatto nella Libreria,
+     * esportarlo come file HTML». Legge SOLO l'HTML: il titolo non è mai
+     * stato scritto qui (`create` lo usa solo per la scheda di consenso,
+     * mai persistito) — il lato JS lo ha già, `s.titolo` sulla scheda, e lo
+     * passa lui a `attachments.saveGeneratedBinary`. Duplicarlo qui
+     * sarebbe una seconda fonte di verità per la stessa parola.
+     *
+     * ⛔ `artifact_create` impone già un documento autosufficiente (niente
+     * risorse esterne, tutto inline) — verificato via ricerca web prima di
+     * scrivere questa funzione: un HTML del genere è già perfettamente
+     * portabile come file `.html` a sé stante, senza nessun impacchettamento.
+     *
+     * ⛔ Sola lettura di un file che l'app ha già scritto — nessun nuovo
+     * rischio: la persona ha già visto l'artefatto (l'ha aperto o gli è
+     * stato mostrato in chat) prima di poter chiedere di salvarlo.
+     */
+    @PluginMethod
+    fun read(call: PluginCall) {
+        val id = call.getString("id")
+        val html = if (id == null) null else store.read(id)
+        if (html == null) {
+            call.reject("TALOS_ARTIFACT_NOT_FOUND", "TALOS_ARTIFACT_NOT_FOUND")
+            return
+        }
+        val payload = JSObject()
+        payload.put("html", String(html, StandardCharsets.UTF_8))
+        call.resolve(payload)
+    }
 }

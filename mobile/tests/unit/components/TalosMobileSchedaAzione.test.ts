@@ -21,6 +21,9 @@ vi.mock('@/i18n', () => ({
             'chat.cardWhichFile': 'Quale file?',
             'chat.cardSent': 'Inviato',
             'chat.cardNotSent': 'NON inviato',
+            'chat.cardSaveToLibrary': 'Salva nella Libreria',
+            'chat.cardSavedToLibrary': 'Salvato nella Libreria',
+            'chat.cardSaveFailed': 'Non è stato possibile salvarlo',
         }[chiave] ?? chiave),
     }),
 }))
@@ -96,8 +99,15 @@ vi.mock('@/lib/tools/schedaComandi', () => ({
  * chat già usa per gli allegati.
  */
 const hydrateText = vi.hoisted(() => vi.fn())
+/*
+ * ⛔ owner 2026-08-27, artefatto HTML: `saveArtifactToLibrary` è la stessa
+ * famiglia di `hydrateText` sopra — un finto controllabile per-test, non
+ * la vera implementazione (che tocca `TalosArtifactBridge` e la Libreria
+ * vera, provate sul Pad separatamente).
+ */
+const saveArtifactToLibrary = vi.hoisted(() => vi.fn())
 vi.mock('@/stores/chatController', () => ({
-    useChatController: () => ({ attachments: { hydrateText } }),
+    useChatController: () => ({ attachments: { hydrateText }, saveArtifactToLibrary }),
 }))
 
 import TalosMobileSchedaAzione from '@/components/chat/TalosMobileSchedaAzione.vue'
@@ -969,5 +979,69 @@ describe('⭐⭐⭐ la scheda "artefatto" — apre una WebView isolata, non una 
         await w.get('[data-testid="talos-scheda-artefatto"]').trigger('click')
         await respiro(w)
         expect(w.get('[data-testid="talos-scheda-artefatto"]').text()).toContain('Non si è aperta')
+    })
+})
+
+/**
+ * ⭐⭐⭐ SALVARE L'ARTEFATTO NELLA LIBRERIA — owner 2026-08-27, «una cosa
+ * molto importante che dà una spinta forte»: senza, un artefatto vive
+ * SOLO scorrendo la chat all'indietro. Riusa `chatController.saveArtifactToLibrary`
+ * (finto qui, provato per davvero — Libreria vera, ponte vero — sul Pad).
+ */
+describe('⭐⭐⭐ "Salva nella Libreria" — un\'azione separata dall\'apertura', () => {
+    beforeEach(() => { saveArtifactToLibrary.mockReset() })
+
+    const conArtefatto = () => mount(TalosMobileSchedaAzione, {
+        props: {
+            metadata: { cards: [{ tipo: 'artefatto', titolo: 'Spirograph', id: 'a1b2c3' }] },
+        },
+    })
+
+    it('chiama saveArtifactToLibrary con id e titolo, non con l\'apertura', async () => {
+        saveArtifactToLibrary.mockResolvedValue({ ok: true, fileId: 'f1' })
+        const w = conArtefatto()
+        await w.get('[data-testid="talos-scheda-artefatto-salva"]').trigger('click')
+        await respiro(w)
+        expect(saveArtifactToLibrary).toHaveBeenCalledWith('a1b2c3', 'Spirograph')
+        // ⛔ Il tocco su «salva» non ha aperto l'Activity — le due azioni
+        // sono indipendenti, non un tocco solo che fa entrambe.
+        expect(comandi.artefattiAperti).toEqual([])
+    })
+
+    it('un successo mostra "Salvato nella Libreria" e disabilita il bottone', async () => {
+        saveArtifactToLibrary.mockResolvedValue({ ok: true, fileId: 'f1' })
+        const w = conArtefatto()
+        const bottone = w.get('[data-testid="talos-scheda-artefatto-salva"]')
+        await bottone.trigger('click')
+        await respiro(w)
+        expect(bottone.text()).toContain('Salvato nella Libreria')
+        expect(bottone.attributes('disabled')).toBeDefined()
+    })
+
+    /*
+     * ⛔ Verso contrario: un salvataggio rifiutato lo dice a schermo, e il
+     * bottone resta premibile — a differenza del successo, un fallimento
+     * deve poter essere ritentato.
+     */
+    it('⛔⛔ un fallimento lo dice a schermo, e il bottone resta premibile', async () => {
+        saveArtifactToLibrary.mockResolvedValue({ ok: false, reason: 'TALOS_ARTIFACT_SAVE_FAILED' })
+        const w = conArtefatto()
+        const bottone = w.get('[data-testid="talos-scheda-artefatto-salva"]')
+        await bottone.trigger('click')
+        await respiro(w)
+        expect(bottone.text()).toContain('Non è stato possibile salvarlo')
+        expect(bottone.attributes('disabled')).toBeUndefined()
+    })
+
+    it('un doppio tocco rapido non chiama il salvataggio due volte', async () => {
+        let sblocca!: (value: { ok: true, fileId: string }) => void
+        saveArtifactToLibrary.mockReturnValue(new Promise((r) => { sblocca = r }))
+        const w = conArtefatto()
+        const bottone = w.get('[data-testid="talos-scheda-artefatto-salva"]')
+        await bottone.trigger('click')
+        await bottone.trigger('click')
+        sblocca({ ok: true, fileId: 'f1' })
+        await respiro(w)
+        expect(saveArtifactToLibrary).toHaveBeenCalledTimes(1)
     })
 })

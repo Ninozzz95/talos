@@ -873,6 +873,8 @@ export interface ChatController {
     readonly promptEnhancement: Readonly<Ref<TalosMobilePromptEnhancementResult | null>>
     readonly promptEnhancementError: Readonly<Ref<string | null>>
     readonly attachments: TalosMobileAttachmentsController
+    /** ⛔ Owner 2026-08-27 — salva un artefatto HTML nella Libreria; vedi la definizione per il perché. */
+    saveArtifactToLibrary(id: string, titolo: string): Promise<{ ok: true, fileId: string } | { ok: false, reason: string }>
     readonly chat: ChatStore<unknown>
     readonly secrets: Readonly<Record<string, boolean>>
     init(): Promise<void>
@@ -1570,6 +1572,49 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             model: profile?.model ?? null,
             provider: profile?.provider ?? null,
             ...extra,
+        }
+    }
+
+    /**
+     * ⛔⛔⛔ Owner 2026-08-27 — «salvare l'artefatto nella Libreria,
+     * esportarlo come file HTML — dà una spinta forte». Azione della
+     * PERSONA, non del modello: nessun tool nuovo, nessuna chiamata
+     * agente — la scheda `artefatto` la chiama quando qualcuno tocca
+     * «Salva nella Libreria», esattamente come `hydrateText` per il
+     * visualizzatore Markdown.
+     *
+     * ⛔ Riusa `attachments.saveGeneratedBinary`, la STESSA via di
+     * `document_create` — non una seconda strada per scrivere nella
+     * Libreria. Una volta lì, l'export come file `.html` è già gratis:
+     * `library_export` sa già esportare qualunque file della Libreria,
+     * non serve una funzione di export dedicata per gli artefatti.
+     *
+     * ⛔ `sessionId`/`model`/`provider` a `null`: non c'è un turno del
+     * modello in corso quando la persona tocca «salva» — `generatedOrigin`
+     * gestisce già questo caso (nessun profilo trovato ⇒ null), qui lo
+     * stesso, dichiarato esplicitamente invece di inventare un contesto.
+     */
+    async function saveArtifactToLibrary(
+        id: string,
+        titolo: string,
+    ): Promise<{ ok: true, fileId: string } | { ok: false, reason: string }> {
+        let html: string
+        try {
+            const { TalosArtifactBridge } = await import('@/lib/device/artifactPlugin')
+            html = (await TalosArtifactBridge.read({ id })).html
+        } catch (error) {
+            const detail = error instanceof Error ? error.message : String(error)
+            return { ok: false, reason: /^TALOS_[A-Z0-9_]+$/.test(detail) ? detail : 'TALOS_ARTIFACT_READ_FAILED' }
+        }
+        try {
+            const saved = await attachments.saveGeneratedBinary(
+                { name: `${titolo}.html`, mediaType: 'text/html', bytes: new TextEncoder().encode(html) },
+                false,
+                generatedOrigin(null, null, { toolName: 'artifact_create' }),
+            )
+            return { ok: true, fileId: saved.id }
+        } catch {
+            return { ok: false, reason: 'TALOS_ARTIFACT_SAVE_FAILED' }
         }
     }
 
@@ -7222,6 +7267,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         promptEnhancement: readonly(promptEnhancement),
         promptEnhancementError: readonly(promptEnhancementError),
         attachments,
+        saveArtifactToLibrary,
         chat,
         secrets: readonly(secrets),
         init,

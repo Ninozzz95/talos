@@ -14,6 +14,12 @@ import { registerPlugin } from '@capacitor/core'
 interface PonteArtefatto {
     create(options: { title: string, html: string }): Promise<{ id: string }>
     open(options: { id: string }): Promise<{ opened: boolean }>
+    /**
+     * ⛔ Owner 2026-08-27 — «salvare l'artefatto nella Libreria». Sola
+     * lettura dell'HTML già scritto da `create` — il titolo non viaggia:
+     * la scheda (`s.titolo`) ce l'ha già lato JS, vedi `TalosArtifactPlugin.kt`.
+     */
+    read(options: { id: string }): Promise<{ html: string }>
 }
 
 export const TalosArtifactBridge = registerPlugin<PonteArtefatto>('TalosArtifact')

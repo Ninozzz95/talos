@@ -29,6 +29,7 @@
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTalosI18n } from '@/i18n'
+import { useChatController } from '@/stores/chatController'
 import { TALOS_TOOL_LABEL_KEYS } from '@/lib/tools/toolLabels'
 import { TALOS_METADATA_SCHEDE, type TalosScheda } from '@/lib/tools/tracciaAzione'
 
@@ -440,6 +441,30 @@ async function apriArtefatto(id: string): Promise<void> {
 }
 
 /**
+ * ⭐⭐⭐ SALVARE L'ARTEFATTO NELLA LIBRERIA — owner 2026-08-27, «una cosa
+ * molto importante che dà una spinta forte»: senza, un artefatto vive
+ * SOLO scorrendo la chat all'indietro, e sparisce dalla vista appena la
+ * conversazione va avanti.
+ *
+ * ⛔ Riusa `chatController.saveArtifactToLibrary` — la STESSA via di
+ * `document_create`, non una seconda strada. Una volta nella Libreria,
+ * l'export come file è già gratis: `library_export` lo sa già fare per
+ * qualunque file, non serve una funzione dedicata qui.
+ */
+const chatController = useChatController()
+const esitoSalvataggio = ref<Record<string, 'salva' | 'salvato' | 'rifiutato'>>({})
+async function salvaArtefattoNellaLibreria(s: SchedaArtefatto): Promise<void> {
+    if (esitoSalvataggio.value[s.id] === 'salva' || esitoSalvataggio.value[s.id] === 'salvato') return
+    esitoSalvataggio.value = { ...esitoSalvataggio.value, [s.id]: 'salva' }
+    try {
+        const esito = await chatController.saveArtifactToLibrary(s.id, s.titolo)
+        esitoSalvataggio.value = { ...esitoSalvataggio.value, [s.id]: esito.ok ? 'salvato' : 'rifiutato' }
+    } catch {
+        esitoSalvataggio.value = { ...esitoSalvataggio.value, [s.id]: 'rifiutato' }
+    }
+}
+
+/**
  * ⭐⭐⭐ IL PDF CHE SI APRE — owner 2026-08-17, «il PDF bisogna poterlo
  * visualizzare dentro la app».
  *
@@ -678,6 +703,29 @@ const parolaStato = (acceso: boolean): string => (acceso
                     >{{ esitoArtefatto[s.id] === 'rifiutato' ? t('chat.cardAppRefused') : '' }}</span>
                 </span>
                 <span class="talos-freccia flex-none" aria-hidden="true">›</span>
+            </button>
+            <!--
+                ⛔ Riga SEPARATA dal bottone che apre: due azioni diverse
+                (apri/salva) non condividono un tocco solo — confonderle
+                vorrebbe dire che toccare per aprire salva anche, o
+                viceversa, senza che la persona l'abbia scelto.
+            -->
+            <button
+                v-if="eArtefatto(s)"
+                type="button"
+                class="talos-app flex w-full items-center border border-border bg-muted text-left text-sm text-muted-foreground"
+                :aria-busy="esitoSalvataggio[s.id] === 'salva'"
+                :disabled="esitoSalvataggio[s.id] === 'salva' || esitoSalvataggio[s.id] === 'salvato'"
+                data-testid="talos-scheda-artefatto-salva"
+                @click="salvaArtefattoNellaLibreria(s)"
+            >
+                <span class="flex-1">
+                    {{ esitoSalvataggio[s.id] === 'salvato' ? t('chat.cardSavedToLibrary') : t('chat.cardSaveToLibrary') }}
+                    <span
+                        class="talos-esito block text-xs"
+                        aria-live="polite"
+                    >{{ esitoSalvataggio[s.id] === 'rifiutato' ? t('chat.cardSaveFailed') : '' }}</span>
+                </span>
             </button>
 
             <!--
