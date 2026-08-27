@@ -3,6 +3,11 @@
 vendor/
 node_modules/
 
+# Harness UI — dati locali generati a runtime (automazioni persistite),
+# stesso principio già in uso per il resto dei dati locali di questo file:
+# generati sul disco di chi fa girare il server, non da versionare.
+harness-ui/.automations/
+
 core/vendor/
 validator/node_modules/
 control-plane/vendor/

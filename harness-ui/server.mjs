@@ -1,6 +1,8 @@
 import { createServer } from 'node:http';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { createAutomationScheduler } from './src/automation-scheduler.mjs';
+import { createAutomationStore } from './src/automation-store.mjs';
 import { createCampaignService } from './src/campaign-service.mjs';
 import { loadConfig } from './src/config.mjs';
 import { readCampaignCosts } from './src/cost-reader.mjs';
@@ -32,12 +34,30 @@ async function startServer() {
     chiave: config.chiaveApi,
     cartelleProgetto: config.cartelleProgetto,
   });
+  /*
+   * ⭐⭐⭐ 27/8 — blocco 7, la vera schedulazione. Owner: "hai il mio via
+   * libera". `.automations/` accanto a `server.mjs`, gitignorata come
+   * `.sessions/` — dati locali generati a runtime, non tracciati.
+   * ⛔ Il tick gira SOLO col processo vivo: `unref()` in
+   * automation-scheduler.mjs non tiene mai il server acceso da solo, e
+   * un riavvio (frequente in sviluppo con --watch) perde solo il timer,
+   * mai le automazioni — quelle sono su disco, il tick le rilegge al
+   * prossimo giro.
+   */
+  const automationStore = createAutomationStore({
+    cartella: fileURLToPath(new URL('.automations/', import.meta.url)),
+  });
+  const automationScheduler = createAutomationScheduler({
+    store: automationStore,
+    sessionRegistry,
+  });
   const app = createHttpApp({
     campaignService,
     staticHandler: createStaticHandler(config.publicDir),
     sessionRegistry,
     listaTaskDisponibili,
     elencaCartelleProgetto: () => elencaCartelleProgetto(config.cartelleProgetto),
+    automationStore,
   });
   const server = createServer(app);
 
@@ -45,8 +65,9 @@ async function startServer() {
     server.once('error', reject);
     server.listen(config.port, config.host, resolve);
   });
+  automationScheduler.avvia();
 
-  const shutdown = () => server.close(() => process.exit(0));
+  const shutdown = () => { automationScheduler.ferma(); server.close(() => process.exit(0)); };
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
   console.log(`Harness UI disponibile su http://${config.host}:${config.port}`);
