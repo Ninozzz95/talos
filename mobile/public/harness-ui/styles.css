@@ -523,6 +523,52 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .file-tree button span { margin-left: auto; color: var(--muted); font: 8px var(--font-mono); }
 .file-tree .nested { padding-left: 26px; }
 .file-tree .deep { padding-left: 42px; }
+
+/* ⭐⭐⭐ 27/8, owner: "un componente allo stato dell'arte" per il pannello
+   Files — albero vero (espande a richiesta, un livello alla volta, mai un
+   dump ricorsivo — vedi la doc di renderizzaAlberoReale in app.js), stato
+   git incrociato con la Review, ricerca dal vivo. Nomi di classe prefissati
+   `ft-` per non collidere con nient'altro in questo foglio già grande. */
+.ft-search-row { position: relative; margin: 2px 0 6px; }
+.ft-search-icon { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); width: 13px; height: 13px; stroke: var(--muted); fill: none; stroke-width: 2; pointer-events: none; }
+.ft-search-input { width: 100%; background: var(--bg-deep); border: 1px solid var(--line); border-radius: 8px; color: var(--text); font: 11.5px var(--font-ui); padding: 6px 8px 6px 27px; outline: 0; transition: border-color var(--motion-control) ease, background var(--motion-control) ease; }
+.ft-search-input::placeholder { color: var(--muted-2); }
+.ft-search-input:focus { border-color: var(--accent); background: var(--surface-2); }
+.ft-search-hint { margin: 0 0 6px; font-size: 9.5px; color: var(--muted-2); min-height: 12px; }
+.ft-search-hint b { color: var(--text-2); font-weight: 600; }
+.ft-legend { display: flex; gap: 10px; margin-bottom: 8px; font-size: 9px; color: var(--muted); }
+.ft-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.ft-legend i { width: 5px; height: 5px; border-radius: 50%; display: inline-block; }
+.ft-legend-new i { background: var(--success); }
+.ft-legend-modified i { background: var(--accent); }
+
+.ft-tree, .ft-tree ul { list-style: none; margin: 0; padding: 0; }
+.ft-tree ul { margin-left: 9px; padding-left: 10px; border-left: 1px solid var(--line); }
+.ft-node > ul { display: none; }
+.ft-node.ft-open > ul { display: block; }
+.ft-row { display: flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 8px 0 3px; border-radius: 7px; cursor: pointer; color: var(--text-2); font-size: 12px; white-space: nowrap; outline: 0; }
+.ft-row:hover { background: var(--surface-2); }
+.ft-row:focus-visible { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.ft-row.ft-selected { background: var(--accent-soft); color: var(--text); }
+.ft-row.ft-selected .ft-name { color: var(--text); font-weight: 500; }
+.ft-row.ft-dimmed { opacity: .32; }
+.ft-row.ft-match .ft-name mark { background: var(--accent-soft); color: var(--accent-2); border-radius: 2px; padding: 0 1px; }
+.ft-chevron { width: 15px; height: 15px; flex-shrink: 0; display: grid; place-items: center; color: var(--muted); transition: transform var(--motion-disclosure) ease; }
+.ft-chevron svg { width: 9px; height: 9px; stroke: currentColor; fill: none; stroke-width: 2.4; }
+.ft-node.ft-open > .ft-row > .ft-chevron { transform: rotate(90deg); }
+.ft-row.ft-leaf .ft-chevron { visibility: hidden; }
+.ft-icon { width: 15px; height: 15px; flex-shrink: 0; display: grid; place-items: center; }
+.ft-icon svg { width: 14px; height: 14px; stroke-width: 1.6; fill: none; }
+.ft-icon-folder svg { stroke: var(--accent-2); }
+.ft-icon-folder.ft-open svg { stroke: var(--accent); }
+.ft-icon-file svg { stroke: var(--muted); }
+.ft-icon-code svg { stroke: var(--info); }
+.ft-name { flex: 1; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); font-size: 11.5px; }
+.ft-row-folder .ft-name { font-family: var(--font-ui); font-size: 12px; }
+.ft-status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.ft-status-dot.ft-new { background: var(--success); }
+.ft-status-dot.ft-modified { background: var(--accent); }
+.ft-loading { padding: 6px 3px; font-size: 10.5px; color: var(--muted-2); }
 .agent-card { min-height: 58px; border: 1px solid var(--line); border-radius: 10px; display: grid; grid-template-columns: 34px minmax(0,1fr) auto; gap: 9px; align-items: center; padding: 9px; margin-bottom: 8px; }
 .agent-avatar { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: var(--surface-3); color: var(--accent-2); font: 10px var(--font-mono); }
 .agent-card strong, .agent-card small { display: block; }
