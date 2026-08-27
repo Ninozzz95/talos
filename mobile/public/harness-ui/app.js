@@ -2266,6 +2266,7 @@
       case 'naviga': return a.url ? `Pagina web: ${a.url}` : 'Lettura pagina web…';
       case 'web_search': return a.query ? `Ricerca web: "${a.query}"` : 'Ricerca web…';
       case 'artifact_create': return a.titolo ? `Artefatto: ${a.titolo}` : 'Creazione artefatto…';
+      case 'time_now': return 'Data e ora correnti'; // ⭐ 28/8 — zero argomenti, nessun placeholder "…" da mostrare
       default: return `${nome}(…)`;
     }
   }
