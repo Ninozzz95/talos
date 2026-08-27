@@ -10,6 +10,7 @@ import { createReportSource } from './src/report-source.mjs';
 import { createSessionRegistry } from './src/session-registry.mjs';
 import { createStaticHandler } from './src/static-files.mjs';
 import { listaTaskDisponibili } from './src/task-catalog.mjs';
+import { elencaCartelleProgetto } from './src/custom-task.mjs';
 
 async function startServer() {
   const config = loadConfig(process.env, import.meta.url);
@@ -29,12 +30,14 @@ async function startServer() {
   const sessionRegistry = createSessionRegistry({
     modello: config.modello,
     chiave: config.chiaveApi,
+    cartelleProgetto: config.cartelleProgetto,
   });
   const app = createHttpApp({
     campaignService,
     staticHandler: createStaticHandler(config.publicDir),
     sessionRegistry,
     listaTaskDisponibili,
+    elencaCartelleProgetto: () => elencaCartelleProgetto(config.cartelleProgetto),
   });
   const server = createServer(app);
 

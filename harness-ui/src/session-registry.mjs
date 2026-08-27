@@ -23,6 +23,7 @@ import {
   compattaSessione as compattaSessioneReale,
   eseguiComandoDiretto as eseguiComandoDirettoReale,
 } from './agent-service.mjs';
+import { CustomTaskError, preparaEsecuzioneLibera as preparaEsecuzioneLiberaReale } from './custom-task.mjs';
 import { TaskCatalogError, preparaEsecuzione as preparaEsecuzioneReale } from './task-catalog.mjs';
 import { leggiAlberoWorkspace as leggiAlberoWorkspaceReale, WorkspaceTreeError } from './workspace-tree.mjs';
 
@@ -31,11 +32,13 @@ export const EXPORT_SCHEMA = 'talos.harness-ui.session-export.v1';
 export function createSessionRegistry({
   avviaSessioneFn = avviaSessioneReale,
   preparaEsecuzioneFn = preparaEsecuzioneReale,
+  preparaEsecuzioneLiberaFn = preparaEsecuzioneLiberaReale,
   compattaSessioneFn = compattaSessioneReale,
   eseguiComandoDirettoFn = eseguiComandoDirettoReale,
   leggiAlberoWorkspaceFn = leggiAlberoWorkspaceReale,
   modello,
   chiave,
+  cartelleProgetto = [],
   clock = () => new Date(),
 } = {}) {
   const sessioni = new Map();
@@ -139,6 +142,27 @@ export function createSessionRegistry({
       return avviaESegui({
         taskId, cartella: preparato.cartella, task: preparato.task, comandoProva: preparato.comandoProva,
         modelloRichiesta: modelloScelto,
+      });
+    },
+
+    /**
+     * ⭐⭐⭐ 27/8, owner: "per adesso un allowlist per testare... come se
+     * fosse Claude Code". Stesso schema di `avvia()`, ma su una cartella
+     * dell'allowlist (`config.cartelleProgetto`) invece di un id del
+     * corpus benchmark — scrive DIRETTAMENTE sul progetto vero, nessuna
+     * copia usa-e-getta (vedi la doc di `custom-task.mjs` sul perché).
+     */
+    avviaLibero({ cartellaId, consegna, comandoProva, modello: modelloScelto = null }) {
+      let preparato;
+      try {
+        preparato = preparaEsecuzioneLiberaFn(cartelleProgetto, { cartellaId, consegna, comandoProva });
+      } catch (errore) {
+        if (errore instanceof CustomTaskError) return { erroreAvvio: errore.message, code: errore.code };
+        throw errore;
+      }
+      return avviaESegui({
+        taskId: `libero:${cartellaId}`, cartella: preparato.cartella, task: preparato.task,
+        comandoProva: preparato.comandoProva, modelloRichiesta: modelloScelto,
       });
     },
 

@@ -10,6 +10,7 @@ import {
   DEFAULT_PORT,
   INITIAL_CAMPAIGNS,
   loadConfig,
+  modelloRichiestaValido,
 } from '../src/config.mjs';
 
 function makeBanco(t) {
@@ -77,4 +78,63 @@ test('config rejects relative or unreadable banco paths and invalid ports', (t) 
       ConfigurationError,
     );
   }
+});
+
+// ⭐⭐⭐ 27/8 — owner: "per adesso un allowlist per testare". Fail-closed per
+// costruzione: assente = zero cartelle, mai "qualunque cartella passi".
+test('config.cartelleProgetto è vuota per costruzione quando TALOS_HARNESS_UI_PROJECT_DIRS è assente', (t) => {
+  const bancoDir = makeBanco(t);
+  const config = loadConfig({ TALOS_BANCO_DIR: bancoDir }, import.meta.url);
+  assert.deepEqual(config.cartelleProgetto, []);
+});
+
+test('config accetta un elenco di cartelle progetto VERE, separate da ";", con id stabili e nomi derivati', (t) => {
+  const bancoDir = makeBanco(t);
+  const uno = mkdtempSync(join(tmpdir(), 'talos-progetto-uno-'));
+  const due = mkdtempSync(join(tmpdir(), 'talos-progetto-due-'));
+  t.after(() => { rmSync(uno, { recursive: true, force: true }); rmSync(due, { recursive: true, force: true }); });
+
+  const config = loadConfig({
+    TALOS_BANCO_DIR: bancoDir,
+    TALOS_HARNESS_UI_PROJECT_DIRS: `${uno};${due}`,
+  }, import.meta.url);
+
+  assert.equal(config.cartelleProgetto.length, 2);
+  assert.equal(config.cartelleProgetto[0].id, '0');
+  assert.equal(config.cartelleProgetto[1].id, '1');
+  assert.ok(config.cartelleProgetto[0].percorso.endsWith(config.cartelleProgetto[0].nome));
+});
+
+test('⛔ config rifiuta una cartella progetto relativa, inesistente, o ripetuta due volte', (t) => {
+  const bancoDir = makeBanco(t);
+  const vera = mkdtempSync(join(tmpdir(), 'talos-progetto-vera-'));
+  t.after(() => rmSync(vera, { recursive: true, force: true }));
+
+  assert.throws(
+    () => loadConfig({ TALOS_BANCO_DIR: bancoDir, TALOS_HARNESS_UI_PROJECT_DIRS: 'relative/progetto' }, import.meta.url),
+    ConfigurationError,
+    'relativa',
+  );
+  assert.throws(
+    () => loadConfig({ TALOS_BANCO_DIR: bancoDir, TALOS_HARNESS_UI_PROJECT_DIRS: join(vera, 'assente') }, import.meta.url),
+    ConfigurationError,
+    'inesistente',
+  );
+  assert.throws(
+    () => loadConfig({ TALOS_BANCO_DIR: bancoDir, TALOS_HARNESS_UI_PROJECT_DIRS: `${vera};${vera}` }, import.meta.url),
+    ConfigurationError,
+    'ripetuta',
+  );
+});
+
+test('modelloRichiestaValido accetta il formato OpenRouter vendor/nome, e AL CONTRARIO rifiuta spazi, righe vuote e assenza di slash', () => {
+  assert.equal(modelloRichiestaValido('deepseek/deepseek-chat'), true);
+  assert.equal(modelloRichiestaValido('deepseek/deepseek-r1:free'), true);
+  assert.equal(modelloRichiestaValido('z-ai/glm-4.7-flash'), true);
+  assert.equal(modelloRichiestaValido('formato sbagliato con spazi'), false);
+  assert.equal(modelloRichiestaValido('senza-slash'), false);
+  assert.equal(modelloRichiestaValido(''), false);
+  assert.equal(modelloRichiestaValido('vendor/'), false);
+  assert.equal(modelloRichiestaValido(null), false);
+  assert.equal(modelloRichiestaValido(42), false);
 });
