@@ -103,6 +103,8 @@
       testoGrezzoMessaggi: new Map(),
       /** ⛔⛔⛔ 27/8, owner: "ricevo risposte duplicate" — ogni evento.`_sequenza` (assegnato dal server, vedi session-registry.mjs broadcast()) entra qui la PRIMA volta che passa da handleRealEvent; una riconnessione (EventSource nativo dopo una caduta, o runDirectShell che ne apre una fresca) rimanda l'intero buffer da capo, e questo Set lo riconosce e lo scarta invece di duplicare bubble/testo. Sopravvive a un `continua:true` (stessa sessione, nuovo giro) — si azzera SOLO per una sessione davvero diversa. */
       sequenzeViste: new Set(),
+      /** ⛔⛔⛔ 27/8, owner: "verifica che i messaggi... persistano dopo il refresh" — vero SOLO fra l'appendUserFollowUp ottimista di resumeSession() e il RunStarted (seguito:true) che arriva davvero: consumato una volta, evita che handleRealEvent mostri lo stesso follow-up due volte dal vivo. Vedi il case RunStarted per il perché non è sempre così. */
+      followUpBubbleInAttesa: false,
     },
   };
 
@@ -1847,6 +1849,20 @@
       const demoBadge = $('.demo-surface-badge', $('[data-view="browser"]'));
       if (demoBadge) demoBadge.hidden = false;
     }
+    /*
+     * ⛔⛔⛔ 27/8, trovato nell'ispezione visiva finale: una sessione VERA
+     * senza nessuna scrittura (una domanda semplice, "chi sei?") mostrava
+     * ANCORA "3 file modificati" con un diff rosso/verde — il markup demo
+     * di index.html, mai una volta sostituito, perché
+     * renderRealReviewList()/aggiornaSommarioReviewReale() partono SOLO da
+     * un vero StateDelta (una vera scrittura) — una sessione senza
+     * scritture non li chiama mai. Chiamarli qui, con reviewFiles GIÀ
+     * azzerato sopra (nuovaGenerazioneSessione), li fa mostrare uno stato
+     * onesto e vero ("0 file modificati") invece del demo mai ripulito —
+     * stessa famiglia del difetto già corretto per Terminale/Browser.
+     */
+    renderRealReviewList();
+    aggiornaSommarioReviewReale();
   }
 
   /**
@@ -2130,16 +2146,31 @@
         /*
          * ⛔⛔⛔ 27/8, owner: "'Nuovo giro iniziato sulla stessa
          * conversazione' ovviamente non deve comparire" — era rumore
-         * interno (utile solo mentre si verificava che resume/comando
-         * diretto funzionassero) lasciato visibile in una conversazione
-         * reale. runCount resta tracciato (altri punti lo leggono), il
-         * secondo RunStarted di un resume/follow-up non produce più un
-         * bubble: il follow-up dell'utente e la risposta che segue bastano
-         * a raccontare cosa è successo, come in qualunque chat vera.
+         * interno lasciato visibile in una conversazione reale. runCount
+         * resta tracciato (altri punti lo leggono).
+         *
+         * ⛔⛔⛔ 27/8, owner: "verifica che i messaggi... persistano dopo il
+         * refresh" — riprodotto: un F5 perdeva ogni follow-up per sempre.
+         * Dal vivo resumeSession() mostra il follow-up in modo OTTIMISTA
+         * (appendUserFollowUp, prima ancora che la POST risponda) — ma
+         * quel bubble non ha NESSUNA controparte lato server, quindi un
+         * reload (che ricostruisce SOLO dal replay degli eventi) non
+         * aveva niente da cui recuperarlo. session-registry.mjs resume()
+         * ora annuncia il nuovo messaggio con `evento.input.seguito:true`
+         * (mai più il task originale ripetuto): un secondo RunStarted così
+         * marcato è un follow-up VERO da mostrare — ma SOLO al replay,
+         * mai due volte dal vivo (`followUpBubbleInAttesa` lo consuma,
+         * impostato da resumeSession subito prima della POST).
          */
         state.realSession.runCount = (state.realSession.runCount || 0) + 1;
         if (!state.realSession.taskBubbleMostrata && evento.input) {
           appendRealTaskStart(evento.input);
+        } else if (state.realSession.taskBubbleMostrata && evento.input?.seguito) {
+          if (state.realSession.followUpBubbleInAttesa) {
+            state.realSession.followUpBubbleInAttesa = false; // già mostrato dal vivo, non duplicare
+          } else {
+            appendUserFollowUp(evento.input.consegna); // replay dopo un reload: nessun ottimismo l'ha già mostrato
+          }
         }
         if (evento.contesto) aggiornaPannelloAmbiente(evento.contesto);
         aggiornaAlberoReale('');
@@ -2319,6 +2350,7 @@
       state.realSession.treePercorso = '';
       state.realSession.sequenzeViste = new Set();
       state.realSession.testoGrezzoMessaggi = new Map();
+      state.realSession.followUpBubbleInAttesa = false;
       // ⛔ 27/8 — Terminale/Browser tengono il loro "già reale" nel DOM
       // (dataset), non in state.realSession: senza questo, restavano
       // mostrati per sempre, mescolati con la sessione successiva.
@@ -2436,7 +2468,7 @@
     if (!state.realSession.id) { toast('Nessuna sessione reale da riprendere'); return; }
     const sessionId = state.realSession.id;
     const taskId = state.realSession.taskId;
-    if (messaggioFollowUp) appendUserFollowUp(messaggioFollowUp);
+    if (messaggioFollowUp) { appendUserFollowUp(messaggioFollowUp); state.realSession.followUpBubbleInAttesa = true; }
     try {
       await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/resume`, messaggioFollowUp ? { messaggio: messaggioFollowUp } : {});
       // continua:true — STESSA vista: la conversazione resta a schermo, il

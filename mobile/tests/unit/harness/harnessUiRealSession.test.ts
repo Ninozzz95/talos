@@ -42,6 +42,7 @@ type RuntimeGlobals = {
             messageElements: Map<string, HTMLElement>
             reviewFiles: Map<string, { path: string, nuovo: boolean, code: [string, string][] }>
             eventoTerminaleVisto: boolean
+            followUpBubbleInAttesa: boolean
         }
     }
 }
@@ -464,6 +465,46 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(runtime().realSessionState.id).toBe('sess-concluso') // STESSO id, non una sessione nuova
     })
 
+    // ⛔⛔⛔ 27/8, owner: "verifica che i messaggi... persistano dopo il
+    // refresh" — riprodotto: un F5 perdeva OGNI follow-up per sempre, e
+    // ripeteva il primo messaggio 3 volte — session-registry.mjs resume()
+    // annunciava SEMPRE il task ORIGINALE, mai il nuovo messaggio: un
+    // replay (nessun appendUserFollowUp ottimista l'ha già mostrato) non
+    // aveva NESSUN evento da cui ricostruire il follow-up.
+    it('REAL-SESSION-RESUME-04 un RunStarted di replay (seguito:true, MAI preceduto da un resumeSession ottimista) mostra il follow-up dal server', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'RunStarted', input: { consegna: 'Primo messaggio' } }, generation)
+        expect(runtime().realSessionState.followUpBubbleInAttesa).toBe(false) // nessun resumeSession() l'ha mai impostato
+
+        runtime().handleRealEvent({ type: 'RunStarted', input: { consegna: 'Secondo messaggio dal server', seguito: true } }, generation)
+
+        expect(document.querySelector('#conversation')?.textContent).toContain('Secondo messaggio dal server')
+    })
+
+    it('⛔ REAL-SESSION-RESUME-05 AL CONTRARIO: un RunStarted di replay MAI mostra il follow-up due volte se resumeSession lo ha già mostrato dal vivo', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-vivo' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-vivo' })
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'RunFinished', result: { detto: 'Fatto.' } }, generation)
+
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions/sess-vivo/resume', corpo: {} },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        expect(runtime().submitPrompt('Domanda dal vivo')).toBe(true) // appendUserFollowUp ottimista + followUpBubbleInAttesa=true
+        await new Promise((r) => setTimeout(r, 0))
+        expect(document.querySelectorAll('#conversation .user-message').length).toBe(2) // task iniziale + follow-up ottimista, non 3
+
+        // l'evento VERO arriva (stessa generazione, ancora consumabile visto che siamo nella stessa sessione)
+        runtime().handleRealEvent({ type: 'RunStarted', input: { consegna: 'Domanda dal vivo', seguito: true } }, runtime().realSessionState.generation)
+
+        expect(document.querySelectorAll('#conversation .user-message').length).toBe(2) // ANCORA 2 — non duplicato
+        expect(runtime().realSessionState.followUpBubbleInAttesa).toBe(false) // consumato
+    })
+
     it('⛔ REAL-SESSION-RESUME-03 AL CONTRARIO: un follow-up su una sessione ANCORA IN CORSO non chiama /resume, rifiuto onesto', async () => {
         mockFetch([
             { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-in-corso' } },
@@ -557,6 +598,29 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(terminaleDopo?.dataset.reale).toBeUndefined()
         const badge = document.querySelector('[data-view="terminal"] .demo-surface-badge') as HTMLElement | null
         expect(badge?.hidden).toBe(false)
+    })
+
+    // ⛔⛔⛔ 27/8, trovato nell'ispezione visiva finale (owner: "IMPORTANTISSIMA"):
+    // una sessione VERA senza nessuna scrittura mostrava ANCORA "3 file
+    // modificati" con un diff rosso/verde — il markup demo di index.html,
+    // mai sostituito perché renderRealReviewList()/aggiornaSommarioReviewReale()
+    // partono solo da un vero StateDelta (una scrittura), mai da una sessione
+    // che non ne fa nessuna. Stessa famiglia del difetto Terminale/Browser.
+    it('⛔⛔ REAL-SESSION-REVIEW-01 AL CONTRARIO: una sessione senza nessuna scrittura mostra "0 file modificati", mai il demo mai ripulito', async () => {
+        const delta = [{ op: 'add', path: '/file/src/nuovo.mjs', value: 'export const x = 1;' }]
+        runtime().handleRealEvent({ type: 'StateDelta', delta }, runtime().realSessionState.generation)
+        expect(document.querySelector('[data-view="diff"] h2')?.textContent).toContain('1 file')
+
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-solo-domanda' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-solo-domanda' })
+
+        expect(document.querySelector('[data-view="diff"] h2')?.textContent).toContain('0 file')
+        expect(document.querySelector('[data-view="diff"] .file-review-list')?.children.length).toBe(0)
+        expect(document.querySelector('#reviewSummaryNuovi')?.textContent).toBe('0')
+        expect(document.querySelector('#reviewSummaryModificati')?.textContent).toBe('0')
     })
 
     it('REAL-SESSION-COMPACT-01 con sessione attiva chiama /compact senza aprire nessuno stream nuovo', async () => {

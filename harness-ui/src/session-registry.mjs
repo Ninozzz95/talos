@@ -261,8 +261,24 @@ export function createSessionRegistry({
       const messaggiIniziali = nuovoMessaggioUtente
         ? [...voce.messaggiFinali, { role: 'user', content: nuovoMessaggioUtente }]
         : voce.messaggiFinali;
+      /*
+       * ⛔⛔⛔ 27/8, owner: "verifica che i messaggi... persistano dopo il
+       * refresh" — riprodotto: il RunStarted di un resume annunciava
+       * SEMPRE il `task` ORIGINALE (`voce.task`), mai il nuovo messaggio.
+       * Dal vivo non si vedeva — app.js mostra il follow-up in modo
+       * ottimista, PRIMA che questo evento arrivi — ma un F5, che
+       * ricostruisce la chat SOLO dai RunStarted replayati, mostrava il
+       * primo messaggio 3 volte e perdeva i due follow-up per sempre: non
+       * esisteva NESSUN evento che li rappresentasse. `talosLavora` non
+       * legge `task` quando `messaggiIniziali` è già pieno (lo ignora del
+       * tutto) — cambiarlo qui è sicuro, serve SOLO all'annuncio.
+       * `seguito:true` distingue "questo è un secondo turno" per app.js.
+       */
+      const taskAnnunciato = nuovoMessaggioUtente
+        ? { consegna: nuovoMessaggioUtente, progetto: voce.task?.progetto, seguito: true }
+        : voce.task;
       return avviaESegui({
-        sessionId, taskId: voce.taskId, cartella: voce.cartella, task: voce.task,
+        sessionId, taskId: voce.taskId, cartella: voce.cartella, task: taskAnnunciato,
         comandoProva: voce.comandoProva, messaggiIniziali,
         forkDa: voce.forkDa, voceEsistente: voce,
       });
