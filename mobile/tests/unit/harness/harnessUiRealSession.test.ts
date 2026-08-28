@@ -1155,6 +1155,20 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
             expect(md).toContain('Nessun evento')
         })
 
+        it('⭐⭐⭐ EXPORT-MD-05: ApprovalRequested/ApprovalResolved (permesso "On request") sono eventi CONOSCIUTI nella trascrizione, con l\'azione vera', () => {
+            const md = runtime().costruisciTrascrizioneMarkdown({
+                sessionId: 'sess-md-approval', nome: null, modello: null, avviataAlle: '2026-08-28T10:00:00.000Z',
+                conclusa: true, forkDa: null,
+                eventi: [
+                    { type: 'ApprovalRequested', requestId: 'r1', azione: { tipo: 'shell', comando: 'npm install' } },
+                    { type: 'ApprovalResolved', requestId: 'r1', approvato: true },
+                ],
+            })
+            expect(md).not.toContain('non riconosciuto')
+            expect(md).toContain('npm install')
+            expect(md).toContain('CONCESSA')
+        })
+
         it('⭐⭐⭐ EXPORT-SHEET-01: con sessione reale, executeCommand(\'export\') apre il foglio di scelta formato — non un download istantaneo', async () => {
             mockFetch([
                 { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-export-sheet' } },
@@ -1387,6 +1401,208 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         await new Promise((r) => setTimeout(r, 0))
 
         expect(FakeEventSource.instances.at(-1)?.url).toBe('/api/v1/sessions/sess-libero/events')
+    })
+
+    /*
+     * ⭐⭐⭐ 28/8 — LA PILLOLA PERMESSI, owner: "read only/workspace write/
+     * on request/full access". Ricerca fatta prima di scrivere (REGOLA
+     * ZERO, e HERMES AGENT è il primo competitor — vedi memoria
+     * [[harness-da-battere-uno-a-uno]]: la sua stessa doc dichiara
+     * "there is no approval prompt and no way to override from the chat
+     * UI" — la card di approvazione sotto è il pareggio-e-supera diretto).
+     *
+     * La scelta del permesso passa dalla pillola VERA del composer
+     * (`[data-open-sheet="permissions"]` → foglio → click), non da uno
+     * stato interno forzato a mano: esercita lo stesso percorso che un
+     * owner vero userebbe.
+     */
+    function sceglierPermesso(nome: string): void {
+        const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
+        sheetDialog.showModal = vi.fn()
+        document.querySelector<HTMLButtonElement>('[data-open-sheet="permissions"]')!.click()
+        document.querySelector<HTMLButtonElement>(`[data-permission-choice="${nome}"]`)!.click()
+    }
+
+    it('⭐⭐⭐ PERMESSI-01: "Full access" scelto dalla pillola sostituisce il select cartella con un campo percorso libero', async () => {
+        sceglierPermesso('Full access')
+        const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
+        sheetDialog.showModal = vi.fn()
+        const fetchMock = mockFetch([]) // ⭐ nessuna GET /api/v1/projects: "Full access" non usa l'allowlist
+
+        await runtime().openRealTaskSheet()
+
+        expect(fetchMock).not.toHaveBeenCalled()
+        expect(document.querySelector('#customTaskCartella')).toBeNull()
+        const inputLibera = document.querySelector<HTMLInputElement>('#customTaskCartellaLibera')
+        expect(inputLibera).not.toBeNull()
+        expect(document.querySelector('.model-picker')).not.toBeNull() // il resto della modale resta identico
+    })
+
+    it('⭐⭐⭐ PERMESSI-02: sottomettere il percorso libero avvia startCustomSession con cartellaLibera+permessi nel corpo, MAI cartellaId', async () => {
+        sceglierPermesso('Full access')
+        const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
+        sheetDialog.showModal = vi.fn()
+        mockFetch([])
+        await runtime().openRealTaskSheet()
+
+        const input = document.querySelector<HTMLInputElement>('#customTaskCartellaLibera')!
+        input.value = 'C:/Users/prova/progetto-libero'
+        document.querySelector<HTMLFormElement>('#customTaskForm')!.requestSubmit()
+        await new Promise((r) => setTimeout(r, 0))
+
+        const fetchMock = mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions/custom', corpo: { sessionId: 'sess-full-access' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        const composerInput = document.querySelector<HTMLTextAreaElement>('#composerInput')!
+        composerInput.value = 'fai qualcosa'
+        document.querySelector<HTMLFormElement>('#composerForm')!.requestSubmit()
+        await new Promise((r) => setTimeout(r, 0))
+
+        const corpoInviato = JSON.parse((fetchMock.mock.calls.find(([url]) => url === '/api/v1/sessions/custom')![1] as RequestInit).body as string)
+        expect(corpoInviato.cartellaLibera).toBe('C:/Users/prova/progetto-libero')
+        expect(corpoInviato.cartellaId).toBeUndefined()
+        expect(corpoInviato.permessi).toBe('Full access')
+    })
+
+    it('⭐⭐ PERMESSI-03: senza scegliere "Full access", il corpo porta comunque permessi ("Workspace write", il default)', async () => {
+        mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } },
+        ])
+        const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
+        sheetDialog.showModal = vi.fn()
+        await runtime().openRealTaskSheet()
+        document.querySelector<HTMLFormElement>('#customTaskForm')!.requestSubmit()
+        await new Promise((r) => setTimeout(r, 0))
+
+        const fetchMock = mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions/custom', corpo: { sessionId: 'sess-default' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        const composerInput = document.querySelector<HTMLTextAreaElement>('#composerInput')!
+        composerInput.value = 'fai qualcosa'
+        document.querySelector<HTMLFormElement>('#composerForm')!.requestSubmit()
+        await new Promise((r) => setTimeout(r, 0))
+
+        const corpoInviato = JSON.parse((fetchMock.mock.calls.find(([url]) => url === '/api/v1/sessions/custom')![1] as RequestInit).body as string)
+        expect(corpoInviato.permessi).toBe('Workspace write')
+        expect(corpoInviato.cartellaId).toBe('proj-1')
+    })
+
+    /*
+     * ⭐⭐⭐ 28/8 — la card interattiva del permesso "On request":
+     * talosHarness.mjs è DAVVERO in pausa (session-registry.mjs tiene la
+     * Promise), l'evento ApprovalRequested lo rende visibile — verificato
+     * che il click POSTI per davvero, non solo che l'evento sia gestito.
+     */
+    /*
+     * ⛔⛔⛔ 28/8 — riscritte dopo un bug trovato DAL VIVO (screenshot
+     * ispezionato, non solo la corsa di uno script): "Approvato (da un
+     * altro client). — Approvato." Il testo raddoppiava perché il click
+     * locale scriveva il testo SUBITO dopo la POST, e l'evento SSE
+     * ApprovalResolved (che il server manda SEMPRE, anche per questa
+     * stessa risposta) lo riscriveva una seconda volta arrivando per un
+     * canale indipendente. Cura: il click DISABILITA SOLO i bottoni — il
+     * testo/la rimozione dei bottoni arrivano SOLO quando ApprovalResolved
+     * è dispatchato (qui, a mano, com'è la SSE reale). Due fasi, non una.
+     */
+    it('⭐⭐⭐ APPROVAL-01: "Approva" fa POST .../approve e disabilita i bottoni SUBITO — ma li toglie solo quando arriva ApprovalResolved (mai due volte)', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-approval' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-approval' })
+        const generation = runtime().realSessionState.generation
+
+        runtime().handleRealEvent({ type: 'ApprovalRequested', requestId: 'req-1', azione: { tipo: 'scrivi', percorso: 'nuovo.txt' } }, generation)
+
+        const card = document.querySelector('.real-approval-card')
+        expect(card).not.toBeNull()
+        expect(card!.textContent).toContain('nuovo.txt')
+        const approvaBtn = Array.from(card!.querySelectorAll('button')).find((b) => b.textContent === 'Approva')!
+        expect(approvaBtn).toBeDefined()
+
+        const fetchMock = mockFetch([{ metodo: 'POST', percorso: '/api/v1/sessions/sess-approval/approve', corpo: { ok: true } }])
+        approvaBtn.click()
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            '/api/v1/sessions/sess-approval/approve',
+            expect.objectContaining({ method: 'POST', body: JSON.stringify({ requestId: 'req-1', approvato: true }) }),
+        )
+        // ⭐ FASE 1: la POST è già tornata, ma i bottoni restano nel DOM — solo disabilitati, non ancora rimossi, e nessun testo aggiunto ancora.
+        expect(card!.querySelector('.sheet-actions')).not.toBeNull()
+        expect(approvaBtn.disabled).toBe(true)
+        expect(card!.textContent).not.toContain('Approvato')
+
+        // ⭐ FASE 2: l'evento SSE vero arriva (qui simulato, com'è ApprovalRequested sopra) — SOLO ora la card si finalizza, UNA volta sola.
+        runtime().handleRealEvent({ type: 'ApprovalResolved', requestId: 'req-1', approvato: true }, generation)
+
+        expect(card!.querySelector('.sheet-actions')).toBeNull()
+        const occorrenze = (card!.textContent!.match(/Approvato/g) || []).length
+        expect(occorrenze, 'mai due volte — il bug reale trovato dal vivo').toBe(1)
+        expect(card!.textContent).not.toContain('altro client') // la risposta È partita da questa stessa card
+    })
+
+    it('⛔ APPROVAL-02 AL CONTRARIO: "Nega" fa POST con approvato:false, mai true, e la finalizzazione dice "Negato" non "Approvato"', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-approval-2' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-approval-2' })
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ApprovalRequested', requestId: 'req-2', azione: { tipo: 'shell', comando: 'rm -rf /' } }, generation)
+
+        const card = document.querySelector('.real-approval-card')!
+        const negaBtn = Array.from(card.querySelectorAll('button')).find((b) => b.textContent === 'Nega')!
+        const fetchMock = mockFetch([{ metodo: 'POST', percorso: '/api/v1/sessions/sess-approval-2/approve', corpo: { ok: true } }])
+        negaBtn.click()
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            '/api/v1/sessions/sess-approval-2/approve',
+            expect.objectContaining({ body: JSON.stringify({ requestId: 'req-2', approvato: false }) }),
+        )
+
+        runtime().handleRealEvent({ type: 'ApprovalResolved', requestId: 'req-2', approvato: false }, generation)
+        expect(card.textContent).toContain('Negato')
+        expect(card.textContent).not.toContain('Approvato')
+    })
+
+    it('⛔⛔ APPROVAL-02-BIS AL CONTRARIO: un fallimento della POST riabilita i bottoni, mai una card bloccata per sempre', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-approval-fail' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-approval-fail' })
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ApprovalRequested', requestId: 'req-fail', azione: { tipo: 'scrivi', percorso: 'x.txt' } }, generation)
+        const card = document.querySelector('.real-approval-card')!
+        const approvaBtn = Array.from(card.querySelectorAll('button')).find((b) => b.textContent === 'Approva') as HTMLButtonElement
+
+        mockFetch([{ metodo: 'POST', percorso: '/api/v1/sessions/sess-approval-fail/approve', corpo: { code: 'QUERY_INVALID' }, ok: false, status: 400 }])
+        approvaBtn.click()
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(approvaBtn.disabled, 'un fallimento non deve lasciare la card bloccata su "in corso" per sempre').toBe(false)
+        expect(card.querySelector('.sheet-actions')).not.toBeNull()
+    })
+
+    it('⛔⛔ APPROVAL-03 AL CONTRARIO: ApprovalResolved arrivato da un ALTRO client toglie i bottoni senza un click locale', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-approval-3' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-approval-3' })
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ApprovalRequested', requestId: 'req-3', azione: { tipo: 'document_create', formato: 'pdf' } }, generation)
+        const card = document.querySelector('.real-approval-card')!
+        expect(card.querySelector('.sheet-actions')).not.toBeNull()
+
+        runtime().handleRealEvent({ type: 'ApprovalResolved', requestId: 'req-3', approvato: true }, generation)
+
+        expect(card.querySelector('.sheet-actions')).toBeNull()
+        expect(card.textContent).toContain('altro client')
     })
 
     /*

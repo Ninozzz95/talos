@@ -131,6 +131,36 @@ export function workspaceChanged({ percorsi }) {
 }
 
 /**
+ * ⭐⭐⭐ 28/8 — la pillola permessi, livello "On request": il kernel chiama
+ * `chiediApprovazioneFn(azione)` PRIMA di scrivi/shell/document_create
+ * (talosHarness.mjs, `verificaPermessoScrittura`) e resta in attesa —
+ * questo evento è come quell'attesa diventa visibile a chi guarda la
+ * sessione dal vivo. Fuori dallo schema pubblico AG-UI (stessa estensione
+ * già dichiarata per ArtifactCreated/WorkspaceChanged): non esiste un
+ * evento AG-UI per "il run è in pausa in attesa di un umano".
+ *
+ * `requestId` è come il frontend risponde (`POST .../approve`, vedi
+ * http-app.mjs) — necessario perché una risposta in ritardo/duplicata non
+ * deve mai risolvere la richiesta SUCCESSIVA per errore (session-registry.mjs
+ * verifica che l'id combaci prima di risolvere la Promise in attesa).
+ * `azione` è esattamente ciò che talosHarness.mjs passa al callback:
+ * `{tipo, percorso?, comando?, formato?}` — abbastanza per mostrare
+ * all'owner COSA sta per succedere prima che lui decida.
+ */
+export function approvalRequested({ requestId, azione }) {
+    return { type: 'ApprovalRequested', requestId, azione }
+}
+
+/**
+ * ⭐⭐⭐ 28/8 — chiude la richiesta sopra: emesso SUBITO dopo che l'owner ha
+ * risposto, così un secondo tab/client con la stessa sessione aperta
+ * smette di mostrare il prompt invece di restare bloccato per sempre.
+ */
+export function approvalResolved({ requestId, approvato }) {
+    return { type: 'ApprovalResolved', requestId, approvato }
+}
+
+/**
  * ⭐ Da una risposta grezza del modello (la stessa forma OpenAI che
  * talosLavora già costruisce — {role, content, tool_calls}, vedi
  * talosHarness.mjs riga ~761) all'elenco ORDINATO di eventi AG-UI per

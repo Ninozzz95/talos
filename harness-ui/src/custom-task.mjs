@@ -12,7 +12,28 @@
  * sulla cartella scelta. Il confine di sicurezza non è "una copia": è
  * l'allowlist stessa, verificata all'AVVIO del server (vedi config.mjs),
  * mai un percorso a piacere accettato a runtime.
+ *
+ * ⭐⭐⭐ 28/8 — ECCEZIONE dichiarata al paragrafo sopra: col permesso "Full
+ * access" (piano elegant-spinning-dongarra.md, owner) un percorso A
+ * PIACERE È ammesso — `cartellaLibera` sotto. Ricerca fatta prima di
+ * scrivere (REGOLA ZERO): la sicurezza degli harness di coding nel 2026
+ * dichiara le DENYLIST di percorsi sensibili (.ssh, credenziali,
+ * System32...) una strategia FALLITA — "sandbox escapes documentati
+ * proprio nella categoria denylist" (Docker/Developers Digest, agosto
+ * 2026) — quindi questo file non ne scrive una. La sicurezza vera sta
+ * altrove: (1) il permesso "Full access" è una SCELTA ESPLICITA
+ * dell'owner per QUELLA sessione, mai un default; (2) il percorso deve
+ * ESISTERE ed essere leggibile/scrivibile DAVVERO (stessa validazione
+ * già in uso per l'allowlist fissa, solo a runtime invece che all'avvio
+ * — l'owner sceglie un percorso che gestisce già col suo stesso OS); (3)
+ * da quel momento la cartella scelta diventa la RADICE della sessione
+ * esattamente come una voce dell'allowlist — lo stesso `isPathInside`
+ * la contiene, solo più in alto nell'albero. Non è "nessun confine": è
+ * "il confine è dove l'owner ha detto esplicitamente", il pattern che
+ * VS Code chiama Workspace Trust.
  */
+import { accessSync, constants, realpathSync, statSync } from 'node:fs';
+import { isAbsolute } from 'node:path';
 
 export class CustomTaskError extends Error {
   constructor(message, code = 'PROJECT_NOT_ALLOWED') {
@@ -31,16 +52,75 @@ export function elencaCartelleProgetto(cartelleProgetto) {
 }
 
 /**
+ * ⭐⭐⭐ 28/8 — la validazione di un percorso "Full access", a RUNTIME (non
+ * all'avvio: qui il percorso non è noto in anticipo). Stessa forma
+ * dell'errore già dichiarata sopra, stessi controlli di
+ * `config.mjs#parseCartelleProgetto` — deliberatamente duplicati invece
+ * di importati: quella funzione valida un ARRAY all'avvio e fallisce
+ * l'intero processo (`fail()`, mai recuperabile), questa valida UN
+ * percorso per richiesta e deve tornare un errore HTTP onesto, non far
+ * cadere il server.
+ */
+function validaCartellaLibera(percorsoInput, { realpathSyncFn = realpathSync, statSyncFn = statSync, accessSyncFn = accessSync } = {}) {
+  if (typeof percorsoInput !== 'string' || percorsoInput.trim().length === 0) {
+    throw new CustomTaskError('cartellaLibera mancante', 'QUERY_INVALID');
+  }
+  if (!isAbsolute(percorsoInput)) {
+    throw new CustomTaskError('cartellaLibera deve essere un percorso assoluto', 'QUERY_INVALID');
+  }
+  let reale;
+  try {
+    reale = realpathSyncFn(percorsoInput);
+  } catch {
+    throw new CustomTaskError(`Il percorso non esiste o non è raggiungibile: ${percorsoInput}`, 'PROJECT_NOT_ALLOWED');
+  }
+  let stat;
+  try {
+    stat = statSyncFn(reale);
+  } catch {
+    throw new CustomTaskError(`Il percorso non è leggibile: ${percorsoInput}`, 'PROJECT_NOT_ALLOWED');
+  }
+  if (!stat.isDirectory()) {
+    throw new CustomTaskError(`Il percorso non è una cartella: ${percorsoInput}`, 'PROJECT_NOT_ALLOWED');
+  }
+  try {
+    accessSyncFn(reale, constants.R_OK | constants.W_OK);
+  } catch {
+    throw new CustomTaskError(`La cartella non è leggibile/scrivibile: ${percorsoInput}`, 'PROJECT_NOT_ALLOWED');
+  }
+  return reale;
+}
+
+/**
  * @returns {{cartella:string, comandoProva:string, task:object}} — mai un
  * `pulisci()`: non c'è una copia usa-e-getta da buttare, la cartella È
  * il progetto vero.
+ *
+ * ⭐ `cartellaLibera` (assoluta, validata da `validaCartellaLibera`) e
+ * `cartellaId` (dall'allowlist) sono MUTUAMENTE ESCLUSIVI — chi chiama
+ * decide quale dei due passare in base al permesso della sessione (vedi
+ * session-registry.mjs), questa funzione si limita a rifiutare se
+ * arrivano ENTRAMBI o NESSUNO dei due, mai a scegliere lei stessa.
  */
-export function preparaEsecuzioneLibera(cartelleProgetto, { cartellaId, consegna, comandoProva }) {
-  if (typeof cartellaId !== 'string' || cartellaId.length === 0) {
-    throw new CustomTaskError('cartellaId mancante', 'QUERY_INVALID');
+export function preparaEsecuzioneLibera(cartelleProgetto, { cartellaId, cartellaLibera, consegna, comandoProva }, deps = {}) {
+  if ((cartellaId && cartellaLibera) || (!cartellaId && !cartellaLibera)) {
+    throw new CustomTaskError('serve ESATTAMENTE uno fra cartellaId e cartellaLibera', 'QUERY_INVALID');
   }
-  const voce = cartelleProgetto.find((candidata) => candidata.id === cartellaId);
-  if (!voce) throw new CustomTaskError(`Cartella non ammessa: ${cartellaId}`);
+
+  let cartella;
+  let nomeProgetto;
+  if (cartellaLibera) {
+    cartella = validaCartellaLibera(cartellaLibera, deps);
+    nomeProgetto = cartella.split(/[\\/]/).pop() || cartella;
+  } else {
+    if (typeof cartellaId !== 'string' || cartellaId.length === 0) {
+      throw new CustomTaskError('cartellaId mancante', 'QUERY_INVALID');
+    }
+    const voce = cartelleProgetto.find((candidata) => candidata.id === cartellaId);
+    if (!voce) throw new CustomTaskError(`Cartella non ammessa: ${cartellaId}`);
+    cartella = voce.percorso;
+    nomeProgetto = voce.nome;
+  }
 
   if (typeof consegna !== 'string' || consegna.trim().length === 0) {
     throw new CustomTaskError('consegna mancante', 'QUERY_INVALID');
@@ -58,8 +138,8 @@ export function preparaEsecuzioneLibera(cartelleProgetto, { cartellaId, consegna
   }
 
   return {
-    cartella: voce.percorso,
+    cartella,
     comandoProva: comando,
-    task: { consegna, consegnaCorta: consegna.length > 80 ? `${consegna.slice(0, 77)}...` : consegna, progetto: voce.nome },
+    task: { consegna, consegnaCorta: consegna.length > 80 ? `${consegna.slice(0, 77)}...` : consegna, progetto: nomeProgetto },
   };
 }

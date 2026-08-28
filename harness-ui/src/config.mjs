@@ -127,6 +127,23 @@ export function reasoningRichiestaValido(raw) {
   return true;
 }
 
+/*
+ * ⭐⭐⭐ 28/8 — LA PILLOLA PERMESSI, owner: "read only/workspace write/on
+ * request/full access". Le stesse quattro stringhe già usate dal foglio
+ * decorativo del frontend (`sheetTemplates.permissions`, app.js, scritto
+ * il 27/8) — una grammatica sola, non una seconda tradotta qui (stessa
+ * disciplina di `permissions-single-global-grammar.md` in memoria).
+ * `undefined`/assente è sempre valido: significa "Workspace write", il
+ * comportamento di sempre, mai un valore inventato quando il client non
+ * sceglie esplicitamente.
+ */
+const PERMESSI_AMMESSI = new Set(['Read only', 'Workspace write', 'On request', 'Full access']);
+
+/** Stesso principio di reasoningRichiestaValido: pura, nessun throw. */
+export function permessiRichiestaValido(raw) {
+  return raw === undefined || raw === null || (typeof raw === 'string' && PERMESSI_AMMESSI.has(raw));
+}
+
 /**
  * ⭐⭐⭐ 27/8 — owner: "per adesso un allowlist per testare, ma in futuro
  * esattamente come i competitor, accesso libero, con limiti estremi" — una

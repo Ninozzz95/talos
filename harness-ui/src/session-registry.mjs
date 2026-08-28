@@ -23,7 +23,7 @@ import {
   compattaSessione as compattaSessioneReale,
   eseguiComandoDiretto as eseguiComandoDirettoReale,
 } from './agent-service.mjs';
-import { workspaceChanged } from './agui-events.mjs';
+import { approvalRequested, approvalResolved, workspaceChanged } from './agui-events.mjs';
 import { CustomTaskError, preparaEsecuzioneLibera as preparaEsecuzioneLiberaReale } from './custom-task.mjs';
 import { TaskCatalogError, preparaEsecuzione as preparaEsecuzioneReale } from './task-catalog.mjs';
 import { leggiAlberoWorkspace as leggiAlberoWorkspaceReale, WorkspaceTreeError } from './workspace-tree.mjs';
@@ -95,6 +95,27 @@ export function createSessionRegistry({
   }
 
   /**
+   * ⭐⭐⭐ 28/8 — LA PILLOLA PERMESSI, livello "On request": il `chiediApprovazioneFn`
+   * che `talosHarness.mjs` chiama PRIMA di scrivi/shell/document_create.
+   * Un SOLO slot di approvazione per voce (`voce.approvazionePendente`) —
+   * `talosLavora` dispatcha le tool-call di un giro UNA alla volta, in un
+   * `for` sequenziale con `await`: non può mai esistere più di una
+   * richiesta in sospeso per la stessa sessione nello stesso istante.
+   *
+   * ⛔ Mai un timeout automatico: un rifiuto silenzioso dopo N secondi
+   * sarebbe un "nega" travestito da "l'owner ha deciso" — se l'owner non
+   * risponde, la sessione resta onestamente in pausa finché non lo fa (o
+   * finché non la ferma con `ferma()`, che chiude comunque il giro).
+   */
+  function richiediApprovazione(voce, azione) {
+    return new Promise((resolve) => {
+      const requestId = randomUUID();
+      voce.approvazionePendente = { requestId, resolve };
+      broadcast(voce, approvalRequested({ requestId, azione }));
+    });
+  }
+
+  /**
    * Il nucleo comune ad `avvia()`, `forka()` e `resume()`: chiama
    * avviaSessioneFn per un giro nuovo, cattura la conversazione finale per
    * un resume/fork FUTURO. Mai un throw — un errore di configurazione è una
@@ -109,6 +130,7 @@ export function createSessionRegistry({
   function avviaESegui({
     sessionId = randomUUID(), taskId, cartella, task, comandoProva, messaggiIniziali,
     forkDa = null, voceEsistente = null, modelloRichiesta = null, reasoningRichiesto = null, mobile = false,
+    permessiRichiesti = null,
   }) {
     if (typeof chiave !== 'string' || chiave.length === 0) {
       return { erroreAvvio: 'Chiave API non configurata sul server (OPENROUTER_API_KEY)', code: 'CONFIG_INVALID' };
@@ -133,6 +155,15 @@ export function createSessionRegistry({
      */
     const reasoningEffettivo = reasoningRichiesto ?? voceEsistente?.reasoning ?? null;
     /*
+     * ⭐⭐⭐ 28/8 — LA PILLOLA PERMESSI: stessa disciplina di
+     * `modelloEffettivo`/`reasoningEffettivo` sopra — un fork/resume
+     * eredita il permesso della voce originale (mai perso a metà
+     * conversazione, e mai un modo per "salire" di livello a metà
+     * sessione passando semplicemente da resume), un avvio nuovo usa
+     * quello richiesto o il default onesto di sempre.
+     */
+    const permessiEffettivi = permessiRichiesti ?? voceEsistente?.permessi ?? 'Workspace write';
+    /*
      * ⛔ `mobile` entra nella voce SOLO quando se ne crea una nuova — un
      * resume (`voceEsistente` presente) la riusa com'era, mai sovrascritta:
      * la "mobilità" di una sessione si decide una volta sola, all'avvio
@@ -142,7 +173,7 @@ export function createSessionRegistry({
     const voce = voceEsistente ?? {
       eventi: [], ascoltatori: new Set(), taskId, cartella, task, comandoProva, forkDa,
       avviataAlle: clock().toISOString(), messaggiFinali: null, modello: modelloEffettivo,
-      reasoning: reasoningEffettivo, mobile,
+      reasoning: reasoningEffettivo, mobile, permessi: permessiEffettivi, approvazionePendente: null,
     };
     voce.controller = controller;
     voce.conclusa = false;
@@ -164,12 +195,28 @@ export function createSessionRegistry({
      * prima di qualunque await — quindi al ritorno di QUESTA funzione
      * RunStarted è già nel buffer (run-to-first-await di JS, non una gara).
      */
+    /*
+     * ⭐⭐⭐ 28/8 — LA PILLOLA PERMESSI, tradotta dalle QUATTRO stringhe
+     * verso i DUE parametri che il kernel capisce (talosHarness.mjs,
+     * verificaPermessoScrittura): "Read only" → livelloAccesso:'lettura';
+     * "On request" → chiediApprovazioneFn vero; "Workspace write"/"Full
+     * access" → nessuno dei due (il kernel non sa e non deve sapere QUALE
+     * cartella sta scrivendo, solo se può farlo — "Full access" cambia
+     * QUALE cartella diventa `cartella` più in alto, in avviaLibero,
+     * mai qui).
+     */
+    const livelloAccesso = voce.permessi === 'Read only' ? 'lettura' : undefined;
+    const chiediApprovazioneFn = voce.permessi === 'On request'
+      ? (azione) => richiediApprovazione(voce, azione)
+      : undefined;
+
     avviaSessioneFn({
       cartella, task, modello: modelloEffettivo, chiave, comandoProva, messaggiIniziali,
       reasoning: reasoningEffettivo ?? undefined,
       segnaleStop: controller.signal,
       mobile: voce.mobile,
       strumentiEstesi, ricercaWeb,
+      livelloAccesso, chiediApprovazioneFn,
       onEvento: (evento) => broadcast(voce, evento),
     }).then((risultato) => {
       /*
@@ -203,8 +250,14 @@ export function createSessionRegistry({
      * @returns {{sessionId:string}|{erroreAvvio:string, code:string}} — mai
      * un throw: un id fuori allowlist o una chiave assente sono risposte
      * attese di un endpoint HTTP, non un guasto del registro.
+     *
+     * ⛔ `permessiScelto:'Full access'` qui è accettato ma INERTE: la
+     * cartella di un task del corpus è SEMPRE la copia usa-e-getta di
+     * `task-catalog.mjs`, mai scelta dall'owner — "Full access" ha senso
+     * solo dove esiste un percorso a piacere da scegliere (`avviaLibero`,
+     * sotto). Nessun errore: solo si comporta come "Workspace write".
      */
-    avvia(taskId, { modelloScelto = null, reasoningScelto = null, mobile = false } = {}) {
+    avvia(taskId, { modelloScelto = null, reasoningScelto = null, mobile = false, permessiScelto = null } = {}) {
       let preparato;
       try {
         preparato = preparaEsecuzioneFn(taskId);
@@ -215,6 +268,7 @@ export function createSessionRegistry({
       return avviaESegui({
         taskId, cartella: preparato.cartella, task: preparato.task, comandoProva: preparato.comandoProva,
         modelloRichiesta: modelloScelto, reasoningRichiesto: reasoningScelto, mobile,
+        permessiRichiesti: permessiScelto,
       });
     },
 
@@ -224,18 +278,35 @@ export function createSessionRegistry({
      * dell'allowlist (`config.cartelleProgetto`) invece di un id del
      * corpus benchmark — scrive DIRETTAMENTE sul progetto vero, nessuna
      * copia usa-e-getta (vedi la doc di `custom-task.mjs` sul perché).
+     *
+     * ⭐⭐⭐ 28/8 — `cartellaLibera` (piano elegant-spinning-dongarra.md,
+     * permesso "Full access") sostituisce `cartellaId` — MUTUAMENTE
+     * ESCLUSIVI, verificato QUI, non solo in `custom-task.mjs`, perché il
+     * confine che conta è "questa richiesta HTTP ha dichiarato Full
+     * access?", non "il percorso è valido?" (quello è già garantito da
+     * `custom-task.mjs`, questo è un secondo cancello: mai un percorso
+     * a piacere accettato con un permesso diverso da Full access, ANCHE
+     * SE il frontend non dovesse mai offrire quella combinazione — un
+     * client HTTP diretto non passa dal frontend).
      */
-    avviaLibero({ cartellaId, consegna, comandoProva, modello: modelloScelto = null, reasoning: reasoningScelto = null, mobile = false }) {
+    avviaLibero({
+      cartellaId, cartellaLibera, consegna, comandoProva,
+      modello: modelloScelto = null, reasoning: reasoningScelto = null, mobile = false, permessi: permessiScelto = null,
+    }) {
+      if (cartellaLibera && permessiScelto !== 'Full access') {
+        return { erroreAvvio: 'cartellaLibera richiede il permesso "Full access" per questa sessione', code: 'QUERY_INVALID' };
+      }
       let preparato;
       try {
-        preparato = preparaEsecuzioneLiberaFn(cartelleProgetto, { cartellaId, consegna, comandoProva });
+        preparato = preparaEsecuzioneLiberaFn(cartelleProgetto, { cartellaId, cartellaLibera, consegna, comandoProva });
       } catch (errore) {
         if (errore instanceof CustomTaskError) return { erroreAvvio: errore.message, code: errore.code };
         throw errore;
       }
       return avviaESegui({
-        taskId: `libero:${cartellaId}`, cartella: preparato.cartella, task: preparato.task,
+        taskId: cartellaLibera ? 'libero:full-access' : `libero:${cartellaId}`, cartella: preparato.cartella, task: preparato.task,
         comandoProva: preparato.comandoProva, modelloRichiesta: modelloScelto, reasoningRichiesto: reasoningScelto, mobile,
+        permessiRichiesti: permessiScelto,
       });
     },
 
@@ -271,6 +342,16 @@ export function createSessionRegistry({
         taskId: originale.taskId, cartella: originale.cartella, task: originale.task,
         comandoProva: originale.comandoProva, messaggiIniziali: originale.messaggiFinali,
         forkDa: sessionIdOrigine, mobile: originale.mobile,
+        /*
+         * ⛔⛔⛔ 28/8 — trovato da un test, non da lettura: un fork crea
+         * una VOCE NUOVA (mai `voceEsistente`, a differenza di resume),
+         * quindi senza questa riga `permessiEffettivi` in `avviaESegui`
+         * ricadeva sul default "Workspace write" — un fork di una
+         * sessione "Read only" avrebbe silenziosamente riacquistato la
+         * scrittura. Stesso principio già in uso per `mobile` sulla riga
+         * sopra, solo dimenticato qui la prima volta.
+         */
+        permessiRichiesti: originale.permessi,
       });
     },
 
@@ -412,6 +493,33 @@ export function createSessionRegistry({
           broadcast(voce, { type: 'RunError', message: errore instanceof Error ? errore.message : String(errore), code: 'internal-error' });
         }
       });
+      return { ok: true };
+    },
+
+    /**
+     * ⭐⭐⭐ 28/8 — LA PILLOLA PERMESSI, livello "On request": risolve la
+     * Promise che `richiediApprovazione` sopra ha appeso, sbloccando il
+     * kernel che sta aspettando dentro `verificaPermessoScrittura`.
+     *
+     * ⛔ `requestId` deve combaciare — mai risolvere alla cieca l'ULTIMA
+     * richiesta pendente: un client con un `requestId` vecchio/duplicato
+     * (un doppio click, una risposta arrivata in ritardo dopo che il
+     * giro è già avanzato a una richiesta successiva) non deve MAI
+     * risolvere quella nuova al posto suo — sarebbe un consenso dato
+     * alla domanda sbagliata.
+     *
+     * @returns {{ok:true}|{erroreAvvio:string, code:string}}
+     */
+    rispondiApprovazione(sessionId, requestId, approvato) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      const pendente = voce.approvazionePendente;
+      if (!pendente || pendente.requestId !== requestId) {
+        return { erroreAvvio: 'Nessuna approvazione in attesa con questo id', code: 'QUERY_INVALID' };
+      }
+      voce.approvazionePendente = null;
+      pendente.resolve(Boolean(approvato));
+      broadcast(voce, approvalResolved({ requestId, approvato: Boolean(approvato) }));
       return { ok: true };
     },
 

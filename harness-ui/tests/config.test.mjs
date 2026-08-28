@@ -11,6 +11,7 @@ import {
   INITIAL_CAMPAIGNS,
   loadConfig,
   modelloRichiestaValido,
+  permessiRichiestaValido,
 } from '../src/config.mjs';
 
 function makeBanco(t) {
@@ -156,6 +157,27 @@ test('modelloRichiestaValido accetta i 12 alias reali "-latest" di OpenRouter (p
   assert.equal(modelloRichiestaValido('~~doppia/tilde'), false);
   assert.equal(modelloRichiestaValido('vendor/~nel-mezzo'), false);
   assert.equal(modelloRichiestaValido('~vendor/'), false);
+});
+
+/*
+ * ⭐⭐⭐ 28/8 — LA PILLOLA PERMESSI, owner: "read only/workspace write/on
+ * request/full access" — le stesse quattro stringhe del foglio
+ * decorativo esistente in app.js (sheetTemplates.permissions), una
+ * grammatica sola.
+ */
+test('permessiRichiestaValido accetta le QUATTRO stringhe esatte e assente/null, e AL CONTRARIO rifiuta qualunque altro valore', () => {
+  assert.equal(permessiRichiestaValido('Read only'), true);
+  assert.equal(permessiRichiestaValido('Workspace write'), true);
+  assert.equal(permessiRichiestaValido('On request'), true);
+  assert.equal(permessiRichiestaValido('Full access'), true);
+  assert.equal(permessiRichiestaValido(undefined), true, 'assente è sempre valido: significa Workspace write');
+  assert.equal(permessiRichiestaValido(null), true);
+  assert.equal(permessiRichiestaValido('read only'), false, 'case-sensitive: non una normalizzazione silenziosa');
+  assert.equal(permessiRichiestaValido('Full Access'), false);
+  assert.equal(permessiRichiestaValido('admin'), false);
+  assert.equal(permessiRichiestaValido(''), false);
+  assert.equal(permessiRichiestaValido(42), false);
+  assert.equal(permessiRichiestaValido(['Full access']), false);
 });
 
 /*

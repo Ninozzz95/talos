@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -78,5 +78,55 @@ test('⛔⛔⛔ una consegna oltre il tetto di byte è rifiutata — non un prom
   assert.throws(
     () => preparaEsecuzioneLibera(cartelle, { cartellaId: '0', consegna: 'x'.repeat(9000) }),
     (errore) => errore instanceof CustomTaskError && errore.code === 'QUERY_INVALID',
+  );
+});
+
+/*
+ * ⭐⭐⭐ 28/8 — LA PILLOLA PERMESSI, permesso "Full access":
+ * `cartellaLibera` è un percorso a PIACERE (validato a runtime, mai
+ * un'allowlist), owner: "read only/workspace write/on request/full
+ * access". Vedi la doc in testa al file sul perché niente denylist —
+ * ricerca fatta prima di scrivere (REGOLA ZERO).
+ */
+test('⭐⭐⭐ cartellaLibera VERA (esiste, è una cartella, leggibile/scrivibile) è accettata: nessuna allowlist coinvolta', (t) => {
+  const percorso = mkdtempSync(join(tmpdir(), 'talos-full-access-'));
+  t.after(() => rmSync(percorso, { recursive: true, force: true }));
+  const { cartella, task } = preparaEsecuzioneLibera([], { cartellaLibera: percorso, consegna: 'fai qualcosa' });
+  assert.equal(cartella, percorso);
+  assert.equal(task.progetto, percorso.split(/[\\/]/).pop());
+});
+
+test('⛔⛔⛔ AL CONTRARIO — cartellaId E cartellaLibera insieme sono rifiutati: mai un percorso scelto a caso fra i due', (t) => {
+  const cartelle = [cartellaProgettoFinta(t)];
+  const percorso = mkdtempSync(join(tmpdir(), 'talos-full-access-'));
+  t.after(() => rmSync(percorso, { recursive: true, force: true }));
+  assert.throws(
+    () => preparaEsecuzioneLibera(cartelle, { cartellaId: '0', cartellaLibera: percorso, consegna: 'fai qualcosa' }),
+    (errore) => errore instanceof CustomTaskError && errore.code === 'QUERY_INVALID',
+  );
+});
+
+test('⛔⛔ AL CONTRARIO — cartellaLibera che NON esiste è PROJECT_NOT_ALLOWED, mai una cartella creata al volo', () => {
+  assert.throws(
+    () => preparaEsecuzioneLibera([], { cartellaLibera: 'C:/questo/percorso/non/esiste/mai-8271', consegna: 'fai qualcosa' }),
+    (errore) => errore instanceof CustomTaskError && errore.code === 'PROJECT_NOT_ALLOWED',
+  );
+});
+
+test('⛔ AL CONTRARIO — cartellaLibera relativa è rifiutata, mai risolta contro un cwd a sorpresa', () => {
+  assert.throws(
+    () => preparaEsecuzioneLibera([], { cartellaLibera: 'una/cartella/relativa', consegna: 'fai qualcosa' }),
+    (errore) => errore instanceof CustomTaskError && errore.code === 'QUERY_INVALID',
+  );
+});
+
+test('⛔⛔ AL CONTRARIO — cartellaLibera che punta a un FILE, non una cartella, è rifiutata', (t) => {
+  const cartella = mkdtempSync(join(tmpdir(), 'talos-full-access-file-'));
+  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  const file = join(cartella, 'non-una-cartella.txt');
+  writeFileSync(file, 'x');
+  assert.throws(
+    () => preparaEsecuzioneLibera([], { cartellaLibera: file, consegna: 'fai qualcosa' }),
+    (errore) => errore instanceof CustomTaskError && errore.code === 'PROJECT_NOT_ALLOWED',
   );
 });

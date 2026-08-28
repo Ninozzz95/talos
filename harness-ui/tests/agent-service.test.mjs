@@ -772,3 +772,39 @@ test('⛔ document_create: un salvataggio fallito (es. nome già esistente) è o
 
   assert.equal(eventi.find((e) => e.type === 'StateDelta'), undefined, 'nessun evento su un salvataggio fallito');
 });
+
+/*
+ * ⭐⭐⭐ 28/8 — LA PILLOLA PERMESSI: questo file resta un adattatore puro,
+ * `livelloAccesso`/`chiediApprovazioneFn` viaggiano SENZA logica propria
+ * fino a talosLavoraFn — la decisione COSA rifiutare vive tutta nel
+ * kernel (talosHarness.mjs, verificaPermessoScrittura).
+ */
+test('⭐⭐⭐ PARITÀ — livelloAccesso/chiediApprovazioneFn arrivano a talosLavoraFn ESATTAMENTE come passati, senza trasformazione', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+  const chiediApprovazioneFn = async () => true;
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    livelloAccesso: 'lettura', chiediApprovazioneFn,
+  });
+
+  assert.equal(catturato.livelloAccesso, 'lettura');
+  assert.equal(catturato.chiediApprovazioneFn, chiediApprovazioneFn, 'STESSA funzione, non una copia/wrapper');
+});
+
+test('⛔ AL CONTRARIO — livelloAccesso/chiediApprovazioneFn assenti arrivano undefined a talosLavoraFn, mai un valore inventato', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn });
+
+  assert.equal(catturato.livelloAccesso, undefined);
+  assert.equal(catturato.chiediApprovazioneFn, undefined);
+});
