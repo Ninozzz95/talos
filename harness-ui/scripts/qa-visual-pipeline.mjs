@@ -37,7 +37,7 @@
  * prova che l'owner ha chiesto di fare "come farebbe un umano".
  */
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -879,6 +879,94 @@ const SCENARI = {
     } else {
       p.difetto(`la chat non menziona ${nomeFile} da nessuna parte — il modello potrebbe non aver chiamato scrivi (variabilità del modello)`, { severita: 'nota' });
     }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /*
+   * ⭐⭐⭐ 28/8 — FASE C (sub-agenti, LEDGER-FASE-C-SUBAGENTI.md).
+   * Criterio di completamento del ledger: una sessione padre delega
+   * DAVVERO a una figlia isolata, la figlia scrive un file per davvero
+   * nella SUA cartella (mai in quella del padre), il padre riceve il
+   * riassunto, il foglio "Albero sessione" mostra la figlia vera.
+   * ⛔ Richiede una SECONDA cartella isolata, già creata sul disco
+   * PRIMA di questa corsa (la delega non crea cartelle da sola — vedi
+   * il ledger, Rischi): `talos-prova-harness-figlio`, sorella di
+   * `talos-prova-harness`.
+   */
+  async 'fase-c-subagenti'(p) {
+    await p.attendi(1200);
+    await p.screenshot('stato-iniziale', { nota: 'app appena caricata, nessuna sessione' });
+
+    const cartellaFiglio = 'C:/Users/Antonino/Desktop/projects/talos-prova-harness-figlio';
+    const nomeFile = `fase-c-figlio-${Date.now()}.txt`;
+    const testoFile = 'delegato con successo';
+    await p.digita(
+      '#composerInput',
+      `Usa l'attrezzo delega_sottotask per delegare a un sotto-agente questo compito, nella cartella isolata `
+      + `\`${cartellaFiglio}\`: crea un file chiamato ${nomeFile} con dentro il testo esatto "${testoFile}". `
+      + `Aspetta il riassunto del sotto-agente e riportamelo per intero. Nient'altro: non scrivere tu stesso alcun file.`,
+    );
+    await p.submit('#composerForm');
+    p.nota('delega inviata — il padre aspetta un ciclo agentico INTERO della figlia (elenca/scrivi/prova suoi), non solo una risposta: soglia di stabilità generosa');
+    // ⛔ una delega annida un secondo ciclo agentico completo dentro il primo — più lento di un turno singolo, la soglia di stabilità riflette questo (non un numero a caso, vedi la caccia al falso-positivo di FASE B più sopra in questo stesso file).
+    await p.attendiTestoStabile('.conversation', { giriStabili: 6, intervalMs: 2000, timeoutMs: 150000 });
+    await p.screenshot('delega-conclusa', { nota: 'il padre ha ricevuto il riassunto della figlia' });
+
+    const testoChat = await p.cdp.evaluate("document.querySelector('.conversation')?.textContent ?? ''");
+    if (/^REFUSED/.test(testoChat) || /Delega rifiutata/.test(testoChat)) {
+      p.difetto(`la delega è stata rifiutata — atteso un successo su una cartella isolata valida: ${JSON.stringify(testoChat.slice(-500))}`, { severita: 'blocco' });
+    } else if (/Sotto-agente:/.test(testoChat)) {
+      p.nota('CONFERMATO: la chat del padre mostra il riassunto del sotto-agente (via il ToolCallResult standard, nessun evento nuovo — la semplificazione decisa nel ledger).');
+    } else {
+      p.difetto(`nessun segnale di delega riuscita né di rifiuto nella chat — il modello potrebbe non aver chiamato delega_sottotask (variabilità del modello): ${JSON.stringify(testoChat.slice(-500))}`, { severita: 'nota' });
+    }
+
+    /*
+     * --- La prova che conta di più: il file esiste per DAVVERO, nella
+     * cartella GIUSTA, mai in quella del padre. Questa funzione gira
+     * in Node (non nel browser): existsSync/readFileSync diretti,
+     * nessun giro per `p.cdp.evaluate` — quello serve solo per codice
+     * che deve girare DENTRO la pagina.
+     */
+    const percorsoFiglio = `${cartellaFiglio}/${nomeFile}`;
+    const percorsoNelPadre = `C:/Users/Antonino/Desktop/projects/talos-prova-harness/${nomeFile}`;
+    if (!existsSync(percorsoFiglio)) {
+      p.difetto(`il file NON esiste nella cartella della figlia: ${percorsoFiglio} — la delega non ha scritto per davvero, o ha scritto altrove`, { severita: 'blocco' });
+    } else {
+      const contenutoVero = readFileSync(percorsoFiglio, 'utf8');
+      if (!contenutoVero.includes(testoFile)) {
+        p.difetto(`il file della figlia esiste ma il contenuto non è quello atteso — letto: ${JSON.stringify(contenutoVero.slice(0, 200))}`, { severita: 'blocco' });
+      } else {
+        p.nota(`CONFERMATO: il file esiste per davvero in ${percorsoFiglio}, contenuto verificato sul disco.`);
+      }
+    }
+    if (existsSync(percorsoNelPadre)) {
+      p.difetto(`ISOLAMENTO ROTTO: il file è finito ANCHE nella cartella del padre (${percorsoNelPadre}) — la figlia non stava lavorando isolata`, { severita: 'blocco' });
+    } else {
+      p.nota('CONFERMATO: nessun file con questo nome nella cartella del padre — isolamento vero, non solo dichiarato.');
+    }
+
+    // --- Il foglio "Albero sessione" mostra la figlia VERA, non le due righe finte di prima ---
+    await p.click('#sessionTitleButton');
+    await p.attendiCondizione(
+      "!document.querySelector('#subagentTreeMount')?.textContent?.includes('Carico')",
+      { descrizione: 'il pannello deleghe ha finito di caricare' },
+    );
+    await p.screenshot('albero-sessione-con-figlia', { nota: 'deve mostrare la delega vera, non "Responsive audit"/"A11y review" (righe finte rimosse in questa fase)' });
+    const testoAlbero = await p.testo('#subagentTreeMount');
+    if (/Responsive audit|A11y review/.test(testoAlbero ?? '')) {
+      p.difetto('il foglio Albero sessione mostra ANCORA le righe finte — non sostituite per davvero', { severita: 'blocco' });
+    } else if (/Nessuna delega ancora/.test(testoAlbero ?? '')) {
+      p.difetto(`il foglio dice "nessuna delega" ma la chat mostrava un riassunto — GET .../children non vede la figlia: ${JSON.stringify(testoAlbero)}`, { severita: 'blocco' });
+    } else {
+      p.nota(`CONFERMATO: Albero sessione mostra la delega vera: ${JSON.stringify(testoAlbero)}`);
+    }
+    await p.click('#closeSheet');
 
     for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
     for (const r of p.cdp.richiesteFallite) {

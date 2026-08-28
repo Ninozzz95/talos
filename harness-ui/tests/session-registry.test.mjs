@@ -1591,3 +1591,78 @@ test('⛔ AL CONTRARIO — un resume sulla STESSA sessione non chiama guardaWork
   registro.resume(sessionId, 'un altro messaggio');
   assert.equal(chiamate, 1, 'il resume riusa la STESSA voce — nessun secondo watcher sulla stessa cartella');
 });
+
+/*
+ * ⭐⭐⭐ FASE C (28/8) — sub-agenti, piano elegant-spinning-dongarra.md.
+ * Verifica il FILO INTERO (session-registry → subagent-orchestrator →
+ * avviaESegui una SECONDA volta per il figlio → onConclusioneFn
+ * sblocca la delega) — la logica pura del solo orchestratore è già
+ * provata isolata in subagent-orchestrator.test.mjs; qui si prova che
+ * session-registry.mjs lo colleghi per davvero, non che lo dimentichi
+ * come successe a `hookFn` prima di FASE A.
+ */
+test('⭐⭐⭐ onDelega è SEMPRE costruito su avvia() — una funzione vera, anche per una sessione che non delega mai nulla', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  registro.avvia('task-vero');
+  assert.equal(typeof finta.ultimoInput.onDelega, 'function');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⭐⭐⭐⭐ delega FILO INTERO: onDelega del padre avvia DAVVERO una seconda sessione isolata, e la Promise si sblocca quando la figlia conclude', async () => {
+  const finta = sessioneControllabile(); // STESSO fake per padre e figlio: avviaSessioneFn è iniettato una volta sola sul registro, la seconda avviaESegui() (per la delega) lo richiama identico
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId: padreId } = registro.avvia('task-vero');
+  const onDelegaDelPadre = finta.ultimoInput.onDelega;
+
+  const promessaDelega = onDelegaDelPadre('scrivi un modulo di test', '/tmp/figlio-isolato');
+  // ⛔ dopo questa chiamata, finta.ultimoInput punta al FIGLIO (la seconda chiamata ad avviaSessioneFn) — è la prova che avviaESegui è stato richiamato per davvero, non solo che l'orchestratore ha fatto finta.
+  assert.equal(finta.chiamate, 2, 'la delega deve aver richiamato avviaSessioneFn una SECONDA volta, per il figlio');
+  assert.equal(finta.ultimoInput.cartella, '/tmp/figlio-isolato', 'la figlia lavora nella SUA cartella, mai in quella del padre');
+  assert.notEqual(finta.ultimoInput.cartella, '/tmp/x', 'per chiarezza: /tmp/x è la cartella del padre in questo test');
+
+  finta.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { detto: 'Modulo scritto e testato.', comeFinita: 'concluso', messaggiFinali: [] } });
+  const esitoDelega = await promessaDelega;
+  assert.deepEqual(esitoDelega, { riassunto: 'Modulo scritto e testato.', esito: 'concluso' });
+
+  const figliDelPadre = registro.elencaFigli(padreId);
+  assert.equal(figliDelPadre.figli.length, 1, 'il registro riconosce la figlia come figlia DI QUESTO padre, non una sessione slegata');
+});
+
+test('⛔⛔⛔ AL CONTRARIO — la cartella della delega deve essere DIVERSA da quella del padre, verificato con la cartella VERA della sessione padre', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  registro.avvia('task-vero'); // preparaEsecuzioneFinta: cartella '/tmp/x'
+  const onDelegaDelPadre = finta.ultimoInput.onDelega;
+
+  const chiamatePrimaDellaDelega = finta.chiamate;
+  const esito = await onDelegaDelPadre('fai qualcosa', '/tmp/x'); // STESSA cartella del padre
+  assert.equal(esito.esito, 'rifiutato');
+  assert.match(esito.motivo, /diversa da quella del padre/);
+  assert.equal(finta.chiamate, chiamatePrimaDellaDelega, 'nessuna seconda sessione avviata per una delega rifiutata');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⭐⭐⭐ elencaFigli(): NOT_FOUND su una sessione inesistente, zero figli per una sessione senza deleghe, i figli VERI dopo una delega conclusa', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+
+  assert.deepEqual(registro.elencaFigli('fantasma'), { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+
+  const { sessionId: padreId } = registro.avvia('task-vero');
+  assert.deepEqual(registro.elencaFigli(padreId), { ok: true, figli: [] }, 'nessuna delega ancora avvenuta: elenco vero, vuoto — non un errore');
+
+  const onDelegaDelPadre = finta.ultimoInput.onDelega;
+  const promessaDelega = onDelegaDelPadre('fai qualcosa di isolato', '/tmp/figlio-isolato');
+  const figlioId = [...registro.elenca()].map((s) => s.sessionId).find((id) => id !== padreId);
+  finta.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { detto: 'fatto', comeFinita: 'concluso', messaggiFinali: [] } });
+  await promessaDelega;
+
+  const conFigli = registro.elencaFigli(padreId);
+  assert.equal(conFigli.ok, true);
+  assert.equal(conFigli.figli.length, 1);
+  assert.equal(conFigli.figli[0].sessionId, figlioId);
+  assert.equal(conFigli.figli[0].task, 'fai qualcosa di isolato');
+  assert.equal(conFigli.figli[0].conclusa, true);
+  assert.equal(conFigli.figli[0].esitoDelega, 'concluso');
+});

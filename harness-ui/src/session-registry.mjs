@@ -39,6 +39,7 @@ import {
   WorkspaceFileError,
 } from './workspace-files.mjs';
 import { guardaWorkspace as guardaWorkspaceReale } from './workspace-watcher.mjs';
+import { creaSubagentOrchestrator } from './subagent-orchestrator.mjs';
 import {
   caricaHooks as caricaHooksReale,
   eseguiHook as eseguiHookReale,
@@ -91,10 +92,13 @@ export function createSessionRegistry({
    * onestamente "not configured", mai un tentativo senza credenziali).
    */
   // ⭐ 28/8 — quarto, stesso principio: document_create è ATTREZZI_ESTESI[2] nel kernel (time_now è il terzo), offerto sempre come gli altri.
-  strumentiEstesi = ['web_search', 'artifact_create', 'document_create', 'time_now'],
+  // ⭐ FASE C (28/8) — quinto: delega_sottotask è ATTREZZI_ESTESI[4] nel kernel, stesso principio.
+  strumentiEstesi = ['web_search', 'artifact_create', 'document_create', 'time_now', 'delega_sottotask'],
   ricercaWeb,
 } = {}) {
   const sessioni = new Map();
+  // ⭐⭐⭐ FASE C (28/8) — istanziato qui: `avviaESegui` è una function declaration (issata), riferibile prima della sua definizione testuale più sotto.
+  const subagentOrchestrator = creaSubagentOrchestrator({ sessioni, avviaESeguiFn: avviaESegui });
 
   /*
    * ⛔⛔⛔ 27/8, owner: "ricevo risposte duplicate" — riprodotto e trovato.
@@ -206,6 +210,16 @@ export function createSessionRegistry({
     sessionId = randomUUID(), taskId, cartella, task, comandoProva, messaggiIniziali,
     forkDa = null, voceEsistente = null, modelloRichiesta = null, reasoningRichiesto = null, mobile = false,
     permessiRichiesti = null, permessiPerAttrezzoRichiesti = null,
+    /*
+     * ⭐⭐⭐ FASE C (28/8) — sub-agenti. `padreId`/`profonditaDelega`
+     * identificano una sessione FIGLIA creata da `subagentOrchestrator`
+     * (mai da un umano) — assenti/`0` per ogni sessione normale,
+     * invariato. `onConclusioneFn`, se presente, è chiamato dentro lo
+     * STESSO `.then()`/`.catch()` che già aggiorna `voce.messaggiFinali`
+     * — è così che `subagent-orchestrator.delegaSottoTask` sa quando la
+     * figlia ha finito, senza un secondo meccanismo di attesa.
+     */
+    padreId = null, profonditaDelega = 0, onConclusioneFn,
   }) {
     if (typeof chiave !== 'string' || chiave.length === 0) {
       return { erroreAvvio: 'Chiave API non configurata sul server (OPENROUTER_API_KEY)', code: 'CONFIG_INVALID' };
@@ -257,6 +271,8 @@ export function createSessionRegistry({
       avviataAlle: clock().toISOString(), messaggiFinali: null, modello: modelloEffettivo,
       reasoning: reasoningEffettivo, mobile, permessi: permessiEffettivi,
       permessiPerAttrezzo: permessiPerAttrezzoEffettivi, approvazionePendente: null,
+      // ⭐⭐⭐ FASE C (28/8) — sub-agenti: null/0 per ogni sessione avviata da un umano, valorizzati SOLO da subagentOrchestrator.delegaSottoTask. `esitoDelega` (per il foglio "Albero sessione") si popola quando la sessione conclude, vedi sotto.
+      padreId, profonditaDelega, esitoDelega: null,
     };
     voce.controller = controller;
     voce.conclusa = false;
@@ -339,6 +355,8 @@ export function createSessionRegistry({
       strumentiEstesi, ricercaWeb,
       livelloAccesso, chiediApprovazioneFn, hookFn,
       permessiPerAttrezzo: voce.permessiPerAttrezzo,
+      // ⭐⭐⭐ FASE C (28/8) — sub-agenti: sempre costruito (stesso principio di hookFn), il vero lavoro (limiti, isolamento) vive tutto dentro subagentOrchestrator.delegaSottoTask.
+      onDelega: (taskFiglio, cartellaFiglio) => subagentOrchestrator.delegaSottoTask({ sessionPadreId: sessionId, task: taskFiglio, cartella: cartellaFiglio }),
       onEvento: (evento) => broadcast(voce, evento),
     }).then((risultato) => {
       /*
@@ -348,6 +366,10 @@ export function createSessionRegistry({
        * onestamente che non c'è niente da ereditare, invece di lanciare.
        */
       voce.messaggiFinali = risultato?.esito?.messaggiFinali ?? null;
+      // ⭐⭐⭐ FASE C (28/8) — per il foglio "Albero sessione": lo stato reale di OGNI sessione che conclude, non solo delle figlie (inerte/ignorato per una sessione senza padre).
+      voce.esitoDelega = risultato?.esito?.comeFinita ?? (risultato?.ok === false ? 'fallito' : null);
+      // ⭐⭐⭐ FASE C (28/8) — se questa sessione è una figlia in delega, sblocca la Promise che il dispatcher del kernel del PADRE sta aspettando. Va DOPO gli aggiornamenti sopra: onConclusioneFn potrebbe (in una fase futura) leggere voce.esitoDelega.
+      onConclusioneFn?.(risultato);
     }).catch((errore) => {
       /*
        * ⛔ Ripiego, non il percorso atteso: avviaSessione dichiara (e il suo
@@ -355,6 +377,8 @@ export function createSessionRegistry({
        * un bug futuro, una promise rifiutata prima del suo try/catch — la
        * sessione non deve restare silenziosamente a metà.
        */
+      // ⛔⛔⛔ FASE C — AL CONTRARIO: se questa sessione è una figlia, il padre non deve restare appeso in eterno anche quando QUESTO ramo raro (mai atteso) scatta.
+      onConclusioneFn?.({ ok: false, esito: null, erroreInterno: errore instanceof Error ? errore.message : String(errore) });
       if (!voce.conclusa) {
         broadcast(voce, {
           type: 'RunError',
@@ -368,6 +392,15 @@ export function createSessionRegistry({
   }
 
   return Object.freeze({
+    /**
+     * ⭐⭐⭐ FASE C (28/8) — sub-agenti. Per il foglio "Albero sessione":
+     * i figli VERI di una sessione, non le due righe finte del mockup.
+     * @returns {{ok:true, figli:Array}|{erroreAvvio:string, code:string}}
+     */
+    elencaFigli(sessionId) {
+      if (!sessioni.get(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      return { ok: true, figli: subagentOrchestrator.elencaFigli(sessionId) };
+    },
     /**
      * @returns {{sessionId:string}|{erroreAvvio:string, code:string}} — mai
      * un throw: un id fuori allowlist o una chiave assente sono risposte

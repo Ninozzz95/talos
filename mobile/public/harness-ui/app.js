@@ -996,6 +996,58 @@
     mount.replaceChildren(...dati.hooks.map((hook) => rigaHook(hook)));
   }
 
+  /*
+   * ⭐⭐⭐ FASE C (28/8) — sub-agenti: il foglio "Albero sessione" mostrava
+   * due righe INVENTATE ("Responsive audit"/"A11y review", mai
+   * collegate a nulla). Stesso pattern di caricaPannelloHooks() appena
+   * sopra: fetch reale, guardia anti-gara se il foglio cambia mentre la
+   * fetch è in volo.
+   */
+  async function caricaAlberoSessione() {
+    const mount = $('#subagentTreeMount', sheetBody);
+    if (!mount) return; // il foglio "sessionTree" non è (più) quello aperto
+    if (!state.realSession.id) {
+      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione attiva.'));
+      return;
+    }
+    mount.replaceChildren(textElement('p', 'board-empty', 'Carico le deleghe…'));
+    let dati;
+    try {
+      dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/children`);
+    } catch (error) {
+      mount.replaceChildren(textElement('p', 'board-empty', `Deleghe non disponibili: ${error.message}`));
+      return;
+    }
+    if (mount !== $('#subagentTreeMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
+    if (!dati.figli || dati.figli.length === 0) {
+      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna delega ancora — TALOS la avvia da sé con l\'attrezzo delega_sottotask quando un sotto-task è genuinamente separabile.'));
+      return;
+    }
+    mount.replaceChildren(...dati.figli.map((figlio) => rigaFiglio(figlio)));
+  }
+
+  /** Una riga figlio — stesso idioma `.sheet-option` di rigaHook, cliccabile → passaASessione (una delega conclusa è una sessione reale come le altre). */
+  function rigaFiglio(figlio) {
+    const riga = document.createElement('button');
+    riga.type = 'button';
+    riga.className = 'sheet-option';
+    const iconEl = document.createElement('span');
+    iconEl.className = 'sheet-icon';
+    iconEl.innerHTML = icon('i-branch');
+    const testo = document.createElement('span');
+    testo.append(
+      textElement('strong', null, tronca(figlio.task || '(compito non registrato)', 60)),
+      textElement('small', null, figlio.conclusa ? `Delega · ${figlio.esitoDelega || 'conclusa'}` : 'Delega · in corso'),
+    );
+    const statoEl = textElement('span', figlio.conclusa ? 'status-chip success' : 'status-chip', figlio.conclusa ? '✓' : '●');
+    riga.append(iconEl, testo, statoEl);
+    riga.addEventListener('click', () => {
+      passaASessione(figlio.sessionId, figlio.sessionId, figlio.task);
+      closeEmbeddedDialog(sheetDialog);
+    });
+    return riga;
+  }
+
   /** Una riga hook — stesso idioma `.sheet-option` delle altre righe del Control plane. */
   function rigaHook(hook) {
     const riga = document.createElement('div');
@@ -1543,6 +1595,7 @@
     showEmbeddedDialog(sheetDialog);
     wireSheetActions(type);
     if (type === 'control') { refreshDoctorBadge(); caricaPannelloHooks(); }
+    if (type === 'sessionTree') caricaAlberoSessione();
     /*
      * ⭐⭐⭐ 27/8, owner: "riaprire lo stesso componente della selezione del
      * modello" — montato qui (non in sheetTemplates.model.html, che è una
@@ -1778,13 +1831,19 @@
       title: 'Albero sessione',
       html: () => `
         <div class="sheet-section session-tree-sheet">
-          <span class="sheet-label">Thread e fork</span>
+          <span class="sheet-label">Sessione</span>
           <button class="sheet-option active" data-session-action="main"><span class="sheet-icon">${icon('i-list')}</span><span><strong data-current-session-title>${state.session.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}</strong><small data-usage-summary>Main · ${formattaUsageBreve(state.realSession.usage)}</small></span><span>●</span></button>
-          <button class="sheet-option" data-session-action="side"><span class="sheet-icon">${icon('i-branch')}</span><span><strong>Responsive audit</strong><small>Side thread · subagent A1</small></span><span>↗</span></button>
-          <button class="sheet-option" data-session-action="fork"><span class="sheet-icon">${icon('i-branch')}</span><span><strong>A11y review</strong><small>Fork dal turn 14 · pronto</small></span><span>✓</span></button>
         </div>
         <div class="sheet-section">
-          <button class="primary-btn full" data-session-action="new-side">+ Nuovo side thread</button>
+          <!--
+            ⭐⭐⭐ FASE C (28/8) — le due righe "Responsive audit"/"A11y
+            review" erano FINTE (mai collegate a nulla). Sostituite da
+            un mount point riempito da caricaAlberoSessione() in
+            openSheet() — le deleghe VERE dell'attrezzo delega_sottotask,
+            vedi LEDGER-FASE-C-SUBAGENTI.md.
+          -->
+          <span class="sheet-label">Deleghe · sotto-agenti isolati</span>
+          <div id="subagentTreeMount"></div>
         </div>`,
     },
     rename: {
@@ -2538,6 +2597,12 @@
   }
 
   /** Riassunto umano di un tool-call — "Scritto x.mjs", non "scrivi(...)"·. Gli argomenti sono opzionali (non ancora arrivati al momento di ToolCallStart). */
+  // ⭐⭐⭐ FASE C (28/8) — piccola utility pura, prima chiamante: delega_sottotask, per tenere il riassunto "in corso" leggibile su un task lungo.
+  function tronca(testo, massimo) {
+    const t = String(testo ?? '');
+    return t.length > massimo ? `${t.slice(0, massimo)}…` : t;
+  }
+
   function riassuntoAttrezzo(nome, argomenti) {
     const a = argomenti || {};
     switch (nome) {
@@ -2555,6 +2620,8 @@
       case 'artifact_create': return a.titolo ? `Artefatto: ${a.titolo}` : 'Creazione artefatto…';
       case 'document_create': return a.title ? `Documento: ${a.title}.${a.format || '?'}` : 'Creazione documento…';
       case 'time_now': return 'Data e ora correnti'; // ⭐ 28/8 — zero argomenti, nessun placeholder "…" da mostrare
+      // ⭐⭐⭐ FASE C (28/8) — sub-agenti: il task è la parte che l'owner vuole vedere subito, tronca corta come già fatto per gli altri riassunti "in corso".
+      case 'delega_sottotask': return a.task ? `Delega: ${tronca(a.task, 60)}` : 'Delega a un sotto-agente…';
       default: return `${nome}(…)`;
     }
   }
@@ -2566,6 +2633,11 @@
    * in questo progetto: "ℹ pass N" / "ℹ fail N"), mai inventato.
    */
   function riassuntoEsitoAttrezzo(nome, riassuntoBase, testoEsito) {
+    // ⭐⭐⭐ FASE C (28/8) — sub-agenti: il riassunto del FIGLIO (o il motivo del rifiuto) è già il contenuto ESATTO del ToolCallResult (stesso meccanismo standard di ogni altro attrezzo — nessun evento nuovo, vedi LEDGER-FASE-C-SUBAGENTI.md), qui solo reso leggibile in un'unica riga.
+    if (nome === 'delega_sottotask') {
+      if (/^REFUSED\./.test(testoEsito || '')) return '✗ Delega rifiutata';
+      return `🧩 Sotto-agente: ${tronca(testoEsito, 100)}`;
+    }
     if (nome !== 'prova') return riassuntoBase;
     const pass = /ℹ?\s*pass\s+(\d+)/i.exec(testoEsito)?.[1];
     const fail = /ℹ?\s*fail\s+(\d+)/i.exec(testoEsito)?.[1];

@@ -876,3 +876,37 @@ test('⛔ AL CONTRARIO — permessiPerAttrezzo assente arriva undefined a talosL
 
   assert.equal(catturato.permessiPerAttrezzo, undefined);
 });
+
+/*
+ * ⭐⭐⭐ FASE C (28/8) — sub-agenti: stesso principio dei blocchi sopra,
+ * `onDelega` viaggia SENZA trasformazione. Chiude lo STESSO gap che
+ * `hookFn` aveva prima di FASE A (un parametro costruito dal
+ * chiamante ma mai arrivato fin qui) — non ripetuto, corretto nello
+ * stesso commit del resto della fase.
+ */
+test('⭐⭐⭐ PARITÀ — onDelega arriva a talosLavoraFn ESATTAMENTE come passato, senza trasformazione', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+  const onDelega = async () => ({ riassunto: 'mai chiamata in questo test', esito: 'concluso' });
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, onDelega,
+  });
+
+  assert.equal(catturato.onDelega, onDelega, 'STESSA funzione, non un wrapper');
+});
+
+test('⛔ AL CONTRARIO — onDelega assente arriva undefined a talosLavoraFn, mai un valore inventato', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn });
+
+  assert.equal(catturato.onDelega, undefined);
+});
