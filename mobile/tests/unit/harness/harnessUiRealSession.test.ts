@@ -1110,6 +1110,32 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
             expect(md).toContain(messaggioLungo)
         })
 
+        /*
+         * ⛔ 28/8 — trovato da una verifica dal vivo (screenshot + file
+         * scaricato per davvero, non un fixture a mano): TextMessageStart e
+         * ReasoningMessageStart finivano nel ramo "evento non riconosciuto"
+         * — non un dato perso, ma rumore vero in ogni singola trascrizione,
+         * perché OGNI messaggio/ragionamento reale parte con uno di questi
+         * due eventi. Regressione con la sequenza ESATTA vista dal vivo.
+         */
+        it('⛔ EXPORT-MD-02-BIS: TextMessageStart/ReasoningMessageStart sono eventi CONOSCIUTI — mai "evento non riconosciuto"', () => {
+            const md = runtime().costruisciTrascrizioneMarkdown({
+                sessionId: 'sess-md-start', nome: null, modello: null, avviataAlle: '2026-08-28T10:00:00.000Z',
+                conclusa: true, forkDa: null,
+                eventi: [
+                    { type: 'ReasoningMessageStart', messageId: 'r1', role: 'reasoning' },
+                    { type: 'ReasoningMessageContent', messageId: 'r1', delta: 'penso...' },
+                    { type: 'ReasoningMessageEnd', messageId: 'r1' },
+                    { type: 'TextMessageStart', messageId: 't1', role: 'assistant' },
+                    { type: 'TextMessageContent', messageId: 't1', delta: '42' },
+                    { type: 'TextMessageEnd', messageId: 't1' },
+                ],
+            })
+            expect(md).not.toContain('non riconosciuto')
+            expect(md).toContain('42')
+            expect(md).toContain('penso...')
+        })
+
         it('⛔⛔ EXPORT-MD-03 AL CONTRARIO: un tipo di evento MAI visto prima non sparisce — finisce nell\'output come JSON grezzo', () => {
             const md = runtime().costruisciTrascrizioneMarkdown({
                 sessionId: 'sess-md-ignoto', nome: null, modello: null, avviataAlle: '2026-08-28T10:00:00.000Z',

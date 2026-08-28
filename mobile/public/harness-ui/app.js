@@ -2677,6 +2677,20 @@
           righe.push(`## Giro ${numeroGiro}`, '', descriviTask(evento.input), '');
           break;
         }
+        /*
+         * ⛔ 28/8 — trovato SUBITO da una verifica dal vivo (una sessione
+         * reale, non i miei fixture a mano): TextMessageStart/
+         * ReasoningMessageStart cadevano nel `default` e comparivano come
+         * "evento non riconosciuto" — non sbagliato (niente è perso), ma
+         * rumore inutile: sono marcatori d'inizio senza contenuto proprio,
+         * il testo vero arriva coi Content/End già gestiti sotto. Stessa
+         * lezione di sempre: un fixture scritto a mano non copre quello che
+         * un giro vero emette davvero.
+         */
+        case 'TextMessageStart':
+        case 'ReasoningMessageStart': {
+          break;
+        }
         case 'TextMessageContent': {
           testoBuffer.set(evento.messageId, (testoBuffer.get(evento.messageId) || '') + evento.delta);
           break;
