@@ -675,6 +675,205 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
             await new Promise((r) => setTimeout(r, 0))
             expect(chiamatePerLivello).toEqual({})
         })
+
+        /*
+         * ⭐⭐⭐ 28/8 — owner: "nella lista files devo poter draggare i
+         * file... non esiste il comando copia... e comandi crud in
+         * generale". jsdom non implementa affatto DragEvent/DataTransfer
+         * (verificato: `undefined`) — un oggetto finto con
+         * setData/getData/types basta per esercitare la logica reale di
+         * app.js, che legge solo quei tre.
+         */
+        describe('Drag&drop, "Copia", "Nuovo file"/"Nuova cartella"', () => {
+            function creaDataTransferFinto() {
+                const dati = new Map<string, string>()
+                return {
+                    setData: (tipo: string, valore: string) => { dati.set(tipo, valore) },
+                    getData: (tipo: string) => dati.get(tipo) ?? '',
+                    get types() { return [...dati.keys()] },
+                    effectAllowed: 'none',
+                    dropEffect: 'none',
+                }
+            }
+            function dispatchDrag(elemento: Element, tipo: string, dataTransfer: ReturnType<typeof creaDataTransferFinto>) {
+                const evento = new Event(tipo, { bubbles: true, cancelable: true }) as Event & { dataTransfer?: unknown }
+                evento.dataTransfer = dataTransfer
+                elemento.dispatchEvent(evento)
+            }
+
+            it('⭐⭐⭐ CRUD-01: il menu di una cartella mostra "Nuovo file"/"Nuova cartella"/"Copia", oltre a quelle già note', async () => {
+                await avviaSessioneConAlbero({ '': [{ nome: 'src', cartella: true }] })
+                const rigaSrc = [...document.querySelectorAll('.ft-row-folder')].find((r) => r.querySelector('.ft-name')?.textContent === 'src')!
+                rigaSrc.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
+
+                const etichette = [...document.querySelectorAll('.ft-actions-menu-item')].map((b) => b.textContent)
+                expect(etichette.some((e) => e?.includes('Nuovo file'))).toBe(true)
+                expect(etichette.some((e) => e?.includes('Nuova cartella'))).toBe(true)
+                expect(etichette.some((e) => e?.includes('Copia'))).toBe(true)
+            })
+
+            it('⭐⭐⭐ CRUD-02: il menu di un FILE mostra anche "Copia"', async () => {
+                await avviaSessioneConAlbero({ '': [{ nome: 'README.md', cartella: false }] })
+                const rigaFile = [...document.querySelectorAll('.ft-row-leaf')].find((r) => r.querySelector('.ft-name')?.textContent === 'README.md')!
+                rigaFile.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
+
+                const etichette = [...document.querySelectorAll('.ft-actions-menu-item')].map((b) => b.textContent)
+                expect(etichette.some((e) => e?.includes('Copia'))).toBe(true)
+            })
+
+            it('⭐⭐⭐ CRUD-03: cliccare "Copia" chiama POST .../tree/copy col percorso VERO, mostra il nuovo nome nel toast', async () => {
+                const { spia } = mockFetchAlbero({ '': [{ nome: 'a.txt', cartella: false }] }, [
+                    { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-copia' } },
+                    { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+                    { metodo: 'POST', percorso: '/api/v1/sessions/sess-copia/tree/copy', corpo: { nuovoPercorso: 'a (copia).txt' } },
+                ])
+                await runtime().startRealSession({ id: 'talos-prova-harness', consegna: 'test copia' })
+                const generation = runtime().realSessionState.generation
+                runtime().handleRealEvent({ type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'test copia' } }, generation)
+                await vi.waitFor(() => { expect(document.querySelector('.ft-tree .ft-row')).toBeTruthy() })
+
+                const rigaFile = [...document.querySelectorAll('.ft-row-leaf')].find((r) => r.querySelector('.ft-name')?.textContent === 'a.txt')!
+                rigaFile.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
+                const voceCopia = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent?.includes('Copia'))!
+                voceCopia.click()
+                await new Promise((r) => setTimeout(r, 0))
+
+                const chiamata = spia.mock.calls.find(([url]) => String(url).includes('/tree/copy'))!
+                expect(JSON.parse(String((chiamata[1] as RequestInit).body))).toEqual({ percorso: 'a.txt' })
+                expect(document.querySelector('#toastRegion')?.textContent).toContain('a (copia).txt')
+            })
+
+            it('⭐⭐⭐ CRUD-04: "Nuovo file" apre un foglio col titolo giusto, e il submit chiama POST .../tree/create con tipo:"file"', async () => {
+                const { spia } = mockFetchAlbero({ '': [{ nome: 'src', cartella: true }] }, [
+                    { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-crea-file' } },
+                    { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+                    { metodo: 'POST', percorso: '/api/v1/sessions/sess-crea-file/tree/create', corpo: { percorso: 'src/nuovo.txt' } },
+                ])
+                await runtime().startRealSession({ id: 'talos-prova-harness', consegna: 'test crea' })
+                const generation = runtime().realSessionState.generation
+                runtime().handleRealEvent({ type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'test crea' } }, generation)
+                await vi.waitFor(() => { expect(document.querySelector('.ft-tree .ft-row')).toBeTruthy() })
+
+                const rigaSrc = [...document.querySelectorAll('.ft-row-folder')].find((r) => r.querySelector('.ft-name')?.textContent === 'src')!
+                rigaSrc.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
+                const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent === 'Nuovo file')!
+                voceMenu.click()
+
+                expect(document.querySelector('#sheetTitle')?.textContent).toBe('Nuovo file')
+                const input = document.querySelector<HTMLInputElement>('#createFileInput')!
+                input.value = 'nuovo.txt'
+                document.querySelector<HTMLFormElement>('#createFileForm')!.requestSubmit()
+                await new Promise((r) => setTimeout(r, 0))
+
+                const chiamata = spia.mock.calls.find(([url]) => String(url).includes('/tree/create'))!
+                expect(JSON.parse(String((chiamata[1] as RequestInit).body))).toEqual({ percorsoBase: 'src', nome: 'nuovo.txt', tipo: 'file' })
+                expect(document.querySelector('#toastRegion')?.textContent).toContain('src/nuovo.txt')
+            })
+
+            it('⭐⭐ CRUD-05: "Nuova cartella" porta tipo:"cartella" e il titolo "Nuova cartella"', async () => {
+                mockFetchAlbero({ '': [{ nome: 'src', cartella: true }] }, [
+                    { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-crea-cartella' } },
+                    { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+                    { metodo: 'POST', percorso: '/api/v1/sessions/sess-crea-cartella/tree/create', corpo: { percorso: 'src/nuova' } },
+                ])
+                await runtime().startRealSession({ id: 'talos-prova-harness', consegna: 'test crea cartella' })
+                const generation = runtime().realSessionState.generation
+                runtime().handleRealEvent({ type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'test crea cartella' } }, generation)
+                await vi.waitFor(() => { expect(document.querySelector('.ft-tree .ft-row')).toBeTruthy() })
+
+                const rigaSrc = [...document.querySelectorAll('.ft-row-folder')].find((r) => r.querySelector('.ft-name')?.textContent === 'src')!
+                rigaSrc.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
+                const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent === 'Nuova cartella')!
+                voceMenu.click()
+
+                expect(document.querySelector('#sheetTitle')?.textContent).toBe('Nuova cartella')
+            })
+
+            it('⭐⭐⭐ CRUD-06: trascinare un file su una cartella chiama POST .../tree/move con percorso e cartellaDestinazione VERI', async () => {
+                const { spia } = mockFetchAlbero({ '': [{ nome: 'src', cartella: true }, { nome: 'a.txt', cartella: false }] }, [
+                    { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-drag' } },
+                    { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+                    { metodo: 'POST', percorso: '/api/v1/sessions/sess-drag/tree/move', corpo: { nuovoPercorso: 'src/a.txt' } },
+                ])
+                await runtime().startRealSession({ id: 'talos-prova-harness', consegna: 'test drag' })
+                const generation = runtime().realSessionState.generation
+                runtime().handleRealEvent({ type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'test drag' } }, generation)
+                await vi.waitFor(() => { expect(document.querySelector('.ft-tree .ft-row')).toBeTruthy() })
+
+                const rigaFile = [...document.querySelectorAll('.ft-row-leaf')].find((r) => r.querySelector('.ft-name')?.textContent === 'a.txt')!
+                const rigaSrc = [...document.querySelectorAll('.ft-row-folder')].find((r) => r.querySelector('.ft-name')?.textContent === 'src')!
+
+                const dt = creaDataTransferFinto()
+                dispatchDrag(rigaFile, 'dragstart', dt)
+                dispatchDrag(rigaSrc, 'dragover', dt)
+                dispatchDrag(rigaSrc, 'drop', dt)
+                await new Promise((r) => setTimeout(r, 0))
+
+                const chiamata = spia.mock.calls.find(([url]) => String(url).includes('/tree/move'))!
+                expect(JSON.parse(String((chiamata[1] as RequestInit).body))).toEqual({ percorso: 'a.txt', cartellaDestinazione: 'src' })
+                expect(document.querySelector('#toastRegion')?.textContent).toContain('src/a.txt')
+            })
+
+            it('⛔⛔⛔ CRUD-07 AL CONTRARIO: trascinare una cartella su SE STESSA non chiama MAI la POST — guardia lato client, prima ancora del server', async () => {
+                const { spia } = mockFetchAlbero({ '': [{ nome: 'src', cartella: true }] }, [
+                    { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-self-drag' } },
+                    { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+                ])
+                await runtime().startRealSession({ id: 'talos-prova-harness', consegna: 'test self drag' })
+                const generation = runtime().realSessionState.generation
+                runtime().handleRealEvent({ type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'test self drag' } }, generation)
+                await vi.waitFor(() => { expect(document.querySelector('.ft-tree .ft-row')).toBeTruthy() })
+
+                const rigaSrc = [...document.querySelectorAll('.ft-row-folder')].find((r) => r.querySelector('.ft-name')?.textContent === 'src')!
+                const dt = creaDataTransferFinto()
+                dispatchDrag(rigaSrc, 'dragstart', dt)
+                dispatchDrag(rigaSrc, 'drop', dt)
+                await new Promise((r) => setTimeout(r, 0))
+
+                expect(spia.mock.calls.some(([url]) => String(url).includes('/tree/move'))).toBe(false)
+            })
+
+            it('⛔⛔ CRUD-08 AL CONTRARIO: il menu di un FILE non mostra MAI "Nuovo file"/"Nuova cartella" — solo le cartelle possono contenere qualcosa', async () => {
+                await avviaSessioneConAlbero({ '': [{ nome: 'README.md', cartella: false }] })
+                const rigaFile = [...document.querySelectorAll('.ft-row-leaf')].find((r) => r.querySelector('.ft-name')?.textContent === 'README.md')!
+                rigaFile.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
+
+                const etichette = [...document.querySelectorAll('.ft-actions-menu-item')].map((b) => b.textContent)
+                expect(etichette.some((e) => e?.includes('Nuovo file'))).toBe(false)
+                expect(etichette.some((e) => e?.includes('Nuova cartella'))).toBe(false)
+            })
+
+            it('⭐⭐⭐ CRUD-09: tasto destro sulla RADICE dell\'albero apre un menu con SOLO "Nuovo file"/"Nuova cartella"', async () => {
+                await avviaSessioneConAlbero({ '': [{ nome: 'src', cartella: true }] })
+                const radice = document.querySelector('.tree-root')!
+                radice.dispatchEvent(new Event('contextmenu', { bubbles: true, cancelable: true }))
+
+                const etichette = [...document.querySelectorAll('.ft-actions-menu-item')].map((b) => b.textContent)
+                expect(etichette).toEqual(['Nuovo file', 'Nuova cartella'])
+            })
+
+            /*
+             * ⛔⛔⛔ 28/8 — BUG REALE trovato dalla verifica DAL VIVO
+             * (screenshot ispezionato, non da un test): il foglio "Nuovo
+             * file" mostrava "Demo UI · non collegato" anche durante una
+             * sessione REALE — TIPI_FOGLIO_INTERAMENTE_ONESTI (il badge
+             * condiviso da 13 tipi di foglio sullo stesso sheetDialog,
+             * già trovato mancante due volte in una sessione precedente
+             * per altri tipi) non includeva ancora 'createFile', il tipo
+             * appena aggiunto oggi stesso. Corretto aggiungendolo alla
+             * whitelist.
+             */
+            it('⭐⭐⭐ CRUD-10: il foglio "Nuovo file"/"Nuova cartella" NON mostra il badge "Demo UI" durante una sessione reale', async () => {
+                await avviaSessioneConAlbero({ '': [{ nome: 'src', cartella: true }] })
+                const rigaSrc = [...document.querySelectorAll('.ft-row-folder')].find((r) => r.querySelector('.ft-name')?.textContent === 'src')!
+                rigaSrc.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
+                const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent === 'Nuovo file')!
+                voceMenu.click()
+
+                const badge = document.querySelector<HTMLElement>('#sheetDialog .demo-surface-badge')
+                expect(badge?.hidden).toBe(true)
+            })
+        })
     })
 
     it('REAL-SESSION-STOP-01 stopRealSession non fa nulla senza una sessione reale attiva (nessun POST)', async () => {

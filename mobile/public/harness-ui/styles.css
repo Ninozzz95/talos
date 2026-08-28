@@ -607,6 +607,8 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .ft-row.ft-selected { background: var(--accent-soft); color: var(--text); }
 .ft-row.ft-selected .ft-name { color: var(--text); font-weight: 500; }
 .ft-row.ft-dimmed { opacity: .32; }
+/* ⭐ 28/8 — drag&drop: la cartella (o la radice) sotto il cursore durante un trascinamento, stesso accento del resto del prodotto. */
+.ft-row.ft-row-drag-over, .tree-root.ft-row-drag-over { box-shadow: inset 0 0 0 1.5px var(--accent); background: var(--accent-soft); border-radius: 7px; }
 .ft-row.ft-match .ft-name mark { background: var(--accent-soft); color: var(--accent-2); border-radius: 2px; padding: 0 1px; }
 .ft-chevron { width: 15px; height: 15px; flex-shrink: 0; display: grid; place-items: center; color: var(--muted); transition: transform var(--motion-disclosure) ease; }
 .ft-chevron svg { width: 9px; height: 9px; stroke: currentColor; fill: none; stroke-width: 2.4; }

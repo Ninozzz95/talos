@@ -28,10 +28,13 @@ import { CustomTaskError, preparaEsecuzioneLibera as preparaEsecuzioneLiberaReal
 import { TaskCatalogError, preparaEsecuzione as preparaEsecuzioneReale } from './task-catalog.mjs';
 import { leggiAlberoWorkspace as leggiAlberoWorkspaceReale, WorkspaceTreeError } from './workspace-tree.mjs';
 import {
+  copiaFile as copiaFileReale,
+  creaVoceWorkspace as creaVoceWorkspaceReale,
   eliminaFile as eliminaFileReale,
   leggiContenutoFile as leggiContenutoFileReale,
   rinominaFile as rinominaFileReale,
   rivelaInEsploraFile as rivelaInEsploraFileReale,
+  spostaFile as spostaFileReale,
   WorkspaceFileError,
 } from './workspace-files.mjs';
 import { guardaWorkspace as guardaWorkspaceReale } from './workspace-watcher.mjs';
@@ -49,6 +52,9 @@ export function createSessionRegistry({
   rinominaFileFn = rinominaFileReale,
   eliminaFileFn = eliminaFileReale,
   rivelaInEsploraFileFn = rivelaInEsploraFileReale,
+  spostaFileFn = spostaFileReale,
+  copiaFileFn = copiaFileReale,
+  creaVoceWorkspaceFn = creaVoceWorkspaceReale,
   guardaWorkspaceFn = guardaWorkspaceReale,
   modello,
   chiave,
@@ -595,6 +601,45 @@ export function createSessionRegistry({
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       try {
         return { ok: true, ...(await rivelaInEsploraFileFn({ cartella: voce.cartella, percorso })) };
+      } catch (errore) {
+        if (errore instanceof WorkspaceFileError) return { erroreAvvio: errore.message, code: errore.code };
+        throw errore;
+      }
+    },
+
+    /*
+     * ⭐⭐⭐ 28/8, owner: "nella lista files devo poter draggare i file...
+     * non esiste il comando copia... e comandi crud in generale" — stesso
+     * schema delle quattro azioni sopra: risolve sessionId a voce.cartella,
+     * la validazione vive tutta in workspace-files.mjs.
+     */
+    async spostaFile(sessionId, percorso, cartellaDestinazione) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      try {
+        return { ok: true, ...(await spostaFileFn({ cartella: voce.cartella, percorso, cartellaDestinazione })) };
+      } catch (errore) {
+        if (errore instanceof WorkspaceFileError) return { erroreAvvio: errore.message, code: errore.code };
+        throw errore;
+      }
+    },
+
+    async copiaFile(sessionId, percorso) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      try {
+        return { ok: true, ...(await copiaFileFn({ cartella: voce.cartella, percorso })) };
+      } catch (errore) {
+        if (errore instanceof WorkspaceFileError) return { erroreAvvio: errore.message, code: errore.code };
+        throw errore;
+      }
+    },
+
+    async creaVoceWorkspace(sessionId, percorsoBase, nome, tipo) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      try {
+        return { ok: true, ...(await creaVoceWorkspaceFn({ cartella: voce.cartella, percorsoBase, nome, tipo })) };
       } catch (errore) {
         if (errore instanceof WorkspaceFileError) return { erroreAvvio: errore.message, code: errore.code };
         throw errore;

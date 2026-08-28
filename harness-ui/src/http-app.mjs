@@ -413,6 +413,33 @@ function requirePercorsoBody(body) {
   return body.percorso;
 }
 
+/** ⭐ 28/8 — {percorso, cartellaDestinazione}, per il drag&drop (sposta). cartellaDestinazione può essere '' (radice), mai assente. */
+function requireSpostaBody(body) {
+  const chiavi = Object.keys(body ?? {});
+  const attese = ['percorso', 'cartellaDestinazione'];
+  if (chiavi.length !== 2 || !attese.every((k) => chiavi.includes(k)) || typeof body.percorso !== 'string' || typeof body.cartellaDestinazione !== 'string') {
+    const errore = new Error('Corpo non valido: atteso {percorso, cartellaDestinazione}');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  return { percorso: body.percorso, cartellaDestinazione: body.cartellaDestinazione };
+}
+
+/** ⭐ 28/8 — {percorsoBase, nome, tipo}, per "Nuovo file"/"Nuova cartella". */
+function requireCreaVoceBody(body) {
+  const chiavi = Object.keys(body ?? {});
+  const attese = ['percorsoBase', 'nome', 'tipo'];
+  if (
+    chiavi.length !== 3 || !attese.every((k) => chiavi.includes(k))
+    || typeof body.percorsoBase !== 'string' || typeof body.nome !== 'string' || typeof body.tipo !== 'string'
+  ) {
+    const errore = new Error('Corpo non valido: atteso {percorsoBase, nome, tipo}');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  return { percorsoBase: body.percorsoBase, nome: body.nome, tipo: body.tipo };
+}
+
 /** ⭐ 27/8 — {percorso, nuovoNome}, per rinomina. */
 function requireRinominaBody(body) {
   const chiavi = Object.keys(body ?? {});
@@ -785,6 +812,98 @@ export function createHttpApp({
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ rivelato: true }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    /*
+     * ⭐⭐⭐ 28/8, owner: "nella lista files devo poter draggare i file...
+     * non esiste il comando copia... e comandi crud in generale" — stesso
+     * schema POST-per-azione delle tre rotte sopra.
+     */
+    const moveFileMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/tree\/move$/.exec(url.pathname);
+    if (moveFileMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try {
+          sessionId = decodeURIComponent(moveFileMatch[1]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const corpo = await leggiCorpoJson(req);
+        const { percorso, cartellaDestinazione } = requireSpostaBody(corpo);
+        const esito = await sessionRegistry.spostaFile(sessionId, percorso, cartellaDestinazione);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ nuovoPercorso: esito.nuovoPercorso }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    const copyFileMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/tree\/copy$/.exec(url.pathname);
+    if (copyFileMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try {
+          sessionId = decodeURIComponent(copyFileMatch[1]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const corpo = await leggiCorpoJson(req);
+        const percorso = requirePercorsoBody(corpo);
+        const esito = await sessionRegistry.copiaFile(sessionId, percorso);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ nuovoPercorso: esito.nuovoPercorso }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    const createFileMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/tree\/create$/.exec(url.pathname);
+    if (createFileMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try {
+          sessionId = decodeURIComponent(createFileMatch[1]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const corpo = await leggiCorpoJson(req);
+        const { percorsoBase, nome, tipo } = requireCreaVoceBody(corpo);
+        const esito = await sessionRegistry.creaVoceWorkspace(sessionId, percorsoBase, nome, tipo);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ percorso: esito.percorso }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);

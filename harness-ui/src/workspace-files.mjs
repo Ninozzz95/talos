@@ -139,6 +139,140 @@ export async function creaFileWorkspace({ cartella, nome, bytes }, deps = {}) {
 }
 
 /**
+ * "Sposta" — drag&drop (piano `elegant-spinning-dongarra.md`, owner:
+ * "nella lista files devo poter draggare i file"). Sposta un file/
+ * cartella in un'ALTRA cartella dello stesso workspace, mantenendo il
+ * nome — `cartellaDestinazione` è un percorso relativo ('' = radice)
+ * che deve esistere ED essere una cartella. Non sovrascrive mai un
+ * nome già occupato nella destinazione. `isPathInside(reale,
+ * destinazioneCartellaReale)` copre da sola sia "dentro se stessa" sia
+ * "dentro un proprio discendente" (torna true anche a parità di
+ * percorso — verificato leggendo path-policy.mjs, non presunto): senza
+ * questa guardia una cartella spostata dentro se stessa lascerebbe
+ * `fs.rename` fallire a metà con un errore di sistema operativo
+ * travestito da azione riuscita.
+ */
+export async function spostaFile({ cartella, percorso, cartellaDestinazione }, deps = {}) {
+  const { radiceReale, reale } = risolviPercorsoEsistente(cartella, percorso, deps);
+  const realpathSyncFn = deps.realpathSyncFn ?? realpathSync;
+  let destinazioneCartellaReale;
+  if (cartellaDestinazione === '') {
+    destinazioneCartellaReale = radiceReale;
+  } else {
+    if (typeof cartellaDestinazione !== 'string' || isAbsolute(cartellaDestinazione)) {
+      throw new WorkspaceFileError('Cartella di destinazione non valida');
+    }
+    try {
+      destinazioneCartellaReale = realpathSyncFn(join(cartella, cartellaDestinazione));
+    } catch {
+      throw new WorkspaceFileError('Cartella di destinazione non trovata', 'FILE_NOT_FOUND');
+    }
+    if (!isPathInside(radiceReale, destinazioneCartellaReale)) {
+      throw new WorkspaceFileError('Destinazione fuori dalla cartella della sessione');
+    }
+  }
+  const statDestinazione = await (deps.statFn ?? fsp.stat)(destinazioneCartellaReale).catch(() => null);
+  if (!statDestinazione || !statDestinazione.isDirectory()) {
+    throw new WorkspaceFileError('La destinazione non è una cartella');
+  }
+  if (isPathInside(reale, destinazioneCartellaReale)) {
+    throw new WorkspaceFileError('Non puoi spostare un elemento dentro se stesso o un suo discendente');
+  }
+  const nome = reale.split(sep).pop();
+  const destinazione = join(destinazioneCartellaReale, nome);
+  const accessFn = deps.accessFn ?? fsp.access;
+  const esisteGia = await accessFn(destinazione).then(() => true, () => false);
+  if (esisteGia) throw new WorkspaceFileError('Esiste già un elemento con questo nome nella destinazione', 'FILE_EXISTS');
+  await (deps.renameFn ?? fsp.rename)(reale, destinazione);
+  const nuovoPercorso = relative(radiceReale, destinazione).split(sep).join('/');
+  return { nuovoPercorso };
+}
+
+/**
+ * "Copia" — owner: "non esiste il comando copia". Duplica un file/
+ * cartella nella STESSA posizione, con un nome tipo "nome (copia).ext"
+ * (pattern Explorer/Finder — verificato via ricerca web, non inventato:
+ * è la convenzione standard di ogni file manager desktop). Se anche
+ * quello esiste già, prova "nome (copia 2).ext" e così via, fino a un
+ * tetto dichiarato — mai un ciclo infinito su un caso patologico.
+ */
+export async function copiaFile({ cartella, percorso }, deps = {}) {
+  const { reale } = risolviPercorsoEsistente(cartella, percorso, deps);
+  const accessFn = deps.accessFn ?? fsp.access;
+  const cartellaGenitore = dirname(reale);
+  const nomeOriginale = reale.split(sep).pop();
+  const stat = await (deps.statFn ?? fsp.stat)(reale);
+  const puntoEstensione = nomeOriginale.lastIndexOf('.');
+  // niente estensione separata per una cartella, o per un file che INIZIA con un punto (es. ".gitignore" resta intero in "base")
+  const haEstensione = !stat.isDirectory() && puntoEstensione > 0;
+  const base = haEstensione ? nomeOriginale.slice(0, puntoEstensione) : nomeOriginale;
+  const estensione = haEstensione ? nomeOriginale.slice(puntoEstensione) : '';
+
+  const TETTO_TENTATIVI = 1000;
+  let destinazione = null;
+  for (let n = 1; n <= TETTO_TENTATIVI; n += 1) {
+    const suffisso = n === 1 ? ' (copia)' : ` (copia ${n})`;
+    const candidato = join(cartellaGenitore, `${base}${suffisso}${estensione}`);
+    const esisteGia = await accessFn(candidato).then(() => true, () => false);
+    if (!esisteGia) { destinazione = candidato; break; }
+  }
+  if (!destinazione) throw new WorkspaceFileError('Troppe copie già esistenti con questo nome');
+
+  await (deps.cpFn ?? fsp.cp)(reale, destinazione, { recursive: true, errorOnExist: true });
+  const radiceReale = realpathSync(cartella);
+  const nuovoPercorso = relative(radiceReale, destinazione).split(sep).join('/');
+  return { nuovoPercorso };
+}
+
+/**
+ * "Nuovo file"/"Nuova cartella" — CRUD manuale dell'owner ("comandi
+ * crud in generale"), in QUALSIASI punto dell'albero — a differenza di
+ * `creaFileWorkspace` sopra, che resta vincolata alla radice per
+ * `document_create` (un bisogno diverso, dell'AGENTE, non toccato qui).
+ * `percorsoBase` è la cartella dove creare ('' = radice); deve
+ * esistere ED essere una cartella se non vuoto.
+ */
+export async function creaVoceWorkspace({ cartella, percorsoBase, nome, tipo }, deps = {}) {
+  if (tipo !== 'file' && tipo !== 'cartella') {
+    throw new WorkspaceFileError('Tipo non valido: "file" o "cartella"');
+  }
+  if (
+    typeof nome !== 'string' || nome.length === 0 || nome.length > 255
+    || nome.includes('/') || nome.includes('\\') || nome.includes('\0')
+    || nome === '.' || nome === '..'
+  ) {
+    throw new WorkspaceFileError('Nome non valido — un nome, non un percorso');
+  }
+  const realpathSyncFn = deps.realpathSyncFn ?? realpathSync;
+  const radiceReale = realpathSyncFn(cartella);
+  let cartellaBaseReale = radiceReale;
+  if (percorsoBase) {
+    if (typeof percorsoBase !== 'string' || isAbsolute(percorsoBase)) {
+      throw new WorkspaceFileError('Cartella base non valida');
+    }
+    try {
+      cartellaBaseReale = realpathSyncFn(join(cartella, percorsoBase));
+    } catch {
+      throw new WorkspaceFileError('Cartella base non trovata', 'FILE_NOT_FOUND');
+    }
+    if (!isPathInside(radiceReale, cartellaBaseReale)) {
+      throw new WorkspaceFileError('Cartella base fuori dal workspace della sessione');
+    }
+    const statBase = await (deps.statFn ?? fsp.stat)(cartellaBaseReale).catch(() => null);
+    if (!statBase || !statBase.isDirectory()) throw new WorkspaceFileError('La cartella base non è una cartella');
+  }
+  const destinazione = join(cartellaBaseReale, nome);
+  if (!isPathInside(radiceReale, destinazione)) throw new WorkspaceFileError('Destinazione fuori dal workspace della sessione');
+  const accessFn = deps.accessFn ?? fsp.access;
+  const esisteGia = await accessFn(destinazione).then(() => true, () => false);
+  if (esisteGia) throw new WorkspaceFileError('Esiste già un elemento con questo nome', 'FILE_EXISTS');
+  if (tipo === 'cartella') await (deps.mkdirFn ?? fsp.mkdir)(destinazione);
+  else await (deps.writeFileFn ?? fsp.writeFile)(destinazione, '');
+  const percorso = relative(radiceReale, destinazione).split(sep).join('/');
+  return { percorso };
+}
+
+/**
  * "Rivela in Esplora File" — SOLO Windows (`explorer.exe`), dichiarato
  * non simulato altrove. Un SOLO argomento argv (`/select,<percorso>`,
  * verificato via ricerca web la sintassi esatta — niente spazio dopo la

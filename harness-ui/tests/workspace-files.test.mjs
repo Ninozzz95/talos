@@ -5,11 +5,14 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import {
+  copiaFile,
   creaFileWorkspace,
+  creaVoceWorkspace,
   eliminaFile,
   leggiContenutoFile,
   rinominaFile,
   rivelaInEsploraFile,
+  spostaFile,
   WorkspaceFileError,
 } from '../src/workspace-files.mjs';
 
@@ -256,6 +259,244 @@ test('⛔⛔⛔ creaFileWorkspace: un nome con traversal (".." o "/") viene RIFI
       (e) => e instanceof WorkspaceFileError,
     );
     assert.ok(!existsSync(join(radice, '..', 'fuori.txt')));
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+// ⭐⭐⭐ 28/8 — owner: "nella lista files devo poter draggare i file... non
+// esiste il comando copia... e comandi crud in generale". Drag&drop
+// (spostaFile), "Copia" (copiaFile), "Nuovo file"/"Nuova cartella"
+// (creaVoceWorkspace) — stesso schema di sicurezza sopra, stessa cartella
+// vera su disco, nessun mock del filesystem.
+
+test('⭐⭐⭐ spostaFile: sposta DAVVERO un file dentro una sottocartella', async () => {
+  const radice = sessioneVera();
+  try {
+    const { nuovoPercorso } = await spostaFile({ cartella: radice, percorso: 'a.txt', cartellaDestinazione: 'sub' });
+    assert.equal(nuovoPercorso, 'sub/a.txt');
+    assert.equal(existsSync(join(radice, 'a.txt')), false, 'non è più alla radice');
+    assert.equal(existsSync(join(radice, 'sub', 'a.txt')), true, 'è davvero dentro sub');
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⭐⭐ spostaFile: cartellaDestinazione vuota sposta ALLA RADICE', async () => {
+  const radice = sessioneVera();
+  try {
+    const { nuovoPercorso } = await spostaFile({ cartella: radice, percorso: 'sub/b.txt', cartellaDestinazione: '' });
+    assert.equal(nuovoPercorso, 'b.txt');
+    assert.equal(existsSync(join(radice, 'b.txt')), true);
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔⛔ spostaFile: AL CONTRARIO, una cartella non può essere spostata dentro se stessa', async () => {
+  const radice = sessioneVera();
+  try {
+    await assert.rejects(
+      spostaFile({ cartella: radice, percorso: 'sub', cartellaDestinazione: 'sub' }),
+      (e) => { assert.ok(e instanceof WorkspaceFileError); return true; },
+    );
+    assert.equal(existsSync(join(radice, 'sub', 'b.txt')), true, 'sub non si è mosso');
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔⛔ spostaFile: AL CONTRARIO, una cartella non può essere spostata dentro un suo discendente', async () => {
+  const radice = sessioneVera();
+  try {
+    mkdirSync(join(radice, 'sub', 'nipote'));
+    await assert.rejects(
+      spostaFile({ cartella: radice, percorso: 'sub', cartellaDestinazione: 'sub/nipote' }),
+      (e) => { assert.ok(e instanceof WorkspaceFileError); return true; },
+    );
+    assert.equal(existsSync(join(radice, 'sub', 'nipote')), true, 'nipote esiste ancora al suo posto, sub non si è mosso dentro se stessa');
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔ spostaFile: AL CONTRARIO, non sovrascrive MAI un nome già occupato nella destinazione', async () => {
+  const radice = sessioneVera();
+  try {
+    writeFileSync(join(radice, 'sub', 'a.txt'), 'già qui in sub, non toccarmi');
+    await assert.rejects(
+      spostaFile({ cartella: radice, percorso: 'a.txt', cartellaDestinazione: 'sub' }),
+      (e) => { assert.equal(e.code, 'FILE_EXISTS'); return true; },
+    );
+    assert.equal(readFileSync(join(radice, 'sub', 'a.txt'), 'utf8'), 'già qui in sub, non toccarmi');
+    assert.equal(existsSync(join(radice, 'a.txt')), true, 'il file originale non si è mosso');
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⛔ spostaFile: una destinazione che non esiste è FILE_NOT_FOUND', async () => {
+  const radice = sessioneVera();
+  try {
+    await assert.rejects(
+      spostaFile({ cartella: radice, percorso: 'a.txt', cartellaDestinazione: 'mai-esistita' }),
+      (e) => { assert.equal(e.code, 'FILE_NOT_FOUND'); return true; },
+    );
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔ spostaFile: AL CONTRARIO, la destinazione dev\'essere una cartella, non un file', async () => {
+  const radice = sessioneVera();
+  try {
+    await assert.rejects(
+      spostaFile({ cartella: radice, percorso: 'sub/b.txt', cartellaDestinazione: 'a.txt' }),
+      (e) => { assert.ok(e instanceof WorkspaceFileError); return true; },
+    );
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⭐⭐⭐ copiaFile: duplica DAVVERO un file, "nome (copia).ext"', async () => {
+  const radice = sessioneVera();
+  try {
+    const { nuovoPercorso } = await copiaFile({ cartella: radice, percorso: 'a.txt' });
+    assert.equal(nuovoPercorso, 'a (copia).txt');
+    assert.equal(readFileSync(join(radice, 'a (copia).txt'), 'utf8'), 'contenuto di a');
+    assert.equal(existsSync(join(radice, 'a.txt')), true, 'l\'originale resta al suo posto');
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⭐⭐⭐ copiaFile: una CARTELLA si copia ricorsivamente, col suo contenuto', async () => {
+  const radice = sessioneVera();
+  try {
+    const { nuovoPercorso } = await copiaFile({ cartella: radice, percorso: 'sub' });
+    assert.equal(nuovoPercorso, 'sub (copia)');
+    assert.equal(readFileSync(join(radice, 'sub (copia)', 'b.txt'), 'utf8'), 'contenuto di b');
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⭐⭐ copiaFile: una seconda copia diventa "(copia 2)", non sovrascrive la prima', async () => {
+  const radice = sessioneVera();
+  try {
+    await copiaFile({ cartella: radice, percorso: 'a.txt' });
+    const { nuovoPercorso } = await copiaFile({ cartella: radice, percorso: 'a.txt' });
+    assert.equal(nuovoPercorso, 'a (copia 2).txt');
+    assert.equal(existsSync(join(radice, 'a (copia).txt')), true, 'la prima copia esiste ancora');
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔ copiaFile: AL CONTRARIO, un file che INIZIA con un punto non perde il nome ("dotfile")', async () => {
+  const radice = sessioneVera();
+  try {
+    writeFileSync(join(radice, '.gitignore'), 'node_modules/');
+    const { nuovoPercorso } = await copiaFile({ cartella: radice, percorso: '.gitignore' });
+    assert.equal(nuovoPercorso, '.gitignore (copia)');
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⛔ copiaFile: un percorso che non esiste è FILE_NOT_FOUND', async () => {
+  const radice = sessioneVera();
+  try {
+    await assert.rejects(
+      copiaFile({ cartella: radice, percorso: 'mai-esistito.txt' }),
+      (e) => { assert.equal(e.code, 'FILE_NOT_FOUND'); return true; },
+    );
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⭐⭐⭐ creaVoceWorkspace: un file nuovo, vuoto, VERO sul disco, in una sottocartella', async () => {
+  const radice = sessioneVera();
+  try {
+    const { percorso } = await creaVoceWorkspace({ cartella: radice, percorsoBase: 'sub', nome: 'nuovo.txt', tipo: 'file' });
+    assert.equal(percorso, 'sub/nuovo.txt');
+    assert.equal(readFileSync(join(radice, 'sub', 'nuovo.txt'), 'utf8'), '');
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⭐⭐⭐ creaVoceWorkspace: una cartella nuova, VERA sul disco, alla radice (percorsoBase vuoto)', async () => {
+  const radice = sessioneVera();
+  try {
+    const { percorso } = await creaVoceWorkspace({ cartella: radice, percorsoBase: '', nome: 'nuova-cartella', tipo: 'cartella' });
+    assert.equal(percorso, 'nuova-cartella');
+    const { statSync } = await import('node:fs');
+    assert.ok(statSync(join(radice, 'nuova-cartella')).isDirectory());
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔ creaVoceWorkspace: AL CONTRARIO, non sovrascrive MAI un nome già occupato', async () => {
+  const radice = sessioneVera();
+  try {
+    await assert.rejects(
+      creaVoceWorkspace({ cartella: radice, percorsoBase: '', nome: 'a.txt', tipo: 'file' }),
+      (e) => { assert.equal(e.code, 'FILE_EXISTS'); return true; },
+    );
+    assert.equal(readFileSync(join(radice, 'a.txt'), 'utf8'), 'contenuto di a', 'il file originale non è stato toccato');
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔⛔ creaVoceWorkspace: AL CONTRARIO, un nome con traversal viene RIFIUTATO', async () => {
+  const radice = sessioneVera();
+  try {
+    await assert.rejects(
+      creaVoceWorkspace({ cartella: radice, percorsoBase: '', nome: '../fuori.txt', tipo: 'file' }),
+      (e) => e instanceof WorkspaceFileError,
+    );
+    assert.ok(!existsSync(join(radice, '..', 'fuori.txt')));
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⛔ creaVoceWorkspace: un percorsoBase che non esiste è FILE_NOT_FOUND', async () => {
+  const radice = sessioneVera();
+  try {
+    await assert.rejects(
+      creaVoceWorkspace({ cartella: radice, percorsoBase: 'mai-esistita', nome: 'x.txt', tipo: 'file' }),
+      (e) => { assert.equal(e.code, 'FILE_NOT_FOUND'); return true; },
+    );
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔ creaVoceWorkspace: AL CONTRARIO, un percorsoBase che è un FILE (non una cartella) viene rifiutato', async () => {
+  const radice = sessioneVera();
+  try {
+    await assert.rejects(
+      creaVoceWorkspace({ cartella: radice, percorsoBase: 'a.txt', nome: 'x.txt', tipo: 'file' }),
+      (e) => e instanceof WorkspaceFileError,
+    );
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⛔ creaVoceWorkspace: un tipo diverso da "file"/"cartella" è rifiutato', async () => {
+  const radice = sessioneVera();
+  try {
+    await assert.rejects(
+      creaVoceWorkspace({ cartella: radice, percorsoBase: '', nome: 'x.txt', tipo: 'qualcosa-daltro' }),
+      (e) => e instanceof WorkspaceFileError,
+    );
   } finally {
     rmSync(radice, { recursive: true, force: true });
   }
