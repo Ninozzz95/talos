@@ -1449,7 +1449,7 @@
    * resta, correttamente. Whitelist esplicita, non un "nascondi sempre":
    * solo i tipi verificati stanotte riga per riga.
    */
-  const TIPI_FOGLIO_INTERAMENTE_ONESTI = new Set(['model', 'capabilities', 'control', 'fileViewer', 'renameFile', 'deleteFile', 'export']);
+  const TIPI_FOGLIO_INTERAMENTE_ONESTI = new Set(['model', 'capabilities', 'control', 'fileViewer', 'renameFile', 'deleteFile', 'createFile', 'export']);
   function openSheet(type) {
     const content = sheetTemplates[type];
     if (!content) return;
@@ -1735,6 +1735,26 @@
         </div>`,
     },
     /**
+     * ⭐⭐⭐ 28/8, owner: "e comandi crud in generale" — "Nuovo file"/"Nuova
+     * cartella", stesso foglio per entrambi (`state.alberoFileTarget.tipo`
+     * decide titolo/etichetta ed è preimpostato da chi apre il foglio,
+     * mai scelto qui dentro — stesso principio di renameFile sopra: un
+     * campo solo, un submit solo).
+     */
+    createFile: {
+      eyebrow: 'Albero workspace',
+      title: 'Nuovo', // ⛔ sovrascritto dinamicamente in avviaCreaVoce() col titolo vero — sheetTemplates.title è una stringa ovunque altrove, stesso pattern di fileViewer sopra
+      html: () => `
+        <form class="sheet-section rename-form" id="createFileForm">
+          <label class="sheet-label" for="createFileInput">${state.alberoFileTarget?.tipo === 'cartella' ? 'Nome della cartella' : 'Nome del file'}</label>
+          <input class="sheet-input" id="createFileInput" value="" maxlength="255" autocomplete="off" spellcheck="false">
+          <div class="sheet-actions">
+            <button type="button" class="secondary-btn" data-create-file-cancel>Annulla</button>
+            <button type="submit" class="primary-btn">Crea</button>
+          </div>
+        </form>`,
+    },
+    /**
      * ⭐⭐⭐ 28/8, owner: "una modale di esportazione in diversi formati, in
      * modo che se c'è qualche errore io ti possa esportare interamente la
      * conversazione con errori e output tecnici" — vedi il commento su
@@ -1926,6 +1946,27 @@
           await invalidaLivelloGenitoreAlbero(bersaglio.percorso);
         } catch (error) {
           toast('Eliminazione non riuscita', error.message);
+        }
+      });
+    }
+
+    const createFileForm = $('#createFileForm', sheetBody);
+    if (createFileForm) {
+      const input = $('#createFileInput', createFileForm);
+      window.setTimeout(() => { input?.focus(); }, 30);
+      $('[data-create-file-cancel]', createFileForm)?.addEventListener('click', () => closeEmbeddedDialog(sheetDialog));
+      createFileForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const nome = input?.value.trim();
+        const bersaglio = state.alberoFileTarget;
+        if (!nome || !bersaglio) { input?.focus(); return; }
+        try {
+          const esito = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/create`, { percorsoBase: bersaglio.percorso, nome, tipo: bersaglio.tipo });
+          closeEmbeddedDialog(sheetDialog);
+          toast(bersaglio.tipo === 'cartella' ? 'Cartella creata' : 'File creato', esito.percorso);
+          await invalidaLivelloGenitoreAlbero(esito.percorso);
+        } catch (error) {
+          toast('Creazione non riuscita', error.message);
         }
       });
     }
@@ -3210,6 +3251,45 @@
       apriMenuAzioniFile(percorsoCompleto, nome, { x: event.clientX, y: event.clientY }, cartella);
     });
 
+    /*
+     * ⭐⭐⭐ 28/8, owner: "nella lista files devo poter draggare i file per
+     * spostarli". Drag&drop HTML5 nativo (ricerca web fatta: è l'API
+     * standard, "notoriamente scorbutica" ma senza alternativa più
+     * semplice per questo caso — nessuna libreria aggiunta, coerente col
+     * bundle a zero dipendenze). MIME custom (`text/x-talos-file-path`)
+     * per non collidere con un drag&drop testuale/URL nativo del browser;
+     * OGNI riga è trascinabile (file e cartelle), ma solo le CARTELLE
+     * accettano il drop — un file non è mai una destinazione valida.
+     */
+    row.draggable = true;
+    row.addEventListener('dragstart', (event) => {
+      event.dataTransfer.setData('text/x-talos-file-path', percorsoCompleto);
+      event.dataTransfer.effectAllowed = 'move';
+    });
+    if (cartella) {
+      row.addEventListener('dragover', (event) => {
+        if (!event.dataTransfer.types.includes('text/x-talos-file-path')) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        row.classList.add('ft-row-drag-over');
+      });
+      row.addEventListener('dragleave', () => row.classList.remove('ft-row-drag-over'));
+      row.addEventListener('drop', async (event) => {
+        event.preventDefault();
+        row.classList.remove('ft-row-drag-over');
+        const percorsoSorgente = event.dataTransfer.getData('text/x-talos-file-path');
+        if (!percorsoSorgente || percorsoSorgente === percorsoCompleto) return;
+        try {
+          const esito = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/move`, { percorso: percorsoSorgente, cartellaDestinazione: percorsoCompleto });
+          toast('Spostato', esito.nuovoPercorso);
+          state.realSession.treeCache.delete(percorsoCompleto);
+          await invalidaLivelloGenitoreAlbero(percorsoSorgente);
+        } catch (error) {
+          toast('Spostamento non riuscito', error.message);
+        }
+      });
+    }
+
     li.appendChild(row);
     contenitoreUl.appendChild(li);
 
@@ -3254,15 +3334,22 @@
    * radice"), non un secondo menu duplicato: stessa funzione, stesso
    * meccanismo di posizionamento/chiusura, solo l'elenco `voci` cambia.
    */
-  function apriMenuAzioniFile(percorsoCompleto, nome, posizionamento, cartella = false) {
+  function apriMenuAzioniFile(percorsoCompleto, nome, posizionamento, cartella = false, soloCreazione = false) {
     document.querySelector('.ft-actions-menu')?.remove();
 
     const menu = document.createElement('div');
     menu.className = 'ft-actions-menu';
     menu.setAttribute('role', 'menu');
 
-    const voci = cartella ? [
+    // ⭐ 28/8 — tasto destro sulla RADICE dell'albero: nessuna rinomina/copia/elimina ha senso lì, solo creare.
+    const voci = soloCreazione ? [
+      { etichetta: 'Nuovo file', icona: 'i-edit', azione: () => avviaCreaVoce(percorsoCompleto, 'file') },
+      { etichetta: 'Nuova cartella', icona: 'i-folder', azione: () => avviaCreaVoce(percorsoCompleto, 'cartella') },
+    ] : cartella ? [
+      { etichetta: 'Nuovo file', icona: 'i-edit', azione: () => avviaCreaVoce(percorsoCompleto, 'file') },
+      { etichetta: 'Nuova cartella', icona: 'i-folder', azione: () => avviaCreaVoce(percorsoCompleto, 'cartella') },
       { etichetta: 'Rinomina', icona: 'i-edit', azione: () => avviaRinominaFile(percorsoCompleto, nome) },
+      { etichetta: 'Copia', icona: 'i-link', azione: () => avviaCopiaFile(percorsoCompleto) },
       { etichetta: 'Imposta come radice', icona: 'i-folder', azione: () => impostaComeRadice(percorsoCompleto, nome) },
       { etichetta: 'Rivela in Esplora File', icona: 'i-folder-open', azione: () => rivelaFileInEsploraFile(percorsoCompleto) },
       { etichetta: 'Elimina', icona: 'i-trash', azione: () => avviaEliminaFile(percorsoCompleto, nome), pericoloso: true },
@@ -3270,6 +3357,7 @@
       { etichetta: 'Apri', icona: 'i-eye', azione: () => apriFileAlbero(percorsoCompleto, nome) },
       { etichetta: 'Allega alla chat', icona: 'i-link', azione: () => allegaFileAllaChat(percorsoCompleto) },
       { etichetta: 'Rinomina', icona: 'i-edit', azione: () => avviaRinominaFile(percorsoCompleto, nome) },
+      { etichetta: 'Copia', icona: 'i-link', azione: () => avviaCopiaFile(percorsoCompleto) },
       { etichetta: 'Rivela in Esplora File', icona: 'i-folder-open', azione: () => rivelaFileInEsploraFile(percorsoCompleto) },
       { etichetta: 'Elimina', icona: 'i-trash', azione: () => avviaEliminaFile(percorsoCompleto, nome), pericoloso: true },
     ];
@@ -3360,6 +3448,30 @@
   }
 
   /**
+   * ⭐⭐⭐ 28/8, owner: "non esiste il comando copia" — non distruttiva,
+   * zero conferma (a differenza di elimina): un click, l'endpoint sceglie
+   * da solo "nome (copia).ext" (pattern Explorer/Finder, mai una
+   * sovrascrittura). L'originale non si tocca — verificato in
+   * workspace-files.test.mjs, non solo qui.
+   */
+  async function avviaCopiaFile(percorsoCompleto) {
+    try {
+      const esito = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/copy`, { percorso: percorsoCompleto });
+      toast('Copiato', esito.nuovoPercorso);
+      await invalidaLivelloGenitoreAlbero(percorsoCompleto);
+    } catch (error) {
+      toast('Copia non riuscita', error.message);
+    }
+  }
+
+  /** ⭐⭐⭐ 28/8, owner: "comandi crud in generale" — "Nuovo file"/"Nuova cartella", dentro percorsoBase ('' = radice). */
+  function avviaCreaVoce(percorsoBase, tipo) {
+    state.alberoFileTarget = { percorso: percorsoBase, tipo };
+    openSheet('createFile');
+    sheetTitle.textContent = tipo === 'cartella' ? 'Nuova cartella' : 'Nuovo file';
+  }
+
+  /**
    * ⭐⭐⭐ 28/8 — owner, coda: "bisogna aggiungere una nuova funzione che
    * con tasto destro su una cartella ti permette di impostare come
    * directory principale quella cartella". Riusa INTERAMENTE il
@@ -3409,6 +3521,33 @@
     const radice = document.createElement('div');
     radice.className = 'tree-root';
     radice.append(iconaSvgAlbero('i-files'), textElement('strong', '', state.realSession.taskId || 'workspace'));
+    // ⭐⭐⭐ 28/8, owner: "comandi crud in generale" — creare un file/una cartella senza dover prima cliccare col destro su una cartella esistente: la radice stessa accetta lo stesso menu, ridotto alle due sole voci di creazione (percorsoBase '').
+    radice.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      apriMenuAzioniFile('', state.realSession.taskId || 'workspace', { x: e.clientX, y: e.clientY }, true, true);
+    });
+    // ⭐ stesso drop-target delle cartelle, ma per "portare fuori" un elemento alla radice.
+    radice.addEventListener('dragover', (e) => {
+      if (!e.dataTransfer.types.includes('text/x-talos-file-path')) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      radice.classList.add('ft-row-drag-over');
+    });
+    radice.addEventListener('dragleave', () => radice.classList.remove('ft-row-drag-over'));
+    radice.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      radice.classList.remove('ft-row-drag-over');
+      const percorsoSorgente = e.dataTransfer.getData('text/x-talos-file-path');
+      if (!percorsoSorgente) return;
+      try {
+        const esito = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/move`, { percorso: percorsoSorgente, cartellaDestinazione: '' });
+        toast('Spostato', esito.nuovoPercorso);
+        state.realSession.treeCache.delete('');
+        await invalidaLivelloGenitoreAlbero(percorsoSorgente);
+      } catch (error) {
+        toast('Spostamento non riuscito', error.message);
+      }
+    });
 
     const ul = document.createElement('ul');
     ul.className = 'ft-tree';

@@ -962,6 +962,16 @@ test('⛔ apriFile/rinominaFile/eliminaFile/rivelaFile su un id inesistente: NOT
   assert.equal((await registro.rivelaFile('mai-esistito', 'a.txt')).code, 'NOT_FOUND');
 });
 
+// ⭐⭐⭐ 28/8, owner: "nella lista files devo poter draggare i file... non
+// esiste il comando copia... e comandi crud in generale" — stesso schema
+// di prova delle quattro azioni sopra.
+test('⛔ spostaFile/copiaFile/creaVoceWorkspace su un id inesistente: NOT_FOUND per tutti e tre', async () => {
+  const registro = createSessionRegistry({ preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  assert.equal((await registro.spostaFile('mai-esistito', 'a.txt', 'sub')).code, 'NOT_FOUND');
+  assert.equal((await registro.copiaFile('mai-esistito', 'a.txt')).code, 'NOT_FOUND');
+  assert.equal((await registro.creaVoceWorkspace('mai-esistito', '', 'x.txt', 'file')).code, 'NOT_FOUND');
+});
+
 test('⭐⭐ apriFile passa cartella/percorso VERI a leggiContenutoFileFn e torna il contenuto', async () => {
   const finta = sessioneControllabile();
   let catturato = null;
@@ -1022,6 +1032,71 @@ test('⛔⛔ rivelaFile: AL CONTRARIO, un errore IMPREVISTO (non WorkspaceFileEr
   const { sessionId } = registro.avvia('task-vero');
 
   await assert.rejects(() => registro.rivelaFile(sessionId, 'a.txt'), /bug vero, non un WorkspaceFileError/);
+
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await new Promise((r) => setImmediate(r));
+});
+
+test('⭐⭐ spostaFile passa cartella/percorso/cartellaDestinazione VERI a spostaFileFn e torna il nuovo percorso', async () => {
+  const finta = sessioneControllabile();
+  let catturato = null;
+  const spostaFileFn = async (input) => { catturato = input; return { nuovoPercorso: 'sub/a.txt' }; };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, spostaFileFn, modello: 'm', chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const risultato = await registro.spostaFile(sessionId, 'a.txt', 'sub');
+
+  assert.deepEqual(catturato, { cartella: '/tmp/x', percorso: 'a.txt', cartellaDestinazione: 'sub' });
+  assert.deepEqual(risultato, { ok: true, nuovoPercorso: 'sub/a.txt' });
+
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await new Promise((r) => setImmediate(r));
+});
+
+test('⛔ copiaFile: un WorkspaceFileError VERO diventa {erroreAvvio, code}, mai un throw fino all\'HTTP', async () => {
+  const finta = sessioneControllabile();
+  const copiaFileFn = async () => { throw new WorkspaceFileError('File non trovato', 'FILE_NOT_FOUND'); };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, copiaFileFn, modello: 'm', chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const risultato = await registro.copiaFile(sessionId, 'mai-esistito.txt');
+  assert.deepEqual(risultato, { erroreAvvio: 'File non trovato', code: 'FILE_NOT_FOUND' });
+
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await new Promise((r) => setImmediate(r));
+});
+
+test('⭐⭐ creaVoceWorkspace passa cartella/percorsoBase/nome/tipo VERI a creaVoceWorkspaceFn e torna il percorso', async () => {
+  const finta = sessioneControllabile();
+  let catturato = null;
+  const creaVoceWorkspaceFn = async (input) => { catturato = input; return { percorso: 'sub/nuova-cartella' }; };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, creaVoceWorkspaceFn, modello: 'm', chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const risultato = await registro.creaVoceWorkspace(sessionId, 'sub', 'nuova-cartella', 'cartella');
+
+  assert.deepEqual(catturato, { cartella: '/tmp/x', percorsoBase: 'sub', nome: 'nuova-cartella', tipo: 'cartella' });
+  assert.deepEqual(risultato, { ok: true, percorso: 'sub/nuova-cartella' });
+
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await new Promise((r) => setImmediate(r));
+});
+
+test('⛔⛔ creaVoceWorkspace: AL CONTRARIO, un errore IMPREVISTO si PROPAGA, mai inghiottito', async () => {
+  const finta = sessioneControllabile();
+  const creaVoceWorkspaceFn = async () => { throw new Error('bug vero, non un WorkspaceFileError'); };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, creaVoceWorkspaceFn, modello: 'm', chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  await assert.rejects(() => registro.creaVoceWorkspace(sessionId, '', 'x.txt', 'file'), /bug vero, non un WorkspaceFileError/);
 
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
   await new Promise((r) => setImmediate(r));
