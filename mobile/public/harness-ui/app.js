@@ -136,6 +136,13 @@
        * lato kernel. Vedi il case 'StateDelta' e la riga "Main" nel
        * foglio Albero sessione. */
       usage: null,
+      /** ⭐⭐⭐ 28/8 — permesso "On request": requestId -> l'elemento DOM
+       * della card interattiva (appendApprovalCard). Il kernel è
+       * DAVVERO in pausa dentro verificaPermessoScrittura mentre questa
+       * mappa ha una voce — mai un timeout automatico, mai una risposta
+       * inventata: solo un click vero (o un ApprovalResolved arrivato
+       * da un altro client) la svuota. */
+      approvazioniPendenti: new Map(),
     },
   };
 
@@ -2395,6 +2402,102 @@
     window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
   }
 
+  /**
+   * ⭐⭐⭐ 28/8 — permesso "On request": descrive l'azione che il kernel sta
+   * per fare, così l'owner decide sapendo COSA sta approvando — stessa
+   * forma {tipo,percorso?,comando?,formato?} di verificaPermessoScrittura
+   * (talosHarness.mjs), mai un "azione sconosciuta" generico quando il
+   * campo giusto è già lì.
+   */
+  function descriviAzioneApprovazione(azione) {
+    if (azione?.tipo === 'scrivi') return `Vuole scrivere il file: ${azione.percorso}`;
+    if (azione?.tipo === 'shell') return `Vuole eseguire il comando: ${azione.comando}`;
+    if (azione?.tipo === 'document_create') return `Vuole creare un documento (formato ${azione.formato || '?'})`;
+    return 'Vuole eseguire un\'azione che modifica qualcosa.';
+  }
+
+  /**
+   * ⭐⭐⭐ 28/8 — la card interattiva del permesso "On request". Diversa da
+   * appendToolNote/appendStatusNote: quelle raccontano cosa È già
+   * successo, questa CHIEDE una decisione — talosHarness.mjs è DAVVERO
+   * in pausa dentro verificaPermessoScrittura (session-registry.mjs
+   * tiene la Promise aperta), non una simulazione: se nessuno risponde
+   * mai, il giro resta onestamente fermo lì — stesso principio "mai un
+   * timeout che nega travestito da decisione" già scritto in
+   * session-registry.richiediApprovazione.
+   *
+   * Ricerca fatta prima di scrivere (REGOLA ZERO): Hermes Agent, il
+   * primo competitor (vedi memoria [[harness-da-battere-uno-a-uno]]),
+   * NON ha affatto un'approvazione interattiva — "there is no approval
+   * prompt and no way to override from the chat UI" (la loro stessa
+   * doc security.md). Questa card è esattamente il pareggio-e-supera.
+   */
+  function appendApprovalCard(requestId, azione) {
+    const conversation = $('#conversation');
+    const article = document.createElement('article');
+    article.className = 'message assistant-message compact-message real-approval-card';
+    article.dataset.requestId = requestId;
+    const meta = document.createElement('div');
+    meta.className = 'assistant-meta';
+    const glyph = document.createElement('span');
+    glyph.className = 'talos-glyph';
+    glyph.textContent = '⏸';
+    meta.append(glyph, document.createTextNode('TALOS · in attesa di approvazione'));
+    const copy = document.createElement('div');
+    copy.className = 'assistant-copy';
+    copy.textContent = descriviAzioneApprovazione(azione);
+    const azioniRiga = document.createElement('div');
+    azioniRiga.className = 'sheet-actions';
+    const negaBtn = document.createElement('button');
+    negaBtn.type = 'button';
+    negaBtn.className = 'secondary-btn';
+    negaBtn.textContent = 'Nega';
+    const approvaBtn = document.createElement('button');
+    approvaBtn.type = 'button';
+    approvaBtn.className = 'primary-btn';
+    approvaBtn.textContent = 'Approva';
+    /*
+     * ⛔⛔⛔ 28/8, trovato dal vivo (screenshot ispezionato, non solo la
+     * corsa dello script): "Approvato (da un altro client). — Approvato."
+     * — il testo raddoppiava. Causa: DUE canali riportavano lo STESSO
+     * fatto senza coordinarsi — questo click locale scriveva il testo
+     * SUBITO dopo la POST, e l'evento SSE ApprovalResolved (che il
+     * server manda SEMPRE, anche per la risposta di QUESTA stessa
+     * scheda) arrivava per un canale indipendente e lo scriveva DI
+     * NUOVO, senza sapere che era "lui stesso" ad averlo già fatto —
+     * stessa famiglia di difetto già vista stanotte per i bubble
+     * duplicati via `_sequenza`. Cura: il click locale disabilita SOLO
+     * i bottoni (reattività immediata) — il testo/la rimozione dei
+     * bottoni li fa SEMPRE e SOLO il case 'ApprovalResolved' quando
+     * l'evento arriva davvero, un SOLO punto che scrive, mai due.
+     */
+    let rispostaDataDaQuestaScheda = false;
+    const rispondi = async (approvato) => {
+      negaBtn.disabled = true;
+      approvaBtn.disabled = true;
+      rispostaDataDaQuestaScheda = true;
+      try {
+        await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/approve`, { requestId, approvato });
+        // ⛔ NIENT'ALTRO qui apposta — vedi il commento sopra: il case ApprovalResolved finalizza la card, sempre e solo lui.
+      } catch (error) {
+        rispostaDataDaQuestaScheda = false;
+        negaBtn.disabled = false;
+        approvaBtn.disabled = false;
+        toast('Risposta non riuscita', error.message);
+      }
+    };
+    negaBtn.addEventListener('click', () => rispondi(false));
+    approvaBtn.addEventListener('click', () => rispondi(true));
+    azioniRiga.append(negaBtn, approvaBtn);
+    article.append(meta, copy, azioniRiga);
+    conversation.appendChild(article);
+    // ⭐ letto dal case 'ApprovalResolved' per distinguere "ho risposto io da questa scheda" da "ha risposto un altro client" — mai un secondo testo duplicato, mai una wording sbagliata.
+    article._rispostaDataQui = () => rispostaDataDaQuestaScheda;
+    markMotionEnter(article);
+    window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
+    return article;
+  }
+
   /*
    * ⛔⛔ 27/8, trovato dalla pipeline QA visiva (zero costo, iniettando un
    * ToolCallResult finto via window.__talosHarnessUiRuntime.handleRealEvent
@@ -2745,6 +2848,14 @@
         case 'WorkspaceChanged': {
           const elenco = Array.isArray(evento.percorsi) ? evento.percorsi.join(', ') : '(percorsi non specificati)';
           righe.push(`📁 _Cambiamento esterno nel workspace: ${elenco}_`, '');
+          break;
+        }
+        case 'ApprovalRequested': {
+          righe.push(`⏸ **Approvazione richiesta:** ${descriviAzioneApprovazione(evento.azione)}`, '');
+          break;
+        }
+        case 'ApprovalResolved': {
+          righe.push(`_Approvazione ${evento.approvato ? 'CONCESSA' : 'NEGATA'}._`, '');
           break;
         }
         case 'RunFinished': {
@@ -3569,6 +3680,40 @@
         aggiornaElencoSessioniReali(); // lo stato in #sessionList passa da "in corso" a "concluso" (visibile solo standalone, vedi nota di testa)
         break;
       }
+      case 'ApprovalRequested': {
+        /*
+         * ⭐⭐⭐ 28/8 — permesso "On request": talosHarness.mjs è DAVVERO in
+         * pausa, aspettando questa risposta (session-registry.mjs tiene
+         * la Promise aperta) — non un evento decorativo.
+         */
+        nascondiAttesaRisposta();
+        const card = appendApprovalCard(evento.requestId, evento.azione);
+        state.realSession.approvazioniPendenti.set(evento.requestId, card);
+        break;
+      }
+      case 'ApprovalResolved': {
+        /*
+         * ⛔⛔⛔ 28/8, trovato dal vivo — l'UNICO punto che finalizza la
+         * card (vedi il commento su appendApprovalCard: due canali che
+         * scrivevano lo stesso testo raddoppiavano "Approvato"). Se
+         * `card._rispostaDataQui()` è vero, il click È partito da
+         * QUESTA card — wording pulita, "da un altro client" solo
+         * quando è vero davvero.
+         */
+        const card = state.realSession.approvazioniPendenti.get(evento.requestId);
+        if (card) {
+          const daQuiStessa = card._rispostaDataQui?.() === true;
+          const azioniRiga = card.querySelector('.sheet-actions');
+          if (azioniRiga) azioniRiga.remove();
+          const copy = card.querySelector('.assistant-copy');
+          if (copy) {
+            const esito = evento.approvato ? 'Approvato' : 'Negato';
+            copy.textContent += daQuiStessa ? ` — ${esito}.` : ` — ${esito} (da un altro client).`;
+          }
+          state.realSession.approvazioniPendenti.delete(evento.requestId);
+        }
+        break;
+      }
       case 'RunError': {
         nascondiAttesaRisposta();
         appendStatusNote(`${evento.code ? `[${evento.code}] ` : ''}${evento.message}`, true);
@@ -3665,6 +3810,7 @@
       state.realSession.followUpBubbleInAttesa = false;
       state.realSession.attesaBubble = null; // il nodo è già sparito con replaceChildren() qui sopra
       state.realSession.usage = null; // Fase 3 — un resume (continua:true) TIENE il conto, una sessione nuova riparte da IGNOTO
+      state.realSession.approvazioniPendenti = new Map(); // le card sono già sparite con replaceChildren() qui sopra, la mappa le segue
       // ⛔ 27/8 — Terminale/Browser tengono il loro "già reale" nel DOM
       // (dataset), non in state.realSession: senza questo, restavano
       // mostrati per sempre, mescolati con la sessione successiva.
@@ -4135,12 +4281,26 @@
     if (demoBadge) demoBadge.hidden = true;
     showEmbeddedDialog(sheetDialog);
 
-    let progetti;
-    try {
-      progetti = await apiGet('/api/v1/projects').then((r) => r.items);
-    } catch (error) {
-      sheetBody.replaceChildren(textElement('p', 'board-empty', `Elenco non disponibile: ${error.message}`));
-      return;
+    /*
+     * ⭐⭐⭐ 28/8 — permesso "Full access" (pillola del composer, foglio
+     * "Permessi"): un percorso ASSOLUTO A PIACERE, mai l'allowlist —
+     * l'elenco progetti non serve nemmeno, si salta la chiamata
+     * (stessa disciplina "mai una richiesta che non serve" già in uso
+     * altrove in questo file). Il server valida DAVVERO il percorso
+     * (esiste? è una cartella? leggibile/scrivibile? — custom-task.mjs,
+     * niente denylist, vedi la sua doc su REGOLA ZERO/Hermes): un
+     * percorso inventato qui torna un errore onesto dalla POST, non un
+     * crash silenzioso.
+     */
+    const accessoCompleto = state.permissions === 'Full access';
+    let progetti = [];
+    if (!accessoCompleto) {
+      try {
+        progetti = await apiGet('/api/v1/projects').then((r) => r.items);
+      } catch (error) {
+        sheetBody.replaceChildren(textElement('p', 'board-empty', `Elenco non disponibile: ${error.message}`));
+        return;
+      }
     }
 
     const corpoFoglio = [];
@@ -4149,23 +4309,20 @@
     const customSection = document.createElement('form');
     customSection.className = 'sheet-section';
     customSection.id = 'customTaskForm';
-    customSection.appendChild(textElement('span', 'sheet-label', 'Cartella — TALOS scrive DIRETTAMENTE lì, nessuna copia'));
-    if (progetti.length === 0) {
-      customSection.appendChild(textElement('p', 'board-empty', 'Nessuna cartella di progetto configurata sul server. Imposta TALOS_HARNESS_UI_PROJECT_DIRS con i percorsi assoluti ammessi e riavvia il server per usare un compito libero.'));
-    } else {
-      const selectCartella = document.createElement('select');
-      selectCartella.className = 'sheet-input';
-      selectCartella.id = 'customTaskCartella';
-      for (const progetto of progetti) {
-        const opzione = document.createElement('option');
-        opzione.value = progetto.id;
-        opzione.textContent = progetto.nome;
-        selectCartella.appendChild(opzione);
-      }
+
+    if (accessoCompleto) {
+      customSection.appendChild(textElement('span', 'sheet-label', 'Cartella — percorso assoluto a piacere ("Full access")'));
+      const inputCartellaLibera = document.createElement('input');
+      inputCartellaLibera.type = 'text';
+      inputCartellaLibera.className = 'sheet-input';
+      inputCartellaLibera.id = 'customTaskCartellaLibera';
+      inputCartellaLibera.placeholder = 'es. C:\\Users\\...\\progetto';
+      inputCartellaLibera.autocomplete = 'off';
+      inputCartellaLibera.spellcheck = false;
       const modelPicker = creaModelPicker({ valoreIniziale: state.model || '' });
       const effortPicker = creaEffortPicker({ valoreIniziale: state.effort });
       customSection.append(
-        selectCartella,
+        inputCartellaLibera,
         textElement('span', 'sheet-label', 'Modello'),
         modelPicker.elemento,
         effortPicker.elemento,
@@ -4177,13 +4334,51 @@
       customSection.appendChild(submit);
       customSection.addEventListener('submit', (event) => {
         event.preventDefault();
-        const cartellaId = selectCartella.value;
-        const nomeCartella = progetti.find((p) => p.id === cartellaId)?.nome ?? cartellaId;
+        const cartellaLibera = inputCartellaLibera.value.trim();
+        if (!cartellaLibera) { inputCartellaLibera.focus(); return; }
+        const nomeCartella = cartellaLibera.split(/[\\/]/).pop() || cartellaLibera;
         const modello = modelPicker.getValore();
         const effort = effortPicker.getValore();
         closeEmbeddedDialog(sheetDialog);
-        avviaSessionePendente({ cartellaId, nomeCartella, modello, effort });
+        avviaSessionePendente({ cartellaLibera, nomeCartella, modello, effort, permessi: state.permissions });
       });
+    } else {
+      customSection.appendChild(textElement('span', 'sheet-label', 'Cartella — TALOS scrive DIRETTAMENTE lì, nessuna copia'));
+      if (progetti.length === 0) {
+        customSection.appendChild(textElement('p', 'board-empty', 'Nessuna cartella di progetto configurata sul server. Imposta TALOS_HARNESS_UI_PROJECT_DIRS con i percorsi assoluti ammessi e riavvia il server, oppure scegli il permesso "Full access" (pillola in alto) per un percorso a piacere.'));
+      } else {
+        const selectCartella = document.createElement('select');
+        selectCartella.className = 'sheet-input';
+        selectCartella.id = 'customTaskCartella';
+        for (const progetto of progetti) {
+          const opzione = document.createElement('option');
+          opzione.value = progetto.id;
+          opzione.textContent = progetto.nome;
+          selectCartella.appendChild(opzione);
+        }
+        const modelPicker = creaModelPicker({ valoreIniziale: state.model || '' });
+        const effortPicker = creaEffortPicker({ valoreIniziale: state.effort });
+        customSection.append(
+          selectCartella,
+          textElement('span', 'sheet-label', 'Modello'),
+          modelPicker.elemento,
+          effortPicker.elemento,
+        );
+        const submit = document.createElement('button');
+        submit.type = 'submit';
+        submit.className = 'primary-btn compact full';
+        submit.textContent = 'Continua nella chat';
+        customSection.appendChild(submit);
+        customSection.addEventListener('submit', (event) => {
+          event.preventDefault();
+          const cartellaId = selectCartella.value;
+          const nomeCartella = progetti.find((p) => p.id === cartellaId)?.nome ?? cartellaId;
+          const modello = modelPicker.getValore();
+          const effort = effortPicker.getValore();
+          closeEmbeddedDialog(sheetDialog);
+          avviaSessionePendente({ cartellaId, nomeCartella, modello, effort, permessi: state.permissions });
+        });
+      }
     }
     corpoFoglio.push(customSection);
 
@@ -4196,7 +4391,7 @@
      * elemento focusable nel markup del foglio. Un focus esplicito dopo
      * l'inserimento nel DOM è l'unico modo affidabile.
      */
-    $('#customTaskCartella')?.focus();
+    ($('#customTaskCartellaLibera') || $('#customTaskCartella'))?.focus();
   }
 
   /**
@@ -4206,9 +4401,9 @@
    * parte solo quando c'è un compito — il primo messaggio scritto nella
    * chat, intercettato da submitPrompt via state.pendingCustomSession).
    */
-  function avviaSessionePendente({ cartellaId, nomeCartella, modello, effort }) {
+  function avviaSessionePendente({ cartellaId, cartellaLibera, nomeCartella, modello, effort, permessi }) {
     nuovaGenerazioneSessione();
-    state.pendingCustomSession = { cartellaId, nomeCartella, modello, effort };
+    state.pendingCustomSession = { cartellaId, cartellaLibera, nomeCartella, modello, effort, permessi };
     if (modello) { state.model = modello; aggiornaPillolaModello(); }
     if (effort) state.effort = effort;
     state.session = `Nuova · ${nomeCartella}`;
@@ -4228,7 +4423,7 @@
    * collegaEventiSessione), corpo POST diverso (/sessions/custom con
    * cartellaId+consegna invece di /sessions con taskId).
    */
-  async function startCustomSession({ cartellaId, nomeCartella, consegna, comandoProva, modello, effort }) {
+  async function startCustomSession({ cartellaId, cartellaLibera, nomeCartella, consegna, comandoProva, modello, effort, permessi }) {
     const generation = nuovaGenerazioneSessione();
     const taskSintetico = { id: `libero:${nomeCartella}`, consegna };
     state.realSession.taskId = taskSintetico.id;
@@ -4252,13 +4447,16 @@
        * usato da `startRealSession` (Fase 3).
        */
       const client = window.__talosHarnessApiBase ? 'mobile' : 'desktop';
-      const corpo = { cartellaId, consegna, client };
+      // ⭐⭐⭐ 28/8 — cartellaId XOR cartellaLibera (permesso "Full access"): mai entrambi, il server li rifiuterebbe insieme (custom-task.mjs, mutua esclusività).
+      const corpo = cartellaLibera ? { cartellaLibera, consegna, client } : { cartellaId, consegna, client };
       if (comandoProva) corpo.comandoProva = comandoProva;
       const modelloEffettivo = modello || state.model; // ⭐ la scelta fatta nel picker della modale ha priorità
       if (modelloEffettivo) corpo.modello = modelloEffettivo;
       // ⭐ 28/8 — stesso principio del modello: la scelta esplicita dell'effort picker ha priorità, altrimenti quella già impostata sulla sessione (pillola/foglio); assente se l'owner non ha mai toccato lo slider.
       const effortEffettivo = effort || state.effort;
       if (effortEffettivo) corpo.reasoning = { effort: effortEffettivo };
+      // ⭐⭐⭐ 28/8 — la pillola permessi: la scelta fatta nella modale ha priorità, altrimenti quella corrente del composer (state.permissions, sempre valorizzata — default "Workspace write").
+      corpo.permessi = permessi || state.permissions;
       const data = await apiPost('/api/v1/sessions/custom', corpo);
       sessionId = data.sessionId;
     } catch (error) {
@@ -4320,9 +4518,9 @@
      * sessione reale, questo primo messaggio la avvia per davvero.
      */
     if (state.pendingCustomSession) {
-      const { cartellaId, nomeCartella, modello, effort } = state.pendingCustomSession;
+      const { cartellaId, cartellaLibera, nomeCartella, modello, effort, permessi } = state.pendingCustomSession;
       state.pendingCustomSession = null;
-      startCustomSession({ cartellaId, nomeCartella, consegna: value, modello, effort });
+      startCustomSession({ cartellaId, cartellaLibera, nomeCartella, consegna: value, modello, effort, permessi });
       return true;
     }
     /*

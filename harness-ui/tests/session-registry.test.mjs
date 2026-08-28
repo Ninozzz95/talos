@@ -192,7 +192,12 @@ test('⛔⛔ chiave API assente: stesso trattamento, zero chiamate ad avviaSessi
 // ⭐⭐⭐ 27/8 — avviaLibero(): stesso schema di avvia(), su una cartella
 // dell'allowlist invece di un taskId. preparaEsecuzioneLiberaFn finta,
 // stesso principio di preparaEsecuzioneFinta sopra.
-function preparaEsecuzioneLiberaFinta(cartelleProgetto, { cartellaId, consegna }) {
+function preparaEsecuzioneLiberaFinta(cartelleProgetto, { cartellaId, cartellaLibera, consegna }) {
+  // ⭐ 28/8 — cartellaLibera (permesso "Full access"): la VALIDAZIONE vera
+  // (esiste? è una cartella? leggibile/scrivibile?) è già provata per
+  // intero in custom-task.test.mjs — qui basta che il registro la
+  // inoltri, stesso principio minimalista del resto di questo fake.
+  if (cartellaLibera) return { cartella: cartellaLibera, comandoProva: 'npm test', task: { consegna, consegnaCorta: consegna } };
   const voce = cartelleProgetto.find((c) => c.id === cartellaId);
   if (!voce) throw new CustomTaskError(`Cartella non ammessa: ${cartellaId}`);
   return { cartella: voce.percorso, comandoProva: 'npm test', task: { consegna, consegnaCorta: consegna } };
@@ -239,6 +244,216 @@ test('⭐⭐ e AL CONTRARIO: senza modello esplicito, avviaLibero() eredita il d
   registro.avviaLibero({ cartellaId: '0', consegna: 'fai qualcosa' });
 
   assert.equal(finta.ultimoInput.modello, 'default/modello');
+});
+
+/*
+ * ⭐⭐⭐ 28/8 — LA PILLOLA PERMESSI (piano elegant-spinning-dongarra.md,
+ * owner: "read only/workspace write/on request/full access"). Ricerca
+ * fatta prima di scrivere (REGOLA ZERO, e HERMES AGENT — vedi memoria
+ * [[harness-da-battere-uno-a-uno]] — è il primo competitor: la sua
+ * assenza di un'approvazione interattiva è esattamente il gap che
+ * "On request" qui sotto colma).
+ */
+test('⭐ default: senza permessi espliciti, la voce è "Workspace write" — nessun livelloAccesso, nessun chiediApprovazioneFn', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+
+  registro.avvia('task-vero');
+
+  assert.equal(finta.ultimoInput.livelloAccesso, undefined);
+  assert.equal(finta.ultimoInput.chiediApprovazioneFn, undefined);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⭐⭐⭐ "Read only" diventa livelloAccesso:\'lettura\' per il kernel, MAI chiediApprovazioneFn', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+
+  registro.avvia('task-vero', { permessiScelto: 'Read only' });
+
+  assert.equal(finta.ultimoInput.livelloAccesso, 'lettura');
+  assert.equal(finta.ultimoInput.chiediApprovazioneFn, undefined);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⭐⭐⭐ "On request" passa una chiediApprovazioneFn vera, MAI livelloAccesso', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+
+  registro.avvia('task-vero', { permessiScelto: 'On request' });
+
+  assert.equal(finta.ultimoInput.livelloAccesso, undefined);
+  assert.equal(typeof finta.ultimoInput.chiediApprovazioneFn, 'function');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⭐⭐ "Workspace write"/"Full access" restano entrambi senza livelloAccesso/chiediApprovazioneFn — "Full access" cambia la CARTELLA, non il kernel', () => {
+  for (const permessiScelto of ['Workspace write', 'Full access']) {
+    const finta = sessioneControllabile();
+    const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+    registro.avvia('task-vero', { permessiScelto });
+    assert.equal(finta.ultimoInput.livelloAccesso, undefined, permessiScelto);
+    assert.equal(finta.ultimoInput.chiediApprovazioneFn, undefined, permessiScelto);
+    finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  }
+});
+
+test('⛔⛔⛔ AL CONTRARIO — avviaLibero() con cartellaLibera ma SENZA permesso "Full access" è rifiutato, avviaSessione MAI chiamato', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
+    cartelleProgetto: [], modello: 'm', chiave: 'k',
+  });
+
+  const risultato = registro.avviaLibero({ cartellaLibera: '/tmp/qualunque', consegna: 'fai qualcosa', permessi: 'Workspace write' });
+
+  assert.equal(risultato.code, 'QUERY_INVALID');
+  assert.equal(finta.chiamate, 0, 'un client HTTP diretto non deve MAI aggirare il cancello del permesso passando dal frontend');
+});
+
+test('⭐⭐⭐ avviaLibero() con cartellaLibera E permesso "Full access" avvia DAVVERO, sulla cartella scelta', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
+    cartelleProgetto: [], modello: 'm', chiave: 'k',
+  });
+
+  const risultato = registro.avviaLibero({ cartellaLibera: '/tmp/percorso-a-piacere', consegna: 'fai qualcosa', permessi: 'Full access' });
+
+  assert.ok(risultato.sessionId);
+  assert.equal(finta.ultimoInput.cartella, '/tmp/percorso-a-piacere');
+  assert.equal(finta.ultimoInput.livelloAccesso, undefined, '"Full access" non tocca il kernel: solo la cartella cambia');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⭐⭐⭐ fork() eredita il permesso della sessione origine — mai perso a metà conversazione', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Read only' });
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: [{ role: 'user', content: 'x' }] } });
+  await new Promise((r) => setImmediate(r));
+
+  // ⛔ STESSO `finta`/`registro`: forka() richiama avviaSessioneFn una
+  // seconda volta sullo stesso closure — `finta.ultimoInput` passa
+  // dalla sessione origine a quella forkata, non serve un secondo fake.
+  const risultatoFork = registro.forka(sessionId);
+
+  assert.ok(risultatoFork.sessionId);
+  assert.equal(finta.ultimoInput.livelloAccesso, 'lettura', 'il fork eredita "Read only" dalla sessione origine');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }); // pulizia della sessione forkata
+});
+
+test('⭐⭐⭐ resume() eredita il permesso della sessione origine', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'On request' });
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: [{ role: 'user', content: 'x' }] } });
+  await new Promise((r) => setImmediate(r));
+
+  const risultatoResume = registro.resume(sessionId);
+
+  // ⛔ mai assumere: se resume() avesse fallito in silenzio (senza
+  // richiamare avviaSessioneFn), finta.ultimoInput sarebbe rimasto
+  // quello della PRIMA chiamata — che ha PURE "On request" — e questa
+  // prova avrebbe superato l'asserzione sotto per il motivo sbagliato.
+  assert.ok(risultatoResume.sessionId, 'resume deve riuscire, non fallire in silenzio');
+  assert.equal(finta.chiamate, 2, 'avviaSessioneFn deve essere stato richiamato una SECONDA volta, non riusato dal primo giro');
+  assert.equal(typeof finta.ultimoInput.chiediApprovazioneFn, 'function', 'il resume ha ri-chiamato avviaSessione con lo STESSO permesso "On request" ereditato');
+});
+
+/*
+ * ⭐⭐⭐ 28/8 — rispondiApprovazione(): il lato server del ciclo "On
+ * request". Un fake avviaSessioneFn che CHIAMA DAVVERO
+ * chiediApprovazioneFn (a differenza di sessioneControllabile sopra,
+ * che non tocca mai i permessi) — questo prova il giro completo:
+ * richiesta → evento ApprovalRequested sul buffer → risposta →
+ * la Promise che il kernel starebbe aspettando si sblocca.
+ */
+function sessioneConApprovazione() {
+  let chiediApprovazioneCatturato;
+  let onEventoCatturato;
+  return {
+    avviaSessioneFn: async (input) => {
+      onEventoCatturato = input.onEvento;
+      chiediApprovazioneCatturato = input.chiediApprovazioneFn;
+      input.onEvento({ type: 'RunStarted', threadId: 't1', runId: 'r1' });
+      return new Promise(() => {}); // resta sospesa: il test conclude a mano se serve
+    },
+    get chiediApprovazioneFn() { return chiediApprovazioneCatturato; },
+    get onEvento() { return onEventoCatturato; },
+  };
+}
+
+test('⭐⭐⭐ richiediApprovazione: emette ApprovalRequested con l\'azione VERA, e rispondiApprovazione(true) sblocca la Promise in attesa', async () => {
+  const finta = sessioneConApprovazione();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'On request' });
+
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+
+  const azione = { tipo: 'scrivi', percorso: 'nuovo.txt' };
+  const promessaApprovazione = finta.chiediApprovazioneFn(azione);
+  await Promise.resolve(); // lascia scorrere il microtask della new Promise dentro richiediApprovazione
+
+  const richiesta = ricevuti.find((e) => e.type === 'ApprovalRequested');
+  assert.ok(richiesta, 'deve comparire un ApprovalRequested sul buffer della sessione');
+  assert.deepEqual(richiesta.azione, azione);
+  assert.equal(typeof richiesta.requestId, 'string');
+
+  const risposta = registro.rispondiApprovazione(sessionId, richiesta.requestId, true);
+  assert.deepEqual(risposta, { ok: true });
+  assert.equal(await promessaApprovazione, true, 'la Promise che il kernel aspettava si è risolta con la risposta vera');
+
+  const risolta = ricevuti.find((e) => e.type === 'ApprovalResolved');
+  assert.ok(risolta, 'un secondo evento chiude il ciclo per un eventuale secondo client in ascolto');
+  assert.equal(risolta.requestId, richiesta.requestId);
+  assert.equal(risolta.approvato, true);
+});
+
+test('⭐⭐ rispondiApprovazione(false) sblocca la Promise con false — un rifiuto vero, non un\'eccezione', async () => {
+  const finta = sessioneConApprovazione();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'On request' });
+
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+  const promessaApprovazione = finta.chiediApprovazioneFn({ tipo: 'shell', comando: 'rm -rf /' });
+  await Promise.resolve();
+
+  const richiesta = ricevuti.find((e) => e.type === 'ApprovalRequested');
+  registro.rispondiApprovazione(sessionId, richiesta.requestId, false);
+
+  assert.equal(await promessaApprovazione, false);
+});
+
+test('⛔⛔⛔ AL CONTRARIO — rispondiApprovazione con un requestId SBAGLIATO/vecchio non risolve NULLA: QUERY_INVALID, la Promise resta sospesa', async () => {
+  const finta = sessioneConApprovazione();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'On request' });
+  finta.chiediApprovazioneFn({ tipo: 'scrivi', percorso: 'x.txt' });
+  await Promise.resolve();
+
+  const risultato = registro.rispondiApprovazione(sessionId, 'un-id-che-non-esiste', true);
+
+  assert.equal(risultato.code, 'QUERY_INVALID');
+});
+
+test('⛔ AL CONTRARIO — rispondiApprovazione senza NESSUNA richiesta pendente: QUERY_INVALID, non un crash', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const risultato = registro.rispondiApprovazione(sessionId, 'qualunque-id', true);
+
+  assert.equal(risultato.code, 'QUERY_INVALID');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔ AL CONTRARIO — rispondiApprovazione su un sessionId inesistente: NOT_FOUND', () => {
+  const registro = createSessionRegistry({ preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const risultato = registro.rispondiApprovazione('mai-esistito', 'qualunque-id', true);
+  assert.equal(risultato.code, 'NOT_FOUND');
 });
 
 /*

@@ -119,6 +119,14 @@ export async function avviaSessione({
   cartella, task, modello, chiave, comandoProva,
   onEvento, segnaleStop, messaggiIniziali, reasoning, mobile = false,
   strumentiEstesi, ricercaWeb,
+  /*
+   * ⭐⭐⭐ 28/8 — pillola permessi: entrambi opzionali, inoltrati SENZA
+   * logica propria a talosLavoraFn (la decisione COSA rifiutare vive
+   * tutta nel kernel, `verificaPermessoScrittura` — vedi la sua doc).
+   * Questo file resta un adattatore, non un secondo posto dove la
+   * regola potrebbe divergere in silenzio.
+   */
+  livelloAccesso, chiediApprovazioneFn,
   talosLavoraFn = talosLavoraReale,
   leggiContestoWorkspaceFn = leggiContestoWorkspaceReale,
   salvaArtefattoFn = salvaArtefattoReale,
@@ -353,6 +361,7 @@ export async function avviaSessione({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
       onGiro, onScrittura, onDelta, reasoning,
       strumentiEstesi, ricercaWeb, onArtefatto, onDocumento,
+      livelloAccesso, chiediApprovazioneFn,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));
     return { threadId, runId, ok: esito.comeFinita === 'concluso', esito, erroreInterno: null };

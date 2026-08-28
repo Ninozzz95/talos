@@ -1,5 +1,5 @@
 import { leggiArtefatto as leggiArtefattoReale } from './artifact-store.mjs';
-import { modelloRichiestaValido, reasoningRichiestaValido } from './config.mjs';
+import { modelloRichiestaValido, permessiRichiestaValido, reasoningRichiestaValido } from './config.mjs';
 
 export const API_SCHEMA = 'talos.harness-ui.api.v1';
 
@@ -257,13 +257,13 @@ function leggiCorpoJson(req, limiteByte = MAX_REQUEST_BODY_BYTES) {
  */
 function requireTaskIdBody(body) {
   const chiavi = Object.keys(body ?? {});
-  const chiaviAmmesse = ['taskId', 'modello', 'reasoning', 'client'];
-  const soloAmmesse = chiavi.length > 0 && chiavi.length <= 4 && chiavi.every((k) => chiaviAmmesse.includes(k)) && chiavi.includes('taskId');
+  const chiaviAmmesse = ['taskId', 'modello', 'reasoning', 'client', 'permessi'];
+  const soloAmmesse = chiavi.length > 0 && chiavi.length <= chiaviAmmesse.length && chiavi.every((k) => chiaviAmmesse.includes(k)) && chiavi.includes('taskId');
   if (
     !soloAmmesse || typeof body.taskId !== 'string' || body.taskId.length === 0
     || ('client' in body && body.client !== 'desktop' && body.client !== 'mobile')
   ) {
-    const errore = new Error('Corpo non valido: atteso {taskId, modello?, reasoning?, client?}');
+    const errore = new Error('Corpo non valido: atteso {taskId, modello?, reasoning?, client?, permessi?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -277,11 +277,17 @@ function requireTaskIdBody(body) {
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
+  if ('permessi' in body && !permessiRichiestaValido(body.permessi)) {
+    const errore = new Error('permessi deve essere uno fra "Read only", "Workspace write", "On request", "Full access"');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
   return {
     taskId: body.taskId,
     modello: 'modello' in body && body.modello !== undefined ? body.modello : null,
     reasoning: 'reasoning' in body ? body.reasoning : null,
     mobile: body.client === 'mobile',
+    permessi: 'permessi' in body && body.permessi !== undefined ? body.permessi : null,
   };
 }
 
@@ -297,16 +303,28 @@ function requireTaskIdBody(body) {
  * (aggiunto in origine solo a `requireTaskIdBody`, mai qui, prima della
  * riconciliazione `avviaLibero` non era raggiungibile dal mobile).
  */
+/*
+ * ⭐⭐⭐ 28/8 — `cartellaId`/`cartellaLibera` MUTUAMENTE ESCLUSIVI (permesso
+ * "Full access", vedi custom-task.mjs/session-registry.avviaLibero per il
+ * perché): qui SOLO la forma cambia — `cartellaId` non è più sempre
+ * obbligatoria, esattamente uno fra i due lo è. La validazione FINE
+ * (il permesso è davvero "Full access"? il percorso esiste davvero?)
+ * resta nel registro/custom-task.mjs, stesso principio di sempre.
+ */
 function requireCustomTaskBody(body) {
-  const AMMESSE = ['cartellaId', 'consegna', 'comandoProva', 'modello', 'reasoning', 'client'];
+  const AMMESSE = ['cartellaId', 'cartellaLibera', 'consegna', 'comandoProva', 'modello', 'reasoning', 'client', 'permessi'];
   const chiavi = Object.keys(body ?? {});
+  const haCartellaId = 'cartellaId' in body && body.cartellaId !== undefined;
+  const haCartellaLibera = 'cartellaLibera' in body && body.cartellaLibera !== undefined;
   const soloAmmesse = chiavi.length > 0 && chiavi.every((k) => AMMESSE.includes(k))
-    && chiavi.includes('cartellaId') && chiavi.includes('consegna');
+    && (haCartellaId !== haCartellaLibera) && chiavi.includes('consegna');
   if (
-    !soloAmmesse || typeof body.cartellaId !== 'string' || typeof body.consegna !== 'string'
+    !soloAmmesse || typeof body.consegna !== 'string'
+    || (haCartellaId && typeof body.cartellaId !== 'string')
+    || (haCartellaLibera && typeof body.cartellaLibera !== 'string')
     || ('client' in body && body.client !== 'desktop' && body.client !== 'mobile')
   ) {
-    const errore = new Error('Corpo non valido: atteso {cartellaId, consegna, comandoProva?, modello?, reasoning?, client?}');
+    const errore = new Error('Corpo non valido: atteso {cartellaId XOR cartellaLibera, consegna, comandoProva?, modello?, reasoning?, client?, permessi?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -320,13 +338,20 @@ function requireCustomTaskBody(body) {
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
+  if ('permessi' in body && !permessiRichiestaValido(body.permessi)) {
+    const errore = new Error('permessi deve essere uno fra "Read only", "Workspace write", "On request", "Full access"');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
   return {
-    cartellaId: body.cartellaId,
+    cartellaId: haCartellaId ? body.cartellaId : undefined,
+    cartellaLibera: haCartellaLibera ? body.cartellaLibera : undefined,
     consegna: body.consegna,
     comandoProva: 'comandoProva' in body ? body.comandoProva : undefined,
     modello: 'modello' in body ? body.modello : null,
     reasoning: 'reasoning' in body ? body.reasoning : null,
     mobile: body.client === 'mobile',
+    permessi: 'permessi' in body && body.permessi !== undefined ? body.permessi : null,
   };
 }
 
@@ -408,6 +433,27 @@ function requireComandoBody(body) {
     throw errore;
   }
   return body.comando;
+}
+
+/**
+ * ⭐⭐⭐ 28/8 — la risposta dell'owner a un'ApprovalRequested (permesso "On
+ * request"). `requestId` obbligatorio — mai un endpoint che risponde
+ * "all'ultima richiesta pendente", vedi la doc di
+ * session-registry.rispondiApprovazione sul perché.
+ */
+function requireApprovaBody(body) {
+  const chiavi = Object.keys(body ?? {});
+  const AMMESSE = ['requestId', 'approvato'];
+  if (
+    chiavi.length !== 2 || !chiavi.every((k) => AMMESSE.includes(k))
+    || typeof body.requestId !== 'string' || body.requestId.length === 0
+    || typeof body.approvato !== 'boolean'
+  ) {
+    const errore = new Error('Corpo non valido: atteso {requestId, approvato}');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  return { requestId: body.requestId, approvato: body.approvato };
 }
 
 /*
@@ -506,8 +552,8 @@ export function createHttpApp({
       try {
         requireNoQuery(url);
         const corpo = await leggiCorpoJson(req);
-        const { taskId, modello, reasoning, mobile } = requireTaskIdBody(corpo);
-        const esito = sessionRegistry.avvia(taskId, { modelloScelto: modello, reasoningScelto: reasoning, mobile });
+        const { taskId, modello, reasoning, mobile, permessi } = requireTaskIdBody(corpo);
+        const esito = sessionRegistry.avvia(taskId, { modelloScelto: modello, reasoningScelto: reasoning, mobile, permessiScelto: permessi });
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
           errore.code = esito.code;
@@ -877,6 +923,42 @@ export function createHttpApp({
         const corpo = await leggiCorpoJson(req);
         const comando = requireComandoBody(corpo);
         const esito = sessionRegistry.shell(sessionId, comando);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    /*
+     * ⭐⭐⭐ 28/8 — la pillola permessi, livello "On request": l'owner
+     * risponde a un'ApprovalRequested vista sulla connessione SSE.
+     * Stesso stile di /shell sopra — synchronous sessionRegistry call,
+     * mai un `await` lungo (rispondiApprovazione risolve una Promise
+     * già in sospeso, non ne avvia una nuova).
+     */
+    const approveMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/approve$/.exec(url.pathname);
+    if (approveMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try {
+          sessionId = decodeURIComponent(approveMatch[1]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const corpo = await leggiCorpoJson(req);
+        const { requestId, approvato } = requireApprovaBody(corpo);
+        const esito = sessionRegistry.rispondiApprovazione(sessionId, requestId, approvato);
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
           errore.code = esito.code;

@@ -85,6 +85,30 @@ function registroFinto() {
       if (evento.type === 'RunFinished' || evento.type === 'RunError') voce.conclusa = true;
       for (const callback of voce.ascoltatori) callback(evento);
     },
+    /*
+     * ⭐⭐⭐ 28/8 — LA PILLOLA PERMESSI: aggiunta minima al fake, stesso
+     * stile di `avvia` sopra — cattura le opzioni ricevute per provare
+     * che la rotta HTTP le inoltra fedelmente, senza far girare
+     * nessuna sessione vera.
+     */
+    ultimeOpzioniAvvioLibero: null,
+    avviaLibero(opzioni = {}) {
+      this.ultimeOpzioniAvvioLibero = opzioni;
+      if (opzioni.cartellaLibera && opzioni.permessi !== 'Full access') {
+        return { erroreAvvio: 'cartellaLibera richiede il permesso "Full access"', code: 'QUERY_INVALID' };
+      }
+      contatore += 1;
+      const sessionId = `sess-${contatore}`;
+      sessioni.set(sessionId, { eventi: [], ascoltatori: new Set(), taskId: `libero:${opzioni.cartellaId ?? 'full-access'}`, avviataAlle: '2026-08-24T18:00:00.000Z', conclusa: false });
+      return { sessionId };
+    },
+    ultimaRispostaApprovazione: null,
+    rispondiApprovazione(sessionId, requestId, approvato) {
+      this.ultimaRispostaApprovazione = { sessionId, requestId, approvato };
+      if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (requestId !== 'richiesta-vera') return { erroreAvvio: 'Nessuna approvazione in attesa con questo id', code: 'QUERY_INVALID' };
+      return { ok: true };
+    },
   };
 }
 
@@ -194,7 +218,7 @@ test('POST /api/v1/sessions con client:\'mobile\' passa {mobile:true} a sessionR
     body: JSON.stringify({ taskId: 'sconto-a-scaglioni', client: 'mobile' }),
   });
   assert.equal(risposta.status, 200);
-  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, reasoningScelto: null, mobile: true });
+  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, reasoningScelto: null, mobile: true, permessiScelto: null });
 });
 
 test('⛔ AL CONTRARIO: client:\'desktop\' ESPLICITO e client ASSENTE producono entrambi {mobile:false} — nessuna differenza di comportamento', async (t) => {
@@ -204,13 +228,134 @@ test('⛔ AL CONTRARIO: client:\'desktop\' ESPLICITO e client ASSENTE producono 
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ taskId: 'sconto-a-scaglioni', client: 'desktop' }),
   });
-  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, reasoningScelto: null, mobile: false });
+  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, reasoningScelto: null, mobile: false, permessiScelto: null });
 
   await fetch(`${base}/api/v1/sessions`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ taskId: 'sconto-a-scaglioni' }),
   });
-  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, reasoningScelto: null, mobile: false });
+  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, reasoningScelto: null, mobile: false, permessiScelto: null });
+});
+
+/*
+ * ⭐⭐⭐ 28/8 — LA PILLOLA PERMESSI, sui DUE endpoint di avvio. Ricerca
+ * (REGOLA ZERO, e HERMES AGENT è il primo competitor — vedi memoria
+ * [[harness-da-battere-uno-a-uno]]): Codex CLI separa sandbox_mode/
+ * approval_policy in due assi, la sicurezza 2026 boccia le denylist —
+ * qui si prova che la FORMA del corpo (non solo la logica interna,
+ * già provata in session-registry.test.mjs) applica davvero quelle
+ * scelte al confine HTTP, dove un client diretto (non il frontend)
+ * potrebbe provare ad aggirarle.
+ */
+test('⭐⭐⭐ POST /api/v1/sessions con permessi:"Read only" lo inoltra a sessionRegistry.avvia come permessiScelto', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taskId: 'sconto-a-scaglioni', permessi: 'Read only' }),
+  });
+  assert.equal(risposta.status, 200);
+  assert.equal(sessionRegistry.ultimeOpzioniAvvio.permessiScelto, 'Read only');
+});
+
+test('⛔⛔ POST /api/v1/sessions con un permessi INVENTATO: QUERY_INVALID, mai una sessione avviata con un valore a caso', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taskId: 'sconto-a-scaglioni', permessi: 'Super Admin' }),
+  });
+  assert.equal(risposta.status, 400);
+  assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
+  assert.equal(sessionRegistry.ultimeOpzioniAvvio, null, 'mai raggiunto il registro con un permesso non valido');
+});
+
+test('⭐⭐⭐ POST /api/v1/sessions/custom con cartellaLibera+permessi:"Full access" arriva davvero al registro', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions/custom`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cartellaLibera: 'C:/qualunque/percorso', consegna: 'fai qualcosa', permessi: 'Full access' }),
+  });
+  assert.equal(risposta.status, 200);
+  assert.equal(sessionRegistry.ultimeOpzioniAvvioLibero.cartellaLibera, 'C:/qualunque/percorso');
+  assert.equal(sessionRegistry.ultimeOpzioniAvvioLibero.permessi, 'Full access');
+  assert.equal(sessionRegistry.ultimeOpzioniAvvioLibero.cartellaId, undefined);
+});
+
+test('⛔⛔⛔ AL CONTRARIO — POST /api/v1/sessions/custom con cartellaLibera ma SENZA "Full access": il registro rifiuta, non l\'HTTP — verificato che raggiunga comunque il cancello vero', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions/custom`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cartellaLibera: 'C:/qualunque/percorso', consegna: 'fai qualcosa', permessi: 'Workspace write' }),
+  });
+  assert.equal(risposta.status, 400);
+  assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
+  assert.ok(sessionRegistry.ultimeOpzioniAvvioLibero, 'la richiesta HA raggiunto avviaLibero (la FORMA del corpo era valida) — è il registro a dire no, stesso cancello di session-registry.test.mjs');
+});
+
+test('⛔⛔ AL CONTRARIO — POST /api/v1/sessions/custom con SIA cartellaId CHE cartellaLibera: 400 PRIMA di raggiungere il registro', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions/custom`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cartellaId: '0', cartellaLibera: 'C:/altro', consegna: 'fai qualcosa' }),
+  });
+  assert.equal(risposta.status, 400);
+  assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
+  assert.equal(sessionRegistry.ultimeOpzioniAvvioLibero, null, 'la FORMA del corpo è già invalida: il registro non deve nemmeno essere chiamato');
+});
+
+test('⛔ AL CONTRARIO — POST /api/v1/sessions/custom senza NÉ cartellaId NÉ cartellaLibera: 400, non una sessione fantasma', async (t) => {
+  const { base } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions/custom`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ consegna: 'fai qualcosa' }),
+  });
+  assert.equal(risposta.status, 400);
+  assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
+});
+
+/*
+ * ⭐⭐⭐ 28/8 — POST .../approve, il lato HTTP del permesso "On request".
+ */
+test('⭐⭐⭐ POST /api/v1/sessions/:id/approve con {requestId, approvato} raggiunge sessionRegistry.rispondiApprovazione', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/approve`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requestId: 'richiesta-vera', approvato: true }),
+  });
+  assert.equal(risposta.status, 200);
+  assert.deepEqual(sessionRegistry.ultimaRispostaApprovazione, { sessionId, requestId: 'richiesta-vera', approvato: true });
+});
+
+test('⛔⛔ AL CONTRARIO — POST .../approve con un requestId sbagliato: QUERY_INVALID, mai un {ok:true} bugiardo', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/approve`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requestId: 'un-id-vecchio', approvato: true }),
+  });
+  assert.equal(risposta.status, 400);
+  assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
+});
+
+test('⛔ AL CONTRARIO — POST .../approve su una sessione inesistente: 404 NOT_FOUND', async (t) => {
+  const { base } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions/mai-esistita/approve`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requestId: 'x', approvato: false }),
+  });
+  assert.equal(risposta.status, 404);
+});
+
+test('⛔⛔ AL CONTRARIO — POST .../approve con un corpo malformato (approvato non booleano, o requestId mancante): 400 QUERY_INVALID', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  for (const corpo of [{ requestId: 'x', approvato: 'sì' }, { approvato: true }, { requestId: 'x' }, {}]) {
+    const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/approve`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo),
+    });
+    assert.equal(risposta.status, 400, JSON.stringify(corpo));
+    assert.equal((await risposta.json()).error.code, 'QUERY_INVALID', JSON.stringify(corpo));
+  }
 });
 
 test('⛔ POST /api/v1/sessions su un task fuori allowlist: 404 TASK_NOT_ALLOWED, mai una sessione', async (t) => {
