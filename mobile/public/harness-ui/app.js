@@ -1580,12 +1580,19 @@
    * "nuovo task" (openRealTaskSheet) — screenshottato aprendo il foglio
    * "control" appena reso onesto: il badge restava lì sopra un
    * contenuto ormai vero al 100%. Non tutti i fogli sono onesti allo
-   * stesso modo, però: `sessionTree` mostra ANCORA due righe fork/side-
-   * thread inventate (nessuna delega reale oggi) — per quello il badge
-   * resta, correttamente. Whitelist esplicita, non un "nascondi sempre":
-   * solo i tipi verificati stanotte riga per riga.
+   * stesso modo, però — whitelist esplicita, non un "nascondi sempre":
+   * solo i tipi verificati riga per riga.
+   *
+   * ⭐⭐⭐ FASE C (28/8) — trovato dallo screenshot dal vivo della
+   * verifica di questa fase, non da un controllo automatico (la stessa
+   * disciplina "l'ispezione visiva trova quello che il controllo
+   * automatico non cerca" già più volte confermata in questo progetto):
+   * `sessionTree` mostrava ancora "Demo UI · non collegato" sopra la
+   * delega VERA appena conclusa — la nota del 27/8 qui sopra descriveva
+   * le due righe fork/side-thread INVENTATE, ora rimosse e sostituite
+   * da caricaAlberoSessione() (dati reali di GET .../children). Aggiunto.
    */
-  const TIPI_FOGLIO_INTERAMENTE_ONESTI = new Set(['model', 'capabilities', 'control', 'fileViewer', 'renameFile', 'deleteFile', 'createFile', 'export']);
+  const TIPI_FOGLIO_INTERAMENTE_ONESTI = new Set(['model', 'capabilities', 'control', 'fileViewer', 'renameFile', 'deleteFile', 'createFile', 'export', 'sessionTree']);
   function openSheet(type) {
     const content = sheetTemplates[type];
     if (!content) return;

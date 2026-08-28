@@ -845,7 +845,8 @@ const SCENARI = {
      * una pausa di ragionamento normale; e via il controllo che si
      * auto-inganna sul secondo.
      */
-    await p.digita('#composerInput', 'Esegui con l\'attrezzo shell il comando `echo fase-b-shell-ok` e riportami l\'output esatto che ricevi. Nient\'altro, non scrivere file.');
+    // ⭐ 28/8, owner: "i messaggi devono partire in linguaggio naturale esattamente come farebbero gli utenti umani, senza termini tecnici" — mai il nome dell'attrezzo, mai un fraseggio da specifica (vedi memoria i-messaggi-di-prova-in-linguaggio-naturale.md).
+    await p.digita('#composerInput', 'Puoi lanciare il comando `echo fase-b-shell-ok` e dirmi esattamente cosa ti risponde?');
     await p.submit('#composerForm');
     await p.attendi(1000);
     await p.attendiTestoStabile('.conversation', { giriStabili: 5, intervalMs: 1500 });
@@ -862,7 +863,7 @@ const SCENARI = {
     // --- Secondo turno, STESSA sessione: scrivi (nessun override) — deve passare SENZA chiedere ---
     const cardPrimaDiScrivi = await p.cdp.evaluate("document.querySelectorAll('.real-approval-card').length");
     const nomeFile = `fase-b-scrivi-${Date.now()}.txt`;
-    await p.digita('#composerInput', `Crea un file chiamato ${nomeFile} con dentro il testo "ok". Nient'altro, non chiamare shell.`);
+    await p.digita('#composerInput', `Grazie. Ora puoi creare un file chiamato ${nomeFile} con dentro scritto "ok"?`);
     await p.submit('#composerForm');
     await p.attendi(1000);
     await p.attendiTestoStabile('.conversation', { giriStabili: 5, intervalMs: 1500 });
@@ -905,11 +906,12 @@ const SCENARI = {
     const cartellaFiglio = 'C:/Users/Antonino/Desktop/projects/talos-prova-harness-figlio';
     const nomeFile = `fase-c-figlio-${Date.now()}.txt`;
     const testoFile = 'delegato con successo';
+    // ⭐ 28/8, owner: "i messaggi devono partire in linguaggio naturale esattamente come farebbero gli utenti umani, senza termini tecnici" — descrive il desiderio (un sotto-agente separato, isolato), mai il nome dell'attrezzo (vedi memoria i-messaggi-di-prova-in-linguaggio-naturale.md).
     await p.digita(
       '#composerInput',
-      `Usa l'attrezzo delega_sottotask per delegare a un sotto-agente questo compito, nella cartella isolata `
-      + `\`${cartellaFiglio}\`: crea un file chiamato ${nomeFile} con dentro il testo esatto "${testoFile}". `
-      + `Aspetta il riassunto del sotto-agente e riportamelo per intero. Nient'altro: non scrivere tu stesso alcun file.`,
+      `Ho una cosa che si può isolare completamente: puoi farla fare a un sotto-agente separato, dandogli `
+      + `come cartella di lavoro \`${cartellaFiglio}\`? Deve creare lì un file chiamato ${nomeFile} con dentro `
+      + `scritto "${testoFile}". Fammi sapere cosa ti risponde quando ha finito.`,
     );
     await p.submit('#composerForm');
     p.nota('delega inviata — il padre aspetta un ciclo agentico INTERO della figlia (elenca/scrivi/prova suoi), non solo una risposta: soglia di stabilità generosa');
@@ -967,6 +969,42 @@ const SCENARI = {
       p.nota(`CONFERMATO: Albero sessione mostra la delega vera: ${JSON.stringify(testoAlbero)}`);
     }
     await p.click('#closeSheet');
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /*
+   * ⭐⭐⭐ 28/8 — verifica ECONOMICA (zero chiamate a pagamento): riusa una
+   * sessione reale già conclusa e persistita dal server (una corsa
+   * precedente, es. fase-c-subagenti) invece di pagarne una nuova solo
+   * per controllare un badge. Nessun composer, nessun submit, nessun
+   * modello: solo navigazione fra superfici già vere.
+   */
+  async 'verifica-badge-albero-sessione'(p) {
+    await p.attendi(1000);
+    await p.cdp.evaluate('window.__talosHarnessUiRuntime.aggiornaElencoSessioniReali()');
+    await p.attendiCondizione("!!document.querySelector('.session-item.real-session-item')", { descrizione: 'sidebar popolata con sessioni reali già esistenti sul server' });
+    await p.click('.session-item.real-session-item');
+    await p.attendi(400);
+    await p.click('#sessionTitleButton');
+    await p.attendiCondizione("!document.querySelector('#subagentTreeMount')?.textContent?.includes('Carico')", { descrizione: 'pannello deleghe caricato' });
+    await p.screenshot('albero-sessione-riverificato', { nota: 'badge "Demo UI" atteso ASSENTE — sessionTree è stato aggiunto a TIPI_FOGLIO_INTERAMENTE_ONESTI in questo giro' });
+    const badgeNascosto = await p.cdp.evaluate("document.querySelector('.demo-surface-badge')?.hidden ?? null");
+    if (badgeNascosto !== true) {
+      p.difetto(`il badge "Demo UI" NON è nascosto sul foglio Albero sessione (hidden=${JSON.stringify(badgeNascosto)}) — la cura non ha funzionato`, { severita: 'blocco' });
+    } else {
+      p.nota('CONFERMATO: il badge "Demo UI" è nascosto sul foglio Albero sessione — la cura ha funzionato, riverificata dal vivo senza spendere un centesimo in più.');
+    }
+    const testoTopology = await p.testo('.session-topology');
+    if (testoTopology && /Sotto-thread non ancora implementati/.test(testoTopology)) {
+      p.difetto('il Context Rail mostra ANCORA la frase statica "Sotto-thread non ancora implementati" — la cura del testo non ha funzionato', { severita: 'blocco' });
+    } else {
+      p.nota(`CONFERMATO: il Context Rail non dichiara più "non implementati" — testo attuale: ${JSON.stringify(testoTopology)}`);
+    }
 
     for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
     for (const r of p.cdp.richiesteFallite) {
