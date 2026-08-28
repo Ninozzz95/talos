@@ -38,6 +38,8 @@ const API_ERROR_CODES = new Set([
   'FILE_TOO_LARGE',
   'FILE_EXISTS',
   'PLATFORM_UNSUPPORTED',
+  /* ⭐ 28/8 — FASE A (hook): .harness-ui-hooks.json malformato, o un hookId che non combacia nessuna voce del file. */
+  'HOOK_INVALID',
 ]);
 
 const STATUS_BY_CODE = Object.freeze({
@@ -65,6 +67,8 @@ const STATUS_BY_CODE = Object.freeze({
   /** ⭐ 27/8 — stesso status di SESSION_NOT_READY: la richiesta è legittima ma lo stato attuale (un file già lì) la blocca. */
   FILE_EXISTS: 409,
   PLATFORM_UNSUPPORTED: 501,
+  /** ⭐ 28/8 — stesso status di ROW_INVALID/QUERY_INVALID: il contenuto della richiesta (hookId, o il file hooks.json stesso) non è valido. */
+  HOOK_INVALID: 422,
 });
 
 const MESSAGE_BY_CODE = Object.freeze({
@@ -87,6 +91,7 @@ const MESSAGE_BY_CODE = Object.freeze({
   FILE_TOO_LARGE: 'File troppo grande per l\'anteprima',
   FILE_EXISTS: 'Esiste già un file con questo nome',
   PLATFORM_UNSUPPORTED: 'Non disponibile su questa piattaforma',
+  HOOK_INVALID: 'Configurazione hook non valida',
 });
 
 const SECURITY_HEADERS = Object.freeze({
@@ -1095,6 +1100,45 @@ export function createHttpApp({
       return;
     }
 
+    /*
+     * ⭐⭐⭐ 28/8 — FASE A (hook), piano `elegant-spinning-dongarra.md`.
+     * L'UNICA strada che rende un hook eseguibile — stesso principio
+     * "fail-closed" di Codex CLI (`--dangerously-bypass-hook-trust`
+     * esiste solo per bypassarlo esplicitamente): senza una chiamata
+     * qui, `verificaTrust` in hook-registry.mjs torna sempre `false`.
+     * Nessun corpo richiesto: l'owner fida ESATTAMENTE l'hook che la UI
+     * gli ha mostrato per `hookId`, l'hash vero si rilegge da disco qui
+     * (sessionRegistry.fidaHook), mai passato dal client.
+     */
+    const trustMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/hooks\/([^/]+)\/trust$/.exec(url.pathname);
+    if (trustMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        let hookId;
+        try {
+          sessionId = decodeURIComponent(trustMatch[1]);
+          hookId = decodeURIComponent(trustMatch[2]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const esito = await sessionRegistry.fidaHook(sessionId, hookId);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
     if (!['GET', 'HEAD'].includes(method)) {
       sendJson(res, 405, errorEnvelope('METHOD_NOT_ALLOWED', clock), method, { Allow: 'GET, HEAD' });
       return;
@@ -1150,6 +1194,8 @@ export function createHttpApp({
         const exportMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/export$/.exec(url.pathname);
         const treeMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/tree$/.exec(url.pathname);
         const treeFileMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/tree\/file$/.exec(url.pathname);
+        // ⭐⭐⭐ 28/8 — FASE A (hook): il pannello Control-plane elenca gli hook dichiarati e il loro stato di fiducia vero — stesso principio di exportMatch sotto.
+        const hooksMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/hooks$/.exec(url.pathname);
         // ⭐⭐⭐ 28/8 — non SESSION-scoped: un artefatto ha un id UUID già globalmente unico (agent-service.mjs), stesso principio di /api/v1/models.
         const artifactMatch = /^\/api\/v1\/artifacts\/([^/]+)$/.exec(url.pathname);
 
@@ -1201,6 +1247,22 @@ export function createHttpApp({
             return;
           }
           data = esportato;
+        } else if (hooksMatch) {
+          requireNoQuery(url);
+          let sessionId;
+          try {
+            sessionId = decodeURIComponent(hooksMatch[1]);
+          } catch {
+            sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+            return;
+          }
+          const esito = await sessionRegistry.elencaHooks(sessionId);
+          if ('erroreAvvio' in esito) {
+            const errore = new Error(esito.erroreAvvio);
+            errore.code = esito.code;
+            throw errore;
+          }
+          data = { hooks: esito.hooks, errore: esito.errore };
         } else if (campaignMatch) {
           let campaign;
           try {

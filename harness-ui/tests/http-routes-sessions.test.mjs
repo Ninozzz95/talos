@@ -109,6 +109,24 @@ function registroFinto() {
       if (requestId !== 'richiesta-vera') return { erroreAvvio: 'Nessuna approvazione in attesa con questo id', code: 'QUERY_INVALID' };
       return { ok: true };
     },
+    /*
+     * ⭐⭐⭐ 28/8 — FASE A (hook): stesso stile di rispondiApprovazione sopra
+     * — cattura la chiamata per provare che la rotta HTTP raggiunge
+     * davvero il registro, senza fingere una vera hooks.json.
+     */
+    async elencaHooks(sessionId) {
+      if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (sessionId === 'sess-hooks-rotti') return { ok: true, hooks: null, errore: '.harness-ui-hooks.json non è un JSON valido' };
+      return { ok: true, hooks: [{ id: 'audit', eventi: ['pre_tool_call'], fidato: false }], errore: null };
+    },
+    ultimaFiduciaHook: null,
+    async fidaHook(sessionId, hookId) {
+      this.ultimaFiduciaHook = { sessionId, hookId };
+      if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (hookId === 'hook-inesistente') return { erroreAvvio: `Hook "${hookId}" non trovato in .harness-ui-hooks.json`, code: 'NOT_FOUND' };
+      if (hookId === 'hook-file-rotto') return { erroreAvvio: '.harness-ui-hooks.json non è un JSON valido', code: 'HOOK_INVALID' };
+      return { ok: true };
+    },
   };
 }
 
@@ -356,6 +374,53 @@ test('⛔⛔ AL CONTRARIO — POST .../approve con un corpo malformato (approvat
     assert.equal(risposta.status, 400, JSON.stringify(corpo));
     assert.equal((await risposta.json()).error.code, 'QUERY_INVALID', JSON.stringify(corpo));
   }
+});
+
+/*
+ * ⭐⭐⭐ 28/8 — POST .../hooks/:hookId/trust, FASE A (hook). L'UNICA
+ * strada che rende un hook eseguibile — vedi il commento in
+ * http-app.mjs sopra questa rotta per il perché (fail-closed, stesso
+ * principio di Codex CLI).
+ */
+test('⭐⭐⭐ POST /api/v1/sessions/:id/hooks/:hookId/trust raggiunge sessionRegistry.fidaHook con id decodificati', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/hooks/${encodeURIComponent('audit hook')}/trust`, {
+    method: 'POST',
+  });
+  assert.equal(risposta.status, 200);
+  assert.deepEqual(sessionRegistry.ultimaFiduciaHook, { sessionId, hookId: 'audit hook' });
+});
+
+test('⛔ AL CONTRARIO — .../trust su una sessione inesistente: 404 NOT_FOUND', async (t) => {
+  const { base } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions/mai-esistita/hooks/audit/trust`, { method: 'POST' });
+  assert.equal(risposta.status, 404);
+  assert.equal((await risposta.json()).error.code, 'NOT_FOUND');
+});
+
+test('⛔⛔ AL CONTRARIO — .../trust su un hookId che non esiste in hooks.json: 404 NOT_FOUND, mai un {ok:true} bugiardo', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/hooks/hook-inesistente/trust`, { method: 'POST' });
+  assert.equal(risposta.status, 404);
+  assert.equal((await risposta.json()).error.code, 'NOT_FOUND');
+});
+
+test('⛔⛔⛔ AL CONTRARIO — .../trust con hooks.json malformato: 422 HOOK_INVALID, mai fidato per errore', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/hooks/hook-file-rotto/trust`, { method: 'POST' });
+  assert.equal(risposta.status, 422);
+  assert.equal((await risposta.json()).error.code, 'HOOK_INVALID');
+});
+
+test('⛔ AL CONTRARIO — GET .../trust (metodo sbagliato) non raggiunge mai fidaHook', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/hooks/audit/trust`, { method: 'GET' });
+  assert.notEqual(risposta.status, 200);
+  assert.equal(sessionRegistry.ultimaFiduciaHook, null);
 });
 
 test('⛔ POST /api/v1/sessions su un task fuori allowlist: 404 TASK_NOT_ALLOWED, mai una sessione', async (t) => {
@@ -664,6 +729,27 @@ test('⭐ GET /api/v1/sessions/{id}/export torna la storia intera, avvolta nella
 test('⛔ GET /api/v1/sessions/{id}/export su un id inesistente torna 404, non un export vuoto', async (t) => {
   const { base } = await listen(t);
   const risposta = await fetch(`${base}/api/v1/sessions/non-esiste/export`);
+  assert.equal(risposta.status, 404);
+});
+
+/*
+ * ⭐⭐⭐ 28/8 — GET .../hooks, FASE A (hook): il pannello Control-plane
+ * chiama questa rotta per mostrare gli hook dichiarati e il loro stato
+ * di fiducia vero.
+ */
+test('⭐ GET /api/v1/sessions/{id}/hooks torna gli hook con lo stato di fiducia dal registro', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/hooks`);
+  assert.equal(risposta.status, 200);
+  const corpo = await risposta.json();
+  assert.deepEqual(corpo.data.hooks, [{ id: 'audit', eventi: ['pre_tool_call'], fidato: false }]);
+  assert.equal(corpo.data.errore, null);
+});
+
+test('⛔ AL CONTRARIO — GET .../hooks su un id inesistente: 404 NOT_FOUND', async (t) => {
+  const { base } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions/non-esiste/hooks`);
   assert.equal(risposta.status, 404);
 });
 

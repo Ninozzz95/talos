@@ -19,6 +19,11 @@ node_modules/
 # generati sul disco di chi fa girare il server, non da versionare.
 harness-ui/.automations/
 
+# ⭐ 28/8 — FASE A (hook): il registro di trust di ogni owner (chi ha
+# fidato quale hook, su questa macchina) — stesso principio di
+# .automations/ appena sopra, dati locali generati a runtime.
+harness-ui/.hooks-trust/
+
 # ⭐ 27/8 — output della pipeline QA visiva (screenshot + report.json +
 # taccuino.md per corsa): dati di UNA verifica, non lo strumento che li
 # produce. Lo script (scripts/qa-visual-pipeline.mjs) resta versionato.

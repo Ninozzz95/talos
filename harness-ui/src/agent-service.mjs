@@ -127,6 +127,17 @@ export async function avviaSessione({
    * regola potrebbe divergere in silenzio.
    */
   livelloAccesso, chiediApprovazioneFn,
+  /*
+   * ⭐⭐⭐ 28/8 — FASE A (hook), piano `elegant-spinning-dongarra.md`.
+   * Stesso principio di `livelloAccesso`/`chiediApprovazioneFn` appena
+   * sopra: inoltrato SENZA logica propria, la decisione (quale hook
+   * fidato blocca cosa) vive tutta in `costruisciHookFn`
+   * (`session-registry.mjs`) e nel kernel (`talosHarness.mjs`). Prima
+   * di questo commit `hookFn` veniva costruito da `session-registry.mjs`
+   * ma MAI arrivava qui — silenziosamente ignorato, nessun errore:
+   * il gap dichiarato in `LEDGER-FASE-A-HOOKS.md`, chiuso ora.
+   */
+  hookFn,
   talosLavoraFn = talosLavoraReale,
   leggiContestoWorkspaceFn = leggiContestoWorkspaceReale,
   salvaArtefattoFn = salvaArtefattoReale,
@@ -361,7 +372,7 @@ export async function avviaSessione({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
       onGiro, onScrittura, onDelta, reasoning,
       strumentiEstesi, ricercaWeb, onArtefatto, onDocumento,
-      livelloAccesso, chiediApprovazioneFn,
+      livelloAccesso, chiediApprovazioneFn, hookFn,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));
     return { threadId, runId, ok: esito.comeFinita === 'concluso', esito, erroreInterno: null };

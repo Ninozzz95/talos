@@ -954,6 +954,82 @@
   }
 
   /**
+   * ⭐⭐⭐ 28/8 — FASE A (hook), piano `elegant-spinning-dongarra.md`.
+   * Riempie `#hooksListMount` nel foglio "control" con gli hook VERI
+   * del progetto della sessione attiva — mai un contatore inventato.
+   * Nessuna sessione attiva → stato onesto, ZERO richiesta di rete
+   * (stessa disciplina "niente fetch fantasma" di ogni altra superficie
+   * di questo bundle). Ri-chiamata dopo ogni "Fida" riuscita, cosi' il
+   * bottone sparisce subito — non serve richiudere/riaprire il foglio.
+   */
+  async function caricaPannelloHooks() {
+    const mount = $('#hooksListMount', sheetBody);
+    if (!mount) return; // il foglio "control" non è (più) quello aperto
+    if (!state.realSession.id) {
+      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione attiva — apri o avvia un task per vedere gli hook del progetto.'));
+      return;
+    }
+    mount.replaceChildren(textElement('p', 'board-empty', 'Carico gli hook…'));
+    let dati;
+    try {
+      dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/hooks`);
+    } catch (error) {
+      mount.replaceChildren(textElement('p', 'board-empty', `Hook non disponibili: ${error.message}`));
+      return;
+    }
+    if (mount !== $('#hooksListMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
+    if (dati.errore) {
+      mount.replaceChildren(textElement('p', 'board-empty', `.harness-ui-hooks.json non valido: ${dati.errore}`));
+      return;
+    }
+    if (!dati.hooks || dati.hooks.length === 0) {
+      mount.replaceChildren(textElement('p', 'board-empty', 'Nessun hook dichiarato in questo progetto (.harness-ui-hooks.json).'));
+      return;
+    }
+    mount.replaceChildren(...dati.hooks.map((hook) => rigaHook(hook)));
+  }
+
+  /** Una riga hook — stesso idioma `.sheet-option` delle altre righe del Control plane. */
+  function rigaHook(hook) {
+    const riga = document.createElement('div');
+    riga.className = 'sheet-option';
+    riga.setAttribute('role', 'group');
+    const iconEl = document.createElement('span');
+    iconEl.className = 'sheet-icon';
+    iconEl.innerHTML = icon('i-bolt');
+    const testo = document.createElement('span');
+    testo.append(
+      textElement('strong', null, hook.id),
+      textElement('small', null, hook.eventi.join(', ')),
+    );
+    let statoEl;
+    if (hook.fidato) {
+      statoEl = textElement('span', 'status-chip success', 'attivo');
+    } else {
+      const bottone = document.createElement('button');
+      bottone.type = 'button';
+      bottone.className = 'secondary-btn';
+      bottone.textContent = 'Fida';
+      bottone.addEventListener('click', async () => {
+        bottone.disabled = true;
+        bottone.textContent = 'Fido…';
+        try {
+          await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/hooks/${encodeURIComponent(hook.id)}/trust`, {});
+          toast('Hook fidato', hook.id);
+          caricaPannelloHooks();
+        } catch (error) {
+          bottone.disabled = false;
+          bottone.textContent = 'Fida';
+          toast('Non riuscito', error.message);
+        }
+      });
+      statoEl = bottone;
+    }
+    riga.append(iconEl, testo, statoEl);
+    return riga;
+  }
+
+  /**
    * ⭐⭐⭐ 27/8 — owner: "un picker per il modello, dropdown stilizzato
    * (l'abbiamo già fatto nel mobile)". Stesso pattern di
    * TalosMobileComposerModelPicker.vue (AVM/mobile/src/components/chat/),
@@ -1459,7 +1535,7 @@
     sheetBody.innerHTML = content.html();
     showEmbeddedDialog(sheetDialog);
     wireSheetActions(type);
-    if (type === 'control') refreshDoctorBadge();
+    if (type === 'control') { refreshDoctorBadge(); caricaPannelloHooks(); }
     /*
      * ⭐⭐⭐ 27/8, owner: "riaprire lo stesso componente della selezione del
      * modello" — montato qui (non in sheetTemplates.model.html, che è una
@@ -1643,6 +1719,15 @@
        * ha un hook di permesso sui comandi). Stesso principio già
        * applicato al Capability hub (blocco 8): reale con un numero
        * vero, o onestamente "non ancora implementato" — mai un bluff.
+       *
+       * ⭐⭐⭐ 28/8 — FASE A CHIUDE QUESTO BUCO PER "Hooks": la sezione
+       * sotto è ora un punto di montaggio reale (`#hooksListMount`,
+       * riempito da `caricaPannelloHooks()` in `openSheet()`) — elenca
+       * gli hook VERI dichiarati dal progetto e il loro stato di
+       * fiducia VERO, con un bottone "Fida" che chiama davvero
+       * `POST .../trust`. "Agents"/"Approval policy per-tool" restano
+       * onestamente "Non ancora implementato" — quelle due fasi non
+       * sono ancora aperte.
        */
       html: () => `
         <div class="sheet-section">
@@ -1651,10 +1736,13 @@
           <button class="sheet-option" data-control-action="settings"><span class="sheet-icon">${icon('i-settings')}</span><span><strong>Impostazioni Codice</strong><small>Aspetto, interazione e preferenze</small></span><span>Apri</span></button>
         </div>
         <div class="sheet-section">
+          <span class="sheet-label">Hooks</span>
+          <div id="hooksListMount"></div>
+        </div>
+        <div class="sheet-section">
           <span class="sheet-label">Non ancora implementato</span>
           ${[
             ['Agents', 'Subagent, deleghe, isolamento e limiti', 'i-robot'],
-            ['Hooks', 'Pre/Post tool, stop, notify e policy', 'i-bolt'],
             ['Approval policy per-tool', 'Nessuna grammatica di permesso per-tool oggi — il cancello semantico su scrivi è sempre attivo, non è opzionale', 'i-shield'],
           ].map(([name, desc, ico]) => `
             <div class="sheet-option" role="group">
@@ -4118,6 +4206,20 @@
         nascondiAttesaRisposta();
         appendStatusNote(`${evento.code ? `[${evento.code}] ` : ''}${evento.message}`, true);
         state.realSession.eventoTerminaleVisto = true;
+        break;
+      }
+      /*
+       * ⭐⭐⭐ 28/8 — FASE A (hook). Solo un hook FIDATO ed eseguito arriva
+       * qui (mai per uno non fidato/una sessione senza hook — vedi
+       * session-registry.mjs). Un toast basta per la prima fetta: un
+       * blocco è già visibile da solo (il tool rifiutato appare come
+       * REFUSED nel bubble della chat), questo è per rendere visibile
+       * anche l'osservazione silenziosa (post_tool_call, session_start/end).
+       */
+      case 'HookInvoked': {
+        if (evento.esito?.consentito === false) {
+          toast(`Hook "${evento.hookId}" ha bloccato ${evento.azione ?? evento.tipo}`, evento.esito.motivo || '');
+        }
         break;
       }
       default:

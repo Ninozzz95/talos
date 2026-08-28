@@ -161,6 +161,22 @@ export function approvalResolved({ requestId, approvato }) {
 }
 
 /**
+ * ⭐⭐⭐ 28/8 — FASE A (hook), piano `elegant-spinning-dongarra.md`. Emesso
+ * da `costruisciHookFn` (session-registry.mjs) DOPO ogni esecuzione VERA
+ * di un hook fidato — mai per un hook non fidato (quello non gira
+ * affatto, non c'è niente da mostrare) né per una sessione senza hook
+ * (il ramo veloce `hooksCache.length === 0` non chiama mai questo).
+ * `tipo`/`azione` sono l'evento passato all'hook (pre_tool_call/
+ * post_tool_call/session_start/session_end, più l'azione se presente);
+ * `esito` è ESATTAMENTE ciò che l'hook ha risposto (o il rifiuto
+ * sintetico se l'hook è fallito nell'esecuzione) — il pannello
+ * Control-plane mostra questo, non una sua interpretazione.
+ */
+export function hookInvoked({ hookId, tipo, azione, esito }) {
+    return { type: 'HookInvoked', hookId, tipo, azione: azione ?? null, esito }
+}
+
+/**
  * ⭐ Da una risposta grezza del modello (la stessa forma OpenAI che
  * talosLavora già costruisce — {role, content, tool_calls}, vedi
  * talosHarness.mjs riga ~761) all'elenco ORDINATO di eventi AG-UI per

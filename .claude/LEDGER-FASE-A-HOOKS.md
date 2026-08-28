@@ -8,28 +8,66 @@
 > (regola vincolante di memoria: "il ledger si aggiorna di pari
 > passo").
 
-## Stato: 🔜 aperta, in corso
+## Stato: ✅ CHIUSA 28/8 — verificata dal vivo, end-to-end, con un modello reale
 
-### Avanzamento (aggiornato 28/8, in pausa per il Terminale REALE + ricerca Hermes)
+### Cosa è stato costruito
 
 - ✅ **Kernel** (`AVM-harness/.../talosHarness.mjs`): `hookFn` opzionale,
   pre/post_tool_call (bloccante solo sulle 3 azioni mutanti)/session_start/session_end.
-  10 test nuovi, 138 totali kernel verdi. Ri-misura TALOS-BANCO fatta:
-  3 righe già misurate riconosciute compatibili, $0, byte-identico.
-- ✅ **`harness-ui/src/hook-registry.mjs`** (nuovo): config+trust+esecuzione
-  sandboxata dell'hook. 15/15 test verdi.
-- ✅ **`session-registry.mjs`**: import, parametri (`cartellaTrustHook`/
-  `caricaHooksFn`/`verificaTrustFn`/`eseguiHookFn`), `costruisciHookFn`
-  (sincrono-con-lazy-load, per rispettare la non-async di `avviaESegui`),
-  `hookFn` passato ad `avviaSessioneFn`.
-- 🔜 **`agent-service.mjs`**: NON ancora aggiornato per ricevere/inoltrare
-  `hookFn` a `talosLavoraFn` — oggi verrebbe silenziosamente ignorato se
-  una sessione girasse. Prossimo passo concreto quando questa fase riprende.
-- 🔜 Non iniziati: evento `hookInvoked` in `agui-events.mjs`, rotta
-  `POST /sessions/:id/hooks/:hookId/trust` in `http-app.mjs`, pannello
-  Control-plane nel frontend (sostituire "Hooks · Non ancora
-  implementato"), test aggiuntivi (`session-registry.test.mjs`,
-  `http-app.test.mjs`), verifica dal vivo via CDP.
+  142 test kernel verdi (10 dedicati agli hook). Ri-misura TALOS-BANCO
+  fatta: righe già misurate riconosciute compatibili, $0, byte-identico.
+- ✅ **`harness-ui/src/hook-registry.mjs`**: config+trust content-hash-bound+
+  esecuzione sandboxata dell'hook. 15/15 test.
+- ✅ **`session-registry.mjs`**: `costruisciHookFn` (sincrono-con-lazy-load),
+  `hookFn` passato ad `avviaSessioneFn`; `elencaHooks(sessionId)` (hook +
+  stato di fiducia vero, per il pannello); `fidaHook(sessionId, hookId)`
+  (rilegge l'hash da disco, mai quello del chiamante); broadcast
+  `HookInvoked` per ogni esecuzione vera di un hook fidato. 15 test nuovi.
+- ✅ **`agent-service.mjs`**: `hookFn` ora ricevuto e inoltrato a
+  `talosLavoraFn` — il gap che lasciava `hookFn` silenziosamente
+  ignorato è chiuso. 2 test nuovi (parità + AL CONTRARIO assente).
+- ✅ **`agui-events.mjs`**: evento `hookInvoked({hookId, tipo, azione, esito})`.
+- ✅ **`http-app.mjs`**: `GET /api/v1/sessions/:id/hooks` (elenco + stato
+  fiducia), `POST /api/v1/sessions/:id/hooks/:hookId/trust` (fail-closed
+  per costruzione — l'UNICA strada che rende un hook eseguibile). 7 test
+  HTTP nuovi (route trust + route elenco).
+- ✅ **Frontend**: pannello Control-plane reale (`caricaPannelloHooks()`,
+  `rigaHook()`) — sostituisce "Hooks · Non ancora implementato" con
+  l'elenco vero, bottone "Fida" funzionante, chip "attivo"/toast di
+  blocco (`case 'HookInvoked'` in `handleRealEvent`).
+
+### Verificato DAL VIVO, con un modello reale (non solo unit test)
+
+Nuovo scenario `fase-a-hooks` in `qa-visual-pipeline.mjs` (riusabile,
+committato): un hook `.harness-ui-hooks.json` di prova che rifiuta ogni
+scrittura, catena intera con DUE sessioni reali (`z-ai/glm-4.7-flash`):
+1. Hook presente ma NON fidato → la scrittura riesce (come se l'hook
+   non esistesse) — confermato, zero REFUSED.
+2. Pannello Control-plane raggiunto dalla palette comandi (⌘K → "Agents,
+   hooks e doctor", non una scorciatoia diretta): l'hook appare con un
+   bottone "Fida" reale.
+3. Click reale su "Fida" → il chip diventa "attivo".
+4. Una SECONDA scrittura, ora con l'hook fidato → **bloccata per
+   davvero**: REFUSED nel bubble della chat con il motivo esatto
+   dichiarato dall'hook. Il modello stesso ha letto il rifiuto e ha
+   proposto un nome diverso — la catena arriva fino al modello, non si
+   ferma a un log.
+
+Cinque screenshot, tutti ispezionati. Tre bug reali nel MIO script di
+verifica trovati e corretti in corsa (non nel prodotto): il trust
+persiste su disco fra corse dello scenario (corretto: reset del fixture
+prima di una corsa pulita — comportamento giusto del prodotto, il mio
+script non lo assumeva); un turno con un tool-call intermedio
+(rifiuto per nome file duplicato → chiarimento → secondo tentativo) fa
+sparire/riapparire più volte i segnali di "sto aspettando" che avevo
+provato prima — risolto con `attendiTestoStabile` (nuovo helper
+riusabile: aspetta che il testo smetta di crescere, indipendente da
+quanti passaggi intermedi il turno contiene).
+
+### Verifica complessiva
+
+436/436 backend, 6642/6684 frontend (stessi 32 falliti pre-esistenti ed
+estranei), 142/142 kernel. Zero regressioni.
 
 ## Contesto
 
