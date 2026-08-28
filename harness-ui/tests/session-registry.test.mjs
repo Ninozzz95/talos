@@ -552,6 +552,93 @@ test('⭐⭐⭐ resume() eredita il permesso della sessione origine', async () =
 });
 
 /*
+ * ⭐⭐⭐ FASE B (28/8) — permesso PER-ATTREZZO, un override più specifico
+ * di `permessiScelto`. Stesso stile/stessi fake della pillola permessi
+ * appena sopra.
+ */
+test('⭐ default: senza permessiPerAttrezzoScelto, la voce non porta alcun override — null verso il kernel (optional chaining lo tratta come assente)', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+
+  registro.avvia('task-vero');
+
+  assert.equal(finta.ultimoInput.permessiPerAttrezzo, null);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⭐⭐⭐ permessiPerAttrezzoScelto arriva DAVVERO ad avviaSessioneFn, invariato', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+
+  registro.avvia('task-vero', { permessiPerAttrezzoScelto: { shell: 'nega' } });
+
+  assert.deepEqual(finta.ultimoInput.permessiPerAttrezzo, { shell: 'nega' });
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⭐⭐⭐ fork() eredita permessiPerAttrezzo della sessione origine — stesso principio già in uso per permessi', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero', { permessiPerAttrezzoScelto: { scrivi: 'sempre' } });
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: [{ role: 'user', content: 'x' }] } });
+  await new Promise((r) => setImmediate(r));
+
+  const risultatoFork = registro.forka(sessionId);
+
+  assert.ok(risultatoFork.sessionId);
+  assert.deepEqual(finta.ultimoInput.permessiPerAttrezzo, { scrivi: 'sempre' }, 'il fork crea una voce NUOVA: senza passarlo esplicitamente si perderebbe, stessa lezione già imparata per permessi');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⭐⭐⭐ resume() eredita permessiPerAttrezzo della sessione origine (STESSA voce, nessun passaggio esplicito necessario)', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero', { permessiPerAttrezzoScelto: { document_create: 'chiedi' } });
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: [{ role: 'user', content: 'x' }] } });
+  await new Promise((r) => setImmediate(r));
+
+  registro.resume(sessionId);
+
+  assert.deepEqual(finta.ultimoInput.permessiPerAttrezzo, { document_create: 'chiedi' });
+});
+
+/*
+ * ⛔⛔⛔ FASE B (28/8) — RIPIEGO TEMPORANEO, non la cura finale. Bug reale
+ * trovato DAL VIVO (screenshot, non solo a unit test): un primo tentativo
+ * costruiva `chiediApprovazioneFn` ogni volta che ALMENO UN attrezzo
+ * voleva 'chiedi' — ma questo fa TRAPELARE l'approvazione anche su
+ * `scrivi` (nessun override), perché il kernel usa "chiediApprovazioneFn
+ * presente" come segnale di "la sessione chiede SEMPRE" per un attrezzo
+ * senza override. La cura vera (un valore esplicito `livelloAccesso`,
+ * tipo `'su-richiesta'`, indipendente dalla presenza del canale) tocca
+ * `talosHarness.mjs` — bloccata da coordinamento: un'altra sessione ha
+ * 111 righe non committate sullo STESSO file proprio mentre questo bug
+ * veniva trovato (vedi il commento nel sorgente). Qui si prova il
+ * ripiego SICURO: 'chiedi' per-attrezzo sotto una policy diversa da "On
+ * request" fallisce chiuso (REFUSED), mai una card che trapela altrove.
+ */
+test('⛔⛔⛔ "Workspace write" con permessiPerAttrezzo:{shell:\'chiedi\'} NON costruisce chiediApprovazioneFn (ripiego sicuro, non la cura finale)', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+
+  registro.avvia('task-vero', { permessiScelto: 'Workspace write', permessiPerAttrezzoScelto: { shell: 'chiedi' } });
+
+  assert.equal(finta.ultimoInput.livelloAccesso, undefined, '"Workspace write" non diventa mai lettura da solo');
+  assert.equal(finta.ultimoInput.chiediApprovazioneFn, undefined, 'ripiego sicuro: solo "On request" costruisce il canale — shell:\'chiedi\' qui fallirà chiuso nel kernel, mai un\'approvazione che trapela su scrivi');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⭐⭐ AL CONTRARIO — "Workspace write" con permessiPerAttrezzo SENZA alcun \'chiedi\' (solo sempre/nega) NON costruisce chiediApprovazioneFn', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+
+  registro.avvia('task-vero', { permessiScelto: 'Workspace write', permessiPerAttrezzoScelto: { scrivi: 'sempre', shell: 'nega' } });
+
+  assert.equal(finta.ultimoInput.chiediApprovazioneFn, undefined, 'sempre/nega non hanno bisogno di un canale interattivo: li decide il gate da solo');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+/*
  * ⭐⭐⭐ 28/8 — rispondiApprovazione(): il lato server del ciclo "On
  * request". Un fake avviaSessioneFn che CHIAMA DAVVERO
  * chiediApprovazioneFn (a differenza di sessioneControllabile sopra,

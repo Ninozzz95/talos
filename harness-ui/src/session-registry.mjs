@@ -205,7 +205,7 @@ export function createSessionRegistry({
   function avviaESegui({
     sessionId = randomUUID(), taskId, cartella, task, comandoProva, messaggiIniziali,
     forkDa = null, voceEsistente = null, modelloRichiesta = null, reasoningRichiesto = null, mobile = false,
-    permessiRichiesti = null,
+    permessiRichiesti = null, permessiPerAttrezzoRichiesti = null,
   }) {
     if (typeof chiave !== 'string' || chiave.length === 0) {
       return { erroreAvvio: 'Chiave API non configurata sul server (OPENROUTER_API_KEY)', code: 'CONFIG_INVALID' };
@@ -239,6 +239,13 @@ export function createSessionRegistry({
      */
     const permessiEffettivi = permessiRichiesti ?? voceEsistente?.permessi ?? 'Workspace write';
     /*
+     * ⭐⭐⭐ FASE B (28/8) — stessa disciplina di `permessiEffettivi` appena
+     * sopra: un fork/resume eredita l'override per-attrezzo della voce
+     * originale, un avvio nuovo usa quello richiesto o nessuno (`null` =
+     * comportamento di oggi, invariato — vedi verificaPermessoScrittura).
+     */
+    const permessiPerAttrezzoEffettivi = permessiPerAttrezzoRichiesti ?? voceEsistente?.permessiPerAttrezzo ?? null;
+    /*
      * ⛔ `mobile` entra nella voce SOLO quando se ne crea una nuova — un
      * resume (`voceEsistente` presente) la riusa com'era, mai sovrascritta:
      * la "mobilità" di una sessione si decide una volta sola, all'avvio
@@ -248,7 +255,8 @@ export function createSessionRegistry({
     const voce = voceEsistente ?? {
       eventi: [], ascoltatori: new Set(), taskId, cartella, task, comandoProva, forkDa,
       avviataAlle: clock().toISOString(), messaggiFinali: null, modello: modelloEffettivo,
-      reasoning: reasoningEffettivo, mobile, permessi: permessiEffettivi, approvazionePendente: null,
+      reasoning: reasoningEffettivo, mobile, permessi: permessiEffettivi,
+      permessiPerAttrezzo: permessiPerAttrezzoEffettivi, approvazionePendente: null,
     };
     voce.controller = controller;
     voce.conclusa = false;
@@ -281,6 +289,41 @@ export function createSessionRegistry({
      * mai qui).
      */
     const livelloAccesso = voce.permessi === 'Read only' ? 'lettura' : undefined;
+    /*
+     * ⛔⛔⛔ FASE B (28/8) — RIPIEGO TEMPORANEO, non la cura finale.
+     *
+     * Trovato dal vivo (screenshot, non un'ipotesi): costruire
+     * `chiediApprovazioneFn` ogni volta che ALMENO UN attrezzo vuole
+     * 'chiedi' (anche sotto "Workspace write") produceva la card giusta
+     * per `shell` — ma FA TRAPELARE l'approvazione anche su `scrivi`
+     * (nessun override), perché il kernel di OGGI usa "chiediApprovazioneFn
+     * presente" come segnale implicito di "la sessione, alla base, chiede
+     * SEMPRE" — un contratto pre-esistente (testato, documentato) che FASE
+     * B non può cambiare da sola senza rompere quel contratto per chi lo
+     * usa così.
+     *
+     * ⛔⛔⛔ Bloccato da coordinamento, non da un dubbio tecnico: mentre
+     * questa scoperta veniva fatta, un'ALTRA sessione (avm-75, commit
+     * `51deba87`/`242caf75`, non ancora committati fino in fondo — 111
+     * righe in lavorazione nello stesso file condiviso) ha ESTESO
+     * `livelloAccesso` a un vocabolario a 4 valori con un valore ESPLICITO
+     * `'su-richiesta'` — esattamente l'assenza che serve per distinguere
+     * "la SESSIONE chiede sempre" da "SOLO questo attrezzo chiede" senza
+     * fare leva sulla presenza nuda di `chiediApprovazioneFn`. La cura
+     * corretta è aspettare quel lavoro e mappare "On request" su
+     * `livelloAccesso:'su-richiesta'` qui — non un secondo tentativo
+     * scritto in fretta sopra un file che un'altra sessione ha ancora
+     * aperto, non committato.
+     *
+     * ⇒ Ripiego SICURO nel frattempo: `chiediApprovazioneFn` torna a
+     * costruirsi SOLO per "On request" (comportamento pre-FASE-B,
+     * invariato). Un override per-attrezzo `'chiedi'` sotto un'altra
+     * policy FALLISCE CHIUSO (REFUSED, "nessun canale di approvazione
+     * attivo") invece di mostrare la card — onesto, mai un bypass
+     * silenzioso, mai una perdita verso altri attrezzi. `'sempre'`/`'nega'`
+     * restano pienamente funzionanti sotto qualunque policy: non toccati
+     * da questo limite.
+     */
     const chiediApprovazioneFn = voce.permessi === 'On request'
       ? (azione) => richiediApprovazione(voce, azione)
       : undefined;
@@ -295,6 +338,7 @@ export function createSessionRegistry({
       mobile: voce.mobile,
       strumentiEstesi, ricercaWeb,
       livelloAccesso, chiediApprovazioneFn, hookFn,
+      permessiPerAttrezzo: voce.permessiPerAttrezzo,
       onEvento: (evento) => broadcast(voce, evento),
     }).then((risultato) => {
       /*
@@ -335,7 +379,10 @@ export function createSessionRegistry({
      * solo dove esiste un percorso a piacere da scegliere (`avviaLibero`,
      * sotto). Nessun errore: solo si comporta come "Workspace write".
      */
-    avvia(taskId, { modelloScelto = null, reasoningScelto = null, mobile = false, permessiScelto = null } = {}) {
+    avvia(taskId, {
+      modelloScelto = null, reasoningScelto = null, mobile = false,
+      permessiScelto = null, permessiPerAttrezzoScelto = null,
+    } = {}) {
       let preparato;
       try {
         preparato = preparaEsecuzioneFn(taskId);
@@ -346,7 +393,7 @@ export function createSessionRegistry({
       return avviaESegui({
         taskId, cartella: preparato.cartella, task: preparato.task, comandoProva: preparato.comandoProva,
         modelloRichiesta: modelloScelto, reasoningRichiesto: reasoningScelto, mobile,
-        permessiRichiesti: permessiScelto,
+        permessiRichiesti: permessiScelto, permessiPerAttrezzoRichiesti: permessiPerAttrezzoScelto,
       });
     },
 
@@ -369,7 +416,8 @@ export function createSessionRegistry({
      */
     avviaLibero({
       cartellaId, cartellaLibera, consegna, comandoProva,
-      modello: modelloScelto = null, reasoning: reasoningScelto = null, mobile = false, permessi: permessiScelto = null,
+      modello: modelloScelto = null, reasoning: reasoningScelto = null, mobile = false,
+      permessi: permessiScelto = null, permessiPerAttrezzo: permessiPerAttrezzoScelto = null,
     }) {
       if (cartellaLibera && permessiScelto !== 'Full access') {
         return { erroreAvvio: 'cartellaLibera richiede il permesso "Full access" per questa sessione', code: 'QUERY_INVALID' };
@@ -384,7 +432,7 @@ export function createSessionRegistry({
       return avviaESegui({
         taskId: cartellaLibera ? 'libero:full-access' : `libero:${cartellaId}`, cartella: preparato.cartella, task: preparato.task,
         comandoProva: preparato.comandoProva, modelloRichiesta: modelloScelto, reasoningRichiesto: reasoningScelto, mobile,
-        permessiRichiesti: permessiScelto,
+        permessiRichiesti: permessiScelto, permessiPerAttrezzoRichiesti: permessiPerAttrezzoScelto,
       });
     },
 
@@ -428,8 +476,15 @@ export function createSessionRegistry({
          * sessione "Read only" avrebbe silenziosamente riacquistato la
          * scrittura. Stesso principio già in uso per `mobile` sulla riga
          * sopra, solo dimenticato qui la prima volta.
+         *
+         * ⭐⭐⭐ FASE B (28/8) — stesso principio, applicato PROATTIVAMENTE
+         * questa volta (non trovato da un bug: imparato dal precedente
+         * riga sopra): un fork crea una voce nuova, quindi anche
+         * `permessiPerAttrezzo` va passato esplicitamente qui, mai dato
+         * per scontato che `voceEsistente` lo erediti da solo.
          */
         permessiRichiesti: originale.permessi,
+        permessiPerAttrezzoRichiesti: originale.permessiPerAttrezzo,
       });
     },
 

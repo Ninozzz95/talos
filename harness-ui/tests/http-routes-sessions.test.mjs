@@ -221,12 +221,12 @@ test('⛔ POST /api/v1/sessions rifiuta un corpo che non è ESATTAMENTE {taskId}
  * prompt) — `client:'mobile'` è l'unico valore che cambia qualcosa: il
  * server lo traduce in `{mobile:true}` verso `sessionRegistry.avvia()`.
  *
- * ⛔ Riconciliazione Fase 1 (branch merge, 27/8): `avvia()` ora accetta un
- * oggetto opzioni con TRE campi (`modelloScelto`/`reasoningScelto`/`mobile`,
- * lavoro R1 del branch desktop unito qui) — `requireTaskIdBody` li passa
- * SEMPRE tutti e tre, `null` quando assenti dal corpo. L'asserzione
- * verifica l'oggetto INTERO, non solo `mobile`, per restare vera contro la
- * firma reale invece di una vecchia più stretta.
+ * ⛔ Riconciliazione Fase 1 (branch merge, 27/8): `avvia()` accetta un
+ * oggetto opzioni (`modelloScelto`/`reasoningScelto`/`mobile`/
+ * `permessiScelto`/`permessiPerAttrezzoScelto`, quest'ultimo FASE B 28/8)
+ * — `requireTaskIdBody` li passa SEMPRE tutti, `null` quando assenti dal
+ * corpo. L'asserzione verifica l'oggetto INTERO, non solo `mobile`, per
+ * restare vera contro la firma reale invece di una vecchia più stretta.
  */
 test('POST /api/v1/sessions con client:\'mobile\' passa {mobile:true} a sessionRegistry.avvia', async (t) => {
   const { base, sessionRegistry } = await listen(t);
@@ -236,7 +236,7 @@ test('POST /api/v1/sessions con client:\'mobile\' passa {mobile:true} a sessionR
     body: JSON.stringify({ taskId: 'sconto-a-scaglioni', client: 'mobile' }),
   });
   assert.equal(risposta.status, 200);
-  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, reasoningScelto: null, mobile: true, permessiScelto: null });
+  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, reasoningScelto: null, mobile: true, permessiScelto: null, permessiPerAttrezzoScelto: null });
 });
 
 test('⛔ AL CONTRARIO: client:\'desktop\' ESPLICITO e client ASSENTE producono entrambi {mobile:false} — nessuna differenza di comportamento', async (t) => {
@@ -246,13 +246,13 @@ test('⛔ AL CONTRARIO: client:\'desktop\' ESPLICITO e client ASSENTE producono 
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ taskId: 'sconto-a-scaglioni', client: 'desktop' }),
   });
-  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, reasoningScelto: null, mobile: false, permessiScelto: null });
+  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, reasoningScelto: null, mobile: false, permessiScelto: null, permessiPerAttrezzoScelto: null });
 
   await fetch(`${base}/api/v1/sessions`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ taskId: 'sconto-a-scaglioni' }),
   });
-  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, reasoningScelto: null, mobile: false, permessiScelto: null });
+  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, reasoningScelto: null, mobile: false, permessiScelto: null, permessiPerAttrezzoScelto: null });
 });
 
 /*
@@ -328,6 +328,67 @@ test('⛔ AL CONTRARIO — POST /api/v1/sessions/custom senza NÉ cartellaId NÉ
   });
   assert.equal(risposta.status, 400);
   assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
+});
+
+/*
+ * ⭐⭐⭐ FASE B (28/8) — permesso PER-ATTREZZO, sui DUE endpoint di avvio.
+ * Stesso principio della pillola permessi appena sopra: si prova che la
+ * FORMA del corpo applica davvero il cancello al confine HTTP.
+ */
+test('⭐⭐⭐ POST /api/v1/sessions con permessiPerAttrezzo valido lo inoltra a sessionRegistry.avvia', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taskId: 'sconto-a-scaglioni', permessiPerAttrezzo: { shell: 'chiedi' } }),
+  });
+  assert.equal(risposta.status, 200);
+  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio.permessiPerAttrezzoScelto, { shell: 'chiedi' });
+});
+
+test('⛔⛔ POST /api/v1/sessions con permessiPerAttrezzo su un nome attrezzo INVENTATO: QUERY_INVALID, mai raggiunge il registro', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taskId: 'sconto-a-scaglioni', permessiPerAttrezzo: { strumento_inventato: 'nega' } }),
+  });
+  assert.equal(risposta.status, 400);
+  assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
+  assert.equal(sessionRegistry.ultimeOpzioniAvvio, null, 'mai raggiunto il registro con una chiave attrezzo inventata');
+});
+
+test('⛔⛔ AL CONTRARIO — POST /api/v1/sessions con permessiPerAttrezzo su un attrezzo REALE ma fuori dal gate (leggi): QUERY_INVALID comunque', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taskId: 'sconto-a-scaglioni', permessiPerAttrezzo: { leggi: 'nega' } }),
+  });
+  assert.equal(risposta.status, 400);
+  assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
+  assert.equal(sessionRegistry.ultimeOpzioniAvvio, null, 'leggi non passa mai dal gate: un override lì sarebbe ignorato in silenzio, stesso rifiuto di un nome inventato');
+});
+
+test('⛔ AL CONTRARIO — POST /api/v1/sessions con un valore non fra sempre/chiedi/nega: QUERY_INVALID', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taskId: 'sconto-a-scaglioni', permessiPerAttrezzo: { scrivi: 'boh' } }),
+  });
+  assert.equal(risposta.status, 400);
+  assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
+  assert.equal(sessionRegistry.ultimeOpzioniAvvio, null);
+});
+
+test('⭐⭐⭐ POST /api/v1/sessions/custom con permessiPerAttrezzo valido arriva davvero al registro', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions/custom`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      cartellaLibera: 'C:/qualunque/percorso', consegna: 'fai qualcosa', permessi: 'Full access',
+      permessiPerAttrezzo: { document_create: 'sempre' },
+    }),
+  });
+  assert.equal(risposta.status, 200);
+  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvioLibero.permessiPerAttrezzo, { document_create: 'sempre' });
 });
 
 /*

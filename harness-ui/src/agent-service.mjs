@@ -128,6 +128,12 @@ export async function avviaSessione({
    */
   livelloAccesso, chiediApprovazioneFn,
   /*
+   * ⭐⭐⭐ FASE B (28/8) — stesso principio di `livelloAccesso`/
+   * `chiediApprovazioneFn`: inoltrato senza logica propria, la semantica
+   * di ogni valore vive nel kernel (`verificaPermessoScrittura`).
+   */
+  permessiPerAttrezzo,
+  /*
    * ⭐⭐⭐ 28/8 — FASE A (hook), piano `elegant-spinning-dongarra.md`.
    * Stesso principio di `livelloAccesso`/`chiediApprovazioneFn` appena
    * sopra: inoltrato SENZA logica propria, la decisione (quale hook
@@ -372,7 +378,7 @@ export async function avviaSessione({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
       onGiro, onScrittura, onDelta, reasoning,
       strumentiEstesi, ricercaWeb, onArtefatto, onDocumento,
-      livelloAccesso, chiediApprovazioneFn, hookFn,
+      livelloAccesso, chiediApprovazioneFn, hookFn, permessiPerAttrezzo,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));
     return { threadId, runId, ok: esito.comeFinita === 'concluso', esito, erroreInterno: null };
