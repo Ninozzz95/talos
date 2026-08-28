@@ -1394,7 +1394,7 @@
    * resta, correttamente. Whitelist esplicita, non un "nascondi sempre":
    * solo i tipi verificati stanotte riga per riga.
    */
-  const TIPI_FOGLIO_INTERAMENTE_ONESTI = new Set(['model', 'capabilities', 'control', 'fileViewer', 'renameFile', 'deleteFile']);
+  const TIPI_FOGLIO_INTERAMENTE_ONESTI = new Set(['model', 'capabilities', 'control', 'fileViewer', 'renameFile', 'deleteFile', 'export']);
   function openSheet(type) {
     const content = sheetTemplates[type];
     if (!content) return;
@@ -1679,6 +1679,28 @@
           </div>
         </div>`,
     },
+    /**
+     * ⭐⭐⭐ 28/8, owner: "una modale di esportazione in diversi formati, in
+     * modo che se c'è qualche errore io ti possa esportare interamente la
+     * conversazione con errori e output tecnici" — vedi il commento su
+     * costruisciTrascrizioneMarkdown per la ricerca fatta prima di
+     * scrivere questo foglio. Aperto solo per una sessione REALE
+     * (exportSession()) — TIPI_FOGLIO_INTERAMENTE_ONESTI lo riflette.
+     */
+    export: {
+      eyebrow: 'Esporta',
+      title: 'Esporta sessione',
+      html: () => `
+        <div class="sheet-section">
+          <span class="sheet-label">Formato</span>
+          <button class="sheet-option" data-export-choice="markdown">
+            <span class="sheet-icon">${icon('i-list')}</span><span><strong>Trascrizione leggibile</strong><small>Ogni messaggio, ragionamento, chiamata attrezzo (argomenti ed esito completi, mai troncati) ed errore, in Markdown — pensata per essere incollata qui in chat quando qualcosa va storto.</small></span><span>.md</span>
+          </button>
+          <button class="sheet-option" data-export-choice="json">
+            <span class="sheet-icon">${icon('i-file')}</span><span><strong>JSON completo</strong><small>Il log eventi grezzo, byte per byte — per un'analisi automatica o un secondo strumento.</small></span><span>.json</span>
+          </button>
+        </div>`,
+    },
   };
 
   /** Aggiorna la pillola del composer che apre il foglio Modello — selettore stabile (`data-open-sheet="model"`), non un confronto sul testo attuale come faceva il codice precedente. */
@@ -1733,6 +1755,36 @@
         autoGrowTextarea();
         closeEmbeddedDialog(sheetDialog);
         composerInput.focus();
+      });
+    });
+    /*
+     * ⭐⭐⭐ 28/8 — export a scelta di formato. `disabled` durante il fetch
+     * (l'unica azione del foglio con un giro di rete prima del download,
+     * a differenza degli altri handler sopra che sono tutti sincroni) per
+     * non permettere un doppio click che parte due volte. ⛔ Mai un
+     * successo dichiarato su un file vuoto — la ricerca su /export di
+     * Claude Code (vedi il commento su costruisciTrascrizioneMarkdown) ha
+     * trovato esattamente quel bug in un tool affermato: qui si controlla
+     * `testo.trim()` PRIMA del download, non dopo.
+     */
+    $$('[data-export-choice]', sheetBody).forEach((button) => {
+      button.addEventListener('click', async () => {
+        const formato = button.dataset.exportChoice;
+        const eraDisabled = $$('[data-export-choice]', sheetBody);
+        eraDisabled.forEach((b) => { b.disabled = true; });
+        try {
+          const esportato = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/export`);
+          const isMarkdown = formato === 'markdown';
+          const testo = isMarkdown ? costruisciTrascrizioneMarkdown(esportato) : JSON.stringify(esportato, null, 2);
+          if (!testo || !testo.trim()) throw new Error('Esportazione vuota: nessun contenuto da scrivere.');
+          scaricaTesto(testo, `talos-sessione-${state.realSession.id}.${isMarkdown ? 'md' : 'json'}`, isMarkdown ? 'text/markdown' : 'application/json');
+          closeEmbeddedDialog(sheetDialog);
+          toast('Sessione esportata', isMarkdown ? 'Trascrizione Markdown pronta.' : 'JSON pronto.');
+        } catch (error) {
+          toast('Esportazione non riuscita', error.message);
+        } finally {
+          eraDisabled.forEach((b) => { b.disabled = false; });
+        }
       });
     });
 
@@ -2558,6 +2610,152 @@
       const marcatore = tipo === 'add' ? '+' : tipo === 'del' ? '-' : ' ';
       return [tipo, `${colNumero} ${marcatore} ${testo}`];
     });
+  }
+
+  /**
+   * ⭐⭐⭐ 28/8, owner: "una modale di esportazione in diversi formati, in
+   * modo che se c'è qualche errore io ti possa esportare interamente la
+   * conversazione con errori e output tecnici". Ricerca fatta prima di
+   * scrivere (REGOLA ZERO): `/export` di Claude Code stesso produce
+   * Markdown per default (non JSON), e sono documentati bug reali dove
+   * dichiara successo su un file VUOTO o una trascrizione TRONCATA a
+   * metà (github.com/anthropics/claude-code#52733, #45996, #42290) —
+   * cursor-session (strumento di terze parti per esportare sessioni
+   * Cursor) esporta md/json/yaml proprio "per il debugging". Da qui le
+   * due scelte sotto: Markdown come formato leggibile pensato per
+   * essere incollato in chat, JSON come il payload grezzo già esistente
+   * (byte per byte, mai alterato).
+   *
+   * ⛔ Walk sequenziale dello STESSO array `eventi` che `handleRealEvent`
+   * consuma dal vivo (stessi nomi di campo, stesse forme — verificati
+   * leggendo quel codice, non assunti). Differenza deliberata rispetto
+   * alla UI dal vivo: qui l'ESITO di ogni tool-call non è mai troncato
+   * (la UI tronca a 4000 caratteri per lo schermo — questo file esiste
+   * apposta per i casi in cui quel troncamento nasconderebbe l'errore
+   * vero), e ogni tipo di evento NON riconosciuto esplicitamente finisce
+   * comunque nell'output come JSON grezzo (mai un evento silenziosamente
+   * scartato — esattamente il tipo di perdita silenziosa che la ricerca
+   * sopra ha trovato nell'export di Claude Code stesso).
+   */
+  function costruisciTrascrizioneMarkdown(esportato) {
+    const righe = [];
+    const testoBuffer = new Map();
+    const ragionamentoBuffer = new Map();
+    const toolBuffer = new Map();
+
+    const recinto = (testo) => {
+      const piuLunga = (String(testo).match(/`{3,}/g) || []).reduce((max, m) => Math.max(max, m.length), 3);
+      return '`'.repeat(piuLunga + 1);
+    };
+    const blocco = (testo, linguaggio = '') => { const f = recinto(testo); return `${f}${linguaggio}\n${testo}\n${f}`; };
+    const descriviTask = (input) => {
+      if (!input) return '(nessun dettaglio)';
+      if (input.comandoDiretto) return `Comando diretto: \`${input.comandoDiretto}\``;
+      if (input.consegna) return `${input.seguito ? '**Follow-up:** ' : ''}${input.consegna}`;
+      return blocco(JSON.stringify(input, null, 2), 'json');
+    };
+
+    righe.push(`# Trascrizione sessione TALOS Harness`, '');
+    righe.push(`- **Sessione:** ${esportato.nome || esportato.taskId || esportato.sessionId}`);
+    righe.push(`- **Id:** \`${esportato.sessionId}\``);
+    righe.push(`- **Modello:** ${esportato.modello || '(default)'}`);
+    righe.push(`- **Avviata:** ${esportato.avviataAlle || '?'}`);
+    righe.push(`- **Conclusa:** ${esportato.conclusa ? 'sì' : 'no'}`);
+    if (esportato.forkDa) righe.push(`- **Fork da:** \`${esportato.forkDa}\``);
+    righe.push(`- **Eventi totali:** ${Array.isArray(esportato.eventi) ? esportato.eventi.length : 0}`, '');
+
+    if (!Array.isArray(esportato.eventi) || esportato.eventi.length === 0) {
+      righe.push('> ⛔ Nessun evento registrato per questa sessione.');
+      return righe.join('\n');
+    }
+
+    let numeroGiro = 0;
+    for (const evento of esportato.eventi) {
+      switch (evento.type) {
+        case 'RunStarted': {
+          numeroGiro += 1;
+          righe.push(`## Giro ${numeroGiro}`, '', descriviTask(evento.input), '');
+          break;
+        }
+        case 'TextMessageContent': {
+          testoBuffer.set(evento.messageId, (testoBuffer.get(evento.messageId) || '') + evento.delta);
+          break;
+        }
+        case 'TextMessageEnd': {
+          const testo = testoBuffer.get(evento.messageId);
+          if (testo !== undefined) { righe.push('**Assistente:**', '', testo, ''); testoBuffer.delete(evento.messageId); }
+          break;
+        }
+        case 'ReasoningMessageContent': {
+          ragionamentoBuffer.set(evento.messageId, (ragionamentoBuffer.get(evento.messageId) || '') + evento.delta);
+          break;
+        }
+        case 'ReasoningMessageEnd': {
+          const pensiero = ragionamentoBuffer.get(evento.messageId);
+          if (pensiero !== undefined) { righe.push('<details><summary>💭 Ragionamento</summary>', '', pensiero, '', '</details>', ''); ragionamentoBuffer.delete(evento.messageId); }
+          break;
+        }
+        case 'ToolCallStart': {
+          toolBuffer.set(evento.toolCallId, { nome: evento.toolCallName, argomenti: '' });
+          break;
+        }
+        case 'ToolCallArgs': {
+          const info = toolBuffer.get(evento.toolCallId);
+          if (info) info.argomenti += evento.delta;
+          break;
+        }
+        case 'ToolCallResult': {
+          const info = toolBuffer.get(evento.toolCallId) || { nome: '(sconosciuto)', argomenti: '' };
+          let argFormattati = info.argomenti;
+          try { argFormattati = JSON.stringify(JSON.parse(info.argomenti), null, 2); } catch { /* args non-JSON o incompleti: mostrati grezzi, mai persi */ }
+          righe.push(`**🔧 ${info.nome}**`, '', 'Argomenti:', blocco(argFormattati || '(nessuno)', 'json'), '', 'Esito (completo, mai troncato):', blocco(String(evento.content ?? '')), '');
+          toolBuffer.delete(evento.toolCallId);
+          break;
+        }
+        case 'StateDelta': {
+          const operazione = evento.delta?.[0];
+          if (operazione?.path === '/usage') {
+            righe.push(`_Utilizzo token aggiornato: ${blocco(JSON.stringify(operazione.value), 'json')}_`, '');
+          } else if (operazione?.path?.startsWith('/file/')) {
+            const percorso = operazione.path.replace(/^\/file\//, '');
+            righe.push(`✏️ **File ${operazione.op === 'add' ? 'creato' : 'modificato'}:** \`${percorso}\` _(contenuto completo nel formato JSON)_`, '');
+          } else {
+            righe.push(`_StateDelta:_ ${blocco(JSON.stringify(evento.delta), 'json')}`, '');
+          }
+          break;
+        }
+        case 'ArtifactCreated': {
+          righe.push(`📦 **Artefatto creato:** ${evento.titolo || '(senza titolo)'} (\`${evento.id}\`)`, '');
+          break;
+        }
+        case 'WorkspaceChanged': {
+          const elenco = Array.isArray(evento.percorsi) ? evento.percorsi.join(', ') : '(percorsi non specificati)';
+          righe.push(`📁 _Cambiamento esterno nel workspace: ${elenco}_`, '');
+          break;
+        }
+        case 'RunFinished': {
+          righe.push('— giro concluso —', '');
+          break;
+        }
+        case 'RunError': {
+          righe.push(`> ⛔ **ERRORE${evento.code ? ` [${evento.code}]` : ''}:** ${evento.message}`, '');
+          break;
+        }
+        default: {
+          // ⛔ mai un evento silenziosamente scartato — vedi il commento di testa
+          righe.push(`_Evento non riconosciuto \`${evento.type}\`:_`, blocco(JSON.stringify(evento), 'json'), '');
+        }
+      }
+    }
+    return righe.join('\n');
+  }
+
+  function scaricaTesto(testo, nomeFile, mime) {
+    const blob = new Blob([testo], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = nomeFile; a.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 500);
   }
 
   /**
@@ -4255,9 +4453,17 @@
    * in `session-registry.mjs`) non veniva mai chiamato da nessuna parte
    * del frontend. Ora: sessione reale attiva → il suo export vero;
    * altrimenti il comportamento demo, invariato.
+   *
+   * ⭐⭐⭐ 28/8, owner: "una modale di esportazione in diversi formati". Una
+   * sessione REALE apre il foglio di scelta (Markdown leggibile / JSON
+   * completo — vedi sheetTemplates.export e costruisciTrascrizioneMarkdown).
+   * Il percorso demo resta un download diretto invariato: una modale con
+   * scelta di formato per dati FINTI non avrebbe alcuno scopo — nessuno
+   * userebbe l'export di un mockup per una diagnosi vera.
    */
   async function exportSession() {
-    let payload = {
+    if (state.realSession.id) { openSheet('export'); return; }
+    const payload = {
       schema: 'talos_mock_session_v1',
       exported_at: new Date().toISOString(),
       session: state.session,
@@ -4267,19 +4473,7 @@
       worktree: 'wt/auth-61c',
       note: 'Interactive TALOS frontend mockup export',
     };
-    if (state.realSession.id) {
-      try {
-        payload = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/export`);
-      } catch {
-        toast('Esportazione non riuscita', 'La sessione reale non ha risposto.');
-        return;
-      }
-    }
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'talos-session-export.json'; a.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 500);
+    scaricaTesto(JSON.stringify(payload, null, 2), 'talos-session-export.json', 'application/json');
     toast('Sessione esportata', 'JSON pronto.');
   }
 
@@ -4738,6 +4932,11 @@
     // bug fork/compatta-finti è stato trovato: esposto per provare la
     // dispatch reale, non solo le funzioni che chiama.
     executeCommand,
+    // ⭐ 28/8 — modale export multi-formato: la funzione pura si espone
+    // per provarla direttamente (ogni tipo di evento, un caso per volta),
+    // separata da executeCommand('export') che prova solo il percorso
+    // d'apertura del foglio.
+    costruisciTrascrizioneMarkdown,
     realSessionState: state.realSession,
   };
   window.__talosHarnessDestroy = () => {
