@@ -4423,6 +4423,22 @@
    * collegaEventiSessione), corpo POST diverso (/sessions/custom con
    * cartellaId+consegna invece di /sessions con taskId).
    */
+  /**
+   * ⭐⭐⭐ 28/8 — owner: "rinominare automaticamente il titolo della
+   * sessione con il primo messaggio inviato (già fatto su mobile per la
+   * chat, non bisogna inventare nulla)". Porting diretto di
+   * `titleFromPrompt` (mobile/src/stores/chat.ts:419-421) — stessa
+   * logica (spazi multipli collassati, poi trim), tetto ADATTATO: 80
+   * caratteri, non 255. Non un refuso — è il tetto che
+   * `session-registry.rinomina()` valida DAVVERO lato server (oltre
+   * rifiuta con QUERY_INVALID, mai un troncamento silenzioso lì): un
+   * numero diverso da mobile perché il vincolo reale è diverso, non
+   * perché "quasi uguale basta".
+   */
+  function titoloDalPrimoMessaggio(testo) {
+    return String(testo || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  }
+
   async function startCustomSession({ cartellaId, cartellaLibera, nomeCartella, consegna, comandoProva, modello, effort, permessi }) {
     const generation = nuovaGenerazioneSessione();
     const taskSintetico = { id: `libero:${nomeCartella}`, consegna };
@@ -4472,6 +4488,26 @@
     if (generation !== state.realSession.generation) return;
     collegaEventiSessione(sessionId, generation);
     aggiornaElencoSessioniReali();
+
+    /*
+     * ⭐⭐⭐ 28/8 — l'auto-rinomina vera e propria. "Best effort" apposta:
+     * la sessione è GIÀ avviata con successo a questo punto (sessionId
+     * esiste, gli eventi stanno già arrivando) — un rename fallito (rete,
+     * corsa persa contro un resume) non deve MAI diventare un secondo
+     * canale di errore per un avvio già riuscito. Resta solo il titolo
+     * "Compito libero · <cartella>" di sempre, mai un crash, mai un toast
+     * per qualcosa che l'owner non ha nemmeno chiesto esplicitamente in
+     * quel momento.
+     */
+    const titoloAutomatico = titoloDalPrimoMessaggio(consegna);
+    apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/rename`, { nome: titoloAutomatico }).then(() => {
+      // ⛔ la generazione può essere già cambiata (un'altra sessione avviata nel frattempo) — mai scrivere il titolo di una sessione che non è più quella a schermo.
+      if (generation !== state.realSession.generation) return;
+      state.session = titoloAutomatico;
+      sessionTitle.textContent = state.session;
+      $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
+      aggiornaElencoSessioniReali();
+    }).catch(() => { /* best effort, vedi sopra: resta il titolo di sempre */ });
   }
 
   function submitPrompt(text) {
@@ -5149,6 +5185,8 @@
     // separata da executeCommand('export') che prova solo il percorso
     // d'apertura del foglio.
     costruisciTrascrizioneMarkdown,
+    // ⭐ 28/8 — auto-rinomina dal primo messaggio: la funzione pura si espone per provare la sua logica (spazi/trim/tetto) senza dover avviare una sessione vera.
+    titoloDalPrimoMessaggio,
     realSessionState: state.realSession,
   };
   window.__talosHarnessDestroy = () => {

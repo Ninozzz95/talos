@@ -36,6 +36,7 @@ type RuntimeGlobals = {
         submitPrompt(text: string): boolean
         executeCommand(command: string): void
         costruisciTrascrizioneMarkdown(esportato: Record<string, unknown>): string
+        titoloDalPrimoMessaggio(testo: string): string
         realSessionState: {
             id: string | null
             taskId: string | null
@@ -1268,6 +1269,119 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
             expect(clickSpy).not.toHaveBeenCalled()
             expect(document.querySelector('#toastRegion')?.textContent).toContain('non riuscita')
+        })
+    })
+
+    /*
+     * ⭐⭐⭐ 28/8 — owner: "rinominare automaticamente il titolo della
+     * sessione con il primo messaggio inviato (già fatto su mobile per
+     * la chat, non bisogna inventare nulla)". Porting di titleFromPrompt
+     * (mobile/src/stores/chat.ts) — vedi titoloDalPrimoMessaggio.
+     */
+    describe('Titolo sessione auto-rinominato dal primo messaggio', () => {
+        it('⭐⭐⭐ TITOLO-01: titoloDalPrimoMessaggio collassa spazi multipli, fa il trim, e taglia a 80 caratteri (NON 255 — il tetto vero di rinomina())', () => {
+            expect(runtime().titoloDalPrimoMessaggio('  aggiungi   una   funzione   sottrai(a,b)  ')).toBe('aggiungi una funzione sottrai(a,b)')
+            expect(runtime().titoloDalPrimoMessaggio('riga uno\nriga due\tcon tab')).toBe('riga uno riga due con tab')
+            const lungo = 'x'.repeat(200)
+            expect(runtime().titoloDalPrimoMessaggio(lungo).length).toBe(80)
+        })
+
+        it('⭐⭐⭐ TITOLO-02: avviare un compito libero rinomina DAVVERO la sessione col primo messaggio — POST .../rename con la consegna pulita', async () => {
+            mockFetch([{ metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } }])
+            const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
+            sheetDialog.showModal = vi.fn()
+            await runtime().openRealTaskSheet()
+            document.querySelector<HTMLFormElement>('#customTaskForm')!.requestSubmit()
+            await new Promise((r) => setTimeout(r, 0))
+
+            const fetchMock = mockFetch([
+                { metodo: 'POST', percorso: '/api/v1/sessions/custom', corpo: { sessionId: 'sess-titolo' } },
+                { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+                { metodo: 'POST', percorso: '/api/v1/sessions/sess-titolo/rename', corpo: { ok: true } },
+            ])
+            const composerInput = document.querySelector<HTMLTextAreaElement>('#composerInput')!
+            composerInput.value = '  aggiungi   una funzione sottrai(a, b)  '
+            document.querySelector<HTMLFormElement>('#composerForm')!.requestSubmit()
+            await new Promise((r) => setTimeout(r, 0))
+
+            expect(fetchMock).toHaveBeenCalledWith(
+                '/api/v1/sessions/sess-titolo/rename',
+                expect.objectContaining({ method: 'POST', body: JSON.stringify({ nome: 'aggiungi una funzione sottrai(a, b)' }) }),
+            )
+            expect(document.querySelector('#sessionTitle')?.textContent).toBe('aggiungi una funzione sottrai(a, b)')
+        })
+
+        it('⛔⛔ TITOLO-03 AL CONTRARIO: un rename fallito NON rompe la sessione — nessun toast, nessun errore, resta usabile', async () => {
+            mockFetch([{ metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } }])
+            const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
+            sheetDialog.showModal = vi.fn()
+            await runtime().openRealTaskSheet()
+            document.querySelector<HTMLFormElement>('#customTaskForm')!.requestSubmit()
+            await new Promise((r) => setTimeout(r, 0))
+
+            mockFetch([
+                { metodo: 'POST', percorso: '/api/v1/sessions/custom', corpo: { sessionId: 'sess-titolo-fail' } },
+                { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+                { metodo: 'POST', percorso: '/api/v1/sessions/sess-titolo-fail/rename', corpo: { code: 'QUERY_INVALID' }, ok: false, status: 400 },
+            ])
+            const composerInput = document.querySelector<HTMLTextAreaElement>('#composerInput')!
+            composerInput.value = 'un messaggio qualunque'
+            document.querySelector<HTMLFormElement>('#composerForm')!.requestSubmit()
+            await new Promise((r) => setTimeout(r, 0))
+
+            expect(FakeEventSource.instances.at(-1)?.url).toBe('/api/v1/sessions/sess-titolo-fail/events') // la sessione è comunque partita
+            expect(document.querySelector('#toastRegion')?.textContent ?? '').not.toContain('rename')
+            expect(document.querySelector('#toastRegion')?.textContent ?? '').not.toContain('rinomina')
+        })
+
+        it('⛔⛔⛔ TITOLO-04 AL CONTRARIO: se una sessione NUOVA parte prima che il rename della vecchia risponda, il titolo vecchio non si applica MAI alla nuova', async () => {
+            mockFetch([{ metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } }])
+            const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
+            sheetDialog.showModal = vi.fn()
+            await runtime().openRealTaskSheet()
+            document.querySelector<HTMLFormElement>('#customTaskForm')!.requestSubmit()
+            await new Promise((r) => setTimeout(r, 0))
+
+            // ⛔ oggetto-contenitore, non un `let` nudo: TypeScript restringe il tipo di un `let` riassegnato dentro una closure annidata (l'executor di `new Promise`) fino a renderlo `never` al punto d'uso — un difetto noto della narrowing su chiusure, non del test.
+            const rifRename: { risolvi: (() => void) | null } = { risolvi: null }
+            const fetchMock = vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+                const url = typeof input === 'string' ? input : String(input)
+                const metodo = (init?.method ?? 'GET').toUpperCase()
+                if (metodo === 'POST' && url === '/api/v1/sessions/custom') {
+                    return new Response(JSON.stringify({ ok: true, data: { sessionId: 'sess-vecchia' } }), { status: 200 })
+                }
+                if (metodo === 'GET' && url.split('?')[0] === '/api/v1/sessions') {
+                    return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
+                }
+                if (metodo === 'POST' && url === '/api/v1/sessions/sess-vecchia/rename') {
+                    return new Promise<Response>((resolve) => { rifRename.risolvi = () => resolve(new Response(JSON.stringify({ ok: true, data: { ok: true } }), { status: 200 })) })
+                }
+                throw new Error(`nessuna risposta finta per ${metodo} ${url}`)
+            })
+            const composerInput = document.querySelector<HTMLTextAreaElement>('#composerInput')!
+            composerInput.value = 'messaggio della sessione vecchia'
+            document.querySelector<HTMLFormElement>('#composerForm')!.requestSubmit()
+            await new Promise((r) => setTimeout(r, 0))
+            // ⛔ il rename della sessione VECCHIA è ancora in sospeso qui (risolviRename non ancora chiamato) — esattamente il momento in cui una NUOVA sessione può partire. Aprire "Nuova sessione" di nuovo chiama nuovaGenerazioneSessione() DA SOLO, dentro startCustomSession (prima riga della funzione) — non serve toccarla a mano.
+            fetchMock.mockRestore()
+            mockFetch([{ metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } }])
+            await runtime().openRealTaskSheet()
+            document.querySelector<HTMLFormElement>('#customTaskForm')!.requestSubmit()
+            await new Promise((r) => setTimeout(r, 0))
+            mockFetch([
+                { metodo: 'POST', percorso: '/api/v1/sessions/custom', corpo: { sessionId: 'sess-nuova' } },
+                { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+                { metodo: 'POST', percorso: '/api/v1/sessions/sess-nuova/rename', corpo: { ok: true } },
+            ])
+            composerInput.value = 'messaggio della sessione NUOVA'
+            document.querySelector<HTMLFormElement>('#composerForm')!.requestSubmit()
+            await new Promise((r) => setTimeout(r, 0))
+
+            // ⭐ ORA la vecchia risposta di rename arriva, tardiva — non deve scavalcare il titolo della sessione nuova già a schermo.
+            rifRename.risolvi?.()
+            await new Promise((r) => setTimeout(r, 0))
+
+            expect(document.querySelector('#sessionTitle')?.textContent).toBe('messaggio della sessione NUOVA')
         })
     })
 
