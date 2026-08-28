@@ -1284,7 +1284,17 @@
     });
     function onDocumentClick(event) {
       if (!wrap.isConnected) { document.removeEventListener('click', onDocumentClick); return; }
-      if (aperto && !wrap.contains(event.target)) chiudi();
+      // ⛔ NON wrap.contains(event.target): l'header di un gruppo, quando cliccato,
+      // chiama renderLista() nel PROPRIO handler (bubble-phase) PRIMA che questo
+      // ascoltatore su document veda l'evento — renderLista() fa
+      // listEl.replaceChildren(...), che STACCA dal DOM il bottone appena cliccato.
+      // contains() su un nodo staccato torna sempre false, quindi il click veniva
+      // letto come "fuori dal pannello" e chiudeva tutto (bug reale, riprodotto e
+      // diagnosticato dal vivo con un log mirato). composedPath() torna il percorso
+      // REALE dell'evento al momento del dispatch, prima di ogni mutazione del DOM —
+      // resta corretto anche se il target viene staccato mentre l'evento sta ancora
+      // salendo verso document.
+      if (aperto && !event.composedPath().includes(wrap)) chiudi();
     }
     /*
      * ⛔⛔⛔ 27/8, trovato provando `apriSubito` dal vivo: se questo

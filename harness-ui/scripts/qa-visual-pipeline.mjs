@@ -1012,6 +1012,105 @@ const SCENARI = {
       p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
     }
   },
+
+  /*
+   * ⭐ 28/8 — riproduzione owner: "nel pill del composer quando seleziono
+   * un provider e ci clicco non compare più nulla". ZERO chiamate a
+   * pagamento: si apre solo la modale "Nuova sessione" e il model
+   * picker al suo interno, mai un submit del form.
+   */
+  async 'riproduci-model-picker-provider'(p) {
+    await p.attendi(1000);
+    await p.screenshot('stato-iniziale');
+
+    await p.click('#newSessionBtn');
+    await p.attendi(400);
+    await p.screenshot('modale-nuova-sessione');
+
+    await p.click('.model-picker-trigger');
+    await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico')", { descrizione: 'catalogo modelli caricato' });
+    await p.screenshot('picker-aperto-chiuso', { nota: 'tutti i gruppi provider chiusi, come apre di default' });
+
+    const primoHeader = await p.cdp.evaluate("document.querySelector('.model-picker-group-header .model-picker-group-name')?.textContent ?? null");
+    p.nota(`primo provider nella lista: ${JSON.stringify(primoHeader)}`);
+
+    await p.click('.model-picker-group-header');
+    await p.attendi(300);
+    await p.screenshot('provider-cliccato', { nota: 'atteso: la lista dei modelli di questo provider sotto l\'header' });
+
+    const espanso = await p.cdp.evaluate("document.querySelector('.model-picker-group-header')?.getAttribute('aria-expanded')");
+    const opzioniVisibili = await p.cdp.evaluate("document.querySelectorAll('.model-picker-option').length");
+    const contenutoLista = await p.testo('.model-picker-list');
+    p.nota(`aria-expanded dopo il click: ${espanso}, opzioni modello nel DOM: ${opzioniVisibili}`);
+    p.nota(`contenuto .model-picker-list: ${JSON.stringify((contenutoLista ?? '').slice(0, 300))}`);
+
+    if (espanso !== 'true') {
+      p.difetto(`il gruppo NON risulta espanso dopo il click (aria-expanded="${espanso}") — il click sul provider non sta aggiornando lo stato`, { severita: 'blocco' });
+    } else if (opzioniVisibili === 0) {
+      p.difetto('il gruppo risulta espanso (aria-expanded=true) ma ZERO opzioni modello sono nel DOM — riprodotto: "clicco e non compare nulla"', { severita: 'blocco' });
+    } else {
+      p.nota(`NON RIPRODOTTO qui (modale "Nuova sessione"): ${opzioniVisibili} opzioni modello appaiono correttamente sotto il provider espanso.`);
+    }
+
+    // --- SECONDO PERCORSO: la STESSA creaModelPicker(), ma montata nel foglio "model" del composer — "il pill del composer", le parole esatte dell'owner ---
+    // ⛔ RICARICA PULITA prima di questo percorso: isola se il difetto dipende da un residuo dell'istanza aperta nella modale "Nuova sessione" appena sopra, o è indipendente.
+    await p.cdp.evaluate('location.reload()');
+    await p.attendi(1500);
+    await p.click('[data-open-sheet="model"]');
+    await p.attendiCondizione("!document.querySelector('#modelPickerMount .model-picker-list')?.textContent?.includes('Carico')", { descrizione: 'catalogo modelli caricato nel foglio pill del composer' });
+    await p.screenshot('pill-composer-picker-aperto', { nota: 'STESSO componente, montato nel foglio del pill del composer — non la modale "Nuova sessione"' });
+
+    await p.click('#modelPickerMount .model-picker-group-header');
+    await p.attendi(300);
+    await p.screenshot('pill-composer-provider-cliccato', { nota: 'qui sono le parole esatte dell\'owner: "nel pill del composer quando seleziono un provider e ci clicco"' });
+
+    const espansoPill = await p.cdp.evaluate("document.querySelector('#modelPickerMount .model-picker-group-header')?.getAttribute('aria-expanded')");
+    const opzioniVisibiliPill = await p.cdp.evaluate("document.querySelectorAll('#modelPickerMount .model-picker-option').length");
+    const listaVisibilePill = await p.cdp.evaluate(`(() => {
+      const el = document.querySelector('#modelPickerMount .model-picker-list');
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      return { larghezza: r.width, altezza: r.height, overflow: cs.overflow, display: cs.display, visibility: cs.visibility, maxHeight: cs.maxHeight };
+    })()`);
+    p.nota(`PILL COMPOSER — aria-expanded: ${espansoPill}, opzioni nel DOM: ${opzioniVisibiliPill}, geometria/stile della lista: ${JSON.stringify(listaVisibilePill)}`);
+
+    // ⛔ catena di antenati: da .model-picker-list risalendo fino a #sheetBody, per trovare ESATTAMENTE dove la larghezza/altezza collassa a 0.
+    const catenaAntenati = await p.cdp.evaluate(`(() => {
+      let el = document.querySelector('#modelPickerMount .model-picker-list');
+      const catena = [];
+      while (el && catena.length < 10) {
+        const r = el.getBoundingClientRect();
+        const cs = getComputedStyle(el);
+        catena.push({
+          selettore: el.id ? '#' + el.id : (el.className ? '.' + String(el.className).split(' ').join('.') : el.tagName),
+          larghezza: r.width, altezza: r.height,
+          display: cs.display, position: cs.position, flexDirection: cs.flexDirection,
+          flexGrow: cs.flexGrow, flexShrink: cs.flexShrink, flexBasis: cs.flexBasis,
+          width: cs.width, height: cs.height, minHeight: cs.minHeight, minWidth: cs.minWidth,
+        });
+        el = el.parentElement;
+      }
+      return catena;
+    })()`);
+    p.nota(`catena antenati (da .model-picker-list a #sheetBody): ${JSON.stringify(catenaAntenati, null, 1)}`);
+
+    if (espansoPill !== 'true') {
+      p.difetto(`PILL COMPOSER: il gruppo NON risulta espanso dopo il click (aria-expanded="${espansoPill}")`, { severita: 'blocco' });
+    } else if (opzioniVisibiliPill === 0) {
+      p.difetto('PILL COMPOSER: il gruppo risulta espanso ma ZERO opzioni modello nel DOM — RIPRODOTTO qui', { severita: 'blocco' });
+    } else if (listaVisibilePill && (listaVisibilePill.altezza === 0 || listaVisibilePill.visibility === 'hidden' || listaVisibilePill.display === 'none')) {
+      p.difetto(`PILL COMPOSER: le opzioni sono nel DOM (${opzioniVisibiliPill}) ma la lista è visivamente invisibile — geometria/stile: ${JSON.stringify(listaVisibilePill)} — RIPRODOTTO: nel DOM c'è, sullo schermo no`, { severita: 'blocco' });
+    } else {
+      p.nota(`NON RIPRODOTTO nemmeno qui: ${opzioniVisibiliPill} opzioni visibili, geometria sana.`);
+    }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
 };
 
 // --------------------------------------------------------------------
