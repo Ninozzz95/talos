@@ -35,6 +35,7 @@ type RuntimeGlobals = {
         runDirectShell(comando: string, silenzioso: boolean): Promise<void>
         submitPrompt(text: string): boolean
         executeCommand(command: string): void
+        costruisciTrascrizioneMarkdown(esportato: Record<string, unknown>): string
         realSessionState: {
             id: string | null
             taskId: string | null
@@ -1060,6 +1061,174 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         runtime().executeCommand('fork')
         await new Promise((r) => setTimeout(r, 0))
         expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    /**
+     * ⭐⭐⭐ 28/8 — owner: "una modale di esportazione in diversi formati, in
+     * modo che se c'è qualche errore io ti possa esportare interamente la
+     * conversazione con errori e output tecnici". Due gruppi di prove:
+     * (A) costruisciTrascrizioneMarkdown come funzione pura, un caso per
+     * ogni garanzia che conta davvero; (B) il foglio vero, aperto da
+     * executeCommand('export') come ogni altro comando della palette.
+     */
+    describe('Esporta sessione — modale multi-formato', () => {
+        it('EXPORT-MD-01: la trascrizione porta OGNI evento — testo, tool-call con esito MAI troncato (a differenza della UI dal vivo, che tronca a 4000 caratteri)', () => {
+            const esitoLungo = 'x'.repeat(5000) // più lungo del tetto di 4000 usato da ToolCallResult in handleRealEvent
+            const md = runtime().costruisciTrascrizioneMarkdown({
+                sessionId: 'sess-md-1', nome: 'Prova export', modello: 'z-ai/glm-4.7-flash',
+                avviataAlle: '2026-08-28T10:00:00.000Z', conclusa: true, forkDa: null,
+                eventi: [
+                    { type: 'RunStarted', input: { consegna: 'Scrivi una funzione somma()' } },
+                    { type: 'TextMessageContent', messageId: 'm1', delta: 'Fatto, ' },
+                    { type: 'TextMessageContent', messageId: 'm1', delta: 'ecco il codice.' },
+                    { type: 'TextMessageEnd', messageId: 'm1' },
+                    { type: 'ToolCallStart', toolCallId: 'c1', toolCallName: 'scrivi' },
+                    { type: 'ToolCallArgs', toolCallId: 'c1', delta: '{"percorso":"somma.js"' },
+                    { type: 'ToolCallArgs', toolCallId: 'c1', delta: ',"contenuto":"..."}' },
+                    { type: 'ToolCallResult', toolCallId: 'c1', content: esitoLungo },
+                    { type: 'RunFinished', outcome: { type: 'success' } },
+                ],
+            })
+            expect(md).toContain('sess-md-1')
+            expect(md).toContain('z-ai/glm-4.7-flash')
+            expect(md).toContain('Scrivi una funzione somma()')
+            expect(md).toContain('Fatto, ecco il codice.')
+            expect(md).toContain('scrivi')
+            expect(md).toContain('somma.js')
+            expect(md).toContain(esitoLungo) // per intero: niente slice(0, 4000)
+            expect(md).toContain('giro concluso')
+        })
+
+        it('EXPORT-MD-02: un RunError porta codice e messaggio per intero, mai riassunti', () => {
+            const messaggioLungo = `Errore reale: ${'dettaglio '.repeat(100)}`
+            const md = runtime().costruisciTrascrizioneMarkdown({
+                sessionId: 'sess-md-err', nome: null, modello: null, avviataAlle: '2026-08-28T10:00:00.000Z',
+                conclusa: true, forkDa: null,
+                eventi: [{ type: 'RunError', code: 'GIRI_ESAURITI', message: messaggioLungo }],
+            })
+            expect(md).toContain('GIRI_ESAURITI')
+            expect(md).toContain(messaggioLungo)
+        })
+
+        it('⛔⛔ EXPORT-MD-03 AL CONTRARIO: un tipo di evento MAI visto prima non sparisce — finisce nell\'output come JSON grezzo', () => {
+            const md = runtime().costruisciTrascrizioneMarkdown({
+                sessionId: 'sess-md-ignoto', nome: null, modello: null, avviataAlle: '2026-08-28T10:00:00.000Z',
+                conclusa: false, forkDa: null,
+                eventi: [{ type: 'FuturoEventoMaiVisto', dettaglio: 'valore-sentinella-9137' }],
+            })
+            expect(md).toContain('FuturoEventoMaiVisto')
+            expect(md).toContain('valore-sentinella-9137')
+        })
+
+        it('⛔ EXPORT-MD-04 AL CONTRARIO: zero eventi produce un avviso esplicito, mai una stringa vuota', () => {
+            const md = runtime().costruisciTrascrizioneMarkdown({
+                sessionId: 'sess-md-vuota', nome: null, modello: null, avviataAlle: '2026-08-28T10:00:00.000Z',
+                conclusa: false, forkDa: null, eventi: [],
+            })
+            expect(md.trim().length).toBeGreaterThan(0)
+            expect(md).toContain('Nessun evento')
+        })
+
+        it('⭐⭐⭐ EXPORT-SHEET-01: con sessione reale, executeCommand(\'export\') apre il foglio di scelta formato — non un download istantaneo', async () => {
+            mockFetch([
+                { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-export-sheet' } },
+                { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+            ])
+            await runtime().startRealSession({ id: 'storia-export-sheet' })
+            const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
+            sheetDialog.showModal = vi.fn()
+
+            runtime().executeCommand('export')
+
+            expect(sheetDialog.hasAttribute('open')).toBe(true)
+            expect(document.querySelector('[data-export-choice="markdown"]')).not.toBeNull()
+            expect(document.querySelector('[data-export-choice="json"]')).not.toBeNull()
+            expect(sheetDialog.querySelector('.demo-surface-badge')?.hasAttribute('hidden')).toBe(true) // foglio interamente onesto — badge condiviso, va cercato DENTRO sheetDialog (14 superfici lo condividono nel resto della pagina)
+        })
+
+        it('⛔ EXPORT-SHEET-02 AL CONTRARIO: SENZA sessione reale, executeCommand(\'export\') NON apre il foglio — resta il download demo diretto', () => {
+            const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
+            sheetDialog.showModal = vi.fn()
+            // jsdom non garantisce URL.createObjectURL: stessa cura di
+            // EXPORT-SHEET-03, qui solo per non far dipendere l'esito da un
+            // dettaglio d'ambiente estraneo a ciò che la prova vuole verificare.
+            const origCreate = URL.createObjectURL
+            URL.createObjectURL = vi.fn(() => 'blob:fake')
+            const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+            try {
+                runtime().executeCommand('export')
+
+                expect(sheetDialog.hasAttribute('open')).toBe(false)
+                expect(clickSpy).toHaveBeenCalled() // il vecchio percorso demo, invariato
+            } finally {
+                URL.createObjectURL = origCreate
+            }
+        })
+
+        it('⭐⭐⭐ EXPORT-SHEET-03: scegliere "JSON completo" chiama GET .../export e scarica il payload vero, byte per byte', async () => {
+            mockFetch([
+                { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-export-json' } },
+                { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+            ])
+            await runtime().startRealSession({ id: 'storia-export-json' })
+            const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
+            sheetDialog.showModal = vi.fn()
+            runtime().executeCommand('export')
+
+            const payloadVero = { schema: 'talos.harness-ui.session-export.v1', sessionId: 'sess-export-json', eventi: [{ type: 'RunFinished' }] }
+            mockFetch([{ metodo: 'GET', percorso: '/api/v1/sessions/sess-export-json/export', corpo: payloadVero }])
+            const blobParts: unknown[][] = []
+            class FakeBlob { constructor(parts: unknown[]) { blobParts.push(parts) } }
+            vi.stubGlobal('Blob', FakeBlob)
+            // ⛔ NON vi.stubGlobal('URL', ...): sostituirebbe l'intero costruttore
+            // URL (usato altrove per il parsing indirizzi), non solo i due
+            // metodi statici che scaricaTesto() chiama davvero — si salvano e
+            // ripristinano SOLO quelli.
+            const origCreate = URL.createObjectURL
+            const origRevoke = URL.revokeObjectURL
+            URL.createObjectURL = vi.fn(() => 'blob:fake')
+            URL.revokeObjectURL = vi.fn()
+            const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+            try {
+                document.querySelector<HTMLButtonElement>('[data-export-choice="json"]')!.click()
+                await new Promise((r) => setTimeout(r, 0))
+
+                expect(clickSpy).toHaveBeenCalled()
+                expect(JSON.parse(String(blobParts[0][0]))).toEqual(payloadVero)
+                expect(sheetDialog.hasAttribute('open')).toBe(false) // il foglio si chiude dopo un export riuscito
+                expect(document.querySelector('#toastRegion')?.textContent).toContain('esportata')
+            } finally {
+                URL.createObjectURL = origCreate
+                URL.revokeObjectURL = origRevoke
+            }
+        })
+
+        it('⛔⛔ EXPORT-SHEET-04 AL CONTRARIO: un export vuoto non scarica MAI un file silenzioso — tocca il toast di errore', async () => {
+            mockFetch([
+                { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-export-vuota' } },
+                { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+            ])
+            await runtime().startRealSession({ id: 'storia-export-vuota' })
+            const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
+            sheetDialog.showModal = vi.fn()
+            runtime().executeCommand('export')
+
+            // stesso principio del bug reale trovato nell'/export di Claude Code
+            // (vedi il commento su costruisciTrascrizioneMarkdown): un payload che
+            // serializza a stringa vuota (qui: `data` assente dalla busta, quindi
+            // apiGet torna `undefined`, e JSON.stringify(undefined) è `undefined`,
+            // non una stringa) non deve MAI passare per un successo.
+            mockFetch([{ metodo: 'GET', percorso: '/api/v1/sessions/sess-export-vuota/export', corpo: undefined }])
+            const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+            document.querySelector<HTMLButtonElement>('[data-export-choice="json"]')!.click()
+            await new Promise((r) => setTimeout(r, 0))
+
+            expect(clickSpy).not.toHaveBeenCalled()
+            expect(document.querySelector('#toastRegion')?.textContent).toContain('non riuscita')
+        })
     })
 
     /*
