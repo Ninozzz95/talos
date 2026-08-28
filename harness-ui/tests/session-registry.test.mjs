@@ -1666,3 +1666,107 @@ test('⭐⭐⭐ elencaFigli(): NOT_FOUND su una sessione inesistente, zero figli
   assert.equal(conFigli.figli[0].conclusa, true);
   assert.equal(conFigli.figli[0].esitoDelega, 'concluso');
 });
+
+/*
+ * ⭐⭐⭐ FASE D (28/8) — coda messaggi, piano elegant-spinning-dongarra.md,
+ * LEDGER-FASE-D-CODA.md. Stesso principio dei test onDelega/hookFn sopra:
+ * `costruisciCodaMessaggiFn` non è esportata — si prova attraverso ciò che
+ * PRODUCE (una funzione vera passata ad avviaSessioneFn) e attraverso i due
+ * metodi pubblici che la popolano/svuotano.
+ */
+test('⭐⭐⭐ codaMessaggiFn è SEMPRE costruita su avvia() — una funzione vera, anche per una sessione senza nessun messaggio in coda', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  registro.avvia('task-vero');
+  assert.equal(typeof finta.ultimoInput.codaMessaggiFn, 'function');
+  assert.equal(finta.ultimoInput.codaMessaggiFn(), null, 'coda vuota: null, mai undefined — stesso contratto di talosLavora');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⭐⭐⭐⭐ FILO INTERO: accodaMessaggio() popola voce.codaMessaggi, e la codaMessaggiFn catturata la DRENA per davvero, emettendo QueuedMessageDelivered SOLO quando consegna qualcosa', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero');
+  const codaMessaggiFn = finta.ultimoInput.codaMessaggiFn;
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+
+  const esito = registro.accodaMessaggio(sessionId, 'e adesso aggiungi anche i test');
+  assert.deepEqual(esito, { ok: true, posizione: 1 });
+
+  assert.equal(codaMessaggiFn(), 'e adesso aggiungi anche i test', 'la STESSA funzione passata al kernel legge il messaggio vero appena accodato');
+  const evento = ricevuti.find((e) => e.type === 'QueuedMessageDelivered');
+  assert.ok(evento, 'il frontend deve sapere ESATTAMENTE quando il kernel ha consumato il messaggio, non indovinarlo');
+  assert.equal(evento.testo, 'e adesso aggiungi anche i test');
+
+  assert.equal(codaMessaggiFn(), null, 'drenato: la seconda lettura torna vuota, mai lo stesso messaggio due volte');
+  assert.equal(ricevuti.filter((e) => e.type === 'QueuedMessageDelivered').length, 1, 'AL CONTRARIO — una lettura a vuoto non emette un secondo evento fantasma');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔ accodaMessaggio: NOT_FOUND su un id inesistente', () => {
+  const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
+  assert.deepEqual(registro.accodaMessaggio('fantasma', 'ciao'), { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+});
+
+test('⛔⛔ accodaMessaggio: SESSION_NOT_READY su una sessione GIÀ CONCLUSA — il percorso giusto lì è resume(), non la coda', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+
+  assert.deepEqual(
+    registro.accodaMessaggio(sessionId, 'ciao'),
+    { erroreAvvio: 'La sessione è già conclusa: usa resume(), non la coda', code: 'SESSION_NOT_READY' },
+  );
+});
+
+test('⛔ accodaMessaggio: QUERY_INVALID su un testo vuoto o di soli spazi', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero');
+
+  assert.equal(registro.accodaMessaggio(sessionId, '').code, 'QUERY_INVALID');
+  assert.equal(registro.accodaMessaggio(sessionId, '   ').code, 'QUERY_INVALID');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⭐⭐⭐ AL CONTRARIO — due accodaMessaggio in sequenza mantengono l\'ORDINE: FIFO, non LIFO', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero');
+  const codaMessaggiFn = finta.ultimoInput.codaMessaggiFn;
+
+  assert.deepEqual(registro.accodaMessaggio(sessionId, 'primo'), { ok: true, posizione: 1 });
+  assert.deepEqual(registro.accodaMessaggio(sessionId, 'secondo'), { ok: true, posizione: 2 });
+
+  assert.equal(codaMessaggiFn(), 'primo', 'il PRIMO accodato è il PRIMO consegnato — FIFO');
+  assert.equal(codaMessaggiFn(), 'secondo');
+  assert.equal(codaMessaggiFn(), null);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⭐⭐ svuotaCoda: rimuove l\'ULTIMO messaggio accodato, mai il primo — coerente con "Annulla" sull\'ultimo appena scritto', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero');
+  const codaMessaggiFn = finta.ultimoInput.codaMessaggiFn;
+
+  registro.accodaMessaggio(sessionId, 'primo');
+  registro.accodaMessaggio(sessionId, 'secondo');
+
+  assert.deepEqual(registro.svuotaCoda(sessionId), { ok: true, rimosso: true });
+  assert.equal(codaMessaggiFn(), 'primo', 'il "secondo" è stato tolto dall\'Annulla — resta solo il primo, ancora in ordine');
+  assert.equal(codaMessaggiFn(), null);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔ svuotaCoda: rimosso:false su una coda già vuota, mai un errore — e NOT_FOUND resta un caso separato', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero');
+
+  assert.deepEqual(registro.svuotaCoda(sessionId), { ok: true, rimosso: false });
+  assert.deepEqual(registro.svuotaCoda('fantasma'), { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});

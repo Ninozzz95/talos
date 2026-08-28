@@ -1111,6 +1111,96 @@ const SCENARI = {
       p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
     }
   },
+
+  /*
+   * ⭐⭐⭐ FASE D (28/8) — verifica dal vivo, criterio di completamento 5
+   * (LEDGER-FASE-D-CODA.md): un secondo messaggio scritto MENTRE la
+   * sessione sta ancora girando non è rifiutato, entra in coda, il
+   * banner mostra il testo vero, e quando il turno corrente conclude il
+   * messaggio arriva DAVVERO al modello (verificato sul FILE scritto sul
+   * disco, non solo sul testo mostrato in chat).
+   *
+   * Il primo messaggio chiede ESPLICITAMENTE almeno due tool-call in
+   * sequenza (leggi+leggi/scrivi) apposta per aprire una finestra reale
+   * in cui la sessione resta "in corso" abbastanza a lungo da poter
+   * scrivere il secondo messaggio PRIMA che il primo turno concluda da
+   * solo — il secondo messaggio è inviato SUBITO dopo che la sessione
+   * risulta avviata (RunStarted), non dopo un'attesa fissa.
+   */
+  async 'fase-d-coda-messaggi'(p) {
+    await p.attendi(1000);
+    await p.screenshot('stato-iniziale');
+
+    const marcatore = Date.now();
+    const nomeFile = `riepilogo-fase-d-${marcatore}.txt`;
+    // ⭐ 28/8, owner: messaggi in linguaggio naturale, mai un termine tecnico interno.
+    const messaggio1 = `Leggi il file package.json di questo progetto e, se esiste, anche il README. Poi crea un nuovo file chiamato ${nomeFile} con dentro scritto, in una riga sola, il nome del progetto che hai letto.`;
+    await p.digita('#composerInput', messaggio1);
+    await p.submit('#composerForm');
+    p.nota('primo messaggio inviato — atteso: leggi (1+) poi scrivi, almeno due giri prima che il turno concluda da solo');
+
+    await p.attendiCondizione(
+      "!!window.__talosHarnessUiRuntime?.realSessionState?.id",
+      { descrizione: 'la sessione reale è partita (RunStarted arrivato)', timeoutMs: 15000 },
+    );
+    const inCorsoAllInvio = await p.cdp.evaluate('window.__talosHarnessUiRuntime.realSessionState.eventoTerminaleVisto === false');
+    p.nota(`sessione ancora in corso al momento del secondo invio: ${inCorsoAllInvio} (se false, il primo turno ha già concluso da solo — il secondo messaggio proverebbe resume, non la coda: da rilanciare con un task più lungo)`);
+
+    const messaggio2 = 'Quando hai finito, aggiungi anche la scritta FASE-D-OK alla fine dello stesso file che hai appena creato.';
+    await p.digita('#composerInput', messaggio2);
+    await p.submit('#composerForm');
+    await p.attendi(300);
+    await p.screenshot('banner-coda-visibile', { nota: 'atteso: banner "Follow-up in coda" col testo del secondo messaggio, NESSUN bubble ancora per quel testo' });
+
+    const bannerVisibile = await p.cdp.evaluate("document.querySelector('#queuedMessage')?.classList.contains('show')");
+    const bannerTesto = await p.testo('#queuedMessageText');
+    const chatPrimaDelDelivered = await p.testo('.conversation');
+    if (!bannerVisibile) {
+      p.difetto('il banner "Follow-up in coda" NON è visibile dopo l\'invio del secondo messaggio — atteso show=true (se il primo turno era già concluso, vedi la nota sopra su inCorsoAllInvio)', { severita: 'blocco' });
+    } else {
+      p.nota(`CONFERMATO: banner visibile, testo: ${JSON.stringify(bannerTesto)}`);
+    }
+    if (chatPrimaDelDelivered?.includes('FASE-D-OK alla fine')) {
+      p.difetto('un bubble col testo del secondo messaggio è GIÀ visibile in chat PRIMA che il kernel lo abbia consegnato — mai un bubble ottimistico per la coda', { severita: 'blocco' });
+    }
+
+    // Aspetto la conclusione VERA — robusto a più tool-call/giri intermedi in ENTRAMBI i turni.
+    await p.attendiTestoStabile('.conversation', { giriStabili: 6, intervalMs: 2000, timeoutMs: 180000 });
+    await p.screenshot('conclusa', { nota: 'atteso: bubble del secondo messaggio in chat, banner sparito, risposta finale del modello dopo il secondo turno' });
+
+    const bannerVisibileDopo = await p.cdp.evaluate("document.querySelector('#queuedMessage')?.classList.contains('show')");
+    const chatFinale = await p.testo('.conversation');
+    if (bannerVisibileDopo) {
+      p.difetto('il banner è ANCORA visibile dopo la conclusione — la coda locale non si è svuotata, o QueuedMessageDelivered non è mai arrivato', { severita: 'blocco' });
+    } else {
+      p.nota('CONFERMATO: il banner è sparito da solo quando la coda si è svuotata — nessuno stato locale rimasto disallineato.');
+    }
+    if (!chatFinale?.includes('FASE-D-OK')) {
+      p.difetto(`il testo del secondo messaggio non appare nella chat finale (atteso un bubble "...FASE-D-OK..."): ${JSON.stringify(chatFinale?.slice(-400))}`, { severita: 'blocco' });
+    } else {
+      p.nota('CONFERMATO: il bubble del messaggio accodato è apparso in chat come un turno utente reale, non un banner statico.');
+    }
+
+    // --- La prova che conta di più: il FILE sul disco riflette ENTRAMBI i turni, non solo il testo mostrato in chat ---
+    const percorsoFile = `C:/Users/Antonino/Desktop/projects/talos-prova-harness/${nomeFile}`;
+    if (!existsSync(percorsoFile)) {
+      p.difetto(`il file NON esiste sul disco: ${percorsoFile} — il primo turno non ha scritto per davvero`, { severita: 'blocco' });
+    } else {
+      const contenuto = readFileSync(percorsoFile, 'utf8');
+      p.nota(`contenuto del file sul disco: ${JSON.stringify(contenuto)}`);
+      if (!contenuto.includes('FASE-D-OK')) {
+        p.difetto(`il file esiste ma NON contiene "FASE-D-OK" — il SECONDO turno (dalla coda) non ha raggiunto per davvero il modello, anche se la chat mostra un bubble: ${JSON.stringify(contenuto)}`, { severita: 'blocco' });
+      } else {
+        p.nota('CONFERMATO ALLA FONTE: il file sul disco contiene ENTRAMBI i turni — il messaggio accodato è arrivato DAVVERO al modello nel punto giusto, non solo mostrato in chat.');
+      }
+    }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
 };
 
 // --------------------------------------------------------------------

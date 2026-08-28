@@ -105,6 +105,11 @@ function esitoInEventoFinale({ threadId, runId, esito }) {
  *   Fase 3: sessione avviata da un client mobile. Solo l'attrezzo `shell`
  *   se ne accorge (vedi talosHarness.mjs, `eseguiComandoSandboxato`) — ogni
  *   altro attrezzo si comporta identico, `false` è il default di sempre.
+ * @param {()=>string|null|undefined} [input.codaMessaggiFn] — FASE D (28/8),
+ *   coda messaggi. Stesso principio di `hookFn`/`onDelega`: inoltrato SENZA
+ *   logica propria, la coda vera (FIFO, per-sessione) vive in
+ *   `session-registry.mjs`. Il kernel la chiama SOLO quando un giro conclude
+ *   senza tool-call — vedi `talosHarness.mjs`, LEDGER-FASE-D-CODA.md.
  * @param {typeof talosLavoraReale} [input.talosLavoraFn] — SOLO per test: la
  *   funzione reale è il default, iniettarne una finta evita di dover far
  *   girare un vero ciclo (già provato per conto suo in AVM-harness) solo per
@@ -154,6 +159,15 @@ export async function avviaSessione({
    * si ripete: aggiunto nello stesso commit del resto della fase.
    */
   onDelega,
+  /*
+   * ⭐⭐⭐ FASE D (28/8) — coda messaggi su una sessione IN CORSO. Stesso
+   * principio di `hookFn`/`onDelega`: inoltrato SENZA logica propria, la
+   * coda vera (FIFO, `voce.codaMessaggi`) vive in `session-registry.mjs`.
+   * Stesso gap da non ripetere: un parametro costruito dal chiamante ma
+   * mai arrivato fin qui — aggiunto nello stesso commit del resto della
+   * fase, non un secondo giro.
+   */
+  codaMessaggiFn,
   talosLavoraFn = talosLavoraReale,
   leggiContestoWorkspaceFn = leggiContestoWorkspaceReale,
   salvaArtefattoFn = salvaArtefattoReale,
@@ -388,7 +402,7 @@ export async function avviaSessione({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
       onGiro, onScrittura, onDelta, reasoning,
       strumentiEstesi, ricercaWeb, onArtefatto, onDocumento,
-      livelloAccesso, chiediApprovazioneFn, hookFn, permessiPerAttrezzo, onDelega,
+      livelloAccesso, chiediApprovazioneFn, hookFn, permessiPerAttrezzo, onDelega, codaMessaggiFn,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));
     return { threadId, runId, ok: esito.comeFinita === 'concluso', esito, erroreInterno: null };

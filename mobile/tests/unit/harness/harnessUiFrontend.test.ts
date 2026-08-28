@@ -439,14 +439,14 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         expect(fetchMock).not.toHaveBeenCalled()
     })
 
-    it('CODE-COMPOSER-QUEUE-HONEST-01 with a real session active, the composer refuses honestly instead of faking a queued follow-up that never arrives — talosLavora accepts no mid-run injection today', () => {
-        const fetchMock = vi.fn()
+    it('CODE-COMPOSER-QUEUE-HONEST-01 — FASE D (28/8): with a real session active, the composer now queues the follow-up for real (POST .../queue) instead of refusing it', async () => {
+        const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true, data: { ok: true, posizione: 1 } }), { status: 200 }))
         vi.stubGlobal('fetch', fetchMock)
         mountStaticRuntime()
         const runtime = (window as unknown as {
             __talosHarnessUiRuntime?: {
                 submitPrompt?(text: string): boolean
-                realSessionState?: { id: string | null }
+                realSessionState?: { id: string | null; codaMessaggi?: string[] }
             }
         }).__talosHarnessUiRuntime
         expect(runtime?.realSessionState).toBeTruthy()
@@ -455,17 +455,18 @@ describe('Harness UI embedded host and keyboard runtime', () => {
 
         const before = document.querySelectorAll('#conversation .user-message').length
         expect(runtime?.submitPrompt?.('follow-up mentre gira una sessione reale')).toBe(true)
+        await new Promise((resolve) => setTimeout(resolve, 0))
         const after = document.querySelectorAll('#conversation .user-message').length
 
-        expect(after).toBe(before) // mai un messaggio finto aggiunto alla conversazione
-        expect(document.querySelector('#queuedMessage')?.classList.contains('show')).toBe(false) // mai il banner "Follow-up in coda"
-        // ⛔ 27/8 — testo aggiornato: submitPrompt ora distingue sessione IN CORSO (questo caso, rifiuto onesto invariato nella sostanza) da sessione CONCLUSA (resumeSession(testo), vedi harnessUiRealSession.test.ts).
-        expect(document.querySelector('#toastRegion')?.textContent).toContain('Messaggio non consegnato')
-        expect(fetchMock).not.toHaveBeenCalled()
-
-        // ⛔ AL CONTRARIO: nemmeno il toggle "Follow-up" si attiva mentre una sessione reale è viva — lo stesso rifiuto onesto, non solo al momento dell'invio.
-        document.querySelector<HTMLButtonElement>('#queueToggle')?.click()
-        expect(document.querySelector('#queueToggle')?.classList.contains('active')).toBe(false)
+        // ⛔ 28/8 — onestà del NUOVO comportamento: il messaggio è solo IN CODA, non
+        // ancora visto dal modello — nessun bubble ottimistico finché il kernel
+        // non lo consegna davvero (evento QueuedMessageDelivered, vedi
+        // harnessUiRealSession.test.ts per il filo intero).
+        expect(after).toBe(before)
+        expect(document.querySelector('#queuedMessage')?.classList.contains('show')).toBe(true) // il banner "Follow-up in coda" ORA mostra dati veri
+        expect(document.querySelector('#queuedMessageText')?.textContent).toContain('follow-up mentre gira')
+        expect(document.querySelector('#toastRegion')?.textContent).toContain('Messaggio in coda')
+        expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/v1/sessions/sess-fake-for-test/queue'), expect.objectContaining({ method: 'POST' }))
     })
 
     it('HARNESS-BOARD-MOBILE-HONESTY-01 never calls a local backend from the embedded mobile demo', async () => {

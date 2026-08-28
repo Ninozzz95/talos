@@ -136,6 +136,35 @@ function registroFinto() {
       if (hookId === 'hook-file-rotto') return { erroreAvvio: '.harness-ui-hooks.json non è un JSON valido', code: 'HOOK_INVALID' };
       return { ok: true };
     },
+    /*
+     * ⭐⭐⭐ FASE D (28/8) — coda messaggi: stesso stile di
+     * rispondiApprovazione/fidaHook sopra — cattura la chiamata per
+     * provare che la rotta HTTP raggiunge davvero il registro.
+     * `voce.conclusa` è lo stato VERO (impostato da _emetti su
+     * RunFinished/RunError, come resume()/forka() sopra) — non un ID
+     * sentinella inventato.
+     */
+    ultimoAccodaMessaggio: null,
+    codaFinta: new Map(), // sessionId -> array di messaggi, solo per il test
+    accodaMessaggio(sessionId, testo) {
+      this.ultimoAccodaMessaggio = { sessionId, testo };
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (voce.conclusa) return { erroreAvvio: 'La sessione è già conclusa: usa resume(), non la coda', code: 'SESSION_NOT_READY' };
+      const coda = this.codaFinta.get(sessionId) ?? [];
+      coda.push(testo);
+      this.codaFinta.set(sessionId, coda);
+      return { ok: true, posizione: coda.length };
+    },
+    ultimaSvuotaCoda: null,
+    svuotaCoda(sessionId) {
+      this.ultimaSvuotaCoda = sessionId;
+      if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      const coda = this.codaFinta.get(sessionId) ?? [];
+      const rimosso = coda.length > 0;
+      if (rimosso) coda.pop();
+      return { ok: true, rimosso };
+    },
   };
 }
 
@@ -491,6 +520,101 @@ test('⛔ AL CONTRARIO — GET .../trust (metodo sbagliato) non raggiunge mai fi
   const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/hooks/audit/trust`, { method: 'GET' });
   assert.notEqual(risposta.status, 200);
   assert.equal(sessionRegistry.ultimaFiduciaHook, null);
+});
+
+/*
+ * ⭐⭐⭐ FASE D (28/8) — POST .../queue e .../queue/annulla, coda messaggi.
+ * ⛔ Il ledger (LEDGER-FASE-D-CODA.md) prevedeva un DELETE HTTP per
+ * "annulla" — corretto nell'implementazione (vedi il commento in
+ * http-app.mjs sopra queueMatch): nessun'altra rotta di questo file usa
+ * mai il verbo DELETE, incluso eliminare un file (POST .../tree/delete).
+ */
+test('⭐⭐⭐ POST /api/v1/sessions/:id/queue con {messaggio} raggiunge sessionRegistry.accodaMessaggio', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/queue`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messaggio: 'e adesso aggiungi anche i test' }),
+  });
+  assert.equal(risposta.status, 200);
+  const corpo = await risposta.json();
+  assert.equal(corpo.ok, true);
+  assert.deepEqual(corpo.data, { ok: true, posizione: 1 });
+  assert.deepEqual(sessionRegistry.ultimoAccodaMessaggio, { sessionId, testo: 'e adesso aggiungi anche i test' });
+});
+
+test('⛔ AL CONTRARIO — POST .../queue su una sessione inesistente: 404 NOT_FOUND', async (t) => {
+  const { base } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions/mai-esistita/queue`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messaggio: 'ciao' }),
+  });
+  assert.equal(risposta.status, 404);
+  assert.equal((await risposta.json()).error.code, 'NOT_FOUND');
+});
+
+test('⛔⛔ AL CONTRARIO — POST .../queue su una sessione GIÀ CONCLUSA: 409 SESSION_NOT_READY, mai un {ok:true} bugiardo', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  sessionRegistry._emetti(sessionId, { type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/queue`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messaggio: 'ciao' }),
+  });
+  assert.equal(risposta.status, 409);
+  assert.equal((await risposta.json()).error.code, 'SESSION_NOT_READY');
+});
+
+test('⛔⛔ AL CONTRARIO — POST .../queue con un corpo malformato (messaggio mancante, vuoto, o un campo in più): 400 QUERY_INVALID', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const corpiCattivi = [{}, { messaggio: '' }, { messaggio: '   ' }, { messaggio: 123 }, { messaggio: 'x', extra: 1 }];
+  for (const corpo of corpiCattivi) {
+    const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/queue`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo),
+    });
+    assert.equal(risposta.status, 400, JSON.stringify(corpo));
+    assert.equal((await risposta.json()).error.code, 'QUERY_INVALID', JSON.stringify(corpo));
+  }
+});
+
+test('⭐⭐⭐ POST /api/v1/sessions/:id/queue/annulla raggiunge sessionRegistry.svuotaCoda', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  await fetch(`${base}/api/v1/sessions/${sessionId}/queue`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messaggio: 'ciao' }),
+  });
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/queue/annulla`, { method: 'POST' });
+  assert.equal(risposta.status, 200);
+  const corpo = await risposta.json();
+  assert.deepEqual(corpo.data, { ok: true, rimosso: true });
+  assert.equal(sessionRegistry.ultimaSvuotaCoda, sessionId);
+});
+
+test('⛔ AL CONTRARIO — POST .../queue/annulla su una sessione inesistente: 404 NOT_FOUND', async (t) => {
+  const { base } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions/mai-esistita/queue/annulla`, { method: 'POST' });
+  assert.equal(risposta.status, 404);
+  assert.equal((await risposta.json()).error.code, 'NOT_FOUND');
+});
+
+test('⛔ AL CONTRARIO — POST .../queue/annulla su una coda già vuota: 200 {rimosso:false}, mai un errore', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/queue/annulla`, { method: 'POST' });
+  assert.equal(risposta.status, 200);
+  assert.deepEqual((await risposta.json()).data, { ok: true, rimosso: false });
+});
+
+test('⛔ AL CONTRARIO — GET .../queue (metodo sbagliato) non raggiunge mai accodaMessaggio', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/queue`, { method: 'GET' });
+  assert.notEqual(risposta.status, 200);
+  assert.equal(sessionRegistry.ultimoAccodaMessaggio, null);
 });
 
 test('⛔ POST /api/v1/sessions su un task fuori allowlist: 404 TASK_NOT_ALLOWED, mai una sessione', async (t) => {
