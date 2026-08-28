@@ -808,3 +808,39 @@ test('⛔ AL CONTRARIO — livelloAccesso/chiediApprovazioneFn assenti arrivano 
   assert.equal(catturato.livelloAccesso, undefined);
   assert.equal(catturato.chiediApprovazioneFn, undefined);
 });
+
+/*
+ * ⭐⭐⭐ 28/8 — FASE A (hook), stesso principio dei due test sopra: questo
+ * file resta un adattatore puro, `hookFn` viaggia SENZA trasformazione
+ * fino a talosLavoraFn — la decisione (quale hook fidato blocca cosa)
+ * vive tutta in session-registry.mjs (costruisciHookFn) e nel kernel.
+ * Chiude il gap dichiarato in LEDGER-FASE-A-HOOKS.md: prima di questo
+ * commit `hookFn` non era nemmeno un parametro di avviaSessione, quindi
+ * una sessione reale lo avrebbe SEMPRE ignorato in silenzio.
+ */
+test('⭐⭐⭐ PARITÀ — hookFn arriva a talosLavoraFn ESATTAMENTE come passato, senza trasformazione', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+  const hookFn = async () => ({ consentito: true });
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, hookFn,
+  });
+
+  assert.equal(catturato.hookFn, hookFn, 'STESSA funzione, non una copia/wrapper');
+});
+
+test('⛔ AL CONTRARIO — hookFn assente arriva undefined a talosLavoraFn, mai un valore inventato', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn });
+
+  assert.equal(catturato.hookFn, undefined);
+});

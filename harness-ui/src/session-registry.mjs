@@ -24,7 +24,7 @@ import {
   compattaSessione as compattaSessioneReale,
   eseguiComandoDiretto as eseguiComandoDirettoReale,
 } from './agent-service.mjs';
-import { approvalRequested, approvalResolved, workspaceChanged } from './agui-events.mjs';
+import { approvalRequested, approvalResolved, hookInvoked, workspaceChanged } from './agui-events.mjs';
 import { CustomTaskError, preparaEsecuzioneLibera as preparaEsecuzioneLiberaReale } from './custom-task.mjs';
 import { TaskCatalogError, preparaEsecuzione as preparaEsecuzioneReale } from './task-catalog.mjs';
 import { leggiAlberoWorkspace as leggiAlberoWorkspaceReale, WorkspaceTreeError } from './workspace-tree.mjs';
@@ -42,6 +42,8 @@ import { guardaWorkspace as guardaWorkspaceReale } from './workspace-watcher.mjs
 import {
   caricaHooks as caricaHooksReale,
   eseguiHook as eseguiHookReale,
+  fidaHook as fidaHookReale,
+  HookRegistryError,
   verificaTrust as verificaTrustReale,
 } from './hook-registry.mjs';
 
@@ -74,6 +76,7 @@ export function createSessionRegistry({
   caricaHooksFn = caricaHooksReale,
   verificaTrustFn = verificaTrustReale,
   eseguiHookFn = eseguiHookReale,
+  fidaHookFn = fidaHookReale,
   modello,
   chiave,
   cartelleProgetto = [],
@@ -179,6 +182,8 @@ export function createSessionRegistry({
         } catch {
           esito = { consentito: false, motivo: `l'hook "${hook.id}" è fallito nell'esecuzione.` };
         }
+        // ⭐ 28/8 — solo QUI, dopo un'esecuzione vera di un hook fidato: mai per un hook non fidato (saltato sopra), mai per una sessione senza hook (ramo veloce sopra la funzione).
+        broadcast(voce, hookInvoked({ hookId: hook.id, tipo: evento.tipo, azione: evento.azione, esito }));
         if (esito?.consentito === false) return esito; // il primo hook fidato che rifiuta vince — AND logico sul verdetto
       }
       return { consentito: true };
@@ -559,6 +564,65 @@ export function createSessionRegistry({
      */
     cartellaDi(sessionId) {
       return sessioni.get(sessionId)?.cartella ?? null;
+    },
+
+    /**
+     * ⭐⭐⭐ 28/8 — FASE A (hook). Elenca gli hook dichiarati dal progetto
+     * di questa sessione con il loro stato di fiducia VERO — il pannello
+     * Control-plane usa questo per decidere se mostrare "Fida" o
+     * "Attivo" per riga. `null` se la sessione non esiste; un
+     * `.harness-ui-hooks.json` malformato torna `{hooks:null, errore}`
+     * (mai un array vuoto che si legge come "nessun hook dichiarato" —
+     * due fatti diversi, stesso principio "gli stati sono tre" già in
+     * uso altrove in questo prodotto).
+     */
+    async elencaHooks(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      let hooks;
+      try {
+        ({ hooks } = await caricaHooksFn({ cartella: voce.cartella }));
+      } catch (errore) {
+        if (errore instanceof HookRegistryError) return { ok: true, hooks: null, errore: errore.message };
+        throw errore;
+      }
+      const conFiducia = await Promise.all(hooks.map(async (hook) => {
+        let fidato = false;
+        try {
+          fidato = await verificaTrustFn({ cartellaTrust: cartellaTrustHook, hookId: hook.id, hash: hook.hash });
+        } catch {
+          fidato = false;
+        }
+        return { id: hook.id, eventi: hook.eventi, fidato };
+      }));
+      return { ok: true, hooks: conFiducia, errore: null };
+    },
+
+    /**
+     * ⭐⭐⭐ 28/8 — FASE A (hook). L'owner FIDA un hook dalla UI — l'UNICA
+     * strada che lo rende eseguibile (`verificaTrust` dentro
+     * `costruisciHookFn` torna sempre `false` finché questo non è stato
+     * chiamato, fail-closed per costruzione). Rilegge `.harness-ui-hooks.json`
+     * AL MOMENTO per calcolare l'hash VERO del comando attuale — fidarsi
+     * di un hash passato dal client aprirebbe esattamente la finestra
+     * che il trust content-hash-bound esiste per chiudere (un comando
+     * modificato dopo la fiducia deve ridiventare non fidato da solo).
+     * @returns {{ok:true}|{erroreAvvio:string, code:string}}
+     */
+    async fidaHook(sessionId, hookId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      let hooks;
+      try {
+        ({ hooks } = await caricaHooksFn({ cartella: voce.cartella }));
+      } catch (errore) {
+        if (errore instanceof HookRegistryError) return { erroreAvvio: errore.message, code: 'HOOK_INVALID' };
+        throw errore;
+      }
+      const hook = hooks.find((h) => h.id === hookId);
+      if (!hook) return { erroreAvvio: `Hook "${hookId}" non trovato in .harness-ui-hooks.json`, code: 'NOT_FOUND' };
+      await fidaHookFn({ cartellaTrust: cartellaTrustHook, hookId: hook.id, hash: hook.hash });
+      return { ok: true };
     },
 
     /**

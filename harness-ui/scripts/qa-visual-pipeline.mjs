@@ -264,6 +264,36 @@ class Pipeline {
   }
 
   /**
+   * ⛔⛔⛔ 28/8 — trovato dal vivo, PIÙ tentativi con segnali diversi (il
+   * flag `eventoTerminaleVisto`, la bolla "sta elaborando"): un turno
+   * con PIÙ tool-call in sequenza (es. `document_create` rifiutato per
+   * nome duplicato → una domanda di chiarimento → un secondo
+   * `document_create`) fa sparire/riapparire quei segnali PIÙ volte
+   * nello stesso turno — un singolo "diventato falso" non basta.
+   * Robusto per costruzione: aspetta che `selettore` smetta di
+   * CRESCERE (stesso testo per `giriStabili` controlli di fila,
+   * `intervalMs` di distanza) — vero indipendentemente da quanti
+   * tool-call/reasoning intermedi il turno contiene.
+   */
+  async attendiTestoStabile(selettore, { timeoutMs = 90000, intervalMs = 800, giriStabili = 3 } = {}) {
+    const scadenza = Date.now() + timeoutMs;
+    let precedente = null;
+    let contatore = 0;
+    while (Date.now() < scadenza) {
+      const attuale = await this.cdp.evaluate(`document.querySelector(${j(selettore)})?.textContent?.length ?? -1`);
+      if (attuale === precedente && attuale > 0) {
+        contatore += 1;
+        if (contatore >= giriStabili) return;
+      } else {
+        contatore = 0;
+      }
+      precedente = attuale;
+      await this.attendi(intervalMs);
+    }
+    throw new Error(`Il testo di "${selettore}" non si è mai stabilizzato entro ${timeoutMs}ms`);
+  }
+
+  /**
    * ⭐⭐⭐ 27/8 — owner: "ogni verifica visiva deve automaticamente
    * annotare nel taccuino tutti errori di UI/UX e funzionalità". Un
    * difetto è LEGATO all'ultimo screenshot scattato (quello in cui è
@@ -660,6 +690,86 @@ const SCENARI = {
       p.difetto(`renderer webgl attivo ma solo ${diagColore.coloriDistinti} colori RGB distinti campionati — il prompt Git Bash è normalmente colorato, possibile regressione`, { severita: 'blocco' });
     } else {
       p.nota(`colori ANSI confermati: ${diagColore.coloriDistinti} colori RGB distinti nel canvas WebGL reale, assaggio ${JSON.stringify(diagColore.assaggio)}`);
+    }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /**
+   * ⭐⭐⭐ 28/8 — FASE A (hook), piano `elegant-spinning-dongarra.md`,
+   * ledger `LEDGER-FASE-A-HOOKS.md`. Prova la catena INTERA, non solo
+   * il pannello: un hook dichiarato in `.harness-ui-hooks.json` (nella
+   * cartella-progetto configurata per questa corsa, un solo hook
+   * `pre_tool_call` che rifiuta `scrivi`) — (1) NON fidato non blocca
+   * nulla (una scrittura vera riesce); (2) l'owner lo fida dal
+   * pannello Control-plane VERO (click reale, non un fetch diretto);
+   * (3) una volta fidato, blocca DAVVERO una scrittura successiva
+   * (REFUSED nel bubble della chat). Richiede due sessioni reali —
+   * costa una piccola cifra reale, come ogni altro scenario di questo
+   * file che chiama un modello vero.
+   */
+  async 'fase-a-hooks'(p) {
+    await p.attendi(1200);
+    await p.screenshot('stato-iniziale', { nota: 'app appena caricata' });
+
+    // --- Sessione 1: hook presente ma NON fidato — la scrittura deve riuscire ---
+    await p.digita('#composerInput', 'Crea un file chiamato non-bloccato.txt con dentro il testo "ok". Nient\'altro.');
+    await p.submit('#composerForm');
+    await p.attendiCondizione(
+      "window.__talosHarnessUiRuntime?.realSessionState?.eventoTerminaleVisto === true",
+      { timeoutMs: 60000, descrizione: 'la prima sessione (hook NON fidato) è conclusa' },
+    );
+    await p.screenshot('sessione1-hook-non-fidato-conclusa', { nota: 'la scrittura doveva riuscire: il hook non è ancora fidato' });
+    const testoChat1 = await p.cdp.evaluate("document.querySelector('.conversation')?.textContent ?? ''");
+    if (!/non-bloccato\.txt/.test(testoChat1)) {
+      p.difetto('la sessione 1 non menziona il file atteso da nessuna parte nella chat — il modello potrebbe non aver chiamato scrivi affatto (variabilità del modello, non necessariamente un bug)', { severita: 'nota' });
+    }
+    if (/REFUSED/.test(testoChat1)) {
+      p.difetto('la sessione 1 mostra REFUSED — un hook non ancora fidato NON deve bloccare nulla', { severita: 'blocco' });
+    } else {
+      p.nota('sessione 1: nessun REFUSED, come atteso — un hook non fidato è come se non esistesse');
+    }
+
+    // --- Fida l'hook dal pannello VERO — raggiunto dalla palette comandi (⌘K → "Agents, hooks e doctor"), come farebbe un umano da qualunque vista. ---
+    await p.click('#commandPaletteBtn');
+    await p.attendi(200);
+    await p.click('[data-command="control"]');
+    await p.attendiCondizione("!!document.querySelector('#hooksListMount button, #hooksListMount .status-chip')", { descrizione: 'il pannello hook ha finito di caricare' });
+    await p.screenshot('pannello-hook-non-fidato', { nota: 'il hook "blocca-scritture" deve apparire con un bottone "Fida"' });
+    const primaDiFidare = await p.testo('#hooksListMount');
+    if (!/blocca-scritture/.test(primaDiFidare ?? '')) {
+      p.difetto(`il pannello non mostra l'hook "blocca-scritture" — trovato invece: ${JSON.stringify(primaDiFidare)}`, { severita: 'blocco' });
+    }
+    await p.clickByText('#hooksListMount', 'Fida');
+    await p.attendiCondizione("document.querySelector('#hooksListMount')?.textContent?.includes('attivo')", { timeoutMs: 5000, descrizione: 'il hook diventa "attivo" dopo Fida' });
+    await p.screenshot('pannello-hook-fidato', { nota: 'ora deve mostrare "attivo", niente più bottone' });
+    await p.click('#closeSheet');
+
+    // --- Sessione 2 (follow-up sulla stessa sessione, conclusa — submitPrompt fa resume): hook ORA fidato, la scrittura deve essere BLOCCATA ---
+    /*
+     * ⛔⛔⛔ 28/8 — trovato dal vivo, TRE tentativi (flag `eventoTerminaleVisto`,
+     * bolla "sta elaborando"): entrambi possono diventare falsi/sparire
+     * PIÙ VOLTE nello stesso turno se il modello incontra un ostacolo a
+     * metà (qui: un nome file già usato da un run precedente di questo
+     * stesso scenario → una domanda di chiarimento → un secondo
+     * tentativo) — un singolo "è diventato vero/falso" cattura il turno
+     * a metà. `attendiTestoStabile` è indipendente da QUANTI passi
+     * intermedi il turno contiene.
+     */
+    await p.digita('#composerInput', `Crea un file chiamato bloccato-${Date.now()}.txt con dentro il testo "ok". Nient'altro.`);
+    await p.submit('#composerForm');
+    await p.attendi(1000); // lascia partire il turno prima di misurare la prima lunghezza stabile
+    await p.attendiTestoStabile('.conversation');
+    await p.screenshot('sessione2-hook-fidato-conclusa', { nota: 'la scrittura doveva essere RIFIUTATA dal hook, ora attivo' });
+    const testoChat2 = await p.cdp.evaluate("document.querySelector('.conversation')?.textContent ?? ''");
+    if (/REFUSED/.test(testoChat2) && /blocco di prova FASE A/.test(testoChat2)) {
+      p.nota('CONFERMATO: l\'hook fidato ha bloccato scrivi per davvero — REFUSED col motivo esatto dichiarato dal hook, visibile nel bubble della chat.');
+    } else {
+      p.difetto(`atteso REFUSED con "blocco di prova FASE A" nella chat della sessione 2, non trovato. Assaggio chat: ${JSON.stringify(testoChat2.slice(-800))}`, { severita: 'blocco' });
     }
 
     for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });

@@ -6,6 +6,7 @@ import { CustomTaskError } from '../src/custom-task.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
 import { WorkspaceTreeError } from '../src/workspace-tree.mjs';
 import { WorkspaceFileError } from '../src/workspace-files.mjs';
+import { HookRegistryError } from '../src/hook-registry.mjs';
 
 // Ne' avviaSessione ne' talosLavora girano MAI qui, veri o finti a metà: si
 // inietta avviaSessioneFn/preparaEsecuzioneFn interamente controllati dal
@@ -90,6 +91,173 @@ test('⭐⭐ cartellaDi(sessionId) torna la cartella VERA di una sessione esiste
 test('⛔⛔ AL CONTRARIO — cartellaDi su un id inesistente torna null, mai un\'eccezione', () => {
   const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
   assert.equal(registro.cartellaDi('id-mai-esistito'), null);
+});
+
+/*
+ * ⭐⭐⭐ 28/8 — FASE A (hook), piano `elegant-spinning-dongarra.md`, ledger
+ * `LEDGER-FASE-A-HOOKS.md`. `costruisciHookFn` non è esportata (è privata
+ * al modulo) — si prova attraverso ciò che PRODUCE: `avvia()` passa un
+ * `hookFn` reale ad `avviaSessioneFn` (catturato dalla sessione finta),
+ * e invocarlo a mano riproduce esattamente cosa succede quando
+ * `talosLavora` lo chiama davvero — stesso principio già in uso per
+ * `chiediApprovazioneFn` altrove in questo file.
+ */
+test('⭐⭐⭐ hookFn passato ad avviaSessioneFn: un hook fidato che esegue emette HookInvoked sullo stream della sessione', async () => {
+  const finta = sessioneControllabile();
+  const hook = { id: 'audit', eventi: ['pre_tool_call'], comando: 'echo ok', hash: 'abc' };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaHooksFn: async () => ({ hooks: [hook] }),
+    verificaTrustFn: async () => true,
+    eseguiHookFn: async () => ({ consentito: true }),
+  });
+
+  const { sessionId } = registro.avvia('task-vero');
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+
+  const esito = await finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'scrivi', giro: 1 });
+
+  assert.deepEqual(esito, { consentito: true });
+  const hookInvoked = ricevuti.find((e) => e.type === 'HookInvoked');
+  assert.ok(hookInvoked, 'un HookInvoked deve arrivare sullo stream della sessione');
+  assert.equal(hookInvoked.hookId, 'audit');
+  assert.equal(hookInvoked.tipo, 'pre_tool_call');
+  assert.equal(hookInvoked.azione, 'scrivi');
+  assert.deepEqual(hookInvoked.esito, { consentito: true });
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔ AL CONTRARIO — nessun hook configurato: hookFn non emette MAI HookInvoked (il ramo veloce non tocca lo stream)', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaHooksFn: async () => ({ hooks: [] }),
+  });
+
+  const { sessionId } = registro.avvia('task-vero');
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+
+  await finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'scrivi', giro: 1 });
+
+  assert.equal(ricevuti.some((e) => e.type === 'HookInvoked'), false);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔⛔ AL CONTRARIO — un hook NON fidato non esegue e non emette HookInvoked (come se non esistesse)', async () => {
+  const finta = sessioneControllabile();
+  const hook = { id: 'non-fidato', eventi: ['pre_tool_call'], comando: 'echo x', hash: 'zzz' };
+  let eseguiChiamato = false;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaHooksFn: async () => ({ hooks: [hook] }),
+    verificaTrustFn: async () => false,
+    eseguiHookFn: async () => { eseguiChiamato = true; return { consentito: false, motivo: 'non dovrebbe mai girare' }; },
+  });
+
+  const { sessionId } = registro.avvia('task-vero');
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+
+  const esito = await finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'shell', giro: 1 });
+
+  assert.deepEqual(esito, { consentito: true }, 'un hook non fidato non blocca — come se non esistesse');
+  assert.equal(eseguiChiamato, false, 'un hook non fidato non deve MAI essere eseguito');
+  assert.equal(ricevuti.some((e) => e.type === 'HookInvoked'), false);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+/*
+ * ⭐⭐⭐ 28/8 — FASE A (hook): `elencaHooks`/`fidaHook` sono ciò che il
+ * pannello Control-plane chiama — provati qui in isolamento dal ciclo
+ * dell'agente, stesso principio di `cartellaDi` sopra.
+ */
+test('⭐⭐⭐ elencaHooks: torna ogni hook con il suo VERO stato di fiducia', async () => {
+  const finta = sessioneControllabile();
+  const hookA = { id: 'audit', eventi: ['pre_tool_call'], comando: 'echo a', hash: 'hash-a' };
+  const hookB = { id: 'notifica', eventi: ['session_end'], comando: 'echo b', hash: 'hash-b' };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaHooksFn: async () => ({ hooks: [hookA, hookB] }),
+    verificaTrustFn: async ({ hookId }) => hookId === 'audit', // solo "audit" è fidato
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.elencaHooks(sessionId);
+
+  assert.equal(esito.ok, true);
+  assert.equal(esito.errore, null);
+  assert.deepEqual(esito.hooks, [
+    { id: 'audit', eventi: ['pre_tool_call'], fidato: true },
+    { id: 'notifica', eventi: ['session_end'], fidato: false },
+  ]);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔ AL CONTRARIO — elencaHooks con hooks.json malformato: {hooks:null, errore}, MAI un array vuoto che si legge come "nessun hook"', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaHooksFn: async () => { throw new HookRegistryError('.harness-ui-hooks.json non è un JSON valido', 'HOOK_MALFORMED'); },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.elencaHooks(sessionId);
+
+  assert.equal(esito.ok, true);
+  assert.equal(esito.hooks, null, 'null, non [] — sono due fatti diversi');
+  assert.match(esito.errore, /non è un JSON valido/);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔ AL CONTRARIO — elencaHooks su un id inesistente: NOT_FOUND', async () => {
+  const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
+  const esito = await registro.elencaHooks('id-mai-esistito');
+  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+});
+
+test('⭐⭐⭐ fidaHook: rilegge hooks.json e fida con l\'hash VERO letto da disco, mai uno passato dal chiamante', async () => {
+  const finta = sessioneControllabile();
+  const hook = { id: 'audit', eventi: ['pre_tool_call'], comando: 'echo a', hash: 'hash-vero-dal-disco' };
+  const chiamate = [];
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaHooksFn: async () => ({ hooks: [hook] }),
+    fidaHookFn: async (args) => { chiamate.push(args); },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.fidaHook(sessionId, 'audit');
+
+  assert.deepEqual(esito, { ok: true });
+  assert.equal(chiamate.length, 1);
+  assert.equal(chiamate[0].hookId, 'audit');
+  assert.equal(chiamate[0].hash, 'hash-vero-dal-disco');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔ AL CONTRARIO — fidaHook su un hookId che non esiste in hooks.json: NOT_FOUND, fidaHookFn MAI chiamata', async () => {
+  const finta = sessioneControllabile();
+  let chiamata = false;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaHooksFn: async () => ({ hooks: [{ id: 'altro', eventi: ['pre_tool_call'], comando: 'x', hash: 'h' }] }),
+    fidaHookFn: async () => { chiamata = true; },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.fidaHook(sessionId, 'audit-mai-dichiarato');
+
+  assert.equal(esito.code, 'NOT_FOUND');
+  assert.equal(chiamata, false);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔ AL CONTRARIO — fidaHook su un id sessione inesistente: NOT_FOUND', async () => {
+  const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
+  const esito = await registro.fidaHook('id-mai-esistito', 'audit');
+  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
 });
 
 /*
