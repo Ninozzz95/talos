@@ -941,7 +941,18 @@ test('⭐⭐⭐ shell() apre una finestra "dal vivo": chi si iscrive DOPO averla
     'e questo arriva DAL VIVO, non da un replay: la sottoscrizione è avvenuta mentre voce.conclusa era ancora false');
 });
 
-test('⛔ limite noto, non silenzioso: una connessione GIÀ APERTA da PRIMA della chiamata a shell() non riceve i suoi eventi dal vivo — per questo app.js deve aprirne una nuova dopo la POST, mai riusare quella vecchia', async () => {
+/*
+ * ⛔⛔⛔ 28/8 — RISCRITTO: il titolo originale di questo test descriveva
+ * un "limite noto" (una connessione già aperta su una sessione conclusa
+ * non riceveva mai eventi dal vivo) che era vero PER COSTRUZIONE, non
+ * per scelta — `iscriviti()` non registrava l'ascoltatore se
+ * `voce.conclusa` era già true. Bug reale, trovato dal vivo (client
+ * Node.js grezzo, non Chrome/EventSource): da quando WorkspaceChanged
+ * può arrivare ben dopo la fine di un giro, questo limite nascondeva
+ * silenziosamente OGNI evento futuro a un client onestamente ancora
+ * connesso. Ora si iscrive sempre — vedi la doc di iscriviti().
+ */
+test('⭐⭐⭐ AL CONTRARIO — una connessione GIÀ APERTA su una sessione conclusa riceve comunque gli eventi dal vivo che arrivano dopo (bug reale corretto il 28/8)', async () => {
   const finta = sessioneControllabile();
   let emettiEventoShell;
   const eseguiComandoDirettoFn = async (input) => {
@@ -955,14 +966,14 @@ test('⛔ limite noto, non silenzioso: una connessione GIÀ APERTA da PRIMA dell
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
   await new Promise((r) => setImmediate(r));
 
-  const ricevutiPrimaDiShell = [];
-  registro.iscriviti(sessionId, (e) => ricevutiPrimaDiShell.push(e.type)); // già concluso: replay, MAI ascoltatore live
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e.type)); // già concluso — ma resta iscritto, non solo un replay
 
   registro.shell(sessionId, 'echo x');
   emettiEventoShell({ type: 'ToolCallStart', toolCallId: 'c1', toolCallName: 'shell' });
 
-  assert.deepEqual(ricevutiPrimaDiShell, ['RunStarted', 'RunFinished'],
-    'nessun evento nuovo: la connessione vecchia non diventa mai live perché la sua iscrizione è avvenuta a sessione ancora conclusa');
+  assert.deepEqual(ricevuti, ['RunStarted', 'RunFinished', 'ToolCallStart'],
+    'una connessione aperta PRIMA di shell() ora vede comunque i suoi eventi dal vivo — non serve più aprirne una nuova per forza');
 });
 
 /*

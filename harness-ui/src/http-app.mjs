@@ -6,6 +6,8 @@ export const API_SCHEMA = 'talos.harness-ui.api.v1';
 const MAX_REQUEST_TARGET_BYTES = 4096;
 /** ⛔ Un corpo POST qui è solo `{taskId}` — poche decine di byte. 4096 è già generoso, stesso ordine di grandezza di MAX_REQUEST_TARGET_BYTES. */
 const MAX_REQUEST_BODY_BYTES = 4096;
+/** ⭐ 28/8 — vedi la doc sopra `res.on('close', ...)` nella rotta /events: abbastanza frequente da tenere il canale vivo, abbastanza raro da non essere rumore nei log/nel traffico. */
+const INTERVALLO_BATTITO_SSE_MS = 15_000;
 const QA_STATES = new Set([
   'desktop',
   'laptop',
@@ -439,6 +441,8 @@ export function createHttpApp({
   campaignService, staticHandler, sessionRegistry = null, listaTaskDisponibili = () => [],
   elencaCartelleProgetto = () => [], automationStore = null, diagnosiFn = null,
   catalogoModelliFn = null, clock = () => new Date(), leggiArtefattoFn = leggiArtefattoReale,
+  // ⛔⛔⛔ 28/8 — iniettabili SOLO per il test del battito SSE sotto: mai un setInterval reale nei test unitari, stesso principio di ogni altra dipendenza di questo file.
+  impostaIntervalloFn = setInterval, cancellaIntervalloFn = clearInterval,
 }) {
   async function handle(req, res) {
     if (req.aborted || res.destroyed) return;
@@ -1016,12 +1020,27 @@ export function createHttpApp({
           }
           if (req.aborted || res.destroyed) return;
 
+          /*
+           * ⛔⛔⛔ 28/8, trovato dal vivo dopo aver eliminato ogni altra
+           * causa (verificato: il buffer del registro ha SEMPRE l'evento
+           * giusto — confermato con curl, con un secondo client
+           * Last-Event-ID, e con l'export della sessione stessa; verificato
+           * che NON è specifico di EventSource — un fetch() grezzo con
+           * reader manuale dalla pagina mostra lo STESSO sintomo). Ricerca
+           * web: un `res.write()` piccolo su una connessione altrimenti
+           * inattiva può restare bloccato dall'algoritmo di Nagle (attende
+           * un ACK o abbastanza dati per un segmento pieno prima di
+           * spedire) — la cura standard per SSE è disabilitarlo sul socket
+           * di QUESTA risposta. `res.socket` esiste solo dopo che gli
+           * header sono partiti, quindi qui, non prima.
+           */
           res.writeHead(200, {
             ...SECURITY_HEADERS,
             'Content-Type': 'text/event-stream; charset=utf-8',
             'Cache-Control': 'no-store',
             Connection: 'keep-alive',
           });
+          res.socket?.setNoDelay(true);
           /*
            * ⛔ Da qui in poi gli header sono GIÀ partiti: un problema deve
            * chiudere lo stream, mai tentare un secondo sendJson — Node
@@ -1032,24 +1051,22 @@ export function createHttpApp({
             if (method === 'HEAD') { res.end(); return; }
             res.write(':ok\n\n');
             /*
-             * ⛔⛔⛔ 27/8, trovato verificando il comando diretto (shell()):
-             * una sessione con PIÙ giri conclusi nel buffer (il task
-             * originale, poi un resume o un comando diretto) troncava il
-             * replay al PRIMO RunFinished incontrato — gli eventi successivi
-             * (il secondo giro per intero) restavano nel buffer ma non
-             * arrivavano mai a un client che si ri-collega dopo che ENTRAMBI
-             * i giri sono già finiti. La stessa callback serviva sia il
-             * replay (sincrono, dentro iscriviti()) sia il futuro live: un
-             * RunFinished rimasto nel buffer da un giro VECCHIO chiudeva lo
-             * stream prima che il resto del replay potesse scriversi.
-             *
-             * `inReplay` distingue i due casi per timing: tutto ciò che
-             * arriva PRIMA che iscriviti() ritorni è replay (sincrono, per
-             * costruzione — vedi la doc sopra broadcast/avviaESegui); tutto
-             * ciò che arriva dopo è dal vivo. Solo un RunFinished/RunError
-             * dal vivo chiude lo stream sul momento; se il replay finisce e
-             * NON c'è un giro in corso dietro (sessionRegistry.inCorso），
-             * si chiude comunque — subito dopo, non a metà.
+             * ⛔⛔⛔ 27/8, trovato verificando il comando diretto (shell()),
+             * STORICO — il meccanismo che questa nota descriveva (un
+             * `inReplay` che distingueva replay-sincrono da eventi dal vivo,
+             * per decidere QUANDO un RunFinished poteva chiudere lo stream)
+             * non esiste più: il 28/8 lo stream ha smesso di chiudersi da
+             * solo del tutto (vedi la nota subito sotto `iscriviti()`). Il
+             * BUG originale resta vero da ricordare, per non reintrodurlo
+             * per altra via: una sessione con PIÙ giri conclusi nel buffer
+             * (il task originale, poi un resume o un comando diretto)
+             * troncava il replay al PRIMO RunFinished incontrato — un
+             * RunFinished vecchio, ancora nel buffer, chiudeva lo stream
+             * prima che il resto del replay potesse scriversi. La cura di
+             * allora (distinguere replay da dal-vivo) è ora superflua perché
+             * NESSUN evento chiude più lo stream da questo lato — ma se in
+             * futuro tornasse un motivo per chiudere selettivamente, questo
+             * stesso bug è la prima cosa da riverificare.
              */
             /*
              * ⛔⛔ 27/8, ricerca web (SSE reconnection, Last-Event-ID): Node
@@ -1060,14 +1077,51 @@ export function createHttpApp({
              */
             const ultimoVistoDalClient = Number.parseInt(req.headers['last-event-id'], 10);
             const daSequenza = Number.isFinite(ultimoVistoDalClient) ? ultimoVistoDalClient : 0;
-            let inReplay = true;
+            /*
+             * ⛔⛔⛔ 28/8, trovato dal vivo (non da un test — vedi
+             * workspace-watcher.mjs): questo stream chiudeva SEMPRE dopo un
+             * RunFinished/RunError dal vivo (sopra) o subito se non c'era un
+             * giro in corso (sotto) — corretto quando l'unica cosa che
+             * poteva ancora arrivare era la fine di UN giro. Da quando
+             * WorkspaceChanged esiste, questo non è più vero: il watcher del
+             * workspace resta vivo per la sessione anche a run concluso (un
+             * file cambiato fuori dall'app due minuti dopo che l'agente ha
+             * finito è un caso reale, non raro), e chiudere qui lo perdeva
+             * SEMPRE — misurato: l'evento arrivava nel buffer del registro
+             * (confermato con un secondo client, Last-Event-ID) ma mai al
+             * client già connesso, perché quel client era già stato chiuso
+             * dal server subito dopo RunFinished.
+             *
+             * ⇒ Lo stream non si chiude più da solo qui. Si chiude quando il
+             * CLIENT lo chiude (navigazione, cambio sessione — `res.on('close', ...)`
+             * sotto lo intercetta comunque) o quando la connessione cade
+             * davvero. Il costo è una manciata di connessioni HTTP idle per
+             * sessioni concluse ma ancora guardate — trascurabile per uno
+             * strumento locale a un solo proprietario, lo stesso compromesso
+             * già scelto altrove in questo registro (vedi la doc in testa a
+             * session-registry.mjs sulle sessioni mai ripulite).
+             */
             const disiscrivi = sessionRegistry.iscriviti(sessionId, (evento) => {
-              const scritto = scriviEventoSse(res, evento);
-              if (scritto && !inReplay && (evento.type === 'RunFinished' || evento.type === 'RunError')) res.end();
+              scriviEventoSse(res, evento);
             }, daSequenza);
-            inReplay = false;
-            if (!sessionRegistry.inCorso(sessionId) && !res.writableEnded) res.end();
-            res.on('close', disiscrivi);
+            /*
+             * ⛔⛔⛔ 28/8 — SECONDA metà della stessa cura (setNoDelay sopra
+             * è la prima): senza scritture nuove, una connessione può
+             * restare "aperta" per il client (readyState/fetch non lo
+             * segnalano MAI come caduta) ma smettere di consegnare i
+             * prossimi byte — misurato dal vivo, non solo letto: un evento
+             * arrivato minuti dopo l'ultimo (RunFinished, poi silenzio, poi
+             * un WorkspaceChanged) non raggiungeva MAI un client altrimenti
+             * sano. Un commento periodico (`:battito\n\n`, innocuo per lo
+             * standard SSE — un commento inizia con `:` e viene ignorato)
+             * tiene il canale attivo ogni pochi secondi, indipendentemente
+             * da eventi applicativi veri.
+             */
+            const battito = impostaIntervalloFn(() => {
+              if (res.writableEnded || res.destroyed) { cancellaIntervalloFn(battito); return; }
+              res.write(':battito\n\n');
+            }, INTERVALLO_BATTITO_SSE_MS);
+            res.on('close', () => { cancellaIntervalloFn(battito); disiscrivi(); });
           } catch {
             if (!res.writableEnded) res.end();
           }
