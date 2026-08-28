@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createSessionRegistry } from '../src/session-registry.mjs';
+import { createSessionRegistry as createSessionRegistryReale } from '../src/session-registry.mjs';
 import { CustomTaskError } from '../src/custom-task.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
 import { WorkspaceTreeError } from '../src/workspace-tree.mjs';
@@ -11,6 +11,17 @@ import { WorkspaceFileError } from '../src/workspace-files.mjs';
 // inietta avviaSessioneFn/preparaEsecuzioneFn interamente controllati dal
 // test - questo file prova SOLO il registro (buffer, iscrizione tardiva,
 // stop), non il ciclo dell'agente (gia' provato altrove).
+//
+// ⛔⛔⛔ 28/8 — STESSO principio per guardaWorkspaceFn (workspace-watcher.mjs,
+// chokidar VERO): senza questo wrapper, OGNI test di questo file avrebbe
+// avviato un watcher reale (mai chiuso, i test non lo fanno) — trovato
+// perché la suite si è bloccata per davvero lanciandola, non per lettura
+// del codice. Un solo punto di default per tutti i 54 call site invece di
+// toccarli uno per uno: chi ha bisogno del watcher VERO lo inietta
+// esplicitamente (nessun test qui ne ha bisogno, per ora).
+function createSessionRegistry(opzioni) {
+  return createSessionRegistryReale({ guardaWorkspaceFn: () => () => {}, ...opzioni });
+}
 
 function preparaEsecuzioneFinta(taskId) {
   if (taskId !== 'task-vero') throw new TaskCatalogError(`Task non ammesso: ${taskId}`);
@@ -952,4 +963,53 @@ test('⛔ limite noto, non silenzioso: una connessione GIÀ APERTA da PRIMA dell
 
   assert.deepEqual(ricevutiPrimaDiShell, ['RunStarted', 'RunFinished'],
     'nessun evento nuovo: la connessione vecchia non diventa mai live perché la sua iscrizione è avvenuta a sessione ancora conclusa');
+});
+
+/*
+ * ⭐⭐⭐ 28/8 — workspace-watcher.mjs, owner 27/8: "se muovo i file il work
+ * tree non si aggiorna automaticamente". Qui si prova SOLO il collegamento
+ * (guardaWorkspaceFn chiamato con la cartella giusta, il suo callback
+ * diventa un evento WorkspaceChanged) — il watcher VERO ha i suoi test
+ * dedicati in workspace-watcher.test.mjs (chokidar reale, disco reale).
+ */
+test('⭐⭐⭐ avvia() chiama guardaWorkspaceFn con la cartella VERA della sessione, e il suo callback diventa un evento WorkspaceChanged', async () => {
+  const finta = sessioneControllabile();
+  let cartellaCatturata = null;
+  let notificaEsterna = null;
+  const guardaWorkspaceFn = (cartella, onCambiamento) => {
+    cartellaCatturata = cartella;
+    notificaEsterna = onCambiamento;
+    return () => {};
+  };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, guardaWorkspaceFn, modello: 'm', chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  assert.equal(cartellaCatturata, '/tmp/x', 'la STESSA cartella della sessione, non un percorso a caso');
+  assert.equal(typeof notificaEsterna, 'function');
+
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+  notificaEsterna(['nuovo.txt', 'sub/altro.txt']); // simula il watcher vero che segnala un cambiamento
+
+  const evento = ricevuti.find((e) => e.type === 'WorkspaceChanged');
+  assert.ok(evento, 'un evento WorkspaceChanged deve arrivare agli iscritti');
+  assert.deepEqual(evento.percorsi, ['nuovo.txt', 'sub/altro.txt']);
+});
+
+test('⛔ AL CONTRARIO — un resume sulla STESSA sessione non chiama guardaWorkspaceFn una seconda volta', async () => {
+  const finta = sessioneControllabile();
+  let chiamate = 0;
+  const guardaWorkspaceFn = () => { chiamate += 1; return () => {}; };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, guardaWorkspaceFn, modello: 'm', chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await new Promise((r) => setImmediate(r));
+
+  assert.equal(chiamate, 1, 'un solo watcher acceso al primo avvio');
+  registro.resume(sessionId, 'un altro messaggio');
+  assert.equal(chiamate, 1, 'il resume riusa la STESSA voce — nessun secondo watcher sulla stessa cartella');
 });
