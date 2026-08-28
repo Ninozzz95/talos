@@ -2800,9 +2800,26 @@
       azioniBtn.appendChild(iconaSvgAlbero('i-more'));
       azioniBtn.addEventListener('click', (event) => {
         event.stopPropagation(); // non selezionare la riga sotto
-        apriMenuAzioniFile(percorsoCompleto, nome, azioniBtn);
+        apriMenuAzioniFile(percorsoCompleto, nome, { ancoraEl: azioniBtn });
       });
       row.appendChild(azioniBtn);
+      /*
+       * ⭐⭐⭐ 28/8, owner: "voglio abilitare il tasto destro del mouse a
+       * livello globale dato che siamo nel desktop, per esempio tasto
+       * destro nel albero file mostra le opzioni" — stesso menu del
+       * bottone "···" (riusato, non duplicato), ancorato al PUNTO del
+       * click invece che a un elemento: è la convenzione universale di
+       * ogni file manager/editor desktop (Explorer, VS Code...), non
+       * qualcosa da reinventare. `preventDefault` sopprime il menu
+       * nativo del browser.
+       */
+      row.addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        row.closest('.ft-tree').querySelectorAll('.ft-row.ft-selected').forEach((r) => r.classList.remove('ft-selected'));
+        row.classList.add('ft-selected');
+        apriMenuAzioniFile(percorsoCompleto, nome, { x: event.clientX, y: event.clientY });
+      });
     }
 
     li.appendChild(row);
@@ -2836,8 +2853,13 @@
    * menu fuori dal flusso normale del DOM (appeso a `document.body`, non
    * dentro `.file-tree`) — il pannello ha `overflow-y:auto`, un menu
    * figlio verrebbe tagliato dal proprio contenitore appena sfora.
+   *
+   * ⭐ 28/8 — `posizionamento` è `{ancoraEl}` (bottone "···", il menu
+   * pende sotto di lui) OPPURE `{x,y}` (tasto destro, il menu nasce nel
+   * punto del click) — stesso menu, due modi di ancorarlo, mai due
+   * implementazioni.
    */
-  function apriMenuAzioniFile(percorsoCompleto, nome, ancoraEl) {
+  function apriMenuAzioniFile(percorsoCompleto, nome, posizionamento) {
     document.querySelector('.ft-actions-menu')?.remove();
 
     const menu = document.createElement('div');
@@ -2863,9 +2885,18 @@
     }
     document.body.appendChild(menu);
 
-    const rect = ancoraEl.getBoundingClientRect();
-    menu.style.top = `${rect.bottom + 4}px`;
-    menu.style.right = `${Math.max(8, window.innerWidth - rect.right)}px`;
+    if (posizionamento.ancoraEl) {
+      const rect = posizionamento.ancoraEl.getBoundingClientRect();
+      menu.style.top = `${rect.bottom + 4}px`;
+      menu.style.right = `${Math.max(8, window.innerWidth - rect.right)}px`;
+    } else {
+      // ⭐ Tasto destro: il menu nasce nel punto del click, ma mai fuori dallo schermo — misurato DOPO l'append, quando le sue dimensioni vere esistono.
+      const misura = menu.getBoundingClientRect();
+      const left = Math.min(posizionamento.x, window.innerWidth - misura.width - 8);
+      const top = Math.min(posizionamento.y, window.innerHeight - misura.height - 8);
+      menu.style.left = `${Math.max(8, left)}px`;
+      menu.style.top = `${Math.max(8, top)}px`;
+    }
 
     function chiudiMenu() {
       menu.remove();
@@ -2873,7 +2904,12 @@
       document.removeEventListener('keydown', onKeydown);
     }
     function onDocumentClick(event) { if (!menu.contains(event.target)) chiudiMenu(); }
-    function onKeydown(event) { if (event.key === 'Escape') { chiudiMenu(); ancoraEl.focus(); } }
+    function onKeydown(event) {
+      if (event.key !== 'Escape') return;
+      chiudiMenu();
+      // ⭐ Dal tasto destro non c'è un bottone "···" a cui tornare — la riga stessa (già selezionata all'apertura) riceve il focus.
+      (posizionamento.ancoraEl ?? document.querySelector('.ft-tree .ft-row.ft-selected'))?.focus();
+    }
     /* ⛔ setTimeout(...,0): STESSO difetto già trovato e corretto stanotte sul model-picker — il click che apre QUESTO menu è ancora in bubbling verso document quando la funzione ritorna; registrare subito chiuderebbe il menu nello stesso istante in cui si apre. */
     window.setTimeout(() => {
       document.addEventListener('click', onDocumentClick);
