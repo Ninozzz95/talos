@@ -3,6 +3,17 @@
 vendor/
 node_modules/
 
+# ⭐ 28/8 — `vendor/` sopra esclude alberi di dipendenze generate
+# (core/vendor/, control-plane/vendor/, sotto). mobile/public/harness-ui/vendor/
+# è diverso per natura: un pugno di build UMD di xterm.js scaricate UNA
+# volta e committate come sorgente statica (stesso principio già in uso
+# per i font .woff2 nello stesso bundle) — senza, un clone pulito
+# perderebbe il Terminale REALE (LEDGER-TERMINALE-REALE.md). Verificato
+# con `git check-ignore -v`, stessa disciplina già imparata su
+# mobile/docs/*: una negazione di directory non basta se scritta senza
+# percorso completo, qui il percorso è scritto per intero apposta.
+!mobile/public/harness-ui/vendor/
+
 # Harness UI — dati locali generati a runtime (automazioni persistite),
 # stesso principio già in uso per il resto dei dati locali di questo file:
 # generati sul disco di chi fa girare il server, non da versionare.

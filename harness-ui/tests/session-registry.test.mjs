@@ -71,6 +71,28 @@ test('avvia(): RunStarted è già nel buffer al RITORNO, non dopo — provato co
 });
 
 /*
+ * ⭐ 28/8 — Terminale REALE (LEDGER-TERMINALE-REALE.md): `terminal-ws.mjs`
+ * usa `cartellaDi(sessionId)` per il cwd iniziale di una PTY. Mai esporre
+ * la `voce` interna intera — solo il campo che serve, e `null` onesto se
+ * la sessione non esiste (il fallback a un progetto di default è
+ * responsabilità del chiamante, non di questo registro).
+ */
+test('⭐⭐ cartellaDi(sessionId) torna la cartella VERA di una sessione esistente', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+
+  const { sessionId } = registro.avvia('task-vero');
+
+  assert.equal(registro.cartellaDi(sessionId), '/tmp/x');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔ AL CONTRARIO — cartellaDi su un id inesistente torna null, mai un\'eccezione', () => {
+  const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
+  assert.equal(registro.cartellaDi('id-mai-esistito'), null);
+});
+
+/*
  * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 — 'mobile'
  * entra nella voce all'avvio e viaggia fino ad avviaSessioneFn/talosLavora
  * (e più sotto, a eseguiComandoDirettoFn per shell()). Zero comportamento

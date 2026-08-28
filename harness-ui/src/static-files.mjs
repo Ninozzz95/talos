@@ -35,6 +35,18 @@ const STATIC_ASSETS = Object.freeze({
     `/fonts/${name}`,
     { file: `fonts/${name}`, contentType: 'font/woff2' },
   ])),
+  /*
+   * ⭐⭐⭐ 28/8 — Terminale REALE (LEDGER-TERMINALE-REALE.md): xterm.js
+   * vendorizzato (mai una CDN, stesso principio dei font sopra). Trovato
+   * dalla verifica dal vivo — senza queste tre righe la allowlist
+   * rispondeva 404 su tutti e tre i file e la UI mostrava onestamente
+   * "xterm.js non caricato" invece di fingersi connessa.
+   */
+  '/vendor/xterm/xterm.js': { file: 'vendor/xterm/xterm.js', contentType: 'text/javascript; charset=utf-8' },
+  '/vendor/xterm/xterm.css': { file: 'vendor/xterm/xterm.css', contentType: 'text/css; charset=utf-8' },
+  '/vendor/xterm/addon-fit.js': { file: 'vendor/xterm/addon-fit.js', contentType: 'text/javascript; charset=utf-8' },
+  /** ⭐ 28/8 — renderer WebGL: la vista Terminale ha bisogno di questo per i colori ANSI, vedi il commento in montaTerminaleSeServe() (app.js) e vendor/xterm/README.md per il perché. */
+  '/vendor/xterm/addon-webgl.js': { file: 'vendor/xterm/addon-webgl.js', contentType: 'text/javascript; charset=utf-8' },
 });
 
 export function createStaticHandler(publicDir, fsAdapter = { readFile }) {

@@ -15,6 +15,11 @@ import { listaTaskDisponibili } from './src/task-catalog.mjs';
 import { elencaCartelleProgetto } from './src/custom-task.mjs';
 import { diagnosi } from './src/doctor.mjs';
 import { createModelCatalog } from './src/model-catalog.mjs';
+import { creaRegistroTerminali, MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA } from './src/pty-terminal.mjs';
+import { creaGestoreTerminaleWs } from './src/terminal-ws.mjs';
+
+/** ⛔ Stessi tre nomi loopback validati in config.mjs (`LOOPBACK_HOSTS`, non esportato — costante minuscola e stabile, duplicarla qui è più semplice che aggiungere un export per tre stringhe). Un browser può presentarsi con uno qualunque dei tre alias anche se il server è bindato su un altro. */
+const ALIAS_LOOPBACK = ['127.0.0.1', '::1', 'localhost'];
 
 async function startServer() {
   const config = loadConfig(process.env, import.meta.url);
@@ -75,13 +80,37 @@ async function startServer() {
   });
   const server = createServer(app);
 
+  /*
+   * ⭐⭐⭐ 28/8 — Terminale REALE (LEDGER-TERMINALE-REALE.md). Nessuna
+   * porta nuova: l'upgrade WebSocket avviene sullo STESSO `server`,
+   * quindi eredita lo stesso bind loopback-only di ogni altra rotta.
+   * `risolviCartella`: la PTY di un id che combacia una sessione VERA
+   * parte nel suo workspace; altrimenti (terminale standalone, nessuna
+   * sessione aperta) cade sul primo progetto configurato — mai un
+   * `cartella` inventata o presa dal client senza validazione.
+   */
+  const registroTerminali = creaRegistroTerminali();
+  const originiTerminaleConsentite = new Set(ALIAS_LOOPBACK.map((host) => `http://${host}:${config.port}`));
+  const terminaleWs = creaGestoreTerminaleWs({
+    registro: registroTerminali,
+    originiConsentite: originiTerminaleConsentite,
+    risolviCartella: (id) => sessionRegistry.cartellaDi(id) ?? config.cartelleProgetto[0]?.percorso ?? process.cwd(),
+  });
+  server.on('upgrade', (req, socket, head) => terminaleWs.gestisciUpgrade(req, socket, head));
+  const reaperTerminali = setInterval(() => registroTerminali.reap(), MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA * 60_000).unref();
+
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(config.port, config.host, resolve);
   });
   automationScheduler.avvia();
 
-  const shutdown = () => { automationScheduler.ferma(); server.close(() => process.exit(0)); };
+  const shutdown = () => {
+    automationScheduler.ferma();
+    clearInterval(reaperTerminali);
+    for (const id of registroTerminali._terminali.keys()) registroTerminali.chiudiForzato(id);
+    server.close(() => process.exit(0));
+  };
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
   console.log(`Harness UI disponibile su http://${config.host}:${config.port}`);

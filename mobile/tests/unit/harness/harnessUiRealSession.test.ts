@@ -37,6 +37,18 @@ type RuntimeGlobals = {
         executeCommand(command: string): void
         costruisciTrascrizioneMarkdown(esportato: Record<string, unknown>): string
         titoloDalPrimoMessaggio(testo: string): string
+        // ⭐ 28/8 — Terminale REALE (LEDGER-TERMINALE-REALE.md).
+        apriVistaTerminaleReale(): void
+        scollegaTerminaleReale(): void
+        statoTerminale(): {
+            ws: { close(): void, onclose?: unknown, readyState?: number } | null
+            idConnesso: string | null
+            term: { clear(): void, write(dati: string): void, writeln(dati: string): void, cols: number, rows: number } | null
+            fit: { fit(): void } | null
+            montato: boolean
+            standaloneId: string | null
+            resizeObserver: unknown
+        }
         realSessionState: {
             id: string | null
             taskId: string | null
@@ -1120,42 +1132,46 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(runtime().realSessionState.id).toBe('sess-shell')
     })
 
-    it('REAL-SESSION-SHELL-03 il risultato di un tool-call "shell" arriva anche nella vista Terminale dedicata, non solo nella chat', () => {
+    // ⛔ 28/8 — Terminale REALE (LEDGER-TERMINALE-REALE.md): la vista
+    // Terminale non è più uno specchio dei tool-call `shell` dell'agente —
+    // è una PTY vera, indipendente dal ciclo dell'agente, digitabile
+    // dall'utente. Queste due prove (SHELL-03/04, prima "il tool-call
+    // shell arriva anche nel Terminale") sono state RISCRITTE, non solo
+    // fatte passare: verificano ora il contratto opposto, deliberato.
+    it('⛔⛔ REAL-SESSION-SHELL-03 AL CONTRARIO: un tool-call "shell" dell\'AGENTE non monta/tocca più il Terminale REALE', () => {
         const generation = runtime().realSessionState.generation
+        const primaMontato = runtime().statoTerminale().montato
+        const primaWs = runtime().statoTerminale().ws
         runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 'c1', toolCallName: 'shell' }, generation)
         runtime().handleRealEvent({ type: 'ToolCallArgs', toolCallId: 'c1', delta: JSON.stringify({ comando: 'echo prova' }) }, generation)
         runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: 'c1', content: 'exit 0 [sandbox: wsl2]\nprova\n' }, generation)
 
-        const terminale = document.querySelector('[data-view="terminal"] .terminal-window code')
-        expect(terminale?.textContent).toContain('echo prova')
-        expect(terminale?.textContent).toContain('exit 0 [sandbox: wsl2]')
-        const badge = document.querySelector('[data-view="terminal"] .demo-surface-badge') as HTMLElement | null
-        expect(badge?.hidden).toBe(true)
+        // niente xterm montata, niente WebSocket aperta a vuoto per un tool-call dell'agente — resta un evento di chat, invariato lì.
+        expect(runtime().statoTerminale().montato).toBe(primaMontato)
+        expect(runtime().statoTerminale().ws).toBe(primaWs)
+        expect(document.querySelector('#realTerminalMount')?.childElementCount ?? 0).toBe(0)
     })
 
-    it('⛔ REAL-SESSION-SHELL-04 AL CONTRARIO: il risultato di un tool-call DIVERSO da "shell" (es. "leggi") NON tocca la vista Terminale', () => {
-        const contenutoPrima = document.querySelector('[data-view="terminal"] .terminal-window code')?.textContent
+    it('⛔ REAL-SESSION-SHELL-04 AL CONTRARIO: un tool-call diverso ("leggi") non tocca il Terminale REALE nemmeno lui — stessa indifferenza', () => {
         const generation = runtime().realSessionState.generation
+        const primaMontato = runtime().statoTerminale().montato
         runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 'c2', toolCallName: 'leggi' }, generation)
         runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: 'c2', content: 'contenuto del file' }, generation)
 
-        expect(document.querySelector('[data-view="terminal"] .terminal-window code')?.textContent).toBe(contenutoPrima)
+        expect(runtime().statoTerminale().montato).toBe(primaMontato)
     })
 
-    // ⛔⛔ 27/8, trovato dalla pipeline QA visiva (iniettando un ToolCallResult
-    // finto via handleRealEvent, zero costo — mai una chiamata vera al
-    // modello per una prova che deve solo verificare il reset del DOM):
-    // passando dalla sessione A (che aveva usato "shell") alla sessione B,
-    // il Terminale mostrava ANCORA l'output di A, concatenato con quello di
-    // B — nuovaGenerazioneSessione() resettava conversazione/reviewFiles/
-    // albero ma non il dataset.reale di Terminale/Browser, che vive nel DOM
-    // e non in state.realSession.
-    it('⛔⛔ REAL-SESSION-SHELL-05 AL CONTRARIO: una NUOVA sessione reale non eredita l\'output shell della sessione precedente nella vista Terminale', async () => {
-        const generation = runtime().realSessionState.generation
-        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 'c3', toolCallName: 'shell' }, generation)
-        runtime().handleRealEvent({ type: 'ToolCallArgs', toolCallId: 'c3', delta: JSON.stringify({ comando: 'echo marcatore-sessione-precedente' }) }, generation)
-        runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: 'c3', content: 'marcatore-sessione-precedente-output' }, generation)
-        expect(document.querySelector('[data-view="terminal"] .terminal-window code')?.textContent).toContain('marcatore-sessione-precedente')
+    // ⛔⛔ 28/8 — Terminale REALE: il reset al cambio sessione oggi significa
+    // "chiudi la WebSocket della sessione precedente" (mai un output che
+    // sopravvive al cambio) — non più "ripulisci un log testuale". jsdom
+    // non ha una vera WebSocket: si inietta un finto oggetto con un
+    // .close() osservabile, stesso principio "mai una rete vera nei test
+    // unitari" già in uso in tutta questa suite (FakeEventSource sopra).
+    it('⛔⛔ REAL-SESSION-SHELL-05 AL CONTRARIO: avviare una sessione NUOVA disconnette il Terminale REALE della sessione precedente', async () => {
+        const t = runtime().statoTerminale()
+        const chiudiChiamato = vi.fn()
+        t.ws = { close: chiudiChiamato, readyState: 1 }
+        t.idConnesso = runtime().realSessionState.id
 
         mockFetch([
             { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-nuova-pulita' } },
@@ -1163,15 +1179,9 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         ])
         await runtime().startRealSession({ id: 'storia-nuova-pulita' })
 
-        const terminaleDopo = document.querySelector('[data-view="terminal"] .terminal-window code') as HTMLElement | null
-        expect(terminaleDopo?.textContent).not.toContain('marcatore-sessione-precedente')
-        expect(terminaleDopo?.dataset.reale).toBeUndefined()
-        // ⛔ 27/8, seconda passata: il reset mostra uno stato ONESTO E VUOTO
-        // ("Nessun comando eseguito..."), non più il demo originale — il
-        // badge resta nascosto perché non è un dato finto da segnalare.
-        expect(terminaleDopo?.textContent).toContain('Nessun comando eseguito')
-        const badge = document.querySelector('[data-view="terminal"] .demo-surface-badge') as HTMLElement | null
-        expect(badge?.hidden).toBe(true)
+        expect(chiudiChiamato).toHaveBeenCalledTimes(1)
+        expect(runtime().statoTerminale().ws).toBeNull()
+        expect(runtime().statoTerminale().idConnesso).toBeNull()
     })
 
     // ⛔⛔⛔ 27/8, trovato nell'ispezione visiva finale (owner: "IMPORTANTISSIMA"):

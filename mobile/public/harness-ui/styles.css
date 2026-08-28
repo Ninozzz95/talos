@@ -685,11 +685,24 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .diff-toolbar > div { display: flex; gap: 6px; }
 .diff-panel pre { min-height: 420px; font-size: 11px; }
 
-.terminal-window { min-height: calc(100dvh - 210px); margin: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-deep); padding: 18px; overflow: auto; color: var(--text-2); font: 12px/1.7 var(--font-mono); box-shadow: inset 0 0 80px var(--surface-highlight-faint); }
-.prompt { color: var(--accent-2); }.path { color: var(--secondary); }.branch { color: var(--info); }
-.cursor { display: inline-block; width: 8px; height: 16px; background: var(--text); vertical-align: -2px; animation: blink var(--motion-activity) steps(1) infinite; }
+/*
+ * ⛔⛔⛔ 28/8 — Terminale REALE (LEDGER-TERMINALE-REALE.md): trovato dal
+ * vivo (verifica CDP con tastiera reale, mai solo unit test): `height`
+ * FISSA, non `min-height`. Con solo `min-height` il box può crescere
+ * oltre il minimo per contenere il suo contenuto — e il contenuto qui è
+ * xterm.js, che ridimensiona SE STESSO in risposta al ResizeObserver
+ * puntato su questo stesso elemento. Risultato misurato: ogni resize
+ * rendeva il viewport xterm un filo più alto → il box (min-height, non
+ * height) cresceva per contenerlo → il ResizeObserver lo notava → un
+ * nuovo fit() → ancora più alto — loop di retroazione infinito (+1 riga
+ * ridisegnata ad ogni giro, mai un prompt stabile). `height` fissa
+ * rompe il loop alla radice: il box non può più crescere col contenuto.
+ */
+.terminal-window { height: calc(100dvh - 210px); margin: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-deep); padding: 10px; overflow: hidden; box-shadow: inset 0 0 80px var(--surface-highlight-faint); }
+.terminal-window .xterm { height: 100%; }
 .status-chip { display: inline-flex; align-items: center; min-height: 25px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: var(--surface-highlight-subtle); font-size: 9px; }
 .status-chip.success { color: var(--success); border-color: var(--success-strong); background: var(--success-soft); }
+.status-chip.error { color: var(--danger); border-color: var(--danger-soft); background: var(--danger-soft); }
 
 .browser-shell { width: min(1100px, calc(100% - 32px)); }
 .browser-bar { min-height: 50px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 12px 12px 0 0; background: var(--surface); padding: 6px 8px; }
@@ -878,7 +891,6 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .toast strong { display: block; margin-bottom: 3px; color: var(--text); }
 
 @keyframes pulse { 0%,100%{transform:scale(.8);opacity:.6}50%{transform:scale(1.2);opacity:1} }
-@keyframes blink { 50%{opacity:0} }
 @keyframes toast-in { from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1} }
 
 @media (max-width: 1280px) {
@@ -961,7 +973,7 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
   .review-summary { grid-template-columns: repeat(2,1fr); }
   .diff-toolbar { align-items: flex-start; flex-direction: column; padding: 9px 10px; }
   .diff-panel pre { min-height: 420px; font-size: 9px; }
-  .terminal-window { min-height: calc(100dvh - 175px - var(--mobile-nav-h)); font-size: 10px; }
+  .terminal-window { height: calc(100dvh - 175px - var(--mobile-nav-h)); }
   .browser-shell { width: calc(100% - 12px); }
   .browser-bar { grid-template-columns: auto minmax(0,1fr); }
   .browser-tools { display: none; }
