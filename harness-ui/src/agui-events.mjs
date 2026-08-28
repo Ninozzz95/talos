@@ -152,6 +152,24 @@ export function approvalRequested({ requestId, azione }) {
 }
 
 /**
+ * ⭐⭐⭐ FASE D (28/8) — coda messaggi, piano elegant-spinning-dongarra.md,
+ * LEDGER-FASE-D-CODA.md. Il kernel chiama `codaMessaggiFn()` SOLO nel
+ * punto in cui avrebbe altrimenti concluso il run (zero tool-call
+ * nell'ultima risposta) — se torna un testo, quel testo diventa un
+ * nuovo turno utente e il ciclo continua. Questo evento è il SOLO modo
+ * onesto per il frontend di sapere ESATTAMENTE quando questo è successo:
+ * un'euristica lato client (es. "un nuovo ToolCallStart dopo una
+ * risposta di solo testo") è ambigua — la stessa sequenza succede anche
+ * quando il modello risponde con testo+tool_calls nello stesso giro,
+ * senza che la coda c'entri nulla. Fuori dallo schema pubblico AG-UI
+ * (stessa estensione già dichiarata per ArtifactCreated/WorkspaceChanged/
+ * ApprovalRequested).
+ */
+export function queuedMessageDelivered({ testo }) {
+    return { type: 'QueuedMessageDelivered', testo }
+}
+
+/**
  * ⭐⭐⭐ 28/8 — chiude la richiesta sopra: emesso SUBITO dopo che l'owner ha
  * risposto, così un secondo tab/client con la stessa sessione aperta
  * smette di mostrare il prompt invece di restare bloccato per sempre.

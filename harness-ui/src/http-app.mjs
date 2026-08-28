@@ -501,6 +501,22 @@ function requireApprovaBody(body) {
   return { requestId: body.requestId, approvato: body.approvato };
 }
 
+/**
+ * ⭐⭐⭐ FASE D (28/8) — un messaggio da accodare su una sessione ancora in
+ * corso. Stesso stile di requireComandoBody: valida solo la FORMA (una
+ * stringa non vuota) — il rifiuto SEMANTICO (sessione conclusa, coda su un
+ * id inesistente) resta a sessionRegistry.accodaMessaggio, mai duplicato qui.
+ */
+function requireQueueBody(body) {
+  const chiavi = Object.keys(body ?? {});
+  if (chiavi.length !== 1 || chiavi[0] !== 'messaggio' || typeof body.messaggio !== 'string' || body.messaggio.trim().length === 0) {
+    const errore = new Error('Corpo non valido: atteso {messaggio}');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  return body.messaggio;
+}
+
 /*
  * Scrive un evento AG-UI come frame SSE. Torna false (e non scrive) se la
  * risposta è già chiusa.
@@ -1147,6 +1163,72 @@ export function createHttpApp({
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    /*
+     * ⭐⭐⭐ FASE D (28/8) — coda messaggi, piano `elegant-spinning-dongarra.md`.
+     * ⛔ Il ledger (LEDGER-FASE-D-CODA.md) prevedeva un DELETE HTTP per
+     * "annulla" — corretto qui: NESSUNA rotta di questo file usa mai il
+     * verbo DELETE (anche eliminare un file dell'albero è
+     * `POST .../tree/delete`, verificato leggendo il file prima di
+     * scrivere) — niente motivo di essere la prima eccezione, e CORS
+     * dichiara solo 'GET, HEAD, POST' più sotto. Stesso schema POST +
+     * verbo-nel-path di trustMatch/approveMatch appena sopra.
+     */
+    const queueMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/queue$/.exec(url.pathname);
+    if (queueMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try {
+          sessionId = decodeURIComponent(queueMatch[1]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const corpo = await leggiCorpoJson(req);
+        const messaggio = requireQueueBody(corpo);
+        const esito = sessionRegistry.accodaMessaggio(sessionId, messaggio);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ ok: true, posizione: esito.posizione }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    const queueAnnullaMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/queue\/annulla$/.exec(url.pathname);
+    if (queueAnnullaMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try {
+          sessionId = decodeURIComponent(queueAnnullaMatch[1]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const esito = sessionRegistry.svuotaCoda(sessionId);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ ok: true, rimosso: esito.rimosso }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);

@@ -24,7 +24,7 @@ import {
   compattaSessione as compattaSessioneReale,
   eseguiComandoDiretto as eseguiComandoDirettoReale,
 } from './agent-service.mjs';
-import { approvalRequested, approvalResolved, hookInvoked, workspaceChanged } from './agui-events.mjs';
+import { approvalRequested, approvalResolved, hookInvoked, queuedMessageDelivered, workspaceChanged } from './agui-events.mjs';
 import { CustomTaskError, preparaEsecuzioneLibera as preparaEsecuzioneLiberaReale } from './custom-task.mjs';
 import { TaskCatalogError, preparaEsecuzione as preparaEsecuzioneReale } from './task-catalog.mjs';
 import { leggiAlberoWorkspace as leggiAlberoWorkspaceReale, WorkspaceTreeError } from './workspace-tree.mjs';
@@ -273,6 +273,8 @@ export function createSessionRegistry({
       permessiPerAttrezzo: permessiPerAttrezzoEffettivi, approvazionePendente: null,
       // ⭐⭐⭐ FASE C (28/8) — sub-agenti: null/0 per ogni sessione avviata da un umano, valorizzati SOLO da subagentOrchestrator.delegaSottoTask. `esitoDelega` (per il foglio "Albero sessione") si popola quando la sessione conclude, vedi sotto.
       padreId, profonditaDelega, esitoDelega: null,
+      // ⭐⭐⭐ FASE D (28/8) — coda messaggi: FIFO vera, vuota per ogni sessione. Sopravvive a un resume (STESSA voce): un messaggio accodato mentre la sessione era "in corso" resta in coda anche se il turno finisce e ne parte un altro tramite resume().
+      codaMessaggi: [],
     };
     voce.controller = controller;
     voce.conclusa = false;
@@ -346,6 +348,23 @@ export function createSessionRegistry({
     // ⭐⭐⭐ FASE A (hook) — sempre costruito, sincrono: costruisciHookFn
     // rimanda il vero lavoro (I/O) alla prima tool-call, vedi la sua doc.
     const hookFn = costruisciHookFn(voce);
+    /*
+     * ⭐⭐⭐ FASE D (28/8) — sempre costruita (stesso principio di
+     * hookFn/onDelega): il vero contenuto vive in voce.codaMessaggi,
+     * popolato da accodaMessaggio() più sotto — shift() drena FIFO,
+     * ?? null non lascia mai passare undefined al kernel. Quando un
+     * messaggio VIENE DAVVERO consegnato (shift() torna qualcosa),
+     * broadcast di QueuedMessageDelivered — è il SOLO momento in cui il
+     * frontend può sapere con certezza che è successo (vedi la doc
+     * dell'evento in agui-events.mjs sul perché un'euristica lato
+     * client non basterebbe).
+     */
+    const codaMessaggiFn = () => {
+      const testo = voce.codaMessaggi.shift();
+      if (testo == null) return null;
+      broadcast(voce, queuedMessageDelivered({ testo }));
+      return testo;
+    };
 
     avviaSessioneFn({
       cartella, task, modello: modelloEffettivo, chiave, comandoProva, messaggiIniziali,
@@ -357,6 +376,7 @@ export function createSessionRegistry({
       permessiPerAttrezzo: voce.permessiPerAttrezzo,
       // ⭐⭐⭐ FASE C (28/8) — sub-agenti: sempre costruito (stesso principio di hookFn), il vero lavoro (limiti, isolamento) vive tutto dentro subagentOrchestrator.delegaSottoTask.
       onDelega: (taskFiglio, cartellaFiglio) => subagentOrchestrator.delegaSottoTask({ sessionPadreId: sessionId, task: taskFiglio, cartella: cartellaFiglio }),
+      codaMessaggiFn,
       onEvento: (evento) => broadcast(voce, evento),
     }).then((risultato) => {
       /*
@@ -400,6 +420,36 @@ export function createSessionRegistry({
     elencaFigli(sessionId) {
       if (!sessioni.get(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       return { ok: true, figli: subagentOrchestrator.elencaFigli(sessionId) };
+    },
+    /**
+     * ⭐⭐⭐ FASE D (28/8) — coda messaggi. Un messaggio mentre la sessione
+     * è ANCORA IN CORSO non viene rifiutato: entra in `voce.codaMessaggi`
+     * (FIFO), consegnato dal kernel al punto giusto (vedi
+     * LEDGER-FASE-D-CODA.md, D.1). Una sessione GIÀ CONCLUSA rifiuta —
+     * lì il percorso giusto è `resume()`, due meccanismi per due stati
+     * diversi, mai sovrapposti.
+     * @returns {{ok:true, posizione:number}|{erroreAvvio:string, code:string}}
+     */
+    accodaMessaggio(sessionId, testo) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (voce.conclusa) return { erroreAvvio: 'La sessione è già conclusa: usa resume(), non la coda', code: 'SESSION_NOT_READY' };
+      if (typeof testo !== 'string' || testo.trim() === '') return { erroreAvvio: 'Il messaggio in coda non può essere vuoto', code: 'QUERY_INVALID' };
+      voce.codaMessaggi.push(testo);
+      return { ok: true, posizione: voce.codaMessaggi.length };
+    },
+    /**
+     * Toglie l'ULTIMO messaggio accodato (non tutta la coda: coerente con
+     * un "Annulla" accanto al messaggio appena scritto, mai un
+     * azzeramento che cancellerebbe messaggi più vecchi già in attesa).
+     * @returns {{ok:true, rimosso:boolean}|{erroreAvvio:string, code:string}}
+     */
+    svuotaCoda(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      const rimosso = voce.codaMessaggi.length > 0;
+      if (rimosso) voce.codaMessaggi.pop();
+      return { ok: true, rimosso };
     },
     /**
      * @returns {{sessionId:string}|{erroreAvvio:string, code:string}} — mai

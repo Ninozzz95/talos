@@ -910,3 +910,37 @@ test('⛔ AL CONTRARIO — onDelega assente arriva undefined a talosLavoraFn, ma
 
   assert.equal(catturato.onDelega, undefined);
 });
+
+/*
+ * ⭐⭐⭐ FASE D (28/8) — coda messaggi: stesso principio dei blocchi sopra,
+ * `codaMessaggiFn` viaggia SENZA trasformazione. Stesso gap da non
+ * ripetere: un parametro costruito dal chiamante (session-registry.mjs)
+ * ma mai arrivato fin qui — aggiunto nello stesso commit del resto
+ * della fase, non un secondo giro. Vedi LEDGER-FASE-D-CODA.md.
+ */
+test('⭐⭐⭐ PARITÀ — codaMessaggiFn arriva a talosLavoraFn ESATTAMENTE come passato, senza trasformazione', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+  const codaMessaggiFn = () => null;
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, codaMessaggiFn,
+  });
+
+  assert.equal(catturato.codaMessaggiFn, codaMessaggiFn, 'STESSA funzione, non un wrapper');
+});
+
+test('⛔ AL CONTRARIO — codaMessaggiFn assente arriva undefined a talosLavoraFn, mai un valore inventato', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn });
+
+  assert.equal(catturato.codaMessaggiFn, undefined);
+});

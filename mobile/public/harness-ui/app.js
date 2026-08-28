@@ -152,6 +152,17 @@
       approvazioniPendenti: new Map(),
       /** ⭐⭐⭐ 28/8 — la radice ASSOLUTA della sessione corrente (da RunStarted→contesto.cartella, la STESSA stringa già mostrata in "Root" nel Context Rail) — serve per calcolare il percorso assoluto di una sottocartella quando l'owner sceglie "Imposta come radice" nel menu dell'albero. `null` finché nessun RunStarted è mai arrivato. */
       cartellaAssoluta: null,
+      /**
+       * ⭐⭐⭐ FASE D (28/8) — coda messaggi: i testi CONFERMATI dal server
+       * (risposta della POST .../queue), FIFO, in attesa di essere
+       * consegnati. Un bubble in chat compare SOLO quando arriva DAVVERO
+       * l'evento QueuedMessageDelivered (mai ottimisticamente al POST: un
+       * messaggio può restare in coda per giri interi mentre il modello
+       * chiama altri attrezzi, mostrarlo subito in chat mentirebbe su
+       * cosa il modello ha già "visto") — vedi renderizzaBannerCoda() e
+       * il case QueuedMessageDelivered.
+       */
+      codaMessaggi: [],
     },
   };
 
@@ -2177,15 +2188,17 @@
 
   function setQueueMode(enabled, announce = false) {
     /*
-     * ⛔ 27/8 — stessa guardia di submitPrompt, estesa: il "Follow-up" non
-     * ha oggi NESSUN percorso reale — né su una sessione già in corso
-     * (talosLavora non lo consegnerebbe mai) né senza nessuna sessione
-     * (non esiste più una conversazione demo da riempire, rimossa da
-     * index.html). Si rifiuta onestamente in entrambi i casi, mai un
-     * toggle che si accende senza che nulla lo segua davvero.
+     * ⛔ 27/8 — stessa guardia di submitPrompt, estesa. ⭐⭐⭐ 28/8, FASE D:
+     * il primo ramo è cambiato — un follow-up su una sessione IN CORSO
+     * ORA arriva davvero (accodaMessaggioReale, POST .../queue), ma
+     * AUTOMATICAMENTE per ogni messaggio scritto nel composer: questo
+     * interruttore non ha un ruolo in più da aggiungere, il vecchio
+     * "non ancora implementato" sarebbe oggi un bluff. Il secondo ramo
+     * resta vero invariato: senza nessuna sessione non c'è nulla da
+     * accodare, mai un toggle che si accende senza che nulla lo segua.
      */
     if (enabled && state.realSession.id) {
-      toast('Follow-up non ancora implementato', 'Una sessione reale non accetta oggi un messaggio a metà esecuzione.');
+      toast('Il follow-up è già in coda', 'Scrivi normalmente nel composer: un messaggio durante un run in corso si accoda da solo, non serve questo interruttore.');
       return;
     }
     if (enabled && !state.realSession.id) {
@@ -2435,6 +2448,40 @@
     conversation.appendChild(article);
     markMotionEnter(article);
     window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
+  }
+
+  /**
+   * ⭐⭐⭐ FASE D (28/8) — il banner "Follow-up in coda" mostra la coda
+   * VERA (state.realSession.codaMessaggi, popolata SOLO da una POST
+   * .../queue riuscita) invece del testo statico del mockup. Il primo
+   * elemento è quello che il kernel consegnerà per PRIMO (FIFO) — un
+   * secondo elemento in attesa si vede come "+N altri", mai perso
+   * silenziosamente. Chiamata sia quando la coda cresce (submitPrompt)
+   * sia quando si svuota (QueuedMessageDelivered, #cancelQueued,
+   * nuovaGenerazioneSessione) — un solo punto che decide se il banner è
+   * visibile, mai due stati da tenere sincronizzati a mano.
+   */
+  function renderizzaBannerCoda() {
+    const coda = state.realSession.codaMessaggi;
+    const testoEl = $('#queuedMessageText', queuedMessage);
+    if (coda.length === 0) {
+      if (queuedMessage.classList.contains('show')) {
+        animateExit(queuedMessage, { durationToken: '--talos-motion-duration-composer-collapse' }, () => {
+          queuedMessage.classList.remove('show');
+        });
+      }
+      return;
+    }
+    if (testoEl) {
+      const extra = coda.length > 1 ? ` (+${coda.length - 1} altr${coda.length - 1 === 1 ? 'o' : 'i'})` : '';
+      testoEl.textContent = `${tronca(coda[0], 60)}${extra}`;
+    }
+    const demoBadge = $('.demo-surface-badge', queuedMessage);
+    if (demoBadge) demoBadge.hidden = true;
+    if (!queuedMessage.classList.contains('show')) {
+      queuedMessage.classList.add('show');
+      markMotionEnter(queuedMessage);
+    }
   }
 
   /**
@@ -3313,6 +3360,10 @@
         case 'WorkspaceChanged': {
           const elenco = Array.isArray(evento.percorsi) ? evento.percorsi.join(', ') : '(percorsi non specificati)';
           righe.push(`📁 _Cambiamento esterno nel workspace: ${elenco}_`, '');
+          break;
+        }
+        case 'QueuedMessageDelivered': {
+          righe.push(`⏭️ **Follow-up dalla coda:**`, '', evento.testo ?? '', '');
           break;
         }
         case 'ApprovalRequested': {
@@ -4264,6 +4315,23 @@
         }
         break;
       }
+      case 'QueuedMessageDelivered': {
+        /*
+         * ⭐⭐⭐ FASE D (28/8) — il kernel ha DAVVERO consumato un messaggio
+         * dalla coda (session-registry.mjs, codaMessaggiFn) — il SOLO
+         * momento onesto per mostrarlo come un turno utente vero (mai
+         * ottimisticamente al POST, vedi accodaMessaggioReale). shift(),
+         * non filter: FIFO, lo stesso ordine con cui il server li ha
+         * accodati — un evento fuori ordine (mai dovrebbe capitare, ma
+         * niente si assume) lascerebbe comunque la lista locale corretta
+         * alla lunghezza, solo con l'etichetta sbagliata nel banner.
+         */
+        appendUserFollowUp(evento.testo);
+        state.realSession.codaMessaggi.shift();
+        renderizzaBannerCoda();
+        mostraAttesaRisposta();
+        break;
+      }
       case 'RunFinished': {
         /*
          * ⛔⛔⛔ 27/8, owner: "non riesco ad avere una conversazione base col
@@ -4443,6 +4511,8 @@
       state.realSession.usage = null; // Fase 3 — un resume (continua:true) TIENE il conto, una sessione nuova riparte da IGNOTO
       state.realSession.approvazioniPendenti = new Map(); // le card sono già sparite con replaceChildren() qui sopra, la mappa le segue
       state.realSession.cartellaAssoluta = null; // Fase 3 — una sessione nuova non conosce ancora la propria radice finché RunStarted non arriva
+      state.realSession.codaMessaggi = []; // FASE D — una sessione nuova non eredita la coda di quella precedente
+      renderizzaBannerCoda();
       // ⛔ 27/8 — Terminale/Browser tengono il loro "già reale" nel DOM
       // (dataset), non in state.realSession: senza questo, restavano
       // mostrati per sempre, mescolati con la sessione successiva.
@@ -4589,6 +4659,29 @@
       nascondiAttesaRisposta();
       if (messaggioFollowUp) appendStatusNote(`Invio non riuscito: ${error.message}`, true); // il bubble utente resta — l'ha scritto davvero, solo non e' arrivato
       toast(messaggioFollowUp ? 'Invio non riuscito' : 'Resume non riuscito', error.message);
+    }
+  }
+
+  /**
+   * ⭐⭐⭐ FASE D (28/8) — un messaggio scritto mentre la sessione reale
+   * sta ANCORA girando. Niente bubble ottimistico qui: il messaggio è
+   * solo IN CODA, non ancora visto dal modello — il bubble vero compare
+   * al case QueuedMessageDelivered, quando il kernel lo consuma
+   * davvero (vedi renderizzaBannerCoda). Fallita la POST, il testo
+   * torna nel composer: non si perde mai in silenzio.
+   */
+  async function accodaMessaggioReale(testo) {
+    const sessionId = state.realSession.id;
+    try {
+      const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/queue`, { messaggio: testo });
+      if (sessionId !== state.realSession.id) return; // la sessione a schermo è già un'altra, questo accodamento non la riguarda più
+      state.realSession.codaMessaggi.push(testo);
+      renderizzaBannerCoda();
+      toast('Messaggio in coda', `Arriverà quando l'agente conclude il turno corrente (posizione ${dati.posizione}).`);
+    } catch (error) {
+      composerInput.value = testo;
+      autoGrowTextarea();
+      toast('Messaggio non accodato', error.message);
     }
   }
 
@@ -5199,11 +5292,14 @@
     /*
      * ⛔⛔⛔ 27/8, owner: "non riesco ad avere una conversazione base col
      * modello" — con una sessione REALE avviata (state.realSession.id) e
-     * ANCORA IN CORSO, il composer non ha modo di consegnarle un messaggio:
-     * talosLavora non accetta un follow-up a metà esecuzione (nessun
-     * parametro equivalente a segnaleStop per INIETTARE, solo per fermare —
-     * verificato leggendo talosHarness.mjs). Quel rifiuto onesto resta.
-     * ⛔ Ma una sessione CONCLUSA è un'altra cosa: resumeSession(testo) fa
+     * ANCORA IN CORSO, il composer non aveva modo di consegnarle un
+     * messaggio: talosLavora non accettava un follow-up a metà
+     * esecuzione. Quel rifiuto onesto era corretto ALLORA (nessuna coda
+     * esisteva) — ⭐⭐⭐ FASE D (28/8) lo sostituisce: il messaggio entra
+     * DAVVERO in coda (accodaMessaggioReale, POST .../queue), consegnato
+     * dal kernel al punto giusto (LEDGER-FASE-D-CODA.md, D.1) invece di
+     * essere rifiutato.
+     * ⛔ Una sessione CONCLUSA è un'altra cosa: resumeSession(testo) fa
      * esattamente ciò che una conversazione normale richiede — appende il
      * messaggio a messaggiFinali e riparte, STESSO sessionId (vedi
      * session-registry.mjs resume(), esteso apposta). Prima di questo fix
@@ -5211,7 +5307,7 @@
      * inutilizzabile dopo la primissima risposta, ogni volta.
      */
     if (state.realSession.id && !state.realSession.eventoTerminaleVisto) {
-      toast('Messaggio non consegnato', 'Una sessione reale non accetta oggi un messaggio a metà esecuzione — aspetta la fine del run.');
+      accodaMessaggioReale(value);
       return true;
     }
     if (state.realSession.id && state.realSession.eventoTerminaleVisto) {
@@ -5696,11 +5792,25 @@
     autoGrowTextarea();
   });
 
-  $('#cancelQueued').addEventListener('click', () => {
-    animateExit(queuedMessage, { durationToken: '--talos-motion-duration-composer-collapse' }, () => {
-      queuedMessage.classList.remove('show');
-    });
-    toast('Follow-up annullato');
+  /*
+   * ⭐⭐⭐ FASE D (28/8) — "Annulla" chiama DAVVERO POST .../queue/annulla
+   * (svuotaCoda toglie l'ULTIMO messaggio accodato, mai il primo — vedi
+   * la sua doc in session-registry.mjs) invece di limitarsi a nascondere
+   * il banner: prima di questo fix il testo restava comunque in coda sul
+   * server, e sarebbe arrivato al modello lo stesso nonostante "Annulla".
+   */
+  $('#cancelQueued').addEventListener('click', async () => {
+    if (!state.realSession.id || state.realSession.codaMessaggi.length === 0) return;
+    try {
+      const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/queue/annulla`, {});
+      if (dati.rimosso) {
+        state.realSession.codaMessaggi.pop();
+        renderizzaBannerCoda();
+        toast('Follow-up annullato');
+      }
+    } catch (error) {
+      toast('Annullamento non riuscito', error.message);
+    }
   });
 
   $$('[data-approve], [data-allow-session], [data-deny]').forEach((button) => {

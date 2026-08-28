@@ -1087,7 +1087,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(runtime().realSessionState.followUpBubbleInAttesa).toBe(false) // consumato
     })
 
-    it('⛔ REAL-SESSION-RESUME-03 AL CONTRARIO: un follow-up su una sessione ANCORA IN CORSO non chiama /resume, rifiuto onesto', async () => {
+    it('⛔ REAL-SESSION-RESUME-03 AL CONTRARIO: un follow-up su una sessione ANCORA IN CORSO non chiama /resume — FASE D (28/8), va in coda per davvero', async () => {
         mockFetch([
             { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-in-corso' } },
             { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
@@ -1095,15 +1095,79 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         await runtime().startRealSession({ id: 'storia-in-corso' })
         expect(runtime().realSessionState.eventoTerminaleVisto).toBe(false) // nessun RunFinished ancora
 
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions/sess-in-corso/queue', corpo: { ok: true, posizione: 1 } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
         const fetchMock = vi.spyOn(window, 'fetch')
         const chiamateSuResume = () => fetchMock.mock.calls.filter(([u]) => String(u).includes('/resume')).length
-        const prima = chiamateSuResume()
+        const chiamateSuQueue = () => fetchMock.mock.calls.filter(([u]) => String(u).includes('/queue')).length
+        const primaResume = chiamateSuResume()
 
         expect(runtime().submitPrompt('Domanda mentre gira')).toBe(true)
         await new Promise((r) => setTimeout(r, 0))
 
-        expect(chiamateSuResume()).toBe(prima) // zero chiamate a /resume
-        expect(document.querySelector('#toastRegion')?.textContent).toContain('Messaggio non consegnato')
+        expect(chiamateSuResume()).toBe(primaResume) // zero chiamate a /resume — una sessione IN CORSO non le usa mai
+        expect(chiamateSuQueue()).toBe(1) // la STRADA giusta per una sessione in corso, ORA reale
+        expect(document.querySelector('#toastRegion')?.textContent).toContain('Messaggio in coda')
+    })
+
+    it('⭐⭐⭐⭐ REAL-SESSION-QUEUE-01 FILO INTERO — FASE D (28/8): accodare mostra il banner (mai un bubble ancora), QueuedMessageDelivered mostra il bubble e svuota il banner', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-coda' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-coda' })
+        const generation = runtime().realSessionState.generation
+
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions/sess-coda/queue', corpo: { ok: true, posizione: 1 } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        expect(runtime().submitPrompt('e adesso aggiungi anche i test')).toBe(true)
+        await new Promise((r) => setTimeout(r, 0))
+
+        // in coda, NON ancora un bubble — il modello non l'ha ancora visto
+        expect(document.querySelector('#queuedMessage')?.classList.contains('show')).toBe(true)
+        expect(document.querySelector('#queuedMessageText')?.textContent).toContain('e adesso aggiungi anche i test')
+        const primaDelDelivered = document.querySelectorAll('#conversation .user-message').length
+
+        runtime().handleRealEvent({ type: 'QueuedMessageDelivered', testo: 'e adesso aggiungi anche i test' }, generation)
+
+        expect(document.querySelectorAll('#conversation .user-message').length).toBe(primaDelDelivered + 1) // ORA il bubble c'è
+        expect(document.querySelector('#conversation')?.textContent).toContain('e adesso aggiungi anche i test')
+        expect(document.querySelector('#queuedMessage')?.classList.contains('show')).toBe(false) // coda vuota: il banner sparisce da solo
+    })
+
+    it('⛔ REAL-SESSION-QUEUE-02 AL CONTRARIO — due messaggi accodati: il banner mostra "+1 altro" finché SOLO un QueuedMessageDelivered arriva', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-coda-2' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-coda-2' })
+        const generation = runtime().realSessionState.generation
+
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions/sess-coda-2/queue', corpo: { ok: true, posizione: 1 } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        expect(runtime().submitPrompt('primo')).toBe(true)
+        await new Promise((r) => setTimeout(r, 0))
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions/sess-coda-2/queue', corpo: { ok: true, posizione: 2 } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        expect(runtime().submitPrompt('secondo')).toBe(true)
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(document.querySelector('#queuedMessageText')?.textContent).toContain('+1 altro')
+
+        runtime().handleRealEvent({ type: 'QueuedMessageDelivered', testo: 'primo' }, generation)
+
+        expect(document.querySelector('#conversation')?.textContent).toContain('primo')
+        expect(document.querySelector('#queuedMessage')?.classList.contains('show')).toBe(true) // ANCORA visibile: "secondo" resta in coda
+        expect(document.querySelector('#queuedMessageText')?.textContent).toContain('secondo')
+        expect(document.querySelector('#queuedMessageText')?.textContent).not.toContain('+1 altro')
     })
 
     it('REAL-SESSION-SHELL-01 runDirectShell senza sessione attiva non chiama niente — rifiuto onesto, mai una finta esecuzione', async () => {
