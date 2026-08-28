@@ -143,6 +143,8 @@
        * inventata: solo un click vero (o un ApprovalResolved arrivato
        * da un altro client) la svuota. */
       approvazioniPendenti: new Map(),
+      /** ⭐⭐⭐ 28/8 — la radice ASSOLUTA della sessione corrente (da RunStarted→contesto.cartella, la STESSA stringa già mostrata in "Root" nel Context Rail) — serve per calcolare il percorso assoluto di una sottocartella quando l'owner sceglie "Imposta come radice" nel menu dell'albero. `null` finché nessun RunStarted è mai arrivato. */
+      cartellaAssoluta: null,
     },
   };
 
@@ -252,6 +254,39 @@
   function cancelMotionAnimations() {
     for (const animation of motionAnimations) animation.cancel();
     motionAnimations.clear();
+  }
+
+  // Ferma SOLO le animazioni di uscita in corso su UN elemento — usata da
+  // showEmbeddedDialog/syncEmbeddedDialogBackdrop per evitare la corsa: un
+  // closeEmbeddedDialog appena avviato (animazione WAAPI ~180ms) la cui
+  // callback finale arriva DOPO che lo stesso elemento è già stato
+  // riaperto per un contenuto nuovo, richiudendolo in silenzio. Mirata
+  // (animation.effect.target === element), non globale come
+  // cancelMotionAnimations(): non deve toccare animazioni indipendenti in
+  // corso altrove nella pagina.
+  function cancelMotionAnimationsFor(element) {
+    if (!element) return;
+    for (const animation of motionAnimations) {
+      if (animation.effect?.target === element) animation.cancel();
+    }
+  }
+
+  // Contatore "generazione" per elemento, chiave dell'altra metà della cura
+  // sopra: quando una chiusura tardiva (la callback di closeEmbeddedDialog/
+  // syncEmbeddedDialogBackdrop, che arriva SOLO dopo che l'animazione WAAPI
+  // è finita o è stata cancellata) esegue, deve chiudere/nascondere solo se
+  // NESSUNA riapertura più recente è avvenuta nel frattempo. Un contatore
+  // esplicito, non la classe CSS motion-enter: quella dipende dall'evento
+  // `animationend`, che jsdom (l'ambiente dei test unitari) non emette mai
+  // — una guardia basata su quella classe resterebbe "vera" per sempre nei
+  // test, bloccando anche chiusure legittime successive (trovato provando
+  // AL CONTRARIO la prima versione di questa cura contro la suite intera).
+  const motionGenerazione = new WeakMap();
+
+  function prossimaGenerazione(element) {
+    const generazione = (motionGenerazione.get(element) || 0) + 1;
+    motionGenerazione.set(element, generazione);
+    return generazione;
   }
 
   function markMotionEnter(element) {
@@ -419,19 +454,27 @@
   function syncEmbeddedDialogBackdrop() {
     const shouldShow = commandDialog.open || sheetDialog.open;
     if (shouldShow) {
+      cancelMotionAnimationsFor(harnessDialogBackdrop);
+      prossimaGenerazione(harnessDialogBackdrop);
       harnessDialogBackdrop.hidden = false;
       markMotionEnter(harnessDialogBackdrop);
       return;
     }
     if (harnessDialogBackdrop.hidden || harnessDialogBackdrop.classList.contains('motion-exit')) return;
+    const generazioneAllaChiusura = motionGenerazione.get(harnessDialogBackdrop) || 0;
     animateExit(
       harnessDialogBackdrop,
       { durationToken: '--talos-motion-duration-popover', transform: 'none' },
-      () => { harnessDialogBackdrop.hidden = true; },
+      // guardia: se nel frattempo qualcuno ha già riaperto il backdrop
+      // (una prossimaGenerazione() più recente), questa callback tardiva
+      // non deve nasconderlo.
+      () => { if (motionGenerazione.get(harnessDialogBackdrop) === generazioneAllaChiusura) harnessDialogBackdrop.hidden = true; },
     );
   }
 
   function showEmbeddedDialog(dialog) {
+    cancelMotionAnimationsFor(dialog);
+    prossimaGenerazione(dialog);
     if (!dialog.open) dialog.show();
     markMotionEnter(dialog);
     syncEmbeddedDialogBackdrop();
@@ -439,8 +482,13 @@
 
   function closeEmbeddedDialog(dialog) {
     if (!dialog.open || dialog.classList.contains('motion-exit')) return;
+    const generazioneAllaChiusura = motionGenerazione.get(dialog) || 0;
     animateExit(dialog, { durationToken: '--talos-motion-duration-popover' }, () => {
-      if (dialog.open) dialog.close();
+      // guardia: se nel frattempo il dialog è stato riaperto per un
+      // contenuto nuovo (una prossimaGenerazione() più recente), questa
+      // callback tardiva non deve richiuderlo — vedi cancelMotionAnimationsFor
+      // sopra per l'altra metà della cura (ferma anche l'animazione visiva).
+      if (dialog.open && motionGenerazione.get(dialog) === generazioneAllaChiusura) dialog.close();
       syncEmbeddedDialogBackdrop();
     });
   }
@@ -1716,13 +1764,25 @@
     if (span) span.textContent = state.model || 'Predefinito del server';
   }
 
+  /**
+   * ⭐⭐⭐ 28/8 — fattorizzata da dentro il click-handler della pillola
+   * permessi: la STESSA propagazione (pillole in giro per la pagina, il
+   * bridge nativo, lo stato) serve ANCHE a "Imposta come radice" (menu
+   * dell'albero, sotto), che sceglie "Full access" per conto suo — un
+   * solo posto che sa come cambiare permesso, mai due copie che
+   * potrebbero divergere.
+   */
+  function impostaPermesso(nuovoPermesso, messaggioToast = nuovoPermesso) {
+    state.permissions = nuovoPermesso;
+    $$('.selector-pill span').filter((span) => ['Workspace write', 'Read only', 'On request', 'Full access'].includes(span.textContent)).forEach((span) => { span.textContent = state.permissions; });
+    window.__talosHarnessHostPermissionChange?.(state.permissions);
+    toast('Policy aggiornata', messaggioToast);
+  }
+
   function wireSheetActions(type) {
     $$('[data-permission-choice]', sheetBody).forEach((button) => {
       button.addEventListener('click', () => {
-        state.permissions = button.dataset.permissionChoice;
-        $$('.selector-pill span').filter((span) => ['Workspace write', 'Read only', 'On request', 'Full access'].includes(span.textContent)).forEach((span) => { span.textContent = state.permissions; });
-        window.__talosHarnessHostPermissionChange?.(state.permissions);
-        toast('Policy aggiornata', state.permissions);
+        impostaPermesso(button.dataset.permissionChoice);
         closeEmbeddedDialog(sheetDialog);
       });
     });
@@ -3112,38 +3172,43 @@
      * ⭐⭐⭐ 27/8, owner: "non ha nessun'opzione per rinominare i file, per
      * aprire i file, per aprirli nel visualizza file explorer di Windows.
      * Non ha opzioni per eliminarlo, per allegarlo nella chat" — un
-     * bottone "···" per file (le cartelle restano solo esplorabili, come
-     * ogni file manager reale: le azioni sotto sono sul singolo file).
+     * bottone "···" per file.
+     *
+     * ⭐⭐⭐ 28/8, owner, coda: "bisogna aggiungere una nuova funzione che
+     * con tasto destro su una cartella ti permette di impostare come
+     * directory principale quella cartella" — QUESTO blocco (bottone
+     * "···" + tasto destro) ora vale anche per le cartelle: prima era
+     * `if (!cartella)`, un file manager vero non nega il menu contestuale
+     * alle cartelle. `apriMenuAzioniFile` riceve `cartella` e sceglie da
+     * sola le voci giuste (vedi la sua doc).
      */
-    if (!cartella) {
-      const azioniBtn = document.createElement('button');
-      azioniBtn.type = 'button';
-      azioniBtn.className = 'ft-actions-btn';
-      azioniBtn.setAttribute('aria-label', `Azioni su ${nome}`);
-      azioniBtn.appendChild(iconaSvgAlbero('i-more'));
-      azioniBtn.addEventListener('click', (event) => {
-        event.stopPropagation(); // non selezionare la riga sotto
-        apriMenuAzioniFile(percorsoCompleto, nome, { ancoraEl: azioniBtn });
-      });
-      row.appendChild(azioniBtn);
-      /*
-       * ⭐⭐⭐ 28/8, owner: "voglio abilitare il tasto destro del mouse a
-       * livello globale dato che siamo nel desktop, per esempio tasto
-       * destro nel albero file mostra le opzioni" — stesso menu del
-       * bottone "···" (riusato, non duplicato), ancorato al PUNTO del
-       * click invece che a un elemento: è la convenzione universale di
-       * ogni file manager/editor desktop (Explorer, VS Code...), non
-       * qualcosa da reinventare. `preventDefault` sopprime il menu
-       * nativo del browser.
-       */
-      row.addEventListener('contextmenu', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        row.closest('.ft-tree').querySelectorAll('.ft-row.ft-selected').forEach((r) => r.classList.remove('ft-selected'));
-        row.classList.add('ft-selected');
-        apriMenuAzioniFile(percorsoCompleto, nome, { x: event.clientX, y: event.clientY });
-      });
-    }
+    const azioniBtn = document.createElement('button');
+    azioniBtn.type = 'button';
+    azioniBtn.className = 'ft-actions-btn';
+    azioniBtn.setAttribute('aria-label', `Azioni su ${nome}`);
+    azioniBtn.appendChild(iconaSvgAlbero('i-more'));
+    azioniBtn.addEventListener('click', (event) => {
+      event.stopPropagation(); // non selezionare/aprire la riga sotto
+      apriMenuAzioniFile(percorsoCompleto, nome, { ancoraEl: azioniBtn }, cartella);
+    });
+    row.appendChild(azioniBtn);
+    /*
+     * ⭐⭐⭐ 28/8, owner: "voglio abilitare il tasto destro del mouse a
+     * livello globale dato che siamo nel desktop, per esempio tasto
+     * destro nel albero file mostra le opzioni" — stesso menu del
+     * bottone "···" (riusato, non duplicato), ancorato al PUNTO del
+     * click invece che a un elemento: è la convenzione universale di
+     * ogni file manager/editor desktop (Explorer, VS Code...), non
+     * qualcosa da reinventare. `preventDefault` sopprime il menu
+     * nativo del browser.
+     */
+    row.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      row.closest('.ft-tree').querySelectorAll('.ft-row.ft-selected').forEach((r) => r.classList.remove('ft-selected'));
+      row.classList.add('ft-selected');
+      apriMenuAzioniFile(percorsoCompleto, nome, { x: event.clientX, y: event.clientY }, cartella);
+    });
 
     li.appendChild(row);
     contenitoreUl.appendChild(li);
@@ -3181,15 +3246,27 @@
    * pende sotto di lui) OPPURE `{x,y}` (tasto destro, il menu nasce nel
    * punto del click) — stesso menu, due modi di ancorarlo, mai due
    * implementazioni.
+   *
+   * ⭐⭐⭐ 28/8 — `cartella` (nuovo, default false): le CARTELLE oggi non
+   * avevano nessun menu (owner, coda: "imposta come directory
+   * principale") — voci diverse da un file (niente "Apri"/"Allega alla
+   * chat", che non hanno senso su una cartella; in più "Imposta come
+   * radice"), non un secondo menu duplicato: stessa funzione, stesso
+   * meccanismo di posizionamento/chiusura, solo l'elenco `voci` cambia.
    */
-  function apriMenuAzioniFile(percorsoCompleto, nome, posizionamento) {
+  function apriMenuAzioniFile(percorsoCompleto, nome, posizionamento, cartella = false) {
     document.querySelector('.ft-actions-menu')?.remove();
 
     const menu = document.createElement('div');
     menu.className = 'ft-actions-menu';
     menu.setAttribute('role', 'menu');
 
-    const voci = [
+    const voci = cartella ? [
+      { etichetta: 'Rinomina', icona: 'i-edit', azione: () => avviaRinominaFile(percorsoCompleto, nome) },
+      { etichetta: 'Imposta come radice', icona: 'i-folder', azione: () => impostaComeRadice(percorsoCompleto, nome) },
+      { etichetta: 'Rivela in Esplora File', icona: 'i-folder-open', azione: () => rivelaFileInEsploraFile(percorsoCompleto) },
+      { etichetta: 'Elimina', icona: 'i-trash', azione: () => avviaEliminaFile(percorsoCompleto, nome), pericoloso: true },
+    ] : [
       { etichetta: 'Apri', icona: 'i-eye', azione: () => apriFileAlbero(percorsoCompleto, nome) },
       { etichetta: 'Allega alla chat', icona: 'i-link', azione: () => allegaFileAllaChat(percorsoCompleto) },
       { etichetta: 'Rinomina', icona: 'i-edit', azione: () => avviaRinominaFile(percorsoCompleto, nome) },
@@ -3280,6 +3357,36 @@
   function avviaEliminaFile(percorsoCompleto, nome) {
     state.alberoFileTarget = { percorso: percorsoCompleto, nome };
     openSheet('deleteFile');
+  }
+
+  /**
+   * ⭐⭐⭐ 28/8 — owner, coda: "bisogna aggiungere una nuova funzione che
+   * con tasto destro su una cartella ti permette di impostare come
+   * directory principale quella cartella". Riusa INTERAMENTE il
+   * percorso "Full access" costruito oggi stesso
+   * (avviaSessionePendente → startCustomSession → cartellaLibera)
+   * invece di inventare un secondo modo di cambiare radice:
+   * session-registry.mjs non ha (e non avrà, per scelta) un modo di
+   * mutare `voce.cartella` su una sessione GIÀ avviata — una nuova
+   * radice è per costruzione una sessione NUOVA. La sessione corrente
+   * resta intatta, ancora nella sidebar, mai toccata.
+   *
+   * ⛔ Passa SEMPRE per "Full access": il percorso scelto è ASSOLUTO
+   * arbitrario per il meccanismo che lo riceve (anche se oggi è dentro
+   * la radice corrente, `cartellaLibera` non lo sa e non deve saperlo —
+   * un solo modo di dire "percorso a piacere", mai due). Il permesso
+   * cambia di conseguenza, MAI in silenzio — `impostaPermesso` mostra
+   * sempre il suo stesso toast "Policy aggiornata".
+   */
+  function impostaComeRadice(percorsoRelativo, nome) {
+    const radice = state.realSession.cartellaAssoluta;
+    if (!radice) {
+      toast('Radice sconosciuta', 'Questa sessione non ha ancora dichiarato il proprio percorso — riprova appena parte il primo giro.');
+      return;
+    }
+    const nuovaRadice = `${radice.replace(/[/\\]+$/, '')}/${percorsoRelativo}`;
+    impostaPermesso('Full access', `Full access · nuova radice: ${nome}`);
+    avviaSessionePendente({ cartellaLibera: nuovaRadice, nomeCartella: nome, modello: state.model, effort: state.effort, permessi: 'Full access' });
   }
 
   async function rivelaFileInEsploraFile(percorsoCompleto) {
@@ -3443,6 +3550,8 @@
     if (branch) branch.textContent = contesto.branch || '—';
     if (worktree) worktree.textContent = '—'; // mai un repository git nel corpus di oggi, vedi doc in workspace-context.mjs
     if (root) root.textContent = contesto.cartella;
+    // ⭐⭐⭐ 28/8 — tenuta anche in stato, non solo nel DOM: serve a "Imposta come radice" (menu dell'albero) per calcolare il percorso assoluto di una sottocartella.
+    state.realSession.cartellaAssoluta = contesto.cartella || null;
     const sezione = $('[data-inspector-section="context"]');
     const demoBadge = sezione && $('.demo-surface-badge', sezione);
     if (demoBadge) demoBadge.hidden = true;
@@ -3811,6 +3920,7 @@
       state.realSession.attesaBubble = null; // il nodo è già sparito con replaceChildren() qui sopra
       state.realSession.usage = null; // Fase 3 — un resume (continua:true) TIENE il conto, una sessione nuova riparte da IGNOTO
       state.realSession.approvazioniPendenti = new Map(); // le card sono già sparite con replaceChildren() qui sopra, la mappa le segue
+      state.realSession.cartellaAssoluta = null; // Fase 3 — una sessione nuova non conosce ancora la propria radice finché RunStarted non arriva
       // ⛔ 27/8 — Terminale/Browser tengono il loro "già reale" nel DOM
       // (dataset), non in state.realSession: senza questo, restavano
       // mostrati per sempre, mescolati con la sessione successiva.
@@ -4294,6 +4404,7 @@
      */
     const accessoCompleto = state.permissions === 'Full access';
     let progetti = [];
+    let cartelleFrequenti = [];
     if (!accessoCompleto) {
       try {
         progetti = await apiGet('/api/v1/projects').then((r) => r.items);
@@ -4301,6 +4412,18 @@
         sheetBody.replaceChildren(textElement('p', 'board-empty', `Elenco non disponibile: ${error.message}`));
         return;
       }
+    } else {
+      /*
+       * ⭐⭐⭐ 28/8 — owner, coda: "directory più usate (tipo desktop
+       * downloads)". Solo SUGGERIMENTI per il campo percorso — un
+       * fallimento qui non deve MAI bloccare "Nuova sessione" (a
+       * differenza di /projects sopra, che è l'unico modo di scegliere
+       * una cartella quando NON si è in Full access): resta solo il
+       * campo di testo vuoto, come oggi.
+       */
+      try {
+        cartelleFrequenti = await apiGet('/api/v1/frequent-dirs').then((r) => r.items);
+      } catch { /* best effort, vedi sopra */ }
     }
 
     const corpoFoglio = [];
@@ -4319,10 +4442,30 @@
       inputCartellaLibera.placeholder = 'es. C:\\Users\\...\\progetto';
       inputCartellaLibera.autocomplete = 'off';
       inputCartellaLibera.spellcheck = false;
+      customSection.appendChild(inputCartellaLibera);
+      /*
+       * ⭐⭐⭐ 28/8 — le scorciatoie vere e proprie: un bottone per cartella
+       * frequente TROVATA sul disco (mai una candidata a occhio, vedi
+       * frequent-dirs.mjs), che riempie il campo — non lo sottomette da
+       * solo, l'owner resta libero di modificarlo prima di continuare.
+       */
+      if (cartelleFrequenti.length > 0) {
+        const scorciatoie = document.createElement('div');
+        scorciatoie.className = 'sheet-shortcuts';
+        for (const { etichetta, percorso } of cartelleFrequenti) {
+          const chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = 'sheet-shortcut-chip';
+          chip.textContent = etichetta;
+          chip.title = percorso;
+          chip.addEventListener('click', () => { inputCartellaLibera.value = percorso; inputCartellaLibera.focus(); });
+          scorciatoie.appendChild(chip);
+        }
+        customSection.appendChild(scorciatoie);
+      }
       const modelPicker = creaModelPicker({ valoreIniziale: state.model || '' });
       const effortPicker = creaEffortPicker({ valoreIniziale: state.effort });
       customSection.append(
-        inputCartellaLibera,
         textElement('span', 'sheet-label', 'Modello'),
         modelPicker.elemento,
         effortPicker.elemento,

@@ -852,6 +852,10 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .sheet-option strong { font-size: 11px; }
 .sheet-option small { color: var(--muted); font-size: 9px; margin-top: 3px; }
 .sheet-option > span:last-child { color: var(--muted); font-size: 10px; }
+/* ⭐⭐⭐ 28/8 — le scorciatoie "Desktop/Download/Documenti" nel campo percorso "Full access" (app.js, openRealTaskSheet). Stessi token di .sheet-option (bordo/accento), taglia più piccola: sono riempitivi rapidi per un campo di testo, non voci di un elenco a piena larghezza. */
+.sheet-shortcuts { display: flex; flex-wrap: wrap; gap: 6px; margin: -2px 0 10px; }
+.sheet-shortcut-chip { border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--text-2); padding: 5px 12px; font-size: 11px; cursor: pointer; }
+.sheet-shortcut-chip:hover { border-color: var(--accent-strong); background: var(--accent-soft); color: var(--text); }
 .sheet-toggle-row { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--line); font-size: 11px; }
 .sheet-toggle-row span { color: var(--text-2); }
 .sheet-toggle-row input { width: 18px; height: 18px; accent-color: var(--accent); }

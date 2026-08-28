@@ -1541,11 +1541,12 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         sceglierPermesso('Full access')
         const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
         sheetDialog.showModal = vi.fn()
-        const fetchMock = mockFetch([]) // ⭐ nessuna GET /api/v1/projects: "Full access" non usa l'allowlist
+        // ⭐ 28/8 — NON più "nessuna chiamata": /api/v1/frequent-dirs (le scorciatoie Desktop/Download) è l'UNICA, best-effort — mai /api/v1/projects, "Full access" non usa l'allowlist. Vedi FREQUENTI-01/02/03 per quella funzione nello specifico.
+        const fetchMock = mockFetch([{ metodo: 'GET', percorso: '/api/v1/frequent-dirs', corpo: { items: [] } }])
 
         await runtime().openRealTaskSheet()
 
-        expect(fetchMock).not.toHaveBeenCalled()
+        expect(fetchMock).not.toHaveBeenCalledWith('/api/v1/projects', expect.anything())
         expect(document.querySelector('#customTaskCartella')).toBeNull()
         const inputLibera = document.querySelector<HTMLInputElement>('#customTaskCartellaLibera')
         expect(inputLibera).not.toBeNull()
@@ -1601,6 +1602,199 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         const corpoInviato = JSON.parse((fetchMock.mock.calls.find(([url]) => url === '/api/v1/sessions/custom')![1] as RequestInit).body as string)
         expect(corpoInviato.permessi).toBe('Workspace write')
         expect(corpoInviato.cartellaId).toBe('proj-1')
+    })
+
+    /*
+     * ⭐⭐⭐ 28/8 — owner, coda: "nella lista file quando si crea una
+     * sessione, bisogna mettere directory più usate (tipo desktop
+     * downloads etc)". Scorciatoie SOLO nel campo "Full access": mai
+     * una seconda allowlist, vedi la doc di frequent-dirs.mjs.
+     */
+    it('⭐⭐⭐ FREQUENTI-01: con "Full access", il campo percorso mostra le scorciatoie vere, e cliccarne una lo riempie', async () => {
+        sceglierPermesso('Full access')
+        const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
+        sheetDialog.showModal = vi.fn()
+        mockFetch([{ metodo: 'GET', percorso: '/api/v1/frequent-dirs', corpo: { items: [{ etichetta: 'Desktop', percorso: 'C:/Users/prova/Desktop' }, { etichetta: 'Download', percorso: 'C:/Users/prova/Downloads' }] } }])
+
+        await runtime().openRealTaskSheet()
+
+        const chip = [...document.querySelectorAll<HTMLButtonElement>('.sheet-shortcut-chip')]
+        expect(chip.map((c) => c.textContent)).toEqual(['Desktop', 'Download'])
+        chip[1].click()
+        expect(document.querySelector<HTMLInputElement>('#customTaskCartellaLibera')?.value).toBe('C:/Users/prova/Downloads')
+    })
+
+    it('⛔⛔ FREQUENTI-02 AL CONTRARIO: SENZA "Full access", nessuna chiamata a /frequent-dirs — non serve, il campo non esiste nemmeno', async () => {
+        const fetchMock = mockFetch([{ metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } }])
+        const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
+        sheetDialog.showModal = vi.fn()
+
+        await runtime().openRealTaskSheet()
+
+        expect(fetchMock).not.toHaveBeenCalledWith('/api/v1/frequent-dirs', expect.anything())
+        expect(document.querySelector('.sheet-shortcut-chip')).toBeNull()
+    })
+
+    it('⛔⛔⛔ FREQUENTI-03 AL CONTRARIO: /frequent-dirs che fallisce non rompe "Full access" — il campo percorso resta usabile, solo senza scorciatoie', async () => {
+        sceglierPermesso('Full access')
+        const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
+        sheetDialog.showModal = vi.fn()
+        mockFetch([]) // nessuna risposta finta per /frequent-dirs: mockFetch lancia, come una rete giù per davvero
+
+        await runtime().openRealTaskSheet()
+
+        expect(document.querySelector('#customTaskCartellaLibera')).not.toBeNull()
+        expect(document.querySelector('.sheet-shortcut-chip')).toBeNull()
+    })
+
+    /*
+     * ⛔⛔⛔ 28/8 — BUG REALE trovato dalla verifica DAL VIVO (screenshot) della
+     * feature scorciatoie sopra, non da un test — vedi la regola "screenshot
+     * obbligatorio e fonte di anomalie". Uno script CDP con 150ms fra "scegli
+     * Full access dalla pillola" e "apri Nuova sessione" (la sequenza che
+     * RADICE-01 sotto esegue in un solo giro sincrono, e che uno script di
+     * verifica veloce può comprimere) mostrava NESSUN dialog visibile,
+     * nonostante ogni controllo DOM avesse successo.
+     *
+     * Misurato con una sonda millisecondo-per-millisecondo (mai un'ipotesi):
+     * a 150ms dal click sulla scelta di permesso, sheetDialog era ANCORA a
+     * metà della sua animazione di chiusura (classe motion-exit, opacity
+     * ~0,3 — closeEmbeddedDialog/animateExit dura ~180ms via WAAPI).
+     * openRealTaskSheet() lo riapre (open resta true), ma la VECCHIA
+     * callback di chiusura arriva comunque ~30ms dopo (quando la SUA
+     * animazione, mai cancellata, raggiunge il naturale compimento):
+     * controllava solo `dialog.open` — vero — e lo richiudeva in silenzio.
+     * 25ms dopo: open:false, display:none, per sempre.
+     *
+     * Cura in app.js, due parti: `cancelMotionAnimationsFor(dialog)` in
+     * showEmbeddedDialog ferma SUBITO l'animazione di chiusura bloccata a
+     * metà quando l'elemento viene riaperto; e un contatore esplicito
+     * `motionGenerazione`/`prossimaGenerazione()` (non la classe CSS
+     * motion-enter — una prima versione di questa cura usava quella,
+     * bocciata perché jsdom non emette mai l'evento `animationend` che la
+     * rimuove, quindi restava "vera" per sempre nei test e bloccava anche
+     * chiusure legittime successive) fa sì che closeEmbeddedDialog (e il
+     * gemello syncEmbeddedDialogBackdrop) chiudano solo se NESSUNA
+     * riapertura più recente dello stesso elemento è avvenuta nel
+     * frattempo — sheetDialog monta 13 tipi di foglio diversi sullo stesso
+     * nodo condiviso.
+     *
+     * Riprodotto qui mockando Element.prototype.animate con un resolver
+     * manuale (stesso pattern di CODE-MOTION-EXIT-01 in
+     * harnessUiFrontend.test.ts) — jsdom non implementa affatto
+     * Element.prototype.animate di default (verificato: `undefined`), motivo
+     * per cui nessun test precedente aveva mai potuto incontrare questa
+     * corsa. Verificato AL CONTRARIO due volte prima di fissare la cura:
+     * senza alcuna guardia il test fallisce (sheetDialog.open torna false
+     * dopo la risoluzione tardiva); con la prima versione (classe CSS) il
+     * test passava ma ROMPEVA 5 altri test della suite (chiusure legittime
+     * mai più permesse) — la versione a contatore non ha questo effetto.
+     */
+    it('⛔⛔⛔ DIALOG-RACE-01: una chiusura in corso non richiude un foglio riaperto nel frattempo per un contenuto diverso', async () => {
+        const originalAnimate = Element.prototype.animate
+        const pendenti: Array<() => void> = []
+        Object.defineProperty(Element.prototype, 'animate', {
+            configurable: true,
+            value: function mockAnimate(this: Element) {
+                let risolviRef: () => void = () => {}
+                const finished = new Promise<void>((risolvi) => { risolviRef = risolvi })
+                pendenti.push(risolviRef)
+                return { cancel: vi.fn(), finished, effect: { target: this } }
+            },
+        })
+
+        try {
+            mockFetch([{ metodo: 'GET', percorso: '/api/v1/frequent-dirs', corpo: { items: [] } }])
+            sceglierPermesso('Full access') // apre il foglio permessi, poi lo chiude scegliendo Full access — closeEmbeddedDialog avvia QUI l'animazione mockata, mai ancora risolta
+            const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
+            sheetDialog.showModal = vi.fn()
+            expect(sheetDialog.open).toBe(true) // la vecchia chiusura non ha ancora effetto: l'animazione mockata non si è mai risolta
+            expect(pendenti).toHaveLength(1)
+
+            await runtime().openRealTaskSheet() // riapre LO STESSO elemento per un contenuto diverso, PRIMA che la vecchia chiusura sia arrivata a compimento
+
+            expect(sheetDialog.open).toBe(true)
+            expect(sheetDialog.className).not.toContain('motion-exit')
+            expect(document.querySelector('#customTaskCartellaLibera')).not.toBeNull() // il contenuto è già "Nuova sessione" (Full access resta impostato)
+
+            // ora la vecchia animazione di chiusura arriva (tardivamente) a naturale compimento
+            pendenti[0]?.()
+            await Promise.resolve()
+            await Promise.resolve()
+
+            expect(sheetDialog.open).toBe(true) // la guardia impedisce alla callback tardiva di richiudere un foglio riaperto nel frattempo
+            expect(document.querySelector('#customTaskCartellaLibera')).not.toBeNull() // il contenuto resta quello nuovo, non un fantasma del vecchio foglio permessi
+        } finally {
+            Object.defineProperty(Element.prototype, 'animate', { configurable: true, value: originalAnimate })
+        }
+    })
+
+    /*
+     * ⭐⭐⭐ 28/8 — owner, coda: "bisogna aggiungere una nuova funzione che
+     * con tasto destro su una cartella ti permette di impostare come
+     * directory principale quella cartella".
+     */
+    describe('Tasto destro su una cartella — "Imposta come radice"', () => {
+        async function avviaSessioneConAlberoERadice(livelli: Record<string, Array<{ nome: string, cartella: boolean }>>, radice: string) {
+            const { chiamatePerLivello } = mockFetchAlbero(livelli, [
+                { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-radice' } },
+                { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+            ])
+            await runtime().startRealSession({ id: 'talos-prova-harness', consegna: 'test radice' })
+            const generation = runtime().realSessionState.generation
+            // ⭐ un RunStarted CON contesto — avviaSessioneConAlbero (sopra, FILE-TREE) non lo manda mai: qui serve DAVVERO, è quello che valorizza cartellaAssoluta.
+            runtime().handleRealEvent({ type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'test radice' }, contesto: { cartella: radice, progetto: 'talos-prova-harness', branch: 'master' } }, generation)
+            await vi.waitFor(() => { expect(document.querySelector('.ft-tree .ft-row')).toBeTruthy() })
+            return { chiamatePerLivello, generation }
+        }
+
+        it('⭐⭐⭐ RADICE-01: cliccare "Imposta come radice" su una sottocartella passa a Full access e avvia una sessione pendente sul percorso assoluto giusto', async () => {
+            await avviaSessioneConAlberoERadice({ '': [{ nome: 'src', cartella: true }] }, 'C:/Users/prova/talos-prova-harness')
+            const rigaSrc = [...document.querySelectorAll('.ft-row-folder')].find((r) => r.querySelector('.ft-name')?.textContent === 'src')!
+            const bottoneAzioni = rigaSrc.querySelector<HTMLButtonElement>('.ft-actions-btn')!
+            expect(bottoneAzioni).toBeTruthy() // il bottone "···" ora esiste ANCHE per le cartelle, non solo per i file
+
+            bottoneAzioni.click()
+            const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent?.includes('Imposta come radice'))!
+            expect(voceMenu).toBeTruthy()
+            voceMenu.click()
+
+            expect(document.querySelector('[data-open-sheet="permissions"] span')?.textContent).toBe('Full access')
+            await new Promise((r) => setTimeout(r, 0))
+            document.querySelector<HTMLTextAreaElement>('#composerInput')!.value = 'x'
+            // ⭐ non sottometto: basta verificare che la sessione PENDENTE porti la cartella giusta, senza spendere una seconda POST/sessione vera in questo test.
+            expect(document.querySelector('#sessionTitle')?.textContent).toContain('src')
+        })
+
+        it('⛔⛔ RADICE-02 AL CONTRARIO: un FILE (non una cartella) non mostra MAI "Imposta come radice" nel suo menu', async () => {
+            await avviaSessioneConAlberoERadice({ '': [{ nome: 'README.md', cartella: false }] }, 'C:/Users/prova/talos-prova-harness')
+            const rigaFile = [...document.querySelectorAll('.ft-row-leaf')].find((r) => r.querySelector('.ft-name')?.textContent === 'README.md')!
+            rigaFile.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
+
+            const etichette = [...document.querySelectorAll('.ft-actions-menu-item')].map((b) => b.textContent)
+            expect(etichette.some((e) => e?.includes('Imposta come radice'))).toBe(false)
+            expect(etichette.some((e) => e?.includes('Apri'))).toBe(true) // il menu file resta quello di sempre
+        })
+
+        it('⛔⛔⛔ RADICE-03 AL CONTRARIO: senza ancora una cartellaAssoluta nota (nessun RunStarted con contesto), "Imposta come radice" avvisa e NON avvia nulla', async () => {
+            // avviaSessioneConAlbero "normale" (senza contesto) — la funzione condivisa con FILE-TREE-*, mai chiamata con radice.
+            mockFetchAlbero({ '': [{ nome: 'src', cartella: true }] }, [
+                { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-senza-radice' } },
+                { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+            ])
+            await runtime().startRealSession({ id: 'talos-prova-harness', consegna: 'test' })
+            const generation = runtime().realSessionState.generation
+            runtime().handleRealEvent({ type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'test' } }, generation) // NESSUN contesto
+            await vi.waitFor(() => { expect(document.querySelector('.ft-tree .ft-row')).toBeTruthy() })
+
+            const rigaSrc = [...document.querySelectorAll('.ft-row-folder')].find((r) => r.querySelector('.ft-name')?.textContent === 'src')!
+            rigaSrc.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
+            const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent?.includes('Imposta come radice'))!
+            voceMenu.click()
+
+            expect(document.querySelector('#toastRegion')?.textContent).toContain('sconosciuta')
+            expect(document.querySelector('[data-open-sheet="permissions"] span')?.textContent).not.toBe('Full access')
+        })
     })
 
     /*
