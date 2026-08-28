@@ -126,6 +126,34 @@ test('OPTIONS answers a CORS preflight, and Access-Control-Allow-Origin reflects
   assert.equal(optionsNoOrigin.headers.has('access-control-allow-origin'), false);
 });
 
+/*
+ * ⭐⭐⭐ 28/8 — owner, coda: "directory più usate (tipo desktop
+ * downloads)". Stessa forma minima delle prove sopra: nessuna
+ * dipendenza da tests/fixtures/banco/, un `cartelleFrequentiFn` finto
+ * al posto del vero (che legge il disco davvero — già provato per
+ * conto suo in frequent-dirs.test.mjs).
+ */
+test('GET /api/v1/frequent-dirs torna gli item di cartelleFrequentiFn, avvolti nella busta standard', async (t) => {
+  const { base } = await listen(t, createHttpApp({
+    campaignService: {},
+    staticHandler: createStaticHandler(publicDir),
+    cartelleFrequentiFn: () => [{ etichetta: 'Desktop', percorso: 'C:/Users/prova/Desktop' }],
+  }));
+
+  const risposta = await fetch(`${base}/api/v1/frequent-dirs`);
+  assert.equal(risposta.status, 200);
+  const busta = await risposta.json();
+  assert.equal(busta.ok, true);
+  assert.deepEqual(busta.data.items, [{ etichetta: 'Desktop', percorso: 'C:/Users/prova/Desktop' }]);
+});
+
+test('⛔ AL CONTRARIO — senza cartelleFrequentiFn iniettata, la rotta usa il default REALE (os.homedir()) e torna comunque 200, mai un crash', async (t) => {
+  const { base } = await listen(t, createHttpApp({ campaignService: {}, staticHandler: createStaticHandler(publicDir) }));
+  const risposta = await fetch(`${base}/api/v1/frequent-dirs`);
+  assert.equal(risposta.status, 200);
+  assert.equal((await risposta.json()).ok, true);
+});
+
 test('static handler serves only the mapped assets (HTML/CSS/JS + real fonts + real logo) and has no directory listing', async (t) => {
   const { base } = await listen(t);
   const fontRoutes = [

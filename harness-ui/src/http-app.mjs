@@ -1,5 +1,6 @@
 import { leggiArtefatto as leggiArtefattoReale } from './artifact-store.mjs';
 import { modelloRichiestaValido, permessiRichiestaValido, reasoningRichiestaValido } from './config.mjs';
+import { cartelleFrequenti as cartelleFrequentiReale } from './frequent-dirs.mjs';
 
 export const API_SCHEMA = 'talos.harness-ui.api.v1';
 
@@ -486,6 +487,8 @@ function scriviEventoSse(res, evento) {
 export function createHttpApp({
   campaignService, staticHandler, sessionRegistry = null, listaTaskDisponibili = () => [],
   elencaCartelleProgetto = () => [], automationStore = null, diagnosiFn = null,
+  // ⭐⭐⭐ 28/8 — owner, coda: "directory più usate (tipo desktop downloads)". Zero config esterna (solo os.homedir()) — il default reale basta, nessun cablaggio in server.mjs come serve invece per elencaCartelleProgetto (quella dipende da TALOS_HARNESS_UI_PROJECT_DIRS).
+  cartelleFrequentiFn = cartelleFrequentiReale,
   catalogoModelliFn = null, clock = () => new Date(), leggiArtefattoFn = leggiArtefattoReale,
   // ⛔⛔⛔ 28/8 — iniettabili SOLO per il test del battito SSE sotto: mai un setInterval reale nei test unitari, stesso principio di ogni altra dipendenza di questo file.
   impostaIntervalloFn = setInterval, cancellaIntervalloFn = clearInterval,
@@ -993,6 +996,16 @@ export function createHttpApp({
         requireNoQuery(url);
         /* ⭐ 27/8 — le cartelle libere ammesse (TALOS_HARNESS_UI_PROJECT_DIRS): mai il percorso assoluto, solo id/nome — vedi custom-task.mjs. */
         data = { items: elencaCartelleProgetto() };
+      } else if (url.pathname === '/api/v1/frequent-dirs') {
+        requireNoQuery(url);
+        /*
+         * ⭐⭐⭐ 28/8 — QUI, a differenza di /projects, il percorso ASSOLUTO
+         * viene mandato per davvero: sono solo SUGGERIMENTI per il campo
+         * "Full access" (cartellaLibera), che già accetta un percorso a
+         * piacere — non una seconda allowlist, quindi nasconderlo non
+         * proteggerebbe niente che avviaLibero non protegga già.
+         */
+        data = { items: cartelleFrequentiFn() };
       } else if (url.pathname === '/api/v1/automations') {
         requireNoQuery(url);
         data = { items: automationStore ? await automationStore.elenca() : [] };
