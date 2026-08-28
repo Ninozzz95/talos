@@ -60,8 +60,8 @@ export function createSessionRegistry({
    * `undefined` se non impostata — il tool resta offerto ma dichiara
    * onestamente "not configured", mai un tentativo senza credenziali).
    */
-  // ⭐ 28/8 — terzo, stesso principio: time_now è ATTREZZI_ESTESI[2] nel kernel, offerto sempre come i primi due.
-  strumentiEstesi = ['web_search', 'artifact_create', 'time_now'],
+  // ⭐ 28/8 — quarto, stesso principio: document_create è ATTREZZI_ESTESI[2] nel kernel (time_now è il terzo), offerto sempre come gli altri.
+  strumentiEstesi = ['web_search', 'artifact_create', 'document_create', 'time_now'],
   ricercaWeb,
 } = {}) {
   const sessioni = new Map();

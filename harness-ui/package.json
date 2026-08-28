@@ -1,0 +1,15 @@
+{
+  "name": "talos-harness-ui-backend",
+  "private": true,
+  "type": "module",
+  "description": "Backend locale di Harness UI (server.mjs + src/*.mjs). Zero dipendenze fino al 28/8 — vedi il commento in document-generator.mjs per il perché queste sette sono la PRIMA eccezione, e solo qui (mai nel bundle frontend mobile/public/harness-ui/).",
+  "dependencies": {
+    "docx": "9.5.1",
+    "jszip": "3.10.1",
+    "pdf-lib": "1.17.1",
+    "pdfmake": "0.3.11",
+    "pptxgenjs": "4.0.1",
+    "unicode-segmenter": "0.15.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  }
+}

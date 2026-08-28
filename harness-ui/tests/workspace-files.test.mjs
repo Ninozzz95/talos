@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import {
+  creaFileWorkspace,
   eliminaFile,
   leggiContenutoFile,
   rinominaFile,
@@ -212,6 +213,49 @@ test('⛔ rivelaInEsploraFile: AL CONTRARIO, fuori da Windows è dichiarato PLAT
       rivelaInEsploraFile({ cartella: radice, percorso: 'a.txt' }, { platform: 'linux', execFileFn: () => { throw new Error('non deve essere chiamato'); } }),
       (e) => { assert.equal(e.code, 'PLATFORM_UNSUPPORTED'); return true; },
     );
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⭐⭐⭐ creaFileWorkspace: byte VERI, rileggibili dal disco, alla radice del workspace', async () => {
+  const radice = sessioneVera();
+  try {
+    const bytes = new TextEncoder().encode('contenuto binario di prova');
+    const { percorso } = await creaFileWorkspace({ cartella: radice, nome: 'nuovo.txt', bytes });
+    assert.equal(percorso, 'nuovo.txt');
+    assert.equal(readFileSync(join(radice, 'nuovo.txt'), 'utf8'), 'contenuto binario di prova');
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔ creaFileWorkspace: un nome che esiste già viene RIFIUTATO, mai sovrascritto in silenzio', async () => {
+  const radice = sessioneVera();
+  try {
+    await assert.rejects(
+      creaFileWorkspace({ cartella: radice, nome: 'a.txt', bytes: new Uint8Array([1, 2, 3]) }),
+      (e) => { assert.ok(e instanceof WorkspaceFileError); assert.equal(e.code, 'FILE_EXISTS'); return true; },
+    );
+    // ⭐ AL CONTRARIO: il file originale non è stato toccato dal tentativo.
+    assert.equal(readFileSync(join(radice, 'a.txt'), 'utf8'), 'contenuto di a');
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔⛔ creaFileWorkspace: un nome con traversal (".." o "/") viene RIFIUTATO, mai scritto fuori dalla radice', async () => {
+  const radice = sessioneVera();
+  try {
+    await assert.rejects(
+      creaFileWorkspace({ cartella: radice, nome: '../fuori.txt', bytes: new Uint8Array([1]) }),
+      (e) => e instanceof WorkspaceFileError,
+    );
+    await assert.rejects(
+      creaFileWorkspace({ cartella: radice, nome: 'sub/dentro.txt', bytes: new Uint8Array([1]) }),
+      (e) => e instanceof WorkspaceFileError,
+    );
+    assert.ok(!existsSync(join(radice, '..', 'fuori.txt')));
   } finally {
     rmSync(radice, { recursive: true, force: true });
   }
