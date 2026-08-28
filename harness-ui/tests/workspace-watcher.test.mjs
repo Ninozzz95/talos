@@ -107,6 +107,39 @@ test('⛔⛔ AL CONTRARIO — il watcher si chiude SOLO quando l\'ULTIMO sottosc
   }
 });
 
+/*
+ * ⛔⛔⛔ 28/8, trovato dal vivo (screenshot/CDP, non da un test — la
+ * causa vera del "il browser non vede mai i cambiamenti esterni" dopo
+ * ore di sessioni di prova sulla stessa cartella): un `for...of` senza
+ * try/catch abortiva l'INTERO giro al primo sottoscrittore che lancia
+ * — quelli iscritti DOPO (ordine di iscrizione = sessioni più recenti
+ * sulla stessa cartella) non venivano mai notificati. Con `guardati`
+ * come singleton di modulo che sopravvive a intere sessioni di test
+ * finché il processo non riavvia, un vecchio sottoscrittore rotto
+ * blocca silenziosamente ogni sessione nuova sulla stessa cartella.
+ */
+test('⛔⛔⛔ AL CONTRARIO — un sottoscrittore che lancia non blocca gli ALTRI, iscritti prima o dopo di lui', async () => {
+  const radice = radiceVera();
+  const { guardaWorkspace } = creaGestoreWorkspaceWatcher();
+  const ricevutiPrima = [];
+  const ricevutiDopo = [];
+  const stopPrima = guardaWorkspace(radice, (p) => ricevutiPrima.push(p));
+  const stopRotto = guardaWorkspace(radice, () => { throw new Error('sottoscrittore rotto, apposta'); });
+  const stopDopo = guardaWorkspace(radice, (p) => ricevutiDopo.push(p));
+  try {
+    await new Promise((r) => setTimeout(r, 800));
+    writeFileSync(join(radice, 'nuovo.txt'), 'x');
+    await new Promise((r) => setTimeout(r, 700));
+    assert.equal(ricevutiPrima.length, 1, 'il sottoscrittore PRIMA di quello rotto riceve comunque l\'evento');
+    assert.equal(ricevutiDopo.length, 1, 'il sottoscrittore DOPO quello rotto riceve comunque l\'evento — questo è il bug reale trovato');
+  } finally {
+    stopPrima();
+    stopRotto();
+    stopDopo();
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
 test('⛔ una cartella inesistente non lancia — degrada a "nessun refresh automatico"', () => {
   const { guardaWorkspace } = creaGestoreWorkspaceWatcher();
   assert.doesNotThrow(() => {

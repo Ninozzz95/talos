@@ -88,12 +88,14 @@ function registroFinto() {
   };
 }
 
-async function listen(t, { sessionRegistry = registroFinto(), listaTaskDisponibili } = {}) {
+async function listen(t, { sessionRegistry = registroFinto(), listaTaskDisponibili, impostaIntervalloFn, cancellaIntervalloFn } = {}) {
   const app = createHttpApp({
     campaignService: { listCampaigns: async () => [] },
     staticHandler: async () => null,
     sessionRegistry,
     listaTaskDisponibili: listaTaskDisponibili ?? (() => [{ id: 'sconto-a-scaglioni', progetto: 'listino', difficolta: 1, consegnaCorta: 'x' }]),
+    ...(impostaIntervalloFn ? { impostaIntervalloFn } : {}),
+    ...(cancellaIntervalloFn ? { cancellaIntervalloFn } : {}),
   });
   const server = createServer(app);
   await new Promise((resolve, reject) => {
@@ -385,7 +387,17 @@ test('GET /api/v1/sessions/{id}/events su un id inesistente torna 404 JSON, non 
   assert.equal(risposta.headers.get('content-type'), 'application/json; charset=utf-8');
 });
 
-test('⭐⭐ GET /api/v1/sessions/{id}/events replica la storia in frame SSE e chiude da solo su RunFinished', async (t) => {
+/*
+ * ⛔⛔⛔ 28/8 — RISCRITTO: prima chiudeva DA SOLO su RunFinished (il titolo
+ * originale del test lo diceva). Trovato dal vivo, non da un test (vedi
+ * workspace-watcher.mjs), che questo chiudeva la porta a WorkspaceChanged
+ * — un evento che può arrivare BEN DOPO che un run è concluso (un file
+ * cambiato fuori dall'app mentre l'owner guarda ancora quella sessione).
+ * Lo stream ora resta aperto finché il CLIENT non lo chiude — questo test
+ * legge i tre eventi attesi da un reader esplicito e poi cancella LUI la
+ * lettura, invece di aspettare una chiusura che non arriva più da sola.
+ */
+test('⭐⭐ GET /api/v1/sessions/{id}/events replica la storia in frame SSE, e NON chiude da solo dopo RunFinished', async (t) => {
   const { base, sessionRegistry } = await listen(t);
   const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
   sessionRegistry._emetti(sessionId, { type: 'RunStarted', threadId: 't1', runId: 'r1' });
@@ -396,10 +408,97 @@ test('⭐⭐ GET /api/v1/sessions/{id}/events replica la storia in frame SSE e c
   assert.equal(risposta.status, 200);
   assert.equal(risposta.headers.get('content-type'), 'text/event-stream; charset=utf-8');
 
-  const testo = await risposta.text(); // lo stream si chiude da solo dopo RunFinished: .text() non resta appeso
-  const frame = testo.split('\n\n').map((f) => f.trim()).filter(Boolean).filter((f) => !f.startsWith(':'));
-  const eventi = frame.map((f) => JSON.parse(f.replace(/^data: /, '')));
+  const reader = risposta.body.getReader();
+  const decoder = new TextDecoder();
+  let accumulato = '';
+  let eventi = [];
+  // ⭐ legge finché non ha visto i tre eventi attesi — mai finché lo stream chiude da solo, perché ora non lo fa più.
+  while (eventi.length < 3) {
+    const { value, done } = await reader.read();
+    if (done) throw new Error('lo stream si è chiuso da solo prima dei tre eventi attesi — regressione');
+    accumulato += decoder.decode(value, { stream: true });
+    const frame = accumulato.split('\n\n').map((f) => f.trim()).filter(Boolean).filter((f) => !f.startsWith(':'));
+    eventi = frame.map((f) => JSON.parse(f.replace(/^data: /, '')));
+  }
   assert.deepEqual(eventi.map((e) => e.type), ['RunStarted', 'TextMessageContent', 'RunFinished']);
+  await reader.cancel(); // il test chiude, non lo stream da solo — coerente con la cura
+});
+
+test('⛔ AL CONTRARIO — GET /api/v1/sessions/{id}/events resta aperto dopo RunFinished: un WorkspaceChanged successivo arriva sullo STESSO stream', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  sessionRegistry._emetti(sessionId, { type: 'RunStarted', threadId: 't1', runId: 'r1' });
+  sessionRegistry._emetti(sessionId, { type: 'RunFinished', threadId: 't1', runId: 'r1', outcome: { type: 'success' } });
+
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/events`);
+  const reader = risposta.body.getReader();
+  const decoder = new TextDecoder();
+  let accumulato = '';
+  let eventi = [];
+
+  // il replay (RunStarted+RunFinished) arriva subito — poi un evento "dal vivo" DOPO, sullo stesso stream mai chiuso.
+  while (eventi.length < 2) {
+    const { value, done } = await reader.read();
+    if (done) throw new Error('lo stream si è chiuso prima del replay atteso');
+    accumulato += decoder.decode(value, { stream: true });
+    eventi = accumulato.split('\n\n').map((f) => f.trim()).filter(Boolean).filter((f) => !f.startsWith(':'))
+      .map((f) => JSON.parse(f.replace(/^data: /, '')));
+  }
+
+  sessionRegistry._emetti(sessionId, { type: 'WorkspaceChanged', percorsi: ['esterno.txt'] });
+  while (eventi.length < 3) {
+    const { value, done } = await reader.read();
+    if (done) throw new Error('lo stream si è chiuso invece di consegnare il terzo evento — la regressione che questo test previene');
+    accumulato += decoder.decode(value, { stream: true });
+    eventi = accumulato.split('\n\n').map((f) => f.trim()).filter(Boolean).filter((f) => !f.startsWith(':'))
+      .map((f) => JSON.parse(f.replace(/^data: /, '')));
+  }
+  assert.equal(eventi[2].type, 'WorkspaceChanged');
+  assert.deepEqual(eventi[2].percorsi, ['esterno.txt']);
+  await reader.cancel();
+});
+
+/*
+ * ⛔⛔⛔ 28/8 — la SECONDA metà della cura (setNoDelay è la prima, non
+ * osservabile da un test HTTP in-process: agisce sul socket TCP, che
+ * qui è loopback e non passa mai per Nagle in un modo che un test
+ * possa misurare). Il battito invece SI osserva: un intervallo finto
+ * scatta subito (nessuna vera attesa di 15s in un test), e la sua
+ * cancellazione alla chiusura del client si prova per assenza di
+ * scritture DOPO che il reader ha cancellato.
+ */
+test('⭐⭐⭐ GET /api/v1/sessions/{id}/events scrive un battito periodico (":battito"), e lo cancella quando il client chiude', async (t) => {
+  const timer = { id: null, fn: null, cancellato: false };
+  const impostaIntervalloFn = (fn, ms) => { timer.fn = fn; timer.ms = ms; timer.id = 'finto-1'; return timer.id; };
+  const cancellaIntervalloFn = (id) => { assert.equal(id, timer.id); timer.cancellato = true; };
+  const { base, sessionRegistry } = await listen(t, { impostaIntervalloFn, cancellaIntervalloFn });
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/events`);
+  const reader = risposta.body.getReader();
+  const decoder = new TextDecoder();
+
+  assert.equal(typeof timer.fn, 'function', 'la rotta deve installare il battito, non lasciarlo implicito');
+  assert.equal(timer.ms, 15_000);
+
+  /*
+   * ⭐ Il PRIMO chunk che arriva è quasi sempre il ":ok\n\n" scritto
+   * all'apertura della connessione (già in transito prima che `fetch()`
+   * torni) — non il battito. Si accumula finché non si vede DAVVERO
+   * ":battito", non si assume che sia il primo read.
+   */
+  timer.fn(); // simula lo scatto del timer — nessuna attesa reale
+  let accumulato = '';
+  while (!accumulato.includes(':battito')) {
+    const { value, done } = await reader.read();
+    if (done) throw new Error('lo stream si è chiuso prima del battito atteso');
+    accumulato += decoder.decode(value, { stream: true });
+  }
+  assert.match(accumulato, /:battito\n\n/, 'un commento SSE valido — inizia con ":" — mai un evento "reale" spacciato per battito');
+
+  await reader.cancel();
+  await new Promise((r) => setTimeout(r, 20)); // l'evento 'close' di res è asincrono
+  assert.equal(timer.cancellato, true, 'chiudere il client deve fermare il timer — mai un intervallo lasciato a girare su una risposta morta');
 });
 
 test('⭐ GET /api/v1/sessions/{id}/export torna la storia intera, avvolta nella busta standard', async (t) => {

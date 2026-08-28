@@ -498,22 +498,8 @@ export function createSessionRegistry({
     },
 
     /**
-     * ⭐ 27/8 — usata da http-app.mjs per sapere, SUBITO DOPO il replay di
-     * `iscriviti()`, se aspettarsi ancora eventi (un giro dal vivo dietro)
-     * o chiudere lo stream perché non arriverà mai più niente. `false` sia
-     * per un id inesistente sia per uno concluso: stessa risposta, motivi
-     * diversi, e chi chiama non ha bisogno di distinguerli qui.
-     */
-    inCorso(sessionId) {
-      const voce = sessioni.get(sessionId);
-      return !!voce && !voce.conclusa;
-    },
-
-    /**
      * Rimanda TUTTI gli eventi già accaduti (mai un buco per chi si collega
-     * tardi), poi ogni evento NUOVO man mano che arriva. Torna una funzione
-     * di disiscrizione — un no-op se la sessione non esiste o è già conclusa
-     * (niente altro arriverà mai, niente da disiscrivere).
+     * tardi), poi ogni evento NUOVO man mano che arriva.
      *
      * ⛔⛔⛔ 27/8, owner: "ricevo risposte duplicate", poi ricerca web (SSE
      * reconnection best practice, 27/8): la prima cura (`_sequenza` nel
@@ -527,6 +513,22 @@ export function createSessionRegistry({
      * `_sequenza` lato client resta — un client che non manda
      * `Last-Event-ID` (fetch manuale, un test) è comunque protetto.
      *
+     * ⛔⛔⛔ 28/8, bug reale trovato dal vivo (non da un test — misurato con
+     * un client Node.js grezzo, tenuto aperto, per escludere Chrome/
+     * EventSource): questa funzione NON registrava mai `ascoltatore` in
+     * `voce.ascoltatori` per una sessione già `conclusa` — corretto quando
+     * fu scritto, perché ALLORA `http-app.mjs` chiudeva comunque lo stream
+     * subito dopo per lo stesso motivo (vedi la sua doc, "lo stream non si
+     * chiude più da solo qui"). Da quando quella chiusura è stata rimossa
+     * (WorkspaceChanged può arrivare ben dopo la fine di un giro), questo
+     * era rimasto l'UNICO punto che ancora presumeva "sessione conclusa =
+     * niente arriverà più": un client connesso a una sessione già finita
+     * riceveva il replay e poi MAI PIÙ NIENTE, silenziosamente — la
+     * connessione restava aperta (nessun errore, nessuna chiusura) ma
+     * `ascoltatori` non la conteneva mai. Ora si iscrive SEMPRE: `conclusa`
+     * dice se il GIRO è finito, non se la SESSIONE ha smesso di generare
+     * eventi (il watcher del workspace non guarda `conclusa` per niente).
+     *
      * @param {number} [daSequenza] — id dell'ultimo evento già ricevuto dal
      *   client (da `Last-Event-ID`); assente = replay completo, come prima.
      */
@@ -537,7 +539,6 @@ export function createSessionRegistry({
         if (typeof evento._sequenza === 'number' && evento._sequenza <= daSequenza) continue;
         ascoltatore(evento);
       }
-      if (voce.conclusa) return () => {};
       voce.ascoltatori.add(ascoltatore);
       return () => voce.ascoltatori.delete(ascoltatore);
     },

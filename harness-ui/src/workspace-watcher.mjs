@@ -71,7 +71,17 @@ export function creaGestoreWorkspaceWatcher({ chokidar = chokidarReale } = {}) {
             const percorsi = [...voce.percorsiInSospeso];
             voce.percorsiInSospeso.clear();
             voce.timerDebounce = null;
-            for (const s of voce.sottoscrittori) s(percorsi);
+            /*
+             * ⛔⛔⛔ 28/8, trovato dal vivo: un `for...of` senza try/catch
+             * ABORTISCE l'intero giro al primo sottoscrittore che lancia —
+             * i sottoscrittori DOPO quello (in ordine di iscrizione, quindi
+             * le sessioni create PIÙ DI RECENTE sulla stessa cartella) non
+             * venivano mai notificati. Ogni sottoscrittore è isolato dagli
+             * altri, come broadcast() già fa per i propri ascoltatori.
+             */
+            for (const s of voce.sottoscrittori) {
+              try { s(percorsi); } catch { /* un sottoscrittore rotto non deve mai bloccare gli altri */ }
+            }
           }, attesa);
         });
         watcher.on('error', () => { /* ⛔ degrado silenzioso per costruzione — vedi doc sopra: mai un throw che romperebbe la sessione */ });
