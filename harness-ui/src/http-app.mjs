@@ -1,5 +1,5 @@
 import { leggiArtefatto as leggiArtefattoReale } from './artifact-store.mjs';
-import { modelloRichiestaValido, permessiRichiestaValido, reasoningRichiestaValido } from './config.mjs';
+import { modelloRichiestaValido, permessiPerAttrezzoRichiestaValido, permessiRichiestaValido, reasoningRichiestaValido } from './config.mjs';
 import { cartelleFrequenti as cartelleFrequentiReale } from './frequent-dirs.mjs';
 
 export const API_SCHEMA = 'talos.harness-ui.api.v1';
@@ -263,13 +263,13 @@ function leggiCorpoJson(req, limiteByte = MAX_REQUEST_BODY_BYTES) {
  */
 function requireTaskIdBody(body) {
   const chiavi = Object.keys(body ?? {});
-  const chiaviAmmesse = ['taskId', 'modello', 'reasoning', 'client', 'permessi'];
+  const chiaviAmmesse = ['taskId', 'modello', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo'];
   const soloAmmesse = chiavi.length > 0 && chiavi.length <= chiaviAmmesse.length && chiavi.every((k) => chiaviAmmesse.includes(k)) && chiavi.includes('taskId');
   if (
     !soloAmmesse || typeof body.taskId !== 'string' || body.taskId.length === 0
     || ('client' in body && body.client !== 'desktop' && body.client !== 'mobile')
   ) {
-    const errore = new Error('Corpo non valido: atteso {taskId, modello?, reasoning?, client?, permessi?}');
+    const errore = new Error('Corpo non valido: atteso {taskId, modello?, reasoning?, client?, permessi?, permessiPerAttrezzo?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -288,12 +288,18 @@ function requireTaskIdBody(body) {
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
+  if ('permessiPerAttrezzo' in body && !permessiPerAttrezzoRichiestaValido(body.permessiPerAttrezzo)) {
+    const errore = new Error('permessiPerAttrezzo deve mappare scrivi/prova/shell/document_create a "sempre"/"chiedi"/"nega"');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
   return {
     taskId: body.taskId,
     modello: 'modello' in body && body.modello !== undefined ? body.modello : null,
     reasoning: 'reasoning' in body ? body.reasoning : null,
     mobile: body.client === 'mobile',
     permessi: 'permessi' in body && body.permessi !== undefined ? body.permessi : null,
+    permessiPerAttrezzo: 'permessiPerAttrezzo' in body && body.permessiPerAttrezzo !== undefined ? body.permessiPerAttrezzo : null,
   };
 }
 
@@ -318,7 +324,7 @@ function requireTaskIdBody(body) {
  * resta nel registro/custom-task.mjs, stesso principio di sempre.
  */
 function requireCustomTaskBody(body) {
-  const AMMESSE = ['cartellaId', 'cartellaLibera', 'consegna', 'comandoProva', 'modello', 'reasoning', 'client', 'permessi'];
+  const AMMESSE = ['cartellaId', 'cartellaLibera', 'consegna', 'comandoProva', 'modello', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo'];
   const chiavi = Object.keys(body ?? {});
   const haCartellaId = 'cartellaId' in body && body.cartellaId !== undefined;
   const haCartellaLibera = 'cartellaLibera' in body && body.cartellaLibera !== undefined;
@@ -330,7 +336,7 @@ function requireCustomTaskBody(body) {
     || (haCartellaLibera && typeof body.cartellaLibera !== 'string')
     || ('client' in body && body.client !== 'desktop' && body.client !== 'mobile')
   ) {
-    const errore = new Error('Corpo non valido: atteso {cartellaId XOR cartellaLibera, consegna, comandoProva?, modello?, reasoning?, client?, permessi?}');
+    const errore = new Error('Corpo non valido: atteso {cartellaId XOR cartellaLibera, consegna, comandoProva?, modello?, reasoning?, client?, permessi?, permessiPerAttrezzo?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -349,6 +355,11 @@ function requireCustomTaskBody(body) {
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
+  if ('permessiPerAttrezzo' in body && !permessiPerAttrezzoRichiestaValido(body.permessiPerAttrezzo)) {
+    const errore = new Error('permessiPerAttrezzo deve mappare scrivi/prova/shell/document_create a "sempre"/"chiedi"/"nega"');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
   return {
     cartellaId: haCartellaId ? body.cartellaId : undefined,
     cartellaLibera: haCartellaLibera ? body.cartellaLibera : undefined,
@@ -358,6 +369,7 @@ function requireCustomTaskBody(body) {
     reasoning: 'reasoning' in body ? body.reasoning : null,
     mobile: body.client === 'mobile',
     permessi: 'permessi' in body && body.permessi !== undefined ? body.permessi : null,
+    permessiPerAttrezzo: 'permessiPerAttrezzo' in body && body.permessiPerAttrezzo !== undefined ? body.permessiPerAttrezzo : null,
   };
 }
 
@@ -587,8 +599,11 @@ export function createHttpApp({
       try {
         requireNoQuery(url);
         const corpo = await leggiCorpoJson(req);
-        const { taskId, modello, reasoning, mobile, permessi } = requireTaskIdBody(corpo);
-        const esito = sessionRegistry.avvia(taskId, { modelloScelto: modello, reasoningScelto: reasoning, mobile, permessiScelto: permessi });
+        const { taskId, modello, reasoning, mobile, permessi, permessiPerAttrezzo } = requireTaskIdBody(corpo);
+        const esito = sessionRegistry.avvia(taskId, {
+          modelloScelto: modello, reasoningScelto: reasoning, mobile,
+          permessiScelto: permessi, permessiPerAttrezzoScelto: permessiPerAttrezzo,
+        });
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
           errore.code = esito.code;

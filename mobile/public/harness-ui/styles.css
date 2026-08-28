@@ -885,6 +885,10 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .sheet-toggle-row { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--line); font-size: 11px; }
 .sheet-toggle-row span { color: var(--text-2); }
 .sheet-toggle-row input { width: 18px; height: 18px; accent-color: var(--accent); }
+/* ⭐⭐⭐ FASE B (28/8) — il permesso per-attrezzo usa un <select> nativo dentro la stessa riga (il browser possiede l'interazione, stesso principio già scelto per lo slider di effort). */
+.sheet-toggle-row select { flex: 0 0 auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--text); font: inherit; font-size: 11px; padding: 5px 8px; cursor: pointer; }
+.sheet-toggle-row select:hover { border-color: var(--accent-strong); }
+.sheet-toggle-row select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .toast-region { position: fixed; right: 16px; bottom: 16px; z-index: 120; display: grid; gap: 8px; pointer-events: none; }
 .toast { min-width: 240px; max-width: 360px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface-2); box-shadow: var(--shadow-sm); padding: 11px 12px; color: var(--text-2); font-size: 11px; animation: toast-in var(--motion-success) var(--motion-ease) both; }

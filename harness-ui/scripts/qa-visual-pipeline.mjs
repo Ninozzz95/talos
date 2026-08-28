@@ -778,6 +778,114 @@ const SCENARI = {
       p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
     }
   },
+
+  /*
+   * ⭐⭐⭐ 28/8 — FASE B (permessi per-attrezzo, LEDGER-FASE-B-PERMESSI.md).
+   *
+   * ⛔⛔⛔ RIVISTO dopo un bug reale trovato dal PRIMO giro di questo stesso
+   * scenario: un primo tentativo (chiediApprovazioneFn costruita appena
+   * un attrezzo qualunque vuole 'chiedi') produceva la card giusta per
+   * shell ma la faceva TRAPELARE anche su scrivi (nessun override) — la
+   * card che appare qui sotto NON è più quella di allora, è la CONFERMA
+   * del ripiego sicuro: shell:'chiedi' fuori da "On request" fallisce
+   * CHIUSO (REFUSED, motivo esplicito), mai un bypass, mai una perdita
+   * verso scrivi. La cura che mostra la card anche sotto "Workspace
+   * write" resta bloccata da coordinamento (vedi il commento nel
+   * sorgente, session-registry.mjs) — non promessa qui.
+   */
+  async 'fase-b-permessi-per-attrezzo'(p) {
+    await p.attendi(1200);
+    await p.screenshot('stato-iniziale', { nota: 'app appena caricata, nessuna sessione, nessun override' });
+
+    // --- Apre il foglio Permessi dalla pillola VERA del composer, come farebbe un umano ---
+    await p.click('[data-open-sheet="permissions"]');
+    await p.attendi(300);
+    await p.screenshot('foglio-permessi-aperto', { nota: 'policy sessione + i 4 select per-attrezzo, tutti su "Come la sessione"' });
+
+    for (const tool of ['scrivi', 'prova', 'shell', 'document_create']) {
+      if (!(await p.esiste(`select[data-tool-permission-select="${tool}"]`))) {
+        p.difetto(`manca il select per-attrezzo per "${tool}" nel foglio Permessi`, { severita: 'blocco' });
+      }
+    }
+    const policyAttiva = await p.testo('.sheet-option.active');
+    if (!policyAttiva?.includes('Workspace write')) {
+      p.difetto(`la policy sessione di default non è "Workspace write" — trovato: ${JSON.stringify(policyAttiva)}`, { severita: 'nota' });
+    }
+
+    // --- Imposta shell:'chiedi' — select nativo, evento change VERO (stesso pattern di p.digita già in uso per input testuali) ---
+    await p.digita('select[data-tool-permission-select="shell"]', 'chiedi', { evento: 'change' });
+    await p.attendi(150);
+    const selectValore = await p.cdp.evaluate("document.querySelector('select[data-tool-permission-select=\"shell\"]')?.value");
+    if (selectValore !== 'chiedi') {
+      p.difetto(`il select shell non riflette 'chiedi' dopo il cambio — valore letto: ${JSON.stringify(selectValore)}`, { severita: 'blocco' });
+    }
+    p.nota(`select shell.value dopo il cambio: ${JSON.stringify(selectValore)} (state.permessiPerAttrezzo non è esposto su __talosHarnessUiRuntime — il select è la sola sonda diretta, la prova vera arriva dalla card di approvazione più sotto)`);
+    await p.screenshot('shell-chiedi-impostato', { nota: 'select shell su "Chiedi conferma"' });
+    await p.click('#closeSheet');
+    await p.attendi(300);
+
+    // --- Prima sessione (implicita, cartella unica): chiede shell — ripiego sicuro, REFUSED fail-closed ---
+    /*
+     * ⛔⛔⛔ 28/8 — trovato dal vivo, DUE bug del MIO script (non del
+     * prodotto), nello stesso giro: (1) `attendiTestoStabile` con la
+     * soglia di default (3 giri × 800ms) dichiarava "stabile" durante una
+     * pausa nel ragionamento, PRIMA che il turno finisse per davvero — il
+     * turno successivo veniva rifiutato con un toast onesto "Messaggio
+     * non consegnato... a metà esecuzione", mai un bug di prodotto; (2) un
+     * controllo per sostanza (`/fase-b-shell-ok/`) trovava SEMPRE un falso
+     * positivo, perché quella stessa stringa è già nel PROMPT dell'owner,
+     * sempre visibile in chat — mai una prova che il comando sia girato.
+     * ⛔ `eventoTerminaleVisto` NON è la cura qui (a differenza di
+     * nuova-sessione-compito-libero): un secondo turno sulla STESSA
+     * sessione lo trova già `true` dal primo, esattamente il difetto già
+     * documentato per fase-a-hooks — si risolverebbe all'istante, prima
+     * che il turno nuovo sia davvero finito. Cura vera: la STESSA
+     * `attendiTestoStabile`, ma con una soglia più conservativa (5 giri
+     * da 1500ms — 7.5s di silenzio vero, non 2.4s) per sopravvivere a
+     * una pausa di ragionamento normale; e via il controllo che si
+     * auto-inganna sul secondo.
+     */
+    await p.digita('#composerInput', 'Esegui con l\'attrezzo shell il comando `echo fase-b-shell-ok` e riportami l\'output esatto che ricevi. Nient\'altro, non scrivere file.');
+    await p.submit('#composerForm');
+    await p.attendi(1000);
+    await p.attendiTestoStabile('.conversation', { giriStabili: 5, intervalMs: 1500 });
+    const testoChatDopoRichiesta = await p.cdp.evaluate("document.querySelector('.conversation')?.textContent ?? ''");
+    await p.screenshot('shell-refused-fail-closed', { nota: 'ripiego sicuro: shell:\'chiedi\' sotto Workspace write fallisce CHIUSO, mai una card che trapela' });
+    if (await p.esiste('.real-approval-card')) {
+      p.difetto('è apparsa una .real-approval-card — inattesa col ripiego sicuro attuale (chiediApprovazioneFn non costruita fuori da "On request")', { severita: 'blocco' });
+    } else if (/REFUSED/.test(testoChatDopoRichiesta) && /non ha un canale di approvazione attivo/.test(testoChatDopoRichiesta)) {
+      p.nota('CONFERMATO: shell:\'chiedi\' sotto "Workspace write" fallisce chiuso col motivo esatto — nessuna card, nessun bypass silenzioso (ripiego sicuro, non la cura finale).');
+    } else {
+      p.difetto(`esito inatteso per la richiesta shell (né REFUSED col motivo atteso né una card) — chat: ${JSON.stringify(testoChatDopoRichiesta.slice(-800))}`, { severita: 'blocco' });
+    }
+
+    // --- Secondo turno, STESSA sessione: scrivi (nessun override) — deve passare SENZA chiedere ---
+    const cardPrimaDiScrivi = await p.cdp.evaluate("document.querySelectorAll('.real-approval-card').length");
+    const nomeFile = `fase-b-scrivi-${Date.now()}.txt`;
+    await p.digita('#composerInput', `Crea un file chiamato ${nomeFile} con dentro il testo "ok". Nient'altro, non chiamare shell.`);
+    await p.submit('#composerForm');
+    await p.attendi(1000);
+    await p.attendiTestoStabile('.conversation', { giriStabili: 5, intervalMs: 1500 });
+    await p.screenshot('scrivi-senza-approvazione', { nota: 'scrivi non ha un override: deve passare dritto, zero card nuova' });
+    const cardDopoScrivi = await p.cdp.evaluate("document.querySelectorAll('.real-approval-card').length");
+    if (cardDopoScrivi !== cardPrimaDiScrivi) {
+      p.difetto(`scrivi (nessun override per-attrezzo) ha prodotto una NUOVA card di approvazione — atteso zero, isolamento per-attrezzo rotto (era ${cardPrimaDiScrivi}, ora ${cardDopoScrivi})`, { severita: 'blocco' });
+    }
+    const testoChatFinale = await p.cdp.evaluate("document.querySelector('.conversation')?.textContent ?? ''");
+    if (/REFUSED/.test(testoChatFinale.slice(testoChatDopoRichiesta.length))) {
+      p.difetto(`scrivi è stato REFUSED senza motivo — sotto "Workspace write" senza override dovrebbe passare: ${JSON.stringify(testoChatFinale.slice(-500))}`, { severita: 'blocco' });
+    } else if (testoChatFinale.includes(nomeFile)) {
+      p.nota(`CONFERMATO: scrivi (nessun override) passa senza card di approvazione — isolamento per-attrezzo verificato nei due versi nella STESSA sessione. File: ${nomeFile}`);
+    } else {
+      p.difetto(`la chat non menziona ${nomeFile} da nessuna parte — il modello potrebbe non aver chiamato scrivi (variabilità del modello)`, { severita: 'nota' });
+    }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
 };
 
 // --------------------------------------------------------------------

@@ -844,3 +844,35 @@ test('⛔ AL CONTRARIO — hookFn assente arriva undefined a talosLavoraFn, mai 
 
   assert.equal(catturato.hookFn, undefined);
 });
+
+/*
+ * ⭐⭐⭐ FASE B (28/8) — stesso principio dei due blocchi sopra:
+ * `permessiPerAttrezzo` viaggia SENZA trasformazione, la semantica di
+ * ogni valore vive nel kernel (verificaPermessoScrittura).
+ */
+test('⭐⭐⭐ PARITÀ — permessiPerAttrezzo arriva a talosLavoraFn ESATTAMENTE come passato, senza trasformazione', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+  const permessiPerAttrezzo = { shell: 'chiedi' };
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, permessiPerAttrezzo,
+  });
+
+  assert.equal(catturato.permessiPerAttrezzo, permessiPerAttrezzo, 'STESSO oggetto, non una copia');
+});
+
+test('⛔ AL CONTRARIO — permessiPerAttrezzo assente arriva undefined a talosLavoraFn, mai un valore inventato', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn });
+
+  assert.equal(catturato.permessiPerAttrezzo, undefined);
+});

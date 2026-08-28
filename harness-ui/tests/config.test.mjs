@@ -11,6 +11,7 @@ import {
   INITIAL_CAMPAIGNS,
   loadConfig,
   modelloRichiestaValido,
+  permessiPerAttrezzoRichiestaValido,
   permessiRichiestaValido,
 } from '../src/config.mjs';
 
@@ -178,6 +179,44 @@ test('permessiRichiestaValido accetta le QUATTRO stringhe esatte e assente/null,
   assert.equal(permessiRichiestaValido(''), false);
   assert.equal(permessiRichiestaValido(42), false);
   assert.equal(permessiRichiestaValido(['Full access']), false);
+});
+
+/*
+ * ⭐⭐⭐ FASE B (28/8) — le 4 chiavi sono i soli attrezzi che chiamano
+ * DAVVERO `verificaPermessoScrittura` nel kernel (verificato leggendo
+ * talosHarness.mjs) — un attrezzo REALE ma fuori da questi 4 (es.
+ * `leggi`) va rifiutato allo stesso modo di uno INVENTATO: entrambi
+ * sarebbero un override che il gate ignora sempre in silenzio.
+ */
+test('permessiPerAttrezzoRichiestaValido accetta assente/null e mappe valide sui 4 attrezzi reali', () => {
+  assert.equal(permessiPerAttrezzoRichiestaValido(undefined), true);
+  assert.equal(permessiPerAttrezzoRichiestaValido(null), true);
+  assert.equal(permessiPerAttrezzoRichiestaValido({ scrivi: 'nega' }), true);
+  assert.equal(permessiPerAttrezzoRichiestaValido({ shell: 'chiedi' }), true);
+  assert.equal(permessiPerAttrezzoRichiestaValido({ prova: 'sempre' }), true);
+  assert.equal(permessiPerAttrezzoRichiestaValido({ document_create: 'nega' }), true);
+  assert.equal(
+    permessiPerAttrezzoRichiestaValido({ scrivi: 'nega', shell: 'chiedi', prova: 'sempre', document_create: 'nega' }),
+    true,
+    'tutti e 4 insieme restano validi',
+  );
+});
+
+test('⛔ AL CONTRARIO — permessiPerAttrezzoRichiestaValido rifiuta nomi attrezzo fuori dai 4 reali (inventati O reali-ma-fuori-gate)', () => {
+  assert.equal(permessiPerAttrezzoRichiestaValido({ strumento_inventato: 'nega' }), false, 'un nome inventato non deve mai passare');
+  assert.equal(permessiPerAttrezzoRichiestaValido({ leggi: 'nega' }), false, 'leggi è un attrezzo REALE ma non passa mai dal gate: stesso rifiuto di un nome inventato');
+  assert.equal(permessiPerAttrezzoRichiestaValido({ elenca: 'sempre' }), false);
+  assert.equal(permessiPerAttrezzoRichiestaValido({ naviga: 'chiedi' }), false);
+});
+
+test('⛔ AL CONTRARIO — permessiPerAttrezzoRichiestaValido rifiuta valori diversi da sempre/chiedi/nega, e forme sbagliate', () => {
+  assert.equal(permessiPerAttrezzoRichiestaValido({ scrivi: 'SEMPRE' }), false, 'case-sensitive: non una normalizzazione silenziosa');
+  assert.equal(permessiPerAttrezzoRichiestaValido({ scrivi: 'boh' }), false);
+  assert.equal(permessiPerAttrezzoRichiestaValido({ scrivi: true }), false);
+  assert.equal(permessiPerAttrezzoRichiestaValido({}), false, 'un oggetto vuoto non ha senso: si omette il campo, non si manda vuoto');
+  assert.equal(permessiPerAttrezzoRichiestaValido([]), false);
+  assert.equal(permessiPerAttrezzoRichiestaValido('nega'), false);
+  assert.equal(permessiPerAttrezzoRichiestaValido(42), false);
 });
 
 /*

@@ -56,6 +56,13 @@
     queueMode: false,
     permissions: 'Workspace write',
     /*
+     * ⭐⭐⭐ FASE B (28/8) — override per-attrezzo, PIÙ SPECIFICO di
+     * `permissions` sopra. `{}` = nessun override (comportamento di
+     * oggi) — mai mandato vuoto al server (config.mjs lo rifiuterebbe:
+     * "{} esplicito non ha senso"), solo letto per popolare il foglio.
+     */
+    permessiPerAttrezzo: {},
+    /*
      * ⭐ 27/8 — stringa vuota = nessuna scelta esplicita, non un modello
      * demo inventato. `aggiornaPillolaModello()` mostra "Predefinito del
      * server" finché l'owner non sceglie qualcosa dal foglio Modello.
@@ -1615,10 +1622,22 @@
             </button>`).join('')}
         </div>
         <div class="sheet-section">
-          <span class="sheet-label">Scope corrente</span>
-          <div class="sheet-toggle-row"><span>Rete esterna</span><input type="checkbox"></div>
-          <div class="sheet-toggle-row"><span>Browser locale 127.0.0.1</span><input type="checkbox" checked></div>
-          <div class="sheet-toggle-row"><span>Git push</span><input type="checkbox"></div>
+          <span class="sheet-label">Permesso per attrezzo · precede la policy sessione sopra</span>
+          ${[
+            ['scrivi', 'Scrive un file — passa dal cancello semantico'],
+            ['prova', 'Esegue la suite di test del progetto'],
+            ['shell', 'Comando di shell nella cartella progetto'],
+            ['document_create', 'Genera un documento (PDF, foglio, slide, report)'],
+          ].map(([tool, desc]) => `
+            <div class="sheet-toggle-row">
+              <span><strong>${tool}</strong><small>${desc}</small></span>
+              <select data-tool-permission-select="${tool}" aria-label="Permesso per-attrezzo: ${tool}">
+                <option value="" ${!state.permessiPerAttrezzo[tool] ? 'selected' : ''}>Come la sessione</option>
+                <option value="sempre" ${state.permessiPerAttrezzo[tool] === 'sempre' ? 'selected' : ''}>Sempre consentito</option>
+                <option value="chiedi" ${state.permessiPerAttrezzo[tool] === 'chiedi' ? 'selected' : ''}>Chiedi conferma</option>
+                <option value="nega" ${state.permessiPerAttrezzo[tool] === 'nega' ? 'selected' : ''}>Nega sempre</option>
+              </select>
+            </div>`).join('')}
         </div>`,
     },
     environment: {
@@ -1662,16 +1681,20 @@
        * già in uso per `naviga`/`shell` (enforcement dichiarato, mai un
        * bluff): la prima sezione sono i SETTE attrezzi VERI dell'harness
        * (stessi nomi/descrizioni di ATTREZZI in talosHarness.mjs, non
-       * riscritti), con la checkbox `disabled` — sono sempre attivi perché
-       * non esiste ancora un cancello di permesso per-tool lato harness,
-       * non perché la UI finga una scelta che non ha effetto. La seconda
+       * riscritti), con la checkbox `disabled` — sono SEMPRE OFFERTI al
+       * modello (questo asse non ha un interruttore, per design). ⛔ FASE B
+       * (28/8): 4 di questi 7 (scrivi/prova/shell/document_create) hanno
+       * ORA anche un cancello di permesso per-tool (sempre/chiedi/nega),
+       * un asse DIVERSO — non "se il modello lo vede", ma "se una sua
+       * chiamata passa" — configurabile dal foglio Permessi, non da qui.
+       * La seconda
        * sezione è tutto il resto, onestamente "non ancora implementato":
        * costruirlo per intero (client MCP, sistema plugin, quattro gateway
        * di chat) è il blocco più grande dei rimasti, non uno stralcio.
        */
       html: () => `
         <div class="sheet-section">
-          <span class="sheet-label">Attrezzi dell'harness · sempre attivi, nessun permesso per-tool ancora</span>
+          <span class="sheet-label">Attrezzi dell'harness · sempre offerti al modello · permesso per-tool nel foglio Permessi</span>
           ${[
             ['elenca', 'Elenca i file del workspace, con le dimensioni', 'i-list'],
             ['cerca', 'Trova file ovunque nel workspace, per testo o nome', 'i-search'],
@@ -1893,6 +1916,21 @@
       button.addEventListener('click', () => {
         impostaPermesso(button.dataset.permissionChoice);
         closeEmbeddedDialog(sheetDialog);
+      });
+    });
+    /*
+     * ⭐⭐⭐ FASE B (28/8) — a differenza della policy sessione sopra (un
+     * bottone chiude il foglio), un `<select>` per riga NON lo chiude:
+     * l'owner può regolare più attrezzi in una sola apertura. `''` toglie
+     * l'override (torna al comportamento della sessione, mai una chiave
+     * vuota mandata al server — config.mjs la rifiuterebbe comunque).
+     */
+    $$('[data-tool-permission-select]', sheetBody).forEach((select) => {
+      select.addEventListener('change', () => {
+        const tool = select.dataset.toolPermissionSelect;
+        if (select.value) state.permessiPerAttrezzo[tool] = select.value;
+        else delete state.permessiPerAttrezzo[tool];
+        toast('Permesso per-attrezzo aggiornato', select.value ? `${tool}: ${select.options[select.selectedIndex].textContent}` : `${tool}: torna alla policy sessione`);
       });
     });
     $$('[data-capability-action]', sheetBody).forEach((button) => {
@@ -2603,6 +2641,8 @@
     if (azione?.tipo === 'scrivi') return `Vuole scrivere il file: ${azione.percorso}`;
     if (azione?.tipo === 'shell') return `Vuole eseguire il comando: ${azione.comando}`;
     if (azione?.tipo === 'document_create') return `Vuole creare un documento (formato ${azione.formato || '?'})`;
+    // ⭐⭐⭐ FASE B (28/8) — `prova` è il quarto attrezzo gated da verificaPermessoScrittura (trovato leggendo talosHarness.mjs): senza questo ramo, un permesso per-attrezzo `prova:'chiedi'` mostrava la card col fallback generico invece del comando VERO.
+    if (azione?.tipo === 'prova') return `Vuole eseguire la suite di test: ${azione.comando}`;
     return 'Vuole eseguire un\'azione che modifica qualcosa.';
   }
 
@@ -3733,7 +3773,7 @@
     }
     const nuovaRadice = `${radice.replace(/[/\\]+$/, '')}/${percorsoRelativo}`;
     impostaPermesso('Full access', `Full access · nuova radice: ${nome}`);
-    avviaSessionePendente({ cartellaLibera: nuovaRadice, nomeCartella: nome, modello: state.model, effort: state.effort, permessi: 'Full access' });
+    avviaSessionePendente({ cartellaLibera: nuovaRadice, nomeCartella: nome, modello: state.model, effort: state.effort, permessi: 'Full access', permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
   }
 
   async function rivelaFileInEsploraFile(percorsoCompleto) {
@@ -4876,7 +4916,7 @@
         const modello = modelPicker.getValore();
         const effort = effortPicker.getValore();
         closeEmbeddedDialog(sheetDialog);
-        avviaSessionePendente({ cartellaLibera, nomeCartella, modello, effort, permessi: state.permissions });
+        avviaSessionePendente({ cartellaLibera, nomeCartella, modello, effort, permessi: state.permissions, permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
       });
     } else {
       customSection.appendChild(textElement('span', 'sheet-label', 'Cartella — TALOS scrive DIRETTAMENTE lì, nessuna copia'));
@@ -4912,7 +4952,7 @@
           const modello = modelPicker.getValore();
           const effort = effortPicker.getValore();
           closeEmbeddedDialog(sheetDialog);
-          avviaSessionePendente({ cartellaId, nomeCartella, modello, effort, permessi: state.permissions });
+          avviaSessionePendente({ cartellaId, nomeCartella, modello, effort, permessi: state.permissions, permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
         });
       }
     }
@@ -4937,9 +4977,9 @@
    * parte solo quando c'è un compito — il primo messaggio scritto nella
    * chat, intercettato da submitPrompt via state.pendingCustomSession).
    */
-  function avviaSessionePendente({ cartellaId, cartellaLibera, nomeCartella, modello, effort, permessi }) {
+  function avviaSessionePendente({ cartellaId, cartellaLibera, nomeCartella, modello, effort, permessi, permessiPerAttrezzo }) {
     nuovaGenerazioneSessione();
-    state.pendingCustomSession = { cartellaId, cartellaLibera, nomeCartella, modello, effort, permessi };
+    state.pendingCustomSession = { cartellaId, cartellaLibera, nomeCartella, modello, effort, permessi, permessiPerAttrezzo };
     if (modello) { state.model = modello; aggiornaPillolaModello(); }
     if (effort) state.effort = effort;
     state.session = `Nuova · ${nomeCartella}`;
@@ -4975,7 +5015,7 @@
     return String(testo || '').replace(/\s+/g, ' ').trim().slice(0, 80);
   }
 
-  async function startCustomSession({ cartellaId, cartellaLibera, nomeCartella, consegna, comandoProva, modello, effort, permessi }) {
+  async function startCustomSession({ cartellaId, cartellaLibera, nomeCartella, consegna, comandoProva, modello, effort, permessi, permessiPerAttrezzo }) {
     const generation = nuovaGenerazioneSessione();
     const taskSintetico = { id: `libero:${nomeCartella}`, consegna };
     state.realSession.taskId = taskSintetico.id;
@@ -5009,6 +5049,16 @@
       if (effortEffettivo) corpo.reasoning = { effort: effortEffettivo };
       // ⭐⭐⭐ 28/8 — la pillola permessi: la scelta fatta nella modale ha priorità, altrimenti quella corrente del composer (state.permissions, sempre valorizzata — default "Workspace write").
       corpo.permessi = permessi || state.permissions;
+      /*
+       * ⭐⭐⭐ FASE B (28/8) — stesso principio di `corpo.permessi`, ma
+       * MAI un oggetto vuoto: config.mjs lo rifiuterebbe ("{} esplicito
+       * non ha senso"), e un `{}` non cambierebbe comunque nulla — si
+       * omette il campo quando non c'è nessun override attivo.
+       */
+      const permessiPerAttrezzoEffettivi = permessiPerAttrezzo || state.permessiPerAttrezzo;
+      if (permessiPerAttrezzoEffettivi && Object.keys(permessiPerAttrezzoEffettivi).length > 0) {
+        corpo.permessiPerAttrezzo = permessiPerAttrezzoEffettivi;
+      }
       const data = await apiPost('/api/v1/sessions/custom', corpo);
       sessionId = data.sessionId;
     } catch (error) {
@@ -5090,9 +5140,9 @@
      * sessione reale, questo primo messaggio la avvia per davvero.
      */
     if (state.pendingCustomSession) {
-      const { cartellaId, cartellaLibera, nomeCartella, modello, effort, permessi } = state.pendingCustomSession;
+      const { cartellaId, cartellaLibera, nomeCartella, modello, effort, permessi, permessiPerAttrezzo } = state.pendingCustomSession;
       state.pendingCustomSession = null;
-      startCustomSession({ cartellaId, cartellaLibera, nomeCartella, consegna: value, modello, effort, permessi });
+      startCustomSession({ cartellaId, cartellaLibera, nomeCartella, consegna: value, modello, effort, permessi, permessiPerAttrezzo });
       return true;
     }
     /*

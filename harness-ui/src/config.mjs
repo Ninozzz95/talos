@@ -144,6 +144,28 @@ export function permessiRichiestaValido(raw) {
   return raw === undefined || raw === null || (typeof raw === 'string' && PERMESSI_AMMESSI.has(raw));
 }
 
+/*
+ * ⭐⭐⭐ FASE B (28/8) — permesso PER-ATTREZZO, un override più specifico
+ * di `permessi` sopra. Le chiavi ammesse sono i 4 nomi attrezzo che
+ * chiamano DAVVERO `verificaPermessoScrittura` nel kernel (verificato
+ * leggendo talosHarness.mjs, non i 3 di `AZIONI_MUTANTI_PER_HOOK`, un
+ * perimetro diverso) — un nome REALE ma fuori da questi 4 (es. `leggi`)
+ * sarebbe comunque un override che il gate ignora sempre in silenzio,
+ * stesso difetto di un nome INVENTATO: entrambi rifiutati qui, mai solo
+ * il secondo.
+ */
+const ATTREZZI_CON_PERMESSO_PER_ATTREZZO = new Set(['scrivi', 'prova', 'shell', 'document_create']);
+const VALORI_PERMESSO_PER_ATTREZZO = new Set(['sempre', 'chiedi', 'nega']);
+
+/** Stesso principio di reasoningRichiestaValido: pura, nessun throw. */
+export function permessiPerAttrezzoRichiestaValido(raw) {
+  if (raw === undefined || raw === null) return true; // assente è sempre valido: nessun override, comportamento di oggi
+  if (typeof raw !== 'object' || Array.isArray(raw)) return false;
+  const chiavi = Object.keys(raw);
+  if (chiavi.length === 0) return false; // {} esplicito non ha senso: si omette il campo, non si manda vuoto
+  return chiavi.every((k) => ATTREZZI_CON_PERMESSO_PER_ATTREZZO.has(k) && VALORI_PERMESSO_PER_ATTREZZO.has(raw[k]));
+}
+
 /**
  * ⭐⭐⭐ 27/8 — owner: "per adesso un allowlist per testare, ma in futuro
  * esattamente come i competitor, accesso libero, con limiti estremi" — una
