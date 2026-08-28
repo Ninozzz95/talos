@@ -144,6 +144,16 @@ export async function avviaSessione({
    * il gap dichiarato in `LEDGER-FASE-A-HOOKS.md`, chiuso ora.
    */
   hookFn,
+  /*
+   * ⭐⭐⭐ FASE C (28/8) — sub-agenti, stesso principio di `hookFn` appena
+   * sopra: inoltrato SENZA logica propria, la decisione (limiti di
+   * concorrenza/profondità, isolamento) vive tutta in
+   * `subagent-orchestrator.mjs` (session-registry.mjs) e nel kernel
+   * (`talosHarness.mjs`). Lo stesso gap di `hookFn` prima di FASE A —
+   * un parametro costruito dal chiamante ma mai arrivato fin qui — non
+   * si ripete: aggiunto nello stesso commit del resto della fase.
+   */
+  onDelega,
   talosLavoraFn = talosLavoraReale,
   leggiContestoWorkspaceFn = leggiContestoWorkspaceReale,
   salvaArtefattoFn = salvaArtefattoReale,
@@ -378,7 +388,7 @@ export async function avviaSessione({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
       onGiro, onScrittura, onDelta, reasoning,
       strumentiEstesi, ricercaWeb, onArtefatto, onDocumento,
-      livelloAccesso, chiediApprovazioneFn, hookFn, permessiPerAttrezzo,
+      livelloAccesso, chiediApprovazioneFn, hookFn, permessiPerAttrezzo, onDelega,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));
     return { threadId, runId, ok: esito.comeFinita === 'concluso', esito, erroreInterno: null };

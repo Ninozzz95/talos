@@ -119,6 +119,15 @@ function registroFinto() {
       if (sessionId === 'sess-hooks-rotti') return { ok: true, hooks: null, errore: '.harness-ui-hooks.json non è un JSON valido' };
       return { ok: true, hooks: [{ id: 'audit', eventi: ['pre_tool_call'], fidato: false }], errore: null };
     },
+    /*
+     * ⭐⭐⭐ FASE C (28/8) — sub-agenti: stesso stile di elencaHooks sopra
+     * — cattura la chiamata per provare che la rotta HTTP raggiunge
+     * davvero il registro, senza fingere una vera delega.
+     */
+    elencaFigli(sessionId) {
+      if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      return { ok: true, figli: [{ sessionId: 'figlio-finto', task: 'un compito delegato', conclusa: true, esitoDelega: 'concluso', avviataAlle: '2026-08-28T10:00:00.000Z' }] };
+    },
     ultimaFiduciaHook: null,
     async fidaHook(sessionId, hookId) {
       this.ultimaFiduciaHook = { sessionId, hookId };
@@ -811,6 +820,28 @@ test('⭐ GET /api/v1/sessions/{id}/hooks torna gli hook con lo stato di fiducia
 test('⛔ AL CONTRARIO — GET .../hooks su un id inesistente: 404 NOT_FOUND', async (t) => {
   const { base } = await listen(t);
   const risposta = await fetch(`${base}/api/v1/sessions/non-esiste/hooks`);
+  assert.equal(risposta.status, 404);
+});
+
+/*
+ * ⭐⭐⭐ FASE C (28/8) — sub-agenti: stesso principio delle rotte /hooks
+ * appena sopra — la FORMA della rotta HTTP, non la logica di delega
+ * (già provata in subagent-orchestrator.test.mjs/session-registry.test.mjs).
+ */
+test('⭐ GET /api/v1/sessions/{id}/children torna i figli veri dal registro', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/children`);
+  assert.equal(risposta.status, 200);
+  const corpo = await risposta.json();
+  assert.equal(corpo.data.figli.length, 1);
+  assert.equal(corpo.data.figli[0].sessionId, 'figlio-finto');
+  assert.equal(corpo.data.figli[0].esitoDelega, 'concluso');
+});
+
+test('⛔ AL CONTRARIO — GET .../children su un id inesistente: 404 NOT_FOUND', async (t) => {
+  const { base } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions/non-esiste/children`);
   assert.equal(risposta.status, 404);
 });
 

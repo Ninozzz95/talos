@@ -1211,6 +1211,8 @@ export function createHttpApp({
         const treeFileMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/tree\/file$/.exec(url.pathname);
         // ⭐⭐⭐ 28/8 — FASE A (hook): il pannello Control-plane elenca gli hook dichiarati e il loro stato di fiducia vero — stesso principio di exportMatch sotto.
         const hooksMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/hooks$/.exec(url.pathname);
+        // ⭐⭐⭐ FASE C (28/8) — sub-agenti: il foglio "Albero sessione" elenca i figli VERI di una sessione, stesso principio di hooksMatch sopra.
+        const childrenMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/children$/.exec(url.pathname);
         // ⭐⭐⭐ 28/8 — non SESSION-scoped: un artefatto ha un id UUID già globalmente unico (agent-service.mjs), stesso principio di /api/v1/models.
         const artifactMatch = /^\/api\/v1\/artifacts\/([^/]+)$/.exec(url.pathname);
 
@@ -1278,6 +1280,22 @@ export function createHttpApp({
             throw errore;
           }
           data = { hooks: esito.hooks, errore: esito.errore };
+        } else if (childrenMatch) {
+          requireNoQuery(url);
+          let sessionId;
+          try {
+            sessionId = decodeURIComponent(childrenMatch[1]);
+          } catch {
+            sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+            return;
+          }
+          const esito = await sessionRegistry.elencaFigli(sessionId);
+          if ('erroreAvvio' in esito) {
+            const errore = new Error(esito.erroreAvvio);
+            errore.code = esito.code;
+            throw errore;
+          }
+          data = { figli: esito.figli };
         } else if (campaignMatch) {
           let campaign;
           try {
