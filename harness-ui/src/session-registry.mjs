@@ -549,6 +549,20 @@ export function createSessionRegistry({
      * POST che resta appesa fino ad allora è un client che sembra bloccato.
      * RunStarted è già nel buffer al ritorno (run-to-first-await di JS,
      * documentato sopra `avviaESegui`), il resto arriva via SSE.
+     *
+     * ⭐ 28/8, terminale reale (LEDGER-TERMINALE-REALE.md): la PTY vera
+     * ha bisogno della cartella di una sessione per il suo cwd iniziale,
+     * ma senza dare al chiamante l'intera `voce` interna (mai esporre
+     * lo stato mutabile del registro fuori da questo modulo). `null` se
+     * la sessione non esiste — un fallback a un progetto di default è
+     * responsabilità del chiamante (`terminal-ws.mjs`), non di qui.
+     */
+    cartellaDi(sessionId) {
+      return sessioni.get(sessionId)?.cartella ?? null;
+    },
+
+    /**
+     * @returns {{ok:true}|{erroreAvvio:string, code:string}}
      */
     shell(sessionId, comando) {
       const voce = sessioni.get(sessionId);

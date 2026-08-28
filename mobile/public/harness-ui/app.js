@@ -402,6 +402,7 @@
     window.__talosHarnessHostViewChange?.(view);
     if (view === 'dashboard') ensureCampaignBoard();
     if (view === 'automations') renderAutomationsReali();
+    if (view === 'terminal') apriVistaTerminaleReale(); // ⭐ 28/8 — Terminale REALE: montaggio/connessione PIGRI, solo alla prima apertura del tab (LEDGER-TERMINALE-REALE.md)
   }
 
   function syncInspectorToggle() {
@@ -2600,38 +2601,18 @@
   }
 
   /*
-   * ⛔⛔ 27/8, trovato dalla pipeline QA visiva (zero costo, iniettando un
-   * ToolCallResult finto via window.__talosHarnessUiRuntime.handleRealEvent
-   * per non pagare una chiamata vera): `code.dataset.reale`/`shell.dataset.reale`
-   * qui sotto diventano "1" alla PRIMA volta e non tornano MAI indietro —
-   * nuovaGenerazioneSessione() resetta la chat/reviewFiles/albero, ma non
-   * queste due viste dedicate, perché il loro stato "già reale" vive nel DOM
-   * (dataset), non in `state.realSession`. Risultato misurato: passando dalla
-   * sessione A (con un comando shell finto, marcatore incluso) alla sessione
-   * B, il Terminale della sessione B mostrava ANCORA il marcatore di A,
-   * concatenato con l'output vero di B — una sessione che mostra la storia
-   * di un'altra, non solo "niente fuffa" ma dati sbagliati.
-   *
-   * ⛔⛔⛔ 27/8, seconda passata (ispezione visiva IMPORTANTISSIMA): la prima
-   * cura restituiva il markup DEMO originale (composer.spec.ts, un
-   * "device preview" con TalosComposer.vue +28-19) — stesso "pty demo"/
-   * badge visibile, ma pur sempre DATI INVENTATI a schermo per una
-   * sessione VERA che semplicemente non ha ancora usato quell'attrezzo.
-   * Confrontato con la cura poco sotto per il Review (che mostra
-   * onestamente "0 file modificati", mai un demo) — stessa famiglia di
-   * difetto, incoerente fra le due. Ora entrambe le viste, al reset,
-   * mostrano uno stato onesto E VUOTO — non il demo, non i dati di
-   * un'altra sessione — esattamente come il Review.
+   * ⛔⛔ 27/8, trovato dalla pipeline QA visiva: le viste dedicate (allora
+   * Terminale/Browser) non venivano ripulite al cambio sessione, e
+   * mostravano i dati di UN'ALTRA sessione — corretto qui per Browser,
+   * invariato sotto. Per il Terminale la cura è cambiata natura il 28/8
+   * (vedi `scollegaTerminaleReale()` più sotto): quella vista oggi è una
+   * PTY VERA, non più un log — "ripulire" significa disconnettere la
+   * WebSocket e, se il tab è aperto, riconnettersi subito alla shell
+   * della sessione nuova (LEDGER-TERMINALE-REALE.md).
    */
   function resettaSuperficiRealiDedicate() {
-    const terminalWindow = $('[data-view="terminal"] .terminal-window');
-    if (terminalWindow) {
-      const code = document.createElement('code');
-      code.textContent = 'Nessun comando eseguito in questa sessione.';
-      terminalWindow.replaceChildren(code);
-      const demoBadge = $('.demo-surface-badge', $('[data-view="terminal"]'));
-      if (demoBadge) demoBadge.hidden = true; // onesto e vuoto, non "demo": non è un dato finto da segnalare
-    }
+    scollegaTerminaleReale();
+    if (state.view === 'terminal') apriVistaTerminaleReale();
     const browserShell = $('[data-view="browser"] .browser-shell');
     if (browserShell) {
       delete browserShell.dataset.reale;
@@ -2658,38 +2639,204 @@
     aggiornaSommarioReviewReale();
   }
 
-  /**
-   * ⭐ Piano §1.3-BIS.T (seconda metà) — la vista Terminale dedicata smette
-   * di essere demo la prima volta che un comando VERO gira. Non un vero
-   * emulatore (niente cursore che si muove, niente ANSI): un prompt riga
-   * per riga, stesso stile visivo del mockup (span .prompt/.path/.cursor),
-   * ma con l'output reale.
+  /*
+   * ⭐⭐⭐ 28/8 — Terminale REALE. Owner: "deve essere un terminale vero e
+   * proprio bash [...] che non ha limiti [...] usabile dall'utente con
+   * le sue dita umane". Ledger completo, ricerca (Hermes su Windows monta
+   * Git Bash dentro una PTY vera) e verifica empirica su questa macchina:
+   * `.claude/LEDGER-TERMINALE-REALE.md`. xterm.js vendorizzato
+   * (`vendor/xterm/`) + una WebSocket verso `pty-terminal.mjs` sul
+   * backend (framing binario: byte 0 = dati grezzi, byte 1 = controllo
+   * JSON — `TIPO_FRAME_DATI`/`TIPO_FRAME_CONTROLLO` in pty-terminal.mjs,
+   * duplicati qui lato client perché questo bundle non è un modulo ES e
+   * non può `import`-arli).
    *
-   * ⛔ Non tocca il rendering generico della chat (appendToolNote già
-   * mostra lo stesso tool-call lì) — questa è un'AGGIUNTA, non una
-   * sostituzione: lo stesso comando compare in entrambe le viste, come nel
-   * mockup originale (Terminale è una vista dedicata, non l'unica prova
-   * che qualcosa è girato).
+   * ⛔ Un id STABILE per terminale: la sessione corrente quando ce n'è
+   * una (il terminale segue "questa sessione", come si aspettava
+   * l'owner nel bug segnalato), altrimenti un id standalone generato UNA
+   * volta e riusato finché la scheda del browser resta aperta — aprire
+   * il tab Terminale prima ancora di avviare un task dà comunque una
+   * shell vera, mai un pannello vuoto in attesa di una sessione.
    */
-  function appendTerminalEntry(comando, testo) {
-    const code = $('[data-view="terminal"] .terminal-window code');
-    if (!code) return;
-    if (!code.dataset.reale) {
-      code.replaceChildren();
-      code.dataset.reale = '1';
-      const demoBadge = $('.demo-surface-badge', $('[data-view="terminal"]'));
-      if (demoBadge) demoBadge.hidden = true;
+  const TIPO_FRAME_DATI_CLIENT = 0;
+  const TIPO_FRAME_CONTROLLO_CLIENT = 1;
+
+  function statoTerminale() {
+    if (!state.terminal) {
+      state.terminal = {
+        ws: null, idConnesso: null, term: null, fit: null, montato: false, standaloneId: null, resizeObserver: null, enforcementColore: null,
+      };
     }
-    const workspace = $('#envWorkspace')?.textContent || 'talos';
-    const rigaPrompt = document.createElement('span');
-    rigaPrompt.append(
-      textElement('span', 'prompt', 'talos'),
-      document.createTextNode(' '),
-      textElement('span', 'path', `~/${workspace}`),
-    );
-    code.append(rigaPrompt, document.createTextNode(`\n$ ${comando}\n\n${testo}\n\n`));
-    const contenitore = code.closest('.terminal-window');
-    if (contenitore) contenitore.scrollTop = contenitore.scrollHeight;
+    return state.terminal;
+  }
+
+  function idTerminaleCorrente() {
+    if (state.realSession.id) return state.realSession.id;
+    const t = statoTerminale();
+    if (!t.standaloneId) {
+      t.standaloneId = window.crypto?.randomUUID?.() ?? `standalone-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
+    return t.standaloneId;
+  }
+
+  /** Tema TALOS letto dai token CSS veri (mai colori scritti a mano due volte) — la scala ANSI a 16 colori è la sola parte senza un token dedicato, intonata a mano allo stesso accent/superficie. */
+  function temaTerminaleReale() {
+    const stile = getComputedStyle(document.documentElement);
+    const leggi = (nome, rip) => stile.getPropertyValue(nome).trim() || rip;
+    return {
+      background: leggi('--bg-deep', '#17181b'),
+      foreground: leggi('--text-2', '#d6d2ca'),
+      cursor: leggi('--accent', '#c08b3c'),
+      cursorAccent: leggi('--bg-deep', '#17181b'),
+      selectionBackground: leggi('--accent-soft', 'rgba(192,139,60,.3)'),
+      black: '#1c1d20', red: '#e2685f', green: '#8fbf7f', yellow: '#c9a35e',
+      blue: '#7aa2d6', magenta: '#c08bd0', cyan: '#7fc1c9', white: leggi('--text-2', '#d6d2ca'),
+      brightBlack: '#54565c', brightRed: '#ef8981', brightGreen: '#a9d99b', brightYellow: leggi('--accent-2', '#d7a554'),
+      brightBlue: '#96b8e6', brightMagenta: '#d6a6e2', brightCyan: '#9ad6dd', brightWhite: '#f1efe9',
+    };
+  }
+
+  function codificaFrameClient(tipo, testo) {
+    const corpo = new TextEncoder().encode(testo);
+    const frame = new Uint8Array(corpo.length + 1);
+    frame[0] = tipo;
+    frame.set(corpo, 1);
+    return frame;
+  }
+
+  function impostaChipTerminale(testo, stato) {
+    const chip = $('#terminalStatusChip');
+    if (!chip) return;
+    chip.textContent = testo;
+    chip.classList.toggle('success', stato === 'ok'); // stessa classe già usata da .status-chip altrove, non una seconda convenzione
+    chip.classList.toggle('error', stato === 'error');
+  }
+
+  function inviaResizeTerminale() {
+    const t = statoTerminale();
+    if (!t.term || t.ws?.readyState !== WebSocket.OPEN) return;
+    t.ws.send(codificaFrameClient(TIPO_FRAME_CONTROLLO_CLIENT, JSON.stringify({ tipo: 'resize', cols: t.term.cols, rows: t.term.rows })));
+  }
+
+  /** @returns {boolean} true se una xterm.js viva esiste (appena montata o già presente) — mai aprire la WebSocket (collegaTerminaleWs) se questo torna false: nessun posto dove scrivere l'output, e nei test/negli ambienti senza vendor/xterm caricato sarebbe una connessione di rete a vuoto. */
+  function montaTerminaleSeServe() {
+    const t = statoTerminale();
+    if (t.montato) return true;
+    const contenitore = $('#realTerminalMount');
+    if (!contenitore || !window.Terminal || !window.FitAddon) {
+      impostaChipTerminale('xterm.js non caricato', 'error'); // onesto: mai un pannello silenziosamente inerte
+      return false;
+    }
+    const term = new window.Terminal({
+      fontFamily: getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim() || 'Menlo, Consolas, monospace',
+      fontSize: 13,
+      cursorBlink: true,
+      scrollback: 5000,
+      theme: temaTerminaleReale(),
+    });
+    const fit = new window.FitAddon.FitAddon();
+    term.loadAddon(fit);
+    term.open(contenitore);
+    /*
+     * ⛔⛔⛔ 28/8 — trovato dal vivo: xterm.js v6 (core) ha SOLO un renderer
+     * DOM, niente più canvas incluso. Il renderer DOM colora il testo
+     * iniettando un `<style>` dinamico con regole `.xterm-fg-N` — ma la
+     * CSP di questo server è `style-src 'self'` (niente `'unsafe-inline'`,
+     * deliberato, vedi http-app.mjs), quindi il browser scarta quello
+     * stylesheet in silenzio: la classe giusta finiva sullo span
+     * (verificato: `class="xterm-fg-2"`), ma ZERO regole CSS la
+     * definivano da nessuna parte — ogni carattere nello stesso colore.
+     * `@xterm/addon-webgl` dipinge pixel GPU veri, niente CSS coinvolto:
+     * stesso renderer che usa VS Code, non un ripiego. Se il contesto
+     * WebGL non è disponibile (GPU assente/bloccata), si ricade sul
+     * renderer DOM — funzionante, solo senza colori ANSI, dichiarato
+     * onestamente via `t.enforcementColore`, mai un fallimento silenzioso.
+     */
+    try {
+      // preserveDrawingBuffer:true — altrimenti il buffer WebGL si pulisce dopo ogni presentazione: qualunque lettura successiva dei pixel (screenshot, verifica) vedrebbe un canvas vuoto anche col rendering perfettamente corretto.
+      const webgl = new window.WebglAddon.WebglAddon(true);
+      webgl.onContextLoss(() => { webgl.dispose(); t.enforcementColore = 'dom (contesto WebGL perso)'; });
+      term.loadAddon(webgl);
+      t.enforcementColore = 'webgl';
+    } catch {
+      t.enforcementColore = 'dom (WebGL non disponibile)';
+    }
+    fit.fit();
+    term.onData((dati) => {
+      if (t.ws?.readyState === WebSocket.OPEN) t.ws.send(codificaFrameClient(TIPO_FRAME_DATI_CLIENT, dati));
+    });
+    /*
+     * ⛔⛔⛔ 28/8 — trovato dal vivo: xterm.js ridimensiona SE STESSO dentro
+     * l'elemento osservato — un `fit()` incondizionato ad ogni tick del
+     * ResizeObserver, con un contenitore la cui altezza potesse dipendere
+     * dal contenuto (`min-height`, corretto sotto in styles.css), produceva
+     * un loop di retroazione (ogni fit rendeva il box un filo più alto,
+     * il ResizeObserver lo notava, un altro fit...). `height` fissa in CSS
+     * rompe il loop alla radice; questo guard resta come SECONDA difesa,
+     * indipendente dalla prima: invia il resize alla PTY SOLO se cols/rows
+     * sono DAVVERO cambiati, mai ad ogni tick — un tick che ricalcola lo
+     * stesso valore (rumore di misura, non un vero cambiamento) non deve
+     * generare traffico né, tantomeno, poter alimentare un loop.
+     */
+    const osservatore = new ResizeObserver(() => {
+      const primaCols = term.cols;
+      const primaRows = term.rows;
+      fit.fit();
+      if (term.cols !== primaCols || term.rows !== primaRows) inviaResizeTerminale();
+    });
+    osservatore.observe(contenitore);
+    t.term = term;
+    t.fit = fit;
+    t.resizeObserver = osservatore;
+    t.montato = true;
+    return true;
+  }
+
+  /** Chiude la WS corrente (se c'è) e pulisce lo schermo — chiamata SOLO al cambio di id (nuova/altra sessione), mai per un timeout arbitrario: la shell "non ha limiti" per richiesta esplicita dell'owner. */
+  function scollegaTerminaleReale() {
+    const t = statoTerminale();
+    if (t.ws) { t.ws.onclose = null; t.ws.close(); t.ws = null; t.idConnesso = null; }
+    t.term?.clear();
+    impostaChipTerminale('in attesa', null);
+  }
+
+  function collegaTerminaleWs() {
+    const t = statoTerminale();
+    const id = idTerminaleCorrente();
+    if (t.ws && t.idConnesso === id) return; // già connesso a questo stesso id — un F5/riapertura del tab riaggancia, non riapre
+    t.ws?.close();
+    impostaChipTerminale('connessione…', null);
+    const protocollo = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${protocollo}://${window.location.host}/api/v1/terminal/ws?id=${encodeURIComponent(id)}`);
+    ws.binaryType = 'arraybuffer';
+    t.ws = ws;
+    t.idConnesso = id;
+    ws.onopen = () => { impostaChipTerminale('connesso', 'ok'); inviaResizeTerminale(); };
+    ws.onmessage = (evento) => {
+      const buf = new Uint8Array(evento.data);
+      if (buf.length === 0) return;
+      const tipo = buf[0];
+      const corpo = new TextDecoder().decode(buf.subarray(1));
+      if (tipo === TIPO_FRAME_DATI_CLIENT) {
+        t.term?.write(corpo);
+        return;
+      }
+      try {
+        const messaggio = JSON.parse(corpo);
+        if (messaggio.evento === 'uscita') {
+          t.term?.writeln(`\r\n[processo terminato, codice ${messaggio.codice}]`);
+          impostaChipTerminale('terminato', 'error');
+        }
+      } catch { /* messaggio di controllo malformato: ignorato, mai un crash della connessione */ }
+    };
+    ws.onclose = () => { if (t.idConnesso === id) impostaChipTerminale('disconnesso', 'error'); };
+  }
+
+  /** Punto d'ingresso unico, chiamato da setView('terminal') e da resettaSuperficiRealiDedicate() quando il tab è già aperto. */
+  function apriVistaTerminaleReale() {
+    if (!montaTerminaleSeServe()) return; // niente xterm.js disponibile: niente WS aperta a vuoto (vale nei test, e in un deploy rotto)
+    collegaTerminaleWs();
+    requestAnimationFrame(() => statoTerminale().fit?.fit());
   }
 
   /**
@@ -3825,11 +3972,16 @@
       }
       case 'ToolCallResult': {
         const info = state.realSession.toolCallNomi.get(evento.toolCallId);
-        if (info?.nome === 'shell') {
-          let comando = '(comando)';
-          try { comando = JSON.parse(info.argomenti).comando || comando; } catch { /* args incompleti o non ancora arrivati: meglio un'etichetta onesta che un crash */ }
-          appendTerminalEntry(comando, String(evento.content));
-        } else if (info?.nome === 'naviga') {
+        /*
+         * ⛔ 28/8 — Terminale REALE (LEDGER-TERMINALE-REALE.md): il tool
+         * `shell` dell'AGENTE non viene più specchiato nella vista
+         * Terminale — quella vista oggi è una PTY vera, digitabile
+         * dall'utente, e scrivervi automaticamente l'output dell'agente
+         * creerebbe una gara con la tastiera umana. L'attività
+         * dell'agente resta visibile qui, nel bubble collassabile della
+         * chat (invariato) — solo lo specchio dedicato è stato tolto.
+         */
+        if (info?.nome === 'naviga') {
           let url = '(url)';
           try { url = JSON.parse(info.argomenti).url || url; } catch { /* args incompleti o non ancora arrivati: meglio un'etichetta onesta che un crash */ }
           appendBrowserEntry(url, String(evento.content));
@@ -5469,6 +5621,10 @@
     costruisciTrascrizioneMarkdown,
     // ⭐ 28/8 — auto-rinomina dal primo messaggio: la funzione pura si espone per provare la sua logica (spazi/trim/tetto) senza dover avviare una sessione vera.
     titoloDalPrimoMessaggio,
+    // ⭐ 28/8 — Terminale REALE (LEDGER-TERMINALE-REALE.md): esposte per i test dedicati, stesso principio di sopra — internals reali, non un secondo contratto.
+    apriVistaTerminaleReale,
+    scollegaTerminaleReale,
+    statoTerminale,
     realSessionState: state.realSession,
   };
   window.__talosHarnessDestroy = () => {

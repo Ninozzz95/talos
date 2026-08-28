@@ -205,6 +205,43 @@ class Pipeline {
   async attendi(ms) { await new Promise((r) => setTimeout(r, ms)); }
 
   /**
+   * ⭐⭐⭐ 28/8 — Terminale REALE (LEDGER-TERMINALE-REALE.md). `digita()`
+   * sopra imposta `.value` su un `<input>` — non funziona su xterm.js,
+   * che non legge un `.value`: ascolta veri eventi di tastiera/input sul
+   * suo textarea nascosto (`.xterm-helper-textarea`). `Input.insertText`
+   * (CDP) inserisce testo allo stesso livello di una digitazione umana
+   * reale (la stessa tecnica di Puppeteer per l'unicode) — funziona con
+   * QUALUNQUE editor basato su eventi nativi, xterm.js incluso.
+   */
+  async digitaTastieraVera(testo) {
+    await this.cdp.send('Input.insertText', { text: testo });
+  }
+
+  /** Per tasti non-stampabili (Enter, Tab, frecce...) — `Input.insertText` non li copre, serve un vero keyDown/keyUp. */
+  async premiTasto(key, { code = key } = {}) {
+    await this.cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key, code });
+    await this.cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key, code });
+  }
+
+  /**
+   * ⛔⛔⛔ 28/8 — trovato dal vivo: `click()` sopra usa `el.click()`
+   * sintetico via JS — dispatcha un evento `click`, ma xterm.js prende
+   * il FOCUS sul suo textarea nascosto rispondendo a un vero
+   * `mousedown` con coordinate reali (hit-testing sul canvas), non a un
+   * `.click()` DOM generico. Senza focus vero, `Input.insertText`
+   * arriva al documento ma non a xterm — la tastiera "reale" non basta
+   * se il click che la precede non lo è altrettanto. Stesse coordinate
+   * di un dito umano: centro dell'elemento, mousePressed+mouseReleased
+   * via CDP.
+   */
+  async clickReale(selettore) {
+    const rect = await this.cdp.evaluate(`(() => { const el = document.querySelector(${j(selettore)}); if (!el) return null; const r = el.getBoundingClientRect(); return {x: r.x + r.width / 2, y: r.y + r.height / 2}; })()`);
+    if (!rect) throw new Error(`Selettore non trovato per il click reale: ${selettore}`);
+    await this.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: rect.x, y: rect.y, button: 'left', clickCount: 1 });
+    await this.cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: rect.x, y: rect.y, button: 'left', clickCount: 1 });
+  }
+
+  /**
    * ⛔ 27/8 — trovato in QUESTA stessa corsa: un'attesa fissa (600ms) dopo
    * l'apertura del model picker non bastava per il VERO fetch a
    * OpenRouter (417 modelli, payload reale, non un mock) — lo script
@@ -509,6 +546,125 @@ const SCENARI = {
     for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
     for (const r of p.cdp.richiesteFallite) {
       if (r.url.endsWith('/favicon.ico')) continue; // già dichiarato, cosmetico
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /**
+   * ⭐⭐⭐ 28/8 — Terminale REALE (LEDGER-TERMINALE-REALE.md). Owner: "deve
+   * essere un terminale vero e proprio bash [...] usabile dall'utente con
+   * le sue dita umane". Digitazione con `Input.insertText`/`Input.dispatchKeyEvent`
+   * (CDP) — lo stesso livello di un tasto premuto per davvero, non
+   * `el.value=...` (xterm.js non legge un `.value`, ascolta eventi di
+   * tastiera veri sul suo textarea nascosto).
+   *
+   * ⛔ xterm.js disegna su `<canvas>` per default (non spans DOM
+   * colorati) — verificare "cosa dice lo schermo" query-ando il DOM
+   * sarebbe fragile e potrebbe mentire. Si legge lo schermo dalla STESSA
+   * API che xterm.js espone per questo (`term.buffer.active`,
+   * `getLine().translateToString()`) — la fonte vera, non una sua ombra
+   * nel DOM. Il colore/l'aspetto restano verificati dallo SCREENSHOT,
+   * ispezionato come ogni altro (regola dello schermo).
+   */
+  async 'terminale-reale'(p) {
+    await p.attendi(1200);
+    await p.screenshot('stato-iniziale', { nota: 'app appena caricata, terminale non ancora aperto' });
+
+    await p.click('[data-mode="terminal"]');
+    await p.attendiCondizione(
+      "document.querySelector('#terminalStatusChip')?.textContent !== 'in attesa'",
+      { descrizione: 'la connessione WS del terminale è partita' },
+    );
+    await p.screenshot('terminale-aperto', { nota: 'tab aperto, xterm.js montata, connessione in corso' });
+
+    await p.attendiCondizione(
+      "document.querySelector('#terminalStatusChip')?.textContent === 'connesso'",
+      { timeoutMs: 8000, descrizione: 'PTY vera connessa (chip "connesso")' },
+    );
+    const chipTesto = await p.testo('#terminalStatusChip');
+    p.nota(`chip di stato terminale: "${chipTesto}"`);
+    await p.screenshot('terminale-connesso', { nota: 'prompt reale della shell (Git Bash o $SHELL), prima di digitare' });
+
+    const leggiSchermo = "(() => { const t = window.__talosHarnessUiRuntime?.statoTerminale?.().term; if (!t) return null; const buf = t.buffer.active; const righe = []; for (let y = 0; y < buf.length; y++) righe.push(buf.getLine(y)?.translateToString(true) ?? ''); return righe.join('\\n'); })()";
+    /*
+     * ⛔ "connesso" è vero appena la WebSocket apre — la PTY lato server
+     * viene spawnata IN QUEL MOMENTO, il primo output (motd/prompt)
+     * arriva un istante dopo, via rete. Stessa famiglia già documentata
+     * sopra per il catalogo modelli: un controllo immediato non basta,
+     * `attendiCondizione` sì.
+     */
+    await p.attendiCondizione(
+      `(${leggiSchermo})?.trim().length > 0`,
+      { timeoutMs: 5000, descrizione: 'il primo output della PTY (prompt/motd) è arrivato' },
+    );
+    const schermoIniziale = await p.cdp.evaluate(leggiSchermo);
+    p.nota(`schermo letto da term.buffer.active (assaggio): ${JSON.stringify(String(schermoIniziale).slice(-160))}`);
+
+    // Focus reale: click dentro il pannello, come farebbe un dito umano — poi tastiera vera, non un .value sintetico.
+    await p.clickReale('#realTerminalMount');
+    await p.attendi(200);
+
+    const marcatore = `talos-qa-marker-${Date.now()}`;
+    await p.digitaTastieraVera(`echo ${marcatore}`);
+    await p.attendi(150);
+    await p.screenshot('terminale-digitato', { nota: 'comando digitato con tastiera VERA (Input.insertText), non ancora inviato' });
+    await p.premiTasto('Enter');
+
+    await p.attendiCondizione(
+      `${leggiSchermo}?.includes(${j(marcatore)})`,
+      { timeoutMs: 6000, descrizione: 'output del comando reale tornato dalla PTY' },
+    );
+    await p.screenshot('terminale-eseguito', { nota: 'output vero della shell dopo Invio' });
+
+    const schermoFinale = await p.cdp.evaluate(leggiSchermo);
+    if (!schermoFinale?.includes(marcatore)) {
+      p.difetto(`il marcatore "${marcatore}" digitato non appare nello schermo del terminale dopo Invio — la PTY non ha eseguito il comando`, { severita: 'blocco' });
+    } else {
+      p.nota('round-trip completo: tastiera VERA (CDP) → xterm.onData → WebSocket → PTY reale → output tornato indietro e renderizzato. Non un log, non una simulazione.');
+    }
+
+    // ⛔ 28/8 — controllo mirato: il prompt Git Bash è normalmente colorato (verde/magenta/giallo/ciano via ANSI), ma la prima ispezione visiva mostrava tutto uniforme. Si campionano i pixel VERI del canvas xterm (getImageData), non un'impressione visiva su uno screenshot compresso.
+    /*
+     * ⭐⭐⭐ 28/8 — colore ANSI reale: verificato che serve il renderer
+     * WebGL (montaTerminaleSeServe() in app.js, LEDGER-TERMINALE-REALE.md
+     * per la storia completa — il renderer DOM di xterm.js v6 dipende da
+     * un <style> iniettato a runtime che la CSP `style-src 'self'` di
+     * questo server scarta in silenzio). Con WebGL attivo il colore è
+     * pixel GPU veri su un <canvas> — si campionano i pixel VERI
+     * (getImageData), non un'impressione visiva su uno screenshot
+     * compresso, e si verifica ANCHE quale renderer è davvero attivo
+     * (mai presumere che WebGL abbia funzionato solo perché richiesto).
+     */
+    const diagColore = await p.cdp.evaluate(`(() => {
+      const enforcement = window.__talosHarnessUiRuntime?.statoTerminale?.().enforcementColore ?? null;
+      const canvasList = [...document.querySelectorAll('#realTerminalMount canvas')];
+      // drawImage su un canvas 2d di appoggio legge i pixel VERI del canvas sorgente (WebGL incluso) senza dover riaprire un contesto WebGL per leggerli.
+      const appoggio = document.createElement('canvas');
+      const campioniColore = new Set();
+      for (const c of canvasList) {
+        if (c.width === 0 || c.height === 0) continue;
+        appoggio.width = c.width; appoggio.height = c.height;
+        const actx = appoggio.getContext('2d');
+        actx.drawImage(c, 0, 0);
+        const dati = actx.getImageData(0, 0, c.width, c.height).data;
+        for (let i = 0; i < dati.length; i += 4 * 7) {
+          if (dati[i + 3] > 0) campioniColore.add(\`\${dati[i]},\${dati[i + 1]},\${dati[i + 2]}\`);
+        }
+      }
+      return { enforcement, numeroCanvas: canvasList.length, coloriDistinti: campioniColore.size, assaggio: [...campioniColore].slice(0, 10) };
+    })()`);
+    p.nota(`colore ANSI — renderer: "${diagColore.enforcement}", canvas trovati: ${diagColore.numeroCanvas}, colori RGB distinti: ${diagColore.coloriDistinti}`);
+    if (diagColore.enforcement !== 'webgl') {
+      p.difetto(`renderer attivo "${diagColore.enforcement}", non "webgl" — colori ANSI probabilmente assenti (fallback dichiarato, non un crash, ma da capire perché WebGL non è partito qui)`, { severita: 'nota' });
+    } else if (diagColore.coloriDistinti <= 2) {
+      p.difetto(`renderer webgl attivo ma solo ${diagColore.coloriDistinti} colori RGB distinti campionati — il prompt Git Bash è normalmente colorato, possibile regressione`, { severita: 'blocco' });
+    } else {
+      p.nota(`colori ANSI confermati: ${diagColore.coloriDistinti} colori RGB distinti nel canvas WebGL reale, assaggio ${JSON.stringify(diagColore.assaggio)}`);
+    }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
       p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
     }
   },

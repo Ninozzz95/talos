@@ -52,11 +52,21 @@ describe('Harness UI static asset contract', () => {
         expect(css).toMatch(/\.approval-card\s*>\s*\.demo-surface-badge\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/s)
     })
 
-    it('CODE-TERMINAL-DEMO-TRUTH-01 never claims that a real PTY is active', () => {
+    it('CODE-TERMINAL-DEMO-TRUTH-01 never claims a terminal connection is live before JS actually opens one', () => {
+        // ⭐ 28/8 — Terminale REALE (LEDGER-TERMINALE-REALE.md, internal doc):
+        // the panel is a genuine PTY now, not a mockup — the honesty contract
+        // this test guards moved from "say demo, never active" to "the raw
+        // HTML must never claim a connection before JS has actually opened
+        // one". Rewritten, not just made to pass again.
         const html = harnessAsset('index.html')
+        const js = harnessAsset('app.js')
 
-        expect(html).toContain('pty demo')
+        expect(html).toContain('id="realTerminalMount"')
+        expect(html).toMatch(/id="terminalStatusChip">in attesa</)
+        expect(html).toContain('vendor/xterm/xterm.js')
+        expect(html).not.toContain('pty demo')
         expect(html).not.toContain('pty attiva')
+        expect(js).toContain('/api/v1/terminal/ws')
     })
 
     it('CODE-TOAST-NO-CONTROL-OVERLAP-01 keeps wide-short feedback above the fixed composer', () => {

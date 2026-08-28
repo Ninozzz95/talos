@@ -7,6 +7,8 @@
   <meta name="theme-color" content="#1e1f22" />
   <title>TALOS Codice - Responsive Mockup</title>
   <link rel="stylesheet" href="styles.css" />
+  <!-- Terminale REALE (LEDGER-TERMINALE-REALE.md) — xterm.js vendorizzato, mai una CDN. -->
+  <link rel="stylesheet" href="vendor/xterm/xterm.css" />
 </head>
 <body>
   <svg class="icon-sprite" aria-hidden="true">
@@ -181,24 +183,10 @@
           </div>
         </section>
 
-        <section class="view-pane" data-view="terminal" data-demo-surface="terminal">
+        <section class="view-pane" data-view="terminal">
           <div class="terminal-shell">
-            <div class="view-heading"><div><span class="eyebrow">Terminale integrato</span><h2>talos · feat/mobile-code</h2></div><span class="status-chip">pty demo</span></div>
-            <pre class="terminal-window"><code><span class="prompt">antonino@talos</span> <span class="path">~/dev/talos</span> <span class="branch">feat/mobile-code</span>
-$ npm run test:unit -- composer
-
- PASS  tests/unit/chat/composer.spec.ts
-  ✓ keeps 48px touch targets at 360px
-  ✓ respects safe-area inset
-  ✓ hides secondary pills under 560px
-  ✓ command palette remains keyboard reachable
-
- Test Files  1 passed (1)
- Tests       6 passed (6)
- Duration    8.42s
-
-<span class="prompt">antonino@talos</span> <span class="path">~/dev/talos</span> <span class="branch">feat/mobile-code</span>
-$ <span class="cursor"> </span></code></pre>
+            <div class="view-heading"><div><span class="eyebrow">Terminale integrato</span><h2>bash — talos</h2></div><span class="status-chip" id="terminalStatusChip">in attesa</span></div>
+            <div class="terminal-window" id="realTerminalMount"></div>
           </div>
         </section>
 
@@ -375,6 +363,10 @@ $ <span class="cursor"> </span></code></pre>
   </dialog>
 
   <div class="toast-region" id="toastRegion" aria-live="polite"></div>
+  <!-- Terminale REALE (LEDGER-TERMINALE-REALE.md) — build UMD vendorizzate, PRIMA di app.js: si attaccano a window.Terminal / window.FitAddon / window.WebglAddon. -->
+  <script src="vendor/xterm/xterm.js"></script>
+  <script src="vendor/xterm/addon-fit.js"></script>
+  <script src="vendor/xterm/addon-webgl.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
