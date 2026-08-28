@@ -17,6 +17,7 @@
  * l'accumulo è un costo di spazio disco, non un difetto di correttezza.
  */
 import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 
 import {
   avviaSessione as avviaSessioneReale,
@@ -38,6 +39,11 @@ import {
   WorkspaceFileError,
 } from './workspace-files.mjs';
 import { guardaWorkspace as guardaWorkspaceReale } from './workspace-watcher.mjs';
+import {
+  caricaHooks as caricaHooksReale,
+  eseguiHook as eseguiHookReale,
+  verificaTrust as verificaTrustReale,
+} from './hook-registry.mjs';
 
 export const EXPORT_SCHEMA = 'talos.harness-ui.session-export.v1';
 
@@ -56,6 +62,18 @@ export function createSessionRegistry({
   copiaFileFn = copiaFileReale,
   creaVoceWorkspaceFn = creaVoceWorkspaceReale,
   guardaWorkspaceFn = guardaWorkspaceReale,
+  /*
+   * ⭐⭐⭐ 28/8 — piano `elegant-spinning-dongarra.md`, FASE A (hook).
+   * `cartellaTrustHook`: FUORI dal workspace di ogni progetto, stesso
+   * pattern REALE già in uso per `.automations/` (verificato in
+   * server.mjs: `fileURLToPath(new URL('.automations/', import.meta.url))`)
+   * — il default qui è relativo a QUESTO file (`src/`), un livello
+   * sopra per arrivare accanto a `server.mjs`.
+   */
+  cartellaTrustHook = fileURLToPath(new URL('../.hooks-trust/', import.meta.url)),
+  caricaHooksFn = caricaHooksReale,
+  verificaTrustFn = verificaTrustReale,
+  eseguiHookFn = eseguiHookReale,
   modello,
   chiave,
   cartelleProgetto = [],
@@ -119,6 +137,52 @@ export function createSessionRegistry({
       voce.approvazionePendente = { requestId, resolve };
       broadcast(voce, approvalRequested({ requestId, azione }));
     });
+  }
+
+  /*
+   * ⭐⭐⭐ 28/8 — FASE A (hook). SINCRONA nella costruzione — `avviaESegui`
+   * sotto NON è async per disegno (torna `{sessionId}` subito, il
+   * lavoro vero prosegue in `.then()`, commento "NON await" più sotto:
+   * un cambio a async avrebbe toccato ogni chiamante fino a http-app.mjs).
+   * `.harness-ui-hooks.json` si legge quindi PIGRAMENTE, alla PRIMA
+   * tool-call della sessione (mai al momento dell'avvio) — memoizzato
+   * per le chiamate successive: un hook aggiunto a metà sessione
+   * richiede un nuovo avvio per essere visto, limite dichiarato non
+   * silenzioso. Un `.harness-ui-hooks.json` malformato o assente (il
+   * caso comune, incluso ogni progetto di TALOS-BANCO — che comunque
+   * non passa mai da questo registro) non impedisce MAI alla sessione
+   * di partire, degrada a "nessun hook", mai un blocco silenzioso.
+   */
+  function costruisciHookFn(voce) {
+    let hooksCache = null; // null = non ancora caricati
+    return async (evento) => {
+      if (hooksCache === null) {
+        try {
+          ({ hooks: hooksCache } = await caricaHooksFn({ cartella: voce.cartella }));
+        } catch {
+          hooksCache = [];
+        }
+      }
+      if (hooksCache.length === 0) return { consentito: true };
+      const pertinenti = hooksCache.filter((h) => h.eventi.includes(evento.tipo));
+      for (const hook of pertinenti) {
+        let fidato = false;
+        try {
+          fidato = await verificaTrustFn({ cartellaTrust: cartellaTrustHook, hookId: hook.id, hash: hook.hash });
+        } catch {
+          fidato = false; // un registro di trust che non si legge non autorizza in silenzio
+        }
+        if (!fidato) continue; // un hook non fidato è come se non esistesse — mai bloccante di suo
+        let esito;
+        try {
+          esito = await eseguiHookFn({ hook, evento, cartella: voce.cartella });
+        } catch {
+          esito = { consentito: false, motivo: `l'hook "${hook.id}" è fallito nell'esecuzione.` };
+        }
+        if (esito?.consentito === false) return esito; // il primo hook fidato che rifiuta vince — AND logico sul verdetto
+      }
+      return { consentito: true };
+    };
   }
 
   /**
@@ -215,6 +279,9 @@ export function createSessionRegistry({
     const chiediApprovazioneFn = voce.permessi === 'On request'
       ? (azione) => richiediApprovazione(voce, azione)
       : undefined;
+    // ⭐⭐⭐ FASE A (hook) — sempre costruito, sincrono: costruisciHookFn
+    // rimanda il vero lavoro (I/O) alla prima tool-call, vedi la sua doc.
+    const hookFn = costruisciHookFn(voce);
 
     avviaSessioneFn({
       cartella, task, modello: modelloEffettivo, chiave, comandoProva, messaggiIniziali,
@@ -222,7 +289,7 @@ export function createSessionRegistry({
       segnaleStop: controller.signal,
       mobile: voce.mobile,
       strumentiEstesi, ricercaWeb,
-      livelloAccesso, chiediApprovazioneFn,
+      livelloAccesso, chiediApprovazioneFn, hookFn,
       onEvento: (evento) => broadcast(voce, evento),
     }).then((risultato) => {
       /*
@@ -482,8 +549,6 @@ export function createSessionRegistry({
      * POST che resta appesa fino ad allora è un client che sembra bloccato.
      * RunStarted è già nel buffer al ritorno (run-to-first-await di JS,
      * documentato sopra `avviaESegui`), il resto arriva via SSE.
-     *
-     * @returns {{ok:true}|{erroreAvvio:string, code:string}}
      */
     shell(sessionId, comando) {
       const voce = sessioni.get(sessionId);
