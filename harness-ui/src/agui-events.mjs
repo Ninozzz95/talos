@@ -116,6 +116,21 @@ export function artifactCreated({ messageId, id, titolo }) {
 }
 
 /**
+ * ⭐⭐⭐ 28/8 — workspace-watcher.mjs: i file sono cambiati FUORI
+ * dall'app (Explorer, un editor, git...), owner 27/8: "se muovo i
+ * file il work tree non si aggiorna automaticamente". Fuori dallo
+ * schema pubblico AG-UI (stessa estensione già dichiarata per
+ * `ArtifactCreated`) — `percorsi` sono i percorsi RELATIVI coinvolti,
+ * già debounced/deduplicati dal watcher; il frontend oggi li usa solo
+ * per decidere SE invalidare (mai un diff fine, vedi app.js), ma sono
+ * inoltrati comunque: costano poco e un consumo più preciso è lavoro
+ * futuro, non una riscrittura del contratto.
+ */
+export function workspaceChanged({ percorsi }) {
+    return { type: 'WorkspaceChanged', percorsi }
+}
+
+/**
  * ⭐ Da una risposta grezza del modello (la stessa forma OpenAI che
  * talosLavora già costruisce — {role, content, tool_calls}, vedi
  * talosHarness.mjs riga ~761) all'elenco ORDINATO di eventi AG-UI per

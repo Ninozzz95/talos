@@ -3305,6 +3305,25 @@
         appendArtifactCard(evento.titolo, evento.id);
         break;
       }
+      case 'WorkspaceChanged': {
+        /*
+         * ⭐⭐⭐ 28/8, owner 27/8: "se muovo i file il work tree non si
+         * aggiorna automaticamente" — workspace-watcher.mjs (backend)
+         * segnala un cambiamento FUORI dall'app (Explorer, un editor,
+         * git...). A differenza di `segnalaScritturaNellAlbero`
+         * (un percorso preciso, dal MODELLO) qui non sappiamo esattamente
+         * cosa è cambiato — il watcher manda i percorsi ma possono essere
+         * molti e ovunque nell'albero — quindi si invalida TUTTA la
+         * cache e si ri-renderizza da capo, come un vero file manager
+         * che si accorge di un `git checkout`: silenzioso, nessuna nota
+         * in chat (non è un'azione dell'agente, non deve sembrarlo).
+         */
+        if (state.realSession.id) {
+          state.realSession.treeCache.clear();
+          renderizzaAlberoReale();
+        }
+        break;
+      }
       case 'RunFinished': {
         /*
          * ⛔⛔⛔ 27/8, owner: "non riesco ad avere una conversazione base col

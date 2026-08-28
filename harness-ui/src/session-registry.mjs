@@ -23,6 +23,7 @@ import {
   compattaSessione as compattaSessioneReale,
   eseguiComandoDiretto as eseguiComandoDirettoReale,
 } from './agent-service.mjs';
+import { workspaceChanged } from './agui-events.mjs';
 import { CustomTaskError, preparaEsecuzioneLibera as preparaEsecuzioneLiberaReale } from './custom-task.mjs';
 import { TaskCatalogError, preparaEsecuzione as preparaEsecuzioneReale } from './task-catalog.mjs';
 import { leggiAlberoWorkspace as leggiAlberoWorkspaceReale, WorkspaceTreeError } from './workspace-tree.mjs';
@@ -33,6 +34,7 @@ import {
   rivelaInEsploraFile as rivelaInEsploraFileReale,
   WorkspaceFileError,
 } from './workspace-files.mjs';
+import { guardaWorkspace as guardaWorkspaceReale } from './workspace-watcher.mjs';
 
 export const EXPORT_SCHEMA = 'talos.harness-ui.session-export.v1';
 
@@ -47,6 +49,7 @@ export function createSessionRegistry({
   rinominaFileFn = rinominaFileReale,
   eliminaFileFn = eliminaFileReale,
   rivelaInEsploraFileFn = rivelaInEsploraFileReale,
+  guardaWorkspaceFn = guardaWorkspaceReale,
   modello,
   chiave,
   cartelleProgetto = [],
@@ -135,6 +138,7 @@ export function createSessionRegistry({
      * la "mobilità" di una sessione si decide una volta sola, all'avvio
      * (piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 3).
      */
+    const voceNuova = !voceEsistente;
     const voce = voceEsistente ?? {
       eventi: [], ascoltatori: new Set(), taskId, cartella, task, comandoProva, forkDa,
       avviataAlle: clock().toISOString(), messaggiFinali: null, modello: modelloEffettivo,
@@ -142,6 +146,17 @@ export function createSessionRegistry({
     };
     voce.controller = controller;
     voce.conclusa = false;
+    /*
+     * ⭐⭐⭐ 28/8 — workspace-watcher.mjs, owner 27/8: "se muovo i file il
+     * work tree non si aggiorna automaticamente". UNA sola volta per
+     * voce (mai ri-sottoscritto su un resume — `voceEsistente` è la
+     * STESSA voce di prima, già in ascolto), fermato quando la voce
+     * stessa esce di scope: qui non c'è un "chiudi sessione" esplicito
+     * (vedi la doc in testa al file — le sessioni vivono in memoria
+     * per la vita del processo), quindi il watcher fa lo stesso
+     * compromesso già scelto per tutto il resto di questo registro.
+     */
+    if (voceNuova) voce.fermaWatcher = guardaWorkspaceFn(cartella, (percorsi) => broadcast(voce, workspaceChanged({ percorsi })));
     sessioni.set(sessionId, voce);
 
     /*

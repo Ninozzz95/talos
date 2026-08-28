@@ -17,6 +17,7 @@ import {
   toolCallArgs,
   toolCallResult,
   toolCallStart,
+  workspaceChanged,
 } from '../src/agui-events.mjs';
 
 // Una riga di prova per riga della tabella §1.2 del piano — vedi
@@ -119,6 +120,13 @@ test('artifactCreated porta type/messageId/id/titolo così come sono, MAI un cam
   assert.deepStrictEqual(
     artifactCreated({ messageId: 'm1', id: 'a1', titolo: 'Grafico' }),
     { type: 'ArtifactCreated', messageId: 'm1', id: 'a1', titolo: 'Grafico' },
+  );
+});
+
+test('workspaceChanged porta type/percorsi così come sono, puro', () => {
+  assert.deepStrictEqual(
+    workspaceChanged({ percorsi: ['a.txt', 'sub/b.txt'] }),
+    { type: 'WorkspaceChanged', percorsi: ['a.txt', 'sub/b.txt'] },
   );
 });
 

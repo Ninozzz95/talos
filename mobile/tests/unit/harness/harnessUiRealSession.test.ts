@@ -639,6 +639,40 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
             expect(rigaReadme.classList.contains('ft-dimmed')).toBe(false)
             expect(document.getElementById('fileTreeFilterHint')?.textContent).toBe('')
         })
+
+        /*
+         * ⭐⭐⭐ 28/8 — workspace-watcher.mjs (backend), owner 27/8: "se
+         * muovo i file il work tree non si aggiorna automaticamente". A
+         * differenza di FILE-TREE-04 (un percorso preciso, dal MODELLO)
+         * qui il backend non sa esattamente cosa è cambiato fuori
+         * dall'app — quindi invalida TUTTA la cache, non solo un livello.
+         */
+        it('FILE-TREE-07 WorkspaceChanged svuota TUTTA la cache dati e ri-scarica ogni livello aperto — "src" resta aperta, con dati freschi', async () => {
+            const { chiamatePerLivello, generation } = await avviaSessioneConAlbero({ '': LIVELLO_RADICE, src: LIVELLO_SRC })
+            const rigaSrc = [...document.querySelectorAll('.ft-row-folder')].find((r) => r.querySelector('.ft-name')?.textContent === 'src')!
+            rigaSrc.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+            await vi.waitFor(() => { expect(document.querySelector('.ft-node[data-percorso="src/app.js"]')).toBeTruthy() })
+            expect(chiamatePerLivello['']).toBe(1)
+            expect(chiamatePerLivello.src).toBe(1)
+
+            runtime().handleRealEvent({ type: 'WorkspaceChanged', percorsi: ['esterno.txt'] }, generation)
+            // ⭐ renderizzaAlberoReale() ri-scarica la radice PIÙ tutto ciò che
+            // era in treeOpen (sua stessa doc, riga "radice + tutto ciò che
+            // era già aperto") — "src" non si richiude, torna aperta con
+            // dati VERI appena letti, non semplicemente "resta come prima".
+            await vi.waitFor(() => { expect(chiamatePerLivello['']).toBe(2) })
+            await vi.waitFor(() => { expect(chiamatePerLivello.src).toBe(2) })
+            expect(document.querySelector('.ft-node[data-percorso="src"]')?.classList.contains('ft-open')).toBe(true)
+            expect(document.querySelector('.ft-node[data-percorso="src/app.js"]')).toBeTruthy()
+        })
+
+        it('⛔ AL CONTRARIO — FILE-TREE-08 WorkspaceChanged senza una sessione reale attiva non tocca l\'albero, zero fetch al tree', async () => {
+            // ⭐ Nessuna sessione avviata in questo test: chiamatePerLivello resta vuoto se e solo se renderizzaAlberoReale non viene mai invocata.
+            const { chiamatePerLivello } = mockFetchAlbero({})
+            runtime().handleRealEvent({ type: 'WorkspaceChanged', percorsi: ['x.txt'] }, runtime().realSessionState.generation)
+            await new Promise((r) => setTimeout(r, 0))
+            expect(chiamatePerLivello).toEqual({})
+        })
     })
 
     it('REAL-SESSION-STOP-01 stopRealSession non fa nulla senza una sessione reale attiva (nessun POST)', async () => {
