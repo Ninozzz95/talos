@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { avviaSessione, compattaSessione, eseguiComandoDiretto } from '../src/agent-service.mjs';
+import { WorkspaceFileError } from '../src/workspace-files.mjs';
 
 // `talosLavoraFn` finto: agent-service.mjs non deve mai far girare un vero
 // talosLavora per essere provato — quello ha già i suoi 65 test in
@@ -39,6 +40,10 @@ function talosLavoraFinto({ script, cattura = () => {} }) {
     // ⭐⭐⭐ 28/8 — come per onScrittura sopra: il finto chiama onArtefatto ESATTAMENTE come farebbe il kernel vero (talosHarness.mjs), risultato incluso.
     for (const artefatto of script.artefatti ?? []) {
       await input.onArtefatto?.(artefatto.titolo, artefatto.html);
+    }
+    // ⭐⭐⭐ 28/8 — stesso principio, per onDocumento: il finto passa gli argomenti grezzi COSÌ COME li manderebbe il modello (nessuna forma diversa qui rispetto al kernel vero).
+    for (const documento of script.documenti ?? []) {
+      await input.onDocumento?.(documento.argomenti);
     }
     return script.esito;
   };
@@ -684,4 +689,86 @@ test('⛔⛔⛔ un artefatto oltre il tetto di dimensione NON viene salvato e NO
 
   assert.equal(eventi.find((e) => e.type === 'ArtifactCreated'), undefined);
   assert.equal(salvati.length, 0, 'niente salvato: un id-solo di rifiuto non deve lasciare tracce nello store');
+});
+
+/*
+ * ⭐⭐⭐ 28/8 — document_create: pipeline generate→verify→salva, MAI il
+ * passo dopo se quello prima fallisce. Le tre funzioni iniettabili sono
+ * finte qui apposta — le vere (document-generator.mjs/workspace-files.mjs,
+ * 7 librerie npm) hanno i loro test dedicati, questo file prova SOLO che
+ * agent-service.mjs le collega nell'ordine giusto e traduce gli esiti.
+ */
+test('⭐⭐⭐ document_create: generate→verify→salva, un evento StateDelta con testo VERO per un formato testuale', async () => {
+  const eventi = [];
+  const bytes = new TextEncoder().encode('# Titolo\ncorpo vero');
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, documenti: [{ argomenti: { format: 'md', title: 'Prova', body: 'x' } }] },
+  });
+
+  const risultato = await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn,
+    generateTalosDocumentFn: async (spec) => ({ format: spec.format, fileName: 'Prova.md', mediaType: 'text/markdown', bytes }),
+    verifyTalosDocumentFn: async () => ({ ok: true, detail: '20 caratteri, 2 righe' }),
+    creaFileWorkspaceFn: async ({ nome }) => ({ percorso: nome }),
+  });
+
+  assert.equal(risultato.ok, true);
+  const evento = eventi.find((e) => e.type === 'StateDelta');
+  assert.ok(evento, 'un evento StateDelta deve essere emesso');
+  assert.equal(evento.delta[0].op, 'add');
+  assert.equal(evento.delta[0].path, '/file/Prova.md');
+  assert.equal(evento.delta[0].value, '# Titolo\ncorpo vero', 'un formato testuale porta il testo VERO, non un placeholder');
+});
+
+test('⭐⭐⭐ document_create: un formato BINARIO non mette mai i byte grezzi nell evento — una riga onesta al loro posto', async () => {
+  const eventi = [];
+  const bytesFinti = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0xff, 0xfe]); // non UTF-8 valido, come un vero .docx
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, documenti: [{ argomenti: { format: 'docx', title: 'Prova', body: 'x' } }] },
+  });
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn,
+    generateTalosDocumentFn: async () => ({ format: 'docx', fileName: 'Prova.docx', mediaType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', bytes: bytesFinti }),
+    verifyTalosDocumentFn: async () => ({ ok: true, detail: 'reopened: 1 paragraph' }),
+    creaFileWorkspaceFn: async ({ nome }) => ({ percorso: nome }),
+  });
+
+  const evento = eventi.find((e) => e.type === 'StateDelta');
+  assert.ok(evento);
+  assert.match(evento.delta[0].value, /^\[binary docx file, \d+ bytes\]$/);
+});
+
+test('⛔⛔⛔ AL CONTRARIO — document_create: se la verifica fallisce, NIENTE viene salvato e NESSUN evento parte', async () => {
+  const eventi = [];
+  let salvataChiamata = false;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, documenti: [{ argomenti: { format: 'pdf', title: 'Rotto', body: 'x' } }] },
+  });
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn,
+    generateTalosDocumentFn: async () => ({ format: 'pdf', fileName: 'Rotto.pdf', mediaType: 'application/pdf', bytes: new Uint8Array() }),
+    verifyTalosDocumentFn: async () => ({ ok: false, detail: 'the pdf has no pages' }),
+    creaFileWorkspaceFn: async () => { salvataChiamata = true; return { percorso: 'mai' }; },
+  });
+
+  assert.equal(salvataChiamata, false, 'il salvataggio non deve MAI essere tentato su un documento che ha fallito la verifica');
+  assert.equal(eventi.find((e) => e.type === 'StateDelta'), undefined);
+});
+
+test('⛔ document_create: un salvataggio fallito (es. nome già esistente) è onesto, mai un successo inventato', async () => {
+  const eventi = [];
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, documenti: [{ argomenti: { format: 'csv', title: 'Duplicato', rows: [['a']] } }] },
+  });
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn,
+    generateTalosDocumentFn: async () => ({ format: 'csv', fileName: 'Duplicato.csv', mediaType: 'text/csv', bytes: new TextEncoder().encode('a') }),
+    verifyTalosDocumentFn: async () => ({ ok: true, detail: '1 riga' }),
+    creaFileWorkspaceFn: async () => { throw new WorkspaceFileError('Esiste già un file con questo nome', 'FILE_EXISTS'); },
+  });
+
+  assert.equal(eventi.find((e) => e.type === 'StateDelta'), undefined, 'nessun evento su un salvataggio fallito');
 });

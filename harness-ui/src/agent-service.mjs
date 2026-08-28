@@ -24,7 +24,9 @@ import {
   talosLavora as talosLavoraReale,
 } from '../../../AVM-harness/mobile/scripts/harness-talos/talosHarness.mjs';
 import { salvaArtefatto as salvaArtefattoReale } from './artifact-store.mjs';
+import { generateTalosDocument as generateTalosDocumentReale, TALOS_SOURCE_TEXT_FORMATS, verifyTalosDocument as verifyTalosDocumentReale } from './document-generator.mjs';
 import { leggiContestoWorkspace as leggiContestoWorkspaceReale } from './workspace-context.mjs';
+import { creaFileWorkspace as creaFileWorkspaceReale, WorkspaceFileError } from './workspace-files.mjs';
 import {
   artifactCreated,
   eventiPerRisposta,
@@ -120,6 +122,9 @@ export async function avviaSessione({
   talosLavoraFn = talosLavoraReale,
   leggiContestoWorkspaceFn = leggiContestoWorkspaceReale,
   salvaArtefattoFn = salvaArtefattoReale,
+  generateTalosDocumentFn = generateTalosDocumentReale,
+  verifyTalosDocumentFn = verifyTalosDocumentReale,
+  creaFileWorkspaceFn = creaFileWorkspaceReale,
 }) {
   const threadId = randomUUID();
   const runId = randomUUID();
@@ -280,11 +285,74 @@ export async function avviaSessione({
     return { id };
   };
 
+  /*
+   * ⭐⭐⭐ 28/8 — side-channel dell'attrezzo `document_create`
+   * (talosHarness.mjs), stesso principio di `onArtefatto`/`onScrittura`:
+   * il kernel resta a zero dipendenze, la generazione vera (7 librerie
+   * npm — owner 28/8, "sì, aggiungile", SOLO qui) vive interamente in
+   * questo backend. Pipeline identica al mobile
+   * (documentTools.ts/documentGenerator.ts, letti per intero prima di
+   * scrivere): generate → verify → salva — MAI il passo dopo se quello
+   * prima è fallito, e ogni fallimento porta la RAGIONE vera, non un
+   * "errore tecnico" generico.
+   *
+   * ⛔ Diverso dal mobile in UNA cosa: qui non c'è una "Libreria" (il
+   * desktop non ne ha una) — il file finisce nel WORKSPACE vero, stesso
+   * trattamento di `scrivi`: un evento StateDelta con `op:'add'` (mai
+   * 'replace' — creaFileWorkspaceFn rifiuta un nome già esistente,
+   * quindi ogni successo qui È per costruzione un file nuovo) fa scattare
+   * lo stesso refresh dell'albero già provato per `scrivi`
+   * (`segnalaScritturaNellAlbero`, app.js) — nessun meccanismo nuovo sul
+   * frontend. Il `value` è il testo VERO per i formati testuali (si
+   * vede nella scheda Review, come un file scritto normale); per i
+   * formati binari (docx/xlsx/pptx/pdf) è una riga onesta — mai i byte
+   * grezzi dentro un evento SSE/JSON, che li corromperebbe comunque
+   * (non sono UTF-8 valido).
+   */
+  const onDocumento = async (argomenti) => {
+    let documento;
+    try {
+      documento = await generateTalosDocumentFn(argomenti);
+    } catch (errore) {
+      const dettaglio = errore instanceof Error ? errore.message : String(errore);
+      return { ok: false, esito: `The document was not created: ${dettaglio}` };
+    }
+
+    const controllo = await verifyTalosDocumentFn(documento);
+    if (!controllo.ok) {
+      return {
+        ok: false,
+        esito: `The file was written but failed its check (${controllo.detail}), so it was discarded. Tell the user, and try a simpler structure.`,
+      };
+    }
+
+    let salvato;
+    try {
+      salvato = await creaFileWorkspaceFn({ cartella, nome: documento.fileName, bytes: documento.bytes });
+    } catch (errore) {
+      const dettaglio = errore instanceof WorkspaceFileError ? errore.message : (errore instanceof Error ? errore.message : String(errore));
+      return {
+        ok: false,
+        esito: `"${documento.fileName}" was created and checked, but it could not be saved to the workspace: ${dettaglio}. Do not silently retry with the same name — offer a different title, or ask.`,
+      };
+    }
+
+    const testuale = TALOS_SOURCE_TEXT_FORMATS.includes(documento.format) || ['md', 'csv', 'html'].includes(documento.format);
+    const valore = testuale ? new TextDecoder('utf-8').decode(documento.bytes) : `[binary ${documento.format} file, ${documento.bytes.byteLength} bytes]`;
+    onEvento(eventoPerScrittura({ percorso: salvato.percorso, contenuto: valore, esisteva: false }));
+
+    const dimensione = Math.max(1, Math.round(documento.bytes.byteLength / 1024));
+    return {
+      ok: true,
+      esito: `Created "${documento.fileName}" (${dimensione} KB) in the workspace. Checked by reopening it: ${controllo.detail}.`,
+    };
+  };
+
   try {
     const esito = await talosLavoraFn({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
       onGiro, onScrittura, onDelta, reasoning,
-      strumentiEstesi, ricercaWeb, onArtefatto,
+      strumentiEstesi, ricercaWeb, onArtefatto, onDocumento,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));
     return { threadId, runId, ok: esito.comeFinita === 'concluso', esito, erroreInterno: null };

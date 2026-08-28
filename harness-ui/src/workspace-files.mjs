@@ -109,6 +109,36 @@ export async function eliminaFile({ cartella, percorso }, deps = {}) {
 }
 
 /**
+ * "Crea" — scrive BYTE nuovi alla radice del workspace (`document_create`,
+ * piano elegant-spinning-dongarra.md, 28/8). Diversa dalle altre azioni
+ * di questo file: qui il file NON esiste ancora, quindi
+ * `risolviPercorsoEsistente` (che richiede `realpathSync` sul
+ * bersaglio) non si applica — si valida solo che `nome` sia un NOME
+ * piatto (stessa grammatica di `nuovoNome` in `rinominaFile`: niente
+ * `/`, `\`, `..`), mai un percorso con sottocartelle. Scope
+ * deliberatamente stretto (radice del workspace, non un percorso
+ * arbitrario) — un generatore di documenti scrive dove l'utente lo
+ * vede subito nell'albero, non in una sottocartella indovinata.
+ */
+export async function creaFileWorkspace({ cartella, nome, bytes }, deps = {}) {
+  if (
+    typeof nome !== 'string' || nome.length === 0 || nome.length > 255
+    || nome.includes('/') || nome.includes('\\') || nome.includes('\0')
+    || nome === '.' || nome === '..'
+  ) {
+    throw new WorkspaceFileError('Nome file non valido — un nome, non un percorso');
+  }
+  const radiceReale = (deps.realpathSyncFn ?? realpathSync)(cartella);
+  const destinazione = join(radiceReale, nome);
+  if (!isPathInside(radiceReale, destinazione)) throw new WorkspaceFileError('Destinazione fuori dalla cartella del workspace');
+  const accessFn = deps.accessFn ?? fsp.access;
+  const esisteGia = await accessFn(destinazione).then(() => true, () => false);
+  if (esisteGia) throw new WorkspaceFileError('Esiste già un file con questo nome', 'FILE_EXISTS');
+  await (deps.writeFileFn ?? fsp.writeFile)(destinazione, bytes);
+  return { percorso: nome };
+}
+
+/**
  * "Rivela in Esplora File" — SOLO Windows (`explorer.exe`), dichiarato
  * non simulato altrove. Un SOLO argomento argv (`/select,<percorso>`,
  * verificato via ricerca web la sintassi esatta — niente spazio dopo la
