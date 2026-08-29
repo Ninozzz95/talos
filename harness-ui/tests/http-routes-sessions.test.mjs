@@ -169,6 +169,17 @@ function registroFinto() {
       if (sessionId === 'sess-libreria-rotta') return { ok: true, voci: null, errore: '.harness-ui-library/rotta/meta.json non è un JSON valido' };
       return { ok: true, voci: [{ id: 'lib-1', nome: 'report.md', fileType: 'document', origine: 'uploaded', aggiornatoIl: '2026-08-29T10:00:00.000Z' }], errore: null };
     },
+    /*
+     * ⭐⭐⭐ FASE N, quarto sistema (30/8): stesso stile esatto di
+     * elencaLibreria appena sopra — cattura la chiamata per provare
+     * che la rotta HTTP raggiunge davvero il registro, senza fingere
+     * una vera .notes-store/.
+     */
+    async elencaNote(sessionId) {
+      if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (sessionId === 'sess-note-rotte') return { ok: true, note: null, errore: '.notes-store/rotta.json non è un JSON valido' };
+      return { ok: true, note: [{ id: 'nota-1', titolo: 'Codice cancello', contenuto: '4471', aggiornataAlle: '2026-08-30T10:00:00.000Z' }], errore: null };
+    },
     ultimaFiduciaServerMcp: null,
     async fidaServerMcp(sessionId, serverId) {
       this.ultimaFiduciaServerMcp = { sessionId, serverId };
@@ -1182,6 +1193,28 @@ test('⭐ GET /api/v1/sessions/{id}/library torna le voci dal registro', async (
 test('⛔ AL CONTRARIO — GET .../library su un id inesistente: 404 NOT_FOUND', async (t) => {
   const { base } = await listen(t);
   const risposta = await fetch(`${base}/api/v1/sessions/non-esiste/library`);
+  assert.equal(risposta.status, 404);
+});
+
+/*
+ * ⭐⭐⭐ FASE N, quarto sistema (30/8) — GET .../notes: il Capability
+ * hub chiama questa rotta per mostrare le note dell'owner (GLOBALI,
+ * non del progetto di questa sessione) — stesso principio esatto di
+ * GET .../library sopra.
+ */
+test('⭐ GET /api/v1/sessions/{id}/notes torna le note dal registro', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/notes`);
+  assert.equal(risposta.status, 200);
+  const corpo = await risposta.json();
+  assert.deepEqual(corpo.data.note, [{ id: 'nota-1', titolo: 'Codice cancello', contenuto: '4471', aggiornataAlle: '2026-08-30T10:00:00.000Z' }]);
+  assert.equal(corpo.data.errore, null);
+});
+
+test('⛔ AL CONTRARIO — GET .../notes su un id inesistente: 404 NOT_FOUND', async (t) => {
+  const { base } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions/non-esiste/notes`);
   assert.equal(risposta.status, 404);
 });
 
