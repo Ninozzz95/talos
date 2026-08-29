@@ -651,6 +651,39 @@ test('⛔ AL CONTRARIO: senza strumentiEstesi/ricercaWeb, talosLavoraFn li ricev
   assert.equal(inputCatturato.ricercaWeb, undefined);
 });
 
+/*
+ * ⭐⭐⭐ 29/8 — FASE D, firma Ed25519. Stessa disciplina di ricercaWeb due
+ * test sopra: si prova SOLO che questo file inoltri il valore così com'è
+ * a talosLavoraFn, non la firma stessa (già provata in AVM-harness).
+ */
+test('⭐⭐⭐ avviaSessione inoltra firma a talosLavoraFn così com\'è', async () => {
+  let inputCatturato = null;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { inputCatturato = input; },
+  });
+  const firma = { chiavePrivata: 'chiave-finta-pem', keyId: 'talos-harness-receipt-test' };
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    firma,
+  });
+
+  assert.deepEqual(inputCatturato.firma, firma);
+});
+
+test('⛔ AL CONTRARIO — senza firma, talosLavoraFn la riceve undefined: nessuna chiave inventata', async () => {
+  let inputCatturato = null;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { inputCatturato = input; },
+  });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn });
+
+  assert.equal(inputCatturato.firma, undefined);
+});
+
 test('⭐⭐⭐ un artefatto creato dal kernel viene salvato E diventa un evento ArtifactCreated senza html (solo id/titolo — vedi artifact-store.mjs)', async () => {
   const eventi = [];
   const salvati = [];

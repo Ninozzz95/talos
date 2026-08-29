@@ -14,6 +14,7 @@ import {
   permessiPerAttrezzoRichiestaValido,
   permessiRichiestaValido,
 } from '../src/config.mjs';
+import { generateHarnessReceiptKeypair } from '../src/harness-receipt-keypair.mjs';
 
 function makeBanco(t) {
   const root = mkdtempSync(join(tmpdir(), 'talos-harness-config-'));
@@ -255,6 +256,56 @@ test('⛔⛔ un TALOS_HARNESS_SEARCH_PROVIDER ignoto è rifiutato — ma SOLO se
   assert.throws(
     () => loadConfig({
       TALOS_BANCO_DIR: bancoDir, TALOS_HARNESS_SEARCH_PROVIDER: 'inventato', TALOS_HARNESS_SEARCH_API_KEY: 'k',
+    }, import.meta.url),
+    ConfigurationError,
+  );
+});
+
+/*
+ * ⭐⭐⭐ 29/8 — FASE D, la firma Ed25519 delle ricevute. Stesso principio
+ * onesto di ricercaWeb sopra: undefined quando non configurata, il
+ * server resta usabile (ricevute non firmate, comportamento di sempre).
+ */
+test('⛔ config.firmaRicevute è undefined quando non configurata (ricevute non firmate, comportamento di sempre)', (t) => {
+  const bancoDir = makeBanco(t);
+  const config = loadConfig({ TALOS_BANCO_DIR: bancoDir }, import.meta.url);
+  assert.equal(config.firmaRicevute, undefined);
+});
+
+test('⭐⭐⭐ config.firmaRicevute con una chiave VERA (generata da harness-receipt-keypair.mjs) viene accettata', (t) => {
+  const bancoDir = makeBanco(t);
+  const pair = generateHarnessReceiptKeypair();
+  const config = loadConfig({
+    TALOS_BANCO_DIR: bancoDir,
+    TALOS_HARNESS_RECEIPT_KEY_ID: pair.keyId,
+    TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64: pair.privateKeyBase64,
+  }, import.meta.url);
+  assert.equal(config.firmaRicevute.keyId, pair.keyId);
+  assert.equal(config.firmaRicevute.chiavePrivata, Buffer.from(pair.privateKeyBase64, 'base64').toString('utf8'));
+});
+
+test('⛔⛔⛔ AL CONTRARIO — SOLO l\'id o SOLO la chiave (mai una sola delle due) fa fallire l\'avvio, non firma con un valore rotto in silenzio', (t) => {
+  const bancoDir = makeBanco(t);
+  const pair = generateHarnessReceiptKeypair();
+  assert.throws(
+    () => loadConfig({ TALOS_BANCO_DIR: bancoDir, TALOS_HARNESS_RECEIPT_KEY_ID: pair.keyId }, import.meta.url),
+    ConfigurationError,
+    'solo l\'id, senza la chiave privata',
+  );
+  assert.throws(
+    () => loadConfig({ TALOS_BANCO_DIR: bancoDir, TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64: pair.privateKeyBase64 }, import.meta.url),
+    ConfigurationError,
+    'solo la chiave privata, senza l\'id',
+  );
+});
+
+test('⛔⛔ AL CONTRARIO — una chiave privata non-Ed25519 (o non decodificabile) è rifiutata, mai passata silenziosamente a talosLavora', (t) => {
+  const bancoDir = makeBanco(t);
+  assert.throws(
+    () => loadConfig({
+      TALOS_BANCO_DIR: bancoDir,
+      TALOS_HARNESS_RECEIPT_KEY_ID: 'talos-harness-receipt-finta',
+      TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64: Buffer.from('non e una chiave PEM').toString('base64'),
     }, import.meta.url),
     ConfigurationError,
   );

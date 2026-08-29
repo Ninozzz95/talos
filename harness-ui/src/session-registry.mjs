@@ -95,6 +95,14 @@ export function createSessionRegistry({
   // ⭐ FASE C (28/8) — quinto: delega_sottotask è ATTREZZI_ESTESI[4] nel kernel, stesso principio.
   strumentiEstesi = ['web_search', 'artifact_create', 'document_create', 'time_now', 'delega_sottotask'],
   ricercaWeb,
+  /*
+   * ⭐⭐⭐ 29/8 — FASE D, firma Ed25519 delle ricevute. Stesso principio di
+   * `ricercaWeb` appena sopra: configurazione di SERVER (§config.mjs,
+   * `undefined` se non impostata), non per sessione — inoltrata SENZA
+   * logica propria, la decisione (dove vive la chiave, chi la ruota) vive
+   * tutta in `config.mjs`/`harness-receipt-keypair.mjs`.
+   */
+  firma,
 } = {}) {
   const sessioni = new Map();
   // ⭐⭐⭐ FASE C (28/8) — istanziato qui: `avviaESegui` è una function declaration (issata), riferibile prima della sua definizione testuale più sotto.
@@ -371,7 +379,7 @@ export function createSessionRegistry({
       reasoning: reasoningEffettivo ?? undefined,
       segnaleStop: controller.signal,
       mobile: voce.mobile,
-      strumentiEstesi, ricercaWeb,
+      strumentiEstesi, ricercaWeb, firma,
       livelloAccesso, chiediApprovazioneFn, hookFn,
       permessiPerAttrezzo: voce.permessiPerAttrezzo,
       // ⭐⭐⭐ FASE C (28/8) — sub-agenti: sempre costruito (stesso principio di hookFn), il vero lavoro (limiti, isolamento) vive tutto dentro subagentOrchestrator.delegaSottoTask.
