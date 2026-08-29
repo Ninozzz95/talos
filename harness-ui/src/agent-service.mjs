@@ -134,6 +134,16 @@ export async function avviaSessione({
   onEvento, segnaleStop, messaggiIniziali, reasoning, mobile = false,
   strumentiEstesi, ricercaWeb,
   /*
+   * ⭐⭐⭐ 29/8 — FASE K, R2 planner costoso + editor economico. Stesso
+   * principio di `ricercaWeb`/`reasoning`: inoltrato SENZA logica
+   * propria — il pre-loop, il gate `livelloAccesso:'lettura'`, il
+   * filtro read-safe degli attrezzi vivono TUTTI dentro
+   * `talosHarness.mjs` (questo file non li duplica). `undefined` per
+   * default (owner, 29/8: "Configurabile, nessun default forzato") —
+   * PARITÀ, il loop resta quello di sempre, un modello solo.
+   */
+  modelloPlanner,
+  /*
    * ⭐⭐⭐ 29/8 — FASE H, `generate_image`. A differenza di `ricercaWeb`:
    * SEMPRE definito (config.mjs, `parseImmagine` — un default onesto e
    * reale, mai `undefined`), perché `generate_image` non ha una
@@ -634,7 +644,7 @@ export async function avviaSessione({
     const esito = await talosLavoraFn({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
       onGiro, onScrittura, onDelta, reasoning,
-      strumentiEstesi, ricercaWeb, onArtefatto, onDocumento, onImmagine,
+      strumentiEstesi, ricercaWeb, onArtefatto, onDocumento, onImmagine, modelloPlanner,
       livelloAccesso, chiediApprovazioneFn, hookFn: hookFnConPlugin, permessiPerAttrezzo, onDelega, codaMessaggiFn,
       firma, toolMcp, chiamaToolMcpFn, skillsDisponibili, caricaSkillFn, toolPlugin, eseguiToolPluginFn,
     });

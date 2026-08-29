@@ -273,18 +273,24 @@ function leggiCorpoJson(req, limiteByte = MAX_REQUEST_BODY_BYTES) {
  */
 function requireTaskIdBody(body) {
   const chiavi = Object.keys(body ?? {});
-  const chiaviAmmesse = ['taskId', 'modello', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo'];
+  // ⭐⭐⭐ 29/8 — FASE K: modelloPlanner riusa la STESSA validazione di modello (modelloRichiestaValido) — è lo stesso formato OpenRouter, mai un secondo validatore.
+  const chiaviAmmesse = ['taskId', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo'];
   const soloAmmesse = chiavi.length > 0 && chiavi.length <= chiaviAmmesse.length && chiavi.every((k) => chiaviAmmesse.includes(k)) && chiavi.includes('taskId');
   if (
     !soloAmmesse || typeof body.taskId !== 'string' || body.taskId.length === 0
     || ('client' in body && body.client !== 'desktop' && body.client !== 'mobile')
   ) {
-    const errore = new Error('Corpo non valido: atteso {taskId, modello?, reasoning?, client?, permessi?, permessiPerAttrezzo?}');
+    const errore = new Error('Corpo non valido: atteso {taskId, modello?, modelloPlanner?, reasoning?, client?, permessi?, permessiPerAttrezzo?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
   if ('modello' in body && body.modello !== undefined && !modelloRichiestaValido(body.modello)) {
     const errore = new Error('modello deve avere la forma "vendor/nome-modello" (formato OpenRouter)');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  if ('modelloPlanner' in body && body.modelloPlanner !== undefined && !modelloRichiestaValido(body.modelloPlanner)) {
+    const errore = new Error('modelloPlanner deve avere la forma "vendor/nome-modello" (formato OpenRouter)');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -306,6 +312,7 @@ function requireTaskIdBody(body) {
   return {
     taskId: body.taskId,
     modello: 'modello' in body && body.modello !== undefined ? body.modello : null,
+    modelloPlanner: 'modelloPlanner' in body && body.modelloPlanner !== undefined ? body.modelloPlanner : null,
     reasoning: 'reasoning' in body ? body.reasoning : null,
     mobile: body.client === 'mobile',
     permessi: 'permessi' in body && body.permessi !== undefined ? body.permessi : null,
@@ -334,7 +341,8 @@ function requireTaskIdBody(body) {
  * resta nel registro/custom-task.mjs, stesso principio di sempre.
  */
 function requireCustomTaskBody(body) {
-  const AMMESSE = ['cartellaId', 'cartellaLibera', 'consegna', 'comandoProva', 'modello', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo'];
+  // ⭐⭐⭐ 29/8 — FASE K: stesso principio di requireTaskIdBody, modelloPlanner riusa modelloRichiestaValido.
+  const AMMESSE = ['cartellaId', 'cartellaLibera', 'consegna', 'comandoProva', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo'];
   const chiavi = Object.keys(body ?? {});
   const haCartellaId = 'cartellaId' in body && body.cartellaId !== undefined;
   const haCartellaLibera = 'cartellaLibera' in body && body.cartellaLibera !== undefined;
@@ -346,12 +354,17 @@ function requireCustomTaskBody(body) {
     || (haCartellaLibera && typeof body.cartellaLibera !== 'string')
     || ('client' in body && body.client !== 'desktop' && body.client !== 'mobile')
   ) {
-    const errore = new Error('Corpo non valido: atteso {cartellaId XOR cartellaLibera, consegna, comandoProva?, modello?, reasoning?, client?, permessi?, permessiPerAttrezzo?}');
+    const errore = new Error('Corpo non valido: atteso {cartellaId XOR cartellaLibera, consegna, comandoProva?, modello?, modelloPlanner?, reasoning?, client?, permessi?, permessiPerAttrezzo?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
   if ('modello' in body && body.modello !== undefined && !modelloRichiestaValido(body.modello)) {
     const errore = new Error('modello deve avere la forma "vendor/nome-modello" (formato OpenRouter)');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  if ('modelloPlanner' in body && body.modelloPlanner !== undefined && !modelloRichiestaValido(body.modelloPlanner)) {
+    const errore = new Error('modelloPlanner deve avere la forma "vendor/nome-modello" (formato OpenRouter)');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -376,6 +389,7 @@ function requireCustomTaskBody(body) {
     consegna: body.consegna,
     comandoProva: 'comandoProva' in body ? body.comandoProva : undefined,
     modello: 'modello' in body ? body.modello : null,
+    modelloPlanner: 'modelloPlanner' in body && body.modelloPlanner !== undefined ? body.modelloPlanner : null,
     reasoning: 'reasoning' in body ? body.reasoning : null,
     mobile: body.client === 'mobile',
     permessi: 'permessi' in body && body.permessi !== undefined ? body.permessi : null,
@@ -625,9 +639,9 @@ export function createHttpApp({
       try {
         requireNoQuery(url);
         const corpo = await leggiCorpoJson(req);
-        const { taskId, modello, reasoning, mobile, permessi, permessiPerAttrezzo } = requireTaskIdBody(corpo);
+        const { taskId, modello, modelloPlanner, reasoning, mobile, permessi, permessiPerAttrezzo } = requireTaskIdBody(corpo);
         const esito = sessionRegistry.avvia(taskId, {
-          modelloScelto: modello, reasoningScelto: reasoning, mobile,
+          modelloScelto: modello, modelloPlannerScelto: modelloPlanner, reasoningScelto: reasoning, mobile,
           permessiScelto: permessi, permessiPerAttrezzoScelto: permessiPerAttrezzo,
         });
         if ('erroreAvvio' in esito) {

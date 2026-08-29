@@ -289,6 +289,14 @@ export function createSessionRegistry({
     forkDa = null, voceEsistente = null, modelloRichiesta = null, reasoningRichiesto = null, mobile = false,
     permessiRichiesti = null, permessiPerAttrezzoRichiesti = null,
     /*
+     * ⭐⭐⭐ 29/8 — FASE K, R2 planner costoso + editor economico. Stessa
+     * disciplina esatta di `modelloRichiesta` una riga sopra: un
+     * fork/resume eredita il planner della voce originale (mai perso
+     * a metà conversazione), un avvio nuovo usa quello richiesto o
+     * nessuno — owner, "Configurabile, nessun default forzato".
+     */
+    modelloPlannerRichiesta = null,
+    /*
      * ⭐⭐⭐ FASE C (28/8) — sub-agenti. `padreId`/`profonditaDelega`
      * identificano una sessione FIGLIA creata da `subagentOrchestrator`
      * (mai da un umano) — assenti/`0` per ogni sessione normale,
@@ -315,6 +323,14 @@ export function createSessionRegistry({
      * di tutto.
      */
     const modelloEffettivo = modelloRichiesta || voceEsistente?.modello || modello;
+    /*
+     * ⭐⭐⭐ 29/8 — FASE K, stessa disciplina esatta di `modelloEffettivo`
+     * appena sopra — MA senza un `|| modello` finale: un planner
+     * assente resta assente (`null`), non ricade MAI sul modello
+     * dell'editor (sarebbe un default forzato inventato qui, contro
+     * la decisione esplicita dell'owner).
+     */
+    const modelloPlannerEffettivo = modelloPlannerRichiesta || voceEsistente?.modelloPlanner || null;
     /*
      * ⭐ 27/8, R1 — stessa disciplina di `modelloEffettivo`: un fork/resume
      * eredita il `reasoning` della voce originale (mai perso in silenzio a
@@ -347,6 +363,7 @@ export function createSessionRegistry({
     const voce = voceEsistente ?? {
       eventi: [], ascoltatori: new Set(), taskId, cartella, task, comandoProva, forkDa,
       avviataAlle: clock().toISOString(), messaggiFinali: null, modello: modelloEffettivo,
+      modelloPlanner: modelloPlannerEffettivo,
       reasoning: reasoningEffettivo, mobile, permessi: permessiEffettivi,
       permessiPerAttrezzo: permessiPerAttrezzoEffettivi, approvazionePendente: null,
       // ⭐⭐⭐ FASE C (28/8) — sub-agenti: null/0 per ogni sessione avviata da un umano, valorizzati SOLO da subagentOrchestrator.delegaSottoTask. `esitoDelega` (per il foglio "Albero sessione") si popola quando la sessione conclude, vedi sotto.
@@ -450,6 +467,8 @@ export function createSessionRegistry({
       segnaleStop: controller.signal,
       mobile: voce.mobile,
       strumentiEstesi, ricercaWeb, firma, immagine,
+      // ⭐⭐⭐ FASE K (29/8) — `?? undefined`: `voce.modelloPlanner` è `null` per una sessione senza planner (mai passato a talosLavoraFn come `null`, che il kernel tratterebbe diversamente da "assente" in un controllo `typeof`).
+      modelloPlanner: voce.modelloPlanner ?? undefined,
       livelloAccesso, chiediApprovazioneFn, hookFn,
       permessiPerAttrezzo: voce.permessiPerAttrezzo,
       // ⭐⭐⭐ FASE C (28/8) — sub-agenti: sempre costruito (stesso principio di hookFn), il vero lavoro (limiti, isolamento) vive tutto dentro subagentOrchestrator.delegaSottoTask.
@@ -545,7 +564,7 @@ export function createSessionRegistry({
      * sotto). Nessun errore: solo si comporta come "Workspace write".
      */
     avvia(taskId, {
-      modelloScelto = null, reasoningScelto = null, mobile = false,
+      modelloScelto = null, modelloPlannerScelto = null, reasoningScelto = null, mobile = false,
       permessiScelto = null, permessiPerAttrezzoScelto = null,
     } = {}) {
       let preparato;
@@ -557,7 +576,7 @@ export function createSessionRegistry({
       }
       return avviaESegui({
         taskId, cartella: preparato.cartella, task: preparato.task, comandoProva: preparato.comandoProva,
-        modelloRichiesta: modelloScelto, reasoningRichiesto: reasoningScelto, mobile,
+        modelloRichiesta: modelloScelto, modelloPlannerRichiesta: modelloPlannerScelto, reasoningRichiesto: reasoningScelto, mobile,
         permessiRichiesti: permessiScelto, permessiPerAttrezzoRichiesti: permessiPerAttrezzoScelto,
       });
     },
@@ -581,7 +600,7 @@ export function createSessionRegistry({
      */
     avviaLibero({
       cartellaId, cartellaLibera, consegna, comandoProva,
-      modello: modelloScelto = null, reasoning: reasoningScelto = null, mobile = false,
+      modello: modelloScelto = null, modelloPlanner: modelloPlannerScelto = null, reasoning: reasoningScelto = null, mobile = false,
       permessi: permessiScelto = null, permessiPerAttrezzo: permessiPerAttrezzoScelto = null,
     }) {
       if (cartellaLibera && permessiScelto !== 'Full access') {
@@ -596,7 +615,7 @@ export function createSessionRegistry({
       }
       return avviaESegui({
         taskId: cartellaLibera ? 'libero:full-access' : `libero:${cartellaId}`, cartella: preparato.cartella, task: preparato.task,
-        comandoProva: preparato.comandoProva, modelloRichiesta: modelloScelto, reasoningRichiesto: reasoningScelto, mobile,
+        comandoProva: preparato.comandoProva, modelloRichiesta: modelloScelto, modelloPlannerRichiesta: modelloPlannerScelto, reasoningRichiesto: reasoningScelto, mobile,
         permessiRichiesti: permessiScelto, permessiPerAttrezzoRichiesti: permessiPerAttrezzoScelto,
       });
     },
