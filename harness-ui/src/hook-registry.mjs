@@ -40,6 +40,14 @@ export class HookRegistryError extends Error {
 }
 
 const NOME_FILE_HOOKS = '.harness-ui-hooks.json';
+/**
+ * ⭐ 29/8 — esportata (era locale a caricaHooks) perché FASE G
+ * (plugin-registry.mjs) valida gli hook dichiarati DENTRO un
+ * plugin.json con la STESSA regola — un import qui, non una seconda
+ * lista che potrebbe divergere in silenzio se un evento nuovo si
+ * aggiunge un domani.
+ */
+export const EVENTI_VALIDI = new Set(['pre_tool_call', 'post_tool_call', 'session_start', 'session_end']);
 
 /**
  * Legge `<cartella>/.harness-ui-hooks.json`. Un progetto senza hook è
@@ -68,7 +76,6 @@ export async function caricaHooks({ cartella }, deps = {}) {
   if (!dati || !Array.isArray(dati.hooks)) {
     throw new HookRegistryError(`${NOME_FILE_HOOKS} deve avere un campo "hooks" (array)`, 'HOOK_MALFORMED');
   }
-  const EVENTI_VALIDI = new Set(['pre_tool_call', 'post_tool_call', 'session_start', 'session_end']);
   const hooks = dati.hooks.map((voce, indice) => {
     if (typeof voce?.id !== 'string' || voce.id.length === 0) {
       throw new HookRegistryError(`hooks[${indice}] manca di "id" (stringa non vuota)`, 'HOOK_MALFORMED');
