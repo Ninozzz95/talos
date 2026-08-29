@@ -42,6 +42,11 @@ harness-ui/.plugin-trust/
 # stesso principio di .automations/ in cima a questo blocco.
 harness-ui/.sessions-store/
 
+# ⭐ 30/8 — FASE N, quarto sistema: le note dell'owner, GLOBALI (non
+# per-progetto, vedi la doc in notes-store.mjs) — dati locali generati
+# a runtime, stesso principio di .automations/ in cima a questo blocco.
+harness-ui/.notes-store/
+
 core/vendor/
 validator/node_modules/
 control-plane/vendor/

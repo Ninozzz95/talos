@@ -1397,6 +1397,8 @@ export function createHttpApp({
         const libraryMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/library$/.exec(url.pathname);
         // ⭐⭐⭐ 29/8 — FASE G: il Capability hub elenca i plugin dichiarati e il loro stato di fiducia vero — stesso principio esatto di mcpMatch sopra (un plugin ESEGUE, a differenza delle skill).
         const pluginsMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/plugins$/.exec(url.pathname);
+        // ⭐⭐⭐ FASE N, quarto sistema (30/8) — il Capability hub elenca le note dell'owner (GLOBALI, non del progetto di questa sessione) — stesso principio esatto di skillsMatch sopra.
+        const notesMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/notes$/.exec(url.pathname);
         // ⭐⭐⭐ FASE C (28/8) — sub-agenti: il foglio "Albero sessione" elenca i figli VERI di una sessione, stesso principio di hooksMatch sopra.
         const childrenMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/children$/.exec(url.pathname);
         // ⭐⭐⭐ 28/8 — non SESSION-scoped: un artefatto ha un id UUID già globalmente unico (agent-service.mjs), stesso principio di /api/v1/models.
@@ -1514,6 +1516,22 @@ export function createHttpApp({
             throw errore;
           }
           data = { voci: esito.voci, errore: esito.errore };
+        } else if (notesMatch) {
+          requireNoQuery(url);
+          let sessionId;
+          try {
+            sessionId = decodeURIComponent(notesMatch[1]);
+          } catch {
+            sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+            return;
+          }
+          const esito = await sessionRegistry.elencaNote(sessionId);
+          if ('erroreAvvio' in esito) {
+            const errore = new Error(esito.erroreAvvio);
+            errore.code = esito.code;
+            throw errore;
+          }
+          data = { note: esito.note, errore: esito.errore };
         } else if (pluginsMatch) {
           requireNoQuery(url);
           let sessionId;

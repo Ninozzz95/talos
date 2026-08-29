@@ -14,6 +14,7 @@ import { McpRegistryError } from '../src/mcp-registry.mjs';
 import { SkillRegistryError } from '../src/skill-registry.mjs';
 import { PluginRegistryError } from '../src/plugin-registry.mjs';
 import { LibraryStoreError } from '../src/library-store.mjs';
+import { NoteStoreError } from '../src/notes-store.mjs';
 import { leggiRegistro as leggiRegistroPerAttesa, registraRigaSync } from '../src/session-store.mjs';
 
 // Ne' avviaSessione ne' talosLavora girano MAI qui, veri o finti a metà: si
@@ -2075,6 +2076,55 @@ test('⛔⛔ AL CONTRARIO — elencaLibreria con .harness-ui-library malformato:
 test('⛔ AL CONTRARIO — elencaLibreria su un id inesistente: NOT_FOUND', async () => {
   const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
   const esito = await registro.elencaLibreria('id-mai-esistito');
+  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+});
+
+/*
+ * ⭐⭐⭐ FASE N, quarto sistema (30/8): `elencaNote` è ciò che il
+ * Capability hub chiama — stesso schema di `elencaLibreria` appena
+ * sopra, MA `elencaNoteRegistroFn` deve ricevere `cartellaNote`
+ * (GLOBALE), MAI la `cartella` della sessione — provato esplicitamente
+ * passando le due come percorsi diversi.
+ */
+test('⭐⭐⭐ elencaNote: torna le note dichiarate, id/titolo/contenuto/aggiornataAlle soltanto, da cartellaNote (GLOBALE) mai dalla cartella della sessione', async () => {
+  const finta = sessioneControllabile();
+  const notaPronta = { id: 'nota-1', titolo: 'Codice cancello', contenuto: '4471', creataAlle: 'x', aggiornataAlle: '2026-08-30T10:00:00.000Z' };
+  let cartellaRicevuta;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    cartellaNote: '/percorso/globale/note',
+    elencaNoteRegistroFn: async ({ cartella }) => { cartellaRicevuta = cartella; return [notaPronta]; },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.elencaNote(sessionId);
+
+  assert.equal(esito.ok, true);
+  assert.equal(esito.errore, null);
+  assert.equal(cartellaRicevuta, '/percorso/globale/note');
+  assert.deepEqual(esito.note, [{ id: 'nota-1', titolo: 'Codice cancello', contenuto: '4471', aggiornataAlle: '2026-08-30T10:00:00.000Z' }]);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔ AL CONTRARIO — elencaNote con .notes-store malformato: {note:null, errore}, MAI un array vuoto che si legge come "nessuna nota"', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    elencaNoteRegistroFn: async () => { throw new NoteStoreError('rotta.json non è JSON valido', 'NOTE_STORE_MALFORMED'); },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.elencaNote(sessionId);
+
+  assert.equal(esito.ok, true);
+  assert.equal(esito.note, null, 'null, non [] — sono due fatti diversi');
+  assert.match(esito.errore, /non è JSON valido/);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔ AL CONTRARIO — elencaNote su un id inesistente: NOT_FOUND', async () => {
+  const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
+  const esito = await registro.elencaNote('id-mai-esistito');
   assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
 });
 

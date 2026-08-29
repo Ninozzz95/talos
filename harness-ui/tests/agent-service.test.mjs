@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { avviaSessione, compattaSessione, eseguiComandoDiretto } from '../src/agent-service.mjs';
+import { NoteStoreError } from '../src/notes-store.mjs';
 import { WorkspaceFileError } from '../src/workspace-files.mjs';
 
 // `talosLavoraFn` finto: agent-service.mjs non deve mai far girare un vero
@@ -1597,6 +1598,132 @@ test('⛔⛔⛔ AL CONTRARIO — elencaVociFn che LANCIA (disco illeggibile) si 
   await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, elencaVociFn });
 
   await assert.rejects(() => catturato.onLibreriaLista({}), /EACCES/);
+});
+
+/*
+ * ⭐⭐⭐ FASE N, quarto sistema (30/8) — Notes. Stesso principio dei 4
+ * callback Libreria di lettura sopra (sempre costruiti,
+ * incondizionatamente): le 4 voci Notes sono già nel default
+ * `strumentiEstesi` di session-registry.mjs. ⛔ Unica differenza reale:
+ * `cartellaNote` è GLOBALE, non la `cartella` della sessione — ogni
+ * test sotto lo prova esplicitamente passando le due come percorsi
+ * DIVERSI e verificando quale delle due arriva davvero allo store.
+ */
+test('⭐⭐⭐ i 4 callback onNote* arrivano SEMPRE a talosLavoraFn, incondizionatamente', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+
+  await avviaSessione({ cartella: '/tmp/senza-note', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn });
+
+  for (const nome of ['onNoteLista', 'onNoteCrea', 'onNoteAggiorna', 'onNoteElimina']) {
+    assert.equal(typeof catturato[nome], 'function', `${nome} deve essere sempre una funzione, mai undefined`);
+  }
+});
+
+test('⭐⭐⭐ onNoteLista: cartellaNote (GLOBALE) passata a elencaNoteFn, MAI la cartella della sessione', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  let argomentiRicevuti;
+  const elencaNoteFn = async (argomenti) => {
+    argomentiRicevuti = argomenti;
+    return [{ id: 'nota-1', titolo: 'x', contenuto: 'y' }];
+  };
+
+  await avviaSessione({
+    cartella: '/tmp/progetto-vero', cartellaNote: '/tmp/note-globali', task: TASK, modello: 'm', chiave: 'k',
+    onEvento: () => {}, talosLavoraFn, elencaNoteFn,
+  });
+
+  const risultato = await catturato.onNoteLista({});
+  assert.deepEqual(argomentiRicevuti, { cartella: '/tmp/note-globali' });
+  assert.equal(risultato.totale, 1);
+  assert.equal(risultato.note[0].id, 'nota-1');
+});
+
+test('⭐⭐ onNoteLista: limit fuori range (0, negativo, oltre 50, assente) viene sempre riportato a 1-50', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const tutte = Array.from({ length: 60 }, (_, i) => ({ id: `nota-${i}`, titolo: `t${i}`, contenuto: 'x' }));
+  const elencaNoteFn = async () => tutte;
+
+  await avviaSessione({ cartella: '/tmp/x', cartellaNote: '/tmp/n', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, elencaNoteFn });
+
+  assert.equal((await catturato.onNoteLista({})).note.length, 20, 'assente: default 20');
+  assert.equal((await catturato.onNoteLista({ limit: 0 })).note.length, 1, '0: riportato al minimo 1');
+  assert.equal((await catturato.onNoteLista({ limit: -5 })).note.length, 1, 'negativo: riportato al minimo 1');
+  assert.equal((await catturato.onNoteLista({ limit: 999 })).note.length, 50, 'oltre 50: riportato al massimo 50');
+  assert.equal((await catturato.onNoteLista({})).totale, 60, 'totale resta il conteggio VERO, non troncato dal limit');
+});
+
+test('⭐⭐⭐ onNoteCrea: argomenti VERI passati a creaNotaFn su cartellaNote, esito onesto sulla nota salvata', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  let ricevuti;
+  const creaNotaFn = async (argomenti) => { ricevuti = argomenti; return { id: 'nota-1', titolo: argomenti.title }; };
+
+  await avviaSessione({ cartella: '/tmp/x', cartellaNote: '/tmp/note-globali', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, creaNotaFn });
+
+  const risultato = await catturato.onNoteCrea({ title: 'Codice cancello', content: '4471' });
+  assert.deepEqual(ricevuti, { cartella: '/tmp/note-globali', title: 'Codice cancello', content: '4471' });
+  assert.equal(risultato.ok, true);
+  assert.match(risultato.esito, /Saved the note «Codice cancello» \(id nota-1\)\./);
+});
+
+test('⛔⛔ AL CONTRARIO — onNoteCrea: un creaNotaFn che lancia NoteStoreError (title vuoto) torna ok:false col messaggio VERO, mai un\'eccezione che scavalca il kernel', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const creaNotaFn = async () => { throw new NoteStoreError('title deve avere 1-120 caratteri', 'NOTE_INVALID'); };
+
+  await avviaSessione({ cartella: '/tmp/x', cartellaNote: '/tmp/n', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, creaNotaFn });
+
+  const risultato = await catturato.onNoteCrea({ title: '', content: 'x' });
+  assert.equal(risultato.ok, false);
+  assert.match(risultato.esito, /title deve avere 1-120 caratteri/);
+});
+
+test('⛔⛔ AL CONTRARIO — onNoteAggiorna: né title né content passati è un rifiuto onesto, creaNotaFn/aggiornaNotaFn MAI chiamata', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  let chiamata = false;
+  const aggiornaNotaFn = async () => { chiamata = true; return {}; };
+
+  await avviaSessione({ cartella: '/tmp/x', cartellaNote: '/tmp/n', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, aggiornaNotaFn });
+
+  const risultato = await catturato.onNoteAggiorna({ id: 'nota-1' });
+  assert.equal(risultato.ok, false);
+  assert.match(risultato.esito, /Nothing to change/);
+  assert.equal(chiamata, false);
+});
+
+test('⭐⭐ onNoteAggiorna: un id inesistente (NOTE_NOT_FOUND) diventa il messaggio onesto del tool mobile, non l\'errore grezzo dello store', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const aggiornaNotaFn = async () => { throw new NoteStoreError('nessuna nota con id mai-esistita', 'NOTE_NOT_FOUND'); };
+
+  await avviaSessione({ cartella: '/tmp/x', cartellaNote: '/tmp/n', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, aggiornaNotaFn });
+
+  const risultato = await catturato.onNoteAggiorna({ id: 'mai-esistita', title: 'x' });
+  assert.equal(risultato.ok, false);
+  assert.equal(risultato.esito, 'There is no note with that id. Call notes_list to see the current ones.');
+});
+
+test('⭐⭐⭐ onNoteElimina: una nota che esisteva davvero dice "deleted", una già assente dice "nothing to delete" — due messaggi diversi per due stati diversi', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const presenti = new Set(['nota-vera']);
+  const leggiNotaFn = async ({ id }) => (presenti.has(id) ? { id, titolo: 'x', contenuto: 'y' } : null);
+  const eliminaNotaFn = async () => {};
+
+  await avviaSessione({ cartella: '/tmp/x', cartellaNote: '/tmp/n', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, leggiNotaFn, eliminaNotaFn });
+
+  const rimossa = await catturato.onNoteElimina({ id: 'nota-vera' });
+  assert.equal(rimossa.esito, 'That note has been deleted.');
+  const giaAssente = await catturato.onNoteElimina({ id: 'mai-esistita' });
+  assert.equal(giaAssente.esito, 'There was no note with that id — nothing to delete.');
+  assert.equal(giaAssente.ok, true, 'idempotente: già assente è l\'esito voluto, non un fallimento');
 });
 
 /*

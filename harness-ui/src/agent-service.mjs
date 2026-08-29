@@ -43,6 +43,13 @@ import {
   trovaVoce as trovaVoceLibreria,
 } from './library-store.mjs';
 import {
+  aggiornaNota as aggiornaNotaReale,
+  creaNota as creaNotaReale,
+  elencaNote as elencaNoteReale,
+  eliminaNota as eliminaNotaReale,
+  leggiNota as leggiNotaReale,
+} from './notes-store.mjs';
+import {
   MODALITA_SUPPORTATE as MODALITA_SUPPORTATE_LIBRERIA,
   creaRicevutaPolitica as creaRicevutaPoliticaLibreria,
   creaRicevutePolitica as creaRicevutePoliticaLibreria,
@@ -324,6 +331,22 @@ export async function avviaSessione({
    */
   leggiPoliticaFn = leggiPoliticaReale,
   scriviPoliticaFn = scriviPoliticaReale,
+  /*
+   * ⭐⭐⭐ FASE N, quarto sistema (30/8) — Notes. `cartellaNote`: GLOBALE,
+   * non `cartella` (il workspace di QUESTA sessione) — una nota non è
+   * un artefatto di un progetto, vedi la doc in notes-store.mjs. Stesso
+   * pattern di threading di `cartellaTrustHook`/`cartellaTrustMcp`/
+   * `cartellaTrustPlugin`: nessun default QUI, il default reale vive in
+   * session-registry.mjs. Nessun gate di fiducia (come le skill/Libreria
+   * di lettura): una nota è un file locale dell'owner, non un comando o
+   * una connessione.
+   */
+  cartellaNote,
+  elencaNoteFn = elencaNoteReale,
+  creaNotaFn = creaNotaReale,
+  aggiornaNotaFn = aggiornaNotaReale,
+  eliminaNotaFn = eliminaNotaReale,
+  leggiNotaFn = leggiNotaReale,
 }) {
   const threadId = randomUUID();
   const runId = randomUUID();
@@ -881,6 +904,61 @@ export async function avviaSessione({
     return { ok: true, esito: `Updated the Library policy to revision ${aggiornata.revision}. Undo receipt: ${ricevuta.receiptId}.` };
   };
 
+  /*
+   * ⭐⭐⭐ FASE N, quarto sistema (30/8) — Notes. `cartellaNote` è GLOBALE
+   * (non `cartella`, il workspace di questa sessione — vedi la doc in
+   * notes-store.mjs) — stesso contratto "questo file non sa DOVE/COME"
+   * dei callback Libreria sopra: `argomenti` verbatim, la traduzione
+   * verso i nomi italiani dello store vive SOLO qui.
+   */
+  const onNoteLista = async (argomenti) => {
+    const note = await elencaNoteFn({ cartella: cartellaNote });
+    /*
+     * ⛔ NON `Number(argomenti?.limit) || 20` — trovato da un test
+     * proprio, non ipotizzato: `||` tratta `0` come assente e lo
+     * riporterebbe al default 20 invece che al minimo 1. `limit:0` è
+     * un valore VALIDO (fuori range, va clampato), non un'assenza.
+     */
+    const richiesto = Number(argomenti?.limit);
+    const limite = Number.isFinite(richiesto) ? Math.min(Math.max(richiesto, 1), 50) : 20;
+    return { note: note.slice(0, limite), totale: note.length };
+  };
+
+  const onNoteCrea = async (argomenti) => {
+    try {
+      const creata = await creaNotaFn({ cartella: cartellaNote, title: argomenti?.title, content: argomenti?.content });
+      return { ok: true, esito: `Saved the note «${creata.titolo}» (id ${creata.id}).` };
+    } catch (errore) {
+      return { ok: false, esito: errore instanceof Error ? errore.message : String(errore) };
+    }
+  };
+
+  const onNoteAggiorna = async (argomenti) => {
+    // ⛔ Rifiutato QUI, non nello store: una patch vuota non è un errore di validazione del campo, è "niente da fare" — stesso principio del tool mobile (verbatim, notesWriteTools.ts).
+    if (argomenti?.title === undefined && argomenti?.content === undefined) {
+      return { ok: false, esito: 'Nothing to change: pass a new title, a new body, or both.' };
+    }
+    try {
+      const aggiornata = await aggiornaNotaFn({ cartella: cartellaNote, id: argomenti?.id, title: argomenti?.title, content: argomenti?.content });
+      return { ok: true, esito: `Updated the note «${aggiornata.titolo}».` };
+    } catch (errore) {
+      if (errore?.code === 'NOTE_NOT_FOUND') {
+        return { ok: false, esito: 'There is no note with that id. Call notes_list to see the current ones.' };
+      }
+      return { ok: false, esito: errore instanceof Error ? errore.message : String(errore) };
+    }
+  };
+
+  const onNoteElimina = async (argomenti) => {
+    const id = argomenti?.id ?? '';
+    // ⛔ Verificato PRIMA di cancellare (eliminaNotaFn è idempotente, mai un throw su un id già assente): stesso messaggio a due facce del tool mobile — "cancellata ora" contro "già assente, niente da fare".
+    const esisteva = await leggiNotaFn({ cartella: cartellaNote, id });
+    await eliminaNotaFn({ cartella: cartellaNote, id });
+    return esisteva
+      ? { ok: true, esito: 'That note has been deleted.' }
+      : { ok: true, esito: 'There was no note with that id — nothing to delete.' };
+  };
+
   try {
     const esito = await talosLavoraFn({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
@@ -890,6 +968,7 @@ export async function avviaSessione({
       firma, toolMcp, chiamaToolMcpFn, skillsDisponibili, caricaSkillFn, toolPlugin, eseguiToolPluginFn,
       onLibreriaLista, onLibreriaCerca, onLibreriaLeggi, onLibreriaOrigine,
       onLibreriaRinomina, onLibreriaElimina, onLibreriaEsporta, onLibreriaPolitica,
+      onNoteLista, onNoteCrea, onNoteAggiorna, onNoteElimina,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));
     return { threadId, runId, ok: esito.comeFinita === 'concluso', esito, erroreInterno: null };

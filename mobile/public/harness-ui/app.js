@@ -1218,6 +1218,56 @@
     return riga;
   }
 
+  /**
+   * ⭐⭐⭐ FASE N, quarto sistema (30/8) — stesso identico pattern di
+   * caricaPannelloLibreria() sopra. ⛔ Unica differenza reale: le note
+   * sono GLOBALI (non del progetto della sessione attiva) — il testo
+   * di stato onesto lo dice esplicitamente, mai lasciato ambiguo.
+   */
+  async function caricaPannelloNote() {
+    const mount = $('#notesListMount', sheetBody);
+    if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
+    if (!state.realSession.id) {
+      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione attiva — apri o avvia un task per vedere le Notes.'));
+      return;
+    }
+    mount.replaceChildren(textElement('p', 'board-empty', 'Carico le Notes…'));
+    let dati;
+    try {
+      dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/notes`);
+    } catch (error) {
+      mount.replaceChildren(textElement('p', 'board-empty', `Notes non disponibili: ${error.message}`));
+      return;
+    }
+    if (mount !== $('#notesListMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
+    if (dati.errore) {
+      mount.replaceChildren(textElement('p', 'board-empty', `.notes-store non valido: ${dati.errore}`));
+      return;
+    }
+    if (!dati.note || dati.note.length === 0) {
+      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna nota (.notes-store/, globale — non del progetto).'));
+      return;
+    }
+    mount.replaceChildren(...dati.note.map((nota) => rigaNota(nota)));
+  }
+
+  /** ⭐⭐⭐ FASE N, quarto sistema (30/8) — sempre attiva (una nota non ha un gate di fiducia): niente bottone, solo il riassunto. */
+  function rigaNota(nota) {
+    const riga = document.createElement('div');
+    riga.className = 'sheet-option';
+    riga.setAttribute('role', 'group');
+    const iconEl = document.createElement('span');
+    iconEl.className = 'sheet-icon';
+    iconEl.innerHTML = icon('i-files');
+    const testo = document.createElement('span');
+    testo.append(
+      textElement('strong', null, nota.titolo),
+      textElement('small', null, nota.contenuto.length > 80 ? `${nota.contenuto.slice(0, 80)}…` : nota.contenuto),
+    );
+    riga.append(iconEl, testo);
+    return riga;
+  }
+
   /** ⭐⭐⭐ 29/8 — sempre attiva (le skill non hanno un gate di fiducia): niente bottone, solo il riassunto. */
   function rigaSkill(skill) {
     const riga = document.createElement('div');
@@ -1901,7 +1951,7 @@
     showEmbeddedDialog(sheetDialog);
     wireSheetActions(type);
     if (type === 'control') { refreshDoctorBadge(); caricaPannelloHooks(); }
-    if (type === 'capabilities') { caricaPannelloMcp(); caricaPannelloSkill(); caricaPannelloPlugin(); caricaPannelloLibreria(); }
+    if (type === 'capabilities') { caricaPannelloMcp(); caricaPannelloSkill(); caricaPannelloPlugin(); caricaPannelloLibreria(); caricaPannelloNote(); }
     if (type === 'sessionTree') caricaAlberoSessione();
     /*
      * ⭐⭐⭐ 27/8, owner: "riaprire lo stesso componente della selezione del
@@ -2096,10 +2146,13 @@
           <div id="libraryListMount"></div>
         </div>
         <div class="sheet-section">
+          <span class="sheet-label">Notes · promemoria in .notes-store/, GLOBALI — non del progetto</span>
+          <div id="notesListMount"></div>
+        </div>
+        <div class="sheet-section">
           <span class="sheet-label">Non ancora implementato</span>
           ${[
             ['Toolsets', 'i-code'], ['Computer use', 'i-layout'],
-            ['Voice', 'i-mic'],
             ['Gateways · Telegram, Discord, Slack, WhatsApp', 'i-link'],
             ['Profiles', 'i-robot'],
           ].map(([name, ico]) => `

@@ -60,6 +60,7 @@ import {
 } from './mcp-registry.mjs';
 import { caricaSkill as caricaSkillReale, SkillRegistryError } from './skill-registry.mjs';
 import { elencaVoci as elencaVociReale, LibraryStoreError } from './library-store.mjs';
+import { elencaNote as elencaNoteReale, NoteStoreError } from './notes-store.mjs';
 import {
   caricaPlugin as caricaPluginReale,
   fidaPlugin as fidaPluginReale,
@@ -181,6 +182,14 @@ export function createSessionRegistry({
    */
   elencaVociRegistroFn = elencaVociReale,
   /*
+   * ⭐⭐⭐ FASE N, quarto sistema (30/8), il pannello Capability hub:
+   * stesso ruolo di elencaVociRegistroFn appena sopra — a differenza
+   * di quello, però, chiama `elencaNoteRegistroFn({cartella:
+   * cartellaNote})`, MAI `voce.cartella` (le note sono GLOBALI, non
+   * di questa sessione — vedi la doc in notes-store.mjs).
+   */
+  elencaNoteRegistroFn = elencaNoteReale,
+  /*
    * ⭐⭐⭐ 29/8 — FASE G, esecuzione. Stesso pattern REALE di
    * `cartellaTrustMcp`/`cartellaTrustHook` sopra — un default relativo
    * a QUESTO file, fuori dal workspace di ogni progetto (il trust di
@@ -197,6 +206,18 @@ export function createSessionRegistry({
   caricaPluginFn = caricaPluginReale,
   verificaTrustPluginFn = verificaTrustPluginReale,
   fidaPluginFn = fidaPluginReale,
+  /*
+   * ⭐⭐⭐ FASE N, quarto sistema (30/8) — Notes, GLOBALE non per-progetto
+   * (vedi la doc in notes-store.mjs). Stesso pattern REALE di
+   * `cartellaTrustHook`/`cartellaTrustMcp`/`cartellaTrustPlugin` sopra —
+   * un default relativo a QUESTO file, fuori dal workspace di ogni
+   * progetto. A differenza di `cartellaStore` (FASE L): un default
+   * reale QUI è sicuro perché le scritture sono rare e gated
+   * (`strumentiEstesi` deve nominare `notes_create`/`notes_update` E il
+   * modello deve scegliere di chiamarli — mai "ad ogni evento" come il
+   * broadcast di sessione).
+   */
+  cartellaNote = fileURLToPath(new URL('../.notes-store/', import.meta.url)),
   modello,
   chiave,
   cartelleProgetto = [],
@@ -216,11 +237,13 @@ export function createSessionRegistry({
   // ⭐ FASE N (29/8) — settimo-decimo: i 4 tool di lettura Libreria (ATTREZZI_ESTESI[6..9] nel kernel), stesso principio — nessun gate, sempre offerti come gli altri sei.
   // ⭐ FASE N (29/8), seconda fetta — undicesimo-tredicesimo: le 3 mutazioni Libreria (ATTREZZI_ESTESI[10..12] nel kernel). MUTANO davvero (passano dal gate di permesso nel kernel stesso), ma il loro OFFRIRLE al modello segue lo stesso principio "schema fisso, sempre in lista" di document_create/generate_image — è verificaPermessoScrittura dentro talosHarness.mjs, non questa lista, a decidere se una chiamata passa.
   // ⭐ FASE N (29/8), terza fetta — quattordicesimo: library_context_policy_update (ATTREZZI_ESTESI[13]). Stesso principio "sempre in lista" — il kernel lo rifiuta comunque senza un canale di approvazione presente (ATTREZZI_SEMPRE_DA_CONFERMARE, nessuna eccezione nemmeno con permessiPerAttrezzo:'sempre').
+  // ⭐ FASE N, quarto sistema (30/8) — quindicesimo-diciottesimo: i 4 tool Notes (ATTREZZI_ESTESI[14..17] nel kernel). Le 3 mutazioni MUTANO davvero (gate nel kernel stesso) ma seguono lo stesso principio "sempre in lista" di document_create/library_rename.
   strumentiEstesi = [
     'web_search', 'artifact_create', 'document_create', 'time_now', 'delega_sottotask', 'generate_image',
     'library_list', 'library_search', 'library_read', 'library_file_origin',
     'library_rename', 'library_delete', 'library_export',
     'library_context_policy_update',
+    'notes_list', 'notes_create', 'notes_update', 'notes_delete',
   ],
   ricercaWeb,
   /*
@@ -598,6 +621,8 @@ export function createSessionRegistry({
       cartellaTrustMcp,
       // ⭐⭐⭐ FASE G (29/8) — stesso principio di cartellaTrustMcp appena sopra: agent-service.mjs legge .harness-ui-plugins/ SOLO se il workspace lo dichiara, zero I/O altrimenti.
       cartellaTrustPlugin,
+      // ⭐⭐⭐ FASE N, quarto sistema (30/8) — sempre passata: GLOBALE, non legata al workspace di questa sessione (vedi la doc in notes-store.mjs).
+      cartellaNote,
       onEvento: (evento) => broadcast(voce, evento),
     }).then((risultato) => {
       /*
@@ -1219,6 +1244,31 @@ export function createSessionRegistry({
       return {
         ok: true,
         voci: voci.map((v) => ({ id: v.id, nome: v.nome, fileType: v.fileType, origine: v.origine, aggiornatoIl: v.aggiornatoIl })),
+        errore: null,
+      };
+    },
+
+    /**
+     * ⭐⭐⭐ FASE N, quarto sistema (30/8), il pannello Capability hub:
+     * stesso ruolo di elencaLibreria appena sopra. ⛔ `cartellaNote`
+     * (GLOBALE, il parametro del costruttore), MAI `voce.cartella` — le
+     * note dell'owner non appartengono al workspace di questa sessione.
+     * Il solo scopo di `sessionId` qui è verificare che la sessione
+     * esista, stesso principio di elencaSkill/elencaLibreria.
+     */
+    async elencaNote(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      let note;
+      try {
+        note = await elencaNoteRegistroFn({ cartella: cartellaNote });
+      } catch (errore) {
+        if (errore instanceof NoteStoreError) return { ok: true, note: null, errore: errore.message };
+        throw errore;
+      }
+      return {
+        ok: true,
+        note: note.map((n) => ({ id: n.id, titolo: n.titolo, contenuto: n.contenuto, aggiornataAlle: n.aggiornataAlle })),
         errore: null,
       };
     },
