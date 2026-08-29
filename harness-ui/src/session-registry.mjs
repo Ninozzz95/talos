@@ -53,6 +53,7 @@ import {
   McpRegistryError,
   verificaTrustMcp as verificaTrustMcpReale,
 } from './mcp-registry.mjs';
+import { caricaSkill as caricaSkillReale, SkillRegistryError } from './skill-registry.mjs';
 
 export const EXPORT_SCHEMA = 'talos.harness-ui.session-export.v1';
 
@@ -102,6 +103,16 @@ export function createSessionRegistry({
   caricaServerMcpFn = caricaServerMcpReale,
   verificaTrustMcpFn = verificaTrustMcpReale,
   fidaServerMcpFn = fidaServerMcpReale,
+  /*
+   * ⭐⭐⭐ 29/8 — FASE F, il pannello Capability hub: stesso pattern
+   * iniettabile di caricaServerMcpFn sopra. Nessun verificaTrust/fida
+   * qui — le skill non hanno un gate di fiducia, vedi skill-registry.mjs.
+   * ⛔ Nome `caricaSkillRegistroFn`, non `caricaSkillFn`: quel nome è
+   * già preso in agent-service.mjs per un ruolo diverso (il callback
+   * nome→corpo passato al kernel) — due cose distinte, mai lo stesso
+   * nome per evitare confusione a chi legge.
+   */
+  caricaSkillRegistroFn = caricaSkillReale,
   modello,
   chiave,
   cartelleProgetto = [],
@@ -852,6 +863,28 @@ export function createSessionRegistry({
       if (!s) return { erroreAvvio: `Server MCP "${serverId}" non trovato in .harness-ui-mcp.json`, code: 'NOT_FOUND' };
       await fidaServerMcpFn({ cartellaTrust: cartellaTrustMcp, serverId: s.id, hash: s.hash });
       return { ok: true };
+    },
+
+    /**
+     * ⭐⭐⭐ 29/8 — FASE F. Stesso ruolo di elencaServerMcp per il
+     * pannello Capability hub — le skill dichiarate dal progetto di
+     * questa sessione. Più semplice: nessun `fidato` da calcolare,
+     * le skill non hanno un gate di fiducia (vedi skill-registry.mjs).
+     * `null` se la sessione non esiste; una skill malformata torna
+     * `{skills:null, errore}`, stesso principio "gli stati sono tre"
+     * di elencaHooks/elencaServerMcp.
+     */
+    async elencaSkill(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      let skills;
+      try {
+        ({ skills } = await caricaSkillRegistroFn({ cartella: voce.cartella }));
+      } catch (errore) {
+        if (errore instanceof SkillRegistryError) return { ok: true, skills: null, errore: errore.message };
+        throw errore;
+      }
+      return { ok: true, skills: skills.map((s) => ({ id: s.id, name: s.name, description: s.description })), errore: null };
     },
 
     /**

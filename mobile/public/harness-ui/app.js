@@ -1135,6 +1135,56 @@
     mount.replaceChildren(...dati.server.map((server) => rigaServerMcp(server)));
   }
 
+  /**
+   * ⭐⭐⭐ 29/8 — FASE F, piano `elegant-spinning-dongarra.md`. Stesso
+   * identico pattern di caricaPannelloMcp() appena sopra, per le
+   * skill — più semplice: nessun bottone "Fida" (le skill non hanno
+   * un gate di fiducia, vedi skill-registry.mjs).
+   */
+  async function caricaPannelloSkill() {
+    const mount = $('#skillsListMount', sheetBody);
+    if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
+    if (!state.realSession.id) {
+      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione attiva — apri o avvia un task per vedere le skill del progetto.'));
+      return;
+    }
+    mount.replaceChildren(textElement('p', 'board-empty', 'Carico le skill…'));
+    let dati;
+    try {
+      dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/skills`);
+    } catch (error) {
+      mount.replaceChildren(textElement('p', 'board-empty', `Skill non disponibili: ${error.message}`));
+      return;
+    }
+    if (mount !== $('#skillsListMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
+    if (dati.errore) {
+      mount.replaceChildren(textElement('p', 'board-empty', `.harness-ui-skills non valido: ${dati.errore}`));
+      return;
+    }
+    if (!dati.skills || dati.skills.length === 0) {
+      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna skill dichiarata in questo progetto (.harness-ui-skills/).'));
+      return;
+    }
+    mount.replaceChildren(...dati.skills.map((skill) => rigaSkill(skill)));
+  }
+
+  /** ⭐⭐⭐ 29/8 — sempre attiva (le skill non hanno un gate di fiducia): niente bottone, solo il riassunto. */
+  function rigaSkill(skill) {
+    const riga = document.createElement('div');
+    riga.className = 'sheet-option';
+    riga.setAttribute('role', 'group');
+    const iconEl = document.createElement('span');
+    iconEl.className = 'sheet-icon';
+    iconEl.innerHTML = icon('i-bolt');
+    const testo = document.createElement('span');
+    testo.append(
+      textElement('strong', null, skill.name),
+      textElement('small', null, skill.description),
+    );
+    riga.append(iconEl, testo, textElement('span', 'status-chip success', 'attivo'));
+    return riga;
+  }
+
   /** ⭐⭐⭐ 29/8 — stesso identico pattern di rigaHook() appena sopra. */
   function rigaServerMcp(server) {
     const riga = document.createElement('div');
@@ -1699,7 +1749,7 @@
     showEmbeddedDialog(sheetDialog);
     wireSheetActions(type);
     if (type === 'control') { refreshDoctorBadge(); caricaPannelloHooks(); }
-    if (type === 'capabilities') caricaPannelloMcp();
+    if (type === 'capabilities') { caricaPannelloMcp(); caricaPannelloSkill(); }
     if (type === 'sessionTree') caricaAlberoSessione();
     /*
      * ⭐⭐⭐ 27/8, owner: "riaprire lo stesso componente della selezione del
@@ -1872,13 +1922,17 @@
             </div>`).join('')}
         </div>
         <div class="sheet-section">
+          <span class="sheet-label">Skills · cartelle SKILL.md dichiarate in .harness-ui-skills/, per progetto</span>
+          <div id="skillsListMount"></div>
+        </div>
+        <div class="sheet-section">
           <span class="sheet-label">MCP · server dichiarati in .harness-ui-mcp.json, per progetto</span>
           <div id="mcpListMount"></div>
         </div>
         <div class="sheet-section">
           <span class="sheet-label">Non ancora implementato</span>
           ${[
-            ['Skills', 'i-bolt'], ['Plugin market', 'i-grid'],
+            ['Plugin market', 'i-grid'],
             ['Toolsets', 'i-code'], ['Web search', 'i-search'], ['Computer use', 'i-layout'],
             ['Images', 'i-image'], ['Voice', 'i-mic'],
             ['Gateways · Telegram, Discord, Slack, WhatsApp', 'i-link'],

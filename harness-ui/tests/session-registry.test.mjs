@@ -8,6 +8,7 @@ import { WorkspaceTreeError } from '../src/workspace-tree.mjs';
 import { WorkspaceFileError } from '../src/workspace-files.mjs';
 import { HookRegistryError } from '../src/hook-registry.mjs';
 import { McpRegistryError } from '../src/mcp-registry.mjs';
+import { SkillRegistryError } from '../src/skill-registry.mjs';
 
 // Ne' avviaSessione ne' talosLavora girano MAI qui, veri o finti a metà: si
 // inietta avviaSessioneFn/preparaEsecuzioneFn interamente controllati dal
@@ -1919,4 +1920,48 @@ test('⛔ AL CONTRARIO — un cartellaTrustMcp esplicito sovrascrive il default,
   registro.avvia('task-vero');
   assert.equal(finta.ultimoInput.cartellaTrustMcp, '/tmp/mcp-trust-di-prova');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+/*
+ * ⭐⭐⭐ 29/8 — FASE F: `elencaSkill` è ciò che il Capability hub
+ * chiama — stesso schema di `elencaServerMcp`, senza il concetto di
+ * fiducia (le skill non ce l'hanno, vedi skill-registry.mjs).
+ */
+test('⭐⭐⭐ elencaSkill: torna le skill dichiarate, id/name/description soltanto', async () => {
+  const finta = sessioneControllabile();
+  const skillA = { id: 'code-review', name: 'code-review', description: 'Revisione in due assi.', corpo: '# corpo lungo, non deve arrivare qui' };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaSkillRegistroFn: async () => ({ skills: [skillA] }),
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.elencaSkill(sessionId);
+
+  assert.equal(esito.ok, true);
+  assert.equal(esito.errore, null);
+  assert.deepEqual(esito.skills, [{ id: 'code-review', name: 'code-review', description: 'Revisione in due assi.' }]);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔ AL CONTRARIO — elencaSkill con .harness-ui-skills malformato: {skills:null, errore}, MAI un array vuoto che si legge come "nessuna skill"', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaSkillRegistroFn: async () => { throw new SkillRegistryError('rotta/SKILL.md manca di "description"', 'SKILL_MALFORMED'); },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.elencaSkill(sessionId);
+
+  assert.equal(esito.ok, true);
+  assert.equal(esito.skills, null, 'null, non [] — sono due fatti diversi');
+  assert.match(esito.errore, /manca di "description"/);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔ AL CONTRARIO — elencaSkill su un id inesistente: NOT_FOUND', async () => {
+  const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
+  const esito = await registro.elencaSkill('id-mai-esistito');
+  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
 });
