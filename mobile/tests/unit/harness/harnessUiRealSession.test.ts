@@ -689,6 +689,34 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         })
 
         /*
+         * ⭐⭐⭐ 29/8, owner dal vivo: "in una sessione vuota la tab files ha
+         * ancora la scritta demo UI non collegato". Lo scenario preciso:
+         * l'id della sessione è già noto, ma NESSUN `RunStarted` è ancora
+         * arrivato — a differenza di `avviaSessioneConAlbero()` sopra, che
+         * lo dispatcha sempre come parte del proprio setup.
+         */
+        it('FILE-TREE-09 aprire la tab Files SENZA che nessun RunStarted sia mai arrivato carica comunque l\'albero vero', async () => {
+            const { chiamatePerLivello } = mockFetchAlbero({ '': LIVELLO_RADICE }, [
+                { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-vuota' } },
+                { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+            ])
+            await runtime().startRealSession({ id: 'talos-prova-harness', consegna: 'test sessione vuota' })
+            expect(chiamatePerLivello).toEqual({}) // niente ancora, prima del click — coerente con la cura: pigra, non a connessione
+            document.getElementById('inspector-tab-files')!.click()
+            await vi.waitFor(() => { expect(document.querySelector('.ft-tree .ft-row')).toBeTruthy() })
+            expect(chiamatePerLivello['']).toBe(1)
+        })
+
+        it('⛔ AL CONTRARIO — FILE-TREE-10 se la radice è già in cache (un RunStarted l\'ha già caricata), riaprire la tab Files NON ripete il fetch', async () => {
+            const { chiamatePerLivello } = await avviaSessioneConAlbero({ '': LIVELLO_RADICE })
+            expect(chiamatePerLivello['']).toBe(1) // caricata dal RunStarted del setup
+            document.getElementById('inspector-tab-files')!.click()
+            document.getElementById('inspector-tab-files')!.click()
+            await new Promise((r) => setTimeout(r, 0))
+            expect(chiamatePerLivello['']).toBe(1) // MAI raddoppiato: la stessa corsa che FILE-TREE-07 aveva scoperto rotta
+        })
+
+        /*
          * ⭐⭐⭐ 28/8 — owner: "nella lista files devo poter draggare i
          * file... non esiste il comando copia... e comandi crud in
          * generale". jsdom non implementa affatto DragEvent/DataTransfer
@@ -1310,6 +1338,68 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         await new Promise((r) => setTimeout(r, 0))
 
         expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions/sess-palette-compatta/compact', expect.objectContaining({ method: 'POST' }))
+    })
+
+    /*
+     * ⭐⭐⭐ FASE M (29/8) — 'resume' non aveva NEMMENO un caso nel
+     * palette: resumeSession() esisteva, testata, ma raggiungibile solo
+     * scrivendo un messaggio (submitPrompt) o mai da un umano. Stesso
+     * principio del test COMPACT/FORK sopra: verificare che il comando
+     * chiami la funzione VERA, non solo che la funzione esista.
+     */
+    it('⭐⭐⭐ PALETTE-RESUME-01: executeCommand(\'resume\') con sessione attiva chiama /resume per davvero', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-palette-riprendi' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-resume-palette' })
+
+        const fetchMock = mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions/sess-palette-riprendi/resume', corpo: {} },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        runtime().executeCommand('resume')
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions/sess-palette-riprendi/resume', expect.objectContaining({ method: 'POST' }))
+    })
+
+    /*
+     * ⭐⭐⭐ FASE M (29/8) — i due nuovi bottoni della topbar. Stesso
+     * principio: un bottone visibile che non chiama niente di vero è
+     * peggio di un bottone assente, vedi la nota gemella sul palette.
+     */
+    it('⭐⭐⭐ TOPBAR-RESUME-01: il bottone Riprendi della topbar chiama /resume per davvero', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-topbar-riprendi' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-resume-topbar' })
+
+        const fetchMock = mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions/sess-topbar-riprendi/resume', corpo: {} },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        ;(document.querySelector('#resumeSessionBtn') as HTMLButtonElement).click()
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions/sess-topbar-riprendi/resume', expect.objectContaining({ method: 'POST' }))
+    })
+
+    it('⭐⭐⭐ TOPBAR-COMPACT-01: il bottone Comprimi della topbar chiama /compact per davvero', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-topbar-compatta' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-compact-topbar' })
+
+        const fetchMock = mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions/sess-topbar-compatta/compact', corpo: { compattato: true } },
+        ])
+        ;(document.querySelector('#compactSessionBtn') as HTMLButtonElement).click()
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions/sess-topbar-compatta/compact', expect.objectContaining({ method: 'POST' }))
     })
 
     it('⭐⭐⭐ PALETTE-FORK-01: executeCommand(\'fork\') con sessione attiva chiama /fork per davvero, non il toast finto', async () => {

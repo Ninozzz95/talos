@@ -108,6 +108,15 @@
         </div>
         <div class="topbar-right">
           <button class="context-chip environment-chip" data-open-sheet="environment"><svg><use href="#i-branch"/></svg><span>wt/auth · feat/mobile</span></button>
+          <!--
+            ⭐ FASE M (29/8) — resumeSession()/compactSession() esistevano
+            già, testate, ma raggiungibili solo scrivendo un messaggio
+            (resume) o mai da un umano (compact, solo via ⌘K). Due
+            bottoni reali, stesse funzioni, nessuna duplicazione — vedi
+            app.js.
+          -->
+          <button class="icon-btn" id="resumeSessionBtn" aria-label="Riprendi la sessione"><svg><use href="#i-play"/></svg></button>
+          <button class="icon-btn" id="compactSessionBtn" aria-label="Comprimi il contesto"><svg><use href="#i-grid"/></svg></button>
           <button class="icon-btn" id="commandPaletteBtn" aria-label="Comandi"><svg><use href="#i-command"/></svg></button>
           <button class="icon-btn desktop-context-toggle" data-open-panel="inspector" aria-label="Mostra o nascondi inspector" aria-expanded="true"><svg><use href="#i-layout"/></svg></button>
         </div>
@@ -342,6 +351,7 @@
       <button data-command="review"><span><svg><use href="#i-diff"/></svg>Apri review</span><kbd>⌘R</kbd></button>
       <button data-command="terminal"><span><svg><use href="#i-terminal"/></svg>Apri terminale</span><kbd>⌘T</kbd></button>
       <button data-command="browser"><span><svg><use href="#i-web"/></svg>Apri browser</span><kbd>⌘B</kbd></button>
+      <button data-command="resume"><span><svg><use href="#i-play"/></svg>Riprendi sessione</span><kbd>R</kbd></button>
       <button data-command="fork"><span><svg><use href="#i-branch"/></svg>Fork sessione</span><kbd>F</kbd></button>
       <button data-command="compact"><span><svg><use href="#i-brain"/></svg>Compatta contesto</span><kbd>C</kbd></button>
       <button data-command="permissions"><span><svg><use href="#i-shield"/></svg>Permessi</span><kbd>P</kbd></button>

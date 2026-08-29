@@ -515,6 +515,7 @@ describe('Harness UI embedded host and keyboard runtime', () => {
             '[data-action]', '[data-demo-action]', '[data-file-entry]', '[role="tab"]', '.session-item',
             '#overlayBackdrop', '#newSessionBtn', '#sessionsCollapseBtn', '#sessionTitleButton',
             '#runStateToggle', '.stop-run', '#commandPaletteBtn', '#capabilityBtn', '#manageCapabilitiesBtn',
+            '#resumeSessionBtn', '#compactSessionBtn',
             '#closeSheet', '#closeCommand', '#cancelQueued', '.composer-mic', '#queueToggle',
             '#approveAllDiffs', '#harnessDialogBackdrop',
         ].join(',')
