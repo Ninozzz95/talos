@@ -2960,6 +2960,8 @@
       case 'web_search': return a.query ? `Ricerca web: "${a.query}"` : 'Ricerca web…';
       case 'artifact_create': return a.titolo ? `Artefatto: ${a.titolo}` : 'Creazione artefatto…';
       case 'document_create': return a.title ? `Documento: ${a.title}.${a.format || '?'}` : 'Creazione documento…';
+      // ⭐⭐⭐ 29/8 — FASE H: il prompt è la parte che l'owner vuole vedere subito, stessa tronca corta già usata per delega_sottotask.
+      case 'generate_image': return a.prompt ? `Immagine: ${tronca(a.prompt, 60)}` : 'Generazione immagine…';
       case 'time_now': return 'Data e ora correnti'; // ⭐ 28/8 — zero argomenti, nessun placeholder "…" da mostrare
       // ⭐⭐⭐ FASE C (28/8) — sub-agenti: il task è la parte che l'owner vuole vedere subito, tronca corta come già fatto per gli altri riassunti "in corso".
       case 'delega_sottotask': return a.task ? `Delega: ${tronca(a.task, 60)}` : 'Delega a un sotto-agente…';
