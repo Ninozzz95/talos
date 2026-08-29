@@ -9,13 +9,17 @@ import {
   LibraryStoreError,
   cercaVoci,
   creaCursoriLibreria,
+  eliminaVoce,
   elencaVoci,
   elencaVociConTesto,
   impaginaVoci,
   leggiVoce,
   origineVoce,
+  rinominaVoce,
   salvaVoce,
+  sanificaNomeLibreria,
   tipoFileLibreria,
+  trovaVoce,
 } from '../src/library-store.mjs';
 
 // ⭐ Stesso principio di skill-registry.test.mjs/hook-registry.test.mjs: cartelle VERE su disco per la logica I/O, nessun mock del filesystem.
@@ -296,4 +300,138 @@ test('⭐ creaCursoriLibreria: una Map nuova e vuota ad ogni chiamata, mai condi
   const b = creaCursoriLibreria();
   assert.notEqual(a, b);
   assert.equal(a.size, 0);
+});
+
+// --- sanificaNomeLibreria: PURA — porto di talosSafeLibraryName mobile ---
+
+test('⭐⭐⭐ sanificaNomeLibreria: separatori di percorso e caratteri di controllo diventano spazio, poi collassano', () => {
+  assert.equal(sanificaNomeLibreria('report.md'), 'report.md');
+  assert.equal(sanificaNomeLibreria('../../etc/passwd'), '.. etc passwd');
+  assert.equal(sanificaNomeLibreria('a\\b:c*d?e"f<g>h|i'), 'a b c d e f g h i');
+  assert.equal(sanificaNomeLibreria(`x${String.fromCharCode(1)}y`), 'x y');
+  assert.equal(sanificaNomeLibreria(`x${String.fromCharCode(127)}y`), 'x y'); // DEL
+  assert.equal(sanificaNomeLibreria('report   finale.md'), 'report finale.md');
+});
+
+test('⭐⭐ sanificaNomeLibreria: un trattino VERO non è un separatore, resta', () => {
+  assert.equal(sanificaNomeLibreria('report-finale-v2.md'), 'report-finale-v2.md');
+});
+
+test('⛔ AL CONTRARIO — sanificaNomeLibreria: un nome fatto solo di separatori/punti/spazi diventa la stringa vuota', () => {
+  assert.equal(sanificaNomeLibreria('///\\\\'), '');
+  assert.equal(sanificaNomeLibreria('   '), '');
+  assert.equal(sanificaNomeLibreria(''), '');
+  assert.equal(sanificaNomeLibreria('  .nascosto.md'), 'nascosto.md'); // solo il punto INIZIALE isolato, non ogni punto
+});
+
+// --- trovaVoce: PURA — porto della risoluzione id-o-nome di library_export mobile ---
+
+test('⭐⭐⭐ trovaVoce: un id ESATTO vince sempre, anche se combacia anche per nome', () => {
+  const voci = [vocePronta({ id: 'lib-1', nome: 'a.md' }), vocePronta({ id: 'lib-2', nome: 'lib-1' })];
+  assert.equal(trovaVoce(voci, 'lib-1').id, 'lib-1');
+});
+
+test('⭐⭐⭐ trovaVoce: nessun id combacia — cade sul nome, case/spazi normalizzati', () => {
+  const voci = [vocePronta({ id: 'lib-1', nome: 'Report Finale.md' })];
+  assert.equal(trovaVoce(voci, '  report finale.md  ').id, 'lib-1');
+});
+
+test('⛔⛔ AL CONTRARIO — trovaVoce: due voci con lo STESSO nome sono ambigue, mai una scelta a caso', () => {
+  const voci = [vocePronta({ id: 'lib-1', nome: 'a.md' }), vocePronta({ id: 'lib-2', nome: 'a.md' })];
+  assert.deepEqual(trovaVoce(voci, 'a.md'), { ambiguo: true });
+});
+
+test('⛔ AL CONTRARIO — trovaVoce: nessuna corrispondenza è null, mai un fuzzy-match', () => {
+  const voci = [vocePronta({ id: 'lib-1', nome: 'a.md' })];
+  assert.equal(trovaVoce(voci, 'a-diverso.md'), null);
+});
+
+// --- rinominaVoce / eliminaVoce: I/O su cartelle vere ---
+
+test('⭐⭐⭐ rinominaVoce: cambia SOLO il nome, il contenuto resta byte per byte identico', async () => {
+  const cartella = cartellaVera();
+  try {
+    const id = await salvaVoce({ cartella, nome: 'vecchio.md', mediaType: 'text/markdown', testo: 'contenuto invariato' });
+    const esito = await rinominaVoce({ cartella, id, nome: 'nuovo.md' });
+    assert.deepEqual(esito, { id, nomePrima: 'vecchio.md', nomeDopo: 'nuovo.md' });
+    const rilette = await elencaVoci({ cartella });
+    assert.equal(rilette[0].nome, 'nuovo.md');
+    const letta = await leggiVoce({ cartella, id });
+    assert.equal(letta.testo, 'contenuto invariato');
+  } finally {
+    rmSync(cartella, { recursive: true, force: true });
+  }
+});
+
+test('⭐⭐ rinominaVoce: il nome viene sanificato, mai un separatore di percorso scritto su disco', async () => {
+  const cartella = cartellaVera();
+  try {
+    const id = await salvaVoce({ cartella, nome: 'a.md', mediaType: 'text/plain', testo: 'x' });
+    // '/' -> spazio -> ".. evil.md" -> il ripulitore di punti iniziali toglie l'INTERO ".. " di testa (stesso comportamento verificato per sanificaNomeLibreria da sola): risultato "evil.md", mai un percorso, mai un residuo ".." a vista.
+    const esito = await rinominaVoce({ cartella, id, nome: '../evil.md' });
+    assert.equal(esito.nomeDopo, 'evil.md');
+    assert.ok(!esito.nomeDopo.includes('/') && !esito.nomeDopo.includes('..'));
+  } finally {
+    rmSync(cartella, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔ AL CONTRARIO — rinominaVoce: un nome vuoto dopo la sanificazione è rifiutato, mai un file rinominato al vuoto', async () => {
+  const cartella = cartellaVera();
+  try {
+    const id = await salvaVoce({ cartella, nome: 'a.md', mediaType: 'text/plain', testo: 'x' });
+    await assert.rejects(() => rinominaVoce({ cartella, id, nome: '///' }), (errore) => {
+      assert.ok(errore instanceof LibraryStoreError);
+      assert.equal(errore.code, 'LIBRARY_NAME_EMPTY');
+      return true;
+    });
+    const voci = await elencaVoci({ cartella });
+    assert.equal(voci[0].nome, 'a.md', 'il nome originale non deve essere toccato dal tentativo rifiutato');
+  } finally {
+    rmSync(cartella, { recursive: true, force: true });
+  }
+});
+
+test('⛔ AL CONTRARIO — rinominaVoce: un id che non esiste torna null, mai un\'eccezione', async () => {
+  const cartella = cartellaVera();
+  try {
+    assert.equal(await rinominaVoce({ cartella, id: 'lib-fantasma', nome: 'x.md' }), null);
+  } finally {
+    rmSync(cartella, { recursive: true, force: true });
+  }
+});
+
+test('⭐⭐⭐ eliminaVoce: la cartella della voce sparisce DAVVERO dal disco', async () => {
+  const cartella = cartellaVera();
+  try {
+    const id = await salvaVoce({ cartella, nome: 'da-cancellare.md', mediaType: 'text/plain', testo: 'x' });
+    const esito = await eliminaVoce({ cartella, id });
+    assert.deepEqual(esito, { id, nome: 'da-cancellare.md' });
+    assert.deepEqual(await elencaVoci({ cartella }), []);
+    assert.equal(await leggiVoce({ cartella, id }), null);
+  } finally {
+    rmSync(cartella, { recursive: true, force: true });
+  }
+});
+
+test('⭐⭐ eliminaVoce: cancellarne una NON tocca le altre voci', async () => {
+  const cartella = cartellaVera();
+  try {
+    const idResta = await salvaVoce({ cartella, nome: 'resta.md', mediaType: 'text/plain', testo: 'y' });
+    const idVia = await salvaVoce({ cartella, nome: 'via.md', mediaType: 'text/plain', testo: 'x' });
+    await eliminaVoce({ cartella, id: idVia });
+    const voci = await elencaVoci({ cartella });
+    assert.deepEqual(voci.map((v) => v.id), [idResta]);
+  } finally {
+    rmSync(cartella, { recursive: true, force: true });
+  }
+});
+
+test('⛔ AL CONTRARIO — eliminaVoce: un id già sparito torna null, MAI un\'eccezione ("It may already be gone")', async () => {
+  const cartella = cartellaVera();
+  try {
+    assert.equal(await eliminaVoce({ cartella, id: 'lib-mai-esistito' }), null);
+  } finally {
+    rmSync(cartella, { recursive: true, force: true });
+  }
 });
