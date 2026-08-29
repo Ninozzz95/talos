@@ -2817,6 +2817,23 @@
     const copy = document.createElement('div');
     copy.className = 'assistant-copy';
     article.append(meta, copy);
+    /*
+     * ⭐⭐⭐ 29/8 — FASE J, TTS: un bottone per bubble, aggiunto UNA sola
+     * volta qui in `meta` (mai ricreato dagli aggiornamenti streaming,
+     * che toccano solo `.assistant-copy` — vedi la doc sopra la
+     * funzione). Costruito solo se `speechSynthesis` esiste — mai un
+     * bottone che sembra funzionare e non fa niente.
+     */
+    if (sintesiVoceDisponibile) {
+      const ascolta = document.createElement('button');
+      ascolta.type = 'button';
+      ascolta.className = 'icon-btn assistant-listen-btn';
+      ascolta.setAttribute('aria-label', 'Ascolta la risposta');
+      ascolta.setAttribute('aria-pressed', 'false');
+      ascolta.innerHTML = `<svg><use href="#i-play"/></svg>`;
+      ascolta.addEventListener('click', () => leggiVoceAlta(copy.textContent || '', ascolta));
+      meta.appendChild(ascolta);
+    }
     conversation.appendChild(article);
     markMotionEnter(article);
     state.realSession.messageElements.set(messageId, article);
@@ -5786,8 +5803,142 @@
     }
   }
 
-  function announceVoiceUnavailable() {
-    toast('Voce demo non collegata', 'Il microfono non registra e non invia audio in questa superficie.');
+  /*
+   * ⭐⭐⭐ 29/8 — FASE J, piano `elegant-spinning-dongarra.md`, design
+   * chiuso la stessa sera. Push-to-talk via Web Speech API
+   * (`SpeechRecognition`) — motore di DEFAULT gratuito: nessuna
+   * chiave, nessun backend, gira interamente nel browser. ⛔ Chrome
+   * (il browser bersaglio dichiarato, owner-only/loopback) instrada
+   * l'audio a un servizio Google per il riconoscimento — verificato
+   * su MDN il 29/8: *"uses a server-based recognition engine... will
+   * not work offline"* — non è on-device come il motore mobile
+   * (Pocket TTS/wake-word "Hey TALOS"), un limite di PIATTAFORMA
+   * dichiarato onestamente, non nostro (e non nuovo: la chat stessa
+   * richiede già una rete per il modello).
+   *
+   * Pareggia Claude Code (push-to-talk: tieni un tasto, rilascia per
+   * il testo) — MAI un ascolto always-on come Hermes (wake-word):
+   * dichiarato limite di piattaforma nel piano madre (un tab senza
+   * focus perde il microfono, comportamento di browser non nostro).
+   *
+   * ⛔⛔⛔ NON VERIFICATO dal vivo in questa sessione — a differenza di
+   * ogni altra fase (E/F/G/H), qui manca ANCHE la verifica più debole
+   * (un round-trip HTTP a unità): `SpeechRecognition`/`speechSynthesis`
+   * non esistono in jsdom/Node, zero polyfill in questo progetto — un
+   * mock qui proverebbe solo il MIO mock, non il comportamento reale
+   * del browser. Nessun tool di automazione browser disponibile in
+   * questa sessione (stesso limite già dichiarato per E/F/G/M).
+   * Richiede un umano che tiene il tasto e parla — resta la verifica
+   * dell'OWNER, non rimandabile a un test automatico.
+   */
+  function creaRiconoscimentoVocale() {
+    const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Ctor) return null;
+    const recognition = new Ctor();
+    recognition.continuous = true; // push-to-talk: resta in ascolto finché il tasto è premuto, non un singolo comando breve
+    recognition.interimResults = true; // testo parziale VISIBILE mentre si parla — stessa disciplina "lo stato si vede" di ogni altra fase
+    recognition.lang = 'it-IT';
+    return recognition;
+  }
+
+  const riconoscimentoVocale = creaRiconoscimentoVocale();
+  const statoVoce = { registrando: false, testoBase: '' };
+
+  function avviaRegistrazioneVoce() {
+    if (!riconoscimentoVocale || statoVoce.registrando) return;
+    statoVoce.registrando = true;
+    statoVoce.testoBase = composerInput.value;
+    composerMic.classList.add('recording');
+    composerMic.setAttribute('aria-pressed', 'true');
+    try {
+      riconoscimentoVocale.start();
+    } catch {
+      // ⛔ start() lancia se una registrazione è già in corso (doppio mousedown/touchstart) — stato già coerente, nessuna azione ulteriore.
+    }
+  }
+
+  function fermaRegistrazioneVoce() {
+    if (!statoVoce.registrando) return;
+    statoVoce.registrando = false;
+    composerMic.classList.remove('recording');
+    composerMic.setAttribute('aria-pressed', 'false');
+    try { riconoscimentoVocale.stop(); } catch { /* già ferma */ }
+  }
+
+  if (riconoscimentoVocale) {
+    /*
+     * ⭐ `event.results` accumula OGNI risultato della sessione di
+     * ascolto corrente (finale e interim) — si ricostruisce il testo
+     * intero da zero ad ogni evento invece di accodare in modo
+     * incrementale: più semplice e senza il rischio di un doppio
+     * conteggio quando un segmento interim diventa finale.
+     */
+    riconoscimentoVocale.onresult = (event) => {
+      let finale = '';
+      let interim = '';
+      for (let i = 0; i < event.results.length; i += 1) {
+        const risultato = event.results[i];
+        if (risultato.isFinal) finale += risultato[0].transcript;
+        else interim += risultato[0].transcript;
+      }
+      const separatore = statoVoce.testoBase && !/\s$/.test(statoVoce.testoBase) ? ' ' : '';
+      composerInput.value = statoVoce.testoBase + separatore + finale + interim;
+      autoGrowTextarea();
+    };
+    riconoscimentoVocale.onerror = (event) => {
+      fermaRegistrazioneVoce();
+      // ⭐ un messaggio ONESTO per errore, mai un generico "qualcosa è andato storto" — gli errori VERI di SpeechRecognition, non inventati.
+      const messaggi = {
+        'not-allowed': 'Permesso microfono negato — abilitalo nelle impostazioni del browser per questo sito.',
+        'no-speech': 'Nessuna voce rilevata.',
+        network: 'Il servizio di riconoscimento vocale non è raggiungibile in questo momento.',
+        'audio-capture': 'Nessun microfono trovato su questo dispositivo.',
+      };
+      toast('Voce non riconosciuta', messaggi[event.error] || `Errore: ${event.error}`);
+    };
+    // ⭐ il servizio può fermarsi da solo (silenzio prolungato) senza che il tasto sia stato rilasciato — lo stato visivo deve seguirlo, mai restare "in ascolto" quando non lo è più.
+    riconoscimentoVocale.onend = () => { fermaRegistrazioneVoce(); };
+  }
+
+  /*
+   * ⭐⭐⭐ 29/8 — FASE J, TTS: `window.speechSynthesis`, STESSA famiglia
+   * di API di SpeechRecognition sopra (un solo namespace del browser
+   * per entrambe le direzioni) ma supporto PIÙ AMPIO — gira
+   * interamente in locale, offline, con le voci del sistema operativo
+   * (verificato nel piano madre: Chrome/Edge/Safari/Firefox/Opera,
+   * non solo Chromium). Un bottone per bubble assistente, come un
+   * "copia" ma per l'orecchio — owner: "Sì, stessa fetta".
+   */
+  const sintesiVoceDisponibile = 'speechSynthesis' in window;
+  let elementoInAscolto = null; // il bottone "ascolta" attivo in questo momento, per poterlo far tornare a stato "play" da onend/onerror
+
+  function impostaStatoBottoneAscolto(bottone, inAscolto) {
+    bottone.classList.toggle('speaking', inAscolto);
+    bottone.setAttribute('aria-pressed', String(inAscolto));
+    bottone.setAttribute('aria-label', inAscolto ? 'Ferma la lettura' : 'Ascolta la risposta');
+    const uso = bottone.querySelector('use');
+    if (uso) uso.setAttribute('href', inAscolto ? '#i-stop' : '#i-play');
+  }
+
+  function fermaLetturaVoceAlta() {
+    if (!sintesiVoceDisponibile) return;
+    window.speechSynthesis.cancel(); // ⭐ cancel() svuota anche la coda — mai due lettura sovrapposte
+    if (elementoInAscolto) impostaStatoBottoneAscolto(elementoInAscolto, false);
+    elementoInAscolto = null;
+  }
+
+  function leggiVoceAlta(testo, bottone) {
+    if (!sintesiVoceDisponibile || !testo.trim()) return;
+    const giàInAscoltoQui = elementoInAscolto === bottone;
+    fermaLetturaVoceAlta(); // un secondo click sullo STESSO bottone, o un click su un bottone diverso, ferma sempre quella precedente prima — mai due letture insieme
+    if (giàInAscoltoQui) return; // il click era per FERMARE, non per far ripartire da capo
+    const utterance = new SpeechSynthesisUtterance(testo);
+    utterance.lang = 'it-IT';
+    utterance.onend = () => { if (elementoInAscolto === bottone) { impostaStatoBottoneAscolto(bottone, false); elementoInAscolto = null; } };
+    utterance.onerror = utterance.onend;
+    elementoInAscolto = bottone;
+    impostaStatoBottoneAscolto(bottone, true);
+    window.speechSynthesis.speak(utterance);
   }
 
   function visibleCommandButtons() {
@@ -6071,7 +6222,27 @@
   });
 
   queueToggle.addEventListener('click', () => setQueueMode(!state.queueMode));
-  composerMic?.addEventListener('click', announceVoiceUnavailable);
+  /*
+   * ⭐⭐⭐ 29/8 — FASE J: push-to-talk vero, non più un annuncio "non
+   * collegato". `mousedown`/`touchstart` avvia, `mouseup`/`mouseleave`/
+   * `touchend`/`touchcancel` ferma — `mouseleave` copre il caso di chi
+   * trascina fuori dal bottone tenendo premuto, `touchcancel` il caso
+   * (mobile/tablet) di un'interruzione di sistema a metà tocco.
+   */
+  if (composerMic) {
+    if (riconoscimentoVocale) {
+      composerMic.setAttribute('aria-pressed', 'false');
+      composerMic.addEventListener('mousedown', avviaRegistrazioneVoce);
+      composerMic.addEventListener('mouseup', fermaRegistrazioneVoce);
+      composerMic.addEventListener('mouseleave', fermaRegistrazioneVoce);
+      composerMic.addEventListener('touchstart', (event) => { event.preventDefault(); avviaRegistrazioneVoce(); }, { passive: false });
+      composerMic.addEventListener('touchend', fermaRegistrazioneVoce);
+      composerMic.addEventListener('touchcancel', fermaRegistrazioneVoce);
+    } else {
+      // ⭐ onesto: questo browser non espone SpeechRecognition affatto (fuori da Chromium) — mai un bottone che sembra funzionare e non fa niente.
+      composerMic.addEventListener('click', () => toast('Voce non disponibile', 'Questo browser non supporta il riconoscimento vocale (SpeechRecognition).'));
+    }
+  }
 
   composerForm.addEventListener('submit', (event) => {
     event.preventDefault();

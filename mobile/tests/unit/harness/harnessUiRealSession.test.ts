@@ -339,6 +339,24 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(copies).toContain('Leggo il file.')
     })
 
+    /*
+     * ⭐⭐⭐ 29/8 — FASE J: il bottone "ascolta" (TTS) è costruito SOLO se
+     * `speechSynthesis` esiste — jsdom non la implementa affatto (zero
+     * polyfill in questo progetto, verificato prima di scrivere: `'speechSynthesis' in window` è `false` qui, esattamente come in un
+     * browser che non la supporta) — stessa disciplina "mai un bottone
+     * che sembra funzionare e non fa niente" già provata per il
+     * microfono. La verifica del percorso POSITIVO (bottone presente,
+     * click→speak/cancel) resta fuori da questo ambiente per lo stesso
+     * motivo — non testabile senza un vero motore di sintesi vocale.
+     */
+    it('⛔ REAL-SESSION-TTS-01 AL CONTRARIO: senza speechSynthesis, nessun bottone "ascolta" nella bolla assistente', () => {
+        expect('speechSynthesis' in window).toBe(false)
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'TextMessageContent', messageId: 'm-tts', delta: 'Risposta senza sintesi vocale disponibile.' }, generation)
+
+        expect(document.querySelector('.assistant-listen-btn')).toBeNull()
+    })
+
     // ⛔⛔⛔ 27/8, owner: "le risposte non sono formattate, cioè le basi" — il
     // testo del modello arrivava con .textContent += : un elenco puntato
     // diventava una riga sola senza a-capo, nessun grassetto/corsivo/codice.

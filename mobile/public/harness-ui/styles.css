@@ -531,6 +531,13 @@ body.reduce-motion .talos-line-loader-node { animation: none; fill: var(--accent
 .composer textarea::placeholder { color: var(--muted); }
 .clipboard-fallback { position: fixed; opacity: 0; pointer-events: none; }
 .composer-mic { position: absolute; top: 7px; right: 8px; width: 40px; height: 40px; }
+/* ⭐⭐⭐ 29/8 — FASE J: stato VISIBILE mentre il push-to-talk è attivo — stesso pattern esatto di .tool-state.running/.connection-dot (pulse + --motion-activity), mai una durata scritta a mano. */
+.composer-mic.recording { color: var(--danger); background: var(--danger-soft); }
+.composer-mic.recording svg { animation: pulse var(--motion-activity) var(--motion-ease) infinite; }
+/* ⭐⭐⭐ 29/8 — FASE J: il bottone "ascolta" per bubble, stato VISIBILE mentre parla. */
+.assistant-listen-btn { width: 26px; height: 26px; margin-left: auto; }
+.assistant-listen-btn svg { width: 14px; height: 14px; }
+.assistant-listen-btn.speaking { color: var(--accent-2); background: var(--accent-soft); }
 .composer-toolbar { min-width: 0; display: flex; align-items: center; gap: 7px; }
 .round-btn { width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 50%; color: var(--text-2); flex: 0 0 auto; }
 .round-btn:hover { background: var(--surface-3); }
