@@ -27,6 +27,7 @@ import { salvaArtefatto as salvaArtefattoReale } from './artifact-store.mjs';
 import { generateTalosDocument as generateTalosDocumentReale, TALOS_SOURCE_TEXT_FORMATS, verifyTalosDocument as verifyTalosDocumentReale } from './document-generator.mjs';
 import { leggiContestoWorkspace as leggiContestoWorkspaceReale } from './workspace-context.mjs';
 import { creaFileWorkspace as creaFileWorkspaceReale, WorkspaceFileError } from './workspace-files.mjs';
+import { preparaToolMcpPerSessione as preparaToolMcpPerSessioneReale } from './mcp-session.mjs';
 import {
   artifactCreated,
   eventiPerRisposta,
@@ -175,6 +176,32 @@ export async function avviaSessione({
    * fase, non un secondo giro.
    */
   codaMessaggiFn,
+  /*
+   * ⭐⭐⭐ 29/8 — FASE E, seconda meta'. Stesso principio di
+   * `hookFn`/`onDelega`/`codaMessaggiFn` sopra: inoltrato SENZA logica
+   * propria — la scoperta/trust/connessione vive tutta in
+   * `mcp-session.mjs`/`mcp-registry.mjs`.
+   *
+   * ⛔⛔⛔ A differenza di quei tre, PERO', qui c'e' un vero lavoro da
+   * fare in QUESTO file (non solo un pass-through): connettersi a un
+   * server MCP e' I/O asincrono, e i tool MCP devono essere pronti
+   * PRIMA della prima chiamata al modello (dentro talosLavoraFn) — ma
+   * DOPO RunStarted (riga 199, gia' sincrono prima di questo). Questo
+   * e' esattamente il punto giusto: gia' dentro il corpo async di
+   * avviaSessione, gia' dopo RunStarted, gia' prima di talosLavoraFn.
+   * Non serve toccare session-registry.mjs (avvia()/avviaLibero()
+   * restano sincrone) ne' i 110 punti che chiamano quelle due funzioni
+   * nei test — investigato PRIMA di scrivere, non assunto (vedi
+   * elegant-spinning-dongarra.md, FASE E).
+   *
+   * `cartellaTrustMcp` ASSENTE (ogni test esistente, e — finche'
+   * session-registry.mjs non lo passa — ogni sessione reale di oggi)
+   * ⇒ ZERO lavoro nuovo: nessuna I/O, toolMcp/chiamaToolMcpFn restano
+   * `undefined`, comportamento bit-per-bit quello di oggi. Stessa
+   * garanzia gia' data per ogni altro parametro di questa lista.
+   */
+  cartellaTrustMcp,
+  preparaToolMcpPerSessioneFn = preparaToolMcpPerSessioneReale,
   talosLavoraFn = talosLavoraReale,
   leggiContestoWorkspaceFn = leggiContestoWorkspaceReale,
   salvaArtefattoFn = salvaArtefattoReale,
@@ -197,6 +224,20 @@ export async function avviaSessione({
   const contesto = leggiContestoWorkspaceFn({ cartella, progetto: task?.progetto ?? null });
 
   onEvento(runStarted({ threadId, runId, input: task, contesto }));
+
+  /*
+   * ⭐⭐⭐ 29/8 — FASE E: DOPO RunStarted (sincrono, sopra), PRIMA di
+   * talosLavoraFn (sotto) — vedi la doc sul parametro `cartellaTrustMcp`.
+   */
+  let toolMcp;
+  let chiamaToolMcpFn;
+  let chiudiMcp = async () => {};
+  if (cartellaTrustMcp) {
+    const preparato = await preparaToolMcpPerSessioneFn({ cartella, cartellaTrust: cartellaTrustMcp });
+    toolMcp = preparato.toolMcp;
+    chiamaToolMcpFn = preparato.chiamaToolMcpFn;
+    chiudiMcp = preparato.chiudiTutti;
+  }
 
   /*
    * ⭐⭐⭐ 27/8, R1 — un messageId per il testo e uno per il ragionamento,
@@ -410,7 +451,7 @@ export async function avviaSessione({
       onGiro, onScrittura, onDelta, reasoning,
       strumentiEstesi, ricercaWeb, onArtefatto, onDocumento,
       livelloAccesso, chiediApprovazioneFn, hookFn, permessiPerAttrezzo, onDelega, codaMessaggiFn,
-      firma,
+      firma, toolMcp, chiamaToolMcpFn,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));
     return { threadId, runId, ok: esito.comeFinita === 'concluso', esito, erroreInterno: null };
@@ -426,6 +467,17 @@ export async function avviaSessione({
     const messaggio = errore instanceof Error ? errore.message : String(errore);
     onEvento(runError({ message: messaggio, code: 'internal-error' }));
     return { threadId, runId, ok: false, esito: null, erroreInterno: messaggio };
+  } finally {
+    /*
+     * ⭐⭐⭐ 29/8 — FASE E: un server MCP è un processo figlio VERO
+     * (a differenza di ogni altra risorsa di questo file) — lasciarlo
+     * aperto oltre la vita di QUESTO run sarebbe il primo leak di
+     * processo mai introdotto in questo file. `chiudiMcp` è sempre
+     * definita (no-op se `cartellaTrustMcp` era assente, sopra) — un
+     * `finally` gira sia sul ritorno riuscito sia su quello d'errore,
+     * mai un percorso che lascia una connessione aperta.
+     */
+    await chiudiMcp();
   }
 }
 
