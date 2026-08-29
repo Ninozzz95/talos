@@ -42,6 +42,8 @@ const API_ERROR_CODES = new Set([
   'HOOK_INVALID',
   /* ⭐ 29/8 — FASE E: .harness-ui-mcp.json malformato, o un serverId che non combacia nessuna voce del file. */
   'MCP_INVALID',
+  /* ⭐ 29/8 — FASE G: un plugin.json malformato, o un pluginId che non combacia nessuna cartella di .harness-ui-plugins/. */
+  'PLUGIN_INVALID',
 ]);
 
 const STATUS_BY_CODE = Object.freeze({
@@ -73,6 +75,8 @@ const STATUS_BY_CODE = Object.freeze({
   HOOK_INVALID: 422,
   /** ⭐ 29/8 — stesso status di HOOK_INVALID, stesso motivo: il contenuto della richiesta (serverId, o il file .harness-ui-mcp.json stesso) non è valido. */
   MCP_INVALID: 422,
+  /** ⭐ 29/8 — FASE G: stesso status di MCP_INVALID, stesso motivo (pluginId, o il file plugin.json stesso) non valido. */
+  PLUGIN_INVALID: 422,
 });
 
 const MESSAGE_BY_CODE = Object.freeze({
@@ -97,6 +101,7 @@ const MESSAGE_BY_CODE = Object.freeze({
   PLATFORM_UNSUPPORTED: 'Non disponibile su questa piattaforma',
   HOOK_INVALID: 'Configurazione hook non valida',
   MCP_INVALID: 'Configurazione server MCP non valida',
+  PLUGIN_INVALID: 'Configurazione plugin non valida',
 });
 
 const SECURITY_HEADERS = Object.freeze({
@@ -1213,6 +1218,41 @@ export function createHttpApp({
     }
 
     /*
+     * ⭐⭐⭐ FASE G (29/8) — stesso ruolo esatto della rotta mcp/trust
+     * appena sopra, per i plugin: l'UNICA strada che rende un plugin
+     * (tool+hook) attivo davvero. Nessun corpo richiesto, hash riletto
+     * DA DISCO in sessionRegistry.fidaPlugin, mai passato dal client.
+     */
+    const pluginTrustMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/plugins\/([^/]+)\/trust$/.exec(url.pathname);
+    if (pluginTrustMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        let pluginId;
+        try {
+          sessionId = decodeURIComponent(pluginTrustMatch[1]);
+          pluginId = decodeURIComponent(pluginTrustMatch[2]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const esito = await sessionRegistry.fidaPlugin(sessionId, pluginId);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    /*
      * ⭐⭐⭐ FASE D (28/8) — coda messaggi, piano `elegant-spinning-dongarra.md`.
      * ⛔ Il ledger (LEDGER-FASE-D-CODA.md) prevedeva un DELETE HTTP per
      * "annulla" — corretto qui: NESSUNA rotta di questo file usa mai il
@@ -1339,6 +1379,8 @@ export function createHttpApp({
         const mcpMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/mcp$/.exec(url.pathname);
         // ⭐⭐⭐ 29/8 — FASE F: il Capability hub elenca le skill dichiarate — stesso principio, senza il concetto di fiducia (le skill non ce l'hanno).
         const skillsMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/skills$/.exec(url.pathname);
+        // ⭐⭐⭐ 29/8 — FASE G: il Capability hub elenca i plugin dichiarati e il loro stato di fiducia vero — stesso principio esatto di mcpMatch sopra (un plugin ESEGUE, a differenza delle skill).
+        const pluginsMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/plugins$/.exec(url.pathname);
         // ⭐⭐⭐ FASE C (28/8) — sub-agenti: il foglio "Albero sessione" elenca i figli VERI di una sessione, stesso principio di hooksMatch sopra.
         const childrenMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/children$/.exec(url.pathname);
         // ⭐⭐⭐ 28/8 — non SESSION-scoped: un artefatto ha un id UUID già globalmente unico (agent-service.mjs), stesso principio di /api/v1/models.
@@ -1440,6 +1482,22 @@ export function createHttpApp({
             throw errore;
           }
           data = { skills: esito.skills, errore: esito.errore };
+        } else if (pluginsMatch) {
+          requireNoQuery(url);
+          let sessionId;
+          try {
+            sessionId = decodeURIComponent(pluginsMatch[1]);
+          } catch {
+            sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+            return;
+          }
+          const esito = await sessionRegistry.elencaPlugin(sessionId);
+          if ('erroreAvvio' in esito) {
+            const errore = new Error(esito.erroreAvvio);
+            errore.code = esito.code;
+            throw errore;
+          }
+          data = { plugin: esito.plugin, errore: esito.errore };
         } else if (childrenMatch) {
           requireNoQuery(url);
           let sessionId;

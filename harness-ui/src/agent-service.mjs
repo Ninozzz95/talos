@@ -29,12 +29,15 @@ import { leggiContestoWorkspace as leggiContestoWorkspaceReale } from './workspa
 import { creaFileWorkspace as creaFileWorkspaceReale, WorkspaceFileError } from './workspace-files.mjs';
 import { preparaToolMcpPerSessione as preparaToolMcpPerSessioneReale } from './mcp-session.mjs';
 import { caricaSkill as caricaSkillReale } from './skill-registry.mjs';
+import { preparaToolPluginPerSessione as preparaToolPluginPerSessioneReale } from './plugin-session.mjs';
+import { eseguiHook as eseguiHookReale } from './hook-registry.mjs';
 import {
   artifactCreated,
   eventiPerRisposta,
   eventoPerEsitoTool,
   eventoPerScrittura,
   eventoPerUsage,
+  hookInvoked,
   reasoningMessageContent,
   reasoningMessageEnd,
   reasoningMessageStart,
@@ -215,6 +218,25 @@ export async function avviaSessione({
    * per i test (mai una vera lettura disco nella suite unitaria).
    */
   caricaSkillDisponibiliFn = caricaSkillReale,
+  /*
+   * ⭐⭐⭐ 29/8 — FASE G (Plugin system). Stesso gate esplicito di
+   * `cartellaTrustMcp` sopra (a differenza di `caricaSkillDisponibiliFn`,
+   * sempre chiamata): un tool di plugin ESEGUE un comando locale, e un
+   * hook di plugin intercetta il ciclo dell'agente — entrambi la
+   * stessa categoria di rischio di un server MCP o di un hook
+   * standalone, mai testo inerte come una skill. Assente (ogni test
+   * esistente, e — finché session-registry.mjs non lo passa — ogni
+   * sessione reale di oggi) ⇒ ZERO lavoro nuovo, stessa garanzia già
+   * data per `cartellaTrustMcp`.
+   *
+   * ⛔ A differenza di MCP: nessun `chiudiPlugin()` nel `finally` sotto
+   * — un tool di plugin non apre una connessione persistente, spawna
+   * ON DEMAND ad ogni chiamata (vedi `plugin-session.mjs`), zero
+   * risorsa da rilasciare a fine run.
+   */
+  cartellaTrustPlugin,
+  preparaToolPluginPerSessioneFn = preparaToolPluginPerSessioneReale,
+  eseguiHookFn = eseguiHookReale,
   talosLavoraFn = talosLavoraReale,
   leggiContestoWorkspaceFn = leggiContestoWorkspaceReale,
   salvaArtefattoFn = salvaArtefattoReale,
@@ -275,6 +297,69 @@ export async function avviaSessione({
   } catch {
     // ⭐ un .harness-ui-skills/ malformato non deve mai bloccare l'avvio: skillsDisponibili resta undefined, zero tool nuovo offerto.
   }
+
+  /*
+   * ⭐⭐⭐ 29/8 — FASE G (Plugin system). Stesso gate esplicito di MCP
+   * sopra (`cartellaTrustPlugin`), stesso punto (dopo RunStarted,
+   * prima di talosLavoraFn) — vedi la doc sul parametro.
+   * `preparaToolPluginPerSessioneFn` già filtra ai soli plugin FIDATI
+   * (hash sull'intero manifesto, `plugin-session.mjs`): un plugin mai
+   * fidato non contribuisce né un tool né un hook, qui come là.
+   */
+  let toolPlugin;
+  let eseguiToolPluginFn;
+  let hookPlugin = [];
+  if (cartellaTrustPlugin) {
+    const preparato = await preparaToolPluginPerSessioneFn({ cartella, cartellaTrust: cartellaTrustPlugin });
+    toolPlugin = preparato.toolPlugin;
+    eseguiToolPluginFn = preparato.eseguiToolPluginFn;
+    hookPlugin = preparato.hookPlugin;
+  }
+
+  /*
+   * ⭐⭐⭐ 29/8 — FASE G: gli hook di un plugin fidato NON passano dal
+   * trust hash-vincolato di hook-registry.mjs (namespace diverso, per
+   * costruzione: uno standalone è fidato per hash del SUO comando, uno
+   * di plugin per hash dell'INTERO manifesto — vedi la doc in
+   * plugin-session.mjs sul perché mischiare i due sarebbe un bug di
+   * sicurezza) — sono GIÀ fidati qui, il plugin intero lo è.
+   *
+   * Si fondono in QUESTO file, non dentro `costruisciHookFn`
+   * (session-registry.mjs): quella funzione è costruita PRIMA di
+   * questo prep asincrono (l'ordine lo fissa già FASE A — hookFn
+   * sincrono, passato com'è), e conosce solo `.harness-ui-hooks.json`.
+   * Questo è il solo punto dove un evento hook incontra ENTRAMBE le
+   * fonti. `hookFn` (il parametro ricevuto, gli hook standalone) resta
+   * la prima parola: se rifiuta, gli hook di plugin non girano nemmeno
+   * — stessa semantica AND ("il primo che rifiuta vince") già in uso
+   * dentro il ciclo di `costruisciHookFn` per gli hook standalone fra
+   * loro, estesa qui a una seconda fonte.
+   *
+   * PARITÀ: hookPlugin vuoto (ogni sessione senza plugin fidati con
+   * hook, cioè ogni sessione oggi) ⇒ hookFnConPlugin === hookFn,
+   * stesso riferimento, zero wrapping — comportamento bit-per-bit
+   * quello di prima di FASE G.
+   */
+  const hookFnConPlugin = hookPlugin.length === 0
+    ? hookFn
+    : async (evento) => {
+      if (hookFn) {
+        const esitoBase = await hookFn(evento);
+        if (esitoBase?.consentito === false) return esitoBase;
+      }
+      const pertinenti = hookPlugin.filter((h) => h.eventi.includes(evento.tipo));
+      for (const hook of pertinenti) {
+        let esito;
+        try {
+          esito = await eseguiHookFn({ hook, evento, cartella });
+        } catch {
+          esito = { consentito: false, motivo: `l'hook di plugin "${hook.id}" è fallito nell'esecuzione.` };
+        }
+        onEvento(hookInvoked({ hookId: hook.id, tipo: evento.tipo, azione: evento.azione, esito }));
+        if (esito?.consentito === false) return esito;
+      }
+      return { consentito: true };
+    };
 
   /*
    * ⭐⭐⭐ 27/8, R1 — un messageId per il testo e uno per il ragionamento,
@@ -487,8 +572,8 @@ export async function avviaSessione({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
       onGiro, onScrittura, onDelta, reasoning,
       strumentiEstesi, ricercaWeb, onArtefatto, onDocumento,
-      livelloAccesso, chiediApprovazioneFn, hookFn, permessiPerAttrezzo, onDelega, codaMessaggiFn,
-      firma, toolMcp, chiamaToolMcpFn, skillsDisponibili, caricaSkillFn,
+      livelloAccesso, chiediApprovazioneFn, hookFn: hookFnConPlugin, permessiPerAttrezzo, onDelega, codaMessaggiFn,
+      firma, toolMcp, chiamaToolMcpFn, skillsDisponibili, caricaSkillFn, toolPlugin, eseguiToolPluginFn,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));
     return { threadId, runId, ok: esito.comeFinita === 'concluso', esito, erroreInterno: null };
