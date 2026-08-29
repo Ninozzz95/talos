@@ -15,6 +15,7 @@ import { SkillRegistryError } from '../src/skill-registry.mjs';
 import { PluginRegistryError } from '../src/plugin-registry.mjs';
 import { LibraryStoreError } from '../src/library-store.mjs';
 import { NoteStoreError } from '../src/notes-store.mjs';
+import { TaskStoreError } from '../src/tasks-store.mjs';
 import { leggiRegistro as leggiRegistroPerAttesa, registraRigaSync } from '../src/session-store.mjs';
 
 // Ne' avviaSessione ne' talosLavora girano MAI qui, veri o finti a metà: si
@@ -2125,6 +2126,54 @@ test('⛔⛔ AL CONTRARIO — elencaNote con .notes-store malformato: {note:null
 test('⛔ AL CONTRARIO — elencaNote su un id inesistente: NOT_FOUND', async () => {
   const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
   const esito = await registro.elencaNote('id-mai-esistito');
+  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+});
+
+/*
+ * ⭐⭐⭐ FASE N, quinto sistema (30/8): `elencaAttivita` è ciò che il
+ * Capability hub chiama — stesso schema di `elencaNote` appena sopra,
+ * stessa prova esplicita che `cartellaAttivita` (GLOBALE) arriva, mai
+ * la `cartella` della sessione.
+ */
+test('⭐⭐⭐ elencaAttivita: torna le attività dichiarate, id/titolo/descrizione/priorita/stato/aggiornataAlle soltanto, da cartellaAttivita (GLOBALE)', async () => {
+  const finta = sessioneControllabile();
+  const attivitaPronta = { id: 'task-1', titolo: 'Chiama idraulico', descrizione: null, priorita: 'high', stato: 'todo', creataAlle: 'x', aggiornataAlle: '2026-08-30T10:00:00.000Z' };
+  let cartellaRicevuta;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    cartellaAttivita: '/percorso/globale/tasks',
+    elencaAttivitaRegistroFn: async ({ cartella }) => { cartellaRicevuta = cartella; return [attivitaPronta]; },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.elencaAttivita(sessionId);
+
+  assert.equal(esito.ok, true);
+  assert.equal(esito.errore, null);
+  assert.equal(cartellaRicevuta, '/percorso/globale/tasks');
+  assert.deepEqual(esito.attivita, [{ id: 'task-1', titolo: 'Chiama idraulico', descrizione: null, priorita: 'high', stato: 'todo', aggiornataAlle: '2026-08-30T10:00:00.000Z' }]);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔ AL CONTRARIO — elencaAttivita con .tasks-store malformato: {attivita:null, errore}, MAI un array vuoto', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    elencaAttivitaRegistroFn: async () => { throw new TaskStoreError('rotta.json non è JSON valido', 'TASK_STORE_MALFORMED'); },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.elencaAttivita(sessionId);
+
+  assert.equal(esito.ok, true);
+  assert.equal(esito.attivita, null, 'null, non [] — sono due fatti diversi');
+  assert.match(esito.errore, /non è JSON valido/);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔ AL CONTRARIO — elencaAttivita su un id inesistente: NOT_FOUND', async () => {
+  const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
+  const esito = await registro.elencaAttivita('id-mai-esistito');
   assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
 });
 

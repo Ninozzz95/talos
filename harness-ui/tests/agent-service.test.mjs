@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { avviaSessione, compattaSessione, eseguiComandoDiretto } from '../src/agent-service.mjs';
 import { NoteStoreError } from '../src/notes-store.mjs';
+import { TaskStoreError } from '../src/tasks-store.mjs';
 import { WorkspaceFileError } from '../src/workspace-files.mjs';
 
 // `talosLavoraFn` finto: agent-service.mjs non deve mai far girare un vero
@@ -1723,6 +1724,133 @@ test('⭐⭐⭐ onNoteElimina: una nota che esisteva davvero dice "deleted", una
   assert.equal(rimossa.esito, 'That note has been deleted.');
   const giaAssente = await catturato.onNoteElimina({ id: 'mai-esistita' });
   assert.equal(giaAssente.esito, 'There was no note with that id — nothing to delete.');
+  assert.equal(giaAssente.ok, true, 'idempotente: già assente è l\'esito voluto, non un fallimento');
+});
+
+/*
+ * ⭐⭐⭐ FASE N, quinto sistema (30/8) — Tasks. Stesso principio ESATTO
+ * dei 4 callback Notes appena sopra: `cartellaAttivita` è GLOBALE, mai
+ * la `cartella` della sessione — ogni test lo prova esplicitamente.
+ */
+test('⭐⭐⭐ i 5 callback onAttivita* arrivano SEMPRE a talosLavoraFn, incondizionatamente', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+
+  await avviaSessione({ cartella: '/tmp/senza-tasks', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn });
+
+  for (const nome of ['onAttivitaLista', 'onAttivitaCrea', 'onAttivitaCompleta', 'onAttivitaAggiorna', 'onAttivitaElimina']) {
+    assert.equal(typeof catturato[nome], 'function', `${nome} deve essere sempre una funzione, mai undefined`);
+  }
+});
+
+test('⭐⭐⭐ onAttivitaLista: cartellaAttivita (GLOBALE) passata a elencaAttivitaFn, MAI la cartella della sessione — e filtra per status', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  let cartellaRicevuta;
+  const tutte = [
+    { id: 'task-1', titolo: 'Aperta', stato: 'todo' },
+    { id: 'task-2', titolo: 'Fatta', stato: 'done' },
+  ];
+  const elencaAttivitaFn = async ({ cartella }) => { cartellaRicevuta = cartella; return tutte; };
+
+  await avviaSessione({
+    cartella: '/tmp/progetto-vero', cartellaAttivita: '/tmp/tasks-globali', task: TASK, modello: 'm', chiave: 'k',
+    onEvento: () => {}, talosLavoraFn, elencaAttivitaFn,
+  });
+
+  const tuttiRisultato = await catturato.onAttivitaLista({});
+  assert.equal(cartellaRicevuta, '/tmp/tasks-globali');
+  assert.equal(tuttiRisultato.totale, 2, 'status assente/all: nessun filtro');
+
+  const soloAperte = await catturato.onAttivitaLista({ status: 'open' });
+  assert.deepEqual(soloAperte.attivita.map((a) => a.id), ['task-1']);
+
+  const soloFatte = await catturato.onAttivitaLista({ status: 'done' });
+  assert.deepEqual(soloFatte.attivita.map((a) => a.id), ['task-2']);
+});
+
+test('⭐⭐⭐ onAttivitaCrea: argomenti VERI passati a creaAttivitaFn su cartellaAttivita, priority default "normal" se assente', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  let ricevuti;
+  const creaAttivitaFn = async (argomenti) => { ricevuti = argomenti; return { id: 'task-1', titolo: argomenti.title }; };
+
+  await avviaSessione({ cartella: '/tmp/x', cartellaAttivita: '/tmp/tasks-globali', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, creaAttivitaFn });
+
+  const risultato = await catturato.onAttivitaCrea({ title: 'Chiama idraulico' });
+  assert.deepEqual(ricevuti, { cartella: '/tmp/tasks-globali', title: 'Chiama idraulico', description: undefined, priority: 'normal' });
+  assert.equal(risultato.ok, true);
+  assert.match(risultato.esito, /Added the task «Chiama idraulico» \(id task-1\)\./);
+});
+
+test('⛔⛔ AL CONTRARIO — onAttivitaCrea: un creaAttivitaFn che lancia TaskStoreError torna ok:false col messaggio VERO', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const creaAttivitaFn = async () => { throw new TaskStoreError('title deve avere 1-200 caratteri', 'TASK_INVALID'); };
+
+  await avviaSessione({ cartella: '/tmp/x', cartellaAttivita: '/tmp/t', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, creaAttivitaFn });
+
+  const risultato = await catturato.onAttivitaCrea({ title: '' });
+  assert.equal(risultato.ok, false);
+  assert.match(risultato.esito, /title deve avere 1-200 caratteri/);
+});
+
+test('⭐⭐ onAttivitaCompleta: il messaggio distingue "Marked as done" da "Moved to <stato>"', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const completaAttivitaFn = async ({ status }) => ({ id: 'task-1', titolo: 'x', stato: status });
+
+  await avviaSessione({ cartella: '/tmp/x', cartellaAttivita: '/tmp/t', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, completaAttivitaFn });
+
+  const fatto = await catturato.onAttivitaCompleta({ id: 'task-1', status: 'done' });
+  assert.equal(fatto.esito, 'Marked «x» as done.');
+  const inCorso = await catturato.onAttivitaCompleta({ id: 'task-1', status: 'doing' });
+  assert.equal(inCorso.esito, 'Moved «x» to doing.');
+});
+
+test('⭐⭐ onAttivitaCompleta: un id inesistente (TASK_NOT_FOUND) diventa il messaggio onesto del tool mobile', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const completaAttivitaFn = async () => { throw new TaskStoreError('nessuna attività con id mai-esistita', 'TASK_NOT_FOUND'); };
+
+  await avviaSessione({ cartella: '/tmp/x', cartellaAttivita: '/tmp/t', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, completaAttivitaFn });
+
+  const risultato = await catturato.onAttivitaCompleta({ id: 'mai-esistita' });
+  assert.equal(risultato.ok, false);
+  assert.equal(risultato.esito, 'There is no task with that id. Call tasks_list to see the current ones.');
+});
+
+test('⛔⛔ AL CONTRARIO — onAttivitaAggiorna: né title né description né priority passati è un rifiuto onesto (indica tasks_complete), aggiornaAttivitaFn MAI chiamata', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  let chiamata = false;
+  const aggiornaAttivitaFn = async () => { chiamata = true; return {}; };
+
+  await avviaSessione({ cartella: '/tmp/x', cartellaAttivita: '/tmp/t', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, aggiornaAttivitaFn });
+
+  const risultato = await catturato.onAttivitaAggiorna({ id: 'task-1' });
+  assert.equal(risultato.ok, false);
+  assert.match(risultato.esito, /Nothing to change/);
+  assert.match(risultato.esito, /tasks_complete/);
+  assert.equal(chiamata, false);
+});
+
+test('⭐⭐⭐ onAttivitaElimina: un\'attività che esisteva davvero dice "deleted", una già assente dice "nothing to delete"', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const presenti = new Set(['task-vero']);
+  const leggiAttivitaFn = async ({ id }) => (presenti.has(id) ? { id, titolo: 'x' } : null);
+  const eliminaAttivitaFn = async () => {};
+
+  await avviaSessione({ cartella: '/tmp/x', cartellaAttivita: '/tmp/t', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, leggiAttivitaFn, eliminaAttivitaFn });
+
+  const rimossa = await catturato.onAttivitaElimina({ id: 'task-vero' });
+  assert.equal(rimossa.esito, 'That task has been deleted.');
+  const giaAssente = await catturato.onAttivitaElimina({ id: 'mai-esistita' });
+  assert.equal(giaAssente.esito, 'There was no task with that id — nothing to delete.');
   assert.equal(giaAssente.ok, true, 'idempotente: già assente è l\'esito voluto, non un fallimento');
 });
 

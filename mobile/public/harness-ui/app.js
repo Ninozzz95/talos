@@ -1268,6 +1268,54 @@
     return riga;
   }
 
+  /**
+   * ⭐⭐⭐ FASE N, quinto sistema (30/8) — stesso identico pattern di
+   * caricaPannelloNote() sopra.
+   */
+  async function caricaPannelloAttivita() {
+    const mount = $('#tasksListMount', sheetBody);
+    if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
+    if (!state.realSession.id) {
+      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione attiva — apri o avvia un task per vedere i Tasks.'));
+      return;
+    }
+    mount.replaceChildren(textElement('p', 'board-empty', 'Carico i Tasks…'));
+    let dati;
+    try {
+      dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tasks`);
+    } catch (error) {
+      mount.replaceChildren(textElement('p', 'board-empty', `Tasks non disponibili: ${error.message}`));
+      return;
+    }
+    if (mount !== $('#tasksListMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
+    if (dati.errore) {
+      mount.replaceChildren(textElement('p', 'board-empty', `.tasks-store non valido: ${dati.errore}`));
+      return;
+    }
+    if (!dati.attivita || dati.attivita.length === 0) {
+      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna attività (.tasks-store/, globale — non del progetto).'));
+      return;
+    }
+    mount.replaceChildren(...dati.attivita.map((attivita) => rigaAttivita(attivita)));
+  }
+
+  /** ⭐⭐⭐ FASE N, quinto sistema (30/8) — sempre attiva (un'attività non ha un gate di fiducia): niente bottone, lo stato al posto del riassunto — mai lo stesso status-chip "attivo" fisso delle skill, qui varia davvero (todo/doing/done). */
+  function rigaAttivita(attivita) {
+    const riga = document.createElement('div');
+    riga.className = 'sheet-option';
+    riga.setAttribute('role', 'group');
+    const iconEl = document.createElement('span');
+    iconEl.className = 'sheet-icon';
+    iconEl.innerHTML = icon('i-files');
+    const testo = document.createElement('span');
+    testo.append(
+      textElement('strong', null, attivita.titolo),
+      textElement('small', null, `${attivita.priorita}${attivita.descrizione ? ` · ${attivita.descrizione}` : ''}`),
+    );
+    riga.append(iconEl, testo, textElement('span', `status-chip ${attivita.stato === 'done' ? 'success' : ''}`, attivita.stato));
+    return riga;
+  }
+
   /** ⭐⭐⭐ 29/8 — sempre attiva (le skill non hanno un gate di fiducia): niente bottone, solo il riassunto. */
   function rigaSkill(skill) {
     const riga = document.createElement('div');
@@ -1951,7 +1999,7 @@
     showEmbeddedDialog(sheetDialog);
     wireSheetActions(type);
     if (type === 'control') { refreshDoctorBadge(); caricaPannelloHooks(); }
-    if (type === 'capabilities') { caricaPannelloMcp(); caricaPannelloSkill(); caricaPannelloPlugin(); caricaPannelloLibreria(); caricaPannelloNote(); }
+    if (type === 'capabilities') { caricaPannelloMcp(); caricaPannelloSkill(); caricaPannelloPlugin(); caricaPannelloLibreria(); caricaPannelloNote(); caricaPannelloAttivita(); }
     if (type === 'sessionTree') caricaAlberoSessione();
     /*
      * ⭐⭐⭐ 27/8, owner: "riaprire lo stesso componente della selezione del
@@ -2148,6 +2196,10 @@
         <div class="sheet-section">
           <span class="sheet-label">Notes · promemoria in .notes-store/, GLOBALI — non del progetto</span>
           <div id="notesListMount"></div>
+        </div>
+        <div class="sheet-section">
+          <span class="sheet-label">Tasks · attività in .tasks-store/, GLOBALI — non del progetto</span>
+          <div id="tasksListMount"></div>
         </div>
         <div class="sheet-section">
           <span class="sheet-label">Non ancora implementato</span>

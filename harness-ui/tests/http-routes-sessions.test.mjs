@@ -180,6 +180,15 @@ function registroFinto() {
       if (sessionId === 'sess-note-rotte') return { ok: true, note: null, errore: '.notes-store/rotta.json non è un JSON valido' };
       return { ok: true, note: [{ id: 'nota-1', titolo: 'Codice cancello', contenuto: '4471', aggiornataAlle: '2026-08-30T10:00:00.000Z' }], errore: null };
     },
+    /*
+     * ⭐⭐⭐ FASE N, quinto sistema (30/8): stesso stile esatto di
+     * elencaNote appena sopra.
+     */
+    async elencaAttivita(sessionId) {
+      if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (sessionId === 'sess-tasks-rotti') return { ok: true, attivita: null, errore: '.tasks-store/rotta.json non è un JSON valido' };
+      return { ok: true, attivita: [{ id: 'task-1', titolo: 'Chiama idraulico', descrizione: null, priorita: 'high', stato: 'todo', aggiornataAlle: '2026-08-30T10:00:00.000Z' }], errore: null };
+    },
     ultimaFiduciaServerMcp: null,
     async fidaServerMcp(sessionId, serverId) {
       this.ultimaFiduciaServerMcp = { sessionId, serverId };
@@ -1215,6 +1224,28 @@ test('⭐ GET /api/v1/sessions/{id}/notes torna le note dal registro', async (t)
 test('⛔ AL CONTRARIO — GET .../notes su un id inesistente: 404 NOT_FOUND', async (t) => {
   const { base } = await listen(t);
   const risposta = await fetch(`${base}/api/v1/sessions/non-esiste/notes`);
+  assert.equal(risposta.status, 404);
+});
+
+/*
+ * ⭐⭐⭐ FASE N, quinto sistema (30/8) — GET .../tasks: il Capability
+ * hub chiama questa rotta per mostrare le attività dell'owner
+ * (GLOBALI, come le note) — stesso principio esatto di GET .../notes
+ * sopra.
+ */
+test('⭐ GET /api/v1/sessions/{id}/tasks torna le attività dal registro', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/tasks`);
+  assert.equal(risposta.status, 200);
+  const corpo = await risposta.json();
+  assert.deepEqual(corpo.data.attivita, [{ id: 'task-1', titolo: 'Chiama idraulico', descrizione: null, priorita: 'high', stato: 'todo', aggiornataAlle: '2026-08-30T10:00:00.000Z' }]);
+  assert.equal(corpo.data.errore, null);
+});
+
+test('⛔ AL CONTRARIO — GET .../tasks su un id inesistente: 404 NOT_FOUND', async (t) => {
+  const { base } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions/non-esiste/tasks`);
   assert.equal(risposta.status, 404);
 });
 
