@@ -1331,7 +1331,15 @@
    * silenzioso — stessa disciplina del componente mobile.
    * @returns {{elemento: HTMLElement, getValore: () => string}}
    */
-  function creaModelPicker({ valoreIniziale = '', apriSubito = false, alSelezionato } = {}) {
+  /*
+   * ⭐⭐⭐ 29/8 — FASE K, R2: `etichettaVuota` nuovo, opzionale — riusato
+   * per il picker del planner ("Nessuno", owner: "Configurabile,
+   * nessun default forzato" — un planner assente non ha un "default
+   * del server" come il modello principale, sarebbe fuorviante
+   * mostrare la stessa etichetta). Default invariato per ogni
+   * chiamante esistente (PARITÀ).
+   */
+  function creaModelPicker({ valoreIniziale = '', apriSubito = false, alSelezionato, etichettaVuota = 'Predefinito del server' } = {}) {
     const wrap = document.createElement('div');
     wrap.className = 'model-picker';
 
@@ -1387,7 +1395,7 @@
     const gruppiAperti = new Set();
 
     function aggiornaTriggerLabel() {
-      triggerLabel.textContent = valoreScelto || 'Predefinito del server';
+      triggerLabel.textContent = valoreScelto || etichettaVuota;
     }
 
     function filtraModelli(query) {
@@ -5376,10 +5384,23 @@
       }
       const modelPicker = creaModelPicker({ valoreIniziale: state.model || '' });
       const effortPicker = creaEffortPicker({ valoreIniziale: state.effort });
+      /*
+       * ⭐⭐⭐ FASE K (29/8) — planner opzionale, R2 (kernel già chiuso e
+       * verificato dal vivo, commit b3cb5a72): "Configurabile, nessun
+       * default forzato" — stesso principio già applicato a modello/
+       * effort sopra, ma qui SENZA una `state.modelloPlanner` a cui
+       * ricadere (nessuna sessione precedente ne fissa uno di default,
+       * a differenza di `state.model`/`state.effort`). Vuoto per
+       * costruzione: se l'owner non sceglie, `getValore()` torna `''`
+       * e il campo resta assente dal corpo POST (vedi startCustomSession).
+       */
+      const plannerPicker = creaModelPicker({ valoreIniziale: '', etichettaVuota: 'Nessuno' });
       customSection.append(
         textElement('span', 'sheet-label', 'Modello'),
         modelPicker.elemento,
         effortPicker.elemento,
+        textElement('span', 'sheet-label', 'Planner (opzionale) — esplora in sola lettura, poi consegna un piano all\'editor'),
+        plannerPicker.elemento,
       );
       const submit = document.createElement('button');
       submit.type = 'submit';
@@ -5393,8 +5414,9 @@
         const nomeCartella = cartellaLibera.split(/[\\/]/).pop() || cartellaLibera;
         const modello = modelPicker.getValore();
         const effort = effortPicker.getValore();
+        const modelloPlanner = plannerPicker.getValore() || undefined;
         closeEmbeddedDialog(sheetDialog);
-        avviaSessionePendente({ cartellaLibera, nomeCartella, modello, effort, permessi: state.permissions, permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
+        avviaSessionePendente({ cartellaLibera, nomeCartella, modello, effort, modelloPlanner, permessi: state.permissions, permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
       });
     } else {
       customSection.appendChild(textElement('span', 'sheet-label', 'Cartella — TALOS scrive DIRETTAMENTE lì, nessuna copia'));
@@ -5412,11 +5434,15 @@
         }
         const modelPicker = creaModelPicker({ valoreIniziale: state.model || '' });
         const effortPicker = creaEffortPicker({ valoreIniziale: state.effort });
+        // ⭐⭐⭐ FASE K (29/8) — stesso planner opzionale del ramo "Full access" sopra, stessa doc.
+        const plannerPicker = creaModelPicker({ valoreIniziale: '', etichettaVuota: 'Nessuno' });
         customSection.append(
           selectCartella,
           textElement('span', 'sheet-label', 'Modello'),
           modelPicker.elemento,
           effortPicker.elemento,
+          textElement('span', 'sheet-label', 'Planner (opzionale) — esplora in sola lettura, poi consegna un piano all\'editor'),
+          plannerPicker.elemento,
         );
         const submit = document.createElement('button');
         submit.type = 'submit';
@@ -5429,8 +5455,9 @@
           const nomeCartella = progetti.find((p) => p.id === cartellaId)?.nome ?? cartellaId;
           const modello = modelPicker.getValore();
           const effort = effortPicker.getValore();
+          const modelloPlanner = plannerPicker.getValore() || undefined;
           closeEmbeddedDialog(sheetDialog);
-          avviaSessionePendente({ cartellaId, nomeCartella, modello, effort, permessi: state.permissions, permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
+          avviaSessionePendente({ cartellaId, nomeCartella, modello, effort, modelloPlanner, permessi: state.permissions, permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
         });
       }
     }
@@ -5455,9 +5482,9 @@
    * parte solo quando c'è un compito — il primo messaggio scritto nella
    * chat, intercettato da submitPrompt via state.pendingCustomSession).
    */
-  function avviaSessionePendente({ cartellaId, cartellaLibera, nomeCartella, modello, effort, permessi, permessiPerAttrezzo }) {
+  function avviaSessionePendente({ cartellaId, cartellaLibera, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo }) {
     nuovaGenerazioneSessione();
-    state.pendingCustomSession = { cartellaId, cartellaLibera, nomeCartella, modello, effort, permessi, permessiPerAttrezzo };
+    state.pendingCustomSession = { cartellaId, cartellaLibera, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo };
     if (modello) { state.model = modello; aggiornaPillolaModello(); }
     if (effort) state.effort = effort;
     state.session = `Nuova · ${nomeCartella}`;
@@ -5493,7 +5520,7 @@
     return String(testo || '').replace(/\s+/g, ' ').trim().slice(0, 80);
   }
 
-  async function startCustomSession({ cartellaId, cartellaLibera, nomeCartella, consegna, comandoProva, modello, effort, permessi, permessiPerAttrezzo }) {
+  async function startCustomSession({ cartellaId, cartellaLibera, nomeCartella, consegna, comandoProva, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo }) {
     const generation = nuovaGenerazioneSessione();
     const taskSintetico = { id: `libero:${nomeCartella}`, consegna };
     state.realSession.taskId = taskSintetico.id;
@@ -5525,6 +5552,17 @@
       // ⭐ 28/8 — stesso principio del modello: la scelta esplicita dell'effort picker ha priorità, altrimenti quella già impostata sulla sessione (pillola/foglio); assente se l'owner non ha mai toccato lo slider.
       const effortEffettivo = effort || state.effort;
       if (effortEffettivo) corpo.reasoning = { effort: effortEffettivo };
+      /*
+       * ⭐⭐⭐ FASE K (29/8) — planner opzionale (R2). Nessuna ricaduta su
+       * `state.modelloPlanner`/`state.model`, a differenza di modello/
+       * effort sopra: "Configurabile, nessun default forzato" (owner) —
+       * lo stesso principio già scelto lato server in
+       * session-registry.mjs (`modelloPlannerRichiesta`, deliberatamente
+       * senza un `|| modello` di ripiego). Assente dal corpo se l'owner
+       * non ha scelto nulla nel picker — mai un `{}`/stringa vuota
+       * spedita al server.
+       */
+      if (modelloPlanner) corpo.modelloPlanner = modelloPlanner;
       // ⭐⭐⭐ 28/8 — la pillola permessi: la scelta fatta nella modale ha priorità, altrimenti quella corrente del composer (state.permissions, sempre valorizzata — default "Workspace write").
       corpo.permessi = permessi || state.permissions;
       /*
@@ -5621,9 +5659,9 @@
      * sessione reale, questo primo messaggio la avvia per davvero.
      */
     if (state.pendingCustomSession) {
-      const { cartellaId, cartellaLibera, nomeCartella, modello, effort, permessi, permessiPerAttrezzo } = state.pendingCustomSession;
+      const { cartellaId, cartellaLibera, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo } = state.pendingCustomSession;
       state.pendingCustomSession = null;
-      startCustomSession({ cartellaId, cartellaLibera, nomeCartella, consegna: value, modello, effort, permessi, permessiPerAttrezzo });
+      startCustomSession({ cartellaId, cartellaLibera, nomeCartella, consegna: value, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo });
       return true;
     }
     /*
