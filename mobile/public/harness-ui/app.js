@@ -2350,6 +2350,29 @@
       section.hidden = !active;
       if (active) markMotionEnter(section);
     });
+    /*
+     * ⛔⛔⛔ 29/8, owner dal vivo: "in una sessione vuota la tab files ha
+     * ancora la scritta demo UI non collegato". Causa: `renderizzaAlberoReale()`
+     * parte SOLO su `RunStarted`/una scrittura — mai su "la sessione esiste"
+     * da sola — e questa funzione faceva solo mostra/nascondi CSS, zero
+     * fetch. Una sessione VERA ma ancora senza un giro restava quindi
+     * indistinguibile da nessuna sessione.
+     *
+     * ⛔ Prima versione di questa cura chiamava `renderizzaAlberoReale()`
+     * da `collegaEventiSessione()` (appena l'id è noto) — TROVATO DAL TEST
+     * (non dal vivo): quando un `RunStarted` arriva a ridosso della
+     * connessione (il caso normale, non quello vuoto), le due chiamate
+     * si sovrappongono e il livello radice viene scaricato DUE volte
+     * invece di una (FILE-TREE-07, `harnessUiRealSession.test.ts`).
+     * ⇒ Qui invece: carica pigro, solo al click sulla tab, solo se la
+     * radice non è già in cache — mai una doppia corsa con RunStarted,
+     * e risolve esattamente lo scenario riportato (l'unico in cui la tab
+     * viene aperta prima che un giro sia mai partito).
+     */
+    if (button.dataset.inspectorTab === 'files' && state.realSession.id
+      && !state.realSession.treeCache.has('')) {
+      renderizzaAlberoReale();
+    }
   }
 
   /*
@@ -5564,6 +5587,7 @@
        * Entrambe già ricadono da sole sullo stesso toast finto quando non
        * c'è una sessione reale — zero duplicazione necessaria qui.
        */
+      case 'resume': resumeSession(); break;
       case 'fork': forkSession(); break;
       case 'compact': compactSession(); break;
       case 'tree': openSheet('sessionTree'); break;
@@ -5751,6 +5775,15 @@
   });
 
   $('#newSessionBtn').addEventListener('click', createNewSession);
+  /*
+   * ⭐ FASE M (29/8) — stesse funzioni reali già cablate su ⌘K
+   * ('resume' non c'era nemmeno lì: solo scrivendo un messaggio;
+   * 'compact' sì, ma senza un punto d'ingresso visibile). Nessuna
+   * duplicazione: resumeSession()/compactSession() restano le uniche
+   * implementazioni, qui solo un secondo modo di chiamarle.
+   */
+  $('#resumeSessionBtn').addEventListener('click', () => resumeSession());
+  $('#compactSessionBtn').addEventListener('click', () => compactSession());
   $('#commandPaletteBtn').addEventListener('click', openCommandPalette);
   $('#closeCommand')?.addEventListener('click', () => closeEmbeddedDialog(commandDialog));
   harnessDialogBackdrop.addEventListener('click', dismissTransientLayers);
