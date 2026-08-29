@@ -703,6 +703,11 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .status-chip { display: inline-flex; align-items: center; min-height: 25px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: var(--surface-highlight-subtle); font-size: 9px; }
 .status-chip.success { color: var(--success); border-color: var(--success-strong); background: var(--success-soft); }
 .status-chip.error { color: var(--danger); border-color: var(--danger-soft); background: var(--danger-soft); }
+/* ⭐⭐⭐ 29/8 — FASE G: avvisi dello scanner di plugin-registry.mjs, mostrati PRIMA del bottone "Fida" (app.js, rigaPlugin) — mai un blocco, solo informazione. */
+.plugin-panel-item { margin-bottom: 6px; }
+.plugin-panel-item .sheet-option { margin-bottom: 4px; }
+.plugin-panel-warnings { display: flex; flex-direction: column; gap: 4px; padding: 0 10px 4px 47px; }
+.plugin-panel-warnings .status-chip { display: block; width: fit-content; white-space: normal; text-align: left; line-height: 1.4; height: auto; min-height: 0; padding: 4px 8px; }
 
 .browser-shell { width: min(1100px, calc(100% - 32px)); }
 .browser-bar { min-height: 50px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 12px 12px 0 0; background: var(--surface); padding: 6px 8px; }

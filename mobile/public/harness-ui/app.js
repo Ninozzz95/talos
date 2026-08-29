@@ -1259,8 +1259,18 @@
     mount.replaceChildren(...dati.plugin.map((plugin) => rigaPlugin(plugin)));
   }
 
-  /** ⭐⭐⭐ 29/8 — stesso identico pattern di rigaServerMcp() sopra. */
+  /**
+   * ⭐⭐⭐ 29/8 — stesso identico pattern di rigaServerMcp() sopra, con
+   * un'aggiunta: gli AVVISI dello scanner (`elencaPlugin`,
+   * session-registry.mjs → `scansionaPatternSospetti`, plugin-registry.mjs)
+   * mostrati PRIMA del click "Fida" — mai un blocco, solo
+   * informazione (vedi la doc lì sul perché un pattern scanner non è
+   * un confine di sicurezza vero). Un plugin GIÀ fidato non li mostra
+   * più: l'owner li ha già visti al momento della fiducia.
+   */
   function rigaPlugin(plugin) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'plugin-panel-item';
     const riga = document.createElement('div');
     riga.className = 'sheet-option';
     riga.setAttribute('role', 'group');
@@ -1299,7 +1309,14 @@
       statoEl = bottone;
     }
     riga.append(iconEl, testo, statoEl);
-    return riga;
+    wrapper.append(riga);
+    if (!plugin.fidato && plugin.avvisi?.length > 0) {
+      const avvisi = document.createElement('div');
+      avvisi.className = 'plugin-panel-warnings';
+      avvisi.append(...plugin.avvisi.map((a) => textElement('span', 'status-chip error', `${a.origine}: ${a.avviso}`)));
+      wrapper.append(avvisi);
+    }
+    return wrapper;
   }
 
   /**
