@@ -1598,3 +1598,113 @@ test('⛔⛔⛔ AL CONTRARIO — elencaVociFn che LANCIA (disco illeggibile) si 
 
   await assert.rejects(() => catturato.onLibreriaLista({}), /EACCES/);
 });
+
+/*
+ * ⭐⭐⭐ FASE N (29/8), seconda fetta — i 3 callback di mutazione. Stesso
+ * principio dei 4 di lettura sopra (sempre costruiti, incondizionatamente),
+ * ma qui scrivono il MESSAGGIO finale per intero (a differenza dei 4 di
+ * lettura, che tornano dati grezzi per il formattatore del kernel).
+ */
+test('⭐⭐⭐ i 3 callback onLibreria* di mutazione arrivano SEMPRE a talosLavoraFn, incondizionatamente', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn });
+
+  for (const nome of ['onLibreriaRinomina', 'onLibreriaElimina', 'onLibreriaEsporta']) {
+    assert.equal(typeof catturato[nome], 'function', `${nome} deve essere sempre una funzione, mai undefined`);
+  }
+});
+
+test('⭐⭐⭐ onLibreriaRinomina: cartella+id+nome VERI passati a rinominaVoceFn, il messaggio riporta ENTRAMBI i nomi', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  let argomentiRicevuti;
+  const rinominaVoceFn = async (argomenti) => { argomentiRicevuti = argomenti; return { id: 'lib-1', nomePrima: 'vecchio.md', nomeDopo: 'nuovo.md' }; };
+
+  await avviaSessione({ cartella: '/tmp/progetto-vero', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, rinominaVoceFn });
+
+  const risultato = await catturato.onLibreriaRinomina({ id: 'lib-1', name: 'nuovo.md' });
+  assert.deepEqual(argomentiRicevuti, { cartella: '/tmp/progetto-vero', id: 'lib-1', nome: 'nuovo.md' });
+  assert.equal(risultato.ok, true);
+  assert.equal(risultato.esito, 'Renamed «vecchio.md» to «nuovo.md».');
+});
+
+test('⛔ AL CONTRARIO — onLibreriaRinomina: un id inesistente (rinominaVoceFn torna null) è ok:false, mai un successo inventato', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const rinominaVoceFn = async () => null;
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, rinominaVoceFn });
+
+  const risultato = await catturato.onLibreriaRinomina({ id: 'lib-fantasma', name: 'x.md' });
+  assert.equal(risultato.ok, false);
+  assert.match(risultato.esito, /No Library file has the id "lib-fantasma"/);
+});
+
+test('⭐⭐⭐ onLibreriaElimina: cartella+id VERI passati a eliminaVoceFn, il messaggio riporta il nome tolto', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  let argomentiRicevuti;
+  const eliminaVoceFn = async (argomenti) => { argomentiRicevuti = argomenti; return { id: 'lib-1', nome: 'via.md' }; };
+
+  await avviaSessione({ cartella: '/tmp/progetto-vero', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, eliminaVoceFn });
+
+  const risultato = await catturato.onLibreriaElimina({ id: 'lib-1' });
+  assert.deepEqual(argomentiRicevuti, { cartella: '/tmp/progetto-vero', id: 'lib-1' });
+  assert.equal(risultato.esito, '«via.md» has been removed from the Library.');
+});
+
+test('⭐⭐⭐ onLibreriaEsporta: risolve il riferimento, legge la voce, la scrive nel workspace VERO con creaFileWorkspaceFn', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const elencaVociFn = async () => [{ id: 'lib-1', nome: 'report.md', fileType: 'document', origine: 'uploaded' }];
+  const leggiVoceFn = async ({ id }) => (id === 'lib-1' ? { nome: 'report.md', mediaType: 'text/markdown', origine: 'uploaded', testo: 'contenuto vero' } : null);
+  let scritturaRicevuta;
+  const creaFileWorkspaceFn = async (spec) => { scritturaRicevuta = spec; return { percorso: spec.nome }; };
+  const eventi = [];
+
+  await avviaSessione({
+    cartella: '/tmp/progetto-vero', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn,
+    elencaVociFn, leggiVoceFn, creaFileWorkspaceFn,
+  });
+
+  const risultato = await catturato.onLibreriaEsporta({ reference: 'lib-1' });
+  assert.deepEqual(scritturaRicevuta, { cartella: '/tmp/progetto-vero', nome: 'report.md', bytes: Buffer.from('contenuto vero', 'utf8') });
+  assert.equal(risultato.ok, true);
+  assert.match(risultato.esito, /Exported "report\.md" into the workspace \(14 bytes\)/);
+  const eventoScrittura = eventi.find((e) => e.type === 'StateDelta');
+  assert.ok(eventoScrittura, 'una scrittura reale nel workspace deve emettere StateDelta, come document_create/generate_image');
+});
+
+test('⛔⛔ AL CONTRARIO — onLibreriaEsporta: due voci con lo stesso nome sono ambigue, creaFileWorkspaceFn MAI chiamata', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const elencaVociFn = async () => [
+    { id: 'lib-1', nome: 'a.md', fileType: 'document', origine: 'uploaded' },
+    { id: 'lib-2', nome: 'a.md', fileType: 'document', origine: 'uploaded' },
+  ];
+  let chiamataScrittura = false;
+  const creaFileWorkspaceFn = async () => { chiamataScrittura = true; return { percorso: 'x' }; };
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, elencaVociFn, creaFileWorkspaceFn });
+
+  const risultato = await catturato.onLibreriaEsporta({ reference: 'a.md' });
+  assert.equal(risultato.ok, false);
+  assert.match(risultato.esito, /More than one Library file is named "a\.md"/);
+  assert.equal(chiamataScrittura, false, 'un\'ambiguità non deve MAI arrivare a scrivere qualcosa');
+});
+
+test('⛔ AL CONTRARIO — onLibreriaEsporta: un nome già occupato nel workspace rifiuta onestamente (WorkspaceFileError), mai una sovrascrittura', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const elencaVociFn = async () => [{ id: 'lib-1', nome: 'esiste-gia.md', fileType: 'document', origine: 'uploaded' }];
+  const leggiVoceFn = async () => ({ nome: 'esiste-gia.md', mediaType: 'text/markdown', origine: 'uploaded', testo: 'x' });
+  const creaFileWorkspaceFn = async () => { throw new WorkspaceFileError('Esiste già un file con questo nome', 'FILE_EXISTS'); };
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, elencaVociFn, leggiVoceFn, creaFileWorkspaceFn });
+
+  const risultato = await catturato.onLibreriaEsporta({ reference: 'lib-1' });
+  assert.equal(risultato.ok, false);
+  assert.match(risultato.esito, /could not be saved into the workspace: Esiste già un file con questo nome/);
+});
