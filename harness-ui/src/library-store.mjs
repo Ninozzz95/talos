@@ -315,11 +315,90 @@ export async function origineVoce({ cartella, id }, deps = {}) {
 }
 
 /**
- * ⛔ NON un tool del modello in questa fetta — primitivo interno per
- * seminare/testare, e base pronta per la seconda fetta (mutazioni,
- * domanda 2 del ledger FASE N, non ancora chiusa). Un id non si
- * passa mai dal chiamante: è sempre generato qui, stesso principio di
- * ogni id in questo progetto.
+ * Un nome di Libreria non è testo libero: è un'etichetta. Porto diretto
+ * di `talosSafeLibraryName` mobile (`libraryWriteTools.ts` righe 48-58)
+ * — tolti separatori di percorso e caratteri di controllo, perché
+ * questo nome finisce in un file VERO su disco (`library_export`,
+ * seconda fetta) dove una barra smetterebbe di essere una lettera e
+ * diventerebbe una cartella. ⛔ Non porta `talosStripPromptEnvelope`
+ * (mobile la applica prima: rimuove un involucro di prompt-injection
+ * specifico del suo formato di messaggio) — il desktop non ha quel
+ * concetto, e sanificare qui i soli caratteri strutturalmente
+ * pericolosi resta sufficiente per un nome file.
+ */
+export function sanificaNomeLibreria(valore) {
+  return String(valore ?? '')
+    .normalize('NFKC')
+    .replace(/[ --]/g, ' ')
+    .replace(/[/\\:*?"<>|]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^\.+\s*/, '')
+    .trim();
+}
+
+/**
+ * Risolve un riferimento del modello (id ESATTO o nome visibile
+ * ESATTO) a UNA voce — porto diretto della logica di `library_export`
+ * mobile (`libraryExportTools.ts` righe 62-79): mai un fuzzy-match sul
+ * nome (case/spazi normalizzati sì, un sinonimo o un troncamento no).
+ * Più di un nome uguale ⇒ `{ambiguo:true}` (mai una scelta a caso: il
+ * modello deve chiedere); nessuna corrispondenza ⇒ `null`.
+ */
+export function trovaVoce(voci, reference) {
+  const perId = voci.find((v) => v.id === reference);
+  if (perId) return perId;
+  const cercato = String(reference ?? '').normalize('NFKC').trim().toLowerCase();
+  const perNome = voci.filter((v) => v.nome.normalize('NFKC').trim().toLowerCase() === cercato);
+  if (perNome.length > 1) return { ambiguo: true };
+  return perNome[0] ?? null;
+}
+
+/**
+ * Rinomina una voce — SOLO i metadata, mai il contenuto. `null` se
+ * l'id non esiste; il nome nuovo è sanificato QUI (non fidato dal
+ * chiamante), e un nome vuoto DOPO la sanificazione è un errore
+ * dichiarato — mai un file rinominato al vuoto.
+ */
+export async function rinominaVoce({ cartella, id, nome }, deps = {}) {
+  const readFileFn = deps.readFileFn ?? fsp.readFile;
+  const writeFileFn = deps.writeFileFn ?? fsp.writeFile;
+  const nomeSicuro = sanificaNomeLibreria(nome);
+  if (!nomeSicuro) {
+    throw new LibraryStoreError('Il nome è vuoto una volta tolti i caratteri di percorso — scegline uno semplice.', 'LIBRARY_NAME_EMPTY');
+  }
+  const cartellaVoce = join(cartella, CARTELLA_LIBRERIA, id);
+  const meta = await leggiMeta(join(cartellaVoce, NOME_FILE_META), readFileFn, id);
+  if (meta === undefined) return null;
+  const nomePrima = meta.nome;
+  const aggiornato = { ...meta, nome: nomeSicuro, aggiornatoIl: new Date().toISOString() };
+  await writeFileFn(join(cartellaVoce, NOME_FILE_META), JSON.stringify(aggiornato, null, 2), 'utf8');
+  return { id, nomePrima, nomeDopo: nomeSicuro };
+}
+
+/**
+ * Elimina una voce PER INTERO (metadata + contenuto) — la cartella
+ * `<id>/` sparisce dal disco. `null` se l'id non esiste (mai
+ * un'eccezione per un id già sparito: è un esito onesto, "già andato",
+ * non un guasto — stesso principio di `library_delete` mobile,
+ * `libraryWriteTools.ts` riga 191 "It may already be gone").
+ */
+export async function eliminaVoce({ cartella, id }, deps = {}) {
+  const readFileFn = deps.readFileFn ?? fsp.readFile;
+  const rmFn = deps.rmFn ?? fsp.rm;
+  const cartellaVoce = join(cartella, CARTELLA_LIBRERIA, id);
+  const meta = await leggiMeta(join(cartellaVoce, NOME_FILE_META), readFileFn, id);
+  if (meta === undefined) return null;
+  await rmFn(cartellaVoce, { recursive: true, force: true });
+  return { id, nome: meta.nome };
+}
+
+/**
+ * ⛔ NON un tool del modello — primitivo interno per seminare/testare
+ * (e per la futura auto-archiviazione di document_create/generate_image
+ * nella Libreria, non ancora decisa). Un id non si passa mai dal
+ * chiamante: è sempre generato qui, stesso principio di ogni id in
+ * questo progetto.
  */
 export async function salvaVoce({ cartella, nome, mediaType, origine = 'uploaded', testo, base64, modello, provider }, deps = {}) {
   const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
