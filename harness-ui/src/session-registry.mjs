@@ -77,6 +77,15 @@ export function createSessionRegistry({
   caricaHooksFn = caricaHooksReale,
   verificaTrustFn = verificaTrustReale,
   eseguiHookFn = eseguiHookReale,
+  /*
+   * ⭐⭐⭐ 29/8 — FASE E, seconda metà. Stesso pattern REALE di
+   * `cartellaTrustHook` appena sopra — un default relativo a QUESTO
+   * file, fuori dal workspace di ogni progetto (il trust di un server
+   * MCP è una decisione dell'OWNER su questa macchina, mai qualcosa
+   * che un progetto clonato può auto-concedersi scrivendo un file —
+   * vedi mcp-registry.mjs).
+   */
+  cartellaTrustMcp = fileURLToPath(new URL('../.mcp-trust/', import.meta.url)),
   fidaHookFn = fidaHookReale,
   modello,
   chiave,
@@ -385,6 +394,8 @@ export function createSessionRegistry({
       // ⭐⭐⭐ FASE C (28/8) — sub-agenti: sempre costruito (stesso principio di hookFn), il vero lavoro (limiti, isolamento) vive tutto dentro subagentOrchestrator.delegaSottoTask.
       onDelega: (taskFiglio, cartellaFiglio) => subagentOrchestrator.delegaSottoTask({ sessionPadreId: sessionId, task: taskFiglio, cartella: cartellaFiglio }),
       codaMessaggiFn,
+      // ⭐⭐⭐ FASE E (29/8) — sempre passata (stesso principio di cartellaTrustHook per gli hook): agent-service.mjs legge .harness-ui-mcp.json SOLO se il workspace lo dichiara, zero I/O altrimenti (vedi la sua doc su cartellaTrustMcp).
+      cartellaTrustMcp,
       onEvento: (evento) => broadcast(voce, evento),
     }).then((risultato) => {
       /*

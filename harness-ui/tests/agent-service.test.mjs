@@ -977,3 +977,99 @@ test('⛔ AL CONTRARIO — codaMessaggiFn assente arriva undefined a talosLavora
 
   assert.equal(catturato.codaMessaggiFn, undefined);
 });
+
+/*
+ * ⭐⭐⭐ FASE E (29/8), seconda metà — mcp-session.mjs collegato dentro
+ * avviaSessione(). Investigato prima di scrivere (vedi
+ * elegant-spinning-dongarra.md): `avvia()`/`avviaLibero()` in
+ * session-registry.mjs restano sincrone, il lavoro asincrono vive QUI,
+ * dopo RunStarted e prima di talosLavoraFn — stesso principio PARITÀ
+ * di ogni altro parametro di questo file: `cartellaTrustMcp` assente
+ * ⇒ zero lavoro nuovo, zero I/O, `preparaToolMcpPerSessioneFn` mai
+ * chiamata.
+ */
+test('⛔⛔⛔ AL CONTRARIO — cartellaTrustMcp assente: preparaToolMcpPerSessioneFn MAI chiamata, toolMcp/chiamaToolMcpFn arrivano undefined', async () => {
+  let catturato;
+  let chiamataPrepara = false;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+  const preparaToolMcpPerSessioneFn = async () => { chiamataPrepara = true; return { toolMcp: [], chiamaToolMcpFn: null, falliti: [], chiudiTutti: async () => {} }; };
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, preparaToolMcpPerSessioneFn,
+  });
+
+  assert.equal(chiamataPrepara, false, 'senza cartellaTrustMcp non deve esserci NESSUN lavoro MCP, nemmeno un tentativo');
+  assert.equal(catturato.toolMcp, undefined);
+  assert.equal(catturato.chiamaToolMcpFn, undefined);
+});
+
+test('⭐⭐⭐ cartellaTrustMcp presente: preparaToolMcpPerSessioneFn chiamata con {cartella,cartellaTrust}, toolMcp/chiamaToolMcpFn arrivano a talosLavoraFn ESATTAMENTE come risolti', async () => {
+  let catturato;
+  let argomentiPrepara;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+  const toolMcpFinto = [{ name: 'mcp__filesystem__read_file', description: 'legge', inputSchema: {} }];
+  const chiamaToolMcpFnFinta = async () => ({ content: [], isError: false });
+  const preparaToolMcpPerSessioneFn = async (argomenti) => {
+    argomentiPrepara = argomenti;
+    return { toolMcp: toolMcpFinto, chiamaToolMcpFn: chiamaToolMcpFnFinta, falliti: [], chiudiTutti: async () => {} };
+  };
+
+  await avviaSessione({
+    cartella: '/tmp/workspace-vero', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    cartellaTrustMcp: '/tmp/mcp-trust', preparaToolMcpPerSessioneFn,
+  });
+
+  assert.deepEqual(argomentiPrepara, { cartella: '/tmp/workspace-vero', cartellaTrust: '/tmp/mcp-trust' });
+  assert.equal(catturato.toolMcp, toolMcpFinto, 'STESSO array, non una copia');
+  assert.equal(catturato.chiamaToolMcpFn, chiamaToolMcpFnFinta, 'STESSA funzione, non un wrapper');
+});
+
+test('⭐⭐⭐ chiudiTutti() viene chiamata DAVVERO dopo un run concluso con successo', async () => {
+  let chiusa = false;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } } });
+  const preparaToolMcpPerSessioneFn = async () => ({ toolMcp: [], chiamaToolMcpFn: null, falliti: [], chiudiTutti: async () => { chiusa = true; } });
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    cartellaTrustMcp: '/tmp/mcp-trust', preparaToolMcpPerSessioneFn,
+  });
+
+  assert.equal(chiusa, true, 'un server MCP e\' un processo figlio vero — lasciato aperto sarebbe un leak');
+});
+
+test('⛔⛔⛔ AL CONTRARIO — chiudiTutti() viene chiamata ANCHE quando talosLavoraFn LANCIA (finally, mai un leak sull\'errore)', async () => {
+  let chiusa = false;
+  const talosLavoraFn = talosLavoraFinto({ script: { tipo: 'lancia', errore: new Error('rete giù') } });
+  const preparaToolMcpPerSessioneFn = async () => ({ toolMcp: [], chiamaToolMcpFn: null, falliti: [], chiudiTutti: async () => { chiusa = true; } });
+
+  const risultato = await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    cartellaTrustMcp: '/tmp/mcp-trust', preparaToolMcpPerSessioneFn,
+  });
+
+  assert.equal(risultato.ok, false, 'il percorso d\'errore resta invariato');
+  assert.equal(chiusa, true, 'chiudiTutti() deve girare ANCHE sul percorso d\'errore, non solo su quello felice');
+});
+
+test('⛔⛔ AL CONTRARIO — RunStarted arriva PRIMA di preparaToolMcpPerSessioneFn, mai dopo (l\'ordine dei bubble non cambia)', async () => {
+  const eventi = [];
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } } });
+  const preparaToolMcpPerSessioneFn = async () => {
+    eventi.push('mcp-preparato');
+    return { toolMcp: [], chiamaToolMcpFn: null, falliti: [], chiudiTutti: async () => {} };
+  };
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e.type), talosLavoraFn,
+    cartellaTrustMcp: '/tmp/mcp-trust', preparaToolMcpPerSessioneFn,
+  });
+
+  assert.equal(eventi[0], 'RunStarted');
+  assert.equal(eventi[1], 'mcp-preparato', 'la preparazione MCP deve girare dopo RunStarted, mai prima');
+});

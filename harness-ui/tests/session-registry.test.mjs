@@ -1801,3 +1801,29 @@ test('⛔ svuotaCoda: rimosso:false su una coda già vuota, mai un errore — e 
   assert.deepEqual(registro.svuotaCoda('fantasma'), { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
+
+/*
+ * ⭐⭐⭐ FASE E (29/8), seconda metà — cartellaTrustMcp, stesso pattern di
+ * cartellaTrustHook (FASE A): un default reale (fuori dal workspace,
+ * accanto a server.mjs) sempre passato ad avviaSessioneFn, mai
+ * costruito da zero per ogni sessione.
+ */
+test('⭐⭐⭐ avvia() passa SEMPRE cartellaTrustMcp a avviaSessioneFn — un default reale, non undefined', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  registro.avvia('task-vero');
+  assert.equal(typeof finta.ultimoInput.cartellaTrustMcp, 'string');
+  assert.ok(finta.ultimoInput.cartellaTrustMcp.length > 0);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔ AL CONTRARIO — un cartellaTrustMcp esplicito sovrascrive il default, non lo ignora', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    cartellaTrustMcp: '/tmp/mcp-trust-di-prova',
+  });
+  registro.avvia('task-vero');
+  assert.equal(finta.ultimoInput.cartellaTrustMcp, '/tmp/mcp-trust-di-prova');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
