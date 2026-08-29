@@ -1253,6 +1253,36 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(runtime().statoTerminale().montato).toBe(primaMontato)
     })
 
+    /*
+     * ⭐⭐⭐ 29/8 — owner, riferimento diretto al proprio Bash tool di
+     * Claude Code: `descrizione` (nuova, opzionale, schema in
+     * talosHarness.mjs) diventa la riga della bolla invece del comando
+     * grezzo, quando il modello la manda.
+     */
+    it('⭐⭐⭐ REAL-SESSION-SHELL-06 un tool-call "shell" con descrizione mostra la descrizione nella riga RIASSUNTO (collassata), non il comando grezzo', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 'c-descr', toolCallName: 'shell' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallArgs', toolCallId: 'c-descr', delta: JSON.stringify({ comando: 'git diff --stat', descrizione: 'Mostra i file cambiati' }) }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: 'c-descr', content: 'exit 0 [sandbox: wsl2]\n' }, generation)
+
+        // ⭐ la riga RIASSUNTO (sempre visibile, collassata) mostra la descrizione — il comando grezzo resta comunque
+        // raggiungibile nel dettaglio espandibile (.tool-note-detail, hidden finché non si clicca): non sparisce,
+        // semplicemente non è più la prima cosa che si legge. Stesso equilibrio del Bash tool di Claude Code.
+        const righe = [...document.querySelectorAll('.tool-note-summary-text')].map((el) => el.textContent)
+        expect(righe.some((r) => r === 'Mostra i file cambiati')).toBe(true)
+        expect(righe.some((r) => (r ?? '').includes('git diff --stat'))).toBe(false)
+    })
+
+    it('⛔ AL CONTRARIO — REAL-SESSION-SHELL-07 senza descrizione: PARITÀ, il comando grezzo resta la riga RIASSUNTO come oggi', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 'c-senza-descr', toolCallName: 'shell' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallArgs', toolCallId: 'c-senza-descr', delta: JSON.stringify({ comando: 'echo prova-parita' }) }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: 'c-senza-descr', content: 'exit 0 [sandbox: wsl2]\nprova-parita\n' }, generation)
+
+        const righe = [...document.querySelectorAll('.tool-note-summary-text')].map((el) => el.textContent)
+        expect(righe.some((r) => r === 'Comando: echo prova-parita')).toBe(true)
+    })
+
     // ⛔⛔ 28/8 — Terminale REALE: il reset al cambio sessione oggi significa
     // "chiudi la WebSocket della sessione precedente" (mai un output che
     // sopravvive al cambio) — non più "ripulisci un log testuale". jsdom

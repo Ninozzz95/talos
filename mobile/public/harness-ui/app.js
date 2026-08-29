@@ -2787,7 +2787,18 @@
       }
       case 'elenca': return 'Elenco dei file del progetto';
       case 'prova': return 'Esecuzione dei test…';
-      case 'shell': return a.comando ? `Comando: ${a.comando}` : 'Comando shell…';
+      /*
+       * ⭐⭐⭐ 29/8 — owner, riferimento diretto al proprio Bash tool di
+       * Claude Code: `descrizione` (nuova, opzionale — vedi lo schema
+       * in talosHarness.mjs) è la riga preferita quando il modello la
+       * manda — "Show changed files" invece di "git diff --stat". Il
+       * comando grezzo resta la SECONDA scelta (PARITÀ: un modello
+       * che non manda descrizione si comporta esattamente come oggi),
+       * mai perso del tutto — resta visibile per intero nel corpo
+       * dell'output quando il tool-call conclude (stesso posto di
+       * sempre, la vista Terminale).
+       */
+      case 'shell': return a.descrizione ? tronca(a.descrizione, 80) : (a.comando ? `Comando: ${a.comando}` : 'Comando shell…');
       case 'naviga': return a.url ? `Pagina web: ${a.url}` : 'Lettura pagina web…';
       case 'web_search': return a.query ? `Ricerca web: "${a.query}"` : 'Ricerca web…';
       case 'artifact_create': return a.titolo ? `Artefatto: ${a.titolo}` : 'Creazione artefatto…';
