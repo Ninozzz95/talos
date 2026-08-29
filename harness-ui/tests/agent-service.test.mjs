@@ -1161,3 +1161,176 @@ test('⛔ AL CONTRARIO — RunStarted arriva PRIMA di caricaSkillDisponibiliFn, 
   assert.equal(eventi[0], 'RunStarted');
   assert.equal(eventi[1], 'skill-caricata');
 });
+
+/*
+ * ⭐⭐⭐ FASE G (29/8), piano elegant-spinning-dongarra.md - plugin-session.mjs
+ * collegato dentro avviaSessione(). Stesso gate esplicito di MCP
+ * (cartellaTrustPlugin, non SEMPRE come le skill) - vedi la doc del
+ * parametro. In più: gli hook di un plugin fidato si fondono nel
+ * `hookFn` passato a talosLavoraFn, un wrapping che questo file (non
+ * session-registry.mjs) possiede - vedi la doc su hookFnConPlugin.
+ */
+test('⛔⛔⛔ AL CONTRARIO — cartellaTrustPlugin assente: preparaToolPluginPerSessioneFn MAI chiamata, toolPlugin/eseguiToolPluginFn arrivano undefined', async () => {
+  let catturato;
+  let chiamataPrepara = false;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+  const preparaToolPluginPerSessioneFn = async () => { chiamataPrepara = true; return { toolPlugin: [], eseguiToolPluginFn: null, hookPlugin: [], falliti: [] }; };
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, preparaToolPluginPerSessioneFn,
+  });
+
+  assert.equal(chiamataPrepara, false, 'senza cartellaTrustPlugin non deve esserci NESSUN lavoro di plugin, nemmeno un tentativo');
+  assert.equal(catturato.toolPlugin, undefined);
+  assert.equal(catturato.eseguiToolPluginFn, undefined);
+});
+
+test('⭐⭐⭐ cartellaTrustPlugin presente: preparaToolPluginPerSessioneFn chiamata con {cartella,cartellaTrust}, toolPlugin/eseguiToolPluginFn arrivano a talosLavoraFn ESATTAMENTE come risolti', async () => {
+  let catturato;
+  let argomentiPrepara;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+  const toolPluginFinto = [{ nome: 'plugin__esempio__conta_righe', descrizione: 'conta', parametri: {} }];
+  const eseguiToolPluginFnFinta = async () => '3 righe';
+  const preparaToolPluginPerSessioneFn = async (argomenti) => {
+    argomentiPrepara = argomenti;
+    return { toolPlugin: toolPluginFinto, eseguiToolPluginFn: eseguiToolPluginFnFinta, hookPlugin: [], falliti: [] };
+  };
+
+  await avviaSessione({
+    cartella: '/tmp/workspace-vero', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    cartellaTrustPlugin: '/tmp/plugin-trust', preparaToolPluginPerSessioneFn,
+  });
+
+  assert.deepEqual(argomentiPrepara, { cartella: '/tmp/workspace-vero', cartellaTrust: '/tmp/plugin-trust' });
+  assert.equal(catturato.toolPlugin, toolPluginFinto, 'STESSO array, non una copia');
+  assert.equal(catturato.eseguiToolPluginFn, eseguiToolPluginFnFinta, 'STESSA funzione, non un wrapper');
+});
+
+test('⛔⛔ AL CONTRARIO — RunStarted arriva PRIMA di preparaToolPluginPerSessioneFn, mai dopo', async () => {
+  const eventi = [];
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } } });
+  const preparaToolPluginPerSessioneFn = async () => {
+    eventi.push('plugin-preparato');
+    return { toolPlugin: [], eseguiToolPluginFn: null, hookPlugin: [], falliti: [] };
+  };
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e.type), talosLavoraFn,
+    cartellaTrustPlugin: '/tmp/plugin-trust', preparaToolPluginPerSessioneFn,
+  });
+
+  assert.equal(eventi[0], 'RunStarted');
+  assert.equal(eventi[1], 'plugin-preparato', 'la preparazione dei plugin deve girare dopo RunStarted, mai prima');
+});
+
+test('⭐⭐⭐ PARITÀ — hookPlugin vuoto (nessun plugin con hook fidato): hookFn arriva a talosLavoraFn come LO STESSO riferimento, zero wrapping', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+  const hookFnOriginale = async () => ({ consentito: true });
+  const preparaToolPluginPerSessioneFn = async () => ({ toolPlugin: [], eseguiToolPluginFn: null, hookPlugin: [], falliti: [] });
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    hookFn: hookFnOriginale, cartellaTrustPlugin: '/tmp/plugin-trust', preparaToolPluginPerSessioneFn,
+  });
+
+  assert.equal(catturato.hookFn, hookFnOriginale, 'senza hook di plugin, hookFn non deve essere avvolto — stesso riferimento di prima di FASE G');
+});
+
+test('⭐⭐⭐ un hook di plugin fidato che RIFIUTA blocca — nessun hookFn standalone', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+  const hookPluginFinto = [{ id: 'plugin:esempio:blocca-rm', eventi: ['pre_tool_call'], comando: 'echo mai eseguito' }];
+  const preparaToolPluginPerSessioneFn = async () => ({ toolPlugin: [], eseguiToolPluginFn: null, hookPlugin: hookPluginFinto, falliti: [] });
+  const eventiHook = [];
+  const eseguiHookFn = async ({ hook }) => { eventiHook.push(hook.id); return { consentito: false, motivo: 'bloccato dal plugin' }; };
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    cartellaTrustPlugin: '/tmp/plugin-trust', preparaToolPluginPerSessioneFn, eseguiHookFn,
+  });
+
+  assert.equal(typeof catturato.hookFn, 'function');
+  const esito = await catturato.hookFn({ tipo: 'pre_tool_call', azione: { tipo: 'scrivi' } });
+  assert.equal(esito.consentito, false);
+  assert.equal(esito.motivo, 'bloccato dal plugin');
+  assert.deepEqual(eventiHook, ['plugin:esempio:blocca-rm']);
+});
+
+test('⛔⛔⛔ AL CONTRARIO — hookFn standalone che rifiuta: gli hook di plugin NON girano nemmeno (il primo che rifiuta vince)', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+  const hookPluginFinto = [{ id: 'plugin:esempio:mai-chiamato', eventi: ['pre_tool_call'], comando: 'echo mai' }];
+  const preparaToolPluginPerSessioneFn = async () => ({ toolPlugin: [], eseguiToolPluginFn: null, hookPlugin: hookPluginFinto, falliti: [] });
+  let eseguiHookFnChiamata = false;
+  const eseguiHookFn = async () => { eseguiHookFnChiamata = true; return { consentito: true }; };
+  const hookFnOriginale = async () => ({ consentito: false, motivo: 'bloccato dallo standalone' });
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    hookFn: hookFnOriginale, cartellaTrustPlugin: '/tmp/plugin-trust', preparaToolPluginPerSessioneFn, eseguiHookFn,
+  });
+
+  const esito = await catturato.hookFn({ tipo: 'pre_tool_call', azione: { tipo: 'scrivi' } });
+  assert.equal(esito.consentito, false);
+  assert.equal(esito.motivo, 'bloccato dallo standalone');
+  assert.equal(eseguiHookFnChiamata, false, 'un hook di plugin non deve nemmeno girare se lo standalone ha già rifiutato');
+});
+
+test('⭐⭐ hookFn standalone consente, un hook di plugin poi rifiuta: il combinato rifiuta, HookInvoked arriva in evento', async () => {
+  let catturato;
+  const eventi = [];
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+  const hookPluginFinto = [{ id: 'plugin:esempio:blocca-rm', eventi: ['pre_tool_call'], comando: 'echo no' }];
+  const preparaToolPluginPerSessioneFn = async () => ({ toolPlugin: [], eseguiToolPluginFn: null, hookPlugin: hookPluginFinto, falliti: [] });
+  const eseguiHookFn = async () => ({ consentito: false, motivo: 'bloccato dal plugin' });
+  const hookFnOriginale = async () => ({ consentito: true });
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn,
+    hookFn: hookFnOriginale, cartellaTrustPlugin: '/tmp/plugin-trust', preparaToolPluginPerSessioneFn, eseguiHookFn,
+  });
+
+  const esito = await catturato.hookFn({ tipo: 'pre_tool_call', azione: { tipo: 'scrivi' } });
+  assert.equal(esito.consentito, false);
+  const hookInvocatoEvento = eventi.find((e) => e.type === 'HookInvoked');
+  assert.ok(hookInvocatoEvento, 'HookInvoked deve arrivare anche per un hook sorgente-plugin, stessa UI del Control-plane');
+  assert.equal(hookInvocatoEvento.hookId, 'plugin:esempio:blocca-rm');
+});
+
+test('⛔⛔⛔ AL CONTRARIO — eseguiHookFn di un hook di plugin che LANCIA: non autorizza, stessa disciplina di un hook standalone che lancia', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+  const hookPluginFinto = [{ id: 'plugin:esempio:rotto', eventi: ['pre_tool_call'], comando: 'echo rotto' }];
+  const preparaToolPluginPerSessioneFn = async () => ({ toolPlugin: [], eseguiToolPluginFn: null, hookPlugin: hookPluginFinto, falliti: [] });
+  const eseguiHookFn = async () => { throw new Error('comando non trovato'); };
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    cartellaTrustPlugin: '/tmp/plugin-trust', preparaToolPluginPerSessioneFn, eseguiHookFn,
+  });
+
+  const esito = await catturato.hookFn({ tipo: 'pre_tool_call', azione: { tipo: 'scrivi' } });
+  assert.equal(esito.consentito, false, 'un hook di plugin che lancia non autorizza in silenzio — stessa regola di un hook standalone che lancia');
+});

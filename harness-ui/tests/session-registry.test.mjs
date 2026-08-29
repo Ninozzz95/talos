@@ -9,6 +9,7 @@ import { WorkspaceFileError } from '../src/workspace-files.mjs';
 import { HookRegistryError } from '../src/hook-registry.mjs';
 import { McpRegistryError } from '../src/mcp-registry.mjs';
 import { SkillRegistryError } from '../src/skill-registry.mjs';
+import { PluginRegistryError } from '../src/plugin-registry.mjs';
 
 // Ne' avviaSessione ne' talosLavora girano MAI qui, veri o finti a metà: si
 // inietta avviaSessioneFn/preparaEsecuzioneFn interamente controllati dal
@@ -1963,5 +1964,124 @@ test('⛔⛔ AL CONTRARIO — elencaSkill con .harness-ui-skills malformato: {sk
 test('⛔ AL CONTRARIO — elencaSkill su un id inesistente: NOT_FOUND', async () => {
   const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
   const esito = await registro.elencaSkill('id-mai-esistito');
+  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+});
+
+/*
+ * ⭐⭐⭐ FASE G (29/8), esecuzione — `cartellaTrustPlugin`, stesso
+ * pattern di `cartellaTrustMcp`/`cartellaTrustHook`: un default reale
+ * (fuori dal workspace, accanto a server.mjs) sempre passato ad
+ * avviaSessioneFn.
+ */
+test('⭐⭐⭐ avvia() passa SEMPRE cartellaTrustPlugin a avviaSessioneFn — un default reale, non undefined', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  registro.avvia('task-vero');
+  assert.equal(typeof finta.ultimoInput.cartellaTrustPlugin, 'string');
+  assert.ok(finta.ultimoInput.cartellaTrustPlugin.length > 0);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔ AL CONTRARIO — un cartellaTrustPlugin esplicito sovrascrive il default, non lo ignora', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    cartellaTrustPlugin: '/tmp/plugin-trust-di-prova',
+  });
+  registro.avvia('task-vero');
+  assert.equal(finta.ultimoInput.cartellaTrustPlugin, '/tmp/plugin-trust-di-prova');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+/*
+ * ⭐⭐⭐ 29/8 — FASE G: `elencaPlugin`/`fidaPlugin` sono ciò che il
+ * Capability hub chiama — stesso identico schema di `elencaServerMcp`/
+ * `fidaServerMcp` (un plugin ESEGUE, quindi porta `fidato`, a
+ * differenza delle skill).
+ */
+test('⭐⭐⭐ elencaPlugin: torna ogni plugin con il suo VERO stato di fiducia', async () => {
+  const finta = sessioneControllabile();
+  const pluginA = { id: 'esempio', nome: 'esempio', descrizione: 'un plugin di prova', hooks: [], tools: [{ nome: 'conta_righe', descrizione: 'conta', parametri: {}, comando: 'echo 3' }], hash: 'hash-a' };
+  const pluginB = { id: 'altro', nome: 'altro', descrizione: 'un altro plugin', hooks: [], tools: [], hash: 'hash-b' };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaPluginFn: async () => ({ plugin: [pluginA, pluginB] }),
+    verificaTrustPluginFn: async ({ pluginId }) => pluginId === 'esempio', // solo "esempio" è fidato
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.elencaPlugin(sessionId);
+
+  assert.equal(esito.ok, true);
+  assert.equal(esito.errore, null);
+  assert.deepEqual(esito.plugin, [
+    { id: 'esempio', nome: 'esempio', descrizione: 'un plugin di prova', hooks: [], tools: pluginA.tools, fidato: true },
+    { id: 'altro', nome: 'altro', descrizione: 'un altro plugin', hooks: [], tools: [], fidato: false },
+  ]);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔ AL CONTRARIO — elencaPlugin con .harness-ui-plugins malformato: {plugin:null, errore}, MAI un array vuoto che si legge come "nessun plugin"', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaPluginFn: async () => { throw new PluginRegistryError('esempio/plugin.json non è un JSON valido', 'PLUGIN_MALFORMED'); },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.elencaPlugin(sessionId);
+
+  assert.equal(esito.ok, true);
+  assert.equal(esito.plugin, null, 'null, non [] — sono due fatti diversi');
+  assert.match(esito.errore, /non è un JSON valido/);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔ AL CONTRARIO — elencaPlugin su un id sessione inesistente: NOT_FOUND', async () => {
+  const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
+  const esito = await registro.elencaPlugin('id-mai-esistito');
+  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+});
+
+test('⭐⭐⭐ fidaPlugin: rilegge .harness-ui-plugins/ e fida con l\'hash VERO letto da disco, mai uno passato dal chiamante', async () => {
+  const finta = sessioneControllabile();
+  const plugin = { id: 'esempio', nome: 'esempio', descrizione: 'd', hooks: [], tools: [], hash: 'hash-vero-dal-disco' };
+  const chiamate = [];
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaPluginFn: async () => ({ plugin: [plugin] }),
+    fidaPluginFn: async (args) => { chiamate.push(args); },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.fidaPlugin(sessionId, 'esempio');
+
+  assert.deepEqual(esito, { ok: true });
+  assert.equal(chiamate.length, 1);
+  assert.equal(chiamate[0].pluginId, 'esempio');
+  assert.equal(chiamate[0].hash, 'hash-vero-dal-disco');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔ AL CONTRARIO — fidaPlugin su un pluginId che non esiste in .harness-ui-plugins/: NOT_FOUND, fidaPluginFn MAI chiamata', async () => {
+  const finta = sessioneControllabile();
+  let chiamata = false;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaPluginFn: async () => ({ plugin: [{ id: 'altro', nome: 'altro', descrizione: 'd', hooks: [], tools: [], hash: 'h' }] }),
+    fidaPluginFn: async () => { chiamata = true; },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.fidaPlugin(sessionId, 'esempio-mai-dichiarato');
+
+  assert.equal(esito.code, 'NOT_FOUND');
+  assert.equal(chiamata, false);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔ AL CONTRARIO — fidaPlugin su un id sessione inesistente: NOT_FOUND', async () => {
+  const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
+  const esito = await registro.fidaPlugin('id-mai-esistito', 'esempio');
   assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
 });

@@ -54,6 +54,12 @@ import {
   verificaTrustMcp as verificaTrustMcpReale,
 } from './mcp-registry.mjs';
 import { caricaSkill as caricaSkillReale, SkillRegistryError } from './skill-registry.mjs';
+import {
+  caricaPlugin as caricaPluginReale,
+  fidaPlugin as fidaPluginReale,
+  PluginRegistryError,
+  verificaTrustPlugin as verificaTrustPluginReale,
+} from './plugin-registry.mjs';
 
 export const EXPORT_SCHEMA = 'talos.harness-ui.session-export.v1';
 
@@ -113,6 +119,23 @@ export function createSessionRegistry({
    * nome per evitare confusione a chi legge.
    */
   caricaSkillRegistroFn = caricaSkillReale,
+  /*
+   * ⭐⭐⭐ 29/8 — FASE G, esecuzione. Stesso pattern REALE di
+   * `cartellaTrustMcp`/`cartellaTrustHook` sopra — un default relativo
+   * a QUESTO file, fuori dal workspace di ogni progetto (il trust di
+   * un plugin è una decisione dell'OWNER su questa macchina, mai
+   * qualcosa che un progetto clonato può auto-concedersi scrivendo un
+   * file — vedi plugin-registry.mjs, stesso principio di mcp-registry.mjs).
+   * `preparaToolPluginPerSessioneFn` (dentro agent-service.mjs) usa lo
+   * STESSO `caricaPluginFn`/`verificaTrustPluginFn` di produzione — qui
+   * sono iniettabili solo per il pannello Capability hub di sola
+   * lettura (elencaPlugin/fidaPlugin sotto), stesso confine già preso
+   * per caricaServerMcpFn/verificaTrustMcpFn.
+   */
+  cartellaTrustPlugin = fileURLToPath(new URL('../.plugin-trust/', import.meta.url)),
+  caricaPluginFn = caricaPluginReale,
+  verificaTrustPluginFn = verificaTrustPluginReale,
+  fidaPluginFn = fidaPluginReale,
   modello,
   chiave,
   cartelleProgetto = [],
@@ -422,6 +445,8 @@ export function createSessionRegistry({
       codaMessaggiFn,
       // ⭐⭐⭐ FASE E (29/8) — sempre passata (stesso principio di cartellaTrustHook per gli hook): agent-service.mjs legge .harness-ui-mcp.json SOLO se il workspace lo dichiara, zero I/O altrimenti (vedi la sua doc su cartellaTrustMcp).
       cartellaTrustMcp,
+      // ⭐⭐⭐ FASE G (29/8) — stesso principio di cartellaTrustMcp appena sopra: agent-service.mjs legge .harness-ui-plugins/ SOLO se il workspace lo dichiara, zero I/O altrimenti.
+      cartellaTrustPlugin,
       onEvento: (evento) => broadcast(voce, evento),
     }).then((risultato) => {
       /*
@@ -885,6 +910,62 @@ export function createSessionRegistry({
         throw errore;
       }
       return { ok: true, skills: skills.map((s) => ({ id: s.id, name: s.name, description: s.description })), errore: null };
+    },
+
+    /**
+     * ⭐⭐⭐ 29/8 — FASE G, il pannello Capability hub: stesso ruolo di
+     * elencaServerMcp, stesso schema {id,fidato,...} — a differenza
+     * delle skill (nessun gate) ma come MCP, un plugin ESEGUE
+     * (tool locali, hook), quindi porta un `fidato` da mostrare prima
+     * del bottone "Fida". `null` se la sessione non esiste; un
+     * `.harness-ui-plugins/` malformato torna `{plugin:null, errore}`,
+     * stesso principio "gli stati sono tre" di elencaServerMcp/elencaHooks.
+     */
+    async elencaPlugin(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      let plugin;
+      try {
+        ({ plugin } = await caricaPluginFn({ cartella: voce.cartella }));
+      } catch (errore) {
+        if (errore instanceof PluginRegistryError) return { ok: true, plugin: null, errore: errore.message };
+        throw errore;
+      }
+      const conFiducia = await Promise.all(plugin.map(async (p) => {
+        let fidato = false;
+        try {
+          fidato = await verificaTrustPluginFn({ cartellaTrust: cartellaTrustPlugin, pluginId: p.id, hash: p.hash });
+        } catch {
+          fidato = false;
+        }
+        return { id: p.id, nome: p.nome, descrizione: p.descrizione, hooks: p.hooks, tools: p.tools, fidato };
+      }));
+      return { ok: true, plugin: conFiducia, errore: null };
+    },
+
+    /**
+     * ⭐⭐⭐ 29/8 — FASE G. L'owner FIDA un plugin dalla UI — stessa
+     * disciplina di fidaServerMcp: rilegge `.harness-ui-plugins/` AL
+     * MOMENTO per calcolare l'hash VERO del manifesto attuale, mai un
+     * hash passato dal client (un manifesto modificato dopo la fiducia
+     * deve ridiventare non fidato da solo — hash sull'INTERO manifesto,
+     * non per componente, vedi plugin-registry.mjs).
+     * @returns {{ok:true}|{erroreAvvio:string, code:string}}
+     */
+    async fidaPlugin(sessionId, pluginId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      let plugin;
+      try {
+        ({ plugin } = await caricaPluginFn({ cartella: voce.cartella }));
+      } catch (errore) {
+        if (errore instanceof PluginRegistryError) return { erroreAvvio: errore.message, code: 'PLUGIN_INVALID' };
+        throw errore;
+      }
+      const p = plugin.find((x) => x.id === pluginId);
+      if (!p) return { erroreAvvio: `Plugin "${pluginId}" non trovato in .harness-ui-plugins/`, code: 'NOT_FOUND' };
+      await fidaPluginFn({ cartellaTrust: cartellaTrustPlugin, pluginId: p.id, hash: p.hash });
+      return { ok: true };
     },
 
     /**

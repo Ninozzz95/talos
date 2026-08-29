@@ -1226,6 +1226,83 @@
   }
 
   /**
+   * ⭐⭐⭐ 29/8 — FASE G, piano `elegant-spinning-dongarra.md`. Stesso
+   * identico pattern di caricaPannelloMcp() sopra, per i plugin —
+   * riempie `#pluginsListMount` nel foglio "capabilities" coi plugin
+   * VERI dichiarati dal progetto della sessione attiva (bottone "Fida"
+   * come MCP: un plugin ESEGUE tool/hook, a differenza di una skill).
+   */
+  async function caricaPannelloPlugin() {
+    const mount = $('#pluginsListMount', sheetBody);
+    if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
+    if (!state.realSession.id) {
+      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione attiva — apri o avvia un task per vedere i plugin del progetto.'));
+      return;
+    }
+    mount.replaceChildren(textElement('p', 'board-empty', 'Carico i plugin…'));
+    let dati;
+    try {
+      dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/plugins`);
+    } catch (error) {
+      mount.replaceChildren(textElement('p', 'board-empty', `Plugin non disponibili: ${error.message}`));
+      return;
+    }
+    if (mount !== $('#pluginsListMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
+    if (dati.errore) {
+      mount.replaceChildren(textElement('p', 'board-empty', `.harness-ui-plugins/ non valido: ${dati.errore}`));
+      return;
+    }
+    if (!dati.plugin || dati.plugin.length === 0) {
+      mount.replaceChildren(textElement('p', 'board-empty', 'Nessun plugin dichiarato in questo progetto (.harness-ui-plugins/).'));
+      return;
+    }
+    mount.replaceChildren(...dati.plugin.map((plugin) => rigaPlugin(plugin)));
+  }
+
+  /** ⭐⭐⭐ 29/8 — stesso identico pattern di rigaServerMcp() sopra. */
+  function rigaPlugin(plugin) {
+    const riga = document.createElement('div');
+    riga.className = 'sheet-option';
+    riga.setAttribute('role', 'group');
+    const iconEl = document.createElement('span');
+    iconEl.className = 'sheet-icon';
+    iconEl.innerHTML = icon('i-bolt');
+    const testo = document.createElement('span');
+    const pezzi = [];
+    if (plugin.tools.length > 0) pezzi.push(`${plugin.tools.length} tool`);
+    if (plugin.hooks.length > 0) pezzi.push(`${plugin.hooks.length} hook`);
+    testo.append(
+      textElement('strong', null, plugin.nome),
+      textElement('small', null, `${plugin.descrizione}${pezzi.length ? ` · ${pezzi.join(', ')}` : ''}`),
+    );
+    let statoEl;
+    if (plugin.fidato) {
+      statoEl = textElement('span', 'status-chip success', 'attivo');
+    } else {
+      const bottone = document.createElement('button');
+      bottone.type = 'button';
+      bottone.className = 'secondary-btn';
+      bottone.textContent = 'Fida';
+      bottone.addEventListener('click', async () => {
+        bottone.disabled = true;
+        bottone.textContent = 'Fido…';
+        try {
+          await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/plugins/${encodeURIComponent(plugin.id)}/trust`, {});
+          toast('Plugin fidato', plugin.id);
+          caricaPannelloPlugin();
+        } catch (error) {
+          bottone.disabled = false;
+          bottone.textContent = 'Fida';
+          toast('Non riuscito', error.message);
+        }
+      });
+      statoEl = bottone;
+    }
+    riga.append(iconEl, testo, statoEl);
+    return riga;
+  }
+
+  /**
    * ⭐⭐⭐ 27/8 — owner: "un picker per il modello, dropdown stilizzato
    * (l'abbiamo già fatto nel mobile)". Stesso pattern di
    * TalosMobileComposerModelPicker.vue (AVM/mobile/src/components/chat/),
@@ -1749,7 +1826,7 @@
     showEmbeddedDialog(sheetDialog);
     wireSheetActions(type);
     if (type === 'control') { refreshDoctorBadge(); caricaPannelloHooks(); }
-    if (type === 'capabilities') { caricaPannelloMcp(); caricaPannelloSkill(); }
+    if (type === 'capabilities') { caricaPannelloMcp(); caricaPannelloSkill(); caricaPannelloPlugin(); }
     if (type === 'sessionTree') caricaAlberoSessione();
     /*
      * ⭐⭐⭐ 27/8, owner: "riaprire lo stesso componente della selezione del
@@ -1897,13 +1974,19 @@
        * chiamata passa" — configurabile dal foglio Permessi, non da qui.
        * La seconda
        * sezione è tutto il resto, onestamente "non ancora implementato":
-       * costruirlo per intero (sistema plugin, quattro gateway di chat)
-       * è il blocco più grande dei rimasti, non uno stralcio.
+       * quattro gateway di chat restano il blocco più grande dei
+       * rimasti, non uno stralcio.
        *
        * ⭐⭐⭐ 29/8 — FASE E chiude "MCP": tolto dalla lista finta sotto,
        * ha ora la sua sezione dinamica vera (`#mcpListMount`, riempita
        * da `caricaPannelloMcp()` in `openSheet()`) — stesso identico
        * pattern di "Hooks" nel foglio Control-plane.
+       *
+       * ⭐⭐⭐ 29/8 — FASE G chiude "Plugin market": tolto dalla lista
+       * finta sotto, ha ora la sua sezione dinamica vera
+       * (`#pluginsListMount`, riempita da `caricaPannelloPlugin()` in
+       * `openSheet()`) — stesso identico pattern di MCP appena sopra,
+       * con lo stesso bottone "Fida" (un plugin ESEGUE, come MCP).
        */
       html: () => `
         <div class="sheet-section">
@@ -1930,9 +2013,12 @@
           <div id="mcpListMount"></div>
         </div>
         <div class="sheet-section">
+          <span class="sheet-label">Plugin · manifesti dichiarati in .harness-ui-plugins/, per progetto</span>
+          <div id="pluginsListMount"></div>
+        </div>
+        <div class="sheet-section">
           <span class="sheet-label">Non ancora implementato</span>
           ${[
-            ['Plugin market', 'i-grid'],
             ['Toolsets', 'i-code'], ['Web search', 'i-search'], ['Computer use', 'i-layout'],
             ['Images', 'i-image'], ['Voice', 'i-mic'],
             ['Gateways · Telegram, Discord, Slack, WhatsApp', 'i-link'],

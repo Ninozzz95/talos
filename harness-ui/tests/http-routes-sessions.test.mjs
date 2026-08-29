@@ -167,6 +167,24 @@ function registroFinto() {
       return { ok: true };
     },
     /*
+     * ⭐⭐⭐ 29/8 — FASE G: stesso stile esatto di elencaServerMcp/fidaServerMcp
+     * appena sopra — cattura la chiamata per provare che la rotta HTTP
+     * raggiunge davvero il registro, senza fingere una vera .harness-ui-plugins/.
+     */
+    async elencaPlugin(sessionId) {
+      if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (sessionId === 'sess-plugin-rotti') return { ok: true, plugin: null, errore: '.harness-ui-plugins/esempio/plugin.json non è un JSON valido' };
+      return { ok: true, plugin: [{ id: 'esempio', nome: 'esempio', descrizione: 'un plugin di prova', hooks: [], tools: [{ nome: 'conta_righe', descrizione: 'conta', parametri: {}, comando: 'echo 3' }], fidato: false }], errore: null };
+    },
+    ultimaFiduciaPlugin: null,
+    async fidaPlugin(sessionId, pluginId) {
+      this.ultimaFiduciaPlugin = { sessionId, pluginId };
+      if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (pluginId === 'plugin-inesistente') return { erroreAvvio: `Plugin "${pluginId}" non trovato in .harness-ui-plugins/`, code: 'NOT_FOUND' };
+      if (pluginId === 'plugin-file-rotto') return { erroreAvvio: '.harness-ui-plugins/esempio/plugin.json non è un JSON valido', code: 'PLUGIN_INVALID' };
+      return { ok: true };
+    },
+    /*
      * ⭐⭐⭐ FASE D (28/8) — coda messaggi: stesso stile di
      * rispondiApprovazione/fidaHook sopra — cattura la chiamata per
      * provare che la rotta HTTP raggiunge davvero il registro.
@@ -595,6 +613,51 @@ test('⛔ AL CONTRARIO — GET .../mcp/.../trust (metodo sbagliato) non raggiung
   const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/mcp/filesystem/trust`, { method: 'GET' });
   assert.notEqual(risposta.status, 200);
   assert.equal(sessionRegistry.ultimaFiduciaServerMcp, null);
+});
+
+/*
+ * ⭐⭐⭐ 29/8 — POST .../plugins/:pluginId/trust, FASE G. Stesso ruolo
+ * esatto della rotta mcp/trust appena sopra, per i plugin.
+ */
+test('⭐⭐⭐ POST /api/v1/sessions/:id/plugins/:pluginId/trust raggiunge sessionRegistry.fidaPlugin con id decodificati', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/plugins/${encodeURIComponent('esempio plugin')}/trust`, {
+    method: 'POST',
+  });
+  assert.equal(risposta.status, 200);
+  assert.deepEqual(sessionRegistry.ultimaFiduciaPlugin, { sessionId, pluginId: 'esempio plugin' });
+});
+
+test('⛔ AL CONTRARIO — .../plugins/.../trust su una sessione inesistente: 404 NOT_FOUND', async (t) => {
+  const { base } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions/mai-esistita/plugins/esempio/trust`, { method: 'POST' });
+  assert.equal(risposta.status, 404);
+  assert.equal((await risposta.json()).error.code, 'NOT_FOUND');
+});
+
+test('⛔⛔ AL CONTRARIO — .../plugins/.../trust su un pluginId che non esiste in .harness-ui-plugins/: 404 NOT_FOUND, mai un {ok:true} bugiardo', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/plugins/plugin-inesistente/trust`, { method: 'POST' });
+  assert.equal(risposta.status, 404);
+  assert.equal((await risposta.json()).error.code, 'NOT_FOUND');
+});
+
+test('⛔⛔⛔ AL CONTRARIO — .../plugins/.../trust con plugin.json malformato: 422 PLUGIN_INVALID, mai fidato per errore', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/plugins/plugin-file-rotto/trust`, { method: 'POST' });
+  assert.equal(risposta.status, 422);
+  assert.equal((await risposta.json()).error.code, 'PLUGIN_INVALID');
+});
+
+test('⛔ AL CONTRARIO — GET .../plugins/.../trust (metodo sbagliato) non raggiunge mai fidaPlugin', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/plugins/esempio/trust`, { method: 'GET' });
+  assert.notEqual(risposta.status, 200);
+  assert.equal(sessionRegistry.ultimaFiduciaPlugin, null);
 });
 
 /*
@@ -1061,6 +1124,28 @@ test('⭐ GET /api/v1/sessions/{id}/skills torna le skill dal registro', async (
 test('⛔ AL CONTRARIO — GET .../skills su un id inesistente: 404 NOT_FOUND', async (t) => {
   const { base } = await listen(t);
   const risposta = await fetch(`${base}/api/v1/sessions/non-esiste/skills`);
+  assert.equal(risposta.status, 404);
+});
+
+/*
+ * ⭐⭐⭐ 29/8 — GET .../plugins, FASE G: il Capability hub chiama questa
+ * rotta per mostrare i plugin dichiarati e il loro stato di fiducia
+ * vero — stesso principio esatto di GET .../mcp sopra (un plugin
+ * ESEGUE, a differenza delle skill).
+ */
+test('⭐ GET /api/v1/sessions/{id}/plugins torna i plugin con lo stato di fiducia dal registro', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/plugins`);
+  assert.equal(risposta.status, 200);
+  const corpo = await risposta.json();
+  assert.deepEqual(corpo.data.plugin, [{ id: 'esempio', nome: 'esempio', descrizione: 'un plugin di prova', hooks: [], tools: [{ nome: 'conta_righe', descrizione: 'conta', parametri: {}, comando: 'echo 3' }], fidato: false }]);
+  assert.equal(corpo.data.errore, null);
+});
+
+test('⛔ AL CONTRARIO — GET .../plugins su un id inesistente: 404 NOT_FOUND', async (t) => {
+  const { base } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions/non-esiste/plugins`);
   assert.equal(risposta.status, 404);
 });
 
