@@ -58,6 +58,7 @@ import {
   caricaPlugin as caricaPluginReale,
   fidaPlugin as fidaPluginReale,
   PluginRegistryError,
+  scansionaPatternSospetti,
   verificaTrustPlugin as verificaTrustPluginReale,
 } from './plugin-registry.mjs';
 
@@ -938,7 +939,22 @@ export function createSessionRegistry({
         } catch {
           fidato = false;
         }
-        return { id: p.id, nome: p.nome, descrizione: p.descrizione, hooks: p.hooks, tools: p.tools, fidato };
+        /*
+         * ⭐⭐⭐ 29/8 — FASE G, Ledger tecnico: gli AVVISI dello scanner
+         * mostrati PRIMA del click "Fida" — mai un blocco, solo
+         * informazione (vedi la doc in plugin-registry.mjs sul perché
+         * un pattern scanner non è un confine di sicurezza vero, anche
+         * per Hermes stesso). Scansiona OGNI comando dichiarato (tool +
+         * hook), con l'origine per farsi capire da chi legge — un
+         * plugin già fidato non ha bisogno di riproporli ad ogni giro,
+         * ma li calcoliamo comunque qui (economico, puro) invece di un
+         * secondo ramo condizionale.
+         */
+        const avvisi = [
+          ...p.tools.flatMap((t) => scansionaPatternSospetti(t.comando).map((avviso) => ({ origine: `tool:${t.nome}`, avviso }))),
+          ...p.hooks.flatMap((h) => scansionaPatternSospetti(h.comando).map((avviso) => ({ origine: `hook:${h.id}`, avviso }))),
+        ];
+        return { id: p.id, nome: p.nome, descrizione: p.descrizione, hooks: p.hooks, tools: p.tools, fidato, avvisi };
       }));
       return { ok: true, plugin: conFiducia, errore: null };
     },

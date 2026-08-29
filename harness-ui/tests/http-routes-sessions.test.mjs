@@ -174,7 +174,7 @@ function registroFinto() {
     async elencaPlugin(sessionId) {
       if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       if (sessionId === 'sess-plugin-rotti') return { ok: true, plugin: null, errore: '.harness-ui-plugins/esempio/plugin.json non è un JSON valido' };
-      return { ok: true, plugin: [{ id: 'esempio', nome: 'esempio', descrizione: 'un plugin di prova', hooks: [], tools: [{ nome: 'conta_righe', descrizione: 'conta', parametri: {}, comando: 'echo 3' }], fidato: false }], errore: null };
+      return { ok: true, plugin: [{ id: 'esempio', nome: 'esempio', descrizione: 'un plugin di prova', hooks: [], tools: [{ nome: 'conta_righe', descrizione: 'conta', parametri: {}, comando: 'echo 3' }], fidato: false, avvisi: [] }], errore: null };
     },
     ultimaFiduciaPlugin: null,
     async fidaPlugin(sessionId, pluginId) {
@@ -1139,7 +1139,7 @@ test('⭐ GET /api/v1/sessions/{id}/plugins torna i plugin con lo stato di fiduc
   const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/plugins`);
   assert.equal(risposta.status, 200);
   const corpo = await risposta.json();
-  assert.deepEqual(corpo.data.plugin, [{ id: 'esempio', nome: 'esempio', descrizione: 'un plugin di prova', hooks: [], tools: [{ nome: 'conta_righe', descrizione: 'conta', parametri: {}, comando: 'echo 3' }], fidato: false }]);
+  assert.deepEqual(corpo.data.plugin, [{ id: 'esempio', nome: 'esempio', descrizione: 'un plugin di prova', hooks: [], tools: [{ nome: 'conta_righe', descrizione: 'conta', parametri: {}, comando: 'echo 3' }], fidato: false, avvisi: [] }]);
   assert.equal(corpo.data.errore, null);
 });
 
