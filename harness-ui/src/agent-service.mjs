@@ -30,6 +30,15 @@ import { leggiContestoWorkspace as leggiContestoWorkspaceReale } from './workspa
 import { creaFileWorkspace as creaFileWorkspaceReale, WorkspaceFileError } from './workspace-files.mjs';
 import { preparaToolMcpPerSessione as preparaToolMcpPerSessioneReale } from './mcp-session.mjs';
 import { caricaSkill as caricaSkillReale } from './skill-registry.mjs';
+import {
+  cercaVoci as cercaVociLibreria,
+  creaCursoriLibreria,
+  elencaVoci as elencaVociReale,
+  elencaVociConTesto as elencaVociConTestoReale,
+  impaginaVoci as impaginaVociLibreria,
+  leggiVoce as leggiVoceReale,
+  origineVoce as origineVoceReale,
+} from './library-store.mjs';
 import { preparaToolPluginPerSessione as preparaToolPluginPerSessioneReale } from './plugin-session.mjs';
 import { eseguiHook as eseguiHookReale } from './hook-registry.mjs';
 import {
@@ -269,6 +278,21 @@ export async function avviaSessione({
   generateTalosDocumentFn = generateTalosDocumentReale,
   verifyTalosDocumentFn = verifyTalosDocumentReale,
   creaFileWorkspaceFn = creaFileWorkspaceReale,
+  /*
+   * ⭐⭐⭐ 29/8 — FASE N (Libreria), prima fetta. Stesso principio di
+   * `caricaSkillDisponibiliFn`: SOLO i quattro punti di contatto I/O
+   * con `library-store.mjs` sono iniettabili (per i test — mai un vero
+   * filesystem mockato altrove, il modulo stesso è già testato per
+   * conto suo). `impaginaVoci`/`cercaVoci`/`creaCursoriLibreria` sono
+   * PURE — usate direttamente, mai iniettate: non c'è I/O da fingere.
+   * Nessun gate/trust (stesso motivo di `caricaSkillDisponibiliFn`:
+   * una voce di Libreria è un file locale come un altro, non un
+   * comando o una connessione — vedi la doc in library-store.mjs).
+   */
+  elencaVociFn = elencaVociReale,
+  elencaVociConTestoFn = elencaVociConTestoReale,
+  leggiVoceFn = leggiVoceReale,
+  origineVoceFn = origineVoceReale,
 }) {
   const threadId = randomUUID();
   const runId = randomUUID();
@@ -640,6 +664,37 @@ export async function avviaSessione({
     };
   };
 
+  /*
+   * ⭐⭐⭐ 29/8 — FASE N (Libreria), prima fetta. `argomenti` è quello che
+   * il modello ha scritto (i nomi di campo inglesi dello schema JSON —
+   * `origin`/`file_type`/`page_size`/`page_token`, ecc., mai tradotti
+   * qui): la traduzione verso i nomi italiani di library-store.mjs vive
+   * SOLO in questi quattro punti, che il kernel non vede.
+   *
+   * `cursoriLibreria` — una Map per QUESTO run (stessa vita di
+   * `libraryListCursors` mobile, un'istanza per chat): un `page_token`
+   * sopravvive fra i giri dello STESSO run, non fra due run diversi —
+   * un resume/follow-up ricostruisce agent-service da capo, quindi un
+   * token vecchio torna onestamente CURSOR_INVALID (il contratto del
+   * tool lo prevede già, mai un crash).
+   */
+  const cursoriLibreria = creaCursoriLibreria();
+  const onLibreriaLista = async (argomenti) => {
+    const voci = await elencaVociFn({ cartella });
+    return impaginaVociLibreria(voci, {
+      origine: argomenti?.origin ?? 'all',
+      fileType: argomenti?.file_type ?? 'all',
+      pageSize: argomenti?.page_size ?? 10,
+      pageToken: argomenti?.page_token,
+    }, cursoriLibreria);
+  };
+  const onLibreriaCerca = async (argomenti) => {
+    const voci = await elencaVociConTestoFn({ cartella });
+    return cercaVociLibreria(voci, { query: argomenti?.query ?? '', limit: argomenti?.limit ?? 5, offset: argomenti?.offset ?? 0 });
+  };
+  const onLibreriaLeggi = async (argomenti) => leggiVoceFn({ cartella, id: argomenti?.id ?? '' });
+  const onLibreriaOrigine = async (argomenti) => origineVoceFn({ cartella, id: argomenti?.id ?? '' });
+
   try {
     const esito = await talosLavoraFn({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
@@ -647,6 +702,7 @@ export async function avviaSessione({
       strumentiEstesi, ricercaWeb, onArtefatto, onDocumento, onImmagine, modelloPlanner,
       livelloAccesso, chiediApprovazioneFn, hookFn: hookFnConPlugin, permessiPerAttrezzo, onDelega, codaMessaggiFn,
       firma, toolMcp, chiamaToolMcpFn, skillsDisponibili, caricaSkillFn, toolPlugin, eseguiToolPluginFn,
+      onLibreriaLista, onLibreriaCerca, onLibreriaLeggi, onLibreriaOrigine,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));
     return { threadId, runId, ok: esito.comeFinita === 'concluso', esito, erroreInterno: null };

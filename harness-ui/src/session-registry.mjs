@@ -153,7 +153,8 @@ export function createSessionRegistry({
   // ⭐ 28/8 — quarto, stesso principio: document_create è ATTREZZI_ESTESI[2] nel kernel (time_now è il terzo), offerto sempre come gli altri.
   // ⭐ FASE C (28/8) — quinto: delega_sottotask è ATTREZZI_ESTESI[4] nel kernel, stesso principio.
   // ⭐ FASE H (29/8) — sesto: generate_image è ATTREZZI_ESTESI[5] nel kernel, stesso principio.
-  strumentiEstesi = ['web_search', 'artifact_create', 'document_create', 'time_now', 'delega_sottotask', 'generate_image'],
+  // ⭐ FASE N (29/8) — settimo-decimo: i 4 tool di lettura Libreria (ATTREZZI_ESTESI[6..9] nel kernel), stesso principio — nessun gate, sempre offerti come gli altri sei.
+  strumentiEstesi = ['web_search', 'artifact_create', 'document_create', 'time_now', 'delega_sottotask', 'generate_image', 'library_list', 'library_search', 'library_read', 'library_file_origin'],
   ricercaWeb,
   /*
    * ⭐⭐⭐ 29/8 — FASE H, generate_image. A differenza di `ricercaWeb` sopra:
