@@ -47,6 +47,12 @@ import {
   HookRegistryError,
   verificaTrust as verificaTrustReale,
 } from './hook-registry.mjs';
+import {
+  caricaServerMcp as caricaServerMcpReale,
+  fidaServerMcp as fidaServerMcpReale,
+  McpRegistryError,
+  verificaTrustMcp as verificaTrustMcpReale,
+} from './mcp-registry.mjs';
 
 export const EXPORT_SCHEMA = 'talos.harness-ui.session-export.v1';
 
@@ -87,6 +93,15 @@ export function createSessionRegistry({
    */
   cartellaTrustMcp = fileURLToPath(new URL('../.mcp-trust/', import.meta.url)),
   fidaHookFn = fidaHookReale,
+  /*
+   * ⭐⭐⭐ 29/8 — FASE E, il pannello Capability hub: stesso pattern
+   * iniettabile di caricaHooksFn/verificaTrustFn/fidaHookFn appena
+   * sopra, per lo stesso motivo (mai una vera lettura disco/scrittura
+   * trust nei test unitari di questo file).
+   */
+  caricaServerMcpFn = caricaServerMcpReale,
+  verificaTrustMcpFn = verificaTrustMcpReale,
+  fidaServerMcpFn = fidaServerMcpReale,
   modello,
   chiave,
   cartelleProgetto = [],
@@ -779,6 +794,63 @@ export function createSessionRegistry({
       const hook = hooks.find((h) => h.id === hookId);
       if (!hook) return { erroreAvvio: `Hook "${hookId}" non trovato in .harness-ui-hooks.json`, code: 'NOT_FOUND' };
       await fidaHookFn({ cartellaTrust: cartellaTrustHook, hookId: hook.id, hash: hook.hash });
+      return { ok: true };
+    },
+
+    /**
+     * ⭐⭐⭐ 29/8 — FASE E. Stesso ruolo di elencaHooks per il pannello
+     * Capability hub: i server MCP dichiarati dal progetto di questa
+     * sessione, col loro stato di fiducia VERO — mai una connessione
+     * reale solo per mostrare l'elenco (quella parte in
+     * mcp-session.mjs, usata da agent-service.mjs quando la sessione
+     * lavora per davvero, non da questo pannello di sola lettura).
+     * `null` se la sessione non esiste; un `.harness-ui-mcp.json`
+     * malformato torna `{server:null, errore}`, stesso principio "gli
+     * stati sono tre" di elencaHooks.
+     */
+    async elencaServerMcp(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      let server;
+      try {
+        ({ server } = await caricaServerMcpFn({ cartella: voce.cartella }));
+      } catch (errore) {
+        if (errore instanceof McpRegistryError) return { ok: true, server: null, errore: errore.message };
+        throw errore;
+      }
+      const conFiducia = await Promise.all(server.map(async (s) => {
+        let fidato = false;
+        try {
+          fidato = await verificaTrustMcpFn({ cartellaTrust: cartellaTrustMcp, serverId: s.id, hash: s.hash });
+        } catch {
+          fidato = false;
+        }
+        return { id: s.id, comando: s.comando, argomenti: s.argomenti, allowlist: s.allowlist, fidato };
+      }));
+      return { ok: true, server: conFiducia, errore: null };
+    },
+
+    /**
+     * ⭐⭐⭐ 29/8 — FASE E. L'owner FIDA un server MCP dalla UI — stessa
+     * disciplina di fidaHook: rilegge `.harness-ui-mcp.json` AL MOMENTO
+     * per calcolare l'hash VERO della dichiarazione attuale, mai un
+     * hash passato dal client (un comando/allowlist modificati dopo la
+     * fiducia devono ridiventare non fidati da soli).
+     * @returns {{ok:true}|{erroreAvvio:string, code:string}}
+     */
+    async fidaServerMcp(sessionId, serverId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      let server;
+      try {
+        ({ server } = await caricaServerMcpFn({ cartella: voce.cartella }));
+      } catch (errore) {
+        if (errore instanceof McpRegistryError) return { erroreAvvio: errore.message, code: 'MCP_INVALID' };
+        throw errore;
+      }
+      const s = server.find((x) => x.id === serverId);
+      if (!s) return { erroreAvvio: `Server MCP "${serverId}" non trovato in .harness-ui-mcp.json`, code: 'NOT_FOUND' };
+      await fidaServerMcpFn({ cartellaTrust: cartellaTrustMcp, serverId: s.id, hash: s.hash });
       return { ok: true };
     },
 

@@ -7,6 +7,7 @@ import { TaskCatalogError } from '../src/task-catalog.mjs';
 import { WorkspaceTreeError } from '../src/workspace-tree.mjs';
 import { WorkspaceFileError } from '../src/workspace-files.mjs';
 import { HookRegistryError } from '../src/hook-registry.mjs';
+import { McpRegistryError } from '../src/mcp-registry.mjs';
 
 // Ne' avviaSessione ne' talosLavora girano MAI qui, veri o finti a metà: si
 // inietta avviaSessioneFn/preparaEsecuzioneFn interamente controllati dal
@@ -288,6 +289,98 @@ test('⛔⛔ AL CONTRARIO — fidaHook su un hookId che non esiste in hooks.json
 test('⛔ AL CONTRARIO — fidaHook su un id sessione inesistente: NOT_FOUND', async () => {
   const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
   const esito = await registro.fidaHook('id-mai-esistito', 'audit');
+  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+});
+
+/*
+ * ⭐⭐⭐ 29/8 — FASE E: `elencaServerMcp`/`fidaServerMcp` sono ciò che il
+ * Capability hub chiama — stesso identico schema di `elencaHooks`/
+ * `fidaHook` appena sopra, stesso principio "provati in isolamento".
+ */
+test('⭐⭐⭐ elencaServerMcp: torna ogni server con il suo VERO stato di fiducia', async () => {
+  const finta = sessioneControllabile();
+  const serverA = { id: 'filesystem', comando: 'npx', argomenti: ['-y', 'x'], allowlist: ['read_file'], hash: 'hash-a' };
+  const serverB = { id: 'altro', comando: 'npx', argomenti: [], allowlist: ['y'], hash: 'hash-b' };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaServerMcpFn: async () => ({ server: [serverA, serverB] }),
+    verificaTrustMcpFn: async ({ serverId }) => serverId === 'filesystem', // solo "filesystem" è fidato
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.elencaServerMcp(sessionId);
+
+  assert.equal(esito.ok, true);
+  assert.equal(esito.errore, null);
+  assert.deepEqual(esito.server, [
+    { id: 'filesystem', comando: 'npx', argomenti: ['-y', 'x'], allowlist: ['read_file'], fidato: true },
+    { id: 'altro', comando: 'npx', argomenti: [], allowlist: ['y'], fidato: false },
+  ]);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔ AL CONTRARIO — elencaServerMcp con .harness-ui-mcp.json malformato: {server:null, errore}, MAI un array vuoto che si legge come "nessun server"', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaServerMcpFn: async () => { throw new McpRegistryError('.harness-ui-mcp.json non è un JSON valido', 'MCP_CONFIG_MALFORMED'); },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.elencaServerMcp(sessionId);
+
+  assert.equal(esito.ok, true);
+  assert.equal(esito.server, null, 'null, non [] — sono due fatti diversi');
+  assert.match(esito.errore, /non è un JSON valido/);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔ AL CONTRARIO — elencaServerMcp su un id inesistente: NOT_FOUND', async () => {
+  const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
+  const esito = await registro.elencaServerMcp('id-mai-esistito');
+  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+});
+
+test('⭐⭐⭐ fidaServerMcp: rilegge .harness-ui-mcp.json e fida con l\'hash VERO letto da disco, mai uno passato dal chiamante', async () => {
+  const finta = sessioneControllabile();
+  const server = { id: 'filesystem', comando: 'npx', argomenti: [], allowlist: ['read_file'], hash: 'hash-vero-dal-disco' };
+  const chiamate = [];
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaServerMcpFn: async () => ({ server: [server] }),
+    fidaServerMcpFn: async (args) => { chiamate.push(args); },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.fidaServerMcp(sessionId, 'filesystem');
+
+  assert.deepEqual(esito, { ok: true });
+  assert.equal(chiamate.length, 1);
+  assert.equal(chiamate[0].serverId, 'filesystem');
+  assert.equal(chiamate[0].hash, 'hash-vero-dal-disco');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔ AL CONTRARIO — fidaServerMcp su un serverId che non esiste in .harness-ui-mcp.json: NOT_FOUND, fidaServerMcpFn MAI chiamata', async () => {
+  const finta = sessioneControllabile();
+  let chiamata = false;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaServerMcpFn: async () => ({ server: [{ id: 'altro', comando: 'x', argomenti: [], allowlist: ['y'], hash: 'h' }] }),
+    fidaServerMcpFn: async () => { chiamata = true; },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.fidaServerMcp(sessionId, 'filesystem-mai-dichiarato');
+
+  assert.equal(esito.code, 'NOT_FOUND');
+  assert.equal(chiamata, false);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔ AL CONTRARIO — fidaServerMcp su un id sessione inesistente: NOT_FOUND', async () => {
+  const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
+  const esito = await registro.fidaServerMcp('id-mai-esistito', 'filesystem');
   assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
 });
 

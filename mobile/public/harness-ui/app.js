@@ -1100,6 +1100,82 @@
   }
 
   /**
+   * ⭐⭐⭐ 29/8 — FASE E, piano `elegant-spinning-dongarra.md`. Stesso
+   * identico pattern di caricaPannelloHooks() appena sopra, per i
+   * server MCP: riempie `#mcpListMount` nel foglio "capabilities" coi
+   * server VERI dichiarati dal progetto della sessione attiva — mai un
+   * contatore inventato, mai una connessione reale solo per mostrare
+   * l'elenco (quella parte vive in mcp-session.mjs, usata quando la
+   * sessione lavora per davvero).
+   */
+  async function caricaPannelloMcp() {
+    const mount = $('#mcpListMount', sheetBody);
+    if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
+    if (!state.realSession.id) {
+      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione attiva — apri o avvia un task per vedere i server MCP del progetto.'));
+      return;
+    }
+    mount.replaceChildren(textElement('p', 'board-empty', 'Carico i server MCP…'));
+    let dati;
+    try {
+      dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/mcp`);
+    } catch (error) {
+      mount.replaceChildren(textElement('p', 'board-empty', `Server MCP non disponibili: ${error.message}`));
+      return;
+    }
+    if (mount !== $('#mcpListMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
+    if (dati.errore) {
+      mount.replaceChildren(textElement('p', 'board-empty', `.harness-ui-mcp.json non valido: ${dati.errore}`));
+      return;
+    }
+    if (!dati.server || dati.server.length === 0) {
+      mount.replaceChildren(textElement('p', 'board-empty', 'Nessun server MCP dichiarato in questo progetto (.harness-ui-mcp.json).'));
+      return;
+    }
+    mount.replaceChildren(...dati.server.map((server) => rigaServerMcp(server)));
+  }
+
+  /** ⭐⭐⭐ 29/8 — stesso identico pattern di rigaHook() appena sopra. */
+  function rigaServerMcp(server) {
+    const riga = document.createElement('div');
+    riga.className = 'sheet-option';
+    riga.setAttribute('role', 'group');
+    const iconEl = document.createElement('span');
+    iconEl.className = 'sheet-icon';
+    iconEl.innerHTML = icon('i-link');
+    const testo = document.createElement('span');
+    testo.append(
+      textElement('strong', null, server.id),
+      textElement('small', null, `${server.comando} · tool: ${server.allowlist.join(', ')}`),
+    );
+    let statoEl;
+    if (server.fidato) {
+      statoEl = textElement('span', 'status-chip success', 'attivo');
+    } else {
+      const bottone = document.createElement('button');
+      bottone.type = 'button';
+      bottone.className = 'secondary-btn';
+      bottone.textContent = 'Fida';
+      bottone.addEventListener('click', async () => {
+        bottone.disabled = true;
+        bottone.textContent = 'Fido…';
+        try {
+          await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/mcp/${encodeURIComponent(server.id)}/trust`, {});
+          toast('Server MCP fidato', server.id);
+          caricaPannelloMcp();
+        } catch (error) {
+          bottone.disabled = false;
+          bottone.textContent = 'Fida';
+          toast('Non riuscito', error.message);
+        }
+      });
+      statoEl = bottone;
+    }
+    riga.append(iconEl, testo, statoEl);
+    return riga;
+  }
+
+  /**
    * ⭐⭐⭐ 27/8 — owner: "un picker per il modello, dropdown stilizzato
    * (l'abbiamo già fatto nel mobile)". Stesso pattern di
    * TalosMobileComposerModelPicker.vue (AVM/mobile/src/components/chat/),
@@ -1623,6 +1699,7 @@
     showEmbeddedDialog(sheetDialog);
     wireSheetActions(type);
     if (type === 'control') { refreshDoctorBadge(); caricaPannelloHooks(); }
+    if (type === 'capabilities') caricaPannelloMcp();
     if (type === 'sessionTree') caricaAlberoSessione();
     /*
      * ⭐⭐⭐ 27/8, owner: "riaprire lo stesso componente della selezione del
@@ -1770,8 +1847,13 @@
        * chiamata passa" — configurabile dal foglio Permessi, non da qui.
        * La seconda
        * sezione è tutto il resto, onestamente "non ancora implementato":
-       * costruirlo per intero (client MCP, sistema plugin, quattro gateway
-       * di chat) è il blocco più grande dei rimasti, non uno stralcio.
+       * costruirlo per intero (sistema plugin, quattro gateway di chat)
+       * è il blocco più grande dei rimasti, non uno stralcio.
+       *
+       * ⭐⭐⭐ 29/8 — FASE E chiude "MCP": tolto dalla lista finta sotto,
+       * ha ora la sua sezione dinamica vera (`#mcpListMount`, riempita
+       * da `caricaPannelloMcp()` in `openSheet()`) — stesso identico
+       * pattern di "Hooks" nel foglio Control-plane.
        */
       html: () => `
         <div class="sheet-section">
@@ -1790,9 +1872,13 @@
             </div>`).join('')}
         </div>
         <div class="sheet-section">
+          <span class="sheet-label">MCP · server dichiarati in .harness-ui-mcp.json, per progetto</span>
+          <div id="mcpListMount"></div>
+        </div>
+        <div class="sheet-section">
           <span class="sheet-label">Non ancora implementato</span>
           ${[
-            ['Skills', 'i-bolt'], ['MCP', 'i-link'], ['Plugin market', 'i-grid'],
+            ['Skills', 'i-bolt'], ['Plugin market', 'i-grid'],
             ['Toolsets', 'i-code'], ['Web search', 'i-search'], ['Computer use', 'i-layout'],
             ['Images', 'i-image'], ['Voice', 'i-mic'],
             ['Gateways · Telegram, Discord, Slack, WhatsApp', 'i-link'],

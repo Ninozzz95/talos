@@ -40,6 +40,8 @@ const API_ERROR_CODES = new Set([
   'PLATFORM_UNSUPPORTED',
   /* ⭐ 28/8 — FASE A (hook): .harness-ui-hooks.json malformato, o un hookId che non combacia nessuna voce del file. */
   'HOOK_INVALID',
+  /* ⭐ 29/8 — FASE E: .harness-ui-mcp.json malformato, o un serverId che non combacia nessuna voce del file. */
+  'MCP_INVALID',
 ]);
 
 const STATUS_BY_CODE = Object.freeze({
@@ -69,6 +71,8 @@ const STATUS_BY_CODE = Object.freeze({
   PLATFORM_UNSUPPORTED: 501,
   /** ⭐ 28/8 — stesso status di ROW_INVALID/QUERY_INVALID: il contenuto della richiesta (hookId, o il file hooks.json stesso) non è valido. */
   HOOK_INVALID: 422,
+  /** ⭐ 29/8 — stesso status di HOOK_INVALID, stesso motivo: il contenuto della richiesta (serverId, o il file .harness-ui-mcp.json stesso) non è valido. */
+  MCP_INVALID: 422,
 });
 
 const MESSAGE_BY_CODE = Object.freeze({
@@ -92,6 +96,7 @@ const MESSAGE_BY_CODE = Object.freeze({
   FILE_EXISTS: 'Esiste già un file con questo nome',
   PLATFORM_UNSUPPORTED: 'Non disponibile su questa piattaforma',
   HOOK_INVALID: 'Configurazione hook non valida',
+  MCP_INVALID: 'Configurazione server MCP non valida',
 });
 
 const SECURITY_HEADERS = Object.freeze({
@@ -1171,6 +1176,43 @@ export function createHttpApp({
     }
 
     /*
+     * ⭐⭐⭐ 29/8 — FASE E, stesso ruolo esatto della rotta hooks/trust
+     * appena sopra, per i server MCP: l'UNICA strada che rende un
+     * server MCP connettibile davvero (serverMcpFidati in
+     * mcp-registry.mjs lo salta finché non è stato fidato qui). Nessun
+     * corpo richiesto, hash riletto DA DISCO in sessionRegistry.fidaServerMcp,
+     * mai passato dal client.
+     */
+    const mcpTrustMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/mcp\/([^/]+)\/trust$/.exec(url.pathname);
+    if (mcpTrustMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        let serverId;
+        try {
+          sessionId = decodeURIComponent(mcpTrustMatch[1]);
+          serverId = decodeURIComponent(mcpTrustMatch[2]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const esito = await sessionRegistry.fidaServerMcp(sessionId, serverId);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    /*
      * ⭐⭐⭐ FASE D (28/8) — coda messaggi, piano `elegant-spinning-dongarra.md`.
      * ⛔ Il ledger (LEDGER-FASE-D-CODA.md) prevedeva un DELETE HTTP per
      * "annulla" — corretto qui: NESSUNA rotta di questo file usa mai il
@@ -1293,6 +1335,8 @@ export function createHttpApp({
         const treeFileMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/tree\/file$/.exec(url.pathname);
         // ⭐⭐⭐ 28/8 — FASE A (hook): il pannello Control-plane elenca gli hook dichiarati e il loro stato di fiducia vero — stesso principio di exportMatch sotto.
         const hooksMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/hooks$/.exec(url.pathname);
+        // ⭐⭐⭐ 29/8 — FASE E: il Capability hub elenca i server MCP dichiarati e il loro stato di fiducia vero, stesso principio esatto di hooksMatch appena sopra.
+        const mcpMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/mcp$/.exec(url.pathname);
         // ⭐⭐⭐ FASE C (28/8) — sub-agenti: il foglio "Albero sessione" elenca i figli VERI di una sessione, stesso principio di hooksMatch sopra.
         const childrenMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/children$/.exec(url.pathname);
         // ⭐⭐⭐ 28/8 — non SESSION-scoped: un artefatto ha un id UUID già globalmente unico (agent-service.mjs), stesso principio di /api/v1/models.
@@ -1362,6 +1406,22 @@ export function createHttpApp({
             throw errore;
           }
           data = { hooks: esito.hooks, errore: esito.errore };
+        } else if (mcpMatch) {
+          requireNoQuery(url);
+          let sessionId;
+          try {
+            sessionId = decodeURIComponent(mcpMatch[1]);
+          } catch {
+            sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+            return;
+          }
+          const esito = await sessionRegistry.elencaServerMcp(sessionId);
+          if ('erroreAvvio' in esito) {
+            const errore = new Error(esito.erroreAvvio);
+            errore.code = esito.code;
+            throw errore;
+          }
+          data = { server: esito.server, errore: esito.errore };
         } else if (childrenMatch) {
           requireNoQuery(url);
           let sessionId;

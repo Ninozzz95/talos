@@ -137,6 +137,25 @@ function registroFinto() {
       return { ok: true };
     },
     /*
+     * ⭐⭐⭐ 29/8 — FASE E: stesso stile esatto di elencaHooks/fidaHook
+     * appena sopra — cattura la chiamata per provare che la rotta HTTP
+     * raggiunge davvero il registro, senza fingere una vera
+     * .harness-ui-mcp.json.
+     */
+    async elencaServerMcp(sessionId) {
+      if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (sessionId === 'sess-mcp-rotti') return { ok: true, server: null, errore: '.harness-ui-mcp.json non è un JSON valido' };
+      return { ok: true, server: [{ id: 'filesystem', comando: 'npx', argomenti: [], allowlist: ['read_file'], fidato: false }], errore: null };
+    },
+    ultimaFiduciaServerMcp: null,
+    async fidaServerMcp(sessionId, serverId) {
+      this.ultimaFiduciaServerMcp = { sessionId, serverId };
+      if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (serverId === 'server-inesistente') return { erroreAvvio: `Server MCP "${serverId}" non trovato in .harness-ui-mcp.json`, code: 'NOT_FOUND' };
+      if (serverId === 'server-file-rotto') return { erroreAvvio: '.harness-ui-mcp.json non è un JSON valido', code: 'MCP_INVALID' };
+      return { ok: true };
+    },
+    /*
      * ⭐⭐⭐ FASE D (28/8) — coda messaggi: stesso stile di
      * rispondiApprovazione/fidaHook sopra — cattura la chiamata per
      * provare che la rotta HTTP raggiunge davvero il registro.
@@ -520,6 +539,51 @@ test('⛔ AL CONTRARIO — GET .../trust (metodo sbagliato) non raggiunge mai fi
   const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/hooks/audit/trust`, { method: 'GET' });
   assert.notEqual(risposta.status, 200);
   assert.equal(sessionRegistry.ultimaFiduciaHook, null);
+});
+
+/*
+ * ⭐⭐⭐ 29/8 — POST .../mcp/:serverId/trust, FASE E. Stesso ruolo esatto
+ * della rotta hooks/trust appena sopra, per i server MCP.
+ */
+test('⭐⭐⭐ POST /api/v1/sessions/:id/mcp/:serverId/trust raggiunge sessionRegistry.fidaServerMcp con id decodificati', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/mcp/${encodeURIComponent('filesystem server')}/trust`, {
+    method: 'POST',
+  });
+  assert.equal(risposta.status, 200);
+  assert.deepEqual(sessionRegistry.ultimaFiduciaServerMcp, { sessionId, serverId: 'filesystem server' });
+});
+
+test('⛔ AL CONTRARIO — .../mcp/.../trust su una sessione inesistente: 404 NOT_FOUND', async (t) => {
+  const { base } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions/mai-esistita/mcp/filesystem/trust`, { method: 'POST' });
+  assert.equal(risposta.status, 404);
+  assert.equal((await risposta.json()).error.code, 'NOT_FOUND');
+});
+
+test('⛔⛔ AL CONTRARIO — .../mcp/.../trust su un serverId che non esiste in .harness-ui-mcp.json: 404 NOT_FOUND, mai un {ok:true} bugiardo', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/mcp/server-inesistente/trust`, { method: 'POST' });
+  assert.equal(risposta.status, 404);
+  assert.equal((await risposta.json()).error.code, 'NOT_FOUND');
+});
+
+test('⛔⛔⛔ AL CONTRARIO — .../mcp/.../trust con .harness-ui-mcp.json malformato: 422 MCP_INVALID, mai fidato per errore', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/mcp/server-file-rotto/trust`, { method: 'POST' });
+  assert.equal(risposta.status, 422);
+  assert.equal((await risposta.json()).error.code, 'MCP_INVALID');
+});
+
+test('⛔ AL CONTRARIO — GET .../mcp/.../trust (metodo sbagliato) non raggiunge mai fidaServerMcp', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/mcp/filesystem/trust`, { method: 'GET' });
+  assert.notEqual(risposta.status, 200);
+  assert.equal(sessionRegistry.ultimaFiduciaServerMcp, null);
 });
 
 /*
@@ -944,6 +1008,27 @@ test('⭐ GET /api/v1/sessions/{id}/hooks torna gli hook con lo stato di fiducia
 test('⛔ AL CONTRARIO — GET .../hooks su un id inesistente: 404 NOT_FOUND', async (t) => {
   const { base } = await listen(t);
   const risposta = await fetch(`${base}/api/v1/sessions/non-esiste/hooks`);
+  assert.equal(risposta.status, 404);
+});
+
+/*
+ * ⭐⭐⭐ 29/8 — GET .../mcp, FASE E: il Capability hub chiama questa
+ * rotta per mostrare i server MCP dichiarati e il loro stato di
+ * fiducia vero — stesso principio esatto di GET .../hooks sopra.
+ */
+test('⭐ GET /api/v1/sessions/{id}/mcp torna i server MCP con lo stato di fiducia dal registro', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/mcp`);
+  assert.equal(risposta.status, 200);
+  const corpo = await risposta.json();
+  assert.deepEqual(corpo.data.server, [{ id: 'filesystem', comando: 'npx', argomenti: [], allowlist: ['read_file'], fidato: false }]);
+  assert.equal(corpo.data.errore, null);
+});
+
+test('⛔ AL CONTRARIO — GET .../mcp su un id inesistente: 404 NOT_FOUND', async (t) => {
+  const { base } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions/non-esiste/mcp`);
   assert.equal(risposta.status, 404);
 });
 
