@@ -166,10 +166,12 @@ export function createSessionRegistry({
   // ⭐ FASE H (29/8) — sesto: generate_image è ATTREZZI_ESTESI[5] nel kernel, stesso principio.
   // ⭐ FASE N (29/8) — settimo-decimo: i 4 tool di lettura Libreria (ATTREZZI_ESTESI[6..9] nel kernel), stesso principio — nessun gate, sempre offerti come gli altri sei.
   // ⭐ FASE N (29/8), seconda fetta — undicesimo-tredicesimo: le 3 mutazioni Libreria (ATTREZZI_ESTESI[10..12] nel kernel). MUTANO davvero (passano dal gate di permesso nel kernel stesso), ma il loro OFFRIRLE al modello segue lo stesso principio "schema fisso, sempre in lista" di document_create/generate_image — è verificaPermessoScrittura dentro talosHarness.mjs, non questa lista, a decidere se una chiamata passa.
+  // ⭐ FASE N (29/8), terza fetta — quattordicesimo: library_context_policy_update (ATTREZZI_ESTESI[13]). Stesso principio "sempre in lista" — il kernel lo rifiuta comunque senza un canale di approvazione presente (ATTREZZI_SEMPRE_DA_CONFERMARE, nessuna eccezione nemmeno con permessiPerAttrezzo:'sempre').
   strumentiEstesi = [
     'web_search', 'artifact_create', 'document_create', 'time_now', 'delega_sottotask', 'generate_image',
     'library_list', 'library_search', 'library_read', 'library_file_origin',
     'library_rename', 'library_delete', 'library_export',
+    'library_context_policy_update',
   ],
   ricercaWeb,
   /*

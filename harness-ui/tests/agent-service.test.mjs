@@ -1708,3 +1708,168 @@ test('⛔ AL CONTRARIO — onLibreriaEsporta: un nome già occupato nel workspac
   assert.equal(risultato.ok, false);
   assert.match(risultato.esito, /could not be saved into the workspace: Esiste già un file con questo nome/);
 });
+
+/*
+ * ⭐⭐⭐ FASE N (29/8), terza fetta — onLibreriaPolitica.
+ */
+function politicaFinta(overrides) {
+  return { revision: 0, enabled: true, mode: 'agentic_on_demand_v1', includedFileIds: [], excludedFileIds: [], ...overrides };
+}
+
+test('⭐⭐⭐ onLibreriaPolitica è SEMPRE presente, incondizionatamente', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn });
+  assert.equal(typeof catturato.onLibreriaPolitica, 'function');
+});
+
+test('⭐⭐⭐ onLibreriaPolitica set_enabled: legge/scrive con la cartella VERA, la revisione avanza, la ricevuta torna nel messaggio', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const leggiPoliticaFn = async () => politicaFinta({});
+  let scritturaRicevuta;
+  const scriviPoliticaFn = async (spec) => { scritturaRicevuta = spec; return { ...spec.valore, revision: spec.revisioneAttesa + 1 }; };
+
+  await avviaSessione({ cartella: '/tmp/progetto-vero', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, leggiPoliticaFn, scriviPoliticaFn });
+
+  const risultato = await catturato.onLibreriaPolitica({ action: 'set_enabled', expected_revision: 0, enabled: false });
+  assert.equal(scritturaRicevuta.cartella, '/tmp/progetto-vero');
+  assert.equal(scritturaRicevuta.valore.enabled, false);
+  assert.equal(risultato.ok, true);
+  assert.match(risultato.esito, /Updated the Library policy to revision 1\. Undo receipt: /);
+});
+
+for (const [azione, campo] of [['set_mode', 'mode'], ['set_enabled', 'enabled'], ['include_files', 'file_ids'], ['exclude_files', 'file_ids'], ['undo', 'receipt_id']]) {
+  test(`⛔ AL CONTRARIO — onLibreriaPolitica ${azione} senza "${campo}": rifiutato PRIMA di leggere la politica, mai un giro di I/O sprecato`, async () => {
+    let catturato;
+    const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+    let lettaChiamata = false;
+    const leggiPoliticaFn = async () => { lettaChiamata = true; return politicaFinta({}); };
+    await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, leggiPoliticaFn });
+
+    const risultato = await catturato.onLibreriaPolitica({ action: azione, expected_revision: 0 });
+    assert.equal(risultato.ok, false);
+    assert.match(risultato.esito, new RegExp(`^${campo} is required when action is ${azione}\\.`));
+    assert.equal(lettaChiamata, false);
+  });
+}
+
+test('⛔⛔ AL CONTRARIO — onLibreriaPolitica: expected_revision sbagliata è un conflitto onesto, scriviPoliticaFn MAI chiamata', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const leggiPoliticaFn = async () => politicaFinta({ revision: 3 });
+  let chiamataScrittura = false;
+  const scriviPoliticaFn = async () => { chiamataScrittura = true; return politicaFinta({}); };
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, leggiPoliticaFn, scriviPoliticaFn });
+
+  const risultato = await catturato.onLibreriaPolitica({ action: 'set_enabled', expected_revision: 0, enabled: false });
+  assert.equal(risultato.ok, false);
+  assert.match(risultato.esito, /expected revision 0, current revision 3/);
+  assert.equal(chiamataScrittura, false);
+});
+
+test('⛔⛔⛔ AL CONTRARIO — onLibreriaPolitica set_mode verso una modalità NON supportata: rifiutato onestamente, scriviPoliticaFn MAI chiamata', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const leggiPoliticaFn = async () => politicaFinta({});
+  let chiamataScrittura = false;
+  const scriviPoliticaFn = async () => { chiamataScrittura = true; return politicaFinta({}); };
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, leggiPoliticaFn, scriviPoliticaFn });
+
+  const risultato = await catturato.onLibreriaPolitica({ action: 'set_mode', expected_revision: 0, mode: 'broad_compat_v1' });
+  assert.equal(risultato.ok, false);
+  assert.match(risultato.esito, /only supports the "agentic_on_demand_v1" mode today; "broad_compat_v1" is not implemented/);
+  assert.equal(chiamataScrittura, false);
+});
+
+test('⭐⭐ onLibreriaPolitica set_mode verso l\'UNICA modalità supportata: riuscito', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const leggiPoliticaFn = async () => politicaFinta({});
+  const scriviPoliticaFn = async (spec) => ({ ...spec.valore, revision: spec.revisioneAttesa + 1 });
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, leggiPoliticaFn, scriviPoliticaFn });
+
+  const risultato = await catturato.onLibreriaPolitica({ action: 'set_mode', expected_revision: 0, mode: 'agentic_on_demand_v1' });
+  assert.equal(risultato.ok, true);
+});
+
+test('⭐⭐ onLibreriaPolitica include_files/exclude_files sono mutuamente esclusivi: includere un id lo toglie dagli esclusi', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const leggiPoliticaFn = async () => politicaFinta({ excludedFileIds: ['lib-1'] });
+  let scritturaRicevuta;
+  const scriviPoliticaFn = async (spec) => { scritturaRicevuta = spec; return { ...spec.valore, revision: spec.revisioneAttesa + 1 }; };
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, leggiPoliticaFn, scriviPoliticaFn });
+
+  await catturato.onLibreriaPolitica({ action: 'include_files', expected_revision: 0, file_ids: ['lib-1'] });
+  assert.deepEqual(scritturaRicevuta.valore.includedFileIds, ['lib-1']);
+  assert.deepEqual(scritturaRicevuta.valore.excludedFileIds, []);
+});
+
+test('⭐⭐ onLibreriaPolitica clear_overrides: riporta al default (abilitata, agentic_on_demand_v1, liste vuote)', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const leggiPoliticaFn = async () => politicaFinta({ enabled: false, includedFileIds: ['lib-1'] });
+  let scritturaRicevuta;
+  const scriviPoliticaFn = async (spec) => { scritturaRicevuta = spec; return { ...spec.valore, revision: spec.revisioneAttesa + 1 }; };
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, leggiPoliticaFn, scriviPoliticaFn });
+
+  await catturato.onLibreriaPolitica({ action: 'clear_overrides', expected_revision: 0 });
+  assert.deepEqual(scritturaRicevuta.valore, { enabled: true, mode: 'agentic_on_demand_v1', includedFileIds: [], excludedFileIds: [] });
+});
+
+test('⭐⭐⭐ onLibreriaPolitica undo: annulla DAVVERO l\'ultima modifica fatta nella stessa sessione', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  let stato = politicaFinta({});
+  const leggiPoliticaFn = async () => stato;
+  const scriviPoliticaFn = async (spec) => { stato = { ...spec.valore, revision: spec.revisioneAttesa + 1 }; return stato; };
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, leggiPoliticaFn, scriviPoliticaFn });
+
+  const primo = await catturato.onLibreriaPolitica({ action: 'set_enabled', expected_revision: 0, enabled: false });
+  const receiptId = primo.esito.match(/Undo receipt: (\S+)/)[1];
+  assert.equal(stato.enabled, false);
+
+  const secondo = await catturato.onLibreriaPolitica({ action: 'undo', expected_revision: 1, receipt_id: receiptId });
+  assert.equal(secondo.ok, true);
+  assert.equal(stato.enabled, true, 'undo deve riportare enabled al valore di PRIMA della modifica');
+});
+
+test('⭐⭐⭐ onLibreriaPolitica undo: un receipt_id con un punto di FRASE finale (copiato dal messaggio "Undo receipt: xxx.") funziona lo stesso — porto di receiptLookupIds mobile', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  let stato = politicaFinta({});
+  const leggiPoliticaFn = async () => stato;
+  const scriviPoliticaFn = async (spec) => { stato = { ...spec.valore, revision: spec.revisioneAttesa + 1 }; return stato; };
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, leggiPoliticaFn, scriviPoliticaFn });
+
+  const primo = await catturato.onLibreriaPolitica({ action: 'set_enabled', expected_revision: 0, enabled: false });
+  const idEsatto = primo.esito.match(/Undo receipt: (\S+)\.$/)[1];
+  const idConPunto = `${idEsatto}.`; // esattamente come un modello lo leggerebbe copiando l'intera frase
+
+  const secondo = await catturato.onLibreriaPolitica({ action: 'undo', expected_revision: 1, receipt_id: idConPunto });
+  assert.equal(secondo.ok, true);
+  assert.equal(stato.enabled, true);
+});
+
+test('⛔⛔ AL CONTRARIO — onLibreriaPolitica undo con un receipt_id sconosciuto: rifiutato onestamente, mai un ripristino a caso', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const leggiPoliticaFn = async () => politicaFinta({});
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, leggiPoliticaFn });
+
+  const risultato = await catturato.onLibreriaPolitica({ action: 'undo', expected_revision: 0, receipt_id: 'libpol-mai-esistito' });
+  assert.equal(risultato.ok, false);
+  assert.match(risultato.esito, /missing, expired, already used, or belongs to another scope/);
+});
+
+test('⛔ AL CONTRARIO — onLibreriaPolitica: leggiPoliticaFn che LANCIA produce un esito onesto, mai un crash', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const leggiPoliticaFn = async () => { throw new Error('EACCES: permesso negato'); };
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, leggiPoliticaFn });
+
+  const risultato = await catturato.onLibreriaPolitica({ action: 'set_enabled', expected_revision: 0, enabled: false });
+  assert.equal(risultato.ok, false);
+  assert.match(risultato.esito, /could not be read.*EACCES/);
+});
