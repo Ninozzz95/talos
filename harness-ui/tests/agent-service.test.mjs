@@ -1471,3 +1471,130 @@ test('⛔⛔⛔ AL CONTRARIO — eseguiHookFn di un hook di plugin che LANCIA: n
   const esito = await catturato.hookFn({ tipo: 'pre_tool_call', azione: { tipo: 'scrivi' } });
   assert.equal(esito.consentito, false, 'un hook di plugin che lancia non autorizza in silenzio — stessa regola di un hook standalone che lancia');
 });
+
+/*
+ * ⭐⭐⭐ FASE N (29/8), piano elegant-spinning-dongarra.md - library-store.mjs
+ * collegato dentro avviaSessione(). A differenza di MCP/plugin (gate
+ * esplicito) MA come document_create/generate_image (non come skill,
+ * che si costruisce SOLO se trova qualcosa): i quattro callback sono
+ * SEMPRE costruiti, incondizionatamente — le 4 voci Libreria sono già
+ * nel default `strumentiEstesi` di session-registry.mjs (offerte come
+ * ogni altro ATTREZZI_ESTESI a schema fisso), e library-store.mjs
+ * stesso degrada onestamente ({pagina:[],totale:0,...}) per un
+ * `.harness-ui-library/` assente — non serve un secondo "esiste?" qui.
+ */
+test('⭐⭐⭐ i 4 callback onLibreria* arrivano SEMPRE a talosLavoraFn, incondizionatamente (a differenza delle skill)', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+
+  await avviaSessione({ cartella: '/tmp/senza-libreria', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn });
+
+  for (const nome of ['onLibreriaLista', 'onLibreriaCerca', 'onLibreriaLeggi', 'onLibreriaOrigine']) {
+    assert.equal(typeof catturato[nome], 'function', `${nome} deve essere sempre una funzione, mai undefined`);
+  }
+});
+
+test('⭐⭐⭐ onLibreriaLista: cartella VERA passata a elencaVociFn, argomenti del modello tradotti per impaginaVoci', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  let argomentiRicevuti;
+  const elencaVociFn = async (argomenti) => {
+    argomentiRicevuti = argomenti;
+    return [{ id: 'lib-1', nome: 'a.md', fileType: 'document', origine: 'uploaded', creatoIl: '2026-08-29T10:00:00.000Z', aggiornatoIl: '2026-08-29T10:00:00.000Z' }];
+  };
+
+  await avviaSessione({ cartella: '/tmp/progetto-vero', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, elencaVociFn });
+
+  const risultato = await catturato.onLibreriaLista({ origin: 'uploaded', file_type: 'document', page_size: 5 });
+  assert.deepEqual(argomentiRicevuti, { cartella: '/tmp/progetto-vero' });
+  assert.equal(risultato.pagina.length, 1);
+  assert.equal(risultato.pagina[0].id, 'lib-1');
+  assert.equal(risultato.totale, 1);
+});
+
+test('⭐⭐ onLibreriaLista: argomenti assenti (il modello chiama senza filtri) ricadono sui default onesti — mai un\'eccezione', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const elencaVociFn = async () => [];
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, elencaVociFn });
+
+  const risultato = await catturato.onLibreriaLista({});
+  assert.deepEqual(risultato, { pagina: [], totale: 0, vistiPrima: 0, vistiDopo: 0, nextPageToken: null });
+});
+
+test('⭐⭐⭐ onLibreriaLista: lo STESSO cursore vive per l\'intera sessione — un page_token del primo giro funziona nel secondo', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const voci = Array.from({ length: 3 }, (_, i) => ({
+    id: `lib-${i}`, nome: `f${i}.md`, fileType: 'document', origine: 'uploaded',
+    creatoIl: `2026-08-2${9 - i}T00:00:00.000Z`, aggiornatoIl: `2026-08-2${9 - i}T00:00:00.000Z`,
+  }));
+  const elencaVociFn = async () => voci;
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, elencaVociFn });
+
+  const prima = await catturato.onLibreriaLista({ page_size: 2 });
+  assert.equal(prima.pagina.length, 2);
+  assert.ok(prima.nextPageToken);
+  const seconda = await catturato.onLibreriaLista({ page_size: 2, page_token: prima.nextPageToken });
+  assert.equal(seconda.pagina.length, 1);
+  assert.equal(seconda.pagina[0].id, 'lib-2');
+});
+
+test('⭐⭐⭐ onLibreriaCerca: legge elencaVociConTestoFn (non elencaVociFn), query tradotta per cercaVoci', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  let argomentiRicevuti;
+  const elencaVociConTestoFn = async (argomenti) => {
+    argomentiRicevuti = argomenti;
+    return [{ id: 'lib-1', nome: 'fattura.md', origine: 'uploaded', testoEstratto: 'contenuto vero' }];
+  };
+  const elencaVociFn = async () => { throw new Error('library_search non deve MAI chiamare elencaVociFn (metadata-only) — deve leggere il testo'); };
+
+  await avviaSessione({ cartella: '/tmp/progetto-vero', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, elencaVociFn, elencaVociConTestoFn });
+
+  const risultato = await catturato.onLibreriaCerca({ query: 'fattura', limit: 3 });
+  assert.deepEqual(argomentiRicevuti, { cartella: '/tmp/progetto-vero' });
+  assert.equal(risultato.pagina.length, 1);
+  assert.equal(risultato.pagina[0].id, 'lib-1');
+});
+
+test('⭐⭐⭐ onLibreriaLeggi: id del modello passato a leggiVoceFn con la cartella VERA', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  let argomentiRicevuti;
+  const leggiVoceFn = async (argomenti) => { argomentiRicevuti = argomenti; return { nome: 'a.md', mediaType: 'text/markdown', origine: 'uploaded', testo: 'contenuto vero' }; };
+
+  await avviaSessione({ cartella: '/tmp/progetto-vero', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, leggiVoceFn });
+
+  const risultato = await catturato.onLibreriaLeggi({ id: 'lib-42' });
+  assert.deepEqual(argomentiRicevuti, { cartella: '/tmp/progetto-vero', id: 'lib-42' });
+  assert.equal(risultato.testo, 'contenuto vero');
+});
+
+test('⭐⭐⭐ onLibreriaOrigine: id del modello passato a origineVoceFn con la cartella VERA', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  let argomentiRicevuti;
+  const origineVoceFn = async (argomenti) => { argomentiRicevuti = argomenti; return { nome: 'a.md', origine: 'generated', modello: 'qwen/qwen3.8-flash', provider: 'openrouter', creatoIl: '2026-08-29T10:00:00.000Z' }; };
+
+  await avviaSessione({ cartella: '/tmp/progetto-vero', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, origineVoceFn });
+
+  const risultato = await catturato.onLibreriaOrigine({ id: 'lib-7' });
+  assert.deepEqual(argomentiRicevuti, { cartella: '/tmp/progetto-vero', id: 'lib-7' });
+  assert.equal(risultato.modello, 'qwen/qwen3.8-flash');
+});
+
+test('⛔⛔⛔ AL CONTRARIO — elencaVociFn che LANCIA (disco illeggibile) si propaga a onLibreriaLista, mai un successo inventato', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const elencaVociFn = async () => { throw new Error('EACCES: permesso negato'); };
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, elencaVociFn });
+
+  await assert.rejects(() => catturato.onLibreriaLista({}), /EACCES/);
+});
