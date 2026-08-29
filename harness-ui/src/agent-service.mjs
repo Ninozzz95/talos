@@ -25,6 +25,7 @@ import {
 } from '../../../AVM-harness/mobile/scripts/harness-talos/talosHarness.mjs';
 import { salvaArtefatto as salvaArtefattoReale } from './artifact-store.mjs';
 import { generateTalosDocument as generateTalosDocumentReale, TALOS_SOURCE_TEXT_FORMATS, verifyTalosDocument as verifyTalosDocumentReale } from './document-generator.mjs';
+import { generaImmagineOpenRouter as generaImmagineOpenRouterReale } from './image-generator.mjs';
 import { leggiContestoWorkspace as leggiContestoWorkspaceReale } from './workspace-context.mjs';
 import { creaFileWorkspace as creaFileWorkspaceReale, WorkspaceFileError } from './workspace-files.mjs';
 import { preparaToolMcpPerSessione as preparaToolMcpPerSessioneReale } from './mcp-session.mjs';
@@ -60,6 +61,9 @@ import {
  * silenzio: un HTML troncato a metà tag è peggio di un rifiuto dichiarato.
  */
 const ARTEFATTO_MAX_BYTE = 400_000; // stesso tetto di artifactTools.ts mobile
+
+/** ⭐ 29/8 — FASE H: i `media_type`/mime VERI che i due percorsi di image-generator.mjs possono tornare (png sempre, jpeg/webp se il fornitore li dichiara) — mai un'estensione inventata per un formato ignoto, ricade su 'png' onestamente. */
+const ESTENSIONE_PER_MEDIA_TYPE = Object.freeze({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' });
 
 /**
  * ⛔ 'giri-esauriti' e 'fermato' sono ENTRAMBI RunError, non solo il primo:
@@ -129,6 +133,18 @@ export async function avviaSessione({
   cartella, task, modello, chiave, comandoProva,
   onEvento, segnaleStop, messaggiIniziali, reasoning, mobile = false,
   strumentiEstesi, ricercaWeb,
+  /*
+   * ⭐⭐⭐ 29/8 — FASE H, `generate_image`. A differenza di `ricercaWeb`:
+   * SEMPRE definito (config.mjs, `parseImmagine` — un default onesto e
+   * reale, mai `undefined`), perché `generate_image` non ha una
+   * credenziale propria da mancare — riusa `chiave`, la stessa già
+   * richiesta per far girare il modello di chat (senza quella la
+   * sessione non parte affatto, vedi session-registry.avvia()). Questo
+   * È il one-up dichiarato su Hermes/Codex: zero secondo sistema di
+   * configurazione provider.
+   */
+  immagine,
+  generaImmagineFn = generaImmagineOpenRouterReale,
   /*
    * ⭐⭐⭐ 29/8 — FASE D, firma Ed25519 delle ricevute. Stesso principio di
    * `ricercaWeb` appena sopra: inoltrato SENZA logica propria a
@@ -567,11 +583,58 @@ export async function avviaSessione({
     };
   };
 
+  /*
+   * ⭐⭐⭐ 29/8 — side-channel dell'attrezzo `generate_image`
+   * (talosHarness.mjs), STESSO principio di `onDocumento` appena
+   * sopra: il kernel resta a zero dipendenze, la chiamata vera vive
+   * qui (`image-generator.mjs`). A differenza di `onDocumento` non
+   * c'è un passo "verify" separato — `generaImmagineFn` stessa lancia
+   * se la risposta è malformata (vedi la sua doc, `TALOS_IMAGE_*`),
+   * quindi il primo `try` copre GENERAZIONE, non solo la chiamata di
+   * rete grezza.
+   */
+  const onImmagine = async (argomenti) => {
+    // ⛔ difesa in profondità: `immagine` è SEMPRE presente quando session-registry.mjs offre questo attrezzo (config.mjs, parseImmagine non torna mai undefined) — ma un chiamante diverso di agent-service.mjs che offra 'generate_image' senza wireare `immagine` non deve MAI vedere un crash, stesso principio onesto di web_search senza provider.
+    if (!immagine) {
+      return { ok: false, esito: 'image generation is not configured on this harness: no model was set.' };
+    }
+    let immagineGenerata;
+    try {
+      immagineGenerata = await generaImmagineFn({
+        prompt: String(argomenti?.prompt ?? ''), shape: argomenti?.shape, modello: immagine.modello, nativo: immagine.nativo, chiave,
+      });
+    } catch (errore) {
+      const dettaglio = errore instanceof Error ? errore.message : String(errore);
+      return { ok: false, esito: `The image was not generated: ${dettaglio}` };
+    }
+
+    const estensione = ESTENSIONE_PER_MEDIA_TYPE[immagineGenerata.mediaType] ?? 'png';
+    let salvato;
+    try {
+      salvato = await creaFileWorkspaceFn({ cartella, nome: `${immagineGenerata.fileStem}.${estensione}`, bytes: immagineGenerata.bytes });
+    } catch (errore) {
+      const dettaglio = errore instanceof WorkspaceFileError ? errore.message : (errore instanceof Error ? errore.message : String(errore));
+      return {
+        ok: false,
+        esito: `The image was generated but could not be saved to the workspace: ${dettaglio}. Do not silently retry with the same prompt — offer a different title, or ask.`,
+      };
+    }
+
+    // ⛔ mai i byte grezzi dentro un evento SSE/JSON (non sono UTF-8 valido) — stessa disciplina già in uso per un documento binario in onDocumento.
+    onEvento(eventoPerScrittura({ percorso: salvato.percorso, contenuto: `[image ${immagineGenerata.mediaType}, ${immagineGenerata.bytes.byteLength} bytes]`, esisteva: false }));
+
+    const dimensioneKb = Math.max(1, Math.round(immagineGenerata.bytes.byteLength / 1024));
+    return {
+      ok: true,
+      esito: `Generated and saved "${salvato.percorso}" (${dimensioneKb} KB) with ${immagine.modello}.`,
+    };
+  };
+
   try {
     const esito = await talosLavoraFn({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
       onGiro, onScrittura, onDelta, reasoning,
-      strumentiEstesi, ricercaWeb, onArtefatto, onDocumento,
+      strumentiEstesi, ricercaWeb, onArtefatto, onDocumento, onImmagine,
       livelloAccesso, chiediApprovazioneFn, hookFn: hookFnConPlugin, permessiPerAttrezzo, onDelega, codaMessaggiFn,
       firma, toolMcp, chiamaToolMcpFn, skillsDisponibili, caricaSkillFn, toolPlugin, eseguiToolPluginFn,
     });

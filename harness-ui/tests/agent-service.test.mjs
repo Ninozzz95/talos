@@ -45,6 +45,10 @@ function talosLavoraFinto({ script, cattura = () => {} }) {
     for (const documento of script.documenti ?? []) {
       await input.onDocumento?.(documento.argomenti);
     }
+    // ⭐⭐⭐ 29/8 — FASE H, stesso principio di onDocumento appena sopra, per onImmagine.
+    for (const immagine of script.immagini ?? []) {
+      await input.onImmagine?.(immagine.argomenti);
+    }
     return script.esito;
   };
 }
@@ -804,6 +808,105 @@ test('⛔ document_create: un salvataggio fallito (es. nome già esistente) è o
   });
 
   assert.equal(eventi.find((e) => e.type === 'StateDelta'), undefined, 'nessun evento su un salvataggio fallito');
+});
+
+/*
+ * ⭐⭐⭐ 29/8 — FASE H, generate_image: pipeline genera→salva, mirror di
+ * document_create sopra — MA senza un passo "verify" separato:
+ * generaImmagineFn stessa lancia su una risposta malformata (vedi
+ * image-generator.mjs, TALOS_IMAGE_*), quindi il primo try copre già
+ * generazione+parsing. Le funzioni iniettabili sono finte qui apposta —
+ * le vere hanno i loro test dedicati in image-generator.test.mjs.
+ */
+const IMMAGINE_CONFIG = Object.freeze({ modello: 'bytedance-seed/seedream-4.5', nativo: false });
+
+test('⭐⭐⭐ generate_image: genera→salva, un evento StateDelta con una riga ONESTA (mai i byte grezzi — un\'immagine non è UTF-8)', async () => {
+  const eventi = [];
+  const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]); // firma PNG vera, non testo
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, immagini: [{ argomenti: { prompt: 'un gatto rosso', shape: 'square' } }] },
+  });
+
+  const risultato = await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn,
+    immagine: IMMAGINE_CONFIG,
+    generaImmagineFn: async () => ({ mediaType: 'image/png', bytes, fileStem: 'un gatto rosso' }),
+    creaFileWorkspaceFn: async ({ nome }) => ({ percorso: nome }),
+  });
+
+  assert.equal(risultato.ok, true);
+  const evento = eventi.find((e) => e.type === 'StateDelta');
+  assert.ok(evento, 'un evento StateDelta deve essere emesso');
+  assert.equal(evento.delta[0].op, 'add');
+  assert.equal(evento.delta[0].path, '/file/un gatto rosso.png');
+  assert.match(evento.delta[0].value, /^\[image image\/png, 4 bytes\]$/, 'mai i byte grezzi — un\'immagine non è testo UTF-8');
+});
+
+test('⭐⭐⭐ generate_image: generaImmagineFn riceve prompt/shape VERI del modello, e modello/nativo/chiave dalla config di sessione', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, immagini: [{ argomenti: { prompt: 'una montagna innevata', shape: 'landscape' } }] },
+  });
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'chiave-vera', onEvento: () => {}, talosLavoraFn,
+    immagine: { modello: 'google/gemini-3.1-flash-image', nativo: true },
+    generaImmagineFn: async (spec) => { catturato = spec; return { mediaType: 'image/png', bytes: new Uint8Array([1]), fileStem: 'x' }; },
+    creaFileWorkspaceFn: async ({ nome }) => ({ percorso: nome }),
+  });
+
+  assert.deepEqual(catturato, {
+    prompt: 'una montagna innevata', shape: 'landscape', modello: 'google/gemini-3.1-flash-image', nativo: true, chiave: 'chiave-vera',
+  });
+});
+
+test('⛔⛔⛔ AL CONTRARIO — generate_image: se generaImmagineFn lancia (es. errore a monte), NIENTE viene salvato e NESSUN evento parte', async () => {
+  const eventi = [];
+  let salvataChiamata = false;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, immagini: [{ argomenti: { prompt: 'x' } }] },
+  });
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn,
+    immagine: IMMAGINE_CONFIG,
+    generaImmagineFn: async () => { throw new Error('TALOS_IMAGE_UPSTREAM_ERROR: 402 insufficient credit'); },
+    creaFileWorkspaceFn: async () => { salvataChiamata = true; return { percorso: 'mai' }; },
+  });
+
+  assert.equal(salvataChiamata, false, 'il salvataggio non deve MAI essere tentato se la generazione è fallita');
+  assert.equal(eventi.find((e) => e.type === 'StateDelta'), undefined);
+});
+
+test('⛔ generate_image: un salvataggio fallito (es. nome già esistente) è onesto, mai un successo inventato', async () => {
+  const eventi = [];
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, immagini: [{ argomenti: { prompt: 'duplicato' } }] },
+  });
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn,
+    immagine: IMMAGINE_CONFIG,
+    generaImmagineFn: async () => ({ mediaType: 'image/png', bytes: new Uint8Array([1]), fileStem: 'duplicato' }),
+    creaFileWorkspaceFn: async () => { throw new WorkspaceFileError('Esiste già un file con questo nome', 'FILE_EXISTS'); },
+  });
+
+  assert.equal(eventi.find((e) => e.type === 'StateDelta'), undefined, 'nessun evento su un salvataggio fallito');
+});
+
+test('⛔⛔ AL CONTRARIO — generate_image: immagine assente (config non wireata): messaggio onesto, generaImmagineFn MAI chiamata', async () => {
+  let chiamata = false;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, immagini: [{ argomenti: { prompt: 'x' } }] },
+  });
+
+  const risultato = await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    generaImmagineFn: async () => { chiamata = true; return { mediaType: 'image/png', bytes: new Uint8Array([1]), fileStem: 'x' }; },
+  });
+
+  assert.equal(risultato.ok, true, 'una config mancante non deve impedire alla sessione di concludere');
+  assert.equal(chiamata, false, 'senza `immagine` generaImmagineFn non va MAI chiamata, mai un tentativo con un modello indovinato');
 });
 
 /*

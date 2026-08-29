@@ -155,7 +155,8 @@ export function permessiRichiestaValido(raw) {
  * stesso difetto di un nome INVENTATO: entrambi rifiutati qui, mai solo
  * il secondo.
  */
-const ATTREZZI_CON_PERMESSO_PER_ATTREZZO = new Set(['scrivi', 'prova', 'shell', 'document_create']);
+// ⭐ 29/8 — FASE H: `generate_image` aggiunto, quinto attrezzo con ricevuta nel kernel (talosHarness.mjs, ATTREZZI_CON_RICEVUTA) — stesso trattamento degli altri quattro.
+const ATTREZZI_CON_PERMESSO_PER_ATTREZZO = new Set(['scrivi', 'prova', 'shell', 'document_create', 'generate_image']);
 const VALORI_PERMESSO_PER_ATTREZZO = new Set(['sempre', 'chiedi', 'nega']);
 
 /** Stesso principio di reasoningRichiestaValido: pura, nessun throw. */
@@ -293,6 +294,7 @@ export function loadConfig(
     chiaveApi: typeof env.OPENROUTER_API_KEY === 'string' ? env.OPENROUTER_API_KEY : undefined,
     ricercaWeb: parseRicercaWeb(env),
     firmaRicevute: parseFirmaRicevute(env),
+    immagine: parseImmagine(env),
   });
 }
 
@@ -333,6 +335,29 @@ function parseFirmaRicevute(env) {
   }
 
   return Object.freeze({ chiavePrivata, keyId });
+}
+
+/*
+ * ⭐⭐⭐ 29/8 — FASE H, `generate_image`. A differenza di `parseRicercaWeb`
+ * sotto: ZERO nuova credenziale (il ONE-UP dichiarato su Hermes/Codex,
+ * vedi il piano madre) — `image-generator.mjs` riusa `chiaveApi` sopra,
+ * mai una seconda chiave. Il DEFAULT è un modello DEDICATO reale e
+ * verificato dal vivo il 29/8 (`GET /api/v1/images/models`, non
+ * presunto): funziona sempre, senza che l'owner debba configurare
+ * niente. `TALOS_HARNESS_UI_IMMAGINE_NATIVA=1` dichiara che il modello
+ * scelto è invece un modello NATIVO (chat/completions+modalities) — un
+ * fatto sul MODELLO, non deducibile da questo file (vedi la doc in
+ * image-generator.mjs sul perché non si chiama un catalogo per
+ * scoprirlo a runtime).
+ */
+const IMMAGINE_MODELLO_DEDICATO_DEFAULT = 'bytedance-seed/seedream-4.5';
+
+function parseImmagine(env) {
+  const modello = typeof env.TALOS_HARNESS_UI_IMMAGINE_MODELLO === 'string' && env.TALOS_HARNESS_UI_IMMAGINE_MODELLO.trim()
+    ? env.TALOS_HARNESS_UI_IMMAGINE_MODELLO.trim()
+    : IMMAGINE_MODELLO_DEDICATO_DEFAULT;
+  const nativo = String(env.TALOS_HARNESS_UI_IMMAGINE_NATIVA ?? '').trim() === '1';
+  return Object.freeze({ modello, nativo });
 }
 
 const PROVIDER_RICERCA_AMMESSI = new Set(['tavily', 'brave', 'searxng', 'custom']);

@@ -45,6 +45,9 @@ async function startServer() {
     // ricercaWeb: undefined quando non configurata (vedi config.mjs), le
     // ricevute restano non firmate — comportamento di sempre.
     firma: config.firmaRicevute,
+    // ⭐⭐⭐ 29/8 — FASE H, generate_image. A differenza di ricercaWeb: SEMPRE
+    // definita (config.mjs, parseImmagine — un default reale, mai undefined).
+    immagine: config.immagine,
   });
   /*
    * ⭐⭐⭐ 27/8 — blocco 7, la vera schedulazione. Owner: "hai il mio via

@@ -189,21 +189,22 @@ test('permessiRichiestaValido accetta le QUATTRO stringhe esatte e assente/null,
  * `leggi`) va rifiutato allo stesso modo di uno INVENTATO: entrambi
  * sarebbero un override che il gate ignora sempre in silenzio.
  */
-test('permessiPerAttrezzoRichiestaValido accetta assente/null e mappe valide sui 4 attrezzi reali', () => {
+test('permessiPerAttrezzoRichiestaValido accetta assente/null e mappe valide sui 5 attrezzi reali', () => {
   assert.equal(permessiPerAttrezzoRichiestaValido(undefined), true);
   assert.equal(permessiPerAttrezzoRichiestaValido(null), true);
   assert.equal(permessiPerAttrezzoRichiestaValido({ scrivi: 'nega' }), true);
   assert.equal(permessiPerAttrezzoRichiestaValido({ shell: 'chiedi' }), true);
   assert.equal(permessiPerAttrezzoRichiestaValido({ prova: 'sempre' }), true);
   assert.equal(permessiPerAttrezzoRichiestaValido({ document_create: 'nega' }), true);
+  assert.equal(permessiPerAttrezzoRichiestaValido({ generate_image: 'chiedi' }), true, 'FASE H, 29/8 — quinto attrezzo con ricevuta');
   assert.equal(
-    permessiPerAttrezzoRichiestaValido({ scrivi: 'nega', shell: 'chiedi', prova: 'sempre', document_create: 'nega' }),
+    permessiPerAttrezzoRichiestaValido({ scrivi: 'nega', shell: 'chiedi', prova: 'sempre', document_create: 'nega', generate_image: 'chiedi' }),
     true,
-    'tutti e 4 insieme restano validi',
+    'tutti e 5 insieme restano validi',
   );
 });
 
-test('⛔ AL CONTRARIO — permessiPerAttrezzoRichiestaValido rifiuta nomi attrezzo fuori dai 4 reali (inventati O reali-ma-fuori-gate)', () => {
+test('⛔ AL CONTRARIO — permessiPerAttrezzoRichiestaValido rifiuta nomi attrezzo fuori dai 5 reali (inventati O reali-ma-fuori-gate)', () => {
   assert.equal(permessiPerAttrezzoRichiestaValido({ strumento_inventato: 'nega' }), false, 'un nome inventato non deve mai passare');
   assert.equal(permessiPerAttrezzoRichiestaValido({ leggi: 'nega' }), false, 'leggi è un attrezzo REALE ma non passa mai dal gate: stesso rifiuto di un nome inventato');
   assert.equal(permessiPerAttrezzoRichiestaValido({ elenca: 'sempre' }), false);
@@ -309,4 +310,31 @@ test('⛔⛔ AL CONTRARIO — una chiave privata non-Ed25519 (o non decodificabi
     }, import.meta.url),
     ConfigurationError,
   );
+});
+
+/*
+ * ⭐⭐⭐ 29/8 — FASE H, `generate_image`. A differenza di `ricercaWeb`
+ * sopra: sempre DEFINITO (mai `undefined`) — zero credenziale nuova da
+ * configurare, il one-up dichiarato su Hermes/Codex (riusa chiaveApi).
+ */
+test('⭐ config.immagine ha un default onesto e reale — un modello dedicato VERO, mai un placeholder — senza nessuna variabile impostata', (t) => {
+  const bancoDir = makeBanco(t);
+  const config = loadConfig({ TALOS_BANCO_DIR: bancoDir }, import.meta.url);
+  assert.deepEqual(config.immagine, { modello: 'bytedance-seed/seedream-4.5', nativo: false });
+});
+
+test('⭐⭐ TALOS_HARNESS_UI_IMMAGINE_MODELLO sovrascrive il default, TALOS_HARNESS_UI_IMMAGINE_NATIVA=1 dichiara il modello nativo', (t) => {
+  const bancoDir = makeBanco(t);
+  const config = loadConfig({
+    TALOS_BANCO_DIR: bancoDir,
+    TALOS_HARNESS_UI_IMMAGINE_MODELLO: 'google/gemini-3.1-flash-image',
+    TALOS_HARNESS_UI_IMMAGINE_NATIVA: '1',
+  }, import.meta.url);
+  assert.deepEqual(config.immagine, { modello: 'google/gemini-3.1-flash-image', nativo: true });
+});
+
+test('⛔ AL CONTRARIO — TALOS_HARNESS_UI_IMMAGINE_NATIVA con un valore diverso da "1" resta false, mai un\'interpretazione permissiva', (t) => {
+  const bancoDir = makeBanco(t);
+  const config = loadConfig({ TALOS_BANCO_DIR: bancoDir, TALOS_HARNESS_UI_IMMAGINE_NATIVA: 'true' }, import.meta.url);
+  assert.equal(config.immagine.nativo, false);
 });

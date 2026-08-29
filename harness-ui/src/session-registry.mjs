@@ -152,8 +152,19 @@ export function createSessionRegistry({
    */
   // ⭐ 28/8 — quarto, stesso principio: document_create è ATTREZZI_ESTESI[2] nel kernel (time_now è il terzo), offerto sempre come gli altri.
   // ⭐ FASE C (28/8) — quinto: delega_sottotask è ATTREZZI_ESTESI[4] nel kernel, stesso principio.
-  strumentiEstesi = ['web_search', 'artifact_create', 'document_create', 'time_now', 'delega_sottotask'],
+  // ⭐ FASE H (29/8) — sesto: generate_image è ATTREZZI_ESTESI[5] nel kernel, stesso principio.
+  strumentiEstesi = ['web_search', 'artifact_create', 'document_create', 'time_now', 'delega_sottotask', 'generate_image'],
   ricercaWeb,
+  /*
+   * ⭐⭐⭐ 29/8 — FASE H, generate_image. A differenza di `ricercaWeb` sopra:
+   * inoltrata SENZA logica propria — la decisione (quale endpoint
+   * OpenRouter, quale modello) vive tutta in `agent-service.mjs`/
+   * `image-generator.mjs`. `undefined` qui rompe l'attrezzo con un
+   * messaggio onesto (vedi `onImmagine` in agent-service.mjs) — non
+   * dovrebbe mai succedere in produzione (config.mjs non torna mai
+   * `undefined`), ma nessun test di questo file lo presume.
+   */
+  immagine,
   /*
    * ⭐⭐⭐ 29/8 — FASE D, firma Ed25519 delle ricevute. Stesso principio di
    * `ricercaWeb` appena sopra: configurazione di SERVER (§config.mjs,
@@ -438,7 +449,7 @@ export function createSessionRegistry({
       reasoning: reasoningEffettivo ?? undefined,
       segnaleStop: controller.signal,
       mobile: voce.mobile,
-      strumentiEstesi, ricercaWeb, firma,
+      strumentiEstesi, ricercaWeb, firma, immagine,
       livelloAccesso, chiediApprovazioneFn, hookFn,
       permessiPerAttrezzo: voce.permessiPerAttrezzo,
       // ⭐⭐⭐ FASE C (28/8) — sub-agenti: sempre costruito (stesso principio di hookFn), il vero lavoro (limiti, isolamento) vive tutto dentro subagentOrchestrator.delegaSottoTask.
