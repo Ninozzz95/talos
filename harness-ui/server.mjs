@@ -48,7 +48,24 @@ async function startServer() {
     // ⭐⭐⭐ 29/8 — FASE H, generate_image. A differenza di ricercaWeb: SEMPRE
     // definita (config.mjs, parseImmagine — un default reale, mai undefined).
     immagine: config.immagine,
+    /*
+     * ⭐⭐⭐ FASE L (30/8) — l'UNICO punto che passa un valore vero (vedi
+     * la doc in session-registry.mjs sul perché nessun default lì
+     * dentro): `.sessions-store/` accanto a questo file, gitignorata
+     * come `.automations/`/`.hooks-trust/` — dati locali generati a
+     * runtime, non tracciati.
+     */
+    cartellaStore: fileURLToPath(new URL('.sessions-store/', import.meta.url)),
   });
+  /*
+   * ⭐⭐⭐ FASE L (30/8) — ricostruisce le sessioni persistite PRIMA di
+   * accettare richieste: un riavvio del server (non solo un F5 del
+   * browser) non deve più mostrare un elenco vuoto. Loggato, mai
+   * silenzioso — l'owner che guarda il terminale vede quante sessioni
+   * sono tornate.
+   */
+  const { ripristinate, totali } = await sessionRegistry.ripristina();
+  if (totali > 0) console.log(`[session-store] ${ripristinate}/${totali} sessioni ripristinate da .sessions-store/`);
   /*
    * ⭐⭐⭐ 27/8 — blocco 7, la vera schedulazione. Owner: "hai il mio via
    * libera". `.automations/` accanto a `server.mjs`, gitignorata come

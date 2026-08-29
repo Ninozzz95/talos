@@ -3,10 +3,15 @@
  * avviate, il buffer dei loro eventi AG-UI, e come fermarle. Piano
  * `elegant-spinning-dongarra.md`, FASE 1 (§1.2/§1.4).
  *
- * ⛔ Solo in memoria, deliberato: la persistenza SU DISCO (sopravvivere a un
- * riavvio del server) è un pezzo separato, non ancora aperto — accettabile
- * per uno strumento locale owner-only, dichiarato qui perché non diventi
- * un'assunzione silenziosa.
+ * ⭐⭐⭐ FASE L (30/8): la persistenza SU DISCO ora esiste — vedi
+ * `cartellaStore`/`session-store.mjs`/`ripristina()` più sotto. Questo
+ * commento diceva "solo in memoria... non ancora aperto" fin dalla prima
+ * riga del file: era la prova stessa, letta alla lettera, che ha aperto
+ * la fase (owner: "un riavvio perde una sessione in corso, è mai
+ * capitato?"). ⛔ Resta vero il limite dichiarato lì: solo lo stato
+ * catturato all'avvio di una sessione sopravvive — rename, permessi
+ * cambiati a sessione già avviata, e la coda messaggi NON sopravvivono a
+ * un riavvio (vedi la doc di `ripristina()`).
  *
  * ⛔ Le cartelle usa-e-getta che `task-catalog.preparaEsecuzione` crea NON
  * vengono ripulite automaticamente da questo file: l'owner potrebbe voler
@@ -62,6 +67,12 @@ import {
   scansionaPatternSospetti,
   verificaTrustPlugin as verificaTrustPluginReale,
 } from './plugin-registry.mjs';
+import {
+  elencaSessioniPersistite as elencaSessioniPersistiteReale,
+  leggiRegistro as leggiRegistroReale,
+  registraRiga as registraRigaReale,
+  registraRigaSync as registraRigaSyncReale,
+} from './session-store.mjs';
 
 export const EXPORT_SCHEMA = 'talos.harness-ui.session-export.v1';
 
@@ -80,6 +91,44 @@ export function createSessionRegistry({
   copiaFileFn = copiaFileReale,
   creaVoceWorkspaceFn = creaVoceWorkspaceReale,
   guardaWorkspaceFn = guardaWorkspaceReale,
+  /*
+   * ⭐⭐⭐ FASE L (30/8) — owner: "ricerca web competitor" sulla domanda
+   * "un riavvio perde una sessione in corso, è mai capitato?". La
+   * ricerca ha trovato che questo file dichiara "solo in memoria...
+   * non ancora aperto" fin dalla sua prima riga — un gap più grande di
+   * quanto la domanda presumesse (OGNI sessione, non solo quelle in
+   * corso).
+   *
+   * ⛔⛔⛔ `cartellaStore` NESSUN default reale — a differenza di
+   * `cartellaTrustHook`/`cartellaTrustMcp`/`cartellaTrustPlugin` sotto
+   * (che pure puntano a un percorso reale di default): quelli sono
+   * letture PIGRE, innescate solo da un'azione esplicita (una
+   * tool-call, un fida). Questo scrive ad OGNI evento, per OGNI
+   * sessione — un default reale avrebbe scritto file veri ad ogni test
+   * di questo intero file che avvia una sessione finta, MAI notato
+   * perché una scrittura riuscita non fa fallire nessun assert (a
+   * differenza di `avviaSessioneFn`, il cui default reale fallirebbe
+   * rumorosamente su una chiave finta). Trovato DAL VIVO: 114 file
+   * scritti in `.sessions-store/` dopo una sola corsa della suite —
+   * corretto qui, non solo notato. `undefined` ⇒ ogni scrittura è
+   * saltata (guardia esplicita ad ogni punto di chiamata) — SOLO
+   * `server.mjs` passa un valore vero.
+   */
+  cartellaStore,
+  registraRigaFn = registraRigaReale,
+  /*
+   * ⭐⭐⭐ FASE L, trovato dalla verifica dal vivo (30/8): un server VERO,
+   * ucciso 6ms dopo aver creato una sessione — sul riavvio, "114/115
+   * ripristinate". La SOLA intestazione (vedi la doc in
+   * session-store.mjs#registraRigaSync) usa questa versione SINCRONA,
+   * non `registraRigaFn`: `avvia()` resta sincrona (nessun rischio di
+   * toccare i ~110 call-site di test che presumono un ritorno
+   * immediato), ma il sessionId non esce mai verso il chiamante prima
+   * che la sua intestazione sia già durevole sul disco.
+   */
+  registraRigaSyncFn = registraRigaSyncReale,
+  elencaSessioniPersistiteFn = elencaSessioniPersistiteReale,
+  leggiRegistroFn = leggiRegistroReale,
   /*
    * ⭐⭐⭐ 28/8 — piano `elegant-spinning-dongarra.md`, FASE A (hook).
    * `cartellaTrustHook`: FUORI dal workspace di ogni progetto, stesso
@@ -220,6 +269,24 @@ export function createSessionRegistry({
     voce.eventi.push(evento);
     for (const ascoltatore of voce.ascoltatori) ascoltatore(evento);
     if (evento.type === 'RunFinished' || evento.type === 'RunError') voce.conclusa = true;
+    /*
+     * ⭐⭐⭐ FASE L (30/8) — accoda anche su disco, MAI in attesa (broadcast
+     * è sincrona da >100 punti di chiamata in questo file, farla async
+     * romperebbe ogni chiamante — stessa scelta già presa per MCP in
+     * FASE E, "investigato PRIMA di scrivere"). Un fallimento di
+     * scrittura non deve MAI interrompere una conversazione dal vivo:
+     * `.catch` che stampa, non rilancia — "mai un buco silenzioso" per
+     * chi guarda il terminale del server, ma nemmeno un crash per chi
+     * sta parlando col modello in questo momento. `voce.sessionId` è
+     * assente per una voce ricostruita PRIMA di questo commit (nessuna
+     * — il registro nasce vuoto ad ogni avvio, oggi) o per una voce
+     * appena creata senza passare da qui: mai vero in pratica, ma un
+     * guard esplicito costa una riga.
+     */
+    if (cartellaStore && voce.sessionId) {
+      registraRigaFn({ cartellaStore, sessionId: voce.sessionId, record: evento })
+        .catch((errore) => { console.error(`[session-store] scrittura fallita per ${voce.sessionId}:`, errore instanceof Error ? errore.message : errore); });
+    }
   }
 
   /**
@@ -393,6 +460,40 @@ export function createSessionRegistry({
     voce.controller = controller;
     voce.conclusa = false;
     /*
+     * ⭐⭐⭐ FASE L (30/8) — `sessionId` sulla voce stessa (prima viveva
+     * solo come chiave della Map): `broadcast()` ne ha bisogno per
+     * sapere in quale file scrivere. L'intestazione va su disco UNA
+     * sola volta, solo per una voce VERAMENTE nuova (un resume/fork
+     * riusa la STESSA voce, `voceNuova` è già falso) — contiene tutto
+     * ciò che serve per RICOSTRUIRE la voce dopo un riavvio, senza
+     * dover rileggere ogni evento per dedurlo.
+     *
+     * ⛔ Debito dichiarato, non nascosto: `nome` (rinomina),
+     * `permessiPerAttrezzo`/`permessi` cambiati DOPO l'avvio,
+     * `codaMessaggi` non sopravvivono a un riavvio in questa prima
+     * fetta — solo lo stato ALL'AVVIO viene catturato qui. Una
+     * rinomina/cambio-permesso post-avvio che precede un crash torna
+     * al valore originale dopo un ripristino: limite onesto, non un
+     * bug silenzioso.
+     */
+    voce.sessionId = sessionId;
+    if (cartellaStore && voceNuova) {
+      try {
+        registraRigaSyncFn({
+          cartellaStore, sessionId,
+          record: {
+            tipo: 'intestazione', sessionId, taskId, cartella, task, comandoProva, forkDa,
+            avviataAlle: voce.avviataAlle, modello: voce.modello, modelloPlanner: voce.modelloPlanner,
+            reasoning: voce.reasoning, mobile: voce.mobile, permessi: voce.permessi,
+            permessiPerAttrezzo: voce.permessiPerAttrezzo, padreId: voce.padreId, profonditaDelega: voce.profonditaDelega,
+          },
+        });
+      } catch (errore) {
+        // ⛔ Un disco pieno/non scrivibile non deve mai impedire una sessione di partire — stesso principio "mai bloccare il dispatch" del resto di questo file, solo loggato invece di silenzioso.
+        console.error(`[session-store] intestazione non scritta per ${sessionId}:`, errore instanceof Error ? errore.message : errore);
+      }
+    }
+    /*
      * ⭐⭐⭐ 28/8 — workspace-watcher.mjs, owner 27/8: "se muovo i file il
      * work tree non si aggiorna automaticamente". UNA sola volta per
      * voce (mai ri-sottoscritto su un resume — `voceEsistente` è la
@@ -506,6 +607,21 @@ export function createSessionRegistry({
        * onestamente che non c'è niente da ereditare, invece di lanciare.
        */
       voce.messaggiFinali = risultato?.esito?.messaggiFinali ?? null;
+      /*
+       * ⭐⭐⭐ FASE L (30/8) — SOLO quando c'è davvero qualcosa da salvare:
+       * senza questa riga su disco, un ripristino dopo un riavvio
+       * troverebbe una sessione con la sua storia (gli eventi) ma
+       * `messaggiFinali:null` — resume()/forka() la rifiuterebbero
+       * onestamente (SESSION_NOT_READY, il loro gate già esistente),
+       * mai un crash: lo stesso limite che Codex stesso dichiara
+       * ("no resumable artefacts may be written" se il crash arriva
+       * troppo presto) — qui capita solo se il turno NON è mai arrivato
+       * a questo punto, prima che questo file venisse scritto su disco.
+       */
+      if (cartellaStore && voce.messaggiFinali && voce.sessionId) {
+        registraRigaFn({ cartellaStore, sessionId: voce.sessionId, record: { tipo: 'messaggi-finali', messaggiFinali: voce.messaggiFinali } })
+          .catch((errore) => { console.error(`[session-store] messaggiFinali non scritti per ${voce.sessionId}:`, errore instanceof Error ? errore.message : errore); });
+      }
       // ⭐⭐⭐ FASE C (28/8) — per il foglio "Albero sessione": lo stato reale di OGNI sessione che conclude, non solo delle figlie (inerte/ignorato per una sessione senza padre).
       voce.esitoDelega = risultato?.esito?.comeFinita ?? (risultato?.ok === false ? 'fallito' : null);
       // ⭐⭐⭐ FASE C (28/8) — se questa sessione è una figlia in delega, sblocca la Promise che il dispatcher del kernel del PADRE sta aspettando. Va DOPO gli aggiornamenti sopra: onConclusioneFn potrebbe (in una fase futura) leggere voce.esitoDelega.
@@ -532,6 +648,65 @@ export function createSessionRegistry({
   }
 
   return Object.freeze({
+    /**
+     * ⭐⭐⭐ FASE L (30/8) — chiamata UNA volta da `server.mjs`, prima di
+     * accettare richieste: legge `.sessions-store/`, ricostruisce una
+     * voce PER OGNI sessione persistita che questo processo non ha
+     * ancora in memoria (un avvio pulito non ne ha mai). Una sessione
+     * il cui ultimo evento non è `RunFinished`/`RunError` è
+     * `interrotta:true` — onestamente: il processo che la eseguiva è
+     * sparito, nessun turno può "riprendere da dove stava" (lo stesso
+     * limite che Codex stesso dichiara: il ripristino è una rilettura
+     * della trascrizione, mai la resurrezione di uno stato in memoria).
+     * Una voce corrotta (JSON illeggibile oltre l'ultima riga, vedi
+     * `session-store.mjs`) NON blocca le altre — loggata e saltata.
+     * @returns {Promise<{ripristinate:number, totali:number}>}
+     */
+    async ripristina() {
+      if (!cartellaStore) return { ripristinate: 0, totali: 0 }; // nessuna persistenza configurata: mai un tentativo di leggere un percorso che non c'è
+      const id = await elencaSessioniPersistiteFn({ cartellaStore });
+      let ripristinate = 0;
+      for (const sessionId of id) {
+        if (sessioni.has(sessionId)) continue; // già viva in questo processo: mai sovrascrivere
+        let record;
+        try {
+          record = await leggiRegistroFn({ cartellaStore, sessionId });
+        } catch (errore) {
+          console.error(`[session-store] sessione ${sessionId} non ripristinata:`, errore instanceof Error ? errore.message : errore);
+          continue;
+        }
+        if (!record || record.length === 0) continue;
+        const intestazione = record.find((r) => r.tipo === 'intestazione');
+        if (!intestazione) continue; // senza intestazione non c'è abbastanza per una voce onesta
+        // ⛔ `type` (AG-UI, PascalCase) contro `tipo` (i record di questo file, italiano): due nomi di campo DIVERSI apposta, mai un'ambiguità nel distinguerli nello stesso file.
+        const eventi = record.filter((r) => typeof r.type === 'string');
+        const messaggiFinaliRecord = record.find((r) => r.tipo === 'messaggi-finali');
+        const ultimoEvento = eventi.at(-1);
+        const conclusa = ultimoEvento?.type === 'RunFinished' || ultimoEvento?.type === 'RunError';
+        const voce = {
+          eventi, ascoltatori: new Set(), taskId: intestazione.taskId, cartella: intestazione.cartella, task: intestazione.task,
+          comandoProva: intestazione.comandoProva, forkDa: intestazione.forkDa,
+          avviataAlle: intestazione.avviataAlle, messaggiFinali: messaggiFinaliRecord?.messaggiFinali ?? null,
+          modello: intestazione.modello, modelloPlanner: intestazione.modelloPlanner, reasoning: intestazione.reasoning,
+          mobile: intestazione.mobile, permessi: intestazione.permessi, permessiPerAttrezzo: intestazione.permessiPerAttrezzo,
+          approvazionePendente: null, padreId: intestazione.padreId, profonditaDelega: intestazione.profonditaDelega,
+          esitoDelega: null, codaMessaggi: [], sessionId, controller: new AbortController(),
+          conclusa, ripristinata: true, interrotta: !conclusa,
+          prossimaSequenza: ultimoEvento?._sequenza ?? 0,
+        };
+        if (intestazione.cartella) {
+          try {
+            voce.fermaWatcher = guardaWorkspaceFn(intestazione.cartella, (percorsi) => broadcast(voce, workspaceChanged({ percorsi })));
+          } catch {
+            // ⛔ una cartella sparita nel frattempo (progetto spostato/cancellato) non deve impedire il ripristino della sessione: resta ripristinata, solo senza un watcher attivo.
+          }
+        }
+        sessioni.set(sessionId, voce);
+        ripristinate += 1;
+      }
+      return { ripristinate, totali: id.length };
+    },
+
     /**
      * ⭐⭐⭐ FASE C (28/8) — sub-agenti. Per il foglio "Albero sessione":
      * i figli VERI di una sessione, non le due righe finte del mockup.
@@ -722,6 +897,21 @@ export function createSessionRegistry({
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       if (!voce.messaggiFinali) {
+        /*
+         * ⭐⭐⭐ FASE L (30/8) — `voce.conclusa===false` copriva DUE stati
+         * diversi sotto lo stesso messaggio: una sessione VIVA che finirà
+         * a breve ("aspetta che concluda") e una ricostruita da
+         * `ripristina()` il cui processo non esiste più — per QUELLA,
+         * "aspetta" è una bugia: non concluderà mai da sola. Stesso
+         * principio "gli stati sono tre" già in memoria: si distingue
+         * `voce.interrotta`, non si conflano.
+         */
+        if (voce.interrotta) {
+          return {
+            erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server e non può essere ripresa: avvia una sessione nuova.',
+            code: 'SESSION_NOT_READY',
+          };
+        }
         return {
           erroreAvvio: voce.conclusa
             ? 'Questa sessione non ha una conversazione da riprendere'
@@ -1318,6 +1508,8 @@ export function createSessionRegistry({
           conclusa: voce.conclusa,
           forkDa: voce.forkDa,
           modello: voce.modello ?? null,
+          // ⭐⭐⭐ FASE L (30/8) — true SOLO per una voce ricostruita dopo un riavvio il cui ultimo evento non era RunFinished/RunError: il processo che la eseguiva è sparito, mai un turno "ancora in corso" travestito da tale.
+          interrotta: voce.interrotta ?? false,
         }))
         .sort((a, b) => b.avviataAlle.localeCompare(a.avviataAlle));
     },
