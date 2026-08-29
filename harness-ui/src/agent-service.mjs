@@ -35,9 +35,12 @@ import {
   creaCursoriLibreria,
   elencaVoci as elencaVociReale,
   elencaVociConTesto as elencaVociConTestoReale,
+  eliminaVoce as eliminaVoceReale,
   impaginaVoci as impaginaVociLibreria,
   leggiVoce as leggiVoceReale,
   origineVoce as origineVoceReale,
+  rinominaVoce as rinominaVoceReale,
+  trovaVoce as trovaVoceLibreria,
 } from './library-store.mjs';
 import { preparaToolPluginPerSessione as preparaToolPluginPerSessioneReale } from './plugin-session.mjs';
 import { eseguiHook as eseguiHookReale } from './hook-registry.mjs';
@@ -293,6 +296,18 @@ export async function avviaSessione({
   elencaVociConTestoFn = elencaVociConTestoReale,
   leggiVoceFn = leggiVoceReale,
   origineVoceFn = origineVoceReale,
+  /*
+   * ⭐⭐⭐ 29/8 — FASE N, seconda fetta (mutazioni). Stesso principio
+   * appena sopra: solo i punti di contatto I/O sono iniettabili
+   * (`rinominaVoceFn`/`eliminaVoceFn`); `trovaVoceLibreria` è PURA,
+   * usata direttamente. `library_export` non ha un suo I/O dedicato —
+   * compone `leggiVoceFn` (già iniettabile sopra) con
+   * `creaFileWorkspaceFn` (già iniettabile per onDocumento/onImmagine,
+   * riuso diretto, nessuna funzione nuova per "scrivi un file nel
+   * workspace").
+   */
+  rinominaVoceFn = rinominaVoceReale,
+  eliminaVoceFn = eliminaVoceReale,
 }) {
   const threadId = randomUUID();
   const runId = randomUUID();
@@ -695,6 +710,69 @@ export async function avviaSessione({
   const onLibreriaLeggi = async (argomenti) => leggiVoceFn({ cartella, id: argomenti?.id ?? '' });
   const onLibreriaOrigine = async (argomenti) => origineVoceFn({ cartella, id: argomenti?.id ?? '' });
 
+  /*
+   * ⭐⭐⭐ 29/8 — FASE N, seconda fetta (mutazioni). Stesso contratto
+   * ESATTO di onDocumento/onImmagine sopra: `(spec) => {ok, esito}` —
+   * il kernel passa `argomenti` (i nomi di campo inglesi dello schema
+   * JSON: id/name/reference) verbatim; questi tre scrivono il
+   * messaggio finale PER INTERO (a differenza dei 4 callback di
+   * lettura sopra, che tornano dati grezzi per un formattatore del
+   * kernel — qui l'esito è un singolo messaggio, non una pagina).
+   */
+  const onLibreriaRinomina = async (argomenti) => {
+    const risultato = await rinominaVoceFn({ cartella, id: argomenti?.id ?? '', nome: argomenti?.name ?? '' });
+    if (!risultato) {
+      return { ok: false, esito: `No Library file has the id "${argomenti?.id}". Use library_list or library_search to find it.` };
+    }
+    return { ok: true, esito: `Renamed «${risultato.nomePrima}» to «${risultato.nomeDopo}».` };
+  };
+
+  const onLibreriaElimina = async (argomenti) => {
+    const risultato = await eliminaVoceFn({ cartella, id: argomenti?.id ?? '' });
+    if (!risultato) {
+      return { ok: false, esito: `No Library file has the id "${argomenti?.id}". It may already be gone.` };
+    }
+    return { ok: true, esito: `«${risultato.nome}» has been removed from the Library.` };
+  };
+
+  /*
+   * ⭐⭐⭐ 29/8 — FASE N, library_export. A differenza di onDocumento/
+   * onImmagine (generano contenuto NUOVO): qui il contenuto esiste già
+   * nella Libreria — "esportare" sul desktop vuol dire materializzarlo
+   * come file vero DENTRO il workspace stesso, riusando
+   * `creaFileWorkspaceFn` (già iniettato per onDocumento/onImmagine,
+   * nessuna funzione nuova). Nessun picker di sistema: quel confine
+   * (Libreria privata → storage condiviso) esiste solo su Android —
+   * vedi la doc nel kernel. Un nome già occupato nel workspace
+   * rifiuta onestamente (`creaFileWorkspaceFn` lancia `FILE_EXISTS`),
+   * mai una sovrascrittura silenziosa.
+   */
+  const onLibreriaEsporta = async (argomenti) => {
+    const voci = await elencaVociFn({ cartella });
+    const trovata = trovaVoceLibreria(voci, argomenti?.reference ?? '');
+    if (!trovata) {
+      return { ok: false, esito: `No available Library file exactly matches "${argomenti?.reference}". Ask for the exact filename or Library id.` };
+    }
+    if (trovata.ambiguo) {
+      return { ok: false, esito: `More than one Library file is named "${argomenti?.reference}". Ask the user which one; do not choose for them.` };
+    }
+    const letta = await leggiVoceFn({ cartella, id: trovata.id });
+    if (!letta) {
+      return { ok: false, esito: `"${trovata.nome}" is no longer available. No copy was saved.` };
+    }
+    const bytes = letta.immagineBase64 ? Buffer.from(letta.immagineBase64, 'base64') : Buffer.from(letta.testo ?? '', 'utf8');
+    let salvato;
+    try {
+      salvato = await creaFileWorkspaceFn({ cartella, nome: letta.nome, bytes });
+    } catch (errore) {
+      const dettaglio = errore instanceof WorkspaceFileError ? errore.message : (errore instanceof Error ? errore.message : String(errore));
+      return { ok: false, esito: `"${letta.nome}" could not be saved into the workspace: ${dettaglio}. Do not silently retry with the same name — offer a different name, or ask.` };
+    }
+    // ⛔ mai i byte grezzi dentro un evento SSE/JSON — stessa disciplina già in uso per un documento/immagine binari in onDocumento/onImmagine.
+    onEvento(eventoPerScrittura({ percorso: salvato.percorso, contenuto: letta.immagineBase64 ? `[image, ${bytes.byteLength} bytes]` : (letta.testo ?? ''), esisteva: false }));
+    return { ok: true, esito: `Exported "${letta.nome}" into the workspace (${bytes.byteLength} bytes).` };
+  };
+
   try {
     const esito = await talosLavoraFn({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
@@ -703,6 +781,7 @@ export async function avviaSessione({
       livelloAccesso, chiediApprovazioneFn, hookFn: hookFnConPlugin, permessiPerAttrezzo, onDelega, codaMessaggiFn,
       firma, toolMcp, chiamaToolMcpFn, skillsDisponibili, caricaSkillFn, toolPlugin, eseguiToolPluginFn,
       onLibreriaLista, onLibreriaCerca, onLibreriaLeggi, onLibreriaOrigine,
+      onLibreriaRinomina, onLibreriaElimina, onLibreriaEsporta,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));
     return { threadId, runId, ok: esito.comeFinita === 'concluso', esito, erroreInterno: null };
