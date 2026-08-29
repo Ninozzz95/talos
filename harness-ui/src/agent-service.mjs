@@ -28,6 +28,7 @@ import { generateTalosDocument as generateTalosDocumentReale, TALOS_SOURCE_TEXT_
 import { leggiContestoWorkspace as leggiContestoWorkspaceReale } from './workspace-context.mjs';
 import { creaFileWorkspace as creaFileWorkspaceReale, WorkspaceFileError } from './workspace-files.mjs';
 import { preparaToolMcpPerSessione as preparaToolMcpPerSessioneReale } from './mcp-session.mjs';
+import { caricaSkill as caricaSkillReale } from './skill-registry.mjs';
 import {
   artifactCreated,
   eventiPerRisposta,
@@ -202,6 +203,18 @@ export async function avviaSessione({
    */
   cartellaTrustMcp,
   preparaToolMcpPerSessioneFn = preparaToolMcpPerSessioneReale,
+  /*
+   * ⭐⭐⭐ 29/8 — FASE F (Skills). Piu' semplice di toolMcp sopra: una
+   * skill e' testo, nessuna connessione da preparare, nessun trust da
+   * verificare (mai un hash-gate qui — vedi la doc in
+   * skill-registry.mjs sul perche'). Chiamata SEMPRE (non dietro un
+   * flag come cartellaTrustMcp): caricaSkill({cartella}) e' gia'
+   * economica sul percorso comune ("nessuna .harness-ui-skills/") —
+   * un solo tentativo di lettura cartella che fallisce con ENOENT,
+   * stesso costo di leggiContestoWorkspaceFn poco sotto. Iniettabile
+   * per i test (mai una vera lettura disco nella suite unitaria).
+   */
+  caricaSkillDisponibiliFn = caricaSkillReale,
   talosLavoraFn = talosLavoraReale,
   leggiContestoWorkspaceFn = leggiContestoWorkspaceReale,
   salvaArtefattoFn = salvaArtefattoReale,
@@ -237,6 +250,30 @@ export async function avviaSessione({
     toolMcp = preparato.toolMcp;
     chiamaToolMcpFn = preparato.chiamaToolMcpFn;
     chiudiMcp = preparato.chiudiTutti;
+  }
+
+  /*
+   * ⭐⭐⭐ 29/8 — FASE F (Skills). Nessun gate (a differenza di MCP
+   * sopra): caricaSkill() e' gia' economica sul percorso comune, vedi
+   * la doc su caricaSkillDisponibiliFn. Un .harness-ui-skills/
+   * malformato non deve MAI impedire alla sessione di partire —
+   * degrada a "nessuna skill", stesso principio di costruisciHookFn
+   * in session-registry.mjs (try/catch a vuoto, mai un blocco).
+   */
+  let skillsDisponibili;
+  let caricaSkillFn;
+  try {
+    const { skills } = await caricaSkillDisponibiliFn({ cartella });
+    if (skills.length > 0) {
+      skillsDisponibili = skills.map((s) => ({ name: s.name, description: s.description }));
+      caricaSkillFn = async (nome) => {
+        const skill = skills.find((s) => s.name === nome);
+        if (!skill) throw new Error(`skill "${nome}" scomparsa fra l'offerta al modello e la chiamata`);
+        return skill.corpo;
+      };
+    }
+  } catch {
+    // ⭐ un .harness-ui-skills/ malformato non deve mai bloccare l'avvio: skillsDisponibili resta undefined, zero tool nuovo offerto.
   }
 
   /*
@@ -451,7 +488,7 @@ export async function avviaSessione({
       onGiro, onScrittura, onDelta, reasoning,
       strumentiEstesi, ricercaWeb, onArtefatto, onDocumento,
       livelloAccesso, chiediApprovazioneFn, hookFn, permessiPerAttrezzo, onDelega, codaMessaggiFn,
-      firma, toolMcp, chiamaToolMcpFn,
+      firma, toolMcp, chiamaToolMcpFn, skillsDisponibili, caricaSkillFn,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));
     return { threadId, runId, ok: esito.comeFinita === 'concluso', esito, erroreInterno: null };

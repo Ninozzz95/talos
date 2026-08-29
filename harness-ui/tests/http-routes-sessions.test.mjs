@@ -147,6 +147,17 @@ function registroFinto() {
       if (sessionId === 'sess-mcp-rotti') return { ok: true, server: null, errore: '.harness-ui-mcp.json non è un JSON valido' };
       return { ok: true, server: [{ id: 'filesystem', comando: 'npx', argomenti: [], allowlist: ['read_file'], fidato: false }], errore: null };
     },
+    /*
+     * ⭐⭐⭐ 29/8 — FASE F: stesso stile esatto di elencaServerMcp appena
+     * sopra — cattura la chiamata per provare che la rotta HTTP
+     * raggiunge davvero il registro, senza fingere una vera
+     * .harness-ui-skills/.
+     */
+    async elencaSkill(sessionId) {
+      if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (sessionId === 'sess-skills-rotte') return { ok: true, skills: null, errore: '.harness-ui-skills/rotta/SKILL.md non è valido' };
+      return { ok: true, skills: [{ id: 'code-review', name: 'code-review', description: 'Revisione in due assi.' }], errore: null };
+    },
     ultimaFiduciaServerMcp: null,
     async fidaServerMcp(sessionId, serverId) {
       this.ultimaFiduciaServerMcp = { sessionId, serverId };
@@ -1029,6 +1040,27 @@ test('⭐ GET /api/v1/sessions/{id}/mcp torna i server MCP con lo stato di fiduc
 test('⛔ AL CONTRARIO — GET .../mcp su un id inesistente: 404 NOT_FOUND', async (t) => {
   const { base } = await listen(t);
   const risposta = await fetch(`${base}/api/v1/sessions/non-esiste/mcp`);
+  assert.equal(risposta.status, 404);
+});
+
+/*
+ * ⭐⭐⭐ 29/8 — GET .../skills, FASE F: il Capability hub chiama questa
+ * rotta per mostrare le skill dichiarate — stesso principio esatto di
+ * GET .../mcp sopra, senza il concetto di fiducia.
+ */
+test('⭐ GET /api/v1/sessions/{id}/skills torna le skill dal registro', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/skills`);
+  assert.equal(risposta.status, 200);
+  const corpo = await risposta.json();
+  assert.deepEqual(corpo.data.skills, [{ id: 'code-review', name: 'code-review', description: 'Revisione in due assi.' }]);
+  assert.equal(corpo.data.errore, null);
+});
+
+test('⛔ AL CONTRARIO — GET .../skills su un id inesistente: 404 NOT_FOUND', async (t) => {
+  const { base } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions/non-esiste/skills`);
   assert.equal(risposta.status, 404);
 });
 

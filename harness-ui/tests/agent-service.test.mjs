@@ -1073,3 +1073,91 @@ test('⛔⛔ AL CONTRARIO — RunStarted arriva PRIMA di preparaToolMcpPerSessio
   assert.equal(eventi[0], 'RunStarted');
   assert.equal(eventi[1], 'mcp-preparato', 'la preparazione MCP deve girare dopo RunStarted, mai prima');
 });
+
+/*
+ * ⭐⭐⭐ FASE F (29/8), piano elegant-spinning-dongarra.md - skill-registry.mjs
+ * collegato dentro avviaSessione(). A differenza di MCP: nessun gate
+ * (caricaSkillDisponibiliFn e' SEMPRE chiamata, mai dietro un
+ * cartellaTrust...) - vedi la doc del parametro.
+ */
+test('⭐⭐⭐ caricaSkillDisponibiliFn chiamata SEMPRE con {cartella} esatta, skillsDisponibili/caricaSkillFn arrivano a talosLavoraFn', async () => {
+  let catturato;
+  let argomentiCarica;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+  const caricaSkillDisponibiliFn = async (argomenti) => {
+    argomentiCarica = argomenti;
+    return { skills: [{ id: 'code-review', name: 'code-review', description: 'Revisione in due assi.', corpo: '# Corpo vero' }] };
+  };
+
+  await avviaSessione({
+    cartella: '/tmp/workspace-vero', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, caricaSkillDisponibiliFn,
+  });
+
+  assert.deepEqual(argomentiCarica, { cartella: '/tmp/workspace-vero' });
+  assert.deepEqual(catturato.skillsDisponibili, [{ name: 'code-review', description: 'Revisione in due assi.' }]);
+  assert.equal(typeof catturato.caricaSkillFn, 'function');
+});
+
+test('⭐⭐⭐ caricaSkillFn(nome) torna il corpo VERO della skill corrispondente', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+  const caricaSkillDisponibiliFn = async () => ({ skills: [{ id: 'code-review', name: 'code-review', description: 'd', corpo: '# Corpo vero, non un placeholder' }] });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, caricaSkillDisponibiliFn });
+
+  const corpo = await catturato.caricaSkillFn('code-review');
+  assert.equal(corpo, '# Corpo vero, non un placeholder');
+});
+
+test('⛔⭐⭐ AL CONTRARIO — nessuna skill trovata: skillsDisponibili/caricaSkillFn arrivano undefined, mai un array vuoto passato al kernel', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+  const caricaSkillDisponibiliFn = async () => ({ skills: [] });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, caricaSkillDisponibiliFn });
+
+  assert.equal(catturato.skillsDisponibili, undefined);
+  assert.equal(catturato.caricaSkillFn, undefined);
+});
+
+test('⛔⛔⛔ AL CONTRARIO — caricaSkillDisponibiliFn che LANCIA (skill malformata) degrada: skillsDisponibili resta undefined, la sessione NON si blocca', async () => {
+  let catturato;
+  let esitoInEvento;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+  const caricaSkillDisponibiliFn = async () => { throw new Error('.harness-ui-skills/rotta/SKILL.md manca di "description"'); };
+
+  const risultato = await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k',
+    onEvento: (e) => { if (e.type === 'RunFinished') esitoInEvento = e; },
+    talosLavoraFn, caricaSkillDisponibiliFn,
+  });
+
+  assert.equal(risultato.ok, true, 'una skill malformata non deve impedire alla sessione di concludere');
+  assert.equal(catturato.skillsDisponibili, undefined);
+  assert.ok(esitoInEvento, 'RunFinished deve comunque arrivare — nessun blocco silenzioso');
+});
+
+test('⛔ AL CONTRARIO — RunStarted arriva PRIMA di caricaSkillDisponibiliFn, mai dopo', async () => {
+  const eventi = [];
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } } });
+  const caricaSkillDisponibiliFn = async () => { eventi.push('skill-caricata'); return { skills: [] }; };
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e.type), talosLavoraFn, caricaSkillDisponibiliFn,
+  });
+
+  assert.equal(eventi[0], 'RunStarted');
+  assert.equal(eventi[1], 'skill-caricata');
+});
