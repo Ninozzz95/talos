@@ -42,6 +42,14 @@ import {
   rinominaVoce as rinominaVoceReale,
   trovaVoce as trovaVoceLibreria,
 } from './library-store.mjs';
+import {
+  MODALITA_SUPPORTATE as MODALITA_SUPPORTATE_LIBRERIA,
+  creaRicevutaPolitica as creaRicevutaPoliticaLibreria,
+  creaRicevutePolitica as creaRicevutePoliticaLibreria,
+  leggiPolitica as leggiPoliticaReale,
+  ricordaRicevutaPolitica as ricordaRicevutaPoliticaLibreria,
+  scriviPolitica as scriviPoliticaReale,
+} from './library-policy-store.mjs';
 import { preparaToolPluginPerSessione as preparaToolPluginPerSessioneReale } from './plugin-session.mjs';
 import { eseguiHook as eseguiHookReale } from './hook-registry.mjs';
 import {
@@ -308,6 +316,14 @@ export async function avviaSessione({
    */
   rinominaVoceFn = rinominaVoceReale,
   eliminaVoceFn = eliminaVoceReale,
+  /*
+   * ⭐⭐⭐ 29/8 — FASE N, terza fetta (library_context_policy_update).
+   * Stesso principio dei punti I/O sopra: solo leggiPoliticaFn/
+   * scriviPoliticaFn iniettabili — creaRicevutaPolitica/
+   * ricordaRicevutaPolitica sono PURE (nessuna I/O da fingere).
+   */
+  leggiPoliticaFn = leggiPoliticaReale,
+  scriviPoliticaFn = scriviPoliticaReale,
 }) {
   const threadId = randomUUID();
   const runId = randomUUID();
@@ -773,6 +789,98 @@ export async function avviaSessione({
     return { ok: true, esito: `Exported "${letta.nome}" into the workspace (${bytes.byteLength} bytes).` };
   };
 
+  /*
+   * ⭐⭐⭐ 29/8 — FASE N, terza fetta (library_context_policy_update).
+   * `ricevutePolitica` — una Map per QUESTO run (stessa vita di
+   * `cursoriLibreria` sopra): un `receipt_id` non sopravvive a un
+   * resume — `undo` con un id di un run precedente torna onestamente
+   * "non trovato" (mobile stesso lo prevede come esito normale).
+   *
+   * La validazione per-azione ("mode è richiesto solo per set_mode",
+   * porto di `libraryContextPolicyTools.ts`, il `.superRefine` Zod
+   * vive QUI perché il kernel passa `argomenti` verbatim, senza
+   * saperne il significato) vive PRIMA della lettura della politica:
+   * un input incompleto non deve costare un giro di I/O.
+   */
+  const ricevutePolitica = creaRicevutePoliticaLibreria();
+  const onLibreriaPolitica = async (argomenti) => {
+    const azione = argomenti?.action;
+    const campoMancante = (campo) => ({ ok: false, esito: `${campo} is required when action is ${azione}. Nothing was changed.` });
+    if (azione === 'set_mode' && typeof argomenti?.mode !== 'string') return campoMancante('mode');
+    if (azione === 'set_enabled' && typeof argomenti?.enabled !== 'boolean') return campoMancante('enabled');
+    if ((azione === 'include_files' || azione === 'exclude_files') && !Array.isArray(argomenti?.file_ids)) return campoMancante('file_ids');
+    if (azione === 'undo' && typeof argomenti?.receipt_id !== 'string') return campoMancante('receipt_id');
+
+    let attuale;
+    try {
+      attuale = await leggiPoliticaFn({ cartella });
+    } catch (errore) {
+      return { ok: false, esito: `The current Library policy could not be read. Nothing was changed. (${errore instanceof Error ? errore.message : String(errore)})` };
+    }
+    if (attuale.revision !== argomenti?.expected_revision) {
+      return { ok: false, esito: `Library policy changed before this update (expected revision ${argomenti?.expected_revision}, current revision ${attuale.revision}). Read the current policy and ask again; nothing was changed.` };
+    }
+
+    if (azione === 'undo') {
+      /*
+       * ⭐⭐⭐ 29/8 — porto diretto di `receiptLookupIds` mobile
+       * (`libraryContextPolicyTools.ts` righe 268-274): il messaggio
+       * di successo finisce la frase con un punto subito dopo l'id
+       * ("Undo receipt: libpol-xxx."), e un modello che lo rilegge e
+       * lo cita può includere quel punto per errore — provato dal
+       * vivo dalla mia stessa suite di test, non solo temuto: un
+       * `\S+` naive nel MIO test ha catturato il punto, riproducendo
+       * esattamente lo scenario che mobile aveva già previsto.
+       */
+      const idEsatto = String(argomenti.receipt_id).trim();
+      const idSenzaPunteggiatura = idEsatto.replace(/[.,;:!?]+$/u, '');
+      const ricevuta = ricevutePolitica.get(idEsatto) ?? (idSenzaPunteggiatura !== idEsatto ? ricevutePolitica.get(idSenzaPunteggiatura) : undefined);
+      if (!ricevuta || ricevuta.revisioneDopo !== attuale.revision) {
+        return { ok: false, esito: 'That Library policy undo receipt is missing, expired, already used, or belongs to another scope. Nothing was changed.' };
+      }
+      let ripristinata;
+      try {
+        ripristinata = await scriviPoliticaFn({ cartella, valore: ricevuta.prima, revisioneAttesa: attuale.revision });
+      } catch (errore) {
+        return { ok: false, esito: `The Library policy could not be restored: ${errore instanceof Error ? errore.message : String(errore)}` };
+      }
+      ricevutePolitica.delete(ricevuta.receiptId);
+      return { ok: true, esito: `Restored the previous Library policy at revision ${ripristinata.revision}.` };
+    }
+
+    let prossima = { enabled: attuale.enabled, mode: attuale.mode, includedFileIds: attuale.includedFileIds, excludedFileIds: attuale.excludedFileIds };
+    if (azione === 'set_mode') {
+      if (!MODALITA_SUPPORTATE_LIBRERIA.includes(argomenti.mode)) {
+        return { ok: false, esito: `This harness only supports the "${MODALITA_SUPPORTATE_LIBRERIA[0]}" mode today; "${argomenti.mode}" is not implemented. Nothing was changed.` };
+      }
+      prossima.mode = argomenti.mode;
+    } else if (azione === 'set_enabled') {
+      prossima.enabled = argomenti.enabled;
+    } else if (azione === 'include_files') {
+      const aggiunte = new Set(argomenti.file_ids);
+      prossima.includedFileIds = [...new Set([...attuale.includedFileIds, ...argomenti.file_ids])];
+      prossima.excludedFileIds = attuale.excludedFileIds.filter((id) => !aggiunte.has(id));
+    } else if (azione === 'exclude_files') {
+      const aggiunte = new Set(argomenti.file_ids);
+      prossima.excludedFileIds = [...new Set([...attuale.excludedFileIds, ...argomenti.file_ids])];
+      prossima.includedFileIds = attuale.includedFileIds.filter((id) => !aggiunte.has(id));
+    } else if (azione === 'clear_overrides') {
+      prossima = { enabled: true, mode: MODALITA_SUPPORTATE_LIBRERIA[0], includedFileIds: [], excludedFileIds: [] };
+    } else {
+      return { ok: false, esito: `Unknown action "${azione}". Nothing was changed.` };
+    }
+
+    let aggiornata;
+    try {
+      aggiornata = await scriviPoliticaFn({ cartella, valore: prossima, revisioneAttesa: attuale.revision });
+    } catch (errore) {
+      return { ok: false, esito: `The Library policy could not be updated: ${errore instanceof Error ? errore.message : String(errore)}` };
+    }
+    const ricevuta = creaRicevutaPoliticaLibreria({ azione, prima: attuale, revisionePrima: attuale.revision, revisioneDopo: aggiornata.revision });
+    ricordaRicevutaPoliticaLibreria(ricevutePolitica, ricevuta);
+    return { ok: true, esito: `Updated the Library policy to revision ${aggiornata.revision}. Undo receipt: ${ricevuta.receiptId}.` };
+  };
+
   try {
     const esito = await talosLavoraFn({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
@@ -781,7 +889,7 @@ export async function avviaSessione({
       livelloAccesso, chiediApprovazioneFn, hookFn: hookFnConPlugin, permessiPerAttrezzo, onDelega, codaMessaggiFn,
       firma, toolMcp, chiamaToolMcpFn, skillsDisponibili, caricaSkillFn, toolPlugin, eseguiToolPluginFn,
       onLibreriaLista, onLibreriaCerca, onLibreriaLeggi, onLibreriaOrigine,
-      onLibreriaRinomina, onLibreriaElimina, onLibreriaEsporta,
+      onLibreriaRinomina, onLibreriaElimina, onLibreriaEsporta, onLibreriaPolitica,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));
     return { threadId, runId, ok: esito.comeFinita === 'concluso', esito, erroreInterno: null };
