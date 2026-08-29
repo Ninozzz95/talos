@@ -41,6 +41,10 @@ async function startServer() {
     chiave: config.chiaveApi,
     cartelleProgetto: config.cartelleProgetto,
     ricercaWeb: config.ricercaWeb,
+    // ⭐⭐⭐ 29/8 — FASE D, firma Ed25519 delle ricevute. Stesso principio di
+    // ricercaWeb: undefined quando non configurata (vedi config.mjs), le
+    // ricevute restano non firmate — comportamento di sempre.
+    firma: config.firmaRicevute,
   });
   /*
    * ⭐⭐⭐ 27/8 — blocco 7, la vera schedulazione. Owner: "hai il mio via

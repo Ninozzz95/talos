@@ -125,6 +125,13 @@ export async function avviaSessione({
   onEvento, segnaleStop, messaggiIniziali, reasoning, mobile = false,
   strumentiEstesi, ricercaWeb,
   /*
+   * ⭐⭐⭐ 29/8 — FASE D, firma Ed25519 delle ricevute. Stesso principio di
+   * `ricercaWeb` appena sopra: inoltrato SENZA logica propria a
+   * `talosLavoraFn` — la decisione (dove vive la chiave) vive tutta in
+   * `config.mjs`/`harness-receipt-keypair.mjs`.
+   */
+  firma,
+  /*
    * ⭐⭐⭐ 28/8 — pillola permessi: entrambi opzionali, inoltrati SENZA
    * logica propria a talosLavoraFn (la decisione COSA rifiutare vive
    * tutta nel kernel, `verificaPermessoScrittura` — vedi la sua doc).
@@ -403,6 +410,7 @@ export async function avviaSessione({
       onGiro, onScrittura, onDelta, reasoning,
       strumentiEstesi, ricercaWeb, onArtefatto, onDocumento,
       livelloAccesso, chiediApprovazioneFn, hookFn, permessiPerAttrezzo, onDelega, codaMessaggiFn,
+      firma,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));
     return { threadId, runId, ok: esito.comeFinita === 'concluso', esito, erroreInterno: null };

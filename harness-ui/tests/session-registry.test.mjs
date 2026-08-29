@@ -94,6 +94,37 @@ test('⛔⛔ AL CONTRARIO — cartellaDi su un id inesistente torna null, mai un
 });
 
 /*
+ * ⭐⭐⭐ 29/8 — FASE D, firma Ed25519: configurazione di SERVER (come
+ * ricercaWeb), inoltrata SENZA logica propria ad avviaSessioneFn — si
+ * prova SOLO che questo strato la passi intatta, stesso principio di
+ * hookFn/chiediApprovazioneFn già provati in questo file.
+ */
+test('⭐⭐⭐ firma passata a createSessionRegistry arriva intatta ad avviaSessioneFn', async () => {
+  const finta = sessioneControllabile();
+  const firma = { chiavePrivata: 'chiave-finta-pem', keyId: 'talos-harness-receipt-test' };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', firma,
+  });
+
+  registro.avvia('task-vero');
+
+  assert.deepEqual(finta.ultimoInput.firma, firma);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔ AL CONTRARIO — senza firma configurata, avviaSessioneFn la riceve undefined: nessuna chiave inventata', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+  });
+
+  registro.avvia('task-vero');
+
+  assert.equal(finta.ultimoInput.firma, undefined);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+/*
  * ⭐⭐⭐ 28/8 — FASE A (hook), piano `elegant-spinning-dongarra.md`, ledger
  * `LEDGER-FASE-A-HOOKS.md`. `costruisciHookFn` non è esportata (è privata
  * al modulo) — si prova attraverso ciò che PRODUCE: `avvia()` passa un

@@ -4,6 +4,7 @@ import {
   realpathSync,
   statSync,
 } from 'node:fs';
+import { createPrivateKey } from 'node:crypto';
 import { isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -291,7 +292,47 @@ export function loadConfig(
      */
     chiaveApi: typeof env.OPENROUTER_API_KEY === 'string' ? env.OPENROUTER_API_KEY : undefined,
     ricercaWeb: parseRicercaWeb(env),
+    firmaRicevute: parseFirmaRicevute(env),
   });
+}
+
+/**
+ * ⭐⭐⭐ 29/8, FASE D — la firma Ed25519 delle ricevute
+ * (`talosHarness.mjs`, `creaRicevutaOperazione`/`firma`). Stesso principio
+ * onesto di `parseRicercaWeb` due funzioni sotto: `undefined` quando non
+ * configurata, il server resta usabile — le ricevute restano non firmate,
+ * comportamento di sempre, mai un errore che blocca l'avvio per una
+ * funzione opzionale. Provisioning: `node src/harness-receipt-keypair.mjs
+ * --env-file <path>` (vedi quel file — stesso pattern di
+ * `browser-action-keypair.mjs`, AVM, con l'algoritmo giusto per una
+ * ricevuta d'audit permanente, non un token con scadenza).
+ *
+ * ⛔ Validato qui, non solo passato: una chiave malformata configurata a
+ * metà (solo l'id, senza la chiave — o viceversa) fallisce l'avvio con
+ * ConfigurationError invece di firmare silenziosamente con un valore
+ * rotto e produrre ricevute che nessuno può verificare.
+ */
+function parseFirmaRicevute(env) {
+  const keyId = typeof env.TALOS_HARNESS_RECEIPT_KEY_ID === 'string' ? env.TALOS_HARNESS_RECEIPT_KEY_ID.trim() : '';
+  const privateKeyB64 = typeof env.TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64 === 'string'
+    ? env.TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64.trim()
+    : '';
+  if (!keyId && !privateKeyB64) return undefined;
+  if (!keyId || !privateKeyB64) {
+    fail('TALOS_HARNESS_RECEIPT_KEY_ID e TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64 vanno configurate insieme, mai una sola');
+  }
+
+  let chiavePrivata;
+  try {
+    chiavePrivata = Buffer.from(privateKeyB64, 'base64').toString('utf8');
+    const keyObject = createPrivateKey(chiavePrivata);
+    if (keyObject.asymmetricKeyType !== 'ed25519') fail('TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64 non è una chiave Ed25519');
+  } catch (error) {
+    if (error instanceof ConfigurationError) throw error;
+    fail('TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64 non è una chiave privata PKCS8 valida in base64');
+  }
+
+  return Object.freeze({ chiavePrivata, keyId });
 }
 
 const PROVIDER_RICERCA_AMMESSI = new Set(['tavily', 'brave', 'searxng', 'custom']);
