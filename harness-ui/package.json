@@ -4,6 +4,7 @@
   "type": "module",
   "description": "Backend locale di Harness UI (server.mjs + src/*.mjs). Zero dipendenze fino al 28/8 — vedi il commento in document-generator.mjs per il perché la PRIMA eccezione (i sette per document_create) era giustificata, e solo qui (mai nel bundle frontend mobile/public/harness-ui/). chokidar segue lo stesso principio per workspace-watcher.mjs.",
   "dependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
     "chokidar": "4.0.3",
     "docx": "9.5.1",
     "jszip": "3.10.1",
