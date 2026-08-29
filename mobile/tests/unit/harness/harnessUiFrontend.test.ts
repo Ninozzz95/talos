@@ -332,14 +332,24 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         expect(runtime?.dismissTransientLayers?.()).toBe(false)
     })
 
-    it('HARNESS-MIC-HONEST-01 answers the microphone control without pretending to record', () => {
+    /*
+     * ⭐⭐⭐ 29/8 — FASE H, piano `elegant-spinning-dongarra.md`. Push-to-talk
+     * vero è arrivato (Web Speech API, SpeechRecognition) — ma jsdom non la
+     * implementa affatto (zero polyfill in questo progetto, verificato
+     * prima di scrivere): `window.SpeechRecognition` è undefined qui,
+     * esattamente come in un browser che non la supporta davvero. Il test
+     * resta lo stesso in SPIRITO (mai un bottone che finge di registrare),
+     * aggiornato al messaggio onesto VERO per questo caso — "non
+     * disponibile", non più "demo non collegata".
+     */
+    it('HARNESS-MIC-HONEST-01 answers the microphone control without pretending to record when SpeechRecognition is unavailable', () => {
         mountStaticRuntime()
         const microphone = document.querySelector<HTMLButtonElement>('.composer-mic')
 
         microphone?.click()
 
         expect(microphone?.getAttribute('aria-pressed')).not.toBe('true')
-        expect(document.querySelector('#toastRegion')?.textContent).toContain('Voce demo non collegata')
+        expect(document.querySelector('#toastRegion')?.textContent).toContain('Voce non disponibile')
     })
 
     // ⛔ 27/8 — l'approval-card demo (che questi due test usavano come veicolo)
