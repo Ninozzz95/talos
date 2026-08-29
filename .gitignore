@@ -47,6 +47,10 @@ harness-ui/.sessions-store/
 # a runtime, stesso principio di .automations/ in cima a questo blocco.
 harness-ui/.notes-store/
 
+# ⭐ 30/8 — FASE N, quinto sistema: le attività dell'owner, GLOBALI —
+# stesso principio esatto di .notes-store/ appena sopra.
+harness-ui/.tasks-store/
+
 core/vendor/
 validator/node_modules/
 control-plane/vendor/

@@ -50,6 +50,14 @@ import {
   leggiNota as leggiNotaReale,
 } from './notes-store.mjs';
 import {
+  aggiornaAttivita as aggiornaAttivitaReale,
+  completaAttivita as completaAttivitaReale,
+  creaAttivita as creaAttivitaReale,
+  elencaAttivita as elencaAttivitaReale,
+  eliminaAttivita as eliminaAttivitaReale,
+  leggiAttivita as leggiAttivitaReale,
+} from './tasks-store.mjs';
+import {
   MODALITA_SUPPORTATE as MODALITA_SUPPORTATE_LIBRERIA,
   creaRicevutaPolitica as creaRicevutaPoliticaLibreria,
   creaRicevutePolitica as creaRicevutePoliticaLibreria,
@@ -347,6 +355,18 @@ export async function avviaSessione({
   aggiornaNotaFn = aggiornaNotaReale,
   eliminaNotaFn = eliminaNotaReale,
   leggiNotaFn = leggiNotaReale,
+  /*
+   * ⭐⭐⭐ FASE N, quinto sistema (30/8) — Tasks. Stesso pattern ESATTO di
+   * cartellaNote/elencaNoteFn appena sopra: GLOBALE, nessun default
+   * QUI (il default reale vive in session-registry.mjs).
+   */
+  cartellaAttivita,
+  elencaAttivitaFn = elencaAttivitaReale,
+  creaAttivitaFn = creaAttivitaReale,
+  completaAttivitaFn = completaAttivitaReale,
+  aggiornaAttivitaFn = aggiornaAttivitaReale,
+  eliminaAttivitaFn = eliminaAttivitaReale,
+  leggiAttivitaFn = leggiAttivitaReale,
 }) {
   const threadId = randomUUID();
   const runId = randomUUID();
@@ -959,6 +979,68 @@ export async function avviaSessione({
       : { ok: true, esito: 'There was no note with that id — nothing to delete.' };
   };
 
+  /*
+   * ⭐⭐⭐ FASE N, quinto sistema (30/8) — Tasks. `cartellaAttivita` è
+   * GLOBALE (stesso principio di cartellaNote sopra). Stesso contratto
+   * "questo file non sa DOVE/COME" dei callback Notes.
+   */
+  const onAttivitaLista = async (argomenti) => {
+    const tutte = await elencaAttivitaFn({ cartella: cartellaAttivita });
+    const stato = argomenti?.status ?? 'all';
+    const filtrate = stato === 'all' ? tutte : tutte.filter((a) => (stato === 'done' ? a.stato === 'done' : a.stato !== 'done'));
+    const richiesto = Number(argomenti?.limit);
+    const limite = Number.isFinite(richiesto) ? Math.min(Math.max(richiesto, 1), 50) : 20;
+    return { attivita: filtrate.slice(0, limite), totale: filtrate.length };
+  };
+
+  const onAttivitaCrea = async (argomenti) => {
+    try {
+      const creata = await creaAttivitaFn({ cartella: cartellaAttivita, title: argomenti?.title, description: argomenti?.description, priority: argomenti?.priority ?? 'normal' });
+      return { ok: true, esito: `Added the task «${creata.titolo}» (id ${creata.id}).` };
+    } catch (errore) {
+      return { ok: false, esito: errore instanceof Error ? errore.message : String(errore) };
+    }
+  };
+
+  const onAttivitaCompleta = async (argomenti) => {
+    try {
+      const stato = argomenti?.status ?? 'done';
+      const aggiornata = await completaAttivitaFn({ cartella: cartellaAttivita, id: argomenti?.id, status: stato });
+      return { ok: true, esito: stato === 'done' ? `Marked «${aggiornata.titolo}» as done.` : `Moved «${aggiornata.titolo}» to ${stato}.` };
+    } catch (errore) {
+      if (errore?.code === 'TASK_NOT_FOUND') {
+        return { ok: false, esito: 'There is no task with that id. Call tasks_list to see the current ones.' };
+      }
+      return { ok: false, esito: errore instanceof Error ? errore.message : String(errore) };
+    }
+  };
+
+  const onAttivitaAggiorna = async (argomenti) => {
+    // ⛔ Rifiutato QUI, non nello store: una patch vuota non è un errore di validazione del campo, è "niente da fare" — stesso principio del tool mobile. Per marcare fatto/iniziato c'è tasks_complete, mai qui.
+    if (argomenti?.title === undefined && argomenti?.description === undefined && argomenti?.priority === undefined) {
+      return { ok: false, esito: 'Nothing to change: send at least a title, a description or a priority. To mark a task done, use tasks_complete.' };
+    }
+    try {
+      const aggiornata = await aggiornaAttivitaFn({ cartella: cartellaAttivita, id: argomenti?.id, title: argomenti?.title, description: argomenti?.description, priority: argomenti?.priority });
+      return { ok: true, esito: `Updated the task «${aggiornata.titolo}».` };
+    } catch (errore) {
+      if (errore?.code === 'TASK_NOT_FOUND') {
+        return { ok: false, esito: 'There is no task with that id. Call tasks_list to see the current ones.' };
+      }
+      return { ok: false, esito: errore instanceof Error ? errore.message : String(errore) };
+    }
+  };
+
+  const onAttivitaElimina = async (argomenti) => {
+    const id = argomenti?.id ?? '';
+    // ⛔ Stesso principio di onNoteElimina: verificato PRIMA di cancellare, per distinguere "cancellata ora" da "già assente".
+    const esisteva = await leggiAttivitaFn({ cartella: cartellaAttivita, id });
+    await eliminaAttivitaFn({ cartella: cartellaAttivita, id });
+    return esisteva
+      ? { ok: true, esito: 'That task has been deleted.' }
+      : { ok: true, esito: 'There was no task with that id — nothing to delete.' };
+  };
+
   try {
     const esito = await talosLavoraFn({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
@@ -969,6 +1051,7 @@ export async function avviaSessione({
       onLibreriaLista, onLibreriaCerca, onLibreriaLeggi, onLibreriaOrigine,
       onLibreriaRinomina, onLibreriaElimina, onLibreriaEsporta, onLibreriaPolitica,
       onNoteLista, onNoteCrea, onNoteAggiorna, onNoteElimina,
+      onAttivitaLista, onAttivitaCrea, onAttivitaCompleta, onAttivitaAggiorna, onAttivitaElimina,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));
     return { threadId, runId, ok: esito.comeFinita === 'concluso', esito, erroreInterno: null };
