@@ -29,6 +29,19 @@ harness-ui/.hooks-trust/
 # produce. Lo script (scripts/qa-visual-pipeline.mjs) resta versionato.
 harness-ui/.qa-runs/
 
+# ⛔⛔⛔ 30/8, FASE L — trovato mentre aggiungevo .sessions-store/ qui
+# sotto: .mcp-trust/ (FASE E) e .plugin-trust/ (FASE G) non erano MAI
+# state aggiunte, un debito dormiente (mai popolate finora, quindi mai
+# rischiato un commit reale — verificato, non presunto) corretto qui
+# nello stesso giro, stesso principio di .hooks-trust/ sopra.
+harness-ui/.mcp-trust/
+harness-ui/.plugin-trust/
+
+# ⭐ 30/8 — FASE L: il registro persistito delle sessioni (una riga
+# JSONL per evento, append-only) — dati locali generati a runtime,
+# stesso principio di .automations/ in cima a questo blocco.
+harness-ui/.sessions-store/
+
 core/vendor/
 validator/node_modules/
 control-plane/vendor/

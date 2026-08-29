@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import { createSessionRegistry as createSessionRegistryReale } from '../src/session-registry.mjs';
@@ -11,6 +14,7 @@ import { McpRegistryError } from '../src/mcp-registry.mjs';
 import { SkillRegistryError } from '../src/skill-registry.mjs';
 import { PluginRegistryError } from '../src/plugin-registry.mjs';
 import { LibraryStoreError } from '../src/library-store.mjs';
+import { leggiRegistro as leggiRegistroPerAttesa } from '../src/session-store.mjs';
 
 // Ne' avviaSessione ne' talosLavora girano MAI qui, veri o finti a metà: si
 // inietta avviaSessioneFn/preparaEsecuzioneFn interamente controllati dal
@@ -2230,4 +2234,173 @@ test('⛔ AL CONTRARIO — fidaPlugin su un id sessione inesistente: NOT_FOUND',
   const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
   const esito = await registro.fidaPlugin('id-mai-esistito', 'esempio');
   assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+});
+
+/*
+ * ⭐⭐⭐ FASE L (30/8) — owner: "ricerca web competitor" sulla domanda "un
+ * riavvio perde una sessione in corso, è mai capitato?". La ricerca ha
+ * trovato che questo file dichiara "solo in memoria... non ancora
+ * aperto" fin dalla prima riga — persistenza su disco, ripristino
+ * all'avvio.
+ */
+function cartellaStoreVera() {
+  return mkdtempSync(join(tmpdir(), 'talos-session-store-registry-'));
+}
+
+/*
+ * ⛔⛔⛔ Le scritture di `registraRigaFn` in session-registry.mjs sono
+ * fire-and-forget per costruzione (session-registry non deve MAI bloccare
+ * il dispatch su un I/O disco) — quindi un tetto FISSO di `setImmediate`
+ * prima di leggere il disco e' un'attesa cieca, non una garanzia: misurato
+ * con uno script a parte, la CONCLUSA e la MAI-CONCLUSA impiegano tempi
+ * reali diversi (il primo percorso ha piu' catene di promise pendenti, che
+ * di fatto regalano al filesystem piu' tempo reale prima che il test
+ * arrivi alla sua asserzione) — nessuna delle due e' garantita entro N
+ * tick. Si attende la CONDIZIONE vera (la riga cercata e' sul disco),
+ * mai un conteggio di tick.
+ */
+async function attendiRegistroSuDisco(cartellaStore, sessionId, condizione, { tentativi = 300, intervalloMs = 10 } = {}) {
+  for (let i = 0; i < tentativi; i++) {
+    let record = null;
+    try {
+      record = await leggiRegistroPerAttesa({ cartellaStore, sessionId });
+    } catch {
+      // Una lettura a meta' scrittura puo' vedere una riga troncata che non
+      // e' l'ultima — leggiRegistro la tratta come corruzione e lancia.
+      // E' transitorio (lo stesso poll la rilegge al giro dopo): si ritenta,
+      // non si fallisce sulla prima lettura sfortunata.
+    }
+    if (record && condizione(record)) return record;
+    await new Promise((r) => setTimeout(r, intervalloMs));
+  }
+  throw new Error(`attendiRegistroSuDisco: timeout aspettando la condizione per ${sessionId} in ${cartellaStore}`);
+}
+
+test('⛔⛔⛔ AL CONTRARIO — senza cartellaStore: ZERO file scritti su disco (il bug trovato dal vivo: 114 file test in .sessions-store/ prima di questa guardia)', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  registro.avvia('task-vero');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await new Promise((r) => setImmediate(r));
+  // Nessuna asserzione sul filesystem possibile qui (cartellaStore è undefined, nessun percorso da controllare) — la garanzia è che questo test non lancia e non scrive nulla: se registraRigaFn venisse chiamata con cartellaStore:undefined, mkdir/appendFile fallirebbero rumorosamente.
+  assert.ok(true, 'nessuna eccezione, nessuna scrittura tentata');
+});
+
+test('⛔⛔⛔ AL CONTRARIO — l\'intestazione è GIÀ sul disco appena avvia() torna, ZERO attese: trovato dalla verifica dal vivo (30/8), un processo ucciso 6ms dopo la creazione perdeva la sessione per intero perché la scrittura fire-and-forget non aveva ancora toccato il disco', () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const finta = sessioneControllabile();
+    const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    const { sessionId } = registro.avvia('task-vero');
+    // Nessun await, nessun setImmediate, nessun tick: se questo passa e' perche' la scrittura e' SINCRONA, non perche' abbiamo aspettato abbastanza.
+    const file = readdirSync(cartellaStore);
+    assert.deepEqual(file, [`${sessionId}.jsonl`]);
+    const contenuto = readFileSync(join(cartellaStore, `${sessionId}.jsonl`), 'utf8');
+    const record = JSON.parse(contenuto.trim().split('\n')[0]);
+    assert.equal(record.tipo, 'intestazione');
+    assert.equal(record.sessionId, sessionId);
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('⭐⭐⭐ CON cartellaStore: intestazione + eventi + messaggiFinali finiscono DAVVERO su disco', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const finta = sessioneControllabile();
+    const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    const { sessionId } = registro.avvia('task-vero');
+    finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { messaggiFinali: [{ role: 'user', content: 'ciao' }] } });
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((r) => r.tipo === 'messaggi-finali'));
+    const file = readdirSync(cartellaStore);
+    assert.deepEqual(file, [`${sessionId}.jsonl`]);
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('⭐⭐⭐⭐⭐ ripristina(): una sessione CONCLUSA prima del riavvio torna nell\'elenco di un registro NUOVO, con la storia intatta', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const finta = sessioneControllabile();
+    const primo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    const { sessionId } = primo.avvia('task-vero');
+    finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { messaggiFinali: [{ role: 'user', content: 'ciao' }] } });
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((r) => r.tipo === 'messaggi-finali'));
+
+    // Un registro NUOVO — simula il processo che riparte, zero sessioni vive in memoria.
+    const secondo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    const { ripristinate, totali } = await secondo.ripristina();
+    assert.equal(ripristinate, 1);
+    assert.equal(totali, 1);
+
+    const elenco = secondo.elenca();
+    assert.equal(elenco.length, 1);
+    assert.equal(elenco[0].sessionId, sessionId);
+    assert.equal(elenco[0].conclusa, true);
+    assert.equal(elenco[0].interrotta, false);
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔⛔ AL CONTRARIO — ripristina(): una sessione MAI conclusa (crash a metà) torna interrotta:true, mai travestita da "ancora in corso" o da "conclusa"', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const finta = sessioneControllabile();
+    const primo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    const { sessionId } = primo.avvia('task-vero');
+    // ⛔ MAI chiamato finta.concludi(): la sessione resta "in corso" per sempre, esattamente come un processo che muore a metà turno.
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((r) => r.tipo === 'intestazione'));
+
+    const secondo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    await secondo.ripristina();
+    const elenco = secondo.elenca();
+    assert.equal(elenco.length, 1);
+    assert.equal(elenco[0].conclusa, false);
+    assert.equal(elenco[0].interrotta, true);
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔ AL CONTRARIO — ripristina(): una sessione interrotta (messaggiFinali mai scritto) rifiuta resume() onestamente, stesso gate già esistente', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const finta = sessioneControllabile();
+    const primo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    const { sessionId } = primo.avvia('task-vero');
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((r) => r.tipo === 'intestazione'));
+
+    const secondo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    await secondo.ripristina();
+    const esito = secondo.resume(sessionId, 'un follow-up');
+    assert.deepEqual(esito, { erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server e non può essere ripresa: avvia una sessione nuova.', code: 'SESSION_NOT_READY' });
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('⛔ ripristina() SENZA cartellaStore: no-op sicuro, {ripristinate:0, totali:0}, mai un tentativo di leggere un percorso che non c\'è', async () => {
+  const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
+  const esito = await registro.ripristina();
+  assert.deepEqual(esito, { ripristinate: 0, totali: 0 });
+});
+
+test('⛔⛔ AL CONTRARIO — ripristina(): una sessione già VIVA in memoria (stesso processo) non viene mai sovrascritta dalla sua copia su disco', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const finta = sessioneControllabile();
+    const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    const { sessionId } = registro.avvia('task-vero');
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((r) => r.tipo === 'intestazione'));
+
+    const prima = registro.elenca()[0];
+    await registro.ripristina();
+    const dopo = registro.elenca()[0];
+    assert.equal(dopo.interrotta, false, 'una sessione viva non è mai "interrotta" solo perché ripristina() è stata chiamata di nuovo');
+    assert.deepEqual(prima, dopo);
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
 });
