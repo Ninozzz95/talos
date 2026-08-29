@@ -563,6 +563,68 @@ test('⭐⭐ e AL CONTRARIO: senza modello esplicito, avviaLibero() eredita il d
 });
 
 /*
+ * ⭐⭐⭐ 29/8 — FASE K, R2 planner costoso + editor economico. Stesso
+ * stile esatto dei test di `modello` appena sopra.
+ */
+test('⭐⭐⭐ avviaLibero() passa attraverso modelloPlanner scelto, undefined quando assente (mai un default forzato)', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
+    cartelleProgetto: [{ id: '0', percorso: '/tmp/progetto-vero', nome: 'progetto-vero' }],
+    modello: 'default/modello', chiave: 'k',
+  });
+
+  registro.avviaLibero({ cartellaId: '0', consegna: 'fai qualcosa', modello: 'editor-economico', modelloPlanner: 'planner-costoso' });
+
+  assert.equal(finta.ultimoInput.modelloPlanner, 'planner-costoso');
+});
+
+test('⛔ AL CONTRARIO — senza modelloPlanner esplicito, avviaLibero() lo lascia undefined (MAI il modello dell\'editor per default)', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
+    cartelleProgetto: [{ id: '0', percorso: '/tmp/progetto-vero', nome: 'progetto-vero' }],
+    modello: 'default/modello', chiave: 'k',
+  });
+
+  registro.avviaLibero({ cartellaId: '0', consegna: 'fai qualcosa', modello: 'editor-economico' });
+
+  assert.equal(finta.ultimoInput.modelloPlanner, undefined);
+});
+
+test('⭐⭐ un resume eredita il modelloPlanner della voce originale, mai perso a metà conversazione', async () => {
+  /*
+   * ⛔⛔⛔ resume() NON è async e chiama avviaSessioneFn una SECONDA volta —
+   * serve LO STESSO schema a due `sessioneControllabile()` già in uso per
+   * il test "resume() su una sessione CONCLUSA" più sotto in questo file
+   * (mai un SOLO `finta` con due call: `attesa` si risolve una volta sola,
+   * e senza il vero secondo giro un'asserzione su `ultimoInput` morderebbe
+   * ancora i dati del PRIMO giro, non provando nulla — trovato scrivendo
+   * questo stesso test la prima volta, con una prova diretta fuori dalla
+   * suite: senza `setImmediate` la voce non è ancora `conclusa` quando
+   * `resume()` gira, e torna SESSION_NOT_READY senza mai richiamare
+   * avviaSessioneFn).
+   */
+  const primoGiro = sessioneControllabile();
+  const secondoGiro = sessioneControllabile();
+  let chiamataNumero = 0;
+  const avviaSessioneFnCombinato = (input) => {
+    chiamataNumero += 1;
+    return chiamataNumero === 1 ? primoGiro.avviaSessioneFn(input) : secondoGiro.avviaSessioneFn(input);
+  };
+  const registro = createSessionRegistry({ avviaSessioneFn: avviaSessioneFnCombinato, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+
+  const { sessionId } = registro.avvia('task-vero', { modelloPlannerScelto: 'planner-costoso' });
+  primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: [{ role: 'user', content: 'x' }] } });
+  await new Promise((r) => setImmediate(r));
+
+  const ripreso = registro.resume(sessionId);
+  assert.equal(ripreso.sessionId, sessionId, 'resume deve riuscire DAVVERO, non SESSION_NOT_READY — altrimenti l\'asserzione sotto morderebbe dati del primo giro, non del resume');
+  assert.equal(secondoGiro.chiamate, 1, 'avviaSessioneFn deve essere richiamata una SECONDA volta');
+  assert.equal(secondoGiro.ultimoInput.modelloPlanner, 'planner-costoso');
+});
+
+/*
  * ⭐⭐⭐ 28/8 — LA PILLOLA PERMESSI (piano elegant-spinning-dongarra.md,
  * owner: "read only/workspace write/on request/full access"). Ricerca
  * fatta prima di scrivere (REGOLA ZERO, e HERMES AGENT — vedi memoria

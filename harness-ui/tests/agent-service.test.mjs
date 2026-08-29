@@ -910,6 +910,40 @@ test('⛔⛔ AL CONTRARIO — generate_image: immagine assente (config non wirea
 });
 
 /*
+ * ⭐⭐⭐ 29/8 — FASE K, R2 planner costoso + editor economico. Questo
+ * file resta un adattatore puro: `modelloPlanner` viaggia SENZA logica
+ * propria fino a talosLavoraFn — il pre-loop, il gate di sola
+ * lettura, il filtro degli attrezzi vivono tutti nel kernel.
+ */
+test('⭐⭐⭐ PARITÀ — modelloPlanner arriva a talosLavoraFn ESATTAMENTE come passato, senza trasformazione', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'editor-economico', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    modelloPlanner: 'planner-costoso',
+  });
+
+  assert.equal(catturato.modelloPlanner, 'planner-costoso');
+  assert.equal(catturato.modello, 'editor-economico', 'modello resta il campo dell\'editor, invariato');
+});
+
+test('⛔ AL CONTRARIO — modelloPlanner assente arriva undefined a talosLavoraFn, mai un valore inventato', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn });
+
+  assert.equal(catturato.modelloPlanner, undefined);
+});
+
+/*
  * ⭐⭐⭐ 28/8 — LA PILLOLA PERMESSI: questo file resta un adattatore puro,
  * `livelloAccesso`/`chiediApprovazioneFn` viaggiano SENZA logica propria
  * fino a talosLavoraFn — la decisione COSA rifiutare vive tutta nel

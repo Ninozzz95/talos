@@ -322,7 +322,7 @@ test('POST /api/v1/sessions con client:\'mobile\' passa {mobile:true} a sessionR
     body: JSON.stringify({ taskId: 'sconto-a-scaglioni', client: 'mobile' }),
   });
   assert.equal(risposta.status, 200);
-  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, reasoningScelto: null, mobile: true, permessiScelto: null, permessiPerAttrezzoScelto: null });
+  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, modelloPlannerScelto: null, reasoningScelto: null, mobile: true, permessiScelto: null, permessiPerAttrezzoScelto: null });
 });
 
 test('⛔ AL CONTRARIO: client:\'desktop\' ESPLICITO e client ASSENTE producono entrambi {mobile:false} — nessuna differenza di comportamento', async (t) => {
@@ -332,13 +332,38 @@ test('⛔ AL CONTRARIO: client:\'desktop\' ESPLICITO e client ASSENTE producono 
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ taskId: 'sconto-a-scaglioni', client: 'desktop' }),
   });
-  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, reasoningScelto: null, mobile: false, permessiScelto: null, permessiPerAttrezzoScelto: null });
+  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, modelloPlannerScelto: null, reasoningScelto: null, mobile: false, permessiScelto: null, permessiPerAttrezzoScelto: null });
 
   await fetch(`${base}/api/v1/sessions`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ taskId: 'sconto-a-scaglioni' }),
   });
-  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, reasoningScelto: null, mobile: false, permessiScelto: null, permessiPerAttrezzoScelto: null });
+  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, modelloPlannerScelto: null, reasoningScelto: null, mobile: false, permessiScelto: null, permessiPerAttrezzoScelto: null });
+});
+
+/*
+ * ⭐⭐⭐ 29/8 — FASE K, R2 planner costoso + editor economico. Stesso
+ * stile esatto del test client:'mobile' sopra.
+ */
+test('⭐⭐⭐ POST /api/v1/sessions con modelloPlanner lo passa a sessionRegistry.avvia, invariato', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taskId: 'sconto-a-scaglioni', modello: 'qwen/qwen3.8-flash', modelloPlanner: 'z-ai/glm-5.3-flash' }),
+  });
+  assert.equal(risposta.status, 200);
+  assert.equal(sessionRegistry.ultimeOpzioniAvvio.modelloPlannerScelto, 'z-ai/glm-5.3-flash');
+});
+
+test('⛔⛔ AL CONTRARIO — POST /api/v1/sessions con modelloPlanner malformato (niente "vendor/nome"): 400 QUERY_INVALID, avvia MAI chiamato', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taskId: 'sconto-a-scaglioni', modelloPlanner: 'senza-slash' }),
+  });
+  assert.equal(risposta.status, 400);
+  assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
+  assert.equal(sessionRegistry.ultimeOpzioniAvvio, null, 'avvia non deve mai essere chiamato su un corpo rifiutato');
 });
 
 /*
