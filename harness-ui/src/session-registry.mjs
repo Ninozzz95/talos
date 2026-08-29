@@ -54,6 +54,7 @@ import {
   verificaTrustMcp as verificaTrustMcpReale,
 } from './mcp-registry.mjs';
 import { caricaSkill as caricaSkillReale, SkillRegistryError } from './skill-registry.mjs';
+import { elencaVoci as elencaVociReale, LibraryStoreError } from './library-store.mjs';
 import {
   caricaPlugin as caricaPluginReale,
   fidaPlugin as fidaPluginReale,
@@ -120,6 +121,16 @@ export function createSessionRegistry({
    * nome per evitare confusione a chi legge.
    */
   caricaSkillRegistroFn = caricaSkillReale,
+  /*
+   * ⭐⭐⭐ 29/8 — FASE N, il pannello Capability hub: stesso pattern
+   * iniettabile di caricaSkillRegistroFn appena sopra, stesso motivo —
+   * nessun gate di fiducia, una voce di Libreria è un file locale come
+   * un altro (vedi library-store.mjs). Nome `elencaVociRegistroFn`,
+   * non `elencaVociFn`: quel nome è già preso in agent-service.mjs per
+   * il punto di contatto I/O dei 4 callback del modello — stessa
+   * distinzione di caricaSkillRegistroFn/caricaSkillFn appena sopra.
+   */
+  elencaVociRegistroFn = elencaVociReale,
   /*
    * ⭐⭐⭐ 29/8 — FASE G, esecuzione. Stesso pattern REALE di
    * `cartellaTrustMcp`/`cartellaTrustHook` sopra — un default relativo
@@ -942,6 +953,33 @@ export function createSessionRegistry({
         throw errore;
       }
       return { ok: true, skills: skills.map((s) => ({ id: s.id, name: s.name, description: s.description })), errore: null };
+    },
+
+    /**
+     * ⭐⭐⭐ 29/8 — FASE N, il pannello Capability hub: stesso ruolo di
+     * elencaSkill appena sopra — nessun `fidato` da calcolare, una
+     * voce di Libreria non ha un gate di fiducia (vedi
+     * library-store.mjs). `null` se la sessione non esiste; una
+     * `.harness-ui-library/` malformata (un `meta.json` rotto) torna
+     * `{voci:null, errore}`, stesso principio "gli stati sono tre" di
+     * elencaSkill/elencaServerMcp — MAI la lista vuota di una Libreria
+     * VUOTA scambiata per l'errore di una Libreria ROTTA.
+     */
+    async elencaLibreria(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      let voci;
+      try {
+        voci = await elencaVociRegistroFn({ cartella: voce.cartella });
+      } catch (errore) {
+        if (errore instanceof LibraryStoreError) return { ok: true, voci: null, errore: errore.message };
+        throw errore;
+      }
+      return {
+        ok: true,
+        voci: voci.map((v) => ({ id: v.id, nome: v.nome, fileType: v.fileType, origine: v.origine, aggiornatoIl: v.aggiornatoIl })),
+        errore: null,
+      };
     },
 
     /**

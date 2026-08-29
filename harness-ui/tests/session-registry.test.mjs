@@ -10,6 +10,7 @@ import { HookRegistryError } from '../src/hook-registry.mjs';
 import { McpRegistryError } from '../src/mcp-registry.mjs';
 import { SkillRegistryError } from '../src/skill-registry.mjs';
 import { PluginRegistryError } from '../src/plugin-registry.mjs';
+import { LibraryStoreError } from '../src/library-store.mjs';
 
 // Ne' avviaSessione ne' talosLavora girano MAI qui, veri o finti a metà: si
 // inietta avviaSessioneFn/preparaEsecuzioneFn interamente controllati dal
@@ -2026,6 +2027,50 @@ test('⛔⛔ AL CONTRARIO — elencaSkill con .harness-ui-skills malformato: {sk
 test('⛔ AL CONTRARIO — elencaSkill su un id inesistente: NOT_FOUND', async () => {
   const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
   const esito = await registro.elencaSkill('id-mai-esistito');
+  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+});
+
+/*
+ * ⭐⭐⭐ FASE N (29/8): `elencaLibreria` è ciò che il Capability hub
+ * chiama — stesso schema di `elencaSkill`, senza il concetto di
+ * fiducia (una voce di Libreria non ce l'ha, vedi library-store.mjs).
+ */
+test('⭐⭐⭐ elencaLibreria: torna le voci dichiarate, id/nome/fileType/origine/aggiornatoIl soltanto', async () => {
+  const finta = sessioneControllabile();
+  const vocePronta = { id: 'lib-1', nome: 'report.md', fileType: 'document', origine: 'uploaded', creatoIl: 'x', aggiornatoIl: '2026-08-29T10:00:00.000Z', modello: null, provider: null };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    elencaVociRegistroFn: async () => [vocePronta],
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.elencaLibreria(sessionId);
+
+  assert.equal(esito.ok, true);
+  assert.equal(esito.errore, null);
+  assert.deepEqual(esito.voci, [{ id: 'lib-1', nome: 'report.md', fileType: 'document', origine: 'uploaded', aggiornatoIl: '2026-08-29T10:00:00.000Z' }]);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔ AL CONTRARIO — elencaLibreria con .harness-ui-library malformato: {voci:null, errore}, MAI un array vuoto che si legge come "Libreria vuota"', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    elencaVociRegistroFn: async () => { throw new LibraryStoreError('rotta/meta.json non è JSON valido', 'LIBRARY_MALFORMED'); },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.elencaLibreria(sessionId);
+
+  assert.equal(esito.ok, true);
+  assert.equal(esito.voci, null, 'null, non [] — sono due fatti diversi');
+  assert.match(esito.errore, /non è JSON valido/);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔ AL CONTRARIO — elencaLibreria su un id inesistente: NOT_FOUND', async () => {
+  const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
+  const esito = await registro.elencaLibreria('id-mai-esistito');
   assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
 });
 

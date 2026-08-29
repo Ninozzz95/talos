@@ -1168,6 +1168,56 @@
     mount.replaceChildren(...dati.skills.map((skill) => rigaSkill(skill)));
   }
 
+  /**
+   * ⭐⭐⭐ 29/8 — FASE N, piano `elegant-spinning-dongarra.md`. Stesso
+   * identico pattern di caricaPannelloSkill() appena sopra — nessun
+   * bottone "Fida" (una voce di Libreria non ha un gate di fiducia,
+   * vedi library-store.mjs).
+   */
+  async function caricaPannelloLibreria() {
+    const mount = $('#libraryListMount', sheetBody);
+    if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
+    if (!state.realSession.id) {
+      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione attiva — apri o avvia un task per vedere la Libreria del progetto.'));
+      return;
+    }
+    mount.replaceChildren(textElement('p', 'board-empty', 'Carico la Libreria…'));
+    let dati;
+    try {
+      dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/library`);
+    } catch (error) {
+      mount.replaceChildren(textElement('p', 'board-empty', `Libreria non disponibile: ${error.message}`));
+      return;
+    }
+    if (mount !== $('#libraryListMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
+    if (dati.errore) {
+      mount.replaceChildren(textElement('p', 'board-empty', `.harness-ui-library non valida: ${dati.errore}`));
+      return;
+    }
+    if (!dati.voci || dati.voci.length === 0) {
+      mount.replaceChildren(textElement('p', 'board-empty', 'Nessun file in Libreria per questo progetto (.harness-ui-library/).'));
+      return;
+    }
+    mount.replaceChildren(...dati.voci.map((voce) => rigaVoceLibreria(voce)));
+  }
+
+  /** ⭐⭐⭐ 29/8 — sempre attiva (una voce di Libreria non ha un gate di fiducia): niente bottone, solo il riassunto. */
+  function rigaVoceLibreria(voce) {
+    const riga = document.createElement('div');
+    riga.className = 'sheet-option';
+    riga.setAttribute('role', 'group');
+    const iconEl = document.createElement('span');
+    iconEl.className = 'sheet-icon';
+    iconEl.innerHTML = icon(voce.fileType === 'image' ? 'i-image' : 'i-files');
+    const testo = document.createElement('span');
+    testo.append(
+      textElement('strong', null, voce.nome),
+      textElement('small', null, `${voce.origine === 'generated' ? 'Generato' : 'Caricato'} · ${voce.fileType}`),
+    );
+    riga.append(iconEl, testo, textElement('span', 'status-chip success', voce.origine === 'generated' ? 'generato' : 'caricato'));
+    return riga;
+  }
+
   /** ⭐⭐⭐ 29/8 — sempre attiva (le skill non hanno un gate di fiducia): niente bottone, solo il riassunto. */
   function rigaSkill(skill) {
     const riga = document.createElement('div');
@@ -1851,7 +1901,7 @@
     showEmbeddedDialog(sheetDialog);
     wireSheetActions(type);
     if (type === 'control') { refreshDoctorBadge(); caricaPannelloHooks(); }
-    if (type === 'capabilities') { caricaPannelloMcp(); caricaPannelloSkill(); caricaPannelloPlugin(); }
+    if (type === 'capabilities') { caricaPannelloMcp(); caricaPannelloSkill(); caricaPannelloPlugin(); caricaPannelloLibreria(); }
     if (type === 'sessionTree') caricaAlberoSessione();
     /*
      * ⭐⭐⭐ 27/8, owner: "riaprire lo stesso componente della selezione del
@@ -2042,10 +2092,14 @@
           <div id="pluginsListMount"></div>
         </div>
         <div class="sheet-section">
+          <span class="sheet-label">Libreria · file in .harness-ui-library/, per progetto</span>
+          <div id="libraryListMount"></div>
+        </div>
+        <div class="sheet-section">
           <span class="sheet-label">Non ancora implementato</span>
           ${[
-            ['Toolsets', 'i-code'], ['Web search', 'i-search'], ['Computer use', 'i-layout'],
-            ['Images', 'i-image'], ['Voice', 'i-mic'],
+            ['Toolsets', 'i-code'], ['Computer use', 'i-layout'],
+            ['Voice', 'i-mic'],
             ['Gateways · Telegram, Discord, Slack, WhatsApp', 'i-link'],
             ['Profiles', 'i-robot'],
           ].map(([name, ico]) => `
