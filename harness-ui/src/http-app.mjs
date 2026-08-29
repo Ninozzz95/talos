@@ -1393,6 +1393,8 @@ export function createHttpApp({
         const mcpMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/mcp$/.exec(url.pathname);
         // ⭐⭐⭐ 29/8 — FASE F: il Capability hub elenca le skill dichiarate — stesso principio, senza il concetto di fiducia (le skill non ce l'hanno).
         const skillsMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/skills$/.exec(url.pathname);
+        // ⭐⭐⭐ 29/8 — FASE N: il Capability hub elenca le voci di Libreria del progetto — stesso principio esatto di skillsMatch appena sopra (nessun concetto di fiducia).
+        const libraryMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/library$/.exec(url.pathname);
         // ⭐⭐⭐ 29/8 — FASE G: il Capability hub elenca i plugin dichiarati e il loro stato di fiducia vero — stesso principio esatto di mcpMatch sopra (un plugin ESEGUE, a differenza delle skill).
         const pluginsMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/plugins$/.exec(url.pathname);
         // ⭐⭐⭐ FASE C (28/8) — sub-agenti: il foglio "Albero sessione" elenca i figli VERI di una sessione, stesso principio di hooksMatch sopra.
@@ -1496,6 +1498,22 @@ export function createHttpApp({
             throw errore;
           }
           data = { skills: esito.skills, errore: esito.errore };
+        } else if (libraryMatch) {
+          requireNoQuery(url);
+          let sessionId;
+          try {
+            sessionId = decodeURIComponent(libraryMatch[1]);
+          } catch {
+            sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+            return;
+          }
+          const esito = await sessionRegistry.elencaLibreria(sessionId);
+          if ('erroreAvvio' in esito) {
+            const errore = new Error(esito.erroreAvvio);
+            errore.code = esito.code;
+            throw errore;
+          }
+          data = { voci: esito.voci, errore: esito.errore };
         } else if (pluginsMatch) {
           requireNoQuery(url);
           let sessionId;
