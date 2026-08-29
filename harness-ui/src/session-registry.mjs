@@ -682,7 +682,24 @@ export function createSessionRegistry({
         const eventi = record.filter((r) => typeof r.type === 'string');
         const messaggiFinaliRecord = record.find((r) => r.tipo === 'messaggi-finali');
         const ultimoEvento = eventi.at(-1);
-        const conclusa = ultimoEvento?.type === 'RunFinished' || ultimoEvento?.type === 'RunError';
+        /*
+         * ⭐⭐⭐ FASE L, trovato da un test intermittente (30/8), non da
+         * lettura: la riga RunFinished (broadcast()) e la riga
+         * messaggi-finali sono DUE scritture fire-and-forget indipendenti,
+         * innescate quasi nello stesso istante ma senza alcuna garanzia
+         * d'ordine reciproca — su disco possono atterrare in QUALUNQUE
+         * ordine. Basarsi solo sull'ULTIMO evento per `conclusa` significa
+         * che, se messaggi-finali vince la gara, una sessione DAVVERO
+         * conclusa (con una conversazione vera già scritta) viene
+         * classificata `interrotta` per un dettaglio di timing del
+         * filesystem, non per la sua storia reale. ⇒ la presenza stessa
+         * di `messaggiFinaliRecord` È la prova sufficiente: quella riga
+         * viene scritta SOLO dopo un run che ha prodotto messaggiFinali
+         * veri (mai su un RunError senza contenuto — vedi il call site in
+         * broadcast()), quindi non può mai attestare falsamente una
+         * conclusione che non c'è stata.
+         */
+        const conclusa = Boolean(messaggiFinaliRecord) || ultimoEvento?.type === 'RunFinished' || ultimoEvento?.type === 'RunError';
         const voce = {
           eventi, ascoltatori: new Set(), taskId: intestazione.taskId, cartella: intestazione.cartella, task: intestazione.task,
           comandoProva: intestazione.comandoProva, forkDa: intestazione.forkDa,
@@ -729,6 +746,19 @@ export function createSessionRegistry({
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       if (voce.conclusa) return { erroreAvvio: 'La sessione è già conclusa: usa resume(), non la coda', code: 'SESSION_NOT_READY' };
+      /*
+       * ⭐⭐⭐ FASE L (30/8) — trovato leggendo questo gate con lo stesso
+       * occhio già applicato a resume()/forka()/compatta()/shell(): senza
+       * questo controllo, una sessione `interrotta` (processo morto,
+       * conclusa:false) accoderebbe SILENZIOSAMENTE un messaggio che
+       * nessuno consumerà mai — nessun talosLavora vivo lo leggerà, mai
+       * un errore, mai una consegna. Non "inventa un dato", ma promette
+       * un effetto che non arriverà mai: stessa famiglia di guasto,
+       * rifiutato onestamente invece che accettato a vuoto.
+       */
+      if (voce.interrotta) {
+        return { erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server: un messaggio in coda qui non verrebbe mai consegnato. Avvia una sessione nuova.', code: 'SESSION_NOT_READY' };
+      }
       if (typeof testo !== 'string' || testo.trim() === '') return { erroreAvvio: 'Il messaggio in coda non può essere vuoto', code: 'QUERY_INVALID' };
       voce.codaMessaggi.push(testo);
       return { ok: true, posizione: voce.codaMessaggi.length };
@@ -835,6 +865,13 @@ export function createSessionRegistry({
       const originale = sessioni.get(sessionIdOrigine);
       if (!originale) return { erroreAvvio: 'Sessione origine non trovata', code: 'NOT_FOUND' };
       if (!originale.messaggiFinali) {
+        // ⭐⭐⭐ FASE L (30/8) — stessa distinzione onesta appena aggiunta a resume(): "ancora in corso" e "interrotta da un riavvio" sono due stati diversi sotto lo stesso originale.conclusa===false, mai lo stesso messaggio.
+        if (originale.interrotta) {
+          return {
+            erroreAvvio: 'La sessione origine è stata interrotta da un riavvio del server e non ha una conversazione da ereditare: avvia una sessione nuova.',
+            code: 'SESSION_NOT_READY',
+          };
+        }
         return {
           erroreAvvio: originale.conclusa
             ? 'La sessione origine non ha una conversazione da ereditare'
@@ -969,6 +1006,13 @@ export function createSessionRegistry({
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       if (!voce.messaggiFinali) {
+        // ⭐⭐⭐ FASE L (30/8) — stessa distinzione onesta di resume()/forka(): "ancora in corso" e "interrotta da un riavvio" non sono lo stesso stato.
+        if (voce.interrotta) {
+          return {
+            erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server e non ha una conversazione da compattare: avvia una sessione nuova.',
+            code: 'SESSION_NOT_READY',
+          };
+        }
         return {
           erroreAvvio: voce.conclusa
             ? 'Questa sessione non ha una conversazione da compattare'
@@ -1257,6 +1301,10 @@ export function createSessionRegistry({
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       if (!voce.conclusa) {
+        // ⭐⭐⭐ FASE L (30/8) — stessa distinzione onesta di resume()/forka()/compatta(): "ancora in corso" e "interrotta da un riavvio" non sono lo stesso stato.
+        if (voce.interrotta) {
+          return { erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server: un comando diretto qui richiederebbe scrivere sopra una cronologia che non concluderà mai. Avvia una sessione nuova.', code: 'SESSION_NOT_READY' };
+        }
         return { erroreAvvio: 'La sessione è ancora in corso: aspetta che concluda prima di un comando diretto', code: 'SESSION_NOT_READY' };
       }
       voce.conclusa = false;

@@ -14,7 +14,7 @@ import { McpRegistryError } from '../src/mcp-registry.mjs';
 import { SkillRegistryError } from '../src/skill-registry.mjs';
 import { PluginRegistryError } from '../src/plugin-registry.mjs';
 import { LibraryStoreError } from '../src/library-store.mjs';
-import { leggiRegistro as leggiRegistroPerAttesa } from '../src/session-store.mjs';
+import { leggiRegistro as leggiRegistroPerAttesa, registraRigaSync } from '../src/session-store.mjs';
 
 // Ne' avviaSessione ne' talosLavora girano MAI qui, veri o finti a metà: si
 // inietta avviaSessioneFn/preparaEsecuzioneFn interamente controllati dal
@@ -2344,6 +2344,28 @@ test('⭐⭐⭐⭐⭐ ripristina(): una sessione CONCLUSA prima del riavvio torn
   }
 });
 
+test('⛔⛔⛔ AL CONTRARIO — ripristina(): messaggi-finali sul disco SENZA che l\'ultimo evento sia RunFinished/RunError conta comunque come conclusa — trovato da un test INTERMITTENTE (30/8), non da lettura: le due scritture sono fire-and-forget indipendenti, l\'ordine su disco non è garantito', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    registraRigaSync({
+      cartellaStore, sessionId: 'sess-gara',
+      record: { tipo: 'intestazione', sessionId: 'sess-gara', taskId: 'task-vero', cartella: '/tmp/x', task: { id: 'task-vero', consegna: 'c' }, comandoProva: 'npm test', forkDa: null, avviataAlle: new Date().toISOString(), modello: 'm', modelloPlanner: null, reasoning: null, mobile: false, permessi: 'Workspace write', permessiPerAttrezzo: null, padreId: null, profonditaDelega: 0 },
+    });
+    registraRigaSync({ cartellaStore, sessionId: 'sess-gara', record: { type: 'RunStarted', threadId: 't1', runId: 'r1', _sequenza: 1 } });
+    // ⛔ NESSUN RunFinished scritto — esattamente lo scenario in cui la scrittura dell'evento perde la gara contro quella di messaggi-finali.
+    registraRigaSync({ cartellaStore, sessionId: 'sess-gara', record: { tipo: 'messaggi-finali', messaggiFinali: [{ role: 'user', content: 'ciao' }] } });
+
+    const registro = createSessionRegistry({ modello: 'm', chiave: 'k', cartellaStore });
+    const { ripristinate } = await registro.ripristina();
+    assert.equal(ripristinate, 1);
+    const elenco = registro.elenca();
+    assert.equal(elenco[0].conclusa, true, 'la PRESENZA di messaggi-finali basta: quella riga non si scrive mai su un run senza contenuto vero');
+    assert.equal(elenco[0].interrotta, false);
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
 test('⛔⛔⛔ AL CONTRARIO — ripristina(): una sessione MAI conclusa (crash a metà) torna interrotta:true, mai travestita da "ancora in corso" o da "conclusa"', async () => {
   const cartellaStore = cartellaStoreVera();
   try {
@@ -2376,6 +2398,74 @@ test('⛔⛔ AL CONTRARIO — ripristina(): una sessione interrotta (messaggiFin
     await secondo.ripristina();
     const esito = secondo.resume(sessionId, 'un follow-up');
     assert.deepEqual(esito, { erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server e non può essere ripresa: avvia una sessione nuova.', code: 'SESSION_NOT_READY' });
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔ AL CONTRARIO — ripristina(): una sessione interrotta rifiuta forka() onestamente, stesso principio di resume()', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const finta = sessioneControllabile();
+    const primo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    const { sessionId } = primo.avvia('task-vero');
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((r) => r.tipo === 'intestazione'));
+
+    const secondo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    await secondo.ripristina();
+    const esito = secondo.forka(sessionId);
+    assert.deepEqual(esito, { erroreAvvio: 'La sessione origine è stata interrotta da un riavvio del server e non ha una conversazione da ereditare: avvia una sessione nuova.', code: 'SESSION_NOT_READY' });
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔ AL CONTRARIO — ripristina(): una sessione interrotta rifiuta compatta() onestamente, stesso principio di resume()', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const finta = sessioneControllabile();
+    const primo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    const { sessionId } = primo.avvia('task-vero');
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((r) => r.tipo === 'intestazione'));
+
+    const secondo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    await secondo.ripristina();
+    const esito = await secondo.compatta(sessionId);
+    assert.deepEqual(esito, { erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server e non ha una conversazione da compattare: avvia una sessione nuova.', code: 'SESSION_NOT_READY' });
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔ AL CONTRARIO — ripristina(): una sessione interrotta rifiuta shell() (comando diretto) onestamente, stesso principio di resume()', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const finta = sessioneControllabile();
+    const primo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    const { sessionId } = primo.avvia('task-vero');
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((r) => r.tipo === 'intestazione'));
+
+    const secondo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    await secondo.ripristina();
+    const esito = secondo.shell(sessionId, 'echo ciao');
+    assert.deepEqual(esito, { erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server: un comando diretto qui richiederebbe scrivere sopra una cronologia che non concluderà mai. Avvia una sessione nuova.', code: 'SESSION_NOT_READY' });
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔⛔ AL CONTRARIO — ripristina(): una sessione interrotta rifiuta accodaMessaggio(), mai un messaggio accodato che nessuno consumerà', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const finta = sessioneControllabile();
+    const primo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    const { sessionId } = primo.avvia('task-vero');
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((r) => r.tipo === 'intestazione'));
+
+    const secondo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    await secondo.ripristina();
+    const esito = secondo.accodaMessaggio(sessionId, 'un messaggio che nessuno leggerà mai');
+    assert.deepEqual(esito, { erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server: un messaggio in coda qui non verrebbe mai consegnato. Avvia una sessione nuova.', code: 'SESSION_NOT_READY' });
   } finally {
     rmSync(cartellaStore, { recursive: true, force: true });
   }
