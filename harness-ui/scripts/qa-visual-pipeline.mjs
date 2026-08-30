@@ -1252,6 +1252,47 @@ const SCENARI = {
       p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
     }
   },
+
+  /**
+   * ⭐⭐⭐ 30/8 — piano di test visivo (owner: "test visivo delle capacità
+   * del harness fatte finora", NON TALOS-BANCO). Task 0 della sequenza:
+   * ricognizione gratuita, zero chiamata al modello — stato vuoto vero,
+   * il pannello "Attrezzi dell'harness" (debito noto: mostra solo 7/43
+   * tool reali), e se le etichette "Agents"/"Approval policy per-tool"
+   * nel Control plane sono ancora oneste "non implementato" nonostante
+   * FASE B/C le abbiano chiuse da tempo (possibile stale label, mai
+   * verificato prima).
+   */
+  async 'qa-task-0-ricognizione'(p) {
+    await p.attendi(1200);
+    await p.screenshot('stato-vuoto', { nota: 'atteso: brand hero (logo+benvenuto), MAI una chat vuota' });
+
+    await p.click('#capabilityBtn');
+    await p.attendi(300);
+    await p.screenshot('capability-hub', { nota: 'atteso: sezione "Attrezzi dell\'harness" — verificare quanti tool reali mostra (debito noto: 7/43)' });
+    const testoAttrezzi = await p.testo('[data-open-sheet="capabilities"], #sheetBody');
+    p.nota(`testo pannello Capability hub (assaggio): ${JSON.stringify(testoAttrezzi?.slice(0, 600))}`);
+    await p.click('#closeSheet');
+    await p.attendi(200);
+
+    await p.click('#commandPaletteBtn');
+    await p.attendi(200);
+    await p.click('[data-command="control"]');
+    await p.attendiCondizione("!document.querySelector('#sheetBody')?.textContent?.includes('Carico')", { descrizione: 'il Control plane ha finito di caricare' });
+    await p.screenshot('control-plane', { nota: 'atteso: verificare se "Agents"/"Approval policy per-tool" sono ancora etichettate "non implementato" nonostante FASE B/C le abbiano chiuse' });
+    const testoControlPlane = await p.testo('#sheetBody');
+    p.nota(`testo Control plane (assaggio): ${JSON.stringify(testoControlPlane?.slice(0, 800))}`);
+    if (/Agents[\s\S]{0,80}non ancora implement/i.test(testoControlPlane ?? '')) {
+      p.difetto('l\'etichetta "Agents" nel Control plane dichiara ancora "non ancora implementato" — possibile stale label, i sub-agenti (delega_sottotask, FASE C) sono reali da tempo', { severita: 'nota' });
+    }
+    await p.click('#closeSheet');
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
 };
 
 // --------------------------------------------------------------------
