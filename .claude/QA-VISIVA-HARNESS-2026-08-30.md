@@ -53,7 +53,7 @@ sotto, prima di proseguire con Task 6.
 | 6 | `py-carica-ordini-csv` | "Serve una funzione che carica gli ordini da un file CSV e segnali chiaramente, riga per riga, se manca un campo o il prezzo è negativo. Prima cerca online qual è il modo più comune e sicuro in Python per farlo, poi implementalo. Alla fine salvami un breve riassunto di cosa hai fatto." | web_search, Libreria | ✅ fatto — web_search confermato, giri-esauriti riprodotto dal vivo, Libreria resta NON verificata |
 | 7 | `html-filtro-articoli` | "Aggiungi un filtro di testo alla lista articoli del preventivo. Mentre ci lavori, segnami una nota con la decisione presa sul nome della funzione, e aggiungimi un promemoria per rivedere i test più tardi." | Notes, Tasks | ✅ fatto — Notes e Tasks entrambi confermati puliti |
 | 8 | `game-ostacolo-mobile` | "Aggiungi un nuovo tipo di ostacolo che si muove da solo nel serpentone. Ricordati per le prossime volte che preferisco che gli ostacoli abbiano nomi in italiano nel codice. Poi disegnami un'icona semplice per questo ostacolo." | Memory (+dedup), generate_image | ✅ fatto — 2 difetti reali trovati (card statiche "non implementato") |
-| 9 | `api-patch-parziale` | "Nell'API dei contatti manca un modo per aggiornare solo alcuni campi di un contatto senza dover rimandare tutto — puoi aggiungerlo? Usa gli stessi controlli già in uso quando si crea un contatto." | Hook/MCP/Skill/Plugin (preparati PRIMA) | ⬜ |
+| 9 | `api-patch-parziale` | "Nell'API dei contatti manca un modo per aggiornare solo alcuni campi di un contatto senza dover rimandare tutto — puoi aggiungerlo? Usa gli stessi controlli già in uso quando si crea un contatto." | Hook/MCP/Skill/Plugin (preparati PRIMA) | ✅ fatto — tutti e 4 scoperti, flusso di trust verificato end-to-end |
 | 10 | `crm-pipeline-fasi` | "Aggiungi allo stato di un contatto una 'fase' (lead, trattativa, cliente) con le transizioni permesse. Se ti torna utile per la prossima volta, costruisciti un piccolo strumento che segna un promemoria ogni volta che sposti un contatto in trattativa." | Tool Forge (crea+abilita+richiama) | ⬜ |
 | 11 | `api-note-orfane` | "Nell'API dei contatti, se provo ad aggiungere una nota a un contatto che non esiste dovrebbe dirmi che non lo trova — invece sembra funzionare comunque, puoi controllare? Nel frattempo avvia anche una ricerca approfondita su cosa si intende di solito per 'cascata di eliminazione' nei database, mi interessa capirlo meglio." | On request+approvazione, coda mid-run, Deep Research | ⬜ |
 | 12 | *(su misura)* | "Voglio che tu prepari con calma un piano per aggiungere un intero modulo di 'sconti fedeltà' al magazzino — nuove funzioni, nuovi test, e un aggiornamento della funzione che calcola il totale. Pensaci bene prima di scrivere una riga, poi esegui il piano. Se ti aiuta, prova anche a delegare la scrittura dei test a un sotto-incarico separato." | Planner/Editor, delega_sottotask | ⬜ |
@@ -519,6 +519,42 @@ conversazione invece di un riassunto naturale come tutti gli altri
 attrezzi (confrontare con `delega_sottotask` → "Delega: ..."). Gravità:
 cosmetico. 🔜 Un caso in più nello switch, stesso pattern degli altri.
 
+Zero eccezioni JS, zero errori console (a parte il favicon noto).
+
+### [Task 9] api-patch-parziale: Hook/MCP/Skill/Plugin, tutti e 4 seminati a mano — 2026-08-30 10:27
+Screenshot: `.qa-runs/qa-task-9-api-patch-2026-08-30T10-27-36-502Z/` (5)
+Preparazione PRIMA della corsa (come richiesto dalla copertura): 4 file
+scritti a mano in `api-contatti/` con lo schema letto dai sorgenti veri
+(`hook-registry.mjs`/`mcp-registry.mjs`/`skill-registry.mjs`/
+`plugin-registry.mjs`, non indovinato) — `.harness-ui-hooks.json`
+(hook `qa-log-scrittura`), `.harness-ui-mcp.json` (server
+`qa-server-prova`), `.harness-ui-skills/nota-qa/SKILL.md`,
+`.harness-ui-plugins/promemoria-qa/plugin.json`.
+
+**Tutti e 4 scoperti correttamente, testo reale non un segnaposto**:
+- Skill: "nota-qa · ... · **attivo**" — nessun gate di fiducia, per
+  design (le skill non eseguono nulla di per sé).
+- MCP: "qa-server-prova · node · tool: strumento_prova · **Fida**" —
+  untrusted corretto, allowlist mostrata.
+- Plugin: "promemoria-qa · ... · **Fida**" — untrusted corretto.
+- Hook (foglio DIVERSO — "control", non "capabilities": verificato
+  leggendo dove monta `caricaPannelloHook()`, non presunto uguale agli
+  altri tre): "qa-log-scrittura · post_tool_call · **Fida**".
+
+⭐⭐⭐ **Flusso di trust provato end-to-end, non solo osservato staticamente**:
+click reale sul bottone "Fida" dell'hook → screenshot DOPO mostra
+"qa-log-scrittura · post_tool_call · **attivo**" (badge verde,
+bottone "Fida" sparito) — il meccanismo hash-vincolato
+(hook-registry.mjs) funziona per davvero, non solo a leggere il
+codice. Non ripetuto per MCP/Plugin (stesso identico pattern di
+codice, dichiarato per design uniforme nei commenti sorgente — ripeterlo
+3 volte sarebbe stato ridondante, non un buco di copertura).
+
+2 file in Review (PATCH endpoint + presumibilmente i suoi test).
+Stessa schermata riconferma dal vivo il difetto già noto di Task 0.3
+("Agents"/"Approval policy per-tool" ancora sotto "NON ANCORA
+IMPLEMENTATO" nello stesso foglio Control plane) — non ri-registrato
+come nuovo, solo consistente con quanto già trovato.
 Zero eccezioni JS, zero errori console (a parte il favicon noto).
 
 Formato per ogni voce, da qui in avanti:
