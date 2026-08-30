@@ -209,6 +209,22 @@ function registroFinto() {
       if (sessionId === 'sess-ricerca-rotta') return { ok: true, ricerche: null, errore: '.harness-ui-research/rotta.json non è un JSON valido' };
       return { ok: true, ricerche: [{ id: 'sess-ricerca-1', titolo: 'Il caching di OpenRouter', stato: 'done', avviataAlle: '2026-08-30T10:00:00.000Z' }], errore: null };
     },
+    /*
+     * ⭐⭐⭐⭐ FASE N, nono e ultimo sistema (30/8): stesso stile esatto di
+     * elencaRicerche appena sopra.
+     */
+    async elencaToolForgiati(sessionId) {
+      if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (sessionId === 'sess-forge-rotta') return { ok: true, strumenti: null, errore: '.tool-forge-store/rotta.json non è un JSON valido' };
+      return { ok: true, strumenti: [{ id: 'log-water-intake', titolo: 'Log water intake', descrizione: 'x', capacita: ['notes.create'], rischio: 'R2', abilitato: false, installatoAlle: '2026-08-30T10:00:00.000Z' }], errore: null };
+    },
+    ultimaAbilitaForge: null,
+    async abilitaToolForgiato(sessionId, id, abilitato) {
+      this.ultimaAbilitaForge = { sessionId, id, abilitato };
+      if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (id === 'tool-inesistente') return { erroreAvvio: `Tool forgiato "${id}" non trovato in .tool-forge-store/`, code: 'NOT_FOUND' };
+      return { ok: true };
+    },
     ultimaFiduciaServerMcp: null,
     async fidaServerMcp(sessionId, serverId) {
       this.ultimaFiduciaServerMcp = { sessionId, serverId };
@@ -1309,6 +1325,71 @@ test('⭐ GET /api/v1/sessions/{id}/research torna le ricerche dal registro', as
 test('⛔ AL CONTRARIO — GET .../research su un id inesistente: 404 NOT_FOUND', async (t) => {
   const { base } = await listen(t);
   const risposta = await fetch(`${base}/api/v1/sessions/non-esiste/research`);
+  assert.equal(risposta.status, 404);
+});
+
+/*
+ * ⭐⭐⭐⭐ FASE N, nono e ultimo sistema (30/8) — GET .../tool-forge: il
+ * Capability hub chiama questa rotta per mostrare i tool forgiati
+ * installati (GLOBALI) — stesso principio esatto della rotta research.
+ */
+test('⭐ GET /api/v1/sessions/{id}/tool-forge torna i tool forgiati dal registro', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/tool-forge`);
+  assert.equal(risposta.status, 200);
+  const corpo = await risposta.json();
+  assert.deepEqual(corpo.data.strumenti, [{ id: 'log-water-intake', titolo: 'Log water intake', descrizione: 'x', capacita: ['notes.create'], rischio: 'R2', abilitato: false, installatoAlle: '2026-08-30T10:00:00.000Z' }]);
+  assert.equal(corpo.data.errore, null);
+});
+
+test('⛔ AL CONTRARIO — GET .../tool-forge su un id inesistente: 404 NOT_FOUND', async (t) => {
+  const { base } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions/non-esiste/tool-forge`);
+  assert.equal(risposta.status, 404);
+});
+
+/*
+ * ⭐⭐⭐⭐⭐ FASE N, nono e ultimo sistema (30/8) — POST .../tool-forge/:id/enable,
+ * l'UNICA mutazione owner-facing di tutta FASE N (vedi la doc in
+ * tool-forge-store.mjs sul perché). Stesso stile di POST .../approve.
+ */
+test('⭐⭐⭐⭐⭐ POST /api/v1/sessions/:id/tool-forge/:toolId/enable con {abilitato} raggiunge sessionRegistry.abilitaToolForgiato', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/tool-forge/${encodeURIComponent('log-water-intake')}/enable`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ abilitato: true }),
+  });
+  assert.equal(risposta.status, 200);
+  assert.deepEqual(sessionRegistry.ultimaAbilitaForge, { sessionId, id: 'log-water-intake', abilitato: true });
+});
+
+test('⛔⛔ AL CONTRARIO — POST .../tool-forge/:id/enable con un corpo malformato (abilitato non booleano, o assente): 400 QUERY_INVALID', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  for (const corpo of [{ abilitato: 'sì' }, {}, { abilitato: true, extra: 1 }]) {
+    const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/tool-forge/log-water-intake/enable`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo),
+    });
+    assert.equal(risposta.status, 400, JSON.stringify(corpo));
+    assert.equal((await risposta.json()).error.code, 'QUERY_INVALID', JSON.stringify(corpo));
+  }
+});
+
+test('⛔ AL CONTRARIO — POST .../tool-forge/:id/enable su una sessione inesistente: 404 NOT_FOUND', async (t) => {
+  const { base } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions/mai-esistita/tool-forge/x/enable`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ abilitato: true }),
+  });
+  assert.equal(risposta.status, 404);
+});
+
+test('⛔⛔ AL CONTRARIO — POST .../tool-forge/:id/enable su un toolId che non esiste in .tool-forge-store/: 404 NOT_FOUND, mai un {ok:true} bugiardo', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/tool-forge/tool-inesistente/enable`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ abilitato: true }),
+  });
   assert.equal(risposta.status, 404);
 });
 

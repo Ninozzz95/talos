@@ -72,6 +72,9 @@ import {
 } from './research-store.mjs';
 import { creaResearchOrchestrator } from './research-orchestrator.mjs';
 import {
+  elencaToolForgiati as elencaToolForgiatiReale, abilitaToolForgiato as abilitaToolForgiatoReale, ToolForgeStoreError,
+} from './tool-forge-store.mjs';
+import {
   caricaPlugin as caricaPluginReale,
   fidaPlugin as fidaPluginReale,
   PluginRegistryError,
@@ -267,6 +270,21 @@ export function createSessionRegistry({
   eliminaRicercaFn = eliminaRicercaReale, elencaRicercheFn = elencaRicercheReale,
   salvaVoceLibreriaFn = salvaVoceLibreriaReale, leggiVoceLibreriaFn = leggiVoceLibreriaReale, eliminaVoceLibreriaFn = eliminaVoceLibreriaReale,
   randomUUIDFn = randomUUID,
+  /*
+   * ⭐⭐⭐⭐ FASE N, nono e ultimo sistema (30/8) — Tool Forge. GLOBALE
+   * come Notes/Tasks/Memory (vedi la doc in tool-forge-store.mjs sul
+   * perché) — stesso pattern REALE di cartellaMemoria: un default vero
+   * qui è sicuro perché le scritture sono rare e gated (`tool_create`
+   * deve essere nominato in strumentiEstesi E il modello deve
+   * scegliere di chiamarlo). `elencaToolForgiatiFn`/`abilitaToolForgiatoFn`
+   * servono al pannello Capability hub — `abilitaToolForgiato` è
+   * l'UNICA mutazione owner-facing di tutta FASE N (vedi la doc in
+   * tool-forge-store.mjs: enable/disable non è mai un tool del
+   * modello, nemmeno sul mobile).
+   */
+  cartellaForge = fileURLToPath(new URL('../.tool-forge-store/', import.meta.url)),
+  elencaToolForgiatiFn = elencaToolForgiatiReale,
+  abilitaToolForgiatoFn = abilitaToolForgiatoReale,
   modello,
   chiave,
   cartelleProgetto = [],
@@ -300,6 +318,7 @@ export function createSessionRegistry({
     'memory_search', 'memory_write', 'memory_update', 'memory_delete',
     'research_list', 'research_start', 'research_read', 'research_rename',
     'research_pause', 'research_resume', 'research_cancel', 'research_delete',
+    'tool_create',
   ],
   ricercaWeb,
   /*
@@ -713,6 +732,8 @@ export function createSessionRegistry({
       // ⭐⭐⭐ FASE N, ottavo sistema (30/8) — Deep Research, gli 8 thin delegate costruiti appena sopra.
       onRicercaLista, onRicercaAvvia, onRicercaLeggi, onRicercaRinomina,
       onRicercaPausa, onRicercaRiprendi, onRicercaAnnulla, onRicercaElimina,
+      // ⭐⭐⭐⭐ FASE N, nono e ultimo sistema (30/8) — Tool Forge, GLOBALE come cartellaMemoria: agent-service.mjs costruisce onForgeCrea/toolForge/eseguiToolForgeFn da qui.
+      cartellaForge,
       onEvento: (evento) => broadcast(voce, evento),
     }).then((risultato) => {
       /*
@@ -1427,6 +1448,51 @@ export function createSessionRegistry({
         throw errore;
       }
       return { ok: true, ricerche: esito.ricerche, errore: null };
+    },
+    /**
+     * ⭐⭐⭐⭐ FASE N, nono e ultimo sistema (30/8) — Tool Forge, il
+     * pannello Capability hub. GLOBALE come elencaMemorie (cartellaForge,
+     * mai voce.cartella).
+     * @returns {Promise<{ok:true, strumenti:Array|null, errore:string|null}|{erroreAvvio:string, code:string}>}
+     */
+    async elencaToolForgiati(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      let installati;
+      try {
+        installati = await elencaToolForgiatiFn({ cartella: cartellaForge });
+      } catch (errore) {
+        if (errore instanceof ToolForgeStoreError) return { ok: true, strumenti: null, errore: errore.message };
+        throw errore;
+      }
+      return {
+        ok: true,
+        strumenti: installati.map((t) => ({ id: t.id, titolo: t.manifest.title, descrizione: t.manifest.description, capacita: t.capacita, rischio: t.rischio, abilitato: t.abilitato, installatoAlle: t.installatoAlle })),
+        errore: null,
+      };
+    },
+    /**
+     * ⭐⭐⭐⭐⭐ L'UNICA mutazione owner-facing di tutta FASE N — vedi la
+     * doc in tool-forge-store.mjs sul perché: abilitare/disabilitare un
+     * tool forgiato non è MAI un tool del modello, nemmeno sul mobile
+     * (station-only su entrambe le piattaforme). Stesso stile di
+     * fidaServerMcp/fidaPlugin (una mutazione diretta dal pannello, non
+     * dal kernel/gate di permesso — quei due gate esistono per azioni
+     * del MODELLO, questa è dell'OWNER).
+     * @returns {Promise<{ok:true}|{erroreAvvio:string, code:string}>}
+     */
+    async abilitaToolForgiato(sessionId, id, abilitato) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      let esito;
+      try {
+        esito = await abilitaToolForgiatoFn({ cartella: cartellaForge, id, abilitato });
+      } catch (errore) {
+        if (errore instanceof ToolForgeStoreError) return { erroreAvvio: errore.message, code: 'FORGE_INVALID' };
+        throw errore;
+      }
+      if (!esito) return { erroreAvvio: `Tool forgiato "${id}" non trovato in .tool-forge-store/`, code: 'NOT_FOUND' };
+      return { ok: true };
     },
 
     /**

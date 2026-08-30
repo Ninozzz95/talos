@@ -21,7 +21,10 @@ import {
   chiamaConRitenta,
   compattaConversazione as compattaConversazioneReale,
   eseguiComandoSandboxato as eseguiComandoSandboxatoReale,
+  eseguiFlowForge,
+  FORGE_PREFISSO_NOME_TOOL,
   talosLavora as talosLavoraReale,
+  validaManifestForge,
 } from '../../../AVM-harness/mobile/scripts/harness-talos/talosHarness.mjs';
 import { salvaArtefatto as salvaArtefattoReale } from './artifact-store.mjs';
 import { generateTalosDocument as generateTalosDocumentReale, TALOS_SOURCE_TEXT_FORMATS, verifyTalosDocument as verifyTalosDocumentReale } from './document-generator.mjs';
@@ -65,6 +68,11 @@ import {
   eliminaMemoria as eliminaMemoriaReale,
   leggiMemoria as leggiMemoriaReale,
 } from './memory-store.mjs';
+import {
+  elencaToolForgiati as elencaToolForgiatiReale,
+  installaToolForgiato as installaToolForgiatoReale,
+  ToolForgeStoreError,
+} from './tool-forge-store.mjs';
 import {
   MODALITA_SUPPORTATE as MODALITA_SUPPORTATE_LIBRERIA,
   creaRicevutaPolitica as creaRicevutaPoliticaLibreria,
@@ -398,6 +406,16 @@ export async function avviaSessione({
   aggiornaMemoriaFn = aggiornaMemoriaReale,
   eliminaMemoriaFn = eliminaMemoriaReale,
   leggiMemoriaFn = leggiMemoriaReale,
+  /*
+   * ⭐⭐⭐⭐ FASE N, nono e ultimo sistema (30/8) — Tool Forge. Stesso
+   * pattern ESATTO di cartellaMemoria/elencaMemorieFn appena sopra:
+   * GLOBALE (nessun default QUI, il default reale vive in
+   * session-registry.mjs — vedi la doc in tool-forge-store.mjs sul
+   * perché GLOBALE come Notes/Tasks/Memory).
+   */
+  cartellaForge,
+  elencaToolForgiatiFn = elencaToolForgiatiReale,
+  installaToolForgiatoFn = installaToolForgiatoReale,
 }) {
   const threadId = randomUUID();
   const runId = randomUUID();
@@ -470,6 +488,102 @@ export async function avviaSessione({
     eseguiToolPluginFn = preparato.eseguiToolPluginFn;
     hookPlugin = preparato.hookPlugin;
   }
+
+  /*
+   * ⭐⭐⭐⭐ FASE N, nono e ultimo sistema (30/8) — Tool Forge. Nessun
+   * gate di fiducia (come le Skills sopra — a differenza di MCP/Plugin:
+   * un manifest forgiato è già validato ALL'INSTALLAZIONE da
+   * validaManifestForge, non da un click di fiducia dell'owner qui).
+   * `eseguiCapacitaForge` compone le funzioni Notes/Tasks/Memory GIÀ
+   * iniettate sopra — zero nuova primitiva di dominio, solo un nuovo
+   * modo di comporle (porto diretto di createLocalCapabilities in
+   * talosIntegration.ts mobile). `toolForge`/`eseguiToolForgeFn` sono
+   * costruiti SEMPRE (un .tool-forge-store/ malformato degrada a
+   * "nessun tool forgiato", mai un blocco dell'avvio — stesso
+   * principio di caricaSkillDisponibiliFn sopra).
+   */
+  async function eseguiCapacitaForge(capacita, input) {
+    switch (capacita) {
+      case 'tasks.list':
+        return elencaAttivitaFn({ cartella: cartellaAttivita });
+      case 'tasks.create':
+        return creaAttivitaFn({ cartella: cartellaAttivita, title: String(input?.title ?? ''), description: input?.description ?? null, priority: input?.priority ?? 'normal' });
+      case 'tasks.setStatus':
+        return completaAttivitaFn({ cartella: cartellaAttivita, id: String(input?.id ?? ''), status: input?.status ?? 'done' });
+      case 'notes.list':
+        return elencaNoteFn({ cartella: cartellaNote });
+      case 'notes.create':
+        return creaNotaFn({ cartella: cartellaNote, title: String(input?.title ?? ''), content: String(input?.content ?? '') });
+      case 'notes.update':
+        // ⛔ porto diretto di talosIntegration.ts mobile: title/content passati SOLO se presenti (spread condizionale), mai `title: undefined` esplicito — aggiornaNotaFn tratterebbe comunque undefined come "non toccare", ma questa è la forma VERA del mobile, non solo equivalente.
+        return aggiornaNotaFn({
+          cartella: cartellaNote, id: String(input?.id ?? ''),
+          ...(input?.title !== undefined ? { title: input.title } : {}),
+          ...(input?.content !== undefined ? { content: input.content } : {}),
+        });
+      case 'memory.search': {
+        const tutte = await elencaMemorieFn({ cartella: cartellaMemoria });
+        return cercaMemorie(tutte, { query: String(input?.query ?? ''), limit: input?.limit });
+      }
+      case 'memory.create': {
+        const { voce } = await creaMemoriaFn({ cartella: cartellaMemoria, title: String(input?.title ?? ''), content: String(input?.content ?? ''), kind: input?.kind ?? 'procedure' });
+        return voce;
+      }
+      default:
+        throw new Error(`TALOS_FORGE_CAPABILITY_UNAVAILABLE:${capacita}`);
+    }
+  }
+
+  let toolForge;
+  let eseguiToolForgeFn;
+  try {
+    const installati = await elencaToolForgiatiFn({ cartella: cartellaForge });
+    const abilitati = installati.filter((t) => t.abilitato);
+    if (abilitati.length > 0) {
+      const manifestPerNome = new Map(abilitati.map((t) => [`${FORGE_PREFISSO_NOME_TOOL}${t.id}`, t.manifest]));
+      toolForge = abilitati.map((t) => ({
+        name: `${FORGE_PREFISSO_NOME_TOOL}${t.id}`,
+        description: t.manifest.description,
+        inputSchema: t.manifest.inputSchema ?? { type: 'object', properties: {} },
+      }));
+      eseguiToolForgeFn = async (nome, argomenti) => {
+        const manifest = manifestPerNome.get(nome);
+        if (!manifest) throw new Error(`unknown forged tool: ${nome}`);
+        return eseguiFlowForge(manifest, argomenti, { capacitaFn: eseguiCapacitaForge });
+      };
+    }
+  } catch {
+    // ⭐ un .tool-forge-store/ malformato non deve mai bloccare l'avvio: toolForge resta undefined, zero tool nuovo offerto.
+  }
+
+  /**
+   * ⭐⭐⭐⭐ Il tool_create dispatch — valida via validaManifestForge
+   * (kernel) PRIMA di scrivere, mai un tentativo di installazione con
+   * un manifest sospetto. Porto diretto dei messaggi mobile
+   * (`forgeCreateTool.ts`): "That tool could not be created: ...",
+   * "Created "X" — it stays off until the user enables it in Tool
+   * Forge." — verbatim, non riformulati.
+   */
+  const onForgeCrea = async (argomenti) => {
+    const manifestoGrezzo = {
+      id: argomenti?.id, title: argomenti?.title, description: argomenti?.description,
+      inputSchema: argomenti?.input_schema, flow: argomenti?.flow,
+    };
+    const validazione = validaManifestForge(manifestoGrezzo);
+    if (!validazione.ok) {
+      return { ok: false, esito: `That tool could not be created: ${validazione.diagnostica.join('; ') || 'the manifest is invalid'}.` };
+    }
+    try {
+      await installaToolForgiatoFn({
+        cartella: cartellaForge, manifest: manifestoGrezzo,
+        capacita: validazione.capacita, azioni: validazione.azioni, rischio: validazione.rischio,
+      });
+    } catch (errore) {
+      if (errore instanceof ToolForgeStoreError) return { ok: false, esito: `That tool could not be created: ${errore.message}.` };
+      throw errore;
+    }
+    return { ok: true, esito: `Created "${manifestoGrezzo.title}" — it stays off until the user enables it in Tool Forge.` };
+  };
 
   /*
    * ⭐⭐⭐ 29/8 — FASE G: gli hook di un plugin fidato NON passano dal
@@ -1134,6 +1248,7 @@ export async function avviaSessione({
       onMemoriaCerca, onMemoriaScrivi, onMemoriaAggiorna, onMemoriaElimina,
       onRicercaLista, onRicercaAvvia, onRicercaLeggi, onRicercaRinomina,
       onRicercaPausa, onRicercaRiprendi, onRicercaAnnulla, onRicercaElimina,
+      onForgeCrea, toolForge, eseguiToolForgeFn,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));
     return { threadId, runId, ok: esito.comeFinita === 'concluso', esito, erroreInterno: null };

@@ -5,6 +5,7 @@ import { avviaSessione, compattaSessione, eseguiComandoDiretto } from '../src/ag
 import { NoteStoreError } from '../src/notes-store.mjs';
 import { TaskStoreError } from '../src/tasks-store.mjs';
 import { MemoryStoreError } from '../src/memory-store.mjs';
+import { ToolForgeStoreError } from '../src/tool-forge-store.mjs';
 import { WorkspaceFileError } from '../src/workspace-files.mjs';
 
 // `talosLavoraFn` finto: agent-service.mjs non deve mai far girare un vero
@@ -2273,4 +2274,190 @@ test('⛔ AL CONTRARIO — onLibreriaPolitica: leggiPoliticaFn che LANCIA produc
   const risultato = await catturato.onLibreriaPolitica({ action: 'set_enabled', expected_revision: 0, enabled: false });
   assert.equal(risultato.ok, false);
   assert.match(risultato.esito, /could not be read.*EACCES/);
+});
+
+/*
+ * ⭐⭐⭐⭐ FASE N, nono e ultimo sistema (30/8) — Tool Forge, "fetta
+ * onesta". eseguiCapacitaForge non è esportata (closure interna,
+ * stesso confine di hookFnConPlugin) — si prova indirettamente
+ * attraverso eseguiToolForgeFn, esattamente come un tool forgiato
+ * VERO la eserciterebbe.
+ */
+function manifestoDiProva({ id = 'x', capability, input = {}, target } = {}) {
+  return {
+    id, title: 'x', description: 'x',
+    inputSchema: { type: 'object', properties: {} },
+    flow: {
+      entry: 'n1', maxTransitions: 10,
+      nodes: [
+        { id: 'n1', type: 'capability', capability, input, ...(target ? { target } : {}), next: 'n2' },
+        { id: 'n2', type: 'return', value: target ? { $ref: target } : null },
+      ],
+    },
+  };
+}
+
+function elencaToolForgiatiFintoConUno(manifest, abilitato = true) {
+  return async () => [{ id: manifest.id, manifest, capacita: [], azioni: [], rischio: 'R1', abilitato }];
+}
+
+for (const [capacita, campiInput, nomeFn, argomentiAttesi, rispostaFinta] of [
+  ['tasks.list', {}, 'elencaAttivitaFn', { cartella: '/tmp/a' }, [{ id: 't-1' }]],
+  ['tasks.create', { title: 'Compra il latte', description: 'x', priority: 'high' }, 'creaAttivitaFn', { cartella: '/tmp/a', title: 'Compra il latte', description: 'x', priority: 'high' }, { id: 't-1' }],
+  ['tasks.setStatus', { id: 't-1', status: 'done' }, 'completaAttivitaFn', { cartella: '/tmp/a', id: 't-1', status: 'done' }, { id: 't-1', stato: 'done' }],
+  ['notes.list', {}, 'elencaNoteFn', { cartella: '/tmp/n' }, [{ id: 'n-1' }]],
+  ['notes.create', { title: 'Titolo', content: 'Corpo' }, 'creaNotaFn', { cartella: '/tmp/n', title: 'Titolo', content: 'Corpo' }, { id: 'n-1' }],
+  ['notes.update', { id: 'n-1', content: 'Nuovo corpo' }, 'aggiornaNotaFn', { cartella: '/tmp/n', id: 'n-1', content: 'Nuovo corpo' }, { id: 'n-1' }],
+]) {
+  test(`⭐⭐⭐ eseguiCapacitaForge(${capacita}) — chiamando DAVVERO il tool forgiato: l'input risolto raggiunge ${nomeFn}, con gli argomenti VERI`, async () => {
+    const manifest = manifestoDiProva({
+      capability: capacita,
+      input: Object.fromEntries(Object.keys(campiInput).map((k) => [k, { $ref: `$.input.${k}` }])),
+      target: '$.state.r',
+    });
+    const ricevuti = [];
+    const fn = async (spec) => { ricevuti.push(spec); return rispostaFinta; };
+    let catturato;
+    const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+    await avviaSessione({
+      cartella: '/tmp/x', cartellaAttivita: '/tmp/a', cartellaNote: '/tmp/n', cartellaMemoria: '/tmp/m', cartellaForge: '/tmp/f',
+      task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+      elencaToolForgiatiFn: elencaToolForgiatiFintoConUno(manifest), [nomeFn]: fn,
+    });
+    // ⛔ talosLavoraFn è un MOCK — mai il kernel vero: la chiamata al tool forgiato non avviene mai da sola, si simula qui esattamente ciò che il dispatch del kernel farebbe (eseguiToolForgeFn(nome, argomenti)).
+    const risultato = await catturato.eseguiToolForgeFn('forge_x', campiInput);
+    assert.equal(risultato.status, 'succeeded');
+    assert.deepEqual(risultato.output, rispostaFinta);
+    assert.equal(ricevuti.length, 1);
+    assert.deepEqual(ricevuti[0], argomentiAttesi);
+  });
+}
+
+test('⭐⭐⭐ eseguiCapacitaForge(memory.create) — chiamando DAVVERO il tool forgiato: il risultato è la voce SPACCHETTATA da {voce,duplicato}, mai il wrapper interno', async () => {
+  const manifest = manifestoDiProva({ capability: 'memory.create', input: { title: { $ref: '$.input.title' }, content: { $ref: '$.input.content' } }, target: '$.state.r' });
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const ricevuti = [];
+  const creaMemoriaFn = async (spec) => { ricevuti.push(spec); return { voce: { id: 'm-1' }, duplicato: false }; };
+  await avviaSessione({
+    cartella: '/tmp/x', cartellaMemoria: '/tmp/m', cartellaForge: '/tmp/f', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    elencaToolForgiatiFn: elencaToolForgiatiFintoConUno(manifest), creaMemoriaFn,
+  });
+  const risultato = await catturato.eseguiToolForgeFn('forge_x', { title: 'x', content: 'y' });
+  assert.equal(risultato.status, 'succeeded');
+  assert.deepEqual(risultato.output, { id: 'm-1' }, 'la voce spacchettata, non {voce,duplicato}: un flow forgiato che legge $.state.r vuole il record, non il wrapper interno del dedup');
+  assert.deepEqual(ricevuti, [{ cartella: '/tmp/m', title: 'x', content: 'y', kind: 'procedure' }]);
+});
+
+test('⭐⭐⭐ eseguiCapacitaForge(memory.search) — composizione in due passi: elencaMemorieFn poi cercaMemorie (pura), mai una terza store', async () => {
+  const manifest = manifestoDiProva({ capability: 'memory.search', input: { query: { $ref: '$.input.query' } }, target: '$.state.r' });
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const chiamateElenco = [];
+  const elencaMemorieFn = async (spec) => { chiamateElenco.push(spec); return [{ id: 'm-1', titolo: 'Preferenze', contenuto: 'Risposte brevi' }, { id: 'm-2', titolo: 'Altro', contenuto: 'xyz' }]; };
+  await avviaSessione({
+    cartella: '/tmp/x', cartellaMemoria: '/tmp/m', cartellaForge: '/tmp/f', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    elencaToolForgiatiFn: elencaToolForgiatiFintoConUno(manifest), elencaMemorieFn,
+  });
+  const risultato = await catturato.eseguiToolForgeFn('forge_x', { query: 'brevi' });
+  assert.equal(risultato.status, 'succeeded');
+  assert.deepEqual(chiamateElenco, [{ cartella: '/tmp/m' }]);
+  assert.equal(risultato.output.memorie.length, 1, 'cercaMemorie ha filtrato DAVVERO — solo la voce che combacia "brevi"');
+  assert.equal(risultato.output.memorie[0].id, 'm-1');
+});
+
+test('⛔⛔⛔ AL CONTRARIO — eseguiCapacitaForge su una capacità VALIDA nel kernel ma senza handler qui (nessuna oggi, provato con un id inventato): TALOS_FORGE_CAPABILITY_UNAVAILABLE', async () => {
+  const manifest = manifestoDiProva({ capability: 'web.search', input: {} });
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  await avviaSessione({ cartella: '/tmp/x', cartellaForge: '/tmp/f', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, elencaToolForgiatiFn: elencaToolForgiatiFintoConUno(manifest) });
+  const risultato = await catturato.eseguiToolForgeFn('forge_x', {});
+  assert.equal(risultato.status, 'failed');
+  assert.match(risultato.error.code, /TALOS_FORGE_CAPABILITY_FAILED/);
+  assert.match(risultato.error.message, /TALOS_FORGE_CAPABILITY_UNAVAILABLE:web\.search/);
+});
+
+test('⭐⭐⭐⭐ PARITÀ — toolForge/eseguiToolForgeFn arrivano a talosLavoraFn ESATTAMENTE come costruiti, tool forgiato ABILITATO', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const manifest = manifestoDiProva({ id: 'log-water-intake', capability: 'notes.create', input: { title: { $ref: '$.input.title' } }, target: '$.state.r' });
+  await avviaSessione({
+    cartella: '/tmp/x', cartellaNote: '/tmp/n', cartellaForge: '/tmp/f', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    elencaToolForgiatiFn: elencaToolForgiatiFintoConUno(manifest, true),
+  });
+  assert.deepEqual(catturato.toolForge, [{ name: 'forge_log-water-intake', description: 'x', inputSchema: manifest.inputSchema }]);
+  assert.equal(typeof catturato.eseguiToolForgeFn, 'function');
+});
+
+test('⛔⛔⛔ AL CONTRARIO — un tool forgiato installato ma NON abilitato non entra MAI in toolForge', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const manifest = manifestoDiProva({ id: 'mai-abilitato', capability: 'notes.list', input: {} });
+  await avviaSessione({
+    cartella: '/tmp/x', cartellaForge: '/tmp/f', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    elencaToolForgiatiFn: elencaToolForgiatiFintoConUno(manifest, false),
+  });
+  assert.equal(catturato.toolForge, undefined);
+  assert.equal(catturato.eseguiToolForgeFn, undefined);
+});
+
+test('⛔ AL CONTRARIO — zero tool forgiati installati: toolForge/eseguiToolForgeFn restano undefined', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  await avviaSessione({
+    cartella: '/tmp/x', cartellaForge: '/tmp/f', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    elencaToolForgiatiFn: async () => [],
+  });
+  assert.equal(catturato.toolForge, undefined);
+});
+
+test('⛔⛔ AL CONTRARIO — cartellaForge assente (elencaToolForgiatiFn lancia): degrada senza bloccare l\'avvio, PARITÀ con ogni altro chiamante', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const risultato = await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn });
+  assert.equal(risultato.ok, true, 'la sessione parte comunque, mai bloccata da .tool-forge-store/ assente');
+  assert.equal(catturato.toolForge, undefined);
+  assert.equal(typeof catturato.onForgeCrea, 'function', 'onForgeCrea resta SEMPRE costruita, come Notes/Tasks/Memory — solo toolForge (scoperta dinamica) è condizionale');
+});
+
+test('⭐⭐⭐⭐ onForgeCrea: un manifest VALIDO chiama installaToolForgiatoFn con manifest/capacita/azioni/rischio VERI, torna il messaggio di successo mobile verbatim', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const ricevuti = [];
+  const installaToolForgiatoFn = async (spec) => { ricevuti.push(spec); return { id: spec.manifest.id }; };
+  await avviaSessione({ cartella: '/tmp/x', cartellaForge: '/tmp/f', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, installaToolForgiatoFn });
+
+  const argomenti = { id: 'log-water-intake', title: 'Log water intake', description: 'x', flow: { entry: 'n1', maxTransitions: 10, nodes: [{ id: 'n1', type: 'return', value: 'ok' }] } };
+  const esito = await catturato.onForgeCrea(argomenti);
+  assert.equal(esito.ok, true);
+  assert.equal(esito.esito, 'Created "Log water intake" — it stays off until the user enables it in Tool Forge.');
+  assert.equal(ricevuti.length, 1);
+  assert.equal(ricevuti[0].manifest.id, 'log-water-intake');
+  assert.deepEqual(ricevuti[0].azioni, []);
+  assert.equal(ricevuti[0].rischio, 'R1');
+});
+
+test('⛔⛔⛔ AL CONTRARIO — onForgeCrea: un manifest NON valido è rifiutato PRIMA di chiamare installaToolForgiatoFn — mai una scrittura sospetta', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  let chiamata = false;
+  const installaToolForgiatoFn = async () => { chiamata = true; return {}; };
+  await avviaSessione({ cartella: '/tmp/x', cartellaForge: '/tmp/f', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, installaToolForgiatoFn });
+
+  const esito = await catturato.onForgeCrea({ id: 'X', title: '', description: 'x', flow: { entry: 'n1', maxTransitions: 10, nodes: [] } });
+  assert.equal(esito.ok, false);
+  assert.match(esito.esito, /^That tool could not be created:/);
+  assert.equal(chiamata, false, 'un manifest invalido non deve MAI raggiungere lo store');
+});
+
+test('⛔⛔ AL CONTRARIO — onForgeCrea: installaToolForgiatoFn che lancia ToolForgeStoreError (id già esistente) torna il messaggio onesto, non un\'eccezione', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const installaToolForgiatoFn = async () => { throw new ToolForgeStoreError('a tool with id "my-tool" already exists — pick a different id', 'FORGE_VERSION_NOT_NEWER'); };
+  await avviaSessione({ cartella: '/tmp/x', cartellaForge: '/tmp/f', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, installaToolForgiatoFn });
+
+  const argomenti = { id: 'my-tool', title: 'x', description: 'x', flow: { entry: 'n1', maxTransitions: 10, nodes: [{ id: 'n1', type: 'return', value: 'ok' }] } };
+  const esito = await catturato.onForgeCrea(argomenti);
+  assert.equal(esito.ok, false);
+  assert.equal(esito.esito, 'That tool could not be created: a tool with id "my-tool" already exists — pick a different id.');
 });
