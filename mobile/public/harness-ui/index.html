@@ -297,9 +297,9 @@
             <span class="ft-legend-new"><i></i>nuovo</span>
             <span class="ft-legend-modified"><i></i>modificato</span>
           </div>
+          <!-- ⛔⛔⛔ 30/8, owner dal vivo: "nella sidebar di destra ci sono ancora dei componenti mockup... il file tree ha ancora la struttura mockup" — QUESTO era esattamente il markup incriminato (un albero finto "talos/src/components/TalosComposer.vue"), mai sostituito prima del primo giro reale. Stessa famiglia già corretta il 27/8 per Terminale/Browser/Review (vedi resettaSuperficiRealiDedicate() in app.js) — qui mancava. Il placeholder onesto sotto viene aggiornato da JS (resettaSuperficiRealiDedicate/avviaSessionePendente) e sostituito per intero da renderizzaAlberoReale() appena una sessione vera ha una radice. -->
           <div class="file-tree">
-            <div class="tree-root"><svg><use href="#i-files"/></svg><strong>talos</strong></div>
-            <button data-file-entry="src">src/</button><button class="nested" data-file-entry="components">components/</button><button class="nested deep active" data-file-entry="composer">TalosComposer.vue <span>+28 −19</span></button><button class="nested deep" data-file-entry="chat-shell">ChatShell.vue</button><button data-file-entry="tests">tests/</button><button class="nested" data-file-entry="composer-tests">composer.spec.ts <span>+8 −4</span></button>
+            <p class="board-empty" id="fileTreeEmptyState">Nessuna cartella ancora scelta — i file appariranno qui appena inizi una sessione.</p>
           </div>
         </section>
         <!-- ⛔⛔⛔ 30/8, QA visiva (batch-fix): NIENTE data-demo-surface qui, a differenza di inspector-context/inspector-files. Trovato dal vivo con una sonda mirata: quei due hanno un vero "reale disponibile → nascondi" (renderizzaAlberoReale, ecc.); questo tab non ha mai avuto un contenuto condizionale — prima diceva "non ancora implementato" in modo statico, ora dice sempre il puntatore vero, ugualmente statico. Un badge "Demo UI" senza NESSUN codice che lo nasconda mai sarebbe rimasto acceso per sempre (verificato: hidden:false anche con una sessione reale aperta, mentre context/files erano già hidden:true). -->

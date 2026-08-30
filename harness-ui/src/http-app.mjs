@@ -1426,8 +1426,11 @@ export function createHttpApp({
          * "Full access" (cartellaLibera), che già accetta un percorso a
          * piacere — non una seconda allowlist, quindi nasconderlo non
          * proteggerebbe niente che avviaLibero non protegga già.
+         * ⭐⭐⭐ 30/8 — `sessionRegistry` passato per davvero: è la fonte
+         * PRIMARIA (cronologia reale), non solo un dettaglio interno di
+         * cartelleFrequentiFn — vedi la doc di frequent-dirs.mjs sul perché.
          */
-        data = { items: cartelleFrequentiFn() };
+        data = { items: cartelleFrequentiFn({ sessionRegistry }) };
       } else if (url.pathname === '/api/v1/automations') {
         requireNoQuery(url);
         data = { items: automationStore ? await automationStore.elenca() : [] };

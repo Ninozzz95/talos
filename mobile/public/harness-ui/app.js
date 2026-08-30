@@ -3606,6 +3606,26 @@
       if (demoBadge) demoBadge.hidden = true;
     }
     /*
+     * ⛔⛔⛔ 30/8, owner dal vivo: "nella sidebar di destra ci sono ancora
+     * dei componenti mockup... il file tree ha ancora la struttura
+     * mockup" — STESSA famiglia di difetto di Browser/Review qui sopra/
+     * sotto, mai applicata al tab Files. `renderizzaAlberoReale()`
+     * sostituisce questo contenuto per intero appena una sessione REALE
+     * ha una radice (`state.realSession.id` + un RunStarted) — ma fra
+     * "Nuova sessione" e quel momento (nessun id ancora, o una sessione
+     * pendente senza id) il markup demo di index.html restava a
+     * schermo per sempre, indistinguibile da una sessione vera. Un
+     * placeholder onesto qui, sempre sostituito integralmente da
+     * renderizzaAlberoReale() quando arriva la radice vera — mai un
+     * ibrido fra i due.
+     */
+    {
+      const fileTreeBox = $('#inspector-files .file-tree');
+      if (fileTreeBox) fileTreeBox.replaceChildren(textElement('p', 'board-empty', 'Nessuna cartella ancora scelta — i file appariranno qui appena inizi una sessione.'));
+      const demoBadgeFiles = $('.demo-surface-badge', $('[data-inspector-section="files"]'));
+      if (demoBadgeFiles) demoBadgeFiles.hidden = true;
+    }
+    /*
      * ⛔⛔⛔ 27/8, trovato nell'ispezione visiva finale: una sessione VERA
      * senza nessuna scrittura (una domanda semplice, "chi sei?") mostrava
      * ANCORA "3 file modificati" con un diff rosso/verde — il markup demo
@@ -6038,6 +6058,9 @@
     closePanels();
     // ⛔ nuovaGenerazioneSessione() ha appena svuotato #conversation (replaceChildren) — l'empty-state originale non esiste più nel DOM, va ricreato, non cercato.
     $('#conversation').appendChild(costruisciConversationHero(`Sessione pronta su ${nomeCartella}.`, 'Scrivi qui sotto cosa deve fare TALOS per iniziare.'));
+    // ⭐ 30/8 — stesso principio di sopra, sul tab Files: nuovaGenerazioneSessione() (dentro resettaSuperficiRealiDedicate) ha già scritto il placeholder GENERICO "nessuna cartella ancora scelta" — ma qui la cartella è già nota, prima ancora del primo messaggio. Nessuna nuova sorgente di verità: nomeCartella è lo stesso valore che finisce nel titolo sessione qui sopra.
+    const fileTreePlaceholder = $('#inspector-files .file-tree .board-empty');
+    if (fileTreePlaceholder) fileTreePlaceholder.textContent = `Cartella scelta: ${nomeCartella}. I file appariranno qui appena TALOS inizia a lavorare.`;
     window.setTimeout(() => composerInput.focus(), 0);
   }
 
