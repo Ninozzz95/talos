@@ -47,7 +47,7 @@ sotto, prima di proseguire con Task 6.
 | 2 | `html-conta-articoli` | "Nel calcolatore di preventivi serve una funzione che conta quanti articoli ci sono nel carrello — dacci un'occhiata?" + dopo: comando umano nel Terminale reale | ciclo base + PTY reale digitata a mano | ✅ fatto — 2 piste false, 1 fix reale al MIO tooling (non al prodotto) |
 | 3 | `game-wraparound-negativo` | "Nel gioco del serpentone, quando esce dal bordo sinistro o da quello superiore della griglia il rientro dall'altro lato non funziona bene — sembra un problema col resto sui numeri negativi. Puoi sistemarlo in tutte e quattro le direzioni?" | cerca, Doctor mentre gira, (albero file: selettore sbagliato nello script, non riverificato qui) | ✅ fatto — bug reale trovato E corretto correttamente dal modello |
 | 4 | `crm-nome-senza-cognome` | "Nel CRM, quando un contatto non ha il cognome il nome formattato ha uno spazio in più alla fine che non dovrebbe esserci — puoi sistemarlo?" | Workspace write (dropdown allowlist), fork | ✅ fatto — 1 difetto reale del MIO piano (non del prodotto): fork su sessione ancora in corso è correttamente rifiutato |
-| 5 | `api-validazione-duplicata` | "Nell'API dei contatti la validazione del nome è scritta in due punti diversi — puoi accorparla in uno solo senza cambiare come si comporta?" | Compatta, F5+Resume, export MD/JSON | 🔄 in corso (interrotto per il punto CRUD sotto) |
+| 5 | `api-validazione-duplicata` | "Nell'API dei contatti la validazione del nome è scritta in due punti diversi — puoi accorparla in uno solo senza cambiare come si comporta?" | Compatta, F5+Resume, export MD/JSON | ✅ fatto — Resume verificato pulito, Compatta non conclusivo (conversazione troppo corta) |
 | 5.1 ⭐ | *(nuovo, CREATE)* | "Sto iniziando un piccolo sito da zero — mi serve una paginetta HTML singola con un titolo, due paragrafi di testo segnaposto e un pulsante che quando premuto cambia colore di sfondo. Puoi crearla da zero, con anche un piccolo file di stile separato?" | `scrivi` su file MAI esistiti (Review "N nuovi", non "modificati" — mai esercitato finora), owner: "Nuovo file/Nuova cartella" dal menu albero | ✅ fatto — "2 nuovi" confermato per la prima volta in questo giro |
 | 5.2 ⭐ | *(nuovo, DELETE)* | "Nel progetto del magazzino c'è un file di backup che non serve più (magazzino_old.py.bak) — puoi eliminarlo? Se trovi altri file temporanei o ridondanti, elimina anche quelli." | eliminazione via `shell` dal modello (nessun tool "elimina file" esplicito per il modello — verificato non presunto), owner: tasto destro → Elimina con scheda di conferma (azione distruttiva) | ✅ fatto — 1 difetto reale di prodotto trovato (backdrop del foglio resta cliccabile) |
 | 6 | `py-carica-ordini-csv` | "Serve una funzione che carica gli ordini da un file CSV e segnali chiaramente, riga per riga, se manca un campo o il prezzo è negativo. Prima cerca online qual è il modo più comune e sicuro in Python per farlo, poi implementalo. Alla fine salvami un breve riassunto di cosa hai fatto." | web_search, Libreria | ⬜ |
@@ -313,6 +313,58 @@ stesso giro**, entrambi permanenti per gli scenari futuri:
 
 Nessuna eccezione JS, nessun errore console, unica richiesta fallita il
 favicon 404 noto.
+
+### [Task 5] api-validazione-duplicata: Compatta, Export, F5+Resume — 2026-08-30 09:54-09:56
+Screenshot: `.qa-runs/qa-task-5-api-validazione-2026-08-30T09-54-34-845Z/` (4) + `.qa-runs/qa-task-5-resume-dopo-f5-2026-08-30T09-56-17-757Z/` (4)
+La primissima corsa di questo task (mattina, ~09:22) era stata
+interrotta prima che il suo risultato mi arrivasse — **ma il turno era
+comunque finito per davvero lato server**: questa corsa (ri-lanciata da
+zero) trova `src/server.js` GIÀ accorpato correttamente, e il modello
+risponde onestamente "Non è stata necessaria alcuna modifica al
+codice, poiché la logica di validazione si trova già accorpata in un
+solo punto e tutti i test passano regolarmente" — **0 file in Review è
+corretto, non un difetto** (stesso comportamento onesto già visto in
+Task 4 su riprove ripetute). La vera correzione del bug del corpus è
+quindi già stata verificata, solo non fotografata a suo tempo.
+
+**Compatta**: bottone trovato e cliccato, nessun toast, nessun
+cambiamento visibile fra prima e dopo (screenshot 02 vs 03
+indistinguibili). ⛔ **Non conclusivo, non dichiarato un difetto**: la
+conversazione di questo task è troppo corta (7 righe di tool-call + 1
+risposta) perché "compattare" abbia qualcosa di sensato da fare — non
+posso distinguere "no-op silenzioso corretto su una conversazione
+breve" da "il bottone non fa nulla". 🔜 Da riverificare su un task con
+una conversazione genuinamente lunga (candidati: Task 11 Deep Research,
+Task 12 Planner/Editor).
+
+**Export**: foglio "Esporta sessione" pulito, due card ben descritte
+("Trascrizione leggibile" .md / "JSON completo" .json), nessuna
+anomalia visiva. 🔜 Non esercitato il click-through reale (il download
+effettivo del blob) — verificata solo l'apertura del foglio, non il
+salvataggio del file.
+
+**F5 reale + Resume** (`Page.reload` vero, non un refresh finto):
+sidebar si ripopola da sola dopo il reload (143 sessioni reali,
+persistenza confermata), sessione del task riselezionabile, bottone
+Resume trovato e cliccato. Toast chiaro: "Sessione ripresa — Un nuovo
+giro è iniziato sulla stessa conversazione." — e **verificato che è
+vero, non solo dichiarato**: la riga sessione in sidebar passa a "in
+corso · live" (evidenziata), e in chat appare un indicatore di
+digitazione reale (`•••`) sotto l'ultima risposta — un giro nuovo è
+DAVVERO ripartito sulla stessa conversazione.
+⚠️ Osservazione, non confermata come difetto: dopo il reload la barra
+del composer mostra "Predefinito d…" come modello e "Workspa…" come
+permesso, diversi da quelli originali della sessione (gemini-3.7-flash
+/ Full access) — plausibilmente solo lo stato CLIENT-SIDE dei
+selettori del composer tornato ai default dopo un reload di pagina
+(ininfluente sul giro di Resume, che è ripartito lato server sulla
+sessione esistente), non necessariamente cosa ha usato il giro
+rigenerato. Non approfondito oltre per budget di tempo — 🔜 se si
+vuole certezza, andrebbe letto il modello effettivo dalla risposta del
+giro rigenerato, non dedotto dai selettori del composer.
+
+Zero eccezioni JS, zero errori console, unica richiesta fallita il
+favicon noto, in entrambe le corse.
 
 Formato per ogni voce, da qui in avanti:
 
