@@ -687,6 +687,9 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .file-review strong { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .file-review svg { width: 14px; height: 14px; }
 .diff-stats { color: var(--muted); font: 9px var(--font-mono); white-space: nowrap; }
+/* ⛔⛔⛔ 30/8, QA visiva (Task 12, difetto B) — avviso quando una riscrittura fa sparire funzioni/classi presenti prima (vedi app.js, simboliSpariti). Stesso token --danger già in uso per ogni azione distruttiva del prodotto, non un colore inventato qui. */
+.review-symbol-warning { color: var(--danger); font-weight: 600; }
+.review-symbol-warning-banner { margin: 0; padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--danger-soft); color: var(--danger); font: 11px/1.5 var(--font-mono); }
 .diff-panel { border: 1px solid var(--line); border-radius: 12px; background: var(--bg-deep); overflow: hidden; }
 .diff-toolbar { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 12px; border-bottom: 1px solid var(--line); color: var(--muted); font: 10px var(--font-mono); }
 .diff-toolbar > div { display: flex; gap: 6px; }

@@ -467,6 +467,7 @@
       cancelMotionAnimationsFor(harnessDialogBackdrop);
       prossimaGenerazione(harnessDialogBackdrop);
       harnessDialogBackdrop.hidden = false;
+      harnessDialogBackdrop.style.pointerEvents = ''; // vedi closeEmbeddedDialog — riattiva se una chiusura precedente l'aveva spento
       markMotionEnter(harnessDialogBackdrop);
       return;
     }
@@ -487,11 +488,32 @@
     prossimaGenerazione(dialog);
     if (!dialog.open) dialog.show();
     markMotionEnter(dialog);
+    harnessDialogBackdrop.style.pointerEvents = ''; // ⛔ vedi closeEmbeddedDialog sotto — un dialog che riapre deve annullare la disattivazione lasciata da una chiusura precedente
     syncEmbeddedDialogBackdrop();
   }
 
   function closeEmbeddedDialog(dialog) {
     if (!dialog.open || dialog.classList.contains('motion-exit')) return;
+    /*
+     * ⛔⛔⛔ 30/8, QA visiva (Task 5.2) — trovato dal vivo con
+     * `elementFromPoint`: il backdrop resta CLICCABILE per un'intera
+     * finestra dopo che il foglio è scomparso alla vista, perché
+     * `hidden` diventa true solo alla fine di DUE animazioni in serie
+     * (prima il dialog qui sotto, poi il backdrop dentro
+     * syncEmbeddedDialogBackdrop, chiamata solo nella callback finale).
+     * Disaccoppiare "sta sparendo alla vista" da "intercetta ancora i
+     * click": pointer-events si spegne SUBITO, qui, non alla fine della
+     * sequenza — la sequenza di animazioni/hidden resta INVARIATA
+     * (nessun rischio sul resto del design, generazioni comprese).
+     * Riattivato in showEmbeddedDialog sopra e nel ramo "shouldShow" di
+     * syncEmbeddedDialogBackdrop qui sotto.
+     * Condizionale sull'ALTRO dialog (non quello che sta chiudendo:
+     * `dialog.open` è ancora true qui, .close() non è ancora stato
+     * chiamato) per non spegnere il backdrop se un secondo dialog
+     * embedded è comunque ancora aperto.
+     */
+    const altroDialogAperto = dialog === sheetDialog ? commandDialog.open : sheetDialog.open;
+    if (!altroDialogAperto) harnessDialogBackdrop.style.pointerEvents = 'none';
     const generazioneAllaChiusura = motionGenerazione.get(dialog) || 0;
     animateExit(dialog, { durationToken: '--talos-motion-duration-popover' }, () => {
       // guardia: se nel frattempo il dialog è stato riaperto per un
@@ -759,11 +781,32 @@
     const chip = textElement('span', `status-chip ${stato.classe}`.trim(), stato.testo);
 
     article.append(identity, chip);
+    // ⭐⭐⭐ 30/8, QA visiva (Task 14) — stesso tasto-destro→conferma diretta già aggiunto alla sidebar (aggiornaElencoSessioniReali): la Board è la SECONDA superficie da cui una sessione dovrebbe potersi eliminare.
+    article.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.sessioneTarget = { sessionId: sessione.sessionId, nome: titolo };
+      openSheet('deleteSession');
+    });
     return article;
   }
 
+  /*
+   * ⛔⛔⛔ 30/8, QA visiva (Task 14) — trovato dal vivo con 154 sessioni
+   * reali sotto: il badge "Demo UI · non collegato" (`ensureDemoLabels()`,
+   * scoped a `[data-demo-surface="board"]`) non veniva MAI nascosto qui,
+   * a differenza di `aggiornaElencoSessioniReali()` (la sidebar), che lo
+   * fa esplicitamente. Stesso identico badge già trovato-e-corretto in
+   * più superfici diverse di questo stesso file (sidebar sessioni,
+   * albero file, tree) — un pattern ricorrente: ogni superficie con dati
+   * reali deve nasconderlo A MANO, non c'è un meccanismo automatico.
+   */
   function renderSessionsBoard(sessioni) {
     sessionsBoardList.replaceChildren();
+    if (sessioni.length > 0) {
+      const demoBadge = sessionsBoardList.closest('[data-demo-surface="board"]')?.querySelector('.demo-surface-badge');
+      if (demoBadge) demoBadge.hidden = true;
+    }
     if (sessioni.length === 0) {
       sessionsBoardList.appendChild(textElement('p', 'board-empty', 'Nessuna sessione ancora — premi «Nuova» per iniziare.'));
       return;
@@ -1949,7 +1992,7 @@
    * le due righe fork/side-thread INVENTATE, ora rimosse e sostituite
    * da caricaAlberoSessione() (dati reali di GET .../children). Aggiunto.
    */
-  const TIPI_FOGLIO_INTERAMENTE_ONESTI = new Set(['model', 'capabilities', 'control', 'fileViewer', 'renameFile', 'deleteFile', 'createFile', 'export', 'sessionTree']);
+  const TIPI_FOGLIO_INTERAMENTE_ONESTI = new Set(['model', 'capabilities', 'control', 'fileViewer', 'renameFile', 'deleteFile', 'createFile', 'export', 'sessionTree', 'deleteSession']);
   function openSheet(type) {
     const content = sheetTemplates[type];
     if (!content) return;
@@ -2211,9 +2254,24 @@
        * riempito da `caricaPannelloHooks()` in `openSheet()`) — elenca
        * gli hook VERI dichiarati dal progetto e il loro stato di
        * fiducia VERO, con un bottone "Fida" che chiama davvero
-       * `POST .../trust`. "Agents"/"Approval policy per-tool" restano
-       * onestamente "Non ancora implementato" — quelle due fasi non
-       * sono ancora aperte.
+       * `POST .../trust`.
+       *
+       * ⛔⛔⛔ 30/8, QA visiva (Task 0.3/9) — la sezione "Non ancora
+       * implementato" qui sotto è stata RIMOSSA: mentiva su ENTRAMBE le
+       * voci, dal vivo, nella stessa identica sessione che la mostrava.
+       * "Agents" ("Subagent, deleghe, isolamento e limiti") è reale da
+       * FASE C — `delega_sottotask` (10 concorrenti, profondità 2),
+       * già mostrato correttamente 4 righe sopra dalla card "Session
+       * topology" del tab Context ("Le deleghe a sotto-agenti isolati
+       * (attrezzo delega_sottotask) appaiono nel foglio 'Albero
+       * sessione'"). "Approval policy per-tool" è reale da FASE B —
+       * `ATTREZZI_CON_PERMESSO_PER_ATTREZZO` in config.mjs,
+       * `permessiPerAttrezzo` inviato a ogni sessione — e lo dice la
+       * STESSA scheda "Attrezzi dell'harness" del Capability hub
+       * ("PERMESSO PER-TOOL NEL FOGLIO PERMESSI"). Un pannello del
+       * prodotto smentiva un altro: rimossa la sezione intera invece
+       * di lasciare un elenco vuoto — quando qualcosa di nuovo resta
+       * davvero da costruire, torna qui con lo stesso pattern onesto.
        */
       html: () => `
         <div class="sheet-section">
@@ -2224,16 +2282,6 @@
         <div class="sheet-section">
           <span class="sheet-label">Hooks</span>
           <div id="hooksListMount"></div>
-        </div>
-        <div class="sheet-section">
-          <span class="sheet-label">Non ancora implementato</span>
-          ${[
-            ['Agents', 'Subagent, deleghe, isolamento e limiti', 'i-robot'],
-            ['Approval policy per-tool', 'Nessuna grammatica di permesso per-tool oggi — il cancello semantico su scrivi è sempre attivo, non è opzionale', 'i-shield'],
-          ].map(([name, desc, ico]) => `
-            <div class="sheet-option" role="group">
-              <span class="sheet-icon">${icon(ico)}</span><span><strong>${name}</strong><small>${desc}</small></span><span><input aria-label="${name}, non implementato" type="checkbox" disabled></span>
-            </div>`).join('')}
         </div>`,
     },
     sessionTree: {
@@ -2312,6 +2360,24 @@
           <div class="sheet-actions">
             <button type="button" class="secondary-btn" data-delete-file-cancel>Annulla</button>
             <button type="button" class="primary-btn danger" id="deleteFileConfirm">Elimina</button>
+          </div>
+        </div>`,
+    },
+    /**
+     * ⭐⭐⭐ 30/8, QA visiva (Task 14) — stesso schema ESATTO di deleteFile
+     * appena sopra (conferma come secondo passaggio esplicito, mai un
+     * click solo): la sessione era l'unica cosa in tutto il prodotto
+     * senza un modo di eliminarla, né qui né sul server.
+     */
+    deleteSession: {
+      eyebrow: 'Sessioni',
+      title: 'Elimina sessione',
+      html: () => `
+        <div class="sheet-section">
+          <p class="board-empty">Eliminare <strong>${(state.sessioneTarget?.nome ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}</strong>? La trascrizione viene cancellata dal disco e non si annulla da qui.</p>
+          <div class="sheet-actions">
+            <button type="button" class="secondary-btn" data-delete-session-cancel>Annulla</button>
+            <button type="button" class="primary-btn danger" id="deleteSessionConfirm">Elimina</button>
           </div>
         </div>`,
     },
@@ -2546,6 +2612,37 @@
       });
     }
 
+    /*
+     * ⭐⭐⭐ 30/8, QA visiva (Task 14) — stesso schema ESATTO di
+     * deleteFileConfirm appena sopra, per la sessione invece del file.
+     * Se la sessione eliminata è quella APERTA ora, un ricaricamento
+     * della pagina (stesso F5 reale già verificato pulito in Task 5) è
+     * il modo più semplice e sicuro di tornare a uno stato coerente —
+     * evita di dover ricostruire a mano ogni angolo di stato che una
+     * sessione attiva tocca (composer, Context Rail, Files, Terminale).
+     */
+    const deleteSessionConfirm = $('#deleteSessionConfirm', sheetBody);
+    if (deleteSessionConfirm) {
+      $('[data-delete-session-cancel]', sheetBody)?.addEventListener('click', () => closeEmbeddedDialog(sheetDialog));
+      deleteSessionConfirm.addEventListener('click', async () => {
+        const bersaglio = state.sessioneTarget;
+        if (!bersaglio) return;
+        try {
+          await apiPost(`/api/v1/sessions/${encodeURIComponent(bersaglio.sessionId)}/delete`, {});
+          closeEmbeddedDialog(sheetDialog);
+          toast('Sessione eliminata', bersaglio.nome);
+          if (state.realSession.id === bersaglio.sessionId) {
+            window.location.reload();
+            return;
+          }
+          await aggiornaElencoSessioniReali();
+          if (state.board.initialized) await refreshSessionsBoard();
+        } catch (error) {
+          toast('Eliminazione non riuscita', error.message);
+        }
+      });
+    }
+
     const createFileForm = $('#createFileForm', sheetBody);
     if (createFileForm) {
       const input = $('#createFileInput', createFileForm);
@@ -2718,6 +2815,18 @@
       return span;
     }));
     markMotionEnter(diffCode);
+    /*
+     * ⛔⛔⛔ 30/8 — vedi il blocco di doc su REGEX_SIMBOLI_TOP_LEVEL/
+     * simboliSpariti: qui il dettaglio COMPLETO (i nomi, non solo il
+     * conteggio già mostrato sulla tab) — un elemento ricreato ogni
+     * volta (mai lasciato per un file che non lo ha più).
+     */
+    $('#reviewSymbolWarning')?.remove();
+    if (file.simboliPersi?.length > 0) {
+      const avviso = textElement('p', 'review-symbol-warning-banner', `⚠ Questa riscrittura fa sparire ${file.simboliPersi.length === 1 ? 'una funzione/classe presente' : `${file.simboliPersi.length} funzioni/classi presenti`} prima e non più dopo: ${file.simboliPersi.join(', ')}. Controlla che non sia una perdita involontaria.`);
+      avviso.id = 'reviewSymbolWarning';
+      diffPath.closest('.diff-toolbar')?.after(avviso);
+    }
   }
 
   function setInspectorTab(button) {
@@ -3121,6 +3230,16 @@
       case 'time_now': return 'Data e ora correnti'; // ⭐ 28/8 — zero argomenti, nessun placeholder "…" da mostrare
       // ⭐⭐⭐ FASE C (28/8) — sub-agenti: il task è la parte che l'owner vuole vedere subito, tronca corta come già fatto per gli altri riassunti "in corso".
       case 'delega_sottotask': return a.task ? `Delega: ${tronca(a.task, 60)}` : 'Delega a un sotto-agente…';
+      /*
+       * ⛔⛔ 30/8, QA visiva (Task 8/11) — due casi mancanti, trovati dal
+       * vivo (mostravano il nome grezzo "memory_write(…)"/mai
+       * verificato per research_start). Forma degli argomenti letta
+       * dagli eventi VERI persistiti (`ToolCallArgs`/`tool_calls`),
+       * non indovinata: memory_write → {kind,title,content};
+       * research_start → {depth,question}.
+       */
+      case 'memory_write': return a.title ? `Memoria: ${tronca(a.title, 60)}` : 'Salvataggio in memoria…';
+      case 'research_start': return a.question ? `Ricerca approfondita: ${tronca(a.question, 60)}` : 'Avvio ricerca approfondita…';
       default: return `${nome}(…)`;
     }
   }
@@ -3214,6 +3333,25 @@
     if (azione?.tipo === 'document_create') return `Vuole creare un documento (formato ${azione.formato || '?'})`;
     // ⭐⭐⭐ FASE B (28/8) — `prova` è il quarto attrezzo gated da verificaPermessoScrittura (trovato leggendo talosHarness.mjs): senza questo ramo, un permesso per-attrezzo `prova:'chiedi'` mostrava la card col fallback generico invece del comando VERO.
     if (azione?.tipo === 'prova') return `Vuole eseguire la suite di test: ${azione.comando}`;
+    /*
+     * ⛔⛔⛔ 30/8, QA visiva (Task 11) — caso mancante trovato dal vivo,
+     * con la prova nell'evento grezzo persistito
+     * (`"azione":{"tipo":"research_start"}`): la card di approvazione
+     * mostrava il fallback TOTALMENTE generico per una ricerca
+     * approfondita reale — l'esatto difetto che questa funzione dice di
+     * voler evitare (vedi doc sopra).
+     * ⛔ `azione.question` è quasi certamente SEMPRE assente oggi: il
+     * commento in agui-events.mjs documenta la forma reale inviata dal
+     * kernel come `{tipo, percorso?, comando?, formato?}` — un elenco
+     * chiuso, senza spazio per `question` — e l'evento persistito
+     * verificato qui sopra lo conferma (solo `tipo`). Il ramo con
+     * `azione.question` resta per compatibilità futura (innocuo, non
+     * inventato); il miglioramento VERO e verificabile oggi è che la
+     * card nomina almeno il TIPO di azione ("ricerca approfondita"
+     * invece di "un'azione che modifica qualcosa") — il topic esatto
+     * richiederebbe un cambio lato kernel, fuori da questo repo.
+     */
+    if (azione?.tipo === 'research_start') return azione.question ? `Vuole avviare una ricerca approfondita: ${azione.question}` : 'Vuole avviare una ricerca approfondita.';
     return 'Vuole eseguire un\'azione che modifica qualcosa.';
   }
 
@@ -3834,6 +3972,43 @@
     window.setTimeout(() => URL.revokeObjectURL(url), 500);
   }
 
+  /*
+   * ⛔⛔⛔ 30/8, QA visiva (Task 12, difetto B, "Alta" gravità) — trovato
+   * dal vivo, con le prove: `calcola_sconto_scaglioni` (scritta da un
+   * task il mattino) sparita in silenzio quando un task successivo ha
+   * riscritto lo STESSO file per aggiungere un'altra funzione — "tutti
+   * i test passano" non lo segnalava, perché il numero di test era
+   * semplicemente più basso di prima, non rosso. `scrivi` sostituisce
+   * il file per intero (Capability hub, Task 9) — il rischio è nella
+   * FORMA del tool, non in un modello specifico.
+   * ⛔ La cura NON può stare nel cancello semantico vero (talosHarness.mjs,
+   * il KERNEL — fuori da questo repo, verificato con una ricerca
+   * mirata prima di scrivere questo commento: zero riscontri qui). Può
+   * stare QUI: `operazione.prima` è già il contenuto VERO del file
+   * PRIMA della scrittura (vedi doc sotto) — lo stesso dato che serve
+   * per un diff serve anche per accorgersi se una funzione/classe
+   * dichiarata PRIMA non compare più DOPO. Un'euristica per riga,
+   * multi-linguaggio ma conservativa (SOLO `def`/`class`/`function` a
+   * colonna zero — non un parser, non un blocco, un AVVISO visibile:
+   * un refactor legittimo che rinomina o consolida deve restare
+   * possibile, l'owner decide guardando l'avviso, non il tool al posto
+   * suo).
+   */
+  const REGEX_SIMBOLI_TOP_LEVEL = /^(?:export\s+)?(?:async\s+)?(?:def|class|function)\s+(\w+)/;
+  function simboliDichiarati(testo) {
+    const trovati = new Set();
+    for (const riga of String(testo ?? '').split('\n')) {
+      const m = REGEX_SIMBOLI_TOP_LEVEL.exec(riga);
+      if (m) trovati.add(m[1]);
+    }
+    return trovati;
+  }
+  function simboliSpariti(prima, dopo) {
+    const primaSet = simboliDichiarati(prima);
+    const dopoSet = simboliDichiarati(dopo);
+    return [...primaSet].filter((nome) => !dopoSet.has(nome));
+  }
+
   /**
    * ⭐ Piano §1.3, riga Review — ogni scrittura reale aggiorna la scheda
    * Review già esistente, non solo la conversazione. Una voce PER
@@ -3856,11 +4031,14 @@
       // ⛔ senza "prima" (chiamante vecchio, o file troppo grande per la DP): stesso
       // comportamento onesto di prima di oggi, MAI un diff che sembra vero e non lo è.
       ?? dopo.split('\n').map((riga) => [operazione.op === 'add' ? 'add' : 'ctx', riga]);
+    // ⛔⛔⛔ 30/8 — vedi il blocco di doc sopra REGEX_SIMBOLI_TOP_LEVEL: solo su una riscrittura di un file ESISTENTE (haPrima), mai su un file nuovo (nulla può "sparire" da niente).
+    const simboliPersi = haPrima ? simboliSpariti(operazione.prima ?? '', dopo) : [];
     state.realSession.reviewFiles.set(percorso, {
       path: percorso,
       nuovo: operazione.op === 'add',
       diffVero: righeGrezze !== null,
       code: formattaRigheConNumero(righe),
+      simboliPersi,
     });
     renderRealReviewList();
     renderReviewFile(`real:${percorso}`);
@@ -3918,6 +4096,10 @@
       icona.append(uso);
       etichetta.append(icona, textElement('strong', '', file.path.split('/').pop()));
       button.append(etichetta, textElement('span', 'diff-stats', `${file.nuovo ? 'nuovo' : 'modificato'} · ${file.code.length} righe`));
+      // ⛔⛔⛔ 30/8 — vedi il blocco di doc su REGEX_SIMBOLI_TOP_LEVEL/simboliSpariti: un avviso VISIBILE, non un blocco, quando la riscrittura fa sparire funzioni/classi che c'erano prima.
+      if (file.simboliPersi?.length > 0) {
+        button.append(textElement('span', 'diff-stats review-symbol-warning', `⚠ ${file.simboliPersi.length} simbol${file.simboliPersi.length === 1 ? 'o sparito' : 'i spariti'}`));
+      }
       button.addEventListener('click', () => {
         $$('.file-review', contenitore).forEach((f) => { f.classList.remove('active'); f.setAttribute('aria-pressed', 'false'); });
         button.classList.add('active');
@@ -5230,6 +5412,20 @@
       meta.textContent = formattaOraSessione(sessione.avviataAlle);
       button.append(main, meta);
       button.addEventListener('click', () => passaASessione(sessione.sessionId, sessione.taskId, sessione.nome));
+      /*
+       * ⭐⭐⭐ 30/8, QA visiva (Task 14) — tasto destro → conferma diretta
+       * (un solo file di azione possibile qui, a differenza del menu a
+       * più voci dell'albero file: non serve un menu intermedio).
+       * `preventDefault`/`stopPropagation` stesso principio del
+       * tasto-destro sull'albero file (sopprime il menu nativo del
+       * browser, non fa risalire l'evento).
+       */
+      button.addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        state.sessioneTarget = { sessionId: sessione.sessionId, nome: etichetta };
+        openSheet('deleteSession');
+      });
       pezzi.push(button);
     }
     contenitore.replaceChildren(...pezzi);

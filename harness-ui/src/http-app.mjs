@@ -41,6 +41,8 @@ const API_ERROR_CODES = new Set([
   'MCP_INVALID',
   /* ⭐ 29/8 — FASE G: un plugin.json malformato, o un pluginId che non combacia nessuna cartella di .harness-ui-plugins/. */
   'PLUGIN_INVALID',
+  /* ⭐ 30/8, QA visiva (Task 14) — DELETE su una sessione ancora viva (né conclusa né interrotta): un controller attivo potrebbe star lavorando davvero. */
+  'SESSION_STILL_RUNNING',
 ]);
 
 const STATUS_BY_CODE = Object.freeze({
@@ -71,6 +73,8 @@ const STATUS_BY_CODE = Object.freeze({
   MCP_INVALID: 422,
   /** ⭐ 29/8 — FASE G: stesso status di MCP_INVALID, stesso motivo (pluginId, o il file plugin.json stesso) non valido. */
   PLUGIN_INVALID: 422,
+  /** ⭐ 30/8 — stesso status di SESSION_NOT_READY: la richiesta è legittima ma lo stato attuale (ancora in corso) la blocca. */
+  SESSION_STILL_RUNNING: 409,
 });
 
 const MESSAGE_BY_CODE = Object.freeze({
@@ -93,6 +97,7 @@ const MESSAGE_BY_CODE = Object.freeze({
   HOOK_INVALID: 'Configurazione hook non valida',
   MCP_INVALID: 'Configurazione server MCP non valida',
   PLUGIN_INVALID: 'Configurazione plugin non valida',
+  SESSION_STILL_RUNNING: 'Sessione ancora in corso — fermala prima di eliminarla',
 });
 
 const SECURITY_HEADERS = Object.freeze({
@@ -762,6 +767,41 @@ export function createHttpApp({
         const corpo = await leggiCorpoJson(req);
         const nome = requireNomeBody(corpo);
         const esito = sessionRegistry.rinomina(sessionId, nome);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    /*
+     * ⭐⭐⭐ 30/8, QA visiva (Task 14) — trovato dal vivo: nessun modo di
+     * eliminare una sessione, in nessun punto (client, server, disco) —
+     * 144+ sessioni accumulate in un solo giro di QA senza pulizia
+     * possibile. Stesso schema POST-per-azione di renameMatch appena
+     * sopra (e di /tree/delete più sotto) — coerenza con la convenzione
+     * già in uso in questo file, non il verbo HTTP DELETE puro.
+     */
+    const deleteSessionMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/delete$/.exec(url.pathname);
+    if (deleteSessionMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try {
+          sessionId = decodeURIComponent(deleteSessionMatch[1]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const esito = await sessionRegistry.elimina(sessionId);
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
           errore.code = esito.code;
