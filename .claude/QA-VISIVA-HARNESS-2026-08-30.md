@@ -49,7 +49,7 @@ sotto, prima di proseguire con Task 6.
 | 4 | `crm-nome-senza-cognome` | "Nel CRM, quando un contatto non ha il cognome il nome formattato ha uno spazio in più alla fine che non dovrebbe esserci — puoi sistemarlo?" | Workspace write (dropdown allowlist), fork | ✅ fatto — 1 difetto reale del MIO piano (non del prodotto): fork su sessione ancora in corso è correttamente rifiutato |
 | 5 | `api-validazione-duplicata` | "Nell'API dei contatti la validazione del nome è scritta in due punti diversi — puoi accorparla in uno solo senza cambiare come si comporta?" | Compatta, F5+Resume, export MD/JSON | 🔄 in corso (interrotto per il punto CRUD sotto) |
 | 5.1 ⭐ | *(nuovo, CREATE)* | "Sto iniziando un piccolo sito da zero — mi serve una paginetta HTML singola con un titolo, due paragrafi di testo segnaposto e un pulsante che quando premuto cambia colore di sfondo. Puoi crearla da zero, con anche un piccolo file di stile separato?" | `scrivi` su file MAI esistiti (Review "N nuovi", non "modificati" — mai esercitato finora), owner: "Nuovo file/Nuova cartella" dal menu albero | ✅ fatto — "2 nuovi" confermato per la prima volta in questo giro |
-| 5.2 ⭐ | *(nuovo, DELETE)* | "Nel progetto del magazzino c'è un file di backup che non serve più (magazzino_old.py.bak) — puoi eliminarlo? Se trovi altri file temporanei o ridondanti, elimina anche quelli." | eliminazione via `shell` dal modello (nessun tool "elimina file" esplicito per il modello — verificato non presunto), owner: tasto destro → Elimina con scheda di conferma (azione distruttiva) | 🔄 scenario scritto, in corso |
+| 5.2 ⭐ | *(nuovo, DELETE)* | "Nel progetto del magazzino c'è un file di backup che non serve più (magazzino_old.py.bak) — puoi eliminarlo? Se trovi altri file temporanei o ridondanti, elimina anche quelli." | eliminazione via `shell` dal modello (nessun tool "elimina file" esplicito per il modello — verificato non presunto), owner: tasto destro → Elimina con scheda di conferma (azione distruttiva) | ✅ fatto — 1 difetto reale di prodotto trovato (backdrop del foglio resta cliccabile) |
 | 6 | `py-carica-ordini-csv` | "Serve una funzione che carica gli ordini da un file CSV e segnali chiaramente, riga per riga, se manca un campo o il prezzo è negativo. Prima cerca online qual è il modo più comune e sicuro in Python per farlo, poi implementalo. Alla fine salvami un breve riassunto di cosa hai fatto." | web_search, Libreria | ⬜ |
 | 7 | `html-filtro-articoli` | "Aggiungi un filtro di testo alla lista articoli del preventivo. Mentre ci lavori, segnami una nota con la decisione presa sul nome della funzione, e aggiungimi un promemoria per rivedere i test più tardi." | Notes, Tasks | ⬜ |
 | 8 | `game-ostacolo-mobile` | "Aggiungi un nuovo tipo di ostacolo che si muove da solo nel serpentone. Ricordati per le prossime volte che preferisco che gli ostacoli abbiano nomi in italiano nel codice. Poi disegnami un'icona semplice per questo ostacolo." | Memory (+dedup), generate_image | ⬜ |
@@ -249,6 +249,70 @@ non uno scheletro vuoto. Nessuna anomalia trovata.
 ⇒ **CRUD-Create verificato pulito**: il percorso "scrivi su file mai
 esistiti" funziona end-to-end, badge/contatori distinguono
 correttamente nuovo da modificato. Nessun nuovo difetto di prodotto.
+
+### [Task 5.2] Delete ridondanti + CRUD owner-facing completo — 2026-08-30 09:34-09:51 — ⛔ DIFETTO REALE DI PRODOTTO TROVATO
+Screenshot: `.qa-runs/qa-task-5-2-delete-ridondanti-2026-08-30T09-51-35-129Z/` (7, corsa finale pulita — 7 corse totali, le prime 6 usate per diagnosticare due bug di tooling e uno di prodotto, vedi sotto)
+Tre percorsi CRUD distinti verificati nello stesso scenario:
+
+**1. Delete via modello (shell)**: prompt naturale su `magazzino_old.py.bak`
++ "altri file ridondanti" (senza nominare `note-temporanee.txt`, seminato
+apposta per vedere se il modello lo trova da solo). Il modello ha
+esplorato, trovato ENTRAMBI, eliminati con `shell`. Verificato sul
+disco (non solo in chat): entrambi spariti. Riprova su cartella già
+pulita: il modello dichiara onestamente "non c'è nulla da eliminare",
+nessuna fabbricazione — stesso buon comportamento già visto in Task 4.
+
+**2. Create owner-facing** (chiude il buco dichiarato in Task 5.1): tasto
+destro sulla RADICE dell'albero → menu ridotto a "Nuovo file"/"Nuova
+cartella" (screenshot 04, coerente col codice — `soloCreazione`) → sheet
+"Nuovo file" (screenshot 05, pulito) → Crea → toast "File creato" →
+verificato **sul disco**, non solo il toast.
+
+**3. Delete owner-facing** (chiude il buco dichiarato in questo stesso
+task): tasto destro sul file appena creato → menu con tutte e 6 le voci
+attese (`Apri, Allega alla chat, Rinomina, Copia, Rivela in Esplora
+File, Elimina` — screenshot 06, ispezionato) → **scheda di conferma
+FOTOGRAFATA prima di confermare** (screenshot 07, ispezionata): "Elimina
+file — Eliminare **zzz-qa-throwaway-crud.txt**? L'azione scrive DAVVERO
+sul disco e non si annulla da qui.", pulsante Elimina in rosso
+(danger) — linguaggio chiaro, nessuna ambiguità → confermato → sparito
+**sul disco**, verificato.
+
+⛔⛔⛔ **Difetto reale di prodotto, non di tooling** — trovato investigando
+perché il tasto destro sul file nuovo non apriva nessun menu (le prime
+5 corse fallivano lì): `document.elementFromPoint()` sulla riga, SUBITO
+dopo aver chiuso il foglio "Nuovo file" col bottone Crea, restituiva
+`<button class="harness-dialog-backdrop motion-enter motion-exit">` —
+il BACKDROP del foglio appena chiuso, ancora sopra tutto e ancora
+cliccabile, non la riga sottostante. Causa nel codice
+(`syncEmbeddedDialogBackdrop`/`closeEmbeddedDialog`, app.js): l'uscita
+del backdrop parte solo DOPO che l'animazione di uscita del DIALOG è
+finita — due animazioni in serie, non in parallelo — e `hidden` torna
+`true` solo al termine della seconda. Finestra reale (non solo di
+questo script, per quanto stretta) in cui un click sull'albero appena
+sotto un foglio da poco chiuso atterra sul backdrop invece che sul
+bersaglio. Gravità: degrada (misclick silenzioso, nessun errore
+visibile all'utente — il click semplicemente non fa nulla). Categoria:
+funzione rotta (race di animazione). 🔜 Non corretto in questo giro
+(batch-fix a fine sequenza, §1.6 del piano).
+
+⛔ **Due bug di TOOLING (miei, non di prodotto) trovati e corretti nello
+stesso giro**, entrambi permanenti per gli scenari futuri:
+- `[data-open-panel="inspector"]` è un **toggle** su desktop (>1040px,
+  `toggleDesktopInspector()`), non un "apri": il pannello è espanso di
+  DEFAULT, quindi cliccarlo alla cieca lo COLLASSA. Corretto: si legge
+  `#app.classList.contains('inspector-collapsed')` prima, si clicca
+  SOLO se serve. ⇒ **Retroattivo**: questo spiega perché in Task 3
+  "click sul tab Files: false" non mostrò mai un albero — il pannello è
+  stato collassato dal MIO stesso click, non un difetto di selettore
+  soltanto (voce originale non riscritta, integrata qui).
+- `elemento?.click() ?? false` è un anti-pattern che stampa **sempre**
+  `false` (`Element.click()` non ha valore di ritorno) — sia quando il
+  click riesce sia quando l'elemento non esiste. Ogni verifica di click
+  ora usa una IIFE che restituisce `true`/`false` per davvero.
+
+Nessuna eccezione JS, nessun errore console, unica richiesta fallita il
+favicon 404 noto.
 
 Formato per ogni voce, da qui in avanti:
 

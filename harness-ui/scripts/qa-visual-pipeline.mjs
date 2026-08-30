@@ -2139,15 +2139,114 @@ const SCENARI = {
       p.nota('CONFERMATO: magazzino_old.py.bak eliminato per davvero dal modello (verificato sul disco, non solo dichiarato in chat).');
     }
 
-    // --- Owner-facing: tasto destro su un file reale rimasto, Elimina + scheda di conferma ---
-    await p.click('[data-open-panel="inspector"]');
-    await p.attendi(300);
-    const filesTabClic = await p.cdp.evaluate("[...document.querySelectorAll('.inspector-tab, [role=\"tab\"]')].find((t) => t.textContent.trim() === 'Files')?.click() ?? false");
-    p.nota(`click sul tab Files: ${filesTabClic}`);
+    // --- Owner-facing: albero file. ⛔⛔⛔ DUE bug di TOOLING trovati qui
+    // dal vivo, non presunti — vedi taccuino:
+    // (1) '[data-open-panel="inspector"]' è un TOGGLE
+    // (toggleDesktopInspector(), app.js) su desktop (>1040px) — il
+    // pannello è espanso di DEFAULT (aria-expanded="true" nel markup
+    // statico), quindi cliccarlo alla cieca lo COLLASSA invece di aprirlo.
+    // Corretto: si legge lo stato vero PRIMA (appShell.classList
+    // 'inspector-collapsed') e si clicca SOLO se serve.
+    // (2) `elemento?.click() ?? false` è un anti-pattern che stampa
+    // SEMPRE false — `Element.click()` non ha valore di ritorno
+    // (undefined), quindi `undefined ?? false` vale false sia quando il
+    // click riesce sia quando l'elemento non esiste. Ogni verifica
+    // sotto usa da qui in poi una IIFE che restituisce true/false per
+    // davvero.
+    const inspectorEraCollassato = await p.cdp.evaluate("document.querySelector('#app')?.classList.contains('inspector-collapsed') ?? false");
+    p.nota(`inspector collassato prima di questo passo: ${inspectorEraCollassato}`);
+    if (inspectorEraCollassato) {
+      await p.click('[data-open-panel="inspector"]');
+      await p.attendi(300);
+    }
+    const filesTabClic = await p.cdp.evaluate("(() => { const t = [...document.querySelectorAll('.inspector-tabs button')].find((el) => el.textContent.includes('Files')); if (!t) return false; t.click(); return true; })()");
+    p.nota(`click sul tab Files (selettore corretto '.inspector-tabs button'): ${filesTabClic}`);
     await p.attendiCondizione("!!document.querySelector('.ft-row')", { timeoutMs: 5000, descrizione: 'albero file caricato' });
-    await p.screenshot('albero-dopo-pulizia', { nota: 'atteso: i file ridondanti non compaiono più' });
+    await p.screenshot('albero-dopo-pulizia', { nota: 'atteso: i file ridondanti eliminati dal modello non compaiono più' });
     const testoAlbero = await p.testo('.file-tree, .inspector-panel');
     p.nota(`albero contiene ancora "old"/"temporanee": ${/old|temporanee/i.test(testoAlbero ?? '')}`);
+
+    // --- Owner-facing CREATE: tasto destro sulla RADICE → "Nuovo file" →
+    // scheda col campo nome → Crea. Chiude anche il buco di copertura
+    // dichiarato in Task 5.1 ("owner: Nuovo file/Nuova cartella dal menu
+    // albero" — mai esercitato finora). ---
+    const NOME_FILE_PROVA = 'zzz-qa-throwaway-crud.txt';
+    const radiceRect = await p.cdp.evaluate("(() => { const r = document.querySelector('.tree-root'); if (!r) return null; const b = r.getBoundingClientRect(); return {x: b.x + b.width/2, y: b.y + b.height/2}; })()");
+    if (!radiceRect) {
+      p.difetto('nessun .tree-root trovato nell\'albero file — impossibile aprire il menu di creazione dalla radice', { severita: 'blocco' });
+    } else {
+      await p.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: radiceRect.x, y: radiceRect.y, button: 'right', clickCount: 1 });
+      await p.cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: radiceRect.x, y: radiceRect.y, button: 'right', clickCount: 1 });
+      await p.attendi(300);
+      await p.screenshot('menu-radice-tasto-destro', { nota: 'atteso: menu ridotto a Nuovo file/Nuova cartella (radice, "soloCreazione")' });
+      const nuovoFileClic = await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('.ft-actions-menu-item')].find((el) => el.textContent.includes('Nuovo file')); if (!b) return false; b.click(); return true; })()");
+      p.nota(`click su "Nuovo file" dal menu radice: ${nuovoFileClic}`);
+      await p.attendiCondizione("!!document.querySelector('#createFileInput')", { timeoutMs: 5000, descrizione: 'scheda Nuovo file' });
+      await p.digita('#createFileInput', NOME_FILE_PROVA);
+      await p.screenshot('scheda-nuovo-file', { nota: 'campo nome compilato, prima di Crea' });
+      await p.submit('#createFileForm');
+      await p.attendiCondizione(`document.querySelector('#toastRegion')?.textContent?.includes('File creato')`, { timeoutMs: 5000, descrizione: 'toast File creato' });
+      const fileProvaCreato = existsSync(join(CARTELLA, NOME_FILE_PROVA));
+      p.nota(`CREATE owner-facing — ${NOME_FILE_PROVA} esiste davvero sul disco dopo "Crea": ${fileProvaCreato}`);
+      if (!fileProvaCreato) p.difetto(`"Nuovo file" dal menu radice ha mostrato il toast "File creato" ma ${NOME_FILE_PROVA} non esiste sul disco`, { severita: 'blocco' });
+
+      // --- Owner-facing DELETE sullo STESSO file appena creato: tasto
+      // destro → Elimina → scheda di conferma (FOTOGRAFATA prima di
+      // confermare — è il pezzo di copertura che Task 5.2 doveva
+      // ancora chiudere) → Elimina → verifica sparito dal disco. ---
+      await p.attendiCondizione(`!![...document.querySelectorAll('.ft-row')].find((r) => r.textContent.includes(${JSON.stringify(NOME_FILE_PROVA)}))`, { timeoutMs: 5000, descrizione: 'riga del nuovo file nell\'albero' });
+      const rigaProvaRect = await p.cdp.evaluate(`(() => { const r = [...document.querySelectorAll('.ft-row')].find((row) => row.textContent.includes(${JSON.stringify(NOME_FILE_PROVA)})); if (!r) return null; const b = r.getBoundingClientRect(); return {x: b.x + b.width/2, y: b.y + b.height/2}; })()`);
+      if (!rigaProvaRect) {
+        p.difetto(`${NOME_FILE_PROVA} creato ma nessuna .ft-row lo mostra nell'albero — invalidamento mancato dopo la creazione?`, { severita: 'blocco' });
+      } else {
+        p.nota(`riga del nuovo file trovata a coordinate x=${rigaProvaRect.x.toFixed(0)}, y=${rigaProvaRect.y.toFixed(0)}`);
+        const elementoAlPuntoPrima = await p.cdp.evaluate(`(() => { const el = document.elementFromPoint(${rigaProvaRect.x}, ${rigaProvaRect.y}); if (!el) return null; return { tag: el.tagName, classi: el.className }; })()`);
+        p.nota(`elemento REALE a quel punto SUBITO dopo "Crea": ${JSON.stringify(elementoAlPuntoPrima)}`);
+        /*
+         * ⛔⛔⛔ 30/8 — DIFETTO REALE DI PRODOTTO trovato qui, non di
+         * tooling: `elementFromPoint` sulla riga appena creata restituiva
+         * `<button class="harness-dialog-backdrop motion-enter
+         * motion-exit">` — il backdrop del foglio "Nuovo file" appena
+         * chiuso, ANCORA hit-testabile, intercetta il tasto destro al posto
+         * della riga sottostante. Causa nel codice (app.js,
+         * closeEmbeddedDialog/syncEmbeddedDialogBackdrop): l'animazione di
+         * uscita del backdrop parte SOLO DOPO che quella del dialog è
+         * finita (due animazioni IN SERIE, non in parallelo) — e solo al
+         * termine della SECONDA `harnessDialogBackdrop.hidden` torna true.
+         * La cura qui è nel test (aspettare la condizione vera, non un
+         * numero fisso), ma il prodotto ha una finestra reale — per
+         * quanto stretta — in cui un click sull'albero appena sotto un
+         * foglio chiuso da poco atterra sul backdrop invece che sul
+         * bersaglio. Riportato in taccuino, non corretto in questo giro
+         * (batch-fix a fine sequenza, come da regola del piano).
+         */
+        await p.attendiCondizione(
+          `document.elementFromPoint(${rigaProvaRect.x}, ${rigaProvaRect.y})?.closest('.ft-row')?.textContent?.includes(${JSON.stringify(NOME_FILE_PROVA)}) ?? false`,
+          { timeoutMs: 4000, intervalMs: 100, descrizione: 'backdrop del foglio chiuso libera la riga (elementFromPoint torna sulla riga vera)' },
+        );
+        const elementoAlPuntoDopo = await p.cdp.evaluate(`(() => { const el = document.elementFromPoint(${rigaProvaRect.x}, ${rigaProvaRect.y}); if (!el) return null; return { tag: el.tagName, classi: el.className }; })()`);
+        p.nota(`elemento REALE a quel punto DOPO l'attesa: ${JSON.stringify(elementoAlPuntoDopo)}`);
+        await p.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: rigaProvaRect.x, y: rigaProvaRect.y });
+        await p.attendi(150);
+        await p.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: rigaProvaRect.x, y: rigaProvaRect.y, button: 'right', clickCount: 1 });
+        await p.cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: rigaProvaRect.x, y: rigaProvaRect.y, button: 'right', clickCount: 1 });
+        await p.attendi(300);
+        await p.screenshot('menu-file-tasto-destro', { nota: 'diagnostica: cosa e apparso davvero dopo il tasto destro sul nuovo file' });
+        const menuVociTesto = await p.cdp.evaluate("[...document.querySelectorAll('.ft-actions-menu-item')].map((el) => el.textContent.trim())");
+        p.nota(`voci del menu contestuale trovate: ${JSON.stringify(menuVociTesto)}`);
+        const eliminaClic = await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('.ft-actions-menu-item')].find((el) => el.textContent.includes('Elimina')); if (!b) return false; b.click(); return true; })()");
+        p.nota(`click su "Elimina" dal menu del file: ${eliminaClic}`);
+        await p.attendiCondizione("!!document.querySelector('#deleteFileConfirm')", { timeoutMs: 5000, descrizione: 'scheda di conferma eliminazione' });
+        await p.screenshot('scheda-conferma-elimina', { nota: `CRITICO: la scheda deve nominare "${NOME_FILE_PROVA}" e avvisare che è irreversibile — PRIMA di cliccare Elimina` });
+        const testoSchedaConferma = await p.testo('#sheetBody');
+        p.nota(`scheda di conferma nomina il file target: ${(testoSchedaConferma ?? '').includes(NOME_FILE_PROVA)}; menziona irreversibilità: ${/non si annulla/i.test(testoSchedaConferma ?? '')}`);
+        await p.click('#deleteFileConfirm');
+        await p.attendiCondizione(`document.querySelector('#toastRegion')?.textContent?.includes('File eliminato')`, { timeoutMs: 5000, descrizione: 'toast File eliminato' });
+        const fileProvaSparito = !existsSync(join(CARTELLA, NOME_FILE_PROVA));
+        p.nota(`DELETE owner-facing — ${NOME_FILE_PROVA} sparito davvero dal disco dopo "Elimina" confermato: ${fileProvaSparito}`);
+        if (!fileProvaSparito) p.difetto(`"Elimina" confermato dalla scheda ma ${NOME_FILE_PROVA} esiste ancora sul disco`, { severita: 'blocco' });
+      }
+    }
 
     for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
     for (const r of p.cdp.richiesteFallite) {
