@@ -51,6 +51,10 @@ harness-ui/.notes-store/
 # stesso principio esatto di .notes-store/ appena sopra.
 harness-ui/.tasks-store/
 
+# ⭐ 30/8 — FASE N, sesto sistema: le memorie dell'owner, GLOBALI —
+# stesso principio esatto di .notes-store/.tasks-store/ appena sopra.
+harness-ui/.memory-store/
+
 core/vendor/
 validator/node_modules/
 control-plane/vendor/

@@ -16,6 +16,7 @@ import { PluginRegistryError } from '../src/plugin-registry.mjs';
 import { LibraryStoreError } from '../src/library-store.mjs';
 import { NoteStoreError } from '../src/notes-store.mjs';
 import { TaskStoreError } from '../src/tasks-store.mjs';
+import { MemoryStoreError } from '../src/memory-store.mjs';
 import { leggiRegistro as leggiRegistroPerAttesa, registraRigaSync } from '../src/session-store.mjs';
 
 // Ne' avviaSessione ne' talosLavora girano MAI qui, veri o finti a metà: si
@@ -2174,6 +2175,53 @@ test('⛔⛔ AL CONTRARIO — elencaAttivita con .tasks-store malformato: {attiv
 test('⛔ AL CONTRARIO — elencaAttivita su un id inesistente: NOT_FOUND', async () => {
   const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
   const esito = await registro.elencaAttivita('id-mai-esistito');
+  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+});
+
+/*
+ * ⭐⭐⭐ FASE N, sesto sistema (30/8): `elencaMemorie` è ciò che il
+ * Capability hub chiama — stesso schema di `elencaAttivita` appena
+ * sopra.
+ */
+test('⭐⭐⭐ elencaMemorie: torna le memorie dichiarate, id/titolo/contenuto/genere/aggiornataAlle soltanto, da cartellaMemoria (GLOBALE)', async () => {
+  const finta = sessioneControllabile();
+  const memoriaPronta = { id: 'mem-1', titolo: 'Preferenze risposta', contenuto: 'Risposte brevi', genere: 'preference', creataAlle: 'x', aggiornataAlle: '2026-08-30T10:00:00.000Z' };
+  let cartellaRicevuta;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    cartellaMemoria: '/percorso/globale/memoria',
+    elencaMemorieRegistroFn: async ({ cartella }) => { cartellaRicevuta = cartella; return [memoriaPronta]; },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.elencaMemorie(sessionId);
+
+  assert.equal(esito.ok, true);
+  assert.equal(esito.errore, null);
+  assert.equal(cartellaRicevuta, '/percorso/globale/memoria');
+  assert.deepEqual(esito.memorie, [{ id: 'mem-1', titolo: 'Preferenze risposta', contenuto: 'Risposte brevi', genere: 'preference', aggiornataAlle: '2026-08-30T10:00:00.000Z' }]);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔ AL CONTRARIO — elencaMemorie con .memory-store malformato: {memorie:null, errore}, MAI un array vuoto', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    elencaMemorieRegistroFn: async () => { throw new MemoryStoreError('rotta.json non è JSON valido', 'MEMORY_STORE_MALFORMED'); },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.elencaMemorie(sessionId);
+
+  assert.equal(esito.ok, true);
+  assert.equal(esito.memorie, null, 'null, non [] — sono due fatti diversi');
+  assert.match(esito.errore, /non è JSON valido/);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔ AL CONTRARIO — elencaMemorie su un id inesistente: NOT_FOUND', async () => {
+  const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
+  const esito = await registro.elencaMemorie('id-mai-esistito');
   assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
 });
 

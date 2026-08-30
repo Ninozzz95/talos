@@ -4,6 +4,7 @@ import test from 'node:test';
 import { avviaSessione, compattaSessione, eseguiComandoDiretto } from '../src/agent-service.mjs';
 import { NoteStoreError } from '../src/notes-store.mjs';
 import { TaskStoreError } from '../src/tasks-store.mjs';
+import { MemoryStoreError } from '../src/memory-store.mjs';
 import { WorkspaceFileError } from '../src/workspace-files.mjs';
 
 // `talosLavoraFn` finto: agent-service.mjs non deve mai far girare un vero
@@ -1851,6 +1852,116 @@ test('⭐⭐⭐ onAttivitaElimina: un\'attività che esisteva davvero dice "dele
   assert.equal(rimossa.esito, 'That task has been deleted.');
   const giaAssente = await catturato.onAttivitaElimina({ id: 'mai-esistita' });
   assert.equal(giaAssente.esito, 'There was no task with that id — nothing to delete.');
+  assert.equal(giaAssente.ok, true, 'idempotente: già assente è l\'esito voluto, non un fallimento');
+});
+
+/*
+ * ⭐⭐⭐ FASE N, sesto sistema (30/8) — Memory. Stesso principio ESATTO
+ * dei callback Notes/Tasks: `cartellaMemoria` è GLOBALE.
+ */
+test('⭐⭐⭐ i 4 callback onMemoria* arrivano SEMPRE a talosLavoraFn, incondizionatamente', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+    cattura: (input) => { catturato = input; },
+  });
+
+  await avviaSessione({ cartella: '/tmp/senza-memory', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn });
+
+  for (const nome of ['onMemoriaCerca', 'onMemoriaScrivi', 'onMemoriaAggiorna', 'onMemoriaElimina']) {
+    assert.equal(typeof catturato[nome], 'function', `${nome} deve essere sempre una funzione, mai undefined`);
+  }
+});
+
+test('⭐⭐⭐ onMemoriaCerca: cartellaMemoria (GLOBALE) passata a elencaMemorieFn, ricerca DAVVERO nel testo (via cercaMemorie pura)', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  let cartellaRicevuta;
+  const elencaMemorieFn = async ({ cartella }) => {
+    cartellaRicevuta = cartella;
+    return [
+      { id: 'mem-1', titolo: 'Preferenze risposta', contenuto: 'Risposte brevi' },
+      { id: 'mem-2', titolo: 'Lingua', contenuto: 'Sempre in italiano' },
+    ];
+  };
+
+  await avviaSessione({
+    cartella: '/tmp/x', cartellaMemoria: '/tmp/memoria-globale', task: TASK, modello: 'm', chiave: 'k',
+    onEvento: () => {}, talosLavoraFn, elencaMemorieFn,
+  });
+
+  const risultato = await catturato.onMemoriaCerca({ query: 'italiano' });
+  assert.equal(cartellaRicevuta, '/tmp/memoria-globale');
+  assert.deepEqual(risultato.memorie.map((m) => m.id), ['mem-2']);
+});
+
+test('⭐⭐⭐ onMemoriaScrivi: caso normale — id incluso nel messaggio (a differenza di mobile, vedi la doc in memory-store.mjs)', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  let ricevuti;
+  const creaMemoriaFn = async (argomenti) => {
+    ricevuti = argomenti;
+    return { voce: { id: 'mem-1', titolo: argomenti.title, contenuto: argomenti.content }, duplicato: false };
+  };
+
+  await avviaSessione({ cartella: '/tmp/x', cartellaMemoria: '/tmp/m', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, creaMemoriaFn });
+
+  const risultato = await catturato.onMemoriaScrivi({ title: 'Preferenze risposta', content: 'Risposte brevi' });
+  assert.deepEqual(ricevuti, { cartella: '/tmp/m', title: 'Preferenze risposta', content: 'Risposte brevi', kind: 'preference' });
+  assert.equal(risultato.esito, 'Remembered as «Preferenze risposta» (id mem-1): Risposte brevi');
+});
+
+test('⭐⭐⭐⭐⭐ onMemoriaScrivi: caso DUPLICATO — messaggio distinto, mai una "creazione" travestita', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const creaMemoriaFn = async () => ({ voce: { id: 'mem-1', titolo: 'Preferenze risposta', contenuto: 'Risposte brevi' }, duplicato: true });
+
+  await avviaSessione({ cartella: '/tmp/x', cartellaMemoria: '/tmp/m', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, creaMemoriaFn });
+
+  const risultato = await catturato.onMemoriaScrivi({ title: 'Preferenze risposta', content: 'testo diverso' });
+  assert.equal(risultato.ok, true);
+  assert.match(risultato.esito, /Already remembered as «Preferenze risposta» \(id mem-1\)\. Nothing new was written\./);
+});
+
+test('⛔⛔ AL CONTRARIO — onMemoriaAggiorna: né title né content né kind passati è un rifiuto onesto, aggiornaMemoriaFn MAI chiamata', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  let chiamata = false;
+  const aggiornaMemoriaFn = async () => { chiamata = true; return {}; };
+
+  await avviaSessione({ cartella: '/tmp/x', cartellaMemoria: '/tmp/m', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, aggiornaMemoriaFn });
+
+  const risultato = await catturato.onMemoriaAggiorna({ id: 'mem-1' });
+  assert.equal(risultato.ok, false);
+  assert.match(risultato.esito, /Nothing to change/);
+  assert.equal(chiamata, false);
+});
+
+test('⭐⭐ onMemoriaAggiorna: un id inesistente (MEMORY_NOT_FOUND) diventa il messaggio onesto del tool mobile', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const aggiornaMemoriaFn = async () => { throw new MemoryStoreError('nessuna memoria con id mai-esistita', 'MEMORY_NOT_FOUND'); };
+
+  await avviaSessione({ cartella: '/tmp/x', cartellaMemoria: '/tmp/m', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, aggiornaMemoriaFn });
+
+  const risultato = await catturato.onMemoriaAggiorna({ id: 'mai-esistita', title: 'x' });
+  assert.equal(risultato.ok, false);
+  assert.match(risultato.esito, /No memory has the id "mai-esistita"/);
+});
+
+test('⭐⭐⭐ onMemoriaElimina: una memoria che esisteva davvero dice "removed", una già assente dice "may already be gone"', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const presenti = new Set(['mem-vera']);
+  const leggiMemoriaFn = async ({ id }) => (presenti.has(id) ? { id, titolo: 'x' } : null);
+  const eliminaMemoriaFn = async () => {};
+
+  await avviaSessione({ cartella: '/tmp/x', cartellaMemoria: '/tmp/m', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, leggiMemoriaFn, eliminaMemoriaFn });
+
+  const rimossa = await catturato.onMemoriaElimina({ id: 'mem-vera' });
+  assert.equal(rimossa.esito, 'That memory has been removed from this device.');
+  const giaAssente = await catturato.onMemoriaElimina({ id: 'mai-esistita' });
+  assert.match(giaAssente.esito, /No memory has the id "mai-esistita".*may already be gone/);
   assert.equal(giaAssente.ok, true, 'idempotente: già assente è l\'esito voluto, non un fallimento');
 });
 
