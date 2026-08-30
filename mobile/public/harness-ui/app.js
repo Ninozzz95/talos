@@ -120,6 +120,19 @@
       treeOpen: new Set(),
       /** Piano §1.3-BIS.T — toolCallId -> nome attrezzo, SOLO per riconoscere quando un ToolCallResult appartiene a "shell" e specchiarlo nella vista Terminale. Non tocca il rendering generico della chat, già esistente. */
       toolCallNomi: new Map(),
+      /**
+       * ⭐⭐⭐ 30/8, owner: "raggruppati in un collapse come fa Claude, con
+       * diff totale accanto" (riferimento: Claude Code stesso, screenshot
+       * allegati — vedi LEDGER-RAGGRUPPAMENTO-TOOL-CALL-DIFF-2026-08-30.md).
+       * `null` = nessun batch di tool-call aperto ora; un oggetto quando
+       * una sequenza ININTERROTTA di tool-call è in corso — chiuso (mai
+       * più riaperto) alla prima cosa che non è una tool-call: testo
+       * dell'assistente, un nuovo blocco di ragionamento, o fine turno.
+       * Vedi apriBatchSeServe/chiudiBatchTool.
+       */
+      batchAttivo: null,
+      /** ⭐ 30/8 — l'ultimo batch chiuso, per attribuire correttamente il diff di uno StateDelta che arriva DOPO la chiusura (il caso normale) — vedi chiudiBatchTool/updateRealReview. */
+      ultimoBatchChiuso: null,
       /** ⛔ 27/8 — vero se l'ULTIMO evento visto su questa connessione era RunFinished/RunError: dice a onerror se la chiusura che sta per arrivare è attesa (niente da segnalare) o una vera interruzione. Vedi collegaEventiSessione. */
       eventoTerminaleVisto: false,
       /** ⛔⛔⛔ 27/8, owner: "le risposte non sono formattate" — testo GREZZO
@@ -3102,6 +3115,132 @@
    * prod-ready.
    */
   /**
+   * ⭐⭐⭐ 30/8, owner: "vorrei che i comandi venissero raggruppati in un
+   * collapse come fa Claude, con diff totale accanto, se ci clicco deve
+   * avere la lista completa (comportamento attuale) ma in ogni modifica
+   * ci deve essere il diff specifico per ogni file" — riferimento:
+   * Claude Code stesso (screenshot allegati, non Harness Desktop — vedi
+   * LEDGER-RAGGRUPPAMENTO-TOOL-CALL-DIFF-2026-08-30.md per la spec UX
+   * dedotta riga per riga). Un batch = una sequenza ININTERROTTA di
+   * tool-call consecutive nello stesso turno: apriBatchSeServe() lo
+   * crea/riusa, chiudiBatchTool() lo chiude per sempre (mai riaperto —
+   * la prossima tool-call ne apre uno NUOVO) alla prima cosa che non è
+   * una tool-call vista in handleRealEvent (testo, un nuovo blocco di
+   * ragionamento, fine turno).
+   *
+   * ⛔ Le righe SINGOLE (comportamento attuale, invariato) vivono DENTRO
+   * `contenitore`, nascosto finché non si clicca la riga di riepilogo —
+   * `appendToolNote` prende un contenitore opzionale proprio per questo,
+   * default `#conversation` per ogni altro chiamante (Ragionamento,
+   * ecc.) che non deve raggrupparsi.
+   */
+  function apriBatchSeServe() {
+    if (state.realSession.batchAttivo) return state.realSession.batchAttivo;
+    const conversation = $('#conversation');
+    const article = document.createElement('article');
+    article.className = 'message assistant-message compact-message tool-batch';
+    const summary = document.createElement('button');
+    summary.type = 'button';
+    summary.className = 'tool-note-summary tool-batch-summary';
+    summary.setAttribute('aria-expanded', 'false');
+    const glyph = document.createElement('span');
+    glyph.className = 'talos-glyph';
+    glyph.textContent = '⚙';
+    const summaryText = document.createElement('span');
+    summaryText.className = 'tool-note-summary-text';
+    summaryText.textContent = 'Attività…';
+    const diffBadge = document.createElement('span');
+    diffBadge.className = 'tool-note-diff';
+    diffBadge.hidden = true;
+    const chevron = document.createElement('span');
+    chevron.className = 'tool-note-chevron';
+    chevron.textContent = '›';
+    chevron.setAttribute('aria-hidden', 'true');
+    summary.append(glyph, summaryText, diffBadge, chevron);
+    const contenitore = document.createElement('div');
+    contenitore.className = 'tool-batch-items';
+    contenitore.hidden = true;
+    summary.addEventListener('click', () => {
+      const aperto = summary.getAttribute('aria-expanded') === 'true';
+      summary.setAttribute('aria-expanded', String(!aperto));
+      contenitore.hidden = aperto;
+    });
+    article.append(summary, contenitore);
+    conversation.appendChild(article);
+    markMotionEnter(article);
+    window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
+    const batch = {
+      contenitore,
+      summaryText,
+      diffBadge,
+      contatori: { letti: 0, cercati: 0, comandi: 0, comandiErrore: 0, nuovi: 0, modificati: 0, altro: 0, diffAgg: 0, diffRim: 0 },
+      // ⭐ FIFO: la bubble {summaryText,detail} di ogni `scrivi` in attesa
+      // del proprio StateDelta (che porta prima/dopo — vedi updateRealReview
+      // più sotto). Il kernel esegue le tool-call in sequenza, mai in
+      // parallelo dentro lo stesso turno (nessuna delega qui: quella ha
+      // il proprio sotto-agente, un contesto separato) — un ordine di
+      // arrivo FIFO per gli SateDelta di scrittura è quindi affidabile,
+      // non un'ipotesi ottimistica.
+      scrittureInAttesa: [],
+    };
+    state.realSession.batchAttivo = batch;
+    return batch;
+  }
+
+  /**
+   * Mai più riaperto: la prossima tool-call, se arriva, apre un batch
+   * NUOVO — coerente con "una sequenza ININTERROTTA" della doc sopra.
+   * ⭐ Tiene il riferimento in `ultimoBatchChiuso`: il caso NORMALE è
+   * che lo StateDelta di una scrittura arrivi DOPO che il testo che la
+   * segue ha già chiuso il batch — updateRealReview lo cerca lì.
+   */
+  function chiudiBatchTool() {
+    if (state.realSession.batchAttivo) state.realSession.ultimoBatchChiuso = state.realSession.batchAttivo;
+    state.realSession.batchAttivo = null;
+  }
+
+  function categoriaAttrezzoPerBatch(nome) {
+    if (nome === 'leggi') return 'letto';
+    if (nome === 'cerca' || nome === 'elenca') return 'cercato';
+    if (nome === 'shell' || nome === 'prova') return 'comando';
+    if (nome === 'scrivi') return 'scrittura'; // risolto in nuovo/modificato solo quando arriva lo StateDelta — vedi updateRealReview
+    return 'altro';
+  }
+
+  /**
+   * Il riepilogo testuale a elenco run-on ("Letto 3 file, modificato 2
+   * file, eseguito 20 comandi (2 errori)...") — RICALCOLATO per intero
+   * a ogni chiamata (i contatori sono lo stato vero, mai un delta da
+   * sommare in giro): più semplice da tenere corretto, il costo è
+   * trascurabile (poche decine di tool-call per batch, non migliaia.
+   */
+  function aggiornaRiassuntoBatch(batch) {
+    const c = batch.contatori;
+    const parti = [];
+    if (c.letti > 0) parti.push(`letto ${c.letti} file`);
+    if (c.cercati > 0) parti.push('cercato nel progetto');
+    if (c.modificati > 0) parti.push(`modificato ${c.modificati} file`);
+    if (c.nuovi > 0) parti.push(c.nuovi === 1 ? 'creato un file' : `creato ${c.nuovi} file`);
+    if (c.comandi > 0) {
+      const erroreParte = c.comandiErrore > 0 ? ` (${c.comandiErrore} error${c.comandiErrore === 1 ? 'e' : 'i'})` : '';
+      parti.push(`eseguito ${c.comandi} comand${c.comandi === 1 ? 'o' : 'i'}${erroreParte}`);
+    }
+    if (c.altro > 0) parti.push(c.altro === 1 ? 'un\'altra azione' : `${c.altro} altre azioni`);
+    batch.summaryText.textContent = parti.length > 0
+      ? `${parti[0].charAt(0).toUpperCase()}${parti[0].slice(1)}${parti.slice(1).map((p) => `, ${p}`).join('')}`
+      : 'Attività…';
+    // ⛔ SOLO se il batch ha scritto qualcosa — un batch di sole letture/ricerche/comandi non mostra un diff totale (spec owner, screenshot 1).
+    if (c.diffAgg > 0 || c.diffRim > 0) {
+      batch.diffBadge.hidden = false;
+      batch.diffBadge.replaceChildren(
+        textElement('span', 'add', `+${c.diffAgg}`),
+        document.createTextNode(' '),
+        textElement('span', 'del', `-${c.diffRim}`),
+      );
+    }
+  }
+
+  /**
    * ⭐ 27/8, owner: "ogni comando al server... va messo come fa Claude e
    * ChatGPT" (screenshot allegati) — una riga COLLASSATA con un riassunto
    * leggibile ("Scritto src/formatatore.mjs"), un chevron per espandere,
@@ -3110,9 +3249,15 @@
    * risultato): ToolCallStart lo crea, ToolCallArgs/Result lo aggiornano
    * IN PLACE — vedi handleRealEvent, che tiene il riferimento in
    * state.realSession.toolCallNomi.
+   *
+   * ⭐⭐⭐ 30/8 — `contenitore` opzionale (default `#conversation`, invariato
+   * per ogni chiamante che non raggruppa: Ragionamento, ecc.): quando una
+   * tool-call fa parte di un batch (apriBatchSeServe), la riga nasce
+   * DENTRO il contenitore del batch invece che direttamente in
+   * conversazione — la riga in sé resta IDENTICA, cambia solo dove vive.
    */
-  function appendToolNote(riassuntoIniziale, { classeExtra = '', glifo = '⚙' } = {}) {
-    const conversation = $('#conversation');
+  function appendToolNote(riassuntoIniziale, { classeExtra = '', glifo = '⚙', contenitore } = {}) {
+    const conversation = contenitore ?? $('#conversation');
     const article = document.createElement('article');
     article.className = `message assistant-message compact-message real-tool-note${classeExtra ? ` ${classeExtra}` : ''}`;
     const summary = document.createElement('button');
@@ -4043,6 +4188,37 @@
     renderRealReviewList();
     renderReviewFile(`real:${percorso}`);
     aggiornaSommarioReviewReale();
+    /*
+     * ⭐⭐⭐ 30/8, owner: "in ogni modifica ci deve essere il diff
+     * specifico per ogni file (segni +n e -n)" — il diff PER-RIGA sulla
+     * tool-call `scrivi` stessa, dentro il batch collassato (spec
+     * screenshot 2: "Modificato app.js +16 -1"). FIFO: la bubble più
+     * vecchia ancora in attesa — vedi la doc su apriBatchSeServe sul
+     * perché l'ordine di arrivo è affidabile.
+     * ⛔ Il caso NORMALE è che il batch sia già CHIUSO quando questo
+     * StateDelta arriva (il testo che segue la scrittura lo chiude
+     * prima) — `chiudiBatchTool()` tiene `ultimoBatchChiuso` proprio
+     * per questo: la riga e il batch a cui apparteneva DAVVERO restano
+     * raggiungibili, mai il batch (nuovo, sbagliato) che è aperto ORA.
+     */
+    if (righeGrezze !== null) {
+      const agg = righe.filter(([tipo]) => tipo === 'add').length;
+      const rim = righe.filter(([tipo]) => tipo === 'del').length;
+      // ⛔ prima il batch ancora aperto (raro: lo StateDelta ha battuto il testo che lo chiude), poi l'ultimo appena chiuso (il caso normale) — mai perso, mai assegnato al batch sbagliato.
+      const batch = [state.realSession.batchAttivo, state.realSession.ultimoBatchChiuso]
+        .find((b) => b?.scrittureInAttesa.length > 0);
+      const bubbleScrittura = batch?.scrittureInAttesa.shift();
+      if (bubbleScrittura) {
+        const diffSpan = document.createElement('span');
+        diffSpan.className = 'tool-note-diff';
+        diffSpan.append(textElement('span', 'add', `+${agg}`), document.createTextNode(' '), textElement('span', 'del', `-${rim}`));
+        bubbleScrittura.summaryText.after(diffSpan);
+        if (operazione.op === 'add') batch.contatori.nuovi += 1; else batch.contatori.modificati += 1;
+        batch.contatori.diffAgg += agg;
+        batch.contatori.diffRim += rim;
+        aggiornaRiassuntoBatch(batch);
+      }
+    }
   }
 
   /**
@@ -4784,6 +4960,7 @@
       }
       case 'TextMessageContent': {
         nascondiAttesaRisposta(); // il primo token vero: la ruota di attesa ha fatto il suo lavoro
+        chiudiBatchTool(); // 30/8 — testo vero dell'assistente: chiude il batch di tool-call corrente, se ce n'è uno aperto (vedi doc su apriBatchSeServe)
         const element = ensureAssistantMessageElement(evento.messageId);
         // ⛔⛔⛔ 27/8 — testo GREZZO accumulato a parte (mai letto da
         // .textContent, che ora contiene il RENDER): renderizzaMarkdownSemplice()
@@ -4815,6 +4992,7 @@
        */
       case 'ReasoningMessageStart': {
         nascondiAttesaRisposta(); // il ragionamento è la prima prova che il modello ha iniziato, anche prima del testo
+        chiudiBatchTool(); // 30/8 — un nuovo blocco di ragionamento chiude il batch di tool-call corrente, stesso motivo di TextMessageContent
         const bubble = appendToolNote('Ragionamento', { classeExtra: 'real-reasoning-note', glifo: '💭' });
         state.realSession.ragionamentoBubble.set(evento.messageId, { ...bubble, grezzo: '' });
         break;
@@ -4832,7 +5010,9 @@
       }
       case 'ToolCallStart': {
         nascondiAttesaRisposta(); // il primo attrezzo chiamato: sappiamo già cosa sta facendo, la ruota non serve più
-        const bubble = appendToolNote(riassuntoAttrezzo(evento.toolCallName, null));
+        // ⭐⭐⭐ 30/8 — raggruppamento (owner, "come fa Claude"): la riga nasce DENTRO il batch corrente, non più direttamente in conversazione. Vedi apriBatchSeServe.
+        const batch = apriBatchSeServe();
+        const bubble = appendToolNote(riassuntoAttrezzo(evento.toolCallName, null), { contenitore: batch.contenitore });
         /*
          * ⭐ nome + riferimenti DOM (summaryText/detail) tenuti per
          * toolCallId: ToolCallArgs e ToolCallResult aggiornano LO STESSO
@@ -4842,6 +5022,13 @@
          * nella vista Terminale/Browser, invariato.
          */
         state.realSession.toolCallNomi.set(evento.toolCallId, { nome: evento.toolCallName, argomenti: '', ...bubble });
+        const categoria = categoriaAttrezzoPerBatch(evento.toolCallName);
+        if (categoria === 'letto') batch.contatori.letti += 1;
+        else if (categoria === 'cercato') batch.contatori.cercati += 1;
+        else if (categoria === 'comando') batch.contatori.comandi += 1;
+        else if (categoria === 'scrittura') batch.scrittureInAttesa.push(bubble); // conteggiata (nuovo/modificato) solo quando arriva lo StateDelta — vedi updateRealReview
+        else batch.contatori.altro += 1;
+        aggiornaRiassuntoBatch(batch);
         break;
       }
       case 'ToolCallArgs': {
@@ -4883,6 +5070,32 @@
           pre.appendChild(textElement('code', '', testoEsito));
           info.detail.appendChild(pre);
         }
+        /*
+         * ⭐⭐⭐ 30/8 — il conteggio "(N errori)" del riepilogo batch (spec
+         * owner, screenshot 1: "eseguito 20 comandi (2 errori)"). Solo
+         * `shell`/`prova` contano come "comando" nel batch (vedi
+         * categoriaAttrezzoPerBatch) — stesso identico riconoscimento
+         * già in uso per `prova` in riassuntoEsitoAttrezzo (pass/fail),
+         * più un pattern exit-code per `shell` generico. Un batch è
+         * spesso già chiuso quando arriva il risultato (la prossima
+         * tool-call ne apre uno nuovo) — `batch` qui è SEMPRE quello
+         * dell'ultimo `ToolCallStart`, mai quello sbagliato: se il
+         * batch che conteneva questa chiamata è già chiuso,
+         * `state.realSession.batchAttivo` è `null` o un batch DIVERSO
+         * (uno nuovo) e questo aggiornamento diventa innocuamente un
+         * no-op sul batch sbagliato — accettabile: il conteggio errori
+         * è un dettaglio del riepilogo, non la riga stessa (che resta
+         * sempre corretta, aggiornata sopra).
+         */
+        if ((info?.nome === 'prova' || info?.nome === 'shell') && state.realSession.batchAttivo) {
+          const fallito = info.nome === 'prova'
+            ? /ℹ?\s*fail\s+([1-9]\d*)/i.test(testoEsito)
+            : /exit\s+([1-9]\d*)/i.test(testoEsito);
+          if (fallito) {
+            state.realSession.batchAttivo.contatori.comandiErrore += 1;
+            aggiornaRiassuntoBatch(state.realSession.batchAttivo);
+          }
+        }
         state.realSession.toolCallNomi.delete(evento.toolCallId);
         break;
       }
@@ -4905,7 +5118,7 @@
         updateRealReview(evento.delta);
         const percorsoScritto = path?.replace(/^\/file\//, '');
         if (percorsoScritto) segnalaScritturaNellAlbero(percorsoScritto);
-        appendStatusNote('✏️ File scritto — vedi la scheda Review per il contenuto intero.');
+        // ⛔⛔⛔ 30/8 — rimossa la nota separata "✏️ File scritto — vedi la scheda Review": ridondante, confermata in Task 0.3 della QA visiva (la stessa scrittura era GIÀ mostrata nel bubble della tool-call, nella scheda Review, nell'albero file). Il raggruppamento tool-call (updateRealReview sopra) ora attacca il diff VERO direttamente alla riga `scrivi` — un segnale più ricco, non solo "qualcosa è stato scritto".
         break;
       }
       case 'ArtifactCreated': {
@@ -4978,6 +5191,7 @@
          * evento era terminale, per onerror.
          */
         nascondiAttesaRisposta(); // rete di sicurezza: un giro che chiude senza aver mai prodotto testo/tool-call (raro, non impossibile) non deve lasciare la ruota a girare per sempre
+        chiudiBatchTool(); // 30/8 — fine turno: un batch di tool-call aperto non resta orfano fino al prossimo giro
         state.realSession.eventoTerminaleVisto = true;
         aggiornaElencoSessioniReali(); // lo stato in #sessionList passa da "in corso" a "concluso" (visibile solo standalone, vedi nota di testa)
         break;
@@ -5018,6 +5232,7 @@
       }
       case 'RunError': {
         nascondiAttesaRisposta();
+        chiudiBatchTool(); // 30/8 — vedi RunFinished sopra, stesso motivo
         appendStatusNote(`${evento.code ? `[${evento.code}] ` : ''}${evento.message}`, true);
         state.realSession.eventoTerminaleVisto = true;
         break;
@@ -5129,6 +5344,8 @@
       state.realSession.approvazioniPendenti = new Map(); // le card sono già sparite con replaceChildren() qui sopra, la mappa le segue
       state.realSession.cartellaAssoluta = null; // Fase 3 — una sessione nuova non conosce ancora la propria radice finché RunStarted non arriva
       state.realSession.codaMessaggi = []; // FASE D — una sessione nuova non eredita la coda di quella precedente
+      state.realSession.batchAttivo = null; // 30/8 — una sessione nuova non eredita un batch di tool-call della precedente
+      state.realSession.ultimoBatchChiuso = null;
       renderizzaBannerCoda();
       // ⛔ 27/8 — Terminale/Browser tengono il loro "già reale" nel DOM
       // (dataset), non in state.realSession: senza questo, restavano

@@ -439,6 +439,30 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 .real-reasoning-note .tool-note-summary-text { font-style: italic; }
 .real-reasoning-note .tool-note-detail { font-style: italic; color: var(--muted); }
 
+/*
+ * ⭐⭐⭐ 30/8, owner: "vorrei che i comandi venissero raggruppati in un
+ * collapse come fa Claude, con diff totale accanto... in ogni modifica
+ * ci deve essere il diff specifico per ogni file (segni +n e -n)"
+ * (screenshot allegati, riferimento Claude Code — vedi app.js,
+ * apriBatchSeServe/aggiornaRiassuntoBatch e
+ * LEDGER-RAGGRUPPAMENTO-TOOL-CALL-DIFF-2026-08-30.md per la spec).
+ * `.tool-batch` riusa .tool-note-summary/-summary-text/-chevron
+ * (stesso idioma visivo di una singola tool-call, di proposito: un
+ * batch È un gruppo di tool-call, non un componente diverso) — solo
+ * `.tool-batch-items` è nuovo, il contenitore delle righe singole
+ * (comportamento INVARIATO, .real-tool-note com'è oggi) mostrato solo
+ * da aperto. `.tool-note-diff` è il badge +n/-n, riusato identico sia
+ * sulla riga di riepilogo del batch (totale) sia su ogni singola riga
+ * `scrivi` (per-file) — stessi token colore --success/--danger di .add/.del
+ * (il diff pieno della Review), non un colore inventato qui.
+ */
+.tool-batch-items { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; padding-left: 30px; border-left: 1px solid var(--line-soft); }
+.tool-batch-items[hidden] { display: none; }
+.tool-batch-items .real-tool-note { margin: 0; }
+.tool-note-diff { flex-shrink: 0; display: flex; gap: 6px; font: 11px var(--font-mono); }
+.tool-note-diff .add { padding: 0; background: transparent; color: var(--success); }
+.tool-note-diff .del { padding: 0; background: transparent; color: var(--danger); }
+
 /* ⭐⭐⭐ 28/8 — la card dell'artefatto (attrezzo artifact_create): titolo +
    iframe sandboxato (vedi app.js, confezionaArtefattoSicuro/appendArtifactCard
    per il perché è sicuro). Altezza fissa ragionevole con scroll interno
