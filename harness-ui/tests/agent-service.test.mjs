@@ -1085,6 +1085,41 @@ test('⛔ AL CONTRARIO — onDelega assente arriva undefined a talosLavoraFn, ma
 });
 
 /*
+ * ⭐⭐⭐ FASE N, ottavo sistema (30/8) — Deep Research: stesso principio
+ * ESATTO dei blocchi onDelega/hookFn/codaMessaggiFn sopra — gli 8
+ * onRicerca* viaggiano SENZA trasformazione, costruiti tutti in
+ * session-registry.mjs (mai qui). Stesso gap da non ripetere.
+ */
+const OTTO_CALLBACK_RICERCA = ['onRicercaLista', 'onRicercaAvvia', 'onRicercaLeggi', 'onRicercaRinomina', 'onRicercaPausa', 'onRicercaRiprendi', 'onRicercaAnnulla', 'onRicercaElimina'];
+
+for (const nome of OTTO_CALLBACK_RICERCA) {
+  test(`⭐⭐⭐ PARITÀ — ${nome} arriva a talosLavoraFn ESATTAMENTE come passato, senza trasformazione`, async () => {
+    let catturato;
+    const talosLavoraFn = talosLavoraFinto({
+      script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+      cattura: (input) => { catturato = input; },
+    });
+    const callback = async () => ({ ok: true, esito: 'mai chiamata in questo test' });
+
+    await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, [nome]: callback });
+
+    assert.equal(catturato[nome], callback, 'STESSA funzione, non un wrapper');
+  });
+
+  test(`⛔ AL CONTRARIO — ${nome} assente arriva undefined a talosLavoraFn, mai un valore inventato`, async () => {
+    let catturato;
+    const talosLavoraFn = talosLavoraFinto({
+      script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+      cattura: (input) => { catturato = input; },
+    });
+
+    await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn });
+
+    assert.equal(catturato[nome], undefined);
+  });
+}
+
+/*
  * ⭐⭐⭐ FASE D (28/8) — coda messaggi: stesso principio dei blocchi sopra,
  * `codaMessaggiFn` viaggia SENZA trasformazione. Stesso gap da non
  * ripetere: un parametro costruito dal chiamante (session-registry.mjs)

@@ -59,10 +59,18 @@ import {
   verificaTrustMcp as verificaTrustMcpReale,
 } from './mcp-registry.mjs';
 import { caricaSkill as caricaSkillReale, SkillRegistryError } from './skill-registry.mjs';
-import { elencaVoci as elencaVociReale, LibraryStoreError } from './library-store.mjs';
+import {
+  elencaVoci as elencaVociReale, leggiVoce as leggiVoceLibreriaReale, salvaVoce as salvaVoceLibreriaReale,
+  eliminaVoce as eliminaVoceLibreriaReale, LibraryStoreError,
+} from './library-store.mjs';
 import { elencaNote as elencaNoteReale, NoteStoreError } from './notes-store.mjs';
 import { elencaAttivita as elencaAttivitaReale, TaskStoreError } from './tasks-store.mjs';
 import { elencaMemorie as elencaMemorieReale, MemoryStoreError } from './memory-store.mjs';
+import {
+  creaRicerca as creaRicercaReale, leggiRicerca as leggiRicercaReale, aggiornaRicerca as aggiornaRicercaReale,
+  eliminaRicerca as eliminaRicercaReale, elencaRicerche as elencaRicercheReale, ResearchStoreError,
+} from './research-store.mjs';
+import { creaResearchOrchestrator } from './research-orchestrator.mjs';
 import {
   caricaPlugin as caricaPluginReale,
   fidaPlugin as fidaPluginReale,
@@ -242,6 +250,23 @@ export function createSessionRegistry({
    * (vedi la doc in memory-store.mjs).
    */
   cartellaMemoria = fileURLToPath(new URL('../.memory-store/', import.meta.url)),
+  /*
+   * ⭐⭐⭐ FASE N, ottavo sistema (30/8) — Deep Research, "fetta onesta".
+   * A DIFFERENZA di Notes/Tasks/Memory (cartelle GLOBALI qui sopra):
+   * Deep Research è PER-PROGETTO, come Libreria — nessun default reale
+   * qui, la cartella di una ricerca è SEMPRE quella della sessione che
+   * l'ha avviata (thread attraverso `avviaESegui`, mai un parametro di
+   * questo costruttore). Solo le FUNZIONI di store sono iniettabili
+   * (stesso principio DI di ogni altro store in questo file), non una
+   * cartella. `randomUUIDFn` è l'id generator della ricerca (== il
+   * sessionId della sessione che la esegue, vedi research-orchestrator.mjs
+   * sul perché) — stesso `randomUUID` già importato per `avviaESegui`
+   * stesso, iniettabile qui separatamente per i test.
+   */
+  creaRicercaFn = creaRicercaReale, leggiRicercaFn = leggiRicercaReale, aggiornaRicercaFn = aggiornaRicercaReale,
+  eliminaRicercaFn = eliminaRicercaReale, elencaRicercheFn = elencaRicercheReale,
+  salvaVoceLibreriaFn = salvaVoceLibreriaReale, leggiVoceLibreriaFn = leggiVoceLibreriaReale, eliminaVoceLibreriaFn = eliminaVoceLibreriaReale,
+  randomUUIDFn = randomUUID,
   modello,
   chiave,
   cartelleProgetto = [],
@@ -264,6 +289,7 @@ export function createSessionRegistry({
   // ⭐ FASE N, quarto sistema (30/8) — quindicesimo-diciottesimo: i 4 tool Notes (ATTREZZI_ESTESI[14..17] nel kernel). Le 3 mutazioni MUTANO davvero (gate nel kernel stesso) ma seguono lo stesso principio "sempre in lista" di document_create/library_rename.
   // ⭐ FASE N, quinto sistema (30/8) — diciannovesimo-ventitreesimo: i 5 tool Tasks (ATTREZZI_ESTESI[18..22] nel kernel). Le 4 mutazioni MUTANO davvero, stesso principio.
   // ⭐ FASE N, sesto sistema (30/8) — ventiquattresimo-ventisettesimo: i 4 tool Memory (ATTREZZI_ESTESI[23..26] nel kernel). Le 3 mutazioni MUTANO davvero, stesso principio.
+  // ⭐ FASE N, ottavo sistema (30/8) — ventottesimo-trentacinquesimo: gli 8 tool Deep Research (ATTREZZI_ESTESI[27..34] nel kernel). Le 6 mutazioni MUTANO davvero, stesso principio.
   strumentiEstesi = [
     'web_search', 'artifact_create', 'document_create', 'time_now', 'delega_sottotask', 'generate_image',
     'library_list', 'library_search', 'library_read', 'library_file_origin',
@@ -272,6 +298,8 @@ export function createSessionRegistry({
     'notes_list', 'notes_create', 'notes_update', 'notes_delete',
     'tasks_list', 'tasks_create', 'tasks_complete', 'tasks_update', 'tasks_delete',
     'memory_search', 'memory_write', 'memory_update', 'memory_delete',
+    'research_list', 'research_start', 'research_read', 'research_rename',
+    'research_pause', 'research_resume', 'research_cancel', 'research_delete',
   ],
   ricercaWeb,
   /*
@@ -296,6 +324,16 @@ export function createSessionRegistry({
   const sessioni = new Map();
   // ⭐⭐⭐ FASE C (28/8) — istanziato qui: `avviaESegui` è una function declaration (issata), riferibile prima della sua definizione testuale più sotto.
   const subagentOrchestrator = creaSubagentOrchestrator({ sessioni, avviaESeguiFn: avviaESegui });
+  /*
+   * ⭐⭐⭐ FASE N, ottavo sistema (30/8) — Deep Research. Stesso principio
+   * di subagentOrchestrator appena sopra: `avviaESegui` issata, `sessioni`
+   * la STESSA Map — nessun secondo registro nascosto.
+   */
+  const researchOrchestrator = creaResearchOrchestrator({
+    sessioni, avviaESeguiFn: avviaESegui,
+    creaRicercaFn, leggiRicercaFn, aggiornaRicercaFn, eliminaRicercaFn, elencaRicercheFn,
+    salvaVoceLibreriaFn, leggiVoceLibreriaFn, eliminaVoceLibreriaFn, randomUUIDFn,
+  });
 
   /*
    * ⛔⛔⛔ 27/8, owner: "ricevo risposte duplicate" — riprodotto e trovato.
@@ -632,6 +670,23 @@ export function createSessionRegistry({
       return testo;
     };
 
+    /*
+     * ⭐⭐⭐ FASE N, ottavo sistema (30/8) — Deep Research: 8 thin delegate
+     * verso researchOrchestrator, stesso principio di onDelega verso
+     * subagentOrchestrator.delegaSottoTask un blocco sopra. `cartella`
+     * qui è quella di QUESTA sessione (il padre che avvia/gestisce la
+     * ricerca) — la ricerca gira nella STESSA cartella, mai un
+     * workspace dedicato (vedi la doc di research-orchestrator.mjs).
+     */
+    const onRicercaLista = (argomenti) => researchOrchestrator.elenca({ cartella, ...argomenti });
+    const onRicercaAvvia = (argomenti) => researchOrchestrator.avvia({ cartella, question: argomenti?.question, depth: argomenti?.depth });
+    const onRicercaLeggi = (argomenti) => researchOrchestrator.leggi({ cartella, id: argomenti?.id });
+    const onRicercaRinomina = (argomenti) => researchOrchestrator.rinomina({ cartella, id: argomenti?.id, title: argomenti?.title ?? null });
+    const onRicercaPausa = (argomenti) => researchOrchestrator.mettiInPausa({ id: argomenti?.id });
+    const onRicercaRiprendi = (argomenti) => researchOrchestrator.riprendi({ id: argomenti?.id });
+    const onRicercaAnnulla = (argomenti) => researchOrchestrator.annulla({ id: argomenti?.id });
+    const onRicercaElimina = (argomenti) => researchOrchestrator.elimina({ cartella, id: argomenti?.id });
+
     avviaSessioneFn({
       cartella, task, modello: modelloEffettivo, chiave, comandoProva, messaggiIniziali,
       reasoning: reasoningEffettivo ?? undefined,
@@ -655,6 +710,9 @@ export function createSessionRegistry({
       cartellaAttivita,
       // ⭐⭐⭐ FASE N, sesto sistema (30/8) — stesso principio esatto di cartellaNote/cartellaAttivita.
       cartellaMemoria,
+      // ⭐⭐⭐ FASE N, ottavo sistema (30/8) — Deep Research, gli 8 thin delegate costruiti appena sopra.
+      onRicercaLista, onRicercaAvvia, onRicercaLeggi, onRicercaRinomina,
+      onRicercaPausa, onRicercaRiprendi, onRicercaAnnulla, onRicercaElimina,
       onEvento: (evento) => broadcast(voce, evento),
     }).then((risultato) => {
       /*
@@ -1347,6 +1405,28 @@ export function createSessionRegistry({
         memorie: memorie.map((m) => ({ id: m.id, titolo: m.titolo, contenuto: m.contenuto, genere: m.genere, aggiornataAlle: m.aggiornataAlle })),
         errore: null,
       };
+    },
+    /**
+     * ⭐⭐⭐ FASE N, ottavo sistema (30/8) — Deep Research, il pannello
+     * Capability hub. A DIFFERENZA di elencaMemorie appena sopra: la
+     * cartella è quella DELLA SESSIONE (`voce.cartella`, PER-PROGETTO
+     * come Libreria — mai una cartella globale), e lo stato di ogni
+     * riga (`stato`) è quello VIVO — riusa researchOrchestrator.elenca,
+     * la STESSA funzione che il tool research_list usa, mai una
+     * seconda logica di derivazione duplicata qui.
+     * @returns {Promise<{ok:true, ricerche:Array|null, errore:string|null}|{erroreAvvio:string, code:string}>}
+     */
+    async elencaRicerche(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      let esito;
+      try {
+        esito = await researchOrchestrator.elenca({ cartella: voce.cartella, page_size: 50 });
+      } catch (errore) {
+        if (errore instanceof ResearchStoreError) return { ok: true, ricerche: null, errore: errore.message };
+        throw errore;
+      }
+      return { ok: true, ricerche: esito.ricerche, errore: null };
     },
 
     /**

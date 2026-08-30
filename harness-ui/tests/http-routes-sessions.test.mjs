@@ -198,6 +198,17 @@ function registroFinto() {
       if (sessionId === 'sess-memoria-rotta') return { ok: true, memorie: null, errore: '.memory-store/rotta.json non è un JSON valido' };
       return { ok: true, memorie: [{ id: 'mem-1', titolo: 'Preferenze risposta', contenuto: 'Risposte brevi', genere: 'preference', aggiornataAlle: '2026-08-30T10:00:00.000Z' }], errore: null };
     },
+    /*
+     * ⭐⭐⭐ FASE N, ottavo sistema (30/8): stesso stile esatto di
+     * elencaMemorie appena sopra — a differenza di quella (GLOBALE),
+     * questa è PER-PROGETTO come Libreria, ma il fake resta identico
+     * (la differenza vive in session-registry.mjs, non in questa rotta).
+     */
+    async elencaRicerche(sessionId) {
+      if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (sessionId === 'sess-ricerca-rotta') return { ok: true, ricerche: null, errore: '.harness-ui-research/rotta.json non è un JSON valido' };
+      return { ok: true, ricerche: [{ id: 'sess-ricerca-1', titolo: 'Il caching di OpenRouter', stato: 'done', avviataAlle: '2026-08-30T10:00:00.000Z' }], errore: null };
+    },
     ultimaFiduciaServerMcp: null,
     async fidaServerMcp(sessionId, serverId) {
       this.ultimaFiduciaServerMcp = { sessionId, serverId };
@@ -1276,6 +1287,28 @@ test('⭐ GET /api/v1/sessions/{id}/memory torna le memorie dal registro', async
 test('⛔ AL CONTRARIO — GET .../memory su un id inesistente: 404 NOT_FOUND', async (t) => {
   const { base } = await listen(t);
   const risposta = await fetch(`${base}/api/v1/sessions/non-esiste/memory`);
+  assert.equal(risposta.status, 404);
+});
+
+/*
+ * ⭐⭐⭐ FASE N, ottavo sistema (30/8) — GET .../research: il Capability
+ * hub chiama questa rotta per mostrare le ricerche approfondite DEL
+ * PROGETTO di questa sessione (PER-PROGETTO, come Libreria — mai
+ * globale come .../memory sopra) — stesso principio esatto della rotta.
+ */
+test('⭐ GET /api/v1/sessions/{id}/research torna le ricerche dal registro', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/research`);
+  assert.equal(risposta.status, 200);
+  const corpo = await risposta.json();
+  assert.deepEqual(corpo.data.ricerche, [{ id: 'sess-ricerca-1', titolo: 'Il caching di OpenRouter', stato: 'done', avviataAlle: '2026-08-30T10:00:00.000Z' }]);
+  assert.equal(corpo.data.errore, null);
+});
+
+test('⛔ AL CONTRARIO — GET .../research su un id inesistente: 404 NOT_FOUND', async (t) => {
+  const { base } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions/non-esiste/research`);
   assert.equal(risposta.status, 404);
 });
 

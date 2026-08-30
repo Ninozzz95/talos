@@ -2641,3 +2641,112 @@ test('⛔⛔ AL CONTRARIO — ripristina(): una sessione già VIVA in memoria (s
     rmSync(cartellaStore, { recursive: true, force: true });
   }
 });
+
+/*
+ * ⭐⭐⭐ FASE N, ottavo sistema (30/8) — Deep Research, piano
+ * elegant-spinning-dongarra.md. La logica PURA dell'orchestratore è
+ * già provata isolata in research-orchestrator.test.mjs; qui si prova
+ * che session-registry.mjs lo colleghi per davvero — stesso principio
+ * dei test onDelega/hookFn appena sopra, mai dimenticato come successe
+ * a hookFn prima di FASE A. Store di Libreria/Ricerca FINTI, in
+ * memoria — mai reale I/O su disco per una `cartella` finta come
+ * '/tmp/x' (che `preparaEsecuzioneFinta` usa solo come etichetta, non
+ * come percorso vero): stesso principio già in uso in
+ * research-orchestrator.test.mjs, qui iniettato al costruttore del
+ * registro invece che al costruttore dell'orchestratore.
+ */
+function storeRicercaFinto() {
+  const record = new Map();
+  const libreria = new Map();
+  let prossimoIdLibreria = 1;
+  return {
+    creaRicercaFn: async ({ cartella, id, domanda, profondita }) => {
+      const voce = { id, domanda, profondita, titolo: null, terminata: null, reportLibraryId: null, avviataAlle: '2026-08-30T10:00:00.000Z' };
+      record.set(`${cartella}::${id}`, voce);
+      return voce;
+    },
+    leggiRicercaFn: async ({ cartella, id }) => record.get(`${cartella}::${id}`) ?? null,
+    aggiornaRicercaFn: async ({ cartella, id, titolo, terminata, reportLibraryId }) => {
+      const voce = record.get(`${cartella}::${id}`);
+      if (!voce) return null;
+      if (titolo !== undefined) voce.titolo = titolo;
+      if (terminata !== undefined) voce.terminata = terminata;
+      if (reportLibraryId !== undefined) voce.reportLibraryId = reportLibraryId;
+      return voce;
+    },
+    eliminaRicercaFn: async ({ cartella, id }) => {
+      const chiave = `${cartella}::${id}`;
+      if (!record.has(chiave)) return null;
+      record.delete(chiave);
+      return { id };
+    },
+    elencaRicercheFn: async ({ cartella }) => [...record.entries()].filter(([chiave]) => chiave.startsWith(`${cartella}::`)).map(([, v]) => v),
+    salvaVoceLibreriaFn: async ({ cartella, testo }) => {
+      const id = `lib-${prossimoIdLibreria}`;
+      prossimoIdLibreria += 1;
+      libreria.set(`${cartella}::${id}`, { testo });
+      return id;
+    },
+    leggiVoceLibreriaFn: async ({ cartella, id }) => libreria.get(`${cartella}::${id}`) ?? null,
+    eliminaVoceLibreriaFn: async ({ cartella, id }) => { libreria.delete(`${cartella}::${id}`); },
+  };
+}
+
+test('⭐⭐⭐ gli 8 onRicerca* sono SEMPRE costruiti su avvia() — funzioni vere, anche per una sessione che non fa mai ricerca', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', ...storeRicercaFinto() });
+  registro.avvia('task-vero');
+  for (const nome of ['onRicercaLista', 'onRicercaAvvia', 'onRicercaLeggi', 'onRicercaRinomina', 'onRicercaPausa', 'onRicercaRiprendi', 'onRicercaAnnulla', 'onRicercaElimina']) {
+    assert.equal(typeof finta.ultimoInput[nome], 'function', `${nome} deve essere una funzione vera`);
+  }
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⭐⭐⭐⭐ research FILO INTERO: onRicercaAvvia avvia DAVVERO una seconda sessione, STESSA cartella del padre — a differenza della delega, MAI isolata', async () => {
+  const finta = sessioneControllabile(); // STESSO fake per padre e ricerca: avviaSessioneFn iniettato una volta sola, la seconda avviaESegui() (per la ricerca) lo richiama identico
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', ...storeRicercaFinto() });
+  registro.avvia('task-vero'); // preparaEsecuzioneFinta: cartella '/tmp/x'
+  const onRicercaAvviaDelPadre = finta.ultimoInput.onRicercaAvvia;
+
+  const { id } = await onRicercaAvviaDelPadre({ question: 'Come funziona il caching di OpenRouter?', depth: 'deep' });
+  assert.ok(id, 'research_start torna SUBITO un id, senza aspettare la CONCLUSIONE della ricerca');
+  assert.equal(finta.chiamate, 2, 'research_start deve aver richiamato avviaSessioneFn una SECONDA volta, per la ricerca');
+  assert.equal(finta.ultimoInput.cartella, '/tmp/x', 'la ricerca gira nella STESSA cartella del padre — MAI isolata come una delega');
+  assert.equal(finta.ultimoInput.livelloAccesso, 'lettura', 'permessiRichiesti:\'Read only\' si traduce nello stesso livelloAccesso del resto del prodotto');
+  assert.match(finta.ultimoInput.task.consegna, /Come funziona il caching di OpenRouter\?/);
+
+  finta.concludi(
+    { type: 'RunFinished', threadId: 't2', runId: 'r2' },
+    { ok: true, esito: { detto: 'x', comeFinita: 'concluso', messaggiFinali: [{ role: 'assistant', content: 'Il rapporto trovato.' }] } },
+  );
+  await new Promise((r) => setImmediate(r)); // store finto, in memoria: un solo tick basta a scaricare onConclusioneRicerca per intero
+
+  const onRicercaLeggiDelPadre = finta.ultimoInput.onRicercaLeggi; // ⛔ dopo concludi(), ultimoInput torna a puntare all'ULTIMA chiamata catturata — ancora la ricerca (nessuna terza chiamata è avvenuta), quindi le stesse callback restano valide
+  const letta = await onRicercaLeggiDelPadre({ id });
+  assert.equal(letta.trovata, true);
+  assert.equal(letta.contenutoRapporto, 'Il rapporto trovato.', 'il rapporto è stato DAVVERO salvato in Libreria e si rilegge');
+});
+
+test('⭐⭐⭐ research_pause FILO INTERO: onRicercaPausa abortisce DAVVERO il controller della ricerca (segnaleStop.aborted)', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', ...storeRicercaFinto() });
+  registro.avvia('task-vero');
+  const onRicercaAvviaDelPadre = finta.ultimoInput.onRicercaAvvia;
+  const onRicercaPausaDelPadre = finta.ultimoInput.onRicercaPausa;
+
+  const { id } = await onRicercaAvviaDelPadre({ question: 'x', depth: 'deep' });
+  // ⛔ solo DOPO aver atteso l'avvio finta.ultimoInput/segnaleStop puntano davvero alla ricerca — prima di allora punterebbero ancora al padre.
+  assert.equal(finta.segnaleStop.aborted, false, 'la ricerca appena avviata non è ancora abortita');
+
+  const esitoPausa = await onRicercaPausaDelPadre({ id });
+  assert.equal(esitoPausa.ok, true);
+  assert.equal(finta.segnaleStop.aborted, true, 'onRicercaPausa deve aver abortito il controller DELLA RICERCA, non un mock a parte');
+
+  // Il kernel (mockato qui) risponderebbe a quell'abort con comeFinita:'fermato' — la ricerca resta resumable, non finalizzata.
+  finta.concludi({ type: 'RunError', threadId: 't2', runId: 'r2', message: 'stopped' }, { ok: true, esito: { detto: 'x', comeFinita: 'fermato', messaggiFinali: [{ role: 'assistant', content: 'parziale' }] } });
+  await new Promise((r) => setImmediate(r));
+
+  const listaDelPadre = finta.ultimoInput.onRicercaLista;
+  const elenco = await listaDelPadre({});
+  assert.equal(elenco.ricerche.find((r) => r.id === id).stato, 'paused', 'dopo la pausa, il bucket vivo è "paused" — mai "done"/"failed"');
+});
