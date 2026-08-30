@@ -104,9 +104,43 @@ Aggiornato cdp-verifica-bug2.mjs +13 -13 ›
    file modificato più volte nello stesso batch produce righe/diff
    separati, non accorpati.
 
+## Fatto (30/8, stesso giorno — owner: "procedi con le correzioni e quello che ti ho detto io riguardo ai comandi stile Claude code")
+
+Implementato per intero secondo la bozza sopra, in `app.js`/`styles.css`:
+
+- `apriBatchSeServe()`/`chiudiBatchTool()`: un batch = sequenza
+  ininterrotta di tool-call, chiuso (mai riaperto) alla prima cosa che
+  non è una tool-call (`TextMessageContent`, `ReasoningMessageStart`,
+  `RunFinished`/`RunError`).
+- `categoriaAttrezzoPerBatch()`/`aggiornaRiassuntoBatch()`: il
+  riepilogo run-on, ricalcolato per intero a ogni evento dai contatori
+  veri (mai un delta sommato in giro). Diff totale SOLO se il batch ha
+  scritto qualcosa.
+- Diff per-file sulla riga `scrivi` stessa: FIFO
+  (`scrittureInAttesa` + `ultimoBatchChiuso`, per il caso normale in
+  cui lo StateDelta arriva DOPO che il batch è già chiuso) correla lo
+  StateDelta alla bubble giusta.
+- `appendToolNote` prende un `contenitore` opzionale (default
+  `#conversation`, invariato per Ragionamento) — le righe singole
+  restano ESATTAMENTE come oggi, solo dentro un contenitore diverso.
+- Rimossa la nota separata ridondante "✏️ File scritto — vedi la
+  scheda Review" (bonus: era già confermata ridondante in Task 0.3
+  della QA visiva).
+
+**Verificato dal vivo** (`qa-raggruppamento-tool-call` in
+`qa-visual-pipeline.mjs`): un batch reale "Letto 4 file, cercato nel
+progetto, modificato 1 file, eseguito 8 comandi (6 errori) +28 -34",
+collassato di default, Ragionamento correttamente fuori dal
+raggruppamento, diff per-file sulla riga `scrivi` espansa. Numeri
+incrociati a mano contro l'evento `StateDelta` grezzo persistito
+(50→44 righe, netto -6, coerente con +28/-34) — non solo guardati a
+schermo.
+
+**Verificato**: 168/168 frontend harness-scope, 953/953 backend,
+6652/6684 suite intera (stessi 32 falliti pre-esistenti ed estranei,
+già documentati altrove, zero relazione con questo lavoro).
+
 ## Stato
 
-🔜 **APERTO, non iniziato.** Nessun file toccato. Riprende con un sì
-esplicito dell'owner, verosimilmente dopo la chiusura del giro di QA
-visiva in corso (`.claude/QA-VISIVA-HARNESS-2026-08-30.md`, Task 6 di
-14 al momento di questa registrazione).
+✅ **Chiuso, verificato dal vivo, committato in locale** (`0b9ef21f`,
+mai pushato).
