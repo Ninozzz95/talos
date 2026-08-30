@@ -1051,6 +1051,50 @@ test('⛔⛔ AL CONTRARIO — elenca(): un altro StateDelta (es. /file/*) non vi
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
+/*
+ * ⭐⭐⭐ 30/8 — owner dal vivo: "come mai non ho le cartelle più usate?"
+ * cartellePiuUsate(): la fonte VERA per frequent-dirs.mjs (vedi la sua
+ * doc su perché le tre cartelle Windows standard non bastavano).
+ */
+test('⭐⭐⭐ cartellePiuUsate(): conta le sessioni per cartella, PIÙ USATA prima, poi PIÙ RECENTE', async () => {
+  const orari = ['2026-08-24T09:00:00.000Z', '2026-08-24T10:00:00.000Z', '2026-08-24T11:00:00.000Z'];
+  const prepara = (taskId) => ({ cartella: taskId, comandoProva: 'npm test', task: { id: taskId, consegna: 'c' } }); // ⭐ ogni taskId finto FA DA cartella, per controllare i percorsi uno a uno in questo test
+  const sessioni3 = [sessioneControllabile(), sessioneControllabile(), sessioneControllabile()];
+  let chiamataNumero = 0;
+  const avviaSessioneFnCombinato = (input) => sessioni3[chiamataNumero++].avviaSessioneFn(input);
+  let indiceOrario = 0;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: avviaSessioneFnCombinato, preparaEsecuzioneFn: prepara,
+    modello: 'm', chiave: 'k', clock: () => new Date(orari[indiceOrario]),
+  });
+
+  indiceOrario = 0; registro.avvia('/progetti/a'); // a: 1 volta, 09:00
+  indiceOrario = 1; registro.avvia('/progetti/b'); // b: 1ª delle 2 volte, 10:00
+  indiceOrario = 2; registro.avvia('/progetti/b'); // b: 2ª volta, 11:00 → b vince per conteggio
+
+  const risultato = registro.cartellePiuUsate();
+  assert.deepEqual(risultato, [
+    { percorso: '/progetti/b', conteggio: 2, ultimaVolta: '2026-08-24T11:00:00.000Z' },
+    { percorso: '/progetti/a', conteggio: 1, ultimaVolta: '2026-08-24T09:00:00.000Z' },
+  ]);
+
+  sessioni3.forEach((s, i) => s.concludi({ type: 'RunFinished', threadId: `t${i}`, runId: `r${i}` })); // pulizia
+  await Promise.resolve();
+});
+
+test('⛔⛔ AL CONTRARIO — cartellePiuUsate() torna vuoto finché nessuna sessione è mai partita, mai un errore', () => {
+  const registro = createSessionRegistry({ preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  assert.deepEqual(registro.cartellePiuUsate(), []);
+});
+
+test('⛔ AL CONTRARIO — cartellePiuUsate() non espone MAI la mappa sessione→cartella, solo l\'aggregato (stesso principio di privacy di elenca())', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  registro.avvia('task-vero');
+  for (const voce of registro.cartellePiuUsate()) assert.ok(!('sessionId' in voce), 'un sessionId qui rilegherebbe una cartella privata a una sessione precisa');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }); // pulizia
+});
+
 test('⭐⭐⭐ rinomina() persiste il nome — elenca() ed esporta() lo mostrano dopo, mai sovrascritto', () => {
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });

@@ -3901,6 +3901,69 @@ const SCENARI = {
       p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
     }
   },
+
+  /**
+   * ⭐⭐⭐ 30/8 — owner dal vivo: "nella sidebar di destra ci sono ancora
+   * dei componenti mockup... il file tree ha ancora la struttura
+   * mockup? come mai non ho le cartelle più usate?" — tre controlli in
+   * un solo giro: (1) tab Files honest al PRIMO carico pagina, prima
+   * di "Nuova"; (2) tab Files honest DOPO "Nuova" + cartella scelta ma
+   * PRIMA di inviare il primo messaggio (il buco esatto segnalato); (3)
+   * le scorciatoie "cartelle frequenti" nel foglio nuova sessione sono
+   * ORA percorsi reali di progetto, mai Desktop/Download/Documenti.
+   */
+  async 'qa-mockup-files-tab-e-cartelle-frequenti'(p) {
+    await p.attendi(1200);
+    await p.click('[data-inspector-tab="files"]');
+    await p.attendi(300);
+    await p.screenshot('01-files-tab-al-primo-carico', { nota: 'CRITICO: nessuna sessione ancora esistita in questa pagina — atteso placeholder onesto, MAI "talos/src/components/TalosComposer.vue"' });
+    const testoFilesIniziale = await p.testo('#inspector-files .file-tree');
+    p.nota(`testo tab Files al primo carico: ${JSON.stringify(testoFilesIniziale)}`);
+    const haMockupIniziale = /TalosComposer|ChatShell|composer\.spec/.test(testoFilesIniziale ?? '');
+    if (haMockupIniziale) p.difetto(`la tab Files mostra ANCORA il markup mockup al primo carico pagina: ${JSON.stringify(testoFilesIniziale)}`, { severita: 'blocco' });
+
+    await p.click('[data-open-sheet="permissions"]');
+    await p.attendi(300);
+    await p.click('[data-permission-choice="Full access"]');
+    await p.click('#closeSheet');
+    await p.attendi(300);
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
+
+    // --- Cartelle frequenti: devono essere percorsi VERI di progetto, mai Desktop/Download/Documenti ---
+    const scorciatoie = await p.cdp.evaluate("[...document.querySelectorAll('.sheet-shortcut-chip')].map((c) => ({ testo: c.textContent, titolo: c.title }))");
+    p.nota(`scorciatoie cartelle frequenti nel foglio: ${JSON.stringify(scorciatoie)}`);
+    await p.screenshot('02-foglio-con-cartelle-frequenti', { nota: 'CRITICO: le chip devono essere nomi di progetto veri (es. magazzino_py), mai Desktop/Download/Documenti' });
+    const sonoGeneriche = Array.isArray(scorciatoie) && scorciatoie.length > 0 && scorciatoie.every((s) => ['Desktop', 'Download', 'Documenti'].includes(s.testo));
+    if (sonoGeneriche) p.difetto('le cartelle frequenti sono ancora SOLO Desktop/Download/Documenti nonostante una cronologia reale di sessioni esista', { severita: 'nota' });
+
+    await p.digita('#customTaskCartellaLibera', 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/crm-contatti');
+    await p.cdp.evaluate("document.querySelectorAll('.model-picker-trigger')[0]?.click()");
+    await p.attendiCondizione("!document.querySelectorAll('.model-picker-list')[0]?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
+    await p.digita('.model-picker-search input', 'gemini-3.7-flash');
+    await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
+    await p.click('.model-picker-option');
+    await p.attendi(200);
+    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
+
+    // --- Il buco esatto segnalato dall'owner: cartella scelta, NESSUN messaggio ancora inviato ---
+    await p.click('[data-inspector-tab="files"]');
+    await p.attendi(300);
+    await p.screenshot('03-files-tab-cartella-scelta-nessun-messaggio', { nota: 'CRITICO: sessione pendente (cartella scelta) ma NESSUN messaggio inviato — atteso placeholder honest col nome della cartella, MAI il mockup' });
+    const testoFilesPendente = await p.testo('#inspector-files .file-tree');
+    p.nota(`testo tab Files con sessione pendente (nessun messaggio): ${JSON.stringify(testoFilesPendente)}`);
+    const haMockupPendente = /TalosComposer|ChatShell|composer\.spec/.test(testoFilesPendente ?? '');
+    if (haMockupPendente) p.difetto(`la tab Files mostra il markup mockup con una sessione pendente ma senza messaggi: ${JSON.stringify(testoFilesPendente)}`, { severita: 'blocco' });
+    const nominaCartella = /crm-contatti/.test(testoFilesPendente ?? '');
+    p.nota(`placeholder nomina la cartella scelta (crm-contatti): ${nominaCartella}`);
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
 };
 
 // --------------------------------------------------------------------

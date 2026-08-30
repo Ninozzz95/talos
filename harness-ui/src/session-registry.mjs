@@ -1896,6 +1896,43 @@ export function createSessionRegistry({
     },
 
     /**
+     * ⭐⭐⭐ 30/8 — owner dal vivo: "come mai non ho le cartelle più
+     * usate?" — `frequent-dirs.mjs` esisteva già (owner, 28/8: "directory
+     * più usate, tipo desktop downloads") ma proponeva SEMPRE le stesse
+     * tre cartelle standard di Windows (Desktop/Downloads/Documenti),
+     * calcolate da `os.homedir()`, MAI dalla cronologia reale — non è
+     * "più usate", è "esistono per ogni installazione Windows". Questo
+     * metodo aggrega `voce.cartella` per DAVVERO usata (in memoria: sia
+     * le sessioni vive, sia quelle ripristinate da `.sessions-store/` al
+     * boot — stessa fonte già in uso per `elenca()`, nessuna lettura
+     * nuova dal disco). Solo AGGREGATO (percorso + conteggio + ultima
+     * volta): mai la mappa sessione→cartella, stesso principio di
+     * privacy già dichiarato sopra `elenca()` (`voce.cartella` non lascia
+     * mai questo file legato a un sessionId specifico).
+     * ⛔ Se una cartella esiste ancora sul disco (una copia usa-e-getta
+     * del corpus benchmark, cancellata dopo) è compito di CHI CHIAMA
+     * (`frequent-dirs.mjs`) verificarlo — stesso principio già in uso lì
+     * per le cartelle Windows standard: "mai una scorciatoia verso il
+     * nulla".
+     * @returns {Array<{percorso:string, conteggio:number, ultimaVolta:string}>} — più usata prima, poi più recente; MAI troncato qui (chi chiama decide quante mostrarne).
+     */
+    cartellePiuUsate() {
+      const perCartella = new Map();
+      for (const voce of sessioni.values()) {
+        const percorso = voce.cartella;
+        if (typeof percorso !== 'string' || percorso.trim().length === 0) continue;
+        const esistente = perCartella.get(percorso);
+        if (esistente) {
+          esistente.conteggio += 1;
+          if (voce.avviataAlle > esistente.ultimaVolta) esistente.ultimaVolta = voce.avviataAlle;
+        } else {
+          perCartella.set(percorso, { percorso, conteggio: 1, ultimaVolta: voce.avviataAlle });
+        }
+      }
+      return [...perCartella.values()].sort((a, b) => b.conteggio - a.conteggio || b.ultimaVolta.localeCompare(a.ultimaVolta));
+    },
+
+    /**
      * L'intera storia di una sessione, pronta per essere scaricata — `null`
      * se non esiste. ⛔ Non richiede che sia conclusa: esportare una
      * sessione ancora in corso mostra tutto ciò che è successo FIN QUI,
