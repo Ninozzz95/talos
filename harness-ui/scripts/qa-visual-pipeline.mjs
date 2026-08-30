@@ -1910,6 +1910,251 @@ const SCENARI = {
       p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
     }
   },
+
+  /**
+   * ⭐⭐⭐ 30/8 — Task 5: api-validazione-duplicata (api-contatti,
+   * difficoltà 3, refactor senza cambio di comportamento). Copertura:
+   * bottone Compatta, F5 reale + bottone Resume, export MD/JSON.
+   */
+  async 'qa-task-5-api-validazione'(p) {
+    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/api-contatti';
+    await p.attendi(1200);
+    await p.click('[data-open-sheet="permissions"]');
+    await p.attendi(300);
+    await p.click('[data-permission-choice="Full access"]');
+    await p.click('#closeSheet');
+    await p.attendi(300);
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
+    await p.digita('#customTaskCartellaLibera', CARTELLA);
+    await p.click('.model-picker-trigger');
+    await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
+    await p.digita('.model-picker-search input', 'gemini-3.7-flash');
+    await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
+    await p.click('.model-picker-option');
+    await p.attendi(200);
+    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
+
+    const prompt = 'Nell\'API dei contatti la validazione del nome è scritta in due punti diversi, uno per creare e uno per modificare un contatto — puoi accorparla in un solo posto senza cambiare come si comporta?';
+    await p.digita('#composerInput', prompt);
+    await p.screenshot('compito-scritto');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendiCondizione("!!window.__talosHarnessUiRuntime?.realSessionState?.id", { timeoutMs: 15000, descrizione: 'sessione vera' });
+    await p.attendiTestoStabile('.conversation', { giriStabili: 5, intervalMs: 2000, timeoutMs: 150000 });
+    await p.screenshot('conversazione-finale');
+    const reviewFilesCount = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.reviewFiles?.size ?? 0");
+    p.nota(`file in Review: ${reviewFilesCount}`);
+
+    // --- Compatta ---
+    const compattaBtn = await p.esiste('#compactSessionBtn');
+    p.nota(`bottone Compatta trovato: ${compattaBtn}`);
+    if (compattaBtn) {
+      await p.click('#compactSessionBtn');
+      await p.attendi(2000);
+      await p.screenshot('dopo-compatta');
+      const toastCompatta = await p.testo('#toastRegion');
+      p.nota(`toast dopo Compatta: ${JSON.stringify(toastCompatta)}`);
+    }
+
+    // --- Export, entrambi i formati ---
+    const exportOk = await p.cdp.evaluate(`(() => {
+      window.__ultimoBlobEsportato = null;
+      const originale = URL.createObjectURL;
+      URL.createObjectURL = (blob) => { window.__ultimoBlobEsportato = blob; return originale.call(URL, blob); };
+      return true;
+    })()`);
+    p.nota(`intercettazione export pronta: ${exportOk}`);
+    await p.click('#commandPaletteBtn');
+    await p.attendi(200);
+    await p.click('[data-command="export"]');
+    await p.attendi(400);
+    await p.screenshot('foglio-export', { nota: 'atteso: scelta fra Markdown leggibile e JSON completo' });
+    const testoFoglioExport = await p.testo('#sheetBody');
+    p.nota(`foglio export (assaggio): ${JSON.stringify(testoFoglioExport?.slice(0, 300))}`);
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /** ⭐⭐⭐ 30/8 — Task 5 parte 2: F5 REALE (Page.reload) + bottone Resume. */
+  async 'qa-task-5-resume-dopo-f5'(p) {
+    await p.attendi(1200);
+    await p.cdp.evaluate('window.__talosHarnessUiRuntime.aggiornaElencoSessioniReali()');
+    await p.attendiCondizione("!!document.querySelector('.session-item.real-session-item')", { descrizione: 'sidebar popolata' });
+    const trovata = await p.cdp.evaluate(`(() => {
+      const riga = [...document.querySelectorAll('.session-item.real-session-item')].find((r) => r.textContent.includes("dell'API dei contatti") || r.textContent.includes('validazione del nome'));
+      if (!riga) return false;
+      riga.click();
+      return true;
+    })()`);
+    p.nota(`sessione Task 5 trovata e selezionata: ${trovata}`);
+    await p.attendi(500);
+    await p.screenshot('prima-di-f5');
+
+    // --- F5 REALE: ricarica la pagina per davvero ---
+    await p.cdp.send('Page.reload', { ignoreCache: false });
+    await p.attendi(2500);
+    await p.screenshot('dopo-f5', { nota: 'pagina ricaricata per davvero — atteso: la sessione riappare in sidebar da sola' });
+    await p.attendiCondizione("!!document.querySelector('.session-item.real-session-item')", { timeoutMs: 8000, descrizione: 'sidebar ripopolata dopo F5' });
+    const contaDopoF5 = await p.cdp.evaluate("document.querySelectorAll('.session-item.real-session-item').length");
+    p.nota(`sessioni in sidebar dopo F5: ${contaDopoF5}`);
+
+    const riselezionata = await p.cdp.evaluate(`(() => {
+      const riga = [...document.querySelectorAll('.session-item.real-session-item')].find((r) => r.textContent.includes('validazione del nome'));
+      if (!riga) return false;
+      riga.click();
+      return true;
+    })()`);
+    p.nota(`sessione Task 5 riselezionata dopo F5: ${riselezionata}`);
+    await p.attendi(500);
+    await p.screenshot('sessione-riselezionata-dopo-f5');
+
+    const resumeBtn = await p.esiste('#resumeSessionBtn');
+    p.nota(`bottone Resume trovato: ${resumeBtn}`);
+    if (resumeBtn) {
+      await p.click('#resumeSessionBtn');
+      await p.attendi(2000);
+      await p.screenshot('dopo-resume');
+      const toastResume = await p.testo('#toastRegion');
+      p.nota(`toast dopo Resume: ${JSON.stringify(toastResume)}`);
+    } else {
+      p.difetto('bottone Resume non trovato dopo la riselezione post-F5', { severita: 'nota' });
+    }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /**
+   * ⭐⭐⭐ 30/8 — Task 5.1, aggiunto dopo una correzione dell'owner ("il
+   * test visivo DEVE prevedere tutti i tipi di operazioni CRUD"): un
+   * progetto NUOVO da zero, cartella mai usata prima — copertura mai
+   * esercitata finora (tutti i task 0-5 modificavano codice ESISTENTE).
+   * Verifica: `scrivi` su file MAI esistiti (Review "N nuovi", non
+   * "modificati" — un contatore mai stato >0 in questo giro), e il
+   * "Nuovo file"/"Nuova cartella" owner-facing dal menu albero.
+   */
+  async 'qa-task-5-1-create-da-zero'(p) {
+    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/sito-nuovo-da-zero';
+    await p.attendi(1200);
+    await p.click('[data-open-sheet="permissions"]');
+    await p.attendi(300);
+    await p.click('[data-permission-choice="Full access"]');
+    await p.click('#closeSheet');
+    await p.attendi(300);
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
+    await p.digita('#customTaskCartellaLibera', CARTELLA);
+    await p.click('.model-picker-trigger');
+    await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
+    await p.digita('.model-picker-search input', 'gemini-3.7-flash');
+    await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
+    await p.click('.model-picker-option');
+    await p.attendi(200);
+    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
+
+    const prompt = 'Sto iniziando un piccolo sito da zero — mi serve una paginetta HTML singola con un titolo, due paragrafi di testo segnaposto e un pulsante che quando premuto cambia il colore di sfondo. Puoi crearla da zero, con anche un piccolo file di stile separato?';
+    await p.digita('#composerInput', prompt);
+    await p.screenshot('compito-scritto', { nota: 'cartella VUOTA, mai usata prima — è un CREATE, non un update' });
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendiCondizione("!!window.__talosHarnessUiRuntime?.realSessionState?.id", { timeoutMs: 15000, descrizione: 'sessione vera' });
+    await p.attendiTestoStabile('.conversation', { giriStabili: 5, intervalMs: 2000, timeoutMs: 150000 });
+    await p.screenshot('conversazione-finale');
+
+    const reviewFilesCount = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.reviewFiles?.size ?? 0");
+    p.nota(`file in Review: ${reviewFilesCount}`);
+    if (reviewFilesCount > 0) {
+      await p.click('#commandPaletteBtn');
+      await p.attendi(200);
+      await p.click('[data-command="review"]');
+      await p.attendi(400);
+      await p.screenshot('review-file-nuovi', { nota: 'atteso: il contatore "nuovi" nel Review Center è >0 per la prima volta in questo giro — mai un file NUOVO creato prima d\'ora' });
+      const nuoviTesto = await p.cdp.evaluate("document.querySelector('#summaryTotal, [data-review-new-count]')?.textContent ?? document.body.textContent.match(/(\\d+)\\s*nuov/i)?.[0] ?? null");
+      p.nota(`assaggio conteggio "nuovi": ${JSON.stringify(nuoviTesto)}`);
+    } else {
+      p.difetto('cartella vuota, compito di creazione, ma zero file in Review — il modello non ha scritto nulla?', { severita: 'blocco' });
+    }
+
+    // Verifica sul DISCO VERO: la cartella era vuota, ora deve avere almeno un file HTML e uno CSS.
+    const fileSulDisco = existsSync(join(CARTELLA.replace(/\//g, '\\'), 'index.html')) || existsSync(join(CARTELLA, 'index.html'));
+    p.nota(`index.html esiste davvero sul disco: ${fileSulDisco}`);
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /**
+   * ⭐⭐⭐ 30/8 — Task 5.2: DELETE, l'altro pezzo mancante di CRUD. Due
+   * file "ridondanti" seminati a mano in magazzino_py PRIMA di questa
+   * corsa (magazzino_old.py.bak, note-temporanee.txt). Copre sia
+   * l'eliminazione via modello (nessun tool "elimina" esplicito per il
+   * modello — deve passare da `shell`, verificato non presunto) sia
+   * quella owner-facing (tasto destro → Elimina, scheda di conferma).
+   */
+  async 'qa-task-5-2-delete-ridondanti'(p) {
+    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/magazzino_py';
+    await p.attendi(1200);
+    await p.click('[data-open-sheet="permissions"]');
+    await p.attendi(300);
+    await p.click('[data-permission-choice="Full access"]');
+    await p.click('#closeSheet');
+    await p.attendi(300);
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
+    await p.digita('#customTaskCartellaLibera', CARTELLA);
+    await p.click('.model-picker-trigger');
+    await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
+    await p.digita('.model-picker-search input', 'gemini-3.7-flash');
+    await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
+    await p.click('.model-picker-option');
+    await p.attendi(200);
+    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
+
+    const prompt = 'Nel progetto del magazzino c\'è un file di backup che non serve più (magazzino_old.py.bak) — puoi eliminarlo? Se trovi anche altri file temporanei o ridondanti nel progetto, elimina pure anche quelli.';
+    await p.digita('#composerInput', prompt);
+    await p.screenshot('compito-scritto', { nota: 'due file ridondanti seminati a mano: magazzino_old.py.bak e note-temporanee.txt' });
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendiCondizione("!!window.__talosHarnessUiRuntime?.realSessionState?.id", { timeoutMs: 15000, descrizione: 'sessione vera' });
+    await p.attendiTestoStabile('.conversation', { giriStabili: 5, intervalMs: 2000, timeoutMs: 150000 });
+    await p.screenshot('conversazione-finale', { nota: 'atteso: il modello ha usato shell (rm/del) per eliminare — nessun tool "elimina" dedicato per lui' });
+
+    const bakEsisteAncora = existsSync(join(CARTELLA, 'src', 'magazzino_old.py.bak'));
+    const notaEsisteAncora = existsSync(join(CARTELLA, 'note-temporanee.txt'));
+    p.nota(`dopo il turno del modello — magazzino_old.py.bak esiste ancora: ${bakEsisteAncora}; note-temporanee.txt esiste ancora: ${notaEsisteAncora}`);
+    if (bakEsisteAncora) {
+      p.difetto('il modello non ha eliminato magazzino_old.py.bak nonostante glielo chiedessi esplicitamente', { severita: 'nota' });
+    } else {
+      p.nota('CONFERMATO: magazzino_old.py.bak eliminato per davvero dal modello (verificato sul disco, non solo dichiarato in chat).');
+    }
+
+    // --- Owner-facing: tasto destro su un file reale rimasto, Elimina + scheda di conferma ---
+    await p.click('[data-open-panel="inspector"]');
+    await p.attendi(300);
+    const filesTabClic = await p.cdp.evaluate("[...document.querySelectorAll('.inspector-tab, [role=\"tab\"]')].find((t) => t.textContent.trim() === 'Files')?.click() ?? false");
+    p.nota(`click sul tab Files: ${filesTabClic}`);
+    await p.attendiCondizione("!!document.querySelector('.ft-row')", { timeoutMs: 5000, descrizione: 'albero file caricato' });
+    await p.screenshot('albero-dopo-pulizia', { nota: 'atteso: i file ridondanti non compaiono più' });
+    const testoAlbero = await p.testo('.file-tree, .inspector-panel');
+    p.nota(`albero contiene ancora "old"/"temporanee": ${/old|temporanee/i.test(testoAlbero ?? '')}`);
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
 };
 
 // --------------------------------------------------------------------
