@@ -44,7 +44,7 @@ import {
   WorkspaceFileError,
 } from './workspace-files.mjs';
 import { guardaWorkspace as guardaWorkspaceReale } from './workspace-watcher.mjs';
-import { creaSubagentOrchestrator } from './subagent-orchestrator.mjs';
+import { analizzaEvidenzaDelega, creaSubagentOrchestrator, esitoDelegaDaEventi } from './subagent-orchestrator.mjs';
 import {
   caricaHooks as caricaHooksReale,
   eseguiHook as eseguiHookReale,
@@ -592,7 +592,7 @@ export function createSessionRegistry({
       reasoning: reasoningEffettivo, mobile, permessi: permessiEffettivi,
       permessiPerAttrezzo: permessiPerAttrezzoEffettivi, approvazionePendente: null,
       // ⭐⭐⭐ FASE C (28/8) — sub-agenti: null/0 per ogni sessione avviata da un umano, valorizzati SOLO da subagentOrchestrator.delegaSottoTask. `esitoDelega` (per il foglio "Albero sessione") si popola quando la sessione conclude, vedi sotto.
-      padreId, profonditaDelega, esitoDelega: null,
+      padreId, profonditaDelega, esitoDelega: null, evidenzaDelega: null,
       // ⭐⭐⭐ FASE D (28/8) — coda messaggi: FIFO vera, vuota per ogni sessione. Sopravvive a un resume (STESSA voce): un messaggio accodato mentre la sessione era "in corso" resta in coda anche se il turno finisce e ne parte un altro tramite resume().
       codaMessaggi: [],
     };
@@ -874,7 +874,9 @@ export function createSessionRegistry({
           modello: intestazione.modello, modelloPlanner: intestazione.modelloPlanner, reasoning: intestazione.reasoning,
           mobile: intestazione.mobile, permessi: intestazione.permessi, permessiPerAttrezzo: intestazione.permessiPerAttrezzo,
           approvazionePendente: null, padreId: intestazione.padreId, profonditaDelega: intestazione.profonditaDelega,
-          esitoDelega: null, codaMessaggi: [], sessionId, controller: new AbortController(),
+          esitoDelega: intestazione.padreId ? esitoDelegaDaEventi(eventi, { task: intestazione.task }) : null,
+          evidenzaDelega: intestazione.padreId ? analizzaEvidenzaDelega(eventi) : null,
+          codaMessaggi: [], sessionId, controller: new AbortController(),
           conclusa, ripristinata: true, interrotta: !conclusa,
           prossimaSequenza: ultimoEvento?._sequenza ?? 0,
         };
@@ -1646,6 +1648,19 @@ export function createSessionRegistry({
       pendente.resolve(Boolean(approvato));
       broadcast(voce, approvalResolved({ requestId, approvato: Boolean(approvato) }));
       return { ok: true };
+    },
+
+    /** Preview read-only del tree prima che esista una sessione: l'id viene risolto solo nell'allowlist server-side. */
+    async anteprimaAlbero(projectId, percorso = '') {
+      const progetto = cartelleProgetto.find((voce) => voce.id === projectId);
+      if (!progetto) return { erroreAvvio: 'Progetto non trovato', code: 'NOT_FOUND' };
+      try {
+        const voci = await leggiAlberoWorkspaceFn({ cartella: progetto.percorso, percorso });
+        return { ok: true, voci };
+      } catch (errore) {
+        if (errore instanceof WorkspaceTreeError) return { erroreAvvio: errore.message, code: errore.code };
+        throw errore;
+      }
     },
 
     /**

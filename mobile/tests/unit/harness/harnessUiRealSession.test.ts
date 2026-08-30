@@ -39,6 +39,7 @@ type RuntimeGlobals = {
         titoloDalPrimoMessaggio(testo: string): string
         // ⭐ 28/8 — Terminale REALE (LEDGER-TERMINALE-REALE.md).
         apriVistaTerminaleReale(): void
+        apriFileAlbero(percorso: string, nome: string): Promise<void>
         scollegaTerminaleReale(): void
         statoTerminale(): {
             ws: { close(): void, onclose?: unknown, readyState?: number } | null
@@ -60,6 +61,8 @@ type RuntimeGlobals = {
             followUpBubbleInAttesa: boolean
             treeCache: Map<string, Array<{ nome: string, cartella: boolean }>>
             treeOpen: Set<string>
+            previewProjectId: string | null
+            previewWorkspaceName: string | null
             usage: { prompt_tokens: number, completion_tokens: number, prompt_tokens_details?: { cached_tokens: number }, giri: number } | null
         }
     }
@@ -122,13 +125,15 @@ function mockFetch(regole: RegolaFetch[]) {
  * chiamate per livello — la prova che la cache NON ri-scarica un livello
  * già visto passa da questo conteggio, non da un'supposizione.
  */
-function mockFetchAlbero(livelli: Record<string, Array<{ nome: string, cartella: boolean }>>, extra: RegolaFetch[] = []) {
+function mockFetchAlbero(livelli: Record<string, Array<{ nome: string, cartella: boolean }>>, extra: RegolaFetch[] = [], projectId?: string) {
     const chiamatePerLivello: Record<string, number> = {}
     const spia = vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
         const url = typeof input === 'string' ? input : String(input)
         const metodo = (init?.method ?? 'GET').toUpperCase()
         const [percorsoBase, query] = url.split('?')
-        const treeMatch = /^\/api\/v1\/sessions\/[^/]+\/tree$/.exec(percorsoBase)
+        const treeMatch = projectId
+            ? percorsoBase === `/api/v1/projects/${projectId}/tree`
+            : /^\/api\/v1\/sessions\/[^/]+\/tree$/.test(percorsoBase)
         if (metodo === 'GET' && treeMatch) {
             const parametri = new URLSearchParams(query ?? '')
             const livello = parametri.get('percorso') ?? ''
@@ -168,6 +173,7 @@ function runtime() {
 describe('Harness UI — real session, la parte portata da lane/harness-ui', () => {
     beforeEach(() => {
         document.body.className = ''
+        window.localStorage.clear()
         FakeEventSource.instances = []
         vi.stubGlobal('EventSource', FakeEventSource)
         mountStaticRuntime()
@@ -732,6 +738,72 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
             document.getElementById('inspector-tab-files')!.click()
             await new Promise((r) => setTimeout(r, 0))
             expect(chiamatePerLivello['']).toBe(1) // MAI raddoppiato: la stessa corsa che FILE-TREE-07 aveva scoperto rotta
+        })
+
+        it('FILE-TREE-PREVIEW-01 mostra il root allowlistato subito dopo la scelta, prima del primo messaggio, in sola lettura', async () => {
+            mockFetch([
+                { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'p1', nome: 'demo' }] } },
+                { metodo: 'GET', percorso: '/api/v1/projects/p1/tree', corpo: { voci: [{ nome: 'src', cartella: true }, { nome: 'README.md', cartella: false }] } },
+            ])
+            await runtime().openRealTaskSheet()
+            document.querySelector<HTMLFormElement>('#customTaskForm')!.requestSubmit()
+
+            await vi.waitFor(() => { expect(document.querySelector('.ft-tree .ft-row')).toBeTruthy() })
+            expect(runtime().realSessionState.previewProjectId).toBe('p1')
+            expect([...document.querySelectorAll('.ft-row .ft-name')].map((el) => el.textContent)).toEqual(['src', 'README.md'])
+            expect(document.querySelector('#inspector-tab-files')?.getAttribute('aria-selected')).toBe('true')
+            expect(document.querySelectorAll('.ft-actions-btn')).toHaveLength(0)
+            expect(document.querySelector('.ft-row[draggable="true"]')).toBeNull()
+        })
+
+        it('FILE-TREE-PREVIEW-02 persiste cartelle aperte e filtro per workspace, poi li ripristina alla nuova anteprima', async () => {
+            mockFetchAlbero({
+                '': [{ nome: 'src', cartella: true }, { nome: 'README.md', cartella: false }],
+                src: [{ nome: 'app.js', cartella: false }],
+            }, [
+                { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'p1', nome: 'demo' }] } },
+            ], 'p1')
+
+            await runtime().openRealTaskSheet()
+            document.querySelector<HTMLFormElement>('#customTaskForm')!.requestSubmit()
+            await vi.waitFor(() => { expect(document.querySelector('.ft-node[data-percorso="src"]')).toBeTruthy() })
+            document.querySelector<HTMLElement>('.ft-node[data-percorso="src"] > .ft-row')!.click()
+            await vi.waitFor(() => { expect(document.querySelector('.ft-node[data-percorso="src/app.js"]')).toBeTruthy() })
+            const filtro = document.getElementById('fileTreeFilter') as HTMLInputElement
+            filtro.value = 'app.js'
+            filtro.dispatchEvent(new Event('input', { bubbles: true }))
+
+            const salvato = JSON.parse(window.localStorage.getItem('talos.harness.desktop.settings.v1') || '{}')
+            expect(salvato.workspaces['project:p1']).toEqual({ expandedPaths: ['src'], filter: 'app.js' })
+
+            await runtime().openRealTaskSheet()
+            document.querySelector<HTMLFormElement>('#customTaskForm')!.requestSubmit()
+            await vi.waitFor(() => { expect(document.querySelector('.ft-node[data-percorso="src/app.js"]')).toBeTruthy() })
+            expect(document.querySelector('.ft-node[data-percorso="src"]')?.classList.contains('ft-open')).toBe(true)
+            expect((document.getElementById('fileTreeFilter') as HTMLInputElement).value).toBe('app.js')
+        })
+
+        it('FILE-TREE-REVEAL-01 aprire un file seleziona e porta a vista la riga attiva', async () => {
+            const { chiamatePerLivello } = mockFetchAlbero({ '': [{ nome: 'README.md', cartella: false }] }, [
+                { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-reveal' } },
+                { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+                { metodo: 'GET', percorso: '/api/v1/sessions/sess-reveal/tree/file', corpo: { contenuto: '# README' } },
+            ])
+            await runtime().startRealSession({ id: 'talos-prova-harness', consegna: 'test reveal' })
+            const generation = runtime().realSessionState.generation
+            runtime().handleRealEvent({ type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'test reveal' } }, generation)
+            await vi.waitFor(() => { expect(document.querySelector('.ft-tree .ft-row')).toBeTruthy() })
+            const riga = document.querySelector<HTMLElement>('.ft-node[data-percorso="README.md"] > .ft-row')!
+            const scrollIntoView = vi.fn()
+            Object.defineProperty(riga, 'scrollIntoView', { value: scrollIntoView })
+
+            await runtime().apriFileAlbero('README.md', 'README.md')
+
+            expect(riga.classList.contains('ft-selected')).toBe(true)
+            expect(document.activeElement).toBe(riga)
+            expect(scrollIntoView).toHaveBeenCalled()
+            expect(chiamatePerLivello['']).toBe(1)
+            expect(document.querySelector('#fileViewerMount .tool-result-block code')?.textContent).toBe('# README')
         })
 
         /*

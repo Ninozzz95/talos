@@ -2579,6 +2579,28 @@ test('⭐⭐⭐⭐⭐ ripristina(): una sessione CONCLUSA prima del riavvio torn
   }
 });
 
+test('⭐⭐ J — ripristina() conserva il verdetto fallito di una delega di modifica senza artefatto', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const adesso = new Date().toISOString();
+    const base = { taskId: 'task-vero', cartella: '/tmp/x', comandoProva: 'npm test', forkDa: null, avviataAlle: adesso, modello: 'm', modelloPlanner: null, reasoning: null, mobile: false, permessi: 'Workspace write', permessiPerAttrezzo: null, profonditaDelega: 0 };
+    registraRigaSync({ cartellaStore, sessionId: 'padre-j', record: { tipo: 'intestazione', sessionId: 'padre-j', ...base, task: { id: 'task-vero', consegna: 'c' }, padreId: null } });
+    registraRigaSync({ cartellaStore, sessionId: 'padre-j', record: { type: 'RunFinished', outcome: { type: 'success' }, _sequenza: 1 } });
+    registraRigaSync({ cartellaStore, sessionId: 'figlio-j', record: { tipo: 'intestazione', sessionId: 'figlio-j', ...base, taskId: 'delega:padre-j', task: { consegna: 'Modifica il file test/gioco.test.mjs aggiungendo un test.' }, padreId: 'padre-j', profonditaDelega: 1 } });
+    registraRigaSync({ cartellaStore, sessionId: 'figlio-j', record: { type: 'ToolCallResult', content: 'Saved the note «controllo completato».', _sequenza: 1 } });
+    registraRigaSync({ cartellaStore, sessionId: 'figlio-j', record: { type: 'RunFinished', outcome: { type: 'success' }, _sequenza: 2 } });
+
+    const registro = createSessionRegistry({ modello: 'm', chiave: 'k', cartellaStore });
+    await registro.ripristina();
+    const figli = registro.elencaFigli('padre-j');
+    assert.equal(figli.ok, true);
+    assert.equal(figli.figli[0].esitoDelega, 'fallito');
+    assert.deepEqual(figli.figli[0].evidenzaDelega, { scritture: 0, artefatti: 0, toolCalls: 1, toolCallsOk: 1, toolCallsFalliti: 0, verificabile: true });
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
 test('⛔⛔⛔ AL CONTRARIO — ripristina(): messaggi-finali sul disco SENZA che l\'ultimo evento sia RunFinished/RunError conta comunque come conclusa — trovato da un test INTERMITTENTE (30/8), non da lettura: le due scritture sono fire-and-forget indipendenti, l\'ordine su disco non è garantito', async () => {
   const cartellaStore = cartellaStoreVera();
   try {
@@ -2924,4 +2946,31 @@ test('⛔ AL CONTRARIO — abilitaToolForgiato su un id di SESSIONE inesistente:
   const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
   const esito = await registro.abilitaToolForgiato('id-mai-esistito', 'x', true);
   assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+});
+
+test('FILE-TREE-PREVIEW-01 — legge un livello soltanto dal progetto allowlistato', async () => {
+  const chiamate = [];
+  const registro = createSessionRegistry({
+    cartelleProgetto: [{ id: 'p1', percorso: '/workspace/demo', nome: 'demo' }],
+    leggiAlberoWorkspaceFn: async (input) => { chiamate.push(input); return [{ nome: 'README.md', cartella: false }]; },
+  });
+
+  assert.deepEqual(await registro.anteprimaAlbero('p1', 'docs'), {
+    ok: true,
+    voci: [{ nome: 'README.md', cartella: false }],
+  });
+  assert.deepEqual(chiamate, [{ cartella: '/workspace/demo', percorso: 'docs' }]);
+});
+
+test('FILE-TREE-PREVIEW-02 — rifiuta un projectId fuori allowlist senza leggere il disco', async () => {
+  let letture = 0;
+  const registro = createSessionRegistry({
+    cartelleProgetto: [{ id: 'p1', percorso: '/workspace/demo', nome: 'demo' }],
+    leggiAlberoWorkspaceFn: async () => { letture += 1; return []; },
+  });
+
+  assert.deepEqual(await registro.anteprimaAlbero('sconosciuto'), {
+    erroreAvvio: 'Progetto non trovato', code: 'NOT_FOUND',
+  });
+  assert.equal(letture, 0);
 });

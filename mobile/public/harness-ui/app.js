@@ -118,6 +118,11 @@
       /** ⭐⭐⭐ 27/8 — l'albero VERO: cache per livello (percorso -> voci già scaricate, mai ributtate finché non cambia qualcosa) + quali cartelle sono aperte (persiste fra un redraw e l'altro, così riaprire un run non richiude tutto). Sostituisce treePercorso, il vecchio modello "un livello alla volta con su/giù". */
       treeCache: new Map(),
       treeOpen: new Set(),
+      treeWorkspaceKey: null,
+      treeUiRestored: false,
+      /** Progetto allowlistato mostrato in sola lettura prima del primo messaggio. */
+      previewProjectId: null,
+      previewWorkspaceName: null,
       /** Piano §1.3-BIS.T — toolCallId -> nome attrezzo, SOLO per riconoscere quando un ToolCallResult appartiene a "shell" e specchiarlo nella vista Terminale. Non tocca il rendering generico della chat, già esistente. */
       toolCallNomi: new Map(),
       /**
@@ -226,6 +231,7 @@
   const topbar = $('.topbar');
   const embeddedHeaderScrollers = [...new Set([...views, chatConversation].filter(Boolean))];
   const embeddedHeaderScrollPositions = new WeakMap();
+  let compattazioneInCorso = false;
 
   if (HOST().classList.contains('talos-embedded')) {
     embeddedSessionBack?.setAttribute('aria-label', 'Torna alle sessioni Codice');
@@ -993,11 +999,13 @@
     iconEl.className = 'sheet-icon';
     iconEl.innerHTML = icon('i-branch');
     const testo = document.createElement('span');
+    const successo = figlio.conclusa && figlio.esitoDelega === 'concluso';
+    const fallita = figlio.conclusa && figlio.esitoDelega === 'fallito';
     testo.append(
       textElement('strong', null, tronca(figlio.task || '(compito non registrato)', 60)),
       textElement('small', null, figlio.conclusa ? `Delega · ${figlio.esitoDelega || 'conclusa'}` : 'Delega · in corso'),
     );
-    const statoEl = textElement('span', figlio.conclusa ? 'status-chip success' : 'status-chip', figlio.conclusa ? '✓' : '●');
+    const statoEl = textElement('span', successo ? 'status-chip success' : fallita ? 'status-chip error' : 'status-chip', successo ? '✓' : fallita ? '!' : '●');
     riga.append(iconEl, testo, statoEl);
     riga.addEventListener('click', () => {
       passaASessione(figlio.sessionId, figlio.sessionId, figlio.task);
@@ -2873,7 +2881,7 @@
      * e risolve esattamente lo scenario riportato (l'unico in cui la tab
      * viene aperta prima che un giro sia mai partito).
      */
-    if (button.dataset.inspectorTab === 'files' && state.realSession.id
+    if (button.dataset.inspectorTab === 'files' && (state.realSession.id || state.realSession.previewProjectId)
       && !state.realSession.treeCache.has('')) {
       renderizzaAlberoReale();
     }
@@ -4341,6 +4349,56 @@
     return voce.nuovo ? 'new' : 'modified';
   }
 
+  function alberoInAnteprima() {
+    return !state.realSession.id && Boolean(state.realSession.previewProjectId);
+  }
+
+  // Stato di sola interfaccia, separato dai dati della sessione: come VS Code
+  // ricorda espansioni e filtro per workspace, mai contenuti o percorsi nuovi.
+  const FILE_TREE_SETTINGS_KEY = 'talos.harness.desktop.settings.v1';
+  function chiaveWorkspaceAlbero() {
+    return state.realSession.treeWorkspaceKey
+      || (state.realSession.previewProjectId ? `project:${state.realSession.previewProjectId}` : null)
+      || (state.realSession.id ? `session:${state.realSession.id}` : null);
+  }
+  function leggiImpostazioniAlbero() {
+    try {
+      const valore = JSON.parse(window.localStorage.getItem(FILE_TREE_SETTINGS_KEY) || '{}');
+      return valore && typeof valore === 'object' ? valore : {};
+    } catch {
+      return {};
+    }
+  }
+  function salvaImpostazioniAlbero() {
+    const chiave = chiaveWorkspaceAlbero();
+    if (!chiave) return;
+    try {
+      const tutte = leggiImpostazioniAlbero();
+      const percorsi = [...state.realSession.treeOpen]
+        .filter((percorso) => typeof percorso === 'string' && percorso.length <= 1024)
+        .slice(0, 200);
+      const filtro = String($('#fileTreeFilter')?.value || '').slice(0, 256);
+      tutte.version = 1;
+      tutte.workspaces = tutte.workspaces && typeof tutte.workspaces === 'object' ? tutte.workspaces : {};
+      tutte.workspaces[chiave] = { expandedPaths: percorsi, filter: filtro };
+      window.localStorage.setItem(FILE_TREE_SETTINGS_KEY, JSON.stringify(tutte));
+    } catch {
+      // Una preferenza persa non deve impedire la navigazione del workspace.
+    }
+  }
+  function ripristinaImpostazioniAlbero() {
+    if (state.realSession.treeUiRestored) return;
+    state.realSession.treeUiRestored = true;
+    const chiave = chiaveWorkspaceAlbero();
+    if (!chiave) return;
+    const salvato = leggiImpostazioniAlbero().workspaces?.[chiave];
+    if (!salvato || typeof salvato !== 'object') return;
+    const percorsi = Array.isArray(salvato.expandedPaths) ? salvato.expandedPaths : [];
+    state.realSession.treeOpen = new Set(percorsi.filter((percorso) => typeof percorso === 'string' && percorso.length <= 1024).slice(0, 200));
+    const filtro = $('#fileTreeFilter');
+    if (filtro && typeof salvato.filter === 'string') filtro.value = salvato.filter.slice(0, 256);
+  }
+
   function iconaSvgAlbero(nomeSimbolo) {
     const svgNs = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(svgNs, 'svg');
@@ -4359,7 +4417,10 @@
   async function caricaLivelloAlbero(percorso, forza = false) {
     const cache = state.realSession.treeCache;
     if (!forza && cache.has(percorso)) return cache.get(percorso);
-    const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree?percorso=${encodeURIComponent(percorso)}`);
+    const base = state.realSession.id
+      ? `/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree`
+      : `/api/v1/projects/${encodeURIComponent(state.realSession.previewProjectId)}/tree`;
+    const dati = await apiGet(`${base}?percorso=${encodeURIComponent(percorso)}`);
     cache.set(percorso, dati.voci);
     return dati.voci;
   }
@@ -4375,6 +4436,7 @@
 
   async function apriCartellaAlbero(li, iconEl, childUl, percorsoCompleto, profondita) {
     state.realSession.treeOpen.add(percorsoCompleto);
+    salvaImpostazioniAlbero();
     li.classList.add('ft-open');
     li.setAttribute('aria-expanded', 'true');
     iconEl.classList.add('ft-open');
@@ -4402,6 +4464,7 @@
     iconEl.classList.remove('ft-open');
     iconEl.replaceChildren(iconaSvgAlbero('i-folder'));
     state.realSession.treeOpen.delete(li.dataset.percorso);
+    salvaImpostazioniAlbero();
   }
 
   async function costruisciNodoAlbero(nome, percorsoCompleto, cartella, profondita, contenitoreUl) {
@@ -4451,16 +4514,18 @@
      * alle cartelle. `apriMenuAzioniFile` riceve `cartella` e sceglie da
      * sola le voci giuste (vedi la sua doc).
      */
-    const azioniBtn = document.createElement('button');
-    azioniBtn.type = 'button';
-    azioniBtn.className = 'ft-actions-btn';
-    azioniBtn.setAttribute('aria-label', `Azioni su ${nome}`);
-    azioniBtn.appendChild(iconaSvgAlbero('i-more'));
-    azioniBtn.addEventListener('click', (event) => {
-      event.stopPropagation(); // non selezionare/aprire la riga sotto
-      apriMenuAzioniFile(percorsoCompleto, nome, { ancoraEl: azioniBtn }, cartella);
-    });
-    row.appendChild(azioniBtn);
+    if (!alberoInAnteprima()) {
+      const azioniBtn = document.createElement('button');
+      azioniBtn.type = 'button';
+      azioniBtn.className = 'ft-actions-btn';
+      azioniBtn.setAttribute('aria-label', `Azioni su ${nome}`);
+      azioniBtn.appendChild(iconaSvgAlbero('i-more'));
+      azioniBtn.addEventListener('click', (event) => {
+        event.stopPropagation(); // non selezionare/aprire la riga sotto
+        apriMenuAzioniFile(percorsoCompleto, nome, { ancoraEl: azioniBtn }, cartella);
+      });
+      row.appendChild(azioniBtn);
+    }
     /*
      * ⭐⭐⭐ 28/8, owner: "voglio abilitare il tasto destro del mouse a
      * livello globale dato che siamo nel desktop, per esempio tasto
@@ -4471,7 +4536,7 @@
      * qualcosa da reinventare. `preventDefault` sopprime il menu
      * nativo del browser.
      */
-    row.addEventListener('contextmenu', (event) => {
+    if (!alberoInAnteprima()) row.addEventListener('contextmenu', (event) => {
       event.preventDefault();
       event.stopPropagation();
       row.closest('.ft-tree').querySelectorAll('.ft-row.ft-selected').forEach((r) => r.classList.remove('ft-selected'));
@@ -4489,12 +4554,14 @@
      * OGNI riga è trascinabile (file e cartelle), ma solo le CARTELLE
      * accettano il drop — un file non è mai una destinazione valida.
      */
-    row.draggable = true;
-    row.addEventListener('dragstart', (event) => {
-      event.dataTransfer.setData('text/x-talos-file-path', percorsoCompleto);
-      event.dataTransfer.effectAllowed = 'move';
-    });
-    if (cartella) {
+    if (!alberoInAnteprima()) {
+      row.draggable = true;
+      row.addEventListener('dragstart', (event) => {
+        event.dataTransfer.setData('text/x-talos-file-path', percorsoCompleto);
+        event.dataTransfer.effectAllowed = 'move';
+      });
+    }
+    if (cartella && !alberoInAnteprima()) {
       row.addEventListener('dragover', (event) => {
         if (!event.dataTransfer.types.includes('text/x-talos-file-path')) return;
         event.preventDefault();
@@ -4641,6 +4708,7 @@
   }
 
   async function apriFileAlbero(percorsoCompleto, nome) {
+    await rivelaERivelaRigaAlbero(percorsoCompleto);
     state.alberoFileTarget = { percorso: percorsoCompleto, nome };
     openSheet('fileViewer');
     sheetTitle.textContent = nome; // sheetTemplates.title è una stringa statica ovunque altrove: il nome vero si scrive qui
@@ -4656,6 +4724,30 @@
       if (!mount.isConnected) return;
       mount.replaceChildren(textElement('p', 'board-empty', `Non leggibile: ${error.message}`));
     }
+  }
+
+  async function rivelaERivelaRigaAlbero(percorsoCompleto) {
+    const trovaNodo = (percorso) => [...document.querySelectorAll('#inspector-files .ft-node')]
+      .find((nodo) => nodo.dataset.percorso === percorso);
+    const parti = String(percorsoCompleto || '').split('/').filter(Boolean);
+    let percorsoPadre = '';
+    for (let indice = 0; indice < Math.max(0, parti.length - 1); indice += 1) {
+      percorsoPadre = percorsoPadre ? `${percorsoPadre}/${parti[indice]}` : parti[indice];
+      const li = trovaNodo(percorsoPadre);
+      if (!li || !li.hasAttribute('aria-expanded') || li.classList.contains('ft-open')) continue;
+      const row = $(':scope > .ft-row', li);
+      const iconEl = $(':scope > .ft-row > .ft-icon', li);
+      const childUl = $(':scope > ul', li);
+      if (row && iconEl && childUl) await apriCartellaAlbero(li, iconEl, childUl, percorsoPadre, Number(li.getAttribute('aria-level') || 1));
+    }
+    const li = trovaNodo(percorsoCompleto);
+    const row = li && $(':scope > .ft-row', li);
+    if (!row) return;
+    const tree = row.closest('.ft-tree');
+    tree?.querySelectorAll('.ft-row.ft-selected').forEach((riga) => riga.classList.remove('ft-selected'));
+    row.classList.add('ft-selected');
+    if (tree) impostaFocusRigaAlbero(tree, row);
+    row.scrollIntoView?.({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'nearest' });
   }
 
   function allegaFileAllaChat(percorsoCompleto) {
@@ -4740,7 +4832,9 @@
 
   /** Piano §1.3, riga "Contesto workspace" — l'albero file REALE, radice + tutto ciò che era già aperto (treeOpen), riscaricato dal vivo. */
   async function renderizzaAlberoReale() {
-    if (!state.realSession.id) return;
+    if (!state.realSession.id && !state.realSession.previewProjectId) return;
+    ripristinaImpostazioniAlbero();
+    const generation = state.realSession.generation;
     const contenitore = $('#inspector-files .file-tree');
     if (!contenitore) return;
     const demoBadge = $('.demo-surface-badge', $('[data-inspector-section="files"]'));
@@ -4748,21 +4842,21 @@
 
     const radice = document.createElement('div');
     radice.className = 'tree-root';
-    radice.append(iconaSvgAlbero('i-files'), textElement('strong', '', state.realSession.taskId || 'workspace'));
+    radice.append(iconaSvgAlbero('i-files'), textElement('strong', '', state.realSession.taskId || state.realSession.previewWorkspaceName || 'workspace'));
     // ⭐⭐⭐ 28/8, owner: "comandi crud in generale" — creare un file/una cartella senza dover prima cliccare col destro su una cartella esistente: la radice stessa accetta lo stesso menu, ridotto alle due sole voci di creazione (percorsoBase '').
-    radice.addEventListener('contextmenu', (e) => {
+    if (!alberoInAnteprima()) radice.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       apriMenuAzioniFile('', state.realSession.taskId || 'workspace', { x: e.clientX, y: e.clientY }, true, true);
     });
     // ⭐ stesso drop-target delle cartelle, ma per "portare fuori" un elemento alla radice.
-    radice.addEventListener('dragover', (e) => {
+    if (!alberoInAnteprima()) radice.addEventListener('dragover', (e) => {
       if (!e.dataTransfer.types.includes('text/x-talos-file-path')) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
       radice.classList.add('ft-row-drag-over');
     });
-    radice.addEventListener('dragleave', () => radice.classList.remove('ft-row-drag-over'));
-    radice.addEventListener('drop', async (e) => {
+    if (!alberoInAnteprima()) radice.addEventListener('dragleave', () => radice.classList.remove('ft-row-drag-over'));
+    if (!alberoInAnteprima()) radice.addEventListener('drop', async (e) => {
       e.preventDefault();
       radice.classList.remove('ft-row-drag-over');
       const percorsoSorgente = e.dataTransfer.getData('text/x-talos-file-path');
@@ -4812,6 +4906,7 @@
       ul.appendChild(textElement('li', 'ft-loading', 'Albero non disponibile.'));
       return;
     }
+    if (generation !== state.realSession.generation) return;
     for (const voce of voci) {
       // eslint-disable-next-line no-await-in-loop -- vedi la nota gemella in apriCartellaAlbero
       await costruisciNodoAlbero(voce.nome, voce.nome, Boolean(voce.cartella), 1, ul);
@@ -5253,7 +5348,10 @@
       case 'RunError': {
         nascondiAttesaRisposta();
         chiudiBatchTool(); // 30/8 — vedi RunFinished sopra, stesso motivo
-        appendStatusNote(`${evento.code ? `[${evento.code}] ` : ''}${evento.message}`, true);
+        const guida = evento.code === 'giri-esauriti'
+          ? ' Il prossimo messaggio continuerà questo task nella stessa sessione. Premi «Nuova» per iniziare un task separato.'
+          : '';
+        appendStatusNote(`${evento.code ? `[${evento.code}] ` : ''}${evento.message}${guida}`, true);
         state.realSession.eventoTerminaleVisto = true;
         break;
       }
@@ -5355,6 +5453,10 @@
       state.realSession.reviewFiles = new Map();
       state.realSession.treeCache = new Map();
       state.realSession.treeOpen = new Set();
+      state.realSession.treeWorkspaceKey = null;
+      state.realSession.treeUiRestored = false;
+      state.realSession.previewProjectId = null;
+      state.realSession.previewWorkspaceName = null;
       state.realSession.sequenzeViste = new Set();
       state.realSession.testoGrezzoMessaggi = new Map();
       state.realSession.ragionamentoBubble = new Map();
@@ -5384,6 +5486,7 @@
   async function startRealSession(task) {
     const generation = nuovaGenerazioneSessione();
     state.realSession.taskId = task.id;
+    state.realSession.treeWorkspaceKey = `task:${task.id}`;
     state.session = `Task reale · ${task.id}`;
     sessionTitle.textContent = state.session;
     /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
@@ -5549,6 +5652,16 @@
       toast('Contesto compattato', '18.7k -> 9.3k token equivalenti.');
       return;
     }
+    if (compattazioneInCorso) return;
+    const bottoneCompattazione = $('#compactSessionBtn');
+    compattazioneInCorso = true;
+    if (bottoneCompattazione) {
+      bottoneCompattazione.disabled = true;
+      bottoneCompattazione.setAttribute('aria-busy', 'true');
+      bottoneCompattazione.setAttribute('aria-label', 'Compattazione in corso');
+      bottoneCompattazione.title = 'Compattazione in corso…';
+      bottoneCompattazione.classList.add('is-loading');
+    }
     try {
       const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/compact`, {});
       toast(
@@ -5559,6 +5672,15 @@
       );
     } catch (error) {
       toast('Compattazione non riuscita', error.message);
+    } finally {
+      compattazioneInCorso = false;
+      if (bottoneCompattazione) {
+        bottoneCompattazione.disabled = false;
+        bottoneCompattazione.removeAttribute('aria-busy');
+        bottoneCompattazione.setAttribute('aria-label', 'Comprimi il contesto');
+        bottoneCompattazione.removeAttribute('title');
+        bottoneCompattazione.classList.remove('is-loading');
+      }
     }
   }
 
@@ -5572,6 +5694,7 @@
     if (sessionId === state.realSession.id) { setView('chat'); closePanels(); return; }
     const generation = nuovaGenerazioneSessione();
     state.realSession.taskId = taskId;
+    state.realSession.treeWorkspaceKey = `session:${sessionId}`;
     state.session = nome || `Task reale · ${taskId}`; // ⭐ un nome scelto dall'owner vince sul taskId
     sessionTitle.textContent = state.session;
     /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
@@ -6049,6 +6172,9 @@
   function avviaSessionePendente({ cartellaId, cartellaLibera, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo }) {
     nuovaGenerazioneSessione();
     state.pendingCustomSession = { cartellaId, cartellaLibera, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo };
+    state.realSession.previewProjectId = cartellaId || null;
+    state.realSession.previewWorkspaceName = nomeCartella;
+    state.realSession.treeWorkspaceKey = cartellaId ? `project:${cartellaId}` : `path:${cartellaLibera || nomeCartella}`;
     if (modello) { state.model = modello; aggiornaPillolaModello(); }
     if (effort) state.effort = effort;
     state.session = `Nuova · ${nomeCartella}`;
@@ -6056,11 +6182,11 @@
     $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
     setView('chat');
     closePanels();
+    const fileTab = $('#inspector-tab-files');
+    if (fileTab) setInspectorTab(fileTab);
     // ⛔ nuovaGenerazioneSessione() ha appena svuotato #conversation (replaceChildren) — l'empty-state originale non esiste più nel DOM, va ricreato, non cercato.
     $('#conversation').appendChild(costruisciConversationHero(`Sessione pronta su ${nomeCartella}.`, 'Scrivi qui sotto cosa deve fare TALOS per iniziare.'));
     // ⭐ 30/8 — stesso principio di sopra, sul tab Files: nuovaGenerazioneSessione() (dentro resettaSuperficiRealiDedicate) ha già scritto il placeholder GENERICO "nessuna cartella ancora scelta" — ma qui la cartella è già nota, prima ancora del primo messaggio. Nessuna nuova sorgente di verità: nomeCartella è lo stesso valore che finisce nel titolo sessione qui sopra.
-    const fileTreePlaceholder = $('#inspector-files .file-tree .board-empty');
-    if (fileTreePlaceholder) fileTreePlaceholder.textContent = `Cartella scelta: ${nomeCartella}. I file appariranno qui appena TALOS inizia a lavorare.`;
     window.setTimeout(() => composerInput.focus(), 0);
   }
 
@@ -6091,6 +6217,7 @@
     const generation = nuovaGenerazioneSessione();
     const taskSintetico = { id: `libero:${nomeCartella}`, consegna };
     state.realSession.taskId = taskSintetico.id;
+    state.realSession.treeWorkspaceKey = cartellaId ? `project:${cartellaId}` : `path:${cartellaLibera || nomeCartella}`;
     state.session = `Compito libero · ${nomeCartella}`;
     sessionTitle.textContent = state.session;
     /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
@@ -7012,6 +7139,7 @@
     titoloDalPrimoMessaggio,
     // ⭐ 28/8 — Terminale REALE (LEDGER-TERMINALE-REALE.md): esposte per i test dedicati, stesso principio di sopra — internals reali, non un secondo contratto.
     apriVistaTerminaleReale,
+    apriFileAlbero,
     scollegaTerminaleReale,
     statoTerminale,
     realSessionState: state.realSession,
@@ -7036,7 +7164,10 @@
   };
   composerInput.addEventListener('focus', () => window.setTimeout(syncVisualViewport, 30));
   composerInput.addEventListener('blur', () => window.setTimeout(syncVisualViewport, 60));
-  $('#fileTreeFilter')?.addEventListener('input', (e) => filtraAlberoReale(e.target.value));
+  $('#fileTreeFilter')?.addEventListener('input', (e) => {
+    filtraAlberoReale(e.target.value);
+    salvaImpostazioniAlbero();
+  });
 
   sessionsCollapseBtn?.addEventListener('click', toggleSessionsPanel);
 

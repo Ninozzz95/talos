@@ -32,6 +32,58 @@ export const LIMITE_FIGLI_CONCORRENTI = 10;
  */
 export const LIMITE_PROFONDITA_DELEGA = 2;
 
+const TOOL_ERRORE_ESPLICITO = /^(?:\s*(?:error\b|exit\s+[1-9]\d*\b)|.*\b(?:ENOENT|no such file or directory|could not|unable to|failed to|not accessible|no file matches|non riesco|problema di configurazione)\b)/i;
+const TASK_SCRITTURA_ESPLICITA = /\b(?:scriv\w*|modific\w*|aggiorn\w*|cre\w*|aggiung\w*|elimin\w*|rinomin\w*|implement\w*|write|modify|update|create|add|delete|rename|implement)\b/i;
+
+/** Una richiesta esplicita di modifica richiede una prova di file/artefatto, non solo una risposta tool. */
+export function taskRichiedeEvidenzaScrittura(task) {
+  const testo = typeof task === 'string' ? task : task?.consegna ?? task?.consegnaCorta ?? '';
+  return TASK_SCRITTURA_ESPLICITA.test(String(testo));
+}
+
+/**
+ * Riassume soltanto i segnali operativi già emessi dal figlio. Il testo
+ * finale del modello non è una prova di scrittura: una delega può dichiarare
+ * "fatto" anche quando ogni terminale ha risposto con un errore.
+ *
+ * @param {Array<object>|undefined|null} eventi
+ * @returns {{scritture:number, artefatti:number, toolCalls:number, toolCallsOk:number, toolCallsFalliti:number, verificabile:boolean}|null}
+ */
+export function analizzaEvidenzaDelega(eventi) {
+  if (!Array.isArray(eventi)) return null;
+  let scritture = 0;
+  let artefatti = 0;
+  let toolCalls = 0;
+  let toolCallsOk = 0;
+  let toolCallsFalliti = 0;
+  for (const evento of eventi) {
+    if (evento?.type === 'ArtifactCreated') artefatti += 1;
+    if (evento?.type === 'StateDelta') {
+      const delta = Array.isArray(evento.delta) ? evento.delta : [];
+      scritture += delta.filter((voce) => typeof voce?.path === 'string' && voce.path.startsWith('/file/')).length;
+    }
+    if (evento?.type !== 'ToolCallResult') continue;
+    toolCalls += 1;
+    if (TOOL_ERRORE_ESPLICITO.test(String(evento.content ?? ''))) toolCallsFalliti += 1;
+    else toolCallsOk += 1;
+  }
+  return {
+    scritture,
+    artefatti,
+    toolCalls,
+    toolCallsOk,
+    toolCallsFalliti,
+    verificabile: scritture > 0 || artefatti > 0 || toolCallsOk > 0,
+  };
+}
+
+function motivoEvidenzaMancante(evidenza, richiestaScrittura = false) {
+  const dettaglio = richiestaScrittura
+    ? 'la richiesta prevedeva una modifica ma non risultano scritture o artefatti'
+    : `${evidenza.toolCallsFalliti} tool su ${evidenza.toolCalls} hanno fallito e non risultano scritture o artefatti`;
+  return `Il sotto-agente ha dichiarato successo, ma non ha lasciato evidenza verificabile: ${dettaglio}. Il lavoro non è considerato concluso.`;
+}
+
 /**
  * Traduce il risultato di `agent-service.avviaSessione` (il "risultato"
  * catturato dentro il `.then()`/`.catch()` di `avviaESegui`) nella
@@ -39,9 +91,24 @@ export const LIMITE_PROFONDITA_DELEGA = 2;
  * inventato quando la figlia non ha concluso per davvero.
  *
  * @param {{ok?: boolean, esito?: object|null, erroreInterno?: string|null}|null} risultato
+ * @param {Array<object>|undefined|null} [eventi] eventi AG-UI persistiti dalla figlia
+ * @param {{task?:string|object}} [contesto] richiesta originale, per distinguere una lettura da una modifica
  */
-export function esitoDelegaDaRisultato(risultato) {
+export function esitoDelegaDaRisultato(risultato, eventi, contesto = {}) {
   if (risultato?.ok) {
+    const evidenza = analizzaEvidenzaDelega(eventi);
+    const richiestaScrittura = taskRichiedeEvidenzaScrittura(contesto.task);
+    // Se il figlio ha ricevuto una richiesta di modifica, una risposta tool
+    // riuscita non dimostra che il file sia stato scritto: serve StateDelta o
+    // ArtifactCreated. Per richieste puramente informative resta sufficiente
+    // una tool-call riuscita; una delega senza tool conserva il contratto.
+    if (evidenza && evidenza.toolCalls > 0 && ((!evidenza.verificabile) || (richiestaScrittura && evidenza.scritture === 0 && evidenza.artefatti === 0))) {
+      return {
+        riassunto: risultato.esito?.detto || '(il sotto-agente non ha lasciato un riassunto testuale)',
+        esito: 'fallito',
+        motivo: motivoEvidenzaMancante(evidenza, richiestaScrittura),
+      };
+    }
     return {
       riassunto: risultato.esito?.detto || '(il sotto-agente non ha lasciato un riassunto testuale)',
       esito: 'concluso',
@@ -56,6 +123,15 @@ export function esitoDelegaDaRisultato(risultato) {
   }
   // erroreInterno: avviaSessione dichiara di non lanciare mai, ma un ripiego onesto resta necessario (stesso principio già in uso nel .catch() di avviaESegui).
   return { riassunto: null, esito: 'fallito', motivo: risultato?.erroreInterno ?? 'errore sconosciuto nella sessione figlia' };
+}
+
+/** Ricostruisce il verdetto di una figlia dopo il riavvio del server. */
+export function esitoDelegaDaEventi(eventi, contesto = {}) {
+  if (!Array.isArray(eventi)) return null;
+  const terminale = [...eventi].reverse().find((evento) => evento?.type === 'RunFinished' || evento?.type === 'RunError');
+  if (!terminale) return null;
+  if (terminale.type === 'RunError') return 'fallito';
+  return esitoDelegaDaRisultato({ ok: true, esito: { detto: terminale.result?.detto ?? '', comeFinita: 'concluso' } }, eventi, contesto).esito;
 }
 
 /**
@@ -81,6 +157,7 @@ export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn }) {
           task: voce.task?.consegna ?? null,
           conclusa: voce.conclusa,
           esitoDelega: voce.esitoDelega ?? null,
+          evidenzaDelega: voce.evidenzaDelega ?? null,
           avviataAlle: voce.avviataAlle ?? null,
         });
       }
@@ -116,7 +193,25 @@ export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn }) {
         resolve({ esito: 'rifiutato', motivo: `limite di ${LIMITE_FIGLI_CONCORRENTI} figli concorrenti raggiunto` });
         return;
       }
-      let risoltaGiaConcluso = false;
+      let figlioId = null;
+      let conclusioneRicevuta = null;
+      let conclusioneGestita = false;
+      const completaConclusione = (risultatoSessione) => {
+        if (conclusioneGestita) return;
+        if (!figlioId) {
+          conclusioneRicevuta = risultatoSessione;
+          return;
+        }
+        conclusioneGestita = true;
+        const voceFiglia = sessioni.get(figlioId);
+        const eventi = voceFiglia?.eventi;
+        const esito = esitoDelegaDaRisultato(risultatoSessione, eventi, { task });
+        if (voceFiglia) {
+          voceFiglia.esitoDelega = esito.esito;
+          voceFiglia.evidenzaDelega = analizzaEvidenzaDelega(eventi);
+        }
+        resolve(esito);
+      };
       const risultatoAvvio = avviaESeguiFn({
         taskId: `delega:${sessionPadreId}`,
         cartella,
@@ -124,12 +219,13 @@ export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn }) {
         padreId: sessionPadreId,
         profonditaDelega: profonditaVoluta,
         onConclusioneFn: (risultatoSessione) => {
-          risoltaGiaConcluso = true;
-          resolve(esitoDelegaDaRisultato(risultatoSessione));
+          completaConclusione(risultatoSessione);
         },
       });
+      figlioId = risultatoAvvio?.sessionId ?? null;
+      if (conclusioneRicevuta) completaConclusione(conclusioneRicevuta);
       // ⛔ AL CONTRARIO: avviaESeguiFn può rifiutare PRIMA di avviare (es. chiave API non configurata) — mai una Promise appesa in eterno se onConclusioneFn non scatterà mai.
-      if (!risoltaGiaConcluso && risultatoAvvio?.erroreAvvio) {
+      if (!conclusioneGestita && !conclusioneRicevuta && risultatoAvvio?.erroreAvvio) {
         resolve({ esito: 'rifiutato', motivo: risultatoAvvio.erroreAvvio });
       }
     });

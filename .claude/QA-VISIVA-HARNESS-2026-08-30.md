@@ -1019,21 +1019,20 @@ importanti di tutto il giro).
 | E | Board: badge "Demo UI · non collegato" mai nascosto con dati reali | `renderSessionsBoard`, riga mancante | Media | 14 | ✅ Corretto — verificato dal vivo |
 | F | Backdrop del foglio "Nuovo file" resta cliccabile per una finestra dopo la chiusura visiva | race di animazione, `syncEmbeddedDialogBackdrop` | Media | 5.2 | ✅ Corretto — riprodotto lo scenario originale, ora funziona al primo colpo |
 | G | `descriviAzioneApprovazione()` senza caso per `research_start` | approvazione "On request", fallback generico | Bassa-media | 11 | ✅ Corretto — non ri-verificato dal vivo (richiederebbe un altro giro On request+Deep Research), verificato via test+lettura |
-| H | Follow-up su sessione con giri-esauriti riprende il task vecchio invece di rispondere al messaggio nuovo | UX non spiegata, non necessariamente sbagliata | Nota | 6 | 🔜 NON toccato — osservazione UX, non un difetto di codice da correggere meccanicamente |
+| H | Follow-up su sessione con giri-esauriti riprende il task vecchio invece di rispondere al messaggio nuovo | UX non spiegata, non necessariamente sbagliata | Nota | 6 | ✅ Corretto — guida esplicita sulla continuità e su «Nuova», desktop/laptop verificati |
 | I | `memory_write` senza riassunto naturale in conversazione (mostra il nome grezzo) | cosmetico | Bassa | 8 | ✅ Corretto — stesso pattern degli altri casi, verificato via test |
-| J | `delega_sottotask`: 3 deleghe consecutive riportano `esitoDelega:"concluso"` con `cartella` CORRETTA (percorso assoluto reale, confermato nel jsonl grezzo), ma il file reale sul disco non risulta mai scritto | kernel (`talosHarness.mjs`, `delega_sottotask`) — osservato via Harness Desktop | **Alta** — se generalizza, il lavoro delegato è silenziosamente un no-op | 12e | 🔜 NON toccato — kernel, root cause non ancora isolata (interrotto a metà lettura del jsonl grezzo della figlia); vedi Task 12e sotto |
-| K | `compactSession()` non disabilita/segnala il bottone Compatta durante la chiamata reale (~2 minuti, un giro LLM vero) — a differenza di Export, che disabilita esplicitamente i suoi bottoni durante il proprio fetch | `app.js`, `compactSession()`, confrontato con l'handler `[data-export-choice]` | Bassa | 5 (seguito) | 🔜 NON toccato — trovato chiudendo Task 5, dopo il giro "procedi con le correzioni"; registrato per un batch-fix separato |
+| J | `delega_sottotask`: 3 deleghe consecutive riportano `esitoDelega:"concluso"` con `cartella` CORRETTA (percorso assoluto reale, confermato nel jsonl grezzo), ma il file reale sul disco non risulta mai scritto | kernel (`talosHarness.mjs`, `delega_sottotask`) — osservato via Harness Desktop | **Alta** — se generalizza, il lavoro delegato è silenziosamente un no-op | 12e | ✅ Corretto — evidenza strutturata, restore onesto e badge errore verificati desktop/laptop |
+| K | `compactSession()` non disabilita/segnala il bottone Compatta durante la chiamata reale (~2 minuti, un giro LLM vero) — a differenza di Export, che disabilita esplicitamente i suoi bottoni durante il proprio fetch | `app.js`, `compactSession()`, confrontato con l'handler `[data-export-choice]` | Bassa | 5 (seguito) | ✅ Corretto — loading/lock, errore e retry verificati desktop/laptop |
 | L | Tab Files: markup mockup residuo (`talos/src/components/TalosComposer.vue…`) visibile su OGNI pagina prima del primo messaggio — segnalato owner dal vivo, fuori sequenza Task 0-14 | `index.html` + `renderizzaAlberoReale()`/`resettaSuperficiRealiDedicate()` (`app.js`) | **Alta** (mente attivamente, come D) | fuori sequenza | ✅ Corretto — dettaglio completo in [[LEDGER-MOCKUP-FILES-TAB-CARTELLE-FREQUENTI-2026-08-30]], verificato dal vivo |
 | M | "Cartelle più usate" nel foglio nuova sessione erano SEMPRE Desktop/Download/Documenti, mai la cronologia reale (feature dal 28/8, mai davvero "frequente") | `frequent-dirs.mjs`, mai collegato a `session-registry` | Media | fuori sequenza | ✅ Corretto — stesso ledger di L, `cartellePiuUsate()` nuovo in `session-registry.mjs` |
 
 ### 5.4 — Batch-fix del 30/8 (stesso giorno, owner: "procedi con le correzioni")
 
-7/9 voci corrette (B-G, I), 2 deliberatamente non toccate (A: kernel,
-serve una decisione owner separata; H: osservazione UX, non un bug di
-codice). Ogni fix verificato dal vivo via CDP dove possibile (B, C, D,
-E, F), o via test automatici quando una riverifica dal vivo avrebbe
-richiesto una nuova corsa costosa (G, I) — mai dichiarato "fatto" senza
-una verifica di qualche tipo.
+Con le fasi successive H, J e K risultano ora corrette anche le tre voci
+rimaste del primo batch; A resta l'unica voce ancora aperta perché riguarda
+il cancello anti-fabbricazione nel kernel/system prompt e richiede una
+decisione tecnica dedicata. Ogni fix è stato verificato via CDP, test o
+lettura strutturata, mai dichiarato "fatto" senza una prova.
 
 **B — l'avviso più importante**: `simboliSpariti()` (app.js) confronta
 i simboli top-level (`def`/`class`/`function`, euristica multi-
@@ -1091,9 +1090,10 @@ richiama, approvazione on-request, coda mid-run, Deep Research, onestà
 su un task-trappola. Zero eccezioni JavaScript non gestite, zero
 errori console non attesi in **qualunque** delle ~30 corse di questo
 giro. I difetti trovati sono reali ma per lo più localizzati (label
-statiche, un badge, un caso mancante in uno switch) — le due eccezioni
-sono le scoperte A e B, entrambe più profonde e degne di una decisione
-esplicita dell'owner prima di un fix meccanico.
+statiche, un badge, un caso mancante in uno switch). B, C, D, E, F, G,
+H, I, J, K, L e M hanno ora una correzione o un audit documentato; A
+resta l'unica eccezione strutturale, degna di una decisione esplicita
+dell'owner prima di un fix meccanico.
 
 Formato per ogni voce, da qui in avanti:
 
@@ -1171,3 +1171,382 @@ avviato e sano, pipeline CDP verificata disponibile, Chrome verificato
 al percorso atteso. Cartella scratch dei cinque progetti-base del
 corpus (§3.0.1): **non ancora creata** — prossimo passo prima del
 Task 1.
+
+## Fase 1 — K: compattazione con stato di loading (2026-08-30)
+
+### [Task K.1] Loading, lock e percorso contrario di `compactSession()` — 2026-08-30
+
+Perimetro: **Harness desktop nel server locale** (`http://127.0.0.1:4174`).
+La lane mobile è stata consultata solo per riferimento; non sono state
+modificate né verificate build mobile o Pad.
+
+Riproduzione RED prima della modifica:
+
+```text
+node harness-ui/scripts/qa-visual-pipeline.mjs qa-compact-loading --url=http://127.0.0.1:4174/ --porta=9561
+```
+
+Esito: exit 1. Con la POST trattenuta il bottone restava attivo
+(`disabled=false`, nessun `aria-busy`, label `Comprimi il contesto`) e un
+secondo click poteva avviare una richiesta concorrente. Le immagini RED sono
+state guardate per intero: nessun feedback visivo di attesa.
+
+Verifica GREEN desktop:
+
+```text
+node harness-ui/scripts/qa-visual-pipeline.mjs qa-compact-loading --url=http://127.0.0.1:4174/ --porta=9564
+```
+
+Report e screenshot: `harness-ui/.qa-runs/qa-compact-loading-2026-08-30T16-09-58-149Z/`.
+Viewport reale del browser: **1440×900**. Durante l'attesa sono stati
+misurati `disabled=true`, `aria-busy=true`, label `Compattazione in corso` e
+una sola POST dopo il secondo click. Successo, errore e retry rilasciano il
+lock e mostrano il toast previsto.
+
+Verifica GREEN laptop:
+
+```text
+node harness-ui/scripts/qa-visual-pipeline.mjs qa-compact-loading --url=http://127.0.0.1:4174/?qa=laptop --porta=9565
+```
+
+Report e screenshot: `harness-ui/.qa-runs/qa-compact-loading-2026-08-30T16-10-13-225Z/`.
+Viewport: **1024×800**. Gli stessi stati e il percorso contrario sono
+passati; 0 eccezioni JS e 0 errori console in entrambe le run. Il solo 404 è
+`/favicon.ico`, difetto cosmetico preesistente e fuori da K.
+
+Manuale — ispezione completa di tutte le sei immagini per entrambe le
+viewport: topbar, sidebar sessioni, chat, rail destro, composer e toast sono
+rimasti allineati e leggibili; lo spinner ambrato non provoca layout shift;
+non ci sono clipping o sovrapposizioni. L'accumulo di toast nella sequenza è
+solo un artefatto del test che forza più esiti consecutivi. Il badge
+`Demo UI · non collegato` e il fixture senza sessione reale sono coerenti con
+il test sintetico.
+
+Confronto: Hermes espone l'avvio/retry/completamento della compattazione;
+pi persiste l'evento mantenendo integre le coppie tool; Codex documenta il
+valore di un indicatore vicino al composer. TALOS adotta questi segnali e
+aggiunge un lock unico e reset certo su errore, senza percentuali fabbricate.
+Claude Code, DeepSeek Harness, Gemini, ChatGPT, OpenClaw e runner locali:
+N/A per assenza di un contratto desktop primario e riproducibile equivalente.
+
+Automatico: `difetti=[]`, `eccezioni=[]`; solo il 404 favicon già noto.
+Gravità: **risolto**.
+Categoria: **funzione rotta / stato UI**.
+
+## Fase 2 — audit label Settings (2026-08-30)
+
+### [Task D.2] Riconciliazione delle label già corrette — 2026-08-30
+
+Perimetro: server locale Harness desktop. Nessun file mobile, Pad o
+TALOS-BANCO è stato modificato o dichiarato verificato.
+
+Scenario read-only:
+
+```text
+node harness-ui/scripts/qa-visual-pipeline.mjs qa-batchfix-d-e-label-badge --url=http://127.0.0.1:4174/ --porta=9567
+```
+
+Report: `harness-ui/.qa-runs/qa-batchfix-d-e-label-badge-2026-08-30T16-16-51-467Z/report.json`.
+
+Automatico: 0 eccezioni JS, 0 errori console; solo il 404 preesistente di
+`/favicon.ico`.
+
+Misure: “Non ancora implementato” nel Control plane **false**; testo Memory
+stale **false**; testo Agents stale **false**; testo Agentico Settings stale
+**false**; badge demo Board con sessioni reali **false**.
+
+Manuale — quattro screenshot ispezionati per intero
+(`harness-ui/.qa-runs/qa-batchfix-d-e-label-badge-2026-08-30T16-16-51-467Z/`):
+Control plane, tab Agents, Settings e Board mantengono gerarchia, contrasto,
+spaziatura e token coerenti. La sola frase rimasta nella card Interazione,
+“Diff espansi di default e Tool activity compatta: non ancora implementati”,
+descrive una capability non costruita e non un falso stato; lasciata intatta.
+
+Confronto: Hermes rende visibile una capability solo quando il relativo stato
+esiste; pi documenta eventi di compattazione ma non un contratto pubblico per
+queste preferenze; Codex considera una label di stato incoerente una
+regressione. TALOS mantiene il testo aperto finché non esiste comportamento
+reale, evitando un toggle decorativo. Gli altri competitor (Claude Code,
+DeepSeek Harness, Gemini, ChatGPT, OpenClaw e runner locali) sono `N/A` per
+assenza di una fonte primaria desktop riproducibile equivalente.
+
+Esito: **audit/no-op chiuso**. Non è stato introdotto codice; per implementare
+le due preferenze serve una fase owner dedicata con stato, comportamento e
+test contrari.
+
+## Fase 3 — H: follow-up dopo limite giri (2026-08-30)
+
+### [Task H.1] Spiegazione esplicita della continuità — 2026-08-30
+
+Perimetro: **Harness desktop sul server locale**. Ownership esclusiva
+desktop: `mobile/src/**` e l'app mobile sono rimasti sola lettura; il bundle
+servito dal server desktop è, per contratto esistente, in
+`mobile/public/harness-ui/**`.
+
+Riproduzione RED (nessun token LLM, nessuna mutazione server):
+
+```text
+node harness-ui/scripts/qa-visual-pipeline.mjs qa-turn-limit-followup --url=http://127.0.0.1:4174/ --porta=9568
+```
+
+Report: `harness-ui/.qa-runs/qa-turn-limit-followup-2026-08-30T16-24-05-252Z/`.
+La sessione persistita `514893db-a60f-4368-b548-2868e0678b06` mostra il vero
+`RunError [giri-esauriti]` (24/24). Il follow-up viene accettato con una sola
+`resume`, ma prima del fix non c'è alcuna spiegazione per l'utente: finding H
+annotato nel taccuino della corsa.
+
+Fix minimo in `mobile/public/harness-ui/app.js`, `handleRealEvent()` →
+`case 'RunError'`: solo `giri-esauriti` aggiunge alla stessa nota errore:
+“Il prossimo messaggio continuerà questo task nella stessa sessione. Premi
+«Nuova» per iniziare un task separato.” Gli altri codici restano invariati;
+backend, endpoint e semantica del composer non cambiano.
+
+Verifica GREEN desktop:
+
+```text
+node harness-ui/scripts/qa-visual-pipeline.mjs qa-turn-limit-followup --url=http://127.0.0.1:4174/ --porta=9569
+```
+
+Report iniziale: `harness-ui/.qa-runs/qa-turn-limit-followup-2026-08-30T16-59-58-681Z/`.
+Viewport **1440×900**, due screenshot ispezionati per intero. `resume === 1`,
+follow-up visibile, spiegazione presente, 0 finding H, 0 eccezioni JS.
+
+Verifica GREEN laptop:
+
+```text
+node harness-ui/scripts/qa-visual-pipeline.mjs qa-turn-limit-followup --url=http://127.0.0.1:4174/?qa=laptop --porta=9570
+```
+
+Report iniziale: `harness-ui/.qa-runs/qa-turn-limit-followup-2026-08-30T17-00-01-847Z/`.
+Viewport **1024×800**, due screenshot ispezionati per intero con gli stessi
+esiti. L'unico errore HTTP in entrambe le corse è il 404 preesistente di
+`/favicon.ico`.
+
+Controprova finale (RunError generico, guida non deve trapelare):
+
+- desktop 1440×900: `harness-ui/.qa-runs/qa-turn-limit-followup-2026-08-30T17-02-07-516Z/`;
+- laptop 1024×800: `harness-ui/.qa-runs/qa-turn-limit-followup-2026-08-30T17-02-10-991Z/`.
+
+Tre screenshot per corsa sono stati ispezionati per intero. `resume === 1`,
+follow-up visibile, codice generico invariato, 0 finding H, 0 eccezioni JS;
+resta soltanto il 404 preesistente del favicon.
+
+Note visive: la frase va a capo nella bolla errore senza coprire il composer,
+non sposta sidebar/topbar/context rail e mantiene il contrasto del tema. La
+pagina resta leggibile sia a piena larghezza sia sul laptop. Nessuna prova su
+Pad o mobile: fuori ownership di questa fase.
+
+Confronto competitivo: Hermes è il riferimento principale perché, quando un
+budget si esaurisce, dichiara il conteggio e l'azione successiva (`/goal
+resume` oppure `/goal clear`) e mostra un recap sul resume. TALOS adotta lo
+stesso principio di stato + conseguenza + scelta, ma con i controlli grafici
+già presenti (`Nuova` e composer), senza introdurre comandi slash. Pi offre
+continuità tramite compaction strutturata ma non una micro-UX equivalente;
+Codex documenta il limite come sessione recuperabile ma non l'auto-resume.
+Claude Code, DeepSeek Harness, Gemini, ChatGPT, OpenClaw e runner locali:
+`N/A` per questa decisione, non esiste una fonte primaria desktop comparabile.
+
+Esito: **risolto**. Ledger dettagliato:
+`.claude/LEDGER-FASE-3-H-TURN-LIMIT-FOLLOWUP-2026-08-30.md`.
+
+## Fase 4 — J: delega con evidenza verificabile (2026-08-30)
+
+### [Task J.1] Ripristino, audit read-only e correzione del falso successo — 2026-08-30
+
+Perimetro: **Harness desktop sul server locale**. Mobile, Pad e TALOS-BANCO
+sono rimasti sola lettura. Il registro contiene tre figlie della sessione
+padre `82c71bd0-74d6-423f-b600-1dbe3bc5fdf7`; il file di destinazione reale è
+`C:\Users\Antonino\Desktop\projects\qa-visiva-harness-2026-08-30\serpente-2d\test\gioco.test.mjs`.
+
+Il primo controllo ha confermato che `RunFinished` riportava successo anche
+quando il test richiesto non era stato scritto. Due figlie avevano risposte
+tool non-fallite (salvataggio di una nota), ma **zero** `StateDelta /file/` e
+zero `ArtifactCreated`; la terza aveva solo errori. Il file reale non ha
+cambiato contenuto né timestamp.
+
+Decisione applicata: per task che chiedono una modifica, il testo finale e una
+tool-call secondaria non sono prova sufficiente; servono una scrittura
+strutturata o un artefatto. Le deleghe informative possono ancora chiudersi
+con una tool-call riuscita. Dopo il riavvio, il registro ricalcola il verdetto
+dagli eventi e il campo `evidenzaDelega` resta consultabile via `/children`.
+
+Fix nei percorsi:
+
+- `harness-ui/src/subagent-orchestrator.mjs`: normalizzazione evidenza,
+  riconoscimento task di modifica, callback sincrono e restore coerenti;
+- `harness-ui/src/session-registry.mjs`: restore con task originale;
+- `harness-ui/tests/subagent-orchestrator.test.mjs`: casi RED/GREEN per
+  errori tool, scrittura reale e tool secondario senza artefatto;
+- `mobile/public/harness-ui/app.js`: una figlia `fallito` usa il badge errore
+  `!`, non il check verde riservato a `concluso`;
+- `harness-ui/scripts/qa-visual-pipeline.mjs`: scenario read-only
+  `qa-delegation-artifact-integrity`.
+
+Verifica automatica e visiva desktop (1440×900):
+
+```text
+node scripts/qa-visual-pipeline.mjs qa-delegation-artifact-integrity --url=http://127.0.0.1:4174/ --porta=9574
+```
+
+Report: `harness-ui/.qa-runs/qa-delegation-artifact-integrity-2026-08-30T17-21-59-499Z/`.
+Il GET `/children` restituisce tre `fallito`, con scritture/artefatti a zero;
+l'Albero sessione mostra tre badge `status-chip error` con `!`; il file target
+resta invariato; 0 eccezioni JS e 0 errori console (solo il 404 favicon noto).
+Lo screenshot `01-albero-deleghe-integrita-artifact.png` è stato ispezionato
+per intero: modal centrata, righe leggibili, nessun badge verde ingannevole,
+nessuna sovrapposizione o taglio.
+
+Verifica automatica e visiva laptop (1024×800):
+
+```text
+node scripts/qa-visual-pipeline.mjs qa-delegation-artifact-integrity --url=http://127.0.0.1:4174/?qa=laptop --porta=9575
+```
+
+Report: `harness-ui/.qa-runs/qa-delegation-artifact-integrity-2026-08-30T17-22-13-546Z/`.
+Stesse misure e stessa integrità del file; screenshot ispezionato per intero,
+senza clipping del modal o delle tre righe.
+
+Confronto competitivo: Hermes documenta contesto isolato, summary strutturato
+e stato `unknown` quando gli effetti non sono dimostrabili; Codex raccoglie il
+risultato del figlio e permette di ispezionarne il thread; pi raccoglie output
+isolato in JSON. TALOS adotta questi principi senza parserizzare il testo del
+modello: richiede gli eventi AG-UI già emessi e rende il fallimento esplicito
+nella stessa grammatica visuale dell'app. Gli altri competitor (Claude Code,
+DeepSeek Harness, Gemini, ChatGPT, OpenClaw e runner locali) sono `N/A` per
+questa decisione, non essendoci una fonte primaria desktop equivalente.
+
+Esito: **risolto**. Ledger dettagliato:
+`.claude/LEDGER-FASE-4-J-DELEGA-EVIDENZA-2026-08-30.md`.
+
+## Fase 5 — A: anti‑fabbricazione (analisi e confine ownership)
+
+La riproduzione reale è la sessione persistita
+`harness-ui/.sessions-store/5c280231-a4fd-4e3c-8a86-07168506c3f0.jsonl`:
+richiesta di una feature nuova senza specifica → due rifiuti corretti sul
+principio “non inventare”, ma senza una domanda strutturata che porti la
+richiesta a uno stato implementabile. Il refactor ancorato a codice esistente
+(Task 12d) continua invece a funzionare. Il punto di morte è nel kernel
+sibling `C:\Users\Antonino\Desktop\projects\AVM-harness\mobile\scripts\harness-talos\talosHarness.mjs`,
+non nel ponte desktop `harness-ui/src/agent-service.mjs`.
+
+Ricerca primaria del 30/08: OpenAI Codex subagents
+(https://developers.openai.com/codex/subagents), Hermes delegation
+(https://hermes-agent.nousresearch.com/docs/user-guide/features/delegation),
+SWE-agent problem statements e ciclo riproduzione/verifica
+(https://github.com/SWE-agent/SWE-agent/blob/main/config/default.yaml).
+Decisione: adottare contesto e prove esplicite, non consentire bypass per
+insistenza. Il kernel dovrebbe distinguere `non-supportato`,
+`specifica-mancante` e `pronto-a-implementare`; il secondo chiede file/area,
+comportamento, criteri di accettazione e test, senza scrivere.
+
+Taccuino/competitor: Hermes è più forte su transcript/stato `unknown`, Codex
+su isolamento e ispezionabilità, SWE-agent su brief e ciclo RED/GREEN; TALOS
+deve unire questi vantaggi conservando permessi, premessa semantica e prova su
+disco. Nessun confronto Pad: ownership desktop, mobile sola lettura.
+
+Esito: **non implementato in questa lane per confine corretto**. Ledger e
+prompt per il main agent: `.claude/LEDGER-FASE-5-A-ANTI-FABBRICAZIONE-2026-08-30.md`.
+
+## Fase 6 — sessione senza cartella (analisi, contratto da decidere)
+
+L’ispezione del codice conferma che `requireCustomTaskBody()` richiede
+`cartellaId XOR cartellaLibera`, `preparaEsecuzioneLibera()` rifiuta entrambi
+assenti e `avviaESegui()` presuppone sempre una radice per watcher, policy e
+tool. Non esiste oggi un percorso scratch né un cleanup associato alla vita
+di una sessione. È una lacuna di prodotto, non un bug da correggere con un
+fallback alla root.
+
+Ricerca primaria: Node `os.tmpdir()`/`fs.mkdtemp()`
+(https://nodejs.org/api/os.html), Workspace Trust di VS Code
+(https://code.visualstudio.com/docs/editing/workspaces/workspace-trust),
+ambienti/subagent locali Codex
+(https://developers.openai.com/codex/subagents). Hermes resta il riferimento
+per sessioni isolate e `/new`, ma non fornisce qui un cleanup scratch
+desktop verificabile.
+
+Proposta per il main agent: campo esplicito `workspace:"scratch"`, directory
+unica sotto `os.tmpdir()`, metadati `workspaceKind/cleanupPending`, cleanup
+solo dopo chiusura di sessione conclusa/fermata e sweep degli orfani al
+riavvio. La variante `workspace:"none"` non è minima perché obbligherebbe a
+rendere condizionali tutti i tool che usano `cartella`.
+
+Taccuino visivo: nessuna superficie modificata, quindi nessun nuovo screenshot
+da dichiarare; QA Pad/mobile N/A per ownership desktop. Ledger:
+`.claude/LEDGER-FASE-6-SESSIONE-SENZA-CARTELLA-2026-08-30.md`.
+
+## Fase 7 — porting impostazioni mobile applicabili al desktop (analisi)
+
+L’inventario in sola lettura ha verificato 15 tab mobile e i contratti reali
+in `mobile/src/stores/settings.ts`, `mobile/src/components/talos/settings/`
+e nelle librerie importate. La Settings desktop attuale (`mobile/public/
+harness-ui/index.html`, sezione `data-view="settings"`) contiene solo tema
+statico, `#reducedMotionToggle`, una nota Agentico e card Control plane: il
+porting non era presente.
+
+Correzione di piano: competitor research non più limitata alla Fase 0. La
+nuova matrice confronta per ogni gruppo Hermes, VS Code, Claude Code, Cursor
+e OpenAI dove esiste una fonte primaria, e assegna ogni controllo a
+**PORTA**, **ADATTA**, **ESCLUDI** o **GATE**. I dettagli, i contratti e il
+ledger dei file sono in:
+`.claude/LEDGER-FASE-7-SETTINGS-DESKTOP-2026-08-30.md`.
+
+Taccuino competitivo sintetico: Hermes è il riferimento per configurazione
+centralizzata, precedenza e profili; VS Code per User/Workspace scope e trust;
+Claude Code per allow/deny, plan e autorizzazioni per tool; Cursor per
+regole/memorie e Privacy Mode; OpenAI per modello/reasoning effort. TALOS
+deve unire questi punti forti senza copiare impostazioni Android-only e senza
+salvare segreti nel browser.
+
+Stato visivo: nessuna schermata è stata modificata, quindi non esistono nuovi
+screenshot da dichiarare. Il prossimo gate deve fotografare Settings completa
+su desktop 1440×900 e laptop 1024×800, gruppo per gruppo, con reload e stati
+gated; Pad/mobile restano N/A per ownership.
+
+## Fase 7b — file tree all’avvio stile VS Code
+
+La preview read-only è stata implementata nella stessa UI del tree reale.
+Quando l’owner sceglie un progetto allowlistato, il pannello Files diventa
+automaticamente attivo e mostra il root prima del primo messaggio. In preview
+sono esclusi menu mutativi, drag/drop e apertura file; dopo l’avvio della
+sessione il componente torna al normale endpoint `/sessions/:id/tree`.
+
+Evidenza automatica:
+
+- `harness-ui/tests/session-registry.test.mjs`: 2 test preview allowlist/path;
+- `harness-ui/tests/http-routes-sessions.test.mjs`: 2 test endpoint, errori e
+  traversal;
+- `mobile/tests/unit/harness/harnessUiRealSession.test.ts`: 118/118 pass,
+  incluso root immediato, gating read-only, persistenza e auto-reveal;
+- suite backend Harness: 970/970 pass;
+- browser Playwright reale su `http://127.0.0.1:4174/`: 1440×900 e 1024×800,
+  pagina non vuota, nessun errore console, Files selezionato, cartella
+  `harness-ui` riaperta e filtro `server.mjs` ripristinato, 0 azioni mutative
+  e 0 righe draggable. Sul laptop il pannello Inspector è stato aperto con il
+  controllo reale prima dello screenshot, come richiede il breakpoint.
+
+Screenshot completi ispezionati per intero:
+
+- `C:\Users\Antonino\AppData\Local\Temp\harness-tree-desktop-final-default.png`
+- `C:\Users\Antonino\AppData\Local\Temp\harness-tree-desktop-final-restored.png`
+- `C:\Users\Antonino\AppData\Local\Temp\harness-tree-laptop-final-default.png`
+- `C:\Users\Antonino\AppData\Local\Temp\harness-tree-laptop-final-restored.png`
+- `C:\Users\Antonino\AppData\Local\Temp\harness-tree-laptop-final-visible.png`
+
+Le immagini `harness-preview-desktop.png`, `harness-preview-laptop.png` e
+`harness-preview-after2.png` appartengono alla prova precedente e non sono
+usate come evidenza finale: le prime due catturavano ancora il foglio aperto.
+
+Il plugin Browser indicato dalle regole non era disponibile in questa sessione;
+la stessa prova è stata eseguita con Playwright contro il server locale reale,
+con controllo DOM, rete e console, e ogni immagine è stata ispezionata per
+intero.
+
+Taccuino competitivo: VS Code resta il riferimento per Explorer immediato,
+stato dell’albero, persistenza per workspace e auto-reveal; Primer conferma
+semantica da file explorer e tastiera. Hermes, Claude Code e Cursor non
+espongono una specifica primaria equivalente per questo tree desktop. TALOS
+conserva il vantaggio di VS Code ma aggiunge allowlist, percorsi relativi,
+preview realmente in sola lettura e nessuna persistenza di contenuti.
+
+Esito: **risolto nella lane desktop**. Il dettaglio esecutivo è in
+`.claude/LEDGER-FASE-7-SETTINGS-DESKTOP-2026-08-30.md`, sezione Fase 7b.

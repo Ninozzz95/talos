@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   creaSubagentOrchestrator,
+  esitoDelegaDaEventi,
   esitoDelegaDaRisultato,
   LIMITE_FIGLI_CONCORRENTI,
   LIMITE_PROFONDITA_DELEGA,
@@ -181,6 +182,82 @@ test('⛔ AL CONTRARIO — esitoDelegaDaRisultato: nessun esito (erroreInterno) 
   assert.equal(r.esito, 'fallito');
   assert.equal(r.riassunto, null);
   assert.equal(r.motivo, 'talosLavora ha lanciato inaspettatamente');
+});
+
+test('⛔ J RED — ok:true non basta se ogni tool fallisce e non esiste alcuna evidenza del lavoro', () => {
+  const r = esitoDelegaDaRisultato(
+    { ok: true, esito: { detto: 'Ho completato il test.', comeFinita: 'concluso' } },
+    [
+      { type: 'ToolCallResult', content: 'error: ENOENT: no such file or directory' },
+      { type: 'ToolCallResult', content: 'exit 1 [sandbox: wsl2]' },
+      { type: 'RunFinished', outcome: { type: 'success' } },
+    ],
+  );
+  assert.equal(r.esito, 'fallito');
+  assert.match(r.motivo, /evidenza verificabile/i);
+});
+
+test('⭐⭐ J — una StateDelta /file/ è evidenza sufficiente per mantenere concluso', () => {
+  const r = esitoDelegaDaRisultato(
+    { ok: true, esito: { detto: 'File scritto.', comeFinita: 'concluso' } },
+    [
+      { type: 'StateDelta', delta: [{ op: 'add', path: '/file/test/gioco.test.mjs', value: 'testo' }] },
+      { type: 'RunFinished', outcome: { type: 'success' } },
+    ],
+  );
+  assert.equal(r.esito, 'concluso');
+});
+
+test('⛔ J — una tool-call riuscita senza file non basta quando il task chiede una modifica', () => {
+  const r = esitoDelegaDaRisultato(
+    { ok: true, esito: { detto: 'Ho aggiunto il test.', comeFinita: 'concluso' } },
+    [
+      { type: 'ToolCallResult', content: 'Saved the note «controllo completato».' },
+      { type: 'RunFinished', outcome: { type: 'success' } },
+    ],
+    { task: 'Aggiungi un test al file test/gioco.test.mjs e verifica la suite.' },
+  );
+  assert.equal(r.esito, 'fallito');
+  assert.match(r.motivo, /scritture o artefatti/i);
+});
+
+test('⭐⭐ J — il callback associa il verdetto e l evidenza alla figlia anche se arriva prima del return', async () => {
+  const sessioni = new Map([['padre-1', vocePadre()]]);
+  const orch = creaSubagentOrchestrator({
+    sessioni,
+    avviaESeguiFn: (opzioni) => {
+      sessioni.set('figlio-vero', {
+        padreId: 'padre-1',
+        conclusa: true,
+        eventi: [
+          { type: 'ToolCallResult', content: 'error: ENOENT: no such file or directory' },
+          { type: 'RunFinished', outcome: { type: 'success' } },
+        ],
+      });
+      opzioni.onConclusioneFn({ ok: true, esito: { detto: 'fatto', comeFinita: 'concluso' } });
+      return { sessionId: 'figlio-vero' };
+    },
+  });
+  const esito = await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'scrivi un file', cartella: '/figlio' });
+  assert.equal(esito.esito, 'fallito');
+  assert.equal(sessioni.get('figlio-vero').esitoDelega, 'fallito');
+  assert.equal(sessioni.get('figlio-vero').evidenzaDelega.toolCallsFalliti, 1);
+});
+
+test('⭐⭐ J — il ripristino da eventi distingue RunFinished senza prova operativa da una scrittura reale', () => {
+  assert.equal(esitoDelegaDaEventi([
+    { type: 'ToolCallResult', content: 'exit 1 [sandbox: wsl2]' },
+    { type: 'RunFinished', outcome: { type: 'success' } },
+  ]), 'fallito');
+  assert.equal(esitoDelegaDaEventi([
+    { type: 'StateDelta', delta: [{ op: 'replace', path: '/file/src/modulo.js', value: 'ok' }] },
+    { type: 'RunFinished', outcome: { type: 'success' } },
+  ]), 'concluso');
+  assert.equal(esitoDelegaDaEventi([
+    { type: 'ToolCallResult', content: 'Saved the note «controllo completato».' },
+    { type: 'RunFinished', outcome: { type: 'success' } },
+  ], { task: { consegna: 'Modifica il file test/gioco.test.mjs aggiungendo un test.' } }), 'fallito');
+  assert.equal(esitoDelegaDaEventi([{ type: 'RunError', code: 'internal-error', message: 'no' }]), 'fallito');
 });
 
 test('⛔ AL CONTRARIO — esitoDelegaDaRisultato: risultato null/undefined non lancia, fallito onesto', () => {
