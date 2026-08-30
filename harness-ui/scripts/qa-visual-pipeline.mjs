@@ -3036,6 +3036,186 @@ const SCENARI = {
       p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
     }
   },
+
+  /**
+   * ⭐⭐⭐ 30/8 — Task 12: compito su misura (magazzino_py). Copertura:
+   * Planner/Editor (secondo model-picker "opzionale", stesso factory
+   * `creaModelPicker` del principale — SECONDO `.model-picker-trigger`
+   * nel DOM, verificato leggendo dove viene costruito, non presunto) +
+   * delega_sottotask (riga "Delega: ..." attesa in conversazione).
+   */
+  async 'qa-task-12-planner-delega'(p) {
+    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/magazzino_py';
+    await p.attendi(1200);
+    await p.click('[data-open-sheet="permissions"]');
+    await p.attendi(300);
+    await p.click('[data-permission-choice="Full access"]');
+    await p.click('#closeSheet');
+    await p.attendi(300);
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
+    await p.digita('#customTaskCartellaLibera', CARTELLA);
+
+    // Modello principale (primo trigger)
+    await p.cdp.evaluate("document.querySelectorAll('.model-picker-trigger')[0]?.click()");
+    await p.attendiCondizione("!document.querySelectorAll('.model-picker-list')[0]?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo principale caricato' });
+    await p.digita('.model-picker-search input', 'gemini-3.7-flash');
+    await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati principale', timeoutMs: 6000 });
+    await p.click('.model-picker-option');
+    await p.attendi(300);
+
+    // Planner (secondo trigger, "opzionale") — stesso modello per semplicità, quello che conta è che il CAMPO esista e venga inviato.
+    const plannerTriggerEsiste = await p.cdp.evaluate("document.querySelectorAll('.model-picker-trigger').length >= 2");
+    p.nota(`secondo model-picker (Planner) trovato nel foglio: ${plannerTriggerEsiste}`);
+    if (plannerTriggerEsiste) {
+      await p.cdp.evaluate("document.querySelectorAll('.model-picker-trigger')[1]?.click()");
+      await p.attendiCondizione("!document.querySelectorAll('.model-picker-list')[1]?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo planner caricato' });
+      const ricercaPlanner = await p.cdp.evaluate("document.querySelectorAll('.model-picker-search input')[1]");
+      if (ricercaPlanner) {
+        await p.cdp.evaluate("document.querySelectorAll('.model-picker-search input')[1].value = 'gemini-3.7-flash'; document.querySelectorAll('.model-picker-search input')[1].dispatchEvent(new Event('input', {bubbles:true}))");
+        await p.attendiCondizione("document.querySelectorAll('.model-picker-option').length > 0", { descrizione: 'risultati planner', timeoutMs: 6000 });
+        await p.cdp.evaluate("document.querySelectorAll('.model-picker-option')[0]?.click()");
+      }
+    } else {
+      p.difetto('richiesto un Planner opzionale, ma un secondo model-picker non è presente nel foglio nuova sessione', { severita: 'blocco' });
+    }
+    await p.attendi(300);
+    await p.screenshot('foglio-planner-impostato', { nota: 'atteso: due model-picker distinti, entrambi valorizzati' });
+    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
+
+    const prompt = 'Voglio che tu prepari con calma un piano per aggiungere un intero modulo di "sconti fedeltà" al magazzino — nuove funzioni, nuovi test, e un aggiornamento della funzione che calcola il totale. Pensaci bene prima di scrivere una riga, poi esegui il piano. Se ti aiuta, prova anche a delegare la scrittura dei test a un sotto-incarico separato.';
+    await p.digita('#composerInput', prompt);
+    await p.screenshot('compito-scritto');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendiCondizione("!!window.__talosHarnessUiRuntime?.realSessionState?.id", { timeoutMs: 15000, descrizione: 'sessione vera' });
+
+    await p.attendiTestoStabile('.conversation', { giriStabili: 8, intervalMs: 3000, timeoutMs: 240000 });
+    await p.screenshot('conversazione-finale');
+    const testoConversazione = await p.testo('.conversation');
+    const usoDelega = /Delega:|delega_sottotask|sotto-agente/i.test(testoConversazione ?? '');
+    p.nota(`indizio di delega_sottotask nella conversazione: ${usoDelega}`);
+    if (!usoDelega) p.difetto('richiesta esplicitamente una delega a un sotto-incarico, ma nessun indizio di delega_sottotask in conversazione', { severita: 'nota' });
+    const reviewFilesCount = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.reviewFiles?.size ?? 0");
+    p.nota(`file in Review: ${reviewFilesCount}`);
+    if (reviewFilesCount === 0) p.difetto('sessione conclusa ma zero file in Review', { severita: 'nota' });
+
+    // Se ha delegato, l'Albero sessione dovrebbe mostrare la topologia.
+    await p.click('[data-current-session-title], #currentSessionTitleBtn, .session-header-title').catch(() => {});
+    await p.attendi(300);
+    await p.screenshot('dopo-click-titolo-sessione', { nota: 'tentativo di aprire l\'albero sessione per vedere la topologia di delega' });
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /**
+   * ⭐⭐⭐ 30/8 — Task 12, seguito: la prima corsa si è RIFIUTATA di
+   * implementare una funzionalità nuova ("sconti fedeltà"), citando
+   * "istruzioni del sistema" contro l'invenzione di logiche non
+   * previste — plausibile guardia anti-fabbricazione (utile sui task
+   * TRAPPOLA, vedi Task 13) applicata TROPPO alla lettera anche a una
+   * richiesta di feature legittima e esplicita. Insisto chiaramente,
+   * per vedere se è un default morbido (cede a un sì esplicito) o un
+   * blocco duro — segnale diverso, gravità diversa.
+   */
+  async 'qa-task-12b-insisti-feature'(p) {
+    await p.attendi(1200);
+    // ⛔ Il titolo sidebar è troncato a 80 caratteri (tronca(), app.js) — "sconti
+    // fedeltà" cade DOPO il taglio. Cerco un frammento dentro i primi 80.
+    await p.digita('#sessionSearch', 'prepari con calma un piano');
+    await p.attendi(400);
+    const trovata = await p.cdp.evaluate(`(() => {
+      const riga = [...document.querySelectorAll('.session-item.real-session-item')].find((r) => r.textContent.includes('prepari con calma'));
+      if (!riga) return false;
+      riga.click();
+      return true;
+    })()`);
+    p.nota(`sessione Task 12 trovata e riaperta: ${trovata}`);
+    if (!trovata) { p.difetto('sessione Task 12 non trovata in sidebar', { severita: 'blocco' }); return; }
+    await p.attendi(1000);
+
+    const prompt = 'Sì, lo voglio DAVVERO: non è una domanda, è una richiesta esplicita di sviluppo di una funzionalità nuova che voglio nel progetto. Non stai inventando nulla di sbagliato — è un modulo che sto chiedendo io, di proposito. Procedi con l\'implementazione, e se ti aiuta delega la scrittura dei test a un sotto-incarico.';
+    await p.digita('#composerInput', prompt);
+    await p.screenshot('insistenza-scritta');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendi(1000);
+    await p.attendiTestoStabile('.conversation', { giriStabili: 8, intervalMs: 3000, timeoutMs: 240000 });
+    await p.screenshot('conversazione-dopo-insistenza');
+    const testoConversazione = await p.testo('.conversation');
+    const usoDelega = /Delega:|delega_sottotask/i.test(testoConversazione ?? '');
+    const rifiutatoAncora = /non vengono inventate|non è previsto|fuori dalle specifiche|non implemento/i.test(testoConversazione ?? '');
+    p.nota(`indizio di delega_sottotask dopo l'insistenza: ${usoDelega}`);
+    p.nota(`rifiutato ANCHE dopo un'insistenza esplicita: ${rifiutatoAncora}`);
+    const reviewFilesCount = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.reviewFiles?.size ?? 0");
+    p.nota(`file in Review dopo l'insistenza: ${reviewFilesCount}`);
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /**
+   * ⭐⭐⭐ 30/8 — Task 12, terzo tentativo: le prime due corse hanno preso
+   * (correttamente) il rifiuto anti-fabbricazione come SOGGETTO della
+   * scoperta, non ancora la copertura Planner/delega che questo slot
+   * doveva dare. Prompt rifatto per essere grounded nel codice ESISTENTE
+   * (unificare due funzioni già presenti), non "inventare" nulla — per
+   * isolare finalmente Planner/Editor + delega_sottotask dal rifiuto.
+   */
+  async 'qa-task-12c-planner-grounded'(p) {
+    await p.attendi(1200);
+    await p.click('[data-open-sheet="permissions"]');
+    await p.attendi(300);
+    await p.click('[data-permission-choice="Full access"]');
+    await p.click('#closeSheet');
+    await p.attendi(300);
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
+    await p.digita('#customTaskCartellaLibera', 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/magazzino_py');
+    await p.cdp.evaluate("document.querySelectorAll('.model-picker-trigger')[0]?.click()");
+    await p.attendiCondizione("!document.querySelectorAll('.model-picker-list')[0]?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo principale caricato' });
+    await p.digita('.model-picker-search input', 'gemini-3.7-flash');
+    await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati principale', timeoutMs: 6000 });
+    await p.click('.model-picker-option');
+    await p.attendi(300);
+    if (await p.cdp.evaluate("document.querySelectorAll('.model-picker-trigger').length >= 2")) {
+      await p.cdp.evaluate("document.querySelectorAll('.model-picker-trigger')[1]?.click()");
+      await p.attendiCondizione("!document.querySelectorAll('.model-picker-list')[1]?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo planner caricato' });
+      await p.cdp.evaluate("document.querySelectorAll('.model-picker-search input')[1].value = 'gemini-3.7-flash'; document.querySelectorAll('.model-picker-search input')[1].dispatchEvent(new Event('input', {bubbles:true}))");
+      await p.attendiCondizione("document.querySelectorAll('.model-picker-option').length > 0", { descrizione: 'risultati planner', timeoutMs: 6000 });
+      await p.cdp.evaluate("document.querySelectorAll('.model-picker-option')[0]?.click()");
+    }
+    await p.attendi(300);
+    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
+
+    const prompt = 'Il progetto ha sia calcola_sconto_scaglioni che applica_sconto, due funzioni di sconto separate e un po\' ridondanti. Pensaci con calma e preparami un piano per unificarle in un\'unica interfaccia coerente, senza rompere i test esistenti, poi esegui il piano. Se ti aiuta, delega la scrittura dei nuovi test a un sotto-incarico separato.';
+    await p.digita('#composerInput', prompt);
+    await p.screenshot('compito-scritto-grounded');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendiCondizione("!!window.__talosHarnessUiRuntime?.realSessionState?.id", { timeoutMs: 15000, descrizione: 'sessione vera' });
+    await p.attendiTestoStabile('.conversation', { giriStabili: 8, intervalMs: 3000, timeoutMs: 240000 });
+    await p.screenshot('conversazione-finale-grounded');
+    const testoConversazione = await p.testo('.conversation');
+    const usoDelega = /Delega:|delega_sottotask/i.test(testoConversazione ?? '');
+    p.nota(`indizio di delega_sottotask: ${usoDelega}`);
+    if (!usoDelega) p.difetto('richiesta esplicitamente una delega, ma nessun indizio di delega_sottotask in conversazione', { severita: 'nota' });
+    const reviewFilesCount = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.reviewFiles?.size ?? 0");
+    p.nota(`file in Review: ${reviewFilesCount}`);
+    if (reviewFilesCount === 0) p.difetto('sessione conclusa ma zero file in Review', { severita: 'nota' });
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
 };
 
 // --------------------------------------------------------------------

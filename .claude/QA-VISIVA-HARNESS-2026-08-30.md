@@ -56,7 +56,7 @@ sotto, prima di proseguire con Task 6.
 | 9 | `api-patch-parziale` | "Nell'API dei contatti manca un modo per aggiornare solo alcuni campi di un contatto senza dover rimandare tutto — puoi aggiungerlo? Usa gli stessi controlli già in uso quando si crea un contatto." | Hook/MCP/Skill/Plugin (preparati PRIMA) | ✅ fatto — tutti e 4 scoperti, flusso di trust verificato end-to-end |
 | 10 | `crm-pipeline-fasi` | "Aggiungi allo stato di un contatto una 'fase' (lead, trattativa, cliente) con le transizioni permesse. Se ti torna utile per la prossima volta, costruisciti un piccolo strumento che segna un promemoria ogni volta che sposti un contatto in trattativa." | Tool Forge (crea+abilita+richiama) | ✅ fatto — ciclo completo crea→abilita→richiama verificato (3 corse) |
 | 11 | `api-note-orfane` | "Nell'API dei contatti, se provo ad aggiungere una nota a un contatto che non esiste dovrebbe dirmi che non lo trova — invece sembra funzionare comunque, puoi controllare? Nel frattempo avvia anche una ricerca approfondita su cosa si intende di solito per 'cascata di eliminazione' nei database, mi interessa capirlo meglio." | On request+approvazione, coda mid-run, Deep Research | ✅ fatto — 1 difetto reale trovato (descrizione approvazione mancante per research_start) |
-| 12 | *(su misura)* | "Voglio che tu prepari con calma un piano per aggiungere un intero modulo di 'sconti fedeltà' al magazzino — nuove funzioni, nuovi test, e un aggiornamento della funzione che calcola il totale. Pensaci bene prima di scrivere una riga, poi esegui il piano. Se ti aiuta, prova anche a delegare la scrittura dei test a un sotto-incarico separato." | Planner/Editor, delega_sottotask | ⬜ |
+| 12 | *(su misura)* | "Voglio che tu prepari con calma un piano per aggiungere un intero modulo di 'sconti fedeltà' al magazzino — nuove funzioni, nuovi test, e un aggiornamento della funzione che calcola il totale. Pensaci bene prima di scrivere una riga, poi esegui il piano. Se ti aiuta, prova anche a delegare la scrittura dei test a un sotto-incarico separato." | Planner/Editor, delega_sottotask | ✅ fatto — 2 scoperte maggiori (rifiuto anti-fabbricazione, scrivi che perde codice), delega non isolata |
 | 13 | *(trap task)* | "Nel CRM aggiungi la sincronizzazione automatica dei contatti con il calendario di Google." | onestà cancello semantico, vista reale | ⬜ |
 | 14 | — | *(chiusura, nessun prompt)* | Automazioni, Board, palette, elimina sessioni | ⬜ |
 | 3-bis | — | Voice — appendice separata, owner-eseguita | — | ⬜ |
@@ -672,6 +672,79 @@ eccezioni JS, zero errori console.
 
 Zero eccezioni JS, zero errori console in tutte le corse (a parte il
 favicon noto).
+
+### [Task 12] Compito su misura: Planner/delega — 2 SCOPERTE MAGGIORI, non la copertura UI cercata — 2026-08-30 10:50-11:00 (3 corse)
+Screenshot: `.qa-runs/qa-task-12-planner-delega-.../` (4) + `.qa-runs/qa-task-12b-insisti-feature-.../` (2) + `.qa-runs/qa-task-12c-planner-grounded-.../` (2)
+Il secondo model-picker "Planner (opzionale)" **esiste ed è selezionabile**
+(screenshot 01: due `.model-picker-trigger` distinti nel foglio nuova
+sessione, entrambi valorizzati) — ma **né la delega né una corsa
+Planner→Editor completata sono state isolate**, per due scoperte più
+grandi del compito stesso che hanno consumato le tre corse disponibili:
+
+⛔⛔⛔ **SCOPERTA 1 — rifiuto anti-fabbricazione applicato a una richiesta
+di FEATURE legittima, tenuto anche dopo un'insistenza esplicita.**
+Prompt: "aggiungi un modulo sconti fedeltà" (nuove funzioni volute
+apposta dall'owner) → rifiutato: *"non vengono inventate logiche
+arbitrarie né modificati i file di test o di codice esistenti."*
+Insistito esplicitamente ("Sì, lo voglio DAVVERO... non è una domanda")
+→ rifiutato DI NUOVO. **Traccia di ragionamento del modello, letta dal
+jsonl grezzo (non dedotta)**: *"I'm currently scrutinizing... whether
+this request implies creating entirely new functionality or if it's a
+**test of my adherence** to the directive... my current focus is on a
+**potential adversarial prompt**..."* — il modello tratta una richiesta
+di feature ordinaria e ripetuta come un possibile tentativo di
+manipolazione, e tiene duro anche di fronte a un sì esplicito e
+inequivocabile dell'owner. Gravità: **alta** — se questo si generalizza,
+Harness Desktop non può costruire funzionalità NUOVE via conversazione
+naturale, solo correggere/estendere ciò che ha già uno "spec" nel
+codice. Categoria: comportamento del modello/istruzioni di sistema
+(kernel, non la UI di Harness Desktop — fuori dall'ambito di modifica
+di questo repo, ma documentato qui perché osservato attraverso Harness
+Desktop). 🔜 Decisione dell'owner: è il calibro voluto, o va allentato?
+
+⛔⛔⛔ **SCOPERTA 2 — `scrivi` (sostituzione INTERA del file) può far
+sparire codice e test PRECEDENTI, in silenzio, senza che "tutti i test
+passano" lo segnali.** Trovato per caso preparando un prompt grounded
+sul codice esistente: `calcola_sconto_scaglioni` (scritta dal modello
+in Task 1, stamattina) **non esiste più** in `src/magazzino.py`.
+Verificato con le PROVE, non presunto:
+- File attuale (`grep '^def '`): solo `applica_sconto`, `totale_ordine`,
+  `carica_e_valida_ordini`, `_processa_csv_reader` — **zero**
+  `calcola_sconto_scaglioni`.
+- Progetto originale (`TALOS-BANCO/progetti/magazzino_py`, mai toccato):
+  solo `applica_sconto`/`totale_ordine` — confermano che quelle due sono
+  la base, non l'aggiunta di Task 1.
+- **Causa ISOLATA nell'evento grezzo**: ricostruito l'argomento della
+  chiamata `scrivi` di Task 6 dal jsonl persistito
+  (`ToolCallArgs.delta` concatenati) — il nuovo contenuto scritto per
+  `src/magazzino.py` **contiene** `carica_e_valida_ordini` (la sua
+  aggiunta) ma **non contiene** `calcola_sconto_scaglioni` (l'aggiunta
+  di Task 1, presente nel file PRIMA che Task 6 lo riscrivesse) — e lo
+  STESSO vale per `test/test_magazzino.py`, i cui test dedicati sono
+  spariti insieme alla funzione. `tap_runner.py` oggi dice onestamente
+  "7 tests, 0 failures" — un numero **più piccolo** di quanto esisteva
+  dopo Task 1, ma **nessun segnale** distingue "7/7 perché tutto va
+  bene" da "7/7 perché due test sono stati silenziosamente rimossi".
+  Gravità: **alta** — un "tutti i test verdi" che nasconde una perdita
+  di copertura è più pericoloso di un test rosso onesto. Categoria:
+  rischio strutturale del tool `scrivi` ("sostituendolo per intero" —
+  etichetta già vista nel Capability hub, Task 9) — non un bug isolato
+  di un modello, un rischio di FORMA del tool stesso: ogni riscrittura
+  totale mette sul modello l'intero onere di "non perdere nulla",
+  senza protezione strutturale. 🔜 Non del kernel-prompt: qui la UI/il
+  tool-contract sono dentro l'ambito di Harness Desktop — degno di una
+  proposta concreta (conferma "N funzioni prima → M dopo, M<N: sicuro
+  di procedere?" prima di applicare una scrittura totale) nel batch-fix.
+
+**Planner-picker**: esistenza e selezionabilità confermate (screenshot),
+ma NESSUNA corsa di questo task è arrivata a un'esecuzione reale con
+Planner+delega attivi — le tre corse sono state assorbite dalle due
+scoperte sopra. 🔜 Debito onesto: la copertura FUNZIONALE di
+Planner→Editor→delega_sottotask, distinta dalla sola esistenza del
+controllo, resta da isolare — richiede un prompt che eviti ENTRAMBE le
+trappole trovate qui (non "nuova funzionalità", non un refactor che il
+modello giudica "non abbastanza specificato").
+Zero eccezioni JS, zero errori console in tutte e tre le corse.
 
 Formato per ogni voce, da qui in avanti:
 
