@@ -875,17 +875,71 @@ importanti di tutto il giro).
 
 ### 5.2 — Difetti reali confermati (backlog batch-fix, per gravità)
 
-| # | Difetto | Dove | Gravità | Task |
-|---|---|---|---|---|
-| A | Rifiuto anti-fabbricazione applicato a richieste di feature legittime, tenuto anche dopo insistenza esplicita | kernel/system prompt (osservato via Harness Desktop) | **Alta** — decisione dell'owner sul calibro | 12 |
-| B | `scrivi` (sostituzione intera) può far sparire codice e test precedenti in silenzio; "tutti verdi" non lo segnala | tool `scrivi`, contratto/UI del tool | **Alta** | 12 |
-| C | Nessun modo di eliminare una sessione (né UI né API) | sessioni, funzione mancante | Media (uso nel tempo) | 14 |
-| D | 5 label statiche "non ancora implementato" false (Control plane ×2, Context Rail ×2, Settings ×1) + 1 genuinamente aperta | mockup residuo, ripetuto | Media (mente attivamente) | 0.3, 8, 14 |
-| E | Board: badge "Demo UI · non collegato" mai nascosto con dati reali | `renderSessionsBoard`, riga mancante | Media | 14 |
-| F | Backdrop del foglio "Nuovo file" resta cliccabile per una finestra dopo la chiusura visiva | race di animazione, `syncEmbeddedDialogBackdrop` | Media | 5.2 |
-| G | `descriviAzioneApprovazione()` senza caso per `research_start` | approvazione "On request", fallback generico | Bassa-media | 11 |
-| H | Follow-up su sessione con giri-esauriti riprende il task vecchio invece di rispondere al messaggio nuovo | UX non spiegata, non necessariamente sbagliata | Nota | 6 |
-| I | `memory_write` senza riassunto naturale in conversazione (mostra il nome grezzo) | cosmetico | Bassa | 8 |
+> ⛔⛔⛔ **Aggiornata il 30/8, stesso giorno — il batch-fix è stato fatto**
+> (owner: "procedi con le correzioni"). Colonna Stato aggiunta, nessuna
+> riga precedente riscritta. Dettaglio completo in una sezione dedicata
+> subito sotto la tabella.
+
+| # | Difetto | Dove | Gravità | Task | Stato |
+|---|---|---|---|---|---|
+| A | Rifiuto anti-fabbricazione applicato a richieste di feature legittime, tenuto anche dopo insistenza esplicita | kernel/system prompt (osservato via Harness Desktop) | **Alta** — decisione dell'owner sul calibro | 12 | 🔜 NON toccato — fuori da questo repo, serve una decisione esplicita separata |
+| B | `scrivi` (sostituzione intera) può far sparire codice e test precedenti in silenzio; "tutti verdi" non lo segnala | tool `scrivi`, contratto/UI del tool | **Alta** | 12 | ✅ Corretto — avviso in Review, verificato dal vivo |
+| C | Nessun modo di eliminare una sessione (né UI né API) | sessioni, funzione mancante | Media (uso nel tempo) | 14 | ✅ Corretto — end-to-end, verificato dal vivo (2 rami) |
+| D | 5 label statiche "non ancora implementato" false (Control plane ×2, Context Rail ×2, Settings ×1) + 1 genuinamente aperta | mockup residuo, ripetuto | Media (mente attivamente) | 0.3, 8, 14 | ✅ Corretto (5/5) — trovato e corretto anche un 6° punto in corsa (badge inspector-agents) |
+| E | Board: badge "Demo UI · non collegato" mai nascosto con dati reali | `renderSessionsBoard`, riga mancante | Media | 14 | ✅ Corretto — verificato dal vivo |
+| F | Backdrop del foglio "Nuovo file" resta cliccabile per una finestra dopo la chiusura visiva | race di animazione, `syncEmbeddedDialogBackdrop` | Media | 5.2 | ✅ Corretto — riprodotto lo scenario originale, ora funziona al primo colpo |
+| G | `descriviAzioneApprovazione()` senza caso per `research_start` | approvazione "On request", fallback generico | Bassa-media | 11 | ✅ Corretto — non ri-verificato dal vivo (richiederebbe un altro giro On request+Deep Research), verificato via test+lettura |
+| H | Follow-up su sessione con giri-esauriti riprende il task vecchio invece di rispondere al messaggio nuovo | UX non spiegata, non necessariamente sbagliata | Nota | 6 | 🔜 NON toccato — osservazione UX, non un difetto di codice da correggere meccanicamente |
+| I | `memory_write` senza riassunto naturale in conversazione (mostra il nome grezzo) | cosmetico | Bassa | 8 | ✅ Corretto — stesso pattern degli altri casi, verificato via test |
+
+### 5.4 — Batch-fix del 30/8 (stesso giorno, owner: "procedi con le correzioni")
+
+7/9 voci corrette (B-G, I), 2 deliberatamente non toccate (A: kernel,
+serve una decisione owner separata; H: osservazione UX, non un bug di
+codice). Ogni fix verificato dal vivo via CDP dove possibile (B, C, D,
+E, F), o via test automatici quando una riverifica dal vivo avrebbe
+richiesto una nuova corsa costosa (G, I) — mai dichiarato "fatto" senza
+una verifica di qualche tipo.
+
+**B — l'avviso più importante**: `simboliSpariti()` (app.js) confronta
+i simboli top-level (`def`/`class`/`function`, euristica multi-
+linguaggio, conservativa — un AVVISO non un blocco) fra `operazione.prima`
+e il contenuto nuovo, ogni volta che `scrivi` sostituisce un file
+ESISTENTE. Un badge "⚠ N simboli spariti" sulla tab + un banner rosso
+coi nomi esatti nel pannello diff. Verificato dal vivo rinominando
+`applica_sconto` → `calcola_sconto`: banner corretto, nomina il
+simbolo giusto, diff reale sotto.
+
+**C — eliminazione sessione, end-to-end**: `eliminaSessionePersistita()`
+(session-store.mjs, nuova) + `elimina()` (session-registry.mjs, rifiuta
+una sessione ancora viva — né conclusa né interrotta — con
+`SESSION_STILL_RUNNING`/409) + `POST /api/v1/sessions/:id/delete`
+(http-app.mjs, stesso schema POST-per-azione del resto del file) +
+scheda "Elimina sessione" (stesso pattern di deleteFile) + tasto destro
+su una riga sidebar O Board. Verificato dal vivo **due rami**: sessione
+ATTIVA (reload della pagina, disegno deliberato — evita di dover
+ricostruire a mano ogni angolo di stato che una sessione tocca) e
+sessione NON attiva (toast + sidebar aggiornata sul posto, 156→155
+righe).
+
+**D — pulizia label**: rimossa la sezione "Non ancora implementato" dal
+Control plane (Agents + Approval policy per-tool, entrambe false);
+riscritte le card Memory/Agents del Context Rail e Agentico di Settings
+con puntatori onesti a dove il dato vero si trova già. ⭐ **Trovato in
+corsa, non presunto**: `inspector-agents` non aveva MAI avuto un
+`hidden=true` da nessuna parte (sonda mirata: `hidden:false` anche con
+sessione reale aperta, mentre context/files erano già `true`) — rimosso
+l'attributo `data-demo-surface` invece di scrivere un hide inutile per
+un pannello ormai sempre-accurato.
+
+**E/F**: un-liner + un piccolo disaccoppiamento visibile/cliccabile
+(`pointer-events` spento SUBITO su intento di chiusura, non a fine
+sequenza di due animazioni) — entrambi riprodotti e confermati risolti
+con lo STESSO scenario che li aveva trovati.
+
+**Verificato**: 953/953 backend (`node --test`), 168/168 frontend
+harness-scope (`npx vitest run tests/unit/harness/`, dalla cartella
+`mobile/`), zero regressioni. Commit locale `a947028f` (mai pushato).
 
 **Non nel backlog** (già dichiarati, non nuovi in questo giro):
 turni-esauriti come limite sistemico ([[talos-esaurisce-i-giri-non-le-capacita]]),
