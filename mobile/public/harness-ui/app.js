@@ -1364,6 +1364,57 @@
     return riga;
   }
 
+  /**
+   * ⭐⭐⭐ FASE N, ottavo sistema (30/8) — Deep Research. Stesso pattern
+   * ESATTO di caricaPannelloMemoria appena sopra — a DIFFERENZA di
+   * Notes/Tasks/Memory (GLOBALI), Research è PER-PROGETTO come
+   * Libreria: il messaggio "vuoto" lo dice, mai la frase "globale" già
+   * usata per gli altri tre.
+   */
+  async function caricaPannelloRicerca() {
+    const mount = $('#researchListMount', sheetBody);
+    if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
+    if (!state.realSession.id) {
+      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione attiva — apri o avvia un task per vedere le Ricerche.'));
+      return;
+    }
+    mount.replaceChildren(textElement('p', 'board-empty', 'Carico le Ricerche…'));
+    let dati;
+    try {
+      dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/research`);
+    } catch (error) {
+      mount.replaceChildren(textElement('p', 'board-empty', `Ricerche non disponibili: ${error.message}`));
+      return;
+    }
+    if (mount !== $('#researchListMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
+    if (dati.errore) {
+      mount.replaceChildren(textElement('p', 'board-empty', `.harness-ui-research non valido: ${dati.errore}`));
+      return;
+    }
+    if (!dati.ricerche || dati.ricerche.length === 0) {
+      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna ricerca avviata in questo progetto.'));
+      return;
+    }
+    mount.replaceChildren(...dati.ricerche.map((ricerca) => rigaRicerca(ricerca)));
+  }
+
+  /** ⭐⭐⭐ FASE N, ottavo sistema (30/8) — sempre attiva (una ricerca non ha un gate di fiducia): niente bottone, lo stato VIVO al posto dell'origine (running/paused/done/cancelled/failed — mai un fisso "attivo" come le skill). */
+  function rigaRicerca(ricerca) {
+    const riga = document.createElement('div');
+    riga.className = 'sheet-option';
+    riga.setAttribute('role', 'group');
+    const iconEl = document.createElement('span');
+    iconEl.className = 'sheet-icon';
+    iconEl.innerHTML = icon('i-search');
+    const testo = document.createElement('span');
+    testo.append(
+      textElement('strong', null, ricerca.titolo),
+      textElement('small', null, String(ricerca.avviataAlle).slice(0, 10)),
+    );
+    riga.append(iconEl, testo, textElement('span', `status-chip ${ricerca.stato === 'done' ? 'success' : ''}`, ricerca.stato));
+    return riga;
+  }
+
   /** ⭐⭐⭐ 29/8 — sempre attiva (le skill non hanno un gate di fiducia): niente bottone, solo il riassunto. */
   function rigaSkill(skill) {
     const riga = document.createElement('div');
@@ -2047,7 +2098,7 @@
     showEmbeddedDialog(sheetDialog);
     wireSheetActions(type);
     if (type === 'control') { refreshDoctorBadge(); caricaPannelloHooks(); }
-    if (type === 'capabilities') { caricaPannelloMcp(); caricaPannelloSkill(); caricaPannelloPlugin(); caricaPannelloLibreria(); caricaPannelloNote(); caricaPannelloAttivita(); caricaPannelloMemoria(); }
+    if (type === 'capabilities') { caricaPannelloMcp(); caricaPannelloSkill(); caricaPannelloPlugin(); caricaPannelloLibreria(); caricaPannelloNote(); caricaPannelloAttivita(); caricaPannelloMemoria(); caricaPannelloRicerca(); }
     if (type === 'sessionTree') caricaAlberoSessione();
     /*
      * ⭐⭐⭐ 27/8, owner: "riaprire lo stesso componente della selezione del
@@ -2252,6 +2303,10 @@
         <div class="sheet-section">
           <span class="sheet-label">Memory · fatti in .memory-store/, GLOBALI — riletti in ogni conversazione</span>
           <div id="memoryListMount"></div>
+        </div>
+        <div class="sheet-section">
+          <span class="sheet-label">Deep Research · rapporti in .harness-ui-research/, per progetto — salvati anche in Libreria</span>
+          <div id="researchListMount"></div>
         </div>
         <div class="sheet-section">
           <span class="sheet-label">Non ancora implementato</span>

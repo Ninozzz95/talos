@@ -250,6 +250,17 @@ export async function avviaSessione({
    */
   codaMessaggiFn,
   /*
+   * ⭐⭐⭐ FASE N, ottavo sistema (30/8) — Deep Research, "fetta onesta".
+   * Stesso principio ESATTO di `hookFn`/`onDelega`/`codaMessaggiFn`
+   * sopra: inoltrati SENZA logica propria — gli 8 thin delegate verso
+   * `research-orchestrator.mjs` vivono tutti in `session-registry.mjs`
+   * (avviaESegui), questo file li passa soltanto fino a `talosLavoraFn`.
+   * Stesso gap da non ripetere: aggiunti nello stesso commit del resto
+   * della fase, non un secondo giro.
+   */
+  onRicercaLista, onRicercaAvvia, onRicercaLeggi, onRicercaRinomina,
+  onRicercaPausa, onRicercaRiprendi, onRicercaAnnulla, onRicercaElimina,
+  /*
    * ⭐⭐⭐ 29/8 — FASE E, seconda meta'. Stesso principio di
    * `hookFn`/`onDelega`/`codaMessaggiFn` sopra: inoltrato SENZA logica
    * propria — la scoperta/trust/connessione vive tutta in
@@ -1121,6 +1132,8 @@ export async function avviaSessione({
       onNoteLista, onNoteCrea, onNoteAggiorna, onNoteElimina,
       onAttivitaLista, onAttivitaCrea, onAttivitaCompleta, onAttivitaAggiorna, onAttivitaElimina,
       onMemoriaCerca, onMemoriaScrivi, onMemoriaAggiorna, onMemoriaElimina,
+      onRicercaLista, onRicercaAvvia, onRicercaLeggi, onRicercaRinomina,
+      onRicercaPausa, onRicercaRiprendi, onRicercaAnnulla, onRicercaElimina,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));
     return { threadId, runId, ok: esito.comeFinita === 'concluso', esito, erroreInterno: null };
