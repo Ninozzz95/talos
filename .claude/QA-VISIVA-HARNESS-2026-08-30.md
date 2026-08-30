@@ -35,7 +35,7 @@ cambiati, solo quali bug/funzioni ciascun task richiede.
 | 0 | — | *(ricognizione, nessun prompt)* | stato vuoto, pannello attrezzi, Control-plane | ✅ fatto — 1 difetto reale trovato (label stale Agents/Approval policy) |
 | 1 | `py-sconto-a-scaglioni` | "Nel progetto del magazzino serve una funzione che calcoli uno sconto a scaglioni in base a delle soglie di importo — puoi aggiungerla?" | elenca/leggi/scrivi/prova, cancello semantico, streaming, Review, auto-rename | ✅ fatto (+ seguito) |
 | 2 | `html-conta-articoli` | "Nel calcolatore di preventivi serve una funzione che conta quanti articoli ci sono nel carrello — dacci un'occhiata?" + dopo: comando umano nel Terminale reale | ciclo base + PTY reale digitata a mano | ✅ fatto — 2 piste false, 1 fix reale al MIO tooling (non al prodotto) |
-| 3 | `game-wraparound-negativo` | "Nel gioco del serpentone, quando esce dal bordo sinistro o da quello superiore della griglia il wraparound sembra comportarsi in modo strano — puoi controllare?" | cerca, tasto destro albero file, Doctor | ⬜ |
+| 3 | `game-wraparound-negativo` | "Nel gioco del serpentone, quando esce dal bordo sinistro o da quello superiore della griglia il rientro dall'altro lato non funziona bene — sembra un problema col resto sui numeri negativi. Puoi sistemarlo in tutte e quattro le direzioni?" | cerca, Doctor mentre gira, (albero file: selettore sbagliato nello script, non riverificato qui) | ✅ fatto — bug reale trovato E corretto correttamente dal modello |
 | 4 | `crm-nome-senza-cognome` | "Nel CRM, quando un contatto non ha il cognome il nome formattato ha uno spazio in più che non dovrebbe esserci — puoi sistemarlo?" | Workspace write, fork a metà lavoro | ⬜ |
 | 5 | `api-validazione-duplicata` | "Nell'API dei contatti la validazione del corpo della richiesta è scritta in due punti diversi — puoi accorparla in uno solo senza cambiare come si comporta?" | Compatta, F5+Resume, export MD/JSON | ⬜ |
 | 6 | `py-carica-ordini-csv` | "Serve una funzione che carica gli ordini da un file CSV e segnali chiaramente, riga per riga, se manca un campo o il prezzo è negativo. Prima cerca online qual è il modo più comune e sicuro in Python per farlo, poi implementalo. Alla fine salvami un breve riassunto di cosa hai fatto." | web_search, Libreria | ⬜ |
@@ -169,6 +169,27 @@ di questo giro finora:
 prima di aprire il Terminale** in ogni scenario di questa sequenza (la
 sessione deve esistere per davvero); il fix a `premiTasto` è permanente,
 non serve ripeterlo.
+
+### [Task 3] game-wraparound-negativo — 2026-08-30 09:14
+Screenshot: `qa-runs/qa-task-3-game-wraparound-.../` (5)
+Automatico: zero eccezioni, zero richieste fallite (a parte favicon).
+Manuale: **bug reale del corpus trovato E corretto correttamente**
+dal modello — ha letto il codice, capito che `%` in JS tronca invece
+di comportarsi come il resto matematico, applicato la formula canonica
+`((valore % dim) + dim) % dim`, spiegato la correzione in linguaggio
+chiaro, test 3/3 verdi. Riassunto naturale in chat, nessun gergo.
+Doctor lanciato MENTRE il modello lavorava in background: "Healthy —
+Chiave API ok · shell wsl2 · git ok · browser ok", nessuna interferenza
+con la sessione in corso — verificato che i due si possono usare
+insieme.
+⛔ Non verificato in questo giro: tasto destro sull'albero file — il
+mio selettore per il tab "Files" dell'inspector era sbagliato (nessun
+`[data-inspector-tab]` nel DOM reale), lo script non ha aperto
+l'albero. Non un difetto di prodotto presunto — questa specifica
+interazione è già stata verificata dal vivo più volte nella storia di
+questo progetto (drag&drop, rinomina, rivela, elimina — commit
+`46940ae4` e altri), quindi non riprovata qui per economia di tempo;
+resta un buco di COPERTURA di questo giro specifico, dichiarato.
 
 Formato per ogni voce, da qui in avanti:
 
