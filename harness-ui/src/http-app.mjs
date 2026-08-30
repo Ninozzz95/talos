@@ -570,6 +570,7 @@ export function createHttpApp({
   // ⭐⭐⭐ 28/8 — owner, coda: "directory più usate (tipo desktop downloads)". Zero config esterna (solo os.homedir()) — il default reale basta, nessun cablaggio in server.mjs come serve invece per elencaCartelleProgetto (quella dipende da TALOS_HARNESS_UI_PROJECT_DIRS).
   cartelleFrequentiFn = cartelleFrequentiReale,
   catalogoModelliFn = null, clock = () => new Date(), leggiArtefattoFn = leggiArtefattoReale,
+  capacitaMacchinaFn = null,
   // ⛔⛔⛔ 28/8 — iniettabili SOLO per il test del battito SSE sotto: mai un setInterval reale nei test unitari, stesso principio di ogni altra dipendenza di questo file.
   impostaIntervalloFn = setInterval, cancellaIntervalloFn = clearInterval,
 }) {
@@ -1440,6 +1441,12 @@ export function createHttpApp({
           const errore = new Error('Catalogo modelli non configurato'); errore.code = 'REPORT_UNAVAILABLE'; throw errore;
         }
         data = await catalogoModelliFn({ forzaAggiornamento });
+      } else if (url.pathname === '/api/v1/model-lab/capacity') {
+        requireNoQuery(url);
+        if (!capacitaMacchinaFn) {
+          const errore = new Error('Capacità macchina non configurata'); errore.code = 'REPORT_UNAVAILABLE'; throw errore;
+        }
+        data = await capacitaMacchinaFn();
       } else if (url.pathname === '/api/v1/doctor') {
         requireNoQuery(url);
         if (!diagnosiFn) {

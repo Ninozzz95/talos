@@ -13,6 +13,7 @@ import { diagnosi } from './src/doctor.mjs';
 import { createModelCatalog } from './src/model-catalog.mjs';
 import { creaRegistroTerminali, MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA } from './src/pty-terminal.mjs';
 import { creaGestoreTerminaleWs } from './src/terminal-ws.mjs';
+import { misuraCapacitaMacchina } from './src/machine-capacity.mjs';
 
 /** ⛔ Stessi tre nomi loopback validati in config.mjs (`LOOPBACK_HOSTS`, non esportato — costante minuscola e stabile, duplicarla qui è più semplice che aggiungere un export per tre stringhe). Un browser può presentarsi con uno qualunque dei tre alias anche se il server è bindato su un altro. */
 const ALIAS_LOOPBACK = ['127.0.0.1', '::1', 'localhost'];
@@ -88,6 +89,7 @@ async function startServer() {
     automationStore,
     diagnosiFn: () => diagnosi({ chiaveConfigurata: Boolean(config.chiaveApi) }),
     catalogoModelliFn: (opts) => modelCatalog.ottieni(opts),
+    capacitaMacchinaFn: () => misuraCapacitaMacchina({ storagePath: config.publicDir }),
   });
   const server = createServer(app);
 

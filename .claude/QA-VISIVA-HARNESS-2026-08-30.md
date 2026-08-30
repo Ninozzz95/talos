@@ -1632,3 +1632,51 @@ Esito: **Fase 8A risolta nella lane desktop**. Il gruppo Laboratorio modelli
 (M01–M52) è inventariato ma resta in attesa della decisione sul runtime LLM
 locale; non sono stati introdotti pannelli che fingano download, inferenza o
 accesso hardware.
+
+## Fase 8B — Laboratorio modelli desktop preparatorio (30/08/2026)
+
+Il Laboratorio modelli usa ora una testata a **capability ledger**: rende
+immediatamente distinguibili capacità misurate, provider configurato e
+funzioni bloccate. Sono reali la RAM/storage osservati sul PC, lo stato
+OpenRouter server-side e il catalogo OpenRouter con ricerca, filtro e dettaglio.
+Installati, Hugging Face e Download dichiarano invece il gate del runtime e non
+simulano file, progressi o inferenze.
+
+Evidenza finale, diciotto screenshot ispezionati per intero:
+
+- desktop 1440×900:
+  `harness-ui/.qa-runs/qa-settings-model-lab-2026-08-30T21-04-23-831Z`;
+- laptop 1024×800:
+  `harness-ui/.qa-runs/qa-settings-model-lab-2026-08-30T21-03-46-056Z`.
+
+Ogni directory contiene panorama, capacità, provider, catalogo, dettaglio,
+catalogo filtrato, installati, Hugging Face e download, oltre a `report.json` e
+`taccuino.md`. Entrambe le corse registrano zero errori console, zero eccezioni
+JavaScript e zero richieste HTTP fallite.
+
+Evidenza automatica finale: frontend Harness 186/186, backend Harness 976/976,
+typecheck, sintassi JavaScript e `git diff --check` tutti puliti.
+
+Taccuino visivo:
+
+- a 1440×900 sidebar sessioni, Settings e rail contestuale rimangono separati;
+  il catalogo master/detail è leggibile e le capability non invadono i prezzi;
+- la prima prova a 1024×800 ha rivelato overflow orizzontale: il breakpoint
+  considerava la viewport, non lo spazio residuo dopo la sidebar persistente;
+- dopo il test regressivo `CODE-MODEL-LAB-LAPTOP-01`, ledger e provider usano
+  due colonne, runtime gate va a tutta riga e catalogo/dettaglio si impilano;
+  nessun contenuto risulta tagliato o sovrapposto;
+- gli stati vuoti di Installati, Hugging Face e Download sono intenzionali e
+  spiegano la dipendenza mancante, quindi non sembrano funzioni già operative.
+
+Confronto competitivo: OpenRouter resta la fonte reale per catalogo,
+capability e prezzi; Hugging Face definisce model card, Hub e cache, ma TALOS
+non avvia download prima di aver scelto runtime e policy; Hermes Desktop rende
+visibili provider e modelli, mentre TALOS separa più chiaramente osservato,
+configurato e gated; VS Code resta il riferimento per densità e composizione
+da workbench, mantenendo però la grammatica tokenizzata TALOS. Il vantaggio
+definitivo è l'onestà operativa: nessuna card promette un backend inesistente.
+
+Esito: **Fase 8B chiusa nel perimetro preparatorio desktop**. Resta una sola
+dipendenza progettuale, la scelta del runtime LLM locale, prima di rendere
+attivi GGUF, Hugging Face, download e inferenza.

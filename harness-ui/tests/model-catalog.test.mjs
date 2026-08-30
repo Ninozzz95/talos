@@ -6,10 +6,14 @@ import { ModelCatalogError, createModelCatalog } from '../src/model-catalog.mjs'
 const MODELLO_GREZZO_1 = {
   id: 'deepseek/deepseek-chat', name: 'DeepSeek: Chat', context_length: 64000,
   pricing: { prompt: '0.0000002', completion: '0.0000006' },
+  architecture: { input_modalities: ['text'], output_modalities: ['text'] },
+  supported_parameters: ['tools'], description: 'Chat model', created: 1700000000,
 };
 const MODELLO_GREZZO_2 = {
   id: 'qwen/qwen3.8-flash', name: 'Qwen: Qwen3.8 Flash', context_length: 1000000,
   pricing: { prompt: '0.00000015', completion: '0.00000047' },
+  architecture: { input_modalities: ['text', 'image'], output_modalities: ['text'] },
+  supported_parameters: ['reasoning'], description: 'Flash model', created: 1700000001,
 };
 
 function fetchFinto(corpo, { ok = true, status = 200 } = {}) {
@@ -21,8 +25,8 @@ test('⭐ ottieni() normalizza id/provider/nome/contesto/prezzo, ordinati per pr
   const { modelli, daCache } = await catalogo.ottieni();
   assert.equal(daCache, false);
   assert.deepEqual(modelli, [
-    { id: 'deepseek/deepseek-chat', provider: 'deepseek', alias: false, nome: 'DeepSeek: Chat', contextLength: 64000, prezzoPrompt: '0.0000002', prezzoCompletion: '0.0000006' },
-    { id: 'qwen/qwen3.8-flash', provider: 'qwen', alias: false, nome: 'Qwen: Qwen3.8 Flash', contextLength: 1000000, prezzoPrompt: '0.00000015', prezzoCompletion: '0.00000047' },
+    { id: 'deepseek/deepseek-chat', provider: 'deepseek', alias: false, nome: 'DeepSeek: Chat', contextLength: 64000, prezzoPrompt: '0.0000002', prezzoCompletion: '0.0000006', inputModalities: ['text'], outputModalities: ['text'], supportedParameters: ['tools'], description: 'Chat model', createdAt: 1700000000 },
+    { id: 'qwen/qwen3.8-flash', provider: 'qwen', alias: false, nome: 'Qwen: Qwen3.8 Flash', contextLength: 1000000, prezzoPrompt: '0.00000015', prezzoCompletion: '0.00000047', inputModalities: ['text', 'image'], outputModalities: ['text'], supportedParameters: ['reasoning'], description: 'Flash model', createdAt: 1700000001 },
   ]);
 });
 
@@ -117,6 +121,7 @@ test('⭐⭐ un alias "~vendor/nome" ha provider "vendor" SENZA tilde (stesso gr
   assert.deepEqual(modelli[0], {
     id: '~anthropic/claude-sonnet-latest', provider: 'anthropic', alias: true,
     nome: 'Claude Sonnet Latest', contextLength: null, prezzoPrompt: null, prezzoCompletion: null,
+    inputModalities: [], outputModalities: [], supportedParameters: [], description: '', createdAt: null,
   });
 });
 

@@ -95,6 +95,18 @@
       sessioni: [],
       generation: 0,
     },
+    modelLab: {
+      initialized: false,
+      loadingCapacity: false,
+      loadingCatalog: false,
+      capacity: null,
+      catalog: null,
+      catalogError: null,
+      selectedModel: null,
+      section: 'overview',
+      search: '',
+      provider: 'all',
+    },
     /*
      * ⭐⭐⭐ 26/8 — riconciliazione desktop→mobile, DEC-053 (owner, 24/8:
      * "harness deve essere fatto sia per mobile che desktop... quando
@@ -428,6 +440,7 @@
     target.scrollTop = 0;
     resetEmbeddedTopbarScroll(view === 'chat' ? chatConversation : target);
     window.__talosHarnessHostViewChange?.(view);
+    if (view === 'settings') inizializzaModelLab();
     if (view === 'dashboard') ensureSessionsBoard();
     if (view === 'automations') renderAutomationsReali();
     if (view === 'terminal') apriVistaTerminaleReale(); // ⭐ 28/8 — Terminale REALE: montaggio/connessione PIGRI, solo alla prima apertura del tab (LEDGER-TERMINALE-REALE.md)
@@ -853,6 +866,146 @@
       throw error;
     }
     return envelope.data;
+  }
+
+  function formattaByteModelLab(bytes) {
+    const value = Number(bytes);
+    if (!Number.isFinite(value) || value < 0) return '—';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let index = 0;
+    let scaled = value;
+    while (scaled >= 1024 && index < units.length - 1) { scaled /= 1024; index += 1; }
+    const display = Number.isInteger(scaled) || scaled >= 10 ? Math.round(scaled) : scaled.toFixed(1);
+    return `${display} ${units[index]}`;
+  }
+
+  function formattaContestoModelLab(tokens) {
+    const value = Number(tokens);
+    if (!Number.isFinite(value) || value <= 0) return 'non dichiarato';
+    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1)}M token`;
+    if (value >= 1_000) return `${Math.round(value / 1_000)}k token`;
+    return `${Math.round(value)} token`;
+  }
+
+  function renderizzaDettaglioModelLab(model) {
+    const mount = $('#modelLabModelDetail');
+    if (!mount) return;
+    if (!model) {
+      mount.replaceChildren(textElement('p', 'model-lab-empty', 'Seleziona un modello per vedere capacità osservate, contesto e prezzi.'));
+      return;
+    }
+    mount.replaceChildren(
+      textElement('span', 'eyebrow', 'Dettagli osservati'),
+      textElement('h4', '', model.nome),
+      textElement('code', 'model-lab-model-id', model.id),
+      textElement('p', 'muted-copy', model.description || 'Il provider non ha fornito una descrizione.'),
+      textElement('p', 'model-lab-detail-row', `Provider · ${model.provider}`),
+      textElement('p', 'model-lab-detail-row', `Contesto · ${formattaContestoModelLab(model.contextLength)}`),
+      textElement('p', 'model-lab-detail-row', `Input · ${model.inputModalities?.join(', ') || 'non dichiarato'}`),
+      textElement('p', 'model-lab-detail-row', `Output · ${model.outputModalities?.join(', ') || 'non dichiarato'}`),
+      textElement('p', 'model-lab-detail-row', `Parametri · ${model.supportedParameters?.join(', ') || 'non dichiarati'}`),
+      textElement('p', 'model-lab-detail-row', `Prezzo input · ${model.prezzoPrompt ?? 'non dichiarato'}`),
+      textElement('p', 'model-lab-detail-row', `Prezzo output · ${model.prezzoCompletion ?? 'non dichiarato'}`),
+    );
+  }
+
+  function filtraCatalogoModelLab() {
+    const { catalog } = state.modelLab;
+    if (!catalog?.modelli) return [];
+    const query = state.modelLab.search.trim().toLowerCase();
+    return catalog.modelli.filter((model) => {
+      const matchesQuery = !query || [model.id, model.nome, model.provider].some((value) => String(value || '').toLowerCase().includes(query));
+      return matchesQuery && (state.modelLab.provider === 'all' || model.provider === state.modelLab.provider);
+    });
+  }
+
+  function renderizzaCatalogoModelLab() {
+    const list = $('#modelLabCatalogList');
+    const count = $('#modelLabCatalogCount');
+    if (!list || !count) return;
+    if (state.modelLab.catalogError) {
+      list.replaceChildren(textElement('p', 'model-lab-empty', `Catalogo non disponibile: ${state.modelLab.catalogError.message}`));
+      count.textContent = 'Catalogo non disponibile';
+      renderizzaDettaglioModelLab(null);
+      return;
+    }
+    const filtered = filtraCatalogoModelLab();
+    count.textContent = state.modelLab.catalog ? `${filtered.length} di ${state.modelLab.catalog.modelli.length} modelli osservati` : 'Catalogo non caricato';
+    list.replaceChildren();
+    if (!state.modelLab.catalog) { list.appendChild(textElement('p', 'model-lab-empty', 'Apri questa sezione per caricare il catalogo reale.')); return; }
+    if (filtered.length === 0) { list.appendChild(textElement('p', 'model-lab-empty', 'Nessun modello corrisponde ai filtri.')); renderizzaDettaglioModelLab(null); return; }
+    for (const model of filtered.slice(0, 120)) {
+      const button = document.createElement('button');
+      button.type = 'button'; button.className = 'model-lab-list-item'; button.setAttribute('aria-selected', String(state.modelLab.selectedModel?.id === model.id));
+      button.append(textElement('strong', '', model.nome), textElement('small', '', `${model.provider} · ${model.id}${model.contextLength ? ` · ${Math.round(model.contextLength / 1000)}k ctx` : ''}`));
+      button.addEventListener('click', () => { state.modelLab.selectedModel = model; renderizzaCatalogoModelLab(); renderizzaDettaglioModelLab(model); });
+      list.appendChild(button);
+    }
+    if (!state.modelLab.selectedModel || !filtered.some((model) => model.id === state.modelLab.selectedModel.id)) {
+      state.modelLab.selectedModel = filtered[0];
+      renderizzaDettaglioModelLab(filtered[0]);
+    }
+  }
+
+  async function caricaCapacitaMacchina() {
+    if (state.modelLab.loadingCapacity || state.modelLab.capacity) return;
+    state.modelLab.loadingCapacity = true;
+    try {
+      const data = await apiGet('/api/v1/model-lab/capacity');
+      state.modelLab.capacity = data;
+      const set = (id, value) => { const el = $(`#${id}`); if (el) el.textContent = value; };
+      set('machineCapacityStatus', 'Misurata');
+      set('machineMemoryMetric', formattaByteModelLab(data.memory?.totalBytes));
+      set('machineFreeMemoryMetric', formattaByteModelLab(data.memory?.freeBytes));
+      set('machineStorageMetric', formattaByteModelLab(data.storage?.availableBytes));
+      set('machineAllocatableMetric', formattaByteModelLab(data.storage?.allocatableBytes));
+      set('machineCapacityDetail', `${data.platform || 'host'} · ${data.arch || 'arch'} · ${new Date(data.measuredAt).toLocaleTimeString()}`);
+    } catch (error) {
+      const el = $('#machineCapacityStatus'); if (el) el.textContent = 'Non disponibile';
+      const detail = $('#machineCapacityDetail'); if (detail) detail.textContent = error.message || 'Misura non disponibile';
+    } finally { state.modelLab.loadingCapacity = false; }
+  }
+
+  async function caricaCatalogoModelLab({ forza = false } = {}) {
+    if (state.modelLab.loadingCatalog) return;
+    state.modelLab.loadingCatalog = true;
+    state.modelLab.catalogError = null;
+    renderizzaCatalogoModelLab();
+    try {
+      state.modelLab.catalog = await apiGet(`/api/v1/models${forza ? '?forza=1' : ''}`);
+      const providers = [...new Set(state.modelLab.catalog.modelli.map((model) => model.provider))].sort();
+      const select = $('#modelLabProviderFilter');
+      if (select) {
+        const current = state.modelLab.provider;
+        select.replaceChildren(new Option('Tutti i provider', 'all'), ...providers.map((provider) => new Option(provider, provider)));
+        select.value = providers.includes(current) ? current : 'all';
+        state.modelLab.provider = select.value;
+      }
+      const status = $('#modelLabCatalogStatus'); if (status) status.textContent = `${state.modelLab.catalog.modelli.length} modelli osservati`;
+      renderizzaCatalogoModelLab();
+    } catch (error) {
+      state.modelLab.catalogError = error;
+      renderizzaCatalogoModelLab();
+    } finally { state.modelLab.loadingCatalog = false; }
+  }
+
+  function setModelLabSection(section) {
+    state.modelLab.section = section;
+    $$('[data-model-lab-tab]').forEach((tab) => { const active = tab.dataset.modelLabTab === section; tab.classList.toggle('active', active); tab.setAttribute('aria-selected', String(active)); });
+    $$('[data-model-lab-panel]').forEach((panel) => { const active = panel.dataset.modelLabPanel === section; panel.classList.toggle('active', active); panel.hidden = !active; if (active) markMotionEnter(panel); });
+    if (section === 'catalog' && !state.modelLab.catalog && !state.modelLab.catalogError) caricaCatalogoModelLab();
+  }
+
+  function inizializzaModelLab() {
+    if (state.modelLab.initialized) return;
+    state.modelLab.initialized = true;
+    $$('[data-model-lab-tab]').forEach((tab) => tab.addEventListener('click', () => setModelLabSection(tab.dataset.modelLabTab)));
+    $('#modelLabSearch')?.addEventListener('input', (event) => { state.modelLab.search = event.target.value; renderizzaCatalogoModelLab(); });
+    $('#modelLabProviderFilter')?.addEventListener('change', (event) => { state.modelLab.provider = event.target.value; renderizzaCatalogoModelLab(); });
+    $('#modelLabRefreshButton')?.addEventListener('click', () => caricaCatalogoModelLab({ forza: true }));
+    caricaCapacitaMacchina();
+    apiGet('/api/v1/doctor').then((doctor) => { const status = $('#modelLabProviderStatus'); if (status) status.textContent = doctor.chiaveApi ? 'OpenRouter configurato' : 'OpenRouter non configurato'; const provider = $('[data-provider-id="openrouter"] [data-provider-state]'); if (provider) provider.textContent = doctor.chiaveApi ? 'Chiave presente sul server' : 'Chiave non configurata'; }).catch(() => {});
+    setModelLabSection('overview');
   }
 
   /** ⭐ 26/8, riconciliazione desktop→mobile — stesso contratto envelope di apiGet, per POST /api/v1/sessions/*. */
