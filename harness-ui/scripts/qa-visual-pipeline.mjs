@@ -2535,6 +2535,98 @@ const SCENARI = {
       p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
     }
   },
+
+  /**
+   * ⭐⭐⭐ 30/8 — Task 9: api-patch-parziale (api-contatti, difficoltà 4).
+   * Copertura: Hook/MCP/Skill/Plugin — 4 file seminati A MANO su disco
+   * PRIMA di questa corsa (.harness-ui-hooks.json, .harness-ui-mcp.json,
+   * .harness-ui-skills/nota-qa/, .harness-ui-plugins/promemoria-qa/),
+   * schema letto dai sorgenti veri (hook-registry.mjs/mcp-registry.mjs/
+   * skill-registry.mjs/plugin-registry.mjs), non indovinato.
+   * ⛔ Hooks vive nel foglio "control" (#hooksListMount), MCP/Skill/
+   * Plugin nel foglio "capabilities" (#mcpListMount/#skillsListMount/
+   * #pluginsListMount) — DUE fogli diversi, verificato leggendo dove
+   * ogni caricaPannello*() monta davvero, non presunto uguale per tutti.
+   */
+  async 'qa-task-9-api-patch'(p) {
+    await p.attendi(1200);
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskCartella')", { descrizione: 'foglio nuova sessione, ramo allowlist' });
+    await p.cdp.evaluate(`(() => {
+      const select = document.querySelector('#customTaskCartella');
+      const opzione = [...select.options].find((o) => o.textContent.includes('api-contatti'));
+      if (opzione) select.value = opzione.value;
+      select.dispatchEvent(new Event('change', {bubbles:true}));
+    })()`);
+    await p.click('.model-picker-trigger');
+    await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
+    await p.digita('.model-picker-search input', 'gemini-3.7-flash');
+    await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
+    await p.click('.model-picker-option');
+    await p.attendi(200);
+    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
+
+    const prompt = 'Nell\'API dei contatti manca un modo per aggiornare solo alcuni campi di un contatto senza dover rimandare tutto — puoi aggiungerlo? Usa gli stessi controlli già in uso quando si crea un contatto.';
+    await p.digita('#composerInput', prompt);
+    await p.screenshot('compito-scritto');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendiCondizione("!!window.__talosHarnessUiRuntime?.realSessionState?.id", { timeoutMs: 15000, descrizione: 'sessione vera' });
+    await p.attendiTestoStabile('.conversation', { giriStabili: 6, intervalMs: 2500, timeoutMs: 180000 });
+    await p.screenshot('conversazione-finale');
+    const reviewFilesCount = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.reviewFiles?.size ?? 0");
+    p.nota(`file in Review: ${reviewFilesCount}`);
+    if (reviewFilesCount === 0) p.difetto('sessione conclusa ma zero file in Review', { severita: 'nota' });
+
+    // --- MCP/Skill/Plugin: foglio "capabilities" ---
+    await p.click('#commandPaletteBtn');
+    await p.attendi(200);
+    await p.click('[data-command="skills"]');
+    await p.attendiCondizione("!document.querySelector('#sheetBody')?.textContent?.includes('Carico')", { timeoutMs: 8000, descrizione: 'Capability hub caricato' });
+    await p.cdp.evaluate("document.querySelector('#pluginsListMount')?.scrollIntoView({block:'center'})");
+    await p.attendi(300);
+    await p.screenshot('capability-hub-mcp-skill-plugin', { nota: 'atteso: qa-server-prova (MCP) + nota-qa (Skill) + promemoria-qa (Plugin) tutti scoperti' });
+    const testoSkill = await p.testo('#skillsListMount');
+    const testoMcp = await p.testo('#mcpListMount');
+    const testoPlugin = await p.testo('#pluginsListMount');
+    p.nota(`Skill scoperte: ${JSON.stringify(testoSkill?.slice(0, 200))}`);
+    p.nota(`MCP scoperti: ${JSON.stringify(testoMcp?.slice(0, 200))}`);
+    p.nota(`Plugin scoperti: ${JSON.stringify(testoPlugin?.slice(0, 200))}`);
+    if (!testoSkill?.includes('nota-qa')) p.difetto('skill seminata "nota-qa" non trovata nel Capability hub', { severita: 'blocco' });
+    if (!testoMcp?.includes('qa-server-prova')) p.difetto('server MCP seminato "qa-server-prova" non trovato nel Capability hub', { severita: 'blocco' });
+    if (!testoPlugin?.includes('promemoria-qa')) p.difetto('plugin seminato "promemoria-qa" non trovato nel Capability hub', { severita: 'blocco' });
+    await p.click('#closeSheet');
+    await p.attendi(300);
+
+    // --- Hooks: foglio "control", + click reale su "Fida" per provare il flusso di trust ---
+    await p.click('#commandPaletteBtn');
+    await p.attendi(200);
+    await p.click('[data-command="control"]');
+    await p.attendiCondizione("!document.querySelector('#sheetBody')?.textContent?.includes('Carico')", { timeoutMs: 8000, descrizione: 'Control plane caricato' });
+    await p.cdp.evaluate("document.querySelector('#hooksListMount')?.scrollIntoView({block:'center'})");
+    await p.attendi(300);
+    await p.screenshot('control-plane-hooks-prima-di-fida', { nota: 'atteso: qa-log-scrittura scoperto, NON fidato' });
+    const testoHookPrima = await p.testo('#hooksListMount');
+    p.nota(`Hook scoperti prima di Fida: ${JSON.stringify(testoHookPrima?.slice(0, 250))}`);
+    if (!testoHookPrima?.includes('qa-log-scrittura')) p.difetto('hook seminato "qa-log-scrittura" non trovato nel Control plane', { severita: 'blocco' });
+
+    const fidaClic = await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('#hooksListMount button')].find((el) => el.textContent.trim() === 'Fida'); if (!b) return false; b.click(); return true; })()");
+    p.nota(`click sul bottone "Fida" dell'hook: ${fidaClic}`);
+    if (fidaClic) {
+      await p.attendi(800);
+      await p.screenshot('control-plane-hooks-dopo-fida', { nota: 'atteso: stato passato a fidato, bottone sparito o cambiato' });
+      const testoHookDopo = await p.testo('#hooksListMount');
+      p.nota(`Hook dopo Fida: ${JSON.stringify(testoHookDopo?.slice(0, 250))}`);
+    } else {
+      p.difetto('bottone "Fida" non trovato per l\'hook seminato — flusso di trust non verificabile', { severita: 'nota' });
+    }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
 };
 
 // --------------------------------------------------------------------
