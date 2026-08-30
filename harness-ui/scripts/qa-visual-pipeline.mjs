@@ -2981,6 +2981,61 @@ const SCENARI = {
 
     for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
   },
+
+  /**
+   * ⭐⭐⭐ 30/8 — debito lasciato aperto da Task 11: la coda mid-run.
+   * Condizione vera (app.js): un messaggio scritto mentre
+   * `!state.realSession.eventoTerminaleVisto` (il giro è ancora vivo)
+   * entra in coda (`accodaMessaggioReale`, POST .../queue) invece di
+   * essere rifiutato o interpretato come resume. Mandato SUBITO un
+   * secondo messaggio dopo il primo, senza aspettare la fine.
+   */
+  async 'qa-coda-mid-run'(p) {
+    await p.attendi(1200);
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskCartella')", { descrizione: 'foglio nuova sessione, ramo allowlist' });
+    await p.cdp.evaluate(`(() => {
+      const select = document.querySelector('#customTaskCartella');
+      const opzione = [...select.options].find((o) => o.textContent.includes('magazzino_py'));
+      if (opzione) select.value = opzione.value;
+      select.dispatchEvent(new Event('change', {bubbles:true}));
+    })()`);
+    await p.click('.model-picker-trigger');
+    await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
+    await p.digita('.model-picker-search input', 'gemini-3.7-flash');
+    await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
+    await p.click('.model-picker-option');
+    await p.attendi(200);
+    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
+
+    await p.digita('#composerInput', 'Elenca tutti i file del progetto, poi leggi src/magazzino.py e test/test_magazzino.py e dimmi con le tue parole, in un paragrafo, cosa fanno.');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendiCondizione("!!window.__talosHarnessUiRuntime?.realSessionState?.id", { timeoutMs: 15000, descrizione: 'sessione vera' });
+
+    // Secondo messaggio SUBITO, senza aspettare la fine del primo giro.
+    await p.digita('#composerInput', 'Nel frattempo: qual è la differenza fra list e tuple in Python, in una riga?');
+    await p.screenshot('secondo-messaggio-scritto', { nota: 'il primo giro è ancora attivo — atteso: entra in coda, non rifiutato' });
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendi(500);
+    const codaVisibile = await p.cdp.evaluate("!!document.querySelector('.queued-message')");
+    p.nota(`.queued-message visibile subito dopo il secondo invio: ${codaVisibile}`);
+    await p.screenshot('dopo-secondo-invio', { nota: 'atteso: il messaggio in coda visibile, il primo giro continua' });
+    if (!codaVisibile) p.difetto('secondo messaggio mandato durante un giro attivo, ma nessun .queued-message visibile', { severita: 'nota' });
+
+    await p.attendiTestoStabile('.conversation', { giriStabili: 6, intervalMs: 2500, timeoutMs: 180000 });
+    await p.screenshot('conversazione-finale', { nota: 'atteso: ENTRAMBE le richieste indirizzate, in ordine' });
+    const testoFinale = await p.testo('.conversation');
+    const rispostoAllaCoda = /list.*tuple|tuple.*list/i.test(testoFinale ?? '');
+    p.nota(`risposta alla domanda accodata (list/tuple) presente: ${rispostoAllaCoda}`);
+    if (!rispostoAllaCoda) p.difetto('il messaggio accodato durante il giro attivo non risulta mai indirizzato alla fine', { severita: 'nota' });
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
 };
 
 // --------------------------------------------------------------------
