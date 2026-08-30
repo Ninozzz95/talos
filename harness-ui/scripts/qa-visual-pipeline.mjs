@@ -2415,6 +2415,62 @@ const SCENARI = {
       p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
     }
   },
+
+  /**
+   * ⭐⭐⭐ 30/8 — Task 7: html-filtro-articoli (preventivo-html,
+   * difficoltà 4). Copertura: Notes (`.notes-store/`, GLOBALE non di
+   * progetto) + Tasks/promemoria — entrambi via `#notesListMount`/
+   * `#tasksListMount` nel Capability hub.
+   */
+  async 'qa-task-7-html-filtro'(p) {
+    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/preventivo-html';
+    await p.attendi(1200);
+    await p.click('[data-open-sheet="permissions"]');
+    await p.attendi(300);
+    await p.click('[data-permission-choice="Full access"]');
+    await p.click('#closeSheet');
+    await p.attendi(300);
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
+    await p.digita('#customTaskCartellaLibera', CARTELLA);
+    await p.click('.model-picker-trigger');
+    await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
+    await p.digita('.model-picker-search input', 'gemini-3.7-flash');
+    await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
+    await p.click('.model-picker-option');
+    await p.attendi(200);
+    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
+
+    const prompt = 'Nel calcolatore di preventivi serve un filtro di testo per la lista articoli — case-insensitive, e se il campo è vuoto mostra tutto. Tieni traccia di dove si trovava originariamente ogni articolo nell\'elenco, anche dopo il filtro. Mentre ci lavori, segnami una nota con la decisione presa sul nome della funzione, e aggiungimi un promemoria per rivedere i test più tardi.';
+    await p.digita('#composerInput', prompt);
+    await p.screenshot('compito-scritto');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendiCondizione("!!window.__talosHarnessUiRuntime?.realSessionState?.id", { timeoutMs: 15000, descrizione: 'sessione vera' });
+    await p.attendiTestoStabile('.conversation', { giriStabili: 6, intervalMs: 2500, timeoutMs: 180000 });
+    await p.screenshot('conversazione-finale');
+    const reviewFilesCount = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.reviewFiles?.size ?? 0");
+    p.nota(`file in Review: ${reviewFilesCount}`);
+    if (reviewFilesCount === 0) p.difetto('sessione conclusa ma zero file in Review', { severita: 'nota' });
+
+    await p.click('#commandPaletteBtn');
+    await p.attendi(200);
+    await p.click('[data-command="skills"]');
+    await p.attendiCondizione("!document.querySelector('#sheetBody')?.textContent?.includes('Carico')", { timeoutMs: 8000, descrizione: 'Capability hub caricato' });
+    await p.screenshot('capability-hub-notes-tasks', { nota: 'atteso: una nota nuova (decisione nome funzione) + un promemoria nuovo (rivedere i test)' });
+    const testoNote = await p.testo('#notesListMount');
+    const testoTasks = await p.testo('#tasksListMount');
+    p.nota(`Notes dopo il task: ${JSON.stringify(testoNote?.slice(0, 250))}`);
+    p.nota(`Tasks/promemoria dopo il task: ${JSON.stringify(testoTasks?.slice(0, 250))}`);
+    if (!testoNote || /Nessuna nota/i.test(testoNote)) p.difetto('richiesta esplicitamente una nota, ma Notes risulta vuoto', { severita: 'nota' });
+    if (!testoTasks || /[Nn]essun/i.test(testoTasks)) p.difetto('richiesto esplicitamente un promemoria, ma Tasks risulta vuoto', { severita: 'nota' });
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
 };
 
 // --------------------------------------------------------------------

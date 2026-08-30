@@ -51,7 +51,7 @@ sotto, prima di proseguire con Task 6.
 | 5.1 ⭐ | *(nuovo, CREATE)* | "Sto iniziando un piccolo sito da zero — mi serve una paginetta HTML singola con un titolo, due paragrafi di testo segnaposto e un pulsante che quando premuto cambia colore di sfondo. Puoi crearla da zero, con anche un piccolo file di stile separato?" | `scrivi` su file MAI esistiti (Review "N nuovi", non "modificati" — mai esercitato finora), owner: "Nuovo file/Nuova cartella" dal menu albero | ✅ fatto — "2 nuovi" confermato per la prima volta in questo giro |
 | 5.2 ⭐ | *(nuovo, DELETE)* | "Nel progetto del magazzino c'è un file di backup che non serve più (magazzino_old.py.bak) — puoi eliminarlo? Se trovi altri file temporanei o ridondanti, elimina anche quelli." | eliminazione via `shell` dal modello (nessun tool "elimina file" esplicito per il modello — verificato non presunto), owner: tasto destro → Elimina con scheda di conferma (azione distruttiva) | ✅ fatto — 1 difetto reale di prodotto trovato (backdrop del foglio resta cliccabile) |
 | 6 | `py-carica-ordini-csv` | "Serve una funzione che carica gli ordini da un file CSV e segnali chiaramente, riga per riga, se manca un campo o il prezzo è negativo. Prima cerca online qual è il modo più comune e sicuro in Python per farlo, poi implementalo. Alla fine salvami un breve riassunto di cosa hai fatto." | web_search, Libreria | ✅ fatto — web_search confermato, giri-esauriti riprodotto dal vivo, Libreria resta NON verificata |
-| 7 | `html-filtro-articoli` | "Aggiungi un filtro di testo alla lista articoli del preventivo. Mentre ci lavori, segnami una nota con la decisione presa sul nome della funzione, e aggiungimi un promemoria per rivedere i test più tardi." | Notes, Tasks | ⬜ |
+| 7 | `html-filtro-articoli` | "Aggiungi un filtro di testo alla lista articoli del preventivo. Mentre ci lavori, segnami una nota con la decisione presa sul nome della funzione, e aggiungimi un promemoria per rivedere i test più tardi." | Notes, Tasks | ✅ fatto — Notes e Tasks entrambi confermati puliti |
 | 8 | `game-ostacolo-mobile` | "Aggiungi un nuovo tipo di ostacolo che si muove da solo nel serpentone. Ricordati per le prossime volte che preferisco che gli ostacoli abbiano nomi in italiano nel codice. Poi disegnami un'icona semplice per questo ostacolo." | Memory (+dedup), generate_image | ⬜ |
 | 9 | `api-patch-parziale` | "Nell'API dei contatti manca un modo per aggiornare solo alcuni campi di un contatto senza dover rimandare tutto — puoi aggiungerlo? Usa gli stessi controlli già in uso quando si crea un contatto." | Hook/MCP/Skill/Plugin (preparati PRIMA) | ⬜ |
 | 10 | `crm-pipeline-fasi` | "Aggiungi allo stato di un contatto una 'fase' (lead, trattativa, cliente) con le transizioni permesse. Se ti torna utile per la prossima volta, costruisciti un piccolo strumento che segna un promemoria ogni volta che sposti un contatto in trattativa." | Tool Forge (crea+abilita+richiama) | ⬜ |
@@ -430,6 +430,43 @@ giri-esauriti (qualunque delle altre già concluse pulite basta).
 
 Zero eccezioni JS, zero errori console in tutte e tre le corse
 (a parte il favicon noto).
+
+### [Task 7] html-filtro-articoli: Notes + Tasks — 2026-08-30 10:17
+Screenshot: `.qa-runs/qa-task-7-html-filtro-2026-08-30T10-17-00-232Z/` (3)
+Corsa pulita, un solo giro di conversazione, 1 file in Review.
+**Notes confermato**: `#notesListMount` mostra "Decisione nome funzione
+filtro articoli — Per la funzionalità di filtro del carrello, la
+funzione è stata denominata \`filt…\`" (testo reale, non un segnaposto).
+⭐ **Retroattivo su Task 6**: nella STESSA lista (Notes è GLOBALE, non
+per progetto) compare anche "Riepilogo implementazione validazione
+ordini CSV — Implementata in src/magazzino.py la funzione
+\`carica_e_valida_ordini\` con contro…" — cioè il follow-up del Task 6
+("salvami un breve appunto") **un risultato l'ha prodotto per davvero**,
+solo non via Libreria/`document_create` come presunto lì: il modello ha
+giustamente letto "appunto" come **Notes**, non come un documento da
+Libreria. Corregge (non contraddice) la conclusione di Task 6: il
+meccanismo "salva un appunto" FUNZIONA, resta solo Libreria
+(`document_create`) specificamente non ancora verificata da nessun task.
+**Tasks confermato**: `#tasksListMount` mostra "Rivedere i test più
+tardi · normal · Controllare e ampliare la suite di test unitari per
+coprire tutti i casi limite del filtro articoli e del preventivo. ·
+todo" — priorità e stato onesti, testo pertinente.
+Codice verificato sul disco: `filtraArticoli(articoli, query)` in
+`src/script.js`, nome ESATTO del corpus (diverso da Task 6 — qui il
+prompt naturale rendeva il nome quasi obbligato). Traccia l'indice
+originale ma come `indiceOriginale` **senza underscore iniziale**
+(il corpus si aspetta `_indiceOriginale`) — stessa dinamica già nota
+(prompt naturale non vincola il contratto esatto), non un difetto.
+⛔ Non verificato con un test dedicato: `npm test` resta a 5/5
+pre-esistenti, il modello non ha scritto test per la nuova funzione qui
+(diversamente da Task 6, dove 4 test nuovi erano arrivati da soli) —
+osservazione di incoerenza fra corse, non un difetto del prodotto.
+⚠️ Screenshot 03 scattato senza scrollare il foglio fino a Notes/Tasks
+(si vedono Attrezzi/Skills/MCP/Plugin/Libreria, Notes solo al margine
+inferiore) — contenuto comunque confermato per testo via `#notesListMount`/
+`#tasksListMount` (sopra), non solo dedotto: gap di inquadratura dello
+screenshot, non di verifica.
+Zero eccezioni JS, zero errori console (a parte il favicon noto).
 
 Formato per ogni voce, da qui in avanti:
 
