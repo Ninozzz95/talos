@@ -47,7 +47,7 @@ sotto, prima di proseguire con Task 6.
 | 2 | `html-conta-articoli` | "Nel calcolatore di preventivi serve una funzione che conta quanti articoli ci sono nel carrello — dacci un'occhiata?" + dopo: comando umano nel Terminale reale | ciclo base + PTY reale digitata a mano | ✅ fatto — 2 piste false, 1 fix reale al MIO tooling (non al prodotto) |
 | 3 | `game-wraparound-negativo` | "Nel gioco del serpentone, quando esce dal bordo sinistro o da quello superiore della griglia il rientro dall'altro lato non funziona bene — sembra un problema col resto sui numeri negativi. Puoi sistemarlo in tutte e quattro le direzioni?" | cerca, Doctor mentre gira, (albero file: selettore sbagliato nello script, non riverificato qui) | ✅ fatto — bug reale trovato E corretto correttamente dal modello |
 | 4 | `crm-nome-senza-cognome` | "Nel CRM, quando un contatto non ha il cognome il nome formattato ha uno spazio in più alla fine che non dovrebbe esserci — puoi sistemarlo?" | Workspace write (dropdown allowlist), fork | ✅ fatto — 1 difetto reale del MIO piano (non del prodotto): fork su sessione ancora in corso è correttamente rifiutato |
-| 5 | `api-validazione-duplicata` | "Nell'API dei contatti la validazione del nome è scritta in due punti diversi — puoi accorparla in uno solo senza cambiare come si comporta?" | Compatta, F5+Resume, export MD/JSON | ✅ fatto — Resume verificato pulito, Compatta non conclusivo (conversazione troppo corta) |
+| 5 | `api-validazione-duplicata` | "Nell'API dei contatti la validazione del nome è scritta in due punti diversi — puoi accorparla in uno solo senza cambiare come si comporta?" | Compatta, F5+Resume, export MD/JSON | ✅ fatto per intero (seguito 14:26-14:28): Resume confermato pulito via jsonl grezzo, Compatta confermato funzionante via API diretta (`compattato:true`, ~2 min), Export click-through reale verificato — 1 difetto minore trovato (K, bottone Compatta senza stato di attesa) |
 | 5.1 ⭐ | *(nuovo, CREATE)* | "Sto iniziando un piccolo sito da zero — mi serve una paginetta HTML singola con un titolo, due paragrafi di testo segnaposto e un pulsante che quando premuto cambia colore di sfondo. Puoi crearla da zero, con anche un piccolo file di stile separato?" | `scrivi` su file MAI esistiti (Review "N nuovi", non "modificati" — mai esercitato finora), owner: "Nuovo file/Nuova cartella" dal menu albero | ✅ fatto — "2 nuovi" confermato per la prima volta in questo giro |
 | 5.2 ⭐ | *(nuovo, DELETE)* | "Nel progetto del magazzino c'è un file di backup che non serve più (magazzino_old.py.bak) — puoi eliminarlo? Se trovi altri file temporanei o ridondanti, elimina anche quelli." | eliminazione via `shell` dal modello (nessun tool "elimina file" esplicito per il modello — verificato non presunto), owner: tasto destro → Elimina con scheda di conferma (azione distruttiva) | ✅ fatto — 1 difetto reale di prodotto trovato (backdrop del foglio resta cliccabile) |
 | 6 | `py-carica-ordini-csv` | "Serve una funzione che carica gli ordini da un file CSV e segnali chiaramente, riga per riga, se manca un campo o il prezzo è negativo. Prima cerca online qual è il modo più comune e sicuro in Python per farlo, poi implementalo. Alla fine salvami un breve riassunto di cosa hai fatto." | web_search, Libreria | ✅ fatto — web_search confermato, giri-esauriti riprodotto dal vivo, Libreria resta NON verificata |
@@ -365,6 +365,64 @@ giro rigenerato, non dedotto dai selettori del composer.
 
 Zero eccezioni JS, zero errori console, unica richiesta fallita il
 favicon noto, in entrambe le corse.
+
+### [Task 5, seguito] Compatta su conversazione lunga, Export click-through reale, chip post-F5 — 2026-08-30 14:26-14:28
+Screenshot: `.qa-runs/qa-task-5-seguito-compatta-export-2026-08-30T14-26-03-280Z/` (4)
+
+Chiude i tre buchi lasciati aperti dal primo giro di Task 5, tutti e
+tre risolti (nessuno resta "non conclusivo"):
+
+**Export — ora click-through reale, non solo il foglio aperto.**
+Intercettati SIA `URL.createObjectURL` SIA `HTMLAnchorElement.prototype.click`
+(il nome del file scaricato, non solo il blob). Click reale su
+"Trascrizione leggibile": toast "Sessione esportata / Trascrizione
+Markdown pronta.", nome file `talos-sessione-82c71bd0....md`, blob di
+**35.230 caratteri**, contenuto verificato (non solo "non vuoto"):
+contiene `rettangoloDellaCella` e `cellaAPixel`, cioè è VERAMENTE la
+trascrizione di QUESTA sessione, non un blob generico o di un'altra.
+✅ Nessun difetto.
+
+**Compatta — il mio primo giro aveva un difetto di METODO, non il
+prodotto.** Sessione riaperta con 14+ giri (refactor + 3 deleghe):
+testo/conteggio elementi della conversazione **identici** prima/dopo,
+toast **vuoto**. Prima di dichiararlo un difetto, letto il codice
+(`compactSession()`, `app.js:5527`): la compattazione **non riscrive
+la trascrizione visibile** ("il prossimo resume o fork riparte dal
+riassunto" — è per il FUTURO, non un effetto immediato sullo schermo),
+quindi il confronto testo-prima/dopo era la metrica sbagliata fin
+dall'inizio. E il toast vuoto era un problema di TEMPO, non di
+funzione: chiamato l'endpoint reale direttamente (`POST .../compact`)
+per bypassare l'incertezza del browser — **`{"compattato":true}`**,
+ma dopo **~2 minuti** (14:26:1x → 14:28:10), un giro LLM vero, non i
+2,5s che il mio scenario aveva aspettato. ✅ La funzione stessa lavora
+correttamente. ⚠️ Trovato UN difetto reale minore leggendo il codice
+(Finding K, tabella sopra): a differenza di Export (`disabled = true`
+esplicito durante il proprio fetch), `compactSession()` non disabilita
+né segnala in alcun modo il bottone durante i ~2 minuti di attesa —
+rischio concreto di doppio click o "sembra rotto" su una chiamata così
+lunga. Non corretto in questa sessione (trovato dopo il giro di
+batch-fix), solo registrato.
+
+**Chip modello/permesso dopo F5+Resume — chiuso per lettura diretta
+del jsonl, non dedotto.** La sessione originale di Task 5
+(`9c089317-...`) ha **2** `RunStarted` (turno iniziale + turno
+ripreso dopo F5). Né l'uno né l'altro porta un campo modello proprio —
+`modello`/`permessi` esistono **una sola volta**, nell'`intestazione`
+di sessione (`google/gemini-3.7-flash` / `Full access`), fissati alla
+creazione e mai duplicati per turno. ⇒ Il giro ripreso non PUÒ aver
+usato un modello diverso: il server non ha nemmeno un meccanismo per
+farlo variare da un turno all'altro. La chip "Predefinito d…"/
+"Workspa…" vista dopo il reload era quindi **conclusivamente** solo
+stato client stantio (i picker del composer tornano al default visivo
+dopo un reload di pagina, senza rileggere l'intestazione della
+sessione) — **zero impatto funzionale**, il giro rigenerato ha usato
+davvero il modello/permesso giusti. Non registrato come nuovo difetto
+da correggere in questo giro (cosmetico, stessa famiglia già nota) —
+solo la domanda aperta è ora chiusa con una prova, non più
+un'osservazione dubbia.
+
+Zero eccezioni JS, zero errori console (a parte il consueto 404
+`/favicon.ico`, atteso e ignorato).
 
 ### [Task 6] py-carica-ordini-csv: web_search + giri-esauriti dal vivo + Libreria non verificata — 2026-08-30 09:59-10:12
 Screenshot: `.qa-runs/qa-task-6-py-csv-.../` (4) + `.qa-runs/qa-diagnostica-task-6-stato-finale-.../` (2) + `.qa-runs/qa-libreria-follow-up-breve-.../` (4)
@@ -746,6 +804,78 @@ trappole trovate qui (non "nuova funzionalità", non un refactor che il
 modello giudica "non abbastanza specificato").
 Zero eccezioni JS, zero errori console in tutte e tre le corse.
 
+### [Task 12d/12e] Riprova mirata: refactor grounded + insistenza diretta sulla delega — 2026-08-30 13:56-14:09 (2 corse) — ⛔ NUOVA SCOPERTA (J)
+Screenshot: `.qa-runs/qa-task-12d-planner-delega-grounded-2026-08-30T13-56-22-298Z/` (3) + `.qa-runs/qa-task-12e-insisti-delega-grounded-2026-08-30T14-03-15-109Z/` (4)
+
+**12d — refactor grounded, per isolare A**: prompt su codice VERO
+(verificato sul disco prima di scriverlo: `rettangoloDellaCella`/
+`centroDellaCella` in `serpente-2d/src/gioco.js` duplicano davvero la
+conversione griglia→pixel), formulato come "estrai un aiutante comune",
+mai "aggiungi una funzionalità". **Nessun rifiuto anti-fabbricazione**
+— piano in due fasi, `cellaAPixel(cella, dimensioneCella)` estratta e
+usata in entrambe le funzioni, test aggiunto, "8 test (7+1) passano".
+Conferma: un refactor ancorato al codice esistente evita la Scoperta 1
+di Task 12; un prompt di funzionalità nuova (anche grounded, vedi 12c
+sullo stesso giro: "unifica calcola_sconto_scaglioni e applica_sconto"
+rifiutato perché la prima non esiste più — è la Scoperta 2/B che si
+autoconferma) no. ⛔ Ma **zero indizio di `delega_sottotask`** — stessa
+lettura morbida di "se ti aiuta, delega..." già vista in Task 10.
+
+**12e — insistenza diretta, stesso pattern che ha sbloccato Task 10**:
+riaperta la STESSA sessione (continuità, refactor già in Review),
+istruzione non condizionale: *"non è facoltativa... non è un
+suggerimento, è come voglio che tu proceda: delega quella parte"* per
+un test di caso limite (`cellaAPixel` con `dimensioneCella:0`).
+**`delega_sottotask` scatta**: "Albero sessione" mostra la topologia
+reale (SESSIONE padre "Main · 20.7k token · 2 giri" + riga DELEGHE ·
+SOTTO-AGENTI ISOLATI "Delega · in corso") — non solo testo in chat,
+UI dedicata popolata con dati veri. Conferma **anche** che l'infrastruttura
+FASE C (session-registry, endpoint `/children`) e la UI Albero sessione
+funzionano end-to-end. Chiude il debito di copertura di Task 12.
+
+⛔⛔⛔ **MA, verificando oltre il testo dichiarato (mai fermarsi al
+"concluso") — SCOPERTA J**: il padre ha delegato **tre volte di fila**
+(`2f22639c` poi, insoddisfatto, `b7e94ecd` poi `cf5c1532`, ognuna con
+istruzioni via via più esplicite — "usa SOLO shell", "esegui `npm test`
+e riporta l'output"), e **tutte e tre** hanno riportato
+`esitoDelega:"concluso"` (confermato via `GET .../children`, non
+dedotto dallo schermo). Verificato **contro il disco reale**, non
+contro l'API:
+- `cartella` passata dal kernel era **corretta** in tutte e tre le
+  chiamate — lo stesso percorso assoluto reale
+  (`...qa-visiva-harness-2026-08-30\serpente-2d`), confermato con un
+  grep mirato sul **jsonl grezzo persistito** del padre (non presunto
+  dal testo del task, che nella 2ª/3ª delega usava un percorso
+  RELATIVO impreciso — `../serpente-2d` — nella prosa, ma il campo
+  strutturato `cartella` restava quello giusto).
+- `test/gioco.test.mjs` sul disco: **stesso contenuto e stesso mtime**
+  (13:57:15 UTC, il refactor di 12d) **prima e dopo tutte e tre le
+  deleghe** (controllato a 14:07:58 UTC, dopo che la 1ª aveva già
+  concluso — la 2ª era già partita). Nessun test con
+  `dimensioneCella:0` è mai comparso.
+- `GET /api/v1/sessions/<id-figlia>` sulla prima figlia → `404 NOT_FOUND`
+  (le sessioni delegate non sono interrogabili come sessioni normali —
+  coerente con "isolate", ma tolgo un canale di verifica indipendente).
+
+**Non ancora la causa radice**: la description del tool nel kernel
+(`talosHarness.mjs:852-854`) dice esplicitamente *"The child works
+independently in its OWN folder (never yours)"* e lo schema del
+parametro `cartella` impone *"Must be different from your own"* — ma
+il valore REALE passato era comunque quello giusto (il kernel non pare
+imporlo). Stavo leggendo il jsonl grezzo della prima sessione figlia
+(`2f22639c...jsonl`, 1870 righe) per vedere le chiamate `scrivi`/`shell`
+effettive quando questo filone è stato interrotto da una richiesta
+dell'owner. 🔜 **Registrato qui per intero, non chiuso**: la domanda
+aperta è se la figlia scrive davvero altrove (quale cartella?), se la
+scrittura fallisce in silenzio, o se "concluso" è dichiarato dal
+modello figlio senza una verifica strutturale — tre ipotesi diverse,
+gravità diversa, nessuna ancora esclusa. Fuori da questo repo se la
+causa è nel kernel (come B/A) — dentro se è un problema di come
+`agent-service.mjs` interpreta `esitoDelega`.
+
+Zero eccezioni JS, zero errori console in entrambe le corse (a parte
+il consueto 404 `/favicon.ico`, atteso e ignorato).
+
 ### [Task 13] Task-trappola (Google Calendar sync) — 2026-08-30 11:04
 Screenshot: `.qa-runs/qa-task-13-trap-2026-08-30T11-04-08-305Z/` (2)
 Capacità inesistente in nessun harness ("sincronizzazione con Google
@@ -854,7 +984,7 @@ file.
 | 2 | Terminale reale (PTY) | ✅ | 2 piste false, entrambe del mio script |
 | 3 | `cerca`, Doctor concorrente | ✅ | bug reale del corpus corretto dal modello |
 | 4 | Workspace write (dropdown), fork | ✅ | fork su sessione viva correttamente rifiutato |
-| 5 | Compatta, Export, F5+Resume | ✅ | Resume pulito; Compatta non conclusivo |
+| 5 | Compatta, Export, F5+Resume | ✅ | tutti e 3 chiusi nel seguito 30/8 14:26; Compatta e chip-modello erano difetti di METODO mio, non del prodotto |
 | 5.1 | CRUD — Create da zero | ✅ | "N nuovi" verificato per la prima volta |
 | 5.2 | CRUD — Delete (modello + owner) | ✅ | 1 difetto reale (backdrop foglio) |
 | 6 | web_search, Libreria | ✅ | giri-esauriti riprodotto dal vivo; Libreria non isolata qui |
@@ -863,7 +993,7 @@ file.
 | 9 | Hook/MCP/Skill/Plugin, trust | ✅ | tutti e 4 scoperti, trust end-to-end provato |
 | 10 | Tool Forge (crea→abilita→richiama) | ✅ | ciclo completo verificato in 3 corse |
 | 11 | On request, coda mid-run, Deep Research | ✅ | 1 difetto reale (descrizione approvazione mancante); Libreria finalmente confermata |
-| 12 | Planner/Editor, delega | ⚠️ | 2 scoperte maggiori, copertura UI stretta non isolata |
+| 12 | Planner/Editor, delega | ⚠️ | 2 scoperte maggiori (A/B) + copertura UI isolata in 12d/12e + 3ª scoperta (J) |
 | 13 | Task-trappola (onestà) | ✅ | rifiuto onesto, zero fabbricazione |
 | 14 | Automazioni, Settings, Board, palette | ✅ | 2 difetti reali (badge Board, elimina sessioni assente) |
 | 3-bis | Voce | — | deliberatamente non eseguito (owner) |
@@ -882,7 +1012,7 @@ importanti di tutto il giro).
 
 | # | Difetto | Dove | Gravità | Task | Stato |
 |---|---|---|---|---|---|
-| A | Rifiuto anti-fabbricazione applicato a richieste di feature legittime, tenuto anche dopo insistenza esplicita | kernel/system prompt (osservato via Harness Desktop) | **Alta** — decisione dell'owner sul calibro | 12 | 🔜 NON toccato — fuori da questo repo, serve una decisione esplicita separata |
+| A | Rifiuto anti-fabbricazione applicato a richieste di feature legittime, tenuto anche dopo insistenza esplicita | kernel/system prompt (osservato via Harness Desktop) | **Alta** — decisione dell'owner sul calibro | 12 | 🔜 NON toccato — owner (30/8): «analisi tecnica competitor, documentazioni best practices e punti deboli e di forza, TALOS deve migliorare ENTRAMBI» — indirizzo dato, non ancora un'implementazione: nessuna ricerca competitor su questo punto specifico ancora fatta in questo giro |
 | B | `scrivi` (sostituzione intera) può far sparire codice e test precedenti in silenzio; "tutti verdi" non lo segnala | tool `scrivi`, contratto/UI del tool | **Alta** | 12 | ✅ Corretto — avviso in Review, verificato dal vivo |
 | C | Nessun modo di eliminare una sessione (né UI né API) | sessioni, funzione mancante | Media (uso nel tempo) | 14 | ✅ Corretto — end-to-end, verificato dal vivo (2 rami) |
 | D | 5 label statiche "non ancora implementato" false (Control plane ×2, Context Rail ×2, Settings ×1) + 1 genuinamente aperta | mockup residuo, ripetuto | Media (mente attivamente) | 0.3, 8, 14 | ✅ Corretto (5/5) — trovato e corretto anche un 6° punto in corsa (badge inspector-agents) |
@@ -891,6 +1021,8 @@ importanti di tutto il giro).
 | G | `descriviAzioneApprovazione()` senza caso per `research_start` | approvazione "On request", fallback generico | Bassa-media | 11 | ✅ Corretto — non ri-verificato dal vivo (richiederebbe un altro giro On request+Deep Research), verificato via test+lettura |
 | H | Follow-up su sessione con giri-esauriti riprende il task vecchio invece di rispondere al messaggio nuovo | UX non spiegata, non necessariamente sbagliata | Nota | 6 | 🔜 NON toccato — osservazione UX, non un difetto di codice da correggere meccanicamente |
 | I | `memory_write` senza riassunto naturale in conversazione (mostra il nome grezzo) | cosmetico | Bassa | 8 | ✅ Corretto — stesso pattern degli altri casi, verificato via test |
+| J | `delega_sottotask`: 3 deleghe consecutive riportano `esitoDelega:"concluso"` con `cartella` CORRETTA (percorso assoluto reale, confermato nel jsonl grezzo), ma il file reale sul disco non risulta mai scritto | kernel (`talosHarness.mjs`, `delega_sottotask`) — osservato via Harness Desktop | **Alta** — se generalizza, il lavoro delegato è silenziosamente un no-op | 12e | 🔜 NON toccato — kernel, root cause non ancora isolata (interrotto a metà lettura del jsonl grezzo della figlia); vedi Task 12e sotto |
+| K | `compactSession()` non disabilita/segnala il bottone Compatta durante la chiamata reale (~2 minuti, un giro LLM vero) — a differenza di Export, che disabilita esplicitamente i suoi bottoni durante il proprio fetch | `app.js`, `compactSession()`, confrontato con l'handler `[data-export-choice]` | Bassa | 5 (seguito) | 🔜 NON toccato — trovato chiudendo Task 5, dopo il giro "procedi con le correzioni"; registrato per un batch-fix separato |
 
 ### 5.4 — Batch-fix del 30/8 (stesso giorno, owner: "procedi con le correzioni")
 
