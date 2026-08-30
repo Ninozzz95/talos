@@ -3630,6 +3630,69 @@ const SCENARI = {
       p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
     }
   },
+
+  /**
+   * ⭐⭐⭐ 30/8 — VERIFICA raggruppamento tool-call (owner: "come fa
+   * Claude, con diff totale accanto... in ogni modifica il diff
+   * specifico per ogni file"). Un prompt che chiede esplorazione +
+   * scrittura + test in un solo giro, senza testo intermedio atteso —
+   * dovrebbe produrre UN batch collassato con diff totale.
+   */
+  async 'qa-raggruppamento-tool-call'(p) {
+    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/magazzino_py';
+    await p.attendi(1200);
+    await p.click('[data-open-sheet="permissions"]');
+    await p.attendi(300);
+    await p.click('[data-permission-choice="Full access"]');
+    await p.click('#closeSheet');
+    await p.attendi(300);
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
+    await p.digita('#customTaskCartellaLibera', CARTELLA);
+    await p.click('.model-picker-trigger');
+    await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
+    await p.digita('.model-picker-search input', 'gemini-3.7-flash');
+    await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
+    await p.click('.model-picker-option');
+    await p.attendi(200);
+    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
+    await p.digita('#composerInput', 'In src/magazzino.py, aggiungi un breve commento di documentazione (docstring) sopra la funzione totale_ordine se non ce l\'ha già, spiegando cosa fa in una riga. Poi esegui i test per conferma. Non fare altro.');
+    await p.screenshot('compito-scritto');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendiCondizione("!!window.__talosHarnessUiRuntime?.realSessionState?.id", { timeoutMs: 15000, descrizione: 'sessione vera' });
+
+    // Screenshot INTERMEDIO, mentre il batch è ancora aperto/in crescita — non solo alla fine.
+    await p.attendiCondizione("!!document.querySelector('.tool-batch')", { timeoutMs: 60000, descrizione: 'primo batch di tool-call apparso' });
+    await p.screenshot('batch-durante-la-corsa', { nota: 'atteso: una riga di riepilogo collassata, chevron, forse già un diff parziale' });
+
+    await p.attendiTestoStabile('.conversation', { giriStabili: 6, intervalMs: 2500, timeoutMs: 150000 });
+    await p.screenshot('conversazione-finale-collassata', { nota: 'CRITICO: riepilogo naturale + diff totale, non righe singole sparse' });
+
+    const numeroBatch = await p.cdp.evaluate("document.querySelectorAll('.tool-batch').length");
+    const numeroRigheSingoleFuoriBatch = await p.cdp.evaluate("[...document.querySelectorAll('.real-tool-note')].filter((el) => !el.closest('.tool-batch-items')).length");
+    p.nota(`numero di batch collassati: ${numeroBatch}`);
+    p.nota(`righe tool-call SINGOLE fuori da un batch (atteso: 0 — solo Ragionamento può stare fuori): ${numeroRigheSingoleFuoriBatch}`);
+    const testoRiepilogo = await p.cdp.evaluate("document.querySelector('.tool-batch-summary .tool-note-summary-text')?.textContent");
+    p.nota(`testo del riepilogo del primo batch: ${JSON.stringify(testoRiepilogo)}`);
+    if (numeroBatch === 0) p.difetto('nessun batch di tool-call raggruppato trovato — il raggruppamento non funziona', { severita: 'blocco' });
+
+    // Espandi il primo batch: la lista completa deve apparire, INVARIATA rispetto a prima.
+    await p.click('.tool-batch-summary');
+    await p.attendi(400);
+    await p.screenshot('batch-espanso', { nota: 'CRITICO: lista completa delle singole tool-call, e la riga scrivi deve avere il suo +n -n' });
+    const rigaScrittura = await p.cdp.evaluate("[...document.querySelectorAll('.tool-batch-items .real-tool-note .tool-note-summary-text')].find((el) => /^(Scritto|Scrittura)/.test(el.textContent))?.parentElement?.textContent");
+    p.nota(`riga "Scritto ..." dentro il batch espanso, testo completo: ${JSON.stringify(rigaScrittura)}`);
+    const haDiffPerFile = await p.cdp.evaluate("!!document.querySelector('.tool-batch-items .real-tool-note .tool-note-diff')");
+    p.nota(`diff per-file presente su almeno una riga di scrittura dentro il batch: ${haDiffPerFile}`);
+    if (!haDiffPerFile) p.difetto('nessun diff per-file (+n -n) trovato su una riga di scrittura dentro il batch espanso', { severita: 'nota' });
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
 };
 
 // --------------------------------------------------------------------
