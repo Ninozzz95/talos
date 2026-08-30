@@ -83,6 +83,7 @@ import {
 } from './plugin-registry.mjs';
 import {
   elencaSessioniPersistite as elencaSessioniPersistiteReale,
+  eliminaSessionePersistita as eliminaSessionePersistitaReale,
   leggiRegistro as leggiRegistroReale,
   registraRiga as registraRigaReale,
   registraRigaSync as registraRigaSyncReale,
@@ -143,6 +144,8 @@ export function createSessionRegistry({
   registraRigaSyncFn = registraRigaSyncReale,
   elencaSessioniPersistiteFn = elencaSessioniPersistiteReale,
   leggiRegistroFn = leggiRegistroReale,
+  // ⭐⭐⭐ 30/8, QA visiva (Task 14) — stesso pattern iniettabile degli altri, per lo stesso motivo (mai una vera cancellazione su disco nei test unitari di questo file).
+  eliminaSessionePersistitaFn = eliminaSessionePersistitaReale,
   /*
    * ⭐⭐⭐ 28/8 — piano `elegant-spinning-dongarra.md`, FASE A (hook).
    * `cartellaTrustHook`: FUORI dal workspace di ogni progetto, stesso
@@ -1837,6 +1840,29 @@ export function createSessionRegistry({
         return { erroreAvvio: 'Nome non valido: serve 1-80 caratteri', code: 'QUERY_INVALID' };
       }
       voce.nome = pulito;
+      return { ok: true };
+    },
+
+    /**
+     * ⭐⭐⭐ 30/8, QA visiva (Task 14) — trovato dal vivo: nessun modo di
+     * eliminare una sessione, né qui né lato client, né lato server —
+     * 144+ sessioni accumulate in un solo giro di QA senza pulizia
+     * possibile. Rifiuta una sessione ANCORA VIVA (né conclusa né
+     * interrotta — un controller attivo potrebbe davvero star
+     * lavorando): eliminare è un'azione di pulizia su qualcosa di
+     * FINITO, mai un modo indiretto di uccidere un run in corso — se
+     * l'owner vuole quello, esiste già `ferma()`, esplicito.
+     * @returns {{ok:true}|{erroreAvvio:string, code:string}}
+     */
+    async elimina(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      const dalVivo = !voce.conclusa && !voce.interrotta;
+      if (dalVivo) {
+        return { erroreAvvio: 'Sessione ancora in corso — fermala prima di eliminarla', code: 'SESSION_STILL_RUNNING' };
+      }
+      sessioni.delete(sessionId);
+      if (cartellaStore) await eliminaSessionePersistitaFn({ cartellaStore, sessionId });
       return { ok: true };
     },
 

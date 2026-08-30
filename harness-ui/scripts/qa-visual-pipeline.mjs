@@ -3320,6 +3320,316 @@ const SCENARI = {
       p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
     }
   },
+
+  /**
+   * ⭐⭐⭐ 30/8 — VERIFICA batch-fix: D (label statiche), E (badge Board).
+   * Nessun task nuovo del modello — solo apertura di superfici già
+   * esistenti, verifica testuale/visiva.
+   */
+  async 'qa-batchfix-d-e-label-badge'(p) {
+    await p.attendi(1200);
+
+    // --- D: Control plane, sezione "Non ancora implementato" deve essere SPARITA ---
+    await p.click('#commandPaletteBtn');
+    await p.attendi(200);
+    await p.click('[data-command="control"]');
+    await p.attendiCondizione("!document.querySelector('#sheetBody')?.textContent?.includes('Carico')", { timeoutMs: 8000, descrizione: 'Control plane caricato' });
+    await p.screenshot('control-plane-dopo-fix', { nota: 'atteso: NESSUNA sezione "Non ancora implementato"' });
+    const testoControl = await p.testo('#sheetBody');
+    const haSezioneVecchia = /Non ancora implementato/i.test(testoControl ?? '');
+    p.nota(`Control plane contiene ancora "Non ancora implementato": ${haSezioneVecchia}`);
+    if (haSezioneVecchia) p.difetto('la sezione "Non ancora implementato" del Control plane è ancora presente dopo il fix', { severita: 'blocco' });
+    await p.click('#closeSheet');
+    await p.attendi(300);
+
+    // --- D: Context Rail — Memory card + Agents tab ---
+    await p.click('[data-open-panel="inspector"]'); // toggle: al boot è espanso, questo click lo collassa — corretto qui sotto controllando lo stato
+    await p.attendi(200);
+    const collassato = await p.cdp.evaluate("document.querySelector('#app')?.classList.contains('inspector-collapsed')");
+    if (collassato) { await p.click('[data-open-panel="inspector"]'); await p.attendi(200); } // ⛔ vedi Task 5.2 — mai cliccare alla cieca, si legge lo stato vero prima
+    const testoMemoryCard = await p.cdp.evaluate("[...document.querySelectorAll('#inspector-context .inspector-card')].find((c) => c.querySelector('.card-title')?.textContent?.includes('Memory'))?.textContent ?? ''");
+    p.nota(`card Memory, testo: ${JSON.stringify(testoMemoryCard?.slice(0, 300))}`);
+    const memoryVecchia = /questo agente non ha oggi un sistema di memoria/i.test(testoMemoryCard ?? '');
+    p.nota(`card Memory mostra ancora il vecchio testo: ${memoryVecchia}`);
+    if (memoryVecchia) p.difetto('la card Memory del Context Rail mostra ancora il vecchio testo "non ancora implementato"', { severita: 'blocco' });
+    await p.click('#inspector-tab-agents');
+    await p.attendi(200);
+    await p.screenshot('context-rail-agents-dopo-fix', { nota: 'atteso: pointer al foglio Albero sessione, non più "non ancora implementato"' });
+    const testoAgentsTab = await p.testo('#inspector-agents');
+    const agentsVecchio = /TALOS non delega a sotto-agenti/i.test(testoAgentsTab ?? '');
+    p.nota(`tab Agents mostra ancora il vecchio testo: ${agentsVecchio}`);
+    if (agentsVecchio) p.difetto('il tab Agents del Context Rail mostra ancora il vecchio testo "non ancora implementato"', { severita: 'blocco' });
+
+    // --- D: Settings ---
+    await p.click('[data-open-view="settings"]');
+    await p.attendi(500);
+    await p.screenshot('settings-dopo-fix', { nota: 'atteso: card Agentico non dice più "non ancora implementati" per sotto-agenti/steering' });
+    const testoSettings = await p.cdp.evaluate("[...document.querySelectorAll('.settings-card')].find((c) => c.querySelector('h3')?.textContent?.includes('Agentico'))?.textContent ?? ''");
+    p.nota(`card Agentico di Settings, testo: ${JSON.stringify(testoSettings?.slice(0, 300))}`);
+    const settingsVecchio = /Sotto-agenti e steering queue: non ancora implementati/i.test(testoSettings ?? '');
+    p.nota(`Settings mostra ancora il vecchio testo: ${settingsVecchio}`);
+    if (settingsVecchio) p.difetto('la card Agentico di Settings mostra ancora il vecchio testo', { severita: 'blocco' });
+
+    // --- E: Board, badge demo deve essere nascosto con sessioni reali ---
+    const boardTabClic = await p.cdp.evaluate("(() => { const t = [...document.querySelectorAll('.mode-tab, button')].find((el) => el.textContent.trim() === 'Board'); if (!t) return false; t.click(); return true; })()");
+    p.nota(`click sul tab Board: ${boardTabClic}`);
+    await p.attendi(800);
+    await p.screenshot('board-dopo-fix', { nota: 'atteso: NESSUN badge "Demo UI · non collegato" con sessioni reali sotto' });
+    const badgeVisibileBoard = await p.cdp.evaluate("(() => { const b = document.querySelector('[data-demo-surface=\"board\"] .demo-surface-badge'); return b ? !b.hidden : false; })()");
+    p.nota(`badge demo ancora visibile sulla Board: ${badgeVisibileBoard}`);
+    if (badgeVisibileBoard) p.difetto('il badge "Demo UI · non collegato" è ancora visibile sulla Board dopo il fix', { severita: 'blocco' });
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /** ⭐ 30/8 — sonda mirata: il badge demo di inspector-agents/inspector-context è nascosto da qualche parte, o no? Stavolta con una sessione VERA aperta. */
+  async 'qa-sonda-badge-inspector'(p) {
+    await p.attendi(1200);
+    const trovata = await p.cdp.evaluate(`(() => {
+      const riga = document.querySelector('.session-item.real-session-item');
+      if (!riga) return false;
+      riga.click();
+      return true;
+    })()`);
+    p.nota(`sessione reale qualsiasi aperta per la sonda: ${trovata}`);
+    await p.attendi(1000);
+    const info = await p.cdp.evaluate(`(() => {
+      const risultato = {};
+      for (const id of ['inspector-context', 'inspector-agents', 'inspector-files']) {
+        const sezione = document.getElementById(id);
+        const badge = sezione?.querySelector('.demo-surface-badge');
+        risultato[id] = badge ? { esiste: true, hidden: badge.hidden } : { esiste: false };
+      }
+      return risultato;
+    })()`);
+    p.nota(`stato badge demo per sezione: ${JSON.stringify(info)}`);
+  },
+
+  /**
+   * ⭐⭐⭐ 30/8 — VERIFICA batch-fix F: il backdrop del foglio "Nuovo file"
+   * non deve più intercettare il tasto destro sulla riga sottostante,
+   * SENZA bisogno dell'attesa esplicita che era il workaround del test
+   * (Task 5.2). Stesso identico scenario di allora, ma il tasto destro
+   * arriva SUBITO dopo "Crea", senza attendiCondizione sul backdrop.
+   */
+  async 'qa-batchfix-f-backdrop'(p) {
+    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/magazzino_py';
+    await p.attendi(1200);
+    await p.click('[data-open-sheet="permissions"]');
+    await p.attendi(300);
+    await p.click('[data-permission-choice="Full access"]');
+    await p.click('#closeSheet');
+    await p.attendi(300);
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
+    await p.digita('#customTaskCartellaLibera', CARTELLA);
+    await p.click('.model-picker-trigger');
+    await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
+    await p.digita('.model-picker-search input', 'gemini-3.7-flash');
+    await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
+    await p.click('.model-picker-option');
+    await p.attendi(200);
+    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
+    await p.digita('#composerInput', 'Elenca i file del progetto.');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendiCondizione("!!window.__talosHarnessUiRuntime?.realSessionState?.id", { timeoutMs: 15000, descrizione: 'sessione vera' });
+    await p.attendiTestoStabile('.conversation', { giriStabili: 5, intervalMs: 2000, timeoutMs: 60000 });
+
+    // ⛔ [data-open-panel="inspector"] è un TOGGLE su desktop (Task 5.2) — si legge lo stato vero prima, mai un click alla cieca.
+    const inspectorEraCollassato = await p.cdp.evaluate("document.querySelector('#app')?.classList.contains('inspector-collapsed') ?? false");
+    if (inspectorEraCollassato) { await p.click('[data-open-panel="inspector"]'); await p.attendi(300); }
+    await p.cdp.evaluate("(() => { const t = [...document.querySelectorAll('.inspector-tabs button')].find((el) => el.textContent.includes('Files')); t?.click(); })()");
+    await p.attendiCondizione("!!document.querySelector('.ft-row')", { timeoutMs: 5000, descrizione: 'albero file caricato' });
+
+    const NOME_FILE = 'zzz-batchfix-backdrop.txt';
+    const radiceRect = await p.cdp.evaluate("(() => { const r = document.querySelector('.tree-root'); if (!r) return null; const b = r.getBoundingClientRect(); return {x: b.x + b.width/2, y: b.y + b.height/2}; })()");
+    await p.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: radiceRect.x, y: radiceRect.y, button: 'right', clickCount: 1 });
+    await p.cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: radiceRect.x, y: radiceRect.y, button: 'right', clickCount: 1 });
+    await p.attendi(300);
+    await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('.ft-actions-menu-item')].find((el) => el.textContent.includes('Nuovo file')); b?.click(); })()");
+    await p.attendiCondizione("!!document.querySelector('#createFileInput')", { timeoutMs: 5000, descrizione: 'scheda Nuovo file' });
+    await p.digita('#createFileInput', NOME_FILE);
+    await p.cdp.evaluate("document.querySelector('#createFileForm').requestSubmit()");
+    await p.attendiCondizione(`document.querySelector('#toastRegion')?.textContent?.includes('File creato')`, { timeoutMs: 5000, descrizione: 'toast File creato' });
+
+    // ⭐ NESSUNA attesa sul backdrop qui — è esattamente il punto della verifica: subito dopo il toast, il tasto destro deve funzionare al primo colpo.
+    const elementoSubito = await p.cdp.evaluate(`(() => { const r = [...document.querySelectorAll('.ft-row')].find((row) => row.textContent.includes(${JSON.stringify(NOME_FILE)})); if (!r) return null; const b = r.getBoundingClientRect(); return {x: b.x + b.width/2, y: b.y + b.height/2}; })()`);
+    p.nota(`riga trovata subito dopo il toast, senza attese extra: ${!!elementoSubito}`);
+    const cosaCEraSubito = await p.cdp.evaluate(`(() => { const el = document.elementFromPoint(${elementoSubito.x}, ${elementoSubito.y}); return el ? { tag: el.tagName, classi: el.className } : null; })()`);
+    p.nota(`elementFromPoint SUBITO dopo il toast (atteso: NON il backdrop): ${JSON.stringify(cosaCEraSubito)}`);
+    if (cosaCEraSubito?.classi?.includes('harness-dialog-backdrop')) {
+      p.difetto('il backdrop intercetta ancora il punto subito dopo la chiusura del foglio — il fix F non ha funzionato', { severita: 'blocco' });
+    }
+    await p.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: elementoSubito.x, y: elementoSubito.y, button: 'right', clickCount: 1 });
+    await p.cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: elementoSubito.x, y: elementoSubito.y, button: 'right', clickCount: 1 });
+    await p.attendi(300);
+    await p.screenshot('menu-subito-dopo-toast', { nota: 'CRITICO: deve mostrare il menu del file (Apri/Elimina/...) al PRIMO tentativo' });
+    const voci = await p.cdp.evaluate("[...document.querySelectorAll('.ft-actions-menu-item')].map((el) => el.textContent.trim())");
+    p.nota(`voci del menu al primo tentativo: ${JSON.stringify(voci)}`);
+    if (voci.length === 0) p.difetto('nessun menu apparso al primo tentativo subito dopo la chiusura del foglio — il fix F non ha funzionato', { severita: 'blocco' });
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+  },
+
+  /**
+   * ⭐⭐⭐ 30/8 — VERIFICA batch-fix C: eliminazione sessione, end-to-end.
+   * Crea una sessione VERA breve e innocua apposta per essere eliminata
+   * (mai riusare una sessione con lavoro dentro), poi tasto destro →
+   * scheda di conferma → Elimina → verifica sparita da sidebar e API.
+   */
+  async 'qa-batchfix-c-elimina-sessione'(p) {
+    await p.attendi(1200);
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskCartella')", { descrizione: 'foglio nuova sessione, ramo allowlist' });
+    await p.cdp.evaluate(`(() => {
+      const select = document.querySelector('#customTaskCartella');
+      const opzione = [...select.options].find((o) => o.textContent.includes('magazzino_py'));
+      if (opzione) select.value = opzione.value;
+      select.dispatchEvent(new Event('change', {bubbles:true}));
+    })()`);
+    await p.click('.model-picker-trigger');
+    await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
+    await p.digita('.model-picker-search input', 'gemini-3.7-flash');
+    await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
+    await p.click('.model-picker-option');
+    await p.attendi(200);
+    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
+    await p.digita('#composerInput', 'Rispondimi solo "ok", senza usare nessuno strumento.');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendiCondizione("!!window.__talosHarnessUiRuntime?.realSessionState?.id", { timeoutMs: 15000, descrizione: 'sessione vera' });
+    await p.attendiTestoStabile('.conversation', { giriStabili: 5, intervalMs: 2000, timeoutMs: 60000 });
+    const sessionIdCreato = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.id");
+    p.nota(`sessione creata apposta per essere eliminata: ${sessionIdCreato}`);
+
+    // ⭐ tasto destro sulla riga sidebar della sessione appena creata (in cima, la più recente)
+    await p.attendi(500);
+    const rigaRect = await p.cdp.evaluate("(() => { const r = document.querySelector('.session-item.real-session-item'); if (!r) return null; const b = r.getBoundingClientRect(); return {x: b.x + b.width/2, y: b.y + b.height/2}; })()");
+    await p.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: rigaRect.x, y: rigaRect.y, button: 'right', clickCount: 1 });
+    await p.cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: rigaRect.x, y: rigaRect.y, button: 'right', clickCount: 1 });
+    await p.attendi(400);
+    await p.screenshot('scheda-conferma-elimina-sessione', { nota: 'CRITICO: deve nominare la sessione e avvisare che è irreversibile' });
+    const testoScheda = await p.testo('#sheetBody');
+    p.nota(`scheda di conferma, testo: ${JSON.stringify(testoScheda?.slice(0, 300))}`);
+    if (!/irreversibil|non si annulla|scrive DAVVERO|cancellata dal disco/i.test(testoScheda ?? '')) {
+      p.difetto('la scheda di conferma eliminazione sessione non avvisa chiaramente che è irreversibile', { severita: 'nota' });
+    }
+    const bottoneTrovato = await p.esiste('#deleteSessionConfirm');
+    p.nota(`bottone Elimina trovato nella scheda: ${bottoneTrovato}`);
+    if (bottoneTrovato) await p.click('#deleteSessionConfirm');
+    await p.attendiCondizione(`document.querySelector('#toastRegion')?.textContent?.includes('Sessione eliminata')`, { timeoutMs: 5000, descrizione: 'toast Sessione eliminata' });
+    await p.attendi(800);
+    await p.screenshot('dopo-eliminazione-sessione');
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /**
+   * ⭐⭐⭐ 30/8 — VERIFICA batch-fix C, ramo B: eliminare una sessione
+   * NON attiva (non quella aperta ora) deve mostrare il toast e
+   * aggiornare la sidebar SUL POSTO, senza ricaricare la pagina — il
+   * ramo opposto di qa-batchfix-c-elimina-sessione, dove la sessione
+   * eliminata ERA quella attiva (reload, testo del toast non
+   * osservabile per costruzione). Bersaglio: una riga a caso NON
+   * evidenziata come attiva.
+   */
+  async 'qa-batchfix-c2-elimina-non-attiva'(p) {
+    await p.attendi(1200);
+    const primaConta = await p.cdp.evaluate("document.querySelectorAll('.session-item.real-session-item').length");
+    p.nota(`righe sessione in sidebar prima: ${primaConta}`);
+    const info = await p.cdp.evaluate(`(() => {
+      const righe = [...document.querySelectorAll('.session-item.real-session-item')];
+      const nonAttiva = righe.find((r) => !r.classList.contains('active'));
+      if (!nonAttiva) return null;
+      const b = nonAttiva.getBoundingClientRect();
+      return { x: b.x + b.width/2, y: b.y + b.height/2, testo: nonAttiva.textContent.trim().slice(0, 60), sessionId: nonAttiva.dataset.realSessionId };
+    })()`);
+    p.nota(`bersaglio scelto (non attivo): ${JSON.stringify(info)}`);
+    if (!info) { p.difetto('nessuna riga sessione non-attiva trovata da eliminare', { severita: 'blocco' }); return; }
+
+    await p.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: info.x, y: info.y, button: 'right', clickCount: 1 });
+    await p.cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: info.x, y: info.y, button: 'right', clickCount: 1 });
+    await p.attendi(400);
+    const bottoneTrovato = await p.esiste('#deleteSessionConfirm');
+    p.nota(`scheda di conferma apparsa: ${bottoneTrovato}`);
+    if (bottoneTrovato) await p.click('#deleteSessionConfirm');
+    await p.attendiCondizione(`document.querySelector('#toastRegion')?.textContent?.includes('Sessione eliminata')`, { timeoutMs: 5000, descrizione: 'toast Sessione eliminata (ramo senza reload)' });
+    await p.attendi(600);
+    await p.screenshot('dopo-elimina-non-attiva', { nota: 'atteso: sidebar aggiornata SUL POSTO, una riga in meno, nessun reload' });
+    const dopoConta = await p.cdp.evaluate("document.querySelectorAll('.session-item.real-session-item').length");
+    p.nota(`righe sessione in sidebar dopo: ${dopoConta} (atteso: ${primaConta - 1})`);
+    if (dopoConta !== primaConta - 1) p.difetto(`atteso ${primaConta - 1} righe dopo l'eliminazione, trovate ${dopoConta}`, { severita: 'nota' });
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /**
+   * ⭐⭐⭐ 30/8 — VERIFICA batch-fix B: l'avviso "simboli spariti" nella
+   * Review. Una RINOMINA di funzione è il modo più affidabile di
+   * ottenere una sparizione VERA e prevedibile (a differenza di
+   * sperare in un drop accidentale come Task 12): il vecchio nome
+   * esce dal file per costruzione, l'avviso deve accorgersene.
+   */
+  async 'qa-batchfix-b-avviso-simboli'(p) {
+    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/magazzino_py';
+    await p.attendi(1200);
+    await p.click('[data-open-sheet="permissions"]');
+    await p.attendi(300);
+    await p.click('[data-permission-choice="Full access"]');
+    await p.click('#closeSheet');
+    await p.attendi(300);
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
+    await p.digita('#customTaskCartellaLibera', CARTELLA);
+    await p.click('.model-picker-trigger');
+    await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
+    await p.digita('.model-picker-search input', 'gemini-3.7-flash');
+    await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
+    await p.click('.model-picker-option');
+    await p.attendi(200);
+    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
+    await p.digita('#composerInput', 'In src/magazzino.py, rinomina la funzione applica_sconto in calcola_sconto (aggiorna anche ogni punto del file che la chiama). Non toccare nient\'altro.');
+    await p.screenshot('compito-scritto');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendiCondizione("!!window.__talosHarnessUiRuntime?.realSessionState?.id", { timeoutMs: 15000, descrizione: 'sessione vera' });
+    await p.attendiTestoStabile('.conversation', { giriStabili: 6, intervalMs: 2500, timeoutMs: 150000 });
+    await p.screenshot('conversazione-finale');
+
+    await p.click('[data-command="review"]').catch(() => {});
+    await p.attendi(500);
+    const testoTabFile = await p.testo('.file-review-list, [data-view="diff"]');
+    p.nota(`tab file in Review (assaggio, atteso: avviso "simbolo sparito"): ${JSON.stringify(testoTabFile?.slice(0, 400))}`);
+    const avvisoVisibile = /simbol.*sparit/i.test(testoTabFile ?? '');
+    p.nota(`avviso "simboli spariti" visibile sulla tab: ${avvisoVisibile}`);
+    await p.screenshot('review-con-avviso', { nota: 'CRITICO: la tab del file deve mostrare "⚠ 1 simbolo sparito", e aprendo il file il banner deve nominare applica_sconto' });
+    const testoBanner = await p.testo('#reviewSymbolWarning');
+    p.nota(`banner dettagliato nel pannello diff: ${JSON.stringify(testoBanner)}`);
+    if (!avvisoVisibile && !testoBanner) {
+      p.difetto('rinominata una funzione (applica_sconto -> calcola_sconto) ma nessun avviso "simboli spariti" mostrato in Review', { severita: 'blocco' });
+    } else if (testoBanner && !testoBanner.includes('applica_sconto')) {
+      p.difetto('il banner di avviso è presente ma non nomina il simbolo vero (applica_sconto)', { severita: 'nota' });
+    }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
 };
 
 // --------------------------------------------------------------------

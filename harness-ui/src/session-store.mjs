@@ -119,6 +119,24 @@ export async function elencaSessioniPersistite({ cartellaStore }, deps = {}) {
 }
 
 /**
+ * ⭐⭐⭐ 30/8, QA visiva (Task 14) — trovato dal vivo: nessun modo di
+ * eliminare una sessione, né qui né lato client. 144+ sessioni
+ * accumulate in un solo giro di QA senza possibilità di pulizia.
+ * Rimuove il file persistito — `ENOENT` è un esito onesto (già
+ * cancellato, o mai persistito perché senza `cartellaStore`), non un
+ * errore: stesso principio di `leggiRegistro` sopra.
+ */
+export async function eliminaSessionePersistita({ cartellaStore, sessionId }, deps = {}) {
+  const unlinkFn = deps.unlinkFn ?? fsp.unlink;
+  try {
+    await unlinkFn(percorsoDi(cartellaStore, sessionId));
+  } catch (errore) {
+    if (errore?.code === 'ENOENT') return;
+    throw new SessionStoreError(`Impossibile eliminare la sessione ${sessionId}: ${errore.message}`, 'SESSION_STORE_DELETE_FAILED');
+  }
+}
+
+/**
  * Legge un registro per intero — una riga JSON per riga del file.
  * ⭐⭐⭐ L'ULTIMA riga, se non è JSON valido, viene SCARTATA in silenzio
  * (mai un errore che perde l'intero file): è esattamente il caso di

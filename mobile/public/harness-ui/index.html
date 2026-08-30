@@ -246,7 +246,7 @@
             <div class="settings-grid">
               <article class="settings-card"><h3>Aspetto</h3><div class="setting-line"><span>Preset</span><strong>Tema TALOS</strong></div><div class="theme-swatch"><span></span><span></span><span></span><span></span></div><small>Token colore, tipo, raggio e densità ereditati</small></article>
               <article class="settings-card"><h3>Interazione</h3><label><span>Riduci movimento</span><input type="checkbox" id="reducedMotionToggle"/></label><p class="muted-copy">Diff espansi di default e Tool activity compatta: non ancora implementati.</p></article>
-              <article class="settings-card"><h3>Agentico</h3><p class="muted-copy">La verifica prima di "fatto" (il cancello semantico) è sempre attiva — non è un'opzione da spegnere. Sotto-agenti e steering queue: non ancora implementati.</p></article>
+              <article class="settings-card"><h3>Agentico</h3><p class="muted-copy">La verifica prima di "fatto" (il cancello semantico) è sempre attiva — non è un'opzione da spegnere. Sotto-agenti (delega_sottotask) e steering queue (un follow-up scritto durante un run si accoda da solo) sono già reali — vedi il tab Agents del context rail e la card "Session topology".</p></article>
               <article class="settings-card control-plane-card"><h3>Control plane</h3><p class="muted-copy">Parità CLI senza costringere l'utente al terminale.</p><div class="control-grid"><button data-open-sheet="control">Agents</button><button data-open-sheet="control">Hooks</button><button data-open-sheet="capabilities">Skills</button><button data-open-sheet="capabilities">Plugins</button><button data-open-sheet="capabilities">MCP</button><button data-control-action="doctor">Doctor</button></div></article>
             </div>
           </div>
@@ -278,7 +278,7 @@
           </div>
           <div class="inspector-card">
             <div class="card-title"><span>Memory</span><svg><use href="#i-brain"/></svg></div>
-            <p class="muted-copy">Non ancora implementato — questo agente non ha oggi un sistema di memoria di progetto.</p>
+            <p class="muted-copy">Le preferenze salvate (attrezzo memory_write) appaiono nel Capability hub — apri la palette comandi (⌘K) → "Skills, MCP, plugin e gateway".</p>
           </div>
           <div class="inspector-card session-topology">
             <div class="card-title"><span>Session topology</span><svg><use href="#i-branch"/></svg></div>
@@ -302,8 +302,9 @@
             <button data-file-entry="src">src/</button><button class="nested" data-file-entry="components">components/</button><button class="nested deep active" data-file-entry="composer">TalosComposer.vue <span>+28 −19</span></button><button class="nested deep" data-file-entry="chat-shell">ChatShell.vue</button><button data-file-entry="tests">tests/</button><button class="nested" data-file-entry="composer-tests">composer.spec.ts <span>+8 −4</span></button>
           </div>
         </section>
-        <section class="inspector-section" id="inspector-agents" role="tabpanel" aria-labelledby="inspector-tab-agents" data-inspector-section="agents" data-demo-surface="inspector-agents">
-          <p class="board-empty">Non ancora implementato — TALOS non delega a sotto-agenti oggi, un solo modello guida l'intero task.</p>
+        <!-- ⛔⛔⛔ 30/8, QA visiva (batch-fix): NIENTE data-demo-surface qui, a differenza di inspector-context/inspector-files. Trovato dal vivo con una sonda mirata: quei due hanno un vero "reale disponibile → nascondi" (renderizzaAlberoReale, ecc.); questo tab non ha mai avuto un contenuto condizionale — prima diceva "non ancora implementato" in modo statico, ora dice sempre il puntatore vero, ugualmente statico. Un badge "Demo UI" senza NESSUN codice che lo nasconda mai sarebbe rimasto acceso per sempre (verificato: hidden:false anche con una sessione reale aperta, mentre context/files erano già hidden:true). -->
+        <section class="inspector-section" id="inspector-agents" role="tabpanel" aria-labelledby="inspector-tab-agents" data-inspector-section="agents">
+          <p class="board-empty">Le deleghe a sotto-agenti isolati (attrezzo delega_sottotask) appaiono nella card "Session topology" del tab Context, e nel foglio "Albero sessione" — apri il titolo sessione in cima alla chat.</p>
         </section>
       </div>
     </aside>
