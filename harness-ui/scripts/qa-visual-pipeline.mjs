@@ -3693,6 +3693,214 @@ const SCENARI = {
       p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
     }
   },
+
+  /**
+   * ⭐⭐⭐ 30/8 — Task 12, quarto tentativo: le prime tre corse hanno
+   * prodotto le due scoperte A/B invece della copertura UI cercata
+   * (Planner/Editor + delega). Bersaglio `game-conversione-duplicata`
+   * del corpus VERO (verificato sul disco prima di scrivere questo
+   * prompt: `rettangoloDellaCella`/`centroDellaCella` in
+   * src/gioco.js duplicano DAVVERO la conversione griglia->pixel) —
+   * un refactor GROUNDED su codice esistente, non "una funzionalità
+   * nuova": non deve incontrare il rifiuto anti-fabbricazione trovato
+   * su questo stesso task.
+   */
+  async 'qa-task-12d-planner-delega-grounded'(p) {
+    await p.attendi(1200);
+    await p.click('[data-open-sheet="permissions"]');
+    await p.attendi(300);
+    await p.click('[data-permission-choice="Full access"]');
+    await p.click('#closeSheet');
+    await p.attendi(300);
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
+    await p.digita('#customTaskCartellaLibera', 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/serpente-2d');
+    await p.cdp.evaluate("document.querySelectorAll('.model-picker-trigger')[0]?.click()");
+    await p.attendiCondizione("!document.querySelectorAll('.model-picker-list')[0]?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo principale caricato' });
+    await p.digita('.model-picker-search input', 'gemini-3.7-flash');
+    await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati principale', timeoutMs: 6000 });
+    await p.click('.model-picker-option');
+    await p.attendi(300);
+    const plannerTriggerEsiste = await p.cdp.evaluate("document.querySelectorAll('.model-picker-trigger').length >= 2");
+    p.nota(`secondo model-picker (Planner) trovato: ${plannerTriggerEsiste}`);
+    if (plannerTriggerEsiste) {
+      await p.cdp.evaluate("document.querySelectorAll('.model-picker-trigger')[1]?.click()");
+      await p.attendiCondizione("!document.querySelectorAll('.model-picker-list')[1]?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo planner caricato' });
+      await p.cdp.evaluate("document.querySelectorAll('.model-picker-search input')[1].value = 'gemini-3.7-flash'; document.querySelectorAll('.model-picker-search input')[1].dispatchEvent(new Event('input', {bubbles:true}))");
+      await p.attendiCondizione("document.querySelectorAll('.model-picker-option').length > 0", { descrizione: 'risultati planner', timeoutMs: 6000 });
+      await p.cdp.evaluate("document.querySelectorAll('.model-picker-option')[0]?.click()");
+    }
+    await p.attendi(300);
+    await p.screenshot('foglio-planner-impostato');
+    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
+
+    const prompt = 'Nel serpentone, rettangoloDellaCella e centroDellaCella ripetono la stessa conversione da griglia a pixel in due punti diversi. Pensaci con calma e preparami un piano per estrarre un aiutante comune e usarlo in entrambe, senza cambiare il comportamento, poi esegui il piano. Se ti aiuta, delega la scrittura dei nuovi test a un sotto-incarico separato.';
+    await p.digita('#composerInput', prompt);
+    await p.screenshot('compito-scritto');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendiCondizione("!!window.__talosHarnessUiRuntime?.realSessionState?.id", { timeoutMs: 15000, descrizione: 'sessione vera' });
+    await p.attendiTestoStabile('.conversation', { giriStabili: 8, intervalMs: 3000, timeoutMs: 240000 });
+    await p.screenshot('conversazione-finale');
+
+    const testoConversazione = await p.testo('.conversation');
+    const rifiutato = /non vengono inventate|non è previsto|fuori dalle specifiche|non implemento|non posso inventare/i.test(testoConversazione ?? '');
+    const usoDelega = /Delega:|delega_sottotask/i.test(testoConversazione ?? '');
+    p.nota(`rifiutato come "funzionalità non specificata" (atteso: NO, è un refactor grounded): ${rifiutato}`);
+    p.nota(`indizio di delega_sottotask nella conversazione: ${usoDelega}`);
+    if (rifiutato) p.difetto('anche un refactor grounded su codice duplicato reale è stato rifiutato come fosse invenzione', { severita: 'blocco' });
+    if (!usoDelega) p.difetto('richiesta esplicitamente una delega, ma nessun indizio di delega_sottotask in conversazione', { severita: 'nota' });
+    const reviewFilesCount = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.reviewFiles?.size ?? 0");
+    p.nota(`file in Review: ${reviewFilesCount}`);
+    if (reviewFilesCount === 0) p.difetto('sessione conclusa ma zero file in Review', { severita: 'nota' });
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /**
+   * ⭐⭐⭐ 30/8 — Task 5, seguito: chiude i due buchi lasciati aperti dal
+   * primo giro (conversazione troppo corta per giudicare Compatta;
+   * export mai cliccato per davvero). Riusa la sessione di Task 12d/12e
+   * (`rettangoloDellaCella`/`centroDellaCella`), ormai genuinamente
+   * lunga — refactor + 3 deleghe consecutive nello stesso turno.
+   */
+  async 'qa-task-5-seguito-compatta-export'(p) {
+    await p.attendi(1200);
+    await p.digita('#sessionSearch', 'rettangoloDellaCella e centroDellaCella');
+    await p.attendi(400);
+    const trovata = await p.cdp.evaluate(`(() => {
+      const riga = [...document.querySelectorAll('.session-item.real-session-item')].find((r) => r.textContent.includes('rettangoloDellaCella'));
+      if (!riga) return false;
+      riga.click();
+      return true;
+    })()`);
+    p.nota(`sessione lunga (Task 12d/12e) trovata e riaperta: ${trovata}`);
+    if (!trovata) { p.difetto('sessione Task 12d/12e non trovata in sidebar', { severita: 'blocco' }); return; }
+    await p.attendi(800);
+
+    // --- Compatta, su una conversazione GENUINAMENTE lunga stavolta ---
+    const primaLunghezza = await p.cdp.evaluate("document.querySelector('.conversation')?.textContent?.length ?? 0");
+    const primaBolle = await p.cdp.evaluate("document.querySelectorAll('.conversation .bubble, .conversation .tool-note, .conversation .tool-batch').length");
+    p.nota(`prima di Compatta: ${primaLunghezza} caratteri, ${primaBolle} elementi in conversazione`);
+    await p.screenshot('prima-di-compatta');
+    const compattaBtn = await p.esiste('#compactSessionBtn');
+    p.nota(`bottone Compatta trovato: ${compattaBtn}`);
+    if (!compattaBtn) { p.difetto('bottone Compatta non trovato su una sessione reale conclusa', { severita: 'blocco' }); }
+    else {
+      await p.click('#compactSessionBtn');
+      await p.attendi(2500);
+      await p.screenshot('dopo-compatta');
+      const toastCompatta = await p.testo('#toastRegion');
+      p.nota(`toast dopo Compatta: ${JSON.stringify(toastCompatta)}`);
+      const dopoLunghezza = await p.cdp.evaluate("document.querySelector('.conversation')?.textContent?.length ?? 0");
+      const dopoBolle = await p.cdp.evaluate("document.querySelectorAll('.conversation .bubble, .conversation .tool-note, .conversation .tool-batch').length");
+      p.nota(`dopo Compatta: ${dopoLunghezza} caratteri, ${dopoBolle} elementi in conversazione`);
+      p.nota(`differenza rilevabile (testo o conteggio elementi cambiati): ${dopoLunghezza !== primaLunghezza || dopoBolle !== primaBolle}`);
+    }
+
+    // --- Export, click-through reale (non solo apertura del foglio) ---
+    const exportOk = await p.cdp.evaluate(`(() => {
+      window.__ultimoBlobEsportato = null;
+      window.__ultimoNomeFileEsportato = null;
+      const originaleCreateObjectURL = URL.createObjectURL;
+      URL.createObjectURL = (blob) => { window.__ultimoBlobEsportato = blob; return originaleCreateObjectURL.call(URL, blob); };
+      const originaleClick = HTMLAnchorElement.prototype.click;
+      HTMLAnchorElement.prototype.click = function () { window.__ultimoNomeFileEsportato = this.download || null; return originaleClick.call(this); };
+      return true;
+    })()`);
+    p.nota(`intercettazione export (blob + nome file) pronta: ${exportOk}`);
+    await p.click('#commandPaletteBtn');
+    await p.attendi(200);
+    await p.click('[data-command="export"]');
+    await p.attendiCondizione("!!document.querySelector('[data-export-choice=\"markdown\"]')", { descrizione: 'foglio export aperto' });
+    await p.screenshot('foglio-export-aperto');
+    await p.click('[data-export-choice="markdown"]');
+    await p.attendiCondizione("!!window.__ultimoBlobEsportato || document.querySelector('#toastRegion')?.textContent?.includes('non riuscita')", { timeoutMs: 10000, descrizione: 'download markdown o errore' });
+    await p.attendi(300);
+    await p.screenshot('dopo-click-export-markdown');
+    const toastExport = await p.testo('#toastRegion');
+    p.nota(`toast dopo click export markdown: ${JSON.stringify(toastExport)}`);
+    const nomeFile = await p.cdp.evaluate('window.__ultimoNomeFileEsportato');
+    p.nota(`nome file scaricato: ${JSON.stringify(nomeFile)}`);
+    const bloccoCreato = await p.cdp.evaluate('!!window.__ultimoBlobEsportato');
+    p.nota(`blob realmente creato (URL.createObjectURL intercettato): ${bloccoCreato}`);
+    if (bloccoCreato) {
+      const testoBlob = await p.cdp.evaluate(`(async () => {
+        const testo = await window.__ultimoBlobEsportato.text();
+        return { lunghezza: testo.length, assaggio: testo.slice(0, 200), contieneRettangolo: testo.includes('rettangoloDellaCella'), contieneCellaAPixel: testo.includes('cellaAPixel') };
+      })()`);
+      p.nota(`contenuto del blob scaricato: ${JSON.stringify(testoBlob)}`);
+      if (!testoBlob.lunghezza) p.difetto('export markdown ha prodotto un blob VUOTO', { severita: 'blocco' });
+      if (!testoBlob.contieneRettangolo && !testoBlob.contieneCellaAPixel) p.difetto('export markdown non contiene alcun riferimento riconoscibile al contenuto reale della sessione — possibile trascrizione sbagliata o di un\'altra sessione', { severita: 'blocco' });
+    } else {
+      p.difetto('click su "Trascrizione leggibile" non ha prodotto nessun blob scaricabile', { severita: 'blocco' });
+    }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /**
+   * ⭐⭐⭐ 30/8 — Task 12, quinto tentativo (seguito diretto del quarto):
+   * la corsa 12d ha prodotto un refactor pulito e grounded, MA senza
+   * delega — stesso esito di Task 10 alla prima formulazione ("se ti
+   * aiuta, delega..." letto come facoltativo). Lì la cura, confermata,
+   * era un'istruzione DIRETTA e non condizionale. La applico qui:
+   * riapro la STESSA sessione (continuità di contesto, il refactor è
+   * già fatto e confermato in Review) e chiedo un lavoro aggiuntivo
+   * piccolo e grounded (un test di caso limite per l'aiutante appena
+   * estratto) con l'ordine di delegarlo per davvero, non come opzione.
+   */
+  async 'qa-task-12e-insisti-delega-grounded'(p) {
+    await p.attendi(1200);
+    // Stesso trucco di Task 12b: il titolo sidebar è troncato a 80
+    // caratteri (tronca(), app.js) — cerco un frammento entro il taglio.
+    await p.digita('#sessionSearch', 'rettangoloDellaCella e centroDellaCella');
+    await p.attendi(400);
+    const trovata = await p.cdp.evaluate(`(() => {
+      const riga = [...document.querySelectorAll('.session-item.real-session-item')].find((r) => r.textContent.includes('rettangoloDellaCella'));
+      if (!riga) return false;
+      riga.click();
+      return true;
+    })()`);
+    p.nota(`sessione Task 12d trovata e riaperta: ${trovata}`);
+    if (!trovata) { p.difetto('sessione Task 12d non trovata in sidebar', { severita: 'blocco' }); return; }
+    await p.attendi(1000);
+    await p.screenshot('sessione-12d-riaperta', { nota: 'atteso: il refactor cellaAPixel già in conversazione/Review da prima' });
+
+    const prompt = 'Bene, il refactoring va bene. Ora voglio un\'altra cosa, e questa volta non è facoltativa: aggiungi un test in più per un caso limite di cellaAPixel (per esempio dimensioneCella pari a zero) — ma la SCRITTURA di questo test specifico la deve fare davvero un sotto-incarico separato tramite delega_sottotask, non tu direttamente. Non è un suggerimento, è come voglio che tu proceda: delega quella parte, poi riportami l\'esito.';
+    await p.digita('#composerInput', prompt);
+    await p.screenshot('insistenza-delega-scritta');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendi(1000);
+    await p.attendiTestoStabile('.conversation', { giriStabili: 8, intervalMs: 3000, timeoutMs: 240000 });
+    await p.screenshot('conversazione-dopo-insistenza-delega');
+
+    const testoConversazione = await p.testo('.conversation');
+    const usoDelega = /Delega:|delega_sottotask/i.test(testoConversazione ?? '');
+    p.nota(`indizio di delega_sottotask dopo l'insistenza diretta: ${usoDelega}`);
+    if (!usoDelega) p.difetto('istruzione diretta e non condizionale di delegare, ma ancora nessun indizio di delega_sottotask in conversazione', { severita: 'nota' });
+    const reviewFilesCount = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.reviewFiles?.size ?? 0");
+    p.nota(`file in Review dopo l'insistenza: ${reviewFilesCount}`);
+
+    // Se ha delegato, l'Albero sessione dovrebbe mostrare la topologia (padre + figlia).
+    await p.click('[data-current-session-title], #currentSessionTitleBtn, .session-header-title').catch(() => {});
+    await p.attendi(300);
+    await p.screenshot('dopo-click-titolo-sessione-12e', { nota: 'tentativo di aprire l\'albero sessione per vedere la topologia di delega' });
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
 };
 
 // --------------------------------------------------------------------
