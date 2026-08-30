@@ -2471,6 +2471,70 @@ const SCENARI = {
       p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
     }
   },
+
+  /**
+   * ⭐⭐⭐ 30/8 — Task 8: game-ostacolo-mobile (serpente-2d, difficoltà 4).
+   * Copertura: Memory (preferenza persistente) + generate_image.
+   * ⛔ Dedup di Memory dichiarato NON coperto qui (richiederebbe una
+   * seconda corsa con la stessa preferenza, costo non giustificato per
+   * questo giro) — gap onesto, non finto testato.
+   */
+  async 'qa-task-8-game-ostacolo'(p) {
+    await p.attendi(1200);
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskCartella')", { descrizione: 'foglio nuova sessione, ramo allowlist' });
+    await p.cdp.evaluate(`(() => {
+      const select = document.querySelector('#customTaskCartella');
+      const opzione = [...select.options].find((o) => o.textContent.includes('serpente-2d'));
+      if (opzione) select.value = opzione.value;
+      select.dispatchEvent(new Event('change', {bubbles:true}));
+    })()`);
+    await p.click('.model-picker-trigger');
+    await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
+    await p.digita('.model-picker-search input', 'gemini-3.7-flash');
+    await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
+    await p.click('.model-picker-option');
+    await p.attendi(200);
+    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
+
+    const prompt = 'Aggiungi un nuovo tipo di ostacolo che si muove da solo nel serpentone. Ricordati per le prossime volte che preferisco che gli ostacoli abbiano nomi in italiano nel codice. Poi disegnami un\'icona semplice per questo ostacolo.';
+    await p.digita('#composerInput', prompt);
+    await p.screenshot('compito-scritto');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendiCondizione("!!window.__talosHarnessUiRuntime?.realSessionState?.id", { timeoutMs: 15000, descrizione: 'sessione vera' });
+
+    await p.attendiCondizione("document.querySelector('.conversation')?.textContent?.includes('Immagine:')", { timeoutMs: 120000, descrizione: 'riga "Immagine: ..." (generate_image chiamato)' });
+    await p.screenshot('durante-generazione-immagine', { nota: 'atteso: una riga tool-call "Immagine: ..." PRIMA della fine' });
+
+    await p.attendiTestoStabile('.conversation', { giriStabili: 6, intervalMs: 2500, timeoutMs: 180000 });
+    await p.screenshot('conversazione-finale');
+    const testoConversazione = await p.testo('.conversation');
+    const usoImmagine = /Immagine:/.test(testoConversazione ?? '');
+    p.nota(`riga "Immagine:" presente nella conversazione finale: ${usoImmagine}`);
+    if (!usoImmagine) p.difetto('richiesta esplicitamente un\'icona, ma nessuna riga "Immagine:" (generate_image) in conversazione', { severita: 'nota' });
+    const reviewFilesCount = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.reviewFiles?.size ?? 0");
+    p.nota(`file in Review: ${reviewFilesCount}`);
+    if (reviewFilesCount === 0) p.difetto('sessione conclusa ma zero file in Review', { severita: 'nota' });
+
+    await p.click('#commandPaletteBtn');
+    await p.attendi(200);
+    await p.click('[data-command="skills"]');
+    await p.attendiCondizione("!document.querySelector('#sheetBody')?.textContent?.includes('Carico')", { timeoutMs: 8000, descrizione: 'Capability hub caricato' });
+    // ⛔ Scroll esplicito fino a Memory (lezione da Task 7: lo screenshot senza scroll non mostra la sezione bassa del foglio).
+    await p.cdp.evaluate("document.querySelector('#memoryListMount')?.scrollIntoView({block:'center'})");
+    await p.attendi(300);
+    await p.screenshot('capability-hub-memory', { nota: 'atteso: una preferenza nuova sui nomi italiani degli ostacoli' });
+    const testoMemoria = await p.testo('#memoryListMount');
+    p.nota(`Memory dopo il task: ${JSON.stringify(testoMemoria?.slice(0, 250))}`);
+    if (!testoMemoria || /[Nn]essun/i.test(testoMemoria)) p.difetto('richiesto esplicitamente di ricordare una preferenza, ma Memory risulta vuoto', { severita: 'nota' });
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
 };
 
 // --------------------------------------------------------------------
