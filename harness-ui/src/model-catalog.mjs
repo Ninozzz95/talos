@@ -36,6 +36,11 @@ function normalizza(modelloGrezzo) {
   const alias = id.startsWith('~');
   const idSenzaAlias = alias ? id.slice(1) : id;
   const provider = idSenzaAlias.includes('/') ? idSenzaAlias.split('/')[0] : 'altro';
+  const listaStringhe = (value) => Array.isArray(value)
+    ? value.filter((item) => typeof item === 'string' && item.length <= 128).slice(0, 32)
+    : [];
+  const architecture = modelloGrezzo?.architecture && typeof modelloGrezzo.architecture === 'object'
+    ? modelloGrezzo.architecture : {};
   return {
     id,
     provider,
@@ -44,6 +49,11 @@ function normalizza(modelloGrezzo) {
     contextLength: Number.isFinite(modelloGrezzo?.context_length) ? modelloGrezzo.context_length : null,
     prezzoPrompt: modelloGrezzo?.pricing?.prompt ?? null,
     prezzoCompletion: modelloGrezzo?.pricing?.completion ?? null,
+    inputModalities: listaStringhe(architecture.input_modalities),
+    outputModalities: listaStringhe(architecture.output_modalities),
+    supportedParameters: listaStringhe(modelloGrezzo?.supported_parameters),
+    description: typeof modelloGrezzo?.description === 'string' ? modelloGrezzo.description.slice(0, 2000) : '',
+    createdAt: Number.isFinite(modelloGrezzo?.created) ? modelloGrezzo.created : null,
   };
 }
 

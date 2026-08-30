@@ -392,6 +392,67 @@ const SCENARI = {
     for (const r of p.cdp.richiesteFallite) { if (!r.url.endsWith('/favicon.ico')) p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' }); }
   },
 
+  async 'qa-settings-model-lab'(p) {
+    const viewport = new URL(URL_BASE).searchParams.get('qa') === 'laptop'
+      ? { width: 1024, height: 800 }
+      : { width: 1440, height: 900 };
+    await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
+    await p.cdp.evaluate('location.reload()');
+    await p.attendi(900);
+    await p.click('[data-open-view="settings"]');
+    await p.attendiCondizione(
+      "document.querySelector('#machineCapacityStatus')?.textContent !== 'Misurazione in corso…' && document.querySelector('#modelLabProviderStatus')?.textContent !== 'Provider da verificare'",
+      { timeoutMs: 8000, descrizione: 'capacità macchina e stato provider risolti' },
+    );
+    await p.cdp.evaluate("document.querySelector('#modelLabCard')?.scrollIntoView({block:'start', inline:'nearest'})");
+    await p.attendi(250);
+    await p.screenshot('model-lab-panorama', { nota: 'Laboratorio modelli: capacità misurata, provider osservati e gate runtime' });
+    await p.cdp.evaluate("document.querySelector('#modelLabOverviewPanel')?.scrollIntoView({block:'start', inline:'nearest'})");
+    await p.attendi(120);
+    await p.screenshot('model-lab-capacita', { nota: 'Misure macchina reali e gate esplicito del runtime locale' });
+
+    await p.click('[data-model-lab-tab="providers"]');
+    await p.attendi(200);
+    await p.cdp.evaluate("document.querySelector('#modelLabProvidersPanel')?.scrollIntoView({block:'start', inline:'nearest'})");
+    await p.attendi(120);
+    await p.screenshot('model-lab-provider', { nota: 'Provider: presenza OpenRouter senza esporre credenziali; provider non configurati dichiarati' });
+
+    await p.click('[data-model-lab-tab="catalog"]');
+    await p.attendiCondizione(
+      "!!document.querySelector('#modelLabCatalogCount')?.textContent?.match(/modelli osservati|non disponibile/)",
+      { timeoutMs: 15000, descrizione: 'catalogo API osservato o errore controllato' },
+    );
+    await p.cdp.evaluate("document.querySelector('#modelLabCatalogPanel')?.scrollIntoView({block:'start', inline:'nearest'})");
+    await p.attendi(120);
+    await p.screenshot('model-lab-catalogo', { nota: 'Catalogo OpenRouter reale oppure stato di errore esplicito, mai elenco inventato' });
+
+    if (await p.esiste('#modelLabCatalogList .model-lab-list-item')) {
+      await p.click('#modelLabCatalogList .model-lab-list-item');
+      await p.attendi(150);
+      await p.cdp.evaluate("document.querySelector('#modelLabCatalogPanel')?.scrollIntoView({block:'start', inline:'nearest'})");
+      await p.attendi(120);
+      await p.screenshot('model-lab-dettaglio', { nota: 'Dettaglio modello: capability, contesto e prezzi osservati' });
+      await p.digita('#modelLabSearch', 'deepseek');
+      await p.attendi(150);
+      await p.cdp.evaluate("document.querySelector('#modelLabCatalogPanel')?.scrollIntoView({block:'start', inline:'nearest'})");
+      await p.attendi(120);
+      await p.screenshot('model-lab-filtro', { nota: 'Ricerca locale nel catalogo senza nuova chiamata al provider' });
+    }
+
+    for (const section of ['installed', 'huggingface', 'downloads']) {
+      await p.click(`[data-model-lab-tab="${section}"]`);
+      await p.attendi(120);
+      await p.cdp.evaluate(`document.querySelector('[data-model-lab-panel="${section === 'huggingface' ? 'huggingface' : section}"]')?.scrollIntoView({block:'start', inline:'nearest'})`);
+      await p.attendi(100);
+      await p.screenshot(`model-lab-${section}`, { nota: `${section}: capability dipendente dal runtime marcata come gated, nessun dato finto` });
+    }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (!r.url.endsWith('/favicon.ico')) p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
   async 'nuova-sessione-compito-libero'(p) {
     await p.attendi(1500);
     await p.screenshot('stato-iniziale', { nota: 'app appena caricata, nessuna sessione' });

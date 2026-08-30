@@ -691,11 +691,111 @@ describe('Harness UI embedded host and keyboard runtime', () => {
             '#resumeSessionBtn', '#compactSessionBtn',
             '#closeSheet', '#closeCommand', '#cancelQueued', '.composer-mic', '#queueToggle',
             '#approveAllDiffs', '#harnessDialogBackdrop',
+            '#modelLabRefreshButton',
         ].join(',')
         const inert = [...document.querySelectorAll<HTMLButtonElement>('button:not([disabled])')]
             .filter((button) => !button.matches(handled))
             .map((button) => button.textContent?.trim().replace(/\s+/g, ' ') || button.getAttribute('aria-label'))
 
         expect(inert).toEqual([])
+    })
+
+    it('CODE-MODEL-LAB-SHELL-01 exposes the complete preparatory desktop model lab shell', () => {
+        mountStaticRuntime()
+
+        const requiredTabs = ['overview', 'providers', 'catalog', 'installed', 'huggingface', 'downloads']
+        for (const section of requiredTabs) {
+            expect(document.querySelector(`[data-model-lab-tab="${section}"]`), section).toBeTruthy()
+            expect(document.querySelector(`[data-model-lab-panel="${section}"]`), section).toBeTruthy()
+        }
+        expect(document.querySelectorAll('[data-model-lab-panel]')).toHaveLength(requiredTabs.length)
+        expect(document.querySelectorAll('[data-disabled-reason]')).not.toHaveLength(0)
+        expect(document.querySelector('#modelLabRuntimeBadge')?.textContent).toContain('non scelto')
+    })
+
+    it('CODE-MODEL-LAB-CAPACITY-01 renders measured machine capacity without exposing secrets', async () => {
+        const fetchMock = vi.fn(async (url: string) => {
+            if (url.endsWith('/api/v1/model-lab/capacity')) {
+                return new Response(JSON.stringify({ ok: true, data: {
+                    schema: 'talos.model-lab.capacity/1', platform: 'win32', arch: 'x64', measuredAt: '2026-08-30T10:00:00.000Z',
+                    memory: { totalBytes: 16 * 1024 ** 3, freeBytes: 8 * 1024 ** 3 },
+                    storage: { totalBytes: 512 * 1024 ** 3, availableBytes: 128 * 1024 ** 3, allocatableBytes: 127 * 1024 ** 3 },
+                    runtime: { status: 'unconfigured' },
+                } }), { status: 200 })
+            }
+            if (url.endsWith('/api/v1/doctor')) return new Response(JSON.stringify({ ok: true, data: { chiaveApi: false } }), { status: 200 })
+            return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
+        })
+        vi.stubGlobal('fetch', fetchMock)
+        mountStaticRuntime()
+        document.querySelector<HTMLButtonElement>('[data-open-view="settings"]')?.click()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        await Promise.resolve()
+
+        expect(document.querySelector('#machineCapacityStatus')?.textContent).toBe('Misurata')
+        expect(document.querySelector('#machineMemoryMetric')?.textContent).toBe('16 GB')
+        expect(document.querySelector('#machineFreeMemoryMetric')?.textContent).toBe('8 GB')
+        expect(document.querySelector('#machineAllocatableMetric')?.textContent).toBe('127 GB')
+        expect(document.querySelector('#modelLabProviderStatus')?.textContent).toContain('non configurato')
+        const stored = window.localStorage.getItem('talos.harness.desktop.settings.v1') || ''
+        expect(stored).not.toMatch(/apiKey|token|secret/i)
+    })
+
+    it('CODE-MODEL-LAB-CATALOG-01 loads, filters and selects the real catalog shape', async () => {
+        const fetchMock = vi.fn(async (url: string) => {
+            if (url.endsWith('/api/v1/models')) return new Response(JSON.stringify({ ok: true, data: { modelli: [
+                { id: 'openai/gpt-test', provider: 'openai', nome: 'GPT Test', contextLength: 128000, inputModalities: ['text'], outputModalities: ['text'], supportedParameters: ['tools'], prezzoPrompt: '1', prezzoCompletion: '2', description: 'Test model' },
+                { id: 'anthropic/claude-test', provider: 'anthropic', nome: 'Claude Test', contextLength: 200000, inputModalities: ['text'], outputModalities: ['text'], supportedParameters: [], prezzoPrompt: '3', prezzoCompletion: '4', description: 'Second model' },
+            ], daCache: false, aggiornatoAlle: '2026-08-30T10:00:00.000Z' } }), { status: 200 })
+            if (url.endsWith('/api/v1/doctor')) return new Response(JSON.stringify({ ok: true, data: { chiaveApi: true } }), { status: 200 })
+            return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
+        })
+        vi.stubGlobal('fetch', fetchMock)
+        mountStaticRuntime()
+        document.querySelector<HTMLButtonElement>('[data-open-view="settings"]')?.click()
+        document.querySelector<HTMLButtonElement>('[data-model-lab-tab="catalog"]')?.click()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        await Promise.resolve()
+
+        expect(document.querySelector('#modelLabCatalogCount')?.textContent).toContain('2 di 2')
+        expect(document.querySelectorAll('#modelLabCatalogList .model-lab-list-item')).toHaveLength(2)
+        expect(document.querySelector('#modelLabModelDetail')?.textContent).toContain('GPT Test')
+
+        const search = document.querySelector<HTMLInputElement>('#modelLabSearch')!
+        search.value = 'claude'
+        search.dispatchEvent(new Event('input', { bubbles: true }))
+        expect(document.querySelectorAll('#modelLabCatalogList .model-lab-list-item')).toHaveLength(1)
+        expect(document.querySelector('#modelLabCatalogList')?.textContent).toContain('Claude Test')
+    })
+
+    it('CODE-MODEL-LAB-CATALOG-ERROR-01 states upstream failure instead of showing an empty success', async () => {
+        const fetchMock = vi.fn(async (url: string) => {
+            if (url.endsWith('/api/v1/models')) return new Response(JSON.stringify({ ok: false, error: { code: 'CATALOG_UNAVAILABLE', message: 'Catalogo non raggiungibile' } }), { status: 503 })
+            if (url.endsWith('/api/v1/doctor')) return new Response(JSON.stringify({ ok: true, data: { chiaveApi: false } }), { status: 200 })
+            return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
+        })
+        vi.stubGlobal('fetch', fetchMock)
+        mountStaticRuntime()
+        document.querySelector<HTMLButtonElement>('[data-open-view="settings"]')?.click()
+        document.querySelector<HTMLButtonElement>('[data-model-lab-tab="catalog"]')?.click()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        await Promise.resolve()
+
+        expect(document.querySelector('#modelLabCatalogCount')?.textContent).toContain('non disponibile')
+        expect(document.querySelector('#modelLabCatalogList')?.textContent).toContain('Catalogo non disponibile')
+    })
+
+    it('CODE-MODEL-LAB-RUNTIME-GATE-01 keeps runtime-dependent actions disabled with an explicit reason', () => {
+        mountStaticRuntime()
+        const gated = [...document.querySelectorAll<HTMLButtonElement>('[data-disabled-reason]')]
+        expect(gated.length).toBeGreaterThanOrEqual(5)
+        expect(gated.every((button) => button.disabled)).toBe(true)
+        expect(gated.some((button) => button.dataset.disabledReason?.toLowerCase().includes('runtime'))).toBe(true)
+    })
+
+    it('CODE-MODEL-LAB-LAPTOP-01 compacts the lab before the persistent session sidebar makes it overflow', () => {
+        const css = asset('styles.css')
+
+        expect(css).toMatch(/@media \(max-width:\s*1180px\)\s*\{[^}]*\.model-lab-ledger\s*\{[^}]*grid-template-columns:\s*repeat\(2,/s)
     })
 })

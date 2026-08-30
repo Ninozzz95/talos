@@ -1262,10 +1262,66 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .range-control input { width: 100%; accent-color: var(--accent); }
 .categories { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .settings-status { display: block; margin-top: 12px; color: var(--muted); font: calc(9px * var(--talos-ui-font-scale)) var(--font-mono); }
+.model-lab-card { display: grid; gap: 14px; }
+.runtime-gate { display: inline-flex; align-items: center; min-height: 28px; padding: 4px 9px; border: 1px solid var(--accent-strong); border-radius: 999px; color: var(--accent-2); background: var(--accent-soft); font: 600 calc(9px * var(--talos-ui-font-scale))/1.2 var(--font-mono); white-space: nowrap; }
+.runtime-gate-large { display: block; min-height: 0; padding: 14px; border-radius: var(--radius-card); white-space: normal; }
+.runtime-gate-large h4 { margin: 0 0 6px; color: var(--text-2); font-size: calc(11px * var(--talos-ui-font-scale)); }
+.runtime-gate-large p { margin: 0 0 12px; color: var(--muted); font-size: calc(10px * var(--talos-ui-font-scale)); line-height: 1.45; }
+.model-lab-ledger { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.model-lab-ledger > div, .model-lab-metrics > div, .provider-card { min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-highlight-subtle); }
+.model-lab-ledger strong, .model-lab-ledger span, .model-lab-metrics span, .model-lab-metrics strong { display: block; }
+.model-lab-ledger strong { overflow: hidden; text-overflow: ellipsis; color: var(--text-2); font-size: calc(11px * var(--talos-ui-font-scale)); }
+.model-lab-ledger span, .model-lab-metrics span { margin-top: 3px; color: var(--muted); font-size: calc(9px * var(--talos-ui-font-scale)); }
+.model-lab-tabs { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--line); scrollbar-width: none; }
+.model-lab-tabs::-webkit-scrollbar { display: none; }
+.model-lab-tabs button { flex: 0 0 auto; min-height: 36px; border: 0; border-bottom: 2px solid transparent; padding: 0 10px; color: var(--muted); background: transparent; cursor: pointer; font-size: calc(10px * var(--talos-ui-font-scale)); }
+.model-lab-tabs button.active { border-bottom-color: var(--accent); color: var(--text); }
+.model-lab-panel { display: none; min-width: 0; }
+.model-lab-panel.active { display: block; }
+.model-lab-layout, .model-lab-catalog-layout { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(240px, .65fr); gap: 12px; }
+.model-lab-panel h4 { margin: 0 0 8px; color: var(--text-2); font-size: calc(11px * var(--talos-ui-font-scale)); }
+.model-lab-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.model-lab-metrics strong { margin-top: 5px; color: var(--text); font: 600 calc(12px * var(--talos-ui-font-scale)) var(--font-mono); }
+.model-lab-active-model { margin: 12px 0 0; color: var(--muted); font-size: calc(10px * var(--talos-ui-font-scale)); }
+.model-lab-active-model strong { color: var(--text-2); }
+.model-lab-panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.model-lab-panel-heading h4 { margin-bottom: 2px; }
+.provider-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.provider-card strong, .provider-card span, .provider-card small { display: block; }
+.provider-card strong { color: var(--text-2); font-size: calc(11px * var(--talos-ui-font-scale)); }
+.provider-card span { margin-top: 5px; color: var(--accent-2); font-size: calc(9px * var(--talos-ui-font-scale)); }
+.provider-card small { margin-top: 4px; color: var(--muted); font-size: calc(9px * var(--talos-ui-font-scale)); line-height: 1.35; }
+.model-lab-filters, .model-lab-disabled-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, .35fr) auto; align-items: end; gap: 8px; margin-bottom: 10px; }
+.model-lab-filters .search-field { min-width: 0; }
+.model-lab-filters .settings-status { margin: 0; white-space: nowrap; }
+.model-lab-list, .model-lab-detail { min-height: 220px; max-height: 360px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-highlight-subtle); }
+.model-lab-list-item { display: grid; width: 100%; gap: 3px; border: 0; border-bottom: 1px solid var(--line-soft); padding: 10px; text-align: left; color: var(--text-2); background: transparent; cursor: pointer; }
+.model-lab-list-item:hover, .model-lab-list-item[aria-selected="true"] { background: var(--accent-soft); }
+.model-lab-list-item strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(10px * var(--talos-ui-font-scale)); }
+.model-lab-list-item small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font: calc(8px * var(--talos-ui-font-scale)) var(--font-mono); }
+.model-lab-detail { padding: 12px; }
+.model-lab-detail h4 { margin: 3px 0 5px; }
+.model-lab-model-id { display: block; overflow-wrap: anywhere; color: var(--accent-2); font: calc(9px * var(--talos-ui-font-scale)) var(--font-mono); }
+.model-lab-detail .muted-copy { margin: 10px 0; line-height: 1.4; }
+.model-lab-detail-row { margin: 5px 0; color: var(--muted); font: calc(9px * var(--talos-ui-font-scale)) var(--font-mono); }
+.model-lab-empty { display: grid; place-items: center; min-height: 150px; margin: 0; padding: 18px; text-align: center; color: var(--muted); font-size: calc(10px * var(--talos-ui-font-scale)); line-height: 1.45; }
+.model-lab-empty strong { color: var(--text-2); }
+.model-lab-empty p { margin: 5px 0 0; }
+.model-lab-filter-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.model-lab-filter-chips span { padding: 5px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font: calc(9px * var(--talos-ui-font-scale)) var(--font-mono); }
+.model-lab-disabled-grid { grid-template-columns: minmax(0, 1fr) auto auto; }
+.model-lab-disabled-grid .search-field { opacity: .65; }
+@media (max-width: 1180px) {
+  .model-lab-ledger { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .model-lab-layout, .model-lab-catalog-layout { grid-template-columns: 1fr; }
+  .provider-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 780px) {
   .settings-card-heading { flex-direction: column; }
-  .settings-control-grid, .settings-switch-grid, .range-grid { grid-template-columns: 1fr; }
+  .settings-control-grid, .settings-switch-grid, .range-grid, .model-lab-metrics { grid-template-columns: 1fr; }
   .categories { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .model-lab-panel-heading { flex-direction: column; }
+  .model-lab-filters, .model-lab-disabled-grid { grid-template-columns: 1fr; align-items: stretch; }
 }
 @media (prefers-reduced-motion: reduce) {
   .talos-background-scene { opacity: .16; }
