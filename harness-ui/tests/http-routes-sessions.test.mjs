@@ -59,6 +59,11 @@ function registroFinto() {
       if (percorso.includes('..')) return { erroreAvvio: 'Percorso non valido', code: 'QUERY_INVALID' };
       return { ok: true, voci: [{ nome: `${percorso || 'radice'}-finto.txt`, cartella: false }] };
     },
+    async anteprimaAlbero(projectId, percorso = '') {
+      if (projectId !== 'p1') return { erroreAvvio: 'Progetto non trovato', code: 'NOT_FOUND' };
+      if (percorso.includes('..')) return { erroreAvvio: 'Percorso non valido', code: 'QUERY_INVALID' };
+      return { ok: true, voci: [{ nome: `${percorso || 'radice'}-preview.txt`, cartella: false }] };
+    },
     elenca() {
       return [...sessioni.entries()]
         .map(([sessionId, voce]) => ({ sessionId, taskId: voce.taskId, nome: voce.nome ?? null, avviataAlle: voce.avviataAlle, conclusa: voce.conclusa, forkDa: voce.forkDa ?? null }))
@@ -1445,6 +1450,24 @@ test('⭐ GET /api/v1/sessions/{id}/tree torna le voci alla radice, e passa "per
 
   const sottocartella = await (await fetch(`${base}/api/v1/sessions/${sessionId}/tree?percorso=src`)).json();
   assert.deepEqual(sottocartella.data.voci, [{ nome: 'src-finto.txt', cartella: false }]);
+});
+
+test('FILE-TREE-PREVIEW-03 — GET /api/v1/projects/{id}/tree legge root e sottocartella prima della sessione', async (t) => {
+  const { base } = await listen(t);
+
+  const root = await (await fetch(`${base}/api/v1/projects/p1/tree`)).json();
+  assert.deepEqual(root.data.voci, [{ nome: 'radice-preview.txt', cartella: false }]);
+
+  const docs = await (await fetch(`${base}/api/v1/projects/p1/tree?percorso=docs`)).json();
+  assert.deepEqual(docs.data.voci, [{ nome: 'docs-preview.txt', cartella: false }]);
+});
+
+test('FILE-TREE-PREVIEW-04 — project id sconosciuto, traversal e query extra falliscono chiusi', async (t) => {
+  const { base } = await listen(t);
+
+  assert.equal((await fetch(`${base}/api/v1/projects/sconosciuto/tree`)).status, 404);
+  assert.equal((await fetch(`${base}/api/v1/projects/p1/tree?percorso=..%2Fetc`)).status, 400);
+  assert.equal((await fetch(`${base}/api/v1/projects/p1/tree?altro=x`)).status, 400);
 });
 
 test('⛔ GET /api/v1/sessions/{id}/tree con un percorso che risale (".."): 400 QUERY_INVALID', async (t) => {

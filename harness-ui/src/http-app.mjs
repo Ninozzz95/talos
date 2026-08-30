@@ -1451,6 +1451,7 @@ export function createHttpApp({
         /* ⛔ Elenco vuoto, non un errore, se sessionRegistry non è configurato — stesso principio già seguito per le altre rotte di sessione. */
         data = { items: sessionRegistry ? sessionRegistry.elenca() : [] };
       } else {
+        const projectTreeMatch = sessionRegistry && /^\/api\/v1\/projects\/([^/]+)\/tree$/.exec(url.pathname);
         const eventsMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/events$/.exec(url.pathname);
         const exportMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/export$/.exec(url.pathname);
         const treeMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/tree$/.exec(url.pathname);
@@ -1480,7 +1481,23 @@ export function createHttpApp({
         // ⭐⭐⭐ 28/8 — non SESSION-scoped: un artefatto ha un id UUID già globalmente unico (agent-service.mjs), stesso principio di /api/v1/models.
         const artifactMatch = /^\/api\/v1\/artifacts\/([^/]+)$/.exec(url.pathname);
 
-        if (treeMatch) {
+        if (projectTreeMatch) {
+          let projectId;
+          try {
+            projectId = decodeURIComponent(projectTreeMatch[1]);
+          } catch {
+            sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+            return;
+          }
+          const percorso = parseTreeQuery(url);
+          const esito = await sessionRegistry.anteprimaAlbero(projectId, percorso);
+          if ('erroreAvvio' in esito) {
+            const errore = new Error(esito.erroreAvvio);
+            errore.code = esito.code;
+            throw errore;
+          }
+          data = { voci: esito.voci };
+        } else if (treeMatch) {
           let sessionId;
           try {
             sessionId = decodeURIComponent(treeMatch[1]);

@@ -794,6 +794,220 @@ const SCENARI = {
     }
   },
 
+  /**
+   * ⭐ 30/8 — Fase 1/K. Test sintetico browser-first per il percorso
+   * Compatta: la POST resta trattenuta per rendere osservabile lo stato
+   * intermedio senza spendere un giro LLM o mutare una sessione reale.
+   * La superficie viene comunque provata con Chrome/CDP, screenshot prima,
+   * durante, dopo successo, durante errore e dopo retry. Il test usa il
+   * contratto HTTP reale (POST + envelope), sostituendo soltanto la risposta
+   * nell'ultimo miglio, come un test di rete controllata.
+   */
+  async 'qa-compact-loading'(p) {
+    const viewport = new URL(URL_BASE).searchParams.get('qa') === 'laptop'
+      ? { width: 1024, height: 800 }
+      : { width: 1440, height: 900 };
+    await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
+    await p.click('[data-mode="chat"]');
+    await p.attendi(1200);
+    await p.cdp.evaluate(`(() => {
+      const runtime = window.__talosHarnessUiRuntime;
+      if (!runtime?.realSessionState) throw new Error('runtime Harness non disponibile');
+      runtime.realSessionState.id = 'qa-compact-loading';
+      runtime.realSessionState.eventoTerminaleVisto = true;
+      const originale = window.fetch.bind(window);
+      const controllo = { mode: 'hold-success', requests: 0, release: null };
+      window.__qaCompact = controllo;
+      window.fetch = (input, init) => {
+        const url = typeof input === 'string' ? input : input?.url || '';
+        if (!url.includes('/api/v1/sessions/qa-compact-loading/compact')) return originale(input, init);
+        controllo.requests += 1;
+        if (controllo.mode === 'success') {
+          return Promise.resolve(new Response(JSON.stringify({ ok: true, data: { compattato: true } }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+        }
+        return new Promise((resolve, reject) => {
+          controllo.release = controllo.mode === 'hold-error'
+            ? () => reject(new Error('rete simulata per il test'))
+            : () => resolve(new Response(JSON.stringify({ ok: true, data: { compattato: true } }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+        });
+      };
+      return true;
+    })()`);
+    await p.screenshot('compatta-pre-click', { nota: 'stato iniziale completo della topbar e della chat prima dell\'azione' });
+
+    await p.click('#compactSessionBtn');
+    await p.attendi(120);
+    await p.screenshot('compatta-in-corso', { nota: 'la POST è trattenuta: bottone, aria-busy, label e resto dello schermo vanno ispezionati interamente' });
+    const durante = await p.cdp.evaluate(`(() => { const b = document.querySelector('#compactSessionBtn'); return { disabled: Boolean(b?.disabled), busy: b?.getAttribute('aria-busy'), label: b?.getAttribute('aria-label'), testo: b?.textContent || '' }; })()`);
+    p.nota(`stato durante la POST trattenuta: ${JSON.stringify(durante)}`);
+    if (!durante.disabled || durante.busy !== 'true') throw new Error(`RED K: Compatta non espone loading/lock durante la richiesta: ${JSON.stringify(durante)}`);
+
+    await p.click('#compactSessionBtn');
+    const dopoDoppioClick = await p.cdp.evaluate('window.__qaCompact.requests');
+    p.nota(`POST dopo secondo click durante loading: ${dopoDoppioClick}`);
+    if (dopoDoppioClick !== 1) throw new Error(`RED K: il doppio click ha avviato ${dopoDoppioClick} POST invece di una`);
+
+    await p.cdp.evaluate('window.__qaCompact.release()');
+    await p.attendi(250);
+    await p.screenshot('compatta-successo', { nota: 'successo completo: controllo riattivato e toast leggibile, senza sovrapposizioni' });
+    const dopoSuccesso = await p.cdp.evaluate(`(() => { const b = document.querySelector('#compactSessionBtn'); return { disabled: Boolean(b?.disabled), busy: b?.getAttribute('aria-busy'), label: b?.getAttribute('aria-label'), toast: document.querySelector('#toastRegion')?.textContent?.trim() || '' }; })()`);
+    p.nota(`stato dopo successo: ${JSON.stringify(dopoSuccesso)}`);
+    if (dopoSuccesso.disabled || dopoSuccesso.busy !== null || !dopoSuccesso.toast.includes('Contesto compattato')) throw new Error(`GREEN K fallito dopo successo: ${JSON.stringify(dopoSuccesso)}`);
+
+    await p.cdp.evaluate(`window.__qaCompact.mode = 'hold-error'; window.__qaCompact.release = null;`);
+    await p.click('#compactSessionBtn');
+    await p.attendi(120);
+    await p.screenshot('compatta-errore-in-corso', { nota: 'percorso contrario: richiesta rifiutata ma loading ancora visibile prima dell\'esito' });
+    const erroreDurante = await p.cdp.evaluate('document.querySelector("#compactSessionBtn")?.disabled === true');
+    if (!erroreDurante) throw new Error('GREEN K fallito: il percorso di errore non entra nello stesso loading');
+    await p.click('#compactSessionBtn');
+    const dopoDoppioClickErrore = await p.cdp.evaluate('window.__qaCompact.requests');
+    if (dopoDoppioClickErrore !== 2) throw new Error(`RED K: doppio click durante errore ha avviato ${dopoDoppioClickErrore - 1} richieste aggiuntive`);
+    await p.cdp.evaluate('window.__qaCompact.release()');
+    await p.attendi(250);
+    await p.screenshot('compatta-errore', { nota: 'errore mostrato senza lock residuo: il controllo deve poter essere ritentato' });
+    const dopoErrore = await p.cdp.evaluate(`(() => { const b = document.querySelector('#compactSessionBtn'); return { disabled: Boolean(b?.disabled), busy: b?.getAttribute('aria-busy'), toast: document.querySelector('#toastRegion')?.textContent?.trim() || '' }; })()`);
+    p.nota(`stato dopo errore: ${JSON.stringify(dopoErrore)}`);
+    if (dopoErrore.disabled || dopoErrore.busy !== null || !dopoErrore.toast.includes('Compattazione non riuscita')) throw new Error(`GREEN K fallito dopo errore: ${JSON.stringify(dopoErrore)}`);
+
+    await p.cdp.evaluate('window.__qaCompact.mode = "success"');
+    await p.click('#compactSessionBtn');
+    await p.attendi(250);
+    const dopoRetry = await p.cdp.evaluate(`(() => { const b = document.querySelector('#compactSessionBtn'); return { requests: window.__qaCompact.requests, disabled: Boolean(b?.disabled), busy: b?.getAttribute('aria-busy'), toast: document.querySelector('#toastRegion')?.textContent?.trim() || '' }; })()`);
+    await p.screenshot('compatta-retry-successo', { nota: 'retry dopo errore: una sola nuova POST e controllo nuovamente attivo' });
+    p.nota(`stato dopo retry: ${JSON.stringify(dopoRetry)}`);
+    if (dopoRetry.requests !== 3 || dopoRetry.disabled || dopoRetry.busy !== null || !dopoRetry.toast.includes('Contesto compattato')) throw new Error(`GREEN K fallito sul retry: ${JSON.stringify(dopoRetry)}`);
+  },
+
+  /**
+   * ⭐ 30/8 — Fase H. Riproduce il follow-up dopo un RunError
+   * `giri-esauriti` su una sessione reale già persistita. Il replay è GET/SSE
+   * soltanto; il POST di resume e il nuovo EventSource sono sostituiti da un
+   * ultimo miglio controllato, così la prova non consuma un giro LLM né muta
+   * il registro. La guardia documenta il difetto UX: il messaggio nuovo viene
+   * accettato senza spiegare che continuerà lo stesso task.
+   */
+  async 'qa-turn-limit-followup'(p) {
+    const sessionId = '514893db-a60f-4368-b548-2868e0678b06';
+    const viewport = new URL(URL_BASE).searchParams.get('qa') === 'laptop'
+      ? { width: 1024, height: 800 }
+      : { width: 1440, height: 900 };
+    await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
+    await p.attendi(1200);
+    const aperta = await p.cdp.evaluate(`(() => {
+      const riga = document.querySelector('[data-real-session-id="${sessionId}"]');
+      if (!riga) return false;
+      riga.click();
+      return true;
+    })()`);
+    if (!aperta) throw new Error(`Sessione reale ${sessionId} non trovata nella sidebar`);
+    await p.attendiCondizione(
+      "document.querySelector('.real-session-status')?.textContent?.includes('giri esauriti')",
+      { timeoutMs: 15000, descrizione: 'RunError giri-esauriti riprodotto dal replay SSE' },
+    );
+    await p.screenshot('giri-esauriti-prima-follow-up', { nota: 'stato completo dopo il limite: il prossimo messaggio deve avere una spiegazione esplicita' });
+    const prima = await p.testo('.real-session-status');
+    p.nota(`stato terminale prima del follow-up: ${JSON.stringify(prima)}`);
+
+    await p.cdp.evaluate(`(() => {
+      const originale = window.fetch.bind(window);
+      const stato = { resume: 0 };
+      window.__qaTurnLimit = stato;
+      window.fetch = (input, init) => {
+        const url = typeof input === 'string' ? input : input?.url || '';
+        if (!url.includes('/api/v1/sessions/${sessionId}/resume')) return originale(input, init);
+        stato.resume += 1;
+        return Promise.resolve(new Response(JSON.stringify({ ok: true, data: {} }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      };
+      class QaEventSource {
+        constructor(url) { this.url = url; this.readyState = 1; }
+        close() { this.readyState = 2; }
+      }
+      window.EventSource = QaEventSource;
+    })()`);
+    await p.digita('#composerInput', 'Qual è il prossimo passo?');
+    await p.submit('#composerForm');
+    await p.attendi(350);
+    await p.screenshot('giri-esauriti-follow-up', { nota: 'stato completo subito dopo l invio: deve spiegare continuità del task o nuova sessione' });
+    const dopo = await p.cdp.evaluate(`(() => ({
+      testo: document.querySelector('.conversation')?.textContent || '',
+      resume: window.__qaTurnLimit?.resume || 0,
+      followUp: [...document.querySelectorAll('.user-message')].some((el) => el.textContent.includes('Qual è il prossimo passo?')),
+    }))()`);
+    p.nota(`stato dopo follow-up controllato: ${JSON.stringify(dopo)}`);
+    const haSpiegazione = /stesso task|stessa sessione|nuova sessione|continuerà|continua/i.test(dopo.testo);
+    if (!haSpiegazione) p.difetto('dopo giri-esauriti il follow-up viene accettato senza spiegare che continua lo stesso task o come iniziarne uno nuovo', { severita: 'nota' });
+    if (dopo.resume !== 1 || !dopo.followUp) throw new Error(`Riproduzione H incompleta: ${JSON.stringify(dopo)}`);
+
+    await p.cdp.evaluate(`(() => {
+      const runtime = window.__talosHarnessUiRuntime;
+      runtime.handleRealEvent({ type: 'RunError', code: 'internal-error', message: 'Errore generico QA', _sequenza: 999999 }, runtime.realSessionState.generation);
+    })()`);
+    await p.screenshot('run-error-generico-inalterato', { nota: 'controprova: un codice diverso da giri-esauriti non deve ricevere la guida di continuità' });
+    const generico = await p.testo('.real-session-status:last-of-type');
+    if (/stesso task|stessa sessione|nuova sessione/i.test(generico ?? '')) throw new Error(`Regressione H: guida giri-esauriti trapelata su RunError generico: ${generico}`);
+  },
+
+  /**
+   * ⭐ 30/8 — Fase J. Audit read-only delle deleghe già persistite: il
+   * modello aveva dichiarato successo senza aver scritto il test richiesto.
+   * La corsa non avvia LLM e non muta né registro né repository figlio:
+   * legge GET /children, mostra l'Albero sessione e confronta il file reale
+   * prima/dopo.
+   */
+  async 'qa-delegation-artifact-integrity'(p) {
+    const sessionId = '82c71bd0-74d6-423f-b600-1dbe3bc5fdf7';
+    const fileTarget = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/serpente-2d/test/gioco.test.mjs';
+    const prima = existsSync(fileTarget) ? readFileSync(fileTarget, 'utf8') : null;
+    const viewport = new URL(URL_BASE).searchParams.get('qa') === 'laptop'
+      ? { width: 1024, height: 800 }
+      : { width: 1440, height: 900 };
+    await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
+    await p.attendi(1200);
+    const aperta = await p.cdp.evaluate(`(() => {
+      const riga = document.querySelector('[data-real-session-id="${sessionId}"]');
+      if (!riga) return false;
+      riga.click();
+      return true;
+    })()`);
+    if (!aperta) throw new Error(`Sessione padre ${sessionId} non trovata nella sidebar`);
+    await p.attendi(500);
+    const audit = await p.cdp.evaluate(`fetch('/api/v1/sessions/${sessionId}/children').then((r) => r.json())`);
+    const figli = audit?.data?.figli ?? audit?.figli ?? [];
+    p.nota(`GET /children dopo il riavvio: ${JSON.stringify(figli.map((f) => ({ sessionId: f.sessionId, esitoDelega: f.esitoDelega, evidenzaDelega: f.evidenzaDelega })))}`);
+    if (figli.length !== 3) throw new Error(`J: attese 3 deleghe persistite, trovate ${figli.length}`);
+    for (const figlio of figli) {
+      const evidenza = figlio.evidenzaDelega;
+      if (figlio.esitoDelega !== 'fallito') {
+        p.difetto(`la delega ${figlio.sessionId} resta "${figlio.esitoDelega}" nonostante la richiesta di modifica senza file/artefatto`, { severita: 'blocco' });
+      }
+      if (!evidenza || evidenza.scritture !== 0 || evidenza.artefatti !== 0) {
+        throw new Error(`J: evidenza inattesa per ${figlio.sessionId}: ${JSON.stringify(evidenza)}`);
+      }
+    }
+    await p.click('#sessionTitleButton');
+    await p.attendiCondizione("!document.querySelector('#subagentTreeMount')?.textContent?.includes('Carico')", { descrizione: 'albero deleghe caricato dal registro ripristinato' });
+    await p.screenshot('albero-deleghe-integrita-artifact', { nota: 'ogni figlia deve mostrare Delega · fallito; nessun successo dichiarato senza prova' });
+    const testoAlbero = await p.testo('#subagentTreeMount');
+    if (!testoAlbero || (testoAlbero.match(/Delega · fallito/g) ?? []).length !== figli.length) {
+      throw new Error(`J: l'Albero sessione non mostra tre esiti falliti: ${JSON.stringify(testoAlbero)}`);
+    }
+    const badgeFalliti = await p.cdp.evaluate("[...document.querySelectorAll('#subagentTreeMount .status-chip')].map((el) => ({ className: el.className, text: el.textContent?.trim() }))");
+    p.nota(`badge Albero sessione: ${JSON.stringify(badgeFalliti)}`);
+    if (badgeFalliti.length !== figli.length || badgeFalliti.some((badge) => !badge.className.includes('status-chip error') || badge.text !== '!')) {
+      throw new Error(`J: una delega fallita è ancora rappresentata come successo: ${JSON.stringify(badgeFalliti)}`);
+    }
+    await p.click('#closeSheet');
+    const dopo = existsSync(fileTarget) ? readFileSync(fileTarget, 'utf8') : null;
+    if (prima !== dopo) throw new Error(`J: il QA read-only ha alterato il file target ${fileTarget}`);
+    p.nota(`CONFERMATO: file target invariato (${fileTarget}); nessuna scrittura prodotta dalla verifica.`);
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
   /*
    * ⭐⭐⭐ 28/8 — FASE B (permessi per-attrezzo, LEDGER-FASE-B-PERMESSI.md).
    *
