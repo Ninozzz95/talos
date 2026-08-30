@@ -176,7 +176,7 @@ describe('Harness UI static asset contract', () => {
             '.harness-dialog-backdrop.motion-enter',
             '.message.motion-enter', '.tool-inline-detail', '.queued-message',
             '.approval-card.motion-exit', '.composer', '.mobile-nav',
-            '.campaign-run-detail', '.inspector-section.motion-enter',
+            '.inspector-section.motion-enter',
         ]) expect(css).toContain(selector)
     })
 

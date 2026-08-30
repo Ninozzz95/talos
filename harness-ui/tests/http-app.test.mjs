@@ -5,33 +5,17 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-import { readCampaignCosts } from '../src/cost-reader.mjs';
-import { createCampaignService } from '../src/campaign-service.mjs';
 import { API_SCHEMA, createHttpApp } from '../src/http-app.mjs';
-import { createPathPolicy } from '../src/path-policy.mjs';
-import { createReportSource } from '../src/report-source.mjs';
 import { createStaticHandler } from '../src/static-files.mjs';
 
 const testDir = dirname(fileURLToPath(import.meta.url));
-const fixtureBanco = join(testDir, 'fixtures', 'banco');
 // ⭐ 26/8, DEC-053 — il bundle canonico è mobile/public/harness-ui/, non più
 // harness-ui/public/ (mai riconciliata con l'integrazione mobile, non
 // portata in questo worktree). Stessa relazione che config.mjs calcola.
 const publicDir = join(testDir, '..', '..', 'mobile', 'public', 'harness-ui');
-const projects = 'esiti-22ago-progetti';
 
 function realApp() {
-  const pathPolicy = createPathPolicy({
-    bancoDir: fixtureBanco,
-    campaigns: [projects, 'esiti-22ago-storia'],
-  });
-  pathPolicy.initialize();
-  const campaignService = createCampaignService({
-    pathPolicy,
-    costReader: readCampaignCosts,
-    reportSource: createReportSource(pathPolicy),
-  });
-  return createHttpApp({ campaignService, staticHandler: createStaticHandler(publicDir) });
+  return createHttpApp({ staticHandler: createStaticHandler(publicDir) });
 }
 
 async function listen(t, app = realApp()) {
@@ -51,25 +35,16 @@ test('server binds to configured loopback only', () => {
   assert.doesNotMatch(source, /listen\([^\n]*0\.0\.0\.0/);
 });
 
-test('api serves the exact five GET resources and HEAD', async (t) => {
+test('GET /api/v1/health torna la busta standard, HEAD combacia, una rotta ignota è 404', async (t) => {
   const { base } = await listen(t);
-  const routes = [
-    '/api/v1/health',
-    '/api/v1/campaigns',
-    `/api/v1/campaigns/${projects}/snapshot`,
-    `/api/v1/campaigns/${projects}/runs?limit=1`,
-    `/api/v1/campaigns/${projects}/report`,
-  ];
-  for (const route of routes) {
-    const response = await fetch(base + route);
-    assert.equal(response.status, 200, route);
-    const body = await response.json();
-    assert.equal(body.ok, true);
-    assert.equal(body.meta.schema, API_SCHEMA);
-    const head = await fetch(base + route, { method: 'HEAD' });
-    assert.equal(head.status, 200, `HEAD ${route}`);
-    assert.equal(await head.text(), '');
-  }
+  const response = await fetch(`${base}/api/v1/health`);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.ok, true);
+  assert.equal(body.meta.schema, API_SCHEMA);
+  const head = await fetch(`${base}/api/v1/health`, { method: 'HEAD' });
+  assert.equal(head.status, 200);
+  assert.equal(await head.text(), '');
   assert.equal((await fetch(`${base}/api/v1/nope`)).status, 404);
 });
 
@@ -92,14 +67,7 @@ test('api rejects POST PUT PATCH DELETE with 405 and no CORS when Origin is abse
  * intestazione CORS compare, stesso comportamento di sempre.
  */
 test('OPTIONS answers a CORS preflight, and Access-Control-Allow-Origin reflects Origin only when present', async (t) => {
-  // Nessuna chiamata a campaignService in questo test (health + un preflight
-  // che non raggiunge mai il routing) — uno stub basta, evita la dipendenza
-  // da tests/fixtures/banco/ (assente in questo ambiente, nota già in
-  // "errors never expose absolute paths" qui sopra, stesso schema riusato).
-  const { base } = await listen(t, createHttpApp({
-    campaignService: {},
-    staticHandler: createStaticHandler(publicDir),
-  }));
+  const { base } = await listen(t);
 
   const preflight = await fetch(`${base}/api/v1/sessions`, {
     method: 'OPTIONS',
@@ -135,7 +103,6 @@ test('OPTIONS answers a CORS preflight, and Access-Control-Allow-Origin reflects
  */
 test('GET /api/v1/frequent-dirs torna gli item di cartelleFrequentiFn, avvolti nella busta standard', async (t) => {
   const { base } = await listen(t, createHttpApp({
-    campaignService: {},
     staticHandler: createStaticHandler(publicDir),
     cartelleFrequentiFn: () => [{ etichetta: 'Desktop', percorso: 'C:/Users/prova/Desktop' }],
   }));
@@ -148,7 +115,7 @@ test('GET /api/v1/frequent-dirs torna gli item di cartelleFrequentiFn, avvolti n
 });
 
 test('⛔ AL CONTRARIO — senza cartelleFrequentiFn iniettata, la rotta usa il default REALE (os.homedir()) e torna comunque 200, mai un crash', async (t) => {
-  const { base } = await listen(t, createHttpApp({ campaignService: {}, staticHandler: createStaticHandler(publicDir) }));
+  const { base } = await listen(t);
   const risposta = await fetch(`${base}/api/v1/frequent-dirs`);
   assert.equal(risposta.status, 200);
   assert.equal((await risposta.json()).ok, true);
@@ -200,53 +167,63 @@ test('response headers apply CSP, nosniff, frame denial and no-store to data', a
   assert.equal(response.headers.get('cache-control'), 'no-store');
 });
 
+/*
+ * ⛔ 30/8 — riscritta dopo la rimozione delle rotte campagne (piano
+ * "Board — da campagne TALOS-BANCO a cruscotto sessioni"): la proprietà
+ * VERA da provare (un errore lanciato da una dipendenza iniettata non
+ * espone mai percorsi/stack al client) non era mai stata specifica alle
+ * campagne — usava solo `campaignService` come veicolo comodo. Stesso
+ * principio, `catalogoModelliFn` come nuovo veicolo (iniettabile, su
+ * `/api/v1/models`).
+ */
 test('errors never expose absolute paths, stack or row evidence', async (t) => {
-  const campaignService = {
-    async listCampaigns() {
-      throw new Error('C:\\secret\\banco\\alpha.jsonl detto-segreto\n    at private-stack');
-    },
+  const catalogoModelliFn = async () => {
+    throw new Error('C:\\secret\\banco\\alpha.jsonl detto-segreto\n    at private-stack');
   };
   const { base } = await listen(t, createHttpApp({
-    campaignService,
     staticHandler: createStaticHandler(publicDir),
+    catalogoModelliFn,
   }));
-  const response = await fetch(`${base}/api/v1/campaigns`);
+  const response = await fetch(`${base}/api/v1/models`);
   const text = await response.text();
   assert.equal(response.status, 500);
   assert.doesNotMatch(text, /secret|banco|alpha\.jsonl|private-stack|detto/i);
   assert.equal(JSON.parse(text).error.code, 'INTERNAL_ERROR');
 });
 
-test('oversized query, cursor, JSONL or report returns a bounded error', async (t) => {
-  const { base } = await listen(t);
-  const oversized = await fetch(`${base}/api/v1/campaigns/${projects}/runs?harness=${'x'.repeat(5000)}`);
-  assert.equal(oversized.status, 413);
-  assert.equal((await oversized.json()).error.code, 'PAYLOAD_LIMIT');
-
-  const campaignService = {
-    async getSnapshot() { throw Object.assign(new Error('private'), { code: 'PAYLOAD_LIMIT' }); },
-  };
-  const bounded = await listen(t, createHttpApp({ campaignService, staticHandler: createStaticHandler(publicDir) }));
-  const response = await fetch(`${bounded.base}/api/v1/campaigns/${projects}/snapshot`);
+/*
+ * ⛔ 30/8 — stessa riscrittura di sopra: la proprietà provata (un errore
+ * con `code: 'PAYLOAD_LIMIT'` da una dipendenza iniettata torna 413, non
+ * un 500 generico) non era specifica alle campagne — `catalogoModelliFn`
+ * come veicolo, stesso principio.
+ */
+test('a dependency throwing PAYLOAD_LIMIT returns a bounded 413, not a generic 500', async (t) => {
+  const catalogoModelliFn = async () => { throw Object.assign(new Error('private'), { code: 'PAYLOAD_LIMIT' }); };
+  const { base } = await listen(t, createHttpApp({ staticHandler: createStaticHandler(publicDir), catalogoModelliFn }));
+  const response = await fetch(`${base}/api/v1/models`);
   assert.equal(response.status, 413);
   assert.equal((await response.json()).error.code, 'PAYLOAD_LIMIT');
 });
 
+/*
+ * ⛔ 30/8 — stessa riscrittura: `catalogoModelliFn` lento/abortibile al
+ * posto di `campaignService.listCampaigns`, stessa proprietà provata
+ * (un client che abortisce non impedisce al lavoro server-side in corso
+ * di concludersi in modo pulito).
+ */
 test('client abort closes work cleanly', async (t) => {
   let resolved = false;
   let markStarted;
   const started = new Promise((resolve) => { markStarted = resolve; });
-  const campaignService = {
-    async listCampaigns() {
-      markStarted();
-      await new Promise((resolve) => setTimeout(resolve, 25));
-      resolved = true;
-      return [];
-    },
+  const catalogoModelliFn = async () => {
+    markStarted();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    resolved = true;
+    return { items: [] };
   };
-  const { base } = await listen(t, createHttpApp({ campaignService, staticHandler: createStaticHandler(publicDir) }));
+  const { base } = await listen(t, createHttpApp({ staticHandler: createStaticHandler(publicDir), catalogoModelliFn }));
   const controller = new AbortController();
-  const request = fetch(`${base}/api/v1/campaigns`, { signal: controller.signal });
+  const request = fetch(`${base}/api/v1/models`, { signal: controller.signal });
   await started;
   controller.abort();
   await assert.rejects(request, /abort/i);
@@ -262,7 +239,6 @@ test('client abort closes work cleanly', async (t) => {
  */
 test('⭐⭐⭐ GET /api/v1/artifacts/:id: HTML intero, CON la sua CSP permissiva — MAI quella globale script-src \'self\'', async (t) => {
   const { base } = await listen(t, createHttpApp({
-    campaignService: { async listCampaigns() { return [] } },
     staticHandler: createStaticHandler(publicDir),
     leggiArtefattoFn: (id) => (id === 'a1' ? '<!doctype html><html><body>ciao</body></html>' : null),
   }));
@@ -278,7 +254,6 @@ test('⭐⭐⭐ GET /api/v1/artifacts/:id: HTML intero, CON la sua CSP permissiv
 
 test('⛔ GET /api/v1/artifacts/:id con un id ignoto: 404 onesto, non un 200 vuoto', async (t) => {
   const { base } = await listen(t, createHttpApp({
-    campaignService: { async listCampaigns() { return [] } },
     staticHandler: createStaticHandler(publicDir),
     leggiArtefattoFn: () => null,
   }));

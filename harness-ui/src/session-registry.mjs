@@ -372,6 +372,34 @@ export function createSessionRegistry({
    * (handleRealEvent) lo usa per scartare un evento già visto, invece di
    * provare a rendere idempotente ogni singolo handler separatamente.
    */
+  /**
+   * ⭐⭐⭐ 30/8 — piano "Board — da campagne TALOS-BANCO a cruscotto
+   * sessioni": il costo/consumo per una sessione, per la Board ridisegnata.
+   * ⛔ Deliberatamente NESSUNA scrittura nuova sul disco: `evento.totali`
+   * (talosHarness.mjs, `conto` — `{prompt_tokens, completion_tokens,
+   * cached_tokens, giri}`) arriva già dentro un evento `StateDelta` reale
+   * su `path:'/usage'` (agui-events.mjs, `eventoPerUsage`), REPLACE sempre
+   * perché è già una somma cumulativa — l'ULTIMO che compare nella storia
+   * di una sessione è il totale finale. Quella storia è GIÀ persistita per
+   * intero (ogni evento passa da `broadcast`, che scrive su
+   * `.sessions-store/`) — un secondo campo mutabile scritto a parte
+   * duplicherebbe una fonte di verità già esistente, stessa disciplina di
+   * `conclusa`/`messaggiFinali` derivati da `ripristina()` sopra, non
+   * salvati come flag a sé. Funziona identica per una sessione VIVA
+   * (`voce.eventi` popolato da `broadcast`) e una RIPRISTINATA
+   * (`voce.eventi` popolato da `ripristina()` dallo stesso JSONL).
+   * @returns {{prompt_tokens:number,completion_tokens:number,cached_tokens:number,giri:number}|null}
+   */
+  function usageDaEventi(eventi) {
+    for (let indice = eventi.length - 1; indice >= 0; indice -= 1) {
+      const evento = eventi[indice];
+      if (evento?.type !== 'StateDelta') continue;
+      const voceUsage = evento.delta?.find((d) => d.path === '/usage');
+      if (voceUsage) return voceUsage.value;
+    }
+    return null;
+  }
+
   function broadcast(voce, evento) {
     evento._sequenza = (voce.prossimaSequenza = (voce.prossimaSequenza ?? 0) + 1);
     voce.eventi.push(evento);
@@ -1830,6 +1858,13 @@ export function createSessionRegistry({
           modello: voce.modello ?? null,
           // ⭐⭐⭐ FASE L (30/8) — true SOLO per una voce ricostruita dopo un riavvio il cui ultimo evento non era RunFinished/RunError: il processo che la eseguiva è sparito, mai un turno "ancora in corso" travestito da tale.
           interrotta: voce.interrotta ?? false,
+          // ⭐⭐⭐ 30/8 — piano "Board — da campagne TALOS-BANCO a cruscotto
+          // sessioni": il costo/consumo per la nuova Board, MAI un numero
+          // inventato. Nessuna scrittura nuova sul disco (vedi usageDaEventi
+          // sotto sul perché) — una sessione registrata PRIMA di questo
+          // cambiamento (o senza mai un giro con `usage`, es. un errore
+          // immediato) torna onestamente `null`, mai uno zero fabbricato.
+          usage: usageDaEventi(voce.eventi),
         }))
         .sort((a, b) => b.avviataAlle.localeCompare(a.avviataAlle));
     },

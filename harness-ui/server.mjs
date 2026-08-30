@@ -3,12 +3,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { createAutomationScheduler } from './src/automation-scheduler.mjs';
 import { createAutomationStore } from './src/automation-store.mjs';
-import { createCampaignService } from './src/campaign-service.mjs';
 import { loadConfig } from './src/config.mjs';
-import { readCampaignCosts } from './src/cost-reader.mjs';
 import { createHttpApp } from './src/http-app.mjs';
-import { createPathPolicy } from './src/path-policy.mjs';
-import { createReportSource } from './src/report-source.mjs';
 import { createSessionRegistry } from './src/session-registry.mjs';
 import { createStaticHandler } from './src/static-files.mjs';
 import { listaTaskDisponibili } from './src/task-catalog.mjs';
@@ -23,18 +19,10 @@ const ALIAS_LOOPBACK = ['127.0.0.1', '::1', 'localhost'];
 
 async function startServer() {
   const config = loadConfig(process.env, import.meta.url);
-  const pathPolicy = createPathPolicy(config);
-  pathPolicy.initialize();
-  const campaignService = createCampaignService({
-    pathPolicy,
-    costReader: readCampaignCosts,
-    reportSource: createReportSource(pathPolicy),
-  });
   /*
    * ⛔ Nessun fail() se config.chiaveApi manca (vedi config.mjs): il server
-   * parte comunque, in sola lettura per le sessioni — avviarne una fallisce
-   * per-richiesta con CONFIG_INVALID, dichiarato al chiamante, non un
-   * server che non parte per chi vuole solo guardare le campagne.
+   * parte comunque — avviare una sessione fallisce per-richiesta con
+   * CONFIG_INVALID, dichiarato al chiamante, non un rifiuto all'avvio.
    */
   const sessionRegistry = createSessionRegistry({
     modello: config.modello,
@@ -93,7 +81,6 @@ async function startServer() {
    */
   const modelCatalog = createModelCatalog();
   const app = createHttpApp({
-    campaignService,
     staticHandler: createStaticHandler(config.publicDir),
     sessionRegistry,
     listaTaskDisponibili,

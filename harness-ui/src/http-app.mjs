@@ -19,9 +19,6 @@ const QA_STATES = new Set([
 ]);
 const API_ERROR_CODES = new Set([
   'CONFIG_INVALID',
-  'CAMPAIGN_NOT_ALLOWED',
-  'CAMPAIGN_UNREADABLE',
-  'ROW_INVALID',
   'QUERY_INVALID',
   'REPORT_UNAVAILABLE',
   'PAYLOAD_LIMIT',
@@ -48,9 +45,6 @@ const API_ERROR_CODES = new Set([
 
 const STATUS_BY_CODE = Object.freeze({
   CONFIG_INVALID: 500,
-  CAMPAIGN_NOT_ALLOWED: 404,
-  CAMPAIGN_UNREADABLE: 503,
-  ROW_INVALID: 422,
   QUERY_INVALID: 400,
   REPORT_UNAVAILABLE: 404,
   PAYLOAD_LIMIT: 413,
@@ -61,7 +55,7 @@ const STATUS_BY_CODE = Object.freeze({
   SESSION_NOT_READY: 409,
   /** ⭐ 27/8 — un tetto duro dell'automazione violato (intervallo/limite fuori range) è un errore di CONTENUTO, non di forma: stesso status di ROW_INVALID. */
   AUTOMATION_INVALID: 422,
-  /** ⭐ 27/8 — il catalogo modelli dipende da OpenRouter: quando è irraggiungibile o risponde male non è colpa del client, stesso trattamento di CAMPAIGN_UNREADABLE. */
+  /** ⭐ 27/8 — il catalogo modelli dipende da OpenRouter: quando è irraggiungibile o risponde male non è colpa del client. */
   CATALOG_UNREACHABLE: 503,
   CATALOG_UPSTREAM_ERROR: 503,
   INTERNAL_ERROR: 500,
@@ -81,9 +75,6 @@ const STATUS_BY_CODE = Object.freeze({
 
 const MESSAGE_BY_CODE = Object.freeze({
   CONFIG_INVALID: 'Configurazione non valida',
-  CAMPAIGN_NOT_ALLOWED: 'Campagna non disponibile',
-  CAMPAIGN_UNREADABLE: 'Campagna non leggibile',
-  ROW_INVALID: 'Dati campagna non validi',
   QUERY_INVALID: 'Query non valida',
   REPORT_UNAVAILABLE: 'Rapporto non ancora prodotto',
   PAYLOAD_LIMIT: 'Contenuto oltre il limite consentito',
@@ -167,20 +158,6 @@ function requireValidStaticQuery(url) {
     error.code = 'QUERY_INVALID';
     throw error;
   }
-}
-
-function parseRunsQuery(url) {
-  const allowed = new Set(['harness', 'esito', 'cursor', 'limit']);
-  const query = {};
-  for (const [key, value] of url.searchParams) {
-    if (!allowed.has(key) || Object.hasOwn(query, key) || value.length > 1024) {
-      const error = new Error('Query non valida');
-      error.code = value.length > 1024 ? 'PAYLOAD_LIMIT' : 'QUERY_INVALID';
-      throw error;
-    }
-    if (value !== '') query[key] = value;
-  }
-  return query;
 }
 
 /** ⛔ Allowlist di UNA chiave — "forza" rifà davvero la fetch a OpenRouter (il pulsante Refresh del picker), ignorando la cache dentro il TTL. */
@@ -575,17 +552,15 @@ function scriviEventoSse(res, evento) {
 
 /**
  * @param {object} deps
- * @param {object} deps.campaignService
  * @param {(pathname:string)=>Promise<object|null>} deps.staticHandler
  * @param {object} deps.sessionRegistry — vedi session-registry.mjs. Se
  *   assente, le rotte POST/sessioni tornano NOT_FOUND invece di lanciare:
- *   Harness UI resta utilizzabile in sola lettura (campagne) anche senza
- *   configurare l'esecuzione — stesso principio del `chiaveApi` opzionale
- *   in config.mjs.
+ *   Harness UI resta utilizzabile in sola lettura anche senza configurare
+ *   l'esecuzione — stesso principio del `chiaveApi` opzionale in config.mjs.
  * @param {()=>Array<object>} [deps.listaTaskDisponibili]
  */
 export function createHttpApp({
-  campaignService, staticHandler, sessionRegistry = null, listaTaskDisponibili = () => [],
+  staticHandler, sessionRegistry = null, listaTaskDisponibili = () => [],
   elencaCartelleProgetto = () => [], automationStore = null, diagnosiFn = null,
   // ⭐⭐⭐ 28/8 — owner, coda: "directory più usate (tipo desktop downloads)". Zero config esterna (solo os.homedir()) — il default reale basta, nessun cablaggio in server.mjs come serve invece per elencaCartelleProgetto (quella dipende da TALOS_HARNESS_UI_PROJECT_DIRS).
   cartelleFrequentiFn = cartelleFrequentiReale,
@@ -1396,9 +1371,6 @@ export function createHttpApp({
       if (url.pathname === '/api/v1/health') {
         requireNoQuery(url);
         data = { status: 'ok' };
-      } else if (url.pathname === '/api/v1/campaigns') {
-        requireNoQuery(url);
-        data = await campaignService.listCampaigns();
       } else if (url.pathname === '/api/v1/tasks') {
         requireNoQuery(url);
         data = { items: listaTaskDisponibili() };
@@ -1436,7 +1408,6 @@ export function createHttpApp({
         /* ⛔ Elenco vuoto, non un errore, se sessionRegistry non è configurato — stesso principio già seguito per le altre rotte di sessione. */
         data = { items: sessionRegistry ? sessionRegistry.elenca() : [] };
       } else {
-        const campaignMatch = /^\/api\/v1\/campaigns\/([^/]+)\/(snapshot|runs|report)$/.exec(url.pathname);
         const eventsMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/events$/.exec(url.pathname);
         const exportMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/export$/.exec(url.pathname);
         const treeMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/tree$/.exec(url.pathname);
@@ -1690,24 +1661,6 @@ export function createHttpApp({
             throw errore;
           }
           data = { figli: esito.figli };
-        } else if (campaignMatch) {
-          let campaign;
-          try {
-            campaign = decodeURIComponent(campaignMatch[1]);
-          } catch {
-            const error = new Error('Campagna non valida');
-            error.code = 'CAMPAIGN_NOT_ALLOWED';
-            throw error;
-          }
-          if (campaignMatch[2] === 'snapshot') {
-            requireNoQuery(url);
-            data = await campaignService.getSnapshot(campaign);
-          } else if (campaignMatch[2] === 'runs') {
-            data = await campaignService.listRuns(campaign, parseRunsQuery(url));
-          } else {
-            requireNoQuery(url);
-            data = await campaignService.getReport(campaign);
-          }
         } else if (eventsMatch) {
           requireNoQuery(url);
           let sessionId;

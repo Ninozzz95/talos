@@ -488,9 +488,15 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         document.querySelector<HTMLElement>('[data-mode="dashboard"]')?.click()
         await Promise.resolve()
 
+        // ⛔ 30/8 — riscritta dopo la rimozione della vista campagne TALOS-BANCO
+        // (piano "Board — da campagne TALOS-BANCO a cruscotto sessioni"): il
+        // widget dedicato [data-connection-state]/#campaignReadMeta è sparito
+        // insieme al resto della UI campagne — l'onestà "demo, non collegato"
+        // ora vive in #boardEyebrow/#boardDescription e nella lista stessa.
         expect(fetchMock).not.toHaveBeenCalled()
-        expect(document.querySelector('[data-connection-state]')?.textContent).toBe('Demo UI · non collegato')
-        expect(document.querySelector('#campaignReadMeta')?.textContent).toContain('backend mobile')
+        expect(document.querySelector('#boardEyebrow')?.textContent).toContain('Demo UI')
+        expect(document.querySelector('#boardDescription')?.textContent).toContain('non ha un backend')
+        expect(document.querySelector('#sessionsBoardList')?.textContent).toContain('Nessun dato mobile collegato')
     })
 
     /**
@@ -511,7 +517,9 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         await Promise.resolve()
         await Promise.resolve()
 
-        expect(fetchMock).toHaveBeenCalledWith('http://localhost:4174/api/v1/campaigns', expect.anything())
+        // ⛔ 30/8 — /api/v1/campaigns rimossa insieme a TALOS-BANCO; la Board
+        // ora legge le sessioni reali di Harness Desktop stesso.
+        expect(fetchMock).toHaveBeenCalledWith('http://localhost:4174/api/v1/sessions', expect.anything())
     })
 
     it('HARNESS-ALL-CONTROLS-01 leaves no decorative or inert element exposed as an enabled button', () => {

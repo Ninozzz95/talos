@@ -1,98 +1,52 @@
 import assert from 'node:assert/strict';
-import {
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 
-import {
-  PathPolicyError,
-  createPathPolicy,
-  isPathInside,
-} from '../src/path-policy.mjs';
+import { PathPolicyError, isPathInside } from '../src/path-policy.mjs';
 
-const CAMPAIGNS = ['esiti-22ago-progetti', 'esiti-22ago-storia'];
+/*
+ * ⛔⛔⛔ 30/8 — questo file testava `createPathPolicy()` (5 test, tutti su
+ * campagne TALOS-BANCO) — rimossa insieme al resto della lettura delle
+ * campagne (piano "Board — da campagne TALOS-BANCO a cruscotto sessioni").
+ * `isPathInside`/`PathPolicyError` restano vive (usate da
+ * workspace-files.mjs/workspace-tree.mjs per il containment del
+ * workspace) ma non avevano MAI un test proprio, solo indiretto via
+ * createPathPolicy — questi test lo colmano, non solo lo spostano.
+ */
 
-function makeBanco(t) {
-  const root = mkdtempSync(join(tmpdir(), 'talos-harness-path-'));
-  for (const campaign of CAMPAIGNS) {
-    mkdirSync(join(root, campaign));
-  }
-  writeFileSync(join(root, CAMPAIGNS[0], 'beta.jsonl'), '{}\n');
-  writeFileSync(join(root, CAMPAIGNS[0], 'alpha.jsonl'), '{}\n');
-  writeFileSync(join(root, CAMPAIGNS[0], 'ignore.txt'), 'ignored');
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  return root;
-}
-
-test('path policy rejects unknown campaign', (t) => {
-  const bancoDir = makeBanco(t);
-  const policy = createPathPolicy({ bancoDir, campaigns: CAMPAIGNS });
-  policy.initialize();
-  assert.throws(() => policy.resolveCampaignDir('esiti-non-ammessi'), PathPolicyError);
+test('isPathInside: un discendente reale è dentro la radice', () => {
+  const root = resolve('/tmp/talos-radice');
+  assert.equal(isPathInside(root, join(root, 'sotto', 'file.txt')), true);
 });
 
-test('path policy rejects dot-dot, encoded dot-dot and Windows separator traversal', (t) => {
-  const bancoDir = makeBanco(t);
-  const policy = createPathPolicy({ bancoDir, campaigns: CAMPAIGNS });
-  policy.initialize();
-  for (const input of ['..', '../esiti-22ago-progetti', '%2e%2e', '%252e%252e', '..\\esiti-22ago-progetti']) {
-    assert.throws(() => policy.resolveCampaignDir(input), PathPolicyError, input);
-  }
+test('isPathInside: la radice stessa è dentro se stessa', () => {
+  const root = resolve('/tmp/talos-radice');
+  assert.equal(isPathInside(root, root), true);
 });
 
-test('path policy rejects absolute and UNC input', (t) => {
-  const bancoDir = makeBanco(t);
-  const policy = createPathPolicy({ bancoDir, campaigns: CAMPAIGNS });
-  policy.initialize();
-  for (const input of ['C:\\Windows', '\\\\server\\share', '/etc/passwd']) {
-    assert.throws(() => policy.resolveCampaignDir(input), PathPolicyError, input);
-  }
+test('isPathInside AL CONTRARIO: ".." fuori dalla radice è rifiutato', () => {
+  const root = resolve('/tmp/talos-radice');
+  assert.equal(isPathInside(root, resolve(root, '..', 'fuori.txt')), false);
 });
 
-test('path policy rejects a symlink or junction escaping bancoDir', (t) => {
-  const bancoDir = mkdtempSync(join(tmpdir(), 'talos-harness-link-root-'));
-  const outside = mkdtempSync(join(tmpdir(), 'talos-harness-link-outside-'));
-  mkdirSync(join(bancoDir, CAMPAIGNS[1]));
-  t.after(() => {
-    rmSync(bancoDir, { recursive: true, force: true });
-    rmSync(outside, { recursive: true, force: true });
-  });
-
-  let policy;
-  try {
-    symlinkSync(outside, join(bancoDir, CAMPAIGNS[0]), 'junction');
-    policy = createPathPolicy({ bancoDir, campaigns: CAMPAIGNS });
-  } catch (error) {
-    if (!['EPERM', 'EACCES'].includes(error.code)) throw error;
-    const bancoReal = resolve(bancoDir);
-    const outsideReal = resolve(outside);
-    const fsAdapter = {
-      accessSync() {},
-      realpathSync(candidate) {
-        return candidate === join(bancoDir, CAMPAIGNS[0]) ? outsideReal : bancoReal;
-      },
-      statSync() { return { isDirectory: () => true }; },
-    };
-    policy = createPathPolicy({ bancoDir, campaigns: [CAMPAIGNS[0]], fsAdapter });
-  }
-
-  assert.throws(() => policy.initialize(), PathPolicyError);
+test('isPathInside AL CONTRARIO: un fratello con lo stesso prefisso testuale non è "dentro"', () => {
+  // ⛔ il bug classico del containment ingenuo: confrontare le stringhe
+  // farebbe passare "/tmp/talos-radice-evil" come "dentro"
+  // "/tmp/talos-radice" perché il prefisso combacia — isPathInside usa
+  // `relative()`, non un prefisso di stringa, e deve rifiutarlo.
+  const root = resolve('/tmp/talos-radice');
+  const sibling = resolve('/tmp/talos-radice-evil/file.txt');
+  assert.equal(isPathInside(root, sibling), false);
 });
 
-test('path policy lists only contained JSONL files in deterministic order', (t) => {
-  const bancoDir = makeBanco(t);
-  const policy = createPathPolicy({ bancoDir, campaigns: CAMPAIGNS });
-  policy.initialize();
-  const files = policy.listJsonlFiles(CAMPAIGNS[0]);
-  assert.deepEqual(files.map((file) => file.split(/[\\/]/).at(-1)), ['alpha.jsonl', 'beta.jsonl']);
-  assert.equal(isPathInside(bancoDir, files[0]), true);
-  assert.equal(policy.resolveHarnessCostFile(CAMPAIGNS[0], 'alpha'), join(bancoDir, CAMPAIGNS[0], 'alpha.costo.json'));
-  assert.equal(policy.resolveReportFile(CAMPAIGNS[0]), join(bancoDir, CAMPAIGNS[0], 'rapporto.txt'));
-  assert.throws(() => policy.resolveHarnessCostFile(CAMPAIGNS[0], '../alpha'), PathPolicyError);
+test('PathPolicyError: nome e codice di default corretti', () => {
+  const errore = new PathPolicyError('percorso non ammesso');
+  assert.equal(errore.name, 'PathPolicyError');
+  assert.equal(errore.code, 'PATH_NOT_ALLOWED');
+  assert.ok(errore instanceof Error);
+});
+
+test('PathPolicyError: un codice esplicito sovrascrive il default', () => {
+  const errore = new PathPolicyError('non inizializzata', 'CONFIG_INVALID');
+  assert.equal(errore.code, 'CONFIG_INVALID');
 });

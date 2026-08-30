@@ -39,7 +39,6 @@ function automationStoreFinto() {
 
 async function listen(t, { automationStore = automationStoreFinto() } = {}) {
   const app = createHttpApp({
-    campaignService: { listCampaigns: async () => [] },
     staticHandler: async () => null,
     automationStore,
   });
