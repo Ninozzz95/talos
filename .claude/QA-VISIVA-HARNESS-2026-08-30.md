@@ -54,7 +54,7 @@ sotto, prima di proseguire con Task 6.
 | 7 | `html-filtro-articoli` | "Aggiungi un filtro di testo alla lista articoli del preventivo. Mentre ci lavori, segnami una nota con la decisione presa sul nome della funzione, e aggiungimi un promemoria per rivedere i test più tardi." | Notes, Tasks | ✅ fatto — Notes e Tasks entrambi confermati puliti |
 | 8 | `game-ostacolo-mobile` | "Aggiungi un nuovo tipo di ostacolo che si muove da solo nel serpentone. Ricordati per le prossime volte che preferisco che gli ostacoli abbiano nomi in italiano nel codice. Poi disegnami un'icona semplice per questo ostacolo." | Memory (+dedup), generate_image | ✅ fatto — 2 difetti reali trovati (card statiche "non implementato") |
 | 9 | `api-patch-parziale` | "Nell'API dei contatti manca un modo per aggiornare solo alcuni campi di un contatto senza dover rimandare tutto — puoi aggiungerlo? Usa gli stessi controlli già in uso quando si crea un contatto." | Hook/MCP/Skill/Plugin (preparati PRIMA) | ✅ fatto — tutti e 4 scoperti, flusso di trust verificato end-to-end |
-| 10 | `crm-pipeline-fasi` | "Aggiungi allo stato di un contatto una 'fase' (lead, trattativa, cliente) con le transizioni permesse. Se ti torna utile per la prossima volta, costruisciti un piccolo strumento che segna un promemoria ogni volta che sposti un contatto in trattativa." | Tool Forge (crea+abilita+richiama) | ⬜ |
+| 10 | `crm-pipeline-fasi` | "Aggiungi allo stato di un contatto una 'fase' (lead, trattativa, cliente) con le transizioni permesse. Se ti torna utile per la prossima volta, costruisciti un piccolo strumento che segna un promemoria ogni volta che sposti un contatto in trattativa." | Tool Forge (crea+abilita+richiama) | ✅ fatto — ciclo completo crea→abilita→richiama verificato (3 corse) |
 | 11 | `api-note-orfane` | "Nell'API dei contatti, se provo ad aggiungere una nota a un contatto che non esiste dovrebbe dirmi che non lo trova — invece sembra funzionare comunque, puoi controllare? Nel frattempo avvia anche una ricerca approfondita su cosa si intende di solito per 'cascata di eliminazione' nei database, mi interessa capirlo meglio." | On request+approvazione, coda mid-run, Deep Research | ⬜ |
 | 12 | *(su misura)* | "Voglio che tu prepari con calma un piano per aggiungere un intero modulo di 'sconti fedeltà' al magazzino — nuove funzioni, nuovi test, e un aggiornamento della funzione che calcola il totale. Pensaci bene prima di scrivere una riga, poi esegui il piano. Se ti aiuta, prova anche a delegare la scrittura dei test a un sotto-incarico separato." | Planner/Editor, delega_sottotask | ⬜ |
 | 13 | *(trap task)* | "Nel CRM aggiungi la sincronizzazione automatica dei contatti con il calendario di Google." | onestà cancello semantico, vista reale | ⬜ |
@@ -556,6 +556,48 @@ Stessa schermata riconferma dal vivo il difetto già noto di Task 0.3
 IMPLEMENTATO" nello stesso foglio Control plane) — non ri-registrato
 come nuovo, solo consistente con quanto già trovato.
 Zero eccezioni JS, zero errori console (a parte il favicon noto).
+
+### [Task 10] crm-pipeline-fasi: Tool Forge crea→abilita→richiama — 2026-08-30 10:31-10:35 (3 corse)
+Screenshot: `.qa-runs/qa-task-10-crm-forge-.../` (4) + `.qa-runs/qa-task-10b-forge-diretto-.../` (5) + `.qa-runs/qa-task-10c-forge-invoca-.../` (1)
+Task base (`impostaFase`, transizioni lead→trattativa→cliente, un
+passo alla volta) risolto pulito al primo giro, 2 file in Review.
+
+**Primo tentativo Tool Forge: onestamente rifiutato dal modello, colpa
+mia non del prodotto.** Il mio prompt diceva *"SE ti torna utile"* —
+condizionale — e il modello ha risposto: *"non è stato costruito alcun
+strumento dedicato ai promemoria (il task precedente richiedeva solo
+la logica di transizione delle fasi)"*. Lezione ripetuta (stessa
+dinamica di Task 1): un prompt naturale ma CONDIZIONALE lascia la
+porta aperta a un "no" legittimo — non un difetto, la mia
+formulazione dava esplicitamente quella scelta al modello.
+
+**Retry con ask diretto (non condizionale) — tutte e tre le fasi
+verificate, in tre corse separate sulla stessa sessione:**
+1. **Crea**: `tool_create` → *"Created 'Promemoria contatto in
+   trattativa' — it stays off until the user enables it in Tool
+   Forge."* ID `promemoria-trattativa` (esposto `forge_promemoria-trattativa`).
+2. **Abilita** (owner-facing, l'UNICA mutazione bidirezionale di
+   tutta la FASE N — verificato leggendo il codice prima di scriverlo
+   nello scenario): Capability hub mostra "· tasks.create ·
+   disabilitato · Abilita" → click reale → "· abilitato · Disabilita"
+   — chip e bottone invertiti correttamente insieme.
+3. **Richiama**: primo tentativo onestamente bloccato — *"non esiste
+   alcun contatto reale... il codice contiene unicamente funzioni pure
+   di gestione, senza dati persistiti"* (limite del progetto scratch —
+   `crm-contatti` è logica pura, zero dati — non del prodotto). Chiesto
+   esplicitamente un contatto d'esempio ("Mario Rossi") → lo strumento
+   forgiato ha chiamato per davvero `tasks_create(…)`, creando un task
+   REALE (id `fc820c78-8d70-498a-88ea-08b4eb0ae0ec`, titolo "Segui
+   contatto in trattativa: Mario Rossi") — il ciclo crea→abilita→richiama
+   è quindi CONFERMATO end-to-end, non solo osservato a metà.
+
+⭐ Dettaglio incidentale interessante: lo strumento forgiato non è un
+tool "a sé" ma un WRAPPER su una capacità di sistema già esistente
+(`tasks.create`, la stessa di Task 7) — coerente con l'etichetta
+mostrata nel pannello ("· tasks.create").
+
+Zero eccezioni JS, zero errori console in tutte e tre le corse (a
+parte il favicon noto).
 
 Formato per ogni voce, da qui in avanti:
 
