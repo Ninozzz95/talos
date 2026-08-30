@@ -1766,6 +1766,82 @@ const SCENARI = {
       p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
     }
   },
+
+  /**
+   * ⭐⭐⭐ 30/8 — Task 3: game-wraparound-negativo (serpente-2d,
+   * difficoltà 2, bug reale). Copertura: cerca, tasto destro
+   * sull'albero file, Doctor.
+   */
+  async 'qa-task-3-game-wraparound'(p) {
+    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/serpente-2d';
+    await p.attendi(1200);
+    await p.click('[data-open-sheet="permissions"]');
+    await p.attendi(300);
+    await p.click('[data-permission-choice="Full access"]');
+    await p.click('#closeSheet');
+    await p.attendi(300);
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
+    await p.digita('#customTaskCartellaLibera', CARTELLA);
+    await p.click('.model-picker-trigger');
+    await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
+    await p.digita('.model-picker-search input', 'gemini-3.7-flash');
+    await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
+    await p.click('.model-picker-option');
+    await p.attendi(200);
+    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
+
+    const prompt = 'Nel gioco del serpentone, quando esce dal bordo sinistro o da quello superiore della griglia il rientro dall\'altro lato non funziona bene — sembra un problema di come si calcola il resto con i numeri negativi in JavaScript. Puoi controllare e sistemarlo in tutte e quattro le direzioni?';
+    await p.digita('#composerInput', prompt);
+    await p.screenshot('compito-scritto');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendiCondizione("!!window.__talosHarnessUiRuntime?.realSessionState?.id", { timeoutMs: 15000, descrizione: 'sessione vera creata' });
+
+    // Doctor, MENTRE il modello lavora — un controllo indipendente che non deve interferire.
+    await p.click('#commandPaletteBtn');
+    await p.attendi(200);
+    await p.click('[data-command="control"]');
+    await p.attendiCondizione("!document.querySelector('#sheetBody')?.textContent?.includes('Carico')", { descrizione: 'Control plane caricato' });
+    await p.click('[data-control-action="doctor"]');
+    await p.attendiCondizione("document.querySelector('#toastRegion')?.textContent?.includes('Doctor:')", { timeoutMs: 8000, descrizione: 'toast Doctor con esito reale' });
+    const doctorToast = await p.testo('#toastRegion');
+    p.nota(`Doctor: ${doctorToast}`);
+    await p.screenshot('doctor-durante-esecuzione', { nota: 'Doctor lanciato mentre il modello lavora in background — non deve interferire' });
+    await p.click('#closeSheet');
+
+    await p.attendiTestoStabile('.conversation', { giriStabili: 5, intervalMs: 2000, timeoutMs: 150000 });
+    await p.screenshot('conversazione-finale');
+    const reviewFilesCount = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.reviewFiles?.size ?? 0");
+    p.nota(`file in Review: ${reviewFilesCount}`);
+    if (reviewFilesCount === 0) p.difetto('sessione conclusa ma zero file in Review', { severita: 'nota' });
+
+    // Albero file: tasto destro su una cartella/file reale
+    await p.click('[data-open-panel="inspector"]');
+    await p.attendi(200);
+    const filesTab = await p.cdp.evaluate("[...document.querySelectorAll('[data-inspector-tab]')].find((t) => t.textContent.includes('Files'))?.click() ?? false");
+    p.nota(`click sul tab Files: ${filesTab !== false}`);
+    await p.attendiCondizione("!!document.querySelector('.ft-row')", { timeoutMs: 5000, descrizione: 'albero file caricato' });
+    await p.screenshot('albero-file', { nota: 'atteso: file veri del progetto, incluso quello appena modificato' });
+    const primaRigaRect = await p.cdp.evaluate("(() => { const r = document.querySelector('.ft-row'); if (!r) return null; const b = r.getBoundingClientRect(); return {x: b.x + b.width/2, y: b.y + b.height/2}; })()");
+    if (primaRigaRect) {
+      await p.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: primaRigaRect.x, y: primaRigaRect.y, button: 'right', clickCount: 1 });
+      await p.cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: primaRigaRect.x, y: primaRigaRect.y, button: 'right', clickCount: 1 });
+      await p.attendi(300);
+      await p.screenshot('menu-tasto-destro', { nota: 'atteso: menu con Rinomina/Rivela in Esplora File/Elimina' });
+      const menuVisibile = await p.esiste('[data-file-menu], .file-context-menu, [role="menu"]');
+      p.nota(`menu contestuale visibile dopo tasto destro: ${menuVisibile}`);
+      await p.premiTasto('Escape');
+    } else {
+      p.difetto('nessuna riga .ft-row trovata nell\'albero file per il test del tasto destro', { severita: 'nota' });
+    }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
 };
 
 // --------------------------------------------------------------------
