@@ -50,7 +50,7 @@ sotto, prima di proseguire con Task 6.
 | 5 | `api-validazione-duplicata` | "Nell'API dei contatti la validazione del nome è scritta in due punti diversi — puoi accorparla in uno solo senza cambiare come si comporta?" | Compatta, F5+Resume, export MD/JSON | ✅ fatto — Resume verificato pulito, Compatta non conclusivo (conversazione troppo corta) |
 | 5.1 ⭐ | *(nuovo, CREATE)* | "Sto iniziando un piccolo sito da zero — mi serve una paginetta HTML singola con un titolo, due paragrafi di testo segnaposto e un pulsante che quando premuto cambia colore di sfondo. Puoi crearla da zero, con anche un piccolo file di stile separato?" | `scrivi` su file MAI esistiti (Review "N nuovi", non "modificati" — mai esercitato finora), owner: "Nuovo file/Nuova cartella" dal menu albero | ✅ fatto — "2 nuovi" confermato per la prima volta in questo giro |
 | 5.2 ⭐ | *(nuovo, DELETE)* | "Nel progetto del magazzino c'è un file di backup che non serve più (magazzino_old.py.bak) — puoi eliminarlo? Se trovi altri file temporanei o ridondanti, elimina anche quelli." | eliminazione via `shell` dal modello (nessun tool "elimina file" esplicito per il modello — verificato non presunto), owner: tasto destro → Elimina con scheda di conferma (azione distruttiva) | ✅ fatto — 1 difetto reale di prodotto trovato (backdrop del foglio resta cliccabile) |
-| 6 | `py-carica-ordini-csv` | "Serve una funzione che carica gli ordini da un file CSV e segnali chiaramente, riga per riga, se manca un campo o il prezzo è negativo. Prima cerca online qual è il modo più comune e sicuro in Python per farlo, poi implementalo. Alla fine salvami un breve riassunto di cosa hai fatto." | web_search, Libreria | ⬜ |
+| 6 | `py-carica-ordini-csv` | "Serve una funzione che carica gli ordini da un file CSV e segnali chiaramente, riga per riga, se manca un campo o il prezzo è negativo. Prima cerca online qual è il modo più comune e sicuro in Python per farlo, poi implementalo. Alla fine salvami un breve riassunto di cosa hai fatto." | web_search, Libreria | ✅ fatto — web_search confermato, giri-esauriti riprodotto dal vivo, Libreria resta NON verificata |
 | 7 | `html-filtro-articoli` | "Aggiungi un filtro di testo alla lista articoli del preventivo. Mentre ci lavori, segnami una nota con la decisione presa sul nome della funzione, e aggiungimi un promemoria per rivedere i test più tardi." | Notes, Tasks | ⬜ |
 | 8 | `game-ostacolo-mobile` | "Aggiungi un nuovo tipo di ostacolo che si muove da solo nel serpentone. Ricordati per le prossime volte che preferisco che gli ostacoli abbiano nomi in italiano nel codice. Poi disegnami un'icona semplice per questo ostacolo." | Memory (+dedup), generate_image | ⬜ |
 | 9 | `api-patch-parziale` | "Nell'API dei contatti manca un modo per aggiornare solo alcuni campi di un contatto senza dover rimandare tutto — puoi aggiungerlo? Usa gli stessi controlli già in uso quando si crea un contatto." | Hook/MCP/Skill/Plugin (preparati PRIMA) | ⬜ |
@@ -365,6 +365,71 @@ giro rigenerato, non dedotto dai selettori del composer.
 
 Zero eccezioni JS, zero errori console, unica richiesta fallita il
 favicon noto, in entrambe le corse.
+
+### [Task 6] py-carica-ordini-csv: web_search + giri-esauriti dal vivo + Libreria non verificata — 2026-08-30 09:59-10:12
+Screenshot: `.qa-runs/qa-task-6-py-csv-.../` (4) + `.qa-runs/qa-diagnostica-task-6-stato-finale-.../` (2) + `.qa-runs/qa-libreria-follow-up-breve-.../` (4)
+Il task più costoso in giri di tutta questa sequenza finora — tre fili
+distinti, tutti verificati dal vivo, non presunti:
+
+**1. web_search: confermato pulito.** Due righe "Ricerca web: ..." reali
+in conversazione ("python csv reader DictReader validate data" e
+"python csv validation best practice DictReader"), screenshot
+intermedio scattato PRIMA che scrivesse codice (regola pipeline QA:
+mai un solo screenshot a fine corsa). Nessuna anomalia.
+
+**2. ⛔⛔⛔ "giri esauriti" RIPRODOTTO DAL VIVO — non un difetto nuovo, la
+CONFERMA EMPIRICA di un debito già aperto in memoria** ([[talos-esaurisce-i-giri-non-le-capacita]]):
+la prima corsa ha finito i 24 giri (confermato via `/api/v1/sessions`,
+poi via `elementFromPoint`/testo conversazione) esplorando molto
+(rilette multiple di magazzino.py, DUE ricerche web, `Legge... in
+base64`, più `Esegue i test`) senza mai arrivare a scrivere il codice.
+Il prodotto lo dichiara **onestamente in chat**, non un fallimento
+silenzioso: *"[giri-esauriti] ⛔ giri esauriti: 24 su 24 usati senza
+chiudere il task. Non e un fallimento del ragionamento: e un tetto
+raggiunto."* — messaggio chiaro, categorizzato, non ambiguo.
+⇒ 0 file in Review a quel punto era quindi CORRETTO, non un difetto di
+conteggio (la mia nota "difetto" nello script era prematura — scritta
+mentre la sessione era ancora "in corso · live", `attendiTestoStabile`
+ingannato da una pausa fra un tool-call e l'altro più lunga della sua
+finestra di stabilità; nessun cambio di codice, solo lezione per me).
+
+**3. ⭐⭐⭐ Scoperta nuova, reale: un follow-up su una sessione con giri
+esauriti RIPRENDE IL TASK VECCHIO invece di rispondere al messaggio
+nuovo.** Per isolare la verifica di Libreria (indipendente dal costo
+del Task 6) ho mandato un follow-up breve e innocuo — *"Salvami un
+breve appunto con un riassunto di una riga di cosa abbiamo fatto
+qui."* — su questa stessa sessione. Il modello non ha scritto un
+appunto: ha ripreso **il compito CSV originale**, rileggendo i
+sorgenti e scrivendo per davvero `carica_e_valida_ordini(...)` in
+`src/magazzino.py` + i test in `test/test_magazzino.py` (13 giri
+freschi, conclusa correttamente stavolta). Verificato sul disco: la
+funzione ESISTE, `python -B tap_runner.py` è **7/7 verde** (compresi i
+4 test nuovi: manca prodotto, prezzo negativo, quantità non intera,
+successo) — implementazione funzionalmente corretta.
+⛔ Nome diverso da quello del corpus (`carica_e_valida_ordini` invece
+di `carica_ordini`) — **atteso, non un difetto**: il mio prompt (di
+proposito naturale, mai il nome interno del corpus) non vincolava il
+nome, stessa dinamica già annotata su Task 1.
+⚠️ **Il comportamento "resume prioritaria sul nuovo messaggio" non è
+dichiarato da nessuna parte nell'interfaccia**: chi manda un follow-up
+innocuo su una sessione fermata per giri-esauriti si aspetterebbe una
+risposta al PROPRIO messaggio, non un secondo giro di lavoro sul
+compito vecchio da 13 giri. Non necessariamente sbagliato (il modello
+potrebbe ragionevolmente voler "finire prima il lavoro in sospeso"),
+ma **sorprendente e non spiegato all'utente**. Gravità: nota.
+Categoria: onestà/aspettativa, non funzione rotta — 🔜 non corretto in
+questo giro (batch-fix a fine sequenza).
+
+**Libreria: resta NON VERIFICATA**, non confermata né rotta. Il
+follow-up pensato per isolarla è stato "dirottato" dal punto 3 sopra
+prima di arrivare a salvare un appunto — screenshot 04 conferma
+`.harness-ui-library/` ancora vuota, ma questo NON è una prova che il
+meccanismo non funzioni (non ha mai avuto l'occasione di provarci).
+🔜 Da riverificare con un follow-up su una sessione MAI andata in
+giri-esauriti (qualunque delle altre già concluse pulite basta).
+
+Zero eccezioni JS, zero errori console in tutte e tre le corse
+(a parte il favicon noto).
 
 Formato per ogni voce, da qui in avanti:
 

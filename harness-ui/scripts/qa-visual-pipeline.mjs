@@ -2254,6 +2254,167 @@ const SCENARI = {
       p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
     }
   },
+
+  /**
+   * ⭐⭐⭐ 30/8 — Task 6: py-carica-ordini-csv (magazzino_py, difficoltà 4).
+   * Copertura: web_search (ricerca PRIMA di scrivere) + Libreria
+   * (riassunto atteso via document_create in .harness-ui-library/).
+   * Permesso Workspace write (dropdown allowlist) — non Full access,
+   * per continuare a variare i due percorsi lungo la sequenza.
+   */
+  async 'qa-task-6-py-csv'(p) {
+    await p.attendi(1200);
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskCartella')", { descrizione: 'foglio nuova sessione, ramo allowlist (Workspace write)' });
+    await p.cdp.evaluate(`(() => {
+      const select = document.querySelector('#customTaskCartella');
+      const opzione = [...select.options].find((o) => o.textContent.includes('magazzino_py'));
+      if (opzione) select.value = opzione.value;
+      select.dispatchEvent(new Event('change', {bubbles:true}));
+    })()`);
+    const cartellaScelta = await p.cdp.evaluate("document.querySelector('#customTaskCartella')?.selectedOptions?.[0]?.textContent");
+    p.nota(`cartella scelta dal dropdown allowlist: ${cartellaScelta}`);
+    await p.click('.model-picker-trigger');
+    await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
+    await p.digita('.model-picker-search input', 'gemini-3.7-flash');
+    await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
+    await p.click('.model-picker-option');
+    await p.attendi(200);
+    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
+
+    const prompt = 'Nel progetto del magazzino mi servirebbe una funzione che carica gli ordini da un file CSV (con prodotto, prezzo e quantità) e li valida — se manca il prodotto, il prezzo è negativo o la quantità non è un numero intero, deve dirmelo chiaramente, nominando il campo che non va. Prima cerca online qual è il modo più comune e sicuro in Python per fare una cosa del genere, poi implementala. Alla fine salvami un breve riassunto di cosa hai fatto.';
+    await p.digita('#composerInput', prompt);
+    await p.screenshot('compito-scritto');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendiCondizione("!!window.__talosHarnessUiRuntime?.realSessionState?.id", { timeoutMs: 15000, descrizione: 'sessione vera' });
+
+    // ⭐ Screenshot INTERMEDIO (regola pipeline QA visiva, §obbligo owner
+    // 27/8): la riga "Ricerca web: ..." deve comparire PRIMA che scriva
+    // codice, non solo essere dedotta alla fine dalla conversazione stabile.
+    await p.attendiCondizione("document.querySelector('.conversation')?.textContent?.includes('Ricerca web')", { timeoutMs: 60000, descrizione: 'riga "Ricerca web" nella conversazione' });
+    await p.screenshot('durante-ricerca-web', { nota: 'atteso: una riga tool-call "Ricerca web: ..." PRIMA che scriva codice' });
+
+    await p.attendiTestoStabile('.conversation', { giriStabili: 5, intervalMs: 2000, timeoutMs: 180000 });
+    await p.screenshot('conversazione-finale');
+    const testoConversazione = await p.testo('.conversation');
+    const usoDavveroWebSearch = /Ricerca web/.test(testoConversazione ?? '');
+    p.nota(`riga "Ricerca web" presente nella conversazione finale: ${usoDavveroWebSearch}`);
+    if (!usoDavveroWebSearch) p.difetto('richiesto esplicitamente di cercare online prima di implementare, ma nessuna riga "Ricerca web" nella conversazione', { severita: 'nota' });
+    const reviewFilesCount = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.reviewFiles?.size ?? 0");
+    p.nota(`file in Review: ${reviewFilesCount}`);
+    if (reviewFilesCount === 0) p.difetto('sessione conclusa ma zero file in Review per un task che richiedeva una funzione nuova', { severita: 'nota' });
+
+    // --- Libreria: il riassunto richiesto dovrebbe finire lì ---
+    await p.click('#commandPaletteBtn');
+    await p.attendi(200);
+    await p.click('[data-command="skills"]');
+    await p.attendiCondizione("!document.querySelector('#sheetBody')?.textContent?.includes('Carico')", { timeoutMs: 8000, descrizione: 'Capability hub caricato' });
+    await p.screenshot('capability-hub-libreria', { nota: 'atteso: una voce nuova in Libreria per il riassunto appena chiesto' });
+    const testoLibreria = await p.testo('#libraryListMount');
+    p.nota(`contenuto Libreria dopo il task: ${JSON.stringify(testoLibreria?.slice(0, 200))}`);
+    if (!testoLibreria || /Nessun file in Libreria/i.test(testoLibreria)) {
+      p.difetto('richiesto un riassunto salvato ma la Libreria del progetto risulta vuota', { severita: 'nota' });
+    }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /**
+   * ⭐ 30/8 — diagnostica: la corsa di qa-task-6-py-csv era ANCORA "in
+   * corso · live" quando lo script ha misurato Review/Libreria (24 giri
+   * usati, GIRI_MASSIMI raggiunto secondo /api/v1/sessions). Riapre la
+   * sessione ORA (conclusa nel frattempo) per vedere lo stato VERO.
+   */
+  async 'qa-diagnostica-task-6-stato-finale'(p) {
+    await p.attendi(1200);
+    const trovata = await p.cdp.evaluate(`(() => {
+      const riga = [...document.querySelectorAll('.session-item.real-session-item')].find((r) => r.textContent.includes('carica gli ordini'));
+      if (!riga) return false;
+      riga.click();
+      return true;
+    })()`);
+    p.nota(`sessione Task 6 trovata e riaperta: ${trovata}`);
+    await p.attendi(1500);
+    await p.screenshot('coda-conversazione', { nota: 'scroll naturale: qualunque cosa il browser mostri di default alla riapertura' });
+    await p.cdp.evaluate("document.querySelector('.conversation')?.scrollTo(0, document.querySelector('.conversation').scrollHeight)");
+    await p.attendi(300);
+    await p.screenshot('fondo-conversazione', { nota: 'forzato in fondo — ultimo messaggio/evento reale della sessione' });
+    const ultimoTesto = await p.cdp.evaluate("document.querySelector('.conversation')?.textContent?.slice(-800)");
+    p.nota(`ultimi 800 caratteri della conversazione: ${JSON.stringify(ultimoTesto)}`);
+    const reviewFilesCount = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.reviewFiles?.size ?? 0");
+    p.nota(`file in Review (ora, sessione conclusa): ${reviewFilesCount}`);
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+  },
+
+  /**
+   * ⭐⭐⭐ 30/8 — copertura Libreria isolata dal resto del Task 6: quella
+   * corsa ha esaurito i 24 giri PRIMA di arrivare a salvare un
+   * riassunto (vedi qa-diagnostica-task-6-stato-finale), quindi non
+   * dice nulla sul meccanismo Libreria in sé. Follow-up breve su una
+   * sessione GIÀ conclusa (Task 1, py-sconto) — un solo giro, a basso
+   * costo, per isolare la domanda "il salvataggio in Libreria funziona
+   * per niente?" da "questo task specifico era troppo caro in giri".
+   */
+  async 'qa-libreria-follow-up-breve'(p) {
+    await p.attendi(1200);
+    /*
+     * ⛔⛔⛔ 30/8 — cambiato bersaglio dopo un vicolo cieco istruttivo: la
+     * sessione del Task 1 ("sconto a scaglioni", 09:01) non si trova più
+     * per testo perché il suo `nome` persistito è tornato `null` — NON
+     * un bug nuovo, è il debito GIÀ DICHIARATO in session-registry.mjs
+     * (FASE L, 30/8, righe ~607-613): una rinomina/derivazione POST-AVVIO
+     * non sopravvive a un riavvio del server, "limite onesto, non un bug
+     * silenzioso" — e questa sessione è sopravvissuta a un riavvio
+     * avvenuto più tardi nella stessa mattinata di test. Confermato
+     * leggendo `.sessions-store/78a35594-....jsonl`: zero occorrenze
+     * della chiave "nome" in TUTTO il file. Non riportato come nuovo
+     * difetto — solo la controprova dal vivo di un debito già scritto.
+     * Bersaglio cambiato al Task 6 (creato DOPO l'ultimo riavvio, `nome`
+     * ancora vivo in memoria — già trovabile per testo, verificato nello
+     * scenario diagnostico precedente).
+     */
+    const trovata = await p.cdp.evaluate(`(() => {
+      const riga = [...document.querySelectorAll('.session-item.real-session-item')].find((r) => r.textContent.includes('carica gli ordini'));
+      if (!riga) return false;
+      riga.click();
+      return true;
+    })()`);
+    p.nota(`sessione Task 6 (carica-ordini-csv) trovata e riaperta: ${trovata}`);
+    if (!trovata) { p.difetto('sessione Task 6 non trovata in sidebar per il follow-up Libreria', { severita: 'blocco' }); return; }
+    await p.attendi(1000);
+    await p.screenshot('sessione-riaperta');
+
+    const prompt = 'Salvami un breve appunto con un riassunto di una riga di cosa abbiamo fatto qui.';
+    await p.digita('#composerInput', prompt);
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendi(1000);
+    await p.screenshot('follow-up-inviato');
+    await p.attendiTestoStabile('.conversation', { giriStabili: 4, intervalMs: 2000, timeoutMs: 60000 });
+    await p.screenshot('follow-up-concluso');
+
+    await p.click('#commandPaletteBtn');
+    await p.attendi(200);
+    await p.click('[data-command="skills"]');
+    await p.attendiCondizione("!document.querySelector('#sheetBody')?.textContent?.includes('Carico')", { timeoutMs: 8000, descrizione: 'Capability hub caricato' });
+    await p.screenshot('libreria-dopo-follow-up');
+    const testoLibreria = await p.testo('#libraryListMount');
+    p.nota(`contenuto Libreria dopo il follow-up: ${JSON.stringify(testoLibreria?.slice(0, 300))}`);
+    const libreriaPopolata = !!testoLibreria && !/Nessun file in Libreria/i.test(testoLibreria);
+    p.nota(`Libreria popolata da un riassunto reale: ${libreriaPopolata}`);
+    if (!libreriaPopolata) p.difetto('richiesto un appunto salvato su una sessione conclusa correttamente, ma la Libreria resta vuota', { severita: 'nota' });
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
 };
 
 // --------------------------------------------------------------------
