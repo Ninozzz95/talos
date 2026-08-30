@@ -4356,20 +4356,77 @@
   // Stato di sola interfaccia, separato dai dati della sessione: come VS Code
   // ricorda espansioni e filtro per workspace, mai contenuti o percorsi nuovi.
   const DESKTOP_SETTINGS_KEY = 'talos.harness.desktop.settings.v1';
-  const DESKTOP_APPEARANCE_DEFAULTS = {
-    uiFontScale: 'default',
-    chatFontScale: 'xcompact',
-    reducedMotion: false,
-  };
   const UI_FONT_SCALE_FACTORS = { xsmall: .8, small: .9, default: 1, large: 1.15, xlarge: 1.3 };
   const CHAT_FONT_SCALE_SIZES = { xcompact: '0.875rem', compact: '0.9375rem', balanced: '1.0625rem', expanded: '1.1875rem' };
+  const TALOS_THEME_IDS = ['forge', 'paper', 'terminal', 'aurora', 'glacier', 'ember', 'atlas', 'noir', 'signal', 'violet', 'claudius', 'basicus', 'telemetry', 'calm'];
+  const TALOS_SCENE_IDS = ['follow-theme', ...TALOS_THEME_IDS];
+  const COLOR_MODE_IDS = ['system', 'dark', 'light'];
+  const MOTION_MODE_IDS = ['off', 'static', 'simple', 'complex', 'adaptive'];
+  const MOTION_QUALITY_IDS = ['low', 'balanced', 'high', 'adaptive'];
+  const MOTION_PROFILE_IDS = ['preset', 'minimal', 'expressive', 'custom', 'off'];
+  const MOTION_EASING_IDS = ['precise', 'soft', 'elastic-light', 'linear', 'cinematic'];
+  const DESKTOP_APPEARANCE_DEFAULTS = {
+    themePreset: 'calm', colorMode: 'system', sceneOverride: 'follow-theme',
+    uiFontScale: 'default', chatFontScale: 'xcompact', composerShape: 'standard',
+    composerPlus: 'drawer', messageStyle: 'sections', streamingAnimation: 'fade',
+    windowPresentation: 'drawer', immersiveHeader: false, reducedMotion: false,
+    backgroundMotion: true, interfaceMotion: true, motionMode: 'adaptive',
+    motionQuality: 'balanced', motionSpeed: 100, motionIntensity: 20,
+    motionGlow: 10, motionDensity: 100, motionDepth: 92, motionTrails: 50,
+    motionContrast: 80, motionParallax: 20, pauseWhenHidden: true,
+    respectDataSaver: true, motionProfile: 'preset', motionEasing: 'precise',
+    motionDuration: 50, motionUiIntensity: 65, motionStagger: 40,
+    motionWindows: true, motionSurfaces: true, motionNavigation: true,
+    motionComposer: true, motionMessages: true, motionFeedback: true,
+  };
+  const TALOS_THEME_TOKENS = {
+    forge: { bg: '#201d1a', panel: '#2b2621', accent: '#c08b3c', text: '#f5efe6', muted: '#b5a89a', border: '#4b3e31', radius: '14px', font: 'Instrument Sans' },
+    paper: { bg: '#f5f1e8', panel: '#fffdf8', accent: '#9b5b2a', text: '#24211e', muted: '#756e65', border: '#d9d0c3', radius: '10px', font: 'Instrument Sans' },
+    terminal: { bg: '#101714', panel: '#16231e', accent: '#67d391', text: '#e5f6ec', muted: '#8ba99a', border: '#2b4a3a', radius: '6px', font: 'JetBrains Mono' },
+    aurora: { bg: '#171629', panel: '#24233e', accent: '#a995ff', text: '#f1efff', muted: '#aaa6c8', border: '#44416c', radius: '16px', font: 'Instrument Sans' },
+    glacier: { bg: '#111c25', panel: '#1b2a37', accent: '#8fd8f3', text: '#eef9ff', muted: '#9eb7c4', border: '#345064', radius: '14px', font: 'Instrument Sans' },
+    ember: { bg: '#211719', panel: '#302022', accent: '#ef8b57', text: '#fff1eb', muted: '#c6a39a', border: '#5b3534', radius: '14px', font: 'Instrument Sans' },
+    atlas: { bg: '#151b29', panel: '#202c43', accent: '#74a8ff', text: '#edf4ff', muted: '#a4b2c9', border: '#3a4e75', radius: '12px', font: 'Instrument Sans' },
+    noir: { bg: '#0e0e10', panel: '#19191c', accent: '#d4d4d8', text: '#f5f5f5', muted: '#929297', border: '#35353a', radius: '4px', font: 'Instrument Sans' },
+    signal: { bg: '#101b1e', panel: '#17272b', accent: '#5ce1e6', text: '#e9ffff', muted: '#91b9bc', border: '#2f555a', radius: '10px', font: 'Instrument Sans' },
+    violet: { bg: '#1c1625', panel: '#2a2038', accent: '#d3a6ff', text: '#fbf3ff', muted: '#b5a0c3', border: '#523c68', radius: '18px', font: 'Instrument Sans' },
+    claudius: { bg: '#211e1a', panel: '#302b24', accent: '#d2a96d', text: '#f8f1e4', muted: '#b6aa98', border: '#514638', radius: '12px', font: 'Instrument Sans' },
+    basicus: { bg: '#202124', panel: '#2b2c30', accent: '#aeb4c0', text: '#f1f3f5', muted: '#9ea4ad', border: '#45484f', radius: '8px', font: 'Instrument Sans' },
+    telemetry: { bg: '#101b1d', panel: '#18292b', accent: '#75d0a4', text: '#e7fff2', muted: '#96b8a8', border: '#315448', radius: '10px', font: 'JetBrains Mono' },
+    calm: { bg: '#1e1f22', panel: '#25262a', accent: '#c08b3c', text: '#f3f0e9', muted: '#9c9da2', border: '#36373b', radius: '12px', font: 'Instrument Sans' },
+  };
+  const MOTION_RANGE_DEFS = {
+    motionSpeed: [25, 200], motionIntensity: [0, 100], motionGlow: [0, 100],
+    motionDensity: [25, 150], motionDepth: [0, 100], motionTrails: [0, 100],
+    motionContrast: [0, 100], motionParallax: [0, 100], motionDuration: [50, 150],
+    motionUiIntensity: [0, 100], motionStagger: [0, 120],
+  };
+  function enumValue(value, allowed, fallback) { return allowed.includes(value) ? value : fallback; }
+  function numberValue(value, [min, max], fallback) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? Math.min(max, Math.max(min, numeric)) : fallback;
+  }
+  function boolValue(value, fallback) { return typeof value === 'boolean' ? value : fallback; }
   function normalizzaAspettoDesktop(value) {
     const record = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-    return {
-      uiFontScale: Object.hasOwn(UI_FONT_SCALE_FACTORS, record.uiFontScale) ? record.uiFontScale : DESKTOP_APPEARANCE_DEFAULTS.uiFontScale,
-      chatFontScale: Object.hasOwn(CHAT_FONT_SCALE_SIZES, record.chatFontScale) ? record.chatFontScale : DESKTOP_APPEARANCE_DEFAULTS.chatFontScale,
-      reducedMotion: record.reducedMotion === true,
-    };
+    const safe = { ...DESKTOP_APPEARANCE_DEFAULTS };
+    safe.themePreset = enumValue(record.themePreset, TALOS_THEME_IDS, safe.themePreset);
+    safe.colorMode = enumValue(record.colorMode, COLOR_MODE_IDS, safe.colorMode);
+    safe.sceneOverride = enumValue(record.sceneOverride, TALOS_SCENE_IDS, safe.sceneOverride);
+    safe.uiFontScale = enumValue(record.uiFontScale, Object.keys(UI_FONT_SCALE_FACTORS), safe.uiFontScale);
+    safe.chatFontScale = enumValue(record.chatFontScale, Object.keys(CHAT_FONT_SCALE_SIZES), safe.chatFontScale);
+    safe.composerShape = enumValue(record.composerShape, ['classic', 'standard', 'compact'], safe.composerShape);
+    safe.composerPlus = enumValue(record.composerPlus, ['drawer', 'menu'], safe.composerPlus);
+    safe.messageStyle = enumValue(record.messageStyle, ['sections', 'bubbles'], safe.messageStyle);
+    safe.streamingAnimation = enumValue(record.streamingAnimation, ['typewriter', 'fade'], safe.streamingAnimation);
+    safe.windowPresentation = enumValue(record.windowPresentation, ['drawer', 'fullscreen'], safe.windowPresentation);
+    safe.motionMode = enumValue(record.motionMode, MOTION_MODE_IDS, safe.motionMode);
+    safe.motionQuality = enumValue(record.motionQuality, MOTION_QUALITY_IDS, safe.motionQuality);
+    safe.motionProfile = enumValue(record.motionProfile, MOTION_PROFILE_IDS, safe.motionProfile);
+    safe.motionEasing = enumValue(record.motionEasing, MOTION_EASING_IDS, safe.motionEasing);
+    for (const [key, range] of Object.entries(MOTION_RANGE_DEFS)) safe[key] = numberValue(record[key], range, safe[key]);
+    for (const key of ['immersiveHeader', 'reducedMotion', 'backgroundMotion', 'interfaceMotion', 'pauseWhenHidden', 'respectDataSaver', 'motionWindows', 'motionSurfaces', 'motionNavigation', 'motionComposer', 'motionMessages', 'motionFeedback']) safe[key] = boolValue(record[key], safe[key]);
+    return safe;
   }
   function normalizzaWorkspaces(value) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
@@ -4396,9 +4453,11 @@
   function salvaImpostazioniDesktop(value) {
     try {
       const safe = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+      const appearance = normalizzaAspettoDesktop(safe.appearance);
+      const sparseAppearance = Object.fromEntries(Object.entries(appearance).filter(([key, value]) => value !== DESKTOP_APPEARANCE_DEFAULTS[key]));
       window.localStorage.setItem(DESKTOP_SETTINGS_KEY, JSON.stringify({
         version: 1,
-        appearance: normalizzaAspettoDesktop(safe.appearance),
+        appearance: sparseAppearance,
         workspaces: normalizzaWorkspaces(safe.workspaces),
       }));
     } catch {
@@ -4411,20 +4470,131 @@
     salvaImpostazioniDesktop(documento);
     applicaAspettoDesktop(documento.appearance);
   }
+  let backgroundAnimationFrame = null;
+  let backgroundAnimationRunning = false;
+  let appearanceMediaQuery = null;
+  let handleAppearanceMediaChange = null;
+  let handleAppearanceVisibilityChange = null;
+  function resolvedColorMode(mode) {
+    if (mode !== 'system') return mode;
+    return window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  }
+  function applicaThemeDesktop(safe) {
+    const host = HOST();
+    const root = document.documentElement;
+    const requestedTheme = safe.themePreset;
+    const scene = safe.sceneOverride === 'follow-theme' ? requestedTheme : safe.sceneOverride;
+    const mode = resolvedColorMode(safe.colorMode);
+    const theme = TALOS_THEME_TOKENS[requestedTheme] || TALOS_THEME_TOKENS.calm;
+    host.dataset.talosTheme = requestedTheme;
+    host.dataset.talosColorMode = safe.colorMode;
+    host.dataset.talosResolvedColorMode = mode;
+    host.dataset.talosScene = scene;
+    if (host !== root) {
+      root.dataset.talosTheme = requestedTheme;
+      root.dataset.talosColorMode = safe.colorMode;
+      root.dataset.talosResolvedColorMode = mode;
+      root.dataset.talosScene = scene;
+    }
+    const light = mode === 'light';
+    const colors = light ? { bg: '#f5f3ee', panel: '#fffdf8', accent: theme.accent, text: '#24211e', muted: '#756e65', border: '#d9d0c3' } : theme;
+    const style = host.style;
+    style.setProperty('--talos-background', colors.bg);
+    style.setProperty('--talos-panel', colors.panel);
+    style.setProperty('--talos-accent', colors.accent);
+    style.setProperty('--talos-text', colors.text);
+    style.setProperty('--talos-muted', colors.muted);
+    style.setProperty('--talos-border', colors.border);
+    style.setProperty('--talos-radius-card', theme.radius);
+    style.setProperty('--talos-radius-control', theme.radius);
+    style.setProperty('--talos-font-ui', theme.font);
+    root.style.setProperty('color-scheme', mode === 'light' ? 'light' : 'dark');
+    const meta = document.querySelector('meta[name="theme-color"]');
+    meta?.setAttribute('content', colors.bg);
+  }
+  function aggiornaMotionDesktop(safe) {
+    const host = HOST();
+    const style = host.style;
+    style.setProperty('--talos-motion-speed', String(safe.motionSpeed / 100));
+    style.setProperty('--talos-motion-intensity', String(safe.motionIntensity / 100));
+    style.setProperty('--talos-motion-glow', String(safe.motionGlow / 100));
+    style.setProperty('--talos-motion-density', String(safe.motionDensity / 100));
+    style.setProperty('--talos-motion-depth', String(safe.motionDepth / 100));
+    style.setProperty('--talos-motion-trails', String(safe.motionTrails / 100));
+    style.setProperty('--talos-motion-contrast', String(safe.motionContrast / 100));
+    style.setProperty('--talos-motion-parallax', String(safe.motionParallax / 100));
+    style.setProperty('--talos-motion-duration-scale', String(safe.motionDuration / 100));
+    style.setProperty('--talos-motion-ui-intensity', String(safe.motionUiIntensity / 100));
+    style.setProperty('--talos-motion-stagger', `${safe.motionStagger}ms`);
+    const backgroundOff = !safe.backgroundMotion || safe.motionMode === 'off' || safe.reducedMotion;
+    host.classList.toggle('background-motion-off', backgroundOff);
+    document.body.classList.toggle('background-motion-off', backgroundOff);
+    host.classList.toggle('interface-motion-off', !safe.interfaceMotion || safe.motionProfile === 'off' || safe.reducedMotion);
+    host.classList.toggle('reduce-motion', safe.reducedMotion);
+    document.body.classList.toggle('reduce-motion', safe.reducedMotion);
+    for (const key of ['windows', 'surfaces', 'navigation', 'composer', 'messages', 'feedback']) host.classList.toggle(`motion-${key}-off`, !safe[`motion${key[0].toUpperCase()}${key.slice(1)}`]);
+    for (const [key, range] of Object.entries(MOTION_RANGE_DEFS)) {
+      const input = $(`#${key}Range`);
+      const output = $(`#${key}Output`);
+      if (input) input.value = String(safe[key]);
+      if (output) output.textContent = String(safe[key]);
+    }
+    const ids = {
+      backgroundMotion: 'backgroundMotionToggle', interfaceMotion: 'interfaceMotionToggle', pauseWhenHidden: 'pauseWhenHiddenToggle', respectDataSaver: 'respectDataSaverToggle', reducedMotion: 'reducedMotionToggle', motionWindows: 'motionWindowsToggle', motionSurfaces: 'motionSurfacesToggle', motionNavigation: 'motionNavigationToggle', motionComposer: 'motionComposerToggle', motionMessages: 'motionMessagesToggle', motionFeedback: 'motionFeedbackToggle',
+    };
+    for (const [key, id] of Object.entries(ids)) { const input = $(`#${id}`); if (input) input.checked = safe[key]; }
+    for (const [key, id] of Object.entries({ motionMode: 'motionModeSelect', motionQuality: 'motionQualitySelect', motionProfile: 'motionProfileSelect', motionEasing: 'motionEasingSelect' })) { const input = $(`#${id}`); if (input) input.value = safe[key]; }
+    const sceneEl = $('#sceneOverrideSelect'); if (sceneEl) sceneEl.value = safe.sceneOverride;
+  }
+  function fermaBackgroundDesktop() {
+    if (backgroundAnimationFrame !== null) cancelAnimationFrame(backgroundAnimationFrame);
+    backgroundAnimationFrame = null;
+    backgroundAnimationRunning = false;
+  }
+  function avviaBackgroundDesktop() {
+    const appearance = leggiImpostazioniDesktop().appearance;
+    if (!appearance.backgroundMotion || appearance.motionMode === 'off' || appearance.motionMode === 'static' || appearance.reducedMotion || (appearance.pauseWhenHidden && document.visibilityState === 'hidden') || (appearance.respectDataSaver && navigator.connection?.saveData)) { fermaBackgroundDesktop(); return; }
+    if (backgroundAnimationRunning) return;
+    const started = performance.now();
+    const frame = (now) => {
+      const current = leggiImpostazioniDesktop().appearance;
+      if (!current.backgroundMotion || current.motionMode === 'off' || current.motionMode === 'static' || current.reducedMotion || (current.pauseWhenHidden && document.visibilityState === 'hidden') || (current.respectDataSaver && navigator.connection?.saveData)) { fermaBackgroundDesktop(); return; }
+      const elapsed = (now - started) * (current.motionSpeed / 100);
+      HOST().style.setProperty('--talos-motion-phase', String(elapsed / 1000));
+      HOST().style.setProperty('--talos-motion-x', `${Math.sin(elapsed / 1800) * 80}px`);
+      HOST().style.setProperty('--talos-motion-y', `${Math.cos(elapsed / 2200) * 50}px`);
+      backgroundAnimationFrame = requestAnimationFrame(frame);
+    };
+    backgroundAnimationRunning = true;
+    backgroundAnimationFrame = requestAnimationFrame(frame);
+  }
+  function aggiornaBackgroundDesktop() { fermaBackgroundDesktop(); avviaBackgroundDesktop(); }
   function applicaAspettoDesktop(appearance) {
     const safe = normalizzaAspettoDesktop(appearance);
+    applicaThemeDesktop(safe);
     HOST().style.setProperty('--talos-ui-font-scale', String(UI_FONT_SCALE_FACTORS[safe.uiFontScale]));
     HOST().style.setProperty('--talos-chat-font-size', CHAT_FONT_SCALE_SIZES[safe.chatFontScale]);
-    document.body.classList.toggle('reduce-motion', safe.reducedMotion);
+    aggiornaMotionDesktop(safe);
     const ui = $('#uiFontScaleSelect');
     const chat = $('#chatFontScaleSelect');
-    const motion = $('#reducedMotionToggle');
     if (ui) ui.value = safe.uiFontScale;
     if (chat) chat.value = safe.chatFontScale;
-    if (motion) motion.checked = safe.reducedMotion;
+    for (const [key, id] of Object.entries({ composerShape: 'composerShapeSelect', composerPlus: 'composerPlusSelect', messageStyle: 'messageStyleSelect', streamingAnimation: 'streamingAnimationSelect', windowPresentation: 'windowPresentationSelect' })) { const input = $(`#${id}`); if (input) input.value = safe[key]; }
+    aggiornaBackgroundDesktop();
   }
   function inizializzaAspettoDesktop() {
+    appearanceMediaQuery = window.matchMedia?.('(prefers-color-scheme: light)') || null;
+    handleAppearanceMediaChange = () => { if (leggiImpostazioniDesktop().appearance.colorMode === 'system') applicaAspettoDesktop(leggiImpostazioniDesktop().appearance); };
+    appearanceMediaQuery?.addEventListener?.('change', handleAppearanceMediaChange);
+    handleAppearanceVisibilityChange = () => { if (leggiImpostazioniDesktop().appearance.pauseWhenHidden) aggiornaBackgroundDesktop(); };
+    document.addEventListener('visibilitychange', handleAppearanceVisibilityChange);
     applicaAspettoDesktop(leggiImpostazioniDesktop().appearance);
+  }
+  function resettaMotionDesktop() {
+    const documento = leggiImpostazioniDesktop();
+    documento.appearance = normalizzaAspettoDesktop({ ...documento.appearance, sceneOverride: DESKTOP_APPEARANCE_DEFAULTS.sceneOverride, ...Object.fromEntries(Object.keys(DESKTOP_APPEARANCE_DEFAULTS).filter((key) => key.startsWith('motion') || ['backgroundMotion', 'interfaceMotion', 'pauseWhenHidden', 'respectDataSaver', 'reducedMotion'].includes(key)).map((key) => [key, DESKTOP_APPEARANCE_DEFAULTS[key]])) });
+    salvaImpostazioniDesktop(documento);
+    applicaAspettoDesktop(documento.appearance);
   }
   function chiaveWorkspaceAlbero() {
     return state.realSession.treeWorkspaceKey
@@ -7096,15 +7266,30 @@
   }));
 
   inizializzaAspettoDesktop();
-  $('#uiFontScaleSelect')?.addEventListener('change', (event) => {
-    aggiornaAspettoDesktop({ uiFontScale: event.target.value });
-  });
-  $('#chatFontScaleSelect')?.addEventListener('change', (event) => {
-    aggiornaAspettoDesktop({ chatFontScale: event.target.value });
-  });
-  $('#reducedMotionToggle')?.addEventListener('change', (event) => {
-    aggiornaAspettoDesktop({ reducedMotion: event.target.checked });
-  });
+  const appearanceControlMap = {
+    themePresetSelect: 'themePreset', colorModeSelect: 'colorMode', sceneOverrideSelect: 'sceneOverride',
+    uiFontScaleSelect: 'uiFontScale', chatFontScaleSelect: 'chatFontScale', composerShapeSelect: 'composerShape',
+    composerPlusSelect: 'composerPlus', messageStyleSelect: 'messageStyle', streamingAnimationSelect: 'streamingAnimation',
+    windowPresentationSelect: 'windowPresentation', backgroundMotionToggle: 'backgroundMotion', interfaceMotionToggle: 'interfaceMotion',
+    reducedMotionToggle: 'reducedMotion', pauseWhenHiddenToggle: 'pauseWhenHidden', respectDataSaverToggle: 'respectDataSaver',
+    motionModeSelect: 'motionMode', motionQualitySelect: 'motionQuality', motionProfileSelect: 'motionProfile', motionEasingSelect: 'motionEasing',
+    motionSpeedRange: 'motionSpeed', motionIntensityRange: 'motionIntensity', motionGlowRange: 'motionGlow', motionDensityRange: 'motionDensity',
+    motionDepthRange: 'motionDepth', motionTrailsRange: 'motionTrails', motionContrastRange: 'motionContrast', motionParallaxRange: 'motionParallax',
+    motionDurationRange: 'motionDuration', motionUiIntensityRange: 'motionUiIntensity', motionStaggerRange: 'motionStagger',
+    motionWindowsToggle: 'motionWindows', motionSurfacesToggle: 'motionSurfaces', motionNavigationToggle: 'motionNavigation',
+    motionComposerToggle: 'motionComposer', motionMessagesToggle: 'motionMessages', motionFeedbackToggle: 'motionFeedback',
+    immersiveHeaderToggle: 'immersiveHeader',
+  };
+  for (const [id, key] of Object.entries(appearanceControlMap)) {
+    const input = $(`#${id}`);
+    if (!input) continue;
+    const eventName = input.type === 'range' ? 'input' : 'change';
+    input.addEventListener(eventName, () => {
+      const value = input.type === 'checkbox' ? input.checked : input.value;
+      aggiornaAspettoDesktop({ [key]: value });
+    });
+  }
+  $('#resetMotionButton')?.addEventListener('click', resettaMotionDesktop);
 
   refreshSessionsBoardButton?.addEventListener('click', () => {
     if (embeddedDemoOnly()) renderEmbeddedSessionsBoardDemo(true);
@@ -7209,10 +7394,19 @@
     apriFileAlbero,
     scollegaTerminaleReale,
     statoTerminale,
+    get backgroundAnimationRunning() { return backgroundAnimationRunning; },
     realSessionState: state.realSession,
   };
   window.__talosHarnessDestroy = () => {
     cancelMotionAnimations();
+    fermaBackgroundDesktop();
+    if (handleAppearanceVisibilityChange) document.removeEventListener('visibilitychange', handleAppearanceVisibilityChange);
+    if (appearanceMediaQuery && handleAppearanceMediaChange) appearanceMediaQuery.removeEventListener?.('change', handleAppearanceMediaChange);
+    handleAppearanceVisibilityChange = null;
+    handleAppearanceMediaChange = null;
+    appearanceMediaQuery = null;
+    HOST().classList.remove('background-motion-off', 'interface-motion-off', 'reduce-motion', 'motion-windows-off', 'motion-surfaces-off', 'motion-navigation-off', 'motion-composer-off', 'motion-messages-off', 'motion-feedback-off');
+    document.body.classList.remove('background-motion-off', 'reduce-motion');
     setEmbeddedTopbarHidden(false);
     embeddedHeaderScrollers.forEach((scroller) => {
       scroller.removeEventListener('scroll', handleEmbeddedContentScroll);

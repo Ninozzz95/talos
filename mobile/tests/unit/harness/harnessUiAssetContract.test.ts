@@ -111,14 +111,15 @@ describe('Harness UI static asset contract', () => {
         expect(withoutHostAdapter).not.toMatch(/rgba?\(255\s*,\s*255\s*,\s*255/i)
     })
 
-    it('CODE-THEME-COPY-TRUTH-01 never labels a live TALOS theme as Calm', () => {
+    it('CODE-THEME-COPY-TRUTH-01 exposes real TALOS presets without a fake Standard Calm label', () => {
         const html = harnessAsset('index.html')
         const js = harnessAsset('app.js')
 
-        expect(html).not.toMatch(/\bCalm\b/)
         expect(js).not.toMatch(/Standard Calm/)
         expect(html).toContain('Tema TALOS')
         expect(html).toContain('Token colore')
+        expect(html).toContain('<option value="calm">Calm</option>')
+        expect(html).toContain('<option value="terminal">Terminal</option>')
     })
 
     it('CODE-BG-CONTINUITY-01 reveals the one TALOS scene only in embedded mode', () => {

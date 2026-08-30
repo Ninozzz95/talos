@@ -233,9 +233,11 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   grid-template-columns: var(--sidebar) minmax(0, 1fr) var(--inspector);
   height: 100dvh;
   min-width: 0;
-  background:
-    radial-gradient(circle at 58% -12%, var(--surface-highlight), transparent 32%),
-    var(--bg);
+  /* The scene is a sibling layer immediately below the shell.  Keeping the
+     shell transparent lets the tokenised background renderer remain visible
+     through the glass panels instead of being painted over by an opaque
+     duplicate background. */
+  background: transparent;
 }
 
 /* ⭐⭐⭐ 27/8, owner: "le animazioni vanno a scatti... troppo pesante" —
@@ -1226,6 +1228,50 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .mission-card, .activity-bundle, .approval-card, .widget, .settings-card, .automation-row, .inspector-card,
 .composer, .sheet-option, .file-review, .diff-panel { transition: border-color var(--motion-control) var(--motion-ease), background-color var(--motion-theme) var(--motion-ease), box-shadow var(--motion-control) var(--motion-ease); }
 .mission-card:hover, .activity-bundle:hover { border-color: var(--surface-highlight-strong); }
+
+/* Fase 8A — superficie Aspetto completa, tokenizzata e responsiva. */
+.talos-background-scene { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; background: radial-gradient(circle at 18% 12%, color-mix(in srgb, var(--accent) calc(20% * var(--talos-motion-intensity, .2)), transparent), transparent 42%), var(--bg); opacity: calc(.35 + var(--talos-motion-contrast, .8) * .25); }
+.app-shell { position: relative; z-index: 1; }
+.scene-orb { position: absolute; width: 42vw; height: 42vw; max-width: 620px; max-height: 620px; border-radius: 50%; filter: blur(42px); opacity: calc(.1 + var(--talos-motion-glow, .1) * .5); transform: translate3d(calc(var(--talos-motion-x, 0) * var(--talos-motion-parallax, .2)), calc(var(--talos-motion-y, 0) * var(--talos-motion-parallax, .2)), 0); transition: transform var(--motion-theme) linear, background var(--motion-theme) var(--motion-ease); }
+.scene-orb-a { top: -16%; left: -10%; background: var(--accent); }
+.scene-orb-b { right: -16%; bottom: -20%; background: var(--secondary); }
+.scene-grid { position: absolute; inset: 0; opacity: calc(var(--talos-motion-density, 1) * .08); background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px); background-size: 48px 48px; transform: perspective(700px) rotateX(calc(54deg - var(--talos-motion-depth, .92) * 10deg)) translateY(32%); transform-origin: center bottom; }
+:host([data-talos-scene="terminal"]) .scene-grid, [data-talos-scene="terminal"] .scene-grid { opacity: calc(var(--talos-motion-density, 1) * .16); }
+:host([data-talos-scene="paper"]) .talos-background-scene, [data-talos-scene="paper"] .talos-background-scene { opacity: .72; }
+:host(.background-motion-off) .scene-orb, :host(.background-motion-off) .scene-grid, .background-motion-off .scene-orb, .background-motion-off .scene-grid { animation: none; transform: none; }
+:host(.interface-motion-off) *, .interface-motion-off * { transition-duration: 0ms !important; animation-duration: 0ms !important; }
+:host(.motion-windows-off) .sheet-dialog, :host(.motion-windows-off) .command-dialog, :host(.motion-windows-off) .inspector-panel, :host(.motion-windows-off) .sessions-panel { transition: none !important; }
+:host(.motion-surfaces-off) .settings-card, :host(.motion-surfaces-off) .widget, :host(.motion-surfaces-off) .mission-card { transition: none !important; }
+:host(.motion-navigation-off) .mode-tab, :host(.motion-navigation-off) .session-item { transition: none !important; }
+:host(.motion-composer-off) .composer { transition: none !important; }
+:host(.motion-messages-off) .message-bubble, :host(.motion-messages-off) .assistant-copy { transition: none !important; }
+:host(.motion-feedback-off) .toast, :host(.motion-feedback-off) .status-pulse { transition: none !important; animation: none !important; }
+.settings-card-wide { grid-column: 1 / -1; }
+.settings-card-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 14px; }
+.settings-card-heading h3 { margin: 2px 0 0; }
+.settings-section { border-top: 1px solid var(--line-soft); padding-top: 12px; margin-top: 12px; }
+.settings-section h4 { margin: 0 0 8px; color: var(--text-2); font-size: calc(10px * var(--talos-ui-font-scale)); text-transform: uppercase; letter-spacing: .08em; }
+.settings-control-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+.settings-control-grid .setting-control { min-width: 0; }
+.settings-switch-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 16px; }
+.settings-switch-grid label { min-height: 38px; }
+.range-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 16px; margin-top: 10px; }
+.range-control { display: grid; gap: 5px; border: 0 !important; min-height: auto !important; align-items: stretch !important; }
+.range-control span { display: flex; justify-content: space-between; color: var(--muted); font-size: calc(9px * var(--talos-ui-font-scale)); }
+.range-control output { color: var(--text-2); font-family: var(--font-mono); }
+.range-control input { width: 100%; accent-color: var(--accent); }
+.categories { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.settings-status { display: block; margin-top: 12px; color: var(--muted); font: calc(9px * var(--talos-ui-font-scale)) var(--font-mono); }
+@media (max-width: 780px) {
+  .settings-card-heading { flex-direction: column; }
+  .settings-control-grid, .settings-switch-grid, .range-grid { grid-template-columns: 1fr; }
+  .categories { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .talos-background-scene { opacity: .16; }
+  .scene-orb { transform: none; }
+  :host(:not(.interface-motion-off)) *, :root:not(.interface-motion-off) * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}
 
 .bundle-header[aria-expanded="false"] .bundle-status svg { transform: rotate(-90deg); }
 .bundle-status svg { transition: transform var(--motion-disclosure) var(--motion-ease); }
