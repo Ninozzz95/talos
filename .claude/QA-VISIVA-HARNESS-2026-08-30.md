@@ -52,7 +52,7 @@ sotto, prima di proseguire con Task 6.
 | 5.2 ⭐ | *(nuovo, DELETE)* | "Nel progetto del magazzino c'è un file di backup che non serve più (magazzino_old.py.bak) — puoi eliminarlo? Se trovi altri file temporanei o ridondanti, elimina anche quelli." | eliminazione via `shell` dal modello (nessun tool "elimina file" esplicito per il modello — verificato non presunto), owner: tasto destro → Elimina con scheda di conferma (azione distruttiva) | ✅ fatto — 1 difetto reale di prodotto trovato (backdrop del foglio resta cliccabile) |
 | 6 | `py-carica-ordini-csv` | "Serve una funzione che carica gli ordini da un file CSV e segnali chiaramente, riga per riga, se manca un campo o il prezzo è negativo. Prima cerca online qual è il modo più comune e sicuro in Python per farlo, poi implementalo. Alla fine salvami un breve riassunto di cosa hai fatto." | web_search, Libreria | ✅ fatto — web_search confermato, giri-esauriti riprodotto dal vivo, Libreria resta NON verificata |
 | 7 | `html-filtro-articoli` | "Aggiungi un filtro di testo alla lista articoli del preventivo. Mentre ci lavori, segnami una nota con la decisione presa sul nome della funzione, e aggiungimi un promemoria per rivedere i test più tardi." | Notes, Tasks | ✅ fatto — Notes e Tasks entrambi confermati puliti |
-| 8 | `game-ostacolo-mobile` | "Aggiungi un nuovo tipo di ostacolo che si muove da solo nel serpentone. Ricordati per le prossime volte che preferisco che gli ostacoli abbiano nomi in italiano nel codice. Poi disegnami un'icona semplice per questo ostacolo." | Memory (+dedup), generate_image | ⬜ |
+| 8 | `game-ostacolo-mobile` | "Aggiungi un nuovo tipo di ostacolo che si muove da solo nel serpentone. Ricordati per le prossime volte che preferisco che gli ostacoli abbiano nomi in italiano nel codice. Poi disegnami un'icona semplice per questo ostacolo." | Memory (+dedup), generate_image | ✅ fatto — 2 difetti reali trovati (card statiche "non implementato") |
 | 9 | `api-patch-parziale` | "Nell'API dei contatti manca un modo per aggiornare solo alcuni campi di un contatto senza dover rimandare tutto — puoi aggiungerlo? Usa gli stessi controlli già in uso quando si crea un contatto." | Hook/MCP/Skill/Plugin (preparati PRIMA) | ⬜ |
 | 10 | `crm-pipeline-fasi` | "Aggiungi allo stato di un contatto una 'fase' (lead, trattativa, cliente) con le transizioni permesse. Se ti torna utile per la prossima volta, costruisciti un piccolo strumento che segna un promemoria ogni volta che sposti un contatto in trattativa." | Tool Forge (crea+abilita+richiama) | ⬜ |
 | 11 | `api-note-orfane` | "Nell'API dei contatti, se provo ad aggiungere una nota a un contatto che non esiste dovrebbe dirmi che non lo trova — invece sembra funzionare comunque, puoi controllare? Nel frattempo avvia anche una ricerca approfondita su cosa si intende di solito per 'cascata di eliminazione' nei database, mi interessa capirlo meglio." | On request+approvazione, coda mid-run, Deep Research | ⬜ |
@@ -466,6 +466,59 @@ osservazione di incoerenza fra corse, non un difetto del prodotto.
 inferiore) — contenuto comunque confermato per testo via `#notesListMount`/
 `#tasksListMount` (sopra), non solo dedotto: gap di inquadratura dello
 screenshot, non di verifica.
+Zero eccezioni JS, zero errori console (a parte il favicon noto).
+
+### [Task 8] game-ostacolo-mobile: Memory + generate_image — 2026-08-30 10:20 — ⛔⛔ 2 DIFETTI REALI (stesso pattern di Task 0.3, in DUE punti nuovi)
+Screenshot: `.qa-runs/qa-task-8-game-ostacolo-2026-08-30T10-20-28-657Z/` (4)
+**generate_image confermato pulito**: riga "Immagine: A simple game icon
+of a moving obstacle for a 2D snake game:…" reale in conversazione,
+screenshot intermedio scattato prima della fine. 3 file in Review
+(`creaOstacolo`/`muoviOstacolo` in `src/gioco.js` + test, "Test verdi —
+7/7" alla fine). **Memory confermato pulito** (via Capability hub,
+`#memoryListMount`, stavolta con scroll esplicito prima dello
+screenshot — corretta la lezione di Task 7): "Nomi ostacoli in italiano
+— Preferisco che gli ostacoli abbiano nomi in italiano nel codice. —
+preference", testo reale e pertinente.
+
+⛔⛔⛔ **DIFETTO REALE #1 — card "Memory" del Context Rail STATICA, mai
+collegata ai dati veri**: `index.html:279-282`, dentro il tab
+"Context" (non il Capability hub — sono DUE superfici Memory diverse
+nello stesso prodotto): *"Memory — Non ancora implementato — questo
+agente non ha oggi un sistema di memoria di progetto."* — **falso**,
+confermato nella STESSA sessione dove questo screenshot è stato preso:
+la conversazione mostra una riga `memory_write(...)` reale, e il
+Capability hub mostra la preferenza salvata per davvero. Schermata
+04's contesto conferma: la card "Capability" appena sopra (stesso
+foglio, stesso tab) mostra correttamente "Attrezzi: 7" — è SOLO la
+card Memory a essere rimasta ferma alla demo. Gravità: degrada
+(mente attivamente). Categoria: mockup residuo.
+
+⛔⛔⛔ **DIFETTO REALE #2 — stesso pattern, tab "Agents" del Context
+Rail**: `index.html:305-307`, il terzo tab (Context/Files/**Agents**):
+*"Non ancora implementato — TALOS non delega a sotto-agenti oggi, un
+solo modello guida l'intero task."* — **falso**, `delega_sottotask`
+(FASE C) è reale da tempo. ⭐ Ironia verificabile nello stesso file:
+la card "Session topology" **4 righe sopra** (`index.html:283-288`,
+stesso tab "Context") dice il contrario, correttamente: *"Le deleghe a
+sotto-agenti isolati (attrezzo delega_sottotask) appaiono nel foglio
+'Albero sessione'"* — **due punti dello stesso pannello, la stessa
+domanda, due risposte opposte**. Stessa gravità/categoria di sopra.
+
+⇒ **Non un incidente isolato**: questo è il TERZO punto trovato in
+questo giro di QA con lo stesso identico difetto (Task 0.3: Control
+plane; qui: due card del Context Rail) — tre superfici diverse dello
+stesso prodotto che dichiarano "non implementato" su capacità reali da
+tempo. 🔜 Consiglio per il batch-fix finale: un grep su `"Non ancora
+implementato"` in `index.html`/`app.js` per trovare TUTTE le occorrenze
+in un colpo solo, non una alla volta.
+
+⛔ Difetto minore, cosmetico: `memory_write` non ha un caso dedicato in
+`riassuntoAttrezzo()` (`app.js:3092`) — cade nel `default: return
+\`${nome}(…)\`\`, mostrando la riga grezza "memory_write(…)" in
+conversazione invece di un riassunto naturale come tutti gli altri
+attrezzi (confrontare con `delega_sottotask` → "Delega: ..."). Gravità:
+cosmetico. 🔜 Un caso in più nello switch, stesso pattern degli altri.
+
 Zero eccezioni JS, zero errori console (a parte il favicon noto).
 
 Formato per ogni voce, da qui in avanti:
