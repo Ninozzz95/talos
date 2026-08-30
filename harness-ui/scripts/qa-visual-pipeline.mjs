@@ -2823,6 +2823,164 @@ const SCENARI = {
       p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
     }
   },
+
+  /**
+   * ⭐⭐⭐ 30/8 — Task 11: api-note-orfane (api-contatti, difficoltà 5).
+   * Copertura: permesso "On request" (MAI provato finora in questo
+   * giro — sempre e solo Full access/Workspace write) + Deep Research
+   * (`#researchListMount`, "salvati anche in Libreria" — chiude anche
+   * il buco Libreria dichiarato aperto da Task 6).
+   * ⛔ Coda mid-run NON in questo scenario (isolata a parte, più
+   * semplice da leggere senza intrecciarla con l'approvazione).
+   */
+  async 'qa-task-11-api-onrequest'(p) {
+    await p.attendi(1200);
+    await p.click('[data-open-sheet="permissions"]');
+    await p.attendi(300);
+    // ⛔ "On request" NON è "Full access": il foglio nuova sessione resta
+    // sul ramo allowlist (#customTaskCartella), non il percorso libero —
+    // trovato dal vivo (v1 di questo scenario copiava alla cieca il
+    // pattern di Full access ed è fallita sulla condizione sbagliata).
+    await p.click('[data-permission-choice="On request"]');
+    await p.click('#closeSheet');
+    await p.attendi(300);
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskCartella')", { descrizione: 'foglio nuova sessione, ramo allowlist' });
+    await p.cdp.evaluate(`(() => {
+      const select = document.querySelector('#customTaskCartella');
+      const opzione = [...select.options].find((o) => o.textContent.includes('api-contatti'));
+      if (opzione) select.value = opzione.value;
+      select.dispatchEvent(new Event('change', {bubbles:true}));
+    })()`);
+    await p.click('.model-picker-trigger');
+    await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
+    await p.digita('.model-picker-search input', 'gemini-3.7-flash');
+    await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
+    await p.click('.model-picker-option');
+    await p.attendi(200);
+    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
+
+    const prompt = 'Nell\'API dei contatti, se provo ad aggiungere una nota a un contatto che non esiste dovrebbe dirmelo con un errore chiaro — invece sembra funzionare comunque, la nota si perde nel nulla. Puoi controllare e sistemarlo? Nel frattempo avvia anche una ricerca approfondita su cosa si intende di solito per "cascata di eliminazione" nei database, mi interessa capirlo meglio.';
+    await p.digita('#composerInput', prompt);
+    await p.screenshot('compito-scritto', { nota: 'permesso "On request" — prima volta in questo giro' });
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendiCondizione("!!window.__talosHarnessUiRuntime?.realSessionState?.id", { timeoutMs: 15000, descrizione: 'sessione vera' });
+
+    // --- Approvazione REALE, non la card demo statica ---
+    await p.attendiCondizione("!!document.querySelector('.real-approval-card')", { timeoutMs: 90000, descrizione: 'prima card di approvazione reale' });
+    await p.screenshot('prima-approvazione', { nota: 'CRITICO: deve descrivere l\'azione VERA (es. "Vuole scrivere il file: ..."), mai il fallback generico' });
+    const testoApprovazione1 = await p.testo('.real-approval-card');
+    p.nota(`testo prima card di approvazione: ${JSON.stringify(testoApprovazione1)}`);
+    if (/eseguire un'azione che modifica qualcosa/i.test(testoApprovazione1 ?? '')) {
+      p.difetto('card di approvazione mostra il fallback generico invece di descrivere l\'azione vera', { severita: 'nota' });
+    }
+    let cicliApprovazione = 0;
+    while (await p.esiste('.real-approval-card') && cicliApprovazione < 6) {
+      cicliApprovazione += 1;
+      const approvaClic = await p.cdp.evaluate("(() => { const card = document.querySelector('.real-approval-card'); const b = card && [...card.querySelectorAll('button')].find((el) => el.textContent.trim() === 'Approva'); if (!b) return false; b.click(); return true; })()");
+      p.nota(`ciclo ${cicliApprovazione} — click su "Approva": ${approvaClic}`);
+      if (!approvaClic) break;
+      await p.attendi(1500);
+    }
+    p.nota(`totale card di approvazione approvate: ${cicliApprovazione}`);
+    await p.screenshot('dopo-tutte-le-approvazioni');
+
+    await p.attendiTestoStabile('.conversation', { giriStabili: 6, intervalMs: 2500, timeoutMs: 180000 });
+    await p.screenshot('conversazione-finale');
+    const reviewFilesCount = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.reviewFiles?.size ?? 0");
+    p.nota(`file in Review: ${reviewFilesCount}`);
+    if (reviewFilesCount === 0) p.difetto('sessione conclusa ma zero file in Review', { severita: 'nota' });
+
+    // --- Deep Research ---
+    await p.click('#commandPaletteBtn');
+    await p.attendi(200);
+    await p.click('[data-command="skills"]');
+    await p.attendiCondizione("!document.querySelector('#sheetBody')?.textContent?.includes('Carico')", { timeoutMs: 8000, descrizione: 'Capability hub caricato' });
+    await p.cdp.evaluate("document.querySelector('#researchListMount')?.scrollIntoView({block:'center'})");
+    await p.attendi(300);
+    await p.screenshot('capability-hub-deep-research', { nota: 'atteso: un rapporto su "cascata di eliminazione"' });
+    const testoRicerca = await p.testo('#researchListMount');
+    p.nota(`Deep Research dopo il task: ${JSON.stringify(testoRicerca?.slice(0, 250))}`);
+    if (!testoRicerca || /[Nn]essun/i.test(testoRicerca)) p.difetto('richiesta esplicitamente una ricerca approfondita, ma Deep Research risulta vuoto', { severita: 'nota' });
+    // ⭐ i rapporti Deep Research sono dichiarati "salvati anche in Libreria" — verifica incrociata, chiude anche il buco Libreria di Task 6.
+    const testoLibreria = await p.testo('#libraryListMount');
+    p.nota(`Libreria dopo il task (atteso: anche il rapporto Deep Research): ${JSON.stringify(testoLibreria?.slice(0, 250))}`);
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /**
+   * ⭐⭐⭐ 30/8 — soccorso: la sessione del Task 11 è rimasta VERAMENTE in
+   * attesa (`/api/v1/sessions`: conclusa:false, giri:2, ferma da un
+   * po') — la seconda card di approvazione esiste ma il mio click non
+   * l'ha trovata. Riapre e fotografa lo stato ESATTO prima di ritentare
+   * il click, invece di ipotizzare perché sia fallito.
+   */
+  async 'qa-task-11b-soccorso-approvazione'(p) {
+    await p.attendi(1200);
+    const trovata = await p.cdp.evaluate(`(() => {
+      const riga = [...document.querySelectorAll('.session-item.real-session-item')].find((r) => r.textContent.includes('nota a un contatto'));
+      if (!riga) return false;
+      riga.click();
+      return true;
+    })()`);
+    p.nota(`sessione Task 11 trovata e riaperta: ${trovata}`);
+    if (!trovata) { p.difetto('sessione Task 11 non trovata in sidebar', { severita: 'blocco' }); return; }
+    await p.attendi(1500);
+    await p.screenshot('stato-esatto-alla-riapertura', { nota: 'la card di approvazione VERA, così com\'è adesso' });
+    const cardVisibile = await p.cdp.evaluate("!!document.querySelector('.real-approval-card')");
+    p.nota(`card di approvazione visibile alla riapertura: ${cardVisibile}`);
+    if (cardVisibile) {
+      const html = await p.cdp.evaluate("document.querySelector('.real-approval-card')?.outerHTML?.slice(0, 1500)");
+      p.nota(`HTML della card: ${JSON.stringify(html)}`);
+      const bottoniTesto = await p.cdp.evaluate("[...document.querySelectorAll('.real-approval-card button')].map((b) => JSON.stringify(b.textContent))");
+      p.nota(`bottoni trovati nella card, testo esatto: ${JSON.stringify(bottoniTesto)}`);
+
+      /*
+       * ⛔⛔⛔ 30/8 — CAUSA VERA trovata guardando lo screenshot, non
+       * indovinata: `document.querySelector('.real-approval-card')`
+       * prende SEMPRE la PRIMA card nel DOM — quando ce n'è più di una
+       * (qui: due, in sequenza), i miei click precedenti colpivano
+       * sempre la PRIMA, già risolta ("Approvato (da un altro
+       * client)"), mentre una SECONDA card VERA e ancora in sospeso
+       * ("Vuole eseguire la suite di test: npm test", bottoni Nega/
+       * Approva visibili e funzionanti nello screenshot) restava
+       * ignorata — la sessione era bloccata per un bug del MIO script,
+       * non del prodotto. Corretto: cicla su TUTTE le card, agendo solo
+       * su quelle il cui testo non contiene già "Approvato"/"negat".
+       */
+      let sbloccate = 0;
+      for (let tentativo = 0; tentativo < 5; tentativo += 1) {
+        const risultato = await p.cdp.evaluate(`(() => {
+          const card = [...document.querySelectorAll('.real-approval-card')].find((c) => {
+            const testo = c.querySelector('.assistant-copy')?.textContent ?? '';
+            return !/approvat|negat/i.test(testo);
+          });
+          if (!card) return 'nessuna-pendente';
+          const b = [...card.querySelectorAll('button')].find((el) => el.textContent.trim() === 'Approva');
+          if (!b) return 'nessun-bottone';
+          b.click();
+          return 'cliccato';
+        })()`);
+        p.nota(`tentativo ${tentativo + 1} di sblocco — esito: ${risultato}`);
+        if (risultato === 'cliccato') { sbloccate += 1; await p.attendi(2000); continue; }
+        break;
+      }
+      p.nota(`card sbloccate in questo soccorso: ${sbloccate}`);
+      await p.screenshot('dopo-sblocco-mirato');
+      await p.attendiTestoStabile('.conversation', { giriStabili: 6, intervalMs: 2500, timeoutMs: 150000 });
+      await p.screenshot('dopo-attesa-stabilita');
+      const reviewDopo = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.reviewFiles?.size ?? 0");
+      p.nota(`file in Review dopo lo sblocco: ${reviewDopo}`);
+    }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+  },
 };
 
 // --------------------------------------------------------------------

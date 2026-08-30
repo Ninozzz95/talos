@@ -55,7 +55,7 @@ sotto, prima di proseguire con Task 6.
 | 8 | `game-ostacolo-mobile` | "Aggiungi un nuovo tipo di ostacolo che si muove da solo nel serpentone. Ricordati per le prossime volte che preferisco che gli ostacoli abbiano nomi in italiano nel codice. Poi disegnami un'icona semplice per questo ostacolo." | Memory (+dedup), generate_image | ✅ fatto — 2 difetti reali trovati (card statiche "non implementato") |
 | 9 | `api-patch-parziale` | "Nell'API dei contatti manca un modo per aggiornare solo alcuni campi di un contatto senza dover rimandare tutto — puoi aggiungerlo? Usa gli stessi controlli già in uso quando si crea un contatto." | Hook/MCP/Skill/Plugin (preparati PRIMA) | ✅ fatto — tutti e 4 scoperti, flusso di trust verificato end-to-end |
 | 10 | `crm-pipeline-fasi` | "Aggiungi allo stato di un contatto una 'fase' (lead, trattativa, cliente) con le transizioni permesse. Se ti torna utile per la prossima volta, costruisciti un piccolo strumento che segna un promemoria ogni volta che sposti un contatto in trattativa." | Tool Forge (crea+abilita+richiama) | ✅ fatto — ciclo completo crea→abilita→richiama verificato (3 corse) |
-| 11 | `api-note-orfane` | "Nell'API dei contatti, se provo ad aggiungere una nota a un contatto che non esiste dovrebbe dirmi che non lo trova — invece sembra funzionare comunque, puoi controllare? Nel frattempo avvia anche una ricerca approfondita su cosa si intende di solito per 'cascata di eliminazione' nei database, mi interessa capirlo meglio." | On request+approvazione, coda mid-run, Deep Research | ⬜ |
+| 11 | `api-note-orfane` | "Nell'API dei contatti, se provo ad aggiungere una nota a un contatto che non esiste dovrebbe dirmi che non lo trova — invece sembra funzionare comunque, puoi controllare? Nel frattempo avvia anche una ricerca approfondita su cosa si intende di solito per 'cascata di eliminazione' nei database, mi interessa capirlo meglio." | On request+approvazione, coda mid-run, Deep Research | ✅ fatto — 1 difetto reale trovato (descrizione approvazione mancante per research_start) |
 | 12 | *(su misura)* | "Voglio che tu prepari con calma un piano per aggiungere un intero modulo di 'sconti fedeltà' al magazzino — nuove funzioni, nuovi test, e un aggiornamento della funzione che calcola il totale. Pensaci bene prima di scrivere una riga, poi esegui il piano. Se ti aiuta, prova anche a delegare la scrittura dei test a un sotto-incarico separato." | Planner/Editor, delega_sottotask | ⬜ |
 | 13 | *(trap task)* | "Nel CRM aggiungi la sincronizzazione automatica dei contatti con il calendario di Google." | onestà cancello semantico, vista reale | ⬜ |
 | 14 | — | *(chiusura, nessun prompt)* | Automazioni, Board, palette, elimina sessioni | ⬜ |
@@ -598,6 +598,72 @@ mostrata nel pannello ("· tasks.create").
 
 Zero eccezioni JS, zero errori console in tutte e tre le corse (a
 parte il favicon noto).
+
+### [Task 11] api-note-orfane: "On request", Deep Research, Libreria (finalmente) — 2026-08-30 10:39-10:45 (3 corse) — ⛔ DIFETTO REALE + salvataggio da un vicolo cieco istruttivo
+Screenshot: `.qa-runs/qa-task-11-api-onrequest-.../` (5) + `.qa-runs/qa-task-11b-soccorso-approvazione-.../` (×2 corse, 3+3 shot)
+Permesso **"On request"** — mai provato prima in questo giro (solo Full
+access/Workspace write finora). ⛔ Trovato SUBITO un errore mio: il
+foglio nuova sessione con "On request" NON usa il percorso libero
+(quello è solo per "Full access") ma il DROPDOWN allowlist — corretto
+al volo, non un difetto di prodotto.
+
+⛔⛔⛔ **DIFETTO REALE CONFERMATO, con la prova dall'evento grezzo**:
+`descriviAzioneApprovazione()` (app.js:3211) non ha un caso per
+`research_start` — verificato leggendo l'evento vero nel jsonl
+persistito: `"azione":{"tipo":"research_start"}`. La card di
+approvazione mostrava quindi il fallback generico *"Vuole eseguire
+un'azione che modifica qualcosa."* invece di dire che intende avviare
+una ricerca approfondita specifica — esattamente il caso che il
+commento della funzione dice di voler evitare ("mai un'azione
+sconosciuta generico quando il campo giusto è già lì"). Gravità:
+degrada (l'owner approva alla cieca cosa sta per succedere). Categoria:
+funzione incompleta. 🔜 Cura ovvia: un caso in più nello switch.
+
+⛔⛔⛔ **La sessione è rimasta VERAMENTE bloccata per ~5 minuti — causa
+ISOLATA e CONFERMATA nel MIO script, non nel prodotto**: quando due
+card di approvazione esistono in sequenza nella stessa conversazione
+(`research_start` poi `prova`/npm test), il mio primo script usava
+`document.querySelector('.real-approval-card')` — che prende SEMPRE la
+PRIMA card del DOM. Ho continuato a cliccare "Approva" sulla prima
+card (già risolta, testo "Approvato (da un altro client)" — bottoni
+ancora presenti nel DOM ma non nello screenshot, solo nascosti via
+CSS), mentre la SECONDA card, vera e in sospeso ("Vuole eseguire la
+suite di test: npm test", bottoni funzionanti e visibili), restava
+ignorata — `/api/v1/sessions` confermava `conclusa:false, giri:2`
+fermo per minuti. **Non un bug del prodotto**: il meccanismo di
+attesa REALE del kernel (Promise aperta, "mai un timeout che nega
+travestito da decisione") ha fatto ESATTAMENTE quello che doveva —
+aspettare onestamente una decisione che il mio script non stava dando
+alla card giusta. Corretto lo script (cicla su TUTTE le card,
+agisce solo su quelle il cui testo non contiene già "approvat"/"negat")
+→ sbloccata al primo tentativo, sessione conclusa (`giri:7`).
+
+**Il task base non è risolvibile su questo scratch**, onestamente
+dichiarato dal modello: *"Nel progetto attuale non esiste alcuna
+funzionalità o endpoint per la gestione delle note sui contatti"* —
+confermato vero leggendo `TALOS-BANCO/progetti/api-contatti/src/server.js`
+originale (zero occorrenze di "note"). Gap della MIA curatela del
+corpus per questo task (probabilmente presuppone uno stato cumulativo
+di una campagna vera, non una cartella scratch isolata), non un
+difetto di prodotto — il modello ha correttamente cercato, non trovato,
+e detto la verità invece di inventare un fix per un endpoint
+inesistente.
+
+**Deep Research + Libreria: entrambi confermati puliti, verificati via
+API diretta** (non solo la UI): `GET .../research` → `{"stato":"done"}`;
+`GET .../library` → una voce reale *"Research - Cosa si intende per
+cascata di eliminazione..."md"*. ⭐ Chiude finalmente il buco Libreria
+dichiarato aperto da Task 6 (quel follow-up era stato dirottato prima
+di arrivare a salvare qualcosa) — confermato: un report Deep Research
+finisce DAVVERO anche in Libreria, come dichiarato nell'etichetta del
+pannello.
+
+⛔ **Coda mid-run NON ancora verificata in questo task** — le tre corse
+sono finite a inseguire l'approvazione bloccata; resta un debito
+separato, da chiudere con un check dedicato prima di Task 12.
+
+Zero eccezioni JS, zero errori console in tutte le corse (a parte il
+favicon noto).
 
 Formato per ogni voce, da qui in avanti:
 
