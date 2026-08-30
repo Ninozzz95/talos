@@ -2627,6 +2627,202 @@ const SCENARI = {
       p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
     }
   },
+
+  /**
+   * ⭐⭐⭐ 30/8 — Task 10: crm-pipeline-fasi (crm-contatti, difficoltà 4).
+   * Copertura: Tool Forge, le TRE fasi vere (letto tool-forge-store.mjs
+   * via app.js): crea (tool_create, nasce SEMPRE disabilitato) → abilita
+   * (UNICA mutazione owner-facing di tutta la FASE N, mai un tool del
+   * modello) → richiama (follow-up dopo l'abilitazione, mai nella stessa
+   * corsa — il tool non esisteva ancora abilitato quando il primo turno
+   * lavorava).
+   */
+  async 'qa-task-10-crm-forge'(p) {
+    await p.attendi(1200);
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskCartella')", { descrizione: 'foglio nuova sessione, ramo allowlist' });
+    await p.cdp.evaluate(`(() => {
+      const select = document.querySelector('#customTaskCartella');
+      const opzione = [...select.options].find((o) => o.textContent.includes('crm-contatti'));
+      if (opzione) select.value = opzione.value;
+      select.dispatchEvent(new Event('change', {bubbles:true}));
+    })()`);
+    await p.click('.model-picker-trigger');
+    await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
+    await p.digita('.model-picker-search input', 'gemini-3.7-flash');
+    await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
+    await p.click('.model-picker-option');
+    await p.attendi(200);
+    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
+
+    const prompt = 'Aggiungi allo stato di un contatto una "fase" (lead, trattativa, cliente) — le transizioni valide sono solo di un passo alla volta, mai indietro, mai saltando una fase. Se ti torna utile per la prossima volta, costruisciti un piccolo strumento che segna un promemoria ogni volta che sposti un contatto in trattativa.';
+    await p.digita('#composerInput', prompt);
+    await p.screenshot('compito-scritto');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendiCondizione("!!window.__talosHarnessUiRuntime?.realSessionState?.id", { timeoutMs: 15000, descrizione: 'sessione vera' });
+    await p.attendiTestoStabile('.conversation', { giriStabili: 6, intervalMs: 2500, timeoutMs: 180000 });
+    await p.screenshot('conversazione-finale-dopo-crea');
+    const reviewFilesCount = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.reviewFiles?.size ?? 0");
+    p.nota(`file in Review: ${reviewFilesCount}`);
+    if (reviewFilesCount === 0) p.difetto('sessione conclusa ma zero file in Review', { severita: 'nota' });
+    const testoConversazione = await p.testo('.conversation');
+    const usoToolCreate = /tool_create|forgiat/i.test(testoConversazione ?? '');
+    p.nota(`indizio di tool_create nella conversazione: ${usoToolCreate}`);
+
+    // --- Fase 2: ABILITA (l'unica mutazione owner-facing) ---
+    await p.click('#commandPaletteBtn');
+    await p.attendi(200);
+    await p.click('[data-command="skills"]');
+    await p.attendiCondizione("!document.querySelector('#sheetBody')?.textContent?.includes('Carico')", { timeoutMs: 8000, descrizione: 'Capability hub caricato' });
+    await p.cdp.evaluate("document.querySelector('#forgeListMount')?.scrollIntoView({block:'center'})");
+    await p.attendi(300);
+    await p.screenshot('capability-hub-forge-prima-abilita', { nota: 'atteso: uno strumento forgiato, nato DISABILITATO' });
+    const testoForgePrima = await p.testo('#forgeListMount');
+    p.nota(`Tool Forge prima di Abilita: ${JSON.stringify(testoForgePrima?.slice(0, 250))}`);
+    if (!testoForgePrima || /Nessun tool forgiato/i.test(testoForgePrima)) {
+      p.difetto('richiesto esplicitamente di costruirsi uno strumento, ma Tool Forge risulta vuoto', { severita: 'nota' });
+    } else {
+      const abilitaClic = await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('#forgeListMount button')].find((el) => el.textContent.trim() === 'Abilita'); if (!b) return false; b.click(); return true; })()");
+      p.nota(`click su "Abilita": ${abilitaClic}`);
+      if (abilitaClic) {
+        await p.attendi(800);
+        await p.screenshot('capability-hub-forge-dopo-abilita', { nota: 'atteso: chip passato a "abilitato", bottone diventato "Disabilita"' });
+        const testoForgeDopo = await p.testo('#forgeListMount');
+        p.nota(`Tool Forge dopo Abilita: ${JSON.stringify(testoForgeDopo?.slice(0, 250))}`);
+        if (!/abilitato/i.test(testoForgeDopo ?? '')) p.difetto('cliccato Abilita ma lo stato non risulta "abilitato"', { severita: 'nota' });
+      } else {
+        p.difetto('bottone "Abilita" non trovato per lo strumento forgiato', { severita: 'nota' });
+      }
+    }
+    await p.click('#closeSheet');
+    await p.attendi(300);
+
+    // --- Fase 3: RICHIAMA — follow-up dopo l'abilitazione ---
+    const followUp = 'Perfetto — ora sposta un contatto reale del CRM in fase "trattativa" e usa lo strumento che hai appena costruito per segnare il promemoria.';
+    await p.digita('#composerInput', followUp);
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendi(1000);
+    await p.attendiTestoStabile('.conversation', { giriStabili: 6, intervalMs: 2500, timeoutMs: 150000 });
+    await p.screenshot('conversazione-finale-dopo-richiama');
+    const testoConversazioneFinale = await p.testo('.conversation');
+    p.nota(`ultimi 600 caratteri dopo il follow-up: ${JSON.stringify(testoConversazioneFinale?.slice(-600))}`);
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /**
+   * ⭐⭐⭐ 30/8 — retry mirato: il primo giro di qa-task-10-crm-forge ha
+   * letto il mio "SE ti torna utile" come discrezionale e ha
+   * legittimamente scelto di non costruire nulla (dichiarato in chat,
+   * onesto — non un difetto). Riprende sulla STESSA sessione con un
+   * ask diretto, non condizionale, per isolare la copertura Tool Forge
+   * dalla mia formulazione morbida del prompt originale.
+   */
+  async 'qa-task-10b-forge-diretto'(p) {
+    await p.attendi(1200);
+    const trovata = await p.cdp.evaluate(`(() => {
+      const riga = [...document.querySelectorAll('.session-item.real-session-item')].find((r) => r.textContent.includes('trattativa'));
+      if (!riga) return false;
+      riga.click();
+      return true;
+    })()`);
+    p.nota(`sessione Task 10 trovata e riaperta: ${trovata}`);
+    if (!trovata) { p.difetto('sessione Task 10 non trovata in sidebar', { severita: 'blocco' }); return; }
+    await p.attendi(1000);
+
+    const prompt = 'Costruisciti anche uno strumento dedicato (non solo codice nel progetto) che segna un promemoria ogni volta che un contatto passa in fase "trattativa" — voglio vedere lo strumento comparire nel Tool Forge.';
+    await p.digita('#composerInput', prompt);
+    await p.screenshot('prompt-diretto-scritto');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendi(1000);
+    await p.attendiTestoStabile('.conversation', { giriStabili: 6, intervalMs: 2500, timeoutMs: 150000 });
+    await p.screenshot('conversazione-dopo-prompt-diretto');
+    const testoConversazione = await p.testo('.conversation');
+    p.nota(`ultimi 500 caratteri: ${JSON.stringify(testoConversazione?.slice(-500))}`);
+
+    await p.click('#commandPaletteBtn');
+    await p.attendi(200);
+    await p.click('[data-command="skills"]');
+    await p.attendiCondizione("!document.querySelector('#sheetBody')?.textContent?.includes('Carico')", { timeoutMs: 8000, descrizione: 'Capability hub caricato' });
+    await p.cdp.evaluate("document.querySelector('#forgeListMount')?.scrollIntoView({block:'center'})");
+    await p.attendi(300);
+    await p.screenshot('capability-hub-forge-prima-abilita');
+    const testoForgePrima = await p.testo('#forgeListMount');
+    p.nota(`Tool Forge dopo il prompt diretto: ${JSON.stringify(testoForgePrima?.slice(0, 300))}`);
+    if (!testoForgePrima || /Nessun tool forgiato/i.test(testoForgePrima)) {
+      p.difetto('anche con un ask diretto e non condizionale, Tool Forge risulta vuoto', { severita: 'nota' });
+    } else {
+      const abilitaClic = await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('#forgeListMount button')].find((el) => el.textContent.trim() === 'Abilita'); if (!b) return false; b.click(); return true; })()");
+      p.nota(`click su "Abilita": ${abilitaClic}`);
+      if (abilitaClic) {
+        await p.attendi(800);
+        await p.screenshot('capability-hub-forge-dopo-abilita');
+        const testoForgeDopo = await p.testo('#forgeListMount');
+        p.nota(`Tool Forge dopo Abilita: ${JSON.stringify(testoForgeDopo?.slice(0, 300))}`);
+      }
+    }
+    await p.click('#closeSheet');
+    await p.attendi(300);
+
+    const followUp = 'Ora sposta un contatto reale del CRM in fase "trattativa" e usa lo strumento appena abilitato per segnare il promemoria.';
+    await p.digita('#composerInput', followUp);
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendi(1000);
+    await p.attendiTestoStabile('.conversation', { giriStabili: 6, intervalMs: 2500, timeoutMs: 150000 });
+    await p.screenshot('conversazione-dopo-richiama');
+    const testoFinale = await p.testo('.conversation');
+    p.nota(`ultimi 600 caratteri dopo il richiamo: ${JSON.stringify(testoFinale?.slice(-600))}`);
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /**
+   * ⭐⭐⭐ 30/8 — ultimo miglio del Tool Forge: il richiamo precedente si
+   * è fermato onestamente perché non esiste un contatto REALE (crm.js
+   * è logica pura, nessun dato persistito) — limite del progetto
+   * scratch, non del prodotto. Chiedo esplicitamente un contatto
+   * d'esempio, per isolare "lo strumento forgiato si invoca davvero?"
+   * dalla mancanza di dati veri nel corpus.
+   */
+  async 'qa-task-10c-forge-invoca'(p) {
+    await p.attendi(1200);
+    const trovata = await p.cdp.evaluate(`(() => {
+      const riga = [...document.querySelectorAll('.session-item.real-session-item')].find((r) => r.textContent.includes('trattativa'));
+      if (!riga) return false;
+      riga.click();
+      return true;
+    })()`);
+    p.nota(`sessione Task 10 trovata e riaperta: ${trovata}`);
+    if (!trovata) { p.difetto('sessione Task 10 non trovata in sidebar', { severita: 'blocco' }); return; }
+    await p.attendi(1000);
+
+    const prompt = 'Va bene così, non serve un contatto reale — usa comunque adesso lo strumento che hai forgiato e abilitato, con un contatto di esempio a tua scelta (es. "Mario Rossi"), solo per vedere lo strumento funzionare davvero.';
+    await p.digita('#composerInput', prompt);
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendi(1000);
+    await p.attendiTestoStabile('.conversation', { giriStabili: 6, intervalMs: 2500, timeoutMs: 150000 });
+    await p.screenshot('conversazione-invocazione');
+    const testoFinale = await p.testo('.conversation');
+    const usoForge = /forge_promemoria|promemoria-trattativa/i.test(testoFinale ?? '');
+    p.nota(`riferimento allo strumento forgiato nella conversazione: ${usoForge}`);
+    p.nota(`ultimi 700 caratteri: ${JSON.stringify(testoFinale?.slice(-700))}`);
+    if (!usoForge) p.difetto('anche con un contatto d\'esempio esplicito, nessun riferimento allo strumento forgiato invocato', { severita: 'nota' });
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
 };
 
 // --------------------------------------------------------------------
