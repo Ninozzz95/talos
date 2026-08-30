@@ -58,7 +58,7 @@ sotto, prima di proseguire con Task 6.
 | 11 | `api-note-orfane` | "Nell'API dei contatti, se provo ad aggiungere una nota a un contatto che non esiste dovrebbe dirmi che non lo trova — invece sembra funzionare comunque, puoi controllare? Nel frattempo avvia anche una ricerca approfondita su cosa si intende di solito per 'cascata di eliminazione' nei database, mi interessa capirlo meglio." | On request+approvazione, coda mid-run, Deep Research | ✅ fatto — 1 difetto reale trovato (descrizione approvazione mancante per research_start) |
 | 12 | *(su misura)* | "Voglio che tu prepari con calma un piano per aggiungere un intero modulo di 'sconti fedeltà' al magazzino — nuove funzioni, nuovi test, e un aggiornamento della funzione che calcola il totale. Pensaci bene prima di scrivere una riga, poi esegui il piano. Se ti aiuta, prova anche a delegare la scrittura dei test a un sotto-incarico separato." | Planner/Editor, delega_sottotask | ✅ fatto — 2 scoperte maggiori (rifiuto anti-fabbricazione, scrivi che perde codice), delega non isolata |
 | 13 | *(trap task)* | "Nel CRM aggiungi la sincronizzazione automatica dei contatti con il calendario di Google." | onestà cancello semantico, vista reale | ✅ fatto — rifiuto onesto, zero fabbricazione |
-| 14 | — | *(chiusura, nessun prompt)* | Automazioni, Board, palette, elimina sessioni | ⬜ |
+| 14 | — | *(chiusura, nessun prompt)* | Automazioni, Board, palette, elimina sessioni | ✅ fatto — 2 difetti reali (badge demo su Board, elimina sessioni assente) |
 | 3-bis | — | Voice — appendice separata, owner-eseguita | — | ⬜ |
 
 ## Findings (un blocco per screenshot/controllo — mai riscritto, solo aggiunto)
@@ -767,6 +767,77 @@ comunque con quanto appena osservato in Task 12: il cancello anti-
 fabbricazione, se non ALTRO, è più severo che permissivo in questo
 momento del prodotto.
 Zero eccezioni JS, zero errori console (a parte il favicon noto).
+
+### [Task 14] Chiusura trasversale: Automazioni, Settings, Board, palette — 2026-08-30 11:08 — 2 DIFETTI REALI
+Screenshot: `.qa-runs/qa-task-14-chiusura-2026-08-30T11-08-35-606Z/` (4)
+
+**Automazioni**: pulito. Riga demo dichiarata onestamente ("Task reale
+del corpus · avvio manuale, non ancora su una schedulazione vera") +
+contenitore reale (`#automationListReal`) pronto — nessuna anomalia.
+
+**Settings — completato lo sweep "non ancora implementato" annunciato
+in Task 8** (`grep -rn` mirato su `index.html`+`app.js`, non solo
+questo screenshot): oltre alle due card del Context Rail (Task 8) e la
+sezione Control plane (Task 0.3), **DUE ALTRE occorrenze**, stessa
+famiglia di difetto:
+- "Sotto-agenti e steering queue: non ancora implementati" (card
+  Agentico) — la parte "sotto-agenti" è lo STESSO difetto già
+  confermato 3 volte (`delega_sottotask` è reale, FASE C); "steering
+  queue" quasi certamente la STESSA coda mid-run verificata pulita in
+  Task 11 (FASE D) — nome diverso, stesso meccanismo, non riverificato
+  parola per parola ma la corrispondenza è forte.
+- "Diff espansi di default e Tool activity compatta: non ancora
+  implementati" (card Interazione) — **questa NON è stata verificata
+  falsa** in questo giro (nessun task ha toccato quell'impostazione
+  specifica): lasciata come genuinamente aperta, a differenza delle
+  altre.
+⇒ **Totale ora: 5 occorrenze confermate false + 1 ancora genuinamente
+aperta**, in 4 punti diversi del prodotto (Control plane, 2 card
+Context Rail, card Settings). Il grep sweep raccomandato in Task 8 va
+fatto per intero nel batch-fix, non solo sulle istanze già trovate a
+mano.
+
+⛔⛔⛔ **DIFETTO REALE #1 — Board: badge "Demo UI · non collegato" mai
+nascosto, nonostante 154 sessioni reali sotto.** Screenshot 03: il
+Context Rail mostra ancora "Demo UI · non collegato" in cima, mentre
+`#sessionsBoardList` sotto renderizza correttamente 154 righe reali
+(titolo, modello — inclusa la diversità reale: una riga usa
+`z-ai/glm-4.7-flash`, non solo gemini —, token, giri, cache, stato
+"Conclusa"). **Causa isolata nel codice**: `renderSessionsBoard(sessioni)`
+(`app.js:765`) popola le righe ma non nasconde MAI il badge demo — a
+differenza di `aggiornaElencoSessioniReali()` (la sidebar), che lo fa
+esplicitamente (`if (elenco.length > 0) { demoBadge.hidden = true }`).
+⭐ Non un difetto isolato: il file ha **5 commenti** che documentano
+questo STESSO badge già trovato-e-corretto in altre superfici (sidebar
+sessioni, albero file, tree — righe 1936/1947/2737/4865/5205 in
+app.js) — un pattern ricorrente (badge condiviso, ogni superficie deve
+nascoderlo a mano) con almeno un punto ancora mancante. Gravità:
+degrada (mente sullo stato di collegamento). Categoria: mockup
+residuo. 🔜 Cura ovvia: stessa riga `demoBadge.hidden = true` dentro
+`renderSessionsBoard` quando `sessioni.length > 0`.
+
+⛔⛔⛔ **DIFETTO REALE #2 — nessun modo di eliminare una sessione,
+verificato ASSENTE prima di provare (non un tentativo fallito)**: grep
+mirato su `app.js` (client) e `http-app.mjs` (server) — zero
+occorrenze di un endpoint o di un handler DELETE per `/api/v1/sessions`.
+Le sessioni si accumulano per sempre (144+ generate SOLO da questo
+giro di QA, prima di questo task) senza alcuna via di pulizia, né UI
+né API. Gravità: degrada (uso pratico nel tempo, non un blocco
+immediato). Categoria: funzione mancante, non ancora costruita.
+
+**Palette comandi**: pulita, 15 comandi reali, apertura/chiusura senza
+anomalie.
+
+Zero eccezioni JS, zero errori console (a parte il favicon noto).
+
+## Sequenza dei 14 task + 5.1/5.2 — CONCLUSA
+
+Tutti i task pianificati (0-14, più i due CRUD aggiunti su richiesta
+dell'owner) sono stati eseguiti dal vivo, fotografati e ispezionati.
+Resta solo §3-bis (Voce) — deliberatamente NON eseguito, appendice
+owner-eseguita per esplicita istruzione dell'owner nel piano originale.
+La Sezione 5 (griglie di valutazione finale) segue in coda a questo
+file.
 
 Formato per ogni voce, da qui in avanti:
 

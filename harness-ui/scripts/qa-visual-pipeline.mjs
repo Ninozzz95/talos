@@ -3267,6 +3267,59 @@ const SCENARI = {
       p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
     }
   },
+
+  /**
+   * ⭐⭐⭐ 30/8 — Task 14: chiusura, giro trasversale. Automazioni,
+   * Settings (conferma il grep-sweep "non ancora implementato" fatto
+   * leggendo il sorgente), Board, palette comandi. ⛔ "elimina
+   * sessioni" NON tentato: verificato PRIMA (grep su app.js/http-app.mjs)
+   * che non esiste alcun meccanismo di eliminazione per le sessioni
+   * reali, né lato client né lato server — non un tentativo fallito,
+   * un buco confermato prima di provare.
+   */
+  async 'qa-task-14-chiusura'(p) {
+    await p.attendi(1200);
+
+    // --- Automazioni ---
+    await p.click('[data-open-view="automations"]');
+    await p.attendi(500);
+    await p.screenshot('vista-automazioni', { nota: 'atteso: riga demo dichiarata onestamente + eventuali automazioni reali' });
+    const testoAutomazioni = await p.testo('.automation-list, #automationListReal');
+    p.nota(`contenuto vista Automazioni: ${JSON.stringify(testoAutomazioni?.slice(0, 300))}`);
+
+    // --- Settings: conferma visiva delle label "non ancora implementato" ---
+    await p.click('[data-open-view="settings"]');
+    await p.attendi(500);
+    await p.screenshot('vista-settings', { nota: 'CRITICO: "Sotto-agenti... non ancora implementati" — stesso difetto già confermato altrove (Task 0.3, Task 8)' });
+
+    // --- Board ---
+    const boardTabClic = await p.cdp.evaluate("(() => { const t = [...document.querySelectorAll('.mode-tab, [data-mobile-view], button')].find((el) => el.textContent.trim() === 'Board'); if (!t) return false; t.click(); return true; })()");
+    p.nota(`click sul tab Board: ${boardTabClic}`);
+    await p.attendi(800);
+    await p.screenshot('vista-board', { nota: 'atteso: elenco sessioni reali (100+), non le vecchie campagne TALOS-BANCO' });
+    const testoBoard = await p.testo('#sessionsBoardList');
+    const conteggioRigheBoard = await p.cdp.evaluate("document.querySelectorAll('#sessionsBoardList [data-real-surface], #sessionsBoardList .session-board-row, #sessionsBoardList tr, #sessionsBoardList li').length");
+    p.nota(`righe visibili in Board: ${conteggioRigheBoard}`);
+    p.nota(`Board menziona "campagna"/TALOS-BANCO (non dovrebbe più): ${/campagna|TALOS-BANCO/i.test(testoBoard ?? '')}`);
+
+    // --- Palette comandi ---
+    await p.click('#commandPaletteBtn');
+    await p.attendi(300);
+    await p.screenshot('palette-comandi', { nota: 'atteso: elenco comandi reali, ⌘-scorciatoie visibili' });
+    const numeroComandi = await p.cdp.evaluate("document.querySelectorAll('[data-command]').length");
+    p.nota(`numero di comandi nella palette: ${numeroComandi}`);
+    await p.premiTasto('Escape');
+
+    // --- Eliminazione sessioni: confermato ASSENTE prima di provare (vedi doc sopra) ---
+    p.nota('eliminazione sessioni reali: NESSUN meccanismo trovato (né client né server, grep mirato prima di questa corsa) — non tentato, buco di prodotto dichiarato');
+    p.difetto('nessun modo di eliminare una sessione reale, né da UI né da API — 144+ sessioni accumulate in questo solo giro di QA senza possibilità di pulizia', { severita: 'nota' });
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
 };
 
 // --------------------------------------------------------------------
