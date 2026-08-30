@@ -48,8 +48,8 @@ sotto, prima di proseguire con Task 6.
 | 3 | `game-wraparound-negativo` | "Nel gioco del serpentone, quando esce dal bordo sinistro o da quello superiore della griglia il rientro dall'altro lato non funziona bene — sembra un problema col resto sui numeri negativi. Puoi sistemarlo in tutte e quattro le direzioni?" | cerca, Doctor mentre gira, (albero file: selettore sbagliato nello script, non riverificato qui) | ✅ fatto — bug reale trovato E corretto correttamente dal modello |
 | 4 | `crm-nome-senza-cognome` | "Nel CRM, quando un contatto non ha il cognome il nome formattato ha uno spazio in più alla fine che non dovrebbe esserci — puoi sistemarlo?" | Workspace write (dropdown allowlist), fork | ✅ fatto — 1 difetto reale del MIO piano (non del prodotto): fork su sessione ancora in corso è correttamente rifiutato |
 | 5 | `api-validazione-duplicata` | "Nell'API dei contatti la validazione del nome è scritta in due punti diversi — puoi accorparla in uno solo senza cambiare come si comporta?" | Compatta, F5+Resume, export MD/JSON | 🔄 in corso (interrotto per il punto CRUD sotto) |
-| 5.1 ⭐ | *(nuovo, CREATE)* | "Sto iniziando un piccolo sito da zero — mi serve una paginetta HTML singola con un titolo, due paragrafi di testo segnaposto e un pulsante che quando premuto cambia colore di sfondo. Puoi crearla da zero, con anche un piccolo file di stile separato?" | `scrivi` su file MAI esistiti (Review "N nuovi", non "modificati" — mai esercitato finora), owner: "Nuovo file/Nuova cartella" dal menu albero | ⬜ |
-| 5.2 ⭐ | *(nuovo, DELETE)* | "Nel progetto del magazzino c'è un file di backup che non serve più (magazzino_old.py.bak) — puoi eliminarlo? Se trovi altri file temporanei o ridondanti, elimina anche quelli." | eliminazione via `shell` dal modello (nessun tool "elimina file" esplicito per il modello — verificato non presunto), owner: tasto destro → Elimina con scheda di conferma (azione distruttiva) | ⬜ |
+| 5.1 ⭐ | *(nuovo, CREATE)* | "Sto iniziando un piccolo sito da zero — mi serve una paginetta HTML singola con un titolo, due paragrafi di testo segnaposto e un pulsante che quando premuto cambia colore di sfondo. Puoi crearla da zero, con anche un piccolo file di stile separato?" | `scrivi` su file MAI esistiti (Review "N nuovi", non "modificati" — mai esercitato finora), owner: "Nuovo file/Nuova cartella" dal menu albero | ✅ fatto — "2 nuovi" confermato per la prima volta in questo giro |
+| 5.2 ⭐ | *(nuovo, DELETE)* | "Nel progetto del magazzino c'è un file di backup che non serve più (magazzino_old.py.bak) — puoi eliminarlo? Se trovi altri file temporanei o ridondanti, elimina anche quelli." | eliminazione via `shell` dal modello (nessun tool "elimina file" esplicito per il modello — verificato non presunto), owner: tasto destro → Elimina con scheda di conferma (azione distruttiva) | 🔄 scenario scritto, in corso |
 | 6 | `py-carica-ordini-csv` | "Serve una funzione che carica gli ordini da un file CSV e segnali chiaramente, riga per riga, se manca un campo o il prezzo è negativo. Prima cerca online qual è il modo più comune e sicuro in Python per farlo, poi implementalo. Alla fine salvami un breve riassunto di cosa hai fatto." | web_search, Libreria | ⬜ |
 | 7 | `html-filtro-articoli` | "Aggiungi un filtro di testo alla lista articoli del preventivo. Mentre ci lavori, segnami una nota con la decisione presa sul nome della funzione, e aggiungimi un promemoria per rivedere i test più tardi." | Notes, Tasks | ⬜ |
 | 8 | `game-ostacolo-mobile` | "Aggiungi un nuovo tipo di ostacolo che si muove da solo nel serpentone. Ricordati per le prossime volte che preferisco che gli ostacoli abbiano nomi in italiano nel codice. Poi disegnami un'icona semplice per questo ostacolo." | Memory (+dedup), generate_image | ⬜ |
@@ -225,6 +225,30 @@ prima corsa): il modello ha correttamente detto "il problema non c'è
 già più, i test passano, nessuna modifica necessaria" — **buon segno**,
 nessuna fabbricazione di un fix inutile solo per sembrare utile.
 Nessun nuovo difetto di prodotto in questo task.
+
+### [Task 5.1] Create da zero — 2026-08-30 09:24-09:25 — prima verifica reale di CRUD-Create
+Screenshot: `.qa-runs/qa-task-5-1-create-da-zero-2026-08-30T09-24-41-496Z/` (3)
+Aggiunto in risposta diretta alla correzione dell'owner sulla copertura
+CRUD (vedi sezione dedicata sopra): cartella scratch nuova di zecca
+(`sito-nuovo-da-zero/`, mai usata prima da nessun task di questo giro),
+permesso Full access, prompt naturale che chiede una paginetta HTML +
+CSS separato senza mai nominare i due file per nome.
+Automatico: zero eccezioni JS, zero difetti, zero richieste fallite (a
+parte il favicon 404 noto). `report.json`: "file in Review: 2",
+assaggio conteggio `"2nuov"` (cioè "2 nuovi"), `index.html esiste
+davvero sul disco: true` — verificato sul filesystem, non solo
+dichiarato dalla UI.
+Manuale (screenshot 03 ispezionato): header Review Center "2 file
+modificati", stat card **"2 nuovi · 0 modificati · — test · — rischio"**
+— la prima volta in tutto questo giro che il contatore "nuovi" è >0.
+Le due tab file portano il badge **"nuovo"** (non "modificato"):
+`index.html nuovo · 28 righe`, `style.css nuovo · 59 righe`. Contenuto
+del diff per `style.css` reale e sensato (reset, `body` centrato in
+flex, card `.container`, regole `h1`/`p`/`button` con transizione) —
+non uno scheletro vuoto. Nessuna anomalia trovata.
+⇒ **CRUD-Create verificato pulito**: il percorso "scrivi su file mai
+esistiti" funziona end-to-end, badge/contatori distinguono
+correttamente nuovo da modificato. Nessun nuovo difetto di prodotto.
 
 Formato per ogni voce, da qui in avanti:
 
