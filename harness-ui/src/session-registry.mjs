@@ -62,6 +62,7 @@ import { caricaSkill as caricaSkillReale, SkillRegistryError } from './skill-reg
 import { elencaVoci as elencaVociReale, LibraryStoreError } from './library-store.mjs';
 import { elencaNote as elencaNoteReale, NoteStoreError } from './notes-store.mjs';
 import { elencaAttivita as elencaAttivitaReale, TaskStoreError } from './tasks-store.mjs';
+import { elencaMemorie as elencaMemorieReale, MemoryStoreError } from './memory-store.mjs';
 import {
   caricaPlugin as caricaPluginReale,
   fidaPlugin as fidaPluginReale,
@@ -198,6 +199,11 @@ export function createSessionRegistry({
    */
   elencaAttivitaRegistroFn = elencaAttivitaReale,
   /*
+   * ⭐⭐⭐ FASE N, sesto sistema (30/8), il pannello Capability hub:
+   * stesso ruolo di elencaAttivitaRegistroFn appena sopra.
+   */
+  elencaMemorieRegistroFn = elencaMemorieReale,
+  /*
    * ⭐⭐⭐ 29/8 — FASE G, esecuzione. Stesso pattern REALE di
    * `cartellaTrustMcp`/`cartellaTrustHook` sopra — un default relativo
    * a QUESTO file, fuori dal workspace di ogni progetto (il trust di
@@ -231,6 +237,11 @@ export function createSessionRegistry({
    * (vedi la doc in tasks-store.mjs). Stesso pattern reale.
    */
   cartellaAttivita = fileURLToPath(new URL('../.tasks-store/', import.meta.url)),
+  /*
+   * ⭐⭐⭐ FASE N, sesto sistema (30/8) — Memory, GLOBALE come Notes/Tasks
+   * (vedi la doc in memory-store.mjs).
+   */
+  cartellaMemoria = fileURLToPath(new URL('../.memory-store/', import.meta.url)),
   modello,
   chiave,
   cartelleProgetto = [],
@@ -252,6 +263,7 @@ export function createSessionRegistry({
   // ⭐ FASE N (29/8), terza fetta — quattordicesimo: library_context_policy_update (ATTREZZI_ESTESI[13]). Stesso principio "sempre in lista" — il kernel lo rifiuta comunque senza un canale di approvazione presente (ATTREZZI_SEMPRE_DA_CONFERMARE, nessuna eccezione nemmeno con permessiPerAttrezzo:'sempre').
   // ⭐ FASE N, quarto sistema (30/8) — quindicesimo-diciottesimo: i 4 tool Notes (ATTREZZI_ESTESI[14..17] nel kernel). Le 3 mutazioni MUTANO davvero (gate nel kernel stesso) ma seguono lo stesso principio "sempre in lista" di document_create/library_rename.
   // ⭐ FASE N, quinto sistema (30/8) — diciannovesimo-ventitreesimo: i 5 tool Tasks (ATTREZZI_ESTESI[18..22] nel kernel). Le 4 mutazioni MUTANO davvero, stesso principio.
+  // ⭐ FASE N, sesto sistema (30/8) — ventiquattresimo-ventisettesimo: i 4 tool Memory (ATTREZZI_ESTESI[23..26] nel kernel). Le 3 mutazioni MUTANO davvero, stesso principio.
   strumentiEstesi = [
     'web_search', 'artifact_create', 'document_create', 'time_now', 'delega_sottotask', 'generate_image',
     'library_list', 'library_search', 'library_read', 'library_file_origin',
@@ -259,6 +271,7 @@ export function createSessionRegistry({
     'library_context_policy_update',
     'notes_list', 'notes_create', 'notes_update', 'notes_delete',
     'tasks_list', 'tasks_create', 'tasks_complete', 'tasks_update', 'tasks_delete',
+    'memory_search', 'memory_write', 'memory_update', 'memory_delete',
   ],
   ricercaWeb,
   /*
@@ -640,6 +653,8 @@ export function createSessionRegistry({
       cartellaNote,
       // ⭐⭐⭐ FASE N, quinto sistema (30/8) — stesso principio esatto di cartellaNote.
       cartellaAttivita,
+      // ⭐⭐⭐ FASE N, sesto sistema (30/8) — stesso principio esatto di cartellaNote/cartellaAttivita.
+      cartellaMemoria,
       onEvento: (evento) => broadcast(voce, evento),
     }).then((risultato) => {
       /*
@@ -1308,6 +1323,28 @@ export function createSessionRegistry({
       return {
         ok: true,
         attivita: attivita.map((a) => ({ id: a.id, titolo: a.titolo, descrizione: a.descrizione, priorita: a.priorita, stato: a.stato, aggiornataAlle: a.aggiornataAlle })),
+        errore: null,
+      };
+    },
+
+    /**
+     * ⭐⭐⭐ FASE N, sesto sistema (30/8), il pannello Capability hub:
+     * stesso ruolo di elencaAttivita appena sopra. ⛔ `cartellaMemoria`
+     * (GLOBALE), MAI `voce.cartella`.
+     */
+    async elencaMemorie(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      let memorie;
+      try {
+        memorie = await elencaMemorieRegistroFn({ cartella: cartellaMemoria });
+      } catch (errore) {
+        if (errore instanceof MemoryStoreError) return { ok: true, memorie: null, errore: errore.message };
+        throw errore;
+      }
+      return {
+        ok: true,
+        memorie: memorie.map((m) => ({ id: m.id, titolo: m.titolo, contenuto: m.contenuto, genere: m.genere, aggiornataAlle: m.aggiornataAlle })),
         errore: null,
       };
     },

@@ -58,6 +58,14 @@ import {
   leggiAttivita as leggiAttivitaReale,
 } from './tasks-store.mjs';
 import {
+  aggiornaMemoria as aggiornaMemoriaReale,
+  cercaMemorie,
+  creaMemoria as creaMemoriaReale,
+  elencaMemorie as elencaMemorieReale,
+  eliminaMemoria as eliminaMemoriaReale,
+  leggiMemoria as leggiMemoriaReale,
+} from './memory-store.mjs';
+import {
   MODALITA_SUPPORTATE as MODALITA_SUPPORTATE_LIBRERIA,
   creaRicevutaPolitica as creaRicevutaPoliticaLibreria,
   creaRicevutePolitica as creaRicevutePoliticaLibreria,
@@ -367,6 +375,18 @@ export async function avviaSessione({
   aggiornaAttivitaFn = aggiornaAttivitaReale,
   eliminaAttivitaFn = eliminaAttivitaReale,
   leggiAttivitaFn = leggiAttivitaReale,
+  /*
+   * ⭐⭐⭐ FASE N, sesto sistema (30/8) — Memory. Stesso pattern ESATTO
+   * di cartellaAttivita/elencaAttivitaFn appena sopra: GLOBALE, nessun
+   * default QUI. `cercaMemorieFn` è PURA (mai iniettata: non c'è I/O
+   * da fingere), stesso trattamento di `impaginaVociLibreria`.
+   */
+  cartellaMemoria,
+  elencaMemorieFn = elencaMemorieReale,
+  creaMemoriaFn = creaMemoriaReale,
+  aggiornaMemoriaFn = aggiornaMemoriaReale,
+  eliminaMemoriaFn = eliminaMemoriaReale,
+  leggiMemoriaFn = leggiMemoriaReale,
 }) {
   const threadId = randomUUID();
   const runId = randomUUID();
@@ -1041,6 +1061,54 @@ export async function avviaSessione({
       : { ok: true, esito: 'There was no task with that id — nothing to delete.' };
   };
 
+  /*
+   * ⭐⭐⭐ FASE N, sesto sistema (30/8) — Memory. `cartellaMemoria` è
+   * GLOBALE (stesso principio di cartellaNote/cartellaAttivita sopra).
+   */
+  const onMemoriaCerca = async (argomenti) => {
+    const tutte = await elencaMemorieFn({ cartella: cartellaMemoria });
+    const richiesto = Number(argomenti?.limit);
+    const limite = Number.isFinite(richiesto) ? Math.min(Math.max(richiesto, 1), 20) : 5;
+    return cercaMemorie(tutte, { query: argomenti?.query ?? '', limit: limite });
+  };
+
+  const onMemoriaScrivi = async (argomenti) => {
+    try {
+      const { voce, duplicato } = await creaMemoriaFn({ cartella: cartellaMemoria, title: argomenti?.title, content: argomenti?.content, kind: argomenti?.kind ?? 'preference' });
+      // ⛔ Porto diretto del ramo dedup mobile (memoryWriteTools.ts): un doppione NON è un fallimento, e' la postcondizione "c'e' gia' una memoria con questo titolo" gia' vera.
+      return duplicato
+        ? { ok: true, esito: `Already remembered as «${voce.titolo}» (id ${voce.id}). Nothing new was written. Use memory_update if the fact has changed.` }
+        : { ok: true, esito: `Remembered as «${voce.titolo}» (id ${voce.id}): ${voce.contenuto}` };
+    } catch (errore) {
+      return { ok: false, esito: errore instanceof Error ? errore.message : String(errore) };
+    }
+  };
+
+  const onMemoriaAggiorna = async (argomenti) => {
+    if (argomenti?.title === undefined && argomenti?.content === undefined && argomenti?.kind === undefined) {
+      return { ok: false, esito: 'Nothing to change: send at least one of title, content or kind. To remove the memory entirely, use memory_delete.' };
+    }
+    try {
+      const aggiornata = await aggiornaMemoriaFn({ cartella: cartellaMemoria, id: argomenti?.id, title: argomenti?.title, content: argomenti?.content, kind: argomenti?.kind });
+      return { ok: true, esito: `Memory «${aggiornata.titolo}» updated.` };
+    } catch (errore) {
+      if (errore?.code === 'MEMORY_NOT_FOUND') {
+        return { ok: false, esito: `No memory has the id "${argomenti?.id}". Use memory_search to find the right one.` };
+      }
+      return { ok: false, esito: errore instanceof Error ? errore.message : String(errore) };
+    }
+  };
+
+  const onMemoriaElimina = async (argomenti) => {
+    const id = argomenti?.id ?? '';
+    // ⛔ Stesso principio di onNoteElimina/onAttivitaElimina: verificato PRIMA di cancellare.
+    const esisteva = await leggiMemoriaFn({ cartella: cartellaMemoria, id });
+    await eliminaMemoriaFn({ cartella: cartellaMemoria, id });
+    return esisteva
+      ? { ok: true, esito: 'That memory has been removed from this device.' }
+      : { ok: true, esito: `No memory has the id "${id}". It may already be gone.` };
+  };
+
   try {
     const esito = await talosLavoraFn({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
@@ -1052,6 +1120,7 @@ export async function avviaSessione({
       onLibreriaRinomina, onLibreriaElimina, onLibreriaEsporta, onLibreriaPolitica,
       onNoteLista, onNoteCrea, onNoteAggiorna, onNoteElimina,
       onAttivitaLista, onAttivitaCrea, onAttivitaCompleta, onAttivitaAggiorna, onAttivitaElimina,
+      onMemoriaCerca, onMemoriaScrivi, onMemoriaAggiorna, onMemoriaElimina,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));
     return { threadId, runId, ok: esito.comeFinita === 'concluso', esito, erroreInterno: null };

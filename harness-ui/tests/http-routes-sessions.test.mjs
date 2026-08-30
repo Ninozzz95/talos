@@ -189,6 +189,15 @@ function registroFinto() {
       if (sessionId === 'sess-tasks-rotti') return { ok: true, attivita: null, errore: '.tasks-store/rotta.json non è un JSON valido' };
       return { ok: true, attivita: [{ id: 'task-1', titolo: 'Chiama idraulico', descrizione: null, priorita: 'high', stato: 'todo', aggiornataAlle: '2026-08-30T10:00:00.000Z' }], errore: null };
     },
+    /*
+     * ⭐⭐⭐ FASE N, sesto sistema (30/8): stesso stile esatto di
+     * elencaAttivita appena sopra.
+     */
+    async elencaMemorie(sessionId) {
+      if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (sessionId === 'sess-memoria-rotta') return { ok: true, memorie: null, errore: '.memory-store/rotta.json non è un JSON valido' };
+      return { ok: true, memorie: [{ id: 'mem-1', titolo: 'Preferenze risposta', contenuto: 'Risposte brevi', genere: 'preference', aggiornataAlle: '2026-08-30T10:00:00.000Z' }], errore: null };
+    },
     ultimaFiduciaServerMcp: null,
     async fidaServerMcp(sessionId, serverId) {
       this.ultimaFiduciaServerMcp = { sessionId, serverId };
@@ -1246,6 +1255,27 @@ test('⭐ GET /api/v1/sessions/{id}/tasks torna le attività dal registro', asyn
 test('⛔ AL CONTRARIO — GET .../tasks su un id inesistente: 404 NOT_FOUND', async (t) => {
   const { base } = await listen(t);
   const risposta = await fetch(`${base}/api/v1/sessions/non-esiste/tasks`);
+  assert.equal(risposta.status, 404);
+});
+
+/*
+ * ⭐⭐⭐ FASE N, sesto sistema (30/8) — GET .../memory: il Capability
+ * hub chiama questa rotta per mostrare le memorie dell'owner (GLOBALI,
+ * come note/attività) — stesso principio esatto di GET .../tasks sopra.
+ */
+test('⭐ GET /api/v1/sessions/{id}/memory torna le memorie dal registro', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/memory`);
+  assert.equal(risposta.status, 200);
+  const corpo = await risposta.json();
+  assert.deepEqual(corpo.data.memorie, [{ id: 'mem-1', titolo: 'Preferenze risposta', contenuto: 'Risposte brevi', genere: 'preference', aggiornataAlle: '2026-08-30T10:00:00.000Z' }]);
+  assert.equal(corpo.data.errore, null);
+});
+
+test('⛔ AL CONTRARIO — GET .../memory su un id inesistente: 404 NOT_FOUND', async (t) => {
+  const { base } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions/non-esiste/memory`);
   assert.equal(risposta.status, 404);
 });
 

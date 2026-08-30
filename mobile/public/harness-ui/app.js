@@ -1316,6 +1316,54 @@
     return riga;
   }
 
+  /**
+   * ⭐⭐⭐ FASE N, sesto sistema (30/8) — stesso identico pattern di
+   * caricaPannelloAttivita() sopra.
+   */
+  async function caricaPannelloMemoria() {
+    const mount = $('#memoryListMount', sheetBody);
+    if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
+    if (!state.realSession.id) {
+      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione attiva — apri o avvia un task per vedere la Memory.'));
+      return;
+    }
+    mount.replaceChildren(textElement('p', 'board-empty', 'Carico la Memory…'));
+    let dati;
+    try {
+      dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/memory`);
+    } catch (error) {
+      mount.replaceChildren(textElement('p', 'board-empty', `Memory non disponibile: ${error.message}`));
+      return;
+    }
+    if (mount !== $('#memoryListMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
+    if (dati.errore) {
+      mount.replaceChildren(textElement('p', 'board-empty', `.memory-store non valido: ${dati.errore}`));
+      return;
+    }
+    if (!dati.memorie || dati.memorie.length === 0) {
+      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna memoria (.memory-store/, globale — non del progetto).'));
+      return;
+    }
+    mount.replaceChildren(...dati.memorie.map((memoria) => rigaMemoria(memoria)));
+  }
+
+  /** ⭐⭐⭐ FASE N, sesto sistema (30/8) — sempre attiva (una memoria non ha un gate di fiducia): niente bottone, il genere al posto dell'origine. */
+  function rigaMemoria(memoria) {
+    const riga = document.createElement('div');
+    riga.className = 'sheet-option';
+    riga.setAttribute('role', 'group');
+    const iconEl = document.createElement('span');
+    iconEl.className = 'sheet-icon';
+    iconEl.innerHTML = icon('i-bolt');
+    const testo = document.createElement('span');
+    testo.append(
+      textElement('strong', null, memoria.titolo),
+      textElement('small', null, memoria.contenuto.length > 80 ? `${memoria.contenuto.slice(0, 80)}…` : memoria.contenuto),
+    );
+    riga.append(iconEl, testo, textElement('span', 'status-chip success', memoria.genere));
+    return riga;
+  }
+
   /** ⭐⭐⭐ 29/8 — sempre attiva (le skill non hanno un gate di fiducia): niente bottone, solo il riassunto. */
   function rigaSkill(skill) {
     const riga = document.createElement('div');
@@ -1999,7 +2047,7 @@
     showEmbeddedDialog(sheetDialog);
     wireSheetActions(type);
     if (type === 'control') { refreshDoctorBadge(); caricaPannelloHooks(); }
-    if (type === 'capabilities') { caricaPannelloMcp(); caricaPannelloSkill(); caricaPannelloPlugin(); caricaPannelloLibreria(); caricaPannelloNote(); caricaPannelloAttivita(); }
+    if (type === 'capabilities') { caricaPannelloMcp(); caricaPannelloSkill(); caricaPannelloPlugin(); caricaPannelloLibreria(); caricaPannelloNote(); caricaPannelloAttivita(); caricaPannelloMemoria(); }
     if (type === 'sessionTree') caricaAlberoSessione();
     /*
      * ⭐⭐⭐ 27/8, owner: "riaprire lo stesso componente della selezione del
@@ -2200,6 +2248,10 @@
         <div class="sheet-section">
           <span class="sheet-label">Tasks · attività in .tasks-store/, GLOBALI — non del progetto</span>
           <div id="tasksListMount"></div>
+        </div>
+        <div class="sheet-section">
+          <span class="sheet-label">Memory · fatti in .memory-store/, GLOBALI — riletti in ogni conversazione</span>
+          <div id="memoryListMount"></div>
         </div>
         <div class="sheet-section">
           <span class="sheet-label">Non ancora implementato</span>

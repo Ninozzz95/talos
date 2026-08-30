@@ -1401,6 +1401,8 @@ export function createHttpApp({
         const notesMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/notes$/.exec(url.pathname);
         // ⭐⭐⭐ FASE N, quinto sistema (30/8) — il Capability hub elenca le attività dell'owner (GLOBALI, come le note) — stesso principio esatto di notesMatch appena sopra.
         const tasksMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/tasks$/.exec(url.pathname);
+        // ⭐⭐⭐ FASE N, sesto sistema (30/8) — il Capability hub elenca le memorie dell'owner (GLOBALI, come note/attività) — stesso principio esatto di tasksMatch appena sopra.
+        const memoryMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/memory$/.exec(url.pathname);
         // ⭐⭐⭐ FASE C (28/8) — sub-agenti: il foglio "Albero sessione" elenca i figli VERI di una sessione, stesso principio di hooksMatch sopra.
         const childrenMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/children$/.exec(url.pathname);
         // ⭐⭐⭐ 28/8 — non SESSION-scoped: un artefatto ha un id UUID già globalmente unico (agent-service.mjs), stesso principio di /api/v1/models.
@@ -1550,6 +1552,22 @@ export function createHttpApp({
             throw errore;
           }
           data = { attivita: esito.attivita, errore: esito.errore };
+        } else if (memoryMatch) {
+          requireNoQuery(url);
+          let sessionId;
+          try {
+            sessionId = decodeURIComponent(memoryMatch[1]);
+          } catch {
+            sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+            return;
+          }
+          const esito = await sessionRegistry.elencaMemorie(sessionId);
+          if ('erroreAvvio' in esito) {
+            const errore = new Error(esito.erroreAvvio);
+            errore.code = esito.code;
+            throw errore;
+          }
+          data = { memorie: esito.memorie, errore: esito.errore };
         } else if (pluginsMatch) {
           requireNoQuery(url);
           let sessionId;
