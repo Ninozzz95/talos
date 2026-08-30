@@ -26,6 +26,7 @@ function mountStaticRuntime(): void {
 describe('Harness UI embedded host and keyboard runtime', () => {
     beforeEach(() => {
         document.body.className = ''
+        window.localStorage.clear()
     })
 
     afterEach(() => {
@@ -223,6 +224,104 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         expect(stored.apiKey).toBeUndefined()
         expect(stored.appearance.token).toBeUndefined()
         expect(stored.workspaces['project:p1'].apiKey).toBeUndefined()
+    })
+
+    it('CODE-SETTINGS-APPEARANCE-COMPLETE-01 exposes every mobile Appearance control in desktop language', () => {
+        mountStaticRuntime()
+
+        const required = [
+            'themePresetSelect', 'colorModeSelect', 'sceneOverrideSelect',
+            'backgroundMotionToggle', 'interfaceMotionToggle', 'motionModeSelect',
+            'motionQualitySelect', 'motionSpeedRange', 'motionIntensityRange',
+            'motionGlowRange', 'motionDensityRange', 'motionDepthRange',
+            'motionTrailsRange', 'motionContrastRange', 'motionParallaxRange',
+            'pauseWhenHiddenToggle', 'respectDataSaverToggle', 'motionProfileSelect',
+            'motionEasingSelect', 'motionDurationRange', 'motionUiIntensityRange',
+            'motionStaggerRange', 'motionWindowsToggle', 'motionSurfacesToggle',
+            'motionNavigationToggle', 'motionComposerToggle', 'motionMessagesToggle',
+            'motionFeedbackToggle', 'composerShapeSelect', 'composerPlusSelect',
+            'messageStyleSelect', 'streamingAnimationSelect', 'windowPresentationSelect',
+            'immersiveHeaderToggle', 'resetMotionButton',
+        ]
+
+        for (const id of required) expect(document.getElementById(id), id).toBeTruthy()
+    })
+
+    it('CODE-SETTINGS-THEME-REAL-01 applies the selected theme and color mode to the host', () => {
+        mountStaticRuntime()
+
+        const theme = document.querySelector<HTMLSelectElement>('#themePresetSelect')!
+        const mode = document.querySelector<HTMLSelectElement>('#colorModeSelect')!
+        theme.value = 'terminal'
+        theme.dispatchEvent(new Event('change', { bubbles: true }))
+        mode.value = 'light'
+        mode.dispatchEvent(new Event('change', { bubbles: true }))
+
+        expect(document.documentElement.dataset.talosTheme).toBe('terminal')
+        expect(document.documentElement.dataset.talosColorMode).toBe('light')
+        const stored = JSON.parse(window.localStorage.getItem('talos.harness.desktop.settings.v1') || '{}')
+        expect(stored.appearance.themePreset).toBe('terminal')
+        expect(stored.appearance.colorMode).toBe('light')
+    })
+
+    it('CODE-SETTINGS-MOTION-REAL-01 applies scene, motion flags and numeric tokens', () => {
+        mountStaticRuntime()
+
+        const scene = document.querySelector<HTMLSelectElement>('#sceneOverrideSelect')!
+        const speed = document.querySelector<HTMLInputElement>('#motionSpeedRange')!
+        const background = document.querySelector<HTMLInputElement>('#backgroundMotionToggle')!
+        scene.value = 'aurora'
+        scene.dispatchEvent(new Event('change', { bubbles: true }))
+        speed.value = '150'
+        speed.dispatchEvent(new Event('input', { bubbles: true }))
+        background.checked = false
+        background.dispatchEvent(new Event('change', { bubbles: true }))
+
+        expect(document.documentElement.dataset.talosScene).toBe('aurora')
+        expect(document.body.classList.contains('background-motion-off')).toBe(true)
+        expect(document.documentElement.style.getPropertyValue('--talos-motion-speed')).toBe('1.5')
+    })
+
+    it('CODE-SETTINGS-MOTION-VISIBILITY-01 pauses the renderer contract while hidden', () => {
+        mountStaticRuntime()
+        const runtime = (window as unknown as {
+            __talosHarnessUiRuntime?: { backgroundAnimationRunning?: boolean }
+        }).__talosHarnessUiRuntime
+
+        expect(runtime?.backgroundAnimationRunning).toBe(true)
+        Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
+        document.dispatchEvent(new Event('visibilitychange'))
+        expect(runtime?.backgroundAnimationRunning).toBe(false)
+        Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
+        document.dispatchEvent(new Event('visibilitychange'))
+        expect(runtime?.backgroundAnimationRunning).toBe(true)
+    })
+
+    it('CODE-SETTINGS-MOTION-STATIC-01 keeps the scene still without scheduling frames', () => {
+        mountStaticRuntime()
+        const mode = document.querySelector<HTMLSelectElement>('#motionModeSelect')!
+        mode.value = 'static'
+        mode.dispatchEvent(new Event('change', { bubbles: true }))
+
+        const runtime = (window as unknown as {
+            __talosHarnessUiRuntime?: { backgroundAnimationRunning?: boolean }
+        }).__talosHarnessUiRuntime
+        expect(runtime?.backgroundAnimationRunning).toBe(false)
+        expect(document.body.classList.contains('background-motion-off')).toBe(false)
+    })
+
+    it('CODE-SETTINGS-MOTION-RESET-01 restores only Motion defaults', () => {
+        mountStaticRuntime()
+        const scene = document.querySelector<HTMLSelectElement>('#sceneOverrideSelect')!
+        const reset = document.querySelector<HTMLButtonElement>('#resetMotionButton')!
+        scene.value = 'aurora'
+        scene.dispatchEvent(new Event('change', { bubbles: true }))
+        reset.click()
+
+        expect(scene.value).toBe('follow-theme')
+        const stored = JSON.parse(window.localStorage.getItem('talos.harness.desktop.settings.v1') || '{}')
+        expect(stored.appearance.sceneOverride ?? 'follow-theme').toBe('follow-theme')
+        expect(stored.appearance.uiFontScale ?? 'default').toBe('default')
     })
 
     it('CODE-COMPOSER-AUTONOMY-SHEET-01 opens the original policy sheet and reports its selection to Vue', () => {

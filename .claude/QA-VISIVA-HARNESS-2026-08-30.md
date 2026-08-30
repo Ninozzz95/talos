@@ -1584,3 +1584,51 @@ tokenizzazione già esistente, senza promettere sincronizzazione account.
 Esito: **slice Appearance/Typography risolta nella lane desktop**. Restano
 fuori da questa slice i gruppi Modelli, Permessi, Privacy, Backup e Voice,
 che richiedono contratti runtime separati già elencati nel ledger.
+
+## Fase 8A — Parità completa Aspetto mobile → desktop (30/08/2026)
+
+Questa slice porta nel desktop tutte le 35 impostazioni A01–A35 dell’inventario:
+tema e modalità colore, scena, scale separate UI/chat, forma del composer,
+stile messaggi, streaming, presentazione pannelli, intestazione immersiva,
+renderer e qualità dello sfondo, otto range della scena, profilo/easing/durata
+delle animazioni UI, sei categorie di movimento e i relativi comportamenti di
+pausa/riduzione. I valori sono normalizzati fail-closed, persistono soltanto
+nel documento locale `talos.harness.desktop.settings.v1` e applicano i token
+TALOS al vero host; A12 (icona launcher) resta correttamente non applicabile
+al bundle web e viene dichiarato nella UI.
+
+Correzione emersa durante la verifica: il renderer della scena era presente ma
+il fondo opaco di `.app-shell` lo copriva. Il guscio ora è trasparente e lascia
+passare la scena tokenizzata attraverso le superfici glass; la modalità
+`static` ferma davvero il frame loop invece di animare in modo invisibile.
+È stato aggiunto anche un favicon inline, così la pagina non genera più il 404
+cosmetico osservato nelle corse precedenti.
+
+Evidenza automatica:
+
+- `mobile/tests/unit/harness/harnessUiFrontend.test.ts`: 41/41 pass,
+  inclusi completezza, tema reale, token movimento, visibilità, reset e
+  modalità statica;
+- suite Harness `mobile/tests/unit/harness`: 180/180 pass;
+- `node --check mobile/public/harness-ui/app.js`: pass;
+- `git diff --check`: pass.
+
+Pipeline CDP reale, screenshot completi ispezionati per intero:
+
+- 1440×900: `harness-ui/.qa-runs/qa-settings-appearance-2026-08-30T19-59-57-416Z/01-settings-default.png`, `02-settings-modificate.png`, `03-settings-parte-bassa.png`, `04-settings-dopo-reload.png`;
+- 1024×800: `harness-ui/.qa-runs/qa-settings-appearance-2026-08-30T19-58-22-166Z/01-settings-default.png`, `02-settings-modificate.png`, `03-settings-parte-bassa.png`, `04-settings-dopo-reload.png`.
+
+Entrambe le corse hanno prodotto zero eccezioni JavaScript e zero richieste
+HTTP fallite. Sono stati verificati cambio valori, scroll fino a Agentico e
+Control plane, persistenza dopo reload e stato di movimento ridotto.
+
+Taccuino competitivo: il pattern di persistenza locale e scope esplicito è
+coerente con VS Code; la separazione tra scala UI e prosa chat e i controlli di
+movimento sono coerenti con Hermes Desktop. TALOS mantiene il vantaggio dei
+token canonici, del fail-closed e del renderer che si ferma su pagina nascosta,
+risparmio dati, reduced-motion e modalità statica.
+
+Esito: **Fase 8A risolta nella lane desktop**. Il gruppo Laboratorio modelli
+(M01–M52) è inventariato ma resta in attesa della decisione sul runtime LLM
+locale; non sono stati introdotti pannelli che fingano download, inferenza o
+accesso hardware.
