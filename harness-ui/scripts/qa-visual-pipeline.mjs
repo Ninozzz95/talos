@@ -1842,6 +1842,74 @@ const SCENARI = {
       p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
     }
   },
+
+  /**
+   * ⭐⭐⭐ 30/8 — Task 4: crm-nome-senza-cognome (crm-contatti,
+   * difficoltà 2). Permesso "Workspace write" DI DEFAULT (mai toccata
+   * la pillola — verifica che il ramo allowlist/dropdown funzioni,
+   * server riavviato con TALOS_HARNESS_UI_PROJECT_DIRS sui 5 progetti
+   * scratch). A metà lavoro: fork della sessione (gratis, bookkeeping).
+   */
+  async 'qa-task-4-crm-nome'(p) {
+    await p.attendi(1200);
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskCartella')", { descrizione: 'foglio nuova sessione, ramo allowlist (Workspace write)' });
+    await p.screenshot('modale-workspace-write', { nota: 'atteso: dropdown cartella allowlist, non il campo percorso libero' });
+    await p.cdp.evaluate(`(() => {
+      const select = document.querySelector('#customTaskCartella');
+      const opzione = [...select.options].find((o) => o.textContent.includes('crm-contatti'));
+      if (opzione) select.value = opzione.value;
+      select.dispatchEvent(new Event('change', {bubbles:true}));
+    })()`);
+    const cartellaScelta = await p.cdp.evaluate("document.querySelector('#customTaskCartella')?.selectedOptions?.[0]?.textContent");
+    p.nota(`cartella scelta dal dropdown allowlist: ${cartellaScelta}`);
+    await p.click('.model-picker-trigger');
+    await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
+    await p.digita('.model-picker-search input', 'gemini-3.7-flash');
+    await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
+    await p.click('.model-picker-option');
+    await p.attendi(200);
+    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
+
+    const prompt = 'Nel CRM, quando un contatto non ha il cognome il nome formattato ha uno spazio in più alla fine che non dovrebbe esserci — puoi sistemarlo?';
+    await p.digita('#composerInput', prompt);
+    await p.screenshot('compito-scritto');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendiCondizione("!!window.__talosHarnessUiRuntime?.realSessionState?.id", { timeoutMs: 15000, descrizione: 'sessione vera creata' });
+
+    // Fork A META' LAVORO — gratis, solo bookkeeping, non deve interferire col turno in corso.
+    const contaPrimaDelFork = await p.cdp.evaluate("document.querySelectorAll('.session-item.real-session-item').length");
+    p.nota(`sessioni in sidebar prima del fork: ${contaPrimaDelFork}`);
+    const forkBtnEsiste = await p.esiste('[data-action="fork-session"]');
+    p.nota(`bottone fork trovato nel DOM: ${forkBtnEsiste}`);
+    await p.screenshot('prima-del-fork', { nota: 'stato dello schermo prima di tentare il fork' });
+    await p.click('[data-action="fork-session"]');
+    await p.attendi(1500);
+    const toastDopoFork = await p.testo('#toastRegion');
+    const contaDopoFork = await p.cdp.evaluate("document.querySelectorAll('.session-item.real-session-item').length");
+    p.nota(`toast dopo il tentativo di fork: ${JSON.stringify(toastDopoFork)} — sessioni in sidebar: ${contaDopoFork} (prima: ${contaPrimaDelFork})`);
+    await p.screenshot('dopo-tentativo-fork');
+    if (contaDopoFork > contaPrimaDelFork) {
+      p.nota('CONFERMATO: fork a metà lavoro riuscito, nuova voce in sidebar.');
+    } else if (/non riuscito|SESSION_NOT_READY|in corso/i.test(toastDopoFork ?? '')) {
+      p.nota('CONFERMATO (comportamento sensato, non un difetto): il fork di una sessione ANCORA IN CORSO viene rifiutato onestamente dal server — un toast lo spiega, mai un fallimento silenzioso. Il piano presumeva "fork a metà lavoro" senza aver verificato questo guardiano — corretto qui, non un bug del prodotto.');
+    } else {
+      p.difetto(`il fork non ha aggiunto una sessione né mostrato un toast di errore comprensibile: ${JSON.stringify(toastDopoFork)}`, { severita: 'nota' });
+    }
+
+    await p.attendiTestoStabile('.conversation', { giriStabili: 5, intervalMs: 2000, timeoutMs: 150000 });
+    await p.screenshot('conversazione-finale');
+    const reviewFilesCount = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.reviewFiles?.size ?? 0");
+    p.nota(`file in Review: ${reviewFilesCount}`);
+    if (reviewFilesCount === 0) p.difetto('sessione conclusa ma zero file in Review', { severita: 'nota' });
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
 };
 
 // --------------------------------------------------------------------

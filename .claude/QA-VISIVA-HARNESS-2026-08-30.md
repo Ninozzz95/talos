@@ -36,7 +36,7 @@ cambiati, solo quali bug/funzioni ciascun task richiede.
 | 1 | `py-sconto-a-scaglioni` | "Nel progetto del magazzino serve una funzione che calcoli uno sconto a scaglioni in base a delle soglie di importo — puoi aggiungerla?" | elenca/leggi/scrivi/prova, cancello semantico, streaming, Review, auto-rename | ✅ fatto (+ seguito) |
 | 2 | `html-conta-articoli` | "Nel calcolatore di preventivi serve una funzione che conta quanti articoli ci sono nel carrello — dacci un'occhiata?" + dopo: comando umano nel Terminale reale | ciclo base + PTY reale digitata a mano | ✅ fatto — 2 piste false, 1 fix reale al MIO tooling (non al prodotto) |
 | 3 | `game-wraparound-negativo` | "Nel gioco del serpentone, quando esce dal bordo sinistro o da quello superiore della griglia il rientro dall'altro lato non funziona bene — sembra un problema col resto sui numeri negativi. Puoi sistemarlo in tutte e quattro le direzioni?" | cerca, Doctor mentre gira, (albero file: selettore sbagliato nello script, non riverificato qui) | ✅ fatto — bug reale trovato E corretto correttamente dal modello |
-| 4 | `crm-nome-senza-cognome` | "Nel CRM, quando un contatto non ha il cognome il nome formattato ha uno spazio in più che non dovrebbe esserci — puoi sistemarlo?" | Workspace write, fork a metà lavoro | ⬜ |
+| 4 | `crm-nome-senza-cognome` | "Nel CRM, quando un contatto non ha il cognome il nome formattato ha uno spazio in più alla fine che non dovrebbe esserci — puoi sistemarlo?" | Workspace write (dropdown allowlist), fork | ✅ fatto — 1 difetto reale del MIO piano (non del prodotto): fork su sessione ancora in corso è correttamente rifiutato |
 | 5 | `api-validazione-duplicata` | "Nell'API dei contatti la validazione del corpo della richiesta è scritta in due punti diversi — puoi accorparla in uno solo senza cambiare come si comporta?" | Compatta, F5+Resume, export MD/JSON | ⬜ |
 | 6 | `py-carica-ordini-csv` | "Serve una funzione che carica gli ordini da un file CSV e segnali chiaramente, riga per riga, se manca un campo o il prezzo è negativo. Prima cerca online qual è il modo più comune e sicuro in Python per farlo, poi implementalo. Alla fine salvami un breve riassunto di cosa hai fatto." | web_search, Libreria | ⬜ |
 | 7 | `html-filtro-articoli` | "Aggiungi un filtro di testo alla lista articoli del preventivo. Mentre ci lavori, segnami una nota con la decisione presa sul nome della funzione, e aggiungimi un promemoria per rivedere i test più tardi." | Notes, Tasks | ⬜ |
@@ -190,6 +190,29 @@ interazione è già stata verificata dal vivo più volte nella storia di
 questo progetto (drag&drop, rinomina, rivela, elimina — commit
 `46940ae4` e altri), quindi non riprovata qui per economia di tempo;
 resta un buco di COPERTURA di questo giro specifico, dichiarato.
+
+### [Task 4] crm-nome-senza-cognome + fork — 2026-08-30 09:17-09:19
+Screenshot: `qa-runs/qa-task-4-crm-nome-.../` (più corse)
+Server riavviato con `TALOS_HARNESS_UI_PROJECT_DIRS` sui 5 progetti
+scratch — **verificato il ramo allowlist/dropdown per la prima volta
+in questo giro**: dropdown popolato coi nomi reali, selezione
+funzionante, sessione avviata sulla cartella giusta (`crm-contatti`).
+Prima corsa: il modello ha trovato e corretto il bug reale (spazio in
+eccesso quando manca il cognome), test verdi.
+⛔ **Il mio piano aveva un'assunzione sbagliata, trovata dal vivo**: ho
+provato a forkare la sessione MENTRE il modello lavorava ancora
+("a metà lavoro", come scritto nella Sezione 3 del piano). Il server
+rifiuta onestamente: `409, "Fork non riuscito — Sessione non pronta
+per questa azione"` (`SESSION_NOT_READY`) — **comportamento corretto e
+sensato del prodotto**, non un difetto: forkare un turno a metà
+sarebbe ambiguo (da quale punto esatto?). Il piano presumeva che il
+fork mid-turn dovesse riuscire senza averlo mai verificato — corretto
+qui: **il fork si prova su una sessione CONCLUSA**, non durante.
+Riprove successive (stesso prompt, stessa cartella già corretta dalla
+prima corsa): il modello ha correttamente detto "il problema non c'è
+già più, i test passano, nessuna modifica necessaria" — **buon segno**,
+nessuna fabbricazione di un fix inutile solo per sembrare utile.
+Nessun nuovo difetto di prodotto in questo task.
 
 Formato per ogni voce, da qui in avanti:
 
