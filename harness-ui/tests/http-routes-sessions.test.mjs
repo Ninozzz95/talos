@@ -285,7 +285,6 @@ function registroFinto() {
 
 async function listen(t, { sessionRegistry = registroFinto(), listaTaskDisponibili, impostaIntervalloFn, cancellaIntervalloFn } = {}) {
   const app = createHttpApp({
-    campaignService: { listCampaigns: async () => [] },
     staticHandler: async () => null,
     sessionRegistry,
     listaTaskDisponibili: listaTaskDisponibili ?? (() => [{ id: 'sconto-a-scaglioni', progetto: 'listino', difficolta: 1, consegnaCorta: 'x' }]),

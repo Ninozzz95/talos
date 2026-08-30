@@ -62,6 +62,10 @@ function sessioneControllabile() {
       onEventoCatturato(eventoFinale);
       risolviAttesa(risultato);
     },
+    // ⭐ 30/8 — piano Board: emette un evento INTERMEDIO (es. uno StateDelta
+    // /usage) senza risolvere la sessione — a differenza di concludi(), la
+    // sessione resta viva dopo la chiamata.
+    emetti(evento) { onEventoCatturato(evento); },
     get segnaleStop() { return inputCatturato?.segnaleStop; },
     get chiamate() { return chiamate; },
     get ultimoInput() { return inputCatturato; },
@@ -1006,6 +1010,45 @@ test('⭐⭐ elenca() torna un riepilogo per sessione, PIÙ RECENTE PRIMA, mai g
 
   secondaSessione.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' }); // pulizia
   await new Promise((r) => setImmediate(r));
+});
+
+/*
+ * ⭐⭐⭐ 30/8 — piano "Board — da campagne TALOS-BANCO a cruscotto
+ * sessioni": elenca().usage, derivato dall'ultimo StateDelta /usage nella
+ * storia — mai un secondo campo scritto a parte (vedi la doc di
+ * usageDaEventi in session-registry.mjs sul perché).
+ */
+test('⭐⭐⭐ elenca(): usage è il valore dell\'ULTIMO StateDelta su /usage (somma cumulativa, REPLACE non ADD)', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  registro.avvia('task-vero');
+
+  finta.emetti({ type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: { prompt_tokens: 100, completion_tokens: 20, cached_tokens: 0, giri: 1 } }] });
+  finta.emetti({ type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: { prompt_tokens: 340, completion_tokens: 55, cached_tokens: 12, giri: 2 } }] });
+  assert.deepEqual(registro.elenca()[0].usage, { prompt_tokens: 340, completion_tokens: 55, cached_tokens: 12, giri: 2 }, 'l\'ULTIMO totale cumulativo, non il primo, non una somma dei due');
+
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔ AL CONTRARIO — elenca(): usage è null quando nessun giro ha mai riportato un /usage (mai uno zero fabbricato)', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  registro.avvia('task-vero');
+  assert.equal(registro.elenca()[0].usage, null);
+
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  assert.equal(registro.elenca()[0].usage, null, 'nemmeno dopo la conclusione: nessun giro l\'ha mai riportato');
+});
+
+test('⛔⛔ AL CONTRARIO — elenca(): un altro StateDelta (es. /file/*) non viene mai scambiato per /usage', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  registro.avvia('task-vero');
+
+  finta.emetti({ type: 'StateDelta', delta: [{ op: 'add', path: '/file/prova.txt', value: 'ciao' }] });
+  assert.equal(registro.elenca()[0].usage, null, 'uno StateDelta su un path diverso non deve produrre un usage a caso');
+
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
 test('⭐⭐⭐ rinomina() persiste il nome — elenca() ed esporta() lo mostrano dopo, mai sovrascritto', () => {

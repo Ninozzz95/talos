@@ -85,14 +85,14 @@
     pendingCustomSession: null,
     /** ⭐ 27/8 — {percorso, nome} del file bersaglio quando si apre il foglio Apri/Rinomina/Elimina dall'albero, null altrimenti. I fogli sono statici (sheetTemplates), questo li parametrizza. */
     alberoFileTarget: null,
+    // ⭐⭐⭐ 30/8 — piano "Board — da campagne TALOS-BANCO a cruscotto
+    // sessioni": `sessioni` è il riepilogo REALE da GET /api/v1/sessions
+    // (la stessa rotta che alimenta già la sidebar), mai le campagne di
+    // uno strumento di misura esterno.
     board: {
       initialized: false,
       bootstrapPromise: null,
-      campaign: null,
-      campaigns: [],
-      runs: [],
-      nextCursor: null,
-      totalMatched: 0,
+      sessioni: [],
       generation: 0,
     },
     /*
@@ -203,17 +203,8 @@
   const commandEmpty = $('#commandEmpty');
   const diffPath = $('#diffPath');
   const diffCode = $('#diffCode');
-  const campaignSelect = $('#campaignSelect');
-  const harnessFilter = $('#harnessFilter');
-  const outcomeFilter = $('#outcomeFilter');
-  const connectionState = $('[data-connection-state]');
-  const campaignReadMeta = $('#campaignReadMeta');
-  const campaignRunList = $('#campaignRunList');
-  const campaignRunCount = $('#campaignRunCount');
-  const campaignReportText = $('#campaignReportText');
-  const campaignReportState = $('#campaignReportState');
-  const loadMoreRunsButton = $('[data-action="load-more-runs"]');
-  const refreshCampaignButton = $('[data-action="refresh-campaign"]');
+  const sessionsBoardList = $('#sessionsBoardList');
+  const refreshSessionsBoardButton = $('[data-action="refresh-sessions-board"]');
   const boardEyebrow = $('#boardEyebrow');
   const boardTitle = $('#boardTitle');
   const boardDescription = $('#boardDescription');
@@ -418,7 +409,7 @@
     target.scrollTop = 0;
     resetEmbeddedTopbarScroll(view === 'chat' ? chatConversation : target);
     window.__talosHarnessHostViewChange?.(view);
-    if (view === 'dashboard') ensureCampaignBoard();
+    if (view === 'dashboard') ensureSessionsBoard();
     if (view === 'automations') renderAutomationsReali();
     if (view === 'terminal') apriVistaTerminaleReale(); // ⭐ 28/8 — Terminale REALE: montaggio/connessione PIGRI, solo alla prima apertura del tab (LEDGER-TERMINALE-REALE.md)
   }
@@ -694,190 +685,90 @@
     return frammento;
   }
 
-  function setConnectionState(value, label, detail) {
-    connectionState.dataset.connectionState = value;
-    connectionState.textContent = label;
-    if (detail !== undefined) campaignReadMeta.textContent = detail;
-  }
-
   function boardErrorMessage(error) {
     if (error?.code && typeof error.message === 'string' && error.message) return error.message;
     return 'Il server locale non risponde. Apri Codice sul PC e riprova.';
   }
 
-  function formatCost(value, estimated = false) {
-    if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
-    const amount = value.toFixed(9).replace(/\.?0+$/, '');
-    return `${estimated ? '~' : ''}$${amount}`;
-  }
-
   /**
    * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 — il
-   * contatore costo/token per una sessione VIVA (oggi esiste solo per le
-   * righe storiche della Board campagne). Solo token, MAI un costo in
+   * contatore costo/token per una sessione. Solo token, MAI un costo in
    * dollari: calcolarlo richiederebbe sapere con certezza quale modello
    * ha girato QUESTO giro (il server può ricadere sul suo default senza
    * dirlo al client) — mostrare un numero solo perché "probabilmente"
    * giusto sarebbe un bluff, lo stesso principio che vieta un
    * `enforcement` finto altrove in questo progetto. Token contati sono
    * sempre veri, indipendentemente dal prezzo.
+   * ⛔⛔⛔ 30/8 — bug reale trovato E corretto riusando questa stessa
+   * funzione per la Board (piano "Board — da campagne TALOS-BANCO a
+   * cruscotto sessioni"): leggeva `usage.prompt_tokens_details?.cached_tokens`
+   * (la forma NIDIFICATA della risposta grezza OpenRouter) — ma il kernel
+   * (talosHarness.mjs, `conto`) espone un `cached_tokens` GIÀ appiattito,
+   * verificato leggendo il sorgente vero, non presunto. Il campo nidificato
+   * non esiste mai in `evento.totali`: la cache mostrava sempre "· cache"
+   * assente, anche quando aveva colpito per davvero.
    */
-  function formattaUsageBreve(usage) {
+  function formattaUsageBreve(usage, { live = false } = {}) {
     if (!usage) return 'contesto ignoto · in attesa del primo giro';
     const prompt = Number(usage.prompt_tokens ?? 0) || 0;
     const completion = Number(usage.completion_tokens ?? 0) || 0;
-    const cache = Number(usage.prompt_tokens_details?.cached_tokens ?? 0) || 0;
+    const cache = Number(usage.cached_tokens ?? 0) || 0;
     const totale = prompt + completion;
     const kilo = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
     const cacheParte = cache > 0 ? ` · cache ${kilo(cache)}` : '';
-    return `${kilo(totale)} token · ${usage.giri} gir${usage.giri === 1 ? 'o' : 'i'}${cacheParte} · live`;
+    return `${kilo(totale)} token · ${usage.giri} gir${usage.giri === 1 ? 'o' : 'i'}${cacheParte}${live ? ' · live' : ''}`;
   }
 
   /** Ripatcha la riga "Main" del foglio Albero sessione SE è già aperto — non riapre né forza un redraw di tutto il foglio, stesso principio di aggiornaPillolaModello(). */
   function aggiornaContatoreUsage() {
     const nodo = $('[data-usage-summary]');
-    if (nodo) nodo.textContent = `Main · ${formattaUsageBreve(state.realSession.usage)}`;
+    if (nodo) nodo.textContent = `Main · ${formattaUsageBreve(state.realSession.usage, { live: true })}`;
   }
 
-  function formatPassRate(value) {
-    if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
-    return `${(value * 100).toFixed(1).replace(/\.0$/, '')}%`;
+  /**
+   * ⭐⭐⭐ 30/8 — piano "Board — da campagne TALOS-BANCO a cruscotto
+   * sessioni": una riga per sessione REALE di Harness Desktop stesso
+   * (`GET /api/v1/sessions`, la STESSA rotta che riempie già la sidebar —
+   * zero meccanismo nuovo lato dati). Nessuna espansione/dettaglio: a
+   * differenza della vecchia riga campagna, qui non c'è un'"evidenza" da
+   * mostrare o nascondere, solo un riepilogo.
+   */
+  function formattaOraSessione(iso) {
+    const data = new Date(iso);
+    if (Number.isNaN(data.getTime())) return iso;
+    return data.toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' });
   }
 
-  function replaceSelectOptions(select, values, allLabel, selectedValue = '') {
-    select.replaceChildren();
-    if (allLabel !== null) {
-      const all = document.createElement('option');
-      all.value = '';
-      all.textContent = allLabel;
-      select.appendChild(all);
-    }
-    for (const value of values) {
-      const option = document.createElement('option');
-      option.value = value;
-      option.textContent = value;
-      select.appendChild(option);
-    }
-    select.value = values.includes(selectedValue) ? selectedValue : '';
-  }
-
-  function renderCampaignOptions(campaigns) {
-    campaignSelect.replaceChildren();
-    for (const campaign of campaigns) {
-      const option = document.createElement('option');
-      option.value = campaign.name;
-      option.textContent = campaign.available ? campaign.name : `${campaign.name} · non disponibile`;
-      option.disabled = !campaign.available;
-      campaignSelect.appendChild(option);
-    }
-    campaignSelect.disabled = campaigns.every((campaign) => !campaign.available);
-    if (state.board.campaign) campaignSelect.value = state.board.campaign;
-  }
-
-  function renderCampaignFilters(summary) {
-    const harnesses = (summary?.harnesses || []).map((entry) => entry.harness);
-    const outcomes = Object.keys(summary?.outcomeCounts || {});
-    replaceSelectOptions(harnessFilter, harnesses, 'Tutti', harnessFilter.value);
-    replaceSelectOptions(outcomeFilter, outcomes, 'Tutti', outcomeFilter.value);
-  }
-
-  function renderCampaignSummary(summary) {
-    $('#summaryTotal').textContent = summary ? String(summary.totalRows) : '—';
-    $('#summaryMeasured').textContent = summary ? String(summary.measuredRows) : '—';
-    $('#summaryPassRate').textContent = summary ? formatPassRate(summary.passRate) : '—';
-    $('#summaryCost').textContent = summary
-      ? formatCost(summary.canonicalCostUsd, summary.costEstimated)
-      : '—';
-    $('#summaryDiagnostics').textContent = summary ? String(summary.diagnosticCount) : '—';
-    $('#summaryCostSource').textContent = !summary || summary.canonicalCostUsd === null
-      ? 'non disponibile'
-      : (summary.costEstimated ? '~ somma righe' : 'file corsa');
-    renderCampaignFilters(summary);
-  }
-
-  function appendRunDetail(detail, label, value) {
-    const item = document.createElement('div');
-    const term = textElement('dt', '', label);
-    const description = textElement('dd', '', value);
-    item.append(term, description);
-    detail.appendChild(item);
-  }
-
-  let runDetailSequence = 0;
-  function createCampaignRun(row) {
+  function creaRigaSessioneBoard(sessione) {
     const article = document.createElement('article');
-    article.className = 'campaign-run';
-    const toggle = document.createElement('button');
-    toggle.className = 'campaign-run-toggle';
-    toggle.type = 'button';
-    toggle.setAttribute('aria-expanded', 'false');
+    article.className = 'session-board-row';
 
     const identity = document.createElement('span');
+    const titolo = sessione.nome || sessione.taskId || 'Sessione';
+    const modelloParte = sessione.modello ? ` · ${sessione.modello}` : '';
     identity.append(
-      textElement('strong', '', `${row.harness} · ${row.id}`),
-      textElement('small', '', `${row.source.file}:${row.source.line} · ${row.modello || 'modello non dichiarato'}`),
+      textElement('strong', '', titolo),
+      textElement('small', '', `${formattaOraSessione(sessione.avviataAlle)}${modelloParte} · ${formattaUsageBreve(sessione.usage)}`),
     );
-    const outcome = textElement('span', 'status-chip campaign-run-outcome', row.esito);
-    toggle.append(identity, outcome);
 
-    const detail = document.createElement('div');
-    detail.className = 'campaign-run-detail';
-    detail.hidden = true;
-    detail.id = `campaign-run-detail-${runDetailSequence += 1}`;
-    toggle.setAttribute('aria-controls', detail.id);
-    const facts = document.createElement('dl');
-    appendRunDetail(facts, 'Difficoltà', row.difficolta);
-    appendRunDetail(facts, 'Durata', typeof row.ms === 'number' ? `${row.ms} ms` : '—');
-    appendRunDetail(facts, 'Costo riga', formatCost(row.costoUsd));
-    appendRunDetail(facts, 'Corpus', row.corpus);
-    appendRunDetail(facts, 'Quando', row.quando);
-    appendRunDetail(facts, 'Cambiamenti', row.cambiamenti?.quanti ?? '—');
-    detail.appendChild(facts);
+    const stato = sessione.interrotta
+      ? { testo: 'Interrotta', classe: 'error' }
+      : sessione.conclusa
+        ? { testo: 'Conclusa', classe: 'success' }
+        : { testo: 'In corso', classe: '' };
+    const chip = textElement('span', `status-chip ${stato.classe}`.trim(), stato.testo);
 
-    toggle.addEventListener('click', () => {
-      const opening = detail.hidden;
-      toggle.setAttribute('aria-expanded', String(opening));
-      if (!opening) {
-        animateExit(detail, { durationToken: '--talos-motion-duration-disclosure' }, () => { detail.hidden = true; });
-        return;
-      }
-      detail.hidden = false;
-      markMotionEnter(detail);
-      if (!detail.querySelector('.run-evidence')) {
-        const evidence = textElement(
-          row.detto === null || row.detto === undefined ? 'p' : 'pre',
-          'run-evidence',
-          row.detto === null || row.detto === undefined ? 'Evidenza svuotata dalla memoria della pagina.' : row.detto,
-        );
-        detail.appendChild(evidence);
-      }
-    });
-
-    article.append(toggle, detail);
+    article.append(identity, chip);
     return article;
   }
 
-  function renderCampaignRuns(items, { append = false } = {}) {
-    if (!append) campaignRunList.replaceChildren();
-    for (const row of items) campaignRunList.appendChild(createCampaignRun(row));
-    if (!append && items.length === 0) {
-      campaignRunList.appendChild(textElement('p', 'board-empty', 'Nessuna riga corrisponde ai filtri selezionati.'));
-    }
-    campaignRunCount.textContent = `${state.board.runs.length} di ${state.board.totalMatched} righe`;
-    loadMoreRunsButton.hidden = !state.board.nextCursor;
-  }
-
-  function renderCampaignReport(report, errorCode = null) {
-    campaignReportState.classList.toggle('success', Boolean(report));
-    if (report) {
-      campaignReportState.textContent = 'Disponibile';
-      campaignReportText.textContent = report.text;
+  function renderSessionsBoard(sessioni) {
+    sessionsBoardList.replaceChildren();
+    if (sessioni.length === 0) {
+      sessionsBoardList.appendChild(textElement('p', 'board-empty', 'Nessuna sessione ancora — premi «Nuova» per iniziare.'));
       return;
     }
-    campaignReportState.textContent = errorCode === 'REPORT_UNAVAILABLE' ? 'Non prodotto' : 'Non disponibile';
-    campaignReportText.textContent = errorCode === 'REPORT_UNAVAILABLE'
-      ? 'Rapporto non ancora prodotto'
-      : 'Rapporto non disponibile';
+    for (const sessione of sessioni) sessionsBoardList.appendChild(creaRigaSessioneBoard(sessione));
   }
 
   async function apiGet(pathname) {
@@ -1971,160 +1862,50 @@
     return { elemento: wrap, getValore: () => (toccato ? LIVELLI_RAGIONAMENTO[indice].valore : null) };
   }
 
-  function runsPath(cursor = null) {
-    const params = new URLSearchParams({ limit: '40' });
-    if (harnessFilter.value) params.set('harness', harnessFilter.value);
-    if (outcomeFilter.value) params.set('esito', outcomeFilter.value);
-    if (cursor) params.set('cursor', cursor);
-    return `/api/v1/campaigns/${encodeURIComponent(state.board.campaign)}/runs?${params}`;
-  }
-
-  async function loadCampaignRuns({ append = false, generation = state.board.generation } = {}) {
-    const page = await apiGet(runsPath(append ? state.board.nextCursor : null));
-    if (generation !== state.board.generation) return;
-    state.board.runs = append ? state.board.runs.concat(page.items) : page.items;
-    state.board.nextCursor = page.nextCursor;
-    state.board.totalMatched = page.totalMatched;
-    renderCampaignRuns(page.items, { append });
-  }
-
-  async function loadCampaignReport(generation) {
-    try {
-      const report = await apiGet(`/api/v1/campaigns/${encodeURIComponent(state.board.campaign)}/report`);
-      if (generation === state.board.generation) renderCampaignReport(report);
-    } catch (error) {
-      if (generation !== state.board.generation) return;
-      if (error.code === 'REPORT_UNAVAILABLE') {
-        renderCampaignReport(null, error.code);
-        return;
-      }
-      throw error;
-    }
-  }
-
-  async function refreshCampaign() {
-    if (!state.board.campaign) return;
+  async function refreshSessionsBoard() {
     const generation = state.board.generation += 1;
-    refreshCampaignButton.disabled = true;
-    setConnectionState('loading', 'Lettura in corso', 'Rileggo i file locali autorizzati.');
-    campaignReportState.textContent = 'Lettura…';
+    if (refreshSessionsBoardButton) refreshSessionsBoardButton.disabled = true;
     try {
-      const snapshot = await apiGet(`/api/v1/campaigns/${encodeURIComponent(state.board.campaign)}/snapshot`);
+      const { items } = await apiGet('/api/v1/sessions');
       if (generation !== state.board.generation) return;
-      renderCampaignSummary(snapshot.summary);
-      campaignReadMeta.textContent = `Lettura ${snapshot.readAt} · SHA-256 ${snapshot.sourceHash}`;
-      await Promise.all([
-        loadCampaignRuns({ append: false, generation }),
-        loadCampaignReport(generation),
-      ]);
-      if (generation !== state.board.generation) return;
-      setConnectionState('ready', 'Dati reali · sola lettura');
+      state.board.sessioni = items;
+      state.board.initialized = true;
+      renderSessionsBoard(items);
       // ⭐ 26/8, riconciliazione desktop→mobile — trovato con una prova vera
       // (browser reale contro il server vero, non ipotizzato): il badge
       // "Demo UI" della Board restava visibile anche a dati reali caricati,
-      // difetto preesistente MAI notato perché su mobile embedded questo
-      // ramo non veniva mai raggiunto. Stesso principio già applicato ad
+      // difetto preesistente. Stesso principio già applicato ad
       // aggiornaAlberoReale/aggiornaPannelloAmbiente: dati reali arrivati,
       // l'etichetta demo deve sparire.
       const demoBadgeBoard = $('.demo-surface-badge', $('[data-view="dashboard"]'));
       if (demoBadgeBoard) demoBadgeBoard.hidden = true;
     } catch (error) {
       if (generation !== state.board.generation) return;
-      state.board.runs = [];
-      state.board.nextCursor = null;
-      state.board.totalMatched = 0;
-      renderCampaignSummary(null);
-      renderCampaignRuns([]);
-      renderCampaignReport(null, error.code);
-      setConnectionState('error', 'Collegamento non disponibile', boardErrorMessage(error));
+      state.board.sessioni = [];
+      sessionsBoardList.replaceChildren(textElement('p', 'board-empty', boardErrorMessage(error)));
     } finally {
-      if (generation === state.board.generation) refreshCampaignButton.disabled = false;
+      if (generation === state.board.generation && refreshSessionsBoardButton) refreshSessionsBoardButton.disabled = false;
     }
   }
 
-  async function loadCampaigns() {
-    setConnectionState('loading', 'Connessione locale', 'Leggo la allowlist dal server Codice.');
-    const campaigns = await apiGet('/api/v1/campaigns');
-    state.board.campaigns = campaigns;
-    const available = campaigns.filter((campaign) => campaign.available);
-    if (available.length === 0) throw new Error('Nessuna campagna autorizzata disponibile');
-    if (!available.some((campaign) => campaign.name === state.board.campaign)) {
-      state.board.campaign = available[0].name;
-    }
-    renderCampaignOptions(campaigns);
-    campaignSelect.value = state.board.campaign;
+  function renderEmbeddedSessionsBoardDemo(announce = false) {
     state.board.initialized = true;
-    await refreshCampaign();
-  }
-
-  function renderEmbeddedBoardDemo(announce = false) {
-    state.board.initialized = true;
-    state.board.campaign = null;
-    state.board.campaigns = [];
-    state.board.runs = [];
-    state.board.nextCursor = null;
-    state.board.totalMatched = 0;
-    boardEyebrow.textContent = 'Board Codice · Demo UI';
-    boardTitle.textContent = 'Anteprima campagne';
-    boardDescription.textContent = 'Questa superficie mobile non ha un backend: nessun dato TALOS-BANCO viene letto o simulato.';
-    campaignSelect.replaceChildren(new Option('Demo non collegata', ''));
-    campaignSelect.disabled = true;
-    harnessFilter.replaceChildren(new Option('Tutti', ''));
-    harnessFilter.disabled = true;
-    outcomeFilter.replaceChildren(new Option('Tutti', ''));
-    outcomeFilter.disabled = true;
-    renderCampaignSummary(null);
-    renderCampaignRuns([]);
-    renderCampaignReport(null, 'REPORT_UNAVAILABLE');
-    $('.board-empty', campaignRunList).textContent = 'Nessun dato mobile collegato.';
-    campaignReportState.textContent = 'Demo';
-    campaignReportText.textContent = 'Nessun rapporto mobile collegato';
-    setConnectionState('demo', 'Demo UI · non collegato', 'Nessun backend mobile è configurato per Codice.');
+    state.board.sessioni = [];
+    boardEyebrow.textContent = 'Codice · Demo UI';
+    boardTitle.textContent = 'Anteprima sessioni';
+    boardDescription.textContent = 'Questa superficie mobile non ha un backend: nessuna sessione reale viene letta o simulata.';
+    sessionsBoardList.replaceChildren(textElement('p', 'board-empty', 'Nessun dato mobile collegato.'));
     if (announce) toast('Board demo non collegata', 'Nessuna richiesta di rete è stata eseguita.');
   }
 
-  function ensureCampaignBoard() {
+  function ensureSessionsBoard() {
     if (embeddedDemoOnly()) {
-      renderEmbeddedBoardDemo();
+      renderEmbeddedSessionsBoardDemo();
       return Promise.resolve();
     }
     if (state.board.initialized || state.board.bootstrapPromise) return state.board.bootstrapPromise;
-    state.board.bootstrapPromise = loadCampaigns()
-      .catch((error) => {
-        state.board.initialized = false;
-        setConnectionState('error', 'Server locale non disponibile', boardErrorMessage(error));
-        renderCampaignSummary(null);
-        renderCampaignRuns([]);
-        renderCampaignReport(null, error.code);
-      })
-      .finally(() => { state.board.bootstrapPromise = null; });
+    state.board.bootstrapPromise = refreshSessionsBoard().finally(() => { state.board.bootstrapPromise = null; });
     return state.board.bootstrapPromise;
-  }
-
-  async function reloadRunsFromFilters() {
-    if (!state.board.initialized) return;
-    const generation = state.board.generation;
-    loadMoreRunsButton.disabled = true;
-    try {
-      await loadCampaignRuns({ append: false, generation });
-      setConnectionState('ready', 'Dati reali · sola lettura');
-    } catch (error) {
-      setConnectionState('error', 'Filtro non disponibile', boardErrorMessage(error));
-    } finally {
-      loadMoreRunsButton.disabled = false;
-    }
-  }
-
-  function clearCampaignEvidence() {
-    if (embeddedDemoOnly()) {
-      toast('Nessuna evidenza collegata', 'La Board mobile è una Demo UI senza backend.');
-      return;
-    }
-    for (const row of state.board.runs) row.detto = null;
-    $$('.run-evidence', campaignRunList).forEach((element) => element.remove());
-    $$('.campaign-run-detail', campaignRunList).forEach((detail) => { detail.hidden = true; });
-    $$('.campaign-run-toggle', campaignRunList).forEach((button) => button.setAttribute('aria-expanded', 'false'));
-    toast('Evidenze svuotate', 'I testi detto sono stati rimossi solo dalla memoria e dal DOM della pagina.');
   }
   // REAL_DATA_RENDER_END
 
@@ -5406,7 +5187,7 @@
    * quello vero appena almeno una sessione reale esiste. Su mobile
    * EMBEDDED #sessionList resta nascosto da styles.css: questa funzione
    * scrive comunque nel DOM (nessun guard qui, il guard è visivo/CSS,
-   * stesso principio già in uso per renderCampaignRuns/Board), pronta a
+   * stesso principio già in uso per renderSessionsBoard/Board), pronta a
    * comparire appena il ponte verso la sidebar nativa Vue esisterà.
    */
   async function aggiornaElencoSessioniReali() {
@@ -6695,38 +6476,11 @@
     toast('Movimento', event.target.checked ? 'Ridotto' : 'Standard');
   });
 
-  campaignSelect?.addEventListener('change', () => {
-    state.board.campaign = campaignSelect.value;
-    harnessFilter.value = '';
-    outcomeFilter.value = '';
-    refreshCampaign();
+  refreshSessionsBoardButton?.addEventListener('click', () => {
+    if (embeddedDemoOnly()) renderEmbeddedSessionsBoardDemo(true);
+    else if (state.board.initialized) refreshSessionsBoard();
+    else ensureSessionsBoard();
   });
-  harnessFilter?.addEventListener('change', reloadRunsFromFilters);
-  outcomeFilter?.addEventListener('change', reloadRunsFromFilters);
-  refreshCampaignButton?.addEventListener('click', () => {
-    if (embeddedDemoOnly()) renderEmbeddedBoardDemo(true);
-    else if (state.board.initialized) refreshCampaign();
-    else ensureCampaignBoard();
-  });
-  loadMoreRunsButton?.addEventListener('click', async () => {
-    const dashboard = $('[data-view="dashboard"]');
-    const scrollTop = dashboard.scrollTop;
-    const firstNewIndex = state.board.runs.length;
-    loadMoreRunsButton.disabled = true;
-    try {
-      await loadCampaignRuns({ append: true });
-      dashboard.scrollTop = scrollTop;
-    } catch (error) {
-      setConnectionState('error', 'Paginazione non disponibile', boardErrorMessage(error));
-    } finally {
-      loadMoreRunsButton.disabled = false;
-      const focusTarget = loadMoreRunsButton.hidden
-        ? campaignRunList.querySelectorAll('.campaign-run-toggle')[firstNewIndex]
-        : loadMoreRunsButton;
-      focusTarget?.focus({ preventScroll: true });
-    }
-  });
-  $('[data-action="clear-evidence"]')?.addEventListener('click', clearCampaignEvidence);
 
   ROOT().addEventListener('keydown', (event) => {
     const mod = event.metaKey || event.ctrlKey;
@@ -6992,7 +6746,7 @@
    * CODE-COMPOSER-DEMO-SEND-01 (mount standalone, senza `talos-embedded`)
    * e HARNESS-BOARD-MOBILE-HONESTY-01 (mount embedded) pretendono ENTRAMBI
    * zero fetch al mount — non solo in embedded. È lo stesso principio
-   * della Board (ensureCampaignBoard/loadCampaigns, mai chiamate al boot,
+   * della Board (ensureSessionsBoard/refreshSessionsBoard, mai chiamate al boot,
    * solo al cambio vista): il boot non fa MAI una chiamata di rete propria,
    * a prescindere da standalone/embedded. Non un buco: design deliberato.
    */

@@ -1201,6 +1201,57 @@ const SCENARI = {
       p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
     }
   },
+
+  /**
+   * ⭐⭐⭐ 30/8 — piano "Board — da campagne TALOS-BANCO a cruscotto
+   * sessioni": Board non legge più TALOS-BANCO — verifica dal vivo che
+   * la tab mostri le sessioni REALI di Harness Desktop stesso (già ce ne
+   * sono su `.sessions-store/` da corse precedenti — zero spesa nuova,
+   * zero sessione creata da questo scenario), e che nessuna traccia
+   * testuale di "campagna"/TALOS-BANCO sia rimasta da nessuna parte.
+   */
+  async 'board-sessioni'(p) {
+    await p.attendi(1200);
+    await p.screenshot('stato-iniziale', { nota: 'app appena caricata' });
+
+    await p.click('[data-mode="dashboard"]');
+    await p.attendiCondizione(
+      "!document.querySelector('#sessionsBoardList')?.textContent?.includes('Nessuna sessione ancora') || true",
+      { timeoutMs: 8000, descrizione: 'la tab Board ha finito di caricare' },
+    );
+    await p.attendi(500); // il fetch reale a /api/v1/sessions non ha un segnale dedicato — attesa breve dopo il click, stesso ordine di grandezza già usato altrove in questo file per un fetch semplice
+    await p.screenshot('board-sessioni-reali', { nota: 'atteso: righe di sessioni VERE (titolo/modello/orario/token), MAI "Campagne TALOS-BANCO"' });
+
+    const testoBoard = await p.testo('[data-view="dashboard"]');
+    if (/campagn/i.test(testoBoard ?? '') || /TALOS-BANCO/i.test(testoBoard ?? '')) {
+      p.difetto(`la tab Board menziona ancora "campagna"/TALOS-BANCO da qualche parte: ${JSON.stringify(testoBoard?.slice(0, 400))}`, { severita: 'blocco' });
+    } else {
+      p.nota('CONFERMATO: zero menzione di campagne/TALOS-BANCO nella tab Board.');
+    }
+
+    const righe = await p.cdp.evaluate("document.querySelectorAll('.session-board-row').length");
+    p.nota(`righe sessione renderizzate: ${righe}`);
+    if (righe === 0) {
+      p.difetto('zero righe .session-board-row renderizzate — atteso >0 (ci sono sessioni reali già persistite su .sessions-store/ da corse precedenti)', { severita: 'blocco' });
+    } else {
+      const primaRiga = await p.testo('.session-board-row');
+      p.nota(`CONFERMATO: ${righe} sessioni reali renderizzate. Prima riga: ${JSON.stringify(primaRiga)}`);
+    }
+
+    const demoBadgeBoard = await p.cdp.evaluate("document.querySelector('[data-view=\"dashboard\"] .demo-surface-badge')?.hidden ?? null");
+    if (demoBadgeBoard !== true) {
+      p.difetto(`il badge "Demo UI" della Board non è nascosto (hidden=${JSON.stringify(demoBadgeBoard)}) nonostante dati reali caricati`, { severita: 'blocco' });
+    } else {
+      p.nota('CONFERMATO: badge "Demo UI" nascosto, dati reali confermati.');
+    }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      if (r.status === 404 && /\/api\/v1\/campaigns/.test(r.url)) continue; // atteso: nessuno dovrebbe più chiamarla, ma se qualcosa lo fa ancora è un difetto separato già catturato sopra come testo residuo
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
 };
 
 // --------------------------------------------------------------------

@@ -1,108 +1,103 @@
 # TALOS Harness UI
 
-Strumento locale e autonomo per leggere le campagne autorizzate di
-TALOS-BANCO. La Board mostra dati reali in sola lettura; le altre superfici del
-mockup restano interattive soltanto lato UI e riportano localmente
-`Demo UI · non collegato`.
+Local backend and UI for Harness Desktop — real coding sessions (chat,
+terminal, review, automations, the six big systems — Library/Notes/Tasks/
+Memory/Deep Research/Tool Forge — plus hooks/MCP/skills/plugins) driven by
+a real model over OpenRouter.
 
-Harness UI non avvia processi nel banco, non importa i suoi moduli, non scrive
-nei suoi file e non dipende da Vue, Vite, npm o dalla corsia mobile.
+⛔ 2026-08-30 — this tool **no longer reads TALOS-BANCO**: until this date
+the Board tab showed TALOS-BANCO's JSONL campaign data (an external
+measurement tool, separate from the product) — an accidental coupling from
+the original 2026-08-24 integration, never a deliberate product decision.
+Removed entirely (plan "Board — from TALOS-BANCO campaigns to a session
+dashboard"): the server no longer knows what TALOS-BANCO is, never reads
+its directory, never imports its modules. The Board now shows Harness
+Desktop's own sessions.
 
-## Requisiti
+Harness UI does not depend on Vue, Vite, npm, or the mobile lane.
 
-- Windows con PowerShell per lo script di verifica Chrome.
-- Node.js 24.18.0 per server e test.
-- Google Chrome installato per la verifica visiva locale.
-- Una directory TALOS-BANCO esistente e leggibile.
+## Requirements
 
-Non esistono `package.json`, lockfile o installazioni da eseguire.
+- Windows with PowerShell for the Chrome verification script.
+- Node.js 24.18.0 for the server and tests.
+- Google Chrome installed for local visual verification.
 
-## Avvio rapido
+No `package.json` for the frontend, no lockfile, nothing to install there —
+the backend (`harness-ui/src/*.mjs`) has its own `package.json` with a few
+targeted dependencies (see its header comment for why each one is there).
 
-Dalla radice del repository:
+## Quick start
+
+From the repository root:
 
 ```powershell
-$env:TALOS_BANCO_DIR = 'C:\Users\Antonino\Desktop\projects\TALOS-BANCO'
 node harness-ui/server.mjs
 ```
 
-Apri `http://127.0.0.1:4174/`. Il server accetta soltanto host loopback e
-stampa l'indirizzo locale, mai righe o evidenze delle campagne.
+Open `http://127.0.0.1:4174/`. The server binds to a loopback host only and
+prints the local address.
 
-### Avvio raccomandato con Permission Model
+### Recommended startup with the Permission Model
 
-Questa variante consente a Node soltanto di leggere il codice di Harness UI e
-la directory del banco. Non concede permessi di scrittura, child process,
-worker o addon. Il bind loopback resta imposto dalla configurazione
-dell'applicazione.
+This variant lets Node read only Harness UI's own code. It grants no write,
+child-process, worker, or addon permissions beyond what the server itself
+needs at runtime (the project workspace, `.sessions-store/`,
+`.automations/`, the PTY terminal). The loopback bind is still enforced by
+the application's own configuration.
 
 ```powershell
-$env:TALOS_BANCO_DIR = 'C:\Users\Antonino\Desktop\projects\TALOS-BANCO'
 node --permission `
   --allow-fs-read="$PWD\harness-ui" `
-  --allow-fs-read="$env:TALOS_BANCO_DIR" `
   harness-ui/server.mjs
 ```
 
-## Configurazione
+## Configuration
 
-| Variabile | Obbligatoria | Significato |
+| Variable | Required | Meaning |
 |---|---|---|
-| `TALOS_BANCO_DIR` | sì | Percorso assoluto e leggibile del banco. |
-| `TALOS_HARNESS_UI_CAMPAIGNS` | no | Può soltanto restringere la allowlist iniziale, mai ampliarla. |
-| `TALOS_HARNESS_UI_HOST` | no | `127.0.0.1` predefinito; ammessi soltanto loopback. |
-| `TALOS_HARNESS_UI_PORT` | no | `4174` predefinito; intervallo `1024..65535`. |
+| `OPENROUTER_API_KEY` | no | Without it the server still starts, read-only — starting a session fails per-request with `CONFIG_INVALID`. |
+| `TALOS_HARNESS_UI_HOST` | no | Defaults to `127.0.0.1`; loopback only. |
+| `TALOS_HARNESS_UI_PORT` | no | Defaults to `4174`; range `1024..65535`. |
+| `TALOS_HARNESS_UI_PROJECT_DIRS` | no | Allowed project folders for the "allowlist" session flow, separated by `;`. Absent = zero registered folders (fail-closed) — "Full access" with a free-form path stays available regardless. |
 
-Le sole campagne iniziali sono `esiti-22ago-progetti` ed
-`esiti-22ago-storia`.
+The rest of the variables (web search, receipt signing, images) are
+documented in the header comment of `src/config.mjs`, not duplicated here to
+avoid a second copy that drifts out of sync.
 
-## Cosa è reale e cosa è demo
+## What is real and what is demo
 
-La Board è reale e legge:
+⛔ This section was written on 2026-08-24, when most of the surfaces listed
+below really were mockup only. Since then, chat, tool activity,
+review/diff, the terminal (a real PTY), automations, doctor, the six big
+systems, and extensibility (hooks/MCP/skills/plugins) have each become
+real, one at a time, each verified live — see the history in
+`.claude/elegant-spinning-dongarra.md` (the master plan) for the
+phase-by-phase detail. This README has not been rewritten in full to
+reflect every phase: **this note says so, rather than hiding it**. The
+one part of this section rewritten as part of this same change
+(2026-08-30):
 
-- file JSONL contenuti nelle campagne allowlisted;
-- costo canonico da `<harness>.costo.json`;
-- in mancanza del costo canonico, somma delle righe marcata con `~`;
-- `rapporto.txt` come blocco preformattato opaco, senza riparsarlo.
+The Board now shows Harness Desktop's own real sessions — title, model,
+an honest three-value status (concluded/interrupted/in progress) — no
+longer the campaigns of an external measurement tool.
 
-Il testo `detto` viene inserito nel DOM soltanto quando l'owner apre la riga.
-`Svuota evidenze` lo rimuove dalla memoria della pagina e dal DOM, senza
-cancellare o modificare file.
+## Local API
 
-Al 24 agosto 2026 i due `rapporto.txt` reali non sono stati prodotti. La UI
-mostra quindi `Rapporto non ancora prodotto`. Il file viene generato
-esternamente dal proprietario della corsa; Harness UI non tenta di crearlo.
+Only `GET`/`HEAD` are available for resources, plus `POST` for session
+actions — the complete, up-to-date list lives in `src/http-app.mjs` (the
+source code, not duplicated here to avoid a second list that goes stale).
+The server does not enable CORS for requests without an `Origin`, and does
+not expose directory listings.
 
-Chat, review, terminale, browser, automazioni, impostazioni, inspector, widget
-di sessione e pannelli capability sono demo UI funzionanti soltanto nel
-browser. Ogni superficie non collegata è etichettata localmente.
-
-## API locali
-
-Sono disponibili soltanto `GET` e `HEAD`:
-
-- `/api/v1/health`
-- `/api/v1/campaigns`
-- `/api/v1/campaigns/{campagna}/snapshot`
-- `/api/v1/campaigns/{campagna}/runs`
-- `/api/v1/campaigns/{campagna}/report`
-
-Le righe supportano filtri esatti `harness`, `esito`, cursore opaco e limite
-massimo. Il server non abilita CORS, non espone directory e serve soltanto
-`index.html`, `styles.css` e `app.js`.
-
-## Test automatici
+## Automated tests
 
 ```powershell
 node --test harness-ui/tests/*.test.mjs
 ```
 
-I test usano fixture sintetiche versionate. Non sostituiscono il gate finale
-sulle due campagne reali.
+## Chrome verification
 
-## Verifica Chrome
-
-Avvia prima il server, poi esegui in un secondo PowerShell:
+Start the server first, then run in a second PowerShell:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass `
@@ -111,27 +106,24 @@ powershell -NoProfile -ExecutionPolicy Bypass `
   -OutputDirectory "$PWD\harness-ui\.artifacts\qa"
 ```
 
-Lo script non avvia il server e non legge direttamente il banco. Usa Chrome
-installato per acquisire i sei stati canonici: desktop `1440×900`, laptop
-`1024×800`, tablet `768×1024`, mobile `390×844`, mobile stretto `320×720` e
-capability `390×844`. Screenshot e `qa-summary.json` vengono scritti soltanto
-nella directory indicata, ignorata da Git.
+The script does not start the server. It uses the installed Chrome to
+capture the six canonical states: desktop `1440×900`, laptop `1024×800`,
+tablet `768×1024`, mobile `390×844`, narrow mobile `320×720`, and
+capability `390×844`. Screenshots and `qa-summary.json` are written only to
+the given directory, gitignored. For deeper CDP scenarios (multi-step
+flows, a real end-to-end session), see
+`harness-ui/scripts/qa-visual-pipeline.mjs`.
 
-## Limiti intenzionali
+## Intentional limits
 
-- Strumento interno owner-only, in un solo browser Chrome.
-- Nessun supporto offline o service worker.
-- Nessun gate WCAG o prestazionale bloccante in questo perimetro.
-- Nessun watcher: `Aggiorna` rilegge i file su richiesta.
-- Nessun ordinamento o percorso fornito liberamente dal browser.
-- Il rapporto end-to-end e il confronto costo/rapporto restano pendenti finché
-  i proprietari delle corse non producono entrambi i file reali.
+- Internal, owner-only tool, in a single Chrome browser.
+- No offline support or service worker.
+- No blocking WCAG or performance gate in this scope.
+- No arbitrary ordering or path supplied freely by the browser beyond what
+  "Full access" already accepts explicitly.
 
-## Problemi comuni
+## Common problems
 
-- `TALOS_BANCO_DIR è obbligatoria`: imposta un percorso assoluto esistente.
-- `Il server locale non risponde`: avvia Harness UI e premi `Aggiorna`.
-- `Rapporto non ancora prodotto`: non è un errore della UI; manca il file
-  esterno della campagna.
-- Porta occupata: imposta `TALOS_HARNESS_UI_PORT` su una porta loopback libera.
-- Chrome non trovato: passa `-ChromePath` allo script QA.
+- `The local server does not respond`: start Harness UI and reload the page.
+- Port already in use: set `TALOS_HARNESS_UI_PORT` to a free loopback port.
+- Chrome not found: pass `-ChromePath` to the QA script.

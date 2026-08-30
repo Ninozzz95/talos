@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { accessSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { accessSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -8,7 +8,6 @@ import {
   ConfigurationError,
   DEFAULT_HOST,
   DEFAULT_PORT,
-  INITIAL_CAMPAIGNS,
   loadConfig,
   modelloRichiestaValido,
   permessiPerAttrezzoRichiestaValido,
@@ -16,51 +15,31 @@ import {
 } from '../src/config.mjs';
 import { generateHarnessReceiptKeypair } from '../src/harness-receipt-keypair.mjs';
 
-function makeBanco(t) {
-  const root = mkdtempSync(join(tmpdir(), 'talos-harness-config-'));
-  for (const campaign of INITIAL_CAMPAIGNS) {
-    mkdirSync(join(root, campaign));
-  }
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  return root;
-}
+/*
+ * ⛔⛔⛔ 30/8 — `TALOS_BANCO_DIR`/`TALOS_HARNESS_UI_CAMPAIGNS` rimosse da
+ * config.mjs (piano "Board — da campagne TALOS-BANCO a cruscotto
+ * sessioni"): TALOS-BANCO è uno strumento di misura esterno, il server
+ * non deve più saperne l'esistenza per accendersi. `makeBanco()` e i test
+ * dedicati a quella variabile sparisono di conseguenza — non erano MAI
+ * stati un requisito del prodotto, solo un incidente di percorso
+ * dell'integrazione originale del 24/8. `loadConfig({}, ...)` è ora il
+ * caso base: zero variabili, un config valido.
+ */
 
-test('config rejects missing TALOS_BANCO_DIR', () => {
-  assert.throws(() => loadConfig({}, import.meta.url), ConfigurationError);
-});
-
-test('config rejects non-loopback host', (t) => {
-  const bancoDir = makeBanco(t);
+test('config rejects non-loopback host', () => {
   for (const host of ['0.0.0.0', '192.168.1.2', 'example.test']) {
     assert.throws(
-      () => loadConfig({ TALOS_BANCO_DIR: bancoDir, TALOS_HARNESS_UI_HOST: host }, import.meta.url),
+      () => loadConfig({ TALOS_HARNESS_UI_HOST: host }, import.meta.url),
       ConfigurationError,
     );
   }
 });
 
-test('config cannot expand the campaign allowlist', (t) => {
-  const bancoDir = makeBanco(t);
-  assert.throws(
-    () => loadConfig({
-      TALOS_BANCO_DIR: bancoDir,
-      TALOS_HARNESS_UI_CAMPAIGNS: 'esiti-22ago-progetti,esiti-non-ammessi',
-    }, import.meta.url),
-    ConfigurationError,
-  );
-});
-
-test('config applies fixed defaults and permits only an allowlist restriction', (t) => {
-  const bancoDir = makeBanco(t);
-  const config = loadConfig({
-    TALOS_BANCO_DIR: bancoDir,
-    TALOS_HARNESS_UI_CAMPAIGNS: 'esiti-22ago-storia',
-  }, new URL('../server.mjs', import.meta.url));
+test('config applies fixed defaults with zero variabili impostate', () => {
+  const config = loadConfig({}, new URL('../server.mjs', import.meta.url));
 
   assert.equal(config.host, DEFAULT_HOST);
   assert.equal(config.port, DEFAULT_PORT);
-  assert.deepEqual(config.campaigns, ['esiti-22ago-storia']);
-  assert.equal(config.bancoDir, bancoDir);
   // ⭐ 26/8, DEC-053: il bundle canonico è mobile/public/harness-ui/ (la
   // pipeline AG-UI ci è già portata, verificata), non più harness-ui/public/
   // (la copia desktop originale, mai riconciliata con l'integrazione mobile).
@@ -68,16 +47,10 @@ test('config applies fixed defaults and permits only an allowlist restriction', 
   accessSync(config.publicDir); // esiste davvero — non solo il pattern del nome
 });
 
-test('config rejects relative or unreadable banco paths and invalid ports', (t) => {
-  const bancoDir = makeBanco(t);
-  assert.throws(() => loadConfig({ TALOS_BANCO_DIR: 'relative/banco' }, import.meta.url), ConfigurationError);
-  assert.throws(
-    () => loadConfig({ TALOS_BANCO_DIR: join(bancoDir, 'missing') }, import.meta.url),
-    ConfigurationError,
-  );
+test('config rejects invalid ports', () => {
   for (const port of ['1023', '65536', 'abc', '4174.5']) {
     assert.throws(
-      () => loadConfig({ TALOS_BANCO_DIR: bancoDir, TALOS_HARNESS_UI_PORT: port }, import.meta.url),
+      () => loadConfig({ TALOS_HARNESS_UI_PORT: port }, import.meta.url),
       ConfigurationError,
     );
   }
@@ -85,20 +58,17 @@ test('config rejects relative or unreadable banco paths and invalid ports', (t) 
 
 // ⭐⭐⭐ 27/8 — owner: "per adesso un allowlist per testare". Fail-closed per
 // costruzione: assente = zero cartelle, mai "qualunque cartella passi".
-test('config.cartelleProgetto è vuota per costruzione quando TALOS_HARNESS_UI_PROJECT_DIRS è assente', (t) => {
-  const bancoDir = makeBanco(t);
-  const config = loadConfig({ TALOS_BANCO_DIR: bancoDir }, import.meta.url);
+test('config.cartelleProgetto è vuota per costruzione quando TALOS_HARNESS_UI_PROJECT_DIRS è assente', () => {
+  const config = loadConfig({}, import.meta.url);
   assert.deepEqual(config.cartelleProgetto, []);
 });
 
 test('config accetta un elenco di cartelle progetto VERE, separate da ";", con id stabili e nomi derivati', (t) => {
-  const bancoDir = makeBanco(t);
   const uno = mkdtempSync(join(tmpdir(), 'talos-progetto-uno-'));
   const due = mkdtempSync(join(tmpdir(), 'talos-progetto-due-'));
   t.after(() => { rmSync(uno, { recursive: true, force: true }); rmSync(due, { recursive: true, force: true }); });
 
   const config = loadConfig({
-    TALOS_BANCO_DIR: bancoDir,
     TALOS_HARNESS_UI_PROJECT_DIRS: `${uno};${due}`,
   }, import.meta.url);
 
@@ -109,22 +79,21 @@ test('config accetta un elenco di cartelle progetto VERE, separate da ";", con i
 });
 
 test('⛔ config rifiuta una cartella progetto relativa, inesistente, o ripetuta due volte', (t) => {
-  const bancoDir = makeBanco(t);
   const vera = mkdtempSync(join(tmpdir(), 'talos-progetto-vera-'));
   t.after(() => rmSync(vera, { recursive: true, force: true }));
 
   assert.throws(
-    () => loadConfig({ TALOS_BANCO_DIR: bancoDir, TALOS_HARNESS_UI_PROJECT_DIRS: 'relative/progetto' }, import.meta.url),
+    () => loadConfig({ TALOS_HARNESS_UI_PROJECT_DIRS: 'relative/progetto' }, import.meta.url),
     ConfigurationError,
     'relativa',
   );
   assert.throws(
-    () => loadConfig({ TALOS_BANCO_DIR: bancoDir, TALOS_HARNESS_UI_PROJECT_DIRS: join(vera, 'assente') }, import.meta.url),
+    () => loadConfig({ TALOS_HARNESS_UI_PROJECT_DIRS: join(vera, 'assente') }, import.meta.url),
     ConfigurationError,
     'inesistente',
   );
   assert.throws(
-    () => loadConfig({ TALOS_BANCO_DIR: bancoDir, TALOS_HARNESS_UI_PROJECT_DIRS: `${vera};${vera}` }, import.meta.url),
+    () => loadConfig({ TALOS_HARNESS_UI_PROJECT_DIRS: `${vera};${vera}` }, import.meta.url),
     ConfigurationError,
     'ripetuta',
   );
@@ -227,36 +196,31 @@ test('⛔ AL CONTRARIO — permessiPerAttrezzoRichiestaValido rifiuta valori div
  * sessione), stesso principio onesto di `chiaveApi`: assente = il tool
  * resta offerto ma il kernel dichiara onestamente "not configured".
  */
-test('⛔ config.ricercaWeb è undefined quando nessuna credenziale/endpoint è impostata (default onesto, mai un provider inventato)', (t) => {
-  const bancoDir = makeBanco(t);
-  const config = loadConfig({ TALOS_BANCO_DIR: bancoDir }, import.meta.url);
+test('⛔ config.ricercaWeb è undefined quando nessuna credenziale/endpoint è impostata (default onesto, mai un provider inventato)', () => {
+  const config = loadConfig({}, import.meta.url);
   assert.equal(config.ricercaWeb, undefined);
 });
 
-test('⭐ config.ricercaWeb con solo TALOS_HARNESS_SEARCH_API_KEY: provider di default tavily', (t) => {
-  const bancoDir = makeBanco(t);
-  const config = loadConfig({ TALOS_BANCO_DIR: bancoDir, TALOS_HARNESS_SEARCH_API_KEY: 'k' }, import.meta.url);
+test('⭐ config.ricercaWeb con solo TALOS_HARNESS_SEARCH_API_KEY: provider di default tavily', () => {
+  const config = loadConfig({ TALOS_HARNESS_SEARCH_API_KEY: 'k' }, import.meta.url);
   assert.deepEqual(config.ricercaWeb, { provider: 'tavily', apiKey: 'k' });
 });
 
-test('⭐ config.ricercaWeb con provider esplicito + endpoint, senza chiave (searxng)', (t) => {
-  const bancoDir = makeBanco(t);
+test('⭐ config.ricercaWeb con provider esplicito + endpoint, senza chiave (searxng)', () => {
   const config = loadConfig({
-    TALOS_BANCO_DIR: bancoDir,
     TALOS_HARNESS_SEARCH_PROVIDER: 'searxng',
     TALOS_HARNESS_SEARCH_ENDPOINT: 'https://searx.esempio.it',
   }, import.meta.url);
   assert.deepEqual(config.ricercaWeb, { provider: 'searxng', endpoint: 'https://searx.esempio.it' });
 });
 
-test('⛔⛔ un TALOS_HARNESS_SEARCH_PROVIDER ignoto è rifiutato — ma SOLO se una credenziale/endpoint è davvero impostata', (t) => {
-  const bancoDir = makeBanco(t);
+test('⛔⛔ un TALOS_HARNESS_SEARCH_PROVIDER ignoto è rifiutato — ma SOLO se una credenziale/endpoint è davvero impostata', () => {
   // AL CONTRARIO: un provider scritto male ma SENZA chiave/endpoint non fa fallire l'avvio del server — la stessa disciplina di chiaveApi assente.
-  const senzaCredenziali = loadConfig({ TALOS_BANCO_DIR: bancoDir, TALOS_HARNESS_SEARCH_PROVIDER: 'inventato' }, import.meta.url);
+  const senzaCredenziali = loadConfig({ TALOS_HARNESS_SEARCH_PROVIDER: 'inventato' }, import.meta.url);
   assert.equal(senzaCredenziali.ricercaWeb, undefined);
   assert.throws(
     () => loadConfig({
-      TALOS_BANCO_DIR: bancoDir, TALOS_HARNESS_SEARCH_PROVIDER: 'inventato', TALOS_HARNESS_SEARCH_API_KEY: 'k',
+      TALOS_HARNESS_SEARCH_PROVIDER: 'inventato', TALOS_HARNESS_SEARCH_API_KEY: 'k',
     }, import.meta.url),
     ConfigurationError,
   );
@@ -267,17 +231,14 @@ test('⛔⛔ un TALOS_HARNESS_SEARCH_PROVIDER ignoto è rifiutato — ma SOLO se
  * onesto di ricercaWeb sopra: undefined quando non configurata, il
  * server resta usabile (ricevute non firmate, comportamento di sempre).
  */
-test('⛔ config.firmaRicevute è undefined quando non configurata (ricevute non firmate, comportamento di sempre)', (t) => {
-  const bancoDir = makeBanco(t);
-  const config = loadConfig({ TALOS_BANCO_DIR: bancoDir }, import.meta.url);
+test('⛔ config.firmaRicevute è undefined quando non configurata (ricevute non firmate, comportamento di sempre)', () => {
+  const config = loadConfig({}, import.meta.url);
   assert.equal(config.firmaRicevute, undefined);
 });
 
-test('⭐⭐⭐ config.firmaRicevute con una chiave VERA (generata da harness-receipt-keypair.mjs) viene accettata', (t) => {
-  const bancoDir = makeBanco(t);
+test('⭐⭐⭐ config.firmaRicevute con una chiave VERA (generata da harness-receipt-keypair.mjs) viene accettata', () => {
   const pair = generateHarnessReceiptKeypair();
   const config = loadConfig({
-    TALOS_BANCO_DIR: bancoDir,
     TALOS_HARNESS_RECEIPT_KEY_ID: pair.keyId,
     TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64: pair.privateKeyBase64,
   }, import.meta.url);
@@ -285,26 +246,23 @@ test('⭐⭐⭐ config.firmaRicevute con una chiave VERA (generata da harness-re
   assert.equal(config.firmaRicevute.chiavePrivata, Buffer.from(pair.privateKeyBase64, 'base64').toString('utf8'));
 });
 
-test('⛔⛔⛔ AL CONTRARIO — SOLO l\'id o SOLO la chiave (mai una sola delle due) fa fallire l\'avvio, non firma con un valore rotto in silenzio', (t) => {
-  const bancoDir = makeBanco(t);
+test('⛔⛔⛔ AL CONTRARIO — SOLO l\'id o SOLO la chiave (mai una sola delle due) fa fallire l\'avvio, non firma con un valore rotto in silenzio', () => {
   const pair = generateHarnessReceiptKeypair();
   assert.throws(
-    () => loadConfig({ TALOS_BANCO_DIR: bancoDir, TALOS_HARNESS_RECEIPT_KEY_ID: pair.keyId }, import.meta.url),
+    () => loadConfig({ TALOS_HARNESS_RECEIPT_KEY_ID: pair.keyId }, import.meta.url),
     ConfigurationError,
     'solo l\'id, senza la chiave privata',
   );
   assert.throws(
-    () => loadConfig({ TALOS_BANCO_DIR: bancoDir, TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64: pair.privateKeyBase64 }, import.meta.url),
+    () => loadConfig({ TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64: pair.privateKeyBase64 }, import.meta.url),
     ConfigurationError,
     'solo la chiave privata, senza l\'id',
   );
 });
 
-test('⛔⛔ AL CONTRARIO — una chiave privata non-Ed25519 (o non decodificabile) è rifiutata, mai passata silenziosamente a talosLavora', (t) => {
-  const bancoDir = makeBanco(t);
+test('⛔⛔ AL CONTRARIO — una chiave privata non-Ed25519 (o non decodificabile) è rifiutata, mai passata silenziosamente a talosLavora', () => {
   assert.throws(
     () => loadConfig({
-      TALOS_BANCO_DIR: bancoDir,
       TALOS_HARNESS_RECEIPT_KEY_ID: 'talos-harness-receipt-finta',
       TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64: Buffer.from('non e una chiave PEM').toString('base64'),
     }, import.meta.url),
@@ -317,24 +275,20 @@ test('⛔⛔ AL CONTRARIO — una chiave privata non-Ed25519 (o non decodificabi
  * sopra: sempre DEFINITO (mai `undefined`) — zero credenziale nuova da
  * configurare, il one-up dichiarato su Hermes/Codex (riusa chiaveApi).
  */
-test('⭐ config.immagine ha un default onesto e reale — un modello dedicato VERO, mai un placeholder — senza nessuna variabile impostata', (t) => {
-  const bancoDir = makeBanco(t);
-  const config = loadConfig({ TALOS_BANCO_DIR: bancoDir }, import.meta.url);
+test('⭐ config.immagine ha un default onesto e reale — un modello dedicato VERO, mai un placeholder — senza nessuna variabile impostata', () => {
+  const config = loadConfig({}, import.meta.url);
   assert.deepEqual(config.immagine, { modello: 'bytedance-seed/seedream-4.5', nativo: false });
 });
 
-test('⭐⭐ TALOS_HARNESS_UI_IMMAGINE_MODELLO sovrascrive il default, TALOS_HARNESS_UI_IMMAGINE_NATIVA=1 dichiara il modello nativo', (t) => {
-  const bancoDir = makeBanco(t);
+test('⭐⭐ TALOS_HARNESS_UI_IMMAGINE_MODELLO sovrascrive il default, TALOS_HARNESS_UI_IMMAGINE_NATIVA=1 dichiara il modello nativo', () => {
   const config = loadConfig({
-    TALOS_BANCO_DIR: bancoDir,
     TALOS_HARNESS_UI_IMMAGINE_MODELLO: 'google/gemini-3.1-flash-image',
     TALOS_HARNESS_UI_IMMAGINE_NATIVA: '1',
   }, import.meta.url);
   assert.deepEqual(config.immagine, { modello: 'google/gemini-3.1-flash-image', nativo: true });
 });
 
-test('⛔ AL CONTRARIO — TALOS_HARNESS_UI_IMMAGINE_NATIVA con un valore diverso da "1" resta false, mai un\'interpretazione permissiva', (t) => {
-  const bancoDir = makeBanco(t);
-  const config = loadConfig({ TALOS_BANCO_DIR: bancoDir, TALOS_HARNESS_UI_IMMAGINE_NATIVA: 'true' }, import.meta.url);
+test('⛔ AL CONTRARIO — TALOS_HARNESS_UI_IMMAGINE_NATIVA con un valore diverso da "1" resta false, mai un\'interpretazione permissiva', () => {
+  const config = loadConfig({ TALOS_HARNESS_UI_IMMAGINE_NATIVA: 'true' }, import.meta.url);
   assert.equal(config.immagine.nativo, false);
 });

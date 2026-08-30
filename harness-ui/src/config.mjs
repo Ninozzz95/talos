@@ -10,16 +10,11 @@ import { fileURLToPath } from 'node:url';
 
 export const DEFAULT_HOST = '127.0.0.1';
 export const DEFAULT_PORT = 4174;
-export const INITIAL_CAMPAIGNS = Object.freeze([
-  'esiti-22ago-progetti',
-  'esiti-22ago-storia',
-]);
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost']);
 
 /**
- * ⛔⛔ ALLOWLIST, stesso principio di INITIAL_CAMPAIGNS due righe sopra:
- * TALOS_HARNESS_UI_MODEL può solo SCEGLIERE fra questi, mai introdurne uno
+ * ⛔⛔ ALLOWLIST: TALOS_HARNESS_UI_MODEL può solo SCEGLIERE fra questi, mai introdurne uno
  * nuovo — la regola dell'owner (20/8, "mai modelli di punta, sempre flash")
  * si applica qui a livello di configurazione, non come convenzione da
  * ricordare a ogni chiamata. Entrambi già usati in questo stesso ecosistema:
@@ -38,23 +33,6 @@ export class ConfigurationError extends Error {
 
 function fail(message) {
   throw new ConfigurationError(message);
-}
-
-function parseCampaigns(raw) {
-  if (raw === undefined || raw === '') return [...INITIAL_CAMPAIGNS];
-  if (typeof raw !== 'string') fail('TALOS_HARNESS_UI_CAMPAIGNS non valida');
-
-  const requested = raw.split(',').map((value) => value.trim());
-  if (requested.length === 0 || requested.some((value) => value === '')) {
-    fail('TALOS_HARNESS_UI_CAMPAIGNS non valida');
-  }
-
-  const unique = new Set(requested);
-  if ([...unique].some((campaign) => !INITIAL_CAMPAIGNS.includes(campaign))) {
-    fail('TALOS_HARNESS_UI_CAMPAIGNS può solo restringere la allowlist');
-  }
-
-  return INITIAL_CAMPAIGNS.filter((campaign) => unique.has(campaign));
 }
 
 function parseModello(raw) {
@@ -234,22 +212,6 @@ export function loadConfig(
 ) {
   if (!env || typeof env !== 'object') fail('Configurazione ambiente non valida');
 
-  const bancoInput = env.TALOS_BANCO_DIR;
-  if (typeof bancoInput !== 'string' || bancoInput.trim() === '') {
-    fail('TALOS_BANCO_DIR obbligatoria');
-  }
-  if (!isAbsolute(bancoInput)) fail('TALOS_BANCO_DIR deve essere assoluta');
-
-  let bancoDir;
-  try {
-    bancoDir = realpathSync(bancoInput);
-    if (!statSync(bancoDir).isDirectory()) fail('TALOS_BANCO_DIR non è una directory');
-    accessSync(bancoDir, constants.R_OK);
-  } catch (error) {
-    if (error instanceof ConfigurationError) throw error;
-    fail('TALOS_BANCO_DIR non esiste o non è leggibile');
-  }
-
   const host = env.TALOS_HARNESS_UI_HOST || DEFAULT_HOST;
   if (typeof host !== 'string' || !LOOPBACK_HOSTS.has(host)) {
     fail('TALOS_HARNESS_UI_HOST deve essere loopback');
@@ -276,8 +238,6 @@ export function loadConfig(
   }
 
   return Object.freeze({
-    bancoDir,
-    campaigns: Object.freeze(parseCampaigns(env.TALOS_HARNESS_UI_CAMPAIGNS)),
     host,
     port: parsePort(env.TALOS_HARNESS_UI_PORT),
     publicDir,

@@ -220,37 +220,13 @@
         <section class="view-pane" data-view="dashboard" data-demo-surface="board">
           <div class="dashboard-shell">
             <div class="view-heading board-heading">
-              <div><span class="eyebrow" id="boardEyebrow">Board Codice</span><h2 id="boardTitle">Campagne TALOS-BANCO</h2><p id="boardDescription">Lettura locale, allowlist fissa e nessuna esecuzione nel banco.</p></div>
-              <div class="board-heading-actions"><button class="secondary-btn compact" type="button" data-action="clear-evidence">Svuota evidenze</button><button class="primary-btn compact" type="button" data-action="refresh-campaign"><svg><use href="#i-history"/></svg>Aggiorna</button></div>
+              <div><span class="eyebrow" id="boardEyebrow">Codice</span><h2 id="boardTitle">Sessioni</h2><p id="boardDescription">Le sessioni reali di Codice — modello, stato, consumo.</p></div>
+              <div class="board-heading-actions"><button class="primary-btn compact" type="button" data-action="refresh-sessions-board"><svg><use href="#i-history"/></svg>Aggiorna</button></div>
             </div>
 
-            <section class="campaign-controls" data-real-surface="campaigns" aria-label="Selezione campagna">
-              <label><span>Campagna</span><select id="campaignSelect"><option>Caricamento…</option></select></label>
-              <label><span>Codice</span><select id="harnessFilter"><option value="">Tutti</option></select></label>
-              <label><span>Esito</span><select id="outcomeFilter"><option value="">Tutti</option></select></label>
-              <div class="campaign-connection"><span class="connection-dot"></span><strong data-connection-state="idle">Non collegato</strong><small id="campaignReadMeta">Apri la Board con il server locale attivo.</small></div>
+            <section class="session-board-list" id="sessionsBoardList" data-real-surface="sessions" aria-label="Sessioni">
+              <p class="board-empty">Nessuna sessione ancora — premi «Nuova» per iniziare.</p>
             </section>
-
-            <section class="campaign-summary" data-real-surface="summary" aria-label="Riepilogo campagna" aria-live="polite">
-              <article><span>Righe</span><strong id="summaryTotal">—</strong><small>osservate</small></article>
-              <article><span>Misurate</span><strong id="summaryMeasured">—</strong><small>esiti binari</small></article>
-              <article><span>Pass rate</span><strong id="summaryPassRate">—</strong><small>maggioranza giri</small></article>
-              <article><span>Costo canonico</span><strong id="summaryCost">—</strong><small id="summaryCostSource">file corsa</small></article>
-              <article><span>Diagnostiche</span><strong id="summaryDiagnostics">—</strong><small>righe segnalate</small></article>
-            </section>
-
-            <div class="campaign-data-grid">
-              <section class="campaign-runs" data-real-surface="runs" aria-label="Righe campagna">
-                <div class="campaign-section-head"><div><span class="eyebrow">Run osservate</span><h3>Risultati JSONL</h3></div><span id="campaignRunCount">0 righe</span></div>
-                <div class="campaign-run-list" id="campaignRunList"><p class="board-empty">Seleziona una campagna per leggere i risultati.</p></div>
-                <button class="secondary-btn full" type="button" data-action="load-more-runs" hidden>Carica altri</button>
-              </section>
-
-              <section class="campaign-report" data-real-surface="report" aria-label="Rapporto campagna">
-                <div class="campaign-section-head"><div><span class="eyebrow">Contratto esistente</span><h3>rapporto.txt</h3></div><span id="campaignReportState" class="status-chip">In attesa</span></div>
-                <pre id="campaignReportText">Rapporto non ancora prodotto</pre>
-              </section>
-            </div>
           </div>
         </section>
 

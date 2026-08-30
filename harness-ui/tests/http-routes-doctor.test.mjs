@@ -6,7 +6,6 @@ import { API_SCHEMA, createHttpApp } from '../src/http-app.mjs';
 
 async function listen(t, { diagnosiFn } = {}) {
   const app = createHttpApp({
-    campaignService: { listCampaigns: async () => [] },
     staticHandler: async () => null,
     diagnosiFn,
   });
