@@ -658,9 +658,17 @@ di arrivare a salvare qualcosa) — confermato: un report Deep Research
 finisce DAVVERO anche in Libreria, come dichiarato nell'etichetta del
 pannello.
 
-⛔ **Coda mid-run NON ancora verificata in questo task** — le tre corse
-sono finite a inseguire l'approvazione bloccata; resta un debito
-separato, da chiudere con un check dedicato prima di Task 12.
+**Coda mid-run — chiusa subito dopo con un check dedicato**
+(`.qa-runs/qa-coda-mid-run-2026-08-30T10-47-53-725Z/`, 3 screenshot):
+secondo messaggio mandato SUBITO dopo il primo, senza aspettare la
+fine del giro — confermato `.queued-message` visibile all'istante, E
+(ispezione visiva) il composer mostra "**Follow-up in coda** · Nel
+frattempo: qual è la differenza fra list e tuple in Pyth... [Annulla]"
++ un toast preciso: *"Messaggio in coda — Arriverà quando l'agente
+conclude il turno corrente (posizione 1)."* — trasparente, onesto,
+nessuna ambiguità. Alla fine: la domanda accodata (list vs tuple) **ha
+ricevuto risposta per davvero** nella stessa conversazione. Zero
+eccezioni JS, zero errori console.
 
 Zero eccezioni JS, zero errori console in tutte le corse (a parte il
 favicon noto).
