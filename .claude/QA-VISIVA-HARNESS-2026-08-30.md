@@ -839,6 +839,74 @@ owner-eseguita per esplicita istruzione dell'owner nel piano originale.
 La Sezione 5 (griglie di valutazione finale) segue in coda a questo
 file.
 
+## Sezione 5 — Griglie di valutazione finale
+
+> Compilata da questo stesso file, come previsto dal piano §5. Ogni
+> riga rimanda al blocco Findings del task citato — nessun fatto
+> nuovo qui, solo consolidamento.
+
+### 5.1 — Copertura per task
+
+| # | Area | Esito | Nota in una riga |
+|---|---|---|---|
+| 0 | Ricognizione, Capability hub, Control plane | ✅ | 1° difetto reale (label statiche) |
+| 1 | Update base, cancello semantico, streaming, auto-rename | ✅ | pulito |
+| 2 | Terminale reale (PTY) | ✅ | 2 piste false, entrambe del mio script |
+| 3 | `cerca`, Doctor concorrente | ✅ | bug reale del corpus corretto dal modello |
+| 4 | Workspace write (dropdown), fork | ✅ | fork su sessione viva correttamente rifiutato |
+| 5 | Compatta, Export, F5+Resume | ✅ | Resume pulito; Compatta non conclusivo |
+| 5.1 | CRUD — Create da zero | ✅ | "N nuovi" verificato per la prima volta |
+| 5.2 | CRUD — Delete (modello + owner) | ✅ | 1 difetto reale (backdrop foglio) |
+| 6 | web_search, Libreria | ✅ | giri-esauriti riprodotto dal vivo; Libreria non isolata qui |
+| 7 | Notes, Tasks | ✅ | entrambi puliti; chiude retroattivamente Libreria≈Notes di Task 6 |
+| 8 | Memory, generate_image | ✅ | 2 difetti reali (label statiche Context Rail) |
+| 9 | Hook/MCP/Skill/Plugin, trust | ✅ | tutti e 4 scoperti, trust end-to-end provato |
+| 10 | Tool Forge (crea→abilita→richiama) | ✅ | ciclo completo verificato in 3 corse |
+| 11 | On request, coda mid-run, Deep Research | ✅ | 1 difetto reale (descrizione approvazione mancante); Libreria finalmente confermata |
+| 12 | Planner/Editor, delega | ⚠️ | 2 scoperte maggiori, copertura UI stretta non isolata |
+| 13 | Task-trappola (onestà) | ✅ | rifiuto onesto, zero fabbricazione |
+| 14 | Automazioni, Settings, Board, palette | ✅ | 2 difetti reali (badge Board, elimina sessioni assente) |
+| 3-bis | Voce | — | deliberatamente non eseguito (owner) |
+
+**15 task su 16 pianificati portati a termine dal vivo** (Task 12
+parzialmente: la copertura funzionale stretta di Planner+delega non si
+è isolata, ma il task ha comunque prodotto le due scoperte più
+importanti di tutto il giro).
+
+### 5.2 — Difetti reali confermati (backlog batch-fix, per gravità)
+
+| # | Difetto | Dove | Gravità | Task |
+|---|---|---|---|---|
+| A | Rifiuto anti-fabbricazione applicato a richieste di feature legittime, tenuto anche dopo insistenza esplicita | kernel/system prompt (osservato via Harness Desktop) | **Alta** — decisione dell'owner sul calibro | 12 |
+| B | `scrivi` (sostituzione intera) può far sparire codice e test precedenti in silenzio; "tutti verdi" non lo segnala | tool `scrivi`, contratto/UI del tool | **Alta** | 12 |
+| C | Nessun modo di eliminare una sessione (né UI né API) | sessioni, funzione mancante | Media (uso nel tempo) | 14 |
+| D | 5 label statiche "non ancora implementato" false (Control plane ×2, Context Rail ×2, Settings ×1) + 1 genuinamente aperta | mockup residuo, ripetuto | Media (mente attivamente) | 0.3, 8, 14 |
+| E | Board: badge "Demo UI · non collegato" mai nascosto con dati reali | `renderSessionsBoard`, riga mancante | Media | 14 |
+| F | Backdrop del foglio "Nuovo file" resta cliccabile per una finestra dopo la chiusura visiva | race di animazione, `syncEmbeddedDialogBackdrop` | Media | 5.2 |
+| G | `descriviAzioneApprovazione()` senza caso per `research_start` | approvazione "On request", fallback generico | Bassa-media | 11 |
+| H | Follow-up su sessione con giri-esauriti riprende il task vecchio invece di rispondere al messaggio nuovo | UX non spiegata, non necessariamente sbagliata | Nota | 6 |
+| I | `memory_write` senza riassunto naturale in conversazione (mostra il nome grezzo) | cosmetico | Bassa | 8 |
+
+**Non nel backlog** (già dichiarati, non nuovi in questo giro):
+turni-esauriti come limite sistemico ([[talos-esaurisce-i-giri-non-le-capacita]]),
+debito "test/tooling propri" (2 selettori sbagliati, 1 anti-pattern di
+diagnostica) — tutti corretti PERMANENTEMENTE in `qa-visual-pipeline.mjs`
+durante questo stesso giro, beneficio per ogni corsa futura.
+
+### 5.3 — Verdetto
+
+Harness Desktop, sulla UI reale (non un mockup), **regge un giro di QA
+di 16 task con corsa dal vivo, permesso per permesso, superficie per
+superficie**: CRUD completo, tutti e 4 i sistemi di estensibilità
+(Hook/MCP/Skill/Plugin) con trust end-to-end, Tool Forge crea→abilita→
+richiama, approvazione on-request, coda mid-run, Deep Research, onestà
+su un task-trappola. Zero eccezioni JavaScript non gestite, zero
+errori console non attesi in **qualunque** delle ~30 corse di questo
+giro. I difetti trovati sono reali ma per lo più localizzati (label
+statiche, un badge, un caso mancante in uno switch) — le due eccezioni
+sono le scoperte A e B, entrambe più profonde e degne di una decisione
+esplicita dell'owner prima di un fix meccanico.
+
 Formato per ogni voce, da qui in avanti:
 
 ```
