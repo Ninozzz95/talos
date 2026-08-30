@@ -218,9 +218,24 @@ class Pipeline {
   }
 
   /** Per tasti non-stampabili (Enter, Tab, frecce...) — `Input.insertText` non li copre, serve un vero keyDown/keyUp. */
+  /**
+   * ⛔⛔⛔ 30/8 — trovato dal vivo: senza `windowsVirtualKeyCode` l'evento
+   * KeyboardEvent sintetico che arriva al DOM porta `keyCode:0` — xterm.js
+   * (`evaluateKeyboardEvent`) riconosce Invio anche da `.key==='Enter'`,
+   * ma il gestore REALE del terminale (`onData`/il custom key handler
+   * che inoltra alla WebSocket) si è mostrato cieco a un Invio senza
+   * keyCode nella prova dal vivo (tre corse, sempre lo stesso comando
+   * digitato ma mai eseguito) — stessa causa nota per altri CDP+xterm.js:
+   * senza keyCode il browser stesso non popola `.keyCode`/`.which` sul
+   * KeyboardEvent risultante. Tabella minima, solo i tasti che questo
+   * file usa davvero.
+   */
   async premiTasto(key, { code = key } = {}) {
-    await this.cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key, code });
-    await this.cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key, code });
+    const KEYCODE_NOTI = { Enter: 13, Tab: 9, Escape: 27, Backspace: 8 };
+    const windowsVirtualKeyCode = KEYCODE_NOTI[key];
+    const extra = windowsVirtualKeyCode !== undefined ? { windowsVirtualKeyCode, nativeVirtualKeyCode: windowsVirtualKeyCode } : {};
+    await this.cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key, code, ...extra });
+    await this.cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, ...extra });
   }
 
   /**
@@ -1426,6 +1441,323 @@ const SCENARI = {
       await p.screenshot('review-diff-dopo-seguito', { nota: 'diff vero, ora che il modello ha i dettagli' });
     } else {
       p.difetto('anche dopo aver risposto alla domanda di chiarimento, zero file in Review', { severita: 'blocco' });
+    }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /**
+   * ⭐⭐⭐ 30/8 — piano di test visivo, Task 2: html-conta-articoli
+   * (preventivo-html, difficoltà 1) + verifica manuale nel Terminale
+   * REALE (PTY, tastiera vera) dopo la conclusione — un umano che
+   * ridigita `npm test` di suo pugno, fuori dal turno dell'agente.
+   */
+  async 'qa-task-2-html-conta'(p) {
+    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/preventivo-html';
+    await p.attendi(1200);
+    await p.click('[data-open-sheet="permissions"]');
+    await p.attendi(300);
+    await p.click('[data-permission-choice="Full access"]');
+    await p.click('#closeSheet');
+    await p.attendi(300);
+
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio Nuova sessione' });
+    await p.digita('#customTaskCartellaLibera', CARTELLA);
+    await p.click('.model-picker-trigger');
+    await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
+    await p.digita('.model-picker-search input', 'gemini-3.7-flash');
+    await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati ricerca', timeoutMs: 6000 });
+    await p.click('.model-picker-option');
+    await p.attendi(200);
+    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
+
+    const prompt = 'Nel calcolatore di preventivi serve una funzione che dica quanti pezzi ci sono in totale nel carrello — contando le quantità di ogni articolo, non semplicemente quante righe ci sono. Puoi aggiungerla?';
+    await p.digita('#composerInput', prompt);
+    await p.screenshot('compito-scritto');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+
+    await p.attendiTestoStabile('.conversation', { giriStabili: 5, intervalMs: 2000, timeoutMs: 150000 });
+    await p.screenshot('conversazione-finale');
+    const reviewFilesCount = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.reviewFiles?.size ?? 0");
+    p.nota(`file in Review: ${reviewFilesCount}`);
+    if (reviewFilesCount === 0) p.difetto('sessione conclusa ma zero file in Review', { severita: 'nota' });
+
+    // --- Terminale REALE: un umano ridigita il comando di test di suo pugno, fuori dal turno dell'agente ---
+    await p.click('[data-mode="terminal"]');
+    await p.attendiCondizione("document.querySelector('#terminalStatusChip')?.textContent === 'connesso'", { timeoutMs: 8000, descrizione: 'PTY connessa' });
+    await p.attendi(500);
+    await p.screenshot('terminale-connesso', { nota: 'prompt reale della shell, radice sulla cartella del progetto' });
+    await p.clickReale('#realTerminalMount');
+    await p.attendi(200);
+    await p.digitaTastieraVera('npm test');
+    await p.screenshot('comando-digitato', { nota: 'digitato con tastiera VERA (Input.insertText), non ancora inviato' });
+    await p.premiTasto('Enter');
+    const leggiSchermo = "(() => { const t = window.__talosHarnessUiRuntime?.statoTerminale?.().term; if (!t) return null; const buf = t.buffer.active; const righe = []; for (let y = 0; y < buf.length; y++) righe.push(buf.getLine(y)?.translateToString(true) ?? ''); return righe.join('\\n'); })()";
+    await p.attendiCondizione(`${leggiSchermo}?.includes('pass') || ${leggiSchermo}?.includes('fail') || ${leggiSchermo}?.includes('ok')`, { timeoutMs: 15000, descrizione: 'output reale di npm test tornato dalla PTY' });
+    await p.screenshot('test-eseguiti-a-mano', { nota: 'output VERO della shell, digitato da un umano, non dall\'agente' });
+    const schermo = await p.cdp.evaluate(leggiSchermo);
+    p.nota(`assaggio schermo terminale dopo npm test a mano: ${JSON.stringify(String(schermo).slice(-500))}`);
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /**
+   * ⭐ 30/8 — riprova mirata: il primo giro di qa-task-2-html-conta è
+   * andato in crash sull'attesa del terminale (15s troppo corti per un
+   * primo `npm test` in una shell interattiva appena aperta — ipotesi
+   * da confermare qui, non un difetto di prodotto presunto). Riapre la
+   * sessione già creata, ridigita il comando con un'attesa più
+   * generosa e uno `attendi` esplicito prima di Invio.
+   */
+  async 'qa-task-2-terminale-riprova'(p) {
+    await p.attendi(1200);
+    await p.cdp.evaluate('window.__talosHarnessUiRuntime.aggiornaElencoSessioniReali()');
+    await p.attendiCondizione("!!document.querySelector('.session-item.real-session-item')", { descrizione: 'sidebar popolata' });
+    await p.click('.session-item.real-session-item');
+    await p.attendi(500);
+
+    await p.click('[data-mode="terminal"]');
+    await p.attendiCondizione("document.querySelector('#terminalStatusChip')?.textContent === 'connesso'", { timeoutMs: 8000, descrizione: 'PTY connessa' });
+    await p.attendi(800);
+    await p.screenshot('terminale-riconnesso');
+    await p.clickReale('#realTerminalMount');
+    await p.attendi(300);
+    const marcatore = `qa-marker-${Date.now()}`;
+    await p.digitaTastieraVera(`echo ${marcatore} && npm test`);
+    await p.attendi(400);
+    await p.screenshot('comando-digitato');
+    await p.premiTasto('Enter');
+
+    const leggiSchermo = "(() => { const t = window.__talosHarnessUiRuntime?.statoTerminale?.().term; if (!t) return null; const buf = t.buffer.active; const righe = []; for (let y = 0; y < buf.length; y++) righe.push(buf.getLine(y)?.translateToString(true) ?? ''); return righe.join('\\n'); })()";
+    await p.attendiCondizione(`${leggiSchermo}?.includes(${JSON.stringify(marcatore)})`, { timeoutMs: 8000, descrizione: 'il marcatore echo è tornato — comando ricevuto dalla PTY' });
+    p.nota('CONFERMATO: il marcatore echo è tornato, il comando è arrivato alla PTY reale.');
+    await p.attendiCondizione(`${leggiSchermo}?.includes('tests ') || ${leggiSchermo}?.includes('pass ')`, { timeoutMs: 30000, descrizione: 'output del riepilogo npm test tornato' });
+    await p.screenshot('test-eseguiti', { nota: 'output VERO npm test, digitato a mano' });
+    const schermo = await p.cdp.evaluate(leggiSchermo);
+    p.nota(`assaggio finale schermo: ${JSON.stringify(String(schermo).slice(-400))}`);
+    if (!String(schermo).includes('pass 5') && !String(schermo).includes('fail 0')) {
+      p.difetto(`l'output del terminale non mostra il riepilogo atteso (5 pass, 0 fail): ${JSON.stringify(String(schermo).slice(-400))}`, { severita: 'nota' });
+    } else {
+      p.nota('CONFERMATO: npm test eseguito a mano nel terminale reale, 5 pass 0 fail, coerente con la corsa diretta.');
+    }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /**
+   * ⭐ 30/8 — diagnostica: due tentativi precedenti hanno confermato che
+   * il comando ARRIVA alla PTY (l'eco del marcatore torna sempre), ma
+   * l'output di `npm test` non compare mai entro 30s. Invece di un'altra
+   * attesa a tutto-o-niente che crasha senza prove, questo scenario
+   * scatta uno screenshot ogni 5s per 60s — "lo screenshot va scattato
+   * DURANTE", non solo alla fine — per vedere ESATTAMENTE cosa succede
+   * sullo schermo del terminale nel frattempo.
+   */
+  async 'qa-diagnostica-terminale-npm-test'(p) {
+    await p.attendi(1200);
+    await p.cdp.evaluate('window.__talosHarnessUiRuntime.aggiornaElencoSessioniReali()');
+    await p.attendiCondizione("!!document.querySelector('.session-item.real-session-item')", { descrizione: 'sidebar popolata' });
+    await p.click('.session-item.real-session-item');
+    await p.attendi(500);
+    await p.click('[data-mode="terminal"]');
+    await p.attendiCondizione("document.querySelector('#terminalStatusChip')?.textContent === 'connesso'", { timeoutMs: 8000, descrizione: 'PTY connessa' });
+    await p.attendi(800);
+    await p.clickReale('#realTerminalMount');
+    await p.attendi(300);
+    await p.digitaTastieraVera('npm test');
+    await p.attendi(300);
+    await p.premiTasto('Enter');
+    p.nota('comando inviato — ora screenshot ogni 5s per 60s, guardando cosa succede davvero');
+
+    const leggiSchermo = "(() => { const t = window.__talosHarnessUiRuntime?.statoTerminale?.().term; if (!t) return null; const buf = t.buffer.active; const righe = []; for (let y = 0; y < buf.length; y++) righe.push(buf.getLine(y)?.translateToString(true) ?? ''); return righe.join('\\n'); })()";
+    for (let secondi = 5; secondi <= 60; secondi += 5) {
+      await p.attendi(5000);
+      await p.screenshot(`t${secondi}s`);
+      const schermo = await p.cdp.evaluate(leggiSchermo);
+      p.nota(`t=${secondi}s — ultime 200 char: ${JSON.stringify(String(schermo).slice(-200))}`);
+    }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /**
+   * ⭐ 30/8 — la diagnostica precedente ha mostrato TRE tentativi di
+   * comando concatenati sulla STESSA riga, mai eseguiti: prova che
+   * Invio non ha mai funzionato in NESSUNO dei tre, non un problema di
+   * tempo. Ma tutti e tre riconnettevano allo STESSO terminale
+   * (sessione già aperta prima). Isola la variabile: una sessione
+   * NUOVA, terminale aperto per la prima volta, UN comando semplice.
+   */
+  async 'qa-diagnostica-terminale-fresco'(p) {
+    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/preventivo-html';
+    await p.attendi(1200);
+    await p.click('[data-open-sheet="permissions"]');
+    await p.attendi(300);
+    await p.click('[data-permission-choice="Full access"]');
+    await p.click('#closeSheet');
+    await p.attendi(300);
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
+    await p.digita('#customTaskCartellaLibera', CARTELLA);
+    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'sessione pronta, vuota' });
+
+    await p.click('[data-mode="terminal"]');
+    await p.attendiCondizione("document.querySelector('#terminalStatusChip')?.textContent === 'connesso'", { timeoutMs: 8000, descrizione: 'PTY connessa per la prima volta' });
+    await p.attendi(1000);
+    await p.screenshot('terminale-fresco-connesso');
+    await p.clickReale('#realTerminalMount');
+    await p.attendi(300);
+    await p.digitaTastieraVera('echo ciao');
+    await p.attendi(300);
+    await p.screenshot('digitato-prima-di-invio');
+    await p.premiTasto('Enter');
+    await p.attendi(2000);
+    await p.screenshot('due-secondi-dopo-invio');
+
+    const leggiSchermo = "(() => { const t = window.__talosHarnessUiRuntime?.statoTerminale?.().term; if (!t) return null; const buf = t.buffer.active; const righe = []; for (let y = 0; y < buf.length; y++) righe.push(buf.getLine(y)?.translateToString(true) ?? ''); return righe.join('\\n'); })()";
+    const schermo = await p.cdp.evaluate(leggiSchermo);
+    p.nota(`schermo 2s dopo Invio: ${JSON.stringify(String(schermo).slice(-300))}`);
+    // conta le righe di prompt "$" per capire se Invio ha mai fatto scattare un nuovo prompt
+    const numeroPrompt = (String(schermo).match(/\$ /g) || []).length;
+    p.nota(`numero di prompt "$ " visti nel buffer: ${numeroPrompt} (1 = Invio non ha mai fatto nulla, 2+ = un nuovo prompt e' apparso)`);
+    if (numeroPrompt < 2) {
+      p.difetto(`dopo Invio compare ancora un solo prompt "$ " — il tasto Invio non sembra raggiungere la PTY reale. Schermo: ${JSON.stringify(String(schermo).slice(-300))}`, { severita: 'blocco' });
+    } else {
+      p.nota('CONFERMATO: Invio ha funzionato, un nuovo prompt è apparso dopo il comando.');
+    }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /**
+   * ⭐⭐⭐ 30/8 — correzione del MIO script, non del prodotto: la
+   * diagnostica precedente apriva il Terminale PRIMA di mandare il
+   * primo messaggio — `avviaSessionePendente` è solo locale
+   * (`state.pendingCustomSession`), la sessione VERA nasce lato server
+   * solo al primo invio (`startCustomSession`, chiamato da
+   * `submitPrompt`). Senza una sessione vera, `risolviCartella` (
+   * server.mjs) cade sul suo ultimo ripiego, `process.cwd()` — il cwd
+   * del PROCESSO SERVER, non della sessione. Qui si manda per davvero
+   * il primo messaggio, si aspetta RunStarted, POI si apre il
+   * Terminale — il confronto corretto.
+   */
+  async 'qa-diagnostica-terminale-sessione-vera'(p) {
+    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/preventivo-html';
+    await p.attendi(1200);
+    await p.click('[data-open-sheet="permissions"]');
+    await p.attendi(300);
+    await p.click('[data-permission-choice="Full access"]');
+    await p.click('#closeSheet');
+    await p.attendi(300);
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
+    await p.digita('#customTaskCartellaLibera', CARTELLA);
+    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'sessione pronta, vuota' });
+
+    // Manda per davvero il primo messaggio — la sessione nasce lato server SOLO ora.
+    await p.digita('#composerInput', 'Ciao, dimmi solo il nome del progetto in questa cartella, una riga sola.');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    await p.attendiCondizione("!!window.__talosHarnessUiRuntime?.realSessionState?.id", { timeoutMs: 15000, descrizione: 'RunStarted arrivato — la sessione VERA esiste ora' });
+    p.nota('CONFERMATO: sessione reale creata lato server (RunStarted ricevuto) prima di aprire il Terminale.');
+
+    await p.click('[data-mode="terminal"]');
+    await p.attendiCondizione("document.querySelector('#terminalStatusChip')?.textContent === 'connesso'", { timeoutMs: 8000, descrizione: 'PTY connessa' });
+    await p.attendi(1000);
+    await p.screenshot('terminale-su-sessione-vera', { nota: 'atteso: prompt sulla cartella preventivo-html scratch, MAI la cartella AVM' });
+    const promptIniziale = await p.cdp.evaluate("(() => { const t = window.__talosHarnessUiRuntime?.statoTerminale?.().term; if (!t) return null; const buf = t.buffer.active; const righe = []; for (let y = 0; y < buf.length; y++) righe.push(buf.getLine(y)?.translateToString(true) ?? ''); return righe.join('\\n'); })()");
+    p.nota(`prompt iniziale: ${JSON.stringify(promptIniziale)}`);
+    if (!promptIniziale?.includes('preventivo-html')) {
+      p.difetto(`il terminale NON si apre nella cartella della sessione (preventivo-html) — prompt reale: ${JSON.stringify(promptIniziale)}`, { severita: 'blocco' });
+    } else {
+      p.nota('CONFERMATO: il terminale è nella cartella giusta quando la sessione esiste per davvero.');
+    }
+
+    await p.clickReale('#realTerminalMount');
+    await p.attendi(300);
+    await p.digitaTastieraVera('echo ciao-vero');
+    await p.attendi(300);
+    await p.premiTasto('Enter');
+    await p.attendi(2000);
+    await p.screenshot('dopo-invio');
+    const schermoFinale = await p.cdp.evaluate("(() => { const t = window.__talosHarnessUiRuntime?.statoTerminale?.().term; if (!t) return null; const buf = t.buffer.active; const righe = []; for (let y = 0; y < buf.length; y++) righe.push(buf.getLine(y)?.translateToString(true) ?? ''); return righe.join('\\n'); })()");
+    p.nota(`schermo dopo Invio: ${JSON.stringify(String(schermoFinale).slice(-300))}`);
+    if (!String(schermoFinale).includes('ciao-vero') || (String(schermoFinale).match(/\$ /g) || []).length < 2) {
+      p.difetto(`Invio non sembra eseguire il comando anche con una sessione vera: ${JSON.stringify(String(schermoFinale).slice(-300))}`, { severita: 'blocco' });
+    } else {
+      p.nota('CONFERMATO: Invio funziona — output reale e nuovo prompt apparsi.');
+    }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /** ⭐ 30/8 — chiusura pulita di Task 2: riprende la sessione VERA con
+   * il codice scritto dal modello e lancia `npm test` a mano, ora che
+   * `premiTasto('Enter')` è corretto. */
+  async 'qa-task-2-chiusura'(p) {
+    await p.attendi(1200);
+    await p.cdp.evaluate('window.__talosHarnessUiRuntime.aggiornaElencoSessioniReali()');
+    await p.attendiCondizione("!!document.querySelector('.session-item.real-session-item')", { descrizione: 'sidebar popolata' });
+    const sessioni = await p.cdp.evaluate("[...document.querySelectorAll('.session-item.real-session-item .session-item-title, .session-item.real-session-item strong')].map((e) => e.textContent)");
+    p.nota(`sessioni in sidebar (assaggio): ${JSON.stringify(sessioni?.slice(0, 5))}`);
+    // la sessione di html-conta è quella col titolo che inizia per "Nel calcolatore di preventivi"
+    const trovata = await p.cdp.evaluate(`(() => {
+      const righe = [...document.querySelectorAll('.session-item.real-session-item')];
+      const riga = righe.find((r) => r.textContent.includes('Nel calcolatore di preventivi'));
+      if (!riga) return false;
+      riga.click();
+      return true;
+    })()`);
+    if (!trovata) { p.difetto('sessione Task 2 (html-conta) non trovata in sidebar per la chiusura', { severita: 'nota' }); return; }
+    await p.attendi(500);
+
+    await p.click('[data-mode="terminal"]');
+    await p.attendiCondizione("document.querySelector('#terminalStatusChip')?.textContent === 'connesso'", { timeoutMs: 8000, descrizione: 'PTY connessa' });
+    await p.attendi(1000);
+    await p.screenshot('terminale-aperto-su-sessione-vera');
+    await p.clickReale('#realTerminalMount');
+    await p.attendi(300);
+    await p.digitaTastieraVera('npm test');
+    await p.attendi(300);
+    await p.premiTasto('Enter');
+    const leggiSchermo = "(() => { const t = window.__talosHarnessUiRuntime?.statoTerminale?.().term; if (!t) return null; const buf = t.buffer.active; const righe = []; for (let y = 0; y < buf.length; y++) righe.push(buf.getLine(y)?.translateToString(true) ?? ''); return righe.join('\\n'); })()";
+    await p.attendi(3000);
+    await p.screenshot('tre-secondi-dopo-invio');
+    await p.attendiCondizione(`${leggiSchermo}?.includes('tests ')`, { timeoutMs: 40000, descrizione: 'output npm test tornato' });
+    await p.screenshot('npm-test-a-mano', { nota: 'output vero, digitato a mano, sul codice scritto dal modello' });
+    const schermo = await p.cdp.evaluate(leggiSchermo);
+    p.nota(`esito: ${JSON.stringify(String(schermo).slice(-350))}`);
+    if (!String(schermo).includes('fail 0')) {
+      p.difetto(`npm test a mano non mostra "fail 0": ${JSON.stringify(String(schermo).slice(-350))}`, { severita: 'blocco' });
+    } else {
+      p.nota('CONFERMATO: il codice scritto dal modello passa i test, riverificato a mano nel terminale reale.');
     }
 
     for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });

@@ -34,7 +34,7 @@ cambiati, solo quali bug/funzioni ciascun task richiede.
 |---|---|---|---|---|
 | 0 | — | *(ricognizione, nessun prompt)* | stato vuoto, pannello attrezzi, Control-plane | ✅ fatto — 1 difetto reale trovato (label stale Agents/Approval policy) |
 | 1 | `py-sconto-a-scaglioni` | "Nel progetto del magazzino serve una funzione che calcoli uno sconto a scaglioni in base a delle soglie di importo — puoi aggiungerla?" | elenca/leggi/scrivi/prova, cancello semantico, streaming, Review, auto-rename | ✅ fatto (+ seguito) |
-| 2 | `html-conta-articoli` | "Nel calcolatore di preventivi serve una funzione che conta quanti articoli ci sono nel carrello — dacci un'occhiata?" + dopo: comando umano nel Terminale reale | ciclo base + PTY reale digitata a mano | ⬜ |
+| 2 | `html-conta-articoli` | "Nel calcolatore di preventivi serve una funzione che conta quanti articoli ci sono nel carrello — dacci un'occhiata?" + dopo: comando umano nel Terminale reale | ciclo base + PTY reale digitata a mano | ✅ fatto — 2 piste false, 1 fix reale al MIO tooling (non al prodotto) |
 | 3 | `game-wraparound-negativo` | "Nel gioco del serpentone, quando esce dal bordo sinistro o da quello superiore della griglia il wraparound sembra comportarsi in modo strano — puoi controllare?" | cerca, tasto destro albero file, Doctor | ⬜ |
 | 4 | `crm-nome-senza-cognome` | "Nel CRM, quando un contatto non ha il cognome il nome formattato ha uno spazio in più che non dovrebbe esserci — puoi sistemarlo?" | Workspace write, fork a metà lavoro | ⬜ |
 | 5 | `api-validazione-duplicata` | "Nell'API dei contatti la validazione del corpo della richiesta è scritta in due punti diversi — puoi accorparla in uno solo senza cambiare come si comporta?" | Compatta, F5+Resume, export MD/JSON | ⬜ |
@@ -125,6 +125,50 @@ Manuale — tutto atteso, nessuna anomalia:
   mostrano onestamente "—" (debito GIÀ dichiarato in FASE 1.3-BIS del
   piano precedente, non nuovo).
 Nessun nuovo difetto oltre a quello già annotato in Task 0.
+
+### [Task 2] html-conta-articoli + Terminale reale — 2026-08-30 09:04-09:13
+Screenshot: `qa-runs/qa-task-2-*` (più corse — vedi sotto)
+Il task base (compito scritto, Review "2 file modificati") è filato
+liscio — nessuna anomalia. La verifica nel **Terminale reale** ha
+richiesto un'indagine vera, con DUE piste che sembravano bug seri e si
+sono rivelate ENTRAMBE difetti del mio script di prova, non del
+prodotto — documentato per intero perché è la lezione più importante
+di questo giro finora:
+
+1. **Pista 1 — "il terminale apre nella cartella sbagliata"**: aprendo
+   il Terminale SUBITO dopo `avviaSessionePendente` (senza mai mandare
+   il primo messaggio), il prompt mostrava `.../AVM (lane/voce-personale)`
+   invece della cartella del progetto. Causa reale: `avviaSessionePendente`
+   è SOLO stato locale (`state.pendingCustomSession`) — la sessione VERA
+   nasce lato server solo al primo invio (`startCustomSession`). Senza
+   una sessione vera, `risolviCartella` (server.mjs) cade sul suo ultimo
+   ripiego, `process.cwd()` del PROCESSO SERVER — che nella mia shell è
+   `AVM` per via di come l'ho avviato oggi (percorso assoluto ma cwd di
+   lancio ereditato). ⇒ **Non un difetto del prodotto**: verificato
+   mandando per davvero il primo messaggio e aspettando `RunStarted`
+   PRIMA di aprire il Terminale — il prompt è apparso ESATTAMENTE sulla
+   cartella giusta. Pista chiusa, retrattata.
+2. **Pista 2 — "Invio non esegue mai il comando digitato"**: anche con
+   una sessione vera, `echo ciao-vero` restava scritto ma MAI eseguito
+   (nessun output, nessun nuovo prompt) — provato 3 volte, sempre lo
+   stesso esito, fino a un buffer con TRE comandi di corse diverse
+   concatenati sulla stessa riga senza mai un invio. Causa reale, **nel
+   MIO script di test**: `premiTasto('Enter')` in `qa-visual-pipeline.mjs`
+   mandava `Input.dispatchKeyEvent` senza `windowsVirtualKeyCode` — il
+   KeyboardEvent sintetico risultante ha `keyCode:0`, e il gestore
+   reale del terminale non lo riconosce come Invio. **Corretto**
+   (committato, beneficia ogni scenario futuro che usa questo helper):
+   aggiunta una tabella minima tasto→keyCode (Enter:13, Tab:9, Escape:27,
+   Backspace:8). Riprovato: Invio funziona, output vero, nuovo prompt.
+3. **Chiusura pulita**: riaperta la sessione VERA di Task 2 (quella col
+   codice scritto dal modello), lanciato `npm test` a mano nel terminale
+   reale — **5 pass, 0 fail**, confermato che il codice del modello è
+   davvero corretto, non solo dichiarato tale dalla Review.
+
+⭐⭐⭐ Lezione per i task restanti: **sempre mandare il primo messaggio
+prima di aprire il Terminale** in ogni scenario di questa sequenza (la
+sessione deve esistere per davvero); il fix a `premiTasto` è permanente,
+non serve ripeterlo.
 
 Formato per ogni voce, da qui in avanti:
 
