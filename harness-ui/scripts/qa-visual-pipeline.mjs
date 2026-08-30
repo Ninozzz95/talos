@@ -1293,6 +1293,147 @@ const SCENARI = {
       p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
     }
   },
+
+  /**
+   * ⭐⭐⭐ 30/8 — piano di test visivo, Task 1: py-sconto-a-scaglioni
+   * (magazzino_py, difficoltà 1). Un solo modello per questo giro,
+   * Gemini 3.7 Flash — owner: "questa non è un confronto tra modelli,
+   * USA per adesso gemini 3.7 flash e niente altro". Cartella scratch
+   * dedicata (mai TALOS-BANCO stesso), "Full access" con percorso
+   * libero. Copertura: ciclo base (elenca/leggi/scrivi/prova), cancello
+   * semantico, streaming testo+ragionamento, tool-call bubble, Review/
+   * diff, titolo auto-rinominato.
+   */
+  async 'qa-task-1-py-sconto'(p) {
+    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/magazzino_py';
+    const MODELLO_RICERCA = 'gemini-3.7-flash';
+
+    await p.attendi(1200);
+    await p.click('[data-open-sheet="permissions"]');
+    await p.attendi(300);
+    await p.click('[data-permission-choice="Full access"]');
+    await p.attendi(200);
+    await p.click('#closeSheet');
+    await p.attendi(300);
+    await p.screenshot('permessi-full-access', { nota: 'pillola composer deve ora mostrare Full access' });
+
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio Nuova sessione, ramo Full access' });
+    await p.digita('#customTaskCartellaLibera', CARTELLA);
+    await p.screenshot('cartella-scelta', { nota: 'percorso scratch inserito, mai dentro TALOS-BANCO' });
+
+    await p.click('.model-picker-trigger');
+    await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo modelli OpenRouter caricato' });
+    await p.digita('.model-picker-search input', MODELLO_RICERCA);
+    await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati di ricerca renderizzati', timeoutMs: 6000 });
+    const opzioneTrovata = await p.testo('.model-picker-option');
+    p.nota(`prima opzione dopo la ricerca "${MODELLO_RICERCA}": ${JSON.stringify(opzioneTrovata)}`);
+    if (!opzioneTrovata?.toLowerCase().includes('gemini')) {
+      p.difetto(`la ricerca "${MODELLO_RICERCA}" non ha trovato Gemini 3.7 Flash nel catalogo — trovato invece: ${JSON.stringify(opzioneTrovata)}`, { severita: 'blocco' });
+    }
+    await p.click('.model-picker-option');
+    await p.attendi(200);
+    const modelloScelto = await p.testo('.model-picker-trigger-label');
+    p.nota(`modello selezionato: ${modelloScelto}`);
+    await p.screenshot('modello-scelto');
+
+    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat vuota pronta dopo la scelta cartella+modello' });
+
+    const prompt = 'Nel progetto del magazzino serve una funzione che calcoli uno sconto a scaglioni in base a delle soglie di importo — puoi aggiungerla?';
+    await p.digita('#composerInput', prompt);
+    await p.screenshot('compito-scritto', { nota: 'prompt in linguaggio naturale, mai il nome di un attrezzo interno' });
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    p.nota('sessione avviata — Gemini 3.7 Flash, compito reale del corpus (contenuto, non il meccanismo del banco)');
+
+    const massimoAttesaMs = 180_000;
+    const intervalloMs = 5_000;
+    let trascorsoMs = 0;
+    let concluso = false;
+    while (trascorsoMs < massimoAttesaMs && !concluso) {
+      await p.attendi(intervalloMs);
+      trascorsoMs += intervalloMs;
+      await p.screenshot(`esecuzione-t${Math.round(trascorsoMs / 1000)}s`);
+      const eventoTerminale = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.eventoTerminaleVisto ?? null");
+      const titoloSessione = await p.testo('#sessionTitle');
+      p.nota(`t=${Math.round(trascorsoMs / 1000)}s — titolo="${titoloSessione}" eventoTerminaleVisto=${eventoTerminale}`);
+      if (eventoTerminale === true) concluso = true;
+    }
+    if (!concluso) {
+      p.difetto(`nessun evento terminale ricevuto entro ${massimoAttesaMs / 1000}s`, { severita: 'blocco' });
+    }
+    await p.screenshot('conversazione-finale', { nota: 'atteso: titolo sessione auto-rinominato dal primo messaggio, non più "Compito libero"' });
+
+    const titoloFinale = await p.testo('#sessionTitle');
+    if (titoloFinale?.includes('Compito libero') || titoloFinale?.includes('Nessuna sessione')) {
+      p.difetto(`il titolo sessione non sembra auto-rinominato dal primo messaggio: ${JSON.stringify(titoloFinale)}`, { severita: 'nota' });
+    } else {
+      p.nota(`CONFERMATO: titolo auto-rinominato: ${JSON.stringify(titoloFinale)}`);
+    }
+
+    const reviewFilesCount = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.reviewFiles?.size ?? 0");
+    p.nota(`file in Review: ${reviewFilesCount}`);
+    if (reviewFilesCount > 0) {
+      await p.click('#commandPaletteBtn');
+      await p.attendi(200);
+      await p.click('[data-command="review"]');
+      await p.attendi(400);
+      await p.screenshot('review-diff', { nota: 'diff vero prodotto dal modello — numeri di riga, +/- colorati' });
+    } else {
+      p.difetto('sessione conclusa ma zero file in Review — il modello ha davvero chiamato scrivi?', { severita: 'nota' });
+    }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /**
+   * ⭐⭐⭐ 30/8 — Task 1, seguito: il primo giro ha fatto una domanda di
+   * chiarimento legittima (le soglie/percentuali non erano nel prompt —
+   * sono un PARAMETRO della funzione, non valori da indovinare). Un
+   * utente vero risponderebbe, non riscriverebbe da capo — questo
+   * scenario riprende la sessione più recente (quella di Task 1) e
+   * manda la risposta, esercitando ANCHE resume+follow-up in linguaggio
+   * naturale, mai il gergo dello schema dati del corpus.
+   */
+  async 'qa-task-1-seguito'(p) {
+    await p.attendi(1200);
+    await p.cdp.evaluate('window.__talosHarnessUiRuntime.aggiornaElencoSessioniReali()');
+    await p.attendiCondizione("!!document.querySelector('.session-item.real-session-item')", { descrizione: 'sidebar popolata' });
+    await p.click('.session-item.real-session-item');
+    await p.attendi(500);
+    await p.screenshot('sessione-riaperta', { nota: 'la sessione di Task 1, riaperta' });
+
+    const risposta = 'La lista delle soglie e delle percentuali te la passo io quando ti chiedo di calcolare uno sconto, non deve essere scritta a mano dentro la funzione — una lista di coppie "da un certo importo, percento di sconto", ordinata dalla più bassa alla più alta. Si applica lo sconto della soglia più alta che l\'importo supera; se non ne supera nessuna, nessuno sconto.';
+    await p.digita('#composerInput', risposta);
+    await p.screenshot('risposta-scritta');
+    await p.submit('#composerForm');
+    p.nota('follow-up inviato su una sessione CONCLUSA — atteso: resume vero, non un secondo task');
+
+    await p.attendiTestoStabile('.conversation', { giriStabili: 5, intervalMs: 1500, timeoutMs: 150000 });
+    await p.screenshot('conclusa-dopo-seguito');
+
+    const reviewFilesCount = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.reviewFiles?.size ?? 0");
+    p.nota(`file in Review dopo il seguito: ${reviewFilesCount}`);
+    if (reviewFilesCount > 0) {
+      await p.click('#commandPaletteBtn');
+      await p.attendi(200);
+      await p.click('[data-command="review"]');
+      await p.attendi(400);
+      await p.screenshot('review-diff-dopo-seguito', { nota: 'diff vero, ora che il modello ha i dettagli' });
+    } else {
+      p.difetto('anche dopo aver risposto alla domanda di chiarimento, zero file in Review', { severita: 'blocco' });
+    }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
 };
 
 // --------------------------------------------------------------------

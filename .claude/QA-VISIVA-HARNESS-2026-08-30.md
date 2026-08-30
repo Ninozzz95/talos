@@ -33,7 +33,7 @@ cambiati, solo quali bug/funzioni ciascun task richiede.
 | # | ID reale | Prompt naturale (verbatim) | Copertura | Stato |
 |---|---|---|---|---|
 | 0 | — | *(ricognizione, nessun prompt)* | stato vuoto, pannello attrezzi, Control-plane | ✅ fatto — 1 difetto reale trovato (label stale Agents/Approval policy) |
-| 1 | `py-sconto-a-scaglioni` | "Nel progetto del magazzino serve una funzione che calcoli uno sconto a scaglioni in base a delle soglie di importo — puoi aggiungerla?" | elenca/leggi/scrivi/prova, cancello semantico, streaming, Review, auto-rename | ⬜ |
+| 1 | `py-sconto-a-scaglioni` | "Nel progetto del magazzino serve una funzione che calcoli uno sconto a scaglioni in base a delle soglie di importo — puoi aggiungerla?" | elenca/leggi/scrivi/prova, cancello semantico, streaming, Review, auto-rename | ✅ fatto (+ seguito) |
 | 2 | `html-conta-articoli` | "Nel calcolatore di preventivi serve una funzione che conta quanti articoli ci sono nel carrello — dacci un'occhiata?" + dopo: comando umano nel Terminale reale | ciclo base + PTY reale digitata a mano | ⬜ |
 | 3 | `game-wraparound-negativo` | "Nel gioco del serpentone, quando esce dal bordo sinistro o da quello superiore della griglia il wraparound sembra comportarsi in modo strano — puoi controllare?" | cerca, tasto destro albero file, Doctor | ⬜ |
 | 4 | `crm-nome-senza-cognome` | "Nel CRM, quando un contatto non ha il cognome il nome formattato ha uno spazio in più che non dovrebbe esserci — puoi sistemarlo?" | Workspace write, fork a metà lavoro | ⬜ |
@@ -95,6 +95,36 @@ esattamente il tipo di difetto che questo giro di QA esiste per
 trovare. 🔜 Non corretto in questo giro (fuori scope — QA visiva
 osserva, non implementa; il piano prevede correzioni in BATCH dopo
 l'intera sequenza, §1.6 regola vincolante).
+
+### [Task 1] py-sconto-a-scaglioni + seguito — 2026-08-30 09:01-09:02
+Screenshot: `qa-runs/qa-task-1-py-sconto-.../` (8) + `qa-runs/qa-task-1-seguito-.../` (4)
+Automatico: zero eccezioni JS, zero richieste fallite (a parte il
+favicon 404 noto) in entrambe le corse.
+Manuale — tutto atteso, nessuna anomalia:
+- Model picker: cercato "gemini-3.7-flash", trovato
+  `google/gemini-3.7-flash · 1049k ctx · $0.75/M in` — prezzo combacia
+  col catalogo verificato in altre fasi di questa sessione.
+- Il modello ha esplorato da solo (elenca, letto src/magazzino.py +
+  test/test_magazzino.py + tap_runner.py, eseguito i test) PRIMA di
+  scrivere — comportamento agentico corretto.
+- **Non un difetto**: il primo giro ha fatto una domanda di
+  chiarimento invece di scrivere subito — le soglie/percentuali dello
+  sconto sono un PARAMETRO della funzione (non valori da indovinare),
+  e il mio prompt di test non li specificava. Buon comportamento del
+  modello (non ha fabbricato valori a caso), cattiva specifica MIA —
+  annotato come lezione per i prompt dei task restanti: quando la
+  consegna reale del corpus prevede un contratto dati preciso, il
+  prompt naturale deve comunicarlo (in prosa, mai nel gergo dello
+  schema) o aspettarsi una domanda.
+- Titolo sessione auto-rinominato correttamente dal primo messaggio.
+- Seguito (resume su sessione conclusa): risposta in linguaggio
+  naturale su soglie/percentuali → il modello ha scritto
+  `calcola_sconto_scaglioni(importo_centesimi, soglie)` per davvero.
+  Review Center: "1 file modificato", diff verde reale, 45 righe,
+  numeri di riga, "Approva tutto" — tutto corretto. "Test"/"Rischio"
+  mostrano onestamente "—" (debito GIÀ dichiarato in FASE 1.3-BIS del
+  piano precedente, non nuovo).
+Nessun nuovo difetto oltre a quello già annotato in Task 0.
 
 Formato per ogni voce, da qui in avanti:
 
