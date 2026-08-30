@@ -169,6 +169,62 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         expect(document.querySelector('[data-view="settings"]')?.classList.contains('active')).toBe(true)
     })
 
+    it('CODE-SETTINGS-APPEARANCE-HYDRATE-01 hydrates local appearance preferences and applies separate scales', () => {
+        window.localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({
+            version: 1,
+            appearance: { uiFontScale: 'large', chatFontScale: 'expanded', reducedMotion: true },
+            apiKey: 'must-not-survive',
+        }))
+
+        mountStaticRuntime()
+
+        const host = document.documentElement
+        expect(host.style.getPropertyValue('--talos-ui-font-scale')).toBe('1.15')
+        expect(host.style.getPropertyValue('--talos-chat-font-size')).toBe('1.1875rem')
+        expect(document.body.classList.contains('reduce-motion')).toBe(true)
+        expect(document.querySelector<HTMLSelectElement>('#uiFontScaleSelect')?.value).toBe('large')
+        expect(document.querySelector<HTMLSelectElement>('#chatFontScaleSelect')?.value).toBe('expanded')
+        expect(document.querySelector<HTMLInputElement>('#reducedMotionToggle')?.checked).toBe(true)
+    })
+
+    it('CODE-SETTINGS-APPEARANCE-PERSIST-01 persists changes in the existing versioned document', () => {
+        mountStaticRuntime()
+
+        const ui = document.querySelector<HTMLSelectElement>('#uiFontScaleSelect')!
+        const chat = document.querySelector<HTMLSelectElement>('#chatFontScaleSelect')!
+        const motion = document.querySelector<HTMLInputElement>('#reducedMotionToggle')!
+        ui.value = 'xlarge'
+        ui.dispatchEvent(new Event('change', { bubbles: true }))
+        chat.value = 'compact'
+        chat.dispatchEvent(new Event('change', { bubbles: true }))
+        motion.checked = true
+        motion.dispatchEvent(new Event('change', { bubbles: true }))
+
+        const stored = JSON.parse(window.localStorage.getItem('talos.harness.desktop.settings.v1') || '{}')
+        expect(stored.appearance).toEqual({ uiFontScale: 'xlarge', chatFontScale: 'compact', reducedMotion: true })
+        expect(stored.apiKey).toBeUndefined()
+    })
+
+    it('CODE-SETTINGS-APPEARANCE-FAIL-CLOSED-01 ignores malformed values and secret-like keys', () => {
+        window.localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({
+            version: 999,
+            appearance: { uiFontScale: 'huge', chatFontScale: {}, reducedMotion: 'yes', token: 'secret' },
+            workspaces: { 'project:p1': { expandedPaths: ['src'], filter: 'composer', apiKey: 'secret' } },
+        }))
+
+        mountStaticRuntime()
+
+        expect(document.querySelector<HTMLSelectElement>('#uiFontScaleSelect')?.value).toBe('default')
+        expect(document.querySelector<HTMLSelectElement>('#chatFontScaleSelect')?.value).toBe('xcompact')
+        expect(document.querySelector<HTMLInputElement>('#reducedMotionToggle')?.checked).toBe(false)
+        document.querySelector<HTMLSelectElement>('#uiFontScaleSelect')!.value = 'small'
+        document.querySelector<HTMLSelectElement>('#uiFontScaleSelect')!.dispatchEvent(new Event('change', { bubbles: true }))
+        const stored = JSON.parse(window.localStorage.getItem('talos.harness.desktop.settings.v1') || '{}')
+        expect(stored.apiKey).toBeUndefined()
+        expect(stored.appearance.token).toBeUndefined()
+        expect(stored.workspaces['project:p1'].apiKey).toBeUndefined()
+    })
+
     it('CODE-COMPOSER-AUTONOMY-SHEET-01 opens the original policy sheet and reports its selection to Vue', () => {
         const permissionChanged = vi.fn()
         ;(window as unknown as {

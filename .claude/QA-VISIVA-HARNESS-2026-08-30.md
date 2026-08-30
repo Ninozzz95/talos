@@ -1550,3 +1550,37 @@ preview realmente in sola lettura e nessuna persistenza di contenuti.
 
 Esito: **risolto nella lane desktop**. Il dettaglio esecutivo è in
 `.claude/LEDGER-FASE-7-SETTINGS-DESKTOP-2026-08-30.md`, sezione Fase 7b.
+
+## Fase 7a — Appearance/Typography locale (30/08/2026)
+
+Il bundle desktop ora espone controlli reali per movimento, scala
+dell’interfaccia e scala indipendente della prosa chat. Il documento locale
+`talos.harness.desktop.settings.v1` è versionato e fail-closed: al salvataggio
+restano soltanto `version`, `appearance` e preferenze visuali del file tree;
+chiavi sconosciute o segreti vengono scartati. Il tema continua a provenire
+dai token TALOS attivi, senza un preset decorativo scollegato.
+
+Evidenza automatica: suite Harness `174/174` test passati; pipeline CDP reale
+`qa-settings-appearance` senza eccezioni JavaScript. Il browser plugin non era
+disponibile, quindi la pipeline locale ha usato Chrome dedicato e ha prodotto
+gli screenshot completi richiesti.
+
+Screenshot ispezionati per intero:
+
+- 1440×900: `harness-ui/.qa-runs/qa-settings-appearance-2026-08-30T19-19-09-502Z/01-settings-default.png`, `02-settings-modificate.png`, `03-settings-parte-bassa.png`, `04-settings-dopo-reload.png`;
+- 1024×800: `harness-ui/.qa-runs/qa-settings-appearance-2026-08-30T19-19-29-042Z/01-settings-default.png`, `02-settings-modificate.png`, `03-settings-parte-bassa.png`, `04-settings-dopo-reload.png`.
+
+Controllo visivo: nessun overflow orizzontale introdotto; a 1024×800 le tre
+card restano leggibili e il Control plane va a riga intera. La scala Grande
+mantiene i controlli dentro la griglia; la prosa chat usa una dimensione
+indipendente. Il `404 /favicon.ico` è l’unica richiesta fallita della pagina
+statica ed è preesistente/non funzionale a questa slice.
+
+Confronto: VS Code conferma il pattern di impostazioni persistenti e scope
+dichiarato; Hermes conferma font/appearance persistenti e separazione dei
+segreti. TALOS adotta entrambi i punti forti con `localStorage` locale e
+tokenizzazione già esistente, senza promettere sincronizzazione account.
+
+Esito: **slice Appearance/Typography risolta nella lane desktop**. Restano
+fuori da questa slice i gruppi Modelli, Permessi, Privacy, Backup e Voice,
+che richiedono contratti runtime separati già elencati nel ledger.

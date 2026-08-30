@@ -4355,36 +4355,97 @@
 
   // Stato di sola interfaccia, separato dai dati della sessione: come VS Code
   // ricorda espansioni e filtro per workspace, mai contenuti o percorsi nuovi.
-  const FILE_TREE_SETTINGS_KEY = 'talos.harness.desktop.settings.v1';
+  const DESKTOP_SETTINGS_KEY = 'talos.harness.desktop.settings.v1';
+  const DESKTOP_APPEARANCE_DEFAULTS = {
+    uiFontScale: 'default',
+    chatFontScale: 'xcompact',
+    reducedMotion: false,
+  };
+  const UI_FONT_SCALE_FACTORS = { xsmall: .8, small: .9, default: 1, large: 1.15, xlarge: 1.3 };
+  const CHAT_FONT_SCALE_SIZES = { xcompact: '0.875rem', compact: '0.9375rem', balanced: '1.0625rem', expanded: '1.1875rem' };
+  function normalizzaAspettoDesktop(value) {
+    const record = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    return {
+      uiFontScale: Object.hasOwn(UI_FONT_SCALE_FACTORS, record.uiFontScale) ? record.uiFontScale : DESKTOP_APPEARANCE_DEFAULTS.uiFontScale,
+      chatFontScale: Object.hasOwn(CHAT_FONT_SCALE_SIZES, record.chatFontScale) ? record.chatFontScale : DESKTOP_APPEARANCE_DEFAULTS.chatFontScale,
+      reducedMotion: record.reducedMotion === true,
+    };
+  }
+  function normalizzaWorkspaces(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    return Object.fromEntries(Object.entries(value).map(([key, record]) => {
+      if (!record || typeof record !== 'object' || Array.isArray(record)) return [key, { expandedPaths: [], filter: '' }];
+      const expandedPaths = Array.isArray(record.expandedPaths)
+        ? record.expandedPaths.filter((path) => typeof path === 'string' && path.length <= 1024).slice(0, 200)
+        : [];
+      return [key, { expandedPaths, filter: typeof record.filter === 'string' ? record.filter.slice(0, 256) : '' }];
+    }));
+  }
+  function leggiImpostazioniDesktop() {
+    try {
+      const raw = JSON.parse(window.localStorage.getItem(DESKTOP_SETTINGS_KEY) || '{}');
+      return {
+        version: 1,
+        appearance: normalizzaAspettoDesktop(raw?.appearance),
+        workspaces: normalizzaWorkspaces(raw?.workspaces),
+      };
+    } catch {
+      return { version: 1, appearance: { ...DESKTOP_APPEARANCE_DEFAULTS }, workspaces: {} };
+    }
+  }
+  function salvaImpostazioniDesktop(value) {
+    try {
+      const safe = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+      window.localStorage.setItem(DESKTOP_SETTINGS_KEY, JSON.stringify({
+        version: 1,
+        appearance: normalizzaAspettoDesktop(safe.appearance),
+        workspaces: normalizzaWorkspaces(safe.workspaces),
+      }));
+    } catch {
+      // Le preferenze perse non devono impedire la navigazione del workspace.
+    }
+  }
+  function aggiornaAspettoDesktop(patch) {
+    const documento = leggiImpostazioniDesktop();
+    documento.appearance = normalizzaAspettoDesktop({ ...documento.appearance, ...patch });
+    salvaImpostazioniDesktop(documento);
+    applicaAspettoDesktop(documento.appearance);
+  }
+  function applicaAspettoDesktop(appearance) {
+    const safe = normalizzaAspettoDesktop(appearance);
+    HOST().style.setProperty('--talos-ui-font-scale', String(UI_FONT_SCALE_FACTORS[safe.uiFontScale]));
+    HOST().style.setProperty('--talos-chat-font-size', CHAT_FONT_SCALE_SIZES[safe.chatFontScale]);
+    document.body.classList.toggle('reduce-motion', safe.reducedMotion);
+    const ui = $('#uiFontScaleSelect');
+    const chat = $('#chatFontScaleSelect');
+    const motion = $('#reducedMotionToggle');
+    if (ui) ui.value = safe.uiFontScale;
+    if (chat) chat.value = safe.chatFontScale;
+    if (motion) motion.checked = safe.reducedMotion;
+  }
+  function inizializzaAspettoDesktop() {
+    applicaAspettoDesktop(leggiImpostazioniDesktop().appearance);
+  }
   function chiaveWorkspaceAlbero() {
     return state.realSession.treeWorkspaceKey
       || (state.realSession.previewProjectId ? `project:${state.realSession.previewProjectId}` : null)
       || (state.realSession.id ? `session:${state.realSession.id}` : null);
   }
   function leggiImpostazioniAlbero() {
-    try {
-      const valore = JSON.parse(window.localStorage.getItem(FILE_TREE_SETTINGS_KEY) || '{}');
-      return valore && typeof valore === 'object' ? valore : {};
-    } catch {
-      return {};
-    }
+    return leggiImpostazioniDesktop();
   }
   function salvaImpostazioniAlbero() {
     const chiave = chiaveWorkspaceAlbero();
     if (!chiave) return;
-    try {
-      const tutte = leggiImpostazioniAlbero();
-      const percorsi = [...state.realSession.treeOpen]
-        .filter((percorso) => typeof percorso === 'string' && percorso.length <= 1024)
-        .slice(0, 200);
-      const filtro = String($('#fileTreeFilter')?.value || '').slice(0, 256);
-      tutte.version = 1;
-      tutte.workspaces = tutte.workspaces && typeof tutte.workspaces === 'object' ? tutte.workspaces : {};
-      tutte.workspaces[chiave] = { expandedPaths: percorsi, filter: filtro };
-      window.localStorage.setItem(FILE_TREE_SETTINGS_KEY, JSON.stringify(tutte));
-    } catch {
-      // Una preferenza persa non deve impedire la navigazione del workspace.
-    }
+    const tutte = leggiImpostazioniAlbero();
+    const percorsi = [...state.realSession.treeOpen]
+      .filter((percorso) => typeof percorso === 'string' && percorso.length <= 1024)
+      .slice(0, 200);
+    const filtro = String($('#fileTreeFilter')?.value || '').slice(0, 256);
+    tutte.version = 1;
+    tutte.workspaces = tutte.workspaces && typeof tutte.workspaces === 'object' ? tutte.workspaces : {};
+    tutte.workspaces[chiave] = { expandedPaths: percorsi, filter: filtro };
+    salvaImpostazioniDesktop(tutte);
   }
   function ripristinaImpostazioniAlbero() {
     if (state.realSession.treeUiRestored) return;
@@ -7034,9 +7095,15 @@
     toast(button.dataset.reviewAction === 'comment' ? 'Commento inline pronto' : 'File aperto nel workspace', diffPath?.textContent || 'Review');
   }));
 
-  $('#reducedMotionToggle').addEventListener('change', (event) => {
-    document.body.classList.toggle('reduce-motion', event.target.checked);
-    toast('Movimento', event.target.checked ? 'Ridotto' : 'Standard');
+  inizializzaAspettoDesktop();
+  $('#uiFontScaleSelect')?.addEventListener('change', (event) => {
+    aggiornaAspettoDesktop({ uiFontScale: event.target.value });
+  });
+  $('#chatFontScaleSelect')?.addEventListener('change', (event) => {
+    aggiornaAspettoDesktop({ chatFontScale: event.target.value });
+  });
+  $('#reducedMotionToggle')?.addEventListener('change', (event) => {
+    aggiornaAspettoDesktop({ reducedMotion: event.target.checked });
   });
 
   refreshSessionsBoardButton?.addEventListener('click', () => {

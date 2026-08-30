@@ -365,6 +365,33 @@ class Pipeline {
 // osserva l'esecuzione, controlla la Review.
 // --------------------------------------------------------------------
 const SCENARI = {
+  async 'qa-settings-appearance'(p) {
+    await p.attendi(900);
+    await p.cdp.evaluate("localStorage.removeItem('talos.harness.desktop.settings.v1'); location.reload();");
+    await p.attendi(900);
+    await p.click('[data-open-view="settings"]');
+    await p.attendi(300);
+    await p.screenshot('settings-default', { nota: 'Appearance desktop: token TALOS, scala interfaccia e testo chat separate' });
+    const modifica = await p.cdp.evaluate("(() => { const ui=document.querySelector('#uiFontScaleSelect'); const chat=document.querySelector('#chatFontScaleSelect'); const motion=document.querySelector('#reducedMotionToggle'); const esiti=[]; for (const [el,value,prop] of [[ui,'large','value'],[chat,'expanded','value'],[motion,true,'checked']]) { try { el[prop]=value; el.dispatchEvent(new Event('change',{bubbles:true})); esiti.push('ok'); } catch (error) { esiti.push(String(error)); } } return esiti; })()");
+    p.nota(`esiti modifica controlli: ${JSON.stringify(modifica)}`);
+    await p.attendi(250);
+    p.nota(`documento Appearance salvato: ${await p.cdp.evaluate("localStorage.getItem('talos.harness.desktop.settings.v1')")}`);
+    await p.screenshot('settings-modificate', { nota: 'valori modificati, controllo contrasto/overflow e movimento ridotto' });
+    await p.cdp.evaluate("document.querySelector('[data-view=\\\"settings\\\"]')?.scrollTo(0, 420)");
+    await p.attendi(150);
+    await p.screenshot('settings-parte-bassa', { nota: 'controllo dei gruppi Interazione, Agentico e Control plane dopo scroll' });
+    await p.cdp.evaluate('location.reload()');
+    await p.attendi(900);
+    await p.click('[data-open-view="settings"]');
+    await p.attendi(250);
+    await p.screenshot('settings-dopo-reload', { nota: 'valori locali ripristinati dopo reload' });
+    const stato = await p.cdp.evaluate("({ui:document.querySelector('#uiFontScaleSelect')?.value,chat:document.querySelector('#chatFontScaleSelect')?.value,motion:document.querySelector('#reducedMotionToggle')?.checked,scale:document.documentElement.style.getPropertyValue('--talos-ui-font-scale')})");
+    p.nota(`stato Appearance dopo reload: ${JSON.stringify(stato)}`);
+    if (stato.ui !== 'large' || stato.chat !== 'expanded' || stato.motion !== true || stato.scale !== '1.15') p.difetto('le preferenze Appearance non sopravvivono al reload', { severita: 'blocco' });
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) { if (!r.url.endsWith('/favicon.ico')) p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' }); }
+  },
+
   async 'nuova-sessione-compito-libero'(p) {
     await p.attendi(1500);
     await p.screenshot('stato-iniziale', { nota: 'app appena caricata, nessuna sessione' });

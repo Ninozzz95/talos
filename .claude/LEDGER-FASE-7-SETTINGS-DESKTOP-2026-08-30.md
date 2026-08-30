@@ -145,14 +145,11 @@ TALOS-BANCO, salvo nuova autorizzazione esplicita e nuovo ledger.
   modifica e reload, controllo dell’intero schermo e console/network.
 - Mobile/Pad: N/A per ownership desktop; `mobile/` resta lettura di confronto.
 
-## Stato
+## Stato analisi iniziale (storico)
 
-**Analisi completata; nessun codice modificato in questa fase.** La richiesta
-“portare tutte le impostazioni mobile applicabili al desktop” è ora una fase
-esplicita, con competitor research per gruppo e confini di portabilità. Prima
-dell’implementazione resta da fissare soltanto il contratto di persistenza
-(locale per desktop oppure sincronizzato tramite API): la raccomandazione
-minima è locale versionata, senza segreti.
+L’analisi iniziale aveva lasciato il codice invariato e aveva fissato i confini
+di portabilità. Le slice 7b e 7a successive hanno poi implementato,
+rispettivamente, il file tree e Appearance/Typography secondo questo ledger.
 
 ## Fase 7b — file tree all’avvio, comportamento VS Code (approvata 30/08/2026)
 
@@ -233,3 +230,70 @@ namespace localStorage e nessun auto-reveal) e ora passano. La cache dei file
 resta esclusivamente runtime; nessun contenuto, stato Git, segreto o percorso
 arbitrario viene scritto nel browser. Rollback indipendente: rimuovere il
 namespace e i due hook UI lascia intatto l’endpoint e il tree reale.
+
+## Fase 7a — Appearance/Typography locale (slice autorizzata 30/08/2026)
+
+### Decisione esecutiva
+
+Implementare soltanto i controlli che hanno già un effetto reale nel bundle:
+riduzione del movimento, scala del testo dell’interfaccia e scala del testo
+della chat. Il tema resta ereditato dai token TALOS attivi; non viene creato
+un selettore di temi finto. La riduzione del movimento è un opt-in locale:
+quando non è salvata, la media query `prefers-reduced-motion` continua a
+governare il comportamento; quando è attiva, il runtime aggiunge
+`body.reduce-motion`.
+
+### Ricerca upstream e decisione
+
+- MDN `prefers-reduced-motion` e `localStorage`: usare le API native,
+  applicando la preferenza solo come override aggiuntivo e catturando gli
+  errori di storage. Nessuna dipendenza.
+- MDN `calc()`: moltiplicare i token tipografici CSS con la custom property
+  locale `--talos-ui-font-scale`; il supporto è sufficiente per il browser
+  target Chrome 151.
+- VS Code: mantenere uno scope dichiarato locale al desktop e separare in
+  seguito user/workspace solo quando esisterà un contratto server reale.
+- Hermes Desktop: font e streaming sono impostazioni persistenti condivise
+  dal prodotto; TALOS adotta la persistenza locale solo per questa pagina
+  statica, senza fingere sincronizzazione con il core.
+
+### Ledger a livello di codice
+
+File esatti da modificare:
+
+1. `mobile/public/harness-ui/index.html` — markup della card Aspetto; select
+   `#uiFontScaleSelect`, select `#chatFontScaleSelect`, mantenimento del
+   checkbox compatibile `#reducedMotionToggle`.
+2. `mobile/public/harness-ui/app.js` — costanti `DESKTOP_SETTINGS_KEY`,
+   `DESKTOP_APPEARANCE_DEFAULTS`; funzioni `normalizzaAspettoDesktop`,
+   `leggiImpostazioniDesktop`, `salvaImpostazioniDesktop`,
+   `applicaAspettoDesktop`, `inizializzaAspettoDesktop`; wiring degli input.
+   Il serializer ammette soltanto `version`, `appearance` e `workspaces`,
+   quindi chiavi sconosciute o segreti non vengono copiati.
+3. `mobile/public/harness-ui/styles.css` — token `--talos-ui-font-scale`,
+   `--talos-chat-font-size`, regole di scala per i font dell’interfaccia e
+   override della prosa chat indipendente; layout dei controlli.
+4. `mobile/tests/unit/harness/harnessUiFrontend.test.ts` — test RED/GREEN
+   `CODE-SETTINGS-APPEARANCE-HYDRATE-01`,
+   `CODE-SETTINGS-APPEARANCE-PERSIST-01`,
+   `CODE-SETTINGS-APPEARANCE-FAIL-CLOSED-01`.
+5. `.claude/QA-VISIVA-HARNESS-2026-08-30.md` — screenshot completi Settings
+   a 1440×900 e 1024×800, cambio valori, reload, reset e controllo di
+   overflow/contrasto; annotazione del confronto VS Code/Hermes.
+
+RED: con il markup e il runtime correnti i select non esistono, il valore
+locale non viene idratato né persistito e le chiavi sconosciute restano nel
+documento. GREEN: suite Harness, `git diff --check`, server locale e prova
+browser sulle due risoluzioni; rollback rimuove solo il ramo appearance e
+lascia intatta la persistenza del file tree.
+
+### Esito della slice
+
+RED riprodotto sui tre test dedicati; GREEN verificato con `174/174` test
+Harness, `node --check` sugli script modificati e `git diff --check`. La
+pipeline `qa-settings-appearance` ha prodotto quattro screenshot per
+1440×900 e quattro per 1024×800, con modifica, scroll dei gruppi inferiori e
+reload persistente; nessuna eccezione JS. La suite mobile completa ha invece
+riportato 32 fallimenti già presenti e fuori perimetro (tooling Android
+mancante, `node-pty` assente e fixture di ricerca mancanti); nessun fallimento
+appartiene ai test Harness.
