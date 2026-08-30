@@ -55,6 +55,10 @@ harness-ui/.tasks-store/
 # stesso principio esatto di .notes-store/.tasks-store/ appena sopra.
 harness-ui/.memory-store/
 
+# ⭐ 30/8 — FASE N, nono e ultimo sistema: i tool forgiati dal modello,
+# GLOBALI — stesso principio esatto di .notes-store/ eccetera sopra.
+harness-ui/.tool-forge-store/
+
 core/vendor/
 validator/node_modules/
 control-plane/vendor/

@@ -1415,6 +1415,86 @@
     return riga;
   }
 
+  /**
+   * ⭐⭐⭐⭐ FASE N, nono e ultimo sistema (30/8) — Tool Forge. Stesso
+   * pattern ESATTO di caricaPannelloMemoria appena sopra — a
+   * DIFFERENZA di Notes/Tasks/Memory/Deep Research (mai una mutazione
+   * owner-facing in tutta FASE N finora): un tool forgiato nasce
+   * SEMPRE disabilitato (vedi la doc in tool-forge-store.mjs), quindi
+   * il pannello porta l'UNICO controllo interattivo bidirezionale di
+   * tutta la fase — un vero toggle, non un bottone "Fida" a senso
+   * unico come MCP/Plugin.
+   */
+  async function caricaPannelloForge() {
+    const mount = $('#forgeListMount', sheetBody);
+    if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
+    if (!state.realSession.id) {
+      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione attiva — apri o avvia un task per vedere i tool forgiati.'));
+      return;
+    }
+    mount.replaceChildren(textElement('p', 'board-empty', 'Carico i tool forgiati…'));
+    let dati;
+    try {
+      dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tool-forge`);
+    } catch (error) {
+      mount.replaceChildren(textElement('p', 'board-empty', `Tool forgiati non disponibili: ${error.message}`));
+      return;
+    }
+    if (mount !== $('#forgeListMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
+    if (dati.errore) {
+      mount.replaceChildren(textElement('p', 'board-empty', `.tool-forge-store non valido: ${dati.errore}`));
+      return;
+    }
+    if (!dati.strumenti || dati.strumenti.length === 0) {
+      mount.replaceChildren(textElement('p', 'board-empty', 'Nessun tool forgiato (.tool-forge-store/, globale — non del progetto). Il modello ne crea uno con tool_create.'));
+      return;
+    }
+    mount.replaceChildren(...dati.strumenti.map((strumento) => rigaToolForgiato(strumento)));
+  }
+
+  /**
+   * ⭐⭐⭐⭐⭐ L'UNICA mutazione owner-facing di tutta FASE N — vedi la
+   * doc in tool-forge-store.mjs sul perché: abilitare/disabilitare non
+   * è mai un tool del modello, nemmeno sul mobile (station-only su
+   * entrambe le piattaforme). Il bottone dice l'AZIONE ("Abilita"/
+   * "Disabilita"), lo status-chip accanto dice lo STATO — due fatti
+   * diversi, mai confusi in una sola etichetta.
+   */
+  function rigaToolForgiato(strumento) {
+    const riga = document.createElement('div');
+    riga.className = 'sheet-option';
+    riga.setAttribute('role', 'group');
+    const iconEl = document.createElement('span');
+    iconEl.className = 'sheet-icon';
+    iconEl.innerHTML = icon('i-settings');
+    const testo = document.createElement('span');
+    testo.append(
+      textElement('strong', null, strumento.titolo),
+      textElement('small', null, `${strumento.descrizione} · ${strumento.capacita.join(', ') || 'nessuna capacità'}`),
+    );
+    const statoEl = textElement('span', `status-chip ${strumento.abilitato ? 'success' : ''}`, strumento.abilitato ? 'abilitato' : 'disabilitato');
+    const bottone = document.createElement('button');
+    bottone.type = 'button';
+    bottone.className = 'secondary-btn';
+    bottone.textContent = strumento.abilitato ? 'Disabilita' : 'Abilita';
+    bottone.addEventListener('click', async () => {
+      const prossimoStato = !strumento.abilitato;
+      bottone.disabled = true;
+      bottone.textContent = prossimoStato ? 'Abilito…' : 'Disabilito…';
+      try {
+        await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tool-forge/${encodeURIComponent(strumento.id)}/enable`, { abilitato: prossimoStato });
+        toast(prossimoStato ? 'Tool abilitato' : 'Tool disabilitato', strumento.titolo);
+        caricaPannelloForge();
+      } catch (error) {
+        bottone.disabled = false;
+        bottone.textContent = strumento.abilitato ? 'Disabilita' : 'Abilita';
+        toast('Non riuscito', error.message);
+      }
+    });
+    riga.append(iconEl, testo, statoEl, bottone);
+    return riga;
+  }
+
   /** ⭐⭐⭐ 29/8 — sempre attiva (le skill non hanno un gate di fiducia): niente bottone, solo il riassunto. */
   function rigaSkill(skill) {
     const riga = document.createElement('div');
@@ -2098,7 +2178,7 @@
     showEmbeddedDialog(sheetDialog);
     wireSheetActions(type);
     if (type === 'control') { refreshDoctorBadge(); caricaPannelloHooks(); }
-    if (type === 'capabilities') { caricaPannelloMcp(); caricaPannelloSkill(); caricaPannelloPlugin(); caricaPannelloLibreria(); caricaPannelloNote(); caricaPannelloAttivita(); caricaPannelloMemoria(); caricaPannelloRicerca(); }
+    if (type === 'capabilities') { caricaPannelloMcp(); caricaPannelloSkill(); caricaPannelloPlugin(); caricaPannelloLibreria(); caricaPannelloNote(); caricaPannelloAttivita(); caricaPannelloMemoria(); caricaPannelloRicerca(); caricaPannelloForge(); }
     if (type === 'sessionTree') caricaAlberoSessione();
     /*
      * ⭐⭐⭐ 27/8, owner: "riaprire lo stesso componente della selezione del
@@ -2307,6 +2387,10 @@
         <div class="sheet-section">
           <span class="sheet-label">Deep Research · rapporti in .harness-ui-research/, per progetto — salvati anche in Libreria</span>
           <div id="researchListMount"></div>
+        </div>
+        <div class="sheet-section">
+          <span class="sheet-label">Tool Forge · tool creati dal modello in .tool-forge-store/, GLOBALI — disabilitati finché non li abiliti qui</span>
+          <div id="forgeListMount"></div>
         </div>
         <div class="sheet-section">
           <span class="sheet-label">Non ancora implementato</span>

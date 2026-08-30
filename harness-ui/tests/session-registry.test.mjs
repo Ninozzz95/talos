@@ -17,6 +17,7 @@ import { LibraryStoreError } from '../src/library-store.mjs';
 import { NoteStoreError } from '../src/notes-store.mjs';
 import { TaskStoreError } from '../src/tasks-store.mjs';
 import { MemoryStoreError } from '../src/memory-store.mjs';
+import { ToolForgeStoreError } from '../src/tool-forge-store.mjs';
 import { leggiRegistro as leggiRegistroPerAttesa, registraRigaSync } from '../src/session-store.mjs';
 
 // Ne' avviaSessione ne' talosLavora girano MAI qui, veri o finti a metà: si
@@ -2749,4 +2750,91 @@ test('⭐⭐⭐ research_pause FILO INTERO: onRicercaPausa abortisce DAVVERO il 
   const listaDelPadre = finta.ultimoInput.onRicercaLista;
   const elenco = await listaDelPadre({});
   assert.equal(elenco.ricerche.find((r) => r.id === id).stato, 'paused', 'dopo la pausa, il bucket vivo è "paused" — mai "done"/"failed"');
+});
+
+/*
+ * ⭐⭐⭐⭐ FASE N, nono e ultimo sistema (30/8) — Tool Forge, piano
+ * elegant-spinning-dongarra.md. Stesso schema esatto di elencaMemorie
+ * appena sopra per elencaToolForgiati; abilitaToolForgiato è invece
+ * l'UNICA mutazione owner-facing di tutta FASE N (vedi la doc in
+ * tool-forge-store.mjs) — mirror di fidaServerMcp/fidaPlugin.
+ */
+test('⭐⭐⭐⭐ elencaToolForgiati: torna i tool installati con lo stato VERO, da cartellaForge (GLOBALE)', async () => {
+  const finta = sessioneControllabile();
+  const toolPronto = { id: 'log-water-intake', manifest: { title: 'Log water intake', description: 'x' }, capacita: ['notes.create'], rischio: 'R2', abilitato: true, installatoAlle: '2026-08-30T10:00:00.000Z' };
+  let cartellaRicevuta;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    cartellaForge: '/percorso/globale/forge',
+    elencaToolForgiatiFn: async ({ cartella }) => { cartellaRicevuta = cartella; return [toolPronto]; },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.elencaToolForgiati(sessionId);
+
+  assert.equal(esito.ok, true);
+  assert.equal(esito.errore, null);
+  assert.equal(cartellaRicevuta, '/percorso/globale/forge');
+  assert.deepEqual(esito.strumenti, [{ id: 'log-water-intake', titolo: 'Log water intake', descrizione: 'x', capacita: ['notes.create'], rischio: 'R2', abilitato: true, installatoAlle: '2026-08-30T10:00:00.000Z' }]);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔ AL CONTRARIO — elencaToolForgiati con .tool-forge-store malformato: {strumenti:null, errore}, MAI un array vuoto', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    elencaToolForgiatiFn: async () => { throw new ToolForgeStoreError('rotto.json non è JSON valido', 'FORGE_READ_FAILED'); },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.elencaToolForgiati(sessionId);
+
+  assert.equal(esito.ok, true);
+  assert.equal(esito.strumenti, null, 'null, non [] — sono due fatti diversi');
+  assert.match(esito.errore, /non è JSON valido/);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔ AL CONTRARIO — elencaToolForgiati su un id inesistente: NOT_FOUND', async () => {
+  const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
+  const esito = await registro.elencaToolForgiati('id-mai-esistito');
+  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+});
+
+test('⭐⭐⭐⭐⭐ abilitaToolForgiato: cambia DAVVERO lo stato — l\'UNICA mutazione owner-facing di tutta FASE N', async () => {
+  const finta = sessioneControllabile();
+  let ricevuto;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    cartellaForge: '/percorso/globale/forge',
+    abilitaToolForgiatoFn: async (spec) => { ricevuto = spec; return { id: spec.id, abilitato: spec.abilitato }; },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.abilitaToolForgiato(sessionId, 'log-water-intake', true);
+
+  assert.deepEqual(esito, { ok: true });
+  assert.deepEqual(ricevuto, { cartella: '/percorso/globale/forge', id: 'log-water-intake', abilitato: true });
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔ AL CONTRARIO — abilitaToolForgiato su un tool id inesistente: NOT_FOUND, mai un successo silenzioso', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    abilitaToolForgiatoFn: async () => null,
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.abilitaToolForgiato(sessionId, 'mai-installato', true);
+
+  assert.equal(esito.code, 'NOT_FOUND');
+  assert.match(esito.erroreAvvio, /mai-installato/);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔ AL CONTRARIO — abilitaToolForgiato su un id di SESSIONE inesistente: NOT_FOUND', async () => {
+  const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
+  const esito = await registro.abilitaToolForgiato('id-mai-esistito', 'x', true);
+  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
 });
