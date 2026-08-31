@@ -1,0 +1,74 @@
+{
+  "source": "harness-ui/public",
+  "assets": {
+    "app": { "lines": 8414, "bytes": 454314, "sha256": "ee4c39a7f781d202d58659b3c7fb2f8b99b141da935c919b21c8b82b03ba9828" },
+    "html": { "lines": 419, "bytes": 66611, "sha256": "6c63b64075581b885a13a4761cd0e5ade4d6a5cfaa43d882562cd931de420f32" },
+    "css": { "lines": 1955, "bytes": 150349, "sha256": "6a038bc13b809388d781eddfccc989b43c548c0ba6ee7b63ef4b347fafbbe56d" }
+  },
+  "hostGlobals": [
+    "__talosHarnessApiBase",
+    "__talosHarnessDestroy",
+    "__talosHarnessHost",
+    "__talosHarnessHostBack",
+    "__talosHarnessHostPermissionChange",
+    "__talosHarnessHostViewChange",
+    "__talosHarnessModelLabEventSource",
+    "__talosHarnessRoot",
+    "__talosHarnessUiLab",
+    "__talosHarnessUiRuntime"
+  ],
+  "storageKeys": [
+    "talos-harness-panel-widths",
+    "talos.harness.desktop.settings.section.v1",
+    "talos.harness.desktop.settings.v1"
+  ],
+  "eventTypes": [
+    "ApprovalRequested",
+    "ApprovalResolved",
+    "ArtifactCreated",
+    "HookInvoked",
+    "QueuedMessageDelivered",
+    "ReasoningMessageContent",
+    "ReasoningMessageEnd",
+    "ReasoningMessageStart",
+    "RunError",
+    "RunFinished",
+    "RunStarted",
+    "StateDelta",
+    "TextMessageContent",
+    "TextMessageEnd",
+    "TextMessageStart",
+    "ToolCallArgs",
+    "ToolCallResult",
+    "ToolCallStart",
+    "WorkspaceChanged"
+  ],
+  "publicAssets": [
+    "/",
+    "/app.js",
+    "/index.html",
+    "/styles.css",
+    "/talos/brand/logo-short.svg",
+    "/vendor/xterm/addon-fit.js",
+    "/vendor/xterm/addon-webgl.js",
+    "/vendor/xterm/xterm.css",
+    "/vendor/xterm/xterm.js"
+  ],
+  "endpointFragments": [
+    "/api/v1/artifacts",
+    "/api/v1/automations",
+    "/api/v1/doctor",
+    "/api/v1/frequent-dirs",
+    "/api/v1/huggingface",
+    "/api/v1/local-models",
+    "/api/v1/model-lab",
+    "/api/v1/models",
+    "/api/v1/projects",
+    "/api/v1/providers",
+    "/api/v1/runtime",
+    "/api/v1/sessions",
+    "/api/v1/tasks",
+    "/api/v1/terminal"
+  ],
+  "terminalFrames": { "data": 0, "control": 1 }
+}

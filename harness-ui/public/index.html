@@ -109,7 +109,7 @@
           <button class="mode-tab" data-mode="dashboard" aria-pressed="false">Board</button>
         </div>
         <div class="topbar-right">
-          <button class="context-chip environment-chip" data-open-sheet="environment"><svg><use href="#i-branch"/></svg><span>wt/auth · feat/mobile</span></button>
+          <button class="context-chip environment-chip" data-open-sheet="environment"><svg><use href="#i-branch"/></svg><span data-environment-label>Ambiente non osservato</span></button>
           <!--
             ⭐ FASE M (29/8) — resumeSession()/compactSession() esistevano
             già, testate, ma raggiungibili solo scrivendo un messaggio
@@ -155,14 +155,14 @@
                 <button class="round-btn" type="button" id="capabilityBtn" aria-label="Aggiungi contesto"><svg><use href="#i-plus"/></svg></button>
                 <button class="selector-pill" type="button" data-open-sheet="model"><svg><use href="#i-brain"/></svg><span>gpt-5.6-sol · high</span><svg><use href="#i-chevron"/></svg></button>
                 <button class="selector-pill hide-on-narrow" type="button" data-open-sheet="permissions"><svg><use href="#i-shield"/></svg><span>Workspace write</span><svg><use href="#i-chevron"/></svg></button>
-                <button class="selector-pill hide-on-mid" type="button" data-open-sheet="environment"><svg><use href="#i-branch"/></svg><span>feat/mobile-code</span></button>
+              <button class="selector-pill hide-on-mid" type="button" data-open-sheet="environment"><svg><use href="#i-branch"/></svg><span data-environment-label>Ambiente non osservato</span></button>
                 <div class="composer-spacer"></div>
                 <button class="queue-toggle" type="button" id="queueToggle" title="Invia come follow-up" aria-pressed="false">Follow-up</button>
                 <button class="send-btn" type="submit" aria-label="Invia"><svg><use href="#i-send"/></svg></button>
               </div>
             </form>
             <div class="composer-status">
-              <span>Tema TALOS · locale</span><span>18.7k / 128k</span><span class="desktop-only">↑ 142 tok/s</span><span class="desktop-only">cache 78%</span>
+              <span>Tema TALOS · locale</span><span data-runtime-usage>Contesto non osservato</span><span class="desktop-only" data-runtime-throughput>Velocità non osservata</span><span class="desktop-only" data-runtime-cache>Cache non osservata</span>
             </div>
           </div>
         </section>
@@ -333,7 +333,7 @@
           </div>
           <div class="inspector-card">
             <div class="card-title"><span>Capability</span><svg><use href="#i-link"/></svg></div>
-            <div class="capability-row"><span>Attrezzi</span><b>7</b></div><div class="capability-row"><span>MCP</span><b>0</b></div><div class="capability-row"><span>Web search</span><b>—</b></div><div class="capability-row"><span>Browser</span><b>Scoped</b></div>
+            <div class="capability-row"><span>Attrezzi</span><b>—</b></div><div class="capability-row"><span>MCP</span><b>—</b></div><div class="capability-row"><span>Web search</span><b>Non osservato</b></div><div class="capability-row"><span>Browser</span><b>Non osservato</b></div>
             <button class="secondary-btn full" id="manageCapabilitiesBtn">Gestisci capability</button>
           </div>
           <div class="inspector-card">

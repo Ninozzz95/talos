@@ -1,0 +1,227 @@
+# Ledger — Phase 0 frontend contract freeze (desktop)
+
+Date: 2026-08-31  
+Owner: TALOS UI desktop (`AVM-harness-desktop`, `lane/harness-desktop`)  
+Scope: characterization only; no serving cutover, no mobile edit, no runtime behavior change.
+
+## Upstream research gate
+
+- esbuild `0.28.2`, pinned from the supplied plan and verified available on npm. Adopted for the future native-ESM frontend build because the official API supports deterministic JS API builds and ESM output: <https://esbuild.github.io/api/>.
+- Playwright `1.62.1`, axe-core `4.13.0`, pixelmatch `7.2.0`, pngjs `7.0.0` remain planned QA pins; no install or browser launch is performed in this slice. Screenshot/trace contract follows the official Playwright API: <https://playwright.dev/docs/screenshots> and <https://playwright.dev/docs/trace-viewer-intro>.
+- Decision: adapt the ZIP contract-extraction idea to the actual desktop assets under `harness-ui/public/`; do not read or mutate mobile files as build inputs because desktop and mobile bundles have different hashes and ownership.
+
+## Exact file ledger
+
+### Create
+
+1. `harness-ui/frontend/scripts/extract-legacy-contract.mjs`
+   - public function `extractLegacyContract({ appPath, htmlPath, cssPath, aguiPath, staticPath }) -> Promise<LegacyContractSnapshot>`.
+   - private helpers `digest(text)`, `lineCount(text)`, `sortedUnique(values)`.
+2. `harness-ui/frontend/tests/contract/legacy-contract-snapshot.test.mjs`
+   - tests the immutable snapshot and required compatibility fields.
+3. `harness-ui/frontend/tests/fixtures/legacy-contract.snapshot.json`
+   - reviewed baseline for current desktop public assets and server contracts.
+4. `harness-ui/frontend/tests/fixtures/legacy-assets.sha256`
+   - SHA-256 lines for the three current desktop public assets.
+
+### Read-only inputs
+
+- `harness-ui/public/app.js`
+- `harness-ui/public/index.html`
+- `harness-ui/public/styles.css`
+- `harness-ui/src/agui-events.mjs`
+- `harness-ui/src/static-files.mjs`
+- `mobile/public/harness-ui/app.js`
+- `mobile/public/harness-ui/index.html`
+- `mobile/public/harness-ui/styles.css`
+
+The mobile files are comparison evidence only and must not be copied, staged or changed.
+
+### Do not modify in this slice
+
+- `harness-ui/server.mjs`
+- every existing file under `harness-ui/src/`
+- every existing file under `harness-ui/public/`
+- `mobile/`
+- `validator/`
+
+## RED test and expected failure
+
+Run before creating the implementation:
+
+```text
+node --test harness-ui/frontend/tests/contract/legacy-contract-snapshot.test.mjs
+```
+
+Expected failure: missing `extract-legacy-contract.mjs` and/or missing fixture. A passing test before the new files exist invalidates this ledger.
+
+## GREEN implementation contract
+
+The extractor records:
+
+- byte length, line count and SHA-256 for `app.js`, `index.html`, `styles.css`;
+- sorted host globals beginning with `__talosHarness`;
+- sorted storage keys used by the desktop bundle;
+- sorted AG-UI event types from `agui-events.mjs`;
+- static asset keys from `static-files.mjs`;
+- endpoint fragments under `/api/v1/`;
+- terminal frame compatibility (`data` and `control`).
+
+The fixture is generated once from the inspected desktop files, then manually reviewed. There is no update flag in the test.
+
+## Focused verification
+
+```text
+node --test harness-ui/frontend/tests/contract/legacy-contract-snapshot.test.mjs
+node --test harness-ui/tests/*.test.mjs
+npm run build:ui
+npm run verify:ui
+git diff --check
+```
+
+## Regression and human-visible proof
+
+- Existing desktop suite must remain green.
+- No URL, global, storage key, event type or static asset may disappear silently.
+- Visual baseline is deferred to the next slice because the current server is not running and the existing pipeline requires an explicit browser/provider environment. The next ledger must capture screenshots at 360×800, 768×1024, 1024×800, 1280×800 and 1440×900, inspect the whole frame, and record every discrepancy.
+
+## Failure, cancellation, reload and rollback
+
+- Failure: extractor exits non-zero and no fixture is auto-updated.
+- Cancellation: no server or browser process is started by this slice.
+- Reload/restart: snapshot is deterministic across repeated runs.
+- Rollback: delete only the four newly created `harness-ui/frontend/...` files; product serving remains untouched.
+
+## Acceptance
+
+This slice is complete only when the snapshot test and all existing desktop gates pass, the fixture is reviewed, and `git status --short` shows no mobile file staged or modified by this slice.
+
+## Follow-up task: pinned frontend package shape
+
+### Exact files
+
+Create:
+
+1. `harness-ui/frontend/package.json`
+2. `harness-ui/frontend/playwright.config.mjs`
+3. `harness-ui/frontend/scripts/run-node-tests.mjs`
+4. `harness-ui/frontend/scripts/run-browser-tests.mjs`
+5. `harness-ui/frontend/tests/contract/package-shape.test.mjs`
+6. `harness-ui/frontend/.gitignore`
+
+Generated by the package manager after review:
+
+7. `harness-ui/frontend/package-lock.json`
+8. `harness-ui/frontend/tests/browser/baseline-shell.spec.mjs`
+
+### Public symbols and contracts
+
+- package scripts: `build`, `build:lab`, `test:unit`, `test:browser`, `test`, `verify`, `test:a11y`, `test:soak`, `test:visual`, `package`;
+- `runNodeTests({ argv })` and `runBrowserTests({ argv })` preserve explicit file/directory/tag selectors;
+- Playwright config exports a deterministic `defineConfig` with desktop Chromium project and trace/screenshot settings; it does not start a provider or mutate product data.
+
+### RED/GREEN
+
+RED command:
+
+```text
+node --test harness-ui/frontend/tests/contract/package-shape.test.mjs
+```
+
+Expected failure: `harness-ui/frontend/package.json` is absent or misses a pinned script/dependency.
+
+GREEN commands:
+
+```text
+npm install --package-lock-only --ignore-scripts
+node --test harness-ui/frontend/tests/contract/package-shape.test.mjs
+npm run test:unit
+npm run verify
+```
+
+No browser execution is claimed until Playwright and its Chromium executable are explicitly available. Rollback is deletion of only the seven listed frontend-package files; current `harness-ui/public` serving remains unchanged.
+
+### First browser RED/GREEN slice
+
+The browser baseline test is intentionally narrow and non-invasive: it proves the real server serves the current desktop shell and that the main surface is visible before any refactor. RED is a connection failure when the local server is absent; GREEN requires the server plus Chromium and must be run before changing the shell.
+
+### Phase 1 correction recorded during verification
+
+The first browser gate exposed a toolchain defect: `run-browser-tests.mjs` referenced `node_modules/@playwright/cli.js`, while the pinned `@playwright/test@1.62.1` package exposes its executable at `node_modules/@playwright/test/cli.js`. The runner now uses the package-local official CLI path. This is a test-infrastructure correction, not a product behavior change.
+
+Evidence:
+
+- official Playwright command contract: `npx playwright test` ([CLI documentation](https://playwright.dev/docs/test-cli));
+- Chromium for the pinned Playwright package installed locally;
+- `npm run test:browser`: 1 passed against the real local server on `127.0.0.1:4174`;
+- `npm run verify`: 3 unit/contract tests passed.
+
+Rollback: restore the previous runner path only if the dependency package changes and the replacement path is proven; otherwise keep the package-local path to avoid global CLI resolution.
+
+### VIS-001 — RED/GREEN closure
+
+RED: the production shell created `.demo-surface-badge` elements unconditionally through `ensureDemoLabels()`, so the operational UI exposed laboratory annotations.
+
+Change: `harness-ui/public/app.js` now creates those labels only for an explicit laboratory opt-in (`window.__talosHarnessUiLab === true` or the hash `#ui-lab`). The normal desktop URL contains no demo badge; the hash keeps the visual laboratory able to reproduce annotated scenarios without adding a production control or network behavior.
+
+Focused browser evidence in `harness-ui/frontend/tests/browser/baseline-shell.spec.mjs`:
+
+- production shell: zero `.demo-surface-badge` nodes;
+- laboratory opt-in: at least one badge is present;
+- real server shell remains visible.
+
+GREEN: `npm run verify` (3/3) and `npm run test:browser` (3/3) pass with Chromium 151.0.7922.34 on `127.0.0.1:4174`.
+
+Rollback: revert only the `demoLabelsEnabled()` guard and its browser assertions if the approved lab contract changes; do not reintroduce unconditional production badges.
+
+### VIS-002 — RED/GREEN closure (cold start)
+
+RED: the first frame exposed branch/worktree names, token totals, throughput, cache percentage and capability counts that were not derived from an observed runtime.
+
+Change: the cold-start markup now uses semantic unavailable states (`Ambiente non osservato`, `Contesto non osservato`, `Velocità non osservata`, `Cache non osservata`, and capability values `—`/`Non osservato`). The environment state starts as `null`; observed session context and `/usage` events continue to populate the existing real render paths. Usage, throughput and cache fields are updated only when numeric runtime data arrives.
+
+GREEN evidence: the browser regression asserts that all previously hard-coded strings are absent from the production cold start and that the semantic placeholders are present. `npm run verify` passes 3/3 and `npm run test:browser` passes 4/4 against the real server.
+
+Scope note: the environment sheet's selectable entries remain a separate management-surface migration and are not used in the cold-start frame; they stay in the next ordered management phase rather than being silently treated as runtime evidence.
+
+Rollback: restore the previous cold-start labels only with an owner-approved contract change; never restore fabricated telemetry.
+
+### VIS-003 — RED/GREEN closure (desktop geometry foundation)
+
+RED: host theme tokens could shrink `.icon-btn` below the 36 px desktop gate; compact tabs, mini actions, context chips, settings toggles, native selects and range inputs also exposed sub-threshold boxes.
+
+Change: the desktop token now clamps `--touch` to at least 36 px; icon buttons cannot flex-shrink; compact queue/tab/mini controls, context chips, settings controls, sheet controls and range inputs have explicit 36 px minimum geometry. Mobile keeps its existing 44 px topbar override.
+
+GREEN evidence: browser assertions cover the real shell primary controls and the visible settings surface at 1440×900; both suites pass (`npm run test:browser`: 6/6, `npm run verify`: 3/3). The mandatory 12-scenario visual audit remains a final cross-surface gate and may add a targeted exception if a future surface proves a different geometry owner.
+
+Rollback: remove only the new minimum-size declarations and restore the prior token after an owner-approved geometry contract change; retain the regression tests.
+
+### VIS-004 — RED/GREEN closure
+
+RED: the dynamically created Hugging Face Model Lab author and filter fields, plus their sort selector, had no explicit accessible name; the native search/filter controls could also fall below the desktop target height.
+
+Change: the Model Lab control factory now supplies explicit ARIA labels for author, filters and ordering. Search/text controls in the Model Lab have a 36 px minimum height while retaining the surrounding Calm layout.
+
+GREEN evidence: the browser test opens the real Model Lab Hugging Face panel, asserts all three labels and checks their geometry; the full browser slice passes 7/7 and frontend unit verification passes 3/3.
+
+Rollback: revert only the labels/minimum-height declarations if the control contract is intentionally renamed; preserve the accessible-name test.
+### VIS-006 — RED/GREEN closure
+
+RED: the long-content scenario reproduced local horizontal overflow in the assistant response container when a response contained long paths and an unbroken code identifier. The page itself stayed within the viewport, but the response box inherited the code block's width and could clip or widen the readable surface.
+
+Change: assistant messages now participate in the same constrained width contract as the conversation, narrative content wraps at otherwise unbreakable boundaries, and code blocks own their horizontal overflow locally with a bounded scroll container. Code text keeps its preformatted layout inside that local region; the conversation page never becomes the scroll owner for a code line.
+
+GREEN evidence: the browser regression injects a long response plus a 240-character code identifier into the real conversation shell and asserts no page or assistant-copy overflow while proving the code block retains a local scrollable width. The full browser slice passes 8/8 and frontend unit verification passes 3/3.
+
+Upstream decision: adapt the CSS Overflow model documented by MDN: use `overflow-wrap: anywhere` for prose and `overflow-x: auto` for intentionally scrollable code, preserving user access to the complete value instead of clipping it ([MDN overflow](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/overflow), [MDN overflow-wrap](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/overflow-wrap)).
+
+Rollback: revert only the assistant width/wrapping/code-block declarations and the focused browser scenario; do not add a page-level horizontal scrollbar or hide code content.
+### Phase 7 — audit browser sui 12 scenari (evidenza acquisita)
+
+La matrice Playwright `harness-ui/frontend/tests/browser/visual-matrix.spec.mjs` ha acquisito e ispezionato l'intero schermo per i dodici scenari previsti dalla ZIP aggiornata, alle viewport 1024×768, 1280×800, 1440×900 e 2560×1080. Gli screenshot e le metriche sono in `harness-ui/frontend/artifacts/visual-audit-2026-08-31/` (artefatti locali ignorati da Git) con indice `index.json` e hash SHA-256 per ogni PNG.
+
+GREEN: pagina senza overflow orizzontale in tutti gli scenari, nessun errore JavaScript inatteso, superfici interattive presenti e modalità reduced-motion verificata; il test passa 12/12 scenari.
+
+Osservazione da non nascondere: la superficie Terminale genera avvisi CSP `style-src 'self'` quando xterm.js applica stili inline. Gli avvisi sono stati classificati come attesi nel test perché non è autorizzato allargare la CSP; nessun errore JavaScript o pageerror inatteso è emerso. La risoluzione richiede una decisione separata (adattatore CSS/integrazione xterm o revisione CSP) e non è stata introdotta in questa tranche.
+
+Rollback: rimuovere solo `visual-matrix.spec.mjs` e gli artefatti ignorati; non modificare la policy CSP senza ricerca e approvazione dedicate.
