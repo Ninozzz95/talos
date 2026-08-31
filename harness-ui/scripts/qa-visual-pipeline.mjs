@@ -400,6 +400,7 @@ const SCENARI = {
     await p.cdp.evaluate('location.reload()');
     await p.attendi(900);
     await p.click('[data-open-view="settings"]');
+    await p.click('[data-settings-tab="models"]');
     await p.attendiCondizione(
       "document.querySelector('#machineCapacityStatus')?.textContent !== 'Misurazione in corso…' && document.querySelector('#modelLabProviderStatus')?.textContent !== 'Provider da verificare'",
       { timeoutMs: 8000, descrizione: 'capacità macchina e stato provider risolti' },
@@ -451,6 +452,254 @@ const SCENARI = {
     for (const r of p.cdp.richiesteFallite) {
       if (!r.url.endsWith('/favicon.ico')) p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
     }
+  },
+
+  /**
+   * FASE Provider/API key — prova visiva mirata, senza scrivere chiavi reali.
+   * Il trasporto di successo viene simulato solo in questa corsa con una
+   * risposta locale controllata; il contratto HTTP reale è coperto dai test
+   * PROVIDER-HTTP-01..05. In questo modo la schermata può essere provata anche
+   * quando il portachiavi della macchina non deve essere modificato.
+   */
+  async 'qa-settings-provider-access'(p) {
+    const viewport = new URL(URL_BASE).searchParams.get('qa') === 'laptop'
+      ? { width: 1024, height: 800 }
+      : { width: 1440, height: 900 };
+    await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
+    await p.cdp.evaluate('location.reload()');
+    await p.attendi(900);
+    await p.click('[data-open-view="settings"]');
+    await p.click('[data-settings-tab="models"]');
+    await p.attendiCondizione(
+      "document.querySelector('#modelLabProviderStatus')?.textContent !== 'Provider da verificare'",
+      { timeoutMs: 8000, descrizione: 'stato provider caricato' },
+    );
+    await p.click('[data-model-lab-tab="providers"]');
+    await p.attendiCondizione("document.querySelectorAll('[data-provider-id]').length === 7", { timeoutMs: 5000, descrizione: 'sette provider presenti' });
+    await p.cdp.evaluate("document.querySelector('#modelLabProvidersPanel')?.scrollIntoView({block:'start', inline:'nearest'})");
+    await p.attendi(160);
+    await p.screenshot('provider-lista', { nota: 'Elenco provider completo: stato leggibile, nessun segreto visibile' });
+
+    await p.click('[data-provider-id="openai"] [data-provider-toggle]');
+    await p.attendi(180);
+    await p.screenshot('provider-card-aperta', { nota: 'Card OpenAI aperta: chiave mascherata, endpoint e timeout allineati al mobile' });
+
+    await p.click('[data-provider-id="anthropic"] [data-provider-toggle]');
+    await p.cdp.evaluate("document.querySelector('[data-provider-id=\\\"anthropic\\\"]')?.scrollIntoView({block:'center', inline:'nearest'})");
+    await p.attendi(160);
+    const anthropicEndpointHidden = await p.cdp.evaluate("document.querySelector('[data-provider-id=\\\"anthropic\\\"] [data-provider-endpoint]')?.closest('label')?.hidden === true");
+    if (!anthropicEndpointHidden) p.difetto('Anthropic mostra un indirizzo personalizzato non previsto dal mobile', { severita: 'blocco' });
+    await p.screenshot('provider-anthropic-timeout', { nota: 'Anthropic: tempo massimo disponibile, indirizzo personalizzato assente come nel mobile' });
+
+    await p.cdp.evaluate("document.querySelector('[data-provider-id=\\\"openai\\\"]')?.scrollIntoView({block:'center', inline:'nearest'})");
+    await p.attendi(120);
+    await p.digita('[data-provider-id="openai"] [data-provider-key]', '');
+    await p.click('[data-provider-id="openai"] [data-provider-action="save-key"]');
+    await p.attendi(160);
+    await p.screenshot('provider-chiave-vuota', { nota: 'Errore naturale per chiave vuota; nessuna eccezione tecnica esposta' });
+    const expectedFailure = p.cdp.richiesteFallite.findIndex((entry) => entry.status === 422 && entry.url.endsWith('/api/v1/providers/openai/key'));
+    if (expectedFailure >= 0) {
+      p.cdp.richiesteFallite.splice(expectedFailure, 1);
+      p.nota('422 su chiave vuota osservato e riconosciuto come esito atteso della prova contraria');
+    } else {
+      p.difetto('la chiave vuota non ha prodotto il rifiuto HTTP atteso', { severita: 'blocco' });
+    }
+
+    // Successo UI controllato senza toccare il portachiavi reale.
+    await p.cdp.evaluate(`(() => {
+      const nativeFetch = window.fetch;
+      window.__qaOpenAiKeyConfigured = false;
+      window.fetch = async (input, init = {}) => {
+        const url = String(input);
+        if (url.endsWith('/api/v1/providers/openai/key') && init.method === 'POST') {
+          window.__qaOpenAiKeyConfigured = true;
+          return new Response(JSON.stringify({ ok: true, data: { provider: 'openai', keyConfigured: true } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+        if (url.endsWith('/api/v1/providers/openai/key/remove') && init.method === 'POST') {
+          window.__qaOpenAiKeyConfigured = false;
+          return new Response(JSON.stringify({ ok: true, data: { provider: 'openai', keyConfigured: false } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+        if (url.endsWith('/api/v1/providers') && (!init.method || init.method === 'GET')) {
+          const rows = [...document.querySelectorAll('[data-provider-id]')].map((card) => ({ id: card.dataset.providerId, label: card.querySelector('.provider-card-toggle strong')?.textContent || card.dataset.providerId, requiresKey: card.dataset.providerId !== 'ollama' && card.dataset.providerId !== 'huggingface', keyConfigured: card.dataset.providerId === 'openai' ? window.__qaOpenAiKeyConfigured : false, supportsEndpoint: !['anthropic', 'gemini', 'huggingface'].includes(card.dataset.providerId), endpoint: '', endpointConfigured: false, timeoutSeconds: 60, execution: 'verifica UI' }));
+          return new Response(JSON.stringify({ ok: true, data: { items: rows } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+        return nativeFetch(input, init);
+      };
+    })()`);
+    await p.digita('[data-provider-id="openai"] [data-provider-key]', 'qa-ui-sentinel');
+    await p.click('[data-provider-id="openai"] [data-provider-action="save-key"]');
+    await p.attendi(250);
+    const cleared = await p.cdp.evaluate("document.querySelector('[data-provider-id=\\\"openai\\\"] [data-provider-key]')?.value === ''");
+    if (!cleared) p.difetto('la chiave non viene cancellata dal campo dopo il salvataggio', { severita: 'blocco' });
+    await p.screenshot('provider-chiave-salvata', { nota: 'Salvataggio UI riuscito: campo ripulito e solo presenza mostrata' });
+    await p.click('[data-provider-id="openai"] [data-provider-action="remove-key"]');
+    await p.attendi(250);
+    await p.screenshot('provider-chiave-rimossa', { nota: 'Rimozione UI riuscita: il valore non compare e lo stato torna non configurato' });
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (!r.url.endsWith('/favicon.ico')) p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /**
+   * P0 31/8 — verifica visiva delle tre correzioni di flusso consegnate
+   * insieme: impostazioni a tutta larghezza, nuova sessione con messaggio
+   * naturale quando non esistono cartelle consentite e menu CRUD sulla riga
+   * di una sessione reale. Le azioni distruttive non vengono selezionate:
+   * il menu viene aperto e chiuso con Escape, così la prova resta ripetibile.
+   */
+  async 'qa-p0-ux'(p) {
+    const viewport = new URL(URL_BASE).searchParams.get('qa') === 'laptop'
+      ? { width: 1024, height: 800 }
+      : { width: 1440, height: 900 };
+    await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
+    await p.cdp.evaluate('location.reload()');
+    await p.attendi(1000);
+    await p.click('[data-open-view="settings"]');
+    await p.attendi(250);
+    await p.cdp.evaluate("document.querySelector('[data-settings-tab=\\\"appearance\\\"]')?.click()");
+    const layout = await p.cdp.evaluate(`(() => {
+      const view = document.querySelector('.view-pane[data-view="settings"]');
+      const pane = view?.querySelector(':scope > .generic-shell');
+      const rect = pane?.getBoundingClientRect();
+      return rect ? {
+        width: rect.width,
+        viewWidth: view.clientWidth,
+        viewport: window.innerWidth,
+        maxWidth: getComputedStyle(pane).maxWidth,
+      } : null;
+    })()`);
+    p.nota(`impostazioni full width osservate: ${JSON.stringify(layout)}`);
+    if (!layout || layout.width < layout.viewWidth - 1 || layout.maxWidth !== 'none') {
+      p.difetto('la superficie Impostazioni non occupa la larghezza disponibile del pannello centrale', { severita: 'blocco' });
+    }
+    await p.screenshot('settings-full-width', { nota: 'P0: impostazioni a tutta larghezza, categorie in lista e dettaglio senza il margine stretto della chat' });
+
+    await p.click('#newSessionBtn');
+    await p.attendiCondizione("!!document.querySelector('#customTaskForm')", { timeoutMs: 10000, descrizione: 'foglio nuova sessione pronto' });
+    await p.attendi(150);
+    const nuovoTesto = await p.testo('#sheetBody');
+    p.nota(`testo modale nuova sessione: ${JSON.stringify(nuovoTesto)}`);
+    const contieneTecnica = /TALOS_HARNESS_UI_PROJECT_DIRS|writeFileSync|child_process|api\/v1|http:\/\//i.test(nuovoTesto ?? '');
+    const contieneAzioneNaturale = /Full access|Apri Doctor|cartella di progetto/i.test(nuovoTesto ?? '');
+    p.nota(`modale senza dettagli tecnici=${!contieneTecnica}, con soluzione naturale=${contieneAzioneNaturale}`);
+    if (contieneTecnica) p.difetto('la modale nuova sessione espone dettagli tecnici invece di una spiegazione naturale', { severita: 'blocco' });
+    if (!contieneAzioneNaturale) p.difetto('la modale nuova sessione non propone una soluzione comprensibile o il passaggio a Doctor', { severita: 'blocco' });
+    await p.screenshot('new-session-natural-empty-projects', { nota: 'P0: errore leggibile e soluzione proposta, senza percorso tecnico o codice interno' });
+    await p.click('#closeSheet');
+    await p.attendi(200);
+
+    const menuState = await p.cdp.evaluate(`(() => {
+      const row = document.querySelector('.session-item.real-session-item');
+      if (!row) return { found: false };
+      const r = row.getBoundingClientRect();
+      row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 24, clientY: r.top + 24 }));
+      return { found: true, title: row.textContent?.trim() || '' };
+    })()`);
+    p.nota(`riga sessione reale per menu azioni: ${JSON.stringify(menuState)}`);
+    if (!menuState?.found) {
+      p.difetto('nessuna sessione reale disponibile per provare il menu CRUD contestuale', { severita: 'nota' });
+    } else {
+      await p.attendi(150);
+      const menu = await p.cdp.evaluate(`(() => ({
+        exists: !!document.querySelector('.session-actions-menu[role="menu"]'),
+        labels: [...document.querySelectorAll('.session-actions-menu [role="menuitem"]')].map((el) => el.textContent.trim()),
+        zIndex: getComputedStyle(document.querySelector('.session-actions-menu')).zIndex
+      }))()`);
+      p.nota(`menu CRUD osservato: ${JSON.stringify(menu)}`);
+      const attese = ['Apri', 'Rinomina', 'Fork', 'Copia identificativo', 'Elimina'];
+      if (!menu.exists || !attese.every((label) => menu.labels.includes(label))) {
+        p.difetto('il menu contestuale della sessione non presenta tutte le azioni CRUD attese', { severita: 'blocco' });
+      }
+      if (Number(menu.zIndex) < 210) p.difetto('il menu contestuale non resta sopra le altre superfici', { severita: 'difetto' });
+      await p.screenshot('session-actions-menu-crud', { nota: 'P0: click destro sulla riga apre Apri/Rinomina/Fork/Copia/Elimina, senza eliminazione automatica' });
+      await p.premiTasto('Escape');
+      await p.attendi(100);
+      const chiuso = await p.esiste('.session-actions-menu');
+      p.nota(`menu chiuso con Escape: ${!chiuso}`);
+      if (chiuso) p.difetto('il menu contestuale non si chiude con Escape', { severita: 'difetto' });
+    }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (!r.url.endsWith('/favicon.ico')) p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  async 'qa-model-lab-runtime-security'(p) {
+    const viewport = new URL(URL_BASE).searchParams.get('qa') === 'laptop'
+      ? { width: 1024, height: 800 }
+      : { width: 1440, height: 900 };
+    await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
+    await p.cdp.evaluate('location.reload()');
+    await p.attendi(900);
+    await p.click('[data-open-view="settings"]');
+    await p.attendiCondizione("!!document.querySelector('#modelLabRuntimeStatus') || !!document.querySelector('#modelLabCard')", { descrizione: 'Model Lab runtime montato' });
+    await p.screenshot('model-lab-runtime-gate', { nota: 'gate runtime: stato osservato, modelli e controlli condizionati alla capability reale' });
+
+    const api = await p.cdp.evaluate("fetch('/api/v1/runtime').then((r) => r.json())");
+    const serializzato = JSON.stringify(api);
+    p.nota(`runtime API osservato: ${serializzato}`);
+    if (/api[_-]?key|authorization|bearer|[A-Za-z]:\\\\/iu.test(serializzato)) {
+      p.difetto('la risposta runtime espone un segreto o un path assoluto al browser', { severita: 'blocco' });
+    }
+    const stati = await p.cdp.evaluate("[...document.querySelectorAll('[data-runtime-state]')].map((el) => el.getAttribute('data-runtime-state'))");
+    const runtimeOsservato = Array.isArray(stati) && stati.includes('observed');
+    const bottoneAttivo = await p.cdp.evaluate("document.querySelector('#modelLabRunButton')?.disabled === false");
+    p.nota(`runtime osservato=${runtimeOsservato}, bottone prova attivo=${bottoneAttivo}`);
+    if (!runtimeOsservato && bottoneAttivo) p.difetto('il bottone di prova è attivo senza un runtime osservato con modello', { severita: 'blocco' });
+
+    await p.cdp.evaluate("document.querySelector('#modelLabOverviewPanel, #modelLabCard')?.scrollIntoView({block:'start', inline:'nearest'})");
+    await p.attendi(120);
+    await p.screenshot('model-lab-runtime-gate-dettaglio', { nota: 'controllo completo di stati, modello e motivazione del gate' });
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (!r.url.endsWith('/favicon.ico')) p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  async 'qa-model-lab-huggingface-download'(p) {
+    const viewport = new URL(URL_BASE).searchParams.get('qa') === 'laptop' ? { width: 1024, height: 800 } : { width: 1440, height: 900 };
+    await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
+    await p.cdp.evaluate('location.reload()'); await p.attendi(900); await p.click('[data-open-view="settings"]'); await p.click('[data-settings-tab="models"]'); await p.click('[data-model-lab-tab="huggingface"]');
+    await p.digita('#modelLabHfSearch', 'Qwen3-0.6B-GGUF'); await p.click('#modelLabHfSearchButton');
+    await p.attendiCondizione("document.querySelector('#modelLabHfResults')?.textContent?.includes('Qwen') || document.querySelector('#modelLabHfStatus')?.textContent?.includes('non disponibile')", { descrizione: 'risultati Hugging Face o stato errore' });
+    await p.cdp.evaluate("document.querySelector('#modelLabHfPanel')?.scrollIntoView({block:'start', inline:'nearest'})"); await p.attendi(120);
+    await p.screenshot('model-lab-hf-risultati', { nota: 'ricerca GGUF reale su Hugging Face, token mai nel browser' });
+    const first = await p.cdp.evaluate("document.querySelector('#modelLabHfResults .model-lab-list-item')?.click(); !!document.querySelector('#modelLabHfResults .model-lab-list-item')");
+    if (first) { await p.attendi(1000); await p.cdp.evaluate("document.querySelector('#modelLabHfPanel')?.scrollIntoView({block:'start', inline:'nearest'})"); await p.screenshot('model-lab-hf-dettaglio', { nota: 'repository selezionato, file GGUF e set incompleti disabilitati' }); }
+    await p.click('[data-model-lab-tab="installed"]'); await p.attendi(120); await p.cdp.evaluate("document.querySelector('#modelLabInstalledPanel')?.scrollIntoView({block:'start', inline:'nearest'})");
+    const importControls = await p.cdp.evaluate("!!document.querySelector('#modelLabImportInput') && !!document.querySelector('#modelLabImportButton')");
+    if (!importControls) p.difetto('il pannello Installati non espone il picker GGUF', { severita: 'blocco' });
+    await p.screenshot('model-lab-installati', { nota: 'picker GGUF, ricerca modelli installati e azioni contestuali' });
+    await p.click('[data-model-lab-tab="downloads"]'); await p.attendi(120); await p.cdp.evaluate("document.querySelector('#modelLabDownloadsPanel')?.scrollIntoView({block:'start', inline:'nearest'})"); await p.screenshot('model-lab-hf-download-center', { nota: 'centro download: stato vuoto onesto, senza modelli finti' });
+    const leakedControls = await p.cdp.evaluate("!!document.querySelector('#modelLabDownloadsPanel .model-lab-enhanced-controls')");
+    if (leakedControls) p.difetto('i controlli Installati/Hugging Face sono fuori dal loro pannello', { severita: 'blocco' });
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) if (!r.url.endsWith('/favicon.ico')) p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+  },
+
+  async 'qa-model-lab-runtime-run'(p) {
+    const viewport = new URL(URL_BASE).searchParams.get('qa') === 'laptop' ? { width: 1024, height: 800 } : { width: 1440, height: 900 };
+    await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
+    await p.cdp.evaluate('location.reload()'); await p.attendi(900); await p.click('[data-open-view="settings"]');
+    await p.attendiCondizione("document.querySelector('#modelLabRunButton')?.disabled === false", { timeoutMs: 8000, descrizione: 'runtime locale e modello realmente pronti' });
+    await p.cdp.evaluate("document.querySelector('#modelLabOverviewPanel')?.scrollIntoView({block:'start', inline:'nearest'})");
+    await p.screenshot('runtime-pronto', { nota: 'runtime llama.cpp e modello GGUF locale osservati prima dell’azione' });
+    await p.digita('#modelLabPrompt', 'Rispondi soltanto con OK.');
+    await p.click('#modelLabRunButton');
+    await p.attendi(4000);
+    await p.screenshot('runtime-streaming', { nota: 'streaming della prova locale via SSE, stato osservato durante l’esecuzione' });
+    const sessionId = await p.cdp.evaluate('window.__talosHarnessModelLabRuntimeSessionId || null');
+    p.nota(`sessione runtime UI: ${sessionId || 'gestita dal pannello'}`);
+    if (await p.esiste('#modelLabCancelButton:not([hidden])')) {
+      await p.click('#modelLabCancelButton'); await p.attendi(800);
+      await p.screenshot('runtime-prova-arrestata', { nota: 'controllo Ferma prova verificato, nessuna promessa di completamento finto' });
+    }
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) if (!r.url.endsWith('/favicon.ico')) p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
   },
 
   async 'nuova-sessione-compito-libero'(p) {
