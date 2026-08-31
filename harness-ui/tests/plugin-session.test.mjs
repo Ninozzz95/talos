@@ -176,15 +176,13 @@ test('⛔⛔⛔ AL CONTRARIO — exit non-zero: RISOLVE (mai rigetta) con l\'esi
   }
 });
 
-test('⛔⛔⛔ AL CONTRARIO — un comando NON RICONOSCIUTO dalla shell RISOLVE comunque, non è un guasto di spawn', async () => {
+test('⛔⛔⛔ AL CONTRARIO — un eseguibile non allowlisted viene rifiutato prima dello spawn', async () => {
   const cartella = cartellaVera();
   try {
-    // ⭐ verificato empiricamente su questa macchina: con shell:true, un
-    // eseguibile introvabile e' un errore CHE LA SHELL riporta (stderr +
-    // exit non-zero, evento 'close') — mai l'evento 'error' di spawn, che
-    // scatta solo per un guasto del canale stesso (vedi il test sotto).
-    const esito = await eseguiComandoPlugin({ comando: 'un-eseguibile-che-non-esiste-di-sicuro-xyz', argomenti: {}, cartella });
-    assert.match(esito, /comando terminato con codice/);
+    await assert.rejects(
+      () => eseguiComandoPlugin({ comando: 'un-eseguibile-che-non-esiste-di-sicuro-xyz', argomenti: {}, cartella }),
+      (error) => error.code === 'EXECUTABLE_NOT_ALLOWED',
+    );
   } finally {
     rmSync(cartella, { recursive: true, force: true });
   }

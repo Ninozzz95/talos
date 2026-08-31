@@ -10,18 +10,11 @@
  * un browser può far succedere qualcosa di reale sul disco, quindi l'elenco
  * ammesso non è "qualunque cartella passi", è SOLO ciò che è già nel corpus.
  *
- * ⛔ Solo `progetti/` (CORPUS_CODING) in questa prima fase, DICHIARATO — non
- * `storia/`. Letto `spazioDaCommit.mjs`: i task storia passano da
- * `preparaDaCommit`, che fa `git archive` su AVM-miniera (una QUARTA cartella
- * sorella) e un junction verso il suo `node_modules` — più macchinari, più
- * cose che possono non esserci nell'ambiente di chi apre Harness UI. I task
- * `progetti/` bastano a provare l'intero ciclo (checkout, esecuzione, pulizia)
- * con un `cpSync` locale e nessuna dipendenza esterna. `storia/` resta una
- * riga aperta, non un buco silenzioso.
+ * Il catalogo non possiede più un corpus implicito: riceve un provider
+ * esplicito dal runtime configurato. Senza provider il risultato è
+ * `TASK_CATALOG_UNAVAILABLE`, non una fixture o un import da un checkout
+ * fratello. Questo mantiene la promessa di portabilità del desktop.
  */
-import { CORPUS_CODING } from '../../../TALOS-BANCO/corpusCoding.mjs';
-import { preparaCopia } from '../../../TALOS-BANCO/corsaDiCoding.mjs';
-
 export class TaskCatalogError extends Error {
   constructor(message, code = 'TASK_NOT_ALLOWED') {
     super(message);
@@ -30,14 +23,21 @@ export class TaskCatalogError extends Error {
   }
 }
 
+function providerRequired(provider) {
+  if (!provider || typeof provider.list !== 'function' || typeof provider.prepare !== 'function') {
+    throw new TaskCatalogError('Il catalogo task non è disponibile in questa installazione. Configura il runtime proprietario.', 'TASK_CATALOG_UNAVAILABLE');
+  }
+  return provider;
+}
+
 /**
  * Un elenco LEGGERO — mai il corpo intero della consegna, che può essere
  * lungo (i task storia, quando arriveranno, elencano casi di test interi).
  * Chi avvia una sessione riceve la consegna vera da `preparaEsecuzione`, non
  * da qui: questa funzione è per un menu, non per lanciare niente.
  */
-export function listaTaskDisponibili() {
-  return CORPUS_CODING.map((task) => ({
+export function listaTaskDisponibili(provider) {
+  return providerRequired(provider).list().map((task) => ({
     id: task.id,
     progetto: task.progetto,
     difficolta: task.difficolta,
@@ -53,18 +53,13 @@ export function listaTaskDisponibili() {
  *
  * @returns {{cartella:string, comandoProva:string, task:object, pulisci:()=>void}}
  */
-export function preparaEsecuzione(taskId) {
+export function preparaEsecuzione(taskId, provider) {
   if (typeof taskId !== 'string' || taskId.length === 0) {
     throw new TaskCatalogError('Id task non valido', 'QUERY_INVALID');
   }
-  const task = CORPUS_CODING.find((candidato) => candidato.id === taskId);
-  if (!task) throw new TaskCatalogError(`Task non ammesso: ${taskId}`);
-
-  const { dove, butta } = preparaCopia(task);
-  return {
-    cartella: dove,
-    comandoProva: task.comando,
-    task,
-    pulisci: butta,
-  };
+  const risultato = providerRequired(provider).prepare(taskId);
+  if (!risultato || typeof risultato !== 'object' || typeof risultato.cartella !== 'string' || !risultato.task) {
+    throw new TaskCatalogError('Il catalogo task ha restituito una sessione non valida.', 'TASK_CATALOG_INVALID');
+  }
+  return risultato;
 }

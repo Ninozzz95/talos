@@ -43,7 +43,7 @@ test('config applies fixed defaults with zero variabili impostate', () => {
   // ⭐ 26/8, DEC-053: il bundle canonico è mobile/public/harness-ui/ (la
   // pipeline AG-UI ci è già portata, verificata), non più harness-ui/public/
   // (la copia desktop originale, mai riconciliata con l'integrazione mobile).
-  assert.match(config.publicDir, /mobile[\\/]public[\\/]harness-ui$/);
+  assert.match(config.publicDir, /harness-ui[\\/]public$/);
   accessSync(config.publicDir); // esiste davvero — non solo il pattern del nome
 });
 
@@ -54,6 +54,13 @@ test('config rejects invalid ports', () => {
       ConfigurationError,
     );
   }
+});
+
+test('config accepts an explicit llama-server binary path and discovers the pinned local binary when present', () => {
+  const explicit = loadConfig({ TALOS_LLAMA_SERVER_PATH: 'C:\\talos\\llama-server.exe' }, import.meta.url);
+  assert.equal(explicit.llamaServerPath, 'C:\\talos\\llama-server.exe');
+  const discovered = loadConfig({}, new URL('../server.mjs', import.meta.url));
+  if (discovered.llamaServerPath) assert.match(discovered.llamaServerPath, /\.local-runtime[\\/]b10517[\\/]llama-server\.exe$/i);
 });
 
 // ⭐⭐⭐ 27/8 — owner: "per adesso un allowlist per testare". Fail-closed per

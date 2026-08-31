@@ -12,7 +12,7 @@ const testDir = dirname(fileURLToPath(import.meta.url));
 // ⭐ 26/8, DEC-053 — il bundle canonico è mobile/public/harness-ui/, non più
 // harness-ui/public/ (mai riconciliata con l'integrazione mobile, non
 // portata in questo worktree). Stessa relazione che config.mjs calcola.
-const publicDir = join(testDir, '..', '..', 'mobile', 'public', 'harness-ui');
+const publicDir = join(testDir, '..', 'public');
 
 function realApp() {
   return createHttpApp({ staticHandler: createStaticHandler(publicDir) });
@@ -46,6 +46,45 @@ test('GET /api/v1/health torna la busta standard, HEAD combacia, una rotta ignot
   assert.equal(head.status, 200);
   assert.equal(await head.text(), '');
   assert.equal((await fetch(`${base}/api/v1/nope`)).status, 404);
+});
+
+test('GET /api/v1/runtime/bootstrap non inventa un elenco quando il runtime non è configurato', async (t) => {
+  const { base } = await listen(t);
+  const response = await fetch(`${base}/api/v1/runtime/bootstrap`);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.data.runtime.status, 'unavailable');
+  assert.equal(body.data.runtime.items, null);
+  assert.equal(body.data.runtime.consulted, false);
+});
+
+test('GET /api/v1/runtime/bootstrap valida il contratto backend e distingue elenco vuoto', async (t) => {
+  const { base } = await listen(t, createHttpApp({
+    staticHandler: createStaticHandler(publicDir),
+    runtimeBootstrapFn: async () => ({
+      schema: 'talos.harness-ui.runtime-bootstrap.v1',
+      authoritative: 'backend',
+      runtime: {
+        schema: 'talos.harness-ui.resource.v1', status: 'available', items: [], consulted: true,
+        observedAt: '2026-08-31T12:00:00.000Z', reason: null,
+      },
+      observedAt: '2026-08-31T12:00:00.000Z',
+    }),
+  }));
+  const response = await fetch(`${base}/api/v1/runtime/bootstrap`);
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).data.runtime.items, []);
+});
+
+test('gli errori HTTP espongono una spiegazione naturale e un riferimento Doctor senza dettagli interni', async (t) => {
+  const { base } = await listen(t);
+  const response = await fetch(`${base}/api/v1/runtime/load`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ runtimeId: 'missing', modelId: 'missing' }) });
+  const body = await response.json();
+  assert.equal(body.ok, false);
+  assert.equal(body.error.code, 'QUERY_INVALID');
+  assert.match(body.error.title, /Configurazione|Operazione|richiesta/i);
+  assert.match(body.error.doctorReference, /^doctor-/);
+  assert.doesNotMatch(JSON.stringify(body), /node_modules|TALOS_HARNESS_UI_PROJECT_DIRS|stack/i);
 });
 
 test('api rejects POST PUT PATCH DELETE with 405 and no CORS when Origin is absent', async (t) => {

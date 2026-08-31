@@ -1,0 +1,13 @@
+{
+  "schema": "talos.harness-ui.runtime-bootstrap.v1",
+  "authoritative": "backend",
+  "runtime": {
+    "schema": "talos.harness-ui.resource.v1",
+    "status": "available",
+    "items": [{ "id": "llama.cpp", "state": "ready" }],
+    "consulted": true,
+    "observedAt": "2026-08-31T12:00:00.000Z",
+    "reason": null
+  },
+  "observedAt": "2026-08-31T12:00:00.000Z"
+}

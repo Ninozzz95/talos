@@ -206,6 +206,32 @@ function parsePort(raw) {
   return port;
 }
 
+function parseLlamaServerPath(raw, moduleUrl) {
+  if (typeof raw === 'string' && raw.trim() !== '') return resolve(raw.trim());
+  try {
+    const candidate = fileURLToPath(new URL('.local-runtime/b10517/llama-server.exe', moduleUrl));
+    if (statSync(candidate).isFile()) return candidate;
+  } catch {
+    // The official runtime is optional during development and in clean clones.
+  }
+  return undefined;
+}
+
+function parseOwnerRuntimeModule(raw) {
+  if (raw === undefined || raw === '') return undefined;
+  if (typeof raw !== 'string' || raw.trim() === '' || !isAbsolute(raw.trim())) {
+    fail('TALOS_OWNER_RUNTIME_MODULE deve essere un file assoluto');
+  }
+  const percorso = resolve(raw.trim());
+  try {
+    if (!statSync(percorso).isFile()) fail('TALOS_OWNER_RUNTIME_MODULE non è un file');
+  } catch (error) {
+    if (error instanceof ConfigurationError) throw error;
+    fail('TALOS_OWNER_RUNTIME_MODULE non esiste o non è leggibile');
+  }
+  return percorso;
+}
+
 export function loadConfig(
   env,
   moduleUrl = new URL('../server.mjs', import.meta.url),
@@ -232,7 +258,7 @@ export function loadConfig(
   try {
     publicDir = env.TALOS_HARNESS_UI_PUBLIC_DIR
       ? resolve(String(env.TALOS_HARNESS_UI_PUBLIC_DIR))
-      : resolve(fileURLToPath(new URL('../mobile/public/harness-ui/', moduleUrl)));
+      : resolve(fileURLToPath(new URL('./public/', moduleUrl)));
   } catch {
     fail('Percorso modulo non valido');
   }
@@ -252,6 +278,9 @@ export function loadConfig(
      * sola, non una copia con un nome diverso che potrebbe disallinearsi.
      */
     chiaveApi: typeof env.OPENROUTER_API_KEY === 'string' ? env.OPENROUTER_API_KEY : undefined,
+    hfToken: typeof env.HF_TOKEN === 'string' && env.HF_TOKEN.trim() ? env.HF_TOKEN.trim() : undefined,
+    llamaServerPath: parseLlamaServerPath(env.TALOS_LLAMA_SERVER_PATH, moduleUrl),
+    ownerRuntimeModule: parseOwnerRuntimeModule(env.TALOS_OWNER_RUNTIME_MODULE),
     ricercaWeb: parseRicercaWeb(env),
     firmaRicevute: parseFirmaRicevute(env),
     immagine: parseImmagine(env),

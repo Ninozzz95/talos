@@ -37,12 +37,11 @@
  *   plugin per HASH DELL'INTERO MANIFESTO — mischiare i due namespace
  *   sarebbe un bug di sicurezza, non una semplificazione).
  */
-import { spawn } from 'node:child_process';
-
 import {
   caricaPlugin as caricaPluginReale,
   verificaTrustPlugin as verificaTrustPluginReale,
 } from './plugin-registry.mjs';
+import { createProcessPolicy, parseProcessCommand } from './process-policy.mjs';
 
 const SEPARATORE = '__';
 const PREFISSO = `plugin${SEPARATORE}`;
@@ -75,40 +74,29 @@ export function hookIdQualificato(pluginId, hookId) {
  * `chiamaToolMcpFn`.
  */
 export async function eseguiComandoPlugin({ comando, argomenti, cartella }, deps = {}) {
-  const spawnFn = deps.spawnFn ?? spawn;
-  return new Promise((risolvi, rifiuta) => {
-    let p;
-    try {
-      p = spawnFn(comando, {
-        cwd: cartella,
-        shell: true,
-        windowsHide: true,
-        env: { ...process.env, TALOS_PLUGIN_TOOL_ARGS: JSON.stringify(argomenti ?? {}) },
-      });
-    } catch (errore) {
-      rifiuta(errore instanceof Error ? errore : new Error(String(errore)));
-      return;
-    }
-    let fuori = '';
-    let errori = '';
-    p.stdout?.on('data', (d) => { fuori += d; });
-    p.stderr?.on('data', (d) => { errori += d; });
-    const timer = setTimeout(() => { p.kill(); }, TIMEOUT_MS);
-    p.on('close', (codice) => {
-      clearTimeout(timer);
-      const testoFuori = fuori.trim();
-      const testoErrori = errori.trim();
-      if (codice === 0) {
-        risolvi(testoFuori || '(nessun output)');
-      } else {
-        risolvi([`comando terminato con codice ${codice}`, testoErrori, testoFuori].filter(Boolean).join('\n'));
-      }
-    });
-    p.on('error', (errore) => {
-      clearTimeout(timer);
-      rifiuta(errore instanceof Error ? errore : new Error(String(errore)));
-    });
+  const [executable, ...args] = parseProcessCommand(comando);
+  const envKeys = ['PATH', 'Path', 'PATHEXT', 'SystemRoot', 'WINDIR', 'COMSPEC', 'TALOS_PLUGIN_TOOL_ARGS'];
+  const allowedExecutables = deps.allowedExecutables ?? ['node', 'node.exe', 'echo', 'echo.exe'];
+  const policy = createProcessPolicy({
+    allowedExecutables,
+    capabilities: { plugin: cartella },
+    envAllowlist: envKeys,
+    spawnFn: deps.spawnFn,
   });
+  const result = await policy.runApprovedProcess({
+    executable,
+    args,
+    cwd: cartella,
+    capability: 'plugin',
+    timeoutMs: TIMEOUT_MS,
+    envKeys,
+    env: { TALOS_PLUGIN_TOOL_ARGS: JSON.stringify(argomenti ?? {}) },
+    captureLimitBytes: 64 * 1024,
+  });
+  const testoFuori = result.stdout.trim();
+  const testoErrori = result.stderr.trim();
+  if (result.code === 0) return testoFuori || '(nessun output)';
+  return [`comando terminato con codice ${result.code}`, testoErrori, testoFuori].filter(Boolean).join('\n');
 }
 
 /**

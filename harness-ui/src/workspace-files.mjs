@@ -19,11 +19,13 @@
  * SEMPRE il percorso REALE (dopo aver risolto eventuali symlink) contro
  * la radice reale della sessione, mai la stringa grezza.
  */
-import { execFile } from 'node:child_process';
 import { promises as fsp, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 
 import { isPathInside } from './path-policy.mjs';
+import { createProcessPolicy } from './process-policy.mjs';
+
+const EXPLORER_PROCESS_POLICY = createProcessPolicy({ allowedExecutables: ['explorer.exe', 'explorer'] });
 
 export class WorkspaceFileError extends Error {
   constructor(message, code = 'QUERY_INVALID') {
@@ -289,7 +291,10 @@ export async function rivelaInEsploraFile({ cartella, percorso }, deps = {}) {
   if ((deps.platform ?? process.platform) !== 'win32') {
     throw new WorkspaceFileError('Disponibile solo su Windows', 'PLATFORM_UNSUPPORTED');
   }
-  const execFileFn = deps.execFileFn ?? execFile;
+  const execFileFn = deps.execFileFn ?? ((comando, argomenti, opzioni, callback) => EXPLORER_PROCESS_POLICY.execFile(comando, argomenti, {
+    ...opzioni,
+    cwd: opzioni?.cwd ?? cartella,
+  }, callback));
   await new Promise((ok, no) => {
     execFileFn('explorer.exe', [`/select,${reale}`], (errore) => {
       if (errore && errore.code === 'ENOENT') { no(errore); return; }

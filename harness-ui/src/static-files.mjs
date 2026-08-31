@@ -30,7 +30,7 @@ const STATIC_ASSETS = Object.freeze({
    * sorgente, mai costruito da `pathname` della richiesta: il `..` non
    * apre un varco di traversal, sceglie solo quale asset fisso servire.
    */
-  '/talos/brand/logo-short.svg': { file: '../talos/brand/logo-short.svg', contentType: 'image/svg+xml' },
+  '/talos/brand/logo-short.svg': { file: 'talos/brand/logo-short.svg', contentType: 'image/svg+xml' },
   ...Object.fromEntries(FONT_FILES.map((name) => [
     `/fonts/${name}`,
     { file: `fonts/${name}`, contentType: 'font/woff2' },
