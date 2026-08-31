@@ -71,7 +71,7 @@
     model: '',
     // ⭐ 28/8 — stesso principio di `model`: null = nessuna scelta esplicita, "reasoning" resta assente dal corpo della richiesta (comportamento di sempre). Un valore fra quelli di LIVELLI_RAGIONAMENTO appena l'owner tocca lo slider dell'effort picker.
     effort: null,
-    environment: 'wt/auth-61c · feat/mobile-code',
+    environment: null,
     // ⛔ 27/8, trovato dalla pipeline QA visiva: la card "Session topology" leggeva questo valore come stato iniziale — restava "Refactor auth flow" finché nessuna funzione lo toccava, cioè sempre, all'apertura della pagina.
     session: 'Nessuna sessione',
     running: true,
@@ -357,7 +357,14 @@
     return `<svg aria-hidden="true"><use href="#${id}"/></svg>`;
   }
 
+  function demoLabelsEnabled() {
+    return window.__talosHarnessUiLab === true
+      || new URLSearchParams(window.location.search).get('ui-lab') === '1'
+      || window.location.hash === '#ui-lab';
+  }
+
   function ensureDemoLabels() {
+    if (!demoLabelsEnabled()) return;
     $$('[data-demo-surface]').forEach((surface) => {
       if (surface.querySelector('.demo-surface-badge')) return;
       const badge = document.createElement('span');
@@ -1148,7 +1155,7 @@
     const hfPanel = $('#modelLabHfPanel'); const installedPanel = $('#modelLabInstalledPanel');
     if (hfPanel && !hfPanel.querySelector('[data-model-lab-enhanced="hf"]')) {
       const controls = document.createElement('div'); controls.dataset.modelLabEnhanced = 'hf'; controls.className = 'model-lab-enhanced-controls';
-      controls.innerHTML = '<label class="setting-control"><span>Ordina</span><select id="modelLabHfSortControl"><option value="downloads">Download</option><option value="likes">Preferiti</option><option value="created">Più recenti</option><option value="lastModified">Aggiornati</option></select></label><label class="setting-control"><span>Autore</span><input id="modelLabHfAuthorControl" type="search" placeholder="Organizzazione" /></label><label class="setting-control"><span>Filtri</span><input id="modelLabHfFiltersControl" type="search" placeholder="q4, text-generation" /></label><button class="secondary-btn compact" id="modelLabHfNextButtonControl" type="button" hidden>Carica altri risultati</button>';
+      controls.innerHTML = '<label class="setting-control"><span>Ordina</span><select id="modelLabHfSortControl" aria-label="Ordina risultati Hugging Face"><option value="downloads">Download</option><option value="likes">Preferiti</option><option value="created">Più recenti</option><option value="lastModified">Aggiornati</option></select></label><label class="setting-control"><span>Autore</span><input id="modelLabHfAuthorControl" type="search" aria-label="Filtra per autore Hugging Face" placeholder="Organizzazione" /></label><label class="setting-control"><span>Filtri</span><input id="modelLabHfFiltersControl" type="search" aria-label="Filtra modelli Hugging Face" placeholder="q4, text-generation" /></label><button class="secondary-btn compact" id="modelLabHfNextButtonControl" type="button" hidden>Carica altri risultati</button>';
       hfPanel.insertBefore(controls, hfPanel.querySelector('.model-lab-catalog-layout'));
     }
     if (installedPanel && !installedPanel.querySelector('[data-model-lab-enhanced="installed"]')) {
@@ -3185,6 +3192,24 @@
     if (span) span.textContent = state.model || 'Predefinito del server';
   }
 
+  function aggiornaPillolaAmbiente() {
+    $$('[data-environment-label]').forEach((span) => {
+      span.textContent = state.environment || 'Ambiente non osservato';
+    });
+  }
+
+  function aggiornaComposerUsage(usage) {
+    const usageNode = $('[data-runtime-usage]');
+    if (usageNode) usageNode.textContent = formattaUsageBreve(usage, { live: true });
+    const throughput = Number(usage?.tokens_per_second ?? usage?.tokensPerSecond);
+    const throughputNode = $('[data-runtime-throughput]');
+    if (throughputNode) throughputNode.textContent = Number.isFinite(throughput) && throughput > 0 ? `↑ ${Math.round(throughput)} tok/s` : 'Velocità non osservata';
+    const cache = Number(usage?.cached_tokens ?? 0);
+    const prompt = Number(usage?.prompt_tokens ?? 0);
+    const cacheNode = $('[data-runtime-cache]');
+    if (cacheNode) cacheNode.textContent = cache > 0 && prompt > 0 ? `cache ${Math.round((cache / prompt) * 100)}%` : 'Cache non osservata';
+  }
+
   /**
    * ⭐⭐⭐ 28/8 — fattorizzata da dentro il click-handler della pillola
    * permessi: la STESSA propagazione (pillole in giro per la pagina, il
@@ -3230,9 +3255,8 @@
     });
     $$('[data-environment-choice]', sheetBody).forEach((button) => {
       button.addEventListener('click', () => {
-        state.environment = button.querySelector('strong')?.textContent || 'Runtime aggiornato';
-        const chip = $('.environment-chip span');
-        if (chip) chip.textContent = state.environment;
+        state.environment = button.querySelector('strong')?.textContent || null;
+        aggiornaPillolaAmbiente();
         toast('Environment selezionato', state.environment);
         closeEmbeddedDialog(sheetDialog);
       });
@@ -6199,6 +6223,7 @@
         if (path === '/usage') {
           state.realSession.usage = evento.delta[0].value;
           aggiornaContatoreUsage();
+          aggiornaComposerUsage(state.realSession.usage);
           break;
         }
         updateRealReview(evento.delta);
@@ -8320,6 +8345,7 @@
     }
   }, 0);
   aggiornaPillolaModello(); // ⭐ 27/8 — sincronizza SUBITO la pillola con lo stato vero (state.model === ''), invece di lasciare "gpt-5.6-sol · high" scritto a mano nell'HTML statico
+  aggiornaPillolaAmbiente();
   applyQaState();
   syncNavigationState();
   syncInspectorToggle();

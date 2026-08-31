@@ -54,7 +54,9 @@
   --shadow-sm: 0 8px 24px rgba(0,0,0,.18);
   --radius-card: var(--talos-radius-card, 12px);
   --radius-control: var(--talos-radius-control, 12px);
-  --touch: var(--talos-touch-target, 48px);
+  /* Desktop quality gate: keep Calm density while guaranteeing a 36 px
+     interactive target when the host theme supplies a smaller token. */
+  --touch: max(36px, var(--talos-touch-target, 48px));
   --sidebar: 292px;
   --inspector: 340px;
   --topbar-h: 64px;
@@ -285,7 +287,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .badge-dot { position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 17px; height: 17px; border-radius: 99px; background: var(--accent); color: var(--on-accent); font-size: calc(10px * var(--talos-ui-font-scale)); font-weight: 800; }
 
 .icon-btn, .mini-icon, .round-btn { border: 0; background: transparent; display: inline-grid; place-items: center; cursor: pointer; }
-.icon-btn { width: var(--touch); height: var(--touch); border-radius: var(--radius-control); position: relative; color: var(--text-2); }
+.icon-btn { width: var(--touch); min-width: var(--touch); height: var(--touch); flex: 0 0 var(--touch); border-radius: var(--radius-control); position: relative; color: var(--text-2); }
 .icon-btn:hover { background: var(--surface-highlight); color: var(--text); }
 .nav-close { display: none; }
 
@@ -333,7 +335,7 @@ kbd { font-family: var(--font-mono); font-size: calc(10px * var(--talos-ui-font-
 .topbar-left, .topbar-right, .topbar-center { display: flex; align-items: center; min-width: 0; }
 .topbar-right { justify-content: flex-end; gap: 4px; }
 .topbar-center { background: var(--surface-highlight-subtle); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
-.mode-tab { border: 0; background: transparent; color: var(--muted); min-height: 32px; padding: 0 12px; border-radius: 7px; cursor: pointer; font-size: calc(12px * var(--talos-ui-font-scale)); }
+.mode-tab { border: 0; background: transparent; color: var(--muted); min-height: 36px; padding: 0 12px; border-radius: 7px; cursor: pointer; font-size: calc(12px * var(--talos-ui-font-scale)); }
 .mode-tab.active { background: var(--surface-3); color: var(--text); box-shadow: inset 0 0 0 1px var(--surface-highlight-subtle); }
 .title-button { display: flex; align-items: center; min-width: 0; gap: 8px; border: 0; background: transparent; color: var(--text); padding: 4px 8px; border-radius: 9px; cursor: pointer; text-align: left; }
 .title-button span { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -353,7 +355,7 @@ kbd { font-family: var(--font-mono); font-size: calc(10px * var(--talos-ui-font-
  * delle sessioni era fissa (292 o, sotto i 1280px, 268) — questo squeeze
  * non era mai raggiungibile finché il trascinamento non l'ha reso reale.
  */
-.context-chip { min-height: 36px; max-width: 230px; min-width: 0; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); border-radius: 10px; display: inline-flex; align-items: center; gap: 7px; padding: 0 10px; cursor: pointer; font-size: calc(11px * var(--talos-ui-font-scale)); }
+.context-chip { min-height: 36px; max-width: 230px; min-width: 0; flex: 0 0 auto; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); border-radius: 10px; display: inline-flex; align-items: center; gap: 7px; padding: 0 10px; cursor: pointer; font-size: calc(11px * var(--talos-ui-font-scale)); }
 .context-chip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .context-chip svg { width: 16px; height: 16px; }
 .mobile-only { display: none; }
@@ -412,12 +414,15 @@ kbd { font-family: var(--font-mono); font-size: calc(10px * var(--talos-ui-font-
 .user-message { display: flex; flex-direction: column; align-items: flex-end; }
 .message-bubble { width: fit-content; max-width: min(75%, 680px); padding: 13px 15px; border-radius: 15px 15px 4px 15px; background: var(--accent); color: var(--on-accent); font-size: calc(14px * var(--talos-ui-font-scale)); line-height: 1.55; box-shadow: var(--shadow-sm); }
 .message-meta { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--muted); font-size: calc(10px * var(--talos-ui-font-scale)); }
-.mini-icon { width: 28px; height: 28px; border-radius: 8px; color: var(--muted); }
+.mini-icon { width: 36px; min-width: 36px; height: 36px; min-height: 36px; border-radius: 8px; color: var(--muted); }
 .mini-icon svg { width: 14px; height: 14px; }
-.assistant-message { max-width: 760px; }
+.assistant-message { width: min(760px, 100%); max-width: 760px; min-width: 0; }
 .assistant-meta { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: calc(10px * var(--talos-ui-font-scale)); margin-bottom: 9px; }
 .talos-glyph { width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; background: var(--accent-soft); }
-.assistant-copy { color: var(--text-2); font-size: calc(14px * var(--talos-ui-font-scale)); line-height: 1.7; }
+.assistant-copy { min-width: 0; color: var(--text-2); font-size: calc(14px * var(--talos-ui-font-scale)); line-height: 1.7; overflow-wrap: anywhere; }
+.assistant-copy :where(p, li, blockquote, h1, h2, h3, h4, h5, h6) { overflow-wrap: anywhere; }
+.assistant-copy pre { max-width: 100%; margin: 12px 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; white-space: pre; }
+.assistant-copy pre code { white-space: pre; overflow-wrap: normal; }
 /* ⭐ 28/8, owner: "--- come separatore, formatta anche quello" — il default del browser (bordo inset/outset grigio) stona sul tema scuro; una riga sola, coerente con --line già usato per gli altri separatori del bundle. */
 .assistant-copy hr { margin: 14px 0; border: 0; border-top: 1px solid var(--line); }
 
@@ -573,7 +578,7 @@ body.reduce-motion .talos-line-loader-node { animation: none; fill: var(--accent
 .selector-pill span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(11px * var(--talos-ui-font-scale)); }
 .selector-pill svg { width: 15px; height: 15px; flex: 0 0 auto; }
 .composer-spacer { flex: 1; }
-.queue-toggle { height: 34px; border-radius: 9px; border: 0; background: transparent; color: var(--muted); font-size: calc(10px * var(--talos-ui-font-scale)); cursor: pointer; padding: 0 8px; }
+.queue-toggle { min-height: 36px; height: 36px; border-radius: 9px; border: 0; background: transparent; color: var(--muted); font-size: calc(10px * var(--talos-ui-font-scale)); cursor: pointer; padding: 0 8px; }
 .queue-toggle.active { color: var(--accent-2); background: var(--accent-soft); }
 .send-btn { width: 42px; height: 42px; border: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer; background: var(--accent); color: var(--on-accent); flex: 0 0 auto; }
 .send-btn svg { width: 18px; height: 18px; }
@@ -854,9 +859,11 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .settings-card h3 { margin: 0 0 14px; font-size: calc(13px * var(--talos-ui-font-scale)); }
 .setting-line, .settings-card label { min-height: 38px; display: flex; justify-content: space-between; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); font-size: calc(10px * var(--talos-ui-font-scale)); color: var(--muted); }
 .setting-line strong { color: var(--text-2); }
-.settings-card input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px; }
+.settings-card input[type="checkbox"] { accent-color: var(--accent); width: 36px; min-width: 36px; height: 36px; min-height: 36px; }
+.settings-card input[type="range"] { min-width: 36px; min-height: 36px; }
 .setting-control { min-height: 38px; display: flex; justify-content: space-between; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); color: var(--muted); }
-.setting-control select { min-width: 132px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--text-2); padding: 6px 8px; font: inherit; }
+.setting-control select { min-width: 132px; min-height: 36px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--text-2); padding: 6px 8px; font: inherit; }
+.model-lab-card input[type="search"], .model-lab-card input[type="text"] { min-height: 36px; }
 .message-bubble, .assistant-copy { font-size: var(--talos-chat-font-size); }
 .assistant-copy :where(p, li, blockquote, td, th) { font-size: inherit; }
 .theme-swatch { display: grid; grid-template-columns: repeat(4,1fr); gap: 5px; margin-top: 14px; }
@@ -912,13 +919,13 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .sheet-option > span:last-child { color: var(--muted); font-size: calc(10px * var(--talos-ui-font-scale)); }
 /* ⭐⭐⭐ 28/8 — le scorciatoie "Desktop/Download/Documenti" nel campo percorso "Full access" (app.js, openRealTaskSheet). Stessi token di .sheet-option (bordo/accento), taglia più piccola: sono riempitivi rapidi per un campo di testo, non voci di un elenco a piena larghezza. */
 .sheet-shortcuts { display: flex; flex-wrap: wrap; gap: 6px; margin: -2px 0 10px; }
-.sheet-shortcut-chip { border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--text-2); padding: 5px 12px; font-size: calc(11px * var(--talos-ui-font-scale)); cursor: pointer; }
+.sheet-shortcut-chip { min-height: 36px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--text-2); padding: 5px 12px; font-size: calc(11px * var(--talos-ui-font-scale)); cursor: pointer; }
 .sheet-shortcut-chip:hover { border-color: var(--accent-strong); background: var(--accent-soft); color: var(--text); }
 .sheet-toggle-row { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--line); font-size: calc(11px * var(--talos-ui-font-scale)); }
 .sheet-toggle-row span { color: var(--text-2); }
-.sheet-toggle-row input { width: 18px; height: 18px; accent-color: var(--accent); }
+.sheet-toggle-row input { width: 36px; min-width: 36px; height: 36px; min-height: 36px; accent-color: var(--accent); }
 /* ⭐⭐⭐ FASE B (28/8) — il permesso per-attrezzo usa un <select> nativo dentro la stessa riga (il browser possiede l'interazione, stesso principio già scelto per lo slider di effort). */
-.sheet-toggle-row select { flex: 0 0 auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--text); font: inherit; font-size: calc(11px * var(--talos-ui-font-scale)); padding: 5px 8px; cursor: pointer; }
+.sheet-toggle-row select { flex: 0 0 auto; min-height: 36px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--text); font: inherit; font-size: calc(11px * var(--talos-ui-font-scale)); padding: 5px 8px; cursor: pointer; }
 .sheet-toggle-row select:hover { border-color: var(--accent-strong); }
 .sheet-toggle-row select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
@@ -1500,7 +1507,7 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
   .sessions-panel, .inspector-panel { padding-bottom: env(safe-area-inset-bottom); }
   .sessions-panel { padding-top: env(safe-area-inset-top); }
 
-  .topbar .icon-btn { width: var(--mobile-control); height: var(--mobile-control); }
+  .topbar .icon-btn { width: var(--mobile-control); min-width: var(--mobile-control); height: var(--mobile-control); flex-basis: var(--mobile-control); }
   .title-button { min-height: var(--mobile-control); }
   .run-state { min-height: var(--mobile-control); padding-right: 5px; }
   .stop-run { width: var(--mobile-control); height: var(--mobile-control); }

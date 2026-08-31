@@ -1,0 +1,27 @@
+{
+  "name": "talos-harness-ui-frontend",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.18.0 <27"
+  },
+  "scripts": {
+    "build": "node ../scripts/build-ui.mjs",
+    "build:lab": "node scripts/build-lab.mjs",
+    "test:unit": "node scripts/run-node-tests.mjs",
+    "test:browser": "node scripts/run-browser-tests.mjs",
+    "test": "npm run test:unit",
+    "verify": "npm run test:unit",
+    "test:a11y": "node scripts/run-browser-tests.mjs --grep=@a11y",
+    "test:soak": "node scripts/run-browser-tests.mjs --grep=@soak",
+    "test:visual": "node scripts/run-browser-tests.mjs --grep=@visual",
+    "package": "node scripts/package-frontend.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "axe-core": "4.13.0",
+    "esbuild": "0.28.2",
+    "pixelmatch": "7.2.0",
+    "pngjs": "7.0.0"
+  }
+}
