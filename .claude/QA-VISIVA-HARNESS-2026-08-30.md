@@ -1680,3 +1680,215 @@ definitivo è l'onestà operativa: nessuna card promette un backend inesistente.
 Esito: **Fase 8B chiusa nel perimetro preparatorio desktop**. Resta una sola
 dipendenza progettuale, la scelta del runtime LLM locale, prima di rendere
 attivi GGUF, Hugging Face, download e inferenza.
+
+## Fase 9 — Conformance e sicurezza runtime locale (31/08/2026)
+
+Sono state aggiunte fixture comuni per llama.cpp, Ollama e LM Studio e uno
+scenario CDP dedicato al gate runtime. Le fixture verificano stream, reasoning,
+tool call, output malformato, cancel, binding loopback, traversal, segreti e
+processi orfani.
+
+Screenshot completi ispezionati:
+
+- 1440×900: `harness-ui/.qa-runs/qa-model-lab-runtime-security-2026-08-31T02-48-17-460Z/01-model-lab-runtime-gate.png`, `02-model-lab-runtime-gate-dettaglio.png`;
+- 1024×800: `harness-ui/.qa-runs/qa-model-lab-runtime-security-2026-08-31T02-48-24-375Z/01-model-lab-runtime-gate.png`, `02-model-lab-runtime-gate-dettaglio.png`.
+
+Il taccuino visivo non rileva overflow o sovrapposizioni: il rail contestuale,
+la sidebar sessioni e il Model Lab restano separati in entrambi i viewport. Lo
+stato `unknown/non raggiunto` è leggibile e il pulsante di prova rimane inattivo
+quando non esiste un runtime osservato con modello. Il confronto conferma la
+densità da workbench di VS Code, il lifecycle esplicito di LM Studio e la
+separazione reasoning/risposta di Claude/Codex; TALOS mantiene il vantaggio del
+gating osservabile e del fail-closed.
+
+Evidenza automatica: conformance/sicurezza **11/11**, adapter/supervisor **20/20**,
+suite desktop **1046/1046**, Harness **191/191**, typecheck e sintassi puliti.
+Le porte reali Ollama `11434` e LM Studio `1234` risultano non installate o non
+raggiungibili: registrato come `not installed`, mai sostituito da un mock.
+
+Restano aperti il binario llama.cpp pinato con misure performance reali e il
+commit, che richiede autorizzazione esplicita.
+## Fase 10 — Hugging Face desktop (2026-08-31)
+
+Scenario CDP `qa-model-lab-huggingface-download` eseguito a 1440×900 e
+1024×800. Ricerca reale `Qwen3-0.6B-GGUF`, dettaglio model card, elenco GGUF e
+set mostrati; nessuna eccezione JS o risposta HTTP fallita. Il layout resta
+compatto e leggibile con sidebar persistente; i pulsanti di set incompleti sono
+disabilitati e motivati. Rispetto a Hermes/Ollama, TALOS mantiene revisione,
+hash, stato e controlli di trasferimento server-side invece di delegare il
+download al provider. Screenshot:
+
+- `harness-ui/.qa-runs/qa-model-lab-huggingface-download-2026-08-31T03-37-07-836Z`
+- `harness-ui/.qa-runs/qa-model-lab-huggingface-download-2026-08-31T03-37-11-849Z`
+
+## Fase 10 — gate reale download → runtime (31/08/2026)
+
+Il percorso è stato provato dall’interfaccia fino all’inferenza: ricerca Hub,
+selezione del file Q2_K, trasferimento da 347 MB, verifica SHA-256, manifest
+`ready`, caricamento del sidecar llama.cpp e stream SSE nella prova runtime.
+Il binario è il release asset ufficiale `b10517` (commit
+`dc72703fc69698b1ea68ece8d2dd8a96e6a4e1fe`) verificato con digest prima
+dell’avvio. Il sidecar resta legato a `127.0.0.1`, con bearer interno non
+esposto all’interfaccia.
+
+Evidenza completa ispezionata:
+
+- 1440×900: `harness-ui/.qa-runs/qa-model-lab-runtime-run-2026-08-31T05-43-37-673Z`;
+- 1024×800: `harness-ui/.qa-runs/qa-model-lab-runtime-run-2026-08-31T05-43-44-940Z`.
+- controprova da runtime scarico, 1440×900:
+  `harness-ui/.qa-runs/qa-model-lab-runtime-run-2026-08-31T05-47-50-117Z`.
+
+Ogni corsa contiene stato pronto, screenshot durante lo streaming e screenshot
+dopo “Ferma prova”; entrambe registrano zero eccezioni JavaScript e zero HTTP
+falliti. In precedenza il gate runtime aveva una barra orizzontale causata dai
+select a larghezza intrinseca: la controprova dopo `min-width:0`/`max-width:100%`
+non mostra più la barra né taglia il contenuto.
+
+Taccuino competitivo: il Model Lab mantiene la densità workbench di VS Code,
+il download verificabile per revisione/hash tipico di Hugging Face e un lifecycle
+esplicito paragonabile a LM Studio/Ollama. Il punto one-up TALOS è che il modello
+non viene dichiarato installato prima dell’hash e il runtime non viene mostrato
+come pronto finché il server reale non risponde. La quantizzazione Q2_K usata
+per il gate è molto economica ma ha prodotto testo ripetitivo: per qualità
+utente va proposta Q4_K_M o superiore, senza cambiare il contratto di download.
+
+Esito: **gate desktop completo chiuso**; Ollama/LM Studio restano correttamente
+`non raggiunto` perché non installati sulla macchina di prova.
+
+### Controllo trasferimento reale — pausa/ripresa/annullamento (31/08/2026)
+
+Per chiudere anche il percorso negativo del download è stato usato un secondo
+file GGUF pubblico (`Qwen3-0.6B.Q3_K_M.gguf`, stesso repository e revisione):
+la corsa reale ha eseguito avvio, pausa, ripresa e annullamento dall'API usata
+dalla UI. Il risultato osservato è `cancelled`/`CANCELLED_BY_OWNER`, con
+`.partial` e file finale assenti; resta soltanto il manifest `incomplete`,
+necessario per una futura ripresa controllata. Nessun processo llama è rimasto
+attivo. Il comportamento è coerente con il contratto mobile e con i pattern di
+cache/resume di Hugging Face; rispetto a Ollama/LM Studio TALOS conserva il
+controllo esplicito e verificabile del trasferimento, senza dichiarare pronto un
+artefatto non completo.
+
+### Nuovi finding owner — coda P0 (31/08/2026)
+
+- **Modale Nuova sessione:** con permesso diverso da Full access e nessuna
+  cartella configurata, il testo espone oggi nomi di configurazione e istruzioni
+  da sviluppatore. Da sostituire con linguaggio naturale, soluzione proposta e
+  collegamento a Doctor; il log tecnico deve restare consultabile soltanto lì.
+- **Menu sessioni:** il tasto destro apre direttamente la conferma di
+  eliminazione. Deve diventare un menu contestuale CRUD uguale a Files, con
+  conferma solo sull'azione distruttiva.
+- **Impostazioni:** le categorie sono ancora presentate come una superficie
+  lunga. La correzione pianificata è list-detail desktop (menu verticale +
+  pannello) e tabs/righe scorrevoli nel compatto, seguendo il contenuto mobile.
+
+Questi finding non sono conteggiati come risolti nelle corse visive precedenti;
+richiedono nuova prova completa dopo l'implementazione.
+
+## P0 UX e Settings full width — verifica finale (31/08/2026)
+
+La coda P0 è stata riprodotta sul server locale con lo scenario versionato
+`harness-ui/scripts/qa-visual-pipeline.mjs qa-p0-ux`. Sono state eseguite due
+corse indipendenti:
+
+- desktop ampio 1440×900:
+  `harness-ui/.qa-runs/qa-p0-ux-2026-08-31T08-51-42-753Z/`;
+- laptop 1024×800:
+  `harness-ui/.qa-runs/qa-p0-ux-2026-08-31T08-52-01-511Z/`.
+
+Ogni corsa contiene e ha avuto ispezione completa dei tre screenshot:
+
+1. `01-settings-full-width.png` — Settings usa tutta la larghezza disponibile
+   del pannello centrale; non applica il limite laterale della conversazione.
+   La lista categorie e il dettaglio restano allineati e leggibili.
+2. `02-new-session-natural-empty-projects.png` — la modale senza cartelle parla
+   in linguaggio naturale e offre `Full access`/`Apri Doctor`; non espone nomi
+   di variabili, percorsi o codici interni.
+3. `03-session-actions-menu-crud.png` — il tasto destro apre `Apri`,
+   `Rinomina`, `Fork`, `Copia identificativo`, `Elimina`; la prova chiude poi
+   il menu con Escape senza eseguire l’azione distruttiva.
+
+Risultato automatico delle due corse: 3 screenshot per corsa, **0 eccezioni
+JavaScript**, **0 risposte HTTP fallite**. Il controllo geometrico misura la
+larghezza del contenitore Settings contro la larghezza reale del suo pannello,
+non contro l’intera finestra che include le sidebar.
+
+### Aggiornamento P0.4/P0.5 — verifica desktop 31/08/2026
+
+Nuove corse Chrome/CDP, ispezionate per intero:
+
+- `harness-ui/.qa-runs/qa-p0-ux-2026-08-31T16-46-48-336Z/` — 1440×900;
+- `harness-ui/.qa-runs/qa-p0-ux-2026-08-31T16-47-06-069Z/` — 1024×800;
+- `harness-ui/.qa-runs/qa-settings-model-lab-2026-08-31T16-47-26-635Z/` — 1440×900;
+- `harness-ui/.qa-runs/qa-settings-model-lab-2026-08-31T16-47-56-880Z/` — 1024×800.
+
+Controllati: impostazioni full width, modale nuova sessione, menu CRUD,
+capacità macchina, runtime, provider, catalogo, ricerca, modello installato,
+Hugging Face e download. Tutte le corse hanno registrato 0 eccezioni
+JavaScript e 0 richieste HTTP fallite. Non sono emersi clipping,
+sovrapposizioni, barre orizzontali o testi tecnici esposti all’utente.
+
+La finestra 1024×800 conserva la lettura a due colonne e lo scorrimento senza
+perdere il contesto. Il confronto con VS Code/Cursor/Cline/Hermes conferma il
+pattern list-detail e il menu CRUD; TALOS mantiene anche la separazione tra
+messaggio naturale e dettaglio Doctor.
+
+### Taccuino dell’ispezione
+
+- Nessun clipping o sovrapposizione nella lista verticale delle categorie a
+  1440×900.
+- A 1024×800 la superficie mantiene il dettaglio in due colonne senza barra
+  orizzontale; il breakpoint compatto è pronto a trasformare la lista in riga
+  scorrevole.
+- La modale è leggibile e centrata; il testo di stato è volutamente breve e
+  non tecnico, mentre Doctor resta il punto per i dettagli.
+- Il menu CRUD resta sopra il velo modale e mantiene il contrasto del tema
+  TALOS; Escape chiude e restituisce il flusso alla lista.
+- Il confronto con VS Code/Cursor/Cline/Hermes conferma list-detail per
+  Settings e menu contestuale per azioni di riga. TALOS aggiunge la separazione
+  esplicita fra copy naturale e diagnosi tecnica, oltre al gating fail-closed.
+
+Il browser integrato non risultava disponibile in questa sessione; perciò la
+prova è stata eseguita con Chrome/CDP della pipeline repository e registrata con
+report e taccuino su disco. La prova non sostituisce eventuali verifiche future
+su browser alternativi.
+
+Gate correlati eseguiti dopo la modifica: backend **1.060/1.060**, frontend
+Harness **197/197**, typecheck, sintassi scenario e `git diff --check` tutti
+passati. Nessun commit o push è stato eseguito.
+
+## 31/08/2026 — P1.1 Model Lab
+
+Confronto visuale con VS Code/Cursor/Cline/Hermes: il laboratorio mantiene il
+pattern lista→dettaglio, mentre la coda resta raggiungibile dall'header. La
+prima prova mostrava erroneamente i filtri anche nella scheda Download; il
+difetto è stato riprodotto e corretto forzando una sola scheda attiva. La
+seconda prova a 1440×900 mostra ricerca HF, dettaglio model card e coda senza
+overflow, sovrapposizioni o richieste fallite:
+`harness-ui/.qa-runs/qa-model-lab-huggingface-download-2026-08-31T18-24-52-032Z/`.
+
+Nota storica: nella prima prova i controlli di importazione locale erano
+disabilitati perché mancava un canale sicuro; il blocco P1.2 li ha poi sostituiti
+con un picker binario verificato, descritto nella sezione seguente.
+
+## 31/08/2026 — P1.2 Importazione GGUF locale
+
+La UI della scheda Installati ora mostra un picker `.gguf`, stato di
+avanzamento e annullamento. L'importazione non rivela percorsi assoluti: il
+browser invia il contenuto a flusso e il server verifica intestazione, misura e
+hash prima di renderlo disponibile. Il confronto con VS Code/Cursor/Cline e
+Hermes conferma il comportamento atteso del picker e della coda; TALOS mantiene
+in più il controllo GGUF e la pubblicazione atomica.
+
+Screenshot integralmente ispezionati:
+
+- `harness-ui/.qa-runs/qa-model-lab-huggingface-download-2026-08-31T19-36-32-646Z/` — 1440×900;
+- `harness-ui/.qa-runs/qa-model-lab-huggingface-download-2026-08-31T19-36-53-467Z/` — 1024×800.
+
+In entrambe le corse: la scheda Installati contiene una sola azione
+`Importa .gguf` con ricerca e azioni per riga; la scheda Download contiene solo
+la coda e le sue progress bar. Non sono comparsi clipping, overflow,
+sovrapposizioni, eccezioni JavaScript o richieste HTTP fallite.
+
+Finding residui: non è ancora stata eseguita una prova con un file GGUF reale
+scelto dall'owner né la matrice interruzione/reload/offline/disco insufficiente;
+le prove di contratto e i controlli contrari sono già verdi.

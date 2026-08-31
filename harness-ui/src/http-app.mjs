@@ -1,6 +1,9 @@
 import { leggiArtefatto as leggiArtefattoReale } from './artifact-store.mjs';
 import { modelloRichiestaValido, permessiPerAttrezzoRichiestaValido, permessiRichiestaValido, reasoningRichiestaValido } from './config.mjs';
 import { cartelleFrequenti as cartelleFrequentiReale } from './frequent-dirs.mjs';
+import { RUNTIME_BOOTSTRAP_SCHEMA, RUNTIME_RESOURCE_SCHEMA, parseBootstrapEnvelope } from './runtime-contract.mjs';
+import { getDiagnosticProblem, toPublicProblem } from './public-problem.mjs';
+import { createSseSession } from './http-lifecycle.mjs';
 
 export const API_SCHEMA = 'talos.harness-ui.api.v1';
 
@@ -25,6 +28,7 @@ const API_ERROR_CODES = new Set([
   'METHOD_NOT_ALLOWED',
   'NOT_FOUND',
   'TASK_NOT_ALLOWED',
+  'TASK_CATALOG_UNAVAILABLE',
   'SESSION_NOT_READY',
   'AUTOMATION_INVALID',
   'CATALOG_UNREACHABLE',
@@ -43,6 +47,19 @@ const API_ERROR_CODES = new Set([
   'PLUGIN_INVALID',
   /* ⭐ 30/8, QA visiva (Task 14) — DELETE su una sessione ancora viva (né conclusa né interrotta): un controller attivo potrebbe star lavorando davvero. */
   'SESSION_STILL_RUNNING',
+  'PROVIDER_INVALID', 'PROVIDER_KEY_REQUIRED', 'PROVIDER_KEY_INVALID', 'PROVIDER_STORE_UNAVAILABLE', 'PROVIDER_RUNTIME_INVALID', 'PROVIDER_RUNTIME_UNAVAILABLE',
+  'RUNTIME_NOT_AVAILABLE',
+  'RUNTIME_UNREACHABLE',
+  'RUNTIME_OPERATION_UNSUPPORTED',
+  'MODEL_NOT_FOUND',
+  'MODEL_LOAD_UNCONFIRMED',
+  'MODEL_UNLOAD_UNCONFIRMED',
+  'LOCAL_RUNTIME_FAILED',
+  'HF_HUB_INVALID', 'HF_HUB_UPSTREAM', 'HF_HUB_RESPONSE_INVALID', 'HF_REPOSITORY_GATED', 'HF_RATE_LIMITED',
+  'HF_REDIRECT_INVALID', 'HF_REDIRECT_HOST_REJECTED', 'HF_RESOLVE_INVALID', 'HF_TRANSFER_INVALID', 'HF_TRANSFER_COLLISION',
+  'HF_DOWNLOAD_FAILED', 'HF_PATH_REJECTED', 'CHECKSUM_MISMATCH', 'MODEL_FILE_UNREADABLE', 'CANCELLED_BY_OWNER', 'PAUSED_BY_OWNER',
+  'HF_IMAGE_URL_INVALID', 'HF_IMAGE_HOST_REJECTED', 'HF_IMAGE_REDIRECT_REJECTED', 'HF_IMAGE_PRIVATE_ADDRESS', 'HF_IMAGE_DNS_FAILED', 'HF_IMAGE_ABORTED', 'HF_IMAGE_UPSTREAM', 'HF_IMAGE_MIME_REJECTED', 'HF_IMAGE_TOO_LARGE', 'HF_IMAGE_CONFIG_INVALID',
+  'LOCAL_IMPORT_INVALID', 'LOCAL_IMPORT_TOO_LARGE', 'LOCAL_IMPORT_SIZE_MISMATCH', 'LOCAL_IMPORT_EMPTY', 'LOCAL_IMPORT_NOT_GGUF',
 ]);
 
 const STATUS_BY_CODE = Object.freeze({
@@ -53,6 +70,7 @@ const STATUS_BY_CODE = Object.freeze({
   METHOD_NOT_ALLOWED: 405,
   NOT_FOUND: 404,
   TASK_NOT_ALLOWED: 404,
+  TASK_CATALOG_UNAVAILABLE: 503,
   /** ⭐ 409 Conflict: la sessione origine esiste ma non è nello stato giusto per un fork (ancora in corso, o senza storia). */
   SESSION_NOT_READY: 409,
   /** ⭐ 27/8 — un tetto duro dell'automazione violato (intervallo/limite fuori range) è un errore di CONTENUTO, non di forma: stesso status di ROW_INVALID. */
@@ -75,6 +93,34 @@ const STATUS_BY_CODE = Object.freeze({
   PLUGIN_INVALID: 422,
   /** ⭐ 30/8 — stesso status di SESSION_NOT_READY: la richiesta è legittima ma lo stato attuale (ancora in corso) la blocca. */
   SESSION_STILL_RUNNING: 409,
+  PROVIDER_INVALID: 422,
+  PROVIDER_KEY_REQUIRED: 422,
+  PROVIDER_KEY_INVALID: 422,
+  PROVIDER_STORE_UNAVAILABLE: 503,
+  PROVIDER_RUNTIME_INVALID: 422,
+  PROVIDER_RUNTIME_UNAVAILABLE: 503,
+  RUNTIME_NOT_AVAILABLE: 503,
+  RUNTIME_UNREACHABLE: 503,
+  RUNTIME_OPERATION_UNSUPPORTED: 409,
+  MODEL_NOT_FOUND: 404,
+  MODEL_LOAD_UNCONFIRMED: 502,
+  MODEL_UNLOAD_UNCONFIRMED: 502,
+  LOCAL_RUNTIME_FAILED: 502,
+  HF_IMAGE_URL_INVALID: 422,
+  HF_IMAGE_HOST_REJECTED: 422,
+  HF_IMAGE_REDIRECT_REJECTED: 422,
+  HF_IMAGE_PRIVATE_ADDRESS: 422,
+  HF_IMAGE_DNS_FAILED: 502,
+  HF_IMAGE_ABORTED: 499,
+  HF_IMAGE_UPSTREAM: 502,
+  HF_IMAGE_MIME_REJECTED: 422,
+  HF_IMAGE_TOO_LARGE: 413,
+  HF_IMAGE_CONFIG_INVALID: 500,
+  LOCAL_IMPORT_INVALID: 422,
+  LOCAL_IMPORT_TOO_LARGE: 413,
+  LOCAL_IMPORT_SIZE_MISMATCH: 422,
+  LOCAL_IMPORT_EMPTY: 422,
+  LOCAL_IMPORT_NOT_GGUF: 422,
 });
 
 const MESSAGE_BY_CODE = Object.freeze({
@@ -98,6 +144,26 @@ const MESSAGE_BY_CODE = Object.freeze({
   MCP_INVALID: 'Configurazione server MCP non valida',
   PLUGIN_INVALID: 'Configurazione plugin non valida',
   SESSION_STILL_RUNNING: 'Sessione ancora in corso — fermala prima di eliminarla',
+  PROVIDER_INVALID: 'Provider non riconosciuto',
+  PROVIDER_KEY_REQUIRED: 'Inserisci una chiave prima di salvarla',
+  PROVIDER_KEY_INVALID: 'La chiave inserita non è valida',
+  PROVIDER_STORE_UNAVAILABLE: 'Il portachiavi del computer non è disponibile: controlla Doctor',
+  PROVIDER_RUNTIME_INVALID: 'Controlla indirizzo e tempo massimo del provider',
+  PROVIDER_RUNTIME_UNAVAILABLE: 'Non è stato possibile salvare le preferenze del provider: controlla Doctor',
+  RUNTIME_NOT_AVAILABLE: 'Runtime locale non disponibile',
+  RUNTIME_UNREACHABLE: 'Runtime locale non raggiungibile',
+  RUNTIME_OPERATION_UNSUPPORTED: 'Operazione runtime non supportata',
+  MODEL_NOT_FOUND: 'Modello locale non trovato',
+  MODEL_LOAD_UNCONFIRMED: 'Caricamento modello non confermato',
+  MODEL_UNLOAD_UNCONFIRMED: 'Scaricamento modello non confermato',
+  LOCAL_RUNTIME_FAILED: 'Runtime locale fallito',
+  HF_HUB_INVALID: 'Richiesta Hugging Face non valida', HF_HUB_UPSTREAM: 'Hugging Face non raggiungibile', HF_HUB_RESPONSE_INVALID: 'Risposta Hugging Face non valida',
+  HF_REPOSITORY_GATED: 'Repository Hugging Face gated o non autorizzato', HF_RATE_LIMITED: 'Limite richieste Hugging Face raggiunto', HF_REDIRECT_INVALID: 'Redirect Hugging Face non valido',
+  HF_REDIRECT_HOST_REJECTED: 'Host di download Hugging Face non autorizzato', HF_RESOLVE_INVALID: 'URL di download Hugging Face non valido', HF_TRANSFER_INVALID: 'Trasferimento modello non valido',
+  HF_TRANSFER_COLLISION: 'Trasferimento modello già presente con revisione diversa', HF_DOWNLOAD_FAILED: 'Download Hugging Face fallito', HF_PATH_REJECTED: 'Percorso modello non autorizzato',
+  CHECKSUM_MISMATCH: 'Verifica checksum modello fallita', MODEL_FILE_UNREADABLE: 'File modello non leggibile', CANCELLED_BY_OWNER: 'Download annullato', PAUSED_BY_OWNER: 'Download in pausa',
+  HF_IMAGE_URL_INVALID: 'URL immagine non valido', HF_IMAGE_HOST_REJECTED: 'Origine immagine non autorizzata', HF_IMAGE_REDIRECT_REJECTED: 'Reindirizzamento immagine non autorizzato', HF_IMAGE_PRIVATE_ADDRESS: 'Immagine non raggiungibile da un indirizzo privato', HF_IMAGE_DNS_FAILED: 'Origine immagine non raggiungibile', HF_IMAGE_ABORTED: 'Richiesta immagine annullata', HF_IMAGE_UPSTREAM: 'Servizio immagini non disponibile', HF_IMAGE_MIME_REJECTED: 'Formato immagine non supportato', HF_IMAGE_TOO_LARGE: 'Immagine troppo grande', HF_IMAGE_CONFIG_INVALID: 'Proxy immagini non configurato',
+  LOCAL_IMPORT_INVALID: 'Controlla il file GGUF scelto e riprova', LOCAL_IMPORT_TOO_LARGE: 'Il modello scelto supera lo spazio consentito', LOCAL_IMPORT_SIZE_MISMATCH: 'La dimensione del file non coincide con quella dichiarata', LOCAL_IMPORT_EMPTY: 'Il file scelto è vuoto', LOCAL_IMPORT_NOT_GGUF: 'Il file scelto non è un modello GGUF',
 });
 
 const SECURITY_HEADERS = Object.freeze({
@@ -131,12 +197,13 @@ function successEnvelope(data, clock) {
   return { ok: true, data, meta };
 }
 
-function errorEnvelope(code, clock) {
-  return {
-    ok: false,
-    error: { code, message: MESSAGE_BY_CODE[code] },
-    meta: { schema: API_SCHEMA, generatedAt: generatedAt(clock) },
-  };
+function errorEnvelope(code, clock, context = {}) {
+const problem = toPublicProblem({ code }, context);
+return {
+ok: false,
+error: { code, message: MESSAGE_BY_CODE[code] ?? problem.title, ...problem },
+meta: { schema: API_SCHEMA, generatedAt: generatedAt(clock) },
+};
 }
 
 function sendJson(res, statusCode, value, method, extraHeaders) {
@@ -256,13 +323,15 @@ function leggiCorpoJson(req, limiteByte = MAX_REQUEST_BODY_BYTES) {
 function requireTaskIdBody(body) {
   const chiavi = Object.keys(body ?? {});
   // ⭐⭐⭐ 29/8 — FASE K: modelloPlanner riusa la STESSA validazione di modello (modelloRichiestaValido) — è lo stesso formato OpenRouter, mai un secondo validatore.
-  const chiaviAmmesse = ['taskId', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo'];
+  const chiaviAmmesse = ['taskId', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo', 'provider', 'runtimeId', 'modelId', 'fallbackConsent'];
   const soloAmmesse = chiavi.length > 0 && chiavi.length <= chiaviAmmesse.length && chiavi.every((k) => chiaviAmmesse.includes(k)) && chiavi.includes('taskId');
   if (
     !soloAmmesse || typeof body.taskId !== 'string' || body.taskId.length === 0
     || ('client' in body && body.client !== 'desktop' && body.client !== 'mobile')
+    || ('provider' in body && body.provider !== 'cloud' && body.provider !== 'local')
+    || (body.provider === 'local' && (typeof body.runtimeId !== 'string' || body.runtimeId.trim() === '' || typeof body.modelId !== 'string' || body.modelId.trim() === '' || ('fallbackConsent' in body && typeof body.fallbackConsent !== 'boolean')))
   ) {
-    const errore = new Error('Corpo non valido: atteso {taskId, modello?, modelloPlanner?, reasoning?, client?, permessi?, permessiPerAttrezzo?}');
+    const errore = new Error('Corpo non valido: atteso {taskId, modello?, modelloPlanner?, reasoning?, client?, permessi?, permessiPerAttrezzo?, provider?, runtimeId?, modelId?, fallbackConsent?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -299,6 +368,8 @@ function requireTaskIdBody(body) {
     mobile: body.client === 'mobile',
     permessi: 'permessi' in body && body.permessi !== undefined ? body.permessi : null,
     permessiPerAttrezzo: 'permessiPerAttrezzo' in body && body.permessiPerAttrezzo !== undefined ? body.permessiPerAttrezzo : null,
+    provider: body.provider ?? 'cloud', runtimeId: body.runtimeId ?? null, modelId: body.modelId ?? null,
+    fallbackConsent: body.fallbackConsent === true,
   };
 }
 
@@ -571,6 +642,10 @@ export function createHttpApp({
   cartelleFrequentiFn = cartelleFrequentiReale,
   catalogoModelliFn = null, clock = () => new Date(), leggiArtefattoFn = leggiArtefattoReale,
   capacitaMacchinaFn = null,
+  localRuntimes = null, localModelStore = null, localModelTransfer = null, hfHubClient = null,
+  hfImageProxyFn = null,
+  runtimeBootstrapFn = null,
+  providerStore = null,
   // ⛔⛔⛔ 28/8 — iniettabili SOLO per il test del battito SSE sotto: mai un setInterval reale nei test unitari, stesso principio di ogni altra dipendenza di questo file.
   impostaIntervalloFn = setInterval, cancellaIntervalloFn = clearInterval,
 }) {
@@ -636,11 +711,15 @@ export function createHttpApp({
       try {
         requireNoQuery(url);
         const corpo = await leggiCorpoJson(req);
-        const { taskId, modello, modelloPlanner, reasoning, mobile, permessi, permessiPerAttrezzo } = requireTaskIdBody(corpo);
-        const esito = sessionRegistry.avvia(taskId, {
+        const { taskId, modello, modelloPlanner, reasoning, mobile, permessi, permessiPerAttrezzo, provider, runtimeId, modelId, fallbackConsent } = requireTaskIdBody(corpo);
+        const opzioniSessione = {
           modelloScelto: modello, modelloPlannerScelto: modelloPlanner, reasoningScelto: reasoning, mobile,
           permessiScelto: permessi, permessiPerAttrezzoScelto: permessiPerAttrezzo,
-        });
+        };
+        if (provider !== 'cloud' || runtimeId !== null || modelId !== null || fallbackConsent === true) {
+          Object.assign(opzioniSessione, { provider, runtimeId, modelId, fallbackConsent });
+        }
+        const esito = sessionRegistry.avvia(taskId, opzioniSessione);
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
           errore.code = esito.code;
@@ -652,6 +731,160 @@ export function createHttpApp({
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
       }
+      return;
+    }
+
+    /* Provider accessi: il corpo contiene la chiave solo nel tragitto locale
+     * verso il server; nessuna risposta o sessione la riflette. */
+    const providerKeyMatch = /^\/api\/v1\/providers\/([^/]+)\/key(?:\/(remove))?$/.exec(url.pathname);
+    const providerRuntimeMatch = /^\/api\/v1\/providers\/([^/]+)\/runtime(?:\/(reset))?$/.exec(url.pathname);
+    if (method === 'POST' && (providerKeyMatch || providerRuntimeMatch)) {
+      try {
+        requireNoQuery(url);
+        if (!providerStore) { const error = new Error('Portachiavi provider non configurato'); error.code = 'PROVIDER_STORE_UNAVAILABLE'; throw error; }
+        const provider = decodeURIComponent((providerKeyMatch || providerRuntimeMatch)[1]);
+        const body = await leggiCorpoJson(req, 16 * 1024);
+        let data;
+        if (providerKeyMatch) {
+          const remove = providerKeyMatch[2] === 'remove';
+          const keys = Object.keys(body || {});
+          if (remove) {
+            if (keys.length !== 0) { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
+            data = providerStore.clearKey(provider);
+          } else {
+            if (keys.length !== 1 || keys[0] !== 'key') { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
+            data = providerStore.setKey(provider, body.key);
+          }
+        } else {
+          const reset = providerRuntimeMatch[2] === 'reset';
+          const keys = Object.keys(body || {});
+          if (reset) {
+            if (keys.length !== 0) { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
+            data = providerStore.resetEndpoint(provider);
+          } else {
+            if (keys.some((key) => !['endpoint', 'timeoutSeconds'].includes(key)) || typeof body.endpoint !== 'string' || !Object.hasOwn(body, 'timeoutSeconds')) {
+              const error = new Error('Corpo runtime non valido'); error.code = 'QUERY_INVALID'; throw error;
+            }
+            data = providerStore.setRuntime(provider, { endpoint: body.endpoint, timeoutSeconds: body.timeoutSeconds });
+          }
+        }
+        sendJson(res, 200, successEnvelope(data, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    if (method === 'POST' && sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/cancel$/.test(url.pathname)) {
+      try {
+        requireNoQuery(url);
+        const sessionId = decodeURIComponent(url.pathname.split('/')[4]);
+        const stopped = sessionRegistry.ferma(sessionId);
+        if (!stopped) { const error = new Error('Sessione non trovata'); error.code = 'NOT_FOUND'; throw error; }
+        sendJson(res, 200, successEnvelope({ ok: true, sessionId }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    if (method === 'POST' && url.pathname === '/api/v1/runtime/load') {
+      try {
+        requireNoQuery(url);
+        const body = await leggiCorpoJson(req);
+        if (!localRuntimes || typeof body?.runtimeId !== 'string' || typeof body?.modelId !== 'string') { const error = new Error('Corpo runtime non valido'); error.code = 'QUERY_INVALID'; throw error; }
+        const runtime = localRuntimes[body.runtimeId];
+        if (!runtime || typeof runtime.load !== 'function') { const error = new Error('Runtime locale non disponibile'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        const data = await runtime.load(body.modelId, { contextLength: body.contextLength });
+        sendJson(res, 200, successEnvelope(data, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    if (method === 'POST' && url.pathname === '/api/v1/runtime/unload') {
+      try {
+        requireNoQuery(url);
+        const body = await leggiCorpoJson(req);
+        if (!localRuntimes || typeof body?.runtimeId !== 'string' || typeof body?.modelId !== 'string') { const error = new Error('Corpo runtime non valido'); error.code = 'QUERY_INVALID'; throw error; }
+        const runtime = localRuntimes[body.runtimeId];
+        if (!runtime || typeof runtime.unload !== 'function') { const error = new Error('Runtime locale non disponibile'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        const data = await runtime.unload(body.modelId);
+        sendJson(res, 200, successEnvelope(data, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    if (method === 'POST' && url.pathname === '/api/v1/local-models/import') {
+      try {
+        requireNoQuery(url);
+        const contentType = String(req.headers['content-type'] || '').split(';', 1)[0].trim().toLowerCase();
+        const id = String(req.headers['x-talos-model-id'] || '').trim();
+        const filename = String(req.headers['x-talos-model-filename'] || '').trim();
+        const nameHeader = req.headers['x-talos-model-name'];
+        const expectedBytes = Number(req.headers['x-talos-model-bytes']);
+        if (contentType !== 'application/octet-stream' || !id || !filename || !Number.isSafeInteger(expectedBytes) || expectedBytes <= 0) { const error = new Error('Scegli un file GGUF valido'); error.code = 'LOCAL_IMPORT_INVALID'; throw error; }
+        if (!localModelTransfer || typeof localModelTransfer.importStream !== 'function') { const error = new Error('Import locale non disponibile'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        const data = await localModelTransfer.importStream(req, { id, filename, expectedBytes, ...(typeof nameHeader === 'string' ? { name: nameHeader } : {}) });
+        sendJson(res, 200, successEnvelope(data, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    if (method === 'POST' && /^\/api\/v1\/local-models\/([^/]+)\/(rename|copy-path|delete)$/.test(url.pathname)) {
+      try {
+        requireNoQuery(url);
+        const match = /^\/api\/v1\/local-models\/([^/]+)\/(rename|copy-path|delete)$/.exec(url.pathname);
+        const id = decodeURIComponent(match[1]);
+        if (!localModelStore) { const error = new Error('Modelli locali non configurati'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        const action = match[2];
+        if (action === 'rename') {
+          const body = await leggiCorpoJson(req);
+          if (typeof localModelStore.rename !== 'function' || typeof body?.name !== 'string') { const error = new Error('Nome modello non valido'); error.code = 'QUERY_INVALID'; throw error; }
+          sendJson(res, 200, successEnvelope(await localModelStore.rename(id, body.name), clock), method);
+        } else if (action === 'copy-path') {
+          const model = typeof localModelStore.inspect === 'function' ? await localModelStore.inspect(id) : null;
+          if (!model) { const error = new Error('Modello non trovato'); error.code = 'NOT_FOUND'; throw error; }
+          sendJson(res, 200, successEnvelope({ id, path: model.path }, clock), method);
+        } else {
+          if (typeof localModelStore.remove !== 'function') { const error = new Error('Eliminazione modello non configurata'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+          await localModelStore.remove(id);
+          sendJson(res, 200, successEnvelope({ id, deleted: true }, clock), method);
+        }
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    if (method === 'POST' && url.pathname === '/api/v1/huggingface/download') {
+      try {
+        requireNoQuery(url);
+        const body = await leggiCorpoJson(req, 1_000_000);
+        if (!localModelTransfer || typeof localModelTransfer.start !== 'function') { const error = new Error('Download Hugging Face non configurato'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        const data = await localModelTransfer.start(body);
+        sendJson(res, 200, successEnvelope(data, clock), method);
+      } catch (error) { const normalized = normalizeError(error); sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method); }
+      return;
+    }
+    if (method === 'POST' && /^\/api\/v1\/huggingface\/downloads\/([^/]+)\/(pause|resume|cancel)$/.test(url.pathname)) {
+      try {
+        requireNoQuery(url); const match = /^\/api\/v1\/huggingface\/downloads\/([^/]+)\/(pause|resume|cancel)$/.exec(url.pathname); const id = decodeURIComponent(match[1]);
+        if (!localModelTransfer || typeof localModelTransfer[match[2]] !== 'function') { const error = new Error('Download Hugging Face non configurato'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        const changed = await localModelTransfer[match[2]](id); if (!changed) { const error = new Error('Download non trovato o non modificabile'); error.code = 'NOT_FOUND'; throw error; }
+        sendJson(res, 200, successEnvelope(localModelTransfer.status(id), clock), method);
+      } catch (error) { const normalized = normalizeError(error); sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method); }
       return;
     }
 
@@ -1435,6 +1668,70 @@ export function createHttpApp({
       } else if (url.pathname === '/api/v1/automations') {
         requireNoQuery(url);
         data = { items: automationStore ? await automationStore.elenca() : [] };
+      } else if (url.pathname === '/api/v1/runtime') {
+        requireNoQuery(url);
+        const items = [];
+        for (const [runtimeId, runtime] of Object.entries(localRuntimes ?? {})) {
+          if (typeof runtime?.detect !== 'function') { items.push({ runtimeId, state: 'unavailable', models: [] }); continue; }
+          const item = { runtimeId, ...(await runtime.detect(runtimeId)), models: [] };
+          if (item.state === 'observed' && typeof runtime.listModels === 'function') {
+            try { item.models = await runtime.listModels(); }
+            catch (error) { item.modelsError = error?.code || 'RUNTIME_FAILED'; }
+          }
+          items.push(item);
+        }
+        data = { items };
+      } else if (url.pathname === '/api/v1/runtime/bootstrap') {
+        requireNoQuery(url);
+        const observedAt = clock().toISOString();
+        const candidate = runtimeBootstrapFn
+          ? await runtimeBootstrapFn()
+          : {
+              schema: RUNTIME_BOOTSTRAP_SCHEMA,
+              authoritative: 'backend',
+              runtime: {
+                schema: RUNTIME_RESOURCE_SCHEMA,
+                status: 'unavailable',
+                items: null,
+                consulted: false,
+                observedAt,
+                reason: 'runtime_not_configured',
+              },
+              observedAt,
+            };
+        data = parseBootstrapEnvelope(candidate);
+      } else if (url.pathname === '/api/v1/local-models') {
+        requireNoQuery(url);
+        data = { items: typeof localModelStore?.list === 'function' ? await localModelStore.list() : [] };
+      } else if (url.pathname === '/api/v1/huggingface/search') {
+        const query = url.searchParams.get('query') || ''; const limit = Number(url.searchParams.get('limit') || 20); const cursor = url.searchParams.get('cursor') || null;
+        const sort = url.searchParams.get('sort') || 'downloads'; const direction = url.searchParams.get('direction') || '-1'; const author = url.searchParams.get('author') || null; const filters = url.searchParams.getAll('filter').filter((value) => value !== 'gguf');
+        if (!hfHubClient?.searchModels) { const error = new Error('Hub Hugging Face non configurato'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        data = await hfHubClient.searchModels({ query, limit, cursor, sort, direction, author, filters });
+      } else if (url.pathname === '/api/v1/huggingface/repo') {
+        const repo = url.searchParams.get('repo'); const revision = url.searchParams.get('revision');
+        if (!repo || !hfHubClient?.describeModel || !hfHubClient?.listGgufFiles) { const error = new Error('Hub Hugging Face non configurato'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        const detail = await hfHubClient.describeModel(repo, revision || 'main');
+        const listed = revision ? await hfHubClient.listGgufFiles(repo, revision) : [];
+        const files = revision && hfHubClient.pathsInfo ? await hfHubClient.pathsInfo(repo, revision, listed.map((item) => item.path)) : listed;
+        data = { ...detail, files };
+      } else if (url.pathname === '/api/v1/huggingface/image') {
+        const source = url.searchParams.get('url');
+        if (!source) { const error = new Error('URL immagine mancante'); error.code = 'QUERY_INVALID'; throw error; }
+        if (typeof hfImageProxyFn !== 'function') { const error = new Error('Proxy immagini Hugging Face non configurato'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        const image = await hfImageProxyFn(source);
+        send(res, 200, image.mimeType, image.bytes, method, { 'Cache-Control': 'no-store' });
+        return;
+      } else if (url.pathname === '/api/v1/huggingface/downloads') {
+        requireNoQuery(url); data = { items: typeof localModelTransfer?.listStatuses === 'function' ? await localModelTransfer.listStatuses() : [] };
+      } else if (url.pathname === '/api/v1/providers') {
+        requireNoQuery(url);
+        if (!providerStore || typeof providerStore.listPublic !== 'function') { const error = new Error('Portachiavi provider non configurato'); error.code = 'PROVIDER_STORE_UNAVAILABLE'; throw error; }
+        data = { items: providerStore.listPublic() };
+      } else if (/^\/api\/v1\/providers\/([^/]+)\/runtime$/.test(url.pathname)) {
+        requireNoQuery(url);
+        if (!providerStore || typeof providerStore.getRuntime !== 'function') { const error = new Error('Portachiavi provider non configurato'); error.code = 'PROVIDER_STORE_UNAVAILABLE'; throw error; }
+        data = providerStore.getRuntime(decodeURIComponent(url.pathname.split('/')[4]));
       } else if (url.pathname === '/api/v1/models') {
         const forzaAggiornamento = parseModelsQuery(url);
         if (!catalogoModelliFn) {
@@ -1453,6 +1750,12 @@ export function createHttpApp({
           const errore = new Error('Doctor non configurato'); errore.code = 'REPORT_UNAVAILABLE'; throw errore;
         }
         data = await diagnosiFn();
+      } else if (/^\/api\/v1\/doctor\/doctor-[a-f0-9]{12}$/u.test(url.pathname)) {
+        requireNoQuery(url);
+        const reference = url.pathname.split('/').at(-1);
+        const detail = getDiagnosticProblem(reference);
+        if (!detail) { const error = new Error('Riferimento Doctor non trovato'); error.code = 'NOT_FOUND'; throw error; }
+        data = { reference, code: detail.code, operation: detail.operation, requestId: detail.requestId };
       } else if (url.pathname === '/api/v1/sessions') {
         requireNoQuery(url);
         /* ⛔ Elenco vuoto, non un errore, se sessionRegistry non è configurato — stesso principio già seguito per le altre rotte di sessione. */
@@ -1757,13 +2060,16 @@ export function createHttpApp({
            * di QUESTA risposta. `res.socket` esiste solo dopo che gli
            * header sono partiti, quindi qui, non prima.
            */
-          res.writeHead(200, {
-            ...SECURITY_HEADERS,
-            'Content-Type': 'text/event-stream; charset=utf-8',
-            'Cache-Control': 'no-store',
-            Connection: 'keep-alive',
+          const ultimoVistoDalClient = Number.parseInt(req.headers['last-event-id'], 10);
+          const daSequenza = Number.isFinite(ultimoVistoDalClient) ? ultimoVistoDalClient : 0;
+          const sseSession = createSseSession({
+            response: res,
+            headers: SECURITY_HEADERS,
+            heartbeatMs: INTERVALLO_BATTITO_SSE_MS,
+            lastEventId: daSequenza,
+            setIntervalFn: impostaIntervalloFn,
+            clearIntervalFn: cancellaIntervalloFn,
           });
-          res.socket?.setNoDelay(true);
           /*
            * ⛔ Da qui in poi gli header sono GIÀ partiti: un problema deve
            * chiudere lo stream, mai tentare un secondo sendJson — Node
@@ -1771,8 +2077,8 @@ export function createHttpApp({
            * esterno lo ributterebbe addosso a una risposta già avviata.
            */
           try {
-            if (method === 'HEAD') { res.end(); return; }
-            res.write(':ok\n\n');
+            if (method === 'HEAD') { sseSession.start(); sseSession.close(); res.end(); return; }
+            sseSession.start();
             /*
              * ⛔⛔⛔ 27/8, trovato verificando il comando diretto (shell()),
              * STORICO — il meccanismo che questa nota descriveva (un
@@ -1798,8 +2104,6 @@ export function createHttpApp({
              * assente, prima connessione) ricade su 0 — replay completo,
              * comportamento identico a prima di questa ottimizzazione.
              */
-            const ultimoVistoDalClient = Number.parseInt(req.headers['last-event-id'], 10);
-            const daSequenza = Number.isFinite(ultimoVistoDalClient) ? ultimoVistoDalClient : 0;
             /*
              * ⛔⛔⛔ 28/8, trovato dal vivo (non da un test — vedi
              * workspace-watcher.mjs): questo stream chiudeva SEMPRE dopo un
@@ -1825,7 +2129,7 @@ export function createHttpApp({
              * session-registry.mjs sulle sessioni mai ripulite).
              */
             const disiscrivi = sessionRegistry.iscriviti(sessionId, (evento) => {
-              scriviEventoSse(res, evento);
+              sseSession.send(evento);
             }, daSequenza);
             /*
              * ⛔⛔⛔ 28/8 — SECONDA metà della stessa cura (setNoDelay sopra
@@ -1840,12 +2144,9 @@ export function createHttpApp({
              * tiene il canale attivo ogni pochi secondi, indipendentemente
              * da eventi applicativi veri.
              */
-            const battito = impostaIntervalloFn(() => {
-              if (res.writableEnded || res.destroyed) { cancellaIntervalloFn(battito); return; }
-              res.write(':battito\n\n');
-            }, INTERVALLO_BATTITO_SSE_MS);
-            res.on('close', () => { cancellaIntervalloFn(battito); disiscrivi(); });
+            res.once('close', disiscrivi);
           } catch {
+            sseSession.close();
             if (!res.writableEnded) res.end();
           }
           return;
