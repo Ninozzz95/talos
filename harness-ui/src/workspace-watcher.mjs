@@ -32,10 +32,17 @@
  * lunghissima — mai un'attesa indefinita.
  */
 import chokidarReale from 'chokidar';
+import { dirname, parse, resolve } from 'node:path';
 
 const DEBOUNCE_MS = 400;
 const TETTO_MASSIMO_MS = 2_000;
 const IGNORATI = [/(^|[/\\])\.git([/\\]|$)/, /(^|[/\\])node_modules([/\\]|$)/];
+
+function eRadiceVolume(cartella) {
+  const assoluta = resolve(cartella);
+  const radice = parse(assoluta).root;
+  return assoluta === radice || dirname(assoluta) === assoluta;
+}
 
 const guardati = new Map(); // cartella -> { watcher, sottoscrittori: Set<fn>, timerDebounce, primoEventoRaffica, percorsiInSospeso }
 
@@ -49,6 +56,14 @@ export function creaGestoreWorkspaceWatcher({ chokidar = chokidarReale } = {}) {
    * sessione che lo ha chiesto.
    */
   function guardaWorkspace(cartella, onCambiamento) {
+    /*
+     * Full access può indicare una radice come `C:\\`. Osservarla con chokidar
+     * significherebbe scandire potenzialmente l’intero volume, saturando eventi
+     * e handle prima che il modello riceva il primo messaggio. La radice resta
+     * leggibile a richiesta tramite workspace-tree, ma non ha refresh automatico:
+     * stato onesto e fail-closed, coerente con il lazy tree.
+     */
+    if (eRadiceVolume(cartella)) return () => {};
     let voce = guardati.get(cartella);
     if (!voce) {
       voce = { watcher: null, sottoscrittori: new Set(), timerDebounce: null, primoEventoRaffica: 0, percorsiInSospeso: new Set() };

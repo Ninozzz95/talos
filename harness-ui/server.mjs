@@ -14,12 +14,86 @@ import { createModelCatalog } from './src/model-catalog.mjs';
 import { creaRegistroTerminali, MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA } from './src/pty-terminal.mjs';
 import { creaGestoreTerminaleWs } from './src/terminal-ws.mjs';
 import { misuraCapacitaMacchina } from './src/machine-capacity.mjs';
+import { createLocalModelStore } from './src/local-model-store.mjs';
+import { createOpenAiCompatibleRuntime } from './src/openai-compatible-runtime.mjs';
+import { createHfHubClient } from './src/hf-hub-client.mjs';
+import { createHfDirectTransfer } from './src/hf-direct-transfer.mjs';
+import { fetchAllowedHfImage } from './src/hf-image-proxy.mjs';
+import { createLlamaServerSupervisor } from './src/llama-server-supervisor.mjs';
+import { createLlamaServerRuntime } from './src/local-runtime-llama-server.mjs';
+import { createProviderCredentialStore } from './src/provider-credential-store.mjs';
+import { createGeneratedImageStore } from './src/generated-image-store.mjs';
+import { createOwnerRuntimeAdapter } from './src/runtime-owner-adapter.mjs';
+import { RUNTIME_BOOTSTRAP_SCHEMA, RUNTIME_RESOURCE_SCHEMA } from './src/runtime-contract.mjs';
+import { closeRuntimeResources } from './src/http-lifecycle.mjs';
+import { join } from 'node:path';
 
 /** ⛔ Stessi tre nomi loopback validati in config.mjs (`LOOPBACK_HOSTS`, non esportato — costante minuscola e stabile, duplicarla qui è più semplice che aggiungere un export per tre stringhe). Un browser può presentarsi con uno qualunque dei tre alias anche se il server è bindato su un altro. */
 const ALIAS_LOOPBACK = ['127.0.0.1', '::1', 'localhost'];
 
 async function startServer() {
   const config = loadConfig(process.env, import.meta.url);
+  const ownerRuntime = createOwnerRuntimeAdapter({ modulePath: config.ownerRuntimeModule });
+  let taskCatalogProvider = null;
+  try {
+    taskCatalogProvider = await ownerRuntime.taskCatalogProvider();
+  } catch (error) {
+    console.warn(`[runtime-owner] catalogo task non disponibile: ${error.message}`);
+  }
+  let providerKeyring = null;
+  try {
+    const { Entry } = await import('@napi-rs/keyring');
+    providerKeyring = {
+      get: (service, account) => { try { return new Entry(service, account).getPassword() || null; } catch { return null; } },
+      set: (service, account, value) => new Entry(service, account).setPassword(value),
+      remove: (service, account) => { try { new Entry(service, account).deletePassword(); } catch { /* assenza già rimossa */ } },
+    };
+  } catch {
+    console.warn('[provider-store] portachiavi del sistema non disponibile; Doctor segnalerà il limite');
+  }
+  const providerStore = createProviderCredentialStore({
+    env: process.env,
+    keyring: providerKeyring,
+    runtimeFile: fileURLToPath(new URL('.provider-runtime.json', import.meta.url)),
+  });
+  providerStore.loadFromKeyring();
+  const localModelStore = createLocalModelStore({ rootDir: fileURLToPath(new URL('.local-models/', import.meta.url)) });
+  const compatibleRuntime = createOpenAiCompatibleRuntime();
+  const hfHubClient = createHfHubClient({ token: config.hfToken });
+  const localModelTransfer = createHfDirectTransfer({ rootDir: fileURLToPath(new URL('.local-models/', import.meta.url)), modelStore: localModelStore, hubClient: hfHubClient });
+  const generatedImageStore = createGeneratedImageStore({ rootDir: fileURLToPath(new URL('.generated-images/', import.meta.url)) });
+  const localRuntimes = {
+    ollama: {
+      detect: () => compatibleRuntime.detect('ollama'), listModels: () => compatibleRuntime.listModels('ollama'),
+      inspect: (modelId) => compatibleRuntime.inspect('ollama', modelId),
+      load: (modelId, options) => compatibleRuntime.load('ollama', modelId, options),
+      unload: (modelId) => compatibleRuntime.unload('ollama', modelId),
+      generateStream: (options) => compatibleRuntime.generateStream({ ...options, provider: 'ollama' }),
+      cancel: (requestId) => compatibleRuntime.cancel(requestId), health: () => compatibleRuntime.health('ollama'),
+    },
+    lmstudio: {
+      detect: () => compatibleRuntime.detect('lmstudio'), listModels: () => compatibleRuntime.listModels('lmstudio'),
+      inspect: (modelId) => compatibleRuntime.inspect('lmstudio', modelId),
+      load: (modelId, options) => compatibleRuntime.load('lmstudio', modelId, options),
+      unload: (modelId) => compatibleRuntime.unload('lmstudio', modelId),
+      generateStream: (options) => compatibleRuntime.generateStream({ ...options, provider: 'lmstudio' }),
+      cancel: (requestId) => compatibleRuntime.cancel(requestId), health: () => compatibleRuntime.health('lmstudio'),
+    },
+  };
+  if (config.llamaServerPath) {
+    const supervisor = createLlamaServerSupervisor({ binaryPath: config.llamaServerPath, modelStore: localModelStore });
+    const llama = createLlamaServerRuntime({ supervisor });
+    localRuntimes['llama.cpp'] = {
+      detect: async () => ({ state: 'observed', runtimeId: 'llama.cpp', runtimeState: supervisor.status().state, observedAt: supervisor.status().observedAt }),
+      listModels: async () => (await localModelStore.list()).filter((model) => model.state === 'ready').map((model) => ({ id: model.id, name: model.repo, source: 'llama.cpp', context: { state: 'unknown' } })),
+      inspect: (modelId) => localModelStore.inspect(modelId),
+      load: async (modelId) => { const manifest = await localModelStore.inspect(modelId); if (!manifest || manifest.state !== 'ready') { const error = new Error('Modello locale non pronto'); error.code = 'MODEL_NOT_FOUND'; throw error; } const file = manifest.files[0]; return llama.load({ modelId, modelPath: join(fileURLToPath(new URL('.local-models/', import.meta.url)), manifest.path, file.path) }); },
+      unload: () => llama.unload(),
+      generateStream: (options) => llama.generateStream(options),
+      cancel: (requestId) => llama.cancel(requestId),
+      health: () => llama.health(),
+    };
+  }
   /*
    * ⛔ Nessun fail() se config.chiaveApi manca (vedi config.mjs): il server
    * parte comunque — avviare una sessione fallisce per-richiesta con
@@ -28,7 +102,9 @@ async function startServer() {
   const sessionRegistry = createSessionRegistry({
     modello: config.modello,
     chiave: config.chiaveApi,
+    chiaveFn: () => providerStore.getKey('openrouter') ?? config.chiaveApi,
     cartelleProgetto: config.cartelleProgetto,
+    taskCatalogProvider,
     ricercaWeb: config.ricercaWeb,
     // ⭐⭐⭐ 29/8 — FASE D, firma Ed25519 delle ricevute. Stesso principio di
     // ricercaWeb: undefined quando non configurata (vedi config.mjs), le
@@ -37,6 +113,9 @@ async function startServer() {
     // ⭐⭐⭐ 29/8 — FASE H, generate_image. A differenza di ricercaWeb: SEMPRE
     // definita (config.mjs, parseImmagine — un default reale, mai undefined).
     immagine: config.immagine,
+    persistGeneratedImageFn: generatedImageStore.persistGeneratedImage,
+    removeGeneratedImageFn: generatedImageStore.removeGeneratedImage,
+    localRuntimes,
     /*
      * ⭐⭐⭐ FASE L (30/8) — l'UNICO punto che passa un valore vero (vedi
      * la doc in session-registry.mjs sul perché nessun default lì
@@ -84,12 +163,43 @@ async function startServer() {
   const app = createHttpApp({
     staticHandler: createStaticHandler(config.publicDir),
     sessionRegistry,
-    listaTaskDisponibili,
+    listaTaskDisponibili: () => listaTaskDisponibili(taskCatalogProvider),
     elencaCartelleProgetto: () => elencaCartelleProgetto(config.cartelleProgetto),
     automationStore,
-    diagnosiFn: () => diagnosi({ chiaveConfigurata: Boolean(config.chiaveApi) }),
+    diagnosiFn: () => diagnosi({ chiaveConfigurata: providerStore.hasKey('openrouter'), cartelleProgetto: config.cartelleProgetto, providerRows: providerStore.listPublic(), providerStoreAvailable: Boolean(providerKeyring) }),
     catalogoModelliFn: (opts) => modelCatalog.ottieni(opts),
     capacitaMacchinaFn: () => misuraCapacitaMacchina({ storagePath: config.publicDir }),
+    localRuntimes,
+    runtimeBootstrapFn: async () => {
+      const observedAt = new Date().toISOString();
+      const items = [];
+      for (const [runtimeId, runtime] of Object.entries(localRuntimes)) {
+        try {
+          const detection = typeof runtime?.detect === 'function' ? await runtime.detect(runtimeId) : { state: 'unavailable' };
+          items.push({ runtimeId, ...(detection && typeof detection === 'object' ? detection : { state: 'unavailable' }) });
+        } catch (error) {
+          items.push({ runtimeId, state: 'unavailable', reason: error?.code || 'runtime_unreachable' });
+        }
+      }
+      return {
+        schema: RUNTIME_BOOTSTRAP_SCHEMA,
+        authoritative: 'backend',
+        runtime: {
+          schema: RUNTIME_RESOURCE_SCHEMA,
+          status: 'available',
+          items,
+          consulted: true,
+          observedAt,
+          reason: null,
+        },
+        observedAt,
+      };
+    },
+    localModelStore,
+    localModelTransfer,
+    hfHubClient,
+    hfImageProxyFn: (url) => fetchAllowedHfImage(url),
+    providerStore,
   });
   const server = createServer(app);
 
@@ -118,10 +228,19 @@ async function startServer() {
   });
   automationScheduler.avvia();
 
-  const shutdown = () => {
-    automationScheduler.ferma();
+  let shutdownStarted = false;
+  const shutdown = async () => {
+    if (shutdownStarted) return;
+    shutdownStarted = true;
     clearInterval(reaperTerminali);
     for (const id of registroTerminali._terminali.keys()) registroTerminali.chiudiForzato(id);
+    await closeRuntimeResources('shutdown', {
+      resources: [
+        { stop: () => automationScheduler.ferma() },
+        ...Object.values(localRuntimes).map((runtime) => ({ close: () => typeof runtime?.unload === 'function' ? runtime.unload() : undefined })),
+      ],
+      logger: console,
+    });
     server.close(() => process.exit(0));
   };
   process.once('SIGINT', shutdown);

@@ -489,6 +489,77 @@ test('⛔ ferma() su un id inesistente torna false, non lancia', () => {
   assert.equal(registro.ferma('non-esiste'), false);
 });
 
+test('SESSION-LOCAL-START-01/STREAM-01: runtime locale avvia senza chiave e traduce lo stream in AG-UI', async () => {
+  const runtime = {
+    async *generateStream({ signal }) {
+      yield { type: 'text', value: 'ciao' };
+      yield { type: 'reasoning', value: 'motivo' };
+      yield { type: 'tool_call', id: 'tool-1', name: 'noop', arguments: '{}' };
+      if (signal?.aborted) return;
+      yield { type: 'done' };
+    },
+  };
+  const registro = createSessionRegistry({
+    preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', localRuntimes: { ollama: runtime },
+  });
+  const avvio = registro.avvia('task-vero', { provider: 'local', runtimeId: 'ollama', modelId: 'qwen3:8b' });
+  assert.equal(typeof avvio.sessionId, 'string');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const eventi = registro.esporta(avvio.sessionId).eventi;
+  assert.deepEqual(eventi.map((evento) => evento.type), [
+    'RunStarted', 'TextMessageStart', 'TextMessageContent', 'ReasoningMessageStart',
+    'ReasoningMessageContent', 'ToolCallStart', 'ToolCallArgs', 'TextMessageEnd',
+    'ReasoningMessageEnd', 'RunFinished',
+  ]);
+  assert.equal(registro.elenca()[0].provider, 'local');
+  assert.equal(registro.elenca()[0].runtimeId, 'ollama');
+  assert.equal(registro.elenca()[0].modelId, 'qwen3:8b');
+  assert.ok(eventi.every((evento) => evento.provider === 'local' && evento.runtimeId === 'ollama' && evento.modelId === 'qwen3:8b' && evento.backend === 'ollama' && Number.isFinite(Date.parse(evento.at))));
+});
+
+test('SESSION-LOCAL-CANCEL-01: ferma abortisce il runtime locale e chiude il giro', async () => {
+  let signal;
+  const runtime = {
+    async *generateStream(input) {
+      signal = input.signal;
+      yield { type: 'text', value: 'parziale' };
+      await new Promise((resolve) => input.signal.addEventListener('abort', resolve, { once: true }));
+    },
+  };
+  const registro = createSessionRegistry({ preparaEsecuzioneFn: preparaEsecuzioneFinta, localRuntimes: { llama: runtime } });
+  const { sessionId } = registro.avvia('task-vero', { provider: 'local', runtimeId: 'llama', modelId: 'model' });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(signal.aborted, false);
+  assert.equal(registro.ferma(sessionId), true);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const eventi = registro.esporta(sessionId).eventi;
+  assert.equal(eventi.at(-1).type, 'RunFinished');
+  assert.equal(eventi.at(-1).outcome, 'fermato');
+});
+
+test('SESSION-LOCAL-FALLBACK-01: fallback cloud solo con consenso esplicito', async () => {
+  let chiamateCloud = 0;
+  const cloud = async ({ onEvento }) => {
+    chiamateCloud += 1;
+    onEvento({ type: 'RunFinished', threadId: 't', runId: 'r' });
+    return { ok: true, esito: { messaggiFinali: [] } };
+  };
+  const runtime = { async *generateStream() { throw Object.assign(new Error('runtime down'), { code: 'RUNTIME_UNREACHABLE' }); } };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: cloud, preparaEsecuzioneFn: preparaEsecuzioneFinta, chiave: 'k', localRuntimes: { ollama: runtime },
+  });
+  const senza = registro.avvia('task-vero', { provider: 'local', runtimeId: 'ollama', modelId: 'm' });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(chiamateCloud, 0);
+  assert.equal(registro.esporta(senza.sessionId).eventi.at(-1).type, 'RunError');
+  assert.equal(registro.esporta(senza.sessionId).eventi.at(-1).code, 'RUNTIME_UNREACHABLE');
+
+  const con = registro.avvia('task-vero', { provider: 'local', runtimeId: 'ollama', modelId: 'm', fallbackConsent: true });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(chiamateCloud, 1);
+  assert.ok(registro.esporta(con.sessionId).eventi.some((evento) => evento.type === 'RuntimeFallback'));
+});
+
 test('esiste()', () => {
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
@@ -516,6 +587,25 @@ test('⛔⛔ chiave API assente: stesso trattamento, zero chiamate ad avviaSessi
 
   assert.equal(risultato.code, 'CONFIG_INVALID');
   assert.equal(finta.chiamate, 0);
+});
+
+test('PROVIDER-SESSION-01 getter dinamico usa la chiave OpenRouter salvata dopo l’avvio del server', () => {
+  const finta = sessioneControllabile();
+  let chiaveCorrente = null;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn,
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'm',
+    chiave: '',
+    chiaveFn: () => chiaveCorrente,
+  });
+  const prima = registro.avvia('task-vero');
+  assert.equal(prima.code, 'CONFIG_INVALID');
+  chiaveCorrente = 'salvata-nel-portachiavi';
+  const dopo = registro.avvia('task-vero');
+  assert.equal(finta.ultimoInput.chiave, 'salvata-nel-portachiavi');
+  assert.equal(JSON.stringify(registro.esporta(dopo.sessionId)).includes('salvata-nel-portachiavi'), false);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
 // ⭐⭐⭐ 27/8 — avviaLibero(): stesso schema di avvia(), su una cartella

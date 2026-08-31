@@ -2,10 +2,10 @@
  * workspace-tree.mjs — l'albero file REALE di una sessione (piano
  * `elegant-spinning-dongarra.md`, FASE 1, §1.3, riga "Contesto workspace").
  *
- * ⛔ Riusa `discoNode` dal kernel compilato — lo stesso oggetto che
- * l'attrezzo `elenca` usa DENTRO talosLavora, ri-esportato apposta da
- * talosHarness.mjs (vedi la sua doc): zero copie, stesso principio già
- * seguito da agent-service.mjs per talosLavora stesso.
+ * L'accesso al disco passa dall'adapter locale `workspace-disk.mjs`: nessun
+ * import da repository esterni e una sola policy di elenco, provata sul disco
+ * reale. Il contratto `{nome, cartella}` resta compatibile con il vecchio
+ * `discoNode` così i chiamanti e i test non cambiano.
  *
  * ⭐ UN livello alla volta, mai un dump ricorsivo intero: la UI espande le
  * cartelle a richiesta (`percorso` sale un pezzo per volta). Stessa lezione
@@ -23,8 +23,8 @@
 import { realpathSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 
-import { discoNode as discoNodeReale } from '../../../AVM-harness/mobile/scripts/harness-talos/talosHarness.mjs';
 import { isPathInside } from './path-policy.mjs';
+import { createWorkspaceDisk } from './workspace-disk.mjs';
 
 export class WorkspaceTreeError extends Error {
   constructor(message) {
@@ -39,10 +39,10 @@ export class WorkspaceTreeError extends Error {
  * @param {string} input.cartella — radice della sessione (già allowlisted a monte da task-catalog.preparaEsecuzione)
  * @param {string} [input.percorso] — sottocartella relativa da elencare; '' = radice
  * @param {object} [deps]
- * @param {typeof discoNodeReale} [deps.discoNodeFn] — SOLO per test
+ * @param {Function} [deps.discoNodeFn] — SOLO per compatibilità/test; il default è l'adapter locale
  * @returns {Promise<Array<{nome:string, cartella:boolean}>>} cartelle prima, poi file, ciascuno alfabetico
  */
-export async function leggiAlberoWorkspace({ cartella, percorso = '' }, { discoNodeFn = discoNodeReale } = {}) {
+export async function leggiAlberoWorkspace({ cartella, percorso = '' }, { discoNodeFn } = {}) {
   if (typeof percorso !== 'string' || percorso.includes('\0') || isAbsolute(percorso)) {
     throw new WorkspaceTreeError('Percorso non valido');
   }
@@ -54,7 +54,7 @@ export async function leggiAlberoWorkspace({ cartella, percorso = '' }, { discoN
     if (!isPathInside(radiceReale, candidatoReale)) {
       throw new WorkspaceTreeError('Percorso fuori dalla cartella della sessione');
     }
-    const disco = discoNodeFn({ radice: cartella });
+    const disco = (discoNodeFn ?? (({ radice }) => createWorkspaceDisk({ rootDir: radice })) )({ radice: cartella });
     voci = await disco.elenca(percorso);
   } catch (errore) {
     if (errore instanceof WorkspaceTreeError) throw errore;

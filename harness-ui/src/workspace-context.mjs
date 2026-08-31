@@ -12,7 +12,9 @@
  * albero di file SENZA metadati git nemmeno lì — quindi anche allora
  * `branch` resterà `null`. Dichiarato qui perché non sembri un bug futuro.
  */
-import { execFileSync } from 'node:child_process';
+import { createProcessPolicy } from './process-policy.mjs';
+
+const GIT_PROCESS_POLICY = createProcessPolicy({ allowedExecutables: ['git'] });
 
 function ramoGit(cartella, exec) {
   try {
@@ -31,15 +33,19 @@ function ramoGit(cartella, exec) {
 
 /**
  * @param {{cartella:string, progetto:string|null}} input
- * @param {{exec?: typeof execFileSync}} [dipendenze] — SOLO per test: inietta
+ * @param {{exec?: Function}} [dipendenze] — SOLO per test: inietta
  *   un `exec` finto per provare "non è un repository git" senza spawnare un
  *   processo vero, o per provare un fallimento arbitrario.
  * @returns {{progetto:string|null, cartella:string, branch:string|null}}
  */
-export function leggiContestoWorkspace({ cartella, progetto = null }, { exec = execFileSync } = {}) {
+export function leggiContestoWorkspace({ cartella, progetto = null }, { exec } = {}) {
+  const execFn = exec ?? ((comando, argomenti, opzioni = {}) => GIT_PROCESS_POLICY.execFileSync(comando, argomenti, {
+    ...opzioni,
+    cwd: opzioni.cwd ?? cartella,
+  }));
   return {
     progetto,
     cartella,
-    branch: ramoGit(cartella, exec),
+    branch: ramoGit(cartella, execFn),
   };
 }

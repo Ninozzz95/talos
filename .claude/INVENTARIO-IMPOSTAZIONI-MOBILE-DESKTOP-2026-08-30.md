@@ -13,6 +13,17 @@ linguaggio desktop e collegati a comportamenti reali. Finché il runtime LLM
 locale non è scelto, le parti che richiedono inferenza o accesso hardware devono
 restare dichiaratamente preparatorie/gated.
 
+> **Aggiornamento 31/08/2026 — prevale su questa fotografia iniziale.**
+> L’intera superficie Appearance A01–A35 è stata implementata nella Fase 8A.
+> Nel Model Lab sono ora reali capacità macchina, runtime llama.cpp, catalogo
+> Hugging Face, scheda repository/file GGUF, download diretto, coda,
+> pausa/ripresa/annullamento, hash, manifest e prova SSE locale. Le voci ancora
+> aperte sono importazione `.gguf`, azioni sui modelli installati, filtri e
+> paginazione HF avanzati, probe/fit esposti nella UI, provider configurabili,
+> rendering completo della model card (incluse immagini) e packaging desktop.
+> Per lo stato normativo usare il [piano consolidato desktop](../docs/superpowers/plans/2026-08-30-local-runtime-desktop.md)
+> e il [Ledger Fase 10](./LEDGER-FASE-10-HF-DOWNLOAD-RUNTIME-DESKTOP-2026-08-31.md).
+
 ## Fonti locali ispezionate
 
 - `mobile/src/components/talos/settings/TalosMobileSettingsAppearancePanel.vue`

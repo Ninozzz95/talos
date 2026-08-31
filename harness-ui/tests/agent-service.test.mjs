@@ -913,6 +913,42 @@ test('⛔⛔ AL CONTRARIO — generate_image: immagine assente (config non wirea
   assert.equal(chiamata, false, 'senza `immagine` generaImmagineFn non va MAI chiamata, mai un tentativo con un modello indovinato');
 });
 
+test('P0.4 generate_image usa il recupero durevole prima della copia nel workspace e passa hash/source reali', async () => {
+  let persistito;
+  const bytes = Buffer.from([137, 80, 78, 71]);
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, immagini: [{ argomenti: { prompt: 'un gatto rosso', shape: 'square' } }] },
+  });
+  const risultato = await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    immagine: IMMAGINE_CONFIG,
+    generaImmagineFn: async () => ({ mediaType: 'image/png', bytes, fileStem: 'gatto' }),
+    persistGeneratedImageFn: async (spec) => { persistito = spec; return { id: 'recovery-1' }; },
+    creaFileWorkspaceFn: async ({ nome }) => ({ percorso: nome }),
+  });
+  assert.equal(risultato.ok, true);
+  assert.equal(persistito.mimeType, 'image/png');
+  assert.deepEqual([...persistito.bytes], [...bytes]);
+  assert.equal(persistito.source, 'openrouter/bytedance-seed/seedream-4.5');
+  assert.match(persistito.promptHash, /^[a-f0-9]{64}$/u);
+});
+
+test('P0.4 AL CONTRARIO — se il recupero durevole fallisce non viene dichiarato un salvataggio riuscito e il workspace resta intatto', async () => {
+  let workspaceChiamato = false;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, immagini: [{ argomenti: { prompt: 'x' } }] },
+  });
+  const risultato = await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    immagine: IMMAGINE_CONFIG,
+    generaImmagineFn: async () => ({ mediaType: 'image/png', bytes: Buffer.from([1]), fileStem: 'x' }),
+    persistGeneratedImageFn: async () => { throw new Error('storage unavailable'); },
+    creaFileWorkspaceFn: async () => { workspaceChiamato = true; return { percorso: 'x.png' }; },
+  });
+  assert.equal(workspaceChiamato, false);
+  assert.equal(risultato.ok, true, 'il tool ha fallito in modo controllato, la sessione non deve andare in crash');
+});
+
 /*
  * ⭐⭐⭐ 29/8 — FASE K, R2 planner costoso + editor economico. Questo
  * file resta un adattatore puro: `modelloPlanner` viaggia SENZA logica

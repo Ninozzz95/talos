@@ -31,6 +31,24 @@ test('⭐ GET /api/v1/doctor torna DAVVERO quello che diagnosiFn produce, nella 
   assert.deepEqual(corpo.data, { chiaveApi: true, shell: 'wsl2', git: true, naviga: true });
 });
 
+test('⭐ GET /api/v1/doctor espone lo stato reale delle cartelle senza confonderlo con la copy della modale', async (t) => {
+  const { base } = await listen(t, {
+    diagnosiFn: async () => ({
+      chiaveApi: false,
+      shell: 'none',
+      git: true,
+      naviga: true,
+      cartelleProgetto: { disponibili: false, conteggio: 0, dettaglio: 'Nessuna cartella di progetto è stata configurata nell’elenco consentito.' },
+    }),
+  });
+  const risposta = await fetch(`${base}/api/v1/doctor`);
+  const corpo = await risposta.json();
+  assert.equal(risposta.status, 200);
+  assert.equal(corpo.data.cartelleProgetto.disponibili, false);
+  assert.equal(corpo.data.cartelleProgetto.conteggio, 0);
+  assert.match(corpo.data.cartelleProgetto.dettaglio, /Nessuna cartella/);
+});
+
 test('⛔ senza diagnosiFn configurato: 404, REPORT_UNAVAILABLE — mai un "Healthy" inventato', async (t) => {
   const { base } = await listen(t, { diagnosiFn: null });
   const risposta = await fetch(`${base}/api/v1/doctor`);

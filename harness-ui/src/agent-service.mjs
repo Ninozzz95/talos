@@ -15,17 +15,9 @@
  * è deliberata: talosLavora resta provabile senza sapere di HTTP/SSE, e
  * agui-events.mjs resta provabile senza sapere di talosLavora.
  */
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
-import {
-  chiamaConRitenta,
-  compattaConversazione as compattaConversazioneReale,
-  eseguiComandoSandboxato as eseguiComandoSandboxatoReale,
-  eseguiFlowForge,
-  FORGE_PREFISSO_NOME_TOOL,
-  talosLavora as talosLavoraReale,
-  validaManifestForge,
-} from '../../../AVM-harness/mobile/scripts/harness-talos/talosHarness.mjs';
+import { createOwnerRuntimeAdapter } from './runtime-owner-adapter.mjs';
 import { salvaArtefatto as salvaArtefattoReale } from './artifact-store.mjs';
 import { generateTalosDocument as generateTalosDocumentReale, TALOS_SOURCE_TEXT_FORMATS, verifyTalosDocument as verifyTalosDocumentReale } from './document-generator.mjs';
 import { generaImmagineOpenRouter as generaImmagineOpenRouterReale } from './image-generator.mjs';
@@ -102,6 +94,15 @@ import {
   toolCallArgs,
   toolCallStart,
 } from './agui-events.mjs';
+
+const OWNER_RUNTIME = createOwnerRuntimeAdapter();
+const chiamaConRitenta = (options) => OWNER_RUNTIME.chiamaConRitenta(options);
+const compattaConversazioneReale = (messaggi, chiamaModello) => OWNER_RUNTIME.compattaConversazione(messaggi, chiamaModello);
+const eseguiComandoSandboxatoReale = (...args) => OWNER_RUNTIME.eseguiComandoSandboxato(...args);
+const eseguiFlowForge = (...args) => OWNER_RUNTIME.eseguiFlowForge(...args);
+const FORGE_PREFISSO_NOME_TOOL = OWNER_RUNTIME.forgeToolPrefix;
+const talosLavoraReale = (input) => OWNER_RUNTIME.talosLavora(input);
+const validaManifestForge = (manifest) => OWNER_RUNTIME.validaManifestForge(manifest);
 
 /**
  * ⭐⭐⭐ 28/8 — un artefatto molto grande sarebbe un evento SSE molto grande
@@ -206,6 +207,8 @@ export async function avviaSessione({
    */
   immagine,
   generaImmagineFn = generaImmagineOpenRouterReale,
+  persistGeneratedImageFn,
+  removeGeneratedImageFn,
   /*
    * ⭐⭐⭐ 29/8 — FASE D, firma Ed25519 delle ricevute. Stesso principio di
    * `ricercaWeb` appena sopra: inoltrato SENZA logica propria a
@@ -852,9 +855,10 @@ export async function avviaSessione({
       return { ok: false, esito: 'image generation is not configured on this harness: no model was set.' };
     }
     let immagineGenerata;
+    const prompt = String(argomenti?.prompt ?? '');
     try {
       immagineGenerata = await generaImmagineFn({
-        prompt: String(argomenti?.prompt ?? ''), shape: argomenti?.shape, modello: immagine.modello, nativo: immagine.nativo, chiave,
+        prompt, shape: argomenti?.shape, modello: immagine.modello, nativo: immagine.nativo, chiave,
       });
     } catch (errore) {
       const dettaglio = errore instanceof Error ? errore.message : String(errore);
@@ -862,10 +866,28 @@ export async function avviaSessione({
     }
 
     const estensione = ESTENSIONE_PER_MEDIA_TYPE[immagineGenerata.mediaType] ?? 'png';
+    let persistito = null;
+    if (typeof persistGeneratedImageFn === 'function') {
+      try {
+        persistito = await persistGeneratedImageFn({
+          bytes: immagineGenerata.bytes,
+          mimeType: immagineGenerata.mediaType,
+          source: `openrouter/${immagine.modello}`,
+          promptHash: createHash('sha256').update(prompt).digest('hex'),
+        });
+      } catch (errore) {
+        const dettaglio = errore instanceof Error ? errore.message : String(errore);
+        return {
+          ok: false,
+          esito: `The image was generated but could not be saved safely: ${dettaglio}. Check local storage in Doctor before trying again.`,
+        };
+      }
+    }
     let salvato;
     try {
       salvato = await creaFileWorkspaceFn({ cartella, nome: `${immagineGenerata.fileStem}.${estensione}`, bytes: immagineGenerata.bytes });
     } catch (errore) {
+      if (persistito?.id && typeof removeGeneratedImageFn === 'function') await removeGeneratedImageFn(persistito.id).catch(() => {});
       const dettaglio = errore instanceof WorkspaceFileError ? errore.message : (errore instanceof Error ? errore.message : String(errore));
       return {
         ok: false,

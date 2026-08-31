@@ -16,6 +16,20 @@ test('⭐ diagnosi() riporta i 4 controlli, con lo shell.enforcement DAVVERO ric
   assert.deepEqual(risultato, { chiaveApi: true, shell: 'wsl2', git: true, naviga: true });
 });
 
+test('⭐ diagnosi() aggiunge il controllo cartelle solo quando riceve la configurazione reale', async () => {
+  const risultato = await diagnosi({
+    chiaveConfigurata: false,
+    cartelleProgetto: [],
+    eseguiComandoSandboxatoFn: async () => ({ enforcement: 'none' }),
+    spawnSyncFn: () => ({ status: 0 }),
+  });
+  assert.deepEqual(risultato.cartelleProgetto, {
+    disponibili: false,
+    conteggio: 0,
+    dettaglio: 'Nessuna cartella di progetto è stata configurata nell’elenco consentito.',
+  });
+});
+
 test('⛔ e AL CONTRARIO: chiave assente, shell "none", git non installato — nessuno di questi si finge presente', async () => {
   const risultato = await diagnosi({
     chiaveConfigurata: false,
@@ -43,4 +57,16 @@ test('git: spawnSync che torna un status diverso da 0 conta come NON disponibile
     spawnSyncFn: () => ({ status: 1 }),
   });
   assert.equal(risultato.git, false);
+});
+
+test('provider: Doctor mostra solo stato pubblico e disponibilità del portachiavi', async () => {
+  const risultato = await diagnosi({
+    chiaveConfigurata: true,
+    providerStoreAvailable: true,
+    providerRows: [{ id: 'openrouter', label: 'OpenRouter', keyConfigured: true }],
+    eseguiComandoSandboxatoFn: async () => ({ enforcement: 'wsl2' }),
+    spawnSyncFn: () => ({ status: 0 }),
+  });
+  assert.deepEqual(risultato.providers, { storeAvailable: true, items: [{ id: 'openrouter', label: 'OpenRouter', keyConfigured: true }] });
+  assert.doesNotMatch(JSON.stringify(risultato), /secret|sk-/i);
 });

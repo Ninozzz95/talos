@@ -29,7 +29,11 @@ import {
   compattaSessione as compattaSessioneReale,
   eseguiComandoDiretto as eseguiComandoDirettoReale,
 } from './agent-service.mjs';
-import { approvalRequested, approvalResolved, hookInvoked, queuedMessageDelivered, workspaceChanged } from './agui-events.mjs';
+import {
+  approvalRequested, approvalResolved, hookInvoked, queuedMessageDelivered, workspaceChanged,
+  runStarted, runFinished, runError, textMessageStart, textMessageContent, textMessageEnd,
+  reasoningMessageStart, reasoningMessageContent, reasoningMessageEnd, toolCallStart, toolCallArgs,
+} from './agui-events.mjs';
 import { CustomTaskError, preparaEsecuzioneLibera as preparaEsecuzioneLiberaReale } from './custom-task.mjs';
 import { TaskCatalogError, preparaEsecuzione as preparaEsecuzioneReale } from './task-catalog.mjs';
 import { leggiAlberoWorkspace as leggiAlberoWorkspaceReale, WorkspaceTreeError } from './workspace-tree.mjs';
@@ -91,9 +95,18 @@ import {
 
 export const EXPORT_SCHEMA = 'talos.harness-ui.session-export.v1';
 
+class LocalRuntimeSessionError extends Error {
+  constructor(message, code = 'LOCAL_RUNTIME_FAILED') {
+    super(message);
+    this.name = 'LocalRuntimeSessionError';
+    this.code = code;
+  }
+}
+
 export function createSessionRegistry({
   avviaSessioneFn = avviaSessioneReale,
-  preparaEsecuzioneFn = preparaEsecuzioneReale,
+  preparaEsecuzioneFn,
+  taskCatalogProvider = null,
   preparaEsecuzioneLiberaFn = preparaEsecuzioneLiberaReale,
   compattaSessioneFn = compattaSessioneReale,
   eseguiComandoDirettoFn = eseguiComandoDirettoReale,
@@ -290,6 +303,8 @@ export function createSessionRegistry({
   abilitaToolForgiatoFn = abilitaToolForgiatoReale,
   modello,
   chiave,
+  /** Getter opzionale: consente a Provider settings di aggiornare OpenRouter senza riavviare il server. */
+  chiaveFn = null,
   cartelleProgetto = [],
   clock = () => new Date(),
   /*
@@ -334,6 +349,8 @@ export function createSessionRegistry({
    * `undefined`), ma nessun test di questo file lo presume.
    */
   immagine,
+  persistGeneratedImageFn,
+  removeGeneratedImageFn,
   /*
    * ⭐⭐⭐ 29/8 — FASE D, firma Ed25519 delle ricevute. Stesso principio di
    * `ricercaWeb` appena sopra: configurazione di SERVER (§config.mjs,
@@ -342,7 +359,9 @@ export function createSessionRegistry({
    * tutta in `config.mjs`/`harness-receipt-keypair.mjs`.
    */
   firma,
+  localRuntimes = {},
 } = {}) {
+  const preparaTask = preparaEsecuzioneFn ?? ((taskId) => preparaEsecuzioneReale(taskId, taskCatalogProvider));
   const sessioni = new Map();
   // ⭐⭐⭐ FASE C (28/8) — istanziato qui: `avviaESegui` è una function declaration (issata), riferibile prima della sua definizione testuale più sotto.
   const subagentOrchestrator = creaSubagentOrchestrator({ sessioni, avviaESeguiFn: avviaESegui });
@@ -497,6 +516,66 @@ export function createSessionRegistry({
     };
   }
 
+  async function eseguiRuntimeLocale({ voce, task, messaggiIniziali, runtimeId, modelId, reasoning, sessionId }) {
+    const runtime = localRuntimes?.[runtimeId];
+    if (!runtime || typeof runtime.generateStream !== 'function') {
+      throw new LocalRuntimeSessionError(`runtime locale non disponibile: ${runtimeId}`, 'RUNTIME_NOT_AVAILABLE');
+    }
+    const runId = randomUUID();
+    const messages = Array.isArray(messaggiIniziali) && messaggiIniziali.length > 0
+      ? messaggiIniziali
+      : [{ role: 'user', content: typeof task?.consegna === 'string' ? task.consegna : String(task ?? '') }];
+    const emit = (event) => broadcast(voce, { ...event, provider: 'local', runtimeId, modelId, backend: runtimeId, at: clock().toISOString() });
+    emit(runStarted({ threadId: sessionId, runId, input: messages }));
+    let textId = null;
+    let reasoningId = null;
+    let text = '';
+    let done = false;
+    try {
+      for await (const event of runtime.generateStream({
+        provider: runtimeId, runId, turnId: runId, modelId, messages, reasoning,
+        signal: voce.controller.signal, requestId: sessionId,
+      })) {
+        if (event?.type === 'text' && typeof event.value === 'string' && event.value !== '') {
+          if (!textId) { textId = randomUUID(); emit(textMessageStart({ messageId: textId })); }
+          text += event.value;
+          emit(textMessageContent({ messageId: textId, delta: event.value }));
+        } else if (event?.type === 'reasoning' && typeof event.value === 'string' && event.value !== '') {
+          if (!reasoningId) { reasoningId = randomUUID(); emit(reasoningMessageStart({ messageId: reasoningId })); }
+          emit(reasoningMessageContent({ messageId: reasoningId, delta: event.value }));
+        } else if (event?.type === 'tool_call') {
+          const toolCallId = event.id || randomUUID();
+          emit(toolCallStart({ toolCallId, toolCallName: event.name || 'unknown' }));
+          const args = typeof event.arguments === 'string' ? event.arguments : JSON.stringify(event.arguments ?? {});
+          emit(toolCallArgs({ toolCallId, delta: args }));
+        } else if (event?.type === 'error') {
+          throw new LocalRuntimeSessionError(event.message || 'runtime locale fallito', event.code || 'LOCAL_RUNTIME_FAILED');
+        } else if (event?.type === 'done') {
+          done = true;
+        }
+      }
+    } catch (error) {
+      if (voce.controller.signal.aborted) {
+        if (textId) emit(textMessageEnd({ messageId: textId }));
+        if (reasoningId) emit(reasoningMessageEnd({ messageId: reasoningId }));
+        emit(runFinished({ threadId: sessionId, runId, outcome: 'fermato' }));
+        return { ok: false, esito: { comeFinita: 'fermato', messaggiFinali: text ? [{ role: 'assistant', content: text }] : null } };
+      }
+      throw error instanceof LocalRuntimeSessionError
+        ? error
+        : new LocalRuntimeSessionError(error?.message || 'runtime locale fallito', error?.code || 'LOCAL_RUNTIME_FAILED');
+    }
+    if (textId) emit(textMessageEnd({ messageId: textId }));
+    if (reasoningId) emit(reasoningMessageEnd({ messageId: reasoningId }));
+    if (voce.controller.signal.aborted) {
+      emit(runFinished({ threadId: sessionId, runId, outcome: 'fermato' }));
+      return { ok: false, esito: { comeFinita: 'fermato', messaggiFinali: text ? [{ role: 'assistant', content: text }] : null } };
+    }
+    if (!done) throw new LocalRuntimeSessionError('runtime locale non ha chiuso lo stream', 'LOCAL_RUNTIME_INCOMPLETE');
+    emit(runFinished({ threadId: sessionId, runId, outcome: 'concluso' }));
+    return { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [{ role: 'assistant', content: text }] } };
+  }
+
   /**
    * Il nucleo comune ad `avvia()`, `forka()` e `resume()`: chiama
    * avviaSessioneFn per un giro nuovo, cattura la conversazione finale per
@@ -513,6 +592,7 @@ export function createSessionRegistry({
     sessionId = randomUUID(), taskId, cartella, task, comandoProva, messaggiIniziali,
     forkDa = null, voceEsistente = null, modelloRichiesta = null, reasoningRichiesto = null, mobile = false,
     permessiRichiesti = null, permessiPerAttrezzoRichiesti = null,
+    provider = 'cloud', runtimeId = null, modelId = null, fallbackConsent = false,
     /*
      * ⭐⭐⭐ 29/8 — FASE K, R2 planner costoso + editor economico. Stessa
      * disciplina esatta di `modelloRichiesta` una riga sopra: un
@@ -532,8 +612,16 @@ export function createSessionRegistry({
      */
     padreId = null, profonditaDelega = 0, onConclusioneFn,
   }) {
-    if (typeof chiave !== 'string' || chiave.length === 0) {
+    const providerEffettivo = voceEsistente?.provider ?? provider;
+    const runtimeIdEffettivo = voceEsistente?.runtimeId ?? runtimeId;
+    const modelIdEffettivo = voceEsistente?.modelId ?? modelId;
+    const fallbackConsentEffettivo = voceEsistente?.fallbackConsent ?? fallbackConsent;
+    const chiaveEffettiva = typeof chiaveFn === 'function' ? chiaveFn() : chiave;
+    if (providerEffettivo !== 'local' && (typeof chiaveEffettiva !== 'string' || chiaveEffettiva.length === 0)) {
       return { erroreAvvio: 'Chiave API non configurata sul server (OPENROUTER_API_KEY)', code: 'CONFIG_INVALID' };
+    }
+    if (providerEffettivo === 'local' && (!runtimeIdEffettivo || !modelIdEffettivo || !localRuntimes?.[runtimeIdEffettivo])) {
+      return { erroreAvvio: 'Runtime locale o modello non disponibile', code: 'RUNTIME_NOT_AVAILABLE' };
     }
 
     const controller = new AbortController();
@@ -547,7 +635,7 @@ export function createSessionRegistry({
      * mai quello di chiusura silenziosamente: coerenza della sessione prima
      * di tutto.
      */
-    const modelloEffettivo = modelloRichiesta || voceEsistente?.modello || modello;
+    const modelloEffettivo = modelIdEffettivo || modelloRichiesta || voceEsistente?.modello || modello;
     /*
      * ⭐⭐⭐ 29/8 — FASE K, stessa disciplina esatta di `modelloEffettivo`
      * appena sopra — MA senza un `|| modello` finale: un planner
@@ -591,6 +679,7 @@ export function createSessionRegistry({
       modelloPlanner: modelloPlannerEffettivo,
       reasoning: reasoningEffettivo, mobile, permessi: permessiEffettivi,
       permessiPerAttrezzo: permessiPerAttrezzoEffettivi, approvazionePendente: null,
+      provider: providerEffettivo, runtimeId: runtimeIdEffettivo, modelId: modelIdEffettivo || modelloEffettivo, fallbackConsent: fallbackConsentEffettivo === true,
       // ⭐⭐⭐ FASE C (28/8) — sub-agenti: null/0 per ogni sessione avviata da un umano, valorizzati SOLO da subagentOrchestrator.delegaSottoTask. `esitoDelega` (per il foglio "Albero sessione") si popola quando la sessione conclude, vedi sotto.
       padreId, profonditaDelega, esitoDelega: null, evidenzaDelega: null,
       // ⭐⭐⭐ FASE D (28/8) — coda messaggi: FIFO vera, vuota per ogni sessione. Sopravvive a un resume (STESSA voce): un messaggio accodato mentre la sessione era "in corso" resta in coda anche se il turno finisce e ne parte un altro tramite resume().
@@ -625,6 +714,7 @@ export function createSessionRegistry({
             avviataAlle: voce.avviataAlle, modello: voce.modello, modelloPlanner: voce.modelloPlanner,
             reasoning: voce.reasoning, mobile: voce.mobile, permessi: voce.permessi,
             permessiPerAttrezzo: voce.permessiPerAttrezzo, padreId: voce.padreId, profonditaDelega: voce.profonditaDelega,
+            provider: voce.provider, runtimeId: voce.runtimeId, modelId: voce.modelId, fallbackConsent: voce.fallbackConsent,
           },
         });
       } catch (errore) {
@@ -737,12 +827,12 @@ export function createSessionRegistry({
     const onRicercaAnnulla = (argomenti) => researchOrchestrator.annulla({ id: argomenti?.id });
     const onRicercaElimina = (argomenti) => researchOrchestrator.elimina({ cartella, id: argomenti?.id });
 
-    avviaSessioneFn({
-      cartella, task, modello: modelloEffettivo, chiave, comandoProva, messaggiIniziali,
+    const cloudOptions = {
+      cartella, task, modello: modelloEffettivo, chiave: chiaveEffettiva, comandoProva, messaggiIniziali,
       reasoning: reasoningEffettivo ?? undefined,
       segnaleStop: controller.signal,
       mobile: voce.mobile,
-      strumentiEstesi, ricercaWeb, firma, immagine,
+      strumentiEstesi, ricercaWeb, firma, immagine, persistGeneratedImageFn, removeGeneratedImageFn,
       // ⭐⭐⭐ FASE K (29/8) — `?? undefined`: `voce.modelloPlanner` è `null` per una sessione senza planner (mai passato a talosLavoraFn come `null`, che il kernel tratterebbe diversamente da "assente" in un controllo `typeof`).
       modelloPlanner: voce.modelloPlanner ?? undefined,
       livelloAccesso, chiediApprovazioneFn, hookFn,
@@ -766,7 +856,17 @@ export function createSessionRegistry({
       // ⭐⭐⭐⭐ FASE N, nono e ultimo sistema (30/8) — Tool Forge, GLOBALE come cartellaMemoria: agent-service.mjs costruisce onForgeCrea/toolForge/eseguiToolForgeFn da qui.
       cartellaForge,
       onEvento: (evento) => broadcast(voce, evento),
-    }).then((risultato) => {
+    };
+    const esecuzione = providerEffettivo === 'local'
+      ? eseguiRuntimeLocale({ voce, task, messaggiIniziali, runtimeId: runtimeIdEffettivo, modelId: voce.modelId, reasoning: reasoningEffettivo, sessionId })
+        .catch((errore) => {
+          if (voce.controller.signal.aborted || fallbackConsentEffettivo !== true || typeof chiaveEffettiva !== 'string' || chiaveEffettiva.length === 0) throw errore;
+          voce.fallbackProvider = 'openrouter';
+          broadcast(voce, { type: 'RuntimeFallback', from: 'local', to: 'openrouter', reason: errore?.code || 'LOCAL_RUNTIME_FAILED', provider: 'local', runtimeId: runtimeIdEffettivo, modelId: voce.modelId, backend: runtimeIdEffettivo, at: clock().toISOString() });
+          return avviaSessioneFn(cloudOptions);
+        })
+      : avviaSessioneFn(cloudOptions);
+    esecuzione.then((risultato) => {
       /*
        * ⭐ Catturato per un resume/fork FUTURO. Se talosLavora non ha
        * prodotto un esito (non dovrebbe succedere, ma non è un'eccezione da
@@ -806,7 +906,7 @@ export function createSessionRegistry({
         broadcast(voce, {
           type: 'RunError',
           message: errore instanceof Error ? errore.message : String(errore),
-          code: 'internal-error',
+          code: errore?.code || 'internal-error',
         });
       }
     });
@@ -873,6 +973,8 @@ export function createSessionRegistry({
           avviataAlle: intestazione.avviataAlle, messaggiFinali: messaggiFinaliRecord?.messaggiFinali ?? null,
           modello: intestazione.modello, modelloPlanner: intestazione.modelloPlanner, reasoning: intestazione.reasoning,
           mobile: intestazione.mobile, permessi: intestazione.permessi, permessiPerAttrezzo: intestazione.permessiPerAttrezzo,
+          provider: intestazione.provider ?? 'cloud', runtimeId: intestazione.runtimeId ?? null,
+          modelId: intestazione.modelId ?? intestazione.modello ?? null, fallbackConsent: intestazione.fallbackConsent === true,
           approvazionePendente: null, padreId: intestazione.padreId, profonditaDelega: intestazione.profonditaDelega,
           esitoDelega: intestazione.padreId ? esitoDelegaDaEventi(eventi, { task: intestazione.task }) : null,
           evidenzaDelega: intestazione.padreId ? analizzaEvidenzaDelega(eventi) : null,
@@ -959,10 +1061,11 @@ export function createSessionRegistry({
     avvia(taskId, {
       modelloScelto = null, modelloPlannerScelto = null, reasoningScelto = null, mobile = false,
       permessiScelto = null, permessiPerAttrezzoScelto = null,
+      provider = 'cloud', runtimeId = null, modelId = null, fallbackConsent = false,
     } = {}) {
       let preparato;
       try {
-        preparato = preparaEsecuzioneFn(taskId);
+        preparato = preparaTask(taskId);
       } catch (errore) {
         if (errore instanceof TaskCatalogError) return { erroreAvvio: errore.message, code: errore.code };
         throw errore;
@@ -971,6 +1074,7 @@ export function createSessionRegistry({
         taskId, cartella: preparato.cartella, task: preparato.task, comandoProva: preparato.comandoProva,
         modelloRichiesta: modelloScelto, modelloPlannerRichiesta: modelloPlannerScelto, reasoningRichiesto: reasoningScelto, mobile,
         permessiRichiesti: permessiScelto, permessiPerAttrezzoRichiesti: permessiPerAttrezzoScelto,
+        provider, runtimeId, modelId, fallbackConsent,
       });
     },
 
@@ -1189,7 +1293,7 @@ export function createSessionRegistry({
           code: 'SESSION_NOT_READY',
         };
       }
-      const risultato = await compattaSessioneFn({ messaggiFinali: voce.messaggiFinali, modello, chiave });
+      const risultato = await compattaSessioneFn({ messaggiFinali: voce.messaggiFinali, modello, chiave: typeof chiaveFn === 'function' ? chiaveFn() : chiave });
       if (risultato.compattato) voce.messaggiFinali = risultato.messaggi;
       return { ok: true, compattato: risultato.compattato };
     },
@@ -1897,6 +2001,8 @@ export function createSessionRegistry({
           conclusa: voce.conclusa,
           forkDa: voce.forkDa,
           modello: voce.modello ?? null,
+          provider: voce.provider ?? 'cloud', runtimeId: voce.runtimeId ?? null, modelId: voce.modelId ?? voce.modello ?? null,
+          fallbackProvider: voce.fallbackProvider ?? null,
           // ⭐⭐⭐ FASE L (30/8) — true SOLO per una voce ricostruita dopo un riavvio il cui ultimo evento non era RunFinished/RunError: il processo che la eseguiva è sparito, mai un turno "ancora in corso" travestito da tale.
           interrotta: voce.interrotta ?? false,
           // ⭐⭐⭐ 30/8 — piano "Board — da campagne TALOS-BANCO a cruscotto

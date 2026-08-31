@@ -27,9 +27,9 @@
  * apposta"). Il trust usa lo stesso pattern REALE di `.automations/`.
  */
 import { createHash } from 'node:crypto';
-import { spawn } from 'node:child_process';
 import { promises as fsp } from 'node:fs';
 import { join } from 'node:path';
+import { createProcessPolicy, parseProcessCommand } from './process-policy.mjs';
 
 export class HookRegistryError extends Error {
   constructor(message, code = 'HOOK_INVALID') {
@@ -155,35 +155,33 @@ export async function fidaHook({ cartellaTrust, hookId, hash }, deps = {}) {
  * `rivelaInEsploraFile`/explorer.exe).
  */
 export async function eseguiHook({ hook, evento, cartella }, deps = {}) {
-  const spawnFn = deps.spawnFn ?? spawn;
-  const TIMEOUT_MS = 10_000; // un hook è un controllo rapido, non un giro di test — 10s, non 120s come eseguiProva
-  return new Promise((risolvi) => {
-    const p = spawnFn(hook.comando, {
+  try {
+    const [executable, ...args] = parseProcessCommand(hook.comando);
+    const policy = createProcessPolicy({
+      allowedExecutables: deps.allowedExecutables ?? ['node', 'node.exe', 'echo', 'echo.exe'],
+      capabilities: { hook: cartella },
+      envAllowlist: ['PATH', 'Path', 'PATHEXT', 'SystemRoot', 'WINDIR', 'COMSPEC', 'TALOS_HOOK_EVENT'],
+      spawnFn: deps.spawnFn,
+    });
+    const result = await policy.runApprovedProcess({
+      executable,
+      args,
       cwd: cartella,
-      shell: true,
-      windowsHide: true,
-      env: { ...process.env, TALOS_HOOK_EVENT: JSON.stringify(evento) },
+      capability: 'hook',
+      timeoutMs: 10_000,
+      envKeys: ['PATH', 'Path', 'PATHEXT', 'SystemRoot', 'WINDIR', 'COMSPEC', 'TALOS_HOOK_EVENT'],
+      env: { TALOS_HOOK_EVENT: JSON.stringify(evento) },
+      captureLimitBytes: 64 * 1024,
     });
-    let fuori = '';
-    let errori = '';
-    p.stdout?.on('data', (d) => { fuori += d; });
-    p.stderr?.on('data', (d) => { errori += d; });
-    const timer = setTimeout(() => p.kill(), TIMEOUT_MS);
-    p.on('close', (codice) => {
-      clearTimeout(timer);
-      const testoFuori = fuori.trim();
-      try {
-        const dati = JSON.parse(testoFuori);
-        if (typeof dati?.consentito === 'boolean') {
-          risolvi({ consentito: dati.consentito, motivo: typeof dati.motivo === 'string' ? dati.motivo : undefined });
-          return;
-        }
-      } catch { /* non è JSON: si ricade sul codice di uscita */ }
-      risolvi({ consentito: codice === 0, motivo: codice === 0 ? undefined : (errori.trim() || testoFuori || `hook exited ${codice}`) });
-    });
-    p.on('error', (e) => {
-      clearTimeout(timer);
-      risolvi({ consentito: false, motivo: String(e.message) });
-    });
-  });
+    const testoFuori = result.stdout.trim();
+    try {
+      const dati = JSON.parse(testoFuori);
+      if (typeof dati?.consentito === 'boolean') {
+        return { consentito: dati.consentito, motivo: typeof dati.motivo === 'string' ? dati.motivo : undefined };
+      }
+    } catch { /* non è JSON: si ricade sul codice di uscita */ }
+    return { consentito: result.code === 0, motivo: result.code === 0 ? undefined : (result.stderr.trim() || testoFuori || `hook exited ${result.code}`) };
+  } catch (error) {
+    return { consentito: false, motivo: String(error?.message || error) };
+  }
 }

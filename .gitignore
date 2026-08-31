@@ -29,6 +29,9 @@ harness-ui/.hooks-trust/
 # produce. Lo script (scripts/qa-visual-pipeline.mjs) resta versionato.
 harness-ui/.qa-runs/
 
+# Desktop UI build output; source and manifest generator live in harness-ui/public/ and scripts/.
+harness-ui/dist/
+
 # ⛔⛔⛔ 30/8, FASE L — trovato mentre aggiungevo .sessions-store/ qui
 # sotto: .mcp-trust/ (FASE E) e .plugin-trust/ (FASE G) non erano MAI
 # state aggiunte, un debito dormiente (mai popolate finora, quindi mai
@@ -58,6 +61,14 @@ harness-ui/.memory-store/
 # ⭐ 30/8 — FASE N, nono e ultimo sistema: i tool forgiati dal modello,
 # GLOBALI — stesso principio esatto di .notes-store/ eccetera sopra.
 harness-ui/.tool-forge-store/
+
+# Official llama.cpp runtime binary, downloaded and verified locally from the
+# pinned upstream release; never commit generated platform binaries.
+harness-ui/.local-runtime/
+
+# Local model weights and manifests downloaded by the desktop Model Lab;
+# generated machine-local data, never source-controlled.
+harness-ui/.local-models/
 
 core/vendor/
 validator/node_modules/
@@ -264,3 +275,11 @@ banco/
 # in talosHarness.mjs). Marcatore locale "ci sto lavorando io" — MAI
 # committato, un controllo in più a costo zero prima di scrivere qui.
 .claude/SESSIONE-ATTIVA.local.md
+
+# Preferenze runtime provider non segrete, locali al server (le chiavi stanno
+# esclusivamente nel portachiavi del sistema operativo).
+harness-ui/.provider-runtime.json
+harness-ui/.provider-runtime.json.tmp
+
+# Generated image recovery copies are local runtime data, never source.
+harness-ui/.generated-images/
