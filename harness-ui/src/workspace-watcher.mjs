@@ -36,7 +36,21 @@ import { dirname, parse, resolve } from 'node:path';
 
 const DEBOUNCE_MS = 400;
 const TETTO_MASSIMO_MS = 2_000;
-const IGNORATI = [/(^|[/\\])\.git([/\\]|$)/, /(^|[/\\])node_modules([/\\]|$)/];
+/*
+ * Stato interno del server: viene scritto mentre una sessione è in corso.
+ * Se il workspace scelto è la cartella Harness (o la radice del worktree),
+ * osservarlo produrrebbe un feedback continuo: l'evento aggiorna la sessione,
+ * la sessione scrive il proprio registro e il registro riattiva il watcher.
+ * Queste directory non fanno parte dell'albero del progetto dell'owner e
+ * restano leggibili tramite le loro API dedicate, quindi sono escluse dal
+ * refresh automatico allo stesso modo di `.git` e `node_modules`.
+ */
+const IGNORATI = [
+  /(^|[/\\])\.git([/\\]|$)/,
+  /(^|[/\\])node_modules([/\\]|$)/,
+  /(^|[/\\])\.(?:sessions-store|automations|generated-images|local-models|hooks-trust|mcp-trust|plugin-trust|notes-store|tasks-store|memory-store|tool-forge-store)([/\\]|$)/,
+  /(^|[/\\])\.provider-runtime\.json$/,
+];
 
 function eRadiceVolume(cartella) {
   const assoluta = resolve(cartella);

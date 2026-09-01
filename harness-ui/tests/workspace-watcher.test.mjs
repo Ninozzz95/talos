@@ -71,6 +71,27 @@ test('⛔⛔⛔ AL CONTRARIO — .git e node_modules non generano MAI un evento,
   }
 });
 
+test('⛔⛔⛔ AL CONTRARIO — lo stato interno di Harness non riattiva il watcher e non crea un ciclo di eventi', async () => {
+  const radice = radiceVera();
+  mkdirSync(join(radice, '.sessions-store'));
+  mkdirSync(join(radice, '.automations'));
+  mkdirSync(join(radice, '.generated-images'));
+  const { guardaWorkspace } = creaGestoreWorkspaceWatcher();
+  const ricevuti = [];
+  const stop = guardaWorkspace(radice, (percorsi) => ricevuti.push(percorsi));
+  try {
+    await new Promise((r) => setTimeout(r, 800));
+    writeFileSync(join(radice, '.sessions-store', 'session.jsonl'), '{}');
+    writeFileSync(join(radice, '.automations', 'job.json'), '{}');
+    writeFileSync(join(radice, '.generated-images', 'image.png'), 'x');
+    await new Promise((r) => setTimeout(r, 700));
+    assert.equal(ricevuti.length, 0, 'i file interni non devono diventare eventi workspace');
+  } finally {
+    stop();
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
 test('⭐⭐⭐ due sottoscrittori sulla stessa cartella condividono UN watcher, entrambi ricevono lo stesso evento', async () => {
   const radice = radiceVera();
   const { guardaWorkspace, quantiWatcherAttiviPerTest } = creaGestoreWorkspaceWatcher();
