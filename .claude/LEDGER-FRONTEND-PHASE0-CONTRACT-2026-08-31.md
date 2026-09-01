@@ -225,3 +225,24 @@ GREEN: pagina senza overflow orizzontale in tutti gli scenari, nessun errore Jav
 Osservazione da non nascondere: la superficie Terminale genera avvisi CSP `style-src 'self'` quando xterm.js applica stili inline. Gli avvisi sono stati classificati come attesi nel test perché non è autorizzato allargare la CSP; nessun errore JavaScript o pageerror inatteso è emerso. La risoluzione richiede una decisione separata (adattatore CSS/integrazione xterm o revisione CSP) e non è stata introdotta in questa tranche.
 
 Rollback: rimuovere solo `visual-matrix.spec.mjs` e gli artefatti ignorati; non modificare la policy CSP senza ricerca e approvazione dedicate.
+
+## Aggiornamento 2026-09-01 — gate runtime locale e watcher
+
+### RUNTIME-001 — configurazione runtime owner
+
+- **RED:** con il server su `4174` avviato senza `TALOS_OWNER_RUNTIME_MODULE`, una sessione agente reale falliva con `OWNER_RUNTIME_NOT_CONFIGURED`.
+- **Azione verificata:** il processo locale è stato riavviato una sola volta, su autorizzazione esplicita dell'owner, con `TALOS_OWNER_RUNTIME_MODULE` puntato al modulo runtime già presente negli asset debug mobile. Nessun file mobile è stato modificato.
+- **GREEN reale:** sessione `bb68b52b-51cc-42b8-9f04-9323f23bbb9b`, modello `qwen/qwen3.8-flash`, permesso Full access, risposta `OK`, evento `RunFinished` riuscito e nessun ciclo `WorkspaceChanged`.
+- **Limite ancora aperto:** il modulo scelto non espone `listaTaskDisponibili`/`preparaEsecuzione`; `/api/v1/tasks` resta quindi `TASK_CATALOG_UNAVAILABLE`. Il flusso custom Full access è provato, il catalogo preset non è chiuso.
+
+### WATCH-001 — ciclo di eventi dello stato interno
+
+- **RED:** la scrittura di `.sessions-store`, `.automations`, `.generated-images` e delle altre directory interne riattivava il watcher della radice e produceva eventi ripetuti.
+- **Fix:** `harness-ui/src/workspace-watcher.mjs` ora esclude esplicitamente tutte le directory/file di stato interno Harness.
+- **Test permanente:** `harness-ui/tests/workspace-watcher.test.mjs` verifica anche il percorso contrario (zero callback e nessun ciclo).
+- **GREEN:** suite watcher 8/8; suite backend interessata 452/452.
+
+### Debiti osservati durante il gate
+
+- Record persistito corrotto `b7b1b7d2-a6b3-4f81-bc3c-5ec57e0ead4a`: il server lo segnala e lo salta; non è stato cancellato né alterato.
+- Avviso CSP inline di xterm.js già noto e ancora aperto; la CSP non è stata indebolita.

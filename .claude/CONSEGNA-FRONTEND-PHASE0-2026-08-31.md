@@ -72,6 +72,26 @@ La differenza tra asset desktop e mobile è stata misurata: non sono copie byte-
 La prossima fase richiede l’installazione effettiva delle dipendenze frontend, il primo test browser RED e una baseline screenshot a 360×800, 768×1024, 1024×800, 1280×800 e 1440×900. Solo dopo questa evidenza sarà autorizzabile il primo cambiamento visuale.
 
 La correzione del runner è registrata nel ledger: `harness-ui/frontend/scripts/run-browser-tests.mjs` ora invoca `@playwright/test/cli.js`, coerentemente con la documentazione ufficiale Playwright. La matrice visuale completa resta subordinata alla sequenza `VIS-001` → `VIS-002` → `VIS-003` → `VIS-004` → `VIS-006` → audit finale.
+
+## Aggiornamento esecutivo 2026-09-01 — riavvio controllato e prova Qwen
+
+Il server desktop è stato riavviato su `http://127.0.0.1:4174` con configurazione esplicita del runtime owner. Il riavvio è stato eseguito dopo l'autorizzazione dell'owner; il processo è ora attivo e non deve essere interrotto durante l'uso.
+
+È stata aperta una sessione reale con il solo modello autorizzato `qwen/qwen3.8-flash`, permesso `Full access` e messaggio “Rispondi soltanto con OK”. La sessione `bb68b52b-51cc-42b8-9f04-9323f23bbb9b` ha prodotto `OK` e si è chiusa con `RunFinished` riuscito.
+
+Durante la prova è stato riprodotto un difetto di robustezza: il watcher osservava anche lo stato interno di Harness e generava un ciclo di eventi. Il difetto è stato corretto in `harness-ui/src/workspace-watcher.mjs` e fissato con un test contrario in `harness-ui/tests/workspace-watcher.test.mjs`.
+
+### Evidenza test
+
+- Suite watcher: **8/8 pass**.
+- Suite backend interessata (watcher, agent-service, session-registry, route sessioni): **452/452 pass**.
+- Prova reale Qwen: **pass**, risposta `OK`, nessun flusso ripetuto di eventi interni.
+
+### Stato trasparente
+
+- `/api/v1/tasks` resta non disponibile perché il modulo runtime attualmente configurato non espone il catalogo task richiesto. Questo non blocca il percorso custom Full access, ma impedisce di dichiarare chiusi i task preset.
+- Il server segnala un vecchio record sessione corrotto (`b7b1b7d2-a6b3-4f81-bc3c-5ec57e0ead4a`); è stato lasciato intatto.
+- L'avviso CSP inline di xterm.js resta un debito noto e non è stato aggirato indebolendo la CSP.
 ## Aggiornamento esecutivo — VIS-003/VIS-004/VIS-006
 
 - `VIS-003` è stato chiuso nella fondazione geometrica: il browser verifica i controlli principali e la superficie Impostazioni a 1440×900, mentre il token mobile resta invariato.
