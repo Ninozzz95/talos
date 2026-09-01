@@ -92,6 +92,10 @@ Durante la prova è stato riprodotto un difetto di robustezza: il watcher osserv
 - `/api/v1/tasks` resta non disponibile perché il modulo runtime attualmente configurato non espone il catalogo task richiesto. Questo non blocca il percorso custom Full access, ma impedisce di dichiarare chiusi i task preset.
 - Il server segnala un vecchio record sessione corrotto (`b7b1b7d2-a6b3-4f81-bc3c-5ec57e0ead4a`); è stato lasciato intatto.
 - L'avviso CSP inline di xterm.js resta un debito noto e non è stato aggirato indebolendo la CSP.
+
+### Regola aggiunta — chip modello
+
+È stata recepita e applicata la regola owner: la dicitura “Predefinito del server” non viene più mostrata nel chip del composer né nel riepilogo del Model Lab. Prima della scelta compare un invito neutro; dopo la scelta viene mostrato il nome reale del modello, mantenendo un'unica fonte di verità (`state.model`). Il test browser dedicato è verde.
 ## Aggiornamento esecutivo — VIS-003/VIS-004/VIS-006
 
 - `VIS-003` è stato chiuso nella fondazione geometrica: il browser verifica i controlli principali e la superficie Impostazioni a 1440×900, mentre il token mobile resta invariato.

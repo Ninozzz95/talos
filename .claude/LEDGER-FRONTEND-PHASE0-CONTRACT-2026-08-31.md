@@ -246,3 +246,10 @@ Rollback: rimuovere solo `visual-matrix.spec.mjs` e gli artefatti ignorati; non 
 
 - Record persistito corrotto `b7b1b7d2-a6b3-4f81-bc3c-5ec57e0ead4a`: il server lo segnala e lo salta; non è stato cancellato né alterato.
 - Avviso CSP inline di xterm.js già noto e ancora aperto; la CSP non è stata indebolita.
+
+### MODEL-CHIP-001 — nessuna etichetta “Predefinito del server”
+
+- Regola owner: il chip modello e il riepilogo del Model Lab non devono mostrare l'etichetta interna del server.
+- Stato vuoto: viene mostrato `Seleziona modello` (o `Nessun modello selezionato` nel riepilogo), senza fingere una scelta.
+- Dopo una scelta esplicita: il chip e il riepilogo condividono sempre il nome/ID reale del modello selezionato.
+- RED/GREEN: test browser `model chip never exposes the server-default label`; RED riprodotto prima del fix, GREEN verificato dopo il fix.
