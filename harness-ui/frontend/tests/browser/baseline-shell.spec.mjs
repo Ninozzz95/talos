@@ -22,6 +22,14 @@ test('cold start does not expose invented runtime telemetry', async ({ page }) =
   await expect(page.locator('[data-environment-label]').first()).toHaveText('Ambiente non osservato');
 });
 
+test('model chip never exposes the server-default label', async ({ page }) => {
+  await page.goto('/');
+  const chip = page.locator('[data-open-sheet="model"] span').first();
+  await expect(chip).toBeVisible();
+  await expect(chip).not.toHaveText('Predefinito del server');
+  await expect(page.locator('body')).not.toContainText('Predefinito del server');
+});
+
 test('desktop primary controls meet the 36 px hit-area gate', async ({ page }) => {
   await page.goto('/');
   const sizes = await page.locator('.topbar-right .icon-btn, #queueToggle').evaluateAll((elements) => elements.map((element) => {

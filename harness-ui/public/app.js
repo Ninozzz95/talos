@@ -65,8 +65,9 @@
     permessiPerAttrezzo: {},
     /*
      * ⭐ 27/8 — stringa vuota = nessuna scelta esplicita, non un modello
-     * demo inventato. `aggiornaPillolaModello()` mostra "Predefinito del
-     * server" finché l'owner non sceglie qualcosa dal foglio Modello.
+ * demo inventato. `aggiornaPillolaModello()` mostra un invito neutro finché
+ * l'owner non sceglie qualcosa dal foglio Modello; non espone mai il valore
+ * interno "Predefinito del server".
      */
     model: '',
     // ⭐ 28/8 — stesso principio di `model`: null = nessuna scelta esplicita, "reasoning" resta assente dal corpo della richiesta (comportamento di sempre). Un valore fra quelli di LIVELLI_RAGIONAMENTO appena l'owner tocca lo slider dell'effort picker.
@@ -2289,13 +2290,11 @@
    */
   /*
    * ⭐⭐⭐ 29/8 — FASE K, R2: `etichettaVuota` nuovo, opzionale — riusato
-   * per il picker del planner ("Nessuno", owner: "Configurabile,
-   * nessun default forzato" — un planner assente non ha un "default
-   * del server" come il modello principale, sarebbe fuorviante
-   * mostrare la stessa etichetta). Default invariato per ogni
-   * chiamante esistente (PARITÀ).
+   * per il picker del planner ("Nessuno", owner: configurabile). Il picker
+   * principale usa invece un invito neutro e non espone dettagli interni
+   * del server prima della scelta esplicita.
    */
-  function creaModelPicker({ valoreIniziale = '', apriSubito = false, alSelezionato, etichettaVuota = 'Predefinito del server' } = {}) {
+  function creaModelPicker({ valoreIniziale = '', apriSubito = false, alSelezionato, etichettaVuota = 'Seleziona modello' } = {}) {
     const wrap = document.createElement('div');
     wrap.className = 'model-picker';
 
@@ -2585,7 +2584,7 @@
 
     function aggiorna() {
       range.value = String(indice);
-      selected.textContent = toccato ? LIVELLI_RAGIONAMENTO[indice].etichetta : 'Predefinito del server';
+      selected.textContent = toccato ? LIVELLI_RAGIONAMENTO[indice].etichetta : 'Automatico';
       labelEls.forEach((el, i) => el.classList.toggle('effort-picker-tick-selected', i === indice));
     }
     aggiorna();
@@ -3189,7 +3188,10 @@
   /** Aggiorna la pillola del composer che apre il foglio Modello — selettore stabile (`data-open-sheet="model"`), non un confronto sul testo attuale come faceva il codice precedente. */
   function aggiornaPillolaModello() {
     const span = $('[data-open-sheet="model"] span');
-    if (span) span.textContent = state.model || 'Predefinito del server';
+    const label = state.model || 'Seleziona modello';
+    if (span) span.textContent = label;
+    const activeModel = $('#modelLabActiveModel');
+    if (activeModel) activeModel.textContent = label;
   }
 
   function aggiornaPillolaAmbiente() {
