@@ -259,14 +259,27 @@ segnalato dallo script non è un difetto).
    di un'altra sessione** (08:54, sezione "Causa vera del lag"): non le ho
    toccate né incluse nel mio commit.
 
+## 5-ter — Cosa resta in mano all'owner dopo i cinque commit di codice
+
+1. **Riavviare il server 4174**: `app.js`/`index.html`/`styles.css` sono
+   serviti dal disco e sono già i nuovi a ogni ricarica della pagina; il
+   **backend** (`WorkspaceChanged` effimero, `inAttesaApprovazione`,
+   `ultimoEsito`) gira solo dopo un riavvio. Finché gira il vecchio, il log
+   della sessione "ciao bello" (workspace = Desktop) continua a crescere.
+2. **Sfondo animato → Statico** nel tuo Chrome (Impostazioni → Aspetto), o
+   riaccendere l'accelerazione grafica: senza GPU è lo sfondo in moto che
+   costa (§1.2-bis).
+3. Il ledger `LEDGER-LAG-DESKTOP-2026-09-01.md` è committato come lo ha
+   scritto l'altra sessione (7B).
+
 ## 5-bis — Ordini dell'owner (02/09, dopo la prima consegna) e cosa è già fatto
 
 | # | ordine | stato |
 |---|---|---|
 | 1 | B — «Sfondo animato → Statico» lo imposta l'owner nel suo Chrome; l'app andrà in un installer e girerà anche in modo nativo | in mano all'owner |
 | 2 | B — mai vietare cartelle: fare come Claude Code/Hermes, ricerca competitor | **FATTO** (fase B, sotto) |
-| 3 | mockup Review/Browser/campanella: non togliere, **agganciare a dati veri**, ricerca completa | fase D, in corso |
-| 4 | tutti i 14 difetti visivi, coerenti e allo stato dell'arte dell'ultimo mese | fase E, dopo la D |
+| 3 | mockup Review/Browser/campanella: non togliere, **agganciare a dati veri**, ricerca completa | **FATTO** (fase D, sotto) |
+| 4 | tutti i 14 difetti visivi, coerenti e allo stato dell'arte dell'ultimo mese | **FATTO** (fase E, sotto) |
 | 5 | streaming: sistemare la rianalisi completa a ogni frame | **FATTO** (fase C, sotto) |
 | 6 | regola di misura (`chrome://gpu` + Chrome vero) | scritta in `MEMORIA-REGOLE.md`; da portare nello script diagnostico di repo |
 | 7 | B — committare la sezione del ledger scritta dall'altra sessione | **FATTO**, `d6817d6a` |
@@ -298,6 +311,65 @@ Test nuovo `LAG-LIVE-INCREMENTAL-40` (identità dei nodi stabili attraverso 40
 delta, fence con riga vuota interna non spezza il blocco, testo finale
 completo). Unit/contratto 57/57, browser **86 passati + 2 opt-in saltati**,
 snapshot legacy aggiornato solo per `assets.app`.
+
+### Fase D — Review, Browser, notifiche e suggerimenti `@` agganciati a dati veri (commit `22a2dd6c`)
+Ricerca 02/09: Claude Code Desktop (indicatore `+12 −1` → diff per file, commenti
+sul diff che tornano al modello, browser integrato con profilo pulito), Codex
+app (Review dei diff del workspace, ordine coerente col tree), Hermes Desktop
+(Annota nel browser → pin nel composer, mai inviati da soli; galleria
+artefatti), Cursor (Review panel, Keep/Reject) — fonti nel commit e nel
+dossier competitor. Scelte: la review è **a valle** delle scritture (come
+Claude Code/Codex), quindi niente "Approva tutto" finto ma **Copia tutti i
+diff**; **Commenta** porta nel composer il file (e la riga selezionata) come
+fa Claude Code; **Apri file** usa il visualizzatore dell'albero.
+- Review: stato vuoto onesto all'avvio (`Nessuna modifica in questa sessione`),
+  diff reale dallo `StateDelta` (già esistente), pulsanti disabilitati finché
+  non c'è un file, nessun nome di file inventato in nessun punto del bundle
+  (l'oggetto demo `reviewFiles` con `TalosComposer.vue` è stato rimosso).
+- Browser: cronologia reale delle pagine lette da `naviga` con indietro/avanti,
+  **Apri nel browser** (solo `http(s)`), **Annota** → composer, **Copia testo**;
+  niente telefono finto né URL `4173/chat` mai raggiunto.
+- Campanella: conteggio reale = approvazioni in attesa (sempre) + sessioni
+  finite/interrotte non ancora riviste (stato "visto" locale, seminato alla
+  prima esecuzione così notificano solo i cambiamenti futuri); popover che
+  porta alla sessione; refresh leggero ogni 15 s a scheda visibile;
+  `elenca()` espone `inAttesaApprovazione`.
+- Suggerimenti `@` dal workspace vero (file scritti + livelli dell'albero già
+  caricati), copy finta dei dettagli tool rimossa, pillola modello iniziale
+  onesta.
+- Test: `REVIEW-REAL-41`, `BROWSER-REAL-42`, `NOTIFICHE-REALI-43` (browser),
+  `ELENCA-APPROVAZIONE-03` (backend). Browser 89+2, backend 1262.
+
+### Fase E — i 14 difetti visivi (commit `34fcceab`, `b4587d3c` e rifiniture)
+Ricerca 02/09 (fonti nel commit): container query come default per componenti
+e media query solo per la struttura di pagina; list-detail side-by-side da
+641 px; glass ≤ 3 pannelli con blur 12-20 px; interfacce "calme". Applicato:
+
+| # | cura | dove si vede (visual5) |
+|---|---|---|
+| V1-V4 | fase D | `*-02-review-nosession`, `*-03-browser-nosession`, `*-01-fresh` (campanella) |
+| V5 | placeholder "Nessuna sessione ancora" nascosto se esistono sessioni | `tablet-portrait-dark-01-fresh` |
+| V6 | campo cerca: scorciatoia ⌘K nascosta sotto 300 px di sidebar; Fork su una riga | idem |
+| V7 | griglie Aspetto a gradi 3→2→1 sulla larghezza del pannello; valore dei cursori unito al simbolo | `tablet-portrait-*-10-settings-first` |
+| V8 | Laboratorio modelli a una colonna sotto 940 px di pannello | `tablet-portrait-dark-11-settings-models` |
+| V9 | chip ambiente solo icona quando la barra è stretta (container query sulla topbar) | `desktop-1440-dark-01-fresh` |
+| V10 | esiti tool a capo (`pre-wrap`) | copertura funzionale; nessuna sessione con esiti lunghi disponibile oggi |
+| V11 | Nuova sessione: altezza fino a 980 px, colonne scorrevoli, "Cartella scelta" sticky | `*-13-new-session` |
+| V12 | Board: `RunError` → "Errore"; una sessione finita non "aspetta il primo giro" (`elenca().ultimoEsito`) | `*-09-dashboard` |
+| V13 | telefono orizzontale (≤540 px di altezza) usa il layout compatto, in CSS e JS (`layoutCompatto()`); hero ridotto | `phone-landscape-dark-*` |
+| V14 | cinque sezioni Settings con dati letti adesso: provider dal server (chiave sì/no), preferenze attive, policy della sessione, dati locali con svuotamento reale, workspace attivo | `tablet-portrait-dark-11-settings-{chat,providers,tools,privacy,workspace}` |
+
+Test: `SETTINGS-FATTI-44` (provider dal server e caso contrario con server
+che non risponde). Browser **90 passati + 2 opt-in**, unit 57, backend 1262,
+`verify` verde. Screenshot finali in
+`harness-ui/frontend/artifacts/review-2026-09-02/visual5/` (140 png,
+`notes.json`: zero overflow orizzontale, zero errori JS, zero badge demo su
+140 scatti). Ispezionati per intero i tablet portrait scuro e chiaro, il
+desktop 1440 scuro e chiaro, tablet landscape, 1024 e i due telefoni; le due
+voci `crash` in `notes.json` sono un limite dello script (sui telefoni il
+pulsante Impostazioni sta nel cassetto laterale, non in vista), non un
+difetto del prodotto: le sezioni Settings dei telefoni sono verificate in
+`phone-landscape-dark-10/11-*` della corsa precedente (`visual4/`).
 
 ## 6 — File di questa consegna
 
