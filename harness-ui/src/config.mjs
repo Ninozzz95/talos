@@ -223,6 +223,32 @@ function parseLlamaServerPath(raw, moduleUrl) {
   return undefined;
 }
 
+/**
+ * ⭐⭐⭐ 02/9 — dove vivono le sessioni persistite. Fino a oggi era CABLATO
+ * in `server.mjs` (`.sessions-store/` accanto al file), senza modo di
+ * spostarlo: conseguenza misurata, la suite Playwright — che punta al
+ * 4174 dell'owner — girava sulle sue sessioni VERE, e lo stesso codice
+ * dava 21 rossi a un giro e 19 al successivo. Un conteggio così non è un
+ * cancello (vedi LEDGER-STREAMING-SCROLL-TERMINALE-2026-09-02.md).
+ *
+ * ⭐ Ricerca 02/9 — tutti e tre i concorrenti rendono la cartella di stato
+ * sovrascrivibile da ambiente, esattamente per non toccare i dati veri
+ * dell'utente durante i test: **Codex** `CODEX_HOME` ("isolates the eval
+ * from any personal Codex configuration on the machine"), **Hermes**
+ * `HERMES_HOME` (fixture caricate da una home isolata; ogni profilo ha
+ * session database proprio), **Claude Code** `CLAUDE_CONFIG_DIR`
+ * ("keeping your real config untouched"). Questa variabile è la nostra.
+ *
+ * ⛔ Nessun `fail()` se manca e nessuna creazione qui: assente = il
+ * comportamento di sempre, la cartella accanto a `server.mjs`. Un
+ * percorso relativo si risolve sulla cwd, come ogni altro percorso di
+ * questo file.
+ */
+function parseCartellaStore(raw, moduleUrl) {
+  if (typeof raw === 'string' && raw.trim() !== '') return resolve(raw.trim());
+  return fileURLToPath(new URL('.sessions-store/', moduleUrl));
+}
+
 function parseOwnerRuntimeModule(raw) {
   if (raw === undefined || raw === '') return undefined;
   if (typeof raw !== 'string' || raw.trim() === '' || !isAbsolute(raw.trim())) {
@@ -308,6 +334,7 @@ export function loadConfig(
      */
     chiaveApi: typeof env.OPENROUTER_API_KEY === 'string' ? env.OPENROUTER_API_KEY : undefined,
     hfToken: typeof env.HF_TOKEN === 'string' && env.HF_TOKEN.trim() ? env.HF_TOKEN.trim() : undefined,
+    cartellaStore: parseCartellaStore(env.TALOS_HARNESS_UI_SESSIONS_DIR, moduleUrl),
     llamaServerPath: parseLlamaServerPath(env.TALOS_LLAMA_SERVER_PATH, moduleUrl),
     ownerRuntimeModule: parseOwnerRuntimeModule(env.TALOS_OWNER_RUNTIME_MODULE),
     ricercaWeb: parseRicercaWeb(env),
