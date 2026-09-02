@@ -629,3 +629,13 @@ l'ASSENZA dello sweep), REDUCED-MOTION-02 e
 WAITING-LOADER-REDUCED-MOTION-01 (pretendevano `animation: none`).
 Aggiunti RESPONSE-ACTIVITY-DOTS-08b (la geometria dell'SVG) e
 RESPONSE-ACTIVITY-STAMPATO-05 (la ruota non si chiude al primo delta).
+
+### Rifinitura subito dopo (owner: «troppo grande, fallo più piccolo e coerente»)
+
+Il disegno non cambia (il viewBox resta `0 0 96 16`): cambia quanto lo si
+stampa. Da 96×16 a **48×8**, stesso rapporto 6:1, e agganciato a
+`--talos-ui-font-scale` così cresce insieme al testo se l'owner cambia la
+dimensione dalle impostazioni. Misurato accanto alla sua etichetta
+(`.run-activity-label`, 11px): altezza **0,52×** la riga di testo, centri
+allineati entro 1,5 px — prima il loader era **più alto** della riga che
+accompagna.
