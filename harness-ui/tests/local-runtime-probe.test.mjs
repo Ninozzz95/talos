@@ -3,11 +3,31 @@ import test from 'node:test';
 
 import { createLocalRuntimeProbe } from '../src/local-runtime-probe.mjs';
 
+/*
+ * ⛔⛔⛔ 02/9 (sera) — questa fixture era INFEDELE, ed è per questo che un
+ * difetto vero è sopravvissuto ai test: aveva
+ * `path: 'models/qwen-local.gguf'`, cioè trattava `path` come il FILE. Nel
+ * manifest vero (`local-model-store.mjs` lo valida, la rotta di import lo
+ * scrive) `path` è la CARTELLA del modello e il nome del file sta in
+ * `files[0].path` — `files` è obbligatorio e non vuoto.
+ * Con la fixture sbagliata, `readHeader(manifest.path)` sembrava corretto,
+ * e sul disco vero leggeva una DIRECTORY: `/fit` falliva sempre con
+ * MODEL_HEADER_UNREADABLE. È emerso solo dopo aver importato due GGUF
+ * veri, mai dai test.
+ * ⇒ Ora la fixture ha la forma REALE, e c'è un test sul percorso esatto
+ * che `readHeader` riceve.
+ */
 const manifest = Object.freeze({
   id: 'qwen-local',
-  path: 'models/qwen-local.gguf',
+  repo: 'local-upload',
+  revision: 'a'.repeat(64),
+  files: [{ path: 'qwen-local.gguf', bytes: 4_000, sha256: 'a'.repeat(64) }],
   bytes: 4_000,
+  sha256: 'a'.repeat(64),
+  license: 'unknown',
+  path: 'qwen-local',
   state: 'ready',
+  updatedAt: '2026-08-31T10:00:00.000Z',
 });
 
 const header = Object.freeze({
@@ -38,10 +58,15 @@ function makeProbe({
   generateStream,
   metrics = async () => '',
   clockMs = () => 0,
+  /** ⭐ 02/9 — per provare forme di manifest diverse da quella buona (es. senza file). */
+  manifestOverride = null,
+  /** ⭐ 02/9 — runtime locale SPENTO: `probe()` lancia, come fa davvero quando llama-server non gira. */
+  probeThrows = false,
 } = {}) {
   let generations = 0;
+  const manifestUsato = manifestOverride || manifest;
   const runtime = {
-    probe: async () => structuredClone(props),
+    probe: async () => { if (probeThrows) throw new Error('connessione rifiutata'); return structuredClone(props); },
     metrics,
     generateStream: generateStream ?? (async function* () {
       generations += 1;
@@ -51,7 +76,7 @@ function makeProbe({
   };
   const probe = createLocalRuntimeProbe({
     runtime,
-    modelStore: { inspect: async (id) => id === manifest.id ? structuredClone(manifest) : null },
+    modelStore: { inspect: async (id) => id === manifestUsato.id ? structuredClone(manifestUsato) : null },
     readHeader,
     measureMachine: async () => structuredClone(machine),
     now: () => new Date('2026-08-31T10:00:00.000Z'),
@@ -158,4 +183,48 @@ test('LOCAL-RUNTIME-PROBE-CONSENT-01 qualifica solo con consenso e misura TTFT e
   });
   assert.deepEqual(result.backend, { state: 'observed', value: 'CUDA' });
   assert.deepEqual(result.build, { state: 'observed', value: 'llama.cpp-b1234' });
+});
+
+test('LOCAL-RUNTIME-PROBE-PERCORSO-01 — readHeader riceve CARTELLA + FILE, non la sola cartella', async () => {
+  /*
+   * ⛔⛔⛔ Il test che mancava, e che avrebbe preso il difetto del 02/9:
+   * `inspectModel` passava `manifest.path` da solo — la CARTELLA — quindi
+   * sul disco vero il lettore riceveva una directory e falliva sempre.
+   * La vecchia fixture, che metteva il nome del file dentro `path`, lo
+   * rendeva invisibile. Qui si guarda l'argomento REALE.
+   */
+  const visti = [];
+  const { probe } = makeProbe({ readHeader: async (percorso) => { visti.push(percorso); return header; } });
+  await probe.fit('qwen-local', { profile: 'chat', contextTokens: 4_096 });
+  assert.equal(visti.length, 1);
+  assert.equal(visti[0], 'qwen-local/qwen-local.gguf');
+});
+
+test('LOCAL-RUNTIME-PROBE-PERCORSO-02 — AL CONTRARIO: un manifest senza file non passa per buono', async () => {
+  const { probe } = makeProbe({ manifestOverride: { ...manifest, files: [] } });
+  await assert.rejects(() => probe.fit('qwen-local'), (errore) => errore.code === 'MODEL_HEADER_UNREADABLE');
+});
+
+test('LOCAL-RUNTIME-PROBE-RUNTIME-SPENTO-01 — con il runtime giù /fit degrada a unknown, non fallisce', async () => {
+  /*
+   * ⛔⛔ 02/9 (sera): `readRuntimeProps()` lanciava e faceva abortire tutta
+   * `inspectModel`, quindi `/fit` rispondeva RUNTIME_PROBE_FAILED anche
+   * quando aveva già letto l'header e poteva dire cose vere su spazio,
+   * memoria e contesto addestrato. Un runtime spento non è un errore
+   * della lettura: è un fatto NON OSSERVATO. `fit` ha lo stato `unknown`
+   * esattamente per questo.
+   */
+  const { probe } = makeProbe({ probeThrows: true });
+  const esito = await probe.fit('qwen-local', { profile: 'chat', contextTokens: 4_096 });
+  assert.equal(esito.state, 'unknown');
+  assert.equal(esito.reason, 'context');
+  // ⭐ I fatti VERI restano, non si perdono con il runtime:
+  assert.equal(esito.storage.requiredBytes, manifest.bytes);
+  assert.equal(esito.context.availableTokens, header.trainedContext);
+});
+
+test('LOCAL-RUNTIME-PROBE-RUNTIME-SPENTO-02 — AL CONTRARIO: qualify NON degrada, si rifiuta', async () => {
+  // Un giro di generazione vero senza runtime non deve neanche essere tentato.
+  const { probe } = makeProbe({ probeThrows: true });
+  await assert.rejects(() => probe.qualify({ modelId: 'qwen-local', consent: true, profile: 'chat', contextTokens: 4_096 }), (errore) => errore.code === 'MODEL_NOT_COMPATIBLE');
 });

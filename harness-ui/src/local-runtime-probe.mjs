@@ -1,3 +1,14 @@
+/**
+ * Unisce cartella e file del manifest. ⛔ Non usa `node:path.join`: i
+ * percorsi del manifest sono relativi e sempre con `/` (validati così da
+ * `local-model-store.mjs`), e su Windows `join` li riscriverebbe con `\`,
+ * cambiando una stringa che il chiamante potrebbe confrontare. Il
+ * chiamante ci antepone la radice assoluta con il join vero.
+ */
+function joinPosix(cartella, file) {
+  return `${String(cartella).replace(/[/\\]+$/u, '')}/${String(file).replace(/^[/\\]+/u, '')}`;
+}
+
 export class LocalRuntimeProbeError extends Error {
   constructor(message, code = 'LOCAL_RUNTIME_PROBE_FAILED') {
     super(message);
@@ -70,13 +81,49 @@ export function createLocalRuntimeProbe({
 
     let header;
     try {
-      header = validateHeader(await readHeader(manifest.path));
+      /*
+       * ⛔⛔⛔ 02/9 (sera) — QUI si passava `manifest.path` da solo, e
+       * `manifest.path` è la CARTELLA del modello, non il file: il lettore
+       * riceveva una directory e falliva sempre con
+       * `MODEL_HEADER_UNREADABLE`. Il difetto è mio, del collegamento
+       * scritto stamattina, e non era emerso perché i test iniettano un
+       * `readHeader` finto (a cui il percorso non importa) e sulla macchina
+       * non c'era NESSUN modello registrato con cui provarlo dal vivo:
+       * è saltato fuori solo dopo aver reimportato due GGUF veri.
+       * ⇒ Il percorso si compone qui, dove si conosce la forma del
+       * manifest (cartella + primo file), esattamente come già faceva
+       * `load` in `server.mjs`; la radice assoluta la mette il chiamante,
+       * che è l'unico a conoscerla.
+       */
+      const file = Array.isArray(manifest.files) ? manifest.files[0] : null;
+      if (!file || typeof file.path !== 'string') throw new LocalRuntimeProbeError(`model ${modelId} has no file to inspect`, 'MODEL_HEADER_UNREADABLE');
+      header = validateHeader(await readHeader(joinPosix(manifest.path, file.path)));
     } catch (error) {
       if (error instanceof LocalRuntimeProbeError) throw error;
       throw new LocalRuntimeProbeError(`cannot read model header: ${error?.message || 'unknown error'}`, 'MODEL_HEADER_UNREADABLE');
     }
 
-    const props = await readRuntimeProps();
+    /*
+     * ⛔⛔ 02/9 (sera) — `readRuntimeProps()` LANCIA se il runtime locale
+     * non risponde, e faceva abortire tutta `inspectModel`: `/fit`
+     * rispondeva `RUNTIME_PROBE_FAILED` anche quando aveva già letto
+     * l'header e poteva dire cose vere su spazio, memoria e contesto
+     * addestrato. Incoerente col disegno di questo stesso file: tutto ciò
+     * che segue è GIÀ scritto per degradare (`unknown()`,
+     * `observedBoolean(caps?.…)`), e `fit()` ha lo stato `unknown` con
+     * motivo `context` esattamente per questo caso.
+     * ⇒ Un runtime spento non è un errore della lettura: è un fatto NON
+     * OSSERVATO, e si dichiara come tale invece di rifiutare la risposta.
+     * ⛔ `qualify()` resta severo: chiede `fit()` compatibile e con
+     * `unknown` si ferma da solo — un giro di generazione vero senza
+     * runtime non deve neanche essere tentato.
+     */
+    let props = {};
+    try {
+      props = await readRuntimeProps();
+    } catch (error) {
+      if (!(error instanceof LocalRuntimeProbeError) || error.code !== 'RUNTIME_PROBE_FAILED') throw error;
+    }
     const runtimeTokens = props.default_generation_settings?.n_ctx;
     const runtimeContext = positiveInteger(runtimeTokens) ? fact('observed', runtimeTokens) : unknown();
     const caps = props.chat_template_caps;
