@@ -402,6 +402,10 @@ kbd { font-family: var(--font-mono); font-size: calc(10px * var(--talos-ui-font-
    calcolo già in uso da `.composer-wrap` qui sotto, non un valore nuovo
    inventato: risultato pixel-per-pixel identico al vecchio `width: min(920px, …)`. */
 .conversation { padding: 24px max(20px, calc((100% - 920px)/2)) max(190px, var(--stream-follow-space, 0px)); }
+/* ⛔ 02/09, owner: "quando clicchi su una riga sessione la chat deve trovarsi già in fondo senza animazioni" — durante il ripristino il contenuto è invisibile ma impaginato (lo scroll lo porta in fondo frammento per frammento), nessuna animazione, e una riga sola dice cosa sta succedendo. Si scopre già in fondo (app.js, mantieniFondoDuranteRipristino). */
+.conversation.is-restoring { visibility: hidden; scroll-behavior: auto; }
+.conversation.is-restoring > * { animation: none !important; transition: none !important; }
+.conversation.is-restoring::before { content: 'Apro la cronologia…'; visibility: visible; position: sticky; top: 45%; display: block; text-align: center; color: var(--muted); font-size: calc(12px * var(--talos-ui-font-scale)); letter-spacing: .02em; }
 
 .mission-card, .activity-bundle, .approval-card, .widget, .settings-card, .automation-row, .inspector-card { border: 1px solid var(--line); background: linear-gradient(180deg, var(--surface-highlight-subtle), var(--surface-highlight-faint)); border-radius: var(--radius-card); }
 .mission-card { padding: 16px; margin-bottom: 24px; }
@@ -1160,7 +1164,16 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
   border-radius: var(--radius-card);
   background: var(--surface-highlight-subtle);
 }
-:root[data-talos-streaming-animation="typewriter"] .assistant-message.is-streaming .assistant-copy::after {
+/* ⛔⛔⛔ 02/09 — owner: "il cursore terminale non funziona bene" (Aspetto →
+ * Animazione risposta → Macchina da scrivere). Misurato dal vivo
+ * (qa-visual-pipeline.mjs, scenario qa-cursore-streaming): l'::after stava
+ * su .assistant-copy, cioè DOPO l'ultimo <p> — un blocco — quindi il
+ * cursore finiva su una riga vuota tutta sua, 42px sotto l'ultima riga di
+ * testo, mai in coda a ciò che si sta scrivendo. Il cursore va DENTRO
+ * l'ultimo blocco, inline dopo l'ultimo carattere: `> :last-child::after`.
+ * Se l'ultimo blocco è un elenco, il cursore sta nell'ultimo <li>. */
+:root[data-talos-streaming-animation="typewriter"] .assistant-message.is-streaming .assistant-copy > :last-child:not(ul):not(ol)::after,
+:root[data-talos-streaming-animation="typewriter"] .assistant-message.is-streaming .assistant-copy > :is(ul, ol):last-child > li:last-child::after {
   content: "";
   display: inline-block;
   width: 2px;
@@ -1177,9 +1190,17 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
  * zero, non finiva mai di dissolversi. `.stream-settle` marca solo il
  * testo appena stabilizzato (una volta sola, mai più toccato dopo) — vedi
  * il commento nella stessa funzione lato JS. */
-:root[data-talos-streaming-animation="fade"] .assistant-message.is-streaming .assistant-copy > .stream-settle {
-  animation: talos-stream-fade var(--motion-message) var(--motion-ease) both;
+/* ⛔⛔⛔ 02/09 — owner: "per dissolvenza deve essere una dissolvenza super
+ * smooth delle PAROLE". Non più il blocco appena stabilizzato (.stream-settle,
+ * che ri-dissolveva testo già visibile): ogni parola rivelata dal ritmo di
+ * streaming (app.js, avvolgiParoleRecenti) è uno span con animation-delay
+ * negativo = tempo già trascorso — ricreato a ogni frame, riparte da dove
+ * era, mai da zero. Opacità + un filo di sfocatura che si dissolve. */
+:root[data-talos-streaming-animation="fade"] .assistant-message .stream-word {
+  display: inline;
+  animation: talos-stream-word 420ms cubic-bezier(.2, .6, .2, 1) both;
 }
+@keyframes talos-stream-word { from { opacity: 0; filter: blur(3px); } to { opacity: 1; filter: blur(0); } }
 :root[data-talos-window-presentation="fullscreen"] .sheet-dialog {
   width: calc(100vw - 32px);
   max-width: none;

@@ -1289,13 +1289,13 @@ test('⛔ AL CONTRARIO — cartellePiuUsate() non espone MAI la mappa sessione�
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }); // pulizia
 });
 
-test('⭐⭐⭐ rinomina() persiste il nome — elenca() ed esporta() lo mostrano dopo, mai sovrascritto', () => {
+test('⭐⭐⭐ rinomina() persiste il nome — elenca() ed esporta() lo mostrano dopo, mai sovrascritto', async () => {
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
   const { sessionId } = registro.avvia('task-vero');
 
   assert.equal(registro.elenca()[0].nome, null, 'prima di rinominare, nessun nome');
-  const risultato = registro.rinomina(sessionId, '  Il mio nome scelto  ');
+  const risultato = await registro.rinomina(sessionId, '  Il mio nome scelto  ');
   assert.deepEqual(risultato, { ok: true });
 
   assert.equal(registro.elenca()[0].nome, 'Il mio nome scelto', 'rifilato, non con gli spazi intorno');
@@ -1304,18 +1304,18 @@ test('⭐⭐⭐ rinomina() persiste il nome — elenca() ed esporta() lo mostran
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }); // pulizia
 });
 
-test('⛔ rinomina() su un id inesistente: NOT_FOUND', () => {
+test('⛔ rinomina() su un id inesistente: NOT_FOUND', async () => {
   const registro = createSessionRegistry({ preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
-  assert.equal(registro.rinomina('mai-esistito', 'x').code, 'NOT_FOUND');
+  assert.equal((await registro.rinomina('mai-esistito', 'x')).code, 'NOT_FOUND');
 });
 
-test('⛔ rinomina() rifiuta nomi vuoti o troppo lunghi — QUERY_INVALID, mai un nome vuoto salvato', () => {
+test('⛔ rinomina() rifiuta nomi vuoti o troppo lunghi — QUERY_INVALID, mai un nome vuoto salvato', async () => {
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
   const { sessionId } = registro.avvia('task-vero');
 
   for (const nomeCattivo of ['', '   ', 'x'.repeat(81), null, undefined, 42]) {
-    const risultato = registro.rinomina(sessionId, nomeCattivo);
+    const risultato = await registro.rinomina(sessionId, nomeCattivo);
     assert.equal(risultato.code, 'QUERY_INVALID', JSON.stringify(nomeCattivo));
   }
   assert.equal(registro.elenca()[0].nome, null, 'nessuno dei tentativi cattivi deve essere rimasto salvato');
@@ -2890,6 +2890,10 @@ test('SESSION-SETTINGS-DURABILITY-01 — impostazioni aggiornate guidano elenco,
     assert.equal(finta.ultimoInput.livelloAccesso, 'lettura');
     assert.deepEqual(finta.ultimoInput.permessiPerAttrezzo, { scrivi: 'nega', shell: 'chiedi' });
 
+    // ⛔ 02/09 — il nome dato dal primo messaggio (o scelto dall'owner) deve sopravvivere al riavvio: dal vivo TUTTA la sidebar tornava "libero:full-access" dopo un restart di 4174.
+    assert.deepEqual(await primo.rinomina(sessionId, 'Rispondi solo con la parola: pong'), { ok: true });
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((r) => r.tipo === 'nome-sessione'));
+
     const secondo = createSessionRegistry({ modello: 'openai/gpt-default', chiave: 'k', cartellaStore });
     await secondo.ripristina();
     const ripristinata = secondo.elenca()[0];
@@ -2897,6 +2901,7 @@ test('SESSION-SETTINGS-DURABILITY-01 — impostazioni aggiornate guidano elenco,
     assert.deepEqual(ripristinata.reasoning, { effort: 'xhigh' });
     assert.equal(ripristinata.permessi, 'Read only');
     assert.deepEqual(ripristinata.permessiPerAttrezzo, { scrivi: 'nega', shell: 'chiedi' });
+    assert.equal(ripristinata.nome, 'Rispondi solo con la parola: pong', 'il nome sopravvive al riavvio');
   } finally {
     rmSync(cartellaStore, { recursive: true, force: true });
   }

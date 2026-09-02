@@ -1254,7 +1254,7 @@ export function createHttpApp({
         }
         const corpo = await leggiCorpoJson(req);
         const nome = requireNomeBody(corpo);
-        const esito = sessionRegistry.rinomina(sessionId, nome);
+        const esito = await sessionRegistry.rinomina(sessionId, nome);
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
           errore.code = esito.code;

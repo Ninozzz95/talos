@@ -1038,6 +1038,8 @@ export function createSessionRegistry({
     const cloudOptions = {
       cartella, task, modello: modelloEffettivo, chiave: chiaveEffettiva, comandoProva, messaggiIniziali,
       reasoning: reasoningEffettivo ?? undefined,
+      // ⭐ 02/09 — l'etichetta del permesso, dichiarata in RunStarted.contesto (vedi agent-service.mjs): è `voce.permessi` letto ADESSO, cioè anche un cambio arrivato da un altro client via POST /settings fra un giro e l'altro.
+      permessi: voce.permessi ?? null,
       segnaleStop: controller.signal,
       mobile: voce.mobile,
       strumentiEstesi, ricercaWeb, firma, immagine, persistGeneratedImageFn, removeGeneratedImageFn,
@@ -1248,6 +1250,8 @@ export function createSessionRegistry({
         const finalePiuRecente = piuRecente(finali);
         const checkpointPiuRecente = piuRecente(checkpoint);
         const impostazioniRecord = record.filter((r) => r.tipo === 'impostazioni-sessione').at(-1) ?? null;
+        // ⭐ 02/09 — il nome scelto (o dato dal primo messaggio) sopravvive al riavvio: l'ULTIMA riga nome-sessione vince, come per le impostazioni.
+        const nomeRecord = record.filter((r) => r.tipo === 'nome-sessione' && typeof r.nome === 'string' && r.nome.trim().length > 0).at(-1) ?? null;
         const impostazioni = impostazioniRecord ? { ...intestazione, ...impostazioniRecord } : intestazione;
         const ultimoEventoEsecuzione = [...eventi].reverse().find((evento) => (
           evento?.type === 'RunStarted' || evento?.type === 'RunFinished' || evento?.type === 'RunError'
@@ -1291,6 +1295,8 @@ export function createSessionRegistry({
           avviataAlle: intestazione.avviataAlle, messaggiFinali: messaggiFinaliRecord?.messaggiFinali ?? null,
           messaggiPendente: Array.isArray(checkpointRecord?.messaggi) ? checkpointRecord.messaggi : null,
           modello: impostazioni.modello, modelloPlanner: impostazioni.modelloPlanner, reasoning: impostazioni.reasoning,
+          // Sessioni nate PRIMA della riga nome-sessione (o mai rinominate): per un compito libero il client ha sempre usato il primo messaggio come titolo (titoloDalPrimoMessaggio, 80 caratteri) — stesso valore, ricavato dall'intestazione invece che perso. Un task del corpus resta col suo taskId, come prima.
+          nome: nomeRecord?.nome ?? (typeof intestazione.taskId === 'string' && intestazione.taskId.startsWith('libero:') && typeof intestazione.task?.consegnaCorta === 'string' && intestazione.task.consegnaCorta.trim() ? intestazione.task.consegnaCorta.replace(/\s+/g, ' ').trim().slice(0, 80) : null),
           mobile: intestazione.mobile, permessi: impostazioni.permessi, permessiPerAttrezzo: impostazioni.permessiPerAttrezzo,
           provider: intestazione.provider ?? 'cloud', runtimeId: intestazione.runtimeId ?? null,
           modelId: impostazioni.modelId ?? impostazioni.modello ?? null, fallbackConsent: intestazione.fallbackConsent === true,
@@ -2420,17 +2426,26 @@ export function createSessionRegistry({
      * valore che qualunque ricostruzione della sidebar (nuova sessione,
      * resume, un giro di aggiornaElencoSessioniReali) sovrascriveva in
      * silenzio con `taskId`. Qui vive sulla VOCE del registro: sopravvive a
-     * ogni ricostruzione, finché il server resta acceso.
+     * ogni ricostruzione.
      *
-     * @returns {{ok:true}|{erroreAvvio:string, code:string}}
+     * ⛔⛔ 02/09 — "finché il server resta acceso" NON bastava più: il
+     * client rinomina OGNI sessione col primo messaggio
+     * (titoloDalPrimoMessaggio, owner 28/8), quindi dopo un riavvio del
+     * server TUTTA la sidebar tornava "libero:full-access" — visto dal
+     * vivo il 02/09 riavviando 4174 per TALOS_OWNER_RUNTIME_MODULE. Ora il
+     * nome è una riga `nome-sessione` nel registro su disco (stessa
+     * disciplina di `impostazioni-sessione`) e ripristina() la rilegge.
+     *
+     * @returns {Promise<{ok:true}|{erroreAvvio:string, code:string}>}
      */
-    rinomina(sessionId, nome) {
+    async rinomina(sessionId, nome) {
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       const pulito = typeof nome === 'string' ? nome.trim() : '';
       if (pulito.length === 0 || pulito.length > 80) {
         return { erroreAvvio: 'Nome non valido: serve 1-80 caratteri', code: 'QUERY_INVALID' };
       }
+      if (cartellaStore) await registraRigaFn({ cartellaStore, sessionId, record: { tipo: 'nome-sessione', nome: pulito } });
       voce.nome = pulito;
       return { ok: true };
     },

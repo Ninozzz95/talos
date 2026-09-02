@@ -70,7 +70,9 @@ class ClientCdp {
       const testo = (msg.params.args || []).map((a) => a.value ?? a.description ?? '').join(' ');
       this.logConsole.push({ tipo: msg.params.type, testo, quando: new Date().toISOString() });
     } else if (msg.method === 'Runtime.exceptionThrown') {
-      this.eccezioni.push({ testo: msg.params.exceptionDetails?.text, url: msg.params.exceptionDetails?.url, quando: new Date().toISOString() });
+      const d = msg.params.exceptionDetails || {};
+      // ⛔ 02/09 — `text` da solo dice 'Uncaught' e basta: il messaggio vero sta in exception.description, e riga/colonna servono per aprire il punto esatto.
+      this.eccezioni.push({ testo: d.exception?.description || d.text, url: d.url || d.stackTrace?.callFrames?.[0]?.url, riga: d.lineNumber, colonna: d.columnNumber, quando: new Date().toISOString() });
     } else if (msg.method === 'Network.responseReceived') {
       const { response } = msg.params;
       if (response.status >= 400) {
@@ -111,6 +113,10 @@ function lanciaChrome({ porta, userDataDir, url }) {
     `--user-data-dir=${userDataDir}`,
     '--no-first-run',
     '--no-default-browser-check',
+    // ⛔ 02/09 — misurato: la finestra QA (windowsHide) è 'hidden' per il browser e Chrome strozza requestAnimationFrame a ~1/s: i 'render' dello streaming sembravano radi (buchi di 2s) mentre i 'delta' arrivavano ogni ~50ms. Senza questi flag ogni misura di fluidità qui è falsa.
+    '--disable-backgrounding-occluded-windows',
+    '--disable-renderer-backgrounding',
+    '--disable-background-timer-throttling',
     url,
   ], { stdio: 'ignore', windowsHide: true });
 }
@@ -4521,6 +4527,428 @@ const SCENARI = {
       p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
     }
   },
+  /*
+   * ⛔⛔⛔ 02/09 — riproduzione dal vivo del bug §5 del ledger
+   * LEDGER-STREAMING-SCROLL-TERMINALE-2026-09-02.md: "il picker mostra
+   * un modello e ne invia un altro". Percorso ESATTO in cui è stato
+   * visto: "Nuova" sceglie cartella+modello (sessione PENDENTE, nessuna
+   * chiamata al server), poi la pillola del composer cambia il modello,
+   * poi il primo messaggio avvia la sessione. Il verdetto non è la
+   * pillola (che può mentire): è il corpo VERO del POST
+   * /api/v1/sessions/custom intercettato via Network.requestWillBeSent,
+   * confrontato con quello che la pillola mostra. Costa UN giro breve
+   * col modello scelto dalla pillola.
+   *
+   * Richiede TALOS_QA_CARTELLA (cartella scratch assoluta, scrivibile):
+   * la sessione parte con Full access su quella cartella, mai sul repo.
+   */
+  async 'qa-modello-pillola-dopo-nuova'(p) {
+    const cartella = process.env.TALOS_QA_CARTELLA;
+    if (!cartella) throw new Error('TALOS_QA_CARTELLA mancante: percorso assoluto di una cartella scratch scrivibile');
+    const MODELLO_MODALE = process.env.TALOS_QA_MODELLO_MODALE || 'z-ai/glm-4.7-flash';
+    const MODELLO_PILLOLA = process.env.TALOS_QA_MODELLO_PILLOLA || 'google/gemini-3.7-flash';
+    const postCatturati = [];
+    p.cdp.ws.addEventListener('message', (event) => {
+      const msg = JSON.parse(event.data);
+      if (msg.method !== 'Network.requestWillBeSent') return;
+      const { request } = msg.params;
+      if (request.method === 'POST' && request.url.endsWith('/api/v1/sessions/custom')) postCatturati.push(request.postData ?? null);
+    });
+
+    // ⛔ hard reload: la scheda non deve MAI restare sul JavaScript precedente a una modifica.
+    await p.cdp.send('Page.reload', { ignoreCache: true });
+    await p.attendi(1500);
+    await p.screenshot('stato-iniziale', { nota: 'dopo hard reload (ignoreCache)' });
+
+    await p.click('#newSessionBtn');
+    await p.attendi(400);
+    await p.screenshot('modale-nuova-aperta', { nota: 'subito dopo il click su Nuova' });
+    try {
+      await p.scegliCartellaNuovaSessione(cartella, { fullAccess: true });
+    } catch (error) {
+      await p.screenshot('errore-scelta-cartella', { nota: String(error.message) });
+      p.nota(`stato chooser: ${await p.cdp.evaluate("JSON.stringify({chooser: !!document.querySelector('#workspaceChooser'), path: document.querySelector('#workspaceChooserPath')?.value ?? null, selezionato: document.querySelector('[data-workspace-selected-path]')?.textContent ?? null, errore: document.querySelector('#workspaceChooser .workspace-chooser-error, #workspaceChooser [role=alert]')?.textContent ?? null})")}`);
+      throw error;
+    }
+    await p.click('#workspaceChooser .model-picker-trigger');
+    await p.attendiCondizione("!document.querySelector('#workspaceChooser .model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato nella modale Nuova' });
+    await p.digita('#workspaceChooser .model-picker-search input', MODELLO_MODALE);
+    await p.attendiCondizione(`[...document.querySelectorAll('#workspaceChooser .model-picker-option')].some((o) => o.textContent.includes(${j(MODELLO_MODALE)}))`, { descrizione: `opzione ${MODELLO_MODALE} nella modale` });
+    await p.cdp.evaluate(`[...document.querySelectorAll('#workspaceChooser .model-picker-option')].find((o) => o.textContent.includes(${j(MODELLO_MODALE)}))?.click()`);
+    await p.attendi(250);
+    const modelloModale = await p.testo('#workspaceChooser .model-picker-trigger-label');
+    p.nota(`modello scelto nella modale Nuova: ${modelloModale}`);
+    await p.screenshot('modale-modello-scelto', { nota: `trigger della modale: ${modelloModale}` });
+    await p.confermaNuovaSessione();
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat vuota pronta (sessione pendente)' });
+    const pillolaDopoModale = await p.testo('[data-open-sheet="model"] span');
+    p.nota(`pillola del composer subito dopo la modale: ${pillolaDopoModale}`);
+    await p.screenshot('sessione-pendente', { nota: `pillola: ${pillolaDopoModale}` });
+
+    await p.click('[data-open-sheet="model"]');
+    await p.attendiCondizione("!document.querySelector('#modelPickerMount .model-picker-list')?.textContent?.includes('Carico')", { descrizione: 'catalogo caricato nel foglio della pillola' });
+    await p.digita('#modelPickerMount .model-picker-search input', MODELLO_PILLOLA);
+    await p.attendiCondizione(`[...document.querySelectorAll('#modelPickerMount .model-picker-option')].some((o) => o.textContent.includes(${j(MODELLO_PILLOLA)}))`, { descrizione: `opzione ${MODELLO_PILLOLA} nel foglio` });
+    await p.screenshot('pillola-ricerca', { nota: `foglio pillola filtrato su ${MODELLO_PILLOLA}` });
+    await p.cdp.evaluate(`[...document.querySelectorAll('#modelPickerMount .model-picker-option')].find((o) => o.textContent.includes(${j(MODELLO_PILLOLA)}))?.click()`);
+    await p.attendi(400);
+    const pillola = await p.testo('[data-open-sheet="model"] span');
+    p.nota(`pillola del composer dopo la scelta nel foglio: ${pillola}`);
+    await p.screenshot('pillola-modello-cambiato', { nota: `pillola: ${pillola}` });
+    if (pillola !== MODELLO_PILLOLA) p.difetto(`la pillola mostra "${pillola}" invece di "${MODELLO_PILLOLA}" dopo la scelta nel foglio`, { severita: 'blocco' });
+
+    await p.digita('#composerInput', 'Rispondi solo con la parola: pong');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    const scadenza = Date.now() + 10000;
+    while (postCatturati.length === 0 && Date.now() < scadenza) await p.attendi(100);
+    if (postCatturati.length === 0) {
+      p.difetto('nessun POST /api/v1/sessions/custom intercettato entro 10s dall\'invio', { severita: 'blocco' });
+    } else {
+      let corpo = null;
+      try { corpo = JSON.parse(postCatturati[0]); } catch { corpo = null; }
+      p.nota(`corpo POST /sessions/custom: ${postCatturati[0]}`);
+      const modelloInviato = corpo?.modello ?? null;
+      if (modelloInviato !== pillola) {
+        p.difetto(`RIPRODOTTO: la pillola mostra "${pillola}" ma il POST ha spedito modello="${modelloInviato}"`, { severita: 'blocco' });
+      } else {
+        p.nota(`OK: il POST ha spedito lo stesso modello della pillola (${modelloInviato})`);
+      }
+      if (corpo?.permessi !== 'Full access') p.difetto(`permessi nel POST: "${corpo?.permessi}" (atteso "Full access" per una cartella libera)`, { severita: 'difetto' });
+    }
+
+    const massimoAttesaMs = 60_000;
+    let trascorsoMs = 0;
+    let concluso = false;
+    while (trascorsoMs < massimoAttesaMs && !concluso) {
+      await p.attendi(3000);
+      trascorsoMs += 3000;
+      await p.screenshot(`esecuzione-t${Math.round(trascorsoMs / 1000)}s`);
+      const eventoTerminale = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.eventoTerminaleVisto ?? null");
+      const modelloGiro = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.currentRunModel ?? null");
+      p.nota(`t=${Math.round(trascorsoMs / 1000)}s — eventoTerminaleVisto=${eventoTerminale} modello del giro (RunStarted.contesto)=${modelloGiro}`);
+      if (eventoTerminale === true) concluso = true;
+    }
+    const modelloGiroFinale = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.currentRunModel ?? null");
+    if (modelloGiroFinale && modelloGiroFinale !== pillola) p.difetto(`il giro è partito con "${modelloGiroFinale}" mentre la pillola mostra "${pillola}"`, { severita: 'blocco' });
+    await p.screenshot('conversazione-finale', { nota: `modello del giro: ${modelloGiroFinale}` });
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /*
+   * ⛔⛔⛔ 02/09 — riverifica dal vivo dei punti §1-§4 del ledger
+   * LEDGER-STREAMING-SCROLL-TERMINALE-2026-09-02.md, dopo un hard
+   * reload (la scheda dell'owner era il sospetto principale: JS vecchio).
+   *  §1  click su una riga sessione CONCLUSA → lo scroll deve arrivare in
+   *      fondo e restarci (campionato ogni 250 ms per 4 s, non un'occhiata
+   *      sola alla fine); poi scroll in cima e RICLICK sulla riga già
+   *      attiva → di nuovo in fondo.
+   *  §2  streaming reale: il FONDO del testo scritto finora deve stare a
+   *      metà viewport (misurato ogni 200 ms sul rettangolo vero del
+   *      messaggio, mediana della distanza dal centro).
+   *  §3  dissolvenza: `.stream-settle` compare e l'ULTIMO figlio (la coda
+   *      volatile) non è mai marcato.
+   *  §4  `window.talosStreamingLogRiassunto()` + buchi fra un render e il
+   *      successivo, letti SUBITO dopo lo stream.
+   * Costa UN giro col modello della sessione auto-aperta (la più recente).
+   * TALOS_QA_RIGA_TESTO (consigliata): testo della riga da cliccare per §1
+   * — serve una sessione LUNGA, altrimenti max scroll = 0 e §1 non prova
+   * nulla (visto dal vivo). TALOS_QA_RIGA: indice fra le non attive.
+   * ⛔ Il prompt dice "senza attrezzi, senza file": a un agente di codice
+   * "scrivi dieci paragrafi" fa creare storia-tcp.txt e rispondere con
+   * una riga (visto dal vivo) — lo stream da misurare è quello in chat.
+   */
+  async 'qa-scroll-sessione-e-streaming'(p) {
+    await p.cdp.send('Page.reload', { ignoreCache: true });
+    await p.attendi(2500);
+    await p.screenshot('dopo-hard-reload', { nota: 'ultima sessione auto-aperta al boot' });
+    p.nota(`sessione auto-aperta: ${await p.cdp.evaluate("document.querySelector('.real-session-item.active')?.textContent?.trim() ?? null")}`);
+
+    // --- §1: click su UN'ALTRA riga sessione ---
+    // TALOS_QA_RIGA_TESTO sceglie la riga per testo (serve una sessione LUNGA, altrimenti non c'è nulla da scrollare); TALOS_QA_RIGA per indice fra le non attive.
+    const indiceRiga = Number(process.env.TALOS_QA_RIGA || 0);
+    const testoRiga = process.env.TALOS_QA_RIGA_TESTO || '';
+    const cliccata = await p.cdp.evaluate(`(() => { const r = [...document.querySelectorAll('.real-session-item:not(.active)')]; const perTesto = ${j(testoRiga)} ? r.find((el) => el.textContent.includes(${j(testoRiga)})) : null; const el = perTesto ?? r[${indiceRiga}] ?? r[0]; if (!el) return null; el.click(); return el.textContent.trim(); })()`);
+    p.nota(`§1 cliccata la riga: ${cliccata}`);
+    const campioni = [];
+    for (let i = 0; i < 16; i += 1) {
+      await p.attendi(250);
+      const c = await p.cdp.evaluate("(() => { const c = document.querySelector('#conversation'); return { t: Math.round(c.scrollTop), max: c.scrollHeight - c.clientHeight, nascosta: c.classList.contains('is-restoring'), fine: window.__talosHarnessUiRuntime?.realSessionState?.eventoTerminaleVisto ?? null }; })()");
+      c.ms = (i + 1) * 250;
+      campioni.push(c);
+      if (i === 0 || i === 1 || i === 5) await p.screenshot(`riga-t${c.ms}ms`, { nota: `DURANTE il ripristino: scrollTop=${c.t} max=${c.max} nascosta=${c.nascosta}` });
+    }
+    p.nota(`§1 campioni (ms/scrollTop/max/nascosta): ${campioni.map((c) => `${c.ms}:${c.t}/${c.max}${c.nascosta ? '/H' : ''}`).join(' ')}`);
+    // ⛔ 02/09, owner: "la chat deve trovarsi già in fondo senza animazioni" — quando si scopre (is-restoring tolta) deve essere GIÀ in fondo, e alla fine non deve restare nascosta.
+    const primaVisibile = campioni.find((c) => !c.nascosta);
+    if (!primaVisibile) p.difetto('§1 la conversazione è rimasta nascosta (is-restoring) per tutti i 4s', { severita: 'blocco' });
+    else if (primaVisibile.max > 0 && primaVisibile.t < primaVisibile.max - 4) p.difetto(`§1 la conversazione è stata scoperta a ${primaVisibile.ms}ms NON in fondo (${primaVisibile.t}/${primaVisibile.max})`, { severita: 'blocco' });
+    else p.nota(`§1 scoperta a ${primaVisibile.ms}ms già in fondo (${primaVisibile.t}/${primaVisibile.max})`);
+    const ultimo = campioni.at(-1);
+    if (ultimo.max > 0 && ultimo.t < ultimo.max - 4) p.difetto(`§1 dopo il click su una riga sessione lo scroll è a ${ultimo.t} su ${ultimo.max} (NON in fondo) dopo 4s`, { severita: 'blocco' });
+    else p.nota(`§1 OK: in fondo a 4s (${ultimo.t}/${ultimo.max})`);
+    const primoVicino = campioni.find((c) => c.max > 0 && c.t >= c.max * 0.85);
+    p.nota(`§1 primo campione ≥85% del fondo: ${primoVicino ? `${primoVicino.ms}ms` : 'mai'}`);
+    await p.screenshot('riga-sessione-fondo', { nota: `a 4s: scrollTop=${ultimo.t} max=${ultimo.max}` });
+
+    // --- §1-bis: scroll in cima e RICLICK sulla riga già attiva ---
+    await p.cdp.evaluate("document.querySelector('#conversation').scrollTop = 0");
+    await p.attendi(200);
+    await p.screenshot('scrollato-in-cima', { nota: 'prima del riclick sulla riga attiva' });
+    await p.cdp.evaluate("document.querySelector('.real-session-item.active')?.click()");
+    await p.attendi(300);
+    const dopoRiclick = await p.cdp.evaluate("(() => { const c = document.querySelector('#conversation'); return { t: Math.round(c.scrollTop), max: c.scrollHeight - c.clientHeight }; })()");
+    p.nota(`§1-bis dopo il riclick sulla riga attiva: ${JSON.stringify(dopoRiclick)}`);
+    if (dopoRiclick.max > 0 && dopoRiclick.t < dopoRiclick.max - 4) p.difetto(`§1-bis riclick sulla riga attiva: scroll a ${dopoRiclick.t} su ${dopoRiclick.max}, non in fondo`, { severita: 'blocco' });
+    await p.screenshot('riclick-riga-attiva', { nota: `scrollTop=${dopoRiclick.t} max=${dopoRiclick.max}` });
+
+    // --- §2/§3/§4: uno stream reale sulla sessione aperta ---
+    p.nota(`animazione streaming attiva: ${await p.cdp.evaluate("document.documentElement.dataset.talosStreamingAnimation ?? null")}`);
+    p.nota(`modello della sessione (pillola): ${await p.testo('[data-open-sheet="model"] span')}`);
+    // ⛔ 02/09 — misurato: con la finestra QA dietro altre finestre Chrome strozza requestAnimationFrame (~1 render/s): i 'render' sembravano radi mentre i 'delta' arrivavano ogni ~50ms. In primo piano, come l'owner guarda la sua scheda.
+    await p.cdp.send('Page.bringToFront');
+    p.nota(`visibilità della scheda: ${await p.cdp.evaluate('document.visibilityState')}`);
+    await p.digita('#composerInput', process.env.TALOS_QA_PROMPT_LUNGO || 'Rispondi direttamente qui in chat, senza usare nessun attrezzo e senza creare o modificare file: scrivi dieci paragrafi discorsivi, ognuno di almeno ottanta parole, sulla storia del protocollo TCP. Niente elenchi puntati, niente titoli, solo prosa.');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    const inizio = Date.now();
+    const campioniStream = [];
+    let vistoStreaming = false;
+    let scatti = 0;
+    while (Date.now() - inizio < 150_000) {
+      await p.attendi(200);
+      const c = await p.cdp.evaluate(`(() => {
+        const conv = document.querySelector('#conversation');
+        const fine = window.__talosHarnessUiRuntime?.realSessionState?.eventoTerminaleVisto ?? null;
+        const m = document.querySelector('.assistant-message.is-streaming');
+        const base = { fine, t: Math.round(conv.scrollTop), h: conv.scrollHeight, v: conv.clientHeight };
+        if (!m) return { ...base, streaming: false };
+        const copy = m.querySelector('.assistant-copy');
+        const cr = conv.getBoundingClientRect();
+        const mr = m.getBoundingClientRect();
+        const centro = cr.top + cr.height / 2;
+        return {
+          ...base, streaming: true,
+          fondoMenoCentro: Math.round(mr.bottom - centro), altezzaMsg: Math.round(mr.height),
+          settle: copy ? copy.querySelectorAll(':scope > .stream-settle').length : 0,
+          figli: copy ? copy.children.length : 0,
+          ultimoSettle: copy?.lastElementChild?.classList.contains('stream-settle') ?? null,
+          testo: copy?.textContent?.length ?? 0,
+        };
+      })()`);
+      c.ms = Date.now() - inizio;
+      campioniStream.push(c);
+      if (c.streaming) {
+        vistoStreaming = true;
+        if (scatti < 6 && campioniStream.length % 10 === 0) {
+          scatti += 1;
+          await p.screenshot(`stream-t${Math.round(c.ms / 1000)}s`, { nota: `DURANTE lo stream: fondo−centro=${c.fondoMenoCentro}px, altezza msg=${c.altezzaMsg}px, settle=${c.settle}/${c.figli}, testo=${c.testo}` });
+        }
+      }
+      if (c.fine === true && (vistoStreaming || c.ms > 20_000)) break;
+    }
+    const stream = campioniStream.filter((c) => c.streaming);
+    p.nota(`campioni in streaming: ${stream.length} su ${campioniStream.length} (${Math.round((Date.now() - inizio) / 1000)}s totali)`);
+    if (stream.length === 0) p.difetto('nessun campione con .assistant-message.is-streaming: lo stream non è stato osservato', { severita: 'nota' });
+    const alti = stream.filter((c) => c.altezzaMsg > c.v / 2 && c.h > c.v);
+    if (alti.length > 0) {
+      const dist = alti.map((c) => Math.abs(c.fondoMenoCentro)).sort((a, b) => a - b);
+      const mediana = dist[Math.floor(dist.length / 2)];
+      p.nota(`§2 |fondo del testo − centro viewport| su ${alti.length} campioni con contenuto oltre metà viewport: mediana ${mediana}px, max ${dist.at(-1)}px (viewport ${alti[0].v}px)`);
+      p.nota(`§2 serie fondo−centro: ${alti.map((c) => c.fondoMenoCentro).join(' ')}`);
+      if (mediana > 80) p.difetto(`§2 lo streaming NON tiene il fondo del testo a metà viewport: mediana ${mediana}px dal centro`, { severita: 'blocco' });
+    } else {
+      p.nota('§2 nessun campione con il messaggio più alto di metà viewport: risposta troppo corta per giudicare il centro');
+    }
+    const conSettle = stream.filter((c) => c.settle > 0).length;
+    const ultimoMarcato = stream.filter((c) => c.ultimoSettle === true).length;
+    p.nota(`§3 campioni con .stream-settle: ${conSettle}/${stream.length}; con l'ULTIMO figlio marcato (coda volatile, sbagliato): ${ultimoMarcato}; settle max ${Math.max(0, ...stream.map((c) => c.settle))}`);
+    if (stream.length > 5 && conSettle === 0) p.difetto('§3 nessun .stream-settle durante lo stream: la dissolvenza non parte mai', { severita: 'difetto' });
+    if (ultimoMarcato > 0) p.difetto(`§3 l'ultimo figlio (coda volatile) porta .stream-settle in ${ultimoMarcato} campioni: l'animazione riparte`, { severita: 'difetto' });
+    p.nota(`§4 talosStreamingLogRiassunto(16): ${await p.cdp.evaluate("JSON.stringify(window.talosStreamingLogRiassunto ? window.talosStreamingLogRiassunto(16) : null)")}`);
+    p.nota(`§4 buchi fra render consecutivi: ${await p.cdp.evaluate("(() => { const l = window.talosStreamingLog ? window.talosStreamingLog() : []; const r = l.filter((x) => x.evento === 'render'); const g = []; for (let i = 1; i < r.length; i += 1) g.push({ gapMs: Math.round(r[i].quandoMs - r[i - 1].quandoMs), aMs: Math.round(r[i].quandoMs), testoLen: r[i].testoLen }); g.sort((a, b) => b.gapMs - a.gapMs); const scroll = l.filter((x) => x.evento === 'scroll').length; const skip = l.filter((x) => x.evento === 'scroll-skip').length; return JSON.stringify({ render: r.length, scroll, scrollSkip: skip, top5gap: g.slice(0, 5), lente: r.filter((x) => x.durataMs > 16).length, maxDurataMs: Math.max(0, ...r.map((x) => x.durataMs || 0)) }); })()")}`);
+    p.nota(`§4 buchi fra DELTA consecutivi (rete/provider, non render): ${await p.cdp.evaluate("(() => { const l = window.talosStreamingLog ? window.talosStreamingLog() : []; const r = l.filter((x) => x.evento === 'delta'); const g = []; for (let i = 1; i < r.length; i += 1) g.push({ gapMs: Math.round(r[i].quandoMs - r[i - 1].quandoMs), aMs: Math.round(r[i].quandoMs) }); g.sort((a, b) => b.gapMs - a.gapMs); const somma = r.reduce((s, x) => s + (x.len || 0), 0); return JSON.stringify({ delta: r.length, caratteri: somma, top5gap: g.slice(0, 5), mediaLenDelta: r.length ? Math.round(somma / r.length) : 0 }); })()")}`);
+    await p.screenshot('fine-streaming', { nota: 'stato finale della conversazione' });
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /*
+   * ⛔⛔⛔ 02/09 — §6/§7 del ledger LEDGER-STREAMING-SCROLL-TERMINALE:
+   * riproduce ESATTAMENTE ciò che è successo alla sessione dell'owner —
+   * un ALTRO client cambia le impostazioni della sessione aperta in
+   * questa scheda (POST /api/v1/sessions/:id/settings → "Read only")
+   * mentre le pillole dicono ancora "Full access" — e verifica che ora
+   * la UI dica la verità al giro successivo: RunStarted.contesto porta
+   * il permesso, la bolla del follow-up lo scrive ("Follow-up · Read
+   * only"), le pillole si allineano e una nota in chat dichiara il cambio.
+   * Alla fine ripristina "Full access" sulla sessione. Costa UN giro
+   * breve col modello della sessione auto-aperta (la più recente).
+   */
+  async 'qa-permessi-cambiati-da-fuori'(p) {
+    await p.cdp.send('Page.reload', { ignoreCache: true });
+    await p.attendi(2500);
+    const sessionId = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.id ?? null");
+    p.nota(`sessione auto-aperta: ${sessionId} — ${await p.cdp.evaluate("document.querySelector('.real-session-item.active')?.textContent?.trim() ?? null")}`);
+    if (!sessionId) throw new Error('nessuna sessione auto-aperta al reload: lo scenario ha bisogno di una sessione conclusa recente');
+    const pillolePrima = await p.cdp.evaluate("JSON.stringify({ modello: document.querySelector('[data-open-sheet=\"model\"] span')?.textContent, permessi: document.querySelector('[data-open-sheet=\"permissions\"] span')?.textContent })");
+    p.nota(`pillole PRIMA del cambio esterno: ${pillolePrima}`);
+    await p.screenshot('prima-del-cambio-esterno', { nota: `pillole: ${pillolePrima}` });
+
+    // L'ALTRO client: stessa origine, stessa API, nessun passaggio dalla UI.
+    const esitoPatch = await p.cdp.evaluate(`fetch('/api/v1/sessions/${sessionId}/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ permessi: 'Read only' }) }).then((r) => r.status)`);
+    p.nota(`POST /settings {permessi:'Read only'} da un altro client → HTTP ${esitoPatch}`);
+    const pilloleDopoPatch = await p.cdp.evaluate("JSON.stringify({ modello: document.querySelector('[data-open-sheet=\"model\"] span')?.textContent, permessi: document.querySelector('[data-open-sheet=\"permissions\"] span')?.textContent })");
+    p.nota(`pillole subito DOPO il cambio esterno (attese ancora vecchie: nessun evento le raggiunge): ${pilloleDopoPatch}`);
+    await p.screenshot('dopo-cambio-esterno-prima-del-giro', { nota: `la scheda non sa ancora nulla: ${pilloleDopoPatch}` });
+
+    await p.digita('#composerInput', 'Rispondi solo con la parola: ok');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    const inizio = Date.now();
+    let fine = null;
+    while (Date.now() - inizio < 60_000) {
+      await p.attendi(500);
+      fine = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.eventoTerminaleVisto ?? null");
+      if ((Date.now() - inizio) % 3000 < 500) await p.screenshot(`giro-t${Math.round((Date.now() - inizio) / 1000)}s`);
+      if (fine === true) break;
+    }
+    const dopo = await p.cdp.evaluate(`(() => {
+      const meta = [...document.querySelectorAll('#conversation .user-message .message-meta span')].map((s) => s.textContent);
+      const note = [...document.querySelectorAll('#conversation .real-session-status .assistant-copy')].map((s) => s.textContent);
+      return JSON.stringify({
+        modelloPillola: document.querySelector('[data-open-sheet="model"] span')?.textContent,
+        permessiPillola: document.querySelector('[data-open-sheet="permissions"] span')?.textContent,
+        ultimaBollaUtente: meta.at(-1) ?? null,
+        noteCambio: note.filter((t) => t.includes('fuori da questa scheda')),
+      });
+    })()`);
+    p.nota(`DOPO il giro: ${dopo}`);
+    const d = JSON.parse(dopo);
+    if (d.ultimaBollaUtente !== 'Follow-up · Read only') p.difetto(`la bolla del follow-up non dichiara il permesso del giro: "${d.ultimaBollaUtente}" (atteso "Follow-up · Read only")`, { severita: 'blocco' });
+    if (d.permessiPillola !== 'Read only') p.difetto(`la pillola permessi dice "${d.permessiPillola}" mentre il giro è partito in Read only`, { severita: 'blocco' });
+    if (d.noteCambio.length !== 1) p.difetto(`attesa UNA nota "cambiate fuori da questa scheda", trovate ${d.noteCambio.length}`, { severita: 'blocco' });
+    await p.screenshot('dopo-il-giro', { nota: `bolla: ${d.ultimaBollaUtente} · pillola: ${d.permessiPillola} · note: ${d.noteCambio.length}` });
+
+    // Ripristino: la sessione torna com'era.
+    const esitoRipristino = await p.cdp.evaluate(`fetch('/api/v1/sessions/${sessionId}/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ permessi: 'Full access' }) }).then((r) => r.status)`);
+    p.nota(`ripristino Full access → HTTP ${esitoRipristino}`);
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url}:${e.riga})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
+  /*
+   * ⛔⛔⛔ 02/09 — owner: "il rendering a dissolvenza e cursore terminale
+   * non funzionano bene" → chiarito dal vivo: NON xterm, ma l'opzione
+   * "Animazione risposta → Macchina da scrivere" (Impostazioni → Aspetto):
+   * il cursore che lampeggia in coda al testo mentre la risposta arriva.
+   * Misura, non impressione: durante uno stream si confronta il fondo
+   * del contenitore `.assistant-copy` col fondo dell'ULTIMA riga di testo
+   * — se differiscono di una riga intera, il cursore (un ::after) è
+   * finito su una riga tutta sua sotto il testo, non a fine riga. Clip
+   * ingranditi della coda del messaggio DURANTE lo stream, non alla fine.
+   * Costa UN giro breve col modello della sessione auto-aperta.
+   */
+  async 'qa-cursore-streaming'(p) {
+    const ANIMAZIONE = process.env.TALOS_QA_ANIMAZIONE || 'typewriter';
+    await p.cdp.send('Page.reload', { ignoreCache: true });
+    await p.attendi(2500);
+    await p.cdp.send('Page.bringToFront');
+    // Stessa cosa che fa Impostazioni → Aspetto → Animazione risposta (host.dataset.talosStreamingAnimation): per questa scheda soltanto, il salvataggio resta quello dell'owner. TALOS_QA_ANIMAZIONE=fade per la dissolvenza.
+    await p.cdp.evaluate(`document.documentElement.dataset.talosStreamingAnimation = ${j(ANIMAZIONE)}`);
+    // ⭐ 02/09 — FLUIDITÀ, owner: "una lettera alla volta streammata velocemente" / "dissolvenza super smooth delle parole". Campionatore a 40ms dentro la pagina (non dal driver: il round-trip CDP sfalserebbe): lunghezza del testo mostrato e numero di parole in dissolvenza a ogni campione.
+    await p.cdp.evaluate(`(() => { window.__qaCampioni = []; const tick = () => { const m = document.querySelector('.assistant-message.is-streaming .assistant-copy'); if (m) window.__qaCampioni.push({ t: Math.round(performance.now()), len: m.textContent.length, parole: m.querySelectorAll('.stream-word').length, inCorso: [...m.querySelectorAll('.stream-word')].filter((w) => w.getAnimations().some((an) => an.currentTime !== null && an.currentTime >= 0 && an.currentTime < 420)).length }); if (window.__qaCampioni.length < 4000) setTimeout(tick, 40); }; tick(); })()`);
+    p.nota(`animazione streaming forzata a: ${await p.cdp.evaluate('document.documentElement.dataset.talosStreamingAnimation')}`);
+    p.nota(`sessione auto-aperta: ${await p.cdp.evaluate("document.querySelector('.real-session-item.active')?.textContent?.trim() ?? null")}`);
+
+    await p.digita('#composerInput', 'Rispondi qui in chat, senza attrezzi e senza file: tre paragrafi brevi (tre frasi ciascuno) su cosa è un semaforo in programmazione concorrente. Solo prosa, niente elenchi.');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    const inizio = Date.now();
+    const campioni = [];
+    let clip = 0;
+    while (Date.now() - inizio < 90_000) {
+      await p.attendi(250);
+      const c = await p.cdp.evaluate(`(() => {
+        const fine = window.__talosHarnessUiRuntime?.realSessionState?.eventoTerminaleVisto ?? null;
+        const m = document.querySelector('.assistant-message.is-streaming');
+        const copy = m?.querySelector('.assistant-copy');
+        if (!copy) return { streaming: false, fine };
+        const ultimoEl = copy.lastElementChild;
+        const ultimoNodo = copy.lastChild;
+        // ultima riga di TESTO: il rettangolo dell'ultimo nodo di testo non vuoto (Range), non del blocco
+        let ultimoTesto = null;
+        const walker = document.createTreeWalker(copy, NodeFilter.SHOW_TEXT);
+        let n; while ((n = walker.nextNode())) { if (n.textContent.trim()) ultimoTesto = n; }
+        let fondoTesto = null, destraTesto = null;
+        if (ultimoTesto) { const r = document.createRange(); r.selectNodeContents(ultimoTesto); const rects = r.getClientRects(); const last = rects[rects.length - 1]; if (last) { fondoTesto = last.bottom; destraTesto = last.right; } }
+        const cr = copy.getBoundingClientRect();
+        const cs = getComputedStyle(copy, '::after');
+        const lineHeight = parseFloat(getComputedStyle(copy).lineHeight) || 24;
+        const cursoreDentroUltimo = ultimoEl ? getComputedStyle(ultimoEl, '::after').content : null;
+        return {
+          streaming: true, fine,
+          ultimoElTag: ultimoEl?.tagName ?? null, ultimoNodoTipo: ultimoNodo?.nodeType ?? null,
+          testoLen: copy.textContent.length,
+          fondoCopyMenoFondoTesto: fondoTesto === null ? null : Math.round(cr.bottom - fondoTesto),
+          lineHeight: Math.round(lineHeight),
+          afterCopy: { content: cs.content, display: cs.display, width: cs.width },
+          afterUltimo: cursoreDentroUltimo,
+          clip: { x: Math.round(cr.left), y: Math.round(Math.max(0, cr.bottom - 160)), w: Math.round(cr.width), h: 190 },
+        };
+      })()`);
+      c.ms = Date.now() - inizio;
+      campioni.push(c);
+      if (c.streaming && clip < 4 && c.testoLen > 60 && [2, 4, 7, 10].includes(campioni.filter((x) => x.streaming).length)) {
+        clip += 1;
+        const { data } = await p.cdp.send('Page.captureScreenshot', { format: 'png', clip: { x: c.clip.x, y: c.clip.y, width: c.clip.w, height: c.clip.h, scale: 2 } });
+        p.numeroStep += 1;
+        const fileName = `${String(p.numeroStep).padStart(2, '0')}-coda-stream-t${Math.round(c.ms / 1000)}s.png`;
+        writeFileSync(join(p.outDir, fileName), Buffer.from(data, 'base64'));
+        p.report.push({ step: p.numeroStep, nome: 'coda-stream', file: fileName, nota: `clip 2x della coda del messaggio DURANTE lo stream: fondo copy − fondo ultima riga = ${c.fondoCopyMenoFondoTesto}px (line-height ${c.lineHeight}px), ultimo elemento ${c.ultimoElTag}`, quando: new Date().toISOString() });
+        console.log(`  [${String(p.numeroStep).padStart(2, '0')}] screenshot: ${fileName} — clip coda, Δfondo=${c.fondoCopyMenoFondoTesto}px`);
+      }
+      if (c.fine === true && (campioni.some((x) => x.streaming) || c.ms > 20_000)) break;
+    }
+    const stream = campioni.filter((c) => c.streaming && c.fondoCopyMenoFondoTesto !== null);
+    p.nota(`campioni in streaming: ${stream.length}; ultimo elemento della copy: ${[...new Set(stream.map((c) => c.ultimoElTag))].join(',')}; ::after su .assistant-copy: ${JSON.stringify(stream.at(-1)?.afterCopy ?? null)}; ::after sull'ultimo elemento: ${stream.at(-1)?.afterUltimo ?? null}`);
+    if (stream.length > 0) {
+      const delta = stream.map((c) => c.fondoCopyMenoFondoTesto).sort((a, b) => a - b);
+      const mediana = delta[Math.floor(delta.length / 2)];
+      const lh = stream[0].lineHeight;
+      p.nota(`Δ fondo copy − fondo ultima riga di testo: mediana ${mediana}px, min ${delta[0]}px, max ${delta.at(-1)}px (line-height ${lh}px) — 0 significa cursore a fine riga, ~una riga significa cursore su una riga tutta sua`);
+      if (mediana >= lh * 0.8) p.difetto(`RIPRODOTTO: il cursore "macchina da scrivere" sta su una riga vuota SOTTO il testo (Δ ${mediana}px ≈ una riga da ${lh}px), non in coda all'ultima riga`, { severita: 'blocco' });
+      else p.nota('OK: il cursore sta in coda all\'ultima riga di testo');
+    } else {
+      p.difetto('nessun campione in streaming con testo: impossibile giudicare il cursore', { severita: 'nota' });
+    }
+    const fluidita = await p.cdp.evaluate(`(() => { const c = (window.__qaCampioni || []).filter((x) => x.len > 0); if (c.length < 3) return null; const inc = []; for (let i = 1; i < c.length; i += 1) inc.push(c[i].len - c[i - 1].len); const attivi = inc.filter((x) => x > 0); attivi.sort((a, b) => a - b); const somma = attivi.reduce((s, x) => s + x, 0); return { campioni: c.length, frameConTesto: attivi.length, frameFermi: inc.filter((x) => x === 0).length, caratteriPerFrameMediana: attivi[Math.floor(attivi.length / 2)] ?? 0, caratteriPerFrameMax: attivi.at(-1) ?? 0, caratteriPerFrameP90: attivi[Math.floor(attivi.length * 0.9)] ?? 0, caratteriAlSecondo: Math.round(somma / ((c.at(-1).t - c[0].t) / 1000)), paroleInDissolvenzaMax: Math.max(0, ...c.map((x) => x.parole)), paroleConAnimazioneInCorsoMax: Math.max(0, ...c.map((x) => x.inCorso || 0)), campioniConAnimazioneInCorso: c.filter((x) => (x.inCorso || 0) > 0).length }; })()`);
+    p.nota(`FLUIDITÀ (${ANIMAZIONE}, campioni ogni 40ms): ${JSON.stringify(fluidita)}`);
+    if (fluidita && fluidita.caratteriPerFrameMax > 120) p.difetto(`salti di testo fino a ${fluidita.caratteriPerFrameMax} caratteri in 40ms: non è "una lettera alla volta"`, { severita: 'difetto' });
+    if (fluidita && ANIMAZIONE === 'fade' && fluidita.paroleInDissolvenzaMax === 0) p.difetto('dissolvenza: nessuna parola con .stream-word durante lo stream', { severita: 'blocco' });
+    await p.screenshot('fine-stream', { nota: 'a stream concluso il cursore deve sparire (is-streaming tolta)' });
+    // il ritmo di rivelazione può essere ancora in pari-da-fare per ≤0,35s dopo la fine dal server: si aspetta più di quel ritardo prima di giudicare il cursore
+    await p.attendi(900);
+    p.nota(`riassunto render (${ANIMAZIONE}): ${await p.cdp.evaluate('JSON.stringify(window.talosStreamingLogRiassunto ? window.talosStreamingLogRiassunto(8) : null)')}`);
+    const residuo = await p.cdp.evaluate("document.querySelectorAll('.assistant-message.is-streaming').length");
+    if (residuo > 0) p.difetto(`${residuo} messaggi ancora .is-streaming a stream concluso: il cursore resta acceso`, { severita: 'difetto' });
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url}:${e.riga})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
 };
 
 // --------------------------------------------------------------------
