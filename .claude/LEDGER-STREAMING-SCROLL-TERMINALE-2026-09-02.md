@@ -260,6 +260,29 @@ Non escluso un collegamento con §7 (l'ID modello di test in una
 sessione reale) — se il modello effettivo non è mai quello mostrato,
 resta aperta la domanda di dove venga letto quello vero.
 
+## ✅ Chiuso subito dopo la consegna — il ramo "riclicco la sessione già aperta"
+
+Trovato per ragionamento diretto (non un'altra segnalazione dell'owner):
+`passaASessione()`, il ramo `if (sessionId === state.realSession.id)`
+(riclicco la riga della sessione GIÀ aperta — es. dopo essere scrollato
+in su per rileggere qualcosa) NON passava da `nuovaGenerazioneSessione`,
+quindi non chiamava NESSUNO scroll — l'unico punto rimasto dove
+"clicco una riga sessione" non portava mai in fondo. Corretto: scroll
+istantaneo al fondo vero (`scrollTop = scrollHeight`, nessun observer
+necessario — il contenuto è già tutto a schermo, non in ripristino).
+
+**Verificato dal vivo**: sessione aperta (scrollTop assestato in
+avvicinamento al fondo), scrollato manualmente a 0 (simula "rileggo
+qualcosa in alto"), ricliccata la STESSA riga → `scrollTop:10363`,
+esattamente `scrollHeight(11577) - clientHeight(1214)`, il fondo vero,
+istantaneo. Backend 1319/1319, frontend 200/200.
+
+Owner, subito dopo: *"lascia che fable se ne occupi, tu passa avanti"*
+— chiuso questo pezzo (era già in corso, verificato, non abbandonato a
+metà) e ceduto il resto dell'area (streaming lag da catturare col
+log, cursore terminale, falso read-only, ID modello di test, bug model
+picker) a Fable per intero, come richiesto.
+
 ## Consegnato a Fable 5 — nuova sessione, batch completo
 
 Owner: *"dammi prompt completo per nuova sessione Fable 5 per
