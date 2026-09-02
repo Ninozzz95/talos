@@ -493,3 +493,139 @@ questa nota.
 - Server 4174 riavviato TRE volte in questo giro (con
   `TALOS_OWNER_RUNTIME_MODULE`), pid finale annotato nel log dello
   scratchpad; nessuna sessione era in corso a nessuno dei tre riavvii.
+
+---
+
+## 02/09 (sera) — Il loader del mobile, il "gap senza nulla" e il delay fra elabora e stampa
+
+Tre richieste dell'owner, dal vivo, in un colpo solo:
+
+> «il logo di caricamento deve esistere fino a quando la risposta viene
+> STREAMMATA E STAMPATA poi il logo non e animato come il mobile ci deve
+> essere una linea che attraversa dot, usa direttamente lo stessa identica
+> immagine animata del mobile» · «ce un delay assurdo tra quando invio
+> messaggio quando elabora e quando stampa, strumenta tutte queste cose in
+> maniera piu precisa con ricerca web» · «fai un analisi di debugging
+> mirata e approfondita»
+
+### La causa vera del "delay assurdo": ERO STATO IO, poche ore prima
+
+⛔⛔⛔ Il difetto peggiore di questo giro **l'avevo introdotto io** nello
+stesso pomeriggio, curando il salto di scroll: `resumeSession()` armava
+`deferHistoricalRendering = true` per sopprimere lo scroll durante il
+replay della cronologia. Non l'ha trovato una rilettura: l'ha trovato la
+strumentazione nuova, tracciando **ogni messaggio SSE per singolo stream**
+(`EventSource` patchato in pagina, non il codice riletto):
+
+```
+t=9163  S2  RunStarted         seq=8   giaVista=false   ← il turno NUOVO
+t=9163  S2  CHIUSO   /  S3 APERTO
+t=9166  S3  RunStarted seq=1..8        giaVista=TRUE    ← replay, scartato dal dedup
+t=10472 S3  TextMessageContent seq=9+  giaVista=false  defer=TRUE ← la risposta vera, MAI renderizzata
+stato finale: defer=true
+```
+
+Il `RunStarted` del turno nuovo arriva sul **vecchio** stream (ancora
+aperto durante la POST `/resume`) e finisce in `sequenzeViste`; quando il
+nuovo stream lo rigioca, il dedup per `_sequenza` lo **scarta**. Nessun
+`RunStarted` "nuovo" raggiunge mai lo stream nuovo ⇒ il contatore di
+disarmo non avanza ⇒ **il differimento resta acceso per sempre** ⇒
+`TextMessageContent` non chiama più `programmaRenderMessaggioStreaming`:
+la risposta non scorre, compare **in blocco alla fine**. Nove secondi di
+attesa a zero caratteri, poi 2.070 tutti insieme. Esattamente il "delay
+assurdo tra quando elabora e quando stampa".
+
+⛔ E il differimento **non serviva**: il replay è già neutralizzato a
+monte dal dedup `_sequenza`, che scarta gli eventi rigiocati prima di
+qualunque render o scroll. Tolto alla radice; `deferHistoricalRendering`
+torna a servire solo ciò per cui era nato (aprire una sessione CONCLUSA).
+
+⭐ **Due tentativi di disarmo a contatore, sbagliati entrambi**, e a
+smentirli è stata sempre la misura, mai una rilettura: la 1ª versione
+(`runCount > runCountPrimaDelResume`) non teneva conto che `runCount` non
+si azzera con `continua:true`; la 2ª (contatore dedicato da zero) non
+poteva funzionare perché l'evento che doveva contare **viene deduplicato**.
+La lezione: quando la cura di un difetto ne richiede una seconda che le
+corra dietro, il problema è la prima cura.
+
+**Misurato, prima → dopo** (stesso scenario, follow-up su sessione conclusa):
+
+| tratto | prima | dopo |
+|---|---|---|
+| `primoDelta → primoPixel` (nostro) | **7877 ms** | **4-5 ms** |
+| streaming progressivo | no, blocco unico | sì, delta a 11783/12432/12756 |
+| `defer` a fine giro | `true` (bloccato) | `false` |
+
+Il tratto lungo che resta (`runStarted → primoDelta`, 1850-3400 ms) è il
+provider: quello non è nostro, e ora si vede a colpo d'occhio di chi è.
+
+### La strumentazione (richiesta esplicita: "in maniera più precisa")
+
+Ricerca web prima, come da regola zero — il TTFT lato client si misura con
+un timestamp monotono appena prima della richiesta e uno al primo chunk
+SSE con contenuto, e va **scomposto** (coda del provider, prefill, rete):
+clickhouse.com/resources/engineering/llm-inference-latency ·
+bentoml.com/llm/llm-inference-basics/llm-inference-metrics.
+
+`window.talosLatenzaRisposta()` in devtools, sempre attiva, otto tappe:
+`invio → postInviata → postRisposta → sseCollegato → primoEvento →
+runStarted → primoDelta → primoPixel`, con i tratti già sottratti e il
+`trattoPiuLungo` in chiaro. ⛔ Le tappe del turno vero non si registrano
+durante un replay (`TAPPE_SOLO_TURNO_VERO`): la prima versione mentiva
+proprio per questo, e se n'è accorta da sola.
+
+### Il loader: ora è quello del mobile, e ANIMATO
+
+Porta 1:1 di `mobile/src/components/brand/TalosLineLoader.vue` +
+`mobile/src/style.css`: viewBox `0 0 96 16`, traccia fioca a
+`stroke-opacity .18`, **sweep** che disegna da sinistra a destra, tre nodi
+VUOTI a cx 16/48/80 r4 che si riempiono quando la linea li raggiunge
+(ritardi 0 / .36s / .73s). Il desktop aveva divergito su tre pallini che
+pulsano, viewBox 48×18, **nessuna linea**: un'altra immagine.
+
+⛔ L'unica riga del mobile che **non** si copia è il suo blocco
+`@media (prefers-reduced-motion: reduce)`, che spegne l'animazione: su
+questa macchina quella preferenza è **vera a livello di sistema**
+(misurato), quindi copiarla avrebbe riprodotto lo stesso difetto che
+l'owner sta segnalando. Sotto motion ridotto il loader si **calma**
+(1,4×), non si ferma — un indicatore fermo è indistinguibile da un'app
+piantata. Servono quattro punti nel foglio, non uno: la regola cieca
+`*{animation-duration:0ms!important}` e la più specifica
+`:root:not(.interface-motion-off) *{animation-duration:.001ms!important}`
+lo azzeravano di nuovo (già misurato: `1e-06s`).
+
+Misurato dal vivo, con `prefers-reduced-motion: reduce` attivo:
+`animationName: talosLineSweep`, `playState: running`, `iterations:
+infinite`, e `stroke-dashoffset` che scorre davvero — 84,6 → 79,5 → 72,2 →
+62,8 → 51,9 → 40,2 → 28,9 → 18,8 → 10,7 → 5,1 px.
+
+### Il loader resta finché il testo è STAMPATO
+
+`nascondiAttesaRisposta()` stava nel case `TextMessageContent` — "il primo
+token vero". Ma il token **arrivato** non è testo **a schermo**: il render
+è programmato su `requestAnimationFrame`. In mezzo lo schermo restava
+senza loader e senza testo: il "gap in cui non c'è niente". Ora la chiude
+`renderizzaMessaggioStreamingOra`, al primo frame con `mostrato > 0`.
+La ricerca conferma il principio (getstream.io/chat typing-indicator,
+mui.com/x/react-chat): l'indicatore si sostituisce al contenuto quando il
+contenuto **compare**. Misurato: zero campioni con schermo vuoto (prima:
+l'ultimo campione con loader aveva già 443 caratteri stampati).
+
+### Suite
+
+Backend `node --test`: **1345/1345**. Frontend unit: **57/57**.
+Browser Playwright: **da 20 rossi / 70 verdi a 6 rossi / 84 verdi** — i 6
+residui erano già rossi sul baseline committato (verificato scambiando
+`app.js`/`styles.css` con la versione di HEAD e rilanciando): sono
+FILE-EXPLORER-TOOLBAR-05, LAG-LIVE-INCREMENTAL-40, NOTIFICHE-REALI-43,
+SETTINGS-FATTI-44, WORKSPACE-CHOOSER-INVERSE-19, WORKSPACE-CHOOSER-SUBMIT-10.
+🔜 **Debito registrato**: quei 6 restano aperti, non sono stati toccati in
+questo giro (permessi workspace, toolbar Files, notifiche, settings).
+
+Tre contratti di test cambiati **deliberatamente**, per ordine diretto
+dell'owner, con il perché scritto accanto a ognuno:
+RESPONSE-ACTIVITY-DOTS-08 e WAITING-LOADER-MOTION-01 (pretendevano
+l'ASSENZA dello sweep), REDUCED-MOTION-02 e
+WAITING-LOADER-REDUCED-MOTION-01 (pretendevano `animation: none`).
+Aggiunti RESPONSE-ACTIVITY-DOTS-08b (la geometria dell'SVG) e
+RESPONSE-ACTIVITY-STAMPATO-05 (la ruota non si chiude al primo delta).

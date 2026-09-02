@@ -362,6 +362,106 @@
     if (window.__talosHarnessStreamingVerbose) console.debug('[streaming]', evento, dettagli);
   }
   window.talosStreamingLog = () => streamingLog.slice();
+  /*
+   * ⛔⛔⛔ 02/9 — owner: "c'è un delay assurdo tra quando invio messaggio,
+   * quando elabora e quando stampa — strumenta tutte queste cose in
+   * maniera più precisa". Il log di streaming qui sopra misura BENE il
+   * tratto finale (delta→render), ma non dice niente su ciò che viene
+   * prima: chi si mangia i secondi fra il tocco su «Invia» e il primo
+   * carattere a schermo? Senza segmentarlo si tira a indovinare fra rete,
+   * provider, kernel e noi.
+   *
+   * ⭐ Ricerca web (regola zero, 02/9): il TTFT lato client si misura
+   * "recording a monotonic timestamp immediately before sending the
+   * request, then a second timestamp upon receiving the first valid SSE
+   * data chunk containing a content delta" — e va scomposto, perché
+   * include code del provider, prefill e rete
+   * (clickhouse.com/resources/engineering/llm-inference-latency,
+   * bentoml.com/llm/llm-inference-basics/llm-inference-metrics). Qui si
+   * segna OGNI tappa della catena reale, così il ritardo si ATTRIBUISCE
+   * invece di essere un unico numero opaco:
+   *
+   *   invio          il gesto della persona (submit del composer)
+   *   postInviata    un istante prima della fetch verso il nostro server
+   *   postRisposta   la POST ha risposto (il kernel ha accettato il giro)
+   *   sseCollegato   EventSource costruito
+   *   primoEvento    primo messaggio SSE di QUALUNQUE tipo (il canale vive)
+   *   runStarted     il kernel dichiara il giro partito
+   *   primoDelta     primo frammento di testo dal modello  ⇐ TTFT vero
+   *   primoPixel     primo carattere STAMPATO sullo schermo ⇐ ciò che si vede
+   *
+   * `window.talosLatenzaRisposta()` in devtools restituisce i tratti già
+   * sottratti, in ordine: il tratto più lungo È la causa, senza dibattito.
+   */
+  const TAPPE_LATENZA = ['invio', 'postInviata', 'postRisposta', 'sseCollegato', 'primoEvento', 'runStarted', 'primoDelta', 'primoPixel'];
+  let misuraLatenzaCorrente = null;
+  const misureLatenzaPassate = [];
+  function iniziaMisuraLatenza(etichetta) {
+    misuraLatenzaCorrente = { etichetta, avviataIl: new Date().toISOString(), tappe: new Map(), eventiRigiocati: 0, caratteriRigiocati: 0 };
+    segnaTappaLatenza('invio');
+  }
+  /**
+   * ⛔⛔⛔ 02/9 — la PRIMA versione di questa misura mentiva su un
+   * follow-up, e se ne è accorta da sola: dava `primoDelta → primoPixel =
+   * 7877 ms` (contro 4 ms sul primo messaggio della stessa sessione), un
+   * numero che sembrava accusare il nostro renderer. Non era vero: su un
+   * resume l'EventSource RIGIOCA tutta la cronologia prima di arrivare al
+   * turno nuovo, e `runStarted`/`primoDelta` venivano consumati dal PRIMO
+   * evento RIGIOCATO — cioè da un messaggio VECCHIO, già a schermo. I
+   * tratti erano quindi misurati fra cose diverse.
+   * ⇒ Le tappe del turno vero si registrano solo quando NON siamo dentro
+   * un replay (`deferHistoricalRendering`), e il replay ha una tappa sua
+   * (`replayFinito`) con quanti eventi/caratteri è costato: così si vede
+   * separatamente quanto pesa rileggere il passato e quanto aspetta il
+   * modello. Una misura che non sa distinguerli non è una misura.
+   */
+  const TAPPE_SOLO_TURNO_VERO = new Set(['runStarted', 'primoDelta', 'primoPixel']);
+  function segnaTappaLatenza(nome) {
+    // ⛔ Solo la PRIMA volta per giro: un secondo delta non è "il primo delta".
+    if (!misuraLatenzaCorrente || misuraLatenzaCorrente.tappe.has(nome)) return;
+    if (TAPPE_SOLO_TURNO_VERO.has(nome) && state.realSession.deferHistoricalRendering) return;
+    misuraLatenzaCorrente.tappe.set(nome, performance.now());
+    if (nome === 'primoPixel') {
+      misureLatenzaPassate.push(misuraLatenzaCorrente);
+      if (misureLatenzaPassate.length > 40) misureLatenzaPassate.shift();
+      misuraLatenzaCorrente = null;
+    }
+  }
+  /** Quanto costa rileggere il passato: un evento rigiocato per chiamata. */
+  function contaEventoRigiocato(caratteri) {
+    if (!misuraLatenzaCorrente) return;
+    misuraLatenzaCorrente.eventiRigiocati += 1;
+    misuraLatenzaCorrente.caratteriRigiocati += caratteri || 0;
+  }
+  function riassumiMisuraLatenza(misura) {
+    if (!misura) return null;
+    const presenti = TAPPE_LATENZA.filter((nome) => misura.tappe.has(nome));
+    const tratti = [];
+    for (let i = 1; i < presenti.length; i += 1) {
+      tratti.push({
+        tratto: `${presenti[i - 1]} → ${presenti[i]}`,
+        ms: Math.round(misura.tappe.get(presenti[i]) - misura.tappe.get(presenti[i - 1])),
+      });
+    }
+    const primo = misura.tappe.get(presenti[0]);
+    const ultimo = misura.tappe.get(presenti[presenti.length - 1]);
+    const piuLungo = tratti.reduce((max, t) => (t.ms > (max?.ms ?? -1) ? t : max), null);
+    return {
+      etichetta: misura.etichetta,
+      avviataIl: misura.avviataIl,
+      totaleMs: Math.round(ultimo - primo),
+      // ⛔ `completa:false` = il giro non è arrivato a stampare: il totale
+      // è un parziale, non un tempo di risposta. Mai confonderli.
+      completa: misura.tappe.has('primoPixel'),
+      tratti,
+      trattoPiuLungo: piuLungo,
+      replay: { eventi: misura.eventiRigiocati, caratteri: misura.caratteriRigiocati },
+    };
+  }
+  window.talosLatenzaRisposta = () => ({
+    inCorso: riassumiMisuraLatenza(misuraLatenzaCorrente),
+    ultime: misureLatenzaPassate.map(riassumiMisuraLatenza).reverse(),
+  });
   /** Riassunto pronto per un'occhiata rapida: quante righe 'render' hanno superato la soglia, la piu' lenta, la media. */
   window.talosStreamingLogRiassunto = (sogliaMs = 16) => {
     const render = streamingLog.filter((r) => r.evento === 'render');
@@ -614,8 +714,44 @@
     const arretrato = testoGrezzo.length - statoRender.mostrato;
     renderizzaMarkdownIncrementale(copia, statoRender, testoGrezzo.slice(0, statoRender.mostrato));
     if (modalita === 'fade') avvolgiParoleRecenti(copia, statoRender.paroleRecenti, t0);
+    /*
+     * ⛔⛔⛔ 02/9 — owner: "il logo di caricamento deve esistere fino a
+     * quando la risposta viene STREAMMATA E STAMPATA". Questo è l'unico
+     * punto del codice che sa di aver messo caratteri VERI sullo schermo:
+     * `renderizzaMarkdownIncrementale` è appena tornata e `mostrato` è il
+     * numero di caratteri effettivamente resi. La bolla di attesa si
+     * chiude QUI e in nessun altro punto del percorso del testo — non
+     * all'arrivo del primo delta (vedi il commento gemello nel case
+     * `TextMessageContent`), che precede il primo pixel di un frame o
+     * più, e con un ritmo di rivelazione attivo anche di parecchio.
+     * ⛔ `mostrato > 0` e non `>= 0`: un frame che non ha ancora rivelato
+     * nulla (ritmo appena partito) non è "stampato", e chiudere lì
+     * riaprirebbe esattamente il buco che stiamo togliendo.
+     */
+    if (statoRender.mostrato > 0) {
+      if (state.realSession.attesaBubble) segnaTappaLatenza('primoPixel');
+      nascondiAttesaRisposta();
+    }
     logStreaming('render', { messageId, testoLen: testoGrezzo.length, mostrato: statoRender.mostrato, rivelati, arretrato, modalita, durataMs: Math.round((performance.now() - t0) * 10) / 10 });
-    scrollStreamingOutput(element);
+    /*
+     * ⛔⛔⛔ 02/9 — owner dal vivo: "quando invio un messaggio la chat si
+     * sposta in alto e non rimane a fine chat". Isolato leggendo il
+     * codice (riproduzione dal vivo instabile per i tempi variabili del
+     * provider, non per il difetto): un follow-up su una sessione
+     * CONCLUSA (resumeSession) riapre un EventSource che RIPETE anche
+     * gli eventi VECCHI già a schermo (RunStarted/TextMessageContent/
+     * TextMessageEnd della cronologia precedente) — e questa funzione,
+     * chiamata da TextMessageEnd per OGNI messaggio incluso quelli
+     * vecchi, scrollava comunque: il replay del messaggio precedente
+     * centrava lo scroll su contenuto VECCHIO invece di lasciare la
+     * vista dov'era (già in fondo). Soppresso SOLO lo scroll (mai il
+     * render: TextMessageEnd deve comunque committare il testo) mentre
+     * `deferHistoricalRendering` è vero — vedi resumeSession() e il
+     * ramo `followUpBubbleInAttesa` di RunStarted per dove si arma e
+     * disarma per un resume, non solo per l'apertura di una sessione
+     * conclusa (che lo usava già).
+     */
+    if (!state.realSession.deferHistoricalRendering) scrollStreamingOutput(element);
     if (arretrato > 0) {
       programmaRenderMessaggioStreaming(messageId); // c'è ancora testo da rivelare: un altro frame, finché non si è in pari
     } else if (statoRender.fineRicevuta) {
@@ -770,8 +906,32 @@
    */
   function scorriAllaBollaAppesa(article) {
     window.setTimeout(() => {
-      if (!article.isConnected || $('#conversation')?.classList.contains('is-restoring')) return;
-      if (!$('#conversation')?.classList.contains('is-restoring')) article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' });
+      const conversazione = $('#conversation');
+      if (!article.isConnected || conversazione?.classList.contains('is-restoring')) return;
+      /*
+       * ⛔⛔⛔ 02/9 — owner dal vivo: "quando invio un messaggio la chat
+       * non resta ferma ma sale sopra" + "gap senza nulla" — riprodotto e
+       * isolato con strumentazione diretta (Element.prototype.scrollTo/
+       * scrollIntoView patchati, scrollTop campionato ogni 30-50ms):
+       * `article.scrollIntoView({block:'end'})` non produceva ALCUN
+       * movimento qui — zero pixel in 3s — anche su un elemento connesso
+       * dentro un #conversation genuinamente overflowing
+       * (scrollHeight 1630+ contro clientHeight 1214, misurato). Causa
+       * nella gerarchia: #conversation sta dentro .chat-view/.view-pane,
+       * che ha un `overflow` proprio (hidden, vince su .view-pane per
+       * ordine di sorgente — vedi styles.css) ed è quindi ANCH'ESSO una
+       * "scrolling box" per l'algoritmo nativo di scrollIntoView, che
+       * cammina tutti gli antenati scrollabili — la doppia gerarchia lo
+       * confondeva. `conversazione.scrollTo({top:scrollHeight})`,
+       * chiamato DIRETTAMENTE sull'UNICO contenitore che sappiamo
+       * scrollabile per davvero, non cammina antenati e non ha questo
+       * problema — stessa tecnica (assegnazione diretta) già in uso e
+       * verificata in passaASessione per il riclic sessione. Misurato:
+       * scrollIntoView 0px mossi; scrollTo diretto, in ~60ms, esatto.
+       */
+      if (conversazione) {
+        conversazione.scrollTo({ top: conversazione.scrollHeight, behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth' });
+      }
     }, 40);
   }
 
@@ -4841,9 +5001,30 @@
    * !runningTools.length` su mobile): il primo token di testo o il primo
    * tool-call la rimuovono (vedi TextMessageContent/ToolCallStart sotto).
    */
+  /*
+   * ⛔⛔⛔ 02/9 — owner: "il caricamento della risposta... con gemini flash
+   * c'è un gap in cui non c'è niente". Ricerca web (regola zero):
+   * redis.io/blog/streaming-llm-responses, tianpan.co/.../streaming-ttft-
+   * latency-perception — quando il tempo-al-primo-token non si può
+   * eliminare (qui il collo è il PROVIDER, già misurato da Fable:
+   * "raffiche ogni 100-500ms, pause fino a 10s"), la cura è percepita, non
+   * di velocità vera: "a status line sets a processing frame that makes
+   * a [wait] feel like forward progress rather than silence". L'etichetta
+   * fissa ("elaborando…") per 10 secondi filati È il silenzio che la
+   * ricerca descrive — il contasecondi (`.run-activity-elapsed`) già
+   * esiste ma è piccolo e muto. Qui l'etichetta principale avanza da
+   * sola con l'attesa reale — MAI un dettaglio inventato tipo "sto
+   * cercando nei tuoi file" (il progetto vieta i numeri/fatti finti):
+   * solo il tempo trascorso, che è vero per costruzione.
+   */
+  const ETICHETTE_ATTESA_PER_TEMPO = [
+    { dopoSecondi: 0, testo: 'TALOS sta elaborando la risposta…' },
+    { dopoSecondi: 5, testo: 'Il modello ci sta ancora lavorando…' },
+    { dopoSecondi: 12, testo: 'Ci sta mettendo più del solito — resta in attesa…' },
+  ];
   function mostraAttesaRisposta(stato = 'attesa') {
     const etichette = {
-      attesa: 'TALOS sta elaborando la risposta…',
+      attesa: ETICHETTE_ATTESA_PER_TEMPO[0].testo,
       reasoning: 'Ragionamento in corso…',
       preparing: 'TALOS sta preparando la risposta…',
       redirect: 'Reindirizzamento al prossimo punto sicuro…',
@@ -4861,23 +5042,46 @@
     article.setAttribute('role', 'status');
     article.setAttribute('aria-live', 'polite');
     article.setAttribute('aria-atomic', 'true');
+    /*
+     * ⛔⛔⛔ 02/9 — owner: "il logo non è animato come il mobile, ci deve
+     * essere una linea che attraversa i dot, usa direttamente la stessa
+     * identica immagine animata del mobile". Questa è ORA la porta esatta
+     * di `mobile/src/components/brand/TalosLineLoader.vue` (F4-#24/F5-#30):
+     * stesso viewBox 96×16, stessa traccia fioca, stesso sweep che disegna
+     * da sinistra a destra, stessi tre nodi VUOTI a cx 16/48/80 r 4 che si
+     * riempiono quando la linea li raggiunge. Il desktop aveva divergito su
+     * tre soli pallini che pulsano (viewBox 48×18, nessuna linea): non era
+     * la stessa immagine. ⛔ Il regolamento del progetto è
+     * [[mobile-harness-ui-si-allinea-sempre-al-desktop]] per il
+     * COMPORTAMENTO; qui l'owner ordina l'opposto per questa GRAFICA, ed è
+     * un ordine esplicito e diretto — il mobile è la fonte. Stili in
+     * styles.css, portati riga per riga da `mobile/src/style.css`.
+     */
     const svgNs = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(svgNs, 'svg');
     svg.setAttribute('class', 'talos-line-loader');
-    svg.setAttribute('viewBox', '0 0 48 18');
-    svg.setAttribute('width', '34');
-    svg.setAttribute('height', '13');
+    svg.setAttribute('viewBox', '0 0 96 16');
+    svg.setAttribute('width', '96');
+    svg.setAttribute('height', '16');
     svg.setAttribute('aria-hidden', 'true');
-    for (const cx of [8, 24, 40]) {
+    for (const classe of ['talos-line-loader-track', 'talos-line-loader-sweep']) {
+      const linea = document.createElementNS(svgNs, 'line');
+      linea.setAttribute('class', classe);
+      linea.setAttribute('x1', '4'); linea.setAttribute('y1', '8');
+      linea.setAttribute('x2', '92'); linea.setAttribute('y2', '8');
+      svg.append(linea);
+    }
+    for (const cx of [16, 48, 80]) {
       const nodo = document.createElementNS(svgNs, 'circle');
       nodo.setAttribute('class', 'talos-line-loader-node');
-      nodo.setAttribute('cx', String(cx)); nodo.setAttribute('cy', '10'); nodo.setAttribute('r', '3.5');
+      nodo.setAttribute('cx', String(cx)); nodo.setAttribute('cy', '8'); nodo.setAttribute('r', '4');
       svg.append(nodo);
     }
     const elapsed = textElement('span', 'run-activity-elapsed', '0s');
     elapsed.setAttribute('aria-hidden', 'true');
+    const labelEl = textElement('span', 'run-activity-label', etichetta);
     article.dataset.activity = stato;
-    article.append(svg, textElement('span', 'run-activity-label', etichetta), elapsed);
+    article.append(svg, labelEl, elapsed);
     conversation.appendChild(article);
     state.realSession.attesaBubble = article;
     state.realSession.attesaAvviataA = typeof performance !== 'undefined' && typeof performance.now === 'function'
@@ -4888,7 +5092,22 @@
       const ora = typeof performance !== 'undefined' && typeof performance.now === 'function'
         ? performance.now()
         : Date.now();
-      elapsed.textContent = `${Math.max(0, Math.floor((ora - state.realSession.attesaAvviataA) / 1000))}s`;
+      const secondiTrascorsi = Math.max(0, Math.floor((ora - state.realSession.attesaAvviataA) / 1000));
+      elapsed.textContent = `${secondiTrascorsi}s`;
+      /*
+       * ⛔ Solo mentre lo stato resta 'attesa': 'reasoning'/'preparing'/
+       * 'redirect' sono segnali VERI arrivati dal kernel (vedi
+       * `mostraAttesaRisposta` sopra) e non vanno scavalcati da
+       * un'etichetta a tempo — altrimenti si perde un'informazione reale
+       * per una generica.
+       */
+      if (state.realSession.attesaBubble.dataset.activity === 'attesa') {
+        let testoAdatto = ETICHETTE_ATTESA_PER_TEMPO[0].testo;
+        for (const voce of ETICHETTE_ATTESA_PER_TEMPO) {
+          if (secondiTrascorsi >= voce.dopoSecondi) testoAdatto = voce.testo;
+        }
+        if (labelEl.textContent !== testoAdatto) labelEl.textContent = testoAdatto;
+      }
     };
     state.realSession.attesaTimer = window.setInterval(aggiornaTempoAttesa, 1000);
     markMotionEnter(article);
@@ -7482,6 +7701,32 @@
          * impostato da resumeSession subito prima della POST).
          */
         state.realSession.runCount = (state.realSession.runCount || 0) + 1;
+        /*
+         * ⛔⛔⛔ 02/9 — disarma il "sopprimi lo scroll" armato da
+         * resumeSession() (vedi il commento lì): confronta col NUMERO di
+         * giri, non con `evento.input?.seguito` — copre sia il resume CON
+         * un nuovo messaggio sia quello SENZA (sessione interrotta, si
+         * riprende lo stesso task, niente `seguito`), e non si disarma
+         * troppo presto su una cronologia con più follow-up precedenti
+         * (che il replay ripete anch'essi, ognuno con `seguito:true`).
+         */
+        /*
+         * ⛔⛔⛔ 02/9 — QUI c'erano DUE tentativi di disarmare a contatore
+         * il differimento acceso da `resumeSession`, sbagliati entrambi, e
+         * a smentirli è stata la strumentazione, non una rilettura:
+         *   1ª versione (`runCount > runCountPrimaDelResume`): `runCount`
+         *      non si azzera con `continua:true`, quindi il PRIMO giro
+         *      rigiocato superava già la soglia — il replay passava per
+         *      turno nuovo.
+         *   2ª versione (contatore dedicato da zero): il RunStarted del
+         *      turno nuovo arriva sul VECCHIO stream e sul nuovo viene
+         *      scartato dal dedup `_sequenza` — non arriva MAI, e il
+         *      differimento restava acceso per sempre.
+         * ⇒ Il differimento sul resume è stato tolto alla radice (vedi
+         * `resumeSession`): il replay è già neutralizzato dal dedup qui
+         * sopra, e non serve un secondo meccanismo che gli corra dietro.
+         */
+        segnaTappaLatenza('runStarted');
         if (!state.realSession.taskBubbleMostrata && evento.input) {
           appendRealTaskStart(evento.input, evento.contesto);
         } else if (state.realSession.taskBubbleMostrata && evento.input?.seguito) {
@@ -7499,7 +7744,22 @@
       case 'TextMessageContent': {
         // ⭐ 02/09 — arrivo del frammento dal server, PRIMA di qualunque render: nel log di streaming un buco fra due 'delta' è rete/provider, un buco fra 'delta' e 'render' è nostro. Misurato dal vivo il 02/09: render ≤1,1 ms, buchi fra delta di 2-12 s — il collo era a monte.
         logStreaming('delta', { messageId: evento.messageId, len: typeof evento.delta === 'string' ? evento.delta.length : 0 });
-        nascondiAttesaRisposta(); // il primo token vero: la ruota di attesa ha fatto il suo lavoro
+        segnaTappaLatenza('primoDelta');
+        /*
+         * ⛔⛔⛔ 02/9 — owner: "il logo di caricamento deve esistere fino a
+         * quando la risposta viene STREAMMATA E STAMPATA". Qui c'era
+         * `nascondiAttesaRisposta()` — "il primo token vero". Ma il primo
+         * token ARRIVATO non è testo STAMPATO: il render è programmato su
+         * `requestAnimationFrame` e, con un ritmo di rivelazione attivo,
+         * i primi caratteri compaiono anche più in là. Nel mezzo lo
+         * schermo restava senza loader E senza testo — il "gap in cui non
+         * c'è niente" che l'owner vede. La ricerca lo dice esplicito
+         * (getstream.io/chat typing-indicator, mui.com/x/react-chat):
+         * l'indicatore si sostituisce al contenuto quando il contenuto
+         * COMPARE, non quando arriva il primo pezzo sul filo. Ora la
+         * chiude `renderizzaMessaggioStreamingOra`, al primo frame che ha
+         * davvero scritto qualcosa (vedi lì).
+         */
         chiudiBatchTool(); // 30/8 — testo vero dell'assistente: chiude il batch di tool-call corrente, se ce n'è uno aperto (vedi doc su apriBatchSeServe)
         const element = ensureAssistantMessageElement(evento.messageId);
         if (!element.classList.contains('is-streaming')) element.classList.add('is-streaming');
@@ -7509,7 +7769,8 @@
         // in mezzo a un ```blocco di codice``` non basta da solo a capirlo.
         const testoGrezzo = (state.realSession.testoGrezzoMessaggi.get(evento.messageId) || '') + evento.delta;
         state.realSession.testoGrezzoMessaggi.set(evento.messageId, testoGrezzo);
-        if (!state.realSession.deferHistoricalRendering) programmaRenderMessaggioStreaming(evento.messageId);
+        if (state.realSession.deferHistoricalRendering) contaEventoRigiocato(typeof evento.delta === 'string' ? evento.delta.length : 0);
+        else programmaRenderMessaggioStreaming(evento.messageId);
         break;
       }
       case 'TextMessageEnd': {
@@ -7906,8 +8167,10 @@
       .find((badge) => badge.closest('[data-demo-surface]')?.dataset.demoSurface === 'chat');
     if (demoBadgeChat) demoBadgeChat.hidden = true;
     const source = new EventSource(API(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`));
+    segnaTappaLatenza('sseCollegato');
     state.realSession.eventSource = source;
     source.onmessage = (message) => {
+      segnaTappaLatenza('primoEvento'); // ⭐ il canale è vivo: da qui in poi il ritardo è del modello, non della nostra connessione
       let evento;
       try { evento = JSON.parse(message.data); } catch { return; }
       handleRealEvent(evento, generation);
@@ -8174,13 +8437,67 @@
     if (!state.realSession.id) { toast('Nessuna sessione reale da riprendere'); return; }
     const sessionId = state.realSession.id;
     const taskId = state.realSession.taskId;
+    iniziaMisuraLatenza(messaggioFollowUp ? 'follow-up' : 'resume senza messaggio');
     if (messaggioFollowUp) { appendUserFollowUp(messaggioFollowUp); state.realSession.followUpBubbleInAttesa = true; }
     mostraAttesaRisposta(); // sia il follow-up sia un resume senza messaggio riavviano un giro vero
     try {
+      segnaTappaLatenza('postInviata');
       await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/resume`, messaggioFollowUp ? { messaggio: messaggioFollowUp } : {});
+      segnaTappaLatenza('postRisposta');
       // continua:true — STESSA vista: la conversazione resta a schermo, il
       // follow-up già mostrato (sopra) e la risposta che arriva bastano.
       const generation = nuovaGenerazioneSessione({ continua: true });
+      /*
+       * ⛔⛔⛔ 02/9 — riprodotto dal vivo con strumentazione (screenshot +
+       * campionamento ogni 30ms): `nuovaGenerazioneSessione` chiama SEMPRE
+       * `nascondiAttesaRisposta()` in testa (riga corrispondente più sopra
+       * nel file) — anche con `continua:true`, dove serve solo per
+       * cancellare i render pendenti del giro precedente. Il risultato:
+       * la bolla creata da `mostraAttesaRisposta()` due righe sopra questo
+       * blocco veniva distrutta un istante dopo, PRIMA che il nuovo
+       * EventSource riproducesse la cronologia e arrivasse al giro vero —
+       * un vuoto reale (misurato: 0 bolle su 50 campioni in 1,5s) fino al
+       * primo `TextMessageContent`/segnale utile, che con provider lenti
+       * (gemini-3.7-flash, gap fino a ~10s per misura di Fable) è
+       * lunghissimo. `RunStarted` non richiama `mostraAttesaRisposta()`:
+       * niente altro la rimette. Si ri-arma qui, subito dopo il wipe.
+       */
+      mostraAttesaRisposta();
+      /*
+       * ⛔⛔⛔ 02/9 — QUI c'era `deferHistoricalRendering = true` per il
+       * replay del resume. TOLTO, ed è la correzione più importante di
+       * questo giro: era la causa del "delay assurdo tra quando elabora e
+       * quando stampa" segnalato dall'owner, non una cura.
+       *
+       * ⭐ La prova, tracciando OGNI messaggio SSE per singolo stream
+       * (sonda con `EventSource` patchato, non una rilettura del codice):
+       *
+       *   t=9163 S2  RunStarted        seq=8  giaVista=false  ← il turno NUOVO
+       *   t=9163 S2  CHIUSO   /  S3 APERTO
+       *   t=9166 S3  RunStarted seq=1..8      giaVista=TRUE   ← replay, scartato
+       *   t=10472 S3 TextMessageContent seq=9+ giaVista=false ← la risposta vera
+       *
+       * Il RunStarted del turno nuovo arriva sul VECCHIO stream (S2, ancora
+       * aperto durante la POST /resume) e viene registrato in
+       * `sequenzeViste`; quando il nuovo stream lo rigioca, il dedup per
+       * `_sequenza` lo scarta — quindi NESSUN RunStarted "nuovo" arriva
+       * mai sullo stream nuovo, il contatore non avanza e il
+       * differimento resta acceso PER SEMPRE (misurato: `defer:true` a
+       * fine giro). Con il differimento acceso `TextMessageContent` non
+       * chiama `programmaRenderMessaggioStreaming`: la risposta non
+       * scorre più parola per parola, compare in blocco alla fine — 9
+       * secondi di attesa con zero caratteri, poi 2.070 tutti insieme.
+       *
+       * ⛔ E non serviva: il replay è GIÀ neutralizzato a monte dal dedup
+       * `_sequenza` (vedi handleRealEvent), che scarta gli eventi
+       * rigiocati prima di qualunque render o scroll. Il salto di scroll
+       * che l'owner vedeva aveva un'altra causa, trovata e curata
+       * separatamente in `scorriAllaBollaAppesa` (scrollIntoView non
+       * muoveva un pixel — vedi il commento lì).
+       * ⇒ `deferHistoricalRendering` torna a servire SOLO ciò per cui era
+       * nato: aprire una sessione già CONCLUSA (`passaASessione`, con
+       * `conclusa:true`), dove la cronologia si costruisce davvero da zero.
+       */
       state.realSession.taskId = taskId;
       collegaEventiSessione(sessionId, generation);
       aggiornaElencoSessioniReali();
@@ -9497,6 +9814,7 @@
   }
 
   async function startCustomSession({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, consegna, comandoProva, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo }) {
+    iniziaMisuraLatenza('primo messaggio della sessione');
     const generation = nuovaGenerazioneSessione();
     const taskSintetico = { id: `libero:${nomeCartella}`, consegna };
     state.realSession.taskId = taskSintetico.id;
@@ -9563,7 +9881,9 @@
       if (permessiPerAttrezzoEffettivi && Object.keys(permessiPerAttrezzoEffettivi).length > 0) {
         corpo.permessiPerAttrezzo = permessiPerAttrezzoEffettivi;
       }
+      segnaTappaLatenza('postInviata');
       const data = await apiPost('/api/v1/sessions/custom', corpo);
+      segnaTappaLatenza('postRisposta');
       sessionId = data.sessionId;
     } catch (error) {
       if (generation !== state.realSession.generation) return;

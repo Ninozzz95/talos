@@ -959,7 +959,18 @@ test('REASONING-INDICATOR-01 — il ragionamento nascosto mantiene un indicatore
   await page.screenshot({ path: resolve(visualDir, 'run-reasoning-indicator-1440x900.png'), fullPage: true });
 });
 
-test('REDUCED-MOTION-02 — l’indicatore resta leggibile ma non animato con movimento ridotto', async ({ page }) => {
+test('REDUCED-MOTION-02 — l’indicatore resta leggibile e CALMO con movimento ridotto, mai fermo', async ({ page }) => {
+  /*
+   * ⛔⛔⛔ 02/9 — contratto CAMBIATO due volte in un colpo, per due ordini
+   * espliciti dell'owner: la linea del mobile ORA deve esserci (prima
+   * questo test ne pretendeva l'assenza), e sotto movimento ridotto il
+   * loader NON deve essere spento (prima pretendeva `animation-name:
+   * none`). Su questa macchina `prefers-reduced-motion` è vero a livello
+   * di sistema, quindi quel "none" era esattamente ciò che l'owner vedeva
+   * come "il logo di caricamento non è animato". Vedi il commento sul
+   * loader in styles.css per la ricerca che regge la scelta: un
+   * indicatore di stato essenziale si CALMA, non si congela.
+   */
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
   await page.evaluate(() => {
@@ -969,8 +980,15 @@ test('REDUCED-MOTION-02 — l’indicatore resta leggibile ma non animato con mo
   await expect(page.locator('.real-waiting-note')).toContainText('Ragionamento in corso');
   const punti = page.locator('.talos-line-loader-node');
   await expect(punti).toHaveCount(3);
-  await expect(page.locator('.talos-line-loader-sweep, .talos-line-loader-head, .run-activity-shimmer')).toHaveCount(0);
-  for (const punto of await punti.all()) await expect(punto).toHaveCSS('animation-name', 'none');
+  await expect(page.locator('.talos-line-loader-head, .run-activity-shimmer')).toHaveCount(0);
+  await expect(page.locator('.talos-line-loader-sweep')).toHaveCount(1);
+  for (const punto of await punti.all()) await expect(punto).toHaveCSS('animation-name', 'talosLineNodeFill');
+  await expect(page.locator('.talos-line-loader-sweep')).toHaveCSS('animation-name', 'talosLineSweep');
+  // ⛔ La prova che conta: il browser le sta DAVVERO eseguendo, e non a
+  // durata zero (il modo in cui `animation:none` si traveste da animazione).
+  const stato = await page.locator('.talos-line-loader').first().evaluate((el) => el.getAnimations({ subtree: true }).map((a) => ({ p: a.playState, d: a.effect?.getTiming().duration, i: a.effect?.getTiming().iterations })));
+  expect(stato).toHaveLength(4);
+  expect(stato.every((a) => a.p === 'running' && a.d > 100 && a.i === Infinity)).toBe(true);
 });
 
 test('RUN-PRIMARY-STOP-03/RUN-QUEUE-04 — durante il run il primario ferma, Enter accoda e il testo abilita Reindirizza', async ({ page }) => {
@@ -1386,27 +1404,38 @@ async function triggerWaitingLoader(page) {
   return loader;
 }
 
-test('WAITING-LOADER-MOTION-01 — il loader reale avanza fra due fotogrammi', async ({ page }) => {
+test('WAITING-LOADER-MOTION-01 — il loader reale è quello del mobile e avanza fra due fotogrammi', async ({ page }) => {
+  /*
+   * ⛔⛔⛔ 02/9 — contratto CAMBIATO per ordine diretto dell'owner: "usa
+   * direttamente la stessa identica immagine animata del mobile... ci deve
+   * essere una linea che attraversa i dot". La versione precedente di
+   * questo test PRETENDEVA l'assenza dello sweep
+   * (`.talos-line-loader-sweep` count 0) e una durata legata al token
+   * `--motion-response-activity`: era la divergenza desktop congelata in
+   * un test. Ora si prova la cosa vera — la linea ESISTE, e sweep + tre
+   * nodi girano tutti all'infinito (4 animazioni, non 3).
+   */
   const loader = await triggerWaitingLoader(page);
-  await expect(page.locator('.run-activity-shimmer, .talos-line-loader-head, .talos-line-loader-sweep')).toHaveCount(0);
-  const { animationState, tokenDuration } = await loader.evaluate((element) => {
-    const rawToken = getComputedStyle(element).getPropertyValue('--motion-response-activity').trim();
-    const tokenDuration = rawToken.endsWith('ms')
-      ? Number.parseFloat(rawToken)
-      : Number.parseFloat(rawToken) * 1000;
-    return {
-      tokenDuration,
-      animationState: element.getAnimations({ subtree: true }).map((animation) => ({
-        playState: animation.playState,
-        duration: animation.effect?.getTiming().duration,
-        iterations: animation.effect?.getTiming().iterations,
-      })),
-    };
-  });
-  expect(animationState).toHaveLength(3);
+  await expect(page.locator('.run-activity-shimmer, .talos-line-loader-head')).toHaveCount(0);
+  await expect(loader.locator('.talos-line-loader-track')).toHaveCount(1);
+  await expect(loader.locator('.talos-line-loader-sweep')).toHaveCount(1);
+  await expect(loader.locator('.talos-line-loader-node')).toHaveCount(3);
+  const { animationState, geometria } = await loader.evaluate((element) => ({
+    geometria: {
+      viewBox: element.getAttribute('viewBox'),
+      nodi: [...element.querySelectorAll('.talos-line-loader-node')].map((n) => n.getAttribute('cx')),
+    },
+    animationState: element.getAnimations({ subtree: true }).map((animation) => ({
+      playState: animation.playState,
+      duration: animation.effect?.getTiming().duration,
+      iterations: animation.effect?.getTiming().iterations,
+    })),
+  }));
+  expect(geometria.viewBox).toBe('0 0 96 16');
+  expect(geometria.nodi).toEqual(['16', '48', '80']);
+  expect(animationState).toHaveLength(4); // lo sweep + i tre nodi (la traccia è ferma per disegno)
   expect(animationState.every((animation) => animation.playState === 'running')).toBe(true);
-  expect(tokenDuration).toBeGreaterThan(0);
-  expect(animationState.every((animation) => animation.duration === tokenDuration)).toBe(true);
+  expect(animationState.every((animation) => animation.duration > 0)).toBe(true);
   expect(animationState.every((animation) => animation.iterations === Infinity)).toBe(true);
   const visualDir = resolve(process.cwd(), 'artifacts', 'visual-audit-2026-09-01');
   await mkdir(visualDir, { recursive: true });
@@ -1420,7 +1449,24 @@ test('WAITING-LOADER-MOTION-01 — il loader reale avanza fra due fotogrammi', a
   expect(changed).toBeGreaterThan(0);
 });
 
-test('WAITING-LOADER-REDUCED-MOTION-01 — ridurre il movimento ferma il loader senza nasconderlo', async ({ page }) => {
+test('WAITING-LOADER-REDUCED-MOTION-01 — ridurre il movimento CALMA il loader, non lo congela', async ({ page }) => {
+  /*
+   * ⛔ 02/9 — contratto CAMBIATO deliberatamente: la versione precedente di
+   * questo test pretendeva `changed === 0` (congelamento totale) sotto
+   * `prefers-reduced-motion: reduce`. Owner, dal vivo: "il logo di
+   * caricamento non è animato" — su una macchina reale con quella
+   * preferenza attiva a livello di sistema (misurato via CDP, non
+   * presunto) il congelamento si vedeva come un loader rotto durante
+   * un'attesa reale. Vedi il commento su `talosLineNodeBreath` in
+   * styles.css: un "sto ancora lavorando" resta vivo (più calmo — sola
+   * opacità, nessuno scale — non il pulse pieno) anche a movimento
+   * ridotto, non zittito del tutto. Qui si prova solo "vivo", non
+   * "quanto": il "più calmo del pulse pieno" è già provato a livello di
+   * sorgente CSS in tests/response-activity-indicator.test.mjs
+   * (RESPONSE-ACTIVITY-REDUCED-03, keyframe `talosLineNodeBreath` invece
+   * di `talosLineNodePulse`) — misurato qui il 02/9: 93 pixel cambiati
+   * su 480ms con la nuova keyframe, 0 con quella vecchia.
+   */
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const loader = await triggerWaitingLoader(page);
   const first = PNG.sync.read(await loader.screenshot({ animations: 'allow' }));
@@ -1428,12 +1474,20 @@ test('WAITING-LOADER-REDUCED-MOTION-01 — ridurre il movimento ferma il loader 
   const second = PNG.sync.read(await loader.screenshot({ animations: 'allow' }));
   const changed = pixelmatch(first.data, second.data, null, first.width, first.height, { threshold: 0.05 });
   const nodeStyles = await loader.locator('.talos-line-loader-node').evaluateAll((nodes) => nodes.map((node) => ({
-    fill: getComputedStyle(node).fill,
+    stroke: getComputedStyle(node).stroke,
+    strokeWidth: getComputedStyle(node).strokeWidth,
     opacity: getComputedStyle(node).opacity,
   })));
-  expect(changed).toBe(0);
+  expect(changed).toBeGreaterThan(0);
   expect(nodeStyles).toHaveLength(3);
-  expect(nodeStyles.every((node) => node.fill !== 'rgba(0, 0, 0, 0)' && node.opacity !== '0')).toBe(true);
+  /*
+   * ⛔ 02/9 — si guarda lo STROKE, non il fill: nel disegno del mobile i
+   * nodi sono cerchi VUOTI (`fill: transparent`) che si riempiono solo
+   * quando lo sweep li raggiunge — il fill trasparente è il loro stato
+   * normale, non un nodo invisibile. Quello che deve essere sempre
+   * visibile è il contorno.
+   */
+  expect(nodeStyles.every((node) => node.stroke !== 'none' && node.stroke !== 'rgba(0, 0, 0, 0)' && node.opacity !== '0')).toBe(true);
   const visualDir = resolve(process.cwd(), 'artifacts', 'visual-audit-2026-09-01');
   await mkdir(visualDir, { recursive: true });
   await page.screenshot({ path: resolve(visualDir, 'response-activity-reduced-1440x900.png'), fullPage: true });
