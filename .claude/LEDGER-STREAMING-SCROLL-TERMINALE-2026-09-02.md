@@ -1059,3 +1059,50 @@ passati con i 2 rossi preesistenti invariati.
 solo il profilo **agente**, quindi bolla «non compatibile» un modello che
 per **chat** andrebbe bene — misurato sul Qwen3 27B: 28,9 GB a 65k
 (agente) contro ~17 GB a 8k (chat), su 31,6 GB di RAM totale.
+
+### ⛔⛔⛔ E poi ho premuto il pulsante per davvero: TRE difetti
+
+Il pannello era stato «verificato dal vivo» — ma con **nessun modello
+caricato**, quindi il pulsante era disabilitato e quello stato *sembrava*
+l'esito giusto. Caricando un modello VERO (`/runtime/load` → `ready`,
+porta 61107) sono usciti tre difetti, **nessuno visibile leggendo il
+codice**:
+
+1. **Il corpo della richiesta era `{}`** e la rotta pretende `runtimeId`:
+   il pulsante avrebbe risposto **sempre** `QUERY_INVALID`. Non avrebbe
+   mai funzionato, nemmeno una volta.
+2. **Due nomi di campo INVENTATI** per sapere se un modello è caricato:
+   nessuno dei due esiste nella risposta del server ⇒ sempre `null`,
+   pulsante disabilitato per sempre, funzione morta. Il fatto osservabile
+   vero è `runtimeState === 'ready'`.
+3. **Il pannello non si rinfrescava mai**: leggeva
+   `state.modelLab.runtimes` ma veniva ridisegnato solo da
+   `caricaCapacitaMacchina()`, che gira una volta all'avvio. Caricare un
+   modello dopo non cambiava nulla a schermo.
+
+⭐ **E un difetto della ROTTA, non mio**: `/api/v1/runtime/unload`
+pretendeva `modelId` obbligatorio, ma `unload()` non prende argomenti
+(fa `supervisor.stop()`) e il server **non espone da nessuna parte quale
+modello sia caricato** — chiedeva un dato che non esiste. Reso opzionale.
+⛔ Quella rotta **non aveva un solo test**: aggiunti tre, incluso il verso
+contrario.
+
+### La prova finale, nei byte
+
+Pulsante **abilitato** → clic vero → runtime `unavailable`, riga tornata a
+«non tiene nessun modello», pulsante di nuovo disabilitato, e la memoria:
+**da 10 GB a 15 GB liberi — 5 GB recuperati**, misurati dopo la rimisura.
+
+⛔ **Due volte un mio test ha protetto il codice rotto**: il primo fissava
+il *nome* di una variabile appartenente all'implementazione sbagliata; il
+secondo, riscritto per vietare i nomi inventati, falliva sul **commento**
+che quei nomi cita per spiegare il difetto. Una regola che vieta una
+parola in tutto il file colpisce anche la documentazione: si vieta
+l'**uso** (l'accesso come proprietà), non la menzione.
+
+**Suite finale**: backend **1388/1388**, frontend unit 57/57, browser 88
+passati con i 2 rossi preesistenti invariati.
+
+🔜 **Debito**: caricare un runtime già caricato risponde
+`500 INTERNAL_ERROR` invece di un errore di collisione pulito — stessa
+famiglia del reimport di un modello già presente.
