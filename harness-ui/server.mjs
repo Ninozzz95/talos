@@ -347,8 +347,9 @@ async function startServer() {
 const direct = process.argv[1]
   && pathToFileURL(process.argv[1]).href === import.meta.url;
 if (direct) {
-  startServer().catch(() => {
+  startServer().catch((error) => {
     console.error('Harness UI non avviabile: controlla configurazione e file locali');
+    console.error('[avvio] causa reale:', error instanceof Error ? (error.stack || error.message) : error);
     process.exitCode = 1;
   });
 }

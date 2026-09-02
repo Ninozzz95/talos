@@ -1500,6 +1500,67 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .model-lab-filter-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .model-lab-filter-chips span { padding: 5px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font: calc(9px * var(--talos-ui-font-scale)) var(--font-mono); }
 .model-lab-disabled-grid { grid-template-columns: minmax(0, 1fr) auto auto; }
+
+/*
+ * ⭐⭐⭐ 02/09 — scheda repository Hugging Face ridisegnata, owner dal
+ * vivo: "la scheda modelli HF fa schifo davvero". Skill frontend-design
+ * caricata (regola vincolante). Riferimento: la stessa superficie sul
+ * mobile (`TalosMobileLocalRepoDetail.vue`) — stessa informazione (tag,
+ * scarica/preferiti, apri+copia link, scheda README, varianti con
+ * stato), layout desktop: un elenco verticale di righe al posto della
+ * rail orizzontale a chip pensata per un pollice — il desktop ha
+ * larghezza da spendere, non uno scroll laterale. Riusa SOLO token già
+ * esistenti (--surface/--accent/--success/--danger/--line/--muted):
+ * nessun colore nuovo inventato per questa sola scheda.
+ */
+/* ⛔⛔⛔ 02/9 — QA visiva dal vivo (screenshot + misura reale via CDP, non
+ * un'ipotesi): il floor fisso 360px sulla colonna dettaglio, dentro un
+ * container che nella scheda Impostazioni reale è largo quanto
+ * `settings-detail` (spesso ~300-330px, il container-query esistente
+ * qui sotto ne è la prova — non un caso raro), collassava la colonna
+ * elenco a 0px (`getComputedStyle → "0px 360px"`, nomi repo illeggibili,
+ * "Ma…"/"han…") E mandava la colonna dettaglio in overflow (360 > 312
+ * disponibili). Floor più piccoli su ENTRAMBE le colonne, e sotto una
+ * soglia si impila in una colonna sola — stesso idioma già in uso su
+ * `settings-detail` (righe sotto), non inventato qui. */
+#modelLabHfPanel .model-lab-catalog-layout { grid-template-columns: minmax(120px, .8fr) minmax(200px, 1.2fr); }
+#modelLabHfPanel .model-lab-detail { max-height: none; padding: 0; background: transparent; border: 0; }
+.hf-repo-card { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-highlight-subtle); }
+.hf-repo-heading { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.hf-repo-id { margin: 0; overflow-wrap: anywhere; color: var(--text); font: 600 calc(12px * var(--talos-ui-font-scale)) var(--font-mono); }
+.hf-repo-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; }
+.hf-repo-actions .secondary-btn { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.hf-repo-actions .secondary-btn svg { width: 13px; height: 13px; }
+.hf-repo-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.hf-tag { padding: 3px 9px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font: calc(9px * var(--talos-ui-font-scale)) var(--font-mono); white-space: nowrap; }
+.hf-tag-gated { border-color: var(--danger-strong, var(--danger)); color: var(--danger); background: var(--danger-soft); }
+.hf-tag-public { border-color: var(--success-strong, var(--success)); color: var(--success); background: var(--success-soft); }
+.hf-repo-stats { margin: 0; color: var(--muted); font: calc(9px * var(--talos-ui-font-scale)) var(--font-mono); }
+.hf-variant-list { display: grid; gap: 6px; }
+.hf-variant-list-heading { margin: 4px 0 0; color: var(--text-2); font-size: calc(10px * var(--talos-ui-font-scale)); text-transform: uppercase; letter-spacing: .04em; }
+.hf-variant-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+.hf-variant-status { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.hf-variant-row.is-ready .hf-variant-status { background: var(--success); }
+.hf-variant-row.is-incomplete .hf-variant-status, .hf-variant-row.is-unverified .hf-variant-status { background: var(--danger); }
+.hf-variant-info { display: grid; min-width: 0; flex: 1 1 auto; gap: 2px; }
+.hf-variant-info strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font: calc(10px * var(--talos-ui-font-scale)) var(--font-mono); }
+.hf-variant-info small { color: var(--muted); font: calc(9px * var(--talos-ui-font-scale)) var(--font-mono); }
+.hf-variant-row button { flex: 0 0 auto; }
+@media (max-width: 720px) {
+  #modelLabHfPanel .model-lab-catalog-layout { grid-template-columns: 1fr; }
+  .hf-repo-heading { flex-direction: column; align-items: stretch; }
+  .hf-repo-actions { justify-content: flex-end; }
+}
+/* ⛔ 02/9 — la larghezza che conta qui è quella del CONTAINER
+ * `settings-detail` (vedi `@container settings-detail` più sotto per lo
+ * stesso pattern), non quella del viewport: dentro la scheda
+ * Impostazioni questo pannello resta stretto anche su un desktop largo.
+ * La regola @media sopra non scatta mai in quel caso — questa sì. */
+@container settings-detail (max-width: 560px) {
+  #modelLabHfPanel .model-lab-catalog-layout { grid-template-columns: 1fr; }
+  .hf-repo-heading { flex-direction: column; align-items: stretch; }
+  .hf-repo-actions { justify-content: flex-end; }
+}
 .model-lab-disabled-grid .search-field { opacity: .65; }
 .model-lab-runtime-list, .model-lab-installed-list, .model-lab-stream { display: grid; gap: 6px; margin: 10px 0; }
 .model-lab-runtime-item, .model-lab-installed-item, .model-lab-stream-block { min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-highlight-subtle); }
