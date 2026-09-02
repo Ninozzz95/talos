@@ -2,19 +2,19 @@
   "source": "harness-ui/public",
   "assets": {
     "app": {
-      "lines": 10223,
-      "bytes": 544910,
-      "sha256": "cc33fa46ffdc22f6eecc336bd26e3a405a4c24af83d0b1daa6175883224a6f52"
+      "lines": 10326,
+      "bytes": 551788,
+      "sha256": "a2c8732d73a846aac7499e17396161f14e697dc4558ba3718dd8d8778d50b925"
     },
     "html": {
       "lines": 413,
-      "bytes": 67594,
-      "sha256": "6d2edcb5297b92ddb13d50a643cc431e81abf77ae4ebf649714d816aca8d8046"
+      "bytes": 68541,
+      "sha256": "40083b883e24d4dddfee2b8159de78838a5ca364dcdc8b3687f5884f94c2d88b"
     },
     "css": {
-      "lines": 2193,
-      "bytes": 173640,
-      "sha256": "0fb997072fac59c0eb7c37e33e8f50165b9b0a4693fff182faeb2d6ee653f1d3"
+      "lines": 2262,
+      "bytes": 178882,
+      "sha256": "01d22bf1e6345b09396bdff9edb3b70079f7c0fd4b76286e17670daed42a4797"
     }
   },
   "hostGlobals": [
