@@ -888,3 +888,62 @@ risponde **500 `INTERNAL_ERROR`** invece di un errore di collisione
 pulito (`HF_TRANSFER_COLLISION` esiste già lato transfer, non affiora).
 
 **Suite**: backend **1364/1364** (+11 dal mattino), snapshot invariata.
+
+---
+
+## 02/09 (notte) — La stima di memoria sbagliava di un ordine di grandezza
+
+Il verdetto "non compatibile" sul Qwen3 27B dell'owner dichiarava **340 GB**
+di memoria richiesta contro 15,6 GB liberi. Un numero così non è un
+verdetto: è un artefatto. Due errori miei, sovrapposti.
+
+### 1. La cache KV seguiva TUTTE le teste, non quelle KV
+
+`estimateWorkingBytes` moltiplicava per `embedding_length` **intero**, come
+se ogni testa di attenzione avesse la sua coppia K/V. Sulle architetture
+moderne non è così: la **grouped-query attention** condivide le teste KV.
+
+⭐ Ricerca 02/9 (llama.cpp discussion #7949, omrimallis.com): la formula è
+`2 × strati × teste_KV × head_dim × token × byte`. Esempio citato: Llama 3
+ha **8 teste KV contro 64 di query — 8× di cache in meno**.
+⇒ Ora `head_dim = embedding_length / head_count` e la dimensione KV è
+`head_count_kv × head_dim`. ⛔ I conteggi delle teste sono **opzionali** nel
+GGUF: se mancano si ricade sull'embedding intero — sovrastima **dichiarata**,
+non un indovinello.
+
+### 2. Si stimava sul contesto ADDESTRATO, non su quello richiesto
+
+Sul 27B: 262.144 token invece dei 65.536 del profilo agente — un fattore 4
+sopra all'errore della GQA. Il lettore ora espone **`kvCacheBytesPerToken`**
+e `inspectModel` accetta il contesto richiesto, che `fit()` gli passa
+sempre. ⛔ Con un tetto: chiedere più del contesto addestrato non gonfia la
+stima — a bocciare è il controllo sul contesto, con un motivo suo.
+
+### Misurato, prima → dopo
+
+| modello | prima | dopo (contesto pieno) | dopo (a 65k richiesti) |
+|---|---|---|---|
+| Qwen3.8 27B | **340 GB** | 69,5 GB | **28,88 GB** |
+| Qwen3 0.6B | 4,70 GB | 2,51 GB | 2,51 GB |
+
+Il 27B resta `blocked/memory` con 13,8 GB liberi — ma ora è un verdetto
+**vero**, non un ordine di grandezza sbagliato.
+
+### ⛔ E una regressione mia, introdotta e presa in mezz'ora
+
+Con la nuova formula il 27B rispondeva **`MODEL_HEADER_INVALID`**: su quel
+modello `embedding_length / head_count` **non è esatto** e la stima usciva
+221.866,67 byte per token, mentre `validateHeader` pretende interi. Un
+modello leggibile dichiarato illeggibile. Curato con `Math.ceil` (per
+eccesso, la stessa direzione conservativa) e **fissato da un test al
+contrario** con una divisione volutamente non esatta (100/3).
+
+⭐ **Perché nessun test l'aveva presa prima**: i 12 test del lettore GGUF
+provavano magic, versione, troncamenti, chiavi mancanti e tipi ignoti — ma
+**nessuno fissava il valore stimato**. Una formula sbagliata passava tutti.
+Ora ce ne sono quattro: GQA, ripiego dichiarato, scala col contesto,
+interezza. Più tre sulla sonda (stima sul contesto richiesto, tetto al
+contesto addestrato, retrocompatibilità con header senza il campo nuovo).
+
+**Suite**: backend **1371/1371**, frontend unit 57/57, browser 88 passati
+con i 2 rossi preesistenti invariati.

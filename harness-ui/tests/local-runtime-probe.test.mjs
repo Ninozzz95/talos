@@ -228,3 +228,38 @@ test('LOCAL-RUNTIME-PROBE-RUNTIME-SPENTO-02 — AL CONTRARIO: qualify NON degrad
   const { probe } = makeProbe({ probeThrows: true });
   await assert.rejects(() => probe.qualify({ modelId: 'qwen-local', consent: true, profile: 'chat', contextTokens: 4_096 }), (errore) => errore.code === 'MODEL_NOT_COMPATIBLE');
 });
+
+test('LOCAL-RUNTIME-PROBE-CONTESTO-MEMORIA-01 — la memoria si stima sul contesto RICHIESTO, non su quello addestrato', async () => {
+  /*
+   * ⛔⛔⛔ 02/9 (sera) — `inspectModel` usava sempre `estimatedWorkingBytes`,
+   * calcolato dal lettore sul contesto ADDESTRATO. Sul Qwen3 27B
+   * dell'owner sono 262.144 token invece dei 65.536 richiesti: un fattore
+   * 4 di sovrastima, sopra a quello (già corretto) della GQA. Il verdetto
+   * usciva "non compatibile" per un motivo che non esisteva.
+   */
+  const headerConPerToken = { ...header, kvCacheBytesPerToken: 10, trainedContext: 1_000, estimatedWorkingBytes: 500 + 10 * 1_000 };
+  const { probe } = makeProbe({ headerValue: headerConPerToken, machine: { memory: { totalBytes: 1e9, freeBytes: 1e9 }, storage: { allocatableBytes: 1e9 } } });
+
+  const stretto = await probe.fit('qwen-local', { profile: 'chat', contextTokens: 100 });
+  const largo = await probe.fit('qwen-local', { profile: 'chat', contextTokens: 1_000 });
+  // pesi (500) + 10 byte/token × il contesto chiesto
+  assert.equal(stretto.memory.requiredBytes, 500 + 10 * 100);
+  assert.equal(largo.memory.requiredBytes, 500 + 10 * 1_000);
+  assert.ok(stretto.memory.requiredBytes < largo.memory.requiredBytes, 'un contesto più corto deve costare meno memoria');
+});
+
+test('LOCAL-RUNTIME-PROBE-CONTESTO-MEMORIA-02 — AL CONTRARIO: chiedere PIÙ del contesto addestrato non gonfia la stima', async () => {
+  // Il tetto è ciò che il modello sa fare: oltre, a bocciare è il controllo
+  // sul contesto, con un motivo suo — non una memoria inventata più grande.
+  const headerConPerToken = { ...header, kvCacheBytesPerToken: 10, trainedContext: 1_000, estimatedWorkingBytes: 500 + 10 * 1_000 };
+  const { probe } = makeProbe({ headerValue: headerConPerToken, machine: { memory: { totalBytes: 1e9, freeBytes: 1e9 }, storage: { allocatableBytes: 1e9 } } });
+  const oltre = await probe.fit('qwen-local', { profile: 'chat', contextTokens: 50_000 });
+  assert.equal(oltre.memory.requiredBytes, 500 + 10 * 1_000);
+});
+
+test('LOCAL-RUNTIME-PROBE-CONTESTO-MEMORIA-03 — un header SENZA costo per token resta valido: si usa la stima del file', async () => {
+  // Retrocompatibilità dichiarata: nessun campo nuovo obbligatorio.
+  const { probe } = makeProbe({ machine: { memory: { totalBytes: 1e9, freeBytes: 1e9 }, storage: { allocatableBytes: 1e9 } } });
+  const esito = await probe.fit('qwen-local', { profile: 'chat', contextTokens: 100 });
+  assert.equal(esito.memory.requiredBytes, header.estimatedWorkingBytes);
+});

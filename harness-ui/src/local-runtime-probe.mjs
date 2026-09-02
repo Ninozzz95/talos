@@ -74,7 +74,17 @@ export function createLocalRuntimeProbe({
     }
   }
 
-  async function inspectModel(modelId) {
+  /**
+   * @param {string} modelId
+   * @param {{contextTokens?: number}} [opzioni] `contextTokens` = il contesto
+   *   per cui si vuole la stima di memoria. ⛔ Assente = si usa quello
+   *   ADDESTRATO, che per un modello a contesto lungo è enormemente più
+   *   grande di quello che si userà davvero (sul Qwen3 27B: 262.144 token
+   *   invece dei 65.536 richiesti, un fattore 4 di sovrastima). `fit()` lo
+   *   passa sempre; resta opzionale per non rompere chi chiama
+   *   `inspectModel` da solo per sapere cosa dichiara il file.
+   */
+  async function inspectModel(modelId, { contextTokens } = {}) {
     const manifest = await modelStore.inspect(modelId);
     if (!manifest) throw new LocalRuntimeProbeError(`model ${modelId} not found`, 'MODEL_NOT_FOUND');
     if (manifest.state !== 'ready') throw new LocalRuntimeProbeError(`model ${modelId} is not ready`, 'MODEL_NOT_READY');
@@ -131,7 +141,22 @@ export function createLocalRuntimeProbe({
       modelId: manifest.id,
       format: { state: 'observed', magic: 'GGUF', version: 3 },
       storageBytes: { state: 'declared', value: manifest.bytes },
-      workingMemoryBytes: { state: 'declared', value: header.estimatedWorkingBytes },
+      /*
+       * ⛔ 02/9 (sera) — si stima sul contesto RICHIESTO quando il lettore
+       * espone il costo per token; senza quel dato (header vecchio o file
+       * che non dichiara le teste) si ricade sulla stima del file, che usa
+       * il contesto addestrato. Il tetto è il contesto addestrato: chiedere
+       * più di quanto il modello sa fare non costa più memoria, semmai è il
+       * controllo sul contesto a bocciarlo, e con un motivo suo.
+       */
+      workingMemoryBytes: {
+        state: 'declared',
+        // ⛔ Math.ceil come nel lettore: il consumatore a valle pretende interi.
+        value: (Number.isSafeInteger(header.kvCacheBytesPerToken) && Number.isSafeInteger(contextTokens) && contextTokens > 0)
+          ? Math.ceil((header.estimatedWorkingBytes - header.kvCacheBytesPerToken * header.trainedContext)
+            + header.kvCacheBytesPerToken * Math.min(contextTokens, header.trainedContext))
+          : header.estimatedWorkingBytes,
+      },
       context: {
         trainedTokens: fact('declared', header.trainedContext),
         runtimeTokens: runtimeContext,
@@ -166,7 +191,8 @@ export function createLocalRuntimeProbe({
     if (!['agent', 'chat'].includes(profile) || !positiveInteger(contextTokens)) {
       throw new LocalRuntimeProbeError('fit request is invalid', 'FIT_INVALID');
     }
-    const inspection = await inspectModel(modelId);
+    // ⛔ Il contesto RICHIESTO arriva fin qui: è quello per cui la memoria va stimata.
+    const inspection = await inspectModel(modelId, { contextTokens });
     let machine;
     try {
       machine = await measureMachine();
