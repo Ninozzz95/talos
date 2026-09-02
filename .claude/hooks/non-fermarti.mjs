@@ -175,6 +175,48 @@ const RESOCONTI_CHE_SI_FERMANO = [
 ]
 
 /**
+ * ⛔⛔⛔ IL RINVIO RACCONTATO, NON DICHIARATO — 2026-09-02.
+ *
+ * Owner: «perché ti sei fermato?», dopo un turno chiuso SOLO con un
+ * resoconto di verifica vero (sintassi pulita, «backend 1341/1342», quali
+ * suite non si applicano) — proprio la verifica che un ALTRO hook
+ * (`verifica-prima-di-chiudere.mjs`) aveva appena chiesto. Il resoconto era
+ * onesto e la verifica era stata fatta per davvero: non era un `RESOCONTI_CHE_SI_FERMANO`
+ * (zero frasi di quella lista), non un'`OFFERTA`, non una `PROMESSA` nuda.
+ * Eppure dentro c'era un rinvio VERO, solo raccontato in prosa invece che
+ * dichiarato: *"non rigenero quella fixture finché quel file non si
+ * assesta"* — un altro lavoro (la Fase 5, la UI "prima di load") restava
+ * fuori, il motivo (un'altra sessione sta scrivendo lo stesso file) è
+ * persino legittimo (rientra nel cancello rosso/decisione-non-mia), ma non
+ * era mai passato dalla formula `⛔ FERMATA:` — quindi nessuno lo controllava
+ * contro `PRETESTI`/`LEGITTIME`, e il turno si è chiuso lo stesso.
+ *
+ * ⛔ NON è lo stesso difetto di un resoconto chiuso senza code aperte (vedi
+ * il test «LASCIA PASSARE un resoconto di lavoro CHIUSO» qui accanto — quel
+ * caso resta valido, un lavoro davvero finito non ha nulla da dichiarare).
+ * La differenza è che QUESTO messaggio nomina esplicitamente un rinvio — «non
+ * X finché Y», «aspetto che», «resta bloccato da» — senza mai passare dalla
+ * formula. Si guarda quindi la FORMA del rinvio raccontato, non i numeri di
+ * verifica: un resoconto chiuso senza nessuna di queste forme resta libero
+ * di passare, come sempre.
+ */
+const RINVIO_NON_DICHIARATO = [
+    /*
+     * «non rigenero/tocco/modifico/proseguo/continuo X finché (non) Y».
+     * ⛔ Niente `\b` DOPO `[eé]`: scoperto scrivendo la prova gemella — «é»
+     * non è un carattere di parola per `\b` (che è ASCII-only, `[A-Za-z0-9_]`),
+     * quindi un confine PRIMA di «é» esiste già («h»→«é» è word→non-word) ma
+     * uno DOPO no («é»→spazio è non-word→non-word, mai un vero confine): la
+     * `\b` finale falliva sempre su «finché» scritto con l'accento vero.
+     */
+    /\bnon (rigener|tocc|modific|prosegu|continu)[oa]\b[^.!?;]{0,60}\bfinch[eé]/i,
+    /\baspett(o|iamo) che\b/i,
+    /\bquando (l'altra sessione|fable|lui|lei|quel file|quel lavoro)\b[^.!?;]{0,40}\b(avr[àa]|finisc|committa|si assest)/i,
+    /\brest(a|ano) (bloccat[oa]|ferm[oa]) (da|per)\b/i,
+    /\bin attesa (che|di)\b/i,
+]
+
+/**
  * ⛔⛔ LO STATO, non le parole — ed è quello che dice la ricerca.
  *
  * Owner, 2026-08-13: «ti stai fermando in continuazione c'è qualcosa che non va,
@@ -525,6 +567,12 @@ export function decidiFermata(input) {
     const coda = messaggio.slice(-600)
     const offre = OFFERTE.some((forma) => forma.test(coda))
     const archivia = RESOCONTI_CHE_SI_FERMANO.some((forma) => forma.test(coda))
+    // ⛔ Un rinvio raccontato in prosa («non X finché Y», «aspetto che»,
+    // «resta bloccato da») invece che dichiarato con la formula — vedi il
+    // commento sopra RINVIO_NON_DICHIARATO. Diverso da `archivia`: quello
+    // cerca le frasi di un resoconto che si arena, questo cerca un motivo di
+    // attesa che non è mai passato dal controllo PRETESTI/LEGITTIME.
+    const rinvia = RINVIO_NON_DICHIARATO.some((forma) => forma.test(coda))
     // ⛔ La promessa nuda si cerca sul messaggio INTERO e non sulla coda: serve
     // l'ULTIMA frase vera, e tagliare a 600 caratteri può spezzarne una a metà
     // facendone sembrare ultima una che non lo è.
@@ -533,15 +581,16 @@ export function decidiFermata(input) {
     // ⛔ Lo STATO prima delle parole: se qualcosa risulta ancora aperto sul
     // disco, il turno non si chiude — qualunque cosa il messaggio dica.
     const aperti = compitiAperti(input?.session_id)
-    if (!offre && !promette && !archivia && aperti.length === 0) return null
-    if (aperti.length > 0 && !offre && !promette && !archivia) {
+    if (!offre && !promette && !archivia && !rinvia && aperti.length === 0) return null
+    if (aperti.length > 0 && !offre && !promette && !archivia && !rinvia) {
         return { decision: 'block', reason: RAGIONE_STATO(aperti) }
     }
 
     return {
         decision: 'block',
-        reason: archivia && !offre && !promette ? RAGIONE_RESOCONTO
-            : (promette && !offre ? RAGIONE_PROMESSA : RAGIONE),
+        reason: rinvia && !offre && !promette && !archivia ? RAGIONE_RINVIO
+            : (archivia && !offre && !promette ? RAGIONE_RESOCONTO
+                : (promette && !offre ? RAGIONE_PROMESSA : RAGIONE)),
     }
 }
 
@@ -615,6 +664,17 @@ function RAGIONE_STATO(aperti) {
         'chiuso, aggiorna il suo stato invece di lasciarlo aperto e raccontarlo.',
     ].join(' ')
 }
+
+const RAGIONE_RINVIO = [
+    'Ti sei fermato per una QUARTA forma: un rinvio raccontato in prosa invece',
+    'che dichiarato. Il messaggio dice che stai aspettando qualcosa («non X',
+    'finché Y», «aspetto che», «resta bloccato da») ma non è mai passato dalla',
+    'formula «⛔ FERMATA:» — quindi nessuno ha controllato se il motivo regge.',
+    '',
+    'Se il motivo regge davvero (una delle quattro legittime), scrivilo con la',
+    'formula esplicita e chiudi lì. Se non regge — o se c\'è ALTRO lavoro che',
+    'non dipende da quell\'attesa — fallo ORA, nello stesso turno.',
+].join(' ')
 
 const RAGIONE_RESOCONTO = [
     'Ti sei fermato per la TERZA forma: un RESOCONTO che si ferma. Non hai',

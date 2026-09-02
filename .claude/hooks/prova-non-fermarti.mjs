@@ -361,6 +361,35 @@ const casi = [
         blocca: false,
     },
     {
+        // Il caso VERO del 2026-09-02: nessuna offerta, nessuna promessa nuda,
+        // nessuna frase di RESOCONTI_CHE_SI_FERMANO — solo un rinvio raccontato
+        // in prosa («non rigenero... finché») mai passato dalla formula. Owner:
+        // «perché ti sei fermato?», e aveva ragione — restava altro lavoro
+        // (Fase 5) che NON dipendeva da quell'attesa.
+        nome: 'BLOCCA il rinvio raccontato del 2026-09-02 («non rigenero... finché»)',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: 'Verificato ora: sintassi pulita sui file toccati, '
+                + 'backend 1341/1342. L\'unico rosso è la fixture del contratto frontend '
+                + '— confronta i byte di app.js, che in questo momento è sotto modifica '
+                + 'attiva di un\'altra sessione nello stesso worktree, non toccato da me. '
+                + 'Non rigenero quella fixture finché quel file non si assesta, altrimenti '
+                + 'catturerei il suo lavoro a metà.',
+        },
+        blocca: true,
+    },
+    {
+        nome: 'LASCIA PASSARE un resoconto chiuso che NON contiene nessun rinvio raccontato',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: 'Verificato ora: sintassi pulita, backend 1341/1342, '
+                + 'frontend 200/200. Tutto verde.',
+        },
+        blocca: false,
+    },
+    {
         nome: 'LASCIA PASSARE un resoconto senza offerte',
         input: {
             stop_hook_active: false,
