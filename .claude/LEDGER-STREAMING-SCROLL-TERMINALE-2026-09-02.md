@@ -766,3 +766,59 @@ elenca prism **e** xterm.
 **Suite**: backend `node --test` **1351/1351** (+6 nuovi,
 `tests/code-block-formatter.test.mjs`, hermetici apposta — leggono i
 sorgenti, non passano dal 4174); frontend unit **57/57**.
+
+---
+
+## 02/09 — La suite browser diventa ERMETICA (e il conteggio torna citabile)
+
+Chiusa la lacuna registrata come debito poche ore prima. Due metà:
+
+**1. Lato server** — `cartellaStore` non è più cablato in `server.mjs`:
+arriva da `config` e si sposta con **`TALOS_HARNESS_UI_SESSIONS_DIR`**.
+Senza la variabile resta *esattamente* la cartella di prima (default
+calcolato sullo stesso `import.meta.url` del file).
+
+**2. Lato Playwright** — `playwright.config.mjs` ha ora un blocco
+`webServer`: avvia un server **suo** su `4176`, con uno store creato
+vuoto a ogni esecuzione (`mkdtempSync`, valutato una volta per giro — mai
+una cartella fissa, che rimetterebbe la non-ripetibilità che stiamo
+togliendo). Attende `/api/v1/health`, non la porta aperta: il server
+ascolta *prima* di aver finito di ripristinare le sessioni.
+`TALOS_HARNESS_UI_BASE_URL` continua a vincere e in quel caso `webServer`
+non parte, per puntare la suite a un server già acceso quando lo si vuole
+davvero.
+
+⭐ Ricerca: i tre concorrenti fanno la stessa identica cosa, tutti con una
+variabile sulla cartella di stato — Codex `CODEX_HOME` («isolates the eval
+from any personal Codex configuration on the machine»), Hermes
+`HERMES_HOME` (fixture da una home isolata, ogni profilo col proprio
+session database), Claude Code `CLAUDE_CONFIG_DIR` («keeping your real
+config untouched»); Playwright documenta `webServer` +
+`reuseExistingServer: false`.
+
+### La prova — misurata, non dichiarata
+
+| | prima (4174 dell'owner) | dopo (server ermetico) |
+|---|---|---|
+| giro 1 | **21 rossi** | **2 rossi** |
+| giro 2 | **19 rossi** | **2 rossi** |
+| insiemi | **diversi** | **IDENTICI** |
+
+⭐ I ~18 rossi spariti non erano difetti del codice: erano **stato**. La
+suite girava sulle sessioni vere dell'owner, e ciò che si apriva da solo
+all'avvio cambiava l'esito.
+
+I **2 rossi** che restano sono deterministici e **non sono miei**:
+verificato con un A/B sullo stesso server ermetico, scambiando
+`app.js`/`styles.css`/`index.html`/`static-files.mjs` con quelli di
+`4910b4a5` — falliscono **identici** senza nessuna mia modifica:
+- `LAG-LIVE-INCREMENTAL-40`
+- `NOTIFICHE-REALI-43`
+
+⛔ Verificato anche che il **4174 dell'owner resta intatto** mentre i test
+girano (health ok, sessioni invariate): i due server convivono.
+
+**Verificato facendo PARTIRE i server, non solo coi test unitari** — è
+codice d'avvio: istanza isolata su `4179` con store vuoto → **0 sessioni**
+(contro 17 vere), health ok; `4174` riavviato senza variabile →
+`1/17 sessioni ripristinate da .sessions-store/`, identico a prima.
