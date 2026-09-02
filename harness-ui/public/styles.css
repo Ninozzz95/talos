@@ -1170,7 +1170,14 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
   background: var(--accent);
   animation: talos-stream-caret 780ms steps(1, end) infinite;
 }
-:root[data-talos-streaming-animation="fade"] .assistant-message.is-streaming .assistant-copy > :last-child {
+/* ⛔⛔⛔ 02/9 — era `.assistant-copy > :last-child`: durante lo streaming
+ * l'elemento realmente last-child è quasi sempre la CODA volatile
+ * (renderizzaMarkdownIncrementale, app.js), distrutta e ricreata ad ogni
+ * frame — l'animazione su un elemento appena creato riparte sempre da
+ * zero, non finiva mai di dissolversi. `.stream-settle` marca solo il
+ * testo appena stabilizzato (una volta sola, mai più toccato dopo) — vedi
+ * il commento nella stessa funzione lato JS. */
+:root[data-talos-streaming-animation="fade"] .assistant-message.is-streaming .assistant-copy > .stream-settle {
   animation: talos-stream-fade var(--motion-message) var(--motion-ease) both;
 }
 :root[data-talos-window-presentation="fullscreen"] .sheet-dialog {
