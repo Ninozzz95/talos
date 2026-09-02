@@ -185,6 +185,45 @@ test('AL CONTRARIO — MODEL-LAB-HTTP-FIT-07 un parametro di query sconosciuto �
   assert.equal((await response.json()).error.code, 'QUERY_INVALID');
 });
 
+test('MODEL-LAB-HTTP-QUALIFY-01 fa girare qualify() SOLO con consent:true esplicito nel corpo', async (t) => {
+  let received;
+  const base = await listen(t, null, { localRuntimeProbe: {
+    qualify: async (options) => { received = options; return { modelId: options.modelId, state: 'qualified', performance: { ttftMs: { state: 'observed', value: 12 } } }; },
+  } });
+  const response = await fetch(`${base}/api/v1/local-models/qwen3/qualify`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ consent: true, profile: 'chat', contextTokens: 4096 }) });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.data.state, 'qualified');
+  assert.deepEqual(received, { modelId: 'qwen3', consent: true, profile: 'chat', contextTokens: 4096 });
+});
+
+test('AL CONTRARIO — MODEL-LAB-HTTP-QUALIFY-02 senza consent:true nel corpo, il consenso mandato al probe è false, non un default ottimista', async (t) => {
+  let received;
+  const base = await listen(t, null, { localRuntimeProbe: {
+    qualify: async (options) => { received = options; const error = new Error('consent required'); error.code = 'PROBE_CONSENT_REQUIRED'; throw error; },
+  } });
+  const response = await fetch(`${base}/api/v1/local-models/qwen3/qualify`, { method: 'POST', body: '{}' });
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error.code, 'PROBE_CONSENT_REQUIRED');
+  assert.equal(received.consent, false);
+});
+
+test('AL CONTRARIO — MODEL-LAB-HTTP-QUALIFY-03 senza il probe configurato non finge una risposta', async (t) => {
+  const base = await listen(t, null);
+  const response = await fetch(`${base}/api/v1/local-models/qwen3/qualify`, { method: 'POST', body: '{"consent":true}' });
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error.code, 'RUNTIME_NOT_AVAILABLE');
+});
+
+test('AL CONTRARIO — MODEL-LAB-HTTP-QUALIFY-04 propaga un fit incompatibile come errore reale, non un successo travestito', async (t) => {
+  const base = await listen(t, null, { localRuntimeProbe: {
+    qualify: async () => { const error = new Error('model fit is blocked'); error.code = 'MODEL_NOT_COMPATIBLE'; throw error; },
+  } });
+  const response = await fetch(`${base}/api/v1/local-models/qwen3/qualify`, { method: 'POST', body: '{"consent":true}' });
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).error.code, 'MODEL_NOT_COMPATIBLE');
+});
+
 test('MODEL-LAB-HTTP-HF-QUERY-01 inoltra filtri e cursore al client Hub', async (t) => {
   let received;
   const base = await listen(t, null, { hfHubClient: { searchModels: async (options) => { received = options; return { items: [], nextCursor: 'next' }; } } });
