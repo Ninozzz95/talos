@@ -66,7 +66,7 @@
         <button class="icon-btn nav-close" data-close-panel="sessions" aria-label="Chiudi sessioni"><svg><use href="#i-x"/></svg></button>
         <div class="brand-mark" aria-hidden="true"><span class="brand-glyph-mark"></span></div>
         <div class="brand-copy"><strong>TALOS</strong><span>Codice</span></div>
-        <button class="icon-btn" data-demo-action="notifications" aria-label="Notifiche demo"><svg><use href="#i-bell"/></svg><span class="badge-dot">2</span></button>
+        <button class="icon-btn" id="notificationsBtn" aria-label="Notifiche" aria-haspopup="menu" aria-expanded="false"><svg><use href="#i-bell"/></svg><span class="badge-dot" id="notificationsBadge" hidden>0</span></button>
       </div>
 
       <div class="session-actions">
@@ -161,7 +161,7 @@
               <button class="icon-btn composer-mic" type="button" aria-label="Voce"><svg><use href="#i-mic"/></svg></button>
               <div class="composer-toolbar">
                 <button class="round-btn" type="button" id="capabilityBtn" aria-label="Aggiungi contesto"><svg><use href="#i-plus"/></svg></button>
-                <button class="selector-pill" type="button" data-open-sheet="model"><svg><use href="#i-brain"/></svg><span>gpt-5.6-sol · high</span><svg><use href="#i-chevron"/></svg></button>
+                <button class="selector-pill" type="button" data-open-sheet="model"><svg><use href="#i-brain"/></svg><span>Seleziona modello</span><svg><use href="#i-chevron"/></svg></button>
                 <button class="selector-pill hide-on-narrow" type="button" data-open-sheet="permissions"><svg><use href="#i-shield"/></svg><span>Workspace write</span><svg><use href="#i-chevron"/></svg></button>
               <button class="selector-pill hide-on-mid" type="button" data-open-sheet="environment"><svg><use href="#i-branch"/></svg><span data-environment-label>Ambiente non osservato</span></button>
                 <div class="composer-spacer"></div>
@@ -175,29 +175,18 @@
           </div>
         </section>
 
-        <section class="view-pane" data-view="diff" data-demo-surface="diff">
+        <!-- ⭐⭐⭐ 02/09, review complessiva, ordine owner "non togliere il mockup ma agganciarlo": il Review center è la superficie REALE delle scritture della sessione (StateDelta con prima/dopo → diff per riga, vedi updateRealReview). Qui solo stato vuoto onesto: nessun file finto, nessun numero finto. -->
+        <section class="view-pane" data-view="diff">
           <div class="review-shell">
-            <div class="view-heading"><div><span class="eyebrow">Review center</span><h2>3 file modificati</h2><p>Gate prima del completamento: diff, test e rischio.</p></div><button class="primary-btn compact" id="approveAllDiffs">Approva tutto</button></div>
+            <div class="view-heading"><div><span class="eyebrow">Review center</span><h2 id="reviewHeading">Nessuna modifica in questa sessione</h2><p>Ogni file che TALOS scrive compare qui, riga per riga, con ciò che c'era prima.</p></div><button class="secondary-btn compact" id="copyAllDiffs" type="button" disabled>Copia tutti i diff</button></div>
             <div class="review-summary">
-              <div><span id="reviewSummaryNuovi">+68</span><small>nuovi</small></div><div><span id="reviewSummaryModificati">−31</span><small>modificati</small></div><div><span id="reviewSummaryTest">6/6</span><small>test</small></div><div><span id="reviewSummaryRischio">Basso</span><small>rischio</small></div>
+              <div><span id="reviewSummaryNuovi">0</span><small>nuovi</small></div><div><span id="reviewSummaryModificati">0</span><small>modificati</small></div><div><span id="reviewSummaryTest">—</span><small>test</small></div><div><span id="reviewSummaryRischio">—</span><small>rischio</small></div>
             </div>
-            <div class="file-review-list">
-              <button class="file-review active" data-review-file="composer" aria-pressed="true"><span><svg><use href="#i-diff"/></svg><strong>TalosComposer.vue</strong></span><span class="diff-stats">+28 −19</span></button>
-              <button class="file-review" data-review-file="layout" aria-pressed="false"><span><svg><use href="#i-diff"/></svg><strong>chat-layout.css</strong></span><span class="diff-stats">+32 −8</span></button>
-              <button class="file-review" data-review-file="tests" aria-pressed="false"><span><svg><use href="#i-diff"/></svg><strong>composer.spec.ts</strong></span><span class="diff-stats">+8 −4</span></button>
-            </div>
+            <div class="file-review-list"><p class="board-empty review-empty" id="reviewEmptyList">Nessun file scritto finora.</p></div>
             <div class="diff-panel">
-              <div class="diff-toolbar"><span id="diffPath">src/components/chat/TalosComposer.vue</span><div><button class="secondary-btn compact" data-review-action="comment">Commenta</button><button class="secondary-btn compact" data-review-action="open">Apri file</button></div></div>
-              <pre><code id="diffCode"><span class="ctx">@@ composer layout @@</span>
-<span class="del">- .composer { grid-template-columns: 48px 1fr auto auto; }</span>
-<span class="add">+ .composer { container-type: inline-size; }</span>
-<span class="add">+ .composer-toolbar { grid-template-columns: 48px minmax(0, 1fr) 48px; }</span>
-<span class="add">+ @container (max-width: 560px) {</span>
-<span class="add">+   .secondary-context { display: none; }</span>
-<span class="add">+ }</span>
-<span class="ctx"> </span>
-<span class="ctx">@@ safe area @@</span>
-<span class="add">+ padding-bottom: max(12px, env(safe-area-inset-bottom));</span></code></pre>
+              <div class="diff-toolbar"><span id="diffPath">—</span><div><button class="secondary-btn compact" type="button" data-review-action="comment" disabled>Commenta</button><button class="secondary-btn compact" type="button" data-review-action="open" disabled>Apri file</button></div></div>
+              <p class="board-empty review-empty" id="diffEmpty">Il diff del file selezionato compare qui: righe tolte in rosso, aggiunte in verde.</p>
+              <pre hidden id="diffPre"><code id="diffCode"></code></pre>
             </div>
           </div>
         </section>
@@ -209,21 +198,11 @@
           </div>
         </section>
 
-        <section class="view-pane" data-view="browser" data-demo-surface="browser">
+        <!-- ⭐⭐⭐ 02/09 — Browser REALE: le pagine lette dall'attrezzo `naviga` (testo esatto che il modello ha ricevuto), con cronologia indietro/avanti, apertura nel browser di sistema, copia e "Annota" verso il composer (come Hermes Desktop). Niente telefono finto, niente URL mai raggiunto. -->
+        <section class="view-pane" data-view="browser">
           <div class="browser-shell">
-            <div class="browser-bar"><div class="browser-nav"><button data-browser-action="back" aria-label="Indietro">‹</button><button data-browser-action="forward" aria-label="Avanti">›</button><button data-browser-action="reload" aria-label="Ricarica">↻</button></div><div class="browser-url"><span class="status-pulse"></span>127.0.0.1:4173/chat</div><div class="browser-tools"><button class="secondary-btn compact" data-browser-action="annotate">Annota</button><button class="secondary-btn compact" data-browser-action="inspect">Ispeziona</button></div></div>
-            <div class="device-preview">
-              <div class="phone-frame">
-                <div class="phone-status"><span>09:41</span><span>5G · 87%</span></div>
-                <div class="phone-header"><span class="mini-brand"><span class="brand-glyph-mark"></span></span><strong>TALOS</strong><span>•••</span></div>
-                <div class="phone-chat">
-                  <div class="phone-user">Sistema il composer e non perdere contesto.</div>
-                  <div class="phone-agent"><span class="mini-brand"><span class="brand-glyph-mark"></span></span><p>Ho preservato modello, permessi e branch in un'area compatta e sempre accessibile.</p></div>
-                  <div class="phone-tool"><span>✓ Edit</span><strong>TalosComposer.vue</strong><small>+28 −19</small></div>
-                </div>
-                <div class="phone-composer"><span>Scrivi a TALOS...</span><span class="phone-send-preview" aria-hidden="true">↑</span><div class="phone-composer-meta"><span>+ </span><span>gpt-5.6-sol</span><span>workspace</span></div></div>
-              </div>
-            </div>
+            <div class="browser-bar"><div class="browser-nav"><button type="button" data-browser-action="back" aria-label="Pagina letta precedente" disabled>‹</button><button type="button" data-browser-action="forward" aria-label="Pagina letta successiva" disabled>›</button><button type="button" data-browser-action="open" aria-label="Apri nel browser" disabled>↗</button></div><div class="browser-url"><span class="status-pulse"></span>—</div><div class="browser-tools"><button class="secondary-btn compact" type="button" data-browser-action="annotate" disabled>Annota</button><button class="secondary-btn compact" type="button" data-browser-action="copy" disabled>Copia testo</button></div></div>
+            <div class="device-preview"><p class="board-empty">Nessuna pagina letta in questa sessione. Quando TALOS legge una pagina web, il testo ricevuto compare qui.</p></div>
           </div>
         </section>
 

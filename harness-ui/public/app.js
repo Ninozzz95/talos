@@ -193,6 +193,9 @@
       testoGrezzoMessaggi: new Map(),
       /** ⭐⭐⭐ 02/09 — messageId -> { prefisso, nodiCoda }: quanto testo è già reso in blocchi STABILI e quali nodi DOM sono la coda ancora aperta (vedi renderizzaMarkdownIncrementale). */
       renderIncrementale: new Map(),
+      /** ⭐⭐⭐ 02/09 — cronologia REALE delle pagine lette da `naviga` in questa sessione: [{ url, testo, quando }] e l'indice mostrato (indietro/avanti). */
+      browserPagine: [],
+      browserIndice: -1,
       /** ⭐⭐⭐ 27/8, R1 — messageId(ragionamento) -> {summaryText, detail, grezzo}, la bolla collassabile che ospita il ragionamento in streaming (riusa la stessa forma di appendToolNote, non un componente nuovo). Il testo grezzo si accumula qui per lo stesso motivo di testoGrezzoMessaggi: renderizzaMarkdownSemplice lavora sul totale, non sul delta. */
       ragionamentoBubble: new Map(),
       /** ⛔⛔⛔ 27/8, owner: "ricevo risposte duplicate" — ogni evento.`_sequenza` (assegnato dal server, vedi session-registry.mjs broadcast()) entra qui la PRIMA volta che passa da handleRealEvent; una riconnessione (EventSource nativo dopo una caduta, o runDirectShell che ne apre una fresca) rimanda l'intero buffer da capo, e questo Set lo riconosce e lo scarta invece di duplicare bubble/testo. Sopravvive a un `continua:true` (stessa sessione, nuovo giro) — si azzera SOLO per una sessione davvero diversa. */
@@ -3076,6 +3079,110 @@
    * menu CRUD dell'albero Files. Le voci chiamano soltanto comportamenti gia'
    * supportati dal registro: apri, rinomina, fork, copia id, elimina.
    */
+  /*
+   * ⭐⭐⭐ 02/09 — NOTIFICHE REALI (prima: campanella con "2" scritto a mano e
+   * un toast "Notifiche demo"). Una notifica è una sessione DIVERSA da quella
+   * aperta che chiede attenzione: approvazione in attesa (sempre), oppure
+   * conclusa/interrotta e non ancora rivista da quando ha cambiato stato.
+   * "Vista" è locale al browser (localStorage): alla prima esecuzione si
+   * segna tutto come già visto, così notificano solo i cambiamenti FUTURI —
+   * mai un badge pieno di storia vecchia. La sessione aperta non notifica
+   * mai se stessa: la sua approvazione è già una card in chat.
+   */
+  const NOTIFICHE_STORAGE_KEY = 'talos.harness.desktop.notifiche.v1';
+  function leggiNotificheViste() {
+    try { const raw = JSON.parse(window.localStorage.getItem(NOTIFICHE_STORAGE_KEY) || 'null'); return raw && typeof raw === 'object' ? raw : null; } catch { return null; }
+  }
+  function salvaNotificheViste(viste) {
+    try { window.localStorage.setItem(NOTIFICHE_STORAGE_KEY, JSON.stringify(viste)); } catch { /* storage pieno o negato: il badge resta corretto per questa pagina */ }
+  }
+  function statoNotificaSessione(sessione) {
+    if (sessione.inAttesaApprovazione) return 'approvazione';
+    if (sessione.interrotta) return 'interrotta';
+    if (sessione.conclusa) return 'conclusa';
+    return 'in-corso';
+  }
+  function aggiornaNotifiche(elenco) {
+    if (!Array.isArray(elenco)) return;
+    let viste = leggiNotificheViste();
+    const primaVolta = viste === null;
+    if (primaVolta) viste = {};
+    const attiva = state.realSession.id;
+    const notifiche = [];
+    for (const sessione of elenco) {
+      const stato = statoNotificaSessione(sessione);
+      if (sessione.sessionId === attiva) { viste[sessione.sessionId] = stato; continue; }
+      if (stato === 'approvazione') { notifiche.push({ sessione, stato }); continue; } // un'approvazione in attesa notifica SEMPRE, anche alla prima esecuzione
+      if (primaVolta) { viste[sessione.sessionId] = stato; continue; }
+      if ((stato === 'conclusa' || stato === 'interrotta') && viste[sessione.sessionId] !== stato) notifiche.push({ sessione, stato });
+    }
+    for (const id of Object.keys(viste)) if (!elenco.some((s) => s.sessionId === id)) delete viste[id]; // sessioni eliminate
+    salvaNotificheViste(viste);
+    state.notifiche = notifiche;
+    const badge = $('#notificationsBadge');
+    if (badge) { badge.textContent = String(notifiche.length); badge.hidden = notifiche.length === 0; }
+    const bottone = $('#notificationsBtn');
+    if (bottone) bottone.setAttribute('aria-label', notifiche.length === 0 ? 'Notifiche: nessuna' : `Notifiche: ${notifiche.length}`);
+  }
+  function segnaNotificaVista(sessione) {
+    const viste = leggiNotificheViste() || {};
+    viste[sessione.sessionId] = statoNotificaSessione(sessione);
+    salvaNotificheViste(viste);
+  }
+  function apriPopoverNotifiche(ancoraEl) {
+    document.querySelector('.notifications-menu')?.remove();
+    const menu = document.createElement('div');
+    menu.className = 'ft-actions-menu session-actions-menu notifications-menu';
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', 'Notifiche');
+    const notifiche = state.notifiche || [];
+    const etichette = { approvazione: 'aspetta la tua approvazione', conclusa: 'ha finito', interrotta: 'si è interrotta' };
+    const glifi = { approvazione: 'i-shield', conclusa: 'i-check', interrotta: 'i-stop' };
+    if (notifiche.length === 0) {
+      menu.appendChild(textElement('p', 'notifications-empty', 'Nessuna notifica: nessun\'altra sessione chiede attenzione.'));
+    }
+    for (const { sessione, stato } of notifiche) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'ft-actions-menu-item notifications-item';
+      button.setAttribute('role', 'menuitem');
+      const testo = document.createElement('span');
+      testo.append(textElement('strong', '', sessione.nome || sessione.taskId || 'Sessione'), textElement('small', '', `${etichette[stato]} · ${formattaOraSessione(sessione.avviataAlle)}`));
+      button.append(iconaSvgAlbero(glifi[stato] || 'i-bell'), testo);
+      button.addEventListener('click', () => {
+        chiudi();
+        segnaNotificaVista(sessione);
+        passaASessione(sessione.sessionId, sessione.taskId || sessione.sessionId, sessione.nome || sessione.taskId, normalizzaModelloSessione(sessione), sessione);
+      });
+      menu.appendChild(button);
+    }
+    if (notifiche.length > 0) {
+      const tutte = document.createElement('button');
+      tutte.type = 'button';
+      tutte.className = 'ft-actions-menu-item notifications-mark-all';
+      tutte.setAttribute('role', 'menuitem');
+      tutte.append(iconaSvgAlbero('i-check'), textElement('span', '', 'Segna tutte come viste'));
+      tutte.addEventListener('click', () => { for (const { sessione } of notifiche) segnaNotificaVista(sessione); chiudi(); void aggiornaElencoSessioniReali(); });
+      menu.appendChild(tutte);
+    }
+    document.body.appendChild(menu);
+    const rect = ancoraEl.getBoundingClientRect();
+    menu.style.top = `${rect.bottom + 6}px`;
+    menu.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - menu.getBoundingClientRect().width - 8))}px`;
+    ancoraEl.setAttribute('aria-expanded', 'true');
+    function chiudi() {
+      menu.remove();
+      ancoraEl.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('click', onClick, true);
+      document.removeEventListener('keydown', onKey);
+    }
+    function onClick(event) { if (!menu.contains(event.target) && event.target !== ancoraEl && !ancoraEl.contains(event.target)) chiudi(); }
+    function onKey(event) { if (event.key === 'Escape') { chiudi(); ancoraEl.focus(); } }
+    document.addEventListener('click', onClick, true);
+    document.addEventListener('keydown', onKey);
+    (menu.querySelector('button') || menu).focus?.();
+  }
+
   function apriMenuAzioniSessione(sessione, posizionamento) {
     document.querySelector('.session-actions-menu')?.remove();
     const target = {
@@ -3511,7 +3618,7 @@
       html: () => `
         <div class="sheet-section">
           <span class="sheet-label">Suggerimenti workspace</span>
-          ${['src/components/chat/TalosComposer.vue','src/style.css','src/lib/talosThemes.ts','tests/unit/chat/composer.spec.ts','AGENTS.md'].map((file) => `<button class="sheet-option reference-option" data-reference-file="${file}"><span class="sheet-icon">${icon('i-files')}</span><span><strong>${file}</strong><small>Aggiungi al contesto del messaggio</small></span><span>@</span></button>`).join('')}
+          ${suggerimentiRiferimentiReali().map((file) => `<button class="sheet-option reference-option" data-reference-file="${attributoSicuro(file)}"><span class="sheet-icon">${icon('i-files')}</span><span><strong>${attributoSicuro(file)}</strong><small>Aggiungi al contesto del messaggio</small></span><span>@</span></button>`).join('') || `<p class="board-empty">${state.realSession.id ? 'Apri una cartella nell’albero Files: i file caricati compaiono qui come suggerimenti.' : 'Avvia una sessione: qui compaiono i file del suo workspace.'}</p>`}
         </div>`,
     },
     /*
@@ -3612,6 +3719,27 @@
         </div>`,
     },
   };
+
+  /*
+   * ⭐⭐⭐ 02/09 — i suggerimenti del foglio "@" erano cinque nomi di file
+   * inventati (TalosComposer.vue, talosThemes.ts…). Ora vengono dal
+   * workspace VERO: prima i file scritti in questa sessione (reviewFiles),
+   * poi i file dei livelli dell'albero già caricati (treeCache) — nessuna
+   * fetch nuova, nessun nome inventato; senza sessione, un messaggio onesto.
+   */
+  function suggerimentiRiferimentiReali(massimo = 12) {
+    const visti = new Set();
+    const elenco = [];
+    const aggiungi = (percorso) => { if (percorso && !visti.has(percorso) && elenco.length < massimo) { visti.add(percorso); elenco.push(percorso); } };
+    for (const file of state.realSession.reviewFiles.values()) aggiungi(file.path);
+    for (const [percorso, voci] of state.realSession.treeCache.entries()) {
+      for (const voce of voci || []) { if (!voce.cartella) aggiungi(percorso ? `${percorso}/${voce.nome}` : voce.nome); }
+    }
+    return elenco;
+  }
+  function attributoSicuro(valore) {
+    return String(valore).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
 
   /** Aggiorna la pillola del composer che apre il foglio Modello — selettore stabile (`data-open-sheet="model"`), non un confronto sul testo attuale come faceva il codice precedente. */
   function aggiornaPillolaModello() {
@@ -3969,13 +4097,8 @@
     applyKeyboardOpen(nativeKeyboardOpen ?? viewportKeyboardOpen);
   }
 
-  const toolDetails = {
-    read: ['File letto', 'TalosComposer.vue · 214 righe · nessun conflitto rilevato.'],
-    search: ['Ricerca completata', 'Trovati breakpoint 360/430/780, safe-area e 11 target interattivi da rifinire.'],
-    edit: ['Patch applicata', '+28 −19 · layout composer convertito a container-aware responsive surface.'],
-    bash: ['Test completati', '6/6 test superati in 8.4s · touch target, safe-area e command palette verificati.'],
-    browser: ['Browser check live', '390×844 · viewport dinamico, composer, drawer e bottom navigation sotto osservazione.'],
-  };
+  // ⭐ 02/09 — nessuna copy inventata per i dettagli tool: il markup demo che li usava non esiste più; resta il fallback onesto sotto.
+  const toolDetails = {};
 
   function toggleToolDetail(button) {
     const key = button.dataset.toolDetail;
@@ -4000,52 +4123,19 @@
     button.setAttribute('aria-expanded', 'true');
   }
 
-  const reviewFiles = {
-    composer: {
-      path: 'src/components/chat/TalosComposer.vue',
-      code: [
-        ['ctx', '@@ composer layout @@'],
-        ['del', '- .composer { grid-template-columns: 48px 1fr auto auto; }'],
-        ['add', '+ .composer { container-type: inline-size; }'],
-        ['add', '+ .composer-toolbar { grid-template-columns: 48px minmax(0, 1fr) 48px; }'],
-        ['add', '+ @container (max-width: 560px) {'],
-        ['add', '+   .secondary-context { display: none; }'],
-        ['add', '+ }'],
-        ['ctx', ' '],
-        ['ctx', '@@ safe area @@'],
-        ['add', '+ padding-bottom: max(12px, env(safe-area-inset-bottom));'],
-      ],
-    },
-    layout: {
-      path: 'src/styles/chat-layout.css',
-      code: [
-        ['ctx', '@@ mobile interaction density @@'],
-        ['del', '- .message-actions button { width: 34px; height: 32px; }'],
-        ['add', '+ .message-actions button { width: 44px; height: 44px; }'],
-        ['add', '+ .view-pane { overscroll-behavior: contain; }'],
-        ['add', '+ .mobile-nav { padding-bottom: env(safe-area-inset-bottom); }'],
-      ],
-    },
-    tests: {
-      path: 'tests/unit/chat/composer.spec.ts',
-      code: [
-        ['ctx', '@@ responsive guardrails @@'],
-        ['add', '+ expect(target.height).toBeGreaterThanOrEqual(44)'],
-        ['add', '+ expect(document.documentElement.scrollWidth).toBe(innerWidth)'],
-        ['add', '+ expect(dialog.getAttribute("aria-labelledby")).toBeTruthy()'],
-        ['add', '+ expect(queueButton.getAttribute("aria-pressed")).toBe("true")'],
-      ],
-    },
-  };
-
   function renderReviewFile(key) {
     // ⭐ 26/8, riconciliazione desktop→mobile — le voci reali vivono in
     // state.realSession.reviewFiles (una per percorso scritto), non nel
     // fisso `reviewFiles` demo: chiave "real:<percorso>" le distingue,
     // stesso schema già in produzione su lane/harness-ui.
-    const file = key.startsWith('real:') ? state.realSession.reviewFiles.get(key.slice(5)) : reviewFiles[key];
+    // ⭐ 02/09 — solo voci REALI (state.realSession.reviewFiles): l'oggetto demo con TalosComposer.vue non esiste più.
+    const file = key.startsWith('real:') ? state.realSession.reviewFiles.get(key.slice(5)) : null;
     if (!file || !diffPath || !diffCode) return;
+    state.reviewFileCorrente = file.path;
     diffPath.textContent = file.path;
+    $('#diffEmpty')?.setAttribute('hidden', '');
+    $('#diffPre')?.removeAttribute('hidden');
+    $$('[data-review-action]').forEach((b) => { b.disabled = false; });
     diffCode.replaceChildren(...file.code.map(([kind, text]) => {
       const span = document.createElement('span');
       span.className = kind;
@@ -4941,13 +5031,7 @@
     if (state.view === 'terminal') apriVistaTerminaleReale();
     const browserShell = $('[data-view="browser"] .browser-shell');
     if (browserShell) {
-      delete browserShell.dataset.reale;
-      const barraUrl = $('[data-view="browser"] .browser-url');
-      if (barraUrl) barraUrl.replaceChildren(document.createTextNode('—'));
-      const anteprima = $('[data-view="browser"] .device-preview');
-      if (anteprima) anteprima.replaceChildren(textElement('p', 'board-empty', 'Nessuna pagina letta in questa sessione.'));
-      const demoBadge = $('.demo-surface-badge', $('[data-view="browser"]'));
-      if (demoBadge) demoBadge.hidden = true;
+      mostraPaginaBrowser(state.realSession.browserIndice); // 02/09 — stessa funzione della cronologia: con browserPagine vuoto rende lo stato vuoto onesto
     }
     /*
      * ⛔⛔⛔ 30/8, owner dal vivo: "nella sidebar di destra ci sono ancora
@@ -5198,28 +5282,48 @@
    * ricevuto, al posto dell'anteprima inventata.
    */
   function appendBrowserEntry(url, testo) {
+    const pagine = state.realSession.browserPagine;
+    pagine.push({ url, testo, quando: new Date().toISOString() });
+    mostraPaginaBrowser(pagine.length - 1);
+  }
+
+  /** ⭐⭐⭐ 02/09 — mostra la pagina letta all'indice dato e allinea i controlli (indietro/avanti/apri/annota/copia). Senza pagine: stato vuoto onesto. */
+  function mostraPaginaBrowser(indice) {
     const shell = $('[data-view="browser"] .browser-shell');
     if (!shell) return;
-    if (!shell.dataset.reale) {
-      shell.dataset.reale = '1';
-      const demoBadge = $('.demo-surface-badge', $('[data-view="browser"]'));
-      if (demoBadge) demoBadge.hidden = true;
-    }
+    const pagine = state.realSession.browserPagine;
+    const pagina = pagine[indice] || null;
+    state.realSession.browserIndice = pagina ? indice : -1;
+    if (pagina) shell.dataset.reale = '1'; else delete shell.dataset.reale;
     const barraUrl = $('[data-view="browser"] .browser-url');
     if (barraUrl) {
       barraUrl.replaceChildren();
       const pulse = document.createElement('span');
       pulse.className = 'status-pulse';
-      barraUrl.append(pulse, document.createTextNode(url));
+      barraUrl.append(pulse, document.createTextNode(pagina ? pagina.url : '—'));
+      barraUrl.title = pagina ? `Letta alle ${formattaOraSessione(pagina.quando)} · ${pagina.testo.length} caratteri` : '';
     }
     const anteprima = $('[data-view="browser"] .device-preview');
     if (anteprima) {
       anteprima.replaceChildren();
-      const blocco = document.createElement('pre');
-      blocco.className = 'browser-real-output';
-      blocco.textContent = testo;
-      anteprima.append(blocco);
+      if (pagina) {
+        const blocco = document.createElement('pre');
+        blocco.className = 'browser-real-output';
+        blocco.textContent = pagina.testo;
+        anteprima.append(blocco);
+      } else {
+        anteprima.append(textElement('p', 'board-empty', 'Nessuna pagina letta in questa sessione. Quando TALOS legge una pagina web, il testo ricevuto compare qui.'));
+      }
     }
+    const contatore = pagine.length > 1 && pagina ? ` (${indice + 1} di ${pagine.length})` : '';
+    const abilita = (azione, ok) => { const b = $(`[data-browser-action="${azione}"]`); if (b) b.disabled = !ok; };
+    abilita('back', Boolean(pagina) && indice > 0);
+    abilita('forward', Boolean(pagina) && indice < pagine.length - 1);
+    abilita('open', Boolean(pagina) && /^https?:\/\//i.test(pagina.url));
+    abilita('annotate', Boolean(pagina));
+    abilita('copy', Boolean(pagina));
+    const back = $('[data-browser-action="back"]');
+    if (back) back.setAttribute('aria-label', `Pagina letta precedente${contatore}`);
   }
 
   /**
@@ -5612,8 +5716,38 @@
     impostaTesto('reviewSummaryModificati', String(modificati));
     impostaTesto('reviewSummaryTest', '—');
     impostaTesto('reviewSummaryRischio', '—');
-    const demoBadge = $('.demo-surface-badge', $('[data-view="diff"]'));
-    if (demoBadge) demoBadge.hidden = true;
+    const copia = $('#copyAllDiffs');
+    if (copia) copia.disabled = voci.length === 0;
+    if (voci.length === 0) {
+      state.reviewFileCorrente = null;
+      if (diffPath) diffPath.textContent = '—';
+      if (diffCode) diffCode.replaceChildren();
+      $('#diffPre')?.setAttribute('hidden', '');
+      $('#diffEmpty')?.removeAttribute('hidden');
+      $('#reviewSymbolWarning')?.remove();
+      $$('[data-review-action]').forEach((b) => { b.disabled = true; });
+    }
+  }
+
+  /** ⭐ 02/09 — il diff di TUTTI i file scritti in questa sessione come testo unificato semplice (per incollarlo in una PR, un messaggio, una nota). */
+  function testoDiffCompleto() {
+    return [...state.realSession.reviewFiles.values()].map((file) => [
+      `### ${file.path}${file.nuovo ? ' (nuovo)' : ''}`,
+      ...file.code.map(([kind, text]) => text),
+      '',
+    ].join('\n')).join('\n');
+  }
+
+  /** ⭐ 02/09 — scrive nel composer (senza inviare) e porta il fuoco lì: è il gesto "Commenta"/"Annota" — la persona completa e decide se mandare. */
+  function preparaCommentoNelComposer(testo) {
+    if (!composerInput) return;
+    const attuale = composerInput.value;
+    composerInput.value = attuale.trim() ? `${attuale.replace(/\s+$/, '')}\n${testo}` : testo;
+    composerInput.dispatchEvent(new Event('input', { bubbles: true }));
+    setView('chat');
+    closePanels();
+    composerInput.focus();
+    composerInput.setSelectionRange(composerInput.value.length, composerInput.value.length);
   }
 
   /**
@@ -5652,8 +5786,13 @@
       });
       return button;
     }));
+    if (voci.length === 0) {
+      const vuoto = textElement('p', 'board-empty review-empty', 'Nessun file scritto finora.');
+      vuoto.id = 'reviewEmptyList';
+      contenitore.appendChild(vuoto);
+    }
     const titolo = $('[data-view="diff"] .view-heading h2');
-    if (titolo) titolo.textContent = `${voci.length} file modificat${voci.length === 1 ? 'o' : 'i'}`;
+    if (titolo) titolo.textContent = voci.length === 0 ? 'Nessuna modifica in questa sessione' : `${voci.length} file modificat${voci.length === 1 ? 'o' : 'i'}`;
   }
 
   /**
@@ -7322,6 +7461,8 @@
       state.realSession.sequenzeViste = new Set();
       state.realSession.testoGrezzoMessaggi = new Map();
       state.realSession.renderIncrementale = new Map();
+      state.realSession.browserPagine = [];
+      state.realSession.browserIndice = -1;
       state.realSession.ragionamentoBubble = new Map();
       state.realSession.followUpBubbleInAttesa = false;
       state.realSession.redirectPendingId = null;
@@ -7770,6 +7911,7 @@
     } catch {
       return; // ⛔ un aggiornamento sidebar fallito non è un'azione richiesta, non merita un toast
     }
+    aggiornaNotifiche(elenco);
     /*
      * ⭐ 27/8, trovato analizzando quali badge non si spengono MAI: questa
      * funzione aggiungeva sessioni vere in un blocco separato senza mai
@@ -9426,19 +9568,44 @@
     }
   });
 
+  /*
+   * ⭐⭐⭐ 02/09 — azioni REALI sul Browser (prima: toast "Azione simulata nel
+   * mockup locale"). Indietro/avanti scorrono la cronologia delle pagine
+   * lette dall'attrezzo naviga in questa sessione; Apri porta l'URL nel
+   * browser di sistema; Annota scrive nel composer un riferimento alla
+   * pagina (Hermes Desktop: le annotazioni finiscono nel composer, mai
+   * inviate da sole); Copia testo mette negli appunti ciò che il modello ha
+   * letto.
+   */
   $$('[data-browser-action]').forEach((button) => button.addEventListener('click', () => {
-    const labels = { back: 'Indietro', forward: 'Avanti', reload: 'Preview ricaricata', annotate: 'Modalità annotazione', inspect: 'Inspector browser' };
-    toast(labels[button.dataset.browserAction] || 'Browser', 'Azione simulata nel mockup locale.');
+    const pagine = state.realSession.browserPagine;
+    const indice = state.realSession.browserIndice;
+    const pagina = pagine[indice] || null;
+    switch (button.dataset.browserAction) {
+      case 'back': if (indice > 0) mostraPaginaBrowser(indice - 1); break;
+      case 'forward': if (indice < pagine.length - 1) mostraPaginaBrowser(indice + 1); break;
+      case 'open': if (pagina && /^https?:\/\//i.test(pagina.url)) window.open(pagina.url, '_blank', 'noopener'); break;
+      case 'annotate': if (pagina) preparaCommentoNelComposer(`Riguardo alla pagina ${pagina.url}: `); break;
+      case 'copy': if (pagina) copyText(pagina.testo, 'Testo della pagina copiato'); break;
+      default: break;
+    }
   }));
 
   const demoActionCopy = {
-    notifications: ['Notifiche demo', 'La superficie non è collegata a notifiche reali.'],
     widget: ['Widget demo', 'L’aggiunta sarà disponibile quando questa Board avrà un backend.'],
     delegate: ['Delega demo', 'Nessun subagent è stato avviato da questa interfaccia.'],
   };
   $$('[data-demo-action]').forEach((button) => button.addEventListener('click', () => {
     toast(...(demoActionCopy[button.dataset.demoAction] || ['Demo UI · non collegato', 'Nessuna azione reale eseguita.']));
   }));
+
+  // ⭐⭐⭐ 02/09 — campanella REALE (vedi aggiornaNotifiche). Il badge si allinea a ogni refresh dell'elenco sessioni; un refresh leggero ogni 15 s, solo a scheda visibile, coglie le sessioni che finiscono mentre se ne guarda un'altra (nessuna SSE le porta qui).
+  $('#notificationsBtn')?.addEventListener('click', (event) => {
+    const aperto = document.querySelector('.notifications-menu');
+    if (aperto) { aperto.remove(); event.currentTarget.setAttribute('aria-expanded', 'false'); return; }
+    apriPopoverNotifiche(event.currentTarget);
+  });
+  const notificheTimer = window.setInterval(() => { if (document.visibilityState === 'visible') void aggiornaElencoSessioniReali(); }, 15_000);
 
   $$('[data-file-entry]').forEach((button) => button.addEventListener('click', () => {
     $$('[data-file-entry]').forEach((entry) => entry.classList.toggle('active', entry === button));
@@ -9609,9 +9776,15 @@
     });
   });
 
-  $('#approveAllDiffs').addEventListener('click', () => {
-    toast('Review approvata', '3 file pronti per il gate finale.');
-    $$('.file-review').forEach((file) => { file.classList.remove('active'); file.setAttribute('aria-pressed', 'false'); });
+  /*
+   * ⭐⭐⭐ 02/09 — "Approva tutto" era un toast con "3 file" scritti a mano.
+   * Le scritture di TALOS sono già sul disco (come in Claude Code e Codex, la
+   * review è a valle, non un cancello): l'azione vera e utile è portarsi via
+   * il diff completo — per una PR, una nota, un messaggio.
+   */
+  $('#copyAllDiffs')?.addEventListener('click', () => {
+    if (state.realSession.reviewFiles.size === 0) { toast('Nessuna modifica da copiare', 'In questa sessione TALOS non ha ancora scritto file.'); return; }
+    copyText(testoDiffCompleto(), `Diff di ${state.realSession.reviewFiles.size} file copiato`);
   });
 
   $$('.file-review').forEach((button) => {
@@ -9625,8 +9798,23 @@
     });
   });
 
+  /*
+   * ⭐⭐⭐ 02/09 — azioni REALI sul file in review (prima: due toast).
+   * Commenta: come Claude Code Desktop (commenti sul diff che tornano al
+   * modello) — il riferimento al file, e all'ultima riga del diff sotto il
+   * puntatore se c'è, finisce nel composer, la persona completa e invia.
+   * Apri file: lo stesso visualizzatore dell'albero Files (apriFileAlbero).
+   */
   $$('[data-review-action]').forEach((button) => button.addEventListener('click', () => {
-    toast(button.dataset.reviewAction === 'comment' ? 'Commento inline pronto' : 'File aperto nel workspace', diffPath?.textContent || 'Review');
+    const percorso = state.reviewFileCorrente;
+    if (!percorso) { toast('Nessun file selezionato', 'Scegli un file nella lista qui sopra.'); return; }
+    if (button.dataset.reviewAction === 'comment') {
+      const selezione = String(window.getSelection?.()?.toString() || '').trim().split('\n')[0]?.slice(0, 160);
+      preparaCommentoNelComposer(selezione ? `Riguardo a \`${percorso}\`, alla riga «${selezione}»: ` : `Riguardo a \`${percorso}\`: `);
+      return;
+    }
+    if (!state.realSession.id) { toast('Nessuna sessione aperta', 'Il file si apre dall\'albero della sessione che lo ha scritto.'); return; }
+    void apriFileAlbero(percorso, percorso.split('/').pop());
   }));
 
   inizializzaPreferenzeChatDesktop();
@@ -9769,6 +9957,8 @@
     realSessionState: state.realSession,
   };
   window.__talosHarnessDestroy = () => {
+    window.clearInterval(notificheTimer);
+    document.querySelector('.notifications-menu')?.remove();
     cancelMotionAnimations();
     nascondiAttesaRisposta();
     cancellaRenderMessaggiStreaming();
