@@ -542,7 +542,18 @@ kbd { font-family: var(--font-mono); font-size: calc(10px * var(--talos-ui-font-
  * QUALUNQUE specificità batte sempre un attributo di presentazione) e
  * schiaccerebbe la geometria vera 96×16.
  */
-.talos-line-loader { display: block; width: 96px; height: 16px; overflow: visible; flex: 0 0 auto; }
+/*
+ * ⛔ 02/9 — owner: "il logo dei dot con linea animata è troppo grande,
+ * fallo più piccolo e coerente". Il disegno resta identico al mobile (il
+ * viewBox 96×16 non si tocca: cambia solo quanto lo si stampa a schermo).
+ * Il mobile lo rende a 96×16 su un'interfaccia da telefono; qui sta
+ * accanto a `.run-activity-label`, che è 11px × la scala UI — 16px di
+ * altezza erano più alti della riga di testo che accompagnano.
+ * ⇒ Metà del mobile (48×8), stesso rapporto 6:1, e AGGANCIATO a
+ * `--talos-ui-font-scale`: se l'owner cambia la dimensione del testo
+ * dalle impostazioni, il loader cresce con lui invece di sfasarsi.
+ */
+.talos-line-loader { display: block; width: calc(48px * var(--talos-ui-font-scale)); height: calc(8px * var(--talos-ui-font-scale)); overflow: visible; flex: 0 0 auto; }
 .talos-line-loader-track { stroke: var(--accent); stroke-opacity: .18; stroke-width: 2; stroke-linecap: round; }
 .talos-line-loader-sweep { stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 88; stroke-dashoffset: 88; animation: talosLineSweep 1.6s ease-in-out infinite; }
 .talos-line-loader-node { fill: transparent; stroke: var(--accent); stroke-width: 2; animation: talosLineNodeFill 1.6s ease-in-out infinite; }

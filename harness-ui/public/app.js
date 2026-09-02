@@ -5061,8 +5061,12 @@
     const svg = document.createElementNS(svgNs, 'svg');
     svg.setAttribute('class', 'talos-line-loader');
     svg.setAttribute('viewBox', '0 0 96 16');
-    svg.setAttribute('width', '96');
-    svg.setAttribute('height', '16');
+    // ⛔ 02/9 — owner: "troppo grande, fallo più piccolo e coerente". La
+    // misura vera la decide il CSS (agganciata alla scala del testo, vedi
+    // `.talos-line-loader` in styles.css); questi due attributi sono solo
+    // il ripiego se il foglio non arriva, e ne rispettano il rapporto.
+    svg.setAttribute('width', '48');
+    svg.setAttribute('height', '8');
     svg.setAttribute('aria-hidden', 'true');
     for (const classe of ['talos-line-loader-track', 'talos-line-loader-sweep']) {
       const linea = document.createElementNS(svgNs, 'line');
