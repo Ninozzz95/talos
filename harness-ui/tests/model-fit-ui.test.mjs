@@ -103,3 +103,40 @@ test('MODEL-FIT-UI-07 — il verdetto non è distinguibile SOLO dal colore', asy
     assert.match(css, new RegExp(`\\.model-lab-fit\\[data-fit-state="${stato}"\\]::before \\{ content: '\\${glifo}'|\\.model-lab-fit\\[data-fit-state="${stato}"\\]::before \\{ content: '${glifo}'`), `manca il glifo per ${stato}`);
   }
 });
+
+test('MODEL-FIT-UI-08 — se il profilo agente non passa si chiede ANCHE la chat', async () => {
+  /*
+   * ⭐⭐⭐ 02/9 — la verifica interrogava SOLO il profilo agente (65.536
+   * token) e bollava «non compatibile» modelli che per chat vanno
+   * benissimo. Misurato dal vivo sul Qwen3 0.6B: agente → `chat-only`
+   * (contesto 40.960 contro 65.536 richiesti), chat → `compatible`.
+   * ⭐ Ricerca: Ollama sceglie il contesto in base alla memoria (4K sotto
+   * 24 GiB, 32K fra 24 e 48, 256K sopra) — il pattern affermato non è «ci
+   * sta / non ci sta», è cosa può fare su QUESTA macchina.
+   */
+  const app = await source('public/app.js');
+  assert.match(app, /\?profile=\$\{profilo\}/);
+  assert.match(app, /if \(esito\.state !== 'compatible'\)/);
+  assert.match(app, /Va bene per la chat, non come agente/);
+});
+
+test('MODEL-FIT-UI-09 — AL CONTRARIO: il ripiego si mostra solo se la chat passa DAVVERO', async () => {
+  // ⛔ Un ripiego che a sua volta non passa sarebbe rumore su una riga già
+  // negativa. E se la seconda domanda fallisce, resta il verdetto
+  // principale: mai un errore in più a schermo per un extra.
+  const app = await source('public/app.js');
+  assert.match(app, /if \(chat\.state === 'compatible'\) ripiegoChat = chat;/);
+  assert.match(app, /catch \{ \/\* ⛔ il ripiego è un extra/);
+});
+
+test('MODEL-FIT-UI-10 — quando manca memoria o spazio si dice QUANTO ne manca', async () => {
+  /*
+   * ⭐ Misurato: il 27B in chat chiede 16,18 GB contro 15,23 liberi —
+   * bloccato per meno di 1 GB. «Non compatibile» e basta nasconderebbe che
+   * basta liberarne un po', e il pannello memoria accanto fa proprio
+   * quello. ⛔ Solo con entrambi i numeri veri.
+   */
+  const app = await source('public/app.js');
+  assert.match(app, /ne mancano \$\{formattaByteModelLab\(richiesti - disponibili\)\}/);
+  assert.match(app, /if \(!Number\.isFinite\(richiesti\) \|\| !Number\.isFinite\(disponibili\) \|\| richiesti <= disponibili\) return '';/);
+});
