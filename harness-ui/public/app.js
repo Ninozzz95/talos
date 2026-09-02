@@ -339,6 +339,37 @@
   let streamingAutoFollow = true;
   let streamingLastTargetTop = null;
   const CONVERSATION_FOLLOW_EPSILON_PX = 24;
+
+  /*
+   * ⭐⭐⭐ 02/9 — owner dal vivo: "lo streaming ha lag sostanziali a meta
+   * testo... trova un modo per strumentare tutte queste statistiche per
+   * loggarle e debuggarle". Un registro leggero, SEMPRE attivo (costo
+   * minimo: un push su un array capato — mai una console.log di
+   * default, sarebbe rumore ad ogni token) — consultabile DOPO una
+   * sessione lenta senza aver dovuto accendere nulla in anticipo:
+   * `window.talosStreamingLog()` in devtools restituisce le ultime
+   * STREAMING_LOG_CAP righe (quando, evento, durata del render, lunghezza
+   * del delta, bersaglio di scroll). `window.__talosHarnessStreamingVerbose
+   * = true` aggiunge anche uno specchio in console in tempo reale, per chi
+   * vuole guardare mentre succede.
+   */
+  const STREAMING_LOG_CAP = 400;
+  const streamingLog = [];
+  function logStreaming(evento, dettagli) {
+    const riga = { quandoMs: Math.round(performance.now()), evento, ...dettagli };
+    streamingLog.push(riga);
+    if (streamingLog.length > STREAMING_LOG_CAP) streamingLog.shift();
+    if (window.__talosHarnessStreamingVerbose) console.debug('[streaming]', evento, dettagli);
+  }
+  window.talosStreamingLog = () => streamingLog.slice();
+  /** Riassunto pronto per un'occhiata rapida: quante righe 'render' hanno superato la soglia, la piu' lenta, la media. */
+  window.talosStreamingLogRiassunto = (sogliaMs = 16) => {
+    const render = streamingLog.filter((r) => r.evento === 'render');
+    const lente = render.filter((r) => r.durataMs > sogliaMs);
+    const media = render.length ? render.reduce((s, r) => s + r.durataMs, 0) / render.length : 0;
+    const piuLenta = render.reduce((max, r) => (r.durataMs > (max?.durataMs ?? -1) ? r : max), null);
+    return { righeRender: render.length, righeLente: lente.length, sogliaMs, durataMediaMs: Math.round(media * 10) / 10, piuLenta };
+  };
   let streamingRenderFrame = null;
   const streamingRenderPending = new Set();
   let treeRenderTimer = null;
@@ -370,7 +401,10 @@
       const target = streamingScrollTarget;
       streamingScrollTarget = null;
       const conversation = $('#conversation');
-      if (!target || !target.isConnected || !conversation || !streamingAutoFollow) return;
+      if (!target || !target.isConnected || !conversation || !streamingAutoFollow) {
+        logStreaming('scroll-skip', { hasTarget: !!target, connesso: target?.isConnected, hasConversation: !!conversation, streamingAutoFollow });
+        return;
+      }
       const containerRect = conversation.getBoundingClientRect();
       const targetRect = target.getBoundingClientRect();
       const fondoContenuto = conversation.scrollTop + (targetRect.bottom - containerRect.top);
@@ -379,6 +413,7 @@
       streamingLastTargetTop = nuovoTop;
       // Istantaneo, mai 'smooth': vedi il commento di Hermes citato sopra.
       conversation.scrollTop = nuovoTop;
+      logStreaming('scroll', { nuovoTop: Math.round(nuovoTop), scrollHeight: conversation.scrollHeight, clientHeight: conversation.clientHeight });
     });
   }
 
@@ -417,7 +452,9 @@
     if (!copia) return false;
     let statoRender = state.realSession.renderIncrementale.get(messageId);
     if (!statoRender) { statoRender = { prefisso: null, nodiCoda: [] }; state.realSession.renderIncrementale.set(messageId, statoRender); }
+    const t0 = performance.now();
     renderizzaMarkdownIncrementale(copia, statoRender, testoGrezzo);
+    logStreaming('render', { messageId, testoLen: testoGrezzo.length, durataMs: Math.round((performance.now() - t0) * 10) / 10 });
     scrollStreamingOutput(element);
     return true;
   }
@@ -8085,6 +8122,34 @@
     if (state.board.initialized) await refreshSessionsBoard();
   }
 
+  /*
+   * ⛔⛔⛔ 02/9 — owner dal vivo, dopo aver cliccato una riga: "adesso se
+   * clicco una mi scrolla all'inizio non alla fine". Misurato con una
+   * sonda CDP dedicata (non un'ipotesi): lo scroll ARRIVA al fondo giusto
+   * (confermato per 9s filati), ma solo al TextMessageEnd dell'ULTIMO
+   * messaggio — per una cronologia lunga (un solo messaggio da 11.257px
+   * in questo caso) questo può volerci diversi secondi, durante i quali
+   * la conversazione resta ferma in cima: sembra rotta, non lo è, è solo
+   * in ritardo. Un MutationObserver segue il fondo VERO (scrollHeight,
+   * non il centro — qui non si sta scrivendo nulla dal vivo, si sta solo
+   * aprendo una cronologia già conclusa) ad ogni frammento che arriva
+   * durante il ripristino, invece di aspettare l'ultimo evento soltanto.
+   */
+  function mantieniFondoDuranteRipristino(generation) {
+    const conversation = $('#conversation');
+    if (!conversation) return;
+    const osservatore = new MutationObserver(() => { conversation.scrollTop = conversation.scrollHeight; });
+    osservatore.observe(conversation, { childList: true, subtree: true, characterData: true });
+    const fermaSeFinito = window.setInterval(() => {
+      if (generation !== state.realSession.generation || state.realSession.eventoTerminaleVisto) {
+        osservatore.disconnect();
+        window.clearInterval(fermaSeFinito);
+      }
+    }, 200);
+    // Rete di sicurezza: mai un osservatore vivo per sempre se il segnale di fine non arriva (connessione caduta, sessione mai conclusa per davvero).
+    window.setTimeout(() => { osservatore.disconnect(); window.clearInterval(fermaSeFinito); }, 30_000);
+  }
+
   function passaASessione(sessionId, taskId, nome, modello, impostazioniSessione = null) {
     if (state.sessionSelection.active) {
       toggleSessionSelection(sessionId, !state.sessionSelection.selected.has(sessionId));
@@ -8104,6 +8169,7 @@
     setView('chat');
     closePanels();
     collegaEventiSessione(sessionId, generation);
+    if (state.realSession.deferHistoricalRendering) mantieniFondoDuranteRipristino(generation);
     aggiornaElencoSessioniReali();
   }
 
@@ -10464,4 +10530,33 @@
    * più in alto nel file, non veniva mai eseguita per davvero. Rimossa:
    * la versione attiva ora è quella del ridisegno (card `.hf-repo-card`,
    * stessa logica di download/set-incompleto/hash-mancante inline). */
+
+  /*
+   * ⭐⭐⭐ 02/9 — owner dal vivo: "quando ricarico la pagina bisogna che si
+   * apra automaticamente ultima sessione disponibile". Non una chiamata
+   * sincrona al mount: il commento sopra ensureDownloadQueueBadge()
+   * documenta un vincolo TESTATO ("il boot non fa MAI una chiamata di
+   * rete propria" — CODE-COMPOSER-DEMO-SEND-01, HARNESS-BOARD-MOBILE-
+   * HONESTY-01) e quei test controllano fetchMock in modo SINCRONO
+   * (zero tick) subito dopo il mount — un setTimeout, anche a 0ms, non
+   * ha ancora girato in quel momento preciso, quindi resta compatibile:
+   * verificato leggendo entrambi i test riga per riga, non presunto.
+   * Mai nell'embedded mobile demo (nessun backend reale lì — stesso
+   * principio del vincolo che questo commento cita).
+   */
+  window.setTimeout(() => {
+    if (HOST().classList.contains('talos-embedded')) return;
+    if (state.realSession.id) return; // già una sessione attiva per altra via (es. deep-link)
+    apriUltimaSessioneDisponibileAllAvvio();
+  }, 0);
+
+  async function apriUltimaSessioneDisponibileAllAvvio() {
+    let elenco;
+    try { elenco = (await apiGet('/api/v1/sessions')).items; } catch { return; } // ⛔ un fallimento qui non è un'azione richiesta dall'utente, non merita un toast — resta lo stato vuoto onesto
+    if (state.realSession.id) return; // ri-controllo: potrebbe essere cambiata durante l'attesa della fetch
+    if (!Array.isArray(elenco) || elenco.length === 0) return;
+    const ultima = [...elenco].sort((a, b) => new Date(b.avviataAlle).getTime() - new Date(a.avviataAlle).getTime())[0];
+    if (!ultima) return;
+    passaASessione(ultima.sessionId, ultima.taskId, ultima.nome, ultima.modello, ultima);
+  }
 })();
