@@ -2178,3 +2178,16 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
   .workspace-chooser-footer { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
   .workspace-chooser-footer .primary-btn { min-width: 0; flex: 1; }
 }
+
+/* ⭐⭐⭐ 02/09 — Review, Browser e notifiche REALI (review complessiva). Stati vuoti onesti e popover notifiche sullo stesso idioma del menu azioni. */
+.review-empty { margin: 0; padding: 14px 16px; }
+.file-review-list .review-empty { grid-column: 1 / -1; }
+.diff-panel > .review-empty { padding: 22px 16px; }
+.browser-nav button:disabled, .browser-tools button:disabled { opacity: .45; cursor: not-allowed; }
+.badge-dot[hidden] { display: none; }
+.notifications-menu { min-width: 320px; max-width: min(420px, calc(100vw - 16px)); }
+.notifications-menu .notifications-item span { display: grid; gap: 2px; min-width: 0; }
+.notifications-menu .notifications-item strong { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notifications-menu .notifications-item small { color: var(--text-3); font-size: calc(11.5px * var(--talos-ui-font-scale)); }
+.notifications-menu .notifications-empty { margin: 0; padding: 12px 14px; color: var(--text-3); font-size: calc(13px * var(--talos-ui-font-scale)); }
+.notifications-menu .notifications-mark-all { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 10px; }

@@ -4359,3 +4359,21 @@ test('WORKSPACE-CHANGED-EPHEMERAL-02 — al ripristino i WorkspaceChanged già s
     rmSync(cartellaStore, { recursive: true, force: true });
   }
 });
+
+test('ELENCA-APPROVAZIONE-03 — elenca() dice se una sessione è ferma su un approvazione, e torna false appena risolta', async () => {
+  const finta = sessioneConApprovazione();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'On request' });
+  assert.equal(registro.elenca()[0].inAttesaApprovazione, false, 'AL CONTRARIO: nessuna richiesta, nessuna attesa');
+
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+  const promessa = finta.chiediApprovazioneFn({ tipo: 'scrivi', percorso: 'nuovo.txt' });
+  await Promise.resolve();
+  assert.equal(registro.elenca()[0].inAttesaApprovazione, true, 'la campanella del desktop legge questo campo per le sessioni NON aperte');
+
+  const richiesta = ricevuti.find((e) => e.type === 'ApprovalRequested');
+  registro.rispondiApprovazione(sessionId, richiesta.requestId, true);
+  await promessa;
+  assert.equal(registro.elenca()[0].inAttesaApprovazione, false);
+});

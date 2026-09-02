@@ -2,19 +2,19 @@
   "source": "harness-ui/public",
   "assets": {
     "app": {
-      "lines": 10033,
-      "bytes": 533377,
-      "sha256": "14f606bcc6ab728cefa2eddf926e927d2d19b70f99a8bb00ba0ccbd52f083f46"
+      "lines": 10223,
+      "bytes": 544910,
+      "sha256": "cc33fa46ffdc22f6eecc336bd26e3a405a4c24af83d0b1daa6175883224a6f52"
     },
     "html": {
-      "lines": 434,
-      "bytes": 68678,
-      "sha256": "967aaa91a3282e200c9c0c50af40d51c848167ded636cd8d3c0380de52e605a3"
+      "lines": 413,
+      "bytes": 67594,
+      "sha256": "6d2edcb5297b92ddb13d50a643cc431e81abf77ae4ebf649714d816aca8d8046"
     },
     "css": {
-      "lines": 2180,
-      "bytes": 172484,
-      "sha256": "43e4ac6c07e04ad86f9457d2eecc054f9169eecc56e44a6ac27f8dfcdee1b73a"
+      "lines": 2193,
+      "bytes": 173640,
+      "sha256": "0fb997072fac59c0eb7c37e33e8f50165b9b0a4693fff182faeb2d6ee653f1d3"
     }
   },
   "hostGlobals": [
@@ -32,6 +32,7 @@
   "storageKeys": [
     "talos-harness-modal-sizes-v1",
     "talos-harness-panel-widths",
+    "talos.harness.desktop.notifiche.v1",
     "talos.harness.desktop.settings.section.v1",
     "talos.harness.desktop.settings.v1"
   ],

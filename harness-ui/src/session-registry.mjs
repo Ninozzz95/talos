@@ -2473,6 +2473,8 @@ export function createSessionRegistry({
           fallbackProvider: voce.fallbackProvider ?? null,
           // ⭐⭐⭐ FASE L (30/8) — true SOLO per una voce ricostruita dopo un riavvio il cui ultimo evento non era RunFinished/RunError: il processo che la eseguiva è sparito, mai un turno "ancora in corso" travestito da tale.
           interrotta: voce.interrotta ?? false,
+          // ⭐⭐⭐ 02/09 — la campanella del desktop: una sessione ferma su un'approvazione è la notifica più urgente, e solo l'elenco la può dire a chi guarda un'ALTRA sessione.
+          inAttesaApprovazione: Boolean(voce.approvazionePendente),
           // ⭐⭐⭐ 30/8 — piano "Board — da campagne TALOS-BANCO a cruscotto
           // sessioni": il costo/consumo per la nuova Board, MAI un numero
           // inventato. Nessuna scrittura nuova sul disco (vedi usageDaEventi
