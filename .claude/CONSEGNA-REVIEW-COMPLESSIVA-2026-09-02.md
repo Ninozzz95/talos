@@ -259,6 +259,46 @@ segnalato dallo script non è un difetto).
    di un'altra sessione** (08:54, sezione "Causa vera del lag"): non le ho
    toccate né incluse nel mio commit.
 
+## 5-bis — Ordini dell'owner (02/09, dopo la prima consegna) e cosa è già fatto
+
+| # | ordine | stato |
+|---|---|---|
+| 1 | B — «Sfondo animato → Statico» lo imposta l'owner nel suo Chrome; l'app andrà in un installer e girerà anche in modo nativo | in mano all'owner |
+| 2 | B — mai vietare cartelle: fare come Claude Code/Hermes, ricerca competitor | **FATTO** (fase B, sotto) |
+| 3 | mockup Review/Browser/campanella: non togliere, **agganciare a dati veri**, ricerca completa | fase D, in corso |
+| 4 | tutti i 14 difetti visivi, coerenti e allo stato dell'arte dell'ultimo mese | fase E, dopo la D |
+| 5 | streaming: sistemare la rianalisi completa a ogni frame | **FATTO** (fase C, sotto) |
+| 6 | regola di misura (`chrome://gpu` + Chrome vero) | scritta in `MEMORIA-REGOLE.md`; da portare nello script diagnostico di repo |
+| 7 | B — committare la sezione del ledger scritta dall'altra sessione | **FATTO**, `d6817d6a` |
+
+### Fase B — `WorkspaceChanged` effimero (commit `666a5fa8`)
+Dossier competitor: `.claude/DOSSIER-RICERCA-WATCHER-COMPETITOR-2026-09-02.md`.
+Cura in `session-registry.mjs` `broadcast()`: consegnato solo agli iscritti
+vivi, mai in `voce.eventi`, mai su disco; i log vecchi si filtrano al
+ripristino. Nessuna cartella vietata. Misurato su server isolato 4177:
+replay di e572474a **1.606.366 → 98.241 byte**, eventi 743 → 250, UI identica.
+Backend **1261/1261** (RED→GREEN `WORKSPACE-CHANGED-EPHEMERAL-01/02`).
+
+### Fase C — streaming incrementale
+`renderizzaMarkdownIncrementale()` + `confineBlocchiStabili()` in `app.js`:
+i blocchi chiusi (riga vuota fuori fence) si rendono una volta e restano gli
+stessi nodi DOM, solo la coda si rifà; vale anche per il ragionamento. DOM
+piatto invariato. Stessa misura di prima (13.068 caratteri, 162 delta, Chrome
+con GPU):
+
+| | prima | dopo |
+|---|---|---|
+| main thread totale | 1,28 s | **0,35 s** |
+| style / layout | 0,30 s / 0,33 s | 0,03 s / 0,04 s |
+| paint | 222 ms | 126 ms |
+| frame sopra 16,7 ms | 8 | **0** |
+| durata dello stream | 1,41 s | 0,98 s |
+
+Test nuovo `LAG-LIVE-INCREMENTAL-40` (identità dei nodi stabili attraverso 40
+delta, fence con riga vuota interna non spezza il blocco, testo finale
+completo). Unit/contratto 57/57, browser **86 passati + 2 opt-in saltati**,
+snapshot legacy aggiornato solo per `assets.app`.
+
 ## 6 — File di questa consegna
 
 - Questo documento; riga indice in `.claude/MEMORIA-REGOLE.md`; nota di

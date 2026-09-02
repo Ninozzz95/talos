@@ -1,9 +1,21 @@
 {
   "source": "harness-ui/public",
   "assets": {
-    "app": { "lines": 9974, "bytes": 530197, "sha256": "d40f1c24e0f756049856932d1281656f06002f971649f856b72a41a4fb9f5f04" },
-    "html": { "lines": 434, "bytes": 68678, "sha256": "967aaa91a3282e200c9c0c50af40d51c848167ded636cd8d3c0380de52e605a3" },
-    "css": { "lines": 2180, "bytes": 172484, "sha256": "43e4ac6c07e04ad86f9457d2eecc054f9169eecc56e44a6ac27f8dfcdee1b73a" }
+    "app": {
+      "lines": 10033,
+      "bytes": 533377,
+      "sha256": "14f606bcc6ab728cefa2eddf926e927d2d19b70f99a8bb00ba0ccbd52f083f46"
+    },
+    "html": {
+      "lines": 434,
+      "bytes": 68678,
+      "sha256": "967aaa91a3282e200c9c0c50af40d51c848167ded636cd8d3c0380de52e605a3"
+    },
+    "css": {
+      "lines": 2180,
+      "bytes": 172484,
+      "sha256": "43e4ac6c07e04ad86f9457d2eecc054f9169eecc56e44a6ac27f8dfcdee1b73a"
+    }
   },
   "hostGlobals": [
     "__talosHarnessApiBase",
@@ -76,5 +88,8 @@
     "/api/v1/workspace-browser",
     "/api/v1/workspace-launches"
   ],
-  "terminalFrames": { "data": 0, "control": 1 }
+  "terminalFrames": {
+    "data": 0,
+    "control": 1
+  }
 }
