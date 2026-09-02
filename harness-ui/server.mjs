@@ -167,7 +167,16 @@ async function startServer() {
      * come `.automations/`/`.hooks-trust/` — dati locali generati a
      * runtime, non tracciati.
      */
-    cartellaStore: fileURLToPath(new URL('.sessions-store/', import.meta.url)),
+    /*
+     * ⭐ 02/9 — il valore ora viene da `config` invece che essere cablato
+     * qui: `TALOS_HARNESS_UI_SESSIONS_DIR` lo sposta, e senza quella
+     * variabile resta ESATTAMENTE questa cartella (il default vive in
+     * `parseCartellaStore`, calcolato sullo stesso `import.meta.url` di
+     * questo file). Serve a dare ai test un'istanza isolata invece di
+     * girare sulle sessioni vere dell'owner — vedi il commento lì per la
+     * ricerca sui tre concorrenti che fanno la stessa cosa.
+     */
+    cartellaStore: config.cartellaStore,
   });
   /*
    * ⭐⭐⭐ FASE L (30/8) — ricostruisce le sessioni persistite PRIMA di
