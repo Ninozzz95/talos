@@ -2267,3 +2267,11 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
 
 /* V11-bis — la "Cartella scelta" resta sempre visibile in fondo alla colonna, anche quando l albero scorre. */
 .workspace-chooser-selection { position: sticky; bottom: 0; background: var(--surface-elevated); z-index: 1; }
+
+/* V13-bis — telefono in orizzontale: 412 px di altezza non bastano per hero + composer + nav; l hero si riduce al solo titolo e il composer stringe i margini. */
+@media (max-height: 540px) and (orientation: landscape) {
+  .conversation-hero .hero-logo, .conversation-hero .hero-subtitle { display: none; }
+  .conversation-hero { padding-block: 8px; }
+  .composer { padding: 8px 48px 6px 10px; }
+  .composer-wrap { padding-bottom: 6px; }
+}
