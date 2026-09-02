@@ -1106,3 +1106,34 @@ passati con i 2 rossi preesistenti invariati.
 🔜 **Debito**: caricare un runtime già caricato risponde
 `500 INTERNAL_ERROR` invece di un errore di collisione pulito — stessa
 famiglia del reimport di un modello già presente.
+
+---
+
+## 02/09 (notte) — Due collisioni che si accusavano da sole
+
+Caricare un runtime già acceso, o reimportare un modello già presente,
+rispondevano **`500 INTERNAL_ERROR`** — «si è verificato un problema
+imprevisto». ⛔ Falso: è previstissimo, ed è la stessa cosa che la persona
+ha appena chiesto due volte. Un 500 dice «è colpa del server, riprova»
+su una situazione perfettamente spiegabile.
+
+⭐ Il codice giusto **c'era già**: il supervisor lancia
+`RUNTIME_ALREADY_RUNNING`, ma non essendo registrato fra i codici ammessi
+veniva degradato a `INTERNAL_ERROR`. `HF_TRANSFER_COLLISION` era
+registrato e aveva un messaggio, ma **nessuno status**.
+
+⭐ Ricerca (http.dev/409, RFC 9110): **409 Conflict** è «the request could
+not be completed due to a conflict with the current state of the target
+resource» — dice il perché e implica che è risolvibile.
+
+**Misurato, prima → dopo:**
+
+| gesto | prima | dopo |
+|---|---|---|
+| carico un runtime già acceso | `500 INTERNAL_ERROR` | **409** `RUNTIME_ALREADY_RUNNING` — «liberalo prima di caricarne un altro» |
+| reimporto un modello presente | `500 INTERNAL_ERROR` | **409** `HF_TRANSFER_COLLISION` — «scaricalo di nuovo solo dopo averlo rimosso» |
+
+⛔ Il messaggio ora dice **cosa fare**, non «problema imprevisto».
+⛔ E un test AL CONTRARIO tiene la linea dall'altra parte: un guasto VERO
+del runtime (errore senza codice noto) resta **500** — una collisione non
+è un guasto, ma un guasto non deve diventare una collisione.

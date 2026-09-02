@@ -62,6 +62,11 @@ const API_ERROR_CODES = new Set([
   'LOCAL_RUNTIME_FAILED',
   'HF_HUB_INVALID', 'HF_HUB_UPSTREAM', 'HF_HUB_RESPONSE_INVALID', 'HF_REPOSITORY_GATED', 'HF_RATE_LIMITED',
   'HF_REDIRECT_INVALID', 'HF_REDIRECT_HOST_REJECTED', 'HF_RESOLVE_INVALID', 'HF_TRANSFER_INVALID', 'HF_TRANSFER_COLLISION',
+  /* ⭐ 02/9 — il supervisor llama.cpp lancia gia' un codice preciso quando
+     il runtime e' occupato; non essendo registrato qui veniva degradato a
+     INTERNAL_ERROR (500), cioe' 'e' colpa nostra, riprova' su una
+     situazione perfettamente normale e spiegabile. */
+  'RUNTIME_ALREADY_RUNNING',
   'HF_DOWNLOAD_FAILED', 'HF_PATH_REJECTED', 'CHECKSUM_MISMATCH', 'MODEL_FILE_UNREADABLE', 'CANCELLED_BY_OWNER', 'PAUSED_BY_OWNER',
   'HF_IMAGE_URL_INVALID', 'HF_IMAGE_HOST_REJECTED', 'HF_IMAGE_REDIRECT_REJECTED', 'HF_IMAGE_PRIVATE_ADDRESS', 'HF_IMAGE_DNS_FAILED', 'HF_IMAGE_ABORTED', 'HF_IMAGE_UPSTREAM', 'HF_IMAGE_MIME_REJECTED', 'HF_IMAGE_TOO_LARGE', 'HF_IMAGE_CONFIG_INVALID',
   'LOCAL_IMPORT_INVALID', 'LOCAL_IMPORT_TOO_LARGE', 'LOCAL_IMPORT_SIZE_MISMATCH', 'LOCAL_IMPORT_EMPTY', 'LOCAL_IMPORT_NOT_GGUF',
@@ -82,6 +87,18 @@ const STATUS_BY_CODE = Object.freeze({
   TASK_CATALOG_UNAVAILABLE: 503,
   /** ⭐ 409 Conflict: la sessione origine esiste ma non è nello stato giusto per un fork (ancora in corso, o senza storia). */
   SESSION_NOT_READY: 409,
+  /*
+   * ⭐⭐ 02/9 — due COLLISIONI, non due guasti: un runtime già acceso e un
+   * modello già presente. Entrambe rispondevano 500 INTERNAL_ERROR — «si è
+   * verificato un problema imprevisto», che è falso: è previstissimo, ed è
+   * la stessa cosa che l'utente ha appena chiesto due volte.
+   * ⭐ Ricerca 02/9 (http.dev/409, RFC 9110): 409 è lo status per «the
+   * request could not be completed due to a conflict with the current state
+   * of the target resource» — dice al chiamante il perché e che è
+   * risolvibile, invece di accusare il server.
+   */
+  RUNTIME_ALREADY_RUNNING: 409,
+  HF_TRANSFER_COLLISION: 409,
   SESSION_STORE_WRITE_FAILED: 503,
   /** ⭐ 27/8 — un tetto duro dell'automazione violato (intervallo/limite fuori range) è un errore di CONTENUTO, non di forma: stesso status di ROW_INVALID. */
   AUTOMATION_INVALID: 422,
@@ -202,7 +219,8 @@ const MESSAGE_BY_CODE = Object.freeze({
   HF_HUB_INVALID: 'Richiesta Hugging Face non valida', HF_HUB_UPSTREAM: 'Hugging Face non raggiungibile', HF_HUB_RESPONSE_INVALID: 'Risposta Hugging Face non valida',
   HF_REPOSITORY_GATED: 'Repository Hugging Face gated o non autorizzato', HF_RATE_LIMITED: 'Limite richieste Hugging Face raggiunto', HF_REDIRECT_INVALID: 'Redirect Hugging Face non valido',
   HF_REDIRECT_HOST_REJECTED: 'Host di download Hugging Face non autorizzato', HF_RESOLVE_INVALID: 'URL di download Hugging Face non valido', HF_TRANSFER_INVALID: 'Trasferimento modello non valido',
-  HF_TRANSFER_COLLISION: 'Trasferimento modello già presente con revisione diversa', HF_DOWNLOAD_FAILED: 'Download Hugging Face fallito', HF_PATH_REJECTED: 'Percorso modello non autorizzato',
+  HF_TRANSFER_COLLISION: 'Questo modello è già presente: scaricalo di nuovo solo dopo averlo rimosso',
+  RUNTIME_ALREADY_RUNNING: 'Il runtime locale ha già un modello caricato: liberalo prima di caricarne un altro', HF_DOWNLOAD_FAILED: 'Download Hugging Face fallito', HF_PATH_REJECTED: 'Percorso modello non autorizzato',
   CHECKSUM_MISMATCH: 'Verifica checksum modello fallita', MODEL_FILE_UNREADABLE: 'File modello non leggibile', CANCELLED_BY_OWNER: 'Download annullato', PAUSED_BY_OWNER: 'Download in pausa',
   HF_IMAGE_URL_INVALID: 'URL immagine non valido', HF_IMAGE_HOST_REJECTED: 'Origine immagine non autorizzata', HF_IMAGE_REDIRECT_REJECTED: 'Reindirizzamento immagine non autorizzato', HF_IMAGE_PRIVATE_ADDRESS: 'Immagine non raggiungibile da un indirizzo privato', HF_IMAGE_DNS_FAILED: 'Origine immagine non raggiungibile', HF_IMAGE_ABORTED: 'Richiesta immagine annullata', HF_IMAGE_UPSTREAM: 'Servizio immagini non disponibile', HF_IMAGE_MIME_REJECTED: 'Formato immagine non supportato', HF_IMAGE_TOO_LARGE: 'Immagine troppo grande', HF_IMAGE_CONFIG_INVALID: 'Proxy immagini non configurato',
   LOCAL_IMPORT_INVALID: 'Controlla il file GGUF scelto e riprova', LOCAL_IMPORT_TOO_LARGE: 'Il modello scelto supera lo spazio consentito', LOCAL_IMPORT_SIZE_MISMATCH: 'La dimensione del file non coincide con quella dichiarata', LOCAL_IMPORT_EMPTY: 'Il file scelto è vuoto', LOCAL_IMPORT_NOT_GGUF: 'Il file scelto non è un modello GGUF',

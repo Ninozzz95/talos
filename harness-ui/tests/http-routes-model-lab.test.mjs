@@ -296,3 +296,34 @@ test('HTTP-RUNTIME-UNLOAD-03 — un runtime sconosciuto non viene inventato', as
   const risposta = await fetch(`${base}/api/v1/runtime/unload`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ runtimeId: 'inesistente' }) });
   assert.notEqual(risposta.status, 200);
 });
+
+/*
+ * ⭐⭐ 02/9 — DUE COLLISIONI che rispondevano `500 INTERNAL_ERROR`, cioè
+ * «si è verificato un problema imprevisto»: falso, è previstissimo — è la
+ * stessa cosa chiesta due volte. Il supervisor lanciava già
+ * `RUNTIME_ALREADY_RUNNING`, ma il codice non era registrato e veniva
+ * degradato; `HF_TRANSFER_COLLISION` era registrato ma senza status.
+ * ⭐ Ricerca (http.dev/409, RFC 9110): 409 è «a conflict with the current
+ * state of the target resource» — dice il perché ed è risolvibile.
+ */
+test('HTTP-COLLISIONE-409-01 — un runtime già acceso risponde 409, non 500', async (t) => {
+  const base = await listen(t, null, {
+    localRuntimes: { 'llama.cpp': { load: async () => { const e = new Error('runtime is already active'); e.code = 'RUNTIME_ALREADY_RUNNING'; throw e; } } },
+  });
+  const risposta = await fetch(`${base}/api/v1/runtime/load`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ runtimeId: 'llama.cpp', modelId: 'qwen3' }) });
+  assert.equal(risposta.status, 409);
+  const corpo = await risposta.json();
+  assert.equal(corpo.error.code, 'RUNTIME_ALREADY_RUNNING');
+  // ⛔ E il messaggio dice cosa fare, non «problema imprevisto».
+  assert.match(corpo.error.message, /liberalo prima/);
+});
+
+test('HTTP-COLLISIONE-409-02 — AL CONTRARIO: un guasto VERO del runtime resta 500', async (t) => {
+  // ⛔ Una collisione non è un guasto, ma un guasto non deve diventare una
+  // collisione: un errore senza codice noto resta un errore del server.
+  const base = await listen(t, null, {
+    localRuntimes: { 'llama.cpp': { load: async () => { throw new Error('disco esploso'); } } },
+  });
+  const risposta = await fetch(`${base}/api/v1/runtime/load`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ runtimeId: 'llama.cpp', modelId: 'qwen3' }) });
+  assert.equal(risposta.status, 500);
+});
