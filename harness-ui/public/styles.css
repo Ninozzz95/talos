@@ -331,6 +331,36 @@ kbd { font-family: var(--font-mono); font-size: calc(10px * var(--talos-ui-font-
 .session-main { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
 .session-main strong { font-size: calc(14px * var(--talos-ui-font-scale)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 650; }
 .session-main small { color: var(--muted); font-size: calc(11px * var(--talos-ui-font-scale)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/*
+ * ⭐⭐⭐ 02/9 — lo stato della sessione: pallino + parola + dettagli veri.
+ * ⛔ Il pallino non è l'unico segnale — la parola per esteso c'è sempre
+ * accanto. Un «conclusa con errore» distinguibile solo dal rosso sarebbe
+ * illeggibile a chi non distingue i colori, ed è proprio l'informazione
+ * che conta di più in questa lista.
+ * ⛔ E lo stato "in corso" PULSA: è l'unico che cambia da solo, e un
+ * pallino fermo accanto a «live» direbbe una cosa mentre ne mostra
+ * un'altra (stesso principio del line-loader — vedi più sopra).
+ */
+.session-stato { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.session-stato-punto { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: var(--muted-2); }
+.session-stato-extra { flex: 0 0 auto; padding-left: 6px; margin-left: 2px; border-left: 1px solid var(--line); color: var(--muted-2); overflow: hidden; text-overflow: ellipsis; }
+.session-stato[data-session-state="vivo"] { color: var(--accent-2); }
+.session-stato[data-session-state="vivo"] .session-stato-punto { background: var(--accent); animation: sessionePulsa 1.8s ease-in-out infinite; }
+.session-stato[data-session-state="attesa"] { color: var(--accent); font-weight: 600; }
+.session-stato[data-session-state="attesa"] .session-stato-punto { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.session-stato[data-session-state="successo"] .session-stato-punto { background: var(--success); }
+.session-stato[data-session-state="errore"] { color: var(--danger); }
+.session-stato[data-session-state="errore"] .session-stato-punto { background: var(--danger); }
+.session-stato[data-session-state="interrotto"] .session-stato-punto { background: var(--muted); }
+.session-stato[data-session-state="ignoto"] .session-stato-punto { background: transparent; border: 1px solid var(--line-strong); }
+.session-meta-giri { color: var(--muted-2); font-size: calc(10px * var(--talos-ui-font-scale)); font-variant-numeric: tabular-nums; align-self: end; }
+@keyframes sessionePulsa { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+/* ⛔ Sotto movimento ridotto il pallino vivo si CALMA, non si ferma: fermo
+   sarebbe indistinguibile da una sessione conclusa. */
+body.reduce-motion .session-stato[data-session-state="vivo"] .session-stato-punto { animation: sessionePulsa 2.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .session-stato[data-session-state="vivo"] .session-stato-punto { animation: sessionePulsa 2.6s ease-in-out infinite !important; animation-duration: 2.6s !important; animation-iteration-count: infinite !important; }
+}
 .session-meta { align-self: stretch; display: grid; grid-template-rows: auto 1fr; justify-items: end; color: var(--muted); font-size: calc(11px * var(--talos-ui-font-scale)); padding-top: 3px; }
 .session-meta svg { width: 17px; height: 17px; margin-top: auto; }
 .status-pulse { display: inline-block; width: 7px; height: 7px; border-radius: 99px; background: var(--success); box-shadow: 0 0 0 4px var(--success-soft); margin-right: 6px; }
