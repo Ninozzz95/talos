@@ -2551,3 +2551,19 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
   .composer { padding: 8px 48px 6px 10px; }
   .composer-wrap { padding-bottom: 6px; }
 }
+
+/*
+ * ⭐⭐⭐ 02/9 — pannello memoria (owner: «pulsanti che liberano la RAM»).
+ * ⛔ La barra non è l'unico segnale: la percentuale e i byte veri sono
+ * scritti per esteso nell'etichetta sotto. Una barra che diventa rossa e
+ * basta non dice quanto manca.
+ */
+.memoria-libera { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); display: grid; gap: 8px; }
+.memoria-barra { height: 8px; border-radius: 999px; background: var(--surface-highlight); overflow: hidden; }
+.memoria-barra-usata { display: block; height: 100%; width: 0; border-radius: 999px; background: var(--accent); transition: width var(--motion-control) var(--motion-ease); }
+.memoria-barra-usata[data-memoria-livello="alto"] { background: var(--accent-2); }
+.memoria-barra-usata[data-memoria-livello="critico"] { background: var(--danger); }
+.memoria-riga { margin: 0; color: var(--text-2); font-size: calc(12px * var(--talos-ui-font-scale)); font-variant-numeric: tabular-nums; }
+.memoria-tenuta { margin: 0; color: var(--muted); font-size: calc(11px * var(--talos-ui-font-scale)); }
+.memoria-azioni { display: flex; flex-wrap: wrap; gap: 8px; }
+.memoria-nota { margin: 0; font-size: calc(10.5px * var(--talos-ui-font-scale)); line-height: 1.5; }

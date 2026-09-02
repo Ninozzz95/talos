@@ -2442,6 +2442,96 @@
     }
   }
 
+  /*
+   * ⭐⭐⭐ 02/9 — «pulsanti che liberano la RAM» (owner). La ricerca ha
+   * spostato il progetto rispetto alla richiesta letterale, e vale la pena
+   * scriverlo qui:
+   *
+   * ⛔ NON si uccidono processi. Le fonti sulla sicurezza sono esplicite —
+   * «do not force-close processes with names you do not recognize», «if you
+   * cannot explain what a process does, do not kill it», e terminare un
+   * processo di sistema (svchost, lsass) porta a un BSOD immediato. Il
+   * progetto ha già pagato questa lezione con la sorveglianza che due volte
+   * stava per uccidere la sessione VIVA dell'owner
+   * ([[il-guardiano-accusava-la-sessione-dellowner]]).
+   *
+   * ⭐ E nessuno dei runtime affermati lo fa: Ollama (`ollama stop`,
+   * `keep_alive: 0`) e LM Studio (`lms unload --all`) liberano memoria
+   * SCARICANDO IL MODELLO, non terminando processi altrui. È anche la leva
+   * che conta davvero: su questa macchina il modello 27B pesa 15,3 GB di
+   * pesi — più di qualunque altra cosa si potrebbe chiudere.
+   *
+   * ⇒ Qui: si MISURA (la ricerca dice «start by checking what is using
+   * memory», non dal kill), si mostra quanto ne tiene TALOS, e si offre un
+   * pulsante che libera quella — l'unica memoria di cui siamo padroni.
+   */
+  function aggiornaPannelloMemoria() {
+    const capacita = state.modelLab.capacity;
+    const barra = $('#memoriaBarraUsata');
+    const etichetta = $('#memoriaBarraEtichetta');
+    const tenuta = $('#memoriaTenuta');
+    const bottone = $('#memoriaScarica');
+    if (!etichetta) return;
+    const totale = capacita?.memory?.totalBytes;
+    const libera = capacita?.memory?.freeBytes;
+    if (!Number.isFinite(totale) || !Number.isFinite(libera) || totale <= 0) {
+      etichetta.textContent = 'Memoria non misurata.';
+      if (barra) barra.style.width = '0%';
+      if (bottone) bottone.disabled = true;
+      return;
+    }
+    const usata = Math.max(0, totale - libera);
+    const percentuale = Math.min(100, Math.round((usata / totale) * 100));
+    if (barra) {
+      barra.style.width = `${percentuale}%`;
+      // ⛔ Non solo il colore: la percentuale è scritta nell'etichetta qui sotto.
+      barra.dataset.memoriaLivello = percentuale >= 90 ? 'critico' : percentuale >= 75 ? 'alto' : 'ok';
+    }
+    etichetta.textContent = `${formattaByteModelLab(usata)} in uso su ${formattaByteModelLab(totale)} · ${formattaByteModelLab(libera)} liberi (${percentuale}%)`;
+    /*
+     * ⛔ Quanto ne tiene TALOS si dichiara solo se un modello è DAVVERO
+     * caricato: `runtimes` riporta lo stato osservato del runtime locale.
+     * Senza quel dato non si scrive una stima — sarebbe un numero inventato
+     * proprio dove la persona sta per premere un pulsante.
+     */
+    const runtimeLocale = (state.modelLab.runtimes || []).find((r) => r.runtimeId === 'llama.cpp');
+    const modelloCaricato = runtimeLocale?.modelloCaricato || runtimeLocale?.loadedModel || null;
+    if (tenuta) {
+      if (modelloCaricato) {
+        tenuta.hidden = false;
+        tenuta.textContent = `TALOS tiene in memoria: ${modelloCaricato}`;
+      } else {
+        tenuta.hidden = false;
+        tenuta.textContent = 'TALOS non tiene nessun modello in memoria adesso.';
+      }
+    }
+    if (bottone) bottone.disabled = !modelloCaricato;
+  }
+
+  async function liberaMemoriaModello() {
+    const bottone = $('#memoriaScarica');
+    const originale = bottone?.textContent;
+    if (bottone) { bottone.disabled = true; bottone.textContent = 'Liberazione…'; }
+    const primaLiberi = state.modelLab.capacity?.memory?.freeBytes;
+    try {
+      await apiPost('/api/v1/runtime/unload', {});
+      // ⭐ Si RIMISURA subito: il risultato si dichiara con i byte veri
+      // liberati, non con un «fatto» generico.
+      state.modelLab.capacity = null;
+      await caricaCapacitaMacchina();
+      const dopoLiberi = state.modelLab.capacity?.memory?.freeBytes;
+      const guadagno = (Number.isFinite(primaLiberi) && Number.isFinite(dopoLiberi)) ? dopoLiberi - primaLiberi : null;
+      toast('Memoria liberata', guadagno && guadagno > 0
+        ? `${formattaByteModelLab(guadagno)} tornati disponibili.`
+        : 'Modello scaricato. La misura di sistema può aggiornarsi con qualche secondo di ritardo.');
+    } catch (error) {
+      toast('Memoria non liberata', error.message || 'Il runtime locale non ha risposto.');
+    } finally {
+      if (bottone) { bottone.textContent = originale || 'Libera la memoria del modello'; }
+      aggiornaPannelloMemoria();
+    }
+  }
+
   async function caricaCapacitaMacchina() {
     if (state.modelLab.loadingCapacity || state.modelLab.capacity) return;
     state.modelLab.loadingCapacity = true;
@@ -2455,6 +2545,7 @@
       set('machineStorageMetric', formattaByteModelLab(data.storage?.availableBytes));
       set('machineAllocatableMetric', formattaByteModelLab(data.storage?.allocatableBytes));
       set('machineCapacityDetail', `${data.platform || 'host'} · ${data.arch || 'arch'} · ${new Date(data.measuredAt).toLocaleTimeString()}`);
+      aggiornaPannelloMemoria();
     } catch (error) {
       const el = $('#machineCapacityStatus'); if (el) el.textContent = 'Non disponibile';
       const detail = $('#machineCapacityDetail'); if (detail) detail.textContent = error.message || 'Misura non disponibile';
@@ -2652,6 +2743,10 @@
     $('#modelLabProviderFilter')?.addEventListener('change', (event) => { state.modelLab.provider = event.target.value; renderizzaCatalogoModelLab(); });
     $('#modelLabRefreshButton')?.addEventListener('click', () => caricaCatalogoModelLab({ forza: true }));
     $('#modelLabRuntimeRefresh')?.addEventListener('click', () => caricaRuntimeModelLab());
+    // ⭐ 02/9 — pannello memoria: rimisura e liberazione (vedi il commento su
+    // aggiornaPannelloMemoria per perché NON si uccidono processi).
+    $('#memoriaRimisura')?.addEventListener('click', async () => { state.modelLab.capacity = null; await caricaCapacitaMacchina(); });
+    $('#memoriaScarica')?.addEventListener('click', () => { void liberaMemoriaModello(); });
     $('#modelLabRuntimeSelect')?.addEventListener('change', (event) => { state.modelLab.selectedRuntime = event.target.value; state.modelLab.selectedRuntimeModel = ''; renderizzaRuntimeModelLab(); });
     $('#modelLabModelSelect')?.addEventListener('change', (event) => { state.modelLab.selectedRuntimeModel = event.target.value; renderizzaRuntimeModelLab(); });
     $('#modelLabRunButton')?.addEventListener('click', () => avviaProvaRuntimeModelLab());

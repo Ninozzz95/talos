@@ -998,3 +998,64 @@ e dallo screenshot ingrandito.
 
 **Suite**: backend **1377/1377** (+6), frontend unit 57/57, browser 88
 passati con i 2 rossi preesistenti invariati.
+
+---
+
+## 02/09 (notte) — «Pulsanti che liberano la RAM»: la ricerca ha spostato il progetto
+
+Owner: «funzioni all'avanguardia… pulsanti che liberano la RAM dai
+processi non critici». La ricerca obbligatoria ha portato **contro**
+l'implementazione letterale, e vale la pena scriverlo.
+
+### ⛔ Perché NON si uccidono processi
+
+Le fonti sulla sicurezza sono esplicite: *«do not force-close processes
+with names you do not recognize»*, *«if you cannot explain what a process
+does, do not kill it»*, e terminare un processo di sistema (`svchost`,
+`lsass`) causa un **BSOD immediato**. E il consiglio d'apertura è proprio
+l'opposto del kill: *«do not start by killing random processes. Start by
+checking what is using memory»*.
+
+⛔ Il progetto ha già pagato questa lezione in casa: la sorveglianza
+gridava «3 ORFANI» e **due volte** stava per uccidere la sessione Codex
+**viva** dell'owner ([[il-guardiano-accusava-la-sessione-dellowner]]).
+
+⭐ E **nessuno dei runtime affermati uccide processi**: Ollama
+(`ollama stop`, `keep_alive: 0`) e LM Studio (`lms unload --all`) liberano
+memoria **scaricando il modello**. È anche la leva che conta davvero: su
+questa macchina i pesi del 27B sono **15,3 GB**, più di qualunque altra
+cosa si potrebbe chiudere.
+
+### Cosa è stato fatto
+
+Pannello nella Panoramica del Model Lab:
+1. **Misura** (la ricerca dice di partire da lì): barra + byte veri +
+   percentuale, con tre livelli (ok / alto ≥75% / critico ≥90%).
+   ⛔ La barra non è l'unico segnale: percentuale e byte sono scritti.
+2. **Quanto ne tiene TALOS**: il modello caricato, o l'ammissione onesta
+   «non tiene nessun modello in memoria adesso».
+3. **«Libera la memoria del modello»** → `POST /api/v1/runtime/unload`,
+   rotta che **esisteva già** e non era raggiungibile da nessun pulsante.
+   ⛔ Disabilitato quando non c'è nulla da liberare: un pulsante che non
+   ha niente da fare mentirebbe.
+4. **«Rimisura»**.
+5. La scelta di non toccare i processi è **dichiarata a schermo**, non
+   solo nel codice.
+
+⭐ L'esito si dichiara **coi byte veri liberati**: si rimisura dopo lo
+scarico e si dice quanto è tornato disponibile; se la misura di sistema
+non si è ancora aggiornata lo si dice, invece di annunciare un guadagno
+non visto.
+
+**Verificato dal vivo**: «16 GB in uso su 32 GB · 16 GB liberi (50%)»,
+barra al 50%, livello `ok`, pulsante correttamente **disabilitato**
+(nessun modello caricato), Rimisura funzionante, zero errori di pagina,
+screenshot ispezionato.
+
+**Suite**: backend **1383/1383** (+6), frontend unit 57/57, browser 88
+passati con i 2 rossi preesistenti invariati.
+
+🔜 **Debito registrato**: il pulsante «Verifica compatibilità» interroga
+solo il profilo **agente**, quindi bolla «non compatibile» un modello che
+per **chat** andrebbe bene — misurato sul Qwen3 27B: 28,9 GB a 65k
+(agente) contro ~17 GB a 8k (chat), su 31,6 GB di RAM totale.
