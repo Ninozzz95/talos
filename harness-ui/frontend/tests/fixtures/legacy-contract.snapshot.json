@@ -2,19 +2,19 @@
   "source": "harness-ui/public",
   "assets": {
     "app": {
-      "lines": 11180,
-      "bytes": 601422,
-      "sha256": "f46395ef568c79e4d6b8818724bc0bce1711c732c7bbf2bba143e36d221ce5a5"
+      "lines": 11275,
+      "bytes": 607200,
+      "sha256": "70186f8050e0e79edacd192aaad03577fcbe05a4d81eaa33bd649669d7c88b34"
     },
     "html": {
-      "lines": 413,
-      "bytes": 68838,
-      "sha256": "468cfdd2466584f1df83500ac2ac876101cc00e090cfc9399c789a45c17297c4"
+      "lines": 417,
+      "bytes": 69139,
+      "sha256": "86471a32ecca12a61582258dd81659fd202ddd43dd96f9e0545546bca6a6f16f"
     },
     "css": {
-      "lines": 2462,
-      "bytes": 194149,
-      "sha256": "87f0da9671168ad2a99c1894216c64b48adc1b07b0526557dd3499995b664521"
+      "lines": 2502,
+      "bytes": 197455,
+      "sha256": "e2983c6966f3b83b98fc64d9d74017616caa3fa414610c4a0210edb61d9647e9"
     }
   },
   "hostGlobals": [
@@ -68,6 +68,7 @@
     "/index.html",
     "/styles.css",
     "/talos/brand/logo-short.svg",
+    "/vendor/prism/prism.js",
     "/vendor/xterm/addon-fit.js",
     "/vendor/xterm/addon-webgl.js",
     "/vendor/xterm/xterm.css",

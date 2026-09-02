@@ -695,3 +695,74 @@ di una suite condivisa):
 Finché resta così, **il suo conteggio non può essere citato come prova**
 né in un commit né in un rapporto: valgono i test hermetici, le misure
 dirette e l'A/B contro un baseline nello stesso momento.
+
+---
+
+## 02/09 — Formattatore dei blocchi di codice (Prism vendorizzato)
+
+Owner: «crea un formattatore di blocco codice, ricerca web dei migliori».
+Prima ogni ```` ```fence ```` diventava un `<pre><code>` nudo: nessuna
+evidenziazione, nessuna etichetta, nessun modo di copiarlo — e
+l'identificatore di linguaggio dopo i backtick veniva **scartato**, cioè
+l'unico posto in cui il modello ci dice di che linguaggio si tratta.
+
+**Scelta, con ricerca** (pkgpulse.com/guides/shiki-vs-prismjs-vs-highlightjs-2026,
+streamdown.ai/docs/code-blocks, mui.com/x/react-chat): **Prism**, perché
+Shiki evidenzia a build-time/server (sbagliato per un testo che arriva in
+streaming nel browser) e highlight.js indovina il linguaggio, che qui non
+serve — il fence lo dichiara già, e indovinare significherebbe scrivere
+un'etichetta non verificata.
+
+- `public/vendor/prism/prism.js` — 1.30.0, core + 19 linguaggi in UN file,
+  concatenati **in ordine di dipendenza** (`clike` prima di `javascript`,
+  `c` prima di `cpp`, `markup` prima di `markdown`), con
+  `window.Prism.manual = true` **prima** del core: senza, Prism evidenzia
+  da solo tutto il documento al DOMContentLoaded. Zero CDN, stesso
+  principio di `vendor/xterm/`. README con versione, motivo e come si
+  aggiorna.
+- Registrato in `src/static-files.mjs`: la allowlist è **esplicita**, senza
+  quella riga risponde 404 e ogni blocco perde l'evidenziazione in
+  silenzio — lo stesso difetto già pagato con xterm il 28/8.
+- Intestazione con il linguaggio **dichiarato** + pulsante copia con
+  conferma transitoria; tema dai token TALOS, mai un tema di Prism.
+- ⛔ Fence **ancora aperto** (streaming): nessuna evidenziazione e copia
+  **disabilitata** — «defer code block rendering until the closing fence
+  arrives… copy disabled during streaming». Rievidenziare a ogni frame un
+  testo che cambia costa e sfarfalla, e si copierebbe codice a metà.
+- ⛔ Fence **senza** linguaggio: etichetta «testo», nessuna evidenziazione.
+  Mai un linguaggio indovinato.
+
+**Verificato dal vivo** (CDP, sessione vera, non un mock): Python →
+etichetta «Python», 19 token (`keyword`, `builtin`, `triple-quoted-string`);
+```` ```js ```` → «JavaScript» via alias, 16 token; fence nudo → «testo», 0
+token; ```` ```sql ```` aperto → «SQL», `inArrivo`, copia disabilitata «In
+arrivo…»; pulsante copia → «Copiato», classe `is-fatto`, appunti col
+codice esatto. Screenshot ispezionato.
+
+**Difetto trovato ISPEZIONANDO l'HTML prodotto**, non cercandolo: la
+dissolvenza per parola avvolgeva anche l'etichetta e il testo del pulsante
+(`<span class="code-block-lang"><span class="stream-word">Python`), come se
+il modello li stesse scrivendo. Sono cornice dell'interfaccia:
+`avvolgiParoleRecenti` ora salta anche `.code-block-head` (saltava già
+`pre, code`).
+
+### ⛔⛔⛔ E un buco più vecchio, trovato per caso: `vendor/` era GITIGNORATO
+
+`git check-ignore -v` sul nuovo `prism.js` ha rivelato che `vendor/` in
+cima al `.gitignore` escludeva anche `harness-ui/public/vendor/`, e la
+negazione esistente copre solo il percorso **mobile**. Conseguenza mai
+notata: **nemmeno `vendor/xterm/` era tracciato** — dal 28/8. Un clone
+pulito perdeva sia il Terminale REALE sia (ora) l'evidenziazione, e il
+difetto sarebbe emerso solo su un'altra macchina.
+
+⛔ Servono **due** righe, non una: git non rientra in una directory
+esclusa, quindi prima si ri-include la directory e poi il suo contenuto
+(`!harness-ui/public/vendor/` + `!harness-ui/public/vendor/**`) — stessa
+lezione già pagata su `mobile/docs/*`. ⛔ E `git check-ignore -v` da solo
+**non basta a leggere l'esito**: stampa la regola che combacia anche
+quando è una negazione. La prova vera è `git add --dry-run`, che ora
+elenca prism **e** xterm.
+
+**Suite**: backend `node --test` **1351/1351** (+6 nuovi,
+`tests/code-block-formatter.test.mjs`, hermetici apposta — leggono i
+sorgenti, non passano dal 4174); frontend unit **57/57**.

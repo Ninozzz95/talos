@@ -442,6 +442,46 @@ kbd { font-family: var(--font-mono); font-size: calc(10px * var(--talos-ui-font-
 .assistant-copy :where(p, li, blockquote, h1, h2, h3, h4, h5, h6) { overflow-wrap: anywhere; }
 .assistant-copy pre { max-width: 100%; margin: 12px 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; white-space: pre; }
 .assistant-copy pre code { white-space: pre; overflow-wrap: normal; }
+
+/*
+ * ⭐⭐⭐ 02/9 — BLOCCO DI CODICE (owner: "crea un formattatore di blocco
+ * codice"). Intestazione con il linguaggio dichiarato dal fence + pulsante
+ * copia, corpo evidenziato da Prism vendorizzato. Il tema NON è quello di
+ * default di Prism (un viola/rosa da tema chiaro che qui stonerebbe): i
+ * colori escono TUTTI dai token TALOS già in uso nel resto del foglio, così
+ * il blocco appartiene alla pagina invece di sembrarci appoggiato sopra.
+ * ⛔ Un solo bordo per tutto il blocco (testa + corpo), non due riquadri
+ * accostati: la testa è la stessa superficie del codice, separata da una
+ * riga sola.
+ */
+.assistant-copy .code-block { margin: 12px 0; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--bg-deep); overflow: hidden; }
+.code-block-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 10px 6px 12px; border-bottom: 1px solid var(--line); background: var(--surface-highlight-subtle); }
+.code-block-lang { color: var(--muted); font-size: calc(10px * var(--talos-ui-font-scale)); letter-spacing: .06em; text-transform: uppercase; }
+.code-block-copy { flex: 0 0 auto; padding: 3px 9px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--muted); font: inherit; font-size: calc(10px * var(--talos-ui-font-scale)); cursor: pointer; transition: color var(--motion-control) var(--motion-ease), border-color var(--motion-control) var(--motion-ease), background var(--motion-control) var(--motion-ease); }
+.code-block-copy:hover:not(:disabled) { color: var(--text); border-color: var(--line-strong); background: var(--surface-highlight); }
+.code-block-copy:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* ⛔ Ricerca 02/9 (streamdown.ai/docs/code-blocks): copia DISABILITATA mentre
+   il blocco arriva — si copierebbe codice a metà. Lo stato si vede, non si
+   scopre premendo. */
+.code-block-copy:disabled { cursor: default; opacity: .55; }
+.code-block-copy.is-fatto { color: var(--success); border-color: var(--success-strong); }
+.assistant-copy .code-block pre { margin: 0; padding: 12px; background: transparent; }
+.assistant-copy .code-block code { font-family: var(--font-mono); font-size: calc(12.5px * var(--talos-ui-font-scale)); line-height: 1.6; }
+
+/* I colori di Prism, tutti dai token TALOS. Nomi delle classi: quelli che
+   Prism produce da solo, non inventati — vedi vendor/prism/README.md. */
+.token.comment, .token.prolog, .token.cdata, .token.doctype { color: var(--muted-2); font-style: italic; }
+.token.punctuation { color: var(--muted); }
+.token.string, .token.char, .token.attr-value, .token.regex { color: var(--secondary); }
+.token.number, .token.boolean, .token.constant, .token.symbol { color: var(--info); }
+.token.keyword, .token.selector, .token.important, .token.atrule, .token.rule { color: var(--accent-2); }
+.token.function, .token.class-name, .token.tag { color: var(--accent); }
+.token.operator, .token.entity, .token.url, .token.variable { color: var(--text-2); }
+.token.property, .token.attr-name, .token.parameter { color: var(--info); }
+.token.deleted { color: var(--danger); }
+.token.inserted { color: var(--success); }
+.token.bold { font-weight: 600; }
+.token.italic { font-style: italic; }
 /* ⭐ 28/8, owner: "--- come separatore, formatta anche quello" — il default del browser (bordo inset/outset grigio) stona sul tema scuro; una riga sola, coerente con --line già usato per gli altri separatori del bundle. */
 .assistant-copy hr { margin: 14px 0; border: 0; border-top: 1px solid var(--line); }
 
