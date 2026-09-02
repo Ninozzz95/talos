@@ -2,9 +2,9 @@
   "source": "harness-ui/public",
   "assets": {
     "app": {
-      "lines": 10467,
-      "bytes": 558728,
-      "sha256": "3322bc3863a3512534f73de6d89ae05cf35f76d428cb1b8c4a5de600ac5c13fb"
+      "lines": 10562,
+      "bytes": 564563,
+      "sha256": "c829455c4fa3e09a42b6351dca93100bfa20fe36bb9a0f190ea41fcf5d64091f"
     },
     "html": {
       "lines": 413,
@@ -26,6 +26,7 @@
     "__talosHarnessHostViewChange",
     "__talosHarnessModelLabEventSource",
     "__talosHarnessRoot",
+    "__talosHarnessStreamingVerbose",
     "__talosHarnessUiLab",
     "__talosHarnessUiRuntime"
   ],

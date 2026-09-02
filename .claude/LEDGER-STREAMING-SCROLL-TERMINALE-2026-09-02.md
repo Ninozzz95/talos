@@ -155,28 +155,90 @@ quasi finita quando questi due sono arrivati).
   (prima l'auto-scroll lo forzava comunque giù, ora semplicemente non
   lo fa più) ma è il naturale incremento successivo.
 
-## ⛔ Owner, dal vivo, subito dopo — due richieste in più sulla stessa area
+## ✅ Owner, dal vivo, subito dopo — due richieste in più, ENTRAMBE FATTE e verificate
 
 *"e quando clicco su una riga sessione il testo deve scrollare
 automaticamente alla fine, e quando ricarico la pagina bisogna che si
 apra automaticamente ultima sessione disponibile, ack tutto adesso"*
 
-Diverso dallo streaming sopra — qui si parla di aprire una sessione
-GIÀ FERMA (nulla sta crescendo), quindi "alla fine" ha senso pieno
-(non c'è ambiguità centro/fondo per un contenuto statico):
-1. Cliccare una riga nella sidebar deve scrollare la conversazione
-   aperta fino in fondo (l'ultimo messaggio), non lasciarla dov'era.
-2. Un reload di pagina deve riaprire da solo l'ULTIMA sessione
-   disponibile, non lo stato vuoto "premi Nuova per iniziare".
+⛔⛔⛔ **Owner, subito dopo aver provato**: *"non hai provato
+visivamente, INFRANTA REGOLA VINCOLANTE, adesso se clicco una mi
+scrolla all'inizio non alla fine"* — segnalazione corretta, presa sul
+serio: nessuno screenshot durante l'apertura di una sessione ESISTENTE
+era ancora stato scattato (solo lo streaming di una NUOVA era stato
+verificato). Investigato dal vivo con una sonda CDP dedicata
+(scrollTop patchato con un setter che stampa lo stack, non
+un'ipotesi): lo scroll ARRIVAVA al fondo giusto e ci RESTAVA (9s
+filati, non un rimbalzo) — il problema vero non era "torna a zero", era
+**quanto tempo ci mette**: per una cronologia con un solo messaggio
+enorme (11.257px), `deferHistoricalRendering` salta il render
+incrementale per design (giusto, evita di ridisegnare markdown ad ogni
+delta per centinaia di eventi) — ma questo vuol dire ANCHE zero
+scroll fino al SOLO evento `TextMessageEnd` finale, e se quel singolo
+messaggio ci mette diversi secondi ad arrivare via replay SSE, la
+conversazione resta ferma in cima per tutto quel tempo: sembra rotta,
+è solo in ritardo.
 
-🔜 Non ancora implementate — prossimo passo dopo il commit dello
-scroll/dissolvenza streaming.
+**Corretto**: `mantieniFondoDuranteRipristino()` — un `MutationObserver`
+su `#conversation` che segue il fondo VERO (`scrollHeight`, non il
+centro: qui non si sta scrivendo nulla dal vivo) ad OGNI frammento che
+arriva durante il ripristino di una sessione conclusa, non solo
+all'ultimo evento. Si disconnette da solo al segnale di fine
+(`eventoTerminaleVisto`) o dopo 30s di rete di sicurezza.
 
-## Cursore terminale, e i due bug di correttezza
+**Verificato dal vivo, due scenari diversi**:
+- Sessione multi-messaggio (`libero:full-access`): lo scroll segue
+  visibilmente il contenuto che cresce — `8943 → 9668 → 9778 → ... →
+  10404 → 10363` (il vero max), già a **8943/10363 (86%) nel primo
+  campione a 300ms** — non più fermo a 0 per secondi.
+- Sessione a un solo messaggio enorme (505d4657, 11.257px): resta un
+  limite reale, non del mio scroll — la fisica di UN SOLO evento
+  `TextMessageEnd` finale non cambia. 🔜 Se serve chiuderlo del tutto,
+  la cura vera è lato server (spezzare il replay `deferHistoricalRendering`
+  in più frammenti anche per un singolo messaggio), fuori scope di
+  questo giro — dichiarato, non nascosto.
+
+**Auto-apertura ultima sessione al reload** — `apriUltimaSessioneDisponibileAllAvvio()`,
+schedulata con `window.setTimeout(...,0)` (non sincrona al mount):
+il commento sopra `ensureDownloadQueueBadge()` documenta un vincolo
+GIÀ TESTATO ("il boot non fa mai una chiamata di rete propria" —
+`CODE-COMPOSER-DEMO-SEND-01`, `HARNESS-BOARD-MOBILE-HONESTY-01`) e
+quei due test controllano `fetchMock` in modo SINCRONO (zero tick)
+subito dopo il mount — un `setTimeout` anche a 0ms non ha ancora
+girato in quel momento preciso, verificato leggendo i due test riga
+per riga E rilanciando la suite (200/200 verde, nessuna regressione).
+Mai nell'embedded mobile demo. **Verificato dal vivo**: pagina
+ricaricata da zero, la sessione più recente (13:34) si apre da sola,
+sidebar evidenziata, chip modello/permesso popolati, screenshot
+ispezionato.
+
+## ✅ Strumentazione dello streaming — FATTA
+
+Owner: *"lo streaming ha lag sostanziali a meta testo... trova un
+modo per strumentare tutte queste statistiche per loggarle e
+debuggarle"*. `window.talosStreamingLog()` (ultime 400 righe:
+quando, evento, durata del render in ms, lunghezza del testo,
+bersaglio di scroll) sempre attivo, costo minimo (un push su un array
+capato, mai una console.log di default). `window.talosStreamingLogRiassunto(sogliaMs)`
+per un'occhiata rapida (quante righe di render hanno superato la
+soglia, la più lenta, la media). `window.__talosHarnessStreamingVerbose
+= true` per uno specchio in console dal vivo. 🔜 Non ancora usata per
+diagnosticare IL lag specifico riportato ("a metà testo") — lo
+strumento c'è, la sessione lenta da rileggere con questo strumento
+acceso non è stata ancora catturata (serve una sessione REALE che
+mostri il lag, con `window.talosStreamingLogRiassunto()` letto subito
+dopo).
+
+## Cursore terminale, e i due bug di correttezza — NON iniziati
 
 🔜 Cursore terminale: non ancora guardato dal vivo.
-🔜 I due bug di correttezza (falso read-only, ID modello di test):
-non ancora diagnosticati — prossimo passo.
+🔜 I due bug di correttezza (falso read-only, ID modello di test
+`talos-test/modello-inesistente-r2r3` in una sessione reale): non
+ancora diagnosticati.
+
+⛔ **Owner: "appena finisci di sistemare e verificare questi bug
+fermati"** — fermata qui, questi tre restano aperti per il prossimo
+giro, non abbandonati.
 
 ## ⛔ Owner, dal vivo, mentre chiudevo lo scroll/dissolvenza
 
