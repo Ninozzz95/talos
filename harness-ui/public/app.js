@@ -2011,9 +2011,24 @@
   function descriviFit(esito) {
     const verdetto = verdettoFit(esito);
     const voce = VERDETTI_FIT[verdetto] || VERDETTI_FIT.unknown;
+    /*
+     * ⭐⭐ 02/9 — quando manca memoria o spazio si dice QUANTO ne manca.
+     * Misurato sul Qwen3 27B dell'owner: in chat chiede 16,18 GB contro
+     * 15,23 liberi — bloccato per meno di 1 GB. «Non compatibile» e basta
+     * nasconderebbe che basta liberare un poco, e il pannello memoria qui
+     * accanto fa esattamente quello.
+     * ⛔ Solo con entrambi i numeri veri: senza, si resta sul motivo secco.
+     */
+    const scarto = (parte) => {
+      const richiesti = parte?.requiredBytes;
+      const disponibili = parte?.availableBytes;
+      if (!Number.isFinite(richiesti) || !Number.isFinite(disponibili) || richiesti <= disponibili) return '';
+      return ` — ne mancano ${formattaByteModelLab(richiesti - disponibili)}`;
+    };
     const motivo = verdetto === 'tight'
       ? `entra, ma sopra il ${Math.round(SOGLIA_TIGHT * 100)}% di ciò che è libero: sotto carico può non bastare`
-      : (MOTIVI_FIT[esito.reason] || esito.reason || 'motivo non dichiarato');
+      : (MOTIVI_FIT[esito.reason] || esito.reason || 'motivo non dichiarato')
+        + (esito.reason === 'memory' ? scarto(esito.memory) : esito.reason === 'storage' ? scarto(esito.storage) : '');
     return { verdetto, classe: voce.classe, testo: `${voce.etichetta} — ${motivo}` };
   }
   function nodoVerdettoFit(modelId) {
@@ -2031,20 +2046,51 @@
       return nodo;
     }
     const { classe, testo } = descriviFit(voce.esito);
-    nodo.dataset.fitState = classe;
-    nodo.textContent = testo;
+    /*
+     * ⛔ 02/9 — con un ripiego chat valido il verdetto NON resta rosso: il
+     * modello è utilizzabile, solo non come agente. Rosso direbbe «non ti
+     * serve a niente», che è falso.
+     */
+    nodo.dataset.fitState = voce.ripiegoChat ? 'warn' : classe;
+    nodo.textContent = voce.ripiegoChat ? `Va bene per la chat, non come agente — ${testo.replace(/^[^—]*— /, '')}` : testo;
     const ctx = voce.esito.context;
     if (Number.isFinite(ctx?.availableTokens) && Number.isFinite(ctx?.requestedTokens)) {
       nodo.append(textElement('small', '', ` contesto ${ctx.availableTokens.toLocaleString('it-IT')} token su ${ctx.requestedTokens.toLocaleString('it-IT')} richiesti`));
     }
     return nodo;
   }
+  /*
+   * ⭐⭐⭐ 02/9 — la verifica chiedeva SOLO il profilo agente (65.536 token) e
+   * bollava «non compatibile» modelli che per CHAT vanno benissimo: sul
+   * Qwen3 27B dell'owner sono 28,9 GB a 65k contro ~17 GB a 8k, su 31,6 GB
+   * di RAM. Dire «non compatibile» e basta è vero a metà, ed è la metà meno
+   * utile.
+   *
+   * ⭐ Ricerca 02/9: Ollama sceglie il contesto in base alla memoria
+   * disponibile (4K sotto 24 GiB, 32K fra 24 e 48, 256K sopra) — il
+   * pattern affermato non è «ci sta / non ci sta», è **cosa può fare qui**.
+   *
+   * ⇒ Se il profilo agente non passa si chiede ANCHE quello chat, e si
+   * riporta il meglio che il modello può fare su questa macchina.
+   * ⛔ La seconda domanda si fa solo quando serve: un modello che va bene
+   * come agente non ha bisogno di una seconda misura.
+   */
   async function verificaCompatibilitaModello(modelId) {
     state.modelLab.fit.set(modelId, { inCorso: true });
     aggiornaNodoFit(modelId);
+    const chiediFit = (profilo) => apiGet(`/api/v1/local-models/${encodeURIComponent(modelId)}/fit${profilo ? `?profile=${profilo}` : ''}`);
     try {
-      const esito = await apiGet(`/api/v1/local-models/${encodeURIComponent(modelId)}/fit`);
-      state.modelLab.fit.set(modelId, { esito });
+      const esito = await chiediFit();
+      let ripiegoChat = null;
+      if (esito.state !== 'compatible') {
+        try {
+          const chat = await chiediFit('chat');
+          // ⛔ Solo se la chat passa DAVVERO: un ripiego che non passa non
+          // si mostra, sarebbe rumore su una riga già negativa.
+          if (chat.state === 'compatible') ripiegoChat = chat;
+        } catch { /* ⛔ il ripiego è un extra: se fallisce resta il verdetto principale, mai un errore in più a schermo */ }
+      }
+      state.modelLab.fit.set(modelId, { esito, ripiegoChat });
     } catch (error) {
       state.modelLab.fit.set(modelId, { errore: error.message || 'errore non dichiarato' });
     }

@@ -36,6 +36,40 @@
  * pagamento sulla chiave configurata sul server. Non è un mock: è la
  * prova che l'owner ha chiesto di fare "come farebbe un umano".
  */
+
+/*
+ * ⛔⛔⛔ REGOLA VINCOLANTE — LE VIEWPORT DEL DESKTOP (owner, 02/09)
+ *
+ * «per gli screenshot la regola impone viewport tablet ma noi siamo su
+ * desktop, quindi devi includere anche viewport laptop e desktop».
+ *
+ * La regola delle QUATTRO VIEWPORT in memoria — tablet portrait per
+ * primo, tablet landscape, telefono in entrambi gli orientamenti — è nata
+ * per il MOBILE, ed è giusta lì. ⛔ Su questo prodotto, che è un'app
+ * DESKTOP, applicarla da sola lascia scoperto proprio lo schermo su cui
+ * la persona lavora davvero: si finiva per fotografare solo 1440×900,
+ * senza mai vedere come la stessa vista si comporta su un portatile
+ * stretto — dove le sidebar, il composer e le righe si stringono per prime.
+ *
+ * ⇒ Su desktop ogni giro visivo passa da QUESTA matrice, non da una
+ * viewport sola. È scritta qui, in un posto solo, perché non dipenda dal
+ * fatto che qualcuno se la ricordi.
+ */
+export const VIEWPORT_DESKTOP = Object.freeze([
+  /** Portatile stretto: è qui che le colonne si comprimono per prime. */
+  Object.freeze({ nome: 'laptop', width: 1024, height: 800 }),
+  /** Desktop di riferimento, la misura di lavoro dell'owner. */
+  Object.freeze({ nome: 'desktop', width: 1440, height: 900 }),
+]);
+
+/** La viewport scelta da `?qa=` — default `desktop`. ⛔ Un nome sconosciuto NON ricade in silenzio sul default: si dice quale è valido. */
+export function viewportRichiesta(urlBase) {
+  const nome = new URL(urlBase).searchParams.get('qa') || 'desktop';
+  const trovata = VIEWPORT_DESKTOP.find((v) => v.nome === nome);
+  if (!trovata) throw new Error(`viewport '${nome}' sconosciuta — valide: ${VIEWPORT_DESKTOP.map((v) => v.nome).join(', ')}`);
+  return { width: trovata.width, height: trovata.height };
+}
+
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -459,9 +493,7 @@ const SCENARI = {
   },
 
   async 'qa-settings-model-lab'(p) {
-    const viewport = new URL(URL_BASE).searchParams.get('qa') === 'laptop'
-      ? { width: 1024, height: 800 }
-      : { width: 1440, height: 900 };
+    const viewport = viewportRichiesta(URL_BASE); // ⛔ matrice unica: vedi VIEWPORT_DESKTOP in testa al file
     await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
     await p.cdp.evaluate('location.reload()');
     await p.attendi(900);
@@ -528,9 +560,7 @@ const SCENARI = {
    * quando il portachiavi della macchina non deve essere modificato.
    */
   async 'qa-settings-provider-access'(p) {
-    const viewport = new URL(URL_BASE).searchParams.get('qa') === 'laptop'
-      ? { width: 1024, height: 800 }
-      : { width: 1440, height: 900 };
+    const viewport = viewportRichiesta(URL_BASE); // ⛔ matrice unica: vedi VIEWPORT_DESKTOP in testa al file
     await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
     await p.cdp.evaluate('location.reload()');
     await p.attendi(900);
@@ -616,9 +646,7 @@ const SCENARI = {
    * il menu viene aperto e chiuso con Escape, così la prova resta ripetibile.
    */
   async 'qa-p0-ux'(p) {
-    const viewport = new URL(URL_BASE).searchParams.get('qa') === 'laptop'
-      ? { width: 1024, height: 800 }
-      : { width: 1440, height: 900 };
+    const viewport = viewportRichiesta(URL_BASE); // ⛔ matrice unica: vedi VIEWPORT_DESKTOP in testa al file
     await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
     await p.cdp.evaluate('location.reload()');
     await p.attendi(1000);
@@ -694,9 +722,7 @@ const SCENARI = {
   },
 
   async 'qa-model-lab-runtime-security'(p) {
-    const viewport = new URL(URL_BASE).searchParams.get('qa') === 'laptop'
-      ? { width: 1024, height: 800 }
-      : { width: 1440, height: 900 };
+    const viewport = viewportRichiesta(URL_BASE); // ⛔ matrice unica: vedi VIEWPORT_DESKTOP in testa al file
     await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
     await p.cdp.evaluate('location.reload()');
     await p.attendi(900);
@@ -727,7 +753,7 @@ const SCENARI = {
   },
 
   async 'qa-model-lab-huggingface-download'(p) {
-    const viewport = new URL(URL_BASE).searchParams.get('qa') === 'laptop' ? { width: 1024, height: 800 } : { width: 1440, height: 900 };
+    const viewport = viewportRichiesta(URL_BASE); // ⛔ matrice unica: vedi VIEWPORT_DESKTOP in testa al file
     await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
     await p.cdp.evaluate('location.reload()'); await p.attendi(900); await p.click('[data-open-view="settings"]'); await p.click('[data-settings-tab="models"]'); await p.click('[data-model-lab-tab="huggingface"]');
     await p.digita('#modelLabHfSearch', 'Qwen3-0.6B-GGUF'); await p.click('#modelLabHfSearchButton');
@@ -748,7 +774,7 @@ const SCENARI = {
   },
 
   async 'qa-model-lab-runtime-run'(p) {
-    const viewport = new URL(URL_BASE).searchParams.get('qa') === 'laptop' ? { width: 1024, height: 800 } : { width: 1440, height: 900 };
+    const viewport = viewportRichiesta(URL_BASE); // ⛔ matrice unica: vedi VIEWPORT_DESKTOP in testa al file
     await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
     await p.cdp.evaluate('location.reload()'); await p.attendi(900); await p.click('[data-open-view="settings"]');
     await p.attendiCondizione("document.querySelector('#modelLabRunButton')?.disabled === false", { timeoutMs: 8000, descrizione: 'runtime locale e modello realmente pronti' });
@@ -1207,9 +1233,7 @@ const SCENARI = {
    * nell'ultimo miglio, come un test di rete controllata.
    */
   async 'qa-compact-loading'(p) {
-    const viewport = new URL(URL_BASE).searchParams.get('qa') === 'laptop'
-      ? { width: 1024, height: 800 }
-      : { width: 1440, height: 900 };
+    const viewport = viewportRichiesta(URL_BASE); // ⛔ matrice unica: vedi VIEWPORT_DESKTOP in testa al file
     await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
     await p.click('[data-mode="chat"]');
     await p.attendi(1200);
@@ -1292,9 +1316,7 @@ const SCENARI = {
    */
   async 'qa-turn-limit-followup'(p) {
     const sessionId = '514893db-a60f-4368-b548-2868e0678b06';
-    const viewport = new URL(URL_BASE).searchParams.get('qa') === 'laptop'
-      ? { width: 1024, height: 800 }
-      : { width: 1440, height: 900 };
+    const viewport = viewportRichiesta(URL_BASE); // ⛔ matrice unica: vedi VIEWPORT_DESKTOP in testa al file
     await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
     await p.attendi(1200);
     const aperta = await p.cdp.evaluate(`(() => {
@@ -1362,9 +1384,7 @@ const SCENARI = {
     const sessionId = '82c71bd0-74d6-423f-b600-1dbe3bc5fdf7';
     const fileTarget = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/serpente-2d/test/gioco.test.mjs';
     const prima = existsSync(fileTarget) ? readFileSync(fileTarget, 'utf8') : null;
-    const viewport = new URL(URL_BASE).searchParams.get('qa') === 'laptop'
-      ? { width: 1024, height: 800 }
-      : { width: 1440, height: 900 };
+    const viewport = viewportRichiesta(URL_BASE); // ⛔ matrice unica: vedi VIEWPORT_DESKTOP in testa al file
     await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
     await p.attendi(1200);
     const aperta = await p.cdp.evaluate(`(() => {

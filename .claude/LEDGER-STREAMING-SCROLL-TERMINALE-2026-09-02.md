@@ -1137,3 +1137,67 @@ resource» — dice il perché e implica che è risolvibile.
 ⛔ E un test AL CONTRARIO tiene la linea dall'altra parte: un guasto VERO
 del runtime (errore senza codice noto) resta **500** — una collisione non
 è un guasto, ma un guasto non deve diventare una collisione.
+
+---
+
+## 02/09 (notte) — Il profilo CHAT, e le viewport del desktop
+
+### «Non compatibile» era vero a metà, ed era la metà meno utile
+
+La verifica di compatibilità interrogava **solo il profilo agente** (65.536
+token) e bollava «non compatibile» modelli che per chat vanno benissimo.
+
+⭐ Ricerca 02/9: Ollama sceglie il contesto **in base alla memoria
+disponibile** (4K sotto 24 GiB, 32K fra 24 e 48, 256K sopra) — il pattern
+affermato non è «ci sta / non ci sta», è **cosa può fare su questa
+macchina**.
+
+⇒ Se il profilo agente non passa si chiede **anche** quello chat, e si
+riporta il meglio che il modello sa fare qui. ⛔ La seconda domanda si fa
+solo quando serve, e il ripiego si mostra solo se la chat passa **davvero**.
+
+**E si dice QUANTO manca.** Misurato sul 27B: in chat chiede 16,18 GB
+contro 15,23 liberi — bloccato per **meno di 1 GB**. «Non compatibile» e
+basta nasconderebbe che basta liberarne un po', e il pannello memoria
+accanto fa esattamente quello.
+
+**Verificato dal vivo, entrambi i percorsi:**
+
+| modello | verdetto |
+|---|---|
+| Qwen3 0.6B (agente `chat-only`, chat `compatible`) | **«Va bene per la chat, non come agente»** |
+| Qwen3.8 27B | «Non compatibile — non c'è abbastanza memoria libera **— ne mancano 19 GB**» |
+
+🔜 **Debito visto per strada**: con un runtime caricato, la riga di un
+ALTRO modello mostra come «contesto disponibile» l'`n_ctx` del modello
+attualmente caricato (min fra addestrato e runtime). È coerente col
+significato di «effettivo», ma su una riga che parla di un altro modello
+confonde.
+
+### ⛔⛔⛔ Correzione dell'owner: le viewport del desktop
+
+Owner, testuale: «per gli screenshot la regola impone viewport tablet ma
+noi siamo su desktop, quindi devi includere anche viewport laptop e
+desktop. Memorizzalo nello script di test screenshot».
+
+La regola delle QUATTRO VIEWPORT è nata per il **mobile** ed è giusta lì.
+Su un'app desktop, da sola, lascia scoperto lo schermo su cui la persona
+lavora: si finiva per fotografare solo 1440×900, senza mai vedere la stessa
+vista su un portatile stretto — dove sidebar, composer e righe si stringono
+per primi.
+
+⇒ Matrice unica in `scripts/qa-visual-pipeline.mjs`:
+`VIEWPORT_DESKTOP` = **laptop 1024×800** + **desktop 1440×900**, con
+`viewportRichiesta(url)` come unico modo di sceglierla.
+
+⛔ **Ce n'erano NOVE copie** sparse nello stesso file — sette su più righe e
+**due su una riga sola**. Le ultime due le ha trovate il test nuovo, non
+io: una regola che vive in nove copie non è una regola.
+⛔ E un nome di viewport sconosciuto ora **lancia** invece di ricadere sul
+default: credere di aver fotografato il portatile e aver fotografato il
+desktop due volte è il difetto peggiore per una pipeline di prove.
+
+Memorizzata anche fuori dal repo: [[viewport-desktop-non-solo-tablet]].
+
+**Suite**: backend **1396/1396**, frontend unit 57/57, browser 88 passati
+con i 2 rossi preesistenti invariati.
