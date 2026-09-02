@@ -4287,3 +4287,75 @@ test('FILE-TREE-PREVIEW-02 — rifiuta un projectId fuori allowlist senza legger
   });
   assert.equal(letture, 0);
 });
+
+/*
+ * ⛔⛔⛔ 02/09 — review complessiva: la sessione e572474a (workspace = Desktop
+ * intero) aveva 490 WorkspaceChanged su 756 eventi, 355 DOPO la fine del
+ * giro, 1,9 MB di log di cui il 79% percorsi di altre lane — rigiocati per
+ * intero (1,6 MB) a ogni apertura. Ricerca 02/09: Claude Code, Hermes, Cline
+ * e VS Code trattano gli eventi del filesystem come EFFIMERI — nessuno li
+ * scrive nella storia della sessione. Qui: vivo sì, persistito no, rigiocato
+ * no. Il client svuota comunque la cache dell'albero a ogni nuova
+ * generazione, quindi un WorkspaceChanged storico non aveva mai niente da dire.
+ */
+test('WORKSPACE-CHANGED-EPHEMERAL-01 — WorkspaceChanged arriva agli iscritti vivi ma non si persiste e non si rigioca', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const finta = sessioneControllabile();
+    let notificaEsterna = null;
+    const guardaWorkspaceFn = (_cartella, onCambiamento) => { notificaEsterna = onCambiamento; return () => {}; };
+    const registro = createSessionRegistry({
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, guardaWorkspaceFn, modello: 'm', chiave: 'k', cartellaStore,
+    });
+    const { sessionId } = registro.avvia('task-vero');
+
+    const vivo = [];
+    registro.iscriviti(sessionId, (e) => vivo.push(e.type));
+    notificaEsterna(['a.txt']);
+    notificaEsterna(['b.txt', 'sub/c.txt']);
+    notificaEsterna(['d.txt']);
+    assert.equal(vivo.filter((t) => t === 'WorkspaceChanged').length, 3, 'chi è connesso ADESSO riceve ogni segnale dal vivo');
+
+    const tardivo = [];
+    registro.iscriviti(sessionId, (e) => tardivo.push(e.type));
+    assert.ok(tardivo.includes('RunStarted'), 'il replay contiene ancora la storia vera');
+    assert.equal(tardivo.filter((t) => t === 'WorkspaceChanged').length, 0, 'il replay NON contiene stato del filesystem');
+
+    // la scrittura su disco è fire-and-forget: si attende che RunStarted sia atterrato
+    let righe = [];
+    for (let i = 0; i < 40; i += 1) {
+      righe = await leggiRegistroPerAttesa({ cartellaStore, sessionId }).catch(() => []);
+      if (righe.some((r) => r.type === 'RunStarted')) break;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    assert.ok(righe.some((r) => r.type === 'RunStarted'), 'AL CONTRARIO: gli eventi del giro si persistono ancora');
+    assert.equal(righe.filter((r) => r.type === 'WorkspaceChanged').length, 0, 'nessun WorkspaceChanged finisce nel log della sessione');
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('WORKSPACE-CHANGED-EPHEMERAL-02 — al ripristino i WorkspaceChanged già su disco (file vecchi) non entrano nel replay', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const sessionId = 'sess-log-vecchio-con-wc';
+  try {
+    registraRigaSync({
+      cartellaStore, sessionId,
+      record: { tipo: 'intestazione', sessionId, taskId: 'task-vero', cartella: '/tmp/x', task: { id: 'task-vero', consegna: 'c' }, comandoProva: 'npm test', forkDa: null, avviataAlle: new Date().toISOString(), modello: 'm', modelloPlanner: null, reasoning: null, mobile: false, permessi: 'Workspace write', permessiPerAttrezzo: null, padreId: null, profonditaDelega: 0 },
+    });
+    registraRigaSync({ cartellaStore, sessionId, record: { type: 'RunStarted', threadId: 't1', runId: 'r1', input: { consegna: 'c' }, _sequenza: 1 } });
+    registraRigaSync({ cartellaStore, sessionId, record: { type: 'WorkspaceChanged', percorsi: ['README.md'], _sequenza: 2 } });
+    registraRigaSync({ cartellaStore, sessionId, record: { type: 'WorkspaceChanged', percorsi: ['a', 'b', 'c'], _sequenza: 3 } });
+    registraRigaSync({ cartellaStore, sessionId, record: { type: 'RunFinished', threadId: 't1', runId: 'r1', _sequenza: 4 } });
+
+    const registro = createSessionRegistry({ modello: 'm', chiave: 'k', cartellaStore });
+    await registro.ripristina();
+    const tipi = [];
+    registro.iscriviti(sessionId, (e) => tipi.push(e.type));
+    assert.deepEqual(tipi, ['RunStarted', 'RunFinished'], 'la storia rigiocata è solo la storia del giro');
+    const [voce] = registro.elenca();
+    assert.equal(voce.conclusa, true, 'AL CONTRARIO: il filtro non cambia il verdetto di chiusura');
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});

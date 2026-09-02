@@ -569,7 +569,21 @@ export function createSessionRegistry({
 
   function broadcast(voce, evento) {
     evento._sequenza = (voce.prossimaSequenza = (voce.prossimaSequenza ?? 0) + 1);
-    voce.eventi.push(evento);
+    /*
+     * ⛔⛔⛔ 02/09 — review complessiva. WorkspaceChanged è STATO del
+     * filesystem, non storia della sessione: la sessione e572474a (workspace
+     * = Desktop intero) ne aveva 490 su 756 eventi, 355 DOPO la fine del
+     * giro, 1,9 MB di log di cui il 79% percorsi di altre lane e test,
+     * rigiocati per intero (1,6 MB) a ogni apertura. Ricerca 02/09 (Claude
+     * Code, Hermes, Cline, VS Code): nessuno persiste gli eventi del watcher
+     * nella storia. Qui: consegnato a chi è connesso ADESSO (il tree si
+     * aggiorna dal vivo, contratto invariato), MAI in voce.eventi né su disco
+     * — il client svuota comunque la cache dell'albero a ogni nuova
+     * generazione, quindi un WorkspaceChanged storico non aveva niente da
+     * dire. `_sequenza` avanza lo stesso: Last-Event-ID resta monotono.
+     */
+    const effimero = evento.type === 'WorkspaceChanged';
+    if (!effimero) voce.eventi.push(evento);
     for (const ascoltatore of voce.ascoltatori) ascoltatore(evento);
     if (evento.type === 'RunFinished' || evento.type === 'RunError') {
       voce.conclusa = true;
@@ -589,7 +603,7 @@ export function createSessionRegistry({
      * appena creata senza passare da qui: mai vero in pratica, ma un
      * guard esplicito costa una riga.
      */
-    if (cartellaStore && voce.sessionId) {
+    if (!effimero && cartellaStore && voce.sessionId) {
       registraRigaFn({ cartellaStore, sessionId: voce.sessionId, record: evento })
         .catch((errore) => { console.error(`[session-store] scrittura fallita per ${voce.sessionId}:`, errore instanceof Error ? errore.message : errore); });
     }
@@ -1203,7 +1217,8 @@ export function createSessionRegistry({
         const intestazione = record.find((r) => r.tipo === 'intestazione');
         if (!intestazione) continue; // senza intestazione non c'è abbastanza per una voce onesta
         // ⛔ `type` (AG-UI, PascalCase) contro `tipo` (i record di questo file, italiano): due nomi di campo DIVERSI apposta, mai un'ambiguità nel distinguerli nello stesso file.
-        const eventiFisici = record.filter((r) => typeof r.type === 'string');
+        // ⛔ 02/09 — i file scritti PRIMA di oggi contengono WorkspaceChanged (vedi broadcast()): stato del filesystem, non storia — si scartano al ripristino, così anche i log vecchi tornano leggeri senza riscriverli.
+        const eventiFisici = record.filter((r) => typeof r.type === 'string' && r.type !== 'WorkspaceChanged');
         const eventi = eventiFisici.every((evento) => Number.isSafeInteger(evento._sequenza))
           ? [...eventiFisici].sort((a, b) => a._sequenza - b._sequenza)
           : eventiFisici;
