@@ -145,12 +145,17 @@ aggiornata dal 31/8) lasciasse credere:
    fixture binaria costruita a mano — commit `90cac7a`). `local-runtime-probe.mjs`
    ora istanziato in `server.mjs` (quando `config.llamaServerPath` è
    configurata) e `GET /api/v1/local-models/:id/fit` lo espone (sola
-   lettura, mai un caricamento vero) — backend 1331/1331. 🔜 **Resta da
-   fare**: la UI "prima di load" che chiama questa rotta e mostra
-   compatible/blocked/chat-only/unknown con la motivazione (nessun
-   controllo dedicato oggi nel pannello Installati), e `qualify()` (il
-   giro di generazione reale, consenso esplicito) non ha ancora una
-   rotta — dichiarato, non implementato in questo giro.
+   lettura, mai un caricamento vero). `POST /api/v1/local-models/:id/qualify`
+   (consenso esplicito obbligatorio, `consent:true` nel corpo) espone
+   anche il giro di generazione reale — backend 1341/1342 (l'unico rosso
+   è la fixture del contratto frontend, `app.js` sotto modifica attiva
+   di un'altra sessione, non toccato). **Backend del punto 4 completo.**
+   🔜 **Resta da fare, SOLO frontend**: la UI "prima di load" nel
+   pannello Installati che chiama `/fit`/`/qualify` e mostra lo stato
+   onesto (compatible/blocked/chat-only/unknown con la motivazione) —
+   non iniziata qui apposta: `app.js` è sotto modifica attiva di
+   un'altra sessione (Fable) in questo stesso worktree, nessun tocco per
+   evitare di sovrascrivere lavoro in corso.
 5. ⚠️ **PARZIALE** — 7 card provider (OpenRouter/OpenAI/DeepSeek/Anthropic/
    Gemini/Ollama/HuggingFace) con chiave/indirizzo/timeout, salva/rimuovi
    chiave — reale. Il "motore" che li rende operativi per la chat locale è
