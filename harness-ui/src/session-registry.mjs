@@ -417,6 +417,16 @@ export function createSessionRegistry({
    * (`voce.eventi` popolato da `ripristina()` dallo stesso JSONL).
    * @returns {{prompt_tokens:number,completion_tokens:number,cached_tokens:number,giri:number}|null}
    */
+  function ultimoEsitoDaEventi(eventi) {
+    for (let i = eventi.length - 1; i >= 0; i -= 1) {
+      const tipo = eventi[i]?.type;
+      if (tipo === 'RunError') return 'errore';
+      if (tipo === 'RunFinished') return 'successo';
+      if (tipo === 'RunStarted') return null;
+    }
+    return null;
+  }
+
   function usageDaEventi(eventi) {
     for (let indice = eventi.length - 1; indice >= 0; indice -= 1) {
       const evento = eventi[indice];
@@ -2475,6 +2485,8 @@ export function createSessionRegistry({
           interrotta: voce.interrotta ?? false,
           // ⭐⭐⭐ 02/09 — la campanella del desktop: una sessione ferma su un'approvazione è la notifica più urgente, e solo l'elenco la può dire a chi guarda un'ALTRA sessione.
           inAttesaApprovazione: Boolean(voce.approvazionePendente),
+          // ⭐ 02/09 — la Board diceva "Conclusa" anche a una sessione morta su RunError: l'ultimo evento del ciclo agente decide.
+          ultimoEsito: ultimoEsitoDaEventi(voce.eventi),
           // ⭐⭐⭐ 30/8 — piano "Board — da campagne TALOS-BANCO a cruscotto
           // sessioni": il costo/consumo per la nuova Board, MAI un numero
           // inventato. Nessuna scrittura nuova sul disco (vedi usageDaEventi

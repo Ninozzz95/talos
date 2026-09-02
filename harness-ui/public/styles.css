@@ -1015,7 +1015,7 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .chat-view .conversation > .demo-surface-badge { margin: 0 0 12px; }
 .inspector-panel > .demo-surface-badge { margin: 8px 12px; }
 
-@media (max-width: 780px) {
+@media (max-width: 780px), (max-height: 540px) and (orientation: landscape) {
   :root, :host { overflow: hidden; }
   .app-shell { display: block; }
   .sessions-panel { position: fixed; top: 0; left: 0; bottom: 0; width: min(330px, 88vw); transform: translateX(-102%); transition: transform var(--motion-enter) var(--motion-ease); z-index: 90; box-shadow: var(--shadow); }
@@ -1231,7 +1231,7 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
   .control-plane-card { grid-column: span 2; }
   .control-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
 }
-@media (max-width: 780px) {
+@media (max-width: 780px), (max-height: 540px) and (orientation: landscape) {
   .control-plane-card { grid-column: auto; }
   .control-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
 }
@@ -1522,7 +1522,7 @@ button:disabled { cursor: not-allowed; opacity: .48; }
   .model-lab-ledger { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .model-lab-layout, .model-lab-catalog-layout { grid-template-columns: 1fr; }
 }
-@media (max-width: 780px) {
+@media (max-width: 780px), (max-height: 540px) and (orientation: landscape) {
   .settings-card-heading { flex-direction: column; }
   .settings-control-grid, .settings-switch-grid, .range-grid, .model-lab-metrics { grid-template-columns: 1fr; }
   .categories { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1609,7 +1609,7 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
   .app-shell.inspector-collapsed .inspector-panel { opacity: 1; pointer-events: auto; overflow: auto; border-left-color: var(--line); }
 }
 
-@media (max-width: 780px) {
+@media (max-width: 780px), (max-height: 540px) and (orientation: landscape) {
   :root, :host { --mobile-control: 44px; }
   .workspace-shell { height: 100dvh; min-height: 100dvh; }
   .topbar { min-height: calc(58px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
@@ -1766,19 +1766,19 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
 .effort-picker-tick:first-child { transform: none; }
 .effort-picker-tick:last-child { transform: translateX(-100%); }
 .effort-picker-tick-selected { color: var(--accent); font-weight: 600; }
-@media (max-width: 780px) {
+@media (max-width: 780px), (max-height: 540px) and (orientation: landscape) {
   .sheet-input { min-height: 52px; font-size: calc(16px * var(--talos-ui-font-scale)); }
   .sheet-actions { display: grid; grid-template-columns: 1fr 1fr; }
 }
 
-@media (max-width: 780px) {
+@media (max-width: 780px), (max-height: 540px) and (orientation: landscape) {
   .composer textarea { min-height: 44px; }
   .round-btn { width: 44px; }
   .text-btn { min-height: 44px; }
   .mobile-nav button, .mobile-nav button span { font-size: calc(10px * var(--talos-ui-font-scale)); }
 }
 
-@media (max-width: 780px) {
+@media (max-width: 780px), (max-height: 540px) and (orientation: landscape) {
   .board-heading { align-items: flex-start; }
   .board-heading-actions { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
   .board-heading-actions .primary-btn, .board-heading-actions .secondary-btn { min-height: 44px; width: 100%; }
@@ -1887,7 +1887,7 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
   scroll-padding-bottom: max(var(--talos-code-composer-clearance, 220px), var(--stream-follow-space, 0px));
 }
 
-@media (max-width: 780px) {
+@media (max-width: 780px), (max-height: 540px) and (orientation: landscape) {
   :host(.talos-embedded) .topbar {
     min-height: calc(58px + env(safe-area-inset-top));
     max-height: calc(58px + env(safe-area-inset-top));
@@ -2165,7 +2165,7 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
   .workspace-chooser-shortcut { min-width: 135px; }
 }
 
-@media (max-width: 780px) {
+@media (max-width: 780px), (max-height: 540px) and (orientation: landscape) {
   .sheet-dialog.sheet-dialog--new-session { height: min(92dvh, 920px); }
   .sheet-dialog--new-session .sheet-body { height: calc(100% - 62px); max-height: none; }
   .workspace-chooser { overflow: hidden; }
@@ -2191,3 +2191,72 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
 .notifications-menu .notifications-item small { color: var(--text-3); font-size: calc(11.5px * var(--talos-ui-font-scale)); }
 .notifications-menu .notifications-empty { margin: 0; padding: 12px 14px; color: var(--text-3); font-size: calc(13px * var(--talos-ui-font-scale)); }
 .notifications-menu .notifications-mark-all { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 10px; }
+
+/* ⭐⭐⭐ 02/09 — review complessiva, fase E: i difetti visivi si curano dove nascono, con container query sul contenitore reale (tablet 1200 px con inspector aperto è un contesto, non una larghezza di finestra). Ricerca 02/09: container query come default per componenti, media query solo per la struttura di pagina; glass ≤ 3 pannelli, blur 12-20 px. */
+
+/* V9 — barra in alto: la destra non deve mai invadere il selettore centrale. */
+.topbar { container-type: inline-size; container-name: topbar; }
+.topbar-right { min-width: 0; overflow: visible; }
+.topbar-center { flex: 0 0 auto; }
+@container topbar (max-width: 1040px) {
+  .environment-chip { max-width: 40px; padding: 0; justify-content: center; }
+  .environment-chip span[data-environment-label] { display: none; }
+}
+@container topbar (max-width: 720px) {
+  .title-button strong { max-width: 160px; }
+}
+
+/* V6 — sidebar: campo cerca leggibile e "Fork questa sessione" su una riga. */
+.sessions-panel { container-type: inline-size; container-name: sessions; }
+.search-field input { min-width: 64px; }
+@container sessions (max-width: 300px) {
+  .search-field kbd { display: none; }
+  .search-field { grid-template-columns: 20px minmax(0, 1fr); }
+}
+.topology-actions { display: flex; }
+.topology-actions .secondary-btn { white-space: nowrap; width: 100%; justify-content: center; }
+.inspector-panel { container-type: inline-size; container-name: inspector; }
+@container inspector (max-width: 300px) {
+  .topology-actions .secondary-btn { font-size: calc(12px * var(--talos-ui-font-scale)); padding: 0 8px; }
+}
+
+/* V7 — Settings Aspetto: griglie che scendono per gradi (3 → 2 → 1) sulla larghezza del pannello, mai etichette sopra le caselle. */
+.settings-switch-grid label { gap: 10px; min-width: 0; }
+.settings-switch-grid label > span { min-width: 0; overflow-wrap: anywhere; }
+.range-control span { gap: 8px; flex-wrap: wrap; }
+.range-control output { flex: 0 0 auto; }
+@container settings-detail (max-width: 780px) {
+  .settings-switch-grid, .range-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .settings-control-grid { grid-template-columns: 1fr; }
+}
+
+/* V8 — Laboratorio modelli: due colonne solo se c'è spazio nel pannello, non nella finestra. */
+@container settings-detail (max-width: 940px) {
+  .model-lab-layout, .model-lab-catalog-layout { grid-template-columns: 1fr; }
+  .model-lab-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .model-lab-ledger { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container settings-detail (max-width: 560px) {
+  .model-lab-metrics, .model-lab-ledger { grid-template-columns: 1fr; }
+}
+.model-lab-metrics > div { min-width: 0; }
+.model-lab-metrics span { overflow-wrap: anywhere; }
+
+/* V10 — esiti dei tool: le righe lunghe vanno a capo, niente testo tagliato al bordo. */
+.tool-result-block code { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* V11 — Nuova sessione: usa l'altezza che c'è e ogni colonna scorre da sola, il piè di pagina non copre niente. */
+.sheet-dialog.sheet-dialog--new-session { height: min(980px, calc(100dvh - 32px)); }
+.workspace-chooser-browser { overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.workspace-chooser-browser > .workspace-chooser-tree, .workspace-chooser-browser [role="tree"] { min-height: 180px; }
+
+/* V14 — riepiloghi reali nelle sezioni Settings. */
+.settings-facts { display: grid; gap: 6px 14px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin: 8px 0 12px; }
+.settings-facts > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 8px 10px; border: 1px solid var(--line-soft, var(--line)); border-radius: 10px; background: var(--surface-highlight-subtle); min-width: 0; }
+.settings-facts dt { color: var(--muted); font-size: calc(11.5px * var(--talos-ui-font-scale)); }
+.settings-facts dd { margin: 0; color: var(--text); font-size: calc(12.5px * var(--talos-ui-font-scale)); font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+.settings-facts-list { list-style: none; margin: 8px 0 12px; padding: 0; display: grid; gap: 6px; }
+.settings-facts-list li { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 8px 10px; border: 1px solid var(--line-soft, var(--line)); border-radius: 10px; background: var(--surface-highlight-subtle); font-size: calc(12.5px * var(--talos-ui-font-scale)); }
+.settings-facts-list li code { font-family: var(--font-mono); font-size: calc(11.5px * var(--talos-ui-font-scale)); color: var(--text-2); overflow-wrap: anywhere; }
+.settings-provider-state { color: var(--muted); font-size: calc(11.5px * var(--talos-ui-font-scale)); }
+.settings-provider-state.is-ok { color: var(--success, var(--text-2)); }

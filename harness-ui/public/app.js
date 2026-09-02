@@ -680,6 +680,8 @@
 
   const DIALOG_RESIZE_STORAGE_KEY = 'talos-harness-modal-sizes-v1';
   const DIALOG_RESIZE_BREAKPOINT = 780;
+  /** ⭐⭐⭐ 02/09 — un telefono in orizzontale (915×412) è compatto quanto uno in verticale: stessa regola del CSS (`@media (max-width: 780px), (max-height: 540px) and (orientation: landscape)`), un solo posto in JS. */
+  const layoutCompatto = () => window.innerWidth <= DIALOG_RESIZE_BREAKPOINT || (window.innerHeight <= 540 && window.innerWidth > window.innerHeight);
   const DIALOG_RESIZE_MIN = Object.freeze({
     commandDialog: { width: 420, height: 240 },
     sheetDialog: { width: 520, height: 340 },
@@ -716,7 +718,7 @@
 
   function saveDialogSize(dialog) {
     const key = dialog.dataset.dialogResizeKey;
-    if (!key || window.innerWidth <= DIALOG_RESIZE_BREAKPOINT) return;
+    if (!key || layoutCompatto()) return;
     const rect = dialog.getBoundingClientRect();
     const size = clampDialogSize(dialog, rect.width, rect.height);
     try {
@@ -733,7 +735,7 @@
     dialog.style.removeProperty('width');
     dialog.style.removeProperty('height');
     dialog.classList.remove('dialog-user-sized');
-    if (window.innerWidth <= DIALOG_RESIZE_BREAKPOINT) return;
+    if (layoutCompatto()) return;
     const saved = readSavedDialogSizes()[logicalKey];
     if (saved && Number.isFinite(saved.width) && Number.isFinite(saved.height)) {
       applyDialogSize(dialog, saved.width, saved.height);
@@ -743,7 +745,7 @@
   function clampOpenDialogsToViewport() {
     for (const dialog of [commandDialog, sheetDialog]) {
       if (!dialog.open || !dialog.classList.contains('dialog-user-sized')) continue;
-      if (window.innerWidth <= DIALOG_RESIZE_BREAKPOINT) {
+      if (layoutCompatto()) {
         dialog.style.removeProperty('width');
         dialog.style.removeProperty('height');
         dialog.classList.remove('dialog-user-sized');
@@ -770,7 +772,7 @@
         (resizeMount || dialog).appendChild(handle);
 
         handle.addEventListener('pointerdown', (event) => {
-          if (window.innerWidth <= DIALOG_RESIZE_BREAKPOINT || event.button !== 0) return;
+          if (layoutCompatto() || event.button !== 0) return;
           event.preventDefault();
           const start = dialog.getBoundingClientRect();
           const startX = event.clientX;
@@ -797,7 +799,7 @@
         });
 
         handle.addEventListener('keydown', (event) => {
-          if (window.innerWidth <= DIALOG_RESIZE_BREAKPOINT) return;
+          if (layoutCompatto()) return;
           const horizontal = event.key === 'ArrowLeft' || event.key === 'ArrowRight';
           const vertical = event.key === 'ArrowUp' || event.key === 'ArrowDown';
           if ((axis === 'width' && !horizontal) || (axis === 'height' && !vertical) || (axis === 'both' && !horizontal && !vertical)) return;
@@ -1133,8 +1135,8 @@
    * non esiste mai in `evento.totali`: la cache mostrava sempre "· cache"
    * assente, anche quando aveva colpito per davvero.
    */
-  function formattaUsageBreve(usage, { live = false } = {}) {
-    if (!usage) return 'contesto ignoto · in attesa del primo giro';
+  function formattaUsageBreve(usage, { live = false, finita = false } = {}) {
+    if (!usage) return finita ? 'consumo non registrato' : 'contesto ignoto · in attesa del primo giro'; // 02/09 — una sessione finita non "aspetta" niente
     const prompt = Number(usage.prompt_tokens ?? 0) || 0;
     const completion = Number(usage.completion_tokens ?? 0) || 0;
     const cache = Number(usage.cached_tokens ?? 0) || 0;
@@ -1174,14 +1176,16 @@
     const modelloParte = sessione.modello ? ` · ${sessione.modello}` : '';
     identity.append(
       textElement('strong', '', titolo),
-      textElement('small', '', `${formattaOraSessione(sessione.avviataAlle)}${modelloParte} · ${formattaUsageBreve(sessione.usage)}`),
+      textElement('small', '', `${formattaOraSessione(sessione.avviataAlle)}${modelloParte} · ${formattaUsageBreve(sessione.usage, { finita: Boolean(sessione.conclusa || sessione.interrotta) })}`),
     );
 
     const stato = sessione.interrotta
       ? { testo: 'Interrotta', classe: 'error' }
-      : sessione.conclusa
-        ? { testo: 'Conclusa', classe: 'success' }
-        : { testo: 'In corso', classe: '' };
+      : sessione.ultimoEsito === 'errore'
+        ? { testo: 'Errore', classe: 'error' } // 02/09 — RunError non è "Conclusa"
+        : sessione.conclusa
+          ? { testo: 'Conclusa', classe: 'success' }
+          : { testo: 'In corso', classe: '' };
     const chip = textElement('span', `status-chip ${stato.classe}`.trim(), stato.testo);
 
     article.append(identity, chip);
@@ -1761,7 +1765,85 @@
   const SETTINGS_SECTION_STORAGE_KEY = 'talos.harness.desktop.settings.section.v1';
 
   /** List-detail Settings: una sola categoria visibile e un solo punto di verità per il tab attivo. */
+  /*
+   * ⭐⭐⭐ 02/09 — review complessiva, V14: cinque sezioni Settings erano un
+   * paragrafo e un bottone. Ora mostrano lo stato VERO letto adesso: valori
+   * di Aspetto per la chat, provider dal server (chiave sì/no, mai la chiave),
+   * policy della sessione aperta, dati locali di questo browser (chiavi e
+   * peso), workspace attivo. Niente scritto a mano: ogni riga viene da uno
+   * stato o da una risposta del server.
+   */
+  const ETICHETTE_ASPETTO = {
+    chatFontScale: { xcompact: 'Extra piccolo', compact: 'Compatto', default: 'Predefinito', large: 'Grande', xlarge: 'Extra grande' },
+    messageStyle: { sections: 'Sezioni', bubbles: 'Bolle', plain: 'Piatto' },
+    streamingAnimation: { fade: 'Dissolvenza', typewriter: 'Macchina da scrivere', none: 'Nessuna' },
+    composerShape: { standard: 'Standard', compact: 'Compatto', classic: 'Classico' },
+  };
+  function riempiFatti(id, coppie) {
+    const dl = $(`#${id}`);
+    if (!dl) return;
+    dl.replaceChildren(...coppie.map(([k, v]) => { const riga = document.createElement('div'); riga.append(textElement('dt', '', k), textElement('dd', '', v)); return riga; }));
+  }
+  async function renderSettingsRiepiloghi() {
+    const impostazioni = leggiImpostazioniDesktop();
+    const a = impostazioni.appearance;
+    const etichetta = (gruppo, valore) => ETICHETTE_ASPETTO[gruppo]?.[valore] || String(valore);
+    riempiFatti('settingsChatFacts', [
+      ['Testo chat', etichetta('chatFontScale', a.chatFontScale)],
+      ['Stile dei messaggi', etichetta('messageStyle', a.messageStyle)],
+      ['Animazione risposta', etichetta('streamingAnimation', a.streamingAnimation)],
+      ['Forma del composer', etichetta('composerShape', a.composerShape)],
+      ['Chat a tutta larghezza', a.chatFullWidth ? 'Sì' : 'No'],
+      ['Ragionamento mostrato', state.showReasoning ? 'Sì' : 'No'],
+    ]);
+    const regole = Object.keys(state.permessiPerAttrezzo || impostazioni.chat.permessiPerAttrezzo || {}).length;
+    riempiFatti('settingsToolsFacts', [
+      ['Policy attiva', String(state.permissions || impostazioni.chat.permissions || 'Workspace write')],
+      ['Regole per attrezzo', regole === 0 ? 'Nessuna' : `${regole}`],
+      ['Sessione', state.realSession.id ? (state.session || 'sessione aperta') : 'nessuna aperta: valgono i valori predefiniti'],
+    ]);
+    riempiFatti('settingsWorkspaceFacts', [
+      ['Workspace attivo', state.realSession.cartellaAssoluta || (state.realSession.id ? 'in attesa del primo giro' : 'nessuna sessione aperta')],
+      ['File scritti in questa sessione', String(state.realSession.reviewFiles.size)],
+      ['Pagine lette in questa sessione', String(state.realSession.browserPagine.length)],
+    ]);
+    const privacy = $('#settingsPrivacyList');
+    if (privacy) {
+      const voci = [];
+      try {
+        for (let i = 0; i < window.localStorage.length; i += 1) {
+          const chiave = window.localStorage.key(i);
+          if (!/^talos/i.test(chiave)) continue;
+          voci.push([chiave, Buffer_len(window.localStorage.getItem(chiave) || '')]);
+        }
+      } catch { /* storage negato: la lista resta vuota, onestamente */ }
+      privacy.replaceChildren(...(voci.length === 0
+        ? [textElement('li', 'muted-copy', 'Nessuna preferenza TALOS salvata in questo browser.')]
+        : voci.map(([chiave, byte]) => { const li = document.createElement('li'); li.append(textElement('code', '', chiave), textElement('span', 'muted-copy', ` · ${byte < 1024 ? `${byte} B` : `${(byte / 1024).toFixed(1)} KB`}`)); return li; })));
+    }
+    const lista = $('#settingsProvidersList');
+    if (lista) {
+      try {
+        const risposta = await apiGet('/api/v1/providers');
+        const provider = risposta.items || risposta.providers || (Array.isArray(risposta) ? risposta : []);
+        lista.replaceChildren(...provider.map((p) => {
+          const li = document.createElement('li');
+          const stato = p.execution === 'local' || p.requiresKey === false
+            ? (p.endpointConfigured ? `indirizzo impostato: ${p.endpoint}` : 'locale, nessuna chiave richiesta')
+            : (p.keyConfigured ? 'chiave configurata sul server' : 'nessuna chiave');
+          li.append(textElement('strong', '', p.label || p.id), textElement('span', `settings-provider-state ${p.keyConfigured || p.endpointConfigured ? 'is-ok' : ''}`, stato));
+          return li;
+        }));
+        if (provider.length === 0) lista.replaceChildren(textElement('li', 'muted-copy', 'Il server non espone provider.'));
+      } catch {
+        lista.replaceChildren(textElement('li', 'muted-copy', 'Stato provider non leggibile adesso: il server locale non risponde.'));
+      }
+    }
+  }
+  function Buffer_len(testo) { return new TextEncoder().encode(testo).length; }
+
   function setSettingsSection(section, { persist = true } = {}) {
+    queueMicrotask(() => { void renderSettingsRiepiloghi(); }); // 02/09 — i riepiloghi si rileggono a ogni cambio sezione
     const selected = SETTINGS_SECTIONS.includes(section) ? section : 'appearance';
     state.settingsSection = selected;
     $$('[data-settings-tab]').forEach((tab) => {
@@ -4093,7 +4175,7 @@
     // l'interfaccia DocumentOrShadowRoot) — document.activeElement da fuori
     // vedrebbe solo l'host, mai composerInput.
     const composerFocused = ROOT().activeElement === composerInput;
-    const viewportKeyboardOpen = composerFocused && keyboardOffset > 0 && window.innerWidth <= 780;
+    const viewportKeyboardOpen = composerFocused && keyboardOffset > 0 && layoutCompatto();
     applyKeyboardOpen(nativeKeyboardOpen ?? viewportKeyboardOpen);
   }
 
@@ -7912,6 +7994,7 @@
       return; // ⛔ un aggiornamento sidebar fallito non è un'azione richiesta, non merita un toast
     }
     aggiornaNotifiche(elenco);
+    $('#noSessionsPlaceholder')?.toggleAttribute('hidden', Array.isArray(elenco) && elenco.length > 0); // 02/09 — il riquadro "Nessuna sessione ancora" stava sotto quattro sessioni reali
     /*
      * ⭐ 27/8, trovato analizzando quali badge non si spengono MAI: questa
      * funzione aggiungeva sessioni vere in un blocco separato senza mai
@@ -9600,6 +9683,25 @@
   }));
 
   // ⭐⭐⭐ 02/09 — campanella REALE (vedi aggiornaNotifiche). Il badge si allinea a ogni refresh dell'elenco sessioni; un refresh leggero ogni 15 s, solo a scheda visibile, coglie le sessioni che finiscono mentre se ne guarda un'altra (nessuna SSE le porta qui).
+  // ⭐ 02/09 — azioni reali delle sezioni Settings: svuotare le preferenze locali (due clic, mai un dialogo nativo) e aprire il chooser per una nuova sessione altrove.
+  $('#settingsSvuotaLocali')?.addEventListener('click', (event) => {
+    const bottone = event.currentTarget;
+    if (bottone.dataset.conferma !== '1') {
+      bottone.dataset.conferma = '1';
+      bottone.textContent = 'Confermi? Tocca di nuovo per svuotare';
+      window.setTimeout(() => { bottone.dataset.conferma = ''; bottone.textContent = 'Svuota le preferenze di questo browser'; }, 4000);
+      return;
+    }
+    try {
+      const chiavi = [];
+      for (let i = 0; i < window.localStorage.length; i += 1) { const k = window.localStorage.key(i); if (/^talos/i.test(k)) chiavi.push(k); }
+      for (const k of chiavi) window.localStorage.removeItem(k);
+      toast('Preferenze locali svuotate', `${chiavi.length} voci rimosse: la pagina si ricarica con i valori predefiniti.`);
+      window.setTimeout(() => window.location.reload(), 600);
+    } catch { toast('Non riesco a svuotare le preferenze', 'Il browser non consente di accedere allo storage locale.'); }
+  });
+  $('#settingsNuovaSessioneAltrove')?.addEventListener('click', () => createNewSession());
+
   $('#notificationsBtn')?.addEventListener('click', (event) => {
     const aperto = document.querySelector('.notifications-menu');
     if (aperto) { aperto.remove(); event.currentTarget.setAttribute('aria-expanded', 'false'); return; }
@@ -9895,7 +9997,7 @@
     } else {
       appShell.classList.remove('inspector-collapsed');
     }
-    if (window.innerWidth > 780) sessionsPanel.classList.remove('open');
+    if (!layoutCompatto()) sessionsPanel.classList.remove('open');
     syncInspectorToggle();
     if (window.innerWidth > 1040) loadPanelWidths();
     clampOpenDialogsToViewport();
@@ -9946,6 +10048,7 @@
     // d'apertura del foglio.
     costruisciTrascrizioneMarkdown,
     setSettingsSection,
+    renderSettingsRiepiloghi,
     // ⭐ 28/8 — auto-rinomina dal primo messaggio: la funzione pura si espone per provare la sua logica (spazi/trim/tetto) senza dover avviare una sessione vera.
     titoloDalPrimoMessaggio,
     // ⭐ 28/8 — Terminale REALE (LEDGER-TERMINALE-REALE.md): esposte per i test dedicati, stesso principio di sopra — internals reali, non un secondo contratto.
