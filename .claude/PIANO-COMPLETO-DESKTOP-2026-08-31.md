@@ -139,18 +139,18 @@ aggiornata dal 31/8) lasciasse credere:
    filtro per autore, un campo filtri libero (`app.js` riga 1495) — copre
    l'intento ma non le voci ESATTE `fits/chat/code/q4/open-licence` come
    controlli dedicati. Paginazione/retry non verificati in questo giro.
-4. ❌ **MANCANTE, causa isolata** — `local-runtime-probe.mjs` esiste GIÀ
-   completo (`inspectModel`/`fit`/`qualify`, esattamente header GGUF +
-   template + contesto + fit + qualificazione con generazione reale) ma
-   **non è mai istanziato in `server.mjs`, nessuna rotta HTTP la espone, il
-   frontend non la chiama mai**. Causa più a monte: il probe richiede una
-   dipendenza `readHeader(path)` (parser del metadata GGUF — magic/version/
-   context/working-memory) che **non esiste ancora da nessuna parte** nel
-   codebase — `hf-direct-transfer.mjs` controlla solo i 4 byte magici
-   `'GGUF'` per validare un import, non legge le metadata key-value. Non è
-   "collegare una rotta": prima serve scrivere un vero parser GGUF (ricerca
-   dello spec ufficiale, formato binario tensor_count/metadata_kv_count/tipi
-   valore) — lavoro nuovo, non wiring.
+4. ⚠️ **PARZIALE, backend FATTO — 02/09** — `readHeader(path)` scritto
+   (`harness-ui/src/gguf-header.mjs`, ricerca dello spec ufficiale PRIMA
+   di scrivere, testato su 3 file GGUF reali + 7 casi AL CONTRARIO su una
+   fixture binaria costruita a mano — commit `90cac7a`). `local-runtime-probe.mjs`
+   ora istanziato in `server.mjs` (quando `config.llamaServerPath` è
+   configurata) e `GET /api/v1/local-models/:id/fit` lo espone (sola
+   lettura, mai un caricamento vero) — backend 1331/1331. 🔜 **Resta da
+   fare**: la UI "prima di load" che chiama questa rotta e mostra
+   compatible/blocked/chat-only/unknown con la motivazione (nessun
+   controllo dedicato oggi nel pannello Installati), e `qualify()` (il
+   giro di generazione reale, consenso esplicito) non ha ancora una
+   rotta — dichiarato, non implementato in questo giro.
 5. ⚠️ **PARZIALE** — 7 card provider (OpenRouter/OpenAI/DeepSeek/Anthropic/
    Gemini/Ollama/HuggingFace) con chiave/indirizzo/timeout, salva/rimuovi
    chiave — reale. Il "motore" che li rende operativi per la chat locale è
@@ -166,11 +166,10 @@ aggiornata dal 31/8) lasciasse credere:
    `#modelLabActiveModel` dalla STESSA `state.model`, una sola fonte di
    verità (`app.js` riga 3827).
 
-⇒ **Prossimo passo reale, non ancora iniziato**: un parser GGUF minimo
-(magic/version/metadata KV rilevanti) per sbloccare il punto 4 — ricerca
-dello spec ufficiale PRIMA di scrivere, RED/GREEN con un file `.gguf` reale
-o una fixture binaria costruita a mano, mai un mock che finge la struttura.
-Poi la rotta HTTP + la UI "prima di load" mostrano cosa il probe già sa fare.
+⇒ **Prossimo passo reale, non ancora iniziato**: la UI "prima di load" nel
+pannello Installati (chiama `GET /api/v1/local-models/:id/fit`, appena
+scritta — punto 4 sopra — e mostra lo stato onesto), poi eventualmente
+`qualify()` con una rotta e un consenso esplicito.
 
 Gate: RED per ogni voce, test HTTP/UI, reload, errore e stato gated; E2E reale
 desktop a 1440×900 e 1024×800 con screenshot interi.
