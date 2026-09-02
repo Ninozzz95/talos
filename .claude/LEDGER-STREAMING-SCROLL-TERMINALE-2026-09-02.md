@@ -1201,3 +1201,114 @@ Memorizzata anche fuori dal repo: [[viewport-desktop-non-solo-tablet]].
 
 **Suite**: backend **1396/1396**, frontend unit 57/57, browser 88 passati
 con i 2 rossi preesistenti invariati.
+
+---
+
+## 02/9 (notte) — L'`n_ctx` ERA DEL MODELLO CARICATO, e veniva dato a tutti
+
+Primo punto di «Cosa rimane» del turno precedente, chiuso. Il difetto era
+più grande di come l'avevo scritto: non riguardava solo il contesto.
+
+### Cosa succedeva, MISURATO dal vivo (non dedotto)
+
+Server vero, due modelli veri installati, il Qwen3 0.6B caricato nel
+runtime. Stessa domanda (`GET /fit?profile=agent`) sul Qwen3 27B, che **non
+è** il modello caricato:
+
+| | PRIMA | DOPO |
+|---|---|---|
+| contesto disponibile | **40.960** *(observed)* | **262.144** *(declared)* |
+| attrezzi | **observed: true** | unknown |
+| template | **observed: true** | unknown |
+
+⛔ I 40.960 sono il contesto del **Qwen3 0.6B**. Il 27B ne ha 262.144. E
+`attrezzi: true` era la capacità del 0.6B attribuita a un modello di cui
+non sapevamo niente — **la metà più grave**: un contesto sbagliato si vede
+subito, una capacità inventata si scopre a metà di una sessione agentica.
+
+⭐ La misura «PRIMA» è vera end-to-end: ho tolto il metodo nuovo
+dall'export, riavviato il server, rifatto la stessa chiamata, e poi
+ripristinato. ⛔ Un primo tentativo di misurarla in-process **non valeva** e
+l'ho buttato: il `/props` chiesto direttamente alla porta di llama-server
+rispondeva `error` (il supervisore aggiunge qualcosa che io non passavo),
+quindi stavo confrontando due volte il vuoto — una sonda che scagiona è
+troppo facile.
+
+### La causa
+
+`/props` descrive **la sessione in corso**, non la macchina: contesto,
+template e capacità sono del modello caricato. `inspectModel()` li
+attribuiva al modello *ispezionato*, chiunque fosse.
+
+⭐ Ricerca 02/9: llama.cpp tiene i due numeri **separati** proprio perché
+sono cose diverse — `n_ctx` (caricato) contro `n_ctx_train` (del modello) —
+e stampa un avviso quando divergono. Noi ne usavamo uno per due domande.
+
+### La cura, in tre pezzi
+
+1. `llama-server-supervisor.mjs` — `status()` espone `modelId`: era già
+   tracciato (finisce in `--alias`) ma non usciva.
+2. `local-runtime-llama-server.mjs` — `loadedModelId()`. ⛔ Letto dal
+   **supervisore**, codice nostro, non da un campo indovinato dentro
+   `/props`: un nome di campo dedotto invece che verificato è già costato
+   tre difetti su questo sottosistema oggi.
+3. `local-runtime-probe.mjs` — contesto, template e capacità sono
+   `observed` **solo** per il modello caricato; per gli altri `unknown()`.
+
+⛔ **Il cancello del contesto è cambiato di criterio, non per comodità.**
+Leggeva `runtimeTokens.state !== 'observed'`, e finché quel campo conteneva
+l'`n_ctx` di chiunque le due cose coincidevano. Ora non più: un modello non
+caricato ha `runtimeTokens` sconosciuto **per costruzione**, e con la
+vecchia riga ogni riga della lista sarebbe diventata «non lo so» — cioè la
+lista avrebbe smesso di rispondere alla sola domanda per cui esiste (*ci
+sta, PRIMA di caricarlo?*). Ora guarda la **raggiungibilità**: runtime giù =
+non si sa niente (invariato, `RUNTIME-SPENTO-01` resta verde); runtime su
+un altro modello = il contesto **addestrato** lo dichiara l'header, che è un
+fatto del modello e non della sessione.
+
+### A schermo
+
+La riga del verdetto ora nomina chi occupa il runtime e indica il gesto
+(«è caricato «X», scaricalo per verificarlo») invece di un «non
+determinabile» muto — il pulsante che lo scarica è nel pannello accanto.
+
+⛔ E «Verifica compatibilità» **non veniva MAI premuto in QA**: si
+fotografava la lista coi pulsanti intatti, cioè la porta invece della
+stanza. Aggiunto allo scenario `qa-settings-model-lab` (e un aggancio
+`data-verify-fit` stabile, così la prova non dipende dall'etichetta).
+
+### ⛔ NON VERIFICATO a schermo — dichiarato, non nascosto
+
+La frase nuova («è caricato «X»…») compare solo con `reason: capabilities`.
+**Verificata dal server vero** — `state: unknown, reason: capabilities,
+runtime: {reachable:true, servingThisModel:false, servingModelId:
+'qwen3-0.6b-…'}` — ma per **vederla in una schermata** serve un modello che
+passi memoria e contesto senza essere caricato, e questa macchina non ce
+l'ha: entrambi i piccoli hanno 40.960 token addestrati (si fermano sul
+contesto, sotto i 65.536 del profilo agente) e il 27B si ferma prima sulla
+memoria (mancano 19 GB). Ho importato una seconda copia del 0.6B per
+provarci: stesso limite di contesto, e l'ho rimossa. Resta coperta da due
+test unitari, non da uno screenshot.
+
+### Taccuino ispettore — 4 difetti FUORI da questo lavoro
+
+Il rapporto automatico ne segnala **0**. Guardando l'immagine:
+
+1. La striscia delle schede del pannello impostazioni («Panoramica ·
+   Provider · Catalogo API · Installati · …») è **tagliata in alto** dal
+   contenitore che scorre: la scheda attiva si legge a metà.
+2. `ready·unknown·331 MB` — `unknown` è la licenza, mostrata **col codice
+   grezzo inglese** in una UI italiana. Su entrambe le schede modello.
+3. Nel Context rail, «Attrezzi» e «MCP» dicono `—` mentre «Web search» e
+   «Browser» dicono «Non osservato»: **due modi diversi** per lo stesso
+   stato, nello stesso riquadro.
+4. Il glifo del verdetto è **inline** quando il testo sta su una riga
+   (`✕ Non compatibile —`) e va **a capo da solo** quando il testo ne
+   occupa due: allineamento incoerente fra i due stati.
+
+Nessuno dei quattro è di questo punto: registrati qui, non corretti ora
+([[una-fase-alla-volta-finisci-verifica-poi-vai]]).
+
+**Suite**: backend+contratti **1404/1404**. QA visiva: scenario
+`qa-settings-model-lab` verde su **laptop 1024×800** e **desktop 1440×900**,
+0 eccezioni JS, 0 richieste fallite.

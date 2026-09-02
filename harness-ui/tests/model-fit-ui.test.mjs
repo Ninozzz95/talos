@@ -140,3 +140,25 @@ test('MODEL-FIT-UI-10 — quando manca memoria o spazio si dice QUANTO ne manca'
   assert.match(app, /ne mancano \$\{formattaByteModelLab\(richiesti - disponibili\)\}/);
   assert.match(app, /if \(!Number\.isFinite\(richiesti\) \|\| !Number\.isFinite\(disponibili\) \|\| richiesti <= disponibili\) return '';/);
 });
+
+test('MODEL-FIT-UI-11 — «capacità non osservabili» dice CHI le blocca e cosa fare', async () => {
+  /*
+   * ⛔⛔ 02/9 — il difetto sotto era che l'`n_ctx` (e il template, e gli
+   * attrezzi) del modello CARICATO venivano attribuiti a ogni altro modello.
+   * Curato nel probe. Ma la conseguenza a schermo era un «non determinabile»
+   * muto: vero e inutile. Ora la riga nomina il modello che occupa il runtime
+   * e indica il gesto — il pulsante che lo scarica è lì accanto.
+   */
+  const app = await source('public/app.js');
+  assert.match(app, /servingThisModel === false/);
+  assert.match(app, /finché c'è lui il runtime non può osservare questo modello: scaricalo per verificarlo/);
+});
+
+test('MODEL-FIT-UI-12 — AL CONTRARIO: la frase non compare se il runtime serve PROPRIO questo modello', async () => {
+  // ⛔ Tre condizioni, tutte necessarie: runtime raggiungibile, NON su questo
+  // modello, e con un id vero da nominare. Senza la seconda, la riga
+  // accuserebbe un modello di bloccare se stesso.
+  const app = await source('public/app.js');
+  assert.match(app, /runtimeDi\?\.reachable === true/);
+  assert.match(app, /typeof runtimeDi\?\.servingModelId === 'string' && runtimeDi\.servingModelId !== ''/);
+});

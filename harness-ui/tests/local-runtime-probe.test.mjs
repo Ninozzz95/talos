@@ -62,11 +62,18 @@ function makeProbe({
   manifestOverride = null,
   /** ⭐ 02/9 — runtime locale SPENTO: `probe()` lancia, come fa davvero quando llama-server non gira. */
   probeThrows = false,
+  /**
+   * ⭐ 02/9 — QUALE modello è caricato adesso. `undefined` = l'adattatore non
+   * sa rispondere (come i doppi più vecchi); una stringa = quel modello è
+   * quello acceso, e il suo `n_ctx` vale solo per lui.
+   */
+  loadedModelId,
 } = {}) {
   let generations = 0;
   const manifestUsato = manifestOverride || manifest;
   const runtime = {
     probe: async () => { if (probeThrows) throw new Error('connessione rifiutata'); return structuredClone(props); },
+    ...(loadedModelId === undefined ? {} : { loadedModelId: () => loadedModelId }),
     metrics,
     generateStream: generateStream ?? (async function* () {
       generations += 1;
@@ -262,4 +269,100 @@ test('LOCAL-RUNTIME-PROBE-CONTESTO-MEMORIA-03 — un header SENZA costo per toke
   const { probe } = makeProbe({ machine: { memory: { totalBytes: 1e9, freeBytes: 1e9 }, storage: { allocatableBytes: 1e9 } } });
   const esito = await probe.fit('qwen-local', { profile: 'chat', contextTokens: 100 });
   assert.equal(esito.memory.requiredBytes, header.estimatedWorkingBytes);
+});
+
+/*
+ * ⛔⛔⛔ L'`n_ctx` È DEL MODELLO CARICATO, NON DELLA MACCHINA — 02/9.
+ *
+ * Debito trovato dal vivo il 02/9 e registrato in «Cosa rimane»: con un
+ * runtime acceso, la riga di OGNI ALTRO modello mostrava come «contesto
+ * disponibile» l'`n_ctx` di quello caricato. `/props` descrive la sessione in
+ * corso, non la macchina.
+ *
+ * ⭐ Ricerca 02/9: llama.cpp tiene separati `n_ctx` (caricato) e `n_ctx_train`
+ * (del modello) e avvisa quando divergono — noi usavamo un numero solo per
+ * rispondere a due domande diverse.
+ */
+test('LOCAL-RUNTIME-PROBE-CTX-01 — l\'n_ctx osservato vale per il modello CARICATO', async () => {
+  const { probe } = makeProbe({ loadedModelId: 'qwen-local' });
+  const esito = await probe.inspectModel('qwen-local');
+  assert.deepEqual(esito.context.runtimeTokens, { state: 'observed', value: 65_536 });
+  assert.deepEqual(esito.context.effectiveTokens, { state: 'observed', value: 65_536 });
+});
+
+test('LOCAL-RUNTIME-PROBE-CTX-02 — con un ALTRO modello caricato il runtime non ha osservato niente', async () => {
+  const { probe } = makeProbe({ loadedModelId: 'un-altro-modello' });
+  const esito = await probe.inspectModel('qwen-local');
+  assert.equal(esito.context.runtimeTokens.state, 'unknown');
+  // Il contesto torna a essere quello ADDESTRATO, dichiarato dall'header.
+  assert.deepEqual(esito.context.effectiveTokens, { state: 'declared', value: 131_072 });
+});
+
+test('LOCAL-RUNTIME-PROBE-CTX-03 — AL CONTRARIO: un piccolo n_ctx altrui non fa BOCCIARE per contesto', async () => {
+  /*
+   * ⛔ L'errore andava in ENTRAMBE le direzioni, e questa è quella che fa più
+   * danno: con caricato un modello da 4.096 token, un modello da 131.072
+   * veniva dichiarato inadatto al profilo agente (65.536) — cioè si negava
+   * una capacità che il modello ha davvero. Il caso gemello (un n_ctx altrui
+   * GRANDE che gonfia un modello piccolo) è coperto da CTX-02.
+   */
+  const { probe } = makeProbe({
+    loadedModelId: 'un-altro-modello',
+    props: { default_generation_settings: { n_ctx: 4_096 }, chat_template: 't', chat_template_caps: {} },
+  });
+  const esito = await probe.fit('qwen-local', { profile: 'agent', contextTokens: 65_536 });
+  assert.equal(esito.context.availableTokens, 131_072);
+  assert.notEqual(esito.reason, 'context');
+});
+
+test('LOCAL-RUNTIME-PROBE-CTX-04 — un adattatore che non sa rispondere non perde l\'osservazione', async () => {
+  // ⛔ Retrocompatibilità dichiarata: senza `loadedModelId` non c'è un modello
+  // ALTRO a cui attribuire il numero, quindi il comportamento resta quello di
+  // prima invece di degradare in silenzio a `unknown`.
+  const { probe } = makeProbe();
+  const esito = await probe.inspectModel('qwen-local');
+  assert.deepEqual(esito.context.runtimeTokens, { state: 'observed', value: 65_536 });
+});
+
+test('LOCAL-RUNTIME-PROBE-CTX-05 — con un ALTRO modello caricato NON si ereditano template e attrezzi', async () => {
+  /*
+   * ⛔⛔⛔ La metà più grave dello stesso difetto, trovata allargando la cura:
+   * `chat_template` e `chat_template_caps` vengono dallo stesso `/props`, e
+   * descrivono la sessione in corso. Con un modello che supporta gli attrezzi
+   * caricato, la riga di OGNI altro modello dichiarava di supportarli — una
+   * capacità inventata, che si scopre solo a metà di una sessione agentica.
+   */
+  const { probe } = makeProbe({
+    loadedModelId: 'un-altro-modello',
+    props: {
+      default_generation_settings: { n_ctx: 131_072 },
+      chat_template: 'il template dell\'ALTRO modello',
+      chat_template_caps: { supports_tools: true, supports_tool_calls: true, supports_system_role: true },
+    },
+  });
+  const esito = await probe.inspectModel('qwen-local');
+  assert.equal(esito.template.state, 'unknown');
+  assert.deepEqual(esito.capabilities, {
+    tools: { state: 'unknown', value: null },
+    toolCalls: { state: 'unknown', value: null },
+    systemRole: { state: 'unknown', value: null },
+  });
+  // ⇒ e il profilo agente si ferma onestamente sulle CAPACITÀ, non sul contesto.
+  const fit = await probe.fit('qwen-local', { profile: 'agent', contextTokens: 65_536 });
+  assert.equal(fit.state, 'unknown');
+  assert.equal(fit.reason, 'capabilities');
+});
+
+test('LOCAL-RUNTIME-PROBE-CTX-06 — il profilo CHAT resta giudicabile su ciò che l\'header dichiara', async () => {
+  /*
+   * ⛔ Il rischio della cura era di rendere ogni riga «non lo so» appena un
+   * runtime è acceso — cioè spegnere la sola domanda per cui la lista esiste
+   * (*ci sta, PRIMA di caricarlo?*). Il contesto addestrato è un fatto del
+   * MODELLO, dichiarato dal suo header: per la chat basta, e la risposta
+   * resta vera.
+   */
+  const { probe } = makeProbe({ loadedModelId: 'un-altro-modello' });
+  const fit = await probe.fit('qwen-local', { profile: 'chat', contextTokens: 4_096 });
+  assert.equal(fit.state, 'compatible');
+  assert.equal(fit.context.availableTokens, 131_072);
 });

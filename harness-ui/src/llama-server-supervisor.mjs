@@ -55,6 +55,15 @@ export function createLlamaServerSupervisor({
       runtimeId: 'llama.cpp',
       port: current.port,
       baseUrl: current.baseUrl,
+      /*
+       * ⛔ 02/9 — QUALE modello è caricato, non solo CHE ce n'è uno.
+       * `current.modelId` era già tracciato dall'avvio (è lo stesso valore
+       * che finisce in `--alias`), ma non usciva da qui: chi chiedeva lo
+       * stato sapeva che un runtime era pronto e non di chi fosse. Da lì
+       * nasceva il difetto curato in `local-runtime-probe.mjs` — l'`n_ctx`
+       * del modello caricato attribuito a QUALUNQUE modello ispezionato.
+       */
+      modelId: current.modelId ?? null,
       observedAt: now().toISOString(),
     };
   }
