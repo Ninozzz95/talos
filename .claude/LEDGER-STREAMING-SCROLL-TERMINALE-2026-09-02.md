@@ -237,8 +237,42 @@ dopo).
 ancora diagnosticati.
 
 ⛔ **Owner: "appena finisci di sistemare e verificare questi bug
-fermati"** — fermata qui, questi tre restano aperti per il prossimo
-giro, non abbandonati.
+fermati"** — poi, subito dopo: *"I BUG NON SONO STATI SISTEMATI LA
+CONVERSAZIONE SE CLICCO SU UNA RIGA SESSIONE SCROLLA IN ALTO NON IN
+BASSO"*. Il fix di §"scroll-to-end" sopra ERA verificato dal vivo con
+Chrome fresco (screenshot + misura CDP, non un'ipotesi) — sospetto
+forte non confermato: la scheda del browser dell'owner era aperta
+PRIMA del fix (il server serve i file statici dal disco senza bisogno
+di riavvio, ma una scheda già caricata resta sul JS vecchio finché non
+ricarica). Non verificabile da qui senza accesso al suo browser reale.
+
+## ⛔⛔⛔ NUOVO, trovato tentando di riprodurre il falso read-only
+
+Provando a riprodurre dal vivo il bug read-only (§ sotto), trovato un
+bug DIVERSO e concreto: selezionato "gemini-3.7-flash" nel model
+picker (il trigger del composer lo conferma testualmente,
+"google/gemini-3.7-flash"), ma il POST reale a
+`/api/v1/sessions/custom` ha spedito
+`"modello":"z-ai/glm-4.7-flash"` — un modello COMPLETAMENTE diverso.
+Non isolato se il difetto è nel salvataggio dello stato al click
+sull'opzione, o nella lettura di quello stato al momento dell'invio.
+Non escluso un collegamento con §7 (l'ID modello di test in una
+sessione reale) — se il modello effettivo non è mai quello mostrato,
+resta aperta la domanda di dove venga letto quello vero.
+
+## Consegnato a Fable 5 — nuova sessione, batch completo
+
+Owner: *"dammi prompt completo per nuova sessione Fable 5 per
+risolvere con implementazione codice diretta questi bug... e fai in
+modo che risolva tutti i bug che ti ho chiesto"*. Prompt scritto e
+consegnato (`prompt-fable-bug-batch-2026-09-02.md`, via SendUserFile) —
+copre tutti gli 8 punti di questo ledger (scroll-to-end da riverificare
+con hard-reload, streaming a metà viewport, dissolvenza, strumentazione
+lag, il bug nuovo sul model picker, falso read-only, ID modello di
+test, cursore terminale) con riferimenti precisi a file/funzioni,
+l'ordine consigliato, e la disciplina di verifica di questo progetto
+(hard-reload prima di ogni prova dal vivo, screenshot durante non solo
+alla fine, fixture del contratto da rigenerare).
 
 ## ⛔ Owner, dal vivo, mentre chiudevo lo scroll/dissolvenza
 
