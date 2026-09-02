@@ -41,6 +41,15 @@ function normalizza(modelloGrezzo) {
     : [];
   const architecture = modelloGrezzo?.architecture && typeof modelloGrezzo.architecture === 'object'
     ? modelloGrezzo.architecture : {};
+  const reasoningGrezzo = modelloGrezzo?.reasoning && typeof modelloGrezzo.reasoning === 'object'
+    ? modelloGrezzo.reasoning : null;
+  const reasoning = reasoningGrezzo ? {
+    supportedEfforts: listaStringhe(reasoningGrezzo.supported_efforts),
+    defaultEffort: typeof reasoningGrezzo.default_effort === 'string' && reasoningGrezzo.default_effort.length <= 128
+      ? reasoningGrezzo.default_effort : null,
+    defaultEnabled: typeof reasoningGrezzo.default_enabled === 'boolean' ? reasoningGrezzo.default_enabled : null,
+    mandatory: reasoningGrezzo.mandatory === true,
+  } : null;
   return {
     id,
     provider,
@@ -52,6 +61,7 @@ function normalizza(modelloGrezzo) {
     inputModalities: listaStringhe(architecture.input_modalities),
     outputModalities: listaStringhe(architecture.output_modalities),
     supportedParameters: listaStringhe(modelloGrezzo?.supported_parameters),
+    reasoning,
     description: typeof modelloGrezzo?.description === 'string' ? modelloGrezzo.description.slice(0, 2000) : '',
     createdAt: Number.isFinite(modelloGrezzo?.created) ? modelloGrezzo.created : null,
   };

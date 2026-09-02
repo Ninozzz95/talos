@@ -6,14 +6,14 @@
  *
  * ⛔ Ricerca fatta PRIMA di scrivere (28/8, REGOLA ZERO): `fs.watch`
  * nativo di Node ha difetti reali anche su Windows (più eventi per
- * salvataggio, nessun debounce — non solo "niente ricorsione su
- * Linux", quel difetto specifico non ci tocca dato che questo backend
- * gira SOLO su Windows). `chokidar` è lo standard de facto (VS Code,
- * webpack, vite, parcel lo usano) proprio perché normalizza questi
- * casi — owner 28/8 aveva già approvato dipendenze npm nel backend
- * (document_create): stessa eccezione, stesso motivo (Node non ha il
- * vincolo di first-paint del bundle browser), qui per un problema
- * diverso.
+ * salvataggio e `filename` non sempre presente), quindi debounce e
+ * normalizzazione restano qui. Il profilo reale del 1/9 ha però
+ * invalidato l'uso di Chokidar per QUESTO percorso ricorsivo: oltre
+ * 255 mila handle e un core occupato a riposo dopo l'attivazione su un
+ * workspace grande. Node 24 usa `ReadDirectoryChangesW` per la
+ * ricorsione Windows con una registrazione nativa e supporta `ignore`,
+ * `AbortSignal` e `persistent:false`: il contratto upstream viene
+ * adottato direttamente dietro questo adapter TALOS.
  *
  * ⭐ Un watcher per CARTELLA, non per sessione: due sessioni sulla
  * stessa cartella (un fork, un resume) condividono un solo watcher —
@@ -31,8 +31,8 @@
  * tetto massimo forza comunque un invio anche durante una raffica
  * lunghissima — mai un'attesa indefinita.
  */
-import chokidarReale from 'chokidar';
-import { dirname, parse, resolve } from 'node:path';
+import { watch as watchReale } from 'node:fs';
+import { dirname, isAbsolute, parse, relative, resolve, sep } from 'node:path';
 
 const DEBOUNCE_MS = 400;
 const TETTO_MASSIMO_MS = 2_000;
@@ -58,9 +58,23 @@ function eRadiceVolume(cartella) {
   return assoluta === radice || dirname(assoluta) === assoluta;
 }
 
-const guardati = new Map(); // cartella -> { watcher, sottoscrittori: Set<fn>, timerDebounce, primoEventoRaffica, percorsiInSospeso }
+const guardati = new Map(); // cartella -> { watcher, controller, sottoscrittori: Set<fn>, timerDebounce, primoEventoRaffica, percorsiInSospeso }
 
-export function creaGestoreWorkspaceWatcher({ chokidar = chokidarReale } = {}) {
+function percorsoRelativoEvento(cartella, filename) {
+  if (filename === null || filename === undefined) return '.';
+  const grezzo = Buffer.isBuffer(filename) ? filename.toString('utf8') : String(filename);
+  if (grezzo.length === 0) return '.';
+  const assoluto = isAbsolute(grezzo) ? resolve(grezzo) : resolve(cartella, grezzo);
+  const relativo = relative(resolve(cartella), assoluto);
+  if (relativo === '' || relativo === '..' || relativo.startsWith(`..${sep}`)) return '.';
+  return relativo.split(/[/\\]+/).join('/');
+}
+
+function percorsoIgnorato(percorso) {
+  return percorso !== '.' && IGNORATI.some((rx) => rx.test(percorso));
+}
+
+export function creaGestoreWorkspaceWatcher({ watchFn = watchReale } = {}) {
   /**
    * Sottoscrive `onCambiamento(percorsiRelativi)` ai cambiamenti REALI
    * (mai quelli della scansione iniziale — `ready` li separa) di
@@ -71,25 +85,30 @@ export function creaGestoreWorkspaceWatcher({ chokidar = chokidarReale } = {}) {
    */
   function guardaWorkspace(cartella, onCambiamento) {
     /*
-     * Full access può indicare una radice come `C:\\`. Osservarla con chokidar
-     * significherebbe scandire potenzialmente l’intero volume, saturando eventi
-     * e handle prima che il modello riceva il primo messaggio. La radice resta
+     * Full access può indicare una radice come `C:\\`. Anche il watcher nativo
+     * ricorsivo non deve trasformare l’intero volume in una sorgente di eventi
+     * permanente prima che il modello riceva il primo messaggio. La radice resta
      * leggibile a richiesta tramite workspace-tree, ma non ha refresh automatico:
      * stato onesto e fail-closed, coerente con il lazy tree.
      */
     if (eRadiceVolume(cartella)) return () => {};
     let voce = guardati.get(cartella);
     if (!voce) {
-      voce = { watcher: null, sottoscrittori: new Set(), timerDebounce: null, primoEventoRaffica: 0, percorsiInSospeso: new Set() };
+      voce = { watcher: null, controller: null, sottoscrittori: new Set(), timerDebounce: null, primoEventoRaffica: 0, percorsiInSospeso: new Set() };
       guardati.set(cartella, voce);
       try {
-        const watcher = chokidar.watch(cartella, {
-          ignored: (percorso) => IGNORATI.some((rx) => rx.test(percorso)),
-          ignoreInitial: true, // ⭐ mai un refresh per la scansione di avvio — solo cambiamenti VERI dopo che il watcher è pronto
-          persistent: true,
-        });
-        watcher.on('all', (_evento, percorsoAssoluto) => {
-          const relativo = percorsoAssoluto.slice(cartella.length).replace(/^[/\\]+/, '').split(/[/\\]+/).join('/');
+        const controller = new AbortController();
+        const watcher = watchFn(cartella, {
+          recursive: true,
+          persistent: false,
+          encoding: 'utf8',
+          ignore: IGNORATI,
+          signal: controller.signal,
+        }, (_evento, filename) => {
+          const relativo = percorsoRelativoEvento(cartella, filename);
+          // Il filtro nativo riduce gli eventi a monte; questo secondo guard
+          // difende adapter finti, backend OS e versioni Node non omogenei.
+          if (percorsoIgnorato(relativo)) return;
           voce.percorsiInSospeso.add(relativo);
           const adesso = Date.now();
           if (!voce.timerDebounce) voce.primoEventoRaffica = adesso;
@@ -113,8 +132,10 @@ export function creaGestoreWorkspaceWatcher({ chokidar = chokidarReale } = {}) {
             }
           }, attesa);
         });
-        watcher.on('error', () => { /* ⛔ degrado silenzioso per costruzione — vedi doc sopra: mai un throw che romperebbe la sessione */ });
+        watcher.on?.('error', () => { /* ⛔ degrado silenzioso per costruzione — vedi doc sopra: mai un throw che romperebbe la sessione */ });
+        watcher.unref?.();
         voce.watcher = watcher;
+        voce.controller = controller;
       } catch { /* stesso principio: nessun refresh automatico, non un guasto */ }
     }
     voce.sottoscrittori.add(onCambiamento);
@@ -122,7 +143,8 @@ export function creaGestoreWorkspaceWatcher({ chokidar = chokidarReale } = {}) {
       voce.sottoscrittori.delete(onCambiamento);
       if (voce.sottoscrittori.size === 0) {
         clearTimeout(voce.timerDebounce);
-        voce.watcher?.close();
+        voce.controller?.abort();
+        try { voce.watcher?.close(); } catch { /* la chiusura via signal può averlo già chiuso */ }
         guardati.delete(cartella);
       }
     };

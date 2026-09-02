@@ -31,6 +31,7 @@ import {
 } from './agent-service.mjs';
 import {
   approvalRequested, approvalResolved, hookInvoked, queuedMessageDelivered, workspaceChanged,
+  runRedirectApplied, runRedirectCancelled, runRedirectFailed, runRedirectRequested,
   runStarted, runFinished, runError, textMessageStart, textMessageContent, textMessageEnd,
   reasoningMessageStart, reasoningMessageContent, reasoningMessageEnd, toolCallStart, toolCallArgs,
 } from './agui-events.mjs';
@@ -108,6 +109,8 @@ export function createSessionRegistry({
   preparaEsecuzioneFn,
   taskCatalogProvider = null,
   preparaEsecuzioneLiberaFn = preparaEsecuzioneLiberaReale,
+  resolveWorkspaceLaunchFn = null,
+  consumeWorkspaceLaunchFn = null,
   compattaSessioneFn = compattaSessioneReale,
   eseguiComandoDirettoFn = eseguiComandoDirettoReale,
   leggiAlberoWorkspaceFn = leggiAlberoWorkspaceReale,
@@ -363,6 +366,8 @@ export function createSessionRegistry({
 } = {}) {
   const preparaTask = preparaEsecuzioneFn ?? ((taskId) => preparaEsecuzioneReale(taskId, taskCatalogProvider));
   const sessioni = new Map();
+  let ultimoRipristino = { ripristinate: 0, totali: 0 };
+  let sessioniCorrotte = [];
   // ⭐⭐⭐ FASE C (28/8) — istanziato qui: `avviaESegui` è una function declaration (issata), riferibile prima della sua definizione testuale più sotto.
   const subagentOrchestrator = creaSubagentOrchestrator({ sessioni, avviaESeguiFn: avviaESegui });
   /*
@@ -422,11 +427,154 @@ export function createSessionRegistry({
     return null;
   }
 
+  /**
+   * SESSION-RESTORE-LAZY-WATCHER-24 — una cronologia ripristinata è stato
+   * passivo, non un workspace aperto. Il watcher ricorsivo si attiva soltanto
+   * quando parte davvero un giro e resta uno solo per la vita della voce.
+   * `guardaWorkspaceFn` conserva inoltre la propria deduplica per cartella,
+   * quindi sessioni vive sullo stesso progetto condividono l'handle fisico.
+   */
+  function attivaWatcherSessione(voce, cartella) {
+    if (typeof voce.fermaWatcher === 'function') return;
+    if (typeof cartella !== 'string' || cartella.length === 0) return;
+    try {
+      voce.fermaWatcher = guardaWorkspaceFn(cartella, (percorsi) => broadcast(voce, workspaceChanged({ percorsi })));
+    } catch {
+      // Il refresh automatico è accessorio: un watcher indisponibile non deve
+      // impedire né il boot né la ripresa della conversazione.
+      voce.fermaWatcher = null;
+    }
+  }
+
+  function fermaWatcherSessione(voce) {
+    const fermaWatcher = voce?.fermaWatcher;
+    voce.fermaWatcher = null;
+    if (typeof fermaWatcher !== 'function') return;
+    try { fermaWatcher(); } catch { /* il watcher è accessorio e la chiusura deve restare idempotente */ }
+  }
+
+  function rilasciaWatcherSessioneSeInattiva(voce) {
+    if (!(voce.conclusa || voce.interrotta)) return;
+    if (voce.ascoltatori.size > 0) return;
+    fermaWatcherSessione(voce);
+  }
+
+  /**
+   * Ricostruisce soltanto il transcript conversazionale che gli eventi
+   * persistiti provano davvero. Serve quando un turno termina con RunError
+   * prima che il runtime restituisca `messaggiFinali`: la chat resta
+   * riprendibile sullo stesso id senza promuovere reasoning, tool parziali o
+   * testo assistant mai chiuso a messaggi canonici.
+   */
+  function messaggiRipristinabiliDaEventi(voce) {
+    let messaggi = [];
+    const testiAssistant = new Map();
+    const aggiungi = (role, content) => {
+      if ((role !== 'user' && role !== 'assistant') || typeof content !== 'string' || content.trim() === '') return;
+      const messaggio = { role, content };
+      const ultimo = messaggi.at(-1);
+      if (ultimo?.role === messaggio.role && ultimo.content === messaggio.content) return;
+      messaggi.push(messaggio);
+    };
+    // Gli eventi legacy di test/primi build non portavano ancora `input` nel
+    // RunStarted: l'intestazione conserva comunque il prompt originale e
+    // deve precedere qualunque risposta assistant completa.
+    aggiungi('user', voce.task?.consegna ?? voce.task?.consegnaCorta);
+    for (const evento of voce.eventi ?? []) {
+      if (evento?.type === 'RunStarted') {
+        if (Array.isArray(evento.input)) {
+          const canonici = evento.input
+            .filter((item) => item && (item.role === 'user' || item.role === 'assistant') && typeof item.content === 'string' && item.content.trim() !== '')
+            .map((item) => ({ role: item.role, content: item.content }));
+          if (canonici.length > 0) messaggi = canonici;
+        } else {
+          aggiungi('user', evento.input?.consegna ?? evento.input?.consegnaCorta);
+        }
+        continue;
+      }
+      if (evento?.type === 'TextMessageStart' && evento.role === 'assistant' && typeof evento.messageId === 'string') {
+        testiAssistant.set(evento.messageId, '');
+        continue;
+      }
+      if (evento?.type === 'TextMessageContent' && testiAssistant.has(evento.messageId) && typeof evento.delta === 'string') {
+        testiAssistant.set(evento.messageId, testiAssistant.get(evento.messageId) + evento.delta);
+        continue;
+      }
+      if (evento?.type === 'TextMessageEnd' && testiAssistant.has(evento.messageId)) {
+        aggiungi('assistant', testiAssistant.get(evento.messageId));
+        testiAssistant.delete(evento.messageId);
+      }
+    }
+    return messaggi;
+  }
+
+  function persistiMessaggiFinali(voce, versioneGiro) {
+    if (!cartellaStore || !Array.isArray(voce.messaggiFinali) || !voce.sessionId) return;
+    try {
+      registraRigaSyncFn({
+        cartellaStore,
+        sessionId: voce.sessionId,
+        record: { tipo: 'messaggi-finali', versioneGiro, messaggiFinali: voce.messaggiFinali },
+      });
+    } catch (errore) {
+      console.error(`[session-store] messaggiFinali non scritti per ${voce.sessionId}:`, errore instanceof Error ? errore.message : errore);
+    }
+  }
+
+  /**
+   * Il nuovo input utente è ammesso alla sessione PRIMA della chiamata al
+   * modello. Ha quindi un record durevole proprio, distinto da
+   * `messaggi-finali`: un crash dopo questa append non può perdere il testo,
+   * ma non può neppure travestire un giro incompleto da output concluso.
+   */
+  function persistiCheckpointRipresa(voce, messaggi, versioneGiro) {
+    if (!cartellaStore || !voce.sessionId) return;
+    registraRigaSyncFn({
+      cartellaStore,
+      sessionId: voce.sessionId,
+      record: { tipo: 'checkpoint-ripresa', versioneGiro, messaggi },
+    });
+  }
+
+  /**
+   * Ricostruisce soltanto l'intento di redirect che un processo precedente
+   * non ha potuto chiudere. Gli eventi restano append-only: un Applied è
+   * completo solo quando è seguito dal nuovo RunStarted, mentre Cancelled e
+   * Failed sono terminali per quello stesso redirectId.
+   */
+  function redirectOrfanoDaEventi(eventi) {
+    let pendente = null;
+    for (const evento of eventi) {
+      if (evento?.type === 'RunRedirectRequested') {
+        pendente = { redirectId: evento.redirectId, stato: 'richiesto' };
+      } else if (evento?.type === 'RunRedirectApplied' && pendente?.redirectId === evento.redirectId) {
+        pendente = { redirectId: evento.redirectId, stato: 'applicato' };
+      } else if ((evento?.type === 'RunRedirectCancelled' || evento?.type === 'RunRedirectFailed') && pendente?.redirectId === evento.redirectId) {
+        pendente = null;
+      } else if (evento?.type === 'RunStarted' && pendente?.stato === 'applicato') {
+        pendente = null;
+      }
+    }
+    return pendente;
+  }
+
+  function ricordaRedirectAnnullato(voce, redirectId) {
+    if (typeof redirectId !== 'string' || redirectId.length === 0) return;
+    voce.redirectAnnullati ??= new Set();
+    voce.redirectAnnullati.add(redirectId);
+    while (voce.redirectAnnullati.size > 32) {
+      voce.redirectAnnullati.delete(voce.redirectAnnullati.values().next().value);
+    }
+  }
+
   function broadcast(voce, evento) {
     evento._sequenza = (voce.prossimaSequenza = (voce.prossimaSequenza ?? 0) + 1);
     voce.eventi.push(evento);
     for (const ascoltatore of voce.ascoltatori) ascoltatore(evento);
-    if (evento.type === 'RunFinished' || evento.type === 'RunError') voce.conclusa = true;
+    if (evento.type === 'RunFinished' || evento.type === 'RunError') {
+      voce.conclusa = true;
+      rilasciaWatcherSessioneSeInattiva(voce);
+    }
     /*
      * ⭐⭐⭐ FASE L (30/8) — accoda anche su disco, MAI in attesa (broadcast
      * è sincrona da >100 punti di chiamata in questo file, farla async
@@ -466,6 +614,20 @@ export function createSessionRegistry({
       voce.approvazionePendente = { requestId, resolve };
       broadcast(voce, approvalRequested({ requestId, azione }));
     });
+  }
+
+  /**
+   * Stop e Reindirizza rendono obsoleta qualunque domanda di consenso del
+   * giro corrente. Risolverla con `false` prima dell'abort evita una Promise
+   * sospesa che impedirebbe al kernel di raggiungere il confine sicuro.
+   */
+  function negaApprovazionePendente(voce) {
+    const pendente = voce.approvazionePendente;
+    if (!pendente) return false;
+    voce.approvazionePendente = null;
+    pendente.resolve(false);
+    broadcast(voce, approvalResolved({ requestId: pendente.requestId, approvato: false }));
+    return true;
   }
 
   /*
@@ -530,6 +692,7 @@ export function createSessionRegistry({
     let textId = null;
     let reasoningId = null;
     let text = '';
+    const messaggiCanonici = () => [...messages, ...(text ? [{ role: 'assistant', content: text }] : [])];
     let done = false;
     try {
       for await (const event of runtime.generateStream({
@@ -559,7 +722,7 @@ export function createSessionRegistry({
         if (textId) emit(textMessageEnd({ messageId: textId }));
         if (reasoningId) emit(reasoningMessageEnd({ messageId: reasoningId }));
         emit(runFinished({ threadId: sessionId, runId, outcome: 'fermato' }));
-        return { ok: false, esito: { comeFinita: 'fermato', messaggiFinali: text ? [{ role: 'assistant', content: text }] : null } };
+        return { ok: false, esito: { comeFinita: 'fermato', messaggiFinali: messaggiCanonici() } };
       }
       throw error instanceof LocalRuntimeSessionError
         ? error
@@ -569,11 +732,11 @@ export function createSessionRegistry({
     if (reasoningId) emit(reasoningMessageEnd({ messageId: reasoningId }));
     if (voce.controller.signal.aborted) {
       emit(runFinished({ threadId: sessionId, runId, outcome: 'fermato' }));
-      return { ok: false, esito: { comeFinita: 'fermato', messaggiFinali: text ? [{ role: 'assistant', content: text }] : null } };
+      return { ok: false, esito: { comeFinita: 'fermato', messaggiFinali: messaggiCanonici() } };
     }
     if (!done) throw new LocalRuntimeSessionError('runtime locale non ha chiuso lo stream', 'LOCAL_RUNTIME_INCOMPLETE');
     emit(runFinished({ threadId: sessionId, runId, outcome: 'concluso' }));
-    return { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [{ role: 'assistant', content: text }] } };
+    return { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: messaggiCanonici() } };
   }
 
   /**
@@ -610,7 +773,7 @@ export function createSessionRegistry({
      * — è così che `subagent-orchestrator.delegaSottoTask` sa quando la
      * figlia ha finito, senza un secondo meccanismo di attesa.
      */
-    padreId = null, profonditaDelega = 0, onConclusioneFn,
+    padreId = null, profonditaDelega = 0, onConclusioneFn, versioneGiroRichiesta = null,
   }) {
     const providerEffettivo = voceEsistente?.provider ?? provider;
     const runtimeIdEffettivo = voceEsistente?.runtimeId ?? runtimeId;
@@ -679,14 +842,34 @@ export function createSessionRegistry({
       modelloPlanner: modelloPlannerEffettivo,
       reasoning: reasoningEffettivo, mobile, permessi: permessiEffettivi,
       permessiPerAttrezzo: permessiPerAttrezzoEffettivi, approvazionePendente: null,
+        reindirizzamentoPendente: null,
+        redirectAnnullati: new Set(),
+        messaggiPendente: null,
+        versioneGiro: 0,
       provider: providerEffettivo, runtimeId: runtimeIdEffettivo, modelId: modelIdEffettivo || modelloEffettivo, fallbackConsent: fallbackConsentEffettivo === true,
       // ⭐⭐⭐ FASE C (28/8) — sub-agenti: null/0 per ogni sessione avviata da un umano, valorizzati SOLO da subagentOrchestrator.delegaSottoTask. `esitoDelega` (per il foglio "Albero sessione") si popola quando la sessione conclude, vedi sotto.
       padreId, profonditaDelega, esitoDelega: null, evidenzaDelega: null,
       // ⭐⭐⭐ FASE D (28/8) — coda messaggi: FIFO vera, vuota per ogni sessione. Sopravvive a un resume (STESSA voce): un messaggio accodato mentre la sessione era "in corso" resta in coda anche se il turno finisce e ne parte un altro tramite resume().
       codaMessaggi: [],
     };
-    voce.controller = controller;
-    voce.conclusa = false;
+    /*
+     * Il punto sicuro può arrivare anche dopo un timeout/abort avvenuto prima
+     * del primo token. In quel caso il runtime non restituisce una nuova
+     * `messaggiFinali`, ma il contesto con cui QUESTO giro è partito resta una
+     * fonte canonica e non va cancellato. Per il primissimo giro non esiste
+     * ancora una cronologia: il fallback ricostruisce invece il task sotto,
+     * così è il runtime a rigenerare il proprio system prompt.
+     */
+    const versioneGiro = Number.isSafeInteger(versioneGiroRichiesta) && versioneGiroRichiesta > (voce.versioneGiro ?? 0)
+      ? versioneGiroRichiesta
+      : (voce.versioneGiro ?? 0) + 1;
+    voce.versioneGiro = versioneGiro;
+    const messaggiPrimaDelGiro = Array.isArray(messaggiIniziali)
+      ? messaggiIniziali
+      : (Array.isArray(voce.messaggiFinali) ? voce.messaggiFinali : null);
+      voce.controller = controller;
+      voce.conclusa = false;
+      voce.interrotta = false;
     /*
      * ⭐⭐⭐ FASE L (30/8) — `sessionId` sulla voce stessa (prima viveva
      * solo come chiave della Map): `broadcast()` ne ha bisogno per
@@ -725,14 +908,12 @@ export function createSessionRegistry({
     /*
      * ⭐⭐⭐ 28/8 — workspace-watcher.mjs, owner 27/8: "se muovo i file il
      * work tree non si aggiorna automaticamente". UNA sola volta per
-     * voce (mai ri-sottoscritto su un resume — `voceEsistente` è la
-     * STESSA voce di prima, già in ascolto), fermato quando la voce
-     * stessa esce di scope: qui non c'è un "chiudi sessione" esplicito
-     * (vedi la doc in testa al file — le sessioni vivono in memoria
-     * per la vita del processo), quindi il watcher fa lo stesso
-     * compromesso già scelto per tutto il resto di questo registro.
+     * voce ATTIVA. Un resume riusa la stessa voce ma può riaprire il
+     * watcher se era stato rilasciato al termine del giro precedente.
+     * Dopo il profilo P0 del 1/9 il possesso è esplicito: un run vivo o
+     * almeno un client SSE lo tengono aperto; nessuno dei due lo chiude.
      */
-    if (voceNuova) voce.fermaWatcher = guardaWorkspaceFn(cartella, (percorsi) => broadcast(voce, workspaceChanged({ percorsi })));
+    attivaWatcherSessione(voce, cartella);
     sessioni.set(sessionId, voce);
 
     /*
@@ -804,6 +985,9 @@ export function createSessionRegistry({
      * client non basterebbe).
      */
     const codaMessaggiFn = () => {
+      // Un input prioritario è già stato accettato: la FIFO resta intatta
+      // per il giro successivo, mai consumata dal giro che stiamo fermando.
+      if (voce.reindirizzamentoPendente) return null;
       const testo = voce.codaMessaggi.shift();
       if (testo == null) return null;
       broadcast(voce, queuedMessageDelivered({ testo }));
@@ -873,7 +1057,13 @@ export function createSessionRegistry({
        * gestire qui), resta null: riprendere questa sessione dirà
        * onestamente che non c'è niente da ereditare, invece di lanciare.
        */
-      voce.messaggiFinali = risultato?.esito?.messaggiFinali ?? null;
+      const messaggiRestituiti = risultato?.esito?.messaggiFinali;
+      if (Array.isArray(messaggiRestituiti)) {
+        voce.messaggiFinali = messaggiRestituiti;
+      } else if (Array.isArray(messaggiPrimaDelGiro)) {
+        voce.messaggiFinali = messaggiPrimaDelGiro;
+      }
+      voce.messaggiPendente = null;
       /*
        * ⭐⭐⭐ FASE L (30/8) — SOLO quando c'è davvero qualcosa da salvare:
        * senza questa riga su disco, un ripristino dopo un riavvio
@@ -885,13 +1075,65 @@ export function createSessionRegistry({
        * troppo presto) — qui capita solo se il turno NON è mai arrivato
        * a questo punto, prima che questo file venisse scritto su disco.
        */
-      if (cartellaStore && voce.messaggiFinali && voce.sessionId) {
-        registraRigaFn({ cartellaStore, sessionId: voce.sessionId, record: { tipo: 'messaggi-finali', messaggiFinali: voce.messaggiFinali } })
-          .catch((errore) => { console.error(`[session-store] messaggiFinali non scritti per ${voce.sessionId}:`, errore instanceof Error ? errore.message : errore); });
-      }
+      persistiMessaggiFinali(voce, versioneGiro);
       // ⭐⭐⭐ FASE C (28/8) — per il foglio "Albero sessione": lo stato reale di OGNI sessione che conclude, non solo delle figlie (inerte/ignorato per una sessione senza padre).
       voce.esitoDelega = risultato?.esito?.comeFinita ?? (risultato?.ok === false ? 'fallito' : null);
-      // ⭐⭐⭐ FASE C (28/8) — se questa sessione è una figlia in delega, sblocca la Promise che il dispatcher del kernel del PADRE sta aspettando. Va DOPO gli aggiornamenti sopra: onConclusioneFn potrebbe (in una fase futura) leggere voce.esitoDelega.
+      const redirect = voce.reindirizzamentoPendente;
+      if (redirect) {
+        voce.reindirizzamentoPendente = null;
+        const haCronologiaCanonica = Array.isArray(voce.messaggiFinali);
+        const messaggiInizialiRedirect = haCronologiaCanonica
+          ? [...voce.messaggiFinali, { role: 'user', content: redirect.testo }]
+          : undefined;
+        const consegnaOriginale = task?.consegna || task?.consegnaCorta || '';
+        const consegnaRedirect = haCronologiaCanonica
+          ? redirect.testo
+          : [consegnaOriginale, `Correzione dell’utente: ${redirect.testo}`].filter(Boolean).join('\n\n');
+        const versioneGiroRedirect = (voce.versioneGiro ?? 0) + 1;
+        if (haCronologiaCanonica) {
+          try {
+            persistiCheckpointRipresa(voce, messaggiInizialiRedirect, versioneGiroRedirect);
+          } catch {
+            broadcast(voce, runRedirectFailed({
+              redirectId: redirect.redirectId,
+              message: 'Non è stato possibile salvare la correzione. Riprova senza chiudere la sessione.',
+              code: 'SESSION_STORE_WRITE_FAILED',
+            }));
+            onConclusioneFn?.(risultato);
+            return;
+          }
+          voce.messaggiPendente = messaggiInizialiRedirect;
+        }
+        broadcast(voce, runRedirectApplied({ redirectId: redirect.redirectId, testo: redirect.testo }));
+        const ripartenza = avviaESegui({
+          sessionId,
+          taskId: voce.taskId,
+          cartella: voce.cartella,
+          task: {
+            consegna: consegnaRedirect,
+            progetto: task?.progetto ?? voce.task?.progetto,
+            seguito: true,
+            reindirizzato: true,
+          },
+          comandoProva: voce.comandoProva,
+          messaggiIniziali: messaggiInizialiRedirect,
+          forkDa: voce.forkDa,
+          voceEsistente: voce,
+          onConclusioneFn,
+          versioneGiroRichiesta: versioneGiroRedirect,
+        });
+        if ('erroreAvvio' in ripartenza) {
+          broadcast(voce, runRedirectFailed({
+            redirectId: redirect.redirectId,
+            message: ripartenza.erroreAvvio,
+            code: ripartenza.code,
+          }));
+          onConclusioneFn?.(risultato);
+        }
+        return;
+      }
+      // ⭐⭐⭐ FASE C (28/8) — una delega si considera conclusa solo quando
+      // non esiste un reindirizzamento che continua la STESSA sessione.
       onConclusioneFn?.(risultato);
     }).catch((errore) => {
       /*
@@ -908,6 +1150,15 @@ export function createSessionRegistry({
           message: errore instanceof Error ? errore.message : String(errore),
           code: errore?.code || 'internal-error',
         });
+      }
+      if (voce.reindirizzamentoPendente) {
+        const { redirectId } = voce.reindirizzamentoPendente;
+        voce.reindirizzamentoPendente = null;
+        broadcast(voce, runRedirectFailed({
+          redirectId,
+          message: errore instanceof Error ? errore.message : String(errore),
+          code: errore?.code || 'internal-error',
+        }));
       }
     });
 
@@ -930,9 +1181,14 @@ export function createSessionRegistry({
      * @returns {Promise<{ripristinate:number, totali:number}>}
      */
     async ripristina() {
-      if (!cartellaStore) return { ripristinate: 0, totali: 0 }; // nessuna persistenza configurata: mai un tentativo di leggere un percorso che non c'è
+      if (!cartellaStore) {
+        ultimoRipristino = { ripristinate: 0, totali: 0 };
+        sessioniCorrotte = [];
+        return ultimoRipristino;
+      } // nessuna persistenza configurata: mai un tentativo di leggere un percorso che non c'è
       const id = await elencaSessioniPersistiteFn({ cartellaStore });
       let ripristinate = 0;
+      const corrotte = [];
       for (const sessionId of id) {
         if (sessioni.has(sessionId)) continue; // già viva in questo processo: mai sovrascrivere
         let record;
@@ -940,15 +1196,48 @@ export function createSessionRegistry({
           record = await leggiRegistroFn({ cartellaStore, sessionId });
         } catch (errore) {
           console.error(`[session-store] sessione ${sessionId} non ripristinata:`, errore instanceof Error ? errore.message : errore);
+          if (errore?.code === 'SESSION_STORE_CORRUPT') corrotte.push(sessionId);
           continue;
         }
         if (!record || record.length === 0) continue;
         const intestazione = record.find((r) => r.tipo === 'intestazione');
         if (!intestazione) continue; // senza intestazione non c'è abbastanza per una voce onesta
         // ⛔ `type` (AG-UI, PascalCase) contro `tipo` (i record di questo file, italiano): due nomi di campo DIVERSI apposta, mai un'ambiguità nel distinguerli nello stesso file.
-        const eventi = record.filter((r) => typeof r.type === 'string');
-        const messaggiFinaliRecord = record.find((r) => r.tipo === 'messaggi-finali');
-        const ultimoEvento = eventi.at(-1);
+        const eventiFisici = record.filter((r) => typeof r.type === 'string');
+        const eventi = eventiFisici.every((evento) => Number.isSafeInteger(evento._sequenza))
+          ? [...eventiFisici].sort((a, b) => a._sequenza - b._sequenza)
+          : eventiFisici;
+        const ultimaSequenza = eventi.reduce(
+          (massimo, evento) => Number.isSafeInteger(evento._sequenza) ? Math.max(massimo, evento._sequenza) : massimo,
+          0,
+        );
+        const finali = record.map((r, indice) => ({ record: r, indice })).filter((voceRecord) => voceRecord.record.tipo === 'messaggi-finali');
+        const checkpoint = record.map((r, indice) => ({ record: r, indice })).filter((voceRecord) => voceRecord.record.tipo === 'checkpoint-ripresa');
+        const piuRecente = (voci) => voci.reduce((corrente, candidato) => {
+          if (!corrente) return candidato;
+          const versioneCorrente = Number.isSafeInteger(corrente.record.versioneGiro) ? corrente.record.versioneGiro : -1;
+          const versioneCandidato = Number.isSafeInteger(candidato.record.versioneGiro) ? candidato.record.versioneGiro : -1;
+          if (versioneCandidato !== versioneCorrente) return versioneCandidato > versioneCorrente ? candidato : corrente;
+          return candidato.indice > corrente.indice ? candidato : corrente;
+        }, null);
+        const finalePiuRecente = piuRecente(finali);
+        const checkpointPiuRecente = piuRecente(checkpoint);
+        const impostazioniRecord = record.filter((r) => r.tipo === 'impostazioni-sessione').at(-1) ?? null;
+        const impostazioni = impostazioniRecord ? { ...intestazione, ...impostazioniRecord } : intestazione;
+        const ultimoEventoEsecuzione = [...eventi].reverse().find((evento) => (
+          evento?.type === 'RunStarted' || evento?.type === 'RunFinished' || evento?.type === 'RunError'
+        ));
+        const versioneFinale = Number.isSafeInteger(finalePiuRecente?.record.versioneGiro) ? finalePiuRecente.record.versioneGiro : null;
+        const versioneCheckpoint = Number.isSafeInteger(checkpointPiuRecente?.record.versioneGiro) ? checkpointPiuRecente.record.versioneGiro : null;
+        const numeroGiriOsservati = eventi.filter((evento) => evento?.type === 'RunStarted').length;
+        const versioneGiro = Math.max(numeroGiriOsservati, versioneFinale ?? 0, versioneCheckpoint ?? 0);
+        const checkpointSuccessivoAlFinale = Boolean(checkpointPiuRecente) && (
+          versioneCheckpoint !== null && versioneFinale !== null
+            ? versioneCheckpoint > versioneFinale
+            : ultimoEventoEsecuzione?.type === 'RunStarted' || checkpointPiuRecente.indice > (finalePiuRecente?.indice ?? -1)
+        );
+        const messaggiFinaliRecord = finalePiuRecente?.record ?? null;
+        const checkpointRecord = checkpointSuccessivoAlFinale ? checkpointPiuRecente?.record ?? null : null;
         /*
          * ⭐⭐⭐ FASE L, trovato da un test intermittente (30/8), non da
          * lettura: la riga RunFinished (broadcast()) e la riga
@@ -959,40 +1248,56 @@ export function createSessionRegistry({
          * che, se messaggi-finali vince la gara, una sessione DAVVERO
          * conclusa (con una conversazione vera già scritta) viene
          * classificata `interrotta` per un dettaglio di timing del
-         * filesystem, non per la sua storia reale. ⇒ la presenza stessa
-         * di `messaggiFinaliRecord` È la prova sufficiente: quella riga
-         * viene scritta SOLO dopo un run che ha prodotto messaggiFinali
-         * veri (mai su un RunError senza contenuto — vedi il call site in
-         * broadcast()), quindi non può mai attestare falsamente una
-         * conclusione che non c'è stata.
+         * filesystem, non per la sua storia reale. Un WorkspaceChanged dopo
+         * RunError non riapre il giro: si guarda l'ultimo evento del LIFECYCLE
+         * agente. Una vecchia riga finale, però, non conclude un RunStarted
+         * successivo: deve essere fisicamente posteriore al RunStarted più
+         * recente. Il checkpoint di input è separato e non vale mai come
+         * prova di output concluso.
          */
-        const conclusa = Boolean(messaggiFinaliRecord) || ultimoEvento?.type === 'RunFinished' || ultimoEvento?.type === 'RunError';
+        const finaleConfermaIlGiroCorrente = versioneFinale !== null && versioneFinale === versioneGiro && !checkpointSuccessivoAlFinale;
+        const terminaleConfermaIlGiroCorrente = numeroGiriOsservati === versioneGiro && (
+          ultimoEventoEsecuzione?.type === 'RunFinished' || ultimoEventoEsecuzione?.type === 'RunError'
+        );
+        const conclusa = terminaleConfermaIlGiroCorrente || finaleConfermaIlGiroCorrente;
         const voce = {
           eventi, ascoltatori: new Set(), taskId: intestazione.taskId, cartella: intestazione.cartella, task: intestazione.task,
           comandoProva: intestazione.comandoProva, forkDa: intestazione.forkDa,
           avviataAlle: intestazione.avviataAlle, messaggiFinali: messaggiFinaliRecord?.messaggiFinali ?? null,
-          modello: intestazione.modello, modelloPlanner: intestazione.modelloPlanner, reasoning: intestazione.reasoning,
-          mobile: intestazione.mobile, permessi: intestazione.permessi, permessiPerAttrezzo: intestazione.permessiPerAttrezzo,
+          messaggiPendente: Array.isArray(checkpointRecord?.messaggi) ? checkpointRecord.messaggi : null,
+          modello: impostazioni.modello, modelloPlanner: impostazioni.modelloPlanner, reasoning: impostazioni.reasoning,
+          mobile: intestazione.mobile, permessi: impostazioni.permessi, permessiPerAttrezzo: impostazioni.permessiPerAttrezzo,
           provider: intestazione.provider ?? 'cloud', runtimeId: intestazione.runtimeId ?? null,
-          modelId: intestazione.modelId ?? intestazione.modello ?? null, fallbackConsent: intestazione.fallbackConsent === true,
-          approvazionePendente: null, padreId: intestazione.padreId, profonditaDelega: intestazione.profonditaDelega,
+          modelId: impostazioni.modelId ?? impostazioni.modello ?? null, fallbackConsent: intestazione.fallbackConsent === true,
+          approvazionePendente: null, reindirizzamentoPendente: null, redirectAnnullati: new Set(), padreId: intestazione.padreId, profonditaDelega: intestazione.profonditaDelega,
           esitoDelega: intestazione.padreId ? esitoDelegaDaEventi(eventi, { task: intestazione.task }) : null,
           evidenzaDelega: intestazione.padreId ? analizzaEvidenzaDelega(eventi) : null,
           codaMessaggi: [], sessionId, controller: new AbortController(),
           conclusa, ripristinata: true, interrotta: !conclusa,
-          prossimaSequenza: ultimoEvento?._sequenza ?? 0,
+          prossimaSequenza: ultimaSequenza, versioneGiro,
         };
-        if (intestazione.cartella) {
-          try {
-            voce.fermaWatcher = guardaWorkspaceFn(intestazione.cartella, (percorsi) => broadcast(voce, workspaceChanged({ percorsi })));
-          } catch {
-            // ⛔ una cartella sparita nel frattempo (progetto spostato/cancellato) non deve impedire il ripristino della sessione: resta ripristinata, solo senza un watcher attivo.
-          }
-        }
+        // SESSION-RESTORE-LAZY-WATCHER-24 — nessun watcher durante il boot:
+        // la cronologia resta leggibile e il primo vero resume lo attiverà.
+        voce.fermaWatcher = null;
         sessioni.set(sessionId, voce);
+        const redirectOrfano = redirectOrfanoDaEventi(eventi);
+        if (redirectOrfano) {
+          broadcast(voce, runRedirectFailed({
+            redirectId: redirectOrfano.redirectId,
+            code: 'SESSION_INTERRUPTED',
+            message: 'Il server è stato riavviato prima che il reindirizzamento potesse concludersi.',
+          }));
+        }
         ripristinate += 1;
       }
-      return { ripristinate, totali: id.length };
+      ultimoRipristino = { ripristinate, totali: id.length };
+      sessioniCorrotte = corrotte;
+      return ultimoRipristino;
+    },
+
+    /** Stato di sola lettura dell'ultimo ripristino: non modifica né elimina i registri danneggiati. */
+    statoPersistenza() {
+      return { corrotte: [...sessioniCorrotte], ultimaLettura: { ...ultimoRipristino } };
     },
 
     /**
@@ -1096,25 +1401,47 @@ export function createSessionRegistry({
      * client HTTP diretto non passa dal frontend).
      */
     avviaLibero({
-      cartellaId, cartellaLibera, consegna, comandoProva,
+      cartellaId, cartellaLibera, workspaceLaunchId, consegna, comandoProva,
       modello: modelloScelto = null, modelloPlanner: modelloPlannerScelto = null, reasoning: reasoningScelto = null, mobile = false,
       permessi: permessiScelto = null, permessiPerAttrezzo: permessiPerAttrezzoScelto = null,
     }) {
+      const scelteWorkspace = [cartellaId, cartellaLibera, workspaceLaunchId].filter((value) => typeof value === 'string' && value.length > 0);
+      if (scelteWorkspace.length !== 1) {
+        return { erroreAvvio: 'Serve una sola cartella per questa sessione', code: 'QUERY_INVALID' };
+      }
       if (cartellaLibera && permessiScelto !== 'Full access') {
         return { erroreAvvio: 'cartellaLibera richiede il permesso "Full access" per questa sessione', code: 'QUERY_INVALID' };
       }
+      let cartellaRisolta = cartellaLibera;
+      if (workspaceLaunchId) {
+        if (typeof resolveWorkspaceLaunchFn !== 'function') {
+          return { erroreAvvio: 'Il collegamento alla cartella non è disponibile', code: 'WORKSPACE_LAUNCH_NOT_AVAILABLE' };
+        }
+        try {
+          cartellaRisolta = resolveWorkspaceLaunchFn(workspaceLaunchId).percorso;
+        } catch (errore) {
+          return {
+            erroreAvvio: errore?.message || 'Il collegamento alla cartella non è disponibile',
+            code: errore?.code === 'WORKSPACE_NOT_AVAILABLE' ? 'WORKSPACE_NOT_AVAILABLE' : 'WORKSPACE_LAUNCH_NOT_AVAILABLE',
+          };
+        }
+      }
       let preparato;
       try {
-        preparato = preparaEsecuzioneLiberaFn(cartelleProgetto, { cartellaId, cartellaLibera, consegna, comandoProva });
+        preparato = preparaEsecuzioneLiberaFn(cartelleProgetto, { cartellaId, cartellaLibera: cartellaRisolta, consegna, comandoProva });
       } catch (errore) {
         if (errore instanceof CustomTaskError) return { erroreAvvio: errore.message, code: errore.code };
         throw errore;
       }
-      return avviaESegui({
-        taskId: cartellaLibera ? 'libero:full-access' : `libero:${cartellaId}`, cartella: preparato.cartella, task: preparato.task,
+      const risultato = avviaESegui({
+        taskId: workspaceLaunchId ? 'libero:workspace-launch' : (cartellaLibera ? 'libero:full-access' : `libero:${cartellaId}`), cartella: preparato.cartella, task: preparato.task,
         comandoProva: preparato.comandoProva, modelloRichiesta: modelloScelto, modelloPlannerRichiesta: modelloPlannerScelto, reasoningRichiesto: reasoningScelto, mobile,
         permessiRichiesti: permessiScelto, permessiPerAttrezzoRichiesti: permessiPerAttrezzoScelto,
       });
+      if (workspaceLaunchId && risultato.sessionId && typeof consumeWorkspaceLaunchFn === 'function') {
+        try { consumeWorkspaceLaunchFn(workspaceLaunchId); } catch { /* la sessione è già partita: mai trasformare un successo in errore */ }
+      }
+      return risultato;
     },
 
     /**
@@ -1206,15 +1533,34 @@ export function createSessionRegistry({
     resume(sessionId, nuovoMessaggioUtente = null) {
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
-      if (!voce.messaggiFinali) {
+      if (!voce.conclusa && !voce.interrotta) {
+        return {
+          erroreAvvio: 'La sessione è ancora in corso: aspetta che concluda prima di riprenderla',
+          code: 'SESSION_NOT_READY',
+        };
+      }
+      const haNuovoMessaggio = typeof nuovoMessaggioUtente === 'string' && nuovoMessaggioUtente.trim() !== '';
+      if (voce.interrotta && !haNuovoMessaggio) {
+        return {
+          erroreAvvio: 'Questa sessione è stata interrotta: scrivi un nuovo messaggio per riprenderla in sicurezza.',
+          code: 'SESSION_NOT_READY',
+        };
+      }
+      let storiaRiprendibile = Array.isArray(voce.messaggiPendente)
+        ? voce.messaggiPendente
+        : (Array.isArray(voce.messaggiFinali) ? voce.messaggiFinali : null);
+      if (!storiaRiprendibile && (voce.conclusa || voce.interrotta) && typeof nuovoMessaggioUtente === 'string' && nuovoMessaggioUtente.trim() !== '') {
+        storiaRiprendibile = messaggiRipristinabiliDaEventi(voce);
+      }
+      if (!storiaRiprendibile || storiaRiprendibile.length === 0) {
         /*
          * ⭐⭐⭐ FASE L (30/8) — `voce.conclusa===false` copriva DUE stati
          * diversi sotto lo stesso messaggio: una sessione VIVA che finirà
          * a breve ("aspetta che concluda") e una ricostruita da
-         * `ripristina()` il cui processo non esiste più — per QUELLA,
-         * "aspetta" è una bugia: non concluderà mai da sola. Stesso
-         * principio "gli stati sono tre" già in memoria: si distingue
-         * `voce.interrotta`, non si conflano.
+         * `ripristina()` il cui processo non esiste più. Quest'ultima può
+         * ripartire solo con un NUOVO messaggio, attraverso il transcript
+         * sicuro ricostruito sopra; senza nuovo input non fingiamo di poter
+         * riprendere il frame esatto di una tool-call persa.
          */
         if (voce.interrotta) {
           return {
@@ -1230,8 +1576,20 @@ export function createSessionRegistry({
         };
       }
       const messaggiIniziali = nuovoMessaggioUtente
-        ? [...voce.messaggiFinali, { role: 'user', content: nuovoMessaggioUtente }]
-        : voce.messaggiFinali;
+        ? [...storiaRiprendibile, { role: 'user', content: nuovoMessaggioUtente }]
+        : storiaRiprendibile;
+      const prossimaVersioneGiro = (voce.versioneGiro ?? 0) + 1;
+      if (haNuovoMessaggio) {
+        try {
+          persistiCheckpointRipresa(voce, messaggiIniziali, prossimaVersioneGiro);
+        } catch {
+          return {
+            erroreAvvio: 'Non è stato possibile salvare il nuovo messaggio. Riprova senza chiudere la sessione.',
+            code: 'SESSION_STORE_WRITE_FAILED',
+          };
+        }
+        voce.messaggiPendente = messaggiIniziali;
+      }
       /*
        * ⛔⛔⛔ 27/8, owner: "verifica che i messaggi... persistano dopo il
        * refresh" — riprodotto: il RunStarted di un resume annunciava
@@ -1252,7 +1610,52 @@ export function createSessionRegistry({
         sessionId, taskId: voce.taskId, cartella: voce.cartella, task: taskAnnunciato,
         comandoProva: voce.comandoProva, messaggiIniziali,
         forkDa: voce.forkDa, voceEsistente: voce,
+        versioneGiroRichiesta: prossimaVersioneGiro,
       });
+    },
+
+    /**
+     * Aggiorna il contratto durevole di una sessione già esistente. La
+     * scrittura append-only precede la mutazione in memoria: se il disco
+     * fallisce, il processo non espone uno stato che un reload perderebbe.
+     */
+    async aggiornaImpostazioni(sessionId, patch) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      const chiaviAmmesse = new Set(['modello', 'modelloPlanner', 'reasoning', 'permessi', 'permessiPerAttrezzo']);
+      const chiavi = patch && typeof patch === 'object' && !Array.isArray(patch) ? Object.keys(patch) : [];
+      if (chiavi.length === 0 || chiavi.some((chiave) => !chiaviAmmesse.has(chiave))) {
+        return { erroreAvvio: 'Nessuna impostazione valida da aggiornare', code: 'QUERY_INVALID' };
+      }
+
+      const prossimo = {
+        modello: Object.hasOwn(patch, 'modello') ? patch.modello : voce.modello,
+        modelloPlanner: Object.hasOwn(patch, 'modelloPlanner') ? patch.modelloPlanner : voce.modelloPlanner,
+        reasoning: Object.hasOwn(patch, 'reasoning') ? patch.reasoning : voce.reasoning,
+        permessi: Object.hasOwn(patch, 'permessi') ? patch.permessi : voce.permessi,
+        permessiPerAttrezzo: Object.hasOwn(patch, 'permessiPerAttrezzo') ? patch.permessiPerAttrezzo : voce.permessiPerAttrezzo,
+      };
+      const modelId = voce.provider === 'cloud' && Object.hasOwn(patch, 'modello')
+        ? prossimo.modello
+        : voce.modelId;
+      const record = {
+        tipo: 'impostazioni-sessione',
+        modello: prossimo.modello,
+        modelloPlanner: prossimo.modelloPlanner,
+        reasoning: prossimo.reasoning,
+        permessi: prossimo.permessi,
+        permessiPerAttrezzo: prossimo.permessiPerAttrezzo,
+        modelId,
+      };
+      if (cartellaStore) await registraRigaFn({ cartellaStore, sessionId, record });
+
+      voce.modello = prossimo.modello;
+      voce.modelloPlanner = prossimo.modelloPlanner;
+      voce.reasoning = prossimo.reasoning;
+      voce.permessi = prossimo.permessi;
+      voce.permessiPerAttrezzo = prossimo.permessiPerAttrezzo;
+      voce.modelId = modelId;
+      return { ok: true };
     },
 
     /**
@@ -1754,6 +2157,36 @@ export function createSessionRegistry({
       return { ok: true };
     },
 
+    /**
+     * Richiede un cambio di direzione prioritario durante un giro attivo.
+     * Non tocca la FIFO: ferma al primo confine sicuro, poi `avviaESegui`
+     * riparte sullo stesso sessionId con la storia realmente restituita dal
+     * kernel e il nuovo input utente.
+     */
+    reindirizza(sessionId, testo, { redirectId: redirectIdRichiesto = null } = {}) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      const redirectId = typeof redirectIdRichiesto === 'string' && redirectIdRichiesto.length > 0
+        ? redirectIdRichiesto
+        : randomUUID();
+      if (voce.redirectAnnullati?.has(redirectId) || voce.controller.signal.aborted) {
+        return { erroreAvvio: 'Il reindirizzamento è stato annullato dallo stop', code: 'SESSION_NOT_READY' };
+      }
+      if (voce.conclusa || voce.interrotta) {
+        return { erroreAvvio: 'La sessione non è in corso e non può essere reindirizzata', code: 'SESSION_NOT_READY' };
+      }
+      const pulito = typeof testo === 'string' ? testo.trim() : '';
+      if (!pulito) return { erroreAvvio: 'Il reindirizzamento non può essere vuoto', code: 'QUERY_INVALID' };
+      if (voce.reindirizzamentoPendente) {
+        return { erroreAvvio: 'Un reindirizzamento è già in attesa del prossimo confine sicuro', code: 'SESSION_NOT_READY' };
+      }
+      voce.reindirizzamentoPendente = { redirectId, testo: pulito };
+      broadcast(voce, runRedirectRequested({ redirectId, testo: pulito }));
+      negaApprovazionePendente(voce);
+      voce.controller.abort();
+      return { ok: true, redirectId };
+    },
+
     /** Preview read-only del tree prima che esista una sessione: l'id viene risolto solo nell'allowlist server-side. */
     async anteprimaAlbero(projectId, percorso = '') {
       const progetto = cartelleProgetto.find((voce) => voce.id === projectId);
@@ -1931,12 +2364,27 @@ export function createSessionRegistry({
         ascoltatore(evento);
       }
       voce.ascoltatori.add(ascoltatore);
-      return () => voce.ascoltatori.delete(ascoltatore);
+      attivaWatcherSessione(voce, voce.cartella);
+      let attiva = true;
+      return () => {
+        if (!attiva) return;
+        attiva = false;
+        voce.ascoltatori.delete(ascoltatore);
+        rilasciaWatcherSessioneSeInattiva(voce);
+      };
     },
 
-    ferma(sessionId) {
+    ferma(sessionId, { redirectId: redirectIdInVolo = null } = {}) {
       const voce = sessioni.get(sessionId);
       if (!voce) return false;
+      ricordaRedirectAnnullato(voce, redirectIdInVolo);
+      if (voce.reindirizzamentoPendente) {
+        const { redirectId } = voce.reindirizzamentoPendente;
+        ricordaRedirectAnnullato(voce, redirectId);
+        voce.reindirizzamentoPendente = null;
+        broadcast(voce, runRedirectCancelled({ redirectId }));
+      }
+      negaApprovazionePendente(voce);
       voce.controller.abort();
       return true;
     },
@@ -1980,6 +2428,7 @@ export function createSessionRegistry({
       if (dalVivo) {
         return { erroreAvvio: 'Sessione ancora in corso — fermala prima di eliminarla', code: 'SESSION_STILL_RUNNING' };
       }
+      fermaWatcherSessione(voce);
       sessioni.delete(sessionId);
       if (cartellaStore) await eliminaSessionePersistitaFn({ cartellaStore, sessionId });
       return { ok: true };
@@ -2001,6 +2450,10 @@ export function createSessionRegistry({
           conclusa: voce.conclusa,
           forkDa: voce.forkDa,
           modello: voce.modello ?? null,
+          modelloPlanner: voce.modelloPlanner ?? null,
+          reasoning: voce.reasoning ?? null,
+          permessi: voce.permessi ?? 'Workspace write',
+          permessiPerAttrezzo: voce.permessiPerAttrezzo ?? null,
           provider: voce.provider ?? 'cloud', runtimeId: voce.runtimeId ?? null, modelId: voce.modelId ?? voce.modello ?? null,
           fallbackProvider: voce.fallbackProvider ?? null,
           // ⭐⭐⭐ FASE L (30/8) — true SOLO per una voce ricostruita dopo un riavvio il cui ultimo evento non era RunFinished/RunError: il processo che la eseguiva è sparito, mai un turno "ancora in corso" travestito da tale.

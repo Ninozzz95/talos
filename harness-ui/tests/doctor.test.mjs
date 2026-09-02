@@ -70,3 +70,15 @@ test('provider: Doctor mostra solo stato pubblico e disponibilità del portachia
   assert.deepEqual(risultato.providers, { storeAvailable: true, items: [{ id: 'openrouter', label: 'OpenRouter', keyConfigured: true }] });
   assert.doesNotMatch(JSON.stringify(risultato), /secret|sk-/i);
 });
+
+test('Doctor segnala runtime agente e catalogo task senza confondere processo vivo e prontezza', async () => {
+  const risultato = await diagnosi({
+    chiaveConfigurata: true,
+    ownerRuntime: { configurato: true, pronto: false, dettaglio: 'Il runtime agente non espone ancora tutte le funzioni richieste.' },
+    catalogoTask: { disponibile: false, dettaglio: 'L’elenco delle attività predefinite non è disponibile.' },
+    eseguiComandoSandboxatoFn: async () => ({ enforcement: 'desktop' }),
+    spawnSyncFn: () => ({ status: 0 }),
+  });
+  assert.deepEqual(risultato.ownerRuntime, { configurato: true, pronto: false, dettaglio: 'Il runtime agente non espone ancora tutte le funzioni richieste.' });
+  assert.deepEqual(risultato.catalogoTask, { disponibile: false, dettaglio: 'L’elenco delle attività predefinite non è disponibile.' });
+});

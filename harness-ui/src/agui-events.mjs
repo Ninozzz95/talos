@@ -46,6 +46,32 @@ export function runError({ message, code }) {
     return evento
 }
 
+/**
+ * Lifecycle AVM-owned del reindirizzamento di un giro attivo. AG-UI non
+ * definisce ancora un contratto equivalente a Codex `turn/steer`: questi
+ * eventi restano quindi estensioni dichiarate, come ApprovalRequested e
+ * QueuedMessageDelivered. `redirectId` correla richiesta ed esito senza
+ * affidarsi alla posizione nel buffer; `testo` compare solo negli eventi
+ * che rappresentano un input utente effettivo.
+ */
+export function runRedirectRequested({ redirectId, testo }) {
+    return { type: 'RunRedirectRequested', redirectId, testo }
+}
+
+export function runRedirectApplied({ redirectId, testo }) {
+    return { type: 'RunRedirectApplied', redirectId, testo }
+}
+
+export function runRedirectCancelled({ redirectId }) {
+    return { type: 'RunRedirectCancelled', redirectId }
+}
+
+export function runRedirectFailed({ redirectId, message, code }) {
+    const evento = { type: 'RunRedirectFailed', redirectId, message }
+    if (code !== undefined) evento.code = code
+    return evento
+}
+
 export function textMessageStart({ messageId, role = 'assistant' }) {
     return { type: 'TextMessageStart', messageId, role }
 }

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -537,6 +537,40 @@ test('SESSION-LOCAL-CANCEL-01: ferma abortisce il runtime locale e chiude il gir
   assert.equal(eventi.at(-1).outcome, 'fermato');
 });
 
+test('SESSION-LOCAL-REDIRECT-02 — il runtime locale conserva richiesta originale, risposta parziale e correzione', async () => {
+  const inputVisti = [];
+  let chiamata = 0;
+  const runtime = {
+    async *generateStream(input) {
+      inputVisti.push(input.messages);
+      chiamata += 1;
+      if (chiamata === 1) {
+        yield { type: 'text', value: 'parziale' };
+        await new Promise((resolve) => input.signal.addEventListener('abort', resolve, { once: true }));
+        return;
+      }
+      yield { type: 'text', value: 'OK' };
+      yield { type: 'done' };
+    },
+  };
+  const registro = createSessionRegistry({
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    localRuntimes: { llama: runtime },
+  });
+  const { sessionId } = registro.avvia('task-vero', { provider: 'local', runtimeId: 'llama', modelId: 'model' });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(registro.reindirizza(sessionId, 'correzione').ok, true);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(inputVisti[0], [{ role: 'user', content: 'c' }]);
+  assert.deepEqual(inputVisti[1], [
+    { role: 'user', content: 'c' },
+    { role: 'assistant', content: 'parziale' },
+    { role: 'user', content: 'correzione' },
+  ]);
+});
+
 test('SESSION-LOCAL-FALLBACK-01: fallback cloud solo con consenso esplicito', async () => {
   let chiamateCloud = 0;
   const cloud = async ({ onEvento }) => {
@@ -694,6 +728,76 @@ test('⛔ AL CONTRARIO — senza modelloPlanner esplicito, avviaLibero() lo lasc
 
   assert.equal(finta.ultimoInput.modelloPlanner, undefined);
 });
+
+test('OPEN-WITH-TALOS-REGISTRY-01 — un launch id server-owned usa Workspace write senza diventare Full access', () => {
+  const finta = sessioneControllabile();
+  const consumati = [];
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn,
+    preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
+    resolveWorkspaceLaunchFn: (id) => ({ id, percorso: '/tmp/workspace-da-shell', nome: 'workspace-da-shell' }),
+    consumeWorkspaceLaunchFn: (id) => { consumati.push(id); return true; },
+    modello: 'm', chiave: 'k',
+  });
+
+  const risultato = registro.avviaLibero({ workspaceLaunchId: 'launch-vero', consegna: 'lavora qui', permessi: 'Workspace write' });
+
+  assert.ok(risultato.sessionId);
+  assert.equal(finta.ultimoInput.cartella, '/tmp/workspace-da-shell');
+  assert.equal(finta.ultimoInput.livelloAccesso, undefined);
+  assert.equal(finta.ultimoInput.chiediApprovazioneFn, undefined);
+  assert.equal(registro.elenca().find((sessione) => sessione.sessionId === risultato.sessionId)?.permessi, 'Workspace write');
+  assert.deepEqual(consumati, ['launch-vero']);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('OPEN-WITH-TALOS-REGISTRY-02 — un launch id non disponibile non avvia né consuma', () => {
+  const finta = sessioneControllabile();
+  const consumati = [];
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn,
+    preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
+    resolveWorkspaceLaunchFn: () => { const error = new Error('Collegamento scaduto'); error.code = 'WORKSPACE_LAUNCH_NOT_AVAILABLE'; throw error; },
+    consumeWorkspaceLaunchFn: (id) => consumati.push(id),
+    modello: 'm', chiave: 'k',
+  });
+  const risultato = registro.avviaLibero({ workspaceLaunchId: 'scaduto', consegna: 'x', permessi: 'Workspace write' });
+  assert.equal(risultato.code, 'WORKSPACE_LAUNCH_NOT_AVAILABLE');
+  assert.equal(finta.chiamate, 0);
+  assert.deepEqual(consumati, []);
+});
+
+test('OPEN-WITH-TALOS-REGISTRY-03 — un errore di avvio non brucia l’intenzione', () => {
+  const finta = sessioneControllabile();
+  const consumati = [];
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn,
+    preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
+    resolveWorkspaceLaunchFn: (id) => ({ id, percorso: '/tmp/workspace-da-shell', nome: 'workspace-da-shell' }),
+    consumeWorkspaceLaunchFn: (id) => consumati.push(id),
+    modello: 'm',
+  });
+  const risultato = registro.avviaLibero({ workspaceLaunchId: 'riprova', consegna: 'x', permessi: 'Workspace write' });
+  assert.equal(risultato.code, 'CONFIG_INVALID');
+  assert.equal(finta.chiamate, 0);
+  assert.deepEqual(consumati, []);
+});
+
+test('OPEN-WITH-TALOS-REGISTRY-04 — launch id è mutuamente esclusivo con cartellaId e cartellaLibera', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn,
+    preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
+    resolveWorkspaceLaunchFn: () => ({ percorso: '/tmp/workspace-da-shell', nome: 'workspace-da-shell' }),
+    modello: 'm', chiave: 'k',
+  });
+  for (const extra of [{ cartellaId: '0' }, { cartellaLibera: '/tmp/x' }]) {
+    const risultato = registro.avviaLibero({ workspaceLaunchId: 'launch', ...extra, consegna: 'x', permessi: 'Workspace write' });
+    assert.equal(risultato.code, 'QUERY_INVALID');
+  }
+  assert.equal(finta.chiamate, 0);
+});
+
 
 test('⭐⭐ un resume eredita il modelloPlanner della voce originale, mai perso a metà conversazione', async () => {
   /*
@@ -1358,6 +1462,94 @@ test('⛔ resume() su una sessione ANCORA IN CORSO: SESSION_NOT_READY', async ()
   await new Promise((r) => setImmediate(r));
 });
 
+test('SESSION-RECOVERY-RUNERROR-01 — una sessione conclusa con RunError accetta il follow-up sullo stesso id', async () => {
+  const primoGiro = sessioneControllabile();
+  const secondoGiro = sessioneControllabile();
+  let chiamataNumero = 0;
+  const avviaSessioneFn = (input) => {
+    chiamataNumero += 1;
+    return chiamataNumero === 1 ? primoGiro.avviaSessioneFn(input) : secondoGiro.avviaSessioneFn(input);
+  };
+  const registro = createSessionRegistry({ avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero');
+  primoGiro.concludi(
+    { type: 'RunError', message: 'timeout', code: 'internal-error' },
+    { ok: false, esito: null },
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const ripreso = registro.resume(sessionId, 'riprova adesso');
+
+  assert.equal(ripreso.sessionId, sessionId);
+  assert.equal(secondoGiro.chiamate, 1);
+  assert.deepEqual(secondoGiro.ultimoInput.messaggiIniziali, [
+    { role: 'user', content: 'c' },
+    { role: 'user', content: 'riprova adesso' },
+  ]);
+  secondoGiro.concludi(
+    { type: 'RunFinished', threadId: 't2', runId: 'r2' },
+    { ok: true, esito: { messaggiFinali: secondoGiro.ultimoInput.messaggiIniziali } },
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+});
+
+test('SESSION-RECOVERY-PARTIAL-03 — testo assistant non chiuso non contamina il follow-up', async () => {
+  const primoGiro = sessioneControllabile();
+  const secondoGiro = sessioneControllabile();
+  let chiamataNumero = 0;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: (input) => (++chiamataNumero === 1 ? primoGiro.avviaSessioneFn(input) : secondoGiro.avviaSessioneFn(input)),
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'm',
+    chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  primoGiro.emetti({ type: 'TextMessageStart', messageId: 'assistant-parziale', role: 'assistant' });
+  primoGiro.emetti({ type: 'TextMessageContent', messageId: 'assistant-parziale', delta: 'frase mai conclusa' });
+  primoGiro.concludi({ type: 'RunError', message: 'timeout', code: 'internal-error' }, { ok: false, esito: null });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  registro.resume(sessionId, 'continua');
+
+  assert.deepEqual(secondoGiro.ultimoInput.messaggiIniziali, [
+    { role: 'user', content: 'c' },
+    { role: 'user', content: 'continua' },
+  ]);
+  secondoGiro.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' });
+  await new Promise((resolve) => setImmediate(resolve));
+});
+
+test('SESSION-RECOVERY-COMPLETE-04 — testo assistant chiuso entra una volta e reasoning/tool restano fuori', async () => {
+  const primoGiro = sessioneControllabile();
+  const secondoGiro = sessioneControllabile();
+  let chiamataNumero = 0;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: (input) => (++chiamataNumero === 1 ? primoGiro.avviaSessioneFn(input) : secondoGiro.avviaSessioneFn(input)),
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'm',
+    chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  primoGiro.emetti({ type: 'ReasoningMessageContent', messageId: 'reasoning', delta: 'segreto' });
+  primoGiro.emetti({ type: 'ToolCallResult', toolCallId: 'tool', content: 'output tecnico' });
+  primoGiro.emetti({ type: 'TextMessageStart', messageId: 'assistant-completo', role: 'assistant' });
+  primoGiro.emetti({ type: 'TextMessageContent', messageId: 'assistant-completo', delta: 'risposta ' });
+  primoGiro.emetti({ type: 'TextMessageContent', messageId: 'assistant-completo', delta: 'completa' });
+  primoGiro.emetti({ type: 'TextMessageEnd', messageId: 'assistant-completo' });
+  primoGiro.concludi({ type: 'RunError', message: 'errore dopo il testo', code: 'internal-error' }, { ok: false, esito: null });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  registro.resume(sessionId, 'continua');
+
+  assert.deepEqual(secondoGiro.ultimoInput.messaggiIniziali, [
+    { role: 'user', content: 'c' },
+    { role: 'assistant', content: 'risposta completa' },
+    { role: 'user', content: 'continua' },
+  ]);
+  secondoGiro.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' });
+  await new Promise((resolve) => setImmediate(resolve));
+});
+
 test('⭐⭐⭐ resume() su una sessione CONCLUSA: STESSO sessionId, un giro in più appeso allo STESSO buffer, mai un gap', async () => {
   const storiaDelPrimoGiro = [{ role: 'system', content: 's' }, { role: 'user', content: 'c' }, { role: 'assistant', content: 'primo giro fatto' }];
 
@@ -1950,10 +2142,17 @@ test('⭐⭐⭐ avvia() chiama guardaWorkspaceFn con la cartella VERA della sess
   assert.deepEqual(evento.percorsi, ['nuovo.txt', 'sub/altro.txt']);
 });
 
-test('⛔ AL CONTRARIO — un resume sulla STESSA sessione non chiama guardaWorkspaceFn una seconda volta', async () => {
+test('⛔ AL CONTRARIO — un resume sulla stessa sessione riapre il watcher rilasciato senza duplicarne due vivi', async () => {
   const finta = sessioneControllabile();
   let chiamate = 0;
-  const guardaWorkspaceFn = () => { chiamate += 1; return () => {}; };
+  let vivi = 0;
+  let massimoVivi = 0;
+  const guardaWorkspaceFn = () => {
+    chiamate += 1;
+    vivi += 1;
+    massimoVivi = Math.max(massimoVivi, vivi);
+    return () => { vivi -= 1; };
+  };
   const registro = createSessionRegistry({
     avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, guardaWorkspaceFn, modello: 'm', chiave: 'k',
   });
@@ -1962,8 +2161,95 @@ test('⛔ AL CONTRARIO — un resume sulla STESSA sessione non chiama guardaWork
   await new Promise((r) => setImmediate(r));
 
   assert.equal(chiamate, 1, 'un solo watcher acceso al primo avvio');
+  assert.equal(vivi, 0, 'il watcher del giro concluso è già stato rilasciato');
   registro.resume(sessionId, 'un altro messaggio');
-  assert.equal(chiamate, 1, 'il resume riusa la STESSA voce — nessun secondo watcher sulla stessa cartella');
+  assert.equal(chiamate, 2, 'il resume riapre il watcher per il nuovo giro');
+  assert.equal(vivi, 1);
+  assert.equal(massimoVivi, 1, 'mai due watcher contemporanei per la stessa voce');
+});
+
+test('SESSION-WATCHER-LIFECYCLE-27 — un giro concluso senza client rilascia il watcher', async () => {
+  const finta = sessioneControllabile();
+  let avviati = 0;
+  let fermati = 0;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn,
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    guardaWorkspaceFn: () => { avviati += 1; return () => { fermati += 1; }; },
+    modello: 'm',
+    chiave: 'k',
+  });
+  registro.avvia('task-vero');
+  assert.equal(avviati, 1);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await new Promise((r) => setImmediate(r));
+  assert.equal(fermati, 1, 'nessun client osserva più il workspace concluso');
+});
+
+test('SESSION-WATCHER-LIFECYCLE-28 — un client connesso conserva il watcher dopo RunFinished e lo rilascia alla chiusura', async () => {
+  const finta = sessioneControllabile();
+  let fermati = 0;
+  let notificaEsterna;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn,
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    guardaWorkspaceFn: (_cartella, onCambiamento) => {
+      notificaEsterna = onCambiamento;
+      return () => { fermati += 1; };
+    },
+    modello: 'm',
+    chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  const ricevuti = [];
+  const disiscrivi = registro.iscriviti(sessionId, (evento) => ricevuti.push(evento));
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await new Promise((r) => setImmediate(r));
+  assert.equal(fermati, 0, 'lo stream ancora aperto possiede il watcher');
+  notificaEsterna(['esterno.txt']);
+  assert.ok(ricevuti.some((evento) => evento.type === 'WorkspaceChanged'));
+  disiscrivi();
+  assert.equal(fermati, 1);
+});
+
+test('SESSION-WATCHER-LIFECYCLE-29 — selezionare una cronologia conclusa riattiva una volta e deselezionarla rilascia', async () => {
+  const finta = sessioneControllabile();
+  let avviati = 0;
+  let fermati = 0;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn,
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    guardaWorkspaceFn: () => { avviati += 1; return () => { fermati += 1; }; },
+    modello: 'm',
+    chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual({ avviati, fermati }, { avviati: 1, fermati: 1 });
+  const disiscrivi = registro.iscriviti(sessionId, () => {});
+  assert.deepEqual({ avviati, fermati }, { avviati: 2, fermati: 1 });
+  disiscrivi();
+  assert.deepEqual({ avviati, fermati }, { avviati: 2, fermati: 2 });
+});
+
+test('SESSION-WATCHER-LIFECYCLE-30 — eliminare una sessione rilascia il watcher anche con un client ancora iscritto', async () => {
+  const finta = sessioneControllabile();
+  let fermati = 0;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn,
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    guardaWorkspaceFn: () => () => { fermati += 1; },
+    modello: 'm',
+    chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  registro.iscriviti(sessionId, () => {});
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await new Promise((r) => setImmediate(r));
+  assert.equal(fermati, 0);
+  assert.deepEqual(await registro.elimina(sessionId), { ok: true });
+  assert.equal(fermati, 1);
 });
 
 /*
@@ -2572,6 +2858,130 @@ function cartellaStoreVera() {
   return mkdtempSync(join(tmpdir(), 'talos-session-store-registry-'));
 }
 
+test('SESSION-SETTINGS-DURABILITY-01 — impostazioni aggiornate guidano elenco, resume e ripristino JSONL', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const finta = sessioneControllabile();
+    const primo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'openai/gpt-default', chiave: 'k', cartellaStore });
+    const { sessionId } = primo.avvia('task-vero', { modelloScelto: 'openai/gpt-default', reasoningScelto: { effort: 'low' }, permessiScelto: 'Workspace write' });
+    finta.concludi(
+      { type: 'RunFinished', threadId: 't1', runId: 'r1' },
+      { ok: true, esito: { messaggiFinali: [{ role: 'user', content: 'ciao' }, { role: 'assistant', content: 'ciao' }] } },
+    );
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((r) => r.tipo === 'messaggi-finali'));
+
+    const aggiornato = await primo.aggiornaImpostazioni(sessionId, {
+      modello: 'google/gemini-3.7-flash',
+      reasoning: { effort: 'xhigh' },
+      permessi: 'Read only',
+      permessiPerAttrezzo: { scrivi: 'nega', shell: 'chiedi' },
+    });
+    assert.equal(aggiornato.ok, true);
+    const inElenco = primo.elenca()[0];
+    assert.equal(inElenco.modello, 'google/gemini-3.7-flash');
+    assert.deepEqual(inElenco.reasoning, { effort: 'xhigh' });
+    assert.equal(inElenco.permessi, 'Read only');
+    assert.deepEqual(inElenco.permessiPerAttrezzo, { scrivi: 'nega', shell: 'chiedi' });
+
+    const ripreso = primo.resume(sessionId, 'continua');
+    assert.equal(ripreso.sessionId, sessionId);
+    assert.equal(finta.ultimoInput.modello, 'google/gemini-3.7-flash');
+    assert.deepEqual(finta.ultimoInput.reasoning, { effort: 'xhigh' });
+    assert.equal(finta.ultimoInput.livelloAccesso, 'lettura');
+    assert.deepEqual(finta.ultimoInput.permessiPerAttrezzo, { scrivi: 'nega', shell: 'chiedi' });
+
+    const secondo = createSessionRegistry({ modello: 'openai/gpt-default', chiave: 'k', cartellaStore });
+    await secondo.ripristina();
+    const ripristinata = secondo.elenca()[0];
+    assert.equal(ripristinata.modello, 'google/gemini-3.7-flash');
+    assert.deepEqual(ripristinata.reasoning, { effort: 'xhigh' });
+    assert.equal(ripristinata.permessi, 'Read only');
+    assert.deepEqual(ripristinata.permessiPerAttrezzo, { scrivi: 'nega', shell: 'chiedi' });
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('SESSION-SETTINGS-DURABILITY-01 contrario — id assente e patch vuota non mutano alcuna sessione', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'openai/gpt-default', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero');
+  const prima = registro.elenca()[0];
+  assert.deepEqual(await registro.aggiornaImpostazioni('assente', { permessi: 'Read only' }), { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+  assert.equal((await registro.aggiornaImpostazioni(sessionId, {})).code, 'QUERY_INVALID');
+  assert.deepEqual(registro.elenca()[0], prima);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('SESSION-SETTINGS-DURABILITY-01 contrario — una scrittura JSONL fallita non aggiorna la voce in memoria', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const finta = sessioneControllabile();
+    const registro = createSessionRegistry({
+      avviaSessioneFn: finta.avviaSessioneFn,
+      preparaEsecuzioneFn: preparaEsecuzioneFinta,
+      modello: 'openai/gpt-default',
+      chiave: 'k',
+      cartellaStore,
+      registraRigaFn: async () => { throw new Error('disco non disponibile'); },
+    });
+    const { sessionId } = registro.avvia('task-vero');
+    await assert.rejects(registro.aggiornaImpostazioni(sessionId, { permessi: 'Read only' }), /disco non disponibile/);
+    assert.equal(registro.elenca()[0].permessi, 'Workspace write');
+    finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('MODEL-SWITCH-CONTINUITY-05 — Qwen → altro modello → Qwen conserva cronologia e tool trace senza salti', async () => {
+  const inputPerGiro = [];
+  const storiaConTool = [
+    { role: 'user', content: 'leggi il progetto' },
+    { role: 'assistant', content: null, tool_calls: [{ id: 'call-1', type: 'function', function: { name: 'leggi', arguments: '{"percorso":"README.md"}' } }] },
+    { role: 'tool', tool_call_id: 'call-1', content: 'contenuto README' },
+    { role: 'assistant', content: 'Ho letto README.md.' },
+  ];
+  const avviaSessioneFn = async (input) => {
+    inputPerGiro.push(structuredClone({ modello: input.modello, reasoning: input.reasoning, messaggiIniziali: input.messaggiIniziali }));
+    const giro = inputPerGiro.length;
+    input.onEvento({ type: 'RunStarted', threadId: 't', runId: `r${giro}`, contesto: { modello: input.modello, reasoning: input.reasoning ?? null } });
+    input.onEvento({ type: 'ToolCallStart', toolCallId: `tool-${giro}`, toolCallName: 'leggi' });
+    input.onEvento({ type: 'ToolCallResult', toolCallId: `tool-${giro}`, content: `esito-${giro}` });
+    input.onEvento({ type: 'RunFinished', threadId: 't', runId: `r${giro}` });
+    const messaggiFinali = giro === 1
+      ? storiaConTool
+      : [...input.messaggiIniziali, { role: 'assistant', content: `risposta-${giro}` }];
+    return { ok: true, esito: { comeFinita: 'concluso', messaggiFinali } };
+  };
+  const registro = createSessionRegistry({ avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'qwen/qwen3.8-flash', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero', { modelloScelto: 'qwen/qwen3.8-flash', reasoningScelto: { effort: 'low' } });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  await registro.aggiornaImpostazioni(sessionId, { modello: 'google/gemini-3.7-flash', reasoning: { effort: 'medium' } });
+  registro.resume(sessionId, 'continua con Gemini');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(inputPerGiro[1].modello, 'google/gemini-3.7-flash');
+  assert.deepEqual(inputPerGiro[1].messaggiIniziali, [...storiaConTool, { role: 'user', content: 'continua con Gemini' }]);
+
+  await registro.aggiornaImpostazioni(sessionId, { modello: 'qwen/qwen3.8-flash', reasoning: { effort: 'low' } });
+  registro.resume(sessionId, 'torna a Qwen');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(inputPerGiro[2].modello, 'qwen/qwen3.8-flash');
+  assert.deepEqual(inputPerGiro[2].messaggiIniziali, [
+    ...storiaConTool,
+    { role: 'user', content: 'continua con Gemini' },
+    { role: 'assistant', content: 'risposta-2' },
+    { role: 'user', content: 'torna a Qwen' },
+  ]);
+  const esportata = registro.esporta(sessionId).eventi;
+  assert.equal(esportata.filter((evento) => evento.type === 'RunStarted').length, 3);
+  assert.equal(esportata.filter((evento) => evento.type === 'ToolCallResult').length, 3);
+  assert.deepEqual(esportata.filter((evento) => evento.type === 'RunStarted').map((evento) => evento.contesto.modello), [
+    'qwen/qwen3.8-flash', 'google/gemini-3.7-flash', 'qwen/qwen3.8-flash',
+  ]);
+});
+
 /*
  * ⛔⛔⛔ Le scritture di `registraRigaFn` in session-registry.mjs sono
  * fire-and-forget per costruzione (session-registry non deve MAI bloccare
@@ -2669,6 +3079,114 @@ test('⭐⭐⭐⭐⭐ ripristina(): una sessione CONCLUSA prima del riavvio torn
   }
 });
 
+test('SESSION-RESTORE-LAZY-WATCHER-24 — boot e intervallo fra turni restano passivi, ogni resume possiede un solo watcher', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const sessionId = 'sess-watcher-lazy';
+  try {
+    registraRigaSync({
+      cartellaStore,
+      sessionId,
+      record: {
+        tipo: 'intestazione', sessionId, taskId: 'task-vero', cartella: '/tmp/workspace-storico',
+        task: { id: 'task-vero', consegna: 'prima domanda' }, comandoProva: 'npm test',
+        forkDa: null, avviataAlle: new Date().toISOString(), modello: 'm', modelloPlanner: null,
+        reasoning: null, mobile: false, permessi: 'Workspace write', permessiPerAttrezzo: null,
+        padreId: null, profonditaDelega: 0,
+      },
+    });
+    registraRigaSync({
+      cartellaStore,
+      sessionId,
+      record: {
+        tipo: 'messaggi-finali', versioneGiro: 1,
+        messaggiFinali: [
+          { role: 'user', content: 'prima domanda' },
+          { role: 'assistant', content: 'prima risposta' },
+        ],
+      },
+    });
+    registraRigaSync({ cartellaStore, sessionId, record: { type: 'RunFinished', threadId: 't1', runId: 'r1', _sequenza: 1 } });
+
+    const finta = sessioneControllabile();
+    let watcherAvviati = 0;
+    let watcherFermati = 0;
+    let watcherVivi = 0;
+    let massimoWatcherVivi = 0;
+    const registro = createSessionRegistry({
+      avviaSessioneFn: finta.avviaSessioneFn,
+      preparaEsecuzioneFn: preparaEsecuzioneFinta,
+      guardaWorkspaceFn: () => {
+        watcherAvviati += 1;
+        watcherVivi += 1;
+        massimoWatcherVivi = Math.max(massimoWatcherVivi, watcherVivi);
+        return () => { watcherFermati += 1; watcherVivi -= 1; };
+      },
+      modello: 'm',
+      chiave: 'k',
+      cartellaStore,
+    });
+
+    await registro.ripristina();
+    assert.equal(watcherAvviati, 0, 'la cronologia passiva non deve scandire il workspace durante il boot');
+
+    assert.equal(registro.resume(sessionId, 'seconda domanda').sessionId, sessionId);
+    assert.equal(watcherAvviati, 1, 'il primo turno realmente ripreso attiva il watcher');
+    finta.concludi(
+      { type: 'RunFinished', threadId: 't2', runId: 'r2' },
+      { ok: true, esito: { messaggiFinali: [{ role: 'user', content: 'seconda domanda' }, { role: 'assistant', content: 'seconda risposta' }] } },
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual({ watcherFermati, watcherVivi }, { watcherFermati: 1, watcherVivi: 0 }, 'fra due turni non resta alcun watcher');
+
+    assert.equal(registro.resume(sessionId, 'terza domanda').sessionId, sessionId);
+    assert.equal(watcherAvviati, 2, 'il turno successivo riapre il watcher rilasciato');
+    assert.equal(watcherVivi, 1);
+    assert.equal(massimoWatcherVivi, 1, 'mai due watcher contemporanei per la stessa cronologia');
+    finta.concludi({ type: 'RunFinished', threadId: 't3', runId: 'r3' });
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('REGISTRY-RESTORE-LATEST-HISTORY-18 — dopo più turni il riavvio eredita l’ultimo snapshot della conversazione, non il primo', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const sessionId = 'sess-storia-piu-recente';
+    const storiaPrimoTurno = [
+      { role: 'user', content: 'prima domanda' },
+      { role: 'assistant', content: 'prima risposta' },
+    ];
+    const storiaSecondoTurno = [
+      ...storiaPrimoTurno,
+      { role: 'user', content: 'seconda domanda' },
+      { role: 'assistant', content: 'seconda risposta' },
+    ];
+    registraRigaSync({
+      cartellaStore,
+      sessionId,
+      record: { tipo: 'intestazione', sessionId, taskId: 'task-vero', cartella: '/tmp/x', task: { id: 'task-vero', consegna: 'c' }, comandoProva: 'npm test', forkDa: null, avviataAlle: new Date().toISOString(), modello: 'm', modelloPlanner: null, reasoning: null, mobile: false, permessi: 'Workspace write', permessiPerAttrezzo: null, padreId: null, profonditaDelega: 0 },
+    });
+    registraRigaSync({ cartellaStore, sessionId, record: { tipo: 'messaggi-finali', messaggiFinali: storiaPrimoTurno } });
+    registraRigaSync({ cartellaStore, sessionId, record: { type: 'RunFinished', threadId: 't1', runId: 'r1', _sequenza: 1 } });
+    registraRigaSync({ cartellaStore, sessionId, record: { tipo: 'messaggi-finali', messaggiFinali: storiaSecondoTurno } });
+
+    const giroFork = sessioneControllabile();
+    const registro = createSessionRegistry({ avviaSessioneFn: giroFork.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    await registro.ripristina();
+    const fork = registro.forka(sessionId);
+
+    assert.ok(fork.sessionId);
+    assert.deepEqual(giroFork.ultimoInput.messaggiIniziali, storiaSecondoTurno);
+    giroFork.concludi(
+      { type: 'RunFinished', threadId: 'tf', runId: 'rf' },
+      { ok: true, esito: { messaggiFinali: storiaSecondoTurno } },
+    );
+    await attendiRegistroSuDisco(cartellaStore, fork.sessionId, (record) => record.some((r) => r.tipo === 'messaggi-finali'));
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
 test('⭐⭐ J — ripristina() conserva il verdetto fallito di una delega di modifica senza artefatto', async () => {
   const cartellaStore = cartellaStoreVera();
   try {
@@ -2691,7 +3209,7 @@ test('⭐⭐ J — ripristina() conserva il verdetto fallito di una delega di mo
   }
 });
 
-test('⛔⛔⛔ AL CONTRARIO — ripristina(): messaggi-finali sul disco SENZA che l\'ultimo evento sia RunFinished/RunError conta comunque come conclusa — trovato da un test INTERMITTENTE (30/8), non da lettura: le due scritture sono fire-and-forget indipendenti, l\'ordine su disco non è garantito', async () => {
+test('SESSION-RECOVERY-VERSIONED-FINAL-21 — uno snapshot finale correlato al giro conferma la conclusione anche se l’evento terminale non è arrivato sul disco', async () => {
   const cartellaStore = cartellaStoreVera();
   try {
     registraRigaSync({
@@ -2699,15 +3217,102 @@ test('⛔⛔⛔ AL CONTRARIO — ripristina(): messaggi-finali sul disco SENZA c
       record: { tipo: 'intestazione', sessionId: 'sess-gara', taskId: 'task-vero', cartella: '/tmp/x', task: { id: 'task-vero', consegna: 'c' }, comandoProva: 'npm test', forkDa: null, avviataAlle: new Date().toISOString(), modello: 'm', modelloPlanner: null, reasoning: null, mobile: false, permessi: 'Workspace write', permessiPerAttrezzo: null, padreId: null, profonditaDelega: 0 },
     });
     registraRigaSync({ cartellaStore, sessionId: 'sess-gara', record: { type: 'RunStarted', threadId: 't1', runId: 'r1', _sequenza: 1 } });
-    // ⛔ NESSUN RunFinished scritto — esattamente lo scenario in cui la scrittura dell'evento perde la gara contro quella di messaggi-finali.
-    registraRigaSync({ cartellaStore, sessionId: 'sess-gara', record: { tipo: 'messaggi-finali', messaggiFinali: [{ role: 'user', content: 'ciao' }] } });
+    // Nessun RunFinished sul disco: lo snapshot sincrono e correlato al giro 1 è la prova durevole che il ramo finale ha concluso.
+    registraRigaSync({ cartellaStore, sessionId: 'sess-gara', record: { tipo: 'messaggi-finali', versioneGiro: 1, messaggiFinali: [{ role: 'user', content: 'ciao' }] } });
 
     const registro = createSessionRegistry({ modello: 'm', chiave: 'k', cartellaStore });
     const { ripristinate } = await registro.ripristina();
     assert.equal(ripristinate, 1);
     const elenco = registro.elenca();
-    assert.equal(elenco[0].conclusa, true, 'la PRESENZA di messaggi-finali basta: quella riga non si scrive mai su un run senza contenuto vero');
+    assert.equal(elenco[0].conclusa, true, 'solo uno snapshot correlato al giro corrente può sostituire l’evento terminale mancante');
     assert.equal(elenco[0].interrotta, false);
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('SESSION-RECOVERY-TRAILING-WORKSPACE-09 — WorkspaceChanged dopo RunError non riapre il giro concluso', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const sessionId = 'sess-runerror-con-refresh';
+  try {
+    registraRigaSync({
+      cartellaStore, sessionId,
+      record: { tipo: 'intestazione', sessionId, taskId: 'task-vero', cartella: '/tmp/x', task: { id: 'task-vero', consegna: 'c' }, comandoProva: 'npm test', forkDa: null, avviataAlle: new Date().toISOString(), modello: 'm', modelloPlanner: null, reasoning: null, mobile: false, permessi: 'Workspace write', permessiPerAttrezzo: null, padreId: null, profonditaDelega: 0 },
+    });
+    registraRigaSync({ cartellaStore, sessionId, record: { type: 'RunStarted', threadId: 't1', runId: 'r1', input: { consegna: 'c' }, _sequenza: 1 } });
+    registraRigaSync({ cartellaStore, sessionId, record: { type: 'RunError', message: 'timeout', code: 'internal-error', _sequenza: 2 } });
+    registraRigaSync({ cartellaStore, sessionId, record: { type: 'WorkspaceChanged', percorsi: ['README.md'], _sequenza: 3 } });
+
+    const registro = createSessionRegistry({ modello: 'm', chiave: 'k', cartellaStore });
+    await registro.ripristina();
+    const [voce] = registro.elenca();
+    assert.equal(voce.conclusa, true);
+    assert.equal(voce.interrotta, false);
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('SESSION-RECOVERY-STALE-HISTORY-10 — una vecchia storia finale non conclude un giro successivo rimasto a metà', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const sessionId = 'sess-secondo-giro-perso';
+  try {
+    registraRigaSync({
+      cartellaStore, sessionId,
+      record: { tipo: 'intestazione', sessionId, taskId: 'task-vero', cartella: '/tmp/x', task: { id: 'task-vero', consegna: 'prima domanda' }, comandoProva: 'npm test', forkDa: null, avviataAlle: new Date().toISOString(), modello: 'm', modelloPlanner: null, reasoning: null, mobile: false, permessi: 'Workspace write', permessiPerAttrezzo: null, padreId: null, profonditaDelega: 0 },
+    });
+    registraRigaSync({ cartellaStore, sessionId, record: { type: 'RunStarted', threadId: 't1', runId: 'r1', input: { consegna: 'prima domanda' }, _sequenza: 1 } });
+    registraRigaSync({ cartellaStore, sessionId, record: { tipo: 'messaggi-finali', messaggiFinali: [{ role: 'user', content: 'prima domanda' }, { role: 'assistant', content: 'prima risposta' }] } });
+    registraRigaSync({ cartellaStore, sessionId, record: { type: 'RunFinished', threadId: 't1', runId: 'r1', _sequenza: 2 } });
+    registraRigaSync({ cartellaStore, sessionId, record: { type: 'RunStarted', threadId: 't2', runId: 'r2', input: { consegna: 'seconda domanda', seguito: true }, _sequenza: 3 } });
+    registraRigaSync({ cartellaStore, sessionId, record: { type: 'WorkspaceChanged', percorsi: ['README.md'], _sequenza: 4 } });
+
+    const registro = createSessionRegistry({ modello: 'm', chiave: 'k', cartellaStore });
+    await registro.ripristina();
+    const [voce] = registro.elenca();
+    assert.equal(voce.conclusa, false);
+    assert.equal(voce.interrotta, true);
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('SESSION-RECOVERY-LATE-FINAL-18 — una storia del giro precedente scritta in ritardo non conclude né sostituisce il checkpoint del giro nuovo', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const sessionId = 'sess-finale-vecchia-in-ritardo';
+  const storiaPrimoGiro = [
+    { role: 'user', content: 'prima domanda' },
+    { role: 'assistant', content: 'prima risposta' },
+  ];
+  const checkpointSecondoGiro = [...storiaPrimoGiro, { role: 'user', content: 'seconda domanda' }];
+  try {
+    registraRigaSync({
+      cartellaStore, sessionId,
+      record: { tipo: 'intestazione', sessionId, taskId: 'task-vero', cartella: '/tmp/x', task: { id: 'task-vero', consegna: 'prima domanda' }, comandoProva: 'npm test', forkDa: null, avviataAlle: new Date().toISOString(), modello: 'm', modelloPlanner: null, reasoning: null, mobile: false, permessi: 'Workspace write', permessiPerAttrezzo: null, padreId: null, profonditaDelega: 0 },
+    });
+    registraRigaSync({ cartellaStore, sessionId, record: { type: 'RunStarted', threadId: 't1', runId: 'r1', input: { consegna: 'prima domanda' }, _sequenza: 1 } });
+    registraRigaSync({ cartellaStore, sessionId, record: { type: 'RunFinished', threadId: 't1', runId: 'r1', _sequenza: 2 } });
+    registraRigaSync({ cartellaStore, sessionId, record: { tipo: 'checkpoint-ripresa', versioneGiro: 2, messaggi: checkpointSecondoGiro } });
+    registraRigaSync({ cartellaStore, sessionId, record: { type: 'RunStarted', threadId: 't2', runId: 'r2', input: { consegna: 'seconda domanda', seguito: true }, _sequenza: 3 } });
+    // Simula la Promise di append del giro 1 che si assesta fisicamente dopo l'avvio del giro 2.
+    registraRigaSync({ cartellaStore, sessionId, record: { tipo: 'messaggi-finali', versioneGiro: 1, messaggiFinali: storiaPrimoGiro } });
+
+    const giroRetry = sessioneControllabile();
+    const registro = createSessionRegistry({ avviaSessioneFn: giroRetry.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    await registro.ripristina();
+    assert.equal(registro.elenca()[0].conclusa, false);
+    assert.equal(registro.elenca()[0].interrotta, true);
+
+    assert.equal(registro.resume(sessionId, 'riprova terzo giro').sessionId, sessionId);
+    assert.deepEqual(giroRetry.ultimoInput.messaggiIniziali, [
+      ...checkpointSecondoGiro,
+      { role: 'user', content: 'riprova terzo giro' },
+    ]);
+    giroRetry.concludi({ type: 'RunFinished', threadId: 't3', runId: 'r3' });
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => (
+      record.filter((item) => item.type === 'RunFinished').length === 2
+      && record.some((item) => item.tipo === 'messaggi-finali' && item.versioneGiro === 3)
+    ));
   } finally {
     rmSync(cartellaStore, { recursive: true, force: true });
   }
@@ -2733,18 +3338,323 @@ test('⛔⛔⛔ AL CONTRARIO — ripristina(): una sessione MAI conclusa (crash 
   }
 });
 
-test('⛔⛔ AL CONTRARIO — ripristina(): una sessione interrotta (messaggiFinali mai scritto) rifiuta resume() onestamente, stesso gate già esistente', async () => {
+test('SESSION-RECOVERY-RESTART-02 — RunError ripristinato dal JSONL accetta un follow-up e conserva il contratto', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const sessionId = 'sess-runerror-ripristinata';
+  try {
+    registraRigaSync({
+      cartellaStore,
+      sessionId,
+      record: {
+        tipo: 'intestazione', sessionId, taskId: 'task-vero', cartella: '/tmp/x',
+        task: { id: 'task-vero', consegna: 'domanda originale' }, comandoProva: 'npm test',
+        forkDa: null, avviataAlle: new Date().toISOString(), modello: 'm', modelloPlanner: null,
+        reasoning: { effort: 'high' }, mobile: false, permessi: 'Read only', permessiPerAttrezzo: null,
+        padreId: null, profonditaDelega: 0, provider: 'cloud', runtimeId: null, modelId: 'm', fallbackConsent: false,
+      },
+    });
+    registraRigaSync({
+      cartellaStore,
+      sessionId,
+      record: {
+        type: 'RunStarted', threadId: 'thread-old', runId: 'run-old',
+        input: { consegna: 'domanda originale', progetto: 'x' }, _sequenza: 1,
+      },
+    });
+    registraRigaSync({
+      cartellaStore,
+      sessionId,
+      record: { type: 'RunError', message: 'timeout', code: 'internal-error', _sequenza: 2 },
+    });
+
+    const giroRipreso = sessioneControllabile();
+    const registro = createSessionRegistry({
+      avviaSessioneFn: giroRipreso.avviaSessioneFn,
+      preparaEsecuzioneFn: preparaEsecuzioneFinta,
+      modello: 'default',
+      chiave: 'k',
+      cartellaStore,
+    });
+    await registro.ripristina();
+
+    const ripreso = registro.resume(sessionId, 'nuova domanda');
+
+    assert.equal(ripreso.sessionId, sessionId);
+    assert.equal(giroRipreso.ultimoInput.cartella, '/tmp/x');
+    assert.equal(giroRipreso.ultimoInput.modello, 'm');
+    assert.equal(giroRipreso.ultimoInput.livelloAccesso, 'lettura');
+    assert.deepEqual(giroRipreso.ultimoInput.reasoning, { effort: 'high' });
+    assert.deepEqual(giroRipreso.ultimoInput.messaggiIniziali, [
+      { role: 'user', content: 'domanda originale' },
+      { role: 'user', content: 'nuova domanda' },
+    ]);
+    giroRipreso.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' });
+    await new Promise((resolve) => setImmediate(resolve));
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => (
+      record.some((item) => item.tipo === 'messaggi-finali')
+      && record.some((item) => item.type === 'RunFinished')
+    ));
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('SESSION-RECOVERY-INTERRUPTED-05 — una sessione interrotta dal riavvio accetta un nuovo turno sullo stesso id', async () => {
   const cartellaStore = cartellaStoreVera();
   try {
-    const finta = sessioneControllabile();
-    const primo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    const giroPerso = sessioneControllabile();
+    const primo = createSessionRegistry({ avviaSessioneFn: giroPerso.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
     const { sessionId } = primo.avvia('task-vero');
     await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((r) => r.tipo === 'intestazione'));
 
-    const secondo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    const giroRipreso = sessioneControllabile();
+    const secondo = createSessionRegistry({ avviaSessioneFn: giroRipreso.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
     await secondo.ripristina();
     const esito = secondo.resume(sessionId, 'un follow-up');
-    assert.deepEqual(esito, { erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server e non può essere ripresa: avvia una sessione nuova.', code: 'SESSION_NOT_READY' });
+    assert.equal(esito.sessionId, sessionId);
+    assert.equal(secondo.elenca()[0].interrotta, false, 'il nuovo giro è vivo, non resta marcato come interrotto');
+    assert.deepEqual(giroRipreso.ultimoInput.messaggiIniziali, [
+      { role: 'user', content: 'c' },
+      { role: 'user', content: 'un follow-up' },
+    ]);
+    giroRipreso.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' });
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => (
+      record.some((item) => item.tipo === 'messaggi-finali')
+      && record.some((item) => item.type === 'RunFinished')
+    ));
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('SESSION-RECOVERY-REACTIVATE-15 — il nuovo giro rimuove subito lo stato interrotto', async () => {
+  const primoGiro = sessioneControllabile();
+  const secondoGiro = sessioneControllabile();
+  let chiamate = 0;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: (input) => (++chiamate === 1 ? primoGiro.avviaSessioneFn(input) : secondoGiro.avviaSessioneFn(input)),
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'm', chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  const storia = [{ role: 'user', content: 'c' }, { role: 'assistant', content: 'risposta' }];
+  primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { messaggiFinali: storia } });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(registro.resume(sessionId, 'nuovo turno').sessionId, sessionId);
+  const [attiva] = registro.elenca();
+  assert.equal(attiva.conclusa, false);
+  assert.equal(attiva.interrotta, false);
+  secondoGiro.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' });
+  await new Promise((resolve) => setImmediate(resolve));
+});
+
+test('SESSION-RECOVERY-CONCURRENT-14 — una cronologia esistente non consente due resume concorrenti', async () => {
+  const primoGiro = sessioneControllabile();
+  const secondoGiro = sessioneControllabile();
+  let chiamate = 0;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: (input) => {
+      chiamate += 1;
+      return chiamate === 1 ? primoGiro.avviaSessioneFn(input) : secondoGiro.avviaSessioneFn(input);
+    },
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'm',
+    chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  primoGiro.concludi(
+    { type: 'RunFinished', threadId: 't1', runId: 'r1' },
+    { ok: true, esito: { messaggiFinali: [{ role: 'user', content: 'c' }, { role: 'assistant', content: 'prima risposta' }] } },
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(registro.resume(sessionId, 'secondo turno').sessionId, sessionId);
+  const concorrente = registro.resume(sessionId, 'terzo turno concorrente');
+
+  assert.equal(concorrente.code, 'SESSION_NOT_READY');
+  assert.equal(chiamate, 2, 'il runtime viene invocato una sola volta per il giro vivo');
+  secondoGiro.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' });
+  await new Promise((resolve) => setImmediate(resolve));
+});
+
+test('SESSION-RECOVERY-DURABLE-BEFORE-RUNTIME-11 — il checkpoint è sul disco prima della chiamata runtime', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const primoGiro = sessioneControllabile();
+    const secondoGiro = sessioneControllabile();
+    let sessionId = null;
+    let chiamate = 0;
+    let checkpointVistoPrimaDelRuntime = false;
+    const registro = createSessionRegistry({
+      avviaSessioneFn: (input) => {
+        chiamate += 1;
+        if (chiamate === 1) return primoGiro.avviaSessioneFn(input);
+        const righe = readFileSync(join(cartellaStore, `${sessionId}.jsonl`), 'utf8').trim().split('\n').map((riga) => JSON.parse(riga));
+        checkpointVistoPrimaDelRuntime = righe.some((record) => record.tipo === 'checkpoint-ripresa' && record.messaggi?.at(-1)?.content === 'follow-up durevole');
+        return secondoGiro.avviaSessioneFn(input);
+      },
+      preparaEsecuzioneFn: preparaEsecuzioneFinta,
+      modello: 'm', chiave: 'k', cartellaStore,
+    });
+    ({ sessionId } = registro.avvia('task-vero'));
+    primoGiro.concludi(
+      { type: 'RunFinished', threadId: 't1', runId: 'r1' },
+      { ok: true, esito: { messaggiFinali: [{ role: 'user', content: 'c' }, { role: 'assistant', content: 'prima risposta' }] } },
+    );
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((item) => item.tipo === 'messaggi-finali'));
+
+    registro.resume(sessionId, 'follow-up durevole');
+
+    assert.equal(checkpointVistoPrimaDelRuntime, true);
+    secondoGiro.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' });
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.filter((item) => item.type === 'RunFinished').length === 2);
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('SESSION-RECOVERY-DURABLE-FAILURE-17 — un checkpoint fallito impedisce la chiamata runtime', async () => {
+  const primoGiro = sessioneControllabile();
+  const secondoGiro = sessioneControllabile();
+  let chiamate = 0;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: (input) => (++chiamate === 1 ? primoGiro.avviaSessioneFn(input) : secondoGiro.avviaSessioneFn(input)),
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'm', chiave: 'k', cartellaStore: 'store-finto',
+    registraRigaFn: async () => {},
+    registraRigaSyncFn: ({ record }) => {
+      if (record.tipo === 'checkpoint-ripresa') throw new Error('disco pieno');
+    },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  primoGiro.concludi(
+    { type: 'RunFinished', threadId: 't1', runId: 'r1' },
+    { ok: true, esito: { messaggiFinali: [{ role: 'user', content: 'c' }, { role: 'assistant', content: 'prima risposta' }] } },
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const esito = registro.resume(sessionId, 'non deve partire');
+
+  assert.equal(esito.code, 'SESSION_STORE_WRITE_FAILED');
+  assert.equal(chiamate, 1);
+  assert.equal(registro.elenca()[0].conclusa, true);
+});
+
+test('SESSION-RECOVERY-FOLLOWUP-FAILURE-12 — un follow-up fallito resta nella storia del retry dopo riavvio', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const primoGiro = sessioneControllabile();
+    const giroFallito = sessioneControllabile();
+    let chiamate = 0;
+    const primoRegistro = createSessionRegistry({
+      avviaSessioneFn: (input) => (++chiamate === 1 ? primoGiro.avviaSessioneFn(input) : giroFallito.avviaSessioneFn(input)),
+      preparaEsecuzioneFn: preparaEsecuzioneFinta,
+      modello: 'm', chiave: 'k', cartellaStore,
+    });
+    const { sessionId } = primoRegistro.avvia('task-vero');
+    const storiaIniziale = [{ role: 'user', content: 'c' }, { role: 'assistant', content: 'prima risposta' }];
+    primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { messaggiFinali: storiaIniziale } });
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((item) => item.tipo === 'messaggi-finali'));
+    primoRegistro.resume(sessionId, 'follow-up che fallirà');
+    giroFallito.concludi({ type: 'RunError', message: 'timeout', code: 'internal-error' }, { ok: false, esito: null });
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => (
+      record.filter((item) => item.type === 'RunError').length === 1
+      && record.filter((item) => item.tipo === 'messaggi-finali').at(-1)?.messaggiFinali?.at(-1)?.content === 'follow-up che fallirà'
+    ));
+
+    const giroRetry = sessioneControllabile();
+    const secondoRegistro = createSessionRegistry({ avviaSessioneFn: giroRetry.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    await secondoRegistro.ripristina();
+    secondoRegistro.resume(sessionId, 'riprova ora');
+
+    assert.deepEqual(giroRetry.ultimoInput.messaggiIniziali, [
+      ...storiaIniziale,
+      { role: 'user', content: 'follow-up che fallirà' },
+      { role: 'user', content: 'riprova ora' },
+    ]);
+    giroRetry.concludi({ type: 'RunFinished', threadId: 't3', runId: 'r3' });
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => (
+      record.filter((item) => item.type === 'RunFinished').length === 2
+      && record.filter((item) => item.tipo === 'messaggi-finali').at(-1)?.messaggiFinali?.at(-1)?.content === 'riprova ora'
+    ));
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('SESSION-RECOVERY-REJECTION-19 — un runtime che rigetta conserva il follow-up nel retry dello stesso processo', async () => {
+  const primoGiro = sessioneControllabile();
+  const giroRetry = sessioneControllabile();
+  const storiaIniziale = [
+    { role: 'user', content: 'c' },
+    { role: 'assistant', content: 'prima risposta' },
+  ];
+  let chiamate = 0;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: (input) => {
+      chiamate += 1;
+      if (chiamate === 1) return primoGiro.avviaSessioneFn(input);
+      if (chiamate === 2) {
+        input.onEvento({ type: 'RunStarted', threadId: 't2', runId: 'r2', input: { consegna: 'follow-up rigettato', seguito: true } });
+        return Promise.reject(Object.assign(new Error('runtime disconnesso'), { code: 'internal-error' }));
+      }
+      return giroRetry.avviaSessioneFn(input);
+    },
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'm', chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { messaggiFinali: storiaIniziale } });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(registro.resume(sessionId, 'follow-up rigettato').sessionId, sessionId);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(registro.resume(sessionId, 'riprova nello stesso processo').sessionId, sessionId);
+  assert.deepEqual(giroRetry.ultimoInput.messaggiIniziali, [
+    ...storiaIniziale,
+    { role: 'user', content: 'follow-up rigettato' },
+    { role: 'user', content: 'riprova nello stesso processo' },
+  ]);
+  giroRetry.concludi({ type: 'RunFinished', threadId: 't3', runId: 'r3' });
+  await new Promise((resolve) => setImmediate(resolve));
+});
+
+test('SESSION-RECOVERY-CHECKPOINT-CRASH-13 — un checkpoint senza terminale resta interrotto e alimenta il retry', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const primoGiro = sessioneControllabile();
+    const giroPerso = sessioneControllabile();
+    let chiamate = 0;
+    const primoRegistro = createSessionRegistry({
+      avviaSessioneFn: (input) => (++chiamate === 1 ? primoGiro.avviaSessioneFn(input) : giroPerso.avviaSessioneFn(input)),
+      preparaEsecuzioneFn: preparaEsecuzioneFinta,
+      modello: 'm', chiave: 'k', cartellaStore,
+    });
+    const { sessionId } = primoRegistro.avvia('task-vero');
+    const storiaIniziale = [{ role: 'user', content: 'c' }, { role: 'assistant', content: 'prima risposta' }];
+    primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { messaggiFinali: storiaIniziale } });
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((item) => item.tipo === 'messaggi-finali'));
+    primoRegistro.resume(sessionId, 'turno perso nel crash');
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.filter((item) => item.type === 'RunStarted').length === 2);
+
+    const giroRetry = sessioneControllabile();
+    const secondoRegistro = createSessionRegistry({ avviaSessioneFn: giroRetry.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    await secondoRegistro.ripristina();
+    assert.equal(secondoRegistro.elenca()[0].conclusa, false);
+    assert.equal(secondoRegistro.elenca()[0].interrotta, true);
+    secondoRegistro.resume(sessionId, 'riprova dopo crash');
+
+    assert.deepEqual(giroRetry.ultimoInput.messaggiIniziali, [
+      ...storiaIniziale,
+      { role: 'user', content: 'turno perso nel crash' },
+      { role: 'user', content: 'riprova dopo crash' },
+    ]);
+    giroRetry.concludi({ type: 'RunFinished', threadId: 't3', runId: 'r3' });
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => (
+      record.filter((item) => item.type === 'RunFinished').length === 2
+      && record.filter((item) => item.tipo === 'messaggi-finali').at(-1)?.messaggiFinali?.at(-1)?.content === 'riprova dopo crash'
+    ));
   } finally {
     rmSync(cartellaStore, { recursive: true, force: true });
   }
@@ -2782,6 +3692,306 @@ test('⛔⛔ AL CONTRARIO — ripristina(): una sessione interrotta rifiuta comp
   } finally {
     rmSync(cartellaStore, { recursive: true, force: true });
   }
+});
+
+test('SESSION-RECOVERY-CHECKPOINT-BEFORE-START-22 — un checkpoint più nuovo del terminale precedente resta interrotto', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const sessionId = 'sess-checkpoint-prima-start';
+  const storiaPrimoGiro = [{ role: 'user', content: 'prima' }, { role: 'assistant', content: 'risposta' }];
+  const checkpointSecondoGiro = [...storiaPrimoGiro, { role: 'user', content: 'input accettato' }];
+  try {
+    registraRigaSync({
+      cartellaStore,
+      sessionId,
+      record: { tipo: 'intestazione', sessionId, taskId: 'task-vero', cartella: '/tmp/x', task: { id: 'task-vero', consegna: 'prima' }, comandoProva: 'npm test', forkDa: null, avviataAlle: new Date().toISOString(), modello: 'm', modelloPlanner: null, reasoning: null, mobile: false, permessi: 'Workspace write', permessiPerAttrezzo: null, padreId: null, profonditaDelega: 0 },
+    });
+    registraRigaSync({ cartellaStore, sessionId, record: { type: 'RunStarted', threadId: 't1', runId: 'r1', _sequenza: 1 } });
+    registraRigaSync({ cartellaStore, sessionId, record: { type: 'RunFinished', threadId: 't1', runId: 'r1', _sequenza: 2 } });
+    registraRigaSync({ cartellaStore, sessionId, record: { tipo: 'messaggi-finali', versioneGiro: 1, messaggiFinali: storiaPrimoGiro } });
+    registraRigaSync({ cartellaStore, sessionId, record: { tipo: 'checkpoint-ripresa', versioneGiro: 2, messaggi: checkpointSecondoGiro } });
+
+    const giroRetry = sessioneControllabile();
+    const registro = createSessionRegistry({ avviaSessioneFn: giroRetry.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    await registro.ripristina();
+
+    assert.equal(registro.elenca()[0].conclusa, false);
+    assert.equal(registro.elenca()[0].interrotta, true);
+    assert.equal(registro.resume(sessionId).code, 'SESSION_NOT_READY', 'senza nuovo input il checkpoint non può ripartire da solo');
+    registro.resume(sessionId, 'riprova esplicita');
+    assert.deepEqual(giroRetry.ultimoInput.messaggiIniziali, [...checkpointSecondoGiro, { role: 'user', content: 'riprova esplicita' }]);
+    giroRetry.concludi({ type: 'RunFinished', threadId: 't3', runId: 'r3' });
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.filter((item) => item.type === 'RunFinished').length === 2);
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('SESSION-RECOVERY-REDIRECT-CRASH-23 — un redirect applicato sopravvive al crash del giro successivo', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const primoGiro = sessioneControllabile();
+    const giroRedirectPerso = sessioneControllabile();
+    let chiamate = 0;
+    const primoRegistro = createSessionRegistry({
+      avviaSessioneFn: (input) => (++chiamate === 1 ? primoGiro.avviaSessioneFn(input) : giroRedirectPerso.avviaSessioneFn(input)),
+      preparaEsecuzioneFn: preparaEsecuzioneFinta,
+      modello: 'm', chiave: 'k', cartellaStore,
+    });
+    const { sessionId } = primoRegistro.avvia('task-vero');
+    const storiaPrimoGiro = [{ role: 'user', content: 'prima' }, { role: 'assistant', content: 'risposta parziale valida' }];
+    primoRegistro.reindirizza(sessionId, 'correzione da non perdere');
+    primoGiro.concludi(
+      { type: 'RunFinished', threadId: 't1', runId: 'r1', outcome: 'fermato' },
+      { ok: false, esito: { comeFinita: 'fermato', messaggiFinali: storiaPrimoGiro } },
+    );
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => (
+      record.filter((item) => item.type === 'RunStarted').length === 2
+      && record.some((item) => item.tipo === 'checkpoint-ripresa' && item.messaggi?.at(-1)?.content === 'correzione da non perdere')
+    ));
+
+    const giroRetry = sessioneControllabile();
+    const secondoRegistro = createSessionRegistry({ avviaSessioneFn: giroRetry.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    await secondoRegistro.ripristina();
+    assert.equal(secondoRegistro.elenca()[0].interrotta, true);
+    secondoRegistro.resume(sessionId, 'riprova dopo crash');
+    assert.deepEqual(giroRetry.ultimoInput.messaggiIniziali, [
+      ...storiaPrimoGiro,
+      { role: 'user', content: 'correzione da non perdere' },
+      { role: 'user', content: 'riprova dopo crash' },
+    ]);
+    giroRetry.concludi({ type: 'RunFinished', threadId: 't3', runId: 'r3' });
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.filter((item) => item.type === 'RunFinished').length === 2);
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('REGISTRY-REDIRECT-07/REPLAY-12 — reindirizza interrompe al confine sicuro, riparte sullo stesso id e conserva la FIFO', async () => {
+  const primoGiro = sessioneControllabile();
+  const secondoGiro = sessioneControllabile();
+  let numeroChiamata = 0;
+  const avviaSessioneFn = (input) => {
+    numeroChiamata += 1;
+    return numeroChiamata === 1 ? primoGiro.avviaSessioneFn(input) : secondoGiro.avviaSessioneFn(input);
+  };
+  const registro = createSessionRegistry({ avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero');
+  const eventi = [];
+  registro.iscriviti(sessionId, (evento) => eventi.push(evento));
+  registro.accodaMessaggio(sessionId, 'messaggio FIFO già in attesa');
+
+  const esitoRedirect = registro.reindirizza(sessionId, 'usa il parser tipizzato');
+  assert.equal(esitoRedirect.ok, true);
+  assert.equal(typeof esitoRedirect.redirectId, 'string');
+  assert.equal(primoGiro.segnaleStop.aborted, true, 'il giro corrente riceve lo stop immediatamente');
+  assert.equal(primoGiro.ultimoInput.codaMessaggiFn(), null, 'un redirect pendente non consuma accidentalmente la FIFO');
+
+  const storiaInterrotta = [{ role: 'user', content: 'prima richiesta' }, { role: 'assistant', content: 'lavoro già completato prima dello stop' }];
+  primoGiro.concludi(
+    { type: 'RunFinished', threadId: 't1', runId: 'r1', outcome: 'fermato' },
+    { ok: false, esito: { comeFinita: 'fermato', messaggiFinali: storiaInterrotta } },
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(secondoGiro.chiamate, 1, 'il redirect apre un secondo giro reale, non una sola notifica UI');
+  assert.deepEqual(secondoGiro.ultimoInput.messaggiIniziali, [...storiaInterrotta, { role: 'user', content: 'usa il parser tipizzato' }]);
+  assert.equal(secondoGiro.ultimoInput.codaMessaggiFn(), 'messaggio FIFO già in attesa', 'la coda preesistente sopravvive separata al redirect');
+  assert.deepEqual(
+    eventi.filter((evento) => evento.type.startsWith('RunRedirect')).map((evento) => evento.type),
+    ['RunRedirectRequested', 'RunRedirectApplied'],
+  );
+  assert.equal(eventi.find((evento) => evento.type === 'RunRedirectApplied')?.redirectId, esitoRedirect.redirectId);
+
+  secondoGiro.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: secondoGiro.ultimoInput.messaggiIniziali } });
+  await new Promise((resolve) => setImmediate(resolve));
+});
+
+test('REGISTRY-REDIRECT-TIMEOUT-14 — un timeout prima del primo token riparte dal task noto invece di perdere il redirect', async () => {
+  const primoGiro = sessioneControllabile();
+  const secondoGiro = sessioneControllabile();
+  let numeroChiamata = 0;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: (input) => (++numeroChiamata === 1 ? primoGiro.avviaSessioneFn(input) : secondoGiro.avviaSessioneFn(input)),
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'm',
+    chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  const eventi = [];
+  registro.iscriviti(sessionId, (evento) => eventi.push(evento));
+
+  const redirect = registro.reindirizza(sessionId, 'limita la risposta a OK');
+  primoGiro.concludi(
+    { type: 'RunError', message: 'The operation was aborted due to timeout', code: 'internal-error' },
+    { ok: false, esito: null, erroreInterno: 'The operation was aborted due to timeout' },
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(secondoGiro.chiamate, 1, 'il contesto iniziale noto basta a riaprire il giro');
+  assert.equal(secondoGiro.ultimoInput.messaggiIniziali, undefined, 'senza una cronologia canonica il runtime deve ricostruire il proprio system prompt');
+  assert.match(secondoGiro.ultimoInput.task.consegna, /c/u, 'la richiesta originale resta nel task ricostruito');
+  assert.match(secondoGiro.ultimoInput.task.consegna, /limita la risposta a OK/u, 'la correzione viene applicata nello stesso task ricostruito');
+  assert.ok(eventi.some((evento) => evento.type === 'RunRedirectApplied' && evento.redirectId === redirect.redirectId));
+  assert.ok(!eventi.some((evento) => evento.type === 'RunRedirectFailed'), 'un timeout senza token non rende il redirect impossibile');
+
+  secondoGiro.concludi(
+    { type: 'RunFinished', threadId: 't2', runId: 'r2', outcome: 'success' },
+    { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [{ role: 'assistant', content: 'OK' }] } },
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+});
+
+test('REDIRECT-REPLAY-15 — dopo un riavvio un redirect rimasto a metà viene chiuso esplicitamente, mai mostrato come ancora attivo', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const giro = sessioneControllabile();
+    const primo = createSessionRegistry({
+      avviaSessioneFn: giro.avviaSessioneFn,
+      preparaEsecuzioneFn: preparaEsecuzioneFinta,
+      modello: 'm', chiave: 'k', cartellaStore,
+    });
+    const { sessionId } = primo.avvia('task-vero');
+    const redirect = primo.reindirizza(sessionId, 'cambia direzione');
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((r) => r.type === 'RunRedirectRequested'));
+
+    const secondo = createSessionRegistry({
+      avviaSessioneFn: giro.avviaSessioneFn,
+      preparaEsecuzioneFn: preparaEsecuzioneFinta,
+      modello: 'm', chiave: 'k', cartellaStore,
+    });
+    await secondo.ripristina();
+    const eventi = [];
+    secondo.iscriviti(sessionId, (evento) => eventi.push(evento));
+
+    const finale = eventi.at(-1);
+    assert.equal(finale.type, 'RunRedirectFailed');
+    assert.equal(finale.redirectId, redirect.redirectId);
+    assert.equal(finale.code, 'SESSION_INTERRUPTED');
+    assert.equal(secondo.reindirizza(sessionId, 'riprova').code, 'SESSION_NOT_READY');
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((r) => r.type === 'RunRedirectFailed' && r.redirectId === redirect.redirectId));
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('REDIRECT-REPLAY-OUT-OF-ORDER-19 — il replay riordina per sequenza e chiude il redirect senza collisioni', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const sessionId = 'sess-redirect-fuori-ordine';
+  try {
+    registraRigaSync({
+      cartellaStore,
+      sessionId,
+      record: { tipo: 'intestazione', sessionId, taskId: 'task-vero', cartella: '/tmp/x', task: { id: 'task-vero', consegna: 'c' }, comandoProva: 'npm test', forkDa: null, avviataAlle: new Date().toISOString(), modello: 'm', modelloPlanner: null, reasoning: null, mobile: false, permessi: 'Workspace write', permessiPerAttrezzo: null, padreId: null, profonditaDelega: 0 },
+    });
+    registraRigaSync({ cartellaStore, sessionId, record: { type: 'RunStarted', threadId: 't', runId: 'r', _sequenza: 1 } });
+    registraRigaSync({ cartellaStore, sessionId, record: { type: 'RunFinished', threadId: 't', runId: 'r', outcome: 'fermato', _sequenza: 3 } });
+    registraRigaSync({ cartellaStore, sessionId, record: { type: 'RunRedirectRequested', redirectId: 'd-fuori-ordine', testo: 'correggi', _sequenza: 2 } });
+
+    const registro = createSessionRegistry({ modello: 'm', chiave: 'k', cartellaStore });
+    await registro.ripristina();
+    const eventi = [];
+    registro.iscriviti(sessionId, (evento) => eventi.push(evento));
+
+    assert.deepEqual(eventi.map((evento) => evento._sequenza), [1, 2, 3, 4]);
+    assert.equal(eventi.at(-1).type, 'RunRedirectFailed');
+    assert.equal(eventi.at(-1).redirectId, 'd-fuori-ordine');
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((r) => r.type === 'RunRedirectFailed' && r._sequenza === 4));
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('REGISTRY-DUPLICATE-08/STOP-CANCELS-REDIRECT-09 — un solo redirect pendente e Stop lo annulla senza riavviare', async () => {
+  const giro = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: giro.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero');
+  const eventi = [];
+  registro.iscriviti(sessionId, (evento) => eventi.push(evento));
+
+  assert.equal(registro.reindirizza(sessionId, 'prima correzione').ok, true);
+  assert.equal(registro.reindirizza(sessionId, 'seconda correzione').code, 'SESSION_NOT_READY');
+  assert.equal(registro.ferma(sessionId), true);
+  giro.concludi(
+    { type: 'RunFinished', threadId: 't1', runId: 'r1', outcome: 'fermato' },
+    { ok: false, esito: { comeFinita: 'fermato', messaggiFinali: [{ role: 'user', content: 'x' }] } },
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(giro.chiamate, 1, 'Stop dopo il redirect non deve far partire un secondo giro');
+  assert.deepEqual(
+    eventi.filter((evento) => evento.type.startsWith('RunRedirect')).map((evento) => evento.type),
+    ['RunRedirectRequested', 'RunRedirectCancelled'],
+  );
+});
+
+test('REGISTRY-STOP-BEFORE-REDIRECT-20 — Stop tombstona l’intento prima che la richiesta redirect arrivi', () => {
+  const giro = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: giro.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero');
+  const eventi = [];
+  registro.iscriviti(sessionId, (evento) => eventi.push(evento));
+  const redirectId = '2b6d64d0-05c4-4ab2-9d78-51aaabf54522';
+
+  assert.equal(registro.ferma(sessionId, { redirectId }), true);
+  const tardivo = registro.reindirizza(sessionId, 'non applicare più', { redirectId });
+
+  assert.equal(tardivo.code, 'SESSION_NOT_READY');
+  assert.equal(eventi.some((evento) => evento.type === 'RunRedirectRequested' && evento.redirectId === redirectId), false);
+  assert.equal(eventi.some((evento) => evento.type === 'RunRedirectApplied' && evento.redirectId === redirectId), false);
+  assert.equal(eventi.filter((evento) => evento.type === 'RunStarted').length, 1, 'nessun nuovo giro può partire dopo lo Stop');
+});
+
+test('APPROVAL-10 — Reindirizza risolve fail-closed un’approvazione pendente prima di abortire', async () => {
+  const finta = sessioneConApprovazione();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'On request' });
+  const eventi = [];
+  registro.iscriviti(sessionId, (evento) => eventi.push(evento));
+  const promessa = finta.chiediApprovazioneFn({ tipo: 'scrivi', percorso: 'src/a.js' });
+  await Promise.resolve();
+
+  assert.equal(registro.reindirizza(sessionId, 'non scrivere più quel file').ok, true);
+  const esito = await Promise.race([
+    promessa,
+    new Promise((resolve) => setImmediate(() => resolve('ancora-pendente'))),
+  ]);
+  assert.equal(esito, false, 'il kernel non resta appeso su una domanda che lo stop ha reso obsoleta');
+  const risolta = eventi.find((evento) => evento.type === 'ApprovalResolved');
+  assert.equal(risolta?.approvato, false);
+});
+
+test('FAILURE-06 — un guasto interno mentre Reindirizza attende chiude il lifecycle, mai una richiesta fantasma', async () => {
+  let rigetta;
+  const avviaSessioneFn = (input) => {
+    input.onEvento({ type: 'RunStarted', threadId: 't1', runId: 'r1' });
+    return new Promise((resolve, reject) => { rigetta = reject; });
+  };
+  const registro = createSessionRegistry({ avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero');
+  const eventi = [];
+  registro.iscriviti(sessionId, (evento) => eventi.push(evento));
+  const redirect = registro.reindirizza(sessionId, 'cambia direzione');
+  rigetta(new Error('runtime caduto'));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const fallito = eventi.find((evento) => evento.type === 'RunRedirectFailed');
+  assert.equal(fallito?.redirectId, redirect.redirectId);
+  assert.match(fallito?.message ?? '', /runtime caduto/u);
+  assert.equal(registro.reindirizza(sessionId, 'riprova').code, 'SESSION_NOT_READY', 'il run è concluso, non resta un redirect pendente ambiguo');
+});
+
+test('APPROVAL-10 contrario — Stop risolve anch’esso fail-closed una approvazione pendente', async () => {
+  const finta = sessioneConApprovazione();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'On request' });
+  const promessa = finta.chiediApprovazioneFn({ tipo: 'shell', comando: 'npm test' });
+  await Promise.resolve();
+  assert.equal(registro.ferma(sessionId), true);
+  const esito = await Promise.race([
+    promessa,
+    new Promise((resolve) => setImmediate(() => resolve('ancora-pendente'))),
+  ]);
+  assert.equal(esito, false);
 });
 
 test('⛔⛔ AL CONTRARIO — ripristina(): una sessione interrotta rifiuta shell() (comando diretto) onestamente, stesso principio di resume()', async () => {
@@ -2837,6 +4047,19 @@ test('⛔⛔ AL CONTRARIO — ripristina(): una sessione già VIVA in memoria (s
     const dopo = registro.elenca()[0];
     assert.equal(dopo.interrotta, false, 'una sessione viva non è mai "interrotta" solo perché ripristina() è stata chiamata di nuovo');
     assert.deepEqual(prima, dopo);
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('Doctor può leggere il riepilogo delle sessioni corrotte senza cancellarle', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    writeFileSync(join(cartellaStore, 'sess-corrotto.jsonl'), '{"tipo":"intestazione"}\nCORROTTA\n{"type":"RunError"}\n');
+    const registro = createSessionRegistry({ modello: 'm', chiave: 'k', cartellaStore });
+    await registro.ripristina();
+    assert.deepEqual(registro.statoPersistenza(), { corrotte: ['sess-corrotto'], ultimaLettura: { ripristinate: 0, totali: 1 } });
+    assert.ok(existsSync(join(cartellaStore, 'sess-corrotto.jsonl')));
   } finally {
     rmSync(cartellaStore, { recursive: true, force: true });
   }

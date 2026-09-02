@@ -70,6 +70,10 @@
  * interno "Predefinito del server".
      */
     model: '',
+    /** Selezione esplicita delle sessioni reali nella sidebar. */
+    sessionSelection: { active: false, selected: new Set(), available: new Map(), deleting: false },
+    /** Ragionamento nascosto di default; il foglio Modello lo rende opt-in. */
+    showReasoning: false,
     // ⭐ 28/8 — stesso principio di `model`: null = nessuna scelta esplicita, "reasoning" resta assente dal corpo della richiesta (comportamento di sempre). Un valore fra quelli di LIVELLI_RAGIONAMENTO appena l'owner tocca lo slider dell'effort picker.
     effort: null,
     environment: null,
@@ -137,6 +141,10 @@
     realSession: {
       id: null,
       taskId: null,
+      /** Modello realmente usato dal giro corrente, letto dal RunStarted persistito. */
+      currentRunModel: null,
+      /** Una cronologia conclusa accumula i delta e li committa sui rispettivi eventi End. */
+      deferHistoricalRendering: false,
       generation: 0,
       eventSource: null,
       messageElements: new Map(),
@@ -170,6 +178,14 @@
       ultimoBatchChiuso: null,
       /** ⛔ 27/8 — vero se l'ULTIMO evento visto su questa connessione era RunFinished/RunError: dice a onerror se la chiusura che sta per arrivare è attesa (niente da segnalare) o una vera interruzione. Vedi collegaEventiSessione. */
       eventoTerminaleVisto: false,
+      /** Correlazione del redirect prioritario: evita il falso stato idle fra il RunFinished del giro abortito e il RunStarted della ripartenza. */
+      redirectPendingId: null,
+      /** Una risposta HTTP tardiva non può prevalere su Cancelled/Failed già arrivati via SSE. */
+      redirectInvalidatedIds: new Set(),
+      /** Distingue la POST ancora in volo dal redirect già accettato e annunciato via SSE. */
+      redirectRequestInFlight: false,
+      /** UUID creato prima della rete: Stop può annullare anche se arriva al server per primo. */
+      redirectRequestIntentId: null,
       /** ⛔⛔⛔ 27/8, owner: "le risposte non sono formattate" — testo GREZZO
        * accumulato per messageId, così renderizzaMarkdownSemplice() lavora
        * sempre sul markdown intero visto finora, non su un singolo delta:
@@ -183,6 +199,10 @@
       followUpBubbleInAttesa: false,
       /** ⭐⭐⭐ 27/8, owner: "non esiste nessun loading quando il modello elabora... fa sembrare che si sia piantato" — l'elemento DOM della bolla di attesa (porta di TalosLineLoader.vue, mobile), o null quando non ce n'è una a schermo. Vedi mostraAttesaRisposta()/nascondiAttesaRisposta(). */
       attesaBubble: null,
+      /** Timer e istante monotono della riga di attivita. Restano separati dal
+       * DOM per fermarli anche quando il nodo e gia stato rimosso. */
+      attesaTimer: null,
+      attesaAvviataA: null,
       /** ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 — l'ultimo
        * StateDelta path /usage visto (forma OpenRouter: prompt_tokens,
        * completion_tokens, prompt_tokens_details.cached_tokens, giri),
@@ -230,6 +250,11 @@
   const modeTabs = $$('.mode-tab');
   const backdrop = $('#overlayBackdrop');
   const sessionsPanel = $('#sessionsPanel');
+  const sessionSelectionToolbar = $('#sessionSelectionToolbar');
+  const sessionSelectionToggle = $('#sessionSelectionToggle');
+  const sessionSelectionSelectAll = $('#sessionSelectionSelectAll');
+  const sessionSelectionDelete = $('#sessionSelectionDelete');
+  const sessionSelectionCount = $('#sessionSelectionCount');
   const inspectorPanel = $('#inspectorPanel');
   const commandDialog = $('#commandDialog');
   const commandSearch = $('#commandSearch');
@@ -240,7 +265,8 @@
   const sheetBody = $('#sheetBody');
   const composerInput = $('#composerInput');
   const composerForm = $('#composerForm');
-  const queueToggle = $('#queueToggle');
+  const redirectRunButton = $('#redirectRunButton');
+  const sendButton = $('.send-btn', composerForm);
   const queuedMessage = $('#queuedMessage');
   const sessionTitle = $('#sessionTitle');
   const toastRegion = $('#toastRegion');
@@ -262,12 +288,109 @@
   const embeddedHeaderScrollers = [...new Set([...views, chatConversation].filter(Boolean))];
   const embeddedHeaderScrollPositions = new WeakMap();
   let compattazioneInCorso = false;
+  let streamingScrollFrame = null;
+  let streamingScrollTarget = null;
+  let streamingRenderFrame = null;
+  const streamingRenderPending = new Set();
+  let treeRenderTimer = null;
+  let treeRenderInFlight = null;
+  let treeRenderNeedsRerun = false;
+  let sessionListRefreshTimer = null;
 
   if (HOST().classList.contains('talos-embedded')) {
     embeddedSessionBack?.setAttribute('aria-label', 'Torna alle sessioni Codice');
   }
 
   const motionAnimations = new Set();
+
+  /**
+   * Porta l'output attivo nella fascia centrale di #conversation durante uno
+   * stream. Una sola richiesta per frame evita animazioni concorrenti; il
+   * limite non sposta mai la pagina esterna.
+   */
+  function scrollStreamingOutput(element) {
+    if (!element || !element.isConnected) return;
+    streamingScrollTarget = element;
+    if (streamingScrollFrame !== null) return;
+    const schedule = window.requestAnimationFrame || ((callback) => window.setTimeout(callback, 0));
+    streamingScrollFrame = schedule(() => {
+      streamingScrollFrame = null;
+      const target = streamingScrollTarget;
+      streamingScrollTarget = null;
+      const conversation = $('#conversation');
+      if (!target || !target.isConnected || !conversation) return;
+      conversation.style.setProperty('--stream-follow-space', `${Math.ceil(conversation.clientHeight / 2)}px`);
+      const containerRect = conversation.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const targetTop = conversation.scrollTop
+        + (targetRect.top - containerRect.top)
+        - (conversation.clientHeight - targetRect.height) / 2;
+      const maxScroll = Math.max(0, conversation.scrollHeight - conversation.clientHeight);
+      conversation.scrollTop = Math.max(0, Math.min(maxScroll, targetTop));
+    });
+  }
+
+  /**
+   * Un replay SSE può consegnare centinaia di delta nello stesso frame. Il
+   * testo grezzo resta accumulato evento per evento, ma il markdown entra nel
+   * DOM una volta per frame; TextMessageEnd forza comunque l'ultimo commit.
+   */
+  function renderizzaMessaggioStreamingOra(messageId) {
+    streamingRenderPending.delete(messageId);
+    const element = state.realSession.messageElements.get(messageId);
+    const testoGrezzo = state.realSession.testoGrezzoMessaggi.get(messageId);
+    if (!element || typeof testoGrezzo !== 'string') return false;
+    const copia = $('.assistant-copy', element);
+    if (!copia) return false;
+    copia.replaceChildren(renderizzaMarkdownSemplice(testoGrezzo));
+    scrollStreamingOutput(element);
+    return true;
+  }
+
+  function flushMessaggiStreaming() {
+    streamingRenderFrame = null;
+    const messageIds = [...streamingRenderPending];
+    for (const messageId of messageIds) renderizzaMessaggioStreamingOra(messageId);
+  }
+
+  function programmaRenderMessaggioStreaming(messageId) {
+    streamingRenderPending.add(messageId);
+    if (streamingRenderFrame !== null) return;
+    const schedule = window.requestAnimationFrame || ((callback) => window.setTimeout(callback, 16));
+    streamingRenderFrame = schedule(flushMessaggiStreaming);
+  }
+
+  function cancellaRenderMessaggiStreaming() {
+    if (streamingRenderFrame !== null) {
+      if (window.cancelAnimationFrame) window.cancelAnimationFrame(streamingRenderFrame);
+      else window.clearTimeout(streamingRenderFrame);
+    }
+    streamingRenderFrame = null;
+    streamingRenderPending.clear();
+  }
+
+  function cancellaRenderAlberoDifferito() {
+    if (treeRenderTimer !== null) window.clearTimeout(treeRenderTimer);
+    treeRenderTimer = null;
+  }
+
+  function programmaRenderAlberoReale() {
+    const generation = state.realSession.generation;
+    cancellaRenderAlberoDifferito();
+    treeRenderTimer = window.setTimeout(() => {
+      treeRenderTimer = null;
+      if (generation !== state.realSession.generation) return;
+      void renderizzaAlberoReale();
+    }, 60);
+  }
+
+  function programmaAggiornamentoElencoSessioniReali() {
+    if (sessionListRefreshTimer !== null) window.clearTimeout(sessionListRefreshTimer);
+    sessionListRefreshTimer = window.setTimeout(() => {
+      sessionListRefreshTimer = null;
+      void aggiornaElencoSessioniReali();
+    }, 60);
+  }
 
   function motionMilliseconds(name, fallback = 0) {
     if (document.body.classList.contains('reduce-motion')) return 0;
@@ -445,6 +568,13 @@
     const target = $(`[data-view="${view}"]`);
     if (!target) return;
     const previous = views.find((pane) => pane.classList.contains('active'));
+    // Una vista può diventare nuovamente il target mentre la sua precedente
+    // animazione di uscita è ancora in corso. In quel caso la callback
+    // terminale obsoleta non deve rimuovere `active` dalla vista appena
+    // riaperta: fermiamo l'effetto e avanziamo la stessa generazione già
+    // usata per dialog/backdrop, senza introdurre un secondo lifecycle.
+    cancelMotionAnimationsFor(target);
+    prossimaGenerazione(target);
     state.view = view;
     if (options.mode) state.mode = options.mode;
     else if (view === 'dashboard') state.mode = 'dashboard';
@@ -455,8 +585,9 @@
       if (pane !== target && pane !== previous) pane.classList.remove('active', 'motion-enter', 'motion-exit');
     });
     if (previous && previous !== target) {
+      const generazioneAllaChiusura = prossimaGenerazione(previous);
       animateExit(previous, { durationToken: '--talos-motion-duration-tab-change', transform: 'translateX(-8px)' }, () => {
-        previous.classList.remove('active');
+        if (motionGenerazione.get(previous) === generazioneAllaChiusura) previous.classList.remove('active');
       });
     }
     target.classList.add('active');
@@ -540,13 +671,149 @@
     );
   }
 
+  const DIALOG_RESIZE_STORAGE_KEY = 'talos-harness-modal-sizes-v1';
+  const DIALOG_RESIZE_BREAKPOINT = 780;
+  const DIALOG_RESIZE_MIN = Object.freeze({
+    commandDialog: { width: 420, height: 240 },
+    sheetDialog: { width: 520, height: 340 },
+  });
+
+  function readSavedDialogSizes() {
+    try {
+      const value = JSON.parse(window.localStorage.getItem(DIALOG_RESIZE_STORAGE_KEY) || '{}');
+      return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function clampDialogSize(dialog, width, height) {
+    const configured = DIALOG_RESIZE_MIN[dialog.id] || DIALOG_RESIZE_MIN.sheetDialog;
+    const maxWidth = Math.max(280, window.innerWidth - 24);
+    const maxHeight = Math.max(240, window.innerHeight - 24);
+    const minWidth = Math.min(configured.width, maxWidth);
+    const minHeight = Math.min(configured.height, maxHeight);
+    return {
+      width: Math.min(maxWidth, Math.max(minWidth, Math.round(Number(width) || minWidth))),
+      height: Math.min(maxHeight, Math.max(minHeight, Math.round(Number(height) || minHeight))),
+    };
+  }
+
+  function applyDialogSize(dialog, width, height, { userSized = true } = {}) {
+    const size = clampDialogSize(dialog, width, height);
+    dialog.style.width = `${size.width}px`;
+    dialog.style.height = `${size.height}px`;
+    dialog.classList.toggle('dialog-user-sized', userSized);
+    return size;
+  }
+
+  function saveDialogSize(dialog) {
+    const key = dialog.dataset.dialogResizeKey;
+    if (!key || window.innerWidth <= DIALOG_RESIZE_BREAKPOINT) return;
+    const rect = dialog.getBoundingClientRect();
+    const size = clampDialogSize(dialog, rect.width, rect.height);
+    try {
+      const saved = readSavedDialogSizes();
+      saved[key] = size;
+      window.localStorage.setItem(DIALOG_RESIZE_STORAGE_KEY, JSON.stringify(saved));
+    } catch {
+      // Preferenza visuale non bloccante: il dialog resta utilizzabile.
+    }
+  }
+
+  function prepareResizableDialog(dialog, logicalKey) {
+    dialog.dataset.dialogResizeKey = logicalKey;
+    dialog.style.removeProperty('width');
+    dialog.style.removeProperty('height');
+    dialog.classList.remove('dialog-user-sized');
+    if (window.innerWidth <= DIALOG_RESIZE_BREAKPOINT) return;
+    const saved = readSavedDialogSizes()[logicalKey];
+    if (saved && Number.isFinite(saved.width) && Number.isFinite(saved.height)) {
+      applyDialogSize(dialog, saved.width, saved.height);
+    }
+  }
+
+  function clampOpenDialogsToViewport() {
+    for (const dialog of [commandDialog, sheetDialog]) {
+      if (!dialog.open || !dialog.classList.contains('dialog-user-sized')) continue;
+      if (window.innerWidth <= DIALOG_RESIZE_BREAKPOINT) {
+        dialog.style.removeProperty('width');
+        dialog.style.removeProperty('height');
+        dialog.classList.remove('dialog-user-sized');
+        continue;
+      }
+      const rect = dialog.getBoundingClientRect();
+      applyDialogSize(dialog, rect.width, rect.height);
+    }
+  }
+
+  function setupDialogResize() {
+    for (const dialog of [commandDialog, sheetDialog]) {
+      const resizeMount = dialog === sheetDialog ? $('.sheet-head', dialog) : $('.command-search', dialog);
+      for (const axis of ['width', 'height', 'both']) {
+        const handle = document.createElement('button');
+        handle.type = 'button';
+        handle.className = `dialog-resize-handle dialog-resize-handle--${axis}`;
+        handle.dataset.dialogResize = axis;
+        handle.setAttribute('aria-label', axis === 'width'
+          ? 'Ridimensiona larghezza finestra'
+          : axis === 'height'
+            ? 'Ridimensiona altezza finestra'
+            : 'Ridimensiona larghezza e altezza finestra');
+        (resizeMount || dialog).appendChild(handle);
+
+        handle.addEventListener('pointerdown', (event) => {
+          if (window.innerWidth <= DIALOG_RESIZE_BREAKPOINT || event.button !== 0) return;
+          event.preventDefault();
+          const start = dialog.getBoundingClientRect();
+          const startX = event.clientX;
+          const startY = event.clientY;
+          dialog.classList.add('dialog-user-sized', 'dialog-resizing');
+          handle.setPointerCapture(event.pointerId);
+
+          const onMove = (moveEvent) => {
+            const width = axis === 'height' ? start.width : start.width + moveEvent.clientX - startX;
+            const height = axis === 'width' ? start.height : start.height + moveEvent.clientY - startY;
+            applyDialogSize(dialog, width, height);
+          };
+          const onEnd = () => {
+            dialog.classList.remove('dialog-resizing');
+            if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+            saveDialogSize(dialog);
+            handle.removeEventListener('pointermove', onMove);
+            handle.removeEventListener('pointerup', onEnd);
+            handle.removeEventListener('pointercancel', onEnd);
+          };
+          handle.addEventListener('pointermove', onMove);
+          handle.addEventListener('pointerup', onEnd);
+          handle.addEventListener('pointercancel', onEnd);
+        });
+
+        handle.addEventListener('keydown', (event) => {
+          if (window.innerWidth <= DIALOG_RESIZE_BREAKPOINT) return;
+          const horizontal = event.key === 'ArrowLeft' || event.key === 'ArrowRight';
+          const vertical = event.key === 'ArrowUp' || event.key === 'ArrowDown';
+          if ((axis === 'width' && !horizontal) || (axis === 'height' && !vertical) || (axis === 'both' && !horizontal && !vertical)) return;
+          event.preventDefault();
+          const rect = dialog.getBoundingClientRect();
+          const width = horizontal ? rect.width + (event.key === 'ArrowRight' ? 16 : -16) : rect.width;
+          const height = vertical ? rect.height + (event.key === 'ArrowDown' ? 16 : -16) : rect.height;
+          applyDialogSize(dialog, width, height);
+          saveDialogSize(dialog);
+        });
+      }
+    }
+  }
+
   function showEmbeddedDialog(dialog) {
+    if (!dialog.dataset.dialogResizeKey) prepareResizableDialog(dialog, `dialog:${dialog.id}`);
     cancelMotionAnimationsFor(dialog);
     prossimaGenerazione(dialog);
     if (!dialog.open) dialog.show();
     markMotionEnter(dialog);
     harnessDialogBackdrop.style.pointerEvents = ''; // ⛔ vedi closeEmbeddedDialog sotto — un dialog che riapre deve annullare la disattivazione lasciata da una chiusura precedente
     syncEmbeddedDialogBackdrop();
+    syncBackgroundDialogPause();
   }
 
   function closeEmbeddedDialog(dialog) {
@@ -579,6 +846,7 @@
       // sopra per l'altra metà della cura (ferma anche l'animazione visiva).
       if (dialog.open && motionGenerazione.get(dialog) === generazioneAllaChiusura) dialog.close();
       syncEmbeddedDialogBackdrop();
+      syncBackgroundDialogPause();
     });
   }
 
@@ -774,6 +1042,9 @@
       PROJECTS_NOT_CONFIGURED: 'Non c’è ancora una cartella di progetto disponibile. Apri Doctor per capire cosa manca.',
       CONFIG_INVALID: 'La configurazione non è pronta. Apri Doctor per vedere come sistemarla.',
       RUNTIME_NOT_AVAILABLE: 'Questa funzione non è ancora disponibile. Apri Doctor per controllare lo stato.',
+      METHOD_NOT_ALLOWED: 'Questa parte di TALOS deve essere aggiornata. Apri Doctor, aggiorna il servizio locale e riprova.',
+      WORKSPACE_LAUNCH_NOT_AVAILABLE: 'Questo collegamento alla cartella non è più valido. Aprila di nuovo dal menu di Windows.',
+      WORKSPACE_NOT_AVAILABLE: 'Questa cartella non è più disponibile. Controlla che esista e aprila di nuovo dal menu di Windows.',
       INTERNAL_ERROR: 'Il server locale ha incontrato un problema. Apri Doctor e riprova.',
       NOT_FOUND: 'Questa risorsa non è più disponibile. Aggiorna la pagina e riprova.',
     };
@@ -1285,7 +1556,12 @@
     try {
       const tasks = await apiGet('/api/v1/tasks');
       const taskId = tasks?.items?.[0]?.id;
-      if (!taskId) throw Object.assign(new Error('Nessun task reale disponibile per la prova'), { code: 'TASK_NOT_AVAILABLE' });
+      if (!taskId) {
+        aggiungiBloccoStreamModelLab('error', 'Prova non disponibile', 'In questa installazione non ci sono ancora attività pronte per la prova. Puoi usare una sessione personalizzata oppure aprire Doctor per vedere cosa manca.');
+        cancelButton.hidden = true;
+        runButton.disabled = false;
+        return;
+      }
       const runtimeState = state.modelLab.runtimes.find((runtime) => runtime.runtimeId === runtimeId)?.runtimeState;
       if (runtimeId === 'llama.cpp' && runtimeState !== 'ready') await apiPost('/api/v1/runtime/load', { runtimeId, modelId });
       const data = await apiPost('/api/v1/sessions', { taskId, provider: 'local', runtimeId, modelId });
@@ -1569,8 +1845,11 @@
     if (!risultato.git) problemi.push('git non trovato');
     if (!risultato.naviga) problemi.push('browser non disponibile');
     if (risultato.cartelleProgetto && !risultato.cartelleProgetto.disponibili) problemi.push('nessuna cartella di progetto disponibile');
+    if (risultato.ownerRuntime && !risultato.ownerRuntime.pronto) problemi.push('servizio agente non pronto');
+    if (risultato.catalogoTask && !risultato.catalogoTask.disponibile) problemi.push('attività predefinite non disponibili');
+    if (risultato.sessioniPersistenza?.corrotte?.length) problemi.push(`${risultato.sessioniPersistenza.corrotte.length} sessione da controllare`);
     return problemi.length === 0
-      ? { badge: 'Healthy', dettaglio: `Chiave API ok · shell ${risultato.shell} · git ok · browser ok.` }
+      ? { badge: 'Healthy', dettaglio: `Chiave API ok · ambiente ${risultato.shell} · git ok · browser ok · agente pronto.` }
       : { badge: `${problemi.length} da rivedere`, dettaglio: `${problemi.join(' · ')}.` };
   }
 
@@ -2294,7 +2573,29 @@
    * principale usa invece un invito neutro e non espone dettagli interni
    * del server prima della scelta esplicita.
    */
-  function creaModelPicker({ valoreIniziale = '', apriSubito = false, alSelezionato, etichettaVuota = 'Seleziona modello' } = {}) {
+  function effortCompatibilePerModello(modello, effortCorrente = state.effort) {
+    const capacita = modello?.reasoning;
+    if (!capacita || typeof capacita !== 'object') return effortCorrente || null;
+
+    const supportati = Array.isArray(capacita.supportedEfforts)
+      ? capacita.supportedEfforts.filter((effort) => typeof effort === 'string' && effort !== 'none')
+      : [];
+    const effortPredefinito = typeof capacita.defaultEffort === 'string' && capacita.defaultEffort !== 'none'
+      ? capacita.defaultEffort
+      : null;
+    const fallback = (effortPredefinito && (supportati.length === 0 || supportati.includes(effortPredefinito)))
+      ? effortPredefinito
+      : (supportati[0] || null);
+
+    if (!effortCorrente) return capacita.mandatory ? fallback : null;
+    if (effortCorrente === 'none') return capacita.mandatory ? fallback : 'none';
+    if (supportati.length > 0 && !supportati.includes(effortCorrente)) {
+      return capacita.mandatory ? fallback : (effortPredefinito || null);
+    }
+    return effortCorrente;
+  }
+
+  function creaModelPicker({ valoreIniziale = '', apriSubito = false, alSelezionato, etichettaVuota = 'Seleziona modello', aggiornaModelloPrincipale = true, sincronizzaSessione = false } = {}) {
     const wrap = document.createElement('div');
     wrap.className = 'model-picker';
 
@@ -2429,13 +2730,53 @@
             checkSpan.innerHTML = icon('i-check');
             opt.appendChild(checkSpan);
           }
-          opt.addEventListener('click', () => {
-            valoreScelto = modello.id;
-            state.model = modello.id; // ⭐ un'unica fonte di verità: la pillola del composer e il foglio "Modello" restano sincronizzati
-            aggiornaTriggerLabel();
-            aggiornaPillolaModello();
-            chiudi();
-            alSelezionato?.(modello.id);
+          opt.addEventListener('click', async () => {
+            const effortAlClick = state.effort;
+            const prossimoEffort = aggiornaModelloPrincipale
+              ? effortCompatibilePerModello(modello, effortAlClick)
+              : effortAlClick;
+            const applicaScelta = () => {
+              valoreScelto = modello.id;
+              if (aggiornaModelloPrincipale) {
+                state.model = modello.id;
+                // Se l'owner ha mosso lo slider mentre il salvataggio era in
+                // corso, la sua scelta più recente è già accodata e vince.
+                if (state.effort === effortAlClick) state.effort = prossimoEffort;
+              }
+              aggiornaTriggerLabel();
+              if (aggiornaModelloPrincipale) {
+                aggiornaPillolaModello();
+                salvaPreferenzeChatDesktop();
+              }
+              chiudi();
+              alSelezionato?.(modello.id);
+            };
+
+            // Su una sessione esistente il server è la fonte di verità. La
+            // pillola non deve promettere un modello che il registro non ha
+            // ancora accettato: mantiene il valore corrente finché la
+            // scrittura durevole non è conclusa e resta aperta su errore.
+            if (aggiornaModelloPrincipale && sincronizzaSessione && state.realSession.id) {
+              if (panel.getAttribute('aria-busy') === 'true') return;
+              panel.setAttribute('aria-busy', 'true');
+              opt.disabled = true;
+              try {
+                await sincronizzaImpostazioniSessione({
+                  modello: modello.id,
+                  reasoning: prossimoEffort ? { effort: prossimoEffort } : null,
+                });
+                applicaScelta();
+              } catch {
+                valoreScelto = state.model || '';
+                aggiornaTriggerLabel();
+                renderLista();
+              } finally {
+                panel.removeAttribute('aria-busy');
+                opt.disabled = false;
+              }
+              return;
+            }
+            applicaScelta();
           });
           pezzi.push(opt);
         }
@@ -2474,7 +2815,12 @@
     searchInput.addEventListener('input', renderLista);
     refreshBtn.addEventListener('click', (event) => { event.preventDefault(); carica({ forza: true }); });
     panel.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') { event.preventDefault(); chiudi(); trigger.focus(); }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        chiudi();
+        trigger.focus();
+      }
     });
     function onDocumentClick(event) {
       if (!wrap.isConnected) { document.removeEventListener('click', onDocumentClick); return; }
@@ -2675,9 +3021,11 @@
   function apriMenuAzioniSessione(sessione, posizionamento) {
     document.querySelector('.session-actions-menu')?.remove();
     const target = {
+      ...sessione,
       sessionId: sessione.sessionId,
       taskId: sessione.taskId || sessione.sessionId,
       nome: sessione.nome || sessione.taskId || 'Sessione',
+      modello: normalizzaModelloSessione(sessione),
     };
     state.sessioneTarget = target;
 
@@ -2686,7 +3034,7 @@
     menu.setAttribute('role', 'menu');
     menu.setAttribute('aria-label', `Azioni per ${target.nome}`);
     const voci = [
-      { etichetta: 'Apri', icona: 'i-eye', azione: () => passaASessione(target.sessionId, target.taskId, target.nome) },
+      { etichetta: 'Apri', icona: 'i-eye', azione: () => passaASessione(target.sessionId, target.taskId, target.nome, target.modello, target) },
       { etichetta: 'Rinomina', icona: 'i-edit', azione: () => openSheet('rename') },
       { etichetta: 'Fork', icona: 'i-branch', azione: () => forkSession(target) },
       { etichetta: 'Copia identificativo', icona: 'i-link', azione: () => copyText(target.sessionId, 'Identificativo copiato') },
@@ -2752,13 +3100,15 @@
    * le due righe fork/side-thread INVENTATE, ora rimosse e sostituite
    * da caricaAlberoSessione() (dati reali di GET .../children). Aggiunto.
    */
-  const TIPI_FOGLIO_INTERAMENTE_ONESTI = new Set(['model', 'capabilities', 'control', 'fileViewer', 'renameFile', 'deleteFile', 'createFile', 'export', 'sessionTree', 'deleteSession']);
+  const TIPI_FOGLIO_INTERAMENTE_ONESTI = new Set(['model', 'permissions', 'capabilities', 'control', 'fileViewer', 'renameFile', 'deleteFile', 'createFile', 'export', 'sessionTree', 'deleteSession']);
   function openSheet(type) {
     const content = sheetTemplates[type];
     if (!content) return;
+    sheetDialog.classList.remove('sheet-dialog--new-session');
     sheetEyebrow.textContent = content.eyebrow;
     sheetTitle.textContent = content.title;
     sheetBody.innerHTML = content.html();
+    prepareResizableDialog(sheetDialog, `sheet:${type}`);
     showEmbeddedDialog(sheetDialog);
     wireSheetActions(type);
     if (type === 'control') { refreshDoctorBadge(); caricaPannelloHooks(); }
@@ -2780,6 +3130,7 @@
         const picker = creaModelPicker({
           valoreIniziale: state.model || '',
           apriSubito: true,
+          sincronizzaSessione: true,
           alSelezionato: () => closeEmbeddedDialog(sheetDialog),
         });
         /*
@@ -2793,9 +3144,28 @@
          */
         const effortPicker = creaEffortPicker({
           valoreIniziale: state.effort,
-          alCambiato: (valore) => { state.effort = valore; },
+          alCambiato: (valore) => {
+            state.effort = valore;
+            sincronizzaImpostazioniSessione({ reasoning: valore ? { effort: valore } : null });
+          },
         });
-        mount.replaceChildren(picker.elemento, effortPicker.elemento);
+        const reasoningRow = document.createElement('label');
+        reasoningRow.className = 'sheet-toggle-row';
+        const reasoningLabel = document.createElement('span');
+        reasoningLabel.textContent = 'Mostra ragionamento';
+        const reasoningToggle = document.createElement('input');
+        reasoningToggle.type = 'checkbox';
+        reasoningToggle.id = 'showReasoningToggle';
+        reasoningToggle.checked = state.showReasoning;
+        reasoningToggle.setAttribute('aria-label', 'Mostra ragionamento');
+        reasoningToggle.addEventListener('change', () => {
+          state.showReasoning = reasoningToggle.checked;
+          salvaPreferenzeChatDesktop();
+          aggiornaVisibilitaRagionamento();
+        });
+        reasoningRow.append(reasoningLabel, reasoningToggle);
+        mount.replaceChildren(picker.elemento, effortPicker.elemento, reasoningRow);
+        aggiornaVisibilitaRagionamento();
       }
     }
     /*
@@ -3220,10 +3590,15 @@
    * solo posto che sa come cambiare permesso, mai due copie che
    * potrebbero divergere.
    */
-  function impostaPermesso(nuovoPermesso, messaggioToast = nuovoPermesso) {
-    state.permissions = nuovoPermesso;
+  function aggiornaPillolaPermessi() {
     $$('.selector-pill span').filter((span) => ['Workspace write', 'Read only', 'On request', 'Full access'].includes(span.textContent)).forEach((span) => { span.textContent = state.permissions; });
     window.__talosHarnessHostPermissionChange?.(state.permissions);
+  }
+
+  function impostaPermesso(nuovoPermesso, messaggioToast = nuovoPermesso) {
+    state.permissions = nuovoPermesso;
+    aggiornaPillolaPermessi();
+    sincronizzaImpostazioniSessione({ permessi: nuovoPermesso });
     toast('Policy aggiornata', messaggioToast);
   }
 
@@ -3246,6 +3621,7 @@
         const tool = select.dataset.toolPermissionSelect;
         if (select.value) state.permessiPerAttrezzo[tool] = select.value;
         else delete state.permessiPerAttrezzo[tool];
+        sincronizzaImpostazioniSessione({ permessiPerAttrezzo: Object.keys(state.permessiPerAttrezzo).length ? { ...state.permessiPerAttrezzo } : null });
         toast('Permesso per-attrezzo aggiornato', select.value ? `${tool}: ${select.options[select.selectedIndex].textContent}` : `${tool}: torna alla policy sessione`);
       });
     });
@@ -3452,6 +3828,26 @@
     }
   }
 
+  function runRealeAttivo() {
+    return Boolean(state.realSession.id && !state.realSession.eventoTerminaleVisto);
+  }
+
+  /** Un solo punto sincronizza semantica, icona e azioni del composer. */
+  function syncRunComposerState() {
+    const attivo = runRealeAttivo();
+    const haTesto = composerInput.value.trim().length > 0;
+    const redirectOccupato = state.realSession.redirectRequestInFlight || Boolean(state.realSession.redirectPendingId);
+    const use = $('use', sendButton);
+    sendButton.classList.toggle('is-stop', attivo);
+    sendButton.setAttribute('aria-label', attivo ? 'Interrompi risposta' : 'Invia');
+    sendButton.title = attivo ? 'Interrompi al prossimo punto sicuro' : 'Invia';
+    if (use) use.setAttribute('href', attivo ? '#i-stop' : '#i-send');
+    redirectRunButton.hidden = !(attivo && haTesto);
+    redirectRunButton.disabled = redirectOccupato;
+    redirectRunButton.setAttribute('aria-label', 'Reindirizza con il testo scritto');
+    composerInput.placeholder = attivo ? 'Scrivi un follow-up…' : 'Scrivi a TALOS...';
+  }
+
   function setQueueMode(enabled, announce = false) {
     /*
      * ⛔ 27/8 — stessa guardia di submitPrompt, estesa. ⭐⭐⭐ 28/8, FASE D:
@@ -3472,9 +3868,6 @@
       return;
     }
     state.queueMode = Boolean(enabled);
-    queueToggle.classList.toggle('active', state.queueMode);
-    queueToggle.setAttribute('aria-pressed', String(state.queueMode));
-    queueToggle.textContent = state.queueMode ? 'In coda' : 'Follow-up';
     runStateToggle?.setAttribute('aria-pressed', String(state.queueMode));
     if (announce) toast(state.queueMode ? 'Steering queue attiva' : 'Steering queue disattivata');
   }
@@ -3797,41 +4190,66 @@
    * !runningTools.length` su mobile): il primo token di testo o il primo
    * tool-call la rimuovono (vedi TextMessageContent/ToolCallStart sotto).
    */
-  function mostraAttesaRisposta() {
-    if (state.realSession.attesaBubble) return; // già a schermo, non raddoppiare
+  function mostraAttesaRisposta(stato = 'attesa') {
+    const etichette = {
+      attesa: 'TALOS sta elaborando la risposta…',
+      reasoning: 'Ragionamento in corso…',
+      preparing: 'TALOS sta preparando la risposta…',
+      redirect: 'Reindirizzamento al prossimo punto sicuro…',
+    };
+    const etichetta = etichette[stato] || etichette.attesa;
+    if (state.realSession.attesaBubble) {
+      state.realSession.attesaBubble.dataset.activity = stato;
+      const label = $('.run-activity-label', state.realSession.attesaBubble);
+      if (label) label.textContent = etichetta;
+      return;
+    }
     const conversation = $('#conversation');
     const article = document.createElement('article');
     article.className = 'message assistant-message compact-message real-waiting-note';
     article.setAttribute('role', 'status');
     article.setAttribute('aria-live', 'polite');
+    article.setAttribute('aria-atomic', 'true');
     const svgNs = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(svgNs, 'svg');
     svg.setAttribute('class', 'talos-line-loader');
-    svg.setAttribute('viewBox', '0 0 96 16');
-    svg.setAttribute('width', '44');
-    svg.setAttribute('height', '7');
+    svg.setAttribute('viewBox', '0 0 48 18');
+    svg.setAttribute('width', '34');
+    svg.setAttribute('height', '13');
     svg.setAttribute('aria-hidden', 'true');
-    const traccia = document.createElementNS(svgNs, 'line');
-    traccia.setAttribute('class', 'talos-line-loader-track');
-    traccia.setAttribute('x1', '4'); traccia.setAttribute('y1', '8'); traccia.setAttribute('x2', '92'); traccia.setAttribute('y2', '8');
-    const sweep = document.createElementNS(svgNs, 'line');
-    sweep.setAttribute('class', 'talos-line-loader-sweep');
-    sweep.setAttribute('x1', '4'); sweep.setAttribute('y1', '8'); sweep.setAttribute('x2', '92'); sweep.setAttribute('y2', '8');
-    svg.append(traccia, sweep);
-    for (const cx of [16, 48, 80]) {
+    for (const cx of [8, 24, 40]) {
       const nodo = document.createElementNS(svgNs, 'circle');
       nodo.setAttribute('class', 'talos-line-loader-node');
-      nodo.setAttribute('cx', String(cx)); nodo.setAttribute('cy', '8'); nodo.setAttribute('r', '4');
+      nodo.setAttribute('cx', String(cx)); nodo.setAttribute('cy', '10'); nodo.setAttribute('r', '3.5');
       svg.append(nodo);
     }
-    article.append(svg, textElement('span', 'sr-only', 'TALOS sta elaborando la risposta…'));
+    const elapsed = textElement('span', 'run-activity-elapsed', '0s');
+    elapsed.setAttribute('aria-hidden', 'true');
+    article.dataset.activity = stato;
+    article.append(svg, textElement('span', 'run-activity-label', etichetta), elapsed);
     conversation.appendChild(article);
     state.realSession.attesaBubble = article;
+    state.realSession.attesaAvviataA = typeof performance !== 'undefined' && typeof performance.now === 'function'
+      ? performance.now()
+      : Date.now();
+    const aggiornaTempoAttesa = () => {
+      if (!state.realSession.attesaBubble || state.realSession.attesaAvviataA === null) return;
+      const ora = typeof performance !== 'undefined' && typeof performance.now === 'function'
+        ? performance.now()
+        : Date.now();
+      elapsed.textContent = `${Math.max(0, Math.floor((ora - state.realSession.attesaAvviataA) / 1000))}s`;
+    };
+    state.realSession.attesaTimer = window.setInterval(aggiornaTempoAttesa, 1000);
     markMotionEnter(article);
     window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
   }
 
   function nascondiAttesaRisposta() {
+    if (state.realSession.attesaTimer !== null) {
+      window.clearInterval(state.realSession.attesaTimer);
+      state.realSession.attesaTimer = null;
+    }
+    state.realSession.attesaAvviataA = null;
     if (!state.realSession.attesaBubble) return;
     state.realSession.attesaBubble.remove();
     state.realSession.attesaBubble = null;
@@ -3848,7 +4266,7 @@
     const glyph = document.createElement('span');
     glyph.className = 'talos-glyph';
     glyph.appendChild(textElement('span', 'brand-glyph-mark', ''));
-    meta.append(glyph, document.createTextNode('TALOS · sessione reale'));
+    meta.append(glyph, document.createTextNode(`TALOS · ${state.realSession.currentRunModel || 'sessione reale'}`));
     const copy = document.createElement('div');
     copy.className = 'assistant-copy';
     article.append(meta, copy);
@@ -3947,7 +4365,10 @@
       contenitore,
       summaryText,
       diffBadge,
-      contatori: { letti: 0, cercati: 0, comandi: 0, comandiErrore: 0, nuovi: 0, modificati: 0, altro: 0, diffAgg: 0, diffRim: 0 },
+      contatori: { letti: 0, cercati: 0, comandi: 0, comandiErrore: 0, nuovi: 0, modificati: 0, altro: 0, falliti: 0, diffAgg: 0, diffRim: 0 },
+      // Lo Start non è un successo. Questi contatori descrivono soltanto
+      // ciò che è ancora vivo; i totali sopra avanzano al ToolCallResult.
+      inCorso: { letto: 0, cercato: 0, comando: 0, scrittura: 0, altro: 0 },
       // ⭐ FIFO: la bubble {summaryText,detail} di ogni `scrivi` in attesa
       // del proprio StateDelta (che porta prima/dopo — vedi updateRealReview
       // più sotto). Il kernel esegue le tool-call in sequenza, mai in
@@ -3981,6 +4402,24 @@
     return 'altro';
   }
 
+  function formattaConteggioAttivita(categoria, totale) {
+    if (categoria === 'letto') return totale === 1 ? '1 file letto' : `${totale} file letti`;
+    if (categoria === 'cercato') return totale === 1 ? '1 ricerca completata' : `${totale} ricerche completate`;
+    if (categoria === 'modificato') return totale === 1 ? '1 file modificato' : `${totale} file modificati`;
+    if (categoria === 'nuovo') return totale === 1 ? '1 file creato' : `${totale} file creati`;
+    if (categoria === 'comando') return totale === 1 ? '1 comando eseguito' : `${totale} comandi eseguiti`;
+    if (categoria === 'fallito') return totale === 1 ? '1 attività non riuscita' : `${totale} attività non riuscite`;
+    return totale === 1 ? '1 altra azione' : `${totale} altre azioni`;
+  }
+
+  function formattaAttivitaInCorso(categoria, totale) {
+    if (categoria === 'letto') return `lettura di ${totale} file…`;
+    if (categoria === 'cercato') return totale === 1 ? '1 ricerca in corso…' : `${totale} ricerche in corso…`;
+    if (categoria === 'comando') return `esecuzione di ${totale} comand${totale === 1 ? 'o' : 'i'}…`;
+    if (categoria === 'scrittura') return `scrittura di ${totale} file…`;
+    return totale === 1 ? '1 attività in corso…' : `${totale} attività in corso…`;
+  }
+
   /**
    * Il riepilogo testuale a elenco run-on ("Letto 3 file, modificato 2
    * file, eseguito 20 comandi (2 errori)...") — RICALCOLATO per intero
@@ -3991,15 +4430,19 @@
   function aggiornaRiassuntoBatch(batch) {
     const c = batch.contatori;
     const parti = [];
-    if (c.letti > 0) parti.push(`letto ${c.letti} file`);
-    if (c.cercati > 0) parti.push('cercato nel progetto');
-    if (c.modificati > 0) parti.push(`modificato ${c.modificati} file`);
-    if (c.nuovi > 0) parti.push(c.nuovi === 1 ? 'creato un file' : `creato ${c.nuovi} file`);
+    if (c.letti > 0) parti.push(formattaConteggioAttivita('letto', c.letti));
+    if (c.cercati > 0) parti.push(formattaConteggioAttivita('cercato', c.cercati));
+    if (c.modificati > 0) parti.push(formattaConteggioAttivita('modificato', c.modificati));
+    if (c.nuovi > 0) parti.push(formattaConteggioAttivita('nuovo', c.nuovi));
     if (c.comandi > 0) {
       const erroreParte = c.comandiErrore > 0 ? ` (${c.comandiErrore} error${c.comandiErrore === 1 ? 'e' : 'i'})` : '';
-      parti.push(`eseguito ${c.comandi} comand${c.comandi === 1 ? 'o' : 'i'}${erroreParte}`);
+      parti.push(`${formattaConteggioAttivita('comando', c.comandi)}${erroreParte}`);
     }
-    if (c.altro > 0) parti.push(c.altro === 1 ? 'un\'altra azione' : `${c.altro} altre azioni`);
+    if (c.altro > 0) parti.push(formattaConteggioAttivita('altro', c.altro));
+    if (c.falliti > 0) parti.push(formattaConteggioAttivita('fallito', c.falliti));
+    for (const categoria of ['letto', 'cercato', 'comando', 'scrittura', 'altro']) {
+      if (batch.inCorso[categoria] > 0) parti.push(formattaAttivitaInCorso(categoria, batch.inCorso[categoria]));
+    }
     batch.summaryText.textContent = parti.length > 0
       ? `${parti[0].charAt(0).toUpperCase()}${parti[0].slice(1)}${parti.slice(1).map((p) => `, ${p}`).join('')}`
       : 'Attività…';
@@ -4060,8 +4503,20 @@
     article.append(summary, detail);
     conversation.appendChild(article);
     markMotionEnter(article);
-    window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
-    return { summaryText, detail };
+    window.setTimeout(() => {
+      if (article.hidden) return;
+      article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' });
+    }, 40);
+    return { article, summaryText, detail };
+  }
+
+  function aggiornaVisibilitaRagionamento() {
+    $$('.real-reasoning-note').forEach((article) => {
+      article.hidden = !state.showReasoning;
+      article.setAttribute('aria-hidden', String(!state.showReasoning));
+    });
+    const toggle = $('#showReasoningToggle');
+    if (toggle) toggle.checked = state.showReasoning;
   }
 
   /*
@@ -4115,6 +4570,26 @@
   function tronca(testo, massimo) {
     const t = String(testo ?? '');
     return t.length > massimo ? `${t.slice(0, massimo)}…` : t;
+  }
+
+  function riassuntoAttrezzoInCorso(nome, argomenti) {
+    const a = argomenti || {};
+    switch (nome) {
+      case 'scrivi': return a.percorso ? `Scrittura di ${a.percorso}…` : 'Scrittura file…';
+      case 'leggi': return a.percorso ? `Lettura di ${a.percorso}…` : 'Lettura file…';
+      case 'cerca': {
+        const criteri = [a.nome, a.testo].filter(Boolean).map((v) => `"${v}"`).join(' · ');
+        return criteri ? `Ricerca di ${criteri}…` : 'Ricerca nel progetto…';
+      }
+      case 'elenca': return 'Elenco dei file…';
+      case 'prova': return 'Esecuzione dei test…';
+      case 'shell': return a.descrizione ? `${tronca(a.descrizione, 92)}…` : a.comando ? `Esecuzione di ${tronca(a.comando, 80)}…` : 'Esecuzione comando…';
+      case 'naviga': return a.url ? `Apertura di ${tronca(a.url, 90)}…` : 'Apertura pagina…';
+      case 'delega_sottotask': return a.task ? `Sotto-attività: ${tronca(a.task, 84)}…` : 'Avvio sotto-attività…';
+      case 'memory_write': return a.title ? `Salvataggio memoria: ${tronca(a.title, 60)}…` : 'Salvataggio in memoria…';
+      case 'research_start': return a.question ? `Ricerca approfondita: ${tronca(a.question, 60)}…` : 'Avvio ricerca approfondita…';
+      default: return `${nome}(…)`;
+    }
   }
 
   function riassuntoAttrezzo(nome, argomenti) {
@@ -4182,6 +4657,39 @@
     return fail === '0' ? `✓ Test verdi — ${pass}/${pass}` : `✗ Test falliti — ${fail} su ${Number(pass) + Number(fail)}`;
   }
 
+  function esitoAttrezzoFallito(nome, testoEsito) {
+    const testo = String(testoEsito ?? '');
+    if (nome === 'prova') return /ℹ?\s*fail\s+([1-9]\d*)/i.test(testo);
+    if (nome === 'shell') return /(?:^|\n)exit\s+([1-9]\d*)\b/i.test(testo);
+    return /^(?:REFUSED\.|ERROR\b|ERRORE\b|FAILED\b|FALLITO\b|NON RIUSCITO\b)/i.test(testo.trim());
+  }
+
+  function riassuntoAttrezzoConcluso(nome, argomenti, testoEsito, fallito) {
+    const descrizioneModello = typeof argomenti?.descrizione === 'string' ? argomenti.descrizione.trim() : '';
+    if (nome === 'shell' && descrizioneModello) {
+      const descrizione = tronca(descrizioneModello, 92);
+      return fallito ? `${descrizione} — non riuscito` : descrizione;
+    }
+    if (nome === 'delega_sottotask' || nome === 'prova') {
+      return riassuntoEsitoAttrezzo(nome, riassuntoAttrezzo(nome, argomenti), testoEsito);
+    }
+    if (fallito) {
+      if (nome === 'leggi') return 'Lettura non riuscita';
+      if (nome === 'cerca' || nome === 'elenca') return 'Ricerca non riuscita';
+      if (nome === 'scrivi') return 'Scrittura non riuscita';
+      if (nome === 'shell') return '1 comando fallito';
+      if (nome === 'naviga') return 'Navigazione non riuscita';
+      return 'Attività non riuscita';
+    }
+    if (nome === 'leggi') return '1 file letto';
+    if (nome === 'cerca') return '1 ricerca completata';
+    if (nome === 'elenca') return '1 elenco completato';
+    if (nome === 'scrivi') return '1 file scritto';
+    if (nome === 'shell') return '1 comando eseguito';
+    if (nome === 'naviga') return 'Navigazione completata';
+    return riassuntoEsitoAttrezzo(nome, riassuntoAttrezzo(nome, argomenti), testoEsito);
+  }
+
   /**
    * Argomenti di un tool-call, formattati: se il JSON è valido (lo è
    * sempre a fine trasmissione — questo backend manda gli argomenti in
@@ -4204,6 +4712,10 @@
       return;
     }
     for (const [chiave, valore] of Object.entries(argomenti)) {
+      // La descrizione è già la label primaria della riga. Ripeterla nel
+      // dettaglio toglierebbe spazio proprio a comando ed esito, che sono
+      // l'evidenza tecnica utile quando l'owner espande il singolo step.
+      if (chiave === 'descrizione') continue;
       const riga = document.createElement('div');
       riga.className = 'tool-arg-row';
       const testoValore = typeof valore === 'string' ? valore : JSON.stringify(valore);
@@ -4398,6 +4910,7 @@
       if (fileTreeBox) fileTreeBox.replaceChildren(textElement('p', 'board-empty', 'Nessuna cartella ancora scelta — i file appariranno qui appena inizi una sessione.'));
       const demoBadgeFiles = $('.demo-surface-badge', $('[data-inspector-section="files"]'));
       if (demoBadgeFiles) demoBadgeFiles.hidden = true;
+      syncFileTreeToolbar(false);
     }
     /*
      * ⛔⛔⛔ 27/8, trovato nell'ispezione visiva finale: una sessione VERA
@@ -4801,7 +5314,10 @@
       switch (evento.type) {
         case 'RunStarted': {
           numeroGiro += 1;
-          righe.push(`## Giro ${numeroGiro}`, '', descriviTask(evento.input), '');
+          righe.push(`## Giro ${numeroGiro}`, '');
+          if (evento.contesto?.modello) righe.push(`- **Modello del giro:** ${evento.contesto.modello}`);
+          if (evento.contesto?.reasoning?.effort) righe.push(`- **Ragionamento:** ${evento.contesto.reasoning.effort}`);
+          righe.push('', descriviTask(evento.input), '');
           break;
         }
         /*
@@ -5119,6 +5635,36 @@
     return !state.realSession.id && Boolean(state.realSession.previewProjectId);
   }
 
+  function syncFileTreeToolbar(enabled = Boolean(state.realSession.id) && !alberoInAnteprima()) {
+    for (const id of ['fileTreeNewFile', 'fileTreeNewFolder', 'fileTreeRefresh', 'fileTreeCollapse']) {
+      const button = $(`#${id}`);
+      if (button) button.disabled = !enabled;
+    }
+  }
+
+  function cartellaSelezionataAlbero() {
+    const selected = $('#inspector-files .ft-row.ft-selected');
+    const node = selected?.closest('.ft-node');
+    if (!node) return '';
+    const path = node.dataset.percorso || '';
+    if (node.hasAttribute('aria-expanded')) return path;
+    return path.includes('/') ? path.split('/').slice(0, -1).join('/') : '';
+  }
+
+  async function refreshSessionFileTree() {
+    if (!state.realSession.id || alberoInAnteprima()) return;
+    state.realSession.treeCache.clear();
+    await renderizzaAlberoReale();
+    toast('File aggiornati', 'Il workspace è stato riletto.');
+  }
+
+  async function collapseSessionFileTree() {
+    if (!state.realSession.id || alberoInAnteprima()) return;
+    state.realSession.treeOpen.clear();
+    salvaImpostazioniAlbero();
+    await renderizzaAlberoReale();
+  }
+
   // Stato di sola interfaccia, separato dai dati della sessione: come VS Code
   // ricorda espansioni e filtro per workspace, mai contenuti o percorsi nuovi.
   const DESKTOP_SETTINGS_KEY = 'talos.harness.desktop.settings.v1';
@@ -5135,7 +5681,7 @@
     themePreset: 'calm', colorMode: 'system', sceneOverride: 'follow-theme',
     uiFontScale: 'default', chatFontScale: 'xcompact', composerShape: 'standard',
     composerPlus: 'drawer', messageStyle: 'sections', streamingAnimation: 'fade',
-    windowPresentation: 'drawer', immersiveHeader: false, reducedMotion: false,
+    windowPresentation: 'drawer', immersiveHeader: false, chatFullWidth: false, reducedMotion: false,
     backgroundMotion: true, interfaceMotion: true, motionMode: 'adaptive',
     motionQuality: 'balanced', motionSpeed: 100, motionIntensity: 20,
     motionGlow: 10, motionDensity: 100, motionDepth: 92, motionTrails: 50,
@@ -5144,6 +5690,10 @@
     motionDuration: 50, motionUiIntensity: 65, motionStagger: 40,
     motionWindows: true, motionSurfaces: true, motionNavigation: true,
     motionComposer: true, motionMessages: true, motionFeedback: true,
+  };
+  const DESKTOP_CHAT_DEFAULTS = {
+    model: '', effort: null, showReasoning: false,
+    permissions: 'Workspace write', permessiPerAttrezzo: {},
   };
   const TALOS_THEME_TOKENS = {
     forge: { bg: '#201d1a', panel: '#2b2621', accent: '#c08b3c', text: '#f5efe6', muted: '#b5a89a', border: '#4b3e31', radius: '14px', font: 'Instrument Sans' },
@@ -5191,8 +5741,25 @@
     safe.motionProfile = enumValue(record.motionProfile, MOTION_PROFILE_IDS, safe.motionProfile);
     safe.motionEasing = enumValue(record.motionEasing, MOTION_EASING_IDS, safe.motionEasing);
     for (const [key, range] of Object.entries(MOTION_RANGE_DEFS)) safe[key] = numberValue(record[key], range, safe[key]);
-    for (const key of ['immersiveHeader', 'reducedMotion', 'backgroundMotion', 'interfaceMotion', 'pauseWhenHidden', 'respectDataSaver', 'motionWindows', 'motionSurfaces', 'motionNavigation', 'motionComposer', 'motionMessages', 'motionFeedback']) safe[key] = boolValue(record[key], safe[key]);
+    for (const key of ['immersiveHeader', 'chatFullWidth', 'reducedMotion', 'backgroundMotion', 'interfaceMotion', 'pauseWhenHidden', 'respectDataSaver', 'motionWindows', 'motionSurfaces', 'motionNavigation', 'motionComposer', 'motionMessages', 'motionFeedback']) safe[key] = boolValue(record[key], safe[key]);
     return safe;
+  }
+  function normalizzaPreferenzeChatDesktop(value) {
+    const record = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    const effortAmmessi = ['xhigh', 'high', 'medium', 'low', 'minimal', 'none'];
+    const permessiAmmessi = ['Read only', 'Workspace write', 'On request', 'Full access'];
+    const toolAmmessi = ['scrivi', 'prova', 'shell', 'document_create', 'generate_image'];
+    const valoriTool = ['sempre', 'chiedi', 'nega'];
+    const override = record.permessiPerAttrezzo && typeof record.permessiPerAttrezzo === 'object' && !Array.isArray(record.permessiPerAttrezzo)
+      ? Object.fromEntries(Object.entries(record.permessiPerAttrezzo).filter(([tool, valore]) => toolAmmessi.includes(tool) && valoriTool.includes(valore)))
+      : {};
+    return {
+      model: typeof record.model === 'string' && record.model.length <= 160 ? record.model : '',
+      effort: effortAmmessi.includes(record.effort) ? record.effort : null,
+      showReasoning: boolValue(record.showReasoning, false),
+      permissions: permessiAmmessi.includes(record.permissions) ? record.permissions : DESKTOP_CHAT_DEFAULTS.permissions,
+      permessiPerAttrezzo: override,
+    };
   }
   function normalizzaWorkspaces(value) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
@@ -5210,10 +5777,11 @@
       return {
         version: 1,
         appearance: normalizzaAspettoDesktop(raw?.appearance),
+        chat: normalizzaPreferenzeChatDesktop(raw?.chat),
         workspaces: normalizzaWorkspaces(raw?.workspaces),
       };
     } catch {
-      return { version: 1, appearance: { ...DESKTOP_APPEARANCE_DEFAULTS }, workspaces: {} };
+      return { version: 1, appearance: { ...DESKTOP_APPEARANCE_DEFAULTS }, chat: { ...DESKTOP_CHAT_DEFAULTS }, workspaces: {} };
     }
   }
   function salvaImpostazioniDesktop(value) {
@@ -5224,6 +5792,7 @@
       window.localStorage.setItem(DESKTOP_SETTINGS_KEY, JSON.stringify({
         version: 1,
         appearance: sparseAppearance,
+        chat: normalizzaPreferenzeChatDesktop(safe.chat),
         workspaces: normalizzaWorkspaces(safe.workspaces),
       }));
     } catch {
@@ -5236,8 +5805,29 @@
     salvaImpostazioniDesktop(documento);
     applicaAspettoDesktop(documento.appearance);
   }
-  let backgroundAnimationFrame = null;
+  function salvaPreferenzeChatDesktop() {
+    const documento = leggiImpostazioniDesktop();
+    documento.chat = normalizzaPreferenzeChatDesktop({
+      model: state.model,
+      effort: state.effort,
+      showReasoning: state.showReasoning,
+      permissions: state.permissions,
+      permessiPerAttrezzo: state.permessiPerAttrezzo,
+    });
+    salvaImpostazioniDesktop(documento);
+  }
+  function inizializzaPreferenzeChatDesktop() {
+    const preferenze = leggiImpostazioniDesktop().chat;
+    state.model = preferenze.model;
+    state.effort = preferenze.effort;
+    state.showReasoning = preferenze.showReasoning;
+    state.permissions = preferenze.permissions;
+    state.permessiPerAttrezzo = { ...preferenze.permessiPerAttrezzo };
+  }
   let backgroundAnimationRunning = false;
+  const backgroundInteractionPauseReasons = new Set();
+  let backgroundScrollResumeTimer = null;
+  const BACKGROUND_SCROLL_RESUME_DELAY_MS = 220;
   let appearanceMediaQuery = null;
   let handleAppearanceMediaChange = null;
   let handleAppearanceVisibilityChange = null;
@@ -5264,13 +5854,54 @@
     }
     const light = mode === 'light';
     const colors = light ? { bg: '#f5f3ee', panel: '#fffdf8', accent: theme.accent, text: '#24211e', muted: '#756e65', border: '#d9d0c3' } : theme;
+    const mix = (primary, weight, secondary) => `color-mix(in srgb, ${primary} ${weight}%, ${secondary})`;
+    const semantic = {
+      codeBg: mix(colors.bg, light ? 94 : 78, '#000'),
+      panelSoft: mix(colors.panel, light ? 92 : 88, colors.bg),
+      card: mix(colors.panel, light ? 94 : 86, colors.text),
+      windowBg: mix(colors.panel, light ? 97 : 82, colors.text),
+      assistantText: mix(colors.text, 82, colors.muted),
+      borderStrong: mix(colors.border, 72, colors.text),
+      accentHover: mix(colors.accent, 84, light ? '#000' : '#fff'),
+      accentSoft: mix(colors.accent, 14, 'transparent'),
+      accentBorder: mix(colors.accent, 34, 'transparent'),
+      accentText: '#151411',
+      secondary: light ? '#426d64' : mix(colors.muted, 72, '#7cc7b4'),
+      success: light ? '#3f7650' : '#77a884',
+      successSoft: mix(light ? '#3f7650' : '#77a884', 13, 'transparent'),
+      successBorder: mix(light ? '#3f7650' : '#77a884', 28, 'transparent'),
+      danger: light ? '#a9463d' : '#d87d72',
+      dangerSoft: mix(light ? '#a9463d' : '#d87d72', 13, 'transparent'),
+      info: light ? '#41688f' : '#7f9fc4',
+      ring: colors.accent,
+      ringSoft: mix(colors.accent, 12, 'transparent'),
+    };
     const style = host.style;
     style.setProperty('--talos-background', colors.bg);
+    style.setProperty('--talos-code-bg', semantic.codeBg);
     style.setProperty('--talos-panel', colors.panel);
+    style.setProperty('--talos-panel-soft', semantic.panelSoft);
+    style.setProperty('--talos-card', semantic.card);
+    style.setProperty('--talos-window-bg', semantic.windowBg);
     style.setProperty('--talos-accent', colors.accent);
+    style.setProperty('--talos-accent-hover', semantic.accentHover);
+    style.setProperty('--talos-accent-soft', semantic.accentSoft);
+    style.setProperty('--talos-accent-border', semantic.accentBorder);
+    style.setProperty('--talos-accent-text', semantic.accentText);
     style.setProperty('--talos-text', colors.text);
+    style.setProperty('--talos-assistant-text', semantic.assistantText);
     style.setProperty('--talos-muted', colors.muted);
     style.setProperty('--talos-border', colors.border);
+    style.setProperty('--talos-border-strong', semantic.borderStrong);
+    style.setProperty('--talos-secondary', semantic.secondary);
+    style.setProperty('--talos-success', semantic.success);
+    style.setProperty('--talos-success-soft', semantic.successSoft);
+    style.setProperty('--talos-success-border', semantic.successBorder);
+    style.setProperty('--talos-danger', semantic.danger);
+    style.setProperty('--talos-danger-soft', semantic.dangerSoft);
+    style.setProperty('--talos-info', semantic.info);
+    style.setProperty('--talos-ring', semantic.ring);
+    style.setProperty('--talos-ring-soft', semantic.ringSoft);
     style.setProperty('--talos-radius-card', theme.radius);
     style.setProperty('--talos-radius-control', theme.radius);
     style.setProperty('--talos-font-ui', theme.font);
@@ -5289,9 +5920,38 @@
     style.setProperty('--talos-motion-trails', String(safe.motionTrails / 100));
     style.setProperty('--talos-motion-contrast', String(safe.motionContrast / 100));
     style.setProperty('--talos-motion-parallax', String(safe.motionParallax / 100));
+    const velocitaSfondo = Math.max(0.1, safe.motionSpeed / 100);
+    style.setProperty('--talos-background-cycle', `${Math.round(36_000 / velocitaSfondo)}ms`);
+    style.setProperty('--talos-background-shift-x', `${Math.round(safe.motionParallax * 0.8)}px`);
+    style.setProperty('--talos-background-shift-y', `${Math.round(safe.motionParallax * 0.5)}px`);
     style.setProperty('--talos-motion-duration-scale', String(safe.motionDuration / 100));
     style.setProperty('--talos-motion-ui-intensity', String(safe.motionUiIntensity / 100));
     style.setProperty('--talos-motion-stagger', `${safe.motionStagger}ms`);
+    const profilo = { minimal: .72, expressive: 1.2, custom: 1, preset: 1, off: 0 }[safe.motionProfile] ?? 1;
+    const scala = (safe.motionDuration / 100) * profilo;
+    const durata = (base) => `${Math.max(1, Math.round(base * scala))}ms`;
+    const easing = {
+      precise: 'cubic-bezier(.2,.7,.2,1)', soft: 'cubic-bezier(.22,1,.36,1)',
+      'elastic-light': 'cubic-bezier(.34,1.28,.64,1)', linear: 'linear', cinematic: 'cubic-bezier(.16,1,.3,1)',
+    }[safe.motionEasing];
+    style.setProperty('--talos-motion-duration-control', durata(160));
+    style.setProperty('--talos-motion-duration-surface-enter', durata(180));
+    style.setProperty('--talos-motion-duration-surface-exit', durata(150));
+    style.setProperty('--talos-motion-duration-disclosure', durata(180));
+    style.setProperty('--talos-motion-duration-popover', durata(180));
+    style.setProperty('--talos-motion-duration-tab-change', durata(180));
+    style.setProperty('--talos-motion-duration-composer-expand', durata(180));
+    style.setProperty('--talos-motion-duration-composer-collapse', durata(150));
+    style.setProperty('--talos-motion-duration-message-insert', durata(180));
+    style.setProperty('--talos-motion-duration-response-progress', durata(1600));
+    style.setProperty('--talos-motion-duration-success-confirm', durata(280));
+    style.setProperty('--talos-motion-duration-theme-transition', durata(220));
+    style.setProperty('--talos-motion-ease', easing);
+    style.setProperty('--talos-motion-ease-exit', safe.motionEasing === 'linear' ? 'linear' : 'ease-in');
+    host.dataset.talosMotionMode = safe.motionMode;
+    host.dataset.talosMotionQuality = safe.motionQuality;
+    host.dataset.talosMotionProfile = safe.motionProfile;
+    host.dataset.talosMotionEasing = safe.motionEasing;
     const backgroundOff = !safe.backgroundMotion || safe.motionMode === 'off' || safe.reducedMotion;
     host.classList.toggle('background-motion-off', backgroundOff);
     document.body.classList.toggle('background-motion-off', backgroundOff);
@@ -5313,39 +5973,70 @@
     const sceneEl = $('#sceneOverrideSelect'); if (sceneEl) sceneEl.value = safe.sceneOverride;
   }
   function fermaBackgroundDesktop() {
-    if (backgroundAnimationFrame !== null) cancelAnimationFrame(backgroundAnimationFrame);
-    backgroundAnimationFrame = null;
     backgroundAnimationRunning = false;
+    HOST().classList.remove('background-motion-active');
+    HOST().classList.add('background-motion-paused');
+    document.body.classList.remove('background-motion-active');
+    document.body.classList.add('background-motion-paused');
+  }
+  function setBackgroundInteractionPause(reason, paused) {
+    const changed = paused
+      ? !backgroundInteractionPauseReasons.has(reason)
+      : backgroundInteractionPauseReasons.has(reason);
+    if (!changed) return;
+    if (paused) backgroundInteractionPauseReasons.add(reason);
+    else backgroundInteractionPauseReasons.delete(reason);
+    avviaBackgroundDesktop();
+  }
+  function syncBackgroundDialogPause() {
+    setBackgroundInteractionPause('dialog', commandDialog.open || sheetDialog.open);
+  }
+  function queueBackgroundScrollPause() {
+    setBackgroundInteractionPause('scroll', true);
+    if (backgroundScrollResumeTimer !== null) window.clearTimeout(backgroundScrollResumeTimer);
+    backgroundScrollResumeTimer = window.setTimeout(() => {
+      backgroundScrollResumeTimer = null;
+      setBackgroundInteractionPause('scroll', false);
+    }, BACKGROUND_SCROLL_RESUME_DELAY_MS);
   }
   function avviaBackgroundDesktop() {
-    const appearance = leggiImpostazioniDesktop().appearance;
-    if (!appearance.backgroundMotion || appearance.motionMode === 'off' || appearance.motionMode === 'static' || appearance.reducedMotion || (appearance.pauseWhenHidden && document.visibilityState === 'hidden') || (appearance.respectDataSaver && navigator.connection?.saveData)) { fermaBackgroundDesktop(); return; }
-    if (backgroundAnimationRunning) return;
-    const started = performance.now();
-    const frame = (now) => {
-      const current = leggiImpostazioniDesktop().appearance;
-      if (!current.backgroundMotion || current.motionMode === 'off' || current.motionMode === 'static' || current.reducedMotion || (current.pauseWhenHidden && document.visibilityState === 'hidden') || (current.respectDataSaver && navigator.connection?.saveData)) { fermaBackgroundDesktop(); return; }
-      const elapsed = (now - started) * (current.motionSpeed / 100);
-      HOST().style.setProperty('--talos-motion-phase', String(elapsed / 1000));
-      HOST().style.setProperty('--talos-motion-x', `${Math.sin(elapsed / 1800) * 80}px`);
-      HOST().style.setProperty('--talos-motion-y', `${Math.cos(elapsed / 2200) * 50}px`);
-      backgroundAnimationFrame = requestAnimationFrame(frame);
-    };
-    backgroundAnimationRunning = true;
-    backgroundAnimationFrame = requestAnimationFrame(frame);
+    const appearance = normalizzaAspettoDesktop(leggiImpostazioniDesktop().appearance);
+    const animabile = appearance.backgroundMotion
+      && appearance.motionMode !== 'off'
+      && appearance.motionMode !== 'static'
+      && !appearance.reducedMotion;
+    const osservabile = !(appearance.pauseWhenHidden && document.visibilityState === 'hidden')
+      && !(appearance.respectDataSaver && navigator.connection?.saveData);
+    const attivo = animabile && osservabile && backgroundInteractionPauseReasons.size === 0;
+    const host = HOST();
+    host.classList.toggle('background-motion-active', animabile);
+    host.classList.toggle('background-motion-paused', !attivo);
+    document.body.classList.toggle('background-motion-active', animabile);
+    document.body.classList.toggle('background-motion-paused', !attivo);
+    backgroundAnimationRunning = attivo;
   }
   function aggiornaBackgroundDesktop() { fermaBackgroundDesktop(); avviaBackgroundDesktop(); }
   function applicaAspettoDesktop(appearance) {
     const safe = normalizzaAspettoDesktop(appearance);
+    const host = HOST();
     applicaThemeDesktop(safe);
-    HOST().style.setProperty('--talos-ui-font-scale', String(UI_FONT_SCALE_FACTORS[safe.uiFontScale]));
-    HOST().style.setProperty('--talos-chat-font-size', CHAT_FONT_SCALE_SIZES[safe.chatFontScale]);
+    host.style.setProperty('--talos-ui-font-scale', String(UI_FONT_SCALE_FACTORS[safe.uiFontScale]));
+    host.style.setProperty('--talos-chat-font-size', CHAT_FONT_SCALE_SIZES[safe.chatFontScale]);
+    host.dataset.talosComposerShape = safe.composerShape;
+    host.dataset.talosComposerPlus = safe.composerPlus;
+    host.dataset.talosMessageStyle = safe.messageStyle;
+    host.dataset.talosStreamingAnimation = safe.streamingAnimation;
+    host.dataset.talosWindowPresentation = safe.windowPresentation;
+    host.classList.toggle('immersive-header', safe.immersiveHeader);
+    host.classList.toggle('chat-full-width', safe.chatFullWidth);
     aggiornaMotionDesktop(safe);
     const ui = $('#uiFontScaleSelect');
     const chat = $('#chatFontScaleSelect');
     if (ui) ui.value = safe.uiFontScale;
     if (chat) chat.value = safe.chatFontScale;
     for (const [key, id] of Object.entries({ composerShape: 'composerShapeSelect', composerPlus: 'composerPlusSelect', messageStyle: 'messageStyleSelect', streamingAnimation: 'streamingAnimationSelect', windowPresentation: 'windowPresentationSelect' })) { const input = $(`#${id}`); if (input) input.value = safe[key]; }
+    const immersive = $('#immersiveHeaderToggle'); if (immersive) immersive.checked = safe.immersiveHeader;
+    const fullWidth = $('#chatFullWidthToggle'); if (fullWidth) fullWidth.checked = safe.chatFullWidth;
     aggiornaBackgroundDesktop();
   }
   function inizializzaAspettoDesktop() {
@@ -5354,6 +6045,8 @@
     appearanceMediaQuery?.addEventListener?.('change', handleAppearanceMediaChange);
     handleAppearanceVisibilityChange = () => { if (leggiImpostazioniDesktop().appearance.pauseWhenHidden) aggiornaBackgroundDesktop(); };
     document.addEventListener('visibilitychange', handleAppearanceVisibilityChange);
+    document.addEventListener('wheel', queueBackgroundScrollPause, { capture: true, passive: true });
+    document.addEventListener('scroll', queueBackgroundScrollPause, { capture: true, passive: true });
     applicaAspettoDesktop(leggiImpostazioniDesktop().appearance);
   }
   function resettaMotionDesktop() {
@@ -5827,9 +6520,32 @@
     }
   }
 
-  /** Piano §1.3, riga "Contesto workspace" — l'albero file REALE, radice + tutto ciò che era già aperto (treeOpen), riscaricato dal vivo. */
+  /**
+   * Una sola ricostruzione del tree può essere in volo. Le invalidazioni che
+   * arrivano durante la lettura non aprono fetch concorrenti: chiedono al
+   * massimo un secondo passaggio con lo stato più recente.
+   */
   async function renderizzaAlberoReale() {
+    cancellaRenderAlberoDifferito();
+    if (treeRenderInFlight) {
+      treeRenderNeedsRerun = true;
+      return treeRenderInFlight;
+    }
+    treeRenderInFlight = (async () => {
+      do {
+        treeRenderNeedsRerun = false;
+        await renderizzaAlberoRealeUnaVolta();
+      } while (treeRenderNeedsRerun);
+    })().finally(() => {
+      treeRenderInFlight = null;
+    });
+    return treeRenderInFlight;
+  }
+
+  /** Piano §1.3, riga "Contesto workspace" — l'albero file REALE, radice + tutto ciò che era già aperto (treeOpen), riscaricato dal vivo. */
+  async function renderizzaAlberoRealeUnaVolta() {
     if (!state.realSession.id && !state.realSession.previewProjectId) return;
+    syncFileTreeToolbar();
     ripristinaImpostazioniAlbero();
     const generation = state.realSession.generation;
     const contenitore = $('#inspector-files .file-tree');
@@ -6037,6 +6753,12 @@
     }
     switch (evento.type) {
       case 'RunStarted': {
+        state.realSession.currentRunModel = typeof evento.contesto?.modello === 'string' && evento.contesto.modello.trim()
+          ? evento.contesto.modello.trim()
+          : (state.model || null);
+        state.realSession.redirectPendingId = null;
+        state.realSession.eventoTerminaleVisto = false;
+        syncRunComposerState();
         /*
          * ⛔⛔⛔ 27/8, owner: "'Nuovo giro iniziato sulla stessa
          * conversazione' ovviamente non deve comparire" — era rumore
@@ -6067,21 +6789,26 @@
           }
         }
         if (evento.contesto) aggiornaPannelloAmbiente(evento.contesto);
-        renderizzaAlberoReale();
+        programmaRenderAlberoReale();
         break;
       }
       case 'TextMessageContent': {
         nascondiAttesaRisposta(); // il primo token vero: la ruota di attesa ha fatto il suo lavoro
         chiudiBatchTool(); // 30/8 — testo vero dell'assistente: chiude il batch di tool-call corrente, se ce n'è uno aperto (vedi doc su apriBatchSeServe)
         const element = ensureAssistantMessageElement(evento.messageId);
+        if (!element.classList.contains('is-streaming')) element.classList.add('is-streaming');
         // ⛔⛔⛔ 27/8 — testo GREZZO accumulato a parte (mai letto da
         // .textContent, che ora contiene il RENDER): renderizzaMarkdownSemplice()
         // rilavora sempre il markdown intero visto finora, un delta grezzo
         // in mezzo a un ```blocco di codice``` non basta da solo a capirlo.
         const testoGrezzo = (state.realSession.testoGrezzoMessaggi.get(evento.messageId) || '') + evento.delta;
         state.realSession.testoGrezzoMessaggi.set(evento.messageId, testoGrezzo);
-        const copia = $('.assistant-copy', element);
-        copia.replaceChildren(renderizzaMarkdownSemplice(testoGrezzo));
+        if (!state.realSession.deferHistoricalRendering) programmaRenderMessaggioStreaming(evento.messageId);
+        break;
+      }
+      case 'TextMessageEnd': {
+        renderizzaMessaggioStreamingOra(evento.messageId);
+        state.realSession.messageElements.get(evento.messageId)?.classList.remove('is-streaming');
         break;
       }
       /*
@@ -6103,9 +6830,14 @@
        * doverlo chiudere lui stesso.
        */
       case 'ReasoningMessageStart': {
-        nascondiAttesaRisposta(); // il ragionamento è la prima prova che il modello ha iniziato, anche prima del testo
-        chiudiBatchTool(); // 30/8 — un nuovo blocco di ragionamento chiude il batch di tool-call corrente, stesso motivo di TextMessageContent
+        mostraAttesaRisposta('reasoning');
+        // Un evento che l'utente ha scelto di nascondere non è un confine
+        // visibile: il batch resta unico. Quando il ragionamento è mostrato,
+        // invece, conserva la cronologia reale e chiude il gruppo precedente.
+        if (state.showReasoning) chiudiBatchTool();
         const bubble = appendToolNote('Ragionamento', { classeExtra: 'real-reasoning-note', glifo: '💭' });
+        bubble.article.hidden = !state.showReasoning;
+        bubble.article.setAttribute('aria-hidden', String(!state.showReasoning));
         state.realSession.ragionamentoBubble.set(evento.messageId, { ...bubble, grezzo: '' });
         break;
       }
@@ -6113,18 +6845,31 @@
         const voce = state.realSession.ragionamentoBubble.get(evento.messageId);
         if (!voce) break; // difensivo: un Content senza il suo Start non deve far crashare la sessione
         voce.grezzo += evento.delta;
-        voce.detail.replaceChildren(renderizzaMarkdownSemplice(voce.grezzo));
+        if (!state.realSession.deferHistoricalRendering) {
+          voce.detail.replaceChildren(renderizzaMarkdownSemplice(voce.grezzo));
+          if (state.showReasoning) scrollStreamingOutput(voce.article);
+        }
         break;
       }
       case 'ReasoningMessageEnd': {
+        const voce = state.realSession.ragionamentoBubble.get(evento.messageId);
+        if (voce && state.realSession.deferHistoricalRendering) {
+          voce.detail.replaceChildren(renderizzaMarkdownSemplice(voce.grezzo));
+        }
         state.realSession.ragionamentoBubble.delete(evento.messageId); // la bolla resta a schermo, solo non si aggiorna più
+        mostraAttesaRisposta('preparing');
         break;
       }
       case 'ToolCallStart': {
         nascondiAttesaRisposta(); // il primo attrezzo chiamato: sappiamo già cosa sta facendo, la ruota non serve più
         // ⭐⭐⭐ 30/8 — raggruppamento (owner, "come fa Claude"): la riga nasce DENTRO il batch corrente, non più direttamente in conversazione. Vedi apriBatchSeServe.
         const batch = apriBatchSeServe();
-        const bubble = appendToolNote(riassuntoAttrezzo(evento.toolCallName, null), { contenitore: batch.contenitore });
+        const bubble = appendToolNote(riassuntoAttrezzoInCorso(evento.toolCallName, null), { contenitore: batch.contenitore });
+        bubble.article.dataset.toolState = 'running';
+        bubble.article.setAttribute('aria-busy', 'true');
+        bubble.summaryText.setAttribute('role', 'status');
+        bubble.summaryText.setAttribute('aria-live', 'polite');
+        bubble.summaryText.setAttribute('aria-atomic', 'true');
         /*
          * ⭐ nome + riferimenti DOM (summaryText/detail) tenuti per
          * toolCallId: ToolCallArgs e ToolCallResult aggiornano LO STESSO
@@ -6133,13 +6878,18 @@
          * `nome` serve ANCHE a riconoscere shell/naviga per specchiarli
          * nella vista Terminale/Browser, invariato.
          */
-        state.realSession.toolCallNomi.set(evento.toolCallId, { nome: evento.toolCallName, argomenti: '', ...bubble });
         const categoria = categoriaAttrezzoPerBatch(evento.toolCallName);
-        if (categoria === 'letto') batch.contatori.letti += 1;
-        else if (categoria === 'cercato') batch.contatori.cercati += 1;
-        else if (categoria === 'comando') batch.contatori.comandi += 1;
-        else if (categoria === 'scrittura') batch.scrittureInAttesa.push(bubble); // conteggiata (nuovo/modificato) solo quando arriva lo StateDelta — vedi updateRealReview
-        else batch.contatori.altro += 1;
+        state.realSession.toolCallNomi.set(evento.toolCallId, {
+          nome: evento.toolCallName,
+          argomenti: '',
+          argomentiParsati: null,
+          categoria,
+          batch,
+          stato: 'running',
+          ...bubble,
+        });
+        batch.inCorso[categoria] += 1;
+        if (categoria === 'scrittura') batch.scrittureInAttesa.push(bubble); // conteggiata (nuovo/modificato) solo quando arriva lo StateDelta — vedi updateRealReview
         aggiornaRiassuntoBatch(batch);
         break;
       }
@@ -6149,7 +6899,8 @@
           info.argomenti += evento.delta;
           let argomentiParsati = null;
           try { argomentiParsati = JSON.parse(info.argomenti); } catch { /* delta ancora incompleto: il riassunto resta quello generico finché non arriva tutto */ }
-          if (argomentiParsati && info.summaryText) info.summaryText.textContent = riassuntoAttrezzo(info.nome, argomentiParsati);
+          if (argomentiParsati) info.argomentiParsati = argomentiParsati;
+          if (argomentiParsati && info.summaryText) info.summaryText.textContent = riassuntoAttrezzoInCorso(info.nome, argomentiParsati);
           if (info.detail) renderizzaArgomentiAttrezzo(info.detail, info.argomenti);
         }
         break;
@@ -6171,7 +6922,14 @@
           appendBrowserEntry(url, String(evento.content));
         }
         const testoEsito = String(evento.content).slice(0, 4000);
-        if (info?.summaryText) info.summaryText.textContent = riassuntoEsitoAttrezzo(info.nome, info.summaryText.textContent, testoEsito);
+        const fallito = info ? esitoAttrezzoFallito(info.nome, testoEsito) : false;
+        if (info?.summaryText) info.summaryText.textContent = riassuntoAttrezzoConcluso(info.nome, info.argomentiParsati, testoEsito, fallito);
+        if (info?.article) {
+          info.article.dataset.toolState = fallito ? 'error' : 'complete';
+          info.article.setAttribute('aria-busy', 'false');
+          const glifo = info.summaryText?.previousElementSibling;
+          if (glifo?.classList.contains('talos-glyph')) glifo.textContent = fallito ? '!' : '✓';
+        }
         if (info?.detail) {
           const separatore = document.createElement('div');
           separatore.className = 'tool-arg-key';
@@ -6182,31 +6940,25 @@
           pre.appendChild(textElement('code', '', testoEsito));
           info.detail.appendChild(pre);
         }
-        /*
-         * ⭐⭐⭐ 30/8 — il conteggio "(N errori)" del riepilogo batch (spec
-         * owner, screenshot 1: "eseguito 20 comandi (2 errori)"). Solo
-         * `shell`/`prova` contano come "comando" nel batch (vedi
-         * categoriaAttrezzoPerBatch) — stesso identico riconoscimento
-         * già in uso per `prova` in riassuntoEsitoAttrezzo (pass/fail),
-         * più un pattern exit-code per `shell` generico. Un batch è
-         * spesso già chiuso quando arriva il risultato (la prossima
-         * tool-call ne apre uno nuovo) — `batch` qui è SEMPRE quello
-         * dell'ultimo `ToolCallStart`, mai quello sbagliato: se il
-         * batch che conteneva questa chiamata è già chiuso,
-         * `state.realSession.batchAttivo` è `null` o un batch DIVERSO
-         * (uno nuovo) e questo aggiornamento diventa innocuamente un
-         * no-op sul batch sbagliato — accettabile: il conteggio errori
-         * è un dettaglio del riepilogo, non la riga stessa (che resta
-         * sempre corretta, aggiornata sopra).
-         */
-        if ((info?.nome === 'prova' || info?.nome === 'shell') && state.realSession.batchAttivo) {
-          const fallito = info.nome === 'prova'
-            ? /ℹ?\s*fail\s+([1-9]\d*)/i.test(testoEsito)
-            : /exit\s+([1-9]\d*)/i.test(testoEsito);
-          if (fallito) {
-            state.realSession.batchAttivo.contatori.comandiErrore += 1;
-            aggiornaRiassuntoBatch(state.realSession.batchAttivo);
-          }
+        if (info?.batch && info.stato === 'running') {
+          const { batch, categoria } = info;
+          batch.inCorso[categoria] = Math.max(0, batch.inCorso[categoria] - 1);
+          if (categoria === 'comando') {
+            batch.contatori.comandi += 1;
+            if (fallito) batch.contatori.comandiErrore += 1;
+          } else if (fallito) {
+            batch.contatori.falliti += 1;
+            if (categoria === 'scrittura') {
+              const indice = batch.scrittureInAttesa.findIndex((voce) => voce.article === info.article);
+              if (indice >= 0) batch.scrittureInAttesa.splice(indice, 1);
+            }
+          } else if (categoria === 'letto') batch.contatori.letti += 1;
+          else if (categoria === 'cercato') batch.contatori.cercati += 1;
+          // Una scrittura riuscita è contata soltanto dal relativo
+          // StateDelta add/replace: il testo del tool non prova il disco.
+          else if (categoria === 'altro') batch.contatori.altro += 1;
+          info.stato = fallito ? 'error' : 'complete';
+          aggiornaRiassuntoBatch(batch);
         }
         state.realSession.toolCallNomi.delete(evento.toolCallId);
         break;
@@ -6254,7 +7006,7 @@
          */
         if (state.realSession.id) {
           state.realSession.treeCache.clear();
-          renderizzaAlberoReale();
+          programmaRenderAlberoReale();
         }
         break;
       }
@@ -6273,6 +7025,41 @@
         state.realSession.codaMessaggi.shift();
         renderizzaBannerCoda();
         mostraAttesaRisposta();
+        break;
+      }
+      case 'RunRedirectRequested': {
+        state.realSession.redirectInvalidatedIds.delete(evento.redirectId);
+        state.realSession.redirectPendingId = evento.redirectId;
+        state.realSession.eventoTerminaleVisto = false;
+        mostraAttesaRisposta('redirect');
+        syncRunComposerState();
+        break;
+      }
+      case 'RunRedirectApplied': {
+        state.realSession.redirectInvalidatedIds.delete(evento.redirectId);
+        state.realSession.redirectPendingId = null;
+        state.realSession.eventoTerminaleVisto = false;
+        appendUserFollowUp(evento.testo);
+        state.realSession.followUpBubbleInAttesa = true;
+        mostraAttesaRisposta();
+        syncRunComposerState();
+        break;
+      }
+      case 'RunRedirectCancelled': {
+        state.realSession.redirectInvalidatedIds.add(evento.redirectId);
+        state.realSession.redirectPendingId = null;
+        toast('Reindirizzamento annullato', 'La richiesta di stop resta attiva.');
+        syncRunComposerState();
+        break;
+      }
+      case 'RunRedirectFailed': {
+        state.realSession.redirectInvalidatedIds.add(evento.redirectId);
+        state.realSession.redirectPendingId = null;
+        state.realSession.eventoTerminaleVisto = true;
+        nascondiAttesaRisposta();
+        appendStatusNote(`Reindirizzamento non riuscito: ${evento.message}`, true);
+        toast('Reindirizzamento non riuscito', evento.message);
+        syncRunComposerState();
         break;
       }
       case 'RunFinished': {
@@ -6303,10 +7090,12 @@
          * senza un giro dal vivo dietro) — si segna solo che l'ultimo
          * evento era terminale, per onerror.
          */
-        nascondiAttesaRisposta(); // rete di sicurezza: un giro che chiude senza aver mai prodotto testo/tool-call (raro, non impossibile) non deve lasciare la ruota a girare per sempre
+        if (state.realSession.redirectPendingId) mostraAttesaRisposta('redirect');
+        else nascondiAttesaRisposta(); // rete di sicurezza: un giro che chiude senza aver mai prodotto testo/tool-call (raro, non impossibile) non deve lasciare la ruota a girare per sempre
         chiudiBatchTool(); // 30/8 — fine turno: un batch di tool-call aperto non resta orfano fino al prossimo giro
-        state.realSession.eventoTerminaleVisto = true;
-        aggiornaElencoSessioniReali(); // lo stato in #sessionList passa da "in corso" a "concluso" (visibile solo standalone, vedi nota di testa)
+        state.realSession.eventoTerminaleVisto = !state.realSession.redirectPendingId;
+        syncRunComposerState();
+        programmaAggiornamentoElencoSessioniReali(); // il replay di più giri produce un solo refresh visibile della sidebar
         break;
       }
       case 'ApprovalRequested': {
@@ -6344,13 +7133,15 @@
         break;
       }
       case 'RunError': {
-        nascondiAttesaRisposta();
+        if (state.realSession.redirectPendingId) mostraAttesaRisposta('redirect');
+        else nascondiAttesaRisposta();
         chiudiBatchTool(); // 30/8 — vedi RunFinished sopra, stesso motivo
         const guida = evento.code === 'giri-esauriti'
           ? ' Il prossimo messaggio continuerà questo task nella stessa sessione. Premi «Nuova» per iniziare un task separato.'
           : '';
         appendStatusNote(`${evento.code ? `[${evento.code}] ` : ''}${evento.message}${guida}`, true);
-        state.realSession.eventoTerminaleVisto = true;
+        state.realSession.eventoTerminaleVisto = !state.realSession.redirectPendingId;
+        syncRunComposerState();
         break;
       }
       /*
@@ -6401,6 +7192,7 @@
   function collegaEventiSessione(sessionId, generation) {
     state.realSession.id = sessionId;
     state.realSession.eventoTerminaleVisto = false;
+    syncRunComposerState();
     const demoBadgeChat = $$('.demo-surface-badge', $('.chat-view'))
       .find((badge) => badge.closest('[data-demo-surface]')?.dataset.demoSurface === 'chat');
     if (demoBadgeChat) demoBadgeChat.hidden = true;
@@ -6439,6 +7231,20 @@
 
   /** Chiude l'EventSource corrente (se c'è) e apre una nuova generazione. */
   function nuovaGenerazioneSessione({ continua = false } = {}) {
+    nascondiAttesaRisposta();
+    cancellaRenderMessaggiStreaming();
+    cancellaRenderAlberoDifferito();
+    // Ogni nuova generazione è live. Solo `passaASessione()` può
+    // riabilitare il differimento usando il dato canonico `conclusa`.
+    state.realSession.deferHistoricalRendering = false;
+    /*
+     * RUN-MODEL-RESUME-RACE-10 — durante la POST /resume il vecchio
+     * EventSource può già ricevere il nuovo RunStarted e impostare il modello
+     * corretto. Il replay successivo scarta quella stessa sequenza: azzerare
+     * qui il valore appena osservato produceva "TALOS · sessione reale".
+     * Una sessione davvero nuova continua invece a ripartire da null.
+     */
+    if (!continua) state.realSession.currentRunModel = null;
     if (state.realSession.eventSource) {
       state.realSession.eventSource.close();
       state.realSession.eventSource = null;
@@ -6459,6 +7265,10 @@
       state.realSession.testoGrezzoMessaggi = new Map();
       state.realSession.ragionamentoBubble = new Map();
       state.realSession.followUpBubbleInAttesa = false;
+      state.realSession.redirectPendingId = null;
+      state.realSession.redirectInvalidatedIds = new Set();
+      state.realSession.redirectRequestInFlight = false;
+      state.realSession.redirectRequestIntentId = null;
       state.realSession.attesaBubble = null; // il nodo è già sparito con replaceChildren() qui sopra
       state.realSession.usage = null; // Fase 3 — un resume (continua:true) TIENE il conto, una sessione nuova riparte da IGNOTO
       state.realSession.approvazioniPendenti = new Map(); // le card sono già sparite con replaceChildren() qui sopra, la mappa le segue
@@ -6473,6 +7283,7 @@
       resettaSuperficiRealiDedicate();
     }
     state.realSession.id = null;
+    syncRunComposerState();
     return (state.realSession.generation += 1);
   }
 
@@ -6530,11 +7341,58 @@
 
   async function stopRealSession() {
     if (!state.realSession.id) { toast('Nessuna sessione reale attiva'); return; }
+    const redirectId = state.realSession.redirectRequestIntentId || state.realSession.redirectPendingId;
+    if (redirectId) state.realSession.redirectInvalidatedIds.add(redirectId);
+    sendButton.disabled = true;
+    sendButton.setAttribute('aria-busy', 'true');
     try {
-      await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/stop`, {});
-      toast('Stop richiesto', 'La sessione si ferma al prossimo giro.');
+      await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/stop`, redirectId ? { redirectId } : {});
+      toast('Stop richiesto', 'La sessione si ferma al prossimo punto sicuro.');
     } catch (error) {
       toast('Stop non riuscito', error.message);
+    } finally {
+      sendButton.disabled = false;
+      sendButton.removeAttribute('aria-busy');
+      syncRunComposerState();
+    }
+  }
+
+  async function reindirizzaSessioneReale(testo) {
+    const sessionId = state.realSession.id;
+    const pulito = String(testo || '').trim();
+    if (!sessionId || state.realSession.eventoTerminaleVisto || !pulito || state.realSession.redirectRequestInFlight || state.realSession.redirectPendingId) return false;
+    const redirectId = crypto.randomUUID();
+    state.realSession.redirectRequestInFlight = true;
+    state.realSession.redirectRequestIntentId = redirectId;
+    redirectRunButton.disabled = true;
+    redirectRunButton.setAttribute('aria-busy', 'true');
+    try {
+      const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/redirect`, { messaggio: pulito, redirectId });
+      if (sessionId !== state.realSession.id) return true;
+      const idAccettato = dati?.redirectId || redirectId;
+      if (state.realSession.redirectInvalidatedIds.has(redirectId) || state.realSession.redirectInvalidatedIds.has(idAccettato)) {
+        state.realSession.redirectInvalidatedIds.delete(redirectId);
+        state.realSession.redirectInvalidatedIds.delete(idAccettato);
+        return false;
+      }
+      if (composerInput.value.trim() === pulito) composerInput.value = '';
+      autoGrowTextarea();
+      syncRunComposerState();
+      toast('Reindirizzamento richiesto', 'La correzione verrà applicata al prossimo punto sicuro.');
+      return true;
+    } catch (error) {
+      if (state.realSession.redirectInvalidatedIds.has(redirectId)) {
+        state.realSession.redirectInvalidatedIds.delete(redirectId);
+        return false;
+      }
+      toast('Reindirizzamento non riuscito', error.message);
+      return false;
+    } finally {
+      state.realSession.redirectRequestInFlight = false;
+      if (state.realSession.redirectRequestIntentId === redirectId) state.realSession.redirectRequestIntentId = null;
+      redirectRunButton.disabled = false;
+      redirectRunButton.removeAttribute('aria-busy');
+      syncRunComposerState();
     }
   }
 
@@ -6691,12 +7549,124 @@
    * aprire l'EventSource la riproduce da sola (iscriviti() nel registro
    * rimanda TUTTI gli eventi già accaduti a chi si collega).
    */
-  function passaASessione(sessionId, taskId, nome) {
-    if (sessionId === state.realSession.id) { setView('chat'); closePanels(); return; }
+  function normalizzaModelloSessione(sessioneOrModel) {
+    if (typeof sessioneOrModel === 'string') return sessioneOrModel.trim();
+    const valore = sessioneOrModel?.modello ?? sessioneOrModel?.modelId ?? sessioneOrModel?.model;
+    return typeof valore === 'string' ? valore.trim() : '';
+  }
+
+  let catenaAggiornamentiSessione = Promise.resolve();
+  function sincronizzaImpostazioniSessione(patch) {
+    salvaPreferenzeChatDesktop();
+    const sessionId = state.realSession.id;
+    if (!sessionId || !patch || Object.keys(patch).length === 0) return Promise.resolve({ locale: true });
+    const richiesta = catenaAggiornamentiSessione
+      .catch(() => undefined)
+      .then(() => apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/settings`, patch))
+      .then((esito) => {
+        const sessione = state.sessionSelection.available.get(sessionId);
+        if (sessione) {
+          Object.assign(sessione, patch);
+          if (typeof patch.modello === 'string') sessione.modelId = patch.modello;
+        }
+        return esito;
+      });
+    catenaAggiornamentiSessione = richiesta.catch(() => undefined);
+    richiesta.catch((error) => {
+      toast('Preferenza non salvata', messaggioErroreUtente(error, 'La scelta non è stata salvata. Apri Doctor e riprova.'));
+    });
+    return richiesta;
+  }
+
+  function applicaImpostazioniSessione(sessione) {
+    const reasoning = sessione?.reasoning && typeof sessione.reasoning === 'object' ? sessione.reasoning : null;
+    state.model = normalizzaModelloSessione(sessione);
+    state.effort = typeof reasoning?.effort === 'string' ? reasoning.effort : null;
+    state.permissions = ['Read only', 'Workspace write', 'On request', 'Full access'].includes(sessione?.permessi)
+      ? sessione.permessi
+      : DESKTOP_CHAT_DEFAULTS.permissions;
+    state.permessiPerAttrezzo = sessione?.permessiPerAttrezzo && typeof sessione.permessiPerAttrezzo === 'object'
+      ? { ...sessione.permessiPerAttrezzo }
+      : {};
+    aggiornaPillolaModello();
+    aggiornaPillolaPermessi();
+    salvaPreferenzeChatDesktop();
+  }
+
+  function aggiornaToolbarSelezioneSessioni() {
+    if (!sessionSelectionToolbar) return;
+    const totale = state.sessionSelection.available.size;
+    const selezionate = state.sessionSelection.selected.size;
+    sessionSelectionToolbar.hidden = totale === 0;
+    sessionSelectionToggle.hidden = totale === 0;
+    sessionSelectionToggle.setAttribute('aria-pressed', String(state.sessionSelection.active));
+    sessionSelectionToggle.textContent = state.sessionSelection.active ? 'Fine selezione' : 'Seleziona sessioni';
+    sessionSelectionSelectAll.hidden = !state.sessionSelection.active;
+    sessionSelectionSelectAll.disabled = totale === 0;
+    const tutto = totale > 0 && selezionate === totale;
+    sessionSelectionSelectAll.textContent = tutto ? 'Deseleziona tutto' : 'Seleziona tutto';
+    sessionSelectionDelete.hidden = !state.sessionSelection.active;
+    sessionSelectionDelete.disabled = selezionate === 0 || state.sessionSelection.deleting;
+    sessionSelectionCount.textContent = selezionate === 0 ? 'Nessuna selezionata' : `${selezionate} selezionat${selezionate === 1 ? 'a' : 'e'}`;
+  }
+
+  function aggiornaStatoRigheSelezione() {
+    for (const input of $$('[data-session-select]')) {
+      const checked = state.sessionSelection.selected.has(input.dataset.sessionSelect);
+      input.checked = checked;
+      input.closest('.real-session-item')?.classList.toggle('is-selected', checked);
+    }
+    aggiornaToolbarSelezioneSessioni();
+  }
+
+  async function toggleSessionSelectionMode() {
+    state.sessionSelection.active = !state.sessionSelection.active;
+    state.sessionSelection.selected.clear();
+    aggiornaToolbarSelezioneSessioni();
+    await aggiornaElencoSessioniReali();
+  }
+
+  function toggleSessionSelection(sessionId, checked) {
+    if (!sessionId) return;
+    if (checked) state.sessionSelection.selected.add(sessionId);
+    else state.sessionSelection.selected.delete(sessionId);
+    aggiornaStatoRigheSelezione();
+  }
+
+  async function eliminaSessioniSelezionate() {
+    const ids = [...state.sessionSelection.selected].filter((id) => state.sessionSelection.available.has(id));
+    if (ids.length === 0 || state.sessionSelection.deleting) return;
+    const conferma = window.confirm(`Eliminare ${ids.length} session${ids.length === 1 ? 'e' : 'i'} selezionat${ids.length === 1 ? 'a' : 'e'}? Le trascrizioni verranno cancellate dal disco.`);
+    if (!conferma) return;
+    state.sessionSelection.deleting = true;
+    aggiornaToolbarSelezioneSessioni();
+    const risultati = await Promise.allSettled(ids.map((id) => apiPost(`/api/v1/sessions/${encodeURIComponent(id)}/delete`, {})));
+    const fallite = risultati.filter((result) => result.status === 'rejected');
+    state.sessionSelection.deleting = false;
+    state.sessionSelection.selected.clear();
+    if (fallite.length > 0) {
+      toast('Alcune sessioni non sono state eliminate', `${fallite.length} ${fallite.length === 1 ? 'operazione non riuscita' : 'operazioni non riuscite'}. Riprova.`);
+    } else {
+      toast('Sessioni eliminate', `${ids.length} session${ids.length === 1 ? 'e' : 'i'} rimosse.`);
+      state.sessionSelection.active = false;
+    }
+    await aggiornaElencoSessioniReali();
+    if (state.board.initialized) await refreshSessionsBoard();
+  }
+
+  function passaASessione(sessionId, taskId, nome, modello, impostazioniSessione = null) {
+    if (state.sessionSelection.active) {
+      toggleSessionSelection(sessionId, !state.sessionSelection.selected.has(sessionId));
+      return;
+    }
+    const contrattoSessione = impostazioniSessione || { modello };
+    if (sessionId === state.realSession.id) { applicaImpostazioniSessione(contrattoSessione); setView('chat'); closePanels(); return; }
     const generation = nuovaGenerazioneSessione();
+    state.realSession.deferHistoricalRendering = impostazioniSessione?.conclusa === true;
     state.realSession.taskId = taskId;
     state.realSession.treeWorkspaceKey = `session:${sessionId}`;
     state.session = nome || `Task reale · ${taskId}`; // ⭐ un nome scelto dall'owner vince sul taskId
+    applicaImpostazioniSessione(contrattoSessione);
     sessionTitle.textContent = state.session;
     /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
     $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
@@ -6754,12 +7724,25 @@
       const demoBadge = $('.demo-surface-badge', $('#sessionsPanel'));
       if (demoBadge) demoBadge.hidden = true;
     }
-    if (elenco.length === 0) { contenitore.replaceChildren(); return; }
+    elenco = Array.isArray(elenco) ? elenco.map((sessione) => ({ ...sessione, modello: normalizzaModelloSessione(sessione) })) : [];
+    state.sessionSelection.available = new Map(elenco.map((sessione) => [sessione.sessionId, sessione]));
+    for (const id of [...state.sessionSelection.selected]) {
+      if (!state.sessionSelection.available.has(id)) state.sessionSelection.selected.delete(id);
+    }
+    if (elenco.length === 0) {
+      state.sessionSelection.active = false;
+      state.sessionSelection.selected.clear();
+      contenitore.replaceChildren();
+      aggiornaToolbarSelezioneSessioni();
+      return;
+    }
 
     const pezzi = [textElement('div', 'list-heading', 'Sessioni reali')];
     for (const sessione of elenco) {
-      const button = document.createElement('button');
-      button.className = `session-item real-session-item${sessione.sessionId === state.realSession.id ? ' active' : ''}`;
+      const button = document.createElement('div');
+      button.className = `session-item real-session-item${sessione.sessionId === state.realSession.id ? ' active' : ''}${state.sessionSelection.active ? ' is-selection-mode' : ''}`;
+      button.tabIndex = 0;
+      button.setAttribute('role', 'button');
       button.dataset.realSessionId = sessione.sessionId;
       const main = document.createElement('span');
       main.className = 'session-main';
@@ -6771,8 +7754,27 @@
       const meta = document.createElement('span');
       meta.className = 'session-meta';
       meta.textContent = formattaOraSessione(sessione.avviataAlle);
+      if (state.sessionSelection.active) {
+        const checkLabel = document.createElement('label');
+        checkLabel.className = 'session-selection-check';
+        checkLabel.title = `Seleziona ${etichetta}`;
+        const check = document.createElement('input');
+        check.type = 'checkbox';
+        check.dataset.sessionSelect = sessione.sessionId;
+        check.checked = state.sessionSelection.selected.has(sessione.sessionId);
+        check.setAttribute('aria-label', `Seleziona ${etichetta}`);
+        check.addEventListener('click', (event) => event.stopPropagation());
+        check.addEventListener('change', () => toggleSessionSelection(sessione.sessionId, check.checked));
+        checkLabel.appendChild(check);
+        button.append(checkLabel);
+      }
       button.append(main, meta);
-      button.addEventListener('click', () => passaASessione(sessione.sessionId, sessione.taskId, sessione.nome));
+      button.addEventListener('click', () => passaASessione(sessione.sessionId, sessione.taskId, sessione.nome, sessione.modello, sessione));
+      button.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        passaASessione(sessione.sessionId, sessione.taskId, sessione.nome, sessione.modello, sessione);
+      });
       /* ⭐ 31/8 P0 — tasto destro apre il menu completo condiviso con la
        * Board e con il menu CRUD dei Files. */
       button.addEventListener('contextmenu', (event) => {
@@ -6783,6 +7785,7 @@
       pezzi.push(button);
     }
     contenitore.replaceChildren(...pezzi);
+    aggiornaToolbarSelezioneSessioni();
   }
 
   /**
@@ -6879,13 +7882,18 @@
     sheetEyebrow.textContent = 'Automazioni';
     sheetTitle.textContent = 'Nuova automazione';
     sheetBody.replaceChildren(textElement('p', 'board-empty', 'Carico l’elenco dal server…'));
+    prepareResizableDialog(sheetDialog, 'sheet:new-automation');
     showEmbeddedDialog(sheetDialog);
 
     let tasks;
     try {
       tasks = (await apiGet('/api/v1/tasks')).items;
     } catch (error) {
-      sheetBody.replaceChildren(textElement('p', 'board-empty', `Elenco non disponibile: ${error.message}`));
+      sheetBody.replaceChildren(textElement('p', 'board-empty', 'Non riesco a caricare le attività in questo momento. Apri Doctor per capire cosa manca e riprova.'));
+      return;
+    }
+    if (!Array.isArray(tasks) || tasks.length === 0) {
+      sheetBody.replaceChildren(textElement('p', 'board-empty', 'Non ci sono ancora attività pronte per creare un’automazione. Puoi preparare il catalogo nelle impostazioni oppure riprovare più tardi.'));
       return;
     }
 
@@ -6983,202 +7991,625 @@
    * verificato (Claude Code, Codex CLI, Cline, Aider, Cursor: il testo
    * libero è SEMPRE nella chat, mai in un modulo a parte prima di essa).
    */
-  async function openRealTaskSheet() {
-    sheetEyebrow.textContent = 'Nuova sessione';
-    sheetTitle.textContent = 'Su quale progetto lavora TALOS?';
-    sheetBody.replaceChildren(textElement('p', 'board-empty', 'Carico l’elenco dal server…'));
-    const demoBadge = $('.demo-surface-badge', sheetDialog);
-    if (demoBadge) demoBadge.hidden = true;
-    showEmbeddedDialog(sheetDialog);
+  function creaWorkspaceChooser() {
+    const form = document.createElement('form');
+    form.className = 'workspace-chooser';
+    form.id = 'workspaceChooser';
+    form.noValidate = true;
 
-    /*
-     * ⭐⭐⭐ 28/8 — permesso "Full access" (pillola del composer, foglio
-     * "Permessi"): un percorso ASSOLUTO A PIACERE, mai l'allowlist —
-     * l'elenco progetti non serve nemmeno, si salta la chiamata
-     * (stessa disciplina "mai una richiesta che non serve" già in uso
-     * altrove in questo file). Il server valida DAVVERO il percorso
-     * (esiste? è una cartella? leggibile/scrivibile? — custom-task.mjs,
-     * niente denylist, vedi la sua doc su REGOLA ZERO/Hermes): un
-     * percorso inventato qui torna un errore onesto dalla POST, non un
-     * crash silenzioso.
-     */
-    const accessoCompleto = state.permissions === 'Full access';
-    let progetti = [];
-    let cartelleFrequenti = [];
-    if (!accessoCompleto) {
-      try {
-        progetti = await apiGet('/api/v1/projects').then((r) => r.items);
-      } catch (error) {
-        const stato = document.createElement('div');
-        stato.className = 'sheet-section';
-        stato.appendChild(textElement('p', 'board-empty', messaggioErroreUtente(error, 'Non riesco a leggere le cartelle disponibili. Apri Doctor per controllare lo stato.')));
-        const doctorButton = document.createElement('button');
-        doctorButton.type = 'button';
-        doctorButton.className = 'secondary-btn full';
-        doctorButton.dataset.openDoctor = 'true';
-        doctorButton.textContent = 'Apri Doctor';
-        doctorButton.addEventListener('click', () => {
-          closeEmbeddedDialog(sheetDialog);
-          openSheet('control');
-          window.setTimeout(() => eseguiDoctor(), 0);
-        });
-        stato.appendChild(doctorButton);
-        sheetBody.replaceChildren(stato);
+    const local = {
+      current: null,
+      selected: null,
+      permission: state.permissions,
+      showReasoning: state.showReasoning,
+      requestGeneration: 0,
+      busy: false,
+      focusedPath: null,
+      typeahead: '',
+      typeaheadTimer: null,
+      collapsed: false,
+      creatingFolder: false,
+    };
+
+    const shortcuts = document.createElement('div');
+    shortcuts.className = 'workspace-chooser-shortcuts';
+    shortcuts.setAttribute('aria-label', 'Cartelle consigliate');
+
+    const left = document.createElement('section');
+    left.className = 'workspace-chooser-browser';
+    left.setAttribute('aria-labelledby', 'workspaceChooserBrowserTitle');
+    const leftHead = document.createElement('div');
+    leftHead.className = 'workspace-chooser-section-head';
+    leftHead.append(
+      textElement('span', 'eyebrow', 'Workspace'),
+      textElement('h3', '', 'Scegli la cartella di lavoro'),
+      textElement('p', '', 'TALOS lavorerà direttamente nella cartella scelta, senza creare copie.'),
+    );
+    leftHead.querySelector('h3').id = 'workspaceChooserBrowserTitle';
+
+    const pathBar = document.createElement('div');
+    pathBar.className = 'workspace-chooser-pathbar';
+    const upButton = document.createElement('button');
+    upButton.type = 'button';
+    upButton.className = 'workspace-chooser-up';
+    upButton.setAttribute('aria-label', 'Vai alla cartella superiore');
+    upButton.innerHTML = icon('i-arrow-left');
+    const pathInput = document.createElement('input');
+    pathInput.type = 'text';
+    pathInput.id = 'workspaceChooserPath';
+    pathInput.className = 'workspace-chooser-path';
+    pathInput.autocomplete = 'off';
+    pathInput.spellcheck = false;
+    pathInput.setAttribute('aria-label', 'Percorso cartella');
+    const goButton = document.createElement('button');
+    goButton.type = 'button';
+    goButton.className = 'workspace-chooser-go';
+    goButton.textContent = 'Apri';
+    pathBar.append(upButton, pathInput, goButton);
+
+    const treeTools = document.createElement('div');
+    treeTools.className = 'workspace-chooser-tree-tools';
+    treeTools.setAttribute('role', 'toolbar');
+    treeTools.setAttribute('aria-label', 'Comandi cartelle');
+    const newFolderButton = document.createElement('button');
+    newFolderButton.type = 'button';
+    newFolderButton.className = 'workspace-chooser-tree-tool';
+    newFolderButton.setAttribute('aria-label', 'Nuova cartella');
+    newFolderButton.title = 'Nuova cartella';
+    newFolderButton.innerHTML = icon('i-folder');
+    const refreshFoldersButton = document.createElement('button');
+    refreshFoldersButton.type = 'button';
+    refreshFoldersButton.className = 'workspace-chooser-tree-tool';
+    refreshFoldersButton.setAttribute('aria-label', 'Aggiorna cartelle');
+    refreshFoldersButton.title = 'Aggiorna';
+    refreshFoldersButton.innerHTML = icon('i-history');
+    const collapseFoldersButton = document.createElement('button');
+    collapseFoldersButton.type = 'button';
+    collapseFoldersButton.className = 'workspace-chooser-tree-tool';
+    collapseFoldersButton.setAttribute('aria-label', 'Comprimi cartelle');
+    collapseFoldersButton.title = 'Comprimi tutto';
+    collapseFoldersButton.innerHTML = icon('i-chevron');
+    const copyFolderPathButton = document.createElement('button');
+    copyFolderPathButton.type = 'button';
+    copyFolderPathButton.className = 'workspace-chooser-tree-tool';
+    copyFolderPathButton.setAttribute('aria-label', 'Copia percorso cartella');
+    copyFolderPathButton.title = 'Copia percorso';
+    copyFolderPathButton.innerHTML = icon('i-copy');
+    const treeToolsSpacer = document.createElement('span');
+    treeToolsSpacer.className = 'workspace-chooser-tree-tools-spacer';
+    treeTools.append(newFolderButton, treeToolsSpacer, refreshFoldersButton, collapseFoldersButton, copyFolderPathButton);
+
+    const newFolderForm = document.createElement('form');
+    newFolderForm.className = 'workspace-chooser-new-folder';
+    newFolderForm.hidden = true;
+    const newFolderInput = document.createElement('input');
+    newFolderInput.type = 'text';
+    newFolderInput.maxLength = 255;
+    newFolderInput.autocomplete = 'off';
+    newFolderInput.spellcheck = false;
+    newFolderInput.setAttribute('aria-label', 'Nome nuova cartella');
+    newFolderInput.placeholder = 'Nome cartella';
+    const createFolderButton = document.createElement('button');
+    createFolderButton.type = 'submit';
+    createFolderButton.className = 'primary-btn compact';
+    createFolderButton.textContent = 'Crea cartella';
+    const cancelFolderButton = document.createElement('button');
+    cancelFolderButton.type = 'button';
+    cancelFolderButton.className = 'text-btn compact';
+    cancelFolderButton.textContent = 'Annulla';
+    const newFolderStatus = document.createElement('span');
+    newFolderStatus.className = 'workspace-chooser-new-folder-status';
+    newFolderStatus.setAttribute('role', 'status');
+    newFolderForm.append(newFolderInput, createFolderButton, cancelFolderButton, newFolderStatus);
+
+    const treeFrame = document.createElement('div');
+    treeFrame.className = 'workspace-chooser-tree-frame';
+    const tree = document.createElement('div');
+    tree.id = 'workspaceChooserTree';
+    tree.className = 'workspace-chooser-tree';
+    tree.setAttribute('role', 'tree');
+    tree.setAttribute('aria-label', 'Cartelle del computer');
+    const treeState = document.createElement('div');
+    treeState.className = 'workspace-chooser-tree-state';
+    treeState.setAttribute('role', 'status');
+    treeFrame.append(tree, treeState);
+
+    const selectedCard = document.createElement('div');
+    selectedCard.className = 'workspace-chooser-selection';
+    selectedCard.innerHTML = `${icon('i-folder-open')}<span><small>Cartella scelta</small><strong data-workspace-selected-path>Nessuna cartella scelta</strong></span>`;
+    left.append(leftHead, pathBar, treeTools, newFolderForm, treeFrame, selectedCard);
+
+    const right = document.createElement('section');
+    right.className = 'workspace-chooser-settings';
+    right.setAttribute('aria-labelledby', 'workspaceChooserSettingsTitle');
+    const rightHead = document.createElement('div');
+    rightHead.className = 'workspace-chooser-section-head';
+    rightHead.append(
+      textElement('span', 'eyebrow', 'Sessione'),
+      textElement('h3', '', 'Configura il lavoro'),
+      textElement('p', '', 'Le scelte valgono per la nuova sessione e restano modificabili in chat.'),
+    );
+    rightHead.querySelector('h3').id = 'workspaceChooserSettingsTitle';
+
+    const modelPicker = creaModelPicker({ valoreIniziale: state.model || '', aggiornaModelloPrincipale: false });
+    const effortPicker = creaEffortPicker({ valoreIniziale: state.effort });
+    const plannerPicker = creaModelPicker({ valoreIniziale: '', etichettaVuota: 'Nessuno', aggiornaModelloPrincipale: false });
+
+    const modelSection = document.createElement('div');
+    modelSection.className = 'workspace-chooser-setting-group';
+    modelSection.append(textElement('span', 'sheet-label', 'Modello'), modelPicker.elemento);
+
+    const reasoningSection = document.createElement('div');
+    reasoningSection.className = 'workspace-chooser-setting-group';
+    reasoningSection.append(effortPicker.elemento);
+    const reasoningToggle = document.createElement('label');
+    reasoningToggle.className = 'workspace-chooser-inline-toggle';
+    reasoningToggle.innerHTML = '<span><strong>Mostra ragionamento</strong><small>Visualizza il processo solo quando ti serve.</small></span>';
+    const reasoningInput = document.createElement('input');
+    reasoningInput.type = 'checkbox';
+    reasoningInput.checked = local.showReasoning;
+    reasoningInput.setAttribute('aria-label', 'Mostra ragionamento');
+    reasoningInput.addEventListener('change', () => { local.showReasoning = reasoningInput.checked; });
+    reasoningToggle.appendChild(reasoningInput);
+    reasoningSection.appendChild(reasoningToggle);
+
+    const plannerSection = document.createElement('div');
+    plannerSection.className = 'workspace-chooser-setting-group';
+    plannerSection.append(
+      textElement('span', 'sheet-label', 'Planner opzionale'),
+      plannerPicker.elemento,
+      textElement('small', 'workspace-chooser-help', 'Esplora in sola lettura e consegna il piano prima dell’esecuzione.'),
+    );
+
+    const permissionSection = document.createElement('div');
+    permissionSection.className = 'workspace-chooser-setting-group';
+    permissionSection.appendChild(textElement('span', 'sheet-label', 'Accesso al workspace'));
+    const permissionGrid = document.createElement('div');
+    permissionGrid.className = 'workspace-chooser-permissions';
+    const permissionCopy = {
+      'Read only': 'Solo lettura',
+      'Workspace write': 'Scrive qui',
+      'On request': 'Chiede prima',
+      'Full access': 'Accesso completo',
+    };
+    const permissionButtons = [];
+    for (const permission of ['Read only', 'Workspace write', 'On request', 'Full access']) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.workspacePermission = permission;
+      button.className = 'workspace-chooser-permission';
+      button.setAttribute('aria-pressed', String(permission === local.permission));
+      button.innerHTML = `${icon('i-shield')}<span><strong>${permission}</strong><small>${permissionCopy[permission]}</small></span>`;
+      button.addEventListener('click', () => {
+        local.permission = permission;
+        permissionButtons.forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+        aggiornaConfermaWorkspaceChooser();
+      });
+      permissionButtons.push(button);
+      permissionGrid.appendChild(button);
+    }
+    const policyGate = document.createElement('p');
+    policyGate.className = 'workspace-chooser-policy-gate';
+    policyGate.dataset.workspacePolicyGate = 'true';
+    permissionSection.append(permissionGrid, policyGate);
+    right.append(rightHead, modelSection, reasoningSection, plannerSection, permissionSection);
+
+    const columns = document.createElement('div');
+    columns.className = 'workspace-chooser-columns';
+    columns.append(left, right);
+
+    const footer = document.createElement('footer');
+    footer.className = 'workspace-chooser-footer';
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'secondary-btn';
+    cancel.textContent = 'Annulla';
+    cancel.addEventListener('click', () => closeEmbeddedDialog(sheetDialog));
+    const submit = document.createElement('button');
+    submit.type = 'submit';
+    submit.id = 'workspaceChooserSubmit';
+    submit.className = 'primary-btn compact';
+    submit.textContent = 'Scegli una cartella';
+    footer.append(cancel, submit);
+    form.append(shortcuts, columns, footer);
+
+    function pathKey(path) {
+      return String(path || '').replace(/[\\/]+$/, '').toLocaleLowerCase('en-US');
+    }
+
+    function folderName(path) {
+      return String(path || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path;
+    }
+
+    function projectFor(path) {
+      const target = pathKey(path);
+      const direct = local.current?.items?.find((item) => pathKey(item.path) === target)?.projectId;
+      if (direct) return direct;
+      return local.current?.recommended?.find((item) => pathKey(item.path) === target)?.projectId ?? null;
+    }
+
+    function aggiornaConfermaWorkspaceChooser() {
+      const selectedPath = $('[data-workspace-selected-path]', selectedCard);
+      if (selectedPath) selectedPath.textContent = local.selected?.path || 'Nessuna cartella scelta';
+      const allowlisted = Boolean(local.selected?.projectId);
+      const ready = !local.busy && Boolean(local.selected) && (allowlisted || local.permission === 'Full access');
+      submit.disabled = !ready;
+      submit.textContent = local.busy ? 'Apro la cartella…' : ready ? `Continua nella chat — ${folderName(local.selected.path)}` : 'Scegli una cartella';
+      if (local.busy) policyGate.textContent = 'Attendi che la cartella scelta sia pronta.';
+      else if (!local.selected) policyGate.textContent = 'Scegli una cartella per continuare.';
+      else if (allowlisted) policyGate.textContent = `${local.permission}: TALOS resterà nella cartella scelta.`;
+      else if (local.permission === 'Full access') policyGate.textContent = 'Full access consente di usare questa cartella esterna. La scelta sarà verificata di nuovo all’avvio.';
+      else policyGate.textContent = 'Questa cartella è esterna ai progetti già autorizzati. Se vuoi usarla, scegli Full access.';
+      const toolsDisabled = local.busy || local.creatingFolder || !local.current;
+      newFolderButton.disabled = toolsDisabled;
+      refreshFoldersButton.disabled = toolsDisabled;
+      collapseFoldersButton.disabled = toolsDisabled || local.collapsed || !(local.current?.items?.length);
+      copyFolderPathButton.disabled = toolsDisabled || !local.current?.path;
+      renderizzaScorciatoie();
+    }
+
+    function selezionaWorkspaceChooser(item, { focus = true } = {}) {
+      if (!item?.path) return;
+      local.selected = { path: item.path, projectId: item.projectId ?? projectFor(item.path) };
+      local.focusedPath = item.path;
+      renderizzaAlberoWorkspaceChooser({ restoreFocus: focus });
+      aggiornaConfermaWorkspaceChooser();
+    }
+
+    function visibleRows() {
+      if (!local.current) return [];
+      const rootItem = {
+        name: folderName(local.current.path),
+        path: local.current.path,
+        projectId: projectFor(local.current.path),
+        current: true,
+      };
+      return local.collapsed ? [rootItem] : [rootItem, ...(local.current.items || [])];
+    }
+
+    function focusRow(path) {
+      const row = [...tree.querySelectorAll('[role="treeitem"]')].find((item) => pathKey(item.dataset.workspacePath) === pathKey(path));
+      row?.focus();
+    }
+
+    function gestisciTastieraWorkspaceChooser(event, item) {
+      const rows = visibleRows();
+      const index = rows.findIndex((row) => pathKey(row.path) === pathKey(item.path));
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        selezionaWorkspaceChooser(item);
         return;
       }
-    } else {
-      /*
-       * ⭐⭐⭐ 28/8 — owner, coda: "directory più usate (tipo desktop
-       * downloads)". Solo SUGGERIMENTI per il campo percorso — un
-       * fallimento qui non deve MAI bloccare "Nuova sessione" (a
-       * differenza di /projects sopra, che è l'unico modo di scegliere
-       * una cartella quando NON si è in Full access): resta solo il
-       * campo di testo vuoto, come oggi.
-       */
-      try {
-        cartelleFrequenti = await apiGet('/api/v1/frequent-dirs').then((r) => r.items);
-      } catch { /* best effort, vedi sopra */ }
-    }
-
-    const corpoFoglio = [];
-
-    // --- Cartella + modello, come Claude Code/Codex/Cline/Aider/Devin. Il compito si scrive DOPO, nella chat. ---
-    const customSection = document.createElement('form');
-    customSection.className = 'sheet-section';
-    customSection.id = 'customTaskForm';
-
-    if (accessoCompleto) {
-      customSection.appendChild(textElement('span', 'sheet-label', 'Cartella — percorso assoluto a piacere ("Full access")'));
-      const inputCartellaLibera = document.createElement('input');
-      inputCartellaLibera.type = 'text';
-      inputCartellaLibera.className = 'sheet-input';
-      inputCartellaLibera.id = 'customTaskCartellaLibera';
-      inputCartellaLibera.placeholder = 'es. C:\\Users\\...\\progetto';
-      inputCartellaLibera.autocomplete = 'off';
-      inputCartellaLibera.spellcheck = false;
-      customSection.appendChild(inputCartellaLibera);
-      /*
-       * ⭐⭐⭐ 28/8 — le scorciatoie vere e proprie: un bottone per cartella
-       * frequente TROVATA sul disco (mai una candidata a occhio, vedi
-       * frequent-dirs.mjs), che riempie il campo — non lo sottomette da
-       * solo, l'owner resta libero di modificarlo prima di continuare.
-       */
-      if (cartelleFrequenti.length > 0) {
-        const scorciatoie = document.createElement('div');
-        scorciatoie.className = 'sheet-shortcuts';
-        for (const { etichetta, percorso } of cartelleFrequenti) {
-          const chip = document.createElement('button');
-          chip.type = 'button';
-          chip.className = 'sheet-shortcut-chip';
-          chip.textContent = etichetta;
-          chip.title = percorso;
-          chip.addEventListener('click', () => { inputCartellaLibera.value = percorso; inputCartellaLibera.focus(); });
-          scorciatoie.appendChild(chip);
-        }
-        customSection.appendChild(scorciatoie);
-      }
-      const modelPicker = creaModelPicker({ valoreIniziale: state.model || '' });
-      const effortPicker = creaEffortPicker({ valoreIniziale: state.effort });
-      /*
-       * ⭐⭐⭐ FASE K (29/8) — planner opzionale, R2 (kernel già chiuso e
-       * verificato dal vivo, commit b3cb5a72): "Configurabile, nessun
-       * default forzato" — stesso principio già applicato a modello/
-       * effort sopra, ma qui SENZA una `state.modelloPlanner` a cui
-       * ricadere (nessuna sessione precedente ne fissa uno di default,
-       * a differenza di `state.model`/`state.effort`). Vuoto per
-       * costruzione: se l'owner non sceglie, `getValore()` torna `''`
-       * e il campo resta assente dal corpo POST (vedi startCustomSession).
-       */
-      const plannerPicker = creaModelPicker({ valoreIniziale: '', etichettaVuota: 'Nessuno' });
-      customSection.append(
-        textElement('span', 'sheet-label', 'Modello'),
-        modelPicker.elemento,
-        effortPicker.elemento,
-        textElement('span', 'sheet-label', 'Planner (opzionale) — esplora in sola lettura, poi consegna un piano all\'editor'),
-        plannerPicker.elemento,
-      );
-      const submit = document.createElement('button');
-      submit.type = 'submit';
-      submit.className = 'primary-btn compact full';
-      submit.textContent = 'Continua nella chat';
-      customSection.appendChild(submit);
-      customSection.addEventListener('submit', (event) => {
+      if (event.key === 'ArrowRight' && !item.current) {
         event.preventDefault();
-        const cartellaLibera = inputCartellaLibera.value.trim();
-        if (!cartellaLibera) { inputCartellaLibera.focus(); return; }
-        const nomeCartella = cartellaLibera.split(/[\\/]/).pop() || cartellaLibera;
-        const modello = modelPicker.getValore();
-        const effort = effortPicker.getValore();
-        const modelloPlanner = plannerPicker.getValore() || undefined;
-        closeEmbeddedDialog(sheetDialog);
-        avviaSessionePendente({ cartellaLibera, nomeCartella, modello, effort, modelloPlanner, permessi: state.permissions, permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
-      });
-    } else {
-      customSection.appendChild(textElement('span', 'sheet-label', 'Cartella — TALOS scrive DIRETTAMENTE lì, nessuna copia'));
-      if (progetti.length === 0) {
-        customSection.appendChild(textElement('p', 'board-empty', 'Non c’è ancora una cartella di progetto disponibile. Puoi scegliere Full access per indicarne una ora, oppure aprire Doctor per capire cosa manca.'));
-        const doctorButton = document.createElement('button');
-        doctorButton.type = 'button';
-        doctorButton.className = 'secondary-btn full';
-        doctorButton.dataset.openDoctor = 'true';
-        doctorButton.textContent = 'Apri Doctor';
-        doctorButton.addEventListener('click', () => {
-          closeEmbeddedDialog(sheetDialog);
-          openSheet('control');
-          window.setTimeout(() => eseguiDoctor(), 0);
-        });
-        customSection.appendChild(doctorButton);
-      } else {
-        const selectCartella = document.createElement('select');
-        selectCartella.className = 'sheet-input';
-        selectCartella.id = 'customTaskCartella';
-        for (const progetto of progetti) {
-          const opzione = document.createElement('option');
-          opzione.value = progetto.id;
-          opzione.textContent = progetto.nome;
-          selectCartella.appendChild(opzione);
+        caricaWorkspaceChooser(item.path, { select: true, focusTree: true });
+        return;
+      }
+      if (event.key === 'ArrowRight' && item.current) {
+        if (local.collapsed) {
+          local.collapsed = false;
+          renderizzaAlberoWorkspaceChooser();
         }
-        const modelPicker = creaModelPicker({ valoreIniziale: state.model || '' });
-        const effortPicker = creaEffortPicker({ valoreIniziale: state.effort });
-        // ⭐⭐⭐ FASE K (29/8) — stesso planner opzionale del ramo "Full access" sopra, stessa doc.
-        const plannerPicker = creaModelPicker({ valoreIniziale: '', etichettaVuota: 'Nessuno' });
-        customSection.append(
-          selectCartella,
-          textElement('span', 'sheet-label', 'Modello'),
-          modelPicker.elemento,
-          effortPicker.elemento,
-          textElement('span', 'sheet-label', 'Planner (opzionale) — esplora in sola lettura, poi consegna un piano all\'editor'),
-          plannerPicker.elemento,
-        );
-        const submit = document.createElement('button');
-        submit.type = 'submit';
-        submit.className = 'primary-btn compact full';
-        submit.textContent = 'Continua nella chat';
-        customSection.appendChild(submit);
-        customSection.addEventListener('submit', (event) => {
+        const firstChild = local.current?.items?.[0];
+        if (firstChild) {
           event.preventDefault();
-          const cartellaId = selectCartella.value;
-          const nomeCartella = progetti.find((p) => p.id === cartellaId)?.nome ?? cartellaId;
-          const modello = modelPicker.getValore();
-          const effort = effortPicker.getValore();
-          const modelloPlanner = plannerPicker.getValore() || undefined;
-          closeEmbeddedDialog(sheetDialog);
-          avviaSessionePendente({ cartellaId, nomeCartella, modello, effort, modelloPlanner, permessi: state.permissions, permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
-        });
+          local.focusedPath = firstChild.path;
+          focusRow(firstChild.path);
+        }
+        return;
+      }
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        if (!item.current) {
+          local.focusedPath = local.current.path;
+          focusRow(local.current.path);
+        } else if (!local.collapsed) {
+          local.collapsed = true;
+          renderizzaAlberoWorkspaceChooser({ restoreFocus: true });
+        } else if (local.current?.parent) {
+          caricaWorkspaceChooser(local.current.parent, { select: false, focusTree: true });
+        }
+        return;
+      }
+      let target = null;
+      if (event.key === 'ArrowDown') target = rows[Math.min(rows.length - 1, index + 1)];
+      if (event.key === 'ArrowUp') target = rows[Math.max(0, index - 1)];
+      if (event.key === 'Home') target = rows[0];
+      if (event.key === 'End') target = rows.at(-1);
+      if (target) {
+        event.preventDefault();
+        local.focusedPath = target.path;
+        focusRow(target.path);
+        return;
+      }
+      if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        window.clearTimeout(local.typeaheadTimer);
+        local.typeahead += event.key.toLocaleLowerCase('it');
+        local.typeaheadTimer = window.setTimeout(() => { local.typeahead = ''; }, 650);
+        const match = rows.find((row, rowIndex) => rowIndex !== index && row.name.toLocaleLowerCase('it').startsWith(local.typeahead));
+        if (match) {
+          event.preventDefault();
+          local.focusedPath = match.path;
+          focusRow(match.path);
+        }
       }
     }
-    corpoFoglio.push(customSection);
 
-    sheetBody.replaceChildren(...corpoFoglio);
-    /*
-     * ⛔ 27/8, trovato dalla pipeline QA visiva: l'attributo HTML `autofocus`
-     * non scatta da solo perché il <dialog> è già aperto quando il form
-     * viene inserito (showEmbeddedDialog gira PRIMA del fetch) — il
-     * browser aveva già messo il focus sul bottone di chiusura, il primo
-     * elemento focusable nel markup del foglio. Un focus esplicito dopo
-     * l'inserimento nel DOM è l'unico modo affidabile.
-     */
-    ($('#customTaskCartellaLibera') || $('#customTaskCartella'))?.focus();
+    function renderizzaAlberoWorkspaceChooser({ restoreFocus = false } = {}) {
+      if (!local.current) return;
+      const rows = visibleRows();
+      const elements = rows.map((item, index) => {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'workspace-chooser-tree-row';
+        row.dataset.workspacePath = item.path;
+        row.setAttribute('role', 'treeitem');
+        row.setAttribute('aria-level', item.current ? '1' : '2');
+        row.setAttribute('aria-selected', String(pathKey(local.selected?.path) === pathKey(item.path)));
+        row.setAttribute('aria-expanded', String(item.current ? !local.collapsed : false));
+        row.tabIndex = pathKey(local.focusedPath) === pathKey(item.path) || (!local.focusedPath && index === 0) ? 0 : -1;
+        row.innerHTML = `<span class="workspace-chooser-tree-toggle" aria-hidden="true">${icon(item.current && !local.collapsed ? 'i-chevron' : 'i-chevron-right')}</span>${icon(item.current && !local.collapsed ? 'i-folder-open' : 'i-folder')}<span>${item.name}</span>${item.projectId ? '<small>Progetto</small>' : ''}`;
+        row.addEventListener('click', (event) => {
+          if (event.target.closest('.workspace-chooser-tree-toggle')) {
+            if (item.current) {
+              local.collapsed = !local.collapsed;
+              renderizzaAlberoWorkspaceChooser({ restoreFocus: true });
+            } else {
+              caricaWorkspaceChooser(item.path, { select: true, focusTree: true });
+            }
+            return;
+          }
+          selezionaWorkspaceChooser(item, { focus: false });
+        });
+        row.addEventListener('dblclick', () => { if (!item.current) caricaWorkspaceChooser(item.path, { select: true, focusTree: true }); });
+        row.addEventListener('focus', () => {
+          local.focusedPath = item.path;
+          [...tree.querySelectorAll('[role="treeitem"]')].forEach((candidate) => { candidate.tabIndex = candidate === row ? 0 : -1; });
+        });
+        row.addEventListener('keydown', (event) => gestisciTastieraWorkspaceChooser(event, item));
+        return row;
+      });
+      tree.replaceChildren(...elements);
+      treeState.hidden = rows.length > 1;
+      treeState.textContent = rows.length > 1 ? '' : 'Questa cartella non contiene altre cartelle.';
+      if (restoreFocus) window.setTimeout(() => focusRow(local.focusedPath || local.current.path), 0);
+    }
+
+    function renderizzaScorciatoie() {
+      const recommended = local.current?.recommended || [];
+      shortcuts.replaceChildren(...recommended.map((item) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'workspace-chooser-shortcut';
+        button.classList.toggle('active', pathKey(local.selected?.path) === pathKey(item.path));
+        button.setAttribute('aria-pressed', String(pathKey(local.selected?.path) === pathKey(item.path)));
+        button.title = item.path;
+        button.innerHTML = `${icon(item.kind === 'recent' ? 'i-clock' : 'i-folder')}<span><strong>${item.label}</strong><small>${item.kind === 'project' ? 'Progetto' : item.kind === 'recent' ? 'Usata di recente' : 'Scelta rapida'}</small></span>`;
+        button.addEventListener('click', () => caricaWorkspaceChooser(item.path, { select: true, focusTree: true, projectId: item.projectId }));
+        return button;
+      }));
+    }
+
+    async function caricaWorkspaceChooser(path, { select = false, focusTree = false, projectId = null } = {}) {
+      const generation = ++local.requestGeneration;
+      local.busy = true;
+      if (select) local.selected = null;
+      form.setAttribute('aria-busy', 'true');
+      tree.setAttribute('aria-busy', 'true');
+      treeState.hidden = false;
+      treeState.textContent = 'Apro la cartella…';
+      aggiornaConfermaWorkspaceChooser();
+      try {
+        const suffix = path ? `?path=${encodeURIComponent(path)}` : '';
+        const data = await apiGet(`/api/v1/workspace-browser${suffix}`);
+        if (generation !== local.requestGeneration || !form.isConnected) return false;
+        local.current = data;
+        local.collapsed = false;
+        pathInput.value = data.path;
+        upButton.disabled = !data.parent;
+        local.focusedPath = data.path;
+        if (select) local.selected = { path: data.path, projectId: projectId ?? projectFor(data.path) };
+        else if (!local.selected) {
+          const defaultProject = data.recommended?.find((item) => item.kind === 'project' && item.projectId);
+          local.selected = defaultProject ? { path: defaultProject.path, projectId: defaultProject.projectId } : null;
+        }
+        renderizzaScorciatoie();
+        renderizzaAlberoWorkspaceChooser({ restoreFocus: focusTree });
+        aggiornaConfermaWorkspaceChooser();
+        return true;
+      } catch (error) {
+        if (generation !== local.requestGeneration || !form.isConnected) return false;
+        tree.replaceChildren();
+        treeState.hidden = false;
+        treeState.replaceChildren(textElement('p', '', messaggioErroreUtente(error, 'Non riesco ad aprire questa cartella. Scegline un’altra oppure controlla Doctor.')));
+        const actions = document.createElement('div');
+        actions.className = 'workspace-chooser-error-actions';
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.className = 'secondary-btn compact';
+        retry.textContent = 'Riprova';
+        retry.addEventListener('click', () => caricaWorkspaceChooser(path, { select, focusTree, projectId }));
+        const doctor = document.createElement('button');
+        doctor.type = 'button';
+        doctor.className = 'text-btn';
+        doctor.textContent = 'Apri Doctor';
+        doctor.addEventListener('click', () => { closeEmbeddedDialog(sheetDialog); openSheet('control'); window.setTimeout(() => eseguiDoctor(), 0); });
+        actions.append(retry, doctor);
+        treeState.appendChild(actions);
+        aggiornaConfermaWorkspaceChooser();
+        return false;
+      } finally {
+        if (generation === local.requestGeneration) {
+          local.busy = false;
+          form.removeAttribute('aria-busy');
+          tree.removeAttribute('aria-busy');
+          aggiornaConfermaWorkspaceChooser();
+        }
+      }
+    }
+
+    upButton.addEventListener('click', () => {
+      if (local.current?.parent) caricaWorkspaceChooser(local.current.parent, { focusTree: true });
+    });
+    const openTypedPath = () => caricaWorkspaceChooser(pathInput.value.trim(), { select: true, focusTree: true });
+    goButton.addEventListener('click', openTypedPath);
+    pathInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') { event.preventDefault(); openTypedPath(); }
+    });
+    function closeNewFolderForm() {
+      newFolderForm.hidden = true;
+      newFolderInput.value = '';
+      newFolderStatus.textContent = '';
+      newFolderButton.setAttribute('aria-expanded', 'false');
+    }
+    newFolderButton.setAttribute('aria-expanded', 'false');
+    newFolderButton.addEventListener('click', () => {
+      const opening = newFolderForm.hidden;
+      if (!opening) {
+        closeNewFolderForm();
+        newFolderButton.focus();
+        return;
+      }
+      newFolderForm.hidden = false;
+      newFolderButton.setAttribute('aria-expanded', 'true');
+      window.setTimeout(() => newFolderInput.focus(), 0);
+    });
+    cancelFolderButton.addEventListener('click', () => {
+      closeNewFolderForm();
+      newFolderButton.focus();
+    });
+    newFolderForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const name = newFolderInput.value;
+      const parentPath = local.current?.path;
+      if (!parentPath || !name || local.creatingFolder) { newFolderInput.focus(); return; }
+      local.creatingFolder = true;
+      createFolderButton.disabled = true;
+      newFolderInput.disabled = true;
+      newFolderStatus.textContent = 'Creo la cartella…';
+      aggiornaConfermaWorkspaceChooser();
+      try {
+        const created = await apiPost('/api/v1/workspace-browser/folders', { parentPath, name });
+        closeNewFolderForm();
+        await caricaWorkspaceChooser(parentPath, { focusTree: true });
+        selezionaWorkspaceChooser({ path: created.path, projectId: projectFor(created.path) });
+        toast('Cartella creata', created.name);
+      } catch (error) {
+        newFolderStatus.textContent = messaggioErroreUtente(error, 'Non riesco a creare la cartella qui. Controlla il nome e riprova.');
+        newFolderInput.focus();
+      } finally {
+        local.creatingFolder = false;
+        createFolderButton.disabled = false;
+        newFolderInput.disabled = false;
+        aggiornaConfermaWorkspaceChooser();
+      }
+    });
+    refreshFoldersButton.addEventListener('click', () => {
+      if (local.current?.path) caricaWorkspaceChooser(local.current.path, { focusTree: true });
+    });
+    collapseFoldersButton.addEventListener('click', () => {
+      local.collapsed = true;
+      local.focusedPath = local.current?.path || null;
+      renderizzaAlberoWorkspaceChooser({ restoreFocus: true });
+      aggiornaConfermaWorkspaceChooser();
+    });
+    copyFolderPathButton.addEventListener('click', async () => {
+      const path = local.selected?.path || local.current?.path;
+      if (!path) return;
+      try {
+        await navigator.clipboard.writeText(path);
+        toast('Percorso copiato', path);
+      } catch {
+        toast('Copia non disponibile', 'Seleziona il percorso nella barra e copialo da lì.');
+        pathInput.focus();
+        pathInput.select();
+      }
+    });
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (local.busy) return;
+      const allowlisted = Boolean(local.selected?.projectId);
+      if (!local.selected || (!allowlisted && local.permission !== 'Full access')) {
+        permissionSection.scrollIntoView({ block: 'nearest' });
+        return;
+      }
+      const model = modelPicker.getValore();
+      const effort = effortPicker.getValore();
+      const planner = plannerPicker.getValore() || undefined;
+      state.model = model;
+      state.effort = effort;
+      state.showReasoning = local.showReasoning;
+      state.permissions = local.permission;
+      aggiornaPillolaModello();
+      aggiornaPillolaPermessi();
+      salvaPreferenzeChatDesktop();
+      const input = {
+        nomeCartella: folderName(local.selected.path),
+        modello: model,
+        effort,
+        modelloPlanner: planner,
+        permessi: local.permission,
+        permessiPerAttrezzo: { ...state.permessiPerAttrezzo },
+      };
+      if (allowlisted) input.cartellaId = local.selected.projectId;
+      else input.cartellaLibera = local.selected.path;
+      closeEmbeddedDialog(sheetDialog);
+      avviaSessionePendente(input);
+    });
+
+    function attivaFocusTrapWorkspaceChooser() {
+      const controller = new AbortController();
+      const observer = new MutationObserver(() => {
+        if (!form.isConnected) {
+          controller.abort();
+          observer.disconnect();
+        }
+      });
+      const focusables = () => [...sheetDialog.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')]
+        .filter((element) => !element.closest('[hidden]') && element.getClientRects().length > 0);
+      sheetDialog.addEventListener('keydown', (event) => {
+        if (event.key !== 'Tab' || !form.isConnected) return;
+        const elements = focusables();
+        const first = elements[0];
+        const last = elements.at(-1);
+        if (!first || !last) return;
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }, { signal: controller.signal });
+      sheetDialog.addEventListener('close', () => {
+        controller.abort();
+        observer.disconnect();
+      }, { once: true, signal: controller.signal });
+      observer.observe(sheetBody, { childList: true });
+    }
+
+    return {
+      elemento: form,
+      async initialize() {
+        attivaFocusTrapWorkspaceChooser();
+        const loaded = await caricaWorkspaceChooser(undefined);
+        if (loaded) window.setTimeout(() => focusRow(local.current?.path), 0);
+      },
+    };
+  }
+
+  async function openRealTaskSheet() {
+    sheetDialog.classList.add('sheet-dialog--new-session');
+    sheetEyebrow.textContent = 'Nuova sessione';
+    sheetTitle.textContent = 'Su quale progetto lavora TALOS?';
+    const demoBadge = $('.demo-surface-badge', sheetDialog);
+    if (demoBadge) demoBadge.hidden = true;
+    const chooser = creaWorkspaceChooser();
+    sheetBody.replaceChildren(chooser.elemento);
+    prepareResizableDialog(sheetDialog, 'sheet:new-session');
+    showEmbeddedDialog(sheetDialog);
+    await chooser.initialize();
   }
 
   /**
@@ -7188,12 +8619,70 @@
    * parte solo quando c'è un compito — il primo messaggio scritto nella
    * chat, intercettato da submitPrompt via state.pendingCustomSession).
    */
-  function avviaSessionePendente({ cartellaId, cartellaLibera, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo }) {
+  function leggiWorkspaceLaunchId() {
+    const parametri = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const id = parametri.get('open-workspace');
+    return typeof id === 'string' && /^[A-Za-z0-9_-]{32}$/.test(id) ? id : null;
+  }
+
+  function rimuoviWorkspaceLaunchFragment() {
+    if (!window.location.hash) return;
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}`);
+  }
+
+  /**
+   * Riceve soltanto l'identificatore opaco creato dal launcher Windows. Il
+   * percorso assoluto resta nel processo locale: né l'URL né il DOM possono
+   * esporlo. La policy corrente viene conservata e non diventa mai
+   * implicitamente Full access.
+   */
+  async function apriWorkspaceDaLauncher() {
+    const workspaceLaunchId = leggiWorkspaceLaunchId();
+    if (!workspaceLaunchId) return false;
+    try {
+      const launch = await apiGet(`/api/v1/workspace-launches/${encodeURIComponent(workspaceLaunchId)}`);
+      rimuoviWorkspaceLaunchFragment();
+      avviaSessionePendente({
+        workspaceLaunchId,
+        nomeCartella: launch.nome,
+        modello: state.model,
+        effort: state.effort,
+        permessi: state.permissions,
+        permessiPerAttrezzo: { ...state.permessiPerAttrezzo },
+      });
+      toast('Cartella pronta', `${launch.nome} è pronta per una nuova sessione.`);
+      return true;
+    } catch (error) {
+      rimuoviWorkspaceLaunchFragment();
+      toast('Cartella non aperta', messaggioErroreUtente(error, 'Apri di nuovo la cartella dal menu di Windows e riprova.'));
+      return false;
+    }
+  }
+
+  function renderizzaRadiceWorkspacePendente(nomeCartella) {
+    const contenitore = $('#inspector-files .file-tree');
+    if (!contenitore) return;
+    const radice = document.createElement('div');
+    radice.className = 'tree-root';
+    radice.append(iconaSvgAlbero('i-files'), textElement('strong', '', nomeCartella));
+    contenitore.replaceChildren(
+      radice,
+      textElement('p', 'board-empty', 'I file appariranno appena inizi la sessione.'),
+    );
+    const demoBadge = $('.demo-surface-badge', $('[data-inspector-section="files"]'));
+    if (demoBadge) demoBadge.hidden = true;
+  }
+
+  function avviaSessionePendente({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo }) {
     nuovaGenerazioneSessione();
-    state.pendingCustomSession = { cartellaId, cartellaLibera, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo };
+    state.pendingCustomSession = { cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo };
     state.realSession.previewProjectId = cartellaId || null;
     state.realSession.previewWorkspaceName = nomeCartella;
-    state.realSession.treeWorkspaceKey = cartellaId ? `project:${cartellaId}` : `path:${cartellaLibera || nomeCartella}`;
+    state.realSession.treeWorkspaceKey = cartellaId
+      ? `project:${cartellaId}`
+      : workspaceLaunchId
+        ? `launch:${workspaceLaunchId}`
+        : `path:${cartellaLibera || nomeCartella}`;
     if (modello) { state.model = modello; aggiornaPillolaModello(); }
     if (effort) state.effort = effort;
     state.session = `Nuova · ${nomeCartella}`;
@@ -7203,6 +8692,11 @@
     closePanels();
     const fileTab = $('#inspector-tab-files');
     if (fileTab) setInspectorTab(fileTab);
+    // Un progetto allowlistato può già caricare la preview tramite projectId.
+    // Un launch id o un percorso libero non devono invece esporre il percorso
+    // al browser: mostrano la radice scelta e aspettano il primo messaggio,
+    // quando la sessione vera abilita l'albero file ordinario.
+    if (!cartellaId) renderizzaRadiceWorkspacePendente(nomeCartella);
     // ⛔ nuovaGenerazioneSessione() ha appena svuotato #conversation (replaceChildren) — l'empty-state originale non esiste più nel DOM, va ricreato, non cercato.
     $('#conversation').appendChild(costruisciConversationHero(`Sessione pronta su ${nomeCartella}.`, 'Scrivi qui sotto cosa deve fare TALOS per iniziare.'));
     // ⭐ 30/8 — stesso principio di sopra, sul tab Files: nuovaGenerazioneSessione() (dentro resettaSuperficiRealiDedicate) ha già scritto il placeholder GENERICO "nessuna cartella ancora scelta" — ma qui la cartella è già nota, prima ancora del primo messaggio. Nessuna nuova sorgente di verità: nomeCartella è lo stesso valore che finisce nel titolo sessione qui sopra.
@@ -7232,11 +8726,15 @@
     return String(testo || '').replace(/\s+/g, ' ').trim().slice(0, 80);
   }
 
-  async function startCustomSession({ cartellaId, cartellaLibera, nomeCartella, consegna, comandoProva, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo }) {
+  async function startCustomSession({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, consegna, comandoProva, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo }) {
     const generation = nuovaGenerazioneSessione();
     const taskSintetico = { id: `libero:${nomeCartella}`, consegna };
     state.realSession.taskId = taskSintetico.id;
-    state.realSession.treeWorkspaceKey = cartellaId ? `project:${cartellaId}` : `path:${cartellaLibera || nomeCartella}`;
+    state.realSession.treeWorkspaceKey = cartellaId
+      ? `project:${cartellaId}`
+      : workspaceLaunchId
+        ? `launch:${workspaceLaunchId}`
+        : `path:${cartellaLibera || nomeCartella}`;
     state.session = `Compito libero · ${nomeCartella}`;
     sessionTitle.textContent = state.session;
     /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
@@ -7257,8 +8755,15 @@
        * usato da `startRealSession` (Fase 3).
        */
       const client = window.__talosHarnessApiBase ? 'mobile' : 'desktop';
-      // ⭐⭐⭐ 28/8 — cartellaId XOR cartellaLibera (permesso "Full access"): mai entrambi, il server li rifiuterebbe insieme (custom-task.mjs, mutua esclusività).
-      const corpo = cartellaLibera ? { cartellaLibera, consegna, client } : { cartellaId, consegna, client };
+      // ⭐⭐⭐ 1/9 — tre selettori mutuamente esclusivi: il launcher passa
+      // soltanto un id opaco; il percorso assoluto resta nel server locale.
+      // `cartellaLibera` continua a essere l'unico ramo che richiede Full
+      // access, mentre un launch id conserva la policy scelta dall'owner.
+      const corpo = workspaceLaunchId
+        ? { workspaceLaunchId, consegna, client }
+        : cartellaLibera
+          ? { cartellaLibera, consegna, client }
+          : { cartellaId, consegna, client };
       if (comandoProva) corpo.comandoProva = comandoProva;
       const modelloEffettivo = modello || state.model; // ⭐ la scelta fatta nel picker della modale ha priorità
       if (modelloEffettivo) corpo.modello = modelloEffettivo;
@@ -7372,9 +8877,9 @@
      * sessione reale, questo primo messaggio la avvia per davvero.
      */
     if (state.pendingCustomSession) {
-      const { cartellaId, cartellaLibera, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo } = state.pendingCustomSession;
+      const { cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo } = state.pendingCustomSession;
       state.pendingCustomSession = null;
-      startCustomSession({ cartellaId, cartellaLibera, nomeCartella, consegna: value, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo });
+      startCustomSession({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, consegna: value, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo });
       return true;
     }
     /*
@@ -7702,6 +9207,7 @@
   }
 
   function openCommandPalette() {
+    prepareResizableDialog(commandDialog, 'command:palette');
     showEmbeddedDialog(commandDialog);
     commandSearch.value = '';
     filterCommands('');
@@ -7961,6 +9467,7 @@
 
   composerInput.addEventListener('input', () => {
     autoGrowTextarea();
+    syncRunComposerState();
     const value = composerInput.value;
     if (value === '/') openCommandPalette();
     if (/@[^\s]*$/.test(value) && value.endsWith('@')) openSheet('references');
@@ -7972,7 +9479,16 @@
     }
   });
 
-  queueToggle.addEventListener('click', () => setQueueMode(!state.queueMode));
+  sendButton.addEventListener('click', () => {
+    if (runRealeAttivo()) {
+      stopRealSession();
+      return;
+    }
+    composerForm.requestSubmit();
+  });
+  redirectRunButton.addEventListener('click', () => {
+    reindirizzaSessioneReale(composerInput.value);
+  });
   /*
    * ⭐⭐⭐ 29/8 — FASE J: push-to-talk vero, non più un annuncio "non
    * collegato". `mousedown`/`touchstart` avvia, `mouseup`/`mouseleave`/
@@ -8001,6 +9517,7 @@
     if (!submitPrompt(text)) return;
     composerInput.value = '';
     autoGrowTextarea();
+    syncRunComposerState();
   });
 
   /*
@@ -8053,6 +9570,7 @@
     toast(button.dataset.reviewAction === 'comment' ? 'Commento inline pronto' : 'File aperto nel workspace', diffPath?.textContent || 'Review');
   }));
 
+  inizializzaPreferenzeChatDesktop();
   inizializzaAspettoDesktop();
   inizializzaSettingsNavigation();
   const appearanceControlMap = {
@@ -8067,7 +9585,7 @@
     motionDurationRange: 'motionDuration', motionUiIntensityRange: 'motionUiIntensity', motionStaggerRange: 'motionStagger',
     motionWindowsToggle: 'motionWindows', motionSurfacesToggle: 'motionSurfaces', motionNavigationToggle: 'motionNavigation',
     motionComposerToggle: 'motionComposer', motionMessagesToggle: 'motionMessages', motionFeedbackToggle: 'motionFeedback',
-    immersiveHeaderToggle: 'immersiveHeader',
+    immersiveHeaderToggle: 'immersiveHeader', chatFullWidthToggle: 'chatFullWidth',
   };
   for (const [id, key] of Object.entries(appearanceControlMap)) {
     const input = $(`#${id}`);
@@ -8132,6 +9650,8 @@
     }
     if (window.innerWidth > 780) sessionsPanel.classList.remove('open');
     syncInspectorToggle();
+    if (window.innerWidth > 1040) loadPanelWidths();
+    clampOpenDialogsToViewport();
     syncHostLayout();
     syncVisualViewport();
   }
@@ -8159,6 +9679,8 @@
     // (stesso schema di sopra: internals reali, non un secondo contratto).
     startRealSession,
     stopRealSession,
+    reindirizzaSessioneReale,
+    syncRunComposerState,
     handleRealEvent,
     forkSession,
     resumeSession,
@@ -8189,17 +9711,30 @@
   };
   window.__talosHarnessDestroy = () => {
     cancelMotionAnimations();
+    nascondiAttesaRisposta();
+    cancellaRenderMessaggiStreaming();
+    cancellaRenderAlberoDifferito();
+    if (sessionListRefreshTimer !== null) window.clearTimeout(sessionListRefreshTimer);
+    sessionListRefreshTimer = null;
+    if (streamingScrollFrame !== null) window.cancelAnimationFrame?.(streamingScrollFrame);
+    streamingScrollFrame = null;
+    streamingScrollTarget = null;
     state.modelLab.runtimeEventSource?.close();
     state.modelLab.runtimeEventSource = null;
     delete window.__talosHarnessModelLabEventSource;
     fermaBackgroundDesktop();
+    if (backgroundScrollResumeTimer !== null) window.clearTimeout(backgroundScrollResumeTimer);
+    backgroundScrollResumeTimer = null;
+    backgroundInteractionPauseReasons.clear();
+    document.removeEventListener('wheel', queueBackgroundScrollPause, true);
+    document.removeEventListener('scroll', queueBackgroundScrollPause, true);
     if (handleAppearanceVisibilityChange) document.removeEventListener('visibilitychange', handleAppearanceVisibilityChange);
     if (appearanceMediaQuery && handleAppearanceMediaChange) appearanceMediaQuery.removeEventListener?.('change', handleAppearanceMediaChange);
     handleAppearanceVisibilityChange = null;
     handleAppearanceMediaChange = null;
     appearanceMediaQuery = null;
-    HOST().classList.remove('background-motion-off', 'interface-motion-off', 'reduce-motion', 'motion-windows-off', 'motion-surfaces-off', 'motion-navigation-off', 'motion-composer-off', 'motion-messages-off', 'motion-feedback-off');
-    document.body.classList.remove('background-motion-off', 'reduce-motion');
+    HOST().classList.remove('background-motion-active', 'background-motion-paused', 'background-motion-off', 'interface-motion-off', 'reduce-motion', 'motion-windows-off', 'motion-surfaces-off', 'motion-navigation-off', 'motion-composer-off', 'motion-messages-off', 'motion-feedback-off');
+    document.body.classList.remove('background-motion-active', 'background-motion-paused', 'background-motion-off', 'reduce-motion');
     setEmbeddedTopbarHidden(false);
     embeddedHeaderScrollers.forEach((scroller) => {
       scroller.removeEventListener('scroll', handleEmbeddedContentScroll);
@@ -8222,15 +9757,29 @@
     filtraAlberoReale(e.target.value);
     salvaImpostazioniAlbero();
   });
+  $('#fileTreeNewFile')?.addEventListener('click', () => avviaCreaVoce(cartellaSelezionataAlbero(), 'file'));
+  $('#fileTreeNewFolder')?.addEventListener('click', () => avviaCreaVoce(cartellaSelezionataAlbero(), 'cartella'));
+  $('#fileTreeRefresh')?.addEventListener('click', refreshSessionFileTree);
+  $('#fileTreeCollapse')?.addEventListener('click', collapseSessionFileTree);
 
   sessionsCollapseBtn?.addEventListener('click', toggleSessionsPanel);
+  sessionSelectionToggle?.addEventListener('click', () => { toggleSessionSelectionMode(); });
+  sessionSelectionSelectAll?.addEventListener('click', () => {
+    const tutto = state.sessionSelection.available.size > 0
+      && state.sessionSelection.selected.size === state.sessionSelection.available.size;
+    state.sessionSelection.selected = tutto
+      ? new Set()
+      : new Set(state.sessionSelection.available.keys());
+    aggiornaStatoRigheSelezione();
+  });
+  sessionSelectionDelete?.addEventListener('click', () => { eliminaSessioniSelezionate(); });
 
   // Ridimensionamento reale delle due sidebar, con limiti — owner 24/8.
   // Un trascinamento vero (pointer capture) e la stessa cosa da tastiera,
   // perché una maniglia raggiungibile solo dal dito non lo è da chi non
   // può trascinare. Persistito per-viewer in localStorage, come le altre
   // comodità di sola interfaccia di questo mockup (non è dato reale).
-  const PANEL_RESIZE_LIMITS = { sessions: [220, 420], inspector: [280, 480] };
+  const PANEL_RESIZE_LIMITS = { sessions: [220, 420], inspector: [280, 720] };
   const PANEL_RESIZE_STORAGE_KEY = 'talos-harness-panel-widths';
   const PANEL_RESIZE_VAR = { sessions: '--sidebar', inspector: '--inspector' };
   const PANEL_RESIZE_DEFAULT = { sessions: 292, inspector: 340 };
@@ -8254,7 +9803,12 @@
   }
 
   function applyPanelWidth(which, px) {
-    const [min, max] = PANEL_RESIZE_LIMITS[which];
+    const [min, configuredMax] = PANEL_RESIZE_LIMITS[which];
+    const sidebarWidth = parseInt(getComputedStyle(HOST()).getPropertyValue('--sidebar'), 10) || PANEL_RESIZE_DEFAULT.sessions;
+    const viewportMax = which === 'inspector' && window.innerWidth > 1040
+      ? Math.max(min, window.innerWidth - sidebarWidth - 520)
+      : configuredMax;
+    const max = Math.min(configuredMax, viewportMax);
     const clamped = Math.min(max, Math.max(min, Math.round(px)));
     HOST().style.setProperty(PANEL_RESIZE_VAR[which], `${clamped}px`);
     return clamped;
@@ -8342,11 +9896,13 @@
     // ⛔ verificato al MOMENTO del fire, non alla schedulazione: un test (o
     // un embed reale) può marcare talos-embedded fra i due istanti.
     if (!HOST().classList.contains('talos-embedded')) {
+      apriWorkspaceDaLauncher();
       aggiornaElencoSessioniReali();
       renderAutomationsReali(); // ⭐ 27/8 — la card automazioni della sidebar è live da subito, non solo dopo aver aperto la vista
     }
   }, 0);
   aggiornaPillolaModello(); // ⭐ 27/8 — sincronizza SUBITO la pillola con lo stato vero (state.model === ''), invece di lasciare "gpt-5.6-sol · high" scritto a mano nell'HTML statico
+  aggiornaPillolaPermessi();
   aggiornaPillolaAmbiente();
   applyQaState();
   syncNavigationState();
@@ -8354,10 +9910,12 @@
   syncSessionsToggle();
   loadPanelWidths();
   setupPanelResize();
+  setupDialogResize();
   syncHostLayout();
   ensureDownloadQueueBadge();
   setQueueMode(false);
   setRunState(true);
+  syncRunComposerState();
   setInspectorTab($('.inspector-tabs button.active'));
   renderReviewFile('composer');
   autoGrowTextarea();

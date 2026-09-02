@@ -2,6 +2,10 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/browser',
+  // Il laboratorio modulare ha server, build e matrice propri (4175):
+  // eseguirlo contro il 4174 prodotto è un falso negativo, non un gate.
+  // playwright.lab.config.mjs lo include esplicitamente con testMatch.
+  testIgnore: ['lab-bootstrap.spec.mjs'],
   timeout: 30_000,
   expect: { timeout: 5_000 },
   fullyParallel: false,

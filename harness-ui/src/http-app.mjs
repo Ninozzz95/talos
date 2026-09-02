@@ -30,6 +30,7 @@ const API_ERROR_CODES = new Set([
   'TASK_NOT_ALLOWED',
   'TASK_CATALOG_UNAVAILABLE',
   'SESSION_NOT_READY',
+  'SESSION_STORE_WRITE_FAILED',
   'AUTOMATION_INVALID',
   'CATALOG_UNREACHABLE',
   'CATALOG_UPSTREAM_ERROR',
@@ -47,6 +48,10 @@ const API_ERROR_CODES = new Set([
   'PLUGIN_INVALID',
   /* ⭐ 30/8, QA visiva (Task 14) — DELETE su una sessione ancora viva (né conclusa né interrotta): un controller attivo potrebbe star lavorando davvero. */
   'SESSION_STILL_RUNNING',
+  'WORKSPACE_LAUNCH_UNAUTHORIZED',
+  'WORKSPACE_LAUNCH_NOT_AVAILABLE',
+  'WORKSPACE_NOT_AVAILABLE',
+  'WORKSPACE_ALREADY_EXISTS',
   'PROVIDER_INVALID', 'PROVIDER_KEY_REQUIRED', 'PROVIDER_KEY_INVALID', 'PROVIDER_STORE_UNAVAILABLE', 'PROVIDER_RUNTIME_INVALID', 'PROVIDER_RUNTIME_UNAVAILABLE',
   'RUNTIME_NOT_AVAILABLE',
   'RUNTIME_UNREACHABLE',
@@ -73,6 +78,7 @@ const STATUS_BY_CODE = Object.freeze({
   TASK_CATALOG_UNAVAILABLE: 503,
   /** ⭐ 409 Conflict: la sessione origine esiste ma non è nello stato giusto per un fork (ancora in corso, o senza storia). */
   SESSION_NOT_READY: 409,
+  SESSION_STORE_WRITE_FAILED: 503,
   /** ⭐ 27/8 — un tetto duro dell'automazione violato (intervallo/limite fuori range) è un errore di CONTENUTO, non di forma: stesso status di ROW_INVALID. */
   AUTOMATION_INVALID: 422,
   /** ⭐ 27/8 — il catalogo modelli dipende da OpenRouter: quando è irraggiungibile o risponde male non è colpa del client. */
@@ -93,6 +99,10 @@ const STATUS_BY_CODE = Object.freeze({
   PLUGIN_INVALID: 422,
   /** ⭐ 30/8 — stesso status di SESSION_NOT_READY: la richiesta è legittima ma lo stato attuale (ancora in corso) la blocca. */
   SESSION_STILL_RUNNING: 409,
+  WORKSPACE_LAUNCH_UNAUTHORIZED: 403,
+  WORKSPACE_LAUNCH_NOT_AVAILABLE: 410,
+  WORKSPACE_NOT_AVAILABLE: 422,
+  WORKSPACE_ALREADY_EXISTS: 409,
   PROVIDER_INVALID: 422,
   PROVIDER_KEY_REQUIRED: 422,
   PROVIDER_KEY_INVALID: 422,
@@ -144,6 +154,10 @@ const MESSAGE_BY_CODE = Object.freeze({
   MCP_INVALID: 'Configurazione server MCP non valida',
   PLUGIN_INVALID: 'Configurazione plugin non valida',
   SESSION_STILL_RUNNING: 'Sessione ancora in corso — fermala prima di eliminarla',
+  WORKSPACE_LAUNCH_UNAUTHORIZED: 'Il comando locale non è autorizzato. Riavvia TALOS e riprova.',
+  WORKSPACE_LAUNCH_NOT_AVAILABLE: 'Questo collegamento non è più disponibile. Usa di nuovo “Apri cartella con TALOS”.',
+  WORKSPACE_NOT_AVAILABLE: 'La cartella non è disponibile. Controlla che esista e che TALOS possa lavorarci, poi riprova.',
+  WORKSPACE_ALREADY_EXISTS: 'Esiste già un file o una cartella con questo nome.',
   PROVIDER_INVALID: 'Provider non riconosciuto',
   PROVIDER_KEY_REQUIRED: 'Inserisci una chiave prima di salvarla',
   PROVIDER_KEY_INVALID: 'La chiave inserita non è valida',
@@ -395,19 +409,21 @@ function requireTaskIdBody(body) {
  */
 function requireCustomTaskBody(body) {
   // ⭐⭐⭐ 29/8 — FASE K: stesso principio di requireTaskIdBody, modelloPlanner riusa modelloRichiestaValido.
-  const AMMESSE = ['cartellaId', 'cartellaLibera', 'consegna', 'comandoProva', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo'];
+  const AMMESSE = ['cartellaId', 'cartellaLibera', 'workspaceLaunchId', 'consegna', 'comandoProva', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo'];
   const chiavi = Object.keys(body ?? {});
   const haCartellaId = 'cartellaId' in body && body.cartellaId !== undefined;
   const haCartellaLibera = 'cartellaLibera' in body && body.cartellaLibera !== undefined;
+  const haWorkspaceLaunchId = 'workspaceLaunchId' in body && body.workspaceLaunchId !== undefined;
   const soloAmmesse = chiavi.length > 0 && chiavi.every((k) => AMMESSE.includes(k))
-    && (haCartellaId !== haCartellaLibera) && chiavi.includes('consegna');
+    && [haCartellaId, haCartellaLibera, haWorkspaceLaunchId].filter(Boolean).length === 1 && chiavi.includes('consegna');
   if (
     !soloAmmesse || typeof body.consegna !== 'string'
     || (haCartellaId && typeof body.cartellaId !== 'string')
     || (haCartellaLibera && typeof body.cartellaLibera !== 'string')
+    || (haWorkspaceLaunchId && (typeof body.workspaceLaunchId !== 'string' || !/^[A-Za-z0-9_-]{32}$/.test(body.workspaceLaunchId)))
     || ('client' in body && body.client !== 'desktop' && body.client !== 'mobile')
   ) {
-    const errore = new Error('Corpo non valido: atteso {cartellaId XOR cartellaLibera, consegna, comandoProva?, modello?, modelloPlanner?, reasoning?, client?, permessi?, permessiPerAttrezzo?}');
+    const errore = new Error('Corpo non valido: atteso {cartellaId XOR cartellaLibera XOR workspaceLaunchId, consegna, comandoProva?, modello?, modelloPlanner?, reasoning?, client?, permessi?, permessiPerAttrezzo?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -437,8 +453,9 @@ function requireCustomTaskBody(body) {
     throw errore;
   }
   return {
-    cartellaId: haCartellaId ? body.cartellaId : undefined,
-    cartellaLibera: haCartellaLibera ? body.cartellaLibera : undefined,
+    ...(haCartellaId ? { cartellaId: body.cartellaId } : {}),
+    ...(haCartellaLibera ? { cartellaLibera: body.cartellaLibera } : {}),
+    ...(haWorkspaceLaunchId ? { workspaceLaunchId: body.workspaceLaunchId } : {}),
     consegna: body.consegna,
     comandoProva: 'comandoProva' in body ? body.comandoProva : undefined,
     modello: 'modello' in body ? body.modello : null,
@@ -494,6 +511,43 @@ function requireNomeBody(body) {
     throw errore;
   }
   return body.nome;
+}
+
+/** Allowlist stretta per le preferenze che appartengono alla sessione. */
+function requireSessionSettingsBody(body) {
+  const ammesse = ['modello', 'modelloPlanner', 'reasoning', 'permessi', 'permessiPerAttrezzo'];
+  const chiavi = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : [];
+  if (chiavi.length === 0 || chiavi.some((chiave) => !ammesse.includes(chiave))) {
+    const errore = new Error('Corpo non valido: attesa almeno una preferenza di sessione riconosciuta');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  if ('modello' in body && !modelloRichiestaValido(body.modello)) {
+    const errore = new Error('modello deve avere la forma "vendor/nome-modello"');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  if ('modelloPlanner' in body && body.modelloPlanner !== null && !modelloRichiestaValido(body.modelloPlanner)) {
+    const errore = new Error('modelloPlanner deve essere null o avere la forma "vendor/nome-modello"');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  if ('reasoning' in body && !reasoningRichiestaValido(body.reasoning)) {
+    const errore = new Error('reasoning deve usare effort e summary ammessi');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  if ('permessi' in body && (body.permessi === null || !permessiRichiestaValido(body.permessi))) {
+    const errore = new Error('permessi non riconosciuto');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  if ('permessiPerAttrezzo' in body && !permessiPerAttrezzoRichiestaValido(body.permessiPerAttrezzo)) {
+    const errore = new Error('permessiPerAttrezzo non riconosciuto');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  return Object.fromEntries(chiavi.map((chiave) => [chiave, body[chiave]]));
 }
 
 /** ⭐ 27/8 — {percorso}, per elimina/rivela: la validazione FINE del percorso resta in workspace-files.mjs, qui solo la forma. */
@@ -610,6 +664,61 @@ function requireQueueBody(body) {
   return body.messaggio;
 }
 
+/** Resume legacy senza body oppure nuovo turno con una sola stringa non vuota. */
+function requireResumeBody(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    const errore = new Error('Corpo non valido: atteso {messaggio?}');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  const chiavi = Object.keys(body);
+  if (chiavi.length === 0) return null;
+  if (chiavi.length !== 1 || chiavi[0] !== 'messaggio' || typeof body.messaggio !== 'string' || body.messaggio.trim().length === 0) {
+    const errore = new Error('Corpo non valido: atteso {messaggio?}');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  return body.messaggio.trim();
+}
+
+const REDIRECT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
+function requireRedirectId(value) {
+  if (typeof value !== 'string' || !REDIRECT_ID_PATTERN.test(value)) {
+    const errore = new Error('Identificatore del reindirizzamento non valido');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  return value.toLowerCase();
+}
+
+/** Forma stretta, con id opzionale per la compatibilità dei client precedenti. */
+function requireRedirectBody(body) {
+  const chiavi = Object.keys(body ?? {});
+  const ammesse = new Set(['messaggio', 'redirectId']);
+  if (chiavi.length < 1 || chiavi.length > 2 || !chiavi.every((chiave) => ammesse.has(chiave)) || !chiavi.includes('messaggio') || typeof body.messaggio !== 'string' || body.messaggio.trim().length === 0) {
+    const errore = new Error('Corpo non valido: atteso {messaggio, redirectId?}');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  return {
+    messaggio: body.messaggio.trim(),
+    redirectId: body.redirectId === undefined ? null : requireRedirectId(body.redirectId),
+  };
+}
+
+/** Stop resta compatibile con il corpo vuoto e può tombstonare un redirect in volo. */
+function requireStopBody(body) {
+  const chiavi = Object.keys(body ?? {});
+  if (chiavi.length === 0) return null;
+  if (chiavi.length !== 1 || chiavi[0] !== 'redirectId') {
+    const errore = new Error('Corpo non valido: atteso {redirectId?}');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  return requireRedirectId(body.redirectId);
+}
+
 /*
  * Scrive un evento AG-UI come frame SSE. Torna false (e non scrive) se la
  * risposta è già chiusa.
@@ -638,6 +747,8 @@ function scriviEventoSse(res, evento) {
 export function createHttpApp({
   staticHandler, sessionRegistry = null, listaTaskDisponibili = () => [],
   elencaCartelleProgetto = () => [], automationStore = null, diagnosiFn = null,
+  workspaceLaunchStore = null,
+  workspaceBrowser = null,
   // ⭐⭐⭐ 28/8 — owner, coda: "directory più usate (tipo desktop downloads)". Zero config esterna (solo os.homedir()) — il default reale basta, nessun cablaggio in server.mjs come serve invece per elencaCartelleProgetto (quella dipende da TALOS_HARNESS_UI_PROJECT_DIRS).
   cartelleFrequentiFn = cartelleFrequentiReale,
   catalogoModelliFn = null, clock = () => new Date(), leggiArtefattoFn = leggiArtefattoReale,
@@ -694,6 +805,56 @@ export function createHttpApp({
       url = new URL(requestTarget, 'http://127.0.0.1');
     } catch {
       sendJson(res, 400, errorEnvelope('QUERY_INVALID', clock), method);
+      return;
+    }
+
+    if (method === 'POST' && workspaceLaunchStore && url.pathname === '/api/v1/workspace-launches') {
+      try {
+        requireNoQuery(url);
+        const body = await leggiCorpoJson(req);
+        const keys = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : [];
+        if (keys.length !== 1 || keys[0] !== 'percorso' || typeof body.percorso !== 'string') {
+          const error = new Error('Scegli una cartella valida');
+          error.code = 'QUERY_INVALID';
+          throw error;
+        }
+        const data = workspaceLaunchStore.create({
+          percorso: body.percorso,
+          credential: req.headers['x-talos-launcher-token'],
+        });
+        sendJson(res, 200, successEnvelope(data, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    if (method === 'POST' && url.pathname === '/api/v1/workspace-browser/folders') {
+      try {
+        requireNoQuery(url);
+        const body = await leggiCorpoJson(req);
+        const keys = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : [];
+        if (keys.length !== 2
+          || !keys.includes('parentPath')
+          || !keys.includes('name')
+          || typeof body.parentPath !== 'string'
+          || typeof body.name !== 'string') {
+          const error = new Error('Scegli una cartella e un nome validi');
+          error.code = 'QUERY_INVALID';
+          throw error;
+        }
+        if (!workspaceBrowser || typeof workspaceBrowser.createFolder !== 'function') {
+          const error = new Error('Creazione cartella non disponibile');
+          error.code = 'WORKSPACE_NOT_AVAILABLE';
+          throw error;
+        }
+        const data = await workspaceBrowser.createFolder(body.parentPath, body.name);
+        sendJson(res, 200, successEnvelope(data, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
       return;
     }
 
@@ -1248,13 +1409,42 @@ export function createHttpApp({
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
           return;
         }
-        const fermata = sessionRegistry.ferma(sessionId);
+        const redirectId = requireStopBody(await leggiCorpoJson(req));
+        const fermata = sessionRegistry.ferma(sessionId, redirectId ? { redirectId } : {});
         if (!fermata) {
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
           return;
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ stopped: true }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    const redirectMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/redirect$/.exec(url.pathname);
+    if (redirectMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try {
+          sessionId = decodeURIComponent(redirectMatch[1]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const { messaggio, redirectId } = requireRedirectBody(await leggiCorpoJson(req));
+        const esito = sessionRegistry.reindirizza(sessionId, messaggio, redirectId ? { redirectId } : {});
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ ok: true, redirectId: esito.redirectId }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
@@ -1309,10 +1499,7 @@ export function createHttpApp({
          * campo diverso da stringa: un body malformato resta silenziosamente
          * "nessun messaggio nuovo" invece di rompere il resume classico.
          */
-        const corpoResume = await leggiCorpoJson(req);
-        const nuovoMessaggioUtente = typeof corpoResume?.messaggio === 'string' && corpoResume.messaggio.trim()
-          ? corpoResume.messaggio.trim()
-          : null;
+        const nuovoMessaggioUtente = requireResumeBody(await leggiCorpoJson(req));
         const esito = sessionRegistry.resume(sessionId, nuovoMessaggioUtente);
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
@@ -1321,6 +1508,34 @@ export function createHttpApp({
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ sessionId: esito.sessionId }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    const settingsMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/settings$/.exec(url.pathname);
+    if (settingsMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try {
+          sessionId = decodeURIComponent(settingsMatch[1]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const patch = requireSessionSettingsBody(await leggiCorpoJson(req));
+        const esito = await sessionRegistry.aggiornaImpostazioni(sessionId, patch);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ updated: true }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
@@ -1645,6 +1860,11 @@ export function createHttpApp({
       if (url.pathname === '/api/v1/health') {
         requireNoQuery(url);
         data = { status: 'ok' };
+      } else if (workspaceLaunchStore && /^\/api\/v1\/workspace-launches\/([^/]+)$/.test(url.pathname)) {
+        requireNoQuery(url);
+        let id;
+        try { id = decodeURIComponent(url.pathname.split('/')[4]); } catch { id = ''; }
+        data = workspaceLaunchStore.inspect(id);
       } else if (url.pathname === '/api/v1/tasks') {
         requireNoQuery(url);
         data = { items: listaTaskDisponibili() };
@@ -1652,6 +1872,20 @@ export function createHttpApp({
         requireNoQuery(url);
         /* ⭐ 27/8 — le cartelle libere ammesse (TALOS_HARNESS_UI_PROJECT_DIRS): mai il percorso assoluto, solo id/nome — vedi custom-task.mjs. */
         data = { items: elencaCartelleProgetto() };
+      } else if (url.pathname === '/api/v1/workspace-browser') {
+        const keys = [...url.searchParams.keys()];
+        const paths = url.searchParams.getAll('path');
+        if (keys.some((key) => key !== 'path') || paths.length > 1) {
+          const error = new Error('Query workspace non valida');
+          error.code = 'QUERY_INVALID';
+          throw error;
+        }
+        if (!workspaceBrowser || typeof workspaceBrowser.browse !== 'function') {
+          const error = new Error('Browser workspace non disponibile');
+          error.code = 'WORKSPACE_NOT_AVAILABLE';
+          throw error;
+        }
+        data = await workspaceBrowser.browse(paths.length === 1 ? paths[0] : undefined);
       } else if (url.pathname === '/api/v1/frequent-dirs') {
         requireNoQuery(url);
         /*

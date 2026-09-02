@@ -38,10 +38,11 @@ test('la baseline contiene i contratti pubblici che il refactor deve conservare'
   assert.ok(expected.publicAssets.includes('/app.js'));
   assert.ok(expected.publicAssets.includes('/styles.css'));
   assert.ok(expected.endpointFragments.some((value) => value.includes('/api/v1/sessions')));
+  assert.ok(expected.endpointFragments.includes('/api/v1/workspace-browser'));
+  assert.ok(expected.endpointFragments.includes('/api/v1/workspace-launches'));
   assert.deepEqual(expected.terminalFrames, { data: 0, control: 1 });
   assert.equal(expected.source, 'harness-ui/public');
   assert.ok(expected.assets.app.bytes > 400_000);
   assert.ok(expected.assets.html.bytes > 60_000);
   assert.ok(expected.assets.css.bytes > 140_000);
 });
-

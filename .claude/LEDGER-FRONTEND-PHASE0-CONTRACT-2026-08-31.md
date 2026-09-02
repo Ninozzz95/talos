@@ -253,3 +253,873 @@ Rollback: rimuovere solo `visual-matrix.spec.mjs` e gli artefatti ignorati; non 
 - Stato vuoto: viene mostrato `Seleziona modello` (o `Nessun modello selezionato` nel riepilogo), senza fingere una scelta.
 - Dopo una scelta esplicita: il chip e il riepilogo condividono sempre il nome/ID reale del modello selezionato.
 - RED/GREEN: test browser `model chip never exposes the server-default label`; RED riprodotto prima del fix, GREEN verificato dopo il fix.
+
+## Tranche P0 — attività 1–6 autorizzate il 2026-09-01
+
+### Ledger esecutivo
+
+1. **Catalogo task preset:** modificare `harness-ui/src/runtime-owner-adapter.mjs`, `harness-ui/src/task-catalog.mjs`, `harness-ui/server.mjs`; aggiungere test in `harness-ui/tests/runtime-owner-adapter.test.mjs`, `harness-ui/tests/task-catalog.test.mjs`, `harness-ui/tests/http-routes-sessions.test.mjs`. Contratto: provider owner esplicito, elenco leggero e preparazione reale; nessuna fixture nascosta.
+2. **Doctor runtime:** modificare `harness-ui/src/doctor.mjs`, `harness-ui/server.mjs`, `harness-ui/public/app.js`; test RED/GREEN in `harness-ui/tests/doctor.test.mjs` e `harness-ui/frontend/tests/browser/baseline-shell.spec.mjs`. Il controllo deve distinguere processo vivo da runtime agente pronto.
+3. **Sessioni corrotte:** modificare `harness-ui/src/session-registry.mjs`, `harness-ui/src/session-store.mjs`; test in `harness-ui/tests/session-store.test.mjs` e `harness-ui/tests/session-registry.test.mjs`. Recupero non distruttivo, conteggio e riferimento diagnostico, nessuna cancellazione automatica.
+4. **Test receipt:** modificare solo `harness-ui/tests/harness-receipt-keypair.test.mjs` per risolvere il percorso relativo al file di test, mantenendo il modulo pubblico `harness-ui/src/harness-receipt-keypair.mjs` invariato.
+5. **CSP/xterm:** modificare `harness-ui/public/app.js` e, se necessario, `harness-ui/public/styles.css`; test in `harness-ui/frontend/tests/browser/visual-matrix.spec.mjs` e audit console. La CSP resta invariata; se l'upstream richiede stili inline non eliminabili, il finding resta aperto e dichiarato.
+6. **Gate integrato:** aggiornare `harness-ui/.claude/CONSEGNA-FRONTEND-PHASE0-2026-08-31.md` e questo ledger con risultati, screenshot e rollback. Il server owner `4174` non viene fermato; eventuali prove che richiedono riavvio usano una porta diagnostica separata e richiedono nuova autorizzazione per il cutover.
+
+### Ricerca primaria registrata
+
+- Node.js ESM e import assoluti/dinamici: documentazione ufficiale Node 26 (<https://nodejs.org/api/esm.html>).
+- `fs.watch` e limiti reali su Windows: documentazione ufficiale Node 26 (<https://nodejs.org/api/fs.html>).
+- Readiness distinta da liveness: documentazione Kubernetes (<https://kubernetes.io/docs/concepts/workloads/pods/probes/>).
+- xterm.js e WebGL addon: repository/API ufficiali (<https://github.com/xtermjs/xterm.js/>, <https://xtermjs.org/docs/api/terminal/interfaces/iterminaloptions/>).
+
+Decisione upstream: mantenere il caricamento runtime dietro adapter AVM con percorso assoluto; usare WebGL xterm quando disponibile senza allargare CSP; rifiutare fallback silenziosi o import dal mobile non dichiarati.
+
+### Esito della tranche 1–6
+
+1. **Catalogo task preset — degradazione onesta chiusa, provider reale ancora dipendente dall'owner.** `server.mjs` restituisce `items: []` quando l'adapter owner non espone il catalogo, senza inventare fixture e senza trasformare uno stato degradato in errore interno. Model Lab e Nuova automazione mostrano una spiegazione naturale e indicano Doctor. Test permanenti: `GET /api/v1/tasks mantiene una risposta onesta quando il catalogo non è disponibile` e `Nuova automazione comunica in linguaggio naturale quando non ci sono attività`.
+2. **Doctor runtime — chiuso.** `diagnosi()` espone separatamente runtime agente, catalogo task e persistenza sessioni. Il server distingue processo vivo da capacità agente pronta; il browser non mostra più `Healthy` quando una delle dipendenze operative manca.
+3. **Sessioni corrotte — chiuso senza distruzione.** `createSessionRegistry().statoPersistenza()` rende visibili conteggio e identificativi che non sono stati ripristinati. Il record reale `b7b1b7d2-a6b3-4f81-bc3c-5ec57e0ead4a` è ancora presente e Doctor lo segnala; nessun file è stato cancellato o riscritto.
+4. **Receipt keypair — chiuso.** Il test risolve il modulo con `fileURLToPath(import.meta.url)` e non dipende più dalla directory corrente. Il modulo di produzione è invariato.
+5. **CSP/xterm — decisione negativa esplicita.** L'addon WebGL ufficiale resta il primo renderer tentato e il fallback xterm rimane funzionante. La build UMD di xterm applica stili inline e produce avvisi `style-src 'self'`; rimuoverli richiederebbe modificare/forkare l'upstream o rilassare la policy. La CSP non è stata indebolita: il finding resta aperto, riproducibile e classificato negli artefatti del Terminale.
+6. **Gate integrato — chiuso sulla porta diagnostica 4175.** Il processo owner `4174` è rimasto attivo. `4175` ha restituito health 200, task vuoti, Doctor degradato con runtime/catalogo/sessione corrotta; la suite browser e la matrice visuale sono state eseguite lì.
+
+### Evidenza fresca
+
+- test backend mirati: **294/294**;
+- suite backend completa: **1153/1153**;
+- contratto frontend: **3/3**;
+- suite browser aggregata: **12/12**;
+- matrice screenshot: **12 scenari** ispezionati per intero in `harness-ui/frontend/artifacts/visual-audit-2026-08-31/`;
+- `git diff --check`: pass;
+- server owner `4174`: al controllo finale non era più in ascolto (nessuna terminazione eseguita da questa tranche), quindi è stato riavviato con la configurazione già autorizzata e lasciato attivo; server diagnostico `4175`: usato soltanto per la verifica isolata del nuovo codice.
+
+Riconferma conclusiva: `4174` è stato riportato in ascolto dopo il controllo isolato e lasciato attivo; health/Doctor e la matrice browser completa sono stati rieseguiti sul server owner (**12/12**).
+
+### Rollback
+
+- ripristinare la precedente diagnostica eliminando esclusivamente i campi opzionali `ownerRuntime`, `catalogoTask` e `sessioniPersistenza` e i relativi test;
+- ripristinare l'errore HTTP del catalogo solo se viene deliberatamente abbandonata la degradazione onesta; non introdurre task finti;
+- ripristinare il vecchio percorso del test receipt solo se il runner garantisce esplicitamente la stessa working directory su ogni piattaforma;
+- non modificare la CSP come rollback del finding xterm.
+
+## Hotfix P0 — Nuova sessione senza configurazione manuale (2026-09-01)
+
+### Obiettivo
+
+Eliminare il blocco per cui `Nuova sessione` mostra zero cartelle quando
+`TALOS_HARNESS_UI_PROJECT_DIRS` è assente. La prima workspace deve essere
+quella del progetto desktop che ospita il server, con nome e percorso derivati
+dal disco reale; nessun percorso viene inventato o ricevuto dal browser.
+
+### File e simboli esatti
+
+- `harness-ui/src/config.mjs`: modificare `parseCartelleProgetto(raw,
+  defaultProjectDir)` e `loadConfig()` per costruire una voce predefinita
+  validata con `realpathSync/statSync/accessSync` quando l’elenco esplicito è
+  omesso; mantenere `TALOS_HARNESS_UI_PROJECT_DIRS` come estensione esplicita.
+- `harness-ui/tests/config.test.mjs`: aggiornare il caso zero-config e
+  aggiungere il caso contrario per una directory di progetto non leggibile.
+- `harness-ui/tests/http-routes-doctor.test.mjs`: verificare che Doctor
+  descriva la workspace predefinita come disponibile.
+- `harness-ui/frontend/tests/browser/baseline-shell.spec.mjs`: aggiungere la
+  prova utente `Nuova sessione` zero-config, con selezione della workspace e
+  ritorno alla chat senza messaggio tecnico.
+- `.claude/CONSEGNA-FRONTEND-PHASE0-2026-08-31.md`: registrare motivazione,
+  risultato, limiti e prove.
+
+### RED/GREEN e gate
+
+- RED: `loadConfig({})` restituisce zero cartelle e il click su `Nuova` resta
+  bloccato nella modale.
+- GREEN mirato: `node --test harness-ui/tests/config.test.mjs
+  harness-ui/tests/http-routes-doctor.test.mjs`.
+- GREEN frontend: `npm run verify` e browser baseline sulla porta owner 4174.
+- Regressione: `node --test harness-ui/tests/*.test.mjs`, `npm run test:browser`
+  e `git diff --check`.
+- Prova reale: un messaggio Qwen già riuscito resta il gate runtime; non si
+  cambia provider e non si interrompe il processo owner durante il test.
+
+### Decisione upstream
+
+Adattare il modello “working directory predefinita” documentato da Claude Code,
+Codex CLI e Hermes. Non adottare una directory globale come `C:\` e non
+allargare l’accesso a percorsi arbitrari: il default è la radice del progetto
+desktop, mentre un percorso diverso richiede la scelta esplicita `Full access`.
+
+### Esito hotfix e prove (2026-09-01)
+
+- RED riprodotto: con elenco progetti assente la modale Nuova sessione non offriva alcuna cartella.
+- GREEN: `parseCartelleProgetto(raw, defaultProjectDir)` valida la workspace del server desktop con `realpathSync`, `statSync`, `accessSync`; `TALOS_HARNESS_UI_PROJECT_DIRS` resta l’estensione esplicita.
+- Test aggiunto: `harness-ui/tests/http-routes-doctor.test.mjs` verifica `disponibili:true` e `conteggio:1`; test browser verifica il percorso visibile dalla modale.
+- Suite backend completa: **1155/1155**; Doctor/config mirati: **29/29**; frontend: **3/3**; browser owner 4174: **13/13**; matrice visuale: **12/12**; `git diff --check`: superato.
+- Prova upstream reale: sessione custom su `default`, messaggio accodato e `RunFinished` riuscito; nessuna interruzione del server owner dopo il riavvio controllato.
+- Rollback: ripristinare il vecchio comportamento solo modificando `loadConfig()`/`parseCartelleProgetto`; non rimuovere i test e non concedere `C:\\` implicitamente.
+-
+### Vincolo futuro installer — workspace dinamica in produzione (2026-09-01)
+
+La workspace predefinita introdotta dall’hotfix è un fallback per il server desktop dal repository. Non può diventare un percorso fisso nella build distribuita.
+
+Ricerca ufficiale registrata:
+- Microsoft raccomanda di non scrivere nella cartella d’installazione e di usare lo spazio dati per-utente; MSIX tratta il pacchetto come sola lettura e può cambiare il working directory.
+- Le linee guida Windows raccomandano installazione per-utente, niente UAC/reboot non necessari, disinstallazione pulita, aggiornamenti riparabili e test su ambiente pulito.
+- Per distribuzione fuori Store, MSIX + `.appinstaller` è il percorso ufficiale per aggiornamenti automatici, con firma attendibile.
+
+Decisione: durante la fase Installer, calcolare a runtime `installRoot`, `userDataRoot` e `workspaceRoot` dall’identità del pacchetto/profilo utente; mai usare `process.cwd()` o un percorso del checkout come fonte di verità. I dati Harness (sessioni, log, chiavi locali e cataloghi) vivono in una directory dati per-utente persistente; la workspace di progetto è selezionata dal contesto d’avvio/installazione e può essere cambiata esplicitamente. L’installer deve migrare i dati esistenti, preservare i contenuti dell’utente alla disinstallazione quando richiesto, firmare il pacchetto e verificare installazione/upgrade/rollback su macchina pulita.
+
+Gate obbligatori da aggiungere al ledger Installer: installazione per-utente senza privilegi elevati, primo avvio senza variabili manuali, aggiornamento con dati/sessioni preservati, uninstall con scelta conserva/rimuovi dati, working directory corretta in MSIX, firma e verifica hash, e fallback controllato quando il progetto non è accessibile.
+- Riferimenti: Microsoft Windows app best practices (https://learn.microsoft.com/en-us/windows/apps/get-started/best-practices), MSIX packaging (https://learn.microsoft.com/en-us/windows/msix/packaging-tool/know-your-installer), app data (https://learn.microsoft.com/en-us/windows/apps/develop/data/store-and-retrieve-app-data), distribution paths (https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/choose-distribution-path).
+
+## Hotfix P0 — sincronizzazione modello quando si apre una sessione (2026-09-01)
+
+### Problema
+
+La sidebar riceveva il campo reale `modello` ma `passaASessione()` riceveva solo id, task e nome. Aprendo una sessione, `state.model` restava vuoto e la pillola mostrava falsamente `Seleziona modello`.
+
+### File e simboli
+
+- `harness-ui/public/app.js`: estendere `passaASessione(sessionId, taskId, nome, modello)`; aggiornare `state.model` e `aggiornaPillolaModello()` solo quando il modello reale è presente; propagare il valore dai click della sidebar e dal menu Azioni.
+- `harness-ui/frontend/tests/browser/baseline-shell.spec.mjs`: test `selezionare una sessione sincronizza la pillola con il suo modello reale`.
+- `.claude/CONSEGNA-FRONTEND-PHASE0-2026-08-31.md`: registrare causa, fix, test e limiti.
+
+### RED/GREEN
+
+- RED riprodotto su Chromium: sessione con `modello:qwen/qwen3.8-flash` selezionata, pillola rimasta `Seleziona modello`.
+- GREEN: test browser con dati sessione reali simulati, click sulla riga e verifica del nome modello nella pillola.
+- Regressioni: suite backend completa, `npm run verify`, browser completo e `git diff --check`.
+
+### Decisione
+
+Il modello della sessione selezionata è la fonte di verità per il composer; non si copia un default globale e non si modifica il backend. Se una sessione storica non contiene il modello, la pillola mantiene lo stato precedente senza inventare un valore.
+-
+### Esito hotfix modello/sessione (2026-09-01)
+
+- RED: sessione con `modello:qwen/qwen3.8-flash` selezionata, pillola rimasta `Seleziona modello`.
+- GREEN: `passaASessione(sessionId, taskId, nome, modello)` propaga il valore reale a `state.model` e `aggiornaPillolaModello()`; lista e menu Azioni passano il campo senza duplicare logica.
+- Prova browser: **1/1** mirata; suite browser completa **14/14**; backend **1155/1155**; frontend **3/3**; matrice visuale **12/12**; `git diff --check` superato.
+- Compatibilità: sessioni storiche prive di modello non ricevono valori inventati e tornano allo stato neutro `Seleziona modello`, senza ereditare il modello della sessione precedente.
+- Ricerca primaria: WAI-ARIA richiede che lo stato selezionato/corrente rappresenti l’elemento effettivamente attivo (https://www.w3.org/WAI/WCAG21/Techniques/aria/ARIA26; https://www.w3.org/WAI/ARIA/apg/patterns/listbox/). Decisione: adattare il principio alla fonte di verità della sessione; nessuna libreria upstream necessaria.
+
+## Hotfix P0 — ragionamento opt-in e autoscroll centrato dello streaming (2026-09-01)
+
+### Obiettivo e causa riprodotta
+
+- `ReasoningMessageStart` crea oggi una nota visibile per default; il testo di
+  ragionamento resta quindi nel flusso principale anche quando l’utente non lo
+  ha richiesto. Il raggruppamento dei comandi dipende però da
+  `chiudiBatchTool()` nello stesso handler e non deve essere rimosso o
+  condizionato alla visibilità.
+- `TextMessageContent` ridisegna il messaggio ma non aggiorna la posizione del
+  contenitore durante i delta; l’utente deve trascinare manualmente lo scroll.
+  Le chiamate esistenti a `scrollIntoView({block:'end'})` sono adatte a una
+  nuova scheda, non a uno stream continuo.
+
+### File e simboli esatti
+
+- `harness-ui/public/app.js`
+  - aggiungere `state.showReasoning: false`;
+  - aggiungere `aggiornaVisibilitaRagionamento()` per applicare `.hidden` alle
+    note `.real-reasoning-note` esistenti e sincronizzare il controllo;
+  - aggiungere `scrollStreamingOutput(element)` con coalescenza
+    `requestAnimationFrame`, calcolo del centro del contenitore `#conversation`
+    e clamp tra `0` e `scrollHeight-clientHeight`;
+  - estendere il risultato interno di `appendToolNote()` con il riferimento
+    `article` senza cambiare il contratto dei chiamanti esistenti;
+  - in `openSheet('model')` montare lo switch testuale **Mostra ragionamento**
+    accanto ai componenti già esistenti, con `checked=false` iniziale, label
+    associata e aggiornamento live;
+  - in `ReasoningMessageStart` mantenere sempre `nascondiAttesaRisposta()` e
+    `chiudiBatchTool()`, creando la nota ma rispettando lo stato di visibilità;
+  - in `TextMessageContent` richiamare `scrollStreamingOutput(element)` dopo
+    il render; nel canale reasoning richiamarlo solo quando la nota è visibile.
+- `harness-ui/public/styles.css`: rendere il padding inferiore di
+  `.conversation` compatibile con la variabile interna
+  `--stream-follow-space`, senza ridurre le distanze desktop/mobile già
+  esistenti.
+- `harness-ui/frontend/tests/browser/baseline-shell.spec.mjs`
+  - test RED/GREEN per switch opt-in e visibilità iniziale nascosta;
+  - test di regressione per due tool-call separate da reasoning nascosto:
+    i batch restano due e le righe comando sono presenti;
+  - test RED/GREEN per delta testuale con contenuto precedente alto: il
+    contenitore porta il messaggio attivo nella fascia centrale, non al fondo.
+- `harness-ui/frontend/tests/fixtures/legacy-contract.snapshot.json`: aggiornare
+  hash/righe/byte del bundle dopo la modifica app.js.
+- `.claude/CONSEGNA-FRONTEND-PHASE0-2026-08-31.md`: registrare decisione,
+  comportamento, ricerca, test, screenshot e limiti.
+
+### RED/GREEN e gate
+
+- RED: il test dello switch trova il controllo assente e una nota reasoning
+  visibile; il test autoscroll misura il target fuori dalla fascia centrale.
+- GREEN mirato: `npm.cmd exec -- playwright test baseline-shell.spec.mjs -g
+  "ragionamento|autoscroll"` sul server owner `http://127.0.0.1:4174`.
+- Regressioni: `npm.cmd run verify`; suite browser completa con matrice visuale;
+  `node --test harness-ui/tests/*.test.mjs`; `git diff --check`.
+- Prova runtime: mantenere il server owner attivo e verificare almeno una
+  sessione Qwen già autorizzata senza cambiare provider o interrompere la porta
+  4174.
+- Prova visiva: screenshot completo desktop largo e viewport mobile simulato
+  del foglio Modello (switch spento/acceso) e dello stream con testo lungo;
+  ispezione integrale per clipping, focus, batch e posizione del composer.
+- Rollback: rimuovere solo `state.showReasoning`, lo switch, l’helper
+  `scrollStreamingOutput` e i relativi hook/test; lasciare invariati
+  `chiudiBatchTool()` e il contratto `appendToolNote()`.
+
+### Ricerca primaria e decisione upstream
+
+- CSSOM View definisce `scrollIntoView` e l’allineamento `block:center`;
+  l’implementazione usa un calcolo equivalente sul contenitore per evitare
+  di spostare antenati esterni e per applicare un limite sicuro.
+- WAI-ARIA APG Switch Pattern definisce un controllo binario con stato
+  esplicito on/off; il progetto adatta il pattern al checkbox nativo già usato
+  nei fogli, mantenendo label e stato accessibile (https://www.w3.org/WAI/ARIA/apg/patterns/switch/).
+- Decisione: adattare standard nativi e nessuna nuova dipendenza; non adottare
+  una libreria di chat/autoscroll perché introdurrebbe un secondo modello di
+  stato e non risolverebbe il vincolo TALOS sul raggruppamento dei comandi.
+
+### Amend visivo obbligatorio
+
+Il primo screenshot ha mostrato l’output circa al 74% dell’altezza: il calcolo
+centrale era corretto, ma il limite massimo dello scroll impediva di raggiungere
+il centro perché sotto l’ultimo messaggio non esisteva spazio sufficiente. Il
+test 25–75% era troppo permissivo. Il contratto è quindi corretto prima del
+secondo edit: fascia **40–60%**, con `--stream-follow-space` pari a metà altezza
+del contenitore e padding effettivo mai inferiore a quello già previsto dal
+layout. Questa modifica non cambia ordine, DOM o raggruppamento dei comandi.
+
+## Amend P0 — modello persistente dopo reload e selezione massiva sessioni (2026-09-01)
+
+### Vincolo di verifica
+
+La verifica visiva sul server locale `http://127.0.0.1:4174` è un gate
+bloccante: nessuna fase è GREEN senza screenshot completi, ispezionati
+dall'alto verso il basso prima e dopo ogni correzione. Il server owner deve
+restare attivo durante i test; un arresto è ammesso solo se esplicitamente
+richiesto e va registrato.
+
+### Problemi e obiettivo
+
+- La sessione deve usare sempre il proprio campo canonico `modello` restituito
+  da `GET /api/v1/sessions`, anche dopo un ricaricamento. Un modello precedente
+  o il modello predefinito non può riempire la pillola quando il dato manca o è
+  diverso.
+- La sidebar deve consentire di selezionare più righe reali e cancellarle in
+  un'unica azione esplicita, con seleziona-tutto, conteggio, conferma e report
+  degli eventuali fallimenti. La cancellazione usa il contratto esistente
+  `POST /api/v1/sessions/:id/delete`; non si introduce un endpoint parallelo.
+
+### File e simboli esatti
+
+- `harness-ui/public/app.js`: stato `state.sessionSelection`, normalizzatore
+  `normalizzaModelloSessione`, `passaASessione`, `aggiornaElencoSessioniReali`,
+  handler `toggleSessionSelectionMode`, `toggleSessionSelection` e
+  `eliminaSessioniSelezionate` con toolbar sincronizzata.
+- `harness-ui/public/index.html`: toolbar della cronologia reale con pulsanti
+  `Seleziona sessioni`, `Seleziona tutto`, `Elimina selezionate`, conteggio e
+  regione live.
+- `harness-ui/public/styles.css`: layout e stati focus/checked della toolbar,
+  checkbox e righe selezionate, responsive senza overflow.
+- `harness-ui/frontend/tests/browser/baseline-shell.spec.mjs`: test RED/GREEN
+  per modello Gemini dopo reload e selezione/cancellazione multipla, inclusi
+  casi contrari (nessuna selezione, errore parziale, sessione senza modello).
+- `harness-ui/frontend/tests/fixtures/legacy-contract.snapshot.json`: hash,
+  righe e byte aggiornati dopo le modifiche ai bundle.
+- `.claude/CONSEGNA-FRONTEND-PHASE0-2026-08-31.md`: causa, decisioni, limiti,
+  log dei test, screenshot completi e nota della regola bloccante.
+
+### RED/GREEN e gate
+
+- RED mirato: il test seleziona una sessione Gemini, ricarica, riapre la stessa
+  riga e trova ancora la pillola Gemini; il test massivo non trova toolbar,
+  conteggio o richieste di cancellazione.
+- GREEN mirato: Playwright sulla porta owner 4174 per i due scenari.
+- Regressioni: `npm.cmd run verify`, suite browser intera, `node --test
+  harness-ui/tests/*.test.mjs`, `npm.cmd run build`, `git diff --check`.
+- Prova visiva obbligatoria: screenshot completo 1440×900 della sidebar in
+  stato normale, selezione parziale, seleziona-tutto, conferma e risultato;
+  screenshot 390×844 della stessa toolbar senza overflow. Ogni immagine va
+  ispezionata integralmente; console/page errors devono essere zero.
+- Prova runtime: almeno un messaggio con Qwen già autorizzato, senza cambiare
+  provider né interrompere il server owner.
+- Rollback: rimuovere esclusivamente i simboli di selezione massiva e il
+  normalizzatore aggiunti in questo amend; mantenere il fix precedente della
+  pillola e non modificare il registro sessioni.
+
+### Ricerca primaria e decisione upstream
+
+Ricerca primaria eseguita via documentazione WAI-ARIA APG (fallback `curl`
+perché il browser web integrato ha restituito `401 token_revoked`): in un
+controllo multi-selezione lo stato deve essere esplicito per ogni voce e
+separato dal focus; `aria-checked` è la convenzione raccomandata per la
+selezione multipla. Adattiamo il principio con checkbox HTML nativi dentro una
+toolbar, mantenendo il click sulla riga per aprire la sessione fuori dalla
+modalità selezione. Nessuna nuova dipendenza.
+
+## Amend P0 — impostazioni durevoli, chat a tutta larghezza e inspector esteso (2026-09-01)
+
+### Perimetro e contratto utente
+
+- Owner: `TALOS UI` desktop, con un attraversamento esplicito nel registro locale delle sessioni. La lane mobile resta esclusivamente un riferimento di grammatica e non viene modificata.
+- Ogni controllo realmente modificabile deve sopravvivere al reload e cambiare il comportamento o la presentazione che dichiara. Una preferenza solo salvata o solo cosmeticamente selezionata non è GREEN.
+- Le preferenze globali, non segrete, restano nel documento browser `talos.harness.desktop.settings.v1`; modello, reasoning e permessi propri di una sessione restano canonici nel registro server e nel JSONL append-only. Chiavi API, token e credenziali non entrano mai in `localStorage`.
+- Lo switch **Chat a tutta larghezza** elimina il limite editoriale di 920 px della conversazione e del composer, senza nascondere le sidebar. Il pannello destro resta indipendente e può crescere fino a 720 px soltanto quando resta uno spazio centrale utilizzabile; su viewport piccole continua a essere un pannello sovrapposto.
+
+### Ricerca primaria e confronto competitivo
+
+- WHATWG HTML Web Storage, revisione osservata il 2026-09-01: `Storage.getItem()`/`setItem()` sono il contratto nativo per preferenze origin-scoped persistenti (https://html.spec.whatwg.org/multipage/webstorage.html).
+- WAI-ARIA APG Switch Pattern: un controllo binario mantiene una label stabile, stato on/off e interazione da tastiera; si adotta `input[type=checkbox]` nativo con testo descrittivo (https://www.w3.org/WAI/ARIA/apg/patterns/switch/).
+- CSS Grid Level 2: la colonna centrale resta `minmax(0,1fr)` e la rail usa un limite definito, evitando che il contenuto intrinseco allarghi o mandi in overflow il workspace (https://www.w3.org/TR/css-grid-2/).
+- CSS Box Sizing Level 3: `max-width: none` rimuove il limite massimo e una percentuale si risolve rispetto al containing block; perciò il full width si applica ai contenitori dei messaggi dentro `.conversation`, non al composer che è una superficie sorella con un proprio contratto di larghezza (https://www.w3.org/TR/css-sizing-3/).
+- CSS Box Sizing Level 3 definisce inoltre la dimensione `fit-content` come `clamp(min-content, stretch-fit, max-content)`: la bolla utente deve quindi conservare la propria misura intrinseca per testi brevi e usare lo spazio disponibile soltanto quando il contenuto lo richiede. `width:100%` sulla bolla è respinto perché distrugge questa semantica (https://www.w3.org/TR/css-sizing-3/#fit-content-size).
+- OWASP WSTG: dati sensibili e identificatori di sessione non vanno salvati in Web Storage; TALOS conserva solo preferenze non segrete e mantiene gli accessi provider sul server (https://owasp.org/www-project-web-security-testing-guide/).
+- VS Code descrive `Chat conversation` e `Chat input` come due aree distinte e offre un editor tab quando serve più spazio; Hermes Desktop combina chat e preview laterale senza fondere il composer col contenuto. Claude Code resta un riferimento per sessione/modello/permessi, ma la sua TUI non è una base geometrica valida per questo fix. TALOS adatta i punti forti: sessione come sorgente di verità, layout ricordato, contenuto espandibile e input stabile; evita il punto debole di una preferenza globale capace di sovrascrivere in silenzio una sessione riaperta (https://code.visualstudio.com/docs/agents/run/chat-view, https://github.com/nousresearch/hermes-agent/blob/main/apps/desktop/README.md, https://docs.anthropic.com/en/docs/claude-code/cli-usage).
+- Decisione upstream: **adattare standard nativi dietro contratti TALOS**. Nessuna dipendenza nuova: Web Storage, checkbox e CSS Grid coprono il lato UI; il registro append-only esistente copre la durabilità server. Non si adotta SQLite/Hermes perché sostituirebbe la sorgente JSONL già verificata e allargherebbe il perimetro senza guadagno per questo strumento owner-only.
+
+### Regola owner permanente — ogni modifica UI
+
+- Prima di ogni modifica UI, anche apparentemente locale, si ispeziona il difetto nel runtime, si cercano documentazione primaria corrente e pratiche mantenute, si registra la decisione adopt/adapt/reject e solo allora si modifica il test RED.
+- Nessuna modifica UI diventa GREEN senza screenshot del prima/dopo alle viewport interessate, invarianti geometriche automatiche, console/page error a zero e ispezione integrale dell'immagine. Un controllo DOM isolato non chiude il gate visivo.
+- Le skill ufficiali `frontend-design`, `browser` e `talos-engineering` sono il percorso predefinito per progetto visivo, controllo del browser e prova TALOS. Se il browser integrato non è disponibile, la matrice Playwright pinned del repository resta il fallback documentato.
+- Per ogni componente o flusso UI/UX residuo derivato dalle ZIP v1 e v2, il
+  dossier deve confrontare separatamente Claude Code, Codex e Hermes usando
+  documentazione ufficiale/primaria corrente: contratto teorico, stati del
+  ciclo vita, comportamento visibile, punti forti, limiti e decisione TALOS
+  `adotta/adatta/scarta`. Nessun competitor può essere citato per analogia o
+  per memoria; se la sua documentazione non pubblica un dettaglio visuale, il
+  ledger lo dichiara invece di inventarlo.
+
+### File, simboli e compatibilità esatti
+
+- `harness-ui/src/session-registry.mjs`: aggiungere il metodo pubblico asincrono `aggiornaImpostazioni(sessionId, patch)`; persistere il record completo `tipo:'impostazioni-sessione'` prima di mutare la voce; aggiornare `ripristina()` applicando l'ultimo record sopra l'intestazione; estendere `elenca()` con `modelloPlanner`, `reasoning`, `permessi` e `permessiPerAttrezzo`; mantenere compatibili `resume()`, `forka()`, `avvia()` e `avviaLibero()`.
+- `harness-ui/src/http-app.mjs`: aggiungere il validatore privato `requireSessionSettingsBody(body)` riusando i quattro validatori di `config.mjs`; aggiungere `POST /api/v1/sessions/:id/settings`, senza query, con envelope API v1 e codici esistenti `QUERY_INVALID`/`NOT_FOUND`.
+- `harness-ui/public/app.js`: aggiungere `DESKTOP_CHAT_DEFAULTS`, `normalizzaChatDesktop`, estendere `leggiImpostazioniDesktop()`/`salvaImpostazioniDesktop()` e aggiungere `salvaPreferenzeChatDesktop()`/`inizializzaPreferenzeChatDesktop()`; aggiungere `applicaImpostazioniSessione(sessione)` e `sincronizzaImpostazioniSessione(patch)` con coda seriale e rollback; estendere `passaASessione()` e `aggiornaElencoSessioniReali()` per modello, effort/reasoning, policy e override; correggere `creaModelPicker()` con `aggiornaModelloPrincipale`; rendere effettivi `composerShape`, `composerPlus`, `messageStyle`, `streamingAnimation`, `windowPresentation`, `immersiveHeader`, profilo, qualità, easing e movimento tramite dataset/classi/token consumati dal CSS; aggiungere `chatFullWidth`; portare `PANEL_RESIZE_LIMITS.inspector` a `[280,720]` e rendere `applyPanelWidth()` viewport-aware lasciando almeno 520 px alla colonna centrale.
+- `harness-ui/public/index.html`: trasformare `#settingsChatPanel` in sezione operativa con `#chatFullWidthToggle`, testo stabile e stato persistente; aggiungere in `#settingsToolsPanel` l'accesso diretto al foglio permessi senza duplicare i controlli.
+- `harness-ui/public/styles.css`: aggiungere `.chat-full-width` esclusivamente per `.conversation`, `.assistant-message`, `.user-message` e `.message-bubble`; rimuovere il limite 760 px dalla risposta, ma per la bolla utente sostituire il cap 680 px con `width:fit-content; max-width:100%`, così una domanda breve non viene stirata e una lunga può usare tutta la conversazione; non selezionare né modificare `.composer-wrap` o `.composer`; mantenere `minmax(0,1fr)`, nessun overflow e responsive sotto 1040 px. Le varianti tokenizzate per forma composer, bolle/sezioni, streaming typewriter/fade, drawer/fullscreen/menu e testata immersiva restano indipendenti.
+- `harness-ui/tests/session-registry.test.mjs`: scenario permanente `SESSION-SETTINGS-DURABILITY-01` per update, elenco, resume/fork e ripristino; contrari per id assente, store fallito e patch vuota/non valida.
+- `harness-ui/tests/http-routes-sessions.test.mjs`: scenario `SESSION-SETTINGS-HTTP-01`; contrari per modello, reasoning, permessi, override, chiavi sconosciute, body vuoto e id inesistente.
+- `harness-ui/frontend/tests/browser/baseline-shell.spec.mjs`: scenari `DESKTOP-SETTINGS-PERSISTENCE-01`, `SESSION-SETTINGS-RELOAD-01`, `CHAT-FULL-WIDTH-01`, `CHAT-FULL-WIDTH-SHORT-BUBBLE-01`, `CHAT-FULL-WIDTH-COPY-01` e `INSPECTOR-WIDTH-01`, inclusi stati contrari e reload. I test full width misurano prima/dopo: larghezza composer invariata entro 1 px; risposta e domanda lunga estese oltre i precedenti cap; domanda breve invariata entro 1 px e mai stirata; disattivazione e reload preservano lo stesso contratto; il testo impostazioni nomina esplicitamente ciò che cambia e ciò che resta invariato, senza promettere l'allargamento del composer.
+- `harness-ui/frontend/tests/browser/visual-matrix.spec.mjs`: estende la matrice canonica con chat normale/full-width, impostazioni Chat, inspector largo/clamp e viewport compatto; è il gate visuale permanente già usato dal progetto, aggiunto al perimetro dopo che il browser integrato è risultato non disponibile.
+- `harness-ui/frontend/tests/fixtures/legacy-contract.snapshot.json`: aggiornare soltanto hash, righe e byte dei tre bundle modificati.
+- `.claude/CONSEGNA-FRONTEND-PHASE0-2026-08-31.md`: registrare causa, ricerca, comandi, prove visive, limiti e rollback.
+
+### RED, GREEN, regressioni e prova umana
+
+- RED backend: la route settings è 404 e il registro non espone né persiste le modifiche; RED frontend originario: lo switch full width non esiste, 640 px viene clampato a 480 e policy/effort tornano ai default dopo reload. Regressione permanente `CHAT-FULL-WIDTH-01`: l'implementazione intermedia errata allarga il composer e lascia risposta/bolla ai cap 760/680 px. Regressione permanente `CHAT-FULL-WIDTH-SHORT-BUBBLE-01`: il primo fix forza anche una domanda breve alla larghezza completa; il test deve fallire perché la bolla breve cresce invece di mantenere la propria misura intrinseca.
+- GREEN mirato: `node --test harness-ui/tests/session-registry.test.mjs harness-ui/tests/http-routes-sessions.test.mjs` e Playwright filtrato sui quattro scenari nominati.
+- Regressioni: `npm.cmd run verify`, `npm.cmd run test:browser`, `node --test harness-ui/tests/*.test.mjs`, `npm.cmd run build`, `git diff --check`.
+- Prova visiva sul server owner non interrotto `http://127.0.0.1:4174`: screenshot completi 1440x900 e 1920x1080 con chat normale/full width, inspector 340/640 px e Settings dopo reload; 1024x768 e 390x844 per assenza overflow e pannello mobile invariato. Lo screenshot full width deve mostrare una risposta e una domanda lunga estese, una domanda breve aderente al testo e il composer sovrapponibile geometricamente allo stato normale. Ogni screenshot va ispezionato integralmente; `console.error`, page error e overflow devono essere zero.
+- Prova reale: la sessione autorizzata con Qwen resta il solo modello usabile per un messaggio end-to-end; non si cambia provider e non si arresta il processo 4174.
+
+### Findings visivi emersi il 2026-09-01
+
+- `CHAT-FULL-WIDTH-COPY-01` — nello screenshot `settings-chat-1440x900.png` la descrizione intermedia diceva erroneamente che la preferenza rimuoveva il limite anche dal composer. Il comportamento era già corretto ma la promessa UI no: scenario bloccante da correggere e screenshot da rigenerare.
+- `VISUAL-CONTRAST-LIGHT-ASSISTANT-01` — negli screenshot `active-chat-1440x900.png`, `approval-pending-1440x900.png` e `long-content-1280x800.png` testo assistente e alcune superfici secondarie risultano molto deboli sul tema chiaro. Non è introdotto dal full width e resta un debito visivo separato: prima di modificarlo richiede ricerca contrasto/theme engine, test sui token renderizzati e una matrice light completa.
+
+## Hotfix P0 — ciclo vita dei comandi, aggregazione e loader mobile-parity (2026-09-01)
+
+### Contratto owner e causa misurata
+
+- Ogni comando ha una sola riga persistente: nasce nello stato in corso
+  (`Lettura di …`) e la stessa identica riga DOM diventa l'esito concluso
+  (`1 file letto`). Non si aggiunge una seconda riga e non si dichiara un
+  successo prima del `ToolCallResult` reale.
+- Le attività omogenee consecutive confluiscono nello stesso riepilogo:
+  cinque letture diventano `5 file letti`, mai `letto 3 file` seguito da
+  `letto 2 file` e mai un plurale con verbo al singolare.
+- Un blocco di ragionamento nascosto non è un confine visibile e quindi non
+  può spezzare il batch di attività. Testo assistente visibile, cambio turno,
+  errore o conclusione restano confini reali.
+- Il line-loader di attesa deve essere lo stesso componente visivo del mobile
+  e deve mostrare movimento reale tra fotogrammi quando le animazioni sono
+  abilitate; con `prefers-reduced-motion` o la preferenza TALOS esplicita resta
+  statico e leggibile per scelta, non per guasto.
+- Causa locale riprodotta per ispezione: `ToolCallStart` incrementa oggi i
+  contatori finali, `ToolCallArgs` usa già il passato, `ToolCallResult` cerca
+  `batchAttivo` invece del batch correlato alla chiamata e
+  `ReasoningMessageStart` chiude sempre il gruppo anche quando la nota è
+  nascosta. Il markup loader e le keyframe mobile esistono già, ma nessun test
+  verifica che il browser le stia realmente eseguendo.
+
+### Ricerca primaria, confronto e decisione upstream
+
+- AG-UI `main`, documento `docs/concepts/events.mdx` osservato il 2026-09-01:
+  `ToolCallStart`, `ToolCallArgs`, `ToolCallEnd` e `ToolCallResult` sono
+  correlati da `toolCallId`; lo Start rende visibile l'attività in tempo reale
+  e il Result porta l'esito completo dopo l'esecuzione
+  (https://github.com/ag-ui-protocol/ag-ui/blob/main/docs/concepts/events.mdx).
+- WAI-ARIA Technique ARIA22: `role=status` ha live region polite e atomic;
+  l'aggiornamento del contenuto dello stesso contenitore comunica il nuovo
+  stato senza duplicare il messaggio
+  (https://www.w3.org/WAI/WCAG21/Techniques/aria/ARIA22.html).
+- Hermes Agent, documentazione primaria `ui-tui/README.md` e developer guide:
+  il gateway separa `tool.start`, `tool.progress`, `tool.complete`, con
+  `tool_id`, summary, error e durata; Desktop promette attività live e
+  riepiloghi strutturati. Il punto forte adottato è il ciclo terminale
+  correlato; il punto debole da evitare è perdere stati terminali e lasciare
+  indicatori eternamente attivi, regressione pubblicamente documentata nel
+  desktop Hermes
+  (https://github.com/NousResearch/hermes-agent/blob/main/ui-tui/README.md,
+  https://github.com/NousResearch/hermes-agent/blob/main/website/docs/developer-guide/programmatic-integration.md).
+- Claude Code resta un riferimento visivo per righe compatte aggiornate in
+  place, ma la sua TUI non è un contratto DOM riusabile. TALOS mantiene il
+  dettaglio completo espandibile, vantaggio rispetto a una riga effimera.
+- OpenAI Docs/ChatKit modellano i progressi come `ChatKitTask` e i gruppi come
+  `ChatKitTaskGroup`; la Responses API espone stati distinti `in_progress`,
+  `completed` e `failed` per le chiamate supportate. Il contratto utile a
+  TALOS è quindi uno stato esplicito e correlato, non una successione di
+  stringhe decorative; la documentazione OpenAI non prescrive però la
+  geometria della riga Codex, che resta un confronto visuale separato
+  (https://developers.openai.com/api/reference/typescript/resources/beta/subresources/chatkit/subresources/threads/methods/list_items,
+  https://developers.openai.com/api/reference/cli/resources/beta/subresources/responses).
+- CSS Animations Level 1 definisce un'animazione come `running` quando avanza
+  nel tempo e WCAG 2.3.3 richiede di rispettare la riduzione del movimento
+  (https://www.w3.org/TR/css-animations-1/,
+  https://www.w3.org/WAI/WCAG22/Understanding/animation-from-interactions.html).
+- Decisione: **adattare** AG-UI e Hermes dietro lo stato TALOS già esistente;
+  nessuna dipendenza e nessun nuovo evento server. `ToolCallResult` è già il
+  terminale reale disponibile. Aggiungere un `ToolCallEnd` immediatamente
+  prima del Result è respinto: segnerebbe soltanto la fine degli argomenti,
+  non l'esito dell'esecuzione, e non aggiungerebbe informazione all'attuale
+  kernel. Il protocollo completo resta un debito separato solo se il kernel
+  offrirà in futuro un confine argomenti/esecuzione realmente anticipato.
+
+### File, simboli e compatibilità esatti
+
+- `harness-ui/public/app.js`
+  - estendere l'oggetto creato da `apriBatchSeServe()` con i contatori
+    `inCorso` per categoria, senza modificare i contatori finali e i diff;
+  - aggiungere le pure `formattaConteggioAttivita(categoria, totale)` e
+    `riassuntoAttrezzoInCorso(nome, argomenti)`; restringere
+    `riassuntoAttrezzo()` al testo concluso o sostituirla esplicitamente con
+    `riassuntoAttrezzoConcluso(nome, argomenti, testoEsito)`;
+  - aggiornare `aggiornaRiassuntoBatch(batch)` per comporre prima gli esiti
+    finali con grammatica italiana corretta e poi l'eventuale attività in
+    corso, senza righe duplicate;
+  - estendere `appendToolNote()` con `summary` e inizializzare
+    `data-tool-state="running"`, `aria-busy="true"` e un `role="status"`
+    atomic sulla riga esistente;
+  - in `handleRealEvent/ToolCallStart`, conservare nell'entry
+    `state.realSession.toolCallNomi` il riferimento esatto `batch`, la
+    `categoria`, gli argomenti parsati e lo stato; incrementare soltanto
+    `batch.inCorso`, mai il totale concluso;
+  - in `ToolCallArgs`, aggiornare la stessa riga con il testo in corso;
+  - in `ToolCallResult`, aggiornare la stessa riga a `complete` o `error`,
+    togliere `aria-busy`, decrementare il pendente, incrementare il contatore
+    concluso del batch correlato e calcolare gli errori shell/test su quel
+    batch, mai su un eventuale batch nuovo;
+  - in `ReasoningMessageStart`, chiamare `chiudiBatchTool()` soltanto quando
+    `state.showReasoning` è vero; la nota nascosta conserva comunque il proprio
+    evento/dettaglio per poter essere mostrata in seguito;
+  - non cambiare `ToolCallResult`, SSE, registro sessioni, export o backend;
+    replay e live usano lo stesso `handleRealEvent` e devono restare identici.
+- `harness-ui/public/styles.css`
+  - aggiungere uno stato visivo tokenizzato a
+    `.real-tool-note[data-tool-state="running"]` e il relativo arresto a
+    `complete/error`, riusando `--motion-activity`, `--motion-ease` e i token
+    colore esistenti;
+  - mantenere esattamente geometria e keyframe del `.talos-line-loader`
+    mobile; correggere soltanto eventuali regole/cascade dimostrate dal test
+    RED come causa del fotogramma statico;
+  - mantenere i rami `body.reduce-motion` e `prefers-reduced-motion`.
+- `harness-ui/frontend/tests/browser/baseline-shell.spec.mjs`
+  - `TOOL-LIFECYCLE-SAME-ROW-01`: Start/Args/Result mantengono lo stesso
+    `Element`, passano running→complete, `aria-busy` true→false e testo
+    presente→passato;
+  - `TOOL-LIFECYCLE-ERROR-01`: un exit non zero conclude la stessa riga e
+    incrementa l'errore nel batch correlato anche se un altro batch è attivo;
+  - `TOOL-BATCH-AGGREGATION-01`: cinque letture producono un solo batch e
+    `5 file letti`; il contrario con una sola lettura produce `1 file letto`;
+  - riscrivere lo scenario già esistente sul reasoning nascosto come
+    `TOOL-BATCH-HIDDEN-REASONING-01`: due attività separate solo da reasoning
+    non visibile restano nello stesso batch;
+  - `WAITING-LOADER-MOTION-01`: attivare il percorso prodotto reale
+    `startRealSession` con POST intercettata, verificare `getAnimations()` in
+    stato running e confrontare pixel RGBA del loader a due istanti distinti;
+  - `WAITING-LOADER-REDUCED-MOTION-01`: con reduced motion i pixel restano
+    stabili e i tre nodi rimangono visibili.
+- `harness-ui/frontend/tests/browser/visual-matrix.spec.mjs`: aggiungere gli
+  stati canonici completi `tool-lifecycle-running-1440x900`,
+  `tool-lifecycle-complete-1440x900` e `waiting-loader-1440x900`, con zero
+  overflow/console error e ispezione integrale.
+- `harness-ui/frontend/tests/fixtures/legacy-contract.snapshot.json`:
+  aggiornare soltanto hash, righe e byte dei bundle effettivamente cambiati.
+- `.claude/CONSEGNA-FRONTEND-PHASE0-2026-08-31.md`: registrare RED, GREEN,
+  screenshot, confronto competitivo, limiti e rollback.
+
+### RED, GREEN, regressioni, prova reale e rollback
+
+- RED atteso: al ricevere gli argomenti la riga mostra già `Letto`; cinque
+  letture producono grammatica errata o più batch; reasoning nascosto crea due
+  batch; il test di motion non dimostra oggi alcuna differenza di fotogramma o
+  non raggiunge il percorso reale del loader.
+- GREEN mirato: Playwright filtrato su
+  `TOOL-LIFECYCLE|TOOL-BATCH|WAITING-LOADER` contro il server owner non
+  interrotto `http://127.0.0.1:4174`.
+- Regressioni: `npm.cmd run verify`, suite browser completa, matrice visuale,
+  `node --test harness-ui/tests/*.test.mjs`, `npm.cmd run build` e
+  `git diff --check`.
+- Prova reale: un solo messaggio Qwen 3.8 Flash, già autorizzato, deve produrre
+  almeno una lettura e mostrare dal composer fino al risultato la stessa riga;
+  non si cambia modello/provider e non si arresta il processo 4174.
+- Prova visiva: screenshot completi 1440×900 degli stati pending, aggregato e
+  concluso, più 1024×768 e 390×844 per overflow e responsive; per il loader
+  due crop a tempi distinti dimostrano il movimento, ma la chiusura richiede
+  anche lo screenshot dell'intera pagina e la sua ispezione dall'alto al
+  basso.
+- Rollback: rimuovere solo i nuovi helper/stati/test CSS e ripristinare il
+  conteggio originario; nessun record server o dato sessione deve essere
+  migrato o cancellato.
+
+## Regressione P0 — corsa fra navigazione e animazione di uscita (2026-09-01)
+
+### Scenario permanente e causa misurata
+
+- `VIEW-TRANSITION-RACE-01`: una sequenza rapida Impostazioni → Chat deve
+  lasciare esattamente una `.view-pane.active`, con Chat, conversazione e
+  composer visibili anche dopo la fine di tutte le animazioni.
+- La matrice visuale ha riprodotto il difetto reale: `setView('settings')`
+  avvia l'uscita della Chat; se Chat viene riaperta prima dei circa 180 ms,
+  la callback della vecchia `animateExit(chat)` arriva dopo la riapertura e
+  rimuove `active` dalla vista corrente. Lo screenshot risultante è una
+  colonna centrale vuota e il JSON della prova registra `activeView:null`.
+- Non è un problema della preferenza full-width: la preferenza ha soltanto
+  reso ripetibile una corsa già possibile con qualunque navigazione rapida.
+
+### Ricerca primaria e confronto competitor
+
+- Web Animations Level 1 tratta cancellazione, stato e callback terminali
+  come parte esplicita del ciclo vita; `Animation.cancel()` interrompe gli
+  effetti e rende non valida la conclusione precedente. TALOS **adatta**
+  questo contratto con la coppia già esistente
+  `cancelMotionAnimationsFor(element)` + `prossimaGenerazione(element)`,
+  evitando una seconda astrazione
+  (https://www.w3.org/TR/web-animations-1/#canceling-an-animation,
+  https://developer.mozilla.org/en-US/docs/Web/API/Animation/cancel).
+- Claude Code e Codex documentano navigazione, sessioni e superfici, ma le
+  rispettive fonti ufficiali non pubblicano un contratto per la geometria o
+  la cancellazione delle transizioni fra pannelli. Non si inventa quindi una
+  loro soluzione visuale: il confronto si limita all'invariante di prodotto
+  che la superficie attiva resta utilizzabile dopo un'azione dell'utente.
+- Hermes documenta stato UI separato per shell/overlay e route roots sottili,
+  oltre a input non bloccante; non prescrive però il dettaglio WAAPI. TALOS
+  **adatta** la separazione dello stato e **rifiuta** di lasciare che una
+  callback visuale obsoleta modifichi lo stato di navigazione corrente
+  (https://github.com/NousResearch/hermes-agent/blob/main/AGENTS.md,
+  https://github.com/NousResearch/hermes-agent/blob/main/ui-tui/README.md).
+
+### File, simboli, RED/GREEN e rollback
+
+- `harness-ui/public/app.js`: modificare soltanto `setView(view, options)`;
+  quando una vista diventa target, cancellare l'uscita precedente su quella
+  vista, avanzarne la generazione e proteggere la callback di chiusura con la
+  generazione osservata. Restano invariati nomi view, routing, callback host,
+  token/durate, reduced-motion e tutti i contratti pubblici.
+- `harness-ui/frontend/tests/browser/baseline-shell.spec.mjs`: aggiungere
+  `VIEW-TRANSITION-RACE-01` con azioni immediate, attesa oltre la durata e
+  prova contraria ripetuta; deve verificare una sola vista attiva, Chat,
+  conversazione e composer visibili.
+- `harness-ui/frontend/tests/browser/visual-matrix.spec.mjs`: lo scenario
+  `chat-full-width-1920x1080` resta il riscontro umano e deve registrare
+  `activeView:'chat'`, non soltanto assenza di overflow.
+- RED: il test corrente termina con zero viste attive. GREEN: test mirato,
+  matrice 21 scenari, suite browser completa, snapshot/build e ispezione
+  integrale dello screenshot rigenerato.
+- Rollback: rimuovere soltanto la guardia generazionale in `setView` e il
+  test; nessuna preferenza o sessione viene migrata o cancellata.
+
+## Regressioni P0 — cambio modello durevole e forma composer (2026-09-01)
+
+### Contratto e cause misurate
+
+- `SESSION-MODEL-CHANGE-RELOAD-02`: su una sessione esistente, scegliere un
+  modello diverso deve completare la scrittura server prima di cambiare la
+  pillola; dopo reload e riapertura la pillola e il contratto sessione devono
+  mostrare lo stesso modello scelto.
+- `SESSION-MODEL-UPDATE-FAIL-01`: se la scrittura risponde 404/405/500, la
+  pillola non deve fingere il nuovo modello, il foglio resta disponibile e
+  l'errore offre una soluzione naturale. La preferenza locale globale non
+  può sovrascrivere il modello reale della sessione.
+- Causa reale osservata su `127.0.0.1:4174`: `POST
+  /api/v1/sessions/:id/settings` risponde oggi `405`; il processo owner è
+  antecedente alla route caricata sul disco. Il frontend aggiorna invece
+  subito `state.model`, chiude il foglio e salva localmente: il reload legge
+  dalla lista il vecchio `z-ai/glm-4.7-flash`. Il test precedente mockava una
+  sessione già Gemini e non esercitava mai la selezione né il fallimento.
+- `COMPOSER-SHAPE-FULL-WIDTH-01`: cambiare soltanto
+  `#chatFullWidthToggle` deve lasciare invariati width, height, min-height,
+  padding, border-radius, toolbar e posizione del composer. Vale per le forme
+  `standard`, `classic` e `compact`, anche dopo reload. Full width possiede
+  esclusivamente conversazione e messaggi.
+- La regola `.chat-full-width` non seleziona oggi `.composer`; nella stessa
+  tranche sono però diventate operative le varianti forma prima decorative.
+  La prova deve quindi distinguere una dipendenza CSS reale da una preferenza
+  forma già salvata, senza cancellare silenziosamente una scelta dell'owner.
+
+### Ricerca primaria e confronto Claude/Codex/Hermes
+
+- Claude Code documenta `--model` come modello della sessione corrente e
+  `--resume` come ripresa per ID: TALOS **adatta** l'idea che il modello
+  mostrato appartenga alla sessione ripresa, non a un default globale
+  (https://docs.anthropic.com/en/docs/claude-code/cli-usage).
+- La documentazione ufficiale Codex/OpenAI pubblica identificatori e
+  configurazione dei modelli, ma non un contratto visuale per la pillola né
+  la sua persistenza per sessione. TALOS non ne inventa la geometria; adotta
+  soltanto l'invariante provider-neutral che l'ID mostrato sia quello
+  effettivamente inviato al runtime
+  (https://developers.openai.com/api/docs/models).
+- Hermes distingue esplicitamente `/model` nella sessione da `--global` e
+  documenta che il cambio senza `--global` vale solo per la sessione. Il suo
+  ACP conserva inoltre il modello selezionato nel record sessione. TALOS
+  **adatta direttamente** questa separazione e rifiuta un fallback globale
+  capace di mascherare un salvataggio fallito
+  (https://github.com/NousResearch/hermes-agent/blob/main/website/docs/reference/cli-commands.md,
+  https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/acp.md).
+- CSS Sizing/Box Model resta il contratto geometrico del composer: una
+  preferenza sulla larghezza del contenuto non deve alterare la box sorella
+  dell'input. Le fonti Claude/Codex/Hermes non pubblicano misure ufficiali del
+  loro composer desktop; il confronto visuale non viene presentato come una
+  specifica riusabile (https://www.w3.org/TR/css-sizing-3/).
+- Decisione upstream: **adattare** la semantica session-scoped di
+  Claude/Hermes dietro il registro TALOS esistente; nessuna dipendenza. Il
+  browser non persiste un successo finché il server non lo conferma.
+
+### File, simboli, RED/GREEN, gate reale e rollback
+
+- `harness-ui/public/app.js`: rendere asincrono il ramo di selezione in
+  `creaModelPicker`; con `sincronizzaSessione:true` impostare `aria-busy`,
+  attendere `sincronizzaImpostazioniSessione({modello})`, aggiornare
+  `state.model`/pillola/localStorage e chiudere soltanto dopo successo;
+  su errore lasciare modello e foglio precedenti. Dopo successo aggiornare
+  anche la voce corrispondente in `state.sessionSelection.available` per
+  evitare che un click sulla riga riapplichi il modello vecchio.
+- `harness-ui/frontend/tests/browser/baseline-shell.spec.mjs`: aggiungere i
+  due scenari modello sopra attraversando il picker vero; estendere
+  `CHAT-FULL-WIDTH-01` e aggiungere la matrice forma con misure computed style
+  prima/dopo/reload.
+- `harness-ui/frontend/tests/browser/visual-matrix.spec.mjs`: conservare
+  screenshot Chat normale/full-width con composer visibile e aggiungere alle
+  metriche border-radius, altezza e padding, che devono coincidere.
+- Il processo 4174 non viene interrotto senza consenso. Prima si provano
+  route/registro e UI in isolamento; la chiusura reale richiede poi un
+  riavvio controllato del server owner affinché carichi la route già presente,
+  seguito da cambio modello e reload sul server reale.
+- RED modello: scelta ottimistica cambia pillola anche su 405 e il reload la
+  riporta a z.ai. RED composer: qualunque differenza geometrica oltre 1 px o
+  cambio di proprietà computed fallisce. GREEN: test mirati, suite backend,
+  suite browser, screenshot 1440×900/1920×1080 e prova reale 4174.
+- Rollback: ripristinare il click ottimistico e rimuovere le asserzioni;
+  nessun record sessione o preferenza deve essere cancellato.
+
+## Debito architetturale P1 — modernizzazione componenti e latenza UI (owner, 2026-09-01)
+
+Finding owner: l'intera superficie desktop richiede un refresh moderno e
+coerente di dropdown, layout, tab, impostazioni e componenti equivalenti;
+vanno eliminati i componenti HTML legacy, spezzati i monoliti UI e rimossa la
+latenza percepita. La valutazione deve escludere con misure bottleneck CPU/GPU
+e confrontare l'assetto vanilla modulare con una migrazione diretta a Vue.
+
+Questo finding è custodito ma non viene confuso con la tranche P0 corrente.
+Prima di qualsiasi modifica richiede: inventario file/simboli completo,
+profiling Performance/Long Tasks/layout/paint/memoria su server locale,
+ricerca web primaria aggiornata, confronto Hermes/Claude Code/Codex/VS Code,
+ledger RED/GREEN/rollback e decisione esplicita `adopt/adapt/reject` per Vue.
+Nessuna riscrittura big-bang: qualunque migrazione dovrà preservare API,
+sessioni, persistenza, accessibilità, test E2E e server owner sempre disponibile.
+- Rollback: rimuovere route/metodo/record settings, la sezione `chat` del documento locale, `chatFullWidth` e il nuovo limite inspector; i record JSONL aggiunti restano innocui per versioni precedenti che ignorano i `tipo` sconosciuti.
+
+## Esito misurato P0 modello, composer e ciclo attività (2026-09-01)
+
+### RED realmente osservati e correzioni
+
+- `SESSION-MODEL-CHANGE-RELOAD-02` e `SESSION-MODEL-UPDATE-FAIL-01` erano
+  rossi: il picker cambiava subito la pillola anche quando la scrittura
+  sessione falliva. Il ramo è ora transazionale; il valore visibile cambia
+  soltanto dopo la risposta positiva e la stessa voce nella cache sessioni
+  viene aggiornata. Su errore il modello precedente e il foglio restano
+  disponibili, con un messaggio naturale.
+- `VIEW-TRANSITION-RACE-01` era rosso con zero viste attive dopo una sequenza
+  rapida Impostazioni → Chat. La callback di uscita è ora invalidata dalla
+  generazione più recente e non può spegnere una vista riaperta.
+- I test sul ciclo attività erano rossi per riga duplicata, tempo verbale e
+  aggregazione. Start, argomenti e risultato aggiornano ora lo stesso nodo;
+  il batch distingue attività in corso, completate ed errori e produce
+  `1 file letto` / `5 file letti` senza essere spezzato da ragionamento
+  nascosto.
+- I due test loader non erano rossi: la componente prodotto era già animata.
+  La tranche ha aggiunto la prova che i pixel avanzano con movimento attivo e
+  restano fermi, ma visibili, con reduced motion. Non è stata introdotta una
+  seconda animazione.
+- `COMPOSER-SHAPE-FULL-WIDTH-01` era già verde e ha escluso una regressione
+  CSS diretta: la modalità full width non seleziona il composer. Il test è
+  stato mantenuto come contratto permanente per forme `standard`, `classic`
+  e `compact`, prima/dopo toggle e dopo reload. La preferenza dell'owner non
+  viene cancellata o forzata.
+
+### Gate automatici conclusi
+
+- registro/route sessione mirati: **286/286**;
+- backend completo: **1160/1160**;
+- browser completo: **34/34**;
+- matrice visuale: **21/21** scenari;
+- snapshot frontend: **3/3**;
+- build frontend: **22 asset verificati**;
+- `git diff --check`: superato.
+
+Gli screenshot e le metriche sono in
+`harness-ui/frontend/artifacts/visual-audit-2026-09-01/`. Le coppie
+`chat-standard-1920x1080` e `chat-full-width-1920x1080` hanno identici width,
+height, min-height, padding e border-radius del composer; la domanda breve non
+viene stirata e soltanto conversazione/bolle acquistano spazio.
+
+### Debiti visivi permanenti rilevati dall'ispezione completa
+
+- `VISUAL-CONTRAST-LIGHT-ASSISTANT-01`: sul tema chiaro testo assistente,
+  attività, testo secondario e alcune card scure hanno contrasto troppo debole.
+- `VISUAL-APPROVAL-FIXTURE-FIDELITY-01`: lo scenario visuale approvazione crea
+  pulsanti senza etichetta; la fixture va resa fedele prima di usarla come
+  riferimento estetico.
+- `VISUAL-INSPECTOR-TOPBAR-1200-01`: a 1200 px con inspector ampio alcune
+  etichette della testata vengono troncate o si avvicinano troppo.
+- `VISUAL-COMPACT-STATUS-NAV-390-01`: a 390 px la riga stato sotto il composer
+  è troppo vicina alla navigazione inferiore.
+- `VISUAL-CAPABILITY-DARK-CONTRAST-01`: la modale Capability in dark ha testo
+  secondario debole e il contenuto inferiore richiede scroll poco evidente.
+- `VISUAL-TERMINAL-EMPTY-STATE-01`: il Terminale mostra una grande regione
+  vuota pur dichiarandosi connesso; serve una prova funzionale prima di
+  classificarlo come bug di contenuto o semplice stato inattivo.
+
+Questi debiti non sono stati corretti nella tranche P0 perché richiedono
+ledger, ricerca primaria, RED dedicati e confronto visuale competitor. Non
+bloccano il fix modello/composer, ma impediscono di dichiarare l'intera UI
+visivamente conclusa.
+
+### Gate reale owner ancora aperto
+
+Il processo già attivo su `127.0.0.1:4174` è precedente alla route settings
+presente sul disco e risponde `405` alla scrittura del modello. Non è stato
+interrotto. Per chiudere `SESSION-MODEL-CHANGE-RELOAD-02` sul dato owner serve
+un riavvio controllato esplicitamente autorizzato, poi scelta Gemini, reload e
+riapertura della stessa sessione. L'unico messaggio reale ammesso per il gate
+agente resta Qwen 3.8 Flash.
+
+Stato misurato prima della fermata: PID `1936`, comando
+`node harness-ui/server.mjs`, listener `127.0.0.1:4174`, avvio locale
+2026-09-01 11:24; `GET /api/v1/health` è `200`. Il riavvio deve quindi colpire
+soltanto quel PID e ripristinare immediatamente la stessa porta, senza
+terminare altri processi Node né modificare le chiavi provider.
+
+### Gate owner concluso dopo autorizzazione
+
+- Target ricontrollato prima della fermata: porta `4174`, PID `1936`, comando
+  `node harness-ui/server.mjs`. È stato terminato soltanto quel PID.
+- Nuovo processo: PID `9352`, stesso comando, working directory desktop,
+  `TALOS_OWNER_RUNTIME_MODULE` puntato in sola lettura al modulo debug mobile
+  già impiegato nel gate precedente. La porta `4174` e
+  `GET /api/v1/health = 200` sono tornati disponibili prima delle prove UI.
+- Doctor dopo il riavvio: chiave provider presente, OpenRouter collegato,
+  runtime owner configurato; il catalogo task preset resta non esposto dal
+  modulo e continua a essere dichiarato come limite, non mascherato.
+- Gate UI reale `SESSION-MODEL-CHANGE-RELOAD-02`: sessione
+  `14d329e9-67d2-4135-a427-12efb220020c`, prima
+  `z-ai/glm-4.7-flash`; selezione attraverso il picker prodotto di
+  `google/gemini-3.7-flash`; risposta settings `200`; pillola dopo scelta e
+  dopo reload identica; `GET /api/v1/sessions` conferma sia `modello` sia
+  `modelId` Gemini.
+- Gate agente reale obbligatorio: nuova sessione separata
+  `a65e05b7-9670-4abc-b2cf-6bbd4ba6cc63`, creata dal foglio Nuova e dal
+  composer prodotto con `qwen/qwen3.8-flash`; messaggio
+  `Rispondi soltanto con OK`; risposta esatta `OK`; sessione conclusa e modello
+  Qwen persistito. Gemini non è stato interrogato.
+- Screenshot completi ispezionati:
+  `harness-ui/frontend/artifacts/visual-audit-2026-09-01/model-persistence-real-4174.png`
+  e `qwen-real-message-4174.png`. Il composer mantiene la geometria standard
+  originale. La risposta Qwen conferma visivamente il finding già nominato
+  `VISUAL-CONTRAST-LIGHT-ASSISTANT-01`: testo assistente troppo debole sul tema
+  chiaro.
+
+Il gate modello e il gate Qwen sono quindi chiusi. Restano aperti soltanto i
+debiti visivi/architetturali esplicitamente elencati nelle sezioni precedenti.
+
+## Hotfix P0 — altezza canonica del composer del mockup (2026-09-01)
+
+### Owner, contratto e baseline misurato
+
+- Owner: `TALOS UI` desktop. `mobile/` resta riferimento in sola lettura.
+- Scenario permanente `COMPOSER-MOCKUP-HEIGHT-01`: a viewport desktop
+  `1440×900` e `1024×800`, le forme `standard`, `classic` e `compact` devono
+  occupare la stessa altezza esterna del composer canonico contenuto in
+  `harness-ui/mockup-originale/index.html`. Raggio e densità interna possono
+  distinguere le forme; l'ingombro verticale non può cambiare.
+- Baseline browser misurato prima del RED: mockup e prodotto `standard` sono
+  entrambi `116px`; il prodotto `classic` è `132px` e `compact` è `82px` per
+  due override in `harness-ui/public/styles.css`. A `780×900` e `390×844` il
+  ramo responsive canonico resta `112px` e non viene modificato.
+
+### Ricerca primaria e decisione upstream
+
+- CSS Box Sizing/MDN: usare `box-sizing:border-box` rende l'altezza dichiarata
+  comprensiva di padding e bordo; il progetto lo applica già globalmente
+  (https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/box-sizing).
+- MDN sizing: `min-height` preserva il pavimento geometrico lasciando al
+  contenuto la possibilità di crescere; non viene introdotta un'altezza fissa
+  che tronchi il testo
+  (https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Styling_basics/Sizing).
+- W3C WCAG 2.2 2.5.8: i controlli interni conservano target e spaziatura
+  esistenti; il fix non riduce pulsanti o area interattiva
+  (https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum).
+- Claude Code, Codex e Hermes documentano comportamento del prompt/composer e
+  scorciatoie, ma non pubblicano una misura geometrica del composer desktop.
+  Hermes conferma il valore di una superficie unica e coerente fra input,
+  picker e attività, non un'altezza riusabile
+  (https://github.com/NousResearch/hermes-agent/blob/main/ui-tui/README.md).
+- Decisione upstream: **adattare** la misura del mockup TALOS, unica sorgente
+  geometrica verificabile. Nessuna dipendenza e nessuna imitazione di una
+  misura competitor non documentata.
+
+### File, simboli, RED/GREEN e rollback
+
+- `.claude/LEDGER-FRONTEND-PHASE0-CONTRACT-2026-08-31.md`: questo ledger.
+- `harness-ui/frontend/tests/browser/baseline-shell.spec.mjs`: aggiungere il
+  test `COMPOSER-MOCKUP-HEIGHT-01`, che apre prodotto e mockup con lo stesso
+  Chromium/viewport, misura il bordo esterno e richiede delta `≤1px` per tutte
+  le forme; deve provare anche reload e textarea multilinea senza clipping.
+- `harness-ui/public/styles.css`: modificare esclusivamente gli override
+  `data-talos-composer-shape="classic"` e `"compact"`, mantenendo raggio e
+  padding ma usando il pavimento canonico desktop `116px`. Non cambiare
+  `.composer-wrap`, larghezza, toolbar, responsive mobile o full width.
+- `harness-ui/frontend/tests/browser/visual-matrix.spec.mjs`: aggiungere tre
+  scenari screenshot `composer-standard-1440x900`,
+  `composer-classic-1440x900` e `composer-compact-1440x900`, con metrica
+  `composerHeight` uguale al mockup.
+- `harness-ui/frontend/tests/fixtures/legacy-contract.snapshot.json`: aggiornare
+  hash, byte e righe del solo asset CSS attraverso la build verificata.
+- `.claude/CONSEGNA-FRONTEND-PHASE0-2026-08-31.md`: registrare esito e percorsi
+  degli screenshot ispezionati.
+- RED atteso: `classic=132px` e `compact=82px` contro mockup `116px`.
+- GREEN mirato: Playwright `baseline-shell.spec.mjs -g
+  "COMPOSER-MOCKUP-HEIGHT-01"`; regressione: suite browser completa, matrice
+  visuale, `npm run verify`, `npm run build`, `git diff --check`.
+- Prova umana: screenshot interi delle tre forme a `1440×900`, ispezionando
+  composer, conversazione, toolbar, status, sidebar e inspector. Il server
+  owner `4174` non viene interrotto.
+- Rollback: ripristinare soltanto `132px`/`82px` nei due override e rimuovere i
+  tre scenari; nessuna preferenza salvata, sessione o API viene migrata.
+
+### Esito RED/GREEN e prova visuale
+
+- RED osservato: `standard=116px`, `classic=132px`; il test è fallito con
+  delta `16px` prima di raggiungere `compact`, già misurato a `82px`.
+- GREEN: le tre forme usano ora il token locale
+  `--composer-canonical-h:116px`. `classic` conserva raggio `8px` e padding
+  superiore `16px`; `compact` conserva raggio `11px` e padding verticale
+  `8px/7px`; `standard` resta invariato.
+- Il test dedicato passa a `1440×900` e `1024×800`, incluse multilinea e
+  persistenza dopo reload.
+- Suite browser completa: **35/35**. Matrice visuale: **24/24**. Contratto
+  frontend: **3/3**. Build: **22 asset verificati**. `git diff --check` e
+  salute server `4174=200`: superati.
+- Screenshot interi ispezionati:
+  `harness-ui/frontend/artifacts/visual-audit-2026-09-01/composer-standard-1440x900.png`,
+  `composer-classic-1440x900.png`, `composer-compact-1440x900.png`.
+  Composer, toolbar, status, conversazione, sidebar e inspector restano
+  allineati; nessun nuovo finding. Il contrasto tenue del tema chiaro resta il
+  debito già registrato `VISUAL-CONTRAST-LIGHT-ASSISTANT-01`.

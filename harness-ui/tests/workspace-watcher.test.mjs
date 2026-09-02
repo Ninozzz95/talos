@@ -6,6 +6,55 @@ import test from 'node:test';
 
 import { creaGestoreWorkspaceWatcher } from '../src/workspace-watcher.mjs';
 
+test('WATCHER-NATIVE-SINGLE-25 — un workspace profondo usa una sola registrazione nativa ricorsiva', () => {
+  const chiamate = [];
+  const watcher = {
+    on() { return watcher; },
+    close() {},
+  };
+  const gestore = creaGestoreWorkspaceWatcher({
+    watchFn(cartella, opzioni, listener) {
+      chiamate.push({ cartella, opzioni, listener });
+      return watcher;
+    },
+  });
+  const cartella = `C:\\workspace\\talos-native-${process.pid}`;
+  const stop = gestore.guardaWorkspace(cartella, () => {});
+  try {
+    assert.equal(chiamate.length, 1, 'la profondità del workspace non deve moltiplicare le registrazioni TALOS');
+    assert.equal(chiamate[0].cartella, cartella);
+    assert.equal(chiamate[0].opzioni.recursive, true);
+    assert.equal(chiamate[0].opzioni.persistent, false);
+    assert.equal(chiamate[0].opzioni.encoding, 'utf8');
+    assert.ok(Array.isArray(chiamate[0].opzioni.ignore), 'gli esclusi devono entrare nel watcher nativo, non solo nel callback');
+  } finally {
+    stop();
+  }
+});
+
+test('WATCHER-NATIVE-NULL-FILENAME-26 — un evento senza nome forza un refresh generico senza crash', async () => {
+  let listener;
+  const watcher = {
+    on() { return watcher; },
+    close() {},
+  };
+  const gestore = creaGestoreWorkspaceWatcher({
+    watchFn(_cartella, _opzioni, onChange) {
+      listener = onChange;
+      return watcher;
+    },
+  });
+  const ricevuti = [];
+  const stop = gestore.guardaWorkspace(`C:\\workspace\\talos-null-${process.pid}`, (percorsi) => ricevuti.push(percorsi));
+  try {
+    listener('rename', null);
+    await new Promise((r) => setTimeout(r, 500));
+    assert.deepEqual(ricevuti, [['.']]);
+  } finally {
+    stop();
+  }
+});
+
 // ⭐ Disco VERO, chokidar VERO — stesso principio di workspace-tree.test.mjs:
 // un watcher non si prova bene con un mock, il suo intero scopo è
 // reagire a eventi del filesystem reale. I tempi (attese fisse) sono

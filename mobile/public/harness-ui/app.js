@@ -53,6 +53,7 @@
   const state = {
     view: 'chat',
     mode: 'chat',
+    settingsSection: 'appearance',
     queueMode: false,
     permissions: 'Workspace write',
     /*
@@ -99,13 +100,28 @@
       initialized: false,
       loadingCapacity: false,
       loadingCatalog: false,
+      loadingRuntime: false,
+      loadingInstalled: false,
       capacity: null,
       catalog: null,
+      runtimes: [],
+      installed: [],
       catalogError: null,
+      runtimeError: null,
+      installedError: null,
+      runtimeSessionId: null,
+      runtimeEventSource: null,
+      runtimeBlocks: new Map(),
+      providers: [],
+      loadingProviders: false,
+      providerError: null,
       selectedModel: null,
+      selectedRuntime: '',
+      selectedRuntimeModel: '',
       section: 'overview',
       search: '',
       provider: 'all',
+      hfQuery: '', hfResults: [], hfSelected: null, hfDetail: null, hfError: null, downloads: [], downloadTimer: null,
     },
     /*
      * ⭐⭐⭐ 26/8 — riconciliazione desktop→mobile, DEC-053 (owner, 24/8:
@@ -740,8 +756,22 @@
   }
 
   function boardErrorMessage(error) {
-    if (error?.code && typeof error.message === 'string' && error.message) return error.message;
-    return 'Il server locale non risponde. Apri Codice sul PC e riprova.';
+    return messaggioErroreUtente(error, 'Il server locale non risponde. Apri Codice sul PC e riprova.');
+  }
+
+  /** Copy per persone: i dettagli tecnici restano nel Doctor e nel log. */
+  function messaggioErroreUtente(error, fallback = 'La richiesta non è riuscita. Riprova.') {
+    const messaggi = {
+      PROJECTS_NOT_CONFIGURED: 'Non c’è ancora una cartella di progetto disponibile. Apri Doctor per capire cosa manca.',
+      CONFIG_INVALID: 'La configurazione non è pronta. Apri Doctor per vedere come sistemarla.',
+      RUNTIME_NOT_AVAILABLE: 'Questa funzione non è ancora disponibile. Apri Doctor per controllare lo stato.',
+      INTERNAL_ERROR: 'Il server locale ha incontrato un problema. Apri Doctor e riprova.',
+      NOT_FOUND: 'Questa risorsa non è più disponibile. Aggiorna la pagina e riprova.',
+    };
+    if (error?.code && messaggi[error.code]) return messaggi[error.code];
+    const messaggio = typeof error?.message === 'string' ? error.message.trim() : '';
+    if (messaggio && !/TALOS_[A-Z0-9_]+|child_process|writeFileSync|stack| at [A-Za-z]:\\/i.test(messaggio)) return messaggio;
+    return fallback;
   }
 
   /**
@@ -796,6 +826,7 @@
   function creaRigaSessioneBoard(sessione) {
     const article = document.createElement('article');
     article.className = 'session-board-row';
+    article.tabIndex = 0;
 
     const identity = document.createElement('span');
     const titolo = sessione.nome || sessione.taskId || 'Sessione';
@@ -813,12 +844,12 @@
     const chip = textElement('span', `status-chip ${stato.classe}`.trim(), stato.testo);
 
     article.append(identity, chip);
-    // ⭐⭐⭐ 30/8, QA visiva (Task 14) — stesso tasto-destro→conferma diretta già aggiunto alla sidebar (aggiornaElencoSessioniReali): la Board è la SECONDA superficie da cui una sessione dovrebbe potersi eliminare.
+    // ⭐ 31/8 P0 — la Board usa lo stesso menu azioni della sidebar, non una
+    // scorciatoia che apre direttamente la conferma di eliminazione.
     article.addEventListener('contextmenu', (event) => {
       event.preventDefault();
       event.stopPropagation();
-      state.sessioneTarget = { sessionId: sessione.sessionId, nome: titolo };
-      openSheet('deleteSession');
+      apriMenuAzioniSessione({ ...sessione, nome: titolo }, { x: event.clientX, y: event.clientY, focusElement: article });
     });
     return article;
   }
@@ -885,6 +916,316 @@
     if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1)}M token`;
     if (value >= 1_000) return `${Math.round(value / 1_000)}k token`;
     return `${Math.round(value)} token`;
+  }
+
+  function runtimeModelLabPronto(runtime) {
+    return runtime?.state === 'observed' && Array.isArray(runtime.models) && runtime.models.length > 0;
+  }
+
+  function renderizzaProviderModelLab() {
+    const rows = Array.isArray(state.modelLab.providers) ? state.modelLab.providers : [];
+    const status = $('#modelLabProviderStatus');
+    if (status) {
+      if (state.modelLab.providerError) status.textContent = 'Stato provider non disponibile';
+      else if (state.modelLab.loadingProviders) status.textContent = 'Stato provider in lettura…';
+      else {
+        const configured = rows.filter((row) => row.keyConfigured).length;
+        status.textContent = configured > 0 ? `${configured} access${configured === 1 ? 'o' : 'i'} configurat${configured === 1 ? 'o' : 'i'}` : 'Accesso provider non configurato';
+      }
+    }
+    for (const card of $$('[data-provider-id]')) {
+      const row = rows.find((item) => item.id === card.dataset.providerId);
+      if (!row) continue;
+      const stateNode = card.querySelector('[data-provider-state]');
+      if (stateNode) stateNode.textContent = row.keyConfigured ? 'Chiave presente sul server' : (row.requiresKey ? 'Non configurato' : 'Chiave non necessaria');
+      const execution = card.querySelector('[data-provider-execution]');
+      if (execution) execution.textContent = row.execution || 'Collegamento non dichiarato';
+      const providerHelp = card.querySelector('.provider-help');
+      if (providerHelp && row.id !== 'openrouter' && row.id !== 'ollama' && row.id !== 'huggingface') {
+        providerHelp.textContent = row.supportsEndpoint
+          ? 'Chiave e indirizzo restano sul server locale.'
+          : 'La chiave resta nel portachiavi del computer.';
+      }
+      card.classList.toggle('is-configured', Boolean(row.keyConfigured || row.endpointConfigured));
+      const keyInput = card.querySelector('[data-provider-key]');
+      const removeKey = card.querySelector('[data-provider-action="remove-key"]');
+      if (removeKey) removeKey.hidden = !row.keyConfigured;
+      const endpointBlock = card.querySelector('[data-provider-endpoint-block]');
+      const endpointInput = card.querySelector('[data-provider-endpoint]');
+      const endpointLabel = endpointInput?.closest('label');
+      if (endpointLabel) endpointLabel.hidden = !row.supportsEndpoint;
+      if (endpointBlock) endpointBlock.hidden = false;
+      if (endpointInput && document.activeElement !== endpointInput) endpointInput.value = row.endpoint || '';
+      const timeoutInput = card.querySelector('[data-provider-timeout]');
+      if (timeoutInput && document.activeElement !== timeoutInput) timeoutInput.value = String(row.timeoutSeconds || 60);
+      const resetRuntime = card.querySelector('[data-provider-action="reset-runtime"]');
+      if (resetRuntime) resetRuntime.hidden = !row.supportsEndpoint || !row.endpointConfigured;
+      if (keyInput) keyInput.value = '';
+    }
+  }
+
+  async function caricaProviderModelLab() {
+    if (state.modelLab.loadingProviders) return;
+    state.modelLab.loadingProviders = true;
+    state.modelLab.providerError = null;
+    renderizzaProviderModelLab();
+    try {
+      const data = await apiGet('/api/v1/providers');
+      state.modelLab.providers = Array.isArray(data?.items) ? data.items : [];
+    } catch (error) {
+      state.modelLab.providerError = error;
+      state.modelLab.providers = [];
+    } finally {
+      state.modelLab.loadingProviders = false;
+      renderizzaProviderModelLab();
+    }
+  }
+
+  function mostraEsitoProvider(card, message, errore = false) {
+    const feedback = card?.querySelector('[data-provider-feedback]');
+    if (!feedback) return;
+    feedback.textContent = message;
+    feedback.classList.toggle('is-error', errore);
+    feedback.hidden = false;
+    if (!errore) window.setTimeout(() => { if (feedback.textContent === message) feedback.hidden = true; }, 3500);
+  }
+
+  async function gestisciAzioneProvider(button) {
+    const card = button.closest('[data-provider-id]');
+    const provider = card?.dataset.providerId;
+    const action = button.dataset.providerAction;
+    if (!provider || !action) return;
+    const original = button.textContent;
+    button.disabled = true;
+    try {
+      if (action === 'save-key') {
+        const input = card.querySelector('[data-provider-key]');
+        await apiPost(`/api/v1/providers/${encodeURIComponent(provider)}/key`, { key: input?.value || '' });
+        if (input) input.value = '';
+        mostraEsitoProvider(card, 'Chiave salvata nel portachiavi del computer.');
+      } else if (action === 'remove-key') {
+        await apiPost(`/api/v1/providers/${encodeURIComponent(provider)}/key/remove`, {});
+        mostraEsitoProvider(card, 'Chiave rimossa.');
+      } else if (action === 'save-runtime') {
+        const endpoint = card.querySelector('[data-provider-endpoint]')?.value || '';
+        const timeoutSeconds = Number(card.querySelector('[data-provider-timeout]')?.value || 60);
+        await apiPost(`/api/v1/providers/${encodeURIComponent(provider)}/runtime`, { endpoint, timeoutSeconds });
+        mostraEsitoProvider(card, 'Collegamento salvato.');
+      } else if (action === 'reset-runtime') {
+        await apiPost(`/api/v1/providers/${encodeURIComponent(provider)}/runtime/reset`, {});
+        mostraEsitoProvider(card, 'Indirizzo predefinito ripristinato.');
+      }
+      await caricaProviderModelLab();
+    } catch (error) {
+      mostraEsitoProvider(card, error.message || 'Non è stato possibile salvare questa modifica.', true);
+    } finally {
+      button.disabled = false;
+      button.textContent = original;
+    }
+  }
+
+  function renderizzaModelliLocaliModelLab() {
+    const mount = $('#modelLabInstalledList');
+    if (!mount) return;
+    if (state.modelLab.installedError) {
+      mount.replaceChildren(textElement('p', 'model-lab-empty', `Modelli locali non disponibili: ${state.modelLab.installedError.message}`));
+      return;
+    }
+    if (state.modelLab.installed.length === 0) {
+      mount.replaceChildren(textElement('p', 'model-lab-empty', 'Nessun modello locale osservabile.'));
+      return;
+    }
+    mount.replaceChildren(...state.modelLab.installed.map((model) => {
+      const row = document.createElement('article');
+      row.className = 'model-lab-installed-item';
+      row.append(
+        textElement('strong', '', model.id),
+        textElement('span', '', `${model.state} · ${model.license || 'licenza non dichiarata'} · ${formattaByteModelLab(model.bytes)}`),
+        textElement('small', '', `${model.repo || 'origine non dichiarata'} · sha256 ${String(model.sha256 || '').slice(0, 12) || 'non dichiarato'}`),
+      );
+      return row;
+    }));
+  }
+
+  function renderizzaRuntimeModelLab() {
+    const list = $('#modelLabRuntimeList');
+    const status = $('#modelLabRuntimeStatus');
+    const runtimeSelect = $('#modelLabRuntimeSelect');
+    const modelSelect = $('#modelLabModelSelect');
+    const runButton = $('#modelLabRunButton');
+    const prompt = $('#modelLabPrompt');
+    if (!list || !status || !runtimeSelect || !modelSelect || !runButton || !prompt) return;
+    if (state.modelLab.runtimeError) {
+      status.textContent = `Runtime non disponibili: ${state.modelLab.runtimeError.message}`;
+      list.replaceChildren(textElement('p', 'model-lab-empty', 'La lettura dello stato runtime è fallita.'));
+      runtimeSelect.replaceChildren(new Option('Nessun runtime osservato', ''));
+      modelSelect.replaceChildren(new Option('Nessun modello osservato', ''));
+      runtimeSelect.disabled = modelSelect.disabled = runButton.disabled = prompt.disabled = true;
+      return;
+    }
+    const pronti = state.modelLab.runtimes.filter(runtimeModelLabPronto);
+    status.textContent = pronti.length > 0 ? `${pronti.length} runtime pronto${pronti.length === 1 ? '' : 'i'} · stato osservato` : 'Nessun runtime pronto';
+    list.replaceChildren(...(state.modelLab.runtimes.length > 0 ? state.modelLab.runtimes.map((runtime) => {
+      const row = document.createElement('article');
+      row.className = `model-lab-runtime-item ${runtimeModelLabPronto(runtime) ? 'ready' : 'unavailable'}`;
+      row.dataset.runtimeState = runtime.state || 'unknown';
+      row.append(
+        textElement('strong', '', runtime.runtimeId),
+        textElement('span', '', runtimeModelLabPronto(runtime) ? `${runtime.models.length} modelli · ${runtime.models.map((model) => model.name || model.id).join(', ')}` : 'non raggiunto'),
+        textElement('small', '', runtime.modelsError ? `modelli non letti · ${runtime.modelsError}` : (runtime.observedAt ? `misurato ${new Date(runtime.observedAt).toLocaleTimeString()}` : 'misura non disponibile')),
+      );
+      return row;
+    }) : [textElement('p', 'model-lab-empty', 'Nessun runtime osservato.')]));
+    const selected = pronti.find((runtime) => runtime.runtimeId === state.modelLab.selectedRuntime) || pronti[0];
+    state.modelLab.selectedRuntime = selected?.runtimeId || '';
+    const models = selected?.models || [];
+    state.modelLab.selectedRuntimeModel = models.some((model) => model.id === state.modelLab.selectedRuntimeModel) ? state.modelLab.selectedRuntimeModel : (models[0]?.id || '');
+    runtimeSelect.replaceChildren(...(pronti.length > 0 ? pronti.map((runtime) => new Option(runtime.runtimeId, runtime.runtimeId)) : [new Option('Nessun runtime pronto', '')]));
+    runtimeSelect.value = state.modelLab.selectedRuntime;
+    modelSelect.replaceChildren(...(models.length > 0 ? models.map((model) => new Option(model.name || model.id, model.id)) : [new Option('Nessun modello osservato', '')]));
+    modelSelect.value = state.modelLab.selectedRuntimeModel;
+    runtimeSelect.disabled = modelSelect.disabled = prompt.disabled = runButton.disabled = !selected;
+    const gate = $('#modelLabRuntimeGate');
+    if (gate) gate.classList.toggle('is-ready', Boolean(selected));
+  }
+
+  async function caricaRuntimeModelLab() {
+    if (state.modelLab.loadingRuntime) return;
+    state.modelLab.loadingRuntime = true;
+    state.modelLab.runtimeError = null;
+    try {
+      const data = await apiGet('/api/v1/runtime');
+      state.modelLab.runtimes = Array.isArray(data?.items) ? data.items : [];
+    } catch (error) {
+      state.modelLab.runtimeError = error;
+      state.modelLab.runtimes = [];
+    } finally {
+      state.modelLab.loadingRuntime = false;
+      renderizzaRuntimeModelLab();
+    }
+  }
+
+  async function caricaModelliLocaliModelLab() {
+    if (state.modelLab.loadingInstalled) return;
+    state.modelLab.loadingInstalled = true;
+    state.modelLab.installedError = null;
+    try {
+      const data = await apiGet('/api/v1/local-models');
+      state.modelLab.installed = Array.isArray(data?.items) ? data.items : [];
+    } catch (error) {
+      state.modelLab.installedError = error;
+      state.modelLab.installed = [];
+    } finally {
+      state.modelLab.loadingInstalled = false;
+      renderizzaModelliLocaliModelLab();
+    }
+  }
+
+  function renderizzaDownloadModelLab() {
+    const mount = $('#modelLabDownloadsList'); if (!mount) return;
+    if (!state.modelLab.downloads.length) { mount.replaceChildren(textElement('p', 'model-lab-empty', 'Nessun download attivo.')); return; }
+    mount.replaceChildren(...state.modelLab.downloads.map((item) => {
+      const row = document.createElement('article'); row.className = 'model-lab-installed-item';
+      const label = `${item.id} · ${item.state} · ${item.progress ?? 0}%`;
+      row.append(textElement('strong', '', label), textElement('span', '', `${formattaByteModelLab(item.bytes)} / ${formattaByteModelLab(item.totalBytes)}`));
+      if (['running', 'queued'].includes(item.state)) { const pause = document.createElement('button'); pause.className = 'secondary-btn compact'; pause.textContent = 'Pausa'; pause.addEventListener('click', async () => { await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(item.id)}/pause`, {}); caricaDownloadModelLab(); }); row.append(pause); }
+      if (['paused', 'failed'].includes(item.state)) { const resume = document.createElement('button'); resume.className = 'secondary-btn compact'; resume.textContent = 'Riprendi'; resume.addEventListener('click', async () => { await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(item.id)}/resume`, {}); caricaDownloadModelLab(); }); row.append(resume); }
+      if (!['ready', 'cancelled'].includes(item.state)) { const cancel = document.createElement('button'); cancel.className = 'secondary-btn compact'; cancel.textContent = 'Annulla'; cancel.addEventListener('click', async () => { await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(item.id)}/cancel`, {}); caricaDownloadModelLab(); }); row.append(cancel); }
+      return row;
+    }));
+  }
+  async function caricaDownloadModelLab() {
+    try { const data = await apiGet('/api/v1/huggingface/downloads'); state.modelLab.downloads = Array.isArray(data?.items) ? data.items : []; renderizzaDownloadModelLab(); if (state.modelLab.downloads.some((item) => ['queued', 'running', 'verifying'].includes(item.state))) { if (!state.modelLab.downloadTimer) state.modelLab.downloadTimer = setTimeout(() => { state.modelLab.downloadTimer = null; caricaDownloadModelLab(); }, 800); } else if (state.modelLab.downloads.some((item) => item.state === 'ready')) caricaModelliLocaliModelLab(); }
+    catch (error) { const mount = $('#modelLabDownloadsList'); if (mount) mount.replaceChildren(textElement('p', 'model-lab-empty', error.message || 'Download non disponibili.')); }
+  }
+  function hfSetGroups(files) {
+    const groups = new Map(); for (const file of files || []) { const key = file.path.replace(/-\d{5}-of-\d{5}(?=\.gguf$)/iu, ''); const group = groups.get(key) || []; group.push(file); groups.set(key, group); }
+    return [...groups.values()].map((items) => items.sort((a, b) => a.path.localeCompare(b.path)));
+  }
+  function renderizzaHfDetailModelLab() {
+    const mount = $('#modelLabHfDetail'); if (!mount) return; const detail = state.modelLab.hfDetail;
+    if (!detail) { mount.replaceChildren(textElement('p', 'model-lab-empty', 'Seleziona un repository per vedere i file GGUF.')); return; }
+    const title = textElement('h4', '', detail.repo); const meta = textElement('p', 'muted-copy', `${detail.license || 'licenza non dichiarata'} · revisione ${detail.revision}`); const body = document.createElement('div');
+    const groups = hfSetGroups(detail.files); if (!groups.length) body.append(textElement('p', 'model-lab-empty', 'Nessun file GGUF osservato.'));
+    for (const files of groups) { const bytes = files.reduce((sum, file) => sum + Number(file.sizeBytes || 0), 0); const expected = files[0].path.match(/-\d{5}-of-(\d{5})\.gguf$/iu)?.[1]; const incomplete = expected && Number(expected) !== files.length; const button = document.createElement('button'); button.type = 'button'; button.className = 'secondary-btn compact'; button.disabled = Boolean(incomplete || files.some((file) => !file.sha256)); button.textContent = incomplete ? `Set incompleto · ${files.length}/${expected}` : `Scarica · ${files[0].path.split('/').pop()} · ${formattaByteModelLab(bytes)}`; button.addEventListener('click', async () => { const id = `${detail.repo.replace(/[^a-z0-9_-]/giu, '-')}-${detail.revision.slice(0, 12)}-${files[0].path.replace(/[^a-z0-9]/giu, '-')}`.slice(0, 120); await apiPost('/api/v1/huggingface/download', { id, repo: detail.repo, revision: detail.revision, files: files.map((file) => ({ path: file.path, bytes: file.sizeBytes, sha256: file.sha256 })), bytes, sha256: files[0].sha256, license: detail.license || 'unknown', path: id }); setModelLabSection('downloads'); caricaDownloadModelLab(); }); body.append(textElement('p', 'model-lab-detail-row', `${files.length} file · ${files.map((file) => file.path).join(', ')}`), button); }
+    mount.replaceChildren(title, meta, body);
+  }
+  function renderizzaHfRisultatiModelLab() { const mount = $('#modelLabHfResults'); if (!mount) return; if (state.modelLab.hfError) { mount.replaceChildren(textElement('p', 'model-lab-empty', state.modelLab.hfError.message)); return; } if (!state.modelLab.hfResults.length) { mount.replaceChildren(textElement('p', 'model-lab-empty', 'Nessun repository GGUF trovato.')); return; } mount.replaceChildren(...state.modelLab.hfResults.map((item) => { const button = document.createElement('button'); button.type = 'button'; button.className = 'model-lab-list-item'; button.append(textElement('strong', '', item.repo), textElement('small', '', `${item.downloads ?? '—'} download · ${item.gated ? 'gated' : 'pubblico'}`)); button.addEventListener('click', async () => { state.modelLab.hfDetail = null; renderizzaHfDetailModelLab(); try { state.modelLab.hfDetail = await apiGet(`/api/v1/huggingface/repo?repo=${encodeURIComponent(item.repo)}&revision=${encodeURIComponent(item.revision || '')}`); } catch (error) { state.modelLab.hfError = error; } renderizzaHfDetailModelLab(); }); return button; })); }
+  async function cercaHuggingFaceModelLab() { state.modelLab.hfQuery = $('#modelLabHfSearch')?.value?.trim() || ''; state.modelLab.hfError = null; const status = $('#modelLabHfStatus'); if (status) status.textContent = 'Ricerca in corso…'; try { const data = await apiGet(`/api/v1/huggingface/search?query=${encodeURIComponent(state.modelLab.hfQuery)}&limit=20`); state.modelLab.hfResults = data.items || []; if (status) status.textContent = `${state.modelLab.hfResults.length} repository osservati`; } catch (error) { state.modelLab.hfError = error; state.modelLab.hfResults = []; if (status) status.textContent = 'Ricerca non disponibile'; } renderizzaHfRisultatiModelLab(); }
+
+  function aggiungiBloccoStreamModelLab(tipo, titolo, contenuto) {
+    const mount = $('#modelLabStream');
+    if (!mount) return;
+    if (mount.querySelector('.model-lab-empty')) mount.replaceChildren();
+    let block = mount.querySelector(`[data-model-lab-stream-block="${tipo}"]`);
+    if (!block) {
+      block = document.createElement('section');
+      block.dataset.modelLabStreamBlock = tipo;
+      block.className = `model-lab-stream-block model-lab-stream-${tipo}`;
+      block.append(textElement('strong', '', titolo), textElement('pre', '', ''));
+      mount.append(block);
+    }
+    const body = block.querySelector('pre');
+    if (body && contenuto) body.textContent += String(contenuto);
+  }
+
+  function collegaEventiProvaModelLab(sessionId) {
+    if (state.modelLab.runtimeEventSource) state.modelLab.runtimeEventSource.close();
+    if (typeof EventSource !== 'function') { aggiungiBloccoStreamModelLab('error', 'Errore', 'EventSource non disponibile nel browser.'); return; }
+    const source = new EventSource(API(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`));
+    state.modelLab.runtimeEventSource = source;
+    window.__talosHarnessModelLabEventSource = source;
+    source.onmessage = (message) => {
+      let event;
+      try { event = JSON.parse(message.data); } catch { return; }
+      if (event.type === 'TextMessageContent') aggiungiBloccoStreamModelLab('text', 'Risposta', event.delta);
+      else if (event.type === 'ReasoningMessageContent') aggiungiBloccoStreamModelLab('reasoning', 'Ragionamento', event.delta);
+      else if (event.type === 'ToolCallStart') aggiungiBloccoStreamModelLab('tool', 'Tool call', event.toolCallName || event.toolCallId);
+      else if (event.type === 'ToolCallArgs') aggiungiBloccoStreamModelLab('tool', 'Tool call', event.delta);
+      else if (event.type === 'RunError') aggiungiBloccoStreamModelLab('error', 'Errore', event.message || event.code || 'Runtime locale fallito');
+      if (event.type === 'RunFinished' || event.type === 'RunError') {
+        source.close();
+        state.modelLab.runtimeEventSource = null;
+        const cancel = $('#modelLabCancelButton'); if (cancel) cancel.hidden = true;
+      }
+    };
+    source.onerror = () => { if (source.readyState === EventSource.CLOSED) aggiungiBloccoStreamModelLab('error', 'Errore', 'Connessione agli eventi interrotta.'); };
+  }
+
+  async function avviaProvaRuntimeModelLab() {
+    const runtimeId = state.modelLab.selectedRuntime;
+    const modelId = state.modelLab.selectedRuntimeModel;
+    if (!runtimeId || !modelId) return;
+    const runButton = $('#modelLabRunButton');
+    const cancelButton = $('#modelLabCancelButton');
+    runButton.disabled = true;
+    cancelButton.hidden = false;
+    $('#modelLabStream')?.replaceChildren(textElement('p', 'model-lab-empty', 'Avvio della sessione locale…'));
+    try {
+      const tasks = await apiGet('/api/v1/tasks');
+      const taskId = tasks?.items?.[0]?.id;
+      if (!taskId) throw Object.assign(new Error('Nessun task reale disponibile per la prova'), { code: 'TASK_NOT_AVAILABLE' });
+      const runtimeState = state.modelLab.runtimes.find((runtime) => runtime.runtimeId === runtimeId)?.runtimeState;
+      if (runtimeId === 'llama.cpp' && runtimeState !== 'ready') await apiPost('/api/v1/runtime/load', { runtimeId, modelId });
+      const data = await apiPost('/api/v1/sessions', { taskId, provider: 'local', runtimeId, modelId });
+      state.modelLab.runtimeSessionId = data.sessionId;
+      collegaEventiProvaModelLab(data.sessionId);
+    } catch (error) {
+      aggiungiBloccoStreamModelLab('error', 'Errore', error.message || 'Prova runtime non riuscita');
+      cancelButton.hidden = true;
+      runButton.disabled = false;
+    }
+  }
+
+  async function annullaProvaRuntimeModelLab() {
+    if (!state.modelLab.runtimeSessionId) return;
+    try { await apiPost(`/api/v1/sessions/${encodeURIComponent(state.modelLab.runtimeSessionId)}/cancel`, {}); }
+    catch (error) { aggiungiBloccoStreamModelLab('error', 'Errore', error.message || 'Annullamento non riuscito'); }
+    state.modelLab.runtimeEventSource?.close();
+    state.modelLab.runtimeEventSource = null;
+    state.modelLab.runtimeSessionId = null;
+    $('#modelLabCancelButton').hidden = true;
+    $('#modelLabRunButton').disabled = false;
   }
 
   function renderizzaDettaglioModelLab(model) {
@@ -994,6 +1335,57 @@
     $$('[data-model-lab-tab]').forEach((tab) => { const active = tab.dataset.modelLabTab === section; tab.classList.toggle('active', active); tab.setAttribute('aria-selected', String(active)); });
     $$('[data-model-lab-panel]').forEach((panel) => { const active = panel.dataset.modelLabPanel === section; panel.classList.toggle('active', active); panel.hidden = !active; if (active) markMotionEnter(panel); });
     if (section === 'catalog' && !state.modelLab.catalog && !state.modelLab.catalogError) caricaCatalogoModelLab();
+    if (section === 'installed' && !state.modelLab.loadingInstalled && state.modelLab.installed.length === 0 && !state.modelLab.installedError) caricaModelliLocaliModelLab();
+    if (section === 'downloads') caricaDownloadModelLab();
+  }
+
+  const SETTINGS_SECTIONS = ['appearance', 'chat', 'models', 'providers', 'tools', 'privacy', 'workspace', 'account'];
+  const SETTINGS_SECTION_STORAGE_KEY = 'talos.harness.desktop.settings.section.v1';
+
+  /** List-detail Settings: una sola categoria visibile e un solo punto di verità per il tab attivo. */
+  function setSettingsSection(section, { persist = true } = {}) {
+    const selected = SETTINGS_SECTIONS.includes(section) ? section : 'appearance';
+    state.settingsSection = selected;
+    $$('[data-settings-tab]').forEach((tab) => {
+      const active = tab.dataset.settingsTab === selected;
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-selected', String(active));
+      tab.tabIndex = active ? 0 : -1;
+    });
+    $$('[data-settings-panel]').forEach((panel) => {
+      const active = panel.dataset.settingsPanel === selected;
+      panel.classList.toggle('active', active);
+      panel.hidden = !active;
+      if (active) markMotionEnter(panel);
+    });
+    if (persist) {
+      try { window.localStorage.setItem(SETTINGS_SECTION_STORAGE_KEY, selected); } catch { /* preferenza non bloccante */ }
+    }
+    if (selected === 'models' && !state.modelLab.initialized) inizializzaModelLab();
+  }
+
+  function inizializzaSettingsNavigation() {
+    $$('[data-settings-tab]').forEach((tab) => {
+      tab.addEventListener('click', () => setSettingsSection(tab.dataset.settingsTab));
+      tab.addEventListener('keydown', (event) => {
+        if (!['ArrowDown', 'ArrowRight', 'ArrowUp', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const current = SETTINGS_SECTIONS.indexOf(tab.dataset.settingsTab);
+        const next = event.key === 'Home' ? 0
+          : event.key === 'End' ? SETTINGS_SECTIONS.length - 1
+            : (current + (event.key === 'ArrowDown' || event.key === 'ArrowRight' ? 1 : -1) + SETTINGS_SECTIONS.length) % SETTINGS_SECTIONS.length;
+        const nextTab = document.querySelector(`[data-settings-tab="${SETTINGS_SECTIONS[next]}"]`);
+        setSettingsSection(SETTINGS_SECTIONS[next]);
+        nextTab?.focus();
+      });
+    });
+    $$('[data-settings-go]').forEach((button) => button.addEventListener('click', () => {
+      setSettingsSection(button.dataset.settingsGo);
+      if (button.dataset.modelLabGo) setModelLabSection(button.dataset.modelLabGo);
+    }));
+    let saved = null;
+    try { saved = window.localStorage.getItem(SETTINGS_SECTION_STORAGE_KEY); } catch { /* default appearance */ }
+    setSettingsSection(saved || 'appearance', { persist: false });
   }
 
   function inizializzaModelLab() {
@@ -1003,8 +1395,30 @@
     $('#modelLabSearch')?.addEventListener('input', (event) => { state.modelLab.search = event.target.value; renderizzaCatalogoModelLab(); });
     $('#modelLabProviderFilter')?.addEventListener('change', (event) => { state.modelLab.provider = event.target.value; renderizzaCatalogoModelLab(); });
     $('#modelLabRefreshButton')?.addEventListener('click', () => caricaCatalogoModelLab({ forza: true }));
+    $('#modelLabRuntimeRefresh')?.addEventListener('click', () => caricaRuntimeModelLab());
+    $('#modelLabRuntimeSelect')?.addEventListener('change', (event) => { state.modelLab.selectedRuntime = event.target.value; state.modelLab.selectedRuntimeModel = ''; renderizzaRuntimeModelLab(); });
+    $('#modelLabModelSelect')?.addEventListener('change', (event) => { state.modelLab.selectedRuntimeModel = event.target.value; renderizzaRuntimeModelLab(); });
+    $('#modelLabRunButton')?.addEventListener('click', () => avviaProvaRuntimeModelLab());
+    $('#modelLabCancelButton')?.addEventListener('click', () => annullaProvaRuntimeModelLab());
+    $('#modelLabHfSearchButton')?.addEventListener('click', () => cercaHuggingFaceModelLab());
+    $('#modelLabHfSearch')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') cercaHuggingFaceModelLab(); });
+    $$('[data-provider-toggle]').forEach((toggle) => toggle.addEventListener('click', () => {
+      const card = toggle.closest('[data-provider-id]');
+      const detail = card?.querySelector('[data-provider-detail]');
+      if (!detail) return;
+      const expanded = toggle.getAttribute('aria-expanded') === 'true';
+      toggle.setAttribute('aria-expanded', String(!expanded));
+      detail.hidden = expanded;
+      card?.classList.toggle('is-expanded', !expanded);
+      if (!expanded) markMotionEnter(detail);
+    }));
+    $$('[data-provider-action]').forEach((button) => button.addEventListener('click', () => gestisciAzioneProvider(button)));
     caricaCapacitaMacchina();
-    apiGet('/api/v1/doctor').then((doctor) => { const status = $('#modelLabProviderStatus'); if (status) status.textContent = doctor.chiaveApi ? 'OpenRouter configurato' : 'OpenRouter non configurato'; const provider = $('[data-provider-id="openrouter"] [data-provider-state]'); if (provider) provider.textContent = doctor.chiaveApi ? 'Chiave presente sul server' : 'Chiave non configurata'; }).catch(() => {});
+    caricaRuntimeModelLab();
+    caricaModelliLocaliModelLab();
+    caricaProviderModelLab();
+    const runButton = $('#modelLabRunButton');
+    if (runButton) runButton.dataset.disabledReason = 'Seleziona un runtime osservato e un modello';
     setModelLabSection('overview');
   }
 
@@ -1044,9 +1458,10 @@
   function riassuntoDoctor(risultato) {
     const problemi = [];
     if (!risultato.chiaveApi) problemi.push('chiave API assente');
-    if (risultato.shell !== 'wsl2') problemi.push(`shell ${risultato.shell === 'none' ? 'non sandboxata' : risultato.shell}`);
+    if (risultato.shell !== 'wsl2') problemi.push('ambiente di lavoro da controllare');
     if (!risultato.git) problemi.push('git non trovato');
     if (!risultato.naviga) problemi.push('browser non disponibile');
+    if (risultato.cartelleProgetto && !risultato.cartelleProgetto.disponibili) problemi.push('nessuna cartella di progetto disponibile');
     return problemi.length === 0
       ? { badge: 'Healthy', dettaglio: `Chiave API ok · shell ${risultato.shell} · git ok · browser ok.` }
       : { badge: `${problemi.length} da rivedere`, dettaglio: `${problemi.join(' · ')}.` };
@@ -2147,6 +2562,72 @@
     }
   }
 
+  /**
+   * Menu unico per le sessioni reali, riusato da sidebar e Board come il
+   * menu CRUD dell'albero Files. Le voci chiamano soltanto comportamenti gia'
+   * supportati dal registro: apri, rinomina, fork, copia id, elimina.
+   */
+  function apriMenuAzioniSessione(sessione, posizionamento) {
+    document.querySelector('.session-actions-menu')?.remove();
+    const target = {
+      sessionId: sessione.sessionId,
+      taskId: sessione.taskId || sessione.sessionId,
+      nome: sessione.nome || sessione.taskId || 'Sessione',
+    };
+    state.sessioneTarget = target;
+
+    const menu = document.createElement('div');
+    menu.className = 'ft-actions-menu session-actions-menu';
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', `Azioni per ${target.nome}`);
+    const voci = [
+      { etichetta: 'Apri', icona: 'i-eye', azione: () => passaASessione(target.sessionId, target.taskId, target.nome) },
+      { etichetta: 'Rinomina', icona: 'i-edit', azione: () => openSheet('rename') },
+      { etichetta: 'Fork', icona: 'i-branch', azione: () => forkSession(target) },
+      { etichetta: 'Copia identificativo', icona: 'i-link', azione: () => copyText(target.sessionId, 'Identificativo copiato') },
+      { etichetta: 'Elimina', icona: 'i-trash', azione: () => openSheet('deleteSession'), pericoloso: true },
+    ];
+    for (const voce of voci) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `ft-actions-menu-item${voce.pericoloso ? ' ft-actions-menu-item-danger' : ''}`;
+      button.setAttribute('role', 'menuitem');
+      button.append(iconaSvgAlbero(voce.icona), textElement('span', '', voce.etichetta));
+      button.addEventListener('click', () => { chiudiMenu(); voce.azione(); });
+      menu.appendChild(button);
+    }
+    document.body.appendChild(menu);
+    const pos = posizionamento || {};
+    if (pos.ancoraEl) {
+      const rect = pos.ancoraEl.getBoundingClientRect();
+      menu.style.top = `${rect.bottom + 4}px`;
+      menu.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - menu.getBoundingClientRect().width - 8))}px`;
+    } else {
+      const misura = menu.getBoundingClientRect();
+      const left = Math.min(Number(pos.x) || 8, window.innerWidth - misura.width - 8);
+      const top = Math.min(Number(pos.y) || 8, window.innerHeight - misura.height - 8);
+      menu.style.left = `${Math.max(8, left)}px`;
+      menu.style.top = `${Math.max(8, top)}px`;
+    }
+    const focusElement = pos.focusElement || null;
+    function chiudiMenu() {
+      menu.remove();
+      document.removeEventListener('click', onDocumentClick);
+      document.removeEventListener('keydown', onKeydown);
+    }
+    function onDocumentClick(event) { if (!menu.contains(event.target)) chiudiMenu(); }
+    function onKeydown(event) {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      chiudiMenu();
+      focusElement?.focus?.();
+    }
+    window.setTimeout(() => {
+      document.addEventListener('click', onDocumentClick);
+      document.addEventListener('keydown', onKeydown);
+    }, 0);
+  }
+
   /*
    * ⛔⛔ 27/8, trovato nell'inventario "legare ogni componente visivo":
    * `sheetDialog` è CONDIVISO fra tredici tipi di foglio, e il suo unico
@@ -2484,7 +2965,7 @@
       html: () => `
         <form class="sheet-section rename-form" id="renameSessionForm">
           <label class="sheet-label" for="renameSessionInput">Nome sessione</label>
-          <input class="sheet-input" id="renameSessionInput" value="${state.session.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}" maxlength="80" autocomplete="off">
+          <input class="sheet-input" id="renameSessionInput" value="${(state.sessioneTarget?.nome || state.session).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}" maxlength="80" autocomplete="off">
           <div class="sheet-actions">
             <button type="button" class="secondary-btn" data-rename-cancel>Annulla</button>
             <button type="submit" class="primary-btn">Salva</button>
@@ -2729,22 +3210,29 @@
          * sidebar/refresh. Senza sessione reale, resta lo stesso rename
          * solo-client di sempre (demo).
          */
-        if (state.realSession.id) {
+        const targetSessionId = state.sessioneTarget?.sessionId || state.realSession.id;
+        if (targetSessionId) {
           try {
-            await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/rename`, { nome: next });
+            await apiPost(`/api/v1/sessions/${encodeURIComponent(targetSessionId)}/rename`, { nome: next });
           } catch (error) {
-            toast('Rinomina non riuscita', error.message);
+            toast('Rinomina non riuscita', messaggioErroreUtente(error));
             return;
           }
         }
-        state.session = next;
-        sessionTitle.textContent = state.session;
-    /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
-    $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
-        const activeSession = $('.session-item.active .session-main strong');
-        if (activeSession) activeSession.textContent = state.session;
+        if (!state.sessioneTarget || targetSessionId === state.realSession.id) {
+          state.session = next;
+          sessionTitle.textContent = state.session;
+          $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
+          const activeSession = $('.session-item.active .session-main strong');
+          if (activeSession) activeSession.textContent = state.session;
+        }
+        state.sessioneTarget = null;
         closeEmbeddedDialog(sheetDialog);
-        toast('Sessione rinominata', state.session);
+        toast('Sessione rinominata', next);
+        if (targetSessionId && targetSessionId !== state.realSession.id) {
+          await aggiornaElencoSessioniReali();
+          if (state.board.initialized) await refreshSessionsBoard();
+        }
       });
     }
 
@@ -5945,13 +6433,16 @@
    * ⭐ Fork reale quando c'è una sessione reale CONCLUSA attiva. Il server
    * rifiuta con SESSION_NOT_READY (409) su una sessione ancora in corso.
    */
-  async function forkSession() {
-    if (!state.realSession.id) {
+  async function forkSession(targetOverride = null) {
+    const origine = targetOverride || (state.realSession.id
+      ? { sessionId: state.realSession.id, taskId: state.realSession.taskId, nome: state.session }
+      : null);
+    if (!origine?.sessionId) {
       toast('Fork creato', 'Nuovo ramo di conversazione da questo punto.');
       return;
     }
-    const idOrigine = state.realSession.id;
-    const taskIdOrigine = state.realSession.taskId;
+    const idOrigine = origine.sessionId;
+    const taskIdOrigine = origine.taskId || state.realSession.taskId;
     try {
       const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(idOrigine)}/fork`, {});
       const generation = nuovaGenerazioneSessione();
@@ -6156,19 +6647,12 @@
       meta.textContent = formattaOraSessione(sessione.avviataAlle);
       button.append(main, meta);
       button.addEventListener('click', () => passaASessione(sessione.sessionId, sessione.taskId, sessione.nome));
-      /*
-       * ⭐⭐⭐ 30/8, QA visiva (Task 14) — tasto destro → conferma diretta
-       * (un solo file di azione possibile qui, a differenza del menu a
-       * più voci dell'albero file: non serve un menu intermedio).
-       * `preventDefault`/`stopPropagation` stesso principio del
-       * tasto-destro sull'albero file (sopprime il menu nativo del
-       * browser, non fa risalire l'evento).
-       */
+      /* ⭐ 31/8 P0 — tasto destro apre il menu completo condiviso con la
+       * Board e con il menu CRUD dei Files. */
       button.addEventListener('contextmenu', (event) => {
         event.preventDefault();
         event.stopPropagation();
-        state.sessioneTarget = { sessionId: sessione.sessionId, nome: etichetta };
-        openSheet('deleteSession');
+        apriMenuAzioniSessione({ ...sessione, nome: etichetta }, { x: event.clientX, y: event.clientY, focusElement: button });
       });
       pezzi.push(button);
     }
@@ -6399,7 +6883,21 @@
       try {
         progetti = await apiGet('/api/v1/projects').then((r) => r.items);
       } catch (error) {
-        sheetBody.replaceChildren(textElement('p', 'board-empty', `Elenco non disponibile: ${error.message}`));
+        const stato = document.createElement('div');
+        stato.className = 'sheet-section';
+        stato.appendChild(textElement('p', 'board-empty', messaggioErroreUtente(error, 'Non riesco a leggere le cartelle disponibili. Apri Doctor per controllare lo stato.')));
+        const doctorButton = document.createElement('button');
+        doctorButton.type = 'button';
+        doctorButton.className = 'secondary-btn full';
+        doctorButton.dataset.openDoctor = 'true';
+        doctorButton.textContent = 'Apri Doctor';
+        doctorButton.addEventListener('click', () => {
+          closeEmbeddedDialog(sheetDialog);
+          openSheet('control');
+          window.setTimeout(() => eseguiDoctor(), 0);
+        });
+        stato.appendChild(doctorButton);
+        sheetBody.replaceChildren(stato);
         return;
       }
     } else {
@@ -6492,7 +6990,18 @@
     } else {
       customSection.appendChild(textElement('span', 'sheet-label', 'Cartella — TALOS scrive DIRETTAMENTE lì, nessuna copia'));
       if (progetti.length === 0) {
-        customSection.appendChild(textElement('p', 'board-empty', 'Nessuna cartella di progetto configurata sul server. Imposta TALOS_HARNESS_UI_PROJECT_DIRS con i percorsi assoluti ammessi e riavvia il server, oppure scegli il permesso "Full access" (pillola in alto) per un percorso a piacere.'));
+        customSection.appendChild(textElement('p', 'board-empty', 'Non c’è ancora una cartella di progetto disponibile. Puoi scegliere Full access per indicarne una ora, oppure aprire Doctor per capire cosa manca.'));
+        const doctorButton = document.createElement('button');
+        doctorButton.type = 'button';
+        doctorButton.className = 'secondary-btn full';
+        doctorButton.dataset.openDoctor = 'true';
+        doctorButton.textContent = 'Apri Doctor';
+        doctorButton.addEventListener('click', () => {
+          closeEmbeddedDialog(sheetDialog);
+          openSheet('control');
+          window.setTimeout(() => eseguiDoctor(), 0);
+        });
+        customSection.appendChild(doctorButton);
       } else {
         const selectCartella = document.createElement('select');
         selectCartella.className = 'sheet-input';
@@ -7419,6 +7928,7 @@
   }));
 
   inizializzaAspettoDesktop();
+  inizializzaSettingsNavigation();
   const appearanceControlMap = {
     themePresetSelect: 'themePreset', colorModeSelect: 'colorMode', sceneOverrideSelect: 'sceneOverride',
     uiFontScaleSelect: 'uiFontScale', chatFontScaleSelect: 'chatFontScale', composerShapeSelect: 'composerShape',
@@ -7540,6 +8050,7 @@
     // separata da executeCommand('export') che prova solo il percorso
     // d'apertura del foglio.
     costruisciTrascrizioneMarkdown,
+    setSettingsSection,
     // ⭐ 28/8 — auto-rinomina dal primo messaggio: la funzione pura si espone per provare la sua logica (spazi/trim/tetto) senza dover avviare una sessione vera.
     titoloDalPrimoMessaggio,
     // ⭐ 28/8 — Terminale REALE (LEDGER-TERMINALE-REALE.md): esposte per i test dedicati, stesso principio di sopra — internals reali, non un secondo contratto.
@@ -7552,6 +8063,9 @@
   };
   window.__talosHarnessDestroy = () => {
     cancelMotionAnimations();
+    state.modelLab.runtimeEventSource?.close();
+    state.modelLab.runtimeEventSource = null;
+    delete window.__talosHarnessModelLabEventSource;
     fermaBackgroundDesktop();
     if (handleAppearanceVisibilityChange) document.removeEventListener('visibilitychange', handleAppearanceVisibilityChange);
     if (appearanceMediaQuery && handleAppearanceMediaChange) appearanceMediaQuery.removeEventListener?.('change', handleAppearanceMediaChange);
@@ -7679,6 +8193,7 @@
    * su `/memoria` (Indietro → `/`), niente da reinventare qui.
    */
 
+  $('#modelLabRunButton')?.setAttribute('data-disabled-reason', 'Seleziona un runtime osservato e un modello');
   ensureDemoLabels();
   /*
    * ⛔⛔⛔ 27/8, owner: "il caricamento della pagina non deve azzerare le

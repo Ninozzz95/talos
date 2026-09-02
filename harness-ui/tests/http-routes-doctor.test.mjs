@@ -57,3 +57,21 @@ test('⛔ senza diagnosiFn configurato: 404, REPORT_UNAVAILABLE — mai un "Heal
   assert.equal(corpo.ok, false);
   assert.equal(corpo.error.code, 'REPORT_UNAVAILABLE');
 });
+
+test('GET /api/v1/doctor conferma la workspace predefinita pronta al primo avvio', async (t) => {
+  const { base } = await listen(t, {
+    diagnosiFn: async () => ({
+      chiaveApi: true,
+      shell: 'desktop',
+      git: true,
+      naviga: true,
+      cartelleProgetto: { disponibili: true, conteggio: 1, dettaglio: '1 cartella di progetto disponibile.' },
+    }),
+  });
+  const risposta = await fetch(`${base}/api/v1/doctor`);
+  const corpo = await risposta.json();
+  assert.equal(risposta.status, 200);
+  assert.equal(corpo.data.cartelleProgetto.disponibili, true);
+  assert.equal(corpo.data.cartelleProgetto.conteggio, 1);
+  assert.match(corpo.data.cartelleProgetto.dettaglio, /disponibile/);
+});

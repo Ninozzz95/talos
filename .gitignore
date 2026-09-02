@@ -283,3 +283,4 @@ harness-ui/.provider-runtime.json.tmp
 
 # Generated image recovery copies are local runtime data, never source.
 harness-ui/.generated-images/
+harness-ui/.workspace-launch-token

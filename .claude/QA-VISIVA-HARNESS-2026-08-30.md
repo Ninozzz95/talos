@@ -1892,3 +1892,296 @@ sovrapposizioni, eccezioni JavaScript o richieste HTTP fallite.
 Finding residui: non è ancora stata eseguita una prova con un file GGUF reale
 scelto dall'owner né la matrice interruzione/reload/offline/disco insufficiente;
 le prove di contratto e i controlli contrari sono già verdi.
+
+## 01/09/2026 — descrizioni dei comandi nei batch espansi
+
+Finding owner riprodotto da `C:\Users\Antonino\Downloads\awdadw.png`: il
+riepilogo aggregato era corretto, ma le righe figlie concluse diventavano tutte
+“1 comando eseguito/fallito”, costringendo a leggere il comando grezzo.
+
+Screenshot nuovi, ispezionati per intero:
+
+- `harness-ui/frontend/artifacts/tool-description-1440x900.png`;
+- `harness-ui/frontend/artifacts/tool-description-1024x800.png`.
+
+Esito visivo: la frase prodotta dal modello resta nella stessa riga da start a
+end; il dettaglio contiene comando ed esito senza ripetere `descrizione`; il
+conteggio del batch resta separato e grammaticalmente corretto. Il test reale
+isolato con Qwen 3.8 Flash ha prodotto “Sto verificando la versione di Node.js
+installata sul progetto”, quindi la UI non inventa l’intento a posteriori.
+
+Confronto competitivo: Claude Code privilegia l’intento umano per Bash;
+Hermes usa verbi deterministici per i tool noti e conserva il dettaglio tecnico.
+TALOS combina i due: descrizione del modello soltanto per shell e fallback
+deterministico per file/ricerca, senza alterare i contratti di tool terzi.
+
+Nuovo debito visuale nominato `DESKTOP-1024-COMPOSER-RAIL-01`: nella cattura
+1024×800 il rail destro comprime/taglia la parte destra del composer. Non nasce
+dal cambio alle righe tool, ma deve entrare nella Fase 4 Shell/layout e ricevere
+RED geometrico prima del fix.
+
+## 01/09/2026 — ciclo corsa: ragionamento, Stop, coda e Reindirizza
+
+Screenshot nuovi, aperti e ispezionati per intero:
+
+- `harness-ui/frontend/artifacts/visual-audit-2026-09-01/run-reasoning-indicator-1440x900.png`;
+- `harness-ui/frontend/artifacts/visual-audit-2026-09-01/run-stop-redirect-composer-1440x900.png`;
+- `harness-ui/frontend/artifacts/visual-audit-2026-09-01/run-stop-redirect-composer-1280x800.png`;
+- `harness-ui/frontend/artifacts/visual-audit-2026-09-01/run-stop-redirect-composer-1024x800.png`.
+
+Esito: il ragionamento nascosto non lascia più una pagina apparentemente
+ferma; una live region discreta indica “Ragionamento in corso”. Durante il run
+il primario diventa Stop; con testo presente compare Reindirizza, mentre Enter
+mantiene il percorso non distruttivo della coda. A 1440 e 1280 px il composer
+conserva la larghezza canonica e nessun controllo si sovrappone.
+
+A 1024 px Stop e Reindirizza restano interamente dentro il composer, ma il rail
+destro continua a uscire dal viewport: è la riproduzione aggiornata del debito
+preesistente `DESKTOP-1024-COMPOSER-RAIL-01`, non una regressione di questa
+slice. La variante `prefers-reduced-motion: reduce` mantiene il testo di stato
+e ferma l'animazione.
+
+Confronto competitivo applicato: Codex separa steer e interrupt; Claude
+esplicita che una tool call in corso può raggiungere il proprio confine;
+Hermes distingue queue, steer e interrupt. TALOS mostra tutte e tre le scelte
+senza sovraccaricare Enter: coda da tastiera, correzione prioritaria esplicita e
+Stop sempre disponibile.
+
+Nota di evidenza: il gate Qwen reale su `4175` e gli screenshot sono separati.
+Qwen ha attraversato runtime/API/SSE reali; le catture visuali usano sul server
+locale di test gli stessi handler UI con eventi deterministici. Il browser
+integrato non era disponibile, quindi questa sezione non attribuisce le PNG al
+turno provider reale.
+
+Gate finali freschi: suite backend **1203/1203**, browser desktop **47/47**,
+build modulare **23 asset** e verifica di contratti/build/determinismo verde.
+La review indipendente ha riprodotto anche la gara inversa Stop-prima-del-
+redirect; la correzione mantiene testo e stato coerenti senza riavviare il run.
+
+## 01/09/2026 — workbench Nuova sessione
+
+La superficie è stata ricostruita come workbench desktop: browser cartelle
+read-only e scorciatoie a sinistra; modello, reasoning, planner e permessi a
+destra. La pipeline QA versionata è stata migrata integralmente al nuovo
+contratto e non contiene più selettori `#customTask*` né la vecchia chip delle
+cartelle frequenti.
+
+Evidenza tecnica disponibile:
+
+- test geometrici/comportamentali a 1440×900, 1280×800 e 1024×800;
+- tastiera tree, focus/selezione, errore, retry, Doctor, reduced motion e gate
+  Full access;
+- browser prodotto 59/59, chooser focalizzato 12/12;
+- gate opt-in UI + endpoint reale 1/1 su server isolato `4176`;
+- endpoint reale verificato su `C:\` e `C:\Users`;
+- health server owner `4174` finale 200.
+
+### Fermata visuale obbligatoria
+
+Non esistono screenshot ufficiali nuovi da dichiarare ispezionati. La skill
+browser ufficiale ha risposto `No browser is available`; la lista delle
+istanze era `[]` anche dopo troubleshooting. Le prove Playwright restano test
+sintetici e non sostituiscono l'ispezione dell'intero schermo richiesta
+dall'owner.
+
+Stato del taccuino: **nessun finding visuale nuovo inventato; gate visuale
+bloccato**. Alla prima disponibilità del browser integrato bisogna catturare e
+ispezionare default, scorciatoia, albero da tastiera, percorso arbitrario
+bloccato, Full access esplicito, errore/Riprova/Doctor e reduced motion nei tre
+viewport. Ogni difetto trovato diventerà uno scenario RED permanente prima di
+qualunque ulteriore modifica UI.
+
+## 01/09/2026 — modali ridimensionabili e command bar Explorer
+
+La matrice automatica ha verificato tre assi di resize, persistenza distinta
+per tipo di modale, clamp al viewport, tastiera, focus trap, reduced motion e
+le command bar di sidebar Files e Nuova sessione. La suite ha rilevato e fatto
+correggere due discrepanze reali prima della consegna:
+
+1. le maniglie montate in fondo al dialog uscivano dal ciclo Tab; ora vivono
+   negli header già inclusi nella trappola del focus;
+2. a 780 px il foglio poteva conservare una larghezza desktop; ora azzera
+   dimensioni personalizzate e resta interamente nel viewport.
+
+Evidenza sintetica: browser prodotto 70/70 scenari ordinari, unit 14/14,
+backend 1219/1219, build/verify verdi e creazione cartella reale su server
+isolato. Questa evidenza non viene chiamata ispezione visuale ufficiale.
+
+### Fermata visuale obbligatoria
+
+Il browser in-app continua a esporre zero istanze. Non sono quindi disponibili
+nuovi screenshot ufficiali da ispezionare per intero. Appena il browser torna
+disponibile, il taccuino deve coprire 1440×900, 1920×1080 e 1280×800, con
+Modello/Permessi ridimensionati separatamente, workbench Nuova sessione e
+sidebar Files con una sessione reale.
+
+## 01/09/2026 — indicatore attività risposta
+
+Finding owner riprodotto: il loader a tre nodi esistente aveva movimento poco
+percepibile. La prima risposta aveva aggiunto una barra/testa/shimmer, ma
+l'owner l'ha correttamente rifiutata come segnale concorrente e inutile. La
+riga ora usa soltanto tre punti in pulsazione sequenziale e il tempo trascorso,
+senza cambiare testo di stato o geometria del composer.
+
+Evidenza locale sulla pagina servita `4174`:
+
+- test dedicati 4/4: esattamente tre animazioni, frame diversi, token motion e
+  reduced motion statico;
+- browser desktop completo 71/71 pass, uno scenario reale opt-in saltato;
+- screenshot completi ispezionati:
+  `harness-ui/frontend/artifacts/visual-audit-2026-09-01/response-activity-dots-1440x900.png`
+  e `response-activity-reduced-1440x900.png`;
+- nessun nodo `.talos-line-loader-head`, `.talos-line-loader-sweep` o
+  `.run-activity-shimmer` sopravvive nel DOM o nel CSS.
+
+Taccuino: nessuna sovrapposizione nuova su topbar, sidebar, context rail o
+composer. Un punto è visibilmente attivo nel frame normale; i tre punti sono
+uniformi e leggibili nel frame reduced-motion. La riga resta intenzionalmente
+compatta. Il gate con Qwen reale è accorpato al riavvio autorizzato del backend.
+Queste catture sono Playwright locali e non vengono dichiarate screenshot del
+browser in-app.
+
+## 01/09/2026 — OpenRouter resiliente e cambio modello per turno
+
+- `model-switch-reasoning-1440x900.png`: dopo reload la pillola resta Gemini e
+  il controllo mostra effort `Medio`, scelto perché il modello dichiara
+  reasoning obbligatorio. Nessuna falsa mutazione prima della risposta server.
+- `model-switch-turn-attribution-1440x900.png`: due turni della stessa
+  conversazione mostrano rispettivamente `qwen/qwen3.8-flash` e
+  `google/gemini-3.7-flash`; la riga `1 file letto` resta al proprio posto fra
+  i turni.
+- Taccuino: nessun salto del composer, nessuna perdita del tool batch, nessuna
+  attribuzione retroattiva dei messaggi storici. Il foglio Modello resta
+  contenuto nel viewport e conserva spaziature/gerarchia esistenti.
+- Gate sintetici: backend 1252/1252, browser 71/71 + 1 opt-in skipped,
+  focused switch/loader 4/4, `git diff --check` pulito.
+- Sicurezza dipendenze: `eventsource-parser@4.1.0` non introduce advisory.
+  `npm audit --omit=dev` segnala due advisory high preesistenti in
+  `image-size`, transitivo di `pptxgenjs@4.0.1`; il fix automatico proposto è
+  un downgrade breaking e non è stato applicato di nascosto.
+
+Il paragrafo precedente descriveva lo stato prima del riavvio. Il gate reale è
+stato poi chiuso come documentato qui sotto.
+
+## 01/09/2026 — sessione Qwen reale e correzione tema chiaro
+
+Artefatti ispezionati per intero:
+
+- `harness-ui/frontend/artifacts/real-qwen-gate-2026-09-01/01-qwen-in-corso-1440x900.png`;
+- `02-qwen-tool-completato-1440x900.png`;
+- `03-qwen-follow-up-1440x900.png`;
+- `04-qwen-reload-persistito-1440x900.png`;
+- `05-qwen-stable-1440x900.png`;
+- `06-qwen-light-tokens-fixed-1440x900.png`.
+
+Taccuino:
+
+- i tre punti comunicano attività senza barra estranea;
+- la riga aggregata mostra `1 file letto, 2 ricerche completate`;
+- risposta iniziale e follow-up riportano entrambi
+  `qwen/qwen3.8-flash`, anche dopo reload;
+- composer, topbar, sidebar e context rail non si sovrappongono;
+- lo screenshot stabile `05` ha provato un difetto reale: testo assistente
+  `#d6d2ca` quasi invisibile sul tema chiaro, non un frame intermedio;
+- `06` prova la correzione nel theme engine: risposta, tab, card, bordi e rail
+  sono coerenti e il testo risposta misura **12:1** sul fondale;
+- nessuna nuova chiamata modello è stata eseguita per gli screenshot `05` e
+  `06`.
+
+Gate finali della slice: focused 1/1, backend 1253/1253, browser 73 pass con 2
+gate reali opt-in saltati, `npm run verify` GREEN e `git diff --check` pulito.
+Le catture sono Playwright locali; il browser in-app non era disponibile e non
+vengono presentate come catture provenienti da quella superficie.
+
+## 01/09/2026 — P0 lag: watcher e background motion
+
+Artefatti Playwright locali ispezionati per intero:
+
+- `harness-ui/frontend/artifacts/p0-lag-2026-09-01/desktop-1440x900-dark.png`;
+- `harness-ui/frontend/artifacts/p0-lag-2026-09-01/desktop-1024x800-light.png`.
+
+Taccuino visivo:
+
+- 1440×900 scuro: sidebar sessioni, topbar, conversazione, composer e Context
+  Rail sono contenuti e allineati; nessuna sovrapposizione o clipping;
+- 1024×800 chiaro: il rail destro viene rimosso dalla media query senza
+  schiacciare il composer; la conversazione resta leggibile e non appare
+  overflow orizzontale (`scrollWidth - clientWidth = 0`);
+- in entrambi i temi il background conserva la profondità Calm senza competere
+  con il testo; `background-motion-active` è presente e il keyframe reale è
+  `talos-scene-orbit-a`;
+- non sono comparsi flash, overlay, cambi di geometria del composer o errori
+  visivi fuori dalla superficie modificata.
+
+Evidenza strumentata collegata agli screenshot:
+
+- 5 s motion ON: `RecalcStyleDuration=0`, `TaskDuration=0.001432`;
+- 5 s motion OFF: `RecalcStyleDuration=0`, `TaskDuration=0.000531`;
+- selezione/chiusura di una sessione storica: handle server `273 → 277 → 272`,
+  senza nuovo messaggio modello;
+- processo stabile: `0 s` CPU in 5 s idle, contro `8.125 s` e `255330` handle
+  nello stato degradato riprodotto prima del fix.
+
+La suite browser completa ha chiuso `76` scenari; due gate reali opt-in sono
+stati saltati intenzionalmente perché questa verifica non era autorizzata a
+inviare un nuovo turno modello. Il browser in-app non esponeva istanze: le
+catture restano dichiarate correttamente come Playwright locali.
+
+## 01/09/2026 — Frontend Fase 2: stato, lifecycle e primitive
+
+Sono state aperte e ispezionate integralmente nove catture Playwright locali
+in `harness-ui/frontend/artifacts/phase-02/`: VirtualList, FocusOverlay e
+ApplicationLifecycle a 1440×900, 1280×800 e 1024×800.
+
+Taccuino:
+
+- la lista da 10.000 elementi raggiunge `Item 9999`, conserva bordi e
+  allineamenti e monta soltanto le righe visibili;
+- la modale resta centrata e interamente nel viewport, con sfondo attenuato
+  uniforme e nessun elemento che passa sopra il layer;
+- il lifecycle iniziale è leggibile e coerente nelle tre larghezze;
+- nessuna cattura presenta overflow orizzontale, clipping, sovrapposizioni o
+  errori di rete/console;
+- il test visivo ha portato a un controllo aggiuntivo: dopo Escape una modale
+  deve ripristinare anche un eventuale `inert`/`aria-hidden` preesistente. Il
+  primo RED ha riprodotto la perdita; la correzione è verde in tre viewport.
+
+Gate collegati: frontend `53/53`, laboratorio `15/15`, backend `1259/1259`,
+browser prodotto `76` passati con `2` opt-in saltati, hash dei tre file pubblici
+immutati e server owner `4174` sempre `200`. Il test autonomo
+`PHASE2-LIVE-REGION-MODAL-21` è verde in tutte le tre viewport. Nessuna nuova
+chiamata modello.
+
+## 01/09/2026 — Frontend Fase 3: Design system Calm e primitive
+
+Sono state aperte e ispezionate integralmente le catture in
+`harness-ui/frontend/artifacts/phase-03/` per 1440×900, 1280×800 e 1024×800:
+
+- viste complete `design-system-desktop-*`;
+- menu `menu-open-desktop-*`, catturati nel viewport reale;
+- sheet `sheet-open-desktop-*`;
+- frame `sheet-motion-before-*`, `sheet-motion-during-*` e
+  `sheet-motion-after-*` per ciascuna viewport.
+
+Taccuino:
+
+- pulsanti, badge, tabs, switch, menu, tooltip e sheet condividono la stessa
+  densità Calm, gerarchia tipografica e focus ring;
+- nessuna vista presenta overflow orizzontale, clipping, sovrapposizioni o
+  contrasto anomalo;
+- il menu viene ribaltato/spostato da Floating UI e resta interamente dentro
+  il viewport anche a 1024×800;
+- lo sheet resta sopra il laboratorio, mantiene visibili i controlli e rende
+  inerte lo sfondo senza perdere il ritorno focus;
+- l'animazione dello sheet è provata con geometria, hit-test e differenza pixel
+  prima/durante/dopo, non dedotta dallo stato finale;
+- reduced motion e forced colors conservano rispettivamente una transizione
+  minima e bordi/focus percepibili;
+- un difetto di bilanciamento dell'ultima griglia è stato trovato durante
+  l'ispezione e chiuso prima del gate finale.
+
+Gate collegati: frontend `57/57`, matrice focalizzata `27/27`, laboratorio
+`42/42`, backend `1259/1259`, browser prodotto `76` passati con `2` opt-in
+saltati, attestato Fase 3 coerente, hash pubblici immutati e server owner
+`4174` sempre `200`. Nessuna chiamata provider. Le immagini sono catture
+Playwright locali e non vengono descritte come screenshot del browser in-app.

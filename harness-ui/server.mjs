@@ -24,22 +24,19 @@ import { createLlamaServerRuntime } from './src/local-runtime-llama-server.mjs';
 import { createProviderCredentialStore } from './src/provider-credential-store.mjs';
 import { createGeneratedImageStore } from './src/generated-image-store.mjs';
 import { createOwnerRuntimeAdapter } from './src/runtime-owner-adapter.mjs';
+import { avviaSessione } from './src/agent-service.mjs';
 import { RUNTIME_BOOTSTRAP_SCHEMA, RUNTIME_RESOURCE_SCHEMA } from './src/runtime-contract.mjs';
 import { closeRuntimeResources } from './src/http-lifecycle.mjs';
-import { join } from 'node:path';
+import { createWorkspaceLaunchStore } from './src/workspace-launch-store.mjs';
+import { cartelleConsigliate } from './src/frequent-dirs.mjs';
+import { createWorkspaceBrowser } from './src/workspace-browser.mjs';
+import { join, parse } from 'node:path';
 
 /** ⛔ Stessi tre nomi loopback validati in config.mjs (`LOOPBACK_HOSTS`, non esportato — costante minuscola e stabile, duplicarla qui è più semplice che aggiungere un export per tre stringhe). Un browser può presentarsi con uno qualunque dei tre alias anche se il server è bindato su un altro. */
 const ALIAS_LOOPBACK = ['127.0.0.1', '::1', 'localhost'];
 
 async function startServer() {
   const config = loadConfig(process.env, import.meta.url);
-  const ownerRuntime = createOwnerRuntimeAdapter({ modulePath: config.ownerRuntimeModule });
-  let taskCatalogProvider = null;
-  try {
-    taskCatalogProvider = await ownerRuntime.taskCatalogProvider();
-  } catch (error) {
-    console.warn(`[runtime-owner] catalogo task non disponibile: ${error.message}`);
-  }
   let providerKeyring = null;
   try {
     const { Entry } = await import('@napi-rs/keyring');
@@ -57,11 +54,35 @@ async function startServer() {
     runtimeFile: fileURLToPath(new URL('.provider-runtime.json', import.meta.url)),
   });
   providerStore.loadFromKeyring();
+  const modelCatalog = createModelCatalog();
+  const ownerRuntime = createOwnerRuntimeAdapter({
+    modulePath: config.ownerRuntimeModule,
+    openRouterRuntimeFn: () => providerStore.getRuntime('openrouter'),
+    modelCapabilityFn: async (modelId) => {
+      try {
+        const { modelli } = await modelCatalog.ottieni();
+        return modelli.find((modello) => modello.id === modelId) ?? null;
+      } catch {
+        // Il catalogo degradato non impedisce una richiesta: il provider
+        // conserva la validazione finale e Doctor espone già il guasto.
+        return null;
+      }
+    },
+  });
+  let taskCatalogProvider = null;
+  let taskCatalogError = null;
+  try {
+    taskCatalogProvider = await ownerRuntime.taskCatalogProvider();
+  } catch (error) {
+    taskCatalogError = error;
+    console.warn(`[runtime-owner] catalogo task non disponibile: ${error.message}`);
+  }
   const localModelStore = createLocalModelStore({ rootDir: fileURLToPath(new URL('.local-models/', import.meta.url)) });
   const compatibleRuntime = createOpenAiCompatibleRuntime();
   const hfHubClient = createHfHubClient({ token: config.hfToken });
   const localModelTransfer = createHfDirectTransfer({ rootDir: fileURLToPath(new URL('.local-models/', import.meta.url)), modelStore: localModelStore, hubClient: hfHubClient });
   const generatedImageStore = createGeneratedImageStore({ rootDir: fileURLToPath(new URL('.generated-images/', import.meta.url)) });
+  const workspaceLaunchStore = createWorkspaceLaunchStore({ credentialFile: fileURLToPath(new URL('.workspace-launch-token', import.meta.url)) });
   const localRuntimes = {
     ollama: {
       detect: () => compatibleRuntime.detect('ollama'), listModels: () => compatibleRuntime.listModels('ollama'),
@@ -100,6 +121,10 @@ async function startServer() {
    * CONFIG_INVALID, dichiarato al chiamante, non un rifiuto all'avvio.
    */
   const sessionRegistry = createSessionRegistry({
+    avviaSessioneFn: (input) => avviaSessione({
+      ...input,
+      talosLavoraFn: (runtimeInput) => ownerRuntime.talosLavora(runtimeInput),
+    }),
     modello: config.modello,
     chiave: config.chiaveApi,
     chiaveFn: () => providerStore.getKey('openrouter') ?? config.chiaveApi,
@@ -116,6 +141,8 @@ async function startServer() {
     persistGeneratedImageFn: generatedImageStore.persistGeneratedImage,
     removeGeneratedImageFn: generatedImageStore.removeGeneratedImage,
     localRuntimes,
+    resolveWorkspaceLaunchFn: workspaceLaunchStore.resolve,
+    consumeWorkspaceLaunchFn: workspaceLaunchStore.consume,
     /*
      * ⭐⭐⭐ FASE L (30/8) — l'UNICO punto che passa un valore vero (vedi
      * la doc in session-registry.mjs sul perché nessun default lì
@@ -134,6 +161,11 @@ async function startServer() {
    */
   const { ripristinate, totali } = await sessionRegistry.ripristina();
   if (totali > 0) console.log(`[session-store] ${ripristinate}/${totali} sessioni ripristinate da .sessions-store/`);
+  const workspaceBrowser = createWorkspaceBrowser({
+    rootDir: parse(process.cwd()).root,
+    projectDirectories: config.cartelleProgetto,
+    recommendedDirectoriesFn: () => cartelleConsigliate({ sessionRegistry }),
+  });
   /*
    * ⭐⭐⭐ 27/8 — blocco 7, la vera schedulazione. Owner: "hai il mio via
    * libera". `.automations/` accanto a `server.mjs`, gitignorata come
@@ -159,14 +191,31 @@ async function startServer() {
    * cache in-memory 10 minuti, così il foglio "Nuova sessione" non
    * richiama OpenRouter a ogni apertura.
    */
-  const modelCatalog = createModelCatalog();
   const app = createHttpApp({
     staticHandler: createStaticHandler(config.publicDir),
     sessionRegistry,
-    listaTaskDisponibili: () => listaTaskDisponibili(taskCatalogProvider),
+    // Un catalogo non configurato è uno stato degradato osservabile, non un crash HTTP.
+    listaTaskDisponibili: () => (taskCatalogProvider ? listaTaskDisponibili(taskCatalogProvider) : []),
     elencaCartelleProgetto: () => elencaCartelleProgetto(config.cartelleProgetto),
     automationStore,
-    diagnosiFn: () => diagnosi({ chiaveConfigurata: providerStore.hasKey('openrouter'), cartelleProgetto: config.cartelleProgetto, providerRows: providerStore.listPublic(), providerStoreAvailable: Boolean(providerKeyring) }),
+    diagnosiFn: async () => {
+      let snapshot;
+      try { snapshot = await ownerRuntime.runtimeSnapshot(); } catch (error) { snapshot = { status: 'unavailable', reason: error?.code || 'runtime_unavailable' }; }
+      const ownerRuntimeState = {
+        configurato: Boolean(config.ownerRuntimeModule),
+        pronto: snapshot?.status === 'available',
+        dettaglio: snapshot?.status === 'available'
+          ? 'Runtime agente pronto.'
+          : (taskCatalogError?.message || 'Il runtime agente non è pronto per tutte le funzioni richieste.'),
+      };
+      return diagnosi({
+        chiaveConfigurata: providerStore.hasKey('openrouter'), cartelleProgetto: config.cartelleProgetto,
+        providerRows: providerStore.listPublic(), providerStoreAvailable: Boolean(providerKeyring),
+        ownerRuntime: ownerRuntimeState,
+        catalogoTask: { disponibile: Boolean(taskCatalogProvider), dettaglio: taskCatalogProvider ? 'Elenco attività predefinite disponibile.' : 'L’elenco delle attività predefinite non è disponibile in questa installazione.' },
+        sessioniPersistenza: typeof sessionRegistry.statoPersistenza === 'function' ? sessionRegistry.statoPersistenza() : undefined,
+      });
+    },
     catalogoModelliFn: (opts) => modelCatalog.ottieni(opts),
     capacitaMacchinaFn: () => misuraCapacitaMacchina({ storagePath: config.publicDir }),
     localRuntimes,
@@ -200,6 +249,8 @@ async function startServer() {
     hfHubClient,
     hfImageProxyFn: (url) => fetchAllowedHfImage(url),
     providerStore,
+    workspaceLaunchStore,
+    workspaceBrowser,
   });
   const server = createServer(app);
 

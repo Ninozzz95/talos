@@ -75,6 +75,14 @@
       </div>
 
       <div class="sidebar-caption">Tieni premuta una chat per le azioni.</div>
+      <div class="session-selection-toolbar" id="sessionSelectionToolbar" hidden aria-label="Selezione sessioni">
+        <div class="session-selection-toolbar-row">
+          <button class="secondary-btn compact" id="sessionSelectionToggle" type="button" aria-pressed="false">Seleziona sessioni</button>
+          <button class="text-btn compact" id="sessionSelectionSelectAll" type="button" hidden>Seleziona tutto</button>
+          <span class="session-selection-count" id="sessionSelectionCount" aria-live="polite">Nessuna selezionata</span>
+        </div>
+        <button class="secondary-btn compact danger" id="sessionSelectionDelete" type="button" hidden disabled>Elimina selezionate</button>
+      </div>
       <nav class="session-list" id="sessionList">
         <p class="board-empty" id="noSessionsPlaceholder">Nessuna sessione ancora — premi «Nuova» per iniziare.</p>
       </nav>
@@ -157,8 +165,8 @@
                 <button class="selector-pill hide-on-narrow" type="button" data-open-sheet="permissions"><svg><use href="#i-shield"/></svg><span>Workspace write</span><svg><use href="#i-chevron"/></svg></button>
               <button class="selector-pill hide-on-mid" type="button" data-open-sheet="environment"><svg><use href="#i-branch"/></svg><span data-environment-label>Ambiente non osservato</span></button>
                 <div class="composer-spacer"></div>
-                <button class="queue-toggle" type="button" id="queueToggle" title="Invia come follow-up" aria-pressed="false">Follow-up</button>
-                <button class="send-btn" type="submit" aria-label="Invia"><svg><use href="#i-send"/></svg></button>
+                <button class="queue-toggle" type="button" id="redirectRunButton" title="Interrompi al prossimo punto sicuro e applica questa correzione" hidden>Reindirizza</button>
+                <button class="send-btn" type="button" aria-label="Invia"><svg><use href="#i-send"/></svg></button>
               </div>
             </form>
             <div class="composer-status">
@@ -301,9 +309,9 @@
                 <section class="model-lab-panel" id="modelLabDownloadsPanel" role="tabpanel" aria-labelledby="modelLabDownloadsTab" data-model-lab-panel="downloads" hidden><div class="model-lab-panel-heading"><div><h4>Centro download</h4><p class="muted-copy">Coda globale con progresso, pausa, ripresa, verifica e annullamento.</p></div></div><div id="modelLabDownloadsList" class="model-lab-installed-list"><p class="model-lab-empty">Nessun download attivo.</p></div></section>
                 <span class="settings-status" id="modelLabStatus" role="status">Preferenze di ricerca locali · credenziali e file restano fuori dal browser</span>
               </article>
-              <article class="settings-card settings-info-card" data-settings-panel="chat" id="settingsChatPanel" hidden><div class="settings-card-heading"><div><span class="eyebrow">Chat</span><h3>Chat e composer</h3></div></div><p class="muted-copy">Il composer, il testo della chat e l’animazione delle risposte seguono le preferenze della sezione Aspetto e movimento, senza copie diverse dello stesso controllo.</p><button type="button" class="secondary-btn compact" data-settings-go="appearance">Apri preferenze chat</button></article>
+              <article class="settings-card settings-card-wide" data-settings-panel="chat" id="settingsChatPanel" hidden><div class="settings-card-heading"><div><span class="eyebrow">Chat</span><h3>Chat e composer</h3></div></div><div class="settings-section"><h4>Spazio di lettura</h4><div class="settings-switch-grid"><label><span>Chat a tutta larghezza</span><input type="checkbox" id="chatFullWidthToggle" /></label></div><p class="muted-copy">Risposte e domande lunghe usano tutta la larghezza disponibile. Le domande brevi, il composer e le sidebar non cambiano.</p></div><p class="muted-copy">Testo, forma del composer e animazione delle risposte restano nella sezione Aspetto e movimento, senza controlli duplicati.</p><button type="button" class="secondary-btn compact" data-settings-go="appearance">Apri preferenze chat</button></article>
               <article class="settings-card settings-info-card" data-settings-panel="providers" id="settingsProvidersPanel" hidden><div class="settings-card-heading"><div><span class="eyebrow">Accessi</span><h3>Provider e accessi</h3></div></div><p class="muted-copy">Gli accessi restano sul server. Per vedere lo stato osservato dei provider apri la scheda Provider dentro Laboratorio modelli.</p><button type="button" class="secondary-btn compact" data-settings-go="models" data-model-lab-go="providers">Apri provider</button></article>
-              <article class="settings-card settings-info-card" data-settings-panel="tools" id="settingsToolsPanel" hidden><div class="settings-card-heading"><div><span class="eyebrow">Agente</span><h3>Strumenti agente e permessi</h3></div></div><p class="muted-copy">Il cancello di verifica, le deleghe e i permessi per attrezzo sono attivi e vengono mostrati nel pannello Control plane.</p><button type="button" class="secondary-btn compact" data-open-sheet="capabilities">Gestisci strumenti</button></article>
+              <article class="settings-card settings-info-card" data-settings-panel="tools" id="settingsToolsPanel" hidden><div class="settings-card-heading"><div><span class="eyebrow">Agente</span><h3>Strumenti agente e permessi</h3></div></div><p class="muted-copy">Policy della sessione e regole per singolo attrezzo vengono salvate con la sessione e restano attive dopo un reload.</p><div class="provider-actions"><button type="button" class="primary-btn compact" data-open-sheet="permissions">Gestisci permessi</button><button type="button" class="secondary-btn compact" data-open-sheet="capabilities">Gestisci strumenti</button></div></article>
               <article class="settings-card settings-info-card" data-settings-panel="privacy" id="settingsPrivacyPanel" hidden><div class="settings-card-heading"><div><span class="eyebrow">Dati</span><h3>Privacy e dati locali</h3></div></div><p class="muted-copy">Le preferenze restano in questo browser; chiavi, percorsi assoluti e log tecnici non vengono salvati nell’interfaccia.</p><span class="settings-status">Nessuna credenziale salvata nel browser</span></article>
               <article class="settings-card settings-info-card" data-settings-panel="workspace" id="settingsWorkspacePanel" hidden><div class="settings-card-heading"><div><span class="eyebrow">Workspace</span><h3>File e workspace</h3></div></div><p class="muted-copy">Il workspace attivo e l’albero dei file si gestiscono dal Context rail, con operazioni reali e permessi espliciti.</p><button type="button" class="secondary-btn compact" data-open-panel="inspector">Apri workspace</button></article>
               <article class="settings-card control-plane-card" data-settings-panel="account" id="settingsAccountPanel" hidden><h3>Account, Doctor e backup</h3><p class="muted-copy">Parità CLI senza costringere l’utente al terminale.</p><div class="control-grid"><button data-open-sheet="control">Agents</button><button data-open-sheet="control">Hooks</button><button data-open-sheet="capabilities">Skills</button><button data-open-sheet="capabilities">Plugins</button><button data-open-sheet="capabilities">MCP</button><button data-control-action="doctor">Doctor</button></div></article>
@@ -351,6 +359,13 @@
           <div class="ft-search-row">
             <svg class="ft-search-icon" aria-hidden="true"><use href="#i-search"/></svg>
             <input type="text" id="fileTreeFilter" class="ft-search-input" placeholder="Filtra i file caricati…" aria-label="Filtra i file per nome" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="ft-commandbar" role="toolbar" aria-label="Comandi file del workspace">
+            <button type="button" class="ft-command" id="fileTreeNewFile" aria-label="Nuovo file" title="Nuovo file" disabled><svg><use href="#i-edit"/></svg></button>
+            <button type="button" class="ft-command" id="fileTreeNewFolder" aria-label="Nuova cartella" title="Nuova cartella" disabled><svg><use href="#i-folder"/></svg></button>
+            <span class="ft-commandbar-spacer"></span>
+            <button type="button" class="ft-command" id="fileTreeRefresh" aria-label="Aggiorna file" title="Aggiorna" disabled><svg><use href="#i-history"/></svg></button>
+            <button type="button" class="ft-command" id="fileTreeCollapse" aria-label="Comprimi cartelle" title="Comprimi tutto" disabled><svg><use href="#i-chevron"/></svg></button>
           </div>
           <p class="ft-search-hint" id="fileTreeFilterHint" aria-live="polite"></p>
           <div class="ft-legend">

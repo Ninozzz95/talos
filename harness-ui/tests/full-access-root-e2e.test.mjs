@@ -6,13 +6,11 @@ import { preparaEsecuzioneLibera } from '../src/custom-task.mjs';
 
 test('Full access su radice volume non avvia un watcher ricorsivo', () => {
   let chiamate = 0;
-  const chokidar = {
-    watch() {
+  const watchFn = () => {
       chiamate += 1;
-      throw new Error('la radice non deve arrivare a chokidar');
-    },
+      throw new Error('la radice non deve arrivare al watcher nativo');
   };
-  const gestore = creaGestoreWorkspaceWatcher({ chokidar });
+  const gestore = creaGestoreWorkspaceWatcher({ watchFn });
   const disiscrivi = gestore.guardaWorkspace('C:\\', () => {});
   assert.equal(chiamate, 0);
   assert.equal(gestore.quantiWatcherAttiviPerTest(), 0);
@@ -23,10 +21,11 @@ test('Full access su una cartella ordinaria mantiene il watcher', () => {
   let chiamate = 0;
   const watcher = {
     on() { return watcher; },
+    unref() {},
     close() {},
   };
   const gestore = creaGestoreWorkspaceWatcher({
-    chokidar: { watch() { chiamate += 1; return watcher; } },
+    watchFn() { chiamate += 1; return watcher; },
   });
   const disiscrivi = gestore.guardaWorkspace('C:\\workspace\\talos', () => {});
   assert.equal(chiamate, 1);
@@ -47,4 +46,3 @@ test('il percorso Full access resta esplicito e non viene trasformato in allowli
   assert.equal(result.cartella, process.cwd());
   assert.equal(result.task.progetto, process.cwd().split(/[\\/]/u).pop());
 });
-

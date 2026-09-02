@@ -425,7 +425,21 @@ test('⭐ RunStarted porta il contesto workspace (progetto/cartella/branch), let
     onEvento: (e) => eventi.push(e), talosLavoraFn, leggiContestoWorkspaceFn,
   });
 
-  assert.deepEqual(eventi[0].contesto, contestoFinto);
+  assert.deepEqual(eventi[0].contesto, { ...contestoFinto, modello: 'm', reasoning: null });
+});
+
+test('RUN-MODEL-TRACE-07 — RunStarted attribuisce modello e reasoning effettivi al singolo turno', async () => {
+  const eventi = [];
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } } });
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'qwen/qwen3.8-flash', chiave: 'k',
+    reasoning: { effort: 'high' }, onEvento: (evento) => eventi.push(evento), talosLavoraFn,
+    leggiContestoWorkspaceFn: () => ({ progetto: 'talos', cartella: '/tmp/x', branch: 'lane/test' }),
+  });
+  assert.deepEqual(eventi[0].contesto, {
+    progetto: 'talos', cartella: '/tmp/x', branch: 'lane/test',
+    modello: 'qwen/qwen3.8-flash', reasoning: { effort: 'high' },
+  });
 });
 
 test('⭐⭐ senza iniezione, il contesto workspace è QUELLO VERO (nessun mock): questo repo ha un branch reale', async () => {
