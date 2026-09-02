@@ -191,6 +191,34 @@ async function startServer() {
    * cache in-memory 10 minuti, così il foglio "Nuova sessione" non
    * richiama OpenRouter a ogni apertura.
    */
+  /*
+   * ⭐⭐⭐ 02/09 — estratta a const (prima era inline dentro createHttpApp)
+   * per poterla richiamare anche subito dopo l'avvio, non solo quando
+   * qualcuno apre Settings → Doctor. Trovato dal vivo lo stesso giorno:
+   * il server è rimasto sano su `/api/v1/health` (200) per due giorni
+   * mentre OGNI giro reale falliva (`TALOS_OWNER_RUNTIME_MODULE` non
+   * impostata) — perché nessuno aveva mai chiamato QUESTA funzione, che
+   * l'avrebbe detto subito. Vedi
+   * `.claude/LEDGER-RUNTIME-OWNER-MODULE-2026-09-02.md`.
+   */
+  const diagnosiFn = async () => {
+    let snapshot;
+    try { snapshot = await ownerRuntime.runtimeSnapshot(); } catch (error) { snapshot = { status: 'unavailable', reason: error?.code || 'runtime_unavailable' }; }
+    const ownerRuntimeState = {
+      configurato: Boolean(config.ownerRuntimeModule),
+      pronto: snapshot?.status === 'available',
+      dettaglio: snapshot?.status === 'available'
+        ? 'Runtime agente pronto.'
+        : (taskCatalogError?.message || 'Il runtime agente non è pronto per tutte le funzioni richieste.'),
+    };
+    return diagnosi({
+      chiaveConfigurata: providerStore.hasKey('openrouter'), cartelleProgetto: config.cartelleProgetto,
+      providerRows: providerStore.listPublic(), providerStoreAvailable: Boolean(providerKeyring),
+      ownerRuntime: ownerRuntimeState,
+      catalogoTask: { disponibile: Boolean(taskCatalogProvider), dettaglio: taskCatalogProvider ? 'Elenco attività predefinite disponibile.' : 'L’elenco delle attività predefinite non è disponibile in questa installazione.' },
+      sessioniPersistenza: typeof sessionRegistry.statoPersistenza === 'function' ? sessionRegistry.statoPersistenza() : undefined,
+    });
+  };
   const app = createHttpApp({
     staticHandler: createStaticHandler(config.publicDir),
     sessionRegistry,
@@ -198,24 +226,7 @@ async function startServer() {
     listaTaskDisponibili: () => (taskCatalogProvider ? listaTaskDisponibili(taskCatalogProvider) : []),
     elencaCartelleProgetto: () => elencaCartelleProgetto(config.cartelleProgetto),
     automationStore,
-    diagnosiFn: async () => {
-      let snapshot;
-      try { snapshot = await ownerRuntime.runtimeSnapshot(); } catch (error) { snapshot = { status: 'unavailable', reason: error?.code || 'runtime_unavailable' }; }
-      const ownerRuntimeState = {
-        configurato: Boolean(config.ownerRuntimeModule),
-        pronto: snapshot?.status === 'available',
-        dettaglio: snapshot?.status === 'available'
-          ? 'Runtime agente pronto.'
-          : (taskCatalogError?.message || 'Il runtime agente non è pronto per tutte le funzioni richieste.'),
-      };
-      return diagnosi({
-        chiaveConfigurata: providerStore.hasKey('openrouter'), cartelleProgetto: config.cartelleProgetto,
-        providerRows: providerStore.listPublic(), providerStoreAvailable: Boolean(providerKeyring),
-        ownerRuntime: ownerRuntimeState,
-        catalogoTask: { disponibile: Boolean(taskCatalogProvider), dettaglio: taskCatalogProvider ? 'Elenco attività predefinite disponibile.' : 'L’elenco delle attività predefinite non è disponibile in questa installazione.' },
-        sessioniPersistenza: typeof sessionRegistry.statoPersistenza === 'function' ? sessionRegistry.statoPersistenza() : undefined,
-      });
-    },
+    diagnosiFn,
     catalogoModelliFn: (opts) => modelCatalog.ottieni(opts),
     capacitaMacchinaFn: () => misuraCapacitaMacchina({ storagePath: config.publicDir }),
     localRuntimes,
@@ -297,6 +308,40 @@ async function startServer() {
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
   console.log(`Harness UI disponibile su http://${config.host}:${config.port}`);
+  /*
+   * ⭐⭐⭐ 02/09 — stesso principio di `hermes doctor`/`claude doctor`
+   * (ricerca fatta lo stesso giorno, vedi
+   * `.claude/DOSSIER-RICERCA-RESILIENZA-SERVER-2026-09-02.md`): un
+   * processo vivo (`/api/v1/health` 200) non vuol dire un processo che fa
+   * il suo lavoro. Questo controllo esisteva già (`doctor.mjs`), ma prima
+   * di oggi nessuno lo chiamava finché l'owner non apriva Settings →
+   * Doctor a mano. Qui gira UNA volta all'avvio, best-effort (un
+   * fallimento qui non deve mai impedire al server di partire), e mette
+   * a log — non solo nella UI — esattamente i due problemi che il
+   * riavvio di oggi ha trovato nel modo peggiore (un utente reale che
+   * riceve un errore): il runtime agente non configurato, e sessioni
+   * scartate al ripristino.
+   */
+  diagnosiFn().then((esito) => {
+    /*
+     * ⛔ `configurato:false` (nessun modulo indicato) è quanto ha rotto
+     * OGNI giro oggi — severità alta. `configurato:true` ma
+     * `pronto:false` è più stretto (di solito solo il catalogo task
+     * opzionale, verificato dal vivo il 02/09: talosLavora ha continuato
+     * a funzionare con questa stessa combinazione) — severità bassa,
+     * mai la stessa frase allarmante dell'altro caso.
+     */
+    if (esito.ownerRuntime && !esito.ownerRuntime.configurato) {
+      console.error(`[doctor] ATTENZIONE all'avvio: TALOS_OWNER_RUNTIME_MODULE non è impostata — ogni giro reale (sessione nuova o ripresa) fallirà finché non è risolto.`);
+    } else if (esito.ownerRuntime && !esito.ownerRuntime.pronto) {
+      console.error(`[doctor] avviso all'avvio (non blocca l'uso normale): ${esito.ownerRuntime.dettaglio}`);
+    }
+    if (esito.sessioniPersistenza?.corrotte?.length > 0) {
+      console.error(`[doctor] ATTENZIONE all'avvio: ${esito.sessioniPersistenza.corrotte.length} sessione/i corrotta/e al ripristino: ${esito.sessioniPersistenza.corrotte.join(', ')}`);
+    }
+  }).catch((error) => {
+    console.error('[doctor] controllo all\'avvio non riuscito (non blocca il server):', error instanceof Error ? error.message : error);
+  });
 }
 
 const direct = process.argv[1]
