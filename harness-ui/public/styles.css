@@ -520,16 +520,68 @@ kbd { font-family: var(--font-mono); font-size: calc(10px * var(--talos-ui-font-
    presentazione) — la ruota veniva schiacciata a 20×20 invece della sua
    geometria vera 44×7. Esplicitata qui per non dipendere dall'ordine
    delle regole nel foglio. */
-.talos-line-loader { display: block; width: 34px; height: 13px; overflow: visible; }
-.talos-line-loader-node { fill: var(--accent); transform-box: fill-box; transform-origin: center; will-change: transform, opacity; animation: talosLineNodePulse var(--motion-response-activity) var(--motion-ease) infinite; }
+/*
+ * ⛔⛔⛔ 02/9 — owner: "il logo non è animato come il mobile, ci deve essere
+ * una linea che attraversa i dot, usa direttamente la stessa identica
+ * immagine animata del mobile". Questo blocco è ORA la porta 1:1 di
+ * `mobile/src/style.css` (F4-#24/F5-#30, cerca `.talos-line-loader`):
+ * traccia fioca (l'eco del primo fotogramma dell'esagono di boot,
+ * stroke-opacity .18), uno SWEEP che disegna da sinistra a destra, e tre
+ * nodi VUOTI che si riempiono esattamente quando la linea li raggiunge
+ * (i ritardi 0 / .36s / .73s sono i tempi in cui lo sweep passa per
+ * x=16/48/80 sulla corsa di 88px — non numeri a caso).
+ * ⛔ Il desktop aveva divergito: tre pallini che pulsano, nessuna linea,
+ * viewBox 48×18 — un'ALTRA immagine, non la stessa. Unica differenza
+ * ammessa rispetto al mobile: i colori passano dal token desktop
+ * `--accent` invece che da `--talos-accent` diretto (è lo stesso colore,
+ * `--accent` è definito come `var(--talos-accent, …)` in testa al foglio),
+ * e il movimento ridotto NON spegne (vedi il blocco subito sotto).
+ * ⛔ Le dimensioni restano esplicite qui per lo stesso motivo del 27/8: la
+ * regola cieca `svg { width:20px; height:20px }` più sotto in questo stesso
+ * foglio vince sugli attributi width/height inline dell'SVG (una CSS di
+ * QUALUNQUE specificità batte sempre un attributo di presentazione) e
+ * schiaccerebbe la geometria vera 96×16.
+ */
+.talos-line-loader { display: block; width: 96px; height: 16px; overflow: visible; flex: 0 0 auto; }
+.talos-line-loader-track { stroke: var(--accent); stroke-opacity: .18; stroke-width: 2; stroke-linecap: round; }
+.talos-line-loader-sweep { stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 88; stroke-dashoffset: 88; animation: talosLineSweep 1.6s ease-in-out infinite; }
+.talos-line-loader-node { fill: transparent; stroke: var(--accent); stroke-width: 2; animation: talosLineNodeFill 1.6s ease-in-out infinite; }
+/* I tempi di riempimento seguono lo sweep che raggiunge x=16/48/80 sugli 88px. */
 .talos-line-loader-node:nth-of-type(1) { animation-delay: 0s; }
-.talos-line-loader-node:nth-of-type(2) { animation-delay: calc(var(--motion-response-activity) * .16); }
-.talos-line-loader-node:nth-of-type(3) { animation-delay: calc(var(--motion-response-activity) * .32); }
-@keyframes talosLineNodePulse {
-  0%, 58%, 100% { transform: translateY(0) scale(.72); opacity: .3; }
-  26% { transform: translateY(-3px) scale(1.18); opacity: 1; }
+.talos-line-loader-node:nth-of-type(2) { animation-delay: .36s; }
+.talos-line-loader-node:nth-of-type(3) { animation-delay: .73s; }
+@keyframes talosLineSweep {
+  0% { stroke-dashoffset: 88; }
+  70%, 100% { stroke-dashoffset: 0; }
 }
-body.reduce-motion .talos-line-loader-node { animation: none; transform: none; fill: var(--accent); opacity: .7; }
+@keyframes talosLineNodeFill {
+  0%, 12% { fill: transparent; }
+  22%, 82% { fill: var(--accent); }
+  100% { fill: transparent; }
+}
+/*
+ * ⛔⛔⛔ 02/9 — owner: "il logo di caricamento non è animato" · "assicurati
+ * che sia animato". Non era un bug del CSS: Chrome su QUESTA macchina
+ * riporta `prefers-reduced-motion: reduce` VERO (misurato dal vivo via
+ * `matchMedia`, non ipotizzato), e sia il foglio desktop sia quello mobile
+ * spegnevano l'animazione del tutto per rispettarlo. ⛔ Portare il blocco
+ * reduced-motion del mobile alla lettera avrebbe quindi riprodotto lo
+ * stesso identico difetto che l'owner sta segnalando — l'unica riga del
+ * mobile che NON si copia. La ricerca sull'accessibilità del movimento è
+ * esplicita (openreplay.com/prefers-reduced-motion,
+ * joshwcomeau.com/react/prefers-reduced-motion): un'indicazione "sto
+ * ancora lavorando" resta legittima sotto reduced-motion, va resa più
+ * calma, non tolta — un loader perfettamente fermo è indistinguibile da
+ * un'app piantata, che è un problema di usabilità peggiore, per chiunque.
+ * Qui: stessa identica animazione, rallentata a 1,4× (nessun lampeggio,
+ * nessuno scatto — sono già solo `stroke-dashoffset` e `fill`).
+ */
+.talos-line-loader--calmo .talos-line-loader-sweep,
+body.reduce-motion .talos-line-loader-sweep { animation: talosLineSweep calc(1.6s * 1.4) ease-in-out infinite; }
+.talos-line-loader--calmo .talos-line-loader-node,
+body.reduce-motion .talos-line-loader-node { animation: talosLineNodeFill calc(1.6s * 1.4) ease-in-out infinite; }
+body.reduce-motion .talos-line-loader-node:nth-of-type(2) { animation-delay: calc(.36s * 1.4); }
+body.reduce-motion .talos-line-loader-node:nth-of-type(3) { animation-delay: calc(.73s * 1.4); }
 .message-actions { display: flex; gap: 4px; margin-top: 8px; }
 .message-actions button { width: 34px; height: 32px; display: grid; place-items: center; border-radius: 8px; border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: calc(12px * var(--talos-ui-font-scale)); }
 .message-actions button:hover { background: var(--surface-highlight); color: var(--text); }
@@ -1137,7 +1189,23 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0ms !important; animation-iteration-count: 1 !important; transition-duration: 0ms !important; }
-  .talos-line-loader-node { animation: none !important; transform: none; fill: var(--accent); opacity: .7; } /* stesso motivo del :host-context gemello qui sopra */
+  /*
+   * ⛔⛔⛔ 02/9 — vedi il commento sul loader più sopra: un "sto ancora
+   * lavorando" resta legittimo sotto reduced-motion, va solo reso più
+   * calmo, non spento del tutto — un loader fermo è indistinguibile da
+   * un'app bloccata. La regola SOPRA azzera `animation-duration` e
+   * `animation-iteration-count` per TUTTO con `!important`: senza
+   * dichiararli di nuovo qui, esplicitamente, l'animazione durerebbe 0ms
+   * e girerebbe una volta sola — impercettibile quanto `animation:none`,
+   * lo stesso difetto travestito. ⛔ Vale per lo SWEEP quanto per i nodi:
+   * è la linea che attraversa i pallini, la parte che l'owner ha chiesto
+   * per nome — dimenticarla qui la lascerebbe ferma sul suo primo frame
+   * (invisibile, `stroke-dashoffset: 88` = linea tutta nascosta).
+   */
+  .talos-line-loader-sweep { animation: talosLineSweep calc(1.6s * 1.4) ease-in-out infinite !important; animation-duration: calc(1.6s * 1.4) !important; animation-iteration-count: infinite !important; }
+  .talos-line-loader-node { animation: talosLineNodeFill calc(1.6s * 1.4) ease-in-out infinite !important; animation-duration: calc(1.6s * 1.4) !important; animation-iteration-count: infinite !important; }
+  .talos-line-loader-node:nth-of-type(2) { animation-delay: calc(.36s * 1.4) !important; }
+  .talos-line-loader-node:nth-of-type(3) { animation-delay: calc(.73s * 1.4) !important; }
 }
 
 /* Preferenze desktop effettive: lo stato salvato da app.js cambia la stessa
@@ -1227,11 +1295,15 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
  * è l'antenato che `:host-context` sa raggiungere.
  */
 :host-context(body.reduce-motion) *, :host-context(body.reduce-motion) *::before, :host-context(body.reduce-motion) *::after { scroll-behavior: auto !important; animation-duration: 0ms !important; animation-iteration-count: 1 !important; transition-duration: 0ms !important; }
-/* ⛔ Senza queste due righe, la regola cieca qui sopra e quella in @media
-   (prefers-reduced-motion) sotto lascerebbero i tre nodi del line-loader
-   sul fotogramma iniziale del keyframe: tre cerchi troppo attenuati invece
-   di un marchio statico pienamente leggibile. */
-:host-context(body.reduce-motion) .talos-line-loader-node { fill: var(--accent); opacity: .7; }
+/* ⛔ Senza queste righe, la regola cieca qui sopra lascerebbe il loader sul
+   fotogramma iniziale del keyframe: la linea invisibile (dashoffset 88 =
+   tutta nascosta) e tre cerchi vuoti e FERMI. ⛔⛔⛔ 02/9 — owner: "il logo
+   di caricamento non è animato" / "assicurati che sia animato" — un "sto
+   ancora lavorando" fermo è indistinguibile da un'app bloccata (vedi il
+   commento gemello sul loader più sopra): si ridichiarano durata e
+   ripetizioni per lo stesso motivo, per lo SWEEP e per i nodi. */
+:host-context(body.reduce-motion) .talos-line-loader-sweep { animation: talosLineSweep calc(1.6s * 1.4) ease-in-out infinite !important; animation-duration: calc(1.6s * 1.4) !important; animation-iteration-count: infinite !important; }
+:host-context(body.reduce-motion) .talos-line-loader-node { animation: talosLineNodeFill calc(1.6s * 1.4) ease-in-out infinite !important; animation-duration: calc(1.6s * 1.4) !important; animation-iteration-count: infinite !important; }
 
 /* Feature-parity additions: session graph + GUI control plane */
 .session-topology { overflow: hidden; }
@@ -1622,6 +1694,19 @@ button:disabled { cursor: not-allowed; opacity: .48; }
   .talos-background-scene { opacity: .16; }
   .scene-orb { transform: none; }
   :host(:not(.interface-motion-off)) *, :root:not(.interface-motion-off) * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+  /*
+   * ⛔⛔⛔ 02/9 — trovato SOLO misurando `getComputedStyle` dal vivo (non
+   * rileggendo): la regola sopra ha specificità PIÙ ALTA della mia
+   * eccezione per `.talos-line-loader-node` scritta accanto al primo
+   * `@media (prefers-reduced-motion)` più in alto nel file
+   * (`:root:not(.interface-motion-off) *` = due classi-equivalenti,
+   * `.talos-line-loader-node` da sola = una) — vinceva lei, `.001ms`
+   * (misurato: `animationDuration` tornava "1e-06s", non i ~1120ms
+   * attesi). Stessa specificità della regola che sto correggendo, stesso
+   * principio "sto ancora lavorando" resta legittimo sotto reduced-motion.
+   */
+  :host(:not(.interface-motion-off)) .talos-line-loader-node, :root:not(.interface-motion-off) .talos-line-loader-node,
+  :host(:not(.interface-motion-off)) .talos-line-loader-sweep, :root:not(.interface-motion-off) .talos-line-loader-sweep { animation-duration: calc(1.6s * 1.4) !important; transition-duration: .001ms !important; animation-iteration-count: infinite !important; }
 }
 
 .bundle-header[aria-expanded="false"] .bundle-status svg { transform: rotate(-90deg); }
