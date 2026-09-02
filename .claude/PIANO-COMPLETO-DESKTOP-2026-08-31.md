@@ -1,5 +1,8 @@
 # Piano completo desktop — stato e lavoro residuo
 
+> ⛔ **SUPERATO il 03/09/2026 da `LEDGER-ROADMAP-DESKTOP-2026-09-03.md`** (owner: «un solo piano»). Le Fasi 4-10 del refactor frontend sono lì come Wave 3, invariate nel contenuto. Questo file resta come storia e come dettaglio delle fasi già chiuse; non si aggiorna più.
+
+
 Data: 31/08/2026  
 Lane: `C:\Users\Antonino\Desktop\projects\AVM-harness-desktop`  
 Ownership: desktop; `mobile/` soltanto riferimento read-only.
