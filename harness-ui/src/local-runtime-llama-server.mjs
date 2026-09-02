@@ -75,6 +75,26 @@ export function createLlamaServerRuntime({ supervisor, fetchImpl = fetch, now = 
     return jsonRequest('/props');
   }
 
+  /**
+   * L'id del modello effettivamente caricato adesso, o `null` se non c'è
+   * nessun runtime pronto.
+   *
+   * ⛔ 02/9 — serve a `inspectModel()` per NON attribuire l'`n_ctx` osservato
+   * a un modello diverso da quello che lo ha prodotto. Si legge dal
+   * supervisore (codice nostro, lo stesso valore che finisce in `--alias`) e
+   * non da un campo indovinato dentro `/props`: llama.cpp ne espone di
+   * simili, ma un nome di campo dedotto invece che verificato è già costato
+   * tre difetti su questo stesso sottosistema il 02/9.
+   */
+  function loadedModelId() {
+    try {
+      const stato = supervisor.status();
+      return stato?.state === 'ready' && typeof stato.modelId === 'string' && stato.modelId !== ''
+        ? stato.modelId
+        : null;
+    } catch { return null; }
+  }
+
   async function listModels() {
     const body = await jsonRequest('/v1/models');
     if (!Array.isArray(body?.data)) throw new LlamaServerRuntimeError('runtime model list is invalid', 'RUNTIME_RESPONSE_INVALID');
@@ -190,5 +210,5 @@ export function createLlamaServerRuntime({ supervisor, fetchImpl = fetch, now = 
     return true;
   }
 
-  return Object.freeze({ probe, listModels, load, unload, generateStream, cancel, health, metrics });
+  return Object.freeze({ probe, loadedModelId, listModels, load, unload, generateStream, cancel, health, metrics });
 }

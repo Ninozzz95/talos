@@ -2025,10 +2025,26 @@
       if (!Number.isFinite(richiesti) || !Number.isFinite(disponibili) || richiesti <= disponibili) return '';
       return ` — ne mancano ${formattaByteModelLab(richiesti - disponibili)}`;
     };
+    /*
+     * ⛔⛔ 02/9 — «non è stato possibile osservare le capacità» è vero ma
+     * muto: non dice COSA fare. Da quando il probe attribuisce `/props` al
+     * modello che l'ha prodotto, la causa quasi sempre è una sola e si toglie
+     * con un gesto — c'è un ALTRO modello caricato, e finché c'è lui il
+     * runtime non può dire niente di questo. Il pulsante che lo scarica sta
+     * nel pannello qui accanto, quindi la frase indica il gesto invece di
+     * lasciare la persona davanti a un «non lo so».
+     */
+    const runtimeDi = esito?.inspection?.runtime;
+    const perColpaDiUnAltro = esito.reason === 'capabilities'
+      && runtimeDi?.reachable === true
+      && runtimeDi?.servingThisModel === false
+      && typeof runtimeDi?.servingModelId === 'string' && runtimeDi.servingModelId !== ''
+      ? ` — è caricato «${runtimeDi.servingModelId}», e finché c'è lui il runtime non può osservare questo modello: scaricalo per verificarlo`
+      : '';
     const motivo = verdetto === 'tight'
       ? `entra, ma sopra il ${Math.round(SOGLIA_TIGHT * 100)}% di ciò che è libero: sotto carico può non bastare`
       : (MOTIVI_FIT[esito.reason] || esito.reason || 'motivo non dichiarato')
-        + (esito.reason === 'memory' ? scarto(esito.memory) : esito.reason === 'storage' ? scarto(esito.storage) : '');
+        + (esito.reason === 'memory' ? scarto(esito.memory) : esito.reason === 'storage' ? scarto(esito.storage) : perColpaDiUnAltro);
     return { verdetto, classe: voce.classe, testo: `${voce.etichetta} — ${motivo}` };
   }
   function nodoVerdettoFit(modelId) {
@@ -2129,6 +2145,13 @@
        */
       const verifica = document.createElement('button');
       verifica.className = 'secondary-btn compact'; verifica.type = 'button'; verifica.textContent = 'Verifica compatibilità';
+      /*
+       * ⛔ 02/9 — un aggancio stabile per la QA visiva, che finora non
+       * premeva MAI questo pulsante: senza, il selettore sarebbe la stringa
+       * dell'etichetta, cioè una prova che si rompe alla prima riscrittura
+       * del testo — e il testo è la cosa che più spesso si riscrive.
+       */
+      verifica.dataset.verifyFit = model.id;
       verifica.addEventListener('click', () => { void verificaCompatibilitaModello(model.id); });
       actions.append(rename, copy, verifica, remove); row.append(actions, nodoVerdettoFit(model.id)); return row;
     }));

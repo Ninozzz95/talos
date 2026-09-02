@@ -129,13 +129,48 @@ export function createLocalRuntimeProbe({
      * runtime non deve neanche essere tentato.
      */
     let props = {};
+    let raggiungibile = true;
     try {
       props = await readRuntimeProps();
     } catch (error) {
       if (!(error instanceof LocalRuntimeProbeError) || error.code !== 'RUNTIME_PROBE_FAILED') throw error;
+      raggiungibile = false;
     }
+    /*
+     * ⛔⛔⛔ L'`n_ctx` È DEL MODELLO CARICATO, NON DELLA MACCHINA — 02/9.
+     *
+     * Il difetto, trovato dal vivo e non leggendo: con un runtime acceso su
+     * un modello, la riga di OGNI ALTRO modello mostrava come «contesto
+     * disponibile» l'`n_ctx` di quello caricato. `/props` descrive la
+     * sessione in corso, non la macchina: quel numero è vero solo per il
+     * modello che l'ha prodotto. Un 262k caricato faceva sembrare enorme il
+     * contesto di un 4k, e un 4k caricato faceva bocciare per contesto un
+     * modello che ne ha 262k — cioè l'errore in ENTRAMBE le direzioni.
+     *
+     * ⭐ Ricerca 02/9: llama.cpp tiene i due numeri separati proprio perché
+     * sono cose diverse — `n_ctx` (quello caricato) contro `n_ctx_train`
+     * (quello del modello) — e stampa un avviso quando divergono
+     * («n_ctx_per_seq (4096) < n_ctx_train (8192)»). Noi ne usavamo uno solo
+     * per rispondere a due domande.
+     *
+     * ⇒ L'osservazione vale solo per il modello caricato. Per gli altri il
+     * runtime NON HA OSSERVATO NIENTE, e `unknown()` è la risposta onesta:
+     * quando quel modello verrà caricato avrà il contesto suo. ⛔ Non è un
+     * ripiego pessimista — è la differenza fra «non lo so» e «so che è
+     * questo», la stessa che regge tutto il resto di questo file.
+     */
+    /*
+     * `null` = nessun runtime pronto (e allora `props` è vuoto, quindi si
+     * ricade su `unknown()` da sé) oppure un adattatore che non sa ancora
+     * rispondere. In entrambi i casi non c'è un modello ALTRO a cui
+     * attribuire il numero, che è la cosa da impedire.
+     */
+    const caricato = typeof runtime.loadedModelId === 'function' ? runtime.loadedModelId() : null;
+    const parlaDiQuestoModello = caricato === null || caricato === manifest.id;
     const runtimeTokens = props.default_generation_settings?.n_ctx;
-    const runtimeContext = positiveInteger(runtimeTokens) ? fact('observed', runtimeTokens) : unknown();
+    const runtimeContext = parlaDiQuestoModello && positiveInteger(runtimeTokens)
+      ? fact('observed', runtimeTokens)
+      : unknown();
     const caps = props.chat_template_caps;
     return {
       modelId: manifest.id,
@@ -164,14 +199,28 @@ export function createLocalRuntimeProbe({
           ? fact('observed', Math.min(header.trainedContext, runtimeContext.value))
           : fact('declared', header.trainedContext),
       },
-      template: typeof props.chat_template === 'string' && props.chat_template !== ''
+      /*
+       * ⛔⛔⛔ E NON È SOLO IL CONTESTO — scoperto allargando la cura, 02/9.
+       *
+       * `chat_template` e `chat_template_caps` arrivano dallo STESSO `/props`,
+       * e descrivono anch'essi la sessione in corso. Con un modello caricato,
+       * la riga di un altro modello dichiarava il suo template e il suo
+       * supporto agli attrezzi — cioè rispondeva «sì, chiama gli attrezzi»
+       * per un modello che potrebbe non saperlo fare. È il difetto più grave
+       * dei due, perché una capacità inventata si scopre solo a metà di una
+       * sessione agentica.
+       * ⇒ Stessa regola del contesto: se non è il modello caricato, il
+       * runtime non ha osservato NIENTE di lui.
+       */
+      runtime: { reachable: raggiungibile, servingThisModel: parlaDiQuestoModello, servingModelId: caricato },
+      template: parlaDiQuestoModello && typeof props.chat_template === 'string' && props.chat_template !== ''
         ? fact('observed', true)
         : unknown(),
-      capabilities: {
+      capabilities: parlaDiQuestoModello ? {
         tools: observedBoolean(caps?.supports_tools),
         toolCalls: observedBoolean(caps?.supports_tool_calls),
         systemRole: observedBoolean(caps?.supports_system_role),
-      },
+      } : { tools: unknown(), toolCalls: unknown(), systemRole: unknown() },
       backend: observedString(props.backend),
       build: observedString(props.build),
       observedAt: now().toISOString(),
@@ -212,7 +261,25 @@ export function createLocalRuntimeProbe({
     if (!Number.isSafeInteger(storageAvailable) || !Number.isSafeInteger(memoryAvailable)) return { ...base, state: 'unknown', reason: 'measurement' };
     if (inspection.storageBytes.value > storageAvailable) return { ...base, state: 'blocked', reason: 'storage' };
     if (inspection.workingMemoryBytes.value > memoryAvailable) return { ...base, state: 'blocked', reason: 'memory' };
-    if (inspection.context.runtimeTokens.state !== 'observed') return { ...base, state: 'unknown', reason: 'context' };
+    /*
+     * ⛔ Il cancello del contesto guarda la RAGGIUNGIBILITÀ, non l'osservazione.
+     *
+     * Prima leggeva `runtimeTokens.state !== 'observed'`, e finché quel campo
+     * conteneva l'`n_ctx` di chiunque fosse caricato le due cose coincidevano.
+     * Da quando il numero è attribuito al modello giusto, non coincidono più:
+     * un modello NON caricato ha `runtimeTokens` sconosciuto per costruzione,
+     * e con la vecchia riga ogni riga della lista sarebbe diventata «non lo
+     * so» — cioè la lista avrebbe smesso di rispondere alla sola domanda per
+     * cui esiste (*ci sta, prima di caricarlo?*).
+     *
+     * ⇒ Il caso che quella riga voleva prendere resta preso, e per intero: se
+     * il runtime non risponde non si sa niente né del contesto né del
+     * template. Se invece risponde ma sta servendo un altro modello, il
+     * contesto ADDESTRATO lo dichiara l'header — che è un fatto del modello,
+     * non della sessione — e il profilo agente si ferma comunque poco sotto,
+     * sul cancello delle capacità, che ora è sconosciuto per lo stesso motivo.
+     */
+    if (!inspection.runtime.reachable) return { ...base, state: 'unknown', reason: 'context' };
     if (inspection.context.effectiveTokens.value < contextTokens) {
       return { ...base, state: profile === 'agent' && inspection.context.effectiveTokens.value < 65_536 ? 'chat-only' : 'blocked', reason: 'context' };
     }

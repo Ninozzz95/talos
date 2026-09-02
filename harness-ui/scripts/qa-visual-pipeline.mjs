@@ -546,6 +546,32 @@ const SCENARI = {
       await p.screenshot(`model-lab-${section}`, { nota: `${section}: capability dipendente dal runtime marcata come gated, nessun dato finto` });
     }
 
+    /*
+     * ⛔⛔ 02/9 — «Verifica compatibilità» non veniva MAI premuto in QA.
+     *
+     * La lista si fotografava con i pulsanti intatti, quindi il verdetto —
+     * cioè la sola cosa che quel pannello esiste per dire — non è mai
+     * comparso in una schermata. È lo stesso difetto di forma di «APERTA non
+     * è FATTA»: si fotografava la porta, non la stanza.
+     *
+     * ⇒ Si preme su OGNI modello installato, uno per uno, e si aspetta il
+     * verdetto vero. Con un runtime acceso su un modello solo, questa è anche
+     * la prova a schermo che gli altri non ne ereditano contesto e attrezzi.
+     */
+    await p.click('[data-model-lab-tab="installed"]');
+    await p.attendi(150);
+    const quanti = await p.cdp.evaluate("document.querySelectorAll('[data-verify-fit]').length");
+    p.nota(`modelli installati con pulsante di verifica: ${quanti}`);
+    for (let i = 0; i < Number(quanti) && i < 4; i += 1) {
+      await p.cdp.evaluate(`document.querySelectorAll('[data-verify-fit]')[${i}]?.click()`);
+    }
+    // Il verdetto arriva da /fit, che legge l'header dal disco e misura la macchina.
+    await p.attendi(2_500);
+    const verdetti = await p.cdp.evaluate("JSON.stringify(Array.from(document.querySelectorAll('.model-lab-fit')).filter(n => !n.hidden).map(n => n.textContent.trim()))");
+    p.nota(`verdetti a schermo: ${verdetti}`);
+    if (String(verdetti) === '[]') p.difetto('nessun verdetto di compatibilità a schermo dopo aver premuto Verifica', { severita: 'blocco' });
+    await p.screenshot('model-lab-verdetti-fit', { nota: 'verdetto di compatibilità per ogni modello installato, col runtime acceso su UNO solo' });
+
     for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
     for (const r of p.cdp.richiesteFallite) {
       if (!r.url.endsWith('/favicon.ico')) p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
