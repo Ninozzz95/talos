@@ -194,6 +194,19 @@ function esitoInEventoFinale({ threadId, runId, esito }) {
 export async function avviaSessione({
   cartella, task, modello, chiave, comandoProva,
   onEvento, segnaleStop, messaggiIniziali, reasoning, mobile = false,
+  /*
+   * ⛔⛔⛔ 02/09 — LEDGER-STREAMING-SCROLL-TERMINALE-2026-09-02.md, §6/§7.
+   * L'etichetta del permesso della sessione ("Read only"/"Workspace
+   * write"/"On request"/"Full access") — SOLO per dichiararla in
+   * RunStarted.contesto, accanto a `modello` e `reasoning`. Nessuna
+   * logica: la regola vive in `livelloAccesso`/`chiediApprovazioneFn`
+   * (kernel). Perché: la sessione dell'owner è stata messa in "Read only"
+   * da un altro client fra un giro e l'altro, l'attrezzo scrivi ha
+   * rifiutato per "sola lettura" e la UI diceva ancora "Full access" —
+   * nessun evento portava il permesso VERO del giro. Ora ogni giro lo
+   * dichiara, e la cronologia lo mostra sotto la bolla utente.
+   */
+  permessi = null,
   strumentiEstesi, ricercaWeb,
   /*
    * ⭐⭐⭐ 29/8 — FASE K, R2 planner costoso + editor economico. Stesso
@@ -447,6 +460,7 @@ export async function avviaSessione({
     ...contestoWorkspace,
     modello,
     reasoning: reasoning ?? null,
+    permessi: permessi ?? null,
   };
 
   onEvento(runStarted({ threadId, runId, input: task, contesto }));

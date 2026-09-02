@@ -353,7 +353,7 @@
    * = true` aggiunge anche uno specchio in console in tempo reale, per chi
    * vuole guardare mentre succede.
    */
-  const STREAMING_LOG_CAP = 400;
+  const STREAMING_LOG_CAP = 4000; // 02/09 — 400 righe coprivano ~6s di stream (un delta ogni ~50ms): i buchi calcolati su una finestra parziale mentivano. 4000 righe = uno stream intero, costo trascurabile (oggetti piccoli).
   const streamingLog = [];
   function logStreaming(evento, dettagli) {
     const riga = { quandoMs: Math.round(performance.now()), evento, ...dettagli };
@@ -390,6 +390,31 @@
    * se l'utente non se n'è già andato per conto suo. Una sola richiesta
    * per frame evita animazioni concorrenti.
    */
+  let spazioCodaConversazioneUltimo = -1;
+  /**
+   * ⛔⛔⛔ 02/09 — misurato dal vivo (qa-visual-pipeline.mjs, scenario
+   * `qa-scroll-sessione-e-streaming`): il fondo del testo in streaming
+   * stava 403px SOTTO il centro di un viewport da 1214px, costante per 75
+   * campioni di fila — lo scroll era già al massimo. Il bersaglio "a metà"
+   * di scrollStreamingOutput è irraggiungibile se sotto l'ultimo messaggio
+   * c'è solo il padding di 190px: serve mezzo viewport di spazio in coda.
+   * La variabile `--stream-follow-space` esiste nel CSS (padding-bottom di
+   * .conversation, checkpoint cca79b08) — e il commit bf15bb3e ha TOLTO la
+   * riga che la impostava: da allora valeva 0, e il centro era vero solo
+   * nella matematica, mai sullo schermo. Lo spazio resta per tutta la
+   * sessione (owner: "quando scrollo alla fine l'output deve essere a
+   * metà, non alla fine") e torna 0 su una conversazione vuota, così
+   * l'hero resta centrato.
+   */
+  function aggiornaSpazioCodaConversazione(conversation) {
+    if (!conversation) return;
+    const haMessaggi = !!conversation.querySelector('.message');
+    const spazio = haMessaggi ? Math.ceil(conversation.clientHeight / 2) : 0;
+    if (spazio === spazioCodaConversazioneUltimo) return;
+    spazioCodaConversazioneUltimo = spazio;
+    conversation.style.setProperty('--stream-follow-space', `${spazio}px`);
+  }
+
   function scrollStreamingOutput(element) {
     if (!element || !element.isConnected) return;
     streamingScrollTarget = element;
@@ -405,6 +430,7 @@
         logStreaming('scroll-skip', { hasTarget: !!target, connesso: target?.isConnected, hasConversation: !!conversation, streamingAutoFollow });
         return;
       }
+      aggiornaSpazioCodaConversazione(conversation); // prima di leggere scrollHeight: il clamp a maxScroll deve vedere lo spazio in coda
       const containerRect = conversation.getBoundingClientRect();
       const targetRect = target.getBoundingClientRect();
       const fondoContenuto = conversation.scrollTop + (targetRect.bottom - containerRect.top);
@@ -435,6 +461,8 @@
       if (streamingLastTargetTop === null) return;
       streamingAutoFollow = Math.abs(conversation.scrollTop - streamingLastTargetTop) <= CONVERSATION_FOLLOW_EPSILON_PX;
     }, { passive: true });
+    // Lo spazio in coda è metà dell'altezza VISIBILE: se la finestra cambia, cambia anche lui.
+    if (typeof ResizeObserver === 'function') new ResizeObserver(() => aggiornaSpazioCodaConversazione(conversation)).observe(conversation);
   }
   collegaSeguiFondoConversazione();
 
@@ -443,6 +471,127 @@
    * testo grezzo resta accumulato evento per evento, ma il markdown entra nel
    * DOM una volta per frame; TextMessageEnd forza comunque l'ultimo commit.
    */
+  /*
+   * ⛔⛔⛔ 02/09 — owner, dal vivo: "l'animazione deve essere fluida come se
+   * si scrivesse su una macchina da scrivere: con impostazione Cursore una
+   * lettera alla volta, streammata velocemente; per Dissolvenza una
+   * dissolvenza super smooth delle parole".
+   *
+   * Misurato PRIMA (qa-scroll-sessione-e-streaming, scheda in primo piano):
+   * il render costa ≤0,2 ms e segue ogni 'delta' entro un frame — il
+   * testo però ARRIVA a raffiche (buchi fra delta di 100-500 ms, a volte
+   * secondi), quindi sullo schermo compaiono blocchi di parole a scatti:
+   * la "scattosità" era il ritmo del provider, reso pari pari.
+   *
+   * Cura: un RITMO DI RIVELAZIONE nostro. Il testo ricevuto resta in
+   * testoGrezzoMessaggi per intero; sullo schermo se ne mostra un prefisso
+   * (`statoRender.mostrato`) che avanza a ogni frame a velocità costante e
+   * alta — lettere una alla volta con "Cursore", parole intere con
+   * "Dissolvenza" — e accelera in proporzione all'arretrato, così il
+   * ritardo rispetto al testo vero non supera mai ~0,3 s (un provider a
+   * raffiche viene livellato, uno veloce non viene frenato). Con
+   * "Nessuna", con movimento ridotto, o nel ripristino di una cronologia,
+   * nessun ritmo: tutto subito, come prima. Stesso principio dello
+   * "smooth streaming" di ChatGPT/Claude web (buffer + cadenza costante),
+   * scritto in vanilla JS sopra il renderer incrementale già esistente:
+   * un prefisso più corto è un input come un altro per lui.
+   */
+  const RITMO_STREAMING = {
+    typewriter: { caratteriAlSecondo: 160, ritardoMassimoMs: 300, perParola: false },
+    fade: { caratteriAlSecondo: 140, ritardoMassimoMs: 350, perParola: true, dissolvenzaMs: 420 },
+  };
+
+  function modalitaAnimazioneStreaming() {
+    if (state.realSession.deferHistoricalRendering) return 'none';
+    if (HOST().classList.contains('reduce-motion') || document.body.classList.contains('reduce-motion')) return 'none';
+    const scelta = HOST().dataset.talosStreamingAnimation;
+    return scelta === 'typewriter' || scelta === 'fade' ? scelta : 'none';
+  }
+
+  function contaParole(testo) {
+    const m = String(testo).match(/\S+/g);
+    return m ? m.length : 0;
+  }
+
+  /**
+   * Avanza `statoRender.mostrato` verso `testo.length` secondo il ritmo
+   * scelto. Torna il numero di caratteri rivelati in questo frame.
+   */
+  function avanzaRitmoStreaming(statoRender, testo, modalita, ora) {
+    const ritmo = RITMO_STREAMING[modalita];
+    const arretrato = testo.length - statoRender.mostrato;
+    if (arretrato <= 0) { statoRender.ultimoTickMs = ora; return 0; }
+    const dtMs = Math.min(100, Math.max(0, ora - (statoRender.ultimoTickMs ?? ora)));
+    statoRender.ultimoTickMs = ora;
+    const velocita = Math.max(ritmo.caratteriAlSecondo, arretrato / (ritmo.ritardoMassimoMs / 1000));
+    let passo = Math.min(arretrato, Math.max(1, Math.ceil(velocita * dtMs / 1000)));
+    if (dtMs === 0 && statoRender.ultimoTickMs !== null) passo = Math.min(passo, 1);
+    let prossimo = statoRender.mostrato + passo;
+    if (ritmo.perParola) {
+      // parole intere: si estende fino al prossimo spazio (o alla fine), così nessuna parola compare a metà
+      const fineParola = testo.slice(prossimo).search(/\s/);
+      prossimo = fineParola === -1 ? testo.length : prossimo + fineParola;
+      const nuoveParole = contaParole(testo.slice(statoRender.mostrato, prossimo));
+      for (let k = 0; k < nuoveParole; k += 1) statoRender.paroleRecenti.push(ora);
+      const soglia = ora - ritmo.dissolvenzaMs;
+      while (statoRender.paroleRecenti.length > 0 && statoRender.paroleRecenti[0] < soglia) statoRender.paroleRecenti.shift();
+      if (statoRender.paroleRecenti.length > 400) statoRender.paroleRecenti.splice(0, statoRender.paroleRecenti.length - 400);
+    }
+    const rivelati = prossimo - statoRender.mostrato;
+    statoRender.mostrato = prossimo;
+    return rivelati;
+  }
+
+  /**
+   * Dissolvenza per PAROLA: le ultime K parole del testo mostrato (K =
+   * parole rivelate negli ultimi `dissolvenzaMs`) diventano <span
+   * class="stream-word"> con un animation-delay NEGATIVO pari al tempo già
+   * trascorso dalla loro comparsa. La coda del markdown viene ricostruita a
+   * ogni frame (renderizzaMarkdownIncrementale) — uno span ricreato
+   * riparte da dove era, non da zero: è questo che rende la dissolvenza
+   * continua invece di un lampeggio (la lezione del vecchio
+   * `:last-child`, vedi il CSS). Il codice (pre/code) non si dissolve
+   * parola per parola. Parole già avvolte nei blocchi stabili restano come
+   * sono: la loro animazione sta già finendo da sola.
+   */
+  function avvolgiParoleRecenti(copia, tempi, ora) {
+    let restanti = tempi.length;
+    if (restanti === 0) return;
+    let indice = tempi.length - 1;
+    const walker = document.createTreeWalker(copia, NodeFilter.SHOW_TEXT);
+    const nodi = [];
+    let n;
+    while ((n = walker.nextNode())) nodi.push(n);
+    for (let i = nodi.length - 1; i >= 0 && restanti > 0; i -= 1) {
+      const nodo = nodi[i];
+      const genitore = nodo.parentElement;
+      if (!genitore) continue;
+      if (genitore.classList.contains('stream-word')) { restanti -= 1; indice -= 1; continue; }
+      if (genitore.closest('pre, code')) continue;
+      const pezzi = nodo.textContent.split(/(\s+)/).filter((p) => p.length > 0);
+      if (pezzi.length === 0) continue;
+      const nuovi = [];
+      let testoPiano = '';
+      for (let k = pezzi.length - 1; k >= 0; k -= 1) {
+        const pezzo = pezzi[k];
+        if (/^\s+$/.test(pezzo) || restanti <= 0) { testoPiano = pezzo + testoPiano; continue; }
+        if (testoPiano) { nuovi.unshift(document.createTextNode(testoPiano)); testoPiano = ''; }
+        const span = document.createElement('span');
+        span.className = 'stream-word';
+        span.textContent = pezzo;
+        span.style.animationDelay = `-${Math.max(0, Math.round(ora - tempi[Math.max(0, indice)]))}ms`;
+        restanti -= 1;
+        indice -= 1;
+        nuovi.unshift(span);
+      }
+      if (testoPiano) nuovi.unshift(document.createTextNode(testoPiano));
+      if (nuovi.length === 1 && nuovi[0].nodeType === Node.TEXT_NODE) continue; // nessuna parola avvolta in questo nodo
+      const frag = document.createDocumentFragment();
+      for (const nuovo of nuovi) frag.appendChild(nuovo);
+      nodo.replaceWith(frag);
+    }
+  }
+
   function renderizzaMessaggioStreamingOra(messageId) {
     streamingRenderPending.delete(messageId);
     const element = state.realSession.messageElements.get(messageId);
@@ -451,11 +600,28 @@
     const copia = $('.assistant-copy', element);
     if (!copia) return false;
     let statoRender = state.realSession.renderIncrementale.get(messageId);
-    if (!statoRender) { statoRender = { prefisso: null, nodiCoda: [] }; state.realSession.renderIncrementale.set(messageId, statoRender); }
+    if (!statoRender) { statoRender = { prefisso: null, nodiCoda: [], mostrato: 0, ultimoTickMs: null, paroleRecenti: [], fineRicevuta: false }; state.realSession.renderIncrementale.set(messageId, statoRender); }
     const t0 = performance.now();
-    renderizzaMarkdownIncrementale(copia, statoRender, testoGrezzo);
-    logStreaming('render', { messageId, testoLen: testoGrezzo.length, durataMs: Math.round((performance.now() - t0) * 10) / 10 });
+    const modalita = modalitaAnimazioneStreaming();
+    let rivelati = 0;
+    if (modalita === 'none') {
+      rivelati = testoGrezzo.length - statoRender.mostrato;
+      statoRender.mostrato = testoGrezzo.length;
+      statoRender.paroleRecenti = [];
+    } else {
+      rivelati = avanzaRitmoStreaming(statoRender, testoGrezzo, modalita, t0);
+    }
+    const arretrato = testoGrezzo.length - statoRender.mostrato;
+    renderizzaMarkdownIncrementale(copia, statoRender, testoGrezzo.slice(0, statoRender.mostrato));
+    if (modalita === 'fade') avvolgiParoleRecenti(copia, statoRender.paroleRecenti, t0);
+    logStreaming('render', { messageId, testoLen: testoGrezzo.length, mostrato: statoRender.mostrato, rivelati, arretrato, modalita, durataMs: Math.round((performance.now() - t0) * 10) / 10 });
     scrollStreamingOutput(element);
+    if (arretrato > 0) {
+      programmaRenderMessaggioStreaming(messageId); // c'è ancora testo da rivelare: un altro frame, finché non si è in pari
+    } else if (statoRender.fineRicevuta) {
+      // in pari E il messaggio è finito: il cursore si spegne SOLO adesso, non quando è arrivata la fine dal server
+      element.classList.remove('is-streaming');
+    }
     return true;
   }
 
@@ -584,9 +750,29 @@
 
   function markMotionEnter(element) {
     if (!element) return;
+    // ⛔ 02/09, owner: "la chat deve trovarsi già in fondo senza animazioni" — durante il ripristino le bolle non entrano una a una, compaiono tutte insieme già in fondo.
+    const conversazione = $('#conversation');
+    if (conversazione?.classList.contains('is-restoring') && conversazione.contains(element)) return;
     element.classList.remove('motion-exit');
     element.classList.add('motion-enter');
     element.addEventListener('animationend', () => element.classList.remove('motion-enter'), { once: true });
+  }
+
+  /**
+   * ⛔ 02/09, owner: "quando clicchi su una riga sessione la chat deve
+   * trovarsi già in fondo senza animazioni". Le bolle appese durante il
+   * RIPRISTINO di una sessione (#conversation.is-restoring) non scorrono
+   * da sole: il fondo lo tiene mantieniFondoDuranteRipristino, istantaneo,
+   * e la conversazione si mostra solo quando è già tutta in fondo. Prima
+   * ognuna di queste sette chiamate faceva partire uno scrollIntoView
+   * "smooth" 40ms dopo l'inserimento — decine di animazioni in gara con
+   * lo scroll istantaneo. Fuori dal ripristino: comportamento di sempre.
+   */
+  function scorriAllaBollaAppesa(article) {
+    window.setTimeout(() => {
+      if (!article.isConnected || $('#conversation')?.classList.contains('is-restoring')) return;
+      if (!$('#conversation')?.classList.contains('is-restoring')) article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' });
+    }, 40);
   }
 
   function icon(id) {
@@ -4496,7 +4682,57 @@
    * prossimo passo è la decisione UX del trigger, non altro porting.
    */
 
-  function appendRealTaskStart(task) {
+  const PERMESSI_SESSIONE_VALIDI = ['Read only', 'Workspace write', 'On request', 'Full access'];
+  /**
+   * ⛔⛔⛔ 02/09 — LEDGER-STREAMING-SCROLL-TERMINALE-2026-09-02.md, §6/§7:
+   * la sessione dell'owner è stata messa in "Read only" e poi su un
+   * modello inesistente da un ALTRO client (POST /sessions/:id/settings
+   * da una sonda di un'altra sessione di lavoro, dump nel suo scratchpad),
+   * mentre questa scheda diceva ancora "Full access": il rifiuto "sola
+   * lettura" dell'attrezzo scrivi era VERO per il server e una bugia per
+   * chi guardava lo schermo. Il permesso di ogni giro ora viaggia in
+   * RunStarted.contesto (agent-service.mjs) e si scrive sotto la bolla
+   * utente, come il modello sta già nell'intestazione della risposta:
+   * chi rilegge la cronologia vede con quale permesso quel giro è stato
+   * eseguito davvero, anche se le pillole nel frattempo dicono altro.
+   */
+  function etichettaPermessiGiro(contesto) {
+    return PERMESSI_SESSIONE_VALIDI.includes(contesto?.permessi) ? ` · ${contesto.permessi}` : '';
+  }
+
+  /**
+   * Giro VIVO avviato da questa scheda (follow-up): il server dichiara
+   * modello e permesso che sta DAVVERO usando. Se differiscono dalle
+   * pillole, qualcuno ha cambiato le impostazioni fuori da qui: si
+   * allineano le pillole e lo si dice in chat, mai in silenzio. Solo dal
+   * vivo — un replay dopo un reload riparte già dalle impostazioni
+   * correnti del server (applicaImpostazioniSessione) e non deve
+   * rigiocare la storia giro per giro.
+   */
+  function allineaPilloleAlGiroVivo(contesto) {
+    if (!contesto || typeof contesto !== 'object') return;
+    const cambi = [];
+    const modello = typeof contesto.modello === 'string' ? contesto.modello.trim() : '';
+    if (modello && state.model && modello !== state.model) {
+      cambi.push(`modello ${state.model} → ${modello}`);
+      state.model = modello;
+      aggiornaPillolaModello();
+    }
+    if (PERMESSI_SESSIONE_VALIDI.includes(contesto.permessi) && contesto.permessi !== state.permissions) {
+      cambi.push(`permesso ${state.permissions} → ${contesto.permessi}`);
+      state.permissions = contesto.permessi;
+      aggiornaPillolaPermessi();
+    }
+    const etichetta = etichettaPermessiGiro(contesto);
+    const ultimaMeta = $$('#conversation .user-message .message-meta span').at(-1);
+    if (etichetta && ultimaMeta && ultimaMeta.textContent === 'Follow-up') ultimaMeta.textContent += etichetta;
+    if (cambi.length > 0) {
+      salvaPreferenzeChatDesktop();
+      appendStatusNote(`Impostazioni cambiate fuori da questa scheda. Questo giro usa: ${cambi.join(', ')}.`);
+    }
+  }
+
+  function appendRealTaskStart(task, contesto = null) {
     const conversation = $('#conversation');
     const article = document.createElement('article');
     article.className = 'message user-message';
@@ -4527,12 +4763,13 @@
       : (task.consegna || task.consegnaCorta)
         ? `Compito libero${task.progetto ? ` · ${task.progetto}` : ''}`
         : 'Comando diretto';
+    span.textContent += etichettaPermessiGiro(contesto);
     meta.appendChild(span);
     article.append(bubble, meta);
     conversation.appendChild(article);
     markMotionEnter(article);
     /* ⛔ 28/8, owner: "auto centramento dello scroll dei messaggi appena se ne invia uno nuovo (meta schermo)" — questa era l'UNICA delle sei chiamate scrollIntoView di questo file con block:'center' invece di 'end': ogni messaggio inviato veniva centrato a metà schermo invece di scorrere in fondo come ogni altro elemento appeso alla conversazione. */
-    window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
+    scorriAllaBollaAppesa(article);
     state.realSession.taskBubbleMostrata = true;
   }
 
@@ -4542,7 +4779,7 @@
    * "Follow-up" invece di "Task reale · <id>" — non è il compito che ha
    * aperto la sessione, è quello che la continua.
    */
-  function appendUserFollowUp(text) {
+  function appendUserFollowUp(text, contesto = null) {
     const conversation = $('#conversation');
     const article = document.createElement('article');
     article.className = 'message user-message';
@@ -4551,11 +4788,11 @@
     bubble.textContent = text;
     const meta = document.createElement('div');
     meta.className = 'message-meta';
-    meta.appendChild(textElement('span', '', 'Follow-up'));
+    meta.appendChild(textElement('span', '', `Follow-up${etichettaPermessiGiro(contesto)}`));
     article.append(bubble, meta);
     conversation.appendChild(article);
     markMotionEnter(article);
-    window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
+    scorriAllaBollaAppesa(article);
   }
 
   /**
@@ -4655,7 +4892,7 @@
     };
     state.realSession.attesaTimer = window.setInterval(aggiornaTempoAttesa, 1000);
     markMotionEnter(article);
-    window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
+    scorriAllaBollaAppesa(article);
   }
 
   function nascondiAttesaRisposta() {
@@ -4774,7 +5011,7 @@
     article.append(summary, contenitore);
     conversation.appendChild(article);
     markMotionEnter(article);
-    window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
+    scorriAllaBollaAppesa(article);
     const batch = {
       contenitore,
       summaryText,
@@ -4919,7 +5156,7 @@
     markMotionEnter(article);
     window.setTimeout(() => {
       if (article.hidden) return;
-      article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' });
+      if (!$('#conversation')?.classList.contains('is-restoring')) article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' });
     }, 40);
     return { article, summaryText, detail };
   }
@@ -4975,7 +5212,7 @@
     article.append(header, frame);
     conversation.appendChild(article);
     markMotionEnter(article);
-    window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
+    scorriAllaBollaAppesa(article);
     return { frame };
   }
 
@@ -5162,7 +5399,7 @@
     article.append(meta, copy);
     conversation.appendChild(article);
     markMotionEnter(article);
-    window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
+    scorriAllaBollaAppesa(article);
   }
 
   /**
@@ -5278,7 +5515,7 @@
     // ⭐ letto dal case 'ApprovalResolved' per distinguere "ho risposto io da questa scheda" da "ha risposto un altro client" — mai un secondo testo duplicato, mai una wording sbagliata.
     article._rispostaDataQui = () => rispostaDataDaQuestaScheda;
     markMotionEnter(article);
-    window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
+    scorriAllaBollaAppesa(article);
     return article;
   }
 
@@ -5745,6 +5982,7 @@
           righe.push(`## Giro ${numeroGiro}`, '');
           if (evento.contesto?.modello) righe.push(`- **Modello del giro:** ${evento.contesto.modello}`);
           if (evento.contesto?.reasoning?.effort) righe.push(`- **Ragionamento:** ${evento.contesto.reasoning.effort}`);
+          if (evento.contesto?.permessi) righe.push(`- **Permessi del giro:** ${evento.contesto.permessi}`);
           righe.push('', descriviTask(evento.input), '');
           break;
         }
@@ -7245,12 +7483,13 @@
          */
         state.realSession.runCount = (state.realSession.runCount || 0) + 1;
         if (!state.realSession.taskBubbleMostrata && evento.input) {
-          appendRealTaskStart(evento.input);
+          appendRealTaskStart(evento.input, evento.contesto);
         } else if (state.realSession.taskBubbleMostrata && evento.input?.seguito) {
           if (state.realSession.followUpBubbleInAttesa) {
             state.realSession.followUpBubbleInAttesa = false; // già mostrato dal vivo, non duplicare
+            allineaPilloleAlGiroVivo(evento.contesto);
           } else {
-            appendUserFollowUp(evento.input.consegna); // replay dopo un reload: nessun ottimismo l'ha già mostrato
+            appendUserFollowUp(evento.input.consegna, evento.contesto); // replay dopo un reload: nessun ottimismo l'ha già mostrato
           }
         }
         if (evento.contesto) aggiornaPannelloAmbiente(evento.contesto);
@@ -7258,6 +7497,8 @@
         break;
       }
       case 'TextMessageContent': {
+        // ⭐ 02/09 — arrivo del frammento dal server, PRIMA di qualunque render: nel log di streaming un buco fra due 'delta' è rete/provider, un buco fra 'delta' e 'render' è nostro. Misurato dal vivo il 02/09: render ≤1,1 ms, buchi fra delta di 2-12 s — il collo era a monte.
+        logStreaming('delta', { messageId: evento.messageId, len: typeof evento.delta === 'string' ? evento.delta.length : 0 });
         nascondiAttesaRisposta(); // il primo token vero: la ruota di attesa ha fatto il suo lavoro
         chiudiBatchTool(); // 30/8 — testo vero dell'assistente: chiude il batch di tool-call corrente, se ce n'è uno aperto (vedi doc su apriBatchSeServe)
         const element = ensureAssistantMessageElement(evento.messageId);
@@ -7272,8 +7513,11 @@
         break;
       }
       case 'TextMessageEnd': {
-        renderizzaMessaggioStreamingOra(evento.messageId);
-        state.realSession.messageElements.get(evento.messageId)?.classList.remove('is-streaming');
+        // ⭐ 02/09 — con un ritmo di rivelazione attivo il testo può essere ancora in coda: la fine si SEGNA qui e si applica (is-streaming tolta) quando lo schermo è in pari, dentro renderizzaMessaggioStreamingOra. Senza ritmo (Nessuna/ripristino) l'effetto è immediato come prima.
+        let statoRender = state.realSession.renderIncrementale.get(evento.messageId);
+        if (!statoRender) { statoRender = { prefisso: null, nodiCoda: [], mostrato: 0, ultimoTickMs: null, paroleRecenti: [], fineRicevuta: false }; state.realSession.renderIncrementale.set(evento.messageId, statoRender); }
+        statoRender.fineRicevuta = true;
+        if (!renderizzaMessaggioStreamingOra(evento.messageId)) state.realSession.messageElements.get(evento.messageId)?.classList.remove('is-streaming');
         break;
       }
       /*
@@ -7716,6 +7960,8 @@
     }
     if (!continua) {
       $('#conversation').replaceChildren();
+      $('#conversation').classList.remove('is-restoring'); // un ripristino interrotto da una nuova generazione non lascia la chat nascosta
+      aggiornaSpazioCodaConversazione($('#conversation')); // conversazione vuota: niente spazio in coda, l'hero resta centrato
       state.realSession.messageElements = new Map();
       state.realSession.runCount = 0;
       state.realSession.taskBubbleMostrata = false;
@@ -8138,14 +8384,21 @@
   function mantieniFondoDuranteRipristino(generation) {
     const conversation = $('#conversation');
     if (!conversation) return;
-    const osservatore = new MutationObserver(() => { conversation.scrollTop = conversation.scrollHeight; });
-    osservatore.observe(conversation, { childList: true, subtree: true, characterData: true });
+    const inFondo = () => { aggiornaSpazioCodaConversazione(conversation); conversation.scrollTop = conversation.scrollHeight; };
+    // Scopre la conversazione SOLO quando è già in fondo: prima porta il fondo, poi toglie is-restoring, poi ribatte il fondo (togliere la classe non cambia il layout, ma costa zero essere sicuri).
+    const scopri = () => { if (generation !== state.realSession.generation) return; inFondo(); conversation.classList.remove('is-restoring'); inFondo(); };
+    const osservatore = new MutationObserver(inFondo);
+    // ⛔ 02/09 — misurato dal vivo: 12320 su 12334, 14px sopra il fondo per 4s filati. L'ultima MUTAZIONE di figli non è l'ultimo cambio di altezza: markMotionEnter cambia una classe (attributo, non childList) un frame dopo l'inserimento e il layout cresce ancora. Si osservano anche gli attributi, e alla fine del ripristino si ribatte il fondo su due frame successivi.
+    osservatore.observe(conversation, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class', 'style'] });
     const fermaSeFinito = window.setInterval(() => {
       if (generation !== state.realSession.generation || state.realSession.eventoTerminaleVisto) {
         osservatore.disconnect();
         window.clearInterval(fermaSeFinito);
+        if (generation === state.realSession.generation) { scopri(); window.requestAnimationFrame(inFondo); window.setTimeout(inFondo, 250); }
       }
     }, 200);
+    // Rete di sicurezza per la VISIBILITÀ: una sessione conclusa senza evento terminale nel replay (interrotta) non resta nascosta per sempre — 8s bastano a qualunque cronologia vista finora (1.235 righe in ~1s).
+    window.setTimeout(scopri, 8_000);
     // Rete di sicurezza: mai un osservatore vivo per sempre se il segnale di fine non arriva (connessione caduta, sessione mai conclusa per davvero).
     window.setTimeout(() => { osservatore.disconnect(); window.clearInterval(fermaSeFinito); }, 30_000);
   }
@@ -8169,11 +8422,14 @@
        * tutto a schermo (nessun ripristino in corso): istantaneo, non
        * serve un MutationObserver. */
       const conversation = $('#conversation');
+      aggiornaSpazioCodaConversazione(conversation);
       if (conversation) conversation.scrollTop = conversation.scrollHeight;
       return;
     }
     const generation = nuovaGenerazioneSessione();
     state.realSession.deferHistoricalRendering = impostazioniSessione?.conclusa === true;
+    /* ⛔ 02/09, owner: "quando clicchi su una riga sessione la chat deve trovarsi già in fondo senza animazioni" — la cronologia si costruisce INVISIBILE (ma impaginata: lo scroll la porta in fondo a ogni frammento), e si scopre solo quando è tutta lì, già in fondo (mantieniFondoDuranteRipristino). */
+    $('#conversation')?.classList.toggle('is-restoring', state.realSession.deferHistoricalRendering);
     state.realSession.taskId = taskId;
     state.realSession.treeWorkspaceKey = `session:${sessionId}`;
     state.session = nome || `Task reale · ${taskId}`; // ⭐ un nome scelto dall'owner vince sul taskId
@@ -9391,9 +9647,32 @@
      * sessione reale, questo primo messaggio la avvia per davvero.
      */
     if (state.pendingCustomSession) {
-      const { cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo } = state.pendingCustomSession;
+      const { cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, modelloPlanner } = state.pendingCustomSession;
+      /*
+       * ⛔⛔⛔ 02/09 — riprodotto dal vivo (qa-visual-pipeline.mjs,
+       * scenario `qa-modello-pillola-dopo-nuova`): la pillola mostrava
+       * "google/gemini-3.7-flash", il POST /sessions/custom spediva
+       * "z-ai/glm-4.7-flash". `pendingCustomSession` FOTOGRAFAVA modello,
+       * effort e permessi al momento di "Nuova"; le pillole del composer
+       * cambiate DOPO aggiornavano `state.*` e la scritta, ma qui vinceva
+       * la foto (`modello || state.model` in startCustomSession). Le
+       * pillole sono l'unica cosa che l'owner vede: al momento dell'invio
+       * la fonte di verità è `state`, non la foto. `modelloPlanner` non ha
+       * una pillola e resta quello della modale. Una cartella fuori
+       * elenco richiede Full access (lo esige il server): se la pillola è
+       * stata spostata altrove, il messaggio resta nel composer e si dice
+       * cosa manca, invece di spedire un permesso che la pillola non mostra.
+       */
+      if (cartellaLibera && state.permissions !== 'Full access') {
+        toast('Serve Full access', `${nomeCartella} è fuori dall'elenco delle cartelle: per avviarla serve Full access. Cambia il permesso dalla pillola e invia di nuovo.`);
+        return false;
+      }
       state.pendingCustomSession = null;
-      startCustomSession({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, consegna: value, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo });
+      startCustomSession({
+        cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, consegna: value,
+        modello: state.model, effort: state.effort, modelloPlanner,
+        permessi: state.permissions, permessiPerAttrezzo: { ...state.permessiPerAttrezzo },
+      });
       return true;
     }
     /*

@@ -425,7 +425,27 @@ test('⭐ RunStarted porta il contesto workspace (progetto/cartella/branch), let
     onEvento: (e) => eventi.push(e), talosLavoraFn, leggiContestoWorkspaceFn,
   });
 
-  assert.deepEqual(eventi[0].contesto, { ...contestoFinto, modello: 'm', reasoning: null });
+  assert.deepEqual(eventi[0].contesto, { ...contestoFinto, modello: 'm', reasoning: null, permessi: null });
+});
+
+test('⛔ 02/09 — RunStarted dichiara il PERMESSO del giro nel contesto (la sessione dell\'owner era stata messa in Read only da un altro client e la UI diceva Full access)', async () => {
+  const eventi = [];
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } } });
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', permessi: 'Read only',
+    onEvento: (e) => eventi.push(e), talosLavoraFn,
+    leggiContestoWorkspaceFn: () => ({ progetto: 'p', cartella: '/tmp/x', branch: null }),
+  });
+  assert.equal(eventi[0].type, 'RunStarted');
+  assert.equal(eventi[0].contesto.permessi, 'Read only');
+  // AL CONTRARIO: senza etichetta, null dichiarato — mai un default inventato ("Workspace write") che il server non ha scelto.
+  const eventiSenza = [];
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k',
+    onEvento: (e) => eventiSenza.push(e), talosLavoraFn,
+    leggiContestoWorkspaceFn: () => ({ progetto: 'p', cartella: '/tmp/x', branch: null }),
+  });
+  assert.equal(eventiSenza[0].contesto.permessi, null);
 });
 
 test('RUN-MODEL-TRACE-07 — RunStarted attribuisce modello e reasoning effettivi al singolo turno', async () => {
@@ -438,7 +458,7 @@ test('RUN-MODEL-TRACE-07 — RunStarted attribuisce modello e reasoning effettiv
   });
   assert.deepEqual(eventi[0].contesto, {
     progetto: 'talos', cartella: '/tmp/x', branch: 'lane/test',
-    modello: 'qwen/qwen3.8-flash', reasoning: { effort: 'high' },
+    modello: 'qwen/qwen3.8-flash', reasoning: { effort: 'high' }, permessi: null,
   });
 });
 
