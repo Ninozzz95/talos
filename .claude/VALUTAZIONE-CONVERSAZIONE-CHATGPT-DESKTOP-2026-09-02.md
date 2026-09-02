@@ -187,3 +187,48 @@ Correzioni prima della zip:
 
 - Il pacchetto di review del 31/08 dichiarava «working tree intenzionalmente sporco» e includeva la diff non committata: la stessa situazione di oggi (472 righe di un'altra sessione non committate su `app.js`/`styles.css`). Se rigenero il pacchetto, includo solo il committato e dichiaro la diff a parte, come allora.
 - La conversazione ha usato circa 40 fonti ufficiali (Claude Code docs, Codex docs, Hermes Agent docs, Hermes IDE repo) con data 2/9: utile anche per il nostro `LEDGER-FASE-0-BASELINE-COMPETITIVE`, che è del 30/08.
+
+## 8 — Chiusura (02/09, sera tardi): decisioni 40-57 e stato delle 12 domande
+
+Dopo il pacchetto di review aggiornato (`AVM-harness-desktop-review-2026-09-02.zip`, HEAD `0752b376`, SHA-256 `2aaca8af…250ef3`) ChatGPT ha marcato la baseline del 31/08 `SUPERSEDED`, la runtime gateway `REJECTED_AS_BASELINE`, e ha registrato i dieci vincoli del §6 alla lettera (destinazioni `KERNEL / DESKTOP-ADAPTER / UI-MONOLITE / UI-MODULARE / LABS`, `KERNEL_OWNER_APPROVAL` per ogni riga che tocca il kernel, percorsi relativi a `harness-ui/`, allowlist modelli, D18 ridotta all'editor scrivibile, schema a 15 campi per ogni riga di roadmap).
+
+| # | Tema | Scelta | Precisazioni nostre registrate da ChatGPT |
+|---|---|---|---|
+| 41 | Piano di sessione | C: Session Plan Ledger con evidence gate | è la persistenza del planner Fase K già nel kernel (`GIRI_MASSIMI_PLANNER=8`, pre-loop in sola lettura); riusa `awaiting_plan_approval` del mobile; `COMPLETED_WITH_EVIDENCE` calcolato da ricevute Ed25519, cancello semantico, esito test; mai autocertificato dal modello |
+| 42 | Terminali | C: Multi-Terminal & Process Ledger | registro PTY già `Map` per id: quick win = `terminalId` ≠ `sessionId`; comandi `AGENT`/`DIRECT_COMMAND` già strutturati (descrizione umana, ricevute, `ToolCall*`); timeline umana per ultima con `PARTIAL_TIMELINE`; split pane in `UI-MODULARE/LABS` |
+| 43 | Git in-app | C: Git & Evidence Review | Git nel backend solo Doctor e ramo; `Uncommitted/Branch` dal Git service, `Last agent turn` dalle ricevute; push/PR sempre sotto approvazione |
+| 44 | Verifica | C: Verification Runner + Evidence Gate | riusa l'attrezzo `prova` e le ricevute; eval dell'agente = TALOS-BANCO, esterno |
+| 45 | Automazioni/notifiche | C | manca solo la run history (`ultimaEsecuzione`); Web Notifications finché non c'è la shell (57) |
+| 46 | Ricerca sessioni | C: indice derivato | `#sessionSearch` filtra solo titoli; prima chiudere 16/23 sessioni non ripristinate |
+| 47 | SSH/remoto | C: SSH stable, Remote Node labs | — |
+| 48 | Costi | C: Observability & Budget Ledger | costo per giro già presente (usage × pricing); dichiarato stima, riconciliazione col credito del provider |
+| 49 | Prestazioni | C: budget + Resource Governor | misure in Chrome reale con stato GPU; script esistenti, non seconda pipeline |
+| 50 | Packaging | C: Windows Release Safety Chain | vincolo `IExplorerCommand` + eseguibile stabile dal dossier 01/09; dipende da 57 |
+| 51 | Accessibilità/lingua | C | stringhe italiane cablate: localizzazione in `UI-MODULARE`; parità azioni messaggio = 6.3B Fase 5 |
+| 52 | Onboarding | C: Doctor-driven | riusa Doctor |
+| 53 | Policy | C: policy-ready core | gerarchia owner → project → user → default |
+| 54 | Eval | C con correzione | livello 2 = TALOS-BANCO esterno; nel prodotto solo gate deterministici |
+| 55 | Evidence Pack | C | formati: `qa-visual-pipeline.mjs` e Playwright `frontend/tests/browser`; screenshot pubblici approvati dall'owner uno per uno |
+| 56 | Roadmap | C: evidence-weighted, Wave 0-4 + monorepo ultimo | 15 campi obbligatori per riga; zip accettabile solo con sette contatori a zero |
+| 57 | **Shell desktop** (domanda mancante, posta da noi) | A: Electron thin shell | server Node come processo figlio con Node impacchettato a parte (niente rebuild ABI per `node-pty`/keyring); NSIS per-user senza admin né servizio; GPU governata dalla shell con sonda rAF nei release gate; 57.1 in Wave 1, 57.2-57.6 in Wave 2; browser-first = rollback; una sola pipeline QA visiva (mini-ADR in 57.1) |
+
+### Le 12 domande del §4: cosa è chiuso dalla conversazione
+
+| Q | Stato |
+|---|---|
+| 1 baseline fresca | ✅ fatto: zip 5 MB caricata, baseline sostituita |
+| 2 bersaglio UI | ✅ `UI-MONOLITE` per quick win, `UI-MODULARE` per componenti nuovi |
+| 3 kernel | ✅ `DESKTOP-ADAPTER` prima; `KERNEL` solo con `KERNEL_OWNER_APPROVAL` |
+| 4 piattaforme | ✅ Windows lavoro, mac/Linux vincolo di design |
+| 5 prima tranche backend | ✅ nativo isolato, WSL2, Docker, Podman, SSH |
+| 6 modelli | ✅ routing solo dentro `MODELLI_AMMESSI` |
+| 7 IDE | ✅ editor scrivibile sì, debug/LSP/test explorer `MONITOR` |
+| 8 monorepo | ✅ ultima fase, percorsi relativi a `harness-ui/` |
+| 9 dove vive `labs/` | 🔜 **aperta**: nel repo dietro flag con store separati (mia raccomandazione) o repo a parte |
+| 10 versione empirica | 🔜 **aperta**: ChatGPT la produrrà come fork eseguibile; resta da decidere se il suo codice entra solo via ledger (mia raccomandazione) |
+| 11 metrica d'ordine | ✅ impatto 1-5, rischio 1-5, giorni, dipendenze, file, test, evidenza, rollback, criterio |
+| 12 domanda 39 | ✅ C |
+
+### Prossimo passo
+
+Quando arriva la zip: (1) verificare i sette contatori dichiarati (funzioni senza analisi/destinazione/stato, righe senza campo, mock dichiarati reali, patch kernel senza approvazione, segreti) rileggendo il registro, non fidandosi del report; (2) confrontare ogni riga con `MAPPA-HARNESS-DESKTOP-2026-09-02.md` §2 e §11 (già fatto / a metà / manca, file d'innesto giusto); (3) trasformare il tutto nel ledger + roadmap spuntabile per l'agente desktop, ordinata Wave 0 → 4.
