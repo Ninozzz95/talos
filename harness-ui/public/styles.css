@@ -2260,3 +2260,10 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
 .settings-facts-list li code { font-family: var(--font-mono); font-size: calc(11.5px * var(--talos-ui-font-scale)); color: var(--text-2); overflow-wrap: anywhere; }
 .settings-provider-state { color: var(--muted); font-size: calc(11.5px * var(--talos-ui-font-scale)); }
 .settings-provider-state.is-ok { color: var(--success, var(--text-2)); }
+
+/* V7-bis — il valore di un cursore resta unito al suo simbolo ("100%", "40ms") anche quando va a capo. */
+.range-control .range-value { white-space: nowrap; font-weight: 500; color: var(--text-2); }
+.range-control .range-value output { font-family: var(--font-mono); }
+
+/* V11-bis — la "Cartella scelta" resta sempre visibile in fondo alla colonna, anche quando l albero scorre. */
+.workspace-chooser-selection { position: sticky; bottom: 0; background: var(--surface-elevated); z-index: 1; }
