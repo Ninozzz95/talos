@@ -543,15 +543,127 @@ const casi = [
         },
         blocca: false,
     },
+
+    /* ═══════════ LA FORMULA DI CHIUSURA FASE — 2026-09-02, ordine dell'owner ══
+     *
+     * «fai in modo che hook di sollecito venga aggiornato con i prompt finali
+     * che mi stai mandando, in modo che ti solleciti quando dici cosa rimane».
+     *
+     * ⛔ Il primo caso è il MESSAGGIO VERO con cui ho chiuso il turno poco
+     * prima di quell'ordine, non un esempio scritto per far passare la prova.
+     * Se un giorno smettesse di bloccare quello, questo pezzo non serve più.
+     */
+    {
+        nome: 'blocca la FORMULA VERA del 2026-09-02 (quattro voci sotto «Cosa rimane»)',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: [
+                'Fatto tutto (`5c2cda49`, pushato). Backend 1396/1396, unit 57/57, browser 88.',
+                '',
+                '## Cosa devi fare tu',
+                '',
+                'Niente in sospeso. Quando `avm-6f` sceglie i nomi degli eventi, li registro io.',
+                '',
+                '## Cosa faccio io',
+                '',
+                '**Fase 5 punto 6** — la model card con Markdown, l\'ultima voce ❌ della fase.',
+                '',
+                '## Cosa rimane',
+                '',
+                '- 🔜 Con un runtime caricato, la riga di un *altro* modello mostra l\'`n_ctx` del modello caricato come «contesto disponibile»',
+                '- 🔜 Gruppo B del dossier: ultimo messaggio in anteprima',
+                '- 🔜 `NAV-CAPABILITY-FIRSTCLASS-01`: 5 righe sidebar',
+                '- 🔜 2 test rossi preesistenti; `@visual` matrix',
+            ].join('\n'),
+        },
+        blocca: true,
+        ragione: /formula di fine fase/,
+    },
+    {
+        nome: 'blocca anche se «Cosa rimane» ha UNA SOLA voce',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: '## Cosa devi fare tu\n\nNiente.\n\n## Cosa rimane\n\n- 🔜 Il debito sul contesto disponibile',
+        },
+        blocca: true,
+        ragione: /formula di fine fase/,
+    },
+    {
+        nome: 'LASCIA PASSARE la formula quando «Cosa rimane» dice NIENTE',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: 'Suite verde, 1396/1396.\n\n## Cosa devi fare tu\n\nNiente.\n\n'
+                + '## Cosa faccio io\n\nNulla: la fase è chiusa.\n\n## Cosa rimane\n\n- Niente in sospeso.',
+        },
+        blocca: false,
+    },
+    {
+        nome: 'LASCIA PASSARE la formula quando «Cosa devi fare tu» chiede il PUSH',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: 'Commit fatto in locale.\n\n## Cosa devi fare tu\n\n'
+                + 'Autorizzare il push: dimmi sì e lo mando.\n\n## Cosa rimane\n\n- 🔜 Le 5 righe della sidebar',
+        },
+        blocca: false,
+    },
+    {
+        nome: 'LASCIA PASSARE la formula con una FERMATA dichiarata e legittima',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: '## Cosa rimane\n\n- 🔜 Il debito sul contesto disponibile\n\n'
+                + '⛔ FERMATA: serve una decisione tua su quale delle due strade prendere.',
+        },
+        blocca: false,
+    },
+    {
+        nome: 'AL CONTRARIO: un elenco 🔜 che NON sta sotto «Cosa rimane» non basta a bloccare',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            /*
+             * ⛔ La sezione si legge dal titolo al titolo successivo. Se il
+             * ritaglio fosse sbagliato (tutto il messaggio invece della sola
+             * sezione), questo caso bloccherebbe — ed è l'unico modo di
+             * accorgersene: un elenco identico, sotto un titolo diverso.
+             */
+            last_assistant_message: '## Cosa ho trovato\n\n- 🔜 una voce che sembra aperta ma è solo citata\n\n'
+                + '## Cosa rimane\n\nNiente: la fase è chiusa e verificata sul dispositivo.',
+        },
+        blocca: false,
+    },
 ]
 
+/*
+ * ⛔⛔⛔ SI CONTROLLA ANCHE PERCHÉ BLOCCA, non solo CHE blocchi — 2026-09-02.
+ *
+ * Difetto trovato in questo stesso file, scrivendo i casi della formula di
+ * chiusura: un caso che si accontenta di `blocca: true` passa anche se il
+ * rilevatore che dovrebbe averlo preso è MORTO e l'ha preso un altro per
+ * sbaglio. È successo davvero — la formula veniva bloccata da
+ * `AVVISI_DI_CONTESTO` (il titolo «Cosa rimane» seguito dalla parola
+ * «contesto» entro 40 caratteri), con una ragione che parlava d'altro. La
+ * prova era verde e il pezzo nuovo poteva non esistere.
+ *
+ * ⇒ Dove il caso lo dichiara, si controlla che la ragione stampata sia
+ * QUELLA: un cancello che non dice cosa ha guardato non è un cancello.
+ */
 let falliti = 0
 for (const caso of casi) {
     const esito = decidiFermata(caso.input)
     const bloccato = esito !== null && esito.decision === 'block'
-    const ok = bloccato === caso.blocca
+    let ok = bloccato === caso.blocca
+    let perche = ''
+    if (ok && caso.ragione && !caso.ragione.test(esito?.reason ?? '')) {
+        ok = false
+        perche = ` — blocca, ma per la ragione sbagliata: «${String(esito?.reason ?? '').slice(0, 90)}…»`
+    }
     if (!ok) falliti += 1
-    console.log(`${ok ? 'ok  ' : 'FAIL'}  ${caso.nome}`)
+    console.log(`${ok ? 'ok  ' : 'FAIL'}  ${caso.nome}${perche}`)
 }
 
 console.log(falliti === 0

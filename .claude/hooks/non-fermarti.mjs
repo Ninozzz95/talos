@@ -217,6 +217,105 @@ const RINVIO_NON_DICHIARATO = [
 ]
 
 /**
+ * ⛔⛔⛔ LA FORMULA DI CHIUSURA FASE — 2026-09-02, ordine dell'owner.
+ *
+ * «fai in modo che hook di sollecito venga aggiornato con i prompt finali che
+ * mi stai mandando, in modo che ti solleciti quando dici cosa rimane o altro».
+ *
+ * ## Il difetto, esatto
+ *
+ * Dal 2026-09-02 ogni fase si chiude con una formula fissa che l'owner ha
+ * imposto («accetto solo queste»): **Cosa devi fare tu · Cosa faccio io ·
+ * Cosa rimane**. È una buona formula — dice lo stato senza girarci attorno.
+ * Ma ha un effetto collaterale che nessuno aveva previsto: l'elenco sotto
+ * «Cosa rimane» *sembra* una consegna, e quindi il turno ci si chiude sopra
+ * con la coscienza a posto. Le altre forme di questo file non lo vedevano —
+ * verificato sul messaggio vero di oggi: zero `OFFERTE`, zero `PROMESSE`,
+ * zero `RESOCONTI_CHE_SI_FERMANO` («cosa rimane» non è «resta da fare»),
+ * zero `RINVIO_NON_DICHIARATO`. Passava liscio, ed è stato l'owner a dover
+ * scrivere «vai avanti con il primo punto di cosa rimane».
+ *
+ * ⇒ Elencare il lavoro che resta è **la prova di sapere qual è il passo dopo**,
+ * cioè esattamente il motivo per cui non serve chiedere. Stessa logica delle
+ * `PROMESSE` («vado su quelli») e dei `RESOCONTI_CHE_SI_FERMANO», solo con la
+ * grafica di un titolo markdown addosso.
+ *
+ * ## Perché NON basta cercare le parole «cosa rimane»
+ *
+ * ⭐ Ricerca 2026-09-02 (code.claude.com/docs/en/hooks; disler/claude-code-hooks-mastery;
+ * codingwithroby, «The Stop Hook That Won't Let Claude Lie to You»): un Stop hook
+ * che risponde `block` sempre viene **scavalcato da Claude Code dopo 8 blocchi di
+ * fila senza progresso**, e la raccomandazione è di legare il blocco a una
+ * *condizione vera* che a un certo punto si spegne. Un rilevatore che blocca a
+ * ogni comparsa della formula sarebbe quindi peggio che inutile: brucerebbe il
+ * budget di blocchi e si disattiverebbe da solo proprio quando serve.
+ *
+ * ⇒ La condizione vera qui è **«Cosa rimane» ha almeno una voce E «Cosa devi
+ * fare tu» non chiede niente di davvero suo**. Una formula con «Cosa rimane:
+ * niente» passa. Una formula che chiede un'autorizzazione al push, una
+ * decisione, dei suoi soldi — passa, perché lì la fermata è legittima e si
+ * riconosce con le stesse `LEGITTIME` usate per la formula `⛔ FERMATA:`,
+ * non con una seconda lista da tenere allineata a mano.
+ */
+const TITOLO_RIMANE = /^\s{0,3}#{0,4}\s*\**\s*cosa (rimane|manca|resta)\b/im
+const TITOLO_TOCCA_A_TE = /^\s{0,3}#{0,4}\s*\**\s*cosa devi fare tu\b/im
+/** Un titolo markdown qualunque: serve solo a sapere dove finisce la sezione. */
+const TITOLO_QUALUNQUE = /^\s{0,3}#{1,4}\s+\S/m
+
+/**
+ * Il testo di una sezione della formula, dal suo titolo al titolo successivo.
+ * @returns '' se quel titolo non c'è.
+ */
+function sezione(messaggio, titolo) {
+    const apre = titolo.exec(messaggio)
+    if (!apre) return ''
+    const dopo = messaggio.slice(apre.index + apre[0].length)
+    const chiude = TITOLO_QUALUNQUE.exec(dopo)
+    return chiude ? dopo.slice(0, chiude.index) : dopo
+}
+
+/**
+ * Le voci elencate sotto «Cosa rimane», nel testo con cui sono scritte.
+ *
+ * ⛔ Si restituiscono le RIGHE, non il numero: un allarme che dice quante sono
+ * e non QUALI non è azionabile — è la stessa lezione del guardiano che gridava
+ * «3 orfani» senza dire chi fossero, e la ragione stampata più sotto nomina la
+ * prima per esteso.
+ */
+export function codeRimaste(messaggio) {
+    if (typeof messaggio !== 'string') return []
+    const corpo = sezione(messaggio, TITOLO_RIMANE)
+    if (corpo === '') return []
+    return corpo.split('\n')
+        .map((riga) => riga.trim())
+        .filter((riga) => /^(?:[-*•]|\d+[.)])\s+\S/.test(riga) || riga.startsWith('🔜'))
+        .map((riga) => riga.replace(/^(?:[-*•]|\d+[.)])\s+/, '').replace(/^🔜\s*/, '').trim())
+        .filter((riga) => riga.length > 0)
+        /*
+         * ⛔ AL CONTRARIO, e non è teorico: «Niente in sospeso» scritto come
+         * voce di elenco è una sezione VUOTA travestita da elenco pieno. Se
+         * passasse, l'hook bloccherebbe proprio i turni in cui non resta
+         * niente — cioè quelli in cui ha ragione a lasciar passare.
+         */
+        .filter((riga) => !/^(niente|nulla|nessun[ao]?)\b/i.test(riga))
+}
+
+/**
+ * «Cosa devi fare tu» chiede davvero qualcosa che solo l'owner può dare?
+ *
+ * ⛔ Si riusa `LEGITTIME`, la stessa lista che giudica un `⛔ FERMATA:`
+ * dichiarato. Una seconda lista parallela sarebbe una seconda cosa da tenere
+ * allineata a mano, e le due divergerebbero al primo cambiamento.
+ */
+export function chiedeQualcosaDiSuo(messaggio) {
+    if (typeof messaggio !== 'string') return false
+    const corpo = sezione(messaggio, TITOLO_TOCCA_A_TE)
+    if (corpo.trim() === '') return false
+    if (/^\s*[-*•]?\s*(niente|nulla|nessun)/i.test(corpo)) return false
+    return LEGITTIME.some((forma) => forma.test(corpo))
+}
+
+/**
  * ⛔⛔ LO STATO, non le parole — ed è quello che dice la ricerca.
  *
  * Owner, 2026-08-13: «ti stai fermando in continuazione c'è qualcosa che non va,
@@ -415,8 +514,24 @@ const AVVISI_DI_CONTESTO = [
     // «il contesto sta finendo», «contesto quasi esaurito», «contesto pieno»,
     // «contesto residuo», «il contesto non basta», «contesto limitato»…
     /\bcontesto\b[^.!?;]{0,90}\b(fin(e|ir|isc|it)|esaur|sgoccioli|pien[oa]|rimast|residu|poco|scars|limitat|budget|token|margine|spazio|sufficiente|bast(a|i)|strett)/i,
-    // «non ho più contesto», «mi resta poco contesto», «con il contesto rimasto»…
-    /\b(non ho|ho poco|resta|rimane|mi rest|mi riman|poco|senza|salvare|risparmiare|consumare)\b[^.!?;]{0,40}\bcontesto\b/i,
+    /*
+     * «non ho più contesto», «mi resta poco contesto», «con il contesto rimasto»…
+     *
+     * ⛔⛔ FALSO POSITIVO CURATO IL 2026-09-02, trovato scrivendo la prova
+     * della formula di chiusura e non prima: l'alternativa conteneva anche
+     * `resta|rimane` NUDI, e il titolo che l'owner ha reso obbligatorio —
+     * «## Cosa RIMANE» — è seguito entro 40 caratteri dalla parola «contesto»
+     * ogni volta che una voce aperta parla della finestra di contesto di un
+     * modello (che è un debito vero, aperto in questo momento). Risultato: il
+     * turno veniva bloccato con la ragione SBAGLIATA — un avviso di contesto
+     * che non era mai stato dato.
+     *
+     * ⇒ Tolti solo i due nudi. Nessuna forma voluta si perde: «mi resta poco
+     * contesto» resta coperta da `mi rest` e da `poco`, «con il contesto
+     * rimasto» dalla riga sopra (`rimast`). Verificato al VERSO CONTRARIO
+     * nella prova gemella, non dedotto.
+     */
+    /\b(non ho|ho poco|mi rest|mi riman|poco|senza|salvare|risparmiare|consumare)\b[^.!?;]{0,40}\bcontesto\b/i,
     // «la finestra di contesto», «il budget di contesto», «la compattazione»…
     /\b(finestra|budget|limite|tetto|spazio) (di|del|nel) contesto\b/i,
     /\bprima (che|di) (finire|esaurire|chiudere|compattare)\b[^.!?;]{0,30}\bcontesto\b/i,
@@ -567,6 +682,24 @@ export function decidiFermata(input) {
         return { decision: 'block', reason: RAGIONE_SENZA_NOME }
     }
 
+    /*
+     * ⛔⛔⛔ LA FORMULA DI CHIUSURA FASE — vedi il commento sopra `TITOLO_RIMANE`.
+     *
+     * Sta QUI, subito dopo la fermata dichiarata e prima di tutto il resto,
+     * per due motivi precisi:
+     *  · dopo, perché un `⛔ FERMATA:` legittimo dev'essere ancora l'ultima
+     *    parola — se il motivo regge, il turno si chiude anche con un elenco
+     *    di cose che restano;
+     *  · prima, perché la formula si legge sul messaggio INTERO e non sulla
+     *    coda di 600 caratteri: i tre titoli stanno alla fine, ma la sezione
+     *    «Cosa rimane» può cominciare molto più su, e tagliare la coda
+     *    troncherebbe l'elenco proprio dove si conta.
+     */
+    const rimaste = codeRimaste(messaggio)
+    if (rimaste.length > 0 && !chiedeQualcosaDiSuo(messaggio)) {
+        return { decision: 'block', reason: RAGIONE_FORMULA(rimaste) }
+    }
+
     // Si guarda la CODA, non tutto il testo: citare una domanda a metà di un
     // messaggio lungo è normale, chiuderci sopra il turno no.
     const coda = messaggio.slice(-600)
@@ -610,6 +743,39 @@ const CINQUE = [
     'una scusa valida. Se il contesto si sta esaurendo si CONTINUA A LAVORARE —',
     'il riassunto lo fa il sistema, tu riparti da solo dall\'altra parte.',
 ].join(' ')
+
+/**
+ * ⛔ La ragione NOMINA la prima voce rimasta, non la conta.
+ *
+ * Un blocco che dicesse «hai lasciato 4 cose aperte» costringerebbe a
+ * rileggere il proprio messaggio per sapere da dove ripartire — e la ricerca
+ * dice che la ragione di un Stop hook va scritta **come un'istruzione**, non
+ * come un rimprovero: è il testo che si legge subito dopo, ed è l'unico posto
+ * dove l'istruzione arriva a costo zero.
+ */
+function RAGIONE_FORMULA(rimaste) {
+    const prima = rimaste[0]
+    const altre = rimaste.length - 1
+    return [
+        '⛔ Hai chiuso il turno con la formula di fine fase, e sotto «Cosa rimane»',
+        `c'è ancora lavoro: ${altre > 0 ? `${rimaste.length} voci, la prima è` : 'una voce,'}`,
+        `«${prima.slice(0, 140)}».`,
+        '',
+        'Elencare quel che resta è la PROVA di sapere qual è il passo dopo — cioè',
+        'esattamente il motivo per cui non c\'è niente da chiedere. La formula',
+        'serve a dire lo STATO all\'owner, non a consegnargli la coda: la regola',
+        'resta la «corsa continua», e sugli step approvati si va da soli.',
+        '',
+        `⇒ Riparti ADESSO, in questo turno, dalla PRIMA voce: «${prima.slice(0, 140)}».`,
+        'Non riscrivere la formula per dire che stai per farlo: aprila e basta.',
+        '',
+        'Se invece quella prima voce è davvero bloccata da qualcosa che solo',
+        'l\'owner può sbloccare, allora scrivilo sotto «Cosa devi fare tu» in modo',
+        'esplicito (una sua decisione, i suoi soldi, un gesto che esce fuori, un',
+        'cancello rosso) oppure dichiara «⛔ FERMATA: <motivo>» — con una di',
+        'quelle due forme questo blocco non scatta.',
+    ].join(' ')
+}
 
 const RAGIONE_CONTESTO = [
     '⛔ Hai dato un AVVISO DI CONTESTO, e l\'owner li ha vietati tutti il',
