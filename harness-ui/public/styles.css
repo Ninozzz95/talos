@@ -1102,6 +1102,27 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .model-lab-download-action progress { width: min(240px, 100%); accent-color: var(--accent); }
 .model-lab-queue-badge { min-width: 42px; justify-content: center; padding-inline: 10px; }
 .model-lab-installed-item > progress { width: 100%; height: 8px; accent-color: var(--accent); }
+/*
+ * ⭐⭐⭐ 02/9 — Fase 5 punto 4: il verdetto di compatibilità PRIMA del load.
+ * ⛔ Il colore non è l'unico segnale: ogni stato porta anche un glifo suo
+ * (`::before`) e la parola per esteso nel testo. Un "non compatibile"
+ * distinguibile solo dal rosso sarebbe illeggibile a chi non distingue i
+ * colori — ed è proprio il caso in cui l'informazione conta di più, visto
+ * che si sta per caricare un modello che può bloccare la macchina.
+ */
+.model-lab-fit { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; margin: 8px 0 0; padding: 6px 10px; border: 1px solid var(--line); border-left-width: 3px; border-radius: 8px; background: var(--surface-highlight-subtle); color: var(--text-2); font-size: calc(11px * var(--talos-ui-font-scale)); line-height: 1.5; }
+.model-lab-fit::before { flex: 0 0 auto; font-weight: 700; }
+.model-lab-fit > small { color: var(--muted); }
+.model-lab-fit[data-fit-state="ok"] { border-left-color: var(--success); }
+.model-lab-fit[data-fit-state="ok"]::before { content: '✓'; color: var(--success); }
+.model-lab-fit[data-fit-state="warn"] { border-left-color: var(--accent); }
+.model-lab-fit[data-fit-state="warn"]::before { content: '!'; color: var(--accent); }
+.model-lab-fit[data-fit-state="bad"] { border-left-color: var(--danger); }
+.model-lab-fit[data-fit-state="bad"]::before { content: '✕'; color: var(--danger); }
+.model-lab-fit[data-fit-state="unknown"] { border-left-color: var(--line-strong); }
+.model-lab-fit[data-fit-state="unknown"]::before { content: '?'; color: var(--muted); }
+.model-lab-fit[data-fit-state="attesa"] { border-left-color: var(--line-strong); color: var(--muted); }
+.model-lab-fit[data-fit-state="attesa"]::before { content: '…'; color: var(--muted); }
 .model-lab-model-card, .model-lab-model-card * { min-width: 0; overflow-wrap: anywhere; }
 .model-lab-model-card pre, .model-lab-model-card code { white-space: pre-wrap; word-break: break-word; }
 .file-picker-label { display: inline-flex; align-items: center; justify-content: center; }

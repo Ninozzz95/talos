@@ -150,12 +150,40 @@ aggiornata dal 31/8) lasciasse credere:
    anche il giro di generazione reale — backend 1341/1342 (l'unico rosso
    è la fixture del contratto frontend, `app.js` sotto modifica attiva
    di un'altra sessione, non toccato). **Backend del punto 4 completo.**
-   🔜 **Resta da fare, SOLO frontend**: la UI "prima di load" nel
-   pannello Installati che chiama `/fit`/`/qualify` e mostra lo stato
-   onesto (compatible/blocked/chat-only/unknown con la motivazione) —
-   non iniziata qui apposta: `app.js` è sotto modifica attiva di
-   un'altra sessione (Fable) in questo stesso worktree, nessun tocco per
-   evitare di sovrascrivere lavoro in corso.
+   ✅ **UI "prima di load" FATTA — 02/09 (sera)**: pulsante "Verifica
+   compatibilità" per riga nel pannello Installati, chiama `/fit` e
+   mostra il verdetto onesto. Cinque stati: compatible / **tight** /
+   chat-only / blocked / unknown, con il motivo in italiano piano (mai il
+   codice grezzo del server). ⭐ `tight` è un'aggiunta nostra, derivata
+   dai byte che il server già misura sulla soglia standard del 90%
+   (ricerca: aimultiple.com/self-hosted-llm,
+   tech-insider.org/lm-studio-vs-ollama-2026) — e la ricerca dichiara un
+   BUCO nei due concorrenti diretti: «neither currently implements a
+   prominent "will not fit" warning UI before model loading» (LM Studio
+   può crashare senza avviso, Ollama scivola in silenzio su CPU, fino a
+   30× più lento). Avvisare PRIMA del load è quindi un vantaggio reale.
+   ⛔ `/fit` NON parte da solo a ogni render (legge l'header GGUF e
+   misura la macchina): è un gesto esplicito. ⛔ Con `availableBytes`
+   assente non si inventa una percentuale. ⛔ Un errore di verifica dice
+   "verifica non riuscita" col messaggio vero, mai un verdetto negativo.
+   ⛔ Ogni stato ha un glifo oltre al colore. 7 test hermetici
+   (`tests/model-fit-ui.test.mjs`), 8 stati provati dal vivo sulla
+   funzione vera della UI.
+   ⛔⛔ **Trovato per strada, DUE difetti**: (a) esistevano DUE
+   `renderizzaModelliLocaliModelLab` in `app.js`, la prima più vecchia e
+   povera, morta ma leggibile — stessa classe già trovata con
+   `renderizzaHfDetailModelLab`; rimossa. (b) 🔜 **la cartella
+   `.local-models/manifests/` è VUOTA** mentre sul disco ci sono tre
+   cartelle modello (incluso un GGUF vero da 331 MB): il pannello
+   Installati mostra "Nessun modello locale osservabile" e `/fit`
+   risponde `MODEL_NOT_FOUND`. ⛔ Non ho ricostruito i manifest a mano:
+   servirebbero `revision` (hash di commit) e licenza che non conosco, e
+   il pannello dichiara "hash, licenza e origine sono osservati" —
+   inventarli metterebbe una provenienza falsa. Decide l'owner.
+   ⛔ **NON verificato visivamente**: il verdetto dentro una riga vera,
+   perché nessun modello è elencabile finché i manifest mancano. Provata
+   la funzione (8 stati) e il percorso HTTP reale (errore vero), non il
+   suo aspetto in lista.
 5. ⚠️ **PARZIALE** — 7 card provider (OpenRouter/OpenAI/DeepSeek/Anthropic/
    Gemini/Ollama/HuggingFace) con chiave/indirizzo/timeout, salva/rimuovi
    chiave — reale. Il "motore" che li rende operativi per la chat locale è
