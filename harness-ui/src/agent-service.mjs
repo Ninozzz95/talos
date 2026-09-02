@@ -2,11 +2,21 @@
  * agent-service.mjs — espone `talosLavora` (AVM-harness) come servizio per
  * Harness UI. Piano `elegant-spinning-dongarra.md`, FASE 1, §1.2.
  *
- * ⛔ Import relativo, non un pacchetto npm: `talosHarness.mjs` È il kernel
- * TALOS reale compilato (vedi la sua stessa doc in testa al file, "una copia
- * in .mjs divergerebbe in silenzio"), e Harness UI ha il vincolo dichiarato
- * "zero npm install" (README.md). AVM, AVM-harness, AVM-harness-ui sono tre
- * cartelle SORELLE — verificato il 24/8 con un elenco reale, non assunto.
+ * ⛔⛔⛔ 02/09 — CORRETTO, questo commento era rimasto FALSO per due giorni.
+ * Descriveva un import relativo diretto verso `talosHarness.mjs` come
+ * cartella sorella — dal commit `16677c48` (31/8) quell'import non esiste
+ * più: `talosLavora` (riga 104 sotto) passa per `createOwnerRuntimeAdapter()`
+ * (`runtime-owner-adapter.mjs`), che carica il kernel SOLO se
+ * `TALOS_OWNER_RUNTIME_MODULE` è impostata a un percorso assoluto —
+ * altrimenti lancia `OwnerRuntimeUnavailableError` su OGNI giro, nuovo o
+ * ripreso. La cartella sorella (`AVM-harness/mobile/scripts/harness-talos/
+ * talosHarness.mjs`, verificata il 24/8 e ancora vera oggi) resta il valore
+ * giusto da passare in quella variabile — ma va DICHIARATA a chi avvia il
+ * server, non più assunta dal codice. Il server è rimasto acceso per due
+ * giorni con la copia PRECEDENTE (senza questo requisito) finché un riavvio
+ * il 02/09 non ha esposto il buco: ogni sessione, nuova o ripresa,
+ * rispondeva "Il runtime agente non è configurato per questa
+ * installazione." Vedi `.claude/LEDGER-RUNTIME-OWNER-MODULE-2026-09-02.md`.
  *
  * ⛔ `talosLavora` non sa niente di AG-UI: riporta dati grezzi (`onGiro`,
  * `onScrittura`) tramite i quattro parametri opzionali aggiunti in
