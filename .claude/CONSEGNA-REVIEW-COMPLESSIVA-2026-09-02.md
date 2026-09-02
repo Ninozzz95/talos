@@ -83,6 +83,29 @@ anch'esso software e ha un tetto a 30 fps, quindi "p95 33 ms" era il MASSIMO
 possibile, non una misura di fluidità. Nessuno dei quattro scenari CDP
 precedenti ha mai letto `chrome://gpu`.
 
+### 1.2-bis Senza GPU, quanto recupera l'app da sola (misurato dopo la prima consegna)
+
+Stesso Chrome con `--disable-gpu`, pagina ferma 5 s, sidebar aperte, report in
+`.../review-2026-09-02/chrome-nogpu-degrado/report.json`:
+
+| variante | frame in 5 s | mediana | p95 | sopra 50 ms |
+|---|---|---|---|---|
+| com'è oggi (sfondo in moto + backdrop-filter) | 48 | 109,2 ms | 121,2 ms | 46 |
+| solo backdrop-filter spento, sfondo in moto | 94 | 60,5 ms | 66,7 ms | 60 |
+| **solo sfondo fermo**, backdrop-filter intatto | **883** | **6,1 ms** | **6,1 ms** | **0** |
+| sfondo fermo e backdrop-filter spento | 875 | 6,1 ms | 6,2 ms | 0 |
+| palette: digitazione con sfondo in moto | — | p95 163,7 ms | | 13 |
+| palette: digitazione con sfondo fermo | — | p95 109 ms | | 3 |
+
+Lettura: senza GPU il costo dominante è l'**animazione degli orb** (che
+costringe a ricomporre tutto ciò che sta sopra, sfocature comprese); il
+`backdrop-filter` da solo pesa la metà. Fermare lo sfondo riporta la pagina
+ferma allo stesso frame rate della GPU accesa. Il controllo esiste già nelle
+impostazioni («Sfondo animato» → Statico, oppure «Sfondo attivo» spento):
+l'owner può usarlo oggi, senza codice. Una rilevazione automatica del
+rendering software (sonda rAF da fermo > 50 ms → sfondo statico) resta
+possibile ed è la sola parte che richiede codice.
+
 ### 1.3 Cosa resta vero del codice (misurato in A, dove il compositing non maschera)
 
 - **Streaming vivo**: `renderizzaMessaggioStreamingOra()`
