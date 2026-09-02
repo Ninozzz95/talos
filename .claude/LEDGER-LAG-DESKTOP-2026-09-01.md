@@ -413,3 +413,32 @@ Modifiche esatte:
 Nessun blur, token, forma, colore o impostazione viene rimosso. La pausa vale
 solo durante un gesto di scroll o finché un dialog è aperto; lo sfondo torna a
 muoversi automaticamente senza ripartire da zero.
+
+## Seconda lettura — 02/09/2026, dopo che Codex ha esaurito i crediti
+
+Questa era l'ULTIMA cosa scritta, mai passata da un secondo paio d'occhi —
+owner: *"ancora oggi c'è del lag inspiegabile"*. Riletta riga per riga
+(`setBackgroundInteractionPause`, `syncBackgroundDialogPause`,
+`queueBackgroundScrollPause`, `harness-ui/public/app.js:5982-6018`), tracciati
+tutti e tre i percorsi di chiusura di un dialog (bottone/azione esplicita →
+`closeEmbeddedDialog`; Escape → `dismissTransientLayers`; click sul backdrop →
+`dismissTransientLayers`) fino a `syncBackgroundDialogPause()`: tutti e tre
+corretti, nessun percorso nativo (`<dialog>` in modalità `.show()`, non
+`.showModal()` — l'Escape del browser non scatta da solo, è tutto manuale via
+keydown) che lo scavalca. Teardown (`window.__talosHarnessDestroy`) pulisce
+timer, reasons e classi CSS per intero.
+
+**Rilanciato dal vivo, non solo riletto**: `LAG-INTERACTION-DIALOG-38` e
+`LAG-INTERACTION-SCROLL-39` — **2/2 passati** (`npm --prefix harness-ui/frontend
+run test:browser -- --grep "LAG-INTERACTION"`, server owner `4174` sano prima
+e dopo).
+
+**Conclusione di questa lettura**: questo pezzo specifico è solido — nessun
+difetto trovato nella logica né nella copertura dei percorsi di chiusura. Se
+il lag persiste "ancora oggi" come riporta l'owner, la causa è altrove — NON
+in questa slice. Il perimetro da controllare per primo (non ancora fatto):
+se il lag riportato è successivo al 02/09 e riguarda una sessione con MOLTI
+messaggi/tool-call storici, la sezione "Riapertura P0... replay storico" più
+sopra in questo stesso file (coalescenza `TextMessageContent`/`WorkspaceChanged`)
+è la seconda area indicata dal proprio storico di riaperture — anch'essa da
+riverificare dal vivo con lo stesso rigore, non ancora fatto in questo giro.
