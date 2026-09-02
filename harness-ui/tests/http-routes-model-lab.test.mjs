@@ -119,6 +119,72 @@ test('MODEL-LAB-HTTP-MODEL-ACTIONS-01 espone rinomina, copia percorso relativo e
   assert.deepEqual(calls, [['rename', 'qwen3', 'Qwen locale'], ['delete', 'qwen3']]);
 });
 
+test('MODEL-LAB-HTTP-FIT-01 espone il probe "prima di load" (fit), busta API standard', async (t) => {
+  let received;
+  const base = await listen(t, null, { localRuntimeProbe: {
+    fit: async (modelId, options) => { received = { modelId, options }; return { modelId, profile: 'agent', state: 'compatible', reason: 'fits' }; },
+  } });
+  const response = await fetch(`${base}/api/v1/local-models/qwen3/fit`);
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.ok, true);
+  assert.equal(body.data.state, 'compatible');
+  assert.deepEqual(received, { modelId: 'qwen3', options: {} });
+});
+
+test('MODEL-LAB-HTTP-FIT-02 inoltra profile e contextTokens dalla query', async (t) => {
+  let received;
+  const base = await listen(t, null, { localRuntimeProbe: {
+    fit: async (modelId, options) => { received = { modelId, options }; return { modelId, profile: options.profile, state: 'compatible' }; },
+  } });
+  const response = await fetch(`${base}/api/v1/local-models/qwen3/fit?profile=chat&contextTokens=8192`);
+  assert.equal(response.status, 200);
+  assert.deepEqual(received, { modelId: 'qwen3', options: { profile: 'chat', contextTokens: 8192 } });
+});
+
+test('MODEL-LAB-HTTP-FIT-03 propaga lo stato/motivo onesto quando il modello non ci sta (mai un "ok" travestito)', async (t) => {
+  const base = await listen(t, null, { localRuntimeProbe: {
+    fit: async () => ({ modelId: 'qwen3', profile: 'agent', state: 'blocked', reason: 'memory' }),
+  } });
+  const body = await (await fetch(`${base}/api/v1/local-models/qwen3/fit`)).json();
+  assert.equal(body.data.state, 'blocked');
+  assert.equal(body.data.reason, 'memory');
+});
+
+test('MODEL-LAB-HTTP-FIT-04 propaga un errore del probe (es. modello non trovato) come errore HTTP reale', async (t) => {
+  const base = await listen(t, null, { localRuntimeProbe: {
+    fit: async () => { const error = new Error('model x not found'); error.code = 'MODEL_NOT_FOUND'; throw error; },
+  } });
+  const response = await fetch(`${base}/api/v1/local-models/x/fit`);
+  const body = await response.json();
+  assert.equal(response.status, 404);
+  assert.equal(body.error.code, 'MODEL_NOT_FOUND');
+});
+
+test('AL CONTRARIO — MODEL-LAB-HTTP-FIT-05 senza il probe configurato non finge una risposta, dichiara la dipendenza mancante', async (t) => {
+  const base = await listen(t, null);
+  const response = await fetch(`${base}/api/v1/local-models/qwen3/fit`);
+  const body = await response.json();
+  assert.equal(response.status, 503);
+  assert.equal(body.error.code, 'RUNTIME_NOT_AVAILABLE');
+});
+
+test('AL CONTRARIO — MODEL-LAB-HTTP-FIT-06 un contextTokens non valido è rifiutato PRIMA di chiamare il probe', async (t) => {
+  let called = false;
+  const base = await listen(t, null, { localRuntimeProbe: { fit: async () => { called = true; return {}; } } });
+  const response = await fetch(`${base}/api/v1/local-models/qwen3/fit?contextTokens=-4`);
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error.code, 'FIT_INVALID');
+  assert.equal(called, false);
+});
+
+test('AL CONTRARIO — MODEL-LAB-HTTP-FIT-07 un parametro di query sconosciuto è rifiutato, non ignorato in silenzio', async (t) => {
+  const base = await listen(t, null, { localRuntimeProbe: { fit: async () => ({}) } });
+  const response = await fetch(`${base}/api/v1/local-models/qwen3/fit?refresh=1`);
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error.code, 'QUERY_INVALID');
+});
+
 test('MODEL-LAB-HTTP-HF-QUERY-01 inoltra filtri e cursore al client Hub', async (t) => {
   let received;
   const base = await listen(t, null, { hfHubClient: { searchModels: async (options) => { received = options; return { items: [], nextCursor: 'next' }; } } });

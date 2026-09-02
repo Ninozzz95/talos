@@ -30,6 +30,8 @@ import { closeRuntimeResources } from './src/http-lifecycle.mjs';
 import { createWorkspaceLaunchStore } from './src/workspace-launch-store.mjs';
 import { cartelleConsigliate } from './src/frequent-dirs.mjs';
 import { createWorkspaceBrowser } from './src/workspace-browser.mjs';
+import { createLocalRuntimeProbe } from './src/local-runtime-probe.mjs';
+import { readGgufHeader } from './src/gguf-header.mjs';
 import { join, parse } from 'node:path';
 
 /** ⛔ Stessi tre nomi loopback validati in config.mjs (`LOOPBACK_HOSTS`, non esportato — costante minuscola e stabile, duplicarla qui è più semplice che aggiungere un export per tre stringhe). Un browser può presentarsi con uno qualunque dei tre alias anche se il server è bindato su un altro. */
@@ -101,6 +103,15 @@ async function startServer() {
       cancel: (requestId) => compatibleRuntime.cancel(requestId), health: () => compatibleRuntime.health('lmstudio'),
     },
   };
+  /*
+   * ⭐⭐⭐ 02/9 — Fase 5, punto 4: `local-runtime-probe.mjs` esisteva già
+   * completo (inspectModel/fit/qualify) ma senza `readHeader` non poteva
+   * mai partire — vedi `.claude/PIANO-COMPLETO-DESKTOP-2026-08-31.md`. Il
+   * probe è specifico a llama.cpp (l'unico runtime locale con file GGUF
+   * reali su disco da ispezionare): resta `null` se `config.llamaServerPath`
+   * non è configurata, stessa condizione già in uso per `localRuntimes['llama.cpp']`.
+   */
+  let localRuntimeProbe = null;
   if (config.llamaServerPath) {
     const supervisor = createLlamaServerSupervisor({ binaryPath: config.llamaServerPath, modelStore: localModelStore });
     const llama = createLlamaServerRuntime({ supervisor });
@@ -114,6 +125,12 @@ async function startServer() {
       cancel: (requestId) => llama.cancel(requestId),
       health: () => llama.health(),
     };
+    localRuntimeProbe = createLocalRuntimeProbe({
+      runtime: llama,
+      modelStore: localModelStore,
+      readHeader: readGgufHeader,
+      measureMachine: () => misuraCapacitaMacchina({ storagePath: config.publicDir }),
+    });
   }
   /*
    * ⛔ Nessun fail() se config.chiaveApi manca (vedi config.mjs): il server
@@ -257,6 +274,7 @@ async function startServer() {
     },
     localModelStore,
     localModelTransfer,
+    localRuntimeProbe,
     hfHubClient,
     hfImageProxyFn: (url) => fetchAllowedHfImage(url),
     providerStore,

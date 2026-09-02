@@ -65,6 +65,8 @@ const API_ERROR_CODES = new Set([
   'HF_DOWNLOAD_FAILED', 'HF_PATH_REJECTED', 'CHECKSUM_MISMATCH', 'MODEL_FILE_UNREADABLE', 'CANCELLED_BY_OWNER', 'PAUSED_BY_OWNER',
   'HF_IMAGE_URL_INVALID', 'HF_IMAGE_HOST_REJECTED', 'HF_IMAGE_REDIRECT_REJECTED', 'HF_IMAGE_PRIVATE_ADDRESS', 'HF_IMAGE_DNS_FAILED', 'HF_IMAGE_ABORTED', 'HF_IMAGE_UPSTREAM', 'HF_IMAGE_MIME_REJECTED', 'HF_IMAGE_TOO_LARGE', 'HF_IMAGE_CONFIG_INVALID',
   'LOCAL_IMPORT_INVALID', 'LOCAL_IMPORT_TOO_LARGE', 'LOCAL_IMPORT_SIZE_MISMATCH', 'LOCAL_IMPORT_EMPTY', 'LOCAL_IMPORT_NOT_GGUF',
+  /* ⭐ 02/9 — Fase 5 punto 4: probe locale "prima di load" (local-runtime-probe.mjs + gguf-header.mjs). */
+  'MODEL_NOT_READY', 'MODEL_HEADER_INVALID', 'MODEL_HEADER_UNREADABLE', 'RUNTIME_PROBE_FAILED', 'FIT_INVALID', 'LOCAL_RUNTIME_PROBE_MISCONFIGURED',
 ]);
 
 const STATUS_BY_CODE = Object.freeze({
@@ -131,6 +133,15 @@ const STATUS_BY_CODE = Object.freeze({
   LOCAL_IMPORT_SIZE_MISMATCH: 422,
   LOCAL_IMPORT_EMPTY: 422,
   LOCAL_IMPORT_NOT_GGUF: 422,
+  /** ⭐ 02/9 — stesso status di SESSION_NOT_READY: il modello esiste ma non è nello stato giusto per un probe (download/verifica in corso). */
+  MODEL_NOT_READY: 409,
+  /** ⭐ 02/9 — il file GGUF esiste ma il suo contenuto non è quello atteso (magic/version/metadata mancante) — è il FILE ad essere invalido, non la richiesta. */
+  MODEL_HEADER_INVALID: 422,
+  MODEL_HEADER_UNREADABLE: 422,
+  /** ⭐ 02/9 — stesso status di RUNTIME_UNREACHABLE: il runtime llama.cpp non ha risposto al probe. */
+  RUNTIME_PROBE_FAILED: 503,
+  FIT_INVALID: 400,
+  LOCAL_RUNTIME_PROBE_MISCONFIGURED: 500,
 });
 
 const MESSAGE_BY_CODE = Object.freeze({
@@ -168,6 +179,11 @@ const MESSAGE_BY_CODE = Object.freeze({
   RUNTIME_UNREACHABLE: 'Runtime locale non raggiungibile',
   RUNTIME_OPERATION_UNSUPPORTED: 'Operazione runtime non supportata',
   MODEL_NOT_FOUND: 'Modello locale non trovato',
+  MODEL_NOT_READY: 'Il modello non è ancora pronto (download o verifica in corso)',
+  MODEL_HEADER_INVALID: 'Il file GGUF del modello non è valido',
+  MODEL_HEADER_UNREADABLE: 'Il file GGUF del modello non è leggibile',
+  RUNTIME_PROBE_FAILED: 'Il runtime locale non ha risposto al controllo',
+  FIT_INVALID: 'Parametri di verifica non validi',
   MODEL_LOAD_UNCONFIRMED: 'Caricamento modello non confermato',
   MODEL_UNLOAD_UNCONFIRMED: 'Scaricamento modello non confermato',
   LOCAL_RUNTIME_FAILED: 'Runtime locale fallito',
@@ -754,6 +770,7 @@ export function createHttpApp({
   catalogoModelliFn = null, clock = () => new Date(), leggiArtefattoFn = leggiArtefattoReale,
   capacitaMacchinaFn = null,
   localRuntimes = null, localModelStore = null, localModelTransfer = null, hfHubClient = null,
+  localRuntimeProbe = null,
   hfImageProxyFn = null,
   runtimeBootstrapFn = null,
   providerStore = null,
@@ -1022,6 +1039,39 @@ export function createHttpApp({
           await localModelStore.remove(id);
           sendJson(res, 200, successEnvelope({ id, deleted: true }, clock), method);
         }
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    /*
+     * ⭐⭐⭐ 02/9 — Fase 5, punto 4 del piano ("prima di load"): header GGUF
+     * reale + capacità macchina reale + un giro di probe sul runtime, MAI
+     * un caricamento vero — sola lettura, sicura da chiamare prima che
+     * l'owner decida di caricare il modello per davvero. `qualify()` (che
+     * fa girare il modello per un giro reale) resta un incremento
+     * successivo, dichiarato non implementato qui.
+     */
+    if (method === 'GET' && /^\/api\/v1\/local-models\/([^/]+)\/fit$/.test(url.pathname)) {
+      try {
+        const match = /^\/api\/v1\/local-models\/([^/]+)\/fit$/.exec(url.pathname);
+        const id = decodeURIComponent(match[1]);
+        if (!localRuntimeProbe) { const error = new Error('Probe runtime locale non configurato'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        const profileParam = url.searchParams.get('profile');
+        const contextParam = url.searchParams.get('contextTokens');
+        const options = {};
+        if (profileParam !== null) options.profile = profileParam;
+        if (contextParam !== null) {
+          const parsed = Number(contextParam);
+          if (!Number.isSafeInteger(parsed) || parsed <= 0) { const error = new Error('contextTokens non valido'); error.code = 'FIT_INVALID'; throw error; }
+          options.contextTokens = parsed;
+        }
+        // Solo profile/contextTokens sono ammessi — qualunque altro parametro è un errore, non ignorato in silenzio.
+        for (const key of url.searchParams.keys()) { if (key !== 'profile' && key !== 'contextTokens') { const error = new Error('Query non valida'); error.code = 'QUERY_INVALID'; throw error; } }
+        const data = await localRuntimeProbe.fit(id, options);
+        sendJson(res, 200, successEnvelope(data, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
