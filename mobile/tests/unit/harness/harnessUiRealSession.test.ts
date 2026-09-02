@@ -2459,7 +2459,77 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         await runtime().openRealTaskSheet()
 
         expect(document.querySelector('#customTaskCartella')).toBeNull()
-        expect(document.querySelector('#sheetBody')?.textContent).toContain('TALOS_HARNESS_UI_PROJECT_DIRS')
+        const body = document.querySelector('#sheetBody')
+        expect(body?.textContent).toContain('cartella di progetto disponibile')
+        expect(body?.textContent).not.toContain('TALOS_HARNESS_UI_PROJECT_DIRS')
+        expect(body?.textContent).not.toMatch(/riavvia il server|percorsi assoluti/i)
+        const doctor = body?.querySelector<HTMLButtonElement>('[data-open-doctor]')
+        expect(doctor).toBeTruthy()
+        doctor?.click()
+        expect(document.querySelector('#sheetBody')?.textContent).toContain('Doctor')
+    })
+
+    it('REAL-SESSION-CONTEXT-MENU-01 il tasto destro apre un menu azioni condiviso, non la conferma elimina', async () => {
+        mockFetch([{
+            metodo: 'GET',
+            percorso: '/api/v1/sessions',
+            corpo: { items: [{ sessionId: 'sess-menu', taskId: 'task-menu', nome: 'Sessione menu', avviataAlle: '2026-08-31T10:00:00.000Z', conclusa: true }] },
+        }])
+
+        await runtime().aggiornaElencoSessioniReali()
+        const riga = document.querySelector<HTMLElement>('[data-real-session-id="sess-menu"]')
+        expect(riga).toBeTruthy()
+        riga!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 140 }))
+
+        const menu = document.querySelector<HTMLElement>('[role="menu"].session-actions-menu')
+        expect(menu).toBeTruthy()
+        expect(menu?.textContent).toContain('Apri')
+        expect(menu?.textContent).toContain('Rinomina')
+        expect(menu?.textContent).toContain('Fork')
+        expect(menu?.textContent).toContain('Copia identificativo')
+        expect(menu?.textContent).toContain('Elimina')
+        expect(document.querySelector('#deleteSessionConfirm')).toBeNull()
+    })
+
+    it('REAL-SESSION-CONTEXT-MENU-02 Elimina dal menu apre la conferma esplicita', async () => {
+        mockFetch([{
+            metodo: 'GET',
+            percorso: '/api/v1/sessions',
+            corpo: { items: [{ sessionId: 'sess-delete-menu', taskId: 'task-delete-menu', nome: 'Da eliminare', avviataAlle: '2026-08-31T10:00:00.000Z', conclusa: true }] },
+        }])
+
+        await runtime().aggiornaElencoSessioniReali()
+        const riga = document.querySelector<HTMLElement>('[data-real-session-id="sess-delete-menu"]')!
+        riga.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 140 }))
+        const elimina = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((button) => button.textContent?.includes('Elimina'))
+        expect(elimina).toBeTruthy()
+        elimina!.click()
+
+        expect(document.querySelector('#deleteSessionConfirm')).toBeTruthy()
+    })
+
+    it('REAL-SESSION-CONTEXT-MENU-03 Rinomina usa il target scelto e il relativo endpoint', async () => {
+        mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [{ sessionId: 'sess-rename-menu', taskId: 'task-rename-menu', nome: 'Titolo precedente', avviataAlle: '2026-08-31T10:00:00.000Z', conclusa: true }] } },
+        ])
+        await runtime().aggiornaElencoSessioniReali()
+        const riga = document.querySelector<HTMLElement>('[data-real-session-id="sess-rename-menu"]')!
+        riga.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 140 }))
+        const rinomina = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((button) => button.textContent?.includes('Rinomina'))
+        rinomina!.click()
+        expect((document.querySelector('#renameSessionInput') as HTMLInputElement).value).toBe('Titolo precedente')
+
+        const fetchMock = vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+            const url = typeof input === 'string' ? input : String(input)
+            const metodo = (init?.method ?? 'GET').toUpperCase()
+            if (metodo === 'POST' && url === '/api/v1/sessions/sess-rename-menu/rename') return new Response(JSON.stringify({ ok: true, data: {} }), { status: 200 })
+            if (metodo === 'GET' && url === '/api/v1/sessions') return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
+            throw new Error(`nessuna risposta per ${metodo} ${url}`)
+        })
+        const input = document.querySelector<HTMLInputElement>('#renameSessionInput')!
+        input.value = 'Titolo nuovo'
+        document.querySelector<HTMLFormElement>('#renameSessionForm')!.requestSubmit()
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions/sess-rename-menu/rename', expect.objectContaining({ method: 'POST' })))
     })
 
     it('MODEL-PICKER-01 apre il catalogo vero (GET /api/v1/models), raggruppato per provider, e la scelta viaggia nella POST', async () => {

@@ -30,6 +30,7 @@ describe('Harness UI embedded host and keyboard runtime', () => {
     })
 
     afterEach(() => {
+        vi.unstubAllGlobals()
         ;(window as unknown as { __talosHarnessDestroy?: () => void }).__talosHarnessDestroy?.()
         delete (window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot
         delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
@@ -45,6 +46,104 @@ describe('Harness UI embedded host and keyboard runtime', () => {
             value: originalElementAnimate,
         })
         vi.unstubAllGlobals()
+    })
+
+    it('CODE-PROVIDERS-UI-01 mostra card richiudibili e salva/rimuove senza lasciare la chiave nel browser', async () => {
+        let openAiConfigured = false
+        const rows = [
+            ['openai', 'OpenAI', true, 'https://api.openai.com/v1'],
+            ['deepseek', 'DeepSeek', true, 'https://api.deepseek.com'],
+            ['anthropic', 'Anthropic', true, 'https://api.anthropic.com/v1'],
+            ['gemini', 'Gemini', true, 'https://generativelanguage.googleapis.com/v1beta'],
+            ['openrouter', 'OpenRouter', true, 'https://openrouter.ai/api/v1'],
+            ['ollama', 'Ollama', false, 'http://127.0.0.1:11434'],
+            ['huggingface', 'Hugging Face', false, null],
+        ].map(([id, label, requiresKey, endpoint]) => ({
+            id, label, requiresKey, keyConfigured: id === 'openai' ? openAiConfigured : false,
+            supportsEndpoint: !['anthropic', 'gemini', 'huggingface'].includes(id as string), endpoint, endpointConfigured: false, timeoutSeconds: 60,
+            execution: id === 'openrouter' ? 'collegato' : 'in preparazione',
+        }))
+        const response = (data: unknown) => ({ ok: true, json: async () => ({ ok: true, data }) })
+        const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+            const path = String(input)
+            if (path.endsWith('/api/v1/providers')) { rows[0].keyConfigured = openAiConfigured; return response({ items: rows }) }
+            if (path.includes('/api/v1/providers/openai/key/remove')) { openAiConfigured = false; return response({ provider: 'openai', keyConfigured: false }) }
+            if (path.includes('/api/v1/providers/openai/key')) { openAiConfigured = true; return response({ provider: 'openai', keyConfigured: true }) }
+            if (path.includes('/api/v1/model-lab/capacity')) return response({ memory: {}, storage: {} })
+            if (path.endsWith('/api/v1/runtime') || path.endsWith('/api/v1/local-models')) return response({ items: [] })
+            return response({ items: [] })
+        })
+        vi.stubGlobal('fetch', fetchMock)
+        mountStaticRuntime()
+
+        document.querySelector<HTMLButtonElement>('[data-settings-tab="models"]')!.click()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(document.querySelectorAll('[data-provider-id]')).toHaveLength(7)
+        expect([...document.querySelectorAll<HTMLElement>('[data-provider-detail]')].every((detail) => detail.hidden)).toBe(true)
+
+        const card = document.querySelector<HTMLElement>('[data-provider-id="openai"]')!
+        card.querySelector<HTMLButtonElement>('[data-provider-toggle]')!.click()
+        expect(card.querySelector<HTMLElement>('[data-provider-detail]')!.hidden).toBe(false)
+        const input = card.querySelector<HTMLInputElement>('[data-provider-key]')!
+        input.value = 'sk-ui-secret-never-stored'
+        card.querySelector<HTMLButtonElement>('[data-provider-action="save-key"]')!.click()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(input.value).toBe('')
+        expect(window.localStorage.getItem('sk-ui-secret-never-stored')).toBeNull()
+        expect(document.body.textContent).not.toContain('sk-ui-secret-never-stored')
+        expect(fetchMock.mock.calls.some(([url, options]) => String(url).includes('/providers/openai/key') && (options as RequestInit)?.method === 'POST')).toBe(true)
+        expect(card.querySelector<HTMLElement>('[data-provider-action="remove-key"]')!.hidden).toBe(false)
+
+        card.querySelector<HTMLButtonElement>('[data-provider-action="remove-key"]')!.click()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(card.querySelector<HTMLElement>('[data-provider-action="remove-key"]')!.hidden).toBe(true)
+    })
+
+    it('CODE-PROVIDERS-UI-02 non mette endpoint per Hugging Face e mantiene il tempo massimo separato dalla chiave', async () => {
+        const rows = ['openai', 'deepseek', 'anthropic', 'gemini', 'openrouter', 'ollama', 'huggingface'].map((id) => ({
+            id, label: id, requiresKey: id !== 'ollama' && id !== 'huggingface', keyConfigured: false,
+            supportsEndpoint: !['anthropic', 'gemini', 'huggingface'].includes(id), endpoint: id === 'huggingface' ? null : 'https://example.test', endpointConfigured: false, timeoutSeconds: 60, execution: 'in preparazione',
+        }))
+        const response = (data: unknown) => ({ ok: true, json: async () => ({ ok: true, data }) })
+        const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+            const path = String(input)
+            if (path.endsWith('/api/v1/providers')) return response({ items: rows })
+            if (path.endsWith('/api/v1/model-lab/capacity')) return response({ memory: {}, storage: {} })
+            if (path.endsWith('/api/v1/runtime') || path.endsWith('/api/v1/local-models')) return response({ items: [] })
+            return response({ items: [] })
+        })
+        vi.stubGlobal('fetch', fetchMock)
+        mountStaticRuntime()
+        document.querySelector<HTMLButtonElement>('[data-settings-tab="models"]')!.click()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        const hf = document.querySelector<HTMLElement>('[data-provider-id="huggingface"]')!
+        hf.querySelector<HTMLButtonElement>('[data-provider-toggle]')!.click()
+        expect(hf.querySelector<HTMLElement>('[data-provider-endpoint-block]')).toBeNull()
+        const ollama = document.querySelector<HTMLElement>('[data-provider-id="ollama"]')!
+        ollama.querySelector<HTMLButtonElement>('[data-provider-toggle]')!.click()
+        expect(ollama.querySelector<HTMLInputElement>('[data-provider-timeout]')?.value).toBe('60')
+        const anthropic = document.querySelector<HTMLElement>('[data-provider-id="anthropic"]')!
+        anthropic.querySelector<HTMLButtonElement>('[data-provider-toggle]')!.click()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(anthropic.querySelector<HTMLElement>('[data-provider-endpoint]')?.closest('label')?.hidden).toBe(true)
+        expect(anthropic.querySelector<HTMLInputElement>('[data-provider-timeout]')?.value).toBe('60')
+        expect(anthropic.querySelector<HTMLElement>('.provider-help')?.textContent).toBe('La chiave resta nel portachiavi del computer.')
+        const gemini = document.querySelector<HTMLElement>('[data-provider-id="gemini"]')!
+        gemini.querySelector<HTMLButtonElement>('[data-provider-toggle]')!.click()
+        expect(gemini.querySelector<HTMLElement>('.provider-help')?.textContent).toBe('La chiave resta nel portachiavi del computer.')
+    })
+
+    it('CODE-PROVIDERS-UI-03 closed provider details stay out of layout and expanded card gets the full grid', () => {
+        const css = asset('styles.css')
+        expect(css).toMatch(/\.provider-card-detail\[hidden\]\s*\{[^}]*display:\s*none/s)
+        expect(css).toMatch(/\.provider-card\s+\.provider-field\[hidden\]\s*\{[^}]*display:\s*none/s)
+        expect(css).toMatch(/\.provider-card\.is-expanded\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/s)
+        mountStaticRuntime()
+        document.querySelector<HTMLButtonElement>('[data-settings-tab="models"]')!.click()
+        const card = document.querySelector<HTMLElement>('[data-provider-id="openai"]')!
+        expect(card.querySelector<HTMLElement>('[data-provider-detail]')?.hidden).toBe(true)
+        card.querySelector<HTMLButtonElement>('[data-provider-toggle]')!.click()
+        expect(card.classList.contains('is-expanded')).toBe(true)
     })
 
     it('HARNESS-EMBEDDED-HEIGHT-01 sizes the embedded app and workspace from their real host', () => {
@@ -168,6 +267,37 @@ describe('Harness UI embedded host and keyboard runtime', () => {
 
         expect(sheet?.open).toBe(false)
         expect(document.querySelector('[data-view="settings"]')?.classList.contains('active')).toBe(true)
+    })
+
+    it('CODE-SETTINGS-CATEGORIES-01 organizza tutte le categorie in un list-detail con un solo pannello attivo', () => {
+        mountStaticRuntime()
+
+        const tabs = [...document.querySelectorAll<HTMLButtonElement>('[data-settings-tab]')]
+        expect(tabs.map((tab) => tab.dataset.settingsTab)).toEqual([
+            'appearance', 'chat', 'models', 'providers', 'tools', 'privacy', 'workspace', 'account',
+        ])
+        expect(tabs.every((tab) => tab.getAttribute('role') === 'tab')).toBe(true)
+        expect(document.querySelectorAll('[data-settings-panel]:not([hidden])')).toHaveLength(1)
+        expect(document.querySelector('[data-settings-panel="appearance"]')?.classList.contains('active')).toBe(true)
+
+        tabs.find((tab) => tab.dataset.settingsTab === 'models')!.click()
+        expect(document.querySelector('[data-settings-tab="models"]')?.getAttribute('aria-selected')).toBe('true')
+        expect(document.querySelectorAll('[data-settings-panel]:not([hidden])')).toHaveLength(1)
+        expect(document.querySelector('[data-settings-panel="models"]')?.classList.contains('active')).toBe(true)
+        expect(document.querySelector('[data-settings-panel="appearance"]')?.hasAttribute('hidden')).toBe(true)
+    })
+
+    it('CODE-SETTINGS-CATEGORIES-02 persiste la categoria e offre la barra compatta scorrevole', () => {
+        const css = asset('styles.css')
+        expect(css).toMatch(/\.settings-category-nav\s*\{[^}]*display:\s*grid/s)
+        expect(css).toMatch(/@media\s*\(max-width:\s*780px\)[\s\S]*\.settings-category-nav\s*\{[^}]*overflow-x:\s*auto/s)
+        expect(css).toMatch(/\.view-pane\[data-view="settings"\]\s*>\s*\.generic-shell\s*\{[^}]*width:\s*100%[^}]*max-width:\s*none/s)
+        expect(css).toMatch(/\.settings-detail-panels\s*\{[^}]*container-type:\s*inline-size/s)
+        expect(css).toMatch(/@container\s+settings-detail\s*\(max-width:\s*540px\)[\s\S]*grid-template-columns:\s*1fr/s)
+
+        mountStaticRuntime()
+        document.querySelector<HTMLButtonElement>('[data-settings-tab="privacy"]')!.click()
+        expect(window.localStorage.getItem('talos.harness.desktop.settings.section.v1')).toBe('privacy')
     })
 
     it('CODE-SETTINGS-APPEARANCE-HYDRATE-01 hydrates local appearance preferences and applies separate scales', () => {
@@ -685,13 +815,16 @@ describe('Harness UI embedded host and keyboard runtime', () => {
             '[data-copy-message]', '[data-collapse-target]', '[data-tool-detail]', '[data-browser-action]',
             '[data-automation-action]', '[data-review-action]', '[data-review-file]', '[data-session-action]',
             '[data-control-action]', '[data-command]', '[data-approve]', '[data-allow-session]', '[data-deny]',
-            '[data-action]', '[data-demo-action]', '[data-file-entry]', '[role="tab"]', '.session-item',
+            '[data-action]', '[data-demo-action]', '[data-file-entry]', '[data-settings-go]', '[role="tab"]', '.session-item',
             '#overlayBackdrop', '#newSessionBtn', '#sessionsCollapseBtn', '#sessionTitleButton',
             '#runStateToggle', '.stop-run', '#commandPaletteBtn', '#capabilityBtn', '#manageCapabilitiesBtn',
             '#resumeSessionBtn', '#compactSessionBtn',
             '#closeSheet', '#closeCommand', '#cancelQueued', '.composer-mic', '#queueToggle',
             '#approveAllDiffs', '#harnessDialogBackdrop',
             '#modelLabRefreshButton',
+            '#modelLabRuntimeRefresh', '#modelLabCancelButton',
+            '#modelLabHfSearchButton',
+            '[data-provider-toggle]', '[data-provider-action]',
         ].join(',')
         const inert = [...document.querySelectorAll<HTMLButtonElement>('button:not([disabled])')]
             .filter((button) => !button.matches(handled))
@@ -724,6 +857,7 @@ describe('Harness UI embedded host and keyboard runtime', () => {
                 } }), { status: 200 })
             }
             if (url.endsWith('/api/v1/doctor')) return new Response(JSON.stringify({ ok: true, data: { chiaveApi: false } }), { status: 200 })
+            if (url.endsWith('/api/v1/tasks')) return new Response(JSON.stringify({ ok: true, data: { items: [{ id: 'task-probe' }] } }), { status: 200 })
             return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
         })
         vi.stubGlobal('fetch', fetchMock)
@@ -788,7 +922,7 @@ describe('Harness UI embedded host and keyboard runtime', () => {
     it('CODE-MODEL-LAB-RUNTIME-GATE-01 keeps runtime-dependent actions disabled with an explicit reason', () => {
         mountStaticRuntime()
         const gated = [...document.querySelectorAll<HTMLButtonElement>('[data-disabled-reason]')]
-        expect(gated.length).toBeGreaterThanOrEqual(5)
+        expect(gated.length).toBeGreaterThanOrEqual(3)
         expect(gated.every((button) => button.disabled)).toBe(true)
         expect(gated.some((button) => button.dataset.disabledReason?.toLowerCase().includes('runtime'))).toBe(true)
     })
@@ -797,5 +931,151 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         const css = asset('styles.css')
 
         expect(css).toMatch(/@media \(max-width:\s*1180px\)\s*\{[^}]*\.model-lab-ledger\s*\{[^}]*grid-template-columns:\s*repeat\(2,/s)
+    })
+
+    it('CODE-MODEL-LAB-HF-DOWNLOAD-01 searches Hugging Face and starts a verified-set download', async () => {
+        const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
+            if (url.includes('/api/v1/huggingface/search')) return new Response(JSON.stringify({ ok: true, data: { items: [{ repo: 'org/model', revision: 'a'.repeat(40), downloads: 10, gated: false }] } }), { status: 200 })
+            if (url.includes('/api/v1/huggingface/repo')) return new Response(JSON.stringify({ ok: true, data: { repo: 'org/model', revision: 'a'.repeat(40), license: 'apache-2.0', files: [{ path: 'model.gguf', sizeBytes: 4, sha256: 'b'.repeat(64) }] } }), { status: 200 })
+            if (url.endsWith('/api/v1/huggingface/downloads')) return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
+            if (url.endsWith('/api/v1/huggingface/download')) return new Response(JSON.stringify({ ok: true, data: { id: 'org-model', state: 'queued', progress: 0 } }), { status: 200 })
+            if (url.endsWith('/api/v1/model-lab/capacity')) return new Response(JSON.stringify({ ok: true, data: { memory: {}, storage: {} } }), { status: 200 })
+            if (url.endsWith('/api/v1/runtime')) return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
+            if (url.endsWith('/api/v1/doctor')) return new Response(JSON.stringify({ ok: true, data: { chiaveApi: false } }), { status: 200 })
+            return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
+        })
+        vi.stubGlobal('fetch', fetchMock)
+        mountStaticRuntime()
+        document.querySelector<HTMLButtonElement>('[data-open-view="settings"]')?.click()
+        document.querySelector<HTMLButtonElement>('[data-model-lab-tab="huggingface"]')?.click()
+        const input = document.querySelector<HTMLInputElement>('#modelLabHfSearch')!
+        input.value = 'model'
+        document.querySelector<HTMLButtonElement>('#modelLabHfSearchButton')?.click()
+        await new Promise((resolve) => setTimeout(resolve, 0)); await Promise.resolve()
+        expect(document.querySelector('#modelLabHfResults')?.textContent).toContain('org/model')
+        document.querySelector<HTMLButtonElement>('#modelLabHfResults .model-lab-list-item')?.click()
+        await new Promise((resolve) => setTimeout(resolve, 0)); await Promise.resolve()
+        expect(document.querySelector('#modelLabHfDetail')?.textContent).toContain('Scarica')
+    })
+
+    it('CODE-MODEL-LAB-RUNTIME-STATUS-01 renders observed runtimes and enables only a real model choice', async () => {
+        const fetchMock = vi.fn(async (url: string) => {
+            if (url.endsWith('/api/v1/runtime')) return new Response(JSON.stringify({ ok: true, data: { items: [
+                { runtimeId: 'ollama', provider: 'ollama', state: 'observed', baseUrl: 'http://127.0.0.1:11434', observedAt: '2026-08-31T10:00:00.000Z', models: [
+                    { id: 'qwen3:8b', name: 'qwen3:8b', source: 'ollama', context: { state: 'observed', value: 65536 }, verifiedContext: true },
+                ] },
+                { runtimeId: 'lmstudio', provider: 'lmstudio', state: 'unknown', baseUrl: 'http://127.0.0.1:1234', models: [] },
+            ] } }), { status: 200 })
+            if (url.endsWith('/api/v1/model-lab/capacity')) return new Response(JSON.stringify({ ok: true, data: { measuredAt: '2026-08-31T10:00:00.000Z', memory: {}, storage: {} } }), { status: 200 })
+            if (url.endsWith('/api/v1/doctor')) return new Response(JSON.stringify({ ok: true, data: { chiaveApi: false } }), { status: 200 })
+            return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
+        })
+        vi.stubGlobal('fetch', fetchMock)
+        mountStaticRuntime()
+        document.querySelector<HTMLButtonElement>('[data-open-view="settings"]')?.click()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        await Promise.resolve()
+
+        expect(document.querySelector('#modelLabRuntimeStatus')?.textContent).toContain('1 runtime pronto')
+        expect(document.querySelector('#modelLabRuntimeList')?.textContent).toContain('ollama')
+        expect(document.querySelector('#modelLabRuntimeList')?.textContent).toContain('qwen3:8b')
+        expect(document.querySelector('#modelLabRuntimeList')?.textContent).toContain('non raggiunto')
+        expect(document.querySelector<HTMLButtonElement>('#modelLabRunButton')?.disabled).toBe(false)
+        expect(document.querySelector<HTMLSelectElement>('#modelLabRuntimeSelect')?.value).toBe('ollama')
+        expect(document.querySelector<HTMLSelectElement>('#modelLabModelSelect')?.value).toBe('qwen3:8b')
+    })
+
+    it('CODE-MODEL-LAB-INSTALLED-01 renders local manifests without leaking absolute paths or secrets', async () => {
+        const fetchMock = vi.fn(async (url: string) => {
+            if (url.endsWith('/api/v1/local-models')) return new Response(JSON.stringify({ ok: true, data: { items: [{
+                id: 'qwen3', repo: 'Qwen/Qwen3-GGUF', revision: 'a'.repeat(40), bytes: 123456, sha256: 'b'.repeat(64), license: 'Apache-2.0', path: 'qwen3/model.gguf', state: 'ready', updatedAt: '2026-08-31T10:00:00.000Z', files: [],
+            }] } }), { status: 200 })
+            if (url.endsWith('/api/v1/runtime')) return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
+            if (url.endsWith('/api/v1/model-lab/capacity')) return new Response(JSON.stringify({ ok: true, data: { measuredAt: '2026-08-31T10:00:00.000Z', memory: {}, storage: {} } }), { status: 200 })
+            if (url.endsWith('/api/v1/doctor')) return new Response(JSON.stringify({ ok: true, data: { chiaveApi: false } }), { status: 200 })
+            return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
+        })
+        vi.stubGlobal('fetch', fetchMock)
+        mountStaticRuntime()
+        document.querySelector<HTMLButtonElement>('[data-open-view="settings"]')?.click()
+        document.querySelector<HTMLButtonElement>('[data-model-lab-tab="installed"]')?.click()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        await Promise.resolve()
+
+        expect(document.querySelector('#modelLabInstalledList')?.textContent).toContain('qwen3')
+        expect(document.querySelector('#modelLabInstalledList')?.textContent).toContain('Apache-2.0')
+        expect(document.querySelector('#modelLabInstalledList')?.textContent).toContain('bbbbbbbbbbbb')
+        expect(document.querySelector('#modelLabInstalledList')?.textContent).not.toContain('C:\\')
+        expect(document.querySelector('#modelLabInstalledList')?.textContent).not.toMatch(/token|api[_-]?key|secret/i)
+    })
+
+    it('CODE-MODEL-LAB-GATED-01 keeps runtime test disabled when no adapter is ready', async () => {
+        const fetchMock = vi.fn(async (url: string) => {
+            if (url.endsWith('/api/v1/runtime')) return new Response(JSON.stringify({ ok: true, data: { items: [{ runtimeId: 'ollama', state: 'unknown', models: [] }] } }), { status: 200 })
+            if (url.endsWith('/api/v1/model-lab/capacity')) return new Response(JSON.stringify({ ok: true, data: { measuredAt: '2026-08-31T10:00:00.000Z', memory: {}, storage: {} } }), { status: 200 })
+            if (url.endsWith('/api/v1/doctor')) return new Response(JSON.stringify({ ok: true, data: { chiaveApi: false } }), { status: 200 })
+            return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
+        })
+        vi.stubGlobal('fetch', fetchMock)
+        mountStaticRuntime()
+        document.querySelector<HTMLButtonElement>('[data-open-view="settings"]')?.click()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        await Promise.resolve()
+
+        expect(document.querySelector<HTMLButtonElement>('#modelLabRunButton')?.disabled).toBe(true)
+        expect(document.querySelector('#modelLabRuntimeStatus')?.textContent).toContain('Nessun runtime pronto')
+        expect(document.querySelector('#modelLabRuntimeGate')?.textContent).toContain('non disponibile')
+    })
+
+    it('CODE-MODEL-LAB-STREAM-01 keeps text, reasoning, tool call and error in separate blocks', async () => {
+        class FakeEventSource {
+            static OPEN = 1
+            static CLOSED = 2
+            readyState = 1
+            onmessage: ((event: MessageEvent) => void) | null = null
+            onerror: (() => void) | null = null
+            close = vi.fn(() => { this.readyState = FakeEventSource.CLOSED })
+            constructor(public readonly url: string) { void url }
+            emit(value: unknown) { this.onmessage?.({ data: JSON.stringify(value) } as MessageEvent) }
+        }
+        const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
+            if (url.endsWith('/api/v1/runtime')) return new Response(JSON.stringify({ ok: true, data: { items: [{ runtimeId: 'ollama', state: 'observed', models: [{ id: 'qwen3:8b', name: 'qwen3:8b', source: 'ollama', context: { state: 'observed', value: 65536 } }] }] } }), { status: 200 })
+            if (url.endsWith('/api/v1/model-lab/capacity')) return new Response(JSON.stringify({ ok: true, data: { measuredAt: '2026-08-31T10:00:00.000Z', memory: {}, storage: {} } }), { status: 200 })
+            if (url.endsWith('/api/v1/doctor')) return new Response(JSON.stringify({ ok: true, data: { chiaveApi: false } }), { status: 200 })
+            if (url.endsWith('/api/v1/tasks')) return new Response(JSON.stringify({ ok: true, data: { items: [{ id: 'task-probe' }] } }), { status: 200 })
+            if (url.endsWith('/api/v1/sessions') && options?.method === 'POST') return new Response(JSON.stringify({ ok: true, data: { sessionId: 'local-1' } }), { status: 200 })
+            return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
+        })
+        vi.stubGlobal('fetch', fetchMock)
+        vi.stubGlobal('EventSource', FakeEventSource)
+        mountStaticRuntime()
+        document.querySelector<HTMLButtonElement>('[data-open-view="settings"]')?.click()
+        await new Promise((resolve) => setTimeout(resolve, 40))
+        expect(document.querySelector<HTMLButtonElement>('#modelLabRunButton')?.disabled).toBe(false)
+        document.querySelector<HTMLButtonElement>('#modelLabRunButton')?.click()
+        await new Promise((resolve) => setTimeout(resolve, 40))
+        const source = [...([] as FakeEventSource[])][0]
+        // The implementation exposes the active source on the test seam to avoid using chat state.
+        const active = (window as unknown as { __talosHarnessModelLabEventSource?: FakeEventSource }).__talosHarnessModelLabEventSource
+        expect(active).toBeTruthy()
+        active?.emit({ type: 'TextMessageContent', delta: 'risposta' })
+        active?.emit({ type: 'ReasoningMessageContent', delta: 'interno' })
+        active?.emit({ type: 'ToolCallStart', toolCallId: 'tool-1', toolCallName: 'leggi' })
+        active?.emit({ type: 'ToolCallArgs', toolCallId: 'tool-1', delta: '{"path":"README.md"}' })
+        active?.emit({ type: 'RunError', code: 'LOCAL_RUNTIME_FAILED', message: 'runtime fermato' })
+
+        expect(document.querySelector('[data-model-lab-stream-block="text"]')?.textContent).toContain('risposta')
+        expect(document.querySelector('[data-model-lab-stream-block="reasoning"]')?.textContent).toContain('interno')
+        expect(document.querySelector('[data-model-lab-stream-block="tool"]')?.textContent).toContain('leggi')
+        expect(document.querySelector('[data-model-lab-stream-block="error"]')?.textContent).toContain('runtime fermato')
+        expect(document.querySelector('[data-model-lab-stream-block="text"]')?.textContent).not.toContain('interno')
+        expect(document.querySelector('[data-model-lab-stream-block="text"]')?.textContent).not.toContain('README.md')
+        expect(source).toBeUndefined()
+    })
+
+    it('CODE-MODEL-LAB-NO-SECRET-02 keeps provider credentials out of the shipped bundle', () => {
+        const js = asset('app.js')
+        expect(js).not.toMatch(/OPENROUTER_API_KEY|Authorization\s*:/i)
+        expect(js).not.toMatch(/(?:api[_-]?key|secret)\s*[:=]\s*['"][^'"]+['"]/i)
     })
 })

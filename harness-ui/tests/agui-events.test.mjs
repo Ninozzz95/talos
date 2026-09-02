@@ -9,6 +9,10 @@ import {
   eventoPerUsage,
   runError,
   runFinished,
+  runRedirectApplied,
+  runRedirectCancelled,
+  runRedirectFailed,
+  runRedirectRequested,
   runStarted,
   stateDelta,
   textMessageContent,
@@ -63,6 +67,25 @@ test('runError porta message sempre, code solo se presente', () => {
   assert.deepStrictEqual(
     runError({ message: 'giri esauriti', code: 'giri-esauriti' }),
     { type: 'RunError', message: 'giri esauriti', code: 'giri-esauriti' },
+  );
+});
+
+test('RUN-REDIRECT-EVENTS-01 — il lifecycle del reindirizzamento conserva id e testo senza campi impliciti', () => {
+  assert.deepStrictEqual(
+    runRedirectRequested({ redirectId: 'd1', testo: 'correggi la rotta' }),
+    { type: 'RunRedirectRequested', redirectId: 'd1', testo: 'correggi la rotta' },
+  );
+  assert.deepStrictEqual(
+    runRedirectApplied({ redirectId: 'd1', testo: 'correggi la rotta' }),
+    { type: 'RunRedirectApplied', redirectId: 'd1', testo: 'correggi la rotta' },
+  );
+  assert.deepStrictEqual(
+    runRedirectCancelled({ redirectId: 'd1' }),
+    { type: 'RunRedirectCancelled', redirectId: 'd1' },
+  );
+  assert.deepStrictEqual(
+    runRedirectFailed({ redirectId: 'd1', message: 'contesto non disponibile', code: 'SESSION_NOT_READY' }),
+    { type: 'RunRedirectFailed', redirectId: 'd1', message: 'contesto non disponibile', code: 'SESSION_NOT_READY' },
   );
 });
 

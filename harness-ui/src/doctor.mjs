@@ -50,10 +50,14 @@ function controllaGit(spawnSyncFn) {
  *   controllo reale per la scelta della cartella nella modale Nuova sessione.
  * @param {Array<object>|undefined} providerRows — stato pubblico dei provider, mai segreti
  * @param {boolean|undefined} providerStoreAvailable — portachiavi di sistema disponibile
- * @returns {{chiaveApi:boolean, shell:'wsl2'|'none', git:boolean, naviga:boolean, cartelleProgetto?:{disponibili:boolean,conteggio:number,dettaglio:string}, providers?:{storeAvailable:boolean,items:Array<object>}}}
+ * @param {{configurato:boolean,pronto:boolean,dettaglio:string}|undefined} ownerRuntime — stato reale del runtime agente
+ * @param {{disponibile:boolean,dettaglio:string}|undefined} catalogoTask — disponibilità del catalogo task preset
+ * @param {{corrotte:string[],ultimaLettura:{ripristinate:number,totali:number}}|undefined} sessioniPersistenza — stato di lettura dei registri persistiti
+ * @returns {{chiaveApi:boolean, shell:'wsl2'|'none'|'desktop', git:boolean, naviga:boolean, cartelleProgetto?:{disponibili:boolean,conteggio:number,dettaglio:string}, providers?:{storeAvailable:boolean,items:Array<object>}, ownerRuntime?:{configurato:boolean,pronto:boolean,dettaglio:string}, catalogoTask?:{disponibile:boolean,dettaglio:string}, sessioniPersistenza?:{corrotte:string[],ultimaLettura:{ripristinate:number,totali:number}}}}
  */
 export async function diagnosi({
-  chiaveConfigurata, cartelleProgetto, providerRows, providerStoreAvailable, eseguiComandoSandboxatoFn = eseguiComandoSandboxatoLocale, spawnSyncFn,
+  chiaveConfigurata, cartelleProgetto, providerRows, providerStoreAvailable, ownerRuntime, catalogoTask, sessioniPersistenza,
+  eseguiComandoSandboxatoFn = eseguiComandoSandboxatoLocale, spawnSyncFn,
 } = {}) {
   // ⛔ Una cartella usa-e-getta SOLO per il comando diagnostico, mai una
   // cartella del progetto vero — il Doctor non deve toccare niente.
@@ -82,6 +86,28 @@ export async function diagnosi({
   }
   if (Array.isArray(providerRows)) {
     risultato.providers = { storeAvailable: providerStoreAvailable === true, items: providerRows };
+  }
+  if (ownerRuntime && typeof ownerRuntime === 'object') {
+    risultato.ownerRuntime = {
+      configurato: ownerRuntime.configurato === true,
+      pronto: ownerRuntime.pronto === true,
+      dettaglio: typeof ownerRuntime.dettaglio === 'string' ? ownerRuntime.dettaglio : 'Stato runtime non osservato.',
+    };
+  }
+  if (catalogoTask && typeof catalogoTask === 'object') {
+    risultato.catalogoTask = {
+      disponibile: catalogoTask.disponibile === true,
+      dettaglio: typeof catalogoTask.dettaglio === 'string' ? catalogoTask.dettaglio : 'Elenco attività predefinite non osservato.',
+    };
+  }
+  if (sessioniPersistenza && typeof sessioniPersistenza === 'object') {
+    risultato.sessioniPersistenza = {
+      corrotte: Array.isArray(sessioniPersistenza.corrotte) ? [...sessioniPersistenza.corrotte] : [],
+      ultimaLettura: {
+        ripristinate: Number(sessioniPersistenza.ultimaLettura?.ripristinate) || 0,
+        totali: Number(sessioniPersistenza.ultimaLettura?.totali) || 0,
+      },
+    };
   }
   return risultato;
 }

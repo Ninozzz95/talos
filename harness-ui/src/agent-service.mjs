@@ -432,7 +432,12 @@ export async function avviaSessione({
    * questo leggiContestoWorkspace non lancia mai, anche se questo file non
    * lo intercetta con un try/catch: la garanzia vive nella funzione stessa.
    */
-  const contesto = leggiContestoWorkspaceFn({ cartella, progetto: task?.progetto ?? null });
+  const contestoWorkspace = leggiContestoWorkspaceFn({ cartella, progetto: task?.progetto ?? null });
+  const contesto = {
+    ...contestoWorkspace,
+    modello,
+    reasoning: reasoning ?? null,
+  };
 
   onEvento(runStarted({ threadId, runId, input: task, contesto }));
 

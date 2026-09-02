@@ -25,8 +25,8 @@ test('⭐ ottieni() normalizza id/provider/nome/contesto/prezzo, ordinati per pr
   const { modelli, daCache } = await catalogo.ottieni();
   assert.equal(daCache, false);
   assert.deepEqual(modelli, [
-    { id: 'deepseek/deepseek-chat', provider: 'deepseek', alias: false, nome: 'DeepSeek: Chat', contextLength: 64000, prezzoPrompt: '0.0000002', prezzoCompletion: '0.0000006', inputModalities: ['text'], outputModalities: ['text'], supportedParameters: ['tools'], description: 'Chat model', createdAt: 1700000000 },
-    { id: 'qwen/qwen3.8-flash', provider: 'qwen', alias: false, nome: 'Qwen: Qwen3.8 Flash', contextLength: 1000000, prezzoPrompt: '0.00000015', prezzoCompletion: '0.00000047', inputModalities: ['text', 'image'], outputModalities: ['text'], supportedParameters: ['reasoning'], description: 'Flash model', createdAt: 1700000001 },
+    { id: 'deepseek/deepseek-chat', provider: 'deepseek', alias: false, nome: 'DeepSeek: Chat', contextLength: 64000, prezzoPrompt: '0.0000002', prezzoCompletion: '0.0000006', inputModalities: ['text'], outputModalities: ['text'], supportedParameters: ['tools'], reasoning: null, description: 'Chat model', createdAt: 1700000000 },
+    { id: 'qwen/qwen3.8-flash', provider: 'qwen', alias: false, nome: 'Qwen: Qwen3.8 Flash', contextLength: 1000000, prezzoPrompt: '0.00000015', prezzoCompletion: '0.00000047', inputModalities: ['text', 'image'], outputModalities: ['text'], supportedParameters: ['reasoning'], reasoning: null, description: 'Flash model', createdAt: 1700000001 },
   ]);
 });
 
@@ -121,7 +121,7 @@ test('⭐⭐ un alias "~vendor/nome" ha provider "vendor" SENZA tilde (stesso gr
   assert.deepEqual(modelli[0], {
     id: '~anthropic/claude-sonnet-latest', provider: 'anthropic', alias: true,
     nome: 'Claude Sonnet Latest', contextLength: null, prezzoPrompt: null, prezzoCompletion: null,
-    inputModalities: [], outputModalities: [], supportedParameters: [], description: '', createdAt: null,
+    inputModalities: [], outputModalities: [], supportedParameters: [], reasoning: null, description: '', createdAt: null,
   });
 });
 
@@ -135,4 +135,31 @@ test('un id senza slash prende provider "altro", mai un crash su split', async (
   const catalogo = createModelCatalog({ fetchFn: fetchFinto({ data: [{ id: 'modello-senza-provider', name: 'X' }] }) });
   const { modelli } = await catalogo.ottieni();
   assert.equal(modelli[0].provider, 'altro');
+});
+
+test('MODEL-REASONING-CATALOG-04 — preserva solo le capacità reasoning necessarie a validare il picker e il wire', async () => {
+  const catalogo = createModelCatalog({ fetchFn: fetchFinto({ data: [{
+    id: 'google/gemini-3.7-flash',
+    name: 'Gemini 3.7 Flash',
+    reasoning: {
+      supported_efforts: ['high', 'medium', 'low', 'minimal', 7],
+      default_effort: 'medium',
+      default_enabled: true,
+      mandatory: true,
+      campo_non_fidato: '<script>',
+    },
+  }] }) });
+  const { modelli } = await catalogo.ottieni();
+  assert.deepEqual(modelli[0].reasoning, {
+    supportedEfforts: ['high', 'medium', 'low', 'minimal'],
+    defaultEffort: 'medium',
+    defaultEnabled: true,
+    mandatory: true,
+  });
+});
+
+test('MODEL-REASONING-CATALOG-04 contrario — capacità assenti restano null, mai default inventati', async () => {
+  const catalogo = createModelCatalog({ fetchFn: fetchFinto({ data: [MODELLO_GREZZO_1] }) });
+  const { modelli } = await catalogo.ottieni();
+  assert.equal(modelli[0].reasoning, null);
 });

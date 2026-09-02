@@ -31,12 +31,22 @@ function registroFinto() {
       sessioni.set(sessionId, { eventi: [], ascoltatori: new Set(), taskId: voce.taskId, avviataAlle: '2026-08-24T18:05:00.000Z', conclusa: false, forkDa: idOrigine });
       return { sessionId };
     },
-    resume(sessionId) {
+    ultimoResume: null,
+    resume(sessionId, nuovoMessaggioUtente = null) {
+      this.ultimoResume = { sessionId, nuovoMessaggioUtente };
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       if (!voce.conclusa) return { erroreAvvio: 'La sessione è ancora in corso', code: 'SESSION_NOT_READY' };
       voce.conclusa = false;
       return { sessionId };
+    },
+    ultimeImpostazioniSessione: null,
+    async aggiornaImpostazioni(sessionId, patch) {
+      this.ultimeImpostazioniSessione = { sessionId, patch };
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      Object.assign(voce, patch);
+      return { ok: true };
     },
     rinomina(sessionId, nome) {
       const voce = sessioni.get(sessionId);
@@ -82,7 +92,18 @@ function registroFinto() {
       voce.ascoltatori.add(callback);
       return () => voce.ascoltatori.delete(callback);
     },
-    ferma(id) { return sessioni.has(id); },
+    ultimaFermata: null,
+    ferma(id, opzioni = {}) { this.ultimaFermata = { sessionId: id, opzioni }; return sessioni.has(id); },
+    ultimoReindirizzamento: null,
+    ultimoRedirectId: null,
+    reindirizza(sessionId, testo, opzioni = {}) {
+      this.ultimoReindirizzamento = { sessionId, testo };
+      this.ultimoRedirectId = opzioni.redirectId ?? null;
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (voce.conclusa) return { erroreAvvio: 'La sessione non è in corso', code: 'SESSION_NOT_READY' };
+      return { ok: true, redirectId: 'redirect-finto' };
+    },
     // Solo per il test: mette un evento nel buffer e lo spinge ai vivi.
     _emetti(id, evento) {
       const voce = sessioni.get(id);
@@ -314,6 +335,15 @@ test('GET /api/v1/tasks torna l\'elenco leggero, avvolto nella busta standard', 
   assert.equal(corpo.ok, true);
   assert.equal(corpo.meta.schema, API_SCHEMA);
   assert.deepEqual(corpo.data.items, [{ id: 'sconto-a-scaglioni', progetto: 'listino', difficolta: 1, consegnaCorta: 'x' }]);
+});
+
+test('GET /api/v1/tasks mantiene una risposta onesta quando il catalogo non è disponibile', async (t) => {
+  const { base } = await listen(t, { listaTaskDisponibili: () => [] });
+  const risposta = await fetch(`${base}/api/v1/tasks`);
+  assert.equal(risposta.status, 200);
+  const corpo = await risposta.json();
+  assert.equal(corpo.ok, true);
+  assert.deepEqual(corpo.data.items, []);
 });
 
 test('⭐ GET /api/v1/sessions torna un elenco vuoto senza sessioni, e un riepilogo per ognuna dopo', async (t) => {
@@ -851,6 +881,56 @@ test('⛔ AL CONTRARIO — GET .../queue (metodo sbagliato) non raggiunge mai ac
   assert.equal(sessionRegistry.ultimoAccodaMessaggio, null);
 });
 
+test('HTTP-REDIRECT-11 — POST /api/v1/sessions/:id/redirect inoltra il testo al registro', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/redirect`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messaggio: 'usa invece il parser tipizzato' }),
+  });
+  assert.equal(risposta.status, 200);
+  assert.deepEqual((await risposta.json()).data, { ok: true, redirectId: 'redirect-finto' });
+  assert.deepEqual(sessionRegistry.ultimoReindirizzamento, { sessionId, testo: 'usa invece il parser tipizzato' });
+});
+
+test('HTTP-STOP-BEFORE-REDIRECT-20 — stop e redirect inoltrano lo stesso id di correlazione', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const redirectId = '2b6d64d0-05c4-4ab2-9d78-51aaabf54522';
+  const stop = await fetch(`${base}/api/v1/sessions/${sessionId}/stop`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ redirectId }),
+  });
+  const redirect = await fetch(`${base}/api/v1/sessions/${sessionId}/redirect`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messaggio: 'non applicare più', redirectId }),
+  });
+
+  assert.equal(stop.status, 200);
+  assert.equal(redirect.status, 200);
+  assert.deepEqual(sessionRegistry.ultimaFermata, { sessionId, opzioni: { redirectId } });
+  assert.equal(sessionRegistry.ultimoRedirectId, redirectId);
+});
+
+test('HTTP-REDIRECT-11 contrario — redirect rifiuta corpo malformato, sessione conclusa e id assente', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  for (const body of [{}, { messaggio: '' }, { messaggio: 'ok', extra: true }, { messaggio: 'ok', redirectId: 'non-uuid' }]) {
+    const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/redirect`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    assert.equal(risposta.status, 400);
+  }
+  sessionRegistry._emetti(sessionId, { type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  const conclusa = await fetch(`${base}/api/v1/sessions/${sessionId}/redirect`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messaggio: 'x' }),
+  });
+  assert.equal(conclusa.status, 409);
+  const assente = await fetch(`${base}/api/v1/sessions/assente/redirect`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messaggio: 'x' }),
+  });
+  assert.equal(assente.status, 404);
+});
+
 test('⛔ POST /api/v1/sessions su un task fuori allowlist: 404 TASK_NOT_ALLOWED, mai una sessione', async (t) => {
   const { base } = await listen(t);
   const risposta = await fetch(`${base}/api/v1/sessions`, {
@@ -958,7 +1038,7 @@ test('⛔ POST /api/v1/sessions/{id}/fork su un id origine inesistente: 404', as
   assert.equal(risposta.status, 404);
 });
 
-test('⭐⭐⭐ POST /api/v1/sessions/{id}/resume su una sessione conclusa: 200 e LO STESSO sessionId', async (t) => {
+test('SESSION-RECOVERY-HTTP-06 — POST resume su una sessione conclusa torna 200 e lo stesso sessionId', async (t) => {
   const { base, sessionRegistry } = await listen(t);
   const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
   sessionRegistry._emetti(sessionId, { type: 'RunFinished', threadId: 't1', runId: 'r1' });
@@ -969,7 +1049,73 @@ test('⭐⭐⭐ POST /api/v1/sessions/{id}/resume su una sessione conclusa: 200 
   assert.equal(corpo.data.sessionId, sessionId, 'resume torna LO STESSO id, mai uno nuovo');
 });
 
-test('⛔ POST /api/v1/sessions/{id}/resume su una sessione ANCORA IN CORSO: 409 SESSION_NOT_READY', async (t) => {
+test('SESSION-RECOVERY-INTERRUPTED-HTTP-08 — il nuovo messaggio raggiunge il recupero della stessa sessione', async (t) => {
+  const sessionRegistry = registroFinto();
+  const sessionId = 'b9d67958-93fb-4f44-b06a-12e584b5c513';
+  sessionRegistry.resume = function resumeInterrotta(idRicevuto, nuovoMessaggioUtente) {
+    this.ultimoResume = { sessionId: idRicevuto, nuovoMessaggioUtente };
+    return { sessionId: idRicevuto };
+  };
+  const { base } = await listen(t, { sessionRegistry });
+
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/resume`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ messaggio: 'continua senza perdere la cronologia' }),
+  });
+
+  assert.equal(risposta.status, 200);
+  assert.equal((await risposta.json()).data.sessionId, sessionId);
+  assert.deepEqual(sessionRegistry.ultimoResume, {
+    sessionId,
+    nuovoMessaggioUtente: 'continua senza perdere la cronologia',
+  });
+});
+
+test('SESSION-RECOVERY-HTTP-BODY-16 — resume accetta solo body vuoto o esattamente {messaggio:stringaNonVuota}', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  sessionRegistry._emetti(sessionId, { type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  const nonValidi = [
+    null,
+    [],
+    'continua',
+    42,
+    true,
+    { messaggio: 123 },
+    { messaggio: '' },
+    { messaggio: 'continua', extra: true },
+    { extra: true },
+  ];
+
+  for (const body of nonValidi) {
+    const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/resume`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    });
+    assert.equal(risposta.status, 400);
+    assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
+  }
+});
+
+test('SESSION-RECOVERY-STORE-HTTP-20 — un checkpoint non salvabile resta un errore pubblico e ritentabile', async (t) => {
+  const sessionRegistry = registroFinto();
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  sessionRegistry._emetti(sessionId, { type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  sessionRegistry.resume = () => ({
+    erroreAvvio: 'Non è stato possibile salvare il nuovo messaggio',
+    code: 'SESSION_STORE_WRITE_FAILED',
+  });
+  const { base } = await listen(t, { sessionRegistry });
+
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/resume`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ messaggio: 'continua' }),
+  });
+
+  assert.equal(risposta.status, 503);
+  assert.equal((await risposta.json()).error.code, 'SESSION_STORE_WRITE_FAILED');
+});
+
+test('SESSION-RECOVERY-LIVE-INVERSE-07 — POST resume su una sessione ancora in corso resta 409 SESSION_NOT_READY', async (t) => {
   const { base, sessionRegistry } = await listen(t);
   const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni'); // mai concluso in questo test
 
@@ -982,6 +1128,55 @@ test('⛔ POST /api/v1/sessions/{id}/resume su un id inesistente: 404', async (t
   const { base } = await listen(t);
   const risposta = await fetch(`${base}/api/v1/sessions/non-esiste/resume`, { method: 'POST' });
   assert.equal(risposta.status, 404);
+});
+
+test('SESSION-SETTINGS-HTTP-01 — aggiorna modello, reasoning e permessi della sessione con envelope v1', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const creata = await fetch(`${base}/api/v1/sessions`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId: 'sconto-a-scaglioni' }),
+  });
+  const sessionId = (await creata.json()).data.sessionId;
+  const patch = {
+    modello: 'google/gemini-3.7-flash',
+    reasoning: { effort: 'high' },
+    permessi: 'Read only',
+    permessiPerAttrezzo: { scrivi: 'nega', shell: 'chiedi' },
+  };
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/settings`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch),
+  });
+  assert.equal(risposta.status, 200);
+  const corpo = await risposta.json();
+  assert.equal(corpo.ok, true);
+  assert.equal(corpo.meta.schema, API_SCHEMA);
+  assert.deepEqual(sessionRegistry.ultimeImpostazioniSessione, { sessionId, patch });
+});
+
+test('SESSION-SETTINGS-HTTP-01 contrari — body vuoto, chiavi o valori non validi falliscono chiusi', async (t) => {
+  const { base } = await listen(t);
+  const creata = await fetch(`${base}/api/v1/sessions`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId: 'sconto-a-scaglioni' }),
+  });
+  const sessionId = (await creata.json()).data.sessionId;
+  const nonValidi = [
+    {},
+    { sconosciuta: true },
+    { modello: 'non-un-modello' },
+    { reasoning: { effort: 'ultra' } },
+    { permessi: 'Scrivi ovunque' },
+    { permessiPerAttrezzo: {} },
+    { permessiPerAttrezzo: { leggi: 'sempre' } },
+  ];
+  for (const body of nonValidi) {
+    const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/settings`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    });
+    assert.equal(risposta.status, 400, `deve rifiutare ${JSON.stringify(body)}`);
+  }
+  const assente = await fetch(`${base}/api/v1/sessions/sessione-assente/settings`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ permessi: 'Read only' }),
+  });
+  assert.equal(assente.status, 404);
 });
 
 test('⭐ POST /api/v1/sessions/{id}/compact su una sessione conclusa: 200 e {compattato:true}', async (t) => {

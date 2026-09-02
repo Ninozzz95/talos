@@ -63,11 +63,21 @@ test('config accepts an explicit llama-server binary path and discovers the pinn
   if (discovered.llamaServerPath) assert.match(discovered.llamaServerPath, /\.local-runtime[\\/]b10517[\\/]llama-server\.exe$/i);
 });
 
-// ⭐⭐⭐ 27/8 — owner: "per adesso un allowlist per testare". Fail-closed per
-// costruzione: assente = zero cartelle, mai "qualunque cartella passi".
-test('config.cartelleProgetto è vuota per costruzione quando TALOS_HARNESS_UI_PROJECT_DIRS è assente', () => {
+// ⭐⭐⭐ 27/8 — owner: l’installazione deve essere pronta senza variabili.
+// Il default è la workspace reale del progetto che ospita il server; i
+// percorsi ulteriori restano validati dall’elenco esplicito.
+test('config.cartelleProgetto usa la workspace predefinita quando TALOS_HARNESS_UI_PROJECT_DIRS è assente', () => {
   const config = loadConfig({}, import.meta.url);
-  assert.deepEqual(config.cartelleProgetto, []);
+  assert.equal(config.cartelleProgetto.length, 1);
+  assert.equal(config.cartelleProgetto[0].id, 'default');
+  assert.ok(config.cartelleProgetto[0].nome);
+  accessSync(config.cartelleProgetto[0].percorso);
+});
+
+test('config zero-config dal server punta alla radice desktop reale', () => {
+  const config = loadConfig({}, new URL('../server.mjs', import.meta.url));
+  assert.equal(config.cartelleProgetto.length, 1);
+  assert.match(config.cartelleProgetto[0].percorso, /AVM-harness-desktop$/i);
 });
 
 test('config accetta un elenco di cartelle progetto VERE, separate da ";", con id stabili e nomi derivati', (t) => {

@@ -6,12 +6,12 @@
     "build:ui": "node scripts/build-ui.mjs",
     "verify:ui": "node scripts/verify-ui-manifest.mjs"
   },
-  "description": "Backend locale di Harness UI (server.mjs + src/*.mjs). Zero dipendenze fino al 28/8 — vedi il commento in document-generator.mjs per il perché la PRIMA eccezione (i sette per document_create) era giustificata, e solo qui (mai nel bundle frontend mobile/public/harness-ui/). chokidar segue lo stesso principio per workspace-watcher.mjs.",
+  "description": "Backend locale di Harness UI (server.mjs + src/*.mjs). Le dipendenze sono limitate al backend e motivate nei rispettivi adapter; il watcher workspace usa direttamente node:fs su Windows.",
   "dependencies": {
     "@modelcontextprotocol/client": "2.0.0",
     "@napi-rs/keyring": "1.3.0",
-    "chokidar": "4.0.3",
     "docx": "9.5.1",
+    "eventsource-parser": "4.1.0",
     "jszip": "3.10.1",
     "node-pty": "1.1.0",
     "pdf-lib": "1.17.1",

@@ -6,12 +6,13 @@
     "node": ">=24.18.0 <27"
   },
   "scripts": {
-    "build": "node ../scripts/build-ui.mjs",
+    "build": "node scripts/build.mjs",
     "build:lab": "node scripts/build-lab.mjs",
     "test:unit": "node scripts/run-node-tests.mjs",
     "test:browser": "node scripts/run-browser-tests.mjs",
-    "test": "npm run test:unit",
-    "verify": "npm run test:unit",
+    "test:lab": "node scripts/run-browser-tests.mjs --config=playwright.lab.config.mjs",
+    "test": "npm run test:unit && npm run test:lab",
+    "verify": "node scripts/verify.mjs",
     "test:a11y": "node scripts/run-browser-tests.mjs --grep=@a11y",
     "test:soak": "node scripts/run-browser-tests.mjs --grep=@soak",
     "test:visual": "node scripts/run-browser-tests.mjs --grep=@visual",
@@ -23,5 +24,9 @@
     "esbuild": "0.28.2",
     "pixelmatch": "7.2.0",
     "pngjs": "7.0.0"
+  },
+  "dependencies": {
+    "@floating-ui/dom": "1.8.0",
+    "@tanstack/virtual-core": "3.17.8"
   }
 }

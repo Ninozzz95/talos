@@ -61,6 +61,7 @@
   --inspector: 340px;
   --topbar-h: 64px;
   --mobile-nav-h: 68px;
+  --composer-canonical-h: 116px;
   --font-ui: var(--talos-font-ui, "Instrument Sans", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   --font-mono: var(--talos-font-mono, "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace);
   --talos-ui-font-scale: 1;
@@ -75,6 +76,7 @@
   --motion-composer-collapse: var(--talos-motion-duration-composer-collapse, 150ms);
   --motion-message: var(--talos-motion-duration-message-insert, 180ms);
   --motion-activity: var(--talos-motion-duration-activity-progress, 1200ms);
+  --motion-response-activity: var(--talos-motion-duration-response-progress, 1600ms);
   --motion-success: var(--talos-motion-duration-success-confirm, 280ms);
   --motion-theme: var(--talos-motion-duration-theme-transition, 220ms);
   --motion-ease: var(--talos-motion-ease, cubic-bezier(.2,.7,.2,1));
@@ -307,12 +309,25 @@ kbd { font-family: var(--font-mono); font-size: calc(10px * var(--talos-ui-font-
 .secondary-btn.full { width: 100%; margin-top: 10px; }
 .text-btn { background: transparent; color: var(--accent-2); padding: 6px 0; font-size: calc(13px * var(--talos-ui-font-scale)); font-weight: 650; }
 .sidebar-caption { color: var(--muted-2); font-size: calc(11px * var(--talos-ui-font-scale)); padding: 0 16px 8px; }
+.session-selection-toolbar { margin: 0 12px 8px; padding: 8px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); display: grid; gap: 8px; }
+.session-selection-toolbar[hidden] { display: none; }
+.session-selection-toolbar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.session-selection-toolbar .text-btn { min-height: 36px; padding: 0 4px; white-space: nowrap; }
+.session-selection-count { margin-left: auto; color: var(--muted); font-size: calc(11px * var(--talos-ui-font-scale)); white-space: nowrap; }
+.secondary-btn.danger { color: var(--danger); border-color: var(--danger-soft); }
+.secondary-btn.danger:hover:not(:disabled) { background: var(--danger-soft); border-color: var(--danger); }
+.secondary-btn:disabled, .text-btn:disabled { opacity: .48; cursor: not-allowed; }
 
 .session-list { overflow: auto; padding: 2px 9px 14px; min-height: 0; flex: 1; }
 .list-heading { color: var(--muted-2); text-transform: uppercase; letter-spacing: .1em; font-size: calc(10px * var(--talos-ui-font-scale)); margin: 14px 10px 7px; }
 .session-item { width: 100%; min-height: 66px; border: 1px solid transparent; border-radius: 11px; background: transparent; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 10px 9px 10px 11px; text-align: left; cursor: pointer; color: var(--text-2); }
 .session-item:hover { background: var(--surface-highlight-subtle); }
 .session-item.active { background: linear-gradient(90deg, var(--accent-soft), color-mix(in srgb, var(--accent) 8%, transparent)); border-color: var(--accent-strong); box-shadow: inset 2px 0 var(--accent); }
+.session-item.is-selection-mode { grid-template-columns: 28px minmax(0,1fr) auto; }
+.session-item.is-selected { background: var(--accent-soft); border-color: var(--accent-strong); }
+.session-selection-check { width: 28px; height: 36px; display: grid; place-items: center; cursor: pointer; }
+.session-selection-check input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.session-item:focus-visible, .session-selection-check input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .session-main { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
 .session-main strong { font-size: calc(14px * var(--talos-ui-font-scale)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 650; }
 .session-main small { color: var(--muted); font-size: calc(11px * var(--talos-ui-font-scale)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -386,7 +401,7 @@ kbd { font-family: var(--font-mono); font-size: calc(10px * var(--talos-ui-font-
    CENTRARE il testo ci pensa il padding orizzontale — stesso identico
    calcolo già in uso da `.composer-wrap` qui sotto, non un valore nuovo
    inventato: risultato pixel-per-pixel identico al vecchio `width: min(920px, …)`. */
-.conversation { padding: 24px max(20px, calc((100% - 920px)/2)) 190px; }
+.conversation { padding: 24px max(20px, calc((100% - 920px)/2)) max(190px, var(--stream-follow-space, 0px)); }
 
 .mission-card, .activity-bundle, .approval-card, .widget, .settings-card, .automation-row, .inspector-card { border: 1px solid var(--line); background: linear-gradient(180deg, var(--surface-highlight-subtle), var(--surface-highlight-faint)); border-radius: var(--radius-card); }
 .mission-card { padding: 16px; margin-bottom: 24px; }
@@ -439,6 +454,13 @@ kbd { font-family: var(--font-mono); font-size: calc(10px * var(--talos-ui-font-
 .tool-arg-row:last-child { margin-bottom: 0; }
 .tool-arg-key { color: var(--muted); font: calc(10px * var(--talos-ui-font-scale)) var(--font-mono); text-transform: uppercase; letter-spacing: .04em; margin-top: 6px; }
 .tool-result-block { margin: 4px 0 0; overflow: auto; max-height: 340px; padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--bg-deep); font: calc(11px * var(--talos-ui-font-scale))/1.6 var(--font-mono); color: var(--text-2); }
+.real-tool-note[data-tool-state="running"] .talos-glyph { color: var(--accent-2); animation: talosToolRunning var(--motion-activity) var(--motion-ease) infinite; transform-origin: center; }
+.real-tool-note[data-tool-state="complete"] .talos-glyph { color: var(--success); animation: talosToolComplete var(--motion-success) var(--motion-ease) both; }
+.real-tool-note[data-tool-state="error"] .talos-glyph { color: var(--danger); }
+.real-tool-note[data-tool-state="complete"] .tool-note-summary-text { color: var(--text-2); }
+.real-tool-note[data-tool-state="error"] .tool-note-summary-text { color: var(--danger); }
+@keyframes talosToolRunning { 0%, 100% { opacity: .55; transform: rotate(0deg) scale(.92); } 50% { opacity: 1; transform: rotate(180deg) scale(1); } }
+@keyframes talosToolComplete { 0% { opacity: .5; transform: scale(.72); } 70% { opacity: 1; transform: scale(1.12); } 100% { opacity: 1; transform: scale(1); } }
 
 /* ⭐⭐⭐ 27/8, R1 — il ragionamento riusa la bolla collassabile delle
    tool-call (stesso markup, .real-tool-note), ma deve leggersi come una
@@ -482,15 +504,11 @@ kbd { font-family: var(--font-mono); font-size: calc(10px * var(--talos-ui-font-
 .artifact-card-title { font-size: calc(13px * var(--talos-ui-font-scale)); font-weight: 500; color: var(--text-2); }
 .artifact-card-frame { display: block; width: 100%; height: min(60vh, 480px); border: 0; background: #fff; }
 
-/* ⭐⭐⭐ 27/8, owner: "il loading della risposta... usa lo stesso del mobile" —
-   porta di TalosLineLoader.vue (mobile/src/components/brand/, style.css
-   .talos-line-loader*): stessa geometria (traccia+sweep+3 nodi), stessa
-   temporizzazione, `--accent` al posto di `--talos-accent` diretto — sono
-   la STESSA variabile (vedi la definizione di `--accent` in testa a
-   questo file, dentro l'adattatore `:host`): lo stesso colore quando
-   questo bundle gira embedded nel telefono, e lo stesso fallback quando
-   gira standalone su desktop. */
-.real-waiting-note { display: flex; align-items: center; padding: 4px 0; }
+/* I tre punti sono il solo marchio di attività. Nessuna barra decorativa:
+   ogni punto usa il token motion TALOS e trasformazioni compositabili. */
+.real-waiting-note { display: flex; align-items: center; gap: 10px; width: min(100%, 560px); padding: 4px 0; color: var(--muted); }
+.run-activity-label { flex: 0 1 auto; min-width: 0; font-size: calc(11px * var(--talos-ui-font-scale)); line-height: 1.4; }
+.run-activity-elapsed { flex: 0 0 auto; min-width: 3ch; color: var(--muted-2); font: calc(9px * var(--talos-ui-font-scale))/1 var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
 /* ⛔ 27/8, trovato verificando le dimensioni vere (non solo "appare/sparisce"):
    la regola cieca `svg { width:20px; height:20px }` più sotto in questo
    stesso foglio vince sugli attributi HTML width/height inline dell'SVG
@@ -498,17 +516,16 @@ kbd { font-family: var(--font-mono); font-size: calc(10px * var(--talos-ui-font-
    presentazione) — la ruota veniva schiacciata a 20×20 invece della sua
    geometria vera 44×7. Esplicitata qui per non dipendere dall'ordine
    delle regole nel foglio. */
-.talos-line-loader { display: block; width: 44px; height: 7px; }
-.talos-line-loader-track { stroke: var(--accent); stroke-opacity: .18; stroke-width: 2; stroke-linecap: round; }
-.talos-line-loader-sweep { stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 88; stroke-dashoffset: 88; animation: talosLineSweep 1.6s ease-in-out infinite; }
-.talos-line-loader-node { fill: transparent; stroke: var(--accent); stroke-width: 2; animation: talosLineNodeFill 1.6s ease-in-out infinite; }
+.talos-line-loader { display: block; width: 34px; height: 13px; overflow: visible; }
+.talos-line-loader-node { fill: var(--accent); transform-box: fill-box; transform-origin: center; will-change: transform, opacity; animation: talosLineNodePulse var(--motion-response-activity) var(--motion-ease) infinite; }
 .talos-line-loader-node:nth-of-type(1) { animation-delay: 0s; }
-.talos-line-loader-node:nth-of-type(2) { animation-delay: .36s; }
-.talos-line-loader-node:nth-of-type(3) { animation-delay: .73s; }
-@keyframes talosLineSweep { 0% { stroke-dashoffset: 88; } 70%, 100% { stroke-dashoffset: 0; } }
-@keyframes talosLineNodeFill { 0%, 12% { fill: transparent; } 22%, 82% { fill: var(--accent); } 100% { fill: transparent; } }
-body.reduce-motion .talos-line-loader-sweep { animation: none; stroke-dashoffset: 0; }
-body.reduce-motion .talos-line-loader-node { animation: none; fill: var(--accent); opacity: .7; }
+.talos-line-loader-node:nth-of-type(2) { animation-delay: calc(var(--motion-response-activity) * .16); }
+.talos-line-loader-node:nth-of-type(3) { animation-delay: calc(var(--motion-response-activity) * .32); }
+@keyframes talosLineNodePulse {
+  0%, 58%, 100% { transform: translateY(0) scale(.72); opacity: .3; }
+  26% { transform: translateY(-3px) scale(1.18); opacity: 1; }
+}
+body.reduce-motion .talos-line-loader-node { animation: none; transform: none; fill: var(--accent); opacity: .7; }
 .message-actions { display: flex; gap: 4px; margin-top: 8px; }
 .message-actions button { width: 34px; height: 32px; display: grid; place-items: center; border-radius: 8px; border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: calc(12px * var(--talos-ui-font-scale)); }
 .message-actions button:hover { background: var(--surface-highlight); color: var(--text); }
@@ -558,7 +575,7 @@ body.reduce-motion .talos-line-loader-node { animation: none; fill: var(--accent
 
 .composer-wrap { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px max(20px, calc((100% - 920px)/2)) 12px; background: linear-gradient(180deg, transparent, var(--bg-glass-strong) 22%, var(--bg) 48%); z-index: 10; pointer-events: none; }
 .composer, .queued-message, .composer-status { pointer-events: auto; }
-.composer { container-type: inline-size; min-height: 116px; border: 1px solid var(--line-strong); background: var(--surface-glass-strong); backdrop-filter: blur(20px); will-change: backdrop-filter; border-radius: 15px; box-shadow: var(--shadow); padding: 13px 54px 10px 12px; display: grid; grid-template-rows: minmax(38px,auto) auto; position: relative; }
+.composer { container-type: inline-size; min-height: var(--composer-canonical-h); border: 1px solid var(--line-strong); background: var(--surface-glass-strong); backdrop-filter: blur(20px); will-change: backdrop-filter; border-radius: 15px; box-shadow: var(--shadow); padding: 13px 54px 10px 12px; display: grid; grid-template-rows: minmax(38px,auto) auto; position: relative; }
 .composer:focus-within { border-color: var(--focus); box-shadow: var(--shadow), 0 0 0 1px var(--focus-soft); }
 .composer textarea { width: 100%; min-height: 38px; max-height: 120px; field-sizing: content; resize: none; overflow-y: auto; border: 0; background: transparent; color: var(--text); outline: 0; padding: 5px 3px 7px; font-size: calc(14px * var(--talos-ui-font-scale)); line-height: 1.5; }
 .composer textarea::placeholder { color: var(--muted); }
@@ -581,6 +598,8 @@ body.reduce-motion .talos-line-loader-node { animation: none; fill: var(--accent
 .queue-toggle { min-height: 36px; height: 36px; border-radius: 9px; border: 0; background: transparent; color: var(--muted); font-size: calc(10px * var(--talos-ui-font-scale)); cursor: pointer; padding: 0 8px; }
 .queue-toggle.active { color: var(--accent-2); background: var(--accent-soft); }
 .send-btn { width: 42px; height: 42px; border: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer; background: var(--accent); color: var(--on-accent); flex: 0 0 auto; }
+.send-btn.is-stop { background: var(--danger); color: var(--text); }
+.send-btn[aria-busy="true"], .queue-toggle[aria-busy="true"] { cursor: progress; opacity: .72; }
 .send-btn svg { width: 18px; height: 18px; }
 .queued-message { display: none; align-items: center; justify-content: space-between; gap: 10px; min-height: 36px; margin: 0 8px -4px; padding: 0 12px 4px; border-radius: 10px 10px 0 0; background: var(--surface-2); border: 1px solid var(--line); border-bottom: 0; color: var(--muted); font-size: calc(10px * var(--talos-ui-font-scale)); }
 .queued-message.show { display: flex; flex-wrap: wrap; padding: 6px 8px; }
@@ -629,6 +648,13 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .ft-search-input { width: 100%; background: var(--bg-deep); border: 1px solid var(--line); border-radius: 8px; color: var(--text); font: calc(11.5px * var(--talos-ui-font-scale)) var(--font-ui); padding: 6px 8px 6px 27px; outline: 0; transition: border-color var(--motion-control) ease, background var(--motion-control) ease; }
 .ft-search-input::placeholder { color: var(--muted-2); }
 .ft-search-input:focus { border-color: var(--accent); background: var(--surface-2); }
+.ft-commandbar { min-height: 34px; display: flex; align-items: center; gap: 3px; margin: 0 0 4px; padding: 2px; border-bottom: 1px solid var(--line); }
+.ft-commandbar-spacer { flex: 1 1 auto; }
+.ft-command { width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; transition: color var(--motion-hover) var(--motion-ease), background var(--motion-hover) var(--motion-ease); }
+.ft-command svg { width: 15px; height: 15px; }
+.ft-command:hover:not(:disabled), .ft-command:focus-visible { color: var(--text); background: var(--surface-2); }
+.ft-command:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.ft-command:disabled { opacity: .34; cursor: default; }
 .ft-search-hint { margin: 0 0 6px; font-size: calc(9.5px * var(--talos-ui-font-scale)); color: var(--muted-2); min-height: 12px; }
 .ft-search-hint b { color: var(--text-2); font-weight: 600; }
 .ft-legend { display: flex; gap: 10px; margin-bottom: 8px; font-size: calc(9px * var(--talos-ui-font-scale)); color: var(--muted); }
@@ -878,6 +904,21 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .harness-dialog-backdrop { position: fixed; inset: 0; z-index: 198; border: 0; background: var(--scrim); backdrop-filter: blur(5px); will-change: opacity; transition: opacity var(--motion-popover) var(--motion-ease); }
 .harness-dialog-backdrop[hidden] { display: none; }
 .command-dialog, .sheet-dialog { position: fixed; z-index: 199; padding: 0; border: 1px solid var(--line-strong); background: var(--surface-elevated); color: var(--text); box-shadow: var(--shadow); }
+.command-dialog.dialog-user-sized[open], .sheet-dialog.dialog-user-sized[open] { display: flex; flex-direction: column; }
+.dialog-user-sized .sheet-head, .dialog-user-sized .command-search { flex: 0 0 auto; }
+.dialog-user-sized .sheet-body, .sheet-dialog--new-session.dialog-user-sized .sheet-body, .dialog-user-sized .command-results { flex: 1 1 auto; min-height: 0; height: auto; max-height: none; }
+.dialog-resizing { user-select: none; }
+.dialog-resize-handle { display: block; position: absolute; z-index: 8; margin: 0; border: 0; outline: 0; background: transparent; padding: 0; touch-action: none; opacity: .72; }
+.dialog-resize-handle::after { content: ''; position: absolute; border-radius: 999px; background: var(--line-strong); transition: background var(--motion-hover) var(--motion-ease), opacity var(--motion-hover) var(--motion-ease); opacity: .6; }
+.dialog-resize-handle:hover::after, .dialog-resize-handle:focus-visible::after, .dialog-resizing .dialog-resize-handle::after { background: var(--accent-2); opacity: 1; }
+.dialog-resize-handle:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
+.dialog-resize-handle--width { top: 72px; right: 0; bottom: 22px; width: 9px; cursor: ew-resize; }
+.dialog-resize-handle--width::after { top: 50%; right: 2px; width: 3px; height: 42px; transform: translateY(-50%); }
+.dialog-resize-handle--height { right: 22px; bottom: 0; left: 22px; height: 9px; cursor: ns-resize; }
+.dialog-resize-handle--height::after { bottom: 2px; left: 50%; width: 42px; height: 3px; transform: translateX(-50%); }
+.dialog-resize-handle--both { right: 0; bottom: 0; width: 22px; height: 22px; cursor: nwse-resize; }
+.dialog-resize-handle--both::after { right: 4px; bottom: 4px; width: 10px; height: 10px; border-radius: 0 0 3px; border-right: 2px solid var(--line-strong); border-bottom: 2px solid var(--line-strong); background: transparent; }
+.dialog-resize-handle--both:hover::after, .dialog-resize-handle--both:focus-visible::after, .dialog-resizing .dialog-resize-handle--both::after { border-color: var(--accent-2); background: transparent; }
 .command-dialog { inset: 0 0 auto; width: min(720px, calc(100vw - 32px)); max-height: min(700px, calc(100dvh - 40px)); border-radius: 14px; margin: 10vh auto 0; }
 .command-dialog::backdrop, .sheet-dialog::backdrop { background: transparent; }
 .command-search { min-height: 58px; display: grid; grid-template-columns: 22px minmax(0,1fr) auto; align-items: center; gap: 9px; padding: 0 13px; border-bottom: 1px solid var(--line); }
@@ -995,7 +1036,7 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
   .run-state { font-size: calc(10px * var(--talos-ui-font-scale)); }
   .run-state > span:last-child { display: none; }
   .content-stage { padding-bottom: var(--mobile-nav-h); }
-  .conversation { padding: 16px 12px 205px; }
+  .conversation { padding: 16px 12px max(205px, var(--stream-follow-space, 0px)); }
   .mission-card { padding: 12px; margin-bottom: 16px; }
   .mission-head h2 { font-size: calc(15px * var(--talos-ui-font-scale)); }
   .mission-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
@@ -1051,7 +1092,8 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
   .settings-category-nav button { flex: 0 0 auto; min-height: 38px; white-space: nowrap; padding: 0 12px; }
   .view-pane[data-view="settings"] > .generic-shell { width: 100%; max-width: none; margin: 0; padding: 14px 12px calc(var(--mobile-nav-h) + 24px); }
   .command-dialog { margin-top: 7vh; }
-  .sheet-dialog { width: 100vw; max-width: none; margin: auto 0 0; border-radius: 18px 18px 0 0; border-bottom: 0; padding-bottom: max(0px, env(safe-area-inset-bottom)); }
+  .sheet-dialog { width: 100vw; min-width: 0; max-width: 100vw; box-sizing: border-box; margin: auto 0 0; border-radius: 18px 18px 0 0; border-bottom: 0; padding-bottom: max(0px, env(safe-area-inset-bottom)); overflow-x: hidden; }
+  .dialog-resize-handle { display: none; }
   .sheet-handle { display: block; width: 36px; height: 4px; border-radius: 99px; background: var(--line-strong); margin: 7px auto 0; }
   .sheet-head { min-height: 62px; }
   .sheet-dialog[data-demo-surface="dynamic-sheet"] > .demo-surface-badge { margin: 8px 16px 0; }
@@ -1091,8 +1133,62 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0ms !important; animation-iteration-count: 1 !important; transition-duration: 0ms !important; }
-  .talos-line-loader-node { fill: var(--accent); opacity: .7; } /* stesso motivo del :host-context gemello qui sopra */
+  .talos-line-loader-node { animation: none !important; transform: none; fill: var(--accent); opacity: .7; } /* stesso motivo del :host-context gemello qui sopra */
 }
+
+/* Preferenze desktop effettive: lo stato salvato da app.js cambia la stessa
+   superficie di chat, senza duplicare componenti o nascondere le sidebar. */
+:root.chat-full-width .conversation {
+  padding-left: 20px;
+  padding-right: 20px;
+}
+:root.chat-full-width .conversation .user-message,
+:root.chat-full-width .conversation .assistant-message {
+  width: 100%;
+  max-width: none;
+}
+:root.chat-full-width .conversation .message-bubble {
+  width: fit-content;
+  max-width: 100%;
+}
+:root[data-talos-composer-shape="classic"] .composer { min-height: var(--composer-canonical-h); border-radius: 8px; padding-top: 16px; }
+:root[data-talos-composer-shape="compact"] .composer { min-height: var(--composer-canonical-h); border-radius: 11px; padding-top: 8px; padding-bottom: 7px; }
+:root[data-talos-composer-shape="compact"] .composer textarea { min-height: 30px; padding-top: 2px; padding-bottom: 3px; }
+:root[data-talos-message-style="bubbles"] .assistant-message {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface-highlight-subtle);
+}
+:root[data-talos-streaming-animation="typewriter"] .assistant-message.is-streaming .assistant-copy::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 4px;
+  vertical-align: -.12em;
+  background: var(--accent);
+  animation: talos-stream-caret 780ms steps(1, end) infinite;
+}
+:root[data-talos-streaming-animation="fade"] .assistant-message.is-streaming .assistant-copy > :last-child {
+  animation: talos-stream-fade var(--motion-message) var(--motion-ease) both;
+}
+:root[data-talos-window-presentation="fullscreen"] .sheet-dialog {
+  width: calc(100vw - 32px);
+  max-width: none;
+  height: calc(100dvh - 32px);
+  max-height: none;
+}
+:root.immersive-header .topbar {
+  background: linear-gradient(180deg, var(--bg-glass-strong), transparent);
+  border-bottom-color: transparent;
+  backdrop-filter: blur(18px);
+}
+:root[data-talos-motion-quality="low"] .scene-orb:nth-child(n+3) { display: none; }
+:root[data-talos-motion-quality="high"] .scene-orb { filter: saturate(1.12); }
+
+@keyframes talos-stream-caret { 0%, 48% { opacity: 1; } 49%, 100% { opacity: 0; } }
+@keyframes talos-stream-fade { from { opacity: .45; transform: translateY(2px); } to { opacity: 1; transform: none; } }
 
 /*
  * Owner 24/8: `body.reduce-motion`/`body.keyboard-open` (qui e più sotto)
@@ -1105,8 +1201,8 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 :host-context(body.reduce-motion) *, :host-context(body.reduce-motion) *::before, :host-context(body.reduce-motion) *::after { scroll-behavior: auto !important; animation-duration: 0ms !important; animation-iteration-count: 1 !important; transition-duration: 0ms !important; }
 /* ⛔ Senza queste due righe, la regola cieca qui sopra e quella in @media
    (prefers-reduced-motion) sotto lascerebbero i tre nodi del line-loader
-   sul fotogramma 100% del loro keyframe — che per `talosLineNodeFill` è
-   `fill: transparent`: tre cerchi invisibili invece di tre nodi pieni. */
+   sul fotogramma iniziale del keyframe: tre cerchi troppo attenuati invece
+   di un marchio statico pienamente leggibile. */
 :host-context(body.reduce-motion) .talos-line-loader-node { fill: var(--accent); opacity: .7; }
 
 /* Feature-parity additions: session graph + GUI control plane */
@@ -1282,20 +1378,33 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 /* Fase 8A — superficie Aspetto completa, tokenizzata e responsiva. */
 .talos-background-scene { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; background: radial-gradient(circle at 18% 12%, color-mix(in srgb, var(--accent) calc(20% * var(--talos-motion-intensity, .2)), transparent), transparent 42%), var(--bg); opacity: calc(.35 + var(--talos-motion-contrast, .8) * .25); }
 .app-shell { position: relative; z-index: 1; }
-.scene-orb { position: absolute; width: 42vw; height: 42vw; max-width: 620px; max-height: 620px; border-radius: 50%; filter: blur(42px); opacity: calc(.1 + var(--talos-motion-glow, .1) * .5); transform: translate3d(calc(var(--talos-motion-x, 0) * var(--talos-motion-parallax, .2)), calc(var(--talos-motion-y, 0) * var(--talos-motion-parallax, .2)), 0); transition: transform var(--motion-theme) linear, background var(--motion-theme) var(--motion-ease); }
+.scene-orb { position: absolute; width: 42vw; height: 42vw; max-width: 620px; max-height: 620px; border-radius: 50%; filter: blur(42px); opacity: calc(.1 + var(--talos-motion-glow, .1) * .5); transform: translate3d(0, 0, 0); transition: background var(--motion-theme) var(--motion-ease); }
 .scene-orb-a { top: -16%; left: -10%; background: var(--accent); }
 .scene-orb-b { right: -16%; bottom: -20%; background: var(--secondary); }
+.background-motion-active .scene-orb-a { animation: talos-scene-orbit-a var(--talos-background-cycle, 36000ms) linear infinite both; will-change: transform; }
+.background-motion-active .scene-orb-b { animation: talos-scene-orbit-b calc(var(--talos-background-cycle, 36000ms) * 1.18) linear infinite both; will-change: transform; }
+.background-motion-paused .scene-orb { animation-play-state: paused; }
+@keyframes talos-scene-orbit-a {
+  0%, 100% { transform: translate3d(calc(var(--talos-background-shift-x, 16px) * -1), calc(var(--talos-background-shift-y, 10px) * -.35), 0) scale(1); }
+  35% { transform: translate3d(var(--talos-background-shift-x, 16px), calc(var(--talos-background-shift-y, 10px) * -.8), 0) scale(1.025); }
+  70% { transform: translate3d(calc(var(--talos-background-shift-x, 16px) * .35), var(--talos-background-shift-y, 10px), 0) scale(.985); }
+}
+@keyframes talos-scene-orbit-b {
+  0%, 100% { transform: translate3d(calc(var(--talos-background-shift-x, 16px) * .55), var(--talos-background-shift-y, 10px), 0) scale(1.01); }
+  42% { transform: translate3d(calc(var(--talos-background-shift-x, 16px) * -1), calc(var(--talos-background-shift-y, 10px) * .2), 0) scale(.98); }
+  76% { transform: translate3d(var(--talos-background-shift-x, 16px), calc(var(--talos-background-shift-y, 10px) * -1), 0) scale(1.02); }
+}
 .scene-grid { position: absolute; inset: 0; opacity: calc(var(--talos-motion-density, 1) * .08); background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px); background-size: 48px 48px; transform: perspective(700px) rotateX(calc(54deg - var(--talos-motion-depth, .92) * 10deg)) translateY(32%); transform-origin: center bottom; }
 :host([data-talos-scene="terminal"]) .scene-grid, [data-talos-scene="terminal"] .scene-grid { opacity: calc(var(--talos-motion-density, 1) * .16); }
 :host([data-talos-scene="paper"]) .talos-background-scene, [data-talos-scene="paper"] .talos-background-scene { opacity: .72; }
-:host(.background-motion-off) .scene-orb, :host(.background-motion-off) .scene-grid, .background-motion-off .scene-orb, .background-motion-off .scene-grid { animation: none; transform: none; }
+:host(.background-motion-off) .scene-orb, :host(.background-motion-off) .scene-grid, .background-motion-off .scene-orb, .background-motion-off .scene-grid { animation: none; transform: none; will-change: auto; }
 :host(.interface-motion-off) *, .interface-motion-off * { transition-duration: 0ms !important; animation-duration: 0ms !important; }
 :host(.motion-windows-off) .sheet-dialog, :host(.motion-windows-off) .command-dialog, :host(.motion-windows-off) .inspector-panel, :host(.motion-windows-off) .sessions-panel { transition: none !important; }
 :host(.motion-surfaces-off) .settings-card, :host(.motion-surfaces-off) .widget, :host(.motion-surfaces-off) .mission-card { transition: none !important; }
 :host(.motion-navigation-off) .mode-tab, :host(.motion-navigation-off) .session-item { transition: none !important; }
 :host(.motion-composer-off) .composer { transition: none !important; }
 :host(.motion-messages-off) .message-bubble, :host(.motion-messages-off) .assistant-copy { transition: none !important; }
-:host(.motion-feedback-off) .toast, :host(.motion-feedback-off) .status-pulse { transition: none !important; animation: none !important; }
+:host(.motion-feedback-off) .toast, :host(.motion-feedback-off) .status-pulse, :host(.motion-feedback-off) .real-tool-note .talos-glyph { transition: none !important; animation: none !important; }
 .settings-card-wide { grid-column: 1 / -1; }
 .settings-card-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 14px; }
 .settings-card-heading h3 { margin: 2px 0 0; }
@@ -1528,7 +1637,7 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
   .send-btn { width: var(--mobile-control); height: var(--mobile-control); }
   .composer-status { font-size: calc(9.5px * var(--talos-ui-font-scale)); line-height: 1.2; }
   .content-stage { padding-bottom: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom)); }
-  .conversation { padding-bottom: 220px; scroll-padding-bottom: 220px; }
+  .conversation { padding-bottom: max(220px, var(--stream-follow-space, 0px)); scroll-padding-bottom: max(220px, var(--stream-follow-space, 0px)); }
 
   .mobile-nav { min-height: var(--mobile-nav-h); transition: opacity var(--motion-enter) var(--motion-ease), transform var(--motion-enter) var(--motion-ease); }
   .mobile-nav button { min-height: 52px; }
@@ -1774,8 +1883,8 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
 }
 :host(.talos-embedded) .composer-wrap { display: none; }
 :host(.talos-embedded) .conversation {
-  padding-bottom: var(--talos-code-composer-clearance, 220px);
-  scroll-padding-bottom: var(--talos-code-composer-clearance, 220px);
+  padding-bottom: max(var(--talos-code-composer-clearance, 220px), var(--stream-follow-space, 0px));
+  scroll-padding-bottom: max(var(--talos-code-composer-clearance, 220px), var(--stream-follow-space, 0px));
 }
 
 @media (max-width: 780px) {
@@ -1848,8 +1957,8 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
 :host(.talos-embedded-wide-short) .conversation {
   width: auto;
   margin: 0 12px;
-  padding: 8px 0 var(--talos-code-composer-clearance, 152px);
-  scroll-padding-bottom: var(--talos-code-composer-clearance, 152px);
+  padding: 8px 0 max(var(--talos-code-composer-clearance, 152px), var(--stream-follow-space, 0px));
+  scroll-padding-bottom: max(var(--talos-code-composer-clearance, 152px), var(--stream-follow-space, 0px));
 }
 :host(.talos-embedded-wide-short) .composer-wrap {
   bottom: var(--mobile-nav-h);
@@ -1938,8 +2047,8 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
   bottom: calc(var(--wide-short-composer-h) + var(--wide-short-toast-gap));
 }
 :host(.talos-embedded-wide-short):host-context(body.keyboard-open) .conversation {
-  padding-bottom: var(--talos-code-composer-clearance, 76px);
-  scroll-padding-bottom: var(--talos-code-composer-clearance, 76px);
+  padding-bottom: max(var(--talos-code-composer-clearance, 76px), var(--stream-follow-space, 0px));
+  scroll-padding-bottom: max(var(--talos-code-composer-clearance, 76px), var(--stream-follow-space, 0px));
 }
 
 @media (min-width: 1041px) {
@@ -1952,4 +2061,120 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
      il resto) lascerebbe 252px vuoti. Una sola colonna, tutta al main —
      l'inspector qui è già un cassetto fuori schermo per conto suo. */
   :host(.talos-embedded) .app-shell { grid-template-columns: minmax(0,1fr); }
+}
+
+/*
+ * Workspace chooser desktop — workbench, non card gallery. La variante resta
+ * confinata a "Nuova sessione": gli altri fogli condivisi conservano esatte
+ * dimensioni e comportamento. Tutti i colori/motion provengono dai token
+ * TALOS; nessun valore di brand parallelo.
+ */
+.sheet-dialog.sheet-dialog--new-session {
+  width: min(1240px, calc(100vw - 24px));
+  height: min(820px, calc(100dvh - 32px));
+  max-width: none;
+}
+.sheet-dialog--new-session .sheet-head { min-height: 72px; padding-inline: 20px 14px; }
+.sheet-dialog--new-session .sheet-body { height: calc(100% - 72px); max-height: none; overflow: hidden; padding: 0; }
+.workspace-chooser { height: 100%; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.workspace-chooser-shortcuts { min-height: 76px; display: flex; align-items: center; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; padding: 12px 18px; border-bottom: 1px solid var(--line); scrollbar-width: none; }
+.workspace-chooser-shortcuts::-webkit-scrollbar { display: none; }
+.workspace-chooser-shortcut { flex: 0 0 auto; min-width: 150px; min-height: 50px; display: grid; grid-template-columns: 28px minmax(0,1fr); align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text-2); padding: 7px 10px; text-align: left; cursor: pointer; transition: border-color var(--motion-hover) var(--motion-ease), background var(--motion-hover) var(--motion-ease), transform var(--motion-hover) var(--motion-ease); }
+.workspace-chooser-shortcut:hover { border-color: var(--line-strong); background: var(--surface-2); transform: translateY(-1px); }
+.workspace-chooser-shortcut.active, .workspace-chooser-shortcut[aria-pressed="true"] { border-color: var(--accent-strong); background: var(--accent-soft); color: var(--text); }
+.workspace-chooser-shortcut svg { width: 18px; height: 18px; color: var(--accent-2); }
+.workspace-chooser-shortcut span, .workspace-chooser-shortcut strong, .workspace-chooser-shortcut small { display: block; min-width: 0; }
+.workspace-chooser-shortcut strong { max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(11px * var(--talos-ui-font-scale)); }
+.workspace-chooser-shortcut small { margin-top: 2px; color: var(--muted); font-size: calc(8px * var(--talos-ui-font-scale)); }
+
+.workspace-chooser-columns { min-height: 0; display: grid; grid-template-columns: minmax(0, 1.22fr) minmax(360px, .78fr); }
+.workspace-chooser-browser, .workspace-chooser-settings { min-width: 0; min-height: 0; padding: 18px; }
+.workspace-chooser-browser { display: grid; grid-template-rows: auto auto auto auto minmax(0, 1fr) auto; gap: 10px; border-right: 1px solid var(--line); }
+.workspace-chooser-settings { overflow-y: auto; overscroll-behavior: contain; padding: 18px 20px 22px; scrollbar-gutter: stable; }
+.workspace-chooser-section-head h3 { margin: 5px 0 4px; color: var(--text); font-size: calc(16px * var(--talos-ui-font-scale)); font-weight: 680; }
+.workspace-chooser-section-head p { margin: 0; color: var(--muted); font-size: calc(10px * var(--talos-ui-font-scale)); line-height: 1.45; }
+.workspace-chooser-pathbar { min-width: 0; display: grid; grid-template-columns: 38px minmax(0,1fr) auto; align-items: center; gap: 6px; }
+.workspace-chooser-up, .workspace-chooser-go { min-height: 38px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text-2); cursor: pointer; }
+.workspace-chooser-up { width: 38px; display: grid; place-items: center; }
+.workspace-chooser-up svg { width: 16px; height: 16px; }
+.workspace-chooser-up:disabled { opacity: .42; cursor: default; }
+.workspace-chooser-go { padding-inline: 13px; font-weight: 650; }
+.workspace-chooser-path { width: 100%; min-width: 0; min-height: 38px; border: 1px solid var(--line); border-radius: 8px; outline: 0; background: var(--surface); color: var(--text-2); padding: 0 11px; font: calc(10px * var(--talos-ui-font-scale))/1.3 var(--font-mono); }
+.workspace-chooser-path:focus { border-color: var(--focus); box-shadow: 0 0 0 2px var(--focus-soft); }
+.workspace-chooser-tree-tools { min-height: 34px; display: flex; align-items: center; gap: 3px; padding: 2px; border-bottom: 1px solid var(--line); }
+.workspace-chooser-tree-tools-spacer { flex: 1 1 auto; }
+.workspace-chooser-tree-tool { width: 31px; height: 31px; display: grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; transition: color var(--motion-hover) var(--motion-ease), background var(--motion-hover) var(--motion-ease); }
+.workspace-chooser-tree-tool svg { width: 16px; height: 16px; }
+.workspace-chooser-tree-tool:hover:not(:disabled), .workspace-chooser-tree-tool:focus-visible { color: var(--text); background: var(--surface-2); }
+.workspace-chooser-tree-tool:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.workspace-chooser-tree-tool:disabled { opacity: .34; cursor: default; }
+.workspace-chooser-new-folder { min-width: 0; display: grid; grid-template-columns: minmax(0,1fr) auto auto; align-items: center; gap: 6px; padding: 8px; border: 1px solid var(--accent-strong); border-radius: 9px; background: var(--accent-soft); }
+.workspace-chooser-new-folder[hidden] { display: none; }
+.workspace-chooser-new-folder input { min-width: 0; min-height: 36px; border: 1px solid var(--line); border-radius: 7px; outline: 0; background: var(--surface); color: var(--text); padding: 0 10px; font: inherit; }
+.workspace-chooser-new-folder input:focus { border-color: var(--focus); box-shadow: 0 0 0 2px var(--focus-soft); }
+.workspace-chooser-new-folder-status { grid-column: 1 / -1; min-height: 0; color: var(--muted); font-size: calc(9px * var(--talos-ui-font-scale)); }
+.workspace-chooser-new-folder-status:empty { display: none; }
+.workspace-chooser-tree-frame { min-height: 230px; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); padding: 6px; scrollbar-gutter: stable; }
+.workspace-chooser-tree { display: grid; gap: 2px; }
+.workspace-chooser-tree[aria-busy="true"] { opacity: .64; }
+.workspace-chooser-tree-row { width: 100%; min-height: 38px; display: grid; grid-template-columns: 18px 20px minmax(0,1fr) auto; align-items: center; gap: 7px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--text-2); padding: 0 8px; text-align: left; cursor: default; transition: background var(--motion-hover) var(--motion-ease), border-color var(--motion-hover) var(--motion-ease); }
+.workspace-chooser-tree-row[aria-level="2"] { padding-left: 22px; }
+.workspace-chooser-tree-row:hover { background: var(--surface-2); }
+.workspace-chooser-tree-row[aria-selected="true"] { border-color: var(--accent-strong); background: var(--accent-soft); color: var(--text); }
+.workspace-chooser-tree-row:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.workspace-chooser-tree-row svg { width: 16px; height: 16px; color: var(--muted); }
+.workspace-chooser-tree-row > svg { color: var(--accent-2); }
+.workspace-chooser-tree-toggle { width: 18px; min-height: 28px; display: grid; place-items: center; cursor: pointer; }
+.workspace-chooser-tree-row > span:not(.workspace-chooser-tree-spacer):not(.workspace-chooser-tree-toggle) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(11px * var(--talos-ui-font-scale)); }
+.workspace-chooser-tree-row small { color: var(--accent-2); font-size: calc(8px * var(--talos-ui-font-scale)); text-transform: uppercase; letter-spacing: .08em; }
+.workspace-chooser-tree-spacer { width: 16px; }
+.workspace-chooser-tree-state { min-height: 60px; display: grid; place-items: center; gap: 10px; color: var(--muted); padding: 18px; text-align: center; font-size: calc(10px * var(--talos-ui-font-scale)); }
+.workspace-chooser-tree-state[hidden] { display: none; }
+.workspace-chooser-tree-state p { margin: 0; }
+.workspace-chooser-error-actions { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.workspace-chooser-selection { min-width: 0; min-height: 54px; display: grid; grid-template-columns: 32px minmax(0,1fr); align-items: center; gap: 9px; border-top: 1px solid var(--line); padding: 9px 3px 0; }
+.workspace-chooser-selection > svg { width: 20px; height: 20px; color: var(--accent-2); }
+.workspace-chooser-selection span, .workspace-chooser-selection small, .workspace-chooser-selection strong { display: block; min-width: 0; }
+.workspace-chooser-selection small { color: var(--muted); font-size: calc(8px * var(--talos-ui-font-scale)); text-transform: uppercase; letter-spacing: .1em; }
+.workspace-chooser-selection strong { margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font: 600 calc(10px * var(--talos-ui-font-scale))/1.35 var(--font-mono); }
+
+.workspace-chooser-setting-group { padding: 15px 0; border-bottom: 1px solid var(--line); }
+.workspace-chooser-setting-group:last-child { border-bottom: 0; }
+.workspace-chooser-setting-group .model-picker-panel { max-height: 330px; }
+.workspace-chooser-help { display: block; margin-top: 7px; color: var(--muted); font-size: calc(9px * var(--talos-ui-font-scale)); line-height: 1.45; }
+.workspace-chooser-inline-toggle { min-height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 8px 11px; }
+.workspace-chooser-inline-toggle span, .workspace-chooser-inline-toggle strong, .workspace-chooser-inline-toggle small { display: block; }
+.workspace-chooser-inline-toggle strong { color: var(--text-2); font-size: calc(10px * var(--talos-ui-font-scale)); }
+.workspace-chooser-inline-toggle small { margin-top: 3px; color: var(--muted); font-size: calc(8px * var(--talos-ui-font-scale)); }
+.workspace-chooser-inline-toggle input { width: 38px; height: 38px; flex: 0 0 auto; accent-color: var(--accent); }
+.workspace-chooser-permissions { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 7px; }
+.workspace-chooser-permission { min-width: 0; min-height: 54px; display: grid; grid-template-columns: 24px minmax(0,1fr); align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--text-2); padding: 8px; text-align: left; cursor: pointer; }
+.workspace-chooser-permission[aria-pressed="true"] { border-color: var(--accent-strong); background: var(--accent-soft); color: var(--text); }
+.workspace-chooser-permission > svg { width: 17px; height: 17px; color: var(--accent-2); }
+.workspace-chooser-permission span, .workspace-chooser-permission strong, .workspace-chooser-permission small { display: block; min-width: 0; }
+.workspace-chooser-permission strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(9px * var(--talos-ui-font-scale)); }
+.workspace-chooser-permission small { margin-top: 2px; color: var(--muted); font-size: calc(8px * var(--talos-ui-font-scale)); }
+.workspace-chooser-policy-gate { min-height: 42px; margin: 8px 0 0; border-radius: 8px; background: var(--surface-2); color: var(--muted); padding: 9px 10px; font-size: calc(9px * var(--talos-ui-font-scale)); line-height: 1.45; }
+.workspace-chooser-footer { min-height: 72px; display: flex; align-items: center; justify-content: flex-end; gap: 9px; border-top: 1px solid var(--line); background: var(--surface-elevated); padding: 12px 18px; }
+.workspace-chooser-footer .primary-btn { min-width: 250px; }
+.workspace-chooser-footer .primary-btn:disabled { opacity: .46; cursor: not-allowed; box-shadow: none; }
+
+@media (max-width: 1180px) {
+  .workspace-chooser-columns { grid-template-columns: minmax(0, 1.08fr) minmax(330px, .92fr); }
+  .workspace-chooser-browser, .workspace-chooser-settings { padding: 14px; }
+  .workspace-chooser-shortcut { min-width: 135px; }
+}
+
+@media (max-width: 780px) {
+  .sheet-dialog.sheet-dialog--new-session { height: min(92dvh, 920px); }
+  .sheet-dialog--new-session .sheet-body { height: calc(100% - 62px); max-height: none; }
+  .workspace-chooser { overflow: hidden; }
+  .workspace-chooser-shortcuts { min-height: 68px; padding: 9px 12px; }
+  .workspace-chooser-columns { display: block; overflow-y: auto; }
+  .workspace-chooser-browser, .workspace-chooser-settings { min-height: auto; }
+  .workspace-chooser-browser { border-right: 0; border-bottom: 1px solid var(--line); }
+  .workspace-chooser-tree-frame { height: 320px; }
+  .workspace-chooser-settings { overflow: visible; }
+  .workspace-chooser-footer { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+  .workspace-chooser-footer .primary-btn { min-width: 0; flex: 1; }
 }

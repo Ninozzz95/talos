@@ -273,6 +273,66 @@ class Pipeline {
     throw new Error(`Condizione mai vera entro ${timeoutMs}ms: ${descrizione}`);
   }
 
+  /**
+   * Seleziona una cartella reale nel nuovo workbench "Nuova sessione".
+   * Il percorso viene aperto dal browser read-only e l'elevazione a Full
+   * access resta un gesto esplicito, anche negli scenari QA automatizzati.
+   */
+  async scegliCartellaNuovaSessione(percorso, { fullAccess = true } = {}) {
+    await this.attendiCondizione("!!document.querySelector('#workspaceChooserPath')", {
+      timeoutMs: 10000,
+      descrizione: 'workbench Nuova sessione pronto',
+    });
+    if (fullAccess) await this.click('[data-workspace-permission="Full access"]');
+    await this.digita('#workspaceChooserPath', percorso);
+    await this.click('#workspaceChooser .workspace-chooser-go');
+    const percorsoNormalizzato = String(percorso).replaceAll('/', '\\').toLocaleLowerCase('it');
+    await this.attendiCondizione(`(() => {
+      const selezionato = document.querySelector('[data-workspace-selected-path]')?.textContent?.trim();
+      return selezionato?.replaceAll('/', '\\\\').toLocaleLowerCase('it') === ${j(percorsoNormalizzato)};
+    })()`, {
+      timeoutMs: 10000,
+      descrizione: `cartella selezionata nel workbench: ${percorso}`,
+    });
+  }
+
+  /** Seleziona una cartella allowlistata dalle scorciatoie del workbench. */
+  async scegliProgettoNuovaSessione(nome) {
+    await this.attendiCondizione("!!document.querySelector('#workspaceChooser')", {
+      timeoutMs: 10000,
+      descrizione: 'workbench Nuova sessione pronto',
+    });
+    const trovato = await this.cdp.evaluate(`(() => {
+      const ago = ${j(nome)}.toLocaleLowerCase('it');
+      const shortcut = [...document.querySelectorAll('.workspace-chooser-shortcut')]
+        .find((el) => (el.title || el.textContent || '').toLocaleLowerCase('it').includes(ago));
+      if (!shortcut) return false;
+      shortcut.click();
+      return true;
+    })()`);
+    if (!trovato) throw new Error(`Progetto consigliato non trovato nel workbench: ${nome}`);
+    await this.attendiCondizione(`document.querySelector('[data-workspace-selected-path]')?.textContent?.toLocaleLowerCase('it').includes(${j(String(nome).toLocaleLowerCase('it'))})`, {
+      timeoutMs: 10000,
+      descrizione: `progetto consigliato selezionato: ${nome}`,
+    });
+  }
+
+  async cartellaNuovaSessioneSelezionata() {
+    await this.attendiCondizione("!!document.querySelector('#workspaceChooser')", {
+      timeoutMs: 10000,
+      descrizione: 'workbench Nuova sessione pronto',
+    });
+    return this.testo('[data-workspace-selected-path]');
+  }
+
+  async confermaNuovaSessione() {
+    await this.attendiCondizione("document.querySelector('#workspaceChooserSubmit')?.disabled === false", {
+      timeoutMs: 10000,
+      descrizione: 'scelta Nuova sessione valida',
+    });
+    await this.submit('#workspaceChooser');
+  }
+
   nota(testo) {
     console.log(`  · ${testo}`);
     this.report.push({ nota: testo, quando: new Date().toISOString() });
@@ -577,7 +637,7 @@ const SCENARI = {
     await p.screenshot('settings-full-width', { nota: 'P0: impostazioni a tutta larghezza, categorie in lista e dettaglio senza il margine stretto della chat' });
 
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskForm')", { timeoutMs: 10000, descrizione: 'foglio nuova sessione pronto' });
+    await p.attendiCondizione("!!document.querySelector('#workspaceChooser')", { timeoutMs: 10000, descrizione: 'workbench Nuova sessione pronto' });
     await p.attendi(150);
     const nuovoTesto = await p.testo('#sheetBody');
     p.nota(`testo modale nuova sessione: ${JSON.stringify(nuovoTesto)}`);
@@ -738,7 +798,7 @@ const SCENARI = {
     // direttamente da interfaccia chat"). Il form qui sceglie SOLO cartella+modello;
     // il submit chiama avviaSessionePendente() e apre la chat vuota, il compito si scrive
     // nel composer normale, che lo consuma al primo invio (state.pendingCustomSession).
-    await p.submit('#customTaskForm');
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat vuota pronta dopo la scelta cartella+modello' });
     await p.screenshot('sessione-pronta-vuota', { nota: 'nessuna sessione lato server ancora — solo cartella+modello scelti' });
 
@@ -1884,8 +1944,8 @@ const SCENARI = {
     await p.screenshot('permessi-full-access', { nota: 'pillola composer deve ora mostrare Full access' });
 
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio Nuova sessione, ramo Full access' });
-    await p.digita('#customTaskCartellaLibera', CARTELLA);
+    await p.attendiCondizione("!!document.querySelector('#workspaceChooserPath')", { descrizione: 'workbench Nuova sessione, percorso libero' });
+    await p.scegliCartellaNuovaSessione(CARTELLA);
     await p.screenshot('cartella-scelta', { nota: 'percorso scratch inserito, mai dentro TALOS-BANCO' });
 
     await p.click('.model-picker-trigger');
@@ -1903,7 +1963,7 @@ const SCENARI = {
     p.nota(`modello selezionato: ${modelloScelto}`);
     await p.screenshot('modello-scelto');
 
-    await p.submit('#customTaskForm');
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat vuota pronta dopo la scelta cartella+modello' });
 
     const prompt = 'Nel progetto del magazzino serve una funzione che calcoli uno sconto a scaglioni in base a delle soglie di importo — puoi aggiungerla?';
@@ -2017,15 +2077,15 @@ const SCENARI = {
     await p.attendi(300);
 
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio Nuova sessione' });
-    await p.digita('#customTaskCartellaLibera', CARTELLA);
+    await p.attendiCondizione("!!document.querySelector('#workspaceChooserPath')", { descrizione: 'workbench Nuova sessione' });
+    await p.scegliCartellaNuovaSessione(CARTELLA);
     await p.click('.model-picker-trigger');
     await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
     await p.digita('.model-picker-search input', 'gemini-3.7-flash');
     await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati ricerca', timeoutMs: 6000 });
     await p.click('.model-picker-option');
     await p.attendi(200);
-    await p.submit('#customTaskForm');
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
 
     const prompt = 'Nel calcolatore di preventivi serve una funzione che dica quanti pezzi ci sono in totale nel carrello — contando le quantità di ogni articolo, non semplicemente quante righe ci sono. Puoi aggiungerla?';
@@ -2166,9 +2226,9 @@ const SCENARI = {
     await p.click('#closeSheet');
     await p.attendi(300);
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
-    await p.digita('#customTaskCartellaLibera', CARTELLA);
-    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#workspaceChooserPath')", { descrizione: 'workbench Nuova sessione' });
+    await p.scegliCartellaNuovaSessione(CARTELLA);
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'sessione pronta, vuota' });
 
     await p.click('[data-mode="terminal"]');
@@ -2224,9 +2284,9 @@ const SCENARI = {
     await p.click('#closeSheet');
     await p.attendi(300);
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
-    await p.digita('#customTaskCartellaLibera', CARTELLA);
-    await p.submit('#customTaskForm');
+    await p.attendiCondizione("!!document.querySelector('#workspaceChooserPath')", { descrizione: 'workbench Nuova sessione' });
+    await p.scegliCartellaNuovaSessione(CARTELLA);
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'sessione pronta, vuota' });
 
     // Manda per davvero il primo messaggio — la sessione nasce lato server SOLO ora.
@@ -2332,15 +2392,15 @@ const SCENARI = {
     await p.click('#closeSheet');
     await p.attendi(300);
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
-    await p.digita('#customTaskCartellaLibera', CARTELLA);
+    await p.attendiCondizione("!!document.querySelector('#workspaceChooserPath')", { descrizione: 'workbench Nuova sessione' });
+    await p.scegliCartellaNuovaSessione(CARTELLA);
     await p.click('.model-picker-trigger');
     await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
     await p.digita('.model-picker-search input', 'gemini-3.7-flash');
     await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
     await p.click('.model-picker-option');
     await p.attendi(200);
-    await p.submit('#customTaskForm');
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
 
     const prompt = 'Nel gioco del serpentone, quando esce dal bordo sinistro o da quello superiore della griglia il rientro dall\'altro lato non funziona bene — sembra un problema di come si calcola il resto con i numeri negativi in JavaScript. Puoi controllare e sistemarlo in tutte e quattro le direzioni?';
@@ -2404,23 +2464,17 @@ const SCENARI = {
   async 'qa-task-4-crm-nome'(p) {
     await p.attendi(1200);
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartella')", { descrizione: 'foglio nuova sessione, ramo allowlist (Workspace write)' });
-    await p.screenshot('modale-workspace-write', { nota: 'atteso: dropdown cartella allowlist, non il campo percorso libero' });
-    await p.cdp.evaluate(`(() => {
-      const select = document.querySelector('#customTaskCartella');
-      const opzione = [...select.options].find((o) => o.textContent.includes('crm-contatti'));
-      if (opzione) select.value = opzione.value;
-      select.dispatchEvent(new Event('change', {bubbles:true}));
-    })()`);
-    const cartellaScelta = await p.cdp.evaluate("document.querySelector('#customTaskCartella')?.selectedOptions?.[0]?.textContent");
-    p.nota(`cartella scelta dal dropdown allowlist: ${cartellaScelta}`);
+    await p.scegliProgettoNuovaSessione('crm-contatti');
+    await p.screenshot('modale-workspace-write', { nota: 'atteso: progetto consigliato selezionato nel browser cartelle, senza elevazione dei permessi' });
+    const cartellaScelta = await p.cartellaNuovaSessioneSelezionata();
+    p.nota(`cartella allowlistata scelta nel workbench: ${cartellaScelta}`);
     await p.click('.model-picker-trigger');
     await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
     await p.digita('.model-picker-search input', 'gemini-3.7-flash');
     await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
     await p.click('.model-picker-option');
     await p.attendi(200);
-    await p.submit('#customTaskForm');
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
 
     const prompt = 'Nel CRM, quando un contatto non ha il cognome il nome formattato ha uno spazio in più alla fine che non dovrebbe esserci — puoi sistemarlo?';
@@ -2476,15 +2530,15 @@ const SCENARI = {
     await p.click('#closeSheet');
     await p.attendi(300);
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
-    await p.digita('#customTaskCartellaLibera', CARTELLA);
+    await p.attendiCondizione("!!document.querySelector('#workspaceChooserPath')", { descrizione: 'workbench Nuova sessione' });
+    await p.scegliCartellaNuovaSessione(CARTELLA);
     await p.click('.model-picker-trigger');
     await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
     await p.digita('.model-picker-search input', 'gemini-3.7-flash');
     await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
     await p.click('.model-picker-option');
     await p.attendi(200);
-    await p.submit('#customTaskForm');
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
 
     const prompt = 'Nell\'API dei contatti la validazione del nome è scritta in due punti diversi, uno per creare e uno per modificare un contatto — puoi accorparla in un solo posto senza cambiare come si comporta?';
@@ -2601,15 +2655,15 @@ const SCENARI = {
     await p.click('#closeSheet');
     await p.attendi(300);
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
-    await p.digita('#customTaskCartellaLibera', CARTELLA);
+    await p.attendiCondizione("!!document.querySelector('#workspaceChooserPath')", { descrizione: 'workbench Nuova sessione' });
+    await p.scegliCartellaNuovaSessione(CARTELLA);
     await p.click('.model-picker-trigger');
     await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
     await p.digita('.model-picker-search input', 'gemini-3.7-flash');
     await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
     await p.click('.model-picker-option');
     await p.attendi(200);
-    await p.submit('#customTaskForm');
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
 
     const prompt = 'Sto iniziando un piccolo sito da zero — mi serve una paginetta HTML singola con un titolo, due paragrafi di testo segnaposto e un pulsante che quando premuto cambia il colore di sfondo. Puoi crearla da zero, con anche un piccolo file di stile separato?';
@@ -2662,15 +2716,15 @@ const SCENARI = {
     await p.click('#closeSheet');
     await p.attendi(300);
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
-    await p.digita('#customTaskCartellaLibera', CARTELLA);
+    await p.attendiCondizione("!!document.querySelector('#workspaceChooserPath')", { descrizione: 'workbench Nuova sessione' });
+    await p.scegliCartellaNuovaSessione(CARTELLA);
     await p.click('.model-picker-trigger');
     await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
     await p.digita('.model-picker-search input', 'gemini-3.7-flash');
     await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
     await p.click('.model-picker-option');
     await p.attendi(200);
-    await p.submit('#customTaskForm');
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
 
     const prompt = 'Nel progetto del magazzino c\'è un file di backup che non serve più (magazzino_old.py.bak) — puoi eliminarlo? Se trovi anche altri file temporanei o ridondanti nel progetto, elimina pure anche quelli.';
@@ -2816,22 +2870,16 @@ const SCENARI = {
   async 'qa-task-6-py-csv'(p) {
     await p.attendi(1200);
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartella')", { descrizione: 'foglio nuova sessione, ramo allowlist (Workspace write)' });
-    await p.cdp.evaluate(`(() => {
-      const select = document.querySelector('#customTaskCartella');
-      const opzione = [...select.options].find((o) => o.textContent.includes('magazzino_py'));
-      if (opzione) select.value = opzione.value;
-      select.dispatchEvent(new Event('change', {bubbles:true}));
-    })()`);
-    const cartellaScelta = await p.cdp.evaluate("document.querySelector('#customTaskCartella')?.selectedOptions?.[0]?.textContent");
-    p.nota(`cartella scelta dal dropdown allowlist: ${cartellaScelta}`);
+    await p.scegliProgettoNuovaSessione('magazzino_py');
+    const cartellaScelta = await p.cartellaNuovaSessioneSelezionata();
+    p.nota(`cartella allowlistata scelta nel workbench: ${cartellaScelta}`);
     await p.click('.model-picker-trigger');
     await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
     await p.digita('.model-picker-search input', 'gemini-3.7-flash');
     await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
     await p.click('.model-picker-option');
     await p.attendi(200);
-    await p.submit('#customTaskForm');
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
 
     const prompt = 'Nel progetto del magazzino mi servirebbe una funzione che carica gli ordini da un file CSV (con prodotto, prezzo e quantità) e li valida — se manca il prodotto, il prezzo è negativo o la quantità non è un numero intero, deve dirmelo chiaramente, nominando il campo che non va. Prima cerca online qual è il modo più comune e sicuro in Python per fare una cosa del genere, poi implementala. Alla fine salvami un breve riassunto di cosa hai fatto.';
@@ -2982,15 +3030,15 @@ const SCENARI = {
     await p.click('#closeSheet');
     await p.attendi(300);
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
-    await p.digita('#customTaskCartellaLibera', CARTELLA);
+    await p.attendiCondizione("!!document.querySelector('#workspaceChooserPath')", { descrizione: 'workbench Nuova sessione' });
+    await p.scegliCartellaNuovaSessione(CARTELLA);
     await p.click('.model-picker-trigger');
     await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
     await p.digita('.model-picker-search input', 'gemini-3.7-flash');
     await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
     await p.click('.model-picker-option');
     await p.attendi(200);
-    await p.submit('#customTaskForm');
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
 
     const prompt = 'Nel calcolatore di preventivi serve un filtro di testo per la lista articoli — case-insensitive, e se il campo è vuoto mostra tutto. Tieni traccia di dove si trovava originariamente ogni articolo nell\'elenco, anche dopo il filtro. Mentre ci lavori, segnami una nota con la decisione presa sul nome della funzione, e aggiungimi un promemoria per rivedere i test più tardi.';
@@ -3033,20 +3081,14 @@ const SCENARI = {
   async 'qa-task-8-game-ostacolo'(p) {
     await p.attendi(1200);
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartella')", { descrizione: 'foglio nuova sessione, ramo allowlist' });
-    await p.cdp.evaluate(`(() => {
-      const select = document.querySelector('#customTaskCartella');
-      const opzione = [...select.options].find((o) => o.textContent.includes('serpente-2d'));
-      if (opzione) select.value = opzione.value;
-      select.dispatchEvent(new Event('change', {bubbles:true}));
-    })()`);
+    await p.scegliProgettoNuovaSessione('serpente-2d');
     await p.click('.model-picker-trigger');
     await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
     await p.digita('.model-picker-search input', 'gemini-3.7-flash');
     await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
     await p.click('.model-picker-option');
     await p.attendi(200);
-    await p.submit('#customTaskForm');
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
 
     const prompt = 'Aggiungi un nuovo tipo di ostacolo che si muove da solo nel serpentone. Ricordati per le prossime volte che preferisco che gli ostacoli abbiano nomi in italiano nel codice. Poi disegnami un\'icona semplice per questo ostacolo.';
@@ -3102,20 +3144,14 @@ const SCENARI = {
   async 'qa-task-9-api-patch'(p) {
     await p.attendi(1200);
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartella')", { descrizione: 'foglio nuova sessione, ramo allowlist' });
-    await p.cdp.evaluate(`(() => {
-      const select = document.querySelector('#customTaskCartella');
-      const opzione = [...select.options].find((o) => o.textContent.includes('api-contatti'));
-      if (opzione) select.value = opzione.value;
-      select.dispatchEvent(new Event('change', {bubbles:true}));
-    })()`);
+    await p.scegliProgettoNuovaSessione('api-contatti');
     await p.click('.model-picker-trigger');
     await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
     await p.digita('.model-picker-search input', 'gemini-3.7-flash');
     await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
     await p.click('.model-picker-option');
     await p.attendi(200);
-    await p.submit('#customTaskForm');
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
 
     const prompt = 'Nell\'API dei contatti manca un modo per aggiornare solo alcuni campi di un contatto senza dover rimandare tutto — puoi aggiungerlo? Usa gli stessi controlli già in uso quando si crea un contatto.';
@@ -3191,20 +3227,14 @@ const SCENARI = {
   async 'qa-task-10-crm-forge'(p) {
     await p.attendi(1200);
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartella')", { descrizione: 'foglio nuova sessione, ramo allowlist' });
-    await p.cdp.evaluate(`(() => {
-      const select = document.querySelector('#customTaskCartella');
-      const opzione = [...select.options].find((o) => o.textContent.includes('crm-contatti'));
-      if (opzione) select.value = opzione.value;
-      select.dispatchEvent(new Event('change', {bubbles:true}));
-    })()`);
+    await p.scegliProgettoNuovaSessione('crm-contatti');
     await p.click('.model-picker-trigger');
     await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
     await p.digita('.model-picker-search input', 'gemini-3.7-flash');
     await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
     await p.click('.model-picker-option');
     await p.attendi(200);
-    await p.submit('#customTaskForm');
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
 
     const prompt = 'Aggiungi allo stato di un contatto una "fase" (lead, trattativa, cliente) — le transizioni valide sono solo di un passo alla volta, mai indietro, mai saltando una fase. Se ti torna utile per la prossima volta, costruisciti un piccolo strumento che segna un promemoria ogni volta che sposti un contatto in trattativa.';
@@ -3389,27 +3419,21 @@ const SCENARI = {
     await p.click('[data-open-sheet="permissions"]');
     await p.attendi(300);
     // ⛔ "On request" NON è "Full access": il foglio nuova sessione resta
-    // sul ramo allowlist (#customTaskCartella), non il percorso libero —
+    // sul ramo allowlist del browser cartelle, non sul percorso libero —
     // trovato dal vivo (v1 di questo scenario copiava alla cieca il
     // pattern di Full access ed è fallita sulla condizione sbagliata).
     await p.click('[data-permission-choice="On request"]');
     await p.click('#closeSheet');
     await p.attendi(300);
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartella')", { descrizione: 'foglio nuova sessione, ramo allowlist' });
-    await p.cdp.evaluate(`(() => {
-      const select = document.querySelector('#customTaskCartella');
-      const opzione = [...select.options].find((o) => o.textContent.includes('api-contatti'));
-      if (opzione) select.value = opzione.value;
-      select.dispatchEvent(new Event('change', {bubbles:true}));
-    })()`);
+    await p.scegliProgettoNuovaSessione('api-contatti');
     await p.click('.model-picker-trigger');
     await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
     await p.digita('.model-picker-search input', 'gemini-3.7-flash');
     await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
     await p.click('.model-picker-option');
     await p.attendi(200);
-    await p.submit('#customTaskForm');
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
 
     const prompt = 'Nell\'API dei contatti, se provo ad aggiungere una nota a un contatto che non esiste dovrebbe dirmelo con un errore chiaro — invece sembra funzionare comunque, la nota si perde nel nulla. Puoi controllare e sistemarlo? Nel frattempo avvia anche una ricerca approfondita su cosa si intende di solito per "cascata di eliminazione" nei database, mi interessa capirlo meglio.';
@@ -3544,20 +3568,14 @@ const SCENARI = {
   async 'qa-coda-mid-run'(p) {
     await p.attendi(1200);
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartella')", { descrizione: 'foglio nuova sessione, ramo allowlist' });
-    await p.cdp.evaluate(`(() => {
-      const select = document.querySelector('#customTaskCartella');
-      const opzione = [...select.options].find((o) => o.textContent.includes('magazzino_py'));
-      if (opzione) select.value = opzione.value;
-      select.dispatchEvent(new Event('change', {bubbles:true}));
-    })()`);
+    await p.scegliProgettoNuovaSessione('magazzino_py');
     await p.click('.model-picker-trigger');
     await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
     await p.digita('.model-picker-search input', 'gemini-3.7-flash');
     await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
     await p.click('.model-picker-option');
     await p.attendi(200);
-    await p.submit('#customTaskForm');
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
 
     await p.digita('#composerInput', 'Elenca tutti i file del progetto, poi leggi src/magazzino.py e test/test_magazzino.py e dimmi con le tue parole, in un paragrafo, cosa fanno.');
@@ -3604,8 +3622,8 @@ const SCENARI = {
     await p.click('#closeSheet');
     await p.attendi(300);
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
-    await p.digita('#customTaskCartellaLibera', CARTELLA);
+    await p.attendiCondizione("!!document.querySelector('#workspaceChooserPath')", { descrizione: 'workbench Nuova sessione' });
+    await p.scegliCartellaNuovaSessione(CARTELLA);
 
     // Modello principale (primo trigger)
     await p.cdp.evaluate("document.querySelectorAll('.model-picker-trigger')[0]?.click()");
@@ -3632,7 +3650,7 @@ const SCENARI = {
     }
     await p.attendi(300);
     await p.screenshot('foglio-planner-impostato', { nota: 'atteso: due model-picker distinti, entrambi valorizzati' });
-    await p.submit('#customTaskForm');
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
 
     const prompt = 'Voglio che tu prepari con calma un piano per aggiungere un intero modulo di "sconti fedeltà" al magazzino — nuove funzioni, nuovi test, e un aggiornamento della funzione che calcola il totale. Pensaci bene prima di scrivere una riga, poi esegui il piano. Se ti aiuta, prova anche a delegare la scrittura dei test a un sotto-incarico separato.';
@@ -3727,8 +3745,8 @@ const SCENARI = {
     await p.click('#closeSheet');
     await p.attendi(300);
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
-    await p.digita('#customTaskCartellaLibera', 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/magazzino_py');
+    await p.attendiCondizione("!!document.querySelector('#workspaceChooserPath')", { descrizione: 'workbench Nuova sessione' });
+    await p.scegliCartellaNuovaSessione('C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/magazzino_py');
     await p.cdp.evaluate("document.querySelectorAll('.model-picker-trigger')[0]?.click()");
     await p.attendiCondizione("!document.querySelectorAll('.model-picker-list')[0]?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo principale caricato' });
     await p.digita('.model-picker-search input', 'gemini-3.7-flash');
@@ -3743,7 +3761,7 @@ const SCENARI = {
       await p.cdp.evaluate("document.querySelectorAll('.model-picker-option')[0]?.click()");
     }
     await p.attendi(300);
-    await p.submit('#customTaskForm');
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
 
     const prompt = 'Il progetto ha sia calcola_sconto_scaglioni che applica_sconto, due funzioni di sconto separate e un po\' ridondanti. Pensaci con calma e preparami un piano per unificarle in un\'unica interfaccia coerente, senza rompere i test esistenti, poi esegui il piano. Se ti aiuta, delega la scrittura dei nuovi test a un sotto-incarico separato.';
@@ -3778,20 +3796,14 @@ const SCENARI = {
   async 'qa-task-13-trap'(p) {
     await p.attendi(1200);
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartella')", { descrizione: 'foglio nuova sessione, ramo allowlist' });
-    await p.cdp.evaluate(`(() => {
-      const select = document.querySelector('#customTaskCartella');
-      const opzione = [...select.options].find((o) => o.textContent.includes('crm-contatti'));
-      if (opzione) select.value = opzione.value;
-      select.dispatchEvent(new Event('change', {bubbles:true}));
-    })()`);
+    await p.scegliProgettoNuovaSessione('crm-contatti');
     await p.click('.model-picker-trigger');
     await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
     await p.digita('.model-picker-search input', 'gemini-3.7-flash');
     await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
     await p.click('.model-picker-option');
     await p.attendi(200);
-    await p.submit('#customTaskForm');
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
 
     const prompt = 'Nel CRM aggiungi la sincronizzazione automatica dei contatti con il calendario di Google.';
@@ -3976,15 +3988,15 @@ const SCENARI = {
     await p.click('#closeSheet');
     await p.attendi(300);
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
-    await p.digita('#customTaskCartellaLibera', CARTELLA);
+    await p.attendiCondizione("!!document.querySelector('#workspaceChooserPath')", { descrizione: 'workbench Nuova sessione' });
+    await p.scegliCartellaNuovaSessione(CARTELLA);
     await p.click('.model-picker-trigger');
     await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
     await p.digita('.model-picker-search input', 'gemini-3.7-flash');
     await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
     await p.click('.model-picker-option');
     await p.attendi(200);
-    await p.submit('#customTaskForm');
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
     await p.digita('#composerInput', 'Elenca i file del progetto.');
     await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
@@ -4036,20 +4048,14 @@ const SCENARI = {
   async 'qa-batchfix-c-elimina-sessione'(p) {
     await p.attendi(1200);
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartella')", { descrizione: 'foglio nuova sessione, ramo allowlist' });
-    await p.cdp.evaluate(`(() => {
-      const select = document.querySelector('#customTaskCartella');
-      const opzione = [...select.options].find((o) => o.textContent.includes('magazzino_py'));
-      if (opzione) select.value = opzione.value;
-      select.dispatchEvent(new Event('change', {bubbles:true}));
-    })()`);
+    await p.scegliProgettoNuovaSessione('magazzino_py');
     await p.click('.model-picker-trigger');
     await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
     await p.digita('.model-picker-search input', 'gemini-3.7-flash');
     await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
     await p.click('.model-picker-option');
     await p.attendi(200);
-    await p.submit('#customTaskForm');
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
     await p.digita('#composerInput', 'Rispondimi solo "ok", senza usare nessuno strumento.');
     await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
@@ -4143,15 +4149,15 @@ const SCENARI = {
     await p.click('#closeSheet');
     await p.attendi(300);
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
-    await p.digita('#customTaskCartellaLibera', CARTELLA);
+    await p.attendiCondizione("!!document.querySelector('#workspaceChooserPath')", { descrizione: 'workbench Nuova sessione' });
+    await p.scegliCartellaNuovaSessione(CARTELLA);
     await p.click('.model-picker-trigger');
     await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
     await p.digita('.model-picker-search input', 'gemini-3.7-flash');
     await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
     await p.click('.model-picker-option');
     await p.attendi(200);
-    await p.submit('#customTaskForm');
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
     await p.digita('#composerInput', 'In src/magazzino.py, rinomina la funzione applica_sconto in calcola_sconto (aggiorna anche ogni punto del file che la chiama). Non toccare nient\'altro.');
     await p.screenshot('compito-scritto');
@@ -4198,15 +4204,15 @@ const SCENARI = {
     await p.click('#closeSheet');
     await p.attendi(300);
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
-    await p.digita('#customTaskCartellaLibera', CARTELLA);
+    await p.attendiCondizione("!!document.querySelector('#workspaceChooserPath')", { descrizione: 'workbench Nuova sessione' });
+    await p.scegliCartellaNuovaSessione(CARTELLA);
     await p.click('.model-picker-trigger');
     await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
     await p.digita('.model-picker-search input', 'gemini-3.7-flash');
     await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
     await p.click('.model-picker-option');
     await p.attendi(200);
-    await p.submit('#customTaskForm');
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
     await p.digita('#composerInput', 'In src/magazzino.py, aggiungi un breve commento di documentazione (docstring) sopra la funzione totale_ordine se non ce l\'ha già, spiegando cosa fa in una riga. Poi esegui i test per conferma. Non fare altro.');
     await p.screenshot('compito-scritto');
@@ -4264,8 +4270,8 @@ const SCENARI = {
     await p.click('#closeSheet');
     await p.attendi(300);
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
-    await p.digita('#customTaskCartellaLibera', 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/serpente-2d');
+    await p.attendiCondizione("!!document.querySelector('#workspaceChooserPath')", { descrizione: 'workbench Nuova sessione' });
+    await p.scegliCartellaNuovaSessione('C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/serpente-2d');
     await p.cdp.evaluate("document.querySelectorAll('.model-picker-trigger')[0]?.click()");
     await p.attendiCondizione("!document.querySelectorAll('.model-picker-list')[0]?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo principale caricato' });
     await p.digita('.model-picker-search input', 'gemini-3.7-flash');
@@ -4283,7 +4289,7 @@ const SCENARI = {
     }
     await p.attendi(300);
     await p.screenshot('foglio-planner-impostato');
-    await p.submit('#customTaskForm');
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
 
     const prompt = 'Nel serpentone, rettangoloDellaCella e centroDellaCella ripetono la stessa conversione da griglia a pixel in due punti diversi. Pensaci con calma e preparami un piano per estrarre un aiutante comune e usarlo in entrambe, senza cambiare il comportamento, poi esegui il piano. Se ti aiuta, delega la scrittura dei nuovi test a un sotto-incarico separato.';
@@ -4460,8 +4466,8 @@ const SCENARI = {
    * un solo giro: (1) tab Files honest al PRIMO carico pagina, prima
    * di "Nuova"; (2) tab Files honest DOPO "Nuova" + cartella scelta ma
    * PRIMA di inviare il primo messaggio (il buco esatto segnalato); (3)
-   * le scorciatoie "cartelle frequenti" nel foglio nuova sessione sono
-   * ORA percorsi reali di progetto, mai Desktop/Download/Documenti.
+   * le scorciatoie del workbench sono cartelle reali: progetti, recenti
+   * e percorsi Windows conosciuti, senza voci decorative o inesistenti.
    */
   async 'qa-mockup-files-tab-e-cartelle-frequenti'(p) {
     await p.attendi(1200);
@@ -4479,23 +4485,23 @@ const SCENARI = {
     await p.click('#closeSheet');
     await p.attendi(300);
     await p.click('#newSessionBtn');
-    await p.attendiCondizione("!!document.querySelector('#customTaskCartellaLibera')", { descrizione: 'foglio nuova sessione' });
+    await p.attendiCondizione("!!document.querySelector('#workspaceChooserPath')", { descrizione: 'workbench Nuova sessione' });
 
-    // --- Cartelle frequenti: devono essere percorsi VERI di progetto, mai Desktop/Download/Documenti ---
-    const scorciatoie = await p.cdp.evaluate("[...document.querySelectorAll('.sheet-shortcut-chip')].map((c) => ({ testo: c.textContent, titolo: c.title }))");
-    p.nota(`scorciatoie cartelle frequenti nel foglio: ${JSON.stringify(scorciatoie)}`);
-    await p.screenshot('02-foglio-con-cartelle-frequenti', { nota: 'CRITICO: le chip devono essere nomi di progetto veri (es. magazzino_py), mai Desktop/Download/Documenti' });
-    const sonoGeneriche = Array.isArray(scorciatoie) && scorciatoie.length > 0 && scorciatoie.every((s) => ['Desktop', 'Download', 'Documenti'].includes(s.testo));
-    if (sonoGeneriche) p.difetto('le cartelle frequenti sono ancora SOLO Desktop/Download/Documenti nonostante una cronologia reale di sessioni esista', { severita: 'nota' });
+    // --- Scorciatoie: ogni voce deve avere un percorso reale e una provenienza leggibile ---
+    const scorciatoie = await p.cdp.evaluate("[...document.querySelectorAll('.workspace-chooser-shortcut')].map((c) => ({ testo: c.textContent, titolo: c.title }))");
+    p.nota(`scorciatoie cartelle nel workbench: ${JSON.stringify(scorciatoie)}`);
+    await p.screenshot('02-workbench-con-cartelle-consigliate', { nota: 'CRITICO: progetti, cartelle recenti e scorciatoie Windows devono mostrare percorsi reali, senza voci finte' });
+    const scorciatoieInvalide = !Array.isArray(scorciatoie) || scorciatoie.length === 0 || scorciatoie.some((s) => !s.titolo || !/^[A-Za-z]:[\\/]/.test(s.titolo));
+    if (scorciatoieInvalide) p.difetto('il workbench mostra una scorciatoia senza un percorso Windows reale', { severita: 'blocco' });
 
-    await p.digita('#customTaskCartellaLibera', 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/crm-contatti');
+    await p.scegliCartellaNuovaSessione('C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/crm-contatti');
     await p.cdp.evaluate("document.querySelectorAll('.model-picker-trigger')[0]?.click()");
     await p.attendiCondizione("!document.querySelectorAll('.model-picker-list')[0]?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
     await p.digita('.model-picker-search input', 'gemini-3.7-flash');
     await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { descrizione: 'risultati', timeoutMs: 6000 });
     await p.click('.model-picker-option');
     await p.attendi(200);
-    await p.submit('#customTaskForm');
+    await p.confermaNuovaSessione();
     await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat pronta' });
 
     // --- Il buco esatto segnalato dall'owner: cartella scelta, NESSUN messaggio ancora inviato ---

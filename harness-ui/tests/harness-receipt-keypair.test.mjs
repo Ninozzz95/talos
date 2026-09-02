@@ -3,6 +3,7 @@ import { createPrivateKey, createPublicKey, sign, verify } from 'node:crypto'
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
 import {
@@ -98,7 +99,7 @@ test('env provisioning rejects partial receipt-key configuration without mutatin
 test('env-file CLI provisions without rendering either key half', async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), 'talos-harness-receipt-'))
     const envFile = path.join(directory, '.env')
-    const script = path.resolve('src/harness-receipt-keypair.mjs')
+    const script = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/harness-receipt-keypair.mjs')
 
     try {
         await writeFile(envFile, 'APP_ENV=production\n', { mode: 0o600 })

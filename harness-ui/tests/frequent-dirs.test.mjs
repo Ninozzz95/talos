@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { cartelleFrequenti } from '../src/frequent-dirs.mjs';
+import { cartelleConsigliate, cartelleFrequenti } from '../src/frequent-dirs.mjs';
 
 function homeFinta(t, { conDesktop = true, conDownloads = true, conDocuments = true } = {}) {
   const home = mkdtempSync(join(tmpdir(), 'talos-home-finta-'));
@@ -101,4 +101,21 @@ test('⛔ AL CONTRARIO — cartellePiuUsate() rispetta il tetto massimoRisultati
   const trovate = cartelleFrequenti({ homedirFn: () => home, sessionRegistry: registry });
   assert.equal(trovate.length, 6);
   assert.deepEqual(trovate.map((c) => c.percorso), cartelle.slice(0, 6).map((c) => c.percorso));
+});
+
+test('WORKSPACE-CHOOSER-RECOMMENDED-06 — cartelleConsigliate unisce cronologia e cartelle standard reali senza duplicati', (t) => {
+  const home = homeFinta(t);
+  const progetto = mkdtempSync(join(tmpdir(), 'talos-progetto-consigliato-'));
+  t.after(() => rmSync(progetto, { recursive: true, force: true }));
+  const registry = { cartellePiuUsate: () => [
+    { percorso: progetto, conteggio: 4, ultimaVolta: '2026-09-01T10:00:00.000Z' },
+    { percorso: join(home, 'Desktop'), conteggio: 2, ultimaVolta: '2026-09-01T09:00:00.000Z' },
+  ] };
+  const trovate = cartelleConsigliate({ homedirFn: () => home, sessionRegistry: registry });
+  assert.deepEqual(trovate, [
+    { etichetta: progetto.split(/[/\\]/).pop(), percorso: progetto, tipo: 'recent' },
+    { etichetta: 'Desktop', percorso: join(home, 'Desktop'), tipo: 'recent' },
+    { etichetta: 'Download', percorso: join(home, 'Downloads'), tipo: 'known' },
+    { etichetta: 'Documenti', percorso: join(home, 'Documents'), tipo: 'known' },
+  ]);
 });

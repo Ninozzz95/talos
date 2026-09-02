@@ -24,7 +24,7 @@
  * seconda allowlist che aggirerebbe il permesso.
  */
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { statSync } from 'node:fs';
 
 /**
@@ -59,6 +59,26 @@ function candidatiDaCronologia(sessionRegistry, massimoRisultati) {
   return sessionRegistry.cartellePiuUsate().slice(0, massimoRisultati);
 }
 
+function cartellaReale(percorso, statSyncFn) {
+  try {
+    return statSyncFn(percorso).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function cartelleStandard({ homedirFn, statSyncFn }) {
+  const home = homedirFn();
+  return CANDIDATE.flatMap(({ etichetta, sottocartella }) => {
+    const percorso = join(home, sottocartella);
+    return cartellaReale(percorso, statSyncFn) ? [{ etichetta, percorso }] : [];
+  });
+}
+
+function chiavePercorso(percorso) {
+  return resolve(percorso).replace(/[\\/]+$/, '').toLocaleLowerCase('en-US');
+}
+
 /**
  * @param {{homedirFn?: typeof homedir, statSyncFn?: typeof statSync, sessionRegistry?: {cartellePiuUsate: () => Array<{percorso:string, conteggio:number, ultimaVolta:string}>}}} [deps] — `sessionRegistry` opzionale: assente nei test che provano solo il ripiego Windows, sempre presente dal server reale (vedi http-app.mjs).
  * @returns {Array<{etichetta:string, percorso:string}>} — SOLO le cartelle che esistono
@@ -72,25 +92,43 @@ export function cartelleFrequenti({ homedirFn = homedir, statSyncFn = statSync, 
   const daCronologia = candidatiDaCronologia(sessionRegistry, MASSIMO);
   const trovate = [];
   for (const { percorso } of daCronologia) {
-    try {
-      if (!statSyncFn(percorso).isDirectory()) continue;
-    } catch {
-      continue; // ⛔ cancellata nel frattempo (es. copia usa-e-getta del corpus): si salta, mai una scorciatoia verso il nulla.
-    }
+    if (!cartellaReale(percorso, statSyncFn)) continue;
     // ⭐ etichetta = nome dell'ultima cartella nel percorso ("qa-visiva-harness-2026-08-30" da ...\projects\qa-visiva-harness-2026-08-30), stesso principio di nomeCartella lato client (app.js, split su [\\/]).
     const etichetta = percorso.replace(/[/\\]+$/, '').split(/[/\\]/).pop() || percorso;
     trovate.push({ etichetta, percorso });
   }
   if (trovate.length > 0) return trovate; // ⛔ cronologia reale disponibile: MAI mescolarla con Desktop/Downloads/Documenti sotto — quelle tre non sono "più usate", solo il ripiego a freddo.
+  return cartelleStandard({ homedirFn, statSyncFn });
+}
 
-  const home = homedirFn();
-  for (const { etichetta, sottocartella } of CANDIDATE) {
-    const percorso = join(home, sottocartella);
-    try {
-      if (statSyncFn(percorso).isDirectory()) trovate.push({ etichetta, percorso });
-    } catch {
-      // ⛔ non esiste o non leggibile: si salta, mai un errore che blocca le altre — stesso principio di ogni altra lista "onesta" di questo progetto.
-    }
+/**
+ * Scelte rapide della workbench "Nuova sessione". A differenza del contratto
+ * storico `cartelleFrequenti()` (che resta identico), qui l'owner ha bisogno
+ * sia della cronologia vera sia delle cartelle standard realmente presenti.
+ * L'unione è solo presentazione: non crea una allowlist e non modifica i
+ * permessi della sessione.
+ *
+ * @returns {Array<{etichetta:string, percorso:string, tipo:'recent'|'known'}>}
+ */
+export function cartelleConsigliate({ homedirFn = homedir, statSyncFn = statSync, sessionRegistry } = {}) {
+  const trovate = [];
+  const viste = new Set();
+  for (const { percorso } of candidatiDaCronologia(sessionRegistry, 6)) {
+    if (!cartellaReale(percorso, statSyncFn)) continue;
+    const chiave = chiavePercorso(percorso);
+    if (viste.has(chiave)) continue;
+    viste.add(chiave);
+    trovate.push({
+      etichetta: percorso.replace(/[/\\]+$/, '').split(/[/\\]/).pop() || percorso,
+      percorso,
+      tipo: 'recent',
+    });
+  }
+  for (const { etichetta, percorso } of cartelleStandard({ homedirFn, statSyncFn })) {
+    const chiave = chiavePercorso(percorso);
+    if (viste.has(chiave)) continue;
+    viste.add(chiave);
+    trovate.push({ etichetta, percorso, tipo: 'known' });
   }
   return trovate;
 }

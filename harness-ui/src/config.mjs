@@ -147,31 +147,37 @@ export function permessiPerAttrezzoRichiestaValido(raw) {
 }
 
 /**
- * ⭐⭐⭐ 27/8 — owner: "per adesso un allowlist per testare, ma in futuro
- * esattamente come i competitor, accesso libero, con limiti estremi" — una
- * cartella libera (non il corpus benchmark) su cui far girare un compito
- * VERO, DIRETTAMENTE (non una copia usa-e-getta come `task-catalog.mjs`:
- * qui l'obiettivo dichiarato è vedere l'effetto su un progetto reale,
- * esattamente come un Claude Code/Pi/Hermes puntato su una cartella).
- *
- * ⛔ Fail-closed per costruzione: `TALOS_HARNESS_UI_PROJECT_DIRS` assente =
- * ZERO cartelle libere ammesse, non "qualunque cartella passi" — stesso
- * principio già in uso per `TASK_NOT_ALLOWED` in `task-catalog.mjs`.
- * L'"accesso libero" del futuro è un lavoro SUO, con la sua ricerca sui
- * limiti dei competitor (owner l'ha chiesta esplicitamente) — non
- * anticipato qui scrivendo un percorso a piacere dal browser.
+ * ⭐⭐⭐ 27/8 — una cartella libera (non il corpus benchmark) su cui far
+ * girare un compito VERO, DIRETTAMENTE. Come i competitor verificati,
+ * l’installazione parte dalla workspace del progetto che ospita il server:
+ * l’utente non deve preparare variabili prima di poter aprire "Nuova
+ * sessione". `TALOS_HARNESS_UI_PROJECT_DIRS` resta l’estensione esplicita
+ * per aggiungere altre cartelle.
  *
  * Elenco separato da `;` (come PATH su Windows, mai virgola: un percorso
  * reale può contenerne una). Ogni percorso deve esistere, essere una
  * directory, leggibile E scrivibile — un agente che ci scrive davvero
  * su una cartella non scrivibile fallirebbe a metà lavoro, meglio
- * scoprirlo all'avvio del server che a sessione già in corso.
+ * scoprirlo all’avvio del server che a sessione già in corso.
  */
-function parseCartelleProgetto(raw) {
-  if (raw === undefined || raw === '') return Object.freeze([]);
+function parseCartelleProgetto(raw, defaultProjectDir) {
+  const richiesti = typeof raw === 'string'
+    ? raw.split(';').map((valore) => valore.trim()).filter((valore) => valore.length > 0)
+    : [];
+  if (raw === undefined || raw === '' || richiesti.length === 0) {
+    if (!defaultProjectDir) return Object.freeze([]);
+    let percorso;
+    try {
+      percorso = realpathSync(defaultProjectDir);
+      if (!statSync(percorso).isDirectory()) fail('La workspace predefinita non è una directory');
+      accessSync(percorso, constants.R_OK | constants.W_OK);
+    } catch (error) {
+      if (error instanceof ConfigurationError) throw error;
+      fail('La workspace predefinita non esiste o non è leggibile/scrivibile');
+    }
+    return Object.freeze([{ id: 'default', percorso, nome: percorso.split(/[\\/]/).pop() || percorso }]);
+  }
   if (typeof raw !== 'string') fail('TALOS_HARNESS_UI_PROJECT_DIRS non valida');
-
-  const richiesti = raw.split(';').map((valore) => valore.trim()).filter((valore) => valore.length > 0);
   const cartelle = richiesti.map((percorsoInput, indice) => {
     if (!isAbsolute(percorsoInput)) fail(`TALOS_HARNESS_UI_PROJECT_DIRS[${indice}] deve essere assoluta: ${percorsoInput}`);
     let percorso;
@@ -244,15 +250,33 @@ export function loadConfig(
   }
 
   /*
-   * ⭐⭐⭐ 26/8 — DEC-053: il bundle canonico non è più `./public/` (la copia
-   * desktop originale, mai riconciliata con l'integrazione mobile) ma
-   * `mobile/public/harness-ui/`, dentro lo stesso worktree
-   * (`lane/harness-desktop`) — quello con la pipeline AG-UI di consumo
-   * eventi già portata, verificata con test e in un browser vero. Un solo
-   * bundle, servito sia a chi apre questa pagina standalone in Chrome sul
-   * PC sia — quando esisterà il tunnel `adb reverse` (piano §3) — al
-   * telefono, senza differenza di codice. Override via env solo per i
-   * test, mai per uso normale (nessun fail() se assente: resta il default).
+   * ⛔⛔⛔ 02/09 — CORRETTO, il commento sotto era rimasto FALSO per due
+   * giorni: descriveva ancora DEC-053 (26/8, `mobile/public/harness-ui/`
+   * canonico) mentre il codice, dal commit `16677c48` (31/8, "chiude i
+   * tre blocchi runtime desktop"), risolve `./public/` — verificato dal
+   * vivo (il server serve `app.js` da 530.197 byte, combacia con
+   * `harness-ui/public/`, non con `mobile/public/harness-ui/` che è
+   * rimasto fermo al 31/8 ore 14:52, ~95KB indietro). Il cambio non era
+   * un refuso: nello STESSO commit sono arrivati `harness-ui/public/talos/
+   * brand/` (font e logo propri del desktop) e `harness-ui/scripts/
+   * build-ui.mjs`/`verify-ui-manifest.mjs`, che hanno `harness-ui/public`
+   * come sorgente esplicita e cablata (`SOURCE = ... join(ROOT, 'public')`,
+   * `manifest.json` dichiara `source: 'harness-ui/public'`). ⇒ Il desktop
+   * ha un bundle proprio (font/logo/pipeline di build+verifica dedicati),
+   * non più preso in prestito dal mobile — una direzione ragionevole per
+   * un prodotto desktop maturo. Non è mai stato scritto un successore
+   * dichiarato a DEC-053: questo commento lo è.
+   *
+   * ⛔ Aperto, non deciso qui: DEC-053 esisteva ANCHE per servire lo stesso
+   * bundle al telefono via `adb reverse` (piano §3, mai implementato).
+   * Se quell'intento è ancora vivo, va ripensato esplicitamente (il
+   * telefono aggancerebbe un bundle desktop-specifico, non più condiviso)
+   * — decisione dell'owner, non presa qui. `mobile/public/harness-ui/`
+   * resta sul disco, stantio, non cancellato: nessuno l'ha dichiarato
+   * morto per iscritto.
+   *
+   * Override via env solo per i test, mai per uso normale (nessun fail()
+   * se assente: resta il default).
    */
   let publicDir;
   try {
@@ -268,7 +292,12 @@ export function loadConfig(
     port: parsePort(env.TALOS_HARNESS_UI_PORT),
     publicDir,
     modello: parseModello(env.TALOS_HARNESS_UI_MODEL),
-    cartelleProgetto: parseCartelleProgetto(env.TALOS_HARNESS_UI_PROJECT_DIRS),
+    // Come Claude/Codex/Hermes: in assenza di elenco esplicito la prima
+    // workspace è la radice del progetto desktop che contiene il server.
+    cartelleProgetto: parseCartelleProgetto(
+      env.TALOS_HARNESS_UI_PROJECT_DIRS,
+      resolve(fileURLToPath(new URL('../', moduleUrl))),
+    ),
     /*
      * ⛔ Nessun fail() se manca: Harness UI resta usabile in sola lettura
      * (campagne, elenco task) anche senza una chiave configurata — è

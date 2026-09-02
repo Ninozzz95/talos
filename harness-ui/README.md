@@ -37,6 +37,35 @@ node harness-ui/server.mjs
 Open `http://127.0.0.1:4174/`. The server binds to a loopback host only and
 prints the local address.
 
+### Windows Explorer development integration
+
+After starting the current desktop server, register the per-user development
+commands from the repository root:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File harness-ui/scripts/windows/register-open-with-talos.ps1
+```
+
+Explorer then offers **Apri cartella con TALOS** for a selected directory and
+**Apri questa cartella in TALOS** for a directory background. On Windows 11,
+this development-only legacy verb can appear under **Show more options**. The
+command opens a new-session draft with that directory selected; it does not
+silently grant `Full access`.
+
+Remove both per-user commands with:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File harness-ui/scripts/windows/register-open-with-talos.ps1 `
+  -Unregister
+```
+
+The final installer must own a stable executable and the modern Windows 11
+`IExplorerCommand` integration. It must not register a path into a source
+checkout. See
+`.claude/DOSSIER-RICERCA-OPEN-WITH-TALOS-WINDOWS-2026-09-01.md`.
+
 ### Recommended startup with the Permission Model
 
 This variant lets Node read only Harness UI's own code. It grants no write,
@@ -58,7 +87,7 @@ node --permission `
 | `OPENROUTER_API_KEY` | no | Without it the server still starts, read-only — starting a session fails per-request with `CONFIG_INVALID`. |
 | `TALOS_HARNESS_UI_HOST` | no | Defaults to `127.0.0.1`; loopback only. |
 | `TALOS_HARNESS_UI_PORT` | no | Defaults to `4174`; range `1024..65535`. |
-| `TALOS_HARNESS_UI_PROJECT_DIRS` | no | Allowed project folders for the "allowlist" session flow, separated by `;`. Absent = zero registered folders (fail-closed) — "Full access" with a free-form path stays available regardless. |
+| `TALOS_HARNESS_UI_PROJECT_DIRS` | no | Additional project folders for the session picker, separated by `;`. When absent, the server exposes its own desktop project workspace by default; `Full access` still allows an explicitly chosen folder. |
 
 The rest of the variables (web search, receipt signing, images) are
 documented in the header comment of `src/config.mjs`, not duplicated here to
