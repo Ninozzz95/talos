@@ -436,9 +436,44 @@ e dopo).
 **Conclusione di questa lettura**: questo pezzo specifico è solido — nessun
 difetto trovato nella logica né nella copertura dei percorsi di chiusura. Se
 il lag persiste "ancora oggi" come riporta l'owner, la causa è altrove — NON
-in questa slice. Il perimetro da controllare per primo (non ancora fatto):
-se il lag riportato è successivo al 02/09 e riguarda una sessione con MOLTI
-messaggi/tool-call storici, la sezione "Riapertura P0... replay storico" più
-sopra in questo stesso file (coalescenza `TextMessageContent`/`WorkspaceChanged`)
-è la seconda area indicata dal proprio storico di riaperture — anch'essa da
-riverificare dal vivo con lo stesso rigore, non ancora fatto in questo giro.
+in questa slice.
+
+## Causa vera del lag "ancora oggi" — trovata da Fable 5.1, 02/09/2026
+
+⛔⛔⛔ **Non era nel codice**: owner, testuale, dopo la review — *"era la
+accelerazione hardware disattivata da me"*. L'accelerazione hardware del
+browser era disattivata (dall'owner stesso, non un difetto introdotto da
+nessuna delle sessioni). Con l'accelerazione hardware spenta, Chrome
+ricompone `backdrop-filter`/blur via software invece che via GPU — **esattamente
+il meccanismo già misurato e nominato** nella riapertura P0 "lag interattivo
+di scroll e modali" più sopra in questo stesso file ("Chrome deve ricomporre
+le grandi superfici a ogni fotogramma… il collo di bottiglia è
+compositing/raster"): quella misura era corretta sul meccanismo, ma non
+poteva vedere che il fallback software lo stava aggravando drasticamente,
+perché la macchina di misura aveva l'accelerazione hardware accesa.
+
+**Cosa questo NON invalida**: le tre chiusure precedenti (watcher nativo,
+coalescenza del replay storico, pausa sfondo durante scroll/modali) restano
+ottimizzazioni reali e corrette — hanno abbassato per davvero handle/CPU/
+mutazioni DOM misurate, numeri veri, non inventati. Nessuna delle tre era
+"la" causa del lag riportato "ancora oggi": erano tutte cure reali a
+problemi reali MA più piccoli del fattore che dominava l'esperienza —
+l'accelerazione hardware spenta rende costoso categoricamente ciò che le tre
+cure avevano già reso più economico.
+
+**Lezione per chi legge questo ledger in futuro**: davanti a un lag che
+resiste a più chiusure "GREEN" verificate ciascuna con numeri veri, il passo
+mancante era guardare FUORI dal codice — l'ambiente/le impostazioni del
+browser che esegue la pagina, non solo il codice che la pagina esegue.
+Nessuno strumento di questa sessione (CDP Tracing, PerformanceObserver, LoAF)
+avrebbe distinto "compositing costoso per un motivo nel codice" da
+"compositing costoso perché software invece che GPU" senza controllare
+esplicitamente `chrome://gpu` o l'equivalente prima di ogni misura.
+
+## Stato — CHIUSO
+
+✅ Causa trovata, confermata dall'owner. Le tre cure di codice restano (sono
+comunque migliorie reali). Nessun lavoro di codice aggiuntivo necessario per
+QUESTO P0 — resta solo, se si vuole, un controllo esplicito
+dell'accelerazione hardware come parte del protocollo di misura futuro,
+prima di attribuire un lag al codice.
