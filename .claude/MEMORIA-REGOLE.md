@@ -14,6 +14,9 @@
 
 ## Regole di ingegneria — spostate qui il 2026-08-22
 
+- ⛔⛔⛔⭐⭐⭐ [UNA SONDA DI UN'ALTRA SESSIONE SCRIVE SUL SERVER VIVO](una-sonda-di-unaltra-sessione-scrive-sul-server-vivo.md) — 02/09: il «falso read-only» e l'ID modello `talos-test/…` nella sessione dell'owner erano righe `impostazioni-sessione` scritte da una sonda di un'altra sessione Claude sul server 4174 (dump nel suo scratchpad). ⛔ Una sonda non tocca MAI 4174 né una sessione che non ha creato; davanti a un comportamento «impossibile» prima il JSONL della sessione (CHI ha scritto), poi il codice. Cura nel prodotto: il permesso del giro viaggia in `RunStarted.contesto` e sta sotto la bolla utente
+- ⛔⛔ [String.replace MANGIA i dollari](string-replace-mangia-i-dollari.md) — 02/09: patch via script Node, `$$('#sel')` diventato `$('#sel')` (eccezione a runtime, trovata solo dalla pipeline QA) e `/\s+/` arrivato come `/s+/` passando da bash a `node -e` («Ri pondi  olo»). ⛔ Sempre `s.replace(a, () => b)`, script su file (mai backtick dentro `node -e` da bash), rilettura delle righe toccate
+
 > ⛔ Stesso motivo delle altre migrazioni: `MEMORY.md` si riavvicinava al
 > tetto. Blocco intero spostato, non accorciato.
 

@@ -306,3 +306,190 @@ usa-e-getta): marks/measures + un log delle statistiche di rendering
 durante lo streaming, per poter diagnosticare un lag futuro senza
 ripartire da zero ogni volta. 🔜 Da implementare, prossimo passo dopo
 questa nota.
+
+
+## ✅ Batch Fable 5.1 — 02/09 pomeriggio: tutti gli 8 punti, riprodotti e verificati dal vivo
+
+> Ogni voce: riprodotta PRIMA con uno scenario nuovo di
+> `harness-ui/scripts/qa-visual-pipeline.mjs` (Chrome dedicato, hard reload
+> `Page.reload({ignoreCache:true})` a ogni corsa), corretta, riverificata
+> con lo stesso scenario. Suite: backend `node --test` **1343/1343**
+> (era 1319 — +1 test permessi, +altri già in coda), frontend `vitest`
+> **200/200**. Fixture `legacy-contract.snapshot.json` rigenerata
+> (script riusabile: `regen-fixture.mjs` nello scratchpad di questa
+> sessione — legge `extract-legacy-contract.mjs` e riscrive la fixture).
+
+### §5 Model picker — RIPRODOTTO e corretto (`qa-modello-pillola-dopo-nuova`)
+
+- **Riproduzione**: "Nuova" → cartella scratch + `z-ai/glm-4.7-flash` →
+  pillola del composer → `google/gemini-3.7-flash` → primo messaggio.
+  POST `/api/v1/sessions/custom` intercettato via `Network.requestWillBeSent`:
+  `"modello":"z-ai/glm-4.7-flash"` mentre la pillola diceva gemini. Il giro
+  è partito con glm (RunStarted.contesto).
+- **Causa** (`app.js`, `submitPrompt`): `state.pendingCustomSession`
+  FOTOGRAFAVA modello/effort/permessi al momento di "Nuova"; le pillole
+  cambiate dopo aggiornavano `state.model` e la scritta, ma
+  `startCustomSession` faceva `modello || state.model` — vinceva la foto.
+- **Cura**: al primo invio la fonte di verità sono le pillole
+  (`state.model/effort/permissions/permessiPerAttrezzo`); `modelloPlanner`
+  (senza pillola) resta dalla modale. Una cartella fuori elenco con la
+  pillola spostata via da "Full access" NON parte in silenzio con un
+  permesso che la pillola non mostra: toast che dice cosa manca, il
+  messaggio resta nel composer (`return false`).
+- **Verificato**: stesso scenario dopo il fix → POST `modello:
+  google/gemini-3.7-flash`, giro partito con gemini, risposta "pong".
+
+### §6/§7 Falso read-only e ID modello di test — NON erano bug del codice: era UN'ALTRA SESSIONE DI LAVORO che scriveva sulla sessione viva dell'owner
+
+- **Prova sul disco** (`harness-ui/.sessions-store/6aa5159a….jsonl`, la
+  sessione dell'owner): riga 869 `{"tipo":"impostazioni-sessione",…,"permessi":"Read only"}`,
+  poi turno "Create a new file named r2r3-proof.txt…" → l'attrezzo `scrivi`
+  risponde `REFUSED. la sessione è in sola lettura…` (kernel,
+  `verificaPermessoScrittura`, `via:'livello-lettura'`) → il modello lo
+  ripete, ONESTAMENTE: la sessione ERA in Read only per il server. Riga 884:
+  `"modello":"talos-test/modello-inesistente-r2r3"` → turno "say hi" → HTTP
+  400. Riga 889: `deepseek/deepseek-v4-flash-0731` + "Workspace write".
+  Turni in inglese e con `r2r3` nel nome in mezzo a una chat in italiano.
+- **Chi**: i dump SSE `eventi_r2r3.txt` (13:20:46) e `eventi_r2r3_modello.txt`
+  (13:21:17) nello scratchpad della sessione Claude `ca3ca828…` (la review
+  "harness mobile — 11 rilievi": R2/R3 = read-only e ID sconosciuto)
+  contengono ESATTAMENTE quei turni: una sonda di verifica ha usato il
+  server vivo 4174 e la sessione reale dell'owner come banco. Nessuna
+  stringa `talos-test`/`modello-inesistente` esiste in nessun sorgente.
+- **Perché è sembrata una bugia**: la scheda dell'owner diceva ancora "Full
+  access": `aggiornaImpostazioni` non annuncia niente a nessuno (nessun
+  broadcast, per costruzione — `iscriviti()` non accetta ascoltatori su una
+  sessione conclusa), e nessun evento portava il permesso VERO del giro.
+- **Cura, verificata (`qa-permessi-cambiati-da-fuori`)**: `RunStarted.contesto`
+  porta `permessi` (`agent-service.mjs` param + `session-registry.mjs`
+  `cloudOptions.permessi: voce.permessi`, letto AL MOMENTO del giro); sotto
+  la bolla utente compare "Follow-up · Read only" / "Compito libero · … ·
+  Full access" (`etichettaPermessiGiro`); su un giro VIVO avviato da questa
+  scheda `allineaPilloleAlGiroVivo` allinea le pillole e scrive in chat
+  "Impostazioni cambiate fuori da questa scheda. Questo giro usa: permesso
+  Full access → Read only." — solo dal vivo, mai nel replay (che riparte già
+  dalle impostazioni correnti). Esportazione: "- **Permessi del giro:**".
+  Test `agent-service.test.mjs` anche AL CONTRARIO (senza etichetta →
+  `null`, mai un default inventato).
+- 🔜 **Decide l'owner**: (a) regola per TUTTE le sessioni di lavoro — una
+  sonda non tocca MAI 4174 né una sessione che non ha creato lei (memoria
+  scritta: `una-sonda-di-unaltra-sessione-scrive-sul-server-vivo`); (b) se
+  `/settings` debba rifiutare un `modello` non nel catalogo (oggi accetta
+  qualunque stringa: onesto ma senza rete).
+
+### §1 Scroll al click su una riga sessione — verificato; poi RIFATTO su ordine owner ("già in fondo, senza animazioni")
+
+- Hard reload + click su una sessione lunga (12-19k px): a 250 ms già in
+  fondo e ci resta per 4 s; riclick sulla riga attiva dopo essere risaliti
+  in cima → di nuovo in fondo (`qa-scroll-sessione-e-streaming`).
+- Un buco trovato misurando: 12320 su 12334 per 4 s — l'ultima MUTAZIONE
+  di figli non è l'ultimo cambio di altezza (`markMotionEnter` cambia una
+  classe un frame dopo). Ora l'osservatore guarda anche `class`/`style` e
+  ribatte il fondo su due frame alla fine.
+- Owner dal vivo: *"quando clicchi su una riga sessione la chat deve
+  trovarsi già in fondo senza animazioni"* → `#conversation.is-restoring`
+  (`passaASessione` → `mantieniFondoDuranteRipristino` la toglie SOLO
+  quando è già in fondo): cronologia costruita invisibile ma impaginata,
+  riga "Apro la cronologia…" sticky, nessuna animazione d'ingresso
+  (`markMotionEnter` salta i figli della conversazione in ripristino), le 9
+  chiamate `scrollIntoView` smooth passano da `scorriAllaBollaAppesa`, che
+  tace durante il ripristino. Reti: 8 s per la visibilità, 30 s per
+  l'osservatore, e `nuovaGenerazioneSessione` toglie la classe. Verificato:
+  nascosta a 250 ms, scoperta a 500 ms già in fondo (17495/17495).
+- L'auto-apertura dell'ultima sessione al reload: confermata a ogni corsa
+  (nota "sessione auto-aperta").
+
+### §2 Streaming a metà viewport — la matematica era giusta e lo SCHERMO no
+
+- Misurato: fondo del testo **403 px sotto** il centro (viewport 1214) per
+  75 campioni di fila — lo scroll era già al massimo. Sotto l'ultimo
+  messaggio c'erano 190 px di padding: il centro era irraggiungibile.
+- Causa con prova git: `--stream-follow-space` (padding-bottom di
+  `.conversation`, checkpoint `cca79b08`) e il commit `bf15bb3e` che ha
+  TOLTO la riga che la impostava. Da allora valeva 0.
+- Cura: `aggiornaSpazioCodaConversazione` = metà dell'altezza visibile,
+  permanente per la sessione (owner: "quando scrollo alla fine l'output
+  deve essere a metà"), 0 su conversazione vuota (hero centrato),
+  ResizeObserver per il resize. Verificato: mediana **0 px**, max 0 px.
+
+### §3 Dissolvenza — era corretta a livello di blocco; poi RIFATTA per parola (owner)
+
+- Verifica: `.stream-settle` presente in 128/152 campioni, l'ultimo
+  figlio (coda volatile) mai marcato (0). Owner dal vivo: *"per dissolvenza
+  deve essere una dissolvenza super smooth delle parole"* → vedi §4.
+
+### §4 Streaming "scattoso" — misurato: il render non c'entra, il ritmo sì
+
+- Strumento: `logStreaming('delta', …)` all'arrivo di ogni frammento
+  (prima del render), cap del log 400 → 4000 (400 righe = ~6 s di stream,
+  i buchi calcolati su una finestra parziale mentivano).
+- ⛔ Trappola del banco: la finestra QA (`windowsHide`) è `hidden` per
+  Chrome → `requestAnimationFrame` strozzato a ~1/s: i render sembravano
+  radi (buchi di 2 s) mentre i delta arrivavano ogni ~50 ms. Con
+  `--disable-backgrounding-occluded-windows` (+2 flag) i render seguono
+  ogni delta entro un frame: 425 render/10 s, durata ≤0,2 ms, buchi fra
+  render = buchi fra delta (213 vs 210 ms). Il collo era il PROVIDER
+  (raffiche ogni 100-500 ms, pause fino a 10 s prima del primo token).
+- Cura (owner: *"fluida come una macchina da scrivere… una lettera alla
+  volta streammata velocemente"*): RITMO DI RIVELAZIONE
+  (`avanzaRitmoStreaming`, `RITMO_STREAMING`): il testo arriva tutto in
+  `testoGrezzoMessaggi`, sullo schermo avanza un prefisso a ≥160 car/s
+  ("Cursore", lettere) o ≥140 car/s per parole intere ("Dissolvenza"),
+  accelerando con l'arretrato così il ritardo non supera ~0,3 s. "Nessuna",
+  movimento ridotto e ripristino: tutto subito, come prima. Il cursore si
+  spegne quando lo schermo è in pari, non quando arriva la fine dal server
+  (`fineRicevuta`). Dissolvenza per parola: `avvolgiParoleRecenti` — le
+  parole rivelate negli ultimi 420 ms sono `<span class="stream-word">` con
+  `animation-delay` NEGATIVO = tempo trascorso: ricreate a ogni frame,
+  ripartono da dove erano (la lezione del vecchio `:last-child`, stavolta
+  risolta invece che evitata).
+- Verificato (`qa-cursore-streaming`, campionatore in pagina a 40 ms):
+  Cursore → 50/55 frame con testo, 4 fermi, mediana 21 car/frame, max 47,
+  391 render tutti <8 ms; Dissolvenza → parole con animazione IN CORSO in
+  52/52 campioni (fino a 120 in una raffica di recupero), render medio
+  0,2 ms, max 0,6 ms.
+
+### §8 "Cursore terminale" — NON xterm: l'opzione "Macchina da scrivere" (Aspetto → Animazione risposta)
+
+- Riprodotto: il cursore (`::after` su `.assistant-copy`) stava DOPO
+  l'ultimo `<p>`, su una riga vuota tutta sua: Δ fondo-copy − fondo ultima
+  riga = **42 px** (line-height 24), clip 2× scattato durante lo stream.
+- Cura CSS: `.assistant-copy > :last-child:not(ul):not(ol)::after` (e
+  `li:last-child` per gli elenchi). Verificato: Δ **4 px** (è il
+  `vertical-align` del cursore), cursore in coda a "risorse |".
+
+### Trovati per strada (non nel batch), CORRETTI
+
+- **I nomi delle sessioni sparivano a ogni riavvio del server**: dopo il
+  restart di 4174 tutta la sidebar diceva "libero:full-access".
+  `rinomina()` teneva il nome solo in memoria ("finché il server resta
+  acceso", dichiarato) — ma il client rinomina OGNI sessione col primo
+  messaggio, quindi il riavvio le spogliava tutte. Ora riga
+  `nome-sessione` nel JSONL + `ripristina()` la rilegge; per le sessioni
+  nate prima, il nome si ricava dall'intestazione (`task.consegnaCorta`,
+  solo `libero:*`). Test (`session-registry.test.mjs`) + verificato dal
+  vivo su due riavvii. ⛔ Al primo tentativo un `\s` mangiato dalla shell
+  ha prodotto "Ri pondi  olo con la parola" — visto nell'elenco, corretto.
+- `qa-visual-pipeline.mjs`: eccezioni JS ora con messaggio vero e riga
+  (`exception.description`, non solo "Uncaught"); +4 scenari riusabili
+  (`qa-modello-pillola-dopo-nuova`, `qa-scroll-sessione-e-streaming`,
+  `qa-permessi-cambiati-da-fuori`, `qa-cursore-streaming`).
+
+### Trovati per strada, REGISTRATI e non toccati (decide l'owner)
+
+- Riavvio 4174: **7/23** sessioni ripristinate, 16 scartate (una
+  dichiarata corrotta, `b7b1b7d2`, 5,4 MB) — stesso difetto del ledger
+  `LEDGER-RESTORE-SILENZIOSO-16-SESSIONI-2026-09-02.md`, ancora aperto.
+- Sottotitolo dell'intestazione "premi «Nuova» per iniziare" resta sotto
+  il titolo anche con una sessione aperta (visto in ogni screenshot).
+- La riga attiva in sidebar resta evidenziata sulla sessione precedente
+  mentre la chat mostra una sessione PENDENTE nuova ("Nuova · cartella").
+- La nota "Impostazioni cambiate fuori da questa scheda" usa il
+  contenitore `appendStatusNote` con meta "TALOS · concluso" e spunta: per
+  un avviso servirebbe una variante neutra.
+- Nel ripristino di una sessione senza evento terminale nel replay
+  (interrotta) la chat resta nascosta fino a 8 s: rete di sicurezza, non
+  un comportamento voluto.
+- Server 4174 riavviato TRE volte in questo giro (con
+  `TALOS_OWNER_RUNTIME_MODULE`), pid finale annotato nel log dello
+  scratchpad; nessuna sessione era in corso a nessuno dei tre riavvii.
