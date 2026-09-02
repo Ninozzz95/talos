@@ -34,35 +34,41 @@
   3. `.claude/PIANO-COMPLETO-DESKTOP-2026-08-31.md` — stato dichiarato
      delle fasi, con l'addendum del 02/09 già corretto.
 
-## 1 — Il filo NON verificato, priorità assoluta
+## 1 — Già verificato in questo giro (02/09, dopo la scrittura di questo brief) — NON rifare
 
-L'ultima modifica (`harness-ui/public/app.js`, righe 5828-6049 e
-9726-9730 circa) aggiunge pausa dello sfondo animato durante scroll e
-modali:
+`setBackgroundInteractionPause`/`syncBackgroundDialogPause`/
+`queueBackgroundScrollPause` (`harness-ui/public/app.js:5982-6018`) —
+riletta tutta la logica, tracciati i tre percorsi di chiusura di un
+dialog (bottone/azione, Escape, click backdrop) fino in fondo, nessuno
+scavalca la ripresa; teardown pulito. **Rilanciati dal vivo**
+`LAG-INTERACTION-DIALOG-38`/`-39` — **2/2 passati** contro il server
+owner reale. Dettaglio in `.claude/LEDGER-LAG-DESKTOP-2026-09-01.md`,
+sezione "Seconda lettura — 02/09/2026". Nessun difetto trovato in
+questa slice specifica.
 
-```
-backgroundInteractionPauseReasons   Set — 'dialog' | 'scroll'
-setBackgroundInteractionPause(reason, paused)
-syncBackgroundDialogPause()
-queueBackgroundScrollPause()
-backgroundScrollResumeTimer
-```
+⇒ **Conseguenza per la review**: se il lag è ancora presente come
+riporta l'owner, la causa **non è qui**. Non ripartire da questo pezzo.
 
-Test dichiarati (non ancora rilanciati in questo giro):
-`LAG-INTERACTION-DIALOG-38`, `LAG-INTERACTION-SCROLL-39` in
-`harness-ui/frontend/tests/browser/baseline-shell.spec.mjs`.
+## 1-bis — Il filo NON verificato, ora priorità assoluta
 
-**Perché è il punto di partenza**: è l'ultima cosa scritta prima che
-Codex finisse i crediti — nessun secondo paio d'occhi l'ha ancora
-guardata, e l'owner riporta lag "ancora oggi", il che significa una di
-due cose, da distinguere con la traccia reale (CDP `Tracing`,
-`PerformanceObserver`, LoAF — stesso strumentario già usato nelle tre
-riaperture precedenti, vedi ledger §2):
-1. questa cura specifica non basta (un quarto colpevole, non ancora
-   attribuito), oppure
-2. la cura è giusta ma il file servito dal browser oggi non è quello
-   in cui è stata scritta (vedi §0.3 sotto — verificarlo per primo,
-   è più veloce di rifare tutta l'attribuzione).
+La riapertura P0 PRECEDENTE a questa (sezione "Riapertura P0... replay
+storico" nello stesso ledger) — coalescenza di `TextMessageContent`/
+`WorkspaceChanged` su una sessione con molti eventi storici
+(`realSession.deferHistoricalRendering`, `passaASessione()`,
+`nuovaGenerazioneSessione()`). Dichiarata GREEN dal proprio autore, **mai
+riverificata da un secondo lettore** in questo giro — stesso trattamento
+appena dato al punto 1: rileggere la logica, poi riprodurre dal vivo
+aprendo una sessione storica con centinaia di eventi (ce ne sono già
+nel `.sessions-store/`) e misurare con CDP `Tracing`/`PerformanceObserver`,
+non fidarsi del numero dichiarato nel ledger.
+
+Se ANCHE questo regge, il colpevole del lag "di oggi" è un quarto
+sospetto non ancora nominato — a quel punto serve un'attribuzione da
+zero (stesso strumentario, stessi quattro scenari CDP già usati nelle
+riaperture precedenti: `CHAT-SIDEBARS-OPEN`, `CHAT-SIDEBARS-COLLAPSED`,
+`NEW-SESSION-SCROLL`, `COMMAND-PALETTE-SCROLL`, script già pronto in
+`harness-ui/frontend/scripts/diagnose-interaction-lag.mjs`), non una
+supposizione.
 
 ## 2 — Domande aperte, non decise, da NON decidere da soli
 
