@@ -1000,7 +1000,21 @@ export function createHttpApp({
       try {
         requireNoQuery(url);
         const body = await leggiCorpoJson(req);
-        if (!localRuntimes || typeof body?.runtimeId !== 'string' || typeof body?.modelId !== 'string') { const error = new Error('Corpo runtime non valido'); error.code = 'QUERY_INVALID'; throw error; }
+        /*
+         * ⛔⛔⛔ 02/9 (notte) — `modelId` era OBBLIGATORIO qui, ma
+         * l'implementazione lo IGNORA: `unload()` in
+         * `local-runtime-llama-server.mjs` non prende argomenti e fa
+         * `supervisor.stop()` — scaricare significa fermare il runtime, non
+         * togliere il modello X. E il server non espone da nessuna parte
+         * QUALE modello sia caricato (`status()` dà stato, porta e baseUrl,
+         * mai il modello), quindi un chiamante onesto non poteva nemmeno
+         * procurarselo: la rotta chiedeva un dato che non esiste.
+         * ⇒ Reso opzionale. `runtimeId` resta obbligatorio: quello sceglie
+         * davvero su chi agire.
+         * ⛔ Trovato provando il pulsante «Libera la memoria» dal vivo con un
+         * modello VERAMENTE caricato — nessun test copriva questa rotta.
+         */
+        if (!localRuntimes || typeof body?.runtimeId !== 'string' || (body?.modelId !== undefined && typeof body.modelId !== 'string')) { const error = new Error('Corpo runtime non valido'); error.code = 'QUERY_INVALID'; throw error; }
         const runtime = localRuntimes[body.runtimeId];
         if (!runtime || typeof runtime.unload !== 'function') { const error = new Error('Runtime locale non disponibile'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
         const data = await runtime.unload(body.modelId);

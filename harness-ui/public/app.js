@@ -2117,6 +2117,17 @@
       );
       return row;
     }) : [textElement('p', 'model-lab-empty', 'Nessun runtime osservato.')]));
+    /*
+     * ⛔⛔⛔ 02/9 (notte) — TERZO difetto dello stesso pannello, trovato
+     * premendo il pulsante per davvero con un modello CARICATO: il
+     * pannello memoria leggeva `state.modelLab.runtimes`, ma veniva
+     * ridisegnato SOLO da `caricaCapacitaMacchina()` — che gira una volta
+     * all'avvio. Caricare un modello dopo non cambiava nulla a schermo: la
+     * riga continuava a dire «non tiene nessun modello» e il pulsante
+     * restava disabilitato. Lo stato dei runtime si aggiorna QUI: è qui
+     * che il pannello va rinfrescato.
+     */
+    aggiornaPannelloMemoria();
     const selected = pronti.find((runtime) => runtime.runtimeId === state.modelLab.selectedRuntime) || pronti[0];
     state.modelLab.selectedRuntime = selected?.runtimeId || '';
     const models = selected?.models || [];
@@ -2494,18 +2505,30 @@
      * Senza quel dato non si scrive una stima — sarebbe un numero inventato
      * proprio dove la persona sta per premere un pulsante.
      */
+    /*
+     * ⛔⛔⛔ 02/9 (notte) — QUI leggevo due proprietà del runtime con nomi
+     * che mi ero INVENTATO (una in italiano e una in inglese, in cascata
+     * con `||`): nessuna delle due esiste nella risposta del server.
+     * ⛔ Il nome esatto non si ripete qui apposta: un test lo vieta, e
+     * citarlo alla lettera lo farebbe scattare sulla documentazione invece
+     * che sul codice — è già successo due volte stanotte. Effetto: sempre `null`, pulsante disabilitato per
+     * sempre, funzione morta — e la prova dal vivo non l'ha vista perché
+     * «disabilitato» sembrava l'esito giusto (nessun modello era
+     * caricato). Trovato solo caricandone uno DAVVERO.
+     * ⇒ Il fatto osservabile è `runtimeState`: il supervisor dichiara
+     * `ready` quando il runtime è su con un modello dentro. Il server non
+     * espone QUALE modello sia (status() dà stato, porta e baseUrl), e
+     * quindi non lo si scrive: si dice che c'è, non si inventa il nome.
+     */
     const runtimeLocale = (state.modelLab.runtimes || []).find((r) => r.runtimeId === 'llama.cpp');
-    const modelloCaricato = runtimeLocale?.modelloCaricato || runtimeLocale?.loadedModel || null;
+    const runtimeCarico = runtimeLocale?.runtimeState === 'ready';
     if (tenuta) {
-      if (modelloCaricato) {
-        tenuta.hidden = false;
-        tenuta.textContent = `TALOS tiene in memoria: ${modelloCaricato}`;
-      } else {
-        tenuta.hidden = false;
-        tenuta.textContent = 'TALOS non tiene nessun modello in memoria adesso.';
-      }
+      tenuta.hidden = false;
+      tenuta.textContent = runtimeCarico
+        ? 'TALOS tiene in memoria il runtime locale con un modello caricato.'
+        : 'TALOS non tiene nessun modello in memoria adesso.';
     }
-    if (bottone) bottone.disabled = !modelloCaricato;
+    if (bottone) bottone.disabled = !runtimeCarico;
   }
 
   async function liberaMemoriaModello() {
@@ -2514,11 +2537,21 @@
     if (bottone) { bottone.disabled = true; bottone.textContent = 'Liberazione…'; }
     const primaLiberi = state.modelLab.capacity?.memory?.freeBytes;
     try {
-      await apiPost('/api/v1/runtime/unload', {});
+      /*
+       * ⛔ 02/9 (notte) — il corpo era `{}` e la rotta rispondeva SEMPRE
+       * QUERY_INVALID: pretende `runtimeId`. Il pulsante non avrebbe mai
+       * funzionato. `modelId` non si manda perche' il server non espone
+       * quale modello sia caricato e l'implementazione lo ignora — la
+       * rotta e' stata corretta per non chiederlo piu' (vedi http-app.mjs).
+       */
+      await apiPost('/api/v1/runtime/unload', { runtimeId: 'llama.cpp' });
       // ⭐ Si RIMISURA subito: il risultato si dichiara con i byte veri
       // liberati, non con un «fatto» generico.
       state.modelLab.capacity = null;
       await caricaCapacitaMacchina();
+      // ⛔ Anche lo stato del runtime va riletto: senza, il pulsante
+      // resterebbe abilitato su un runtime che ormai e' spento.
+      await caricaRuntimeModelLab();
       const dopoLiberi = state.modelLab.capacity?.memory?.freeBytes;
       const guadagno = (Number.isFinite(primaLiberi) && Number.isFinite(dopoLiberi)) ? dopoLiberi - primaLiberi : null;
       toast('Memoria liberata', guadagno && guadagno > 0
@@ -2745,7 +2778,7 @@
     $('#modelLabRuntimeRefresh')?.addEventListener('click', () => caricaRuntimeModelLab());
     // ⭐ 02/9 — pannello memoria: rimisura e liberazione (vedi il commento su
     // aggiornaPannelloMemoria per perché NON si uccidono processi).
-    $('#memoriaRimisura')?.addEventListener('click', async () => { state.modelLab.capacity = null; await caricaCapacitaMacchina(); });
+    $('#memoriaRimisura')?.addEventListener('click', async () => { state.modelLab.capacity = null; await caricaCapacitaMacchina(); await caricaRuntimeModelLab(); });
     $('#memoriaScarica')?.addEventListener('click', () => { void liberaMemoriaModello(); });
     $('#modelLabRuntimeSelect')?.addEventListener('change', (event) => { state.modelLab.selectedRuntime = event.target.value; state.modelLab.selectedRuntimeModel = ''; renderizzaRuntimeModelLab(); });
     $('#modelLabModelSelect')?.addEventListener('change', (event) => { state.modelLab.selectedRuntimeModel = event.target.value; renderizzaRuntimeModelLab(); });

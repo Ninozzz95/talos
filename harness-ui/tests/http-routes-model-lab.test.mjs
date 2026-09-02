@@ -257,3 +257,42 @@ test('MODEL-LAB-HTTP-IMPORT-03 considera facoltativo il nome visualizzato', asyn
   assert.equal(response.status, 200);
   assert.deepEqual(metadata, { id: 'local-gguf', filename: 'model.gguf', expectedBytes: 4 });
 });
+
+/*
+ * ⛔⛔⛔ 02/9 (notte) — questa rotta NON aveva un test, ed è per questo che
+ * un'incoerenza vera è sopravvissuta: pretendeva `modelId` obbligatorio,
+ * ma `unload()` in `local-runtime-llama-server.mjs` non prende argomenti e
+ * fa `supervisor.stop()`. Peggio: il server non espone da nessuna parte
+ * QUALE modello sia caricato (`status()` dà stato, porta e baseUrl), quindi
+ * un chiamante onesto non poteva procurarselo — la rotta chiedeva un dato
+ * inesistente e rispondeva sempre QUERY_INVALID.
+ * Trovato provando dal vivo il pulsante «Libera la memoria» con un modello
+ * VERAMENTE caricato.
+ */
+test('HTTP-RUNTIME-UNLOAD-01 — basta runtimeId: modelId è opzionale perché l’implementazione lo ignora', async (t) => {
+  const chiamate = [];
+  const base = await listen(t, null, {
+    localRuntimes: { 'llama.cpp': { unload: async (modelId) => { chiamate.push(modelId); return { state: 'unavailable' }; } } },
+  });
+  const risposta = await fetch(`${base}/api/v1/runtime/unload`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ runtimeId: 'llama.cpp' }) });
+  assert.equal(risposta.status, 200);
+  assert.deepEqual((await risposta.json()).data, { state: 'unavailable' });
+  assert.deepEqual(chiamate, [undefined], 'unload viene chiamata anche senza modelId');
+});
+
+test('HTTP-RUNTIME-UNLOAD-02 — AL CONTRARIO: senza runtimeId si rifiuta, e un modelId non stringa pure', async (t) => {
+  // ⛔ `runtimeId` resta obbligatorio: è quello che sceglie su chi agire.
+  const base = await listen(t, null, {
+    localRuntimes: { 'llama.cpp': { unload: async () => ({ state: 'unavailable' }) } },
+  });
+  const senzaRuntime = await fetch(`${base}/api/v1/runtime/unload`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+  assert.equal(senzaRuntime.status, 400);
+  const modelIdSbagliato = await fetch(`${base}/api/v1/runtime/unload`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ runtimeId: 'llama.cpp', modelId: 42 }) });
+  assert.equal(modelIdSbagliato.status, 400, 'un modelId presente ma non stringa resta un errore');
+});
+
+test('HTTP-RUNTIME-UNLOAD-03 — un runtime sconosciuto non viene inventato', async (t) => {
+  const base = await listen(t, null, { localRuntimes: { 'llama.cpp': { unload: async () => ({ state: 'unavailable' }) } } });
+  const risposta = await fetch(`${base}/api/v1/runtime/unload`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ runtimeId: 'inesistente' }) });
+  assert.notEqual(risposta.status, 200);
+});
