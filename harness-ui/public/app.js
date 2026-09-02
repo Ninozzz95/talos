@@ -295,6 +295,50 @@
   let compattazioneInCorso = false;
   let streamingScrollFrame = null;
   let streamingScrollTarget = null;
+  /*
+   * ⛔⛔⛔ 02/9 — owner dal vivo: "lo scrolling automatico fa schifo non
+   * centra bene la risposta in streaming... lo streaming dell output è
+   * macchinoso ed estremamente scattoso". Poi, precisato dopo un primo
+   * giro di correzione: "lo scroll non deve fermarsi a fine pagina ma a
+   * meta... quando scrollo alla fine output deve essere a meta non alla
+   * fine" — cioè il punto attivo (dove il testo sta arrivando ORA) va
+   * tenuto a META' del viewport, non incollato al fondo dello schermo.
+   *
+   * La versione originale ANDAVA nella direzione giusta (centrava) ma
+   * era rotta nel bersaglio: centrava il bounding box dell'INTERA bolla
+   * (che cresce), non il punto dove il testo sta davvero arrivando — una
+   * volta che la bolla è più alta del viewport, il "centro della bolla"
+   * scappa via dalla coda che si sta scrivendo, e il punto seguito non è
+   * più quello giusto. E non controllava mai se l'utente avesse
+   * scrollato via di sua iniziativa, quindi lo inseguiva comunque.
+   *
+   * Confrontato col codice REALE di Hermes Agent (owner l'ha chiesto
+   * esplicitamente) — repo locale, `apps/desktop/src/components/
+   * assistant-ui/thread/list.tsx`: usano `use-stick-to-bottom` come
+   * "single writer" di scrollTop, con commento esplicito — *"Snap
+   * instantly, not spring — a spring can't tell live-token growth from
+   * a session-switch bulk relayout, and chasing the latter reads as the
+   * view scrolling to random spots before settling"* — e seguono SOLO
+   * se l'utente non si è spostato di sua iniziativa. Hermes insegue il
+   * FONDO (la loro scelta di prodotto); qui si insegue il CENTRO (scelta
+   * esplicita di QUESTO owner) — stesso principio "singolo writer,
+   * istantaneo mai a molla, mai contro un utente che si è spostato",
+   * bersaglio diverso.
+   *
+   * Bersaglio corretto: il fondo del CONTENUTO scritto finora
+   * (getBoundingClientRect().bottom dell'elemento messaggio — si sposta
+   * in giù ad ogni frame insieme al testo vero), portato a metà
+   * dell'altezza del viewport. Mai `behavior:'smooth'`, sempre
+   * istantaneo (stesso motivo di Hermes sopra). streamingLastTargetTop
+   * ricorda l'ultimo valore che abbiamo scritto NOI: il listener di
+   * scroll qui sotto lo confronta con lo scrollTop reale per capire se è
+   * stato l'utente a spostarsi (stessa tecnica di resolveThreadScrollTarget
+   * in Hermes, con uno scopo diverso: lì evita un re-trigger su un resto
+   * di sub-pixel, qui distingue "siamo stati noi" da "si è mosso lui").
+   */
+  let streamingAutoFollow = true;
+  let streamingLastTargetTop = null;
+  const CONVERSATION_FOLLOW_EPSILON_PX = 24;
   let streamingRenderFrame = null;
   const streamingRenderPending = new Set();
   let treeRenderTimer = null;
@@ -309,13 +353,16 @@
   const motionAnimations = new Set();
 
   /**
-   * Porta l'output attivo nella fascia centrale di #conversation durante uno
-   * stream. Una sola richiesta per frame evita animazioni concorrenti; il
-   * limite non sposta mai la pagina esterna.
+   * Porta il fondo del CONTENUTO scritto finora (non il centro
+   * dell'intera bolla — vedi il commento sopra la dichiarazione di
+   * streamingAutoFollow) a metà del viewport, durante uno stream — SOLO
+   * se l'utente non se n'è già andato per conto suo. Una sola richiesta
+   * per frame evita animazioni concorrenti.
    */
   function scrollStreamingOutput(element) {
     if (!element || !element.isConnected) return;
     streamingScrollTarget = element;
+    if (!streamingAutoFollow) return;
     if (streamingScrollFrame !== null) return;
     const schedule = window.requestAnimationFrame || ((callback) => window.setTimeout(callback, 0));
     streamingScrollFrame = schedule(() => {
@@ -323,17 +370,38 @@
       const target = streamingScrollTarget;
       streamingScrollTarget = null;
       const conversation = $('#conversation');
-      if (!target || !target.isConnected || !conversation) return;
-      conversation.style.setProperty('--stream-follow-space', `${Math.ceil(conversation.clientHeight / 2)}px`);
+      if (!target || !target.isConnected || !conversation || !streamingAutoFollow) return;
       const containerRect = conversation.getBoundingClientRect();
       const targetRect = target.getBoundingClientRect();
-      const targetTop = conversation.scrollTop
-        + (targetRect.top - containerRect.top)
-        - (conversation.clientHeight - targetRect.height) / 2;
+      const fondoContenuto = conversation.scrollTop + (targetRect.bottom - containerRect.top);
       const maxScroll = Math.max(0, conversation.scrollHeight - conversation.clientHeight);
-      conversation.scrollTop = Math.max(0, Math.min(maxScroll, targetTop));
+      const nuovoTop = Math.max(0, Math.min(maxScroll, fondoContenuto - conversation.clientHeight / 2));
+      streamingLastTargetTop = nuovoTop;
+      // Istantaneo, mai 'smooth': vedi il commento di Hermes citato sopra.
+      conversation.scrollTop = nuovoTop;
     });
   }
+
+  /**
+   * Aggiorna streamingAutoFollow ad ogni scroll reale di #conversation.
+   * Confronta lo scrollTop reale con l'ultimo bersaglio che abbiamo
+   * scritto NOI (streamingLastTargetTop): se combaciano (entro
+   * un'epsilon) lo scroll è stato nostro o l'utente non si è mosso — si
+   * continua a seguire; se non combaciano, è stato l'utente a spostarsi
+   * di sua iniziativa — si smette di inseguirlo (si riarma su
+   * RunStarted). Prima che uno stream sia mai partito
+   * (streamingLastTargetTop ancora nullo) non c'è nulla da confrontare:
+   * non tocca streamingAutoFollow. Passive: mai bloccare lo scroll nativo.
+   */
+  function collegaSeguiFondoConversazione() {
+    const conversation = $('#conversation');
+    if (!conversation) return;
+    conversation.addEventListener('scroll', () => {
+      if (streamingLastTargetTop === null) return;
+      streamingAutoFollow = Math.abs(conversation.scrollTop - streamingLastTargetTop) <= CONVERSATION_FOLLOW_EPSILON_PX;
+    }, { passive: true });
+  }
+  collegaSeguiFondoConversazione();
 
   /**
    * Un replay SSE può consegnare centinaia di delta nello stesso frame. Il
@@ -1086,7 +1154,21 @@
       for (const nodo of statoRender.nodiCoda) nodo.remove();
       statoRender.nodiCoda = [];
       if (stabile.length > statoRender.prefisso.length) {
-        contenitore.appendChild(renderizzaMarkdownSemplice(stabile.slice(statoRender.prefisso.length)));
+        // ⛔⛔⛔ 02/9 — owner dal vivo: "il rendering a dissolvenza... non
+        // funziona bene". Causa trovata leggendo il CSS (talos-stream-fade):
+        // era agganciata a `.assistant-copy > :last-child`, ma il vero
+        // :last-child durante lo streaming è quasi sempre la CODA qui sotto
+        // — distrutta e ricreata ad ogni frame (nodiCoda.forEach(remove) +
+        // append, sopra). Un'animazione su un elemento appena creato riparte
+        // da zero: la coda non finiva MAI di dissolversi, ricominciava ogni
+        // frame. Il blocco giusto da animare è QUESTO — il testo che si è
+        // appena STABILIZZATO (confineBlocchiStabili l'ha giudicato
+        // definitivo) e che da qui in avanti non viene più toccato: marcato
+        // una volta sola, l'animazione parte una volta sola e finisce.
+        const nuovoStabile = renderizzaMarkdownSemplice(stabile.slice(statoRender.prefisso.length));
+        const ultimoNodoStabile = nuovoStabile.lastElementChild;
+        contenitore.appendChild(nuovoStabile);
+        ultimoNodoStabile?.classList.add('stream-settle');
         statoRender.prefisso = stabile;
       }
     }
@@ -7097,6 +7179,8 @@
     }
     switch (evento.type) {
       case 'RunStarted': {
+        streamingAutoFollow = true; // un nuovo giro ri-arma il "segui il centro" — stesso principio di resetThreadScroll() in Hermes
+        streamingLastTargetTop = null;
         state.realSession.currentRunModel = typeof evento.contesto?.modello === 'string' && evento.contesto.modello.trim()
           ? evento.contesto.modello.trim()
           : (state.model || null);
@@ -10135,7 +10219,6 @@
     sessionListRefreshTimer = null;
     if (streamingScrollFrame !== null) window.cancelAnimationFrame?.(streamingScrollFrame);
     streamingScrollFrame = null;
-    streamingScrollTarget = null;
     state.modelLab.runtimeEventSource?.close();
     state.modelLab.runtimeEventSource = null;
     delete window.__talosHarnessModelLabEventSource;

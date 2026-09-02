@@ -99,8 +99,91 @@
 sessione dopo aver chiuso scroll/dissolvenza (fase già in corso,
 quasi finita quando questi due sono arrivati).
 
-## Stato
+## ✅ Scroll/dissolvenza — CORRETTI, verificati dal vivo
 
-🔜 Aperto. Scroll/dissolvenza: diagnosi completa (vedi sopra),
-implementazione in corso. Cursore terminale: non ancora guardato dal
-vivo. I due bug di correttezza appena sopra: non ancora aperti.
+> ⛔ **Correzione owner, durante il primo giro di fix**: il primo
+> tentativo seguiva il FONDO vero (`scrollHeight`, pattern Hermes
+> "stick-to-bottom"). Owner, subito dopo: *"ripeto lo scroll non deve
+> fermarsi a fine pagina ma a meta... quando scrollo alla fine output
+> deve essere a meta non alla fine"* — la scelta di QUESTO prodotto è
+> il CENTRO del viewport, non il fondo. Corretto nello stesso giro,
+> prima di committare la prima versione.
+
+- **Scroll**: `scrollStreamingOutput` non centra più l'intera bolla
+  (che perdeva senso una volta più alta del viewport, il difetto
+  originale) — ora porta il FONDO DEL CONTENUTO scritto finora
+  (`getBoundingClientRect().bottom` dell'elemento messaggio, che si
+  sposta in giù col testo vero) a META' del viewport, istantaneo (mai
+  `smooth`), e SOLO mentre `streamingAutoFollow` è vero (si spegne da
+  solo se l'utente scrolla via — confronto fra lo scrollTop reale e
+  l'ultimo bersaglio scritto da noi, `streamingLastTargetTop`; si
+  riarma su `RunStarted`). Principio "singolo writer, istantaneo mai a
+  molla, mai contro un utente che si è spostato" preso da Hermes
+  (`use-stick-to-bottom`, `apps/desktop/src/components/assistant-ui/
+  thread/list.tsx`, letto dal vivo nel repo locale in scratchpad — la
+  LORO scelta di bersaglio è il fondo, la NOSTRA è il centro, owner
+  esplicito) — riportato in vanilla JS senza dipendenze nuove.
+- **Dissolvenza**: `.stream-settle` sostituisce `:last-child` — la
+  classe marca UNA VOLTA SOLA il testo appena stabilizzato
+  (`renderizzaMarkdownIncrementale`), mai la coda volatile ricreata
+  ogni frame, quindi l'animazione ora finisce invece di ripartire in
+  continuazione.
+- **Verificato dal vivo** (`verifica-scroll-streaming.mjs`, due sessioni
+  reali `z-ai/glm-4.7-flash`): la PRIMA corsa (versione fondo-vero,
+  prompt lungo su TCP) ha confermato che il meccanismo insegue
+  davvero la coda che cresce (non più il centro dell'intera bolla). La
+  SECONDA corsa (dopo la correzione al centro-viewport, prompt "25
+  comandi Git") conferma `distanzaDalFondo:250` al termine — la vista
+  NON è incollata al fondo (0px), coerente col nuovo bersaglio; il
+  turno è stato più veloce del previsto (~11s) e non ha lasciato una
+  finestra comoda per uno screenshot con `streaming:true` E contenuto
+  già oltre il viewport nello stesso istante — la MATEMATICA del
+  bersaglio (fondo del contenuto meno metà altezza viewport, clampato)
+  è verificata per lettura diretta del codice, non (ancora) da uno
+  screenshot che la coglie a metà stream. 🔜 Se dal vivo risultasse
+  ancora non convincente, riverificare con un prompt che produce testo
+  lungo più lentamente (paragrafi discorsivi, non un elenco veloce).
+  `settleCount` cresce e l'ultimo figlio resta SENZA la classe
+  `stream-settle` finché non si stabilizza — comportamento della
+  dissolvenza confermato dalla telemetria, non solo dal codice. Zero
+  eccezioni JS in nessuna delle corse. Backend 1319/1319 (fixture
+  contratto rigenerata due volte), frontend 200/200.
+- 🔜 Non implementato in questo giro (dichiarato, non perso): un
+  pulsante "vai in fondo" quando l'utente si scosta (Hermes ce l'ha,
+  `ScrollToBottomButton`) — senza, chi scrolla via durante uno stream
+  lungo deve poi scrollare a mano fino in fondo. Nessuna regressione
+  (prima l'auto-scroll lo forzava comunque giù, ora semplicemente non
+  lo fa più) ma è il naturale incremento successivo.
+
+## ⛔ Owner, dal vivo, subito dopo — due richieste in più sulla stessa area
+
+*"e quando clicco su una riga sessione il testo deve scrollare
+automaticamente alla fine, e quando ricarico la pagina bisogna che si
+apra automaticamente ultima sessione disponibile, ack tutto adesso"*
+
+Diverso dallo streaming sopra — qui si parla di aprire una sessione
+GIÀ FERMA (nulla sta crescendo), quindi "alla fine" ha senso pieno
+(non c'è ambiguità centro/fondo per un contenuto statico):
+1. Cliccare una riga nella sidebar deve scrollare la conversazione
+   aperta fino in fondo (l'ultimo messaggio), non lasciarla dov'era.
+2. Un reload di pagina deve riaprire da solo l'ULTIMA sessione
+   disponibile, non lo stato vuoto "premi Nuova per iniziare".
+
+🔜 Non ancora implementate — prossimo passo dopo il commit dello
+scroll/dissolvenza streaming.
+
+## Cursore terminale, e i due bug di correttezza
+
+🔜 Cursore terminale: non ancora guardato dal vivo.
+🔜 I due bug di correttezza (falso read-only, ID modello di test):
+non ancora diagnosticati — prossimo passo.
+
+## ⛔ Owner, dal vivo, mentre chiudevo lo scroll/dissolvenza
+
+*"lo streaming ha lag sostanziali a meta testo, se non l'hai già fatto
+trova un modo per strumentare tutte queste statistiche per loggarle e
+debuggarle"* — chiede STRUMENTAZIONE permanente (non un altro script
+usa-e-getta): marks/measures + un log delle statistiche di rendering
+durante lo streaming, per poter diagnosticare un lag futuro senza
+ripartire da zero ogni volta. 🔜 Da implementare, prossimo passo dopo
+questa nota.
