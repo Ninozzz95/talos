@@ -26,6 +26,23 @@
 9. **Ancore per nome**: le guide indicano funzioni e id HTML, non numeri di riga (il monolite ha modifiche non committate di un'altra sessione che li spostano). Prima di toccare: `grep -n "function <nome>"`.
 10. **Onestà**: una riga è «fatta» solo con test verdi, verifica dal vivo e screenshot ispezionati. Se manca uno dei tre, la casella resta vuota e la riga dice cosa manca.
 
+11. **Modello ed effort per riga** (§1-bis, owner 03/09): prima di iniziare una riga, chi implementa legge la tabella §1-bis e **chiede all'owner di passare al modello e all'effort consigliati** se la sessione corrente non li sta già usando. Non si parte con un modello più debole di quello indicato; mai Haiku su righe che toccano `public/app.js` o `styles.css`; mai effort medium sulle righe UI.
+
+## 1-bis — Modello ed effort consigliati (sessione Claude Code che implementa; non riguarda i modelli dentro TALOS)
+
+| Righe | Modello | Effort | Perché |
+|---|---|---|---|
+| W0-02, W0-04, W0-05, W0-06 | Sonnet 5 | high | meccaniche, guida completa |
+| W0-01, W0-03 | Opus 5 | high | diagnosi sui file reali |
+| W1-03, W1-08, W1-12, W1-13 | Sonnet 5 | high | piccole, contratto chiaro |
+| W1-01, W1-04, W1-05, W1-07, W1-11 | Opus 5 | xhigh | monolite in più punti, UI nuova, QA a due temi |
+| W1-02, W1-06, W1-09, W1-10 | Opus 5 | high | medie |
+| W2-03a/b/c, W2-04, W2-05, W2-13…W2-17 | Fable 5.1 (o Opus 5) | xhigh | sicurezza e processi: un errore silenzioso costa più della differenza di prezzo |
+| Wave 2 restanti, Wave 3, Wave 4 | Opus 5 | high | |
+| Richieste kernel K-01…K-08 (lane mobile, al sì dell'owner) | Fable 5.1 | xhigh | codice condiviso col mobile, banco da 354 KB da tenere verde |
+
+Se l'owner vuole un solo modello per tutto: Opus 5 a effort high, xhigh sulle righe segnate, Fable solo su sicurezza e kernel. Modalità veloce ammessa sulle righe meccaniche (stesso modello, meno latenza).
+
 ## 2 — Come si legge una riga
 
 Campi (15 + kernel): **ID** · **F** (id registro) · **Titolo** · **Stato** (`STABLE_IMPLEMENTED` / `LABS_EXECUTABLE` / `CONTRACT_VALIDATED` / `DESIGN_VALIDATED` / `MONITOR` / `REJECTED_WITH_EVIDENCE` / `BLOCKED_BY_EXTERNAL_DEPENDENCY`, **prima** dell'implementazione) · **Dest** (`DESKTOP-ADAPTER` = `harness-ui/src`; `UI-MONOLITE` = `public/`; `UI-MODULARE` = `frontend/src`; `LABS` = `harness-ui/labs`; `KERNEL`) · **Wave** · **Imp** 1-5 · **Ris** 1-5 · **gg** · **Dip** · **File** (relativi a `harness-ui/`) · **Test** · **Evidenza** · **Rollback** · **Criterio** · **Kernel** (`—` / `K-nn PENDING`).
