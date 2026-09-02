@@ -67,6 +67,8 @@ const API_ERROR_CODES = new Set([
   'LOCAL_IMPORT_INVALID', 'LOCAL_IMPORT_TOO_LARGE', 'LOCAL_IMPORT_SIZE_MISMATCH', 'LOCAL_IMPORT_EMPTY', 'LOCAL_IMPORT_NOT_GGUF',
   /* ⭐ 02/9 — Fase 5 punto 4: probe locale "prima di load" (local-runtime-probe.mjs + gguf-header.mjs). */
   'MODEL_NOT_READY', 'MODEL_HEADER_INVALID', 'MODEL_HEADER_UNREADABLE', 'RUNTIME_PROBE_FAILED', 'FIT_INVALID', 'LOCAL_RUNTIME_PROBE_MISCONFIGURED',
+  /* ⭐ 02/9 — stesso probe, qualify(): un giro di generazione reale, consenso esplicito obbligatorio. */
+  'PROBE_CONSENT_REQUIRED', 'PROBE_GENERATION_FAILED', 'PROBE_GENERATION_INCOMPLETE', 'MODEL_NOT_COMPATIBLE',
 ]);
 
 const STATUS_BY_CODE = Object.freeze({
@@ -142,6 +144,12 @@ const STATUS_BY_CODE = Object.freeze({
   RUNTIME_PROBE_FAILED: 503,
   FIT_INVALID: 400,
   LOCAL_RUNTIME_PROBE_MISCONFIGURED: 500,
+  /** ⭐ 02/9 — richiesta legittima, ma manca il consenso esplicito per un giro di generazione reale: stesso status di FIT_INVALID (contenuto della richiesta incompleto). */
+  PROBE_CONSENT_REQUIRED: 400,
+  PROBE_GENERATION_FAILED: 502,
+  PROBE_GENERATION_INCOMPLETE: 502,
+  /** ⭐ 02/9 — stesso status di MODEL_NOT_READY/SESSION_NOT_READY: il modello esiste ma il suo stato attuale (non compatibile) blocca l'azione. */
+  MODEL_NOT_COMPATIBLE: 409,
 });
 
 const MESSAGE_BY_CODE = Object.freeze({
@@ -184,6 +192,10 @@ const MESSAGE_BY_CODE = Object.freeze({
   MODEL_HEADER_UNREADABLE: 'Il file GGUF del modello non è leggibile',
   RUNTIME_PROBE_FAILED: 'Il runtime locale non ha risposto al controllo',
   FIT_INVALID: 'Parametri di verifica non validi',
+  PROBE_CONSENT_REQUIRED: 'Serve un consenso esplicito per far girare il modello',
+  PROBE_GENERATION_FAILED: 'La prova di generazione è fallita',
+  PROBE_GENERATION_INCOMPLETE: 'La prova di generazione non si è conclusa',
+  MODEL_NOT_COMPATIBLE: 'Il modello non è compatibile con questo profilo',
   MODEL_LOAD_UNCONFIRMED: 'Caricamento modello non confermato',
   MODEL_UNLOAD_UNCONFIRMED: 'Scaricamento modello non confermato',
   LOCAL_RUNTIME_FAILED: 'Runtime locale fallito',
@@ -1071,6 +1083,37 @@ export function createHttpApp({
         // Solo profile/contextTokens sono ammessi — qualunque altro parametro è un errore, non ignorato in silenzio.
         for (const key of url.searchParams.keys()) { if (key !== 'profile' && key !== 'contextTokens') { const error = new Error('Query non valida'); error.code = 'QUERY_INVALID'; throw error; } }
         const data = await localRuntimeProbe.fit(id, options);
+        sendJson(res, 200, successEnvelope(data, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    /*
+     * ⭐⭐⭐ 02/9 — Fase 5, punto 4, il secondo pezzo del probe: un giro di
+     * generazione REALE ("Reply with OK.", già scritto in qualify()) per
+     * confermare che il modello funziona davvero, non solo che "dovrebbe
+     * stare in memoria". A differenza di /fit (sola lettura, sempre
+     * sicura), questa chiama per davvero il runtime — richiede
+     * `consent:true` esplicito nel corpo (già imposto da qualify() stesso,
+     * non solo qui: due livelli della stessa guardia).
+     */
+    if (method === 'POST' && /^\/api\/v1\/local-models\/([^/]+)\/qualify$/.test(url.pathname)) {
+      try {
+        requireNoQuery(url);
+        const match = /^\/api\/v1\/local-models\/([^/]+)\/qualify$/.exec(url.pathname);
+        const id = decodeURIComponent(match[1]);
+        if (!localRuntimeProbe) { const error = new Error('Probe runtime locale non configurato'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        const body = await leggiCorpoJson(req);
+        const options = { modelId: id, consent: body?.consent === true };
+        if (typeof body?.profile === 'string') options.profile = body.profile;
+        if (body?.contextTokens !== undefined) {
+          if (!Number.isSafeInteger(body.contextTokens) || body.contextTokens <= 0) { const error = new Error('contextTokens non valido'); error.code = 'FIT_INVALID'; throw error; }
+          options.contextTokens = body.contextTokens;
+        }
+        const data = await localRuntimeProbe.qualify(options);
         sendJson(res, 200, successEnvelope(data, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
