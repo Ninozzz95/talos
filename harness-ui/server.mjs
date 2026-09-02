@@ -128,7 +128,14 @@ async function startServer() {
     localRuntimeProbe = createLocalRuntimeProbe({
       runtime: llama,
       modelStore: localModelStore,
-      readHeader: readGgufHeader,
+      /*
+       * ⛔ 02/9 (sera) — la radice assoluta la mette QUI il chiamante, che
+       * è l'unico a conoscerla: la sonda compone `cartella/file` dal
+       * manifest e non sa dove viva `.local-models/`. Stessa radice usata
+       * da `load` poche righe sopra — un solo posto da cambiare se un
+       * giorno la cartella si sposta.
+       */
+      readHeader: (percorsoRelativo) => readGgufHeader(join(fileURLToPath(new URL('.local-models/', import.meta.url)), percorsoRelativo)),
       measureMachine: () => misuraCapacitaMacchina({ storagePath: config.publicDir }),
     });
   }

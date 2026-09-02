@@ -822,3 +822,69 @@ girano (health ok, sessioni invariate): i due server convivono.
 codice d'avvio: istanza isolata su `4179` con store vuoto → **0 sessioni**
 (contro 17 vere), health ok; `4174` riavviato senza variabile →
 `1/17 sessioni ripristinate da .sessions-store/`, identico a prima.
+
+---
+
+## 02/09 (sera) — Due difetti VERI trovati solo dopo aver messo modelli veri
+
+L'owner ha autorizzato il reimport dei GGUF già sul disco (i manifest
+erano spariti: cartelle piene, `manifests/` vuota). Fatto passando dalla
+**rotta vera** dell'app, mai scrivendo JSON a mano — la rotta scrive
+`repo: 'local-upload'`, `revision` = sha256 REALE del file, `license:
+'unknown'`: nessuna provenienza inventata. Due modelli registrati (331 MB
+in 1 s, 15,3 GB in 43 s).
+
+⭐ **E con dei modelli veri sono usciti due difetti che nessun test
+vedeva.**
+
+### 1. `readHeader` riceveva una CARTELLA, non un file — difetto MIO
+
+`inspectModel` faceva `readHeader(manifest.path)`. Ma `manifest.path` è la
+**cartella** del modello: il nome del file sta in `files[0].path`. Sul
+disco vero il lettore riceveva una directory e falliva **sempre** con
+`MODEL_HEADER_UNREADABLE`.
+
+⛔ **Perché i test non l'hanno visto**: la fixture era **infedele** —
+aveva `path: 'models/qwen-local.gguf'`, cioè metteva il file dentro
+`path`. Con quella forma il codice sbagliato sembrava giusto. Una seconda
+fixture in `local-runtime-conformance.test.mjs` aveva lo stesso vizio.
+⇒ Corrette entrambe alla forma REALE (quella che `local-model-store.mjs`
+valida e che la rotta di import scrive), e aggiunto
+`LOCAL-RUNTIME-PROBE-PERCORSO-01`, che guarda l'argomento vero passato a
+`readHeader` (`qwen-local/qwen-local.gguf`), più il caso al contrario di
+un manifest senza file.
+
+### 2. `/fit` non sapeva degradare col runtime spento
+
+`readRuntimeProps()` lancia se llama-server non risponde, e faceva
+abortire tutta `inspectModel`: `/fit` rispondeva `RUNTIME_PROBE_FAILED`
+anche dopo aver già letto l'header, quando poteva dire cose vere su
+spazio, memoria e contesto addestrato. ⛔ Incoerente con il disegno dello
+stesso file: tutto ciò che segue è già scritto per degradare
+(`unknown()`, `observedBoolean(caps?.…)`), e `fit()` ha lo stato
+`unknown` con motivo `context` esattamente per questo caso.
+⇒ Un runtime spento è un fatto **non osservato**, non un errore della
+lettura. ⛔ `qualify()` resta severo: chiede un `fit` compatibile, quindi
+con `unknown` si ferma da solo — un giro di generazione vero senza
+runtime non va nemmeno tentato. Due test nuovi, uno per verso.
+
+### La funzione, misurata sui modelli VERI dell'owner
+
+| modello | verdetto |
+|---|---|
+| Qwen3 0.6B Q2_K (331 MB) | **Non determinabile** — contesto 40.960 su 65.536 richiesti |
+| Qwen3.8 27B UD-Q4_K_M (15,3 GB) | **Non compatibile — non c'è abbastanza memoria libera** |
+
+⭐ Il 27B **non entra** in 15,64 GB liberi, e l'app lo dice **prima** di
+caricarlo: è esattamente il buco che la ricerca attribuisce ai due
+concorrenti (LM Studio crasha, Ollama scivola su CPU 30× più lento).
+
+**Chiuso anche il NON VERIFICATO dichiarato poche ore prima**: il
+verdetto dentro una riga vera ora è provato, con clic reale sul pulsante
+e screenshot ispezionato.
+
+🔜 **Debito minore trovato**: reimportare un modello già registrato
+risponde **500 `INTERNAL_ERROR`** invece di un errore di collisione
+pulito (`HF_TRANSFER_COLLISION` esiste già lato transfer, non affiora).
+
+**Suite**: backend **1364/1364** (+11 dal mattino), snapshot invariata.

@@ -135,7 +135,10 @@ test('CONFORMANCE-CONTEXT-01 contesto insufficiente degrada a chat-only', async 
       probe: async () => ({ default_generation_settings: { n_ctx: 32_768 }, chat_template: 'chat', backend: 'CPU', build: 'fixture' }),
       generateStream: async function* () { yield { type: 'done' }; },
     },
-    modelStore: { inspect: async () => ({ id: 'model-1', state: 'ready', bytes: 1, path: 'model.gguf' }) },
+    // ⛔ 02/9 — forma REALE del manifest: `path` è la CARTELLA, il nome del
+    // file sta in `files[0].path`. La vecchia fixture metteva il file dentro
+    // `path` e nascondeva un difetto vero (vedi local-runtime-probe.test.mjs).
+    modelStore: { inspect: async () => ({ id: 'model-1', state: 'ready', bytes: 1, path: 'model-1', files: [{ path: 'model.gguf', bytes: 1, sha256: 'c'.repeat(64) }] }) },
     readHeader: async () => ({ magic: 'GGUF', version: 3, trainedContext: 65_536, estimatedWorkingBytes: 1 }),
     measureMachine: async () => ({ storage: { allocatableBytes: 10 }, memory: { freeBytes: 10 } }),
   });
