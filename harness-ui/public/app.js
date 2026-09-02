@@ -1263,6 +1263,13 @@
     return `${Math.round(value)} token`;
   }
 
+  /** ⭐ 02/09 — stesso stile di formattaByteModelLab/formattaContestoModelLab: nessuna dipendenza nuova, Intl già nel browser. Per download/preferiti Hugging Face nella scheda repository ridisegnata. */
+  function formattaContoModelLab(numero) {
+    const value = Number(numero);
+    if (!Number.isFinite(value) || value < 0) return null;
+    return new Intl.NumberFormat('it-IT', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
+  }
+
   function runtimeModelLabPronto(runtime) {
     return runtime?.state === 'observed' && Array.isArray(runtime.models) && runtime.models.length > 0;
   }
@@ -1559,13 +1566,71 @@
     }
     return section;
   }
+  /*
+   * ⭐⭐⭐ 02/09 — RIDISEGNATA, owner dal vivo: "la scheda modelli HF fa
+   * schifo davvero". Skill frontend-design caricata (regola vincolante).
+   * Riferimento: `TalosMobileLocalRepoDetail.vue` (mobile, 893 righe) —
+   * stessa INFORMAZIONE (tag/licenza/download/preferiti, apri+copia link,
+   * scheda README, varianti con stato), layout diverso perché il
+   * desktop ha spazio: niente rail orizzontale a chip (pensata per un
+   * pollice), un elenco verticale di righe — più naturale con mouse e
+   * tastiera, stessa densità informativa di prima ma leggibile a colpo
+   * d'occhio (stato in FORMA, non solo in testo: un pallino colorato
+   * prima del nome). Zero campi inventati: `downloads`/`likes`/
+   * `pipelineTag`/`gated` esistono già in `hf-hub-client.mjs#describeModel`
+   * — semplicemente non venivano mai mostrati.
+   */
   function renderizzaHfDetailModelLab() {
     const mount = $('#modelLabHfDetail'); if (!mount) return; const detail = state.modelLab.hfDetail;
     if (!detail) { mount.replaceChildren(textElement('p', 'model-lab-empty', 'Seleziona un repository per vedere i file GGUF.')); return; }
-    const title = textElement('h4', '', detail.repo); const meta = textElement('p', 'muted-copy', `${detail.license || 'licenza non dichiarata'} · revisione ${detail.revision}`); const body = document.createElement('div');
-    const groups = hfSetGroups(detail.files); if (!groups.length) body.append(textElement('p', 'model-lab-empty', 'Nessun file GGUF osservato.'));
-    for (const files of groups) { const bytes = files.reduce((sum, file) => sum + Number(file.sizeBytes || 0), 0); const expected = files[0].path.match(/-\d{5}-of-(\d{5})\.gguf$/iu)?.[1]; const incomplete = expected && Number(expected) !== files.length; const button = document.createElement('button'); button.type = 'button'; button.className = 'secondary-btn compact'; button.disabled = Boolean(incomplete || files.some((file) => !file.sha256)); button.textContent = incomplete ? `Set incompleto · ${files.length}/${expected}` : `Scarica · ${files[0].path.split('/').pop()} · ${formattaByteModelLab(bytes)}`; button.addEventListener('click', async () => { const id = `${detail.repo.replace(/[^a-z0-9_-]/giu, '-')}-${detail.revision.slice(0, 12)}-${files[0].path.replace(/[^a-z0-9]/giu, '-')}`.slice(0, 120); await apiPost('/api/v1/huggingface/download', { id, repo: detail.repo, revision: detail.revision, files: files.map((file) => ({ path: file.path, bytes: file.sizeBytes, sha256: file.sha256 })), bytes, sha256: files[0].sha256, license: detail.license || 'unknown', path: id }); setModelLabSection('downloads'); caricaDownloadModelLab(); }); body.append(textElement('p', 'model-lab-detail-row', `${files.length} file · ${files.map((file) => file.path).join(', ')}`), button); }
-    mount.replaceChildren(title, meta, renderizzaModelCardReadme(detail), body);
+    const card = document.createElement('article'); card.className = 'hf-repo-card';
+
+    const heading = document.createElement('div'); heading.className = 'hf-repo-heading';
+    heading.append(textElement('h4', 'hf-repo-id', detail.repo));
+    const actions = document.createElement('div'); actions.className = 'hf-repo-actions';
+    const openLink = document.createElement('a'); openLink.className = 'secondary-btn compact'; openLink.href = `https://huggingface.co/${detail.repo}`; openLink.target = '_blank'; openLink.rel = 'noopener noreferrer';
+    openLink.append(document.createTextNode('Apri su Hugging Face'), iconaSvgAlbero('i-link'));
+    const copyLink = document.createElement('button'); copyLink.type = 'button'; copyLink.className = 'icon-btn'; copyLink.setAttribute('aria-label', 'Copia link del repository'); copyLink.title = 'Copia link del repository'; copyLink.append(iconaSvgAlbero('i-copy'));
+    copyLink.addEventListener('click', async () => { try { await navigator.clipboard?.writeText(`https://huggingface.co/${detail.repo}`); copyLink.title = 'Link copiato'; window.setTimeout(() => { copyLink.title = 'Copia link del repository'; }, 1800); } catch { copyLink.title = 'Copia non riuscita'; } });
+    actions.append(openLink, copyLink);
+    heading.append(actions);
+
+    const tags = document.createElement('div'); tags.className = 'hf-repo-tags';
+    tags.append(textElement('span', 'hf-tag', detail.license || 'licenza non dichiarata'));
+    tags.append(textElement('span', 'hf-tag', 'GGUF'));
+    if (detail.pipelineTag) tags.append(textElement('span', 'hf-tag', detail.pipelineTag));
+    tags.append(textElement('span', `hf-tag ${detail.gated ? 'hf-tag-gated' : 'hf-tag-public'}`, detail.gated ? 'Gated' : 'Pubblico'));
+
+    const statsParti = [];
+    const downloadLabel = formattaContoModelLab(detail.downloads);
+    if (downloadLabel) statsParti.push(`${downloadLabel} download`);
+    if (Number.isFinite(detail.likes) && detail.likes >= 0) statsParti.push(`${formattaContoModelLab(detail.likes)} ★`);
+    statsParti.push(`revisione ${String(detail.revision || 'main').slice(0, 12)}`);
+    const stats = textElement('p', 'hf-repo-stats', statsParti.join(' · '));
+
+    const variants = document.createElement('div'); variants.className = 'hf-variant-list';
+    const groups = hfSetGroups(detail.files);
+    variants.append(textElement('p', 'hf-variant-list-heading', groups.length > 0 ? `Varianti GGUF osservate · ${groups.length}` : 'Varianti GGUF'));
+    if (!groups.length) variants.append(textElement('p', 'model-lab-empty', 'Nessun file GGUF osservato.'));
+    for (const files of groups) {
+      const bytes = files.reduce((sum, file) => sum + Number(file.sizeBytes || 0), 0);
+      const expected = files[0].path.match(/-\d{5}-of-(\d{5})\.gguf$/iu)?.[1];
+      const incomplete = Boolean(expected && Number(expected) !== files.length);
+      const missingHash = files.some((file) => !file.sha256);
+      const row = document.createElement('article'); row.className = `hf-variant-row${incomplete ? ' is-incomplete' : missingHash ? ' is-unverified' : ' is-ready'}`;
+      const status = document.createElement('span'); status.className = 'hf-variant-status'; status.setAttribute('aria-hidden', 'true');
+      const info = document.createElement('div'); info.className = 'hf-variant-info';
+      info.append(textElement('strong', '', files[0].path.split('/').pop()), textElement('small', '', `${files.length === 1 ? '1 file' : `${files.length} file`} · ${formattaByteModelLab(bytes)}`));
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'secondary-btn compact';
+      button.disabled = incomplete || missingHash;
+      button.textContent = incomplete ? `Set incompleto · ${files.length}/${expected}` : missingHash ? 'Hash non verificato' : 'Scarica';
+      button.addEventListener('click', async () => { const id = `${detail.repo.replace(/[^a-z0-9_-]/giu, '-')}-${detail.revision.slice(0, 12)}-${files[0].path.replace(/[^a-z0-9]/giu, '-')}`.slice(0, 120); await apiPost('/api/v1/huggingface/download', { id, repo: detail.repo, revision: detail.revision, files: files.map((file) => ({ path: file.path, bytes: file.sizeBytes, sha256: file.sha256 })), bytes, sha256: files[0].sha256, license: detail.license || 'unknown', path: id }); setModelLabSection('downloads'); caricaDownloadModelLab(); });
+      row.append(status, info, button);
+      variants.append(row);
+    }
+
+    card.append(heading, tags, stats, renderizzaModelCardReadme(detail), variants);
+    mount.replaceChildren(card);
   }
   function renderizzaHfRisultatiModelLab() { const mount = $('#modelLabHfResults'); if (!mount) return; if (state.modelLab.hfError) { mount.replaceChildren(textElement('p', 'model-lab-empty', state.modelLab.hfError.message)); return; } if (!state.modelLab.hfResults.length) { mount.replaceChildren(textElement('p', 'model-lab-empty', 'Nessun repository GGUF trovato.')); return; } mount.replaceChildren(...state.modelLab.hfResults.map((item) => { const button = document.createElement('button'); button.type = 'button'; button.className = 'model-lab-list-item'; button.append(textElement('strong', '', item.repo), textElement('small', '', `${item.downloads ?? '—'} download · ${item.gated ? 'gated' : 'pubblico'}`)); button.addEventListener('click', async () => { state.modelLab.hfDetail = null; renderizzaHfDetailModelLab(); try { state.modelLab.hfDetail = await apiGet(`/api/v1/huggingface/repo?repo=${encodeURIComponent(item.repo)}&revision=${encodeURIComponent(item.revision || '')}`); } catch (error) { state.modelLab.hfError = error; } renderizzaHfDetailModelLab(); }); return button; })); }
   async function cercaHuggingFaceModelLab() { state.modelLab.hfQuery = $('#modelLabHfSearch')?.value?.trim() || ''; state.modelLab.hfError = null; const status = $('#modelLabHfStatus'); if (status) status.textContent = 'Ricerca in corso…'; try { const data = await apiGet(`/api/v1/huggingface/search?query=${encodeURIComponent(state.modelLab.hfQuery)}&limit=20`); state.modelLab.hfResults = data.items || []; if (status) status.textContent = `${state.modelLab.hfResults.length} repository osservati`; } catch (error) { state.modelLab.hfError = error; state.modelLab.hfResults = []; if (status) status.textContent = 'Ricerca non disponibile'; } renderizzaHfRisultatiModelLab(); }
@@ -10309,18 +10374,11 @@
   }
 
   // P1: dettaglio HF con stato di download agganciato allo stesso pulsante.
-  function renderizzaHfDetailModelLab() {
-    const mount = $('#modelLabHfDetail'); if (!mount) return; const detail = state.modelLab.hfDetail;
-    if (!detail) { mount.replaceChildren(textElement('p', 'model-lab-empty', 'Seleziona un repository per vedere i file GGUF.')); return; }
-    const title = textElement('h4', '', detail.repo); const meta = textElement('p', 'muted-copy', `${detail.license || 'licenza non dichiarata'} · revisione ${detail.revision}`); const body = document.createElement('div');
-    const groups = hfSetGroups(detail.files); if (!groups.length) body.append(textElement('p', 'model-lab-empty', 'Nessun file GGUF osservato.'));
-    for (const files of groups) {
-      const bytes = files.reduce((sum, file) => sum + Number(file.sizeBytes || 0), 0); const expected = files[0].path.match(/-\d{5}-of-(\d{5})\.gguf$/iu)?.[1]; const incomplete = expected && Number(expected) !== files.length; const id = `${detail.repo.replace(/[^a-z0-9_-]/giu, '-')}-${detail.revision.slice(0, 12)}-${files[0].path.replace(/[^a-z0-9]/giu, '-')}`.slice(0, 120); const current = state.modelLab.downloads.find((item) => item.id === id);
-      const wrap = document.createElement('div'); wrap.className = 'model-lab-download-action'; const button = document.createElement('button'); button.type = 'button'; button.className = 'secondary-btn compact'; button.disabled = Boolean(incomplete || files.some((file) => !file.sha256)); button.textContent = incomplete ? `Set incompleto · ${files.length}/${expected}` : (current && !['ready', 'failed', 'cancelled'].includes(current.state) ? `Download ${current.progress ?? 0}%` : `Scarica · ${files[0].path.split('/').pop()} · ${formattaByteModelLab(bytes)}`);
-      if (current && !['ready', 'failed', 'cancelled'].includes(current.state)) { const progress = document.createElement('progress'); progress.max = 100; progress.value = current.progress ?? 0; progress.setAttribute('aria-label', 'Avanzamento download'); wrap.append(progress); }
-      button.addEventListener('click', async () => { button.disabled = true; try { await apiPost('/api/v1/huggingface/download', { id, repo: detail.repo, revision: detail.revision, files: files.map((file) => ({ path: file.path, bytes: file.sizeBytes, sha256: file.sha256 })), bytes, sha256: files[0].sha256, license: detail.license || 'unknown', path: id }); setModelLabSection('downloads'); await caricaDownloadModelLab(); renderizzaHfDetailModelLab(); } catch (error) { button.disabled = false; button.textContent = error.message || 'Download non riuscito'; } });
-      wrap.append(button); body.append(textElement('p', 'model-lab-detail-row', `${files.length} file · ${files.map((file) => file.path).join(', ')}`), wrap);
-    }
-    mount.replaceChildren(title, meta, renderizzaModelCardReadme(detail), body);
-  }
+  /* ⛔⛔⛔ 02/9 — QA visiva dal vivo ha trovato che QUESTA era la
+   * definizione "vincente" (le dichiarazioni di funzione in JS non
+   * fanno errore su un nome duplicato: l'ultima nello stesso scope
+   * sovrascrive le precedenti) — la riscrittura del ridisegno, molto
+   * più in alto nel file, non veniva mai eseguita per davvero. Rimossa:
+   * la versione attiva ora è quella del ridisegno (card `.hf-repo-card`,
+   * stessa logica di download/set-incompleto/hash-mancante inline). */
 })();
