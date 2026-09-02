@@ -191,6 +191,8 @@
        * sempre sul markdown intero visto finora, non su un singolo delta:
        * `.assistant-copy` mostra il RENDER, non è più la fonte del testo. */
       testoGrezzoMessaggi: new Map(),
+      /** ⭐⭐⭐ 02/09 — messageId -> { prefisso, nodiCoda }: quanto testo è già reso in blocchi STABILI e quali nodi DOM sono la coda ancora aperta (vedi renderizzaMarkdownIncrementale). */
+      renderIncrementale: new Map(),
       /** ⭐⭐⭐ 27/8, R1 — messageId(ragionamento) -> {summaryText, detail, grezzo}, la bolla collassabile che ospita il ragionamento in streaming (riusa la stessa forma di appendToolNote, non un componente nuovo). Il testo grezzo si accumula qui per lo stesso motivo di testoGrezzoMessaggi: renderizzaMarkdownSemplice lavora sul totale, non sul delta. */
       ragionamentoBubble: new Map(),
       /** ⛔⛔⛔ 27/8, owner: "ricevo risposte duplicate" — ogni evento.`_sequenza` (assegnato dal server, vedi session-registry.mjs broadcast()) entra qui la PRIMA volta che passa da handleRealEvent; una riconnessione (EventSource nativo dopo una caduta, o runDirectShell che ne apre una fresca) rimanda l'intero buffer da capo, e questo Set lo riconosce e lo scarta invece di duplicare bubble/testo. Sopravvive a un `continua:true` (stessa sessione, nuovo giro) — si azzera SOLO per una sessione davvero diversa. */
@@ -342,7 +344,9 @@
     if (!element || typeof testoGrezzo !== 'string') return false;
     const copia = $('.assistant-copy', element);
     if (!copia) return false;
-    copia.replaceChildren(renderizzaMarkdownSemplice(testoGrezzo));
+    let statoRender = state.realSession.renderIncrementale.get(messageId);
+    if (!statoRender) { statoRender = { prefisso: null, nodiCoda: [] }; state.realSession.renderIncrementale.set(messageId, statoRender); }
+    renderizzaMarkdownIncrementale(copia, statoRender, testoGrezzo);
     scrollStreamingOutput(element);
     return true;
   }
@@ -1030,6 +1034,60 @@
     }
     chiudiParagrafo();
     return frammento;
+  }
+
+  /**
+   * ⭐⭐⭐ 02/09 — rendering INCREMENTALE dello streaming (review complessiva,
+   * misurato: 13.068 caratteri in 162 delta = 1,28 s di main thread, ~8 ms a
+   * frame che crescono col testo, perché renderizzaMarkdownSemplice() rilavora
+   * TUTTO il markdown a ogni frame). Ricerca 02/09 — Hermes TUI/Desktop
+   * (15×/14×), Streamdown, incremark, Textual: solo l'ULTIMO blocco può ancora
+   * cambiare, i blocchi chiusi si analizzano una volta sola.
+   *
+   * In questo renderer un blocco si chiude su una riga vuota FUORI da un
+   * ```fence``` (paragrafo, elenco, titolo e separatore finiscono lì; il fence è
+   * l'unico costrutto che attraversa righe vuote): tagliare il testo
+   * all'ultima riga vuota fuori fence e renderizzare i due pezzi separatamente
+   * produce ESATTAMENTE lo stesso DOM del tutto-insieme. Il DOM resta piatto
+   * (nessun wrapper: `.assistant-copy > :last-child` e `::after` continuano a
+   * valere): si rimuovono solo i nodi della coda precedente e si appendono i
+   * nuovi; i nodi stabili non si toccano più. Se il testo cambia all'indietro
+   * (non è più un prefisso di ciò che era) si riparte da zero: il comportamento
+   * di sempre, mai un DOM incoerente.
+   */
+  function confineBlocchiStabili(testo) {
+    const righe = testo.split('\n');
+    let dentroFence = false;
+    let offset = 0;
+    let confine = 0;
+    for (let r = 0; r < righe.length - 1; r += 1) { // l'ultima riga è sempre coda
+      const riga = righe[r];
+      if (/^```/.test(riga.trim())) dentroFence = !dentroFence;
+      offset += riga.length + 1;
+      if (!dentroFence && riga.trim() === '') confine = offset;
+    }
+    return confine;
+  }
+
+  function renderizzaMarkdownIncrementale(contenitore, statoRender, testoGrezzo) {
+    const testo = String(testoGrezzo ?? '');
+    const confine = confineBlocchiStabili(testo);
+    const stabile = testo.slice(0, confine);
+    if (statoRender.prefisso === null || !stabile.startsWith(statoRender.prefisso)) {
+      contenitore.replaceChildren(renderizzaMarkdownSemplice(stabile));
+      statoRender.prefisso = stabile;
+      statoRender.nodiCoda = [];
+    } else {
+      for (const nodo of statoRender.nodiCoda) nodo.remove();
+      statoRender.nodiCoda = [];
+      if (stabile.length > statoRender.prefisso.length) {
+        contenitore.appendChild(renderizzaMarkdownSemplice(stabile.slice(statoRender.prefisso.length)));
+        statoRender.prefisso = stabile;
+      }
+    }
+    const coda = renderizzaMarkdownSemplice(testo.slice(confine));
+    statoRender.nodiCoda = [...coda.childNodes];
+    contenitore.appendChild(coda);
   }
 
   function boardErrorMessage(error) {
@@ -6838,7 +6896,7 @@
         const bubble = appendToolNote('Ragionamento', { classeExtra: 'real-reasoning-note', glifo: '💭' });
         bubble.article.hidden = !state.showReasoning;
         bubble.article.setAttribute('aria-hidden', String(!state.showReasoning));
-        state.realSession.ragionamentoBubble.set(evento.messageId, { ...bubble, grezzo: '' });
+        state.realSession.ragionamentoBubble.set(evento.messageId, { ...bubble, grezzo: '', renderStato: { prefisso: null, nodiCoda: [] } });
         break;
       }
       case 'ReasoningMessageContent': {
@@ -6846,7 +6904,7 @@
         if (!voce) break; // difensivo: un Content senza il suo Start non deve far crashare la sessione
         voce.grezzo += evento.delta;
         if (!state.realSession.deferHistoricalRendering) {
-          voce.detail.replaceChildren(renderizzaMarkdownSemplice(voce.grezzo));
+          renderizzaMarkdownIncrementale(voce.detail, voce.renderStato, voce.grezzo);
           if (state.showReasoning) scrollStreamingOutput(voce.article);
         }
         break;
@@ -6854,7 +6912,7 @@
       case 'ReasoningMessageEnd': {
         const voce = state.realSession.ragionamentoBubble.get(evento.messageId);
         if (voce && state.realSession.deferHistoricalRendering) {
-          voce.detail.replaceChildren(renderizzaMarkdownSemplice(voce.grezzo));
+          renderizzaMarkdownIncrementale(voce.detail, voce.renderStato, voce.grezzo);
         }
         state.realSession.ragionamentoBubble.delete(evento.messageId); // la bolla resta a schermo, solo non si aggiorna più
         mostraAttesaRisposta('preparing');
@@ -7263,6 +7321,7 @@
       state.realSession.previewWorkspaceName = null;
       state.realSession.sequenzeViste = new Set();
       state.realSession.testoGrezzoMessaggi = new Map();
+      state.realSession.renderIncrementale = new Map();
       state.realSession.ragionamentoBubble = new Map();
       state.realSession.followUpBubbleInAttesa = false;
       state.realSession.redirectPendingId = null;

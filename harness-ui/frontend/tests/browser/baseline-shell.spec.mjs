@@ -1784,3 +1784,63 @@ test('DESKTOP-SETTINGS-PERSISTENCE-01 — i controlli di aspetto producono stato
   await expect(page.locator('html')).toHaveAttribute('data-talos-message-style', 'bubbles');
   await expect(page.locator('html')).toHaveClass(/immersive-header/);
 });
+
+/*
+ * ⭐⭐⭐ 02/09 — review complessiva: lo streaming vivo rilavorava TUTTO il
+ * markdown a ogni frame (13k caratteri in 162 delta = 1,28 s di main thread).
+ * Ora i blocchi chiusi (riga vuota fuori fence) si rendono una volta sola e
+ * restano gli STESSI nodi DOM; solo la coda si rifà. Il test prova l'identità
+ * dei nodi, non solo il testo: un renderer che ricrea tutto passerebbe un
+ * controllo sul solo textContent.
+ */
+test('LAG-LIVE-INCREMENTAL-40 — i blocchi già chiusi non vengono ricreati a ogni delta, la coda sì e il testo finale è completo', async ({ page }) => {
+  await page.route('**/api/v1/sessions/lag-live-incremental/events', async (route) => route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }));
+  await page.goto('/');
+  const result = await page.evaluate(async () => {
+    const runtime = window.__talosHarnessUiRuntime;
+    runtime.passaASessione('lag-live-incremental', 'workspace', 'Live', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
+    const generation = runtime.realSessionState.generation;
+    const frame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const mid = 'inc-1';
+    let seq = 31000;
+    const invia = (delta) => runtime.handleRealEvent({ type: 'TextMessageContent', messageId: mid, delta, _sequenza: seq += 1 }, generation);
+
+    invia('Primo paragrafo con **grassetto**.\n\n');
+    await frame();
+    const copia = document.querySelector('.assistant-message:last-child .assistant-copy');
+    const primoNodo = copia?.firstElementChild || null;
+    const primoTag = primoNodo?.tagName || null;
+
+    invia('```js\nconst a = 1;\n\nconst b = 2;\n');   // fence APERTO con una riga vuota dentro: non deve chiudere il blocco
+    await frame();
+    const figliDuranteFence = copia.children.length;
+    const preDuranteFence = copia.querySelector('pre')?.textContent || '';
+
+    invia('```\n\n- uno\n- due\n\n');
+    await frame();
+    const stessoPrimoNodo = copia.firstElementChild === primoNodo;
+    const preFinale = copia.querySelector('pre');
+
+    for (let i = 0; i < 40; i += 1) { invia(`riga ${i} della coda `); await frame(); }
+    const stessoPrimoNodoDopo40 = copia.firstElementChild === primoNodo;
+    const stessoPre = copia.querySelector('pre') === preFinale;
+
+    runtime.handleRealEvent({ type: 'TextMessageEnd', messageId: mid, _sequenza: seq += 1 }, generation);
+    await frame();
+    return {
+      primoTag, figliDuranteFence, preDuranteFence, stessoPrimoNodo, stessoPrimoNodoDopo40, stessoPre,
+      testo: copia.textContent, ul: copia.querySelectorAll('ul').length, strong: copia.querySelectorAll('strong').length,
+      ultimoP: copia.lastElementChild?.textContent || '',
+    };
+  });
+  expect(result.primoTag).toBe('P');
+  expect(result.figliDuranteFence).toBe(2); // il paragrafo stabile + il pre della coda (la riga vuota dentro il fence non ha spezzato niente)
+  expect(result.preDuranteFence).toContain('const b = 2;');
+  expect(result.stessoPrimoNodo).toBe(true);
+  expect(result.stessoPrimoNodoDopo40).toBe(true);
+  expect(result.stessoPre).toBe(true);
+  expect(result.strong).toBe(1);
+  expect(result.ul).toBe(1);
+  expect(result.testo).toContain('riga 39 della coda');
+  expect(result.ultimoP).toContain('riga 0 della coda');
+});
