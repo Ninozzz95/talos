@@ -8994,6 +8994,31 @@
    * stesso principio già in uso per renderSessionsBoard/Board), pronta a
    * comparire appena il ponte verso la sidebar nativa Vue esisterà.
    */
+  /**
+   * ⭐⭐⭐ 02/9 — i cinque stati veri di una sessione, tutti da campi che il
+   * server manda già. Ricerca (vedi il dossier): Claude traccia
+   * Working/Needs Approval/Waiting/Idle, Hermes mostra modello e conteggi,
+   * Codex ha un buco documentato proprio sul MOTIVO del fallimento
+   * (issue #30713) — che noi abbiamo in `ultimoEsito` e non mostravamo.
+   *
+   * ⛔ L'ordine dei controlli è la parte che conta: «in attesa di
+   * approvazione» viene PRIMA di «in corso», perché è lo stato che chiede
+   * qualcosa alla persona ed è quello che non deve annegare fra gli altri.
+   * ⛔ E `interrotta` prima di `conclusa`: una sessione fermata a metà è
+   * chiusa, ma non è finita — dirle uguali sarebbe la bugia che stiamo
+   * togliendo.
+   */
+  function statoSessione(sessione) {
+    if (sessione.inAttesaApprovazione) return { classe: 'attesa', testo: 'in attesa di approvazione' };
+    if (!sessione.conclusa) return { classe: 'vivo', testo: 'in corso · live' };
+    if (sessione.interrotta) return { classe: 'interrotto', testo: 'interrotta' };
+    if (sessione.ultimoEsito === 'errore') return { classe: 'errore', testo: 'conclusa con errore' };
+    if (sessione.ultimoEsito === 'successo') return { classe: 'successo', testo: 'conclusa' };
+    // ⛔ Nessun esito registrato ≠ successo: le sessioni vecchie non lo
+    // hanno, e chiamarle "riuscite" sarebbe inventare un fatto.
+    return { classe: 'ignoto', testo: 'conclusa · esito non registrato' };
+  }
+
   async function aggiornaElencoSessioniReali() {
     const contenitore = contenitoreSessioniReali();
     let elenco;
@@ -9040,13 +9065,55 @@
       const main = document.createElement('span');
       main.className = 'session-main';
       const etichetta = sessione.nome || sessione.taskId; // ⭐ un nome scelto dall'owner vince sempre sul taskId
-      main.append(
-        textElement('strong', '', sessione.forkDa ? `${etichetta} · fork` : etichetta),
-        textElement('small', '', sessione.conclusa ? 'concluso' : 'in corso · live'),
-      );
+      /*
+       * ⭐⭐⭐ 02/9 — la riga diceva solo «concluso» o «in corso»: una
+       * sessione FALLITA e una RIUSCITA si leggevano identiche. Il server
+       * mandava già tutto (`ultimoEsito`, `interrotta`,
+       * `inAttesaApprovazione`, `modello`, `usage`) e la riga ne usava
+       * due campi su otto — il divario con i concorrenti non era di dati,
+       * era di resa (vedi DOSSIER-LISTA-SESSIONI-CONFRONTO-2026-09-02.md).
+       * ⛔ Nessun dato inventato: ogni pezzo qui sotto esiste nella
+       * risposta di `GET /api/v1/sessions`, e ciò che manca non si scrive.
+       */
+      const stato = statoSessione(sessione);
+      const riga = document.createElement('small');
+      riga.className = 'session-stato';
+      riga.dataset.sessionState = stato.classe;
+      riga.append(textElement('span', 'session-stato-punto', ''), textElement('span', '', stato.testo));
+      // ⭐ Il modello, come fa Hermes: è la domanda più frequente su una
+      // sessione vecchia («con quale modello l'avevo fatta?»).
+      /*
+       * ⛔ 02/9 — solo il NOME del modello, senza il prefisso del provider
+       * (google/gemini-3.7-flash -> gemini-3.7-flash): misurato dal
+       * vivo, con il prefisso il nome veniva TRONCATO e i giri finivano
+       * fuori dalla riga. Il provider e' gia' nella scheda della sessione,
+       * qui ruberebbe spazio a un dato che non si vede da nessun'altra
+       * parte. Nessuna informazione persa, solo non ripetuta.
+       */
+      if (sessione.modello) riga.append(textElement('span', 'session-stato-extra', String(sessione.modello).split('/').pop()));
+      /*
+       * ⛔ Token e giri SOLO se il server li ha davvero contati: `usage`
+       * è null per le sessioni registrate prima che il conteggio
+       * esistesse, e lì non si scrive nulla invece di uno zero finto.
+       */
+
+      main.append(textElement('strong', '', sessione.forkDa ? `${etichetta} · fork` : etichetta), riga);
       const meta = document.createElement('span');
       meta.className = 'session-meta';
-      meta.textContent = formattaOraSessione(sessione.avviataAlle);
+      /*
+       * ⛔ 02/9 — i giri vanno QUI, nella colonna destra, non nella riga di
+       * stato: misurato dal vivo, in una sidebar da 292px lo stato + il
+       * modello + i giri si troncavano a «6 g». Un fatto troncato e' peggio
+       * di un fatto assente — sembra un dato, ma non si legge. Questa
+       * colonna ha gia' una riga libera sotto l'ora (grid-template-rows:
+       * auto 1fr), ed e' il posto giusto per un conteggio.
+       * ⛔ Solo se il server li ha davvero contati: `usage` è null sulle
+       * sessioni registrate prima che il conteggio esistesse, e lì non si
+       * scrive nulla invece di uno zero finto.
+       */
+      meta.append(textElement('span', '', formattaOraSessione(sessione.avviataAlle)));
+      const giri = sessione.usage?.giri;
+      if (Number.isFinite(giri) && giri > 0) meta.append(textElement('span', 'session-meta-giri', `${giri} gir${giri === 1 ? 'o' : 'i'}`));
       if (state.sessionSelection.active) {
         const checkLabel = document.createElement('label');
         checkLabel.className = 'session-selection-check';
@@ -11083,6 +11150,8 @@
     // d'apertura del foglio.
     costruisciTrascrizioneMarkdown,
     setSettingsSection,
+    // ⭐ 02/9 — funzione PURA dello stato riga: esposta per provare i cinque stati senza dover avere in casa una sessione per ciascuno.
+    statoSessione,
     renderSettingsRiepiloghi,
     // ⭐ 02/9, Fase 5 punto 4 — la funzione PURA che traduce la risposta di
     // /fit nel verdetto mostrato: esposta per provarla su tutti gli stati

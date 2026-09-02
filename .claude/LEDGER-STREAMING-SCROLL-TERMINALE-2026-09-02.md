@@ -947,3 +947,54 @@ contesto addestrato, retrocompatibilità con header senza il campo nuovo).
 
 **Suite**: backend **1371/1371**, frontend unit 57/57, browser 88 passati
 con i 2 rossi preesistenti invariati.
+
+---
+
+## 02/09 (notte) — Le righe sessione dicono finalmente com'è andata
+
+Gruppo A del `DOSSIER-LISTA-SESSIONI-CONFRONTO-2026-09-02.md`, quello che
+non richiede backend: **il server mandava già tutto e la riga ne usava due
+campi su otto.**
+
+Prima: nome, «concluso»/«in corso», ora. ⛔ Una sessione **fallita** e una
+**riuscita** si leggevano IDENTICHE.
+
+Ora, cinque stati veri, tutti da campi già presenti in
+`GET /api/v1/sessions`:
+
+| stato | da dove | pallino |
+|---|---|---|
+| in attesa di approvazione | `inAttesaApprovazione` | accento, alone |
+| in corso · live | `!conclusa` | accento, **pulsa** |
+| interrotta | `interrotta` | grigio |
+| conclusa con errore | `ultimoEsito === 'errore'` | rosso |
+| conclusa | `ultimoEsito === 'successo'` | verde |
+| conclusa · esito non registrato | nessun esito | vuoto, bordato |
+
+⛔ **L'ordine dei controlli è la parte che conta**: «in attesa di
+approvazione» è il primo, perché è l'unico stato che CHIEDE qualcosa alla
+persona e non deve annegare fra gli altri; «interrotta» precede l'esito,
+perché fermata a metà non è finita. ⛔ E nessun esito registrato **non**
+diventa «successo»: le sessioni vecchie dicono «esito non registrato», che
+è la verità.
+
+Aggiunti anche **modello** (senza il prefisso del provider) e **giri**.
+
+### Tre difetti trovati GUARDANDO il risultato, non il codice
+
+1. **«6 giroi»** — la mia pluralizzazione aggiungeva una lettera invece di
+   cambiarla. ⛔ E il codice esistente, poche righe più su, aveva già la
+   forma giusta (`gir${'o'/'i'}`): la mia era anche incoerente.
+2. **Nome modello troncato**: con il prefisso `google/` la riga non ci
+   stava. Tolto il prefisso — è già nella scheda sessione, qui rubava
+   spazio a un dato che non si vede altrove.
+3. **«6 g»** — con stato + modello + giri sulla stessa riga, i giri si
+   troncavano. ⛔ Un fatto troncato è **peggio** di un fatto assente:
+   sembra un dato ma non si legge. Spostati nella colonna destra, che
+   aveva già una riga libera sotto l'ora.
+
+⭐ Tutti e tre invisibili leggendo il codice: sono usciti dal **testo reso**
+e dallo screenshot ingrandito.
+
+**Suite**: backend **1377/1377** (+6), frontend unit 57/57, browser 88
+passati con i 2 rossi preesistenti invariati.
