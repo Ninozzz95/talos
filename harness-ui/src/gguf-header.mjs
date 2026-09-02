@@ -97,10 +97,58 @@ function positiveSafeInteger(value, label) {
  * un controllo "ci sta?" prima di caricare: meglio dire "forse non ci
  * sta" che far girare un modello che poi va in OOM davvero.
  */
-function estimateWorkingBytes({ fileBytes, blockCount, contextLength, embeddingLength }) {
-  const kvCacheBytes = 2 * blockCount * contextLength * embeddingLength * 2;
-  return fileBytes + kvCacheBytes;
+/**
+ * ⛔⛔⛔ 02/9 (sera) — la versione precedente moltiplicava per
+ * `embeddingLength` INTERO, cioè come se ogni testa di attenzione avesse
+ * la sua coppia K/V. Sulle architetture moderne non è così: la
+ * **grouped-query attention** condivide le teste KV fra più teste di
+ * query, e la cache si riduce dello stesso rapporto. Sul Qwen3 27B
+ * dell'owner la stima usciva **340 GB** contro 15,6 GB liberi — un
+ * verdetto "non compatibile" che non dice niente di utile, perché
+ * sbagliato di un ordine di grandezza.
+ *
+ * ⭐ Ricerca 02/9 — la formula standard è
+ * `2 × strati × teste_KV × head_dim × token × byte_per_valore`
+ * (github.com/ggml-org/llama.cpp discussion #7949,
+ * omrimallis.com/posts/techniques-for-kv-cache-optimization): il `2` sono
+ * K e V, e le teste sono quelle **KV**, non quelle di query. Esempio
+ * citato: Llama 3 ha 8 teste KV contro 64 di query — **8× di cache in
+ * meno**.
+ *
+ * Qui `head_dim = embedding_length / head_count` e la dimensione KV è
+ * `head_count_kv × head_dim`. ⛔ Se il file non dichiara i conteggi delle
+ * teste si ricade sull'`embedding_length` intero: resta una
+ * sovrastima, ma dichiarata — meglio "forse non ci sta" che un OOM vero.
+ */
+function kvBytesPerToken({ blockCount, embeddingLength, headCount, headCountKv }) {
+  const dimensioneKv = (Number.isSafeInteger(headCount) && headCount > 0 && Number.isSafeInteger(headCountKv) && headCountKv > 0)
+    ? (embeddingLength / headCount) * headCountKv
+    : embeddingLength;
+  /*
+   * ⛔ 02/9 — `Math.ceil` non è cosmetico: su un modello reale (il Qwen3 27B
+   * dell'owner) `embedding_length / head_count` NON è esatto e il prodotto
+   * usciva frazionario — 221.866,67 byte per token. `validateHeader` in
+   * `local-runtime-probe.mjs` pretende interi positivi, quindi il file
+   * veniva rifiutato come `MODEL_HEADER_INVALID`: un modello leggibile
+   * dichiarato illeggibile. Si arrotonda PER ECCESSO, nella stessa
+   * direzione conservativa del resto della stima.
+   */
+  return Math.ceil(2 * blockCount * dimensioneKv * 2); // K+V, e 2 byte per valore (fp16)
 }
+
+/**
+ * Stima dichiarata, non misurata: pesi caricati (≈ dimensione del file) +
+ * KV-cache per il numero di token indicato.
+ * ⛔ `contextLength` è quello per cui si vuole la stima: chi chiama passa
+ * il contesto RICHIESTO dal profilo, non quello addestrato. La versione
+ * precedente usava sempre quello addestrato — sul 27B, 262.144 token
+ * invece dei 65.536 richiesti: un fattore 4 di sovrastima sopra a quello
+ * della GQA.
+ */
+function estimateWorkingBytes({ fileBytes, blockCount, contextLength, embeddingLength, headCount, headCountKv }) {
+  return fileBytes + kvBytesPerToken({ blockCount, embeddingLength, headCount, headCountKv }) * contextLength;
+}
+
 
 export async function readGgufHeader(path) {
   if (typeof path !== 'string' || !path) fail('path is required', 'GGUF_HEADER_MISCONFIGURED');
@@ -132,12 +180,26 @@ export async function readGgufHeader(path) {
     const contextLength = positiveSafeInteger(metadata.get(`${architecture}.context_length`), `${architecture}.context_length`);
     const embeddingLength = positiveSafeInteger(metadata.get(`${architecture}.embedding_length`), `${architecture}.embedding_length`);
     const blockCount = positiveSafeInteger(metadata.get(`${architecture}.block_count`), `${architecture}.block_count`);
+    /*
+     * ⛔ I conteggi delle teste sono OPZIONALI, a differenza dei tre
+     * sopra: un file che non li dichiara resta leggibile e si stima con
+     * l'embedding intero (sovrastima dichiarata, vedi kvBytesPerToken).
+     * Per questo NON passano da `positiveSafeInteger`, che lancerebbe.
+     */
+    const numeroInteroOpzionale = (valore) => {
+      const n = typeof valore === 'bigint' ? Number(valore) : valore;
+      return Number.isSafeInteger(n) && n > 0 ? n : undefined;
+    };
+    const headCount = numeroInteroOpzionale(metadata.get(`${architecture}.attention.head_count`));
+    const headCountKv = numeroInteroOpzionale(metadata.get(`${architecture}.attention.head_count_kv`));
 
     return {
       magic,
       version,
       trainedContext: contextLength,
-      estimatedWorkingBytes: estimateWorkingBytes({ fileBytes, blockCount, contextLength, embeddingLength }),
+      /** ⭐ 02/9 — il costo per TOKEN, così chi chiama può stimare sul contesto che gli serve invece che su quello addestrato. */
+      kvCacheBytesPerToken: kvBytesPerToken({ blockCount, embeddingLength, headCount, headCountKv }),
+      estimatedWorkingBytes: estimateWorkingBytes({ fileBytes, blockCount, contextLength, embeddingLength, headCount, headCountKv }),
     };
   } finally {
     await handle.close();
