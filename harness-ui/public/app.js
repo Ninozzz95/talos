@@ -8156,7 +8156,22 @@
       return;
     }
     const contrattoSessione = impostazioniSessione || { modello };
-    if (sessionId === state.realSession.id) { applicaImpostazioniSessione(contrattoSessione); setView('chat'); closePanels(); return; }
+    if (sessionId === state.realSession.id) {
+      applicaImpostazioniSessione(contrattoSessione);
+      setView('chat');
+      closePanels();
+      /* ⛔⛔⛔ 02/9 — owner dal vivo, dopo il fix di mantieniFondoDuranteRipristino:
+       * questo ramo (si riclicca la riga della sessione GIÀ aperta — es.
+       * dopo essere scrollati in su per rileggere qualcosa) non passa da
+       * nuovaGenerazioneSessione/passaASessione per intero, quindi non
+       * chiamava NESSUNO scroll — l'unico posto rimasto dove "clicco una
+       * riga sessione" non portava mai in fondo. Qui il contenuto è già
+       * tutto a schermo (nessun ripristino in corso): istantaneo, non
+       * serve un MutationObserver. */
+      const conversation = $('#conversation');
+      if (conversation) conversation.scrollTop = conversation.scrollHeight;
+      return;
+    }
     const generation = nuovaGenerazioneSessione();
     state.realSession.deferHistoricalRendering = impostazioniSessione?.conclusa === true;
     state.realSession.taskId = taskId;
