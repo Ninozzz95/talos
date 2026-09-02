@@ -3,6 +3,7 @@ import { accessSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import {
   ConfigurationError,
@@ -308,4 +309,31 @@ test('⭐⭐ TALOS_HARNESS_UI_IMMAGINE_MODELLO sovrascrive il default, TALOS_HAR
 test('⛔ AL CONTRARIO — TALOS_HARNESS_UI_IMMAGINE_NATIVA con un valore diverso da "1" resta false, mai un\'interpretazione permissiva', () => {
   const config = loadConfig({ TALOS_HARNESS_UI_IMMAGINE_NATIVA: 'true' }, import.meta.url);
   assert.equal(config.immagine.nativo, false);
+});
+
+/*
+ * ⭐⭐⭐ 02/9 — `cartellaStore` configurabile. Prima era CABLATO in
+ * `server.mjs`: conseguenza misurata, la suite Playwright girava sulle
+ * sessioni VERE dell'owner e lo stesso codice dava 21 rossi a un giro e
+ * 19 al successivo. Ricerca: Codex `CODEX_HOME`, Hermes `HERMES_HOME`,
+ * Claude Code `CLAUDE_CONFIG_DIR` — tutti e tre rendono la cartella di
+ * stato sovrascrivibile proprio per non toccare i dati veri nei test.
+ */
+test('CONFIG-STORE-01 — senza variabile la cartella sessioni resta quella di sempre, accanto a server.mjs', () => {
+  const config = loadConfig({}, new URL('../server.mjs', import.meta.url));
+  assert.equal(config.cartellaStore, fileURLToPath(new URL('../.sessions-store/', import.meta.url)));
+});
+
+test('CONFIG-STORE-02 — TALOS_HARNESS_UI_SESSIONS_DIR sposta la cartella, risolta in assoluto', () => {
+  const cartella = mkdtempSync(join(tmpdir(), 'talos-store-'));
+  try {
+    const config = loadConfig({ TALOS_HARNESS_UI_SESSIONS_DIR: cartella }, new URL('../server.mjs', import.meta.url));
+    assert.equal(config.cartellaStore, cartella);
+    // ⛔ AL CONTRARIO: una stringa vuota o di soli spazi NON è una scelta —
+    // deve ricadere sul default, non produrre una cartella vuota o la cwd.
+    const vuota = loadConfig({ TALOS_HARNESS_UI_SESSIONS_DIR: '   ' }, new URL('../server.mjs', import.meta.url));
+    assert.equal(vuota.cartellaStore, fileURLToPath(new URL('../.sessions-store/', import.meta.url)));
+  } finally {
+    rmSync(cartella, { recursive: true, force: true });
+  }
 });
