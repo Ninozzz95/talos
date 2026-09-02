@@ -123,19 +123,54 @@ il dettaglio completo. File candidati, da ledger prima di ogni modifica:
 - `harness-ui/tests/local-runtime-probe.test.mjs`
 - `mobile/tests/unit/harness/harnessUiFrontend.test.ts`
 
-Da implementare o dichiarare esplicitamente gated/non applicabile:
+⛔⛔⛔ 02/09 — le 7 voci sotto sono state VERIFICATE una per una leggendo il
+codice reale (`harness-ui/public/{index.html,app.js}`, `harness-ui/src/`),
+non presunte. Il Model Lab è molto più avanti di quanto questa sezione (mai
+aggiornata dal 31/8) lasciasse credere:
 
-1. importazione locale `.gguf` con spazio, formato, permessi, progresso e hash;
-2. ricerca/ordinamento/vista dei modelli installati, rinomina, copia percorso e
-   cancellazione confermata;
-3. filtri HF `fits/chat/code/q4/open-licence`, publisher, fascia peso,
-   ordinamento, paginazione e retry;
-4. probe header GGUF, template, contesto, fit e resource ledger mostrati nella
-   UI prima di `load`;
-5. provider configurabili e profili manuali con segreti esclusivamente server-side;
-6. model card completa con Markdown sicuro e immagini remote consentite solo
-   tramite policy/allowlist, senza trasformare HTML non fidato in markup attivo;
-7. modello attivo condiviso con Chat e preferenze persistenti provider-neutral.
+1. ✅ **FATTO** — importazione locale `.gguf`: selettore file, XHR con
+   progresso reale, annulla, validazione estensione/dimensione,
+   sanificazione nome, hash lato server (`POST /api/v1/local-models/import`,
+   `app.js` righe ~1499-1523).
+2. ✅ **FATTO** — ricerca (`modelLabInstalledSearchControl`), rinomina, copia
+   percorso, cancellazione con conferma (`window.confirm`), tutte collegate a
+   route reali (`app.js` righe ~1397-1414).
+3. ⚠️ **PARZIALE** — ordina (download/preferiti/più recenti/aggiornati),
+   filtro per autore, un campo filtri libero (`app.js` riga 1495) — copre
+   l'intento ma non le voci ESATTE `fits/chat/code/q4/open-licence` come
+   controlli dedicati. Paginazione/retry non verificati in questo giro.
+4. ❌ **MANCANTE, causa isolata** — `local-runtime-probe.mjs` esiste GIÀ
+   completo (`inspectModel`/`fit`/`qualify`, esattamente header GGUF +
+   template + contesto + fit + qualificazione con generazione reale) ma
+   **non è mai istanziato in `server.mjs`, nessuna rotta HTTP la espone, il
+   frontend non la chiama mai**. Causa più a monte: il probe richiede una
+   dipendenza `readHeader(path)` (parser del metadata GGUF — magic/version/
+   context/working-memory) che **non esiste ancora da nessuna parte** nel
+   codebase — `hf-direct-transfer.mjs` controlla solo i 4 byte magici
+   `'GGUF'` per validare un import, non legge le metadata key-value. Non è
+   "collegare una rotta": prima serve scrivere un vero parser GGUF (ricerca
+   dello spec ufficiale, formato binario tensor_count/metadata_kv_count/tipi
+   valore) — lavoro nuovo, non wiring.
+5. ⚠️ **PARZIALE** — 7 card provider (OpenRouter/OpenAI/DeepSeek/Anthropic/
+   Gemini/Ollama/HuggingFace) con chiave/indirizzo/timeout, salva/rimuovi
+   chiave — reale. Il "motore" che li rende operativi per la chat locale è
+   esplicitamente e onestamente gated (`disabled`, `data-disabled-reason="Il
+   motore degli altri provider sarà collegato nella fase successiva"`, non
+   un mockup silenzioso).
+6. ❌ **MANCANTE** — il pannello dettaglio catalogo (`modelLabModelDetail`)
+   mostra metadata strutturati (provider/contesto/modalità/parametri/
+   prezzi), non una vera model card con Markdown renderizzato e immagini
+   remote su policy/allowlist. Nessun rendering Markdown trovato nel giro
+   di verifica.
+7. ✅ **FATTO** — `aggiornaPillolaModello()` aggiorna la pillola Chat E
+   `#modelLabActiveModel` dalla STESSA `state.model`, una sola fonte di
+   verità (`app.js` riga 3827).
+
+⇒ **Prossimo passo reale, non ancora iniziato**: un parser GGUF minimo
+(magic/version/metadata KV rilevanti) per sbloccare il punto 4 — ricerca
+dello spec ufficiale PRIMA di scrivere, RED/GREEN con un file `.gguf` reale
+o una fixture binaria costruita a mano, mai un mock che finge la struttura.
+Poi la rotta HTTP + la UI "prima di load" mostrano cosa il probe già sa fare.
 
 Gate: RED per ogni voce, test HTTP/UI, reload, errore e stato gated; E2E reale
 desktop a 1440×900 e 1024×800 con screenshot interi.
