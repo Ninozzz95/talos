@@ -475,7 +475,12 @@ export function parlaDelContesto(messaggio) {
 /** Le cinque, riconosciute da ciò che manca FUORI da me. */
 const LEGITTIME = [
     // 1 — una decisione che è sua.
-    /\b(decid(e|ere|i)|scelta|scegli|il tuo via|solo tu|tocca a te|veto|autorizz|quale prefer|dimmi quale)\b/i,
+    // ⛔ 2026-09-02 — mancava il SOSTANTIVO: «decid(e|ere|i)» copre solo il
+    // verbo (decido/decidere/decidi), non «decisione» — l'italiano usa una
+    // radice diversa per il nome (decis-) rispetto al verbo (decid-), e la
+    // forma più naturale per dichiarare questa fermata («è una decisione
+    // tua») non passava mai. Trovato bloccando una mia fermata vera.
+    /\b(decid(e|ere|i)|decision[ei]|scelta|scegli|il tuo via|solo tu|tocca a te|veto|autorizz|quale prefer|dimmi quale)\b/i,
     // 2 — costa soldi suoi.
     /\b(cost[ai]|a pagamento|soldi|credit|spesa|traffico|abbonament)\b/i,
     // 3 — distruttivo o esce fuori.
