@@ -639,3 +639,59 @@ dimensione dalle impostazioni. Misurato accanto alla sua etichetta
 (`.run-activity-label`, 11px): altezza **0,52×** la riga di testo, centri
 allineati entro 1,5 px — prima il loader era **più alto** della riga che
 accompagna.
+
+### ⛔⛔⛔ CORREZIONE — la suite browser NON è un cancello: gira sul 4174 VIVO
+
+Poco dopo aver scritto qui sopra «da 20 rossi / 70 verdi a 6 rossi / 84
+verdi», lo stop-hook ha chiesto la verifica che morde. Rifacendola è
+saltato fuori che **quel numero non valeva niente**, e con esso la mia
+affermazione: la stessa suite, lanciata **due volte di fila sullo stesso
+identico codice**, ha dato **21 rossi** e poi **19 rossi**, con insiemi
+diversi (RUN-REDIRECT-05 e RUN-REDIRECT-STOP-RACE-16 rossi solo al primo
+giro; «il ragionamento resta nascosto…» rosso solo al secondo).
+
+Causa, letta in `frontend/playwright.config.mjs`: non c'è nessun blocco
+`webServer`, e `baseURL` punta a **`http://127.0.0.1:4174/`** — il server
+di lavoro dell'owner, con le sue sessioni vere in `.sessions-store/`.
+Nessuna istanza fresca, nessun azzeramento fra un giro e l'altro. Le mie
+stesse sonde CDP avevano creato ~20 sessioni reali durante il lavoro:
+l'esito dipende da quante sessioni ci sono e da quale si apre da sola
+all'avvio. ⇒ **20 → 6 → 18 → 21 → 19 rossi erano rumore di stato, non il
+mio codice.** Ritirata l'affermazione, qui e verso l'owner.
+
+⭐ È esattamente la prima delle cinque pratiche di Fable
+([[cinque-pratiche-osservate-in-fable-02-settembre]]): *misurare su
+un'istanza isolata, mai su quella in uso*. L'avevo scritta in memoria
+poche ore prima e non l'ho applicata al mio stesso lavoro.
+
+**Cosa resta valido, e perché** (misure hermetiche o dirette, non conteggi
+di una suite condivisa):
+
+- Backend `node --test`: **1345/1345** — nessun server condiviso.
+- Frontend unit `run-node-tests.mjs`: **57/57** — idem.
+- I test di ciò che ho toccato, **stabili su tre giri consecutivi**:
+  `WAITING-LOADER-MOTION-01`, `WAITING-LOADER-REDUCED-MOTION-01`,
+  `LAG-LIVE-TEXT-37` (il test diretto del resume/differimento),
+  `LAG-REPLAY-TREE-31` — verdi tutte e tre le volte.
+- Le misure **dirette** dal vivo, che non passano dalla suite:
+  `primoDelta → primoPixel` 7877 ms → 4-5 ms, `defer` bloccato a `true`
+  → `false`, `stroke-dashoffset` 84,6 → 5,1 px, zero campioni con
+  schermo vuoto.
+- **A/B contro il baseline pulito `4910b4a5`** (scambiando `app.js` e
+  `styles.css` con quelli di quel commit e rilanciando lo stesso
+  sottoinsieme, di seguito): `LAG-REPLAY-TEXT-32`, `LAG-REPLAY-PACED-35`,
+  `LAG-REPLAY-REASONING-36`, `REASONING-INDICATOR-01`, `REDUCED-MOTION-02`
+  falliscono **identiche** anche senza nessuna mia modifica ⇒ non sono
+  mie. Nessuna regressione attribuibile a questo lavoro.
+- `@visual 24-scenario visual matrix`: rosso per uno *strict mode
+  violation* di Playwright (`.tool-batch-summary` trova 3 elementi, manca
+  un `.first()`), niente a che vedere con il loader — letto nel messaggio
+  d'errore vero, non dedotto dal nome.
+
+🔜 **Debito aperto, decide l'owner**: la suite browser va resa ermetica
+(un `webServer` Playwright su una porta e uno store propri, oppure
+`cartellaStore` configurabile da ambiente — oggi è cablato in
+`server.mjs:170` su `.sessions-store/` accanto al file, senza override).
+Finché resta così, **il suo conteggio non può essere citato come prova**
+né in un commit né in un rapporto: valgono i test hermetici, le misure
+dirette e l'A/B contro un baseline nello stesso momento.
