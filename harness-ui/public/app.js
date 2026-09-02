@@ -114,6 +114,8 @@
       catalogError: null,
       runtimeError: null,
       installedError: null,
+      /** ⭐ Fase 5 punto 4 — esito di `GET /api/v1/local-models/:id/fit` per modello, id -> { stato, ... } o { errore }. Vuota finché la persona non chiede la verifica: `/fit` legge l'header GGUF e misura la macchina, non si fa da soli su ogni riga a ogni render. */
+      fit: new Map(),
       runtimeSessionId: null,
       runtimeEventSource: null,
       runtimeBlocks: new Map(),
@@ -1936,27 +1938,122 @@
     }
   }
 
-  function renderizzaModelliLocaliModelLab() {
-    const mount = $('#modelLabInstalledList');
-    if (!mount) return;
-    if (state.modelLab.installedError) {
-      mount.replaceChildren(textElement('p', 'model-lab-empty', `Modelli locali non disponibili: ${state.modelLab.installedError.message}`));
-      return;
+  /*
+   * ⛔⛔⛔ 02/9 — QUI c'era una SECONDA `renderizzaModelliLocaliModelLab`,
+   * più vecchia e più povera (nessun filtro di ricerca, nessuna azione
+   * rinomina/copia/elimina, mostrava `model.id` invece del nome scelto).
+   * In JS fra due dichiarazioni omonime nello stesso scope vince
+   * l'ULTIMA: girava già quella più sotto, e questa era codice morto —
+   * ma leggibile, quindi capace di far credere a chi legge (e a un test)
+   * che il pannello Installati fosse quello scarno.
+   * ⛔ È la STESSA classe di difetto già trovata oggi con
+   * `renderizzaHfDetailModelLab`: due copie della stessa funzione in
+   * questo file, una che ombreggia l'altra in silenzio. L'ha scoperta un
+   * test nuovo che cercava «la» funzione e ha trovato la prima.
+   * La versione viva, unica, è più sotto.
+   */
+
+  /*
+   * ⭐⭐⭐ 02/9 — Fase 5, punto 4: la UI "PRIMA DI LOAD". Il backend
+   * (`/fit`, `/qualify` — scritti il 02/09) sapeva già rispondere, ma
+   * nessuno lo chiedeva: la lista Installati mostrava dimensione e
+   * licenza e taceva sulla domanda che conta, «questo modello girerà su
+   * QUESTA macchina?».
+   *
+   * ⭐ Ricerca 02/9 (aimultiple.com/self-hosted-llm,
+   * tech-insider.org/lm-studio-vs-ollama-2026, localllm.in): la scala
+   * standard è **Fits ≤90% dell'usabile · Tight nell'ultimo 10% · Won't
+   * fit sopra**. E c'è un buco dichiarato nei due concorrenti diretti:
+   * «neither currently implements a prominent "will not fit" warning UI
+   * before model loading» — LM Studio può crashare senza avviso, Ollama
+   * scivola in silenzio su CPU (misurato fino a **30× più lento**, e può
+   * bloccare la macchina). Avvisare PRIMA è quindi un vantaggio reale,
+   * non un abbellimento.
+   *
+   * ⛔ `tight` NON arriva dal server: è derivato qui dai byte che il
+   * server ha già misurato (richiesti vs disponibili). Non è un dato
+   * inventato — è una soglia dichiarata, applicata a numeri veri, e si
+   * mostra solo quando entrambi i numeri esistono davvero.
+   */
+  const SOGLIA_TIGHT = 0.9;
+  const VERDETTI_FIT = {
+    compatible: { etichetta: 'Compatibile', classe: 'ok' },
+    tight: { etichetta: 'Al limite', classe: 'warn' },
+    'chat-only': { etichetta: 'Solo chat', classe: 'warn' },
+    blocked: { etichetta: 'Non compatibile', classe: 'bad' },
+    unknown: { etichetta: 'Non determinabile', classe: 'unknown' },
+  };
+  /** Il perché, in italiano piano: mai il codice grezzo del server a schermo. */
+  const MOTIVI_FIT = {
+    fits: 'memoria, spazio e contesto sono sufficienti',
+    storage: 'non c\'è abbastanza spazio su disco',
+    memory: 'non c\'è abbastanza memoria libera',
+    context: 'il contesto del modello è più corto di quello richiesto dal profilo',
+    capabilities: 'non è stato possibile osservare le capacità del modello',
+    template: 'il template non dichiara gli attrezzi: può conversare, non lavorare come agente',
+    measurement: 'la macchina non è stata misurata',
+  };
+  /**
+   * Deriva il verdetto mostrato. ⛔ Alza `compatible` a `tight` SOLO se
+   * entrambi i byte sono numeri veri: con `availableBytes: null` (che il
+   * server restituisce quando non ha potuto misurare) non si inventa una
+   * percentuale, si lascia `compatible`.
+   */
+  function verdettoFit(esito) {
+    if (esito.state !== 'compatible') return esito.state;
+    for (const parte of [esito.memory, esito.storage]) {
+      const richiesti = parte?.requiredBytes;
+      const disponibili = parte?.availableBytes;
+      if (Number.isFinite(richiesti) && Number.isFinite(disponibili) && disponibili > 0 && richiesti > disponibili * SOGLIA_TIGHT) return 'tight';
     }
-    if (state.modelLab.installed.length === 0) {
-      mount.replaceChildren(textElement('p', 'model-lab-empty', 'Nessun modello locale osservabile.'));
-      return;
+    return 'compatible';
+  }
+  function descriviFit(esito) {
+    const verdetto = verdettoFit(esito);
+    const voce = VERDETTI_FIT[verdetto] || VERDETTI_FIT.unknown;
+    const motivo = verdetto === 'tight'
+      ? `entra, ma sopra il ${Math.round(SOGLIA_TIGHT * 100)}% di ciò che è libero: sotto carico può non bastare`
+      : (MOTIVI_FIT[esito.reason] || esito.reason || 'motivo non dichiarato');
+    return { verdetto, classe: voce.classe, testo: `${voce.etichetta} — ${motivo}` };
+  }
+  function nodoVerdettoFit(modelId) {
+    const voce = state.modelLab.fit.get(modelId);
+    const nodo = document.createElement('p');
+    nodo.className = 'model-lab-fit';
+    nodo.dataset.modelFit = modelId;
+    if (!voce) { nodo.hidden = true; return nodo; }
+    if (voce.inCorso) { nodo.dataset.fitState = 'attesa'; nodo.textContent = 'Verifica in corso…'; return nodo; }
+    if (voce.errore) {
+      nodo.dataset.fitState = 'bad';
+      // ⛔ L'errore VERO del server, non un "non compatibile" generico: non
+      // sapere se un modello gira è diverso dal sapere che non gira.
+      nodo.textContent = `Verifica non riuscita — ${voce.errore}`;
+      return nodo;
     }
-    mount.replaceChildren(...state.modelLab.installed.map((model) => {
-      const row = document.createElement('article');
-      row.className = 'model-lab-installed-item';
-      row.append(
-        textElement('strong', '', model.id),
-        textElement('span', '', `${model.state} · ${model.license || 'licenza non dichiarata'} · ${formattaByteModelLab(model.bytes)}`),
-        textElement('small', '', `${model.repo || 'origine non dichiarata'} · sha256 ${String(model.sha256 || '').slice(0, 12) || 'non dichiarato'}`),
-      );
-      return row;
-    }));
+    const { classe, testo } = descriviFit(voce.esito);
+    nodo.dataset.fitState = classe;
+    nodo.textContent = testo;
+    const ctx = voce.esito.context;
+    if (Number.isFinite(ctx?.availableTokens) && Number.isFinite(ctx?.requestedTokens)) {
+      nodo.append(textElement('small', '', ` contesto ${ctx.availableTokens.toLocaleString('it-IT')} token su ${ctx.requestedTokens.toLocaleString('it-IT')} richiesti`));
+    }
+    return nodo;
+  }
+  async function verificaCompatibilitaModello(modelId) {
+    state.modelLab.fit.set(modelId, { inCorso: true });
+    aggiornaNodoFit(modelId);
+    try {
+      const esito = await apiGet(`/api/v1/local-models/${encodeURIComponent(modelId)}/fit`);
+      state.modelLab.fit.set(modelId, { esito });
+    } catch (error) {
+      state.modelLab.fit.set(modelId, { errore: error.message || 'errore non dichiarato' });
+    }
+    aggiornaNodoFit(modelId);
+  }
+  /** Sostituisce SOLO la riga toccata: un re-render dell'intera lista perderebbe il fuoco e la ricerca in corso. */
+  function aggiornaNodoFit(modelId) {
+    const vecchio = $(`[data-model-fit="${CSS.escape(modelId)}"]`);
+    if (vecchio) vecchio.replaceWith(nodoVerdettoFit(modelId));
   }
 
   // P1 Model Lab: lista installati con ricerca e azioni reali.
@@ -1977,7 +2074,17 @@
       copy.addEventListener('click', async () => { try { await navigator.clipboard?.writeText(model.path || ''); copy.textContent = 'Percorso copiato'; window.setTimeout(() => { copy.textContent = 'Copia percorso'; }, 1800); } catch { copy.textContent = 'Copia non riuscita'; } });
       const remove = document.createElement('button'); remove.className = 'secondary-btn compact danger'; remove.type = 'button'; remove.textContent = 'Elimina';
       remove.addEventListener('click', async () => { if (!window.confirm(`Eliminare ${model.name || model.id}?`)) return; try { await apiPost(`/api/v1/local-models/${encodeURIComponent(model.id)}/delete`, {}); await caricaModelliLocaliModelLab(); } catch (error) { window.alert(error.message || 'Eliminazione non riuscita.'); } });
-      actions.append(rename, copy, remove); row.append(actions); return row;
+      /*
+       * ⭐ Fase 5 punto 4 — "girerà su QUESTA macchina?", chiesto PRIMA di
+       * caricare. Non parte da solo a ogni render: `/fit` legge l'header
+       * GGUF dal disco e misura la macchina, farlo per ogni riga a ogni
+       * ridisegno sarebbe lavoro vero speso senza che nessuno l'abbia
+       * chiesto. È un gesto esplicito, e resta in memoria per la sessione.
+       */
+      const verifica = document.createElement('button');
+      verifica.className = 'secondary-btn compact'; verifica.type = 'button'; verifica.textContent = 'Verifica compatibilità';
+      verifica.addEventListener('click', () => { void verificaCompatibilitaModello(model.id); });
+      actions.append(rename, copy, verifica, remove); row.append(actions, nodoVerdettoFit(model.id)); return row;
     }));
   }
 
@@ -10977,6 +11084,12 @@
     costruisciTrascrizioneMarkdown,
     setSettingsSection,
     renderSettingsRiepiloghi,
+    // ⭐ 02/9, Fase 5 punto 4 — la funzione PURA che traduce la risposta di
+    // /fit nel verdetto mostrato: esposta per provarla su tutti gli stati
+    // senza dover avere in casa un modello per ciascuno (stesso schema già
+    // in uso qui sopra — internals reali, mai un secondo contratto).
+    descriviFit,
+    verificaCompatibilitaModello,
     // ⭐ 28/8 — auto-rinomina dal primo messaggio: la funzione pura si espone per provare la sua logica (spazi/trim/tetto) senza dover avviare una sessione vera.
     titoloDalPrimoMessaggio,
     // ⭐ 28/8 — Terminale REALE (LEDGER-TERMINALE-REALE.md): esposte per i test dedicati, stesso principio di sopra — internals reali, non un secondo contratto.
