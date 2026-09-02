@@ -47,6 +47,16 @@ const STATIC_ASSETS = Object.freeze({
   '/vendor/xterm/addon-fit.js': { file: 'vendor/xterm/addon-fit.js', contentType: 'text/javascript; charset=utf-8' },
   /** ⭐ 28/8 — renderer WebGL: la vista Terminale ha bisogno di questo per i colori ANSI, vedi il commento in montaTerminaleSeServe() (app.js) e vendor/xterm/README.md per il perché. */
   '/vendor/xterm/addon-webgl.js': { file: 'vendor/xterm/addon-webgl.js', contentType: 'text/javascript; charset=utf-8' },
+  /**
+   * ⭐⭐⭐ 02/9 — formattatore dei blocchi di codice: Prism 1.30.0
+   * vendorizzato (core + 19 linguaggi in un file solo, vedi
+   * `vendor/prism/README.md`), stesso principio di xterm qui sopra — mai
+   * una CDN. ⛔ Questa riga NON è facoltativa: la allowlist è esplicita, e
+   * senza risponderebbe 404 lasciando ogni blocco senza evidenziazione —
+   * esattamente il difetto già pagato con xterm il 28/8, quattro righe più
+   * su, dove è costato una verifica dal vivo per accorgersene.
+   */
+  '/vendor/prism/prism.js': { file: 'vendor/prism/prism.js', contentType: 'text/javascript; charset=utf-8' },
 });
 
 export function createStaticHandler(publicDir, fsAdapter = { readFile }) {

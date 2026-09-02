@@ -667,7 +667,17 @@
       const genitore = nodo.parentElement;
       if (!genitore) continue;
       if (genitore.classList.contains('stream-word')) { restanti -= 1; indice -= 1; continue; }
-      if (genitore.closest('pre, code')) continue;
+      /*
+       * ⛔ 02/9 — trovato ISPEZIONANDO l'HTML prodotto, non cercandolo: la
+       * dissolvenza aveva avvolto anche l'etichetta del linguaggio e il
+       * testo del pulsante Copia dell'intestazione del blocco di codice
+       * (`<span class="code-block-lang"><span class="stream-word">Python`).
+       * Quelli non sono output del modello: sono cornice dell'interfaccia,
+       * scritti da noi, e non devono comparire in dissolvenza come se il
+       * modello li stesse scrivendo. `pre, code` era già escluso per lo
+       * stesso motivo — mancava la testa del blocco, che prima non esisteva.
+       */
+      if (genitore.closest('pre, code, .code-block-head')) continue;
       const pezzi = nodo.textContent.split(/(\s+)/).filter((p) => p.length > 0);
       if (pezzi.length === 0) continue;
       const nuovi = [];
@@ -1396,6 +1406,88 @@
    * stringa come "<img onerror=...>" nel testo del modello resta testo
    * letterale a schermo, mai eseguito.
    */
+  /*
+   * ⭐⭐⭐ 02/9 — formattatore dei blocchi di codice (owner: "crea un
+   * formattatore di blocco codice, ricerca web dei migliori"). Prima ogni
+   * ```fence``` diventava un `<pre><code>` nudo: nessuna evidenziazione,
+   * nessuna etichetta, nessun modo di copiarlo, e l'identificatore di
+   * linguaggio dopo i backtick veniva addirittura buttato via.
+   *
+   * ⭐ Ricerca web (regola zero): fra i tre affermati, **Prism** è quello
+   * giusto QUI — Shiki evidenzia a build-time/server (pkgpulse.com/guides/
+   * shiki-vs-prismjs-vs-highlightjs-2026), inadatto a un testo che arriva in
+   * streaming nel browser; highlight.js indovina il linguaggio da solo ma
+   * non serve, il fence ce lo DICE già. Prism è il più leggero e si
+   * vendorizza offline. Sul disegno del blocco la ricerca è unanime
+   * (streamdown.ai/docs/code-blocks, mui.com/x/react-chat, reui.io):
+   * intestazione con il linguaggio + pulsante copia con conferma
+   * transitoria, e ⛔ "defer code block rendering until the closing fence
+   * arrives, or show a streaming indicator; copy disabled during
+   * streaming" — che è esattamente il parametro `chiuso` qui sotto.
+   *
+   * ⛔ Il linguaggio si SCRIVE solo se il fence lo dichiara: mai indovinato
+   * (il progetto vieta i fatti inventati), e mai scritto se Prism non
+   * conosce quella grammatica — si mostra il nome dichiarato ma il testo
+   * resta non evidenziato, senza fingere.
+   * ⛔ Finché il fence è APERTO (`chiuso === false`) il blocco è ancora in
+   * arrivo: nessuna evidenziazione (verrebbe rifatta a ogni frame su un
+   * testo che cambia, con sfarfallio e costo inutile) e copia disabilitata
+   * — si copierebbe codice a metà.
+   */
+  const LINGUAGGI_CODICE_ALIAS = {
+    js: 'javascript', jsx: 'jsx', ts: 'typescript', tsx: 'tsx', mjs: 'javascript', cjs: 'javascript',
+    py: 'python', python3: 'python', sh: 'bash', shell: 'bash', zsh: 'bash', console: 'bash',
+    html: 'markup', xml: 'markup', svg: 'markup', vue: 'markup', yml: 'yaml',
+    'c++': 'cpp', 'c#': 'csharp', cs: 'csharp', golang: 'go', rs: 'rust', md: 'markdown',
+  };
+  /** Il nome da mostrare nell'intestazione: quello dichiarato dal modello, non quello interno di Prism. */
+  function etichettaLinguaggio(dichiarato) {
+    const pulito = String(dichiarato || '').trim();
+    if (!pulito) return '';
+    const noti = { js: 'JavaScript', jsx: 'JSX', ts: 'TypeScript', tsx: 'TSX', javascript: 'JavaScript', typescript: 'TypeScript', py: 'Python', python: 'Python', sh: 'Bash', bash: 'Bash', shell: 'Shell', json: 'JSON', yaml: 'YAML', yml: 'YAML', sql: 'SQL', html: 'HTML', xml: 'XML', css: 'CSS', rust: 'Rust', go: 'Go', java: 'Java', c: 'C', cpp: 'C++', 'c++': 'C++', csharp: 'C#', 'c#': 'C#', markdown: 'Markdown', md: 'Markdown', vue: 'Vue' };
+    return noti[pulito.toLowerCase()] || pulito;
+  }
+  function costruisciBloccoCodice(testoCodice, linguaggioDichiarato, chiuso) {
+    const blocco = document.createElement('div');
+    blocco.className = 'code-block';
+    if (!chiuso) blocco.classList.add('code-block-in-arrivo');
+    const etichetta = etichettaLinguaggio(linguaggioDichiarato);
+    const intestazione = document.createElement('div');
+    intestazione.className = 'code-block-head';
+    intestazione.append(textElement('span', 'code-block-lang', etichetta || 'testo'));
+    const copia = document.createElement('button');
+    copia.type = 'button';
+    copia.className = 'code-block-copy';
+    copia.textContent = chiuso ? 'Copia' : 'In arrivo…';
+    copia.disabled = !chiuso;
+    if (chiuso) {
+      copia.addEventListener('click', async () => {
+        await copyText(testoCodice, 'Codice copiato');
+        copia.textContent = 'Copiato';
+        copia.classList.add('is-fatto');
+        window.setTimeout(() => { copia.textContent = 'Copia'; copia.classList.remove('is-fatto'); }, 1800);
+      });
+    }
+    intestazione.append(copia);
+    const pre = document.createElement('pre');
+    const code = textElement('code', '', testoCodice);
+    const chiave = LINGUAGGI_CODICE_ALIAS[String(linguaggioDichiarato || '').toLowerCase()] || String(linguaggioDichiarato || '').toLowerCase();
+    const grammatica = chiuso && chiave && window.Prism?.languages?.[chiave];
+    if (grammatica) {
+      code.className = `language-${chiave}`;
+      try {
+        // `highlightElement` va bene, ma passa da un hook globale e da
+        // `Prism.plugins`: qui basta la funzione pura, più prevedibile.
+        code.innerHTML = window.Prism.highlight(testoCodice, grammatica, chiave);
+      } catch {
+        code.textContent = testoCodice; // ⛔ una grammatica che lancia non deve mangiarsi il codice: si torna al testo nudo
+      }
+    }
+    pre.appendChild(code);
+    blocco.append(intestazione, pre);
+    return blocco;
+  }
+
   function renderizzaMarkdownSemplice(testoGrezzo) {
     const frammento = document.createDocumentFragment();
     const testo = String(testoGrezzo ?? '');
@@ -1441,12 +1533,15 @@
 
       if (fenceMatch) {
         chiudiParagrafo();
+        // ⭐ 02/9 — l'identificatore di linguaggio dopo i backtick di apertura
+        // (```python) veniva SCARTATO: era l'unico posto dove il modello ci dice
+        // di che linguaggio si tratta, e lo buttavamo via.
+        const linguaggioDichiarato = riga.trim().slice(3).trim().split(/\s+/)[0] || '';
         const righeCodice = [];
         i += 1;
         while (i < righe.length && !/^```/.test(righe[i].trim())) { righeCodice.push(righe[i]); i += 1; }
-        const pre = document.createElement('pre');
-        pre.appendChild(textElement('code', '', righeCodice.join('\n')));
-        frammento.appendChild(pre);
+        const chiuso = i < righe.length; // il fence ha trovato la sua riga di chiusura
+        frammento.appendChild(costruisciBloccoCodice(righeCodice.join('\n'), linguaggioDichiarato, chiuso));
         i += 1; // salta la riga di chiusura ```
         continue;
       }

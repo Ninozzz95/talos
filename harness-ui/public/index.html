@@ -408,6 +408,10 @@
   <script src="vendor/xterm/xterm.js"></script>
   <script src="vendor/xterm/addon-fit.js"></script>
   <script src="vendor/xterm/addon-webgl.js"></script>
+  <!-- Evidenziazione dei blocchi di codice — Prism 1.30.0 vendorizzato (core + 19
+       linguaggi in un file solo), PRIMA di app.js: si attacca a window.Prism.
+       Stesso principio di xterm qui sopra — nessun CDN, asset statico committato. -->
+  <script src="vendor/prism/prism.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
