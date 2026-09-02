@@ -50,6 +50,57 @@
   toccare xterm — il cursore potrebbe essere lo stesso tipo di difetto
   già trovato lì (evento sintetico incompleto) o uno nuovo.
 
+## ⛔⛔⛔ Registrato mentre indagavo sopra — DUE bug distinti, più gravi (correttezza, non cosmesi)
+
+> Owner, dal vivo, trascritto letterale di una sessione TALOS reale
+> (`google/gemini-3.7-flash`) mentre lavoravo sul fix sopra:
+>
+> **Turno 1** — "Create a new file named r2r3-proof.txt in this
+> workspace with the text hello." → risposta del modello: *"Non è
+> possibile creare o modificare file: l'ambiente è attualmente
+> configurato in modalità sola lettura (read-only), quindi le
+> operazioni di scrittura su disco non sono consentite."*
+>
+> **Turno 2** — "say hi" → **errore**, non una risposta:
+> `[internal-error] HTTP 400 dopo 4 tentativi:
+> {"error":{"message":"talos-test/modello-inesistente-r2r3 is not a
+> valid model ID","code":400},"user_id":"user_3FG1j8kmjWdYSixNglpxJIZn4RO"}`
+>
+> Owner, subito dopo: **"l'ambiente non era in sola lettura"** — cioè
+> il turno 1 ha mentito: il permesso NON era read-only per davvero.
+
+### Perché sono gravi
+
+1. **Falso "read-only"**: un modello che rifiuta di scrivere per un
+   motivo dichiarato FALSO viola direttamente la disciplina di onestà
+   di questo progetto (REGOLA ZERO) — non è "il modello ha sbagliato",
+   è che lo STATO che gli è stato passato/letto era sbagliato. Sospetti
+   da verificare, non presunti: risoluzione del permesso di sessione
+   (`Workspace write`/`Full access`/`On request`), un default che non
+   combacia con la selezione reale, o l'attrezzo `scrivi` che legge un
+   flag stantio.
+2. **ID modello di TEST in una sessione REALE**:
+   `talos-test/modello-inesistente-r2r3` ha un prefisso `talos-test/`
+   che grida "sentinella di test" — un valore che dovrebbe esistere
+   SOLO dentro una suite `node --test`/vitest per provare il percorso
+   di errore su un ID inesistente, non nella risoluzione modello di una
+   sessione vera con un modello vero selezionato (`google/gemini-3.7-flash`,
+   turno 1). Se un fixture di test sta contaminando la risoluzione
+   modello in produzione, è un buco potenzialmente serio — stato
+   condiviso fra test e server vivo, o una costante hardcoded con un
+   fallback sbagliato. Non diagnosticato ancora: da cercare
+   `talos-test/modello-inesistente-r2r3` letteralmente nel codice
+   (sorgente Y test) per capire da dove esce E perché finisce in una
+   sessione reale.
+
+### Stato
+
+🔜 Registrati, NON ancora diagnosticati — prossimo passo di questa
+sessione dopo aver chiuso scroll/dissolvenza (fase già in corso,
+quasi finita quando questi due sono arrivati).
+
 ## Stato
 
-🔜 Aperto, appena registrato. Indagine in corso nella stessa sessione.
+🔜 Aperto. Scroll/dissolvenza: diagnosi completa (vedi sopra),
+implementazione in corso. Cursore terminale: non ancora guardato dal
+vivo. I due bug di correttezza appena sopra: non ancora aperti.
