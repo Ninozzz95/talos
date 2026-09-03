@@ -13,6 +13,7 @@ import { isAbsolute } from 'node:path';
 import { createParser } from 'eventsource-parser';
 import { eseguiFlowForgeLocale, FORGE_PREFISSO_NOME_TOOL, validaManifestForgeLocale } from './forge-contract.mjs';
 import { parseRuntimeOwnerSnapshot } from './runtime-owner-contract.mjs';
+import { risolviDestinazioneModello } from './model-destination.mjs';
 
 const ENDPOINT_OPENROUTER = 'https://openrouter.ai/api/v1/chat/completions';
 const RICHIESTA_DI_RIASSUNTO = 'Riassumi la conversazione mantenendo decisioni, file e risultati utili al lavoro.';
@@ -444,11 +445,98 @@ export function creaFetchOpenRouterResiliente(fetchDiRete = fetch, {
 /**
  * @param {{modulePath?:string|null, importFn?:Function}} [options]
  */
+
+/**
+ * ⭐⭐⭐ 03/9 — I MODELLI DI OGNI PROVIDER, FATTI GIRARE DAVVERO.
+ *
+ * Owner: «se non riesco ad aggiungere più provider oltre a OpenRouter e
+ * soprattutto usare i modelli locali, l'applicazione è spacciata». E, sulla
+ * mia risposta precedente: «non è un limite quello che mi hai detto tu, è un
+ * finto limite». Aveva ragione.
+ *
+ * ## Perché QUI e non nel kernel
+ *
+ * Il kernel ha UNA riga cablata su OpenRouter — misurato: riga 406 della copia
+ * che il desktop carica, 392 di quella mobile. Ma prende `fetchDiRete` come
+ * dipendenza, e questo adattatore gliela costruisce già a strati
+ * (`creaFetchConDescrizioneComando` → `creaFetchOpenRouterResiliente`).
+ *
+ * ⇒ Il varco giusto era già lì. Il kernel dice «fai un completamento per il
+ * modello X»; DOVE vive X è una decisione del trasporto, non sua. Così:
+ *  · zero righe modificate nei kernel — e sono DUE file diversi, 3.203 e
+ *    6.226 righe, in due repository, che divergerebbero al primo tocco;
+ *  · zero collisione con la sessione mobile, che sullo stesso file sta
+ *    lavorando in queste ore;
+ *  · un posto solo da provare, in questo repository.
+ *
+ * ## Cosa fa, esattamente
+ *
+ * Guarda il `model` del corpo uscente. Senza prefisso di fonte non tocca
+ * NIENTE — la richiesta parte come è sempre partita, e nessuna sessione
+ * esistente cambia comportamento. Con un prefisso (`local:`, `ollama:`,
+ * `openai:`, `deepseek:`) riscrive indirizzo e intestazioni, e rimette nel
+ * corpo il nome vero del modello senza prefisso: il provider non deve sapere
+ * niente della nostra convenzione.
+ *
+ * ⛔ Se la fonte non è servibile — chiave mancante, motore locale spento,
+ * provider che vuole un altro formato — NON parte nessuna richiesta: si
+ * solleva l'errore con il motivo vero. Partire e prendersi un 404 farebbe
+ * sembrare rotta una credenziale che è buona.
+ */
+export function creaFetchMultiProvider(fetchDiRete = fetch, { risolvi = risolviDestinazioneModello, dipendenze = null } = {}) {
+  if (!dipendenze) return fetchDiRete;
+  return async function fetchMultiProvider(url, opzioni = {}) {
+    let corpo = null;
+    try {
+      corpo = typeof opzioni.body === 'string' ? JSON.parse(opzioni.body) : null;
+    } catch {
+      corpo = null;
+    }
+    /*
+     * ⛔ Si interviene solo su una richiesta di completamento riconoscibile:
+     * il kernel usa questa stessa fetch anche per la ricerca web e per gli
+     * attrezzi, e dirottare quelle sarebbe un guasto silenzioso.
+     */
+    if (!corpo || typeof corpo.model !== 'string' || !String(url).includes('/chat/completions')) {
+      return fetchDiRete(url, opzioni);
+    }
+    const destinazione = risolvi(corpo.model, dipendenze);
+    if (destinazione.fonte === 'openrouter') return fetchDiRete(url, opzioni);
+    const corpoRiscritto = JSON.stringify({ ...corpo, model: destinazione.modelloRemoto });
+    /*
+     * ⛔ Il motore locale si chiama attraverso il SUO supervisore, non con una
+     * fetch nuda: llama-server parte con `--api-key randomBytes(32)` e quella
+     * chiave vive solo dentro il supervisore (`status()` non la espone,
+     * perché quella risposta arriva al browser). Misurato costruendo l'URL a
+     * mano: HTTP 401 «Invalid API Key» in 4 ms.
+     */
+    if (destinazione.locale) {
+      if (typeof dipendenze.chiamaLocale !== 'function') {
+        const errore = new Error('Il motore locale non è collegato a questo server.');
+        errore.code = 'LOCAL_RUNTIME_NOT_READY';
+        throw errore;
+      }
+      return dipendenze.chiamaLocale(destinazione.percorso, { ...opzioni, headers: { 'Content-Type': 'application/json' }, body: corpoRiscritto });
+    }
+    return fetchDiRete(destinazione.url, {
+      ...opzioni,
+      headers: { ...destinazione.headers },
+      body: corpoRiscritto,
+    });
+  };
+}
+
 export function createOwnerRuntimeAdapter({
   modulePath = process.env.TALOS_OWNER_RUNTIME_MODULE ?? null,
   importFn = (specifier) => import(specifier),
   openRouterRuntimeFn = () => ({ timeoutSeconds: OPENROUTER_IDLE_MS_PREDEFINITO / 1_000 }),
   modelCapabilityFn = async () => null,
+  /**
+   * ⭐ 03/9 — da dove si leggono chiave, indirizzo e motore locale per
+   * instradare un modello non-OpenRouter. ⛔ Assente = comportamento di
+   * sempre, byte per byte: chi non le passa non cambia di una virgola.
+   */
+  destinazioneModelloDeps = null,
 } = {}) {
   const specifier = normalizzaModuloPath(modulePath);
   let moduloPromise = null;
@@ -500,7 +588,15 @@ export function createOwnerRuntimeAdapter({
         modelCapabilityFn,
         userSignal: input?.segnaleStop ?? null,
       });
-      return richiama('talosLavora', { ...input, fetchDiRete: fetchResiliente });
+      /*
+       * ⛔ L'ORDINE conta: il multi-provider sta PIÙ ESTERNO della resilienza
+       * OpenRouter, così le ritentate e i timeout di quella restano applicati
+       * alla richiesta finale, qualunque sia la sua destinazione. Metterlo
+       * dentro avrebbe fatto ritentare su OpenRouter una chiamata già
+       * dirottata altrove.
+       */
+      const fetchInstradata = creaFetchMultiProvider(fetchResiliente, { dipendenze: destinazioneModelloDeps });
+      return richiama('talosLavora', { ...input, fetchDiRete: fetchInstradata });
     },
     async eseguiComandoSandboxato(...args) { return richiama('eseguiComandoSandboxato', ...args); },
     async eseguiFlowForge(...args) {

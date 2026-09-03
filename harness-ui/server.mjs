@@ -70,9 +70,39 @@ async function startServer() {
     leggiRuntime: (provider) => providerStore.getRuntime(provider),
   });
   const modelCatalog = createModelCatalog();
+  /*
+   * ⛔ 03/9 — LEGAME TARDIVO, e non per eleganza: il supervisore di
+   * llama-server viene creato più in basso in questo file (serve il catalogo
+   * modelli), mentre l'adattatore agente nasce qui. Passargli il supervisore
+   * adesso significherebbe passargli `null` per sempre — e i modelli locali
+   * non partirebbero mai, senza un errore da nessuna parte.
+   * ⇒ Si passa una funzione che lo legge QUANDO serve, cioè al momento della
+   * richiesta, quando il motore può anche essere stato acceso nel frattempo.
+   */
+  let supervisoreLocale = null;
+
   const ownerRuntime = createOwnerRuntimeAdapter({
     modulePath: config.ownerRuntimeModule,
     openRouterRuntimeFn: () => providerStore.getRuntime('openrouter'),
+    /*
+     * ⭐⭐⭐ 03/9 — da qui passano i modelli che NON sono di OpenRouter.
+     * La chiave viene dal portachiavi del computer e non tocca mai il
+     * browser; l'indirizzo è quello che la persona ha impostato nella scheda
+     * Provider, cioè lo stesso con cui il pulsante «Prova» l'ha verificato:
+     * instradare con parametri diversi da quelli provati renderebbe la prova
+     * una bugia.
+     */
+    destinazioneModelloDeps: {
+      leggiChiave: (fonte) => { try { return providerStore.getKey(fonte); } catch { return null; } },
+      leggiRuntime: (fonte) => { try { return providerStore.getRuntime(fonte); } catch { return {}; } },
+      localePronto: () => supervisoreLocale?.status?.()?.state === 'ready',
+      /*
+       * ⛔ Si passa il PONTE, non la chiave: `request()` del supervisore
+       * aggiunge da sé l'`--api-key` generata all'avvio, che non deve essere
+       * copiata da nessuna parte — men che meno in una risposta HTTP.
+       */
+      chiamaLocale: (percorso, opzioni) => supervisoreLocale.request(percorso, opzioni),
+    },
     modelCapabilityFn: async (modelId) => {
       try {
         const { modelli } = await modelCatalog.ottieni();
@@ -127,6 +157,11 @@ async function startServer() {
   let localRuntimeProbe = null;
   if (config.llamaServerPath) {
     const supervisor = createLlamaServerSupervisor({ binaryPath: config.llamaServerPath, modelStore: localModelStore });
+    // ⛔ Registrato SUBITO dopo la creazione: è l'unico punto in cui il
+    // legame tardivo di sopra si chiude davvero. Senza questa riga i modelli
+    // locali resterebbero irraggiungibili con un messaggio che dice
+    // «il motore non è acceso» anche quando lo è.
+    supervisoreLocale = supervisor;
     const llama = createLlamaServerRuntime({ supervisor });
     localRuntimes['llama.cpp'] = {
       detect: async () => ({ state: 'observed', runtimeId: 'llama.cpp', runtimeState: supervisor.status().state, observedAt: supervisor.status().observedAt }),

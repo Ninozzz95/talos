@@ -75,7 +75,40 @@ function parseModello(raw) {
  * nessuna eccezione" (owner, 27/8 mattina) era rotta esattamente sugli
  * alias più comodi da scegliere.
  */
-const FORMATO_MODELLO_RICHIESTA = /^~?[a-z0-9](?:[a-z0-9._-]{0,63}[a-z0-9])?\/[a-z0-9](?:[a-z0-9._:-]{0,63}[a-z0-9])?$/i;
+/*
+ * ⛔⛔⛔ 03/9 — IL CANCELLO CHE AVREBBE FERMATO I MODELLI LOCALI.
+ *
+ * Owner: «bisogna far girare davvero i modelli di diversi provider… se non
+ * riesco a usare i modelli locali, l'applicazione è spacciata».
+ *
+ * Trovato provando, non leggendo: la convenzione di fonte `local:qwen3-0.6b…`
+ * veniva RESPINTA QUI, con un 400 su /api/v1/sessions, molto prima di
+ * arrivare al kernel o all'instradamento. Questo formato pretende `autore/
+ * nome` — lo slash — perché nasce dagli id OpenRouter, e un modello locale
+ * non ha un autore: ha un nome e basta.
+ *
+ * ⇒ Si ammette un prefisso di FONTE opzionale, e solo per le fonti vere
+ * (`local:`, `ollama:`, `openai:`, `deepseek:`, `openrouter:`, `anthropic:`,
+ * `gemini:` — le stesse di `model-destination.mjs`). Dopo il prefisso lo
+ * slash diventa facoltativo, perché `local:qwen3-0.6b-q2-k` è un nome intero.
+ * ⛔ Senza prefisso NIENTE cambia: resta esattamente il formato di prima, e
+ * nessuna sessione salvata si comporta diversamente.
+ */
+const FONTI_AMMESSE_MODELLO = 'local|ollama|openai|deepseek|openrouter|anthropic|gemini';
+/** Il formato OpenRouter di sempre: `vendor/nome`, con `~` e `:variante`. INVARIATO. */
+const FORMA_OPENROUTER = '~?[a-z0-9](?:[a-z0-9._-]{0,63}[a-z0-9])?\/[a-z0-9](?:[a-z0-9._:-]{0,63}[a-z0-9])?';
+/**
+ * Con un prefisso di fonte lo slash diventa FACOLTATIVO — e solo lì.
+ *
+ * ⛔ La prima stesura lo rendeva facoltativo dappertutto, e ha fatto cadere
+ * quattro test che presidiavano il contratto giusto: «senza slash non è un id
+ * OpenRouter». Avevano ragione loro. Un id senza prefisso deve continuare a
+ * essere rifiutato esattamente come prima, byte per byte: rilassare un
+ * cancello più del necessario è il modo tipico di far passare, mesi dopo,
+ * qualcosa che nessuno voleva.
+ */
+const FORMA_CON_FONTE = `(?:${FONTI_AMMESSE_MODELLO}):[a-z0-9](?:[a-z0-9._:/-]{0,127}[a-z0-9])?`;
+const FORMATO_MODELLO_RICHIESTA = new RegExp(`^(?:${FORMA_OPENROUTER}|${FORMA_CON_FONTE})$`, 'i');
 
 /**
  * Pura — nessun throw, chi chiama decide il `code`/status HTTP giusto per
