@@ -306,6 +306,22 @@ jobs:
             "$GITHUB_WORKSPACE/${{ steps.apk.outputs.nome }}" \
             cpu,opencl
 
+      # ⛔⛔⛔ CODICE (harness UI + terminale) NON SPARISCE DI NUOVO — 3/9,
+      # dopo la v0.1.24: quelle due classi vivono in `main/` da oggi, ma
+      # sono cercate via Class.forName (stringa, non X.class) — R8 può
+      # rinominarle a runtime senza fallire in compilazione se la regola
+      # -keep in proguard-rules.pro si rompe. `npm run build` (sopra)
+      # verifica solo che i FILE vivano nel posto giusto, prima che Gradle
+      # e R8 tocchino niente — questo verifica l'APK VERO, firmato, dopo
+      # che R8 ha già fatto il suo lavoro: la metà che nessun checkout
+      # web può provare da solo. Vedi il commento di classe di
+      # TalosHarnessUiPlugin.kt per la storia intera.
+      - name: ⛔ Codice non e' sparito di nuovo dalla release
+        working-directory: ${{ steps.dove.outputs.dir }}
+        run: |
+          node scripts/verify-release-plugin-classes.mjs \
+            "$GITHUB_WORKSPACE/${{ steps.apk.outputs.nome }}"
+
       # La provenienza SLSA: lega l'artefatto al workflow, al commit e al
       # repository, con un certificato effimero su un registro di trasparenza.
       # La provenienza SLSA: lega l'artefatto al workflow, al commit e al

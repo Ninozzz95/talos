@@ -73,3 +73,18 @@
 # when converting the first native tensor result. The official Android guide
 # requires this keep rule for R8-minimized applications.
 -keep class ai.onnxruntime.** { *; }
+
+# ⛔⛔⛔ CODICE (harness UI + terminale), 3/9 — appena arrivate in `main`.
+#
+# Le altre 26 registrazioni di MainActivity chiamano `registerPlugin(X.class)`
+# — un riferimento diretto che R8 traccia da solo. Queste due sono diverse:
+# `Class.forName("ai.talos.harness.TalosHarnessUiPlugin")` /
+# `Class.forName("ai.talos.terminal.TalosTerminalPlugin")` sono ricerche per
+# STRINGA (il motivo: la classe poteva non esistere affatto — vedi il
+# commento di classe di TalosHarnessUiPlugin). R8 non traccia una stringa fino
+# alla classe che nomina come farebbe con `X.class`: senza questa riga
+# potrebbe rinominarle, e la ricerca fallirebbe A RUNTIME con
+# ClassNotFoundException — non in compilazione, dove nessuno lo vedrebbe fino
+# a quando una persona non prova ad aprire Codice sul telefono.
+-keep class ai.talos.harness.TalosHarnessUiPlugin { *; }
+-keep class ai.talos.terminal.TalosTerminalPlugin { *; }

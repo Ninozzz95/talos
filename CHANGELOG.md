@@ -6,6 +6,34 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.25
+
+The previous release corrected one bug by introducing its opposite:
+Codice stopped showing on a signed build entirely, instead of showing
+correctly. This release makes Codice real in the signed APK — visible,
+and able to run a command on the device it's installed on.
+
+### Codice ships in the signed build
+
+The native bridge behind Codice — the piece that lets a session run a
+sandboxed terminal, not just chat — lived in a part of the project
+that Android only compiles into development builds, since the day it
+shipped. Announcing Codice as a phone-hosted coding agent while that
+piece never reached the APK anyone could actually download was the
+root of both this release and the previous one. It now compiles into
+every build, signed release included, and was verified on one:
+opening Codice, starting a session, and running a real command all
+work on a production-shaped APK, not just a development one.
+
+### Fixed
+
+- A session hosted entirely on the phone — no computer involved —
+  couldn't run a single shell command: the run always failed as if no
+  device were reachable, even though the device running it was the
+  one right there. It now runs the command directly, the way it
+  always should have on a session that was never talking to a second
+  device in the first place.
+
 ## v0.1.24
 
 The previous release could show "Codice" as available on a signed

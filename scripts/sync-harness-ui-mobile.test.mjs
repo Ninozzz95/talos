@@ -23,8 +23,8 @@ function radiceFinta(t) {
 }
 
 function creaCartellaAndroid(radice) {
-    mkdirSync(join(radice, 'android', 'app', 'src', 'debug', 'assets', 'talos-harness-ui', 'mobile-public'), { recursive: true })
-    mkdirSync(join(radice, 'android', 'app', 'src', 'debug', 'assets', 'talos-harness-ui', 'kernel'), { recursive: true })
+    mkdirSync(join(radice, 'android', 'app', 'src', 'main', 'assets', 'talos-harness-ui', 'mobile-public'), { recursive: true })
+    mkdirSync(join(radice, 'android', 'app', 'src', 'main', 'assets', 'talos-harness-ui', 'kernel'), { recursive: true })
 }
 
 describe('sincronizzaHarnessUiMobile', () => {
@@ -37,11 +37,11 @@ describe('sincronizzaHarnessUiMobile', () => {
         assert.equal(ok, true)
         assert.deepEqual(esiti.map((e) => e.esito), ['copiato', 'copiato'])
         assert.equal(
-            readFileSync(join(radice, 'android', 'app', 'src', 'debug', 'assets', 'talos-harness-ui', 'mobile-public', 'app.js'), 'utf8'),
+            readFileSync(join(radice, 'android', 'app', 'src', 'main', 'assets', 'talos-harness-ui', 'mobile-public', 'app.js'), 'utf8'),
             'contenuto app.js v1',
         )
         assert.equal(
-            readFileSync(join(radice, 'android', 'app', 'src', 'debug', 'assets', 'talos-harness-ui', 'kernel', 'talosHarness.mjs'), 'utf8'),
+            readFileSync(join(radice, 'android', 'app', 'src', 'main', 'assets', 'talos-harness-ui', 'kernel', 'talosHarness.mjs'), 'utf8'),
             'contenuto kernel v1',
         )
     })
@@ -66,7 +66,7 @@ describe('sincronizzaHarnessUiMobile', () => {
         const kernel = righe.find((r) => r.nome === 'kernel talosHarness.mjs')
         assert.equal(kernel.esito, 'copiato')
         assert.equal(
-            readFileSync(join(radice, 'android', 'app', 'src', 'debug', 'assets', 'talos-harness-ui', 'kernel', 'talosHarness.mjs'), 'utf8'),
+            readFileSync(join(radice, 'android', 'app', 'src', 'main', 'assets', 'talos-harness-ui', 'kernel', 'talosHarness.mjs'), 'utf8'),
             'contenuto kernel v2 — modificato',
         )
     })

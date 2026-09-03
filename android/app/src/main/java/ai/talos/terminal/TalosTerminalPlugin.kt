@@ -10,6 +10,17 @@ import com.getcapacitor.annotation.CapacitorPlugin
 import java.io.File
 
 /**
+ * ⛔⛔⛔ 3/9 — spostata da `debug` a `main`, insieme a
+ * [ai.talos.harness.TalosHarnessUiPlugin] (vedi il suo commento di classe
+ * per il perché e la citazione dell'owner): Codice, terminale incluso, ora
+ * spedisce nella build di rilascio. `assets/talos-node-lib/` (il binario
+ * Node + le sue dipendenze) si è spostato con lei — stessa cartella
+ * `main`, non più `debug`. R8 (release, minify+shrink ON) ora vede questa
+ * classe: `Class.forName("ai.talos.terminal.TalosTerminalPlugin")` in
+ * `MainActivity` è tenuta esplicita in `proguard-rules.pro`, per lo
+ * stesso motivo del plugin harness — una ricerca per stringa che R8 non
+ * traccia da solo.
+ *
  * ⭐⭐⭐ 28/8 — owner, testuale: «voglio che trovi questa ricerca, procedi a
  * fare funzionare al cento per cento un terminale sandboxato nella sezione
  * Codice [...] usando il nostro ponte a DB che abbiamo già usato per la
@@ -703,6 +714,15 @@ class TalosTerminalPlugin : Plugin() {
             comandoAvvio.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP,
         )
         val prefissiServer = listOf(
+            // ⛔⛔⛔ 3/9 — owner, dopo aver verificato una build di rilascio:
+            // lo strumento `shell` falliva sempre per una sessione ospitata
+            // qui (talosHarness.mjs cercava un adb.exe da PC per raggiungere
+            // "il" telefono, ma il telefono È questo processo — vedi il
+            // commento di `eseguiComandoSandboxato` per la storia intera).
+            // Un fatto sull'AMBIENTE di questo processo kernel, impostato
+            // UNA VOLTA qui all'avvio: il kernel non smette di essere "sul
+            // telefono" a seconda di quale sessione lo chiama.
+            "TALOS_KERNEL_SUL_TELEFONO=1",
             "TALOS_BANCO_DIR=$BANCO_STUB_REMOTO",
             "TALOS_HARNESS_UI_PUBLIC_DIR=$PUBLIC_DIR_REMOTO",
             "TALOS_HARNESS_UI_PORT=$PORTA_SERVER",
