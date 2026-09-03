@@ -230,6 +230,49 @@ export function createLlamaServerSupervisor({
          * `-ngl` verrebbe accettato e ignorato, e crederemmo di usare una
          * GPU che non tocchiamo. Lo decide chi costruisce il supervisore,
          * che il binario lo ha scelto.
+         *
+         * ⛔⛔⛔ 03/9 — BUG REALE trovato benchmarkando un modello VERO (27B
+         * Q4_K_M, 16,46 GB) invece del giocattolo 0,6B su cui il 99 sopra era
+         * stato misurato: `-ngl 99` forza SEMPRE tutti i layer in VRAM, ma
+         * questo modello supera i 16,3 GB totali della scheda. Il log del
+         * binario stesso lo dice: «common_fit_params: failed to fit params to
+         * free device memory: n_gpu_layers already set by user to 99, abort»
+         * — llama.cpp SA che non entra, ma l'auto-fit si disattiva appena
+         * l'utente fissa `-ngl` a un numero esplicito. Risultato misurato:
+         * generazione a **13,28 tok/s**, un decimo di quello che la scheda fa
+         * su un modello che ci sta (62 tok/s, ricerca sopra) — overflow
+         * silenzioso verso la memoria condivisa di Windows (WDDM), niente
+         * errore, nessun avviso, solo lento.
+         *
+         * ⭐ Owner: "bisogna usare la RAM e la VRAM come fa LM Studio".
+         * Verificato COME: LM Studio stima l'ingombro PRIMA di caricare e
+         * riduce i layer se non entrano (guardrail, con avviso — mai un
+         * overflow muto) — lmstudio-bug-tracker #1673/#1631. `--help` sul
+         * BINARIO VERO conferma che llama-server ha già la stessa cosa
+         * incorporata: `-ngl` accetta un numero, `auto` o `all` (default:
+         * **auto**), e `-fit on` (default) «adjusts UNSET arguments to fit in
+         * device memory» — si disattiva SOLO se l'argomento è impostato
+         * esplicitamente, esattamente il nostro caso.
+         *
+         * ⛔⛔⛔ 03/9, STESSO GIORNO — provato `'auto'` qui, poi MISURATO contro
+         * `99` esplicito con un banco A/B pulito (stesso modello 27B, stesso
+         * prompt, `benchmark-gpu-reale.mjs`): `auto` è PEGGIO, non meglio —
+         * 11,12 tok/s contro 13,28 (-16%), 191,3 contro 262,3 in prompt
+         * processing (-27%), e in più un avviso «GDN mismatch» che con `99`
+         * non compare. Il fitter del binario, su QUESTA architettura ibrida
+         * Gated Delta Net, sceglie un piazzamento peggiore di quello ingenuo
+         * — l'ipotesi «auto = mai peggio di un overflow muto» era ragionevole
+         * e si è misurata falsa qui. Confermato anche da una ricerca esterna
+         * commissionata lo stesso giorno (custodita in TALOS-RICERCHE,
+         * 2026-09-03-ottimizzazioni-llama-server-rx9070xt.md): i profili che
+         * raccomanda per QUESTA scheda usano `-ngl 99` esplicito, mai `auto`.
+         * ⇒ Si torna al numero esplicito. Il caso reale che aveva motivato
+         * `auto` (un modello che eccede la VRAM totale, non solo quella
+         * libera) resta scomodo — genera comunque overflow verso la memoria
+         * condivisa di Windows — ma fra i due, `99` vince anche lì: non è
+         * stato trovato NESSUN caso, su questo binario e questa scheda, dove
+         * `auto` batta il numero esplicito. Se un caso simile ricomparirà, si
+         * ri-misura da capo prima di ripetere questo cambio, non si presume.
          */
         ...(Number.isInteger(gpuLayers) && gpuLayers > 0 ? ['-ngl', String(gpuLayers)] : []),
         /*

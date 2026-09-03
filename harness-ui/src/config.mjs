@@ -247,11 +247,30 @@ function parsePort(raw) {
 
 function parseLlamaServerPath(raw, moduleUrl) {
   if (typeof raw === 'string' && raw.trim() !== '') return resolve(raw.trim());
-  try {
-    const candidate = fileURLToPath(new URL('.local-runtime/b10517/llama-server.exe', moduleUrl));
-    if (statSync(candidate).isFile()) return candidate;
-  } catch {
-    // The official runtime is optional during development and in clean clones.
+  /*
+   * ⭐⭐⭐ 03/9 — SI PREFERISCE LA BUILD CON LA GPU, se c'è.
+   *
+   * ⛔ Debito che stavo per lasciare aperto: la GPU l'avevo accesa passando
+   * il percorso a mano, quindi al primo riavvio normale il server sarebbe
+   * tornato sulla build CPU-only — e nessuno se ne sarebbe accorto, perché
+   * funziona lo stesso, solo lentissimo. Una cura che vive in una variabile
+   * d'ambiente digitata una volta non è una cura.
+   *
+   * MISURATO: `llama-b10517-bin-win-cpu-x64` risponde «Available devices:
+   * (none)»; la variante Vulkan della stessa versione elenca la scheda con
+   * la sua VRAM, e su un 27B porta da «non finisce» a 7,7 token/s.
+   *
+   * ⛔ L'ordine conta: prima la variante accelerata, poi quella di sempre.
+   * E resta solo un DEFAULT: `TALOS_LLAMA_SERVER_PATH` continua a vincere,
+   * perché chi sa cosa sta facendo deve poter scegliere.
+   */
+  for (const cartella of ['.local-runtime/b10517-vulkan/', '.local-runtime/b10517/']) {
+    try {
+      const candidate = fileURLToPath(new URL(`${cartella}llama-server.exe`, moduleUrl));
+      if (statSync(candidate).isFile()) return candidate;
+    } catch {
+      // The official runtime is optional during development and in clean clones.
+    }
   }
   return undefined;
 }

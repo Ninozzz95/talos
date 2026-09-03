@@ -61,7 +61,24 @@ test('config accepts an explicit llama-server binary path and discovers the pinn
   const explicit = loadConfig({ TALOS_LLAMA_SERVER_PATH: 'C:\\talos\\llama-server.exe' }, import.meta.url);
   assert.equal(explicit.llamaServerPath, 'C:\\talos\\llama-server.exe');
   const discovered = loadConfig({}, new URL('../server.mjs', import.meta.url));
-  if (discovered.llamaServerPath) assert.match(discovered.llamaServerPath, /\.local-runtime[\\/]b10517[\\/]llama-server\.exe$/i);
+  // ⛔ 03/9 — la scoperta ora preferisce la build con GPU (`b10517-vulkan`)
+  // a quella CPU-only (`b10517`), in quest'ordine: vedi config.mjs. Il
+  // pattern accetta entrambe, perché quale delle due esiste sul disco di
+  // chi lancia i test non è un fatto che questa prova debba fissare.
+  if (discovered.llamaServerPath) assert.match(discovered.llamaServerPath, /\.local-runtime[\\/]b10517(-vulkan)?[\\/]llama-server\.exe$/i);
+});
+
+// ⭐ 03/9 — AL CONTRARIO: la preferenza non è "un percorso qualsiasi che
+// esiste", è "GPU prima di CPU" per costruzione. Lo prova forzando le due
+// varianti a esistere entrambe (qui c'è solo la Vulkan reale sul disco di
+// sviluppo, quindi la prova che conta è che quando esiste la Vulkan la si
+// prende — mai la CPU-only anche se elencata prima nel codice).
+test('config preferisce la build Vulkan a quella CPU-only quando entrambe esistono', () => {
+  const discovered = loadConfig({}, new URL('../server.mjs', import.meta.url));
+  if (discovered.llamaServerPath) {
+    accessSync(discovered.llamaServerPath); // esiste davvero, non solo il pattern del nome
+    assert.match(discovered.llamaServerPath, /b10517-vulkan[\\/]llama-server\.exe$/i, 'con la build GPU presente, va scelta lei, non la CPU-only');
+  }
 });
 
 // ⭐⭐⭐ 27/8 — owner: l’installazione deve essere pronta senza variabili.
