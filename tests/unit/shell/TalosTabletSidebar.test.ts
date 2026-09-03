@@ -102,7 +102,13 @@ describe('TalosTabletSidebar (F6 sidebar refactor) — one rail, contextual cont
         await flushPromises()
 
         expect(w.find('[data-testid="stub-harness-screen"]').exists()).toBe(true)
-        expect(w.get('[data-testid="talos-tablet-harness-toggle"]').attributes('aria-label')).toBe('Collapse Code sessions')
+        const toggle = w.get('[data-testid="talos-tablet-harness-toggle"]')
+        expect(toggle.attributes('aria-label')).toBe('Collapse Code sessions')
+        expect(toggle.attributes('aria-expanded')).toBe('true')
+        // ⭐ 3/9 — avm-03, dal vivo (item 6): verificato su device che aria-expanded:bg-muted
+        // (del Button condiviso) resta acceso quasi sempre — il pannello e espanso per default —
+        // e sembra un bottone "premuto" in permanenza, accanto a "Open menu" senza quello sfondo.
+        expect(toggle.classes()).toContain('aria-expanded:!bg-transparent')
     })
 
     it('HARNESS-TABLET-RAIL-COLLAPSE-01 never collapses the chat rail', async () => {

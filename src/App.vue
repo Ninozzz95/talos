@@ -41,6 +41,7 @@ import { talosOverlayBackActive, handleTalosOverlayBack } from '@/composables/us
 import { talosLightImpact } from '@/services/haptics'
 import { Capacitor } from '@capacitor/core'
 import { setTalosScreenSecure } from '@/services/privacyScreen'
+import { talosHarnessUiAvailable } from '@/services/harnessUi'
 import { applyTalosFontScale } from '@/lib/talosFontScale'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
@@ -735,8 +736,18 @@ const tabletChatRailVisible = computed(() => (
 // una seconda lettura di rotta — solo Harness sostituisce la chat; ogni
 // altra stazione (Memoria, Note, ecc.) resta un foglio SOPRA il rail chat,
 // invariato.
+//
+// ⛔⛔⛔ 3/9 — owner, urgente: questo leggeva SOLO il nome della rotta, mai
+// se Codice fosse disponibile su QUESTA build — su un APK di release
+// (dove talosHarnessUiAvailable() torna sempre false, il plugin nativo non
+// compila) la barra tablet mostrava comunque tutta la chrome "harness"
+// (titolo, elenco sessioni) se la rotta corrente era /harness/*, mentre il
+// contenuto diceva onestamente "not available": l'app "diceva di avere
+// Codice" da un pannello e lo negava dall'altro. Il guard nuovo in
+// router/index.ts impedisce ormai di ARRIVARE su quella rotta senza
+// disponibilità; questo controllo resta come seconda rete, non l'unica.
 const tabletRailVariant = computed<'chat' | 'harness'>(() => (
-    talosMobileStationOf(activeRoute.value) === 'harness' ? 'harness' : 'chat'
+    talosMobileStationOf(activeRoute.value) === 'harness' && talosHarnessUiAvailable() ? 'harness' : 'chat'
 ))
 const tabletHarnessRailCollapsed = computed(() => (
     tabletRailVariant.value === 'harness'

@@ -1867,6 +1867,12 @@
         area.className = 'clipboard-fallback';
         document.body.appendChild(area);
         area.select();
+        // ⭐ 3/9 — item 12: `execCommand('copy')` è deprecato (avviso TS), ma
+        // resta l'unico ripiego per un motore senza `navigator.clipboard`
+        // (il ramo `if` sopra copre già ogni WebView moderna) — toglierlo
+        // toglierebbe la rete di sicurezza, non l'avviso. Documentato, non
+        // silenziato: nessun `@ts-ignore` che nasconderebbe un vero
+        // regresso futuro su questa stessa riga.
         document.execCommand('copy');
         area.remove();
       }
@@ -2160,7 +2166,7 @@
     sheetTitle.textContent = content.title;
     sheetBody.innerHTML = content.html();
     showEmbeddedDialog(sheetDialog);
-    wireSheetActions(type);
+    wireSheetActions();
     // ⭐ porting dal bundle desktop: i due mount point sotto si riempiono con una fetch reale, mai al momento del template() (che non è async).
     if (type === 'control') { refreshDoctorBadge(); caricaPannelloHooks(); }
     if (type === 'sessionTree') caricaAlberoSessione();
@@ -2609,7 +2615,12 @@
     toast('Policy updated', messaggioToast);
   }
 
-  function wireSheetActions(type) {
+  // ⭐ 3/9 — item 12: il parametro `type` non serviva (ogni ramo qui sotto
+  // si aggancia a un selettore `data-*` presente SOLO nell'html del
+  // proprio foglio — `$$(...)` su zero corrispondenze non fa nulla, mai
+  // servito uno `switch(type)`) — tolto, non un `void type` per zittire
+  // l'avviso.
+  function wireSheetActions() {
     $$('[data-permission-choice]', sheetBody).forEach((button) => {
       button.addEventListener('click', () => {
         impostaPermesso(button.dataset.permissionChoice);
@@ -3951,23 +3962,6 @@
     while (i < n) { righe.push(['del', a[i]]); i += 1; }
     while (j < m) { righe.push(['add', b[j]]); j += 1; }
     return righe;
-  }
-
-  /**
-   * Numero di riga (del file DOPO la scrittura — 'ctx'/'add' lo hanno, una
-   * riga 'del' no: non esiste più in quel file, non un numero inventato) +
-   * un marcatore +/-/spazio, come prefisso testuale della riga stessa —
-   * stesso pattern di `renderReviewFile` sotto (uno `<span>` per riga,
-   * nessuna colonna CSS dedicata da costruire).
-   */
-  function formattaRigheConNumero(righe) {
-    let numero = 0;
-    return righe.map(([tipo, testo]) => {
-      if (tipo !== 'del') numero += 1;
-      const colNumero = tipo === 'del' ? ''.padStart(4) : String(numero).padStart(4);
-      const marcatore = tipo === 'add' ? '+' : tipo === 'del' ? '-' : ' ';
-      return [tipo, `${colNumero} ${marcatore} ${testo}`];
-    });
   }
 
   /**

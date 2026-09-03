@@ -6,6 +6,51 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.24
+
+The previous release could show "Codice" as available on a signed
+build — a debug-only feature with nothing behind it once you tapped
+in. This release makes sure that never happens again, and fixes the
+run-strip numbers, a composer draft that didn't survive leaving the
+screen, and a few smaller Codice surfaces found while verifying it.
+
+### Codice never shows on a build that can't run it
+
+Codice needs a native bridge that only compiles into development
+builds — that has been true since it shipped, but nothing enforced it
+everywhere. The tablet layout decided whether to show Codice's chrome
+by looking only at the current route's name, and Vue Router restores
+whatever route was open last — so a phone that had ever run a debug
+build could boot straight into a Codice screen on a signed one, with
+the native side simply absent. A single guard, checked before every
+way of reaching the screen — a direct link, a route restored at boot,
+or in-app navigation — now redirects to chat instead whenever the
+build can't run it. **Codice is not, and has never been, in the
+signed release APK** — v0.1.23's notes described it without saying
+that; consider this the correction.
+
+### Fixed
+
+- When the on-device bridge a session depends on isn't connected, the
+  app now says so in plain language instead of leaving the run stuck
+  or failing with a technical error.
+- The run strip's step count, context size, and error count always
+  showed a placeholder dash, even while a session was actively running
+  with real numbers behind them.
+- A failed tool call didn't say why in the run's summary; it now shows
+  the failure reason, and the warning icon on the affected step is
+  read by a screen reader instead of hidden from one.
+- A prompt typed into the composer and left unsent used to disappear
+  if you left the screen; it's restored when you come back.
+- The button that opens Codice from the tablet sidebar was below the
+  minimum touch-target size.
+- The executor-model list inside effort settings showed the same
+  "Models" label as the primary model picker, with nothing to tell
+  them apart.
+- A few remaining Italian strings in Codice's menus and toasts are now
+  in English, and the Hugging Face access status labels are sentence
+  case like the rest of the app.
+
 ## v0.1.23
 
 The coding agent moved onto the phone. Until this release "Codice" was a
