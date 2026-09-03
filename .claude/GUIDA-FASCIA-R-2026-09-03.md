@@ -29,7 +29,7 @@ RED
 1. `tests/config.test.mjs`: con `TALOS_HARNESS_UI_PORT` assente e 4174 occupata, la porta scelta è la
    prima libera sopra 4174, e viene stampata; con la variabile presente e occupata → errore esplicito
    (chi la imposta la vuole quella).
-2. Test del lanciatore a secco (`TALOS_PROVA_A_SECCO=1`, stessa convenzione di `mobile/scripts/research/run-device-tests.mjs`
+2. Test del lanciatore a secco (`TALOS_PROVA_A_SECCO=1`, stessa convenzione di `.claude/GUIDA-FASCIA-R-2026-09-03.md`
    sul mobile): stampa il comando del browser invece di eseguirlo.
 
 GREEN
