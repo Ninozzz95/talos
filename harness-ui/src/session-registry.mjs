@@ -22,6 +22,7 @@
  * l'accumulo è un costo di spazio disco, non un difetto di correttezza.
  */
 import { randomUUID } from 'node:crypto';
+import { parse as parsePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -764,6 +765,46 @@ export function createSessionRegistry({
   }
 
   /**
+   * ⭐⭐⭐ 03/9 — Full access: owner, parole esatte — *"se ho abilitato full
+   * access... il modello deve potere accedere a qualunque e fare operazioni
+   * a qualunque file e cartella"*, ANCHE se la sessione è partita in una
+   * cartella precisa, ANCHE se il permesso è stato acceso DOPO l'avvio.
+   *
+   * ⛔ Il kernel (talosHarness.mjs) non ha un concetto di "full access": gli
+   * arriva un solo parametro `cartella` e verifica il contenimento relativo
+   * a QUELLO — confermato leggendo runtime-owner-adapter.mjs/agent-service.mjs,
+   * mai modificato qui (territorio mobile). ⇒ "Full access" non è una regola
+   * nuova da insegnare al kernel: è QUALE cartella gli viene consegnata.
+   * Larga quanto l'intero disco (stesso `parse(x).root` già usato da
+   * `workspaceBrowser` in server.mjs per lo stesso motivo) quando il
+   * permesso è "Full access", altrimenti la cartella di partenza invariata.
+   *
+   * ⭐ `cartellaBase` (nuovo campo su `voce`, mai mutato dopo la creazione)
+   * è cosa serve per poter TORNARE INDIETRO se il permesso viene abbassato
+   * di nuovo: senza di lei, una volta allargata la cartella non c'è più modo
+   * di sapere qual era quella di partenza.
+   *
+   * ⛔⛔⛔ 03/9 — BUG REALE trovato dal vivo, owner: "usa come radice" su una
+   * cartella FUORI sessione (es. C:\.cache) produceva una sessione con
+   * `cartella:"C:\\"`, non `C:\.cache` — l'allargamento scattava ANCHE
+   * quando la cartella non è "quella di partenza che si allarga", ma è già
+   * la scelta ESATTA, deliberata della persona (avviaLibero con
+   * cartellaLibera/workspaceLaunchId — "Imposta come radice", il selettore
+   * "Nuova sessione" su un percorso a piacere). Le due situazioni sono
+   * OPPOSTE: (a) parto in una cartella dell'allowlist, Full access la
+   * allarga — quello che l'owner ha chiesto in origine; (b) scelgo IO
+   * esattamente questa cartella (già passa da "Full access" come cancello
+   * obbligato, vedi avviaLibero) — allargarla ANCORA di più rompe la scelta
+   * appena fatta. `cartellaGiaScelta:true` disattiva l'allargamento: la
+   * cartella scelta a piacere resta ESATTA, sempre, indipendentemente dal
+   * permesso — mai un secondo allargamento sopra una scelta già precisa.
+   */
+  function cartellaEffettivaPerPermessi(cartellaBase, permessi, cartellaGiaScelta = false) {
+    if (cartellaGiaScelta) return cartellaBase;
+    return permessi === 'Full access' ? parsePath(cartellaBase).root : cartellaBase;
+  }
+
+  /**
    * Il nucleo comune ad `avvia()`, `forka()` e `resume()`: chiama
    * avviaSessioneFn per un giro nuovo, cattura la conversazione finale per
    * un resume/fork FUTURO. Mai un throw — un errore di configurazione è una
@@ -779,6 +820,14 @@ export function createSessionRegistry({
     sessionId = randomUUID(), taskId, cartella, task, comandoProva, messaggiIniziali,
     forkDa = null, voceEsistente = null, modelloRichiesta = null, reasoningRichiesto = null, mobile = false,
     permessiRichiesti = null, permessiPerAttrezzoRichiesti = null,
+    /*
+     * ⭐⭐⭐ 03/9 — vedi la doc di cartellaEffettivaPerPermessi: `true` SOLO
+     * per avviaLibero con cartellaLibera/workspaceLaunchId (la persona ha
+     * scelto ESATTAMENTE questa cartella) — mai per l'allowlist
+     * (cartellaId) né per il corpus benchmark, dove "Full access" resta
+     * un allargamento legittimo oltre la cartella di partenza.
+     */
+    cartellaGiaScelta = false,
     provider = 'cloud', runtimeId = null, modelId = null, fallbackConsent = false,
     /*
      * ⭐⭐⭐ 29/8 — FASE K, R2 planner costoso + editor economico. Stessa
@@ -861,7 +910,15 @@ export function createSessionRegistry({
      */
     const voceNuova = !voceEsistente;
     const voce = voceEsistente ?? {
-      eventi: [], ascoltatori: new Set(), taskId, cartella, task, comandoProva, forkDa,
+      eventi: [], ascoltatori: new Set(), taskId,
+      // ⭐ 03/9 — Full access: `cartella` è quella EFFETTIVA (allargata se il
+      // permesso è già "Full access" all'avvio E la cartella non era già
+      // una scelta esatta — vedi cartellaGiaScelta/cartellaEffettivaPerPermessi);
+      // `cartellaBase` è quella di PARTENZA, mai mutata — serve a tornare
+      // indietro se il permesso viene abbassato più tardi.
+      cartella: cartellaEffettivaPerPermessi(cartella, permessiEffettivi, cartellaGiaScelta), cartellaBase: cartella,
+      cartellaGiaScelta,
+      task, comandoProva, forkDa,
       avviataAlle: clock().toISOString(), messaggiFinali: null, modello: modelloEffettivo,
       modelloPlanner: modelloPlannerEffettivo,
       reasoning: reasoningEffettivo, mobile, permessi: permessiEffettivi,
@@ -922,6 +979,8 @@ export function createSessionRegistry({
             reasoning: voce.reasoning, mobile: voce.mobile, permessi: voce.permessi,
             permessiPerAttrezzo: voce.permessiPerAttrezzo, padreId: voce.padreId, profonditaDelega: voce.profonditaDelega,
             provider: voce.provider, runtimeId: voce.runtimeId, modelId: voce.modelId, fallbackConsent: voce.fallbackConsent,
+            // ⭐⭐⭐ 03/9 — persistita: senza questa, un ripristino dopo un riavvio perderebbe la distinzione e allargherebbe una cartella già scelta esattamente (stesso bug appena corretto, ma dopo un riavvio invece che subito).
+            cartellaGiaScelta: voce.cartellaGiaScelta,
           },
         });
       } catch (errore) {
@@ -937,7 +996,17 @@ export function createSessionRegistry({
      * Dopo il profilo P0 del 1/9 il possesso è esplicito: un run vivo o
      * almeno un client SSE lo tengono aperto; nessuno dei due lo chiude.
      */
-    attivaWatcherSessione(voce, cartella);
+    /*
+     * ⭐ 03/9 — `voce.cartella`, non il parametro `cartella`: per una
+     * sessione nata già con "Full access" i due divergono (voce.cartella è
+     * allargata a radice disco, vedi cartellaEffettivaPerPermessi più
+     * sopra). Stessa fonte già usata da resume() due chiamate più sotto —
+     * un solo punto di verità, mai due percorsi che possono disallinearsi.
+     * ⛔ Un volume intero non fa comunque partire un watcher ricorsivo
+     * (guardaWorkspace lo rifiuta da solo, vedi workspace-watcher.mjs e
+     * tests/full-access-root-e2e.test.mjs) — nessun rischio nuovo.
+     */
+    attivaWatcherSessione(voce, voce.cartella);
     sessioni.set(sessionId, voce);
 
     /*
@@ -1025,18 +1094,34 @@ export function createSessionRegistry({
      * qui è quella di QUESTA sessione (il padre che avvia/gestisce la
      * ricerca) — la ricerca gira nella STESSA cartella, mai un
      * workspace dedicato (vedi la doc di research-orchestrator.mjs).
+     *
+     * ⭐⭐⭐ 03/9 — `voce.cartella`, non il parametro: stesso bug e stessa
+     * cura di cloudOptions.cartella poco sopra in questo file — un avvio
+     * nuovo con Full access già scelto in partenza deve vedere SUBITO la
+     * cartella allargata, non solo dal resume successivo.
      */
-    const onRicercaLista = (argomenti) => researchOrchestrator.elenca({ cartella, ...argomenti });
-    const onRicercaAvvia = (argomenti) => researchOrchestrator.avvia({ cartella, question: argomenti?.question, depth: argomenti?.depth });
-    const onRicercaLeggi = (argomenti) => researchOrchestrator.leggi({ cartella, id: argomenti?.id });
-    const onRicercaRinomina = (argomenti) => researchOrchestrator.rinomina({ cartella, id: argomenti?.id, title: argomenti?.title ?? null });
+    const onRicercaLista = (argomenti) => researchOrchestrator.elenca({ cartella: voce.cartella, ...argomenti });
+    const onRicercaAvvia = (argomenti) => researchOrchestrator.avvia({ cartella: voce.cartella, question: argomenti?.question, depth: argomenti?.depth });
+    const onRicercaLeggi = (argomenti) => researchOrchestrator.leggi({ cartella: voce.cartella, id: argomenti?.id });
+    const onRicercaRinomina = (argomenti) => researchOrchestrator.rinomina({ cartella: voce.cartella, id: argomenti?.id, title: argomenti?.title ?? null });
     const onRicercaPausa = (argomenti) => researchOrchestrator.mettiInPausa({ id: argomenti?.id });
     const onRicercaRiprendi = (argomenti) => researchOrchestrator.riprendi({ id: argomenti?.id });
     const onRicercaAnnulla = (argomenti) => researchOrchestrator.annulla({ id: argomenti?.id });
-    const onRicercaElimina = (argomenti) => researchOrchestrator.elimina({ cartella, id: argomenti?.id });
+    const onRicercaElimina = (argomenti) => researchOrchestrator.elimina({ cartella: voce.cartella, id: argomenti?.id });
 
     const cloudOptions = {
-      cartella, task, modello: modelloEffettivo, chiave: chiaveEffettiva, comandoProva, messaggiIniziali,
+      /*
+       * ⭐⭐⭐ 03/9 — `voce.cartella`, non il parametro `cartella`: stessa
+       * disciplina "letto ADESSO" già documentata due righe sotto per
+       * `permessi` — trovato dal vivo (Full access da avviaLibero, il
+       * PRIMO giro usava ancora la cartella non allargata, perché questo
+       * punto leggeva il parametro chiuso in chiusura invece della voce).
+       * Per un resume i due combaciano sempre (resume() passa già
+       * `cartella: voce.cartella`); per un avvio nuovo con Full access già
+       * scelto in partenza NO — `voce.cartella` è quella allargata da
+       * cartellaEffettivaPerPermessi, il parametro è ancora quella scelta.
+       */
+      cartella: voce.cartella, task, modello: modelloEffettivo, chiave: chiaveEffettiva, comandoProva, messaggiIniziali,
       reasoning: reasoningEffettivo ?? undefined,
       // ⭐ 02/09 — l'etichetta del permesso, dichiarata in RunStarted.contesto (vedi agent-service.mjs): è `voce.permessi` letto ADESSO, cioè anche un cambio arrivato da un altro client via POST /settings fra un giro e l'altro.
       permessi: voce.permessi ?? null,
@@ -1289,8 +1374,23 @@ export function createSessionRegistry({
           ultimoEventoEsecuzione?.type === 'RunFinished' || ultimoEventoEsecuzione?.type === 'RunError'
         );
         const conclusa = terminaleConfermaIlGiroCorrente || finaleConfermaIlGiroCorrente;
+        /*
+         * ⭐⭐⭐ 03/9 — Full access sopravvive a un riavvio del server:
+         * `intestazione.cartella` è sempre quella di PARTENZA (scritta
+         * PRIMA di un eventuale allargamento, vedi il commento su
+         * cartellaEffettivaPerPermessi più sopra in questo file) — la si
+         * ricalcola con l'ULTIMO permesso restaurato (`impostazioni.permessi`,
+         * non `intestazione.permessi`: un cambio-permesso post-avvio vince,
+         * stessa fonte già usata due righe sotto per modello/reasoning).
+         * Senza questo, una sessione con Full access acceso PRIMA di un
+         * riavvio tornerebbe castrata alla cartella di partenza dopo il
+         * riavvio — un downgrade silenzioso di un permesso già concesso.
+         */
+        const cartellaRipristinata = cartellaEffettivaPerPermessi(intestazione.cartella, impostazioni.permessi, intestazione.cartellaGiaScelta);
         const voce = {
-          eventi, ascoltatori: new Set(), taskId: intestazione.taskId, cartella: intestazione.cartella, task: intestazione.task,
+          eventi, ascoltatori: new Set(), taskId: intestazione.taskId,
+          cartella: cartellaRipristinata, cartellaBase: intestazione.cartella, cartellaGiaScelta: intestazione.cartellaGiaScelta,
+          task: intestazione.task,
           comandoProva: intestazione.comandoProva, forkDa: intestazione.forkDa,
           avviataAlle: intestazione.avviataAlle, messaggiFinali: messaggiFinaliRecord?.messaggiFinali ?? null,
           messaggiPendente: Array.isArray(checkpointRecord?.messaggi) ? checkpointRecord.messaggi : null,
@@ -1468,6 +1568,8 @@ export function createSessionRegistry({
         taskId: workspaceLaunchId ? 'libero:workspace-launch' : (cartellaLibera ? 'libero:full-access' : `libero:${cartellaId}`), cartella: preparato.cartella, task: preparato.task,
         comandoProva: preparato.comandoProva, modelloRichiesta: modelloScelto, modelloPlannerRichiesta: modelloPlannerScelto, reasoningRichiesto: reasoningScelto, mobile,
         permessiRichiesti: permessiScelto, permessiPerAttrezzoRichiesti: permessiPerAttrezzoScelto,
+        // ⭐⭐⭐ 03/9 — cartellaLibera/workspaceLaunchId: la persona ha scelto ESATTAMENTE questa cartella, "Full access" qui è solo il cancello obbligato per poterla scegliere (vedi il gate poco sopra), mai un invito ad allargarla oltre — cartellaId (allowlist) resta l'unico caso che allarga.
+        cartellaGiaScelta: Boolean(cartellaLibera) || Boolean(workspaceLaunchId),
       });
       if (workspaceLaunchId && risultato.sessionId && typeof consumeWorkspaceLaunchFn === 'function') {
         try { consumeWorkspaceLaunchFn(workspaceLaunchId); } catch { /* la sessione è già partita: mai trasformare un successo in errore */ }
@@ -1669,6 +1771,30 @@ export function createSessionRegistry({
       const modelId = voce.provider === 'cloud' && Object.hasOwn(patch, 'modello')
         ? prossimo.modello
         : voce.modelId;
+      /*
+       * ⭐⭐⭐ 03/9 — Full access A META' CHAT: owner, "anche dopo aver
+       * abilitato full access e essere partito con... readonly... il
+       * modello deve potere accedere a qualunque file e cartella". Questo è
+       * il momento in cui una sessione GIÀ IN CORSO cambia permesso — la
+       * cartella EFFETTIVA si ricalcola qui, sulla stessa `cartellaBase`
+       * immutabile fissata alla creazione. Calcolata PRIMA della scrittura
+       * durevole (sta nel `record`, così un `ripristina()` dopo un riavvio
+       * la rideriva da `cartellaBase`+`permessi` invece di perderla), ma
+       * ASSEGNATA a `voce.cartella` solo dopo — stessa disciplina "disco
+       * prima della memoria" di ogni altro campo qui sotto, non un'eccezione
+       * per questo. Da questo punto in poi ogni lettura di `voce.cartella`
+       * (il giro successivo via resume(), il pannello Files, le azioni file
+       * dell'owner più sotto in questo stesso file) vede la cartella nuova —
+       * nessuna di quelle chiama questa funzione, leggono tutte
+       * `voce.cartella` fresca al momento dell'uso, verificato sopra il
+       * file intero.
+       *
+       * ⛔ Se il permesso TORNA indietro (Full access → qualunque altro),
+       * `cartellaEffettivaPerPermessi` ritorna `voce.cartellaBase` intatta:
+       * mai una cartella allargata che resta allargata per sbaglio dopo che
+       * l'owner ha abbassato il permesso.
+       */
+      const cartellaProssima = cartellaEffettivaPerPermessi(voce.cartellaBase, prossimo.permessi, voce.cartellaGiaScelta);
       const record = {
         tipo: 'impostazioni-sessione',
         modello: prossimo.modello,
@@ -1686,6 +1812,7 @@ export function createSessionRegistry({
       voce.permessi = prossimo.permessi;
       voce.permessiPerAttrezzo = prossimo.permessiPerAttrezzo;
       voce.modelId = modelId;
+      voce.cartella = cartellaProssima;
       return { ok: true };
     },
 

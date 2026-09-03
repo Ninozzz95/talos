@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, parse as parsePath } from 'node:path';
 import test from 'node:test';
 
 import { createSessionRegistry as createSessionRegistryReale } from '../src/session-registry.mjs';
@@ -896,18 +896,84 @@ test('⛔⛔⛔ AL CONTRARIO — avviaLibero() con cartellaLibera ma SENZA perme
   assert.equal(finta.chiamate, 0, 'un client HTTP diretto non deve MAI aggirare il cancello del permesso passando dal frontend');
 });
 
-test('⭐⭐⭐ avviaLibero() con cartellaLibera E permesso "Full access" avvia DAVVERO, sulla cartella scelta', () => {
+test('⛔⛔⭐⭐⭐ AL CONTRARIO — avviaLibero() con cartellaLibera resta SEMPRE sulla cartella esatta scelta, "Full access" e tutto', () => {
+  /*
+   * ⛔⛔⛔ 03/9 — DUE riscritture nello stesso giorno sulla stessa riga di
+   * codice, entrambe da un dubbio VERO dell'owner, non un capriccio:
+   *
+   * (1a mattina) La prova originale (28/8) diceva "cartellaLibera resta
+   * ESATTA sempre" — era giusta per il difetto di allora (sessione
+   * castrata a vita alla cartella di partenza).
+   * (1a correzione) Cambiata per far allargare "Full access" alla radice
+   * disco — coerente col NUOVO requisito owner ("parto in una cartella
+   * precisa, full access deve farmi uscire").
+   * (2a correzione, QUESTA) L'owner ha poi chiesto dal vivo: "se risalgo,
+   * uso come radice su una cartella fuori sessione, quello dovrebbe
+   * cambiarmi il workspace o no?" — e la (1a correzione) aveva rotto
+   * ESATTAMENTE quello: "usa come radice" su C:\.cache produceva una
+   * sessione con cartella "C:\\", non "C:\.cache" — l'allargamento
+   * scattava ANCHE su una cartella già scelta a piacere dalla persona,
+   * vanificando la scelta appena fatta.
+   *
+   * ⇒ Le due situazioni sono OPPOSTE e ora distinte per davvero
+   * (cartellaGiaScelta): l'allowlist (cartellaId) allarga con Full access
+   * — è "parto stretto, mi allargo"; cartellaLibera/workspaceLaunchId NON
+   * allargano MAI — la persona ha già scelto ESATTAMENTE questa cartella,
+   * "Full access" lì è solo il cancello per poterla scegliere (vedi il
+   * test AL CONTRARIO due sopra), non un invito ad allargarla di più.
+   */
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({
     avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
     cartelleProgetto: [], modello: 'm', chiave: 'k',
   });
 
-  const risultato = registro.avviaLibero({ cartellaLibera: '/tmp/percorso-a-piacere', consegna: 'fai qualcosa', permessi: 'Full access' });
+  const risultato = registro.avviaLibero({ cartellaLibera: 'C:\\tmp\\percorso-a-piacere', consegna: 'fai qualcosa', permessi: 'Full access' });
 
   assert.ok(risultato.sessionId);
-  assert.equal(finta.ultimoInput.cartella, '/tmp/percorso-a-piacere');
-  assert.equal(finta.ultimoInput.livelloAccesso, undefined, '"Full access" non tocca il kernel: solo la cartella cambia');
+  assert.equal(finta.ultimoInput.cartella, 'C:\\tmp\\percorso-a-piacere', 'cartellaLibera è già la scelta esatta della persona: MAI allargata, nemmeno con Full access');
+  assert.equal(finta.ultimoInput.livelloAccesso, undefined, '"Full access" non tocca il kernel: solo la cartella cambia (qui: non cambia affatto)');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⭐⭐⭐ AL CONTRARIO — SENZA "Full access", avviaLibero() resta sulla cartella esatta scelta (nessun allargamento indebito)', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
+    cartelleProgetto: [], modello: 'm', chiave: 'k',
+    resolveWorkspaceLaunchFn: () => ({ id: 'l1', percorso: 'C:\\lancio\\qualunque', nome: 'lancio' }),
+    consumeWorkspaceLaunchFn: () => {},
+  });
+
+  // Stessa `preparaEsecuzioneLiberaFinta`, ma passando dal ramo workspaceLaunchId
+  // (permessi:'Workspace write' consentito lì, a differenza di cartellaLibera):
+  // resta esatta comunque — sia per il permesso, sia perché workspaceLaunchId
+  // è ANCH'esso cartellaGiaScelta:true (owner l'ha scelta aprendo "Apri con TALOS").
+  const risultato = registro.avviaLibero({ workspaceLaunchId: 'l1', consegna: 'fai qualcosa', permessi: 'Workspace write' });
+
+  assert.ok(risultato.sessionId);
+  assert.equal(finta.ultimoInput.cartella, 'C:\\lancio\\qualunque', 'senza Full access la cartella resta quella esatta, mai allargata alla radice del disco');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⭐⭐⭐ AL CONTRARIO — l\'allowlist (cartellaId) SI allarga con "Full access": cartellaGiaScelta è SOLO per cartellaLibera/workspaceLaunchId', () => {
+  /*
+   * ⛔ Prova gemella e opposta della precedente: senza questa, un domani
+   * qualcuno potrebbe "correggere" cartellaGiaScelta a `true` sempre e
+   * rompere il requisito ORIGINALE dell'owner (parto in una cartella
+   * dell'allowlist, Full access mi allarga oltre) senza che nessuna prova
+   * se ne accorga.
+   */
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
+    cartelleProgetto: [{ id: '0', nome: 'progetto', percorso: 'C:\\tmp\\progetto-allowlisted' }], modello: 'm', chiave: 'k',
+  });
+
+  const risultato = registro.avviaLibero({ cartellaId: '0', consegna: 'fai qualcosa', permessi: 'Full access' });
+
+  assert.ok(risultato.sessionId);
+  assert.equal(finta.ultimoInput.cartella, parsePath('C:\\tmp\\progetto-allowlisted').root, 'una cartella DELL\'ALLOWLIST con Full access allarga davvero — è il caso "parto stretto, esco fuori" che l\'owner ha chiesto in origine');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
@@ -2985,6 +3051,110 @@ test('MODEL-SWITCH-CONTINUITY-05 — Qwen → altro modello → Qwen conserva cr
   assert.deepEqual(esportata.filter((evento) => evento.type === 'RunStarted').map((evento) => evento.contesto.modello), [
     'qwen/qwen3.8-flash', 'google/gemini-3.7-flash', 'qwen/qwen3.8-flash',
   ]);
+});
+
+/*
+ * ⭐⭐⭐ 03/9 — Full access A META' CHAT: owner, parole esatte — "se ho
+ * abilitato full access anche dopo aver abilitato full access e essere
+ * partito con... readonly... il modello deve potere accedere a qualunque
+ * e fare operazioni a qualunque file e cartella". Stesso schema del test
+ * appena sopra (cambio modello a metà conversazione via
+ * aggiornaImpostazioni + resume) — qui sulla cartella invece che sul
+ * modello, perché è lo STESSO meccanismo: `voce.cartella` letta fresca a
+ * ogni resume(), mai catturata una volta sola all'avvio.
+ */
+test('⭐⭐⭐ aggiornaImpostazioni({permessi:"Full access"}) A META\' CHAT allarga la cartella dal GIRO SUCCESSIVO, senza sessione nuova', async () => {
+  const inputPerGiro = [];
+  const avviaSessioneFn = async (input) => {
+    inputPerGiro.push(input.cartella);
+    const giro = inputPerGiro.length;
+    input.onEvento({ type: 'RunStarted', threadId: 't', runId: `r${giro}` });
+    input.onEvento({ type: 'RunFinished', threadId: 't', runId: `r${giro}` });
+    // ⛔ resume() richiede uno storico NON VUOTO per considerare la sessione riprendibile (vedi resume(), storiaRiprendibile) — mai [] come nel test SESSION-SETTINGS-DURABILITY-01 poco sopra, stesso principio.
+    const messaggiFinali = input.messaggiIniziali ?? [{ role: 'user', content: 'prima domanda' }, { role: 'assistant', content: `risposta-${giro}` }];
+    return { ok: true, esito: { comeFinita: 'concluso', messaggiFinali } };
+  };
+  const registro = createSessionRegistry({ avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  // preparaEsecuzioneFinta (in cima a questo file) fissa cartella:'/tmp/x' — nessuna scelta libera qui, il permesso di partenza è quello di default ('Workspace write').
+  const { sessionId } = registro.avvia('task-vero');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(inputPerGiro[0], '/tmp/x', 'primo giro: cartella esatta di partenza, permesso di default');
+
+  await registro.aggiornaImpostazioni(sessionId, { permessi: 'Full access' });
+  registro.resume(sessionId, 'ora dovresti vedere tutto il disco');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(inputPerGiro[1], parsePath('/tmp/x').root, 'giro successivo: allargata alla radice del disco, STESSA sessione, nessun nuovo avvio');
+
+  // ⛔ AL CONTRARIO, stessa sessione: abbassare il permesso restituisce la cartella ORIGINALE, mai una radice rimasta larga per sbaglio.
+  await registro.aggiornaImpostazioni(sessionId, { permessi: 'Workspace write' });
+  registro.resume(sessionId, 'torna alla cartella di prima');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(inputPerGiro[2], '/tmp/x', 'permesso abbassato: la cartella torna quella di partenza, non resta la radice del disco');
+});
+
+test('⛔ AL CONTRARIO — un aggiornaImpostazioni che NON tocca permessi non allarga né restringe mai la cartella', async () => {
+  const inputPerGiro = [];
+  const avviaSessioneFn = async (input) => {
+    inputPerGiro.push(input.cartella);
+    const giro = inputPerGiro.length;
+    input.onEvento({ type: 'RunStarted', threadId: 't', runId: `r${giro}` });
+    input.onEvento({ type: 'RunFinished', threadId: 't', runId: `r${giro}` });
+    const messaggiFinali = input.messaggiIniziali ?? [{ role: 'user', content: 'prima domanda' }, { role: 'assistant', content: `risposta-${giro}` }];
+    return { ok: true, esito: { comeFinita: 'concluso', messaggiFinali } };
+  };
+  const registro = createSessionRegistry({ avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero');
+  await new Promise((resolve) => setImmediate(resolve));
+
+  await registro.aggiornaImpostazioni(sessionId, { modello: 'altro-modello' }); // cambia SOLO il modello, mai i permessi
+  registro.resume(sessionId, 'continua');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(inputPerGiro[1], '/tmp/x', 'un aggiornamento che non tocca "permessi" non deve mai spostare la cartella');
+});
+
+test('⭐⭐⭐ Full access sopravvive a un riavvio del server: ripristina() riallarga dalla cartella di partenza + ultimo permesso', async () => {
+  /*
+   * ⛔ Senza questo, una sessione con Full access acceso PRIMA di un riavvio
+   * (server.mjs killato e rilanciato, owner: "assicurati... dopo ogni
+   * riavvio") tornerebbe castrata alla cartella di partenza — un downgrade
+   * silenzioso di un permesso già concesso, mai dichiarato all'owner.
+   * `intestazione.cartella` resta sempre quella DI PARTENZA (scritta prima
+   * di un eventuale allargamento, mai quella già allargata) — vedi il
+   * commento su cartellaEffettivaPerPermessi in session-registry.mjs.
+   */
+  const cartellaStore = cartellaStoreVera();
+  const sessionId = 'sess-full-access-dopo-riavvio';
+  try {
+    registraRigaSync({
+      cartellaStore, sessionId,
+      record: {
+        tipo: 'intestazione', sessionId, taskId: 'task-vero', cartella: 'C:\\workspace-storico',
+        task: { id: 'task-vero', consegna: 'prima domanda' }, comandoProva: 'npm test',
+        forkDa: null, avviataAlle: new Date().toISOString(), modello: 'm', modelloPlanner: null,
+        reasoning: null, mobile: false, permessi: 'Workspace write', permessiPerAttrezzo: null,
+        padreId: null, profonditaDelega: 0,
+      },
+    });
+    // Il permesso è stato alzato a Full access PRIMA del riavvio (una riga impostazioni-sessione successiva all'intestazione, come scrive davvero aggiornaImpostazioni()).
+    registraRigaSync({ cartellaStore, sessionId, record: { tipo: 'impostazioni-sessione', modello: 'm', modelloPlanner: null, reasoning: null, permessi: 'Full access', permessiPerAttrezzo: null, modelId: 'm' } });
+    registraRigaSync({ cartellaStore, sessionId, record: { tipo: 'messaggi-finali', versioneGiro: 1, messaggiFinali: [{ role: 'user', content: 'prima domanda' }, { role: 'assistant', content: 'prima risposta' }] } });
+    registraRigaSync({ cartellaStore, sessionId, record: { type: 'RunFinished', threadId: 't1', runId: 'r1', _sequenza: 1 } });
+
+    const finta = sessioneControllabile();
+    const registro = createSessionRegistry({
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+      modello: 'm', chiave: 'k', cartellaStore,
+    });
+
+    await registro.ripristina();
+    registro.resume(sessionId, 'continua dopo il riavvio');
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(finta.ultimoInput.cartella, parsePath('C:\\workspace-storico').root, 'dopo un riavvio, una sessione già a Full access resta allargata — mai ricastrata alla cartella di partenza');
+    finta.concludi({ type: 'RunFinished', threadId: 't', runId: 'r2' });
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
 });
 
 /*
