@@ -1434,3 +1434,53 @@ Ordine testuale, in quest'ordine e non un altro:
 
 ⛔ Nessuna delle due si tocca prima della ricerca competitor: è esattamente
 il tipo di modifica dove «sembra ovvia» e non lo è.
+
+---
+
+## 03/9 — Due fix UI chiesti dall'owner, da fare «quando puoi»
+
+Segnati subito e non iniziati: l'owner ha detto «ack e segna questi per quando
+puoi». Restano dietro alla sequenza qui sopra (release mobile → GPU → full
+access), a meno che non dica lui diversamente.
+
+### FIX-UI-1 · Il suggerimento di risposta nel placeholder del composer
+
+Con le sue parole:
+
+> «fare in modo un po' come fa Claude di dare al modello una risposta come
+> suggerimento… alla fine della risposta/output del modello, LUI decide cosa
+> mettere nel placeholder del chat composer. Esempio: io chiedo "guarda la
+> directory", lui risponde "ecco quello che ho trovato: directory 1,
+> directory 2…", nel composer spunta come placeholder "dai un'occhiata alla
+> directory X" oppure "appuntami un file md con la lista delle directory".
+> Io premo TAB e da placeholder diventa testo nel composer, pronto da
+> inviare.»
+
+Le cose che questa richiesta implica, scritte perché non si perdano:
+- il suggerimento lo produce **il modello**, alla fine del proprio giro — non
+  è una frase nostra scelta da una lista;
+- vive come **placeholder**, quindi non è testo finché non lo si accetta;
+- **TAB** lo trasforma in testo vero nel composer, pronto ma NON inviato;
+- ⛔ serve una **ricerca tecnica competitor** («c'è bisogno di una ricerca
+  tecnica web competitor per implementarlo al meglio»), da fare prima.
+
+⛔ Domande aperte che la ricerca deve chiudere, non da decidere a tavolino:
+uno o più suggerimenti? il giro costa un'altra chiamata al modello o si
+ricava dallo stesso? cosa succede se la persona sta già scrivendo? e come
+non farlo sembrare testo suo quando è solo un suggerimento.
+
+### FIX-UI-2 · Composer ridimensionabile, e ricordato
+
+> «modificare altezza e larghezza del chat composer a piacimento e
+> memorizzarlo, un po' come si fa con le modali. ATTENZIONE BISOGNA FARE IN
+> MODO CHE MODIFICANDO ALTEZZA E LARGHEZZA NON SI SPACCHI POSIZIONE E
+> COMPONENTI INTERNI, BISOGNA DARE COMUNQUE UN'ALTEZZA MASSIMA E LARGHEZZA
+> MASSIMA ALTRIMENTI UTENTE PUÒ ALLARGARE E ALZARE ALL'INFINITO»
+
+⛔ Il vincolo è in maiuscolo nell'originale, e sono due:
+1. ridimensionare **non deve rompere** posizione e componenti interni (il
+   composer contiene la pillola del modello, i permessi, il ramo, il
+   microfono, il «+» e il pulsante d'invio: sono quelli che si spaccano);
+2. servono un **tetto di altezza e di larghezza**, altrimenti si allarga
+   all'infinito.
+⇒ La misura si **ricorda**, come per le modali.
