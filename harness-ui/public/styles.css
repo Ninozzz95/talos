@@ -714,14 +714,26 @@ body.reduce-motion .talos-line-loader-node:nth-of-type(3) { animation-delay: cal
 .composer, .queued-message, .composer-status { pointer-events: auto; }
 .composer { container-type: inline-size; min-height: var(--composer-canonical-h); width: var(--composer-max-w, 100%); margin-inline: auto; border: 1px solid var(--line-strong); background: var(--surface-glass-strong); backdrop-filter: blur(20px); will-change: backdrop-filter; border-radius: 15px; box-shadow: var(--shadow); padding: 13px 54px 10px 12px; display: grid; grid-template-rows: minmax(38px,auto) auto; position: relative; }
 .composer:focus-within { border-color: var(--focus); box-shadow: var(--shadow), 0 0 0 1px var(--focus-soft); }
-.composer textarea { width: 100%; min-height: 38px; max-height: var(--composer-textarea-max-h, 120px); field-sizing: content; resize: none; overflow-y: auto; border: 0; background: transparent; color: var(--text); outline: 0; padding: 5px 3px 7px; font-size: calc(14px * var(--talos-ui-font-scale)); line-height: 1.5; }
+/* ⭐ 3/9 — padding-top/left aumentati (5/3 → 9/9): la maniglia di ridimensionamento (18×18 a 2,2 dentro `.composer`) arriva fino a (20,20) nella stessa coordinata — il testo deve cominciare DOPO quel punto, non sotto di lei. Misurato con Playwright, non a occhio: l'angolo di 6-9px che si sovrapponeva prima è sparito con questo margine. */
+.composer textarea { width: 100%; min-height: 38px; max-height: var(--composer-textarea-max-h, 120px); field-sizing: content; resize: none; overflow-y: auto; border: 0; background: transparent; color: var(--text); outline: 0; padding: 9px 3px 7px 13px; font-size: calc(14px * var(--talos-ui-font-scale)); line-height: 1.5; }
 .composer textarea::placeholder { color: var(--muted); }
 /* ⭐ 3/9 — item 10: il placeholder-suggerimento si distingue da quello vuoto normale — colore d'accento, corsivo. */
 .composer textarea.composer-has-suggestion::placeholder { color: var(--accent-2); font-style: italic; }
 .composer-suggestion-hint { position: absolute; right: 56px; top: 15px; font-size: 10px; color: var(--muted-2); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; pointer-events: none; opacity: 0; transition: opacity .15s ease; }
 .composer textarea.composer-has-suggestion ~ .composer-suggestion-hint { opacity: 1; }
 /* ⭐ 3/9 — item 10: maniglia in alto a sinistra, il bordo LIBERO — il composer è ancorato al fondo dello schermo (.composer-wrap sopra: bottom:0, mai un top), quindi crescere in altezza lo estende verso l'ALTO, mai verso il basso: non può clippare fuori dallo schermo. touch-action:none, o un dito che trascina su schermo touch scrollerebbe la pagina sotto invece di ridimensionare. */
-.composer-resize-handle { position: absolute; left: -1px; top: -1px; width: 22px; height: 22px; border: 1px solid var(--line-strong); border-right: 0; border-bottom: 0; border-radius: 15px 0 0 0; display: flex; align-items: center; justify-content: center; color: var(--muted-2); cursor: nwse-resize; touch-action: none; background: var(--surface-glass-strong); }
+/*
+ * ⭐⭐⭐ 3/9 — owner, dal vivo: "icona di estensione copre il placeholder".
+ * Misurato (Playwright): la maniglia da 22×22 a (-1,-1) si estendeva fino
+ * a (21,21), e il testo del composer comincia a (15,18) — 12px di padding
+ * del riquadro + 3/5px di padding proprio della textarea. La maniglia
+ * invadeva 6-9px del punto dove il testo comincia davvero.
+ * ⇒ Due mosse insieme, non una sola: la maniglia più piccola E spostata
+ * dentro al bordo (18×18 a 2,2 → arriva a 20,20), la textarea con un
+ * pizzico di padding in più (vedi sotto) così il testo comincia dopo la
+ * maniglia invece che sotto di lei.
+ */
+.composer-resize-handle { position: absolute; left: 2px; top: 2px; width: 18px; height: 18px; border: 1px solid var(--line-strong); border-right: 0; border-bottom: 0; border-radius: 10px 0 0 0; display: flex; align-items: center; justify-content: center; color: var(--muted-2); cursor: nwse-resize; touch-action: none; background: var(--surface-glass-strong); }
 .composer-resize-handle:hover, .composer-resize-handle:focus-visible { color: var(--accent-2); }
 .composer-resize-handle svg { width: 9px; height: 9px; }
 .clipboard-fallback { position: fixed; opacity: 0; pointer-events: none; }
@@ -1336,6 +1348,8 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 }
 :root[data-talos-composer-shape="classic"] .composer { min-height: var(--composer-canonical-h); border-radius: 8px; padding-top: 16px; }
 :root[data-talos-composer-shape="compact"] .composer { min-height: var(--composer-canonical-h); border-radius: 11px; padding-top: 8px; padding-bottom: 7px; }
+/* ⭐ 3/9 — "compact" riduce il padding-top di .composer (13→8): senza questa riga la maniglia tornerebbe a toccare il testo in quella forma specifica, gli stessi 5px che qui mancano. */
+:root[data-talos-composer-shape="compact"] .composer textarea { padding-top: 14px; }
 :root[data-talos-composer-shape="compact"] .composer textarea { min-height: 30px; padding-top: 2px; padding-bottom: 3px; }
 :root[data-talos-message-style="bubbles"] .assistant-message {
   padding: 14px 16px;
