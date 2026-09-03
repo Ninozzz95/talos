@@ -101,6 +101,7 @@ export function createLlamaServerRuntime({ supervisor, fetchImpl = fetch, now = 
     return body.data;
   }
 
+  /** ⛔ `options` viaggia intero, `contextLength` compreso: era qui che si perdeva. */
   async function load(options) {
     return supervisor.start(options);
   }

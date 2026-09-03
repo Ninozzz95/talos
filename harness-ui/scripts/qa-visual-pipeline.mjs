@@ -497,7 +497,7 @@ const SCENARI = {
     if (String(locali) === '[]') p.difetto('nessun modello locale selezionabile: la scheda Locali non offre niente', { severita: 'blocco' });
     await p.screenshot('picker-locali-scegliibili', { nota: 'i modelli sul disco si scelgono come gli altri, col prefisso di fonte local:' });
 
-    await p.cdp.evaluate("document.querySelector('[data-model-picker-local]')?.click()");
+    await p.cdp.evaluate("(() => { const b = Array.from(document.querySelectorAll('[data-model-picker-local]')); const acceso = b.find((x) => /27B/i.test(x.dataset.modelPickerLocal)); (acceso || b[0])?.click(); return (acceso || b[0])?.dataset.modelPickerLocal; })()");
     await p.attendi(900);
     const scelto = await p.cdp.evaluate("document.querySelector('.model-picker-trigger-label')?.textContent?.trim() ?? '(nessuno)'");
     p.nota(`modello scelto: ${scelto}`);
@@ -519,7 +519,10 @@ const SCENARI = {
     await p.attendi(300);
     const inviato = await p.cdp.evaluate("(() => { const f = document.querySelector('#composerForm'); if (!f) return 'nessun form'; f.requestSubmit ? f.requestSubmit() : f.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); return 'inviato'; })()");
     p.nota(`invio nel composer: ${inviato}`);
-    await p.attendi(30_000);
+    // ⛔ Un 0.6B su CPU con 43 attrezzi in contesto impiega piu' di trenta
+    // secondi al primo token: la prima stesura fotografava il vuoto e lo
+    // chiamava "nessuna risposta".
+    await p.attendi(75_000);
 
     const esito = await p.cdp.evaluate("(() => { const m = document.querySelectorAll('.assistant-message .assistant-copy'); const ultimo = m[m.length - 1]; return JSON.stringify({ messaggi: m.length, testo: (ultimo?.textContent || '').slice(0, 200), errore: (document.querySelector('.session-error, .run-error')?.textContent || '').slice(0, 160) }); })()");
     p.nota(`esito della sessione su modello LOCALE: ${esito}`);
@@ -564,7 +567,7 @@ const SCENARI = {
     await p.attendi(800);
 
     // ── 2. le azioni sotto una risposta ──────────────────────────────────
-    await p.cdp.evaluate("document.querySelector('.session-row, .chat-list-item, [data-session-id]')?.click()");
+    await p.cdp.evaluate("document.querySelector('.real-session-item[data-real-session-id]')?.click()");
     await p.attendi(4_000);
     const azioni = await p.cdp.evaluate("JSON.stringify(Array.from(document.querySelectorAll('.assistant-message .message-actions button')).map(b => b.getAttribute('aria-label')))");
     p.nota(`azioni sotto le risposte: ${azioni}`);

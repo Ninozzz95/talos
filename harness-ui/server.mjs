@@ -79,6 +79,27 @@ async function startServer() {
    * ⇒ Si passa una funzione che lo legge QUANDO serve, cioè al momento della
    * richiesta, quando il motore può anche essere stato acceso nel frattempo.
    */
+  /**
+   * Quanti livelli si possono mandare sulla GPU con QUESTO binario.
+   *
+   * ⛔ 99 è la convenzione affermata per «tutti quelli che ci sono»
+   * (llama.cpp docs): non serve sapere quanti siano. Zero se il binario non
+   * dichiara nessun dispositivo — una build CPU accetterebbe `-ngl` e lo
+   * ignorerebbe, e resteremmo convinti di usare una scheda che non tocchiamo.
+   */
+  async function rilevaLivelliGpu(percorsoBinario) {
+    try {
+      const { execFile } = await import('node:child_process');
+      const { promisify } = await import('node:util');
+      const { stdout } = await promisify(execFile)(percorsoBinario, ['--list-devices'], { timeout: 20_000, windowsHide: true });
+      const haDispositivo = /^\s{2,}\S+\d*:\s/mu.test(stdout) && !/\(none\)/u.test(stdout);
+      if (haDispositivo) console.log('[runtime] backend GPU rilevato dal binario llama-server:', stdout.trim().split(/\r?\n/u).slice(1).join(' | '));
+      return haDispositivo ? 99 : 0;
+    } catch {
+      return 0; // ⛔ se non si riesce a chiedere, non si dà per scontato
+    }
+  }
+
   let supervisoreLocale = null;
 
   const ownerRuntime = createOwnerRuntimeAdapter({
@@ -156,7 +177,17 @@ async function startServer() {
    */
   let localRuntimeProbe = null;
   if (config.llamaServerPath) {
-    const supervisor = createLlamaServerSupervisor({ binaryPath: config.llamaServerPath, modelStore: localModelStore });
+    /*
+     * ⭐⭐⭐ 03/9 — si CHIEDE AL BINARIO se ha una GPU, non lo si indovina.
+     *
+     * `llama-server --list-devices` è la sola risposta che vale: la build CPU
+     * dice «(none)», quella Vulkan elenca la scheda con la sua VRAM. Da lì
+     * si decide se passare `-ngl`, invece di fidarsi del nome del file o di
+     * quello che Windows racconta sulla VRAM (tronca a 32 bit: riportava 4 GB
+     * per una scheda da 16).
+     */
+    const gpuLayers = await rilevaLivelliGpu(config.llamaServerPath);
+    const supervisor = createLlamaServerSupervisor({ binaryPath: config.llamaServerPath, modelStore: localModelStore, gpuLayers });
     // ⛔ Registrato SUBITO dopo la creazione: è l'unico punto in cui il
     // legame tardivo di sopra si chiude davvero. Senza questa riga i modelli
     // locali resterebbero irraggiungibili con un messaggio che dice
@@ -167,7 +198,84 @@ async function startServer() {
       detect: async () => ({ state: 'observed', runtimeId: 'llama.cpp', runtimeState: supervisor.status().state, observedAt: supervisor.status().observedAt }),
       listModels: async () => (await localModelStore.list()).filter((model) => model.state === 'ready').map((model) => ({ id: model.id, name: model.repo, source: 'llama.cpp', context: { state: 'unknown' } })),
       inspect: (modelId) => localModelStore.inspect(modelId),
-      load: async (modelId) => { const manifest = await localModelStore.inspect(modelId); if (!manifest || manifest.state !== 'ready') { const error = new Error('Modello locale non pronto'); error.code = 'MODEL_NOT_FOUND'; throw error; } const file = manifest.files[0]; return llama.load({ modelId, modelPath: join(fileURLToPath(new URL('.local-models/', import.meta.url)), manifest.path, file.path) }); },
+      /*
+       * ⭐⭐⭐ 03/9 — IL CONTESTO SI SCEGLIE, non si lascia decidere al motore.
+       *
+       * Owner: «ne ho scaricato uno da 27 b, perché cazzo ne devi usare uno da
+       * 600 milioni?». Perché il 27B non partiva — e non per la sua taglia.
+       * Senza `-c`, llama.cpp alloca il contesto ADDESTRATO del modello:
+       * 262.144 token per quel file, cioè una cache che non sta in nessuna
+       * memoria di questo computer. Il 0.6B funzionava solo perché il suo
+       * contesto addestrato è 40.960.
+       *
+       * ⛔ MISURATO: lo stesso file, lanciato a mano con `-c 2048`, dice
+       * «model loaded / listening» in 13 secondi.
+       *
+       * ⇒ Si calcola quanti token ci stanno DAVVERO, con i numeri che questo
+       * server già misura: i byte per token della cache (dall'header GGUF) e
+       * la memoria libera adesso. Metà del libero, mai oltre il contesto
+       * addestrato, mai sotto 4.096 — sotto quella soglia una sessione
+       * agentica non ha spazio nemmeno per il prompt di sistema.
+       */
+      load: async (modelId, opzioni = {}) => {
+        const manifest = await localModelStore.inspect(modelId);
+        if (!manifest || manifest.state !== 'ready') { const error = new Error('Modello locale non pronto'); error.code = 'MODEL_NOT_FOUND'; throw error; }
+        const file = manifest.files[0];
+        const radiceModelli = fileURLToPath(new URL('.local-models/', import.meta.url));
+        const modelPath = join(radiceModelli, manifest.path, file.path);
+        let contextLength = Number.isInteger(opzioni.contextLength) && opzioni.contextLength > 0 ? opzioni.contextLength : null;
+        if (contextLength === null) {
+          try {
+            const header = await readGgufHeader(modelPath);
+            const macchina = await misuraCapacitaMacchina({ storagePath: config.publicDir });
+            const liberi = Number(macchina?.memory?.freeBytes);
+            const perToken = Number(header?.kvCacheBytesPerToken);
+            if (Number.isFinite(liberi) && Number.isFinite(perToken) && perToken > 0) {
+              /*
+               * ⛔⛔ I PESI NON SI SOTTRAGGONO. La prima stesura calcolava
+               * `(liberi - pesi) * 0.5` e sul 27B dava 7.157 token: la
+               * richiesta di apertura ne vuole 8.314 (prompt di sistema più 43
+               * attrezzi), quindi la sessione moriva subito con
+               * «request exceeds the available context size».
+               *
+               * MISURATO: lo stesso modello con `-c 32768` parte e resta
+               * pronto. Il motivo è che llama.cpp mappa i pesi dal disco
+               * (mmap): il sistema li pagina su richiesta e NON occupano la
+               * memoria libera. Quella se la prende la cache del contesto, e
+               * basta contare quella.
+               *
+               * ⛔ E il pavimento non è 4.096: sotto gli 8.192 una sessione
+               * agentica non ha spazio nemmeno per la propria apertura, e
+               * partirebbe solo per fallire al primo messaggio.
+               */
+              const possibili = Math.floor((liberi * 0.6) / perToken);
+              const tetto = header.trainedContext || possibili;
+              contextLength = Math.max(8_192, Math.min(tetto, possibili));
+              /*
+               * ⛔⛔ CON LA GPU IL BUDGET E' UN ALTRO: la cache finisce in
+               * VRAM, non nella RAM di sistema, e su questa scheda sono 15,4
+               * GB contro un modello da 15,7. Il calcolo qui sopra guarda la
+               * RAM e dava 58.739 token: il caricamento moriva.
+               *
+               * MISURATO sulla RX 9070 XT: `-ngl 99 -c 8192` carica in 15
+               * secondi e genera a 7,7 token/s su un 27B, in italiano
+               * corretto. Lasciando decidere a llama.cpp (`common_fit_params`,
+               * che si adatta alla memoria libera del dispositivo) il modello
+               * parte ma il contesto scende a 4.096 — meno degli 8.314 che
+               * l'apertura di una sessione agentica richiede, quindi la
+               * sessione morirebbe al primo messaggio.
+               * ⇒ Con la GPU si resta in una banda misurata e prudente.
+               */
+              if (gpuLayers > 0) contextLength = Math.max(8_192, Math.min(tetto, 16_384));
+            }
+          } catch {
+            /* ⛔ Se non si riesce a misurare non si inventa un numero grande:
+               si resta su un contesto piccolo e sicuro, che almeno parte. */
+            contextLength = 8_192;
+          }
+        }
+        return llama.load({ modelId, modelPath, contextLength: contextLength ?? 8_192 });
+      },
       unload: () => llama.unload(),
       generateStream: (options) => llama.generateStream(options),
       cancel: (requestId) => llama.cancel(requestId),

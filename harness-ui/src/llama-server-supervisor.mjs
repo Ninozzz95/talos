@@ -3,9 +3,34 @@ import { EventEmitter } from 'node:events';
 import { createServer } from 'node:net';
 import { dirname, isAbsolute } from 'node:path';
 import { createProcessPolicy } from './process-policy.mjs';
+import { statSync } from 'node:fs';
 
 const LOOPBACK = '127.0.0.1';
 const DEFAULT_TIMEOUT_MS = 15_000;
+/*
+ * ⛔⛔⛔ 03/9 — «PERCHE' CAZZO NE DEVI USARE UNO DA 600 MILIONI?».
+ *
+ * L'owner aveva scaricato un 27B da 15,7 GB e io usavo un 0.6B, perche' il
+ * 27B «non partiva»: la rotta di caricamento rispondeva INTERNAL_ERROR dopo
+ * 15 secondi netti. Avevo creduto alla mia stima di memoria e non ho chiesto
+ * il motivo vero.
+ *
+ * Il motivo vero, misurato lanciando llama-server a mano: il modello STA
+ * CARICANDO — oltre due minuti per leggere 15,7 GB dal disco — e siamo noi ad
+ * abbandonarlo dopo 15 secondi. Non era «troppo grande»: era un'attesa
+ * tarata su modelli piccoli.
+ *
+ * ⇒ L'attesa si commisura ai BYTE del modello: quindici secondi di base piu'
+ * quindici per gigabyte. Sul 27B fanno ~4 minuti, sul 0.6B restano i 15
+ * secondi di sempre. ⛔ Non una costante piu' grande per tutti: un modello
+ * piccolo che non parte deve continuare a dirlo subito, non far aspettare
+ * quattro minuti per scoprire che il binario e' rotto.
+ */
+const ATTESA_PER_GIGABYTE_MS = 15_000;
+export function attesaSaluteMs(byteModello, base = DEFAULT_TIMEOUT_MS) {
+  const gb = Number.isFinite(byteModello) && byteModello > 0 ? byteModello / 1_000_000_000 : 0;
+  return Math.round(base + gb * ATTESA_PER_GIGABYTE_MS);
+}
 const DEFAULT_POLL_MS = 100;
 
 export class LlamaServerSupervisorError extends Error {
@@ -40,6 +65,13 @@ export function createLlamaServerSupervisor({
   portAllocator = allocatePort,
   now = () => new Date(),
   healthTimeoutMs = DEFAULT_TIMEOUT_MS,
+  /**
+   * Quanti livelli mandare sulla GPU. ⛔ `0` (predefinito) = nessuno, cioè il
+   * comportamento di sempre: una build senza backend accetterebbe `-ngl` e lo
+   * ignorerebbe in silenzio, facendoci credere di usare una scheda che non
+   * stiamo toccando.
+   */
+  gpuLayers = 0,
   pollIntervalMs = DEFAULT_POLL_MS,
 } = {}) {
   if (typeof binaryPath !== 'string' || binaryPath.trim() === '') throw new LlamaServerSupervisorError('binaryPath is required', 'RUNTIME_MISCONFIGURED');
@@ -119,7 +151,13 @@ export function createLlamaServerSupervisor({
     return fetchImpl(`${current.baseUrl}${path}`, { ...options, headers });
   }
 
-  async function start({ modelId, modelPath, port } = {}) {
+  /**
+   * @param {{modelId?: string, modelPath: string, port?: number, contextLength?: number}} opzioni
+   *   `contextLength` — ⛔ QUANTI TOKEN chiedere al motore. Vedi il commento
+   *   sopra `-c` più sotto: senza, llama.cpp prova ad allocare il contesto
+   *   ADDESTRATO, e su un modello grande non ci sta in nessuna macchina.
+   */
+  async function start({ modelId, modelPath, port, contextLength } = {}) {
     if (current && ['loading', 'ready', 'stopping'].includes(current.state)) throw new LlamaServerSupervisorError('runtime is already active', 'RUNTIME_ALREADY_RUNNING');
     if (typeof modelPath !== 'string' || !isAbsolute(modelPath)) throw invalid('modelPath must be absolute');
     const selectedPort = port ?? await portAllocator();
@@ -151,13 +189,64 @@ export function createLlamaServerSupervisor({
         '--host', LOOPBACK,
         '--port', String(selectedPort),
         '--api-key', apiKey,
+        /*
+         * ⛔⛔⛔ 03/9 — QUI NON PASSAVAMO MAI `-c`, e il 27B dell'owner non
+         * partiva. Owner: «ne ho scaricato uno da 27 b, perché cazzo ne devi
+         * usare uno da 600 milioni?».
+         *
+         * MISURATO, non dedotto: lanciato a mano lo STESSO file con `-c 2048`
+         * il motore dice «model loaded / listening» in 13 secondi. Lanciato
+         * come lo lanciavamo noi, muore. Senza `-c` llama.cpp alloca il
+         * contesto ADDESTRATO — 262.144 token per quel modello — e la cache
+         * che ne esce non sta in nessuna memoria di questo computer.
+         *
+         * ⛔ Non era «il modello è troppo grande»: il file da 15,7 GB entra.
+         * Era la CACHE di un contesto che nessuno aveva chiesto. Ci avevo
+         * creduto due volte — prima incolpando la memoria, poi l'attesa — e
+         * ogni volta senza guardare cosa diceva il motore.
+         */
+        ...(Number.isInteger(contextLength) && contextLength > 0 ? ['-c', String(contextLength)] : []),
+        /*
+         * ⭐⭐⭐ 03/9 — LA GPU. Owner: «bisogna usare tecniche all'avanguardia
+         * (per esempio uso della gpu)».
+         *
+         * MISURATO, non supposto: la build che stavamo usando è
+         * `llama-b10517-bin-win-CPU-x64` e risponde «Available devices:
+         * (none)». La stessa versione in variante Vulkan, sulla stessa
+         * macchina, risponde «Vulkan0: AMD Radeon RX 9070 XT (16304 MiB,
+         * 15416 MiB free)» — sedici gigabyte di VRAM che stavamo ignorando,
+         * mentre un 27B macinava sul processore.
+         * ⛔ Windows riportava 4 GB di VRAM (`Win32_VideoController` tronca a
+         * 32 bit): un altro numero da non credere senza chiedere al motore.
+         *
+         * ⭐ Ricerca 03/9 (ggml-org/llama.cpp discussions #21043;
+         * digtvbg.com, «Vulkan vs ROCm su RX 9070 XT»): su questa scheda
+         * llama-server con Vulkan fa **62 token/s** e batte vLLM su ROCm
+         * (48), e Vulkan è nelle release Windows ufficiali senza driver
+         * speciali. `-ngl 99` scarica TUTTI i livelli sulla GPU: il 99 è la
+         * convenzione affermata per «tutti», qualunque sia il numero vero.
+         *
+         * ⛔ Solo se il binario ha davvero un backend: con la build CPU
+         * `-ngl` verrebbe accettato e ignorato, e crederemmo di usare una
+         * GPU che non tocchiamo. Lo decide chi costruisce il supervisore,
+         * che il binario lo ha scelto.
+         */
+        ...(Number.isInteger(gpuLayers) && gpuLayers > 0 ? ['-ngl', String(gpuLayers)] : []),
         '--jinja',
         '--metrics',
         '--props',
       ], { cwd: isAbsolute(binaryPath) ? dirname(binaryPath) : process.cwd(), shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
       if (!entry.child || typeof entry.child.once !== 'function') throw new LlamaServerSupervisorError('spawn did not return a child process', 'RUNTIME_PROCESS_FAILED');
       attachProcess(entry);
-      const deadline = Date.now() + healthTimeoutMs;
+      /*
+       * ⛔ L'attesa la decide la DIMENSIONE del file, letta adesso dal disco:
+       * un modello che il sistema deve ancora leggere non e' un modello che
+       * non parte. Se la misura non riesce si resta sull'attesa di base.
+       */
+      let byteModello = 0;
+      try { byteModello = statSync(modelPath).size; } catch { byteModello = 0; }
+      const attesa = attesaSaluteMs(byteModello, healthTimeoutMs);
+      const deadline = Date.now() + attesa;
       while (Date.now() < deadline) {
         if (entry.failure) throw new LlamaServerSupervisorError(`llama-server failed: ${entry.failure.message}`, 'RUNTIME_PROCESS_FAILED');
         const result = await health();
@@ -170,7 +259,9 @@ export function createLlamaServerSupervisor({
       }
       entry.state = 'failed';
       state = 'failed';
-      throw new LlamaServerSupervisorError('llama-server health timeout', 'RUNTIME_HEALTH_TIMEOUT');
+      // ⛔ Il messaggio dice QUANTO si e' aspettato e quanto pesa il modello:
+      // «timeout» da solo manda a cercare un guasto che non c'e'.
+      throw new LlamaServerSupervisorError(`llama-server non è diventato pronto entro ${Math.round(attesa / 1000)} s (modello di ${(byteModello / 1_000_000_000).toFixed(1)} GB)`, 'RUNTIME_HEALTH_TIMEOUT');
     } catch (error) {
       if (entry.child && !entry.closed) entry.child.kill('SIGTERM');
       if (current === entry) current = null;
