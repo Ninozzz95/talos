@@ -712,10 +712,18 @@ body.reduce-motion .talos-line-loader-node:nth-of-type(3) { animation-delay: cal
 
 .composer-wrap { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px max(20px, calc((100% - 920px)/2)) 12px; background: linear-gradient(180deg, transparent, var(--bg-glass-strong) 22%, var(--bg) 48%); z-index: 10; pointer-events: none; }
 .composer, .queued-message, .composer-status { pointer-events: auto; }
-.composer { container-type: inline-size; min-height: var(--composer-canonical-h); border: 1px solid var(--line-strong); background: var(--surface-glass-strong); backdrop-filter: blur(20px); will-change: backdrop-filter; border-radius: 15px; box-shadow: var(--shadow); padding: 13px 54px 10px 12px; display: grid; grid-template-rows: minmax(38px,auto) auto; position: relative; }
+.composer { container-type: inline-size; min-height: var(--composer-canonical-h); width: var(--composer-max-w, 100%); margin-inline: auto; border: 1px solid var(--line-strong); background: var(--surface-glass-strong); backdrop-filter: blur(20px); will-change: backdrop-filter; border-radius: 15px; box-shadow: var(--shadow); padding: 13px 54px 10px 12px; display: grid; grid-template-rows: minmax(38px,auto) auto; position: relative; }
 .composer:focus-within { border-color: var(--focus); box-shadow: var(--shadow), 0 0 0 1px var(--focus-soft); }
-.composer textarea { width: 100%; min-height: 38px; max-height: 120px; field-sizing: content; resize: none; overflow-y: auto; border: 0; background: transparent; color: var(--text); outline: 0; padding: 5px 3px 7px; font-size: calc(14px * var(--talos-ui-font-scale)); line-height: 1.5; }
+.composer textarea { width: 100%; min-height: 38px; max-height: var(--composer-textarea-max-h, 120px); field-sizing: content; resize: none; overflow-y: auto; border: 0; background: transparent; color: var(--text); outline: 0; padding: 5px 3px 7px; font-size: calc(14px * var(--talos-ui-font-scale)); line-height: 1.5; }
 .composer textarea::placeholder { color: var(--muted); }
+/* ⭐ 3/9 — item 10: il placeholder-suggerimento si distingue da quello vuoto normale — colore d'accento, corsivo. */
+.composer textarea.composer-has-suggestion::placeholder { color: var(--accent-2); font-style: italic; }
+.composer-suggestion-hint { position: absolute; right: 56px; top: 15px; font-size: 10px; color: var(--muted-2); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; pointer-events: none; opacity: 0; transition: opacity .15s ease; }
+.composer textarea.composer-has-suggestion ~ .composer-suggestion-hint { opacity: 1; }
+/* ⭐ 3/9 — item 10: maniglia in alto a sinistra, il bordo LIBERO — il composer è ancorato al fondo dello schermo (.composer-wrap sopra: bottom:0, mai un top), quindi crescere in altezza lo estende verso l'ALTO, mai verso il basso: non può clippare fuori dallo schermo. touch-action:none, o un dito che trascina su schermo touch scrollerebbe la pagina sotto invece di ridimensionare. */
+.composer-resize-handle { position: absolute; left: -1px; top: -1px; width: 22px; height: 22px; border: 1px solid var(--line-strong); border-right: 0; border-bottom: 0; border-radius: 15px 0 0 0; display: flex; align-items: center; justify-content: center; color: var(--muted-2); cursor: nwse-resize; touch-action: none; background: var(--surface-glass-strong); }
+.composer-resize-handle:hover, .composer-resize-handle:focus-visible { color: var(--accent-2); }
+.composer-resize-handle svg { width: 9px; height: 9px; }
 .clipboard-fallback { position: fixed; opacity: 0; pointer-events: none; }
 .composer-mic { position: absolute; top: 7px; right: 8px; width: 40px; height: 40px; }
 /* ⭐⭐⭐ 29/8 — FASE J: stato VISIBILE mentre il push-to-talk è attivo — stesso pattern esatto di .tool-state.running/.connection-dot (pulse + --motion-activity), mai una durata scritta a mano. */
@@ -1045,6 +1053,7 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .dialog-user-sized .sheet-head, .dialog-user-sized .command-search { flex: 0 0 auto; }
 .dialog-user-sized .sheet-body, .sheet-dialog--new-session.dialog-user-sized .sheet-body, .dialog-user-sized .command-results { flex: 1 1 auto; min-height: 0; height: auto; max-height: none; }
 .dialog-resizing { user-select: none; }
+.composer-resizing { user-select: none; }
 .dialog-resize-handle { display: block; position: absolute; z-index: 8; margin: 0; border: 0; outline: 0; background: transparent; padding: 0; touch-action: none; opacity: .72; }
 .dialog-resize-handle::after { content: ''; position: absolute; border-radius: 999px; background: var(--line-strong); transition: background var(--motion-hover) var(--motion-ease), opacity var(--motion-hover) var(--motion-ease); opacity: .6; }
 .dialog-resize-handle:hover::after, .dialog-resize-handle:focus-visible::after, .dialog-resizing .dialog-resize-handle::after { background: var(--accent-2); opacity: 1; }

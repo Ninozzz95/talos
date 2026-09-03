@@ -176,6 +176,16 @@
       /** Piano §1.3-BIS.T — toolCallId -> nome attrezzo, SOLO per riconoscere quando un ToolCallResult appartiene a "shell" e specchiarlo nella vista Terminale. Non tocca il rendering generico della chat, già esistente. */
       toolCallNomi: new Map(),
       /**
+       * ⭐⭐⭐ 3/9 — item 10 (fix UI, desktop): il bersaglio dell'ULTIMO
+       * attrezzo del giro, per il suggerimento nel composer. Catturato al
+       * ToolCallResult, PRIMA che `toolCallNomi.delete()` lo faccia
+       * sparire — RunFinished arriva sempre dopo l'ultimo ToolCallResult,
+       * quindi a quel punto la Map è già vuota per il giro appena
+       * concluso. Stessa idea di `ultimoBatchChiuso` qui sopra: un
+       * riferimento preso PRIMA della pulizia, non ricostruito dopo.
+       */
+      ultimoBersaglioAttrezzo: null,
+      /**
        * ⭐⭐⭐ 30/8, owner: "raggruppati in un collapse come fa Claude, con
        * diff totale accanto" (riferimento: Claude Code stesso, screenshot
        * allegati — vedi LEDGER-RAGGRUPPAMENTO-TOOL-CALL-DIFF-2026-08-30.md).
@@ -5544,6 +5554,29 @@
     return Boolean(state.realSession.id && !state.realSession.eventoTerminaleVisto);
   }
 
+  /**
+   * ⭐⭐⭐ 3/9 — item 10: il placeholder-suggerimento è un TERZO stato del
+   * composer, non uno nuovo scollegato dagli altri due (attivo/non attivo)
+   * che `syncRunComposerState` già gestisce — se lo scrivessi altrove,
+   * la prossima chiamata a QUESTA funzione (16 punti diversi nel file) lo
+   * sovrascriverebbe con "Scrivi a TALOS..." al primo evento qualunque.
+   */
+  let suggerimentoComposerAttivo = null;
+  /*
+   * ⛔ NON chiama syncRunComposerState() da qui dentro: se questa funzione
+   * è invocata DA syncRunComposerState stessa (il caso normale, vedi
+   * sotto), richiamarla di nuovo sarebbe una funzione che si richiama —
+   * la stessa famiglia di difetto di stamattina sul mobile (ricorsione
+   * da un self-reference non notato). Chi chiama questa funzione da FUORI
+   * (l'input listener, RunStarted) chiama syncRunComposerState() da sé,
+   * subito dopo — mai qui dentro.
+   */
+  function svuotaSuggerimentoComposer() {
+    if (suggerimentoComposerAttivo === null) return;
+    suggerimentoComposerAttivo = null;
+    composerInput.classList.remove('composer-has-suggestion');
+  }
+
   /** Un solo punto sincronizza semantica, icona e azioni del composer. */
   function syncRunComposerState() {
     const attivo = runRealeAttivo();
@@ -5557,7 +5590,16 @@
     redirectRunButton.hidden = !(attivo && haTesto);
     redirectRunButton.disabled = redirectOccupato;
     redirectRunButton.setAttribute('aria-label', 'Reindirizza con il testo scritto');
-    composerInput.placeholder = attivo ? 'Scrivi un follow-up…' : 'Scrivi a TALOS...';
+    // ⭐ 3/9 — item 10: un suggerimento vale solo a riposo, campo vuoto, niente in coda.
+    if (suggerimentoComposerAttivo && (attivo || haTesto)) svuotaSuggerimentoComposer();
+    composerInput.placeholder = attivo ? 'Scrivi un follow-up…' : (suggerimentoComposerAttivo || 'Scrivi a TALOS...');
+  }
+
+  function mostraSuggerimentoComposer(testo) {
+    if (!testo || runRealeAttivo() || composerInput.value.trim() !== '') return;
+    suggerimentoComposerAttivo = testo;
+    composerInput.classList.add('composer-has-suggestion');
+    syncRunComposerState();
   }
 
   function setQueueMode(enabled, announce = false) {
@@ -6422,6 +6464,46 @@
   function tronca(testo, massimo) {
     const t = String(testo ?? '');
     return t.length > massimo ? `${t.slice(0, massimo)}…` : t;
+  }
+
+  /**
+   * ⭐⭐⭐ 3/9 — item 10, owner: "un po' come fa Claude di dare al modello
+   * una risposta come suggerimento… nel composer spunta come placeholder…
+   * premo tab e diventa testo". Il BERSAGLIO nudo (nome file, comando…),
+   * non una frase — il verbo lo mette la frase-suggerimento più sotto, e
+   * ripeterlo qui sarebbe come `bersaglioAttrezzo` nel bundle mobile
+   * (stessa idea, adattata ai nomi-campo di QUESTO codebase: `descrizione`
+   * prima di `comando` per shell, come fa già `riassuntoAttrezzo`).
+   */
+  function bersaglioAttrezzoNudo(nome, argomenti) {
+    const a = argomenti || {};
+    switch (nome) {
+      case 'leggi': case 'scrivi': return a.percorso || '';
+      case 'cerca': return [a.nome, a.testo].filter(Boolean).map((v) => `"${v}"`).join(' · ');
+      case 'shell': return a.descrizione ? tronca(a.descrizione, 60) : (a.comando ? tronca(a.comando, 60) : '');
+      case 'naviga': return a.url || '';
+      case 'web_search': return a.query ? `"${tronca(a.query, 60)}"` : '';
+      case 'delega_sottotask': return a.task ? tronca(a.task, 60) : '';
+      default: return ''; // elenca/prova/altri: nessun bersaglio singolo pulito, meglio niente che un suggerimento goffo
+    }
+  }
+
+  /** Da dove viene il testo del suggerimento: il bersaglio dell'ultimo attrezzo del giro appena concluso, non una chiamata al modello inventata apposta (costerebbe un giro intero per un extra facoltativo). */
+  function suggerimentoDaUltimoAttrezzo() {
+    const ultimo = state.realSession.ultimoBersaglioAttrezzo;
+    if (!ultimo || !ultimo.nome) return null;
+    const bersaglio = bersaglioAttrezzoNudo(ultimo.nome, ultimo.argomenti);
+    if (!bersaglio) return null;
+    switch (ultimo.nome) {
+      case 'leggi': return `Dimmi di più su ${bersaglio}`;
+      case 'scrivi': return `Rivediamo le modifiche in ${bersaglio}`;
+      case 'cerca': return `Approfondisci ${bersaglio}`;
+      case 'shell': return `Spiega cosa ha fatto: ${bersaglio}`;
+      case 'naviga': return `Cosa dice ${bersaglio}?`;
+      case 'web_search': return `Trova di più su ${bersaglio}`;
+      case 'delega_sottotask': return `Com'è andata: ${bersaglio}`;
+      default: return null;
+    }
   }
 
   function riassuntoAttrezzoInCorso(nome, argomenti) {
@@ -8662,6 +8744,7 @@
           : (state.model || null);
         state.realSession.redirectPendingId = null;
         state.realSession.eventoTerminaleVisto = false;
+        svuotaSuggerimentoComposer(); // ⭐ 3/9 — item 10: un suggerimento del giro FINITO non ha senso su uno appena iniziato
         syncRunComposerState();
         /*
          * ⛔⛔⛔ 27/8, owner: "'Nuovo giro iniziato sulla stessa
@@ -8912,6 +8995,8 @@
           info.stato = fallito ? 'error' : 'complete';
           aggiornaRiassuntoBatch(batch);
         }
+        // ⭐ 3/9 — item 10: preso ORA, non dopo — fra un attimo l'entry sparisce.
+        if (info?.nome) state.realSession.ultimoBersaglioAttrezzo = { nome: info.nome, argomenti: info.argomentiParsati };
         state.realSession.toolCallNomi.delete(evento.toolCallId);
         break;
       }
@@ -9047,6 +9132,7 @@
         chiudiBatchTool(); // 30/8 — fine turno: un batch di tool-call aperto non resta orfano fino al prossimo giro
         state.realSession.eventoTerminaleVisto = !state.realSession.redirectPendingId;
         syncRunComposerState();
+        mostraSuggerimentoComposer(suggerimentoDaUltimoAttrezzo()); // ⭐ 3/9 — item 10: dopo syncRunComposerState, cosi' se c'e' un redirect pendente runRealeAttivo() lo vede ancora attivo e non propone niente
         programmaAggiornamentoElencoSessioniReali(); // il replay di più giri produce un solo refresh visibile della sidebar
         break;
       }
@@ -11123,6 +11209,119 @@
     composerInput.rows = Math.min(5, Math.max(1, explicitLines));
   }
 
+  /**
+   * ⭐⭐⭐ 3/9 — item 10, owner: "modificare altezza e larghezza del chat
+   * composer a piacimento e memorizzarlo, un po' come si fa con le
+   * modali… bisogna dare comunque un'altezza massima e larghezza massima
+   * altrimenti l'utente può allargare e alzare all'infinito".
+   *
+   * ⛔ Non un sistema nuovo: QUESTO stesso file ha già `setupDialogResize`/
+   * `applyDialogSize`/`clampDialogSize` per command/sheet dialog — la
+   * stessa disciplina (chiave localStorage dedicata, clamp min/max,
+   * `layoutCompatto()` disattiva il resize su schermo piccolo, resize
+   * anche da tastiera con le frecce) va tenuta qui, non reinventata più
+   * povera. Non è lo STESSO codice perché il composer non è un
+   * `<dialog>` — è ancorato al fondo dello schermo (`.composer-wrap`:
+   * `bottom:0`, mai un `top`), quindi crescere in altezza lo deve
+   * estendere verso l'ALTO, mai verso il basso: un dialog centrato non
+   * ha questo vincolo, un composer ancorato sì.
+   */
+  const COMPOSER_RESIZE_STORAGE_KEY = 'talos-harness-composer-size-v1';
+  const COMPOSER_RESIZE_MIN = Object.freeze({ width: 380, height: 80 });
+  const COMPOSER_RESIZE_MAX = Object.freeze({ width: 1400, height: 420 });
+
+  function readSavedComposerSize() {
+    try {
+      const value = JSON.parse(window.localStorage.getItem(COMPOSER_RESIZE_STORAGE_KEY) || 'null');
+      return value && Number.isFinite(value.width) && Number.isFinite(value.height) ? value : null;
+    } catch { return null; } // storage negato o valore corrotto: si riparte dalla taglia di default, mai un crash
+  }
+
+  function clampComposerSize(width, height) {
+    const maxWidth = Math.min(COMPOSER_RESIZE_MAX.width, Math.max(280, window.innerWidth - 24));
+    const maxHeight = Math.min(COMPOSER_RESIZE_MAX.height, Math.max(160, window.innerHeight - 160));
+    return {
+      width: Math.min(maxWidth, Math.max(COMPOSER_RESIZE_MIN.width, Math.round(Number(width) || COMPOSER_RESIZE_MIN.width))),
+      height: Math.min(maxHeight, Math.max(COMPOSER_RESIZE_MIN.height, Math.round(Number(height) || COMPOSER_RESIZE_MIN.height))),
+    };
+  }
+
+  function applyComposerSize(width, height) {
+    const size = clampComposerSize(width, height);
+    // ⭐ Due variabili, un solo comando: --composer-canonical-h guida il min-height del riquadro (già usata dal sistema "forma del composer"), --composer-textarea-max-h il tetto della textarea — restano proporzionate come lo erano nei valori di default (120 contro 116, +4).
+    document.documentElement.style.setProperty('--composer-canonical-h', `${size.height}px`);
+    document.documentElement.style.setProperty('--composer-textarea-max-h', `${size.height + 4}px`);
+    document.documentElement.style.setProperty('--composer-max-w', `${size.width}px`);
+    composerForm.classList.add('composer-user-sized');
+    return size;
+  }
+
+  function resetComposerSize() {
+    document.documentElement.style.removeProperty('--composer-canonical-h');
+    document.documentElement.style.removeProperty('--composer-textarea-max-h');
+    document.documentElement.style.removeProperty('--composer-max-w');
+    composerForm.classList.remove('composer-user-sized');
+    try { window.localStorage.removeItem(COMPOSER_RESIZE_STORAGE_KEY); } catch { /* niente da pulire se lo storage non risponde */ }
+  }
+
+  function saveComposerSize(size) {
+    try { window.localStorage.setItem(COMPOSER_RESIZE_STORAGE_KEY, JSON.stringify(size)); }
+    catch { /* preferenza visuale non bloccante: il composer resta usabile */ }
+  }
+
+  function setupComposerResize() {
+    const saved = readSavedComposerSize();
+    if (saved && !layoutCompatto()) applyComposerSize(saved.width, saved.height);
+    const handle = $('#composerResizeHandle');
+    if (!handle) return; // markup non presente — niente da agganciare, non un errore
+
+    handle.addEventListener('pointerdown', (event) => {
+      if (layoutCompatto() || event.button !== 0) return;
+      event.preventDefault();
+      const start = composerForm.getBoundingClientRect();
+      const startX = event.clientX;
+      const startY = event.clientY;
+      composerForm.classList.add('composer-resizing');
+      handle.setPointerCapture(event.pointerId);
+
+      // ⛔ La maniglia è in ALTO A SINISTRA: trascinare verso l'ALTO o verso SINISTRA (fuori dal riquadro) deve INGRANDIRE in entrambi gli assi — il contrario sembrerebbe al rovescio di quello che si vede muoversi sotto il dito/il cursore.
+      const onMove = (moveEvent) => {
+        const width = start.width + (startX - moveEvent.clientX);
+        const height = start.height + (startY - moveEvent.clientY);
+        applyComposerSize(width, height);
+      };
+      const onEnd = () => {
+        composerForm.classList.remove('composer-resizing');
+        if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+        const rect = composerForm.getBoundingClientRect();
+        saveComposerSize(clampComposerSize(rect.width, rect.height));
+        handle.removeEventListener('pointermove', onMove);
+        handle.removeEventListener('pointerup', onEnd);
+        handle.removeEventListener('pointercancel', onEnd);
+      };
+      handle.addEventListener('pointermove', onMove);
+      handle.addEventListener('pointerup', onEnd);
+      handle.addEventListener('pointercancel', onEnd);
+    });
+
+    // ⭐ Stessa accessibilità già data ai dialog: ridimensionabile anche da tastiera.
+    handle.addEventListener('keydown', (event) => {
+      if (layoutCompatto()) return;
+      const orizzontale = event.key === 'ArrowLeft' || event.key === 'ArrowRight';
+      const verticale = event.key === 'ArrowUp' || event.key === 'ArrowDown';
+      if (!orizzontale && !verticale) return;
+      event.preventDefault();
+      const rect = composerForm.getBoundingClientRect();
+      // Stessa convenzione del trascinamento: Sinistra/Su ingrandiscono.
+      const width = orizzontale ? rect.width + (event.key === 'ArrowLeft' ? 16 : -16) : rect.width;
+      const height = verticale ? rect.height + (event.key === 'ArrowUp' ? 16 : -16) : rect.height;
+      const size = applyComposerSize(width, height);
+      saveComposerSize(size);
+    });
+
+    handle.addEventListener('dblclick', resetComposerSize);
+  }
+
   /*
    * ⭐⭐⭐ 26/8 — il trigger su desktop standalone. Owner: "abbiamo già la
    * grammatica... va adattata", non una decisione UX da inventare da zero.
@@ -11684,6 +11883,21 @@
       event.preventDefault();
       composerForm.requestSubmit();
     }
+    /*
+     * ⭐⭐⭐ 3/9 — item 10: Tab promuove il suggerimento a testo vero. Solo a
+     * campo vuoto e con un suggerimento attivo — altrimenti Tab fa il suo
+     * mestiere normale (sposta il focus), niente sorprese per chi naviga
+     * la pagina da tastiera senza mai aver visto un suggerimento.
+     */
+    if (event.key === 'Tab' && suggerimentoComposerAttivo && composerInput.value === '') {
+      event.preventDefault();
+      const testo = suggerimentoComposerAttivo;
+      svuotaSuggerimentoComposer();
+      composerInput.value = testo;
+      autoGrowTextarea();
+      syncRunComposerState();
+      composerInput.setSelectionRange(composerInput.value.length, composerInput.value.length);
+    }
   });
 
   sendButton.addEventListener('click', () => {
@@ -11880,6 +12094,11 @@
     syncInspectorToggle();
     if (window.innerWidth > 1040) loadPanelWidths();
     clampOpenDialogsToViewport();
+    // ⭐ 3/9 — item 10: stesso principio dei dialog — una finestra rimpicciolita non deve lasciare il composer più grande dello schermo, o su schermo compatto disattiva del tutto la taglia scelta.
+    if (composerForm.classList.contains('composer-user-sized')) {
+      if (layoutCompatto()) resetComposerSize();
+      else applyComposerSize(composerForm.getBoundingClientRect().width, composerForm.getBoundingClientRect().height);
+    }
     syncHostLayout();
     syncVisualViewport();
   }
@@ -12149,6 +12368,7 @@
   loadPanelWidths();
   setupPanelResize();
   setupDialogResize();
+  setupComposerResize(); // ⭐ 3/9 — item 10: stessa famiglia dei due sopra, per il composer
   syncHostLayout();
   ensureDownloadQueueBadge();
   setQueueMode(false);

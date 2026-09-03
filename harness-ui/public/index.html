@@ -157,7 +157,9 @@
           <div class="composer-wrap">
             <div class="queued-message" id="queuedMessage" data-demo-surface="queue"><span><b>Follow-up in coda</b> · <span id="queuedMessageText">dopo il run corrente</span></span><button class="text-btn" id="cancelQueued">Annulla</button></div>
             <form class="composer" id="composerForm">
+              <button type="button" class="composer-resize-handle" id="composerResizeHandle" aria-label="Ridimensiona composer (doppio click per ripristinare)" title="Trascina per ridimensionare · doppio click per ripristinare"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M1 11 11 1M5 11 11 5M9 11 11 9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
               <textarea id="composerInput" rows="1" placeholder="Scrivi a TALOS..." aria-label="Messaggio"></textarea>
+              <span class="composer-suggestion-hint" aria-hidden="true">Tab ↵</span>
               <button class="icon-btn composer-mic" type="button" aria-label="Voce"><svg><use href="#i-mic"/></svg></button>
               <div class="composer-toolbar">
                 <button class="round-btn" type="button" id="capabilityBtn" aria-label="Aggiungi contesto"><svg><use href="#i-plus"/></svg></button>
