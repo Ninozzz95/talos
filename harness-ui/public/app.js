@@ -170,6 +170,17 @@
       treeOpen: new Set(),
       treeWorkspaceKey: null,
       treeUiRestored: false,
+      /**
+       * ⭐⭐⭐ 03/9 — "risali fuori dalla sessione", owner: "a prescindere da
+       * full access o meno". SEPARATA da treeCache/treeOpen apposta: quella
+       * cache è per-livello dentro la cartella della sessione (leggiAlberoWorkspace,
+       * legata al confine di scrittura del modello); questa è UN solo
+       * livello alla volta di workspaceBrowser (sola lettura, radice disco
+       * intero) — due fonti dati diverse, mai la stessa cache.
+       */
+      fuoriSessioneAperto: false,
+      fuoriSessionePercorso: null,
+      fuoriSessioneDati: null,
       /** Progetto allowlistato mostrato in sola lettura prima del primo messaggio. */
       previewProjectId: null,
       previewWorkspaceName: null,
@@ -4223,7 +4234,7 @@
      */
     function renderListaLocali() {
       const pezzi = [];
-      pezzi.push(textElement('p', 'model-picker-source-note', 'Girano su questo computer, senza rete e senza costo. Il motore va acceso dal Laboratorio modelli prima di usarli.'));
+      pezzi.push(textElement('p', 'model-picker-source-note', 'Girano su questo computer, senza rete e senza costo. Si accendono da soli alla prima richiesta.'));
       if (!modelliLocali) {
         pezzi.push(textElement('p', 'board-empty', 'Leggo i modelli installati…'));
       } else if (modelliLocali.length === 0) {
@@ -4245,12 +4256,53 @@
           textWrap.append(textElement('strong', '', modello.name || modello.id));
           textWrap.append(textElement('small', '', `su questo computer · ${formattaByteModelLab(Number(modello.bytes || 0))}${modello.state === 'ready' ? '' : ` · ${modello.state}`}`));
           opt.append(iconWrap, textWrap);
-          opt.addEventListener('click', () => {
-            valoreScelto = valore;
-            if (aggiornaModelloPrincipale) state.model = valore;
-            aggiornaTriggerLabel();
-            if (typeof alSelezionato === 'function') alSelezionato(valore);
-            chiudi();
+          /*
+           * ⛔⛔⛔ 03/9 — trovato dal vivo verificando l'avvio automatico a
+           * metà chat (owner: "verifica... anche a metà strada in una chat
+           * già iniziata"): questo handler NON chiamava mai
+           * sincronizzaImpostazioniSessione come fa invece il ramo remoto
+           * (renderLista, poco sopra). Risultato misurato: click sul
+           * modello locale, la pillola del composer restava su quello
+           * remoto, e al Send il server eseguiva ANCORA col modello
+           * vecchio (RunStarted.contesto.modello confermava deepseek, non
+           * il locale scelto) — corretto solo a posteriori dalla nota
+           * "Impostazioni cambiate fuori da questa scheda", che è onesta
+           * ma fuorviante: non era un'altra scheda, era questo stesso
+           * click mai arrivato al server. Stessa disciplina del ramo
+           * remoto: il server è la fonte di verità, la pillola non
+           * promette un modello che il registro non ha ancora accettato.
+           */
+          opt.addEventListener('click', async () => {
+            const applicaScelta = () => {
+              valoreScelto = valore;
+              if (aggiornaModelloPrincipale) state.model = valore;
+              aggiornaTriggerLabel();
+              if (aggiornaModelloPrincipale) {
+                aggiornaPillolaModello();
+                salvaPreferenzeChatDesktop();
+              }
+              chiudi();
+              if (typeof alSelezionato === 'function') alSelezionato(valore);
+            };
+
+            if (aggiornaModelloPrincipale && sincronizzaSessione && state.realSession.id) {
+              if (panel.getAttribute('aria-busy') === 'true') return;
+              panel.setAttribute('aria-busy', 'true');
+              opt.disabled = true;
+              try {
+                await sincronizzaImpostazioniSessione({ modello: valore });
+                applicaScelta();
+              } catch {
+                valoreScelto = state.model || '';
+                aggiornaTriggerLabel();
+                renderLista();
+              } finally {
+                panel.removeAttribute('aria-busy');
+                opt.disabled = false;
+              }
+              return;
+            }
+            applicaScelta();
           });
           pezzi.push(opt);
         }
@@ -7626,6 +7678,15 @@
       const button = $(`#${id}`);
       if (button) button.disabled = !enabled;
     }
+    // ⭐ 03/9 — "risali": abilitato quanto gli altri comandi (una sessione reale, non l'anteprima), ma NON legato a Full access — sola lettura, sempre disponibile.
+    const bottoneUp = $('#fileTreeUp');
+    if (bottoneUp) {
+      bottoneUp.disabled = !enabled || !fuoriSessioneDisponibile();
+      const aperto = state.realSession.fuoriSessioneAperto;
+      bottoneUp.setAttribute('aria-pressed', String(aperto));
+      bottoneUp.title = aperto ? 'Chiudi, torna alla sessione' : 'Risali fuori dalla sessione';
+      bottoneUp.setAttribute('aria-label', aperto ? 'Chiudi, torna alla sola cartella della sessione' : 'Risali fuori dalla sessione (sola lettura)');
+    }
   }
 
   function cartellaSelezionataAlbero() {
@@ -7649,6 +7710,149 @@
     state.realSession.treeOpen.clear();
     salvaImpostazioniAlbero();
     await renderizzaAlberoReale();
+  }
+
+  /**
+   * ⭐⭐⭐ 03/9, owner: "il file tree deve esplorare tutto TUTTO a
+   * prescindere da full access o meno... ho bisogno di risalire a
+   * directory sopra o diverse". SOLA LETTURA per costruzione — workspaceBrowser
+   * (server.mjs, radice = disco intero, già usato dal selettore cartelle
+   * di "Nuova sessione") espone solo browse+createFolder, mai
+   * leggi/scrivi/rinomina/elimina: la persona vede più di quanto il
+   * modello possa toccare, mai il contrario. Il confine di scrittura vero
+   * resta `voce.cartella` (si allarga solo con Full access, lavoro
+   * separato) — questa funzione non lo cambia e non lo può cambiare.
+   */
+  function fuoriSessioneDisponibile() {
+    const radice = state.realSession.cartellaAssoluta;
+    return typeof radice === 'string' && radice.length > 0;
+  }
+
+  async function caricaFuoriSessione(percorso) {
+    const suffix = percorso ? `?path=${encodeURIComponent(percorso)}` : '';
+    const dati = await apiGet(`/api/v1/workspace-browser${suffix}`);
+    state.realSession.fuoriSessionePercorso = dati.path;
+    state.realSession.fuoriSessioneDati = dati;
+    return dati;
+  }
+
+  async function apriFuoriSessione() {
+    if (!fuoriSessioneDisponibile()) return;
+    const button = $('#fileTreeUp');
+    try {
+      if (button) button.disabled = true;
+      // Primo click: parte dal genitore della cartella della sessione — "risali", non "riparti da zero".
+      await caricaFuoriSessione(state.realSession.cartellaAssoluta);
+      if (state.realSession.fuoriSessioneDati?.parent) {
+        await caricaFuoriSessione(state.realSession.fuoriSessioneDati.parent);
+      }
+      state.realSession.fuoriSessioneAperto = true;
+      await renderizzaAlberoReale();
+    } catch (error) {
+      toast('Non riesco a risalire', messaggioErroreUtente(error, 'Riprova, o apri Doctor se persiste.'));
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  function chiudiFuoriSessione() {
+    state.realSession.fuoriSessioneAperto = false;
+    state.realSession.fuoriSessionePercorso = null;
+    state.realSession.fuoriSessioneDati = null;
+    renderizzaAlberoReale();
+  }
+
+  async function navigaFuoriSessione(percorso) {
+    try {
+      await caricaFuoriSessione(percorso);
+      await renderizzaAlberoReale();
+    } catch (error) {
+      toast('Cartella non disponibile', messaggioErroreUtente(error, 'Scegline un’altra.'));
+    }
+  }
+
+  /** Il pannello tratteggiato "fuori dalla sessione": un livello, sola lettura, mai unito alla cache dell'albero vero. */
+  /** Ultimo pezzo di un percorso, come nome mostrabile — 'C:\\' non ha un ultimo pezzo, resta il percorso intero (è già il nome più chiaro possibile per una radice di disco). */
+  function nomeDaPercorso(percorso) {
+    const pulito = String(percorso || '').replace(/[/\\]+$/, '');
+    const ultimo = pulito.split(/[/\\]/u).pop();
+    return ultimo || percorso;
+  }
+
+  /**
+   * ⭐⭐⭐ 03/9 — owner, dal vivo: "se risalgo... faccio tasto destro e uso
+   * come radice, dovrebbe abilitarmi a cambiare il workspace o no? se no
+   * sarebbe una funzione inutile". Aveva ragione — mancava del tutto.
+   * Bottone "usa come radice" su OGNI riga (icona i-check, sempre
+   * visibile — non nascosto dietro un hover: è una capacità nuova, deve
+   * trovarsi da sola) PIÙ sulla cartella corrente in testata, così non
+   * serve entrarci prima solo per poterla scegliere. Ogni riga è un <div>
+   * con DUE bottoni separati (navighiamo/adottiamo), mai un bottone
+   * annidato in un altro — invalido in HTML.
+   */
+  function costruisciRigaAdottaFuoriSessione(percorsoAssoluto, nome) {
+    const bottone = document.createElement('button');
+    bottone.type = 'button';
+    bottone.className = 'ft-outside-row-adopt';
+    bottone.setAttribute('aria-label', `Usa "${nome}" come radice — apre una sessione nuova con Full access`);
+    bottone.title = 'Usa come radice (sessione nuova, Full access)';
+    bottone.append(iconaSvgAlbero('i-check'));
+    bottone.addEventListener('click', (evento) => {
+      evento.stopPropagation();
+      usaCartellaFuoriSessioneComeRadice(percorsoAssoluto, nome);
+    });
+    return bottone;
+  }
+
+  function costruisciZonaFuoriSessione() {
+    const dati = state.realSession.fuoriSessioneDati;
+    const zona = document.createElement('div');
+    zona.className = 'ft-outside-zone';
+
+    const testata = document.createElement('div');
+    testata.className = 'ft-outside-zone-head';
+    testata.append(iconaSvgAlbero('i-eye'));
+    const etichetta = textElement('span', '', dati ? `Fuori dalla sessione · sola lettura · ${dati.path}` : 'Fuori dalla sessione · sola lettura');
+    etichetta.title = dati?.path || '';
+    testata.append(etichetta);
+    if (dati) testata.append(costruisciRigaAdottaFuoriSessione(dati.path, nomeDaPercorso(dati.path)));
+    const chiudi = document.createElement('button');
+    chiudi.type = 'button';
+    chiudi.className = 'ft-outside-zone-close';
+    chiudi.setAttribute('aria-label', 'Chiudi, torna alla sola cartella della sessione');
+    chiudi.title = 'Chiudi';
+    chiudi.append(iconaSvgAlbero('i-x'));
+    chiudi.addEventListener('click', chiudiFuoriSessione);
+    testata.append(chiudi);
+    zona.append(testata);
+
+    if (!dati) {
+      zona.append(textElement('p', 'ft-outside-empty', 'Carico…'));
+      return zona;
+    }
+    if (dati.parent) {
+      const su = document.createElement('button');
+      su.type = 'button';
+      su.className = 'ft-outside-row ft-outside-row-up';
+      su.append(iconaSvgAlbero('i-arrow-left'), textElement('span', '', '..'));
+      su.addEventListener('click', () => navigaFuoriSessione(dati.parent));
+      zona.append(su);
+    }
+    if (dati.items.length === 0) {
+      zona.append(textElement('p', 'ft-outside-empty', 'Questa cartella non contiene altre cartelle.'));
+    }
+    for (const voce of dati.items) {
+      const riga = document.createElement('div');
+      riga.className = 'ft-outside-row-wrap';
+      const naviga = document.createElement('button');
+      naviga.type = 'button';
+      naviga.className = 'ft-outside-row';
+      naviga.append(iconaSvgAlbero('i-folder'), textElement('span', '', voce.name));
+      naviga.addEventListener('click', () => navigaFuoriSessione(voce.path));
+      riga.append(naviga, costruisciRigaAdottaFuoriSessione(voce.path, voce.name));
+      zona.append(riga);
+    }
+    return zona;
   }
 
   // Stato di sola interfaccia, separato dai dati della sessione: come VS Code
@@ -8473,11 +8677,23 @@
    * directory principale quella cartella". Riusa INTERAMENTE il
    * percorso "Full access" costruito oggi stesso
    * (avviaSessionePendente → startCustomSession → cartellaLibera)
-   * invece di inventare un secondo modo di cambiare radice:
-   * session-registry.mjs non ha (e non avrà, per scelta) un modo di
-   * mutare `voce.cartella` su una sessione GIÀ avviata — una nuova
-   * radice è per costruzione una sessione NUOVA. La sessione corrente
-   * resta intatta, ancora nella sidebar, mai toccata.
+   * invece di inventare un secondo modo di cambiare radice: una nuova
+   * radice/progetto resta per costruzione una sessione NUOVA. La
+   * sessione corrente resta intatta, ancora nella sidebar, mai toccata.
+   *
+   * ⛔⛔ 03/9 — CORRETTO: questo commento diceva "session-registry.mjs
+   * non ha, e non avrà per scelta, un modo di mutare voce.cartella su
+   * una sessione già avviata". Non è più vero: `aggiornaImpostazioni`
+   * ORA lo fa (session-registry.mjs, cartellaEffettivaPerPermessi) —
+   * owner, 03/9: "anche dopo aver abilitato full access... il modello
+   * deve potere accedere a qualunque cartella", nella STESSA sessione,
+   * mai una sessione nuova. Le due cose restano DIVERSE per scopo, non
+   * per capacità tecnica: `impostaComeRadice` cambia PROGETTO (nuovo
+   * file tree, nuova conversazione) — accendere "Full access" dalla
+   * pillola permessi allarga il raggio SENZA perdere la sessione, la
+   * conversazione, il contesto. Questa funzione resta la via giusta
+   * per un vero cambio di progetto; non la via per un allargamento
+   * temporaneo.
    *
    * ⛔ Passa SEMPRE per "Full access": il percorso scelto è ASSOLUTO
    * arbitrario per il meccanismo che lo riceve (anche se oggi è dentro
@@ -8486,15 +8702,34 @@
    * cambia di conseguenza, MAI in silenzio — `impostaPermesso` mostra
    * sempre il suo stesso toast "Policy aggiornata".
    */
+  /** Il nucleo comune: apre una sessione NUOVA su un percorso ASSOLUTO, sempre Full access. Condiviso da impostaComeRadice (dentro l'albero) e usaCartellaFuoriSessioneComeRadice (fuori). */
+  function avviaComeNuovaRadice(percorsoAssoluto, nome) {
+    impostaPermesso('Full access', `Full access · nuova radice: ${nome}`);
+    avviaSessionePendente({ cartellaLibera: percorsoAssoluto, nomeCartella: nome, modello: state.model, effort: state.effort, permessi: 'Full access', permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
+  }
+
   function impostaComeRadice(percorsoRelativo, nome) {
     const radice = state.realSession.cartellaAssoluta;
     if (!radice) {
       toast('Radice sconosciuta', 'Questa sessione non ha ancora dichiarato il proprio percorso — riprova appena parte il primo giro.');
       return;
     }
-    const nuovaRadice = `${radice.replace(/[/\\]+$/, '')}/${percorsoRelativo}`;
-    impostaPermesso('Full access', `Full access · nuova radice: ${nome}`);
-    avviaSessionePendente({ cartellaLibera: nuovaRadice, nomeCartella: nome, modello: state.model, effort: state.effort, permessi: 'Full access', permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
+    avviaComeNuovaRadice(`${radice.replace(/[/\\]+$/, '')}/${percorsoRelativo}`, nome);
+  }
+
+  /**
+   * ⭐⭐⭐ 03/9 — owner, dal vivo: "se risalgo... faccio tasto destro e uso
+   * come radice, quello dovrebbe abilitarmi a cambiare il workspace o no?
+   * se no sarebbe una funzione inutile". Aveva ragione: `impostaComeRadice`
+   * costruisce SEMPRE `radiceSessione + '/' + percorso` — per una cartella
+   * FUORI dalla sessione (percorso già ASSOLUTO, mai relativo alla radice
+   * corrente) quella concatenazione produce un percorso rotto. Questa è la
+   * via SEPARATA per la zona fuori sessione: percorso assoluto diretto,
+   * nessuna concatenazione — stesso nucleo (avviaComeNuovaRadice), stesso
+   * risultato di impostaComeRadice (sessione nuova, Full access).
+   */
+  function usaCartellaFuoriSessioneComeRadice(percorsoAssoluto, nome) {
+    avviaComeNuovaRadice(percorsoAssoluto, nome);
   }
 
   async function rivelaFileInEsploraFile(percorsoCompleto) {
@@ -8596,7 +8831,32 @@
       else if (e.key === 'End') { e.preventDefault(); if (righe.length) impostaFocusRigaAlbero(ul, righe[righe.length - 1]); }
     });
 
-    contenitore.replaceChildren(radice, ul);
+    /*
+     * ⭐⭐⭐ 03/9 — "risali fuori dalla sessione": la zona tratteggiata (sola
+     * lettura, workspaceBrowser) sta SOPRA, l'albero vero (radice+ul,
+     * struttura invariata) si racchiude in una "vault card" — il confine di
+     * scrittura del modello reso letteralmente visibile — SOLO mentre la
+     * zona è aperta. Zona chiusa (lo stato di sempre): zero elementi in
+     * più, stessa identica struttura di prima di oggi.
+     */
+    if (state.realSession.fuoriSessioneAperto) {
+      /*
+       * ⛔ 03/9, trovato dal vivo: bordo/fondo d'accento da soli (34%/14% di
+       * opacità) sono troppo deboli su un tema chiaro già caldo — non
+       * bastano a "mai confondere le due cose a schermo". Un'etichetta
+       * esplicita, simmetrica a quella della zona esterna, è il segnale
+       * vero: le parole, non solo il colore.
+       */
+      const vaultLabel = document.createElement('div');
+      vaultLabel.className = 'ft-session-boundary-head';
+      vaultLabel.append(iconaSvgAlbero('i-shield'), textElement('span', '', 'Qui il modello può scrivere'));
+      const vault = document.createElement('div');
+      vault.className = 'ft-session-boundary';
+      vault.append(vaultLabel, radice, ul);
+      contenitore.replaceChildren(costruisciZonaFuoriSessione(), vault);
+    } else {
+      contenitore.replaceChildren(radice, ul);
+    }
 
     let voci;
     try {
@@ -12303,6 +12563,10 @@
   $('#fileTreeNewFolder')?.addEventListener('click', () => avviaCreaVoce(cartellaSelezionataAlbero(), 'cartella'));
   $('#fileTreeRefresh')?.addEventListener('click', refreshSessionFileTree);
   $('#fileTreeCollapse')?.addEventListener('click', collapseSessionFileTree);
+  $('#fileTreeUp')?.addEventListener('click', () => {
+    if (state.realSession.fuoriSessioneAperto) chiudiFuoriSessione();
+    else apriFuoriSessione();
+  });
 
   sessionsCollapseBtn?.addEventListener('click', toggleSessionsPanel);
   sessionSelectionToggle?.addEventListener('click', () => { toggleSessionSelectionMode(); });

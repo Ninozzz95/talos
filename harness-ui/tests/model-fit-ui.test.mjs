@@ -262,17 +262,63 @@ test('MODEL-PICKER-02 — i modelli locali SI SCELGONO, col prefisso di fonte', 
   assert.match(corpo, /createElement\('button'\)/u, 'la riga locale è un bottone come le altre');
 });
 
-test('MODEL-PICKER-03 — AL CONTRARIO: la nota non promette una generazione senza motore acceso', async () => {
+test('MODEL-PICKER-03 — AL CONTRARIO: la nota non promette un\'attesa che il codice non impone più', async () => {
   /*
-   * ⛔ È l'unica differenza vera che resta fra un modello locale e uno
-   * remoto, e va detta PRIMA: scoprirlo a metà di una risposta è il modo
-   * peggiore. ⛔ E la nota vecchia («non ancora qui») è sparita: una
-   * spiegazione corretta che invecchia convince a non riprovare, ed è peggio
-   * di nessuna spiegazione.
+   * ⛔⛔ QUESTA PROVA PRETENDEVA IL CONTRARIO STAMATTINA (03/9), ed era
+   * giusta allora: a quell'ora un modello locale andava davvero acceso a
+   * mano dal Laboratorio modelli prima di poterlo usare in chat, e tacerlo
+   * sarebbe stata la bugia peggiore — scoprirlo a metà di una risposta.
+   *
+   * ⇒ Nel giro di poche ore quel vincolo è caduto: `runtime-owner-adapter.mjs`
+   * (creaFetchMultiProvider) ora intercetta LOCAL_RUNTIME_NOT_READY e chiama
+   * avviaLocale() da solo, un solo colpo, prima di ritentare — verificato dal
+   * vivo attraverso il server reale (non solo un mock): un modello MAI
+   * caricato, selezionato A META' di una chat già iniziata, risponde entro
+   * pochi secondi senza alcun intervento manuale. La nota vecchia prometteva
+   * un passo che non serve più: tenerla sarebbe esattamente la trappola che
+   * il commento originale di questa prova nominava — «una spiegazione
+   * corretta che invecchia convince a non riprovare» — solo che ora
+   * invecchia subito, non col tempo. Non si cancella la prova, si riscrive
+   * dicendo cosa presidia ADESSO, stessa disciplina di MODEL-PICKER-02 poco
+   * sopra nello stesso file.
    */
   const app = await source('public/app.js');
-  assert.match(app, /Il motore va acceso dal Laboratorio modelli prima di usarli\./u);
+  assert.doesNotMatch(app, /Il motore va acceso dal Laboratorio modelli prima di usarli\./u);
+  assert.match(app, /Si accendono da soli alla prima richiesta\./u);
   assert.doesNotMatch(app, /La chat parla solo con OpenRouter/u);
+});
+
+test('MODEL-PICKER-04 — scegliere un modello locale a META\' CHAT lo scrive sul server, non solo sullo schermo', async () => {
+  /*
+   * ⛔⛔⛔ 03/9 — BUG REALE trovato dal vivo facendo esattamente la verifica
+   * richiesta dall'owner («assicurati... anche a metà strada in una chat già
+   * iniziata»): il ramo remoto del selettore (renderLista, sopra) chiama
+   * sincronizzaImpostazioniSessione PRIMA di applicare la scelta; il ramo
+   * locale (renderListaLocali) no — aggiornava solo `state.model` in
+   * memoria, senza mai scrivere sul registro sessione (server.mjs, endpoint
+   * /sessions/:id/settings). Misurato con Playwright sul server vivo (porta
+   * 4174): click sul modello locale, la pillola del composer restava sul
+   * remoto, e al Send il server eseguiva ANCORA col modello vecchio —
+   * RunStarted.contesto.modello confermava il remoto, mai il locale scelto.
+   * L'unica traccia era la nota "Impostazioni cambiate fuori da questa
+   * scheda", onesta ma fuorviante: non era un'altra scheda, era questo
+   * stesso click mai arrivato al server.
+   *
+   * ⇒ Riparato rendendo il ramo locale simmetrico al remoto: stesso guard
+   * (aggiornaModelloPrincipale && sincronizzaSessione && state.realSession.id),
+   * stessa attesa prima di applicare la scelta, stesso ripristino su errore.
+   * Ri-verificato dal vivo dopo il fix: la pillola mostra il modello locale
+   * scelto, e RunStarted.contesto.modello lo conferma — nessun "impostazioni
+   * cambiate fuori da questa scheda" spurio.
+   */
+  const app = await source('public/app.js');
+  const inizio = app.indexOf('function renderListaLocali()');
+  const fine = app.indexOf('\n    function ', inizio + 1);
+  const corpo = app.slice(inizio, fine);
+  assert.ok(inizio > 0);
+  assert.match(corpo, /await sincronizzaImpostazioniSessione\(\{ modello: valore \}\)/u, 'il click locale deve scrivere sul registro sessione, non solo su state.model');
+  assert.match(corpo, /aggiornaModelloPrincipale && sincronizzaSessione && state\.realSession\.id/u, 'stesso guard del ramo remoto: niente sync su un picker che non ne ha bisogno (es. Laboratorio modelli)');
+  assert.match(corpo, /aggiornaPillolaModello\(\)/u, 'la pillola del composer deve aggiornarsi, non solo il trigger dentro il foglio');
 });
 
 test('MESSAGE-ACTIONS-01 — la barra sta DOPO il testo, per lo screen reader', async () => {

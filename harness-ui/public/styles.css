@@ -820,6 +820,51 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .ft-legend-new i { background: var(--success); }
 .ft-legend-modified i { background: var(--accent); }
 
+/*
+ * ⭐⭐⭐ 03/9, owner: "il file tree deve esplorare tutto TUTTO a prescindere
+ * da full access o meno... ho bisogno di risalire a directory sopra o
+ * diverse" — frontend-design applicato: zero colori nuovi, si estende il
+ * sistema TALOS esistente invece di inventarne uno. Il "risali" apre una
+ * zona FUORI dalla sessione, sola lettura (workspaceBrowser — mai
+ * leggiAlberoWorkspace, che resta legato al vero confine di scrittura del
+ * modello): registro "muto" già in uso per il secondario (--text-2,
+ * bordo tratteggiato), MAI l'accento — l'accento è riservato a ciò che il
+ * modello può davvero toccare. Quando la zona è aperta, l'albero VERO
+ * (.ft-session-boundary) si racchiude in un bordo/fondo d'accento — la
+ * "vault card": il confine di scrittura diventa un contenitore letterale,
+ * visibile solo quando c'è qualcosa fuori con cui contrastarlo. Costo
+ * visivo zero nello stato di sempre (zona chiusa): nessuna riga nuova, nessun
+ * bordo nuovo finché non la si apre.
+ */
+.ft-command[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
+/* ⛔ 03/9 — raggi allineati alla famiglia GIÀ in uso in questo pannello: 8px per i contenitori (.tree-root/.file-tree button), 7px per le righe cliccabili (.ft-row/.ft-command) — non due valori nuovi inventati qui. */
+.ft-outside-zone { margin: 0 0 8px; padding: 7px 8px 8px; border: 1px dashed var(--line-strong); border-radius: 8px; background: var(--surface-highlight-faint); }
+.ft-outside-zone-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; color: var(--text-2); font-size: calc(10.5px * var(--talos-ui-font-scale)); }
+.ft-outside-zone-head svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 1.8; flex-shrink: 0; }
+/* ⛔ 03/9, trovato dal vivo (screenshot: testo invisibile, DOM corretto): un figlio flex con overflow:hidden+ellipsis resta a 0px senza min-width:0 esplicito — il min-content automatico non basta da solo. */
+.ft-outside-zone-head span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* ⛔ 03/9, trovato dal vivo (screenshot: bottone chiudi grande quanto la riga, testo del percorso invisibile a 0px): `.file-tree button` (riga sopra in questo file, specificità 0,1,1) batte una classe singola come `.ft-outside-zone-close` da sola (0,1,0) — width:100%/min-height:36px vincevano SEMPRE, a prescindere dall'ordine. Qualificate sotto `.ft-outside-zone` (0,2,0) per battere il generico in modo inequivocabile, non affidato all'ordine nel file. */
+.ft-outside-zone .ft-outside-zone-close, .ft-outside-zone .ft-outside-row-adopt { width: 20px; height: 20px; min-height: 20px; flex-shrink: 0; display: grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; }
+.ft-outside-zone-close:hover, .ft-outside-zone-close:focus-visible, .ft-outside-row-adopt:hover, .ft-outside-row-adopt:focus-visible { color: var(--text); background: var(--surface-2); }
+.ft-outside-zone-close svg { width: 11px; height: 11px; }
+/* ⭐ 03/9 — "usa come radice" per una cartella fuori sessione, owner: "se no sarebbe una funzione inutile". Icona i-check per coerenza con "adotta/conferma"; colore promosso ad --accent al hover — è l'unica azione che TOCCA il workspace in questa zona, altrimenti sola lettura. */
+.ft-outside-row-adopt svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+.ft-outside-row-adopt:hover, .ft-outside-row-adopt:focus-visible { color: var(--accent); background: var(--accent-soft); }
+.ft-outside-row-wrap { display: flex; align-items: center; gap: 3px; }
+/* ⛔ width:100% resta come ripiego per la riga ".." (mai dentro un wrapper flex, quindi flex:1 lì non ha effetto da solo); dentro .ft-outside-row-wrap flex:1 vince, la riga si divide correttamente lo spazio col bottone "usa come radice" accanto. */
+.ft-outside-zone .ft-outside-row { display: flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 6px; border-radius: 7px; cursor: pointer; color: var(--text-2); font-size: calc(11.5px * var(--talos-ui-font-scale)); background: transparent; border: 0; width: 100%; flex: 1 1 0%; min-width: 0; text-align: left; font-family: var(--font-ui); }
+.ft-outside-row:hover, .ft-outside-row:focus-visible { background: var(--surface-2); color: var(--text); }
+.ft-outside-row:focus-visible { outline: 1.5px solid var(--focus); outline-offset: -1px; }
+.ft-outside-row svg { width: 13px; height: 13px; stroke: var(--muted); fill: none; stroke-width: 1.6; flex-shrink: 0; }
+.ft-outside-row.ft-outside-row-up svg { stroke: var(--text-2); }
+.ft-outside-row span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ft-outside-empty { padding: 6px 6px 2px; color: var(--muted); font-size: calc(11px * var(--talos-ui-font-scale)); }
+/* ⛔ 03/9 — bordo 1px/34% da solo non bastava (misurato dal vivo, tema chiaro): rinforzato a 1.5px, l'etichetta sotto è il vero segnale, il colore lo conferma. */
+.ft-session-boundary { border: 1.5px solid var(--accent-strong); border-radius: 8px; background: var(--accent-soft); padding: 4px; }
+.ft-session-boundary .tree-root { color: var(--text); }
+.ft-session-boundary-head { display: flex; align-items: center; gap: 6px; padding: 4px 6px 6px; color: var(--accent); font-size: calc(10.5px * var(--talos-ui-font-scale)); font-weight: 500; }
+.ft-session-boundary-head svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 1.8; flex-shrink: 0; }
+
 .ft-tree, .ft-tree ul { list-style: none; margin: 0; padding: 0; }
 .ft-tree ul { margin-left: 9px; padding-left: 10px; border-left: 1px solid var(--line); }
 .ft-node > ul { display: none; }
