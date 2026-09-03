@@ -292,7 +292,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         await runtime().startRealSessionFromMessage('ciao')
 
         const meta = document.querySelector('.user-message .message-meta')
-        expect(meta?.textContent).toContain('Task reale · libero:talos')
+        expect(meta?.textContent).toContain('Real task · libero:talos') // ⭐ 3/9 — etichetta tradotta in inglese (avm-03, commit 8398f860), asserzione aggiornata a pari passo
         expect(meta?.textContent).not.toContain('undefined')
         expect(document.querySelector('.user-message .message-bubble')?.textContent).toBe('ciao')
     })
@@ -338,7 +338,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         await runtime().startRealSession({ id: 'storia-0b81c88', consegna: 'Sistema il test rosso.' })
 
         const meta = document.querySelector('.user-message .message-meta')
-        expect(meta?.textContent).toContain('Task reale · storia-0b81c88')
+        expect(meta?.textContent).toContain('Real task · storia-0b81c88') // ⭐ 3/9 — vedi nota sopra, stessa etichetta tradotta
     })
 
     it('REAL-SESSION-AUTOMATION-01 "Esegui ora" su una riga con data-task-id avvia per davvero quel task (standalone)', async () => {
@@ -573,7 +573,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
         const conversationText = document.querySelector('#conversation')?.textContent ?? ''
         expect(conversationText).not.toContain('undefined')
-        expect(conversationText).toContain('Comando diretto')
+        expect(conversationText).toContain('Direct command') // ⭐ 3/9 — etichetta tradotta in inglese (avm-03, commit 8398f860), asserzione aggiornata a pari passo
     })
 
     // ⛔⛔⛔ 27/8, trovato ricaricando la pagina (F5) su una sessione VERA di
@@ -586,8 +586,8 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         runtime().handleRealEvent({ type: 'RunStarted', input: { consegna: 'Ciao, chi sei?', consegnaCorta: 'Ciao, chi sei?', progetto: 'talos-prova-harness' } }, generation)
 
         const conversationText = document.querySelector('#conversation')?.textContent ?? ''
-        expect(conversationText).not.toContain('Comando diretto')
-        expect(conversationText).toContain('Compito libero')
+        expect(conversationText).not.toContain('Direct command') // ⭐ 3/9 — vedi nota sopra, stesse etichette tradotte
+        expect(conversationText).toContain('Free task')
         expect(conversationText).toContain('talos-prova-harness')
     })
 
@@ -619,8 +619,9 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
     it('REAL-SESSION-COMPACTION-01 CompactionStart mostra "Sto riassumendo…" (senza raddoppiare), CompactionEnd la rimuove', () => {
         const generation = runtime().realSessionState.generation
 
+        // ⭐ 3/9 — bolla tradotta in inglese (avm-03, commit 8398f860), asserzioni aggiornate a pari passo
         runtime().handleRealEvent({ type: 'CompactionStart' }, generation)
-        expect(document.querySelector('#conversation')?.textContent ?? '').toContain('Sto riassumendo la conversazione finora…')
+        expect(document.querySelector('#conversation')?.textContent ?? '').toContain('Summarising the conversation so far…')
         expect(document.querySelectorAll('.real-compaction-note')).toHaveLength(1)
 
         runtime().handleRealEvent({ type: 'CompactionStart' }, generation) // replay SSE dopo una riconnessione: stessa bolla, non una seconda
@@ -628,7 +629,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
         runtime().handleRealEvent({ type: 'CompactionEnd' }, generation)
         expect(document.querySelector('.real-compaction-note')).toBeNull()
-        expect(document.querySelector('#conversation')?.textContent ?? '').not.toContain('Sto riassumendo')
+        expect(document.querySelector('#conversation')?.textContent ?? '').not.toContain('Summarising')
     })
 
     it('⛔ REAL-SESSION-COMPACTION-02 AL CONTRARIO: un CompactionStart di una generazione VECCHIA non mostra mai la bolla', () => {
@@ -940,9 +941,10 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
                 rigaSrc.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
 
                 const etichette = [...document.querySelectorAll('.ft-actions-menu-item')].map((b) => b.textContent)
-                expect(etichette.some((e) => e?.includes('Nuovo file'))).toBe(true)
-                expect(etichette.some((e) => e?.includes('Nuova cartella'))).toBe(true)
-                expect(etichette.some((e) => e?.includes('Copia'))).toBe(true)
+                // ⭐ 3/9 — etichette tradotte in inglese, apriMenuAzioniFile completata nello stesso giro
+                expect(etichette.some((e) => e?.includes('New file'))).toBe(true)
+                expect(etichette.some((e) => e?.includes('New folder'))).toBe(true)
+                expect(etichette.some((e) => e?.includes('Copy'))).toBe(true)
             })
 
             it('⭐⭐⭐ CRUD-02: il menu di un FILE mostra anche "Copia"', async () => {
@@ -951,7 +953,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
                 rigaFile.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
 
                 const etichette = [...document.querySelectorAll('.ft-actions-menu-item')].map((b) => b.textContent)
-                expect(etichette.some((e) => e?.includes('Copia'))).toBe(true)
+                expect(etichette.some((e) => e?.includes('Copy'))).toBe(true)
             })
 
             it('⭐⭐⭐ CRUD-03: cliccare "Copia" chiama POST .../tree/copy col percorso VERO, mostra il nuovo nome nel toast', async () => {
@@ -967,7 +969,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
                 const rigaFile = [...document.querySelectorAll('.ft-row-leaf')].find((r) => r.querySelector('.ft-name')?.textContent === 'a.txt')!
                 rigaFile.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
-                const voceCopia = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent?.includes('Copia'))!
+                const voceCopia = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent?.includes('Copy'))! // ⭐ 3/9 — etichetta tradotta
                 voceCopia.click()
                 await new Promise((r) => setTimeout(r, 0))
 
@@ -989,10 +991,10 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
                 const rigaSrc = [...document.querySelectorAll('.ft-row-folder')].find((r) => r.querySelector('.ft-name')?.textContent === 'src')!
                 rigaSrc.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
-                const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent === 'Nuovo file')!
+                const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent === 'New file')! // ⭐ 3/9 — etichetta tradotta
                 voceMenu.click()
 
-                expect(document.querySelector('#sheetTitle')?.textContent).toBe('Nuovo file')
+                expect(document.querySelector('#sheetTitle')?.textContent).toBe('New file')
                 const input = document.querySelector<HTMLInputElement>('#createFileInput')!
                 input.value = 'nuovo.txt'
                 document.querySelector<HTMLFormElement>('#createFileForm')!.requestSubmit()
@@ -1016,10 +1018,10 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
                 const rigaSrc = [...document.querySelectorAll('.ft-row-folder')].find((r) => r.querySelector('.ft-name')?.textContent === 'src')!
                 rigaSrc.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
-                const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent === 'Nuova cartella')!
+                const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent === 'New folder')! // ⭐ 3/9 — etichetta tradotta
                 voceMenu.click()
 
-                expect(document.querySelector('#sheetTitle')?.textContent).toBe('Nuova cartella')
+                expect(document.querySelector('#sheetTitle')?.textContent).toBe('New folder')
             })
 
             it('⭐⭐⭐ CRUD-06: trascinare un file su una cartella chiama POST .../tree/move con percorso e cartellaDestinazione VERI', async () => {
@@ -1072,8 +1074,9 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
                 rigaFile.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
 
                 const etichette = [...document.querySelectorAll('.ft-actions-menu-item')].map((b) => b.textContent)
-                expect(etichette.some((e) => e?.includes('Nuovo file'))).toBe(false)
-                expect(etichette.some((e) => e?.includes('Nuova cartella'))).toBe(false)
+                // ⭐ 3/9 — etichette tradotte in inglese, apriMenuAzioniFile completata nello stesso giro
+                expect(etichette.some((e) => e?.includes('New file'))).toBe(false)
+                expect(etichette.some((e) => e?.includes('New folder'))).toBe(false)
             })
 
             it('⭐⭐⭐ CRUD-09: tasto destro sulla RADICE dell\'albero apre un menu con SOLO "Nuovo file"/"Nuova cartella"', async () => {
@@ -1082,7 +1085,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
                 radice.dispatchEvent(new Event('contextmenu', { bubbles: true, cancelable: true }))
 
                 const etichette = [...document.querySelectorAll('.ft-actions-menu-item')].map((b) => b.textContent)
-                expect(etichette).toEqual(['Nuovo file', 'Nuova cartella'])
+                expect(etichette).toEqual(['New file', 'New folder']) // ⭐ 3/9 — etichette tradotte
             })
 
             /*
@@ -1100,7 +1103,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
                 await avviaSessioneConAlbero({ '': [{ nome: 'src', cartella: true }] })
                 const rigaSrc = [...document.querySelectorAll('.ft-row-folder')].find((r) => r.querySelector('.ft-name')?.textContent === 'src')!
                 rigaSrc.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
-                const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent === 'Nuovo file')!
+                const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent === 'New file')! // ⭐ 3/9 — etichetta tradotta
                 voceMenu.click()
 
                 const badge = document.querySelector<HTMLElement>('#sheetDialog .demo-surface-badge')
@@ -1146,20 +1149,21 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         const strip = () => document.querySelector('.run-strip')
         const label = () => document.querySelector('#runStateToggle strong')?.textContent
 
+        // ⭐ 3/9 — etichette tradotte in inglese (avm-03, commit 8398f860): setRunState() ha solo due stati (Running/Stopped, mai un terzo "Interrotto" — RunFinished e RunError chiamano entrambi setRunState(false)), asserzione allineata al codice vero
         runtime().handleRealEvent({ type: 'RunStarted', input: { consegna: 'x' } }, generation)
         expect(strip()?.classList.contains('is-stopped')).toBe(false)
-        expect(label()).toBe('In esecuzione')
+        expect(label()).toBe('Running')
 
         runtime().handleRealEvent({ type: 'RunFinished', result: { detto: 'Fatto.' } }, generation)
         expect(strip()?.classList.contains('is-stopped')).toBe(true)
-        expect(label()).toBe('Interrotto')
+        expect(label()).toBe('Stopped')
 
         runtime().handleRealEvent({ type: 'RunStarted', input: { consegna: 'y' } }, generation)
         expect(strip()?.classList.contains('is-stopped')).toBe(false)
 
         runtime().handleRealEvent({ type: 'RunError', code: 'INTERNAL_ERROR', message: 'boom' }, generation)
         expect(strip()?.classList.contains('is-stopped')).toBe(true)
-        expect(label()).toBe('Interrotto')
+        expect(label()).toBe('Stopped') // ⭐ 3/9 — vedi nota sopra, stessa etichetta a due stati
     })
 
     it('REAL-SESSION-FINISH-01 RunFinished NON chiude subito lo stream — solo quando la connessione cade DAVVERO, e senza avviso', async () => {
@@ -1201,7 +1205,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
         source?.onerror?.()
 
-        expect(document.querySelector('#conversation')?.textContent).toContain('interrotta')
+        expect(document.querySelector('#conversation')?.textContent).toContain('Event connection lost.') // ⭐ 3/9 — testo tradotto in inglese
     })
 
     it('REAL-SESSION-LIST-01 aggiornaElencoSessioniReali popola #sessionList con un blocco "Sessioni reali"', async () => {
@@ -1517,7 +1521,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         // ⛔ 27/8, seconda passata: il reset mostra uno stato ONESTO E VUOTO
         // ("Nessun comando eseguito..."), non più il demo originale — il
         // badge resta nascosto perché non è un dato finto da segnalare.
-        expect(terminaleDopo?.textContent).toContain('Nessun comando eseguito')
+        expect(terminaleDopo?.textContent).toContain('No command run in this session.') // ⭐ 3/9 — testo tradotto in inglese
         const badge = document.querySelector('[data-view="terminal"] .demo-surface-badge') as HTMLElement | null
         expect(badge?.hidden).toBe(true)
     })
@@ -1785,7 +1789,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
                 conclusa: false, forkDa: null, eventi: [],
             })
             expect(md.trim().length).toBeGreaterThan(0)
-            expect(md).toContain('Nessun evento')
+            expect(md).toContain('No event recorded') // ⭐ 3/9 — testo tradotto in inglese
         })
 
         it('⭐⭐⭐ EXPORT-MD-05: ApprovalRequested/ApprovalResolved (permesso "On request") sono eventi CONOSCIUTI nella trascrizione, con l\'azione vera', () => {
@@ -1871,7 +1875,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
                 expect(clickSpy).toHaveBeenCalled()
                 expect(JSON.parse(String(blobParts[0][0]))).toEqual(payloadVero)
                 expect(sheetDialog.hasAttribute('open')).toBe(false) // il foglio si chiude dopo un export riuscito
-                expect(document.querySelector('#toastRegion')?.textContent).toContain('esportata')
+                expect(document.querySelector('#toastRegion')?.textContent).toContain('exported') // ⭐ 3/9 — testo tradotto in inglese
             } finally {
                 URL.createObjectURL = origCreate
                 URL.revokeObjectURL = origRevoke
@@ -1900,7 +1904,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
             await new Promise((r) => setTimeout(r, 0))
 
             expect(clickSpy).not.toHaveBeenCalled()
-            expect(document.querySelector('#toastRegion')?.textContent).toContain('non riuscita')
+            expect(document.querySelector('#toastRegion')?.textContent).toContain('failed') // ⭐ 3/9 — testo tradotto in inglese ("Export failed")
         })
     })
 
@@ -2484,7 +2488,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
             expect(bottoneAzioni).toBeTruthy() // il bottone "···" ora esiste ANCHE per le cartelle, non solo per i file
 
             bottoneAzioni.click()
-            const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent?.includes('Imposta come radice'))!
+            const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent?.includes('Set as root'))! // ⭐ 3/9 — etichetta tradotta
             expect(voceMenu).toBeTruthy()
             voceMenu.click()
 
@@ -2501,8 +2505,9 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
             rigaFile.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
 
             const etichette = [...document.querySelectorAll('.ft-actions-menu-item')].map((b) => b.textContent)
-            expect(etichette.some((e) => e?.includes('Imposta come radice'))).toBe(false)
-            expect(etichette.some((e) => e?.includes('Apri'))).toBe(true) // il menu file resta quello di sempre
+            // ⭐ 3/9 — etichette tradotte in inglese (stesso giro: apriMenuAzioniFile completata, non solo le due voci già inglesi)
+            expect(etichette.some((e) => e?.includes('Set as root'))).toBe(false)
+            expect(etichette.some((e) => e?.includes('Open'))).toBe(true) // il menu file resta quello di sempre
         })
 
         it('⛔⛔⛔ RADICE-03 AL CONTRARIO: senza ancora una cartellaAssoluta nota (nessun RunStarted con contesto), "Imposta come radice" avvisa e NON avvia nulla', async () => {
@@ -2518,10 +2523,10 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
             const rigaSrc = [...document.querySelectorAll('.ft-row-folder')].find((r) => r.querySelector('.ft-name')?.textContent === 'src')!
             rigaSrc.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
-            const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent?.includes('Imposta come radice'))!
+            const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent?.includes('Set as root'))! // ⭐ 3/9 — etichetta tradotta
             voceMenu.click()
 
-            expect(document.querySelector('#toastRegion')?.textContent).toContain('sconosciuta')
+            expect(document.querySelector('#toastRegion')?.textContent).toContain('Unknown root') // ⭐ 3/9 — testo tradotto in inglese
             expect(document.querySelector('[data-open-sheet="permissions"] span')?.textContent).not.toBe('Full access')
         })
     })
@@ -2661,8 +2666,8 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         document.querySelector<HTMLFormElement>('#composerForm')!.requestSubmit()
         await new Promise((resolve) => setTimeout(resolve, 0))
 
-        // ⭐ 29/8 — testo vero di startRealSessionFromMessage (toast('Nessuna sessione avviata', ...)), non 'Nessuna sessione attiva' come assunto dal canonico in questo punto.
-        expect(document.querySelector('#toastRegion')?.textContent).toContain('Nessuna sessione avviata')
+        // ⭐ 29/8 — testo vero di startRealSessionFromMessage (toast('No session started', ...)), non 'Nessuna sessione attiva' come assunto dal canonico in questo punto.
+        expect(document.querySelector('#toastRegion')?.textContent).toContain('No session started')
         expect(FakeEventSource.instances.length).toBe(0)
     })
 
@@ -2685,7 +2690,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         await new Promise((resolve) => setTimeout(resolve, 0))
 
         expect(FakeEventSource.instances.at(-1)?.url).toBe('/api/v1/sessions/sess-implicita/events')
-        expect(document.querySelector('#toastRegion')?.textContent ?? '').not.toContain('Nessuna sessione avviata')
+        expect(document.querySelector('#toastRegion')?.textContent ?? '').not.toContain('No session started')
     })
 
     /*
@@ -2701,7 +2706,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         document.querySelector<HTMLFormElement>('#composerForm')!.requestSubmit()
         await new Promise((resolve) => setTimeout(resolve, 0))
 
-        expect(document.querySelector('#toastRegion')?.textContent).toContain('Nessuna sessione avviata')
+        expect(document.querySelector('#toastRegion')?.textContent).toContain('No session started')
         expect(FakeEventSource.instances.length).toBe(0)
     })
 
@@ -2799,7 +2804,7 @@ describe('Harness UI — Doctor, Hooks, deleghe sub-agenti (porting FASE A/C dal
         runtime().openSheet('control')
         await new Promise((r) => setTimeout(r, 0))
 
-        expect(document.querySelector('[data-doctor-status]')?.textContent).toBe('Non disponibile')
+        expect(document.querySelector('[data-doctor-status]')?.textContent).toBe('Not available') // ⭐ 3/9 — testo tradotto in inglese
     })
 
     it('⛔ DOCTOR-04 AL CONTRARIO: refreshDoctorBadge() senza il foglio aperto non lancia e non chiama fetch', async () => {
@@ -2843,7 +2848,7 @@ describe('Harness UI — Doctor, Hooks, deleghe sub-agenti (porting FASE A/C dal
         await new Promise((r) => setTimeout(r, 0))
 
         expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining('/hooks'), expect.anything())
-        expect(document.querySelector('#hooksListMount')?.textContent).toContain('Nessuna sessione attiva')
+        expect(document.querySelector('#hooksListMount')?.textContent).toContain('No active session') // ⭐ 3/9 — testo tradotto in inglese
     })
 
     it('HOOKS-02 con sessione attiva, elenca gli hook veri; un hook non fidato mostra "Fida", uno fidato mostra "attivo"', async () => {
@@ -2944,7 +2949,7 @@ describe('Harness UI — Doctor, Hooks, deleghe sub-agenti (porting FASE A/C dal
         await new Promise((r) => setTimeout(r, 0))
 
         expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/children'))).toBe(false)
-        expect(document.querySelector('#subagentTreeMount')?.textContent).toContain('Nessuna sessione attiva')
+        expect(document.querySelector('#subagentTreeMount')?.textContent).toContain('No active session') // ⭐ 3/9 — testo tradotto in inglese
     })
 
     it('SUBAGENTI-02 con deleghe reali, ogni riga passa alla sessione figlia e chiude il foglio', async () => {
@@ -2975,7 +2980,7 @@ describe('Harness UI — Doctor, Hooks, deleghe sub-agenti (porting FASE A/C dal
         runtime().openSheet('sessionTree')
         await new Promise((r) => setTimeout(r, 0))
 
-        expect(document.querySelector('#subagentTreeMount')?.textContent).toContain('Nessuna delega ancora')
+        expect(document.querySelector('#subagentTreeMount')?.textContent).toContain('No delegation yet') // ⭐ 3/9 — testo tradotto in inglese
         expect(document.querySelectorAll('#subagentTreeMount button').length).toBe(0)
     })
 })
@@ -3079,7 +3084,7 @@ describe('Harness UI — Automazioni (porting dal bundle desktop)', () => {
         mockFetch([{ metodo: 'GET', percorso: '/api/v1/automations', corpo: { items: [{ id: 'a1', nome: 'Weekly audit', attiva: false, intervalloMinuti: 60, limiteAlGiorno: 3 }] } }])
         await runtime().renderAutomationsReali()
 
-        const eliminaBtn = Array.from(document.querySelectorAll('#automationListReal button')).find((b) => b.textContent === 'Elimina') as HTMLButtonElement
+        const eliminaBtn = Array.from(document.querySelectorAll('#automationListReal button')).find((b) => b.textContent === 'Delete') as HTMLButtonElement // ⭐ 3/9 — etichetta tradotta in inglese
         mockFetch([
             { metodo: 'POST', percorso: '/api/v1/automations/a1/elimina', corpo: {} },
             { metodo: 'GET', percorso: '/api/v1/automations', corpo: { items: [] } },
@@ -3199,7 +3204,7 @@ describe('Harness UI — gruppo di tool-call collassato, con diff per-file (owne
         runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 't1', toolCallName: 'shell' }, generation)
 
         expect(document.querySelectorAll('.real-tool-group').length).toBe(1)
-        expect(document.querySelector('.tool-note-summary-text')?.textContent).toBe('Eseguito un comando')
+        expect(document.querySelector('.tool-note-summary-text')?.textContent).toBe('Ran a command') // ⭐ 3/9 — testo tradotto in inglese
         expect(document.querySelector('.tool-group-warn')?.hasAttribute('hidden')).toBe(true)
     })
 
@@ -3209,7 +3214,7 @@ describe('Harness UI — gruppo di tool-call collassato, con diff per-file (owne
         runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 't2', toolCallName: 'scrivi' }, generation)
 
         expect(document.querySelectorAll('.real-tool-group').length).toBe(1)
-        expect(document.querySelector('.tool-note-summary-text')?.textContent).toBe('Eseguito un comando, modificato un file')
+        expect(document.querySelector('.tool-note-summary-text')?.textContent).toBe('Ran a command, modified a file') // ⭐ 3/9 — testo tradotto in inglese
     })
 
     it('TOOLGROUP-03 un messaggio di testo NUOVO chiude il gruppo: il prossimo tool-call ne apre uno SEPARATO', () => {
@@ -3240,12 +3245,13 @@ describe('Harness UI — gruppo di tool-call collassato, con diff per-file (owne
 
         document.querySelector<HTMLButtonElement>('.tool-group-summary')!.click()
 
-        expect(document.querySelector('#sheetTitle')?.textContent).toBe('Letto un file, eseguito un comando')
+        expect(document.querySelector('#sheetTitle')?.textContent).toBe('Read a file, ran a command') // ⭐ 3/9 — testo tradotto in inglese
         const righe = document.querySelectorAll('.tool-group-sheet-row')
         expect(righe.length).toBe(2)
-        expect(righe[0].querySelector('strong')?.textContent).toBe('Letto')
+        // ⭐ 3/9 — ETICHETTA_CATEGORIA tradotta in inglese
+        expect(righe[0].querySelector('strong')?.textContent).toBe('Read')
         expect(righe[0].querySelector('.tool-group-sheet-target')?.textContent).toBe('README.md')
-        expect(righe[1].querySelector('strong')?.textContent).toBe('Eseguito')
+        expect(righe[1].querySelector('strong')?.textContent).toBe('Ran')
         expect(righe[1].querySelector('.tool-group-sheet-target')?.textContent).toBe('npm test')
     })
 
@@ -3255,7 +3261,7 @@ describe('Harness UI — gruppo di tool-call collassato, con diff per-file (owne
         runtime().handleRealEvent({ type: 'ToolCallArgs', toolCallId: 't1', delta: JSON.stringify({ percorso: 'src/index.ts', contenuto: 'a\nb\nc\nd' }) }, generation)
         runtime().handleRealEvent({ type: 'StateDelta', delta: [{ op: 'replace', path: '/file/src/index.ts', value: 'a\nb\nc\nd', previous: 'a\nx\nc' }] }, generation)
 
-        expect(document.querySelector('.tool-note-summary-text')?.textContent).toBe('Modificato un file') // esisteva già: "modificato", non "creato"
+        expect(document.querySelector('.tool-note-summary-text')?.textContent).toBe('Modified a file') // ⭐ 3/9 — tradotto; esisteva già: "modificato", non "creato"
         const conteggi = document.querySelector('.tool-group-counts')!
         expect(conteggi.querySelector('.diff-add')?.textContent).toBe('+2') // 'b' e 'd' sono nuove
         expect(conteggi.querySelector('.diff-del')?.textContent).toBe('-1') // 'x' sparisce
@@ -3272,7 +3278,7 @@ describe('Harness UI — gruppo di tool-call collassato, con diff per-file (owne
         runtime().handleRealEvent({ type: 'ToolCallArgs', toolCallId: 't1', delta: JSON.stringify({ percorso: 'nuovo.ts', contenuto: 'uno\ndue\ntre' }) }, generation)
         runtime().handleRealEvent({ type: 'StateDelta', delta: [{ op: 'add', path: '/file/nuovo.ts', value: 'uno\ndue\ntre', previous: null }] }, generation)
 
-        expect(document.querySelector('.tool-note-summary-text')?.textContent).toBe('Creato un file')
+        expect(document.querySelector('.tool-note-summary-text')?.textContent).toBe('Created a file') // ⭐ 3/9 — testo tradotto in inglese
         expect(document.querySelector('.diff-add')?.textContent).toBe('+3')
         expect(document.querySelector('.diff-del')?.textContent).toBe('') // mai "-0": zero non si mostra, vedi aggiornaRiassuntoGruppoTool
     })
@@ -3287,7 +3293,7 @@ describe('Harness UI — gruppo di tool-call collassato, con diff per-file (owne
         const conteggi = document.querySelector('.tool-group-counts')!
         expect(conteggi.querySelector('.diff-add')?.textContent).toBe('')
         expect(conteggi.querySelector('.diff-del')?.textContent).toBe('')
-        expect(document.querySelector('.tool-note-summary-text')?.textContent).toBe('Modificato un file') // esisteva già, anche se il diff non si può calcolare
+        expect(document.querySelector('.tool-note-summary-text')?.textContent).toBe('Modified a file') // ⭐ 3/9 — tradotto; esisteva già, anche se il diff non si può calcolare
     })
 
     it('TOOLGROUP-07 ⚠️ un esito che "pare fallito" (stesso vocabolario REFUSED./exit N≠0 del kernel, talosHarness.mjs) accende l\'avviso sul gruppo', () => {
@@ -3434,7 +3440,7 @@ describe('Harness UI — selectSession con un id reale, senza una riga statica c
         // testo "Nessuna sessione attiva"; l'hero di caricamento porta class="conversation-hero conversation-hero-loading".
         expect(document.querySelector('#conversationEmptyState')?.classList.contains('conversation-hero')).toBe(true)
         expect(document.querySelector('#conversationEmptyState')?.classList.contains('conversation-hero-loading')).toBe(true)
-        expect(document.querySelector('#conversationEmptyState')?.textContent).not.toContain('Nessuna sessione attiva')
+        expect(document.querySelector('#conversationEmptyState')?.textContent).not.toContain('No active session') // ⭐ 3/9 — testo tradotto in inglese
         const hero = document.querySelector('#conversation .conversation-hero')
         expect(hero).not.toBeNull()
         // ⭐ 2/9 — niente logo/wordmark durante il caricamento (owner dal vivo).
@@ -3442,10 +3448,10 @@ describe('Harness UI — selectSession con un id reale, senza una riga statica c
         expect(hero?.querySelector('.hero-wordmark')).toBeNull()
         expect(hero?.querySelector('.hero-welcome-title')?.textContent).toBe('Elenca i file del workspace')
         expect(hero?.querySelector('.talos-line-loader')).not.toBeNull()
-        expect(hero?.querySelector('.hero-subtitle')?.textContent).toBe('Recupero la cronologia…')
+        expect(hero?.querySelector('.hero-subtitle')?.textContent).toBe('Fetching the history…') // ⭐ 3/9 — testo tradotto in inglese
         // ⭐ 29/8 — ledger §10: la striscia "In esecuzione" (default running:true del modulo) non deve restare appesa su una sessione appena selezionata di cui non sappiamo ancora lo stato vero.
         expect(document.querySelector('.run-strip')?.classList.contains('is-stopped')).toBe(true)
-        expect(document.querySelector('#runStateToggle strong')?.textContent).toBe('Interrotto')
+        expect(document.querySelector('#runStateToggle strong')?.textContent).toBe('Stopped') // ⭐ 3/9 — vedi nota su RUNSTATE-01, stessa etichetta a due stati
     })
 
     /*
@@ -3481,7 +3487,7 @@ describe('Harness UI — selectSession con un id reale, senza una riga statica c
         expect(document.querySelector('.conversation-hero-loading')).toBeNull()
         const hero = document.querySelector('#conversation .conversation-hero')
         expect(hero?.querySelector('.hero-subtitle')?.textContent).not.toBe('Scrivi qui sotto per continuare questa sessione.')
-        expect(hero?.querySelector('.hero-subtitle')?.textContent).toContain('Nessuna cronologia trovata')
+        expect(hero?.querySelector('.hero-subtitle')?.textContent).toContain('No history found') // ⭐ 3/9 — testo tradotto in inglese
         expect(runtime().realSessionState.id).toBeNull() // mai finto un id che il server non ha
     })
 
@@ -3796,8 +3802,16 @@ describe('Harness UI — riprendiSessioneDalHost(), riapertura di una sessione s
         ])
         mountStaticRuntime()
         await new Promise((resolve) => setTimeout(resolve, 0))
-        // precondizione: prima del RunStarted vero, il pannello mostra ancora il markup statico
-        expect(document.querySelector('#envBranch')?.textContent).toBe('feat/mobile-code')
+        /*
+         * precondizione, AGGIORNATA 3/9 (avm-03, dal vivo — item 8): prima
+         * del RunStarted vero il pannello mostra un trattino onesto, non
+         * più un dato d'esempio verosimile ("feat/mobile-code") accanto a
+         * un badge che intanto dichiara "not connected" — vedi il commento
+         * in index.html sopra <dl id="envWorkspace">... per il resoconto
+         * completo. Il resto del test (RunStarted rimpiazza con dati veri)
+         * è invariato: solo il DEFAULT prima dell'evento è cambiato.
+         */
+        expect(document.querySelector('#envBranch')?.textContent).toBe('—')
 
         FakeEventSource.instances.at(-1)?.emit({
             type: 'RunStarted', threadId: 't1', runId: 'r1',

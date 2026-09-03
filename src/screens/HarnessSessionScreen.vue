@@ -652,19 +652,42 @@ async function attendiServerHarnessPronto(tentativiMassimi = 15, intervalloMs = 
  * il server è già vivo. Solo debug: `talosTerminaleDisponibile()` è la
  * stessa domanda già usata altrove per questo plugin (non esiste in
  * release).
+ *
+ * ⭐⭐⭐ 3/9 — avm-03, dal vivo (item 13, owner: "deve essere segnalato in
+ * modo più fluido possibile"): PRIMA questa funzione tornava sempre
+ * `void` e ogni fallimento (plugin assente, avvio fallito, mai pronto
+ * entro il tetto) finiva SOLO in `console.warn` — nessuna persona lo
+ * vede mai. Chi usava Codice scopriva il problema più a valle, da un
+ * errore di rete grezzo verso un server mai partito ("technical, non
+ * deve succedere" — owner). Ricerca fatta: la formula guida per un
+ * messaggio di connessione è [cosa] + [perché, se utile] + [come si
+ * risolve], mai il gergo tecnico — l'esempio da NON fare, citato per
+ * contrasto, è proprio "the network location cannot be reached"
+ * (UX Content Collective, error-message guides, 2026). Il chiamante
+ * (mountMockup più sotto) legge questo esito e mostra un avviso in
+ * linguaggio naturale — "cosa" è onesto (il motore su cui gira Codice
+ * non è partito), "come" è l'UNICO rimedio che si può promettere in
+ * buona fede: riaprire l'app. Nessun secondo tentativo automatico
+ * inventato, nessun interruttore che non esiste — sarebbe un'istruzione
+ * falsa quanto l'errore tecnico che sostituisce.
  */
-async function avviaServerHarnessSeDisponibile(): Promise<void> {
-    if (!talosTerminaleDisponibile()) return
+async function avviaServerHarnessSeDisponibile(): Promise<{ ok: boolean, motivoInterno: string | null }> {
+    if (!talosTerminaleDisponibile()) return { ok: false, motivoInterno: 'plugin-assente' }
     try {
         const esito = await avviaServerHarnessConChiaveProvider()
         if (!esito.ok) {
             console.warn('[harness-ui] avvio server non riuscito:', esito.motivo, esito.stderr)
-            return
+            return { ok: false, motivoInterno: esito.motivo || 'avvio-fallito' }
         }
         const pronto = await attendiServerHarnessPronto()
-        if (!pronto) console.warn('[harness-ui] server avviato ma non risponde entro il tetto di attesa')
+        if (!pronto) {
+            console.warn('[harness-ui] server avviato ma non risponde entro il tetto di attesa')
+            return { ok: false, motivoInterno: 'timeout-avvio' }
+        }
+        return { ok: true, motivoInterno: null }
     } catch (error) {
         console.warn('[harness-ui] avvio server: eccezione', error)
+        return { ok: false, motivoInterno: 'eccezione' }
     }
 }
 
@@ -753,6 +776,17 @@ async function mountMockup(): Promise<void> {
         // (che non dipende dal server): si aspetta il suo esito solo più giù,
         // appena prima di inoltrare un eventuale primo messaggio in sospeso.
         const serverPronto = avviaServerHarnessSeDisponibile()
+        // ⭐⭐⭐ 3/9 — reagisce al fallimento SENZA bloccare il montaggio (stesso
+        // motivo del commento sopra: l'interfaccia parte comunque, dai soli
+        // asset locali). `.then` invece di un secondo `await` — un avviso in
+        // linguaggio naturale appena l'esito è noto, che ci sia o no un
+        // messaggio in sospeso da inoltrare (quel caso specifico è già
+        // coperto più sotto, ma riaprire una sessione ESISTENTE senza scrivere
+        // nulla non passava mai da lì: restava silenzioso fino al primo
+        // errore di rete grezzo).
+        serverPronto.then((esito) => {
+            if (!esito.ok) toasts.push({ message: t('harness.bridgeNotConnected'), durationMs: 6000 })
+        })
         const html = await fetch(harnessUiAssetUrl('index.html'), { cache: 'no-cache' }).then((response) => {
             if (!response.ok) throw new Error(`harness-ui index.html: ${response.status}`)
             return response.text()
