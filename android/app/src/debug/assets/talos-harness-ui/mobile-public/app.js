@@ -4,7 +4,7 @@
   /*
    * Owner 24/8: montato dentro uno shadow root da `HarnessSessionScreen.vue`
    * (non più un documento a sé tramite `window.location.assign` — la stessa
-   * pagina resta la SPA, la cronologia resta condivisa, il tasto Indietro
+   * pagina resta la SPA, la cronologia resta condivisa, il tasto Back
    * torna a essere quello vero di sempre). `HarnessSessionScreen.vue` pianta
    * `window.__talosHarnessRoot` PRIMA di aggiungere questo script; ROOT()
    * torna a `document` se qualcuno lo apre com'era prima (nessuna regressione
@@ -75,7 +75,7 @@
     environment: 'wt/auth-61c · feat/mobile-code',
     session: 'Refactor auth flow',
     running: true,
-    /** ⭐ 27/8 — {percorso, nome} del file bersaglio quando si apre il foglio Apri/Rinomina/Elimina dall'albero, null altrimenti. I fogli sono statici (sheetTemplates), questo li parametrizza. */
+    /** ⭐ 27/8 — {percorso, nome} del file bersaglio quando si apre il foglio Open/Rinomina/Elimina dall'albero, null altrimenti. I fogli sono statici (sheetTemplates), questo li parametrizza. */
     alberoFileTarget: null,
     /*
      * ⭐⭐⭐ 27/8, owner: "nella modale nuova sessione non deve esserci il
@@ -158,7 +158,7 @@
        * null finché nessun giro ha mai riportato consumo — mai un
        * contatore finto, la stessa onestà di IGNOTO-vs-GRATIS già in uso
        * lato kernel. Vedi il case 'StateDelta' e la riga "Main" nel
-       * foglio Albero sessione. */
+       * foglio Session tree. */
       usage: null,
       /** ⭐⭐⭐ 28/8 — permesso "On request": requestId -> l'elemento DOM
        * della card interattiva (appendApprovalCard). Il kernel è
@@ -231,6 +231,31 @@
   const queueToggle = $('#queueToggle');
   const queuedMessage = $('#queuedMessage');
   const sessionTitle = $('#sessionTitle');
+  const sessionSubtitle = $('#sessionSubtitle');
+  /*
+   * ⛔ 03/9 — Il sottotitolo era una stringa FISSA nell'HTML: «press "New" to
+   * start» restava sotto il titolo anche con una sessione aperta e in corso,
+   * cioe' istruiva a fare una cosa gia' fatta. Sette punti aggiornavano il
+   * titolo e nessuno lui: e' il difetto tipico di un'etichetta scritta una
+   * volta accanto a un valore che cambia. Ora i due si muovono insieme.
+   */
+  function mostraTitoloSessione(nome) {
+    sessionTitle.textContent = nome;
+    if (sessionSubtitle) sessionSubtitle.textContent = nome && nome !== 'No sessions' ? '' : 'press “New” to start';
+  }
+  /*
+   * ⛔ Due funzioni, non una. Il primo tentativo ne aveva UNA che aggiornava
+   * anche ogni `[data-current-session-title]`, e ha fatto scrivere «No
+   * sessions» dentro "Session topology" su una sessione che aveva un nome: i
+   * label sparsi vanno toccati SOLO dove il codice lo faceva prima, perche'
+   * qualcuno di essi viene costruito con un valore piu' fresco di quello che
+   * l'intestazione conosce in quel momento.
+   * ⇒ Unificare due scritture non e' unificare i loro MOMENTI.
+   */
+  function mostraTitoloOvunque(nome) {
+    mostraTitoloSessione(nome);
+    $$('[data-current-session-title]').forEach((label) => { label.textContent = nome; });
+  }
   const toastRegion = $('#toastRegion');
   const runStrip = $('.run-strip');
   const runStateToggle = $('#runStateToggle');
@@ -260,7 +285,7 @@
   const embeddedHeaderScrollPositions = new WeakMap();
 
   if (HOST().classList.contains('talos-embedded')) {
-    embeddedSessionBack?.setAttribute('aria-label', 'Torna alle sessioni Codice');
+    embeddedSessionBack?.setAttribute('aria-label', 'Back to Code sessions');
   }
 
   const motionAnimations = new Set();
@@ -359,7 +384,7 @@
       if (surface.querySelector('.demo-surface-badge')) return;
       const badge = document.createElement('span');
       badge.className = 'demo-surface-badge';
-      badge.textContent = 'Demo UI · non collegato';
+      badge.textContent = 'Demo UI · not connected';
       badge.setAttribute('aria-label', `Demo UI non collegata: ${surface.dataset.demoSurface || 'superficie'}`);
       if (surface.classList.contains('chat-view')) surface.querySelector('.conversation')?.prepend(badge);
       else if (surface.classList.contains('sessions-panel')) surface.querySelector('.brand-row')?.after(badge);
@@ -668,7 +693,7 @@
       nodo.setAttribute('cx', String(cx)); nodo.setAttribute('cy', '8'); nodo.setAttribute('r', '4');
       svg.append(nodo);
     }
-    hero.append(svg, textElement('p', 'hero-subtitle', 'Recupero la cronologia…'));
+    hero.append(svg, textElement('p', 'hero-subtitle', 'Fetching the history…'));
     return hero;
   }
 
@@ -697,8 +722,8 @@
     const conversation = $('#conversation');
     if (!conversation?.querySelector('.conversation-hero-loading')) return;
     conversation.replaceChildren(costruisciConversationHero(
-      titolo || state.session || 'Sessione',
-      'Nessuna cronologia trovata per questa sessione al momento. Scrivi qui sotto per continuare: se il server è stato riavviato, il messaggio apre una sessione nuova da qui.',
+      titolo || state.session || 'Session',
+      'No history found for this session right now. Write below to continue: if the server was restarted, your message opens a new session from here.',
     ));
   }
 
@@ -941,7 +966,7 @@
 
   function boardErrorMessage(error) {
     if (error?.code && typeof error.message === 'string' && error.message) return error.message;
-    return 'Il server locale non risponde. Apri Codice sul PC e riprova.';
+    return 'The local server is not responding. Open Codice on the PC and try again.';
   }
 
   function formatCost(value, estimated = false) {
@@ -972,7 +997,7 @@
     return `${kilo(totale)} token · ${usage.giri} gir${usage.giri === 1 ? 'o' : 'i'}${cacheParte} · live`;
   }
 
-  /** Ripatcha la riga "Main" del foglio Albero sessione SE è già aperto — non riapre né forza un redraw di tutto il foglio, stesso principio di aggiornaPillolaModello(). */
+  /** Ripatcha la riga "Main" del foglio Session tree SE è già aperto — non riapre né forza un redraw di tutto il foglio, stesso principio di aggiornaPillolaModello(). */
   function aggiornaContatoreUsage() {
     const nodo = $('[data-usage-summary]');
     if (nodo) nodo.textContent = `Main · ${formattaUsageBreve(state.realSession.usage)}`;
@@ -1100,7 +1125,7 @@
     if (!append) campaignRunList.replaceChildren();
     for (const row of items) campaignRunList.appendChild(createCampaignRun(row));
     if (!append && items.length === 0) {
-      campaignRunList.appendChild(textElement('p', 'board-empty', 'Nessuna riga corrisponde ai filtri selezionati.'));
+      campaignRunList.appendChild(textElement('p', 'board-empty', 'No row matches the selected filters.'));
     }
     campaignRunCount.textContent = `${state.board.runs.length} di ${state.board.totalMatched} righe`;
     loadMoreRunsButton.hidden = !state.board.nextCursor;
@@ -1113,9 +1138,9 @@
       campaignReportText.textContent = report.text;
       return;
     }
-    campaignReportState.textContent = errorCode === 'REPORT_UNAVAILABLE' ? 'Non prodotto' : 'Non disponibile';
+    campaignReportState.textContent = errorCode === 'REPORT_UNAVAILABLE' ? 'Non prodotto' : 'Not available';
     campaignReportText.textContent = errorCode === 'REPORT_UNAVAILABLE'
-      ? 'Rapporto non ancora prodotto'
+      ? 'Report not produced yet'
       : 'Rapporto non disponibile';
   }
 
@@ -1145,7 +1170,7 @@
       });
     } catch (error) {
       if (error?.name === 'AbortError') {
-        const timeoutError = new Error(`Nessuna risposta dal server entro ${Math.round(timeoutMs / 1000)}s`);
+        const timeoutError = new Error(`No answer from the server within ${Math.round(timeoutMs / 1000)}s`);
         timeoutError.code = 'TIMEOUT';
         throw timeoutError;
       }
@@ -1157,12 +1182,12 @@
     try {
       envelope = await response.json();
     } catch {
-      const error = new Error('Risposta locale non valida');
+      const error = new Error('Invalid local response');
       error.code = 'INTERNAL_ERROR';
       throw error;
     }
     if (!response.ok || !envelope?.ok) {
-      const error = new Error(envelope?.error?.message || 'Richiesta locale non riuscita');
+      const error = new Error(envelope?.error?.message || 'Local request failed');
       error.code = envelope?.error?.code || 'INTERNAL_ERROR';
       throw error;
     }
@@ -1180,12 +1205,12 @@
     try {
       envelope = await response.json();
     } catch {
-      const error = new Error('Risposta locale non valida');
+      const error = new Error('Invalid local response');
       error.code = 'INTERNAL_ERROR';
       throw error;
     }
     if (!response.ok || !envelope?.ok) {
-      const error = new Error(envelope?.error?.message || 'Richiesta locale non riuscita');
+      const error = new Error(envelope?.error?.message || 'Local request failed');
       error.code = envelope?.error?.code || 'INTERNAL_ERROR';
       throw error;
     }
@@ -1205,7 +1230,7 @@
    *
    * ⛔⛔ 29/8 — nota per dopo, NON risolta da questo commit: il
    * commento originale (rimosso sopra) diceva che questa cura era per
-   * "il foglio Albero sessione" (`.sheet-option`, aperto dalla Command
+   * "il foglio Session tree" (`.sheet-option`, aperto dalla Command
    * Palette) — e lo È, verificato: quella sheet chiama già `/children`
    * per davvero. MA la scheda "Agents" del Context Rail (verificata
    * dal vivo, screenshot: "A1 Responsive auditor"/"A2 A11y reviewer")
@@ -1219,7 +1244,7 @@
    * ⭐⭐⭐ 28/8 — FASE A (hook), piano `elegant-spinning-dongarra.md`.
    * Riempie `#hooksListMount` nel foglio "control" con gli hook VERI
    * del progetto della sessione attiva — mai un contatore inventato.
-   * Nessuna sessione attiva → stato onesto, ZERO richiesta di rete
+   * No session attiva → stato onesto, ZERO richiesta di rete
    * (stessa disciplina "niente fetch fantasma" di ogni altra superficie
    * di questo bundle). Ri-chiamata dopo ogni "Fida" riuscita, cosi' il
    * bottone sparisce subito — non serve richiudere/riaprire il foglio.
@@ -1228,24 +1253,24 @@
     const mount = $('#hooksListMount', sheetBody);
     if (!mount) return; // il foglio "control" non è (più) quello aperto
     if (!state.realSession.id) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione attiva — apri o avvia un task per vedere gli hook del progetto.'));
+      mount.replaceChildren(textElement('p', 'board-empty', 'No active session — open or start a task to see the project hooks.'));
       return;
     }
-    mount.replaceChildren(textElement('p', 'board-empty', 'Carico gli hook…'));
+    mount.replaceChildren(textElement('p', 'board-empty', 'Loading hooks…'));
     let dati;
     try {
       dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/hooks`);
     } catch (error) {
-      mount.replaceChildren(textElement('p', 'board-empty', `Hook non disponibili: ${error.message}`));
+      mount.replaceChildren(textElement('p', 'board-empty', `Hooks not available: ${error.message}`));
       return;
     }
     if (mount !== $('#hooksListMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
     if (dati.errore) {
-      mount.replaceChildren(textElement('p', 'board-empty', `.harness-ui-hooks.json non valido: ${dati.errore}`));
+      mount.replaceChildren(textElement('p', 'board-empty', `.harness-ui-hooks.json is not valid: ${dati.errore}`));
       return;
     }
     if (!dati.hooks || dati.hooks.length === 0) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessun hook dichiarato in questo progetto (.harness-ui-hooks.json).'));
+      mount.replaceChildren(textElement('p', 'board-empty', 'No hooks declared in this project (.harness-ui-hooks.json).'));
       return;
     }
     mount.replaceChildren(...dati.hooks.map((hook) => rigaHook(hook)));
@@ -1282,7 +1307,7 @@
         } catch (error) {
           bottone.disabled = false;
           bottone.textContent = 'Fida';
-          toast('Non riuscito', error.message);
+          toast('Failed', error.message);
         }
       });
       statoEl = bottone;
@@ -1331,7 +1356,7 @@
     const searchInput = document.createElement('input');
     searchInput.type = 'search';
     searchInput.className = 'sheet-input';
-    searchInput.placeholder = 'Cerca modello o provider…';
+    searchInput.placeholder = 'Search a model or provider…';
     searchLabel.append(searchIconSpan, searchInput);
 
     const listEl = document.createElement('div');
@@ -1344,7 +1369,7 @@
     refreshBtn.className = 'text-btn';
     const refreshIconSpan = document.createElement('span');
     refreshIconSpan.innerHTML = icon('i-history');
-    refreshBtn.append(refreshIconSpan, document.createTextNode('Aggiorna'));
+    refreshBtn.append(refreshIconSpan, document.createTextNode('Refresh'));
     const metaSpan = document.createElement('span');
     metaSpan.className = 'model-picker-meta';
     footer.append(refreshBtn, metaSpan);
@@ -1381,12 +1406,12 @@
     function renderLista() {
       const query = searchInput.value;
       if (!modelliCache) {
-        listEl.replaceChildren(textElement('p', 'board-empty', 'Carico il catalogo da OpenRouter…'));
+        listEl.replaceChildren(textElement('p', 'board-empty', 'Loading the catalogue from OpenRouter…'));
         return;
       }
       const filtrati = filtraModelli(query);
       if (filtrati.length === 0) {
-        listEl.replaceChildren(textElement('p', 'board-empty', query.trim() ? `Nessun modello corrisponde a "${query.trim()}".` : 'Nessun modello disponibile.'));
+        listEl.replaceChildren(textElement('p', 'board-empty', query.trim() ? `No model matches "${query.trim()}".` : 'No model available.'));
         return;
       }
       const cercando = query.trim() !== '';
@@ -1440,7 +1465,7 @@
           }
           opt.addEventListener('click', () => {
             valoreScelto = modello.id;
-            state.model = modello.id; // ⭐ un'unica fonte di verità: la pillola del composer e il foglio "Modello" restano sincronizzati
+            state.model = modello.id; // ⭐ un'unica fonte di verità: la pillola del composer e il foglio "Model" restano sincronizzati
             aggiornaTriggerLabel();
             aggiornaPillolaModello();
             chiudi();
@@ -1453,7 +1478,7 @@
     }
 
     async function carica({ forza = false } = {}) {
-      listEl.replaceChildren(textElement('p', 'board-empty', 'Carico il catalogo da OpenRouter…'));
+      listEl.replaceChildren(textElement('p', 'board-empty', 'Loading the catalogue from OpenRouter…'));
       try {
         const dati = await apiGet(`/api/v1/models${forza ? '?forza=1' : ''}`);
         modelliCache = dati.modelli;
@@ -1461,7 +1486,7 @@
         metaSpan.textContent = `${dati.modelli.length} modelli${dati.daCache ? ' · da cache' : ''}`;
         renderLista();
       } catch (error) {
-        listEl.replaceChildren(textElement('p', 'board-empty', `Catalogo non disponibile: ${error.message}`));
+        listEl.replaceChildren(textElement('p', 'board-empty', `Catalogue not available: ${error.message}`));
         metaSpan.textContent = '';
       }
     }
@@ -1518,7 +1543,7 @@
      * ⭐⭐⭐ 27/8, owner: "quando clicco la pillola del modello si deve
      * riaprire lo stesso componente della selezione del modello" — la
      * pillola apre un FOGLIO il cui unico scopo è scegliere un modello:
-     * il trigger collassato (utile in "Nuova sessione", un campo fra
+     * il trigger collassato (utile in "New session", un campo fra
      * altri) sarebbe qui un secondo click ridondante. `apriSubito`
      * nasconde il trigger e tiene il pannello sempre aperto — stesso
      * componente, stessa lista vera, montaggio diverso.
@@ -1643,19 +1668,19 @@
     if (!state.board.campaign) return;
     const generation = state.board.generation += 1;
     refreshCampaignButton.disabled = true;
-    setConnectionState('loading', 'Lettura in corso', 'Rileggo i file locali autorizzati.');
-    campaignReportState.textContent = 'Lettura…';
+    setConnectionState('loading', 'Reading', 'Rileggo i file locali autorizzati.');
+    campaignReportState.textContent = 'Reading…';
     try {
       const snapshot = await apiGet(`/api/v1/campaigns/${encodeURIComponent(state.board.campaign)}/snapshot`);
       if (generation !== state.board.generation) return;
       renderCampaignSummary(snapshot.summary);
-      campaignReadMeta.textContent = `Lettura ${snapshot.readAt} · SHA-256 ${snapshot.sourceHash}`;
+      campaignReadMeta.textContent = `Read ${snapshot.readAt} · SHA-256 ${snapshot.sourceHash}`;
       await Promise.all([
         loadCampaignRuns({ append: false, generation }),
         loadCampaignReport(generation),
       ]);
       if (generation !== state.board.generation) return;
-      setConnectionState('ready', 'Dati reali · sola lettura');
+      setConnectionState('ready', 'Real data · read-only');
       // ⭐ 26/8, riconciliazione desktop→mobile — trovato con una prova vera
       // (browser reale contro il server vero, non ipotizzato): il badge
       // "Demo UI" della Board restava visibile anche a dati reali caricati,
@@ -1684,7 +1709,7 @@
     const campaigns = await apiGet('/api/v1/campaigns');
     state.board.campaigns = campaigns;
     const available = campaigns.filter((campaign) => campaign.available);
-    if (available.length === 0) throw new Error('Nessuna campagna autorizzata disponibile');
+    if (available.length === 0) throw new Error('No authorised campaign available');
     if (!available.some((campaign) => campaign.name === state.board.campaign)) {
       state.board.campaign = available[0].name;
     }
@@ -1702,8 +1727,8 @@
     state.board.nextCursor = null;
     state.board.totalMatched = 0;
     boardEyebrow.textContent = 'Board Codice · Demo UI';
-    boardTitle.textContent = 'Anteprima campagne';
-    boardDescription.textContent = 'Questa superficie mobile non ha un backend: nessun dato TALOS-BANCO viene letto o simulato.';
+    boardTitle.textContent = 'Run preview';
+    boardDescription.textContent = 'This mobile surface has no backend: no benchmark data is read or simulated.';
     campaignSelect.replaceChildren(new Option('Demo non collegata', ''));
     campaignSelect.disabled = true;
     harnessFilter.replaceChildren(new Option('Tutti', ''));
@@ -1713,11 +1738,11 @@
     renderCampaignSummary(null);
     renderCampaignRuns([]);
     renderCampaignReport(null, 'REPORT_UNAVAILABLE');
-    $('.board-empty', campaignRunList).textContent = 'Nessun dato mobile collegato.';
+    $('.board-empty', campaignRunList).textContent = 'No mobile data connected.';
     campaignReportState.textContent = 'Demo';
-    campaignReportText.textContent = 'Nessun rapporto mobile collegato';
-    setConnectionState('demo', 'Demo UI · non collegato', 'Nessun backend mobile è configurato per Codice.');
-    if (announce) toast('Board demo non collegata', 'Nessuna richiesta di rete è stata eseguita.');
+    campaignReportText.textContent = 'No mobile report connected';
+    setConnectionState('demo', 'Demo UI · not connected', 'No mobile backend is configured for Codice.');
+    if (announce) toast('Demo board not connected', 'No network request was made.');
   }
 
   function ensureCampaignBoard() {
@@ -1744,7 +1769,7 @@
     loadMoreRunsButton.disabled = true;
     try {
       await loadCampaignRuns({ append: false, generation });
-      setConnectionState('ready', 'Dati reali · sola lettura');
+      setConnectionState('ready', 'Real data · read-only');
     } catch (error) {
       setConnectionState('error', 'Filtro non disponibile', boardErrorMessage(error));
     } finally {
@@ -1754,7 +1779,7 @@
 
   function clearCampaignEvidence() {
     if (embeddedDemoOnly()) {
-      toast('Nessuna evidenza collegata', 'La Board mobile è una Demo UI senza backend.');
+      toast('No evidence attached', 'La Board mobile è una Demo UI senza backend.');
       return;
     }
     for (const row of state.board.runs) row.detto = null;
@@ -1782,7 +1807,7 @@
       }
       toast(success);
     } catch {
-      toast('Copia non disponibile', 'Seleziona manualmente il contenuto.');
+      toast('Copy not available', 'Select the content manually.');
     }
   }
 
@@ -1811,22 +1836,22 @@
   function riassuntoDoctor(risultato) {
     const problemi = [];
     if (!risultato.chiaveApi) problemi.push('chiave API assente');
-    if (risultato.shell !== 'wsl2') problemi.push(`shell ${risultato.shell === 'none' ? 'non sandboxata' : risultato.shell}`);
+    if (risultato.shell !== 'wsl2') problemi.push(`shell ${risultato.shell === 'none' ? 'not sandboxed' : risultato.shell}`);
     if (!risultato.git) problemi.push('git non trovato');
     if (!risultato.naviga) problemi.push('browser non disponibile');
     return problemi.length === 0
-      ? { badge: 'Healthy', dettaglio: `Chiave API ok · shell ${risultato.shell} · git ok · browser ok.` }
+      ? { badge: 'Healthy', dettaglio: `API key ok · shell ${risultato.shell} · git ok · browser ok.` }
       : { badge: `${problemi.length} da rivedere`, dettaglio: `${problemi.join(' · ')}.` };
   }
 
-  /** Aggiorna lo stato accanto al bottone Doctor dentro il foglio "control", se è aperto. */
+  /** Refresh lo stato accanto al bottone Doctor dentro il foglio "control", se è aperto. */
   async function refreshDoctorBadge() {
     const badgeEl = $('[data-doctor-status]', sheetBody);
     if (!badgeEl) return;
     try {
       badgeEl.textContent = riassuntoDoctor(await apiGet('/api/v1/doctor')).badge;
     } catch {
-      badgeEl.textContent = 'Non disponibile';
+      badgeEl.textContent = 'Not available';
     }
   }
 
@@ -1835,7 +1860,7 @@
     try {
       risultato = await apiGet('/api/v1/doctor');
     } catch (error) {
-      toast('Doctor non disponibile', error.message);
+      toast('Doctor not available', error.message);
       return;
     }
     const { badge, dettaglio } = riassuntoDoctor(risultato);
@@ -1846,7 +1871,7 @@
 
   /*
    * ⭐⭐⭐ porting FASE C (sub-agenti) dal bundle desktop — il foglio
-   * "Albero sessione" mostrava due righe INVENTATE ("Responsive audit"/
+   * "Session tree" mostrava due righe INVENTATE ("Responsive audit"/
    * "A11y review", mai collegate a nulla, con un bottone "+ Nuovo side
    * thread" che chiamava solo un toast). Stesso pattern di
    * caricaPannelloHooks() sopra: fetch reale, guardia anti-gara se il
@@ -1856,20 +1881,20 @@
     const mount = $('#subagentTreeMount', sheetBody);
     if (!mount) return; // il foglio "sessionTree" non è (più) quello aperto
     if (!state.realSession.id) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione attiva.'));
+      mount.replaceChildren(textElement('p', 'board-empty', 'No active session.'));
       return;
     }
-    mount.replaceChildren(textElement('p', 'board-empty', 'Carico le deleghe…'));
+    mount.replaceChildren(textElement('p', 'board-empty', 'Loading delegations…'));
     let dati;
     try {
       dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/children`);
     } catch (error) {
-      mount.replaceChildren(textElement('p', 'board-empty', `Deleghe non disponibili: ${error.message}`));
+      mount.replaceChildren(textElement('p', 'board-empty', `Delegations not available: ${error.message}`));
       return;
     }
     if (mount !== $('#subagentTreeMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
     if (!dati.figli || dati.figli.length === 0) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna delega ancora — TALOS la avvia da sé con l\'attrezzo delega_sottotask quando un sotto-task è genuinamente separabile.'));
+      mount.replaceChildren(textElement('p', 'board-empty', 'No delegation yet — TALOS starts one itself, with the delega_sottotask tool, when a sub-task is genuinely separable.'));
       return;
     }
     mount.replaceChildren(...dati.figli.map((figlio) => rigaFiglio(figlio)));
@@ -1923,7 +1948,7 @@
     if (titolo) titolo.textContent = `${elenco.length} automazion${elenco.length === 1 ? 'e' : 'i'}`;
     if (sottotitolo) {
       const prossime = elenco.filter((a) => a.attiva && a.prossimaEsecuzione).map((a) => a.prossimaEsecuzione).sort();
-      sottotitolo.textContent = prossime.length > 0 ? `Prossima esecuzione ${formattaOraSessione(prossime[0])}` : 'Nessuna attiva';
+      sottotitolo.textContent = prossime.length > 0 ? `Next run ${formattaOraSessione(prossime[0])}` : 'None active';
     }
   }
 
@@ -1949,7 +1974,7 @@
       iconWrap.innerHTML = icon(automazione.attiva ? 'i-clock' : 'i-history');
       const testo = document.createElement('div');
       const stato = automazione.attiva
-        ? `attiva · ogni ${automazione.intervalloMinuti} min · max ${automazione.limiteAlGiorno}/giorno · prossima ${formattaOraSessione(automazione.prossimaEsecuzione)}`
+        ? `on · every ${automazione.intervalloMinuti} min · max ${automazione.limiteAlGiorno}/day · next ${formattaOraSessione(automazione.prossimaEsecuzione)}`
         : `in pausa · ogni ${automazione.intervalloMinuti} min · max ${automazione.limiteAlGiorno}/giorno`;
       testo.append(textElement('strong', '', automazione.nome), textElement('small', '', stato));
       const chip = document.createElement('span');
@@ -1964,19 +1989,19 @@
           toast(automazione.attiva ? 'Automazione in pausa' : 'Automazione attivata', automazione.nome);
           renderAutomationsReali();
         } catch (error) {
-          toast('Operazione non riuscita', error.message);
+          toast('That did not work', error.message);
         }
       });
       const eliminaBtn = document.createElement('button');
       eliminaBtn.className = 'secondary-btn compact';
-      eliminaBtn.textContent = 'Elimina';
+      eliminaBtn.textContent = 'Delete';
       eliminaBtn.addEventListener('click', async () => {
         try {
           await apiPost(`/api/v1/automations/${encodeURIComponent(automazione.id)}/elimina`, {});
-          toast('Automazione eliminata', automazione.nome);
+          toast('Automation deleted', automazione.nome);
           renderAutomationsReali();
         } catch (error) {
-          toast('Operazione non riuscita', error.message);
+          toast('That did not work', error.message);
         }
       });
       article.append(iconWrap, testo, chip, toggleBtn, eliminaBtn);
@@ -1996,30 +2021,30 @@
     try {
       tasks = (await apiGet('/api/v1/tasks')).items;
     } catch (error) {
-      sheetBody.replaceChildren(textElement('p', 'board-empty', `Elenco non disponibile: ${error.message}`));
+      sheetBody.replaceChildren(textElement('p', 'board-empty', `List not available: ${error.message}`));
       return;
     }
 
     const form = document.createElement('form');
     form.className = 'sheet-section';
-    form.appendChild(textElement('span', 'sheet-label', 'Task del corpus'));
+    form.appendChild(textElement('span', 'sheet-label', 'Corpus task'));
     const selectTask = document.createElement('select');
     selectTask.className = 'sheet-input';
     for (const task of tasks) {
       const opzione = document.createElement('option');
       opzione.value = task.id;
-      opzione.textContent = `${task.id} · difficoltà ${task.difficolta}`;
+      opzione.textContent = `${task.id} · difficulty ${task.difficolta}`;
       selectTask.appendChild(opzione);
     }
     form.appendChild(selectTask);
-    form.appendChild(textElement('span', 'sheet-label', 'Ogni quanti minuti'));
+    form.appendChild(textElement('span', 'sheet-label', 'Every how many minutes'));
     const inputIntervallo = document.createElement('input');
     inputIntervallo.className = 'sheet-input';
     inputIntervallo.type = 'number';
     inputIntervallo.min = '5';
     inputIntervallo.value = '30';
     form.appendChild(inputIntervallo);
-    form.appendChild(textElement('span', 'sheet-label', 'Massimo esecuzioni al giorno'));
+    form.appendChild(textElement('span', 'sheet-label', 'Maximum runs per day'));
     const inputLimite = document.createElement('input');
     inputLimite.className = 'sheet-input';
     inputLimite.type = 'number';
@@ -2042,10 +2067,10 @@
           limiteAlGiorno: Number(inputLimite.value),
         });
         closeEmbeddedDialog(sheetDialog);
-        toast('Automazione creata', 'In pausa — attivala dall\'elenco quando vuoi.');
+        toast('Automation created', 'In pausa — attivala dall\'elenco quando vuoi.');
         renderAutomationsReali();
       } catch (error) {
-        toast('Creazione non riuscita', error.message);
+        toast('Create failed', error.message);
       }
     });
     sheetBody.replaceChildren(form);
@@ -2095,7 +2120,7 @@
         });
         /*
          * ⭐⭐⭐ 28/8, owner: "nella pill del modello metti lo slider
-         * dell'effort" — STESSO componente di "Nuova sessione"
+         * dell'effort" — STESSO componente di "New session"
          * (creaEffortPicker), montato qui sotto il picker modello.
          * ⭐⭐⭐ 2/9 — R2/R3: oltre a `state.effort` (che resta la fonte
          * per una sessione NUOVA), ora sincronizza anche una sessione
@@ -2131,7 +2156,7 @@
         });
         /*
          * ⭐⭐⭐ 28/8, owner: "nella pill del modello metti lo slider
-         * dell'effort" — STESSO componente di "Nuova sessione"
+         * dell'effort" — STESSO componente di "New session"
          * (creaEffortPicker), montato qui sotto il picker modello.
          * ⭐⭐⭐ 2/9 — R2/R3: oltre a `state.effort` (che resta la fonte
          * per una sessione NUOVA), ora sincronizza anche una sessione
@@ -2161,7 +2186,7 @@
   const sheetTemplates = {
     model: {
       eyebrow: 'Runtime',
-      title: 'Modello',
+      title: 'Model',
       /*
        * ⛔⛔⛔ 27/8, owner: "la stessa modale deve essere riprodotta nel chat
        * composer... si deve riaprire lo stesso componente della selezione
@@ -2169,7 +2194,7 @@
        * SETTE scorciatoie scritte a mano (gpt-5.6-sol, claude-opus-4.6...,
        * tutti nomi finti), un componente DIVERSO da `creaModelPicker` (il
        * catalogo vero di OpenRouter, ricerca, raggruppato per provider,
-       * usato in "Nuova sessione"). Qui resta solo un punto di montaggio:
+       * usato in "New session"). Qui resta solo un punto di montaggio:
        * `openSheet()` ci monta lo STESSO componente, non una sua copia —
        * vedi lì per il perché.
        */
@@ -2177,12 +2202,12 @@
     },
     permissions: {
       eyebrow: 'Safety lens',
-      title: 'Permessi di esecuzione',
+      title: 'Run permissions',
       html: () => `
         <div class="sheet-section">
           <span class="sheet-label">Policy sessione</span>
           ${[
-            ['Read only', 'Legge progetto e comandi non mutanti.', 'Minimo rischio'],
+            ['Read only', 'Reads the project and runs non-mutating commands.', 'Minimo rischio'],
             ['Workspace write', 'Scrive solo nel workspace/worktree corrente.', 'Consigliato'],
             ['On request', 'Chiede prima delle azioni sensibili.', 'Controllato'],
             ['Full access', 'Filesystem e rete senza gate ordinari.', 'Alto rischio'],
@@ -2255,7 +2280,7 @@
             ['leggi', 'Legge un file del workspace', 'i-eye'],
             ['scrivi', 'Scrive un file, sostituendolo per intero — passa dal cancello semantico', 'i-code'],
             ['prova', 'Esegue la suite di test del progetto: è il giudice', 'i-check'],
-            ['shell', 'Comando di shell nella cartella progetto — WSL2 se c’è, altrimenti dichiarato', 'i-terminal'],
+            ['shell', 'Shell command in the project folder — WSL2 if present, otherwise declared', 'i-terminal'],
             ['naviga', 'Legge una pagina web pubblica — DNS pinnato, solo http/https', 'i-web'],
           ].map(([name, desc, ico]) => `
             <div class="sheet-option" role="group">
@@ -2302,7 +2327,7 @@
         <div class="sheet-section">
           <span class="sheet-label">Agent runtime</span>
           <button class="sheet-option" data-control-action="doctor"><span class="sheet-icon">${icon('i-check')}</span><span><strong>Doctor</strong><small>Runtime, provider, shell, git e browser</small></span><span data-doctor-status>Verifica…</span></button>
-          <button class="sheet-option" data-control-action="settings"><span class="sheet-icon">${icon('i-settings')}</span><span><strong>Impostazioni Codice</strong><small>Aspetto, interazione e preferenze</small></span><span>Apri</span></button>
+          <button class="sheet-option" data-control-action="settings"><span class="sheet-icon">${icon('i-settings')}</span><span><strong>Impostazioni Codice</strong><small>Aspetto, interazione e preferenze</small></span><span>Open</span></button>
         </div>
         <div class="sheet-section">
           <span class="sheet-label">Hooks</span>
@@ -2311,8 +2336,8 @@
         <div class="sheet-section">
           <span class="sheet-label">Non ancora implementato</span>
           ${[
-            ['Agents', 'Subagent, deleghe, isolamento e limiti', 'i-robot'],
-            ['Approval policy per-tool', 'Nessuna grammatica di permesso per-tool oggi — il cancello semantico su scrivi è sempre attivo, non è opzionale', 'i-shield'],
+            ['Agents', 'Sub-agents, delegation, isolation and limits', 'i-robot'],
+            ['Approval policy per-tool', 'No per-tool permission grammar today — the semantic gate on writes is always on, and not optional', 'i-shield'],
           ].map(([name, desc, ico]) => `
             <div class="sheet-option" role="group">
               <span class="sheet-icon">${icon(ico)}</span><span><strong>${name}</strong><small>${desc}</small></span><span><input aria-label="${name}, non implementato" type="checkbox" disabled></span>
@@ -2321,7 +2346,7 @@
     },
     sessionTree: {
       eyebrow: 'Conversation graph',
-      title: 'Albero sessione',
+      title: 'Session tree',
       /*
        * ⭐⭐⭐ 29/8 — porting dal bundle desktop (FASE C, ledger basso
        * livello, chiusa 28/8): le due righe "Responsive audit"/"A11y
@@ -2360,8 +2385,8 @@
         </div>`,
     },
     rename: {
-      eyebrow: 'Sessione',
-      title: 'Rinomina sessione',
+      eyebrow: 'Session',
+      title: 'Rename session',
       html: () => `
         <form class="sheet-section rename-form" id="renameSessionForm">
           <label class="sheet-label" for="renameSessionInput">Nome sessione</label>
@@ -2393,7 +2418,7 @@
       html: () => '<div class="sheet-section" id="fileViewerMount"><p class="board-empty">Carico…</p></div>',
     },
     renameFile: {
-      eyebrow: 'Albero workspace',
+      eyebrow: 'Workspace tree',
       title: 'Rinomina file',
       html: () => `
         <form class="sheet-section rename-form" id="renameFileForm">
@@ -2407,8 +2432,8 @@
     },
     /** ⛔ Distruttiva — la conferma è QUESTO stesso foglio (un secondo passaggio esplicito, mai un click solo), stessa disciplina "hard to reverse actions get confirmed" del resto del prodotto. */
     deleteFile: {
-      eyebrow: 'Albero workspace',
-      title: 'Elimina file',
+      eyebrow: 'Workspace tree',
+      title: 'Delete file',
       html: () => `
         <div class="sheet-section">
           <p class="board-empty">Eliminare <strong>${(state.alberoFileTarget?.nome ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}</strong>? L'azione scrive DAVVERO sul disco e non si annulla da qui.</p>
@@ -2426,11 +2451,11 @@
      * campo solo, un submit solo).
      */
     createFile: {
-      eyebrow: 'Albero workspace',
+      eyebrow: 'Workspace tree',
       title: 'Nuovo', // ⛔ sovrascritto dinamicamente in avviaCreaVoce() col titolo vero — sheetTemplates.title è una stringa ovunque altrove, stesso pattern di fileViewer sopra
       html: () => `
         <form class="sheet-section rename-form" id="createFileForm">
-          <label class="sheet-label" for="createFileInput">${state.alberoFileTarget?.tipo === 'cartella' ? 'Nome della cartella' : 'Nome del file'}</label>
+          <label class="sheet-label" for="createFileInput">${state.alberoFileTarget?.tipo === 'cartella' ? 'Folder name' : 'Nome del file'}</label>
           <input class="sheet-input" id="createFileInput" value="" maxlength="255" autocomplete="off" spellcheck="false">
           <div class="sheet-actions">
             <button type="button" class="secondary-btn" data-create-file-cancel>Annulla</button>
@@ -2448,7 +2473,7 @@
      */
     export: {
       eyebrow: 'Esporta',
-      title: 'Esporta sessione',
+      title: 'Export session',
       html: () => `
         <div class="sheet-section">
           <span class="sheet-label">Formato</span>
@@ -2466,7 +2491,7 @@
    * ⭐ 29/8, porta canonico (ledger §22, cherry-pick 582dffcf) — mancava:
    * chiamata già presente altrove (il boot-time init appena portato) ma
    * mai definita, ReferenceError immediato a ogni eval del bundle (trovato
-   * dai 80/80 test falliti in blocco, non da un'ipotesi). Aggiorna la
+   * dai 80/80 test falliti in blocco, non da un'ipotesi). Refresh la
    * pillola del composer che apre il foglio Modello — selettore stabile
    * (`data-open-sheet="model"`), non un confronto sul testo attuale.
    */
@@ -2479,25 +2504,25 @@
    * ⭐⭐⭐ 2/9 — R2/R3 dalla review Fable: porta canonico (desktop, app.js
    * `sincronizzaImpostazioniSessione`) del pattern "impostazioni di
    * sessione". Prima d'oggi impostaPermesso() cambiava SOLO lo stato
-   * locale e mostrava sempre "Policy aggiornata" — anche su una sessione
+   * locale e mostrava sempre "Policy updated" — anche su una sessione
    * già avviata, dove il kernel non lo avrebbe mai saputo (piano
    * §14.2.2, "cosmetico": il messaggio era falso per qualunque sessione
    * già in corso). Una coda seriale evita che due cambi ravvicinati
-   * (permesso poi modello) si scavalchino in rete. Nessuna sessione
+   * (permesso poi modello) si scavalchino in rete. No session
    * attiva → no-op locale onesto, non un errore: la scelta vale
    * comunque dal PROSSIMO avvio (state.permissions/state.model restano
    * la fonte per una sessione nuova).
    */
-  let catenaAggiornamentiSessione = Promise.resolve();
+  let catenaRefreshmentiSessione = Promise.resolve();
   function sincronizzaImpostazioniSessione(patch) {
     const sessionId = state.realSession.id;
     if (!sessionId || !patch || Object.keys(patch).length === 0) return Promise.resolve({ locale: true });
-    const richiesta = catenaAggiornamentiSessione
+    const richiesta = catenaRefreshmentiSessione
       .catch(() => undefined)
       .then(() => apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/settings`, patch));
-    catenaAggiornamentiSessione = richiesta.catch(() => undefined);
+    catenaRefreshmentiSessione = richiesta.catch(() => undefined);
     richiesta.catch((error) => {
-      toast('Preferenza non salvata', error?.message || 'La scelta non è stata inviata alla sessione: riprova.');
+      toast('Preference not saved', error?.message || 'The choice did not reach the session: try again.');
     });
     return richiesta;
   }
@@ -2516,7 +2541,7 @@
     window.__talosHarnessHostPermissionChange?.(state.permissions);
     // ⭐⭐⭐ 2/9 — R2/R3: prima d'ora nessuna rete, il toast sotto mentiva su una sessione già avviata.
     sincronizzaImpostazioniSessione({ permessi: nuovoPermesso });
-    toast('Policy aggiornata', messaggioToast);
+    toast('Policy updated', messaggioToast);
   }
 
   function wireSheetActions(type) {
@@ -2534,10 +2559,10 @@
     });
     $$('[data-environment-choice]', sheetBody).forEach((button) => {
       button.addEventListener('click', () => {
-        state.environment = button.querySelector('strong')?.textContent || 'Runtime aggiornato';
+        state.environment = button.querySelector('strong')?.textContent || 'Runtime updated';
         const chip = $('.environment-chip span');
         if (chip) chip.textContent = state.environment;
-        toast('Environment selezionato', state.environment);
+        toast('Environment selected', state.environment);
         closeEmbeddedDialog(sheetDialog);
       });
     });
@@ -2584,12 +2609,12 @@
           const esportato = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/export`);
           const isMarkdown = formato === 'markdown';
           const testo = isMarkdown ? costruisciTrascrizioneMarkdown(esportato) : JSON.stringify(esportato, null, 2);
-          if (!testo || !testo.trim()) throw new Error('Esportazione vuota: nessun contenuto da scrivere.');
-          scaricaTesto(testo, `talos-sessione-${state.realSession.id}.${isMarkdown ? 'md' : 'json'}`, isMarkdown ? 'text/markdown' : 'application/json');
+          if (!testo || !testo.trim()) throw new Error('Nothing to export: no content to write.');
+          scaricaTesto(testo, `talos-session-${state.realSession.id}.${isMarkdown ? 'md' : 'json'}`, isMarkdown ? 'text/markdown' : 'application/json');
           closeEmbeddedDialog(sheetDialog);
-          toast('Sessione esportata', isMarkdown ? 'Trascrizione Markdown pronta.' : 'JSON pronto.');
+          toast('Session exported', isMarkdown ? 'Trascrizione Markdown pronta.' : 'JSON pronto.');
         } catch (error) {
-          toast('Esportazione non riuscita', error.message);
+          toast('Export failed', error.message);
         } finally {
           eraDisabled.forEach((b) => { b.disabled = false; });
         }
@@ -2618,16 +2643,16 @@
           try {
             await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/rename`, { nome: next });
           } catch (error) {
-            toast('Rinomina non riuscita', error.message);
+            toast('Rename failed', error.message);
             return;
           }
         }
         state.session = next;
-        sessionTitle.textContent = state.session;
+        mostraTitoloSessione(state.session);
         const activeSession = $('.session-item.active .session-main strong');
         if (activeSession) activeSession.textContent = state.session;
         closeEmbeddedDialog(sheetDialog);
-        toast('Sessione rinominata', state.session);
+        toast('Session renamed', state.session);
       });
     }
 
@@ -2647,7 +2672,7 @@
           toast('File rinominato', `${bersaglio.nome} → ${nuovoNome}`);
           await invalidaLivelloGenitoreAlbero(bersaglio.percorso);
         } catch (error) {
-          toast('Rinomina non riuscita', error.message);
+          toast('Rename failed', error.message);
         }
       });
     }
@@ -2661,10 +2686,10 @@
         try {
           await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/delete`, { percorso: bersaglio.percorso });
           closeEmbeddedDialog(sheetDialog);
-          toast('File eliminato', bersaglio.nome);
+          toast('File deleted', bersaglio.nome);
           await invalidaLivelloGenitoreAlbero(bersaglio.percorso);
         } catch (error) {
-          toast('Eliminazione non riuscita', error.message);
+          toast('Delete failed', error.message);
         }
       });
     }
@@ -2682,10 +2707,10 @@
         try {
           const esito = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/create`, { percorsoBase: bersaglio.percorso, nome, tipo: bersaglio.tipo });
           closeEmbeddedDialog(sheetDialog);
-          toast(bersaglio.tipo === 'cartella' ? 'Cartella creata' : 'File creato', esito.percorso);
+          toast(bersaglio.tipo === 'cartella' ? 'Folder created' : 'File created', esito.percorso);
           await invalidaLivelloGenitoreAlbero(esito.percorso);
         } catch (error) {
-          toast('Creazione non riuscita', error.message);
+          toast('Create failed', error.message);
         }
       });
     }
@@ -2703,15 +2728,15 @@
      * accodare, mai un toggle che si accende senza che nulla lo segua.
      */
     if (enabled && state.realSession.id) {
-      toast('Il follow-up è già in coda', 'Scrivi normalmente nel composer: un messaggio durante un run in corso si accoda da solo, non serve questo interruttore.');
+      toast('That follow-up is already queued', 'Just write in the composer: a message sent during a running turn queues itself — this switch is not needed.');
       return;
     }
     if (enabled && !state.realSession.id) {
-      toast('Nessuna sessione attiva', 'Il follow-up si mette in coda solo durante una sessione in corso — apri prima «Nuova».');
+      toast('No active session', 'A follow-up only queues during a running session — open "New" first.');
       return;
     }
     if (enabled && !state.realSession.id) {
-      toast('Nessuna sessione attiva', 'Il follow-up si mette in coda solo durante una sessione in corso — apri prima «Nuova».');
+      toast('No active session', 'A follow-up only queues during a running session — open "New" first.');
       return;
     }
     state.queueMode = Boolean(enabled);
@@ -2727,12 +2752,12 @@
     runStrip?.classList.toggle('is-stopped', !state.running);
     const label = $('strong', runStateToggle);
     const timer = runStateToggle?.querySelector('span:last-child');
-    if (label) label.textContent = state.running ? 'In esecuzione' : 'Interrotto';
+    if (label) label.textContent = state.running ? 'Running' : 'Stopped';
     if (timer) timer.textContent = state.running ? '01:42' : '—';
     const stopButton = $('.stop-run');
     if (stopButton) {
       stopButton.disabled = !state.running;
-      stopButton.setAttribute('aria-label', state.running ? 'Interrompi esecuzione' : 'Esecuzione interrotta');
+      stopButton.setAttribute('aria-label', state.running ? 'Stop run' : 'Run stopped');
     }
   }
 
@@ -2762,10 +2787,10 @@
   }
 
   const toolDetails = {
-    read: ['File letto', 'TalosComposer.vue · 214 righe · nessun conflitto rilevato.'],
-    search: ['Ricerca completata', 'Trovati breakpoint 360/430/780, safe-area e 11 target interattivi da rifinire.'],
+    read: ['File read', 'TalosComposer.vue · 214 lines · no conflict found.'],
+    search: ['Search done', 'Found breakpoints 360/430/780, safe-area and 11 interactive targets to refine.'],
     edit: ['Patch applicata', '+28 −19 · layout composer convertito a container-aware responsive surface.'],
-    bash: ['Test completati', '6/6 test superati in 8.4s · touch target, safe-area e command palette verificati.'],
+    bash: ['Test completati', '6/6 tests passed in 8.4s · touch targets, safe-area and command palette verified.'],
     browser: ['Browser check live', '390×844 · viewport dinamico, composer, drawer e bottom navigation sotto osservazione.'],
   };
 
@@ -2783,7 +2808,7 @@
       animateExit(existing, { durationToken: '--talos-motion-duration-disclosure' }, () => existing.remove());
       return;
     }
-    const [title, detail] = toolDetails[key] || ['Dettaglio tool', 'Nessun dettaglio aggiuntivo disponibile.'];
+    const [title, detail] = toolDetails[key] || ['Dettaglio tool', 'No further detail available.'];
     const row = document.createElement('div');
     row.className = 'tool-inline-detail';
     row.innerHTML = `<strong>${title}</strong><span>${detail}</span>`;
@@ -2913,7 +2938,7 @@
    * apre: su mobile "dove va" resta la
    * stessa decisione UX già rimandata (superficie Codice iterata per otto
    * fasi, non mia da decidere sola); sul desktop standalone il vincolo
-   * tecnico non c'è, ma la scelta di COSA far fare a "Nuova sessione" in
+   * tecnico non c'è, ma la scelta di COSA far fare a "New session" in
    * quel contesto è comunque un prodotto, non un'ovvietà.
    *
    * ⇒ Zero rischio di regressione sulla suite Pad-verificata di Codice: il
@@ -2928,10 +2953,10 @@
    * messaggio libero (`avviaReale` → `{consegna}`, senza `id`), un comando
    * diretto (`{comandoDiretto}`). Prima di questa modifica il meta-testo
    * leggeva SEMPRE `task.id` — corretto qui perché un messaggio libero
-   * l'avrebbe mostrato come "Task reale · undefined" (trovato leggendo il
+   * l'avrebbe mostrato come "Real task · undefined" (trovato leggendo il
    * corpo di `avviaReale`, mai da uno screenshot: non ancora provato dal
    * vivo quando è stato scritto questo commento). Un `id` presente resta
-   * "Task reale · <id>" — comportamento invariato per il corpus; senza,
+   * "Real task · <id>" — comportamento invariato per il corpus; senza,
    * l'etichetta onesta è quella di un messaggio normale.
    */
   function appendRealTaskStart(task) {
@@ -2950,21 +2975,21 @@
      * ⛔⛔⛔ 27/8, secondo giro, trovato ricaricando la pagina (F5): un
      * "compito libero" (custom-task.mjs, preparaEsecuzioneLibera) ha
      * `.consegna`/`.progetto` ma NESSUN `.id` — la stessa logica etichettava
-     * "Comando diretto" anche una vera conversazione. Sul MOMENTO non si
+     * "Direct command" anche una vera conversazione. Sul MOMENTO non si
      * vedeva mai (avviaSessionePendente mostra il suo bubble ottimista
      * PRIMA che l'evento vero arrivi, e taskBubbleMostrata blocca il
      * secondo) — solo un F5/resume, che riparte da zero e replica
      * l'evento VERO, lo rivelava. Tre forme distinte, tre etichette oneste.
      */
-    bubble.textContent = task.consegna || task.consegnaCorta || task.comandoDiretto || (task.id ? task.id : 'Comando diretto');
+    bubble.textContent = task.consegna || task.consegnaCorta || task.comandoDiretto || (task.id ? task.id : 'Direct command');
     const meta = document.createElement('div');
     meta.className = 'message-meta';
     const span = document.createElement('span');
     span.textContent = task.id
-      ? `Task reale · ${task.id}`
+      ? `Real task · ${task.id}`
       : (task.consegna || task.consegnaCorta)
-        ? `Compito libero${task.progetto ? ` · ${task.progetto}` : ''}`
-        : 'Comando diretto';
+        ? `Free task${task.progetto ? ` · ${task.progetto}` : ''}`
+        : 'Direct command';
     meta.appendChild(span);
     article.append(bubble, meta);
     conversation.appendChild(article);
@@ -2977,7 +3002,7 @@
   /**
    * ⛔⛔⛔ 27/8 — la bolla del SECONDO turno di una conversazione reale
    * (resumeSession con un testo): stesso stile di appendRealTaskStart, ma
-   * "Follow-up" invece di "Task reale · <id>" — non è il compito che ha
+   * "Follow-up" invece di "Real task · <id>" — non è il compito che ha
    * aperto la sessione, è quello che la continua.
    */
   function appendUserFollowUp(text) {
@@ -3069,7 +3094,7 @@
       nodo.setAttribute('cx', String(cx)); nodo.setAttribute('cy', '8'); nodo.setAttribute('r', '4');
       svg.append(nodo);
     }
-    article.append(svg, textElement('span', 'sr-only', 'TALOS sta elaborando la risposta…'));
+    article.append(svg, textElement('span', 'sr-only', 'TALOS is working on the answer…'));
     conversation.appendChild(article);
     state.realSession.attesaBubble = article;
     markMotionEnter(article);
@@ -3099,7 +3124,7 @@
     article.className = 'message assistant-message compact-message real-compaction-note';
     article.setAttribute('role', 'status');
     article.setAttribute('aria-live', 'polite');
-    article.textContent = 'Sto riassumendo la conversazione finora…';
+    article.textContent = 'Summarising the conversation so far…';
     conversation.appendChild(article);
     state.realSession.compattazioneBubble = article;
     markMotionEnter(article);
@@ -3123,7 +3148,7 @@
     const glyph = document.createElement('span');
     glyph.className = 'talos-glyph';
     glyph.appendChild(textElement('span', 'brand-glyph-mark', ''));
-    meta.append(glyph, document.createTextNode('TALOS · sessione reale'));
+    meta.append(glyph, document.createTextNode('TALOS · real session'));
     const copy = document.createElement('div');
     copy.className = 'assistant-copy';
     article.append(meta, copy);
@@ -3171,7 +3196,7 @@
   }
 
   const ICONA_PER_CATEGORIA = Object.freeze({ modificato: 'i-edit', letto: 'i-eye', eseguito: 'i-bolt' });
-  const ETICHETTA_CATEGORIA = Object.freeze({ modificato: 'Modificato', letto: 'Letto', eseguito: 'Eseguito' });
+  const ETICHETTA_CATEGORIA = Object.freeze({ modificato: 'Modified', letto: 'Read', eseguito: 'Ran' });
 
   /** Il "bersaglio" di un tool-call per la riga espansa del gruppo — solo l'oggetto (nome file, comando, query…): il verbo lo porta già l'etichetta di categoria accanto (icona+ETICHETTA_CATEGORIA), ripeterlo qui sarebbe ridondante. */
   function bersaglioAttrezzo(nome, argomenti) {
@@ -3275,7 +3300,7 @@
   /**
    * Riassunto aggregato — le categorie nell'ORDINE in cui sono comparse
    * la prima volta nel gruppo, non un ordine fisso: "Eseguiti 3 comandi,
-   * creato un file" e "Creato un file, eseguiti 7 comandi" sono ENTRAMBE
+   * created a file" e "Creato un file, eseguiti 7 comandi" sono ENTRAMBE
    * forme viste negli screenshot di riferimento, a seconda di quale
    * categoria arriva per prima in quel gruppo specifico. Un singolo file
    * scritto dice "creato" (mai esistito prima) o "modificato" (esisteva
@@ -3290,15 +3315,15 @@
     }
     const VERBI = {
       modificato: (n) => {
-        if (n !== 1) return `modificati ${n} file`;
+        if (n !== 1) return `modified ${n} files`;
         const unico = gruppo.items.find((i) => i.categoria === 'modificato');
-        return unico?.nuovo ? 'creato un file' : 'modificato un file';
+        return unico?.nuovo ? 'created a file' : 'modified a file';
       },
-      eseguito: (n) => (n === 1 ? 'eseguito un comando' : `eseguiti ${n} comandi`),
-      letto: (n) => (n === 1 ? 'letto un file' : `letti ${n} file`),
+      eseguito: (n) => (n === 1 ? 'ran a command' : `ran ${n} commands`),
+      letto: (n) => (n === 1 ? 'read a file' : `read ${n} files`),
     };
     const testo = ordine.map((cat) => VERBI[cat](conteggi.get(cat))).join(', ');
-    gruppo.summaryText.textContent = testo ? testo.charAt(0).toUpperCase() + testo.slice(1) : 'Esecuzione…';
+    gruppo.summaryText.textContent = testo ? testo.charAt(0).toUpperCase() + testo.slice(1) : 'Working…';
     gruppo.addEl.textContent = gruppo.aggiunte > 0 ? `+${gruppo.aggiunte}` : '';
     gruppo.delEl.textContent = gruppo.rimozioni > 0 ? `-${gruppo.rimozioni}` : '';
     gruppo.warn.hidden = !gruppo.haProblema;
@@ -3501,8 +3526,8 @@
    * campo giusto è già lì.
    */
   function descriviAzioneApprovazione(azione) {
-    if (azione?.tipo === 'scrivi') return `Vuole scrivere il file: ${azione.percorso}`;
-    if (azione?.tipo === 'shell') return `Vuole eseguire il comando: ${azione.comando}`;
+    if (azione?.tipo === 'scrivi') return `Wants to write the file: ${azione.percorso}`;
+    if (azione?.tipo === 'shell') return `Wants to run the command: ${azione.comando}`;
     if (azione?.tipo === 'document_create') return `Vuole creare un documento (formato ${azione.formato || '?'})`;
     return 'Vuole eseguire un\'azione che modifica qualcosa.';
   }
@@ -3574,7 +3599,7 @@
         rispostaDataDaQuestaScheda = false;
         negaBtn.disabled = false;
         approvaBtn.disabled = false;
-        toast('Risposta non riuscita', error.message);
+        toast('Reply failed', error.message);
       }
     };
     negaBtn.addEventListener('click', () => rispondi(false));
@@ -3617,7 +3642,7 @@
     const terminalWindow = $('[data-view="terminal"] .terminal-window');
     if (terminalWindow) {
       const code = document.createElement('code');
-      code.textContent = 'Nessun comando eseguito in questa sessione.';
+      code.textContent = 'No command run in this session.';
       terminalWindow.replaceChildren(code);
       const demoBadge = $('.demo-surface-badge', $('[data-view="terminal"]'));
       if (demoBadge) demoBadge.hidden = true; // onesto e vuoto, non "demo": non è un dato finto da segnalare
@@ -3628,7 +3653,7 @@
       const barraUrl = $('[data-view="browser"] .browser-url');
       if (barraUrl) barraUrl.replaceChildren(document.createTextNode('—'));
       const anteprima = $('[data-view="browser"] .device-preview');
-      if (anteprima) anteprima.replaceChildren(textElement('p', 'board-empty', 'Nessuna pagina letta in questa sessione.'));
+      if (anteprima) anteprima.replaceChildren(textElement('p', 'board-empty', 'No page read in this session.'));
       const demoBadge = $('.demo-surface-badge', $('[data-view="browser"]'));
       if (demoBadge) demoBadge.hidden = true;
     }
@@ -3729,7 +3754,7 @@
    */
   async function runDirectShell(comando, silenzioso) {
     if (!state.realSession.id) {
-      toast('Nessuna sessione reale attiva', 'Avvia un task dal corpus prima di usare un comando diretto.');
+      toast('No real session running', 'Start a task from the corpus before using a direct command.');
       return;
     }
     const sessionId = state.realSession.id;
@@ -3740,9 +3765,9 @@
       state.realSession.taskId = taskId;
       collegaEventiSessione(sessionId, generation);
       aggiornaElencoSessioniReali();
-      if (!silenzioso) toast('Comando inviato', comando);
+      if (!silenzioso) toast('Command sent', comando);
     } catch (error) {
-      toast('Comando non eseguito', error.message);
+      toast('Command not run', error.message);
     }
   }
 
@@ -3843,23 +3868,23 @@
     };
     const blocco = (testo, linguaggio = '') => { const f = recinto(testo); return `${f}${linguaggio}\n${testo}\n${f}`; };
     const descriviTask = (input) => {
-      if (!input) return '(nessun dettaglio)';
-      if (input.comandoDiretto) return `Comando diretto: \`${input.comandoDiretto}\``;
+      if (!input) return '(no detail)';
+      if (input.comandoDiretto) return `Direct command: \`${input.comandoDiretto}\``;
       if (input.consegna) return `${input.seguito ? '**Follow-up:** ' : ''}${input.consegna}`;
       return blocco(JSON.stringify(input, null, 2), 'json');
     };
 
-    righe.push(`# Trascrizione sessione TALOS Harness`, '');
-    righe.push(`- **Sessione:** ${esportato.nome || esportato.taskId || esportato.sessionId}`);
+    righe.push(`# TALOS Harness session transcript`, '');
+    righe.push(`- **Session:** ${esportato.nome || esportato.taskId || esportato.sessionId}`);
     righe.push(`- **Id:** \`${esportato.sessionId}\``);
     righe.push(`- **Modello:** ${esportato.modello || '(default)'}`);
-    righe.push(`- **Avviata:** ${esportato.avviataAlle || '?'}`);
+    righe.push(`- **Started:** ${esportato.avviataAlle || '?'}`);
     righe.push(`- **Conclusa:** ${esportato.conclusa ? 'sì' : 'no'}`);
     if (esportato.forkDa) righe.push(`- **Fork da:** \`${esportato.forkDa}\``);
     righe.push(`- **Eventi totali:** ${Array.isArray(esportato.eventi) ? esportato.eventi.length : 0}`, '');
 
     if (!Array.isArray(esportato.eventi) || esportato.eventi.length === 0) {
-      righe.push('> ⛔ Nessun evento registrato per questa sessione.');
+      righe.push('> ⛔ No event recorded for this session.');
       return righe.join('\n');
     }
 
@@ -3916,28 +3941,28 @@
           const info = toolBuffer.get(evento.toolCallId) || { nome: '(sconosciuto)', argomenti: '' };
           let argFormattati = info.argomenti;
           try { argFormattati = JSON.stringify(JSON.parse(info.argomenti), null, 2); } catch { /* args non-JSON o incompleti: mostrati grezzi, mai persi */ }
-          righe.push(`**🔧 ${info.nome}**`, '', 'Argomenti:', blocco(argFormattati || '(nessuno)', 'json'), '', 'Esito (completo, mai troncato):', blocco(String(evento.content ?? '')), '');
+          righe.push(`**🔧 ${info.nome}**`, '', 'Argomenti:', blocco(argFormattati || '(none)', 'json'), '', 'Esito (completo, mai troncato):', blocco(String(evento.content ?? '')), '');
           toolBuffer.delete(evento.toolCallId);
           break;
         }
         case 'StateDelta': {
           const operazione = evento.delta?.[0];
           if (operazione?.path === '/usage') {
-            righe.push(`_Utilizzo token aggiornato: ${blocco(JSON.stringify(operazione.value), 'json')}_`, '');
+            righe.push(`_Token usage updated: ${blocco(JSON.stringify(operazione.value), 'json')}_`, '');
           } else if (operazione?.path?.startsWith('/file/')) {
             const percorso = operazione.path.replace(/^\/file\//, '');
-            righe.push(`✏️ **File ${operazione.op === 'add' ? 'creato' : 'modificato'}:** \`${percorso}\` _(contenuto completo nel formato JSON)_`, '');
+            righe.push(`✏️ **File ${operazione.op === 'add' ? 'created' : 'changed'}:** \`${percorso}\` _(full content in the JSON format)_`, '');
           } else {
             righe.push(`_StateDelta:_ ${blocco(JSON.stringify(evento.delta), 'json')}`, '');
           }
           break;
         }
         case 'ArtifactCreated': {
-          righe.push(`📦 **Artefatto creato:** ${evento.titolo || '(senza titolo)'} (\`${evento.id}\`)`, '');
+          righe.push(`📦 **Artifact created:** ${evento.titolo || '(untitled)'} (\`${evento.id}\`)`, '');
           break;
         }
         case 'WorkspaceChanged': {
-          const elenco = Array.isArray(evento.percorsi) ? evento.percorsi.join(', ') : '(percorsi non specificati)';
+          const elenco = Array.isArray(evento.percorsi) ? evento.percorsi.join(', ') : '(paths not specified)';
           righe.push(`📁 _Cambiamento esterno nel workspace: ${elenco}_`, '');
           break;
         }
@@ -3946,7 +3971,7 @@
           break;
         }
         case 'ApprovalRequested': {
-          righe.push(`⏸ **Approvazione richiesta:** ${descriviAzioneApprovazione(evento.azione)}`, '');
+          righe.push(`⏸ **Approval required:** ${descriviAzioneApprovazione(evento.azione)}`, '');
           break;
         }
         case 'ApprovalResolved': {
@@ -4064,7 +4089,7 @@
       uso.setAttribute('href', '#i-diff'); // ⛔ mai innerHTML: costruito nodo per nodo
       icona.append(uso);
       etichetta.append(icona, textElement('strong', '', file.path.split('/').pop()));
-      button.append(etichetta, textElement('span', 'diff-stats', `${file.nuovo ? 'nuovo' : 'modificato'} · ${file.code.length} righe`));
+      button.append(etichetta, textElement('span', 'diff-stats', `${file.nuovo ? 'new' : 'changed'} · ${file.code.length} lines`));
       button.addEventListener('click', () => {
         $$('.file-review', contenitore).forEach((f) => { f.classList.remove('active'); f.setAttribute('aria-pressed', 'false'); });
         button.classList.add('active');
@@ -4074,7 +4099,7 @@
       return button;
     }));
     const titolo = $('[data-view="diff"] .view-heading h2');
-    if (titolo) titolo.textContent = `${voci.length} file modificat${voci.length === 1 ? 'o' : 'i'}`;
+    if (titolo) titolo.textContent = `${voci.length} file${voci.length === 1 ? '' : 's'} changed`;
     if (voci.length > 0) renderRischioReview(voci);
   }
 
@@ -4202,7 +4227,7 @@
     try {
       voci = await caricaLivelloAlbero(percorsoCompleto);
     } catch {
-      childUl.replaceChildren(textElement('li', 'ft-loading', 'Non leggibile.'));
+      childUl.replaceChildren(textElement('li', 'ft-loading', 'Not readable.'));
       return;
     }
     childUl.replaceChildren();
@@ -4250,7 +4275,7 @@
     if (stato) {
       const dot = document.createElement('span');
       dot.className = `ft-status-dot ft-${stato}`;
-      dot.title = stato === 'new' ? 'Nuovo' : 'Modificato';
+      dot.title = stato === 'new' ? 'Nuovo' : 'Changed';
       row.appendChild(dot);
     }
 
@@ -4330,7 +4355,7 @@
           state.realSession.treeCache.delete(percorsoCompleto);
           await invalidaLivelloGenitoreAlbero(percorsoSorgente);
         } catch (error) {
-          toast('Spostamento non riuscito', error.message);
+          toast('Move failed', error.message);
         }
       });
     }
@@ -4374,7 +4399,7 @@
    *
    * ⭐⭐⭐ 28/8 — `cartella` (nuovo, default false): le CARTELLE oggi non
    * avevano nessun menu (owner, coda: "imposta come directory
-   * principale") — voci diverse da un file (niente "Apri"/"Allega alla
+   * principale") — voci diverse da un file (niente "Open"/"Allega alla
    * chat", che non hanno senso su una cartella; in più "Imposta come
    * radice"), non un secondo menu duplicato: stessa funzione, stesso
    * meccanismo di posizionamento/chiusura, solo l'elenco `voci` cambia.
@@ -4389,22 +4414,22 @@
     // ⭐ 28/8 — tasto destro sulla RADICE dell'albero: nessuna rinomina/copia/elimina ha senso lì, solo creare.
     const voci = soloCreazione ? [
       { etichetta: 'Nuovo file', icona: 'i-edit', azione: () => avviaCreaVoce(percorsoCompleto, 'file') },
-      { etichetta: 'Nuova cartella', icona: 'i-folder', azione: () => avviaCreaVoce(percorsoCompleto, 'cartella') },
+      { etichetta: 'New folder', icona: 'i-folder', azione: () => avviaCreaVoce(percorsoCompleto, 'cartella') },
     ] : cartella ? [
       { etichetta: 'Nuovo file', icona: 'i-edit', azione: () => avviaCreaVoce(percorsoCompleto, 'file') },
-      { etichetta: 'Nuova cartella', icona: 'i-folder', azione: () => avviaCreaVoce(percorsoCompleto, 'cartella') },
+      { etichetta: 'New folder', icona: 'i-folder', azione: () => avviaCreaVoce(percorsoCompleto, 'cartella') },
       { etichetta: 'Rinomina', icona: 'i-edit', azione: () => avviaRinominaFile(percorsoCompleto, nome) },
       { etichetta: 'Copia', icona: 'i-link', azione: () => avviaCopiaFile(percorsoCompleto) },
       { etichetta: 'Imposta come radice', icona: 'i-folder', azione: () => impostaComeRadice(percorsoCompleto, nome) },
       { etichetta: 'Rivela in Esplora File', icona: 'i-folder-open', azione: () => rivelaFileInEsploraFile(percorsoCompleto) },
-      { etichetta: 'Elimina', icona: 'i-trash', azione: () => avviaEliminaFile(percorsoCompleto, nome), pericoloso: true },
+      { etichetta: 'Delete', icona: 'i-trash', azione: () => avviaEliminaFile(percorsoCompleto, nome), pericoloso: true },
     ] : [
-      { etichetta: 'Apri', icona: 'i-eye', azione: () => apriFileAlbero(percorsoCompleto, nome) },
+      { etichetta: 'Open', icona: 'i-eye', azione: () => apriFileAlbero(percorsoCompleto, nome) },
       { etichetta: 'Allega alla chat', icona: 'i-link', azione: () => allegaFileAllaChat(percorsoCompleto) },
       { etichetta: 'Rinomina', icona: 'i-edit', azione: () => avviaRinominaFile(percorsoCompleto, nome) },
       { etichetta: 'Copia', icona: 'i-link', azione: () => avviaCopiaFile(percorsoCompleto) },
       { etichetta: 'Rivela in Esplora File', icona: 'i-folder-open', azione: () => rivelaFileInEsploraFile(percorsoCompleto) },
-      { etichetta: 'Elimina', icona: 'i-trash', azione: () => avviaEliminaFile(percorsoCompleto, nome), pericoloso: true },
+      { etichetta: 'Delete', icona: 'i-trash', azione: () => avviaEliminaFile(percorsoCompleto, nome), pericoloso: true },
     ];
     for (const voce of voci) {
       const btn = document.createElement('button');
@@ -4471,7 +4496,7 @@
       mount.replaceChildren(pre);
     } catch (error) {
       if (!mount.isConnected) return;
-      mount.replaceChildren(textElement('p', 'board-empty', `Non leggibile: ${error.message}`));
+      mount.replaceChildren(textElement('p', 'board-empty', `Not readable: ${error.message}`));
     }
   }
 
@@ -4505,15 +4530,15 @@
       toast('Copiato', esito.nuovoPercorso);
       await invalidaLivelloGenitoreAlbero(percorsoCompleto);
     } catch (error) {
-      toast('Copia non riuscita', error.message);
+      toast('Copy failed', error.message);
     }
   }
 
-  /** ⭐⭐⭐ 28/8, owner: "comandi crud in generale" — "Nuovo file"/"Nuova cartella", dentro percorsoBase ('' = radice). */
+  /** ⭐⭐⭐ 28/8, owner: "comandi crud in generale" — "Nuovo file"/"New folder", dentro percorsoBase ('' = radice). */
   function avviaCreaVoce(percorsoBase, tipo) {
     state.alberoFileTarget = { percorso: percorsoBase, tipo };
     openSheet('createFile');
-    sheetTitle.textContent = tipo === 'cartella' ? 'Nuova cartella' : 'Nuovo file';
+    sheetTitle.textContent = tipo === 'cartella' ? 'New folder' : 'Nuovo file';
   }
 
   /**
@@ -4533,12 +4558,12 @@
    * la radice corrente, `cartellaLibera` non lo sa e non deve saperlo —
    * un solo modo di dire "percorso a piacere", mai due). Il permesso
    * cambia di conseguenza, MAI in silenzio — `impostaPermesso` mostra
-   * sempre il suo stesso toast "Policy aggiornata".
+   * sempre il suo stesso toast "Policy updated".
    */
   function impostaComeRadice(percorsoRelativo, nome) {
     const radice = state.realSession.cartellaAssoluta;
     if (!radice) {
-      toast('Radice sconosciuta', 'Questa sessione non ha ancora dichiarato il proprio percorso — riprova appena parte il primo giro.');
+      toast('Radice sconosciuta', 'This session has not declared its path yet — try again once the first turn starts.');
       return;
     }
     const nuovaRadice = `${radice.replace(/[/\\]+$/, '')}/${percorsoRelativo}`;
@@ -4551,7 +4576,7 @@
       await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/reveal`, { percorso: percorsoCompleto });
       toast('Aperto in Esplora File', percorsoCompleto);
     } catch (error) {
-      toast('Non riuscito', error.message);
+      toast('Failed', error.message);
     }
   }
 
@@ -4590,14 +4615,14 @@
         state.realSession.treeCache.delete('');
         await invalidaLivelloGenitoreAlbero(percorsoSorgente);
       } catch (error) {
-        toast('Spostamento non riuscito', error.message);
+        toast('Move failed', error.message);
       }
     });
 
     const ul = document.createElement('ul');
     ul.className = 'ft-tree';
     ul.setAttribute('role', 'tree');
-    ul.setAttribute('aria-label', 'File del workspace');
+    ul.setAttribute('aria-label', 'Workspace files');
     ul.addEventListener('keydown', (e) => {
       const righe = righeVisibiliAlbero(ul);
       const i = righe.indexOf(document.activeElement);
@@ -4626,7 +4651,7 @@
     try {
       voci = await caricaLivelloAlbero('');
     } catch {
-      ul.appendChild(textElement('li', 'ft-loading', 'Albero non disponibile.'));
+      ul.appendChild(textElement('li', 'ft-loading', 'Tree not available.'));
       return;
     }
     for (const voce of voci) {
@@ -4638,7 +4663,7 @@
     filtraAlberoReale($('#fileTreeFilter')?.value || '');
   }
 
-  /** Aggiorna SOLO i pallini di stato dei file già a schermo — nessuna richiesta di rete, reviewFiles è già aggiornato. Porting dal bundle desktop, invariato. */
+  /** Refresh SOLO i pallini di stato dei file già a schermo — nessuna richiesta di rete, reviewFiles è già aggiornato. Porting dal bundle desktop, invariato. */
   function aggiornaPuntiniStatoAlbero() {
     const ul = $('#inspector-files .ft-tree');
     if (!ul) return;
@@ -4650,7 +4675,7 @@
       if (stato) {
         if (!dot) { dot = document.createElement('span'); row.appendChild(dot); }
         dot.className = `ft-status-dot ft-${stato}`;
-        dot.title = stato === 'new' ? 'Nuovo' : 'Modificato';
+        dot.title = stato === 'new' ? 'Nuovo' : 'Changed';
       } else if (dot) {
         dot.remove();
       }
@@ -4714,9 +4739,9 @@
     hint.replaceChildren();
     if (trovati > 0) {
       hint.appendChild(textElement('b', '', String(trovati)));
-      hint.appendChild(document.createTextNode(` risultat${trovati === 1 ? 'o' : 'i'} fra i file già caricati`));
+      hint.appendChild(document.createTextNode(` result${trovati === 1 ? '' : 's'} in the files already loaded`));
     } else {
-      hint.textContent = 'Nessun file caricato corrisponde — apri altre cartelle per includerle.';
+      hint.textContent = 'No loaded file matches — open more folders to include them.';
     }
   }
 
@@ -4762,7 +4787,7 @@
     }
     switch (evento.type) {
       case 'RunStarted': {
-        // ⭐ 29/8 — ledger §10: la striscia "In esecuzione" era scollegata dagli eventi VERI, mai un solo case la chiamava.
+        // ⭐ 29/8 — ledger §10: la striscia "Running" era scollegata dagli eventi VERI, mai un solo case la chiamava.
         setRunState(true);
         chiudiGruppoToolCorrente(); // ⭐ 30/8 — un giro nuovo (anche un resume/continua) non eredita il gruppo tool-call del giro precedente
 
@@ -4881,7 +4906,7 @@
       case 'ToolCallResult': {
         const info = state.realSession.toolCallNomi.get(evento.toolCallId);
         if (info?.nome === 'shell') {
-          let comando = '(comando)';
+          let comando = '(command)';
           try { comando = JSON.parse(info.argomenti).comando || comando; } catch { /* args incompleti o non ancora arrivati: meglio un'etichetta onesta che un crash */ }
           appendTerminalEntry(comando, String(evento.content));
         } else if (info?.nome === 'naviga') {
@@ -4957,12 +4982,12 @@
         const operazioneScrittura = evento.delta?.[0];
         const gruppoInCorsoPerDiff = state.realSession.toolGroupCorrente;
         if (gruppoInCorsoPerDiff && typeof operazioneScrittura?.path === 'string' && operazioneScrittura.path.startsWith('/file/')) {
-          let itemDaAggiornare = null;
+          let itemDaRefreshre = null;
           for (let idx = gruppoInCorsoPerDiff.items.length - 1; idx >= 0; idx -= 1) {
             const candidato = gruppoInCorsoPerDiff.items[idx];
-            if (candidato.categoria === 'modificato' && !candidato.diffDisponibile) { itemDaAggiornare = candidato; break; }
+            if (candidato.categoria === 'modificato' && !candidato.diffDisponibile) { itemDaRefreshre = candidato; break; }
           }
-          if (itemDaAggiornare) {
+          if (itemDaRefreshre) {
             const nuovo = operazioneScrittura.op === 'add';
             const valoreDopo = String(operazioneScrittura.value ?? '');
             let aggiunte = 0;
@@ -4979,11 +5004,11 @@
                 diffDisponibile = false; // file troppo grande per il diff — onesto: nessun numero, non "+0 -0"
               }
             }
-            itemDaAggiornare.nuovo = nuovo;
-            itemDaAggiornare.diffDisponibile = diffDisponibile;
+            itemDaRefreshre.nuovo = nuovo;
+            itemDaRefreshre.diffDisponibile = diffDisponibile;
             if (diffDisponibile) {
-              itemDaAggiornare.diffAggiunte = aggiunte;
-              itemDaAggiornare.diffRimozioni = rimozioni;
+              itemDaRefreshre.diffAggiunte = aggiunte;
+              itemDaRefreshre.diffRimozioni = rimozioni;
               gruppoInCorsoPerDiff.aggiunte += aggiunte;
               gruppoInCorsoPerDiff.rimozioni += rimozioni;
             }
@@ -5162,7 +5187,7 @@
           const bridge = window.__talosHarnessRichiediDato;
           let corpo;
           if (typeof bridge !== 'function') {
-            corpo = { requestId: evento.requestId, errore: `nessun ponte verso "${evento.tipo}" su questo client` };
+            corpo = { requestId: evento.requestId, errore: `no bridge to "${evento.tipo}" on this client` };
           } else {
             try {
               const dati = await bridge(evento.tipo, evento.args ?? null);
@@ -5208,7 +5233,7 @@
   /** Apre l'EventSource per una sessione GIÀ avviata sul server e collega gli eventi al rendering reale. */
   /*
    * ⛔ 27/8, buco trovato eseguendo la PRIMA sessione vera end-to-end
-   * (piano §1.3-BIS, blocco 1): il badge "Demo UI · non collegato" della
+   * (piano §1.3-BIS, blocco 1): il badge "Demo UI · not connected" della
    * chat restava visibile anche con una conversazione reale a schermo —
    * a differenza di Board/contesto/file-tree/foglio, la chat non aveva
    * MAI un punto che lo nascondesse. `collegaEventiSessione` è l'unico
@@ -5280,7 +5305,7 @@
         return;
       }
       if (source.readyState === EventSource.CLOSED) {
-        appendStatusNote('Connessione agli eventi interrotta.', true);
+        appendStatusNote('Event connection lost.', true);
       }
     };
   }
@@ -5338,13 +5363,13 @@
   async function startRealSession(task) {
     const generation = nuovaGenerazioneSessione();
     state.realSession.taskId = task.id;
-    state.session = `Task reale · ${task.id}`;
-    sessionTitle.textContent = state.session;
+    state.session = `Real task · ${task.id}`;
+    mostraTitoloSessione(state.session);
     setView('chat');
     closePanels();
     appendRealTaskStart(task);
     mostraAttesaRisposta();
-    toast('Avvio in corso', `${task.id} · checkout del progetto sul PC che serve questa pagina.`);
+    toast('Avvio in corso', `${task.id} · project checkout on the PC serving this page.`);
 
     let sessionId;
     try {
@@ -5363,7 +5388,7 @@
       if (generation !== state.realSession.generation) return;
       nascondiAttesaRisposta();
       appendStatusNote(`Avvio non riuscito: ${error.message}`, true);
-      toast('Avvio non riuscito', error.message);
+      toast('Start failed', error.message);
       return;
     }
     if (generation !== state.realSession.generation) return;
@@ -5372,12 +5397,12 @@
   }
 
   async function stopRealSession() {
-    if (!state.realSession.id) { toast('Nessuna sessione reale attiva'); return; }
+    if (!state.realSession.id) { toast('No real session running'); return; }
     try {
       await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/stop`, {});
-      toast('Stop richiesto', 'La sessione si ferma al prossimo giro.');
+      toast('Stop requested', 'The session stops at the next turn.');
     } catch (error) {
-      toast('Stop non riuscito', error.message);
+      toast('Stop failed', error.message);
     }
   }
 
@@ -5404,7 +5429,7 @@
    */
   async function forkSession() {
     if (!state.realSession.id) {
-      toast('Fork creato', 'Nuovo ramo di conversazione da questo punto.');
+      toast('Fork created', 'A new branch of the conversation from this point.');
       return;
     }
     const idOrigine = state.realSession.id;
@@ -5413,14 +5438,14 @@
       const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(idOrigine)}/fork`, {});
       const generation = nuovaGenerazioneSessione();
       state.realSession.taskId = taskIdOrigine;
-      state.session = `Task reale · ${taskIdOrigine} (fork)`;
-      sessionTitle.textContent = state.session;
-      appendStatusNote(`Fork avviato dalla sessione ${idOrigine.slice(0, 8)}… — stessa cartella, stessa storia.`);
+      state.session = `Real task · ${taskIdOrigine} (fork)`;
+      mostraTitoloSessione(state.session);
+      appendStatusNote(`Fork started from session ${idOrigine.slice(0, 8)}… — same folder, same history.`);
       collegaEventiSessione(dati.sessionId, generation);
       aggiornaElencoSessioniReali();
-      toast('Fork creato', 'Nuovo ramo di conversazione da questo punto.');
+      toast('Fork created', 'A new branch of the conversation from this point.');
     } catch (error) {
-      toast('Fork non riuscito', error.message);
+      toast('Fork failed', error.message);
     }
   }
 
@@ -5437,7 +5462,7 @@
    * secondo caso. Stesso endpoint, stessa funzione: nessuna duplicazione.
    */
   async function resumeSession(messaggioFollowUp) {
-    if (!state.realSession.id) { toast('Nessuna sessione reale da riprendere'); return; }
+    if (!state.realSession.id) { toast('No real session to resume'); return; }
     const sessionId = state.realSession.id;
     const taskId = state.realSession.taskId;
     if (messaggioFollowUp) { appendUserFollowUp(messaggioFollowUp); state.realSession.followUpBubbleInAttesa = true; }
@@ -5450,7 +5475,7 @@
       mostraAttesaRisposta();
       collegaEventiSessione(sessionId, generation);
       aggiornaElencoSessioniReali();
-      if (!messaggioFollowUp) toast('Sessione ripresa', 'Un nuovo giro è iniziato sulla stessa conversazione.');
+      if (!messaggioFollowUp) toast('Session resumed', 'Un nuovo giro è iniziato sulla stessa conversazione.');
     } catch (error) {
       if (messaggioFollowUp) appendStatusNote(`Invio non riuscito: ${error.message}`, true); // il bubble utente resta — l'ha scritto davvero, solo non e' arrivato
       toast(messaggioFollowUp ? 'Invio non riuscito' : 'Resume non riuscito', error.message);
@@ -5476,7 +5501,7 @@
     } catch (error) {
       composerInput.value = testo;
       autoGrowTextarea();
-      toast('Messaggio non accodato', error.message);
+      toast('Message not queued', error.message);
     }
   }
 
@@ -5487,19 +5512,19 @@
    */
   async function compactSession() {
     if (!state.realSession.id) {
-      toast('Contesto compattato', '18.7k -> 9.3k token equivalenti.');
+      toast('Context compacted', '18.7k -> 9.3k token equivalenti.');
       return;
     }
     try {
       const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/compact`, {});
       toast(
-        dati.compattato ? 'Contesto compattato' : 'Compattazione saltata',
+        dati.compattato ? 'Context compacted' : 'Compattazione saltata',
         dati.compattato
-          ? 'Il prossimo resume o fork riparte dal riassunto.'
+          ? 'The next resume or fork restarts from the summary.'
           : 'Il modello non ha risposto: la conversazione resta quella intera.',
       );
     } catch (error) {
-      toast('Compattazione non riuscita', error.message);
+      toast('Compaction failed', error.message);
     }
   }
 
@@ -5535,8 +5560,8 @@
     if (contenutoGiaVisibile) { setView('chat'); closePanels(); return; }
     const generation = nuovaGenerazioneSessione();
     state.realSession.taskId = taskId;
-    state.session = nome || `Task reale · ${taskId}`; // ⭐ un nome scelto dall'owner vince sul taskId
-    sessionTitle.textContent = state.session;
+    state.session = nome || `Real task · ${taskId}`; // ⭐ un nome scelto dall'owner vince sul taskId
+    mostraTitoloSessione(state.session);
     setView('chat');
     closePanels();
     collegaEventiSessione(sessionId, generation);
@@ -5622,8 +5647,8 @@
     if (!eventi || eventi.length === 0) return false;
     const generation = nuovaGenerazioneSessione();
     state.realSession.taskId = taskIdFallback;
-    state.session = nomeFallback || `Task reale · ${taskIdFallback}`;
-    sessionTitle.textContent = state.session;
+    state.session = nomeFallback || `Real task · ${taskIdFallback}`;
+    mostraTitoloSessione(state.session);
     setView('chat');
     closePanels();
     state.realSession.id = sessionId;
@@ -5706,7 +5731,7 @@
     /*
      * ⭐⭐⭐ 2/9 — owner dal vivo, provando ESATTAMENTE "chiudi l'app e
      * riapri": il contenuto tornava (§53/§54 verificato), il TITOLO no
-     * — l'header cadeva su "Task reale · libero:0" (il segnaposto
+     * — l'header cadeva su "Real task · libero:0" (il segnaposto
      * interno di passaASessione). Causa: il server non traccia MAI un
      * `nome` per una sessione mai rinominata esplicitamente (torna
      * sempre `null` da GET /api/v1/sessions, comportamento corretto,
@@ -5762,7 +5787,7 @@
      * ⭐ 27/8, trovato analizzando quali badge non si spengono MAI: questa
      * funzione aggiungeva sessioni vere in un blocco separato senza mai
      * nascondere il badge del pannello INTERO (`data-demo-surface="sessions"`
-     * su #sessionsPanel) — "Demo UI · non collegato" restava scritto sopra
+     * su #sessionsPanel) — "Demo UI · not connected" restava scritto sopra
      * sessioni realmente in corso. Le voci demo statiche restano sotto per
      * riferimento (non è quello il bug), ma l'etichetta in cima deve
      * smettere di mentire appena ne esiste almeno una vera.
@@ -5773,7 +5798,7 @@
     }
     if (elenco.length === 0) { contenitore.replaceChildren(); return; }
 
-    const pezzi = [textElement('div', 'list-heading', 'Sessioni reali')];
+    const pezzi = [textElement('div', 'list-heading', 'Real sessions')];
     for (const sessione of elenco) {
       const button = document.createElement('button');
       button.className = `session-item real-session-item${sessione.sessionId === state.realSession.id ? ' active' : ''}`;
@@ -5819,12 +5844,12 @@
    * ("click New Session, select Agent, and choose your repository", poi
    * il compito resta testo libero). Nessun competitor mostra un elenco
    * di task predefiniti come primo schermo. L'elenco task del corpus
-   * (storia/progetti) e' un concetto interno di TALOS-BANCO (misurare
+   * (storia/progetti) e' un concetto interno del banco interno (misurare
    * sempre lo stesso compito, per confrontare harness): resta uno
    * strumento reale, ma secondario, sotto il compito libero, mai il default.
    */
   async function openRealTaskSheet() {
-    sheetEyebrow.textContent = 'Nuova sessione';
+    sheetEyebrow.textContent = 'New session';
     sheetTitle.textContent = 'Cosa deve fare TALOS?';
     sheetBody.replaceChildren(textElement('p', 'board-empty', 'Carico l’elenco dal server…'));
     const demoBadge = $('.demo-surface-badge', sheetDialog);
@@ -5842,7 +5867,7 @@
      * percorso inventato qui torna un errore onesto dalla POST, non un
      * crash silenzioso.
      *
-     * ⭐ 29/8 — `tasks` (il corpus TALOS-BANCO, sezione SECONDARIA sotto)
+     * ⭐ 29/8 — `tasks` (il corpus del banco interno, sezione SECONDARIA sotto)
      * si scarica SEMPRE, in entrambe le modalità: la scelta Full access
      * riguarda solo come si sceglie la cartella per il compito libero,
      * non se il corpus resta disponibile — vedi la sua doc più sotto.
@@ -5858,14 +5883,14 @@
           apiGet('/api/v1/projects').then((r) => r.items).catch(() => []), // ⛔ un elenco vuoto/non raggiungibile non deve bloccare i task del corpus
         ]);
       } catch (error) {
-        sheetBody.replaceChildren(textElement('p', 'board-empty', `Elenco non disponibile: ${error.message}`));
+        sheetBody.replaceChildren(textElement('p', 'board-empty', `List not available: ${error.message}`));
         return;
       }
     } else {
       /*
        * ⭐⭐⭐ 28/8 — owner, coda: "directory più usate (tipo desktop
        * downloads)". Solo SUGGERIMENTI per il campo percorso — un
-       * fallimento qui non deve MAI bloccare "Nuova sessione" (a
+       * fallimento qui non deve MAI bloccare "New session" (a
        * differenza di /projects sopra, che è l'unico modo di scegliere
        * una cartella quando NON si è in Full access): resta solo il
        * campo di testo vuoto, come oggi.
@@ -5876,7 +5901,7 @@
           apiGet('/api/v1/frequent-dirs').then((r) => r.items).catch(() => []), // best effort, vedi sopra
         ]);
       } catch (error) {
-        sheetBody.replaceChildren(textElement('p', 'board-empty', `Elenco non disponibile: ${error.message}`));
+        sheetBody.replaceChildren(textElement('p', 'board-empty', `List not available: ${error.message}`));
         return;
       }
     }
@@ -5895,7 +5920,7 @@
     let selectCartella = null;
     let inputCartellaLibera = null;
     if (accessoCompleto) {
-      customSection.appendChild(textElement('span', 'sheet-label', 'Cartella — percorso assoluto a piacere ("Full access")'));
+      customSection.appendChild(textElement('span', 'sheet-label', 'Folder — any absolute path ("Full access")'));
       inputCartellaLibera = document.createElement('input');
       inputCartellaLibera.type = 'text';
       inputCartellaLibera.className = 'sheet-input';
@@ -5925,9 +5950,9 @@
         customSection.appendChild(scorciatoie);
       }
     } else {
-      customSection.appendChild(textElement('span', 'sheet-label', 'Cartella — TALOS scrive DIRETTAMENTE lì, nessuna copia'));
+      customSection.appendChild(textElement('span', 'sheet-label', 'Folder — TALOS writes THERE directly, no copies'));
       if (progetti.length === 0) {
-        customSection.appendChild(textElement('p', 'board-empty', 'Nessuna cartella di progetto configurata sul server. Imposta TALOS_HARNESS_UI_PROJECT_DIRS con i percorsi assoluti ammessi e riavvia il server per usare un compito libero.'));
+        customSection.appendChild(textElement('p', 'board-empty', 'No project folder is configured on the server. Set TALOS_HARNESS_UI_PROJECT_DIRS to the allowed absolute paths and restart the server to use a free task.'));
       } else {
         selectCartella = document.createElement('select');
         selectCartella.className = 'sheet-input';
@@ -5945,14 +5970,14 @@
       const effortPicker = creaEffortPicker({ valoreIniziale: state.effort });
       customSection.append(
         ...(selectCartella ? [selectCartella] : []),
-        textElement('span', 'sheet-label', 'Modello'),
+        textElement('span', 'sheet-label', 'Model'),
         modelPicker.elemento,
         effortPicker.elemento,
       );
       const submit = document.createElement('button');
       submit.type = 'submit';
       submit.className = 'primary-btn compact full';
-      submit.textContent = 'Continua nella chat';
+      submit.textContent = 'Continue in the chat';
       customSection.appendChild(submit);
       customSection.addEventListener('submit', (event) => {
         event.preventDefault();
@@ -5973,10 +5998,10 @@
     }
     corpoFoglio.push(customSection);
 
-    // --- SECONDARIA: i task del corpus TALOS-BANCO, per confrontare l'harness a parità di compito. ---
+    // --- SECONDARIA: i task del corpus del banco interno, per confrontare l'harness a parità di compito. ---
     const section = document.createElement('div');
     section.className = 'sheet-section';
-    section.appendChild(textElement('span', 'sheet-label', `Oppure prova un task del banco (${tasks.length}, checkout ed esecuzione reali)`));
+    section.appendChild(textElement('span', 'sheet-label', `Or try a benchmark task (${tasks.length}, real checkout and run)`));
     for (const task of tasks) {
       const button = document.createElement('button');
       button.className = 'sheet-option';
@@ -5986,7 +6011,7 @@
       iconWrap.innerHTML = icon('i-play');
       const textWrap = document.createElement('span');
       textWrap.append(textElement('strong', '', task.id), textElement('small', '', task.consegnaCorta));
-      button.append(iconWrap, textWrap, textElement('span', '', `difficoltà ${task.difficolta}`));
+      button.append(iconWrap, textWrap, textElement('span', '', `difficulty ${task.difficolta}`));
       button.addEventListener('click', () => { closeEmbeddedDialog(sheetDialog); startRealSession(task); });
       section.appendChild(button);
     }
@@ -6039,13 +6064,12 @@
     state.pendingCustomSession = { cartellaId, cartellaLibera, nomeCartella, modello, effort, permessi };
     if (modello) { state.model = modello; aggiornaPillolaModello(); }
     if (effort) state.effort = effort;
-    state.session = `Nuova · ${nomeCartella}`;
-    sessionTitle.textContent = state.session;
-    $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
+    state.session = `New · ${nomeCartella}`;
+    mostraTitoloOvunque(state.session);
     setView('chat');
     closePanels();
     // ⛔ nuovaGenerazioneSessione() ha appena svuotato #conversation (replaceChildren) — l'empty-state originale non esiste più nel DOM, va ricreato, non cercato.
-    $('#conversation').appendChild(costruisciConversationHero(`Sessione pronta su ${nomeCartella}.`, 'Scrivi qui sotto cosa deve fare TALOS per iniziare.'));
+    $('#conversation').appendChild(costruisciConversationHero(`Session ready on ${nomeCartella}.`, 'Scrivi qui sotto cosa deve fare TALOS per iniziare.'));
     window.setTimeout(() => composerInput.focus(), 0);
   }
 
@@ -6060,14 +6084,13 @@
     const generation = nuovaGenerazioneSessione();
     const taskSintetico = { id: `libero:${nomeCartella}`, consegna };
     state.realSession.taskId = taskSintetico.id;
-    state.session = `Compito libero · ${nomeCartella}`;
-    sessionTitle.textContent = state.session;
-    $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
+    state.session = `Free task · ${nomeCartella}`;
+    mostraTitoloOvunque(state.session);
     setView('chat');
     closePanels();
     appendRealTaskStart(taskSintetico);
     mostraAttesaRisposta();
-    toast('Avvio in corso', `${nomeCartella} · esecuzione diretta sulla cartella vera, nessuna copia.`);
+    toast('Avvio in corso', `${nomeCartella} · runs directly on the real folder, no copy.`);
 
     let sessionId;
     try {
@@ -6119,9 +6142,9 @@
       if (generation !== state.realSession.generation) return;
       nascondiAttesaRisposta();
       appendStatusNote(`Avvio non riuscito: ${error.message}`, true);
-      toast('Avvio non riuscito', error.message);
-      state.session = 'Nessuna sessione';
-      $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
+      toast('Start failed', error.message);
+      state.session = 'No session';
+      mostraTitoloOvunque(state.session);
       return;
     }
     if (generation !== state.realSession.generation) return;
@@ -6134,7 +6157,7 @@
      * esiste, gli eventi stanno già arrivando) — un rename fallito (rete,
      * corsa persa contro un resume) non deve MAI diventare un secondo
      * canale di errore per un avvio già riuscito. Resta solo il titolo
-     * "Compito libero · <cartella>" di sempre, mai un crash, mai un toast
+     * "Free task · <cartella>" di sempre, mai un crash, mai un toast
      * per qualcosa che l'owner non ha nemmeno chiesto esplicitamente in
      * quel momento.
      */
@@ -6143,8 +6166,7 @@
       // ⛔ la generazione può essere già cambiata (un'altra sessione avviata nel frattempo) — mai scrivere il titolo di una sessione che non è più quella a schermo.
       if (generation !== state.realSession.generation) return;
       state.session = titoloAutomatico;
-      sessionTitle.textContent = state.session;
-      $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
+      mostraTitoloOvunque(state.session);
       aggiornaElencoSessioniReali();
     }).catch(() => { /* best effort, vedi sopra: resta il titolo di sempre */ });
   }
@@ -6159,9 +6181,9 @@
     if (progetti.length !== 1) {
       // ⛔ nessun tentativo su /api/v1/sessions/custom: senza esattamente una cartella non c'è un cartellaId da mandare, il server lo rifiuterebbe comunque — stato onesto SUBITO, non un secondo giro per lo stesso esito.
       appendStatusNote(progetti.length === 0
-        ? 'Nessuna cartella progetto configurata sul server — imposta TALOS_HARNESS_UI_PROJECT_DIRS e riavvia.'
-        : `${progetti.length} cartelle progetto configurate: non posso indovinare quale usare per un messaggio senza cartella esplicita.`, true);
-      toast('Nessuna sessione avviata', 'Il server non ha un\'unica cartella progetto.');
+        ? 'No project folder configured on the server — set TALOS_HARNESS_UI_PROJECT_DIRS and restart.'
+        : `${progetti.length} project folders configured: I cannot guess which one to use for a message with no explicit folder.`, true);
+      toast('No session started', 'The server does not have a single project folder.');
       return;
     }
     const [{ id: cartellaId, nome: nomeCartella }] = progetti;
@@ -6187,7 +6209,7 @@
       const hidden = value.startsWith('!!');
       const comando = value.replace(/^!!?/, '').trim();
       setView('terminal');
-      if (!comando) { toast('Comando vuoto', 'Scrivi qualcosa dopo "!".'); return true; }
+      if (!comando) { toast('Empty command', 'Scrivi qualcosa dopo "!".'); return true; }
       runDirectShell(comando, hidden);
       return true;
     }
@@ -6287,12 +6309,12 @@
       return true;
     }
     const copy = {
-      attach: ['Allegato demo', 'Il selettore è UI locale e non carica file reali.'],
-      photo: ['Fotocamera demo', 'Nessuna foto è stata acquisita.'],
-      photos: ['Galleria demo', 'Nessuna immagine è stata importata.'],
-      browse: ['Browse demo', 'Lo stato resta locale a questa sessione Codice.'],
-      enhance: ['Miglioramento demo', 'Nessun modello è stato chiamato.'],
-      'enhance-blocked': ['Miglioramento non collegato', 'Questa superficie resta locale.'],
+      attach: ['Allegato demo', 'The picker is local UI and does not load real files.'],
+      photo: ['Fotocamera demo', 'No photo was captured.'],
+      photos: ['Galleria demo', 'No image was imported.'],
+      browse: ['Browse demo', 'The state stays local to this Codice session.'],
+      enhance: ['Miglioramento demo', 'No model was called.'],
+      'enhance-blocked': ['Miglioramento non collegato', 'This surface stays local.'],
       /*
        * ⭐⭐⭐ 2/9 — chiude una riga della tabella mockup (piano §14.3):
        * HarnessSessionScreen.vue chiama DAVVERO caricaModelliCodice()
@@ -6300,20 +6322,20 @@
        * questa azione — il toast ora descrive un fatto avvenuto, non
        * un'intenzione. Vedi refreshCodeModels() nel file Vue.
        * ⛔ 'refresh-models-failed' è il gemello onesto: senza di lui, un
-       * fallimento di rete avrebbe comunque mostrato "Modelli aggiornati"
+       * fallimento di rete avrebbe comunque mostrato "Models refreshed"
        * (caricaModelliCodice() inghiotte l'errore per non rompere la
        * sessione) — lo stesso difetto di fondo che questa riga chiude,
        * spostato di un livello invece di sparire.
        */
-      'refresh-models': ['Modelli aggiornati', 'Elenco ricaricato dai provider configurati.'],
-      'refresh-models-failed': ['Aggiornamento non riuscito', 'Provider non raggiungibile: elenco invariato.'],
-      'browser-url': ['Browser demo', 'Nessuna navigazione esterna eseguita.'],
-      attach_file: ['Allegato demo', 'Il selettore è UI locale e non carica file reali.'],
+      'refresh-models': ['Models refreshed', 'List reloaded from the configured providers.'],
+      'refresh-models-failed': ['Refresh failed', 'Provider non raggiungibile: elenco invariato.'],
+      'browser-url': ['Browser demo', 'No external navigation happened.'],
+      attach_file: ['Allegato demo', 'The picker is local UI and does not load real files.'],
       // ⭐ 2/9 — export_report ora è una delle eccezioni sopra
       // (exportSession() vera), rimossa da qui: una voce che non può
       // più essere raggiunta è confusione, non documentazione.
     };
-    const feedback = copy[action] || ['Demo UI · non collegato', 'Azione locale registrata senza backend.'];
+    const feedback = copy[action] || ['Demo UI · not connected', 'Azione locale registrata senza backend.'];
     toast(...feedback);
     return true;
   }
@@ -6346,12 +6368,12 @@
       openRealTaskSheet();
       return;
     }
-    state.session = 'Nuova sessione';
-    sessionTitle.textContent = state.session;
+    state.session = 'New session';
+    mostraTitoloSessione(state.session);
     $$('.session-item').forEach((item) => item.classList.remove('active'));
     setView('chat');
     closePanels();
-    toast('Nuova sessione', 'La sessione verrà creata al primo invio.');
+    toast('New session', 'The session is created on the first message.');
     composerInput.focus();
   }
 
@@ -6437,7 +6459,7 @@
       void caricaCronologiaSessione(selection.id, null, selection.title);
       /*
        * ⭐ 29/8 — ledger §10: stessa correzione, un livello più su. Senza
-       * questa riga la striscia "In esecuzione 01:42" del mockup restava
+       * questa riga la striscia "Running 01:42" del mockup restava
        * appesa (default `running:true` del modulo, mai un giro vero dietro
        * per QUESTA sessione appena selezionata) sopra un corpo che, giusto
        * qui sopra, diventa onestamente vuoto — le due metà si
@@ -6450,7 +6472,7 @@
       setRunState(false);
     }
     state.session = selection.title;
-    $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
+    mostraTitoloOvunque(state.session);
     if (item) {
       const itemTitle = $('.session-main strong', item);
       if (itemTitle) itemTitle.textContent = state.session;
@@ -6489,7 +6511,7 @@
       note: 'Interactive TALOS frontend mockup export',
     };
     scaricaTesto(JSON.stringify(payload, null, 2), 'talos-session-export.json', 'application/json');
-    toast('Sessione esportata', 'JSON pronto.');
+    toast('Session exported', 'JSON pronto.');
   }
 
   async function shareSession() {
@@ -6499,12 +6521,12 @@
       else if (navigator.clipboard) { await navigator.clipboard.writeText(text); toast('Snapshot copiato', 'Pronto da condividere.'); }
       else toast('Snapshot pronto', text);
     } catch (error) {
-      if (error?.name !== 'AbortError') toast('Condivisione non disponibile', text);
+      if (error?.name !== 'AbortError') toast('Sharing not available', text);
     }
   }
 
   function announceVoiceUnavailable() {
-    toast('Voce demo non collegata', 'Il microfono non registra e non invia audio in questa superficie.');
+    toast('Demo voice not connected', 'The microphone does not record or send audio on this surface.');
   }
 
   function visibleCommandButtons() {
@@ -6552,7 +6574,7 @@
       case 'dashboard': setView('dashboard'); break;
       /*
        * ⛔⛔⛔ 27/8 (33d4bbbe) — 'fork' mostrava sempre lo stesso toast finto
-       * ("Fork creato"), ANCHE con una sessione reale in corso, invece di
+       * ("Fork created"), ANCHE con una sessione reale in corso, invece di
        * chiamare `forkSession()` (già scritta, già cablata sul bottone
        * "Fork questa sessione" altrove) — ricade da sola sullo stesso toast
        * finto quando non c'è una sessione reale, zero duplicazione qui.
@@ -6611,7 +6633,7 @@
 
   $$('[data-open-sheet]').forEach((button) => button.addEventListener('click', () => openSheet(button.dataset.openSheet)));
   $$('[data-session-action]').forEach((button) => button.addEventListener('click', () => {
-    toast(button.dataset.sessionAction === 'fork' ? 'Fork creato' : 'Side thread creato', 'Contesto isolato, collegamento mantenuto nel grafo sessione.');
+    toast(button.dataset.sessionAction === 'fork' ? 'Fork created' : 'Side thread created', 'Isolated context, link kept in the session graph.');
   }));
   /* ⭐ 27/8 — card "Session topology": il pulsante Fork chiama la VERA forkSession() (già reale per il blocco 1), non un toast finto — stesso attrezzo, un secondo punto d'accesso onesto. */
   $$('[data-action="fork-session"]').forEach((button) => button.addEventListener('click', () => forkSession()));
@@ -6686,8 +6708,8 @@
     if (!actionButton) return;
     const message = actionButton.closest('.assistant-message');
     const action = actionButton.dataset.messageAction;
-    if (action === 'copy') copyText($('.assistant-copy', message)?.textContent || '', 'Risposta copiata');
-    if (action === 'retry') toast('Rigenerazione avviata', 'Il contesto e i permessi della sessione restano invariati.');
+    if (action === 'copy') copyText($('.assistant-copy', message)?.textContent || '', 'Answer copied');
+    if (action === 'retry') toast('Regeneration started', 'The session context and permissions are unchanged.');
     if (action === 'like' || action === 'dislike') {
       const group = $$('.message-actions [data-message-action="like"], .message-actions [data-message-action="dislike"]', message);
       const wasPressed = actionButton.getAttribute('aria-pressed') === 'true';
@@ -6698,29 +6720,29 @@
   });
 
   $$('[data-browser-action]').forEach((button) => button.addEventListener('click', () => {
-    const labels = { back: 'Indietro', forward: 'Avanti', reload: 'Preview ricaricata', annotate: 'Modalità annotazione', inspect: 'Inspector browser' };
+    const labels = { back: 'Back', forward: 'Forward', reload: 'Preview reloaded', annotate: 'Modalità annotazione', inspect: 'Inspector browser' };
     toast(labels[button.dataset.browserAction] || 'Browser', 'Azione simulata nel mockup locale.');
   }));
 
   const demoActionCopy = {
     notifications: ['Notifiche demo', 'La superficie non è collegata a notifiche reali.'],
-    widget: ['Widget demo', 'L’aggiunta sarà disponibile quando questa Board avrà un backend.'],
-    delegate: ['Delega demo', 'Nessun subagent è stato avviato da questa interfaccia.'],
+    widget: ['Widget demo', 'Adding will work once this Board has a backend.'],
+    delegate: ['Delega demo', 'No sub-agent was started from this interface.'],
   };
   $$('[data-demo-action]').forEach((button) => button.addEventListener('click', () => {
-    toast(...(demoActionCopy[button.dataset.demoAction] || ['Demo UI · non collegato', 'Nessuna azione reale eseguita.']));
+    toast(...(demoActionCopy[button.dataset.demoAction] || ['Demo UI · not connected', 'No real action was taken.']));
   }));
 
   $$('[data-file-entry]').forEach((button) => button.addEventListener('click', () => {
     $$('[data-file-entry]').forEach((entry) => entry.classList.toggle('active', entry === button));
-    toast('Elemento selezionato', button.textContent.trim());
+    toast('Item selected', button.textContent.trim());
   }));
 
   /*
    * ⭐ 27/8, piano §1.3-BIS, blocco Automazioni — riusa startRealSession
    * (già reale, già testata) invece di un toast: "Esegui ora" su una riga
    * con data-task-id avvia per davvero quel task del corpus, la stessa
-   * strada di "Nuova sessione". La SCHEDULAZIONE vera (un cron che parte
+   * strada di "New session". La SCHEDULAZIONE vera (un cron che parte
    * da solo, senza un tocco) resta dichiaratamente fuori — spenderebbe
    * credito reale senza nessuno a guardare, una cosa diversa da un
    * bottone premuto apposta, e vuole la sua stessa persistenza che oggi
@@ -6741,7 +6763,7 @@
       openNewAutomationSheet();
       return;
     }
-    const labels = { new: ['Nuova automazione', 'Il mockup rappresenta il flusso senza backend.'], run: ['Run avviato', 'Il mockup rappresenta il flusso senza backend.'], edit: ['Automazione aperta', 'Il mockup rappresenta il flusso senza backend.'] };
+    const labels = { new: ['Nuova automazione', 'Il mockup rappresenta il flusso senza backend.'], run: ['Run started', 'Il mockup rappresenta il flusso senza backend.'], edit: ['Automazione aperta', 'Il mockup rappresenta il flusso senza backend.'] };
     toast(...(labels[action] || ['Automazione', 'Il mockup rappresenta il flusso senza backend.']));
   }));
 
@@ -6762,7 +6784,7 @@
     }
     setRunState(false);
     setQueueMode(false);
-    toast('Esecuzione interrotta', 'Stato, diff e output restano disponibili per la review.');
+    toast('Run stopped', 'Stato, diff e output restano disponibili per la review.');
   });
 
   runStateToggle?.addEventListener('click', () => setQueueMode(!state.queueMode, true));
@@ -6846,10 +6868,10 @@
       if (dati.rimosso) {
         state.realSession.codaMessaggi.pop();
         renderizzaBannerCoda();
-        toast('Follow-up annullato');
+        toast('Follow-up cancelled');
       }
     } catch (error) {
-      toast('Annullamento non riuscito', error.message);
+      toast('Cancel failed', error.message);
     }
   });
 
@@ -6857,8 +6879,8 @@
     button.addEventListener('click', () => {
       const card = button.closest('.approval-card');
       animateExit(card, {}, () => card?.remove());
-      if (button.hasAttribute('data-deny')) toast('Permesso negato', 'Il browser locale non verrà aperto.');
-      else toast(button.hasAttribute('data-allow-session') ? 'Permesso per sessione' : 'Permesso concesso', 'Browser locale autorizzato.');
+      if (button.hasAttribute('data-deny')) toast('Permission denied', 'Il browser locale non verrà aperto.');
+      else toast(button.hasAttribute('data-allow-session') ? 'Per-session permission' : 'Permesso concesso', 'Browser locale autorizzato.');
     });
   });
 
@@ -7138,11 +7160,11 @@
   /*
    * Owner 24/8, RIVISTO dopo l'architettura a shadow DOM: qui c'era un
    * listener 'backButton' scritto apposta, perché la pagina viveva da sola
-   * (`window.location.assign`) e il tasto Indietro non tornava alla SPA né
+   * (`window.location.assign`) e il tasto Back non tornava alla SPA né
    * usciva dall'app — vedi [[tocchi-reali-adb-obbligatori]] per come è
    * stato trovato. Montato dentro `HarnessSessionScreen.vue` invece, la
    * pagina non cambia mai: è la STESSA cronologia Vue Router già verificata
-   * su `/memoria` (Indietro → `/`), niente da reinventare qui.
+   * su `/memoria` (Back → `/`), niente da reinventare qui.
    */
 
   ensureDemoLabels();
