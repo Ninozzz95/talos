@@ -105,13 +105,41 @@ Serve a chiunque per rifare la verifica da zero, senza fidarsi di noi.
 | pacchetto | .deb | SHA-256 del .deb |
 |---|---|---|
 | libprotobuf | [libprotobuf_2:35.1_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/libp/libprotobuf/libprotobuf_2:35.1_aarch64.deb) | `a1ba7c7f0e5903a2134662653d3e7b9ffceaa78bdd00e07ac985e2d313ebc738` |
-| android-tools | [android-tools_36.0.1+really35.0.2_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/a/android-tools/android-tools_36.0.1+really35.0.2_aarch64.deb) | `82e48bf8038250fb0997b1f2cf5f780730104f2544a5532298c453d94cfe1537` |
+| android-tools | [android-tools_36.0.1+really35.0.2-1_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/a/android-tools/android-tools_36.0.1+really35.0.2-1_aarch64.deb) | `59710261c5cb614701943c19e7b18d074a84b5d16163844237d51e3e64c92773` |
 | libc++ | [libc++_29_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/libc/libc++/libc++_29_aarch64.deb) | `bb9f12113c137aa0e8513bb51cc49fe77a5ce3ca39ab9e92c57d228ecdf00222` |
 | zstd | [zstd_1.5.7-1_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/z/zstd/zstd_1.5.7-1_aarch64.deb) | `e1b4a5113648da8de189620ba1fce74c48b2d0833d9043391b9a1c91fb606fd3` |
 | brotli | [brotli_1.2.0_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/b/brotli/brotli_1.2.0_aarch64.deb) | `db1502601d40fb44e6085ad8bfd9311a8b472e98db831ceec9d404c5708bb52c` |
 | liblz4 | [liblz4_1.10.0-1_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/libl/liblz4/liblz4_1.10.0-1_aarch64.deb) | `09b9449418d5c2dc4f5c1c140ba8138d56be3e9ae5fd3be3318825ec9f8a0499` |
 | abseil-cpp | [abseil-cpp_20260526.0_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/a/abseil-cpp/abseil-cpp_20260526.0_aarch64.deb) | `e489fac652cddc39d9436141e627285f1034a545a06fbb19c420514a419ad877` |
 | zlib | [zlib_1.3.2_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/z/zlib/zlib_1.3.2_aarch64.deb) | `75e7d0af17fcc3b40004309fdc00a1ddb9ae08346dce5e269902c34ac3966ac9` |
+
+## 🔄 03/9 — `android-tools` ripubblicato, impronta del `.deb` cambiata
+
+Il pacchetto Termux `android-tools_36.0.1+really35.0.2_aarch64.deb` (senza
+suffisso) è sparito dal loro archivio: la CI ha risposto **404**. Termux lo
+aveva ripubblicato con una revisione Debian in più nel nome,
+`android-tools_36.0.1+really35.0.2-1_aarch64.deb` — stessa versione a monte,
+solo il pacchettamento è cambiato.
+
+⛔ La regola qui sopra dice **non si aggiorna il numero senza sapere
+perché**, quindi non ci si è fermati all'URL nuovo:
+
+1. scaricato il `.deb` nuovo, impronta calcolata: diversa da quella vecchia
+   (ovvio, il file è diverso — contiene la revisione `-1`);
+2. estratto `data.tar.xz` e dentro il binario `adb` (formato `ar`, nessun
+   comando `ar` disponibile: estratto a mano leggendo l'intestazione a 60
+   byte per voce — vedi `scratchpad/estrai-ar.py` nella sessione che ha
+   fatto la verifica);
+3. impronta di **quel binario**: `28c4569e95d5c0f69a64e004ae0e684d64551bf1f86236cf2ffd5235f6eeca16`
+   — **identica, byte per byte**, a quella già dichiarata nella tabella dei
+   file spediti (riga `libadb.so`, invariata).
+
+⇒ Il binario che finisce nell'APK non è cambiato di un byte: solo
+l'involucro Debian. Aggiornati URL e impronta del `.deb` nella tabella qui
+sopra; l'impronta di `libadb.so` nella tabella dei file spediti resta la
+stessa perché il file stesso è lo stesso. Controllati anche gli altri sette
+pacchetti (`abseil-cpp`, `brotli`, `libc++`, `liblz4`, `libprotobuf`,
+`zlib`, `zstd`): tutti ancora `200` sull'URL dichiarato, nessun altro tocco.
 
 ## ⛔ I tre nomi cambiati, e perché
 
