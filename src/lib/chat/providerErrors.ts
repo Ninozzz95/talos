@@ -65,6 +65,86 @@ export function providerErrorMessage(data: unknown, fallback: string): string {
     return fallback
 }
 
+/**
+ * ⭐⭐⭐ DEBT-MOBILE-016 — un 429 non è un fallimento, è un limite di
+ * traffico. `requireHttpSuccess` lanciava sul primo, e la persona doveva
+ * accorgersene e ritentare a mano — misurato il 28/8 su `qwen/qwen3.8-flash`:
+ * card d'errore dopo 11 s, poi 42,5 s per un "Riprova" manuale riuscito.
+ *
+ * ⛔ Stessa causa già chiusa nel banco (`il-429-non-e-un-fallimento`, 21/8)
+ * e mai portata qui: `talosHarness.mjs` la risolve con
+ * `chiamaConRitenta`/`siRitenta`/`attesaDelTentativo` — backoff calcolato,
+ * SENZA leggere `Retry-After` (verificato alla fonte: non lo fa). Qui si fa
+ * meglio, non solo uguale: OpenRouter dichiara che manda `Retry-After` sui
+ * 429 e va onorato come un ordine, non un suggerimento (ricerca 28/8) — il
+ * calcolo esponenziale (stessa formula di `attesaDelTentativo`: 500 ms ·
+ * 2^tentativo + jitter fino a metà) resta il RIPIEGO, per quando l'header
+ * manca o un fornitore non lo manda.
+ */
+export function isTransientProviderStatus(status: number): boolean {
+    return status === 429 || status === 408 || (status >= 500 && status <= 599)
+}
+
+/** Lettura di un header senza fidarsi della maiuscola: HTTP non la garantisce. */
+function readHeader(headers: Record<string, string> | undefined, name: string): string | undefined {
+    if (!headers) return undefined
+    const wanted = name.toLowerCase()
+    for (const key of Object.keys(headers)) {
+        if (key.toLowerCase() === wanted) return headers[key]
+    }
+    return undefined
+}
+
+/**
+ * RFC 9110 §10.2.3: un numero (secondi) o una data HTTP. Torna `null` se
+ * assente o illeggibile — mai un numero inventato per un valore che non
+ * capiamo.
+ */
+export function parseRetryAfterMs(value: string | undefined, now: () => number = Date.now): number | null {
+    if (!value) return null
+    const trimmed = value.trim()
+    if (/^\d+$/.test(trimmed)) return Math.max(0, Number(trimmed) * 1000)
+    const asDate = Date.parse(trimmed)
+    return Number.isNaN(asDate) ? null : Math.max(0, asDate - now())
+}
+
+/** La stessa formula di `attesaDelTentativo` in `talosHarness.mjs` — il ripiego quando `Retry-After` manca. */
+export function providerRetryDelayMs(attempt: number, random: () => number = Math.random): number {
+    const base = 500 * 2 ** attempt
+    return Math.round(base + random() * base * 0.5)
+}
+
+/**
+ * Ritenta `send` finché la risposta non è più transitoria, o finché non
+ * finiscono i tentativi — in quel caso torna l'ULTIMA risposta com'è,
+ * invariata: il chiamante la passa a `requireHttpSuccess` come faceva
+ * prima, e chi non è mai stato 429/408/5xx non vede un tentativo in più.
+ *
+ * ⛔ AL CONTRARIO: uno stato non transitorio (400, 401, 402...) torna al
+ * PRIMO tentativo — ritentare un errore che non migliora ritentando
+ * sprecherebbe solo tempo, esattamente come `chiamaConRitenta` con
+ * `siRitenta`.
+ */
+export async function sendWithProviderRetry<T extends { status: number; headers?: Record<string, string> }>(
+    send: () => Promise<T>,
+    opts: {
+        maxAttempts?: number
+        wait?: (ms: number) => Promise<void>
+        random?: () => number
+        now?: () => number
+    } = {},
+): Promise<T> {
+    const maxAttempts = Math.max(1, opts.maxAttempts ?? 4)
+    const wait = opts.wait ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
+    for (let attempt = 0; ; attempt++) {
+        const response = await send()
+        const attemptsLeft = attempt < maxAttempts - 1
+        if (!isTransientProviderStatus(response.status) || !attemptsLeft) return response
+        const ordered = parseRetryAfterMs(readHeader(response.headers, 'retry-after'), opts.now)
+        await wait(ordered ?? providerRetryDelayMs(attempt, opts.random))
+    }
+}
+
 export function requireHttpSuccess(args: {
     provider: TalosMobileProviderId
     operation: TalosMobileProviderOperation

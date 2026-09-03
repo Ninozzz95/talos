@@ -131,6 +131,59 @@ describe('talos.tool.authorization-grants/1', () => {
         expect(granted.revision).toBe(1)
         expect(granted.grants.document_create).toBeDefined()
     })
+
+    /**
+     * ⛔⛔⛔ Owner 2026-08-27 — chiude il gap onestamente lasciato aperto in
+     * Fase 8: "Consenti sempre" su un tool forgiato (`dynamic:*`) falliva
+     * SEMPRE con `TALOS_TOOL_AUTHORIZATION_TOOL_INVALID`, perché queste
+     * funzioni validavano `tool` contro `TalosAgentToolId` (l'unione statica
+     * dei built-in, che un nome `dynamic:*` non può mai abitare per
+     * costruzione). Ora la guardia è `isTalosAuthorizableToolName`
+     * (built-in O `dynamic:*`), e questo lo prova sia nel verso GIUSTO
+     * (funziona) sia in quello CONTRARIO (un nome che non è né l'uno né
+     * l'altro resta rifiutato — la guardia non si è solo allargata a
+     * "qualunque stringa").
+     */
+    it('un tool FORGIATO riceve "Consenti sempre" quanto un built-in, e sopravvive al round-trip', () => {
+        const granted = applyTalosToolAuthorizationGrant(
+            TALOS_EMPTY_TOOL_AUTHORIZATIONS,
+            'dynamic:close-with-note',
+            ['write'],
+            0,
+            '2026-08-27T13:00:00.000Z',
+        )
+        expect(granted.grants['dynamic:close-with-note']).toEqual({
+            schema_version: 1,
+            tool: 'dynamic:close-with-note',
+            actions: ['write'],
+            scope: 'device',
+            granted_at: '2026-08-27T13:00:00.000Z',
+        })
+        expect(parseTalosToolAuthorizationGrants(JSON.parse(JSON.stringify(granted))))
+            .toEqual(granted)
+
+        const revoked = revokeTalosToolAuthorizationGrant(granted, 'dynamic:close-with-note', 1)
+        expect(revoked.grants['dynamic:close-with-note']).toBeUndefined()
+    })
+
+    it('⛔ verso contrario: un nome che non è né built-in né dynamic:* resta rifiutato', () => {
+        expect(() => applyTalosToolAuthorizationGrant(
+            TALOS_EMPTY_TOOL_AUTHORIZATIONS,
+            'qualcosa_di_inventato_che_non_esiste',
+            ['write'],
+            0,
+            '2026-08-27T13:00:00.000Z',
+        )).toThrow('TALOS_TOOL_AUTHORIZATION_TOOL_INVALID')
+        // Nemmeno un prefisso `dynamic:` con uno slug malformato basta: la
+        // guardia richiama `dynamicToolIdFromName`, che valida lo slug.
+        expect(() => applyTalosToolAuthorizationGrant(
+            TALOS_EMPTY_TOOL_AUTHORIZATIONS,
+            'dynamic:',
+            ['write'],
+            0,
+            '2026-08-27T13:00:00.000Z',
+        )).toThrow('TALOS_TOOL_AUTHORIZATION_TOOL_INVALID')
+    })
 })
 
 describe('exact tool authorization resolution', () => {
@@ -167,6 +220,28 @@ describe('exact tool authorization resolution', () => {
             actions: ['write'],
             allow_persistent: true,
         })
+    })
+
+    it('⛔ un grant persistente su un tool forgiato risolve "allowed" da persistent, non solo "ask"', () => {
+        // `write`, non `read`: con ASK_WRITES la lettura è già permessa dal
+        // baseline (il grant non servirebbe a nulla, il test non proverebbe
+        // il percorso persistente). La scrittura invece chiede conferma —
+        // ESATTAMENTE dove il grant "sempre" deve intervenire.
+        const grants = applyTalosToolAuthorizationGrant(
+            TALOS_EMPTY_TOOL_AUTHORIZATIONS,
+            'dynamic:close-with-note',
+            ['write'],
+            0,
+            '2026-08-27T13:00:00.000Z',
+        )
+        expect(resolveTalosToolAuthorization({
+            tool: 'dynamic:close-with-note',
+            requiredActions: ['write'],
+            permissions: ASK_WRITES,
+            grants,
+            callId: 'call-close',
+            inputDigest: 'e'.repeat(64),
+        })).toMatchObject({ status: 'allowed', source: 'persistent' })
     })
 
     it('TOOL-AUTH-05 never lets one tool grant authorize another tool', () => {

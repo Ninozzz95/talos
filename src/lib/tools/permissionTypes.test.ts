@@ -30,6 +30,9 @@ describe('talosEffectiveToolPermissions', () => {
             read: 'ask',
             write: 'ask',
             outbound: 'ask',
+            // ⭐ La quarta, dal 2026-08-20: `npm test` esegue codice arbitrario,
+            // e con tre parole sole non avevamo modo di nominarlo.
+            execute: 'ask',
         })
     })
 
@@ -41,10 +44,10 @@ describe('talosEffectiveToolPermissions', () => {
      */
     it('gives an unchosen value the default of today, not the one it was installed with', () => {
         const effective = talosEffectiveToolPermissions({
-            stored: { read: 'allow', write: 'ask', outbound: 'deny' },
+            stored: { ...stored({}), read: 'allow', outbound: 'deny' },
             chosen: [],
         })
-        expect(effective).toEqual({ read: 'ask', write: 'ask', outbound: 'ask' })
+        expect(effective).toEqual(TALOS_DEFAULT_TOOL_PERMISSIONS)
     })
 
     /**
@@ -54,7 +57,7 @@ describe('talosEffectiveToolPermissions', () => {
      */
     it('never revises a value the user chose', () => {
         const effective = talosEffectiveToolPermissions({
-            stored: { read: 'allow', write: 'allow', outbound: 'deny' },
+            stored: { ...stored({}), read: 'allow', write: 'allow', outbound: 'deny' },
             chosen: ['outbound', 'read'],
         })
         expect(effective.outbound).toBe('deny')
@@ -111,5 +114,37 @@ describe('parseTalosChosenToolActions', () => {
         expect(parseTalosChosenToolActions(null)).toEqual([])
         expect(parseTalosChosenToolActions('outbound')).toEqual([])
         expect(parseTalosChosenToolActions({ outbound: true })).toEqual([])
+    })
+
+    /*
+     * ⭐⭐⭐ LA MIGRAZIONE, ed e la sola cosa che questo cambio poteva rompere.
+     *
+     * Chi ha installato l'app prima del 2026-08-20 ha nei valori salvati SOLO
+     * tre chiavi: `execute` non c'e. Le due cose che devono valere insieme:
+     *
+     *   · il potere nuovo si applica come `ask`, cioe si CHIEDE;
+     *   · e non risulta SCELTO, perche a quella persona non e mai stata posta
+     *     la domanda. Trasformare un default in una decisione e esattamente il
+     *     difetto che questo file esiste per impedire, e vale anche al
+     *     contrario: una decisione che nessuno ha preso non si inventa.
+     */
+    it('⛔ chi ha salvato TRE poteri si ritrova il quarto ad ASK, e non come sua scelta', () => {
+        const vecchio = { read: 'allow', write: 'allow', outbound: 'allow' } as TalosToolPermissions
+        const effective = talosEffectiveToolPermissions({
+            stored: vecchio,
+            chosen: ['read', 'write', 'outbound'],
+        })
+        expect(effective.execute).toBe('ask')
+        // ⛔ E i tre che aveva scelto restano suoi: nessuno li tocca.
+        expect(effective.read).toBe('allow')
+        expect(effective.write).toBe('allow')
+        expect(effective.outbound).toBe('allow')
+    })
+
+    it('⛔ e una vecchia lista di scelte non puo far apparire `execute` fra le scelte', () => {
+        expect(parseTalosChosenToolActions(['read', 'write', 'outbound']))
+            .not.toContain('execute')
+        // ⭐ Ma se un giorno la persona la sceglie davvero, la lista la accetta.
+        expect(parseTalosChosenToolActions(['execute'])).toEqual(['execute'])
     })
 })

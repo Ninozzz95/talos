@@ -195,6 +195,33 @@
   box-shadow: var(--shadow-sm);
 }
 /*
+ * ⛔⛔⛔ 27/8, trovato PRIMA sul bundle desktop durante il porting R1 (query
+ * `getComputedStyle`, non solo `.hidden`) e portato qui lo stesso giorno:
+ * `display: inline-flex` sopra vinceva SEMPRE su `[hidden]` — ogni
+ * `demoBadge.hidden = true` impostava la proprietà DOM giusta ma non
+ * nascondeva mai visivamente niente. Stessa cura del gemello desktop.
+ *
+ * ⛔⛔⛔ 29/8 — RISTRETTA: quella prima cura (`display: none;` senza
+ * `!important`) bastava finché nessun'altra regola con `display` toccava
+ * `.demo-surface-badge`. Trovato sul device, non ipotizzato:
+ * `aggiornaPannelloAmbiente`/`collegaEventiSessione` (app.js) impostavano
+ * `badge.hidden = true` su una sessione reale, la proprietà VENIVA
+ * impostata (verificato via getComputedStyle sul device: `hiddenProp:true`)
+ * — ma il badge restava VISIBILE lo stesso (`computedDisplay:'inline-flex'`).
+ * Causa: la regola sopra (selettore di classe, specificità 0,1,0) ha la
+ * STESSA specificità della regola dello user-agent per `[hidden]` (anch'essa
+ * 0,1,0), e una regola d'autore vince sempre su quella dello UA a parità di
+ * specificità — la versione senza `!important` non bastava per costruzione,
+ * dipendeva solo dall'ORDINE delle regole nel foglio. Ricerca 29/8 (stesso
+ * bug riportato su Bootstrap #21907/#38936 e Tailwind #345, stessa causa):
+ * la cura raccomandata è un `[hidden]` con `!important`, non un selettore
+ * composto senza — altrimenti la prossima regola con `display` scritta per
+ * QUALUNQUE superficie che usa `.demo-surface-badge` (sette oggi:
+ * chat/sessions/inspector/approval-card/queued-message/dashboard/
+ * sheet-dialog) può silenziosamente rompersi allo stesso modo.
+ */
+.demo-surface-badge[hidden] { display: none !important; }
+/*
  * Owner 24/8: qui c'erano `html`/`body` come selettori nudi — puntano
  * SEMPRE al vero `<html>`/`<body>` della pagina, mai a un antenato dentro
  * lo shadow root; dentro il foglio di questo componente non avrebbero
@@ -223,7 +250,19 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
     var(--bg);
 }
 
-.sessions-panel, .inspector-panel { background: var(--surface-glass); backdrop-filter: blur(18px); min-height: 0; }
+/* ⭐⭐⭐ 30/8, porting dal bundle desktop (67a1b1ac) — owner: "le animazioni
+   vanno a scatti... troppo pesante". Ricerca fatta lì (27/8): il blur di
+   `backdrop-filter` è il filtro più costoso che esiste (campiona un
+   kernel largo di pixel ATTORNO all'elemento), e qui sono impilate
+   CINQUE superfici sempre visibili che lo usano insieme (sidebar+
+   inspector 18px, topbar 20px, composer 20px, nav mobile 18px) —
+   "evita di impilare più elementi con backdrop-filter, ognuno è un
+   passaggio di compositing separato" è la guida corrente. `will-change:
+   backdrop-filter` sposta ciascuna su un proprio layer GPU calcolato UNA
+   volta, invece di ri-sfocare il contenuto sotto a ogni fotogramma di
+   scroll — usato con misura sulle superfici PERSISTENTI (qui: 6), non
+   su ogni elemento con un filtro (costerebbe memoria video). */
+.sessions-panel, .inspector-panel { background: var(--surface-glass); backdrop-filter: blur(18px); will-change: backdrop-filter; min-height: 0; }
 .sessions-panel { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; }
 .inspector-panel { border-left: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; }
 .workspace-shell { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }
@@ -268,6 +307,9 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 .primary-btn { min-height: var(--touch); padding: 0 16px; border-radius: var(--radius-control); background: var(--accent); color: var(--on-accent); font-weight: 750; display: inline-flex; align-items: center; justify-content: center; gap: 8px; box-shadow: inset 0 1px var(--surface-highlight-strong), 0 6px 18px var(--accent-soft); }
 .primary-btn:hover { background: var(--accent-2); }
 .primary-btn.compact, .secondary-btn.compact { min-height: 36px; height: 36px; padding: 0 12px; border-radius: 10px; font-size: 13px; }
+/* ⭐ 27/8 — "Elimina" nel foglio di conferma dell'albero file: stessi token --danger già in uso altrove (.del, .stop-run), non un rosso inventato qui. */
+.primary-btn.danger { background: var(--danger); box-shadow: inset 0 1px var(--surface-highlight-strong), 0 6px 18px var(--danger-soft); }
+.primary-btn.danger:hover { background: var(--danger); filter: brightness(1.08); }
 .secondary-btn { min-height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text-2); }
 .secondary-btn:hover { border-color: var(--line-strong); background: var(--surface-3); }
 .secondary-btn.full { width: 100%; margin-top: 10px; }
@@ -286,6 +328,7 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 .session-meta svg { width: 17px; height: 17px; margin-top: auto; }
 .status-pulse { display: inline-block; width: 7px; height: 7px; border-radius: 99px; background: var(--success); box-shadow: 0 0 0 4px var(--success-soft); margin-right: 6px; }
 .attention-card { margin: 0 12px 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); display: grid; grid-template-columns: 32px 1fr auto; align-items: center; gap: 10px; padding: 10px; }
+.attention-card[hidden] { display: none; } /* ⭐ 27/8 — stesso pattern già in uso per .run-strip/.tool-note-detail/etc.: senza questa riga, `display: grid` sopra vince su [hidden] e card.hidden = true non nasconde niente */
 .attention-card > div:first-child { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 9px; background: var(--accent-soft); color: var(--accent-2); }
 .attention-card strong, .attention-card span { display: block; }
 .attention-card strong { font-size: 12px; }
@@ -296,7 +339,7 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 .sidebar-footer strong { font-size: 13px; }
 .sidebar-footer small { font-size: 10px; color: var(--muted); margin-top: 3px; }
 
-.topbar { padding: 0 12px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; background: var(--bg-glass); backdrop-filter: blur(20px); z-index: 20; }
+.topbar { padding: 0 12px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; background: var(--bg-glass); backdrop-filter: blur(20px); will-change: backdrop-filter; z-index: 20; }
 .topbar-left, .topbar-right, .topbar-center { display: flex; align-items: center; min-width: 0; }
 .topbar-right { justify-content: flex-end; gap: 4px; }
 .topbar-center { background: var(--surface-highlight-subtle); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
@@ -342,8 +385,22 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 .view-pane.active { display: block; }
 .chat-view { overflow: hidden; }
 .chat-view.active { display: flex; flex-direction: column; }
-.chat-view .conversation { height: 100%; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
-.conversation { width: min(920px, calc(100% - 40px)); margin: 0 auto; padding: 24px 0 190px; }
+.chat-view .conversation { height: 100%; width: 100%; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+/* ⭐ 30/8, porting dal bundle desktop (c22e6777) — la barra di scorrimento
+   va sull'orlo destro del riquadro (contro il Context Rail), non contro
+   il bordo della colonna di testo centrata. Il contenitore che scorre è
+   quindi a piena larghezza, e a CENTRARE il testo ci pensa il padding
+   orizzontale — stesso calcolo già in uso da `.composer-wrap`, risultato
+   pixel-per-pixel identico al vecchio `width: min(920px, …)`. */
+.conversation { padding: 24px max(20px, calc((100% - 920px)/2)) 190px; }
+
+/* ⭐⭐⭐ 29/8, porting dal bundle desktop — hero logo+TALOS+messaggio per una sessione vera senza ancora dati reali (mai il Mission/Plan/Attività statico del mockup). Stesso file logo del resto dell'app (talos-short-logo-mark). */
+.conversation-hero { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; max-width: 32rem; margin: 0 auto; padding: 15vh 16px 40px; text-align: center; }
+.hero-logo { display: inline-flex; width: 3.5rem; height: 3.5rem; flex: 0 0 auto; align-items: center; justify-content: center; color: var(--accent); }
+.hero-logo-mark { display: block; width: 92%; height: 92%; background: currentColor; mask: url('/talos/brand/logo-short.svg') center / contain no-repeat; -webkit-mask: url('/talos/brand/logo-short.svg') center / contain no-repeat; }
+.hero-wordmark { margin-top: 10px; font-family: var(--font-ui); font-weight: 700; font-size: 22px; letter-spacing: 0.04em; line-height: 1; color: var(--text); }
+.hero-welcome-title { margin: 16px 0 0; font-size: 17px; font-weight: 600; line-height: 1.35; color: var(--text); }
+.hero-subtitle { margin: 8px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
 
 .mission-card, .activity-bundle, .approval-card, .widget, .settings-card, .automation-row, .inspector-card { border: 1px solid var(--line); background: linear-gradient(180deg, var(--surface-highlight-subtle), var(--surface-highlight-faint)); border-radius: var(--radius-card); }
 .mission-card { padding: 16px; margin-bottom: 24px; }
@@ -381,6 +438,81 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 .message-actions button { width: 34px; height: 32px; display: grid; place-items: center; border-radius: 8px; border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 12px; }
 .message-actions button:hover { background: var(--surface-highlight); color: var(--text); }
 .message-actions svg { width: 15px; height: 15px; }
+/* ⭐ 28/8, owner: "--- come separatore, formatta anche quello" — il default del browser (bordo inset/outset grigio) stona sul tema scuro; una riga sola, coerente con --line già usato per gli altri separatori del bundle. */
+.assistant-copy hr { margin: 14px 0; border: 0; border-top: 1px solid var(--line); }
+
+/* ⭐⭐⭐ 29/8, porting dal bundle desktop — bubble tool-call collassabile
+   (prima: appendToolNote(text) scriveva un blocco sempre aperto, senza
+   distinzione riassunto/dettaglio). Stesso markup di .real-tool-note,
+   invariato: solo il contenuto interno guadagna un summary cliccabile
+   + un dettaglio nascosto. */
+.tool-note-summary { display: flex; align-items: center; gap: 8px; width: 100%; padding: 0; margin-bottom: 0; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px; text-align: left; cursor: pointer; border-radius: 8px; }
+.tool-note-summary:hover { color: var(--text-2); }
+.tool-note-summary:hover .tool-note-summary-text { color: var(--text); }
+.tool-note-summary-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.tool-note-chevron { flex-shrink: 0; color: var(--muted); transition: transform var(--motion-disclosure) ease; }
+.tool-note-summary[aria-expanded="true"] .tool-note-chevron { transform: rotate(90deg); }
+.tool-note-detail { margin-top: 8px; padding-left: 30px; }
+.tool-note-detail[hidden] { display: none; }
+.tool-arg-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; font-size: 12px; }
+.tool-arg-row:last-child { margin-bottom: 0; }
+.tool-arg-key { color: var(--muted); font: 10px var(--font-mono); text-transform: uppercase; letter-spacing: .04em; margin-top: 6px; }
+.tool-result-block { margin: 4px 0 0; overflow: auto; max-height: 340px; padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--bg-deep); font: 11px/1.6 var(--font-mono); color: var(--text-2); }
+
+/* ⭐⭐⭐ 30/8, owner (due screenshot di Claude Code come riferimento) —
+   il gruppo di tool-call collassato: stesso .tool-note-summary di sopra
+   per il bubble (chrome invariato), qui solo le parti NUOVE — l'avviso
+   ⚠️, il totale +n/-n colorato, e il foglio con l'elenco completo. */
+.tool-group-warn { flex-shrink: 0; }
+.tool-group-warn[hidden] { display: none; }
+.tool-group-counts { flex-shrink: 0; display: flex; gap: 6px; font: 12px var(--font-mono); }
+.diff-add { color: var(--success); }
+.diff-del { color: var(--danger); }
+
+.tool-group-sheet-list { display: flex; flex-direction: column; }
+.tool-group-sheet-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 4px; border: 0; border-top: 1px solid var(--line-soft); background: transparent; color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.tool-group-sheet-row:first-child { border-top: 0; }
+.tool-group-sheet-row:hover { background: var(--surface-highlight-subtle); }
+.tool-group-sheet-row svg { flex-shrink: 0; width: 16px; height: 16px; color: var(--muted); }
+.tool-group-sheet-row strong { flex-shrink: 0; }
+.tool-group-sheet-target { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.tool-group-sheet-detail { padding: 0 4px 14px 30px; }
+.tool-group-sheet-detail[hidden] { display: none; }
+
+/* ⭐⭐⭐ 27/8, R1 — il ragionamento riusa la bolla collassabile delle
+   tool-call (stesso markup, .real-tool-note), ma deve leggersi come una
+   cosa DIVERSA a colpo d'occhio: corsivo, leggermente più tenue — lo
+   stesso principio del "gray italic text" che la ricerca del piano ha
+   trovato in Claude Code stesso (Ctrl+O), qui però visibile di default. */
+.real-reasoning-note .tool-note-summary-text { font-style: italic; }
+.real-reasoning-note .tool-note-detail { font-style: italic; color: var(--muted); }
+
+/* ⭐⭐⭐ Porting dal bundle desktop (`lane/harness-desktop`), owner 27/8:
+   "il loading della risposta... usa lo stesso del mobile" — porta di
+   TalosLineLoader.vue (mobile/src/components/brand/, style.css
+   .talos-line-loader*): stessa geometria (traccia+sweep+3 nodi), stessa
+   temporizzazione, `--accent` (già definita in testa a questo foglio,
+   dentro l'adattatore `:root, :host`): lo stesso colore sia embedded nel
+   telefono sia standalone. */
+.real-waiting-note { display: flex; align-items: center; padding: 4px 0; }
+/* ⛔ 27/8, trovato verificando le dimensioni vere (non solo "appare/sparisce"):
+   la regola cieca `svg { width:20px; height:20px }` più sotto in questo
+   stesso foglio vince sugli attributi HTML width/height inline dell'SVG
+   (una CSS di QUALUNQUE specificità batte sempre un attributo di
+   presentazione) — la ruota veniva schiacciata a 20×20 invece della sua
+   geometria vera 44×7. Esplicitata qui per non dipendere dall'ordine
+   delle regole nel foglio. Stesso fix portato anche sul bundle desktop. */
+.talos-line-loader { display: block; width: 44px; height: 7px; }
+.talos-line-loader-track { stroke: var(--accent); stroke-opacity: .18; stroke-width: 2; stroke-linecap: round; }
+.talos-line-loader-sweep { stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 88; stroke-dashoffset: 88; animation: talosLineSweep 1.6s ease-in-out infinite; }
+.talos-line-loader-node { fill: transparent; stroke: var(--accent); stroke-width: 2; animation: talosLineNodeFill 1.6s ease-in-out infinite; }
+.talos-line-loader-node:nth-of-type(1) { animation-delay: 0s; }
+.talos-line-loader-node:nth-of-type(2) { animation-delay: .36s; }
+.talos-line-loader-node:nth-of-type(3) { animation-delay: .73s; }
+@keyframes talosLineSweep { 0% { stroke-dashoffset: 88; } 70%, 100% { stroke-dashoffset: 0; } }
+@keyframes talosLineNodeFill { 0%, 12% { fill: transparent; } 22%, 82% { fill: var(--accent); } 100% { fill: transparent; } }
+body.reduce-motion .talos-line-loader-sweep { animation: none; stroke-dashoffset: 0; }
+body.reduce-motion .talos-line-loader-node { animation: none; fill: var(--accent); opacity: .7; }
 .compact-message { margin-bottom: 0; }
 
 .activity-bundle { overflow: hidden; margin: 26px 0; }
@@ -426,7 +558,7 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 
 .composer-wrap { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px max(20px, calc((100% - 920px)/2)) 12px; background: linear-gradient(180deg, transparent, var(--bg-glass-strong) 22%, var(--bg) 48%); z-index: 10; pointer-events: none; }
 .composer, .queued-message, .composer-status { pointer-events: auto; }
-.composer { container-type: inline-size; min-height: 116px; border: 1px solid var(--line-strong); background: var(--surface-glass-strong); backdrop-filter: blur(20px); border-radius: 15px; box-shadow: var(--shadow); padding: 13px 54px 10px 12px; display: grid; grid-template-rows: minmax(38px,auto) auto; position: relative; }
+.composer { container-type: inline-size; min-height: 116px; border: 1px solid var(--line-strong); background: var(--surface-glass-strong); backdrop-filter: blur(20px); will-change: backdrop-filter; border-radius: 15px; box-shadow: var(--shadow); padding: 13px 54px 10px 12px; display: grid; grid-template-rows: minmax(38px,auto) auto; position: relative; }
 .composer:focus-within { border-color: var(--focus); box-shadow: var(--shadow), 0 0 0 1px var(--focus-soft); }
 .composer textarea { width: 100%; min-height: 38px; max-height: 120px; field-sizing: content; resize: none; overflow-y: auto; border: 0; background: transparent; color: var(--text); outline: 0; padding: 5px 3px 7px; font-size: 14px; line-height: 1.5; }
 .composer textarea::placeholder { color: var(--muted); }
@@ -477,8 +609,114 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .file-tree button { padding: 0 8px; }
 .file-tree button:hover, .file-tree button.active { background: var(--surface-2); }
 .file-tree button span { margin-left: auto; color: var(--muted); font: 8px var(--font-mono); }
+
+/* ⭐⭐⭐ 29/8, porting dal bundle desktop — albero file VERO, espandibile/
+   comprimibile (prima: renderizzaAlberoReale/aggiornaAlberoReale mostrava
+   UN SOLO livello piatto, mai annidato). `.file-tree button`/`.tree-root`
+   sopra restano per il mockup statico che questo sostituisce a runtime. */
+.ft-tree, .ft-tree ul { list-style: none; margin: 0; padding: 0; }
+.ft-tree ul { margin-left: 9px; padding-left: 10px; border-left: 1px solid var(--line); }
+.ft-node > ul { display: none; }
+.ft-node.ft-open > ul { display: block; }
+.ft-row { display: flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 8px 0 3px; border-radius: 7px; cursor: pointer; color: var(--text-2); font-size: 12px; white-space: nowrap; outline: 0; }
+.ft-row:hover { background: var(--surface-2); }
+.ft-row:focus-visible { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.ft-chevron { width: 15px; height: 15px; flex-shrink: 0; display: grid; place-items: center; color: var(--muted); transition: transform var(--motion-disclosure) ease; }
+.ft-chevron svg { width: 9px; height: 9px; stroke: currentColor; fill: none; stroke-width: 2.4; }
+.ft-node.ft-open > .ft-row > .ft-chevron { transform: rotate(90deg); }
+.ft-row-leaf .ft-chevron { visibility: hidden; }
+.ft-icon { width: 15px; height: 15px; flex-shrink: 0; display: grid; place-items: center; }
+.ft-icon svg { width: 14px; height: 14px; stroke-width: 1.6; fill: none; }
+.ft-icon-folder svg { stroke: var(--accent-2); }
+.ft-icon-folder.ft-open svg { stroke: var(--accent); }
+.ft-icon-file svg { stroke: var(--muted); }
+.ft-icon-code svg { stroke: var(--info); }
+.ft-name { flex: 1; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); font-size: 11.5px; }
+.ft-row-folder .ft-name { font-family: var(--font-ui); font-size: 12px; }
+.ft-status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.ft-status-dot.ft-new { background: var(--success); }
+.ft-status-dot.ft-modified { background: var(--accent); }
+.ft-loading { padding: 6px 3px; font-size: 10.5px; color: var(--muted-2); }
 .file-tree .nested { padding-left: 26px; }
 .file-tree .deep { padding-left: 42px; }
+
+/* ⭐⭐⭐ 27/8, owner: "un componente allo stato dell'arte" per il pannello
+   Files — albero vero (espande a richiesta, un livello alla volta, mai un
+   dump ricorsivo — vedi la doc di renderizzaAlberoReale in app.js), stato
+   git incrociato con la Review, ricerca dal vivo. Nomi di classe prefissati
+   `ft-` per non collidere con nient'altro in questo foglio già grande. */
+.ft-search-row { position: relative; margin: 2px 0 6px; }
+.ft-search-icon { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); width: 13px; height: 13px; stroke: var(--muted); fill: none; stroke-width: 2; pointer-events: none; }
+.ft-search-input { width: 100%; background: var(--bg-deep); border: 1px solid var(--line); border-radius: 8px; color: var(--text); font: 11.5px var(--font-ui); padding: 6px 8px 6px 27px; outline: 0; transition: border-color var(--motion-control) ease, background var(--motion-control) ease; }
+.ft-search-input::placeholder { color: var(--muted-2); }
+.ft-search-input:focus { border-color: var(--accent); background: var(--surface-2); }
+.ft-search-hint { margin: 0 0 6px; font-size: 9.5px; color: var(--muted-2); min-height: 12px; }
+.ft-search-hint b { color: var(--text-2); font-weight: 600; }
+.ft-legend { display: flex; gap: 10px; margin-bottom: 8px; font-size: 9px; color: var(--muted); }
+.ft-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.ft-legend i { width: 5px; height: 5px; border-radius: 50%; display: inline-block; }
+.ft-legend-new i { background: var(--success); }
+.ft-legend-modified i { background: var(--accent); }
+
+.ft-tree, .ft-tree ul { list-style: none; margin: 0; padding: 0; }
+.ft-tree ul { margin-left: 9px; padding-left: 10px; border-left: 1px solid var(--line); }
+.ft-node > ul { display: none; }
+.ft-node.ft-open > ul { display: block; }
+.ft-row { display: flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 8px 0 3px; border-radius: 7px; cursor: pointer; color: var(--text-2); font-size: 12px; white-space: nowrap; outline: 0; }
+.ft-row:hover { background: var(--surface-2); }
+.ft-row:focus-visible { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.ft-row.ft-selected { background: var(--accent-soft); color: var(--text); }
+.ft-row.ft-selected .ft-name { color: var(--text); font-weight: 500; }
+.ft-row.ft-dimmed { opacity: .32; }
+/* ⭐ 28/8 — drag&drop: la cartella (o la radice) sotto il cursore durante un trascinamento, stesso accento del resto del prodotto. */
+.ft-row.ft-row-drag-over, .tree-root.ft-row-drag-over { box-shadow: inset 0 0 0 1.5px var(--accent); background: var(--accent-soft); border-radius: 7px; }
+.ft-row.ft-match .ft-name mark { background: var(--accent-soft); color: var(--accent-2); border-radius: 2px; padding: 0 1px; }
+.ft-chevron { width: 15px; height: 15px; flex-shrink: 0; display: grid; place-items: center; color: var(--muted); transition: transform var(--motion-disclosure) ease; }
+.ft-chevron svg { width: 9px; height: 9px; stroke: currentColor; fill: none; stroke-width: 2.4; }
+.ft-node.ft-open > .ft-row > .ft-chevron { transform: rotate(90deg); }
+.ft-row.ft-leaf .ft-chevron { visibility: hidden; }
+.ft-icon { width: 15px; height: 15px; flex-shrink: 0; display: grid; place-items: center; }
+.ft-icon svg { width: 14px; height: 14px; stroke-width: 1.6; fill: none; }
+.ft-icon-folder svg { stroke: var(--accent-2); }
+.ft-icon-folder.ft-open svg { stroke: var(--accent); }
+.ft-icon-file svg { stroke: var(--muted); }
+.ft-icon-code svg { stroke: var(--info); }
+.ft-name { flex: 1; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); font-size: 11.5px; }
+.ft-row-folder .ft-name { font-family: var(--font-ui); font-size: 12px; }
+.ft-status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.ft-status-dot.ft-new { background: var(--success); }
+.ft-status-dot.ft-modified { background: var(--accent); }
+.ft-loading { padding: 6px 3px; font-size: 10.5px; color: var(--muted-2); }
+/*
+ * ⭐⭐⭐ 27/8, owner: le cinque azioni sul file dell'albero (apri,
+ * rinomina, rivela in Esplora File, elimina, allega alla chat). Il
+ * bottone "···" resta nascosto finché la riga non è in hover/focus —
+ * un albero pieno di icone sempre visibili è più rumore che aiuto,
+ * stesso principio delle azioni-riga di ogni file manager reale.
+ */
+/*
+ * ⛔ 28/8, trovato dal vivo con getComputedStyle: `.file-tree button`
+ * (una regola legacy di un albero più vecchio, sopra in questo file) ha
+ * specificità (0,1,1) contro (0,1,0) di `.ft-actions-btn` da solo —
+ * vinceva lei, il bottone restava SEMPRE `display:flex;width:100%` e
+ * divorava tutto lo spazio flessibile della riga, schiacciando
+ * `.ft-name` a 0px (il nome era nel DOM, solo invisibile). Selettore
+ * scoping `.file-tree .ft-actions-btn` (specificità 0,2,0) batte la
+ * regola legacy su OGNI proprietà, non solo display — niente
+ * `!important`, niente tocco alla regola legacy (potrebbe servire
+ * altrove).
+ */
+.file-tree .ft-actions-btn { flex-shrink: 0; width: 22px; height: 22px; display: none; align-items: center; justify-content: center; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; margin-left: auto; }
+.ft-row:hover .ft-actions-btn, .ft-row:focus-within .ft-actions-btn, .ft-row.ft-selected .ft-actions-btn { display: inline-flex; }
+.ft-actions-btn:hover { background: var(--surface-2); color: var(--text); }
+.ft-actions-btn svg { width: 14px; height: 14px; }
+.ft-actions-menu { position: fixed; z-index: 40; min-width: 200px; display: flex; flex-direction: column; padding: 6px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface-elevated); box-shadow: var(--shadow); }
+.ft-actions-menu-item { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: var(--text-2); font-size: 13px; text-align: left; cursor: pointer; }
+.ft-actions-menu-item:hover { background: var(--surface-2); color: var(--text); }
+.ft-actions-menu-item svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--muted); }
+.ft-actions-menu-item-danger { color: var(--danger); }
+.ft-actions-menu-item-danger svg { color: var(--danger); }
+.ft-actions-menu-item-danger:hover { background: var(--danger-soft); }
 .agent-card { min-height: 58px; border: 1px solid var(--line); border-radius: 10px; display: grid; grid-template-columns: 34px minmax(0,1fr) auto; gap: 9px; align-items: center; padding: 9px; margin-bottom: 8px; }
 .agent-avatar { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: var(--surface-3); color: var(--accent-2); font: 10px var(--font-mono); }
 .agent-card strong, .agent-card small { display: block; }
@@ -518,6 +756,8 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .browser-nav button { width: 34px; height: 34px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
 .browser-url { min-width: 0; height: 34px; border: 1px solid var(--line); border-radius: 8px; display: flex; align-items: center; padding: 0 10px; color: var(--muted); font: 10px var(--font-mono); }
 .device-preview { min-height: calc(100dvh - 190px); border: 1px solid var(--line); border-top: 0; border-radius: 0 0 12px 12px; background: radial-gradient(circle at 50% 30%, var(--surface-3), var(--bg-deep) 65%); display: grid; place-items: center; padding: 30px; }
+/* ⭐ Blocco 6, stralcio onesto — l'esito reale di `naviga` è testo, non un telefono da centrare: si scrolla come il Terminale, non si comprime al centro. */
+.browser-real-output { width: 100%; height: 100%; margin: 0; overflow: auto; text-align: left; white-space: pre-wrap; word-break: break-word; color: var(--text-2); font: 12px/1.7 var(--font-mono); }
 .phone-frame { width: min(390px, 100%); aspect-ratio: 390 / 844; max-height: calc(100dvh - 250px); border-radius: 31px; border: 7px solid var(--bg-deep); background: var(--bg); box-shadow: var(--shadow); overflow: hidden; position: relative; display: flex; flex-direction: column; }
 .phone-status { height: 28px; padding: 0 15px; display: flex; justify-content: space-between; align-items: center; font-size: 8px; color: var(--muted); }
 .phone-header { min-height: 45px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 28px 1fr auto; align-items: center; padding: 0 13px; font-size: 10px; }
@@ -577,6 +817,30 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .campaign-section-head > span { color: var(--muted); font: 9px var(--font-mono); text-align: right; }
 .campaign-run-list { display: grid; gap: 6px; }
 .board-empty { margin: 0; padding: 28px 12px; border: 1px dashed var(--line); border-radius: 9px; color: var(--muted); text-align: center; font-size: 10px; }
+
+/*
+ * ⭐⭐⭐ 28/8, owner: "la schermata iniziale non deve essere una chat
+ * vuota, deve essere esattamente come fa il mobile" — porta il "brand
+ * hero" del mobile (logo TALOS + frase di benvenuto, mobile/src/
+ * screens/ChatScreen.vue:1090-1130 + style.css:262-318) qui, ADATTATO
+ * alle convenzioni di questo bundle (var(--accent)/var(--text)/
+ * var(--font-ui) con lo stesso fallback della loro versione, non le
+ * variabili Tailwind --talos-* che qui non esistono — stesso principio
+ * DEC-053 di ogni altro porting mobile↔desktop di questo filone). Il
+ * marchio arriva dallo STESSO asset reale: /talos/brand/logo-short.svg
+ * è già servito da questo server (static-files.mjs riga 33, fratello di
+ * harness-ui/), zero copie nuove. Il testo NON è preso dal mobile
+ * verbatim — il fallback lì ("Quale affermazione vuoi misurare?") è
+ * per un prodotto di fact-checking, fuori contesto per un harness di
+ * coding — resta il testo che questo file già scriveva prima di questa
+ * modifica, solo vestito con lo stesso impianto visivo.
+ */
+.conversation-hero { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; max-width: 32rem; margin: 0 auto; padding: 15vh 16px 40px; text-align: center; }
+.hero-logo { display: inline-flex; width: 3.5rem; height: 3.5rem; flex: 0 0 auto; align-items: center; justify-content: center; color: var(--accent); }
+.hero-logo-mark { display: block; width: 92%; height: 92%; background: currentColor; mask: url('/talos/brand/logo-short.svg') center / contain no-repeat; -webkit-mask: url('/talos/brand/logo-short.svg') center / contain no-repeat; }
+.hero-wordmark { margin-top: 10px; font-family: var(--font-ui); font-weight: 700; font-size: 22px; letter-spacing: 0.04em; line-height: 1; color: var(--text); }
+.hero-welcome-title { margin: 16px 0 0; font-size: 17px; font-weight: 600; line-height: 1.35; color: var(--text); }
+.hero-subtitle { margin: 8px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
 .campaign-run { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); overflow: hidden; }
 .campaign-run-toggle { width: 100%; min-height: 60px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 7px 12px; align-items: center; border: 0; background: transparent; color: var(--text-2); padding: 9px 10px; text-align: left; cursor: pointer; }
 .campaign-run-toggle:hover { background: var(--surface-highlight-subtle); }
@@ -615,13 +879,13 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .settings-card small { display: block; margin-top: 9px; color: var(--muted); font-size: 9px; }
 
 .mobile-nav { display: none; }
-.overlay-backdrop { display: block; position: fixed; inset: 0; z-index: 79; border: 0; background: var(--scrim); backdrop-filter: blur(2px); opacity: 0; visibility: hidden; pointer-events: none; transition: opacity var(--motion-enter) var(--motion-ease), visibility 0ms linear var(--motion-exit); }
+.overlay-backdrop { display: block; position: fixed; inset: 0; z-index: 79; border: 0; background: var(--scrim); backdrop-filter: blur(2px); will-change: opacity; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity var(--motion-enter) var(--motion-ease), visibility 0ms linear var(--motion-exit); }
 .overlay-backdrop.show { opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0ms; }
 
-.harness-dialog-backdrop { position: fixed; inset: 0; z-index: 198; border: 0; background: var(--scrim); backdrop-filter: blur(5px); transition: opacity var(--motion-popover) var(--motion-ease); }
+.harness-dialog-backdrop { position: fixed; inset: 0; z-index: 198; border: 0; background: var(--scrim); backdrop-filter: blur(5px); will-change: opacity; transition: opacity var(--motion-popover) var(--motion-ease); }
 .harness-dialog-backdrop[hidden] { display: none; }
 .command-dialog, .sheet-dialog { position: fixed; z-index: 199; padding: 0; border: 1px solid var(--line-strong); background: var(--surface-elevated); color: var(--text); box-shadow: var(--shadow); }
-.command-dialog { inset: 0 0 auto; width: min(620px, calc(100vw - 32px)); max-height: min(620px, calc(100dvh - 40px)); border-radius: 14px; margin: 12vh auto 0; }
+.command-dialog { inset: 0 0 auto; width: min(720px, calc(100vw - 32px)); max-height: min(700px, calc(100dvh - 40px)); border-radius: 14px; margin: 10vh auto 0; }
 .command-dialog::backdrop, .sheet-dialog::backdrop { background: transparent; }
 .command-search { min-height: 58px; display: grid; grid-template-columns: 22px minmax(0,1fr) auto; align-items: center; gap: 9px; padding: 0 13px; border-bottom: 1px solid var(--line); }
 .command-search input { height: 44px; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 14px; }
@@ -633,11 +897,21 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .command-results button > span { display: flex; align-items: center; gap: 9px; }
 .command-results svg { width: 17px; height: 17px; color: var(--muted); }
 
-.sheet-dialog { inset: 0; width: min(600px, calc(100vw - 24px)); border-radius: 16px; margin: auto; }
+/*
+ * ⭐ 30/8, porting dal bundle desktop (734dfb4b/a115c17e) — la modale
+ * "Nuova sessione" tagliava il dropdown del picker modello (causa vera:
+ * `.model-picker-panel` era `position:absolute`, corretta già su questa
+ * copia — vedi sotto). Due giri sullo stesso problema sul desktop:
+ * 600px/580px → 720px/760px → 880px/880px, man mano che il form ha
+ * guadagnato contenuto (cartella+modello+compito, poi scorciatoie Full
+ * access/effort picker/menu CRUD). Porto lo stato FINALE, non la
+ * cronologia intermedia. 880px resta comodo anche su un laptop 1366px.
+ */
+.sheet-dialog { inset: 0; width: min(880px, calc(100vw - 24px)); border-radius: 16px; margin: auto; }
 .sheet-handle { display: none; }
 .sheet-head { min-height: 70px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px 0 16px; border-bottom: 1px solid var(--line); }
 .sheet-head h2 { margin: 4px 0 0; font-size: 17px; font-weight: 650; }
-.sheet-body { max-height: min(580px, calc(100dvh - 120px)); overflow: auto; padding: 12px; }
+.sheet-body { max-height: min(880px, calc(100dvh - 96px)); overflow: auto; padding: 12px; }
 .sheet-section { margin-bottom: 16px; }
 .sheet-label { display: block; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .12em; margin: 0 0 7px 3px; }
 .sheet-option { width: 100%; min-height: 54px; display: grid; grid-template-columns: 38px minmax(0,1fr) auto; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--text-2); padding: 7px 10px; margin-bottom: 6px; text-align: left; cursor: pointer; }
@@ -648,6 +922,10 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .sheet-option strong { font-size: 11px; }
 .sheet-option small { color: var(--muted); font-size: 9px; margin-top: 3px; }
 .sheet-option > span:last-child { color: var(--muted); font-size: 10px; }
+/* ⭐⭐⭐ 28/8 — le scorciatoie "Desktop/Download/Documenti" nel campo percorso "Full access" (app.js, openRealTaskSheet). Stessi token di .sheet-option (bordo/accento), taglia più piccola: sono riempitivi rapidi per un campo di testo, non voci di un elenco a piena larghezza. */
+.sheet-shortcuts { display: flex; flex-wrap: wrap; gap: 6px; margin: -2px 0 10px; }
+.sheet-shortcut-chip { border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--text-2); padding: 5px 12px; font-size: 11px; cursor: pointer; }
+.sheet-shortcut-chip:hover { border-color: var(--accent-strong); background: var(--accent-soft); color: var(--text); }
 .sheet-toggle-row { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--line); font-size: 11px; }
 .sheet-toggle-row span { color: var(--text-2); }
 .sheet-toggle-row input { width: 18px; height: 18px; accent-color: var(--accent); }
@@ -701,7 +979,7 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
   .run-state { font-size: 10px; }
   .run-state > span:last-child { display: none; }
   .content-stage { padding-bottom: var(--mobile-nav-h); }
-  .conversation { width: auto; margin: 0 12px; padding: 16px 0 205px; }
+  .conversation { padding: 16px 12px 205px; }
   .mission-card { padding: 12px; margin-bottom: 16px; }
   .mission-head h2 { font-size: 15px; }
   .mission-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
@@ -729,7 +1007,7 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
   .selector-pill { max-width: min(56vw, 250px); }
   .queue-toggle { display: none; }
   .composer-status { margin-top: 4px; }
-  .mobile-nav { display: grid; grid-template-columns: repeat(5,1fr); position: fixed; left: 0; right: 0; bottom: 0; min-height: var(--mobile-nav-h); padding: 5px max(5px, env(safe-area-inset-right)) max(5px, env(safe-area-inset-bottom)) max(5px, env(safe-area-inset-left)); border-top: 1px solid var(--line); background: var(--bg-glass-strong); backdrop-filter: blur(18px); z-index: 70; }
+  .mobile-nav { display: grid; grid-template-columns: repeat(5,1fr); position: fixed; left: 0; right: 0; bottom: 0; min-height: var(--mobile-nav-h); padding: 5px max(5px, env(safe-area-inset-right)) max(5px, env(safe-area-inset-bottom)) max(5px, env(safe-area-inset-left)); border-top: 1px solid var(--line); background: var(--bg-glass-strong); backdrop-filter: blur(18px); will-change: backdrop-filter; z-index: 70; }
   .mobile-nav button { min-width: 0; border: 0; background: transparent; color: var(--muted); border-radius: 9px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; cursor: pointer; font-size: 9px; }
   .mobile-nav button.active { color: var(--accent-2); background: var(--accent-soft); }
   .mobile-nav svg { width: 18px; height: 18px; }
@@ -792,6 +1070,7 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0ms !important; animation-iteration-count: 1 !important; transition-duration: 0ms !important; }
+  .talos-line-loader-node { fill: var(--accent); opacity: .7; } /* stesso motivo del :host-context gemello qui sotto */
 }
 
 /*
@@ -803,6 +1082,11 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
  * è l'antenato che `:host-context` sa raggiungere.
  */
 :host-context(body.reduce-motion) *, :host-context(body.reduce-motion) *::before, :host-context(body.reduce-motion) *::after { scroll-behavior: auto !important; animation-duration: 0ms !important; animation-iteration-count: 1 !important; transition-duration: 0ms !important; }
+/* ⛔ Senza questa riga, la regola cieca qui sopra e quella in @media
+   (prefers-reduced-motion) sopra lascerebbero i tre nodi del line-loader
+   sul fotogramma 100% del loro keyframe — che per `talosLineNodeFill` è
+   `fill: transparent`: tre cerchi invisibili invece di tre nodi pieni. */
+:host-context(body.reduce-motion) .talos-line-loader-node { fill: var(--accent); opacity: .7; }
 
 /* Feature-parity additions: session graph + GUI control plane */
 .session-topology { overflow: hidden; }
@@ -1128,6 +1412,76 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .sheet-input:focus { border-color: var(--focus); box-shadow: 0 0 0 2px var(--focus-soft); }
 .sheet-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 .sheet-actions .secondary-btn, .sheet-actions .primary-btn { min-height: 44px; }
+
+/*
+ * ⭐⭐⭐ 27/8 — model picker: dropdown stilizzato, stesso pattern del
+ * componente mobile (TalosMobileComposerModelPicker.vue) — raggruppato
+ * per provider, cercabile. Riusa .sheet-input/.sheet-option/.text-btn
+ * già esistenti invece di inventare un secondo linguaggio visivo.
+ */
+/*
+ * ⛔⛔ 27/8 — owner: "il dropdown viene tagliato". Causa vera: il pannello
+ * era `position: absolute`, cioè FUORI dal flusso del documento — non
+ * faceva crescere l'altezza scrollabile di `.sheet-body`, restava
+ * semplicemente sospeso sotto il trigger e finiva tagliato da
+ * `.sheet-dialog { overflow: clip }` non appena superava il bordo della
+ * modale, senza modo di scorrere per rivederlo. In flusso normale, il
+ * pannello spinge giù il resto del form e `.sheet-body` (già più alto,
+ * vedi sopra) lo scrolla correttamente insieme a tutto il resto.
+ */
+.model-picker { margin-bottom: 12px; }
+.model-picker-trigger { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; text-align: left; }
+/* ⭐ 27/8 — stessa cautela imparata stasera su .model-picker-panel: ogni display esplicito vuole il suo [hidden], scritto SUBITO e non aspettando di trovarlo rotto. */
+.model-picker-trigger[hidden] { display: none; }
+.model-picker-trigger-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px var(--font-mono); }
+.model-picker-chevron svg { width: 14px; height: 14px; color: var(--muted); flex: 0 0 auto; }
+.model-picker-trigger[aria-expanded="true"] .model-picker-chevron svg { transform: rotate(180deg); }
+.model-picker-panel { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; padding: 10px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface-elevated); box-shadow: var(--shadow); }
+/* ⛔⛔⛔ 27/8, owner: "clicco il modello, il drop-down non scompare, copre
+   il bottone Continua" — STESSA causa di .demo-surface-badge trovata poco
+   fa nello stesso giro: `display: flex` sopra vince su [hidden], chiudi()
+   impostava panel.hidden = true correttamente ma non nascondeva niente. */
+.model-picker-panel[hidden] { display: none; }
+.model-picker-search { position: relative; display: block; flex: 0 0 auto; }
+.model-picker-search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--muted); pointer-events: none; }
+.model-picker-search input { padding-left: 32px; }
+.model-picker-list { max-height: 42vh; overflow-y: auto; }
+.model-picker-group-header { width: 100%; display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 4px; border: 0; background: transparent; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; cursor: pointer; }
+.model-picker-group-header:hover { color: var(--text-2); }
+.model-picker-group-count { color: var(--muted); font-weight: 500; text-transform: none; letter-spacing: 0; }
+.model-picker-group-chevron { margin-left: auto; display: flex; }
+.model-picker-group-chevron svg { width: 12px; height: 12px; transition: transform var(--motion-control) var(--motion-ease); }
+.model-picker-group-header[aria-expanded="true"] .model-picker-group-chevron svg { transform: rotate(180deg); }
+.model-picker-option { margin-bottom: 4px; grid-template-columns: 30px minmax(0,1fr) auto; min-height: 46px; }
+.model-picker-option .sheet-icon { width: 28px; height: 28px; }
+.model-picker-option .sheet-icon svg { width: 13px; height: 13px; }
+.model-picker-option strong { font-size: 11px; }
+.model-picker-option small { font: 9px var(--font-mono); color: var(--muted); }
+.model-picker-option > span:last-child svg { width: 14px; height: 14px; color: var(--accent-2); }
+.model-picker-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex: 0 0 auto; border-top: 1px solid var(--line); padding-top: 8px; }
+.model-picker-footer .text-btn { display: inline-flex; align-items: center; gap: 5px; }
+.model-picker-footer .text-btn svg { width: 13px; height: 13px; }
+.model-picker-meta { color: var(--muted); font-size: 10px; }
+
+/*
+ * ⭐⭐⭐ 28/8 — effort picker (livello di ragionamento), porta
+ * TalosMobileEffortPicker.vue/TalosThemedSegmentedSlider.vue: stesso
+ * ruolo visivo (testata etichetta+valore, binario a scatti, tacche
+ * sotto), `<input type="range">` NATIVO al posto di reka-ui (zero
+ * dipendenze nel bundle) — il browser possiede drag/tastiera/touch,
+ * noi solo i token di tema, stessa filosofia dichiarata dal componente
+ * mobile stesso.
+ */
+.effort-picker { margin-top: 6px; padding: 10px 12px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.effort-picker-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.effort-picker-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.effort-picker-selected { color: var(--accent); font-size: 13px; font-weight: 600; }
+.effort-picker-range { width: 100%; margin: 10px 0 2px; accent-color: var(--accent); cursor: pointer; }
+.effort-picker-labels { position: relative; height: 15px; margin-top: 2px; }
+.effort-picker-tick { position: absolute; top: 0; transform: translateX(-50%); color: var(--muted); font-size: 9.5px; white-space: nowrap; transition: color var(--motion-disclosure) ease, font-weight var(--motion-disclosure) ease; }
+.effort-picker-tick:first-child { transform: none; }
+.effort-picker-tick:last-child { transform: translateX(-100%); }
+.effort-picker-tick-selected { color: var(--accent); font-weight: 600; }
 @media (max-width: 780px) {
   .sheet-input { min-height: 52px; font-size: 16px; }
   .sheet-actions { display: grid; grid-template-columns: 1fr 1fr; }

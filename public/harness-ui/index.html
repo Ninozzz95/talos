@@ -45,6 +45,12 @@
     <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></symbol>
     <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></symbol>
     <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></symbol>
+    <symbol id="i-folder-open" viewBox="0 0 24 24"><path d="M3 8a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2l-1.5 7a2 2 0 0 1-2 1.6H6.5a2 2 0 0 1-2-1.6L3 8Z"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v4h4"/></symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="m16.5 3.5 4 4L8 20H4v-4L16.5 3.5Z"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
   </svg>
 
   <div id="app" class="app-shell">
@@ -65,29 +71,7 @@
 
       <div class="sidebar-caption">Tieni premuta una chat per le azioni.</div>
       <nav class="session-list" id="sessionList">
-        <div class="list-heading">Oggi</div>
-<button class="session-item active" data-session-id="refactor-auth-flow" data-session="Refactor auth flow">
-          <span class="session-main"><strong>Refactor auth flow</strong><small><span class="status-pulse"></span>3 tool attivi · 1 min fa</small></span>
-          <span class="session-meta">09:12<svg><use href="#i-more"/></svg></span>
-        </button>
-<button class="session-item" data-session-id="audit-api-permissions" data-session="Audit API permissions">
-          <span class="session-main"><strong>Audit API permissions</strong><small>review · 8 min fa</small></span>
-          <span class="session-meta">08:42<svg><use href="#i-more"/></svg></span>
-        </button>
-<button class="session-item" data-session-id="fix-mobile-composer" data-session="Fix mobile composer">
-          <span class="session-main"><strong>Fix mobile composer</strong><small>workspace · 9 h fa</small></span>
-          <span class="session-meta">08:30<svg><use href="#i-more"/></svg></span>
-        </button>
-        <div class="list-heading">Ieri</div>
-<button class="session-item" data-session-id="prepare-release-notes" data-session="Prepare release notes">
-          <span class="session-main"><strong>Prepare release notes</strong><small>archiviata · 15 h fa</small></span>
-          <span class="session-meta">15:25<svg><use href="#i-more"/></svg></span>
-        </button>
-        <div class="list-heading">Ultimi 7 giorni</div>
-<button class="session-item" data-session-id="investigate-flaky-tests" data-session="Investigate flaky tests">
-          <span class="session-main"><strong>Investigate flaky tests</strong><small>branch: fix/tests</small></span>
-          <span class="session-meta">Mar<svg><use href="#i-more"/></svg></span>
-        </button>
+        <p class="board-empty" id="noSessionsPlaceholder">Nessuna sessione ancora — premi «Nuova» per iniziare.</p>
       </nav>
 
       <div class="attention-card">
@@ -110,29 +94,40 @@
 <button class="icon-btn mobile-only" data-open-panel="sessions" aria-label="Apri sessioni"><svg class="sessions-menu-icon"><use href="#i-menu"/></svg><svg class="embedded-session-back-icon"><use href="#i-arrow-left"/></svg></button>
           <button class="icon-btn desktop-only" id="sessionsCollapseBtn" aria-label="Comprimi o espandi le sessioni" aria-expanded="true"><svg><use href="#i-menu"/></svg></button>
           <button class="title-button" id="sessionTitleButton" data-open-sheet="sessionTree" aria-haspopup="dialog" aria-label="Apri dettagli e albero della sessione">
-            <span><strong id="sessionTitle" data-current-session-title>Refactor auth flow</strong><small>talos / mobile-code</small></span>
+            <span><strong id="sessionTitle" data-current-session-title>Nessuna sessione</strong><small>premi «Nuova» per iniziare</small></span>
             <svg><use href="#i-chevron"/></svg>
           </button>
         </div>
         <div class="topbar-center">
           <button class="mode-tab active" data-mode="chat" aria-pressed="true">Chat</button>
-          <button class="mode-tab" data-mode="split" aria-pressed="false">Split</button>
+          <button class="mode-tab" data-mode="terminal" aria-pressed="false">Terminale</button>
           <button class="mode-tab" data-mode="dashboard" aria-pressed="false">Board</button>
         </div>
         <div class="topbar-right">
           <button class="context-chip environment-chip" data-open-sheet="environment"><svg><use href="#i-branch"/></svg><span>wt/auth · feat/mobile</span></button>
+          <!-- ⭐ 29/8 — ledger §13: l'UNICO trigger di questo sheet viveva dentro .mission-card, il mockup che §9 sostituisce con l'hero per ogni sessione reale — irraggiungibile da quel momento in poi. Qui, in testata, resta sempre presente. -->
+          <button class="icon-btn" data-open-sheet="control" aria-label="Doctor e hook del progetto"><svg><use href="#i-more"/></svg></button>
+          <!--
+            ⭐ FASE M (29/8) — resumeSession()/compactSession() esistevano
+            già, testate, ma raggiungibili solo scrivendo un messaggio
+            (resume) o mai da un umano (compact, solo via ⌘K). Due
+            bottoni reali, stesse funzioni, nessuna duplicazione — vedi
+            app.js.
+          -->
+          <button class="icon-btn" id="resumeSessionBtn" aria-label="Riprendi la sessione"><svg><use href="#i-play"/></svg></button>
+          <button class="icon-btn" id="compactSessionBtn" aria-label="Comprimi il contesto"><svg><use href="#i-grid"/></svg></button>
           <button class="icon-btn" id="commandPaletteBtn" aria-label="Comandi"><svg><use href="#i-command"/></svg></button>
           <button class="icon-btn desktop-context-toggle" data-open-panel="inspector" aria-label="Mostra o nascondi inspector" aria-expanded="true"><svg><use href="#i-layout"/></svg></button>
         </div>
       </header>
 
-      <section class="run-strip" aria-label="Stato esecuzione">
-        <button class="run-state" id="runStateToggle" type="button" aria-pressed="false" aria-label="Attiva o disattiva la coda follow-up"><span class="status-pulse"></span><strong>In esecuzione</strong><span>01:42</span></button>
-        <div class="run-progress" role="progressbar" aria-label="Avanzamento run" aria-valuemin="0" aria-valuemax="100" aria-valuenow="72"><span class="run-progress-value-72"></span></div>
+      <section class="run-strip" aria-label="Stato esecuzione" hidden>
+        <button class="run-state" id="runStateToggle" type="button" aria-pressed="false" aria-label="Attiva o disattiva la coda follow-up"><span class="status-pulse"></span><strong>In esecuzione</strong><span>—</span></button>
+        <div class="run-progress" role="progressbar" aria-label="Avanzamento run" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span class="run-progress-value-0"></span></div>
         <div class="run-kpis">
-          <span><b>4/6</b> step</span>
-          <span><b>18.7k</b> ctx</span>
-          <span><b>0</b> errori</span>
+          <span><b>—</b> step</span>
+          <span><b>—</b> ctx</span>
+          <span><b>—</b> errori</span>
         </div>
         <button class="icon-btn stop-run" aria-label="Interrompi esecuzione"><svg><use href="#i-stop"/></svg></button>
       </section>
@@ -140,93 +135,16 @@
       <div class="content-stage" id="contentStage">
         <section class="chat-view view-pane active" data-view="chat" data-demo-surface="chat">
           <div class="conversation" id="conversation">
-            <article class="mission-card">
-              <div class="mission-head">
-                <div><span class="eyebrow">Missione</span><h2>Rendi il composer mobile robusto e accessibile</h2></div>
-                <button class="icon-btn" data-open-sheet="control" aria-label="Altre azioni della missione"><svg><use href="#i-more"/></svg></button>
-              </div>
-              <div class="mission-grid">
-                <div><span>Workspace</span><strong>talos</strong></div>
-                <div><span>Branch</span><strong>feat/mobile-code</strong></div>
-                <div><span>Permessi</span><strong>Workspace write</strong></div>
-                <div><span>Modello</span><strong>gpt-5.6-sol</strong></div>
-              </div>
-              <div class="plan-inline">
-                <div class="plan-label"><svg><use href="#i-list"/></svg><span>Plan</span><b>4 / 6</b></div>
-                <div class="plan-steps">
-                  <span class="done">Audit layout</span><span class="done">Theme tokens</span><span class="done">Composer</span><span class="done">Tool feed</span><span class="current">Responsive pass</span><span>Review</span>
-                </div>
-              </div>
-            </article>
-
-            <article class="message user-message">
-              <div class="message-bubble">Analizza il layout attuale di Talos, sistema il composer mobile e mantieni visibili branch, permessi e stato dell'esecuzione.</div>
-              <div class="message-meta"><span>Tu · 09:12</span><button class="mini-icon" data-copy-message aria-label="Copia messaggio"><svg><use href="#i-copy"/></svg></button></div>
-            </article>
-
-            <article class="message assistant-message">
-              <div class="assistant-meta"><span class="talos-glyph"><span class="brand-glyph-mark"></span></span><span>TALOS · gpt-5.6-sol</span><span>1 min fa</span></div>
-              <div class="assistant-copy">
-                Ho isolato il problema: il composer usa una gerarchia desktop anche sotto 600 px. Sto trasformando i controlli secondari in capability sheet e mantenendo nel bordo inferiore solo contesto essenziale, invio e interrupt.
-              </div>
-              <div class="message-actions"><button data-message-action="copy" aria-label="Copia risposta"><svg><use href="#i-copy"/></svg></button><button data-message-action="like" aria-label="Risposta utile" aria-pressed="false">👍</button><button data-message-action="dislike" aria-label="Risposta non utile" aria-pressed="false">👎</button><button data-message-action="retry" aria-label="Rigenera risposta"><svg><use href="#i-history"/></svg></button></div>
-            </article>
-
-            <section class="activity-bundle" aria-label="Attivita strumenti">
-              <button class="bundle-header" data-collapse-target="toolBundle" aria-expanded="true" aria-controls="toolBundle">
-                <span class="bundle-title"><span class="tool-icon"><svg><use href="#i-bolt"/></svg></span><span><strong>Attivita</strong><small>6 operazioni · 14.2s</small></span></span>
-                <span class="bundle-status">5 completate · 1 in corso <svg><use href="#i-chevron"/></svg></span>
-              </button>
-              <div class="bundle-content" id="toolBundle">
-                <button class="tool-row" data-tool-detail="read">
-                  <span class="tool-state success"><svg><use href="#i-check"/></svg></span>
-                  <span class="tool-copy"><strong>Read</strong><small>src/components/chat/TalosComposer.vue</small></span>
-                  <span class="tool-time">0.3s</span>
-                </button>
-                <button class="tool-row" data-tool-detail="search">
-                  <span class="tool-state success"><svg><use href="#i-check"/></svg></span>
-                  <span class="tool-copy"><strong>Search</strong><small>mobile breakpoints, safe-area, touch targets</small></span>
-                  <span class="tool-time">0.6s</span>
-                </button>
-                <button class="tool-row expanded" data-tool-detail="edit">
-                  <span class="tool-state success"><svg><use href="#i-check"/></svg></span>
-                  <span class="tool-copy"><strong>Edit</strong><small>TalosComposer.vue · +28 −19</small></span>
-                  <span class="tool-time">1.2s</span>
-                </button>
-                <div class="inline-diff" aria-label="Diff codice">
-                  <div class="diff-head"><span>src/components/chat/TalosComposer.vue</span><button class="text-btn" data-open-view="diff">Apri review</button></div>
-                  <pre><code><span class="del">- grid-template-columns: 48px 1fr auto auto;</span>
-<span class="add">+ grid-template-columns: 48px minmax(0,1fr) 48px;</span>
-<span class="add">+ padding-bottom: max(12px, env(safe-area-inset-bottom));</span>
-<span class="add">+ @container composer (max-width: 560px) { ... }</span></code></pre>
-                </div>
-                <button class="tool-row" data-tool-detail="bash">
-                  <span class="tool-state success"><svg><use href="#i-check"/></svg></span>
-                  <span class="tool-copy"><strong>Test</strong><small>npm run test:unit -- composer</small></span>
-                  <span class="tool-time">8.4s</span>
-                </button>
-                <button class="tool-row running" data-tool-detail="browser">
-                  <span class="tool-state running"><span></span></span>
-                  <span class="tool-copy"><strong>Browser check</strong><small>390 × 844 · touch + keyboard</small></span>
-                  <span class="tool-time">live</span>
-                </button>
-              </div>
-            </section>
-
-            <article class="approval-card" id="approvalCard" data-demo-surface="approval">
-              <div class="approval-icon"><svg><use href="#i-shield"/></svg></div>
-              <div class="approval-copy"><span class="eyebrow">Permesso richiesto</span><h3>Aprire il browser locale di test?</h3><p>Solo <code>http://127.0.0.1:4173</code>. Nessun accesso rete esterno.</p></div>
-              <div class="approval-actions"><button class="secondary-btn" data-deny>Nega</button><button class="secondary-btn" data-allow-session>Consenti per sessione</button><button class="primary-btn compact" data-approve>Consenti una volta</button></div>
-            </article>
-
-            <article class="message assistant-message compact-message">
-              <div class="assistant-meta"><span class="talos-glyph"><span class="brand-glyph-mark"></span></span><span>TALOS</span><span>ora</span></div>
-              <div class="assistant-copy">Sto completando il controllo responsive. Al termine apro automaticamente la review dei file modificati e il gate di verifica.</div>
-            </article>
+            <div class="conversation-hero" id="conversationEmptyState">
+              <span class="hero-logo" aria-hidden="true"><span class="hero-logo-mark"></span></span>
+              <span class="hero-wordmark">TALOS</span>
+              <p class="hero-welcome-title">Nessuna sessione attiva.</p>
+              <p class="hero-subtitle">Premi «Nuova» in alto, scegli una cartella e scrivi cosa deve fare TALOS — oppure scrivi qui sotto per iniziare subito.</p>
+            </div>
           </div>
 
           <div class="composer-wrap">
-            <div class="queued-message" id="queuedMessage" data-demo-surface="queue"><span><b>Follow-up in coda</b> · dopo il run corrente</span><button class="text-btn" id="cancelQueued">Annulla</button></div>
+            <div class="queued-message" id="queuedMessage" data-demo-surface="queue"><span><b>Follow-up in coda</b> · <span id="queuedMessageText">dopo il run corrente</span></span><button class="text-btn" id="cancelQueued">Annulla</button></div>
             <form class="composer" id="composerForm">
               <textarea id="composerInput" rows="1" placeholder="Scrivi a TALOS..." aria-label="Messaggio"></textarea>
               <button class="icon-btn composer-mic" type="button" aria-label="Voce"><svg><use href="#i-mic"/></svg></button>
@@ -250,7 +168,7 @@
           <div class="review-shell">
             <div class="view-heading"><div><span class="eyebrow">Review center</span><h2>3 file modificati</h2><p>Gate prima del completamento: diff, test e rischio.</p></div><button class="primary-btn compact" id="approveAllDiffs">Approva tutto</button></div>
             <div class="review-summary">
-              <div><span>+68</span><small>aggiunte</small></div><div><span>−31</span><small>rimozioni</small></div><div><span>6/6</span><small>test</small></div><div><span>Basso</span><small>rischio</small></div>
+              <div><span id="reviewSummaryNuovi">+68</span><small>nuovi</small></div><div><span id="reviewSummaryModificati">−31</span><small>modificati</small></div><div data-review-stat="test"><span>6/6</span><small>test</small></div><div data-review-stat="risk"><span>Basso</span><small>rischio</small></div>
             </div>
             <div class="file-review-list">
               <button class="file-review active" data-review-file="composer" aria-pressed="true"><span><svg><use href="#i-diff"/></svg><strong>TalosComposer.vue</strong></span><span class="diff-stats">+28 −19</span></button>
@@ -354,18 +272,18 @@ $ <span class="cursor"> </span></code></pre>
             <div class="view-heading"><div><span class="eyebrow">Automazioni</span><h2>Run programmati</h2><p>Task isolati con stato, cronologia e modello dedicato.</p></div><button class="primary-btn compact" data-automation-action="new">Nuova automazione</button></div>
             <div class="automation-list">
               <article class="automation-row"><div class="automation-icon"><svg><use href="#i-clock"/></svg></div><div><strong>Sconto a scaglioni</strong><small>Task reale del corpus · avvio manuale, non ancora su una schedulazione vera</small></div><span class="status-chip">Task reale</span><button class="secondary-btn compact" data-automation-action="run" data-task-id="sconto-a-scaglioni">Esegui ora</button></article>
-              <article class="automation-row"><div class="automation-icon"><svg><use href="#i-history"/></svg></div><div><strong>Weekly dependency audit</strong><small>Lun 08:00 · report nella sessione</small></div><span class="status-chip">Pausa</span><button class="secondary-btn compact" data-automation-action="edit">Modifica</button></article>
             </div>
+            <div class="automation-list" id="automationListReal"></div>
           </div>
         </section>
 
-        <section class="view-pane" data-view="settings" data-demo-surface="settings">
+        <section class="view-pane" data-view="settings">
           <div class="generic-shell">
             <div class="view-heading"><div><span class="eyebrow">TALOS</span><h2>Impostazioni Codice</h2><p>La superficie segue i token del tema TALOS attivo.</p></div></div>
             <div class="settings-grid">
               <article class="settings-card"><h3>Aspetto</h3><div class="setting-line"><span>Preset</span><strong>Tema TALOS</strong></div><div class="theme-swatch"><span></span><span></span><span></span><span></span></div><small>Token colore, tipo, raggio e densità ereditati</small></article>
-              <article class="settings-card"><h3>Interazione</h3><label><span>Riduci movimento</span><input type="checkbox" id="reducedMotionToggle"/></label><label><span>Diff espansi di default</span><input type="checkbox" checked/></label><label><span>Tool activity compatta</span><input type="checkbox" checked/></label></article>
-              <article class="settings-card"><h3>Agentico</h3><label><span>Verifica prima di "done"</span><input type="checkbox" checked/></label><label><span>Mostra subagent</span><input type="checkbox" checked/></label><label><span>Steering queue</span><input type="checkbox" checked/></label></article>
+              <article class="settings-card"><h3>Interazione</h3><label><span>Riduci movimento</span><input type="checkbox" id="reducedMotionToggle"/></label><p class="muted-copy">Diff espansi di default e Tool activity compatta: non ancora implementati.</p></article>
+              <article class="settings-card"><h3>Agentico</h3><p class="muted-copy">La verifica prima di "fatto" (il cancello semantico) è sempre attiva — non è un'opzione da spegnere. Sotto-agenti e steering queue: non ancora implementati.</p></article>
               <article class="settings-card control-plane-card"><h3>Control plane</h3><p class="muted-copy">Parità CLI senza costringere l'utente al terminale.</p><div class="control-grid"><button data-open-sheet="control">Agents</button><button data-open-sheet="control">Hooks</button><button data-open-sheet="capabilities">Skills</button><button data-open-sheet="capabilities">Plugins</button><button data-open-sheet="capabilities">MCP</button><button data-control-action="doctor">Doctor</button></div></article>
             </div>
           </div>
@@ -392,32 +310,37 @@ $ <span class="cursor"> </span></code></pre>
           </div>
           <div class="inspector-card">
             <div class="card-title"><span>Capability</span><svg><use href="#i-link"/></svg></div>
-            <div class="capability-row"><span>Skills</span><b>6</b></div><div class="capability-row"><span>MCP</span><b>3</b></div><div class="capability-row"><span>Web search</span><b>On</b></div><div class="capability-row"><span>Browser</span><b>Scoped</b></div>
+            <div class="capability-row"><span>Attrezzi</span><b>7</b></div><div class="capability-row"><span>MCP</span><b>0</b></div><div class="capability-row"><span>Web search</span><b>—</b></div><div class="capability-row"><span>Browser</span><b>Scoped</b></div>
             <button class="secondary-btn full" id="manageCapabilitiesBtn">Gestisci capability</button>
           </div>
           <div class="inspector-card">
             <div class="card-title"><span>Memory</span><svg><use href="#i-brain"/></svg></div>
-            <p class="muted-copy">2 memorie di progetto applicate. Nessun conflitto rilevato.</p>
-            <div class="memory-chip">design-system.md</div><div class="memory-chip">mobile-rules.md</div>
+            <p class="muted-copy">Non ancora implementato — questo agente non ha oggi un sistema di memoria di progetto.</p>
           </div>
           <div class="inspector-card session-topology">
             <div class="card-title"><span>Session topology</span><svg><use href="#i-branch"/></svg></div>
-            <div class="topology-row root"><span class="topology-node"></span><div><strong data-current-session-title>Refactor auth flow</strong><small>main thread · live</small></div></div>
-            <div class="topology-row child"><span class="topology-node"></span><div><strong>Responsive audit</strong><small>side thread · A1</small></div></div>
-            <div class="topology-row child"><span class="topology-node"></span><div><strong>A11y review</strong><small>fork · ready</small></div></div>
-            <div class="topology-actions"><button class="secondary-btn compact" data-open-sheet="sessionTree">Albero</button><button class="secondary-btn compact" data-session-action="side">+ Side</button><button class="secondary-btn compact" data-session-action="fork">Fork</button></div>
+            <div class="topology-row root"><span class="topology-node"></span><div><strong data-current-session-title>Nessuna sessione</strong><small>sessione corrente</small></div></div>
+            <p class="muted-copy">Le deleghe a sotto-agenti isolati (attrezzo delega_sottotask) appaiono nel foglio "Albero sessione" — apri il titolo sessione qui sopra.</p>
+            <div class="topology-actions"><button class="secondary-btn compact" data-action="fork-session">Fork questa sessione</button></div>
           </div>
         </section>
         <section class="inspector-section" id="inspector-files" role="tabpanel" aria-labelledby="inspector-tab-files" data-inspector-section="files" data-demo-surface="inspector-files">
+          <div class="ft-search-row">
+            <svg class="ft-search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+            <input type="text" id="fileTreeFilter" class="ft-search-input" placeholder="Filtra i file caricati…" aria-label="Filtra i file per nome" autocomplete="off" spellcheck="false">
+          </div>
+          <p class="ft-search-hint" id="fileTreeFilterHint" aria-live="polite"></p>
+          <div class="ft-legend">
+            <span class="ft-legend-new"><i></i>nuovo</span>
+            <span class="ft-legend-modified"><i></i>modificato</span>
+          </div>
           <div class="file-tree">
             <div class="tree-root"><svg><use href="#i-files"/></svg><strong>talos</strong></div>
             <button data-file-entry="src">src/</button><button class="nested" data-file-entry="components">components/</button><button class="nested deep active" data-file-entry="composer">TalosComposer.vue <span>+28 −19</span></button><button class="nested deep" data-file-entry="chat-shell">ChatShell.vue</button><button data-file-entry="tests">tests/</button><button class="nested" data-file-entry="composer-tests">composer.spec.ts <span>+8 −4</span></button>
           </div>
         </section>
         <section class="inspector-section" id="inspector-agents" role="tabpanel" aria-labelledby="inspector-tab-agents" data-inspector-section="agents" data-demo-surface="inspector-agents">
-          <div class="agent-card"><span class="agent-avatar">A1</span><div><strong>Responsive auditor</strong><small>In corso · 00:38</small></div><span class="status-pulse"></span></div>
-          <div class="agent-card"><span class="agent-avatar">A2</span><div><strong>A11y reviewer</strong><small>Completato · 4 note</small></div><svg><use href="#i-check"/></svg></div>
-          <button class="secondary-btn full" data-demo-action="delegate">+ Delega subagent</button>
+          <p class="board-empty">Non ancora implementato — TALOS non delega a sotto-agenti oggi, un solo modello guida l'intero task.</p>
         </section>
       </div>
     </aside>
@@ -433,7 +356,7 @@ $ <span class="cursor"> </span></code></pre>
 
   <button class="harness-dialog-backdrop" id="harnessDialogBackdrop" type="button" aria-label="Chiudi finestra Codice" hidden></button>
 
-  <dialog class="command-dialog" id="commandDialog" aria-labelledby="commandDialogTitle" data-demo-surface="command-palette">
+  <dialog class="command-dialog" id="commandDialog" aria-labelledby="commandDialogTitle">
     <h2 class="sr-only" id="commandDialogTitle">Comandi TALOS</h2>
     <div class="command-search"><svg><use href="#i-search"/></svg><input id="commandSearch" aria-label="Cerca comando o azione" placeholder="Cerca comando o azione..." autocomplete="off"/><button class="command-close" id="closeCommand" type="button" aria-label="Chiudi comandi"><svg><use href="#i-x"/></svg></button></div>
     <div class="command-results" id="commandResults">
@@ -441,6 +364,8 @@ $ <span class="cursor"> </span></code></pre>
       <button data-command="review"><span><svg><use href="#i-diff"/></svg>Apri review</span><kbd>⌘R</kbd></button>
       <button data-command="terminal"><span><svg><use href="#i-terminal"/></svg>Apri terminale</span><kbd>⌘T</kbd></button>
       <button data-command="browser"><span><svg><use href="#i-web"/></svg>Apri browser</span><kbd>⌘B</kbd></button>
+      <!-- ⛔ 28/8, ledger Fase 1/resume-compact §3.B: 'resume' non era nemmeno un comando riconosciuto. Icona i-play: stessa del bottone topbar #resumeSessionBtn (FASE M, 29/8). -->
+      <button data-command="resume"><span><svg><use href="#i-play"/></svg>Riprendi sessione</span><kbd>R</kbd></button>
       <button data-command="fork"><span><svg><use href="#i-branch"/></svg>Fork sessione</span><kbd>F</kbd></button>
       <button data-command="compact"><span><svg><use href="#i-brain"/></svg>Compatta contesto</span><kbd>C</kbd></button>
       <button data-command="permissions"><span><svg><use href="#i-shield"/></svg>Permessi</span><kbd>P</kbd></button>

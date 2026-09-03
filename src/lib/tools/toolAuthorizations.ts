@@ -4,15 +4,23 @@ import {
     type TalosToolPermissions,
 } from '@/lib/tools/permissionTypes'
 import {
-    isTalosAgentToolId,
-    type TalosAgentToolId,
+    isTalosAuthorizableToolName,
 } from '@/lib/tools/toolControls'
 
 const SHA256 = /^[0-9a-f]{64}$/
 
+/*
+ * ⛔⛔⛔ Owner 2026-08-27 — `tool` e la chiave di `grants` erano
+ * `TalosAgentToolId` (l'unione statica dei built-in): un nome `dynamic:*`
+ * non può mai essere un membro di quell'unione per costruzione, quindi
+ * "Always allow" su un tool forgiato falliva SEMPRE. Allargato a `string`,
+ * validato a runtime da `isTalosAuthorizableToolName` (built-in O
+ * `dynamic:*`) invece che dal tipo — vedi il commento su quella funzione
+ * per il perché non si allarga l'enum stesso.
+ */
 export interface TalosToolAuthorizationGrantV1 {
     readonly schema_version: 1
-    readonly tool: TalosAgentToolId
+    readonly tool: string
     readonly actions: readonly TalosToolAction[]
     readonly scope: 'device'
     readonly granted_at: string
@@ -21,7 +29,7 @@ export interface TalosToolAuthorizationGrantV1 {
 export interface TalosToolAuthorizationGrantsV1 {
     readonly schema_version: 1
     readonly revision: number
-    readonly grants: Readonly<Partial<Record<TalosAgentToolId, TalosToolAuthorizationGrantV1>>>
+    readonly grants: Readonly<Partial<Record<string, TalosToolAuthorizationGrantV1>>>
 }
 
 export type TalosToolAuthorizationDecision =
@@ -123,7 +131,7 @@ function normalizeActions(value: unknown): TalosToolAction[] | null {
 }
 
 function freezeGrant(
-    tool: TalosAgentToolId,
+    tool: string,
     actions: readonly TalosToolAction[],
     grantedAt: string,
 ): TalosToolAuthorizationGrantV1 {
@@ -138,7 +146,7 @@ function freezeGrant(
 
 function freezeGrants(
     revision: number,
-    grants: Partial<Record<TalosAgentToolId, TalosToolAuthorizationGrantV1>>,
+    grants: Partial<Record<string, TalosToolAuthorizationGrantV1>>,
 ): TalosToolAuthorizationGrantsV1 {
     return Object.freeze({
         schema_version: 1,
@@ -162,9 +170,9 @@ export function parseTalosToolAuthorizationGrants(
     const rawGrants = recordOf(record.grants)
     if (!rawGrants) return freezeGrants(record.revision as number, {})
 
-    const grants: Partial<Record<TalosAgentToolId, TalosToolAuthorizationGrantV1>> = {}
+    const grants: Partial<Record<string, TalosToolAuthorizationGrantV1>> = {}
     for (const [key, raw] of Object.entries(rawGrants)) {
-        if (!isTalosAgentToolId(key)) continue
+        if (!isTalosAuthorizableToolName(key)) continue
         const grant = recordOf(raw)
         if (
             !grant
@@ -193,14 +201,14 @@ function requireRevision(
 
 export function applyTalosToolAuthorizationGrant(
     value: TalosToolAuthorizationGrantsV1,
-    tool: TalosAgentToolId,
+    tool: string,
     actionsValue: readonly TalosToolAction[],
     expectedRevision: number,
     grantedAt: string,
 ): TalosToolAuthorizationGrantsV1 {
     const current = parseTalosToolAuthorizationGrants(value)
     requireRevision(current, expectedRevision)
-    if (!isTalosAgentToolId(tool)) throw new Error('TALOS_TOOL_AUTHORIZATION_TOOL_INVALID')
+    if (!isTalosAuthorizableToolName(tool)) throw new Error('TALOS_TOOL_AUTHORIZATION_TOOL_INVALID')
     const actions = normalizeActions(actionsValue)
     if (!actions) throw new Error('TALOS_TOOL_AUTHORIZATION_ACTIONS_INVALID')
     if (!validTimestamp(grantedAt)) throw new Error('TALOS_TOOL_AUTHORIZATION_TIME_INVALID')
@@ -215,12 +223,12 @@ export function applyTalosToolAuthorizationGrant(
 
 export function revokeTalosToolAuthorizationGrant(
     value: TalosToolAuthorizationGrantsV1,
-    tool: TalosAgentToolId,
+    tool: string,
     expectedRevision: number,
 ): TalosToolAuthorizationGrantsV1 {
     const current = parseTalosToolAuthorizationGrants(value)
     requireRevision(current, expectedRevision)
-    if (!isTalosAgentToolId(tool)) throw new Error('TALOS_TOOL_AUTHORIZATION_TOOL_INVALID')
+    if (!isTalosAuthorizableToolName(tool)) throw new Error('TALOS_TOOL_AUTHORIZATION_TOOL_INVALID')
     if (!current.grants[tool]) return current
     if (current.revision >= Number.MAX_SAFE_INTEGER) {
         throw new Error('TALOS_TOOL_AUTHORIZATION_REVISION_INVALID')
@@ -387,7 +395,7 @@ export function resolveTalosToolAuthorization(input: {
         // “Always” is a pointer to the revocable Settings grant, not a second
         // immortal grant hidden inside a checkpoint. Removing the Settings
         // grant must take effect even while a continuation is queued.
-        const persistent = isTalosAgentToolId(input.tool)
+        const persistent = isTalosAuthorizableToolName(input.tool)
             ? parseTalosToolAuthorizationGrants(input.grants).grants[input.tool]
             : undefined
         if (
@@ -417,7 +425,7 @@ export function resolveTalosToolAuthorization(input: {
      */
     const rispettaIlSempre = !input.forceConfirmation || input.sempreConsentibile === true
     if (rispettaIlSempre && asked.length > 0) {
-        const grant = isTalosAgentToolId(input.tool)
+        const grant = isTalosAuthorizableToolName(input.tool)
             ? parseTalosToolAuthorizationGrants(input.grants).grants[input.tool]
             : undefined
         if (grant && asked.every((action) => grant.actions.includes(action))) {

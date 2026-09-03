@@ -707,6 +707,11 @@ dependencies {
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    // TalosArtifactActivity, 2026-08-27: prima arrivava solo in transitiva da
+    // @capacitor/android — dichiarata qui esplicitamente perché è la libreria
+    // che porta il Profilo/WebViewAssetLoader su cui si regge l'isolamento
+    // dell'HTML generato dal modello, non un dettaglio da lasciare implicito.
+    implementation "androidx.webkit:webkit:$androidxWebkitVersion"
     // TalosBiometricKeyPlugin: BiometricPrompt + CryptoObject, so the database
     // key's second wrapping is bound to biometrics in the hardware Keystore.
     implementation "androidx.biometric:biometric:1.1.0"

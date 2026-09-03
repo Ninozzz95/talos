@@ -2,6 +2,7 @@
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
 import TalosMobileComposerModelPicker from '@/components/chat/TalosMobileComposerModelPicker.vue'
 import TalosMobileEffortPicker from '@/components/chat/TalosMobileEffortPicker.vue'
+import { Check } from '@lucide/vue'
 import type {
     TalosMobileModelProfileView,
     TalosMobileRoutingProfileView,
@@ -13,6 +14,13 @@ import type { TalosMobileEffortLevel } from '@/lib/mobileEffort'
  * the reasoning controls (effort + extended thinking) in one organized sheet,
  * the same pattern as the "+" Add-to-chat drawer. Reuses the proven picker
  * components — this surface only re-homes them.
+ *
+ * ⭐⭐⭐ 2/9 — sezione "esecutore" opzionale (picker Planner, FASE K, piano
+ * §15.6): additiva, mai passata da ChatScreen.vue (`executorModelProfiles`
+ * assente → `showExecutorModel` resta falso → zero cambio per la chat
+ * regolare). Riusa lo STESSO `TalosMobileComposerModelPicker` del catalogo
+ * principale — stessa UX di ricerca, un secondo elenco invece di un
+ * controllo nuovo da imparare.
  */
 defineProps<{
     modelProfiles: TalosMobileModelProfileView[]
@@ -27,6 +35,9 @@ defineProps<{
     loadingRoutes?: boolean
     refreshingModels?: boolean
     discoveryProblems?: ReadonlyArray<{ message: string, detail?: string | null }>
+    showExecutorModel?: boolean
+    executorModelProfiles?: TalosMobileModelProfileView[]
+    selectedExecutorModelProfileId?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -37,6 +48,7 @@ const emit = defineEmits<{
     selectThinking: [enabled: boolean]
     refreshModels: []
     openModelLab: []
+    selectExecutorModelProfile: [profileId: string | null]
 }>()
 </script>
 
@@ -67,6 +79,34 @@ const emit = defineEmits<{
                 @select-effort="emit('selectEffort', $event)"
                 @select-thinking="emit('selectThinking', $event)"
                 @request-close="emit('close')"
+            />
+        </div>
+
+        <div v-if="showExecutorModel" data-testid="talos-executor-model-section" class="border-t border-[var(--talos-border)] pt-3">
+            <p class="px-1 pb-2 text-xs font-medium uppercase tracking-wide text-[var(--talos-muted)]">
+                {{ $t('chat.executorModel') }}
+            </p>
+            <p class="px-1 pb-2 text-xs text-[var(--talos-muted)]">
+                {{ $t('chat.executorModelHint') }}
+            </p>
+            <button
+                type="button"
+                data-testid="talos-executor-model-automatic"
+                class="talos-pressable mb-2 flex min-h-touch w-full items-center justify-between rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)]"
+                :aria-pressed="selectedExecutorModelProfileId === null"
+                @click="emit('selectExecutorModelProfile', null)"
+            >
+                <span>{{ $t('chat.executorModelAutomatic') }}</span>
+                <Check v-if="selectedExecutorModelProfileId === null" class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
+            </button>
+            <TalosMobileComposerModelPicker
+                :model-profiles="executorModelProfiles ?? []"
+                :selected-model-profile-id="selectedExecutorModelProfileId"
+                :loading-models="loadingModels"
+                :refreshing-models="refreshingModels"
+                @select-model-profile="emit('selectExecutorModelProfile', $event)"
+                @request-close="emit('close')"
+                @refresh-models="emit('refreshModels')"
             />
         </div>
     </TalosMobileComposerSheet>

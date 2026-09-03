@@ -123,6 +123,28 @@ describe('localized Vue chrome', () => {
         for (const file of strictEmitters) inspectTypeScript(file, true)
         inspectTypeScript('stores/chat.ts', false)
         inspectTypeScript('stores/chatController.ts', false)
+        /*
+         * ⛔ La sonda del kernel, iscritta il 2026-08-20 DOPO che questa
+         * guardia l'ha mancata. Il difetto: quattro righe del Doctor con
+         * `label:` scritta a mano in italiano, dentro una superficie che
+         * `Copia diagnostica` spedisce in un rapporto condivisibile.
+         *
+         * ⛔ La regola c'era ed era GIUSTA — `visibleProperties` contiene
+         * gia `label`, e in modo non-strict avrebbe preso tutte e quattro.
+         * Ha taciuto perche i .ts si ispezionano per ELENCO SCRITTO A MANO,
+         * mentre i .vue si ispezionano TUTTI, sempre, per ricorsione.
+         * Un file nuovo non entra mai in quell'elenco da solo.
+         *
+         * ⇒ Misurato prima di proporre di allargarla a tutto `src`:
+         * 465 file, e in modo non-strict **62 violazioni su 10 file** con
+         * la sola `label` (132 aggiungendo `title`, 210 con `message` e
+         * `description`). Non e un allargamento gratuito: la meta grossa
+         * e `description` degli attrezzi, che parla al MODELLO e deve
+         * restare inglese. La distinzione fra testo per la persona e testo
+         * per il modello non esiste ancora in questa guardia, ed e quella
+         * che va progettata prima di accendere lo scanner su tutto.
+         */
+        inspectTypeScript('services/kernelDoctor.ts', false)
 
         if (uncovered.length > 0) {
             throw new Error(

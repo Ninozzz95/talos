@@ -3,7 +3,7 @@ import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, r
 import { useTalosI18n } from '@/i18n'
 import {
     BookMarked, BookOpen, Check, CheckSquare, FlaskConical, StickyNote, Stethoscope, FileArchive, MessageSquareText,
-    Pencil, Trash2, X,
+    Pencil, Trash2, Wrench, X,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
@@ -76,9 +76,17 @@ const TOOL_DEFINITIONS: Array<{ key: string; route: TalosMobileRouteName; icon: 
 const HARNESS_TOOL_DEFINITION: { key: string; route: TalosMobileRouteName; icon: unknown } = {
     key: 'navigation.harness', route: 'harness', icon: FlaskConical,
 }
+// Tool Forge (27/8): stessa ricetta di Harness sopra — accodata, non dentro
+// TOOL_DEFINITIONS, così il test a sei voci di F2-RED-20 resta intatto. A
+// differenza di Harness non è debug-only: non c'è un plugin nativo da
+// verificare, quindi compare sempre.
+const TOOL_FORGE_TOOL_DEFINITION: { key: string; route: TalosMobileRouteName; icon: unknown } = {
+    key: 'navigation.toolForge', route: 'toolforge', icon: Wrench,
+}
 const tools = computed(() => {
     const base = TOOL_DEFINITIONS.map(tool => ({ ...tool, label: t(tool.key) }))
-    return harnessAvailable ? [...base, { ...HARNESS_TOOL_DEFINITION, label: t(HARNESS_TOOL_DEFINITION.key) }] : base
+    const withHarness = harnessAvailable ? [...base, { ...HARNESS_TOOL_DEFINITION, label: t(HARNESS_TOOL_DEFINITION.key) }] : base
+    return [...withHarness, { ...TOOL_FORGE_TOOL_DEFINITION, label: t(TOOL_FORGE_TOOL_DEFINITION.key) }]
 })
 
 const renameTarget = ref<TalosLocalChatSession | null>(null)

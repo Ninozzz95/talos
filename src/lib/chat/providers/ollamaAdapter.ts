@@ -7,6 +7,7 @@ import {
     malformedProviderResponse,
     normalizeHttpEndpoint,
     requireHttpSuccess,
+    sendWithProviderRetry,
 } from '@/lib/chat/providerErrors'
 
 const modelSchema = z.object({
@@ -138,13 +139,16 @@ export const ollamaAdapter: TalosMobileProviderAdapter = {
     },
     async complete(input, credential, transport) {
         const endpoint = normalizeHttpEndpoint('ollama', 'complete', credential.endpoint)
-        const response = await transport.request({
+        // DEBT-MOBILE-016: stesso ritenta-con-backoff degli altri adattatori
+        // — un server Ollama locale sotto carico può comunque rispondere
+        // 429/503, non solo i fornitori remoti.
+        const response = await sendWithProviderRetry(() => transport.request({
             method: 'POST',
             url: `${endpoint}/api/chat`,
             headers: { 'content-type': 'application/json' },
             data: ollamaCompletionData(input, false),
             ...requestTimeouts(credential.timeoutMs),
-        })
+        }))
         requireHttpSuccess({ provider: 'ollama', operation: 'complete', status: response.status, data: response.data })
         const parsed = completionSchema.safeParse(response.data)
         if (!parsed.success) throw malformedProviderResponse('ollama', 'complete', { received: response.data, issues: parsed.error.issues })

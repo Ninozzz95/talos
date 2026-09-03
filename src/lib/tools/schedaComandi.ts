@@ -123,6 +123,20 @@ export async function talosMandaFileDaScheda(
  * usarlo. È la regola già in vigore: la scheda porta il comando, non la parola
  * «fatto».
  */
+/**
+ * ⭐⭐⭐ L'ARTEFATTO SI APRE COL DITO — owner 2026-08-27, «creare artefatti
+ * HTML interattivi in chat, come fa ChatGPT: spirografi, simulazioni».
+ *
+ * ⛔ Non è un `import()` di un modulo TALOS: `TalosArtifactBridge.open`
+ * lancia `TalosArtifactActivity`, una Activity Android SEPARATA (WebView e
+ * profilo propri, mai il ponte Capacitor) — vedi il commento in testa a
+ * `TalosArtifactActivity.kt` per la catena intera, verificata sul Pad.
+ */
+export async function talosApriArtefattoDaScheda(id: string): Promise<boolean> {
+    const { TalosArtifactBridge } = await import('@/lib/device/artifactPlugin')
+    return TalosArtifactBridge.open({ id }).then((r) => r.opened === true, () => false)
+}
+
 export async function talosApriImpostazioniDaScheda(azione: string): Promise<boolean> {
     /*
      * ⛔ `forThisApp: false`: l'elenco dei servizi di accessibilità è UNO per il

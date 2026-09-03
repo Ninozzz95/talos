@@ -69,12 +69,74 @@ describe('composer drawer mode (F3-T4bis)', () => {
         expect(wrapper.find('[data-testid="talos-composer-drawer"]').exists()).toBe(true)
     })
 
+    /**
+     * ⛔⛔ Owner 2026-08-27, segnalato dal vivo: il drawer "+" aveva la SUA
+     * implementazione a bottoni per l'effort — mai passata al segmented
+     * slider (`TalosMobileEffortPicker`) che il drawer "Model & reasoning"
+     * usa dal refactor `b86bdd46`. Due superfici della stessa scelta con due
+     * linguaggi diversi. Questo prova che ora sono lo STESSO componente.
+     */
+    it('il drawer "+" usa lo stesso slider condiviso del drawer "Model & reasoning", non bottoni suoi', async () => {
+        const wrapper = mountComposer({ drawerMode: true })
+        await wrapper.get('[aria-label="Add to chat"]').trigger('click')
+        await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-composer-drawer"]').exists()).toBe(true))
+        expect(wrapper.find('[data-testid="talos-mobile-effort-picker"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-mobile-effort-slider"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-mobile-thinking-toggle"]').exists()).toBe(true)
+        // I vecchi bottoni non esistono più: un solo linguaggio, non due.
+        expect(wrapper.find('[data-testid="talos-drawer-thinking"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid^="talos-drawer-effort-"]').exists()).toBe(false)
+    })
+
     it('the model chip opens the dedicated model & reasoning drawer', async () => {
         const wrapper = mountComposer({ drawerMode: true })
         await wrapper.get('[data-testid="talos-composer-model-chip"]').trigger('click')
         await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-model-drawer"]').exists()).toBe(true))
         expect(wrapper.find('[data-testid="talos-mobile-composer-model-picker"]').exists()).toBe(true)
         expect(wrapper.find('[data-testid="talos-mobile-effort-picker"]').exists()).toBe(true)
+    })
+
+    /**
+     * ⭐⭐⭐ 2/9 — picker Planner (piano §15.6, K): la sezione "esecutore" è
+     * additiva e SPENTA per costruzione quando `showExecutorModel` non è
+     * passata — il caso di ChatScreen.vue/ogni altro chiamante esistente,
+     * mai toccato da questa feature.
+     */
+    it('EXECUTOR-MODEL-01 hides the executor section when the caller never asked for it (regular chat, unchanged)', async () => {
+        const wrapper = mountComposer({ drawerMode: true })
+        await wrapper.get('[data-testid="talos-composer-model-chip"]').trigger('click')
+        await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-model-drawer"]').exists()).toBe(true))
+        expect(wrapper.find('[data-testid="talos-executor-model-section"]').exists()).toBe(false)
+    })
+
+    it('EXECUTOR-MODEL-02 lets a caller that opts in pick an executor model independently of the main one', async () => {
+        const executorProfile: TalosMobileModelProfileView = {
+            id: 'profile-flash', provider: 'openrouter', model: 'z-ai/glm-4.7-flash', display_name: 'GLM 4.7 Flash',
+            status: 'healthy', has_secret: true, effort_levels: [], supports_thinking: false,
+            show_in_composer: true, capabilities: null, probe_ok: true,
+        }
+        const wrapper = mountComposer({
+            drawerMode: true,
+            showExecutorModel: true,
+            executorModelProfiles: [profile, executorProfile],
+            selectedExecutorModelProfileId: null,
+        })
+        await wrapper.get('[data-testid="talos-composer-model-chip"]').trigger('click')
+        await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-model-drawer"]').exists()).toBe(true))
+
+        const section = wrapper.get('[data-testid="talos-executor-model-section"]')
+        // "Automatico" is the honest default: checked, nothing chosen yet.
+        const automatic = section.get('[data-testid="talos-executor-model-automatic"]')
+        expect(automatic.attributes('aria-pressed')).toBe('true')
+
+        const executorRow = section.get(`[data-model-profile-id="${executorProfile.id}"]`)
+        await executorRow.trigger('click')
+        expect(wrapper.emitted('selectExecutorModelProfile')).toEqual([[executorProfile.id]])
+        // AL CONTRARIO: the MAIN model picker is untouched by that click — two independent choices, not one list feeding both.
+        expect(wrapper.emitted('selectModelProfile')).toBeUndefined()
+
+        await automatic.trigger('click')
+        expect(wrapper.emitted('selectExecutorModelProfile')).toEqual([[executorProfile.id], [null]])
     })
 
     it('P1-CTX-UI-04 opens one-turn Library controls from a compact source chip', async () => {

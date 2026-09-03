@@ -5,7 +5,19 @@
  * pulls in zod (for schema validation) and belongs in the lazy graph. Keeping
  * them apart is worth ~27 KB of initial JavaScript — measured, not assumed.
  */
-export type TalosToolAction = 'read' | 'write' | 'outbound'
+/**
+ * ⭐⭐⭐ `execute` è la quarta, ed è arrivata con l'esecuzione di codice vero.
+ *
+ * `npm test` **esegue codice arbitrario**, e non è né una lettura né una
+ * scrittura né una chiamata verso l'esterno: con tre parole sole non avevamo
+ * modo di dirlo. Un potere che il vocabolario non sa nominare è un potere che
+ * la persona non può governare.
+ *
+ * ⛔ La grammatica delle RISPOSTE non cambia e non cambierà: `allow / ask /
+ * deny`, sempre. Cambia il numero dei poteri, non la loro forma — è la regola
+ * G3, e regge.
+ */
+export type TalosToolAction = 'read' | 'write' | 'outbound' | 'execute'
 
 export type TalosToolPermission = 'allow' | 'ask' | 'deny'
 
@@ -30,6 +42,15 @@ export const TALOS_DEFAULT_TOOL_PERMISSIONS: TalosToolPermissions = {
     read: 'ask',
     write: 'ask',
     outbound: 'ask',
+    /**
+     * ⛔⛔ `ask`, e come DEFAULT — mai come scelta della persona.
+     *
+     * Chi ha installato l'app prima che questa parola esistesse non ha
+     * `execute` fra i valori salvati: `talosEffectiveToolPermissions` lo porta
+     * al default di oggi, e `tools_chosen` resta senza. ⇒ Nessuno si ritrova
+     * ad aver «deciso» qualcosa su cui non gli è mai stata posta la domanda.
+     */
+    execute: 'ask',
 }
 
 /** Anything unrecognised resolves to the SAFEST setting for that class. */
@@ -42,7 +63,44 @@ export function decideTalosToolPermission(
     return TALOS_DEFAULT_TOOL_PERMISSIONS[action]
 }
 
-export const TALOS_TOOL_ACTIONS: readonly TalosToolAction[] = ['read', 'write', 'outbound']
+/**
+ * Il vocabolario COMPLETO, e serve all'applicazione dei permessi.
+ *
+ * ⛔ Non è la lista che si mostra alla persona: quella si deriva dagli attrezzi
+ * che esistono davvero — vedi `talosAzioniGovernate`. Tenere qui la lista
+ * completa è ciò che permette a un valore mai scelto di essere normalizzato al
+ * default di oggi anche prima che un attrezzo lo usi.
+ */
+export const TALOS_TOOL_ACTIONS: readonly TalosToolAction[] = ['read', 'write', 'outbound', 'execute']
+
+/**
+ * ⭐⭐ LE AZIONI CHE SI GOVERNANO: quelle che almeno un attrezzo dichiara.
+ *
+ * ## ⛔ Perché non basta `TALOS_TOOL_ACTIONS`
+ *
+ * Il giorno in cui `execute` è entrata nel vocabolario, nessun attrezzo la
+ * dichiarava ancora. Mostrarla lo stesso avrebbe prodotto due difetti visibili
+ * — misurati, non temuti:
+ *
+ *   1. una quarta riga nella scheda dei permessi **senza icona e senza
+ *      traduzione**, per un potere che nessuno può esercitare;
+ *   2. `autonomiaGiaConcessa` — «ogni azione è `allow` e scelta» — sarebbe
+ *      diventata **falsa per chiunque l'avesse già concessa**, e lo schermo
+ *      avrebbe richiesto un permesso che la persona aveva già dato.
+ *
+ * ⇒ La scheda mostra i poteri che **esistono**, non quelli che il tipo sa
+ * scrivere. E il giorno che il primo attrezzo dichiara `execute`, la riga
+ * compare da sola — con la sua icona, la sua stringa e la sua domanda.
+ *
+ * ⛔ Nessuna dipendenza: le azioni dichiarate arrivano da fuori. Questo file
+ * resta nel grafo d'avvio e vale ~27 KB di JavaScript iniziale.
+ */
+export function talosAzioniGovernate(
+    dichiarate: Iterable<TalosToolAction>,
+): readonly TalosToolAction[] {
+    const viste = new Set<TalosToolAction>(dichiarate)
+    return TALOS_TOOL_ACTIONS.filter((azione) => viste.has(azione))
+}
 
 /**
  * Which actions the user has actually DECIDED, as opposed to inherited.
@@ -55,7 +113,7 @@ export function parseTalosChosenToolActions(value: unknown): readonly TalosToolA
     if (!Array.isArray(value)) return []
     const chosen: TalosToolAction[] = []
     for (const entry of value) {
-        if (entry !== 'read' && entry !== 'write' && entry !== 'outbound') continue
+        if (!TALOS_TOOL_ACTIONS.includes(entry as TalosToolAction)) continue
         if (!chosen.includes(entry)) chosen.push(entry)
     }
     return chosen

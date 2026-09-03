@@ -7,7 +7,7 @@ import {
     type TalosToolAuthorizationGrantsV1,
     type TalosToolAuthorizationRequestV1,
 } from '@/lib/tools/toolAuthorizations'
-import { isTalosAgentToolId, type TalosAgentToolId } from '@/lib/tools/toolControls'
+import { isTalosAuthorizableToolName } from '@/lib/tools/toolControls'
 import type { TalosToolAction } from '@/lib/tools/permissionTypes'
 import {
     cloneJsonObject,
@@ -47,7 +47,11 @@ export interface TalosToolAuthorizationPendingView {
     readonly session_id: string
     readonly session_title: string
     readonly model_profile_id: string | null
-    readonly tool: TalosAgentToolId
+    // ⛔ 2026-08-27: era `TalosAgentToolId` con un cast a valle e un commento
+    // che diceva "parseRequest ha già scartato i nomi fuori catalogo" — vero
+    // fino a Fase 8, falso da quando `parseRequest` accetta anche
+    // `dynamic:*`. Il tipo ora dice quello che il runtime porta davvero.
+    readonly tool: string
     readonly actions: readonly TalosToolAction[]
     readonly input: unknown
     readonly allow_persistent: boolean
@@ -55,7 +59,7 @@ export interface TalosToolAuthorizationPendingView {
 }
 
 export interface TalosToolAuthorizationRecoveryToolView {
-    readonly tool: TalosAgentToolId
+    readonly tool: string
     readonly actions: readonly TalosToolAction[]
 }
 
@@ -226,21 +230,41 @@ function parseRequest(value: unknown): TalosToolAuthorizationRequestV1 | null {
     ) {
         return null
     }
-    const grants = parseTalosToolAuthorizationGrants({
-        schema_version: 1,
-        revision: 0,
-        grants: {
-            [record.tool]: {
-                schema_version: 1,
-                tool: record.tool,
-                actions,
-                scope: 'device',
-                granted_at: record.created_at,
-            },
-        },
-    })
-    const tool = Object.keys(grants.grants)[0] as TalosAgentToolId | undefined
-    if (!tool || tool !== record.tool) return null
+    /*
+     * ⛔⛔⛔ Owner 2026-08-27, Fase 8 — trovato SUL DISPOSITIVO, non a
+     * tavolino: ogni richiesta di autorizzazione per un tool FORGIATO
+     * falliva qui, con `TALOS_TOOL_AUTHORIZATION_CHECKPOINT_INVALID`
+     * (motivo `request_invalid`) — anche per un tool a sola lettura, anche
+     * dopo aver già corretto `toolset.ts` e `chatController.ts`.
+     *
+     * La forma PRECEDENTE riusava `parseTalosToolAuthorizationGrants` (una
+     * funzione pensata per costruire l'INSIEME PERSISTENTE dei consensi
+     * "sempre", non per validare la struttura di UNA richiesta) come un
+     * modo indiretto di controllare "`record.tool` è un id riconosciuto".
+     * Quella funzione scarta ogni chiave che non sia un `TalosAgentToolId`
+     * statico (`toolAuthorizations.ts:167`) — un nome `dynamic:*` veniva
+     * silenziosamente rimosso dall'oggetto `grants`, `Object.keys(...)[0]`
+     * diventava `undefined`, e l'INTERA richiesta tornava `null`: non un
+     * rifiuto per "non abilitato", un rifiuto per "non esiste", anche per
+     * un tool installato, abilitato e appena chiamato dal modello.
+     *
+     * Il controllo vero che serve — "questo nome è un id di tool
+     * riconosciuto, statico O forgiato" — ora è diretto ed esplicito,
+     * senza il giro indiretto. Gli altri controlli che quel giro faceva
+     * (forma del grant, timestamp, azioni) sono già garantiti sopra da
+     * `parseActions(record.actions)` e `timestamp(record.created_at)`:
+     * l'UNICA cosa persa rimuovendo l'indiretto era il riconoscimento del
+     * nome, ora qui.
+     *
+     * ⛔ 2026-08-27, stesso giorno: il controllo combinato è ora
+     * `isTalosAuthorizableToolName` (in `toolControls.ts`) — la STESSA
+     * guardia che `applyTalosToolAuthorizationGrant`/
+     * `revokeTalosToolAuthorizationGrant` usano, così "questo nome è
+     * autorizzabile" ha UNA sola definizione, non due che devono restare
+     * d'accordo a mano.
+     */
+    if (!isTalosAuthorizableToolName(record.tool)) return null
+    const tool = record.tool
     try {
         // Validates I-JSON now; hydrate additionally verifies the digest.
         canonicalizeTalosToolAuthorizationInput(record.input)
@@ -403,8 +427,20 @@ export function createTalosToolAuthorizationCoordinator(deps: {
     repository: TalosChatRepository
     now?: () => string
     authorizations(): TalosToolAuthorizationGrantsV1
-    grant(tool: TalosAgentToolId, actions: readonly TalosToolAction[]): Promise<void>
+    grant(tool: string, actions: readonly TalosToolAction[]): Promise<void>
     onReady(checkpoint: TalosToolAuthorizationCheckpointV1): Promise<void> | void
+    /**
+     * ⭐⭐⭐ 6.4 — ASSENTE: comportamento invariato, nessuna chiamata. Presente
+     * (in produzione: `contaDecisioneReale` di `toolAuthorizationFriction.ts`):
+     * chiamata SENZA `await` dopo ogni decisione vera andata a buon fine, col
+     * suo errore inghiottito qui — un contatore diagnostico non deve MAI
+     * rallentare né poter far fallire una decisione di autorizzazione reale.
+     */
+    registraDecisioneReale?: (
+        tool: string,
+        decisione: Exclude<TalosToolAuthorizationDecision, 'pending'>,
+        quando: string,
+    ) => Promise<void>
 }): TalosToolAuthorizationCoordinator {
     const now = deps.now ?? (() => new Date().toISOString())
     const open = new Map<string, {
@@ -458,7 +494,7 @@ export function createTalosToolAuthorizationCoordinator(deps: {
                 session_title: checkpoint?.send_identity.sessionTitle ?? '',
                 model_profile_id: checkpoint?.send_identity.modelProfileId ?? null,
                 tools: (checkpoint?.requests ?? []).map((request) => ({
-                    tool: request.tool as TalosAgentToolId,
+                    tool: request.tool,
                     actions: [...request.actions],
                 })),
                 created_at: checkpoint?.created_at ?? activity.created_at,
@@ -647,7 +683,7 @@ export function createTalosToolAuthorizationCoordinator(deps: {
                     model_profile_id: checkpoint.send_identity.modelProfileId,
                     // parseRequest has already rejected tools outside the
                     // settings-controlled catalog; retain that narrow UI type.
-                    tool: request.tool as TalosAgentToolId,
+                    tool: request.tool,
                     actions: [...request.actions],
                     input: request.input,
                     allow_persistent: request.allow_persistent,
@@ -664,7 +700,7 @@ export function createTalosToolAuthorizationCoordinator(deps: {
                     model_profile_id: checkpoint.send_identity.modelProfileId,
                     tools: checkpoint.requests.map((request) => ({
                         // Checkpoint parsing has already rejected catalog-unknown tools.
-                        tool: request.tool as TalosAgentToolId,
+                        tool: request.tool,
                         actions: [...request.actions],
                     })),
                     created_at: checkpoint.created_at,
@@ -704,7 +740,7 @@ export function createTalosToolAuthorizationCoordinator(deps: {
                 let alsoAnswered: (request: typeof target) => boolean = (request) => request.id === requestId
                 if (decision === 'always_allow') {
                     if (!target.allow_persistent) return
-                    if (!isTalosAgentToolId(target.tool)) {
+                    if (!isTalosAuthorizableToolName(target.tool)) {
                         throw new Error('TALOS_TOOL_AUTHORIZATION_TOOL_INVALID')
                     }
                     await deps.grant(target.tool, target.actions)
@@ -733,6 +769,10 @@ export function createTalosToolAuthorizationCoordinator(deps: {
                 if (!checkpoint) throw new Error('TALOS_TOOL_AUTHORIZATION_CHECKPOINT_INVALID')
                 await persistCheckpoint(owner.activity, checkpoint)
                 result = true
+                // ⭐⭐⭐ 6.4 — vedi la doc su `deps.registraDecisioneReale` sopra:
+                // mai un `await`, mai un errore che risale a questa decisione.
+                void deps.registraDecisioneReale?.(target.tool, decision, decidedAt)
+                    .catch(() => { /* diagnostica: non deve mai rompere una decisione vera */ })
                 await announceReady(checkpoint)
             })
             mutationTail = operation.then(() => undefined, () => undefined)

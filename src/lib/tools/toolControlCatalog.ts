@@ -1,4 +1,4 @@
-import type { TalosToolAction } from '@/lib/tools/permissionTypes'
+import { talosAzioniGovernate, type TalosToolAction } from '@/lib/tools/permissionTypes'
 import type { TalosAgentToolId } from '@/lib/tools/toolControls'
 
 export type TalosAgentToolGroup = 'library' | 'personal' | 'web' | 'create' | 'models' | 'device'
@@ -110,6 +110,8 @@ export const TALOS_AGENT_TOOL_CONTROLS = Object.freeze([
     { id: 'document_create', group: 'create', actions: ['write'] },
     // Il prompt esce verso il provider: è trasmissione, anche se sembra creazione.
     { id: 'generate_image', group: 'create', actions: ['write','outbound'] },
+    // L'HTML gira isolato (TalosArtifactActivity, connect-src 'none'): mai trasmissione, verificato sul Pad.
+    { id: 'artifact_create', group: 'create', actions: ['write'] },
     // Esce dalla sandbox ma resta sul dispositivo. Canale obliquo noto: un file esportato può finire in una cartella sincronizzata — da rivedere se nasce la sincronizzazione.
     { id: 'library_export', group: 'library', actions: ['write','read'] },
     // Nel gruppo `library` e non in `personal`: chi toglie l'accesso alla
@@ -207,4 +209,35 @@ export const TALOS_AGENT_TOOL_CONTROLS = Object.freeze([
      */
     { id: 'calendar_read', group: 'personal', actions: ['read'] },
     { id: 'calendar_write', group: 'personal', actions: ['write'] },
+    // Crea un ARTEFATTO nuovo (un tool), non un contenuto per la persona —
+    // gruppo 'create' come document_create/generate_image (il pannello
+    // raggruppa per `group`, non per posizione nell'elenco: qui sta
+    // ALLA FINE per combaciare con l'ordine reale in `toolset.ts`, dove
+    // vive appena prima dei tool forgiati — l'ultimo innesto prima del
+    // Forge, coerente con "un utente finale crea un tool con questo".
+    { id: 'tool_create', group: 'create', actions: ['write'] },
 ] as const satisfies readonly TalosAgentToolControl[])
+
+/**
+ * ⭐⭐⭐ I POTERI CHE LA PERSONA PUO GOVERNARE OGGI — derivati, mai elencati.
+ *
+ * ## ⛔ Il difetto che questa costante impedisce, misurato il 2026-08-20
+ *
+ * Quando `execute` e entrata nel vocabolario per l'esecuzione di codice, tre
+ * schermate iteravano `TALOS_TOOL_ACTIONS` per rispondere alla domanda «hai
+ * gia concesso tutto?». Con una quarta parola nel vocabolario e nessun attrezzo
+ * che la dichiara, quelle tre rispondevano **no** a chi aveva gia concesso
+ * tutto — e gli avrebbero richiesto un permesso che aveva gia dato.
+ *
+ * ⇒ La domanda giusta non e «esistono altre parole?» ma «esistono altri
+ * POTERI?». Qui la risposta si calcola dal catalogo degli attrezzi, una volta
+ * sola, e le schermate la leggono invece di ricostruirla ognuna a modo suo.
+ *
+ * ⛔ E il giorno che il primo attrezzo dichiara `execute`, questa lista cresce
+ * DA SOLA: la riga compare nella scheda, l'autonomia torna incompleta — ed e
+ * corretto che torni incompleta, perche c'e davvero un potere nuovo da
+ * concedere.
+ */
+export const TALOS_AZIONI_GOVERNATE: readonly TalosToolAction[] = talosAzioniGovernate(
+    TALOS_AGENT_TOOL_CONTROLS.flatMap((controllo) => controllo.actions),
+)

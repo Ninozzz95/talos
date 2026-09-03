@@ -112,6 +112,25 @@ describe('tool activity labels', () => {
         expect(copia.title).not.toBe('attrezzo_inventato')
     })
 
+    /**
+     * ⛔⛔ Owner 2026-08-27, trovato dal vivo sul Pad: la guardia sopra
+     * riconosceva SOLO lo snake_case dei tool incorporati — non il formato
+     * del Tool Forge (`dynamic:` + slug kebab-case), arrivato dopo che questa
+     * guardia era stata scritta. `dynamic:summarize-note` è arrivato nudo
+     * sulla scheda di consenso reale, esattamente come `device_status` il
+     * 2026-08-08 — lo stesso difetto, una forma nuova che la guardia non
+     * conosceva ancora.
+     */
+    it('⛔ un tool forgiato (dynamic:...) non arriva nudo a schermo', () => {
+        const copia = talosToolConsentCopy(
+            { name: 'dynamic:summarize-note', title: 'dynamic:summarize-note', description: 'x' },
+            talosTestT('it'),
+        )
+        expect(copia.title).not.toContain('toolConsent.')
+        expect(copia.title).not.toBe('dynamic:summarize-note')
+        expect(copia.title).not.toContain('dynamic:')
+    })
+
     it('EVERY tool has a localized activity key too', () => {
         const missing = everyToolName().filter((name) => !(name in TALOS_TOOL_LABEL_KEYS))
         expect(missing, `no activity key for: ${missing.join(', ')}`).toEqual([])
@@ -212,6 +231,21 @@ describe('tool activity labels', () => {
     it('an unknown tool falls back to its name, not to nothing', () => {
         // A mystery row is worse than a technical one.
         expect(talosToolActivityLabel({ name: 'future_tool', detail: null })).toBe('future_tool')
+    })
+
+    /**
+     * ⛔⛔ Owner 2026-08-27, trovato dal vivo sul Pad: il badge "Fatto: …"
+     * dopo `close-with-note` mostrava `dynamic:close-with-note` — il nome
+     * di rete grezzo, prefisso incluso. Qui il ripiego non e' il generico
+     * "Uno strumento di TALOS" (quello e' per la scheda di consenso, dove
+     * la posta e' una firma): e' lo slug del Forge ripulito, cosi' due tool
+     * forgiati diversi nello stesso turno restano distinguibili.
+     */
+    it('un tool forgiato mostra lo slug ripulito, non "dynamic:" nudo', () => {
+        expect(talosToolActivityLabel({ name: 'dynamic:close-with-note', detail: null }))
+            .toBe('close with note')
+        expect(talosToolActivityLabel({ name: 'dynamic:summarize-note', detail: null }))
+            .toBe('summarize note')
     })
 
     it('says WHICH page is being read, which is the whole point', () => {

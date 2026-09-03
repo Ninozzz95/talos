@@ -566,7 +566,15 @@ function parseToolPermissions(value: unknown): TalosToolPermissions {
             ? candidate
             : TALOS_DEFAULT_TOOL_PERMISSIONS[key]
     }
-    return { read: read('read'), write: read('write'), outbound: read('outbound') }
+    /*
+     * ⛔ Si deriva dal vocabolario invece di elencare le chiavi a mano: il
+     * giorno in cui `execute` e' entrata, un letterale a tre voci avrebbe
+     * silenziosamente omesso il quarto potere — e un permesso assente vale
+     * quanto uno non chiesto.
+     */
+    return Object.fromEntries(
+        TALOS_TOOL_ACTIONS.map((azione) => [azione, read(azione)]),
+    ) as TalosToolPermissions
 }
 
 /**
@@ -1041,11 +1049,20 @@ export interface SettingsStore {
     /** Owner 2026-07-25: what the model may do without asking. */
     setToolPermissions(patch: Partial<TalosToolPermissions>): Promise<void>
     setAgentToolEnabled(tool: TalosAgentToolId, enabled: boolean): Promise<void>
+    /**
+     * ⛔ 2026-08-27: `tool` era `TalosAgentToolId` — un tool forgiato
+     * (`dynamic:*`) non può mai esserlo per costruzione, quindi "Consenti
+     * sempre" falliva sempre per un tool del Forge. Allargato a `string`,
+     * validato a runtime da `isTalosAuthorizableToolName` dentro
+     * `applyTalosToolAuthorizationGrant`/`revokeTalosToolAuthorizationGrant`
+     * — vedi il commento su quella funzione per il perché non si allarga
+     * l'enum `TalosAgentToolId` stesso.
+     */
     grantToolAuthorization(
-        tool: TalosAgentToolId,
+        tool: string,
         actions: readonly TalosToolAction[],
     ): Promise<void>
-    revokeToolAuthorization(tool: TalosAgentToolId): Promise<void>
+    revokeToolAuthorization(tool: string): Promise<void>
     setSearchPreferences(patch: Partial<TalosMobileSearchPreferences>): Promise<void>
     setResearchModels(patch: Partial<TalosResearchModelPreferences>): Promise<void>
     setTone(preset: TalosToneId): Promise<void>
@@ -1287,8 +1304,33 @@ export function useSettingsStore(): SettingsStore {
             }))
         },
         setToolPermissions(patch) {
-            // Touching a permission is choosing it. From here on the app must
-            // not revise it, whatever it is configured elsewhere.
+            /*
+             * Touching a permission is choosing it. From here on the app must
+             * not revise it, whatever it is configured elsewhere.
+             *
+             * ⛔⛔ MA SOLO SU CIO CHE LE E STATO MOSTRATO — e questa mezza riga
+             * e costata un difetto vero il 2026-08-20.
+             *
+             * Quando `execute` e entrata nel vocabolario, la scheda dei permessi
+             * continuava a emettere il record INTERO: `execute: 'ask'` finiva nel
+             * patch, e questo giro la marcava come **scelta della persona**. Ma
+             * quella riga non era nemmeno a schermo — nessun attrezzo dichiara
+             * ancora quel potere. ⇒ Una decisione registrata su una domanda mai
+             * posta, che e esattamente il difetto che `tools_chosen` esiste per
+             * impedire, commesso dal lato opposto.
+             *
+             * ⇒ «Toccare» vuol dire ESSERE NEL PATCH, e chi il patch lo
+             * costruisce e la schermata — che sa quali poteri ha davvero
+             * mostrato. Il filtro sta in `applica()` dentro
+             * `TalosToolPermissionsBoard.vue`, che emette solo i governati.
+             *
+             * ⛔ Sta LA e non qui per una ragione MISURATA: importare il
+             * catalogo degli attrezzi in questo file costa **4.241 byte** di
+             * grafo d'avvio e sfonda il tetto del pezzo iniziale — 612.073
+             * contro 609.000. La schermata il catalogo ce l'ha gia, e non paga
+             * niente. I VALORI intanto si salvano tutti: `execute` resta `ask`
+             * nei dati, e' solo la SCELTA che non si inventa.
+             */
             const chosen = [...state.tools_chosen]
             for (const action of TALOS_TOOL_ACTIONS) {
                 const value = patch?.[action]

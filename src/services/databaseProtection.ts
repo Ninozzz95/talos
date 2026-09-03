@@ -71,6 +71,26 @@ export function registerTalosSqliteRuntime(value: TalosSqliteRuntime | null): vo
     runtime = value
 }
 
+/**
+ * ⛔ Owner 2026-08-27, Tool Forge Fase 3: la metà mancante della funzione
+ * sopra. Il registro del Forge vive nello STESSO database cifrato della
+ * chat (`talos_forge_*` accanto a `talos_chat_*`/`talos_tasks`/...) e deve
+ * usare LA STESSA connessione — non crearne una seconda che il ciclo del
+ * lock (`relockTalosDatabase`) non conoscerebbe e non chiuderebbe, e che
+ * resterebbe quindi aperta o diventerebbe invalida in modi diversi da
+ * quella registrata. Ricerca 2026 (capacitor-community/sqlite): il
+ * plugin stesso incoraggia una connessione condivisa recuperata per nome
+ * database (`isConnection`/`retrieveConnection`, già usati da
+ * `capacitorSqliteRuntime.ts`), non una seconda indipendente — questo
+ * getter è come `forgeRegistryRepository.ts` la ottiene senza crearne
+ * un'altra. `null` finché `createProductionChatRepository()` non ha
+ * ancora girato: chi chiama deve fallire chiaramente, non far finta di
+ * niente.
+ */
+export function talosSqliteRuntime(): TalosSqliteRuntime | null {
+    return runtime
+}
+
 export interface TalosProtectionOutcome {
     /** True when a legacy database had to be rebuilt under a managed key. */
     migrated: boolean

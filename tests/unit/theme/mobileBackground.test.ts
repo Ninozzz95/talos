@@ -45,4 +45,11 @@ describe('TalosMobileBackground', () => {
         }))
         wrapper.unmount()
     })
+
+    it('pauses the renderer when the owning chat surface yields its frame budget', async () => {
+        const wrapper = shallowMount(TalosMobileBackground, { props: { paused: true } })
+        await nextTick()
+        expect(wrapper.findComponent({ name: 'TalosProceduralBackground' }).props('paused')).toBe(true)
+        wrapper.unmount()
+    })
 })

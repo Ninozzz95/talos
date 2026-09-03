@@ -103,7 +103,7 @@ function argomenti(step: TalosPlanStep): string {
                 />
                 <div class="min-w-0 flex-1">
                     <p class="text-2xs font-medium uppercase tracking-wide text-[var(--talos-muted)]">
-                        {{ $t('chat.authorizationFromChat', { title: sessionTitle }) }}
+                        {{ $t('chat.authorizationFromChat') }} {{ sessionTitle }}
                     </p>
                     <h2
                         id="talos-plan-title"

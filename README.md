@@ -73,6 +73,7 @@ TALOS can research, compare sources and present structured results without turni
 | **Memory** | Search, write, update and delete typed personal/project memory |
 | **Personal workspace** | Notes, tasks and calendar reads/writes |
 | **Creation** | Document creation and configured image generation |
+| **Coding agent (Codice)** | Real agent sessions on the phone: a sandboxed terminal on the device, workspace files, per-tool approvals, sub-agent delegation, automations and a review centre |
 | **Local models** | Discover, inspect, download and run GGUF models through native llama.cpp |
 | **Cloud / self-hosted models** | OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter and Ollama |
 | **Android control** | Device status, location, torch, media, vibration, volume, alarms, apps, screenshots, settings, speech, wallpaper, wake lock |
@@ -165,9 +166,44 @@ Speculative decoding, an NPU backend and per-phase thread counts remain measured
 
 ---
 
+# Codice: the agent runs on the phone
+
+Codice is the coding agent, and it is not a remote control for a computer
+somewhere else. Sessions open on the device, commands run in a sandboxed
+terminal on the device, and the files it reads and writes are the ones on the
+phone. No PC has to be awake for it to work.
+
+What a session gives you:
+
+- **A real terminal, sandboxed.** Commands execute on the device and their
+  output comes back into the conversation, with the command shown in plain
+  words before it runs.
+- **Sessions that survive.** Close the app, come back, and the session is
+  where you left it — including which model it was using and what it was
+  waiting for.
+- **Model and provider, per session.** Pick any OpenRouter model live, or
+  route to OpenAI, DeepSeek or Ollama directly. Anthropic and Gemini are
+  recognized and refused with an honest reason — not translated yet —
+  rather than pretending to work.
+- **Approvals per tool, not per session.** Reading a file and deleting one
+  are not the same decision, and the app does not treat them as one.
+- **Work you can read back.** Tool calls collapse into groups with a
+  per-file diff; long conversations are compacted, and you see it happen.
+- **Delegation.** A session can hand an isolated sub-task to a child agent
+  that starts with no context beyond the instruction it is given.
+
+⚠️ **Not yet:** a model running on the device cannot drive a Codice session.
+The on-device engine is reachable only from the app's web view while the
+agent kernel runs in a separate process; the bridge between them does not
+exist yet. Choosing a local model for Codice is refused with that reason,
+rather than failing halfway through an answer. Network providers are
+unaffected.
+
+---
+
 # The harness is the product
 
-TALOS currently exposes **69 typed tools**. With all available tools enabled, 68 definitions are offered to the model — image generation appears only when configured — weighing **45,116 bytes (~12,194 tokens)** per turn.
+TALOS currently exposes **69 typed tools**. With all available tools enabled, 68 definitions are offered to the model — image generation appears only when configured — weighing **51,827 bytes (~14,007 tokens)** per turn. Progressive disclosure keeps **4 tools, 1,868 bytes (~505 tokens)** in the prefix instead, which is 96% less in front of the model on every turn.
 
 You can reproduce the measurement:
 
@@ -215,7 +251,7 @@ When supported, TALOS uses native deferred loading. Otherwise, cloud and local m
 With progressive disclosure enabled:
 
 ```text
-45,116 bytes  (68 tools)
+51,827 bytes  (68 tools)
       ↓
  1,868 bytes  (4 tools)
 ```

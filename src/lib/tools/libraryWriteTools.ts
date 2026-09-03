@@ -77,6 +77,22 @@ export function createTalosLibraryWriteTools(
                 name: z.string().min(1).max(180)
                     .describe('The new name, including the extension if the file has one.'),
             }),
+            /**
+             * ⛔ Si confronta col nome NORMALIZZATO, non con quello chiesto.
+             *
+             * `run` passa a `rename` il nome ripulito dai separatori di percorso
+             * (`talosSafeLibraryName`): confrontare qui la stringa grezza
+             * boccerebbe ogni rinomina che conteneva una barra — cioe accuserebbe
+             * il tool di non aver fatto proprio la cosa che ha fatto bene.
+             */
+            async verify(input) {
+                const atteso = talosSafeLibraryName(input.name)
+                if (!atteso) return { held: true }
+                const adesso = await sources.describe(input.id)
+                if (!adesso) return { held: false, reason: 'that file is no longer in the Library' }
+                if (adesso.name !== atteso) return { held: false, reason: 'the file still has its old name' }
+                return { held: true }
+            },
             async run(input) {
                 const name = talosSafeLibraryName(input.name)
                 if (!name) {
@@ -154,6 +170,18 @@ export function createTalosLibraryWriteTools(
                 id: z.string().min(1).max(128)
                     .describe('The file id from library_list or library_search.'),
             }),
+            /**
+             * ⛔ La postcondizione di una cancellazione e un'ASSENZA, e un'assenza
+             * non si vede finche non la si cerca. `describe` la cerca, e costa
+             * una lettura sola — la stessa che `run` fa gia nel suo ramo di
+             * recupero, quindi non e un giro in piu: e lo stesso giro, chiesto
+             * anche quando le cose sono andate bene.
+             */
+            async verify(input) {
+                const resta = await sources.describe(input.id)
+                if (resta) return { held: false, reason: 'that file is still in the Library' }
+                return { held: true }
+            },
             async run(input) {
                 const before = await sources.describe(input.id)
                 if (!before) {

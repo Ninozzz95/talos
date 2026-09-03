@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
+    TALOS_DEFAULT_TOOL_PERMISSIONS,
     TALOS_TOOL_ACTIONS,
     talosEffectiveToolPermissions,
 } from '@/lib/tools/permissionTypes'
@@ -38,7 +39,7 @@ describe('⛔ il sì all\'autonomia non evapora', () => {
             stored: { read: 'allow', write: 'allow', outbound: 'allow' },
             chosen: [],
         })
-        expect(senzaScelta).toEqual({ read: 'ask', write: 'ask', outbound: 'ask' })
+        expect(senzaScelta).toEqual(TALOS_DEFAULT_TOOL_PERMISSIONS)
 
         const conScelta = talosEffectiveToolPermissions({
             stored: { read: 'allow', write: 'allow', outbound: 'allow' },
@@ -47,15 +48,25 @@ describe('⛔ il sì all\'autonomia non evapora', () => {
         expect(conScelta).toEqual({ read: 'allow', write: 'allow', outbound: 'allow' })
     })
 
-    it('la modale scrive i TRE permessi, e passa da setToolPermissions', () => {
+    it('la modale scrive i permessi GOVERNATI, e passa da setToolPermissions', () => {
         const schermata = leggi('src/screens/PrivilegeScreen.vue')
 
         // ⛔ `setToolPermissions` registra la scelta da solo — è scritto nel suo
         // commento: «toccare un permesso è sceglierlo». Passare di lì è ciò che
         // impedisce al consenso di evaporare al riavvio.
-        expect(schermata).toContain(
-            "impostazioni.setToolPermissions({ read: 'allow', write: 'allow', outbound: 'allow' })",
-        )
+        expect(schermata).toContain('impostazioni.setToolPermissions(')
+        /*
+         * ⛔⛔ E li DERIVA, invece di elencarli.
+         *
+         * Fino al 2026-08-20 questa riga pretendeva il testo esatto
+         * `{ read: 'allow', write: 'allow', outbound: 'allow' }`. Un elenco
+         * scritto a mano lascia fuori in silenzio ogni potere aggiunto dopo — e
+         * quel giorno ne e stato aggiunto uno, `execute`. La prova ora difende
+         * la PROPRIETA (si concede cio che esiste) invece della sua forma di
+         * oggi, che e la ragione per cui era rossa.
+         */
+        expect(schermata).toContain('TALOS_AZIONI_GOVERNATE.map((azione) => [azione,')
+        expect(schermata).not.toMatch(/setToolPermissions\(\{\s*read:/)
         // E l'ordine: prima si scrive il consenso, POI si accende la parola.
         expect(schermata).toMatch(
             /setToolPermissions\([\s\S]{0,120}?\n\s*parola\.value = await talosAccendiLaParola\(\)/,

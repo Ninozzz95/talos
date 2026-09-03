@@ -13,4 +13,5 @@
     -->
     <string name="talos_occhio_nome">TALOS — controllo del telefono</string>
     <string name="talos_occhio_descrizione">Legge lo schermo per capire l’app aperta e controllarla quando glielo chiedi. Non attiva scorciatoie o pulsanti di accessibilità.</string>
+    <string name="talos_artifact_unsupported">La WebView di questo dispositivo non può isolare questo contenuto in sicurezza, quindi non verrà mostrato.</string>
 </resources>

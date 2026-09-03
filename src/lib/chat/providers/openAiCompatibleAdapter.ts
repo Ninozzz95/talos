@@ -29,6 +29,7 @@ import {
     normalizeHttpEndpoint,
     requireHttpSuccess,
     requireProviderApiKey,
+    sendWithProviderRetry,
 } from '@/lib/chat/providerErrors'
 import { talosNumericUsage } from '@/lib/chat/providers/usage'
 
@@ -432,13 +433,16 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
              * proprio che il loro corpo non cambi.
              */
             if (config.provider === 'openai') {
-                const response = await transport.request({
+                // DEBT-MOBILE-016: un 429/408/5xx si ritenta con backoff (onora
+                // Retry-After se il fornitore lo manda) invece di lanciare al
+                // primo colpo — vedi la doc sopra `sendWithProviderRetry`.
+                const response = await sendWithProviderRetry(() => transport.request({
                     method: 'POST',
                     url: `${baseUrl}/responses`,
                     headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
                     data: responsesCompletionData(input, false),
                     ...requestTimeouts(credential),
-                })
+                }))
                 requireHttpSuccess({ provider: 'openai', operation: 'complete', status: response.status, data: response.data })
                 const read = talosReadOpenAiResponse(response.data)
                 // Un turno che chiama un tool ha legittimamente zero testo: la
@@ -475,48 +479,60 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
                 data: payload,
                 ...requestTimeouts(credential),
             })
-            let response = await send(compatibleCompletionData(config, input, false))
             /**
-             * Si impara dal rifiuto invece di portarsi dietro un elenco.
-             *
-             * Owner 2026-08-03, con uno screenshot: `gpt-5.6-luna` rispondeva
-             * 400 a «Ciaoo», perche' TALOS offre i suoi tool a ogni messaggio e
-             * quel modello non li accetta insieme al ragionamento. Un elenco
-             * cablato invecchierebbe dentro l'APK e sbaglierebbe sul prossimo
-             * modello; il provider invece lo dice, e lo dice in modo
-             * riconoscibile. Un solo nuovo tentativo, e il modello resta
-             * segnato per il resto della sessione.
+             * DEBT-MOBILE-016: tutta la risoluzione qui sotto (il tentativo
+             * base, più i due auto-correttivi già esistenti) diventa UN
+             * `send()` solo agli occhi di `sendWithProviderRetry` — un 429/
+             * 408/5xx la rifà da capo con backoff (Retry-After onorato se
+             * c'è); un 400/401/402/404 esce al primo giro come sempre, ed è
+             * lì che i due rami sotto continuano a fare il loro lavoro.
              */
-            if (talosOpenAiRejectsToolsWithReasoning(response.status, response.data)) {
-                talosRememberReasoningConflict(input.model.id)
-                response = await send(compatibleCompletionData(config, input, false))
+            const resolveResponse = async () => {
+                let response = await send(compatibleCompletionData(config, input, false))
+                /**
+                 * Si impara dal rifiuto invece di portarsi dietro un elenco.
+                 *
+                 * Owner 2026-08-03, con uno screenshot: `gpt-5.6-luna` rispondeva
+                 * 400 a «Ciaoo», perche' TALOS offre i suoi tool a ogni messaggio e
+                 * quel modello non li accetta insieme al ragionamento. Un elenco
+                 * cablato invecchierebbe dentro l'APK e sbaglierebbe sul prossimo
+                 * modello; il provider invece lo dice, e lo dice in modo
+                 * riconoscibile. Un solo nuovo tentativo, e il modello resta
+                 * segnato per il resto della sessione.
+                 */
+                if (talosOpenAiRejectsToolsWithReasoning(response.status, response.data)) {
+                    talosRememberReasoningConflict(input.model.id)
+                    response = await send(compatibleCompletionData(config, input, false))
+                }
+                /*
+                 * ⛔⛔ IL RIPIEGO SUL CREDITO ESISTEVA E COPRIVA UNA STRADA SOLA.
+                 *
+                 * `conRipiegoSulCredito`, scritto il 2026-08-10, vive nel ramo in
+                 * STREAMING. Questo ramo — la chiamata secca — non l'ha mai avuto,
+                 * e chi passa di qui riceve il 402 in faccia.
+                 *
+                 * MISURATO sul Pad il 2026-08-13, dal pilota dello schermo:
+                 *
+                 * > `pilota: chiedi-in-errore TalosMobileProviderError: This request
+                 * > requires more credits, or fewer max_tokens. You requested up to
+                 * > 65536 tokens, but can only afford 5020`
+                 *
+                 * — e la corsa moriva a `passi=0 ms=175`, cioe' prima di guardare
+                 * lo schermo anche una sola volta. Da fuori sembrava che il modello
+                 * non capisse il compito; in realta' non era mai stato interrogato.
+                 *
+                 * ⇒ Stessa cura, stessa funzione, un solo ritentativo: il rifiuto
+                 * porta il numero, e il numero diventa il tetto. Il primo tentativo
+                 * non costa token — il 402 e' un controllo di budget e cade prima
+                 * della generazione.
+                 */
+                const tettoDalRifiuto = talosTettoDaiCrediti(JSON.stringify(response.data ?? ''))
+                if (tettoDalRifiuto !== null) {
+                    response = await send(compatibleCompletionData(config, input, false, tettoDalRifiuto))
+                }
+                return response
             }
-            /*
-             * ⛔⛔ IL RIPIEGO SUL CREDITO ESISTEVA E COPRIVA UNA STRADA SOLA.
-             *
-             * `conRipiegoSulCredito`, scritto il 2026-08-10, vive nel ramo in
-             * STREAMING. Questo ramo — la chiamata secca — non l'ha mai avuto,
-             * e chi passa di qui riceve il 402 in faccia.
-             *
-             * MISURATO sul Pad il 2026-08-13, dal pilota dello schermo:
-             *
-             * > `pilota: chiedi-in-errore TalosMobileProviderError: This request
-             * > requires more credits, or fewer max_tokens. You requested up to
-             * > 65536 tokens, but can only afford 5020`
-             *
-             * — e la corsa moriva a `passi=0 ms=175`, cioe' prima di guardare
-             * lo schermo anche una sola volta. Da fuori sembrava che il modello
-             * non capisse il compito; in realta' non era mai stato interrogato.
-             *
-             * ⇒ Stessa cura, stessa funzione, un solo ritentativo: il rifiuto
-             * porta il numero, e il numero diventa il tetto. Il primo tentativo
-             * non costa token — il 402 e' un controllo di budget e cade prima
-             * della generazione.
-             */
-            const tettoDalRifiuto = talosTettoDaiCrediti(JSON.stringify(response.data ?? ''))
-            if (tettoDalRifiuto !== null) {
-                response = await send(compatibleCompletionData(config, input, false, tettoDalRifiuto))
-            }
+            const response = await sendWithProviderRetry(resolveResponse)
             requireHttpSuccess({ provider: config.provider, operation: 'complete', status: response.status, data: response.data })
             const parsed = completionSchema.safeParse(response.data)
             if (!parsed.success) throw malformedProviderResponse(config.provider, 'complete', { received: response.data, issues: parsed.error.issues })

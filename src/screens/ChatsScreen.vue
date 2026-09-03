@@ -26,6 +26,7 @@ import { talosDaIntitolare } from '@/stores/chat'
 import { archivedChatSessions, orderChatSessions } from '@/lib/chatListGestures'
 import { talosRelativeTime } from '@/lib/relativeTime'
 import { talosChatDateBuckets } from '@/lib/chat/chatDateBuckets'
+import { chatRowBucketTitle, chatRowWhenInBucket } from '@/lib/chat/chatRowTime'
 import { talosLightImpact } from '@/services/haptics'
 import { TALOS_DANGER_ACTION_CLASS } from '@/lib/dangerAction'
 
@@ -41,7 +42,17 @@ const { t, locale } = useTalosI18n()
 const controller = useChatController()
 
 const query = ref('')
-const ordered = computed(() => orderChatSessions(controller.chat.history))
+/**
+ * ⛔ Codice sessions live in this SAME table (`metadata.codice === true`,
+ * see `chatController.ts`'s `createCodiceSession`) — they have their OWN
+ * list (HarnessScreen.vue) and must never leak into Chat's. Filtered here,
+ * not in the shared `chat.history` getter: that getter has consumers
+ * beyond this one screen, and this exclusion is Chat-display-specific.
+ */
+function notCodice<T extends { metadata?: Record<string, unknown> }>(sessions: readonly T[]): T[] {
+    return sessions.filter((session) => session.metadata?.codice !== true)
+}
+const ordered = computed(() => orderChatSessions(notCodice(controller.chat.history)))
 const filtered = computed(() => {
     const needle = query.value.trim().toLowerCase()
     if (!needle) return ordered.value
@@ -49,7 +60,7 @@ const filtered = computed(() => {
 })
 const archived = computed(() => {
     const needle = query.value.trim().toLowerCase()
-    const entries = archivedChatSessions(controller.chat.history)
+    const entries = archivedChatSessions(notCodice(controller.chat.history))
     if (!needle) return entries
     return entries.filter((session) => sessionTitle(session).toLocaleLowerCase().includes(needle))
 })
@@ -114,24 +125,11 @@ const fasce = computed(() => talosChatDateBuckets(
  * dove il titolo è un mese o «precedenti 30 giorni», serve la data intera.
  */
 function quandoInFascia(bucket: string, iso: string | null | undefined): string {
-    if (!iso) return ''
-    const data = new Date(iso)
-    if (Number.isNaN(data.getTime())) return updatedAt(iso)
-    const soloOra = bucket === 'today' || bucket === 'yesterday'
-    return new Intl.DateTimeFormat(locale.value, soloOra
-        ? { hour: '2-digit', minute: '2-digit' }
-        : { day: 'numeric', month: 'short' }).format(data)
+    return chatRowWhenInBucket(bucket, iso, locale.value, updatedAt)
 }
 
 function titoloFascia(gruppo: { bucket: string, monthKey: string | null }): string {
-    if (!gruppo.monthKey) return t(`chats.fascia.${gruppo.bucket}`)
-    const [anno, mese] = gruppo.monthKey.split('-')
-    const data = new Date(Number(anno), Number(mese) - 1, 1)
-    const scritto = new Intl.DateTimeFormat(locale.value, {
-        month: 'long',
-        ...(data.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }),
-    }).format(data)
-    return scritto.charAt(0).toUpperCase() + scritto.slice(1)
+    return chatRowBucketTitle(gruppo, locale.value, (bucket) => t(`chats.fascia.${bucket}`))
 }
 function cleanupDescription(plan: TalosSessionCleanupPlan): string {
     const parts: string[] = []

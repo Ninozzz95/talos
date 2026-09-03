@@ -46,7 +46,6 @@ import { useTalosMobileToasts } from '@/stores/toasts'
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
 import { clampTalosTabletSidebarWidth, talosTabletLeavesChatsRoute, talosTabletLeavesHarnessListRoute, talosTabletSidebarEffectiveWidth } from '@/lib/tabletLayout'
-import { HARNESS_DEFAULT_SESSION_ID } from '@/lib/harnessDefaultSession'
 import { useLauncherIconController } from '@/services/launcherIcon'
 import { parseTalosSessionLibraryContextPolicy } from '@/lib/chat/libraryPolicy'
 const router = useRouter()
@@ -61,6 +60,10 @@ const toastsStore = useTalosMobileToasts()
 const launcherIcon = useLauncherIconController()
 const disabled = talosDisabledSubsystems()
 const uiFallback = disabled.has('ui')
+// The animated workspace backdrop is useful on the empty hero, but it is pure
+// competition once a real thread is visible: chat scrolling must not share a
+// frame budget with a decorative canvas. Keep the empty-chat presentation.
+const chatHasMessages = computed(() => chatController.chat.messages.length > 0)
 
 // The static theme paints immediately. Procedural scenes and renderers are an
 // optional post-entry enhancement, kept outside the first-chat bundle.
@@ -792,6 +795,7 @@ const SHEET_TITLE_KEY: Record<TalosMobileRouteName, string> = {
     // memory/memory-item, tasks/task-item, notes/note-item do.
     harness: 'navigation.harness',
     'harness-session': 'navigation.harness',
+    toolforge: 'navigation.toolForge',
     settings: 'stations.settingsCenterTitle',
     'settings-models': 'models.labTitle',
     'settings-models-providers': 'models.providerAccessTitle',
@@ -834,12 +838,30 @@ watch(
         // Stessa domanda, per Harness: la barra laterale ora mostra il suo
         // elenco (vedi tabletRailVariant) quando la stazione è Harness, quindi
         // la rotta-elenco nuda nel riquadro principale la duplicherebbe.
-        else if (talosTabletLeavesHarnessListRoute(isTablet, rotta)) {
-            void router.replace({ name: 'harness-session', params: { id: HARNESS_DEFAULT_SESSION_ID } })
-        }
+        else if (talosTabletLeavesHarnessListRoute(isTablet, rotta)) void openDefaultHarnessSession()
     },
     { immediate: true },
 )
+
+/**
+ * 28/8 — le sessioni Codice sono vere ora: niente più un id demo fisso
+ * (`HARNESS_DEFAULT_SESSION_ID`, ritirato insieme all'array che descriveva).
+ * Il riquadro principale del tablet apre la sessione più di recente
+ * aggiornata se ce n'è una, altrimenti la pagina di bozza ('new') — mai un
+ * id inventato che potrebbe non esistere (nessuna sessione ancora creata,
+ * o una cancellata).
+ *
+ * ⛔ `import()` dinamico e non statico in cima al file: la stessa trappola
+ * già misurata qui sopra per `HARNESS_DEFAULT_SESSION_ID` (peso eager
+ * trascinato dentro App.vue) — `codiceSessions.ts` importa il repository di
+ * produzione, e questa funzione gira SOLO dentro un `watch`, mai
+ * all'avvio: nessun motivo per pagarla nel chunk iniziale.
+ */
+async function openDefaultHarnessSession(): Promise<void> {
+    const { listCodiceSessions } = await import('@/lib/harness/codiceSessions')
+    const sessions = await listCodiceSessions()
+    void router.replace({ name: 'harness-session', params: { id: sessions[0]?.id ?? 'new' } })
+}
 
 async function navigate(
     name: TalosMobileRouteName,
@@ -1122,7 +1144,12 @@ onBeforeUnmount(async () => {
         />
 
         <!-- Procedural motion background (motion-v6) — behind the content. -->
-        <TalosMobileBackground v-if="!uiFallback" class="z-0" aria-hidden="true" />
+        <TalosMobileBackground
+            v-if="!uiFallback"
+            class="z-0"
+            aria-hidden="true"
+            :paused="activeRoute === 'chat' && chatHasMessages"
+        />
 
         <!-- Fail-closed fallback: no upstream shadcn/reka components. -->
         <template v-if="uiFallback">
@@ -1359,6 +1386,26 @@ onBeforeUnmount(async () => {
                     <main class="relative flex-1 overflow-hidden">
                         <ChatScreen ref="chatScreen" @export="exportSheetOpen = true" />
                     </main>
+
+                    <!--
+                        ⛔ Owner 2026-08-27: stessa richiesta del velo in testa
+                        (`TalosMobileImmersiveChrome.vue`) ma per la striscia
+                        GEMELLA in fondo — la vera barra di sistema del
+                        telefono (`env(safe-area-inset-bottom)`, il gesto di
+                        navigazione), non il compositore. Il compositore è
+                        già opaco al 95% per suo conto; questo velo copre
+                        solo lo spazio fra il suo bordo tondo e il bordo vero
+                        dello schermo, dove prima non c'era NESSUNA sfumatura
+                        — la richiesta era di scurirne una esistente, ma qui
+                        non esisteva ancora. Stessa grammatica del gemello in
+                        alto: tre fermate, MAI blur, `pointer-events-none`
+                        cosi' il tocco passa al compositore sotto.
+                    -->
+                    <div
+                        aria-hidden="true"
+                        data-testid="talos-mobile-bottom-veil"
+                        class="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-[calc(env(safe-area-inset-bottom)+2rem)] bg-gradient-to-t from-[var(--talos-background)]/92 via-[var(--talos-background)]/60 to-transparent"
+                    />
                 </div>
             </div>
 

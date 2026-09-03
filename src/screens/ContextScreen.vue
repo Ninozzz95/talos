@@ -10,6 +10,7 @@ import {
     ArrowDownUp, Download, EllipsisVertical, ExternalLink, LayoutGrid, List, LoaderCircle, Paperclip, RefreshCw, Search, Trash2, Upload, X,
     Check,
     CheckSquare,
+    Eye,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
@@ -303,6 +304,45 @@ async function openFile(file: TalosLocalVaultFile): Promise<void> {
     docText.value = file.extracted_text
     const full = await attachments.hydrateText(file.id)
     if (docView.value?.id === file.id && full !== null) docText.value = full
+    /*
+     * ⛔⛔⛔ Owner 2026-08-27 — «non è possibile renderizzare HTML quando ci
+     * clicchi nella Libreria invece del codice?». Il testo grezzo resta
+     * comunque hydratato sopra (`docView`/`docText`): se il rendering
+     * fallisce (dispositivo senza MULTI_PROFILE/MULTI_PROCESS, fail-closed
+     * — vedi TalosArtifactActivity.kt), la persona non resta davanti a un
+     * riquadro vuoto, vede il codice — lo stesso schermo che vedeva prima
+     * di questa modifica.
+     */
+    if (file.media_type === 'text/html') void renderArtifactFile(file)
+}
+
+/**
+ * ⛔⛔⛔ Owner 2026-08-27 — riusa la STESSA WebView isolata della scheda
+ * `artefatto` in chat (`TalosArtifactActivity`, verificata sul Pad a non
+ * avere accesso né al ponte Capacitor né alla rete) — non un secondo
+ * renderer HTML. Funziona per QUALUNQUE file HTML della Libreria, non
+ * solo quelli creati da `artifact_create`: l'isolamento non dipende da
+ * chi ha scritto il file, dipende da come lo si esegue.
+ *
+ * ⛔ `create` + `open`, non una terza chiamata nativa dedicata: l'HTML
+ * della Libreria diventa un artefatto EFFIMERO (un nuovo id in
+ * `TalosArtifactStore`, non collegato al file della Libreria) — coerente
+ * con «l'HTML non viaggia mai nella scheda né nei metadati», qui vale
+ * anche per il file della Libreria: resta nel suo posto, la WebView
+ * isolata ne legge solo una copia usa-e-getta.
+ */
+async function renderArtifactFile(file: TalosLocalVaultFile): Promise<void> {
+    const html = docView.value?.id === file.id ? docText.value : await attachments.hydrateText(file.id)
+    if (!html) return
+    try {
+        const { TalosArtifactBridge } = await import('@/lib/device/artifactPlugin')
+        const titolo = file.display_name.replace(/\.html?$/i, '')
+        const { id } = await TalosArtifactBridge.create({ title: titolo, html })
+        const { opened } = await TalosArtifactBridge.open({ id })
+        if (!opened) openError.value = t('library.viewAsPageFailed', { name: file.display_name })
+    } catch {
+        openError.value = t('library.viewAsPageFailed', { name: file.display_name })
+    }
 }
 // Product review 2026-07-25: Android Back inside a fullscreen preview used to
 // fall through to the station-top action — it left the station entirely instead
@@ -1054,6 +1094,15 @@ onMounted(async () => {
                 <FileText class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
                 <span class="min-w-0 flex-1 truncate text-sm font-semibold">{{ docView.display_name }}</span>
                 <button v-if="docSourceUrl" type="button" data-testid="talos-library-doc-open-source" :aria-label="t('library.openOriginalPage')" class="talos-pressable flex size-12 items-center justify-center rounded-full" @click="openLink(docSourceUrl)"><ExternalLink class="size-5 text-[var(--talos-accent)]" aria-hidden="true" /></button>
+                <!--
+                    ⛔ Owner 2026-08-27 — «un pulsante vedi codice per
+                    switchare»: qui è il contrario, «vedi come pagina», perché
+                    aprendo il file questo schermo (il codice) è già quello che
+                    resta sotto se il rendering fallisce o la persona torna
+                    indietro dalla WebView isolata — il codice non ha bisogno
+                    di un pulsante per mostrarsi, ce l'ha già davanti.
+                -->
+                <button v-if="docView.media_type === 'text/html'" type="button" data-testid="talos-library-doc-view-as-page" :aria-label="t('library.viewAsPage')" class="talos-pressable flex size-12 items-center justify-center rounded-full" @click="renderArtifactFile(docView)"><Eye class="size-5 text-[var(--talos-accent)]" aria-hidden="true" /></button>
                 <button v-if="docView.status === 'available' && !isSelected(docView.id)" type="button" :aria-label="t('library.attachNamedToMessage', { name: docView.display_name })" :disabled="actionBusy" class="talos-pressable flex size-12 items-center justify-center rounded-full" @click="attachFromOverlay(docView)"><Paperclip class="size-5 text-[var(--talos-accent)]" aria-hidden="true" /></button>
                 <button
                     v-if="docView.status === 'available'"

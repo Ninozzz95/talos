@@ -8,6 +8,8 @@ export interface TalosSmoothRevealDeps {
     paced?: () => boolean
     /** True once the answer is complete, so the remainder is handed over. */
     settled?: () => boolean
+    /** Inactive animation modes must not own a frame loop. */
+    enabled?: () => boolean
 }
 
 /**
@@ -36,6 +38,7 @@ export function useTalosSmoothReveal(
     const raf = deps.raf ?? ((callback) => requestAnimationFrame(callback))
     const cancel = deps.cancel ?? ((handle) => cancelAnimationFrame(handle))
     const paced = deps.paced ?? (() => true)
+    const enabled = deps.enabled ?? (() => true)
 
     const revealed = ref('')
     let engine = createTalosSmoothReveal({ paced: paced() })
@@ -49,6 +52,7 @@ export function useTalosSmoothReveal(
 
     function frame(timestamp: number): void {
         handle = null
+        if (!enabled()) return
         // Arrivals are stamped with the SAME clock as the ticks. Reading
         // `performance.now()` for one and the frame timestamp for the other
         // mixed two time origins: on a device they happen to share one, so it
@@ -65,10 +69,15 @@ export function useTalosSmoothReveal(
     }
 
     function pump(): void {
+        if (!enabled()) return
         if (handle === null) handle = raf(frame)
     }
 
     watch(source, (text) => {
+        if (!enabled()) {
+            stop()
+            return
+        }
         if (!text) {
             stop()
             engine = createTalosSmoothReveal({ paced: paced() })
@@ -79,11 +88,20 @@ export function useTalosSmoothReveal(
         pump()
     }, { immediate: true })
 
+    watch(enabled, (active) => {
+        if (!active) {
+            stop()
+            return
+        }
+        if (source.value) pump()
+    }, { immediate: true })
+
     watch(() => deps.settled?.() ?? false, (settled) => {
         // The answer is done: hand over the remainder in one go rather than
         // letting the buffer trickle after the model has stopped. A UI still
         // typing when the work is finished reads as a hang.
         if (!settled) return
+        if (!enabled()) return
         stop()
         revealed.value = engine.finish()
     })

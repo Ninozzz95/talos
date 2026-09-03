@@ -8,10 +8,10 @@ import { TALOS_SWITCH_THUMB_CLASS, TALOS_SWITCH_TRACK_CLASS } from '@/lib/switch
  * quiet action rows. Loaded lazily by the composer only in drawer mode.
  */
 import {
-    Brain, Camera as CameraIcon, Database, FlaskConical, Globe2, Images, Paperclip, Sparkles,
+    Camera as CameraIcon, Database, FlaskConical, Globe2, Images, Paperclip, Sparkles,
 } from '@lucide/vue'
-import { useTalosI18n } from '@/i18n'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
+import TalosMobileEffortPicker from '@/components/chat/TalosMobileEffortPicker.vue'
 import type { TalosMobileEffortLevel } from '@/lib/mobileEffort'
 
 const props = defineProps<{
@@ -39,7 +39,6 @@ const emit = defineEmits<{
     enhancePrompt: []
 }>()
 
-const { t } = useTalosI18n()
 function single(
     action: 'attach' | 'takePhoto' | 'pickPhotos' | 'openContext' | 'openModelLab' | 'enhancePrompt',
 ): void {
@@ -47,11 +46,6 @@ function single(
     emit('close')
 }
 
-const realEfforts = () => props.effortLevels.filter((level) => level !== 'off')
-function effortLabel(level: string): string {
-    const key = `chat.effort${level.charAt(0).toUpperCase()}${level.slice(1)}`
-    return t(key)
-}
 </script>
 
 <template>
@@ -147,44 +141,25 @@ function effortLabel(level: string): string {
                     </span>
                 </SwitchRoot>
 
-                <SwitchRoot
-                    v-if="supportsThinking"
-                    data-testid="talos-drawer-thinking"
-                    :model-value="thinking"
-                    class="talos-pressable flex min-h-13 w-full items-center gap-3 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 px-3 text-left"
-                    @update:model-value="emit('selectThinking', $event)"
-                >
-                    <span class="flex size-9 items-center justify-center rounded-full bg-[var(--talos-active)]">
-                        <Brain class="size-4" aria-hidden="true" />
-                    </span>
-                    <span class="min-w-0 flex-1 text-sm">{{ $t('chat.extendedThinking') }}</span>
-                    <!-- `data-state` a mano: reka lo mette sulla RIGA, che qui e'
-                         il SwitchRoot, non su questo binario. Senza,
-                         il pomello si muove e il binario resta spento. -->
-                    <span :class="TALOS_SWITCH_TRACK_CLASS" :data-state="thinking ? 'checked' : 'unchecked'" aria-hidden="true">
-                        <SwitchThumb :class="TALOS_SWITCH_THUMB_CLASS" />
-                    </span>
-                </SwitchRoot>
-
-                <div v-if="realEfforts().length" class="rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3">
-                    <p class="text-xs font-medium uppercase tracking-wide text-[var(--talos-muted)]">{{ $t('chat.reasoningEffort') }}</p>
-                    <div class="mt-2 flex gap-1" role="radiogroup" :aria-label="$t('chat.reasoningEffort')">
-                        <button
-                            v-for="level in effortLevels"
-                            :key="level"
-                            type="button"
-                            role="radio"
-                            :aria-checked="level === selectedEffort"
-                            :data-testid="`talos-drawer-effort-${level}`"
-                            class="talos-pressable min-h-10 flex-1 rounded-full text-xs font-medium capitalize transition-colors duration-150"
-                            :class="level === selectedEffort
-                                ? 'bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))]'
-                                : 'text-[var(--talos-muted)] hover:bg-[var(--talos-active)]'"
-                            @click="emit('selectEffort', level as never)"
-                        >
-                            {{ effortLabel(level) }}
-                        </button>
-                    </div>
+                <!--
+                    ⛔⛔ Owner 2026-08-27: questo drawer aveva la SUA implementazione
+                    dell'effort — bottoni, mai passata al segmented slider che
+                    `TalosMobileEffortPicker` porta nel drawer "Model & reasoning"
+                    dal refactor `b86bdd46`. Due superfici della stessa scelta con
+                    due linguaggi diversi. Stesso componente, stessi prop/eventi —
+                    è un drop-in replacement per costruzione (vedi il commento in
+                    testa a `TalosMobileEffortPicker.vue`).
+                -->
+                <div v-if="effortLevels.length || supportsThinking" class="rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3">
+                    <TalosMobileEffortPicker
+                        :effort-levels="effortLevels"
+                        :selected-effort="selectedEffort"
+                        :supports-thinking="supportsThinking"
+                        :thinking="thinking"
+                        @select-effort="emit('selectEffort', $event)"
+                        @select-thinking="emit('selectThinking', $event)"
+                        @request-close="emit('close')"
+                    />
                 </div>
 
                 <!-- F4-#20: never a mute disabled row — the tap explains itself. -->

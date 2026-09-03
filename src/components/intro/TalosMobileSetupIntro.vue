@@ -5,7 +5,7 @@ import { ArrowLeft, Check, ChevronDown, ShieldCheck } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileSettingsLanguagePanel from '@/components/talos/settings/TalosMobileSettingsLanguagePanel.vue'
 import { TALOS_SETUP_STEPS, talosSetupProgress, type TalosSetupStepId } from '@/lib/onboarding/setupProgress'
-import { TALOS_TOOL_ACTIONS } from '@/lib/tools/permissionTypes'
+import { TALOS_AZIONI_GOVERNATE } from '@/lib/tools/toolControlCatalog'
 import { talosBackgroundExtraSteps } from '@/lib/permissions/permissionRows'
 import { readTalosDeviceState, requestTalosBatteryExemption } from '@/services/devicePermissions'
 import { TALOS_INTRO_LANGUAGE_PAGE_ENABLED } from '@/lib/localizationPolicy'
@@ -83,7 +83,12 @@ function onVisible(): void {
  * va registrata come tale, altrimenti chi sceglie la prudenza non finirebbe mai
  * questo passo.
  */
-const autonomyChosen = computed(() => TALOS_TOOL_ACTIONS
+/*
+ * ⛔ Sui poteri GOVERNATI, non sul vocabolario: una parola nuova che nessun
+ * attrezzo dichiara non deve far tornare incompleto un passo gia fatto. Vedi
+ * `TALOS_AZIONI_GOVERNATE`.
+ */
+const autonomyChosen = computed(() => TALOS_AZIONI_GOVERNATE
     .every((action) => settings.state.tools_chosen.includes(action)))
 
 const progress = computed(() => talosSetupProgress({
@@ -292,7 +297,7 @@ async function next(): Promise<void> {
                  * l'owner ha chiesto, e spegnere una capacità che la persona
                  * potrebbe aver acceso apposta sarebbe una decisione mia.
                  */
-                const tutteSempre = (['read', 'write', 'outbound'] as const)
+                const tutteSempre = TALOS_AZIONI_GOVERNATE
                     .every((azione) => toolPermissions.value[azione] === 'allow')
                 if (tutteSempre) {
                     await settings.setShell({ library_context_enabled: true })

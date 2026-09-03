@@ -43,6 +43,7 @@
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, openSync } from 'node:fs'
+import { pathToFileURL } from 'node:url'
 import { LOCALIZZA, spiega } from './deviceLocator.mjs'
 
 /*
@@ -55,8 +56,11 @@ import { LOCALIZZA, spiega } from './deviceLocator.mjs'
  * ⇒ Si guarda dove l'SDK si mette davvero: la variabile che esporta lui, poi le
  * cartelle predefinite per sistema, poi il PATH. Chi ha un'installazione fuori
  * dall'ordinario passa `TALOS_ADB` e non tocca il codice.
+ *
+ * ⛔ Esportata (piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 2):
+ * `avvia-harness-reverse.mjs` la riusa invece di duplicarla.
  */
-function trovaAdb() {
+export function trovaAdb() {
     if (process.env.TALOS_ADB) return process.env.TALOS_ADB
     const casa = process.env.ANDROID_HOME ?? process.env.ANDROID_SDK_ROOT
     const eseguibile = process.platform === 'win32' ? 'adb.exe' : 'adb'
@@ -289,7 +293,16 @@ async function principale() {
   node scripts/device.mjs shot nome`)
 }
 
-principale().catch((errore) => {
-    console.error(String(errore.message ?? errore))
-    process.exit(1)
-})
+/*
+ * ⛔ `trovaAdb` ora è esportata (Fase 2, `avvia-harness-reverse.mjs`): senza
+ * questa guardia, il solo `import { trovaAdb } from './device.mjs'` da
+ * un altro script rilancerebbe QUESTO CLI con l'argv di chi importa — un
+ * effetto collaterale silenzioso, mai voluto. Invariato per chi lancia
+ * `node scripts/device.mjs ...` direttamente: la guardia è vera solo lì.
+ */
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+    principale().catch((errore) => {
+        console.error(String(errore.message ?? errore))
+        process.exit(1)
+    })
+}

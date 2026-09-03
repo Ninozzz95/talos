@@ -95,16 +95,24 @@ describe('the one thing the owner copies and pastes back', () => {
         // site, and one future `String(error)` carrying an Authorization header
         // must not become a copy-pasteable key. A diagnostics export is the most
         // natural way for a secret to leave an app.
+        //
+        // ⛔ 03/9 — il valore qui sotto e' DELIBERATAMENTE impossibile (tutti
+        // zeri e la parola `fixture`), e deve restarlo. Quello di prima aveva la
+        // forma esatta di una chiave DeepSeek vera — `sk-` piu' 32 esadecimali —
+        // e in un repository che diventa pubblico un dubbio del genere non si
+        // lascia aperto: nessuno, leggendo, puo' sapere se sia mai stata reale.
+        // La lunghezza e' la stessa, quindi questo test prova esattamente cio'
+        // che provava prima.
         const report = buildTalosDiagnosticsReport({
             ...INPUT,
             issues: [{
                 at: '2026-07-26T18:00:00.000Z',
                 tag: 'TALOS_HTTP',
-                detail: 'failed with Authorization: Bearer sk-c4b228e688274d32bfee7bb122eda57a',
+                detail: 'failed with Authorization: Bearer sk-00000000000000000000000000fixtur',
             }],
         })
         const detail = report.issues[0]!.detail
-        expect(detail).not.toContain('sk-c4b228e688274d32bfee7bb122eda57a')
+        expect(detail).not.toContain('sk-00000000000000000000000000fixtur')
         expect(detail).toContain('[redacted]')
     })
 

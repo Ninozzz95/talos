@@ -544,7 +544,107 @@ import { resolve } from 'node:path'
  * `harnessDefaultSession.ts`, mai importata insieme all'array. Misurato
  * dopo: 613.751 — dentro il tetto attuale, tetto INVARIATO.
  */
-const DEFAULT_MAXIMUM_BYTES = 614_000
+/*
+ * ⛔ 614.000 → 615.000, il 2026-08-27, trovato NON mentre si aggiungeva una
+ * funzione ma mentre si testava dal vivo un difetto UI di Tool Forge:
+ * `npm run build` non era mai stato rilanciato dopo le Fasi 6-8 (Tool Forge
+ * reale: stazione, innesto, attivazione) — misurato 617.506, 3.506 byte
+ * sopra un tetto mai riverificato dal 24/8 (le due rotte Harness).
+ *
+ * ⛔ Non e' un buco che si e' aperto oggi: e' un cancello che nessuno ha
+ * riguardato per tre giorni di lavoro reale. Verificato PRIMA di alzare,
+ * secondo l'ordine di sempre:
+ *
+ *   1. peso vero — cercato UNA fuga specifica (il codice del Forge stesso
+ *      dentro il chunk eager) e non c'e': zero occorrenze di
+ *      `dynamicToolIdFromName`/`createInstalledDynamicTools`/
+ *      `FORGE_MODEL_UNAVAILABLE` nel chunk d'ingresso — il confine dietro
+ *      `toolset.ts` regge.
+ *   2. spostare nel pigro — gia' cosi': `ToolForgeScreen.vue` e' dietro
+ *      `import()` in `mobileRoutes.ts`, come ogni altra rotta di questo
+ *      file.
+ *   3. mai accorciare un contratto — non c'entra: nessuna descrizione, nessun
+ *      prompt, nessuna guardia qui dentro.
+ *
+ * Quello che RESTA, e non si sposta: la voce «Tool Forge» nella barra
+ * laterale (`TalosMobileSidebar.vue`) e nel titolo di rotta
+ * (`App.vue:SHEET_TITLE_KEY`) — la stessa forma gia' pagata per Ricerca,
+ * Impostazioni e le due rotte Harness — piu' l'attivazione vera dentro
+ * `chatController.ts`/`toolset.ts` (il controllo `dynamicToolIdFromName`
+ * che decide se un tool forgiato e' visibile al modello): senza quella riga
+ * un tool forgiato non parte mai, e questo E' il cancello che Fase 8
+ * doveva accendere.
+ *
+ * ⛔ Non ho rifatto la misura «in N forme» che le voci precedenti mostrano:
+ * qui il peso e' gia' nella forma minima di tre feature reali distinte
+ * (Fase 6 rotta+voce, Fase 8 attivazione), non una sbavatura di una singola
+ * riga da limare.
+ *
+ * ⛔ Primo tentativo, 615.000: ANCORA rosso — 617.526, cioe' la mia prima
+ * stima (mille byte) era sotto la misura vera di 2.526. Rialzato a 618.000,
+ * non al minimo esatto: e' la stessa regola gia' scritta piu' volte in
+ * questo file — un margine di poche decine o centinaia di byte non e' un
+ * margine, e' una trappola sotto la prossima riga.
+ *
+ * ⛔⛔⛔ 2026-08-27 — `artifact_create`, il tool degli artefatti HTML
+ * interattivi in chat: 618.023, ROSSO per 23 byte. Verificato PRIMA di
+ * alzare, non assunto — cercato nel chunk vero (`grep -c "artifact_create"
+ * dist/assets/index-*.js`) e trovate ESATTAMENTE le 4 occorrenze attese:
+ * `TALOS_TOOL_LABELS`, `TALOS_TOOL_LABEL_KEYS`, `TALOS_TOOL_ICONS`,
+ * `TALOS_DEFAULT_AGENT_TOOL_ENABLED` — gli stessi quattro catalogi eager che
+ * hanno spinto il tetto ogni volta finora (vedi `tool_create` sopra). Non
+ * codice del Forge ne' dell'Activity nativa: tre stringhe/chiavi corte per
+ * un tool reale, la stessa fuga strutturale che questo file gia' documenta
+ * come non spostabile — quei catalogi servono PRIMA che qualunque tool
+ * giri, per mostrare l'attivita' nella lista messaggi. Rialzato a 620.000,
+ * non al minimo esatto: stesso margine di poche centinaia di byte gia'
+ * praticato sopra, non una trappola sotto la prossima riga.
+ */
+// Owner 2026-09-01: 620.000 → 620.500 after measuring the chat restore
+// batching and frame scheduler. The resulting entry is 620.325 bytes; the
+// 175-byte margin is intentional and the dynamic-boundary checks above remain
+// the same. This is a tripwire adjustment for a measured performance fix, not
+// permission to move message rendering or provider runtimes into the entry.
+// Owner 2026-09-01: 620.500 → 621.500 after the second measured chat-jank
+// pass. The entry is 621.051 bytes: +726 from the previously recorded 620.325.
+// That delta is the eager glue required to stop the decorative canvas for a
+// non-empty chat, coalesce native scroll events to one handler per frame, and
+// memoize the large message-row subtree. Provider, Markdown and motion renderer
+// implementations remain behind their existing dynamic boundaries.
+/*
+ * ⛔ 621.500 → 622.500, il 2026-09-02, per il picker Planner (piano
+ * §15.6, K — decisione kernel fusione selettiva): l'esecutore economico
+ * opzionale sul composer di Codice (`talosLavora` lo supporta gia' da
+ * 6.1, mancava solo la scelta dal vivo).
+ *
+ * Misurato: 621.553, 53 byte sopra tetto — +502 dai 621.051 registrati
+ * sopra. Verificato PRIMA di alzare, l'ordine di sempre:
+ *
+ *   1. peso vero — non c'e' da togliere: i tre nuovi prop
+ *      (`showExecutorModel`/`executorModelProfiles`/
+ *      `selectedExecutorModelProfileId`) e il nuovo emit
+ *      (`selectExecutorModelProfile`) su `TalosMobileComposer.vue` sono
+ *      gia' la forma minima del contratto — nessuno e' ornamento,
+ *      ognuno e' cio' che la schermata Codice deve poter passare giu'.
+ *      `showExecutorModel` non si deduce da `executorModelProfiles.length`
+ *      per risparmiare un prop: lo farebbe SPARIRE mentre il catalogo
+ *      carica ancora (lista vuota, "Automatico" resterebbe comunque
+ *      scelta valida) — esattamente l'azzoppare vietato dalla regola
+ *      qui sopra, non una forma piu' snella a parita' di cosa dice.
+ *   2. spostare nel pigro — gia' cosi': la sezione "esecutore" vive nel
+ *      template di `TalosMobileModelEffortDrawer.vue`, montato da
+ *      `TalosMobileComposer.vue` via `defineAsyncComponent` da PRIMA di
+ *      questa feature (drawer "Model & reasoning", F4-#26) — il peso
+ *      misurato qui e' SOLO il gancio sul componente eager (i tre prop
+ *      + l'emit), il disegno vero resta dietro il confine dinamico
+ *      esistente, invariato.
+ *   3. mai accorciare un contratto — non c'entra: nessuna descrizione,
+ *      nessun prompt, nessuna guardia toccata qui.
+ *
+ * ⇒ 622.500 e non 621.600: cento byte di margine sono la stessa trappola
+ * gia' descritta piu' volte in questo file. Mille lascia margine vero.
+ */
+const DEFAULT_MAXIMUM_BYTES = 622_500
 const DEFAULT_MAXIMUM_CSS_BYTES = 220_000
 const DYNAMIC_BOUNDARIES = [
     {

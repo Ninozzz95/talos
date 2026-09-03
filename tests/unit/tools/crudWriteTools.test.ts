@@ -213,3 +213,57 @@ describe('libreria: rinominare e togliere', () => {
         expect(esito.evidence).toMatchObject({ verified_after_error: true })
     })
 })
+
+/*
+ * ⭐⭐⭐ LA POSTCONDIZIONE SULLA LIBRERIA — A5.
+ *
+ * `run` gia si verifica nel ramo del GUASTO («se e andata comunque, dillo»).
+ * `verify` copre il verso opposto, che mancava: un `run` che dice di si e non
+ * ha lasciato traccia. Peggiore dei due, perche nessuno va a controllare.
+ */
+describe('la postcondizione: un «fatto» che non regge si DEGRADA', () => {
+    it('⭐ library_rename: se il nome e cambiato davvero, la verifica regge', async () => {
+        const strumenti = libreria({ describe: vi.fn(async () => ({ id: 'f1', name: 'bilancio 2026.xlsx' })) })
+        const rinomina = tool(strumenti as never, 'library_rename')
+        const input = { id: 'f1', name: 'bilancio 2026.xlsx' } as never
+        expect(await rinomina.verify!(input, null, CONTESTO)).toEqual({ held: true })
+    })
+
+    it('⛔⛔ library_rename: se il file ha ancora il nome VECCHIO, verify boccia', async () => {
+        const strumenti = libreria()   // `describe` continua a rispondere «bilancio.xlsx»
+        const rinomina = tool(strumenti as never, 'library_rename')
+        const input = { id: 'f1', name: 'bilancio 2026.xlsx' } as never
+        const verdetto = await rinomina.verify!(input, null, CONTESTO)
+        expect(verdetto.held).toBe(false)
+    })
+
+    /*
+     * ⛔ Il nome si confronta NORMALIZZATO. `run` toglie i separatori di
+     * percorso prima di rinominare: confrontare la stringa grezza accuserebbe
+     * il tool di non aver fatto proprio la cosa che ha fatto bene.
+     */
+    it('⛔ library_rename: una barra nel nome chiesto NON fa fallire la verifica', async () => {
+        const strumenti = libreria({ describe: vi.fn(async () => ({ id: 'f1', name: 'a b.xlsx' })) })
+        const rinomina = tool(strumenti as never, 'library_rename')
+        const verdetto = await rinomina.verify!({ id: 'f1', name: 'a/b.xlsx' } as never, null, CONTESTO)
+        expect(verdetto.held).toBe(true)
+    })
+
+    it('⭐ library_delete: se il file non c e piu, la verifica regge', async () => {
+        const strumenti = libreria({ describe: vi.fn(async () => null) })
+        const cancella = tool(strumenti as never, 'library_delete')
+        expect(await cancella.verify!({ id: 'f1' } as never, null, CONTESTO)).toEqual({ held: true })
+    })
+
+    /*
+     * ⛔ Il caso peggiore del banco: il modello dice «cancellato» e il file e
+     * ancora li. Un'assenza non si vede finche non la si cerca.
+     */
+    it('⛔⛔ library_delete: se il file e ancora li, verify boccia', async () => {
+        const strumenti = libreria()   // `describe` lo trova ancora
+        const cancella = tool(strumenti as never, 'library_delete')
+        const verdetto = await cancella.verify!({ id: 'f1' } as never, null, CONTESTO)
+        expect(verdetto.held).toBe(false)
+    })
+})
+

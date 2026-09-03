@@ -7,6 +7,7 @@ import {
     malformedProviderResponse,
     requireHttpSuccess,
     requireProviderApiKey,
+    sendWithProviderRetry,
 } from '@/lib/chat/providerErrors'
 
 const modelSchema = z.object({
@@ -166,13 +167,16 @@ export const geminiAdapter: TalosMobileProviderAdapter = {
     async complete(input, credential, transport) {
         const apiKey = requireProviderApiKey('gemini', 'complete', credential)
         const data = geminiCompletionData(input)
-        const response = await transport.request({
+        // DEBT-MOBILE-016: un 429/408/5xx si ritenta con backoff (Retry-After
+        // onorato se il fornitore lo manda) prima di lanciare — vedi la doc
+        // sopra `sendWithProviderRetry`.
+        const response = await sendWithProviderRetry(() => transport.request({
             method: 'POST',
             url: `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.model.id)}:generateContent`,
             headers: { 'x-goog-api-key': apiKey, 'content-type': 'application/json' },
             data,
             ...requestTimeouts(credential.timeoutMs),
-        })
+        }))
         requireHttpSuccess({ provider: 'gemini', operation: 'complete', status: response.status, data: response.data })
         const parsed = completionSchema.safeParse(response.data)
         if (!parsed.success) throw malformedProviderResponse('gemini', 'complete', { received: response.data, issues: parsed.error.issues })

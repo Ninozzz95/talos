@@ -21,6 +21,9 @@ vi.mock('@/i18n', () => ({
             'chat.cardWhichFile': 'Quale file?',
             'chat.cardSent': 'Inviato',
             'chat.cardNotSent': 'NON inviato',
+            'chat.cardSaveToLibrary': 'Salva nella Libreria',
+            'chat.cardSavedToLibrary': 'Salvato nella Libreria',
+            'chat.cardSaveFailed': 'Non è stato possibile salvarlo',
         }[chiave] ?? chiave),
     }),
 }))
@@ -56,10 +59,15 @@ const comandi = {
     apri: async (_c: string, _v: Record<string, string>, _p: string): Promise<boolean> => true,
     impostazioni: async (_azione: string): Promise<boolean> => true,
     mandaFile: async (_id: string, _dove: Record<string, string>): Promise<boolean> => true,
+    // ⛔ owner 2026-08-27, artefatto HTML: TalosArtifactActivity può
+    // rifiutarsi di aprirsi (dispositivo senza MULTI_PROFILE/MULTI_PROCESS,
+    // fail-closed) — un finto SEMPRE-vero non proverebbe mai quel ramo.
+    apriArtefatto: async (_id: string): Promise<boolean> => true,
     commutati: [] as Array<[string, boolean]>,
     aperti: [] as Array<[string, Record<string, string>, string]>,
     schermate: [] as string[],
     fileMandati: [] as Array<[string, Record<string, string>]>,
+    artefattiAperti: [] as string[],
 }
 
 vi.mock('@/lib/tools/schedaComandi', () => ({
@@ -79,6 +87,10 @@ vi.mock('@/lib/tools/schedaComandi', () => ({
         comandi.fileMandati.push([id, dove])
         return comandi.mandaFile(id, dove)
     },
+    talosApriArtefattoDaScheda: async (id: string) => {
+        comandi.artefattiAperti.push(id)
+        return comandi.apriArtefatto(id)
+    },
 }))
 
 /*
@@ -87,8 +99,15 @@ vi.mock('@/lib/tools/schedaComandi', () => ({
  * chat già usa per gli allegati.
  */
 const hydrateText = vi.hoisted(() => vi.fn())
+/*
+ * ⛔ owner 2026-08-27, artefatto HTML: `saveArtifactToLibrary` è la stessa
+ * famiglia di `hydrateText` sopra — un finto controllabile per-test, non
+ * la vera implementazione (che tocca `TalosArtifactBridge` e la Libreria
+ * vera, provate sul Pad separatamente).
+ */
+const saveArtifactToLibrary = vi.hoisted(() => vi.fn())
 vi.mock('@/stores/chatController', () => ({
-    useChatController: () => ({ attachments: { hydrateText } }),
+    useChatController: () => ({ attachments: { hydrateText }, saveArtifactToLibrary }),
 }))
 
 import TalosMobileSchedaAzione from '@/components/chat/TalosMobileSchedaAzione.vue'
@@ -135,6 +154,8 @@ beforeEach(() => {
     comandi.mandaFile = async () => true
     comandi.schermate = []
     comandi.fileMandati = []
+    comandi.apriArtefatto = async () => true
+    comandi.artefattiAperti = []
 })
 
 describe('TalosMobileSchedaAzione', () => {
@@ -840,5 +861,187 @@ describe('⭐⭐⭐ la scheda di un MD si apre, formattata', () => {
             expect(visualizzatore.find('h2').exists()).toBe(true)
         })
         expect(visualizzatore.text()).not.toContain('##')
+    })
+})
+
+/**
+ * ⭐⭐⭐ PIÙ DI UNA COSA CREATA IN UN GIRO SOLO — owner 2026-08-27, «hai anche
+ * testato quella cosa di ChatGPT? creare un tool UI che ti trasforma una
+ * lista in un elemento in chat interattivo?». Non l'Apps SDK di OpenAI: la
+ * STESSA scheda `creato` sopra, ripetuta per voce — vedi `tracciaAzione.ts`.
+ *
+ * ⛔ Nessun tocco su una voce con `dove` in questi test: il componente chiama
+ * `useRouter()` senza un plugin router installato in questa suite (nessun
+ * test esistente di `creato` lo fa neanche per la sua rotta) — provare il
+ * tag/il chevron/l'assenza di crash sulla voce SENZA `dove` copre lo stesso
+ * ramo di codice senza dipendere da un router che qui non c'è.
+ */
+describe('⭐⭐⭐ la scheda "creati" — più voci nella stessa card', () => {
+    const conVoci = (voci: Array<Record<string, unknown>>) => mount(TalosMobileSchedaAzione, {
+        props: {
+            metadata: { cards: [{ tipo: 'creati', voci }] },
+        },
+    })
+
+    it('una riga per voce, col titolo e il genere di ciascuna', () => {
+        const w = conVoci([
+            { titolo: 'Prima nota', genere: 'Nota', dove: '/notes/1' },
+            { titolo: 'Seconda nota', genere: 'Nota', dove: '/notes/2' },
+        ])
+        const righe = w.findAll('[data-testid="talos-scheda-creati-voce"]')
+        expect(righe).toHaveLength(2)
+        expect(righe[0]!.text()).toContain('Prima nota')
+        expect(righe[0]!.text()).toContain('Nota')
+        expect(righe[1]!.text()).toContain('Seconda nota')
+    })
+
+    it('⛔ con `dove` la voce è un BOTTONE col chevron', () => {
+        const w = conVoci([{ titolo: 'Prima nota', genere: 'Nota', dove: '/notes/1' }])
+        const riga = w.get('[data-testid="talos-scheda-creati-voce"]')
+        expect(riga.element.tagName).toBe('BUTTON')
+        expect(riga.text()).toContain('›')
+    })
+
+    /*
+     * ⛔⛔ AL CONTRARIO: la stessa regola di `creato` singolare — senza rotta
+     * resta un riquadro muto, mai un bottone che non porta da nessuna parte.
+     */
+    it('⛔⛔ senza `dove` la voce resta un riquadro, non un bottone, e il tocco non fa niente', async () => {
+        const w = conVoci([{ titolo: 'Una memoria', genere: 'Memoria' }])
+        const riga = w.get('[data-testid="talos-scheda-creati-voce"]')
+        expect(riga.element.tagName).toBe('DIV')
+        expect(riga.text()).not.toContain('›')
+        await expect(riga.trigger('click')).resolves.not.toThrow()
+    })
+
+    it('genere per voce: due voci di specie diversa nella stessa card, mai un genere condiviso', () => {
+        const w = conVoci([
+            { titolo: 'Comprare il latte', genere: 'Attività', dove: '/tasks/1' },
+            { titolo: 'Idea per il weekend', genere: 'Nota', dove: '/notes/9' },
+        ])
+        const righe = w.findAll('[data-testid="talos-scheda-creati-voce"]')
+        expect(righe[0]!.text()).toContain('Attività')
+        expect(righe[1]!.text()).toContain('Nota')
+    })
+
+    /*
+     * ⛔ Zero voci non si disegna — stessa regola di `agenda`/`quale-app`: un
+     * tool che dichiara la scheda senza aver creato niente non deve mostrare
+     * una card vuota, sarebbe la bugia opposta del «Fatto».
+     */
+    it('⛔ un elenco VUOTO non disegna nessuna scheda', () => {
+        const w = conVoci([])
+        expect(w.find('[data-testid="talos-scheda-azione"]').exists()).toBe(false)
+    })
+})
+
+/**
+ * ⭐⭐⭐ L'ARTEFATTO HTML — owner 2026-08-27, «creare artefatti con schemi
+ * avanzati e interagibili in chat, come fa ChatGPT: spirografi,
+ * simulazioni». Il tocco NON naviga: chiama `talosApriArtefattoDaScheda`,
+ * che lancia `TalosArtifactActivity` (WebView e profilo separati,
+ * verificato sul Pad a non avere accesso al ponte Capacitor né alla rete).
+ * Qui si prova solo il contratto della card, tramite `comandi.artefattiAperti`/
+ * `comandi.apriArtefatto` — lo stesso finto condiviso di `schedaComandi`
+ * dichiarato in testa al file, non un secondo `vi.mock` per lo stesso modulo.
+ */
+describe('⭐⭐⭐ la scheda "artefatto" — apre una WebView isolata, non una rotta', () => {
+    const conArtefatto = () => mount(TalosMobileSchedaAzione, {
+        props: {
+            metadata: { cards: [{ tipo: 'artefatto', titolo: 'Spirograph', id: 'a1b2c3' }] },
+        },
+    })
+
+    it('è un bottone col titolo e il chevron, non un riquadro muto', () => {
+        const w = conArtefatto()
+        const riga = w.get('[data-testid="talos-scheda-artefatto"]')
+        expect(riga.element.tagName).toBe('BUTTON')
+        expect(riga.text()).toContain('Spirograph')
+        expect(riga.text()).toContain('›')
+    })
+
+    it('⛔ il tocco chiama talosApriArtefattoDaScheda con l\'id, non un router.push', async () => {
+        const w = conArtefatto()
+        await w.get('[data-testid="talos-scheda-artefatto"]').trigger('click')
+        await respiro(w)
+        expect(comandi.artefattiAperti).toEqual(['a1b2c3'])
+    })
+
+    /*
+     * ⛔ Verso contrario: `TalosArtifactActivity` rifiuta di aprirsi
+     * (dispositivo senza MULTI_PROFILE/MULTI_PROCESS — fail-closed, mai un
+     * downgrade silenzioso) e la persona deve VEDERLO, non restare davanti
+     * a un tocco che non ha fatto niente.
+     */
+    it('⛔⛔ se l\'apertura è rifiutata, lo dice a schermo', async () => {
+        comandi.apriArtefatto = async () => false
+        const w = conArtefatto()
+        await w.get('[data-testid="talos-scheda-artefatto"]').trigger('click')
+        await respiro(w)
+        expect(w.get('[data-testid="talos-scheda-artefatto"]').text()).toContain('Non si è aperta')
+    })
+})
+
+/**
+ * ⭐⭐⭐ SALVARE L'ARTEFATTO NELLA LIBRERIA — owner 2026-08-27, «una cosa
+ * molto importante che dà una spinta forte»: senza, un artefatto vive
+ * SOLO scorrendo la chat all'indietro. Riusa `chatController.saveArtifactToLibrary`
+ * (finto qui, provato per davvero — Libreria vera, ponte vero — sul Pad).
+ */
+describe('⭐⭐⭐ "Salva nella Libreria" — un\'azione separata dall\'apertura', () => {
+    beforeEach(() => { saveArtifactToLibrary.mockReset() })
+
+    const conArtefatto = () => mount(TalosMobileSchedaAzione, {
+        props: {
+            metadata: { cards: [{ tipo: 'artefatto', titolo: 'Spirograph', id: 'a1b2c3' }] },
+        },
+    })
+
+    it('chiama saveArtifactToLibrary con id e titolo, non con l\'apertura', async () => {
+        saveArtifactToLibrary.mockResolvedValue({ ok: true, fileId: 'f1' })
+        const w = conArtefatto()
+        await w.get('[data-testid="talos-scheda-artefatto-salva"]').trigger('click')
+        await respiro(w)
+        expect(saveArtifactToLibrary).toHaveBeenCalledWith('a1b2c3', 'Spirograph')
+        // ⛔ Il tocco su «salva» non ha aperto l'Activity — le due azioni
+        // sono indipendenti, non un tocco solo che fa entrambe.
+        expect(comandi.artefattiAperti).toEqual([])
+    })
+
+    it('un successo mostra "Salvato nella Libreria" e disabilita il bottone', async () => {
+        saveArtifactToLibrary.mockResolvedValue({ ok: true, fileId: 'f1' })
+        const w = conArtefatto()
+        const bottone = w.get('[data-testid="talos-scheda-artefatto-salva"]')
+        await bottone.trigger('click')
+        await respiro(w)
+        expect(bottone.text()).toContain('Salvato nella Libreria')
+        expect(bottone.attributes('disabled')).toBeDefined()
+    })
+
+    /*
+     * ⛔ Verso contrario: un salvataggio rifiutato lo dice a schermo, e il
+     * bottone resta premibile — a differenza del successo, un fallimento
+     * deve poter essere ritentato.
+     */
+    it('⛔⛔ un fallimento lo dice a schermo, e il bottone resta premibile', async () => {
+        saveArtifactToLibrary.mockResolvedValue({ ok: false, reason: 'TALOS_ARTIFACT_SAVE_FAILED' })
+        const w = conArtefatto()
+        const bottone = w.get('[data-testid="talos-scheda-artefatto-salva"]')
+        await bottone.trigger('click')
+        await respiro(w)
+        expect(bottone.text()).toContain('Non è stato possibile salvarlo')
+        expect(bottone.attributes('disabled')).toBeUndefined()
+    })
+
+    it('un doppio tocco rapido non chiama il salvataggio due volte', async () => {
+        let sblocca!: (value: { ok: true, fileId: string }) => void
+        saveArtifactToLibrary.mockReturnValue(new Promise((r) => { sblocca = r }))
+        const w = conArtefatto()
+        const bottone = w.get('[data-testid="talos-scheda-artefatto-salva"]')
+        await bottone.trigger('click')
+        await bottone.trigger('click')
+        sblocca({ ok: true, fileId: 'f1' })
+        await respiro(w)
+        expect(saveArtifactToLibrary).toHaveBeenCalledTimes(1)
     })
 })

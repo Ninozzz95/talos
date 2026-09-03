@@ -15,7 +15,9 @@ import TalosThemedSwitch from '@/components/talos/ui/TalosThemedSwitch.vue'
  * effort interaction moves from several radio buttons to one discrete slider.
  */
 const props = defineProps<{
-    effortLevels: string[]
+    // readonly: solo letto qui (mobileEffortLadderFromLevels), e uno dei due
+    // chiamanti (TalosMobileComposerDrawer) passa un array readonly.
+    effortLevels: readonly string[]
     selectedEffort: string
     supportsThinking: boolean
     thinking: boolean

@@ -653,7 +653,24 @@ export async function executeTalosTool(
         if (!tool.verify) return { esito: 'nessuna' }
         try {
             const verdetto = await tool.verify(input as never, result, deps.context)
-            return verdetto.held ? { esito: 'retta' } : { esito: 'smentita', perche: verdetto.reason }
+            /*
+             * ⛔ TRE STATI, e si leggono per NOME.
+             *
+             * Fino al 2026-08-20 qui c'era `verdetto.held ? retta : smentita`,
+             * e il verdetto era un booleano: una verifica che non poteva
+             * concludere doveva **lanciare** per finire in `ignota`, cioè usare
+             * un'eccezione come valore di ritorno.
+             *
+             * ⭐ Il ripiego era comunque quello prudente — `null` è falso,
+             * quindi un `ignoto` cadeva su `smentita` e non su `retta`. Meglio
+             * degradare che cantare vittoria. Ma «non ho potuto guardare» detto
+             * come «non è successo» resta una bugia, solo dalla parte meno
+             * pericolosa: alla persona direbbe che la sua nota non è stata
+             * salvata quando probabilmente lo è.
+             */
+            if (verdetto.held === true) return { esito: 'retta' }
+            if (verdetto.held === false) return { esito: 'smentita', perche: verdetto.reason }
+            return { esito: 'ignota', perche: verdetto.reason }
         }
         catch (esplosa) {
             /*

@@ -58,7 +58,9 @@ describe('che cosa dice un profilo di se stesso', () => {
          */
         expect(profilo.poteri.read + profilo.poteri.write + profilo.poteri.outbound)
             .toBe(DEFINIZIONI.length)
-        expect(profilo.poteri).toEqual({ read: 2, write: 1, outbound: 1 })
+        // ⛔ `execute` compare col suo ZERO: un potere che nessun attrezzo usa
+        // deve risultare a zero, non sparire dal conteggio.
+        expect(profilo.poteri).toEqual({ read: 2, write: 1, outbound: 1, execute: 0 })
         expect(profilo.differiti).toEqual(['send_message', 'set_alarm'])
         expect(profilo.tokenStimati).toBeGreaterThan(0)
         expect(profilo.byteSchema).toBe(JSON.stringify(filo()).length)

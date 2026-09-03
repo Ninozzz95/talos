@@ -12,8 +12,8 @@ import {
 describe('TALOS chat database schema', () => {
     it('AV-02 preserves version one and adds the independent Vault and authority schema in version two', () => {
         expect(TALOS_CHAT_DATABASE_NAME).toBe('talos_mobile')
-        expect(TALOS_CHAT_DATABASE_VERSION).toBe(7)
-        expect(TALOS_CHAT_DATABASE_UPGRADES).toHaveLength(7)
+        expect(TALOS_CHAT_DATABASE_VERSION).toBe(8)
+        expect(TALOS_CHAT_DATABASE_UPGRADES).toHaveLength(8)
         expect(TALOS_CHAT_DATABASE_UPGRADES[0]?.toVersion).toBe(1)
         expect(TALOS_CHAT_DATABASE_UPGRADES[1]?.toVersion).toBe(2)
         expect(TALOS_CHAT_DATABASE_UPGRADES[2]?.toVersion).toBe(3)
@@ -28,6 +28,11 @@ describe('TALOS chat database schema', () => {
         // tingevano la conversazione, quindi la trifecta si chiudeva dopo
         // qualsiasi lettura.
         expect(TALOS_CHAT_DATABASE_UPGRADES[6]?.toVersion).toBe(7)
+        // La 8 dà al Tool Forge un registro vero: due tabelle per lo stato
+        // installato e la storia delle versioni, una append-only per
+        // l'audit — sostituisce un blob JSON in Preferences che non
+        // garantiva niente sotto scritture concorrenti.
+        expect(TALOS_CHAT_DATABASE_UPGRADES[7]?.toVersion).toBe(8)
 
         const sql = TALOS_CHAT_DATABASE_UPGRADES.flatMap((upgrade) => upgrade.statements).join('\n')
         for (const table of [
@@ -43,6 +48,9 @@ describe('TALOS chat database schema', () => {
             'talos_notes',
             'talos_research_runs',
             'talos_research_events',
+            'talos_forge_tools',
+            'talos_forge_tool_versions',
+            'talos_forge_audit',
         ]) {
             expect(sql).toContain(`CREATE TABLE IF NOT EXISTS ${table}`)
         }
@@ -98,11 +106,26 @@ describe('TALOS chat database schema', () => {
         // gives anyone an UPDATE or DELETE path into it.
         expect(v5).not.toMatch(/UPDATE\s+talos_research_events/i)
         expect(v5).not.toMatch(/DELETE\s+FROM\s+talos_research_events/i)
+
+        // Tool Forge Fase 3: v8 replaces the Preferences JSON blob with a
+        // real registry, transactions instead of a read-modify-write race.
+        const v8 = TALOS_CHAT_DATABASE_UPGRADES[7]?.statements.join('\n') ?? ''
+        expect(v8).toContain('CREATE TABLE IF NOT EXISTS talos_forge_tools')
+        expect(v8).toContain("CHECK (enabled IN (0, 1))")
+        expect(v8).toContain('CREATE TABLE IF NOT EXISTS talos_forge_tool_versions')
+        expect(v8).toContain('UNIQUE (tool_id, version)')
+        expect(v8).toContain('FOREIGN KEY (tool_id) REFERENCES talos_forge_tools(id) ON DELETE CASCADE')
+        expect(v8).toContain('CREATE TABLE IF NOT EXISTS talos_forge_audit')
+        expect(v8).toContain("CHECK (kind IN ('install', 'enable', 'disable', 'rollback', 'remove'))")
+        // Stesso principio di talos_research_events sopra: l'audit è
+        // append-only BY CONSTRUCTION, nessun UPDATE/DELETE nella migrazione.
+        expect(v8).not.toMatch(/UPDATE\s+talos_forge_audit/i)
+        expect(v8).not.toMatch(/DELETE\s+FROM\s+talos_forge_audit/i)
     })
 
     it('keeps upgrades incremental and free of destructive database deletion', () => {
         const versions = TALOS_CHAT_DATABASE_UPGRADES.map((upgrade) => upgrade.toVersion)
-        expect(versions).toEqual([1, 2, 3, 4, 5, 6, 7])
+        expect(versions).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
         const sql = TALOS_CHAT_DATABASE_UPGRADES.flatMap((upgrade) => upgrade.statements).join('\n')
         expect(sql).not.toMatch(/DROP\s+DATABASE/i)
         expect(sql).not.toMatch(/DELETE\s+FROM\s+talos_chat_sessions/i)

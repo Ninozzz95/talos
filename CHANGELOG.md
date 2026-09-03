@@ -6,6 +6,78 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.23
+
+The coding agent moved onto the phone. Until this release "Codice" was a
+screen that showed what a session would look like; it now opens real
+sessions, runs real commands in a sandboxed terminal on the device itself,
+and talks to five model providers instead of one. The personal voice engine
+was rebuilt on Pocket, and the Model Lab stopped guessing at what a model
+costs.
+
+### Codice: a real coding agent, on the phone
+
+- Sessions are real and they persist. They survive closing the app and
+  restarting it, and the list shows what each one is doing right now —
+  running, waiting for an approval, finished, or finished with an error —
+  instead of a static row.
+- A sandboxed terminal runs on the phone. No PC, no tunnel, no server on
+  the other side of the room: commands execute on the device, through the
+  ADB bridge, and their output comes back into the session.
+- Any model from OpenRouter can be picked live. OpenAI, DeepSeek and Ollama
+  are wired to real sessions now, not just stored; Anthropic and Gemini are
+  recognized and refused with an honest reason — their request shape isn't
+  translated yet — instead of either working silently or being hidden.
+- Tool calls collapse into groups with a per-file diff, so a long run reads
+  as a list of changes instead of a wall of output.
+- The permissions pill and the model pill act on a live session instead of
+  only looking like they do.
+- Long conversations are compacted, and now you can see it happen instead of
+  wondering why the run paused.
+- The composer got the rest of its work: a Planner picker, a real "improve
+  this prompt" that either rewrites it or says why it cannot, and an export
+  that produces the actual session report.
+- Automations, Doctor, hooks, sub-agent delegation, the review centre and
+  workspace files (drag and drop, copy, create file and folder) all came
+  across from the desktop build rather than being written twice.
+- Deep research, Activities, Memory and the Library are connected to the
+  kernel — read-only for research, on purpose.
+
+### Personal voice
+
+- The engine now runs on Pocket end to end: enrolment creates v2 profiles,
+  older profiles are migrated instead of being abandoned, and installation
+  is observable rather than silent when it fails.
+- A model is loaded on demand, when an intent needs it, instead of being
+  held resident.
+- The Doctor screen reports performance signals from the engine, so a slow
+  or stuttering read can be diagnosed from the report instead of guessed at.
+
+### Model Lab
+
+- The KV cache type (F16 or Q8_0) is a setting rather than whatever the
+  file's header happened to use, with the resolved type always shown.
+- A context-length slider with real reference points, and a provenance
+  ledger that says where each number in a memory estimate comes from.
+- Every quantization is checked against your device as soon as the page
+  opens, instead of waiting for a tap on each one.
+
+### Known, and not hidden
+
+- Local models cannot yet be used for a Codice session. The on-device
+  engine is reachable only from the app's web view, while the agent kernel
+  runs in a separate process, and the bridge between the two does not exist
+  yet. Choosing one is refused with that reason instead of failing halfway
+  through an answer.
+- Anthropic and Gemini models are recognized in the picker but refused for
+  Codice sessions: translating tool calls into their own request format
+  isn't done yet. Only OpenAI, DeepSeek, Ollama and OpenRouter route to a
+  real call today.
+- The "Agents" tab in the context rail is still a mock-up. Delegation
+  itself is real — the session tree reads actual child sessions — but that
+  one panel is static markup that no code fills in yet, so the names in it
+  are examples, not your sub-agents.
+
 ## v0.1.22
 
 Browsing models on Hugging Face got a rebuild, and the Doctor screen can
