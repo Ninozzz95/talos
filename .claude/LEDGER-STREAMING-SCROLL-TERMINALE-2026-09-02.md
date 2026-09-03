@@ -1356,3 +1356,40 @@ Nessuno dei quattro è di questo punto: registrati qui, non corretti ora
 **Suite**: backend+contratti **1405/1405**. QA visiva: scenario
 `qa-settings-model-lab` verde su **laptop 1024×800** e **desktop 1440×900**,
 0 eccezioni JS, 0 richieste fallite.
+
+---
+
+## 03/9 — I cancelli fatti girare, e uno che NON si è potuto aprire
+
+Richiesti dallo Stop hook di verifica. Esiti veri:
+
+| cancello | esito |
+|---|---|
+| `node --test` backend + contratti | **1405/1405** |
+| `harness-ui: npm run verify:ui` | 22 asset verificati |
+| `frontend: npm run test:unit` | **57/57** |
+| `frontend: npm run build` | 27 asset, nessun cutover |
+| QA visiva `qa-settings-model-lab`, laptop + desktop | 0 eccezioni JS, 0 richieste fallite |
+
+⛔ `npm run typecheck` **non esiste in `harness-ui`** e non si applica: quello
+che ho toccato è JavaScript `.mjs`. Il TypeScript sta in `mobile/`, che non ho
+sfiorato. Nominato invece di far finta di averlo lanciato.
+
+### 🔜 DEBITO NUOVO — `frontend: npm run verify` non parte: la porta 4175 è occupata
+
+`playwright.lab.config.mjs` fissa **4175** senza alternativa, e in questo
+momento quella porta è tenuta da **`adb -L tcp:5037 fork-server server`** —
+il server ADB, che serve al Pad dell'owner.
+
+⛔ Non l'ho ucciso: risalita la catena prima di toccare, come da regola. Un
+gate di prova non ha il diritto di spegnere il ponte verso il telefono per
+prendersi una porta.
+
+⇒ La fragilità è del gate, non di ADB: una porta fissa può essere presa da
+chiunque, e qui il messaggio è un `EADDRINUSE` grezzo che non dice né chi la
+occupa né che si può cambiare. La cura è la stessa già applicata a
+`playwright.config.mjs` il 02/9 (porta dedicata + `reuseExistingServer:false`),
+estesa con **una porta libera scelta a runtime** invece di una costante.
+
+**⛔ NON VERIFICATO**: `test:lab` (browser del laboratorio modulare) — non per
+scelta, per porta occupata. Gli altri cinque cancelli sono verdi.
