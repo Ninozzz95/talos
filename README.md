@@ -432,15 +432,15 @@ Some operations require Android system permissions, Accessibility or the optiona
 
 # Coming soon: a coding agent, built on the same rules
 
-<img src="docs/immagini/tablet-9-coding-agent.png" alt="The coding agent harness UI mid-session, with a live tool feed and a context rail">
-
-*(Internal build shown in Italian — the UI text is being translated to English before this ships.)*
+<img src="docs/immagini/tablet-9-coding-agent.png" alt="The coding agent harness UI on a real session: the tool feed reports nine files read and one command run, and the context rail shows the workspace root, the seven tools available, and an honest “not implemented yet” where project memory would go">
 
 TALOS's own coding agent is under active development, on the same principles as the rest of the project: typed tools, explicit authority, and results that are checked instead of assumed.
 
 It already runs against real projects today — read/search/edit/test, a sandboxed shell (WSL2 first, honestly labelled `none` when no isolation is available, never a silent bluff), and an SSRF-safe page reader ported from TALOS's own on-device web-reading policy (DNS pinning, redirect revalidation, no private-network access) — driven through the same kind of typed-tool loop already shipping in the app, benchmarked against other coding agents on cost-per-solved-task rather than vibes.
 
-What's still ahead: bringing it into the phone itself, a persisted session model with fork/resume/compact, and the same UI surfacing on both the desktop tooling and the mobile app instead of two implementations of the same idea.
+It now runs **on the phone itself** — the screenshot above is a real session on the tablet, not a mock-up: a model chosen live from the provider's own catalogue, seven typed tools, and a workspace root on the device. Sessions persist, and fork and resume work from the session title.
+
+What's still ahead: local on-device models driving a Codice session (today they answer in chat, but do not drive the agent), two providers recognised but not yet routed, and the same UI surfacing on both the desktop tooling and the mobile app instead of two implementations of the same idea.
 
 **This is a roadmap direction. It does not run inside the shipped Android app yet.**
 
