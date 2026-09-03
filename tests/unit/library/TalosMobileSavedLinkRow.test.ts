@@ -30,6 +30,16 @@ describe('TalosMobileSavedLinkRow', () => {
         expect(wrapper.get('[data-testid="copy"]').classes()).toContain('min-h-14')
         expect(wrapper.get('[data-testid="browser"]').classes()).toContain('min-h-12')
         expect(wrapper.get('[data-testid="browser"]').classes()).toContain('min-w-12')
+        /*
+         * ⛔⛔⛔ 3/9, stessa forma trovata dal vivo in HarnessScreen.vue
+         * (ledger §67): `line-clamp-2` imposta da sé `display:-webkit-box`
+         * — una `block` esplicita nella STESSA lista di classi vince nella
+         * cascata Tailwind e lo sovrascrive, disattivando il clamp (il
+         * titolo tornava a mostrarsi per intero, mai troncato a 2 righe).
+         * jsdom non ha un motore di layout: non può provare il rendering
+         * reale, solo impedire che questa stessa forma di conflitto torni.
+         */
+        expect(wrapper.get('.line-clamp-2').classes()).not.toContain('block')
     })
 
     it('LINK-PARITY-02 emits copy and browser destinations independently', async () => {

@@ -110,14 +110,43 @@ const haArgomenti = computed(() => {
  */
 interface TalosRigaArgomento { voce: string; valore: string }
 
+/**
+ * ⛔⛔ Owner 2026-08-27, trovato dal vivo su due tool diversi lo stesso
+ * giorno: `bulk-tasks` (un array di titoli) e il progetto di un tool che
+ * CREA tool (titolo/descrizione leggibili accanto a una struttura tecnica)
+ * cadevano ENTRAMBI sul JSON grezzo per un solo campo non piatto — la
+ * regola era "tutto o niente", e "niente" voleva dire l'intera scheda.
+ *
+ * ⇒ Il fallback ora è PER RIGA, non per scheda: un valore primitivo resta
+ * una riga leggibile come sempre; un array di primitivi (i titoli di
+ * `bulk-tasks`) diventa una riga con i valori uniti da virgola — non
+ * `[object Object]`, non JSON; un valore davvero strutturato (un oggetto,
+ * o un array di oggetti — dove appiattire perderebbe informazione)
+ * resta JSON, ma DENTRO la sua riga, con l'etichetta del campo accanto,
+ * non come un blocco unico e anonimo che sostituisce l'intera scheda.
+ * Titolo e descrizione di un tool proposto restano leggibili anche
+ * quando il campo tecnico accanto non lo è.
+ */
+function testoDiRiga(valore: unknown): string {
+    if (valore === null || valore === undefined) return ''
+    if (typeof valore === 'string') return valore
+    if (typeof valore === 'number' || typeof valore === 'boolean') return String(valore)
+    if (Array.isArray(valore) && valore.every((elemento) => elemento === null
+        || ['string', 'number', 'boolean'].includes(typeof elemento))) {
+        return valore.map((elemento) => String(elemento)).join(', ')
+    }
+    try {
+        return JSON.stringify(valore)
+    } catch {
+        return String(valore)
+    }
+}
+
 const righeArgomenti = computed<TalosRigaArgomento[] | null>(() => {
     const dato = props.input
     if (dato === null || typeof dato !== 'object' || Array.isArray(dato)) return null
     const voci = Object.entries(dato as Record<string, unknown>)
     if (voci.length === 0) return null
-    // ⛔ Un solo valore annidato e si torna al JSON per TUTTO: mescolare le due
-    // forme nella stessa scheda leggerebbe peggio di entrambe.
-    if (voci.some(([, valore]) => valore !== null && typeof valore === 'object')) return null
     /*
      * ⛔ IL TETTO VALE ANCHE QUI, e me l'ha ricordato un test rosso.
      *
@@ -133,7 +162,7 @@ const righeArgomenti = computed<TalosRigaArgomento[] | null>(() => {
      */
     let rimanenti = MAX_RENDERED_ARGUMENTS
     return voci.map(([voce, valore]) => {
-        const intero = typeof valore === 'string' ? valore : String(valore)
+        const intero = testoDiRiga(valore)
         const tagliato = intero.length > rimanenti ? `${intero.slice(0, Math.max(0, rimanenti))}…` : intero
         rimanenti = Math.max(0, rimanenti - intero.length)
         return {
@@ -182,7 +211,7 @@ const righeArgomenti = computed<TalosRigaArgomento[] | null>(() => {
                 />
                 <div class="min-w-0 flex-1">
                     <p class="text-2xs font-medium uppercase tracking-wide text-[var(--talos-muted)]">
-                        {{ $t('chat.authorizationFromChat', { title: sessionTitle }) }}
+                        {{ $t('chat.authorizationFromChat') }} {{ sessionTitle }}
                     </p>
                     <h2
                         id="talos-tool-authorization-title"

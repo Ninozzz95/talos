@@ -31,6 +31,7 @@ import {
     type TalosToolIconName,
 } from '@/lib/tools/toolLabels'
 import { stabilizeStreamingTalosMarkdown } from '@/lib/streamingMarkdown'
+import { createTalosFrameScheduler } from '@/lib/streamingTailScheduler'
 import { useTalosTypewriterReveal } from '@/composables/useTalosTypewriterReveal'
 import { useTalosSmoothReveal } from '@/composables/useTalosSmoothReveal'
 import { useChatController } from '@/stores/chatController'
@@ -149,13 +150,16 @@ const reducedMotion = typeof window !== 'undefined'
     && typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-const { revealed: typed } = useTalosTypewriterReveal(streamingText)
+const { revealed: typed } = useTalosTypewriterReveal(streamingText, {
+    enabled: () => !fadeMode.value,
+})
 const { revealed: smoothed } = useTalosSmoothReveal(streamingText, {
     // Reduced motion kills BOTH the fade and the pacing: text marching across
     // the screen is itself the animation, so removing only the fade is half a
     // fix.
     paced: () => !reducedMotion,
     settled: () => !sending.value,
+    enabled: () => fadeMode.value,
 })
 const revealed = computed(() => (fadeMode.value ? smoothed.value : typed.value))
 
@@ -205,6 +209,11 @@ const contentHost = ref<HTMLElement | null>(null)
 let tailHost: HTMLElement | null = null
 let caretEl: HTMLElement | null = null
 let paintedTail = ''
+let cachedTailTarget: HTMLElement | null | undefined
+const tailScheduler = createTalosFrameScheduler(
+    (callback) => requestAnimationFrame(callback),
+    (handle) => cancelAnimationFrame(handle),
+)
 
 // SF-MINOR: void and table-structural elements cannot hold the tail — letters
 // appended into an <hr> or a <tr> are simply never painted.
@@ -212,19 +221,31 @@ const TAIL_REFUSED = new Set(['HR', 'BR', 'IMG', 'INPUT', 'TABLE', 'THEAD', 'TBO
 
 /** The deepest last block, so the tail continues the current line. */
 function tailTarget(): HTMLElement | null {
+    if (cachedTailTarget !== undefined && cachedTailTarget?.isConnected) {
+        return cachedTailTarget
+    }
     // SF-CRITICAL: the markdown renderer is a lazy chunk. While it loads there
     // is no `.talos-message-content`, and falling back to the <article> put the
     // tail inside the sr-only aria-live region — orphaned there for the rest of
     // the reply, re-announcing the whole text on every frame.
     const root = contentHost.value?.querySelector<HTMLElement>('.talos-message-content')
-    if (!root) return null
+    if (!root) {
+        cachedTailTarget = null
+        return null
+    }
     let node: HTMLElement = root
     for (;;) {
         const children = [...node.children].filter((child) => child !== tailHost)
         const last = children.at(-1) as HTMLElement | undefined
-        if (!last || TAIL_REFUSED.has(last.tagName)) return node
+        if (!last || TAIL_REFUSED.has(last.tagName)) {
+            cachedTailTarget = node
+            return node
+        }
         // Inside a fence the tail belongs to the <code>, never after the <pre>.
-        if (last.tagName === 'PRE') return last.querySelector('code') ?? last
+        if (last.tagName === 'PRE') {
+            cachedTailTarget = last.querySelector('code') ?? last
+            return cachedTailTarget
+        }
         node = last
     }
 }
@@ -310,7 +331,21 @@ function syncTail(): void {
         return
     }
     const target = tailTarget()
-    const lastTag = target?.lastElementChild?.tagName ?? ''
+    // BUG (found finishing Pass 2, 2/9): `lastElementChild` also matches the
+    // tailHost span itself once `ensureTail` has appended it to `target` — on
+    // the FOLLOWING call this read the tail's own `<span>` instead of the real
+    // last content element, so a table mid-row could read as non-structural
+    // for one frame and grow a caret nothing ever removed (DEBT-MOBILE-003).
+    // Skip the tailHost the same way `tailTarget()` already does.
+    let lastTag = ''
+    if (target) {
+        for (let i = target.children.length - 1; i >= 0; i -= 1) {
+            const child = target.children[i]
+            if (child === tailHost) continue
+            lastTag = child.tagName
+            break
+        }
+    }
     // Tables and their sibling structural blocks own their layout. A caret
     // painted after one is read as a prompt inside the table, not as answer
     // progress. Structural fragments use the same fade ink as the selected
@@ -328,7 +363,9 @@ function syncTail(): void {
     paintedTail = tail
 }
 
-watch(revealed, () => { void nextTick(syncTail) }, { immediate: true })
+watch(revealed, () => {
+    tailScheduler.schedule(() => { void nextTick(syncTail) })
+}, { immediate: true })
 watch(parsedMarkdown, () => {
     // v-html replaces the subtree, but a tail injected OUTSIDE it (or into a
     // node the new render kept) would survive — remove it explicitly.
@@ -336,13 +373,16 @@ watch(parsedMarkdown, () => {
     tailHost = null
     caretEl = null
     paintedTail = ''
-    void nextTick(syncTail)
+    cachedTailTarget = undefined
+    tailScheduler.schedule(() => { void nextTick(syncTail) })
 })
 
 onBeforeUnmount(() => {
     if (parseThrottle !== null) clearTimeout(parseThrottle)
+    tailScheduler.cancel()
     tailHost = null
     caretEl = null
+    cachedTailTarget = undefined
 })
 </script>
 

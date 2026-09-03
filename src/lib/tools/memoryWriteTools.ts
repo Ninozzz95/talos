@@ -95,6 +95,45 @@ export function createTalosMemoryWriteTools(
                 kind: z.enum(KINDS).default('preference')
                     .describe('preference = how the user wants TALOS to behave; project_fact = something true about their work; procedure = a way of doing something; policy_note = a rule they set.'),
             }),
+            /**
+             * ⛔ LA MEMORIA È IL CASO IN CUI UN FALSO «FATTO» COSTA DI PIÙ.
+             *
+             * Una nota che non si salva la persona la ritrova assente **fra un
+             * mese**, quando ormai contava su di essa. Non c'è un momento in cui
+             * se ne accorge subito, e quindi non c'è niente che corregga.
+             *
+             * ⛔ Si cerca per TITOLO e non per id: `create` per la memoria non
+             * restituisce l'id — l'ha detto il typecheck, e la verifica si adatta
+             * a ciò che il magazzino dà invece di pretendere ciò che le serve.
+             *
+             * ⭐ E vale anche sul ramo del doppione, quello che dice «Nothing new
+             * was written»: lì la memoria esiste già, e la postcondizione — *c'è
+             * una memoria con questo titolo e questo contenuto* — è vera lo
+             * stesso. Una verifica che bocciasse quel ramo starebbe misurando
+             * l'azione invece dell'effetto.
+             */
+            async verify(input) {
+                const titolo = talosStripPromptEnvelope(input.title).trim()
+                /*
+                 * ⛔⛔ `catch(() => null)` QUI SAREBBE UNA BUGIA, e l'avevo scritta.
+                 *
+                 * Una lettura che fallisce e una memoria che non c'è danno lo
+                 * stesso `null`, e riportarle uguali significa dire «non è stata
+                 * salvata» quando l'unica cosa vera è «non ho potuto guardare».
+                 * ⇒ Il terzo stato del verdetto esiste per questa riga.
+                 */
+                let trovata
+                try {
+                    trovata = await sources.findByTitle(titolo)
+                } catch (rotta) {
+                    return {
+                        held: null,
+                        reason: rotta instanceof Error ? rotta.message : String(rotta),
+                    }
+                }
+                if (!trovata) return { held: false, reason: 'that memory is not on the device' }
+                return { held: true }
+            },
             async run(input) {
                 const title = talosStripPromptEnvelope(input.title).trim()
                 const content = talosStripPromptEnvelope(input.content).trim()
@@ -188,6 +227,35 @@ export function createTalosMemoryWriteTools(
                 kind: z.enum(KINDS).optional()
                     .describe('Only if the kind was wrong.'),
             }),
+            /**
+             * ⛔ Si confrontano SOLO i campi mandati.
+             *
+             * Chi ha chiesto di cambiare il contenuto non può vedersi bocciare
+             * la chiamata perché il titolo è rimasto quello di prima — è la
+             * stessa regola già scritta per le note, e vale qui per la stessa
+             * ragione: la postcondizione è ciò che è stato chiesto, non tutto
+             * il resto della riga.
+             */
+            async verify(input) {
+                // ⛔ Vedi la nota in `memory_write`: una lettura rotta non è
+                // un'assenza, e il verdetto ha una parola per dirlo.
+                let adesso
+                try {
+                    adesso = await sources.find(input.id)
+                } catch (rotta) {
+                    return { held: null, reason: rotta instanceof Error ? rotta.message : String(rotta) }
+                }
+                if (!adesso) return { held: false, reason: 'that memory no longer exists' }
+                if (input.title !== undefined
+                    && adesso.title !== talosStripPromptEnvelope(input.title).trim()) {
+                    return { held: false, reason: 'the title is still the old one' }
+                }
+                if (input.content !== undefined
+                    && adesso.content !== talosStripPromptEnvelope(input.content).trim()) {
+                    return { held: false, reason: 'the body is still the old one' }
+                }
+                return { held: true }
+            },
             async run(input) {
                 const title = input.title === undefined
                     ? undefined
@@ -276,6 +344,26 @@ export function createTalosMemoryWriteTools(
                 id: z.string().min(1).max(128)
                     .describe('The memory id, as returned by memory_search.'),
             }),
+            /**
+             * ⛔ La cancellazione è il caso in cui la verifica è più semplice e
+             * più necessaria: la postcondizione è **un'assenza**, e un'assenza
+             * non si vede finché non la si cerca.
+             */
+            async verify(input) {
+                /*
+                 * ⛔⛔ Qui la bugia sarebbe la PEGGIORE delle due: una lettura
+                 * fallita darebbe `null`, cioè «non c'è più», cioè **cancellata**.
+                 * Un permesso negato si trasformerebbe in una conferma.
+                 */
+                let resta
+                try {
+                    resta = await sources.find(input.id)
+                } catch (rotta) {
+                    return { held: null, reason: rotta instanceof Error ? rotta.message : String(rotta) }
+                }
+                if (resta) return { held: false, reason: 'that memory is still on the device' }
+                return { held: true }
+            },
             async run(input) {
                 try {
                     await sources.remove(input.id)

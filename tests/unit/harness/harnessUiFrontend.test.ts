@@ -34,6 +34,7 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
         delete (window as unknown as { __talosHarnessUiRuntime?: unknown }).__talosHarnessUiRuntime
         delete (window as unknown as { __talosHarnessHostPermissionChange?: unknown }).__talosHarnessHostPermissionChange
+        delete (window as unknown as { __talosHarnessApiBase?: unknown }).__talosHarnessApiBase
         document.body.replaceChildren()
         document.body.className = ''
         document.documentElement.className = ''
@@ -50,6 +51,25 @@ describe('Harness UI embedded host and keyboard runtime', () => {
 
         expect(css).toMatch(/:host\(\.talos-embedded\)\s+\.app-shell\s*\{[^}]*height:\s*100%/s)
         expect(css).toMatch(/:host\(\.talos-embedded\)\s+\.workspace-shell\s*\{[^}]*height:\s*100%/s)
+    })
+
+    /**
+     * ⛔⛔⛔ 29/8 — trovato sul device: `.demo-surface-badge { display:
+     * inline-flex }` (regola di classe) ha la STESSA specificità della
+     * regola user-agent per `[hidden]` — una regola d'autore vince sempre
+     * a parità di specificità, quindi `badge.hidden = true`
+     * (`aggiornaPannelloAmbiente`/`collegaEventiSessione`, verificato che
+     * la PROPRIETÀ viene impostata) non aveva MAI un effetto visivo: il
+     * badge "Demo UI · non collegato" restava a schermo su una sessione
+     * reale. jsdom non implementa il foglio di stile dello user-agent
+     * (nessun modo affidabile di riprodurre il bug/la cura via
+     * `getComputedStyle` in questo ambiente) — si prova sul TESTO del
+     * CSS, stesso schema già usato sopra per l'altezza embedded.
+     */
+    it('HARNESS-DEMO-BADGE-HIDDEN-01 [hidden] batte "display: inline-flex" con una specificità reale', () => {
+        const css = asset('styles.css')
+
+        expect(css).toMatch(/\.demo-surface-badge\[hidden\]\s*\{[^}]*display:\s*none\s*!important/s)
     })
 
     it('CODE-SINGLE-SAFE-AREA-02 lets the session-first topbar own the safe area after outer chrome is removed', () => {
@@ -190,6 +210,28 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         expect(sheet?.open).toBe(false)
     })
 
+    /*
+     * ⭐⭐⭐ 2/9 — export_report (piano §14.3/§15.6, R5): il comando slash
+     * `/export` ricadeva sul toast fisso "Export demo" — exportSession()
+     * esiste già (poche righe sotto in app.js, già onesta: sessione
+     * reale → il foglio vero, bozza → un JSON scaricato per davvero con
+     * un toast che lo dichiara). Prova che la NUOVA eccezione in
+     * announceComposerAction() richiama quella funzione vera, mai più
+     * il vecchio toast fisso.
+     */
+    it('⭐ CODE-COMPOSER-EXPORT-REPORT-01 export_report richiama exportSession() vera, mai il vecchio toast fisso', () => {
+        mountStaticRuntime()
+        const runtime = (window as unknown as {
+            __talosHarnessUiRuntime?: { announceComposerAction?(action: string): boolean }
+        }).__talosHarnessUiRuntime
+
+        expect(runtime?.announceComposerAction?.('export_report')).toBe(true)
+
+        const toastTitle = document.querySelector('.toast strong')?.textContent
+        expect(toastTitle).not.toBe('Export demo') // il vecchio mockup fisso
+        expect(toastTitle).toBe('Sessione esportata') // il toast VERO di exportSession(), ramo bozza
+    })
+
     it('CODE-MODE-STATE-TRUTH-01 never leaves Chat selected while another surface is visible', () => {
         mountStaticRuntime()
 
@@ -277,13 +319,24 @@ describe('Harness UI embedded host and keyboard runtime', () => {
     })
 
     it.each([
-        ['refactor-auth-flow', 'Refactor auth flow'],
-        ['audit-api-permissions', 'Audit API permissions'],
-        ['fix-mobile-composer', 'Fix mobile composer'],
-        ['prepare-release-notes', 'Prepare release notes'],
-        ['investigate-flaky-tests', 'Investigate flaky tests'],
+        ['sess-refactor-auth-flow', 'Refactor auth flow'],
+        ['sess-audit-api-permissions', 'Audit API permissions'],
+        ['sess-fix-mobile-composer', 'Fix mobile composer'],
+        ['sess-prepare-release-notes', 'Prepare release notes'],
+        ['sess-investigate-flaky-tests', 'Investigate flaky tests'],
     ])('HARNESS-ROUTE-SESSION-SYNC-01 selects %s through the public runtime', (id, title) => {
         mountStaticRuntime()
+        // ⛔ 27/8 — le sessioni demo statiche sono state rimosse dall'index.html
+        // (owner: "cancella tutte le sessioni mockup"). La sidebar mostra oggi
+        // SOLO sessioni reali, popolate da aggiornaElencoSessioniReali() con
+        // l'attributo data-real-session-id — quello che il router mobile
+        // sincronizza attraverso selectSession() deve poter trovare.
+        const item = document.createElement('button')
+        item.className = 'session-item real-session-item'
+        item.dataset.realSessionId = id
+        item.innerHTML = '<span class="session-main"><strong>placeholder</strong></span>'
+        document.querySelector('#sessionList')?.appendChild(item)
+
         const runtime = (window as unknown as {
             __talosHarnessUiRuntime?: { selectSession?(selection: { id: string; title: string }): void }
         }).__talosHarnessUiRuntime
@@ -292,7 +345,7 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         runtime?.selectSession?.({ id, title })
 
         expect(document.querySelector('#sessionTitle')?.textContent).toBe(title)
-        expect(document.querySelector('.session-item.active')?.getAttribute('data-session-id')).toBe(id)
+        expect(document.querySelector('.session-item.active')?.getAttribute('data-real-session-id')).toBe(id)
         const synchronizedLabels = [...document.querySelectorAll('[data-current-session-title]')]
         expect(synchronizedLabels.length).toBeGreaterThan(0)
         expect(synchronizedLabels.every((label) => label.textContent === title)).toBe(true)
@@ -330,7 +383,14 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         expect(document.querySelector('#toastRegion')?.textContent).toContain('Voce demo non collegata')
     })
 
-    it('CODE-MOTION-EXIT-01 removes approval feedback only after its exit animation finishes', async () => {
+    // ⛔ 27/8 — l'approval-card demo (che questi due test usavano come veicolo)
+    // è stata rimossa da index.html (owner: "cancella tutte le sessioni
+    // mockup"). animateExit() con la durata di default (surface-exit) e una
+    // rimozione dal DOM resta un meccanismo REALE altrove: il toast più
+    // vecchio, quando ce ne sono già 3, usa esattamente lo stesso percorso
+    // (vedi toast() in app.js). announceComposerAction('attach') è la via
+    // pubblica per generarne uno.
+    it('CODE-MOTION-EXIT-01 removes the oldest toast only after its exit animation finishes', async () => {
         let finishAnimation: (() => void) | undefined
         const cancel = vi.fn()
         const animate = vi.fn(() => ({
@@ -343,17 +403,21 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         })
         document.documentElement.style.setProperty('--talos-motion-duration-surface-exit', '120ms')
         mountStaticRuntime()
+        const runtime = (window as unknown as {
+            __talosHarnessUiRuntime?: { announceComposerAction?(action: string): boolean }
+        }).__talosHarnessUiRuntime
 
-        const deny = document.querySelector<HTMLButtonElement>('[data-deny]')
-        const card = deny?.closest('.approval-card')
-        deny?.click()
+        for (let i = 0; i < 3; i += 1) runtime?.announceComposerAction?.('attach')
+        const oldest = document.querySelector('#toastRegion')?.firstElementChild
+        animate.mockClear()
+        runtime?.announceComposerAction?.('attach') // il 4° toast fa scattare la rimozione animata del più vecchio
 
         expect(animate).toHaveBeenCalled()
-        expect(card?.isConnected).toBe(true)
+        expect(oldest?.isConnected).toBe(true)
         finishAnimation?.()
         await Promise.resolve()
         await Promise.resolve()
-        expect(card?.isConnected).toBe(false)
+        expect(oldest?.isConnected).toBe(false)
     })
 
     it('CODE-MOTION-REDUCED-01 removes immediately when the app motion token is zero', () => {
@@ -364,17 +428,47 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         })
         document.documentElement.style.setProperty('--talos-motion-duration-surface-exit', '0ms')
         mountStaticRuntime()
+        const runtime = (window as unknown as {
+            __talosHarnessUiRuntime?: { announceComposerAction?(action: string): boolean }
+        }).__talosHarnessUiRuntime
 
-        const deny = document.querySelector<HTMLButtonElement>('[data-deny]')
-        const card = deny?.closest('.approval-card')
-        deny?.click()
+        for (let i = 0; i < 3; i += 1) runtime?.announceComposerAction?.('attach')
+        const oldest = document.querySelector('#toastRegion')?.firstElementChild
+        runtime?.announceComposerAction?.('attach')
 
         expect(animate).not.toHaveBeenCalled()
-        expect(card?.isConnected).toBe(false)
+        expect(oldest?.isConnected).toBe(false)
     })
 
-    it('CODE-COMPOSER-DEMO-SEND-01 accepts the shared Vue composer through the runtime without a network request', () => {
-        const fetchMock = vi.fn()
+    /**
+     * ⭐⭐⭐ 28/8, "procedi in ordine" punto 3 — RINOMINATO da
+     * "CODE-COMPOSER-DEMO-SEND-01 ... without a network request": era il
+     * mockup stesso (`appendUserMessage`, risposta scriptata) che questo
+     * punto elimina. Un messaggio semplice avvia ORA una sessione reale
+     * (`startRealSessionFromMessage`, ledger FASE-5-EXECUTION-PLANE) — la
+     * prova END-TO-END del contratto (corpo esatto, SSE) vive in
+     * harnessUiRealSession.test.ts, che ha già l'infrastruttura
+     * `FakeEventSource`; questo file resta sulla sua materia (composer ↔
+     * runtime) e verifica solo che il fetch VERO parta con la forma
+     * giusta — senza istanziare un `EventSource` che jsdom non implementa,
+     * la POST finale RIFIUTA di proposito.
+     *
+     * ⛔⛔⛔ 29/8 — RISCRITTA dopo il bug reale trovato sul dispositivo (vedi
+     * la nota gemella in harnessUiRealSession.test.ts): `startRealSessionFromMessage`
+     * ora controlla `/api/v1/projects` PRIMA di disegnare qualunque bolla —
+     * niente più eco ottimistico prima di sapere se esiste una cartella
+     * unica da usare (il vecchio corpo `{messaggio}` non è più un
+     * contratto valido lato server). La bolla appare dopo quel giro,
+     * dentro `startCustomSession`.
+     */
+    it('CODE-COMPOSER-REAL-SEND-01 accepts the shared Vue composer and starts a real session', async () => {
+        const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+            const url = String(input)
+            if (url.includes('/api/v1/projects')) {
+                return new Response(JSON.stringify({ ok: true, data: { items: [{ id: 'p1', nome: 'talos' }] } }), { status: 200 })
+            }
+            throw new Error('rete finta: nessuna risposta in questo test')
+        })
         vi.stubGlobal('fetch', fetchMock)
         mountStaticRuntime()
         const runtime = (window as unknown as {
@@ -382,10 +476,47 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         }).__talosHarnessUiRuntime
 
         expect(runtime?.submitPrompt?.('Prompt from the real composer')).toBe(true)
+        await new Promise((r) => setTimeout(r, 0)) // startRealSessionFromMessage non è awaitable dall'esterno via submitPrompt: prima il GET /api/v1/projects...
+        await new Promise((r) => setTimeout(r, 0)) // ...poi il POST /api/v1/sessions/custom che disegna la bolla.
+
         const userMessages = document.querySelectorAll('.user-message')
         expect(userMessages.item(userMessages.length - 1).textContent)
             .toContain('Prompt from the real composer')
-        expect(fetchMock).not.toHaveBeenCalled()
+        // corpo verificato campo per campo: `modello` può comparire o no a seconda dello stato del picker in questo mount, non è materia di questa prova.
+        const chiamataCustom = fetchMock.mock.calls.find((c) => c[0] === '/api/v1/sessions/custom')
+        expect(chiamataCustom).toBeDefined()
+        const init = (chiamataCustom?.[1] ?? {}) as RequestInit
+        expect(init).toMatchObject({ method: 'POST' })
+        expect(JSON.parse(String(init.body))).toMatchObject({ cartellaId: 'p1', consegna: 'Prompt from the real composer', client: 'desktop', permessi: 'Workspace write' })
+    })
+
+    /*
+     * ⛔ 28/8, riscritto dopo la cura "la sessione non parte quando scrivo
+     * dal composer" (owner) — submitPrompt() ora controlla QUANTE
+     * cartelle sono configurate (GET /api/v1/projects) prima di rifiutare:
+     * con zero (o un fetch che fallisce, come qui: fetchMock senza
+     * implementazione) resta il rifiuto onesto di sempre, ma il controllo
+     * è ASINCRONO — serve un giro di eventi prima che il toast compaia.
+     * `fetchMock` viene chiamato ora (non più mai): è il comportamento
+     * NUOVO e corretto, non una regressione. Gemella AL CONTRARIO del test
+     * sopra: zero cartelle invece di una sola, rifiuto onesto invece di
+     * un avvio vero — stessa funzione (startRealSessionFromMessage),
+     * l'altro ramo.
+     */
+    it('CODE-COMPOSER-DEMO-SEND-01 without any active session, refuses honestly instead of faking a reply — no demo conversation is preloaded any more', async () => {
+        const fetchMock = vi.fn()
+        vi.stubGlobal('fetch', fetchMock)
+        mountStaticRuntime()
+        const runtime = (window as unknown as {
+            __talosHarnessUiRuntime?: { submitPrompt?(text: string): boolean }
+        }).__talosHarnessUiRuntime
+        const before = document.querySelectorAll('.user-message').length
+
+        expect(runtime?.submitPrompt?.('Prompt from the real composer')).toBe(true)
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(document.querySelectorAll('.user-message').length).toBe(before) // mai un messaggio finto aggiunto
+        expect(document.querySelector('#toastRegion')?.textContent).toContain('Nessuna sessione avviata')
+        expect(fetchMock).toHaveBeenCalled() // ⭐ controlla se esiste una sola cartella prima di rifiutare
     })
 
     it('CODE-COMPOSER-DEMO-SEND-01 "!"/"!!" switch to the terminal view and, without an active real session, refuse honestly instead of faking success', () => {
@@ -402,6 +533,36 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         expect(fetchMock).not.toHaveBeenCalled()
     })
 
+    it('CODE-COMPOSER-QUEUE-HONEST-01 — FASE D (28/8): with a real session active, the composer now queues the follow-up for real (POST .../queue) instead of refusing it', async () => {
+        const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true, data: { ok: true, posizione: 1 } }), { status: 200 }))
+        vi.stubGlobal('fetch', fetchMock)
+        mountStaticRuntime()
+        const runtime = (window as unknown as {
+            __talosHarnessUiRuntime?: {
+                submitPrompt?(text: string): boolean
+                realSessionState?: { id: string | null; codaMessaggi?: string[] }
+            }
+        }).__talosHarnessUiRuntime
+        expect(runtime?.realSessionState).toBeTruthy()
+        // ⛔ stesso oggetto di state.realSession (assegnazione diretta, non una copia) — impostarlo qui muove lo stato reale del modulo.
+        runtime!.realSessionState!.id = 'sess-fake-for-test'
+
+        const before = document.querySelectorAll('#conversation .user-message').length
+        expect(runtime?.submitPrompt?.('follow-up mentre gira una sessione reale')).toBe(true)
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        const after = document.querySelectorAll('#conversation .user-message').length
+
+        // ⛔ 28/8 — onestà del NUOVO comportamento: il messaggio è solo IN CODA, non
+        // ancora visto dal modello — nessun bubble ottimistico finché il kernel
+        // non lo consegna davvero (evento QueuedMessageDelivered, vedi
+        // harnessUiRealSession.test.ts per il filo intero).
+        expect(after).toBe(before)
+        expect(document.querySelector('#queuedMessage')?.classList.contains('show')).toBe(true) // il banner "Follow-up in coda" ORA mostra dati veri
+        expect(document.querySelector('#queuedMessageText')?.textContent).toContain('follow-up mentre gira')
+        expect(document.querySelector('#toastRegion')?.textContent).toContain('Messaggio in coda')
+        expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/v1/sessions/sess-fake-for-test/queue'), expect.objectContaining({ method: 'POST' }))
+    })
+
     it('HARNESS-BOARD-MOBILE-HONESTY-01 never calls a local backend from the embedded mobile demo', async () => {
         document.documentElement.classList.add('talos-embedded')
         const fetchMock = vi.fn()
@@ -416,6 +577,27 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         expect(document.querySelector('#campaignReadMeta')?.textContent).toContain('backend mobile')
     })
 
+    /**
+     * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 4 — la
+     * Board mobile è la STESSA superficie che §3.1 punto 4 del piano
+     * promette raggiungibile col tunnel, senza nuovo codice — tranne
+     * questo cancello, trovato solo verificando dal vivo. Col tunnel
+     * attivo la Board fa la stessa richiesta reale del desktop.
+     */
+    it('HARNESS-BOARD-MOBILE-HONESTY-02 col tunnel attivo (window.__talosHarnessApiBase) la Board chiama il backend vero', async () => {
+        document.documentElement.classList.add('talos-embedded')
+        ;(window as unknown as { __talosHarnessApiBase?: string }).__talosHarnessApiBase = 'http://localhost:4174'
+        const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 }))
+        vi.stubGlobal('fetch', fetchMock)
+        mountStaticRuntime()
+
+        document.querySelector<HTMLElement>('[data-mode="dashboard"]')?.click()
+        await Promise.resolve()
+        await Promise.resolve()
+
+        expect(fetchMock).toHaveBeenCalledWith('http://localhost:4174/api/v1/campaigns', expect.anything())
+    })
+
     it('HARNESS-ALL-CONTROLS-01 leaves no decorative or inert element exposed as an enabled button', () => {
         mountStaticRuntime()
         const handled = [
@@ -427,6 +609,7 @@ describe('Harness UI embedded host and keyboard runtime', () => {
             '[data-action]', '[data-demo-action]', '[data-file-entry]', '[role="tab"]', '.session-item',
             '#overlayBackdrop', '#newSessionBtn', '#sessionsCollapseBtn', '#sessionTitleButton',
             '#runStateToggle', '.stop-run', '#commandPaletteBtn', '#capabilityBtn', '#manageCapabilitiesBtn',
+            '#resumeSessionBtn', '#compactSessionBtn',
             '#closeSheet', '#closeCommand', '#cancelQueued', '.composer-mic', '#queueToggle',
             '#approveAllDiffs', '#harnessDialogBackdrop',
         ].join(',')

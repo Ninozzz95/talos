@@ -29,6 +29,7 @@
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTalosI18n } from '@/i18n'
+import { useChatController } from '@/stores/chatController'
 import { TALOS_TOOL_LABEL_KEYS } from '@/lib/tools/toolLabels'
 import { TALOS_METADATA_SCHEDE, type TalosScheda } from '@/lib/tools/tracciaAzione'
 
@@ -97,6 +98,27 @@ function eUnaScheda(valore: unknown): valore is TalosScheda {
         return typeof r.titolo === 'string' && r.titolo !== ''
             && typeof r.genere === 'string' && r.genere !== ''
     }
+    /**
+     * ⛔ Stesse regole di `creato`, per ogni voce — e un elenco VUOTO non si
+     * disegna, stessa ragione di `agenda`/`quale-app`: zero voci non è
+     * «niente da mostrare», è un tool che ha dichiarato una scheda senza
+     * aver creato niente, e mostrarla sarebbe la bugia opposta del «Fatto».
+     */
+    if (r.tipo === 'creati') {
+        return Array.isArray(r.voci) && r.voci.length > 0
+            && r.voci.every((v) => typeof (v as Record<string, unknown>)?.titolo === 'string'
+                && (v as Record<string, unknown>).titolo !== ''
+                && typeof (v as Record<string, unknown>)?.genere === 'string'
+                && (v as Record<string, unknown>).genere !== '')
+    }
+    /**
+     * ⛔ `id` OBBLIGATORIO: senza, il tocco non saprebbe quale artefatto
+     * aprire — stessa regola di `pacchetto` in `quale-app`.
+     */
+    if (r.tipo === 'artefatto') {
+        return typeof r.titolo === 'string' && r.titolo !== ''
+            && typeof r.id === 'string' && r.id !== ''
+    }
 
     /*
      * ⛔ `app` e `partito` sono OBBLIGATORI, e `partito` deve essere un
@@ -153,6 +175,10 @@ const eQualeApp = (s: TalosScheda): s is SchedaQualeApp => s.tipo === 'quale-app
 const eQualeFile = (s: TalosScheda): s is SchedaQualeFile => s.tipo === 'quale-file'
 type SchedaCreato = Extract<TalosScheda, { tipo: 'creato' }>
 const eCreato = (s: TalosScheda): s is SchedaCreato => s.tipo === 'creato'
+type SchedaCreati = Extract<TalosScheda, { tipo: 'creati' }>
+const eCreati = (s: TalosScheda): s is SchedaCreati => s.tipo === 'creati'
+type SchedaArtefatto = Extract<TalosScheda, { tipo: 'artefatto' }>
+const eArtefatto = (s: TalosScheda): s is SchedaArtefatto => s.tipo === 'artefatto'
 
 /**
  * ⛔ La rotta arriva dall'attrezzo che ha creato la cosa, e resta INTERNA: si
@@ -388,6 +414,57 @@ async function scegli(s: SchedaQualeApp, pacchetto: string): Promise<void> {
 const esitoFile = ref<Record<string, 'manda' | 'mandato' | 'rifiutato'>>({})
 
 /**
+ * ⭐⭐⭐ L'ARTEFATTO SI APRE COL DITO, stesso schema di `esitoFile` — keyed
+ * per id, non un booleano solo: più artefatti nella stessa chat hanno stati
+ * indipendenti.
+ *
+ * ⛔ `rifiutato` è un esito onesto, non un'ipotesi: `talosApriArtefattoDaScheda`
+ * torna `false` quando `TalosArtifactActivity` rifiuta di aprirsi (dispositivo
+ * senza `MULTI_PROFILE`/`MULTI_PROCESS` — fail-closed, mai un downgrade
+ * silenzioso, vedi `TalosArtifactActivity.kt`) — e la persona deve saperlo,
+ * non restare davanti a un tocco che non ha fatto niente.
+ */
+const esitoArtefatto = ref<Record<string, 'apre' | 'rifiutato'>>({})
+async function apriArtefatto(id: string): Promise<void> {
+    if (esitoArtefatto.value[id] === 'apre') return
+    esitoArtefatto.value = { ...esitoArtefatto.value, [id]: 'apre' }
+    try {
+        const { talosApriArtefattoDaScheda } = await import('@/lib/tools/schedaComandi')
+        const fatto = await talosApriArtefattoDaScheda(id)
+        const nuovo = { ...esitoArtefatto.value }
+        if (fatto) delete nuovo[id]
+        else nuovo[id] = 'rifiutato'
+        esitoArtefatto.value = nuovo
+    } catch {
+        esitoArtefatto.value = { ...esitoArtefatto.value, [id]: 'rifiutato' }
+    }
+}
+
+/**
+ * ⭐⭐⭐ SALVARE L'ARTEFATTO NELLA LIBRERIA — owner 2026-08-27, «una cosa
+ * molto importante che dà una spinta forte»: senza, un artefatto vive
+ * SOLO scorrendo la chat all'indietro, e sparisce dalla vista appena la
+ * conversazione va avanti.
+ *
+ * ⛔ Riusa `chatController.saveArtifactToLibrary` — la STESSA via di
+ * `document_create`, non una seconda strada. Una volta nella Libreria,
+ * l'export come file è già gratis: `library_export` lo sa già fare per
+ * qualunque file, non serve una funzione dedicata qui.
+ */
+const chatController = useChatController()
+const esitoSalvataggio = ref<Record<string, 'salva' | 'salvato' | 'rifiutato'>>({})
+async function salvaArtefattoNellaLibreria(s: SchedaArtefatto): Promise<void> {
+    if (esitoSalvataggio.value[s.id] === 'salva' || esitoSalvataggio.value[s.id] === 'salvato') return
+    esitoSalvataggio.value = { ...esitoSalvataggio.value, [s.id]: 'salva' }
+    try {
+        const esito = await chatController.saveArtifactToLibrary(s.id, s.titolo)
+        esitoSalvataggio.value = { ...esitoSalvataggio.value, [s.id]: esito.ok ? 'salvato' : 'rifiutato' }
+    } catch {
+        esitoSalvataggio.value = { ...esitoSalvataggio.value, [s.id]: 'rifiutato' }
+    }
+}
+
+/**
  * ⭐⭐⭐ IL PDF CHE SI APRE — owner 2026-08-17, «il PDF bisogna poterlo
  * visualizzare dentro la app».
  *
@@ -565,6 +642,91 @@ const parolaStato = (acceso: boolean): string => (acceso
                 </span>
                 <span v-if="s.dove || s.pdf || s.mdFileId" class="talos-freccia flex-none" aria-hidden="true">›</span>
             </component>
+
+            <!--
+                ⭐⭐⭐ PIÙ DI UNA COSA CREATA — la stessa scheda sopra, ripetuta
+                per ogni voce. Vedi `tracciaAzione.ts` per il perché: un
+                `foreach` del Forge (es. "aggiungi tre attività") produceva
+                N creazioni vere e ZERO righe qui, solo un badge di testo.
+
+                ⛔ Nessun elemento nuovo: stessa classe `talos-controllo`,
+                stesso bottone-solo-col-`dove` di `creato` — è la STESSA
+                scheda, non una seconda forma da imparare a leggere.
+            -->
+            <template v-if="eCreati(s)">
+                <component
+                    v-for="(voce, vi) in s.voci"
+                    :key="`${voce.titolo}-${vi}`"
+                    :is="voce.dove ? 'button' : 'div'"
+                    :type="voce.dove ? 'button' : undefined"
+                    class="talos-controllo flex w-full items-center gap-2 border border-border bg-muted text-left"
+                    :class="voce.dove ? 'talos-pressable' : ''"
+                    data-testid="talos-scheda-creati-voce"
+                    @click="voce.dove ? apri(voce.dove) : undefined"
+                >
+                    <span class="talos-nome min-w-0 flex-1">
+                        <span class="block truncate">{{ voce.titolo }}</span>
+                        <span class="mt-px block text-xs text-muted-foreground">{{ voce.genere }}</span>
+                    </span>
+                    <span v-if="voce.dove" class="talos-freccia flex-none" aria-hidden="true">›</span>
+                </component>
+            </template>
+
+            <!--
+                ⭐⭐⭐ L'ARTEFATTO HTML — owner 2026-08-27, «creare artefatti
+                con schemi avanzati e interagibili in chat, come fa ChatGPT».
+
+                ⛔ Non è un `dove`: il tocco apre `TalosArtifactActivity`, una
+                Activity Android nativa separata — WebView e profilo propri,
+                verificata sul Pad a non avere accesso né al ponte Capacitor
+                né alla rete. Vedi `apriArtefatto` sopra e
+                `TalosArtifactActivity.kt` per la catena intera.
+
+                ⛔ La riga dell'esito c'è SEMPRE, anche vuota — stessa regola
+                di `apriImpostazioni`: un lettore di schermo deve averla già
+                osservata prima che cambi.
+            -->
+            <button
+                v-if="eArtefatto(s)"
+                type="button"
+                class="talos-controllo flex w-full items-center gap-2 border border-border bg-muted text-left talos-pressable"
+                :aria-busy="esitoArtefatto[s.id] === 'apre'"
+                :disabled="esitoArtefatto[s.id] === 'apre'"
+                data-testid="talos-scheda-artefatto"
+                @click="apriArtefatto(s.id)"
+            >
+                <span class="talos-nome min-w-0 flex-1">
+                    <span class="block truncate">{{ s.titolo }}</span>
+                    <span
+                        class="talos-esito mt-px block text-xs text-muted-foreground"
+                        aria-live="polite"
+                    >{{ esitoArtefatto[s.id] === 'rifiutato' ? t('chat.cardAppRefused') : '' }}</span>
+                </span>
+                <span class="talos-freccia flex-none" aria-hidden="true">›</span>
+            </button>
+            <!--
+                ⛔ Riga SEPARATA dal bottone che apre: due azioni diverse
+                (apri/salva) non condividono un tocco solo — confonderle
+                vorrebbe dire che toccare per aprire salva anche, o
+                viceversa, senza che la persona l'abbia scelto.
+            -->
+            <button
+                v-if="eArtefatto(s)"
+                type="button"
+                class="talos-app flex w-full items-center border border-border bg-muted text-left text-sm text-muted-foreground"
+                :aria-busy="esitoSalvataggio[s.id] === 'salva'"
+                :disabled="esitoSalvataggio[s.id] === 'salva' || esitoSalvataggio[s.id] === 'salvato'"
+                data-testid="talos-scheda-artefatto-salva"
+                @click="salvaArtefattoNellaLibreria(s)"
+            >
+                <span class="flex-1">
+                    {{ esitoSalvataggio[s.id] === 'salvato' ? t('chat.cardSavedToLibrary') : t('chat.cardSaveToLibrary') }}
+                    <span
+                        class="talos-esito block text-xs"
+                        aria-live="polite"
+                    >{{ esitoSalvataggio[s.id] === 'rifiutato' ? t('chat.cardSaveFailed') : '' }}</span>
+                </span>
+            </button>
 
             <!--
                 ⭐⭐⭐ È PARTITO, O NO — e questa riga vince sulla prosa.
@@ -903,6 +1065,10 @@ const parolaStato = (acceso: boolean): string => (acceso
     padding: var(--talos-space-control);
     border-radius: var(--talos-radius-control);
 }
+/* ⛔ Serve SOLO da quando `creati` ripete `.talos-controllo` per riga —
+   prima non esisteva un caso con più di uno stesso comando in una scheda.
+   Stessa misura di `.talos-voce + .talos-voce` e `.talos-app + .talos-app`. */
+.talos-controllo + .talos-controllo { margin-block-start: 0.35rem; }
 /*
  * ⭐ La riga di un impegno. Stessa scatola del comando — stesso raggio, stesso
  * respiro — perché a schermo sono due forme della stessa scheda.

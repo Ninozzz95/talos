@@ -1,5 +1,25 @@
 # Build output
-dist/
+#
+# ⛔⛔ 28/8 — STESSO difetto già documentato per `mobile/docs/`
+# (gitignore-mobile-docs-blocca-screenshot-nuovi.md): un pattern di
+# CARTELLA senza `/` iniziale ("dist/") ignora ogni cartella con quel
+# nome A QUALUNQUE PROFONDITÀ, non solo l'output di Vite alla radice.
+# MISURATO: inghiottiva `android/app/src/debug/assets/talos-harness-ui/
+# kernel/dist/kernelPerIlBanco.js` — un file VENDORIZZATO apposta, non
+# generato da una build, verificato con `git check-ignore -v`. L'ancora
+# `/dist/` (relativa a QUESTO file, cioè `mobile/`) risolve SENZA
+# bisogno di una negazione.
+#
+# ⛔ CORREZIONE, stesso giorno: la riga sopra ("nessun'altra cartella
+# dist ne ha bisogno") era FALSA — trovata da `git status` subito dopo,
+# non da una seconda ricerca a tavolino: `scripts/harness-talos/dist/`
+# è l'output VERO di `vite.banco.config.mjs` (kernel del banco,
+# rigenerabile), non un vendorizzato come l'altro. Elencata a parte,
+# ANCORA precisa (non un pattern largo "dist/" che tornerebbe a
+# inghiottire il vendorizzato) — mai due `dist/` nell'albero si
+# assomigliano abbastanza da meritare lo stesso pattern.
+/dist/
+/scripts/harness-talos/dist/
 
 # Test artifacts
 test-results/
@@ -61,3 +81,17 @@ keystore.properties
 
 # ⛔ I modelli sono gigabyte: un file grande in git e un file grande PER SEMPRE.
 .modelli/
+
+# ⛔⛔⛔ 30/8 — porta canonico (3e03f9d3, FASE L): cartelle dati generate a
+# RUNTIME dal server harness-ui imbarcato (talos-harness-ui/harness-ui/),
+# mai tracciate. Il canonico ha trovato QUESTE STESSE cartelle "dormienti"
+# (mai popolate, ma senza gitignore) sul proprio .gitignore mentre
+# lavorava a questa fase — stesso controllo ripetuto qui: la copia
+# embedded non le aveva MAI avute, non solo mai popolate. Pattern SENZA
+# `/` iniziale apposta (a differenza di `/dist/` sopra): queste vogliono
+# essere ignorate A QUALUNQUE PROFONDITÀ sotto `talos-harness-ui/`, non
+# solo alla radice di `mobile/` — non esiste altro contenuto nel repo con
+# questi nomi che rischi di essere inghiottito per sbaglio.
+.sessions-store/
+.hooks-trust/
+.automations/

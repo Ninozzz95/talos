@@ -15,6 +15,19 @@ const deviceSave = vi.hoisted(() => ({
 }))
 vi.mock('@/services/saveVaultFileToDevice', () => deviceSave)
 
+/*
+ * ⛔ Owner 2026-08-27 — «renderizzare HTML invece del codice quando ci
+ * clicchi nella Libreria». `renderArtifactFile` importa `TalosArtifactBridge`
+ * dinamicamente (`await import(...)`): un finto controllabile per-test, non
+ * la vera `TalosArtifactPlugin.kt` (quella si prova solo sul Pad).
+ */
+const artifactBridge = vi.hoisted(() => ({
+    create: vi.fn(),
+    open: vi.fn(),
+    read: vi.fn(),
+}))
+vi.mock('@/lib/device/artifactPlugin', () => ({ TalosArtifactBridge: artifactBridge }))
+
 import ContextScreen from '@/screens/ContextScreen.vue'
 import { __resetToastsForTests, useTalosMobileToasts } from '@/stores/toasts'
 import { __resetSettingsStoreForTests, useSettingsStore } from '@/stores/settings'
@@ -72,6 +85,9 @@ beforeEach(() => {
         bytesWritten: 3,
         displayName: 'architecture.pdf',
     })
+    artifactBridge.create.mockReset().mockResolvedValue({ id: 'artifact-1' })
+    artifactBridge.open.mockReset().mockResolvedValue({ opened: true })
+    artifactBridge.read.mockReset().mockResolvedValue({ html: '<p>read</p>' })
     __resetToastsForTests()
     __resetSettingsStoreForTests()
 })
@@ -652,6 +668,139 @@ describe('ContextScreen Library gallery', () => {
         expect(viewer!.textContent).toContain('Il prezzo del gas')
         // And from the transcript, the original page is still reachable.
         expect(viewer!.querySelector('[data-testid="talos-library-doc-open-source"]')).not.toBeNull()
+    })
+
+    /**
+     * Owner 2026-08-27: "non è possibile renderizzare html quando ci clicchi
+     * nella libreria invece del codice? e con un pulsante 'vedi codice'
+     * switchare alla versione codice?"
+     *
+     * Opening an `.html` Library file renders it as a page by default — the
+     * same isolated `TalosArtifactActivity` the chat `artefatto` card uses,
+     * reused generically. The raw text stays hydrated underneath the whole
+     * time: it is the code view, not a separate mode entered on failure.
+     */
+    it('renders an opened HTML file as a page through the isolated artifact viewer', async () => {
+        const controller = makeController()
+        controller.attachments.hydrateText = vi.fn().mockResolvedValue('<h1>Ciao</h1>')
+        controller.attachments.vaultFiles.push({
+            ...file('vault-page'),
+            display_name: 'Orologio.html',
+            media_type: 'text/html',
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen, { attachTo: document.body })
+        await flushPromises()
+
+        await wrapper.get('[aria-label="Open Orologio.html"]').trigger('click')
+        await flushPromises()
+
+        expect(artifactBridge.create).toHaveBeenCalledWith({ title: 'Orologio', html: '<h1>Ciao</h1>' })
+        expect(artifactBridge.open).toHaveBeenCalledWith({ id: 'artifact-1' })
+        // The code view is still there underneath, untouched.
+        const viewer = document.body.querySelector('[data-testid="talos-library-doc"]')
+        expect(viewer!.textContent).toContain('Ciao')
+    })
+
+    it('offers a "view as page" button on an HTML file, and none on any other kind', async () => {
+        const controller = makeController()
+        controller.attachments.hydrateText = vi.fn().mockResolvedValue('<h1>Ciao</h1>')
+        controller.attachments.vaultFiles.push({
+            ...file('vault-page'),
+            display_name: 'Orologio.html',
+            media_type: 'text/html',
+        } as ReturnType<typeof file>)
+        controller.attachments.vaultFiles.push({
+            ...file('vault-notes'),
+            display_name: 'notes.md',
+            media_type: 'text/markdown',
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen, { attachTo: document.body })
+        await flushPromises()
+
+        await wrapper.get('[aria-label="Open Orologio.html"]').trigger('click')
+        await flushPromises()
+        expect(document.body.querySelector('[data-testid="talos-library-doc-view-as-page"]')).not.toBeNull()
+        ;(document.body.querySelector('[data-testid="talos-library-doc"] [aria-label="Close"]') as HTMLButtonElement).click()
+        await flushPromises()
+
+        artifactBridge.create.mockClear()
+        artifactBridge.open.mockClear()
+        // A different text file still opens in the very same code overlay —
+        // it just never gets the button, and the bridge is never touched.
+        await wrapper.get('[aria-label="Open notes.md"]').trigger('click')
+        await flushPromises()
+        expect(document.body.querySelector('[data-testid="talos-library-doc"]')).not.toBeNull()
+        expect(document.body.querySelector('[data-testid="talos-library-doc-view-as-page"]')).toBeNull()
+        expect(artifactBridge.create).not.toHaveBeenCalled()
+    })
+
+    it('the "view as page" button re-renders from the code view on demand', async () => {
+        const controller = makeController()
+        controller.attachments.hydrateText = vi.fn().mockResolvedValue('<h1>Ciao</h1>')
+        controller.attachments.vaultFiles.push({
+            ...file('vault-page'),
+            display_name: 'Orologio.html',
+            media_type: 'text/html',
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen, { attachTo: document.body })
+        await flushPromises()
+
+        await wrapper.get('[aria-label="Open Orologio.html"]').trigger('click')
+        await flushPromises()
+        artifactBridge.create.mockClear()
+        artifactBridge.open.mockClear()
+
+        ;(document.body.querySelector('[data-testid="talos-library-doc-view-as-page"]') as HTMLButtonElement).click()
+        await flushPromises()
+        expect(artifactBridge.create).toHaveBeenCalledWith({ title: 'Orologio', html: '<h1>Ciao</h1>' })
+        expect(artifactBridge.open).toHaveBeenCalledOnce()
+    })
+
+    it('falls back to the code view already on screen when the page cannot be shown', async () => {
+        const controller = makeController()
+        controller.attachments.hydrateText = vi.fn().mockResolvedValue('<h1>Ciao</h1>')
+        controller.attachments.vaultFiles.push({
+            ...file('vault-page'),
+            display_name: 'Orologio.html',
+            media_type: 'text/html',
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        artifactBridge.open.mockResolvedValue({ opened: false })
+        const wrapper = mount(ContextScreen, { attachTo: document.body })
+        await flushPromises()
+
+        await wrapper.get('[aria-label="Open Orologio.html"]').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.text()).toContain('Orologio.html')
+        expect(wrapper.text()).toMatch(/could not be shown as a page/i)
+        // The code stays visible: an honest failure never leaves an empty screen.
+        const viewer = document.body.querySelector('[data-testid="talos-library-doc"]')
+        expect(viewer!.textContent).toContain('Ciao')
+    })
+
+    it('shows the same failure when the native bridge itself throws', async () => {
+        const controller = makeController()
+        controller.attachments.hydrateText = vi.fn().mockResolvedValue('<h1>Ciao</h1>')
+        controller.attachments.vaultFiles.push({
+            ...file('vault-page'),
+            display_name: 'Orologio.html',
+            media_type: 'text/html',
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        artifactBridge.create.mockRejectedValue(new Error('TALOS_ARTIFACT_UNAVAILABLE'))
+        const wrapper = mount(ContextScreen, { attachTo: document.body })
+        await flushPromises()
+
+        await wrapper.get('[aria-label="Open Orologio.html"]').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.text()).toMatch(/could not be shown as a page/i)
+        const viewer = document.body.querySelector('[data-testid="talos-library-doc"]')
+        expect(viewer!.textContent).toContain('Ciao')
     })
 
     it('shows a compact empty state and a recoverable load error', async () => {

@@ -315,6 +315,33 @@ describe('talos.tool.authorization-checkpoint/1', () => {
     })
 
     /**
+     * ⛔⛔⛔ Owner 2026-08-27 — chiude il gap onestamente lasciato aperto in
+     * Fase 8: questo stesso identico giro, con `tool: 'dynamic:close-with-note'`
+     * invece di un built-in, lanciava SEMPRE
+     * `TALOS_TOOL_AUTHORIZATION_TOOL_INVALID` — "Consenti sempre" su un tool
+     * forgiato non ha mai funzionato fino ad ora. Passa dal COORDINATOR
+     * vero, non dalle funzioni pure: prova che il giro intero — dalla
+     * decisione sullo schermo alla scrittura del grant persistente — regge
+     * per un tool del Forge tanto quanto per uno incorporato.
+     */
+    it('⛔ "Consenti sempre" su un tool FORGIATO persiste il grant, non lancia più', async () => {
+        const operations: string[] = []
+        const gate = coordinator(vi.fn(async () => {}), operations)
+        await gate.suspend(await makeCheckpoint([await makeRequest({
+            tool: 'dynamic:close-with-note',
+            input: { id: 'forge-task-1', status: 'done', reflection: 'fatto senza intoppi' },
+        })]))
+
+        await expect(gate.decide('request-1', 'always_allow')).resolves.toBe(true)
+
+        expect(operations).toEqual(['grant', 'ready'])
+        expect(grants.grants['dynamic:close-with-note']).toMatchObject({
+            tool: 'dynamic:close-with-note',
+            actions: ['write'],
+        })
+    })
+
+    /**
      * Owner 2026-08-02, on the device: "ho premuto consenti sempre ma il pop-up
      * non si è levato immediatamente, ho dovuto insistere".
      *
@@ -718,5 +745,63 @@ describe('⛔⭐ l\'id del profilo modello, che ha rotto i tool su tutto OpenRou
 
         await gate.cancel('activity-illeggibile')
         expect(gate.recoveries()).toEqual([])
+    })
+})
+
+describe('6.4 — registraDecisioneReale, il contatore di frizione opzionale', () => {
+    function coordinatorCon(registraDecisioneReale?: (
+        tool: string,
+        decisione: 'allow_once' | 'allow_turn' | 'always_allow' | 'deny',
+        quando: string,
+    ) => Promise<void>) {
+        return createTalosToolAuthorizationCoordinator({
+            repository,
+            now: () => '2026-07-29T12:01:00.000Z',
+            authorizations: () => grants,
+            async grant(tool, actions) {
+                grants = applyTalosToolAuthorizationGrant(grants, tool, actions, grants.revision, '2026-07-29T12:01:00.000Z')
+            },
+            async onReady() {},
+            ...(registraDecisioneReale ? { registraDecisioneReale } : {}),
+        })
+    }
+
+    it('⭐⭐⭐ PARITÀ — senza registraDecisioneReale, decide() si comporta esattamente come prima', async () => {
+        const gate = coordinatorCon()
+        await gate.suspend(await makeCheckpoint())
+        const risultato = await gate.decide('request-1', 'allow_once')
+        expect(risultato).toBe(true)
+        expect(gate.pending()).toEqual([])
+    })
+
+    it('⭐⭐⭐ una decisione vera chiama registraDecisioneReale con tool/decisione/quando giusti', async () => {
+        const spia = vi.fn(async () => {})
+        const gate = coordinatorCon(spia)
+        await gate.suspend(await makeCheckpoint())
+        await gate.decide('request-1', 'allow_once')
+
+        expect(spia).toHaveBeenCalledTimes(1)
+        expect(spia).toHaveBeenCalledWith('document_create', 'allow_once', '2026-07-29T12:01:00.000Z')
+    })
+
+    it('⛔⛔ AL CONTRARIO — se registraDecisioneReale RIFIUTA, decide() riesce comunque: un contatore rotto non deve mai rompere una decisione vera', async () => {
+        const cheRompeSempre = vi.fn(async () => { throw new Error('preferences non disponibile') })
+        const gate = coordinatorCon(cheRompeSempre)
+        await gate.suspend(await makeCheckpoint())
+
+        const risultato = await gate.decide('request-1', 'allow_once')
+
+        expect(risultato).toBe(true)
+        expect(gate.pending()).toEqual([])
+        expect(cheRompeSempre).toHaveBeenCalledTimes(1)
+    })
+
+    it('un "no" arriva al contatore come "deny", non come un\'omissione', async () => {
+        const spia = vi.fn(async () => {})
+        const gate = coordinatorCon(spia)
+        await gate.suspend(await makeCheckpoint())
+        await gate.decide('request-1', 'deny')
+
+        expect(spia).toHaveBeenCalledWith('document_create', 'deny', '2026-07-29T12:01:00.000Z')
     })
 })

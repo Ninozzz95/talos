@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { ref } from 'vue'
 import TalosToolPermissionsBoard from '@/components/talos/permissions/TalosToolPermissionsBoard.vue'
-import { TALOS_AGENT_TOOL_CONTROLS } from '@/lib/tools/toolControlCatalog'
+import { TALOS_AGENT_TOOL_CONTROLS, TALOS_AZIONI_GOVERNATE } from '@/lib/tools/toolControlCatalog'
 import { TALOS_TOOL_ACTIONS, type TalosToolPermissions } from '@/lib/tools/permissionTypes'
 
 function scheda(iniziali: Partial<TalosToolPermissions> = {}) {
@@ -33,9 +33,9 @@ function scheda(iniziali: Partial<TalosToolPermissions> = {}) {
  * nessuno.
  */
 describe('la scheda dei permessi degli strumenti', () => {
-    it('mostra i tre poteri, ciascuno coi suoi tre stati', () => {
+    it('mostra i poteri GOVERNATI, ciascuno coi suoi tre stati', () => {
         const { wrapper } = scheda()
-        for (const azione of TALOS_TOOL_ACTIONS) {
+        for (const azione of TALOS_AZIONI_GOVERNATE) {
             expect(wrapper.find(`[data-testid="talos-tool-permission-${azione}"]`).exists()).toBe(true)
             for (const stato of ['allow', 'ask', 'deny']) {
                 expect(wrapper.find(`[data-testid="talos-tool-permission-${azione}-${stato}"]`).exists()).toBe(true)
@@ -80,7 +80,7 @@ describe('la scheda dei permessi degli strumenti', () => {
      */
     it('dice quali strumenti stanno dentro ogni potere, e li prende dal catalogo', () => {
         const { wrapper } = scheda()
-        for (const azione of TALOS_TOOL_ACTIONS) {
+        for (const azione of TALOS_AZIONI_GOVERNATE) {
             const dettaglio = wrapper.get(`[data-testid="talos-tool-permission-${azione}-tools"]`)
             const attesi = TALOS_AGENT_TOOL_CONTROLS.filter((c) => c.actions.includes(azione))
             expect(attesi.length).toBeGreaterThan(0)
@@ -134,5 +134,33 @@ describe('la scheda dei permessi degli strumenti', () => {
         wrapper.get('[data-testid="talos-tool-permission-outbound-deny"]').element.dispatchEvent(new Event('click'))
         wrapper.get('[data-testid="talos-tool-permission-read-allow"]').element.dispatchEvent(new Event('click'))
         expect(modello.value).toEqual({ read: 'allow', write: 'ask', outbound: 'deny' })
+    })
+
+    /*
+     * ⭐⭐⭐ LA DECISIONE DEL 2026-08-20, pinnata.
+     *
+     * `execute` e entrata nel vocabolario per l'esecuzione di codice, e nessun
+     * attrezzo la dichiara ancora. Mostrarla lo stesso avrebbe prodotto una
+     * riga senza attrezzi sotto, per un potere non esercitabile — e, misurato,
+     * avrebbe reso FALSA l'autonomia gia concessa di chi l'aveva concessa.
+     *
+     * ⇒ La scheda mostra i poteri che ESISTONO. Questo test cade il giorno che
+     * il primo attrezzo dichiara `execute` — ed e giusto che cada: quel giorno
+     * la riga deve comparire, con la sua icona e la sua domanda.
+     */
+    it('⛔ NON mostra un potere che nessun attrezzo dichiara', () => {
+        const nonGovernate = TALOS_TOOL_ACTIONS.filter((a) => !TALOS_AZIONI_GOVERNATE.includes(a))
+        const { wrapper } = scheda()
+        for (const azione of nonGovernate) {
+            expect(wrapper.find(`[data-testid="talos-tool-permission-${azione}"]`).exists())
+                .toBe(false)
+        }
+        // ⛔ E il verso contrario: ogni potere governato HA la sua riga. Senza
+        // questo, una lista vuota passerebbe il test qui sopra a mani basse.
+        expect(TALOS_AZIONI_GOVERNATE.length).toBeGreaterThan(0)
+        for (const azione of TALOS_AZIONI_GOVERNATE) {
+            expect(wrapper.find(`[data-testid="talos-tool-permission-${azione}"]`).exists())
+                .toBe(true)
+        }
     })
 })

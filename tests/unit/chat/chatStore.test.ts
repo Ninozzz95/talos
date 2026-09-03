@@ -38,6 +38,46 @@ function deferred<T = void>() {
 }
 
 describe('createChatStore durable sessions', () => {
+    it('CHAT-PERF-01 restores a page with session-level reads instead of one native query per message', async () => {
+        const now = makeClock()
+        const repository = createMemoryChatRepository({ now })
+        await repository.initialize()
+        const session = await repository.createSession({
+            id: 'perf-session',
+            title: 'Performance',
+            active_model_profile_id: null,
+            created_at: now(),
+        })
+        for (let index = 0; index < 3; index += 1) {
+            await repository.appendMessage({
+                id: `perf-message-${index}`,
+                session_id: session.id,
+                role: index % 2 === 0 ? 'user' : 'assistant',
+                content: `Message ${index}`,
+                state: 'persisted',
+                created_at: now(),
+            })
+        }
+
+        const messageAttachments = vi.spyOn(repository, 'listMessageAttachments')
+        const messageActivities = vi.spyOn(repository, 'listMessageToolActivities')
+        const sessionActivities = vi.spyOn(repository, 'listSessionToolActivities')
+        const attachmentMessageIds = vi.spyOn(repository, 'listSessionAttachmentMessageIds')
+
+        const store = createChatStore(vi.fn().mockResolvedValue({ text: 'unused', finishReason: 'stop' }), {
+            repository,
+            makeId: makeIds(),
+            now,
+        })
+        await store.initialize()
+
+        expect(store.messages).toHaveLength(3)
+        expect(messageAttachments).not.toHaveBeenCalled()
+        expect(messageActivities).not.toHaveBeenCalled()
+        expect(sessionActivities).toHaveBeenCalledTimes(1)
+        expect(attachmentMessageIds).toHaveBeenCalledTimes(1)
+    })
+
     it('BR-09 persists Browse per session and restores only session-level browser lifecycle evidence', async () => {
         const now = makeClock()
         const makeId = makeIds()

@@ -10,6 +10,7 @@ export type TalosMobileRouteName =
     | 'settings-models' | 'settings-models-providers'
     | 'settings-models-catalog' | 'settings-models-local' | 'settings-models-local-repo'
     | 'harness' | 'harness-session'
+    | 'toolforge'
 
 export interface TalosMobileRoute {
     name: TalosMobileRouteName
@@ -47,6 +48,9 @@ const loadContextScreen = () => import('@/screens/ContextScreen.vue').then((modu
 // against the CSP (`frame-src 'none'`) when the Settings link first shipped.
 const loadHarnessScreen = () => import('@/screens/HarnessScreen.vue').then((module) => module.default)
 const loadHarnessSessionScreen = () => import('@/screens/HarnessSessionScreen.vue').then((module) => module.default)
+// Tool Forge (27/8): tool creati da manifest dichiarativi, non da codice
+// generato dal modello — vedi ADR-001 nel pacchetto d'origine.
+const loadToolForgeScreen = () => import('@/screens/ToolForgeScreen.vue').then((module) => module.default)
 const loadSettingsScreen = () => import('@/screens/SettingsScreen.vue').then((module) => module.default)
 const loadSettingsModelsScreen = () => import('@/screens/SettingsModelsScreen.vue').then((module) => module.default)
 const loadSettingsModelsProvidersScreen = () => import('@/screens/SettingsModelsProvidersScreen.vue').then((module) => module.default)
@@ -125,6 +129,11 @@ export const TALOS_MOBILE_ROUTES: readonly TalosMobileRoute[] = Object.freeze([
     { name: 'context', path: '/context', desktop_station_id: 'context_vault', component: loadContextScreen },
     { name: 'harness', path: '/harness', desktop_station_id: 'harness', component: loadHarnessScreen },
     { name: 'harness-session', path: '/harness/:id', desktop_station_id: 'harness', component: loadHarnessSessionScreen, parent: 'harness' },
+    // Tool Forge — mobile-first, non è ancora nel ledger di parità desktop
+    // (il pacchetto d'origine lo dichiara esplicitamente: "architecture-
+    // compatible, not implemented in v1"). Stesso schema di 'harness', che
+    // non è nella lista `expected_desktop_feature_ids` per lo stesso motivo.
+    { name: 'toolforge', path: '/toolforge', desktop_station_id: 'tool_forge', component: loadToolForgeScreen },
     { name: 'settings', path: '/settings', desktop_station_id: 'settings', component: loadSettingsScreen },
     { name: 'settings-models', path: '/settings/models', desktop_station_id: 'settings', component: loadSettingsModelsScreen, parent: 'settings' },
     { name: 'settings-models-providers', path: '/settings/models/providers', desktop_station_id: 'settings', component: loadSettingsModelsProvidersScreen, parent: 'settings-models' },

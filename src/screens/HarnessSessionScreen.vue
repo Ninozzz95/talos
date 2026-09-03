@@ -45,11 +45,21 @@
  * rotta resta raggiungibile da un URL diretto anche quando la voce di
  * navigazione è nascosta.
  *
- * L'`:id` seleziona una delle cinque sessioni demo canoniche nel documento
- * statico tramite il ponte AVM tipizzato. Non è wiring di backend: cambia solo
- * lo stato locale dichiaratamente demo già presente nel mockup.
+ * ⛔ 28/8 — l'`:id` non seleziona più una delle cinque sessioni demo
+ * canoniche: seleziona una sessione REALE (`@/lib/harness/codiceSessions`,
+ * la stessa tabella on-device di Chat, local-first — vedi
+ * [[mobile-app-local-first-requirement]]), oppure il valore sentinella
+ * `'new'` — uno stato di BOZZA senza riga ancora creata, mostrato come un
+ * composer vuoto invece del mockup. La sessione vera nasce solo al primo
+ * invio (`submitCodePrompt`), mai al solo tocco del bottone "Nuova": un
+ * bottone che crea subito una riga vuota e mai usata sarebbe un fantasma
+ * nella lista, esattamente il difetto che Chat ha già corretto una volta
+ * per il proprio "Nuova chat" (`ensureActiveSession` in `stores/chat.ts`).
+ * Ciò che resta demo, dichiaratamente: cosa succede DENTRO una sessione
+ * (il mockup incorporato sotto) — non ancora un motore reale, ricollegato
+ * in un giro a parte.
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { PluginListenerHandle } from '@capacitor/core'
 import { Keyboard } from '@capacitor/keyboard'
@@ -60,7 +70,16 @@ import TalosMobileComposer from '@/components/chat/TalosMobileComposer.vue'
 import type { TalosMobileModelProfileView } from '@/components/chat/mobileChatTypes'
 import { TALOS_APP_BUILD } from '@/lib/appBuild'
 import { talosComposerFlags } from '@/lib/composerStyle'
-import { findHarnessDemoSession } from '@/lib/harnessDemoSessions'
+import { createCodiceSession, findCodiceSession } from '@/lib/harness/codiceSessions'
+import {
+    listCodiceNotes, createCodiceNote, updateCodiceNote, deleteCodiceNote,
+    listCodiceTasks, createCodiceTask, setCodiceTaskStatus, updateCodiceTask, deleteCodiceTask,
+    searchCodiceMemories, createCodiceMemory, updateCodiceMemoryByTitle, deleteCodiceMemoryByTitle,
+    listCodiceLibraryEntries, readCodiceLibraryDoc, renameCodiceLibraryFile, deleteCodiceLibraryFile,
+    searchCodiceLibrary, readCodiceLibraryFileOrigin,
+    listCodiceResearch, readCodiceResearchReport,
+} from '@/lib/harness/codiceDati'
+import type { TalosLocalChatSession } from '@/repositories/chatRepository'
 import {
     announceTalosHarnessUiComposerAction,
     dismissTalosHarnessUiTransientLayers,
@@ -71,9 +90,33 @@ import {
 } from '@/lib/harnessUiBridge'
 import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
 import { talosHarnessUiAvailable } from '@/services/harnessUi'
+import { avviaServerHarnessConChiaveProvider, talosTerminaleDisponibile } from '@/lib/harness/terminalePonte'
+import { caricaProfiliModelloCodice } from '@/lib/harness/codiceModelProfiles'
+import { TALOS_DEFAULT_MODEL_LAB_PREFERENCES } from '@/lib/modelLabContracts'
 import { useSettingsStore } from '@/stores/settings'
 import type { TalosMobileEffortLevel } from '@/lib/mobileEffort'
 import type { TalosMobileCommandId } from '@/lib/mobileCommandRegistry'
+/**
+ * ⭐⭐⭐ 2/9 — "Migliora prompt" (piano §14.3/§15.6, R5): stessi pezzi
+ * indipendenti già riusati per il catalogo modelli
+ * (codiceModelProfiles.ts) — vincolo CODE-COMPOSER-SINGLE-SOURCE-01,
+ * questa schermata resta indipendente dal composable di chat regolare.
+ * `runTalosMobilePromptEnhancement`/`talosMobileHttpTransport` sono
+ * funzione/const esportate a sé, indipendenti da quel composable
+ * quanto `caricaProfiliModelloCodice` lo è già.
+ */
+import { talosMobileHttpTransport } from '@/lib/chat/httpTransport'
+import { providerAdapterFor } from '@/lib/chat/providerRegistry'
+import { getProviderEndpoint } from '@/services/providerEndpointStore'
+import { getProviderKey } from '@/services/secureKeyStore'
+import {
+    runTalosMobilePromptEnhancement,
+    type TalosMobilePromptEnhancementResult,
+} from '@/lib/chat/promptEnhancement'
+import type { TalosMobileProviderModel } from '@/lib/chat/providerContracts'
+import { TALOS_PROMPT_ENHANCER_DEFAULT_DEPTH } from '@/lib/chat/promptEnhancerDepth'
+import { talosHarnessUiApiBase } from '@/lib/harness/harnessUiApiBase'
+import { useTalosMobileToasts } from '@/stores/toasts'
 
 const TALOS_HARNESS_UI_BASE = '/harness-ui'
 const TALOS_HARNESS_UI_BUILD_QUERY = `?build=${encodeURIComponent(TALOS_APP_BUILD)}`
@@ -86,44 +129,305 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useTalosI18n()
 const settings = useSettingsStore()
+const toasts = useTalosMobileToasts()
 
 const available = talosHarnessUiAvailable()
+/*
+ * ⛔⛔⛔ 29/8, owner dal vivo: "non hai rispettato la regola vincolante di
+ * ispezionare tutti gli screenshot... nella schermata principale c'è
+ * ancora tutto il component mockup. Invece la schermata principale deve
+ * esattamente come la schermata principale della chat mostrare il logo,
+ * la scritta Talos, il messaggio di benvenuto, puoi usare esattamente
+ * lo stesso component." Prima: lo stato BOZZA (isDraft, sotto) mostrava
+ * solo `t('harness.draftHint')` — una riga di testo muto, non il
+ * trattamento TALOS che Chat usa per la stessa situazione (nessuna
+ * conversazione ancora). Stesso componente esatto di ChatScreen.vue
+ * (import async, stesso fallback sincrono per il primo frame — nessuna
+ * variante inventata qui).
+ */
+const TalosWelcomeTitleFallback = () => h(
+    'h1',
+    { class: 'talos-welcome-title' },
+    t('chat.welcomeHeadline'),
+)
+const TalosWelcomeTitle = defineAsyncComponent({
+    loader: () => import('@/components/chat/TalosWelcomeTitle.vue'),
+    loadingComponent: TalosWelcomeTitleFallback,
+    errorComponent: TalosWelcomeTitleFallback,
+    delay: 0,
+    suspensible: false,
+})
 useTalosOverlayBack(
     () => { dismissTalosHarnessUiTransientLayers() },
     talosHarnessUiTransientLayersActive,
 )
 const sessionId = computed(() => String(route.params.id ?? ''))
-const selectedSession = computed(() => findHarnessDemoSession(sessionId.value))
+/**
+ * The 'new' sentinel: a DRAFT, no row created yet. HarnessScreen.vue's
+ * "New" button navigates here; sending the FIRST message is what actually
+ * creates the session (see `submitCodePrompt` below) — the button and a
+ * direct send both end on this exact path, by construction, not by
+ * special-casing one or the other.
+ */
+const isDraft = computed(() => sessionId.value === 'new')
+const loadedSession = ref<TalosLocalChatSession | null>(null)
+const sessionResolving = ref(true)
+
+async function resolveSession(): Promise<void> {
+    sessionResolving.value = true
+    if (isDraft.value) {
+        loadedSession.value = null
+        sessionResolving.value = false
+        return
+    }
+    loadedSession.value = await findCodiceSession(sessionId.value)
+    sessionResolving.value = false
+}
+
 const hostEl = ref<HTMLDivElement | null>(null)
 const composerDockEl = ref<HTMLDivElement | null>(null)
 const loading = ref(true)
 const loadError = ref(false)
 const codePrompt = ref('')
-const codeModelProfileId = ref('code-gpt-5-6-sol')
+/** True only for the brief async window between the first send on a DRAFT and the route landing on the real session id. */
+const creatingSession = ref(false)
+/** Set right before the draft→real route replace; forwarded to the freshly-mounted mockup once `mountMockup()` succeeds. */
+let pendingFirstPrompt: string | null = null
+/** ⭐⭐⭐ 28/8 — il modello scelto AL MOMENTO dell'invio (mai riletto più tardi: la persona potrebbe averlo cambiato nel frattempo). */
+let pendingFirstPromptModello: string | null = null
+/** ⭐⭐⭐ 2/9 — gemello di `pendingFirstPromptModello` per il picker Planner: l'esecutore scelto AL MOMENTO dell'invio, stesso motivo. */
+let pendingFirstPromptModelloEsecutore: string | null = null
+const codeModelProfileId = ref('')
+/**
+ * ⭐⭐⭐ 2/9 — picker Planner (piano §15.6, K): id del profilo esecutore
+ * scelto, o `null` per "Automatico" (il kernel usa sempre `codeModelProfileId`
+ * sopra). A differenza di `codeModelProfileId` non ha un default che si
+ * autoseleziona all'arrivo del catalogo — "Automatico" È il default onesto,
+ * non un placeholder in attesa di una scelta.
+ */
+const codeModelloEsecutoreId = ref<string | null>(null)
 const codeEffort = ref<TalosMobileEffortLevel>('high')
 const codeThinking = ref(false)
 const codeBrowseMode = ref(false)
 const codeView = ref('chat')
 const codePermission = ref('Workspace write')
 
-const CODE_MODEL_PROFILES: TalosMobileModelProfileView[] = [{
-    id: 'code-gpt-5-6-sol',
-    provider: 'openai',
-    model: 'gpt-5.6-sol',
-    display_name: 'gpt-5.6-sol',
-    status: 'healthy',
-    has_secret: true,
-    effort_levels: ['low', 'medium', 'high', 'xhigh', 'max'],
-    supports_thinking: true,
-    show_in_composer: true,
-    capabilities: null,
-    probe_ok: true,
-}]
+/**
+ * ⭐⭐⭐ 28/8, "procedi in ordine" punto 4 — sostituisce `CODE_MODEL_PROFILES`
+ * (un solo profilo finto, mai esistito davvero: `gpt-5.6-sol`). Popolato
+ * da `caricaProfiliModelloCodice()` — stesso catalogo REALE che Chat
+ * mostra, scaricato dal vivo dai provider con una chiave configurata.
+ *
+ * ⛔ Filtrato a `provider === 'openrouter'`, dichiarato non nascosto: il
+ * kernel che esegue Codice (`talosHarness.mjs`) chiama SOLO l'API
+ * OpenRouter — mostrare un profilo OpenAI/Anthropic diretto qui
+ * significherebbe offrire una scelta che il server rifiuterebbe (o,
+ * peggio, ignorerebbe in silenzio). OpenRouter da solo resta "qualunque
+ * modello di qualunque provider" nel senso che conta: il suo catalogo
+ * aggrega GPT/Claude/Gemini/Llama/... sotto una chiave sola. Un kernel
+ * multi-provider (chiamare OpenAI/Anthropic direttamente) resta lavoro
+ * futuro, non finto qui.
+ */
+const codeModelProfiles = ref<TalosMobileModelProfileView[]>([])
+
+/**
+ * ⭐⭐⭐ 2/9 — "Migliora prompt" (R5): stato reale per il drawer che
+ * `TalosMobileComposer.vue` già monta da solo (`TalosMobileEnhancerDrawer`,
+ * v-if="enhancerDrawerOpen" — nessuna UI nuova da scrivere qui, il
+ * componente esiste già e aspetta solo i props veri). La preferenza
+ * modello/effort/depth è GLOBALE (`settings.state.shell.prompt_enhancer`),
+ * condivisa con la chat regolare — stesso principio "riuso diretto" di
+ * codiceModelProfiles.ts: una preferenza "quale modello riscrive i miei
+ * prompt" non ha motivo di divergere fra le due superfici.
+ */
+const codeEnhancingPrompt = ref(false)
+const codePromptEnhancement = ref<TalosMobilePromptEnhancementResult | null>(null)
+const codePromptEnhancementError = ref('')
+const codeEnhancer = computed(() => settings.state.shell?.prompt_enhancer ?? {
+    model: null,
+    effort: 'low' as TalosMobileEffortLevel,
+    depth: TALOS_PROMPT_ENHANCER_DEFAULT_DEPTH,
+})
+/** Solo i profili che il picker del composer già mostra — stessa fonte, mai un secondo elenco. */
+const codeEnhancerModels = computed(() => codeModelProfiles.value.map((profilo) => ({
+    id: profilo.id,
+    label: profilo.display_name || profilo.model,
+    provider: profilo.provider,
+    efforts: profilo.effort_levels ?? [],
+})))
+async function setCodeEnhancer(patch: Partial<typeof codeEnhancer.value>): Promise<void> {
+    await settings.setShell({ prompt_enhancer: { ...codeEnhancer.value, ...patch } })
+}
+
+/**
+ * ⭐⭐⭐ 2/9 — l'unico pezzo genuinamente NUOVO di questa voce (il resto è
+ * riuso): `caricaProfiliModelloCodice()` scarica il catalogo VERO per
+ * costruire i profili ma scarta gli oggetti grezzi
+ * (`TalosMobileProviderModel`) una volta convertiti in "profilo" —
+ * `runTalosMobilePromptEnhancement()` ne vuole uno per davvero (contiene
+ * `chatCompatibility`/modalità che il profilo non porta). Ri-scarica SOLO
+ * il catalogo del provider richiesto (mai tutti, mai a ogni digitazione:
+ * solo quando "Migliora prompt" parte davvero) e trova la voce il cui
+ * `id` combacia con `profilo.model` — stessa corrispondenza che
+ * mobileModelCatalog.ts usa per costruire il profilo stesso (`model: model.id`).
+ */
+async function risolviProviderModelPerEnhance(profilo: TalosMobileModelProfileView): Promise<TalosMobileProviderModel | null> {
+    const adapter = providerAdapterFor(profilo.provider)
+    const [apiKey, endpoint] = await Promise.all([
+        getProviderKey(profilo.provider),
+        getProviderEndpoint(profilo.provider),
+    ])
+    try {
+        const catalogo = await adapter.listModels({ apiKey, endpoint }, talosMobileHttpTransport)
+        return catalogo.models.find((modello) => modello.id === profilo.model) ?? null
+    } catch {
+        return null
+    }
+}
+
+function clearCodePromptEnhancement(): void {
+    codeEnhancingPrompt.value = false
+    codePromptEnhancement.value = null
+    codePromptEnhancementError.value = ''
+}
+
+async function requestCodeEnhancePrompt(): Promise<void> {
+    codeEnhancingPrompt.value = true
+    codePromptEnhancement.value = null
+    codePromptEnhancementError.value = ''
+    const enhancerModelId = codeEnhancer.value.model
+    const scelto = enhancerModelId
+        ? codeModelProfiles.value.find((profilo) => profilo.id === enhancerModelId) ?? null
+        : null
+    const profilo = scelto ?? codeModelProfiles.value.find((entry) => entry.id === codeModelProfileId.value) ?? null
+    if (!profilo) {
+        codeEnhancingPrompt.value = false
+        codePromptEnhancementError.value = t('chat.selectCallableModel')
+        return
+    }
+    try {
+        const [apiKey, endpoint, providerModel] = await Promise.all([
+            getProviderKey(profilo.provider),
+            getProviderEndpoint(profilo.provider),
+            risolviProviderModelPerEnhance(profilo),
+        ])
+        const result = await runTalosMobilePromptEnhancement(
+            {
+                profile: profilo,
+                providerModel,
+                apiKey,
+                endpoint,
+                // L'effort dell'enhancer, non quello della sessione Codice —
+                // stesso motivo di ChatScreen.vue: riscrivere un prompt non è
+                // il compito più difficile della conversazione.
+                effort: codeEnhancer.value.effort ?? codeEffort.value,
+                thinking: codeThinking.value,
+                depth: codeEnhancer.value.depth,
+            },
+            codePrompt.value,
+            talosMobileHttpTransport,
+        )
+        codePromptEnhancement.value = result
+    } catch (error) {
+        codePromptEnhancementError.value = error instanceof Error ? error.message : String(error)
+    } finally {
+        codeEnhancingPrompt.value = false
+    }
+}
+
+function onCodeEnhanceBlocked(reason: string): void {
+    // ⭐ 2/9 — il MOTIVO vero (calcolato dentro TalosMobileComposer.vue
+    // stesso: "seleziona un modello", "scrivi un prompt prima") — mai più
+    // il toast fisso "Miglioramento non collegato" che non diceva perché.
+    toasts.push({ message: reason, durationMs: 5000 })
+}
+
+function insertCodeEnhancePrompt(): void {
+    const result = codePromptEnhancement.value
+    if (!result) return
+    const separator = codePrompt.value.trim().length > 0 ? '\n\n' : ''
+    codePrompt.value = `${codePrompt.value}${separator}${result.enhanced_prompt}`
+    clearCodePromptEnhancement()
+}
+
+function replaceCodeEnhancePrompt(): void {
+    const result = codePromptEnhancement.value
+    if (!result) return
+    codePrompt.value = result.enhanced_prompt
+    clearCodePromptEnhancement()
+}
+
+/**
+ * ⭐ 29/8 — owner, dopo un HTTP 429 reale su tencent/hy4-preview: "fai in
+ * modo che i modelli caricati per ogni sessione funzionino bene". La
+ * selezione sotto NON aveva nessun criterio di affidabilità:
+ * `show_in_composer` è vero per QUASI OGNI modello "supportato"
+ * (mobileModelCatalog.ts, `!unsupported`) — la scelta di fatto era "il
+ * primo della lista", e quella lista si popola da una `Promise.all` fra
+ * provider (ordine non deterministico, una gara) più l'ordine che ogni
+ * singolo provider restituisce (mai curato per affidabilità — così è
+ * arrivato tencent/hy4-preview, rate-limited upstream). Un preferito
+ * esplicito — quello che l'owner ha già indicato il 29/8 ("usa come
+ * modello d'ora in poi Gemini 37 Flash"), id reale verificato su
+ * OpenRouter — vince quando è fra i profili scoperti; altrimenti resta
+ * il comportamento di sempre (show_in_composer, poi il primo), mai un
+ * blocco se assente.
+ */
+const MODELLO_PREFERITO_DEFAULT = 'google/gemini-3.7-flash'
+
+/**
+ * ⭐⭐⭐ 2/9 — il valore di ritorno (`riuscito`) esiste per
+ * refreshCodeModels() qui sotto: senza di lui il toast "Modelli
+ * aggiornati" sarebbe vero solo per il caso comune e falso ogni volta
+ * che il catch sotto interviene — lo stesso genere di messaggio che
+ * dichiara un successo non avvenuto che questa fase intera esiste per
+ * eliminare. Il chiamante al mount (sotto, `void caricaModelliCodice()`)
+ * ignora il ritorno di proposito: lì un fallimento silenzioso è già
+ * onesto, perché non c'è nessun toast ad affermare il contrario.
+ */
+async function caricaModelliCodice(): Promise<boolean> {
+    let riuscito = true
+    try {
+        const tutti = await caricaProfiliModelloCodice(settings.state.model_lab ?? TALOS_DEFAULT_MODEL_LAB_PREFERENCES)
+        codeModelProfiles.value = tutti.filter((profilo) => profilo.provider === 'openrouter')
+    } catch (error) {
+        console.warn('[codice] caricamento profili modello fallito:', error)
+        codeModelProfiles.value = []
+        riuscito = false
+    }
+    if (!codeModelProfiles.value.some((profilo) => profilo.id === codeModelProfileId.value)) {
+        const preferito = codeModelProfiles.value.find((profilo) => profilo.model === MODELLO_PREFERITO_DEFAULT && profilo.status !== 'disabled')
+            ?? codeModelProfiles.value.find((profilo) => profilo.show_in_composer)
+            ?? codeModelProfiles.value[0]
+        codeModelProfileId.value = preferito?.id ?? ''
+    }
+    return riuscito
+}
+
+/**
+ * Il profilo VERO dietro `codeModelProfileId` — `undefined` quando
+ * ancora nessun catalogo è stato caricato, o il provider scelto non ha
+ * (più) un profilo OpenRouter valido: `startRealSessionFromMessage`
+ * legge questo per decidere se mandare un `modello` esplicito o lasciare
+ * il default del server (mai una stringa a caso).
+ */
+const codeModeloSelezionato = computed(() => codeModelProfiles.value.find((profilo) => profilo.id === codeModelProfileId.value)?.model ?? null)
+
+/**
+ * ⭐⭐⭐ 2/9 — gemello di `codeModeloSelezionato` per il picker Planner:
+ * `null` quando `codeModelloEsecutoreId` è `null` ("Automatico", il caso
+ * comune) O quando l'id scelto non risolve più a un profilo valido (stesso
+ * ripiego onesto del modello principale — mai una stringa a caso).
+ */
+const codeModelloEsecutoreSelezionato = computed(() => {
+    if (codeModelloEsecutoreId.value === null) return null
+    return codeModelProfiles.value.find((profilo) => profilo.id === codeModelloEsecutoreId.value)?.model ?? null
+})
 const codeComposerShape = computed(() => talosComposerFlags(
     settings.state.shell.composer_shape,
     settings.state.shell.composer_plus,
 ))
-const codeCanSend = computed(() => codePrompt.value.trim().length > 0)
+const codeCanSend = computed(() => codePrompt.value.trim().length > 0 && !creatingSession.value)
 
 let scriptEl: HTMLScriptElement | null = null
 let mounted = false
@@ -225,9 +529,24 @@ function updateCodePrompt(value: string): void {
     if (/@$/.test(value)) announceTalosHarnessUiComposerAction('references')
 }
 
-function submitCodePrompt(): void {
+async function submitCodePrompt(): Promise<void> {
     const text = codePrompt.value.trim()
-    if (!text || !submitTalosHarnessUiPrompt(text)) return
+    if (!text || creatingSession.value) return
+    if (isDraft.value) {
+        creatingSession.value = true
+        try {
+            const created = await createCodiceSession(text)
+            codePrompt.value = ''
+            pendingFirstPrompt = text
+            pendingFirstPromptModello = codeModeloSelezionato.value
+            pendingFirstPromptModelloEsecutore = codeModelloEsecutoreSelezionato.value
+            await router.replace({ name: 'harness-session', params: { id: created.id } })
+        } finally {
+            creatingSession.value = false
+        }
+        return
+    }
+    if (!submitTalosHarnessUiPrompt(text, codeModeloSelezionato.value ?? undefined, codeModelloEsecutoreSelezionato.value ?? undefined)) return
     codePrompt.value = ''
 }
 
@@ -235,8 +554,25 @@ function announceCodeComposerAction(action: string): void {
     announceTalosHarnessUiComposerAction(action)
 }
 
+/*
+ * ⭐⭐⭐ 2/9 — "refresh-models" era nella tabella mockup del composer
+ * (piano §14.3): il tasto "Aggiorna" del picker modello non faceva
+ * nulla di reale, solo un toast finto ("Nessuna discovery di rete
+ * eseguita"). caricaModelliCodice() (sopra, già la fonte VERA del
+ * picker — vincolo CODE-COMPOSER-SINGLE-SOURCE-01: questa schermata
+ * resta indipendente dal composable di chat regolare, mai importato
+ * qui) fa esattamente ciò che "Aggiorna" promette: richiama i
+ * provider configurati e ripopola codeModelProfiles col catalogo
+ * vero. L'annuncio al bridge resta (stesso toast di sempre), ma solo
+ * DOPO che il refresh vero è finito — mai un "fatto" prima del fatto.
+ */
+async function refreshCodeModels(): Promise<void> {
+    const riuscito = await caricaModelliCodice()
+    announceCodeComposerAction(riuscito ? 'refresh-models' : 'refresh-models-failed')
+}
+
 function selectCodeCommand(command: TalosMobileCommandId): void {
-    if (command === 'send_message') { submitCodePrompt(); return }
+    if (command === 'send_message') { void submitCodePrompt(); return }
     if (command === 'open_browse') {
         codeBrowseMode.value = true
         announceCodeComposerAction('browse')
@@ -247,7 +583,10 @@ function selectCodeCommand(command: TalosMobileCommandId): void {
     if (command === 'open_doctor') { void router.push({ name: 'doctor' }); return }
     if (command === 'open_notes') { void router.push({ name: 'notes' }); return }
     if (command === 'open_tasks') { void router.push({ name: 'tasks' }); return }
-    if (command === 'new_session') codePrompt.value = ''
+    // 28/8: real navigation to the draft route, same path the sidebar's
+    // "New" button uses — was `codePrompt.value = ''` (cleared text, no
+    // session), a much weaker stand-in from when sessions were still demo.
+    if (command === 'new_session') { void router.push({ name: 'harness-session', params: { id: 'new' } }); return }
     announceCodeComposerAction(command)
 }
 
@@ -265,8 +604,142 @@ function teardown(): void {
     delete (window as unknown as { __talosHarnessHostBack?: unknown }).__talosHarnessHostBack
     delete (window as unknown as { __talosHarnessHostViewChange?: unknown }).__talosHarnessHostViewChange
     delete (window as unknown as { __talosHarnessHostPermissionChange?: unknown }).__talosHarnessHostPermissionChange
+    delete (window as unknown as { __talosHarnessApiBase?: unknown }).__talosHarnessApiBase
+    delete (window as unknown as { __talosHarnessRichiediDato?: unknown }).__talosHarnessRichiediDato
     scriptEl?.remove()
     scriptEl = null
+}
+
+/**
+ * ⭐⭐⭐ 28/8 — trovato SUL DEVICE, non ipotizzato: `avviaServerHarness`
+ * (nativo) torna `ok:true` non appena il COMANDO DI LANCIO è partito
+ * (`setsid node ... &`, exitCode 0) — non quando il server ha finito di
+ * caricare le sue dipendenze e si è messo davvero in ascolto sulla
+ * porta. Un primo messaggio inviato subito dopo un avvio a freddo
+ * arrivava a un server non ancora pronto: "Avvio non riuscito: Failed
+ * to fetch", riprodotto e catturato PRIMA di scrivere questa cura (mai
+ * assunto). Il commento sul lato nativo lo dichiarava già: "quella
+ * prova è compito del chiamante, via un secondo giro" — questo È quel
+ * secondo giro. Intervallo fisso breve (non backoff esponenziale con
+ * jitter: quello serve contro il "thundering herd" di MOLTI client
+ * verso lo stesso server, qui è un solo telefono che interroga se
+ * stesso — ricerca 28/8), tetto basso perché un avvio reale impiega
+ * meno di un secondo una volta che il processo esiste (misurato nel
+ * ledger FASE-5-EXECUTION-PLANE).
+ */
+async function attendiServerHarnessPronto(tentativiMassimi = 15, intervalloMs = 300): Promise<boolean> {
+    for (let tentativo = 0; tentativo < tentativiMassimi; tentativo += 1) {
+        try {
+            const risposta = await fetch(`${talosHarnessUiApiBase()}/api/v1/health`, { cache: 'no-store' })
+            if (risposta.ok) return true
+        } catch {
+            // Non ancora in ascolto — si riprova, non si registra un errore
+            // per un tentativo che ci si aspetta possa fallire.
+        }
+        await new Promise((resolve) => { window.setTimeout(resolve, intervalloMs) })
+    }
+    return false
+}
+
+/**
+ * ⭐⭐⭐ 28/8, "procedi in ordine" punto 3 — un messaggio reale (item 3) vuole
+ * un server harness-ui reale già in ascolto (item 2, ledger
+ * FASE-5-EXECUTION-PLANE): senza questa chiamata, il PRIMO messaggio di
+ * una sessione nuova (`pendingFirstPrompt` più sotto, inoltrato SENZA che
+ * la persona tocchi niente altro) arriverebbe a un server ancora spento.
+ * Idempotente lato nativo (`avviaServerHarness`, pid file + `kill -0`,
+ * device-verificato) — chiamarla a ogni mount non ripete staging/push se
+ * il server è già vivo. Solo debug: `talosTerminaleDisponibile()` è la
+ * stessa domanda già usata altrove per questo plugin (non esiste in
+ * release).
+ */
+async function avviaServerHarnessSeDisponibile(): Promise<void> {
+    if (!talosTerminaleDisponibile()) return
+    try {
+        const esito = await avviaServerHarnessConChiaveProvider()
+        if (!esito.ok) {
+            console.warn('[harness-ui] avvio server non riuscito:', esito.motivo, esito.stderr)
+            return
+        }
+        const pronto = await attendiServerHarnessPronto()
+        if (!pronto) console.warn('[harness-ui] server avviato ma non risponde entro il tetto di attesa')
+    } catch (error) {
+        console.warn('[harness-ui] avvio server: eccezione', error)
+    }
+}
+
+/**
+ * ⭐⭐⭐ 30/8 — il PONTE verso Note/Attività/Memoria/Libreria per il kernel
+ * dell'harness. Owner: quei sistemi esistono già, maturi e testati
+ * (`@/lib/tools/toolset.ts`), il difetto era che il kernel (talosHarness.mjs,
+ * un processo Node SEPARATO, avviato via ADB shell — mai lo stesso UID
+ * dell'app, mai un accesso diretto all'SQLite privato) non li ha mai potuti
+ * raggiungere. Stesso schema di `__talosHarnessApiBase`/`__talosHarnessHostBack`
+ * sopra: una funzione piantata su `window` PRIMA di eseguire app.js, che vive
+ * nello STESSO realm JS di questa schermata (shadow DOM, non un iframe — vedi
+ * la nota d'apertura del file) e quindi può chiamare `codiceDati.ts` diretto,
+ * senza toccare il composable dell'intera chat (CODE-COMPOSER-SINGLE-SOURCE-01
+ * ne vieta anche solo il nome scritto qui — vedi `codiceDati.ts` per il
+ * perché).
+ *
+ * Il kernel la raggiunge indirettamente: emette un evento AG-UI
+ * (`DataRequested`, session-registry.mjs), app.js lo vede e chiama QUESTA
+ * funzione, poi POSTa il risultato a `.../data` — lo stesso schema
+ * richiesta/risposta già costruito per l'approvazione "On request"
+ * (richiediApprovazione/rispondiApprovazione), riusato qui per i dati invece
+ * che per un sì/no.
+ *
+ * ⭐ 30/8 — estesa dalla prima fetta (solo `notes_list`) a tutta la
+ * famiglia Note/Attività/Memoria/Libreria/Ricerca (quest'ultima SOLO
+ * in lettura, vedi `codiceDati.ts`). Ogni `tipo` qui sotto ha una spiegazione esatta di
+ * `args` in `session-registry.mjs` (dove viene impacchettato) — questa
+ * funzione si limita a spacchettarlo e chiamare `codiceDati.ts`, zero
+ * logica propria. Un `tipo` non riconosciuto RIFIUTA (mai un `[]`
+ * silenzioso che si legge come "nessuna nota" quando in realtà è
+ * "questo tipo non è ancora collegato") — stesso principio di
+ * `CIECO non è FALLITO` già in memoria.
+ */
+async function talosHarnessRichiediDato(tipo: string, args: unknown): Promise<unknown> {
+    if (tipo === 'notes_list') return listCodiceNotes()
+    if (tipo === 'notes_create') return createCodiceNote(args as { title: string, content: string })
+    if (tipo === 'notes_update') {
+        const { id, patch } = args as { id: string, patch: { title?: string, content?: string } }
+        return updateCodiceNote(id, patch)
+    }
+    if (tipo === 'notes_delete') return deleteCodiceNote((args as { id: string }).id)
+    if (tipo === 'tasks_list') return listCodiceTasks()
+    if (tipo === 'tasks_create') return createCodiceTask(args as { title: string, description: string | null, priority: 'low' | 'normal' | 'high' })
+    if (tipo === 'tasks_complete') {
+        const { id, status } = args as { id: string, status: 'todo' | 'doing' | 'done' }
+        return setCodiceTaskStatus(id, status)
+    }
+    if (tipo === 'tasks_update') {
+        const { id, patch } = args as { id: string, patch: { title?: string, description?: string | null, priority?: 'low' | 'normal' | 'high' } }
+        return updateCodiceTask(id, patch)
+    }
+    if (tipo === 'tasks_delete') return deleteCodiceTask((args as { id: string }).id)
+    if (tipo === 'memory_search') return searchCodiceMemories((args as { query: string }).query)
+    if (tipo === 'memory_write') return createCodiceMemory(args as { title: string, content: string })
+    if (tipo === 'memory_update') {
+        const { title, patch } = args as { title: string, patch: { title?: string, content?: string } }
+        return updateCodiceMemoryByTitle(title, patch)
+    }
+    if (tipo === 'memory_delete') return deleteCodiceMemoryByTitle((args as { title: string }).title)
+    if (tipo === 'library_list') return listCodiceLibraryEntries()
+    if (tipo === 'library_read') return readCodiceLibraryDoc((args as { id: string }).id)
+    if (tipo === 'library_rename') {
+        const { id, name } = args as { id: string, name: string }
+        return renameCodiceLibraryFile(id, name)
+    }
+    if (tipo === 'library_delete') return deleteCodiceLibraryFile((args as { id: string }).id)
+    if (tipo === 'library_search') {
+        const { query, limit } = args as { query: string, limit?: number }
+        return searchCodiceLibrary(query, limit)
+    }
+    if (tipo === 'library_file_origin') return readCodiceLibraryFileOrigin((args as { id: string }).id)
+    if (tipo === 'research_list') return listCodiceResearch()
+    if (tipo === 'research_read') return readCodiceResearchReport((args as { id: string }).id)
+    throw new Error(`tipo di dato non collegato all'harness: "${tipo}"`)
 }
 
 async function mountMockup(): Promise<void> {
@@ -276,6 +749,10 @@ async function mountMockup(): Promise<void> {
     loadError.value = false
     teardown()
     try {
+        // Parte SUBITO, in parallelo col caricamento locale di HTML/CSS/script
+        // (che non dipende dal server): si aspetta il suo esito solo più giù,
+        // appena prima di inoltrare un eventuale primo messaggio in sospeso.
+        const serverPronto = avviaServerHarnessSeDisponibile()
         const html = await fetch(harnessUiAssetUrl('index.html'), { cache: 'no-cache' }).then((response) => {
             if (!response.ok) throw new Error(`harness-ui index.html: ${response.status}`)
             return response.text()
@@ -332,6 +809,9 @@ async function mountMockup(): Promise<void> {
             .__talosHarnessHostViewChange = (view) => { codeView.value = view }
         ;(window as unknown as { __talosHarnessHostPermissionChange?: (permission: string) => void })
             .__talosHarnessHostPermissionChange = (permission) => { codePermission.value = permission }
+        ;(window as unknown as { __talosHarnessApiBase?: string }).__talosHarnessApiBase = talosHarnessUiApiBase()
+        ;(window as unknown as { __talosHarnessRichiediDato?: (tipo: string, args: unknown) => Promise<unknown> })
+            .__talosHarnessRichiediDato = talosHarnessRichiediDato
 
         await new Promise<void>((resolve, reject) => {
             const script = document.createElement('script')
@@ -341,9 +821,22 @@ async function mountMockup(): Promise<void> {
             scriptEl = script
             shadowRoot.appendChild(script)
         })
-        const selection = selectedSession.value
+        const selection = loadedSession.value
         if (!selection || !selectTalosHarnessUiSession({ id: selection.id, title: selection.title })) {
             throw new Error('harness-ui session selection unavailable')
+        }
+        // Draft→real transition: the message that CREATED this session was
+        // typed before the mockup existed to receive it — forward it now,
+        // the one time the mockup is freshly mounted for this session.
+        if (pendingFirstPrompt) {
+            await serverPronto // il messaggio chiama un server VERO ora (item 3): deve essere in ascolto prima
+            const toSend = pendingFirstPrompt
+            const modelloDaInviare = pendingFirstPromptModello
+            const modelloEsecutoreDaInviare = pendingFirstPromptModelloEsecutore
+            pendingFirstPrompt = null
+            pendingFirstPromptModello = null
+            pendingFirstPromptModelloEsecutore = null
+            submitTalosHarnessUiPrompt(toSend, modelloDaInviare ?? undefined, modelloEsecutoreDaInviare ?? undefined)
         }
     } catch {
         loadError.value = true
@@ -354,18 +847,30 @@ async function mountMockup(): Promise<void> {
     }
 }
 
-onMounted(() => {
+onMounted(async () => {
     mounted = true
-    if (available) {
-        void attachKeyboardBridge()
-        if (selectedSession.value) void mountMockup()
-        else loading.value = false
-    }
+    if (!available) { loading.value = false; return }
+    void caricaModelliCodice()
+    void attachKeyboardBridge()
+    await resolveSession()
+    if (!mounted) return
+    if (isDraft.value) { loading.value = false; return }
+    if (loadedSession.value) void mountMockup()
     else loading.value = false
 })
 
-watch(selectedSession, (selection) => {
+watch(sessionId, async () => {
     if (!mounted || !available) return
+    loading.value = true
+    await resolveSession()
+    if (!mounted) return
+    if (isDraft.value) {
+        teardown()
+        loading.value = false
+        loadError.value = false
+        return
+    }
+    const selection = loadedSession.value
     if (!selection) {
         teardown()
         loading.value = false
@@ -374,6 +879,8 @@ watch(selectedSession, (selection) => {
     }
     if (!selectTalosHarnessUiSession({ id: selection.id, title: selection.title })) {
         void mountMockup()
+    } else {
+        loading.value = false
     }
 }, { flush: 'post' })
 
@@ -394,6 +901,7 @@ onBeforeUnmount(() => {
         :title="t('navigation.harness')"
         data-testid="talos-harness-session-screen"
         :data-harness-session-id="sessionId"
+        :data-harness-session-title="loadedSession?.title"
         tablet-edge-to-edge
         edge-to-edge
         embedded
@@ -402,7 +910,7 @@ onBeforeUnmount(() => {
             {{ t('harness.unavailable') }}
         </p>
         <div
-            v-else-if="!selectedSession"
+            v-else-if="!isDraft && !sessionResolving && !loadedSession"
             data-testid="talos-harness-session-unknown"
             class="flex h-full items-center justify-center p-6"
         >
@@ -427,41 +935,69 @@ onBeforeUnmount(() => {
             </div>
         </div>
         <template v-else>
-            <p v-if="loading" data-testid="talos-harness-session-opening" class="text-sm text-[var(--talos-muted)]">
+            <p v-if="!isDraft && (sessionResolving || loading)" data-testid="talos-harness-session-opening" class="text-sm text-[var(--talos-muted)]">
                 {{ t('harness.openingMockup') }}
             </p>
-            <p v-else-if="loadError" data-testid="talos-harness-session-error" class="text-sm text-[var(--talos-muted)]">
+            <p v-else-if="!isDraft && loadError" data-testid="talos-harness-session-error" class="text-sm text-[var(--talos-muted)]">
                 {{ t('harness.loadFailed') }}
             </p>
             <div
-                v-show="!loading && !loadError"
+                v-else-if="isDraft"
+                data-testid="talos-harness-session-draft-hint"
+                class="flex h-full flex-col items-center justify-center p-6 text-center"
+            >
+                <span
+                    class="talos-short-logo talos-chat-brand-logo talos-short-logo-hero"
+                    aria-hidden="true"
+                >
+                    <span class="talos-short-logo-mark"></span>
+                </span>
+                <span class="talos-orbitron-brand mt-2 text-4xl font-semibold text-[var(--talos-text)] sm:text-5xl">TALOS</span>
+                <TalosWelcomeTitle />
+                <p class="mt-1 max-w-[28rem] text-xs leading-5 text-[var(--talos-muted)]">
+                    {{ t('harness.draftHint') }}
+                </p>
+            </div>
+            <div
+                v-show="!isDraft && !sessionResolving && !loading && !loadError"
                 ref="hostEl"
                 data-testid="talos-harness-session-host"
                 class="h-full w-full"
             />
             <div
-                v-show="!loading && !loadError && codeView === 'chat'"
+                v-show="isDraft || (!sessionResolving && !loading && !loadError && codeView === 'chat')"
                 ref="composerDockEl"
                 data-testid="talos-code-composer-dock"
                 class="talos-code-composer-dock"
             >
                 <TalosMobileComposer
                     :prompt="codePrompt"
-                    :model-profiles="CODE_MODEL_PROFILES"
+                    :model-profiles="codeModelProfiles"
                     :selected-model-profile-id="codeModelProfileId"
+                    :show-executor-model="true"
+                    :executor-model-profiles="codeModelProfiles"
+                    :selected-executor-model-profile-id="codeModelloEsecutoreId"
                     :selected-effort="codeEffort"
                     :thinking="codeThinking"
                     :can-send="codeCanSend"
-                    :sending="false"
+                    :sending="creatingSession"
                     :drawer-mode="codeComposerShape.drawerMode"
                     :immersive-composer="codeComposerShape.immersiveComposer"
                     :plus-dropdown="codeComposerShape.plusDropdown"
                     :browse-mode="codeBrowseMode"
                     :attachments-available="true"
                     :context-available="true"
+                    :enhancing-prompt="codeEnhancingPrompt"
+                    :prompt-enhancement="codePromptEnhancement"
+                    :prompt-enhancement-error="codePromptEnhancementError"
+                    :enhancer-depth="codeEnhancer.depth"
+                    :enhancer-model="codeEnhancer.model"
+                    :enhancer-effort="codeEnhancer.effort"
+                    :enhancer-models="codeEnhancerModels"
                     @update:prompt="updateCodePrompt"
                     @send="submitCodePrompt"
                     @select-model-profile="codeModelProfileId = $event"
+                    @select-executor-model-profile="codeModelloEsecutoreId = $event"
                     @select-effort="codeEffort = $event"
                     @select-thinking="codeThinking = $event"
                     @toggle-browse="codeBrowseMode = $event"
@@ -471,12 +1007,19 @@ onBeforeUnmount(() => {
                     @pick-photos="announceCodeComposerAction('photos')"
                     @open-context="void router.push({ name: 'context' })"
                     @open-model-lab="void router.push({ name: 'settings-models' })"
-                    @refresh-models="announceCodeComposerAction('refresh-models')"
-                    @enhance-prompt="announceCodeComposerAction('enhance')"
-                    @enhance-blocked="announceCodeComposerAction('enhance-blocked')"
+                    @refresh-models="void refreshCodeModels()"
+                    @enhance-prompt="void requestCodeEnhancePrompt()"
+                    @enhance-blocked="onCodeEnhanceBlocked"
+                    @update-enhancer-depth="(value) => void setCodeEnhancer({ depth: value })"
+                    @update-enhancer-model="(value) => void setCodeEnhancer({ model: value })"
+                    @update-enhancer-effort="(value) => void setCodeEnhancer({ effort: value as TalosMobileEffortLevel })"
+                    @cancel-prompt-enhancement="clearCodePromptEnhancement"
+                    @insert-prompt-enhancement="insertCodeEnhancePrompt"
+                    @replace-prompt-enhancement="replaceCodeEnhancePrompt"
                     @open-browser-url="announceCodeComposerAction('browser-url')"
                 >
                     <button
+                        v-if="!isDraft"
                         type="button"
                         data-testid="talos-code-autonomy-chip"
                         :aria-label="`${t('autonomia.titolo')}: ${codePermission}`"

@@ -9,7 +9,7 @@ import {
     talosHaAzioniDaMostrare,
 } from '@/lib/tools/tracciaAzione'
 
-import { TALOS_TOOL_LABEL_KEYS } from '@/lib/tools/toolLabels'
+import { TALOS_TOOL_LABEL_KEYS, talosDynamicToolFallbackLabel } from '@/lib/tools/toolLabels'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 import TalosMobileMessageActions from '@/components/chat/TalosMobileMessageActions.vue'
 /*
@@ -132,7 +132,7 @@ function azioniFatte(metadata: unknown): string[] {
     return righe.map((riga) => {
         const nome = (riga as { tool?: string })?.tool ?? ''
         const chiave = TALOS_TOOL_LABEL_KEYS[nome]
-        return chiave ? t(chiave) : nome
+        return chiave ? t(chiave) : (talosDynamicToolFallbackLabel(nome) ?? nome)
     })
 }
 /**
@@ -365,6 +365,7 @@ function messageStateLabel(state: string): string {
         <article
             v-for="(message, index) in messages"
             :key="message.id"
+            v-memo="[message, messages[index - 1]?.role, messages[index + 1]?.role, sending, modelLabels, messageStyle, textScale, hasOlderMessages, pendingAuthorizationIds, diagnostica, firstMemoryDisclosureMessageId, now]"
             :data-message-id="message.id"
             :data-message-kind="message.role"
             :data-state="message.state"

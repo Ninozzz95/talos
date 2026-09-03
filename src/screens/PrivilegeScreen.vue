@@ -20,7 +20,7 @@ import {
 } from '@/lib/device/scorciatoie'
 import TalosConsensoAutonomia from '@/components/talos/permissions/TalosConsensoAutonomia.vue'
 import { useSettingsStore } from '@/stores/settings'
-import { TALOS_TOOL_ACTIONS } from '@/lib/tools/permissionTypes'
+import { TALOS_AZIONI_GOVERNATE } from '@/lib/tools/toolControlCatalog'
 
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { Capacitor } from '@capacitor/core'
@@ -368,7 +368,8 @@ const impostazioni = useSettingsStore()
  */
 const consensoAperto = ref(false)
 
-const autonomiaGiaConcessa = computed(() => TALOS_TOOL_ACTIONS.every(
+// ⛔ Sui poteri GOVERNATI: vedi la nota gemella nell'intro.
+const autonomiaGiaConcessa = computed(() => TALOS_AZIONI_GOVERNATE.every(
     (azione) => impostazioni.state.tools_chosen.includes(azione)
         && impostazioni.state.tools[azione] === 'allow',
 ))
@@ -400,7 +401,11 @@ async function alternaLaParola(): Promise<void> {
  */
 async function concediAutonomia(): Promise<void> {
     consensoAperto.value = false
-    await impostazioni.setToolPermissions({ read: 'allow', write: 'allow', outbound: 'allow' })
+    // ⛔ Si concede cio che esiste, e lo si deriva: un letterale a tre nomi
+    // lascerebbe fuori ogni potere aggiunto dopo, in silenzio.
+    await impostazioni.setToolPermissions(Object.fromEntries(
+        TALOS_AZIONI_GOVERNATE.map((azione) => [azione, 'allow' as const]),
+    ))
     parola.value = await talosAccendiLaParola()
 }
 

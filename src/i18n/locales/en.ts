@@ -81,6 +81,7 @@ export const TALOS_EN_MESSAGES = {
         primary: 'Primary navigation',
         modelLab: 'Model Lab',
         harness: 'Code',
+        toolForge: 'Tool Forge',
     },
     language: {
         title: 'Language',
@@ -836,6 +837,9 @@ export const TALOS_EN_MESSAGES = {
         reasoningEffortLevels: 'Reasoning effort levels',
         noReasoningSetting: 'This model runs without a reasoning setting.',
         modelAndReasoning: 'Model & reasoning',
+        executorModel: 'Executor model',
+        executorModelHint: 'Uses this cheaper model for routine turns; the first turn and any retry after a failure still use the model above.',
+        executorModelAutomatic: 'Automatic — always use the model above',
         enhancerSetupTitle: 'Before rewriting',
         enhancerDepthLabel: 'How much to rewrite',
         enhancerDepth: { concise: 'Concise', balanced: 'Balanced', extended: 'Extended' },
@@ -956,6 +960,9 @@ export const TALOS_EN_MESSAGES = {
         cardOpenA11ySettings: 'Open accessibility settings',
         cardAppOpened: 'Opened',
         cardAppRefused: 'It would not open',
+        cardSaveToLibrary: 'Save to Library',
+        cardSavedToLibrary: 'Saved to Library',
+        cardSaveFailed: 'Could not save',
         memoryUsedOne: '1 memory used',
         memoryUsedMany: '{count} memories used',
         attachedFiles: 'Attached files',
@@ -994,7 +1001,13 @@ export const TALOS_EN_MESSAGES = {
         authorizationAlways: 'Always allow',
         authorizationAlwaysUnavailable: '“Always allow” is not offered for this action: it cannot be undone, so it stays a decision you make each time.',
         authorizationLater: 'Decide later',
-        authorizationFromChat: 'Requested by {title}',
+        // ⛔⛔ Owner 2026-08-27 — found live on device: `escapeParameter` is on
+        // across the app (src/i18n/index.ts), and interpolating a free-form
+        // chat title here rewrote its apostrophes to `&apos;`, visible verbatim
+        // because the three callers render this as plain text (`{{ }}`), never
+        // `v-html`. No placeholder: the title is concatenated OUTSIDE `t()`,
+        // same pattern as `TalosTaskScheduleFields.vue`'s `quando`.
+        authorizationFromChat: 'Requested by',
         pendingAuthorizationCount: '{count} pending',
         reviewAuthorizations: 'Review tool requests ({count})',
         reviewToolActions: 'Review tool actions ({count})',
@@ -1109,18 +1122,34 @@ export const TALOS_EN_MESSAGES = {
     // behind the same debug-only gate as the old Settings link — see
     // services/harnessUi.ts.
     harness: {
-        demoNotice: 'Demo sessions, not wired to a real backend — the navigation structure is real, the data is not.',
         groups: {
             today: 'Today',
             yesterday: 'Yesterday',
             week: 'Last 7 days',
         },
+        newSession: 'New',
+        newSessionAria: 'New Code session',
+        emptyBody: 'No sessions yet. Tap "New", or just write below to start one.',
+        draftHint: 'Write your first message to start the session.',
         openingMockup: 'Opening Code…',
         unavailable: "Code isn't available in this build.",
         loadFailed: "Code didn't open. Try again.",
         unknownTitle: 'Session not found',
-        unknownSession: 'This demo session does not exist. Go back to Code and choose one from the list.',
+        unknownSession: 'This session no longer exists. Go back to Code and choose one from the list.',
         unknownBack: 'Back to Code',
+        actionsFor: 'Actions for {title}',
+        renameTitle: 'Rename session',
+        renameDescription: 'Choose a new name for this Code session.',
+        sessionName: 'Session name',
+        renameFailed: "Couldn't rename the session: {detail}",
+        deleteTitle: 'Delete session',
+        deleteDescription: '"{title}" will be removed from this phone. This cannot be undone.',
+        deleteFailed: "Couldn't delete the session: {detail}",
+        statusRunning: 'Running',
+        statusRunningAria: 'Session still running',
+        statusInterrupted: 'Interrupted',
+        statusWaitingApproval: 'Waiting for approval',
+        statusError: 'Concluded with an error',
     },
     privilege: {
         keepAlive: 'Keep it alive',
@@ -1273,6 +1302,7 @@ export const TALOS_EN_MESSAGES = {
     },
     toolActivity: {
         toolDetails: 'Looking up how to do that',
+        toolCreate: 'Creating a custom tool',
         // What a PERSON is told when a tool fails. The reason itself is written
         // for the model — see avvisoDiTool.ts — and never reaches this screen.
         failedNotice: 'Did not work: {tool}.',
@@ -1316,6 +1346,7 @@ export const TALOS_EN_MESSAGES = {
         webSearch: 'Searching the web',
         webRead: 'Reading a web page',
         documentCreate: 'Making a document',
+        artifactCreate: 'Making an interactive visual',
         generateImage: 'Generating an image',
         libraryExport: 'Saving a file to your device',
         libraryContextPolicyUpdate: 'Changing Library context policy',
@@ -1390,6 +1421,10 @@ export const TALOS_EN_MESSAGES = {
             title: 'Write a note',
             description: 'Save a new note in this local workspace, for you to read later.',
         },
+        toolCreate: {
+            title: 'Create a custom tool',
+            description: 'Add a new tool TALOS can call from now on, built from what was just described. It stays off until you turn it on.',
+        },
         notesUpdate: {
             title: 'Edit a note',
             description: 'Change the title or the body of a note that already exists here.',
@@ -1461,6 +1496,10 @@ export const TALOS_EN_MESSAGES = {
         generateImage: {
             title: 'Generate an image',
             description: 'Send the description to the image provider and save the result in the encrypted Library and chat.',
+        },
+        artifactCreate: {
+            title: 'Create an interactive visual',
+            description: 'Show a self-contained interactive HTML visual in the chat, isolated from the app and from the network — it cannot read your data or send anything anywhere.',
         },
         libraryExport: {
             title: 'Save a file to the device',
@@ -1990,6 +2029,8 @@ export const TALOS_EN_MESSAGES = {
         imagePreview: 'Image preview',
         previewAlt: 'Preview',
         openOriginalPage: 'Open the original page in the browser',
+        viewAsPage: 'View as page',
+        viewAsPageFailed: '"{name}" could not be shown as a page on this device',
         noPreviewText: 'No preview text is available for this file.',
         deleteFileTitle: 'Delete file?',
         deleteFileDescription: '{name} will be removed from this device. Existing chat history keeps only its safe file label.',
@@ -2720,6 +2761,8 @@ export const TALOS_EN_MESSAGES = {
             web_read: { title: 'Read a web page', description: 'Fetch one page and archive its readable snapshot.' },
             document_create: { title: 'Create a document', description: 'Create and verify a document for this conversation.' },
             generate_image: { title: 'Generate an image', description: 'Ask the configured image provider to create and save an image.' },
+            artifact_create: { title: 'Create an interactive visual', description: 'Write a self-contained HTML visual and show it isolated in the chat — a diagram, chart, or small interactive drawing.' },
+            tool_create: { title: 'Create a custom tool', description: 'Add a new tool TALOS can call from now on, described in plain terms instead of hand-written JSON. It stays off until you turn it on.' },
             library_export: { title: 'Save a Library file', description: 'Save a user-selected Library file to device storage.' },
             library_context_policy_update: { title: 'Manage Library context policy', description: 'Let the agent propose confirmed global, chat, or single-response Library policy changes.' },
             local_models_search: { title: 'Find models for this phone', description: 'Send your words to huggingface.co and list models that could run here.' },
@@ -2940,6 +2983,11 @@ export const TALOS_EN_MESSAGES = {
         engineTools: 'Assistant tools with this model',
         recommendedProfile: 'Recommended backend for this model',
         performanceHeadroom: 'CPU/GPU/thermal headroom (Android 16)',
+        kernelWorkspaceFiles: 'Workspace files are visible',
+        kernelFileSize: 'Workspace files report a size',
+        kernelWorkspaceRead: 'Workspace reads completely',
+        kernelCatalogue: 'Symbol catalogue: present vs absent',
+        kernelProbe: 'Code kernel probe',
         nativePlatform: 'native ({platform})',
         webPreview: 'web preview',
         storageNative: 'SQLCipher native',
@@ -3403,6 +3451,60 @@ export const TALOS_EN_MESSAGES = {
         attachLibraryLoading: 'Reading the Library…',
         attachRemove: 'Remove {name}',
         attachFailed: 'The attachment did not go through.',
+    },
+    /**
+     * ⛔ Owner 2026-08-27, Tool Forge Fase 6: la stazione vera, sostituisce
+     * la bozza di Fase 1. Il rischio riusa `chat.plan.risk.*` (stessa
+     * frase già mostrata quando TALOS chiede conferma di un piano) invece
+     * di duplicarla qui — vedi TalosToolForgeStation.vue.
+     */
+    toolForge: {
+        title: 'Tool Forge',
+        intro: 'Tools TALOS can use, built from a manifest — not from code the model writes.',
+        installedSummary: '{n} tools installed · new imports stay disabled until you enable them.',
+        installedSummaryOne: '1 tool installed · new imports stay disabled until you enable them.',
+        enable: 'Enable',
+        disable: 'Disable',
+        enableNamed: 'Enable {title}',
+        disableNamed: 'Disable {title}',
+        history: 'History',
+        historyNamed: 'History for {title}',
+        export: 'Export',
+        exportNamed: 'Export {title}',
+        delete: 'Delete',
+        deleteNamed: 'Delete {title}',
+        versionLabel: 'v{version}',
+        justImported: 'Just imported',
+        blockedCredential: 'Missing access — cannot run yet',
+        emptyTitle: 'No tools yet',
+        emptyBody: 'Import a .talostool file to add the first one — it stays disabled until you enable it.',
+        importCta: 'Import .talostool',
+        importFromFile: 'Choose a file',
+        importHeading: 'Import .talostool',
+        importPlaceholder: 'Paste the .talostool JSON artifact',
+        importAction: 'Validate and import',
+        importInvalidJson: 'This is not valid JSON.',
+        importIssuesHeading: 'Won\'t install — {n} issues',
+        importIssuesHeadingOne: 'Won\'t install — 1 issue',
+        importFixToContinue: 'Fix these to continue',
+        importSuccess: '{title} imported. It stays disabled until you enable it.',
+        deleteTitle: 'Delete {title}?',
+        deleteBody: 'This removes the tool and its version history from this device. TALOS will no longer be able to use it.',
+        rollbackAction: 'Roll back to this version',
+        rollbackConfirmTitle: 'Roll back {title} to v{version}?',
+        rollbackConfirmBody: 'This replaces the current version and disables the tool again, so you can review it before it runs.',
+        rollbackCta: 'Roll back',
+        rollbackSuccess: 'Rolled back to v{version}.',
+        noHistory: 'No earlier versions yet.',
+        auditHeading: 'What happened',
+        noAudit: 'Nothing recorded yet.',
+        audit: {
+            install: 'Installed',
+            enable: 'Enabled',
+            disable: 'Disabled',
+            rollback: 'Rolled back',
+            remove: 'Deleted',
+        },
     },
 } as const
 

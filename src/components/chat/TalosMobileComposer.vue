@@ -102,6 +102,14 @@ const props = withDefaults(defineProps<{
     loadingRoutes?: boolean
     refreshingModels?: boolean
     discoveryProblems?: ReadonlyArray<{ message: string, detail?: string | null }>
+    /**
+     * ⭐⭐⭐ 2/9 — picker Planner (FASE K): additivi, mai passati da
+     * ChatScreen.vue oggi — `showExecutorModel` resta falso di default,
+     * zero cambio per la chat regolare.
+     */
+    showExecutorModel?: boolean
+    executorModelProfiles?: TalosMobileModelProfileView[]
+    selectedExecutorModelProfileId?: string | null
     attachments?: readonly TalosMobileAttachmentDraft[]
     attachmentBusy?: boolean
     attachmentError?: string | null
@@ -143,6 +151,9 @@ const props = withDefaults(defineProps<{
     selectedRoutingProfileId: null,
     loadingModels: false,
     refreshingModels: false,
+    showExecutorModel: false,
+    executorModelProfiles: () => [],
+    selectedExecutorModelProfileId: null,
     attachments: () => [],
     attachmentBusy: false,
     attachmentError: null,
@@ -199,6 +210,7 @@ const emit = defineEmits<{
     openContext: []
     openModelLab: []
     refreshModels: []
+    selectExecutorModelProfile: [profileId: string | null]
     enhancePrompt: []
     updateEnhancerDepth: [value: TalosPromptEnhancerDepth]
     updateEnhancerModel: [value: string | null]
@@ -1235,12 +1247,16 @@ watch(() => props.prompt, () => {
             :loading-routes="loadingRoutes"
             :refreshing-models="refreshingModels"
             :discovery-problems="discoveryProblems"
+            :show-executor-model="showExecutorModel"
+            :executor-model-profiles="executorModelProfiles"
+            :selected-executor-model-profile-id="selectedExecutorModelProfileId"
             @close="closeModelPicker"
             @select-model-profile="selectModelProfile"
             @select-model-routing-profile="selectRoutingProfile"
             @select-effort="selectEffort"
             @select-thinking="emit('selectThinking', $event)"
             @refresh-models="emit('refreshModels')"
+            @select-executor-model-profile="emit('selectExecutorModelProfile', $event)"
             @open-model-lab="modelPickerOpen = false; emit('openModelLab')"
         />
 

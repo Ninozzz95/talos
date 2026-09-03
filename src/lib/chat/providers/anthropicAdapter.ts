@@ -22,6 +22,7 @@ import {
     malformedProviderResponse,
     requireHttpSuccess,
     requireProviderApiKey,
+    sendWithProviderRetry,
 } from '@/lib/chat/providerErrors'
 import { talosNumericUsage } from '@/lib/chat/providers/usage'
 
@@ -451,14 +452,20 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             })
         }
 
-        let response = await send(talosThinkingModeFor(input.model.id))
-        if (response.status === 400) {
-            const other = talosAnthropicThinkingFallback(anthropicErrorText(response.data))
-            if (other !== null) {
-                learnTalosThinkingMode(input.model.id, other)
-                response = await send(other)
+        // DEBT-MOBILE-016: un 429/408/5xx rifà l'intera risoluzione (base +
+        // il fallback 400 già esistente) con backoff, invece di lanciare al
+        // primo colpo — vedi la doc sopra `sendWithProviderRetry`.
+        const response = await sendWithProviderRetry(async () => {
+            let response = await send(talosThinkingModeFor(input.model.id))
+            if (response.status === 400) {
+                const other = talosAnthropicThinkingFallback(anthropicErrorText(response.data))
+                if (other !== null) {
+                    learnTalosThinkingMode(input.model.id, other)
+                    response = await send(other)
+                }
             }
-        }
+            return response
+        })
         requireHttpSuccess({ provider: 'anthropic', operation: 'complete', status: response.status, data: response.data })
         const parsed = completionSchema.safeParse(response.data)
         if (!parsed.success) throw malformedProviderResponse('anthropic', 'complete', { received: response.data, issues: parsed.error.issues })

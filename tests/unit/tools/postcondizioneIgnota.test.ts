@@ -39,7 +39,7 @@ const deps = () => ({
 
 const attrezzo = (opzioni: {
     action: 'read' | 'write'
-    verify?: () => Promise<{ held: boolean, reason?: string }>
+    verify?: () => Promise<{ held: boolean | null, reason?: string }>
 }) => defineTalosTool({
     name: 'prova_effetto',
     title: 'Prova effetto',
@@ -155,3 +155,75 @@ describe('⛔⛔⛔ quando falliscono TUTTI E DUE', () => {
         expect(esito.code).not.toBe('TALOS_TOOL_EFFECT_UNKNOWN')
     })
 })
+
+/*
+ * ⭐⭐⭐ IL TERZO STATO SI DICHIARA, non si lancia — 2026-08-20.
+ *
+ * Tutta la strada di `ignota` esisteva gia: l'audit con `effect_unknown`, il
+ * messaggio che dice al modello di NON ripetere alla cieca, la distinzione fra
+ * lettura e scrittura. Mancava la PORTA: il verdetto era un booleano, quindi una
+ * verifica che non poteva concludere doveva ESPLODERE per arrivarci — cioe usare
+ * un'eccezione come valore di ritorno.
+ *
+ * ⛔ E le due uscite che aveva erano entrambe bugie: `true` dice che l'effetto
+ * c'e senza saperlo, `false` dice alla persona che la sua nota non e stata
+ * salvata quando probabilmente lo e.
+ */
+describe('⭐ il verdetto a TRE stati', () => {
+    it('⛔⛔ `held: null` su una SCRITTURA vale quanto un verificatore esploso', async () => {
+        const esito = await executeTalosTool(attrezzo({
+            action: 'write',
+            verify: async () => ({ held: null, reason: 'permesso contatti negato' }),
+        }), {}, deps())
+
+        expect(esito.code).toBe('TALOS_TOOL_EFFECT_UNKNOWN')
+        // ⛔ E porta la RAGIONE dichiarata, non un messaggio d'errore: e la
+        // differenza fra «non ho potuto guardare, ecco perche» e uno stack trace.
+        expect(esito.content).toContain('permesso contatti negato')
+        expect(esito.content).toMatch(/without checking|do not repeat/i)
+    })
+
+    /*
+     * ⛔⛔⛔ LA PROVA CHE CONTA PIU DI TUTTE.
+     *
+     * `null` e falso in JavaScript. Se un lettore futuro scrivesse
+     * `verdetto.held ? retta : smentita` — che e proprio la riga che c'era —
+     * `ignoto` cadrebbe sul ramo prudente e non su quello che canta vittoria.
+     * Questo test difende la proprieta al contrario: `ignoto` NON deve mai
+     * diventare un «fatto».
+     */
+    it('⛔⛔⛔ `held: null` NON viene scambiato per un si', async () => {
+        const esito = await executeTalosTool(attrezzo({
+            action: 'write',
+            verify: async () => ({ held: null, reason: 'il magazzino non risponde' }),
+        }), {}, deps())
+
+        expect(esito.ok).toBe(false)
+        expect(esito.code).not.toBeUndefined()
+    })
+
+    it('⛔ e resta DISTINTO da una smentita: «non so» non e «non e successo»', async () => {
+        const ignoto = await executeTalosTool(attrezzo({
+            action: 'write',
+            verify: async () => ({ held: null, reason: 'ponte giu' }),
+        }), {}, deps())
+        const smentito = await executeTalosTool(attrezzo({
+            action: 'write',
+            verify: async () => ({ held: false, reason: 'la nota non c e' }),
+        }), {}, deps())
+
+        expect(ignoto.code).toBe('TALOS_TOOL_EFFECT_UNKNOWN')
+        expect(smentito.code).not.toBe('TALOS_TOOL_EFFECT_UNKNOWN')
+    })
+
+    it('⛔ IL VERSO CONTRARIO: `held: true` resta un «fatto» pieno', async () => {
+        const esito = await executeTalosTool(attrezzo({
+            action: 'write',
+            verify: async () => ({ held: true }),
+        }), {}, deps())
+
+        expect(esito.ok).toBe(true)
+        expect(esito.code).not.toBe('TALOS_TOOL_EFFECT_UNKNOWN')
+    })
+})
+

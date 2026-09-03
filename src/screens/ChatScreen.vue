@@ -579,21 +579,52 @@ const chatScroll = ref<HTMLElement | null>(null)
 /** How close to the top counts as "about to need the previous page". */
 const OLDER_PAGE_TRIGGER_PX = 320
 const liveEdge = createTalosChatLiveEdge()
+let pendingChatScroll: { scrollTop: number; scrollHeight: number; clientHeight: number } | null = null
+let chatScrollFrame: number | null = null
+let pendingChatScrollTask: (() => void) | null = null
+function scheduleChatScroll(task: () => void): void {
+    pendingChatScrollTask = task
+    if (chatScrollFrame !== null) return
+    const run = () => {
+        chatScrollFrame = null
+        const next = pendingChatScrollTask
+        pendingChatScrollTask = null
+        next?.()
+    }
+    chatScrollFrame = typeof requestAnimationFrame === 'function'
+        ? requestAnimationFrame(run)
+        : window.setTimeout(run, 0)
+}
+function cancelChatScroll(): void {
+    if (chatScrollFrame === null) return
+    if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(chatScrollFrame)
+    else window.clearTimeout(chatScrollFrame)
+    chatScrollFrame = null
+    pendingChatScrollTask = null
+}
 
 function onChatScroll(): void {
     const el = chatScroll.value
     if (!el) return
-    liveEdge.onScroll({ scrollTop: el.scrollTop, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight })
-    // Defect #4: older messages arrive as you approach the top. One screen of
-    // margin, so the page is already there by the time you would have seen the
-    // gap — and never while a page is in flight.
-    // SF: `scrollTop <= clientHeight` is permanently TRUE whenever the thread
-    // is shorter than two screens, so a short page kept loading the next one
-    // until the whole history was back — the old behaviour, restored quietly.
-    // A fixed margin only fires when the user is actually near the top.
-    if (el.scrollTop < OLDER_PAGE_TRIGGER_PX && chat.state.hasOlderMessages && !chat.state.loadingOlderMessages) {
-        void loadOlderPage()
-    }
+    pendingChatScroll = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight }
+    scheduleChatScroll(() => {
+        const metrics = pendingChatScroll
+        pendingChatScroll = null
+        if (!metrics) return
+        liveEdge.onScroll(metrics)
+        // Defect #4: older messages arrive as you approach the top. One screen of
+        // margin, so the page is already there by the time you would have seen
+        // the gap — and never while a page is in flight.
+        // SF: `scrollTop <= clientHeight` is permanently TRUE whenever the thread
+        // is shorter than two screens, so a short page kept loading the next one
+        // until the whole history was back — the old behaviour, restored quietly.
+        // A fixed margin only fires when the user is actually near the top.
+        const current = chatScroll.value
+        if (current && current.scrollTop < OLDER_PAGE_TRIGGER_PX
+            && chat.state.hasOlderMessages && !chat.state.loadingOlderMessages) {
+            void loadOlderPage()
+        }
+    })
 }
 
 /**
@@ -1012,6 +1043,8 @@ onMounted(async () => {
     }
 })
 onBeforeUnmount(() => {
+    cancelChatScroll()
+    pendingChatScroll = null
     heightObserver?.disconnect()
     heightObserver = null
     void draft.dispose()

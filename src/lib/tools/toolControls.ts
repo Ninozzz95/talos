@@ -5,6 +5,10 @@
  * adapters into the initial bundle. Every key has an explicit upgrade default;
  * the Settings-only catalog adds display/action metadata off the boot path.
  */
+// `dynamic/ids.ts` è a ZERO dipendenze — non trascina Zod/i factory veri, e
+// non rompe il vincolo "leggero" di questo file. Vedi `isTalosAuthorizableToolName`.
+import { dynamicToolIdFromName } from '@/lib/tools/dynamic/ids'
+
 export const TALOS_DEFAULT_AGENT_TOOL_ENABLED = Object.freeze({
     library_list: true,
     library_search: true,
@@ -40,6 +44,9 @@ export const TALOS_DEFAULT_AGENT_TOOL_ENABLED = Object.freeze({
     web_read: true,
     document_create: true,
     generate_image: true,
+    // Owner 2026-08-27: artefatti HTML interattivi in chat — isolati in
+    // TalosArtifactActivity, mai il ponte Capacitor, mai la rete.
+    artifact_create: true,
     library_export: true,
     library_context_policy_update: false,
     // The second door onto the on-device models. Searching and inspecting reach
@@ -133,6 +140,15 @@ export const TALOS_DEFAULT_AGENT_TOOL_ENABLED = Object.freeze({
      */
     app_azione: true,
     invia_file: true,
+    /**
+     * ⛔⛔⛔ Owner 2026-08-27 — «un utente finale... come fa a creare un tool
+     * da solo?». Il tool che CREA tool (`forgeCreateTool.ts`): il modello
+     * propone un manifest, la persona lo rivede sulla STESSA scheda di
+     * consenso di ogni altro tool, resta installato-ma-disabilitato finché
+     * non lo accende dalla Stazione — zero superficie nuova, vedi il
+     * commento in testa a quel file.
+     */
+    tool_create: true,
 })
 
 export type TalosAgentToolId = keyof typeof TALOS_DEFAULT_AGENT_TOOL_ENABLED
@@ -144,6 +160,28 @@ export const TALOS_AGENT_TOOL_IDS = Object.freeze(
 export function isTalosAgentToolId(value: unknown): value is TalosAgentToolId {
     return typeof value === 'string'
         && Object.prototype.hasOwnProperty.call(TALOS_DEFAULT_AGENT_TOOL_ENABLED, value)
+}
+
+/**
+ * ⛔⛔⛔ Owner 2026-08-27 — chiude il gap onestamente lasciato aperto in
+ * Fase 8: "Always allow" persistente su un tool forgiato falliva SEMPRE
+ * (`TALOS_TOOL_AUTHORIZATION_TOOL_INVALID`), perché il libro dei consensi
+ * permanenti (`toolAuthorizations.ts`) usa `TalosAgentToolId` come chiave —
+ * e un nome `dynamic:*` non può mai essere un membro di
+ * quell'unione, per costruzione (deriva da un catalogo statico compilato).
+ *
+ * ⇒ Una guardia SEPARATA, non un allargamento di `isTalosAgentToolId`:
+ * ricerca 2026 (Tyk, "do not use an enum for open sets") — i built-in
+ * restano un insieme chiuso e statico (il pannello Impostazioni ne dipende,
+ * un interruttore per riga), i tool forgiati sono un insieme aperto e
+ * dinamico. Questa e' l'unione delle due, dove il resto del sistema dei
+ * consensi chiede solo "è un nome autorizzabile?", non "è un built-in?".
+ *
+ * `dynamic/ids.ts` non ha dipendenze (zero import): sicuro da importare qui
+ * anche se questo file resta apposta leggero per il pannello Impostazioni.
+ */
+export function isTalosAuthorizableToolName(value: unknown): value is string {
+    return isTalosAgentToolId(value) || dynamicToolIdFromName(value as string) !== null
 }
 
 export function parseTalosAgentToolEnabled(value: unknown): TalosAgentToolEnabled {

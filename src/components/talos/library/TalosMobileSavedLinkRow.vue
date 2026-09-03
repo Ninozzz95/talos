@@ -60,7 +60,7 @@ const emit = defineEmits<{
             >
             <Globe v-else class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
             <span class="min-w-0 flex-1">
-                <span class="line-clamp-2 block text-sm font-medium text-[var(--talos-text)]">{{ row.title }}</span>
+                <span class="line-clamp-2 text-sm font-medium text-[var(--talos-text)]">{{ row.title }}</span>
                 <span class="mt-0.5 flex items-center gap-1.5 text-2xs text-[var(--talos-muted)]">
                     <span class="truncate">{{ row.host }}</span>
                     <span aria-hidden="true">·</span>

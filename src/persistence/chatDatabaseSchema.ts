@@ -1,7 +1,7 @@
 import type { capSQLiteVersionUpgrade } from '@capacitor-community/sqlite'
 
 export const TALOS_CHAT_DATABASE_NAME = 'talos_mobile'
-export const TALOS_CHAT_DATABASE_VERSION = 7
+export const TALOS_CHAT_DATABASE_VERSION = 8
 
 const VERSION_1_STATEMENTS = [
     `CREATE TABLE IF NOT EXISTS talos_chat_sessions (
@@ -342,6 +342,65 @@ const VERSION_7_STATEMENTS = [
     `ALTER TABLE talos_research_runs ADD COLUMN content_origin TEXT NULL;`,
 ] as const
 
+/**
+ * ⛔⛔ Owner 2026-08-27 — Tool Forge Fase 3, finding critico della revisione
+ * ("la persistenza non è adatta a stato sensibile o aggiornamenti
+ * concorrenti"): `registryStore.ts` teneva l'intero registro come UN blob
+ * JSON in Capacitor Preferences (`Preferences.get` → `JSON.parse` → muta
+ * → `Preferences.set` dell'intero envelope). Confermato leggendo Android
+ * SharedPreferences (su cui Preferences si appoggia): **nessuna garanzia
+ * di consistenza multi-thread** sul ciclo read-modify-write — due
+ * `install`/`rollback` in corsa vedono lo stesso stato di partenza e
+ * l'ultimo `write()` vince, un lost update da manuale.
+ *
+ * ⇒ Tre tabelle nello STESSO database cifrato della chat (non uno nuovo:
+ * `@capacitor-community/sqlite` + `databaseKey.ts`/`databaseProtection.ts`
+ * sono già qui, vedi `talosSqliteRuntime()`), con transazioni vere
+ * (`beginTransaction`/`commitTransaction`/`rollbackTransaction`, stessa
+ * `transaction()` serializzata di `sqliteChatRepository.ts`):
+ *
+ * - `talos_forge_tools` — lo stato installato corrente, una riga per id.
+ * - `talos_forge_tool_versions` — la storia delle versioni precedenti,
+ *   righe vere invece di un array `previousVersions` dentro il JSON
+ *   (che veniva anche tagliato a mano a 10 con `.slice(-10)`, ora una
+ *   DELETE con lo stesso limite, non più un accorgimento in memoria).
+ * - `talos_forge_audit` — APPEND-ONLY, mai aggiornata né cancellata,
+ *   stesso principio di `talos_research_events` sopra: install/enable/
+ *   disable/rollback/remove lasciano una traccia che sopravvive al
+ *   processo, che oggi (Preferences) non esisteva affatto.
+ */
+const VERSION_8_STATEMENTS = [
+    `CREATE TABLE IF NOT EXISTS talos_forge_tools (
+        id TEXT PRIMARY KEY NOT NULL,
+        manifest_json TEXT NOT NULL,
+        version INTEGER NOT NULL CHECK (version >= 1),
+        enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+        installed_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );`,
+    `CREATE INDEX IF NOT EXISTS talos_forge_tools_updated_idx
+        ON talos_forge_tools(updated_at DESC, id);`,
+    `CREATE TABLE IF NOT EXISTS talos_forge_tool_versions (
+        tool_id TEXT NOT NULL,
+        version INTEGER NOT NULL CHECK (version >= 1),
+        manifest_json TEXT NOT NULL,
+        replaced_at TEXT NOT NULL,
+        UNIQUE (tool_id, version),
+        FOREIGN KEY (tool_id) REFERENCES talos_forge_tools(id) ON DELETE CASCADE
+    );`,
+    `CREATE INDEX IF NOT EXISTS talos_forge_tool_versions_tool_idx
+        ON talos_forge_tool_versions(tool_id, version DESC);`,
+    `CREATE TABLE IF NOT EXISTS talos_forge_audit (
+        id TEXT PRIMARY KEY NOT NULL,
+        tool_id TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('install', 'enable', 'disable', 'rollback', 'remove')),
+        detail_json TEXT NOT NULL DEFAULT '{}',
+        at TEXT NOT NULL
+    );`,
+    `CREATE INDEX IF NOT EXISTS talos_forge_audit_tool_idx
+        ON talos_forge_audit(tool_id, at DESC);`,
+] as const
+
 export const TALOS_CHAT_DATABASE_UPGRADES: readonly capSQLiteVersionUpgrade[] = Object.freeze([
     Object.freeze({
         toVersion: 1,
@@ -370,5 +429,9 @@ export const TALOS_CHAT_DATABASE_UPGRADES: readonly capSQLiteVersionUpgrade[] = 
     Object.freeze({
         toVersion: 7,
         statements: [...VERSION_7_STATEMENTS],
+    }),
+    Object.freeze({
+        toVersion: 8,
+        statements: [...VERSION_8_STATEMENTS],
     }),
 ])

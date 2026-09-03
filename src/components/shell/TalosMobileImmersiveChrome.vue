@@ -114,11 +114,25 @@ const emit = defineEmits<{
             trasparenza — un velo, non una sfocatura. Tre fermate distribuite
             in automatico (0/50/100%) bastano per un'interpolazione continua
             dal pieno al trasparente, senza bordo.
+
+            ⛔ Owner 2026-08-27 (secondo giro): NON parlava della chat sotto —
+            parlava della STATUS BAR VERA del telefono, che vive proprio in
+            cima a questa sfumatura (`env(safe-area-inset-top)`, dentro il
+            padding qui sotto). `/70 → /30` era troppo chiaro esattamente lì:
+            l'orologio/le icone di sistema perdevano contrasto contro
+            qualunque colore ci scorresse dietro (es. una bolla ambra). Portato
+            a `/92 → /60`, sempre un fade a tre fermate, MAI blur.
+
+            ⛔ Owner 2026-08-27 (terzo giro): il velo era troppo ALTO — la coda
+            della sfumatura (`pb-6`, 24px) scendeva troppo sotto la riga delle
+            icone. Ridotta a `pb-2` (8px): la sfumatura comincia prima, e la
+            parte piena in cima resta compatta invece di allungarsi verso il
+            contenuto della chat.
         -->
-        <div class="relative pb-6">
+        <div class="relative pb-2">
             <div
                 aria-hidden="true"
-                class="absolute inset-0 bg-gradient-to-b from-[var(--talos-background)]/70 via-[var(--talos-background)]/30 to-transparent"
+                class="absolute inset-0 bg-gradient-to-b from-[var(--talos-background)]/92 via-[var(--talos-background)]/60 to-transparent"
             />
             <div class="relative flex items-start justify-between px-3 pt-[max(0.5rem,env(safe-area-inset-top))]">
             <Button

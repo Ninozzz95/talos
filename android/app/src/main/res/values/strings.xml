@@ -38,4 +38,10 @@
     -->
     <string name="talos_occhio_nome">TALOS — phone control</string>
     <string name="talos_occhio_descrizione">Reads the screen to recognise the open app and operate it when you ask. It does not turn on accessibility shortcuts or buttons.</string>
+    <!--
+        ⛔ TalosArtifactActivity, 2026-08-27: shown ONLY when the device lacks
+        WebView MULTI_PROFILE/MULTI_PROCESS — the raw-HTML feature refuses to
+        run with weaker isolation instead of falling back silently.
+    -->
+    <string name="talos_artifact_unsupported">This device\'s WebView cannot isolate this content safely, so it will not be shown.</string>
 </resources>

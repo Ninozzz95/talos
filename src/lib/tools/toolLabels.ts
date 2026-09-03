@@ -1,4 +1,5 @@
 ﻿import type { TalosTranslate } from '@/i18n/contracts'
+import { dynamicToolIdFromName } from '@/lib/tools/dynamic/ids'
 
 /**
  * What a running tool is called, in the user's words.
@@ -40,6 +41,7 @@ export const TALOS_TOOL_LABELS: Record<string, string> = {
     web_read: 'Reading a web page',
     document_create: 'Making a document',
     generate_image: 'Generating an image',
+    artifact_create: 'Making an interactive visual',
     library_export: 'Saving a file to your device',
     library_context_policy_update: 'Changing Library context policy',
     research_list: 'Looking at your researches',
@@ -105,6 +107,7 @@ export const TALOS_TOOL_LABELS: Record<string, string> = {
      * ripiega sul suo nome invece che sul nulla.
      */
     tool_details: 'Looking up how to do that',
+    tool_create: 'Creating a custom tool',
 }
 
 export const TALOS_TOOL_LABEL_KEYS: Record<string, string> = {
@@ -134,6 +137,7 @@ export const TALOS_TOOL_LABEL_KEYS: Record<string, string> = {
     web_read: 'toolActivity.webRead',
     document_create: 'toolActivity.documentCreate',
     generate_image: 'toolActivity.generateImage',
+    artifact_create: 'toolActivity.artifactCreate',
     library_export: 'toolActivity.libraryExport',
     library_context_policy_update: 'toolActivity.libraryContextPolicyUpdate',
     research_list: 'toolActivity.researchList',
@@ -178,6 +182,7 @@ export const TALOS_TOOL_LABEL_KEYS: Record<string, string> = {
     local_model_download: 'toolActivity.localModelDownload',
     local_models_status: 'toolActivity.localModelsStatus',
     tool_details: 'toolActivity.toolDetails',
+    tool_create: 'toolActivity.toolCreate',
 }
 
 export interface TalosToolConsentCopy {
@@ -267,8 +272,24 @@ export function talosToolConsentCopy(
          * interno, si dice una cosa vera e generica invece di esibirlo. E lo si
          * grida nel registro, perche' è un difetto nostro da correggere, non
          * una condizione normale.
+         *
+         * ⛔⛔ Owner 2026-08-27 — trovato dal vivo sul dispositivo: la guardia
+         * riconosceva SOLO lo snake_case dei tool incorporati
+         * (`device_status`), non `dynamic:summarize-note` — il formato del
+         * Tool Forge (prefisso `dynamic:` + slug kebab-case), arrivato dopo
+         * che questa guardia era stata scritta. Un tool forgiato non ha MAI
+         * una riga `toolConsent.*` (il nome cambia per ogni tool che una
+         * persona crea), quindi cadeva SEMPRE qui — e l'id grezzo, non
+         * riconosciuto, arrivava nudo sullo schermo di consenso esattamente
+         * come `device_status` il 2026-08-08. Il titolo umano vero esiste
+         * (il manifest lo dichiara, ed è quello che la stazione Tool Forge
+         * mostra) ma non è ancora quello che arriva fin qui — vedi il
+         * chiamante in `chatController.ts` (`title: pending.tool`, l'id
+         * nudo). Questo chiude solo la fuga del nome interno; portare il
+         * titolo vero del manifest fin qui resta un miglioramento a parte.
          */
         const sembraUnIdentificativo = /^[a-z0-9]+(_[a-z0-9]+)+$/.test(tool.title)
+            || dynamicToolIdFromName(tool.title) !== null
         if (sembraUnIdentificativo) {
             console.error(
                 `[talos] nessuna etichetta umana per lo strumento "${tool.title}": `
@@ -351,6 +372,9 @@ export const TALOS_TOOL_ICONS: Record<string, TalosToolIconName> = {
     web_read: 'web',
     document_create: 'document',
     generate_image: 'image',
+    // Nessuna icona propria nell'elenco chiuso sopra: 'image' è la più
+    // vicina a un output visivo, stessa scelta di generate_image.
+    artifact_create: 'image',
     library_export: 'download',
     library_context_policy_update: 'library',
     // ⛔ Una ricerca approfondita raggiunge il web, ma NON è una ricerca web:
@@ -412,6 +436,7 @@ export const TALOS_TOOL_ICONS: Record<string, TalosToolIconName> = {
     local_model_download: 'download',
     local_models_status: 'tool',
     tool_details: 'tool',
+    tool_create: 'tool',
 }
 
 /** An unknown tool gets the generic mark rather than another tool's. */
@@ -426,6 +451,25 @@ export interface TalosToolActivity {
 }
 
 /**
+ * ⛔⛔ Owner 2026-08-27, trovato dal vivo sul Pad: il badge "Fatto: …" dopo
+ * `close-with-note` mostrava `dynamic:close-with-note` nudo — lo stesso
+ * difetto già chiuso nella scheda di consenso (`talosToolConsentCopy`), ma
+ * in un punto diverso, senza guardia.
+ *
+ * ⇒ Qui la cura è diversa apposta: nella scheda di consenso la posta è una
+ * FIRMA, quindi il ripiego è generico e prudente ("Uno strumento di TALOS").
+ * Qui è un badge INFORMATIVO dopo una decisione già presa, e un tool
+ * forgiato ha uno slug leggibile per costruzione (`close-with-note`, non un
+ * hash) — mostrare quello, ripulito dal prefisso e dai trattini, è più
+ * utile del generico: distingue DUE tool forgiati diversi nello stesso
+ * turno, cosa che "Uno strumento di TALOS" non potrebbe mai fare.
+ */
+export function talosDynamicToolFallbackLabel(name: string): string | null {
+    const id = dynamicToolIdFromName(name)
+    return id === null ? null : id.replace(/[-_]+/g, ' ')
+}
+
+/**
  * The line shown to the user. An unknown tool falls back to its own name rather
  * than to nothing: a mystery row is worse than a technical one.
  */
@@ -433,7 +477,10 @@ export function talosToolActivityLabel(
     activity: TalosToolActivity,
     localizedLabel?: string,
 ): string {
-    const label = localizedLabel ?? TALOS_TOOL_LABELS[activity.name] ?? activity.name
+    const label = localizedLabel
+        ?? TALOS_TOOL_LABELS[activity.name]
+        ?? talosDynamicToolFallbackLabel(activity.name)
+        ?? activity.name
     return activity.detail ? `${label}: ${activity.detail}` : label
 }
 

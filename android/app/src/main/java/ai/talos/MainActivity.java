@@ -84,6 +84,12 @@ public class MainActivity extends BridgeActivity {
         // Arbitrary model-selected page reads use DNS-pinned public addresses
         // and per-hop redirect validation, never unrestricted Capacitor HTTP.
         { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(TalosSafeWebPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
+        // Owner 2026-08-27: artefatti HTML interattivi in chat, come
+        // ChatGPT/Claude — ma renderizzati in una WebView SEPARATA
+        // (TalosArtifactActivity, non esportata, mai in questo ponte),
+        // perché addJavascriptInterface inietta per istanza di WebView e
+        // non per origine (verificato leggendo CapacitorCookies.java vero).
+        { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(ai.talos.artifact.TalosArtifactPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
         // Downloading a model. It cannot be done from JavaScript at all: Android
         // suspends a backgrounded WebView, and a 4 GB transfer spends most of
         // its hours there.
@@ -156,6 +162,20 @@ public class MainActivity extends BridgeActivity {
                 Class.forName("ai.talos.harness.TalosHarnessUiPlugin"));
         } catch (ClassNotFoundException assente) {
             // È la produzione: l'harness UI non esiste, e va bene così.
+        }
+        // Terminale sandboxato in-device per la sezione Codice (owner 28/8:
+        // «vincolo obbligatorio, senza eccezioni» — niente ponte adb/PC come
+        // via di default). Stessa storia della bolla e dell'harness UI sopra:
+        // la classe vive SOLO nel source set `debug`
+        // (ai.talos.terminal.TalosTerminalPlugin), MAI verificata su un
+        // device reale — vedi il commento di classe sul rischio SELinux/
+        // seccomp non ancora chiuso.
+        try {
+            //noinspection unchecked
+            registerPlugin((Class<? extends com.getcapacitor.Plugin>)
+                Class.forName("ai.talos.terminal.TalosTerminalPlugin"));
+        } catch (ClassNotFoundException assente) {
+            // È la produzione: il terminale sandboxato non esiste, e va bene così.
         }
         long tSuper = android.os.SystemClock.uptimeMillis();
         super.onCreate(savedInstanceState);

@@ -14,6 +14,7 @@ import {
 } from '@lucide/vue'
 import { Capacitor } from '@capacitor/core'
 import { talosLocalEngineDoctorRows } from '@/services/localEngineDoctor'
+import { talosKernelDoctorRows } from '@/services/kernelDoctor'
 import { useChatController } from '@/stores/chatController'
 import { useSettingsStore } from '@/stores/settings'
 import { talosDictationDiagnostics } from '@/services/dictationDiagnostica'
@@ -398,6 +399,32 @@ async function scan(): Promise<void> {
      * motore, invece, sa già cosa sta cercando.
      */
     for (const row of await talosLocalEngineDoctorRows().catch(() => [])) {
+        collected.push({ id: row.id, label: t(row.labelKey), value: row.value, ok: row.ok })
+    }
+
+    /*
+     * ⛔ IL KERNEL DEL CODICE — l'unico pezzo che non era MAI girato su un
+     * telefono, e il commit che l'ha collegato lo dichiara: «NON VERIFICATO SU
+     * DISPOSITIVO».
+     *
+     * Non prova il kernel: prova il CONFINE. Tutto il resto è TypeScript puro su
+     * una porta iniettata e ha i suoi dodici file di prova in Node; qui si guarda
+     * se il filesystem vero si comporta come `discoCapacitor` presume — e la
+     * ricerca dice che su Android quell'API ha difetti dichiarati (`readdir` che
+     * torna solo cartelle, `capacitor-plugins#1940`).
+     *
+     * ⛔ Le etichette passano dal dizionario, come ogni riga vicina. La prima
+     * versione le scriveva in italiano dentro la sonda, con la scusa che
+     * «descrive fatti misurati, e ha senso solo per chi la legge adesso» — ma
+     * la sonda è **permanente**, sta nella piega che ogni persona può aprire, e
+     * `Copia diagnostica` la spedisce dentro un rapporto condivisibile. A chi
+     * usa l'app in inglese sarebbero arrivate quattro righe in italiano.
+     *
+     * ⇒ I VALORI invece restano crudi di proposito: sono cifre, oppure le
+     * parole del tipo del kernel — `completo`, `presente`, `assente` — che sono
+     * il **dato**. Tradurle nasconderebbe quale ramo ha risposto.
+     */
+    for (const row of await talosKernelDoctorRows().catch(() => [])) {
         collected.push({ id: row.id, label: t(row.labelKey), value: row.value, ok: row.ok })
     }
 

@@ -117,7 +117,8 @@ describe('tool permissions', () => {
         // the authorization card existed, and `deny` proved to be the wrong
         // shape for a default because nothing downstream could tell it apart
         // from a considered "never".
-        expect(TALOS_DEFAULT_TOOL_PERMISSIONS).toEqual({ read: 'ask', write: 'ask', outbound: 'ask' })
+        expect(TALOS_DEFAULT_TOOL_PERMISSIONS)
+            .toEqual({ read: 'ask', write: 'ask', outbound: 'ask', execute: 'ask' })
     })
 
     /**

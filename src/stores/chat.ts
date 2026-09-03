@@ -613,12 +613,52 @@ export function createChatStore<Runtime = undefined>(
     }> = []
     let drainingContinuations = false
 
-    async function loadMessageView(message: TalosLocalChatMessage): Promise<TalosMobileMessageView> {
+    async function loadMessageView(
+        message: TalosLocalChatMessage,
+        batch?: { attachmentMessageIds: string[]; sessionActivities: TalosLocalToolActivity[] },
+    ): Promise<TalosMobileMessageView> {
+        if (batch) {
+            const attachments = batch.attachmentMessageIds.includes(message.id)
+                ? await repository.listMessageAttachments(message.id)
+                : []
+            return toMessageView(
+                message,
+                attachments,
+                batch.sessionActivities.filter((activity) => activity.message_id === message.id),
+            )
+        }
         const [attachments, toolActivities] = await Promise.all([
             repository.listMessageAttachments(message.id),
             repository.listMessageToolActivities(message.id),
         ])
         return toMessageView(message, attachments, toolActivities)
+    }
+
+    /**
+     * Restore one visible page with bounded native bridge work.
+     *
+     * The old path made two repository calls for every row, even though the
+     * repository already exposes session-level reads for both domains. On a
+     * native SQLite bridge those promises do not become parallel database
+     * work: they queue behind the same plugin, so a 40-row page became an
+     * avoidable N+1 startup stall. One session activity read and one attachment
+     * index read preserve the view contract while leaving per-message reads only
+     * for rows that actually have attachments.
+     */
+    async function loadMessageViews(
+        sessionId: string,
+        rows: readonly TalosLocalChatMessage[],
+    ): Promise<{
+        views: TalosMobileMessageView[]
+        sessionActivities: TalosLocalToolActivity[]
+    }> {
+        const [sessionActivities, attachmentMessageIds] = await Promise.all([
+            repository.listSessionToolActivities(sessionId),
+            repository.listSessionAttachmentMessageIds(sessionId),
+        ])
+        const batch = { attachmentMessageIds, sessionActivities }
+        const views = await Promise.all(rows.map((message) => loadMessageView(message, batch)))
+        return { views, sessionActivities }
     }
 
     /**
@@ -655,16 +695,18 @@ export function createChatStore<Runtime = undefined>(
             ? await repository.listMessages(active.id, { limit: TALOS_MESSAGE_PAGE_SIZE })
             : []
         markPageLoaded(restoredRows)
-        const restored = await Promise.all(restoredRows.map(loadMessageView))
+        const restoredData = active
+            ? await loadMessageViews(active.id, restoredRows)
+            : { views: [], sessionActivities: [] }
         const browserActivities = active
-            ? (await repository.listSessionToolActivities(active.id))
+            ? restoredData.sessionActivities
                 .filter((activity) => activity.message_id === null)
                 .flatMap((activity) => {
                     const view = toBrowserActivityView(activity)
                     return view ? [view] : []
                 })
             : []
-        return { sessions: available, active, messages: restored, sessionBrowserActivities: browserActivities }
+        return { sessions: available, active, messages: restoredData.views, sessionBrowserActivities: browserActivities }
     }
 
     function applySnapshot(snapshot: Awaited<ReturnType<typeof readSnapshot>>): void {
@@ -867,7 +909,7 @@ export function createChatStore<Runtime = undefined>(
                 state.hasOlderMessages = false
                 return 0
             }
-            const older = await Promise.all(rows.map(loadMessageView))
+            const older = (await loadMessageViews(session.id, rows)).views
             // SF-MAJOR: `session` and `oldest` were captured BEFORE two awaits.
             // Tapping another chat while SQLite answered used to splice one
             // conversation's history into the top of another — and the model
@@ -891,8 +933,8 @@ export function createChatStore<Runtime = undefined>(
             await repository.selectSession(sessionId)
             const restoredRows = await repository.listMessages(sessionId, { limit: TALOS_MESSAGE_PAGE_SIZE })
             markPageLoaded(restoredRows)
-            const restored = await Promise.all(restoredRows.map(async (message) => loadMessageView(message)))
-            const browserActivities = (await repository.listSessionToolActivities(sessionId))
+            const restoredData = await loadMessageViews(sessionId, restoredRows)
+            const browserActivities = restoredData.sessionActivities
                 .filter((activity) => activity.message_id === null)
                 .flatMap((activity) => {
                     const view = toBrowserActivityView(activity)
@@ -903,7 +945,7 @@ export function createChatStore<Runtime = undefined>(
             if (!selected) throw new Error(CHAT_SESSION_NOT_FOUND)
             if (revision !== navigationRevision) return
             activeSession.value = selected
-            messages.splice(0, messages.length, ...restored)
+            messages.splice(0, messages.length, ...restoredData.views)
             sessionBrowserActivities.splice(0, sessionBrowserActivities.length, ...browserActivities)
             state.lastError = null
         } catch (error) {
@@ -986,15 +1028,16 @@ export function createChatStore<Runtime = undefined>(
                 ? await repository.listMessages(next.id, { limit: TALOS_MESSAGE_PAGE_SIZE })
                 : []
             markPageLoaded(nextRows)
-            const restored = await Promise.all(nextRows.map(loadMessageView))
-            const browserActivities = next
-                ? (await repository.listSessionToolActivities(next.id))
-                    .filter((activity) => activity.message_id === null)
-                    .flatMap((activity) => {
-                        const view = toBrowserActivityView(activity)
-                        return view ? [view] : []
-                    })
-                : []
+            const restoredData = next
+                ? await loadMessageViews(next.id, nextRows)
+                : { views: [], sessionActivities: [] }
+            const restored = restoredData.views
+            const browserActivities = restoredData.sessionActivities
+                .filter((activity) => activity.message_id === null)
+                .flatMap((activity) => {
+                    const view = toBrowserActivityView(activity)
+                    return view ? [view] : []
+                })
             if (revision !== navigationRevision) return
             sessions.splice(0, sessions.length, ...available)
             activeSession.value = next

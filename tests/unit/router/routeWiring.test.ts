@@ -57,7 +57,11 @@ describe('router wiring', () => {
             'notes', 'note-new', 'note-item',
             'doctor',
             'research', 'research-new', 'research-report', 'research-claim', 'research-source',
-            'context', 'harness', 'harness-session', 'settings',
+            'context', 'harness', 'harness-session',
+            // Tool Forge — mobile-first come 'harness': nessun
+            // desktop_station_id nel ledger di parità (schema deliberato,
+            // vedi mobileRoutes.ts).
+            'toolforge', 'settings',
             'settings-models', 'settings-models-providers',
             'settings-models-catalog', 'settings-models-local', 'settings-models-local-repo',
             // Il controllo del telefono: sotto le Impostazioni, non fra le stazioni.

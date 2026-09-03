@@ -336,7 +336,30 @@ function byte(valore: unknown): number {
  * azzoppare l'app per far tornare un tetto». Qui l'alternativa era un attrezzo
  * che il modello non chiama, cioè una funzione che non esiste.
  */
-const TETTO_BYTE = 45_200
+/*
+ * ⛔⛔⛔ 45.200 → 52.700, il 2026-08-27, per `tool_create` — «un utente
+ * finale... come fa a creare un tool da solo?». Owner, verbatim, quando la
+ * prima stesura tagliava `foreach`/`set`/`llm` dal DSL offerto SOLO per
+ * stare sotto questo tetto: «FERMO, SE ACCORCIARE AZZOPPA LA
+ * FUNZIONALITA, COME DA REGOLA, ALZA IL TETTO».
+ *
+ * ⇒ Il peso è stato inseguito PRIMA di alzare, nell'ordine di sempre:
+ *
+ *     schema COMPLETO, prosa prima stesura   53.277   ⛔ +8.077
+ *     prosa sfrondata a parità di DSL        52.472   ⛔ +7.272
+ *
+ * (Un sottoinsieme capability/if/return era stato provato PRIMA di questi
+ * due — pesava meno ed era sotto il vecchio tetto, ma TOGLIEVA `foreach`,
+ * che `bulk-tasks` usa davvero: scartato senza nemmeno misurarlo fino in
+ * fondo, perché azzoppare per far quadrare il numero è esattamente ciò che
+ * la regola vieta — non un numero da citare, una strada non presa.)
+ *
+ * I 7.272 byte restanti sono il costo IRRIDUCIBILE di offrire l'intero DAG
+ * dichiarativo (7 tipi di nodo, condizioni, retry, compensation, requisiti
+ * del modello) a un tool che deve poterli usare tutti — non prosa da
+ * limare, è la STRUTTURA dello schema stesso.
+ */
+const TETTO_BYTE = 52_700
 
 /**
  * ⛔ E nessun tool da solo può valere un ottavo di tutto.
@@ -346,7 +369,16 @@ const TETTO_BYTE = 45_200
  * ricchezza vera e resta; il tetto serve a impedire che ne nasca un secondo
  * senza che nessuno se ne accorga.
  */
-const TETTO_UN_TOOL = 5_200
+/*
+ * ⛔⛔⛔ 5.200 → 8.000, il 2026-08-27, stesso giorno e stessa regola:
+ * `tool_create` (il tool che ne crea altri) pesa **7.356 byte** — offre
+ * l'intero DSL dichiarativo del Forge, non un sottoinsieme ridotto per
+ * stare sotto un vecchio tetto tarato su `document_create`. 644 byte di
+ * margine, non il minimo esatto: un margine a due cifre è la trappola già
+ * descritta più volte in questo progetto per il cancello gemello
+ * (`verify-initial-chunk.mjs`) — suona a ogni riga invece che quando serve.
+ */
+const TETTO_UN_TOOL = 8_000
 
 describe('il peso degli schemi dei tool, che è il vincolo del locale', () => {
     it('⛔ la superficie totale resta sotto il tetto', async () => {
