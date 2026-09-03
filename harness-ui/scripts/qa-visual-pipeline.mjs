@@ -572,6 +572,77 @@ const SCENARI = {
     if (String(verdetti) === '[]') p.difetto('nessun verdetto di compatibilità a schermo dopo aver premuto Verifica', { severita: 'blocco' });
     await p.screenshot('model-lab-verdetti-fit', { nota: 'verdetto di compatibilità per ogni modello installato, col runtime acceso su UNO solo' });
 
+    /*
+     * ⛔⛔⛔ LO STATO CHE LA MACCHINA NON SA PRODURRE — 02/9.
+     *
+     * Il verdetto «non è stato possibile osservare le capacità» esiste per un
+     * caso preciso: il runtime è acceso su un ALTRO modello, quindi di questo
+     * non sa niente. Sul disco di questa macchina quel caso non si raggiunge
+     * premendo il pulsante — i modelli piccoli hanno 40.960 token addestrati e
+     * si fermano prima sul contesto (il profilo agente ne chiede 65.536), e il
+     * grande si ferma ancora prima sulla memoria (17,37 GB minimi contro 11,24
+     * liberi, misurato a quattro contesti diversi). Restava una riga di UI
+     * provata solo dai test unitari.
+     *
+     * ⭐ Ricerca 02/9 (playwright.dev/docs/mock; dev.to/playwright API mocking):
+     * il pattern affermato per uno stato irriproducibile NON è inventare una
+     * risposta — è `route.fetch()` + `route.fulfill()`: si fa la richiesta
+     * VERA e si tocca il minimo indispensabile.
+     *
+     * ⛔ Qui si tocca ancora meno: non la risposta, la DOMANDA. Si aggiunge
+     * `contextTokens=4096` alla chiamata `/fit`, che è un parametro pubblico e
+     * legittimo della rotta. Il server risponde per davvero, con l'header vero
+     * letto dal disco e la memoria vera misurata: quello che finisce a schermo
+     * non ha un solo byte inventato. L'unica cosa artificiale è QUALE domanda
+     * si fa — e resta scritta qui e nella nota del passo.
+     */
+    /*
+     * ⛔ Chi è caricato lo dice `/fit`, non `/api/v1/runtime`: quella rotta
+     * elenca i runtime e NON riporta il modello (verificato, non supposto).
+     * `inspection.runtime.servingModelId` invece è il campo nato apposta.
+     */
+    const idInstallati = JSON.parse(String(await p.cdp.evaluate(
+      "JSON.stringify(Array.from(document.querySelectorAll('[data-verify-fit]')).map(b => b.dataset.verifyFit))",
+    )));
+    let caricato = null;
+    if (idInstallati.length > 0) {
+      const risposta = await fetch(`${new URL(URL_BASE).origin}/api/v1/local-models/${encodeURIComponent(idInstallati[0])}/fit`);
+      const corpo = await risposta.json().catch(() => null);
+      caricato = corpo?.data?.inspection?.runtime?.servingModelId ?? null;
+    }
+    const scelto = idInstallati.find((id) => id !== caricato) ?? null;
+    p.nota(`runtime acceso su «${caricato}»; per il caso «capacità non osservabili» si usa «${scelto}»`);
+    if (!caricato || !scelto) {
+      p.nota('⛔ passo SALTATO: serve un runtime acceso e almeno un secondo modello installato. Non è una prova riuscita, è una prova non fatta.');
+    } else {
+      await p.cdp.evaluate(`(() => {
+        window.__fetchOriginale = window.__fetchOriginale || window.fetch;
+        window.fetch = (input, init) => {
+          const url = typeof input === 'string' ? input : input?.url ?? '';
+          /*
+           * ⛔ Il filtro NON cerca '/fit?': la chiamata principale non ha
+           * profilo, quindi non ha punto interrogativo — la prima stesura di
+           * questo passo non combaciava mai, e il verdetto restava quello di
+           * prima. Sembrava una prova riuscita e non lo era.
+           */
+          if (url.includes('/fit') && url.includes(encodeURIComponent(${JSON.stringify(scelto)}))) {
+            return window.__fetchOriginale(url + (url.includes('?') ? '&' : '?') + 'contextTokens=4096', init);
+          }
+          return window.__fetchOriginale(input, init);
+        };
+        return 'fetch instradata';
+      })()`);
+      await p.cdp.evaluate(`document.querySelector('[data-verify-fit="${scelto}"]')?.click()`);
+      await p.attendi(2_000);
+      const riga = await p.cdp.evaluate(`document.querySelector('[data-model-fit="${scelto}"]')?.textContent?.trim() ?? '(nessuna riga)'`);
+      p.nota(`verdetto con capacità non osservabili: ${riga}`);
+      if (!String(riga).includes('scaricalo per verificarlo')) {
+        p.difetto(`il verdetto non dice CHI occupa il runtime né cosa fare: «${riga}»`, { severita: 'blocco' });
+      }
+      await p.screenshot('model-lab-capacita-non-osservabili', { nota: `caso «capacità non osservabili»: runtime acceso su «${caricato}», verdetto per «${scelto}». ⛔ Risposta REALE del server; l'unica cosa cambiata è la domanda (contextTokens=4096 invece del default del profilo), perché questa macchina non ha un modello che raggiunga quel cancello premendo il pulsante` });
+      await p.cdp.evaluate("window.fetch = window.__fetchOriginale; 'fetch ripristinata'");
+    }
+
     for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
     for (const r of p.cdp.richiesteFallite) {
       if (!r.url.endsWith('/favicon.ico')) p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });

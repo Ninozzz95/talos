@@ -1277,18 +1277,62 @@ fotografava la lista coi pulsanti intatti, cioè la porta invece della
 stanza. Aggiunto allo scenario `qa-settings-model-lab` (e un aggancio
 `data-verify-fit` stabile, così la prova non dipende dall'etichetta).
 
-### ⛔ NON VERIFICATO a schermo — dichiarato, non nascosto
+### ✅ ORA VERIFICATO a schermo — era il primo punto rimasto
 
-La frase nuova («è caricato «X»…») compare solo con `reason: capabilities`.
-**Verificata dal server vero** — `state: unknown, reason: capabilities,
-runtime: {reachable:true, servingThisModel:false, servingModelId:
-'qwen3-0.6b-…'}` — ma per **vederla in una schermata** serve un modello che
-passi memoria e contesto senza essere caricato, e questa macchina non ce
-l'ha: entrambi i piccoli hanno 40.960 token addestrati (si fermano sul
-contesto, sotto i 65.536 del profilo agente) e il 27B si ferma prima sulla
-memoria (mancano 19 GB). Ho importato una seconda copia del 0.6B per
-provarci: stesso limite di contesto, e l'ho rimossa. Resta coperta da due
-test unitari, non da uno screenshot.
+Il turno precedente lo chiudeva con un **⛔ NON VERIFICATO** onesto: la frase
+compare solo con `reason: capabilities`, e su questa macchina quel cancello
+non si raggiunge premendo il pulsante. Misurato a quattro contesti diversi
+prima di rassegnarsi: il 27B chiede **17,37 GB minimi contro 11,24 liberi**,
+quindi si ferma sulla memoria a `65536`, `32768`, `8192` **e** `4096` — non
+è una questione di contesto, non ci arriva mai.
+
+⭐ **Ricerca 03/9** (playwright.dev/docs/mock; dev.to/playwright, «API
+Mocking for your Playwright tests»): per uno stato irriproducibile il
+pattern affermato **non è inventare una risposta** — è `route.fetch()` +
+`route.fulfill()`, cioè fare la richiesta VERA e toccare il minimo
+indispensabile.
+
+⇒ Qui si tocca ancora meno: **non la risposta, la domanda**. Il passo di QA
+riscrive la chiamata aggiungendo `contextTokens=4096`, che è un parametro
+pubblico e legittimo della rotta. Il server risponde per davvero — header
+letto dal disco, memoria misurata — quindi **a schermo non c'è un byte
+inventato**; l'unica cosa artificiale è quale domanda si fa, ed è scritta
+nel codice del passo e nella nota dello screenshot.
+
+⛔ Serviva un secondo modello non caricato: ne ho importata una copia,
+fotografato, e **rimossa** (la lista è tornata a due). Il passo perciò si
+auto-dichiara saltato quando quella condizione non c'è — «non è una prova
+riuscita, è una prova non fatta».
+
+⛔ **E il primo tentativo NON funzionava**: il filtro cercava `/fit?`, ma la
+chiamata principale non ha profilo e quindi **non ha punto interrogativo**.
+Non combaciava mai, il verdetto restava quello di prima — e la corsa
+*sembrava* riuscita. Se ne è accorto solo il controllo che pretende la
+frase dentro la riga.
+
+**Visto a schermo, laptop 1024×800 e desktop 1440×900:**
+> Va bene per la chat; come agente non verificabile ora — non è stato
+> possibile osservare le capacità del modello — è caricato
+> «qwen3-0.6b-q2-k-16d75108d73a», e finché c'è lui il runtime non può
+> osservare questo modello: scaricalo per verificarlo
+
+### ⛔ Un difetto di ONESTÀ trovato nello screenshot — e nel mio lavoro
+
+La prima versione di quella riga diceva «Va bene per la chat, **non come
+agente**». Ma il verdetto agente lì era `unknown`, non `blocked`: stavamo
+trasformando un «non l'ho potuto controllare» in un «no». ⛔ È esattamente
+la distinzione su cui è costruito tutto questo pannello — `unknown` non è
+`blocked` — e l'avevo rotta io il giorno prima, scrivendo il ripiego chat.
+Curato: con `unknown` la riga dice «come agente **non verificabile ora**»,
+e la forma negativa resta solo dove la si sa. Test `MODEL-FIT-UI-13`.
+
+### 🗑️ (sezione superata lo stesso giorno)
+
+Qui stava il «⛔ NON VERIFICATO» scritto poche ore prima. Non lo cancello in
+silenzio: **è stato chiuso**, con la ricerca e la corsa visiva descritte
+sopra. Resta scritto che c'è stato, perché una fase dichiarata non chiusa e
+poi chiusa davvero è la storia giusta — una che non si era mai fermata
+sarebbe stata più comoda e meno vera.
 
 ### Taccuino ispettore — 4 difetti FUORI da questo lavoro
 
@@ -1309,6 +1353,6 @@ Il rapporto automatico ne segnala **0**. Guardando l'immagine:
 Nessuno dei quattro è di questo punto: registrati qui, non corretti ora
 ([[una-fase-alla-volta-finisci-verifica-poi-vai]]).
 
-**Suite**: backend+contratti **1404/1404**. QA visiva: scenario
+**Suite**: backend+contratti **1405/1405**. QA visiva: scenario
 `qa-settings-model-lab` verde su **laptop 1024×800** e **desktop 1440×900**,
 0 eccezioni JS, 0 richieste fallite.

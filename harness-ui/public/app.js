@@ -2068,7 +2068,22 @@
      * serve a niente», che è falso.
      */
     nodo.dataset.fitState = voce.ripiegoChat ? 'warn' : classe;
-    nodo.textContent = voce.ripiegoChat ? `Va bene per la chat, non come agente — ${testo.replace(/^[^—]*— /, '')}` : testo;
+    /*
+     * ⛔⛔ 03/9 — «non come agente» AFFERMA una cosa che a volte non sappiamo.
+     *
+     * Trovato guardando lo screenshot della verifica precedente, non nel
+     * codice: con il verdetto agente `unknown` (le capacità non sono
+     * osservabili perché il runtime serve un altro modello) la riga diceva
+     * «Va bene per la chat, NON COME AGENTE» — cioè trasformava un «non l'ho
+     * potuto controllare» in un «no». È la stessa distinzione su cui è
+     * costruito tutto il resto di questo pannello: `unknown` non è `blocked`.
+     * ⇒ Il ripiego dice cosa SI SA («va bene per la chat») e poi il vero
+     * stato dell'altra domanda, senza rispondere al posto suo.
+     */
+    const prefissoRipiego = voce.ripiegoChat
+      ? (voce.esito?.state === 'unknown' ? 'Va bene per la chat; come agente non verificabile ora' : 'Va bene per la chat, non come agente')
+      : '';
+    nodo.textContent = voce.ripiegoChat ? `${prefissoRipiego} — ${testo.replace(/^[^—]*— /, '')}` : testo;
     const ctx = voce.esito.context;
     if (Number.isFinite(ctx?.availableTokens) && Number.isFinite(ctx?.requestedTokens)) {
       nodo.append(textElement('small', '', ` contesto ${ctx.availableTokens.toLocaleString('it-IT')} token su ${ctx.requestedTokens.toLocaleString('it-IT')} richiesti`));
