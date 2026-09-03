@@ -2125,8 +2125,28 @@ export function createHttpApp({
         const repo = url.searchParams.get('repo'); const revision = url.searchParams.get('revision');
         if (!repo || !hfHubClient?.describeModel || !hfHubClient?.listGgufFiles) { const error = new Error('Hub Hugging Face non configurato'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
         const detail = await hfHubClient.describeModel(repo, revision || 'main');
-        const listed = revision ? await hfHubClient.listGgufFiles(repo, revision) : [];
-        const files = revision && hfHubClient.pathsInfo ? await hfHubClient.pathsInfo(repo, revision, listed.map((item) => item.path)) : listed;
+        /*
+         * ⛔⛔⛔ 03/9 — BUG REALE trovato riproducendo la chiamata a mano:
+         * `listGgufFiles`/`pathsInfo` (hf-hub-client.mjs) validano la
+         * revision con `ensureRevision` — un commit hash vero (40-64 esa),
+         * MAI un nome di branch come 'main', per disciplina di sicurezza
+         * (pin sempre a un commit esatto, mai un ref mutabile). Questo
+         * endpoint passava però `revision` GREZZA (il parametro della query,
+         * non ancora risolta) a entrambe le chiamate: qualunque chiamante
+         * che passasse 'main' — o qualunque valore non ancora risolto —
+         * riceveva un 500 (INTERNAL_ERROR) invece di una risposta onesta.
+         * ⛔ Non raggiungibile dalla UI di oggi (app.js passa sempre
+         * `item.revision` già risolto dalla ricerca, mai la stringa letterale
+         * 'main') — ma un endpoint HTTP resta raggiungibile da chiunque tocchi
+         * il loopback, stesso principio già in uso altrove in questo file:
+         * non deve fidarsi ciecamente dell'input. `detail.revision` (quello
+         * che `describeModel` ha GIÀ risolto un attimo fa) è la fonte
+         * corretta, sempre un hash valido quando describeModel riesce — la
+         * guardia sul revision GREZZO resta solo per decidere SE elencare i
+         * file (fase 2 della UI), mai per il VALORE passato.
+         */
+        const listed = revision ? await hfHubClient.listGgufFiles(repo, detail.revision) : [];
+        const files = revision && hfHubClient.pathsInfo ? await hfHubClient.pathsInfo(repo, detail.revision, listed.map((item) => item.path)) : listed;
         data = { ...detail, files };
       } else if (url.pathname === '/api/v1/huggingface/image') {
         const source = url.searchParams.get('url');
