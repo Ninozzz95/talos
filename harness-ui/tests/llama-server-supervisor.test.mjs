@@ -69,6 +69,19 @@ test('con un backend GPU attivo aggiunge flash-attention e KV cache quantizzata 
   const argv = spawnCall[1];
   assert.deepEqual(argv, [
     '-m', 'C:\\models\\model.gguf', '--host', '127.0.0.1', '--port', '18081', '--api-key', argv[7],
+    // ⛔⛔⛔ 03/9 — QUESTA PROVA È PASSATA PER 'auto' NELLO STESSO GIORNO, a
+    // metà mattina: un modello giocattolo che ci sta comunque in VRAM aveva
+    // nascosto che un 27B vero (16,46 GB contro 16,3 GB di scheda) con
+    // '-ngl 99' esplicito forza un overflow muto verso la memoria condivisa
+    // di Windows — 13,28 tok/s invece dei 62 possibili. La cura sembrava
+    // ovvia: 'auto' come fa LM Studio (owner: "bisogna usare la RAM e la
+    // VRAM come fa LM Studio"), lasciare decidere al fitter del binario.
+    // ⇒ MISURATA e SMENTITA lo stesso pomeriggio: banco A/B pulito,
+    // 'auto' 11,12 tok/s / 191,3 prompt tok/s contro 13,28 / 262,3 di '99'
+    // esplicito, più un avviso "GDN mismatch" che '99' non genera — vedi
+    // llama-server-supervisor.mjs per i numeri e la fonte esterna che li
+    // corrobora. Si torna a '99': l'ipotesi era ragionevole, la misura ha
+    // vinto sull'ipotesi, come vuole la regola del progetto.
     '-ngl', '99',
     '-fa', '1', '--cache-type-k', 'q8_0', '--cache-type-v', 'q8_0',
     '--jinja', '--metrics', '--props',
