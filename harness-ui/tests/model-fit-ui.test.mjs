@@ -175,3 +175,106 @@ test('MODEL-FIT-UI-13 — «non come agente» solo quando lo SAPPIAMO, mai su un
   assert.match(app, /voce\.esito\?\.state === 'unknown'\s*\?\s*'Va bene per la chat; come agente non verificabile ora'/);
   assert.match(app, /:\s*'Va bene per la chat, non come agente'/);
 });
+
+/* ═══ 03/9 — i quattro fix del Laboratorio modelli + le azioni sui messaggi ═══ */
+
+test('MODEL-LAB-HF-01 — la scheda Hugging Face carica il catalogo APRENDOSI, senza cercare', async () => {
+  /*
+   * ⛔ Owner: «nella tab huggingface i modelli non spuntano subito, devo
+   * prima cercare qualcosa». Il server rispondeva già con query vuota
+   * (misurato: 5 su 5, il primo con 12,7 milioni di download): era «il
+   * codice giusto che nessuno chiama».
+   */
+  const app = await source('public/app.js');
+  assert.match(app, /section === 'huggingface' && !state\.modelLab\.hfCatalogoIniziale/);
+  assert.match(app, /state\.modelLab\.hfCatalogoIniziale = true;/);
+});
+
+test('MODEL-LAB-HF-02 — AL CONTRARIO: il catalogo non sovrascrive una ricerca già fatta', async () => {
+  const app = await source('public/app.js');
+  assert.match(app, /if \(state\.modelLab\.hfResults\.length === 0 && !state\.modelLab\.hfError\) void cercaHuggingFaceModelLab\(\);/);
+});
+
+test('MODEL-LAB-HF-03 — il dettaglio ha tre schede e le QUANTIZZAZIONI per prime', async () => {
+  // ⛔ Come il mobile (TalosMobileLocalRepoDetail.vue), che ha risolto per primo.
+  const app = await source('public/app.js');
+  const schede = app.match(/\{ id: '(quantizzazioni|scheda|file)', etichetta: '[^']+'/gu) || [];
+  assert.deepEqual(schede.map((s) => s.match(/id: '([a-z]+)'/u)[1]), ['quantizzazioni', 'scheda', 'file']);
+  assert.match(app, /hfDetailTab: 'quantizzazioni'/);
+});
+
+test('MODEL-LAB-HF-04 — la stima dichiara SEMPRE di cosa è fatta', async () => {
+  /*
+   * ⛔ Copre i pesi e basta: senza il file non si legge l'header, quindi la
+   * cache del contesto non è calcolabile. È una soglia inferiore, e va detto
+   * — è il punto in cui una persona scarica 15 GB per scoprire dopo che non
+   * parte.
+   */
+  const app = await source('public/app.js');
+  assert.match(app, /se già i pesi non ci stanno, non ci sta/);
+  assert.match(app, /fit-estimate\?bytes=/);
+});
+
+test('MODEL-LAB-HF-05 — la stima porta l\'ORA della misura, non solo il verdetto', async () => {
+  // ⛔ La memoria libera cambia mentre si lavora: un badge senza data diventa
+  // una bugia silenziosa dopo un minuto.
+  const app = await source('public/app.js');
+  assert.match(app, /misurato alle \$\{stima\.misurataAlle\.toLocaleTimeString\('it-IT'\)\}/);
+  assert.match(app, /state\.modelLab\.hfStima = null;/, 'cambiando repository la stima va azzerata');
+});
+
+test('MODEL-PICKER-01 — il selettore ha le FONTI come schede, e i locali dichiarano il limite', async () => {
+  /*
+   * ⛔ Misurato: `provider` in quel catalogo è l'AUTORE (51 gruppi su 424
+   * modelli), non la via d'accesso — tutti passano da OpenRouter. E il
+   * kernel della chat chiama SEMPRE OpenRouter, quindi un modello locale
+   * selezionabile qui sarebbe un pulsante che non fa quel che promette.
+   */
+  const app = await source('public/app.js');
+  assert.match(app, /class="model-picker-sources"|'model-picker-sources'/);
+  assert.match(app, /La chat parla solo con OpenRouter: questi modelli girano nel Laboratorio modelli, non ancora qui\./);
+});
+
+test('MODEL-PICKER-02 — AL CONTRARIO: le righe locali NON sono bottoni', async () => {
+  // ⛔ Un elenco che sembra cliccabile e non lo è mente col gesto, che è
+  // peggio che mentire a parole.
+  const app = await source('public/app.js');
+  const inizio = app.indexOf('function renderListaLocali()');
+  const corpo = app.slice(inizio, app.indexOf('\n    function ', inizio + 1));
+  assert.ok(inizio > 0);
+  assert.doesNotMatch(corpo, /createElement\('button'\)/);
+});
+
+test('MESSAGE-ACTIONS-01 — la barra sta DOPO il testo, per lo screen reader', async () => {
+  /*
+   * ⭐ Ricerca 03/9: le azioni per messaggio vanno dopo il testo nel DOM —
+   * se stanno prima, si annuncia «copia, rigenera» prima di una sola parola
+   * della risposta.
+   */
+  const app = await source('public/app.js');
+  const inizio = app.indexOf('function ensureAssistantMessageElement');
+  const corpo = app.slice(inizio, app.indexOf('\n  function ', inizio + 1));
+  assert.ok(corpo.indexOf("article.append(meta, copy)") < corpo.indexOf('article.append(azioni)'), 'le azioni vanno appese dopo il testo');
+  assert.match(corpo, /aria-label', 'Azioni sulla risposta'/);
+});
+
+test('MESSAGE-ACTIONS-02 — nessun bottone finto: niente Libreria, niente like, niente falso «rigenera»', async () => {
+  /*
+   * ⛔ Il gestore precedente era un residuo di mockup: `retry` diceva
+   * «Rigenerazione avviata» senza rigenerare, like/dislike dicevano
+   * «Feedback registrato» senza salvare. Sul desktop la Libreria non esiste
+   * ancora: un bottone che non salva sarebbe «APERTA non è FATTA».
+   */
+  const app = await source('public/app.js');
+  assert.doesNotMatch(app, /toast\('Rigenerazione avviata'/);
+  assert.doesNotMatch(app, /toast\(!wasPressed \? 'Feedback registrato'/);
+  assert.match(app, /bottoneAzione\('ask-again', 'Chiedi di nuovo'/, 'il nome dice cosa fa: rimanda la domanda, non sostituisce la risposta');
+});
+
+test('MESSAGE-ACTIONS-03 — «chiedi di nuovo» usa la domanda REGISTRATA, non il DOM', async () => {
+  // ⛔ Una bolla può essere ridisegnata o troncata: rileggerla manderebbe una
+  // domanda diversa da quella che la persona vede.
+  const app = await source('public/app.js');
+  assert.match(app, /state\.realSession\.ultimaDomanda = text;/);
+  assert.match(app, /const domanda = state\.realSession\.ultimaDomanda;/);
+});

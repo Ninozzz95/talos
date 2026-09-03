@@ -1741,6 +1741,12 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .hf-variant-list { display: grid; gap: 6px; }
 .hf-variant-list-heading { margin: 4px 0 0; color: var(--text-2); font-size: calc(10px * var(--talos-ui-font-scale)); text-transform: uppercase; letter-spacing: .04em; }
 .hf-variant-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+/* ⛔ 03/9 — la riga andava a capo SOLO dopo aver aggiunto il verdetto: senza
+   `flex-wrap`, la frase della stima si infilava accanto a «Scarica» e
+   schiacciava il nome della quantizzazione fino a troncarlo. Trovato
+   guardando lo screenshot, non leggendo il CSS: il commento nel JS diceva
+   gia' «il verdetto sta SOTTO la riga», e non era vero. */
+.hf-variant-row:has(.hf-variant-fit) { flex-wrap: wrap; }
 .hf-variant-status { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .hf-variant-row.is-ready .hf-variant-status { background: var(--success); }
 .hf-variant-row.is-incomplete .hf-variant-status, .hf-variant-row.is-unverified .hf-variant-status { background: var(--danger); }
@@ -2567,3 +2573,164 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
 .memoria-tenuta { margin: 0; color: var(--muted); font-size: calc(11px * var(--talos-ui-font-scale)); }
 .memoria-azioni { display: flex; flex-wrap: wrap; gap: 8px; }
 .memoria-nota { margin: 0; font-size: calc(10.5px * var(--talos-ui-font-scale)); line-height: 1.5; }
+
+/* ═══════════ Dettaglio Hugging Face a schede — 03/9 ═══════════════════════
+ *
+ * Owner: «se clicco su un modello hugging face, come su mobile si devono
+ * aprire delle tab, con per prima la lista delle quantizzazioni», e «mancano
+ * scritte e badge e pulsanti per misurare in tempo reale se quel modello e
+ * quantizzazione entrano e girano nel pc».
+ *
+ * ⛔ Nessuna palette nuova e nessun secondo linguaggio per il verdetto: la
+ * stima riusa ESATTAMENTE i glifi e i colori di `.model-lab-fit` (✓ ! ✕ ?).
+ * Sulla stessa schermata c'è già il verdetto dei modelli installati: due
+ * grammatiche diverse per la stessa domanda insegnerebbero a non fidarsi di
+ * nessuna delle due — che è il difetto curato tre volte oggi.
+ */
+.hf-detail-tabs { display: flex; gap: 2px; margin: 12px 0 0; border-bottom: 1px solid var(--line); }
+.hf-detail-tab { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border: 0; border-bottom: 2px solid transparent; border-radius: 8px 8px 0 0; background: transparent; color: var(--muted); font: inherit; font-size: calc(12px * var(--talos-ui-font-scale)); cursor: pointer; }
+.hf-detail-tab:hover { color: var(--text); background: var(--surface-highlight-subtle); }
+.hf-detail-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.hf-detail-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+/* Il conto è un fatto, non una decorazione: compare solo dove c'è una lista da contare. */
+.hf-detail-tab-count { padding: 1px 6px; border-radius: 999px; background: var(--surface-highlight-subtle); color: var(--muted); font-variant-numeric: tabular-nums; font-size: calc(10px * var(--talos-ui-font-scale)); }
+.hf-detail-tab.active .hf-detail-tab-count { color: var(--text-2); }
+.hf-detail-body { padding-top: 12px; }
+
+.hf-variant-measure { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.hf-variant-measured-at { color: var(--muted); font-size: calc(11px * var(--talos-ui-font-scale)); font-variant-numeric: tabular-nums; }
+.hf-variant-basis { margin: 0 0 12px; color: var(--muted); font-size: calc(11px * var(--talos-ui-font-scale)); line-height: 1.5; }
+
+.hf-variant-fit { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; flex: 1 0 100%; margin: 8px 0 0; padding: 6px 10px; border: 1px solid var(--line); border-left-width: 3px; border-radius: 8px; background: var(--surface-highlight-subtle); color: var(--text-2); font-size: calc(11px * var(--talos-ui-font-scale)); line-height: 1.5; }
+.hf-variant-fit::before { flex: 0 0 auto; font-weight: 700; }
+.hf-variant-fit[data-fit-state="ok"] { border-left-color: var(--success); }
+.hf-variant-fit[data-fit-state="ok"]::before { content: '✓'; color: var(--success); }
+.hf-variant-fit[data-fit-state="warn"] { border-left-color: var(--accent); }
+.hf-variant-fit[data-fit-state="warn"]::before { content: '!'; color: var(--accent); }
+.hf-variant-fit[data-fit-state="bad"] { border-left-color: var(--danger); }
+.hf-variant-fit[data-fit-state="bad"]::before { content: '✕'; color: var(--danger); }
+.hf-variant-fit[data-fit-state="unknown"] { border-left-color: var(--line-strong); }
+.hf-variant-fit[data-fit-state="unknown"]::before { content: '?'; color: var(--muted); }
+.hf-variant-fit.is-loading { border-left-color: var(--line-strong); color: var(--muted); }
+.hf-variant-fit.is-loading::before { content: '…'; color: var(--muted); }
+
+.hf-file-list { display: flex; flex-direction: column; gap: 2px; }
+.hf-file-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: baseline; gap: 10px; padding: 6px 8px; border-radius: 6px; font-size: calc(11px * var(--talos-ui-font-scale)); }
+.hf-file-row:nth-child(odd) { background: var(--surface-highlight-subtle); }
+.hf-file-path { min-width: 0; overflow-wrap: anywhere; color: var(--text-2); font-family: var(--font-mono, ui-monospace, monospace); }
+.hf-file-bytes { color: var(--muted); font-variant-numeric: tabular-nums; }
+.hf-file-hash { font-size: calc(10px * var(--talos-ui-font-scale)); }
+.hf-file-hash.is-present { color: var(--success); }
+.hf-file-hash.is-missing { color: var(--danger); }
+
+/* ═══════════ Selettore modelli: le FONTI — 03/9 ══════════════════════════
+ *
+ * Owner: «nel model selector i modelli non sono raggruppati per provider
+ * (openrouter, openai, locali etc), consiglio delle tab per switchare».
+ *
+ * ⛔ Misurato prima di disegnare: il raggruppamento c'era, ma sull'AUTORE del
+ * modello (51 gruppi su 424 modelli), non sulla via d'accesso. Le famiglie
+ * restano gruppi richiudibili — oltre sei schede una barra non si legge più —
+ * e schede diventano le due fonti vere.
+ */
+.model-picker-sources { display: flex; gap: 2px; padding: 6px 6px 0; border-bottom: 1px solid var(--line); }
+.model-picker-source { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 0; border-bottom: 2px solid transparent; border-radius: 6px 6px 0 0; background: transparent; color: var(--muted); font: inherit; font-size: calc(12px * var(--talos-ui-font-scale)); cursor: pointer; }
+.model-picker-source:hover { color: var(--text); background: var(--surface-highlight-subtle); }
+.model-picker-source:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.model-picker-source.active { color: var(--text); border-bottom-color: var(--accent); }
+.model-picker-source-count { padding: 1px 6px; border-radius: 999px; background: var(--surface-highlight-subtle); color: var(--muted); font-variant-numeric: tabular-nums; font-size: calc(10px * var(--talos-ui-font-scale)); }
+/* Il limite si dichiara dove si incontra, non in una pagina di aiuto altrove. */
+.model-picker-source-note { margin: 0 0 8px; padding: 8px 10px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; background: var(--surface-highlight-subtle); color: var(--text-2); font-size: calc(11px * var(--talos-ui-font-scale)); line-height: 1.5; }
+/* ⛔ Non è un bottone: niente hover, niente cursore a mano. Un elenco che sembra
+   cliccabile e non lo è mente col gesto, che è peggio che mentire a parole. */
+.model-picker-local-row { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 8px; color: var(--text-2); font-size: calc(12px * var(--talos-ui-font-scale)); }
+.model-picker-local-row:nth-child(even) { background: var(--surface-highlight-subtle); }
+.model-picker-local-row > small { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ═══════════ Provider e accessi — ridisegnata il 03/9 ════════════════════
+ *
+ * Owner: «la tab provider nel modelab è bruttissima, i collabs si aprono in
+ * una maniera orrenda; ridisegna allo stato dell'arte».
+ *
+ * ⛔ UNA COLONNA, non una griglia. La griglia a due colonne si spezzava
+ * aprendo una scheda: quella aperta prendeva tutta la larghezza e la vicina
+ * restava a metà riga. Una colonna sola non può rompersi — è la stessa scelta
+ * del pannello mobile, che questa schermata copia perché lì funziona.
+ *
+ * ⛔ E l'AMBRA torna a significare una cosa sola: azione. Prima marcava anche
+ * «chiave presente», cioè uno stato neutro, e un accento speso ovunque non
+ * indica più niente. Il verde compare SOLO dopo che il provider ha risposto.
+ */
+.provider-list { display: flex; flex-direction: column; gap: 8px; }
+.provider-row { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; }
+.provider-row:has(.provider-row-head[aria-expanded="true"]) { border-color: var(--line-strong); background: var(--surface-highlight-subtle); }
+
+.provider-row-head { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.provider-row-head:hover { background: var(--surface-highlight-subtle); }
+.provider-row-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* Il monogramma: due lettere, non un logo altrui. Distingue le righe a colpo
+   d'occhio senza vendorizzare marchi di nessuno. */
+.provider-mark { flex: 0 0 auto; display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface-highlight); color: var(--text-2); font-weight: 700; font-size: calc(11px * var(--talos-ui-font-scale)); letter-spacing: 0.02em; }
+.provider-row[data-prova-esito="collegato"] .provider-mark { border-color: var(--success); color: var(--success); }
+.provider-row[data-prova-esito="non-autorizzato"] .provider-mark,
+.provider-row[data-prova-esito="errore"] .provider-mark { border-color: var(--danger); color: var(--danger); }
+
+.provider-row-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 auto; }
+.provider-row-name { color: var(--text); font-size: calc(13px * var(--talos-ui-font-scale)); }
+
+/* I TRE SEGMENTI — chiave · indirizzo · prova. È l'elemento per cui questa
+   schermata esiste: si legge nella riga CHIUSA cosa manca a ciascun provider.
+   ⛔ Ogni segmento porta il suo glifo E la parola: chi non distingue i colori
+   legge la stessa cosa di chi li distingue. */
+.provider-segments { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.provider-seg { display: inline-flex; align-items: baseline; gap: 4px; color: var(--muted); font-size: calc(10.5px * var(--talos-ui-font-scale)); }
+.provider-seg[data-seg="ok"] { color: var(--success); }
+.provider-seg[data-seg="rotto"] { color: var(--danger); }
+
+.provider-row-chevron { flex: 0 0 auto; display: grid; place-items: center; color: var(--muted); transition: transform 160ms ease; }
+.provider-row-chevron svg { width: 14px; height: 14px; }
+.provider-row-head[aria-expanded="true"] .provider-row-chevron { transform: rotate(180deg); }
+.reduce-motion .provider-row-chevron { transition: none; }
+
+.provider-row-body { display: flex; flex-direction: column; gap: 12px; padding: 4px 14px 14px; border-top: 1px solid var(--line); }
+/* ⛔ Etichetta SOPRA il campo: prima stavano ai due lati con duecento pixel di
+   vuoto in mezzo, e l'occhio doveva attraversarli per ogni riga. */
+.provider-field { display: flex; flex-direction: column; gap: 5px; }
+.provider-field-label { color: var(--muted); font-size: calc(10.5px * var(--talos-ui-font-scale)); text-transform: uppercase; letter-spacing: 0.06em; }
+.provider-field-narrow { max-width: 200px; }
+.provider-endpoint-input { font-family: var(--font-mono, ui-monospace, monospace); font-size: calc(11.5px * var(--talos-ui-font-scale)); }
+
+.provider-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* «Rimuovi» cancella una credenziale: spinto a destra, senza riempimento,
+   e non può avere lo stesso invito di «Salva». */
+.provider-remove { margin-left: auto; color: var(--danger); }
+
+.provider-prova { margin: 0; padding: 8px 10px; border: 1px solid var(--line); border-left-width: 3px; border-radius: 8px; background: var(--surface-highlight-subtle); color: var(--text-2); font-size: calc(11px * var(--talos-ui-font-scale)); line-height: 1.5; }
+.provider-prova[data-prova-esito="collegato"] { border-left-color: var(--success); }
+.provider-prova[data-prova-esito="non-autorizzato"], .provider-prova[data-prova-esito="errore"] { border-left-color: var(--danger); }
+.provider-prova[data-prova-esito="irraggiungibile"], .provider-prova[data-prova-esito="non-provabile"] { border-left-color: var(--line-strong); }
+.provider-feedback { margin: 0; color: var(--muted); font-size: calc(11px * var(--talos-ui-font-scale)); }
+.provider-feedback.is-error { color: var(--danger); }
+
+/* ⛔⛔ 03/9 — LA CAUSA VERA DEI «DUECENTO PIXEL DI VUOTO».
+ *
+ * `.settings-card label` (più su in questo file) impone a OGNI label dentro
+ * le impostazioni `display:flex; justify-content:space-between;
+ * align-items:center` più un bordo inferiore. È quello — non una svista di
+ * chi scrisse il pannello — a spingere etichetta e campo ai due lati opposti,
+ * e a centrarli quando la colonna diventa verticale. Il difetto che l'owner
+ * ha chiamato «bruttissima» nasceva da una regola generica scritta per
+ * un'altra forma di riga.
+ *
+ * ⇒ Qui si neutralizza per intero, invece di combatterla proprietà per
+ * proprietà: una riga di form non è una riga di impostazione.
+ */
+.settings-card .provider-field, .provider-field {
+  min-height: 0;
+  align-items: stretch;
+  justify-content: flex-start;
+  border-bottom: 0;
+  text-align: left;
+}
+.provider-row-body .sheet-input { width: 100%; }

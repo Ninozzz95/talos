@@ -2,19 +2,19 @@
   "source": "harness-ui/public",
   "assets": {
     "app": {
-      "lines": 11669,
-      "bytes": 629795,
-      "sha256": "be4d041f0dd8375ef1dfae3165f047fac1e9167947393d57ae9301494987a3cc"
+      "lines": 12203,
+      "bytes": 657317,
+      "sha256": "d7f417a2e8f1e6599dc1a2607f58d147f10ff9d599e95629b8304b27d7ca7ae5"
     },
     "html": {
-      "lines": 417,
-      "bytes": 70073,
-      "sha256": "44eed14c5051a40d9c0fd113b029299e2f6f7abdc6ccdc794808c88c0c5320e6"
+      "lines": 409,
+      "bytes": 58622,
+      "sha256": "724e692c01723c7b3def1b5d27e81375b31d2a28bf2b64d19fcdd7e75a0100a4"
     },
     "css": {
-      "lines": 2569,
-      "bytes": 203086,
-      "sha256": "63d66f10927453e7d20b4ad6faddbe64eafd893d82ac536d8f5491475cb44987"
+      "lines": 2736,
+      "bytes": 216298,
+      "sha256": "1dd5b4c5af5cc5e9f93d32adf1b22162acf87bb6b0638b01c60ce99ca5ec01ab"
     }
   },
   "hostGlobals": [
@@ -77,6 +77,7 @@
   "endpointFragments": [
     "/api/v1/artifacts",
     "/api/v1/automations",
+    "/api/v1/chat",
     "/api/v1/doctor",
     "/api/v1/huggingface",
     "/api/v1/local-models",

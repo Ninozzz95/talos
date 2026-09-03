@@ -291,6 +291,71 @@ export function createLocalRuntimeProbe({
     return { ...base, state: 'compatible', reason: 'fits' };
   }
 
+  /**
+   * ⭐⭐⭐ LA STIMA PRIMA DELLO SCARICAMENTO — 03/9, richiesta dell'owner:
+   * «badge e pulsanti per misurare in tempo reale se quel modello e
+   * quantizzazione entrano e girano nel pc».
+   *
+   * ## Perché non è `fit()`
+   *
+   * `fit()` legge l'header GGUF dal disco: sa strati, teste e contesto
+   * addestrato, quindi calcola la cache del contesto al byte. Qui il file
+   * **non c'è ancora** — è una variante su Hugging Face — e l'unica cosa
+   * nota è quanto pesa. Fingere lo stesso verdetto sarebbe inventare.
+   *
+   * ## Cosa dichiara, e cosa NON dichiara
+   *
+   * ⛔ Questa è una **soglia inferiore**, non un totale: copre i PESI e
+   * basta. La cache del contesto si somma sopra e non è calcolabile senza
+   * l'header (serve `n_kv_heads` × `head_dim` × strati). Perciò:
+   *  · se già i pesi non ci stanno, **non ci sta**, ed è un fatto;
+   *  · se i pesi ci stanno, si è detto solo che i pesi ci stanno.
+   * Il campo `basis: 'weights-only'` viaggia con la risposta proprio perché
+   * chi la mostra non possa dimenticarsene.
+   *
+   * ⭐ Ricerca 03/9 (LM Studio, tech-insider/insiderllm): il concorrente
+   * etichetta ogni quantizzazione con la memoria stimata e una scala a
+   * badge (giallo = offload parziale, rosso = non entra), e ha
+   * `lms load --estimate-only`. La stima prima dello scaricamento è una
+   * capacità affermata, non un'invenzione nostra — ma nessuno dei due
+   * dichiara che è una soglia inferiore, e noi sì.
+   *
+   * ⛔ Stessa `measureMachine()` e stesso vocabolario di stati/motivi di
+   * `fit()`: due verdetti sulla stessa schermata scritti con parole diverse
+   * insegnano a non fidarsi di nessuno dei due.
+   */
+  async function estimateFit({ bytes, contextTokens = null } = {}) {
+    if (!Number.isSafeInteger(bytes) || bytes <= 0) {
+      throw new LocalRuntimeProbeError('estimate request is invalid', 'FIT_INVALID');
+    }
+    if (contextTokens !== null && !positiveInteger(contextTokens)) {
+      throw new LocalRuntimeProbeError('estimate request is invalid', 'FIT_INVALID');
+    }
+    let machine;
+    try {
+      machine = await measureMachine();
+    } catch {
+      return { bytes, basis: 'weights-only', state: 'unknown', reason: 'measurement', storage: { requiredBytes: bytes, availableBytes: null }, memory: { requiredBytes: bytes, availableBytes: null }, observedAt: now().toISOString() };
+    }
+    const storageAvailable = machine?.storage?.allocatableBytes;
+    const memoryAvailable = machine?.memory?.freeBytes;
+    const base = {
+      bytes,
+      basis: 'weights-only',
+      contextTokens,
+      storage: { requiredBytes: bytes, availableBytes: Number.isSafeInteger(storageAvailable) ? storageAvailable : null },
+      memory: { requiredBytes: bytes, availableBytes: Number.isSafeInteger(memoryAvailable) ? memoryAvailable : null },
+      observedAt: now().toISOString(),
+    };
+    if (!Number.isSafeInteger(storageAvailable) || !Number.isSafeInteger(memoryAvailable)) return { ...base, state: 'unknown', reason: 'measurement' };
+    // ⛔ Il disco per primo, e con parole sue: lo spazio si libera, la memoria no.
+    if (bytes > storageAvailable) return { ...base, state: 'blocked', reason: 'storage' };
+    if (bytes > memoryAvailable) return { ...base, state: 'blocked', reason: 'memory' };
+    // Stessa soglia dichiarata di `fit()` lato UI: sopra il 90% del libero è «al limite».
+    if (bytes > memoryAvailable * 0.9) return { ...base, state: 'tight', reason: 'memory' };
+    return { ...base, state: 'compatible', reason: 'fits' };
+  }
+
   async function qualify({ modelId, consent, profile = 'agent', contextTokens = profile === 'agent' ? 65_536 : 4_096 } = {}) {
     if (consent !== true) throw new LocalRuntimeProbeError('qualification requires explicit consent', 'PROBE_CONSENT_REQUIRED');
     const fitResult = await fit(modelId, { profile, contextTokens });
@@ -332,5 +397,5 @@ export function createLocalRuntimeProbe({
     };
   }
 
-  return Object.freeze({ inspectModel, measureBackend, fit, qualify });
+  return Object.freeze({ inspectModel, measureBackend, fit, estimateFit, qualify });
 }
