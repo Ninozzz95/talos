@@ -28,6 +28,21 @@ momento di scrivere questo dossier — vedi sopra).
 ⇒ **AMD via Vulkan è il caso già coperto e già superiore all'alternativa
 "nativa" (ROCm) sullo stesso hardware.** Il buco è negli ALTRI vendor.
 
+## Hermes Agent (Nous Research) — il primo nome cercato, come da vincolo
+
+Hermes **non ha un proprio motore locale**: delega interamente a
+Ollama/vLLM come processo esterno, che gestisce l'offload GPU in modo
+trasparente — NVIDIA rilevata e sfruttata automaticamente, Metal su Mac
+di serie (50-80 tok/s su un modello 7B).⁷ Nessuna scelta di backend
+esposta all'utente Hermes: la sceglie Ollama, non Hermes.
+
+⇒ **Non è un vantaggio da copiare, è un confronto a nostro favore da
+nominare**: TALOS gestisce `llama-server` direttamente, senza dipendere
+da un'app terza da installare a parte. Il costo è che TALOS deve fare da
+sé il lavoro di rilevamento che Ollama fa per Hermes — è precisamente il
+lavoro descritto in questo dossier (CUDA/SYCL ancora da provare). Il
+beneficio è zero dipendenze esterne per l'utente finale.
+
 ## La matrice completa dei backend, settembre 2026
 
 | Vendor | Backend consigliato | Alternativa | Note |
@@ -112,6 +127,7 @@ su macOS).
 ⁴ [ggml: add support for dynamic loading of backends (PR #10469)](https://github.com/ggml-org/llama.cpp/pull/10469) · [Determine what backends are loaded at runtime — Discussion #12821](https://github.com/ggml-org/llama.cpp/discussions/12821) · [llama.cpp build.md](https://github.com/ggml-org/llama.cpp/blob/master/docs/build.md)
 ⁵ [Release b10621 · ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp/releases/tag/b10621) — elenco asset esatto, letto dal vivo il 03/9/2026
 ⁶ [Homebrew Formulae: llama.cpp](https://formulae.brew.sh/formula/llama.cpp) — Metal di default su macOS
+⁷ [Run Hermes Agent with Ollama and Local LLMs](https://fast.io/resources/hermes-agent-ollama-local-llm/) · [Run Hermes Locally with Ollama](https://hermes-agent.nousresearch.com/docs/guides/local-ollama-setup) · [Run Local LLMs on Mac](https://hermes-agent.nousresearch.com/docs/guides/local-llm-on-mac)
 
 ## Non autorizzato — decide l'owner
 

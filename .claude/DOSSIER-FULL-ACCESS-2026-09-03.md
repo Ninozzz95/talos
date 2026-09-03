@@ -27,10 +27,46 @@ confonderle:
 Nessun competitor esaminato tratta queste due cose con lo stesso
 interruttore. La (2) è sempre libera; la (1) è sempre un livello a parte.
 
+## ⭐⭐⭐ Hermes Agent (Nous Research) — il dato più forte di questo dossier
+
+Vincolo permanente di questa sessione: Hermes è il primo nome su ogni
+ricerca competitiva. Qui è anche il più utile — non un'altra riga nella
+tabella, un pattern diverso da tutti gli altri.
+
+`HERMES_WRITE_SAFE_ROOT`: una variabile che accetta un **elenco di
+cartelle separate da `:`**, non una sola. `write_file`/`patch` possono
+toccare solo percorsi dentro quei prefissi; il resto è bloccato a livello
+duro.⁶
+
+```
+export HERMES_WRITE_SAFE_ROOT=/path/to/project:/home/you/.hermes
+```
+
+⛔ **Ma il punto chiave è cosa succede quando NON è impostata.** Sul
+backend locale: *"the agent has the same filesystem access as your user
+account"* — l'accesso pieno è il **punto di partenza**, e `SAFE_ROOT` è la
+restrizione **facoltativa** che si aggiunge sopra, non il contrario.⁶
+
+⇒ È l'opposto esatto della TALOS di oggi. TALOS parte castrata a una
+cartella e "Full access" È l'eccezione da accendere. Hermes parte con
+l'accesso dell'account e la cartella-recinto è l'eccezione da accendere.
+Lo stesso confine, la stessa quantità di sicurezza finale — ma il
+DEFAULT è invertito, ed è il default che l'owner sta descrivendo come
+rotto.
+
+Sul GPU (per completezza, meno rilevante qui): Hermes non ha una propria
+selezione di backend — delega tutto a Ollama/vLLM come motore esterno,
+che gestisce l'offload in modo trasparente (CUDA automatico se c'è una
+NVIDIA, Metal su Mac, 50-80 tok/s su un 7B).⁷ TALOS gestisce il motore
+locale direttamente (llama-server, non un'app esterna): un vantaggio
+architetturale reale — nessuna dipendenza da installare a parte — che il
+dossier GPU non aveva nominato.
+
 ## Come tratta la (1) — il modello che scrive — ogni competitor esaminato
 
 | Prodotto | Livello più permissivo | Cosa resta bloccato SEMPRE, anche lì |
 |---|---|---|
+| **Hermes Agent** | Backend locale: **stesso accesso dell'account utente, di default** — nessuna cartella-recinto finché non la si accende. | `HERMES_WRITE_SAFE_ROOT`, quando impostata, e' un elenco (non una singola cartella) — resta l'unica restrizione, opt-in. |
 | **OpenAI Codex CLI** | `danger-full-access` — scrive ovunque, **mai un'approvazione**.¹ | Se un'azienda ha impostato una `deny-read policy` (chiavi SSH, credenziali AWS, `.env`, `.key`), **non è annullabile localmente nemmeno in questa modalità** — Codex si riduce da solo a `read-only`/`workspace-write` per rispettarla.² |
 | **Cursor / Windsurf** | Accesso pieno al filesystem **di default**, nessun recinto per progetto da attivare.³ | (nessun dato trovato su un floor equivalente — verificare se rilevante prima di replicarlo) |
 | **Claude Code (questo prodotto)** | Dentro il progetto: leggi/scrivi/crea/elimina liberamente. Fuori: richiede conferma per singola azione.³ | — |
@@ -95,6 +131,29 @@ chiesto di trattare con serietà, e la ricerca mostra che i migliori
 prodotti del settore la trattano in modi diversi fra loro — non c'è
 un unico "come fanno tutti".
 
+## ⭐ La soluzione che questo dossier segnala come migliore, se l'owner la vuole
+
+Non è A, B o C da sole: è **il pattern Hermes applicato sopra una lista,
+non un booleano**. Concretamente, invece di un solo interruttore
+"Full access on/off":
+
+- una **lista di cartelle consentite** (come `HERMES_WRITE_SAFE_ROOT`),
+  non solo "quella scelta all'avvio" — l'owner potrebbe aggiungere altre
+  radici (es. una cartella Download, un'altra repo) senza dover scegliere
+  fra "tutto" e "una sola";
+- **"Full access" diventa il caso limite della stessa lista**: una voce
+  speciale che significa "l'intero disco", non un meccanismo separato —
+  meno codice, un solo percorso di controllo invece di due;
+- il floor di Codex (C) resta comunque valido come rete di sicurezza
+  SOPRA qualunque lista, indipendente da essa — le due idee non si
+  escludono, si sommano.
+
+Perché è "migliore" e non solo "diversa": risolve la richiesta esatta
+dell'owner (accesso libero quando lo vuole) SENZA il tutto-o-niente che
+rende delicata la scelta A da sola — la persona può concedere "questa
+cartella in più" senza dover concedere "l'intero PC". Resta comunque la
+sua decisione se adottarlo, e in che forma.
+
 ## Fonti
 
 ¹ [OpenAI Codex — Agent approvals & security](https://developers.openai.com/codex/agent-approvals-security) · [Understanding Codex Sandbox and Agent Approvals](https://azukiazusa.dev/en/blog/codex-sandbox-agent-authorization/)
@@ -102,6 +161,8 @@ un unico "come fanno tutti".
 ³ [Claude Code vs Cursor vs Windsurf: A CTO's 2026 Verdict](https://prommer.net/en/tech/guides/claude-code-vs-cursor-vs-windsurf/) · [Claude Code Security: What Files It Actually Reads](https://tokenkarma.app/blog/claude-code-file-access-privacy-2026/)
 ⁴ [Practical Security Guidance for Sandboxing Agentic Workflows (NVIDIA)](https://developer.nvidia.com/blog/practical-security-guidance-for-sandboxing-agentic-workflows-and-managing-execution-risk/) · [How to sandbox AI agents in 2026 (Northflank)](https://northflank.com/blog/how-to-sandbox-ai-agents)
 ⁵ [VS Code — Multi-root Workspaces](https://code.visualstudio.com/docs/editing/workspaces/multi-root-workspaces) · [What is a VS Code workspace?](https://code.visualstudio.com/docs/editing/workspaces/workspaces)
+⁶ [Hermes Agent — SECURITY.md](https://github.com/NousResearch/hermes-agent/blob/main/SECURITY.md) · [Hermes Agent Security Guide: Isolation and Authorization](https://fast.io/resources/hermes-agent-security/) · [user-guide/security.md](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/security.md)
+⁷ [Run Hermes Agent with Ollama and Local LLMs](https://fast.io/resources/hermes-agent-ollama-local-llm/) · [Run Hermes Locally with Ollama](https://hermes-agent.nousresearch.com/docs/guides/local-ollama-setup) · [Run Local LLMs on Mac](https://hermes-agent.nousresearch.com/docs/guides/local-llm-on-mac)
 
 ## Non autorizzato — decide l'owner
 
