@@ -11143,6 +11143,26 @@
     }
   }
 
+  /*
+   * ⭐ 03/9, R-01 — `scripts/avvia-talos.mjs` aggiunge `#avvia-doctor=1`
+   * all'URL quando OPENROUTER_API_KEY non è impostata: la prima schermata
+   * dopo il doppio clic deve dire perché, non aprire una chat che fallirà
+   * al primo messaggio. Stesso pattern hash-e-consuma di
+   * `leggiWorkspaceLaunchId`/`apriWorkspaceDaLauncher` sopra; riusa
+   * `rimuoviWorkspaceLaunchFragment` per ripulire l'URL — il nome viene
+   * dal primo uso, il comportamento (svuota l'intero hash, niente voce
+   * nella cronologia) è esattamente quello che serve anche qui.
+   */
+  function apriDoctorDaLauncher() {
+    const parametri = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    if (parametri.get('avvia-doctor') !== '1') return false;
+    rimuoviWorkspaceLaunchFragment();
+    setView('settings');
+    setSettingsSection('account');
+    eseguiDoctor();
+    return true;
+  }
+
   function renderizzaRadiceWorkspacePendente(nomeCartella) {
     const contenitore = $('#inspector-files .file-tree');
     if (!contenitore) return;
@@ -12702,6 +12722,7 @@
     // ⛔ verificato al MOMENTO del fire, non alla schedulazione: un test (o
     // un embed reale) può marcare talos-embedded fra i due istanti.
     if (!HOST().classList.contains('talos-embedded')) {
+      apriDoctorDaLauncher();
       apriWorkspaceDaLauncher();
       aggiornaElencoSessioniReali();
       renderAutomationsReali(); // ⭐ 27/8 — la card automazioni della sidebar è live da subito, non solo dopo aver aperto la vista
