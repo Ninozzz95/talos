@@ -13,7 +13,7 @@ import { isAbsolute } from 'node:path';
 import { createParser } from 'eventsource-parser';
 import { eseguiFlowForgeLocale, FORGE_PREFISSO_NOME_TOOL, validaManifestForgeLocale } from './forge-contract.mjs';
 import { parseRuntimeOwnerSnapshot } from './runtime-owner-contract.mjs';
-import { risolviDestinazioneModello } from './model-destination.mjs';
+import { risolviDestinazioneModello, separaFonteModello } from './model-destination.mjs';
 
 const ENDPOINT_OPENROUTER = 'https://openrouter.ai/api/v1/chat/completions';
 const RICHIESTA_DI_RIASSUNTO = 'Riassumi la conversazione mantenendo decisioni, file e risultati utili al lavoro.';
@@ -500,7 +500,35 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, { risolvi = risolviD
     if (!corpo || typeof corpo.model !== 'string' || !String(url).includes('/chat/completions')) {
       return fetchDiRete(url, opzioni);
     }
-    const destinazione = risolvi(corpo.model, dipendenze);
+    /*
+     * ⭐⭐⭐ 3/9 — owner, dal vivo: «[internal-error] Il motore locale non è
+     * acceso: caricalo dal Laboratorio modelli prima di usarlo in chat…
+     * non è così che si deve fare». Ricerca fatta (LM Studio: JIT loading,
+     * "you don't need to manually load the model first… it'll be loaded
+     * before your request returns", ON di default dalle nuove
+     * installazioni; Ollama: "the platform loads the specified model into
+     * memory" alla prima richiesta, nessun passo separato — Hermes stesso
+     * NON lo risolve ancora, richiede Ollama configurato a mano: qui lo
+     * battiamo). Owner: «deve partire tutto in automatico, anche con un
+     * loading nella chat o qualcosa del genere».
+     *
+     * ⇒ Nessun nuovo canale di eventi per il "loading": questa fetch è già
+     * dentro la richiesta di completamento che il kernel sta aspettando —
+     * la ruota "in attesa di risposta" che la chat mostra già copre
+     * l'attesa dell'avvio, non serve altro. Un solo tentativo di avvio
+     * automatico, poi si riprova UNA volta sola: se fallisce anche dopo
+     * l'avvio, l'errore vero (disco pieno, GGUF corrotto…) deve arrivare
+     * all'utente, non un secondo giro silenzioso all'infinito.
+     */
+    let destinazione;
+    try {
+      destinazione = risolvi(corpo.model, dipendenze);
+    } catch (erroreRisoluzione) {
+      if (erroreRisoluzione?.code !== 'LOCAL_RUNTIME_NOT_READY' || typeof dipendenze.avviaLocale !== 'function') throw erroreRisoluzione;
+      const { modelloRemoto } = separaFonteModello(corpo.model);
+      await dipendenze.avviaLocale(modelloRemoto); // ⛔ se l'avvio stesso fallisce, il SUO errore (non quello generico "non acceso") arriva a chi ha chiamato
+      destinazione = risolvi(corpo.model, dipendenze); // dopo un avvio riuscito questo non deve più lanciare: se lancia ancora, è un errore vero da mostrare, non da inghiottire
+    }
     if (destinazione.fonte === 'openrouter') return fetchDiRete(url, opzioni);
     const corpoRiscritto = JSON.stringify({ ...corpo, model: destinazione.modelloRemoto });
     /*

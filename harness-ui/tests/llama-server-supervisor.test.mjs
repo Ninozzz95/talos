@@ -45,6 +45,55 @@ test('starts llama-server on loopback without shell and reaches ready after heal
   assert.deepEqual(logs, [{ stream: 'stderr', text: 'ready\n' }]);
 });
 
+/*
+ * ⭐⭐⭐ 3/9 — flash-attention + KV cache quantizzata: MISURATO su AMD RX
+ * 9070 XT (Vulkan), stesso modello stesso prompt, +15% generazione +408%
+ * elaborazione prompt contro la riga precedente (solo -ngl). Zero
+ * differenza di correttezza fra le due righe — verificato prima di
+ * fidarsi del numero. Simmetrici (q8_0/q8_0): solo la coppia simmetrica
+ * usa il kernel fuso veloce secondo la ricerca (ggml-org/llama.cpp
+ * discussions #22411).
+ */
+test('con un backend GPU attivo aggiunge flash-attention e KV cache quantizzata simmetrica, non solo -ngl', async () => {
+  const child = childProcess();
+  let spawnCall;
+  const supervisor = createLlamaServerSupervisor({
+    binaryPath: 'C:\\talos\\llama-server.exe',
+    spawnImpl: (...args) => { spawnCall = args; return child; },
+    fetchImpl: async () => ({ status: 200, ok: true }),
+    portAllocator: async () => 18081,
+    pollIntervalMs: 1,
+    gpuLayers: 99,
+  });
+  await supervisor.start({ modelPath: 'C:\\models\\model.gguf' });
+  const argv = spawnCall[1];
+  assert.deepEqual(argv, [
+    '-m', 'C:\\models\\model.gguf', '--host', '127.0.0.1', '--port', '18081', '--api-key', argv[7],
+    '-ngl', '99',
+    '-fa', '1', '--cache-type-k', 'q8_0', '--cache-type-v', 'q8_0',
+    '--jinja', '--metrics', '--props',
+  ]);
+});
+
+/* ⛔ AL CONTRARIO, esplicito: senza backend GPU (gpuLayers assente/0, come nel primo test sopra) né -ngl né questi due flag compaiono — una build CPU-only non deve MAI ricevere una richiesta di quantizzare una KV cache che non passa mai dalla GPU. */
+test('AL CONTRARIO: senza gpuLayers, nessuno dei flag GPU-only compare — non solo -ngl', async () => {
+  const child = childProcess();
+  let spawnCall;
+  const supervisor = createLlamaServerSupervisor({
+    binaryPath: 'C:\\talos\\llama-server.exe',
+    spawnImpl: (...args) => { spawnCall = args; return child; },
+    fetchImpl: async () => ({ status: 200, ok: true }),
+    portAllocator: async () => 18082,
+    pollIntervalMs: 1,
+  });
+  await supervisor.start({ modelPath: 'C:\\models\\model.gguf' });
+  const argv = spawnCall[1];
+  assert.equal(argv.includes('-ngl'), false);
+  assert.equal(argv.includes('-fa'), false);
+  assert.equal(argv.includes('--cache-type-k'), false);
+  assert.equal(argv.includes('--cache-type-v'), false);
+});
+
 test('health reports a controlled unreachable state instead of throwing', async () => {
   const supervisor = createLlamaServerSupervisor({ binaryPath: 'llama-server.exe', fetchImpl: async () => { throw new Error('ECONNREFUSED'); } });
   assert.deepEqual(await supervisor.health(), { ok: false, status: 0, code: 'RUNTIME_UNREACHABLE' });

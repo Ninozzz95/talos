@@ -123,6 +123,25 @@ async function startServer() {
        * copiata da nessuna parte — men che meno in una risposta HTTP.
        */
       chiamaLocale: (percorso, opzioni) => supervisoreLocale.request(percorso, opzioni),
+      /*
+       * ⭐⭐⭐ 3/9 — owner, dal vivo: "non è così che si deve fare... deve
+       * partire tutto in automatico". LM Studio/Ollama caricano il modello
+       * alla prima richiesta, nessun passo manuale — stesso principio qui:
+       * chi risolve la destinazione, se trova il motore spento, chiama
+       * QUESTA funzione invece di arrendersi. `localRuntimes['llama.cpp']`
+       * non esiste ancora in questo punto del file (viene costruito più
+       * sotto): la freccia qui sotto lo referenzia per closure, non lo usa
+       * subito — `avviaLocale` viene CHIAMATA solo durante una richiesta
+       * vera, ben dopo che il server ha finito di avviarsi. Se il runtime
+       * llama.cpp non è configurato affatto (nessun `TALOS_LLAMA_SERVER_PATH`),
+       * `localRuntimes['llama.cpp']` è `undefined` e l'errore che risale è
+       * quello vero — "non configurato", non un silenzio.
+       */
+      avviaLocale: (modelId) => {
+        const runtime = localRuntimes['llama.cpp'];
+        if (!runtime) { const errore = new Error('Il motore locale non è configurato su questo server.'); errore.code = 'LOCAL_RUNTIME_NOT_CONFIGURED'; throw errore; }
+        return runtime.load(modelId);
+      },
     },
     modelCapabilityFn: async (modelId) => {
       try {
