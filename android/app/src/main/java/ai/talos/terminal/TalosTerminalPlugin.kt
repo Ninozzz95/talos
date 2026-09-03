@@ -147,15 +147,14 @@ class TalosTerminalPlugin : Plugin() {
         // mobile/scripts/harness-talos/talosHarness.mjs`): il kernel deve
         // atterrare ESATTAMENTE qui, non altrove.
         private const val KERNEL_DIR_REMOTO = "$AREA_AVM_HARNESS/mobile/scripts/harness-talos"
-        // ⛔ 3/9 — rinominata da "TALOS-BANCO" a un nome generico: questo file
-        // è appena arrivato in `main/` (vedi la sua storia di classe), e il
-        // cancello di pubblicazione l'ha trovato — un nome di cartella che
-        // nomina il banco di ricerca interno, mai uscito prima perché il
-        // file viveva in `debug/`, fuori dalla scansione del cancello. Il
-        // valore è un percorso arbitrario scelto da questo file, non un
-        // contratto con `config.mjs` (quello è il NOME della variabile,
-        // `TALOS_BANCO_DIR`, invariato): rinominarlo non cambia nessun
-        // comportamento.
+        // ⛔ 3/9 — il nome di questa cartella nominava il banco di ricerca
+        // interno: questo file è appena arrivato in `main/` (vedi la sua
+        // storia di classe), e il cancello di pubblicazione l'ha trovato —
+        // mai uscito prima perché il file viveva in `debug/`, fuori dalla
+        // scansione del cancello. Il valore è un percorso arbitrario scelto
+        // da questo file, non un contratto con `config.mjs` (quello è solo
+        // il nome della variabile d'ambiente qui sotto, invariato):
+        // renderlo generico non cambia nessun comportamento.
         private const val BANCO_STUB_REMOTO = "$AREA_REMOTA/banco-locale"
         /**
          * ⭐⭐⭐ 29/8 — trovato dall'owner sul telefono VERO (screenshot):
