@@ -653,7 +653,8 @@ async function attendiServerHarnessPronto(tentativiMassimi = 15, intervalloMs = 
  * stessa domanda già usata altrove per questo plugin (non esiste in
  * release).
  *
- * ⭐⭐⭐ 3/9 — avm-03, dal vivo (item 13, owner: "deve essere segnalato in
+ * ⭐⭐⭐ 3/9 — owner, item 13 aggiunto di persona alla coda (item 13, non
+ * uno dei 12 di avm-03: "deve essere segnalato in
  * modo più fluido possibile"): PRIMA questa funzione tornava sempre
  * `void` e ogni fallimento (plugin assente, avvio fallito, mai pronto
  * entro il tetto) finiva SOLO in `console.warn` — nessuna persona lo

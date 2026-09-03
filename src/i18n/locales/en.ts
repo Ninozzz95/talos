@@ -840,6 +840,8 @@ export const TALOS_EN_MESSAGES = {
         executorModel: 'Executor model',
         executorModelHint: 'Uses this cheaper model for routine turns; the first turn and any retry after a failure still use the model above.',
         executorModelAutomatic: 'Automatic — always use the model above',
+        // ⭐ 3/9 — avm-03, dal vivo (item 2): la lista qui sotto riusa lo stesso TalosMobileComposerModelPicker del catalogo principale, la cui header diceva sempre "Models" — indistinguibile dalla prima comparsa nello stesso foglio. Vedi TalosMobileModelEffortDrawer.vue.
+        executorModelListLabel: 'Executor models',
         enhancerSetupTitle: 'Before rewriting',
         enhancerDepthLabel: 'How much to rewrite',
         enhancerDepth: { concise: 'Concise', balanced: 'Balanced', extended: 'Extended' },
@@ -1789,8 +1791,8 @@ export const TALOS_EN_MESSAGES = {
         providerAccessStatus: '{configured} saved accesses',
         huggingFaceAccessTitle: 'Hugging Face access',
         huggingFaceAccessDescription: 'Manual token for personal limits and gated repositories you already authorised.',
-        huggingFaceAccessSaved: 'saved',
-        huggingFaceAccessMissing: 'not configured',
+        huggingFaceAccessSaved: 'Saved', // ⭐ 3/9 — avm-03, dal vivo (item 3): minuscolo qui, "Not configured"/"Key saved" maiuscolo per gli altri sei provider — stessa famiglia di stato, stessa capitalizzazione
+        huggingFaceAccessMissing: 'Not configured',
         huggingFaceAccessSecurity: 'The value stays in this device’s secure store; TALOS shows only whether it exists.',
         huggingFaceAccessInput: 'Hugging Face token',
         huggingFaceAccessPlaceholder: 'hf_…',

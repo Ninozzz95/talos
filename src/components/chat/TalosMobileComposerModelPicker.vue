@@ -34,6 +34,17 @@ const props = withDefaults(defineProps<{
      * wrong situation is worse than no advice.
      */
     discoveryProblems?: ReadonlyArray<{ message: string, detail?: string | null }>
+    /**
+     * ⭐ 3/9 — avm-03, dal vivo (item 2): questo picker si monta due volte
+     * nello stesso foglio "Model & reasoning" (TalosMobileModelEffortDrawer.vue
+     * — il catalogo principale, e la lista dell'esecutore sotto "EXECUTOR
+     * MODEL"), e la SUA header interna diceva sempre lo stesso "MODELS"
+     * generico in entrambi i casi — la seconda comparsa non diceva di essere
+     * la lista dell'esecutore. Pre-tradotta (non una chiave i18n) perché chi
+     * la monta decide il testo esatto; `undefined` mantiene l'header di
+     * sempre per il catalogo principale, zero cambio lì.
+     */
+    modelsSectionLabel?: string
 }>(), {
     routingProfiles: () => [],
     selectedModelProfileId: null,
@@ -42,6 +53,7 @@ const props = withDefaults(defineProps<{
     loadingRoutes: false,
     refreshingModels: false,
     discoveryProblems: () => [],
+    modelsSectionLabel: undefined,
 })
 
 const emit = defineEmits<{
@@ -280,7 +292,7 @@ function onListKeydown(event: KeyboardEvent): void {
                     id="talos-mobile-model-picker-models"
                     class="px-1 text-xs font-semibold uppercase text-[var(--talos-muted,var(--muted-foreground))]"
                 >
-                    {{ $t('chat.models') }}
+                    {{ modelsSectionLabel || $t('chat.models') }}
                 </header>
                 <p
                     v-if="loadingModels"

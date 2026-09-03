@@ -55,7 +55,7 @@ describe('TalosMobileHuggingFaceAccessCard', () => {
         expect(copy.element.contains(status.element)).toBe(true)
         expect(status.classes()).not.toContain('hidden')
         expect(status.classes()).not.toContain('sm:inline')
-        expect(status.text()).toBe('not configured')
+        expect(status.text()).toBe('Not configured') // ⭐ 3/9 — avm-03, dal vivo: capitalizzazione allineata a "Not configured"/"Key saved" degli altri sei provider
     })
 
     it('refreshes boolean status and never accepts a token prop', async () => {

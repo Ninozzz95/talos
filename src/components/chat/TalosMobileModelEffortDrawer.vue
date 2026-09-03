@@ -104,6 +104,7 @@ const emit = defineEmits<{
                 :selected-model-profile-id="selectedExecutorModelProfileId"
                 :loading-models="loadingModels"
                 :refreshing-models="refreshingModels"
+                :models-section-label="$t('chat.executorModelListLabel')"
                 @select-model-profile="emit('selectExecutorModelProfile', $event)"
                 @request-close="emit('close')"
                 @refresh-models="emit('refreshModels')"
