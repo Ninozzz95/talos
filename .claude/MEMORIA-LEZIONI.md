@@ -11,6 +11,14 @@
 > `~/.claude/projects/C--Users-Antonino-Desktop-projects-AVM/memory/`.
 > Si aprono per nome, come dall'altro indice.
 
+## ✅ Spostata qui il 03/09 — la voce chiusa del 27/8 sul gitignore
+
+> ⛔ `MEMORY.md` era a **20.429 byte** contro il tetto d'allarme di 19.900 dopo la voce
+> «consiglio modello ed effort a ogni fase». Questa era già ✅ e stava ancora fra gli APERTI:
+> blocco intero spostato, non accorciato.
+
+- ✅⛔⛔⭐⭐⭐ [27/8 — `mobile/docs/` bloccava in silenzio OGNI screenshot nuovo dal 18/8](gitignore-mobile-docs-blocca-screenshot-nuovi.md) — un pattern di directory (`mobile/docs/`) rendeva inerte la negazione `!docs/immagini/*.png`; corretto a `mobile/docs/*` + `!mobile/docs/immagini/` (il GLOB, non la directory, è la forma che funziona) — verificato con `git check-ignore -v`, zero effetti collaterali sul resto già tracciato. 🔜 Resta APERTO solo `git add`/`git commit` dei tre screenshot: cartella condivisa con una sessione viva, decide l'owner · [[harness-ui-inglese-debito-readme]] — screenshot harness in italiano nel README, eccezione esplicita dell'owner, debito registrato
+
 ## ✅ Chiusa il 24/8 — il buco RTF non spiegato
 
 > ⛔ Spostata qui dagli APERTI di `MEMORY.md` il 24/8: l'indice era a 19.819
