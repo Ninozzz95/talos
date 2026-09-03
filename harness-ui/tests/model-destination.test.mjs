@@ -176,6 +176,43 @@ test('FETCH-MULTIPROVIDER-05 — AL CONTRARIO: una fonte impossibile ferma la ri
   assert.equal(spia.chiamate.length, 0, 'nessuna richiesta deve partire verso una destinazione non servibile');
 });
 
+/*
+ * ⭐⭐⭐ 3/9 — owner, dal vivo: «[internal-error] Il motore locale non è
+ * acceso: caricalo dal Laboratorio modelli prima di usarlo in chat… non è
+ * così che si deve fare... deve partire tutto in automatico». Ricerca:
+ * LM Studio (JIT loading, ON di default) e Ollama (carica alla prima
+ * richiesta, nessun passo separato) lo fanno già; Hermes stesso no.
+ */
+test('FETCH-MULTIPROVIDER-06 — il motore spento si avvia da solo, un utente non deve fare nulla', async () => {
+  const spia = fetchSpia();
+  let pronto = false;
+  const avvii = [];
+  const deps = {
+    ...DEPS,
+    localePronto: () => pronto,
+    avviaLocale: async (modelId) => { avvii.push(modelId); pronto = true; },
+  };
+  const avvolta = creaFetchMultiProvider(spia.fn, { dipendenze: deps });
+  const risposta = await avvolta('https://openrouter.ai/api/v1/chat/completions', { method: 'POST', body: JSON.stringify({ model: 'local:qwen3-27b', messages: [] }) });
+  assert.deepEqual(avvii, ['qwen3-27b'], 'avviaLocale riceve il modelId locale, non la stringa con il prefisso "local:"');
+  assert.equal(risposta.__locale.percorso, '/v1/chat/completions', 'dopo l\'avvio la richiesta raggiunge davvero il motore locale, non si ferma al solo avvio');
+  assert.equal(spia.chiamate.length, 0, 'una destinazione locale passa dal ponte del supervisore, mai da una fetch nuda verso l\'esterno');
+});
+
+test('FETCH-MULTIPROVIDER-07 — AL CONTRARIO: se l\'avvio automatico fallisce, arriva IL SUO errore, non un secondo giro silenzioso', async () => {
+  const spia = fetchSpia();
+  const deps = {
+    ...DEPS,
+    localePronto: () => false,
+    avviaLocale: async () => { const errore = new Error('GGUF corrotto'); errore.code = 'MODEL_CORRUPT'; throw errore; },
+  };
+  const avvolta = creaFetchMultiProvider(spia.fn, { dipendenze: deps });
+  await assert.rejects(
+    () => avvolta('https://openrouter.ai/api/v1/chat/completions', { method: 'POST', body: JSON.stringify({ model: 'local:x', messages: [] }) }),
+    (e) => e.code === 'MODEL_CORRUPT' && e.message === 'GGUF corrotto',
+  );
+});
+
 test('MODEL-DEST-08 — il VALIDATORE degli id accetta il prefisso di fonte, e continua a respingere il resto', async () => {
   /*
    * ⛔⛔ IL SECONDO CANCELLO, trovato provando e non leggendo: la convenzione

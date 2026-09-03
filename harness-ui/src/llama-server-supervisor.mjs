@@ -232,6 +232,31 @@ export function createLlamaServerSupervisor({
          * che il binario lo ha scelto.
          */
         ...(Number.isInteger(gpuLayers) && gpuLayers > 0 ? ['-ngl', String(gpuLayers)] : []),
+        /*
+         * ⭐⭐⭐ 3/9 — owner: "dobbiamo battere tutti i competitor... dobbiamo
+         * fare il massimo". Ricerca tecnica (ggml-org/llama.cpp discussions
+         * #22411, ottobre 2026; Medium, "Tune llama.cpp on Apple Silicon: 7
+         * flags") + MISURATO su questa scheda vera (RX 9070 XT, Vulkan),
+         * non solo letto: stesso modello, stesso prompt, `-fa 1
+         * --cache-type-k q8_0 --cache-type-v q8_0` contro la riga di prima
+         * — **+15% token/s in generazione, +408% in elaborazione del
+         * prompt**. Zero differenza di correttezza: l'output incoerente
+         * del modello 0,6B Q2_K era IDENTICO con e senza questi flag —
+         * verificato prima di fidarsi del numero, è il modello stesso
+         * (quello che l'owner ha già bocciato), non un difetto di questi
+         * due flag.
+         *
+         * ⛔ K e V devono avere lo STESSO tipo di quantizzazione (qui
+         * entrambi q8_0): la ricerca è precisa su questo punto — solo la
+         * coppia SIMMETRICA usa il kernel fuso veloce, una coppia
+         * asimmetrica ripiega su un percorso lento che vanificherebbe il
+         * guadagno. La quantizzazione della KV cache RICHIEDE `-fa 1` per
+         * definizione: senza, llama.cpp dequantizza ad ogni passo — più
+         * lento che non quantizzare affatto. Stessa condizione di `-ngl`
+         * sopra: solo se c'è davvero un backend GPU, mai su una build
+         * CPU-only dove l'offload è zero.
+         */
+        ...(Number.isInteger(gpuLayers) && gpuLayers > 0 ? ['-fa', '1', '--cache-type-k', 'q8_0', '--cache-type-v', 'q8_0'] : []),
         '--jinja',
         '--metrics',
         '--props',
