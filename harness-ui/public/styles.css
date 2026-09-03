@@ -242,6 +242,8 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
      through the glass panels instead of being painted over by an opaque
      duplicate background. */
   background: transparent;
+  transition: grid-template-columns var(--motion-disclosure) var(--motion-ease);
+  position: relative; z-index: 1;
 }
 
 /* ⭐⭐⭐ 27/8, owner: "le animazioni vanno a scatti... troppo pesante" —
@@ -257,8 +259,8 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
    suggerimento esplicito per "superfici vetro persistenti", non per
    ogni elemento (costerebbe memoria video se usato ovunque). */
 .sessions-panel, .inspector-panel { background: var(--surface-glass); backdrop-filter: blur(18px); will-change: backdrop-filter; min-height: 0; }
-.sessions-panel { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; }
-.inspector-panel { border-left: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; }
+.sessions-panel { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; container-type: inline-size; container-name: sessions; }
+.inspector-panel { border-left: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; container-type: inline-size; container-name: inspector; }
 .workspace-shell { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }
 
 .brand-row, .topbar, .inspector-head { min-height: var(--topbar-h); display: flex; align-items: center; }
@@ -376,13 +378,13 @@ body.reduce-motion .session-stato[data-session-state="vivo"] .session-stato-punt
 .sidebar-footer strong { font-size: calc(13px * var(--talos-ui-font-scale)); }
 .sidebar-footer small { font-size: calc(10px * var(--talos-ui-font-scale)); color: var(--muted); margin-top: 3px; }
 
-.topbar { padding: 0 12px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; background: var(--bg-glass); backdrop-filter: blur(20px); will-change: backdrop-filter; z-index: 20; }
+.topbar { padding: 0 12px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; background: var(--bg-glass); backdrop-filter: blur(20px); will-change: backdrop-filter; z-index: 20; container-type: inline-size; container-name: topbar; }
 .topbar-left, .topbar-right, .topbar-center { display: flex; align-items: center; min-width: 0; }
-.topbar-right { justify-content: flex-end; gap: 4px; }
-.topbar-center { background: var(--surface-highlight-subtle); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
-.mode-tab { border: 0; background: transparent; color: var(--muted); min-height: 36px; padding: 0 12px; border-radius: 7px; cursor: pointer; font-size: calc(12px * var(--talos-ui-font-scale)); }
+.topbar-right { justify-content: flex-end; gap: 4px; min-width: 0; overflow: visible; }
+.topbar-center { background: var(--surface-highlight-subtle); border: 1px solid var(--line); border-radius: 10px; padding: 3px; flex: 0 0 auto; }
+.mode-tab { border: 0; background: transparent; color: var(--muted); min-height: 36px; padding: 0 12px; border-radius: 7px; cursor: pointer; font-size: calc(12px * var(--talos-ui-font-scale)); min-height: 36px; transition: color var(--motion-control) var(--motion-ease), background-color var(--motion-control) var(--motion-ease); }
 .mode-tab.active { background: var(--surface-3); color: var(--text); box-shadow: inset 0 0 0 1px var(--surface-highlight-subtle); }
-.title-button { display: flex; align-items: center; min-width: 0; gap: 8px; border: 0; background: transparent; color: var(--text); padding: 4px 8px; border-radius: 9px; cursor: pointer; text-align: left; }
+.title-button { display: flex; align-items: center; min-width: 0; gap: 8px; border: 0; background: transparent; color: var(--text); padding: 4px 8px; border-radius: 9px; cursor: pointer; text-align: left; min-height: 44px; transition: background-color var(--motion-control) var(--motion-ease); }
 .title-button span { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .title-button strong { max-width: 270px; font-size: calc(13px * var(--talos-ui-font-scale)); font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .title-button small { color: var(--muted); font-size: calc(10px * var(--talos-ui-font-scale)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -400,7 +402,7 @@ body.reduce-motion .session-stato[data-session-state="vivo"] .session-stato-punt
  * delle sessioni era fissa (292 o, sotto i 1280px, 268) — questo squeeze
  * non era mai raggiungibile finché il trascinamento non l'ha reso reale.
  */
-.context-chip { min-height: 36px; max-width: 230px; min-width: 0; flex: 0 0 auto; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); border-radius: 10px; display: inline-flex; align-items: center; gap: 7px; padding: 0 10px; cursor: pointer; font-size: calc(11px * var(--talos-ui-font-scale)); }
+.context-chip { min-height: 36px; max-width: 230px; min-width: 0; flex: 0 0 auto; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); border-radius: 10px; display: inline-flex; align-items: center; gap: 7px; padding: 0 10px; cursor: pointer; font-size: calc(11px * var(--talos-ui-font-scale)); transition: border-color var(--motion-control) var(--motion-ease), background-color var(--motion-control) var(--motion-ease); }
 .context-chip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .context-chip svg { width: 16px; height: 16px; }
 .mobile-only { display: none; }
@@ -409,7 +411,7 @@ body.reduce-motion .session-stato[data-session-state="vivo"] .session-stato-punt
 .run-strip { min-height: 46px; display: grid; grid-template-columns: auto minmax(120px,1fr) auto 44px; align-items: center; gap: 14px; padding: 0 14px 0 18px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--bg-deep) 55%, transparent); }
 /* ⛔ 27/8, trovato dalla pipeline QA visiva: `hidden` sull'HTML restava visibile — stessa specificità di `.run-strip { display: grid }`, e la classe vince per ordine di cascata. Una regola dedicata per l'attributo chiude il caso. */
 .run-strip[hidden] { display: none; }
-.run-state { display: flex; align-items: center; color: var(--text-2); font-size: calc(11px * var(--talos-ui-font-scale)); white-space: nowrap; }
+.run-state { display: flex; align-items: center; color: var(--text-2); font-size: calc(11px * var(--talos-ui-font-scale)); white-space: nowrap; min-height: 36px; margin: 0; padding: 0 8px 0 0; border: 0; border-radius: 8px; background: transparent; cursor: pointer; font: inherit; transition: background-color var(--motion-control) var(--motion-ease); }
 .run-state strong { margin-right: 6px; }
 .run-state > span:last-child { color: var(--muted); font-family: var(--font-mono); }
 .run-progress { height: 5px; border-radius: 99px; overflow: hidden; background: var(--surface-2); }
@@ -681,7 +683,7 @@ body.reduce-motion .talos-line-loader-node:nth-of-type(3) { animation-delay: cal
 .bundle-status svg { width: 14px; height: 14px; }
 .bundle-content { border-top: 1px solid var(--line); }
 .bundle-content.collapsed { display: none; }
-.tool-row { width: 100%; min-height: 46px; border: 0; border-bottom: 1px solid var(--line-soft); background: transparent; display: grid; grid-template-columns: 28px minmax(0,1fr) auto; align-items: center; gap: 7px; padding: 6px 14px; text-align: left; cursor: pointer; }
+.tool-row { width: 100%; min-height: 46px; border: 0; border-bottom: 1px solid var(--line-soft); background: transparent; display: grid; grid-template-columns: 28px minmax(0,1fr) auto; align-items: center; gap: 7px; padding: 6px 14px; text-align: left; cursor: pointer; cursor: pointer; }
 .tool-row:hover, .tool-row.expanded { background: var(--surface-highlight-subtle); }
 .tool-state { width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; }
 .tool-state svg { width: 13px; height: 13px; }
@@ -710,9 +712,9 @@ body.reduce-motion .talos-line-loader-node:nth-of-type(3) { animation-delay: cal
 .approval-copy code { font-family: var(--font-mono); color: var(--text-2); }
 .approval-actions { display: flex; gap: 6px; align-items: center; }
 
-.composer-wrap { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px max(20px, calc((100% - 920px)/2)) 12px; background: linear-gradient(180deg, transparent, var(--bg-glass-strong) 22%, var(--bg) 48%); z-index: 10; pointer-events: none; }
+.composer-wrap { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px max(20px, calc((100% - 920px)/2)) 12px; background: linear-gradient(180deg, transparent, var(--bg-glass-strong) 22%, var(--bg) 48%); z-index: 10; pointer-events: none; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
 .composer, .queued-message, .composer-status { pointer-events: auto; }
-.composer { container-type: inline-size; min-height: var(--composer-canonical-h); width: var(--composer-max-w, 100%); margin-inline: auto; border: 1px solid var(--line-strong); background: var(--surface-glass-strong); backdrop-filter: blur(20px); will-change: backdrop-filter; border-radius: 15px; box-shadow: var(--shadow); padding: 13px 54px 10px 12px; display: grid; grid-template-rows: minmax(38px,auto) auto; position: relative; }
+.composer { container-type: inline-size; min-height: var(--composer-canonical-h); width: var(--composer-max-w, 100%); margin-inline: auto; border: 1px solid var(--line-strong); background: var(--surface-glass-strong); backdrop-filter: blur(20px); will-change: backdrop-filter; border-radius: 15px; box-shadow: var(--shadow); padding: 13px 54px 10px 12px; display: grid; grid-template-rows: minmax(38px,auto) auto; position: relative; box-shadow: var(--shadow), inset 0 1px var(--surface-highlight-subtle); transition-duration: var(--motion-composer-expand); }
 .composer:focus-within { border-color: var(--focus); box-shadow: var(--shadow), 0 0 0 1px var(--focus-soft); }
 /* ⭐ 3/9 — padding-top/left aumentati (5/3 → 9/9): la maniglia di ridimensionamento (18×18 a 2,2 dentro `.composer`) arriva fino a (20,20) nella stessa coordinata — il testo deve cominciare DOPO quel punto, non sotto di lei. Misurato con Playwright, non a occhio: l'angolo di 6-9px che si sovrapponeva prima è sparito con questo margine. */
 .composer textarea { width: 100%; min-height: 38px; max-height: var(--composer-textarea-max-h, 120px); field-sizing: content; resize: none; overflow-y: auto; border: 0; background: transparent; color: var(--text); outline: 0; padding: 9px 3px 7px 13px; font-size: calc(14px * var(--talos-ui-font-scale)); line-height: 1.5; }
@@ -752,9 +754,9 @@ body.reduce-motion .talos-line-loader-node:nth-of-type(3) { animation-delay: cal
 .selector-pill span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(11px * var(--talos-ui-font-scale)); }
 .selector-pill svg { width: 15px; height: 15px; flex: 0 0 auto; }
 .composer-spacer { flex: 1; }
-.queue-toggle { min-height: 36px; height: 36px; border-radius: 9px; border: 0; background: transparent; color: var(--muted); font-size: calc(10px * var(--talos-ui-font-scale)); cursor: pointer; padding: 0 8px; }
+.queue-toggle { min-height: 36px; height: 36px; border-radius: 9px; border: 0; background: transparent; color: var(--muted); font-size: calc(10px * var(--talos-ui-font-scale)); cursor: pointer; padding: 0 8px; border: 1px solid transparent; }
 .queue-toggle.active { color: var(--accent-2); background: var(--accent-soft); }
-.send-btn { width: 42px; height: 42px; border: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer; background: var(--accent); color: var(--on-accent); flex: 0 0 auto; }
+.send-btn { width: 42px; height: 42px; border: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer; background: var(--accent); color: var(--on-accent); flex: 0 0 auto; box-shadow: inset 0 1px var(--surface-highlight-strong), 0 5px 14px var(--accent-soft); transition: transform var(--motion-control) var(--motion-ease), background-color var(--motion-control) var(--motion-ease); }
 .send-btn.is-stop { background: var(--danger); color: var(--text); }
 .send-btn[aria-busy="true"], .queue-toggle[aria-busy="true"] { cursor: progress; opacity: .72; }
 .send-btn svg { width: 18px; height: 18px; }
@@ -1124,7 +1126,7 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .dialog-resize-handle--both:hover::after, .dialog-resize-handle--both:focus-visible::after, .dialog-resizing .dialog-resize-handle--both::after { border-color: var(--accent-2); background: transparent; }
 .command-dialog { inset: 0 0 auto; width: min(720px, calc(100vw - 32px)); max-height: min(700px, calc(100dvh - 40px)); border-radius: 14px; margin: 10vh auto 0; }
 .command-dialog::backdrop, .sheet-dialog::backdrop { background: transparent; }
-.command-search { min-height: 58px; display: grid; grid-template-columns: 22px minmax(0,1fr) auto; align-items: center; gap: 9px; padding: 0 13px; border-bottom: 1px solid var(--line); }
+.command-search { min-height: 58px; display: grid; grid-template-columns: 22px minmax(0,1fr) auto; align-items: center; gap: 9px; padding: 0 13px; border-bottom: 1px solid var(--line); grid-template-columns: 22px minmax(0,1fr) 42px; }
 .command-search input { height: 44px; border: 0; outline: 0; background: transparent; color: var(--text); font-size: calc(14px * var(--talos-ui-font-scale)); }
 .command-search svg { color: var(--muted); }
 .command-results { max-height: 430px; overflow: auto; padding: 7px; }
@@ -1173,8 +1175,8 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .sheet-toggle-row select:hover { border-color: var(--accent-strong); }
 .sheet-toggle-row select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-.toast-region { position: fixed; right: 16px; bottom: 16px; z-index: 120; display: grid; gap: 8px; pointer-events: none; }
-.toast { min-width: 240px; max-width: 360px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface-2); box-shadow: var(--shadow-sm); padding: 11px 12px; color: var(--text-2); font-size: calc(11px * var(--talos-ui-font-scale)); animation: toast-in var(--motion-success) var(--motion-ease) both; }
+.toast-region { position: fixed; right: 16px; bottom: 16px; z-index: 120; display: grid; gap: 8px; pointer-events: none; max-width: min(380px, calc(100vw - 24px)); }
+.toast { min-width: 240px; max-width: 360px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface-2); box-shadow: var(--shadow-sm); padding: 11px 12px; color: var(--text-2); font-size: calc(11px * var(--talos-ui-font-scale)); animation: toast-in var(--motion-success) var(--motion-ease) both; backdrop-filter: blur(18px); background: var(--surface-glass-strong); }
 .toast strong { display: block; margin-bottom: 3px; color: var(--text); }
 
 @keyframes pulse { 0%,100%{transform:scale(.8);opacity:.6}50%{transform:scale(1.2);opacity:1} }
@@ -1487,7 +1489,7 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .topology-row strong, .topology-row small { display: block; }
 .topology-row strong { font-size: calc(11px * var(--talos-ui-font-scale)); }
 .topology-row small { margin-top: 3px; color: var(--muted); font-size: calc(9px * var(--talos-ui-font-scale)); }
-.topology-actions { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 5px; margin-top: 7px; }
+.topology-actions { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 5px; margin-top: 7px; display: flex; }
 .topology-actions .secondary-btn { padding: 0 6px; min-width: 0; }
 .control-plane-card { grid-column: span 3; }
 .control-plane-card > p { margin: 0 0 12px; }
@@ -1623,19 +1625,14 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 *::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
 *::-webkit-scrollbar-track { background: transparent; }
 
-.app-shell { transition: grid-template-columns var(--motion-disclosure) var(--motion-ease); }
 .sessions-panel, .inspector-panel { transition: transform var(--motion-enter) var(--motion-ease), opacity var(--motion-disclosure) var(--motion-ease), border-color var(--motion-control) var(--motion-ease); }
 .app-shell.inspector-collapsed { grid-template-columns: var(--sidebar) minmax(0, 1fr) 0; }
 .app-shell.inspector-collapsed .inspector-panel { opacity: 0; pointer-events: none; overflow: hidden; border-left-color: transparent; }
 
-.title-button { min-height: 44px; transition: background-color var(--motion-control) var(--motion-ease); }
 .title-button:hover { background: var(--surface-highlight); }
-.mode-tab { min-height: 36px; transition: color var(--motion-control) var(--motion-ease), background-color var(--motion-control) var(--motion-ease); }
 .mode-tab:hover { color: var(--text-2); }
-.context-chip { transition: border-color var(--motion-control) var(--motion-ease), background-color var(--motion-control) var(--motion-ease); }
 .context-chip:hover { border-color: var(--line-strong); background: var(--surface-2); }
 
-.run-state { min-height: 36px; margin: 0; padding: 0 8px 0 0; border: 0; border-radius: 8px; background: transparent; cursor: pointer; font: inherit; transition: background-color var(--motion-control) var(--motion-ease); }
 .run-state:hover { background: var(--surface-highlight); }
 .run-state[aria-pressed="true"] { color: var(--accent-2); }
 .run-strip.is-stopped .status-pulse { background: var(--danger); box-shadow: 0 0 0 4px var(--danger-soft); }
@@ -1647,7 +1644,6 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 
 /* Fase 8A — superficie Aspetto completa, tokenizzata e responsiva. */
 .talos-background-scene { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; background: radial-gradient(circle at 18% 12%, color-mix(in srgb, var(--accent) calc(20% * var(--talos-motion-intensity, .2)), transparent), transparent 42%), var(--bg); opacity: calc(.35 + var(--talos-motion-contrast, .8) * .25); }
-.app-shell { position: relative; z-index: 1; }
 .scene-orb { position: absolute; width: 42vw; height: 42vw; max-width: 620px; max-height: 620px; border-radius: 50%; filter: blur(42px); opacity: calc(.1 + var(--talos-motion-glow, .1) * .5); transform: translate3d(0, 0, 0); transition: background var(--motion-theme) var(--motion-ease); }
 .scene-orb-a { top: -16%; left: -10%; background: var(--accent); }
 .scene-orb-b { right: -16%; bottom: -20%; background: var(--secondary); }
@@ -1738,11 +1734,11 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .provider-card .provider-field[hidden] { display: none; }
 .provider-card.is-expanded { grid-column: 1 / -1; }
 .provider-help { margin: 0; color: var(--muted); font-size: calc(9px * var(--talos-ui-font-scale)); line-height: 1.4; }
-.provider-field { min-height: 40px; }
+.provider-field { min-height: 40px; display: flex; flex-direction: column; gap: 5px; }
 .provider-field input { width: min(60%, 260px); min-width: 0; border: 1px solid var(--line); border-radius: 7px; padding: 7px 8px; color: var(--text-2); background: var(--surface); font: inherit; }
-.provider-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.provider-actions { display: flex; flex-wrap: wrap; gap: 7px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .provider-actions button { flex: 1 1 120px; }
-.provider-feedback { margin-top: 2px; color: var(--accent-2) !important; font-size: calc(9px * var(--talos-ui-font-scale)) !important; line-height: 1.35; }
+.provider-feedback { margin-top: 2px; color: var(--accent-2) !important; font-size: calc(9px * var(--talos-ui-font-scale)) !important; line-height: 1.35; margin: 0; color: var(--muted); font-size: calc(11px * var(--talos-ui-font-scale)); }
 .provider-feedback.is-error { color: var(--danger) !important; }
 .provider-security-note { color: var(--muted); font: calc(8px * var(--talos-ui-font-scale)) var(--font-mono); }
 .provider-heading-actions { display: grid; justify-items: end; gap: 6px; }
@@ -1887,7 +1883,6 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 
 .bundle-header[aria-expanded="false"] .bundle-status svg { transform: rotate(-90deg); }
 .bundle-status svg { transition: transform var(--motion-disclosure) var(--motion-ease); }
-.tool-row { cursor: pointer; }
 .tool-row[aria-expanded="true"] { background: var(--surface-highlight-subtle); }
 .tool-inline-detail { display: grid; grid-template-columns: 28px minmax(0,1fr); gap: 8px; padding: 10px 14px 11px 49px; border-bottom: 1px solid var(--line-soft); background: var(--surface-highlight-subtle); color: var(--muted); font: calc(10px * var(--talos-ui-font-scale))/1.55 var(--font-mono); }
 .tool-inline-detail strong { color: var(--text-2); font-weight: 600; }
@@ -1899,14 +1894,10 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 #compactSessionBtn.is-loading svg { animation: talosCompactSpin var(--motion-activity) linear infinite; }
 body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
 
-.composer-wrap { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
-.composer { box-shadow: var(--shadow), inset 0 1px var(--surface-highlight-subtle); }
 .composer:focus-within { border-color: var(--focus); box-shadow: var(--shadow), 0 0 0 2px var(--focus-soft); }
 .composer textarea { caret-color: var(--accent-2); }
-.queue-toggle { border: 1px solid transparent; }
 .queue-toggle:hover { border-color: var(--line); color: var(--text-2); }
 .queue-toggle.active, .queue-toggle[aria-pressed="true"] { border-color: var(--accent-strong); }
-.send-btn { box-shadow: inset 0 1px var(--surface-highlight-strong), 0 5px 14px var(--accent-soft); transition: transform var(--motion-control) var(--motion-ease), background-color var(--motion-control) var(--motion-ease); }
 .send-btn:hover { background: var(--accent-2); }
 
 .file-review[aria-pressed="true"] { border-color: var(--accent-strong); background: var(--accent-soft); }
@@ -1917,7 +1908,6 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
 .inspector-section[hidden] { display: none !important; }
 
 .command-dialog, .sheet-dialog { overflow: clip; }
-.command-search { grid-template-columns: 22px minmax(0,1fr) 42px; }
 .command-close { width: 38px; height: 38px; border: 0; border-radius: 9px; display: grid; place-items: center; background: transparent; color: var(--muted); cursor: pointer; }
 .command-close:hover { color: var(--text); background: var(--surface-3); }
 .command-close svg { width: 17px; height: 17px; }
@@ -1926,8 +1916,6 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
 .sheet-dialog, .command-dialog { animation: dialog-enter var(--motion-popover) var(--motion-ease) both; }
 .sheet-option:focus-visible, .command-results button:focus-visible { outline-offset: -2px; }
 
-.toast-region { max-width: min(380px, calc(100vw - 24px)); }
-.toast { backdrop-filter: blur(18px); background: var(--surface-glass-strong); }
 
 .view-pane.motion-enter { animation: code-view-enter var(--motion-tab) var(--motion-ease-tab) both; }
 .message.motion-enter { animation: code-message-enter var(--motion-message) var(--motion-ease) both; }
@@ -1938,7 +1926,6 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
 .approval-card.motion-exit,
 .toast.motion-exit,
 .tool-inline-detail.motion-exit { pointer-events: none; }
-.composer { transition-duration: var(--motion-composer-expand); }
 .run-progress span { transition: width var(--motion-activity) linear, background-color var(--motion-control) var(--motion-ease); }
 .status-pulse, .tool-state { transition: color var(--motion-control) var(--motion-ease), background-color var(--motion-control) var(--motion-ease), box-shadow var(--motion-success) var(--motion-ease); }
 :host { transition: color var(--motion-theme) var(--motion-ease), background-color var(--motion-theme) var(--motion-ease); }
@@ -2439,7 +2426,7 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
 
 .workspace-chooser-columns { min-height: 0; display: grid; grid-template-columns: minmax(0, 1.22fr) minmax(360px, .78fr); }
 .workspace-chooser-browser, .workspace-chooser-settings { min-width: 0; min-height: 0; padding: 18px; }
-.workspace-chooser-browser { display: grid; grid-template-rows: auto auto auto auto minmax(0, 1fr) auto; gap: 10px; border-right: 1px solid var(--line); }
+.workspace-chooser-browser { display: grid; grid-template-rows: auto auto auto auto minmax(0, 1fr) auto; gap: 10px; border-right: 1px solid var(--line); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .workspace-chooser-settings { overflow-y: auto; overscroll-behavior: contain; padding: 18px 20px 22px; scrollbar-gutter: stable; }
 .workspace-chooser-section-head h3 { margin: 5px 0 4px; color: var(--text); font-size: calc(16px * var(--talos-ui-font-scale)); font-weight: 680; }
 .workspace-chooser-section-head p { margin: 0; color: var(--muted); font-size: calc(10px * var(--talos-ui-font-scale)); line-height: 1.45; }
@@ -2482,7 +2469,7 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
 .workspace-chooser-tree-state[hidden] { display: none; }
 .workspace-chooser-tree-state p { margin: 0; }
 .workspace-chooser-error-actions { display: flex; align-items: center; justify-content: center; gap: 8px; }
-.workspace-chooser-selection { min-width: 0; min-height: 54px; display: grid; grid-template-columns: 32px minmax(0,1fr); align-items: center; gap: 9px; border-top: 1px solid var(--line); padding: 9px 3px 0; }
+.workspace-chooser-selection { min-width: 0; min-height: 54px; display: grid; grid-template-columns: 32px minmax(0,1fr); align-items: center; gap: 9px; border-top: 1px solid var(--line); padding: 9px 3px 0; position: sticky; bottom: 0; background: var(--surface-elevated); z-index: 1; }
 .workspace-chooser-selection > svg { width: 20px; height: 20px; color: var(--accent-2); }
 .workspace-chooser-selection span, .workspace-chooser-selection small, .workspace-chooser-selection strong { display: block; min-width: 0; }
 .workspace-chooser-selection small { color: var(--muted); font-size: calc(8px * var(--talos-ui-font-scale)); text-transform: uppercase; letter-spacing: .1em; }
@@ -2545,9 +2532,6 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
 /* ⭐⭐⭐ 02/09 — review complessiva, fase E: i difetti visivi si curano dove nascono, con container query sul contenitore reale (tablet 1200 px con inspector aperto è un contesto, non una larghezza di finestra). Ricerca 02/09: container query come default per componenti, media query solo per la struttura di pagina; glass ≤ 3 pannelli, blur 12-20 px. */
 
 /* V9 — barra in alto: la destra non deve mai invadere il selettore centrale. */
-.topbar { container-type: inline-size; container-name: topbar; }
-.topbar-right { min-width: 0; overflow: visible; }
-.topbar-center { flex: 0 0 auto; }
 @container topbar (max-width: 1040px) {
   .environment-chip { max-width: 40px; padding: 0; justify-content: center; }
   .environment-chip span[data-environment-label] { display: none; }
@@ -2557,15 +2541,12 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
 }
 
 /* V6 — sidebar: campo cerca leggibile e "Fork questa sessione" su una riga. */
-.sessions-panel { container-type: inline-size; container-name: sessions; }
 .search-field input { min-width: 64px; }
 @container sessions (max-width: 300px) {
   .search-field kbd { display: none; }
   .search-field { grid-template-columns: 20px minmax(0, 1fr); }
 }
-.topology-actions { display: flex; }
 .topology-actions .secondary-btn { white-space: nowrap; width: 100%; justify-content: center; }
-.inspector-panel { container-type: inline-size; container-name: inspector; }
 @container inspector (max-width: 300px) {
   .topology-actions .secondary-btn { font-size: calc(12px * var(--talos-ui-font-scale)); padding: 0 8px; }
 }
@@ -2597,7 +2578,6 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
 
 /* V11 — Nuova sessione: usa l'altezza che c'è e ogni colonna scorre da sola, il piè di pagina non copre niente. */
 .sheet-dialog.sheet-dialog--new-session { height: min(980px, calc(100dvh - 32px)); }
-.workspace-chooser-browser { overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .workspace-chooser-browser > .workspace-chooser-tree, .workspace-chooser-browser [role="tree"] { min-height: 180px; }
 
 /* V14 — riepiloghi reali nelle sezioni Settings. */
@@ -2616,7 +2596,6 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
 .range-control .range-value output { font-family: var(--font-mono); }
 
 /* V11-bis — la "Cartella scelta" resta sempre visibile in fondo alla colonna, anche quando l albero scorre. */
-.workspace-chooser-selection { position: sticky; bottom: 0; background: var(--surface-elevated); z-index: 1; }
 
 /* V13-bis — telefono in orizzontale: 412 px di altezza non bastano per hero + composer + nav; l hero si riduce al solo titolo e il composer stringe i margini. */
 @media (max-height: 540px) and (orientation: landscape) {
@@ -2764,12 +2743,10 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
 .provider-row-body { display: flex; flex-direction: column; gap: 12px; padding: 4px 14px 14px; border-top: 1px solid var(--line); }
 /* ⛔ Etichetta SOPRA il campo: prima stavano ai due lati con duecento pixel di
    vuoto in mezzo, e l'occhio doveva attraversarli per ogni riga. */
-.provider-field { display: flex; flex-direction: column; gap: 5px; }
 .provider-field-label { color: var(--muted); font-size: calc(10.5px * var(--talos-ui-font-scale)); text-transform: uppercase; letter-spacing: 0.06em; }
 .provider-field-narrow { max-width: 200px; }
 .provider-endpoint-input { font-family: var(--font-mono, ui-monospace, monospace); font-size: calc(11.5px * var(--talos-ui-font-scale)); }
 
-.provider-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 /* «Rimuovi» cancella una credenziale: spinto a destra, senza riempimento,
    e non può avere lo stesso invito di «Salva». */
 .provider-remove { margin-left: auto; color: var(--danger); }
@@ -2778,7 +2755,6 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
 .provider-prova[data-prova-esito="collegato"] { border-left-color: var(--success); }
 .provider-prova[data-prova-esito="non-autorizzato"], .provider-prova[data-prova-esito="errore"] { border-left-color: var(--danger); }
 .provider-prova[data-prova-esito="irraggiungibile"], .provider-prova[data-prova-esito="non-provabile"] { border-left-color: var(--line-strong); }
-.provider-feedback { margin: 0; color: var(--muted); font-size: calc(11px * var(--talos-ui-font-scale)); }
 .provider-feedback.is-error { color: var(--danger); }
 
 /* ⛔⛔ 03/9 — LA CAUSA VERA DEI «DUECENTO PIXEL DI VUOTO».
