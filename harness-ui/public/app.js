@@ -4195,21 +4195,52 @@
      * sceglierlo qui. ⛔ Nessuna riga cliccabile: un elenco che sembra
      * selezionabile e non lo è mente col gesto, non con le parole.
      */
+    /**
+     * ⭐⭐⭐ 03/9, SECONDA STESURA — ora i modelli locali SI SCELGONO.
+     *
+     * ⛔ La prima versione, scritta stamattina, li mostrava come righe morte
+     * con la nota «la chat parla solo con OpenRouter, non ancora qui». Era
+     * vero quando l'ho scritta ed è diventato FALSO nel giro di un'ora, con
+     * l'instradamento multi-provider: una spiegazione corretta che invecchia
+     * è peggio di nessuna spiegazione, perché convince a non riprovare.
+     *
+     * ⇒ La riga è un bottone come le altre e vale `local:<id>`, il prefisso
+     * di fonte concordato. L'unica differenza vera resta detta: senza il
+     * motore acceso la generazione non parte, e QUELLO si dice qui invece di
+     * lasciarlo scoprire a metà di una risposta.
+     */
     function renderListaLocali() {
       const pezzi = [];
-      const nota = textElement('p', 'model-picker-source-note', 'La chat parla solo con OpenRouter: questi modelli girano nel Laboratorio modelli, non ancora qui.');
-      pezzi.push(nota);
+      pezzi.push(textElement('p', 'model-picker-source-note', 'Girano su questo computer, senza rete e senza costo. Il motore va acceso dal Laboratorio modelli prima di usarli.'));
       if (!modelliLocali) {
         pezzi.push(textElement('p', 'board-empty', 'Leggo i modelli installati…'));
       } else if (modelliLocali.length === 0) {
         pezzi.push(textElement('p', 'board-empty', 'Nessun modello installato. Si aggiungono dal Laboratorio modelli.'));
       } else {
         for (const modello of modelliLocali) {
-          const riga = document.createElement('div');
-          riga.className = 'model-picker-local-row';
-          riga.append(textElement('strong', '', modello.name || modello.id));
-          riga.append(textElement('small', '', `${modello.state === 'ready' ? 'pronto' : modello.state} · ${formattaByteModelLab(Number(modello.bytes || 0))}`));
-          pezzi.push(riga);
+          const valore = `local:${modello.id}`;
+          const opt = document.createElement('button');
+          opt.type = 'button';
+          opt.className = 'sheet-option model-picker-option';
+          opt.setAttribute('role', 'option');
+          opt.setAttribute('aria-selected', String(valore === valoreScelto));
+          if (valore === valoreScelto) opt.classList.add('active');
+          opt.dataset.modelPickerLocal = valore;
+          const iconWrap = document.createElement('span');
+          iconWrap.className = 'sheet-icon';
+          iconWrap.innerHTML = icon('i-brain');
+          const textWrap = document.createElement('span');
+          textWrap.append(textElement('strong', '', modello.name || modello.id));
+          textWrap.append(textElement('small', '', `su questo computer · ${formattaByteModelLab(Number(modello.bytes || 0))}${modello.state === 'ready' ? '' : ` · ${modello.state}`}`));
+          opt.append(iconWrap, textWrap);
+          opt.addEventListener('click', () => {
+            valoreScelto = valore;
+            if (aggiornaModelloPrincipale) state.model = valore;
+            aggiornaTriggerLabel();
+            if (typeof alSelezionato === 'function') alSelezionato(valore);
+            chiudi();
+          });
+          pezzi.push(opt);
         }
       }
       listEl.replaceChildren(...pezzi);

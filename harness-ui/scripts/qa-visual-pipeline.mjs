@@ -466,6 +466,73 @@ class Pipeline {
 // --------------------------------------------------------------------
 const SCENARI = {
   /**
+   * ⭐⭐⭐ 03/9 — LA CATENA INTERA su un MODELLO LOCALE, dalla UI.
+   *
+   * Owner: «se non riesco ad aggiungere più provider oltre a OpenRouter e
+   * soprattutto usare i modelli locali, l'applicazione è spacciata».
+   *
+   * Le rotte da `curl` non bastavano a provarlo: `/sessions` vuole il catalogo
+   * task che la copia B del kernel non espone, e `/sessions/custom` vuole un
+   * `cartellaId` che nasce dal flusso del browser — entrambi falliscono allo
+   * stesso modo anche SENZA il campo modello, quindi non dicono niente su
+   * questa cura. La sola prova onesta è il giro che fa una persona.
+   *
+   * ⛔ Fa girare una generazione VERA. Non costa: il modello è sul disco
+   * dell'owner e non esce una richiesta di rete verso nessun provider a
+   * pagamento — che è esattamente la cosa che questo scenario dimostra.
+   */
+  async 'catena-modello-locale'(p) {
+    const viewport = viewportRichiesta(URL_BASE);
+    await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
+    await p.attendi(1_500);
+
+    await p.click('#newSessionBtn');
+    await p.attendi(1_500);
+    await p.click('.model-picker-trigger');
+    await p.attendi(2_500);
+    await p.cdp.evaluate("document.querySelector('[data-picker-source=\"locali\"]')?.click()");
+    await p.attendi(1_200);
+    const locali = await p.cdp.evaluate("JSON.stringify(Array.from(document.querySelectorAll('[data-model-picker-local]')).map(b => b.dataset.modelPickerLocal))");
+    p.nota(`modelli locali scegliibili nel selettore: ${locali}`);
+    if (String(locali) === '[]') p.difetto('nessun modello locale selezionabile: la scheda Locali non offre niente', { severita: 'blocco' });
+    await p.screenshot('picker-locali-scegliibili', { nota: 'i modelli sul disco si scelgono come gli altri, col prefisso di fonte local:' });
+
+    await p.cdp.evaluate("document.querySelector('[data-model-picker-local]')?.click()");
+    await p.attendi(900);
+    const scelto = await p.cdp.evaluate("document.querySelector('.model-picker-trigger-label')?.textContent?.trim() ?? '(nessuno)'");
+    p.nota(`modello scelto: ${scelto}`);
+    await p.screenshot('modello-locale-scelto', { nota: 'il selettore mostra il modello locale come modello della sessione' });
+
+    /*
+     * ⛔ La modale NON ha un campo consegna: sceglie cartella, modello,
+     * ragionamento e permessi, poi «Continua nella chat». La domanda si
+     * scrive DOPO, nel composer. La prima stesura di questo passo scriveva
+     * in una textarea qualsiasi e poi aspettava una risposta che nessuno
+     * aveva chiesto: zero messaggi e zero errori, cioè una prova che sembra
+     * fallita e invece non era mai partita.
+     */
+    await p.screenshot('modale-pronta', { nota: 'modello locale impostato nella modale, prima del via' });
+    const avviato = await p.cdp.evaluate("(() => { const b = Array.from(document.querySelectorAll('button')).find((x) => /Continua nella chat/.test(x.textContent || '')); if (!b) return 'nessun bottone di avvio'; b.click(); return 'avviata'; })()");
+    p.nota(`avvio: ${avviato}`);
+    await p.attendi(2_500);
+    await p.cdp.evaluate("(() => { const t = document.querySelector('#composerInput'); if (!t) return 'nessun composer'; t.value = 'Rispondi con una sola parola: ciao.'; t.dispatchEvent(new Event('input', { bubbles: true })); return 'scritto'; })()");
+    await p.attendi(300);
+    const inviato = await p.cdp.evaluate("(() => { const f = document.querySelector('#composerForm'); if (!f) return 'nessun form'; f.requestSubmit ? f.requestSubmit() : f.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); return 'inviato'; })()");
+    p.nota(`invio nel composer: ${inviato}`);
+    await p.attendi(30_000);
+
+    const esito = await p.cdp.evaluate("(() => { const m = document.querySelectorAll('.assistant-message .assistant-copy'); const ultimo = m[m.length - 1]; return JSON.stringify({ messaggi: m.length, testo: (ultimo?.textContent || '').slice(0, 200), errore: (document.querySelector('.session-error, .run-error')?.textContent || '').slice(0, 160) }); })()");
+    p.nota(`esito della sessione su modello LOCALE: ${esito}`);
+    const letto = JSON.parse(String(esito));
+    if (letto.messaggi === 0) p.difetto(`nessuna risposta dal modello locale: ${letto.errore || 'nessun errore dichiarato a schermo'}`, { severita: 'blocco' });
+    await p.cdp.evaluate("document.querySelector('#conversation')?.scrollTo(0, document.querySelector('#conversation').scrollHeight)");
+    await p.attendi(500);
+    await p.screenshot('risposta-dal-modello-locale', { nota: 'la risposta arriva dal modello sul disco: nessuna chiamata a un provider a pagamento' });
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+  },
+
+  /**
    * ⭐⭐⭐ 03/9 — i due fix che restavano da vedere a schermo: la scheda
    * «Locali» del selettore e la barra di azioni sotto ogni risposta.
    *
