@@ -223,7 +223,7 @@ test('MODEL-LAB-HF-05 — la stima porta l\'ORA della misura, non solo il verdet
   assert.match(app, /state\.modelLab\.hfStima = null;/, 'cambiando repository la stima va azzerata');
 });
 
-test('MODEL-PICKER-01 — il selettore ha le FONTI come schede, e i locali dichiarano il limite', async () => {
+test('MODEL-PICKER-01 — il selettore ha le FONTI come schede, e i locali si distinguono', async () => {
   /*
    * ⛔ Misurato: `provider` in quel catalogo è l'AUTORE (51 gruppi su 424
    * modelli), non la via d'accesso — tutti passano da OpenRouter. E il
@@ -232,17 +232,47 @@ test('MODEL-PICKER-01 — il selettore ha le FONTI come schede, e i locali dichi
    */
   const app = await source('public/app.js');
   assert.match(app, /class="model-picker-sources"|'model-picker-sources'/);
-  assert.match(app, /La chat parla solo con OpenRouter: questi modelli girano nel Laboratorio modelli, non ancora qui\./);
+  /*
+   * ⛔ 03/9, secondo passaggio: qui si pretendeva la nota «la chat parla solo
+   * con OpenRouter… non ancora qui». Con l'instradamento multi-provider non è
+   * più vero, e la nota è stata sostituita — vedi MODEL-PICKER-03, che
+   * presidia quella nuova e vieta il ritorno di quella vecchia.
+   */
+  assert.match(app, /Girano su questo computer, senza rete e senza costo\./);
 });
 
-test('MODEL-PICKER-02 — AL CONTRARIO: le righe locali NON sono bottoni', async () => {
-  // ⛔ Un elenco che sembra cliccabile e non lo è mente col gesto, che è
-  // peggio che mentire a parole.
+test('MODEL-PICKER-02 — i modelli locali SI SCELGONO, col prefisso di fonte', async () => {
+  /*
+   * ⛔⛔ QUESTA PROVA DICEVA IL CONTRARIO STAMATTINA, ed era giusta allora:
+   * pretendeva che le righe locali NON fossero bottoni, perché la chat
+   * parlava solo con OpenRouter e un elenco che sembra cliccabile senza
+   * esserlo mente col gesto.
+   *
+   * ⇒ Con l'instradamento multi-provider (`model-destination.mjs`) quel
+   * vincolo è caduto nel giro di un'ora: i modelli locali girano davvero, e
+   * tenerli spenti sarebbe l'errore opposto. La prova non si cancella, si
+   * riscrive dicendo cosa presidia ADESSO — e resta scritto che cosa
+   * presidiava prima, perché il motivo di allora era buono.
+   */
   const app = await source('public/app.js');
   const inizio = app.indexOf('function renderListaLocali()');
   const corpo = app.slice(inizio, app.indexOf('\n    function ', inizio + 1));
   assert.ok(inizio > 0);
-  assert.doesNotMatch(corpo, /createElement\('button'\)/);
+  assert.match(corpo, /const valore = `local:\$\{modello\.id\}`;/u, 'il valore scelto deve portare il prefisso di fonte concordato');
+  assert.match(corpo, /createElement\('button'\)/u, 'la riga locale è un bottone come le altre');
+});
+
+test('MODEL-PICKER-03 — AL CONTRARIO: la nota non promette una generazione senza motore acceso', async () => {
+  /*
+   * ⛔ È l'unica differenza vera che resta fra un modello locale e uno
+   * remoto, e va detta PRIMA: scoprirlo a metà di una risposta è il modo
+   * peggiore. ⛔ E la nota vecchia («non ancora qui») è sparita: una
+   * spiegazione corretta che invecchia convince a non riprovare, ed è peggio
+   * di nessuna spiegazione.
+   */
+  const app = await source('public/app.js');
+  assert.match(app, /Il motore va acceso dal Laboratorio modelli prima di usarli\./u);
+  assert.doesNotMatch(app, /La chat parla solo con OpenRouter/u);
 });
 
 test('MESSAGE-ACTIONS-01 — la barra sta DOPO il testo, per lo screen reader', async () => {
