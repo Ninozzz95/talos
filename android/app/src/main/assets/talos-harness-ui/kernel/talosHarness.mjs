@@ -1380,7 +1380,87 @@ async function risolviSerialeAdbAttivo() {
  *   più di un dispositivo pronto → `enforcement:'none'` dichiarato, non un
  *   errore nascosto.
  */
+/**
+ * Esegue `comando` DIRETTAMENTE nel processo Node corrente — nessun ponte,
+ * nessun binario esterno da trovare. Estratta il 3/9 dal solo posto che la
+ * usava (il ramo desktop-senza-WSL qui sotto) perché ora ne serve una
+ * seconda copia (il ramo "il kernel gira già sul telefono"): stessa
+ * funzione, `enforcement` diverso, mai due implementazioni dello stesso
+ * spawn-e-raccogli-output a rischio di divergere.
+ *
+ * ⛔ 3/9 — verificato dal vivo aprendo QUESTO ramo per la prima volta sul
+ * device reale: `shell:true` nudo fallisce con `spawn .../com.termux/...
+ * ENOENT` — lo stesso difetto già trovato e corretto il 29/8 in
+ * `hook-registry.mjs` (LEDGER-MOBILE-PAREGGIO-DESKTOP-CODICE.md §18): il
+ * Node imbarcato per Android risolve un percorso Termux inesistente su
+ * questo device invece del `/bin/sh` POSIX standard. Stessa cura, stesso
+ * file di riferimento — mai reinventata: `/bin/sh` fissato ovunque tranne
+ * Windows (dove non esiste), cosi' i test su questa macchina di sviluppo
+ * restano invariati.
+ */
+function eseguiInLoco(comando, cartella, enforcement) {
+    return new Promise((risolvi) => {
+        const p = spawn(comando, {
+            cwd: cartella,
+            shell: process.platform === 'win32' ? true : '/bin/sh',
+            windowsHide: true,
+        })
+        let fuori = ''
+        let errori = ''
+        p.stdout?.on('data', (d) => { fuori += d })
+        p.stderr?.on('data', (d) => { errori += d })
+        const timer = setTimeout(() => p.kill(), 120_000)
+        p.on('close', (codice) => {
+            clearTimeout(timer)
+            risolvi({ codice, testo: uscitaUtile(`${fuori}\n${errori}`.trim(), 4_000, 0.25), enforcement })
+        })
+        p.on('error', (e) => {
+            clearTimeout(timer)
+            risolvi({ codice: -1, testo: String(e.message), enforcement })
+        })
+    })
+}
+
+/*
+ * ⛔⛔⛔ 3/9 — owner, dopo aver verificato dal vivo una build di rilascio:
+ * lo strumento `shell` falliva SEMPRE per una sessione Codice ospitata SUL
+ * TELEFONO (kernel Node bundlato, `TalosTerminalPlugin`, Fase 5 — non una
+ * sessione desktop che controlla un telefono remoto, Fase 3, il caso per
+ * cui il ramo `mobile` qui sotto era stato scritto). Riprodotto 3 volte
+ * (submit, retry, dopo un riavvio completo dell'app): "Nessun dispositivo
+ * ADB pronto in questo momento".
+ *
+ * Causa, trovata leggendo (non ipotizzata): `trovaAdbLocale()` cerca
+ * `adb.exe` SOLO in percorsi da PC (`ANDROID_HOME`/`LOCALAPPDATA`/Sdk
+ * Windows-Mac) — corretto per Fase 3, dove il kernel gira su un PC e deve
+ * raggiungere un ALTRO dispositivo. Ma quando il kernel gira già sul
+ * telefono, non esiste nessun "altro" dispositivo da cercare — verificato
+ * sul device vero: nessun binario `adb` esiste in `/data/local/tmp/talos/`
+ * (`find -iname 'adb*'`, zero risultati). `risolviSerialeAdbAttivo()`
+ * torna sempre `null`, e il ramo `mobile` sotto risponde onestamente "non
+ * pronto" — mai un crash, mai un finto successo, ma nemmeno un comando
+ * vero eseguito.
+ *
+ * ⇒ La cura non è cercare meglio: è non cercare affatto quando non serve.
+ * `TalosTerminalPlugin.kt` (`avviaServerHarness`, `prefissiServer`) marca
+ * ORA il processo con `TALOS_KERNEL_SUL_TELEFONO=1` all'avvio — un fatto
+ * sull'AMBIENTE del processo kernel stesso, impostato una volta dall'host
+ * che lo lancia, non dedotto per ogni comando (stessa disciplina di
+ * `TALOS_ADB` due funzioni sopra: un segnale esplicito, mai una sonda che
+ * può sbagliare). Controllato PRIMA di `mobile`, non dentro: è vero per
+ * OGNI sessione che questo processo esegue, mobile o no — il kernel non
+ * smette di essere "sul telefono" a seconda di quale sessione lo chiama.
+ *
+ * ⛔ Non la stessa classe di bug già chiusa il 29/8 (piano §12.1, "il ramo
+ * mobile cercava sempre un altro telefono anche girando già sul
+ * telefono") — quella toccava un altro percorso di codice (il ramo shell
+ * dell'attrezzo hook-gated). Questo è `eseguiComandoSandboxato`, mai
+ * corretto prima: la stessa forma di difetto, un posto diverso.
+ */
 export async function eseguiComandoSandboxato(comando, cartella, { mobile = false } = {}) {
+    if (process.env.TALOS_KERNEL_SUL_TELEFONO) {
+        return eseguiInLoco(comando, cartella, 'shell-diretta-sul-telefono')
+    }
     if (mobile) {
         const seriale = await risolviSerialeAdbAttivo()
         if (!seriale) {
@@ -1404,22 +1484,7 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
         )
         return { codice, testo: uscitaUtile(`${fuori}\n${errori}`.trim(), 4_000, 0.25), enforcement: 'wsl2' }
     }
-    return new Promise((risolvi) => {
-        const p = spawn(comando, { cwd: cartella, shell: true, windowsHide: true })
-        let fuori = ''
-        let errori = ''
-        p.stdout?.on('data', (d) => { fuori += d })
-        p.stderr?.on('data', (d) => { errori += d })
-        const timer = setTimeout(() => p.kill(), 120_000)
-        p.on('close', (codice) => {
-            clearTimeout(timer)
-            risolvi({ codice, testo: uscitaUtile(`${fuori}\n${errori}`.trim(), 4_000, 0.25), enforcement: 'none' })
-        })
-        p.on('error', (e) => {
-            clearTimeout(timer)
-            risolvi({ codice: -1, testo: String(e.message), enforcement: 'none' })
-        })
-    })
+    return eseguiInLoco(comando, cartella, 'none')
 }
 
 /**

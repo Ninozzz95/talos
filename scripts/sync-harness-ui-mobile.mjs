@@ -8,6 +8,12 @@
  * rifatto quel `cp` a mano più volte per il kernel e per app.js — la
  * stessa mossa ripetuta è il segnale che va tolta di mezzo, non ricordata.
  *
+ * ⛔ 3/9 — le due destinazioni vivono in `android/.../src/main/`, non più
+ * `src/debug/`: Codice spedisce nella build di rilascio da oggi (owner:
+ * «Codice deve essere presente nella app di produzione», dopo undici
+ * giorni in cui viveva solo in debug — vedi TalosHarnessUiPlugin.kt per
+ * la storia intera). Le righe sotto restano vere per il resto.
+ *
  * Due copie sincronizzate, indipendenti fra loro (percorsi diversi, mai
  * confuse):
  * 1. Il bundle CLIENT (`public/harness-ui/` — app.js, index.html,
@@ -34,12 +40,16 @@ export function coppieDiSync(radiceMobile) {
         {
             nome: 'bundle client harness-ui',
             origine: path.join(radiceMobile, 'public', 'harness-ui'),
-            destinazione: path.join(radiceMobile, 'android', 'app', 'src', 'debug', 'assets', 'talos-harness-ui', 'mobile-public'),
+            // ⛔ 3/9 — `main`, non più `debug`: Codice (harness incluso) ora
+            // spedisce in release, owner: «Codice deve essere presente nella
+            // app di produzione» — vedi TalosHarnessUiPlugin.kt per il
+            // resto della storia. Prima del 3/9 questa riga diceva `debug`.
+            destinazione: path.join(radiceMobile, 'android', 'app', 'src', 'main', 'assets', 'talos-harness-ui', 'mobile-public'),
         },
         {
             nome: 'kernel talosHarness.mjs',
             origine: path.join(radiceMobile, 'scripts', 'harness-talos', 'talosHarness.mjs'),
-            destinazione: path.join(radiceMobile, 'android', 'app', 'src', 'debug', 'assets', 'talos-harness-ui', 'kernel', 'talosHarness.mjs'),
+            destinazione: path.join(radiceMobile, 'android', 'app', 'src', 'main', 'assets', 'talos-harness-ui', 'kernel', 'talosHarness.mjs'),
         },
     ]
 }

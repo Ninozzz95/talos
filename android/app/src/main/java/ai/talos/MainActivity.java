@@ -150,32 +150,38 @@ public class MainActivity extends BridgeActivity {
         } catch (ClassNotFoundException assente) {
             // È la produzione: la bolla non esiste, e va bene così.
         }
-        // Harness UI (Codex, 24/8): stessa storia della bolla sopra, stesso
-        // meccanismo — la classe vive SOLO nel source set `debug`
-        // (ai.talos.harness.TalosHarnessUiPlugin), quindi in release
-        // Class.forName trova ClassNotFoundException per costruzione, non
-        // per un controllo aggirabile. Owner: «mockup visibile solo nella
-        // apk di debug, in quello di release lo nascondiamo».
+        // Harness UI (Codex, 24/8; owner 3/9: «Codice deve essere presente
+        // nella app di produzione»): la classe ha vissuto nel source set
+        // `debug` dal 24/8 al 3/9 — ora vive in `main`
+        // (ai.talos.harness.TalosHarnessUiPlugin), quindi in OGNI variante,
+        // release inclusa. Class.forName resta per stringa (vedi il
+        // commento di classe del plugin: R8 in release la vede solo così,
+        // ed è tenuta esplicita in proguard-rules.pro) — ma il catch qui
+        // sotto non dovrebbe più scattare in nessuna build reale.
         try {
             //noinspection unchecked
             registerPlugin((Class<? extends com.getcapacitor.Plugin>)
                 Class.forName("ai.talos.harness.TalosHarnessUiPlugin"));
         } catch (ClassNotFoundException assente) {
-            // È la produzione: l'harness UI non esiste, e va bene così.
+            // Non dovrebbe più capitare (3/9): la classe vive in `main`. Se
+            // scatta comunque, è un install parziale o un artefatto rotto,
+            // non un comportamento previsto — talosHarnessUiAvailable()
+            // lato JS lo mostra come non disponibile invece di far finta.
         }
         // Terminale sandboxato in-device per la sezione Codice (owner 28/8:
         // «vincolo obbligatorio, senza eccezioni» — niente ponte adb/PC come
-        // via di default). Stessa storia della bolla e dell'harness UI sopra:
-        // la classe vive SOLO nel source set `debug`
-        // (ai.talos.terminal.TalosTerminalPlugin), MAI verificata su un
-        // device reale — vedi il commento di classe sul rischio SELinux/
+        // via di default; owner 3/9: deve essere in produzione, non solo in
+        // debug). Stessa storia dell'harness UI sopra: la classe vive ora in
+        // `main` (ai.talos.terminal.TalosTerminalPlugin) — MAI verificata su
+        // un device reale IN VARIANTE RELEASE prima del 3/9 (in debug sì,
+        // più volte) — vedi il commento di classe sul rischio SELinux/
         // seccomp non ancora chiuso.
         try {
             //noinspection unchecked
             registerPlugin((Class<? extends com.getcapacitor.Plugin>)
                 Class.forName("ai.talos.terminal.TalosTerminalPlugin"));
         } catch (ClassNotFoundException assente) {
-            // È la produzione: il terminale sandboxato non esiste, e va bene così.
+            // Non dovrebbe più capitare (3/9): la classe vive in `main`.
         }
         long tSuper = android.os.SystemClock.uptimeMillis();
         super.onCreate(savedInstanceState);
