@@ -124,6 +124,25 @@ verde dopo ogni rimozione. Rollback: revert del singolo commit. Criterio: zero f
 senza una verifica manuale dei chiamanti; **un risultato di zero rimozioni è un esito valido**, non
 un fallimento — è la stessa regola del motore locale («una negativa è comunque una misura»).
 
+## Esiti (03/09-04/09, dopo il via esplicito dell'owner: «totalmente approvati»)
+
+**Q-01 — fatto.** 24 selettori di primo livello consolidati (`.app-shell`, `.composer`,
+`.workspace-chooser-selection`, `.workspace-chooser-browser`, `.topology-actions`, `.topbar-right`,
+`.topbar-center`, `.topbar`, `.tool-row`, `.toast-region`, `.toast`, `.title-button`,
+`.sessions-panel`, `.send-btn`, `.run-state`, `.queue-toggle`, `.provider-field`,
+`.provider-feedback`, `.provider-actions`, `.mode-tab`, `.inspector-panel`, `.context-chip`,
+`.composer-wrap`, `.command-search`) — 2.804 → 2.780 righe. Verifica: due server reali con
+`TALOS_HARNESS_UI_PUBLIC_DIR` puntato rispettivamente al vecchio e al nuovo `styles.css`,
+screenshot Playwright su chat e settings, 1024×800 e 1440×900, confronto `pixelmatch`: **0 pixel
+diversi su 4/4 combinazioni**. Suite backend e frontend verdi dopo la modifica.
+
+**Q-02 — chiuso a ZERO rimozioni, esito valido.** Censimento delle 314 funzioni di primo livello
+(numero cresciuto da 298 per i commit di un'altra sessione arrivati nel frattempo) con conteggio
+delle occorrenze via regex `\b` **in Node**, non nel ciclo bash che in questa stessa sessione aveva
+dato un falso positivo su `suggerimentoDaUltimoAttrezzo`: **0 funzioni con una sola occorrenza**
+(solo la propria dichiarazione). Nessuna rimozione: non c'è niente di confermato morto da togliere.
+Il criterio della riga permette esplicitamente questo esito.
+
 ## Cosa NON è incluso, e perché
 
 - Estrarre `handleRealEvent`, `executeCommand`, `openSheet`, `creaWorkspaceChooser`,
