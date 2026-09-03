@@ -32,6 +32,7 @@ import {
   caricaServerMcp as caricaServerMcpReale,
   serverMcpFidati as serverMcpFidatiReale,
 } from './mcp-registry.mjs';
+import { schemaIngressoAttrezzo } from './tool-schema-normalize.mjs';
 import {
   chiamaToolMcp as chiamaToolMcpReale,
   connettiServerMcp as connettiServerMcpReale,
@@ -100,7 +101,13 @@ export async function preparaToolMcpPerSessione({ cartella, cartellaTrust }, dep
     const filtrati = filtraToolMcpFn(tuttiITool, server.allowlist);
     for (const t of filtrati) {
       const nomeEsposto = nomeEspostoMcp(server.id, t.name);
-      toolMcp.push({ name: nomeEsposto, description: t.description, inputSchema: t.inputSchema });
+      /*
+       * ⛔ Stessa cura degli attrezzi Forge, e qui serve ancora di più: questo
+       * schema arriva da un server MCP di TERZI, che non abbiamo scritto noi e
+       * non possiamo correggere. Passarlo intatto a un motore che ne costruisce
+       * una grammatica fa fallire l'intera richiesta — non solo quell'attrezzo.
+       */
+      toolMcp.push({ name: nomeEsposto, description: t.description, inputSchema: schemaIngressoAttrezzo(t.inputSchema) });
       instradamento.set(nomeEsposto, { client, nomeOriginale: t.name });
     }
   }

@@ -35,6 +35,7 @@ import { leggiContestoWorkspace as leggiContestoWorkspaceReale } from './workspa
 import { creaFileWorkspace as creaFileWorkspaceReale, WorkspaceFileError } from './workspace-files.mjs';
 import { preparaToolMcpPerSessione as preparaToolMcpPerSessioneReale } from './mcp-session.mjs';
 import { caricaSkill as caricaSkillReale } from './skill-registry.mjs';
+import { schemaIngressoAttrezzo } from './tool-schema-normalize.mjs';
 import {
   cercaVoci as cercaVociLibreria,
   creaCursoriLibreria,
@@ -576,7 +577,19 @@ export async function avviaSessione({
       toolForge = abilitati.map((t) => ({
         name: `${FORGE_PREFISSO_NOME_TOOL}${t.id}`,
         description: t.manifest.description,
-        inputSchema: t.manifest.inputSchema ?? { type: 'object', properties: {} },
+        /*
+         * ⛔⛔⛔ 03/9 — QUI passava lo schema del manifest COSI' COM'E'.
+         *
+         * Un manifest Forge scrive le proprietà in forma abbreviata
+         * (`nome_contatto: 'string'` invece di `{ type: 'string' }`), che è
+         * comoda e NON è JSON Schema. OpenRouter non se ne accorge perché non
+         * costruisce grammatiche; llama.cpp deve farlo e si ferma:
+         * «JSON schema conversion failed: Unrecognized schema: "string"»,
+         * due volte — esattamente le due proprietà di quel manifest.
+         * ⇒ Il difetto era nostro e vecchio: l'ha scoperto il primo motore
+         * abbastanza severo da leggere quello schema davvero.
+         */
+        inputSchema: schemaIngressoAttrezzo(t.manifest.inputSchema),
       }));
       eseguiToolForgeFn = async (nome, argomenti) => {
         const manifest = manifestPerNome.get(nome);
