@@ -1153,6 +1153,7 @@ export const TALOS_IT_MESSAGES = {
         openingMockup: 'Apertura di Codice…',
         unavailable: 'Codice non è disponibile in questa build.',
         loadFailed: 'Codice non si è aperto. Riprova.',
+        bridgeNotConnected: 'Codice non è riuscito ad avviare il suo terminale su questo telefono. Chiudi e riapri TALOS: di solito risolve.',
         unknownTitle: 'Sessione non trovata',
         unknownSession: 'Questa sessione non esiste più. Torna a Codice e scegline una dalla lista.',
         unknownBack: 'Torna a Codice',

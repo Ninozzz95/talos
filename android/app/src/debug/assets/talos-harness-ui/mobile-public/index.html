@@ -306,7 +306,8 @@ $ <span class="cursor"> </span></code></pre>
         <section class="inspector-section active" id="inspector-context" role="tabpanel" aria-labelledby="inspector-tab-context" data-inspector-section="context" data-demo-surface="inspector-context">
           <div class="inspector-card">
             <div class="card-title"><span>Environment</span><svg><use href="#i-branch"/></svg></div>
-            <dl><div><dt>Workspace</dt><dd id="envWorkspace">talos</dd></div><div><dt>Branch</dt><dd id="envBranch">feat/mobile-code</dd></div><div><dt>Worktree</dt><dd id="envWorktree">wt/auth-61c</dd></div><div><dt>Root</dt><dd id="envRoot">~/dev/talos</dd></div></dl>
+            <!-- ⭐⭐⭐ 3/9 — avm-03, dal vivo: al resume con server non ancora pronto questi quattro valori mostravano dati d'esempio (talos/feat/mobile-code/wt/auth-61c/~/dev/talos) accanto a un badge onesto "Demo UI · not connected" — sembravano veri, non lo erano. aggiornaPannelloAmbiente() (app.js) li sostituisce SOLO quando arriva un RunStarted vero; prima di allora (boot, o un resume ancora in attesa del server) questi default devono essere onesti quanto il badge, non un esempio verosimile. '—' è la stessa convenzione già usata da quella funzione per "worktree" (mai un repository git in questo corpus). -->
+            <dl><div><dt>Workspace</dt><dd id="envWorkspace">—</dd></div><div><dt>Branch</dt><dd id="envBranch">—</dd></div><div><dt>Worktree</dt><dd id="envWorktree">—</dd></div><div><dt>Root</dt><dd id="envRoot">—</dd></div></dl>
           </div>
           <div class="inspector-card">
             <div class="card-title"><span>Capability</span><svg><use href="#i-link"/></svg></div>

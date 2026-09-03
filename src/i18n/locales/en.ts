@@ -1134,6 +1134,11 @@ export const TALOS_EN_MESSAGES = {
         openingMockup: 'Opening Code…',
         unavailable: "Code isn't available in this build.",
         loadFailed: "Code didn't open. Try again.",
+        // ⭐⭐⭐ 3/9 — item 13, owner: "deve essere segnalato in modo più
+        // fluido possibile". [what] + [how to fix], plain words — no
+        // "ADB"/"bridge"/"plugin": "terminal" and "TALOS" are the same
+        // vocabulary the README already uses for this exact feature.
+        bridgeNotConnected: "Code couldn't start its terminal on this phone. Close and reopen TALOS — that usually fixes it.",
         unknownTitle: 'Session not found',
         unknownSession: 'This session no longer exists. Go back to Code and choose one from the list.',
         unknownBack: 'Back to Code',

@@ -108,7 +108,7 @@ describe('Harness UI static asset contract', () => {
         expect(html).not.toMatch(/\bCalm\b/)
         expect(js).not.toMatch(/Standard Calm/)
         expect(html).toContain('Tema TALOS')
-        expect(html).toContain('Token colore')
+        expect(html).toContain('tokens, inherited') // ⭐ 3/9 — "Token colore, tipo, raggio e densità" tradotto in "Colour, type, radius and density tokens, inherited" (avm-03, commit 8398f860)
     })
 
     it('CODE-BG-CONTINUITY-01 reveals the one TALOS scene only in embedded mode', () => {

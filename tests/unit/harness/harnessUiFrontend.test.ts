@@ -229,7 +229,7 @@ describe('Harness UI embedded host and keyboard runtime', () => {
 
         const toastTitle = document.querySelector('.toast strong')?.textContent
         expect(toastTitle).not.toBe('Export demo') // il vecchio mockup fisso
-        expect(toastTitle).toBe('Sessione esportata') // il toast VERO di exportSession(), ramo bozza
+        expect(toastTitle).toBe('Session exported') // ⭐ 3/9 — tradotto; il toast VERO di exportSession(), ramo bozza
     })
 
     it('CODE-MODE-STATE-TRUTH-01 never leaves Chat selected while another surface is visible', () => {
@@ -355,7 +355,8 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         const parsed = new DOMParser().parseFromString(asset('index.html'), 'text/html')
         mountStaticRuntime()
 
-        expect(parsed.title).toContain('Codice')
+        // ⭐ 3/9 — "Codice" tradotto in "Code" (avm-03, commit 8398f860) — combacia con l'inglese già stabilito in tutto en.ts ("Opening Code…", "Code isn't available"…), non un'eccezione isolata di questo bundle
+        expect(parsed.title).toContain('Code')
         expect(document.body.textContent).not.toMatch(/Harness/i)
         expect(document.querySelector('[aria-label*="Harness" i]')).toBeNull()
     })
@@ -380,7 +381,7 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         microphone?.click()
 
         expect(microphone?.getAttribute('aria-pressed')).not.toBe('true')
-        expect(document.querySelector('#toastRegion')?.textContent).toContain('Voce demo non collegata')
+        expect(document.querySelector('#toastRegion')?.textContent).toContain('Demo voice not connected') // ⭐ 3/9 — testo tradotto in inglese
     })
 
     // ⛔ 27/8 — l'approval-card demo (che questi due test usavano come veicolo)
@@ -515,7 +516,7 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         expect(runtime?.submitPrompt?.('Prompt from the real composer')).toBe(true)
         await new Promise((resolve) => setTimeout(resolve, 0))
         expect(document.querySelectorAll('.user-message').length).toBe(before) // mai un messaggio finto aggiunto
-        expect(document.querySelector('#toastRegion')?.textContent).toContain('Nessuna sessione avviata')
+        expect(document.querySelector('#toastRegion')?.textContent).toContain('No session started') // ⭐ 3/9 — testo tradotto in inglese
         expect(fetchMock).toHaveBeenCalled() // ⭐ controlla se esiste una sola cartella prima di rifiutare
     })
 
@@ -529,7 +530,7 @@ describe('Harness UI embedded host and keyboard runtime', () => {
 
         expect(runtime?.submitPrompt?.('!! pwd')).toBe(true)
         expect(document.querySelector('[data-view="terminal"]')?.classList.contains('active')).toBe(true)
-        expect(document.querySelector('#toastRegion')?.textContent).toContain('Nessuna sessione reale attiva')
+        expect(document.querySelector('#toastRegion')?.textContent).toContain('No real session running') // ⭐ 3/9 — testo tradotto in inglese
         expect(fetchMock).not.toHaveBeenCalled()
     })
 
@@ -573,8 +574,8 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         await Promise.resolve()
 
         expect(fetchMock).not.toHaveBeenCalled()
-        expect(document.querySelector('[data-connection-state]')?.textContent).toBe('Demo UI · non collegato')
-        expect(document.querySelector('#campaignReadMeta')?.textContent).toContain('backend mobile')
+        expect(document.querySelector('[data-connection-state]')?.textContent).toBe('Demo UI · not connected') // ⭐ 3/9 — testo tradotto in inglese
+        expect(document.querySelector('#campaignReadMeta')?.textContent).toContain('mobile backend') // ⭐ 3/9 — testo tradotto in inglese, e "Codice"→"Code" per coerenza col resto del brand
     })
 
     /**

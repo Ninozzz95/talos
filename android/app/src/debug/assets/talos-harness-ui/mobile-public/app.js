@@ -199,6 +199,23 @@
       sequenzeViste: new Set(),
       /** ⛔⛔⛔ 27/8, owner: "verifica che i messaggi... persistano dopo il refresh" — vero SOLO fra l'appendUserFollowUp ottimista di resumeSession() e il RunStarted (seguito:true) che arriva davvero: consumato una volta, evita che handleRealEvent mostri lo stesso follow-up due volte dal vivo. Vedi il case RunStarted per il perché non è sempre così. */
       followUpBubbleInAttesa: false,
+      /**
+       * ⭐⭐⭐ 3/9 — la striscia "Running" (run-strip) mostrava SEMPRE
+       * "— step — ctx — errors" e un cronometro fermo sulla stringa
+       * letterale '01:42' (trovato leggendo setRunState: nessun contatore
+       * vero dietro, un placeholder di demo mai sostituito). `erroriStrumento`
+       * conta i ToolCallResult di QUESTO giro con `problema:true` (stesso
+       * verdetto di `pareFallito`, già calcolato per il gruppo tool-call —
+       * qui solo sommato); si azzera a ogni RunStarted, mai cumulativo fra
+       * giri diversi della stessa sessione (onesto: "errori di questo giro",
+       * non "errori mai visti"). Vedi aggiornaRunKpis().
+       */
+      erroriStrumento: 0,
+      /** ⭐⭐⭐ 3/9 — istante reale (Date.now()) in cui il giro CORRENTE è
+       * iniziato, null a riposo; azzerato a ogni RunStarted come sopra. Il
+       * cronometro del run-strip lo rilegge ogni secondo — vedi
+       * avviaCronometroRun()/fermaCronometroRun(). */
+      runIniziatoAlle: null,
     },
   };
 
@@ -986,21 +1003,69 @@
    * `enforcement` finto altrove in questo progetto. Token contati sono
    * sempre veri, indipendentemente dal prezzo.
    */
+  /** ⭐ 3/9 — sollevato da dentro formattaUsageBreve: lo riusa anche aggiornaRunKpis() per il kpi "ctx" del run-strip, invece di duplicare la stessa formula in due posti. */
+  function formattaKilo(n) {
+    return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+  }
+
   function formattaUsageBreve(usage) {
     if (!usage) return 'contesto ignoto · in attesa del primo giro';
     const prompt = Number(usage.prompt_tokens ?? 0) || 0;
     const completion = Number(usage.completion_tokens ?? 0) || 0;
     const cache = Number(usage.prompt_tokens_details?.cached_tokens ?? 0) || 0;
     const totale = prompt + completion;
-    const kilo = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
-    const cacheParte = cache > 0 ? ` · cache ${kilo(cache)}` : '';
-    return `${kilo(totale)} token · ${usage.giri} gir${usage.giri === 1 ? 'o' : 'i'}${cacheParte} · live`;
+    const cacheParte = cache > 0 ? ` · cache ${formattaKilo(cache)}` : '';
+    return `${formattaKilo(totale)} token · ${usage.giri} gir${usage.giri === 1 ? 'o' : 'i'}${cacheParte} · live`;
+  }
+
+  /**
+   * ⭐⭐⭐ 3/9 — le tre metriche del run-strip («— step — ctx — errors»)
+   * restavano SEMPRE a trattino: nessun codice le aggiornava mai (trovato
+   * leggendo, non ipotizzato — setRunState toccava solo label e timer).
+   * "step" = giri veri riportati dal kernel (usage.giri, la stessa fonte
+   * di formattaUsageBreve — mai un conteggio client separato che
+   * potrebbe disallinearsi); "ctx" = token del giro corrente (prompt +
+   * completion, stessa formula di formattaUsageBreve); "errors" = quanti
+   * ToolCallResult di QUESTO giro hanno avuto pareFallito()===true (vedi
+   * erroriStrumento, incrementato nel case ToolCallResult). Usage
+   * assente (nessun giro ancora riportato) ⇒ trattino onesto, mai uno 0
+   * che direbbe "zero token" quando in realtà è "non ancora saputo".
+   */
+  function aggiornaRunKpis() {
+    const usage = state.realSession.usage;
+    const stepEl = $('[data-run-kpi="step"] b');
+    const ctxEl = $('[data-run-kpi="ctx"] b');
+    const errorsEl = $('[data-run-kpi="errors"] b');
+    if (stepEl) stepEl.textContent = usage && typeof usage.giri === 'number' ? String(usage.giri) : '—';
+    if (ctxEl) {
+      const totale = usage ? (Number(usage.prompt_tokens ?? 0) || 0) + (Number(usage.completion_tokens ?? 0) || 0) : 0;
+      ctxEl.textContent = usage ? formattaKilo(totale) : '—';
+    }
+    if (errorsEl) errorsEl.textContent = String(state.realSession.erroriStrumento || 0);
+  }
+
+  /** ⭐ 3/9 — MM:SS su una durata in ms, mai negativo (Date.now() fra due eventi non è mai garantito monotono di un microsecondo, meglio un 00:00 onesto che un "-00:01"). */
+  function formattaDurataRun(ms) {
+    const totale = Math.max(0, Math.floor(ms / 1000));
+    const minuti = Math.floor(totale / 60);
+    const secondi = totale % 60;
+    return `${String(minuti).padStart(2, '0')}:${String(secondi).padStart(2, '0')}`;
+  }
+
+  let cronometroRunId = null;
+
+  /** ⭐ 3/9 — ricalcola dal VERO Date.now() ogni volta, mai un contatore incrementato a mano: sopravvive a un tab in background che salta dei tick di setInterval senza sfasarsi. */
+  function aggiornaCronometroRun() {
+    const timer = runStateToggle?.querySelector('span:last-child');
+    if (!timer || !state.realSession.runIniziatoAlle) return;
+    timer.textContent = formattaDurataRun(Date.now() - state.realSession.runIniziatoAlle);
   }
 
   /** Ripatcha la riga "Main" del foglio Session tree SE è già aperto — non riapre né forza un redraw di tutto il foglio, stesso principio di aggiornaPillolaModello(). */
   function aggiornaContatoreUsage() {
     const nodo = $('[data-usage-summary]');
     if (nodo) nodo.textContent = `Main · ${formattaUsageBreve(state.realSession.usage)}`;
+    aggiornaRunKpis(); // ⭐ 3/9 — stessa fonte (state.realSession.usage), stesso momento di aggiornamento: mai due punti che potrebbero disallinearsi
   }
 
   function formatPassRate(value) {
@@ -1741,7 +1806,7 @@
     $('.board-empty', campaignRunList).textContent = 'No mobile data connected.';
     campaignReportState.textContent = 'Demo';
     campaignReportText.textContent = 'No mobile report connected';
-    setConnectionState('demo', 'Demo UI · not connected', 'No mobile backend is configured for Codice.');
+    setConnectionState('demo', 'Demo UI · not connected', 'No mobile backend is configured for Code.'); // ⭐ 3/9 — "Codice" → "Code": combacia col resto del brand inglese (title, en.ts), non un'eccezione isolata
     if (announce) toast('Demo board not connected', 'No network request was made.');
   }
 
@@ -2753,7 +2818,25 @@
     const label = $('strong', runStateToggle);
     const timer = runStateToggle?.querySelector('span:last-child');
     if (label) label.textContent = state.running ? 'Running' : 'Stopped';
-    if (timer) timer.textContent = state.running ? '01:42' : '—';
+    /*
+     * ⭐⭐⭐ 3/9 — era `timer.textContent = state.running ? '01:42' : '—'`:
+     * una STRINGA LETTERALE, mai un tempo vero (trovato leggendo il
+     * codice — non un'ipotesi). Il case RunStarted azzera
+     * runIniziatoAlle a ogni giro NUOVO (mai qui: setRunState(true)
+     * parte anche dal boot demo prima di qualunque RunStarted reale —
+     * `|| Date.now()` sotto è solo il ripiego per quel caso, non il
+     * percorso normale). Un giro reale aggiorna ogni secondo finché
+     * `state.running` resta vero; fermo → l'intervallo si ferma con lui,
+     * mai un timer che continua a girare a schermo spento.
+     */
+    if (state.running) {
+      if (!state.realSession.runIniziatoAlle) state.realSession.runIniziatoAlle = Date.now();
+      aggiornaCronometroRun();
+      if (!cronometroRunId) cronometroRunId = window.setInterval(aggiornaCronometroRun, 1000);
+    } else {
+      if (cronometroRunId) { window.clearInterval(cronometroRunId); cronometroRunId = null; }
+      if (timer) timer.textContent = '—';
+    }
     const stopButton = $('.stop-run');
     if (stopButton) {
       stopButton.disabled = !state.running;
@@ -3246,6 +3329,37 @@
     return false;
   }
 
+  /**
+   * ⭐⭐⭐ 3/9 — avm-03, dal vivo (item 9): «Un ⚠️ giallo accompagna "Read
+   * 9 files, ran a command" senza dire cosa è andato storto — probabilmente
+   * uno shell fallito, ma la riga non lo dichiara». Il motivo ESISTE già
+   * (`item.esitoRaw`), ma solo la riga ESPANSA lo mostra — questo riassunto
+   * breve va invece sulla riga CHIUSA, accanto all'icona. Stessi prefissi
+   * di pareFallito(), mai un secondo elenco che potrebbe disallinearsi da
+   * quello: se pareFallito riconosce un caso, questa funzione deve saperlo
+   * spiegare, non solo confermarlo.
+   */
+  function estraiMotivoFallimento(esito) {
+    const testo = String(esito ?? '').trim();
+    const prefissiConEtichetta = [
+      [/^REFUSED\.\s*/, ''],
+      [/^blocked:\s*/, 'blocked: '],
+      [/^error:\s*/, ''],
+      [/^unknown tool:\s*/, 'unknown tool: '],
+      [/^search failed:\s*/, 'search failed: '],
+      [/^document creation failed:\s*/, 'document creation failed: '],
+    ];
+    for (const [pattern, etichetta] of prefissiConEtichetta) {
+      if (pattern.test(testo)) return tronca(`${etichetta}${testo.replace(pattern, '')}`, 60) || etichetta.trim() || 'Failed';
+    }
+    const uscita = /^exit (-?\d+)/.exec(testo);
+    if (uscita && Number(uscita[1]) !== 0) {
+      const dopoUscita = testo.slice(uscita[0].length).replace(/^[:\s]*\n?/, '').trim();
+      return dopoUscita ? tronca(`exit ${uscita[1]} · ${dopoUscita}`, 60) : `exit ${uscita[1]}`;
+    }
+    return tronca(testo, 60) || 'Failed';
+  }
+
   /** Chiude il gruppo tool-call corrente (se c'è): il prossimo ToolCallStart ne apre uno NUOVO invece di aggiungersi a questo. Un gruppo è "i tool-call fra due altre cose" (testo, follow-up dalla coda, un'approvazione, un artefatto, un nuovo giro) — non un contenitore che dura per sempre. Vedi i chiamanti in handleRealEvent. */
   function chiudiGruppoToolCorrente() {
     state.realSession.toolGroupCorrente = null;
@@ -3323,7 +3437,28 @@
       letto: (n) => (n === 1 ? 'read a file' : `read ${n} files`),
     };
     const testo = ordine.map((cat) => VERBI[cat](conteggi.get(cat))).join(', ');
-    gruppo.summaryText.textContent = testo ? testo.charAt(0).toUpperCase() + testo.slice(1) : 'Working…';
+    const base = testo ? testo.charAt(0).toUpperCase() + testo.slice(1) : 'Working…';
+    /*
+     * ⭐⭐⭐ 3/9 — avm-03, dal vivo: «Un ⚠️ giallo accompagna "Read 9
+     * files, ran a command" senza dire cosa è andato storto». L'icona da
+     * sola non bastava (aria-hidden, nessun testo accanto sulla riga
+     * CHIUSA — solo espandendo si vedeva l'esito completo). Qui il
+     * riassunto della riga chiusa include GIÀ il motivo breve
+     * (estraiMotivoFallimento, calcolato una volta per item nel case
+     * ToolCallResult) — l'icona resta aria-hidden apposta: il testo
+     * visibile ora porta l'informazione, non serve più descriverla due
+     * volte.
+     */
+    const problemi = gruppo.items.filter((item) => item.problema);
+    if (problemi.length > 0) {
+      const ultimo = problemi[problemi.length - 1];
+      const motivo = ultimo.motivoFallimento || 'see details';
+      gruppo.summaryText.textContent = problemi.length === 1
+        ? `${base} — failed: ${motivo}`
+        : `${base} — ${problemi.length} failed, last: ${motivo}`;
+    } else {
+      gruppo.summaryText.textContent = base;
+    }
     gruppo.addEl.textContent = gruppo.aggiunte > 0 ? `+${gruppo.aggiunte}` : '';
     gruppo.delEl.textContent = gruppo.rimozioni > 0 ? `-${gruppo.rimozioni}` : '';
     gruppo.warn.hidden = !gruppo.haProblema;
@@ -3363,8 +3498,12 @@
         riga.append(diff);
       }
       if (item.problema) {
+        // ⭐ 3/9 — stessa correzione di aggiornaRiassuntoGruppoTool: qui la riga NON ha un secondo testo visibile pronto ad accogliere il motivo (a differenza del riassunto di gruppo), quindi un'icona significativa vera (role="img" + aria-label, non aria-hidden) invece di una decorativa muta — più il title per chi tocca da desktop con un mouse.
         const warn = textElement('span', 'tool-group-warn', '⚠️');
-        warn.setAttribute('aria-hidden', 'true');
+        const motivo = item.motivoFallimento || 'Failed';
+        warn.setAttribute('role', 'img');
+        warn.setAttribute('aria-label', motivo);
+        warn.title = motivo;
         riga.append(warn);
       }
       const dettaglio = document.createElement('div');
@@ -4351,7 +4490,7 @@
         if (!percorsoSorgente || percorsoSorgente === percorsoCompleto) return;
         try {
           const esito = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/move`, { percorso: percorsoSorgente, cartellaDestinazione: percorsoCompleto });
-          toast('Spostato', esito.nuovoPercorso);
+          toast('Moved', esito.nuovoPercorso); // ⭐ 3/9 — stessa pulizia di apriMenuAzioniFile qui sopra, stesso giro
           state.realSession.treeCache.delete(percorsoCompleto);
           await invalidaLivelloGenitoreAlbero(percorsoSorgente);
         } catch (error) {
@@ -4411,24 +4550,36 @@
     menu.className = 'ft-actions-menu';
     menu.setAttribute('role', 'menu');
 
-    // ⭐ 28/8 — tasto destro sulla RADICE dell'albero: nessuna rinomina/copia/elimina ha senso lì, solo creare.
+    /*
+     * ⭐ 28/8 — tasto destro sulla RADICE dell'albero: nessuna rinomina/copia/elimina ha senso lì, solo creare.
+     * ⭐⭐⭐ 3/9 — trovato mentre aggiornavo un test rosso (item 6 di avm-03,
+     * il pulsante «‹»/«☰» — indagine diversa, stesso giro): questo menu
+     * era un mix di due lingue, "New folder"/"Open"/"Delete" in inglese
+     * accanto a "Nuovo file"/"Rinomina"/"Copia"/"Imposta come
+     * radice"/"Rivela in Esplora File"/"Allega alla chat" ancora in
+     * italiano — la stessa classe di difetto che il censimento di
+     * avm-03 (commit 8398f860, 182 stringhe) intendeva chiudere, sfuggita
+     * qui perché queste sono dentro un array costruito a runtime, non un
+     * letterale isolato facile da trovare a colpo d'occhio. Tradotto per
+     * intero, non solo le due voci che un test toccava.
+     */
     const voci = soloCreazione ? [
-      { etichetta: 'Nuovo file', icona: 'i-edit', azione: () => avviaCreaVoce(percorsoCompleto, 'file') },
+      { etichetta: 'New file', icona: 'i-edit', azione: () => avviaCreaVoce(percorsoCompleto, 'file') },
       { etichetta: 'New folder', icona: 'i-folder', azione: () => avviaCreaVoce(percorsoCompleto, 'cartella') },
     ] : cartella ? [
-      { etichetta: 'Nuovo file', icona: 'i-edit', azione: () => avviaCreaVoce(percorsoCompleto, 'file') },
+      { etichetta: 'New file', icona: 'i-edit', azione: () => avviaCreaVoce(percorsoCompleto, 'file') },
       { etichetta: 'New folder', icona: 'i-folder', azione: () => avviaCreaVoce(percorsoCompleto, 'cartella') },
-      { etichetta: 'Rinomina', icona: 'i-edit', azione: () => avviaRinominaFile(percorsoCompleto, nome) },
-      { etichetta: 'Copia', icona: 'i-link', azione: () => avviaCopiaFile(percorsoCompleto) },
-      { etichetta: 'Imposta come radice', icona: 'i-folder', azione: () => impostaComeRadice(percorsoCompleto, nome) },
-      { etichetta: 'Rivela in Esplora File', icona: 'i-folder-open', azione: () => rivelaFileInEsploraFile(percorsoCompleto) },
+      { etichetta: 'Rename', icona: 'i-edit', azione: () => avviaRinominaFile(percorsoCompleto, nome) },
+      { etichetta: 'Copy', icona: 'i-link', azione: () => avviaCopiaFile(percorsoCompleto) },
+      { etichetta: 'Set as root', icona: 'i-folder', azione: () => impostaComeRadice(percorsoCompleto, nome) },
+      { etichetta: 'Show in Files', icona: 'i-folder-open', azione: () => rivelaFileInEsploraFile(percorsoCompleto) },
       { etichetta: 'Delete', icona: 'i-trash', azione: () => avviaEliminaFile(percorsoCompleto, nome), pericoloso: true },
     ] : [
       { etichetta: 'Open', icona: 'i-eye', azione: () => apriFileAlbero(percorsoCompleto, nome) },
-      { etichetta: 'Allega alla chat', icona: 'i-link', azione: () => allegaFileAllaChat(percorsoCompleto) },
-      { etichetta: 'Rinomina', icona: 'i-edit', azione: () => avviaRinominaFile(percorsoCompleto, nome) },
-      { etichetta: 'Copia', icona: 'i-link', azione: () => avviaCopiaFile(percorsoCompleto) },
-      { etichetta: 'Rivela in Esplora File', icona: 'i-folder-open', azione: () => rivelaFileInEsploraFile(percorsoCompleto) },
+      { etichetta: 'Attach to chat', icona: 'i-link', azione: () => allegaFileAllaChat(percorsoCompleto) },
+      { etichetta: 'Rename', icona: 'i-edit', azione: () => avviaRinominaFile(percorsoCompleto, nome) },
+      { etichetta: 'Copy', icona: 'i-link', azione: () => avviaCopiaFile(percorsoCompleto) },
+      { etichetta: 'Show in Files', icona: 'i-folder-open', azione: () => rivelaFileInEsploraFile(percorsoCompleto) },
       { etichetta: 'Delete', icona: 'i-trash', azione: () => avviaEliminaFile(percorsoCompleto, nome), pericoloso: true },
     ];
     for (const voce of voci) {
@@ -4504,7 +4655,7 @@
     composerInput.value = `${composerInput.value.replace(/@[^\s]*$/, '')}@${percorsoCompleto} `;
     autoGrowTextarea();
     composerInput.focus();
-    toast('Allegato alla chat', percorsoCompleto);
+    toast('Attached to chat', percorsoCompleto); // ⭐ 3/9 — stessa pulizia di apriMenuAzioniFile, stesso giro
   }
 
   function avviaRinominaFile(percorsoCompleto, nome) {
@@ -4527,7 +4678,7 @@
   async function avviaCopiaFile(percorsoCompleto) {
     try {
       const esito = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/copy`, { percorso: percorsoCompleto });
-      toast('Copiato', esito.nuovoPercorso);
+      toast('Copied', esito.nuovoPercorso); // ⭐ 3/9 — stessa pulizia, stesso giro
       await invalidaLivelloGenitoreAlbero(percorsoCompleto);
     } catch (error) {
       toast('Copy failed', error.message);
@@ -4538,7 +4689,7 @@
   function avviaCreaVoce(percorsoBase, tipo) {
     state.alberoFileTarget = { percorso: percorsoBase, tipo };
     openSheet('createFile');
-    sheetTitle.textContent = tipo === 'cartella' ? 'New folder' : 'Nuovo file';
+    sheetTitle.textContent = tipo === 'cartella' ? 'New folder' : 'New file'; // ⭐ 3/9 — stessa pulizia, stesso giro
   }
 
   /**
@@ -4563,18 +4714,18 @@
   function impostaComeRadice(percorsoRelativo, nome) {
     const radice = state.realSession.cartellaAssoluta;
     if (!radice) {
-      toast('Radice sconosciuta', 'This session has not declared its path yet — try again once the first turn starts.');
+      toast('Unknown root', 'This session has not declared its path yet — try again once the first turn starts.'); // ⭐ 3/9 — stessa pulizia, stesso giro
       return;
     }
     const nuovaRadice = `${radice.replace(/[/\\]+$/, '')}/${percorsoRelativo}`;
-    impostaPermesso('Full access', `Full access · nuova radice: ${nome}`);
+    impostaPermesso('Full access', `Full access · new root: ${nome}`);
     avviaSessionePendente({ cartellaLibera: nuovaRadice, nomeCartella: nome, modello: state.model, effort: state.effort, permessi: 'Full access' });
   }
 
   async function rivelaFileInEsploraFile(percorsoCompleto) {
     try {
       await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/reveal`, { percorso: percorsoCompleto });
-      toast('Aperto in Esplora File', percorsoCompleto);
+      toast('Shown in Files', percorsoCompleto); // ⭐ 3/9 — stessa pulizia, stesso giro — combacia con l'etichetta "Show in Files" del menu
     } catch (error) {
       toast('Failed', error.message);
     }
@@ -4611,7 +4762,7 @@
       if (!percorsoSorgente) return;
       try {
         const esito = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/move`, { percorso: percorsoSorgente, cartellaDestinazione: '' });
-        toast('Spostato', esito.nuovoPercorso);
+        toast('Moved', esito.nuovoPercorso); // ⭐ 3/9 — stessa pulizia di apriMenuAzioniFile qui sopra, stesso giro
         state.realSession.treeCache.delete('');
         await invalidaLivelloGenitoreAlbero(percorsoSorgente);
       } catch (error) {
@@ -4788,7 +4939,23 @@
     switch (evento.type) {
       case 'RunStarted': {
         // ⭐ 29/8 — ledger §10: la striscia "Running" era scollegata dagli eventi VERI, mai un solo case la chiamava.
+        /*
+         * ⭐⭐⭐ 3/9 — un giro NUOVO (anche un follow-up sulla stessa
+         * sessione) riparte da zero: mai un cronometro che continua a
+         * contare dal primo giro della sessione, mai un contatore errori
+         * che somma i giri precedenti — vedi erroriStrumento/
+         * runIniziatoAlle in state.realSession. `usage` torna a `null`
+         * apposta (non 0): "non ancora saputo" resta distinto da "zero
+         * token", stessa onestà già in formattaUsageBreve. aggiornaRunKpis()
+         * subito dopo mostra l'azzeramento a schermo, non solo in stato —
+         * altrimenti il run-strip terrebbe i NUMERI DEL GIRO PRECEDENTE
+         * finché il primo /usage del nuovo giro non arriva.
+         */
+        state.realSession.erroriStrumento = 0;
+        state.realSession.runIniziatoAlle = Date.now();
+        state.realSession.usage = null;
         setRunState(true);
+        aggiornaRunKpis();
         chiudiGruppoToolCorrente(); // ⭐ 30/8 — un giro nuovo (anche un resume/continua) non eredita il gruppo tool-call del giro precedente
 
         /*
@@ -4937,7 +5104,19 @@
           info.item.bersaglio = riassuntoEsitoAttrezzo(info.nome, info.item.bersaglio, testoEsito);
           info.item.esitoRaw = testoEsito;
           info.item.problema = pareFallito(testoEsito);
-          if (info.item.problema) info.gruppo.haProblema = true;
+          if (info.item.problema) {
+            info.gruppo.haProblema = true;
+            /*
+             * ⭐⭐⭐ 3/9 — avm-03, dal vivo: un ⚠️ compariva senza dire cosa
+             * fosse andato storto. `estraiMotivoFallimento` mette qui il
+             * riassunto che la riga CHIUSA mostrerà (vedi nuovoGruppoTool);
+             * `erroriStrumento` è il kpi "errors" del run-strip, azzerato a
+             * ogni RunStarted — vedi quel case per il perché.
+             */
+            info.item.motivoFallimento = estraiMotivoFallimento(testoEsito);
+            state.realSession.erroriStrumento += 1;
+            aggiornaRunKpis();
+          }
           aggiornaRiassuntoGruppoTool(info.gruppo);
         }
         state.realSession.toolCallNomi.delete(evento.toolCallId);
@@ -6830,11 +7009,47 @@
     button.addEventListener('click', () => executeCommand(button.dataset.command));
   });
 
+  /*
+   * ⭐⭐⭐ 3/9 — avm-03, dal vivo: «Scrivi un messaggio, apri Model Lab per
+   * configurare la chiave, torni indietro: composer vuoto». Causa
+   * verificata leggendo `HarnessSessionScreen.vue` (onBeforeUnmount →
+   * teardown(), onMounted → app.js ricaricato da uno <script> fresco):
+   * navigare via da questa schermata smonta l'intero realm JS di questo
+   * bundle, `composerInput.value` compreso — non è recuperabile da
+   * NESSUN codice dentro app.js stesso, deve sopravvivere FUORI da qui.
+   * `localStorage` (non sessionStorage: sopravvive anche a un processo
+   * WebView ricreato da zero, non solo a un remount) — chiave per
+   * sessione, stesso attributo già letto da riprendiSessioneDalHost()
+   * (data-harness-session-id), 'new' quando assente (sessione mai
+   * avviata: un solo cassetto condiviso, onesto per il caso comune).
+   * Try/catch ovunque: uno storage negato (privacy mode) non deve mai
+   * rompere l'invio di un messaggio, solo rinunciare silenziosamente a
+   * ricordarlo.
+   */
+  function chiaveBozzaComposer() {
+    const id = HOST().closest?.('[data-harness-session-id]')?.dataset.harnessSessionId;
+    return `talos-codice-bozza:${id || 'new'}`;
+  }
+  function salvaBozzaComposer() {
+    try {
+      const valore = composerInput.value;
+      if (valore) window.localStorage.setItem(chiaveBozzaComposer(), valore);
+      else window.localStorage.removeItem(chiaveBozzaComposer());
+    } catch { /* storage negato: il testo resta solo a schermo, meglio che un crash sull'invio */ }
+  }
+  function ripristinaBozzaComposer() {
+    try {
+      const bozza = window.localStorage.getItem(chiaveBozzaComposer());
+      if (bozza) { composerInput.value = bozza; autoGrowTextarea(); }
+    } catch { /* niente da ripristinare se lo storage non risponde */ }
+  }
+
   composerInput.addEventListener('input', () => {
     autoGrowTextarea();
     const value = composerInput.value;
     if (value === '/') openCommandPalette();
     if (/@[^\s]*$/.test(value) && value.endsWith('@')) openSheet('references');
+    salvaBozzaComposer();
   });
   composerInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
@@ -6852,6 +7067,7 @@
     if (!submitPrompt(text)) return;
     composerInput.value = '';
     autoGrowTextarea();
+    salvaBozzaComposer(); // ⭐ 3/9 — un invio riuscito svuota anche la bozza salvata: non deve tornare dopo un giro in Model Lab
   });
 
   /*
@@ -7208,6 +7424,7 @@
   setInspectorTab($('.inspector-tabs button.active'));
   renderReviewFile('composer');
   autoGrowTextarea();
+  ripristinaBozzaComposer(); // ⭐ 3/9 — un app.js appena montato (boot, o un ritorno da Model Lab) riprende quello che c'era scritto prima di partire
   syncVisualViewport();
   /*
    * ⛔ 26/8 — provato e SCARTATO: aggiungere qui una chiamata a
