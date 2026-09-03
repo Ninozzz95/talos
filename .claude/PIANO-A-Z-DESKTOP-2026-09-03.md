@@ -7,7 +7,7 @@
 > dell'owner su **quella** riga; il numero d'ordine dice solo cosa viene prima.
 >
 > Documenti: `LEDGER-ROADMAP-DESKTOP-2026-09-03.md` (autoritativo, 15 campi per riga) ·
-> `GUIDA-WAVE-0/1/2/3/4-E-FINAL` e `GUIDA-PROPOSTE` (passi) · `LEDGER-KERNEL-RICHIESTE-DESKTOP`
+> `GUIDA-FASCIA-R`, `GUIDA-WAVE-0/1/2/3/4-E-FINAL` e `GUIDA-PROPOSTE` (passi) · `LEDGER-KERNEL-RICHIESTE-DESKTOP`
 > (K-01…K-11, lane mobile, decide l'owner) · `DOSSIER-COMPETITOR-FUNZIONI-DISTINTIVE` +
 > `DOSSIER-COMPETITOR-ESTRATTI-CODICE` (il perché delle P-nn) · `REVIEW-STATE-OF-THE-ART-301,56-09-03`.
 > Regole d'esecuzione: §1 e §1,5-bis del ledger (modello ed effort per riga: chiedere all'owner di
@@ -15,112 +15,140 @@
 
 ## Come si legge una riga
 
-`#` ordine · `ID` · titolo · giorni-agente · guida · dipendenze · parte kernel. Tre fasce:
+`#` ordine · `ID` · titolo · giorni-agente · guida · dipendenze · parte kernel. Fascia **R** apertura (release Windows minima, approvata 03/09) davanti a tutto, poi tre fasce:
 **A** essenziali (baseline, onestà, sicurezza del lavoro, capacità di base) · **B** strutturali
 (controllo, estensibilità, esecuzione, memoria) · **C** lunghe o opzionali (UI modulare completa,
 labs, monorepo).
+
+## Fascia R — apertura: release Windows minima (approvata dall'owner il 03/09/2026)
+
+> Owner 03/09: «prima bisogna fare in modo che la versione desktop parta correttamente, abbia un
+> intro stile mobile, e da lì possiamo andare». Le cinque righe Electron vengono anticipate da A/B;
+> R-01 e R-02 sono nuove. Mac e Linux NON stanno qui: fascia M, dopo Wave 1.
+
+| # | ID | Titolo | gg | Guida | Dip | Kernel |
+|---:|---|---|---:|---|---|---|
+| 1 | R-01 | Lanciatore doppio-clic: porta libera, browser aperto, Doctor se manca qualcosa | 1,5 | R | — | — |
+| 2 | R-02 | Intro al primo avvio stile mobile: chiave+provider nel keyring, cartella, autonomia in un colpo, modello | 3 | R | R-01 | — |
+| 3 | W0-04 | Scheletro `labs/` + flag da config | 0,5 | R (era W0) | — | — |
+| 4 | W1-10 | Electron spike: Node figlio + token loopback | 3 | R (era W1) | W0-04 | — |
+| 5 | W2-13 | Electron 57.2 lifecycle | 3 | R (era W2) | W1-10 | — |
+| 6 | W2-15 | Electron 57.4 NSIS per-user + `IExplorerCommand` | 3 | R (era W2) | W2-13 | — |
+| 7 | W2-16 | Electron 57.5 updater | 3 | R (era W2) | W2-15 | — |
+| 8 | W2-17 | Electron 57.6 hardening + GPU gate | 2 | R (era W2) | W2-13 | — |
+
+Somma fascia R: **19 gg** (R-01 1,5 · R-02 3 · W0-04 0,5 · Electron anticipato 14). ⛔ Costo esterno dell'owner: certificato Authenticode per la firma (senza, SmartScreen blocca l'installer).
 
 ## Fascia A — essenziali
 
 | # | ID | Titolo | gg | Guida | Dip | Kernel |
 |---:|---|---|---:|---|---|---|
-| 1 | W0-06 | `verify:all` (backend + frontend + fixture) | 0,5 | W0 | — | — |
-| 2 | W0-01 | Restore accounting: scarti classificati, Doctor li mostra | 1,5 | W0 | — | K-08 da verificare |
-| 3 | W0-02 | Versione di schema nell'intestazione JSONL | 1 | W0 | — | — |
-| 4 | W0-05 | Model Lab: «Annulla» chiama `/stop` | 0,25 | W0 | — | — |
-| 5 | W0-03 | Sonda di rilascio: GPU + rAF da fermo nella QA | 1 | W0 | — | — |
-| 6 | W0-04 | Scheletro `labs/` + flag da config | 0,5 | W0 | — | — |
-| 7 | W1-12 | Aperti minori + nomi unici + resume con età e stima | 1,5 | W1 | — | — |
-| 8 | W1-13 | File di controllo protetti anche in Full access | 1 | W1 | — | — |
-| 9 | W1-03 | Notifica del browser a fine giro / approvazione | 1 | W1 | — | — |
-| 10 | W1-01 | Schede terminale (`terminalId` ≠ `sessionId`) | 3,5 | W1 | W0-06 | — |
-| 11 | W1-02 | Process Ledger + stall guard | 2,5 | W1 | — | — |
-| 12 | **P-03** | Evidence ledger + guardia «codice senza prova» | 2,5 | PROPOSTE | W1-02 | K-07 |
-| 13 | W1-08 | Costi stimati per sessione/giorno/modello | 2 | W1 | — | — |
-| 14 | W1-11 | Cinque viste di prima classe | 3 | W1 | — | — |
-| 15 | W1-07 | File viewer scrivibile, atomico, `FILE_STALE` | 3,5 | W1 | — | — |
-| 16 | W1-05 | Git service sotto `process-policy` | 6 | W1 | — | — |
-| 17 | **P-11** | Checkpoint del workspace per giro, anche dopo `shell` | 4 | PROPOSTE | W1-02, W1-05 | — |
-| 18 | W1-06 | Review a due sorgenti | 1,5 | W1 | W1-05 | — |
-| 19 | W1-04 | Ricerca full-text nelle sessioni | 3 | W1 | W0-01 | — |
-| 20 | **P-13** | Repo map con PageRank e budget di token | 5 | PROPOSTE | W1-04 | K-10 |
-| 21 | **P-01** | Sotto-agenti pilotabili (steer/stop/list, approvazioni, ripresa) | 3 | PROPOSTE | W1-02 | — |
-| 22 | **P-07** | Hooks: eventi di ciclo di vita, http, fail-closed, prima/dopo | 2,5 | PROPOSTE | W1-02 | — |
-| 23 | **P-16** | Fallback di modello a due stadi con evento | 2 | PROPOSTE | W1-08 | — |
-| 24 | W1-09 | Tastiera e focus | 2,5 | W1 | — | — |
-| 25 | W1-10 | Electron spike: Node figlio + token loopback | 3 | W1 | W0-04 | — |
+| 9 | W0-06 | `verify:all` (backend + frontend + fixture) | 0,5 | W0 | — | — |
+| 10 | W0-01 | Restore accounting: scarti classificati, Doctor li mostra | 1,5 | W0 | — | K-08 da verificare |
+| 11 | W0-02 | Versione di schema nell'intestazione JSONL | 1 | W0 | — | — |
+| 12 | W0-05 | Model Lab: «Annulla» chiama `/stop` | 0,25 | W0 | — | — |
+| 13 | W0-03 | Sonda di rilascio: GPU + rAF da fermo nella QA | 1 | W0 | — | — |
+| 14 | W1-12 | Aperti minori + nomi unici + resume con età e stima | 1,5 | W1 | — | — |
+| 15 | W1-13 | File di controllo protetti anche in Full access | 1 | W1 | — | — |
+| 16 | W1-03 | Notifica del browser a fine giro / approvazione | 1 | W1 | — | — |
+| 17 | W1-01 | Schede terminale (`terminalId` ≠ `sessionId`) | 3,5 | W1 | W0-06 | — |
+| 18 | W1-02 | Process Ledger + stall guard | 2,5 | W1 | — | — |
+| 19 | **P-03** | Evidence ledger + guardia «codice senza prova» | 2,5 | PROPOSTE | W1-02 | K-07 |
+| 20 | W1-08 | Costi stimati per sessione/giorno/modello | 2 | W1 | — | — |
+| 21 | W1-11 | Cinque viste di prima classe | 3 | W1 | — | — |
+| 22 | W1-07 | File viewer scrivibile, atomico, `FILE_STALE` | 3,5 | W1 | — | — |
+| 23 | W1-05 | Git service sotto `process-policy` | 6 | W1 | — | — |
+| 24 | **P-11** | Checkpoint del workspace per giro, anche dopo `shell` | 4 | PROPOSTE | W1-02, W1-05 | — |
+| 25 | W1-06 | Review a due sorgenti | 1,5 | W1 | W1-05 | — |
+| 26 | W1-04 | Ricerca full-text nelle sessioni | 3 | W1 | W0-01 | — |
+| 27 | **P-13** | Repo map con PageRank e budget di token | 5 | PROPOSTE | W1-04 | K-10 |
+| 28 | **P-01** | Sotto-agenti pilotabili (steer/stop/list, approvazioni, ripresa) | 3 | PROPOSTE | W1-02 | — |
+| 29 | **P-07** | Hooks: eventi di ciclo di vita, http, fail-closed, prima/dopo | 2,5 | PROPOSTE | W1-02 | — |
+| 30 | **P-16** | Fallback di modello a due stadi con evento | 2 | PROPOSTE | W1-08 | — |
+| 31 | W1-09 | Tastiera e focus | 2,5 | W1 | — | — |
 
-Somma fascia A: **57,75 gg** (Wave 0 4,75 · Wave 1 34 · P 19).
+Somma fascia A: **54,25 gg** (Wave 0 4,25 · Wave 1 31 · P 19).
+
+## Fascia M — Mac e Linux (dopo Wave 1, fascia a parte, stima NON misurata)
+
+> Oggi è tutto Windows-only: `node-pty` col solo prebuild win32, la coppia di chiavi delle ricevute,
+> il watcher del workspace (`workspace-files.mjs`), l'isolamento shell `wsl2|none`, la QA in
+> PowerShell. Nessuna misura esiste su Mac o Linux e non c'è hardware di prova: le stime si scrivono
+> quando la fascia si apre, non prima.
+
+| # | ID | Titolo | gg | Guida | Dip | Kernel |
+|---:|---|---|---:|---|---|---|
+| 32 | M-01 | Porting dei cinque moduli Windows-only (pty, chiavi, watcher, sandbox, lanciatore) | — | — | W1-01, W1-02 | — |
+| 33 | M-02 | Sandbox per piattaforma (seatbelt su macOS, bubblewrap su Linux) dichiarata dal Doctor | — | — | M-01 | — |
+| 34 | M-03 | Pacchetti firmati: notarizzazione Apple, AppImage/deb; QA senza PowerShell | — | — | M-01, W2-16 | — |
+
+Somma fascia M: **non misurata** (tre righe). ⛔ Costo esterno dell'owner: account Apple Developer per la notarizzazione.
 
 ## Fascia B — strutturali
 
 | # | ID | Titolo | gg | Guida | Dip | Kernel |
 |---:|---|---|---:|---|---|---|
-| 26 | W2-02 | Storia esecuzioni delle automazioni | 2 | W2 | — | — |
-| 27 | **P-02** | Automazioni: trigger a evento, monitor-mode, continuità, costo evitato | 4 | PROPOSTE | W2-02 | — |
-| 28 | W2-10 | Setup guidato da Doctor | 2,5 | W2 | — | — |
-| 29 | **P-14** | Lint per linguaggio dopo `scrivi` | 2 | PROPOSTE | W2-10 | — |
-| 30 | W2-04 | Secret Broker (handle, lease, scope) | 4 | W2 | — | — |
-| 31 | W2-01 | Session Plan Ledger | 4 | W2 | — | K-01 |
-| 32 | **P-17** | Interrogazione del piano (`/grill`) | 2 | PROPOSTE | W2-01 | K-01 |
-| 33 | W2-08 | Browser Lab evidence | 3 | W2 | — | K-07 (parte) |
-| 34 | W2-09 | Gerarchia policy owner → progetto → utente → default | 4 | W2 | — | — |
-| 35 | **P-06** | Revisore automatico delle approvazioni, fail-closed, con misura sul banco | 5 | PROPOSTE | W2-09 | — |
-| 36 | **P-05** | Attrezzo `chiedi` + schema d'uscita della delega (adapter) | 2 | PROPOSTE | — | K-09 |
-| 37 | W2-03a | Execution Fabric: contratto e registro (host, WSL2) | 4 | W2 | — | K-02 |
-| 38 | W2-03b | Docker e Podman | 5 | W2 | W2-03a | K-02 |
-| 39 | W2-03c | SSH | 4 | W2 | W2-03a, W2-04 | K-02 |
-| 40 | W2-05 | Sandbox policy 0-4, fail-closed | 5 | W2 | W2-03a | K-03 |
-| 41 | W2-06 | Context Fabric: `ContextCompacted` + drawer + ricevuta | 3 | W2 | — | K-04 |
-| 42 | W2-07 | Contratto per attrezzo in Settings «Strumenti» | 3 | W2 | — | K-05 |
-| 43 | **P-04** | Ledger firmato di skill e memoria con rollback | 2 | PROPOSTE | W1-13 | — |
-| 44 | **P-08** | Memoria: candidate con citazione, tetto visibile, oblio | 4 | PROPOSTE | W1-04, P-04 | — |
-| 45 | **P-12** | Sessioni ad albero con costo per ramo | 3,5 | PROPOSTE | W0-02 | K-04 (riassunto ramo) |
-| 46 | **P-09** | `@sessione` e messaggi fra sessioni | 2,5 | PROPOSTE | W1-04 | — |
-| 47 | W2-18 | Client MCP alla spec 2026-07-28 | 3 | W2 | — | — |
-| 48 | W2-20 | Import da Claude Code / Codex (incl. hook sotto trust) | 1,5 | W2 | W1-13 | — |
-| 49 | W2-11 | Git worktree / PR via `gh`, push sotto approvazione | 3 | W2 | W1-05 | — |
-| 50 | W2-19 | Timeline dei terminali via OSC 133 | 2,5 | W2 | W1-01 | — |
-| 51 | W2-12 | Ricerca approfondita (parità mobile) | 6 | W2 | — | K-06 |
-| 52 | W2-13 | Electron 57.2 lifecycle | 3 | W2 | W1-10 | — |
-| 53 | W2-14 | Electron 57.3 tray, notifiche, `talos://` | 3 | W2 | W2-13 | — |
-| 54 | W2-15 | Electron 57.4 NSIS per-user + `IExplorerCommand` | 3 | W2 | W2-13 | — |
-| 55 | W2-16 | Electron 57.5 updater | 3 | W2 | W2-15 | — |
-| 56 | W2-17 | Electron 57.6 hardening + GPU gate | 2 | W2 | W2-13 | — |
-| 57 | **P-15** | Marcatori nel codice che aprono un giro | 1,5 | PROPOSTE | P-03 | — |
+| 35 | W2-02 | Storia esecuzioni delle automazioni | 2 | W2 | — | — |
+| 36 | **P-02** | Automazioni: trigger a evento, monitor-mode, continuità, costo evitato | 4 | PROPOSTE | W2-02 | — |
+| 37 | W2-10 | Setup guidato da Doctor | 2,5 | W2 | — | — |
+| 38 | **P-14** | Lint per linguaggio dopo `scrivi` | 2 | PROPOSTE | W2-10 | — |
+| 39 | W2-04 | Secret Broker (handle, lease, scope) | 4 | W2 | — | — |
+| 40 | W2-01 | Session Plan Ledger | 4 | W2 | — | K-01 |
+| 41 | **P-17** | Interrogazione del piano (`/grill`) | 2 | PROPOSTE | W2-01 | K-01 |
+| 42 | W2-08 | Browser Lab evidence | 3 | W2 | — | K-07 (parte) |
+| 43 | W2-09 | Gerarchia policy owner → progetto → utente → default | 4 | W2 | — | — |
+| 44 | **P-06** | Revisore automatico delle approvazioni, fail-closed, con misura sul banco | 5 | PROPOSTE | W2-09 | — |
+| 45 | **P-05** | Attrezzo `chiedi` + schema d'uscita della delega (adapter) | 2 | PROPOSTE | — | K-09 |
+| 46 | W2-03a | Execution Fabric: contratto e registro (host, WSL2) | 4 | W2 | — | K-02 |
+| 47 | W2-03b | Docker e Podman | 5 | W2 | W2-03a | K-02 |
+| 48 | W2-03c | SSH | 4 | W2 | W2-03a, W2-04 | K-02 |
+| 49 | W2-05 | Sandbox policy 0-4, fail-closed | 5 | W2 | W2-03a | K-03 |
+| 50 | W2-06 | Context Fabric: `ContextCompacted` + drawer + ricevuta | 3 | W2 | — | K-04 |
+| 51 | W2-07 | Contratto per attrezzo in Settings «Strumenti» | 3 | W2 | — | K-05 |
+| 52 | **P-04** | Ledger firmato di skill e memoria con rollback | 2 | PROPOSTE | W1-13 | — |
+| 53 | **P-08** | Memoria: candidate con citazione, tetto visibile, oblio | 4 | PROPOSTE | W1-04, P-04 | — |
+| 54 | **P-12** | Sessioni ad albero con costo per ramo | 3,5 | PROPOSTE | W0-02 | K-04 (riassunto ramo) |
+| 55 | **P-09** | `@sessione` e messaggi fra sessioni | 2,5 | PROPOSTE | W1-04 | — |
+| 56 | W2-18 | Client MCP alla spec 2026-07-28 | 3 | W2 | — | — |
+| 57 | W2-20 | Import da Claude Code / Codex (incl. hook sotto trust) | 1,5 | W2 | W1-13 | — |
+| 58 | W2-11 | Git worktree / PR via `gh`, push sotto approvazione | 3 | W2 | W1-05 | — |
+| 59 | W2-19 | Timeline dei terminali via OSC 133 | 2,5 | W2 | W1-01 | — |
+| 60 | W2-12 | Ricerca approfondita (parità mobile) | 6 | W2 | — | K-06 |
+| 61 | W2-14 | Electron 57.3 tray, notifiche, `talos://` | 3 | W2 | W2-13 | — |
+| 62 | **P-15** | Marcatori nel codice che aprono un giro | 1,5 | PROPOSTE | P-03 | — |
 
-Somma fascia B: **102 gg** (Wave 2 73,5 · P 28,5).
+Somma fascia B: **91 gg** (Wave 2 62,5 · P 28,5).
 
 ## Fascia C — lunghe o opzionali
 
 | # | ID | Titolo | gg | Guida | Dip | Kernel |
 |---:|---|---|---:|---|---|---|
-| 58 | W3-01 | Parità azioni per messaggio (6.3B) | 3,5 | W3 | Fase 3 chiusa | — |
-| 59 | W3-02 | Shell, navigazione, layout modulari | 10 | W3 | W3-01 | — |
-| 60 | W3-03 | Conversazioni e sessioni modulari | 12 | W3 | W3-02 | — |
-| 61 | W3-04 | Repository e review modulari | 8 | W3 | W3-03, W1-05 | — |
-| 62 | W3-09 | Git/Review dai contratti | 3 | W3 | W3-04 | — |
-| 63 | W3-05 | Superfici di esecuzione (decisione CSP xterm) | 8 | W3 | W3-03, W1-01 | — |
-| 64 | W3-10 | Split pane e process tree | 3 | W3 | W3-05 | — |
-| 65 | W3-06 | Management portato senza riscrivere | 8 | W3 | W3-03 | — |
-| 66 | W3-07 | UI Lab, performance, gate | 5 | W3 | W3-06 | — |
-| 67 | **P-18** | Best-of-n in worktree | 3 | PROPOSTE | W2-11, P-03 | — |
-| 68 | W3-08 | Cutover strangler + release engineering | 6 | W3 | W3-07, W2-16 | — |
-| 69 | **P-10** | PlanVM (piani dichiarativi con preventivo) | 6 | PROPOSTE | W2-01, W2-07 | K-02, K-05 |
-| 70 | W4-07 | Adapter ACP (Zed, JetBrains) | 5 | W4 | W2-18 | — |
-| 71 | W4-03 | Code graph e ricerca semantica locale | 6 | W4 | W1-04, P-13 | — |
-| 72 | W4-01 | Backend avanzati (manifesti + un adapter live BYOK) | 8 | W4 | W2-03a | K-02 |
-| 73 | W4-04 | Talos Remote Node | 5 | W4 | W2-03c | — |
-| 74 | W4-05 | Memory provider SDK | 4 | W4 | P-08 | — |
-| 75 | W4-02 | Computer use desktop, opt-in, stop | 8 | W4 | W2-05 | — |
-| 76 | W4-06 | Sync E2EE selettiva | — | W4 | decisione owner | — |
-| 77 | FIN-01 | Monorepo `apps/desktop` | 5 | W4-E-FINAL | W3-08 | — |
+| 63 | W3-01 | Parità azioni per messaggio (6.3B) | 3,5 | W3 | Fase 3 chiusa | — |
+| 64 | W3-02 | Shell, navigazione, layout modulari | 10 | W3 | W3-01 | — |
+| 65 | W3-03 | Conversazioni e sessioni modulari | 12 | W3 | W3-02 | — |
+| 66 | W3-04 | Repository e review modulari | 8 | W3 | W3-03, W1-05 | — |
+| 67 | W3-09 | Git/Review dai contratti | 3 | W3 | W3-04 | — |
+| 68 | W3-05 | Superfici di esecuzione (decisione CSP xterm) | 8 | W3 | W3-03, W1-01 | — |
+| 69 | W3-10 | Split pane e process tree | 3 | W3 | W3-05 | — |
+| 70 | W3-06 | Management portato senza riscrivere | 8 | W3 | W3-03 | — |
+| 71 | W3-07 | UI Lab, performance, gate | 5 | W3 | W3-06 | — |
+| 72 | **P-18** | Best-of-n in worktree | 3 | PROPOSTE | W2-11, P-03 | — |
+| 73 | W3-08 | Cutover strangler + release engineering | 6 | W3 | W3-07, W2-16 | — |
+| 74 | **P-10** | PlanVM (piani dichiarativi con preventivo) | 6 | PROPOSTE | W2-01, W2-07 | K-02, K-05 |
+| 75 | W4-07 | Adapter ACP (Zed, JetBrains) | 5 | W4 | W2-18 | — |
+| 76 | W4-03 | Code graph e ricerca semantica locale | 6 | W4 | W1-04, P-13 | — |
+| 77 | W4-01 | Backend avanzati (manifesti + un adapter live BYOK) | 8 | W4 | W2-03a | K-02 |
+| 78 | W4-04 | Talos Remote Node | 5 | W4 | W2-03c | — |
+| 79 | W4-05 | Memory provider SDK | 4 | W4 | P-08 | — |
+| 80 | W4-02 | Computer use desktop, opt-in, stop | 8 | W4 | W2-05 | — |
+| 81 | W4-06 | Sync E2EE selettiva | — | W4 | decisione owner | — |
+| 82 | FIN-01 | Monorepo `apps/desktop` | 5 | W4-E-FINAL | W3-08 | — |
 
 Somma fascia C: **116,5 gg** (Wave 3 66,5 · Wave 4 36 · P 9 · FIN 5).
 
 ## Totale
 
-77 righe (59 del ledger + 18 PROPOSTE), **276,25 giorni-agente** adapter/UI, kernel a parte.
+82 righe (59 del ledger + 18 PROPOSTE + 2 R + 3 M), **280,75 giorni-agente** misurati (fascia M esclusa) adapter/UI, kernel a parte.
 Le stime seguono la regola del ledger: superata del 50 % la riga si ferma e si scrive perché.
 
 ## Le richieste al kernel, nell'ordine in cui servono
