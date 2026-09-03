@@ -13,6 +13,12 @@
 > ⛔ **L'implementazione parte solo su autorizzazione dell'owner**, riga per
 > riga, da una sessione Claude Code su questo worktree.
 
+> **Indice unico d'esecuzione**: `PIANO-A-Z-DESKTOP-2026-09-03.md` — 77 righe (59 di questo ledger + 18 PROPOSTE)
+> in un solo ordine, dalle più critiche alle più lunghe/opzionali (ordine owner 03/09). Guide passo per passo:
+> `GUIDA-WAVE-0`, `GUIDA-WAVE-1`, `GUIDA-WAVE-2`, `GUIDA-WAVE-3`, `GUIDA-WAVE-4-E-FINAL`, `GUIDA-PROPOSTE`
+> (tutte `-2026-09-03.md`). Il piano è completo dalla A alla Z: chi implementa non deve progettare, solo eseguire
+> riga per riga dopo il sì dell'owner su quella riga.
+
 ## 1 — Regole d'esecuzione (vincolanti per chi implementa)
 
 1. **Una riga alla volta**: test RED → codice → GREEN → verifica intera → screenshot se UI → spunta la casella → commit con l'ID nel titolo. Mai due righe in un commit. Mai la riga successiva prima che la precedente sia verificata.
@@ -140,7 +146,7 @@ Casella: `[ ]` da fare · `[~]` in corso · `[x]` fatta (commit nella colonna Es
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | [ ] | FIN-01 | F-0087 | Migrazione a `Ninozzz95/talos` `apps/desktop` con ledger di migrazione, tre vie sui file condivisi | DESIGN_VALIDATED | DESKTOP-ADAPTER | 1 | 5 | 5 | W3-08 | `docs/MONOREPO-FINAL.md` poi il repo | test mobile + desktop | ledger file per file | non migrare | Solo dopo Wave 3; test mobile verdi prima del merge | — | |
 
-### PROPOSTE dal dossier competitor (03/09/2026) — stato `PROPOSTA`, nessuna autorizzata (18 righe, 60 gg)
+### PROPOSTE dal dossier competitor (03/09/2026) — stato `PROPOSTA`, nessuna autorizzata (18 righe, 56,5 gg)
 
 > Copiate da `DOSSIER-COMPETITOR-FUNZIONI-DISTINTIVE-2026-09-03.md` §14 (il dossier resta la fonte del
 > «perché»: capitolo per concorrente, colonne «Dov'è nel codice» e «+1 misurabile»). Una riga `PROPOSTA`
@@ -257,4 +263,4 @@ nel ledger kernel. Il dossier §15 elenca ciò che **non** si copia, con la prov
 | 3 | 10 | 66,5 |
 | 4 | 7 | 36 (+1 da decidere) |
 | FINAL | 1 | 5 |
-| PROPOSTE (dossier competitor, non autorizzate) | 18 | 60 |
+| PROPOSTE (dossier competitor, non autorizzate) | 18 | 56,5 |

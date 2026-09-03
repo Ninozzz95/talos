@@ -430,7 +430,7 @@ Richieste nuove al kernel (da aggiungere a `LEDGER-KERNEL-RICHIESTE-DESKTOP-2026
 attrezzo `chiedi` + `schemaUscita` della delega (P-05); **K-10** attrezzo `mappa` (repo map con budget)
 (P-13); **K-11** loop come passi che rileggono la storia persistita (crash-safe per costruzione) (G1).
 
-Somma delle righe PROPOSTA: **18 righe, 60 gg** adapter/UI (P-01 3 · P-02 4 · P-03 2,5 · P-04 2 · P-05 2 ·
+Somma delle righe PROPOSTA: **18 righe, 56,5 gg** adapter/UI (P-01 3 · P-02 4 · P-03 2,5 · P-04 2 · P-05 2 ·
 P-06 5 · P-07 2,5 · P-08 4 · P-09 2,5 · P-10 6 · P-11 4 · P-12 3,5 · P-13 5 · P-14 2 · P-15 1,5 · P-16 2 ·
 P-17 2 · P-18 3).
 
