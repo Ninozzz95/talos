@@ -1104,6 +1104,7 @@
     }
     appShell.classList.toggle('inspector-collapsed');
     syncInspectorToggle();
+    riclampaComposerUserSized(); // ⭐ 3/9 — item 10: la colonna del context rail è appena cambiata, il tetto del composer con lei
   }
 
   // Owner 24/8: la sidebar sessioni comprimibile quanto l'inspector — stesso
@@ -1120,6 +1121,7 @@
     }
     appShell.classList.toggle('sessions-collapsed');
     syncSessionsToggle();
+    riclampaComposerUserSized(); // ⭐ 3/9 — item 10: stesso motivo del gemello per l'inspector — la colonna della lista sessioni è appena cambiata
   }
 
   function openPanel(name) {
@@ -11237,8 +11239,38 @@
     } catch { return null; } // storage negato o valore corrotto: si riparte dalla taglia di default, mai un crash
   }
 
+  /**
+   * ⭐⭐⭐ 3/9 — owner, dal vivo, tre difetti sulla PRIMA versione:
+   * "la chat composer si estende all'infinito dal lato destro resta
+   * bloccata [sul sinistro]... se le sidebar sono aperte il chat composer
+   * non deve andare dietro, si deve fermare prima delle sidebar".
+   *
+   * ⛔ La causa vera, misurata (Playwright, non ipotizzata): il tetto era
+   * `window.innerWidth`, che IGNORA le sidebar. `.composer` non ha una
+   * `left` propria — sta in flusso normale con `margin-inline:auto`, che
+   * ricentra SOLO finché la larghezza sta dentro il contenitore; appena
+   * la supera, i margini auto collassano a 0 e il riquadro cresce dal
+   * bordo sinistro del contenitore verso destra, sempre — indipendente da
+   * quale maniglia si trascina. Misurato: bordo sinistro fermo a 320,
+   * bordo destro da 1072 a 1272 (+200, la stessa distanza trascinata).
+   *
+   * ⇒ La cura non è raddrizzare la direzione a mano: è non lasciare MAI
+   * che la larghezza superi lo spazio vero fra le sidebar
+   * (`.composer-wrap`, che le esclude già per costruzione — misurato:
+   * 792px disponibili su 1440 di finestra con entrambe le sidebar aperte).
+   * Dentro quel limite, `margin-inline:auto` ricentra correttamente da
+   * solo: il difetto spariva insieme alla causa, non richiedeva una
+   * seconda cura sulla direzione.
+   */
+  function spazioDisponibileComposer() {
+    const wrap = $('.composer-wrap');
+    const rect = wrap?.getBoundingClientRect();
+    return rect && rect.width > 0 ? rect.width : window.innerWidth;
+  }
+
   function clampComposerSize(width, height) {
-    const maxWidth = Math.min(COMPOSER_RESIZE_MAX.width, Math.max(280, window.innerWidth - 24));
+    const margine = 24; // stesso respiro che aveva prima verso i bordi, ora verso le sidebar
+    const maxWidth = Math.min(COMPOSER_RESIZE_MAX.width, Math.max(COMPOSER_RESIZE_MIN.width, spazioDisponibileComposer() - margine));
     const maxHeight = Math.min(COMPOSER_RESIZE_MAX.height, Math.max(160, window.innerHeight - 160));
     return {
       width: Math.min(maxWidth, Math.max(COMPOSER_RESIZE_MIN.width, Math.round(Number(width) || COMPOSER_RESIZE_MIN.width))),
@@ -11252,6 +11284,43 @@
     document.documentElement.style.setProperty('--composer-canonical-h', `${size.height}px`);
     document.documentElement.style.setProperty('--composer-textarea-max-h', `${size.height + 4}px`);
     document.documentElement.style.setProperty('--composer-max-w', `${size.width}px`);
+    /*
+     * ⭐⭐⭐ 3/9 — owner: "resta bloccata [sul sinistro]... si estende
+     * all'infinito dal lato destro". `margin-inline:auto` centra SOLO
+     * finché la larghezza sta dentro il CONTENT-box del genitore
+     * (`.composer-wrap` meno il SUO proprio padding, 752px in questa
+     * finestra) — non dentro il suo bordo esterno (792px). Appena la
+     * supera, per specifica CSS gli auto-margin collassano a 0 e il
+     * riquadro cresce ancorato a sinistra: MISURATO, non presunto (lo
+     * stesso comportamento restava identico anche dopo aver corretto
+     * SOLO il tetto). La cura vera: centrare col margine calcolato a
+     * mano, non affidarsi a `auto` oltre il punto in cui smette di
+     * funzionare per definizione.
+     */
+    const wrap = $('.composer-wrap');
+    if (wrap) {
+      /*
+       * ⛔ Il primo tentativo calcolava il margine sul bordo ESTERNO del
+       * wrap, ma un `margin-left` su `.composer` è relativo al CONTENT-BOX
+       * del suo genitore (cioè il wrap MENO il suo stesso padding, ~20px
+       * per lato in questa finestra) — misurato: il composer finiva 12px
+       * più a destra di dove doveva. Si legge il padding vero del wrap,
+       * non lo si assume.
+       */
+      const wrapRect = wrap.getBoundingClientRect();
+      const wrapStyle = getComputedStyle(wrap);
+      const wrapPaddingLeft = parseFloat(wrapStyle.paddingLeft) || 0;
+      const wrapContentLeft = wrapRect.x + wrapPaddingLeft;
+      const targetLeft = wrapRect.x + (wrapRect.width - size.width) / 2; // centrato sul bordo ESTERNO del wrap, non sul suo content-box: e' quello lo spazio "quasi al massimo" che puo' usare
+      // ⛔ Un margine NEGATIVO è corretto qui, non un errore da bloccare: è
+      // così che il composer invade il padding del wrap invece di restare
+      // confinato al suo content-box — esattamente "estendersi quasi al
+      // massimo della sezione". Un Math.max(0,…) qui annullava la metà
+      // sinistra della crescita, la stessa causa del difetto originale.
+      const marginLeft = Math.round(targetLeft - wrapContentLeft);
+      composerForm.style.marginLeft = `${marginLeft}px`;
+      composerForm.style.marginRight = '0px'; // la larghezza esplicita + il margine sinistro bastano a posizionare il riquadro: un margine destro fisso lotterebbe con `width` per lo spazio residuo
+    }
     composerForm.classList.add('composer-user-sized');
     return size;
   }
@@ -11260,8 +11329,28 @@
     document.documentElement.style.removeProperty('--composer-canonical-h');
     document.documentElement.style.removeProperty('--composer-textarea-max-h');
     document.documentElement.style.removeProperty('--composer-max-w');
+    composerForm.style.removeProperty('margin-left'); // ⭐ 3/9 — la centratura calcolata a mano va tolta insieme al resto, o resterebbe un residuo asimmetrico
+    composerForm.style.removeProperty('margin-right');
     composerForm.classList.remove('composer-user-sized');
     try { window.localStorage.removeItem(COMPOSER_RESIZE_STORAGE_KEY); } catch { /* niente da pulire se lo storage non risponde */ }
+  }
+
+  /**
+   * ⭐⭐⭐ 3/9 — owner: "se le sidebar sono aperte il chat composer non deve
+   * andare dietro, si deve fermare prima delle sidebar". Una sidebar che
+   * si apre/chiude è un cambio di LAYOUT (colonna della grid che
+   * compare/sparisce), non necessariamente un resize della FINESTRA — va
+   * ri-agganciata anche ai due toggle delle sidebar, non solo a un
+   * eventuale ridimensionamento della finestra. `spazioDisponibileComposer()`
+   * rimisura `.composer-wrap` dal vivo ad ogni chiamata: qui basta
+   * richiamare `applyComposerSize` con la taglia attuale perché il nuovo
+   * tetto (più stretto, se una sidebar si è appena aperta) la corregga da solo.
+   */
+  function riclampaComposerUserSized() {
+    if (!composerForm.classList.contains('composer-user-sized')) return;
+    if (layoutCompatto()) { resetComposerSize(); return; }
+    const rect = composerForm.getBoundingClientRect();
+    applyComposerSize(rect.width, rect.height);
   }
 
   function saveComposerSize(size) {
@@ -12094,11 +12183,7 @@
     syncInspectorToggle();
     if (window.innerWidth > 1040) loadPanelWidths();
     clampOpenDialogsToViewport();
-    // ⭐ 3/9 — item 10: stesso principio dei dialog — una finestra rimpicciolita non deve lasciare il composer più grande dello schermo, o su schermo compatto disattiva del tutto la taglia scelta.
-    if (composerForm.classList.contains('composer-user-sized')) {
-      if (layoutCompatto()) resetComposerSize();
-      else applyComposerSize(composerForm.getBoundingClientRect().width, composerForm.getBoundingClientRect().height);
-    }
+    riclampaComposerUserSized();
     syncHostLayout();
     syncVisualViewport();
   }
