@@ -1,9 +1,10 @@
+import { writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { createAutomationScheduler } from './src/automation-scheduler.mjs';
 import { createAutomationStore } from './src/automation-store.mjs';
-import { loadConfig } from './src/config.mjs';
+import { loadConfig, trovaPortaLibera } from './src/config.mjs';
 import { createHttpApp } from './src/http-app.mjs';
 import { createSessionRegistry } from './src/session-registry.mjs';
 import { createStaticHandler } from './src/static-files.mjs';
@@ -476,6 +477,45 @@ async function startServer() {
   const server = createServer(app);
 
   /*
+   * ⭐⭐⭐ 03/9 — R-01 (lanciatore doppio-clic, owner: "porta libera scelta
+   * da sola"). Il legame avviene QUI, prima di costruire l'allowlist delle
+   * origini del terminale sotto: quella allowlist e il log finale devono
+   * vedere la porta VERA su cui il server è finito, non quella richiesta —
+   * se fossero costruiti da `config.port` e la porta richiesta risultasse
+   * occupata, l'origine consentita del terminale punterebbe alla porta
+   * SBAGLIATA e ogni upgrade WebSocket verrebbe rifiutato in silenzio.
+   * `trovaPortaLibera` (config.mjs) decide se spostarsi (porta di default)
+   * o fermarsi con un errore onesto (TALOS_HARNESS_UI_PORT esplicita).
+   */
+  const portaAscolto = await trovaPortaLibera(config.port, {
+    esplicita: config.portaEsplicita,
+    tentaLegameFn: (porta) => new Promise((risolvi) => {
+      const alSuccesso = () => { server.removeListener('error', alFallimento); risolvi({ ok: true }); };
+      const alFallimento = (errore) => { server.removeListener('listening', alSuccesso); risolvi({ ok: false, errore }); };
+      server.once('error', alFallimento);
+      server.once('listening', alSuccesso);
+      server.listen(porta, config.host);
+    }),
+  });
+
+  /*
+   * ⭐ 03/9, R-01 — handshake per `scripts/avvia-talos.mjs`: la porta reale
+   * può differire da quella richiesta (vedi sopra), quindi il lanciatore
+   * non la indovina, la LEGGE da qui. Solo se il lanciatore lo chiede
+   * (variabile impostata): un avvio da terminale normale non scrive nulla
+   * di nuovo su disco. Migliore sforzo: se la scrittura fallisce, il server
+   * parte comunque — l'handshake è una comodità per il lanciatore, non un
+   * requisito del prodotto.
+   */
+  if (typeof process.env.TALOS_HARNESS_UI_REPORT_FILE === 'string' && process.env.TALOS_HARNESS_UI_REPORT_FILE !== '') {
+    try {
+      writeFileSync(process.env.TALOS_HARNESS_UI_REPORT_FILE, JSON.stringify({ host: config.host, port: portaAscolto }));
+    } catch (errore) {
+      console.warn('[avvio] handshake per il lanciatore non scritto:', errore.message);
+    }
+  }
+
+  /*
    * ⭐⭐⭐ 28/8 — Terminale REALE (LEDGER-TERMINALE-REALE.md). Nessuna
    * porta nuova: l'upgrade WebSocket avviene sullo STESSO `server`,
    * quindi eredita lo stesso bind loopback-only di ogni altra rotta.
@@ -485,7 +525,7 @@ async function startServer() {
    * `cartella` inventata o presa dal client senza validazione.
    */
   const registroTerminali = creaRegistroTerminali();
-  const originiTerminaleConsentite = new Set(ALIAS_LOOPBACK.map((host) => `http://${host}:${config.port}`));
+  const originiTerminaleConsentite = new Set(ALIAS_LOOPBACK.map((host) => `http://${host}:${portaAscolto}`));
   const terminaleWs = creaGestoreTerminaleWs({
     registro: registroTerminali,
     originiConsentite: originiTerminaleConsentite,
@@ -494,10 +534,6 @@ async function startServer() {
   server.on('upgrade', (req, socket, head) => terminaleWs.gestisciUpgrade(req, socket, head));
   const reaperTerminali = setInterval(() => registroTerminali.reap(), MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA * 60_000).unref();
 
-  await new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(config.port, config.host, resolve);
-  });
   automationScheduler.avvia();
 
   let shutdownStarted = false;
@@ -517,7 +553,7 @@ async function startServer() {
   };
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
-  console.log(`Harness UI disponibile su http://${config.host}:${config.port}`);
+  console.log(`Harness UI disponibile su http://${config.host}:${portaAscolto}`);
   /*
    * ⭐⭐⭐ 02/09 — stesso principio di `hermes doctor`/`claude doctor`
    * (ricerca fatta lo stesso giorno, vedi

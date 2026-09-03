@@ -9,10 +9,12 @@ import {
   ConfigurationError,
   DEFAULT_HOST,
   DEFAULT_PORT,
+  PortaInUsoError,
   loadConfig,
   modelloRichiestaValido,
   permessiPerAttrezzoRichiestaValido,
   permessiRichiestaValido,
+  trovaPortaLibera,
 } from '../src/config.mjs';
 import { generateHarnessReceiptKeypair } from '../src/harness-receipt-keypair.mjs';
 
@@ -55,6 +57,46 @@ test('config rejects invalid ports', () => {
       ConfigurationError,
     );
   }
+});
+
+/*
+ * ⭐⭐⭐ 03/9 — R-01 (lanciatore doppio-clic): la config deve dire se la
+ * porta viene da una scelta esplicita dell'owner (TALOS_HARNESS_UI_PORT
+ * impostata) o dal default. Solo così `trovaPortaLibera` sotto sa se le è
+ * concesso spostarsi su una porta successiva quando quella scelta è
+ * occupata, o se deve fermarsi con un errore onesto (chi la imposta la
+ * vuole quella, non un'altra).
+ */
+test('config.portaEsplicita riflette se TALOS_HARNESS_UI_PORT è stata impostata', () => {
+  assert.equal(loadConfig({}, import.meta.url).portaEsplicita, false);
+  assert.equal(loadConfig({ TALOS_HARNESS_UI_PORT: '' }, import.meta.url).portaEsplicita, false);
+  assert.equal(loadConfig({ TALOS_HARNESS_UI_PORT: '4180' }, import.meta.url).portaEsplicita, true);
+});
+
+test('trovaPortaLibera: porta esplicita occupata → errore onesto, mai una porta diversa', async () => {
+  const tentate = [];
+  const tentaLegameFn = async (porta) => { tentate.push(porta); return { ok: false, errore: Object.assign(new Error('EADDRINUSE'), { code: 'EADDRINUSE' }) }; };
+  await assert.rejects(
+    () => trovaPortaLibera(4174, { esplicita: true, tentaLegameFn }),
+    (errore) => errore instanceof PortaInUsoError && errore.code === 'PORT_IN_USE' && errore.porta === 4174,
+  );
+  assert.deepEqual(tentate, [4174]); // un solo tentativo: mai spostata da sola
+});
+
+test('trovaPortaLibera: porta di default occupata → sceglie la prima libera sopra, in ordine', async () => {
+  const tentate = [];
+  const tentaLegameFn = async (porta) => { tentate.push(porta); return { ok: porta === 4176 }; };
+  const scelta = await trovaPortaLibera(4174, { esplicita: false, tentaLegameFn });
+  assert.equal(scelta, 4176);
+  assert.deepEqual(tentate, [4174, 4175, 4176]);
+});
+
+test('trovaPortaLibera: nessuna porta libera entro il tetto di tentativi → errore esplicito, non un ciclo infinito', async () => {
+  const tentaLegameFn = async () => ({ ok: false, errore: Object.assign(new Error('EADDRINUSE'), { code: 'EADDRINUSE' }) });
+  await assert.rejects(
+    () => trovaPortaLibera(4174, { esplicita: false, tentativiMassimi: 5, tentaLegameFn }),
+    (errore) => errore instanceof PortaInUsoError && /5 tentativi/.test(errore.message),
+  );
 });
 
 test('config accepts an explicit llama-server binary path and discovers the pinned local binary when present', () => {

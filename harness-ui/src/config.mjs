@@ -35,6 +35,49 @@ function fail(message) {
   throw new ConfigurationError(message);
 }
 
+/*
+ * ⭐⭐⭐ 03/9 — R-01, lanciatore doppio-clic (owner: "parta correttamente,
+ * porta libera scelta da sola"). Non è un errore di CONFIGURAZIONE (la
+ * porta chiesta era valida): è un fatto di RUNTIME, qualcos'altro la sta
+ * usando in questo momento. Classe propria, non ConfigurationError, così
+ * chi la intercetta non la confonde con TALOS_HARNESS_UI_PORT malformata.
+ */
+export class PortaInUsoError extends Error {
+  constructor(porta, { esplicita = false, tentativi } = {}) {
+    super(esplicita
+      ? `La porta ${porta} è già in uso (TALOS_HARNESS_UI_PORT è impostata esplicitamente: non si sceglie una porta diversa da sola).`
+      : `Nessuna porta libera trovata da quella richiesta fino a ${porta} (${tentativi} tentativi).`);
+    this.name = 'PortaInUsoError';
+    this.code = 'PORT_IN_USE';
+    this.porta = porta;
+  }
+}
+
+/*
+ * Sceglie una porta libera partendo da `portaIniziale`. `tentaLegameFn(porta)`
+ * è iniettata: deve provare a legare quella porta e restituire `{ ok: true }`
+ * se ci riesce, `{ ok: false, errore }` se la porta è occupata (o per
+ * qualunque altro motivo il legame fallisce) — mai side-effect nascosti,
+ * mai un vero socket qui dentro: è `server.mjs` a fornire l'implementazione
+ * reale, i test ne iniettano una finta senza aprire porte davvero.
+ *
+ * `esplicita:true` (l'owner ha impostato TALOS_HARNESS_UI_PORT): un solo
+ * tentativo, mai spostata da sola — chi la imposta la vuole quella.
+ * `esplicita:false` (default): prova le porte successive, una alla volta,
+ * fino a `tentativiMassimi`.
+ */
+export async function trovaPortaLibera(portaIniziale, { esplicita = false, tentativiMassimi = 20, tentaLegameFn } = {}) {
+  if (typeof tentaLegameFn !== 'function') fail('trovaPortaLibera richiede tentaLegameFn');
+  let porta = portaIniziale;
+  for (let tentativo = 1; ; tentativo += 1) {
+    const esito = await tentaLegameFn(porta);
+    if (esito.ok) return porta;
+    if (esplicita) throw new PortaInUsoError(porta, { esplicita: true });
+    if (tentativo >= tentativiMassimi) throw new PortaInUsoError(porta, { esplicita: false, tentativi: tentativiMassimi });
+    porta += 1;
+  }
+}
+
 function parseModello(raw) {
   if (raw === undefined || raw === '') return MODELLI_AMMESSI[0];
   if (typeof raw !== 'string' || !MODELLI_AMMESSI.includes(raw)) {
@@ -368,6 +411,9 @@ export function loadConfig(
   return Object.freeze({
     host,
     port: parsePort(env.TALOS_HARNESS_UI_PORT),
+    // ⭐ 03/9, R-01: true solo se l'owner ha scritto qualcosa in
+    // TALOS_HARNESS_UI_PORT — vedi trovaPortaLibera() sopra.
+    portaEsplicita: typeof env.TALOS_HARNESS_UI_PORT === 'string' && env.TALOS_HARNESS_UI_PORT !== '',
     publicDir,
     modello: parseModello(env.TALOS_HARNESS_UI_MODEL),
     // Come Claude/Codex/Hermes: in assenza di elenco esplicito la prima

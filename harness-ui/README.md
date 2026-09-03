@@ -10,14 +10,23 @@ side effects leaves a signed receipt. The server binds to `127.0.0.1` only.
 ## Quick start
 
 Node.js 24 and Google Chrome. No `package.json` for the frontend, no
-lockfile, nothing to install there. From the repository root:
+lockfile, nothing to install there.
+
+**Windows, double-click**: run `harness-ui/scripts/avvia-talos.cmd`. It
+starts the server on the first free port from `4174` up, waits for it to
+answer, and opens your browser — on the Doctor screen if no provider key is
+configured yet, on the chat otherwise. Nothing to set first.
+
+**From a terminal**, from the repository root:
 
 ```powershell
 node harness-ui/server.mjs
 ```
 
-Open `http://127.0.0.1:4174/`. Set `OPENROUTER_API_KEY` to start sessions;
-without it the server still starts, read-only, and starting a session fails
+Open `http://127.0.0.1:4174/` (or the next free port, printed on start; set
+`TALOS_HARNESS_UI_PORT` to require an exact one). Set `OPENROUTER_API_KEY` to
+start sessions; without it the server still starts, read-only, and starting
+a session fails
 per request with `CONFIG_INVALID`.
 
 ## What you get

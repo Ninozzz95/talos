@@ -31,7 +31,15 @@ async function listen(t, app = realApp()) {
 
 test('server binds to configured loopback only', () => {
   const source = readFileSync(join(testDir, '..', 'server.mjs'), 'utf8');
-  assert.match(source, /listen\(config\.port, config\.host/);
+  // ⭐ 03/9, R-01 — il legame ora passa da trovaPortaLibera() (config.mjs:
+  // porta occupata e non esplicita ⇒ prova la successiva), quindi la porta
+  // letterale non è più `config.port` in questo punto ma una variabile
+  // locale che parte da lì. Il fatto che questo test protegge davvero — il
+  // secondo host non è mai un indirizzo diverso da quello validato — non è
+  // cambiato: si continua a controllare che `server.listen(...)` riceva
+  // sempre e solo `config.host` come secondo argomento, mai un valore scritto
+  // a mano come 0.0.0.0.
+  assert.match(source, /\.listen\([^,]+,\s*config\.host\)/);
   assert.doesNotMatch(source, /listen\([^\n]*0\.0\.0\.0/);
 });
 
