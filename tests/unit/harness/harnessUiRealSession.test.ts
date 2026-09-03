@@ -1166,6 +1166,45 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(label()).toBe('Stopped') // ⭐ 3/9 — vedi nota sopra, stessa etichetta a due stati
     })
 
+    /*
+     * ⛔⛔⛔ 3/9 — BUG REALE trovato SOLO dal dispositivo (CDP su un giro vero,
+     * tablet landscape): aggiornaRunKpis() (app.js) cercava i tre valori con
+     * $('[data-run-kpi="…"] b'), ma index.html non portava MAI quell'attributo
+     * — sempre null, sempre "—" a schermo, anche con state.realSession.usage
+     * (giri:4, token veri) e erroriStrumento (1) corretti nello stato interno.
+     * Nessun test l'aveva preso perché ognuno controllava lo STATO, mai il DOM
+     * che dovrebbe rifletterlo — esattamente il tipo di buco che [[screenshot-obbligatorio-e-fonte-di-anomalie]]
+     * descrive. Qui si controlla il DOM, non lo stato.
+     */
+    it('⭐⭐⭐ REAL-SESSION-RUNKPIS-01 step/ctx/errors del run-strip riflettono DAVVERO lo stato — mai il trattino statico', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-kpis' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [{ sessionId: 'sess-kpis', taskId: 'storia-x', conclusa: false, avviataAlle: '2026-08-26T10:00:00.000Z' }] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-x' })
+        const generation = runtime().realSessionState.generation
+        const kpi = (nome: string) => document.querySelector(`[data-run-kpi="${nome}"] b`)?.textContent
+
+        runtime().handleRealEvent({ type: 'RunStarted', input: { consegna: 'x' } }, generation)
+        expect(kpi('step')).toBe('—') // nessun /usage ancora arrivato: onestamente ignoto
+        expect(kpi('ctx')).toBe('—')
+        expect(kpi('errors')).toBe('0') // gli errori si SANNO da subito (zero finora), non "ignoti" come i token
+
+        runtime().handleRealEvent({ type: 'StateDelta', delta: [{ path: '/usage', value: { prompt_tokens: 900, completion_tokens: 100, giri: 2 } }] }, generation)
+        expect(kpi('step')).toBe('2')
+        expect(kpi('ctx')).toBe('1.0k') // 900+100, stessa formattaKilo di formattaUsageBreve
+
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 'tk1', toolCallName: 'leggi' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: 'tk1', content: "error: ENOENT: no such file or directory, open 'nonexistent-xyz.txt'" }, generation)
+        expect(kpi('errors')).toBe('1')
+
+        // ⭐ un giro NUOVO (follow-up sulla stessa sessione) riparte da zero — mai i numeri del giro precedente appesi a schermo
+        runtime().handleRealEvent({ type: 'RunStarted', input: { consegna: 'y', seguito: true } }, generation)
+        expect(kpi('step')).toBe('—')
+        expect(kpi('ctx')).toBe('—')
+        expect(kpi('errors')).toBe('0')
+    })
+
     it('REAL-SESSION-FINISH-01 RunFinished NON chiude subito lo stream — solo quando la connessione cade DAVVERO, e senza avviso', async () => {
         // ⛔ 27/8: chiudere subito su un RunFinished era il difetto — una
         // cronologia con PIÙ giri (resume, comando diretto) troncava il

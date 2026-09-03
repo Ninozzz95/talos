@@ -124,10 +124,11 @@
       <section class="run-strip" aria-label="Run state" hidden>
         <button class="run-state" id="runStateToggle" type="button" aria-pressed="false" aria-label="Turn the follow-up queue on or off"><span class="status-pulse"></span><strong>Running</strong><span>—</span></button>
         <div class="run-progress" role="progressbar" aria-label="Run progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span class="run-progress-value-0"></span></div>
+        <!-- ⛔⛔⛔ 3/9 — verificato dal vivo: aggiornaRunKpis() (app.js) cercava questi tre valori con $('[data-run-kpi="…"] b'), ma il markup non aveva MAI portato quell'attributo — sempre null, sempre "—" a schermo nonostante state.realSession.usage/erroriStrumento fossero corretti (giri:4, erroriStrumento:1, verificato via CDP sullo stato interno). Trovato SOLO dal dispositivo, non dai test (jsdom non distingue "selettore che non trova mai" da "selettore mai eseguito" se il test non controlla anche lo stato interno). -->
         <div class="run-kpis">
-          <span><b>—</b> step</span>
-          <span><b>—</b> ctx</span>
-          <span><b>—</b> errors</span>
+          <span data-run-kpi="step"><b>—</b> step</span>
+          <span data-run-kpi="ctx"><b>—</b> ctx</span>
+          <span data-run-kpi="errors"><b>—</b> errors</span>
         </div>
         <button class="icon-btn stop-run" aria-label="Stop the run"><svg><use href="#i-stop"/></svg></button>
       </section>
