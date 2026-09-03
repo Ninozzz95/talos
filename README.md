@@ -57,11 +57,11 @@ Every row above points to code in this repository, not to a roadmap. Where a fea
 
 ## Install
 
-**Mobile** — download the signed APK from the latest release (`arm64-v8a`, Android 8.0+), then verify it:
+**Mobile** — download the signed APK from the latest [release of Ninozzz95/talos](https://github.com/Ninozzz95/talos/releases) (`arm64-v8a`, Android 8.0+), then verify it:
 
 ```bash
 sha256sum TALOS-<version>.apk
-gh attestation verify TALOS-<version>.apk --repo Ninozzz95/agent-virtual-machine
+gh attestation verify TALOS-<version>.apk --repo Ninozzz95/talos
 ```
 
 **Desktop** — Node.js 24 and Google Chrome, nothing to install for the frontend:
