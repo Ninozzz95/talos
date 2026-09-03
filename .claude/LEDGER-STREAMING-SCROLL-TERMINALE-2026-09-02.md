@@ -1393,3 +1393,44 @@ estesa con **una porta libera scelta a runtime** invece di una costante.
 
 **⛔ NON VERIFICATO**: `test:lab` (browser del laboratorio modulare) — non per
 scelta, per porta occupata. Gli altri cinque cancelli sono verdi.
+
+---
+
+## 03/9 — LA SEQUENZA DELL'OWNER, e i due lavori che aspettano
+
+Ordine testuale, in quest'ordine e non un altro:
+
+1. ✅ **Committare tutto** — fatto (`8c9561d1`).
+2. 🔜 **Release mobile nuova + README aggiornato** con le funzionalità nuove.
+   ⛔ La release è della lane MOBILE (`avm-6f`): coordinata, non toccata.
+   Il README si scrive in due pezzi separati per non aprirlo in due.
+3. 🔜 **DOPO la release**: ricerca tecnica su Hermes, LM Studio e simili —
+   «come far girare usando le migliori tecnologie all'avanguardia allo stato
+   dell'arte dell'ultimo mese per far girare al massimo i modelli scelti
+   dall'utente, se entrano nella memoria, su tutte le GPU previste».
+   ⇒ Oggi abbiamo acceso **una** scheda (Vulkan su AMD RX 9070 XT, misurato
+   7,7 tok/s su un 27B). Restano: CUDA su NVIDIA, ROCm/HIP, Metal, Intel;
+   la scelta del backend per macchina; quanti livelli offrire quando il
+   modello NON entra tutto; e il confronto con chi lo fa meglio.
+4. 🔜 **DOPO la release**: ricerca competitor «approfondita e risolutiva» sul
+   **FULL ACCESS**, e l'owner l'ha marcata «delicatissima, da trattare con
+   serietà e guanti d'oro».
+
+### Il problema del full access, con le sue parole
+
+> «se io parto in una cartella tipo avm, non posso chiedere di salvare file al
+> di fuori di essa anche se ho abilitato full access… dovrei potere fare in
+> modo come tutti i competitor di dare al modello accesso libero a tutto il pc
+> se full access è acceso o qualcosa simile. Anche nel file tree dovrei poter
+> navigare al di fuori della cartella scelta a prescindere se full access è
+> attivo o no: adesso è un file explorer castrato solo alla cartella scelta.»
+
+⇒ Sono **due** cose distinte, e vanno tenute distinte anche nella cura:
+- **la scrittura del modello** fuori dalla cartella, che dipende dal permesso
+  «Full access» ed è la parte delicata (un agente che scrive ovunque);
+- **la navigazione dell'albero file da parte della PERSONA**, che secondo
+  l'owner deve essere libera **a prescindere** dal permesso — è un explorer,
+  non un'autorizzazione all'agente.
+
+⛔ Nessuna delle due si tocca prima della ricerca competitor: è esattamente
+il tipo di modifica dove «sembra ovvia» e non lo è.
