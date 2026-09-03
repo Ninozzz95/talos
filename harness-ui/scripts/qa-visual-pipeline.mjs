@@ -465,6 +465,53 @@ class Pipeline {
 // osserva l'esecuzione, controlla la Review.
 // --------------------------------------------------------------------
 const SCENARI = {
+  /**
+   * ⭐⭐⭐ 03/9 — i due fix che restavano da vedere a schermo: la scheda
+   * «Locali» del selettore e la barra di azioni sotto ogni risposta.
+   *
+   * ⛔ Si apre una sessione GIÀ ESISTENTE invece di farne partire una nuova:
+   * un giro vero costa soldi dell'owner, e per guardare dei pulsanti sotto
+   * una risposta basta una risposta che c'è già.
+   */
+  async 'qa-fix-selettore-e-azioni'(p) {
+    const viewport = viewportRichiesta(URL_BASE);
+    await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
+    await p.attendi(1_200);
+
+    // ── 1. la scheda «Locali» del selettore modelli ──────────────────────
+    await p.click('#newSessionBtn');
+    await p.attendi(1_200);
+    await p.cdp.evaluate("document.querySelector('.model-picker-trigger')?.click()");
+    await p.attendi(2_500);
+    const fonti = await p.cdp.evaluate("JSON.stringify(Array.from(document.querySelectorAll('.model-picker-source')).map(b => b.textContent.trim()))");
+    p.nota(`fonti nel selettore: ${fonti}`);
+    if (!String(fonti).includes('Locali')) p.difetto(`il selettore non mostra le fonti: ${fonti}`, { severita: 'blocco' });
+    await p.cdp.evaluate("document.querySelector('[data-picker-source=\"locali\"]')?.click()");
+    await p.attendi(1_200);
+    const locali = await p.cdp.evaluate("document.querySelector('.model-picker-source-note')?.textContent?.trim() ?? '(nessuna nota)'");
+    p.nota(`nota della scheda Locali: ${locali}`);
+    const cliccabili = await p.cdp.evaluate("document.querySelectorAll('.model-picker-list button.model-picker-local-row').length");
+    if (Number(cliccabili) > 0) p.difetto('le righe locali sono bottoni: sembrano selezionabili e non lo sono', { severita: 'blocco' });
+    await p.screenshot('picker-fonte-locali', { nota: 'scheda «Locali»: cosa c’è sul disco e perché non si può ancora scegliere qui' });
+    await p.cdp.evaluate("document.querySelector('.sheet-close, [data-close-sheet]')?.click()");
+    await p.attendi(800);
+
+    // ── 2. le azioni sotto una risposta ──────────────────────────────────
+    await p.cdp.evaluate("document.querySelector('.session-row, .chat-list-item, [data-session-id]')?.click()");
+    await p.attendi(4_000);
+    const azioni = await p.cdp.evaluate("JSON.stringify(Array.from(document.querySelectorAll('.assistant-message .message-actions button')).map(b => b.getAttribute('aria-label')))");
+    p.nota(`azioni sotto le risposte: ${azioni}`);
+    if (String(azioni) === '[]') p.difetto('nessuna azione sotto le risposte: la barra non viene disegnata', { severita: 'blocco' });
+    const dopoIlTesto = await p.cdp.evaluate("(() => { const m = document.querySelector('.assistant-message'); if (!m) return 'nessun messaggio'; const c = m.querySelector('.assistant-copy'); const a = m.querySelector('.message-actions'); if (!c || !a) return 'manca un pezzo'; return (c.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING) ? 'dopo' : 'prima'; })()");
+    p.nota(`posizione della barra rispetto al testo: ${dopoIlTesto}`);
+    if (String(dopoIlTesto) !== 'dopo') p.difetto(`la barra non sta dopo il testo (${dopoIlTesto}): lo screen reader annuncerebbe le azioni prima della risposta`, { severita: 'blocco' });
+    await p.cdp.evaluate("document.querySelector('.assistant-message .message-actions')?.scrollIntoView({block:'center'})");
+    await p.attendi(400);
+    await p.screenshot('azioni-sotto-risposta', { nota: 'copia, ascolta e «chiedi di nuovo» sotto la risposta — nessun bottone che non fa quello che dice' });
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+  },
+
   async 'qa-settings-appearance'(p) {
     await p.attendi(900);
     await p.cdp.evaluate("localStorage.removeItem('talos.harness.desktop.settings.v1'); location.reload();");
@@ -643,6 +690,36 @@ const SCENARI = {
       await p.cdp.evaluate("window.fetch = window.__fetchOriginale; 'fetch ripristinata'");
     }
 
+    /*
+     * ⭐⭐⭐ 03/9 — i tre fix Hugging Face chiesti dall'owner, provati in fila:
+     * il catalogo che compare APRENDO (senza cercare), le schede del
+     * dettaglio con le quantizzazioni per prime, e la misura per variante.
+     */
+    await p.click('[data-model-lab-tab="huggingface"]');
+    await p.attendi(2_500);
+    const listaHf = await p.cdp.evaluate("document.querySelectorAll('#modelLabHfResults .model-lab-list-item').length");
+    p.nota(`repository nel catalogo SENZA aver cercato niente: ${listaHf}`);
+    if (Number(listaHf) === 0) p.difetto("la scheda Hugging Face resta vuota all'apertura: bisogna ancora cercare per vedere qualcosa", { severita: 'blocco' });
+    await p.screenshot('hf-catalogo-all-apertura', { nota: 'il catalogo dei più scaricati compare aprendo la scheda, senza digitare nulla' });
+
+    await p.cdp.evaluate("document.querySelector('#modelLabHfResults .model-lab-list-item')?.click()");
+    await p.attendi(3_000);
+    const schedeHf = await p.cdp.evaluate("JSON.stringify(Array.from(document.querySelectorAll('.hf-detail-tab')).map(b => b.textContent.trim()))");
+    p.nota(`schede del dettaglio: ${schedeHf}`);
+    if (!String(schedeHf).includes('Quantizzazioni')) p.difetto(`il dettaglio non apre le schede con le quantizzazioni: ${schedeHf}`, { severita: 'blocco' });
+    await p.screenshot('hf-dettaglio-schede', { nota: 'dettaglio a schede, «Quantizzazioni» per prima e attiva — come sul mobile' });
+
+    await p.cdp.evaluate("Array.from(document.querySelectorAll('.hf-variant-measure button')).find(b => /Misura/.test(b.textContent))?.click()");
+    await p.attendi(3_000);
+    // ⛔ Le righe misurate stanno sotto la piega: una schermata che non le
+    // mostra non prova niente di quello che questo passo esiste per provare.
+    await p.cdp.evaluate("document.querySelector('.hf-variant-fit')?.scrollIntoView({block:'center'})");
+    await p.attendi(400);
+    const verdettiVarianti = await p.cdp.evaluate("JSON.stringify(Array.from(document.querySelectorAll('.hf-variant-fit')).map(n => n.textContent.trim()).slice(0, 4))");
+    p.nota(`verdetti per quantizzazione: ${verdettiVarianti}`);
+    if (String(verdettiVarianti) === '[]') p.difetto('«Misura su questo PC» non produce nessun verdetto per quantizzazione', { severita: 'blocco' });
+    await p.screenshot('hf-quantizzazioni-misurate', { nota: "ogni quantizzazione dice se i pesi entrano su QUESTO pc, con l'ora della misura e la base dichiarata" });
+
     for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
     for (const r of p.cdp.richiesteFallite) {
       if (!r.url.endsWith('/favicon.ico')) p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
@@ -677,10 +754,41 @@ const SCENARI = {
     await p.attendi(180);
     await p.screenshot('provider-card-aperta', { nota: 'Card OpenAI aperta: chiave mascherata, endpoint e timeout allineati al mobile' });
 
+    /*
+     * ⭐⭐⭐ 03/9 — «PROVA TUTTI»: la cosa che questo pannello non sapeva fare.
+     *
+     * Fino a oggi si poteva salvare una chiave e non sapere mai se il
+     * provider la accettasse: lo stato diceva «chiave presente», cioè che una
+     * stringa era stata scritta. Ora si chiede al provider, e la riga chiusa
+     * riporta l'esito nel terzo segmento.
+     *
+     * ⛔ Escono richieste VERE verso servizi esterni con le credenziali
+     * dell'owner. Sono letture dell'elenco modelli — la chiamata più
+     * economica che dimostri l'autenticazione, gratuita su tutti e sette —
+     * e partono solo perché questo passo preme un bottone, mai da sole.
+     */
+    await p.click('#providerTestAll');
+    await p.attendi(12_000);
+    const esiti = await p.cdp.evaluate("JSON.stringify(Array.from(document.querySelectorAll('.provider-row')).map(r => r.dataset.providerId + ': ' + (r.dataset.provaEsito || 'nessuna prova')))");
+    p.nota(`esito della prova per provider: ${esiti}`);
+    if (!String(esiti).includes('collegato')) p.difetto(`«Prova tutti» non produce nessun collegamento: ${esiti}`, { severita: 'blocco' });
+    await p.cdp.evaluate("document.querySelector('#providerList')?.scrollIntoView({block:'start'})");
+    await p.attendi(400);
+    await p.screenshot('provider-provati', { nota: 'ogni riga dice se il provider ACCETTA la credenziale, con quanti modelli vede — non solo che una chiave e\u0300 salvata' });
+
     await p.click('[data-provider-id="anthropic"] [data-provider-toggle]');
     await p.cdp.evaluate("document.querySelector('[data-provider-id=\\\"anthropic\\\"]')?.scrollIntoView({block:'center', inline:'nearest'})");
     await p.attendi(160);
-    const anthropicEndpointHidden = await p.cdp.evaluate("document.querySelector('[data-provider-id=\\\"anthropic\\\"] [data-provider-endpoint]')?.closest('label')?.hidden === true");
+    /*
+     * ⛔ 03/9 — il controllo era INVECCHIATO, non il codice. Chiedeva che
+     * il campo indirizzo esistesse ma fosse `hidden`; nel ridisegno per
+     * un provider che non lo supporta il campo NON VIENE COSTRUITO, che è
+     * piu' severo. Con `?.` su un nodo assente l'espressione dava
+     * `undefined !== true` e il passo gridava un difetto inesistente.
+     * ⇒ Ora passa se il campo è assente OPPURE nascosto, e continua a
+     * fallire se è visibile — che è la cosa che si voleva impedire.
+     */
+    const anthropicEndpointHidden = await p.cdp.evaluate("(() => { const n = document.querySelector('[data-provider-id=\\\"anthropic\\\"] [data-provider-endpoint]'); if (!n) return true; const l = n.closest('label'); return Boolean(l ? l.hidden : n.hidden); })()");
     if (!anthropicEndpointHidden) p.difetto('Anthropic mostra un indirizzo personalizzato non previsto dal mobile', { severita: 'blocco' });
     await p.screenshot('provider-anthropic-timeout', { nota: 'Anthropic: tempo massimo disponibile, indirizzo personalizzato assente come nel mobile' });
 

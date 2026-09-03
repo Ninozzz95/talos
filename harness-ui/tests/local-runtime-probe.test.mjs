@@ -366,3 +366,54 @@ test('LOCAL-RUNTIME-PROBE-CTX-06 — il profilo CHAT resta giudicabile su ciò c
   assert.equal(fit.state, 'compatible');
   assert.equal(fit.context.availableTokens, 131_072);
 });
+
+/*
+ * ⭐⭐⭐ LA STIMA PRIMA DELLO SCARICAMENTO — 03/9, richiesta dell'owner:
+ * «badge e pulsanti per misurare in tempo reale se quel modello e
+ * quantizzazione entrano e girano nel pc».
+ *
+ * ⛔ È una SOGLIA INFERIORE dichiarata, non un totale: senza il file non si
+ * può leggere l'header, quindi la cache del contesto non è calcolabile.
+ * `basis: 'weights-only'` viaggia con ogni risposta perché chi la mostra non
+ * possa dimenticarsene.
+ */
+test('ESTIMATE-FIT-01 — i pesi che entrano nella memoria libera sono compatibili, e si dichiara la base', async () => {
+  const { probe } = makeProbe(); // macchina finta: 16.000 byte liberi, 20.000 allocabili
+  const esito = await probe.estimateFit({ bytes: 5_000 });
+  assert.equal(esito.state, 'compatible');
+  assert.equal(esito.reason, 'fits');
+  assert.equal(esito.basis, 'weights-only', 'la base della stima viaggia con la risposta');
+  assert.equal(esito.memory.requiredBytes, 5_000);
+  assert.equal(esito.memory.availableBytes, 16_000);
+});
+
+test('ESTIMATE-FIT-02 — il DISCO si guarda per primo, e ha un motivo suo', async () => {
+  // ⛔ Lo spazio si libera, la memoria no: dire «non gira» a chi ha solo il
+  // disco pieno lo manda a cercare un modello più piccolo, cura sbagliata.
+  const { probe } = makeProbe();
+  const esito = await probe.estimateFit({ bytes: 25_000 });
+  assert.equal(esito.state, 'blocked');
+  assert.equal(esito.reason, 'storage');
+});
+
+test('ESTIMATE-FIT-03 — sopra il 90% del libero è «al limite», non compatibile', async () => {
+  const { probe } = makeProbe();
+  const esito = await probe.estimateFit({ bytes: 15_000 }); // 93,75% di 16.000
+  assert.equal(esito.state, 'tight');
+  assert.equal(esito.reason, 'memory');
+});
+
+test('ESTIMATE-FIT-04 — AL CONTRARIO: senza misura della macchina non si inventa un verdetto', async () => {
+  const { probe } = makeProbe({ machine: { memory: {}, storage: {} } });
+  const esito = await probe.estimateFit({ bytes: 5_000 });
+  assert.equal(esito.state, 'unknown');
+  assert.equal(esito.reason, 'measurement');
+  assert.equal(esito.memory.availableBytes, null, 'mai uno zero al posto di un «non misurato»');
+});
+
+test('ESTIMATE-FIT-05 — AL CONTRARIO: byte assenti o assurdi vengono rifiutati, non stimati', async () => {
+  const { probe } = makeProbe();
+  for (const bytes of [0, -1, 1.5, null, undefined, '5000']) {
+    await assert.rejects(() => probe.estimateFit({ bytes }), { code: 'FIT_INVALID' }, `accettati byte non validi: ${String(bytes)}`);
+  }
+});

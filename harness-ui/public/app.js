@@ -130,6 +130,16 @@
       provider: 'all',
       hfQuery: '', hfResults: [], hfSelected: null, hfDetail: null, hfError: null, hfCursor: null, hfSort: 'downloads', hfDirection: '-1', hfAuthor: '', hfFilters: [], downloads: [], downloadTimer: null,
       installedSearch: '', importProgress: null, importStatus: '', importXhr: null,
+      /*
+       * ⭐ 03/9 — le tre schede del dettaglio Hugging Face (come sul mobile),
+       * il catalogo caricato all'apertura, e la stima per variante.
+       * ⛔ `hfStima` è per-repository e va azzerata scegliendone un altro: un
+       * verdetto rimasto da un modello diverso sarebbe la stessa attribuzione
+       * sbagliata gia' curata oggi sull'n_ctx del runtime.
+       */
+      hfDetailTab: 'quantizzazioni', hfCatalogoIniziale: false, hfStima: null,
+      /** ⭐ 03/9 — quali schede provider sono aperte, e l'esito della prova per ciascuno. */
+      providerAperti: new Set(), provePr: new Map(),
     },
     /*
      * ⭐⭐⭐ 26/8 — riconciliazione desktop→mobile, DEC-053 (owner, 24/8:
@@ -1836,6 +1846,57 @@
     return runtime?.state === 'observed' && Array.isArray(runtime.models) && runtime.models.length > 0;
   }
 
+  /**
+   * ⭐⭐⭐ 03/9 — la scheda Provider, ridisegnata. Owner: «è bruttissima, i
+   * collabs si aprono in una maniera orrenda».
+   *
+   * ## I nove difetti annotati guardandola, e come muoiono qui
+   *
+   * 1. Griglia a DUE COLONNE che si spezzava aprendo una card: quella aperta
+   *    prendeva tutta la larghezza e la vicina restava a metà, con un salto
+   *    violento. ⇒ UNA colonna sola, come fa il mobile
+   *    (`TalosMobileProviderRuntimePanel.vue`): aprire non può rompere una
+   *    griglia che non c'è.
+   * 2. Il badge «Motore provider in preparazione» andava a capo tre volte e
+   *    si sovrapponeva alla nota di sicurezza. ⇒ Via: al suo posto un'azione
+   *    vera, «Prova tutti».
+   * 3. «in preparazione» in fondo alla card, minuscolo e senza spiegazione.
+   *    ⇒ Lo stato ora è MISURATO, non dichiarato a mano.
+   * 4. Etichette a sinistra e campi a destra, con duecento pixel di vuoto in
+   *    mezzo da attraversare con l'occhio. ⇒ Etichetta SOPRA il campo.
+   * 5. «Salva chiave» e «Rimuovi» con lo stesso peso visivo, e sono azioni
+   *    opposte. ⇒ Una primaria, una silenziosa in fondo.
+   * 6. «Salva collegamento» come terzo livello di gerarchia. ⇒ Un solo
+   *    gruppo di azioni.
+   * 7. ⛔ NESSUNA prova che la chiave funzionasse: «chiave presente» dice che
+   *    una stringa è stata salvata, non che il provider la accetti. Sono due
+   *    cose diverse e la seconda è l'unica che interessa. ⇒ La prova esiste
+   *    ed è reale (`POST /providers/:id/test`).
+   * 8. Sette card identiche da scandire leggendo. ⇒ Una tessera col
+   *    monogramma. ⛔ Non i loghi altrui: nessun marchio vendorizzato.
+   * 9. «Chiave presente» in AMBRA: l'accento speso per uno stato neutro
+   *    smette di significare «azione». ⇒ L'ambra resta ai bottoni, e il verde
+   *    appare SOLO quando il provider ha risposto davvero.
+   *
+   * ## L'elemento per cui questa schermata esiste
+   *
+   * Lo stato in TRE SEGMENTI — chiave · indirizzo · prova — leggibile nella
+   * riga CHIUSA. La domanda vera non è «quali provider ho configurato», è
+   * «quali possono far girare un modello adesso, e agli altri cosa manca».
+   * Con tre segmenti la risposta si legge senza aprire niente, e senza
+   * dipendere dal colore: ogni segmento porta anche la parola.
+   */
+  const SEGNI_PROVIDER = Object.freeze({ ok: '\u25CF', mancante: '\u25CB', rotto: '\u2715' });
+  /** Il monogramma: due lettere dal nome del provider, non un logo. */
+  function monogrammaProvider(row) {
+    const parole = String(row.label || row.id).split(/[^A-Za-z0-9]+/u).filter(Boolean);
+    return (parole.length > 1 ? parole[0][0] + parole[1][0] : String(row.label || row.id).slice(0, 2)).toUpperCase();
+  }
+  function segmentoProvider(stato, testo) {
+    const nodo = textElement('span', 'provider-seg', SEGNI_PROVIDER[stato] + ' ' + testo);
+    nodo.dataset.seg = stato;
+    return nodo;
+  }
   function renderizzaProviderModelLab() {
     const rows = Array.isArray(state.modelLab.providers) ? state.modelLab.providers : [];
     const status = $('#modelLabProviderStatus');
@@ -1843,39 +1904,151 @@
       if (state.modelLab.providerError) status.textContent = 'Stato provider non disponibile';
       else if (state.modelLab.loadingProviders) status.textContent = 'Stato provider in lettura…';
       else {
-        const configured = rows.filter((row) => row.keyConfigured).length;
-        status.textContent = configured > 0 ? `${configured} access${configured === 1 ? 'o' : 'i'} configurat${configured === 1 ? 'o' : 'i'}` : 'Accesso provider non configurato';
+        /*
+         * ⛔ Il conto che conta è quello dei provider PROVATI e collegati, non
+         * di quelli con una stringa salvata: è esattamente la differenza che
+         * questa schermata esiste per mostrare.
+         */
+        const provati = rows.filter((row) => state.modelLab.provePr?.get(row.id)?.esito === 'collegato').length;
+        const conChiave = rows.filter((row) => row.keyConfigured).length;
+        status.textContent = provati > 0
+          ? `${provati} provider collegat${provati === 1 ? 'o' : 'i'} · ${conChiave} con chiave`
+          : (conChiave > 0 ? `${conChiave} con chiave · nessuno ancora provato` : 'Nessun accesso configurato');
       }
     }
-    for (const card of $$('[data-provider-id]')) {
-      const row = rows.find((item) => item.id === card.dataset.providerId);
-      if (!row) continue;
-      const stateNode = card.querySelector('[data-provider-state]');
-      if (stateNode) stateNode.textContent = row.keyConfigured ? 'Chiave presente sul server' : (row.requiresKey ? 'Non configurato' : 'Chiave non necessaria');
-      const execution = card.querySelector('[data-provider-execution]');
-      if (execution) execution.textContent = row.execution || 'Collegamento non dichiarato';
-      const providerHelp = card.querySelector('.provider-help');
-      if (providerHelp && row.id !== 'openrouter' && row.id !== 'ollama' && row.id !== 'huggingface') {
-        providerHelp.textContent = row.supportsEndpoint
-          ? 'Chiave e indirizzo restano sul server locale.'
-          : 'La chiave resta nel portachiavi del computer.';
+    const lista = $('#providerList');
+    if (!lista) return;
+    if (state.modelLab.providerError) { lista.replaceChildren(textElement('p', 'model-lab-empty', state.modelLab.providerError.message)); return; }
+    if (rows.length === 0) { lista.replaceChildren(textElement('p', 'model-lab-empty', state.modelLab.loadingProviders ? 'Leggo gli accessi…' : 'Nessun provider dichiarato dal server.')); return; }
+
+    lista.replaceChildren(...rows.map((row) => {
+      const prova = state.modelLab.provePr?.get(row.id) || null;
+      const aperta = state.modelLab.providerAperti?.has(row.id);
+      const card = document.createElement('article');
+      card.className = 'provider-row';
+      card.dataset.providerId = row.id;
+      if (prova) card.dataset.provaEsito = prova.esito;
+
+      const testa = document.createElement('button');
+      testa.type = 'button';
+      testa.className = 'provider-row-head';
+      testa.setAttribute('aria-expanded', String(Boolean(aperta)));
+      testa.dataset.providerToggle = row.id;
+      const tessera = textElement('span', 'provider-mark', monogrammaProvider(row));
+      tessera.setAttribute('aria-hidden', 'true');
+      const centro = document.createElement('span');
+      centro.className = 'provider-row-main';
+      centro.append(textElement('strong', 'provider-row-name', row.label || row.id));
+      const segmenti = document.createElement('span');
+      segmenti.className = 'provider-segments';
+      // 1 — la chiave. Chi non la richiede non ha un segmento vuoto: ha «non serve».
+      if (!row.requiresKey) segmenti.append(segmentoProvider('ok', 'chiave non serve'));
+      else segmenti.append(segmentoProvider(row.keyConfigured ? 'ok' : 'mancante', row.keyConfigured ? 'chiave' : 'chiave mancante'));
+      // 2 — l'indirizzo, solo per chi lo espone: mostrarlo agli altri sarebbe una casella non riempibile.
+      if (row.supportsEndpoint) segmenti.append(segmentoProvider(row.endpoint ? 'ok' : 'mancante', row.endpointConfigured ? 'indirizzo tuo' : (row.endpoint ? 'indirizzo predefinito' : 'indirizzo mancante')));
+      // 3 — la prova: l'unico segmento che parla del PROVIDER e non di noi.
+      if (!prova) segmenti.append(segmentoProvider('mancante', 'mai provato'));
+      else if (prova.esito === 'in-corso') segmenti.append(segmentoProvider('mancante', 'sto chiedendo…'));
+      else if (prova.esito === 'collegato') segmenti.append(segmentoProvider('ok', prova.modelli === null ? 'collegato' : `${prova.modelli} modelli`));
+      else segmenti.append(segmentoProvider('rotto', prova.esito === 'non-autorizzato' ? 'credenziale rifiutata' : prova.esito === 'irraggiungibile' ? 'non raggiungibile' : prova.esito));
+      centro.append(segmenti);
+      const freccia = document.createElement('span');
+      freccia.className = 'provider-row-chevron';
+      freccia.innerHTML = icon('i-chevron');
+      testa.append(tessera, centro, freccia);
+      card.append(testa);
+
+      if (!aperta) return card;
+
+      const corpo = document.createElement('div');
+      corpo.className = 'provider-row-body';
+      if (row.requiresKey || row.keyConfigured) {
+        const campo = document.createElement('label');
+        campo.className = 'provider-field';
+        campo.append(textElement('span', 'provider-field-label', row.keyConfigured ? 'Sostituisci la chiave' : 'Chiave API'));
+        const input = document.createElement('input');
+        input.type = 'password';
+        input.className = 'sheet-input';
+        input.autocomplete = 'off';
+        input.spellcheck = false;
+        input.placeholder = row.keyConfigured ? 'Incolla una chiave nuova per sostituirla' : 'Incolla la chiave';
+        input.dataset.providerKey = row.id;
+        campo.append(input);
+        corpo.append(campo);
       }
-      card.classList.toggle('is-configured', Boolean(row.keyConfigured || row.endpointConfigured));
-      const keyInput = card.querySelector('[data-provider-key]');
-      const removeKey = card.querySelector('[data-provider-action="remove-key"]');
-      if (removeKey) removeKey.hidden = !row.keyConfigured;
-      const endpointBlock = card.querySelector('[data-provider-endpoint-block]');
-      const endpointInput = card.querySelector('[data-provider-endpoint]');
-      const endpointLabel = endpointInput?.closest('label');
-      if (endpointLabel) endpointLabel.hidden = !row.supportsEndpoint;
-      if (endpointBlock) endpointBlock.hidden = false;
-      if (endpointInput && document.activeElement !== endpointInput) endpointInput.value = row.endpoint || '';
-      const timeoutInput = card.querySelector('[data-provider-timeout]');
-      if (timeoutInput && document.activeElement !== timeoutInput) timeoutInput.value = String(row.timeoutSeconds || 60);
-      const resetRuntime = card.querySelector('[data-provider-action="reset-runtime"]');
-      if (resetRuntime) resetRuntime.hidden = !row.supportsEndpoint || !row.endpointConfigured;
-      if (keyInput) keyInput.value = '';
+      if (row.supportsEndpoint) {
+        const campo = document.createElement('label');
+        campo.className = 'provider-field';
+        campo.append(textElement('span', 'provider-field-label', 'Indirizzo del servizio'));
+        const input = document.createElement('input');
+        input.type = 'url';
+        input.className = 'sheet-input provider-endpoint-input';
+        input.value = row.endpoint || '';
+        input.dataset.providerEndpoint = row.id;
+        campo.append(input);
+        corpo.append(campo);
+      }
+      const campoTempo = document.createElement('label');
+      campoTempo.className = 'provider-field provider-field-narrow';
+      campoTempo.append(textElement('span', 'provider-field-label', 'Tempo massimo (secondi)'));
+      const tempo = document.createElement('input');
+      tempo.type = 'number'; tempo.min = '5'; tempo.max = '300';
+      tempo.className = 'sheet-input';
+      tempo.value = String(row.timeoutSeconds || 60);
+      tempo.dataset.providerTimeout = row.id;
+      campoTempo.append(tempo);
+      corpo.append(campoTempo);
+
+      const azioni = document.createElement('div');
+      azioni.className = 'provider-actions';
+      const salva = document.createElement('button');
+      salva.type = 'button'; salva.className = 'primary-btn compact'; salva.dataset.providerAction = 'save-key'; salva.textContent = 'Salva chiave';
+      const provaBtn = document.createElement('button');
+      provaBtn.type = 'button'; provaBtn.className = 'secondary-btn compact'; provaBtn.dataset.providerAction = 'test'; provaBtn.textContent = 'Prova collegamento';
+      azioni.append(salva, provaBtn);
+      if (row.supportsEndpoint) {
+        const salvaLink = document.createElement('button');
+        salvaLink.type = 'button'; salvaLink.className = 'secondary-btn compact'; salvaLink.dataset.providerAction = 'save-runtime'; salvaLink.textContent = 'Salva indirizzo';
+        azioni.append(salvaLink);
+      }
+      /* ⛔ «Rimuovi» è silenzioso e sta in fondo: cancella una credenziale, e
+         non può avere lo stesso invito di «Salva». */
+      if (row.keyConfigured) {
+        const rimuovi = document.createElement('button');
+        rimuovi.type = 'button'; rimuovi.className = 'text-btn provider-remove'; rimuovi.dataset.providerAction = 'remove-key'; rimuovi.textContent = 'Rimuovi la chiave';
+        azioni.append(rimuovi);
+      }
+      corpo.append(azioni);
+
+      if (prova && prova.esito !== 'in-corso') {
+        const esito = textElement('p', 'provider-prova', prova.motivo + (Number.isFinite(prova.millisecondi) ? ` · ${prova.millisecondi} ms` : ''));
+        esito.dataset.provaEsito = prova.esito;
+        corpo.append(esito);
+      }
+      const feedback = textElement('p', 'provider-feedback', '');
+      feedback.dataset.providerFeedback = row.id;
+      feedback.hidden = true;
+      corpo.append(feedback);
+      card.append(corpo);
+      return card;
+    }));
+  }
+
+  /**
+   * Chiede al provider se accetta la credenziale.
+   * ⛔ Esce una richiesta VERA verso un servizio esterno con la chiave
+   * dell'owner: parte solo su gesto, mai a ogni ridisegno.
+   */
+  async function provaProviderModelLab(providerId) {
+    state.modelLab.provePr ??= new Map();
+    state.modelLab.provePr.set(providerId, { esito: 'in-corso', motivo: 'Chiedo al provider…', modelli: null, millisecondi: null });
+    renderizzaProviderModelLab();
+    try {
+      state.modelLab.provePr.set(providerId, await apiPost(`/api/v1/providers/${encodeURIComponent(providerId)}/test`, {}));
+    } catch (error) {
+      state.modelLab.provePr.set(providerId, { esito: 'errore', motivo: error.message || 'Prova non riuscita', modelli: null, millisecondi: null });
     }
+    renderizzaProviderModelLab();
   }
 
   async function caricaProviderModelLab() {
@@ -1912,6 +2085,12 @@
     const original = button.textContent;
     button.disabled = true;
     try {
+      if (action === 'test') {
+        // ⛔ La prova ridisegna la lista: il bottone che stiamo tenendo per
+        // mano sparisce. Si esce subito, senza toccarlo dopo.
+        await provaProviderModelLab(provider);
+        return;
+      }
       if (action === 'save-key') {
         const input = card.querySelector('[data-provider-key]');
         await apiPost(`/api/v1/providers/${encodeURIComponent(provider)}/key`, { key: input?.value || '' });
@@ -2291,19 +2470,14 @@
     xhr.send(file);
   }
 
-  function renderizzaDownloadModelLab() {
-    const mount = $('#modelLabDownloadsList'); if (!mount) return;
-    if (!state.modelLab.downloads.length) { mount.replaceChildren(textElement('p', 'model-lab-empty', 'Nessun download attivo.')); return; }
-    mount.replaceChildren(...state.modelLab.downloads.map((item) => {
-      const row = document.createElement('article'); row.className = 'model-lab-installed-item';
-      const label = `${item.id} · ${item.state} · ${item.progress ?? 0}%`;
-      row.append(textElement('strong', '', label), textElement('span', '', `${formattaByteModelLab(item.bytes)} / ${formattaByteModelLab(item.totalBytes)}`));
-      if (['running', 'queued'].includes(item.state)) { const pause = document.createElement('button'); pause.className = 'secondary-btn compact'; pause.textContent = 'Pausa'; pause.addEventListener('click', async () => { await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(item.id)}/pause`, {}); caricaDownloadModelLab(); }); row.append(pause); }
-      if (['paused', 'failed'].includes(item.state)) { const resume = document.createElement('button'); resume.className = 'secondary-btn compact'; resume.textContent = 'Riprendi'; resume.addEventListener('click', async () => { await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(item.id)}/resume`, {}); caricaDownloadModelLab(); }); row.append(resume); }
-      if (!['ready', 'cancelled'].includes(item.state)) { const cancel = document.createElement('button'); cancel.className = 'secondary-btn compact'; cancel.textContent = 'Annulla'; cancel.addEventListener('click', async () => { await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(item.id)}/cancel`, {}); caricaDownloadModelLab(); }); row.append(cancel); }
-      return row;
-    }));
-  }
+  /* ⛔⛔⛔ 03/9 — QUI stavano DUE funzioni MORTE, rimosse: una seconda
+   * `renderizzaDownloadModelLab()` e una seconda `cercaHuggingFaceModelLab()`.
+   * Le dichiarazioni di funzione sono sollevate e l'ULTIMA vince, quindi
+   * comandavano le versioni piu' avanti nel file (righe ~2830 e ~11600) e
+   * queste non venivano mai eseguite. Trovate cercando dove intervenire sul
+   * catalogo Hugging Face: una modifica scritta qui non avrebbe fatto NIENTE,
+   * e sarebbe sembrata una cura che non funziona.
+   * ⛔ E' la TERZA volta che questa classe di difetto morde in questo file. */
   async function caricaDownloadModelLab() {
     try { const data = await apiGet('/api/v1/huggingface/downloads'); state.modelLab.downloads = Array.isArray(data?.items) ? data.items : []; renderizzaDownloadModelLab(); if (state.modelLab.downloads.some((item) => ['queued', 'running', 'verifying'].includes(item.state))) { if (!state.modelLab.downloadTimer) state.modelLab.downloadTimer = setTimeout(() => { state.modelLab.downloadTimer = null; caricaDownloadModelLab(); }, 800); } else if (state.modelLab.downloads.some((item) => item.state === 'ready')) caricaModelliLocaliModelLab(); }
     catch (error) { const mount = $('#modelLabDownloadsList'); if (mount) mount.replaceChildren(textElement('p', 'model-lab-empty', error.message || 'Download non disponibili.')); }
@@ -2342,6 +2516,83 @@
    * `pipelineTag`/`gated` esistono già in `hf-hub-client.mjs#describeModel`
    * — semplicemente non venivano mai mostrati.
    */
+  /**
+   * ⭐⭐⭐ 03/9 — «entra e gira su QUESTO pc», per una variante che sul disco
+   * non c'è ancora. Owner: «mancano scritte e badge e pulsanti per misurare
+   * in tempo reale se quel modello e quantizzazione entrano e girano nel pc».
+   *
+   * ⛔ Il verdetto NON si calcola qui: si chiede a `/fit-estimate`, che vive
+   * accanto a `/fit` e usa la stessa `measureMachine()` e le stesse parole.
+   * Due verdetti sulla stessa schermata scritti con due vocabolari diversi
+   * insegnano a non fidarsi di nessuno dei due.
+   *
+   * ⛔ E si misura SU RICHIESTA, non a ogni ridisegno: la memoria libera
+   * cambia mentre si lavora (basta caricare un modello), quindi un numero
+   * dipinto una volta e lasciato lì mentirebbe dopo trenta secondi. Il
+   * bottone dice l'ora della misura, e si può rifare.
+   */
+  const VERDETTI_STIMA = {
+    compatible: { etichetta: 'I pesi ci stanno', classe: 'ok' },
+    tight: { etichetta: 'Al limite', classe: 'warn' },
+    blocked: { etichetta: 'Non ci sta', classe: 'bad' },
+    unknown: { etichetta: 'Non misurabile', classe: 'unknown' },
+  };
+  function descriviStimaHf(stima) {
+    const voce = VERDETTI_STIMA[stima?.state] || VERDETTI_STIMA.unknown;
+    const libera = Number.isFinite(stima?.memory?.availableBytes) ? formattaByteModelLab(stima.memory.availableBytes) : null;
+    let motivo;
+    if (stima?.reason === 'storage') motivo = `non c'è abbastanza spazio su disco${Number.isFinite(stima?.storage?.availableBytes) ? ` — liberi ${formattaByteModelLab(stima.storage.availableBytes)}` : ''}`;
+    else if (stima?.reason === 'memory' && stima.state === 'blocked') motivo = `i pesi superano la memoria libera${libera ? ` (${libera})` : ''}`;
+    else if (stima?.reason === 'memory') motivo = `restano pochi margini sulla memoria libera${libera ? ` (${libera})` : ''}`;
+    else if (stima?.reason === 'measurement') motivo = 'la macchina non è stata misurata';
+    else motivo = `entrano nella memoria libera${libera ? ` (${libera})` : ''}`;
+    return { classe: voce.classe, testo: `${voce.etichetta} — ${motivo}` };
+  }
+  /**
+   * La nota che accompagna ogni stima, e che non si può togliere.
+   *
+   * ⛔ La stima copre i PESI e basta: senza il file non si legge l'header,
+   * quindi la cache del contesto non è calcolabile. È una soglia inferiore,
+   * e va detto in chiaro — LM Studio e Ollama mostrano una stima e non
+   * dichiarano di cosa è fatta, ed è esattamente il punto in cui una persona
+   * scarica 15 GB per scoprire dopo che non parte.
+   */
+  function nodoBaseStimaHfModelLab() {
+    return textElement('p', 'hf-variant-basis', 'La misura pesa i file del modello contro memoria e disco liberi adesso. La cache del contesto si somma sopra e si può calcolare solo dopo lo scaricamento: se già i pesi non ci stanno, non ci sta.');
+  }
+  /** La scheda «File»: i percorsi VERI già presenti in `detail.files`, non un secondo endpoint. */
+  function nodoFileHfModelLab(detail) {
+    const lista = document.createElement('div');
+    lista.className = 'hf-file-list';
+    const files = Array.isArray(detail.files) ? detail.files : [];
+    if (files.length === 0) { lista.append(textElement('p', 'model-lab-empty', 'Nessun file osservato in questo repository.')); return lista; }
+    for (const file of files) {
+      const riga = document.createElement('div');
+      riga.className = 'hf-file-row';
+      riga.append(textElement('span', 'hf-file-path', file.path));
+      riga.append(textElement('span', 'hf-file-bytes', formattaByteModelLab(Number(file.sizeBytes || 0))));
+      // ⛔ L'impronta si dice presente o assente, mai finta: un set senza sha256 non si scarica.
+      riga.append(textElement('span', `hf-file-hash ${file.sha256 ? 'is-present' : 'is-missing'}`, file.sha256 ? 'sha256 ✓' : 'sha256 assente'));
+      lista.append(riga);
+    }
+    return lista;
+  }
+  /** Misura TUTTE le varianti in un colpo: la macchina è la stessa per tutte, in questo istante. */
+  async function misuraVariantiHfModelLab(gruppi) {
+    state.modelLab.hfStima = { inCorso: true, misurataAlle: null, perVariante: new Map() };
+    renderizzaHfDetailModelLab();
+    const perVariante = new Map();
+    await Promise.all(gruppi.map(async ({ chiave, bytes }) => {
+      try {
+        perVariante.set(chiave, await apiGet(`/api/v1/local-models/fit-estimate?bytes=${encodeURIComponent(String(bytes))}`));
+      } catch (error) {
+        perVariante.set(chiave, { state: 'unknown', reason: 'measurement', errore: error.message });
+      }
+    }));
+    state.modelLab.hfStima = { inCorso: false, misurataAlle: new Date(), perVariante };
+    renderizzaHfDetailModelLab();
+  }
+
   function renderizzaHfDetailModelLab() {
     const mount = $('#modelLabHfDetail'); if (!mount) return; const detail = state.modelLab.hfDetail;
     if (!detail) { mount.replaceChildren(textElement('p', 'model-lab-empty', 'Seleziona un repository per vedere i file GGUF.')); return; }
@@ -2372,7 +2623,29 @@
 
     const variants = document.createElement('div'); variants.className = 'hf-variant-list';
     const groups = hfSetGroups(detail.files);
-    variants.append(textElement('p', 'hf-variant-list-heading', groups.length > 0 ? `Varianti GGUF osservate · ${groups.length}` : 'Varianti GGUF'));
+    // ⛔ Niente titolo «Varianti GGUF · N»: ora lo dice la scheda con il suo
+    // conto, e ripeterlo due volte a 40 pixel di distanza è rumore.
+    const stima = state.modelLab.hfStima;
+    const gruppiPerMisura = groups.map((files) => ({
+      chiave: files[0].path,
+      bytes: files.reduce((somma, file) => somma + Number(file.sizeBytes || 0), 0),
+    }));
+    const barraMisura = document.createElement('div');
+    barraMisura.className = 'hf-variant-measure';
+    const bottoneMisura = document.createElement('button');
+    bottoneMisura.type = 'button';
+    bottoneMisura.className = 'secondary-btn compact';
+    bottoneMisura.disabled = stima?.inCorso === true || gruppiPerMisura.length === 0;
+    bottoneMisura.textContent = stima?.inCorso ? 'Misuro…' : (stima?.misurataAlle ? 'Rimisura su questo PC' : 'Misura su questo PC');
+    bottoneMisura.addEventListener('click', () => { void misuraVariantiHfModelLab(gruppiPerMisura); });
+    barraMisura.append(bottoneMisura);
+    /*
+     * ⛔ L'ORA della misura, non solo il verdetto: la memoria libera cambia
+     * mentre si lavora — basta caricare un modello — e un badge senza data
+     * diventa una bugia silenziosa dopo un minuto.
+     */
+    if (stima?.misurataAlle) barraMisura.append(textElement('span', 'hf-variant-measured-at', `misurato alle ${stima.misurataAlle.toLocaleTimeString('it-IT')}`));
+    variants.append(barraMisura, nodoBaseStimaHfModelLab());
     if (!groups.length) variants.append(textElement('p', 'model-lab-empty', 'Nessun file GGUF osservato.'));
     for (const files of groups) {
       const bytes = files.reduce((sum, file) => sum + Number(file.sizeBytes || 0), 0);
@@ -2388,14 +2661,76 @@
       button.textContent = incomplete ? `Set incompleto · ${files.length}/${expected}` : missingHash ? 'Hash non verificato' : 'Scarica';
       button.addEventListener('click', async () => { const id = `${detail.repo.replace(/[^a-z0-9_-]/giu, '-')}-${detail.revision.slice(0, 12)}-${files[0].path.replace(/[^a-z0-9]/giu, '-')}`.slice(0, 120); await apiPost('/api/v1/huggingface/download', { id, repo: detail.repo, revision: detail.revision, files: files.map((file) => ({ path: file.path, bytes: file.sizeBytes, sha256: file.sha256 })), bytes, sha256: files[0].sha256, license: detail.license || 'unknown', path: id }); setModelLabSection('downloads'); caricaDownloadModelLab(); });
       row.append(status, info, button);
+      /*
+       * ⛔ Il verdetto sta SOTTO la riga e non dentro, per non spingere via
+       * il bottone «Scarica» quando la frase è lunga: su 1024px di larghezza
+       * il nome di una quantizzazione più un motivo per esteso non stanno
+       * sulla stessa riga, e la cosa che si spezzerebbe sarebbe l'azione.
+       */
+      const voceStima = stima?.perVariante?.get(files[0].path);
+      if (stima?.inCorso) {
+        row.append(textElement('p', 'hf-variant-fit is-loading', 'Misuro su questo PC…'));
+      } else if (voceStima) {
+        const descritta = descriviStimaHf(voceStima);
+        const nodoStima = textElement('p', 'hf-variant-fit', descritta.testo);
+        nodoStima.dataset.fitState = descritta.classe;
+        row.append(nodoStima);
+      }
       variants.append(row);
     }
 
-    card.append(heading, tags, stats, renderizzaModelCardReadme(detail), variants);
+    /*
+     * ⭐⭐⭐ 03/9 — owner: «se clicco su un modello hugging face, come su
+     * mobile si devono aprire delle tab, con per prima la lista delle
+     * quantizzazioni del modello».
+     *
+     * ⛔ Il mobile ce l'ha già, e il desktop deve allinearsi a chi ha
+     * risolto per primo: `TalosMobileLocalRepoDetail.vue` ha esattamente
+     * queste tre — Quantizzazioni · Scheda · File — con «quantizzazioni»
+     * come predefinita. Non invento un ordine mio: quello è l'ordine
+     * giusto perché la domanda che porta qui è «quale versione scarico?»,
+     * e la scheda del modello è contesto, non decisione.
+     *
+     * ⛔ Prima le tre cose erano IMPILATE, con la scheda README davanti
+     * alle varianti: per arrivare alla decisione bisognava scorrere oltre
+     * un testo lungo quanto un articolo.
+     *
+     * ⭐ La terza scheda («File») esiste perché i percorsi veri sono già
+     * qui, in `detail.files`: non è un endpoint nuovo né un elenco
+     * inventato — è un dato che avevamo e non mostravamo.
+     */
+    const schede = [
+      { id: 'quantizzazioni', etichetta: 'Quantizzazioni', conto: groups.length, nodo: variants },
+      { id: 'scheda', etichetta: 'Scheda modello', conto: null, nodo: renderizzaModelCardReadme(detail) },
+      { id: 'file', etichetta: 'File', conto: Array.isArray(detail.files) ? detail.files.length : 0, nodo: nodoFileHfModelLab(detail) },
+    ];
+    const barra = document.createElement('div');
+    barra.className = 'hf-detail-tabs';
+    barra.setAttribute('role', 'tablist');
+    const corpo = document.createElement('div');
+    corpo.className = 'hf-detail-body';
+    const attiva = schede.some((s) => s.id === state.modelLab.hfDetailTab) ? state.modelLab.hfDetailTab : 'quantizzazioni';
+    for (const scheda of schede) {
+      const bottone = document.createElement('button');
+      bottone.type = 'button';
+      bottone.className = 'hf-detail-tab';
+      bottone.dataset.hfDetailTab = scheda.id;
+      bottone.setAttribute('role', 'tab');
+      const selezionata = scheda.id === attiva;
+      bottone.setAttribute('aria-selected', String(selezionata));
+      bottone.classList.toggle('active', selezionata);
+      bottone.append(textElement('span', '', scheda.etichetta));
+      // ⛔ Il conto solo dove è un fatto: «Scheda modello» non è una lista.
+      if (Number.isFinite(scheda.conto)) bottone.append(textElement('span', 'hf-detail-tab-count', String(scheda.conto)));
+      bottone.addEventListener('click', () => { state.modelLab.hfDetailTab = scheda.id; renderizzaHfDetailModelLab(); });
+      barra.append(bottone);
+      if (selezionata) corpo.append(scheda.nodo);
+    }
+
+    card.append(heading, tags, stats, barra, corpo);
     mount.replaceChildren(card);
   }
-  function renderizzaHfRisultatiModelLab() { const mount = $('#modelLabHfResults'); if (!mount) return; if (state.modelLab.hfError) { mount.replaceChildren(textElement('p', 'model-lab-empty', state.modelLab.hfError.message)); return; } if (!state.modelLab.hfResults.length) { mount.replaceChildren(textElement('p', 'model-lab-empty', 'Nessun repository GGUF trovato.')); return; } mount.replaceChildren(...state.modelLab.hfResults.map((item) => { const button = document.createElement('button'); button.type = 'button'; button.className = 'model-lab-list-item'; button.append(textElement('strong', '', item.repo), textElement('small', '', `${item.downloads ?? '—'} download · ${item.gated ? 'gated' : 'pubblico'}`)); button.addEventListener('click', async () => { state.modelLab.hfDetail = null; renderizzaHfDetailModelLab(); try { state.modelLab.hfDetail = await apiGet(`/api/v1/huggingface/repo?repo=${encodeURIComponent(item.repo)}&revision=${encodeURIComponent(item.revision || '')}`); } catch (error) { state.modelLab.hfError = error; } renderizzaHfDetailModelLab(); }); return button; })); }
-  async function cercaHuggingFaceModelLab() { state.modelLab.hfQuery = $('#modelLabHfSearch')?.value?.trim() || ''; state.modelLab.hfError = null; const status = $('#modelLabHfStatus'); if (status) status.textContent = 'Ricerca in corso…'; try { const data = await apiGet(`/api/v1/huggingface/search?query=${encodeURIComponent(state.modelLab.hfQuery)}&limit=20`); state.modelLab.hfResults = data.items || []; if (status) status.textContent = `${state.modelLab.hfResults.length} repository osservati`; } catch (error) { state.modelLab.hfError = error; state.modelLab.hfResults = []; if (status) status.textContent = 'Ricerca non disponibile'; } renderizzaHfRisultatiModelLab(); }
+  function renderizzaHfRisultatiModelLab() { const mount = $('#modelLabHfResults'); if (!mount) return; if (state.modelLab.hfError) { mount.replaceChildren(textElement('p', 'model-lab-empty', state.modelLab.hfError.message)); return; } if (!state.modelLab.hfResults.length) { mount.replaceChildren(textElement('p', 'model-lab-empty', 'Nessun repository GGUF trovato.')); return; } mount.replaceChildren(...state.modelLab.hfResults.map((item) => { const button = document.createElement('button'); button.type = 'button'; button.className = 'model-lab-list-item'; button.append(textElement('strong', '', item.repo), textElement('small', '', `${item.downloads ?? '—'} download · ${item.gated ? 'gated' : 'pubblico'}`)); button.addEventListener('click', async () => { state.modelLab.hfDetail = null; /* ⛔ la stima appartiene al repository che l'ha prodotta: cambiando modello va via, altrimenti si attribuisce a uno il verdetto di un altro */ state.modelLab.hfStima = null; state.modelLab.hfDetailTab = 'quantizzazioni'; renderizzaHfDetailModelLab(); try { state.modelLab.hfDetail = await apiGet(`/api/v1/huggingface/repo?repo=${encodeURIComponent(item.repo)}&revision=${encodeURIComponent(item.revision || '')}`); } catch (error) { state.modelLab.hfError = error; } renderizzaHfDetailModelLab(); }); return button; })); }
 
   function aggiungiBloccoStreamModelLab(tipo, titolo, contenuto) {
     const mount = $('#modelLabStream');
@@ -2699,6 +3034,26 @@
     if (section === 'catalog' && !state.modelLab.catalog && !state.modelLab.catalogError) caricaCatalogoModelLab();
     if (section === 'installed' && !state.modelLab.loadingInstalled && state.modelLab.installed.length === 0 && !state.modelLab.installedError) caricaModelliLocaliModelLab();
     if (section === 'downloads') caricaDownloadModelLab();
+    /*
+     * ⭐⭐⭐ 03/9 — owner: «nella tab huggingface i modelli non spuntano
+     * subito, ma devo prima cercare qualcosa per far sì che vedo la lista».
+     *
+     * ⛔ E non mancava niente lato server: `/api/v1/huggingface/search` con
+     * query VUOTA risponde già col catalogo ordinato per download (misurato:
+     * 5 repository su 5, il primo con 12,7 milioni di scaricamenti). Era di
+     * nuovo «il codice giusto che nessuno chiama» — la lista restava sullo
+     * stato vuoto «Cerca un modello per iniziare» finché non si digitava.
+     *
+     * ⇒ Aprire la scheda È la richiesta. Una schermata vuota che aspetta un
+     * gesto per mostrare quello che sa già è un invito a indovinare cosa
+     * scrivere; i più scaricati sono la risposta giusta a «cosa c'è qui».
+     * ⛔ Una volta sola per sessione: se la persona ha poi cercato altro, la
+     * sua ricerca non viene sostituita dal catalogo alle sue spalle.
+     */
+    if (section === 'huggingface' && !state.modelLab.hfCatalogoIniziale) {
+      state.modelLab.hfCatalogoIniziale = true;
+      if (state.modelLab.hfResults.length === 0 && !state.modelLab.hfError) void cercaHuggingFaceModelLab();
+    }
   }
 
   const SETTINGS_SECTIONS = ['appearance', 'chat', 'models', 'providers', 'tools', 'privacy', 'workspace', 'account'];
@@ -2872,17 +3227,39 @@
     $('#modelLabHfSearch')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') cercaHuggingFaceModelLab(); });
     $('#modelLabHfNextButtonControl')?.addEventListener('click', () => cercaHuggingFaceModelLab({ append: true }));
     $('#modelLabInstalledSearchControl')?.addEventListener('input', (event) => { state.modelLab.installedSearch = event.target.value; renderizzaModelliLocaliModelLab(); });
-    $$('[data-provider-toggle]').forEach((toggle) => toggle.addEventListener('click', () => {
-      const card = toggle.closest('[data-provider-id]');
-      const detail = card?.querySelector('[data-provider-detail]');
-      if (!detail) return;
-      const expanded = toggle.getAttribute('aria-expanded') === 'true';
-      toggle.setAttribute('aria-expanded', String(!expanded));
-      detail.hidden = expanded;
-      card?.classList.toggle('is-expanded', !expanded);
-      if (!expanded) markMotionEnter(detail);
-    }));
-    $$('[data-provider-action]').forEach((button) => button.addEventListener('click', () => gestisciAzioneProvider(button)));
+    /*
+     * ⛔ 03/9 — DELEGA, non aggancio per nodo: le schede provider ora nascono
+     * dal JS e si ridisegnano a ogni prova. Legare gli ascoltatori ai nodi
+     * come prima li avrebbe persi al primo ridisegno — e il pannello sarebbe
+     * sembrato "morto" dopo il primo clic, senza un errore da nessuna parte.
+     */
+    $('#providerList')?.addEventListener('click', (event) => {
+      const toggle = event.target.closest('[data-provider-toggle]');
+      if (toggle) {
+        state.modelLab.providerAperti ??= new Set();
+        const id = toggle.dataset.providerToggle;
+        if (state.modelLab.providerAperti.has(id)) state.modelLab.providerAperti.delete(id);
+        else state.modelLab.providerAperti.add(id);
+        renderizzaProviderModelLab();
+        return;
+      }
+      const azione = event.target.closest('[data-provider-action]');
+      if (azione) gestisciAzioneProvider(azione);
+    });
+    /* «Prova tutti»: una richiesta per provider, in parallelo — la macchina e
+       la rete sono le stesse per tutti in questo istante. */
+    $('#providerTestAll')?.addEventListener('click', async (event) => {
+      const bottone = event.currentTarget;
+      bottone.disabled = true;
+      const prima = bottone.textContent;
+      bottone.textContent = 'Provo tutti…';
+      try {
+        await Promise.all((state.modelLab.providers || []).map((row) => provaProviderModelLab(row.id)));
+      } finally {
+        bottone.disabled = false;
+        bottone.textContent = prima;
+      }
+    });
     caricaCapacitaMacchina();
     caricaRuntimeModelLab();
     caricaModelliLocaliModelLab();
@@ -3728,10 +4105,44 @@
     metaSpan.className = 'model-picker-meta';
     footer.append(refreshBtn, metaSpan);
 
-    panel.append(searchLabel, listEl, footer);
+    /*
+     * ⭐⭐⭐ 03/9 — owner: «nel model selector i modelli non sono raggruppati
+     * per provider (openrouter, openai, locali etc), consiglio delle tab per
+     * switchare».
+     *
+     * ## Cosa ho MISURATO prima di costruire, e come cambia il progetto
+     *
+     * Il raggruppamento c'era già — ma sull'asse sbagliato. Il campo
+     * `provider` di questo catalogo è l'AUTORE del modello, non la via
+     * d'accesso: 424 modelli in **51 gruppi** (openai 91, qwen 53, google 45,
+     * anthropic 31…), e tutti e 424 passano da OpenRouter. Quindi «OpenRouter
+     * contro OpenAI» oggi non è una scelta: i modelli OpenAI di questa lista
+     * SONO via OpenRouter.
+     *
+     * ⭐ Ricerca 03/9 (Apple HIG via eleken.co/blog-posts/tabs-ux): oltre sei
+     * schede l'utente si perde — 51 famiglie non sono schede, e restano
+     * gruppi richiudibili. Le FONTI sì: sono due.
+     * ⭐ E il concorrente da battere non ce l'ha nemmeno per famiglia: Hermes
+     * Agent ha l'issue #15902 aperta, «/model should group models by provider».
+     *
+     * ## Perché la scheda «Locali» non fa scegliere niente
+     *
+     * ⛔ `config.mjs` dice che il kernel della chat chiama SEMPRE
+     * `openrouter.ai/api/v1/chat/completions`. Un modello locale messo qui
+     * come selezionabile sarebbe un pulsante che non fa quello che promette —
+     * lo stesso difetto di «APERTA non è FATTA». La scheda quindi esiste,
+     * risponde alla domanda vera («dove sono i miei modelli locali?») e
+     * dichiara il limite invece di nasconderlo.
+     */
+    const fonti = document.createElement('div');
+    fonti.className = 'model-picker-sources';
+    fonti.setAttribute('role', 'tablist');
+    panel.append(fonti, searchLabel, listEl, footer);
     wrap.append(trigger, panel);
 
     let modelliCache = null;
+    let modelliLocali = null;
+    let fonteScelta = 'openrouter';
     let valoreScelto = valoreIniziale;
     let aperto = false;
     let caricato = false;
@@ -3757,7 +4168,55 @@
       return [...mappa.entries()].sort((a, b) => a[0].localeCompare(b[0]));
     }
 
+    /** Ridisegna la striscia delle fonti: conti veri, mai un numero fisso. */
+    function renderFonti() {
+      const voci = [
+        { id: 'openrouter', etichetta: 'OpenRouter', conto: modelliCache ? modelliCache.length : null },
+        { id: 'locali', etichetta: 'Locali', conto: modelliLocali ? modelliLocali.length : null },
+      ];
+      fonti.replaceChildren(...voci.map((voce) => {
+        const bottone = document.createElement('button');
+        bottone.type = 'button';
+        bottone.className = 'model-picker-source';
+        bottone.dataset.pickerSource = voce.id;
+        bottone.setAttribute('role', 'tab');
+        const attiva = voce.id === fonteScelta;
+        bottone.setAttribute('aria-selected', String(attiva));
+        bottone.classList.toggle('active', attiva);
+        bottone.append(textElement('span', '', voce.etichetta));
+        if (Number.isFinite(voce.conto)) bottone.append(textElement('span', 'model-picker-source-count', String(voce.conto)));
+        bottone.addEventListener('click', () => { fonteScelta = voce.id; renderFonti(); renderLista(); });
+        return bottone;
+      }));
+    }
+
+    /**
+     * La scheda «Locali»: cosa c'è sul disco, e perché non si può ancora
+     * sceglierlo qui. ⛔ Nessuna riga cliccabile: un elenco che sembra
+     * selezionabile e non lo è mente col gesto, non con le parole.
+     */
+    function renderListaLocali() {
+      const pezzi = [];
+      const nota = textElement('p', 'model-picker-source-note', 'La chat parla solo con OpenRouter: questi modelli girano nel Laboratorio modelli, non ancora qui.');
+      pezzi.push(nota);
+      if (!modelliLocali) {
+        pezzi.push(textElement('p', 'board-empty', 'Leggo i modelli installati…'));
+      } else if (modelliLocali.length === 0) {
+        pezzi.push(textElement('p', 'board-empty', 'Nessun modello installato. Si aggiungono dal Laboratorio modelli.'));
+      } else {
+        for (const modello of modelliLocali) {
+          const riga = document.createElement('div');
+          riga.className = 'model-picker-local-row';
+          riga.append(textElement('strong', '', modello.name || modello.id));
+          riga.append(textElement('small', '', `${modello.state === 'ready' ? 'pronto' : modello.state} · ${formattaByteModelLab(Number(modello.bytes || 0))}`));
+          pezzi.push(riga);
+        }
+      }
+      listEl.replaceChildren(...pezzi);
+    }
+
     function renderLista() {
+      if (fonteScelta === 'locali') { renderListaLocali(); return; }
       const query = searchInput.value;
       if (!modelliCache) {
         listEl.replaceChildren(textElement('p', 'board-empty', 'Carico il catalogo da OpenRouter…'));
@@ -3877,7 +4336,17 @@
         const dati = await apiGet(`/api/v1/models${forza ? '?forza=1' : ''}`);
         modelliCache = dati.modelli;
         caricato = true;
+        /*
+         * ⛔ I locali si chiedono a parte e NON bloccano il catalogo: se la
+         * lettura del disco fallisce, la scheda «Locali» resta vuota e lo
+         * dice — ma il selettore continua a funzionare. Una lista che si
+         * spegne per un pannello secondario sarebbe un danno più grande.
+         */
+        apiGet('/api/v1/local-models')
+          .then((locali) => { modelliLocali = Array.isArray(locali?.items) ? locali.items : []; renderFonti(); if (fonteScelta === 'locali') renderListaLocali(); })
+          .catch(() => { modelliLocali = []; renderFonti(); if (fonteScelta === 'locali') renderListaLocali(); });
         metaSpan.textContent = `${dati.modelli.length} modelli${dati.daCache ? ' · da cache' : ''}`;
+        renderFonti();
         renderLista();
       } catch (error) {
         listEl.replaceChildren(textElement('p', 'board-empty', `Catalogo non disponibile: ${error.message}`));
@@ -5354,6 +5823,13 @@
    * aperto la sessione, è quello che la continua.
    */
   function appendUserFollowUp(text, contesto = null) {
+    /*
+     * ⛔ 03/9 — si ricorda QUI, dove il testo passa per davvero, e non
+     * rileggendolo dal DOM: una bolla può essere ridisegnata, tradotta o
+     * troncata, e «chiedi di nuovo» manderebbe una domanda diversa da
+     * quella che la persona vede.
+     */
+    if (typeof text === 'string' && text.trim() !== '') state.realSession.ultimaDomanda = text;
     const conversation = $('#conversation');
     const article = document.createElement('article');
     article.className = 'message user-message';
@@ -5559,22 +6035,79 @@
     copy.className = 'assistant-copy';
     article.append(meta, copy);
     /*
+     * ⭐⭐⭐ 03/9 — owner: «sotto ogni risposta mancano i pulsantini per
+     * copiare la risposta, salvarla nella libreria etc».
+     *
+     * ## Cosa c'era davvero, misurato prima di scrivere
+     *
+     * `.message-actions` esisteva nel CSS **e** aveva un gestore di click —
+     * ma NESSUNA riga di codice la creava: impalcatura morta. E il gestore
+     * era un residuo di mockup: `retry` mostrava il toast «Rigenerazione
+     * avviata» senza rigenerare niente, e like/dislike accendevano un
+     * pulsante senza salvare da nessuna parte. Renderla visibile così
+     * avrebbe messo a schermo tre bottoni finti su quattro.
+     *
+     * ## Perché queste tre e non le quattro del mobile
+     *
+     * Il mobile ha copia · leggi · rigenera · salva in Libreria. Qui la
+     * Libreria NON ESISTE ancora (è il lavoro `NAV-CAPABILITY-FIRSTCLASS-01`,
+     * già in coda): un bottone «Salva in Libreria» che non salva sarebbe
+     * «APERTA non è FATTA» un'altra volta. Manca, e resta scritto che manca.
+     *
+     * ⛔ E non si chiama «Rigenera»: qui rimanda la stessa domanda come
+     * NUOVO turno, non sostituisce la risposta — l'architettura della
+     * sessione è ad append. Il pulsante dice quello che fa.
+     *
+     * ⭐ Ricerca 03/9 (uxpatternsguide.com/patterns/chat-interface,
+     * setproduct.com): le azioni per messaggio vanno DOPO il testo nel DOM,
+     * mai prima — se stanno prima, lo screen reader annuncia «copia,
+     * rigenera» prima di una sola parola della risposta. Per questo la barra
+     * è appesa dopo `.assistant-copy` e non nella riga di intestazione.
+     */
+    const azioni = document.createElement('div');
+    azioni.className = 'message-actions';
+    azioni.setAttribute('role', 'group');
+    azioni.setAttribute('aria-label', 'Azioni sulla risposta');
+    const bottoneAzione = (nome, etichetta, iconaId, alClic) => {
+      const bottone = document.createElement('button');
+      bottone.type = 'button';
+      bottone.dataset.messageAction = nome;
+      bottone.setAttribute('aria-label', etichetta);
+      bottone.title = etichetta;
+      bottone.innerHTML = `<svg><use href="#${iconaId}"/></svg>`;
+      bottone.addEventListener('click', alClic);
+      return bottone;
+    };
+    azioni.append(bottoneAzione('copy', 'Copia la risposta', 'i-copy', () => {
+      copyText(copy.textContent || '', 'Risposta copiata');
+    }));
+    /*
+     * ⛔ Il bottone «Ascolta» esisteva già, ma nella riga di INTESTAZIONE,
+     * cioè prima del testo: sbagliato per lo stesso motivo di sopra, e
+     * incoerente ora che le altre azioni stanno sotto. Spostato qui, con la
+     * stessa classe e lo stesso comportamento di prima — e sempre solo se il
+     * motore di sintesi esiste davvero.
+     */
+    if (sintesiVoceDisponibile) {
+      const ascolta = bottoneAzione('listen', 'Ascolta la risposta', 'i-play', () => leggiVoceAlta(copy.textContent || '', ascolta));
+      ascolta.classList.add('assistant-listen-btn');
+      ascolta.setAttribute('aria-pressed', 'false');
+      azioni.append(ascolta);
+    }
+    const chiediDiNuovo = bottoneAzione('ask-again', 'Chiedi di nuovo', 'i-history', () => {
+      const domanda = state.realSession.ultimaDomanda;
+      if (!domanda) { toast('Nessuna domanda da rimandare', 'Questa risposta non ha una domanda registrata in questa sessione.'); return; }
+      void resumeSession(domanda);
+    });
+    azioni.append(chiediDiNuovo);
+    article.append(azioni);
+    /*
      * ⭐⭐⭐ 29/8 — FASE J, TTS: un bottone per bubble, aggiunto UNA sola
      * volta qui in `meta` (mai ricreato dagli aggiornamenti streaming,
      * che toccano solo `.assistant-copy` — vedi la doc sopra la
      * funzione). Costruito solo se `speechSynthesis` esiste — mai un
      * bottone che sembra funzionare e non fa niente.
      */
-    if (sintesiVoceDisponibile) {
-      const ascolta = document.createElement('button');
-      ascolta.type = 'button';
-      ascolta.className = 'icon-btn assistant-listen-btn';
-      ascolta.setAttribute('aria-label', 'Ascolta la risposta');
-      ascolta.setAttribute('aria-pressed', 'false');
-      ascolta.innerHTML = `<svg><use href="#i-play"/></svg>`;
-      ascolta.addEventListener('click', () => leggiVoceAlta(copy.textContent || '', ascolta));
-      meta.appendChild(ascolta);
-    }
     conversation.appendChild(article);
     markMotionEnter(article);
     state.realSession.messageElements.set(messageId, article);
@@ -10950,19 +11483,20 @@
       copyText($('.message-bubble, .assistant-copy', message)?.textContent || '', 'Messaggio copiato');
       return;
     }
-    const actionButton = event.target.closest('[data-message-action]');
-    if (!actionButton) return;
-    const message = actionButton.closest('.assistant-message');
-    const action = actionButton.dataset.messageAction;
-    if (action === 'copy') copyText($('.assistant-copy', message)?.textContent || '', 'Risposta copiata');
-    if (action === 'retry') toast('Rigenerazione avviata', 'Il contesto e i permessi della sessione restano invariati.');
-    if (action === 'like' || action === 'dislike') {
-      const group = $$('.message-actions [data-message-action="like"], .message-actions [data-message-action="dislike"]', message);
-      const wasPressed = actionButton.getAttribute('aria-pressed') === 'true';
-      group.forEach((button) => button.setAttribute('aria-pressed', 'false'));
-      actionButton.setAttribute('aria-pressed', String(!wasPressed));
-      toast(!wasPressed ? 'Feedback registrato' : 'Feedback rimosso');
-    }
+    /*
+     * ⛔⛔⛔ 03/9 — QUI stava un gestore RESIDUO DEL MOCKUP, rimosso.
+     *
+     * Rispondeva a `retry` con il toast «Rigenerazione avviata» senza
+     * rigenerare niente, e a like/dislike accendendo un pulsante e dicendo
+     * «Feedback registrato» senza salvarlo da nessuna parte. Non si era mai
+     * visto perché NESSUNA riga creava quei bottoni — ma dal momento in cui
+     * la barra `.message-actions` viene disegnata davvero (vedi
+     * `ensureAssistantMessageElement`), sarebbe tornato vivo e avrebbe
+     * mentito a ogni clic.
+     *
+     * ⇒ Ogni azione ora ha il suo `addEventListener` accanto al bottone che
+     * la esegue, e nessuna di esse dichiara un esito che non è avvenuto.
+     */
   });
 
   /*

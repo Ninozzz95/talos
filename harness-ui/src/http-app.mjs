@@ -804,6 +804,8 @@ export function createHttpApp({
   hfImageProxyFn = null,
   runtimeBootstrapFn = null,
   providerStore = null,
+  /** ⭐ 03/9 — la sonda che chiede al provider se accetta la credenziale. Facoltativa: senza, la rotta di prova risponde «non configurata» invece di fingere un esito. */
+  providerProbe = null,
   // ⛔⛔⛔ 28/8 — iniettabili SOLO per il test del battito SSE sotto: mai un setInterval reale nei test unitari, stesso principio di ogni altra dipendenza di questo file.
   impostaIntervalloFn = setInterval, cancellaIntervalloFn = clearInterval,
 }) {
@@ -944,6 +946,33 @@ export function createHttpApp({
 
     /* Provider accessi: il corpo contiene la chiave solo nel tragitto locale
      * verso il server; nessuna risposta o sessione la riflette. */
+    /*
+     * ⭐⭐⭐ 03/9 — «questa chiave funziona davvero?».
+     *
+     * Fino a oggi il pannello sapeva dire solo che una stringa era stata
+     * salvata, che è una cosa diversa dall'essere accettata dal provider. La
+     * prova chiama il provider per davvero (elenco modelli, la chiamata più
+     * economica che dimostri l'autenticazione) e riporta il suo esito.
+     *
+     * ⛔ POST e non GET benché non cambi niente sul server: esce una richiesta
+     * verso un servizio esterno con la credenziale dell'owner, e una cosa che
+     * esce non deve poter partire da un link, da un prefetch del browser o da
+     * una barra degli indirizzi.
+     */
+    const providerTestMatch = /^\/api\/v1\/providers\/([^/]+)\/test$/.exec(url.pathname);
+    if (method === 'POST' && providerTestMatch) {
+      try {
+        requireNoQuery(url);
+        if (!providerProbe || typeof providerProbe.prova !== 'function') { const error = new Error('Prova provider non configurata'); error.code = 'PROVIDER_STORE_UNAVAILABLE'; throw error; }
+        const data = await providerProbe.prova(decodeURIComponent(providerTestMatch[1]));
+        sendJson(res, 200, successEnvelope(data, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
     const providerKeyMatch = /^\/api\/v1\/providers\/([^/]+)\/key(?:\/(remove))?$/.exec(url.pathname);
     const providerRuntimeMatch = /^\/api\/v1\/providers\/([^/]+)\/runtime(?:\/(reset))?$/.exec(url.pathname);
     if (method === 'POST' && (providerKeyMatch || providerRuntimeMatch)) {
@@ -1098,6 +1127,31 @@ export function createHttpApp({
      * fa girare il modello per un giro reale) resta un incremento
      * successivo, dichiarato non implementato qui.
      */
+    /*
+     * ⭐⭐⭐ 03/9 — la stima PRIMA dello scaricamento, per una variante che
+     * sul disco non c'è ancora (una quantizzazione su Hugging Face).
+     *
+     * ⛔ Sta PRIMA della rotta `/:id/fit` per una ragione meccanica, non
+     * estetica: `([^/]+)` combacia anche con la parola `fit-estimate`, e
+     * messa dopo questa rotta non verrebbe mai raggiunta — cercherebbe un
+     * modello che si chiama «fit-estimate» e risponderebbe MODEL_NOT_FOUND.
+     */
+    if (method === 'GET' && url.pathname === '/api/v1/local-models/fit-estimate') {
+      try {
+        if (!localRuntimeProbe) { const error = new Error('Probe runtime locale non configurato'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        for (const key of url.searchParams.keys()) { if (key !== 'bytes' && key !== 'contextTokens') { const error = new Error('Query non valida'); error.code = 'QUERY_INVALID'; throw error; } }
+        const bytes = Number(url.searchParams.get('bytes'));
+        const contextRaw = url.searchParams.get('contextTokens');
+        const contextTokens = contextRaw === null ? null : Number(contextRaw);
+        const data = await localRuntimeProbe.estimateFit({ bytes, contextTokens });
+        sendJson(res, 200, successEnvelope(data, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
     if (method === 'GET' && /^\/api\/v1\/local-models\/([^/]+)\/fit$/.test(url.pathname)) {
       try {
         const match = /^\/api\/v1\/local-models\/([^/]+)\/fit$/.exec(url.pathname);

@@ -21,6 +21,7 @@ import { createHfDirectTransfer } from './src/hf-direct-transfer.mjs';
 import { fetchAllowedHfImage } from './src/hf-image-proxy.mjs';
 import { createLlamaServerSupervisor } from './src/llama-server-supervisor.mjs';
 import { createLlamaServerRuntime } from './src/local-runtime-llama-server.mjs';
+import { createProviderProbe } from './src/provider-probe.mjs';
 import { createProviderCredentialStore } from './src/provider-credential-store.mjs';
 import { createGeneratedImageStore } from './src/generated-image-store.mjs';
 import { createOwnerRuntimeAdapter } from './src/runtime-owner-adapter.mjs';
@@ -56,6 +57,18 @@ async function startServer() {
     runtimeFile: fileURLToPath(new URL('.provider-runtime.json', import.meta.url)),
   });
   providerStore.loadFromKeyring();
+
+  /*
+   * ⭐⭐⭐ 03/9 — la prova della credenziale. Legge la chiave dal portachiavi
+   * (mai dal browser) e l'indirizzo/tempo massimo dalle preferenze del
+   * provider, così la prova usa ESATTAMENTE la configurazione con cui poi
+   * girerà davvero: provare con parametri diversi da quelli veri sarebbe una
+   * sonda che scagiona.
+   */
+  const providerProbe = createProviderProbe({
+    leggiChiave: (provider) => providerStore.getKey(provider),
+    leggiRuntime: (provider) => providerStore.getRuntime(provider),
+  });
   const modelCatalog = createModelCatalog();
   const ownerRuntime = createOwnerRuntimeAdapter({
     modulePath: config.ownerRuntimeModule,
@@ -294,6 +307,7 @@ async function startServer() {
     hfHubClient,
     hfImageProxyFn: (url) => fetchAllowedHfImage(url),
     providerStore,
+    providerProbe,
     workspaceLaunchStore,
     workspaceBrowser,
   });
