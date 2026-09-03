@@ -140,6 +140,34 @@ Casella: `[ ]` da fare · `[~]` in corso · `[x]` fatta (commit nella colonna Es
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | [ ] | FIN-01 | F-0087 | Migrazione a `Ninozzz95/talos` `apps/desktop` con ledger di migrazione, tre vie sui file condivisi | DESIGN_VALIDATED | DESKTOP-ADAPTER | 1 | 5 | 5 | W3-08 | `docs/MONOREPO-FINAL.md` poi il repo | test mobile + desktop | ledger file per file | non migrare | Solo dopo Wave 3; test mobile verdi prima del merge | — | |
 
+### PROPOSTE dal dossier competitor (03/09/2026) — stato `PROPOSTA`, nessuna autorizzata (18 righe, 60 gg)
+
+> Copiate da `DOSSIER-COMPETITOR-FUNZIONI-DISTINTIVE-2026-09-03.md` §14 (il dossier resta la fonte del
+> «perché»: capitolo per concorrente, colonne «Dov'è nel codice» e «+1 misurabile»). Una riga `PROPOSTA`
+> non si implementa: l'owner la promuove a uno stato del registro e le assegna una wave, una alla volta.
+> La wave suggerita è fra parentesi nella colonna Dip.
+
+| ☐ | ID | F | Titolo | Stato | Dest | Imp | Ris | gg | Dip | File | Test | Evidenza | Rollback | Criterio | Kernel | Esito |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| [ ] | P-01 | nuova | Sotto-agenti pilotabili: `list/steer/stop` sui figli, approvazioni inoltrate al genitore, ripresa da JSONL | PROPOSTA | DESKTOP-ADAPTER + UI-MONOLITE | 5 | 2 | 3 | W1-02 (Wave 1) | `src/subagent-orchestrator.mjs`, `src/session-registry.mjs` (`voce.codaMessaggi`), `src/http-app.mjs` (rotte `children/:cid/steer` e `children/:cid/stop`), `public/app.js` (inspector Agenti) | `tests/subagent-orchestrator.test.mjs`, `tests/http-routes-sessions.test.mjs` | delega viva con steer da UI; screenshot inspector; ricevuta con `steerRicevuti/steerApplicati` | rimuovere rotte; coda invariata | lo steer compare nel giro in cui è stato letto; stop conserva l'artefatto parziale; approvazione del figlio mostra `childId` | — | |
+| [ ] | P-02 | nuova | Automazioni: trigger a evento, monitor-mode con diff normalizzato, continuità, notepad, «costo evitato» | PROPOSTA | DESKTOP-ADAPTER + UI-MONOLITE | 4 | 2 | 4 | W2-02 (Wave 2) | `src/automation-store.mjs`, `src/automation-scheduler.mjs` (`unTick`), `src/agui-events.mjs` (predicato), `public/app.js` (vista Attività) | `tests/automation-scheduler.test.mjs` (tick con sorgente invariata ⇒ nessuna corsa) | automazione monitor su file di prova: 3 tick, 1 corsa; storia con «costo evitato» | flag `automazioni-evento` spento | sorgente invariata ⇒ zero chiamate al modello; errore sorgente ≠ cambiamento; notepad con tetti dichiarati | — | |
+| [ ] | P-03 | nuova | Evidence ledger per sessione + guardia di fine giro «codice scritto senza prova» | PROPOSTA | DESKTOP-ADAPTER + UI-MONOLITE | 5 | 2 | 2,5 | K-07 (Wave 2) | `src/session-registry.mjs` (`evidenzaDaEventi`, accanto a `usageDaEventi`), `public/app.js` (badge sul giro) | `tests/session-registry.test.mjs` | giro con `scrivi` e senza `prova` ⇒ badge «senza prova»; task-trappola sul banco | rimuovere proiezione | la risposta finale porta `evidenza:{prove,verdi,fileCoperti}`; `.md` soli non attivano la guardia | K-07 PENDING | |
+| [ ] | P-04 | nuova | Ledger firmato delle mutazioni di skill e memoria con rollback | PROPOSTA | DESKTOP-ADAPTER + UI-MONOLITE | 3 | 2 | 2 | W1-13 (Wave 2) | `src/skill-registry.mjs`, `src/memory-store.mjs`, `src/harness-receipt-keypair.mjs`, `public/app.js` (vista Memoria) | `tests/skill-registry.test.mjs`, `tests/memory-store.test.mjs` | mutazione da agente → rollback → manifest sha256 identico | ledger solo in lettura | ogni mutazione ha attore, sha256 prima/dopo, firma; rollback di una singola voce | — | |
+| [ ] | P-05 | nuova | Attrezzo `chiedi` (domande strutturate, opzioni) + `schemaUscita` sulla delega con un retry | PROPOSTA | DESKTOP-ADAPTER + UI-MONOLITE | 4 | 2 | 2 (adapter) | K-09 (Wave 2) | `src/agui-events.mjs` (`ClarifyRequested`), `src/http-app.mjs` (rotta `clarify`), `src/session-registry.mjs` (record risposta), `public/app.js` (scheda domande) | `tests/agui-events.test.mjs`, `tests/http-routes-sessions.test.mjs` | domanda a scelta in UI; risposta nel JSONL; delega con schema valido/non valido | evento ignorato dal kernel senza K-09 | risposta = record JSONL rigiocabile; ricevuta figlio con `schemaValido, retry` | K-09 PENDING | |
+| [ ] | P-06 | nuova | Revisore automatico delle approvazioni: eventi ritenuti, JSON stretto, fail-closed, circuit breaker | PROPOSTA | DESKTOP-ADAPTER + UI-MONOLITE | 5 | 4 | 5 | W2-09 (Wave 2) | `src/approval-reviewer.mjs` (nuovo), `src/session-registry.mjs` (`chiediApprovazioneFn`), `src/agui-events.mjs`, `public/app.js` (badge «approvato da») | `tests/approval-reviewer.test.mjs` (timeout ⇒ deny; JSON malformato ⇒ deny; 3 deny ⇒ giro abortito) | task-trappola sul banco con e senza revisore: approvazioni evitate, dinieghi corretti; screenshot | preferenza spenta = comportamento attuale | il revisore non vede mai il ragionamento; verdetto firmato con `visto:[_sequenza]`; deny/ask deterministici prima | — | |
+| [ ] | P-07 | nuova | Hooks: eventi `PreCompact/PostCompact/SubagentStart/Stop/Interrupt/PermissionDenied`, tipo `http`, `seFallisce` fail-closed, prima/dopo nel JSONL | PROPOSTA | DESKTOP-ADAPTER | 4 | 2 | 2,5 | W1-02 (Wave 1) | `src/hook-registry.mjs`, `src/agent-service.mjs` (`hookFnConPlugin`), `src/session-registry.mjs` | `tests/hook-registry.test.mjs` | hook che riscrive un `ToolCallResult`: entrambe le versioni nel JSONL; hook che lancia ⇒ server vivo | eventi nuovi non consegnati | default `seFallisce:'blocca'`; ogni hook = riga del Process Ledger | — | |
+| [ ] | P-08 | nuova | Memoria: candidate proposte dalle sessioni chiuse con citazione obbligatoria, tetto visibile, oblio verificabile | PROPOSTA | DESKTOP-ADAPTER + UI-MONOLITE | 4 | 3 | 4 | W1-04 (Wave 2) | `src/memory-store.mjs`, `src/memory-candidates.mjs` (nuovo), `public/app.js` (vista Memoria) | `tests/memory-store.test.mjs` (senza citazione ⇒ respinta; oblio ⇒ reingestione non ripristina) | 3 sessioni chiuse ⇒ candidate con `sessionId/_sequenza`; % confermate dall'owner | candidate mai scritte da sole | nessuna memoria senza citazione; byte/tetto in UI; ricevuta firmata dell'oblio | — | |
+| [ ] | P-09 | nuova | `@sessione` nel composer e messaggi fra sessioni con ricevuta di consegna | PROPOSTA | DESKTOP-ADAPTER + UI-MONOLITE | 3 | 2 | 2,5 | W1-04 (Wave 2) | `src/session-registry.mjs`, `src/agui-events.mjs` (`SessionMessage`), `public/app.js` (composer) | `tests/session-registry.test.mjs` | messaggio a sessione ferma ⇒ recapitato al resume; contesto allegato = replay | evento ignorato | l'allegato è un insieme di `_sequenza`, mai testo copiato | — | |
+| [ ] | P-10 | nuova | PlanVM: programma del modello che orchestra attrezzi/figli con chiamate massime e capacità dichiarate prima | PROPOSTA | DESKTOP-ADAPTER | 3 | 4 | 6 | K-02, K-05 (Wave 3) | `src/planvm.mjs` (nuovo), `src/subagent-orchestrator.mjs` | `tests/planvm.test.mjs` (piano che supera il budget ⇒ respinto prima di partire) | banco: giri e token contro il loop classico | flag spento | il piano è approvabile e limitato per costruzione; spawn loop impossibile | K-02, K-05 PENDING | |
+| [ ] | P-11 | nuova | Checkpoint del workspace per giro (repo ombra content-addressed) e «Ripristina codice», anche per `shell` | PROPOSTA | DESKTOP-ADAPTER + UI-MONOLITE | 5 | 3 | 4 | W1-02, W1-05 (Wave 1) | `src/workspace-checkpoint.mjs` (nuovo, git ombra sotto `process-policy`), `src/session-registry.mjs`, `public/app.js` (riga del giro) | `tests/workspace-checkpoint.test.mjs` (`shell: rm` ⇒ ripristino; commit successivo ⇒ rifiuto con motivo) | sessione reale su repo di prova; screenshot «Ripristina codice» | rimuovere il repo ombra | copre `scrivi` e `shell`; byte del ripristino mostrati prima; symlink dichiarati come saltati | — | |
+| [ ] | P-12 | nuova | Sessioni ad albero nello stesso JSONL (`parentId`) con costo per ramo | PROPOSTA | DESKTOP-ADAPTER + UI-MONOLITE | 3 | 3 | 3,5 | W0-02 (Wave 2) | `src/session-registry.mjs`, `src/session-store.mjs`, `public/app.js` (albero) | `tests/session-store.test.mjs` (migrazione schema 1→2) | fork da un giro precedente nella stessa sessione; usage per sottoalbero | schema 1 invariato | replay per ramo; ramo abbandonato ⇒ ricevuta di riassunto (K-04) | — | |
+| [ ] | P-13 | nuova | Repo map: indice dei simboli per workspace con ranking sui file del task e budget di token dichiarato | PROPOSTA | DESKTOP-ADAPTER (+ K-10) | 5 | 3 | 5 (adapter) | K-10, W1-04 (Wave 2) | `src/repo-map.mjs` (nuovo), `src/workspace-watcher.mjs` (invalidazione), `src/runtime-owner-adapter.mjs` | `tests/repo-map.test.mjs` (budget rispettato; aggiornamento solo dei file cambiati) | banco: pass-rate su `storia` prima/dopo; token della mappa per giro | attrezzo assente = oggi | tetto di token misurato; ricevuta con token spesi dalla mappa | K-10 PENDING | |
+| [ ] | P-14 | nuova | Lint per linguaggio sui file toccati dopo `scrivi`, esito come ricevuta | PROPOSTA | DESKTOP-ADAPTER | 3 | 2 | 2 | W2-10 (Wave 2) | `src/linter.mjs` (nuovo, sotto `process-policy`), `src/doctor.mjs` (rilevamento) | `tests/linter.test.mjs` | banco: task risolti prima/dopo | disattivabile per workspace | ricevuta `errori: n`; nessun linter ⇒ «n/d», mai zero | — | |
+| [ ] | P-15 | nuova | Marcatori `TALOS!`/`TALOS?` nei file salvati aprono un giro | PROPOSTA | DESKTOP-ADAPTER | 2 | 1 | 1,5 | — (Wave 2) | `src/workspace-watcher.mjs`, `src/session-registry.mjs` | `tests/workspace-watcher.test.mjs` | salvataggio con marcatore ⇒ giro con `origine:'marcatore'` | flag spento | il marcatore si rimuove solo a esito verde | — | |
+| [ ] | P-16 | nuova | Fallback di modello a due stadi con evento `ModelSwitched` e rotazione dell'id di routing | PROPOSTA | DESKTOP-ADAPTER + UI-MONOLITE | 3 | 2 | 2 | W1-08 (Wave 1) | `src/runtime-owner-adapter.mjs`, `src/agui-events.mjs`, `src/model-catalog.mjs` | `tests/runtime-owner-adapter.test.mjs` | 429 simulato ⇒ secondo modello; ricevuta con modello effettivo | lista vuota = oggi | il modello che ha risposto è nella ricevuta; mai fuori allowlist | — | |
+| [ ] | P-17 | nuova | Interrogazione del piano: obiezioni al piano finché ne resta una aperta (`/grill`) | PROPOSTA | DESKTOP-ADAPTER + UI-MONOLITE | 3 | 2 | 2 | W2-01, K-01 (Wave 2) | `src/plan-interrogation.mjs` (nuovo), `public/app.js` (inspector Context) | `tests/plan-interrogation.test.mjs` | piano con 3 obiezioni ⇒ 3 risposte prima di Act | disattivabile | obiezioni aperte = 0 prima dell'approvazione; ogni obiezione e risposta nel JSONL | K-01 PENDING | |
+| [ ] | P-18 | nuova | Best-of-n: n corse in n worktree, scelta sulle ricevute e sui diff | PROPOSTA | DESKTOP-ADAPTER + UI-MONOLITE | 3 | 3 | 3 | W2-11 (Wave 3) | `src/best-of-n.mjs` (nuovo, riusa il runner del banco), `src/git-service.mjs` (nuovo, W1-05), `public/app.js` (confronto) | `tests/best-of-n.test.mjs` | 3 corse su un task del banco; confronto; screenshot | rimuovere | il vincitore è scelto su prove eseguite e diff, mai sul testo; costo totale mostrato prima | — | |
+
 ## 4 — Mappa delle 38 righe della zip
 
 `R-0001→W0-01` · `R-0002→W2-01` (fusa) · `R-0003→W0-03` · `R-0004→W0-04` · `R-0010→W1-01` · `R-0011→W1-02` · `R-0012→W1-03` · `R-0013→W1-04` · `R-0014→W1-05 + W2-11` · `R-0015→W1-06` · `R-0016→W1-07` · `R-0017→W1-08` · `R-0018→W1-09` · `R-0019→W1-10` · `R-0020→W2-01` · `R-0021→W2-02` · `R-0022→W2-03a/b/c` · `R-0023→W2-04` · `R-0024→W2-05` · `R-0025→W2-06` · `R-0026→W2-07` · `R-0027→W2-08` · `R-0028→W2-09` · `R-0029→W2-10` · `R-0030→W2-13` · `R-0031→W2-14` · `R-0032→W2-15` · `R-0033→W2-16` · `R-0034→W2-17` · `R-0035→W3-01` · `R-0036→W3-09` · `R-0037→W3-10` · `R-0040→W4-01` · `R-0041→W4-02` · `R-0042→W4-03` · `R-0043→W4-04` · `R-0044→W4-05` · `R-0099→FIN-01`. Aggiunte nostre: W0-02, W0-05, W0-06, W1-11, W1-12, W2-12, W3-02…08, W4-06.
@@ -158,6 +186,41 @@ Casella: `[ ]` da fare · `[~]` in corso · `[x]` fatta (commit nella colonna Es
 
 - W0-01: motivi dei 16 file scartati → …
 
+## 8 — Parità competitiva (dossier del 03/09/2026)
+
+Il dossier `DOSSIER-COMPETITOR-FUNZIONI-DISTINTIVE-2026-09-03.md` legge nel codice 11 concorrenti (Hermes per
+primo) e per ogni funzione distintiva dice cosa ha TALOS, la parità e il «+1 misurabile». Le righe esistenti
+qui sotto ricevono quel «+1» come **criterio aggiuntivo** (si legge insieme al campo Criterio della riga):
+
+| Riga | +1 competitivo (misurabile) | Da |
+|---|---|---|
+| W0-01 | ripresa di un giro interrotto dal riavvio solo opt-in, con `_sequenza` dell'interruzione mostrata | OpenClaw L8 |
+| W0-02 | schema versionato + catalogo degli eventi con marca persistito/effimero generato dai test | dsh S2, Pi P1 |
+| W0-06 | test di architettura: ogni entrypoint censito, altrimenti rosso | dsh S8 |
+| W1-02 | ogni hook e ogni steer è una riga del Process Ledger con durata, esito, prima/dopo | Codex C4, Hermes H1 |
+| W1-04 | full-text + relationship traces sul log; export verificabile delle ricevute | dsh S2, Canvas V6 |
+| W1-05 | il commit porta il trailer `Talos-Receipt:`; mai co-author di default | Aider D5 |
+| W1-06 | check per cartella (`.harness-ui-review/*.md`) con esito firmato e diff-range | Goose G4 |
+| W1-08 | `cacheHit%`, costo d'ingresso per sessione, costo per messaggio e per albero (figli nella ricevuta del padre), provider effettivo | Claude Code A6, Pi P5, Codex C7 |
+| W1-11 | task con `dipendeDa` e avvio di sessione da task; chiusura solo con ricevuta verde | Cline N5 |
+| W1-13 | gate acceso di default; origine (`utente/agente/automazione`) nella ricevuta firmata | Hermes H3 |
+| W2-01 | piano persistito e approvabile con ricevuta; obiettivo durevole confrontato con l'esito; precisione/recall dei file previsti | Aider D2/D6, dsh S3, Muse |
+| W2-02 | storia con «costo evitato», export/import con hash, debug = apri la sessione della corsa | Hermes H2, Canvas V2, Goose G7 |
+| W2-03 | `enforcement` firmato per comando; backend per comando, non per conversazione | Pi P7, Canvas V1 |
+| W2-04 | maschera delle credenziali (sentinel + iniezione al proxy) con ricevuta di ogni iniezione; Windows nativo | Claude Code A4 |
+| W2-05 | livello effettivo firmato per comando; test negativo fail-closed (K-03); regola untrusted→transmit come test del kernel | Codex C2, Goose G3 |
+| W2-06 | soglie del condensatore visibili con la loro storia; costanti di pruning come impostazioni | OpenCode O2, Canvas V4 |
+| W2-07 | token/schema e token/30 giorni per server MCP; grafo di esecuzione dichiarato e verificato per arco | Hermes H8, dsh S1 |
+| W2-09 | policy congelata all'avvio con hash nella ricevuta; regola che ha deciso nella ricevuta; `AuthorityEnvelope` non ampliabile per i figli; revisore nominato nel livello | Hermes H10, Codex C3/C11, OpenCode O3, Cline N3, OpenClaw L1 |
+| W2-10 | sezione Sicurezza del Doctor: check deterministici eseguibili, verso contrario provato | OpenClaw L9 |
+| W2-11 | snapshot prima della rimozione del worktree; push sempre sotto approvazione firmata | OpenClaw L7, Claude Code A9 |
+| W2-20 | ricevuta di cosa è stato importato e cosa no; hook importati sotto trust | Claude Code A10, dsh S5 |
+| K-04 | ricevuta con span esclusi rileggibili; `cacheHit%` prima/dopo; spill rileggibile con byte dichiarati | Hermes H5, Pi P4, OpenCode O2, dsh S6 |
+| K-07 | `evidenza:{prove,verdi,fileCoperti}` nella risposta finale; fabbricazione 0/3 sul banco | Hermes H4, Goose G5 |
+
+Le 18 righe nuove (P-01…P-18) stanno nella sezione PROPOSTE del §3; le richieste kernel K-09, K-10, K-11
+nel ledger kernel. Il dossier §15 elenca ciò che **non** si copia, con la prova.
+
 ## 7 — Somme
 
 | Wave | Righe | Giorni adapter/UI |
@@ -168,3 +231,4 @@ Casella: `[ ]` da fare · `[~]` in corso · `[x]` fatta (commit nella colonna Es
 | 3 | 10 | 66,5 |
 | 4 | 7 | 36 (+1 da decidere) |
 | FINAL | 1 | 5 |
+| PROPOSTE (dossier competitor, non autorizzate) | 18 | 60 |
