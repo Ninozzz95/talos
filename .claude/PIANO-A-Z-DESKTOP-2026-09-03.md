@@ -39,7 +39,7 @@ labs, monorepo).
 | 9 | W2-16 | Electron 57.5 updater | 3 | R (era W2) | W2-15 | — |
 | 10 | W2-17 | Electron 57.6 hardening + GPU gate | 2 | R (era W2) | W2-13 | — |
 
-Somma fascia R (approvata, invariata): **19 gg** (R-01 1,5 · R-02 3 · W0-04 0,5 · Electron anticipato 14). Più **Q-01/Q-02, 1,5 gg, PROPOSTA — in attesa del via esplicito dell'owner** (03/09 sera: «pianificalo e resta in attesa»), contate a parte, non dentro questa somma. Guida: `GUIDA-QUICK-WIN-MONOLITE-2026-09-03.md`. ⛔ Costo esterno dell'owner: certificato Authenticode per la firma (senza, SmartScreen blocca l'installer).
+Somma fascia R (approvata): **19 gg** (R-01 1,5 · R-02 3 · W0-04 0,5 · Electron anticipato 14) — R-01 **fatta** (`3b0b4031`). Più **Q-01/Q-02, 1,5 gg** — approvate dall'owner il 03/09 sera («totalmente approvati») ed **entrambe fatte**: Q-01 consolidamento CSS (`219d110f`), Q-02 censimento funzioni morte chiuso a zero rimozioni, esito valido (nessun commit di codice). Dettagli: `GUIDA-QUICK-WIN-MONOLITE-2026-09-03.md`. ⛔ Costo esterno dell'owner: certificato Authenticode per la firma (senza, SmartScreen blocca l'installer).
 
 ## Fascia A — essenziali
 
@@ -150,7 +150,7 @@ Somma fascia C: **116,5 gg** (Wave 3 66,5 · Wave 4 36 · P 9 · FIN 5).
 
 ## Totale
 
-84 righe (59 del ledger + 18 PROPOSTE + 2 R + 3 M + 2 Q), **280,75 giorni-agente** misurati (fascia M e Q-01/Q-02 esclusi: M non misurata, Q non approvata — vedi sopra) adapter/UI, kernel a parte.
+84 righe (59 del ledger + 18 PROPOSTE + 2 R + 3 M + 2 Q), **282,25 giorni-agente** stimati (fascia M esclusa: non misurata — vedi sopra) adapter/UI, kernel a parte. R-01, Q-01, Q-02 **fatte**; il resto attende il sì dell'owner riga per riga.
 Le stime seguono la regola del ledger: superata del 50 % la riga si ferma e si scrive perché.
 
 ## Le richieste al kernel, nell'ordine in cui servono
