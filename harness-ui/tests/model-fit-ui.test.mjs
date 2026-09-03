@@ -162,3 +162,16 @@ test('MODEL-FIT-UI-12 — AL CONTRARIO: la frase non compare se il runtime serve
   assert.match(app, /runtimeDi\?\.reachable === true/);
   assert.match(app, /typeof runtimeDi\?\.servingModelId === 'string' && runtimeDi\.servingModelId !== ''/);
 });
+
+test('MODEL-FIT-UI-13 — «non come agente» solo quando lo SAPPIAMO, mai su unknown', async () => {
+  /*
+   * ⛔⛔ 03/9 — trovato guardando uno screenshot, non il codice: col verdetto
+   * agente `unknown` (capacità non osservabili perché il runtime serve un
+   * altro modello) la riga affermava «non come agente», trasformando un «non
+   * l'ho potuto controllare» in un «no». `unknown` non è `blocked`: è la
+   * distinzione su cui è costruito tutto questo pannello.
+   */
+  const app = await source('public/app.js');
+  assert.match(app, /voce\.esito\?\.state === 'unknown'\s*\?\s*'Va bene per la chat; come agente non verificabile ora'/);
+  assert.match(app, /:\s*'Va bene per la chat, non come agente'/);
+});
