@@ -79,7 +79,7 @@ import { parseTalosFileProvenance } from '@/lib/files/provenance'
  * un `talosHarness.mjs` DIVERGENTE con Note/Attività/Memoria uguali ma
  * con un proprio store file-based GLOBALE — non collegato al vero
  * repository del telefono, verosimilmente pensato per un'esecuzione
- * standalone di TALOS-BANCO senza un device reale attaccato (ipotesi
+ * standalone del banco di prova interno, senza un device reale attaccato (ipotesi
  * NON verificata di persona: quella lane resta letta in sola lettura,
  * mai eseguita). Per QUESTO kernel (embedded, sul device vero) la
  * scelta resta collegare il repository vero, non copiare il loro store

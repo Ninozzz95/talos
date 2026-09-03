@@ -51,7 +51,8 @@ function plugin(): TalosTerminalePlugin {
  * iniettata come `OPENROUTER_API_KEY` — stesso nome di env var che
  * `harness-ui/src/config.mjs` legge sul desktop (`env.OPENROUTER_API_KEY`),
  * per costruzione: una sola chiave, mai una copia che potrebbe disallinearsi
- * (stesso principio già seguito da `config.mjs` verso `TALOS-BANCO/provaTalos.mjs`).
+ * (stesso principio già seguito da `config.mjs` verso lo script di prova
+ * del banco interno).
  *
  * ⛔ Se la chiave non è configurata, il comando parte comunque SENZA
  * `OPENROUTER_API_KEY` — non è compito di questo ponte decidere se quel
