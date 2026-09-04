@@ -32,6 +32,12 @@
         "hooks": [
           {
             "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/ricerca-prima-di-scrivere.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Controllo di aver cercato prima di scrivere..."
+          },
+          {
+            "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/cancelli.mjs\"",
             "timeout": 10
           },
