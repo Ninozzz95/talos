@@ -782,6 +782,36 @@ button.talos-list-row:focus-visible {
 .talos-send:focus-visible { outline: var(--talos-focus-width) solid var(--talos-ring); outline-offset: var(--talos-focus-offset); }
 .talos-send--stop { background: var(--talos-danger); color: var(--talos-text); }
 
+.talos-composer__attach {
+  width: var(--talos-primary-height);
+  height: var(--talos-primary-height);
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: var(--talos-focus-width) solid var(--talos-border);
+  border-radius: var(--talos-radius-pill);
+  background: var(--talos-panel-soft);
+  color: var(--talos-assistant-text);
+  font: 400 var(--talos-font-size-lg) / 1 var(--talos-font-ui);
+  cursor: pointer;
+}
+.talos-composer__attach:hover { border-color: var(--talos-accent-border); color: var(--talos-accent-hover); }
+.talos-composer__attach:focus-visible { outline: var(--talos-focus-width) solid var(--talos-ring); outline-offset: var(--talos-focus-offset); }
+.talos-composer[data-trascina-sopra='si'] { border-color: var(--talos-accent); background: var(--talos-accent-soft); }
+.talos-composer__attachments { display: flex; flex-wrap: wrap; gap: var(--talos-space-sm); margin: 0 0 var(--talos-space-sm); padding: 0; list-style: none; }
+.talos-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--talos-space-sm);
+  padding: var(--talos-space-xs) var(--talos-space-sm);
+  border: var(--talos-focus-width) solid var(--talos-border);
+  border-radius: var(--talos-radius-pill);
+  background: var(--talos-panel-soft);
+  font-size: var(--talos-font-size-xs);
+}
+.talos-attachment__name { max-width: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--talos-text); }
+.talos-attachment__cost { flex: none; }
+
 @media (forced-colors: active) {
   .talos-button,
   .talos-switch,
