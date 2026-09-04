@@ -65,6 +65,7 @@ import {
   verificaTrustMcp as verificaTrustMcpReale,
 } from './mcp-registry.mjs';
 import { caricaSkill as caricaSkillReale, SkillRegistryError } from './skill-registry.mjs';
+import { ATTREZZI_CON_PERMESSO_PER_ATTREZZO } from './config.mjs';
 import { ePercorsoDiControllo } from './path-policy.mjs';
 import {
   elencaVoci as elencaVociReale, leggiVoce as leggiVoceLibreriaReale, salvaVoce as salvaVoceLibreriaReale,
@@ -377,6 +378,15 @@ export function createSessionRegistry({
    */
   firma,
   localRuntimes = {},
+  /*
+   * ⭐⭐⭐ O-01 (04/9) — L'ELENCO VERO DEGLI ATTREZZI, per il Capability hub.
+   * Torna `{base, estesi}` letti dal kernel (runtime-owner-adapter.mjs,
+   * `attrezziKernel()`), MAI una copia dei nomi tenuta qui: il foglio del
+   * pulsante «+» mostrava sette nomi scritti a mano mentre `strumentiEstesi`
+   * qui sopra ne offre altri 36. ⛔ `null` = nessun kernel collegato: il
+   * pannello dice «non osservato», non elenca zero attrezzi.
+   */
+  attrezziKernelFn = null,
 } = {}) {
   const preparaTask = preparaEsecuzioneFn ?? ((taskId) => preparaEsecuzioneReale(taskId, taskCatalogProvider));
   const sessioni = new Map();
@@ -1385,6 +1395,57 @@ export function createSessionRegistry({
     return { sessionId };
   }
 
+  /**
+   * ⭐ O-01 (04/9) — la dipendenza esterna di `web_search`, LETTA (mai
+   * dedotta): `ricercaWebFn()` è la stessa funzione che il kernel riceve a
+   * ogni giro, quindi ciò che il pannello mostra è esattamente ciò con cui
+   * l'attrezzo girerebbe adesso. ⛔ Si legge SOLO `provider`: la chiave sta
+   * nel portachiavi e non esce di lì, nemmeno per un pannello di sola lettura.
+   */
+  function dipendenzaRicercaWeb() {
+    let conf = null;
+    try { conf = ricercaWebFn ? ricercaWebFn() : { ricercaWeb, richiediRicercaFn: undefined }; } catch { conf = null; }
+    const scelta = conf?.ricercaWeb;
+    if (!scelta) return { stato: 'non-configurata', dettaglio: 'Nessuna fonte di ricerca pronta: sceglila in Impostazioni → Ricerca web.' };
+    if (conf?.richiediRicercaFn) return { stato: 'pronta', dettaglio: 'Fonte: DuckDuckGo, senza chiave' };
+    return { stato: 'pronta', dettaglio: `Fonte: ${scelta.provider}` };
+  }
+
+  /**
+   * ⭐ O-01 (04/9) — il corpo condiviso da `elencaAttrezzi` (per sessione) e
+   * `elencaAttrezziPredefiniti` (senza sessione): l'unica differenza fra i
+   * due è chi ha scelto i permessi per-attrezzo.
+   */
+  async function costruisciElencoAttrezzi(permessiPerAttrezzo) {
+    if (typeof attrezziKernelFn !== 'function') {
+      return { ok: true, attrezzi: null, errore: 'Il runtime agente non è configurato per questa installazione: gli attrezzi offerti non sono osservabili.' };
+    }
+    let dalKernel;
+    try {
+      dalKernel = await attrezziKernelFn();
+    } catch (errore) {
+      return { ok: true, attrezzi: null, errore: errore?.message ?? 'Il runtime agente non ha risposto.' };
+    }
+    const offerti = new Set(strumentiEstesi);
+    const scelte = permessiPerAttrezzo && typeof permessiPerAttrezzo === 'object' ? permessiPerAttrezzo : {};
+    const riga = (a, categoria) => ({
+      nome: a.nome,
+      descrizione: a.descrizione,
+      categoria,
+      permessoConfigurabile: ATTREZZI_CON_PERMESSO_PER_ATTREZZO.has(a.nome),
+      // ⛔ `null` = «come la policy di sessione», che NON è «consentito»: due stati diversi, mai appiattiti.
+      permesso: ATTREZZI_CON_PERMESSO_PER_ATTREZZO.has(a.nome) ? (scelte[a.nome] ?? null) : null,
+      dipendenza: a.nome === 'web_search' ? dipendenzaRicercaWeb() : null,
+      tokenSchemaStimati: a.tokenSchemaStimati,
+    });
+    const attrezzi = [
+      ...dalKernel.base.map((a) => riga(a, 'base')),
+      // ⛔ Solo quelli davvero passati al kernel: `ATTREZZI_ESTESI_OPENAI` ne dichiara di più di quanti `strumentiEstesi` ne accenda.
+      ...dalKernel.estesi.filter((a) => offerti.has(a.nome)).map((a) => riga(a, 'esteso')),
+    ];
+    return { ok: true, attrezzi, errore: null };
+  }
+
   return Object.freeze({
     /**
      * ⭐⭐⭐ FASE L (30/8) — chiamata UNA volta da `server.mjs`, prima di
@@ -2088,6 +2149,47 @@ export function createSessionRegistry({
      * malformato torna `{server:null, errore}`, stesso principio "gli
      * stati sono tre" di elencaHooks.
      */
+    /**
+     * ⭐⭐⭐ O-01 (04/9) — GLI ATTREZZI OFFERTI, per il Capability hub («+»
+     * del composer). Fino a qui il foglio elencava SETTE nomi scritti in una
+     * stringa di template sotto l'etichetta «sempre offerti al modello»,
+     * mentre `strumentiEstesi` (qui sopra, il default di questo file) ne
+     * aggiunge altri 36 che il modello riceve DAVVERO a ogni giro:
+     * `web_search`, `document_create`, `generate_image`, `delega_sottotask`,
+     * Libreria, Notes, Tasks, Memory, Deep Research, Tool Forge. Un
+     * inventario incompleto presentato come completo è uno stato inventato.
+     *
+     * Per ogni attrezzo si dichiarano TRE fatti diversi, mai confusi in uno:
+     *  - è offerto al modello (essere in questa lista);
+     *  - una sua chiamata passa dal cancello per-attrezzo
+     *    (`ATTREZZI_CON_PERMESSO_PER_ATTREZZO`, config.mjs — l'asse del
+     *    foglio Permessi) e con quale scelta per QUESTA sessione;
+     *  - la sua dipendenza esterna è pronta (`web_search` senza una fonte
+     *    configurata è offerto ma non funziona: si dice, non si tace).
+     *
+     * ⛔ `attrezzi:null` + `errore` quando il kernel non è collegato — mai
+     * `attrezzi:[]`, che significherebbe «nessun attrezzo», un fatto diverso.
+     */
+    async elencaAttrezzi(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      return costruisciElencoAttrezzi(voce.permessiPerAttrezzo ?? null);
+    },
+
+    /**
+     * ⭐⭐⭐ O-01 (04/9) — lo stesso elenco PRIMA che una sessione esista.
+     * ⛔ Nato da un rilievo preciso: l'owner apre spesso il foglio senza aver
+     * ancora avviato niente, ed è lì che lo vede la prima volta — se ogni
+     * sezione dicesse «nessuna sessione attiva» il foglio non direbbe più
+     * nulla di vero su cosa TALOS sa fare. Qui i permessi per-attrezzo sono
+     * `null` (non esiste ancora una sessione che li possa avere scelti): il
+     * pannello lo dichiara come «quello che riceverà la prossima sessione»,
+     * mai come lo stato di una sessione che non c'è.
+     */
+    async elencaAttrezziPredefiniti() {
+      return costruisciElencoAttrezzi(null);
+    },
+
     async elencaServerMcp(sessionId) {
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };

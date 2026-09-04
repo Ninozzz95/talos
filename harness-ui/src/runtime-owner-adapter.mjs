@@ -605,6 +605,54 @@ export function createOwnerRuntimeAdapter({
         prepare: (taskId) => runtime.preparaEsecuzione(taskId),
       });
     },
+    /**
+     * ⭐⭐⭐ O-01 (04/9) — GLI ATTREZZI VERI, CHIESTI AL KERNEL.
+     *
+     * Il Capability hub («+» del composer) elencava SETTE nomi scritti a mano
+     * dentro una stringa di template, sotto l'etichetta «Attrezzi
+     * dell'harness · sempre offerti al modello». Il kernel ne offre 43 (7
+     * base + i 36 di `strumentiEstesi`, session-registry.mjs): 36 attrezzi
+     * VERI — `web_search`, `document_create`, `generate_image`,
+     * `delega_sottotask`, tutta Libreria/Notes/Tasks/Memory/Research/Forge —
+     * non comparivano da nessuna parte. Un inventario incompleto presentato
+     * come completo è uno stato inventato, esattamente come un contatore
+     * inventato.
+     *
+     * ⛔ La cura non è allungare la lista a mano (invecchierebbe di nuovo, e
+     * in silenzio): si LEGGE dal kernel, che è l'unico posto dove quei nomi
+     * e quelle descrizioni esistono davvero. Nessuna copia, nessun secondo
+     * elenco da tenere allineato.
+     *
+     * `tokenSchemaStimati` è una STIMA dichiarata (caratteri del JSON / 4,
+     * l'euristica affermata) sul JSON che va davvero sul filo, non un numero
+     * inventato: serve a rispondere «quanto mi costa avere questi attrezzi
+     * offerti a ogni giro» — la stessa domanda a cui Hermes Agent v0.21
+     * risponde col suo «schema token estimate» per server MCP, qui estesa a
+     * OGNI attrezzo, MCP compresi quando ci saranno.
+     *
+     * @returns {Promise<{base: Array<{nome:string,descrizione:string,tokenSchemaStimati:number}>, estesi: Array}>}
+     */
+    async attrezziKernel() {
+      const runtime = await carica();
+      const leggi = (elenco, dove) => {
+        if (!Array.isArray(elenco)) {
+          throw new OwnerRuntimeUnavailableError(`Il runtime agente non espone l’elenco degli attrezzi (${dove}).`, 'OWNER_RUNTIME_CONTRACT_INVALID');
+        }
+        return elenco.map((voce) => {
+          const f = voce?.function ?? voce ?? {};
+          return {
+            nome: String(f.name ?? ''),
+            descrizione: String(f.description ?? ''),
+            // ⛔ Misurato sul JSON reale della dichiarazione, non su un valore per attrezzo scritto altrove.
+            tokenSchemaStimati: Math.ceil(JSON.stringify(voce ?? {}).length / 4),
+          };
+        }).filter((a) => a.nome);
+      };
+      return {
+        base: leggi(runtime.ATTREZZI_OPENAI, 'ATTREZZI_OPENAI'),
+        estesi: leggi(runtime.ATTREZZI_ESTESI_OPENAI, 'ATTREZZI_ESTESI_OPENAI'),
+      };
+    },
     async talosLavora(input) {
       const fetchOriginale = typeof input?.fetchDiRete === 'function' ? input.fetchDiRete : fetch;
       const fetchConDescrizione = creaFetchConDescrizioneComando(fetchOriginale);

@@ -564,6 +564,217 @@ const SCENARI = {
   },
 
   /**
+   * ⭐⭐⭐⭐ O-01 (04/9) — IL FOGLIO DEL PULSANTE «+», RIGA PER RIGA.
+   *
+   * Owner: «quando clicco il pulsante + nel chat composer ogni riga della
+   * modale che si apre deve essere funzionante al 100% e non avere
+   * funzionalità o ui mock».
+   *
+   * Preme OGNI riga premibile del foglio, in QUATTRO combinazioni:
+   * senza sessione / con sessione × «Cassetto» / «Menu» (l'impostazione
+   * «Apertura del pulsante +», che fino a O-01 non cambiava nulla). La
+   * viewport arriva da `?qa=` — la matrice unica laptop/desktop in testa a
+   * questo file.
+   *
+   * ⛔ Nessun giro pagato: le sessioni sono quelle già sul disco dello
+   * store copiato (mai il 4174), e l'unica azione con effetto è il click su
+   * «Allega un file del workspace», che apre un secondo foglio locale.
+   */
+  async 'qa-capability-hub'(p) {
+    const viewport = viewportRichiesta(URL_BASE); // ⛔ matrice unica: vedi VIEWPORT_DESKTOP in testa al file
+    await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
+    await p.cdp.send('Page.reload', { ignoreCache: true });
+    await p.attendi(1800);
+
+    /** Lo stato del foglio: titolo, sezioni, righe premibili, caselle, e il testo di ogni pannello. */
+    const statoFoglio = () => p.cdp.evaluate(`(() => {
+      const d = document.querySelector('#sheetDialog');
+      if (!d || !d.open) return null;
+      const body = d.querySelector('#sheetBody');
+      const sezioni = [...body.querySelectorAll('.sheet-section')].map((s) => ({
+        etichetta: s.querySelector('.sheet-label')?.textContent ?? '',
+        righe: [...s.querySelectorAll('.sheet-option')].length,
+        vuoto: s.querySelector('.board-empty')?.textContent ?? null,
+      }));
+      const r = d.getBoundingClientRect();
+      return {
+        titolo: d.querySelector('#sheetTitle')?.textContent ?? '',
+        menu: d.classList.contains('sheet-dialog--dal-composer'),
+        rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
+        sezioni,
+        premibili: [...body.querySelectorAll('button')].map((b) => b.querySelector('strong')?.textContent ?? b.textContent.trim()),
+        caselle: body.querySelectorAll('input[type=checkbox]').length,
+        riepilogoAttrezzi: body.querySelector('.tools-panel-summary')?.textContent ?? null,
+        attrezzi: [...body.querySelectorAll('[data-tool-name]')].map((el) => el.dataset.toolName),
+      };
+    })()`);
+
+    const schedaRail = () => p.cdp.evaluate(`(() => Object.fromEntries([...document.querySelectorAll('[data-capability-row]')].map((el) => [el.dataset.capabilityRow, el.textContent])))()`);
+
+    /** L'impostazione vera, cambiata dal suo controllo vero (stesso handler di un gesto della persona). */
+    const impostaAperturaPulsantePiu = async (valore) => {
+      const fatto = await p.cdp.evaluate(`(() => { const s = document.querySelector('#composerPlusSelect'); if (!s) return false; s.value = ${j(valore)}; s.dispatchEvent(new Event('change', { bubbles: true })); return document.documentElement.dataset.talosComposerPlus === ${j(valore)}; })()`);
+      if (!fatto) p.difetto(`l'impostazione «Apertura del pulsante +» non ha accettato il valore «${valore}»`, { severita: 'blocco' });
+      await p.attendi(250);
+    };
+
+    /**
+     * Apre il foglio dal «+» VERO del composer e aspetta che i dieci pannelli
+     * abbiano finito di caricare.
+     * ⛔⛔ Trovato dal vivo al secondo giro: con lo store VUOTO l'app apre la
+     * vista Board, e il «+» sta nel pannello Chat NASCOSTO — `el.click()`
+     * funziona lo stesso su un elemento non disposto, e la prova stava
+     * fotografando un gesto che una persona non può fare (e col foglio
+     * ancorato a un rettangolo di zeri, fuori schermo). Prima si va sulla
+     * chat, come farebbe lei.
+     */
+    const apriDalPiu = async () => {
+      await p.cdp.evaluate("document.querySelector('[data-mode=\"chat\"]')?.click()");
+      await p.attendi(350);
+      const visibile = await p.cdp.evaluate("(() => { const r = document.querySelector('#capabilityBtn')?.getBoundingClientRect(); return r ? { w: Math.round(r.width), h: Math.round(r.height), top: Math.round(r.top), left: Math.round(r.left) } : null; })()");
+      p.nota(`rettangolo del «+» prima dell'apertura: ${JSON.stringify(visibile)}`);
+      if (!visibile || visibile.w === 0) p.difetto('il pulsante «+» non è disposto a schermo: il foglio verrebbe aperto da un gesto impossibile', { severita: 'blocco' });
+      await p.click('#capabilityBtn');
+      await p.attendiCondizione("!!document.querySelector('#sheetDialog')?.open", { descrizione: 'foglio capability aperto' });
+      await p.attendiCondizione("!document.querySelector('#sheetBody')?.textContent.includes('Carico')", { descrizione: 'tutti i pannelli hanno risposto', timeoutMs: 12000 });
+      await p.attendi(400);
+    };
+    const chiudi = async () => {
+      await p.cdp.evaluate("document.querySelector('#closeSheet')?.click()");
+      await p.attendi(500);
+    };
+
+    /*
+     * ⛔⛔ Trovato al primo giro di questo stesso scenario: avevo scritto
+     * quattro casi «senza sessione»/«con sessione» dando per scontato che
+     * all'apertura non ci fosse nessuna sessione — e l'app RIAPRE da sola
+     * l'ultima (lo dice anche `qa-aperti-minori`). Le due righe «senza
+     * sessione» stavano fotografando una sessione aperta e chiamandola
+     * assenza: una prova che si dà ragione da sola.
+     * ⇒ Lo stato NON si presume, si OSSERVA — e lo stato che questo server
+     * non può mostrare si dichiara mancante, non si finge. Per vedere
+     * l'altro si punta lo scenario a un server con lo store VUOTO.
+     */
+    const sessioneAperta = await p.cdp.evaluate("document.querySelector('.real-session-item.active')?.dataset.realSessionId ?? null");
+    const sessioniInSidebar = await p.cdp.evaluate("document.querySelectorAll('.real-session-item').length");
+    p.nota(`stato osservato all'apertura: sessioni nella sidebar=${sessioniInSidebar}, sessione riaperta in automatico=${sessioneAperta}`);
+    const conSessione = Boolean(sessioneAperta);
+    p.nota(conSessione
+      ? '⇒ questo giro prova il foglio CON una sessione aperta. Per l\'altro stato si punta lo scenario a un server con lo store VUOTO.'
+      : '⇒ questo giro prova il foglio SENZA nessuna sessione (store vuoto), lo stato in cui l\'owner lo vede la prima volta.');
+    const etichetta = conSessione ? 'con-sessione' : 'senza-sessione';
+    const casi = [
+      { nome: `${etichetta}-cassetto`, apertura: 'drawer', conSessione },
+      { nome: `${etichetta}-menu`, apertura: 'menu', conSessione },
+    ];
+
+    /*
+     * ⛔ Il Tool Forge è uno store GLOBALE (`.tool-forge-store/` accanto a
+     * server.mjs), NON la copia isolata dello store sessioni: premere il suo
+     * interruttore cambia davvero un file dell'owner. Si contano le pressioni
+     * e, se restano dispari, se ne fa un'ultima per rimettere lo stato com'era:
+     * una prova non lascia dietro di sé una modifica che non ha dichiarato.
+     */
+    let pressioniForge = 0;
+
+    let rettangoloCassetto = null;
+    let rettangoloMenu = null;
+
+    for (const caso of casi) {
+      if (caso.conSessione) {
+        const aperta = await p.cdp.evaluate("(() => { const r = document.querySelector('.real-session-item'); if (!r) return null; r.click(); return r.dataset.realSessionId; })()");
+        if (!aperta) { p.difetto('nessuna sessione nella sidebar: serve un server puntato su una COPIA dello store', { severita: 'blocco' }); return; }
+        await p.attendiCondizione("!!document.querySelector('.real-session-item.active')", { descrizione: 'sessione aperta' });
+        await p.attendi(1400);
+      }
+      await impostaAperturaPulsantePiu(caso.apertura);
+      await p.screenshot(`${caso.nome}-01-prima`, { nota: `apertura=${caso.apertura}, sessione=${caso.conSessione}` });
+      await apriDalPiu();
+      const stato = await statoFoglio();
+      if (!stato) { p.difetto(`il foglio non si è aperto (${caso.nome})`, { severita: 'blocco' }); continue; }
+      p.nota(`${caso.nome}: titolo="${stato.titolo}" menu=${stato.menu} rect=${JSON.stringify(stato.rect)} caselle=${stato.caselle} attrezzi=${stato.attrezzi.length} riepilogo="${stato.riepilogoAttrezzi}"`);
+      p.nota(`${caso.nome}: sezioni ${JSON.stringify(stato.sezioni)}`);
+      p.nota(`${caso.nome}: scheda Capability del rail ${JSON.stringify(await schedaRail())}`);
+      await p.screenshot(`${caso.nome}-02-foglio-aperto`, { nota: `${stato.attrezzi.length} attrezzi · ${stato.caselle} caselle · ${stato.sezioni.length} sezioni` });
+      /* ⛔ Le sezioni finali («Non ancora implementato», «Aggiungi contesto al messaggio») stanno sotto 43 righe di attrezzi: senza questo secondo scatto nessuno le guarderebbe mai. */
+      await p.cdp.evaluate("(() => { const b = document.querySelector('#sheetBody'); if (b) b.scrollTop = b.scrollHeight; })()");
+      await p.attendi(500);
+      await p.screenshot(`${caso.nome}-02b-foglio-in-fondo`, { nota: 'sezioni finali: «Non ancora implementato» e «Aggiungi contesto al messaggio»' });
+      await p.cdp.evaluate("(() => { const b = document.querySelector('#sheetBody'); if (b) b.scrollTop = 0; })()");
+      await p.attendi(300);
+
+      // ⛔ Nessuna casella: una checkbox disabilitata è un interruttore che non esiste.
+      if (stato.caselle > 0) p.difetto(`${caso.nome}: ${stato.caselle} caselle di spunta nel foglio — erano la finta da togliere`, { severita: 'blocco' });
+      // ⛔ L'elenco attrezzi è quello VERO, non i sette scritti a mano.
+      if (stato.attrezzi.length < 40) p.difetto(`${caso.nome}: solo ${stato.attrezzi.length} attrezzi elencati — il kernel ne offre 43 (7 base + 36 estesi)`, { severita: 'blocco' });
+      if (!stato.riepilogoAttrezzi || !/token di schema/.test(stato.riepilogoAttrezzi)) p.difetto(`${caso.nome}: manca il riepilogo con la stima di token: "${stato.riepilogoAttrezzi}"`, { severita: 'difetto' });
+      if (!caso.conSessione && !/nessuna sessione aperta/.test(stato.riepilogoAttrezzi || '')) p.difetto(`${caso.nome}: senza sessione il riepilogo deve DICHIARARLO, altrimenti spaccia gli attrezzi della prossima sessione per quelli di una sessione che non c'è`, { severita: 'blocco' });
+      // ⛔ Nessuna sezione deve restare senza né righe né un testo onesto: un riquadro vuoto è uno stato non dichiarato.
+      for (const sez of stato.sezioni) {
+        if (sez.righe === 0 && !sez.vuoto) p.difetto(`${caso.nome}: la sezione "${sez.etichetta}" è vuota e non dice perché`, { severita: 'blocco' });
+      }
+      /* ⛔⛔ Un foglio aperto FUORI dallo schermo è peggio di un foglio che non si apre: il click risponde, e non si vede niente. */
+      if (stato.rect.y < 0 || stato.rect.x < 0 || stato.rect.y > viewport.height - 40) {
+        p.difetto(`${caso.nome}: il foglio è aperto fuori dallo schermo (rect=${JSON.stringify(stato.rect)}, viewport ${viewport.width}×${viewport.height})`, { severita: 'blocco' });
+      }
+      /* ⛔ La scheda «Capability» del rail deve dire un numero VERO anche senza sessione: gli attrezzi non appartengono a una sessione. */
+      const rail = await schedaRail();
+      if (!/^\d+$/.test(String(rail.attrezzi))) p.difetto(`${caso.nome}: la riga «Attrezzi» della scheda Capability dice "${rail.attrezzi}" invece del numero vero`, { severita: 'blocco' });
+      if (caso.apertura === 'menu') rettangoloMenu = stato.rect; else rettangoloCassetto = stato.rect;
+      if (caso.apertura === 'menu' && !stato.menu) p.difetto(`${caso.nome}: il foglio non porta il marcatore sheet-dialog--dal-composer`, { severita: 'blocco' });
+
+      // --- si preme OGNI riga premibile ------------------------------------
+      const premibili = await p.cdp.evaluate("[...document.querySelectorAll('#sheetBody button')].map((b, i) => ({ i, testo: (b.querySelector('strong')?.textContent ?? b.textContent).trim().slice(0, 60) }))");
+      p.nota(`${caso.nome}: righe premibili = ${JSON.stringify(premibili)}`);
+      for (const bottone of premibili) {
+        const prima = await p.cdp.evaluate("(() => ({ titolo: document.querySelector('#sheetTitle')?.textContent, toast: [...document.querySelectorAll('.toast')].length }))()");
+        const esito = await p.cdp.evaluate(`(() => {
+          const b = [...document.querySelectorAll('#sheetBody button')][${bottone.i}];
+          if (!b) return { assente: true };
+          b.click();
+          return { premuto: true };
+        })()`);
+        await p.attendi(700);
+        const dopo = await p.cdp.evaluate("(() => ({ titolo: document.querySelector('#sheetTitle')?.textContent, aperto: !!document.querySelector('#sheetDialog')?.open, toastTesti: [...document.querySelectorAll('.toast')].map((t) => t.textContent.trim().slice(0, 120)) }))()");
+        if (/^(Abilita|Disabilita)$/.test(bottone.testo)) pressioniForge += 1;
+        p.nota(`${caso.nome}: premuto "${bottone.testo}" → ${JSON.stringify({ esito, prima, dopo })}`);
+        await p.screenshot(`${caso.nome}-03-premuto-${bottone.testo.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30)}`, { nota: `dopo il click su "${bottone.testo}"` });
+        for (const testo of dopo.toastTesti) {
+          if (/simulat|mockup|demo|finto|placeholder/i.test(testo)) p.difetto(`${caso.nome}: "${bottone.testo}" produce ancora un avviso che dichiara di essere finto: «${testo}»`, { severita: 'blocco' });
+        }
+        const cambiato = dopo.titolo !== prima.titolo || !dopo.aperto || dopo.toastTesti.length > prima.toast;
+        if (!cambiato) p.difetto(`${caso.nome}: premere "${bottone.testo}" non ha cambiato NIENTE a schermo — un'azione che non fa nulla`, { severita: 'difetto' });
+        // si torna al foglio del «+» per la riga successiva
+        if (!dopo.aperto || dopo.titolo !== stato.titolo) { await chiudi(); await apriDalPiu(); }
+      }
+      await chiudi();
+    }
+
+    // ⛔ Si rimette il Tool Forge com'era: uno store GLOBALE non si lascia cambiato da una prova.
+    if (pressioniForge % 2 === 1) {
+      await apriDalPiu();
+      const rimesso = await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('#sheetBody button')].find((x) => /^(Abilita|Disabilita)$/.test(x.textContent.trim())); if (!b) return null; const era = b.textContent.trim(); b.click(); return era; })()");
+      await p.attendi(800);
+      p.nota(`Tool Forge rimesso com'era: ${pressioniForge} pressioni (dispari) + 1 di ripristino ("${rimesso}")`);
+      await chiudi();
+    } else {
+      p.nota(`Tool Forge: ${pressioniForge} pressioni (pari) — lo stato sul disco è quello di partenza`);
+    }
+
+    if (rettangoloCassetto && rettangoloMenu) {
+      p.nota(`«Cassetto» rect=${JSON.stringify(rettangoloCassetto)} · «Menu» rect=${JSON.stringify(rettangoloMenu)}`);
+      const uguali = JSON.stringify(rettangoloCassetto) === JSON.stringify(rettangoloMenu);
+      if (uguali) p.difetto('«Cassetto» e «Menu» aprono il foglio nella stessa identica posizione e misura: l\'impostazione è ancora inerte', { severita: 'blocco' });
+    } else {
+      p.difetto('non è stato possibile confrontare le due aperture del pulsante +', { severita: 'difetto' });
+    }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url}:${e.riga})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) p.difetto(`richiesta fallita: ${r.status} ${r.url}`, { severita: 'difetto' });
+    if (p.difetti?.some((d) => d.severita === 'blocco')) process.exitCode = 1;
+  },
+
+  /**
    * ⭐⭐⭐ 04/9 — W1-13, i FILE DI CONTROLLO a schermo: la card di
    * approvazione (`descriviAzioneApprovazione`) e la scheda Ambiente
    * ("Repo annidati"). Nessun modello coinvolto e nessun giro pagato,

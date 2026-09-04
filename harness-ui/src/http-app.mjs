@@ -2289,6 +2289,19 @@ export function createHttpApp({
           const errore = new Error('Capacità macchina non configurata'); errore.code = 'REPORT_UNAVAILABLE'; throw errore;
         }
         data = await capacitaMacchinaFn();
+      } else if (url.pathname === '/api/v1/tools') {
+        /*
+         * ⭐⭐⭐ O-01 (04/9) — gli attrezzi offerti PRIMA che una sessione
+         * esista. ⛔ Non un doppione di `/sessions/:id/tools`: l'owner apre il
+         * foglio del «+» spesso senza aver ancora avviato niente, e senza
+         * questa rotta l'unica risposta onesta sarebbe «nessuna sessione
+         * attiva» — vera, e completamente inutile. Qui i permessi
+         * per-attrezzo sono `null`: nessuna sessione li ha ancora scelti.
+         */
+        requireNoQuery(url);
+        if (!sessionRegistry?.elencaAttrezziPredefiniti) { const errore = new Error('Elenco attrezzi non configurato'); errore.code = 'REPORT_UNAVAILABLE'; throw errore; }
+        const esito = await sessionRegistry.elencaAttrezziPredefiniti();
+        data = { attrezzi: esito.attrezzi, errore: esito.errore };
       } else if (url.pathname === '/api/v1/search-source') {
         requireNoQuery(url);
         if (!searchSourceStore) { const error = new Error('Fonte di ricerca non configurata'); error.code = 'SEARCH_STORE_UNAVAILABLE'; throw error; }
@@ -2324,6 +2337,8 @@ export function createHttpApp({
         // ⭐⭐⭐ 28/8 — FASE A (hook): il pannello Control-plane elenca gli hook dichiarati e il loro stato di fiducia vero — stesso principio di exportMatch sotto.
         const hooksMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/hooks$/.exec(url.pathname);
         // ⭐⭐⭐ 29/8 — FASE E: il Capability hub elenca i server MCP dichiarati e il loro stato di fiducia vero, stesso principio esatto di hooksMatch appena sopra.
+        // ⭐⭐⭐ O-01 (04/9): il Capability hub elenca gli attrezzi VERI offerti al modello (43, letti dal kernel) invece dei sette scritti a mano nel template — stesso principio esatto di mcpMatch qui sotto.
+        const toolsMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/tools$/.exec(url.pathname);
         const mcpMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/mcp$/.exec(url.pathname);
         // ⭐⭐⭐ 29/8 — FASE F: il Capability hub elenca le skill dichiarate — stesso principio, senza il concetto di fiducia (le skill non ce l'hanno).
         const skillsMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/skills$/.exec(url.pathname);
@@ -2426,6 +2441,22 @@ export function createHttpApp({
             throw errore;
           }
           data = { hooks: esito.hooks, errore: esito.errore };
+        } else if (toolsMatch) {
+          requireNoQuery(url);
+          let sessionId;
+          try {
+            sessionId = decodeURIComponent(toolsMatch[1]);
+          } catch {
+            sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+            return;
+          }
+          const esito = await sessionRegistry.elencaAttrezzi(sessionId);
+          if ('erroreAvvio' in esito) {
+            const errore = new Error(esito.erroreAvvio);
+            errore.code = esito.code;
+            throw errore;
+          }
+          data = { attrezzi: esito.attrezzi, errore: esito.errore };
         } else if (mcpMatch) {
           requireNoQuery(url);
           let sessionId;
