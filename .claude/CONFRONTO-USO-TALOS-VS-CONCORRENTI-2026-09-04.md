@@ -182,6 +182,39 @@ sidebar per i gateway, *Profiles* è il loro `Ctrl 1…5`, e la visione la instr
 ausiliario dedicato. Il nostro elenco delle cose mancanti non è una lista di desideri: è la lista
 della spesa scritta guardando il concorrente.
 
+## §4-quinquies — La loro pagina «Capabilities»: è qui che siamo più indietro
+
+`hermes-v3/01-capability-skills.png`, `04-capability-mcp.png`, `05-capability-browse-hub.png`.
+
+Una pagina sola con **quattro schede numerate**: *Skills **61*** · *Tools **24*** · *MCP* · *Browse
+Hub*. Dentro la scheda Skills: una ricerca con un esempio scritto nel campo («Try
+"software-development"»), un ordinamento **«↓ Most used»**, e una riga per skill con **nome,
+categoria** (Productivity, Creative, Research, Github, Autonomous-Ai-Agents) e un **interruttore**.
+A destra il **dettaglio** della skill selezionata: nome, pastiglia della categoria, descrizione. In
+fondo a destra, in grigio: **«Changes apply to new sessions»** — cioè la portata della modifica
+dichiarata dove la modifica si fa.
+
+Il **Browse Hub** è un vero mercato dentro l'app: *hub collegati* elencati come pastiglie (Official
+(Nous), Hermes Index, skills.sh, Well-Known, Direct URL, GitHub, ClawHub, LobeHub, browse.sh) e le
+skill in evidenza con descrizione e due azioni per riga, **Preview** e **Install**.
+
+Confronto onesto:
+
+| | Hermes | TALOS oggi |
+|---|---|---|
+| dove vivono le capability | una pagina con 4 schede | un foglio con 12 sezioni in scorrimento unico |
+| ricerca | sì, con esempio nel campo | no |
+| ordinamento | «più usate» (quindi tracciano l'uso per skill) | no |
+| accendere/spegnere una skill | interruttore per riga | no (solo Tool Forge ha abilita/disabilita) |
+| dettaglio | pannello a destra | no |
+| portata della modifica | scritta in fondo | no |
+| distribuzione | nove hub collegati, Preview e Install | nessuna |
+| costo in token | non lo mostrano | **noi sì, per ogni attrezzo e in totale** |
+
+⇒ Sul **contenuto** siamo pari o meglio (43 attrezzi veri col costo, permessi per attrezzo,
+diagnosi dei giri). Sulla **forma** siamo molto indietro: loro hanno una pagina, noi un cassetto.
+È esattamente il motivo per cui l'owner ha chiesto il redesign.
+
 ## §5 — Taccuino: difetti nostri visti mentre confrontavo
 
 1. La sidebar mostra due elementi che non fanno niente finché non servono (suggerimento azioni,
