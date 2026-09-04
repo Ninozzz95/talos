@@ -273,6 +273,76 @@ stessi eventi. È un +1 dichiarabile, non una copia.
 Fonti: [pannelli del cruscotto DeepSeek Harness](https://signoz.io/docs/dashboards/dashboard-templates/deepseek-harness-dashboard/) ·
 [l'osservabilità viene da un plugin esterno](https://signoz.io/docs/deepseek-harness-observability/)
 
-## H — non ancora chiesta
+## H · DOCTOR, ERRORI, PRIMO AVVIO, VOCE DELL'INTERFACCIA — decisa il 04/09
 
-Resta **H**: doctor, errori, primo avvio, voce dell'interfaccia.
+| # | Decisione |
+|---|---|
+| H1-H5 | Il Doctor è una **pagina** con i controlli **raggruppati e con severità** (ok · nota · avviso · guasto), un **conteggio finale** («21 ok · 2 avvisi · 0 guasti»), **ogni avviso dice cosa fare**, e il **rimedio è eseguibile dove è sicuro** (riavvia il server, apri la cartella); altrimenti mostra il comando. |
+| H6 | Il Doctor dice **quanto spazio occupano l'app e lo store**. |
+| H7 | **Si esporta in JSON**, per incollarlo in una segnalazione. |
+| H8 | **Solo contrassegno, mai apertura automatica** (confermato dopo un chiarimento: erano state selezionate entrambe le opzioni opposte). |
+| H9-H10 | Pagina più nuova del server: **si mostrano le due versioni e si propone il riavvio** (riga W0-09). Oggi dice «Risorsa non trovata» e sembra un guasto dell'app. |
+| H11-H13 | Un errore porta **tutte e quattro** le cose: due frasi (cosa è successo · cosa fare) · **niente JSON in prima battuta** · un **codice citabile e copiabile** · **momento e sessione** in cui è avvenuto (si lega al registro esportabile, E28). |
+| H14-H15 | «Giri esauriti» resta una **nota con la diagnosi**, non un errore (già fatto). Le note di sistema **si distinguono dai messaggi** e non usano la faccia dell'assistente. ⚠️ Aggiunta: **si possono nascondere**. |
+| H16-H19 | Intro a **quattro passi, saltabile e ripetibile** dalle impostazioni · parte **solo se manca qualcosa** · offre **chiave API e modello locale, col locale in evidenza** · alla fine **apre una sessione con un compito d'esempio**. |
+| H20 | **«Nessuna telemetria, niente esce da questa macchina»: una riga nell'intro.** |
+| H21 | **La lingua segue il sistema**, italiano e inglese. Vedi la ricerca qui sotto. ⛔ Cambia una premessa che avevamo dato per scontata (interfaccia solo in italiano). |
+| H22 | **Nessun nome tecnico a schermo, con una mappa unica** che traduce ogni nome (`tool_create`, `web_search`) nel suo nome umano, così non divergono fra le pagine. |
+| H23 | **Maiuscole solo per le etichette di sezione**, mai per i contenuti. |
+| H24-H26 | **Ogni numero ha la sua unità** · **le stime dicono di essere stime** · **tempi relativi fino a 24 ore, poi la data**. |
+| H27-H30 | **Tastiera: cancello del redesign**, non un extra — una schermata che non si usa senza mouse non è finita. Dentro anche **anello di focus visibile** e **«riduci il movimento» esteso a tutto** (oggi copre solo lo sfondo). **Alto contrasto: dopo**, come tema aggiuntivo. |
+
+### La ricerca chiesta dall'owner su H21 (lingua), 04/09
+
+L'owner: «qui serve una ricerca web super approfondita a livello di codice, dei
+competitor, delle documentazioni e delle best practice». Fatta.
+
+**Fatto 1 — è un +1, non una parità.** L'interfaccia di **Claude Code è cablata in
+inglese**: menu, messaggi di stato, richieste di permesso, tutto, indipendentemente
+dalla lingua di sistema; e la chiave `language` nelle impostazioni **non tocca**
+l'interfaccia (governa solo la lingua delle risposte del modello). Ci sono richieste
+aperte per spagnolo, portoghese, cinese tradizionale, russo, tedesco, giapponese,
+coreano: **nessuna implementata**. Codex idem.
+
+**Fatto 2 — l'abbiamo già pagato al contrario.** Il titolo della chat si salvava
+**tradotto nel database** e ventiquattro chat risultavano tutte «Nuova chat»
+(memoria `parola-tradotta-nel-database`). ⇒ La regola non negoziabile: **sul disco
+niente testo tradotto** — stati, titoli, nomi di file ed eventi restano neutri, la
+traduzione avviene solo al disegno.
+
+**Le sei regole adottate**, dallo stato dell'arte:
+
+1. **Preferenza ≠ lingua risolta.** Si salva `"sistema" | "it" | "en"` (cosa hai
+   chiesto) accanto alla lingua effettiva (cosa si disegna ora). Salvare solo la
+   seconda impedisce di tornare a «segui il sistema», e inchioda alla lingua del primo
+   avvio chi non ha mai scelto.
+2. **Nomi delle lingue nella loro lingua** (Italiano, English), mai tradotti: chi
+   finisce per sbaglio in una lingua che non legge deve ritrovare la via del ritorno.
+3. **Il catalogo inglese è il contratto**, con controllo a compilazione: una chiave
+   mancante o storpiata non compila.
+4. **Ripiego sull'inglese a runtime** comunque: dati vecchi e build disallineate
+   esistono, e una parola in inglese è meglio di un buco.
+5. **Date e numeri formattati fuori dai testi**, con gli strumenti standard: il
+   formato segue la lingua e il testo localizzato non finisce mai dentro un nome di
+   file o un dato per la macchina.
+6. **La scelta si sincronizza** con la parte nativa dell'app, mandando **entrambi** i
+   valori (preferenza ed effettiva), così le finestre di sistema parlano la stessa
+   lingua e si sa da dove viene.
+
+Fonti: [Claude Code, interfaccia solo in inglese](https://github.com/anthropics/claude-code/issues/29147) ·
+[richiesta i18n aperta](https://github.com/anthropics/claude-code/issues/65963) ·
+[la chiave `language` non tocca l'interfaccia](https://claudelog.com/faqs/what-is-language-setting-in-claude-code/) ·
+[sei decisioni per un layer i18n mantenibile](https://www.shotomatic.com/blog/electron-i18n-decisions) ·
+[rilevamento della lingua di sistema](https://www.npmjs.com/package/i18next-electron-language-detector)
+
+---
+
+## Stato: tutte e otto le categorie decise
+
+240 domande, otto categorie, tutte chiuse nell'interfaccia il 04/09. Tre hanno
+richiesto una ricerca su richiesta esplicita dell'owner (E17 radice enorme · G3-G4
+DeepSeek Harness · H21 lingua), e tutte e tre hanno **cambiato la risposta** rispetto
+al consiglio scritto prima di cercare. Due contraddizioni nelle scelte multiple sono
+state chiarite invece che interpretate (F19-F21 git, H8 apertura del Doctor).
+
+**Il prossimo passo è il mockup**, da costruire solo su questo file.
