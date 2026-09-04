@@ -359,7 +359,7 @@ function chiamateDaEventi(eventi) {
         chiamata.argomentiRicomposti = false;
       }
     }
-    chiamata.impronta = `${chiamata.nome ?? '?'} ${chiamata.argomentiRicomposti && chiamata.argomenti !== null ? JSON.stringify(stabile(chiamata.argomenti)) : testo}`;
+    chiamata.impronta = `${chiamata.nome ?? '?'}\u0000${chiamata.argomentiRicomposti && chiamata.argomenti !== null ? JSON.stringify(stabile(chiamata.argomenti)) : testo}`;
   }
 
   return { ordinati, chiamate, runAperto, ultimaSequenza, ultimoTipo, approvazioniPendenti: [...approvazioni.values()] };
