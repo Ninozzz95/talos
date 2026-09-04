@@ -986,6 +986,8 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .status-chip { display: inline-flex; align-items: center; min-height: 25px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: var(--surface-highlight-subtle); font-size: calc(9px * var(--talos-ui-font-scale)); }
 .status-chip.success { color: var(--success); border-color: var(--success-strong); background: var(--success-soft); }
 .status-chip.error { color: var(--danger); border-color: var(--danger-soft); background: var(--danger-soft); }
+/* ⭐ O-02 (04/9) — «avviso» è il terzo stato: non un errore (la chiamata è riuscita) ma un fatto da guardare — una chiamata identica a una precedente ha consumato un giro per niente. */
+.status-chip.avviso { color: var(--accent-2); border-color: var(--accent-strong); background: var(--accent-soft); }
 /* ⭐⭐⭐ 29/8 — FASE G: avvisi dello scanner di plugin-registry.mjs, mostrati PRIMA del bottone "Fida" (app.js, rigaPlugin) — mai un blocco, solo informazione. */
 .plugin-panel-item { margin-bottom: 6px; }
 .plugin-panel-item .sheet-option { margin-bottom: 4px; }
@@ -2839,6 +2841,14 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
  * fino a tre pastiglie di stato per riga (dipendenza, permesso, offerto).
  */
 .tools-panel-summary { margin: 0 0 8px; color: var(--muted); font-size: calc(11px * var(--talos-ui-font-scale)); }
+/*
+ * ⭐⭐⭐ O-02 (04/9) — «perché questa sessione è costata tanto?»: l'uso VERO
+ * degli attrezzi in questa sessione, sotto il costo di averli offerti.
+ * Accentata perché è il dato che risponde alla domanda, non una didascalia.
+ */
+.tools-panel-uso { margin: -4px 0 10px; padding: 6px 8px; border: 1px solid var(--accent-strong); border-radius: 8px; background: var(--accent-soft); color: var(--text); font-size: calc(11px * var(--talos-ui-font-scale)); line-height: 1.45; }
+/* ⭐ O-02 — il contatore dei giri del composer quando è al 75% del tetto DICHIARATO dal kernel: si vede arrivare, invece di sbatterci. */
+[data-runtime-usage][data-giri-stato="vicino-al-tetto"] { color: var(--accent-2); font-weight: 700; }
 .tool-chips { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px; }
 .tool-chips .status-chip { white-space: nowrap; }
 /* ⛔ Usata anche dalla riga Tool Forge (stato + bottone nella STESSA cella): senza questo il `secondary-btn` prende la larghezza piena e va a capo. */

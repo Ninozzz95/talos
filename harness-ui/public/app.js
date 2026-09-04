@@ -251,6 +251,22 @@
        * lato kernel. Vedi il case 'StateDelta' e la riga "Main" nel
        * foglio Albero sessione. */
       usage: null,
+      /**
+       * ⭐⭐⭐ O-02 (04/9) — il registro degli eventi di attrezzo di QUESTA
+       * sessione: `{type, toolCallId, toolCallName?, delta?}`, riempito in
+       * un punto solo dentro handleRealEvent (dopo il dedup `_sequenza`, mai
+       * due volte lo stesso evento su una riconnessione SSE). Serve alla
+       * diagnosi di «giri esauriti» e al riepilogo per attrezzo del
+       * Capability hub. ⛔ Del `ToolCallResult` si tiene SOLO l'id: il suo
+       * `content` può essere enorme, e per contare non serve.
+       */
+      eventiAttrezzi: [],
+      /**
+       * ⭐⭐⭐ O-02 (04/9) — il tetto dei giri che il KERNEL ha dichiarato nel
+       * suo messaggio d'errore («24 su 24»). `null` finché nessuno l'ha
+       * detto: il client non lo sa e non lo inventa. Vedi tettoGiriDaMessaggio.
+       */
+      tettoGiriDichiarato: null,
       /** ⭐⭐⭐ 28/8 — permesso "On request": requestId -> l'elemento DOM
        * della card interattiva (appendApprovalCard). Il kernel è
        * DAVVERO in pausa dentro verificaPermessoScrittura mentre questa
@@ -1733,7 +1749,14 @@
    * non esiste mai in `evento.totali`: la cache mostrava sempre "· cache"
    * assente, anche quando aveva colpito per davvero.
    */
-  function formattaUsageBreve(usage, { live = false, finita = false } = {}) {
+  /**
+   * ⛔⛔ 04/9 — O-02: `tettoGiri` è il tetto DICHIARATO dal kernel nel suo
+   * stesso messaggio d'errore (vedi tettoGiriDaMessaggio), mai una costante
+   * scritta qui: `GIRI_MASSIMI` vive in talosHarness.mjs e non è esportato,
+   * quindi finché nessuno lo dichiara si mostrano i giri usati e basta —
+   * un «12 su 24» inventato sarebbe uno stato inventato come un altro.
+   */
+  function formattaUsageBreve(usage, { live = false, finita = false, tettoGiri = null } = {}) {
     if (!usage) return finita ? 'consumo non registrato' : 'contesto ignoto · in attesa del primo giro'; // 02/09 — una sessione finita non "aspetta" niente
     const prompt = Number(usage.prompt_tokens ?? 0) || 0;
     const completion = Number(usage.completion_tokens ?? 0) || 0;
@@ -1741,13 +1764,207 @@
     const totale = prompt + completion;
     const kilo = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
     const cacheParte = cache > 0 ? ` · cache ${kilo(cache)}` : '';
-    return `${kilo(totale)} token · ${usage.giri} gir${usage.giri === 1 ? 'o' : 'i'}${cacheParte}${live ? ' · live' : ''}`;
+    const tetto = Number.isFinite(tettoGiri) && tettoGiri > 0 ? ` su ${tettoGiri}` : '';
+    return `${kilo(totale)} token · ${usage.giri} gir${usage.giri === 1 ? 'o' : 'i'}${tetto}${cacheParte}${live ? ' · live' : ''}`;
+  }
+
+  /*
+   * ═══════════ O-02 (04/9) — «giri esauriti» deve dire CHI li ha consumati ═══
+   *
+   * Owner: «vedi perché mi spunta spesso `TALOS · errore [giri-esauriti] ⛔
+   * giri esauriti: 24 su 24 usati senza chiudere il task` con modello locale
+   * e probabilmente su modelli a chiave».
+   *
+   * Misurato sui file VERI di `.sessions-store` (71 sessioni con conteggio
+   * giri, 742 chiamate ad attrezzi ricostruite per `toolCallId`): le 7 che
+   * hanno toccato il tetto fanno 37,9 chiamate in media contro 7,5 delle
+   * altre; `shell` è il 51% delle chiamate, poi `cerca` 20%, `leggi` 15%,
+   * `elenca` 11%; e 71 su 742 (9,6%) sono IDENTICHE a una precedente della
+   * stessa sessione — `elenca` il 35%, `leggi` 14%, `cerca` 12%. In una
+   * sessione con modello LOCALE (unsloth-gpt-oss-20b) sono 18 su 69: il
+   * modello rifaceva lo stesso `unzip -Z1 ...` giro dopo giro.
+   *
+   * ⇒ La bolla di oggi dice solo «tetto raggiunto»: vero e inutilizzabile.
+   * Qui si costruisce la diagnosi dagli eventi che il client ha GIÀ
+   * (ToolCallStart/Args/Result passano tutti da handleRealEvent).
+   *
+   * ⭐ Lo scalino in più sullo stato dell'arte: Hermes Agent porta il suo
+   * budget a 500 iterazioni (v0.20, default oggi) e sa fermarsi con un
+   * riassunto, ma né la deduplica delle chiamate identiche (issue #18076)
+   * né l'avviso prima del tetto (#414) sono implementati — restano aperti.
+   * Claude Code, allo stesso limite, dice solo «reached its tool-use limit
+   * for this turn». Nessuno dei due dice QUALI attrezzi hanno consumato il
+   * budget né quante chiamate erano ripetizioni: è questo il +1 misurabile.
+   *
+   * ⛔ Misura sbagliata da non ripetere: contare i frammenti `ToolCallArgs`
+   * (lo streaming li spezza; nello store persistito arrivano perfino PRIMA
+   * del loro `ToolCallStart`). Gli argomenti si ricostruiscono per
+   * `toolCallId` accumulando i delta — è esattamente quello che fa
+   * riassuntoAttrezziDaEventi, e un test lo prova con l'ordine invertito.
+   */
+
+  /**
+   * ⛔⛔⛔ owner 04/9, vincolante: «nella UI non compaiono nomi tecnici degli
+   * attrezzi». Questa è LA mappa nome-tecnico → nome-umano, in un posto solo
+   * — mai una seconda copia sparsa in un template o in una stringa.
+   * ⛔ Ripiego ONESTO: un attrezzo che non conosciamo (ne nascono, vedi
+   * `tool_create`) mostra il suo nome grezzo, mai un'etichetta inventata.
+   * ⛔ I nomi che il MODELLO riceve non cambiano di una lettera: quelli sono
+   * il contratto col kernel (ATTREZZI_OPENAI in talosHarness.mjs) e la loro
+   * unica fonte resta il server. Qui si traduce solo ciò che si SCRIVE a
+   * schermo; il nome tecnico resta come dettaglio secondario nel title.
+   */
+  function nomeUmanoAttrezzo(nome) {
+    const UMANI = {
+      elenca: 'elenco della cartella',
+      cerca: 'ricerca nei file',
+      leggi: 'lettura di un file',
+      scrivi: 'scrittura di un file',
+      prova: 'esecuzione dei test',
+      shell: 'comando nel terminale',
+      naviga: 'apertura di una pagina web',
+      web_search: 'ricerca sul web',
+      artifact_create: 'creazione di un artefatto',
+      document_create: 'creazione di un documento',
+      generate_image: 'generazione di un’immagine',
+      delega_sottotask: 'delega a un sotto-agente',
+      time_now: 'data e ora',
+      tool_create: 'creazione di un attrezzo nuovo',
+      library_list: 'elenco della Libreria',
+      library_search: 'ricerca in Libreria',
+      library_read: 'lettura di un file di Libreria',
+      library_file_origin: 'origine di un file di Libreria',
+      library_rename: 'rinomina di un file di Libreria',
+      library_delete: 'eliminazione di un file di Libreria',
+      library_export: 'copia di un file di Libreria nel workspace',
+      library_context_policy_update: 'regole d’uso della Libreria',
+      notes_list: 'elenco delle note',
+      notes_create: 'scrittura di una nota',
+      notes_update: 'modifica di una nota',
+      notes_delete: 'eliminazione di una nota',
+      tasks_list: 'elenco delle attività',
+      tasks_create: 'creazione di un’attività',
+      tasks_complete: 'chiusura di un’attività',
+      tasks_update: 'modifica di un’attività',
+      tasks_delete: 'eliminazione di un’attività',
+      memory_search: 'ricerca nella memoria',
+      memory_write: 'scrittura in memoria',
+      memory_update: 'correzione di una memoria',
+      memory_delete: 'eliminazione di una memoria',
+      research_list: 'elenco delle ricerche',
+      research_start: 'avvio di una ricerca approfondita',
+      research_read: 'lettura del rapporto di ricerca',
+      research_rename: 'rinomina di una ricerca',
+      research_pause: 'pausa di una ricerca',
+      research_resume: 'ripresa di una ricerca',
+      research_cancel: 'annullamento di una ricerca',
+      research_delete: 'eliminazione di una ricerca',
+    };
+    return UMANI[nome] || String(nome ?? '');
+  }
+
+  /** Serializzazione stabile (chiavi ordinate, ricorsiva): due argomenti equivalenti scritti diversi devono dare la STESSA chiave. */
+  function chiaveStabile(valore) {
+    if (Array.isArray(valore)) return `[${valore.map((v) => chiaveStabile(v)).join(',')}]`;
+    if (valore && typeof valore === 'object') return `{${Object.keys(valore).sort().map((k) => `${JSON.stringify(k)}:${chiaveStabile(valore[k])}`).join(',')}}`;
+    return JSON.stringify(valore) ?? 'null';
+  }
+
+  /** L'identità di una chiamata: attrezzo + argomenti normalizzati. ⛔ Argomenti non-JSON (troncati) valgono per la loro stringa grezza, mai un errore. */
+  function chiaveChiamataAttrezzo(nome, argomentiGrezzi) {
+    const grezzo = String(argomentiGrezzi ?? '').trim();
+    let normalizzato = grezzo;
+    try { normalizzato = chiaveStabile(JSON.parse(grezzo)); } catch { /* delta incompleto o argomenti malformati: la stringa grezza è comunque un'identità onesta */ }
+    return `${nome} ${normalizzato}`;
+  }
+
+  /**
+   * Quante chiamate ad attrezzi ha fatto questa sessione, per attrezzo, e
+   * quante erano identiche a una precedente.
+   * ⛔ `registrato:false` quando non c'è NESSUN evento di attrezzo (sessione
+   * vecchia, interrotta, o cronologia senza tool-call): «non registrato» non
+   * è «zero», e chi legge il testo non deve poterli confondere.
+   * @param {Array<object>|null|undefined} eventi
+   * @returns {{registrato:boolean, chiamate:number, ripetute:number, perAttrezzo:Array<{nome:string,chiamate:number,ripetute:number}>}}
+   */
+  function riassuntoAttrezziDaEventi(eventi) {
+    const perId = new Map();
+    const ordine = [];
+    for (const evento of eventi || []) {
+      const tipo = evento?.type;
+      if (tipo !== 'ToolCallStart' && tipo !== 'ToolCallArgs' && tipo !== 'ToolCallResult') continue;
+      const id = evento.toolCallId;
+      if (typeof id !== 'string' || id === '') continue;
+      if (!perId.has(id)) { perId.set(id, { nome: null, argomenti: '' }); ordine.push(id); }
+      const voce = perId.get(id);
+      // ⛔ Lo Start NON azzera gli argomenti: nello store persistito un delta può precederlo, e azzerare qui perderebbe il primo `{`.
+      if (tipo === 'ToolCallStart') voce.nome = typeof evento.toolCallName === 'string' ? evento.toolCallName : voce.nome;
+      else if (tipo === 'ToolCallArgs' && typeof evento.delta === 'string') voce.argomenti += evento.delta;
+    }
+    const perAttrezzo = new Map();
+    const viste = new Set();
+    let chiamate = 0;
+    let ripetute = 0;
+    for (const id of ordine) {
+      const voce = perId.get(id);
+      if (!voce.nome) continue; // args/result orfani: nessuno Start, nessun nome — mai un attrezzo inventato
+      chiamate += 1;
+      const conto = perAttrezzo.get(voce.nome) || { nome: voce.nome, chiamate: 0, ripetute: 0 };
+      conto.chiamate += 1;
+      const chiave = chiaveChiamataAttrezzo(voce.nome, voce.argomenti);
+      if (viste.has(chiave)) { ripetute += 1; conto.ripetute += 1; } else viste.add(chiave);
+      perAttrezzo.set(voce.nome, conto);
+    }
+    return {
+      registrato: chiamate > 0,
+      chiamate,
+      ripetute,
+      perAttrezzo: [...perAttrezzo.values()].sort((a, b) => b.chiamate - a.chiamate || a.nome.localeCompare(b.nome)),
+    };
+  }
+
+  /** La diagnosi in una riga: i primi tre attrezzi col conteggio, e quante chiamate erano ripetizioni. */
+  function testoDiagnosiGiri(riassunto) {
+    if (!riassunto || !riassunto.registrato) return 'Attrezzi non registrati per questa sessione: la sua cronologia non porta nessun evento di attrezzo.';
+    // ⛔ owner 04/9: a schermo l'attrezzo si chiama col suo nome UMANO, mai `web_search`/`time_now` — vedi nomeUmanoAttrezzo, unica mappa.
+    const primi = riassunto.perAttrezzo.slice(0, 3).map((a) => `${nomeUmanoAttrezzo(a.nome)} ${a.chiamate}`).join(', ');
+    // ⛔ 04/9, letto nello screenshot della corsa `qa-giri-esauriti-diagnosi`: «, altri 2» si legge come «altre 2 CHIAMATE». Sono altri ATTREZZI, e va detto.
+    const coda = riassunto.perAttrezzo.length > 3 ? `, e altri ${riassunto.perAttrezzo.length - 3} attrezzi` : '';
+    const conRipetizioni = riassunto.perAttrezzo.filter((a) => a.ripetute > 0).sort((a, b) => b.ripetute - a.ripetute || a.nome.localeCompare(b.nome));
+    const ripetizioni = riassunto.ripetute > 0
+      ? `${riassunto.ripetute} identiche a una precedente (${conRipetizioni.slice(0, 3).map((a) => `${nomeUmanoAttrezzo(a.nome)} ${a.ripetute}`).join(', ')})`
+      : 'nessuna identica a una precedente';
+    return `${riassunto.chiamate} chiamate ad attrezzi: ${primi}${coda} · ${ripetizioni}`;
+  }
+
+  /** Cosa può fare la persona ADESSO — dedotto dai numeri misurati, mai una frase fissa. */
+  function consiglioDaRiassunto(riassunto) {
+    if (!riassunto || !riassunto.registrato) return 'Nel prossimo messaggio chiedi un passo solo: il tetto vale per giro, non per sessione.';
+    const quotaRipetute = riassunto.chiamate > 0 ? riassunto.ripetute / riassunto.chiamate : 0;
+    const primo = riassunto.perAttrezzo[0];
+    if (quotaRipetute >= 0.15) return `${riassunto.ripetute} chiamate erano già state fatte identiche: indica tu i percorsi da guardare, così i giri non tornano sugli stessi file.`;
+    if (primo && primo.chiamate / riassunto.chiamate >= 0.4) return `${primo.chiamate} chiamate su ${riassunto.chiamate} sono andate a «${nomeUmanoAttrezzo(primo.nome)}»: chiedi un passo più stretto, o dai tu il comando o il percorso giusto.`;
+    return 'Nel prossimo messaggio chiedi un passo solo: il tetto vale per giro, non per sessione.';
+  }
+
+  /**
+   * Il tetto dei giri, letto dalle parole del kernel («giri esauriti: 24 su
+   * 24 …», comeSonoFinitiIGiri in talosHarness.mjs).
+   * ⛔ È l'UNICA fonte del tetto lato client: `GIRI_MASSIMI` (24) e
+   * `GIRI_MASSIMI_PLANNER` (8) sono `const` NON esportate del kernel, e
+   * `/usage` non le porta — vedi la richiesta al kernel nel resoconto O-02.
+   */
+  function tettoGiriDaMessaggio(messaggio) {
+    const trovato = /giri esauriti:\s*(\d+)\s+su\s+(\d+)/i.exec(String(messaggio ?? ''));
+    if (!trovato) return null;
+    const tetto = Number(trovato[2]);
+    return Number.isFinite(tetto) && tetto > 0 ? tetto : null;
   }
 
   /** Ripatcha la riga "Main" del foglio Albero sessione SE è già aperto — non riapre né forza un redraw di tutto il foglio, stesso principio di aggiornaPillolaModello(). */
   function aggiornaContatoreUsage() {
     const nodo = $('[data-usage-summary]');
-    if (nodo) nodo.textContent = `Main · ${formattaUsageBreve(state.realSession.usage, { live: true })}`;
+    if (nodo) nodo.textContent = `Main · ${formattaUsageBreve(state.realSession.usage, { live: true, tettoGiri: state.realSession.tettoGiriDichiarato })}`;
   }
 
   /**
@@ -3699,7 +3916,25 @@
     const intestazione = textElement('p', 'tools-panel-summary', conSessione
       ? `${dati.attrezzi.length} attrezzi offerti a questa sessione · ~${token.toLocaleString('it-IT')} token di schema a ogni giro (stima)`
       : `${dati.attrezzi.length} attrezzi che riceverà la prossima sessione · ~${token.toLocaleString('it-IT')} token di schema a ogni giro (stima) · nessuna sessione aperta: i permessi per-attrezzo non sono ancora scelti da nessuno`);
-    mount.replaceChildren(intestazione, ...dati.attrezzi.map((a) => rigaAttrezzo(a)));
+    /*
+     * ⭐⭐⭐ O-02 (04/9) — «perché questa sessione è costata tanto?». Sopra
+     * c'è quanto COSTA avere gli attrezzi offerti; qui quanto sono stati
+     * USATI davvero, per attrezzo, con le chiamate identiche a una
+     * precedente evidenziate: sono le due metà della stessa domanda, e
+     * questo è il posto dove l'elenco degli attrezzi già vive.
+     * ⛔ Senza sessione aperta non si scrive niente (non c'è un uso di cui
+     * parlare); con una sessione senza eventi di attrezzo si dice «non
+     * registrato», mai «0 chiamate».
+     */
+    const uso = conSessione ? riassuntoAttrezziDaEventi(state.realSession.eventiAttrezzi) : null;
+    const usoPerNome = new Map((uso?.perAttrezzo ?? []).map((a) => [a.nome, a]));
+    const rigaUso = conSessione
+      ? textElement('p', 'tools-panel-uso', uso.registrato
+        ? `Usati in questa sessione: ${uso.chiamate} chiamate · ${uso.ripetute > 0 ? `${uso.ripetute} identiche a una precedente` : 'nessuna identica a una precedente'} · ${uso.perAttrezzo.length} attrezzi su ${dati.attrezzi.length}`
+        : 'Uso in questa sessione: non registrato — la cronologia caricata non porta nessun evento di attrezzo (sessione vecchia, o nessun attrezzo chiamato).')
+      : null;
+    // ⛔ L'ORDINE resta quello del kernel (base, poi estesi): è l'ordine in cui il modello li riceve, e riordinarlo per uso renderebbe l'elenco diverso a ogni apertura.
+    mount.replaceChildren(intestazione, ...(rigaUso ? [rigaUso] : []), ...dati.attrezzi.map((a) => rigaAttrezzo(a, usoPerNome.get(a.nome) ?? null)));
   }
 
   /**
@@ -3711,7 +3946,7 @@
    * ⛔ Nessuna casella `disabled`: mimare un interruttore che non esiste è
    * la finta che questa riga del piano doveva togliere.
    */
-  function rigaAttrezzo(attrezzo) {
+  function rigaAttrezzo(attrezzo, uso = null) {
     const riga = document.createElement('div');
     riga.className = 'sheet-option';
     riga.setAttribute('role', 'group');
@@ -3720,8 +3955,15 @@
     iconEl.className = 'sheet-icon';
     iconEl.innerHTML = icon(ICONA_ATTREZZO[attrezzo.nome] || (attrezzo.categoria === 'base' ? 'i-code' : 'i-bolt'));
     const testo = document.createElement('span');
+    /*
+     * ⛔⛔⛔ owner 04/9: «nella UI non compaiono nomi tecnici degli attrezzi».
+     * L'etichetta principale è il nome umano (nomeUmanoAttrezzo, unica mappa);
+     * il nome tecnico resta come dettaglio secondario nel `title` qui sotto e
+     * in `data-tool-name` (dato, non testo a schermo) — e soprattutto resta
+     * INTATTO nel contratto col kernel, che questa riga non tocca.
+     */
     testo.append(
-      textElement('strong', null, attrezzo.nome),
+      textElement('strong', null, nomeUmanoAttrezzo(attrezzo.nome)),
       textElement('small', null, attrezzo.descrizione.length > 150 ? `${attrezzo.descrizione.slice(0, 150)}…` : attrezzo.descrizione),
     );
     const chip = document.createElement('span');
@@ -3733,9 +3975,27 @@
       chip.append(textElement('span', 'status-chip', attrezzo.permesso ? `permesso: ${attrezzo.permesso}` : 'permesso: come la sessione'));
     }
     chip.append(textElement('span', 'status-chip success', 'offerto'));
+    /*
+     * ⭐⭐⭐ O-02 (04/9) — quante volte QUESTA sessione lo ha chiamato, e
+     * quante di quelle chiamate erano identiche a una precedente. ⛔ Un
+     * attrezzo offerto e mai chiamato non riceve «usato 0 volte»: la sua
+     * assenza dal riepilogo è già il fatto, e uno zero in una riga e un
+     * «non registrato» nell'intestazione si leggerebbero uguali.
+     */
+    if (uso && uso.chiamate > 0) {
+      riga.dataset.toolChiamate = String(uso.chiamate);
+      chip.append(textElement('span', 'status-chip', `usato ${uso.chiamate} volt${uso.chiamate === 1 ? 'a' : 'e'}`));
+      if (uso.ripetute > 0) {
+        riga.dataset.toolRipetute = String(uso.ripetute);
+        chip.append(textElement('span', 'status-chip avviso', `${uso.ripetute} identich${uso.ripetute === 1 ? 'a' : 'e'}`));
+      }
+    }
     riga.append(iconEl, testo, chip);
     /* ⛔ QA visiva di O-01: la descrizione a schermo è tagliata a 150 caratteri — quella INTERA (la stessa che riceve il modello) deve restare leggibile, non sparire nel taglio. */
-    riga.title = `${attrezzo.descrizione}\n\n~${attrezzo.tokenSchemaStimati} token di schema (stima) · attrezzo ${attrezzo.categoria}`;
+    const usoTitle = uso && uso.chiamate > 0
+      ? `\nIn questa sessione: ${uso.chiamate} chiamate, di cui ${uso.ripetute} identiche a una precedente.`
+      : '';
+    riga.title = `${attrezzo.descrizione}\n\nNome tecnico (quello che riceve il modello): ${attrezzo.nome}\n~${attrezzo.tokenSchemaStimati} token di schema (stima) · attrezzo ${attrezzo.categoria}${usoTitle}`;
     return riga;
   }
 
@@ -5642,9 +5902,30 @@
     });
   }
 
+  /**
+   * ⭐⭐⭐ O-02 (04/9) — il contatore ONESTO durante il giro: la persona deve
+   * poter vedere quanti giri sta consumando PRIMA di sbatterci nel tetto.
+   * ⛔ Il tetto non si scrive qui: `GIRI_MASSIMI` è una `const` non esportata
+   * del kernel. Si mostra il numero di giri usati sempre, il «su N» solo
+   * quando il kernel l'ha DICHIARATO (nel messaggio di un giri-esauriti già
+   * visto in questa sessione), e solo allora si può dire «vicino al tetto».
+   * ⭐ Ha senso perché il tetto vale PER GIRO: nello store, una sessione con
+   * modello locale ha esaurito i 24 giri due volte di fila (run 2 e run 3) —
+   * dopo la prima, la seconda si vede arrivare.
+   */
   function aggiornaComposerUsage(usage) {
     const usageNode = $('[data-runtime-usage]');
-    if (usageNode) usageNode.textContent = formattaUsageBreve(usage, { live: true });
+    const tetto = state.realSession.tettoGiriDichiarato;
+    if (usageNode) {
+      usageNode.textContent = formattaUsageBreve(usage, { live: true, tettoGiri: tetto });
+      const giri = Number(usage?.giri);
+      const vicino = Number.isFinite(tetto) && tetto > 0 && Number.isFinite(giri) && giri >= Math.ceil(tetto * 0.75);
+      if (vicino) usageNode.dataset.giriStato = 'vicino-al-tetto';
+      else delete usageNode.dataset.giriStato;
+      usageNode.title = Number.isFinite(tetto) && tetto > 0
+        ? `Il kernel ha dichiarato un tetto di ${tetto} giri per questo giro di lavoro (dal messaggio «giri esauriti» di questa sessione).`
+        : 'Giri usati in questo giro di lavoro. Il tetto non è dichiarato dal server: non viene mostrato.';
+    }
     const throughput = Number(usage?.tokens_per_second ?? usage?.tokensPerSecond);
     const throughputNode = $('[data-runtime-throughput]');
     if (throughputNode) throughputNode.textContent = Number.isFinite(throughput) && throughput > 0 ? `↑ ${Math.round(throughput)} tok/s` : 'Velocità non osservata';
@@ -6889,7 +7170,8 @@
       case 'delega_sottotask': return a.task ? `Sotto-attività: ${tronca(a.task, 84)}…` : 'Avvio sotto-attività…';
       case 'memory_write': return a.title ? `Salvataggio memoria: ${tronca(a.title, 60)}…` : 'Salvataggio in memoria…';
       case 'research_start': return a.question ? `Ricerca approfondita: ${tronca(a.question, 60)}…` : 'Avvio ricerca approfondita…';
-      default: return `${nome}(…)`;
+      // ⛔ owner 04/9: qui finivano `web_search(…)`, `time_now(…)`, `document_create(…)` — nomi TECNICI a schermo. Il ripiego ora è il nome umano (nomeUmanoAttrezzo, unica mappa), e resta il nome grezzo solo per un attrezzo che nessuno ha ancora etichettato.
+      default: return `${nomeUmanoAttrezzo(nome)}…`;
     }
   }
 
@@ -6935,7 +7217,8 @@
        */
       case 'memory_write': return a.title ? `Memoria: ${tronca(a.title, 60)}` : 'Salvataggio in memoria…';
       case 'research_start': return a.question ? `Ricerca approfondita: ${tronca(a.question, 60)}` : 'Avvio ricerca approfondita…';
-      default: return `${nome}(…)`;
+      // ⛔ owner 04/9: qui finivano `web_search(…)`, `time_now(…)`, `document_create(…)` — nomi TECNICI a schermo. Il ripiego ora è il nome umano (nomeUmanoAttrezzo, unica mappa), e resta il nome grezzo solo per un attrezzo che nessuno ha ancora etichettato.
+      default: return `${nomeUmanoAttrezzo(nome)}…`;
     }
   }
 
@@ -9438,6 +9721,18 @@
       if (state.realSession.sequenzeViste.has(evento._sequenza)) return;
       state.realSession.sequenzeViste.add(evento._sequenza);
     }
+    /*
+     * ⭐⭐⭐ O-02 (04/9) — il registro degli attrezzi si riempie QUI, in un
+     * punto solo e DOPO il dedup `_sequenza`: sotto, i tre `case` hanno già
+     * il loro lavoro (bubble, batch, terminale) e uno di essi — ToolCallArgs
+     * — SCARTA in silenzio ogni evento il cui Start non è ancora passato,
+     * cosa che nello store persistito succede davvero. Contare lì
+     * riprodurrebbe quel buco; contare qui no.
+     * ⛔ Del ToolCallResult si copia solo l'id: il `content` può essere
+     * enorme e per contare le chiamate non serve.
+     */
+    if (evento.type === 'ToolCallStart' || evento.type === 'ToolCallArgs') state.realSession.eventiAttrezzi.push(evento);
+    else if (evento.type === 'ToolCallResult') state.realSession.eventiAttrezzi.push({ type: 'ToolCallResult', toolCallId: evento.toolCallId });
     switch (evento.type) {
       case 'RunStarted': {
         streamingAutoFollow = true; // un nuovo giro ri-arma il "segui il centro" — stesso principio di resetThreadScroll() in Hermes
@@ -9888,9 +10183,37 @@
         if (state.realSession.redirectPendingId) mostraAttesaRisposta('redirect');
         else nascondiAttesaRisposta();
         chiudiBatchTool(); // 30/8 — vedi RunFinished sopra, stesso motivo
-        const guida = evento.code === 'giri-esauriti'
-          ? ' Il prossimo messaggio continuerà questo task nella stessa sessione. Premi «Nuova» per iniziare un task separato.'
-          : '';
+        /*
+         * ⭐⭐⭐ O-02 (04/9), owner: «vedi perché mi spunta spesso [giri-esauriti]».
+         * La frase del kernel («24 su 24 usati senza chiudere il task») è vera
+         * e non azionabile: non dice CHI ha consumato i giri. La diagnosi si
+         * costruisce dagli eventi di attrezzo di questa stessa sessione, che
+         * il client ha già in `eventiAttrezzi` — nessuna rotta nuova, nessun
+         * numero che non venga da un evento vero. E il TETTO si impara dalle
+         * parole del server (mai una costante scritta qui: vedi
+         * tettoGiriDaMessaggio), così il contatore del composer può mostrare
+         * «N su 24» per i giri successivi di questa sessione.
+         */
+        let guida = '';
+        if (evento.code === 'giri-esauriti') {
+          const tetto = tettoGiriDaMessaggio(evento.message);
+          if (tetto) {
+            state.realSession.tettoGiriDichiarato = tetto;
+            /*
+             * ⛔ 04/9, trovato dalla corsa `qa-giri-esauriti-diagnosi` (non
+             * dedotto): il contatore mostrava «24 giri» senza il «su 24»
+             * appena imparato. Lo `/usage` con giri=24 arriva PRIMA di
+             * questo RunError, quindi l'ultimo redraw del contatore è già
+             * passato — chi impara un fatto nuovo ridisegna chi lo mostra,
+             * stessa lezione di ApprovalRequested/aggiornaElencoSessioniReali.
+             */
+            aggiornaContatoreUsage();
+            aggiornaComposerUsage(state.realSession.usage);
+          }
+          const riassunto = riassuntoAttrezziDaEventi(state.realSession.eventiAttrezzi);
+          guida = ` — ${testoDiagnosiGiri(riassunto)}. ${consiglioDaRiassunto(riassunto)}`
+            + ' Il prossimo messaggio continuerà questo task nella stessa sessione. Premi «Nuova» per iniziare un task separato.';
+        }
         appendStatusNote(`${evento.code ? `[${evento.code}] ` : ''}${evento.message}${guida}`, true);
         state.realSession.eventoTerminaleVisto = !state.realSession.redirectPendingId;
         syncRunComposerState();
@@ -10030,6 +10353,8 @@
       state.realSession.redirectRequestIntentId = null;
       state.realSession.attesaBubble = null; // il nodo è già sparito con replaceChildren() qui sopra
       state.realSession.usage = null; // Fase 3 — un resume (continua:true) TIENE il conto, una sessione nuova riparte da IGNOTO
+      state.realSession.eventiAttrezzi = []; // O-02 — la diagnosi dei giri parla della sessione che si sta guardando, mai di quella prima
+      state.realSession.tettoGiriDichiarato = null; // O-02 — il tetto lo dichiara il kernel di QUESTA sessione (il planner ne ha uno diverso), mai ereditato
       state.realSession.approvazioniPendenti = new Map(); // le card sono già sparite con replaceChildren() qui sopra, la mappa le segue
       state.realSession.cartellaAssoluta = null; // Fase 3 — una sessione nuova non conosce ancora la propria radice finché RunStarted non arriva
       state.realSession.codaMessaggi = []; // FASE D — una sessione nuova non eredita la coda di quella precedente
