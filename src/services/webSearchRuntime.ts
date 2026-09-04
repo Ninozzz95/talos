@@ -7,6 +7,7 @@ import {
     type TalosSearchResult,
     type TalosSearchSourceId,
 } from '@/lib/search/searchSources'
+import { looksLikeDuckDuckGoBlock } from '@/lib/search/duckduckgoSearch'
 import type { TalosExtractedPage } from '@/lib/search/pageExtract'
 import { readTalosSafeWebPage } from '@/services/safeWebRead'
 
@@ -57,6 +58,24 @@ export async function runTalosSearch(
         throw asNetworkFailure(error)
     }
 
+    /*
+     * R-03: DuckDuckGo is keyless, so "refused the key" (below) is the wrong
+     * story for it — and unlike the other four sources, a block can arrive as
+     * an HTTP 200 wearing a CAPTCHA page, which the generic 200-299 pass-
+     * through below would otherwise hand to `parse` as if it were results.
+     * `parse` itself is not allowed to throw (see `searchSources.ts`), so the
+     * check has to live here, BEFORE the generic status handling, on the raw
+     * body this source alone returns as HTML rather than JSON.
+     */
+    if (sourceId === 'duckduckgo') {
+        const html = typeof response.data === 'string' ? response.data : ''
+        if (looksLikeDuckDuckGoBlock(response.status, html)) {
+            throw new Error(
+                `TALOS_SEARCH_BLOCKED: DuckDuckGo refused the request (HTTP ${response.status}) `
+                + '— rate limit or anti-bot check. Try again later or choose a keyed source.',
+            )
+        }
+    }
     if (response.status === 401 || response.status === 403) {
         // A refused key must never look like an empty web: one means "fix your
         // settings", the other means "nothing found", and conflating them is how

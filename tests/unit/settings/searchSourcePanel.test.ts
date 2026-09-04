@@ -18,6 +18,11 @@ const settings = vi.hoisted(() => ({
     setSearchPreferences: vi.fn(async (patch: Record<string, unknown>) => {
         Object.assign(settings.state.search, patch)
     }),
+    // R-03: DDG-PANEL-01 is the first test in this file to reach a source
+    // with neither a missing key nor a missing endpoint, so it is the first
+    // to reach this call — it was never mocked before because nothing here
+    // exercised that branch of the readiness computed.
+    effectiveToolPermissions: vi.fn(() => ({ read: 'allow', write: 'allow', outbound: 'allow' })),
     setToolPermissions: vi.fn(async () => {}),
     setAiDefaults: vi.fn(async () => {}),
     setShell: vi.fn(async () => {}),
@@ -68,9 +73,18 @@ afterEach(() => {
 describe('search source panel', () => {
     it('offers every source, in the decided order', () => {
         const wrapper = mount(TalosMobileSearchSourcePanel)
-        for (const id of ['tavily', 'brave', 'searxng', 'custom']) {
+        // R-03: DuckDuckGo is the fifth, keyless source.
+        for (const id of ['tavily', 'brave', 'searxng', 'custom', 'duckduckgo']) {
             expect(wrapper.find(`[data-testid="talos-search-source-${id}"]`).exists()).toBe(true)
         }
+    })
+
+    it('DDG-PANEL-01 DuckDuckGo asks for neither a key nor an endpoint, and reads as ready', () => {
+        settings.state.search.source = 'duckduckgo'
+        const wrapper = mount(TalosMobileSearchSourcePanel)
+        expect(wrapper.find('[data-testid="talos-search-key"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="talos-search-endpoint"]').exists()).toBe(false)
+        expect(wrapper.get('[data-testid="talos-search-readiness"]').text()).toMatch(/ready/i)
     })
 
     it('says out loud that nothing is offered to the model until a source is chosen', () => {

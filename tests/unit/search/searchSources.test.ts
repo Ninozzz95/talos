@@ -20,8 +20,11 @@ import {
  */
 describe('search sources', () => {
     it('offers exactly the sources the owner decided, in the decided order', () => {
+        // R-03 (2026-09-04): DuckDuckGo is the FIFTH source, appended — it
+        // needs neither a key nor an endpoint, so it works with nothing
+        // configured, in parity with the desktop's own R-03 port.
         expect(TALOS_SEARCH_SOURCES.map((source) => source.id))
-            .toEqual(['tavily', 'brave', 'searxng', 'custom'])
+            .toEqual(['tavily', 'brave', 'searxng', 'custom', 'duckduckgo'])
     })
 
     it('Tavily authenticates with a bearer token and posts the query', () => {
@@ -135,6 +138,42 @@ describe('search sources', () => {
             expect(parseTalosSearchResponse(source, '<html>rate limited</html>')).toEqual([])
             expect(parseTalosSearchResponse(source, { results: 'nope' })).toEqual([])
         }
+    })
+
+    it('DDG-SOURCE-01 DuckDuckGo needs no credential at all and GETs the fixed endpoint', () => {
+        const request = buildTalosSearchRequest(
+            talosSearchSourceById('duckduckgo'),
+            { query: 'fattura elettronica 2026', maxResults: 5 },
+            {},
+        )
+        expect(request.method).toBe('GET')
+        expect(request.url).toMatch(/^https:\/\/html\.duckduckgo\.com\/html\/\?q=/)
+        expect(request.url).toContain('q=fattura')
+        expect(request.data).toBeUndefined()
+        // AL CONTRARIO of the four keyed/endpointed sources: no key, no
+        // endpoint anywhere means the tool still works.
+        expect(TALOS_SEARCH_SOURCES.find((s) => s.id === 'duckduckgo')).toMatchObject({
+            needsKey: false,
+            needsEndpoint: false,
+        })
+    })
+
+    it('DDG-SOURCE-02 DuckDuckGo parses the HTML payload webSearchRuntime hands it, not JSON', () => {
+        const html = `
+            <a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.org%2Fa&rut=x">Titolo</a>
+            <a class="result__snippet">Estratto</a>
+        `
+        const results = parseTalosSearchResponse(talosSearchSourceById('duckduckgo'), html)
+        expect(results).toEqual([{
+            url: 'https://example.org/a',
+            title: 'Titolo',
+            snippet: 'Estratto',
+            publishedAt: null,
+        }])
+        // A parser must never take down a send: a non-string payload (a stray
+        // JSON object, say) is not HTML, and reads as zero results, not a crash.
+        expect(parseTalosSearchResponse(talosSearchSourceById('duckduckgo'), { results: [] })).toEqual([])
+        expect(parseTalosSearchResponse(talosSearchSourceById('duckduckgo'), null)).toEqual([])
     })
 
     it('drops entries without a usable url rather than emitting a citation to nowhere', () => {

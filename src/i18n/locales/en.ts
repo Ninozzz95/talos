@@ -2865,6 +2865,7 @@ export const TALOS_EN_MESSAGES = {
         braveNote: 'An independent index. A credit card is required and Brave now offers spending limits. Brave does not allow TALOS to save search results without a separate agreement, so TALOS opens used sources with web_read before saving them.',
         searxngNote: 'Your own SearXNG, so no third party sees the query at all. One Docker container. JSON output ships disabled — turn it on in the instance settings or TALOS gets an HTML page back.',
         customNote: 'Any other search API that answers with a top-level “results” array.',
+        duckduckgoNote: 'No key and no account: TALOS reads DuckDuckGo’s public results page. It is not an official API — under heavy use it can answer with a block, and the outcome says so plainly instead of looking like “no results”. Only the query leaves this device.',
         tavilyKeyLink: 'Create an account or get a Tavily API key',
         tavilyOpenFailed: 'Could not open Tavily. Check your browser and try again.',
         apiKey: 'API key',
