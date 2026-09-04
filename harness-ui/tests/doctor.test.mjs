@@ -102,3 +102,15 @@ test('ricerca web: Doctor riporta fonte e prontezza dal listPublic dello store, 
   assert.equal(spenta.ricercaWeb.pronta, false);
   assert.match(spenta.ricercaWeb.dettaglio, /Spenta/);
 });
+
+test('W0-04 — Doctor elenca i lab accesi come informazione (mai un problema), e «nessuno» quando la lista è vuota', async () => {
+  const eseguiComandoSandboxatoFn = async () => ({ enforcement: 'none' });
+  const spawnSyncFn = () => ({ status: 0 });
+  const nessuno = await diagnosi({ chiaveConfigurata: true, labsAccesi: [], eseguiComandoSandboxatoFn, spawnSyncFn });
+  assert.deepEqual(nessuno.labs, { accesi: [], dettaglio: 'Labs accesi: nessuno.' });
+  const due = await diagnosi({ chiaveConfigurata: true, labsAccesi: ['electron-shell', 'remote-node'], eseguiComandoSandboxatoFn, spawnSyncFn });
+  assert.deepEqual(due.labs.accesi, ['electron-shell', 'remote-node']);
+  assert.match(due.labs.dettaglio, /NOT_LIVE_VALIDATED/);
+  const senza = await diagnosi({ chiaveConfigurata: true, eseguiComandoSandboxatoFn, spawnSyncFn });
+  assert.equal('labs' in senza, false);
+});

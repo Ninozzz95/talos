@@ -59,6 +59,8 @@ export async function diagnosi({
   chiaveConfigurata, cartelleProgetto, providerRows, providerStoreAvailable, ownerRuntime, catalogoTask, sessioniPersistenza,
   // ⭐ 04/9, R-03 — stato pubblico della fonte di ricerca web (search-source-store.listPublic()): fonte, prontezza; mai una chiave.
   ricercaWeb,
+  // ⭐ 04/9, W0-04 — i lab accesi (config.labs): informativo, mai un problema.
+  labsAccesi,
   eseguiComandoSandboxatoFn = eseguiComandoSandboxatoLocale, spawnSyncFn,
 } = {}) {
   // ⛔ Una cartella usa-e-getta SOLO per il comando diagnostico, mai una
@@ -77,6 +79,9 @@ export async function diagnosi({
     git: controllaGit(spawnSyncFn),
     naviga: true, // built-in, nessuna dipendenza esterna da verificare
   };
+  if (Array.isArray(labsAccesi)) {
+    risultato.labs = { accesi: [...labsAccesi], dettaglio: labsAccesi.length ? `Labs accesi: ${labsAccesi.join(', ')} (NOT_LIVE_VALIDATED finché non provati).` : 'Labs accesi: nessuno.' };
+  }
   if (ricercaWeb && typeof ricercaWeb === 'object') {
     const fonte = Array.isArray(ricercaWeb.fonti) ? ricercaWeb.fonti.find((f) => f.id === ricercaWeb.source) : null;
     risultato.ricercaWeb = {

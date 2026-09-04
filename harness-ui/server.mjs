@@ -459,6 +459,7 @@ async function startServer() {
     return diagnosi({
       chiaveConfigurata: providerStore.hasKey('openrouter'), cartelleProgetto: config.cartelleProgetto,
       ricercaWeb: searchSourceStore.listPublic(),
+      labsAccesi: config.labs,
       providerRows: providerStore.listPublic(), providerStoreAvailable: Boolean(providerKeyring),
       ownerRuntime: ownerRuntimeState,
       catalogoTask: { disponibile: Boolean(taskCatalogProvider), dettaglio: taskCatalogProvider ? 'Elenco attività predefinite disponibile.' : 'L’elenco delle attività predefinite non è disponibile in questa installazione.' },

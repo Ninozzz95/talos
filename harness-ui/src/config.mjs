@@ -1,6 +1,7 @@
 import {
   accessSync,
   constants,
+  readFileSync,
   realpathSync,
   statSync,
 } from 'node:fs';
@@ -76,6 +77,33 @@ export async function trovaPortaLibera(portaIniziale, { esplicita = false, tenta
     if (tentativo >= tentativiMassimi) throw new PortaInUsoError(porta, { esplicita: false, tentativi: tentativiMassimi });
     porta += 1;
   }
+}
+
+/*
+ * ⭐⭐⭐ 04/9 — W0-04, scheletro `labs/`. I flag ammessi sono SOLO quelli
+ * dichiarati in `labs/feature-flags.json` (letto qui, accanto al server):
+ * `TALOS_LABS=a,b` accende quelli, un nome sconosciuto è CONFIG_INVALID con
+ * l'elenco degli ammessi — mai un flag inventato al volo. Il file assente o
+ * illeggibile = nessun flag dichiarato, quindi qualunque TALOS_LABS fallisce
+ * (onesto: non si può accendere ciò che non è dichiarato).
+ */
+function leggiFlagLabs(moduleUrl) {
+  try {
+    const dati = JSON.parse(readFileSync(fileURLToPath(new URL('./labs/feature-flags.json', moduleUrl)), 'utf8'));
+    return dati && typeof dati === 'object' && !Array.isArray(dati) ? Object.keys(dati) : [];
+  } catch {
+    return [];
+  }
+}
+function parseLabs(raw, moduleUrl) {
+  if (raw === undefined || raw === null || String(raw).trim() === '') return Object.freeze([]);
+  const ammessi = leggiFlagLabs(moduleUrl);
+  const richiesti = [...new Set(String(raw).split(',').map((s) => s.trim()).filter(Boolean))];
+  const ignoti = richiesti.filter((nome) => !ammessi.includes(nome));
+  if (ignoti.length > 0) {
+    fail(`TALOS_LABS: flag non dichiarato in labs/feature-flags.json: ${ignoti.join(', ')} — ammessi: ${ammessi.length ? ammessi.join(', ') : '(nessuno: file assente)'}`);
+  }
+  return Object.freeze(richiesti);
 }
 
 function parseModello(raw) {
@@ -436,6 +464,8 @@ export function loadConfig(
     llamaServerPath: parseLlamaServerPath(env.TALOS_LLAMA_SERVER_PATH, moduleUrl),
     ownerRuntimeModule: parseOwnerRuntimeModule(env.TALOS_OWNER_RUNTIME_MODULE),
     ricercaWeb: parseRicercaWeb(env),
+    labs: parseLabs(env.TALOS_LABS, moduleUrl), // ⭐ 04/9, W0-04
+
     firmaRicevute: parseFirmaRicevute(env),
     immagine: parseImmagine(env),
   });
