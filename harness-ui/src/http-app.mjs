@@ -2347,6 +2347,12 @@ export function createHttpApp({
         // mcpMatch qui sopra: sola lettura, ricostruito dagli eventi già persistiti,
         // ⛔ nessuna azione — la guardia SEGNALA, fermare è `POST .../stop`.
         const processesMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/processes$/.exec(url.pathname);
+        // ⭐⭐⭐ W1-03 (04/9) — LE TRE METRICHE di una sessione per la Board
+        // ridisegnata (G3-G4): tasso di cache, tempo al primo token, motivo di
+        // chiusura del giro. Stesso principio esatto di processesMatch qui sopra:
+        // sola lettura, DERIVATE dagli eventi già persistiti, ⛔ nessuna scrittura
+        // nuova sul disco e nessun collettore esterno da montare.
+        const metricsMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/metrics$/.exec(url.pathname);
         // ⭐⭐⭐ 29/8 — FASE F: il Capability hub elenca le skill dichiarate — stesso principio, senza il concetto di fiducia (le skill non ce l'hanno).
         const skillsMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/skills$/.exec(url.pathname);
         // ⭐⭐⭐ 29/8 — FASE N: il Capability hub elenca le voci di Libreria del progetto — stesso principio esatto di skillsMatch appena sopra (nessun concetto di fiducia).
@@ -2503,6 +2509,31 @@ export function createHttpApp({
            * "gli stati sono tre" di hooksMatch/mcpMatch qui sopra).
            */
           data = { registrato: esito.registrato, processi: esito.processi, motivo: esito.motivo, guardia: esito.guardia };
+        } else if (metricsMatch) {
+          requireNoQuery(url);
+          let sessionId;
+          try {
+            sessionId = decodeURIComponent(metricsMatch[1]);
+          } catch {
+            sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+            return;
+          }
+          const esito = sessionRegistry.elencaMetriche(sessionId);
+          if ('erroreAvvio' in esito) {
+            const errore = new Error(esito.erroreAvvio);
+            errore.code = esito.code;
+            throw errore;
+          }
+          /*
+           * ⛔ `registrato` viaggia accanto alle tre metriche per la stessa ragione
+           * di processesMatch qui sopra: una sessione senza un solo evento torna
+           * `cache:null` + `motivo:'non-registrato'`, MAI uno 0% — «non misurato» e
+           * «zero» sono due fatti diversi, e i dati veri li contengono ENTRAMBI (5
+           * sessioni su 73 hanno una cache a zero VERA, 2 non hanno consumo affatto).
+           * ⛔ Ogni valore assente porta il proprio `motivoAssente` DETTO a parole:
+           * chi legge questa rotta non deve mai indovinare perché manca.
+           */
+          data = { registrato: esito.registrato, motivo: esito.motivo, giri: esito.giri, cache: esito.cache, primoToken: esito.primoToken, chiusura: esito.chiusura };
         } else if (skillsMatch) {
           requireNoQuery(url);
           let sessionId;

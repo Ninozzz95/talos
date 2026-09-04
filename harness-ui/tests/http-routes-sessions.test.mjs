@@ -1849,3 +1849,120 @@ test('⛔ GET .../processes rifiuta una query string, come le rotte vicine (requ
   assert.equal(risposta.status, 400);
   assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
 });
+
+/* =====================================================================
+ * ⭐⭐⭐ W1-03 (04/9) — GET /api/v1/sessions/:id/metrics.
+ *
+ * ⛔ Provata col registro VERO (`registroVeroConEventi` qui sopra), non col
+ * fake di questo file: il valore della rotta è che le tre metriche arrivino
+ * DERIVATE dagli eventi veri passando per `elencaMetriche()` vero — un fake
+ * che restituisce un oggetto già pronto proverebbe solo che l'involucro
+ * JSON funziona.
+ *
+ * ⭐ La ricerca del 04/09 sul cruscotto di DeepSeek Harness: là le stesse
+ * tre colonne esistono solo montando SigNoz più un plugin OpenTelemetry di
+ * terze parti, perché il loro nucleo non esporta niente. Qui la rotta è
+ * dentro l'app e non scrive un byte in più sul disco.
+ * ===================================================================== */
+
+test('⭐⭐⭐ W1-03 — GET /api/v1/sessions/:id/metrics torna cache, tempo al primo token e motivo di chiusura VERI (registro VERO)', async (t) => {
+  let ora = 1_000;
+  const registro = registroVeroConEventi(t, {
+    clock: () => new Date(ora),
+    emetti: (onEvento) => {
+      onEvento({ type: 'RunStarted', threadId: 't', runId: 'r1', input: { consegna: 'c' } });
+      ora = 1_450;
+      onEvento({ type: 'ReasoningMessageStart', messageId: 'g1', role: 'reasoning' });
+      ora = 1_500;
+      onEvento({ type: 'ReasoningMessageContent', messageId: 'g1', delta: 'penso…' });
+      ora = 6_000;
+      onEvento({ type: 'TextMessageStart', messageId: 'm1', role: 'assistant' });
+      ora = 6_100;
+      onEvento({ type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: { prompt_tokens: 40_000, completion_tokens: 500, cached_tokens: 30_000, giri: 5 } }] });
+    },
+  });
+  const { base } = await listen(t, { sessionRegistry: registro });
+  const { sessionId } = registro.avvia('sconto-a-scaglioni');
+  await Promise.resolve();
+
+  ora = 20_000;
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/metrics`);
+  assert.equal(risposta.status, 200);
+  const corpo = await risposta.json();
+  assert.equal(corpo.ok, true);
+  assert.equal(corpo.meta.schema, API_SCHEMA);
+  assert.equal(corpo.data.registrato, true);
+  assert.equal(corpo.data.giri, 1);
+
+  assert.equal(corpo.data.cache.percentuale, 75);
+  assert.equal(corpo.data.cache.frazione, 0.75);
+  assert.equal(corpo.data.cache.denominatore, 'prompt_tokens', 'il denominatore arriva fino all\'HTTP: un tasso senza denominatore non è confrontabile con niente');
+  assert.equal(corpo.data.cache.motivoAssente, null);
+
+  assert.equal(corpo.data.primoToken.ms, 450, 'TTFT: il primo pezzo che arriva è il ragionamento');
+  assert.equal(corpo.data.primoToken.tipo, 'ragionamento');
+  assert.equal(corpo.data.primoToken.msPrimoVisibile, 5_000, 'TTFV: il testo visibile arriva molto dopo, e i due numeri restano SEPARATI');
+  assert.equal(corpo.data.primoToken.inCorsoDaMs, 19_000);
+
+  assert.equal(corpo.data.chiusura.motivo, null, 'il giro è ancora aperto: nessun motivo di chiusura inventato');
+  assert.ok(corpo.data.chiusura.motivoAssente.includes('ancora in corso'));
+});
+
+test('⛔⛔ AL CONTRARIO — GET .../metrics su una sessione VIVA ma senza un solo evento dice «non registrato», mai uno 0% di cache', async (t) => {
+  const registro = registroVeroConEventi(t, { emetti: () => {} });
+  const { base } = await listen(t, { sessionRegistry: registro });
+  const { sessionId } = registro.avvia('sconto-a-scaglioni');
+  await Promise.resolve();
+
+  const corpo = await (await fetch(`${base}/api/v1/sessions/${sessionId}/metrics`)).json();
+  assert.equal(corpo.ok, true);
+  assert.equal(corpo.data.registrato, false);
+  assert.equal(corpo.data.motivo, 'non-registrato');
+  assert.equal(corpo.data.cache, null, '⛔ «non registrato» e «cache a zero» sono due fatti diversi e non si dicono con la stessa parola');
+  assert.equal(corpo.data.primoToken, null);
+  assert.equal(corpo.data.chiusura, null);
+  assert.equal(corpo.data.giri, null);
+});
+
+test('⛔⛔ AL CONTRARIO — GET .../metrics su un giro CONCLUSO male porta il motivo normalizzato E il codice grezzo', async (t) => {
+  let ora = 1_000;
+  const registro = registroVeroConEventi(t, {
+    clock: () => new Date(ora),
+    emetti: (onEvento) => {
+      onEvento({ type: 'RunStarted', threadId: 't', runId: 'r1', input: { consegna: 'c' } });
+      ora = 2_000;
+      onEvento({ type: 'TextMessageStart', messageId: 'm1', role: 'assistant' });
+      ora = 3_000;
+      onEvento({ type: 'RunError', message: 'giri finiti', code: 'giri-esauriti' });
+    },
+  });
+  const { base } = await listen(t, { sessionRegistry: registro });
+  const { sessionId } = registro.avvia('sconto-a-scaglioni');
+  await Promise.resolve();
+
+  const corpo = await (await fetch(`${base}/api/v1/sessions/${sessionId}/metrics`)).json();
+  assert.equal(corpo.data.chiusura.motivo, 'giri-finiti');
+  assert.equal(corpo.data.chiusura.codice, 'giri-esauriti', '⛔ il codice grezzo non si butta via: la mappatura fra vocabolari «cannot be defaulted»');
+  assert.equal(corpo.data.primoToken.inCorsoDaMs, null, 'un giro chiuso non è «in corso da»');
+  assert.equal(corpo.data.cache.frazione, null, 'questa sessione non ha mai riportato un consumo: null, mai 0%');
+  assert.ok(corpo.data.cache.motivoAssente.includes('MISURATO'));
+});
+
+test('⛔ AL CONTRARIO — GET .../metrics su una sessione inesistente: 404 NOT_FOUND', async (t) => {
+  const registro = registroVeroConEventi(t);
+  const { base } = await listen(t, { sessionRegistry: registro });
+  const risposta = await fetch(`${base}/api/v1/sessions/mai-esistita/metrics`);
+  assert.equal(risposta.status, 404);
+  assert.equal((await risposta.json()).error.code, 'NOT_FOUND');
+});
+
+test('⛔ GET .../metrics rifiuta una query string, come le rotte vicine (requireNoQuery)', async (t) => {
+  const registro = registroVeroConEventi(t, { emetti: () => {} });
+  const { base } = await listen(t, { sessionRegistry: registro });
+  const { sessionId } = registro.avvia('sconto-a-scaglioni');
+  await Promise.resolve();
+
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/metrics?giro=1`);
+  assert.equal(risposta.status, 400);
+  assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
+});
