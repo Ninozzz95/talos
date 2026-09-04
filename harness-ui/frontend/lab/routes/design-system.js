@@ -1,6 +1,9 @@
 import {
   assertTalosDesignTokens,
+  createActivityBundle,
+  createApprovalCard,
   createBadge,
+  createConversation,
   createButton,
   createField,
   createIconButton,
@@ -13,9 +16,13 @@ import {
   createSelect,
   createSheet,
   createSessionItem,
+  createSignedReceipt,
   createStatusDot,
   createSwitch,
+  createMessage,
   createTabs,
+  createTurn,
+  createTurnSpine,
   createTooltip,
 } from '../../src/design-system/index.js';
 import { createAnnouncementRegion } from '../../src/ui/announcement-region.js';
@@ -291,6 +298,117 @@ export function mountDesignSystemLab(root) {
   navigazione.row.append(nav);
   grid.append(navigazione.group);
   components.push(...vociLuoghi, gruppoLuoghi, ...sessioni);
+
+  /*
+   * Fase 4: la conversazione. Qui il banco prova la cosa che conta davvero —
+   * che mentre il modello scrive NON si annuncia ogni pezzo, e che alla fine
+   * si annuncia il messaggio intero una volta sola.
+   */
+  const chat = headingGroup(documentObj, 'Conversazione');
+  chat.group.classList.add('design-system-lab__group--wide');
+
+  const testoRisposta = documentObj.createElement('p');
+  testoRisposta.textContent = 'La guardia è scritta e i test la coprono nei due versi.';
+  const messaggioTalos = createMessage({
+    document: documentObj,
+    author: 'assistant',
+    authorLabel: 'TALOS',
+    model: 'claude-opus-5',
+    time: '18:07',
+    content: [testoRisposta],
+    testId: 'ds-message',
+  });
+  const ricevuta = createSignedReceipt({
+    document: documentObj,
+    text: 'Scrittura eseguita: 18 righe aggiunte, 2 tolte.',
+    hash: 'a1f4c39d77b19c02',
+    testId: 'ds-receipt',
+  });
+  const attrezzoRiga = createListRow({
+    document: documentObj,
+    title: 'Comando nel terminale',
+    subtitle: 'node --test tests/*.test.mjs',
+    testId: 'ds-bundle-row',
+  });
+  const durata = createMeasure({ document: documentObj, value: '3,1', unit: 's', testId: 'ds-bundle-duration' });
+  const blocco = createActivityBundle({
+    document: documentObj,
+    count: 7,
+    failed: 1,
+    summaryWord: 'attrezzi usati in questo giro',
+    failedWord: 'fallito',
+    content: [attrezzoRiga.element],
+    aside: [durata.element],
+    testId: 'ds-activity-bundle',
+    onToggle: (aperto) => announcements.announce(aperto ? 'Attrezzi del giro aperti' : 'Attrezzi del giro chiusi'),
+  });
+  const spina = createTurnSpine({
+    document: documentObj,
+    turns: [{ n: 5, cost: 3 }, { n: 6, cost: 5, outcome: 'warning' }],
+    testId: 'ds-turn-spine',
+  });
+  const giro = createTurn({
+    document: documentObj,
+    spine: spina.element,
+    content: [messaggioTalos.element, blocco.element, ricevuta.element],
+    testId: 'ds-turn',
+  });
+
+  let scrive = false;
+  let conversazione;
+  conversazione = createConversation({
+    document: documentObj,
+    label: 'Conversazione di prova',
+    content: [giro.element],
+    announce: (messaggio) => announcements.announce(messaggio),
+    testId: 'ds-conversation',
+  });
+  const alternaStream = createButton({
+    document: documentObj,
+    label: 'Simula una risposta',
+    variant: 'secondary',
+    testId: 'ds-stream-toggle',
+    onPress: () => {
+      scrive = !scrive;
+      conversazione.update(scrive
+        ? { streaming: true }
+        : { streaming: false, completedText: testoRisposta.textContent });
+    },
+  });
+  chat.row.append(conversazione.element);
+  chat.group.append(alternaStream.element);
+  grid.append(chat.group);
+  components.push(messaggioTalos, ricevuta, attrezzoRiga, durata, blocco, spina, giro, conversazione, alternaStream);
+
+  const gruppoPermesso = headingGroup(documentObj, 'Richiesta di permesso');
+  gruppoPermesso.group.classList.add('design-system-lab__group--wide');
+  const consenti = createButton({ document: documentObj, label: 'Consenti una volta', variant: 'primary', testId: 'ds-approval-allow' });
+  const nega = createButton({ document: documentObj, label: 'Nega', variant: 'ghost' });
+  const differenza = documentObj.createElement('pre');
+  differenza.className = 'talos-diff';
+  differenza.textContent = '+ silenzioMs: 60_000,';
+  let cartaPermesso;
+  cartaPermesso = createApprovalCard({
+    document: documentObj,
+    title: 'Chiede di scrivere src/session-registry.mjs',
+    reason: 'Serve per aggiungere le soglie della guardia che hai chiesto: 60 secondi di silenzio e tre ripetizioni identiche.',
+    content: [differenza],
+    actions: [consenti.element, nega.element],
+    expiry: 'Scade a fine sessione',
+    announce: (messaggio) => announcements.announce(messaggio),
+    testId: 'ds-approval-card',
+  });
+  const mostraPermesso = createButton({
+    document: documentObj,
+    label: 'Mostra la richiesta',
+    variant: 'secondary',
+    testId: 'ds-approval-show',
+    onPress: () => cartaPermesso.update({ presented: true }),
+  });
+  gruppoPermesso.row.append(cartaPermesso.element);
+  gruppoPermesso.group.append(mostraPermesso.element);
+  grid.append(gruppoPermesso.group);
+  components.push(consenti, nega, cartaPermesso, mostraPermesso);
 
   assertTalosDesignTokens(documentObj.defaultView.getComputedStyle(html));
   html.dataset.visualReady = 'true';

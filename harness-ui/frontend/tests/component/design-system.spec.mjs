@@ -216,3 +216,67 @@ test('PHASE3-MOTION-COLORS-09 — reduced motion e forced colors mantengono cont
   expect(style.borderStyle).not.toBe('none');
   expect(style.outlineStyle).not.toBe('none');
 });
+
+test('PHASE4-STREAM-07 — mentre TALOS scrive la conversazione TACE: un avviso, poi il messaggio intero', async ({ page }) => {
+  await openLab(page);
+  const log = page.locator('[data-testid="ds-conversation"]');
+  const politeRegion = page.locator('[role="status"][aria-live="polite"]');
+  await expect(log).toHaveAttribute('role', 'log');
+  await expect(log).toHaveAttribute('aria-busy', 'false');
+
+  // Parte la risposta: un avviso breve, e la regione viva si dichiara occupata.
+  await page.getByRole('button', { name: 'Simula una risposta' }).click();
+  await expect(log).toHaveAttribute('aria-busy', 'true');
+  await expect(politeRegion).toHaveText('TALOS sta rispondendo');
+
+  // ⛔ Il vincolo che ha deciso il disegno: mentre scrive NON si annuncia altro.
+  // Il testo del messaggio è già nel DOM, ma l'annuncio è ancora solo l'avviso.
+  await expect(page.locator('[data-testid="ds-message"]')).toContainText('La guardia è scritta');
+  await expect(politeRegion).toHaveText('TALOS sta rispondendo');
+
+  // Finisce: si annuncia il messaggio COMPLETO, una volta sola.
+  await page.getByRole('button', { name: 'Simula una risposta' }).click();
+  await expect(log).toHaveAttribute('aria-busy', 'false');
+  await expect(politeRegion).toHaveText('La guardia è scritta e i test la coprono nei due versi.');
+});
+
+test('PHASE4-APPROVAL-08 — la richiesta di permesso prende il focus e non vive nel log', async ({ page }) => {
+  await openLab(page);
+  const card = page.locator('[data-testid="ds-approval-card"]');
+  // Non è una voce del log: è un gruppo con un nome proprio.
+  await expect(card).toHaveAttribute('role', 'group');
+  await expect(card).toHaveAccessibleName(/Chiede di scrivere/);
+  // E porta sempre il PERCHÉ, che è ciò che rende decidibile un permesso.
+  await expect(card).toContainText('Serve per aggiungere le soglie');
+
+  await page.getByRole('button', { name: 'Mostra la richiesta' }).click();
+  await expect(card).toBeFocused();
+  await expect(page.locator('[role="status"][aria-live="polite"]')).toContainText('Chiede di scrivere');
+});
+
+test('PHASE4-BUNDLE-09 — gli attrezzi del giro sono una disclosure vera, e l\'esito si legge prima di aprirla', async ({ page }) => {
+  await openLab(page);
+  const testa = page.locator('[data-testid="ds-activity-bundle"] .talos-activity__head');
+  const corpo = page.locator('[data-testid="ds-activity-bundle"] .talos-activity__body');
+  await expect(testa).toContainText('7 attrezzi usati in questo giro · 1 fallito');
+  await expect(testa).toHaveAttribute('aria-expanded', 'false');
+  await expect(corpo).toBeHidden();
+  await testa.click();
+  await expect(testa).toHaveAttribute('aria-expanded', 'true');
+  await expect(corpo).toBeVisible();
+  await expect(corpo).toContainText('Comando nel terminale');
+});
+
+test('PHASE4-MEASURE-10 — una stima si distingue da una misura senza usare il colore', async ({ page }) => {
+  await openLab(page);
+  const misurata = page.locator('[data-testid="ds-measure-measured"]');
+  const stimata = page.locator('[data-testid="ds-measure-estimated"]');
+  await expect(misurata).toHaveAttribute('data-provenance', 'measured');
+  await expect(stimata).toHaveAttribute('data-provenance', 'estimated');
+  // La forma: la tilde è nel CSS, quindi il testo copiato resta un numero pulito.
+  await expect(stimata).toHaveText('stima: 7,5k token');
+  const tilde = await stimata.evaluate((el) => getComputedStyle(el, '::before').content);
+  expect(tilde).toContain('~');
+  const sottolineatura = await stimata.evaluate((el) => getComputedStyle(el).borderBottomStyle);
+  expect(sottolineatura).toBe('dotted');
+});
