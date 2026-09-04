@@ -55,6 +55,8 @@ const API_ERROR_CODES = new Set([
   'PROVIDER_INVALID', 'PROVIDER_KEY_REQUIRED', 'PROVIDER_KEY_INVALID', 'PROVIDER_STORE_UNAVAILABLE', 'PROVIDER_RUNTIME_INVALID', 'PROVIDER_RUNTIME_UNAVAILABLE',
   // ⭐ 04/9, R-03 — fonte della ricerca web (search-source-store.mjs, duckduckgo-search.mjs).
   'SEARCH_SOURCE_INVALID', 'SEARCH_KEY_REQUIRED', 'SEARCH_KEY_INVALID', 'SEARCH_ENDPOINT_INVALID', 'SEARCH_STORE_UNAVAILABLE', 'SEARCH_NOT_READY', 'SEARCH_BLOCKED', 'SEARCH_UNREACHABLE', 'SEARCH_FAILED',
+  // ⭐ 04/9, W1-10 — token di loopback della shell Electron: /api/* senza il cookie talos_token.
+  'AUTH_REQUIRED',
   'RUNTIME_NOT_AVAILABLE',
   'RUNTIME_UNREACHABLE',
   'RUNTIME_OPERATION_UNSUPPORTED',
@@ -141,6 +143,7 @@ const STATUS_BY_CODE = Object.freeze({
   SEARCH_BLOCKED: 502,
   SEARCH_UNREACHABLE: 502,
   SEARCH_FAILED: 502,
+  AUTH_REQUIRED: 401,
   RUNTIME_NOT_AVAILABLE: 503,
   RUNTIME_UNREACHABLE: 503,
   RUNTIME_OPERATION_UNSUPPORTED: 409,
@@ -193,6 +196,7 @@ const MESSAGE_BY_CODE = Object.freeze({
   SEARCH_BLOCKED: 'La fonte di ricerca ha rifiutato la richiesta',
   SEARCH_UNREACHABLE: 'La fonte di ricerca non è raggiungibile',
   SEARCH_FAILED: 'La ricerca non è riuscita',
+  AUTH_REQUIRED: 'Questo server accetta solo la finestra TALOS che lo ha avviato',
   PAYLOAD_LIMIT: 'Contenuto oltre il limite consentito',
   METHOD_NOT_ALLOWED: 'Metodo non consentito',
   NOT_FOUND: 'Risorsa non trovata',
@@ -810,6 +814,18 @@ function scriviEventoSse(res, evento) {
  *   l'esecuzione — stesso principio del `chiaveApi` opzionale in config.mjs.
  * @param {()=>Array<object>} [deps.listaTaskDisponibili]
  */
+/** ⭐ 04/9, W1-10 — legge un cookie dall'intestazione grezza; nessuna dipendenza, nessun parsing oltre il nome cercato. */
+export function leggiCookie(req, nome) {
+  const grezzo = req?.headers?.cookie;
+  if (typeof grezzo !== 'string' || grezzo === '') return null;
+  for (const parte of grezzo.split(';')) {
+    const i = parte.indexOf('=');
+    if (i === -1) continue;
+    if (parte.slice(0, i).trim() === nome) return parte.slice(i + 1).trim();
+  }
+  return null;
+}
+
 export function createHttpApp({
   staticHandler, sessionRegistry = null, listaTaskDisponibili = () => [],
   elencaCartelleProgetto = () => [], automationStore = null, diagnosiFn = null,
@@ -817,6 +833,8 @@ export function createHttpApp({
   setupStatoFn = null,
   // ⭐ 04/9, R-03 — fonte della ricerca web scelta dalle Impostazioni (parità mobile) + prova reale.
   searchSourceStore = null, provaRicercaWebFn = null,
+  // ⭐ 04/9, W1-10 — token di loopback (config.token): quando c'è, /api/* vuole il cookie talos_token; `GET /?token=<t>` lo imposta e rimanda a `/`.
+  token = null,
   workspaceLaunchStore = null,
   workspaceBrowser = null,
   // ⭐⭐⭐ 28/8 — owner, coda: "directory più usate (tipo desktop downloads)". Zero config esterna (solo os.homedir()) — il default reale basta, nessun cablaggio in server.mjs come serve invece per elencaCartelleProgetto (quella dipende da TALOS_HARNESS_UI_PROJECT_DIRS).
@@ -879,6 +897,36 @@ export function createHttpApp({
     } catch {
       sendJson(res, 400, errorEnvelope('QUERY_INVALID', clock), method);
       return;
+    }
+
+    /*
+     * ⭐⭐⭐ 04/9 — W1-10, il cancello a token. Solo se il server è stato
+     * avviato con un token (shell Electron): la finestra apre `/?token=<t>`,
+     * riceve il cookie e viene rimandata a `/` pulita (il token non resta
+     * nella barra né nella cronologia); da lì ogni `/api/*` porta il cookie.
+     * Chi arriva senza (un altro processo sulla stessa macchina, un browser
+     * aperto a mano) riceve 401 AUTH_REQUIRED sull'API — la pagina statica
+     * resta servibile, ma senza API non fa niente. Cookie HttpOnly +
+     * SameSite=Strict: non leggibile da script, mai inviato cross-site.
+     */
+    if (token) {
+      if (url.pathname === '/' && url.searchParams.has('token')) {
+        if (url.searchParams.get('token') === token) {
+          res.writeHead(302, {
+            'Set-Cookie': `talos_token=${token}; HttpOnly; SameSite=Strict; Path=/`,
+            Location: '/',
+            'Cache-Control': 'no-store',
+          });
+          res.end();
+        } else {
+          sendJson(res, 401, errorEnvelope('AUTH_REQUIRED', clock), method);
+        }
+        return;
+      }
+      if (url.pathname.startsWith('/api/') && leggiCookie(req, 'talos_token') !== token) {
+        sendJson(res, 401, errorEnvelope('AUTH_REQUIRED', clock), method);
+        return;
+      }
     }
 
     if (method === 'POST' && workspaceLaunchStore && url.pathname === '/api/v1/workspace-launches') {

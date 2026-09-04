@@ -106,6 +106,24 @@ function parseLabs(raw, moduleUrl) {
   return Object.freeze(richiesti);
 }
 
+/*
+ * ⭐⭐⭐ 04/9 — W1-10, spike Electron: il token di loopback. Quando è
+ * impostato, ogni `/api/*` e l'upgrade WebSocket del terminale vogliono il
+ * cookie `talos_token` (impostato da `GET /?token=…`): così solo la finestra
+ * della shell — che conosce il token generato all'avvio — usa il server,
+ * anche se un altro processo sulla stessa macchina raggiunge la porta.
+ * Senza variabile: comportamento di sempre (browser-first, nessun cookie).
+ * ⛔ Minimo 32 caratteri: un token corto è una serratura di cartone.
+ */
+export const LUNGHEZZA_MINIMA_TOKEN = 32;
+function parseToken(raw) {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  if (typeof raw !== 'string' || raw.trim().length < LUNGHEZZA_MINIMA_TOKEN || /\s/.test(raw.trim())) {
+    fail(`TALOS_HARNESS_UI_TOKEN deve avere almeno ${LUNGHEZZA_MINIMA_TOKEN} caratteri, senza spazi`);
+  }
+  return raw.trim();
+}
+
 function parseModello(raw) {
   if (raw === undefined || raw === '') return MODELLI_AMMESSI[0];
   if (typeof raw !== 'string' || !MODELLI_AMMESSI.includes(raw)) {
@@ -465,6 +483,7 @@ export function loadConfig(
     ownerRuntimeModule: parseOwnerRuntimeModule(env.TALOS_OWNER_RUNTIME_MODULE),
     ricercaWeb: parseRicercaWeb(env),
     labs: parseLabs(env.TALOS_LABS, moduleUrl), // ⭐ 04/9, W0-04
+    token: parseToken(env.TALOS_HARNESS_UI_TOKEN), // ⭐ 04/9, W1-10
 
     firmaRicevute: parseFirmaRicevute(env),
     immagine: parseImmagine(env),

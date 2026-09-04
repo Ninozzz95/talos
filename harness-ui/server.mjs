@@ -483,6 +483,7 @@ async function startServer() {
     }),
     searchSourceStore,
     provaRicercaWebFn,
+    token: config.token, // ⭐ 04/9, W1-10 — cancello a token per la shell Electron
     catalogoModelliFn: (opts) => modelCatalog.ottieni(opts),
     capacitaMacchinaFn: () => misuraCapacitaMacchina({ storagePath: config.publicDir }),
     localRuntimes,
@@ -577,6 +578,7 @@ async function startServer() {
     registro: registroTerminali,
     originiConsentite: originiTerminaleConsentite,
     risolviCartella: (id) => sessionRegistry.cartellaDi(id) ?? config.cartelleProgetto[0]?.percorso ?? process.cwd(),
+    token: config.token, // ⭐ 04/9, W1-10
   });
   server.on('upgrade', (req, socket, head) => terminaleWs.gestisciUpgrade(req, socket, head));
   const reaperTerminali = setInterval(() => registroTerminali.reap(), MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA * 60_000).unref();

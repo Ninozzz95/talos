@@ -20,7 +20,16 @@ import { codificaFrame, decodificaFrame, TIPO_FRAME_CONTROLLO, TIPO_FRAME_DATI }
 
 const PERCORSO_WS = '/api/v1/terminal/ws';
 
-export function creaGestoreTerminaleWs({ registro, originiConsentite, risolviCartella }, deps = {}) {
+function leggiCookieGrezzo(grezzo, nome) {
+  if (typeof grezzo !== 'string' || grezzo === '') return null;
+  for (const parte of grezzo.split(';')) {
+    const i = parte.indexOf('=');
+    if (i !== -1 && parte.slice(0, i).trim() === nome) return parte.slice(i + 1).trim();
+  }
+  return null;
+}
+
+export function creaGestoreTerminaleWs({ registro, originiConsentite, risolviCartella, token = null }, deps = {}) {
   const WSS = deps.WebSocketServer ?? WebSocketServer;
   const wss = new WSS({ noServer: true });
 
@@ -39,6 +48,12 @@ export function creaGestoreTerminaleWs({ registro, originiConsentite, risolviCar
     const origin = req.headers.origin;
     if (origin && originiConsentite && !originiConsentite.has(origin)) {
       socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+    // ⭐ 04/9, W1-10 — stesso cancello a token di /api/*: senza il cookie talos_token l'upgrade è 401, la PTY non nasce nemmeno.
+    if (token && leggiCookieGrezzo(req.headers.cookie, 'talos_token') !== token) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();
       return;
     }
