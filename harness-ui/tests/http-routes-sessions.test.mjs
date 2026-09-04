@@ -3,6 +3,13 @@ import { createServer } from 'node:http';
 import test from 'node:test';
 
 import { API_SCHEMA, createHttpApp } from '../src/http-app.mjs';
+// ⭐⭐⭐ 04/9 — W0-08: SOLO per il test "la rotta HTTP provata davvero" più
+// sotto — un registro VERO (non il fake di questo file), per provare che
+// `POST /api/v1/sessions` non allarga il workspace passando dal livello
+// HTTP vero fino a `avvia()` vero, non solo dalla funzione isolata (già
+// provata in session-registry.test.mjs).
+import { createSessionRegistry } from '../src/session-registry.mjs';
+import { TaskCatalogError } from '../src/task-catalog.mjs';
 
 // ⛔ Un sessionRegistry FINTO, scritto qui apposta: session-registry.mjs ha
 // già i suoi 10 test (buffer, iscrizione tardiva, stop). Questo file prova
@@ -496,6 +503,44 @@ test('⛔⛔ POST /api/v1/sessions con un permessi INVENTATO: QUERY_INVALID, mai
   assert.equal(risposta.status, 400);
   assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
   assert.equal(sessionRegistry.ultimeOpzioniAvvio, null, 'mai raggiunto il registro con un permesso non valido');
+});
+
+/*
+ * ⭐⭐⭐ 04/9 — W0-08: la rotta VERA, non il fake — `POST /api/v1/sessions`
+ * con `{taskId, permessi:'Full access'}` non deve produrre un workspace
+ * diverso dalla cartella del task, da QUALUNQUE client HTTP diretto
+ * (nessun frontend nel mezzo). Un `sessionRegistry` reale (stesso
+ * pattern iniettabile di session-registry.test.mjs: `avviaSessioneFn`
+ * cattura `input.cartella` invece di far girare un agente vero) wired
+ * dentro lo stesso `createHttpApp`/`listen()` di questo file — la
+ * differenza rispetto a tutti gli altri test qui sopra è SOLO questa
+ * iniezione, la richiesta HTTP è identica.
+ */
+test('⭐⭐⭐ W0-08 — POST /api/v1/sessions con permessi:"Full access" su un task del catalogo NON allarga il workspace alla radice del disco (registro VERO, non il fake)', async (t) => {
+  const catturati = [];
+  const avviaSessioneFn = async (input) => {
+    catturati.push(input.cartella);
+    input.onEvento({ type: 'RunStarted', threadId: 't', runId: 'r1' });
+    return { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [] } };
+  };
+  const preparaEsecuzioneFn = (taskId) => {
+    if (taskId !== 'sconto-a-scaglioni') throw new TaskCatalogError(`Task non ammesso: ${taskId}`);
+    return { cartella: 'C:\\corpus\\sconto-a-scaglioni-9f2', comandoProva: 'npm test', task: { id: taskId, consegna: 'c' } };
+  };
+  const sessionRegistryVero = createSessionRegistry({
+    avviaSessioneFn, preparaEsecuzioneFn, guardaWorkspaceFn: () => () => {}, modello: 'm', chiave: 'k',
+  });
+  const { base } = await listen(t, { sessionRegistry: sessionRegistryVero });
+
+  const risposta = await fetch(`${base}/api/v1/sessions`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taskId: 'sconto-a-scaglioni', permessi: 'Full access' }),
+  });
+
+  assert.equal(risposta.status, 200);
+  assert.equal((await risposta.json()).ok, true);
+  assert.equal(catturati.length, 1, 'la sessione deve essere partita davvero, attraverso la rotta HTTP');
+  assert.equal(catturati[0], 'C:\\corpus\\sconto-a-scaglioni-9f2', 'RIPRODOTTO E CORRETTO (W0-08): "Full access" da un client HTTP diretto non deve allargare un task del catalogo alla radice del disco (C:\\)');
 });
 
 test('⭐⭐⭐ POST /api/v1/sessions/custom con cartellaLibera+permessi:"Full access" arriva davvero al registro', async (t) => {

@@ -903,6 +903,22 @@ export function createSessionRegistry({
    * appena fatta. `cartellaGiaScelta:true` disattiva l'allargamento: la
    * cartella scelta a piacere resta ESATTA, sempre, indipendentemente dal
    * permesso — mai un secondo allargamento sopra una scelta già precisa.
+   *
+   * ⛔⛔⛔ 04/9 — W0-08, TERZA situazione trovata dal vivo, distinta dalle
+   * due sopra: `avvia()` (un task del CATALOGO) non passava MAI
+   * `cartellaGiaScelta`, quindi ricadeva sul ramo (a) — "parto stretto, mi
+   * allargo" — anche se non c'è NESSUNO stretto da cui allargarsi: la
+   * cartella di un task del corpus è sempre la copia usa-e-getta di
+   * `task-catalog.mjs`, non una sotto-cartella di un progetto più ampio
+   * scelto dall'owner. Il permesso decideva quindi il workspace anche lì
+   * dove non ha senso — misurato, non teorico: la corruzione del 31/8 e il
+   * lag del 2/9 avevano entrambi una sessione con l'intero albero di C:\
+   * dentro. `avvia()` ora passa `cartellaGiaScelta:true` sempre: stesso
+   * effetto del caso (b) ma per un motivo diverso ("non c'è niente da
+   * allargare", non "la persona ha scelto esattamente questo") — un solo
+   * flag, due ragioni, vedi la doc di `avvia()` per il dettaglio. Il caso
+   * (a) resta l'UNICO che allarga davvero: `avviaLibero({cartellaId})`,
+   * l'allowlist.
    */
   function cartellaEffettivaPerPermessi(cartellaBase, permessi, cartellaGiaScelta = false) {
     if (cartellaGiaScelta) return cartellaBase;
@@ -926,11 +942,25 @@ export function createSessionRegistry({
     forkDa = null, voceEsistente = null, modelloRichiesta = null, reasoningRichiesto = null, mobile = false,
     permessiRichiesti = null, permessiPerAttrezzoRichiesti = null,
     /*
-     * ⭐⭐⭐ 03/9 — vedi la doc di cartellaEffettivaPerPermessi: `true` SOLO
-     * per avviaLibero con cartellaLibera/workspaceLaunchId (la persona ha
+     * ⭐⭐⭐ 03/9 — vedi la doc di cartellaEffettivaPerPermessi: `true` per
+     * avviaLibero con cartellaLibera/workspaceLaunchId (la persona ha
      * scelto ESATTAMENTE questa cartella) — mai per l'allowlist
-     * (cartellaId) né per il corpus benchmark, dove "Full access" resta
-     * un allargamento legittimo oltre la cartella di partenza.
+     * (cartellaId), dove "Full access" resta un allargamento legittimo
+     * oltre la cartella di partenza (owner, 03/9: "parto stretto, mi
+     * allargo" — l'UNICO caso rimasto che allarga).
+     *
+     * ⛔⛔⛔ 04/9 — W0-08: ANCHE `true` per `avvia()` (task del catalogo).
+     * Prima di questo commit non lo era MAI — bug reale, non teorico: un
+     * `permessiScelto:'Full access'` su un task del corpus (o alzato a
+     * metà chat via `aggiornaImpostazioni`) allargava la cartella alla
+     * radice del disco, e `POST /api/v1/sessions` non aveva nessuna
+     * validazione che lo impedisse. Un task del catalogo non ha MAI un
+     * percorso "stretto" da cui allargarsi — la sua cartella è sempre la
+     * copia usa-e-getta di `task-catalog.mjs` — quindi qui il flag non
+     * significa "la persona ha scelto questo percorso" ma "non esiste
+     * niente da allargare": stesso effetto finale (`cartellaEffettivaPerPermessi`
+     * ritorna la cartella invariata), due motivi distinti — vedi la doc
+     * di `avvia()` più sotto.
      */
     cartellaGiaScelta = false,
     provider = 'cloud', runtimeId = null, modelId = null, fallbackConsent = false,
@@ -1675,11 +1705,36 @@ export function createSessionRegistry({
      * un throw: un id fuori allowlist o una chiave assente sono risposte
      * attese di un endpoint HTTP, non un guasto del registro.
      *
-     * ⛔ `permessiScelto:'Full access'` qui è accettato ma INERTE: la
-     * cartella di un task del corpus è SEMPRE la copia usa-e-getta di
-     * `task-catalog.mjs`, mai scelta dall'owner — "Full access" ha senso
-     * solo dove esiste un percorso a piacere da scegliere (`avviaLibero`,
-     * sotto). Nessun errore: solo si comporta come "Workspace write".
+     * ⛔⛔⛔ 04/9 — W0-08: fino a questo commit questa era un'AFFERMAZIONE
+     * FALSA — diceva "INERTE" ma il codice non passava mai
+     * `cartellaGiaScelta:true` ad `avviaESegui`, quindi `permessiScelto:
+     * 'Full access'` allargava DAVVERO alla radice del disco (misurato
+     * leggendo `cartellaEffettivaPerPermessi`: senza quel flag,
+     * `permessi==='Full access'` basta da sola). Non teorico: la
+     * corruzione del 31/8 (riparata il 4/9) e il lag del 2/9 avevano
+     * entrambi una sessione con l'intero albero di C:\ dentro. Ricerca
+     * 4/9 (Codex: read-only/workspace-write/danger-full-access sono un
+     * asse SEPARATO da "quale cartella"; Claude Code: additionalDirectories
+     * è un'estensione esplicita, mai automatica, e la 2.1.251 del 28/8/2026
+     * ha chiuso sei casi in cui qualcosa DENTRO il confine approvato
+     * raggiungeva fuori — stesso pattern di qui; FINOS Agent Authority
+     * Least Privilege Framework: il confine di risorsa è un asse separato
+     * da quello operativo) — conferma che "quanto posso fare" e "dove
+     * posso farlo" non devono mai dipendere l'uno dall'altro.
+     *
+     * ⇒ Ora è vero per davvero: `cartellaGiaScelta:true` qui sotto rende
+     * "Full access" INERTE sulla cartella per un task del catalogo, la
+     * cui cartella è SEMPRE la copia usa-e-getta di `task-catalog.mjs`,
+     * mai scelta dall'owner — "Full access" allarga solo dove esiste un
+     * percorso a piacere da cui allargarsi (`avviaLibero`, sotto, SOLO
+     * per l'allowlist `cartellaId`). Nessun errore verso il client HTTP
+     * (incluso `POST /api/v1/sessions`, che non ha altra validazione su
+     * questa combinazione): la richiesta resta accettata, il permesso
+     * "Full access" resta quello scelto e si comporta come "Workspace
+     * write" SOLO riguardo a quale cartella — il resto (nessuna
+     * approvazione richiesta) è identico fra i due, vedi il test
+     * "'Workspace write'/'Full access' restano entrambi senza
+     * livelloAccesso/chiediApprovazioneFn".
      */
     avvia(taskId, {
       modelloScelto = null, modelloPlannerScelto = null, reasoningScelto = null, mobile = false,
@@ -1697,6 +1752,8 @@ export function createSessionRegistry({
         taskId, cartella: preparato.cartella, task: preparato.task, comandoProva: preparato.comandoProva,
         modelloRichiesta: modelloScelto, modelloPlannerRichiesta: modelloPlannerScelto, reasoningRichiesto: reasoningScelto, mobile,
         permessiRichiesti: permessiScelto, permessiPerAttrezzoRichiesti: permessiPerAttrezzoScelto,
+        // ⭐⭐⭐ 04/9 — W0-08: la cartella di un task del catalogo non è MAI un punto di partenza "stretto" da cui allargarsi — è sempre la copia usa-e-getta preparata da task-catalog.mjs. Vedi la doc qui sopra.
+        cartellaGiaScelta: true,
         provider, runtimeId, modelId, fallbackConsent,
       });
     },

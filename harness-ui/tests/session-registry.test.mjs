@@ -872,7 +872,7 @@ test('⭐⭐⭐ "On request" passa una chiediApprovazioneFn vera, MAI livelloAcc
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
-test('⭐⭐ "Workspace write"/"Full access" restano entrambi senza livelloAccesso/chiediApprovazioneFn — "Full access" cambia la CARTELLA, non il kernel', () => {
+test('⭐⭐ "Workspace write"/"Full access" restano entrambi senza livelloAccesso/chiediApprovazioneFn — "Full access" NON tocca mai il kernel (dove cambia la cartella dipende dal percorso di lancio, vedi W0-08 sotto)', () => {
   for (const permessiScelto of ['Workspace write', 'Full access']) {
     const finta = sessioneControllabile();
     const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
@@ -881,6 +881,26 @@ test('⭐⭐ "Workspace write"/"Full access" restano entrambi senza livelloAcces
     assert.equal(finta.ultimoInput.chiediApprovazioneFn, undefined, permessiScelto);
     finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
   }
+});
+
+/*
+ * ⭐⭐⭐ 04/9 — W0-08: «Full access» allargava il workspace alla RADICE DEL
+ * DISCO anche per un task del catalogo. Misurato leggendo
+ * `cartellaEffettivaPerPermessi`/`avvia()`: `cartellaGiaScelta` non era
+ * mai passato da `avvia()`, quindi `permessi==='Full access'` bastava da
+ * sola per allargare — e `POST /api/v1/sessions` (http-app.mjs) accetta
+ * `{taskId, permessi}` da qualunque client HTTP diretto, senza nessuna
+ * validazione che neghi questa combinazione. Non teorico: la corruzione
+ * del 31/8 (riparata il 4/9) e il lag del 2/9 avevano entrambi una
+ * sessione con l'intero albero di C:\ dentro. Corretto passando
+ * `cartellaGiaScelta:true` da `avvia()` — vedi la sua doc.
+ */
+test('⛔⛔⛔ W0-08 — RIPRODOTTO E CORRETTO: avvia(taskId, {permessiScelto:"Full access"}) su un task del catalogo NON riceve la radice del disco', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  registro.avvia('task-vero', { permessiScelto: 'Full access' });
+  assert.equal(finta.ultimoInput.cartella, '/tmp/x', 'Full access su un task del catalogo non deve MAI allargare a C:\\ — non esiste nessun percorso "scelto dalla persona" da cui allargarsi (vedi la doc di avvia())');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
 test('⛔⛔⛔ AL CONTRARIO — avviaLibero() con cartellaLibera ma SENZA permesso "Full access" è rifiutato, avviaSessione MAI chiamato', () => {
@@ -3175,8 +3195,20 @@ test('MODEL-SWITCH-CONTINUITY-05 — Qwen → altro modello → Qwen conserva cr
  * aggiornaImpostazioni + resume) — qui sulla cartella invece che sul
  * modello, perché è lo STESSO meccanismo: `voce.cartella` letta fresca a
  * ogni resume(), mai catturata una volta sola all'avvio.
+ *
+ * ⛔⛔⛔ 04/9 — W0-08: fino a ieri questa prova usava `avvia('task-vero')`
+ * — un TASK DEL CATALOGO — come sessione da allargare. Era la stessa
+ * lacuna della riga (non teorica: la corruzione del 31/8 e il lag del
+ * 2/9 avevano entrambi una sessione con l'albero di C:\ dentro): la
+ * cartella di un task del corpus è SEMPRE la copia usa-e-getta di
+ * `task-catalog.mjs`, mai un punto di partenza "stretto" scelto
+ * dall'owner da cui allargarsi. ⇒ Spostata sull'ALLOWLIST (`cartellaId`
+ * via `avviaLibero`) — l'UNICO caso rimasto che allarga per disegno,
+ * owner 03/9: "parto stretto, mi allargo" — e affiancata dal test AL
+ * CONTRARIO subito sotto, che prova il buco ora chiuso su un task del
+ * catalogo.
  */
-test('⭐⭐⭐ aggiornaImpostazioni({permessi:"Full access"}) A META\' CHAT allarga la cartella dal GIRO SUCCESSIVO, senza sessione nuova', async () => {
+test('⭐⭐⭐ aggiornaImpostazioni({permessi:"Full access"}) A META\' CHAT allarga la cartella dal GIRO SUCCESSIVO, senza sessione nuova (allowlist)', async () => {
   const inputPerGiro = [];
   const avviaSessioneFn = async (input) => {
     inputPerGiro.push(input.cartella);
@@ -3187,22 +3219,47 @@ test('⭐⭐⭐ aggiornaImpostazioni({permessi:"Full access"}) A META\' CHAT all
     const messaggiFinali = input.messaggiIniziali ?? [{ role: 'user', content: 'prima domanda' }, { role: 'assistant', content: `risposta-${giro}` }];
     return { ok: true, esito: { comeFinita: 'concluso', messaggiFinali } };
   };
-  const registro = createSessionRegistry({ avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
-  // preparaEsecuzioneFinta (in cima a questo file) fissa cartella:'/tmp/x' — nessuna scelta libera qui, il permesso di partenza è quello di default ('Workspace write').
-  const { sessionId } = registro.avvia('task-vero');
+  const registro = createSessionRegistry({
+    avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
+    cartelleProgetto: [{ id: '0', percorso: '/tmp/progetto-allowlisted' }], modello: 'm', chiave: 'k',
+  });
+  // avviaLibero({cartellaId}) — l'allowlist: nessuna scelta esatta della persona (cartellaGiaScelta resta false), il permesso di partenza è quello richiesto ('Workspace write').
+  const { sessionId } = registro.avviaLibero({ cartellaId: '0', consegna: 'fai qualcosa', permessi: 'Workspace write' });
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(inputPerGiro[0], '/tmp/x', 'primo giro: cartella esatta di partenza, permesso di default');
+  assert.equal(inputPerGiro[0], '/tmp/progetto-allowlisted', 'primo giro: cartella esatta di partenza, permesso di default');
 
   await registro.aggiornaImpostazioni(sessionId, { permessi: 'Full access' });
   registro.resume(sessionId, 'ora dovresti vedere tutto il disco');
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(inputPerGiro[1], parsePath('/tmp/x').root, 'giro successivo: allargata alla radice del disco, STESSA sessione, nessun nuovo avvio');
+  assert.equal(inputPerGiro[1], parsePath('/tmp/progetto-allowlisted').root, 'giro successivo: allargata alla radice del disco, STESSA sessione, nessun nuovo avvio');
 
   // ⛔ AL CONTRARIO, stessa sessione: abbassare il permesso restituisce la cartella ORIGINALE, mai una radice rimasta larga per sbaglio.
   await registro.aggiornaImpostazioni(sessionId, { permessi: 'Workspace write' });
   registro.resume(sessionId, 'torna alla cartella di prima');
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(inputPerGiro[2], '/tmp/x', 'permesso abbassato: la cartella torna quella di partenza, non resta la radice del disco');
+  assert.equal(inputPerGiro[2], '/tmp/progetto-allowlisted', 'permesso abbassato: la cartella torna quella di partenza, non resta la radice del disco');
+});
+
+test('⛔⛔⛔ W0-08 — AL CONTRARIO: un TASK DEL CATALOGO non allarga MAI, nemmeno a metà chat con aggiornaImpostazioni({permessi:"Full access"})', async () => {
+  const inputPerGiro = [];
+  const avviaSessioneFn = async (input) => {
+    inputPerGiro.push(input.cartella);
+    const giro = inputPerGiro.length;
+    input.onEvento({ type: 'RunStarted', threadId: 't', runId: `r${giro}` });
+    input.onEvento({ type: 'RunFinished', threadId: 't', runId: `r${giro}` });
+    const messaggiFinali = input.messaggiIniziali ?? [{ role: 'user', content: 'prima domanda' }, { role: 'assistant', content: `risposta-${giro}` }];
+    return { ok: true, esito: { comeFinita: 'concluso', messaggiFinali } };
+  };
+  const registro = createSessionRegistry({ avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  // preparaEsecuzioneFinta (in cima a questo file) fissa cartella:'/tmp/x' — la copia usa-e-getta del corpus, mai una scelta della persona.
+  const { sessionId } = registro.avvia('task-vero');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(inputPerGiro[0], '/tmp/x', 'primo giro: cartella esatta del task, permesso di default');
+
+  await registro.aggiornaImpostazioni(sessionId, { permessi: 'Full access' });
+  registro.resume(sessionId, 'full access, a metà chat');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(inputPerGiro[1], '/tmp/x', 'RIPRODOTTO E CORRETTO (W0-08): un task del catalogo non si allarga alla radice del disco nemmeno a metà chat — non esiste nessun percorso "scelto dalla persona" da cui allargarsi');
 });
 
 test('⛔ AL CONTRARIO — un aggiornaImpostazioni che NON tocca permessi non allarga né restringe mai la cartella', async () => {
