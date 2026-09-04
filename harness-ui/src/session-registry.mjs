@@ -343,6 +343,8 @@ export function createSessionRegistry({
     'tool_create',
   ],
   ricercaWeb,
+  // ⭐ 04/9, R-03 — se presente vince su `ricercaWeb`: letta a OGNI giro (come `chiaveFn`), così una fonte cambiata dalle Impostazioni vale dal giro successivo senza riavvio. Restituisce { ricercaWeb, richiediRicercaFn }.
+  ricercaWebFn = null,
   /*
    * ⭐⭐⭐ 29/8 — FASE H, generate_image. A differenza di `ricercaWeb` sopra:
    * inoltrata SENZA logica propria — la decisione (quale endpoint
@@ -1127,7 +1129,7 @@ export function createSessionRegistry({
       permessi: voce.permessi ?? null,
       segnaleStop: controller.signal,
       mobile: voce.mobile,
-      strumentiEstesi, ricercaWeb, firma, immagine, persistGeneratedImageFn, removeGeneratedImageFn,
+      strumentiEstesi, ...(typeof ricercaWebFn === 'function' ? ricercaWebFn() : { ricercaWeb }), firma, immagine, persistGeneratedImageFn, removeGeneratedImageFn,
       // ⭐⭐⭐ FASE K (29/8) — `?? undefined`: `voce.modelloPlanner` è `null` per una sessione senza planner (mai passato a talosLavoraFn come `null`, che il kernel tratterebbe diversamente da "assente" in un controllo `typeof`).
       modelloPlanner: voce.modelloPlanner ?? undefined,
       livelloAccesso, chiediApprovazioneFn, hookFn,

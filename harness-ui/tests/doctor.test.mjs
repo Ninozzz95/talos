@@ -82,3 +82,23 @@ test('Doctor segnala runtime agente e catalogo task senza confondere processo vi
   assert.deepEqual(risultato.ownerRuntime, { configurato: true, pronto: false, dettaglio: 'Il runtime agente non espone ancora tutte le funzioni richieste.' });
   assert.deepEqual(risultato.catalogoTask, { disponibile: false, dettaglio: 'L’elenco delle attività predefinite non è disponibile.' });
 });
+
+/*
+ * ⭐ 04/9 — R-03, la fonte della ricerca web nel Doctor: stato pubblico
+ * (fonte, prontezza), mai una chiave; assente se non passata (i test sopra
+ * con deepEqual restano validi).
+ */
+test('ricerca web: Doctor riporta fonte e prontezza dal listPublic dello store, e nulla se non gliela si passa', async () => {
+  const eseguiComandoSandboxatoFn = async () => ({ enforcement: 'none' });
+  const spawnSyncFn = () => ({ status: 0 });
+  const senza = await diagnosi({ chiaveConfigurata: true, eseguiComandoSandboxatoFn, spawnSyncFn });
+  assert.equal('ricercaWeb' in senza, false);
+  const pubblico = { source: 'duckduckgo', endpoint: '', readiness: 'pronta', fonti: [{ id: 'duckduckgo', label: 'DuckDuckGo (senza chiave)', keyless: true, keyConfigured: false }] };
+  const con = await diagnosi({ chiaveConfigurata: true, ricercaWeb: pubblico, eseguiComandoSandboxatoFn, spawnSyncFn });
+  assert.equal(con.ricercaWeb.fonte, 'duckduckgo');
+  assert.equal(con.ricercaWeb.pronta, true);
+  assert.match(con.ricercaWeb.dettaglio, /senza chiave/);
+  const spenta = await diagnosi({ chiaveConfigurata: true, ricercaWeb: { ...pubblico, source: 'off', readiness: 'spenta' }, eseguiComandoSandboxatoFn, spawnSyncFn });
+  assert.equal(spenta.ricercaWeb.pronta, false);
+  assert.match(spenta.ricercaWeb.dettaglio, /Spenta/);
+});

@@ -59,9 +59,17 @@ dependencies, each explained in its header comment.
 | `TALOS_HARNESS_UI_PORT` | no | Defaults to `4174`; range `1024..65535`. |
 | `TALOS_HARNESS_UI_PROJECT_DIRS` | no | Additional project folders for the session picker, separated by `;`. When absent, the server exposes its own desktop project workspace by default; `Full access` still allows an explicitly chosen folder. |
 
-The rest of the variables (web search, receipt signing, images) are
-documented in the header comment of `src/config.mjs`, not duplicated here to
-avoid a second copy that drifts out of sync.
+The rest of the variables (receipt signing, images) are documented in the
+header comment of `src/config.mjs`, not duplicated here to avoid a second copy
+that drifts out of sync.
+
+**Web search** is configured from Settings → Agent tools ("Origine della
+ricerca web"), as on the phone: Tavily, Brave, a SearXNG instance of yours, a
+custom endpoint — key in the OS keyring, address in `.search-source.json`
+next to the server — plus **DuckDuckGo without a key**, the default when
+nothing is configured (it reads DuckDuckGo's public results page, not an
+official API: under heavy use it may refuse, and the result says so). The
+`TALOS_HARNESS_SEARCH_*` variables remain the seed until you choose in the UI.
 
 ### Recommended startup with the Permission Model
 

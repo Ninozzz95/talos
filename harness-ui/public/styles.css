@@ -2823,3 +2823,12 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
 .intro-foot .intro-back svg { width: 15px; height: 15px; }
 .intro-foot .intro-next { margin-left: auto; min-width: 140px; }
 @media (max-width: 780px) { .intro-dialog { width: 100vw; max-height: 100dvh; margin: 0; border-radius: 0; border: 0; } .intro-rail-label { letter-spacing: .12em; } }
+
+/* ⭐ 04/9, R-03 — scheda «Origine della ricerca web» nelle Impostazioni: riusa le scelte dell'intro (.intro-choice) e i campi provider; solo il minimo in più. */
+.search-source-list { display: grid; gap: 6px; margin-top: 12px; }
+.search-source-choice .intro-mark svg { width: 15px; height: 15px; }
+.search-source-details { display: grid; gap: 10px; margin-top: 12px; }
+.search-source-details .provider-field input { width: 100%; }
+.search-source-readiness { margin: 12px 0 0; color: var(--muted); font-size: calc(11px * var(--talos-ui-font-scale)); line-height: 1.5; }
+.search-source-readiness[data-search-readiness="pronta"] { color: var(--ok, var(--accent)); }
+.search-source-feedback { margin: 6px 0 0; color: var(--text-2); font-size: calc(11px * var(--talos-ui-font-scale)); }

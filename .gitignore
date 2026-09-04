@@ -295,6 +295,9 @@ banco/
 # esclusivamente nel portachiavi del sistema operativo).
 harness-ui/.provider-runtime.json
 harness-ui/.provider-runtime.json.tmp
+# ⭐ 04/9, R-03 — scelta della fonte di ricerca web (search-source-store.mjs): stato di runtime, mai nel repo; la chiave sta nel portachiavi.
+harness-ui/.search-source.json
+harness-ui/.search-source.json.tmp-*
 
 # Generated image recovery copies are local runtime data, never source.
 harness-ui/.generated-images/
