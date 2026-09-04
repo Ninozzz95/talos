@@ -1,5 +1,15 @@
 import { defineComponent } from '../ui/component.js';
 
+/*
+ * ⛔ Il CONTRASSEGNO sta sulla scheda, non nel pannello. Ricerca del
+ * 05/09/2026: un pannello non attivo porta `hidden` e quindi esce dall'albero
+ * di accessibilita' — un avviso scritto li' dentro non esiste per chi ascolta,
+ * e nemmeno una regione live messa li' parlerebbe. La scheda invece resta
+ * sempre nell'albero. Stesso schema di `nav-item.js`: il numero si vede, la
+ * sua unita' e' testo per chi ascolta («Processi, 2 avvisi», non «Processi 2»).
+ * Fonti: accessibility.build/guides/accessible-tabs ·
+ * a11y-collective.com/blog/accessibility-tab/
+ */
 let tabsSequence = 0;
 
 function normalizedItems(items) {
@@ -54,7 +64,21 @@ export const createTabs = defineComponent('Tabs', (initialProps = {}) => {
       tab.setAttribute('aria-selected', String(selected));
       tab.setAttribute('aria-controls', `${prefix}-panel-${item.id}`);
       tab.tabIndex = selected ? 0 : -1;
-      tab.textContent = item.label;
+      const etichetta = documentObj.createElement('span');
+      etichetta.className = 'talos-tabs__label';
+      etichetta.textContent = item.label;
+      tab.append(etichetta);
+      if (item.count !== undefined && item.count !== null) {
+        const conto = documentObj.createElement('span');
+        conto.className = 'talos-tabs__count';
+        const contoValore = documentObj.createElement('span');
+        contoValore.textContent = String(item.count);
+        const contoUnita = documentObj.createElement('span');
+        contoUnita.className = 'sr-only';
+        contoUnita.textContent = item.countUnit ? ` ${item.countUnit}` : '';
+        conto.append(contoValore, contoUnita);
+        tab.append(conto);
+      }
       const panel = documentObj.createElement('section');
       panel.className = 'talos-tabs__panel';
       panel.id = `${prefix}-panel-${item.id}`;
