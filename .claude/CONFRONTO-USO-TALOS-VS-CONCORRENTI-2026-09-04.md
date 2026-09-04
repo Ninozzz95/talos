@@ -203,14 +203,26 @@ passi.
 | Hermes desktop | 50 | **45** | 5 |
 
 ⛔ Il primo controllo che avevo scritto guardava il TESTO e diceva 32 doppioni su 57: sbagliato,
-perché scorrere un pannello non cambia . Un controllo che misura la cosa sbagliata è
+perché scorrere un pannello non cambia il testo della pagina. Un controllo che misura la cosa sbagliata è
 peggio di nessun controllo — dice «alla cieca» proprio quando non lo sei. Rifatto sui pixel.
 
 Cose imparate dai gesti a vuoto: **Escape chiude i fogli** (verificato: la schermata torna identica
 a quella di partenza), il fondale non li chiude, e il Capability hub finisce di scorrere prima di
 quanto pensassi — cioè tutto quel contenuto sta in due schermate scarse di scorrimento.
 
-## §6 — Stato del giro
+## §6 — Stato del giro (aggiornato)
+
+- ✅ **TALOS: 50 schermate diverse** — intro a quattro passi, chat, Capability hub dall'alto in
+  fondo, selettore modello, Safety lens, Environment proof, Control plane, albero sessione, palette
+  comandi, terminale, board, otto schede delle impostazioni, notifiche, coda download, ricerca,
+  selezione multipla, tre schede del context rail, modale Nuova sessione, sidebar compressa.
+- ✅ **Hermes desktop: 45 schermate diverse** — home, tutte e diciassette le sezioni delle
+  impostazioni (con gli scorrimenti), scorciatoie, Capabilities, Messaging, Artifacts, una
+  conversazione vera dell'owner, nuova sessione, composer.
+- 🔜 Codex TUI (terminale, va catturato come testo e non a pixel), Agent Canvas, e le quattro prove
+  con i numeri — con la spesa dichiarata prima.
+
+### Storico del primo giro (superato)
 
 - ✅ TALOS: 11 schermate (intro a quattro passi, chat, foglio capability, terminale, palette, nuova
   sessione). ⛔ Board e impostazioni: selettori sbagliati al primo giro, da rifare.
