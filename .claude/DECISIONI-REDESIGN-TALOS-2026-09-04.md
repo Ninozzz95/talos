@@ -136,8 +136,75 @@
 | D29 | Il Doctor sta **dentro le impostazioni**. ⚠️ *Contro il mio consiglio* (dicevo voce di sidebar): pesa il tetto di 5-7 voci deciso in A2. |
 | D30 | **Informazioni** con versione, cartelle, licenze e **«apri la cartella dei dati»**. |
 
-## E-H — non ancora chieste
+## E · PERMESSI E SICUREZZA — decisa il 04/09
 
-Restano **E** (permessi e sicurezza), **F** (nuova sessione e workspace), **G** (viste
-della sessione), **H** (doctor, errori, primo avvio, voce dell'interfaccia). Si
-chiedono nell'interfaccia, a gruppi, come le prime quattro.
+| # | Decisione |
+|---|---|
+| E1 | **Carte nel foglio, tendina nella testata**: scelta ragionata quando la fai, cambio rapido quando già sai. ⚠️ *Più del mio consiglio* (dicevo solo carte): due superfici da tenere coerenti. |
+| E2 | **L'etichetta di rischio resta**: dice la conseguenza, non solo il nome. I concorrenti non ce l'hanno. |
+| E3 | **«Consigliato» marcato** su scrittura nel workspace. |
+| E4 | «Accesso pieno» richiede la spunta **«ho capito cosa comporta»**, con scritto cosa comporta. |
+| E5 | Il permesso del singolo attrezzo **vince sulla politica di sessione, e la riga lo dice**. |
+| E6 | Nome e descrizione **su due righe** (oggi sono incollati: difetto aperto). |
+| E7 | Nel foglio compaiono **tutti i 43 attrezzi** con «come la sessione», più il filtro «hanno un cancello». |
+| E8 | Nel dettaglio, **le ultime tre chiamate** di quell'attrezzo. |
+| E9 | La richiesta di permesso dice **sempre perché** sta chiedendo. |
+| E10 | Prima di approvare una scrittura si mostra la **differenza prima/dopo**. |
+| E11 | **Nessun conto alla rovescia** sulla richiesta. ⚠️ *Tensione con D14* (timeout configurabile): se un permesso scade senza contatore, la richiesta non deve **sparire in silenzio** — alla scadenza va scritta una riga esplicita nella conversazione. Da risolvere così nel mockup. |
+| E12 | Si può approvare **«sempre per questa sessione», tranne per i file di controllo**. |
+| E13 | **Sezione «Registro»** con le approvazioni date e le azioni fatte. |
+| E14 | **Le ricevute firmate si mostrano**: è un nostro differenziatore e oggi non si vede. |
+| E15 | I **file di controllo elencati** nella sezione sicurezza. |
+| E16 | I **repo annidati** si mostrano, come oggi. |
+| E17 | **Radice enorme: si misura al momento della scelta e si propone**. Vedi la ricerca qui sotto. |
+| E18 | Ogni giro **dichiara il permesso** con cui gira, come oggi. |
+| E19 | Un cambio di permesso **si annota nella chat**, come oggi. |
+| E20 | Un attrezzo rifiutato è una **nota, con riepilogo a fine giro**. Non un errore rosso: hai deciso tu. |
+| E21 | Negare un attrezzo vale **solo per la sessione**. ⚠️ *Meno del mio consiglio* (dicevo «per sempre, visibile nell'inventario»): niente divieti che sopravvivono invisibili. |
+| E22 | **La trifecta si mostra quando scatta.** Il kernel la calcola già e nessuno la vede. |
+| E23 | Prima di approvare un comando: **comando intero e cartella dove gira**. |
+| E24 | Le **variabili d'ambiente si vedono, con i valori nascosti**. |
+| E25 | **«Sola lettura» con la conseguenza scritta** sotto: «può leggere ed eseguire comandi che non cambiano niente». |
+| E26 | **Rete e filesystem sono due assi distinti**, come Codex. |
+| E27 | Uscita verso la rete limitata da un **elenco di permessi, mai di divieti**. |
+| E28 | Il registro si esporta **in JSONL e come rapporto leggibile**. |
+| E29 | Un permesso concesso **scade a fine sessione, dichiarato**. |
+| E30 | **«Riporta a scrittura nel workspace» sempre visibile**: revoca tutto in un gesto. |
+
+### La ricerca chiesta dall'owner su E17 (radice enorme), 04/09
+
+L'owner ha fermato la domanda: «questo richiede una ricerca web ultra-tecnica per
+vedere cosa fa il concorrente e per esempio Claude e Codex». Fatta. **Nessuno dei
+tre previene il caso**, e ognuno per un motivo diverso:
+
+- **Hermes**: sul terminale locale l'agente ha **lo stesso accesso al filesystem del
+  tuo utente**; i profili **non** fanno da sandbox e il loro file di istruzioni non
+  impone un confine di workspace. La loro risposta è cambiare backend: Docker, SSH,
+  Modal, Daytona, Vercel Sandbox o Singularity (sette in tutto).
+- **Claude Code**: non avvisa sulla cartella, avvisa sulla **dimensione di un file**
+  (40 KB per il file di istruzioni). La guida è partire stretti e aggiungere cartelle
+  a richiesta (`--add-dir`), più ignorare ciò che non è sorgente. Ha un difetto
+  aperto: **8 osservatori, 4 a profondità illimitata**, che su Windows esauriscono la
+  memoria kernel non paginata.
+- **Codex**: limita le **scritture** con un elenco di radici scrivibili e mostra le
+  cartelle in gioco con un comando di stato; ha un difetto per cui partendo dalla
+  **home** finisci in scrittura invece che in sola lettura.
+
+⇒ Il guasto che abbiamo **misurato** (workspace sull'intero Desktop: 490 eventi di
+cambiamento, log da 1,9 MB rigiocato a ogni apertura) è esattamente quello contro cui
+nessuno di loro ha una difesa. Decisione: **misurare al momento della scelta** —
+contare cartelle e file, dire il numero, proporre la sottocartella giusta, e offrire
+di aggiungere il resto a richiesta. È un +1 misurabile, non una parità.
+
+Fonti: [Claude Code, osservatori a profondità illimitata](https://github.com/anthropics/claude-code/issues/48648) ·
+[Claude Code su codebase grandi](https://explainx.ai/blog/claude-code-large-codebases-add-dir-claudeignore-2026) ·
+[Codex, sandbox e radici scrivibili](https://developers.openai.com/codex/concepts/sandboxing) ·
+[Codex, la home finisce in scrittura](https://github.com/openai/codex/issues/10395) ·
+[Hermes, sicurezza e backend](https://hermes-agent.nousresearch.com/docs/user-guide/security) ·
+[Hermes, i profili non isolano](https://hermes-agent.nousresearch.com/docs/user-guide/profiles)
+
+## F-H — non ancora chieste
+
+Restano **F** (nuova sessione e workspace), **G** (viste della sessione), **H**
+(doctor, errori, primo avvio, voce dell'interfaccia). Si chiedono nell'interfaccia, a
+gruppi, come le prime cinque.
