@@ -225,7 +225,54 @@ Fonti: [Claude Code, osservatori a profondità illimitata](https://github.com/an
 | F29 | **Nessuna sessione senza cartella**: senza workspace metà attrezzi non ha senso, e va detto invece di partire azzoppati. |
 | F30 | Il primo messaggio suggerito **dipende dal progetto**, come lo stato vuoto (B3). |
 
-## G-H — non ancora chieste
+## G · VISTE DELLA SESSIONE — decisa il 04/09
 
-Restano **G** (viste della sessione: board, terminale, colonna di destra, albero) e
-**H** (doctor, errori, primo avvio, voce dell'interfaccia).
+| # | Decisione |
+|---|---|
+| G1-G2 | **Chat e Terminale restano nella sessione, la Board va nella sidebar**: è un cruscotto su tutte le sessioni, non una vista di quella aperta. Le schede portano **il nome scritto**, non la sola icona. |
+| G3-G4 | Board a **righe**, con le sette colonne nostre (titolo, stato, modello, giri, token, ultima attività, cartella) **più tre nuove**: tasso di cache, tempo al primo token, motivo di chiusura del giro. Vedi la ricerca qui sotto. |
+| G5-G7 | Sulla Board: **ordinare per colonna ricordando la scelta · filtrare per stato con pastiglie · costo dichiarato come stima · filtrare per cartella o progetto**, tutti e quattro. |
+| G8-G10 | Il terminale dichiara **sempre**: da quale cartella parte · se è isolato o gira sulla tua macchina · **chi ha lanciato il comando** (tu o l'agente). Più **schede multiple** (riga W1-01). |
+| G11-G13 | Colonna di destra a **quattro schede**: Contesto · File toccati · Sotto-agenti · **Processi**. «File» mostra **i file toccati dal giro**, con l'albero dietro un interruttore. |
+| G14-G16 | **L'Ambiente entra nella colonna** (ramo, worktree, repo annidati in tre righe compatte); **il Control plane diventa il Doctor**, che in D29 vive dentro le impostazioni. |
+| G17-G19 | L'albero dei rami **resta un foglio**, raggiungibile **anche dalla colonna**, con **token e giri per nodo**. |
+| G20-G21 | Il registro dei processi è la **scheda «Processi» nella colonna**, con durata, esito e **avviso di stallo**. Il motore esiste già (W1-02, consegnato oggi): manca solo il posto dove guardarlo. |
+| G22/G29 | Ciò che aspetta te si vede in **tutti e tre i modi**: contrassegno sulla sessione nella sidebar · pannello notifiche **con solo ciò che aspetta te** · notifica di sistema. |
+| G23-G26 | La Review **resta una vista separata** e **si apre da tastiera**. Le automazioni diventano una **destinazione della sidebar** e mostrano **la storia delle esecuzioni** (riga W2-02). |
+| G27 | «Tutti i file toccati oggi»: **sì, ma dopo**. Riga a sé. |
+| G28 | Interrotte e concluse **restano distinte**, come oggi. |
+| G30 | La barra di stato **resta, ma deve dire il vero**: su una sessione nuova mostra zero, non il consumo di quella precedente (difetto noto). |
+
+### La ricerca chiesta dall'owner su G3-G4 (DeepSeek Harness), 04/09
+
+L'owner: «bisogna fare una ricerca tecnica visiva delle documentazioni di DeepSeek
+Harness, loro tracciano ogni run in maniera super precisa». Fatta, e il fatto più
+importante è **rovesciato rispetto alla premessa**:
+
+⛔ **Quel cruscotto non è nel loro prodotto.** È un pannello SigNoz alimentato via
+OpenTelemetry dal plugin di terze parti `@loongsuite/dsh-plugin`, «perché DeepSeek
+Harness non esporta niente nel suo nucleo». Per vedere quelle misure devi montare uno
+stack di osservabilità a parte.
+
+I loro pannelli, verbatim: `Agent Turns` · `Sessions` · `Model Calls` · `Tool Calls` ·
+`Total Tokens` · **`Cache Hit Rate`** · `Token Usage Over Time` (input, cache, output) ·
+`Token Distribution by Model` · `Activity Over Time` · **`Turn Outcomes`** (dal campo
+`dsh.turn.end_reason`) · `Model Finish Reasons` · `Model Call Latency` (p95/p99) ·
+**`Time to First Token`** · `Errors Over Time` · `Tool Call Distribution` ·
+`Tool Performance` (chiamate e latenza per attrezzo) · `Session Details`.
+
+⇒ Le tre che ci mancano e che adottiamo: **tasso di cache** (la nostra misura di agosto
+dice che rileggere è il **93%** del costo, e i due lettori non conoscevano nemmeno il
+nome del campo), **tempo al primo token**, **motivo di chiusura del giro**.
+
+⇒ Decisione dell'owner su dove vivono: **dentro l'app, con esportazione OpenTelemetry
+facoltativa**. Parità piena con il loro cruscotto senza installare niente e senza
+mandare dati fuori dalla macchina, e chi ha già un sistema di osservabilità riceve gli
+stessi eventi. È un +1 dichiarabile, non una copia.
+
+Fonti: [pannelli del cruscotto DeepSeek Harness](https://signoz.io/docs/dashboards/dashboard-templates/deepseek-harness-dashboard/) ·
+[l'osservabilità viene da un plugin esterno](https://signoz.io/docs/deepseek-harness-observability/)
+
+## H — non ancora chiesta
+
+Resta **H**: doctor, errori, primo avvio, voce dell'interfaccia.
