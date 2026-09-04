@@ -491,6 +491,79 @@ class Pipeline {
 // --------------------------------------------------------------------
 const SCENARI = {
   /**
+   * ⭐ 04/9 — W1-12, gli «aperti minori» visti a schermo: sottotitolo a tre
+   * stati, riga pendente evidenziata, ripresa con età e stima. Senza
+   * spendere un giro di modello: la POST /resume viene BLOCCATA dal
+   * driver (Fetch.failRequest) perché ciò che si prova sta PRIMA della
+   * rotta. Vuole `TALOS_QA_CARTELLA` e un server con almeno una sessione
+   * conclusa (copia dello store su una porta di prova, mai il 4174).
+   */
+  async 'qa-aperti-minori'(p) {
+    const cartella = process.env.TALOS_QA_CARTELLA;
+    if (!cartella) throw new Error('TALOS_QA_CARTELLA mancante: percorso assoluto di una cartella scratch scrivibile');
+    const viewport = viewportRichiesta(URL_BASE); // ⛔ matrice unica: vedi VIEWPORT_DESKTOP in testa al file
+    await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
+    await p.cdp.send('Page.reload', { ignoreCache: true });
+    await p.attendi(1500);
+    const sottotitolo = () => p.cdp.evaluate("(() => { const s = document.querySelector('#sessionTitle')?.parentElement?.querySelector('small'); return s ? { hidden: s.hidden, testo: s.textContent } : null; })()");
+
+    // 1. all'apertura: senza sessione → l'invito visibile; con la sessione riaperta in automatico (l'app riapre l'ultima) → nascosto. Si dice quale dei due.
+    let st = await sottotitolo();
+    const autoAperta = await p.cdp.evaluate("document.querySelector('.real-session-item.active')?.dataset.realSessionId ?? null");
+    p.nota(`all'apertura: sessione auto-aperta=${autoAperta} · sottotitolo ${JSON.stringify(st)}`);
+    if (autoAperta && (!st || !st.hidden)) p.difetto(`con la sessione ${autoAperta} riaperta in automatico il sottotitolo doveva essere nascosto, è ${JSON.stringify(st)}`, { severita: 'blocco' });
+    if (!autoAperta && (!st || st.hidden || !st.testo.includes('premi «Nuova»'))) p.difetto(`senza sessione il sottotitolo doveva dire «premi «Nuova» per iniziare», è ${JSON.stringify(st)}`, { severita: 'blocco' });
+
+    // 2. sessione pendente → «in attesa del primo messaggio» + riga evidenziata
+    await p.click('#newSessionBtn');
+    await p.attendi(400);
+    await p.scegliCartellaNuovaSessione(cartella, { fullAccess: true });
+    await p.confermaNuovaSessione();
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat vuota pronta (sessione pendente)' });
+    await p.attendi(600);
+    st = await sottotitolo();
+    const rigaPendente = await p.cdp.evaluate("(() => { const r = document.querySelector('.session-item.is-pending'); return r ? { active: r.classList.contains('active'), testo: r.textContent.trim().replace(/\\s+/g, ' ') } : null; })()");
+    p.nota(`sottotitolo con sessione pendente: ${JSON.stringify(st)} · riga pendente: ${JSON.stringify(rigaPendente)}`);
+    await p.screenshot('sessione-pendente', { nota: `sottotitolo «${st?.testo}», riga pendente ${rigaPendente ? 'presente' : 'ASSENTE'}` });
+    if (!st || st.hidden || st.testo !== 'in attesa del primo messaggio') p.difetto(`sessione pendente: sottotitolo ${JSON.stringify(st)}`, { severita: 'blocco' });
+    if (!rigaPendente || !rigaPendente.active) p.difetto(`sessione pendente: riga nella sidebar ${JSON.stringify(rigaPendente)} (attesa: presente e active)`, { severita: 'blocco' });
+    if (await p.cdp.evaluate("document.querySelectorAll('.session-item.active').length") !== 1) p.difetto('più di una riga active con la sessione pendente', { severita: 'difetto' });
+
+    // 3. apro una sessione CONCLUSA → sottotitolo nascosto, riga pendente sparita
+    const aperta = await p.cdp.evaluate("(() => { const r = [...document.querySelectorAll('.real-session-item:not(.is-pending)')].find((x) => x.querySelector('.session-stato')?.dataset.sessionState !== 'vivo'); if (!r) return null; r.click(); return r.dataset.realSessionId; })()");
+    if (!aperta) throw new Error('nessuna sessione conclusa nella sidebar: serve un server con lo store copiato');
+    await p.attendiCondizione("!!document.querySelector('.real-session-item.active:not(.is-pending)')", { descrizione: 'sessione conclusa aperta' });
+    await p.attendi(1200);
+    st = await sottotitolo();
+    const pendenteResidua = await p.cdp.evaluate("document.querySelectorAll('.session-item.is-pending').length");
+    p.nota(`sottotitolo con sessione aperta (${aperta}): ${JSON.stringify(st)} · righe pendenti residue: ${pendenteResidua}`);
+    await p.screenshot('sessione-aperta', { nota: `sottotitolo hidden=${st?.hidden}` });
+    if (!st || !st.hidden) p.difetto(`con una sessione aperta il sottotitolo doveva essere nascosto, è ${JSON.stringify(st)}`, { severita: 'blocco' });
+    if (pendenteResidua > 0) p.difetto('la riga pendente è rimasta dopo l\'apertura di una sessione reale', { severita: 'difetto' });
+
+    // 4. ripresa: il toast con età e stima compare PRIMA della POST — che qui viene bloccata (nessun giro pagato)
+    await p.cdp.send('Fetch.enable', { patterns: [{ urlPattern: '*/api/v1/sessions/*/resume', requestStage: 'Request' }] });
+    let resumeBloccate = 0;
+    p.cdp.ws.addEventListener('message', (event) => {
+      const msg = JSON.parse(event.data);
+      if (msg.method !== 'Fetch.requestPaused') return;
+      resumeBloccate += 1;
+      p.cdp.send('Fetch.failRequest', { requestId: msg.params.requestId, errorReason: 'BlockedByClient' });
+    });
+    await p.click('#resumeSessionBtn');
+    await p.attendi(700);
+    const toastTesto = await p.cdp.evaluate("[...document.querySelectorAll('.toast')].map((t) => [...t.children].map((c) => c.textContent.trim()).join(' — ')).join(' | ')");
+    p.nota(`toast alla ripresa: ${toastTesto} · POST /resume bloccate: ${resumeBloccate}`);
+    await p.screenshot('ripresa-toast', { nota: `toast: ${toastTesto.slice(0, 120)}` });
+    if (!/Ripresa della sessione/.test(toastTesto) || !/riprendere costa/.test(toastTesto) || !/(avviata .* fa|età non registrata)/.test(toastTesto)) p.difetto(`alla ripresa manca il toast con età e stima: «${toastTesto}»`, { severita: 'blocco' });
+    if (resumeBloccate === 0) p.difetto('la POST /resume non è partita (o non è stata intercettata): la prova del «prima della rotta» non è completa', { severita: 'nota' });
+    await p.cdp.send('Fetch.disable');
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url}:${e.riga})`, { severita: 'blocco' });
+    if (p.difetti?.some((d) => d.severita === 'blocco')) process.exitCode = 1;
+  },
+
+  /**
    * ⭐⭐⭐ 04/9 — W0-03, LA SONDA DI RILASCIO: GPU e rAF da fermo.
    *
    * Il lag del 02/09 era FUORI dal codice (accelerazione hardware spenta nel

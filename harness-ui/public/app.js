@@ -5635,16 +5635,18 @@
          * solo-client di sempre (demo).
          */
         const targetSessionId = state.sessioneTarget?.sessionId || state.realSession.id;
+        // ⭐ 04/9, W1-12 — due sessioni vive non portano lo stesso nome: suffisso -2, -3… e lo si dice.
+        const { nome: nomeUnico, cambiato: doppioneEvitato } = nomeUnicoSessione(next, targetSessionId);
         if (targetSessionId) {
           try {
-            await apiPost(`/api/v1/sessions/${encodeURIComponent(targetSessionId)}/rename`, { nome: next });
+            await apiPost(`/api/v1/sessions/${encodeURIComponent(targetSessionId)}/rename`, { nome: nomeUnico });
           } catch (error) {
             toast('Rinomina non riuscita', messaggioErroreUtente(error));
             return;
           }
         }
         if (!state.sessioneTarget || targetSessionId === state.realSession.id) {
-          state.session = next;
+          state.session = nomeUnico;
           sessionTitle.textContent = state.session;
           $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
           const activeSession = $('.session-item.active .session-main strong');
@@ -5652,7 +5654,7 @@
         }
         state.sessioneTarget = null;
         closeEmbeddedDialog(sheetDialog);
-        toast('Sessione rinominata', next);
+        toast('Sessione rinominata', doppioneEvitato ? `${nomeUnico} · rinominata per evitare un doppione con una sessione viva` : nomeUnico);
         if (targetSessionId && targetSessionId !== state.realSession.id) {
           await aggiornaElencoSessioniReali();
           if (state.board.initialized) await refreshSessionsBoard();
@@ -6045,7 +6047,8 @@
     if (etichetta && ultimaMeta && ultimaMeta.textContent === 'Follow-up') ultimaMeta.textContent += etichetta;
     if (cambi.length > 0) {
       salvaPreferenzeChatDesktop();
-      appendStatusNote(`Impostazioni cambiate fuori da questa scheda. Questo giro usa: ${cambi.join(', ')}.`);
+      // ⭐ 04/9, W1-12 — etichetta del giro corrente, non «concluso»: il giro è appena partito.
+      appendStatusNote(`Impostazioni cambiate fuori da questa scheda. Questo giro usa: ${cambi.join(', ')}.`, false, { meta: `TALOS · giro ${state.realSession.runCount || 1}` });
     }
   }
 
@@ -6867,7 +6870,7 @@
     }
   }
 
-  function appendStatusNote(text, isError = false) {
+  function appendStatusNote(text, isError = false, { meta: etichettaMeta = null } = {}) {
     const conversation = $('#conversation');
     const article = document.createElement('article');
     article.className = `message assistant-message compact-message real-session-status${isError ? ' real-session-error' : ''}`;
@@ -6876,7 +6879,8 @@
     const glyph = document.createElement('span');
     glyph.className = 'talos-glyph';
     glyph.textContent = isError ? '!' : '✓';
-    meta.append(glyph, document.createTextNode(isError ? 'TALOS · errore' : 'TALOS · concluso'));
+    // ⭐ 04/9, W1-12 — la meta non dice «concluso» a una nota che parla del giro IN CORSO (impostazioni cambiate): chi chiama passa l'etichetta giusta.
+    meta.append(glyph, document.createTextNode(etichettaMeta || (isError ? 'TALOS · errore' : 'TALOS · concluso')));
     const copy = document.createElement('div');
     copy.className = 'assistant-copy';
     copy.textContent = text;
@@ -9917,6 +9921,18 @@
     if (!state.realSession.id) { toast('Nessuna sessione reale da riprendere'); return; }
     const sessionId = state.realSession.id;
     const taskId = state.realSession.taskId;
+    /*
+     * ⭐ 04/9, W1-12 (Claude Code 2.1.251) — PRIMA di chiamare la rotta si
+     * dice cosa si sta riprendendo: quanto è vecchia la sessione e quanto
+     * contesto il modello rileggerà. Solo dati che l'elenco ha davvero
+     * (`avviataAlle`, ultimo `usage`); l'età è dall'AVVIO, non dall'ultimo
+     * evento, che l'elenco non espone — e lo si scrive così.
+     */
+    const voceElenco = state.sessionSelection.available.get(sessionId);
+    if (voceElenco?.conclusa) {
+      const eta = formattaEta(voceElenco.avviataAlle);
+      toast('Ripresa della sessione', `${eta ? `avviata ${eta} fa` : 'età non registrata'} · riprendere costa ${stimaTokenRipresa(voceElenco.usage)}`);
+    }
     iniziaMisuraLatenza(messaggioFollowUp ? 'follow-up' : 'resume senza messaggio');
     if (messaggioFollowUp) { appendUserFollowUp(messaggioFollowUp); state.realSession.followUpBubbleInAttesa = true; }
     mostraAttesaRisposta(); // sia il follow-up sia un resume senza messaggio riavviano un giro vero
@@ -10238,7 +10254,77 @@
     closePanels();
     collegaEventiSessione(sessionId, generation);
     if (state.realSession.deferHistoricalRendering) mantieniFondoDuranteRipristino(generation);
+    aggiornaSottotitoloSessione(); // W1-12 — con una sessione aperta il sottotitolo non dice «premi Nuova»
     aggiornaElencoSessioniReali();
+  }
+
+  /**
+   * ⭐ 04/9, W1-12 — il sottotitolo sotto il nome della sessione diceva
+   * «premi «Nuova» per iniziare» ANCHE con una sessione aperta (testo
+   * statico in index.html, mai toccato). Tre stati, uno solo vero alla
+   * volta: nessuna sessione → l'invito; sessione pendente (cartella scelta,
+   * nessun messaggio) → «in attesa del primo messaggio»; sessione reale
+   * aperta → nascosto.
+   */
+  function aggiornaSottotitoloSessione() {
+    const small = sessionTitle?.parentElement?.querySelector('small');
+    if (!small) return;
+    if (state.realSession.id) { small.hidden = true; return; }
+    small.hidden = false;
+    small.textContent = state.pendingCustomSession ? 'in attesa del primo messaggio' : 'premi «Nuova» per iniziare';
+  }
+
+  /** ⭐ 04/9, W1-12 — la riga della sessione PENDENTE nella sidebar (prima non esisteva: la cartella era scelta ma l'elenco non la mostrava, e nessuna riga era evidenziata). */
+  function rigaSessionePendente() {
+    if (!state.pendingCustomSession || state.realSession.id) return [];
+    const riga = document.createElement('div');
+    riga.className = 'session-item real-session-item active is-pending';
+    riga.setAttribute('aria-current', 'true');
+    const main = document.createElement('span');
+    main.className = 'session-main';
+    const stato = document.createElement('small');
+    stato.className = 'session-stato';
+    stato.dataset.sessionState = 'pendente';
+    stato.append(textElement('span', 'session-stato-punto', ''), textElement('span', '', 'in attesa del primo messaggio'));
+    main.append(textElement('strong', '', `Nuova · ${state.pendingCustomSession.nomeCartella}`), stato);
+    riga.append(main);
+    return [riga];
+  }
+
+  /**
+   * ⭐ 04/9, W1-12 (Claude Code 2.1.232 fa lo stesso) — due sessioni VIVE
+   * non portano lo stesso nome: chi rinomina, o il titolo automatico dal
+   * primo messaggio, riceve il suffisso `-2`, `-3`… e lo si dice. Le
+   * sessioni concluse non contano: un nome può tornare.
+   */
+  function nomeUnicoSessione(nome, sessionId) {
+    const base = String(nome || '').trim();
+    if (!base) return { nome: base, cambiato: false };
+    const nomiVivi = new Set([...state.sessionSelection.available.values()]
+      .filter((s) => s.sessionId !== sessionId && !s.conclusa && s.nome)
+      .map((s) => s.nome));
+    let candidato = base;
+    for (let n = 2; nomiVivi.has(candidato); n += 1) candidato = `${base}-${n}`;
+    return { nome: candidato, cambiato: candidato !== base };
+  }
+
+  /** ⭐ 04/9, W1-12 — età leggibile di un istante ISO («3 min», «2 h», «5 g»); mai un numero inventato: senza data torna null. */
+  function formattaEta(iso) {
+    const t = Date.parse(iso);
+    if (!Number.isFinite(t)) return null;
+    const secondi = Math.max(0, Math.round((Date.now() - t) / 1000));
+    if (secondi < 60) return `${secondi} s`;
+    if (secondi < 3600) return `${Math.round(secondi / 60)} min`;
+    if (secondi < 86400) return `${Math.round(secondi / 3600)} h`;
+    return `${Math.round(secondi / 86400)} g`;
+  }
+
+  /** ⭐ 04/9, W1-12 (Claude Code 2.1.251) — quanto costa riprendere: l'ultimo `usage` della sessione è il contesto che il modello rilegge al prossimo giro. Etichettato «stima», mai «costo». */
+  function stimaTokenRipresa(usage) {
+    if (!usage) return 'consumo non registrato';
+    const totale = (Number(usage.prompt_tokens ?? 0) || 0) + (Number(usage.completion_tokens ?? 0) || 0);
+    if (totale <= 0) return 'consumo non registrato';
+    return `circa ${totale >= 1000 ? `${(totale / 1000).toFixed(1)}k` : totale} token (stima)`;
   }
 
   function formattaOraSessione(iso) {
@@ -10302,7 +10388,8 @@
       return; // ⛔ un aggiornamento sidebar fallito non è un'azione richiesta, non merita un toast
     }
     aggiornaNotifiche(elenco);
-    $('#noSessionsPlaceholder')?.toggleAttribute('hidden', Array.isArray(elenco) && elenco.length > 0); // 02/09 — il riquadro "Nessuna sessione ancora" stava sotto quattro sessioni reali
+    const pendente = rigaSessionePendente(); // W1-12
+    $('#noSessionsPlaceholder')?.toggleAttribute('hidden', (Array.isArray(elenco) && elenco.length > 0) || pendente.length > 0); // 02/09 — il riquadro "Nessuna sessione ancora" stava sotto quattro sessioni reali
     /*
      * ⭐ 27/8, trovato analizzando quali badge non si spengono MAI: questa
      * funzione aggiungeva sessioni vere in un blocco separato senza mai
@@ -10324,12 +10411,13 @@
     if (elenco.length === 0) {
       state.sessionSelection.active = false;
       state.sessionSelection.selected.clear();
-      contenitore.replaceChildren();
+      contenitore.replaceChildren(...pendente);
       aggiornaToolbarSelezioneSessioni();
+      aggiornaSottotitoloSessione();
       return;
     }
 
-    const pezzi = [textElement('div', 'list-heading', 'Sessioni reali')];
+    const pezzi = [textElement('div', 'list-heading', 'Sessioni reali'), ...pendente];
     for (const sessione of elenco) {
       const button = document.createElement('div');
       button.className = `session-item real-session-item${sessione.sessionId === state.realSession.id ? ' active' : ''}${state.sessionSelection.active ? ' is-selection-mode' : ''}`;
@@ -10420,6 +10508,7 @@
     }
     contenitore.replaceChildren(...pezzi);
     aggiornaToolbarSelezioneSessioni();
+    aggiornaSottotitoloSessione(); // W1-12 — l'elenco si ridisegna a ogni transizione: il sottotitolo lo segue
   }
 
   /**
@@ -11605,6 +11694,8 @@
     state.session = `Nuova · ${nomeCartella}`;
     sessionTitle.textContent = state.session;
     $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
+    aggiornaSottotitoloSessione(); // W1-12 — «in attesa del primo messaggio»
+    aggiornaElencoSessioniReali(); // W1-12 — la riga pendente compare, evidenziata
     setView('chat');
     closePanels();
     const fileTab = $('#inspector-tab-files');
@@ -11739,13 +11830,15 @@
      * per qualcosa che l'owner non ha nemmeno chiesto esplicitamente in
      * quel momento.
      */
-    const titoloAutomatico = titoloDalPrimoMessaggio(consegna);
+    // ⭐ 04/9, W1-12 — anche il titolo automatico evita il doppione con una sessione viva (suffisso -2, -3…).
+    const { nome: titoloAutomatico, cambiato: titoloDisambiguato } = nomeUnicoSessione(titoloDalPrimoMessaggio(consegna), sessionId);
     apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/rename`, { nome: titoloAutomatico }).then(() => {
       // ⛔ la generazione può essere già cambiata (un'altra sessione avviata nel frattempo) — mai scrivere il titolo di una sessione che non è più quella a schermo.
       if (generation !== state.realSession.generation) return;
       state.session = titoloAutomatico;
       sessionTitle.textContent = state.session;
       $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
+      if (titoloDisambiguato) toast('Titolo della sessione', `«${titoloAutomatico}» · rinominata per evitare un doppione con una sessione viva`);
       aggiornaElencoSessioniReali();
     }).catch(() => { /* best effort, vedi sopra: resta il titolo di sempre */ });
   }
