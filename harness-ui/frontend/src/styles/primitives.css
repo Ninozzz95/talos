@@ -477,6 +477,121 @@ button.talos-list-row:focus-visible {
   color: var(--talos-muted);
 }
 
+/* ==========================================================================
+   Fase 4 — la conversazione. Il contenitore e' `role="log"`; la spina e' una
+   misura disegnata e resta nascosta alle tecnologie assistive.
+   ========================================================================== */
+.talos-conversation { overflow-y: auto; }
+.talos-conversation__column { max-width: calc(92px + var(--talos-measure-w, 78ch)); margin: 0 auto; width: 100%; }
+.talos-turn { display: grid; grid-template-columns: calc(var(--talos-primary-height) * 1.85) minmax(0, 1fr); align-items: stretch; }
+.talos-turn-spine {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--talos-space-xs);
+  padding: var(--talos-space-lg) 0 0 var(--talos-space-lg);
+}
+.talos-turn-spine::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--talos-space-lg) - 1px);
+  width: 1px;
+  background: var(--talos-border);
+}
+.talos-turn-spine__n {
+  position: relative;
+  z-index: 1;
+  font-family: var(--talos-font-mono);
+  font-size: 10.5px;
+  color: var(--talos-muted);
+  background: var(--talos-background);
+  padding: 2px 0;
+}
+/* La tacca e' lunga quanto il giro e' costato: `--tick` e' un DATO (0-10). */
+.talos-turn-spine__tick {
+  position: relative;
+  z-index: 1;
+  height: 3px;
+  border-radius: 2px;
+  width: calc(var(--talos-space-sm) + var(--tick, 1) * var(--talos-space-xs));
+  background: var(--talos-success);
+  opacity: 0.85;
+}
+.talos-turn-spine__tick--info { background: var(--talos-info); }
+.talos-turn-spine__tick--warning { background: var(--talos-warning); }
+.talos-turn-spine__tick--danger { background: var(--talos-danger); }
+.talos-turn-spine__tick--current {
+  background: var(--talos-accent-hover);
+  opacity: 1;
+  box-shadow: 0 0 0 var(--talos-space-xs) var(--talos-accent-soft);
+}
+
+.talos-message { padding: var(--talos-space-lg) 0 var(--talos-space-sm); max-width: var(--talos-measure-w, 78ch); }
+.talos-message__head { display: flex; align-items: center; gap: var(--talos-space-inline); margin-bottom: var(--talos-space-sm); }
+.talos-message__who { font-size: var(--talos-font-size-xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--talos-muted); }
+.talos-message__who--talos { color: var(--talos-accent-hover); }
+.talos-message__meta { font-family: var(--talos-font-mono); font-size: var(--talos-font-size-xs); color: var(--talos-muted); }
+.talos-message__body { color: var(--talos-assistant-text); line-height: 1.6; }
+.talos-message--user .talos-message__body {
+  padding: var(--talos-space-control) var(--talos-space-card);
+  border: var(--talos-focus-width) solid var(--talos-border-subtle);
+  border-radius: var(--talos-radius-card);
+  background: var(--talos-panel-soft);
+  color: var(--talos-text);
+}
+
+.talos-activity { margin: var(--talos-space-inline) 0; overflow: hidden; }
+.talos-activity__head {
+  display: flex;
+  align-items: center;
+  gap: var(--talos-space-inline);
+  width: 100%;
+  min-height: var(--talos-touch-target);
+  padding: 0 var(--talos-space-card);
+  border: 0;
+  background: transparent;
+  color: var(--talos-assistant-text);
+  font: 500 var(--talos-font-size-sm) / 1 var(--talos-font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+.talos-activity__head:hover { background: var(--talos-card-subtle); }
+.talos-activity__head:focus-visible { outline: var(--talos-focus-width) solid var(--talos-ring); outline-offset: calc(var(--talos-focus-offset) * -1); }
+.talos-activity__summary { flex: 1; min-width: 0; }
+.talos-activity__body { border-top: var(--talos-focus-width) solid var(--talos-border-subtle); padding: var(--talos-space-sm); }
+
+.talos-approval {
+  margin: var(--talos-space-control) 0;
+  border: var(--talos-focus-width) solid var(--talos-accent-border);
+  border-radius: var(--talos-radius-card);
+  background: var(--talos-panel);
+  box-shadow: var(--talos-shadow-card);
+  overflow: hidden;
+}
+.talos-approval:focus-visible { outline: var(--talos-focus-width) solid var(--talos-ring); outline-offset: var(--talos-focus-offset); }
+.talos-approval__head { display: flex; align-items: center; gap: var(--talos-space-inline); padding: var(--talos-space-control) var(--talos-space-card); border-bottom: var(--talos-focus-width) solid var(--talos-border); }
+.talos-approval__title { font-weight: 600; color: var(--talos-text); }
+.talos-approval__why { margin: 0; padding: var(--talos-space-inline) var(--talos-space-card); color: var(--talos-assistant-text); font-size: var(--talos-font-size-sm); border-bottom: var(--talos-focus-width) solid var(--talos-border); }
+.talos-approval__foot { display: flex; align-items: center; gap: var(--talos-space-sm); flex-wrap: wrap; padding: var(--talos-space-control) var(--talos-space-card); border-top: var(--talos-focus-width) solid var(--talos-border); }
+.talos-approval__foot-note { margin-left: auto; color: var(--talos-muted); font-size: var(--talos-font-size-xs); }
+
+.talos-receipt {
+  display: flex;
+  align-items: center;
+  gap: var(--talos-space-inline);
+  flex-wrap: wrap;
+  margin: var(--talos-space-inline) 0;
+  padding: var(--talos-space-sm) var(--talos-space-card);
+  border: var(--talos-focus-width) dashed var(--talos-accent-border);
+  border-radius: var(--talos-radius-card);
+  background: var(--talos-accent-soft);
+}
+.talos-receipt__text { flex: 1; min-width: 12rem; color: var(--talos-text); font-size: var(--talos-font-size-sm); }
+.talos-receipt__hash { font-family: var(--talos-font-mono); font-size: var(--talos-font-size-xs); color: var(--talos-accent-hover); }
+
 @media (forced-colors: active) {
   .talos-button,
   .talos-switch,
