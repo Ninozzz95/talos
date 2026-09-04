@@ -217,6 +217,21 @@ body {
 
 .design-system-lab__group--wide { grid-column: 1 / -1; }
 
+/* Il pannello di prova della maniglia: la larghezza viene dal token che la
+   maniglia scrive, cosi' il banco misura la stessa cosa che misura l'app. */
+.design-system-lab__pane {
+  position: relative;
+  width: var(--ds-lab-pane-w, 276px);
+  min-height: calc(var(--talos-primary-height) * 3);
+  padding: var(--talos-space-card);
+  border: var(--talos-focus-width) solid var(--talos-border);
+  border-radius: var(--talos-radius-card);
+  background: var(--talos-panel-soft);
+  overflow: hidden;
+}
+.design-system-lab__pane h3 { margin: 0 0 var(--talos-space-sm); font-size: var(--talos-font-size-sm); color: var(--talos-text); }
+
+
 .design-system-lab__group h2 {
   margin: 0 0 var(--talos-space-md);
   color: var(--talos-muted);

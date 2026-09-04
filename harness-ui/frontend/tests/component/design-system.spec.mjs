@@ -323,3 +323,72 @@ test('PHASE5-SETTING-13 — ogni impostazione dichiara QUANDO morde, e il contro
   await expect(riga).toContainText('vale da subito, anche per la sessione aperta');
   await expect(riga.locator('select')).toHaveAccessibleName('Modello principale');
 });
+
+test('PHASE6-SPLITTER-14 — la maniglia dichiara cosa muove, si usa con la tastiera e scrive un token', async ({ page }) => {
+  await openLab(page);
+  const maniglia = page.locator('[data-testid="ds-resizer"]');
+  await expect(maniglia).toHaveAttribute('role', 'separator');
+  await expect(maniglia).toHaveAttribute('aria-controls', 'ds-pane');
+  await expect(maniglia).toHaveAccessibleName('Barra laterale');
+  await expect(maniglia).toHaveAttribute('aria-valuemin', '220');
+  await expect(maniglia).toHaveAttribute('aria-valuemax', '420');
+  await expect(maniglia).toHaveAttribute('aria-valuenow', '276');
+
+  // ⛔ La maniglia sta DENTRO il pannello: a cavallo del bordo `overflow:hidden`
+  // la taglierebbe, e col mouse vero non si prenderebbe. Qui si prova che è
+  // davvero raggiungibile dal puntatore, non solo presente nel DOM.
+  // ⛔ Il mouse di Playwright usa le coordinate della FINESTRA: senza portare
+  // la maniglia in vista si preme nel vuoto, e la prova accusa il componente
+  // di un difetto che non ha. Misurato con una sonda: box a y=3152.
+  await maniglia.scrollIntoViewIfNeeded();
+  const larghezzaPrima = await page.locator('#ds-pane').evaluate((el) => el.getBoundingClientRect().width);
+  const box = await maniglia.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 60, box.y + box.height / 2);
+  await page.mouse.up();
+  // Prima lo stato del componente: dice se il trascinamento è arrivato.
+  await expect(maniglia).toHaveAttribute('aria-valuenow', '336');
+  await expect(page.locator('[data-testid="ds-pane-width"]')).toContainText('336');
+  // Poi la conseguenza sul disegno: il token deve muovere il pannello vero.
+  const larghezzaDopo = await page.locator('#ds-pane').evaluate((el) => el.getBoundingClientRect().width);
+  expect(Math.round(larghezzaDopo - larghezzaPrima)).toBe(60);
+
+  // La tastiera muove, e Home riporta al valore normale.
+  await maniglia.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(maniglia).toHaveAttribute('aria-valuenow', '344');
+  await page.keyboard.press('Home');
+  await expect(maniglia).toHaveAttribute('aria-valuenow', '276');
+  await expect(page.locator('[role="status"][aria-live="polite"]')).toContainText('276 pixel');
+});
+
+test('PHASE6-COMPOSER-15 — un solo pulsante con due stati, la striscia educata e la coda a vista', async ({ page }) => {
+  await openLab(page);
+  const composer = page.locator('[data-testid="ds-composer"]');
+  const bottone = composer.locator('.talos-send');
+  const striscia = composer.locator('.talos-status-strip');
+  const coda = composer.locator('.talos-queue');
+
+  await expect(bottone).toHaveText('Invia');
+  await expect(striscia).toBeHidden();
+  await expect(coda).toBeHidden();
+
+  await bottone.click();
+  // Lo stesso pulsante è diventato «ferma»: un posto solo dove guardare.
+  await expect(bottone).toHaveText('Ferma');
+  await expect(bottone).toHaveAccessibleName('Ferma');
+  // La striscia è un annuncio educato, non un allarme.
+  await expect(striscia).toBeVisible();
+  await expect(striscia).toHaveAttribute('role', 'status');
+  await expect(striscia).toContainText('Comando nel terminale · giro 7');
+  // La coda si vede: un messaggio accodato che non si vede è un messaggio perso.
+  await expect(coda).toBeVisible();
+  await expect(coda).toContainText('1 in coda');
+  await expect(coda).toContainText('Poi aggiorna il ledger');
+
+  await bottone.click();
+  await expect(bottone).toHaveText('Invia');
+  await expect(striscia).toBeHidden();
+  await expect(coda).toBeHidden();
+});

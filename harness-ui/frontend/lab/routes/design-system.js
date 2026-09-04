@@ -4,6 +4,7 @@ import {
   createApprovalCard,
   createBadge,
   createCheckCard,
+  createComposer,
   createConversation,
   createDataTable,
   createButton,
@@ -15,6 +16,7 @@ import {
   createMenuButton,
   createNavGroup,
   createNavItem,
+  createResizablePane,
   createSelect,
   createSettingRow,
   createSheet,
@@ -477,6 +479,68 @@ export function mountDesignSystemLab(root) {
   pagine.group.append(rigaImpostazione.element);
   grid.append(pagine.group);
   components.push(costoStimato, tabella, riavvia, avviso, nota, modelloImpostazione, rigaImpostazione);
+
+  /* Fase 6: il guscio — maniglia dei pannelli e compositore. */
+  const guscio = headingGroup(documentObj, 'Guscio');
+  guscio.group.classList.add('design-system-lab__group--wide');
+
+  const pannello = documentObj.createElement('div');
+  pannello.className = 'design-system-lab__pane';
+  pannello.id = 'ds-pane';
+  const titoloPannello = documentObj.createElement('h3');
+  titoloPannello.id = 'ds-pane-title';
+  titoloPannello.textContent = 'Barra laterale';
+  pannello.append(titoloPannello);
+  const larghezzaViva = createMeasure({ document: documentObj, value: '276', unit: 'px', testId: 'ds-pane-width' });
+  pannello.append(larghezzaViva.element);
+  const maniglia = createResizablePane({
+    document: documentObj,
+    root: documentObj.documentElement,
+    window: documentObj.defaultView,
+    token: '--ds-lab-pane-w',
+    controls: 'ds-pane',
+    labelledBy: 'ds-pane-title',
+    min: 220,
+    max: 420,
+    base: 276,
+    value: 276,
+    announce: (messaggio) => announcements.announce(messaggio),
+    onResize: (px) => larghezzaViva.update({ value: String(px) }),
+    testId: 'ds-resizer',
+  });
+  pannello.append(maniglia.element);
+  guscio.row.append(pannello);
+
+  let scriveComposer = false;
+  const pillolaModello = createBadge({ document: documentObj, label: 'claude-opus-5', tone: 'neutral' });
+  let compositore;
+  compositore = createComposer({
+    document: documentObj,
+    label: 'Messaggio',
+    placeholder: 'Scrivi… Invio indirizza il giro in corso',
+    sendLabel: 'Invia',
+    stopLabel: 'Ferma',
+    pills: [pillolaModello.element],
+    queue: [],
+    testId: 'ds-composer',
+    onSend: () => {
+      scriveComposer = true;
+      compositore.update({
+        busy: true,
+        statusText: 'Comando nel terminale · giro 7',
+        queue: ['Poi aggiorna il ledger con i numeri veri'],
+      });
+      announcements.announce('Messaggio inviato');
+    },
+    onStop: () => {
+      scriveComposer = false;
+      compositore.update({ busy: false, queue: [] });
+      announcements.announce('Giro fermato');
+    },
+  });
+  guscio.group.append(compositore.element);
+  grid.append(guscio.group);
+  components.push(larghezzaViva, maniglia, pillolaModello, compositore);
 
   assertTalosDesignTokens(documentObj.defaultView.getComputedStyle(html));
   html.dataset.visualReady = 'true';
