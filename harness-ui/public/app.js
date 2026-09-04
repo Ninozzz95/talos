@@ -3474,6 +3474,8 @@
     if (risultato.ownerRuntime && !risultato.ownerRuntime.pronto) problemi.push('servizio agente non pronto');
     if (risultato.catalogoTask && !risultato.catalogoTask.disponibile) problemi.push('attività predefinite non disponibili');
     if (risultato.sessioniPersistenza?.corrotte?.length) problemi.push(`${risultato.sessioniPersistenza.corrotte.length} sessione da controllare`);
+    // ⭐ 04/9, R-03 — «spenta» è una scelta, non un problema; chiave/indirizzo mancanti sì.
+    if (risultato.ricercaWeb && !risultato.ricercaWeb.pronta && risultato.ricercaWeb.fonte !== 'off') problemi.push('ricerca web non pronta');
     return problemi.length === 0
       ? { badge: 'Healthy', dettaglio: `Chiave API ok · ambiente ${risultato.shell} · git ok · browser ok · agente pronto.` }
       : { badge: `${problemi.length} da rivedere`, dettaglio: `${problemi.join(' · ')}.` };
