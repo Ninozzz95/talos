@@ -50,6 +50,20 @@ export const selectDock = memoizeInputs([
   (state) => state.layout.contextWidth,
 ], (tab, context, width) => ({ tab, context, width }));
 
+/*
+ * La sidebar: le sessioni, quella aperta e il luogo corrente. Memoizzato come
+ * gli altri, cosi' un giro che tocca solo la conversazione non ridisegna la
+ * cronologia — con 69 sessioni sarebbe lavoro sprecato a ogni token.
+ */
+export const selectSidebar = memoizeInputs([
+  (state) => state.sessions,
+  (state) => state.layout,
+], [
+  (state) => state.sessions.items,
+  (state) => state.sessions.activeId,
+  (state) => state.layout.route,
+], (items, activeId, route) => ({ items, activeId, route }));
+
 export const selectApprovalCount = (state) => Object.keys(state.approvals.pending).length;
 
 export const selectReviewSummary = memoizeInputs([
