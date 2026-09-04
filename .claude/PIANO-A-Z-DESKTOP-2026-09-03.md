@@ -54,6 +54,7 @@ Somma fascia R (approvata): **19 gg** (R-01 1,5 · R-02 3 · W0-04 0,5 · Electr
 | 13 | W0-02 | Versione di schema nell'intestazione JSONL | 1 | W0 | — | — |
 | 14 | W0-05 | Model Lab: «Annulla» chiama `/stop` — **NON APPLICABILE** 04/09: `/cancel` esiste e ferma la sessione (ledger §6), solo test che pinna il fatto | 0,25 | W0 | — | — |
 | 15 | W0-03 | Sonda di rilascio: GPU + rAF da fermo nella QA | 1 | W0 | — | — |
+| 15a | **W0-07** | La persistenza si corrompe da sola: append concorrenti intrecciati oltre 1,5 MiB (trovata 04/09 riparando lo store, una sessione era gia persa) | 1 | W0 | — | — |
 | 16 | W1-12 | Aperti minori + nomi unici + resume con età e stima | 1,5 | W1 | — | — |
 | 17 | W1-13 | File di controllo protetti anche in Full access | 1 | W1 | — | — |
 | 17a | **O-03** | Albero file: radice dice `libero:default` invece della cartella — owner 04/09 | 0,25 | ledger §3 O-01…O-07 | — | — |
@@ -80,7 +81,7 @@ Somma fascia R (approvata): **19 gg** (R-01 1,5 · R-02 3 · W0-04 0,5 · Electr
 | 33 | W1-09 | Tastiera e focus | 2,5 | W1 | — | — |
 | 33a | **O-07** | Lavori agentici di lunga durata + velocità dei tool: RICERCA prima (Fable xhigh, avvisare), poi righe stimate — owner 04/09 «più avanti, segnalo» | 1 | ledger §3 O | W1-02 | forse |
 
-Somma fascia A: **64,5 gg** (Wave 0 4,25 · Wave 1 31 · P 19 · O 10,25 — O-07 ricerca 1 gg a parte).
+Somma fascia A: **65,5 gg** (Wave 0 5,25 · Wave 1 31 · P 19 · O 10,25 — O-07 ricerca 1 gg a parte).
 
 ## Fascia M — Mac e Linux (dopo Wave 1, fascia a parte, stima NON misurata)
 
@@ -161,7 +162,7 @@ Somma fascia C: **116,5 gg** (Wave 3 66,5 · Wave 4 36 · P 9 · FIN 5).
 
 ## Totale
 
-93 righe (59 del ledger + 18 PROPOSTE + 4 R + 7 O + 3 M + 2 Q), **296,5 giorni-agente** stimati (fascia M esclusa: non misurata — vedi sopra) adapter/UI, kernel a parte. R-01, Q-01, Q-02 **fatte**; il resto attende il sì dell'owner riga per riga.
+94 righe (60 del ledger + 18 PROPOSTE + 4 R + 7 O + 3 M + 2 Q), **297,5 giorni-agente** stimati (fascia M esclusa: non misurata — vedi sopra) adapter/UI, kernel a parte. R-01, Q-01, Q-02 **fatte**; il resto attende il sì dell'owner riga per riga.
 Le stime seguono la regola del ledger: superata del 50 % la riga si ferma e si scrive perché.
 
 ## Le richieste al kernel, nell'ordine in cui servono
