@@ -62,9 +62,50 @@
 | B31 | **Striscia di stato fissa sopra il composer** mentre il giro lavora: cosa sta facendo, quale giro, da quanto. |
 | B32 | Cliccare un file citato apre un **menu con le due vie**: anteprima interna o editor di sistema. |
 
-## C-H — non ancora chieste
+## C · CAPABILITY: ATTREZZI, SKILL, CONNETTORI, PLUGIN — decisa il 04/09
 
-Restano le categorie **C** (capability), **D** (impostazioni), **E** (permessi e
-sicurezza), **F** (nuova sessione e workspace), **G** (viste della sessione), **H**
-(doctor, errori, primo avvio, voce dell'interfaccia). Si chiedono nell'interfaccia,
-a gruppi, come le prime due.
+> ⛔⛔ **Istruzione dell'owner dentro C24, che vale per TUTTA la categoria:**
+> «abbiamo già fatto questo lavoro per il mobile quindi non serve reinventare la
+> ruota». ⇒ Per Libreria, Memoria, Note, Attività, Ricerca e Officina si **apre
+> prima il mobile** e si riprende il suo modello (strati della memoria, autore
+> delle attività, elenco dei rapporti di ricerca). ⛔ Leggere il mobile è
+> autorizzato, **scriverci no**: la mia ownership è solo `lane/harness-desktop`.
+
+| # | Decisione |
+|---|---|
+| C1 | Capability diventa una **pagina intera**, non più un foglio con dodici sezioni in un unico scorrimento. |
+| C2 | **Quattro schede** nella pagina (Attrezzi · Skill · Connettori · Plugin) e **sei voci di sidebar** (Libreria · Memoria · Note · Attività · Ricerca · Officina). |
+| C3 | Le schede portano **il numero**, come Hermes: «Attrezzi 43 · Skill 12». |
+| C4 | Gli attrezzi si spengono **uno per uno, per sessione**, col permesso sulla stessa riga. |
+| C5 | Ogni attrezzo dichiara **il suo costo in token**, e in cima c'è il **totale**. |
+| C6 | Il totale è anche **percentuale della finestra** del modello scelto. |
+| C7 | **Ricerca fra gli attrezzi**, con un esempio vero nel segnaposto. |
+| C8 | Ordine per **più usati in questa sessione** (il conteggio c'è già da O-02). |
+| C9 | **Pannello di dettaglio a destra**: descrizione, costo, permesso, **ultime chiamate**. |
+| C10 | Descrizione **nostra in italiano**; quella del kernel resta visibile come «testo inviato al modello». |
+| C11 | Gli attrezzi che il modello scelto **non supporta** sono dichiarati e spenti (lezione Gemma 3). |
+| C12 | Le skill si governano con **tre stati**: sempre / chiedi / mai. La stessa grammatica dei permessi. |
+| C13 | **«Trasforma questo lavoro in una skill»** dalla sessione corrente, costruita dai giri già registrati. |
+| C14 | **Nessun mercato di skill adesso**: è una riga a parte, da stimare da sola. |
+| C15 | I connettori MCP dichiarano **l'origine**: progetto, utente o gestito. |
+| C16 | Per ogni connettore: **timeout, elenco permesso e costo dello schema**, tutti e tre. |
+| C17 | Un connettore si spegne **per sessione**, come gli attrezzi. |
+| C18 | Un plugin dichiara **cosa porta dentro** (quante skill, quanti hook, quali attrezzi) prima che tu ti fidi. |
+| C19 | La fiducia di un plugin vale **per progetto, legata all'impronta**, come già per gli hook. |
+| C20 | **PUNTO CRITICO — tutte e sei** le sezioni-luogo entrano nella sidebar. Vanno verificate una per una: le funzionalità dovrebbero esserci già. |
+| C21 | Un file in Libreria dichiara **il costo in token** (coerente con B9). |
+| C22 | La Memoria distingue **gli strati** (di lavoro, episodica, semantica), come Hermes. |
+| C23 | Una memoria **si corregge a mano** e mostra **quando è stata usata l'ultima volta**. |
+| C24 | Note e Attività restano **separate** — riprendendo il lavoro già fatto sul mobile. |
+| C25 | Le Attività mostrano **l'autore su ogni riga**: tu o l'agente. |
+| C26 | La Ricerca approfondita è una sezione con **l'elenco dei rapporti**, riapribili. |
+| C27 | L'Officina mostra **il codice dell'attrezzo in sola lettura**, con «disabilita» in evidenza. |
+| C28 | Le voci non implementate restano **in fondo, come elenco piatto**: sono promesse, non funzioni. |
+| C29 | **Dove vivono i file** scritto in piccolo sotto ogni elenco: è ciò che rende l'app ispezionabile. |
+| C30 | **La portata di una modifica è dichiarata in fondo alla pagina** («vale dalle sessioni nuove»). |
+
+## D-H — non ancora chieste
+
+Restano **D** (impostazioni), **E** (permessi e sicurezza), **F** (nuova sessione e
+workspace), **G** (viste della sessione), **H** (doctor, errori, primo avvio, voce
+dell'interfaccia). Si chiedono nell'interfaccia, a gruppi, come le prime tre.
