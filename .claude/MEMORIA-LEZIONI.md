@@ -100,3 +100,11 @@
 - ✅⛔⛔⭐⭐⭐ **0.1.16 — la UI Ricerca approfondita: FATTA** (20/8): contesa aperta sul rapporto, tenuta nel tempo, BibTeX/RIS, fonti+token in testata. ⛔ La contesa NON POTEVA esistere — [funzione coi test e nessun chiamante](funzione-con-i-test-e-nessun-chiamante.md). Resta fuori: «estendi con una linea» → [ledger](ricerche-custodite-fuori-dal-repo.md)
 - ✅⛔⭐⭐⭐ [Lo STOP sotto GPU — CHIUSO il 21/8](stop-sotto-gpu-non-interrompe.md) — la cura in `ggml-opencl` porta 1.430 → **32/36/36 ms** al microbatch PIENO **512**: il 192 non serve piu. ⛔ Il costo della cura e **per GRAFO**, non per token ⇒ un riferimento «senza cura» dentro un confronto fra configurazioni e un **fantasma**
 - ✅⭐⭐⭐ [L'ABORT su GPU e' una FUNZIONE MANCANTE — **implementata il 21/8**, non una legge](labort-su-gpu-e-una-funzione-mancante.md) — la implementano solo CPU e **Metal**; `ggml-opencl` ha `get_proc_address = NULL`. Cura ~30 righe a **costo zero**, e upstream #10509 e' **stale**
+
+## 📱 Mobile — spostato in CATALOGO.md il 2026-09-04
+
+> ⛔ Questo file aveva superato i **25.000 byte** (25.580), il tetto oltre cui il contenuto si
+> taglia **in silenzio**: gli aperti della lane mobile e le regole dell'assistente sul telefono
+> sono in `CATALOGO.md`, sezione «Mobile, 04/09». Restano vere; semplicemente non le implemento
+> io (ownership mobile revocata dall'owner il 04/09) e non devono consumare un indice che si
+> carica a ogni sessione desktop.
