@@ -281,3 +281,47 @@ test('⭐⭐ stato(): tre fatti distinti — viva, uscita, inesistente', () => {
   assert.equal(registro.stato('morta').viva, false);
   assert.equal(registro.stato('mai-esistita'), null, '⛔ null non è {viva:false}: "non c\'è" e "è uscita" sono due fatti diversi');
 });
+
+/*
+ * ⭐⭐⭐ Il segnale «ripreso» — la misura che l'interfaccia non poteva fare.
+ *
+ * ⛔ Il ponte rigioca il backlog sia quando riaggancia una PTY viva sia quando
+ * il reaper l'ha chiusa e ne nasce una nuova. Una PTY appena creata ha backlog
+ * vuoto, che è anche l'aspetto di una shell viva che non ha ancora stampato
+ * niente: dedurre la ripresa dall'assenza di backlog è un indovinello. Qui la
+ * risposta viene dal registro, che è l'unico che la sa.
+ */
+test('⭐⭐⭐ apriDichiarando: la PRIMA apertura in assoluto NON è una ripresa', () => {
+  const { registro } = registroPerTest();
+  const esito = registro.apriDichiarando({ id: 'a', cartella: 'C:/progetto' });
+  assert.equal(esito.ripresa, false, 'la prima volta la shell è nuova per definizione');
+  assert.equal(esito.voce.id, 'a');
+});
+
+test('⭐⭐⭐ apriDichiarando: riagganciare una PTY VIVA è una ripresa, e non spawna', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  registro.apri({ id: 'a', cartella: 'C:/progetto' });
+  const esito = registro.apriDichiarando({ id: 'a', cartella: 'C:/progetto' });
+  assert.equal(esito.ripresa, true);
+  assert.equal(ptyCreate.length, 1, 'nessuna seconda PTY');
+});
+
+test('⭐⭐⭐ AL CONTRARIO — dopo che il reaper ha chiuso la shell, riaprire NON è una ripresa', () => {
+  const { registro, ptyCreate, avanza } = registroPerTest();
+  registro.apri({ id: 'a', cartella: 'C:/progetto' });
+  registro.segnaDisconnesso('a');
+  // Oltre la finestra di grazia: il reaper chiude la PTY orfana.
+  avanza(1000 * 60 * 60);
+  registro.reap();
+  const esito = registro.apriDichiarando({ id: 'a', cartella: 'C:/progetto' });
+  // ⛔ È il caso che conta: da fuori sembra identico a una riconnessione
+  // riuscita, e invece la shell della persona non c'è più.
+  assert.equal(esito.ripresa, false);
+  assert.equal(ptyCreate.length, 2, 'una PTY NUOVA è nata');
+});
+
+test('⭐⭐ apriDichiarando dà la STESSA voce di apri: una sola verità, non due', () => {
+  const { registro } = registroPerTest();
+  const voce = registro.apri({ id: 'a', cartella: 'C:/progetto' });
+  assert.equal(registro.apriDichiarando({ id: 'a', cartella: 'C:/progetto' }).voce, voce);
+});

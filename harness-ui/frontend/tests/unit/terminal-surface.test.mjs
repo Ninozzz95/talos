@@ -10,6 +10,8 @@ const ETICHETTE = {
   states: {
     connecting: 'collegamento in corso',
     open: 'collegato',
+    'reconnected-resumed': 'riconnesso — è la stessa shell di prima',
+    'reconnected-new': 'riconnesso — questa è una shell NUOVA, quella di prima è stata chiusa',
     'reconnected-unknown': 'riconnesso — non sappiamo se la shell è ancora quella di prima',
     reconnecting: 'caduto, riprovo fra',
     disconnected: 'scollegato dopo tentativi:',
@@ -105,11 +107,66 @@ test('TERM-02 ⭐⭐ una caduta riprova col backoff, e la ripresa NON promette c
   assert.equal(tempo.attese.at(-1).ms, 500);
 
   tempo.scatta();
+  // ⭐ Il ponte DICE di aver ripreso la shell viva: non si indovina più.
+  trasporto.ultima().onAttach(true);
   trasporto.ultima().onState('open');
-  // ⛔ Il protocollo non ha un segnale «ripreso»: se il reaper ha chiuso la
-  // PTY il server ne apre una NUOVA e da fuori si vede uguale. Si dichiara.
-  assert.match(statoDi(s.element), /non sappiamo se la shell è ancora quella/);
+  assert.match(statoDi(s.element), /è la stessa shell di prima/);
+  assert.equal(s.stato(), 'reconnected-resumed');
+});
+
+test('TERM-02b ⭐⭐ se il ponte dichiara una shell NUOVA, si dice: la tua è stata chiusa', () => {
+  const { s, trasporto, tempo } = monta();
+  s.update({ tab: SCHEDA });
+  trasporto.ultima().onState('open');
+  trasporto.ultima().onData('$ npm test\n');
+  trasporto.ultima().onState('closed');
+  tempo.scatta();
+  // ⛔ È il caso che il reaper produce: da fuori sembrava una riconnessione
+  // riuscita, e invece la shell della persona non c'è più.
+  trasporto.ultima().onAttach(false);
+  trasporto.ultima().onState('open');
+  assert.match(statoDi(s.element), /shell NUOVA/);
+  assert.equal(s.stato(), 'reconnected-new');
+});
+
+test('TERM-02c ⭐⭐ un ponte che NON dichiara niente resta «non lo sappiamo», non «shell nuova»', () => {
+  const { s, trasporto, tempo } = monta();
+  s.update({ tab: SCHEDA });
+  trasporto.ultima().onState('open');
+  trasporto.ultima().onData('x');
+  trasporto.ultima().onState('closed');
+  tempo.scatta();
+  // Nessun onAttach: un ponte vecchio, o un frame perso.
+  trasporto.ultima().onState('open');
   assert.equal(s.stato(), 'reconnected-unknown');
+  // ⛔ E nemmeno un `ripreso` non booleano diventa «nuova» per comodità.
+  trasporto.ultima().onAttach(null);
+  assert.equal(s.stato(), 'reconnected-unknown');
+});
+
+test("TERM-02d ⭐ il segnale vale per LA connessione che l'ha detto: non si eredita", () => {
+  const { s, trasporto, tempo } = monta();
+  s.update({ tab: SCHEDA });
+  trasporto.ultima().onState('open');
+  trasporto.ultima().onData('x');
+  trasporto.ultima().onState('closed');
+  tempo.scatta();
+  trasporto.ultima().onAttach(true);
+  trasporto.ultima().onState('open');
+  assert.equal(s.stato(), 'reconnected-resumed');
+  // Cade di nuovo: la prossima non eredita il «sì» della precedente.
+  trasporto.ultima().onState('closed');
+  tempo.scatta();
+  trasporto.ultima().onState('open');
+  assert.equal(s.stato(), 'reconnected-unknown');
+});
+
+test("TERM-02e ⭐ alla PRIMA connessione non c'è niente da riprendere: «collegato» e basta", () => {
+  const { s, trasporto } = monta();
+  s.update({ tab: SCHEDA });
+  trasporto.ultima().onAttach(false);
+  trasporto.ultima().onState('open');
+  assert.equal(s.stato(), 'open', 'la prima volta la shell è nuova per definizione, non è una notizia');
 });
 
 test('TERM-03 ⭐ dopo il tetto dei tentativi si passa a «scollegato», non si ritenta all\'infinito', () => {

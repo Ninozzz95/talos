@@ -53,7 +53,16 @@ test('TOKEN-04 — leggiCookie trova il nome giusto fra più cookie e ignora nom
 });
 
 function socketFinto() { return { scritture: [], distrutto: false, write(d) { this.scritture.push(d); }, destroy() { this.distrutto = true; } }; }
-function registroFinto() { const voce = { ascoltatori: new Set(), backlog: [] }; return { apri: () => voce, scrivi() {}, ridimensiona() {}, segnaDisconnesso() {} }; }
+/* ⛔ Il doppione implementa l'interfaccia VERA, `apriDichiarando` compresa: un finto
+   che ne copre solo un pezzo fa passare la prova su un ponte che nel prodotto rompe. */
+function registroFinto() {
+  const voce = { ascoltatori: new Set(), backlog: [] };
+  return {
+    apri: () => voce,
+    apriDichiarando: () => ({ voce, ripresa: false }),
+    scrivi() {}, ridimensiona() {}, segnaDisconnesso() {},
+  };
+}
 class WssFinta { handleUpgrade(_req, _socket, _head, cb) { cb({ OPEN: 1, readyState: 1, send() {}, on() {} }); } }
 
 test('TOKEN-05 — upgrade WebSocket del terminale: con token e senza cookie è 401 e il socket muore; col cookie passa; senza token configurato passa come oggi', () => {

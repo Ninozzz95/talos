@@ -40,6 +40,16 @@ function registroFinto(overrides = {}) {
     chiamate,
     voce,
     apri(args) { chiamate.apri.push(args); return voce; },
+    /*
+     * ⛔ Il doppione implementa l'INTERFACCIA VERA, non un sottoinsieme comodo.
+     * `apriDichiarando` è ciò che il ponte usa per dire al client se ha ripreso
+     * una shell viva o ne ha avuta una nuova: un finto che non ce l'ha farebbe
+     * passare una prova su un ponte che nel prodotto non funziona.
+     */
+    apriDichiarando(args) {
+      chiamate.apri.push(args);
+      return { voce, ripresa: overrides.ripresa ?? false };
+    },
     scrivi(...args) { chiamate.scrivi.push(args); },
     ridimensiona(...args) { chiamate.ridimensiona.push(args); },
     segnaDisconnesso(...args) { chiamate.segnaDisconnesso.push(args); },
@@ -114,9 +124,28 @@ test('⭐⭐⭐ il backlog viene rimandato al client PRIMA di ogni evento live, 
   const ws = wsFinta();
   const gestore = creaGestoreTerminaleWs({ registro, originiConsentite: ORIGINE_OK, risolviScheda: schedaFinta() }, { WebSocketServer: wssFinta(ws) });
   gestore.gestisciUpgrade(reqFinto({}), socketFinto(), Buffer.alloc(0));
-  assert.equal(ws.inviati.length, 2);
-  assert.deepEqual(decodificaFrame(ws.inviati[0]), { tipo: TIPO_FRAME_DATI, payload: Buffer.from('uno') });
-  assert.deepEqual(decodificaFrame(ws.inviati[1]), { tipo: TIPO_FRAME_DATI, payload: Buffer.from('due') });
+  assert.equal(ws.inviati.length, 3);
+  /*
+   * ⛔ Il segnale «agganciato» va PRIMA del backlog: chi legge deve sapere di
+   * che shell sono i byte che sta per ricevere, non scoprirlo dopo averli
+   * scritti a schermo. L'ordine è il contratto, non un dettaglio.
+   */
+  const agganciato = decodificaFrame(ws.inviati[0]);
+  assert.equal(agganciato.tipo, TIPO_FRAME_CONTROLLO);
+  assert.deepEqual(JSON.parse(agganciato.payload.toString('utf8')), { evento: 'agganciato', ripreso: false });
+  assert.deepEqual(decodificaFrame(ws.inviati[1]), { tipo: TIPO_FRAME_DATI, payload: Buffer.from('uno') });
+  assert.deepEqual(decodificaFrame(ws.inviati[2]), { tipo: TIPO_FRAME_DATI, payload: Buffer.from('due') });
+});
+
+test('⭐⭐⭐ AGGANCIATO — il ponte DICE se ha ripreso una shell viva o ne ha avuta una nuova', () => {
+  for (const ripresa of [true, false]) {
+    const registro = registroFinto({ ripresa });
+    const ws = wsFinta();
+    const gestore = creaGestoreTerminaleWs({ registro, originiConsentite: ORIGINE_OK, risolviScheda: schedaFinta() }, { WebSocketServer: wssFinta(ws) });
+    gestore.gestisciUpgrade(reqFinto({}), socketFinto(), Buffer.alloc(0));
+    const primo = decodificaFrame(ws.inviati[0]);
+    assert.deepEqual(JSON.parse(primo.payload.toString('utf8')), { evento: 'agganciato', ripreso: ripresa });
+  }
 });
 
 test('⭐⭐ un evento "dati" del registro dopo la connessione arriva come frame DATI', () => {

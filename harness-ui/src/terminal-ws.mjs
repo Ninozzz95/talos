@@ -100,7 +100,28 @@ export function creaGestoreTerminaleWs({ registro, originiConsentite, risolviSch
   function collega(ws, scheda) {
     /* ⛔ L'id e la cartella vengono dalla SCHEDA del registro, mai dalla query: il client nomina, il server decide. */
     const id = scheda.terminalId;
-    const voce = registro.apri({ id, cartella: scheda.cartella });
+    /*
+     * ⭐⭐⭐ Il segnale «ripreso», PRIMA di qualunque byte.
+     *
+     * ⛔ Senza, il client non poteva sapere se la sua shell fosse sopravvissuta:
+     * il ponte rigioca il backlog sia quando riaggancia una PTY viva sia
+     * quando il reaper l'ha chiusa e ne nasce una nuova (backlog vuoto — che è
+     * anche l'aspetto di una shell viva che non ha ancora stampato niente).
+     * L'interfaccia era costretta a dire «riconnesso, non sappiamo se la shell
+     * è ancora quella». Lo stato dell'arte separa l'identità della CONNESSIONE
+     * da quella della SESSIONE e fa dichiarare al server se ha ripreso davvero
+     * (il flag `resumed` di Ably; ricerca del 05/09/2026,
+     * faqs.ably.com/connection-state-recovery · websocket.org/guides/reconnection/).
+     *
+     * ⛔ Va PRIMA del backlog: chi legge deve sapere di che shell sono i byte
+     * che sta per ricevere, non scoprirlo dopo averli scritti a schermo.
+     *
+     * ⛔ Sicuro per il monolite congelato (`public/app.js`), verificato alla
+     * fonte: alla riga 7702 tratta solo `evento === 'uscita'` e ignora in
+     * silenzio ogni altro evento di controllo — nessun `else`, nessun crash.
+     */
+    const { voce, ripresa } = registro.apriDichiarando({ id, cartella: scheda.cartella });
+    ws.send(codificaFrame(TIPO_FRAME_CONTROLLO, JSON.stringify({ evento: 'agganciato', ripreso: ripresa })));
 
     // ⭐ Riconnessione (F5, o WS caduta): replay del backlog PRIMA di tornare live — stesso principio del Last-Event-ID già in uso per SSE, qui su una PTY invece che su un run agente.
     for (const pezzo of voce.backlog) {
