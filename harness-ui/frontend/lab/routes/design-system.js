@@ -2,9 +2,15 @@ import {
   assertTalosDesignTokens,
   createBadge,
   createButton,
+  createField,
   createIconButton,
+  createKbd,
+  createListRow,
+  createMeasure,
   createMenuButton,
+  createSelect,
   createSheet,
+  createStatusDot,
   createSwitch,
   createTabs,
   createTooltip,
@@ -167,6 +173,77 @@ export function mountDesignSystemLab(root) {
   disclosure.group.append(lastAction);
   grid.append(disclosure.group);
   components.push(menu, apply, sheet, openSheet);
+
+  /*
+   * Fase 1 del redesign: le sei primitive nuove sul banco, dove i test del
+   * browser le guardano davvero. Ognuna nello stato che conta.
+   */
+  const misure = headingGroup(documentObj, 'Misure e stato');
+  const misurata = createMeasure({ document: documentObj, value: '1.565', unit: 'test', testId: 'ds-measure-measured' });
+  const stimata = createMeasure({ document: documentObj, value: '7,5k', unit: 'token', provenance: 'estimated', testId: 'ds-measure-estimated' });
+  const puntoVivo = createStatusDot({ document: documentObj, tone: 'live', label: 'in corso', testId: 'ds-dot-live' });
+  const puntoMuto = createStatusDot({ document: documentObj, tone: 'success', testId: 'ds-dot-decorative' });
+  misure.row.append(misurata.element, stimata.element, puntoVivo.element, puntoMuto.element);
+  grid.append(misure.group);
+  components.push(misurata, stimata, puntoVivo, puntoMuto);
+
+  const scorciatoie = headingGroup(documentObj, 'Scorciatoie');
+  const comandoModello = createButton({ document: documentObj, label: 'Cambia modello', variant: 'secondary', testId: 'ds-shortcut-target' });
+  const tasti = createKbd({ document: documentObj, keys: ['Ctrl', '⇧', 'M'], control: comandoModello.element, testId: 'ds-kbd' });
+  scorciatoie.row.append(comandoModello.element, tasti.element);
+  grid.append(scorciatoie.group);
+  components.push(comandoModello, tasti);
+
+  const ingressi = headingGroup(documentObj, 'Ingressi');
+  const lente = documentObj.createElement('span');
+  lente.textContent = '⌕';
+  const ricerca = createField({ document: documentObj, label: 'Cerca nelle conversazioni', placeholder: 'Cerca chat…', icon: lente, testId: 'ds-field' });
+  const modello = createSelect({
+    document: documentObj,
+    label: 'Modello principale',
+    options: [{ value: 'claude-opus-5', label: 'claude-opus-5' }, { value: 'claude-sonnet-5', label: 'claude-sonnet-5' }],
+    value: 'claude-opus-5',
+    testId: 'ds-select',
+    onChange: (valore) => announcements.announce(`Modello ${valore}`),
+  });
+  ingressi.row.append(ricerca.element, modello.element);
+  grid.append(ingressi.group);
+  components.push(ricerca, modello);
+
+  const elenco = headingGroup(documentObj, 'Righe di elenco');
+  elenco.group.classList.add('design-system-lab__group--wide');
+  const contenitore = documentObj.createElement('div');
+  contenitore.className = 'talos-card talos-list';
+  contenitore.setAttribute('role', 'listbox');
+  contenitore.setAttribute('aria-label', 'Attrezzi della sessione');
+  const permesso = createBadge({ document: documentObj, label: 'Chiede', tone: 'warning' });
+  const costo = createMeasure({ document: documentObj, value: '412', unit: 'token', provenance: 'estimated' });
+  let sceltaCorrente = 'terminale';
+  const righe = [
+    { id: 'terminale', title: 'Comando nel terminale', subtitle: 'esegue un comando nella cartella della sessione', aside: [costo.element, permesso.element] },
+    { id: 'ricerca-file', title: 'Ricerca nei file', subtitle: 'cerca un testo dentro la cartella, senza aprirla tutta', aside: [] },
+  ].map((riga) => {
+    const componente = createListRow({
+      document: documentObj,
+      title: riga.title,
+      subtitle: riga.subtitle,
+      aside: riga.aside,
+      interactive: 'select',
+      selected: sceltaCorrente === riga.id,
+      testId: `ds-list-row-${riga.id}`,
+      onPress: () => {
+        sceltaCorrente = riga.id;
+        for (const [altra, altroId] of coppie) altra.update({ selected: altroId === sceltaCorrente });
+        announcements.announce(`${riga.title} selezionato`);
+      },
+    });
+    return [componente, riga.id];
+  });
+  const coppie = righe;
+  for (const [componente] of righe) contenitore.append(componente.element);
+  elenco.row.append(contenitore);
+  grid.append(elenco.group);
+  components.push(permesso, costo, ...righe.map(([c]) => c));
 
   assertTalosDesignTokens(documentObj.defaultView.getComputedStyle(html));
   html.dataset.visualReady = 'true';
