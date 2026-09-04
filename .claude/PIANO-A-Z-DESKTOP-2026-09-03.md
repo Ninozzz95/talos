@@ -33,6 +33,8 @@ labs, monorepo).
 | 3 | **Q-02** | Censimento a mano funzioni senza chiamanti, rimozione solo confermate | 1 | QUICK-WIN | R-01 | — |
 | 4 | R-02 | Intro al primo avvio stile mobile: chiave+provider nel keyring, cartella, autonomia in un colpo, modello | 3 | R | R-01 | — |
 | 4b | **R-03** | Ricerca web dalle Impostazioni (parità mobile) + DuckDuckGo senza chiave — ordine owner 04/09, fatta | 2 | R (ledger §3) | R-02 | — |
+| 4c | **R-05** | DuckDuckGo senza chiave sul mobile (ownership mobile SOLO per questa) — ordine owner 04/09, IN CODA: consigliata subito dopo W0-03, Sonnet 5 high | 0,5 | R (ledger §3, R-04/R-05) | R-03 | — |
+| 4d | **R-04** | Sfondi animati per tema sul desktop (14 scene, «Sfondo scena») — ordine owner 04/09, IN CODA: consigliata con le righe UI di Wave 1 (W1-04/05/07), Opus 5 xhigh, misurata con W0-03 | 2,5 | R (ledger §3, R-04/R-05) | R-02, W0-03 | — |
 | 5 | W0-04 | Scheletro `labs/` + flag da config | 0,5 | R (era W0) | — | — |
 | 6 | W1-10 | Electron spike: Node figlio + token loopback | 3 | R (era W1) | W0-04 | — |
 | 7 | W2-13 | Electron 57.2 lifecycle | 3 | R (era W2) | W1-10 | — |
@@ -151,7 +153,7 @@ Somma fascia C: **116,5 gg** (Wave 3 66,5 · Wave 4 36 · P 9 · FIN 5).
 
 ## Totale
 
-84 righe (59 del ledger + 18 PROPOSTE + 2 R + 3 M + 2 Q), **282,25 giorni-agente** stimati (fascia M esclusa: non misurata — vedi sopra) adapter/UI, kernel a parte. R-01, Q-01, Q-02 **fatte**; il resto attende il sì dell'owner riga per riga.
+86 righe (59 del ledger + 18 PROPOSTE + 4 R + 3 M + 2 Q), **285,25 giorni-agente** stimati (fascia M esclusa: non misurata — vedi sopra) adapter/UI, kernel a parte. R-01, Q-01, Q-02 **fatte**; il resto attende il sì dell'owner riga per riga.
 Le stime seguono la regola del ledger: superata del 50 % la riga si ferma e si scrive perché.
 
 ## Le richieste al kernel, nell'ordine in cui servono
