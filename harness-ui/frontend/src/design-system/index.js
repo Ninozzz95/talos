@@ -18,6 +18,8 @@ export { createSignedReceipt } from './signed-receipt.js';
 export { createDataTable } from './data-table.js';
 export { createCheckCard } from './check-card.js';
 export { createSettingRow } from './setting-row.js';
+export { createResizablePane } from './resizable-pane.js';
+export { createComposer } from './composer.js';
 export { createSwitch } from './switch.js';
 export { createTabs } from './tabs.js';
 export { createFloatingPositioner } from './floating-position.js';

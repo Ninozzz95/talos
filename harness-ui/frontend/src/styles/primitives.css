@@ -677,6 +677,111 @@ button.talos-list-row:focus-visible {
 .talos-setting__scope { display: block; margin-top: 1px; color: var(--talos-muted); font-size: var(--talos-font-size-xs); }
 .talos-setting__control { flex: none; }
 
+/* ==========================================================================
+   Fase 6 — il guscio: maniglie dei pannelli e compositore.
+   ========================================================================== */
+.talos-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  z-index: 6;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+}
+/* ⛔ La maniglia sta DENTRO il riquadro del pannello: la prova funzionale sul
+   mockup ha mostrato che a cavallo del bordo viene tagliata da overflow:hidden
+   e col mouse vero non si prende. */
+.talos-resizer--start { right: 0; }
+.talos-resizer--end { left: 0; }
+.talos-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: transparent;
+  transition: background-color var(--talos-motion-duration-control) var(--talos-motion-ease);
+}
+.talos-resizer--start::after { right: 0; }
+.talos-resizer--end::after { left: 0; }
+.talos-resizer:hover::after,
+.talos-resizer[data-trascina='si']::after { background: var(--talos-accent); }
+.talos-resizer:focus-visible { outline: none; }
+.talos-resizer:focus-visible::after { background: var(--talos-ring); width: 3px; }
+
+.talos-chat-foot { flex: none; padding: 0 var(--talos-space-card) var(--talos-space-control); }
+.talos-status-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--talos-space-control);
+  padding: var(--talos-space-sm) var(--talos-space-card);
+  margin-bottom: var(--talos-space-sm);
+  border: var(--talos-focus-width) solid var(--talos-border);
+  border-radius: var(--talos-radius-control);
+  background: var(--talos-panel);
+}
+.talos-status-strip__pulse {
+  width: var(--talos-space-sm);
+  height: var(--talos-space-sm);
+  flex: none;
+  border-radius: var(--talos-radius-pill);
+  background: var(--talos-accent-hover);
+  animation: talos-pulse var(--talos-motion-duration-pulse) var(--talos-motion-ease) infinite;
+}
+@keyframes talos-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+.talos-status-strip__what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--talos-text); font-size: var(--talos-font-size-sm); }
+.talos-queue {
+  display: flex;
+  align-items: center;
+  gap: var(--talos-space-inline);
+  padding: var(--talos-space-sm) var(--talos-space-card);
+  margin-bottom: var(--talos-space-sm);
+  border: var(--talos-focus-width) dashed var(--talos-border-strong);
+  border-radius: var(--talos-radius-control);
+  color: var(--talos-assistant-text);
+  font-size: var(--talos-font-size-sm);
+}
+.talos-queue__text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.talos-composer {
+  padding: var(--talos-space-control);
+  border: var(--talos-focus-width) solid var(--talos-border-strong);
+  border-radius: var(--talos-radius-card);
+  background: var(--talos-panel);
+  box-shadow: var(--talos-shadow-card);
+}
+.talos-composer:focus-within { border-color: var(--talos-accent-border); }
+.talos-composer__input {
+  width: 100%;
+  min-height: calc(var(--talos-primary-height) * 1.6);
+  padding: var(--talos-space-sm);
+  border: 0;
+  background: transparent;
+  color: var(--talos-text);
+  font: 400 var(--talos-font-size-md) / 1.5 var(--talos-font-ui);
+  resize: vertical;
+}
+.talos-composer__input:focus-visible { outline: none; }
+.talos-composer__bar { display: flex; align-items: center; gap: var(--talos-space-sm); margin-top: var(--talos-space-sm); }
+.talos-composer__pills { display: flex; align-items: center; gap: var(--talos-space-sm); flex-wrap: wrap; flex: 1; min-width: 0; }
+.talos-send {
+  min-height: var(--talos-primary-height);
+  padding: 0 var(--talos-space-md);
+  flex: none;
+  border: 0;
+  border-radius: var(--talos-radius-pill);
+  background: var(--talos-accent);
+  color: var(--talos-text-on-accent);
+  font: 600 var(--talos-font-size-sm) / 1 var(--talos-font-ui);
+  cursor: pointer;
+}
+.talos-send:hover { background: var(--talos-accent-hover); }
+.talos-send:focus-visible { outline: var(--talos-focus-width) solid var(--talos-ring); outline-offset: var(--talos-focus-offset); }
+.talos-send--stop { background: var(--talos-danger); color: var(--talos-text); }
+
 @media (forced-colors: active) {
   .talos-button,
   .talos-switch,

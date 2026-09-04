@@ -54,6 +54,8 @@
   --talos-motion-duration-surface-enter: 180ms;
   --talos-motion-duration-surface-exit: 120ms;
   --talos-motion-duration-tab-change: 160ms;
+  /* Ritmo della pulsazione «sta lavorando»: ambiente, non transizione. */
+  --talos-motion-duration-pulse: 1600ms;
   --talos-motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --talos-motion-ease-exit: cubic-bezier(0.4, 0, 1, 1);
 
@@ -121,6 +123,7 @@
     --talos-motion-duration-surface-enter: 0s;
     --talos-motion-duration-surface-exit: 0s;
     --talos-motion-duration-tab-change: 0s;
+    --talos-motion-duration-pulse: 0s;
   }
 }
 
