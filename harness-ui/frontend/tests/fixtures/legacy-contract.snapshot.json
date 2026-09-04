@@ -2,9 +2,9 @@
   "source": "harness-ui/public",
   "assets": {
     "app": {
-      "lines": 13967,
-      "bytes": 764548,
-      "sha256": "bf367d63371471a77711594327a3f09bec82137925cef7f72ca9fe240d104d30"
+      "lines": 13968,
+      "bytes": 764858,
+      "sha256": "9815bf438b035237b4a4fbcbd6d457bd67b26413c2d8b3cb30f0ad9a382cb418"
     },
     "html": {
       "lines": 429,
