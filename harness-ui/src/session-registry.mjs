@@ -96,6 +96,16 @@ import {
 } from './session-store.mjs';
 
 export const EXPORT_SCHEMA = 'talos.harness-ui.session-export.v1';
+/*
+ * ⭐⭐⭐ 04/9 — W0-02 (D32): la versione di schema del registro JSONL,
+ * scritta in ogni `intestazione` nuova. Si alza SOLO quando un record cambia
+ * forma in modo non retrocompatibile; le migrazioni si scrivono in
+ * `ripristina()`, per versione. Un'intestazione senza `schema` è la versione
+ * 0 (i file di prima) e si ripristina come sempre; una con `schema` maggiore
+ * di questo numero viene da un TALOS più nuovo e si scarta con motivo
+ * `schema-futuro` — mai letta a metà fingendo di capirla.
+ */
+export const SCHEMA_SESSIONE = 1;
 
 class LocalRuntimeSessionError extends Error {
   constructor(message, code = 'LOCAL_RUNTIME_FAILED') {
@@ -977,7 +987,7 @@ export function createSessionRegistry({
         registraRigaSyncFn({
           cartellaStore, sessionId,
           record: {
-            tipo: 'intestazione', sessionId, taskId, cartella, task, comandoProva, forkDa,
+            tipo: 'intestazione', schema: SCHEMA_SESSIONE, sessionId, taskId, cartella, task, comandoProva, forkDa,
             avviataAlle: voce.avviataAlle, modello: voce.modello, modelloPlanner: voce.modelloPlanner,
             reasoning: voce.reasoning, mobile: voce.mobile, permessi: voce.permessi,
             permessiPerAttrezzo: voce.permessiPerAttrezzo, padreId: voce.padreId, profonditaDelega: voce.profonditaDelega,
@@ -1329,6 +1339,9 @@ export function createSessionRegistry({
         if (!record || record.length === 0) { scartate.push({ sessionId, motivo: 'vuota' }); continue; }
         const intestazione = record.find((r) => r.tipo === 'intestazione');
         if (!intestazione) { scartate.push({ sessionId, motivo: 'senza-intestazione', dettaglio: `${record.length} record, nessuna intestazione` }); continue; } // senza intestazione non c'è abbastanza per una voce onesta
+        // ⭐ 04/9, W0-02 — assente = 0 (file di prima), uguale o minore = si legge, maggiore = scritto da un TALOS più nuovo: scarto onesto, mai una lettura a metà.
+        const schemaFile = Number.isSafeInteger(intestazione.schema) ? intestazione.schema : 0;
+        if (schemaFile > SCHEMA_SESSIONE) { scartate.push({ sessionId, motivo: 'schema-futuro', dettaglio: `schema ${schemaFile}, questo TALOS legge fino a ${SCHEMA_SESSIONE}` }); continue; }
         // ⛔ `type` (AG-UI, PascalCase) contro `tipo` (i record di questo file, italiano): due nomi di campo DIVERSI apposta, mai un'ambiguità nel distinguerli nello stesso file.
         // ⛔ 02/09 — i file scritti PRIMA di oggi contengono WorkspaceChanged (vedi broadcast()): stato del filesystem, non storia — si scartano al ripristino, così anche i log vecchi tornano leggeri senza riscriverli.
         const eventiFisici = record.filter((r) => typeof r.type === 'string' && r.type !== 'WorkspaceChanged');
