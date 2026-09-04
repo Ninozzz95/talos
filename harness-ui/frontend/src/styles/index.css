@@ -1,6 +1,7 @@
 @import './tokens.css';
 @import './reset.css';
 @import './primitives.css';
+@import './surfaces.css';
 
 @font-face {
   font-family: 'Instrument Sans';

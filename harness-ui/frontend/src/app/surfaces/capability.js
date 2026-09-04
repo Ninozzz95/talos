@@ -50,6 +50,14 @@ export function createCapabilitySurface({ documentObj, labels, testId, onToggle 
     label: labels.searchLabel,
     type: 'search',
     value: '',
+    /*
+     * ⛔ Il primo giro visivo ha mostrato una SCATOLA VUOTA: l'etichetta era
+     * solo per chi ascolta, e chi guarda non aveva modo di sapere a cosa
+     * servisse quel campo. Il segnaposto ripete l'etichetta a schermo, ed è
+     * un ripiego dichiarato: quando l'inventario avrà il suo spazio,
+     * l'etichetta diventa visibile (`labelVisible`) invece che segnaposto.
+     */
+    placeholder: labels.searchPlaceholder || labels.searchLabel,
     hint: labels.searchHint,
     onInput: (valore) => {
       props = { ...props, query: valore };
@@ -156,7 +164,15 @@ export function createCapabilitySurface({ documentObj, labels, testId, onToggle 
         // Il debito si vede: sono attrezzi nostri che nessuno ha ancora nominato.
         const nota = documentObj.createElement('p');
         nota.className = 'talos-capability__note';
-        nota.textContent = labels.unnamedNote.replace('{n}', String(senzaNome.length));
+        /*
+         * ⛔ Singolare e plurale, perché il primo giro visivo ha mostrato
+         * «1 attrezzi non hanno ancora un nome»: un'interfaccia che sbaglia
+         * l'italiano nel punto in cui denuncia un debito non è credibile
+         * nemmeno sul debito. La frase al singolare la sceglie chi scrive le
+         * etichette, non una regola di grammatica indovinata qui.
+         */
+        const modello = senzaNome.length === 1 ? (labels.unnamedNoteOne || labels.unnamedNote) : labels.unnamedNote;
+        nota.textContent = modello.replace('{n}', String(senzaNome.length));
         nota.setAttribute('title', senzaNome.join(', '));
         figli.push(nota);
       }

@@ -79,9 +79,18 @@ export function createTopbarSurface({ documentObj, store, labels, testId, azioni
   const viste = createTabs({
     document: documentObj,
     label: labels.viewsLabel || 'Viste della sessione',
-    items: labels.views.map((vista) => ({ id: vista.id, label: vista.label })),
+    items: labels.views.map((vista) => ({ id: vista.id, label: vista.label, controls: vista.controls })),
     value: labels.views[0].id,
     activation: 'manual',
+    /*
+     * ⛔ I pannelli delle viste NON stanno qui: Chat, Terminale e Review sono
+     * l'area principale della pagina. `aria-controls` regge il legame anche a
+     * distanza (ricerca 05/09/2026), quindi questa e' una barra di schede vera
+     * e non un finto tablist — ma disegnare qui dentro dei pannelli VUOTI
+     * prometterebbe un contenuto che non c'e', e infatti dava alla barra
+     * un'altezza che spingeva le schede sopra il titolo.
+     */
+    pannelliAltrove: true,
     onChange: (id) => store.dispatch({ type: ACTIONS.ROUTE_CHANGED, payload: { route: id } }),
     testId: testId ? `${testId}-views` : undefined,
   });
@@ -123,6 +132,7 @@ export function createTopbarSurface({ documentObj, store, labels, testId, azioni
       items: labels.views.map((vista) => ({
         id: vista.id,
         label: vista.label,
+        controls: vista.controls,
         count: props.counts?.[vista.id],
         countUnit: vista.countUnit,
       })),

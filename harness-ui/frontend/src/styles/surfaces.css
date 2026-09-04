@@ -1,0 +1,347 @@
+/*
+ * Gli stili delle SUPERFICI estratte (fase 4).
+ *
+ * ⛔ Perché questo file è nato dopo il codice, e non insieme: le otto superfici
+ * sono state scritte con nomi di classe nuovi e nessuna riga di stile. Le
+ * prove unitarie erano verdi e il laboratorio nel browser pure — perché
+ * nessuna delle due guarda l'immagine. Il primo giro visivo ha mostrato testo
+ * INCOLLATO in cinque punti («prontatoken100100giri7cache50700ponteonline»),
+ * pallini di lista mai tolti, e righe selezionate fuse in un'unica lastra.
+ * ⇒ Una superficie non è finita quando i suoi test passano.
+ *
+ * ⛔ Solo token: nessun colore, nessuna durata, nessuna misura grezza (regola
+ * PHASE3-TOKEN-CONTRACT-01, che da oggi copre anche questo file e non solo
+ * `primitives.css`).
+ */
+
+/* --- La distanza fra le cose: il difetto sistematico del primo giro --- */
+
+.talos-status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--talos-space-md);
+  padding: var(--talos-space-sm) var(--talos-space-card);
+  background: var(--talos-panel);
+  border-top: 1px solid var(--talos-border-subtle);
+  font-size: var(--talos-font-size-sm);
+  color: var(--talos-muted);
+}
+
+.talos-status-bar__cell {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--talos-space-xs);
+}
+
+.talos-status-bar__label {
+  color: var(--talos-muted);
+  text-transform: lowercase;
+}
+
+.talos-status-bar__value {
+  color: var(--talos-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.talos-status-bar__phase {
+  color: var(--talos-text);
+  font-weight: 500;
+}
+
+/* --- Terminale: le tre dichiarazioni di G8-G10 devono restare TRE --- */
+
+.talos-terminal {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--talos-border);
+  border-radius: var(--talos-radius-card);
+  background: var(--talos-panel);
+  overflow: hidden;
+}
+
+.talos-terminal__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--talos-space-sm);
+  padding: var(--talos-space-sm) var(--talos-space-card);
+  border-bottom: 1px solid var(--talos-border-subtle);
+  font-size: var(--talos-font-size-xs);
+  color: var(--talos-muted);
+}
+
+/*
+ * ⛔ Il separatore è CSS, non un carattere nel testo: chi ascolta sente tre
+ * frasi, non «·» in mezzo. E senza, le tre dichiarazioni si incollavano
+ * («…AVM-harness-desktopsulla tua macchinalo ha lanciato l'agente»).
+ */
+.talos-terminal__header > * + *::before {
+  content: '';
+  display: inline-block;
+  width: 1px;
+  height: 0.9em;
+  margin-right: var(--talos-space-sm);
+  vertical-align: -0.1em;
+  background: var(--talos-border-strong);
+}
+
+.talos-terminal__folder {
+  font-family: var(--talos-font-mono);
+  color: var(--talos-text);
+}
+
+.talos-terminal__isolation[data-isolamento='unknownIsolation'],
+.talos-terminal__author[data-autore='unknown'] {
+  color: var(--talos-warning);
+}
+
+.talos-terminal__body {
+  flex: 1;
+  min-height: 0;
+  padding: var(--talos-space-card);
+}
+
+.talos-terminal__state {
+  margin: 0;
+  padding: var(--talos-space-sm) var(--talos-space-card);
+  border-top: 1px solid var(--talos-border-subtle);
+  font-size: var(--talos-font-size-xs);
+  color: var(--talos-muted);
+}
+
+.talos-terminal[data-stato='forbidden'] .talos-terminal__state,
+.talos-terminal[data-stato='disconnected'] .talos-terminal__state {
+  color: var(--talos-danger);
+}
+
+.talos-terminal[data-stato='reconnected-new'] .talos-terminal__state,
+.talos-terminal[data-stato='reconnected-unknown'] .talos-terminal__state {
+  color: var(--talos-warning);
+}
+
+/* --- Topbar --- */
+
+/*
+ * ⛔ UNA riga sola, e in quest'ordine: titolo, percorso, viste, azioni. Col
+ * `flex-wrap` il secondo giro visivo ha mostrato le schede finite SOPRA il
+ * titolo — l'intestazione leggeva al contrario. Qui non si va a capo: è il
+ * percorso a stringersi (ha già la sua troncatura al centro e il testo intero
+ * per chi ascolta), perché è l'unico pezzo che può perdere caratteri senza
+ * perdere il senso.
+ */
+.talos-topbar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--talos-space-md);
+  padding: var(--talos-space-sm) var(--talos-space-card);
+  border-bottom: 1px solid var(--talos-border-subtle);
+  background: var(--talos-panel);
+}
+
+.talos-topbar__title {
+  flex: 0 0 auto;
+}
+
+.talos-topbar > .talos-tabs {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.talos-topbar__title h1 {
+  margin: 0;
+  font-family: var(--talos-font-display);
+  font-size: var(--talos-font-size-lg);
+  color: var(--talos-text);
+}
+
+/*
+ * ⛔ UNA troncatura sola. Il terzo giro visivo ha mostrato «…/harness-u:»: il
+ * percorso era gia' accorciato al centro dal codice, e poi il CSS lo tagliava
+ * una seconda volta a meta' carattere. Due troncature sovrapposte producono
+ * una coda che non e' ne' la vera ne' quella scelta — e la coda e' proprio la
+ * parte che avevamo deciso di salvare. Qui non si stringe: la lunghezza la
+ * decide `troncaAlCentro`, che sa dove tagliare.
+ */
+.talos-topbar__path {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-family: var(--talos-font-mono);
+  font-size: var(--talos-font-size-xs);
+  color: var(--talos-muted);
+}
+
+/* ⛔ Un workspace che è la radice di un disco NON si mimetizza. */
+.talos-topbar__path[data-radice='si'] {
+  color: var(--talos-warning);
+  font-weight: 600;
+}
+
+.talos-topbar__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--talos-space-xs);
+  margin-left: auto;
+}
+
+/* --- Board --- */
+
+.talos-board__status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--talos-space-xs);
+}
+
+.talos-board__unmeasured,
+.talos-status-bar__unmeasured,
+.talos-inspector__unmeasured {
+  color: var(--talos-muted);
+  cursor: help;
+}
+
+/* --- Inspector --- */
+
+.talos-inspector {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.talos-inspector__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--talos-space-sm);
+}
+
+.talos-inspector__list,
+.talos-capability__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--talos-space-xs);
+  /* ⛔ Il pallino di lista: tolto. Queste sono righe, non un elenco puntato. */
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.talos-inspector__stall {
+  padding: var(--talos-space-sm) var(--talos-space-card);
+  border-left: 3px solid var(--talos-warning);
+  border-radius: var(--talos-radius-control);
+  background: var(--talos-card-subtle);
+}
+
+/*
+ * ⛔ I due stalli restano distinguibili anche a colpo d'occhio: il motore paga
+ * per separarli, l'interfaccia non li rifonde. Il colore NON è l'unico
+ * segnale — ognuno porta il suo titolo scritto.
+ */
+.talos-inspector__stall--silenzio {
+  border-left-color: var(--talos-warning);
+}
+
+.talos-inspector__stall--giro-a-vuoto {
+  border-left-color: var(--talos-info);
+}
+
+.talos-inspector__stall-title {
+  margin: 0 0 var(--talos-space-xs);
+  font-weight: 600;
+  color: var(--talos-text);
+}
+
+.talos-inspector__stall-body {
+  margin: 0;
+  font-size: var(--talos-font-size-sm);
+  color: var(--talos-muted);
+}
+
+.talos-inspector__note,
+.talos-inspector__empty,
+.talos-capability__empty,
+.talos-capability__note,
+.talos-sidebar__empty {
+  margin: 0;
+  padding: var(--talos-space-sm) 0;
+  font-size: var(--talos-font-size-sm);
+  color: var(--talos-muted);
+}
+
+.talos-inspector__empty-reason {
+  color: var(--talos-muted);
+  font-style: italic;
+}
+
+/* --- Capability --- */
+
+.talos-capability {
+  display: flex;
+  flex-direction: column;
+  gap: var(--talos-space-sm);
+}
+
+/*
+ * ⛔ Righe selezionate ADIACENTI: senza lo stacco si fondevano in una lastra
+ * unica e non si capiva più dove finisse una e cominciasse l'altra. Il gap
+ * dell'elenco le separa; il bordo di sinistra dice quali sono accese.
+ */
+.talos-capability__list .talos-list-row {
+  border-radius: var(--talos-radius-control);
+}
+
+.talos-capability__note {
+  color: var(--talos-warning);
+}
+
+/* --- Tabs: il contrassegno era incollato all'etichetta --- */
+
+.talos-tabs__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--talos-space-xs);
+}
+
+.talos-tabs__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5em;
+  padding: 0 var(--talos-space-xs);
+  border-radius: var(--talos-radius-pill);
+  background: var(--talos-accent-soft);
+  color: var(--talos-accent-text);
+  font-size: var(--talos-font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Sidebar --- */
+
+.talos-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--talos-space-md);
+}
+
+.talos-sidebar__block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--talos-space-xs);
+}
+
+.talos-sidebar__block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--talos-space-sm);
+}
+
+.talos-sidebar__sessions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--talos-space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

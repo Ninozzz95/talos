@@ -14,6 +14,9 @@ if (component === 'bootstrap') {
 } else if (component === 'ApplicationLifecycle') {
   const { mountApplicationLifecycleLab } = await import('./routes/application-lifecycle.js');
   await mountApplicationLifecycleLab(document.getElementById('app'));
+} else if (component === 'Surfaces') {
+  const { mountSurfacesLab } = await import('./routes/surfaces.js');
+  mountSurfacesLab(document.getElementById('app'));
 } else if (component === 'DesignSystem') {
   const { mountDesignSystemLab } = await import('./routes/design-system.js');
   mountDesignSystemLab(document.getElementById('app'));

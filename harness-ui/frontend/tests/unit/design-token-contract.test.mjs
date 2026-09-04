@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -33,10 +33,26 @@ test('PHASE3-TOKEN-CONTRACT-01 — la validazione fallisce chiusa e nomina ogni 
   assert.throws(() => assertTalosDesignTokens(null), /stile calcolato/u);
 });
 
-test('PHASE3-TOKEN-CONTRACT-01 — le primitive consumano token e non colori o durate raw', async () => {
-  const source = await readFile(path.resolve(here, '../../src/styles/primitives.css'), 'utf8');
-  assert.doesNotMatch(source, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/iu);
-  assert.doesNotMatch(source, /\b\d+(?:\.\d+)?m?s\b/iu);
-  assert.match(source, /var\(--talos-/u);
+/*
+ * ⛔ Il contratto copriva SOLO `primitives.css`, per nome. Il 05/09 è nato
+ * `surfaces.css` e sarebbe entrato senza nessun controllo: un cancello che
+ * guarda UN file per nome lascia passare il file successivo, e nessuno se ne
+ * accorge perché il cancello resta verde. Ora si enumera la cartella, così un
+ * foglio nuovo è coperto dal giorno in cui esiste.
+ * `tokens.css` è l'unico escluso, ed è escluso per RUOLO: è il posto dove i
+ * valori grezzi si dichiarano.
+ */
+test('PHASE3-TOKEN-CONTRACT-01 — OGNI foglio consuma token e non colori o durate raw', async () => {
+  const cartella = path.resolve(here, '../../src/styles');
+  const fogli = (await readdir(cartella)).filter((nome) => nome.endsWith('.css') && nome !== 'tokens.css');
+  assert.ok(fogli.includes('primitives.css'), 'primitives.css deve essere nell elenco');
+  assert.ok(fogli.includes('surfaces.css'), 'surfaces.css deve essere nell elenco');
+  for (const foglio of fogli) {
+    const source = await readFile(path.join(cartella, foglio), 'utf8');
+    assert.doesNotMatch(source, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/iu, `${foglio} contiene un colore grezzo`);
+    assert.doesNotMatch(source, /\b\d+(?:\.\d+)?m?s\b/iu, `${foglio} contiene una durata grezza`);
+  }
+  const primitive = await readFile(path.join(cartella, 'primitives.css'), 'utf8');
+  assert.match(primitive, /var\(--talos-/u);
 });
 

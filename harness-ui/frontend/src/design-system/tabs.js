@@ -34,6 +34,12 @@ export const createTabs = defineComponent('Tabs', (initialProps = {}) => {
   const panels = documentObj.createElement('div');
   panels.className = 'talos-tabs__panels';
   root.append(list, panels);
+  /*
+   * ⛔ Il secondo giro visivo ha trovato le schede della Topbar disegnate SOPRA
+   * il titolo: non era il wrap, era questo contenitore di pannelli VUOTO che
+   * dava altezza alla barra. Un componente usato per meta' porta con se' anche
+   * la meta' che non serve, e si vede.
+   */
   const prefix = `talos-tabs-${++tabsSequence}`;
   let props = { activation: 'manual', orientation: 'horizontal', ...initialProps };
 
@@ -53,6 +59,7 @@ export const createTabs = defineComponent('Tabs', (initialProps = {}) => {
     list.setAttribute('aria-orientation', props.orientation);
     list.replaceChildren();
     panels.replaceChildren();
+    panels.hidden = Boolean(props.pannelliAltrove);
     for (const item of items) {
       const selected = item.id === props.value;
       const tab = documentObj.createElement('button');
@@ -62,7 +69,22 @@ export const createTabs = defineComponent('Tabs', (initialProps = {}) => {
       tab.dataset.tabId = item.id;
       tab.setAttribute('role', 'tab');
       tab.setAttribute('aria-selected', String(selected));
-      tab.setAttribute('aria-controls', `${prefix}-panel-${item.id}`);
+      /*
+       * ⛔ `aria-controls` funziona anche quando il pannello sta ALTROVE nel
+       * DOM — e' proprio l'attributo che regge quel legame (ricerca
+       * 05/09/2026: w3.org/WAI/ARIA/apg/patterns/tabs/ ·
+       * developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Roles/tab_role).
+       * Con `pannelliAltrove` la barra non disegna nessun pannello: li possiede
+       * chi la usa, e ogni voce porta l'id del suo. ⛔ Se quell'id non c'e' NON
+       * si scrive un `aria-controls` che punta al vuoto: un riferimento
+       * appeso e' peggio di un attributo assente.
+       */
+      if (props.pannelliAltrove) {
+        if (item.controls) tab.setAttribute('aria-controls', String(item.controls));
+        else tab.removeAttribute('aria-controls');
+      } else {
+        tab.setAttribute('aria-controls', `${prefix}-panel-${item.id}`);
+      }
       tab.tabIndex = selected ? 0 : -1;
       const etichetta = documentObj.createElement('span');
       etichetta.className = 'talos-tabs__label';
@@ -78,6 +100,10 @@ export const createTabs = defineComponent('Tabs', (initialProps = {}) => {
         contoUnita.textContent = item.countUnit ? ` ${item.countUnit}` : '';
         conto.append(contoValore, contoUnita);
         tab.append(conto);
+      }
+      if (props.pannelliAltrove) {
+        list.append(tab);
+        continue;
       }
       const panel = documentObj.createElement('section');
       panel.className = 'talos-tabs__panel';
