@@ -8,7 +8,7 @@ export { createField } from './field.js';
 export { createSelect } from './select.js';
 export { createListRow } from './list-row.js';
 export { createNavGroup, createNavItem } from './nav-item.js';
-export { createSessionItem } from './session-item.js';
+export { createSessionItem, PALLINO_PER_STATO_SESSIONE } from './session-item.js';
 export { createConversation } from './conversation.js';
 export { createTurn, createTurnSpine } from './turn.js';
 export { createMessage } from './message.js';
