@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, parse as parsePath } from 'node:path';
 import test from 'node:test';
 
-import { createSessionRegistry as createSessionRegistryReale } from '../src/session-registry.mjs';
+import { createSessionRegistry as createSessionRegistryReale, SCHEMA_SESSIONE } from '../src/session-registry.mjs';
 import { CustomTaskError } from '../src/custom-task.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
 import { WorkspaceTreeError } from '../src/workspace-tree.mjs';
@@ -4611,4 +4611,45 @@ test('W0-01 — AL CONTRARIO: una sessione ripristinata bene non compare fra le 
   const senza = createSessionRegistry({ modello: 'm', chiave: 'k' });
   await senza.ripristina();
   assert.deepEqual(senza.statoPersistenza().scartate, []);
+});
+
+/*
+ * ⭐⭐⭐ 04/9 — W0-02 (D32), versione di schema nell'intestazione: senza
+ * `schema` = 0 e si ripristina; `schema` uguale si ripristina; `schema`
+ * futuro si scarta con motivo, mai letto a metà; ogni intestazione nuova
+ * porta `schema: SCHEMA_SESSIONE`.
+ */
+test('W0-02 — intestazione senza schema (file di prima) e con schema corrente si ripristinano; schema futuro è scartato con motivo «schema-futuro»', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const testa = (extra) => JSON.stringify({ tipo: 'intestazione', sessionId: 'x', taskId: 't', cartella: cartellaStore, task: 'task', avviataAlle: new Date().toISOString(), modello: 'm', permessi: 'Read only', ...extra });
+    writeFileSync(join(cartellaStore, 'sess-vecchia.jsonl'), `${testa({})}\n`);
+    writeFileSync(join(cartellaStore, 'sess-corrente.jsonl'), `${testa({ schema: SCHEMA_SESSIONE })}\n`);
+    writeFileSync(join(cartellaStore, 'sess-futura.jsonl'), `${testa({ schema: SCHEMA_SESSIONE + 98 })}\n`);
+    const registro = createSessionRegistry({ modello: 'm', chiave: 'k', cartellaStore });
+    const esito = await registro.ripristina();
+    assert.equal(esito.totali, 3);
+    assert.equal(esito.ripristinate, 2);
+    const stato = registro.statoPersistenza();
+    assert.deepEqual(stato.scartate.map((s) => [s.sessionId, s.motivo]), [['sess-futura', 'schema-futuro']]);
+    assert.match(stato.scartate[0].dettaglio, new RegExp(`schema ${SCHEMA_SESSIONE + 98}`));
+    assert.ok(existsSync(join(cartellaStore, 'sess-futura.jsonl')), 'il file futuro non viene toccato');
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('W0-02 — ogni intestazione NUOVA porta schema: SCHEMA_SESSIONE (= 1)', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const finta = sessioneControllabile();
+    const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    const { sessionId } = registro.avvia('task-vero');
+    const record = await attendiRegistroSuDisco(cartellaStore, sessionId, (r) => r.some((x) => x.tipo === 'intestazione'));
+    const intestazione = record.find((r) => r.tipo === 'intestazione');
+    assert.equal(SCHEMA_SESSIONE, 1);
+    assert.equal(intestazione.schema, SCHEMA_SESSIONE);
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
 });
