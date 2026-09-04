@@ -4233,7 +4233,11 @@ test('Doctor può leggere il riepilogo delle sessioni corrotte senza cancellarle
     writeFileSync(join(cartellaStore, 'sess-corrotto.jsonl'), '{"tipo":"intestazione"}\nCORROTTA\n{"type":"RunError"}\n');
     const registro = createSessionRegistry({ modello: 'm', chiave: 'k', cartellaStore });
     await registro.ripristina();
-    assert.deepEqual(registro.statoPersistenza(), { corrotte: ['sess-corrotto'], ultimaLettura: { ripristinate: 0, totali: 1 } });
+    // ⭐ 04/9, W0-01 — `scartate` porta il motivo (qui: corrotta); `corrotte` resta per compatibilità.
+    const stato = registro.statoPersistenza();
+    assert.deepEqual({ corrotte: stato.corrotte, ultimaLettura: stato.ultimaLettura }, { corrotte: ['sess-corrotto'], ultimaLettura: { ripristinate: 0, totali: 1 } });
+    assert.equal(stato.scartate.length, 1);
+    assert.equal(stato.scartate[0].motivo, 'corrotta');
     assert.ok(existsSync(join(cartellaStore, 'sess-corrotto.jsonl')));
   } finally {
     rmSync(cartellaStore, { recursive: true, force: true });
@@ -4551,4 +4555,60 @@ test('ELENCA-APPROVAZIONE-03 — elenca() dice se una sessione è ferma su un ap
   registro.rispondiApprovazione(sessionId, richiesta.requestId, true);
   await promessa;
   assert.equal(registro.elenca()[0].inAttesaApprovazione, false);
+});
+
+/*
+ * ⭐⭐⭐ 04/9 — W0-01, RESTORE ACCOUNTING: nessuno scarto silenzioso. Prima
+ * `ripristina()` aveva tre uscite senza traccia (file vuoto, senza
+ * intestazione, errore di lettura diverso da SESSION_STORE_CORRUPT): il
+ * Doctor diceva «N ripristinate su M» e la differenza spariva. Ora ogni
+ * file scartato ha un motivo in `statoPersistenza().scartate`.
+ */
+test('W0-01 — ogni file scartato al ripristino ha un motivo: vuota, senza-intestazione, corrotta, lettura-fallita', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    writeFileSync(join(cartellaStore, 'sess-vuota.jsonl'), '');
+    writeFileSync(join(cartellaStore, 'sess-senza-testa.jsonl'), '{"type":"RunStarted","_sequenza":1}\n');
+    writeFileSync(join(cartellaStore, 'sess-corrotta.jsonl'), '{"tipo":"intestazione"}\nCORROTTA\n{"type":"RunError"}\n');
+    writeFileSync(join(cartellaStore, 'sess-illeggibile.jsonl'), '{"tipo":"intestazione","task":"x"}\n');
+    const leggiVera = leggiRegistroPerAttesa;
+    const registro = createSessionRegistry({
+      modello: 'm', chiave: 'k', cartellaStore,
+      leggiRegistroFn: async (args) => {
+        if (args.sessionId === 'sess-illeggibile') { const e = new Error('EACCES'); e.code = 'SESSION_STORE_READ_FAILED'; throw e; }
+        return leggiVera(args);
+      },
+    });
+    const esito = await registro.ripristina();
+    assert.deepEqual(esito, { ripristinate: 0, totali: 4 });
+    const stato = registro.statoPersistenza();
+    const motivi = Object.fromEntries(stato.scartate.map((s) => [s.sessionId, s.motivo]));
+    assert.deepEqual(motivi, { 'sess-vuota': 'vuota', 'sess-senza-testa': 'senza-intestazione', 'sess-corrotta': 'corrotta', 'sess-illeggibile': 'lettura-fallita' });
+    assert.deepEqual(stato.corrotte, ['sess-corrotta'], 'la lista corrotte resta, per compatibilità');
+    assert.match(stato.scartate.find((s) => s.sessionId === 'sess-illeggibile').dettaglio, /EACCES/);
+    assert.equal(stato.scartate.length + esito.ripristinate, esito.totali, 'ripristinate + scartate = totali: il conto torna sempre');
+    // ⛔ Nessun file è stato toccato: il Doctor legge, non cancella.
+    for (const nome of ['sess-vuota', 'sess-senza-testa', 'sess-corrotta', 'sess-illeggibile']) assert.ok(existsSync(join(cartellaStore, `${nome}.jsonl`)));
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('W0-01 — AL CONTRARIO: una sessione ripristinata bene non compare fra le scartate, e senza cartellaStore scartate è vuoto', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const finta = sessioneControllabile();
+    const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    const { sessionId } = registro.avvia('task-vero');
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((r) => r.tipo === 'intestazione'));
+    const secondo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    const esito = await secondo.ripristina();
+    assert.equal(esito.ripristinate, 1);
+    assert.deepEqual(secondo.statoPersistenza().scartate, []);
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+  const senza = createSessionRegistry({ modello: 'm', chiave: 'k' });
+  await senza.ripristina();
+  assert.deepEqual(senza.statoPersistenza().scartate, []);
 });

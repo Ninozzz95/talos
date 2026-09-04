@@ -114,3 +114,18 @@ test('W0-04 — Doctor elenca i lab accesi come informazione (mai un problema), 
   const senza = await diagnosi({ chiaveConfigurata: true, eseguiComandoSandboxatoFn, spawnSyncFn });
   assert.equal('labs' in senza, false);
 });
+
+test('W0-01 — Doctor riporta le sessioni scartate col motivo, il conto per motivo e una frase che dice dove è finita la differenza', async () => {
+  const eseguiComandoSandboxatoFn = async () => ({ enforcement: 'none' });
+  const spawnSyncFn = () => ({ status: 0 });
+  const esito = await diagnosi({
+    chiaveConfigurata: true, eseguiComandoSandboxatoFn, spawnSyncFn,
+    sessioniPersistenza: { corrotte: ['c1'], scartate: [{ sessionId: 'c1', motivo: 'corrotta' }, { sessionId: 'v1', motivo: 'vuota' }, { sessionId: 'v2', motivo: 'vuota' }, { sessionId: 'l1', motivo: 'lettura-fallita', dettaglio: 'EACCES' }], ultimaLettura: { ripristinate: 10, totali: 14 } },
+  });
+  assert.deepEqual(esito.sessioniPersistenza.perMotivo, { corrotta: 1, vuota: 2, 'lettura-fallita': 1 });
+  assert.equal(esito.sessioniPersistenza.scartate.length, 4);
+  assert.match(esito.sessioniPersistenza.dettaglio, /10 ripristinate, 4 scartate su 14: 1 corrotta, 2 vuota, 1 lettura-fallita/);
+  const pulito = await diagnosi({ chiaveConfigurata: true, eseguiComandoSandboxatoFn, spawnSyncFn, sessioniPersistenza: { corrotte: [], ultimaLettura: { ripristinate: 3, totali: 3 } } });
+  assert.deepEqual(pulito.sessioniPersistenza.scartate, []);
+  assert.match(pulito.sessioniPersistenza.dettaglio, /nessuna scartata/);
+});
