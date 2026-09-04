@@ -48,6 +48,32 @@ import { randomUUID } from 'node:crypto';
  */
 export const SCHEDE_MASSIME_PER_SESSIONE = 8;
 
+/*
+ * ⛔⛔ Quanto vive una scheda DIMENTICATA — 24 ore dall'ultimo aggancio.
+ *
+ * Il registro delle PTY ha gia' il suo reaper, ma chiude la SHELL, non la
+ * scheda: e' voluto, perche' un F5 dieci minuti dopo deve riaprire nella
+ * cartella giusta invece di prendere un 403. Il prezzo era che le schede non
+ * si dimenticavano MAI: su un server acceso per settimane e' crescita lenta,
+ * e non era misurata da nessuno.
+ *
+ * ⛔ Il tetto e' molto piu' lungo della grazia delle PTY, di proposito: dopo
+ * la scadenza una riconnessione riceve 403, quindi il numero non e' un
+ * dettaglio di implementazione ma una PROMESSA — «una scheda che non tocchi
+ * per un giorno non c'e' piu'». Lo stato dell'arte dice esattamente questo:
+ * la scadenza si applica lato SERVER, con una politica di durata dichiarata,
+ * e la pulizia si programma invece di affidarla al caso (una GC probabilistica
+ * puo' non passare mai). Ricerca del 05/09/2026:
+ * cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html ·
+ * modelcontextprotocol.io/seps/2567-sessionless-mcp
+ *
+ * ⛔ E una scheda tolta in SILENZIO sarebbe il difetto peggiore di quello che
+ * cura: `reap()` torna chi ha tolto e perche', e `misura()` dice quante ne
+ * esistono adesso — un problema di dimensionamento che nessuno puo' vedere
+ * non e' un problema risolto.
+ */
+export const ORE_PRIMA_DI_DIMENTICARE_UNA_SCHEDA = 24;
+
 /**
  * Registro delle schede terminale.
  *
@@ -63,6 +89,7 @@ export function creaRegistroSchedeTerminale({
   statoPtyFn = () => null,
   cartellaStandaloneLegacy = null,
   schedeMassimePerSessione = SCHEDE_MASSIME_PER_SESSIONE,
+  orePrimaDiDimenticare = ORE_PRIMA_DI_DIMENTICARE_UNA_SCHEDA,
   generaId = randomUUID,
   clock = () => new Date(),
 } = {}) {
@@ -104,6 +131,7 @@ export function creaRegistroSchedeTerminale({
       sessionId,
       cartella,
       creatoAlle: clock().toISOString(),
+      ultimoAggancioMs: clock().getTime(),
       origine: 'prima-scheda',
     };
     schede.set(sessionId, voce);
@@ -142,6 +170,7 @@ export function creaRegistroSchedeTerminale({
         sessionId,
         cartella,
         creatoAlle: clock().toISOString(),
+        ultimoAggancioMs: clock().getTime(),
         origine: 'rotta',
       };
       schede.set(terminalId, voce);
@@ -206,7 +235,12 @@ export function creaRegistroSchedeTerminale({
     risolviPerConnessione(id) {
       if (typeof id !== 'string' || id === '') return null;
       const registrata = schede.get(id);
-      if (registrata) return registrata;
+      if (registrata) {
+        // ⛔ «Ultimo aggancio», non «ultima creazione»: e' l'uso che tiene viva
+        // una scheda, ed e' l'unico momento in cui qualcuno la nomina davvero.
+        registrata.ultimoAggancioMs = clock().getTime();
+        return registrata;
+      }
       const cartellaSessione = cartellaDiSessione(id);
       if (typeof cartellaSessione === 'string' && cartellaSessione !== '') {
         return registraPrimaScheda(id, cartellaSessione);
@@ -220,12 +254,56 @@ export function creaRegistroSchedeTerminale({
           sessionId: null,
           cartella: cartellaStandaloneLegacy,
           creatoAlle: clock().toISOString(),
+        ultimoAggancioMs: clock().getTime(),
           origine: 'standalone-legacy',
         };
         schede.set(id, voce);
         return voce;
       }
       return null;
+    },
+
+    /**
+     * ⭐⭐⭐ Dimentica le schede che nessuno tocca da `orePrimaDiDimenticare`.
+     *
+     * ⛔ Una scheda si toglie SOLO se la sua shell e' gia' morta: finche' una
+     * PTY e' viva la scheda serve, per lunga che sia l'attesa — buttarla
+     * lascerebbe un processo vivo senza piu' nessuno che possa raggiungerlo,
+     * che e' esattamente la perdita che questa funzione dovrebbe curare.
+     *
+     * ⛔ Torna CHI ha tolto e PERCHE': una scheda sparita in silenzio sarebbe
+     * peggio del problema, perche' la prossima riconnessione riceve 403 e
+     * nessuno saprebbe dire da dove viene.
+     */
+    dimenticaLeVecchie({ adesso = clock().getTime() } = {}) {
+      const limite = orePrimaDiDimenticare * 60 * 60 * 1000;
+      const tolte = [];
+      for (const [terminalId, voce] of [...schede]) {
+        const ferma = adesso - (voce.ultimoAggancioMs ?? 0);
+        if (ferma < limite) continue;
+        const pty = statoPtyFn(terminalId);
+        if (pty && pty.viva) continue;
+        schede.delete(terminalId);
+        tolte.push({ terminalId, sessionId: voce.sessionId, origine: voce.origine, fermaDaMs: ferma });
+      }
+      return { tolte, restano: schede.size };
+    },
+
+    /**
+     * Quante schede esistono adesso, e da quanto tace la piu' vecchia.
+     * ⛔ Serve a vedere un problema di dimensionamento PRIMA che diventi una
+     * perdita: un numero che nessuno puo' leggere non e' una garanzia.
+     */
+    misura({ adesso = clock().getTime() } = {}) {
+      let piuVecchiaMs = null;
+      let conShellViva = 0;
+      for (const [terminalId, voce] of schede) {
+        const ferma = adesso - (voce.ultimoAggancioMs ?? 0);
+        if (piuVecchiaMs === null || ferma > piuVecchiaMs) piuVecchiaMs = ferma;
+        const pty = statoPtyFn(terminalId);
+        if (pty && pty.viva) conShellViva += 1;
+      }
+      return { schede: schede.size, conShellViva, piuVecchiaFermaDaMs: piuVecchiaMs, orePrimaDiDimenticare };
     },
 
     /** ⛔ Solo per i test e per lo shutdown — mai per decidere un permesso. */
