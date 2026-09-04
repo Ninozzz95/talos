@@ -104,8 +104,40 @@
 | C29 | **Dove vivono i file** scritto in piccolo sotto ogni elenco: è ciò che rende l'app ispezionabile. |
 | C30 | **La portata di una modifica è dichiarata in fondo alla pagina** («vale dalle sessioni nuove»). |
 
-## D-H — non ancora chieste
+## D · IMPOSTAZIONI — decisa il 04/09
 
-Restano **D** (impostazioni), **E** (permessi e sicurezza), **F** (nuova sessione e
-workspace), **G** (viste della sessione), **H** (doctor, errori, primo avvio, voce
-dell'interfaccia). Si chiedono nell'interfaccia, a gruppi, come le prime tre.
+| # | Decisione |
+|---|---|
+| D1 | Finestra con **navigazione a sinistra**, non più schede in alto. |
+| D2 | **Dieci sezioni in due gruppi**: comportamento · infrastruttura. |
+| D3 | **Ricerca in cima alla navigazione**: con dieci sezioni si cerca, non si naviga. |
+| D4 | Sotto-sezioni dove servono, **mai oltre due livelli**. |
+| D5 | **Esporta, importa e ripristina**, tutte e tre. |
+| D6 | Ogni impostazione dichiara **sulla riga** quando morde (subito o dalla sessione nuova). |
+| D7 | **Un modello ausiliario per mestiere** (visione, compattazione, titoli, approvazione). ⛔ Precisazione dell'owner: **di default il modello del composer**, e ognuno impostabile a parte. Questo assorbe anche D9 («riporta tutto al principale»): il principale *è* il default. |
+| D8 | Il valore corrente **in monospazio**. |
+| D10 | **Pannello delle scorciatoie** con ricerca, raggruppate per area. |
+| D11 | Le scorciatoie **si riassegnano cliccandole**, con «ripristina tutte». |
+| D12 | **Ctrl+/** apre il pannello delle scorciatoie. |
+| D13 | **Sicurezza è una sezione a parte** dai permessi di sessione: quelli valgono per la sessione, questa vale sempre. |
+| D14 | Timeout dell'approvazione **configurabile, con un valore predefinito** (loro: 300 s). Oggi da noi una richiesta può restare appesa. |
+| D15 | **Redazione dei segreti accesa di default**: chiavi e token oscurati prima che entrino nel contesto. Non ce l'abbiamo. |
+| D16 | **Elenco dei comandi permessi per progetto**, non globale. |
+| D17 | Indirizzi privati: **chiedi ogni volta**. ⚠️ *Più severo del mio consiglio* (dicevo spenti di default): nessun default silenzioso, la prima chiamata apre una richiesta di permesso. |
+| D18 | **Checkpoint dei file come opzione spenta** (proposta P-11; il nostro +1 è coprire anche `shell`). |
+| D19 | Sezione **Provider con pallino di salute e ultima verifica**. |
+| D20 | Le chiavi **mai in chiaro**: solo «impostata il …» e «rimuovi». |
+| D21 | **Sezione Costi**, sì. |
+| D22 | Consumo **per giorno e per modello**, dai dati che già registriamo. |
+| D23 | Aspetto: **tutte e quattro** le voci (tema chiaro/scuro · densità compatta o comoda · dimensione del testo · movimento ridotto). ⛔ Aggiunta dell'owner: **più i temi che l'app ha già**, «ma meno confusionario e coerente» — quindi i temi esistenti si riordinano, non si buttano né si moltiplicano. |
+| D26 | Sezione **Memoria e contesto con la ripartizione**: quanto della finestra prendono attrezzi, istruzioni e memoria prima che tu scriva. |
+| D27 | Le chat **si archiviano** oltre a potersi eliminare. |
+| D28 | **Profili: dopo**, riga a sé. |
+| D29 | Il Doctor sta **dentro le impostazioni**. ⚠️ *Contro il mio consiglio* (dicevo voce di sidebar): pesa il tetto di 5-7 voci deciso in A2. |
+| D30 | **Informazioni** con versione, cartelle, licenze e **«apri la cartella dei dati»**. |
+
+## E-H — non ancora chieste
+
+Restano **E** (permessi e sicurezza), **F** (nuova sessione e workspace), **G** (viste
+della sessione), **H** (doctor, errori, primo avvio, voce dell'interfaccia). Si
+chiedono nell'interfaccia, a gruppi, come le prime quattro.
