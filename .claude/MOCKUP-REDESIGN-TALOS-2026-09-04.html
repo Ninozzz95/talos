@@ -1,0 +1,1390 @@
+<title>Plancia TALOS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+/* ============================================================
+   PLANCIA TALOS — mockup di redesign, 04/09/2026
+   Costruito SOLO sulle 240 decisioni in DECISIONI-REDESIGN-TALOS.
+   Token a tre livelli: primitivi -> semantici -> di componente.
+   ============================================================ */
+
+/* --- livello 1: primitivi. Mai usati nei componenti. --- */
+:root {
+  --grafite-900:#0E1114; --grafite-850:#12161A; --grafite-800:#171C21;
+  --grafite-700:#1F252B; --grafite-600:#2A323A; --grafite-500:#3A454F;
+  --grafite-300:#697885; --grafite-200:#93A0AB; --grafite-100:#C7D0D7;
+  --grafite-050:#E6EAEE;
+  --oro-400:#E8B04B; --oro-600:#A8792A; --oro-900:#3A2C10;
+  --verde-400:#4FA96B; --verde-900:#122A1B;
+  --azzurro-400:#6E9CC4; --azzurro-900:#132530;
+  --arancio-400:#E07A3C; --arancio-900:#331A0C;
+  --rosso-400:#D25A5A; --rosso-900:#2E1414;
+
+  /* --- livello 2: semantici. Nominano l'INTENTO, mai il valore. --- */
+  --fondo:var(--grafite-900);
+  --fondo-alzato:var(--grafite-850);
+  --fondo-incavo:#0A0D0F;
+  --fondo-riga-attiva:var(--grafite-800);
+  --filo:var(--grafite-700);
+  --filo-forte:var(--grafite-600);
+  --testo:var(--grafite-050);
+  --testo-secondo:var(--grafite-200);
+  --testo-fioco:var(--grafite-300);
+  --azione:var(--oro-400);
+  --azione-fondo:var(--oro-900);
+  --azione-filo:var(--oro-600);
+  --stato-ok:var(--verde-400);        --stato-ok-fondo:var(--verde-900);
+  --stato-nota:var(--azzurro-400);    --stato-nota-fondo:var(--azzurro-900);
+  --stato-avviso:var(--arancio-400);  --stato-avviso-fondo:var(--arancio-900);
+  --stato-guasto:var(--rosso-400);    --stato-guasto-fondo:var(--rosso-900);
+
+  /* Il token che nessun altro ha: la PROVENIENZA del numero.
+     Una misura e una stima non si distinguono per disciplina di chi scrive
+     l'interfaccia, ma per costruzione. */
+  --misura-misurata:var(--grafite-050);
+  --misura-stimata:var(--grafite-200);
+
+  /* --- livello 3: di componente. --- */
+  --riga-h:30px;          /* densita' compatta: Linear sta a 36, noi a 30/38 */
+  --riga-pad:8px;
+  --spina-w:34px;
+  --sidebar-w:268px;      /* decisione A9: 260-280 */
+  --rail-w:322px;
+  --raggio:5px;
+  --ombra-alzata:0 1px 0 rgba(255,255,255,.03), 0 8px 24px rgba(0,0,0,.45);
+
+  color-scheme:dark;
+  --passo:1;
+}
+
+/* Densita' comoda (decisione D23/D24: due valori, non tre) */
+:root[data-densita="comoda"]{ --riga-h:38px; --riga-pad:12px; }
+
+/* --- Tema chiaro. Il mockup e' dark-first: il tema chiaro RIDEFINISCE
+       solo i token semantici, e nessun componente lo sa. --- */
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    color-scheme:light;
+    --fondo:#F4F5F6; --fondo-alzato:#FFFFFF; --fondo-incavo:#E9EBED;
+    --fondo-riga-attiva:#EDEFF1;
+    --filo:#DCE0E4; --filo-forte:#C3CAD1;
+    --testo:#151A1F; --testo-secondo:#4E5A65; --testo-fioco:#78848F;
+    --azione:#9A6B12; --azione-fondo:#FBF0D9; --azione-filo:#D8B463;
+    --stato-ok:#1F7A45; --stato-ok-fondo:#E2F2E8;
+    --stato-nota:#2A6591; --stato-nota-fondo:#E3EDF5;
+    --stato-avviso:#A9531B; --stato-avviso-fondo:#FAEADF;
+    --stato-guasto:#A83232; --stato-guasto-fondo:#F8E4E4;
+    --misura-misurata:#151A1F; --misura-stimata:#4E5A65;
+    --ombra-alzata:0 1px 0 rgba(255,255,255,.7), 0 6px 18px rgba(20,28,36,.10);
+  }
+}
+:root[data-theme="light"]{
+  color-scheme:light;
+  --fondo:#F4F5F6; --fondo-alzato:#FFFFFF; --fondo-incavo:#E9EBED;
+  --fondo-riga-attiva:#EDEFF1;
+  --filo:#DCE0E4; --filo-forte:#C3CAD1;
+  --testo:#151A1F; --testo-secondo:#4E5A65; --testo-fioco:#78848F;
+  --azione:#9A6B12; --azione-fondo:#FBF0D9; --azione-filo:#D8B463;
+  --stato-ok:#1F7A45; --stato-ok-fondo:#E2F2E8;
+  --stato-nota:#2A6591; --stato-nota-fondo:#E3EDF5;
+  --stato-avviso:#A9531B; --stato-avviso-fondo:#FAEADF;
+  --stato-guasto:#A83232; --stato-guasto-fondo:#F8E4E4;
+  --misura-misurata:#151A1F; --misura-stimata:#4E5A65;
+  --ombra-alzata:0 1px 0 rgba(255,255,255,.7), 0 6px 18px rgba(20,28,36,.10);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--fondo); color:var(--testo);
+  font-family:"Archivo","Segoe UI",system-ui,sans-serif;
+  font-size:13px; line-height:1.45;
+  font-variant-numeric:tabular-nums;
+}
+h1,h2,h3{margin:0; text-wrap:balance; font-weight:600; letter-spacing:-.01em}
+button{font:inherit; color:inherit; background:none; border:none; cursor:pointer}
+:focus-visible{outline:2px solid var(--azione); outline-offset:2px; border-radius:3px}
+[hidden]{display:none !important}
+
+/* Etichette: Archivo stretto, maiuscolo, SOLO per le sezioni (decisione H23) */
+.etichetta{
+  font-stretch:78%; font-size:10.5px; font-weight:600;
+  letter-spacing:.09em; text-transform:uppercase; color:var(--testo-fioco);
+}
+/* Ogni valore in monospazio (decisione D8) */
+.val{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:12px}
+.val--misurata{color:var(--misura-misurata)}
+/* Una stima si riconosce dalla FORMA, non solo dal colore: tilde + sottolineatura punteggiata */
+.val--stima{color:var(--misura-stimata); border-bottom:1px dotted var(--filo-forte)}
+.val--stima::before{content:"~"}
+
+/* ====================== REGIA DEL MOCKUP ====================== */
+.regia{
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  padding:8px 14px; background:var(--fondo-incavo);
+  border-bottom:1px solid var(--filo);
+}
+.regia__marchio{display:flex; align-items:center; gap:8px; margin-right:4px}
+.regia__punto{width:9px; height:9px; background:var(--azione); border-radius:2px; transform:rotate(45deg)}
+.regia__titolo{font-stretch:112%; font-weight:700; font-size:12px; letter-spacing:.02em}
+.regia__nota{color:var(--testo-fioco); font-size:11px}
+.gruppo{display:flex; align-items:center; gap:6px}
+.segmenti{display:flex; background:var(--fondo-alzato); border:1px solid var(--filo); border-radius:var(--raggio); overflow:hidden}
+.segmenti button{padding:3px 9px; font-size:11.5px; color:var(--testo-secondo)}
+.segmenti button[aria-pressed="true"]{background:var(--azione-fondo); color:var(--azione); font-weight:600}
+.regia .etichetta{margin-right:2px}
+
+/* ====================== GUSCIO ====================== */
+.guscio{
+  display:grid; grid-template-columns:var(--sidebar-w) minmax(0,1fr) var(--rail-w);
+  height:calc(100vh - 43px); min-height:620px;
+}
+:root[data-sidebar="icone"] .guscio{grid-template-columns:56px minmax(0,1fr) var(--rail-w)}
+@media (max-width:1180px){ .guscio{grid-template-columns:var(--sidebar-w) minmax(0,1fr)} .rail{display:none} }
+@media (max-width:820px){ .guscio{grid-template-columns:minmax(0,1fr)} .sidebar{display:none} }
+
+/* ---------- SIDEBAR: tre blocchi (A1), max 5-7 voci (A2) ---------- */
+.sidebar{
+  background:var(--fondo-incavo); border-right:1px solid var(--filo);
+  display:flex; flex-direction:column; overflow:hidden;
+}
+.sidebar__testa{display:flex; align-items:center; gap:9px; padding:12px 12px 10px}
+.logo{width:22px; height:22px; border:1.5px solid var(--azione); border-radius:4px; display:grid; place-items:center; flex:none}
+.logo span{width:7px; height:7px; background:var(--azione); border-radius:1px; transform:rotate(45deg)}
+.sidebar__nome{font-stretch:112%; font-weight:700; letter-spacing:.03em; font-size:13px}
+.blocco{padding:6px 8px}
+.blocco + .blocco{border-top:1px solid var(--filo)}
+.blocco > .etichetta{display:block; padding:6px 6px 4px}
+.voce{
+  display:flex; align-items:center; gap:9px; width:100%;
+  height:var(--riga-h); padding:0 8px; border-radius:var(--raggio);
+  color:var(--testo-secondo); text-align:left;
+}
+.voce:hover{background:var(--fondo-riga-attiva); color:var(--testo)}
+.voce[aria-current="page"]{background:var(--fondo-riga-attiva); color:var(--testo); font-weight:600}
+.voce[aria-current="page"] .voce__icona{color:var(--azione)}
+.voce__icona{width:15px; flex:none; display:grid; place-items:center; color:var(--testo-fioco)}
+.voce__icona svg{width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:1.5}
+.voce__testo{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.voce__tasto{
+  font-family:"IBM Plex Mono",monospace; font-size:10px; color:var(--testo-fioco);
+  border:1px solid var(--filo); border-radius:3px; padding:1px 4px;
+}
+.voce__conto{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--testo-fioco)}
+.sessioni{flex:1; overflow-y:auto; padding-bottom:8px}
+.sessione{display:flex; align-items:center; gap:8px; width:100%; height:var(--riga-h); padding:0 8px; border-radius:var(--raggio); color:var(--testo-secondo); text-align:left}
+.sessione:hover{background:var(--fondo-riga-attiva)}
+.sessione[aria-current="true"]{background:var(--fondo-riga-attiva); color:var(--testo)}
+.puntino{width:6px; height:6px; border-radius:50%; flex:none; background:var(--filo-forte)}
+.puntino--lavora{background:var(--azione); box-shadow:0 0 0 3px var(--azione-fondo)}
+.puntino--attesa{background:var(--stato-avviso); box-shadow:0 0 0 3px var(--stato-avviso-fondo)}
+.sessione__titolo{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12.5px}
+.sidebar__piede{border-top:1px solid var(--filo); padding:6px 8px}
+:root[data-sidebar="icone"] .voce__testo,
+:root[data-sidebar="icone"] .voce__tasto,
+:root[data-sidebar="icone"] .voce__conto,
+:root[data-sidebar="icone"] .sessione__titolo,
+:root[data-sidebar="icone"] .sidebar__nome,
+:root[data-sidebar="icone"] .blocco > .etichetta{display:none}
+:root[data-sidebar="icone"] .voce,
+:root[data-sidebar="icone"] .sessione{justify-content:center; padding:0}
+
+/* ---------- CENTRO ---------- */
+.centro{display:flex; flex-direction:column; min-width:0; overflow:hidden}
+.testata{
+  display:flex; align-items:center; gap:10px; padding:0 14px;
+  height:44px; border-bottom:1px solid var(--filo); flex:none;
+}
+.testata h1{font-size:14px; font-stretch:105%}
+.testata__percorso{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--testo-fioco)}
+.crescita{flex:1}
+.schede{display:flex; gap:2px}
+.scheda{
+  display:flex; align-items:center; gap:6px; padding:5px 10px; border-radius:var(--raggio);
+  color:var(--testo-secondo); font-size:12.5px;
+}
+.scheda:hover{background:var(--fondo-riga-attiva)}
+.scheda[aria-selected="true"]{background:var(--fondo-riga-attiva); color:var(--testo); font-weight:600; box-shadow:inset 0 -2px 0 var(--azione)}
+.scheda__conto{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--testo-fioco)}
+
+.pillola{
+  display:inline-flex; align-items:center; gap:6px; height:24px; padding:0 8px;
+  border:1px solid var(--filo); border-radius:var(--raggio);
+  font-size:11.5px; color:var(--testo-secondo); background:var(--fondo-alzato);
+}
+.pillola--ok{border-color:color-mix(in srgb,var(--stato-ok) 45%,transparent); color:var(--stato-ok); background:var(--stato-ok-fondo)}
+.pillola--nota{border-color:color-mix(in srgb,var(--stato-nota) 45%,transparent); color:var(--stato-nota); background:var(--stato-nota-fondo)}
+.pillola--avviso{border-color:color-mix(in srgb,var(--stato-avviso) 45%,transparent); color:var(--stato-avviso); background:var(--stato-avviso-fondo)}
+.pillola--guasto{border-color:color-mix(in srgb,var(--stato-guasto) 45%,transparent); color:var(--stato-guasto); background:var(--stato-guasto-fondo)}
+.pillola--azione{border-color:var(--azione-filo); color:var(--azione); background:var(--azione-fondo)}
+.pillola__tasto{font-family:"IBM Plex Mono",monospace; font-size:10px; opacity:.75}
+
+/* ---------- LA CONVERSAZIONE E LA SPINA DEI GIRI ---------- */
+.conversazione{flex:1; overflow-y:auto; padding:0 0 4px}
+.giro{display:grid; grid-template-columns:var(--spina-w) minmax(0,1fr); align-items:stretch}
+.spina{position:relative; display:flex; flex-direction:column; align-items:center; padding-top:16px; gap:3px}
+.spina::before{content:""; position:absolute; top:0; bottom:0; left:calc(50% - .5px); width:1px; background:var(--filo)}
+.spina__n{
+  position:relative; font-family:"IBM Plex Mono",monospace; font-size:10px;
+  color:var(--testo-fioco); background:var(--fondo); padding:1px 0; z-index:1;
+}
+/* La tacca e' uno STRUMENTO: la sua larghezza e' il costo del giro,
+   il suo colore l'esito. Non e' una barra d'accento decorativa. */
+.tacca{position:relative; height:3px; border-radius:1px; background:var(--stato-ok); z-index:1}
+.tacca--corrente{background:var(--azione)}
+.tacca--nota{background:var(--stato-nota)}
+.tacca--avviso{background:var(--stato-avviso)}
+
+.bolla{padding:14px 18px 16px 6px; min-width:0}
+.bolla__chi{display:flex; align-items:center; gap:8px; margin-bottom:5px}
+.chi{font-stretch:78%; font-size:10.5px; font-weight:700; letter-spacing:.09em; text-transform:uppercase}
+.chi--tu{color:var(--testo-secondo)}
+.chi--talos{color:var(--azione)}
+.bolla__ora{font-family:"IBM Plex Mono",monospace; font-size:10.5px; color:var(--testo-fioco)}
+.bolla p{margin:0 0 8px; max-width:66ch; color:var(--testo)}
+.bolla p:last-child{margin-bottom:0}
+
+/* Una NOTA di sistema non usa la faccia dell'assistente (decisione H15) */
+.nota-sistema{
+  display:flex; gap:9px; align-items:flex-start; margin:2px 0 10px;
+  padding:9px 11px; border:1px solid var(--filo); border-left:2px solid var(--stato-nota);
+  border-radius:var(--raggio); background:var(--fondo-alzato); max-width:66ch;
+}
+.nota-sistema__corpo{min-width:0}
+.nota-sistema strong{font-weight:600}
+.nota-sistema p{margin:2px 0 0; color:var(--testo-secondo); font-size:12.5px}
+
+/* Attrezzi: in linea mentre lavora, raccolti a fine giro (decisione B19) */
+.attrezzi{border:1px solid var(--filo); border-radius:var(--raggio); background:var(--fondo-alzato); max-width:66ch; margin-bottom:9px}
+.attrezzi__testa{display:flex; align-items:center; gap:9px; padding:0 10px; height:32px; width:100%; text-align:left}
+.attrezzi__testa:hover{background:var(--fondo-riga-attiva)}
+.freccia{width:9px; height:9px; border-right:1.5px solid var(--testo-fioco); border-bottom:1.5px solid var(--testo-fioco); transform:rotate(-45deg); transition:transform .18s ease; flex:none; margin-left:2px}
+[aria-expanded="true"] .freccia{transform:rotate(45deg)}
+.attrezzi__corpo{border-top:1px solid var(--filo); padding:4px}
+.attrezzo{display:flex; align-items:center; gap:9px; height:var(--riga-h); padding:0 6px; border-radius:4px}
+.attrezzo:hover{background:var(--fondo-riga-attiva)}
+.attrezzo__nome{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.attrezzo__dett{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--testo-fioco); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:40%}
+.esito{width:5px; height:5px; border-radius:50%; flex:none; background:var(--stato-ok)}
+.esito--guasto{background:var(--stato-guasto)}
+
+/* Un attrezzo fallito: motivo in italiano e «riprova» (decisione B20) */
+.errore-attrezzo{
+  display:flex; align-items:flex-start; gap:9px; padding:9px 11px; margin:4px 6px;
+  border:1px solid color-mix(in srgb,var(--stato-guasto) 40%,transparent);
+  background:var(--stato-guasto-fondo); border-radius:var(--raggio);
+}
+.errore-attrezzo__corpo{flex:1; min-width:0}
+.errore-attrezzo__corpo p{margin:2px 0 0; color:var(--testo-secondo); font-size:12.5px}
+.codice{font-family:"IBM Plex Mono",monospace; font-size:10.5px; color:var(--testo-fioco); border:1px solid var(--filo); border-radius:3px; padding:1px 5px}
+
+/* Ricevuta firmata: nostro differenziatore, oggi invisibile (decisione E14) */
+.ricevuta{
+  display:flex; align-items:center; gap:9px; max-width:66ch; margin-bottom:9px;
+  padding:8px 11px; border:1px dashed var(--azione-filo); border-radius:var(--raggio);
+  background:var(--azione-fondo);
+}
+.ricevuta__testo{flex:1; font-size:12.5px; color:var(--testo)}
+.impronta{font-family:"IBM Plex Mono",monospace; font-size:10.5px; color:var(--azione)}
+
+/* File toccati in fondo al messaggio (decisione B22) */
+.file-toccati{max-width:66ch; border:1px solid var(--filo); border-radius:var(--raggio); overflow:hidden}
+.file-toccati__testa{padding:6px 10px; background:var(--fondo-alzato); border-bottom:1px solid var(--filo)}
+.file-riga{display:flex; align-items:center; gap:9px; height:var(--riga-h); padding:0 10px}
+.file-riga + .file-riga{border-top:1px solid var(--filo)}
+.file-riga__nome{flex:1; font-family:"IBM Plex Mono",monospace; font-size:11.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.diff-piu{color:var(--stato-ok); font-family:"IBM Plex Mono",monospace; font-size:11px}
+.diff-meno{color:var(--stato-guasto); font-family:"IBM Plex Mono",monospace; font-size:11px}
+.mini{font-size:11.5px; color:var(--testo-secondo); padding:3px 7px; border:1px solid var(--filo); border-radius:4px}
+.mini:hover{background:var(--fondo-riga-attiva); color:var(--testo)}
+
+/* Card di approvazione con la differenza prima/dopo (decisione E10) */
+.approvazione{
+  max-width:66ch; margin:4px 0 12px; border:1px solid var(--azione-filo);
+  border-radius:var(--raggio); background:var(--fondo-alzato); box-shadow:var(--ombra-alzata);
+}
+.approvazione__testa{display:flex; align-items:center; gap:9px; padding:10px 12px; border-bottom:1px solid var(--filo)}
+.approvazione__perche{padding:9px 12px; color:var(--testo-secondo); font-size:12.5px; border-bottom:1px solid var(--filo)}
+.diff{font-family:"IBM Plex Mono",monospace; font-size:11.5px; line-height:1.6; overflow-x:auto; padding:8px 0}
+.diff div{padding:0 12px; white-space:pre}
+.diff .via{background:var(--stato-guasto-fondo); color:var(--stato-guasto)}
+.diff .arriva{background:var(--stato-ok-fondo); color:var(--stato-ok)}
+.approvazione__piede{display:flex; align-items:center; gap:8px; padding:10px 12px; border-top:1px solid var(--filo)}
+.bottone{
+  height:28px; padding:0 12px; border-radius:var(--raggio); font-size:12.5px; font-weight:600;
+  border:1px solid var(--filo-forte); background:var(--fondo-alzato); color:var(--testo);
+}
+.bottone:hover{border-color:var(--testo-fioco)}
+.bottone--primo{background:var(--azione); border-color:var(--azione); color:#151005}
+.bottone--primo:hover{filter:brightness(1.08)}
+.bottone--quieto{border-color:transparent; color:var(--testo-secondo)}
+.bottone--quieto:hover{background:var(--fondo-riga-attiva); color:var(--testo)}
+
+/* ---------- STRISCIA DI STATO + COMPOSITORE ---------- */
+.piede-chat{flex:none; border-top:1px solid var(--filo); background:var(--fondo)}
+.striscia{
+  display:flex; align-items:center; gap:10px; padding:7px 14px;
+  border-bottom:1px solid var(--filo); background:var(--fondo-alzato);
+}
+.battito{width:7px; height:7px; border-radius:50%; background:var(--azione); flex:none; animation:battito 1.8s ease-in-out infinite}
+@keyframes battito{0%,100%{opacity:.35} 50%{opacity:1}}
+.striscia__cosa{flex:1; font-size:12.5px; color:var(--testo); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.striscia__num{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--testo-fioco)}
+.coda-riga{display:flex; align-items:center; gap:8px; padding:6px 14px; border-bottom:1px solid var(--filo); font-size:12px; color:var(--testo-secondo)}
+.compositore{padding:10px 14px 12px}
+.campo{
+  border:1px solid var(--filo-forte); border-radius:8px; background:var(--fondo-alzato);
+  padding:10px 12px; min-height:64px; color:var(--testo-fioco); font-size:13px;
+}
+.campo:focus-within{border-color:var(--azione)}
+.compositore__barra{display:flex; align-items:center; gap:8px; margin-top:9px; flex-wrap:wrap}
+.piu{
+  width:28px; height:28px; border:1px solid var(--filo-forte); border-radius:var(--raggio);
+  display:grid; place-items:center; color:var(--testo-secondo); font-size:16px; line-height:1;
+}
+.piu:hover{border-color:var(--azione); color:var(--azione)}
+.invia{margin-left:auto}
+
+/* ---------- COLONNA DI DESTRA ---------- */
+.rail{background:var(--fondo-incavo); border-left:1px solid var(--filo); display:flex; flex-direction:column; overflow:hidden}
+.rail__schede{display:flex; padding:6px 8px; gap:2px; border-bottom:1px solid var(--filo)}
+.rail__schede .scheda{font-size:12px; padding:4px 8px}
+.rail__corpo{flex:1; overflow-y:auto; padding:10px}
+.gruppo-rail + .gruppo-rail{margin-top:14px}
+.gruppo-rail > .etichetta{display:block; margin-bottom:6px}
+.coppia{display:flex; align-items:center; justify-content:space-between; gap:10px; height:26px; border-bottom:1px solid var(--filo)}
+.coppia:last-child{border-bottom:none}
+.coppia__chiave{color:var(--testo-secondo); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.processo{border:1px solid var(--filo); border-radius:var(--raggio); background:var(--fondo-alzato); padding:8px 10px}
+.processo + .processo{margin-top:6px}
+.processo__cmd{font-family:"IBM Plex Mono",monospace; font-size:11.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.processo__meta{display:flex; align-items:center; gap:8px; margin-top:5px; font-size:11.5px; color:var(--testo-fioco)}
+.avviso-stallo{
+  margin-top:6px; padding:7px 9px; border-radius:4px; font-size:12px;
+  background:var(--stato-avviso-fondo); color:var(--stato-avviso);
+  border:1px solid color-mix(in srgb,var(--stato-avviso) 35%,transparent);
+}
+
+/* ---------- PAGINE ---------- */
+.pagina{flex:1; overflow-y:auto; padding:16px 18px 24px}
+.pagina__testa{display:flex; align-items:flex-end; gap:12px; margin-bottom:4px; flex-wrap:wrap}
+.pagina__testa h2{font-size:19px; font-stretch:108%}
+.pagina__sotto{color:var(--testo-secondo); max-width:70ch; margin:0 0 14px}
+.tavola-guscio{overflow-x:auto; border:1px solid var(--filo); border-radius:var(--raggio); background:var(--fondo-alzato)}
+table{border-collapse:collapse; width:100%; min-width:860px}
+th{
+  text-align:left; font-stretch:78%; font-size:10.5px; font-weight:600; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--testo-fioco); padding:8px 10px;
+  border-bottom:1px solid var(--filo); white-space:nowrap; position:sticky; top:0; background:var(--fondo-alzato);
+}
+th.num, td.num{text-align:right}
+td{padding:0 10px; height:var(--riga-h); border-bottom:1px solid var(--filo); white-space:nowrap}
+tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:var(--fondo-riga-attiva)}
+td.titolo{width:34%; white-space:normal}
+
+.filtri{display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:10px}
+.pastiglia{
+  height:24px; padding:0 10px; border-radius:12px; border:1px solid var(--filo);
+  font-size:11.5px; color:var(--testo-secondo); background:var(--fondo-alzato);
+}
+.pastiglia[aria-pressed="true"]{border-color:var(--azione-filo); background:var(--azione-fondo); color:var(--azione); font-weight:600}
+
+/* Capability: elenco + dettaglio (decisione C9) */
+.due-colonne{display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:14px; align-items:start}
+@media (max-width:1000px){ .due-colonne{grid-template-columns:minmax(0,1fr)} }
+.elenco{border:1px solid var(--filo); border-radius:var(--raggio); background:var(--fondo-alzato); overflow:hidden}
+.elenco__riga{display:flex; align-items:center; gap:10px; width:100%; height:calc(var(--riga-h) + 6px); padding:0 10px; text-align:left}
+.elenco__riga + .elenco__riga{border-top:1px solid var(--filo)}
+.elenco__riga:hover{background:var(--fondo-riga-attiva)}
+.elenco__riga[aria-selected="true"]{background:var(--fondo-riga-attiva); box-shadow:inset 2px 0 0 var(--azione)}
+.elenco__nome{flex:1; min-width:0}
+.elenco__nome b{display:block; font-weight:600; font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+/* Nome e descrizione su DUE righe: oggi sono incollati (decisione E6) */
+.elenco__nome span{display:block; color:var(--testo-fioco); font-size:11.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.pannello{border:1px solid var(--filo); border-radius:var(--raggio); background:var(--fondo-alzato); padding:12px; position:sticky; top:0}
+.pannello h3{font-size:13.5px; margin-bottom:2px}
+.pannello__desc{color:var(--testo-secondo); font-size:12.5px; margin:0 0 10px}
+.dove-vivono{margin-top:12px; padding-top:10px; border-top:1px solid var(--filo); color:var(--testo-fioco); font-size:11px}
+.dove-vivono code{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--testo-secondo)}
+.portata{margin-top:14px; padding:9px 11px; border:1px solid var(--filo); border-radius:var(--raggio); color:var(--testo-secondo); font-size:12px; background:var(--fondo-alzato)}
+.non-fatte{margin-top:16px; padding-top:12px; border-top:1px solid var(--filo)}
+.non-fatte ul{margin:6px 0 0; padding-left:18px; color:var(--testo-fioco); font-size:12.5px; columns:2; gap:20px}
+
+/* Impostazioni: navigazione a sinistra, dieci sezioni in due gruppi (D1/D2) */
+.impostazioni{display:grid; grid-template-columns:200px minmax(0,1fr); gap:16px; align-items:start}
+@media (max-width:900px){ .impostazioni{grid-template-columns:minmax(0,1fr)} }
+.imp-nav{border:1px solid var(--filo); border-radius:var(--raggio); background:var(--fondo-alzato); padding:6px; position:sticky; top:0}
+.cerca{width:100%; height:28px; padding:0 9px; margin-bottom:6px; border:1px solid var(--filo); border-radius:4px; background:var(--fondo-incavo); color:var(--testo); font:inherit; font-size:12px}
+.cerca::placeholder{color:var(--testo-fioco)}
+.imp-riga{display:flex; align-items:center; justify-content:space-between; gap:16px; padding:11px 0; border-bottom:1px solid var(--filo)}
+.imp-riga:last-child{border-bottom:none}
+.imp-riga__testo{min-width:0}
+.imp-riga__testo b{display:block; font-weight:600; font-size:12.5px}
+.imp-riga__testo span{display:block; color:var(--testo-fioco); font-size:11.5px}
+.selettore{height:26px; padding:0 8px; border:1px solid var(--filo-forte); border-radius:4px; background:var(--fondo-incavo); color:var(--testo); font-family:"IBM Plex Mono",monospace; font-size:11.5px}
+
+/* Doctor: severita' + conteggio + rimedio (H1-H5) */
+.conteggio{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px}
+.check{display:flex; align-items:flex-start; gap:10px; padding:10px 12px; border:1px solid var(--filo); border-radius:var(--raggio); background:var(--fondo-alzato)}
+.check + .check{margin-top:6px}
+.check__stripe{width:3px; align-self:stretch; border-radius:2px; background:var(--stato-ok); flex:none}
+.check--avviso .check__stripe{background:var(--stato-avviso)}
+.check--nota .check__stripe{background:var(--stato-nota)}
+.check__corpo{flex:1; min-width:0}
+.check__corpo b{font-weight:600; font-size:12.5px}
+.check__corpo p{margin:3px 0 0; color:var(--testo-secondo); font-size:12.5px}
+.rimedio{margin-top:7px; display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+
+/* ---------- SOVRAPPOSIZIONI ---------- */
+.velo{position:fixed; inset:0; background:rgba(4,6,8,.62); display:grid; place-items:center; padding:20px; z-index:40}
+.modale{
+  width:min(880px,100%); max-height:88vh; overflow:hidden; display:flex; flex-direction:column;
+  background:var(--fondo); border:1px solid var(--filo-forte); border-radius:10px; box-shadow:var(--ombra-alzata);
+}
+.modale__testa{display:flex; align-items:center; gap:10px; padding:13px 16px; border-bottom:1px solid var(--filo)}
+.modale__testa h2{font-size:15px}
+.passi{display:flex; align-items:center; gap:8px; margin-left:6px}
+.passo{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--testo-fioco)}
+.passo[data-attivo="si"]{color:var(--azione); font-weight:600}
+.passo__n{width:17px; height:17px; border-radius:50%; border:1px solid currentColor; display:grid; place-items:center; font-family:"IBM Plex Mono",monospace; font-size:10px}
+.modale__corpo{padding:14px 16px; overflow-y:auto}
+.modale__piede{display:flex; align-items:center; gap:10px; padding:12px 16px; border-top:1px solid var(--filo)}
+.scelta-cartella{display:grid; grid-template-columns:170px minmax(0,1fr); gap:12px}
+@media (max-width:700px){ .scelta-cartella{grid-template-columns:minmax(0,1fr)} }
+.carte-permesso{display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:9px}
+.carta{padding:11px; border:1px solid var(--filo); border-radius:var(--raggio); background:var(--fondo-alzato); text-align:left}
+.carta[aria-pressed="true"]{border-color:var(--azione-filo); background:var(--azione-fondo)}
+.carta b{display:block; font-weight:600; font-size:12.5px; margin-bottom:3px}
+.carta p{margin:5px 0 0; color:var(--testo-secondo); font-size:11.5px}
+.avviso-radice{
+  display:flex; gap:9px; align-items:flex-start; margin-top:10px; padding:9px 11px;
+  border:1px solid color-mix(in srgb,var(--stato-avviso) 40%,transparent);
+  background:var(--stato-avviso-fondo); border-radius:var(--raggio); font-size:12.5px; color:var(--testo);
+}
+
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important}
+}
+</style>
+
+<div class="regia">
+  <div class="regia__marchio"><span class="regia__punto"></span><span class="regia__titolo">PLANCIA TALOS</span></div>
+  <span class="regia__nota">mockup di redesign · 240 decisioni · 04/09/2026</span>
+  <span class="crescita"></span>
+
+  <div class="gruppo"><span class="etichetta">Schermata</span>
+    <div class="segmenti" id="regiaSchermo">
+      <button data-schermo="chat" aria-pressed="true">Chat</button>
+      <button data-schermo="vuota" aria-pressed="false">Vuota</button>
+      <button data-schermo="capability" aria-pressed="false">Capability</button>
+      <button data-schermo="board" aria-pressed="false">Board</button>
+      <button data-schermo="impostazioni" aria-pressed="false">Impostazioni</button>
+      <button data-schermo="doctor" aria-pressed="false">Doctor</button>
+    </div>
+  </div>
+  <div class="gruppo"><span class="etichetta">Densità</span>
+    <div class="segmenti" id="regiaDensita">
+      <button data-densita="compatta" aria-pressed="true">Compatta</button>
+      <button data-densita="comoda" aria-pressed="false">Comoda</button>
+    </div>
+  </div>
+  <div class="gruppo"><span class="etichetta">Tema</span>
+    <div class="segmenti" id="regiaTema">
+      <button data-tema="sistema" aria-pressed="true">Sistema</button>
+      <button data-tema="dark" aria-pressed="false">Scuro</button>
+      <button data-tema="light" aria-pressed="false">Chiaro</button>
+    </div>
+  </div>
+  <div class="gruppo"><span class="etichetta">Lingua</span>
+    <div class="segmenti" id="regiaLingua">
+      <button data-lingua="sistema" aria-pressed="true">Sistema</button>
+      <button data-lingua="it" aria-pressed="false">Italiano</button>
+      <button data-lingua="en" aria-pressed="false">English</button>
+    </div>
+  </div>
+  <div class="gruppo">
+    <button class="mini" id="apriNuova">Nuova sessione</button>
+    <button class="mini" id="apriPermessi">Permessi</button>
+    <button class="mini" id="piegaSidebar">Riduci sidebar</button>
+  </div>
+</div>
+
+<div class="guscio">
+
+  <!-- ==================== SIDEBAR ==================== -->
+  <nav class="sidebar" aria-label="Navigazione principale">
+    <div class="sidebar__testa">
+      <span class="logo"><span></span></span>
+      <span class="sidebar__nome">TALOS</span>
+    </div>
+
+    <div class="blocco">
+      <span class="etichetta" data-t="azioni">Azioni</span>
+      <button class="voce" id="voceNuova">
+        <span class="voce__icona"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg></span>
+        <span class="voce__testo" data-t="nuovaSessione">Nuova sessione</span>
+        <span class="voce__tasto">Ctrl N</span>
+      </button>
+      <button class="voce">
+        <span class="voce__icona"><svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.2"/><path d="M10.2 10.2 13.5 13.5"/></svg></span>
+        <span class="voce__testo" data-t="cerca">Cerca nelle conversazioni</span>
+        <span class="voce__tasto">Ctrl K</span>
+      </button>
+    </div>
+
+    <div class="blocco">
+      <span class="etichetta" data-t="luoghi">Luoghi</span>
+      <button class="voce" data-vaia="capability">
+        <span class="voce__icona"><svg viewBox="0 0 16 16"><path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h7"/></svg></span>
+        <span class="voce__testo">Capability</span><span class="voce__conto">43</span>
+      </button>
+      <button class="voce" data-vaia="board">
+        <span class="voce__icona"><svg viewBox="0 0 16 16"><rect x="2.3" y="2.3" width="11.4" height="11.4" rx="1.6"/><path d="M2.3 6.3h11.4M6.3 6.3v7.4"/></svg></span>
+        <span class="voce__testo">Board</span><span class="voce__conto">69</span>
+      </button>
+      <button class="voce">
+        <span class="voce__icona"><svg viewBox="0 0 16 16"><path d="M3 3.2h6.2L13 6.6v6.2H3z"/><path d="M9.2 3.2v3.4H13"/></svg></span>
+        <span class="voce__testo">Libreria</span><span class="voce__conto">18</span>
+      </button>
+      <button class="voce">
+        <span class="voce__icona"><svg viewBox="0 0 16 16"><path d="M8 2.6c2.9 0 5.3 1.7 5.3 3.9 0 1.4-1 2.6-2.5 3.3v2.9L8.4 10.4H8c-2.9 0-5.3-1.7-5.3-3.9S5.1 2.6 8 2.6Z"/></svg></span>
+        <span class="voce__testo">Memoria</span><span class="voce__conto">7</span>
+      </button>
+      <button class="voce">
+        <span class="voce__icona"><svg viewBox="0 0 16 16"><rect x="2.6" y="2.6" width="10.8" height="10.8" rx="1.6"/><path d="M5.2 8.2l1.9 1.9 3.7-3.9"/></svg></span>
+        <span class="voce__testo">Attività</span><span class="voce__conto">4</span>
+      </button>
+      <button class="voce" id="altroLuoghi" aria-expanded="false">
+        <span class="voce__icona"><svg viewBox="0 0 16 16"><circle cx="4" cy="8" r="1.1"/><circle cx="8" cy="8" r="1.1"/><circle cx="12" cy="8" r="1.1"/></svg></span>
+        <span class="voce__testo" data-t="altro">Altro</span>
+      </button>
+      <div id="luoghiAltri" hidden>
+        <button class="voce"><span class="voce__icona"><svg viewBox="0 0 16 16"><path d="M3.4 3h9.2v10H3.4z"/><path d="M5.6 6h4.8M5.6 8.6h4.8"/></svg></span><span class="voce__testo">Note</span><span class="voce__conto">11</span></button>
+        <button class="voce"><span class="voce__icona"><svg viewBox="0 0 16 16"><circle cx="7.2" cy="7.2" r="4"/><path d="M10.2 10.2 13.4 13.4"/></svg></span><span class="voce__testo">Ricerca approfondita</span><span class="voce__conto">6</span></button>
+        <button class="voce"><span class="voce__icona"><svg viewBox="0 0 16 16"><path d="M4 12.2 12 4.2M6.4 3.2 3.2 6.4l2.2 2.2 3.2-3.2z"/></svg></span><span class="voce__testo">Officina attrezzi</span><span class="voce__conto">2</span></button>
+        <button class="voce"><span class="voce__icona"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.2"/><path d="M8 5.2V8l2 1.4"/></svg></span><span class="voce__testo">Automazioni</span><span class="voce__conto">3</span></button>
+      </div>
+    </div>
+
+    <div class="blocco">
+      <span class="etichetta" data-t="fissate">Fissate</span>
+      <button class="sessione"><span class="puntino"></span><span class="sessione__titolo">Redesign — 240 decisioni</span></button>
+    </div>
+
+    <div class="blocco sessioni">
+      <span class="etichetta" data-t="sessioni">Sessioni</span>
+      <button class="sessione" aria-current="true"><span class="puntino puntino--lavora"></span><span class="sessione__titolo">W1-02 registro processi</span><span class="voce__conto">7/24</span></button>
+      <button class="sessione"><span class="puntino puntino--attesa"></span><span class="sessione__titolo">Store sessioni: pulizia</span><span class="voce__conto">!</span></button>
+      <button class="sessione"><span class="puntino"></span><span class="sessione__titolo">Cancello ricerca web</span></button>
+      <button class="sessione"><span class="puntino"></span><span class="sessione__titolo">Confronto Hermes e Codex</span></button>
+      <button class="sessione"><span class="puntino"></span><span class="sessione__titolo">Sonda di rilascio GPU</span></button>
+      <button class="sessione"><span class="puntino"></span><span class="sessione__titolo">Recupero sessione b7b1b7d2</span></button>
+    </div>
+
+    <div class="sidebar__piede">
+      <button class="voce">
+        <span class="voce__icona"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.1"/><path d="M8 1.9v1.6M8 12.5v1.6M1.9 8h1.6M12.5 8h1.6M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1"/></svg></span>
+        <span class="voce__testo" data-t="impostazioni">Impostazioni</span>
+        <span class="voce__tasto">Ctrl ,</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ==================== CENTRO ==================== -->
+  <main class="centro">
+
+    <!-- ---------- CHAT AL LAVORO ---------- -->
+    <section id="schermoChat">
+      <div class="testata">
+        <h1>W1-02 registro processi</h1>
+        <span class="testata__percorso">~/Desktop/projects/AVM-harness-desktop</span>
+        <span class="crescita"></span>
+        <div class="schede" role="tablist">
+          <button class="scheda" role="tab" aria-selected="true">Chat</button>
+          <button class="scheda" role="tab" aria-selected="false">Terminale <span class="scheda__conto">2</span></button>
+          <button class="scheda" role="tab" aria-selected="false">Review <span class="scheda__conto">3</span></button>
+        </div>
+      </div>
+
+      <div class="conversazione">
+        <div class="giro">
+          <div class="spina"><span class="spina__n">1</span><span class="tacca" style="width:9px"></span></div>
+          <div class="bolla">
+            <div class="bolla__chi"><span class="chi chi--tu">Tu</span><span class="bolla__ora">18:04</span></div>
+            <p>Aggiungi la guardia di stallo al registro dei processi e falla riconoscere due casi diversi: silenzio prolungato e giri a vuoto. Non deve uccidere niente.</p>
+          </div>
+        </div>
+
+        <div class="giro">
+          <div class="spina">
+            <span class="spina__n">2</span><span class="tacca" style="width:14px"></span>
+            <span class="spina__n">3</span><span class="tacca tacca--nota" style="width:22px"></span>
+            <span class="spina__n">4</span><span class="tacca" style="width:11px"></span>
+          </div>
+          <div class="bolla">
+            <div class="bolla__chi"><span class="chi chi--talos">TALOS</span><span class="bolla__ora">18:04</span></div>
+            <p>Ho letto il registro esistente e i quattro file di prova. La guardia serve due condizioni diverse, quindi le tengo separate: il silenzio si misura sull'ultimo evento arrivato, il giro a vuoto sul confronto fra chiamate identiche.</p>
+
+            <div class="attrezzi">
+              <button class="attrezzi__testa" aria-expanded="false" data-apre="attrezziGiro2">
+                <span class="freccia"></span>
+                <span style="flex:1">7 attrezzi usati in questo giro</span>
+                <span class="val val--misurata">3,1 s</span>
+                <span class="val val--stima">1,9k token</span>
+              </button>
+              <div class="attrezzi__corpo" id="attrezziGiro2" hidden>
+                <div class="attrezzo"><span class="esito"></span><span class="attrezzo__nome">Lettura di un file</span><span class="attrezzo__dett">src/session-registry.mjs</span></div>
+                <div class="attrezzo"><span class="esito"></span><span class="attrezzo__nome">Ricerca nei file</span><span class="attrezzo__dett">guardiaDiStallo</span></div>
+                <div class="attrezzo"><span class="esito"></span><span class="attrezzo__nome">Comando nel terminale</span><span class="attrezzo__dett">node --test tests/*.test.mjs</span></div>
+                <div class="errore-attrezzo">
+                  <span class="esito esito--guasto" style="margin-top:5px"></span>
+                  <div class="errore-attrezzo__corpo">
+                    <b>Il comando non ha trovato la cartella</b>
+                    <p>«labs/electron-shell» non esiste nel percorso da cui è partito il comando. Riprova dalla radice del progetto, oppure correggi il percorso.</p>
+                    <div class="rimedio"><button class="mini">Riprova qui</button><button class="mini">Vedi dettagli tecnici</button><span class="codice">TALOS-SHELL-404</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="nota-sistema">
+              <span class="pillola pillola--nota" style="height:20px;font-size:10.5px">Nota</span>
+              <div class="nota-sistema__corpo">
+                <strong>Permesso cambiato a metà lavoro</strong>
+                <p>Da «sola lettura» a «scrittura nel workspace», deciso da te alle 18:06. I giri precedenti restano registrati col permesso di allora.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="giro">
+          <div class="spina">
+            <span class="spina__n">5</span><span class="tacca" style="width:19px"></span>
+            <span class="spina__n">6</span><span class="tacca tacca--avviso" style="width:26px"></span>
+          </div>
+          <div class="bolla">
+            <div class="bolla__chi"><span class="chi chi--talos">TALOS</span><span class="bolla__ora">18:07</span></div>
+            <p>La guardia è scritta e i test la coprono nei due versi. Prima di applicare la modifica al file vero ti mostro cosa cambia.</p>
+
+            <div class="approvazione">
+              <div class="approvazione__testa">
+                <span class="pillola pillola--azione">Chiede di scrivere</span>
+                <span class="val val--misurata" style="flex:1">src/session-registry.mjs</span>
+                <span class="diff-piu">+18</span><span class="diff-meno">−2</span>
+              </div>
+              <p class="approvazione__perche">Serve per aggiungere le soglie della guardia che hai chiesto: 60 secondi di silenzio e tre ripetizioni identiche.</p>
+              <div class="diff">
+                <div class="via">− const SOGLIE = { silenzioMs: 30_000 };</div>
+                <div class="arriva">+ export const SOGLIE_STALLO_PREDEFINITE = Object.freeze({</div>
+                <div class="arriva">+   silenzioMs: 60_000,      // stream fermo: 30-60 s è lo stato dell'arte</div>
+                <div class="arriva">+   ripetizioniPerAllarme: 3, // misurato: 65 identiche su 634 chiamate</div>
+                <div class="arriva">+ });</div>
+              </div>
+              <div class="approvazione__piede">
+                <button class="bottone bottone--primo">Consenti una volta</button>
+                <button class="bottone">Consenti per questa sessione</button>
+                <button class="bottone bottone--quieto">Nega</button>
+                <span class="crescita"></span>
+                <span class="regia__nota">Scade a fine sessione</span>
+              </div>
+            </div>
+
+            <div class="ricevuta">
+              <span class="pillola pillola--ok" style="height:20px;font-size:10.5px">Ricevuta</span>
+              <span class="ricevuta__testo">Scrittura eseguita e firmata: 18 righe aggiunte, 2 tolte, alle 18:08:12.</span>
+              <span class="impronta">a1f4…9c02</span>
+            </div>
+
+            <div class="file-toccati">
+              <div class="file-toccati__testa"><span class="etichetta">File toccati in questo giro</span></div>
+              <div class="file-riga">
+                <span class="file-riga__nome">src/session-registry.mjs</span>
+                <span class="diff-piu">+18</span><span class="diff-meno">−2</span>
+                <button class="mini">Apri</button><button class="mini">Vedi differenza</button>
+              </div>
+              <div class="file-riga">
+                <span class="file-riga__nome">tests/session-registry.test.mjs</span>
+                <span class="diff-piu">+64</span><span class="diff-meno">−0</span>
+                <button class="mini">Apri</button><button class="mini">Vedi differenza</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="giro">
+          <div class="spina"><span class="spina__n">7</span><span class="tacca tacca--corrente" style="width:16px"></span></div>
+          <div class="bolla">
+            <div class="bolla__chi"><span class="chi chi--talos">TALOS</span><span class="bolla__ora">18:09</span></div>
+            <p>Lancio la suite completa per vedere se qualcosa è regredito…</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="piede-chat">
+        <!-- Striscia di stato fissa mentre lavora (decisione B31) -->
+        <div class="striscia">
+          <span class="battito"></span>
+          <span class="striscia__cosa">Comando nel terminale · <span class="val val--misurata">node --test tests/*.test.mjs</span></span>
+          <span class="striscia__num">giro 7 · 41 s</span>
+          <button class="mini">Ferma <span class="pillola__tasto">Esc</span></button>
+        </div>
+        <!-- La coda è a vista: un messaggio in coda invisibile è un messaggio perso (B15) -->
+        <div class="coda-riga">
+          <span class="pillola" style="height:20px;font-size:11px">1 in coda</span>
+          <span style="flex:1">«Poi aggiorna il ledger con i numeri veri» — parte alla fine di questo giro</span>
+          <button class="mini">Togli</button>
+        </div>
+        <div class="compositore">
+          <div class="campo" tabindex="0">Scrivi, oppure premi Invio per indirizzare il giro in corso…</div>
+          <div class="compositore__barra">
+            <button class="piu" title="Allega">+</button>
+            <span class="pillola">Modello: <span class="val val--misurata">claude-opus-5</span> <span class="pillola__tasto">Ctrl ⇧ M</span></span>
+            <span class="pillola pillola--avviso">Scrittura nel workspace</span>
+            <span class="pillola">Giri <span class="val val--misurata">7/24</span></span>
+            <span class="pillola">Sessione <span class="val val--stima">$0,08</span></span>
+            <button class="bottone bottone--primo invia">Ferma</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- CHAT VUOTA ---------- -->
+    <section id="schermoVuota" hidden>
+      <div class="testata">
+        <h1>Nuova conversazione</h1>
+        <span class="testata__percorso">~/Desktop/projects/AVM-harness-desktop</span>
+      </div>
+      <div class="conversazione" style="display:grid; place-items:center; padding:24px">
+        <div style="max-width:620px; width:100%">
+          <span class="logo" style="width:34px;height:34px;margin-bottom:16px"><span style="width:11px;height:11px"></span></span>
+          <h2 style="font-size:24px; font-stretch:112%; margin-bottom:8px">Cosa costruiamo in <span style="color:var(--azione)">AVM-harness-desktop</span>?</h2>
+          <p style="color:var(--testo-secondo); max-width:60ch; margin:0 0 20px">
+            TALOS legge, scrive ed esegue nella cartella che gli apri. Ogni azione lascia una ricevuta firmata,
+            e niente esce da questa macchina se non lo chiedi tu.
+          </p>
+          <div class="elenco">
+            <button class="elenco__riga"><span class="voce__icona"><svg viewBox="0 0 16 16"><path d="M4 8.4l2.6 2.6L12 5.2"/></svg></span>
+              <span class="elenco__nome"><b>Fai passare la suite di test</b><span>trovata in package.json: node --test tests/*.test.mjs · 1.565 test</span></span>
+              <span class="voce__tasto">↵</span></button>
+            <button class="elenco__riga"><span class="voce__icona"><svg viewBox="0 0 16 16"><path d="M3.2 3.2h9.6v9.6H3.2z"/><path d="M5.6 6.4h5.2M5.6 9.2h3.4"/></svg></span>
+              <span class="elenco__nome"><b>Spiegami src/session-registry.mjs</b><span>il file più grande del progetto: 3.572 righe</span></span>
+              <span class="voce__tasto">↵</span></button>
+            <button class="elenco__riga"><span class="voce__icona"><svg viewBox="0 0 16 16"><circle cx="7.2" cy="7.2" r="4"/><path d="M10.2 10.2 13.4 13.4"/></svg></span>
+              <span class="elenco__nome"><b>Trova le righe di ledger ancora aperte</b><span>cerca «[ ]» in .claude/LEDGER-ROADMAP-DESKTOP</span></span>
+              <span class="voce__tasto">↵</span></button>
+          </div>
+          <p style="margin-top:14px; color:var(--testo-fioco); font-size:12px">
+            Gli esempi nascono da cosa c'è nella cartella: cambiando progetto cambiano.
+          </p>
+        </div>
+      </div>
+      <div class="piede-chat">
+        <div class="compositore">
+          <div class="campo" tabindex="0">Scrivi il primo messaggio…</div>
+          <div class="compositore__barra">
+            <button class="piu" title="Allega">+</button>
+            <span class="pillola">Modello: <span class="val val--misurata">claude-opus-5</span></span>
+            <span class="pillola pillola--avviso">Scrittura nel workspace</span>
+            <span class="pillola">43 attrezzi · <span class="val val--stima">7,5k token per giro</span></span>
+            <button class="bottone bottone--primo invia">Invia</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- CAPABILITY ---------- -->
+    <section id="schermoCapability" hidden style="display:flex;flex-direction:column;min-height:0">
+      <div class="testata">
+        <h1>Capability</h1>
+        <span class="crescita"></span>
+        <div class="schede" role="tablist">
+          <button class="scheda" role="tab" aria-selected="true">Attrezzi <span class="scheda__conto">43</span></button>
+          <button class="scheda" role="tab" aria-selected="false">Skill <span class="scheda__conto">12</span></button>
+          <button class="scheda" role="tab" aria-selected="false">Connettori <span class="scheda__conto">3</span></button>
+          <button class="scheda" role="tab" aria-selected="false">Plugin <span class="scheda__conto">1</span></button>
+        </div>
+      </div>
+      <div class="pagina">
+        <p class="pagina__sotto">Tutto ciò che il modello può usare in questa sessione. Spegnere un attrezzo vale per la sessione corrente.</p>
+
+        <div class="filtri">
+          <input class="cerca" style="width:250px;margin:0" placeholder="cerca: leggi file, terminale, web…">
+          <button class="pastiglia" aria-pressed="true">Più usati qui</button>
+          <button class="pastiglia" aria-pressed="false">Hanno un cancello</button>
+          <button class="pastiglia" aria-pressed="false">Non supportati dal modello</button>
+          <span class="crescita"></span>
+          <span class="pillola">Totale <span class="val val--stima">7.454 token</span> · <span class="val val--stima">3,7% della finestra</span></span>
+        </div>
+
+        <div class="due-colonne">
+          <div class="elenco">
+            <button class="elenco__riga" aria-selected="true">
+              <span class="elenco__nome"><b>Comando nel terminale</b><span>esegue un comando nella cartella della sessione</span></span>
+              <span class="val val--misurata">308 chiamate</span>
+              <span class="val val--stima">412 token</span>
+              <span class="pillola pillola--avviso">Chiede</span>
+            </button>
+            <button class="elenco__riga">
+              <span class="elenco__nome"><b>Ricerca nei file</b><span>cerca un testo dentro la cartella, senza aprirla tutta</span></span>
+              <span class="val val--misurata">234 chiamate</span>
+              <span class="val val--stima">198 token</span>
+              <span class="pillola">Come la sessione</span>
+            </button>
+            <button class="elenco__riga">
+              <span class="elenco__nome"><b>Lettura di un file</b><span>legge un file del workspace</span></span>
+              <span class="val val--misurata">176 chiamate</span>
+              <span class="val val--stima">156 token</span>
+              <span class="pillola">Come la sessione</span>
+            </button>
+            <button class="elenco__riga">
+              <span class="elenco__nome"><b>Scrittura di un file</b><span>crea o modifica un file, sempre con ricevuta</span></span>
+              <span class="val val--misurata">41 chiamate</span>
+              <span class="val val--stima">203 token</span>
+              <span class="pillola pillola--avviso">Chiede</span>
+            </button>
+            <button class="elenco__riga">
+              <span class="elenco__nome"><b>Ricerca sul web</b><span>interroga il web e cita le fonti</span></span>
+              <span class="val val--misurata">18 chiamate</span>
+              <span class="val val--stima">287 token</span>
+              <span class="pillola pillola--avviso">Chiede</span>
+            </button>
+            <button class="elenco__riga" style="opacity:.55">
+              <span class="elenco__nome"><b>Analisi di un'immagine</b><span>il modello scelto non riceve immagini: la riga resta spenta</span></span>
+              <span class="val val--misurata">0 chiamate</span>
+              <span class="val val--stima">146 token</span>
+              <span class="pillola">Non supportato</span>
+            </button>
+          </div>
+
+          <aside class="pannello">
+            <h3>Comando nel terminale</h3>
+            <p class="pannello__desc">Esegue un comando nella cartella della sessione e restituisce l'uscita, con il codice di uscita vero.</p>
+            <div class="coppia"><span class="coppia__chiave">Costo dello schema</span><span class="val val--stima">412 token</span></div>
+            <div class="coppia"><span class="coppia__chiave">Permesso</span><span class="pillola pillola--avviso" style="height:20px;font-size:11px">Chiede sempre</span></div>
+            <div class="coppia"><span class="coppia__chiave">Vince sulla sessione</span><span class="val val--misurata">sì</span></div>
+
+            <div class="gruppo-rail" style="margin-top:14px">
+              <span class="etichetta">Ultime tre chiamate</span>
+              <div class="coppia"><span class="coppia__chiave">node --test tests/*.test.mjs</span><span class="val val--misurata">15,6 s</span></div>
+              <div class="coppia"><span class="coppia__chiave">git status --short</span><span class="val val--misurata">0,3 s</span></div>
+              <div class="coppia"><span class="coppia__chiave">npm run verify:all</span><span class="val val--misurata">18,1 s</span></div>
+            </div>
+
+            <div class="gruppo-rail">
+              <span class="etichetta">Testo inviato al modello</span>
+              <p style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--testo-fioco); margin:4px 0 0">
+                Run a shell command in the session workspace and return its stdout, stderr and exit code.
+              </p>
+            </div>
+
+            <div class="dove-vivono">Gli attrezzi forgiati vivono in <code>.harness-ui-tools/</code></div>
+          </aside>
+        </div>
+
+        <div class="non-fatte">
+          <span class="etichetta">Non ancora implementate</span>
+          <ul>
+            <li>Mercato delle skill</li>
+            <li>Profili di preferenze</li>
+            <li>Vista «file toccati oggi»</li>
+            <li>Tema ad alto contrasto</li>
+          </ul>
+        </div>
+
+        <div class="portata">Le modifiche a permessi e attrezzi valgono <b>da subito</b> in questa sessione. Spegnere un connettore vale dalla sessione successiva.</div>
+      </div>
+    </section>
+
+    <!-- ---------- BOARD ---------- -->
+    <section id="schermoBoard" hidden style="display:flex;flex-direction:column;min-height:0">
+      <div class="testata"><h1>Board</h1><span class="testata__percorso">69 sessioni</span></div>
+      <div class="pagina">
+        <p class="pagina__sotto">
+          Tre colonne che nessun concorrente mostra dentro il prodotto — cache, tempo al primo token e motivo di chiusura —
+          senza montare un sistema di osservabilità a parte.
+        </p>
+        <div class="filtri">
+          <button class="pastiglia" aria-pressed="true">Tutte</button>
+          <button class="pastiglia" aria-pressed="false">In corso</button>
+          <button class="pastiglia" aria-pressed="false">Conclusa</button>
+          <button class="pastiglia" aria-pressed="false">Errore</button>
+          <button class="pastiglia" aria-pressed="false">Interrotta</button>
+          <span class="crescita"></span>
+          <span class="pillola">Cartella: <span class="val val--misurata">AVM-harness-desktop</span></span>
+        </div>
+        <div class="tavola-guscio">
+          <table>
+            <thead><tr>
+              <th class="titolo">Sessione</th><th>Stato</th><th>Modello</th>
+              <th class="num">Giri</th><th class="num">Token</th><th class="num">Cache</th>
+              <th class="num">Primo token</th><th>Chiusa per</th><th class="num">Costo</th><th>Ultima</th>
+            </tr></thead>
+            <tbody>
+              <tr><td class="titolo">W1-02 registro processi</td><td><span class="pillola pillola--azione" style="height:20px;font-size:11px">In corso</span></td><td class="val val--misurata">claude-opus-5</td><td class="num val val--misurata">7</td><td class="num val val--misurata">41,2k</td><td class="num val val--misurata">87%</td><td class="num val val--misurata">1,4 s</td><td class="val val--misurata">—</td><td class="num val val--stima">$0,08</td><td class="val val--misurata">2 min fa</td></tr>
+              <tr><td class="titolo">Cancello ricerca web</td><td><span class="pillola pillola--ok" style="height:20px;font-size:11px">Conclusa</span></td><td class="val val--misurata">claude-opus-5</td><td class="num val val--misurata">3</td><td class="num val val--misurata">12,8k</td><td class="num val val--misurata">91%</td><td class="num val val--misurata">0,9 s</td><td class="val val--misurata">fine lavoro</td><td class="num val val--stima">$0,02</td><td class="val val--misurata">1 ora fa</td></tr>
+              <tr><td class="titolo">Confronto Hermes e Codex</td><td><span class="pillola pillola--guasto" style="height:20px;font-size:11px">Errore</span></td><td class="val val--misurata">claude-sonnet-5</td><td class="num val val--misurata">24</td><td class="num val val--misurata">98,1k</td><td class="num val val--misurata">62%</td><td class="num val val--misurata">3,1 s</td><td class="val val--misurata">giri finiti</td><td class="num val val--stima">$0,21</td><td class="val val--misurata">ieri</td></tr>
+              <tr><td class="titolo">Store sessioni: pulizia</td><td><span class="pillola pillola--avviso" style="height:20px;font-size:11px">Attende te</span></td><td class="val val--misurata">claude-opus-5</td><td class="num val val--misurata">5</td><td class="num val val--misurata">22,4k</td><td class="num val val--misurata">84%</td><td class="num val val--misurata">1,1 s</td><td class="val val--misurata">—</td><td class="num val val--stima">$0,04</td><td class="val val--misurata">18 min fa</td></tr>
+              <tr><td class="titolo">Sonda di rilascio GPU</td><td><span class="pillola pillola--ok" style="height:20px;font-size:11px">Conclusa</span></td><td class="val val--misurata">claude-sonnet-5</td><td class="num val val--misurata">9</td><td class="num val val--misurata">31,7k</td><td class="num val val--misurata">88%</td><td class="num val val--misurata">1,2 s</td><td class="val val--misurata">fine lavoro</td><td class="num val val--stima">$0,05</td><td class="val val--misurata">2 giorni fa</td></tr>
+              <tr><td class="titolo">Recupero sessione b7b1b7d2</td><td><span class="pillola" style="height:20px;font-size:11px">Interrotta</span></td><td class="val val--misurata">claude-opus-5</td><td class="num val val--misurata">2</td><td class="num val val--misurata">8,9k</td><td class="num val val--misurata">79%</td><td class="num val val--misurata">1,0 s</td><td class="val val--misurata">fermata da te</td><td class="num val val--stima">$0,01</td><td class="val val--misurata">3 giorni fa</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="margin-top:10px; color:var(--testo-fioco); font-size:12px">
+          I costi sono <b>stime</b>, riconoscibili dalla tilde e dalla sottolineatura: la spesa vera la dichiara il credito del fornitore.
+        </p>
+      </div>
+    </section>
+
+    <!-- ---------- IMPOSTAZIONI ---------- -->
+    <section id="schermoImpostazioni" hidden style="display:flex;flex-direction:column;min-height:0">
+      <div class="testata"><h1>Impostazioni</h1></div>
+      <div class="pagina">
+        <div class="impostazioni">
+          <nav class="imp-nav">
+            <input class="cerca" placeholder="cerca un'impostazione…">
+            <span class="etichetta" style="display:block;padding:6px">Comportamento</span>
+            <button class="voce" aria-current="page"><span class="voce__testo">Modelli</span></button>
+            <button class="voce"><span class="voce__testo">Permessi</span></button>
+            <button class="voce"><span class="voce__testo">Memoria e contesto</span></button>
+            <button class="voce"><span class="voce__testo">Scorciatoie</span></button>
+            <button class="voce"><span class="voce__testo">Aspetto</span></button>
+            <span class="etichetta" style="display:block;padding:10px 6px 6px">Infrastruttura</span>
+            <button class="voce"><span class="voce__testo">Provider</span></button>
+            <button class="voce"><span class="voce__testo">Sicurezza</span></button>
+            <button class="voce"><span class="voce__testo">Costi</span></button>
+            <button class="voce"><span class="voce__testo">Doctor</span></button>
+            <button class="voce"><span class="voce__testo">Informazioni</span></button>
+          </nav>
+
+          <div>
+            <div class="pagina__testa"><h2>Modelli</h2></div>
+            <p class="pagina__sotto">Ogni mestiere ha il suo modello. Di default usano quello scelto nel compositore.</p>
+
+            <div class="imp-riga">
+              <div class="imp-riga__testo"><b>Modello principale</b><span>vale da subito, anche per la sessione aperta</span></div>
+              <select class="selettore"><option>claude-opus-5</option><option>claude-sonnet-5</option></select>
+            </div>
+            <div class="imp-riga">
+              <div class="imp-riga__testo"><b>Visione (immagini)</b><span>vale dalle sessioni nuove</span></div>
+              <select class="selettore"><option>come il principale</option><option>claude-sonnet-5</option></select>
+            </div>
+            <div class="imp-riga">
+              <div class="imp-riga__testo"><b>Compattazione del contesto</b><span>vale dalle sessioni nuove</span></div>
+              <select class="selettore"><option>come il principale</option><option>claude-haiku-4-5</option></select>
+            </div>
+            <div class="imp-riga">
+              <div class="imp-riga__testo"><b>Titoli delle sessioni</b><span>vale da subito</span></div>
+              <select class="selettore"><option>claude-haiku-4-5</option><option>come il principale</option></select>
+            </div>
+            <div class="imp-riga">
+              <div class="imp-riga__testo"><b>Tetto dei giri</b><span>illimitato, con freno a costo — vale dalle sessioni nuove</span></div>
+              <span class="pillola">freno a <span class="val val--misurata">$1,00</span> o <span class="val val--misurata">30 min</span></span>
+            </div>
+
+            <div class="portata">Le righe dicono una per una quando mordono. Nessuna modifica tocca le sessioni già chiuse.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- DOCTOR ---------- -->
+    <section id="schermoDoctor" hidden style="display:flex;flex-direction:column;min-height:0">
+      <div class="testata"><h1>Doctor</h1><span class="testata__percorso">ultimo controllo: 2 minuti fa</span></div>
+      <div class="pagina">
+        <div class="conteggio">
+          <span class="pillola pillola--ok"><b>21</b> ok</span>
+          <span class="pillola pillola--nota"><b>1</b> nota</span>
+          <span class="pillola pillola--avviso"><b>2</b> avvisi</span>
+          <span class="pillola pillola--guasto"><b>0</b> guasti</span>
+          <span class="crescita"></span>
+          <button class="mini">Esporta in JSON</button>
+          <button class="mini">Ricontrolla</button>
+        </div>
+
+        <div class="check check--avviso">
+          <span class="check__stripe"></span>
+          <div class="check__corpo">
+            <b>La pagina è più nuova del server</b>
+            <p>La pagina caricata è la <span class="val val--misurata">0.4.12</span>, il server che risponde è la <span class="val val--misurata">0.4.9</span>. Alcune richieste rispondono «non trovata» finché non si allineano.</p>
+            <div class="rimedio"><button class="bottone bottone--primo" style="height:24px">Riavvia il server</button><button class="mini">Cosa cambia</button></div>
+          </div>
+        </div>
+
+        <div class="check check--avviso">
+          <span class="check__stripe"></span>
+          <div class="check__corpo">
+            <b>Una cartella di lavoro è molto grande</b>
+            <p>La sessione «Confronto Hermes» ha come workspace l'intero Desktop: <span class="val val--misurata">48.213 file</span>, di cui <span class="val val--misurata">12.004</span> osservati. Una sessione così ha già prodotto un registro da <span class="val val--misurata">1,9 MB</span> riletto a ogni apertura.</p>
+            <div class="rimedio"><button class="bottone" style="height:24px">Restringi a projects/AVM</button><button class="mini">Lascia com'è</button></div>
+          </div>
+        </div>
+
+        <div class="check check--nota">
+          <span class="check__stripe"></span>
+          <div class="check__corpo">
+            <b>Spazio occupato</b>
+            <p>App <span class="val val--misurata">318 MB</span> · store delle sessioni <span class="val val--misurata">1,4 GB</span> su 69 sessioni. Nessuna azione necessaria.</p>
+            <div class="rimedio"><button class="mini">Apri la cartella dei dati</button></div>
+          </div>
+        </div>
+
+        <div class="check">
+          <span class="check__stripe"></span>
+          <div class="check__corpo">
+            <b>Suite di verifica</b>
+            <p><span class="val val--misurata">1.565 test su 1.565</span> verdi, uscita <span class="val val--misurata">0</span>, misurati 4 minuti fa.</p>
+          </div>
+        </div>
+
+        <div class="check">
+          <span class="check__stripe"></span>
+          <div class="check__corpo">
+            <b>Chiavi dei fornitori</b>
+            <p>Anthropic impostata il <span class="val val--misurata">29/08</span>, verificata <span class="val val--misurata">2 min fa</span>. La chiave non è mai visibile.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ==================== COLONNA DI DESTRA ==================== -->
+  <aside class="rail" aria-label="Dettagli della sessione">
+    <div class="rail__schede" role="tablist">
+      <button class="scheda" role="tab" aria-selected="true" data-rail="contesto">Contesto</button>
+      <button class="scheda" role="tab" aria-selected="false" data-rail="file">File</button>
+      <button class="scheda" role="tab" aria-selected="false" data-rail="agenti">Agenti</button>
+      <button class="scheda" role="tab" aria-selected="false" data-rail="processi">Processi</button>
+    </div>
+
+    <div class="rail__corpo" id="railContesto">
+      <div class="gruppo-rail">
+        <span class="etichetta">Ambiente</span>
+        <div class="coppia"><span class="coppia__chiave">Ramo</span><span class="val val--misurata">lane/harness-desktop</span></div>
+        <div class="coppia"><span class="coppia__chiave">Worktree</span><span class="val val--misurata">AVM-harness-desktop</span></div>
+        <div class="coppia"><span class="coppia__chiave">Non salvate</span><span class="val val--misurata">2 file</span></div>
+        <div class="coppia"><span class="coppia__chiave">Repo annidati</span><span class="val val--misurata">1</span></div>
+      </div>
+
+      <div class="gruppo-rail">
+        <span class="etichetta">Finestra del contesto</span>
+        <div class="coppia"><span class="coppia__chiave">Attrezzi</span><span class="val val--stima">7,5k · 3,7%</span></div>
+        <div class="coppia"><span class="coppia__chiave">Istruzioni</span><span class="val val--stima">4,1k · 2,0%</span></div>
+        <div class="coppia"><span class="coppia__chiave">Memoria</span><span class="val val--stima">1,8k · 0,9%</span></div>
+        <div class="coppia"><span class="coppia__chiave">Conversazione</span><span class="val val--misurata">41,2k · 20,6%</span></div>
+        <div class="coppia"><span class="coppia__chiave">Libera</span><span class="val val--misurata">145,4k · 72,8%</span></div>
+      </div>
+
+      <div class="gruppo-rail">
+        <span class="etichetta">Indice dei giri</span>
+        <div class="coppia"><span class="coppia__chiave">1 · La richiesta</span><span class="val val--misurata">0,4k</span></div>
+        <div class="coppia"><span class="coppia__chiave">2 · Lettura del registro</span><span class="val val--misurata">1,9k</span></div>
+        <div class="coppia"><span class="coppia__chiave">3 · Le due condizioni</span><span class="val val--misurata">4,2k</span></div>
+        <div class="coppia"><span class="coppia__chiave">5 · Scrittura e ricevuta</span><span class="val val--misurata">6,1k</span></div>
+        <div class="coppia"><span class="coppia__chiave">7 · Suite completa</span><span class="val val--misurata">2,8k</span></div>
+      </div>
+    </div>
+
+    <div class="rail__corpo" id="railProcessi" hidden>
+      <div class="gruppo-rail">
+        <span class="etichetta">Processi di questa sessione</span>
+        <div class="processo">
+          <div class="processo__cmd">node --test tests/*.test.mjs</div>
+          <div class="processo__meta"><span class="pillola pillola--azione" style="height:19px;font-size:10.5px">In corso</span><span>agente · giro 7</span><span class="crescita"></span><span class="val val--misurata">41 s</span></div>
+        </div>
+        <div class="processo">
+          <div class="processo__cmd">npm run verify:all</div>
+          <div class="processo__meta"><span class="esito"></span><span>agente · giro 5</span><span class="crescita"></span><span class="val val--misurata">18,1 s · uscita 0</span></div>
+        </div>
+        <div class="processo">
+          <div class="processo__cmd">git status --short</div>
+          <div class="processo__meta"><span class="esito"></span><span>tu · terminale 1</span><span class="crescita"></span><span class="val val--misurata">0,3 s · uscita 0</span></div>
+        </div>
+        <div class="processo">
+          <div class="processo__cmd">gradlew assembleDebug</div>
+          <div class="processo__meta"><span class="esito esito--guasto"></span><span>agente · giro 3</span><span class="crescita"></span><span class="val val--misurata">2,4 s · uscita 1</span></div>
+          <div class="avviso-stallo">Nessuna uscita da 74 secondi. Il processo è vivo: potrebbe aspettare un input. TALOS non lo ferma da solo.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="rail__corpo" id="railFile" hidden>
+      <div class="gruppo-rail">
+        <span class="etichetta">File toccati in questa sessione</span>
+        <div class="coppia"><span class="coppia__chiave">src/session-registry.mjs</span><span class="diff-piu">+18</span></div>
+        <div class="coppia"><span class="coppia__chiave">tests/session-registry.test.mjs</span><span class="diff-piu">+64</span></div>
+        <div class="coppia"><span class="coppia__chiave">src/http-app.mjs</span><span class="diff-piu">+30</span></div>
+      </div>
+      <p style="color:var(--testo-fioco); font-size:12px; margin-top:10px">L'albero della cartella sta dietro un interruttore: durante un lavoro la domanda è cosa è cambiato.</p>
+      <button class="mini" style="margin-top:6px">Mostra l'albero della cartella</button>
+    </div>
+
+    <div class="rail__corpo" id="railAgenti" hidden>
+      <div class="gruppo-rail">
+        <span class="etichetta">Sotto-agenti</span>
+        <p style="color:var(--testo-fioco); font-size:12px; margin:0">Nessun sotto-agente in questa sessione. Quando ce ne sarà uno, qui compaiono i suoi giri, le sue richieste di permesso e il pulsante per fermarlo.</p>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- ==================== NUOVA SESSIONE ==================== -->
+<div class="velo" id="veloNuova" hidden>
+  <div class="modale" role="dialog" aria-modal="true" aria-label="Nuova sessione">
+    <div class="modale__testa">
+      <h2>Nuova sessione</h2>
+      <div class="passi">
+        <span class="passo" data-attivo="si"><span class="passo__n">1</span>Dove si lavora</span>
+        <span class="passo"><span class="passo__n">2</span>Come si lavora</span>
+      </div>
+      <span class="crescita"></span>
+      <button class="bottone bottone--quieto" data-chiudi="veloNuova">Chiudi</button>
+    </div>
+    <div class="modale__corpo">
+      <input class="cerca" style="height:30px;margin-bottom:12px" placeholder="incolla un percorso, oppure cerca una cartella…">
+      <div class="scelta-cartella">
+        <nav class="imp-nav" style="position:static">
+          <button class="voce" aria-current="page"><span class="voce__testo">Recenti</span></button>
+          <button class="voce"><span class="voce__testo">Progetti</span><span class="voce__conto">6</span></button>
+          <button class="voce"><span class="voce__testo">Desktop</span></button>
+          <button class="voce"><span class="voce__testo">Documenti</span></button>
+          <button class="voce"><span class="voce__testo">Sfoglia…</span></button>
+        </nav>
+        <div class="elenco">
+          <button class="elenco__riga" aria-selected="true">
+            <span class="elenco__nome"><b>AVM-harness-desktop</b><span>~/Desktop/projects · lane/harness-desktop · 2 file non salvati</span></span>
+            <span class="val val--misurata">12 sessioni</span>
+          </button>
+          <button class="elenco__riga">
+            <span class="elenco__nome"><b>AVM</b><span>~/Desktop/projects · main · pulito</span></span>
+            <span class="val val--misurata">41 sessioni</span>
+          </button>
+          <button class="elenco__riga">
+            <span class="elenco__nome"><b>Desktop</b><span>~/Desktop · non è un repository</span></span>
+            <span class="val val--misurata">3 sessioni</span>
+          </button>
+        </div>
+      </div>
+      <div class="avviso-radice">
+        <span class="pillola pillola--avviso" style="height:20px;font-size:10.5px">Cartella grande</span>
+        <div>
+          <b>Desktop contiene <span class="val val--misurata">48.213 file</span> in <span class="val val--misurata">6.402 cartelle</span>.</b>
+          Aprirla intera fa osservare <span class="val val--stima">12.000 cartelle</span> e rallenta ogni apertura della sessione.
+          Conviene aprire <b>Desktop/projects/AVM-harness-desktop</b> e aggiungere il resto quando serve.
+        </div>
+      </div>
+    </div>
+    <div class="modale__piede">
+      <span class="regia__nota">Cartella scelta: <span class="val val--misurata">~/Desktop/projects/AVM-harness-desktop</span></span>
+      <span class="crescita"></span>
+      <button class="bottone bottone--quieto" data-chiudi="veloNuova">Annulla</button>
+      <button class="bottone bottone--primo">Avanti: come si lavora</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PERMESSI ==================== -->
+<div class="velo" id="veloPermessi" hidden>
+  <div class="modale" role="dialog" aria-modal="true" aria-label="Permessi della sessione">
+    <div class="modale__testa">
+      <h2>Permessi</h2>
+      <span class="regia__nota">valgono per questa sessione</span>
+      <span class="crescita"></span>
+      <button class="bottone bottone--quieto" data-chiudi="veloPermessi">Chiudi</button>
+    </div>
+    <div class="modale__corpo">
+      <div class="carte-permesso">
+        <button class="carta">
+          <b>Sola lettura</b>
+          <span class="pillola pillola--ok" style="height:19px;font-size:10.5px">rischio basso</span>
+          <p>Può leggere ed eseguire comandi che non cambiano niente.</p>
+        </button>
+        <button class="carta" aria-pressed="true">
+          <b>Scrittura nel workspace</b>
+          <span class="pillola pillola--avviso" style="height:19px;font-size:10.5px">rischio medio</span>
+          <p>Scrive solo dentro la cartella aperta. <b style="color:var(--azione)">Consigliato</b></p>
+        </button>
+        <button class="carta">
+          <b>Comandi liberi</b>
+          <span class="pillola pillola--avviso" style="height:19px;font-size:10.5px">rischio alto</span>
+          <p>Esegue qualunque comando nella cartella, senza chiedere ogni volta.</p>
+        </button>
+        <button class="carta">
+          <b>Accesso pieno</b>
+          <span class="pillola pillola--guasto" style="height:19px;font-size:10.5px">rischio molto alto</span>
+          <p>Scrive ovunque sul disco. Richiede una conferma esplicita.</p>
+        </button>
+      </div>
+
+      <div class="filtri" style="margin:16px 0 8px">
+        <span class="etichetta">Per attrezzo</span>
+        <button class="pastiglia" aria-pressed="true">Tutti e 43</button>
+        <button class="pastiglia" aria-pressed="false">Hanno un cancello</button>
+        <span class="crescita"></span>
+        <span class="regia__nota">Il permesso dell'attrezzo vince sulla politica della sessione</span>
+      </div>
+      <div class="elenco">
+        <div class="elenco__riga">
+          <span class="elenco__nome"><b>Comando nel terminale</b><span>esegue un comando nella cartella della sessione</span></span>
+          <span class="pillola pillola--avviso">Chiede sempre</span>
+        </div>
+        <div class="elenco__riga">
+          <span class="elenco__nome"><b>Scrittura di un file</b><span>crea o modifica un file, sempre con ricevuta</span></span>
+          <span class="pillola pillola--avviso">Chiede sempre</span>
+        </div>
+        <div class="elenco__riga">
+          <span class="elenco__nome"><b>Ricerca nei file</b><span>cerca un testo dentro la cartella, senza aprirla tutta</span></span>
+          <span class="pillola">Come la sessione</span>
+        </div>
+      </div>
+
+      <div class="portata" style="display:flex;align-items:center;gap:10px">
+        <span style="flex:1">I file di controllo (<span class="val val--misurata">.claude/</span>, <span class="val val--misurata">package.json</span>, gli hook) chiedono <b>sempre</b> una conferma singola, anche con «consenti per questa sessione».</span>
+        <button class="mini">Vedi l'elenco</button>
+      </div>
+    </div>
+    <div class="modale__piede">
+      <button class="bottone">Riporta a «scrittura nel workspace»</button>
+      <span class="crescita"></span>
+      <button class="bottone bottone--primo" data-chiudi="veloPermessi">Fatto</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var radice = document.documentElement;
+
+  /* --- La lingua: PREFERENZA e LINGUA RISOLTA sono due cose diverse.
+         I dati restano neutri: qui si traduce solo cio' che si disegna. --- */
+  var DIZIONARIO = {
+    it:{azioni:"Azioni", nuovaSessione:"Nuova sessione", cerca:"Cerca nelle conversazioni",
+        luoghi:"Luoghi", altro:"Altro", fissate:"Fissate", sessioni:"Sessioni", impostazioni:"Impostazioni"},
+    en:{azioni:"Actions", nuovaSessione:"New session", cerca:"Search conversations",
+        luoghi:"Places", altro:"More", fissate:"Pinned", sessioni:"Sessions", impostazioni:"Settings"}
+  };
+  var preferenzaLingua = "sistema";
+  function linguaRisolta(){
+    if (preferenzaLingua !== "sistema") return preferenzaLingua;
+    var l = (navigator.language || "it").slice(0,2).toLowerCase();
+    return DIZIONARIO[l] ? l : "en";   // ripiego dichiarato, mai un buco
+  }
+  function disegnaLingua(){
+    var d = DIZIONARIO[linguaRisolta()] || DIZIONARIO.it;
+    document.querySelectorAll("[data-t]").forEach(function(el){
+      var v = d[el.getAttribute("data-t")];
+      if (v) el.textContent = v;
+    });
+    radice.setAttribute("lang", linguaRisolta());
+  }
+
+  function premuto(gruppo, bottone){
+    gruppo.querySelectorAll("button").forEach(function(b){
+      b.setAttribute("aria-pressed", String(b === bottone));
+    });
+  }
+
+  var SCHERMI = {
+    chat:"schermoChat", vuota:"schermoVuota", capability:"schermoCapability",
+    board:"schermoBoard", impostazioni:"schermoImpostazioni", doctor:"schermoDoctor"
+  };
+  function mostraSchermo(nome){
+    Object.keys(SCHERMI).forEach(function(k){
+      var el = document.getElementById(SCHERMI[k]);
+      if (el) el.hidden = (k !== nome);
+    });
+    var g = document.getElementById("regiaSchermo");
+    var b = g.querySelector('[data-schermo="' + nome + '"]');
+    if (b) premuto(g, b);
+  }
+
+  document.getElementById("regiaSchermo").addEventListener("click", function(e){
+    var b = e.target.closest("button"); if (!b) return;
+    mostraSchermo(b.dataset.schermo);
+  });
+  document.getElementById("regiaDensita").addEventListener("click", function(e){
+    var b = e.target.closest("button"); if (!b) return;
+    radice.setAttribute("data-densita", b.dataset.densita);
+    premuto(this, b);
+  });
+  document.getElementById("regiaTema").addEventListener("click", function(e){
+    var b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.tema === "sistema") radice.removeAttribute("data-theme");
+    else radice.setAttribute("data-theme", b.dataset.tema);
+    premuto(this, b);
+  });
+  document.getElementById("regiaLingua").addEventListener("click", function(e){
+    var b = e.target.closest("button"); if (!b) return;
+    preferenzaLingua = b.dataset.lingua;
+    premuto(this, b);
+    disegnaLingua();
+  });
+
+  document.getElementById("piegaSidebar").addEventListener("click", function(){
+    var piegata = radice.getAttribute("data-sidebar") === "icone";
+    if (piegata) radice.removeAttribute("data-sidebar");
+    else radice.setAttribute("data-sidebar", "icone");
+    this.textContent = piegata ? "Riduci sidebar" : "Espandi sidebar";
+  });
+
+  document.querySelectorAll('[data-vaia]').forEach(function(b){
+    b.addEventListener("click", function(){ mostraSchermo(b.dataset.vaia); });
+  });
+
+  var altro = document.getElementById("altroLuoghi");
+  altro.addEventListener("click", function(){
+    var aperto = altro.getAttribute("aria-expanded") === "true";
+    altro.setAttribute("aria-expanded", String(!aperto));
+    document.getElementById("luoghiAltri").hidden = aperto;
+  });
+
+  document.querySelectorAll("[data-apre]").forEach(function(t){
+    t.addEventListener("click", function(){
+      var corpo = document.getElementById(t.dataset.apre);
+      var aperto = t.getAttribute("aria-expanded") === "true";
+      t.setAttribute("aria-expanded", String(!aperto));
+      corpo.hidden = aperto;
+    });
+  });
+
+  function apriVelo(id){ document.getElementById(id).hidden = false; }
+  function chiudiVelo(id){ document.getElementById(id).hidden = true; }
+  document.getElementById("apriNuova").addEventListener("click", function(){ apriVelo("veloNuova"); });
+  document.getElementById("voceNuova").addEventListener("click", function(){ apriVelo("veloNuova"); });
+  document.getElementById("apriPermessi").addEventListener("click", function(){ apriVelo("veloPermessi"); });
+  document.querySelectorAll("[data-chiudi]").forEach(function(b){
+    b.addEventListener("click", function(){ chiudiVelo(b.dataset.chiudi); });
+  });
+  document.addEventListener("keydown", function(e){
+    if (e.key === "Escape"){ chiudiVelo("veloNuova"); chiudiVelo("veloPermessi"); }
+  });
+
+  /* Colonna di destra: quattro schede */
+  var RAIL = {contesto:"railContesto", file:"railFile", agenti:"railAgenti", processi:"railProcessi"};
+  document.querySelector(".rail__schede").addEventListener("click", function(e){
+    var b = e.target.closest("button"); if (!b) return;
+    this.querySelectorAll("button").forEach(function(x){ x.setAttribute("aria-selected", String(x === b)); });
+    Object.keys(RAIL).forEach(function(k){
+      document.getElementById(RAIL[k]).hidden = (k !== b.dataset.rail);
+    });
+  });
+
+  /* Le carte del permesso e le pastiglie: una scelta sola per gruppo */
+  document.querySelectorAll(".carte-permesso").forEach(function(g){
+    g.addEventListener("click", function(e){
+      var c = e.target.closest(".carta"); if (!c) return;
+      g.querySelectorAll(".carta").forEach(function(x){ x.setAttribute("aria-pressed", String(x === c)); });
+    });
+  });
+  document.querySelectorAll(".elenco").forEach(function(g){
+    g.addEventListener("click", function(e){
+      var r = e.target.closest(".elenco__riga"); if (!r || !r.hasAttribute("aria-selected")) return;
+      g.querySelectorAll("[aria-selected]").forEach(function(x){ x.setAttribute("aria-selected", String(x === r)); });
+    });
+  });
+
+  disegnaLingua();
+})();
+</script>
