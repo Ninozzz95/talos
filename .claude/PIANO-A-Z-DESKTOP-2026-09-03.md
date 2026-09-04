@@ -32,6 +32,7 @@ labs, monorepo).
 | 2 | **Q-01** | Consolidare CSS frammentato dello stesso selettore | 0,5 | QUICK-WIN | R-01 | — |
 | 3 | **Q-02** | Censimento a mano funzioni senza chiamanti, rimozione solo confermate | 1 | QUICK-WIN | R-01 | — |
 | 4 | R-02 | Intro al primo avvio stile mobile: chiave+provider nel keyring, cartella, autonomia in un colpo, modello | 3 | R | R-01 | — |
+| 4b | **R-03** | Ricerca web dalle Impostazioni (parità mobile) + DuckDuckGo senza chiave — ordine owner 04/09, fatta | 2 | R (ledger §3) | R-02 | — |
 | 5 | W0-04 | Scheletro `labs/` + flag da config | 0,5 | R (era W0) | — | — |
 | 6 | W1-10 | Electron spike: Node figlio + token loopback | 3 | R (era W1) | W0-04 | — |
 | 7 | W2-13 | Electron 57.2 lifecycle | 3 | R (era W2) | W1-10 | — |
