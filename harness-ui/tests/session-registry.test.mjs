@@ -1195,6 +1195,119 @@ test('⛔ AL CONTRARIO — rispondiApprovazione su un sessionId inesistente: NOT
 });
 
 /*
+ * ⭐⭐⭐ 04/9 — W1-13: il cancello sui FILE DI CONTROLLO
+ * (`costruisciCancelloFileDiControllo`, non esportato — provato come
+ * `hookFn` sopra, attraverso ciò che PRODUCE) deve chiedere approvazione
+ * ANCHE quando "Full access"/un permesso per-attrezzo 'sempre' farebbero
+ * passare `verificaPermessoScrittura` (kernel) senza chiedere nulla —
+ * è esattamente il buco misurato leggendo talosHarness.mjs prima di
+ * scrivere il codice. `caricaHooksFn: async () => ({ hooks: [] })` tiene
+ * questi test ermetici (nessun disco vero), stesso principio del blocco
+ * hook qui sopra.
+ */
+test('⭐⭐⭐ W1-13 — il cancello chiede approvazione ANCHE in Full access, dove chiediApprovazioneFn ordinario NON esiste', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaHooksFn: async () => ({ hooks: [] }),
+  });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Full access' });
+
+  assert.equal(finta.ultimoInput.chiediApprovazioneFn, undefined, 'Full access non costruisce mai il canale ordinario — è esattamente il buco che questa riga chiude');
+
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+
+  const esitoPromessa = finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'scrivi', argomenti: { percorso: 'CLAUDE.md' }, giro: 0 });
+  await Promise.resolve();
+
+  const richiesta = ricevuti.find((e) => e.type === 'ApprovalRequested');
+  assert.ok(richiesta, 'un file di controllo chiede SEMPRE, anche senza un canale ordinario');
+  assert.deepEqual(richiesta.azione, { tipo: 'scrivi', percorso: 'CLAUDE.md', fileDiControllo: true });
+
+  registro.rispondiApprovazione(sessionId, richiesta.requestId, true);
+  assert.deepEqual(await esitoPromessa, { consentito: true });
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⭐⭐ ...e un DINIEGO torna {consentito:false} con un motivo che nomina il file di controllo — mai un bypass silenzioso', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaHooksFn: async () => ({ hooks: [] }),
+  });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Full access' });
+
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+  const esitoPromessa = finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'scrivi', argomenti: { percorso: '.claude/settings.json' }, giro: 0 });
+  await Promise.resolve();
+  const richiesta = ricevuti.find((e) => e.type === 'ApprovalRequested');
+
+  registro.rispondiApprovazione(sessionId, richiesta.requestId, false);
+  const esito = await esitoPromessa;
+
+  assert.equal(esito.consentito, false);
+  assert.match(esito.motivo, /file di controllo/);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⭐⭐⭐ W1-13 — il cancello chiede ANCHE con permessiPerAttrezzo:{scrivi:\'sempre\'}: l\'override per-attrezzo non lo scavalca', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaHooksFn: async () => ({ hooks: [] }),
+  });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Full access', permessiPerAttrezzoScelto: { scrivi: 'sempre' } });
+
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+  const esitoPromessa = finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'scrivi', argomenti: { percorso: 'AGENTS.md' }, giro: 0 });
+  await Promise.resolve();
+
+  const richiesta = ricevuti.find((e) => e.type === 'ApprovalRequested');
+  assert.ok(richiesta, '"sempre" decide SOLO il gate del kernel (verificaPermessoScrittura) — questo cancello vive fuori dalla sua portata, per costruzione');
+
+  registro.rispondiApprovazione(sessionId, richiesta.requestId, true);
+  assert.deepEqual(await esitoPromessa, { consentito: true });
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔⛔ AL CONTRARIO — una scrittura su un file NORMALE del progetto in Full access non chiede nulla: hookFn risolve subito, zero ApprovalRequested', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaHooksFn: async () => ({ hooks: [] }),
+  });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Full access' });
+
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+  const esito = await finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'scrivi', argomenti: { percorso: 'src/a.js' }, giro: 0 });
+
+  assert.deepEqual(esito, { consentito: true });
+  assert.equal(ricevuti.find((e) => e.type === 'ApprovalRequested'), undefined, 'un file del progetto non deve mai attivare questo secondo cancello');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔ AL CONTRARIO — pre_tool_call su un attrezzo diverso da "scrivi" (es. "leggi") non attiva il cancello, anche con un percorso di controllo negli argomenti', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaHooksFn: async () => ({ hooks: [] }),
+  });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Full access' });
+
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+  const esito = await finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'leggi', argomenti: { percorso: 'CLAUDE.md' }, giro: 0 });
+
+  assert.deepEqual(esito, { consentito: true });
+  assert.equal(ricevuti.find((e) => e.type === 'ApprovalRequested'), undefined, 'il cancello protegge SOLO "scrivi" — una lettura non muta nulla');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+/*
  * ⛔⛔⛔ Riconciliazione Fase 1 (branch merge, 27/8) — trovato dal VIVO sul
  * Pad, non a unit test: un "compito libero" avviato dal tunnel mobile
  * eseguiva `!comando` sulla PC (`sandbox: none`) invece che sul telefono,

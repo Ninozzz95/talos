@@ -564,6 +564,104 @@ const SCENARI = {
   },
 
   /**
+   * ⭐⭐⭐ 04/9 — W1-13, i FILE DI CONTROLLO a schermo: la card di
+   * approvazione (`descriviAzioneApprovazione`) e la scheda Ambiente
+   * ("Repo annidati"). Nessun modello coinvolto e nessun giro pagato,
+   * stesso principio di `qa-aperti-minori` — ma qui non basta bloccare
+   * una rotta: il comportamento nasce da un `hookFn` reale che scatta
+   * SOLO su una tool-call `scrivi` vera del modello. Le DUE sessioni che
+   * questo scenario apre sono seminate OFFLINE, prima che il server
+   * parta (`ripristina()` legge lo store una sola volta all'avvio, vedi
+   * server.mjs) — uno script separato (non nel repo: un generatore di
+   * dati, non un test) chiama il codice VERO — `createSessionRegistry`
+   * (`session-registry.mjs`, quindi il `hookFn` composto con
+   * `costruisciCancelloFileDiControllo`) e `leggiContestoWorkspace`
+   * (`workspace-context.mjs`) su una cartella scratch con un vero `git
+   * init` annidato — mai un JSON scritto a mano. La sessione resta
+   * "interrotta" (mai un RunFinished): esattamente cosa succederebbe
+   * DAVVERO se il kernel restasse sospeso in attesa di un'approvazione
+   * mai data — non un artificio del test.
+   *
+   * Vuole un server puntato SULLA COPIA seminata dello store
+   * (`TALOS_HARNESS_UI_SESSIONS_DIR`), con ESATTAMENTE le due sessioni
+   * del seed (nessun'altra) — MAI il 4174.
+   */
+  async 'qa-file-di-controllo'(p) {
+    const viewport = viewportRichiesta(URL_BASE); // ⛔ matrice unica: vedi VIEWPORT_DESKTOP in testa al file
+    await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
+    await p.cdp.send('Page.reload', { ignoreCache: true });
+    await p.attendi(1500);
+
+    const idSessioni = await p.cdp.evaluate("[...document.querySelectorAll('.real-session-item')].map((el) => el.dataset.realSessionId)");
+    p.nota(`sessioni seminate trovate nella sidebar: ${JSON.stringify(idSessioni)}`);
+    if (idSessioni.length !== 2) p.difetto(`attese ESATTAMENTE 2 sessioni seminate nella sidebar, trovate ${idSessioni.length}: lo store puntato non è quello del seed`, { severita: 'blocco' });
+
+    /*
+     * ⭐ Il trucco di `qa-aperti-minori`, riusato per lo STESSO motivo:
+     * `voce.approvazionePendente` non sopravvive a un riavvio del server
+     * (torna `null` da `ripristina()`) — un click su "Nega"/"Approva"
+     * sulla card RIVISSUTA (replay dello storico, non una richiesta
+     * viva) colpirebbe una rotta che non troverebbe più nessuna
+     * approvazione in sospeso. Si blocca PRIMA di interagire, non dopo:
+     * quello che si prova (la card, il suo testo) sta tutto nel replay
+     * degli eventi persistiti, mai nella risposta della POST.
+     */
+    await p.cdp.send('Fetch.enable', { patterns: [{ urlPattern: '*/api/v1/sessions/*/approve', requestStage: 'Request' }] });
+    let approveBloccate = 0;
+    p.cdp.ws.addEventListener('message', (event) => {
+      const msg = JSON.parse(event.data);
+      if (msg.method !== 'Fetch.requestPaused') return;
+      approveBloccate += 1;
+      p.cdp.send('Fetch.failRequest', { requestId: msg.params.requestId, errorReason: 'BlockedByClient' });
+    });
+
+    let vistaCardControllo = false;
+    let vistaRepoAnnidati = false;
+    let vistaRepoVuoto = false;
+
+    for (const id of idSessioni) {
+      await p.cdp.evaluate(`document.querySelector('[data-real-session-id=${j(id)}]')?.click()`);
+      await p.attendiCondizione(`document.querySelector('.real-session-item.active')?.dataset.realSessionId === ${j(id)}`, { descrizione: `sessione ${id} aperta` });
+      await p.attendi(900);
+
+      const ambiente = await p.cdp.evaluate("(() => { const el = document.querySelector('#envRepoAnnidati'); return el ? { testo: el.textContent, title: el.title } : null; })()");
+      const card = await p.cdp.evaluate("(() => { const el = document.querySelector('.real-approval-card .assistant-copy'); return el ? el.textContent : null; })()");
+      p.nota(`sessione ${id}: Repo annidati = ${JSON.stringify(ambiente)} · card = ${JSON.stringify(card)}`);
+
+      if (card) {
+        vistaCardControllo = true;
+        await p.screenshot('card-file-di-controllo', { nota: `card: «${card}»` });
+        if (!card.includes('file di controllo')) p.difetto(`la card di approvazione non nomina "file di controllo": «${card}»`, { severita: 'blocco' });
+        if (!card.includes('.claude/settings.json')) p.difetto(`la card non nomina il percorso VERO tentato: «${card}»`, { severita: 'difetto' });
+        // interazione: Nega, con /approve bloccata — l'interfaccia non deve fingere un successo silenzioso su una richiesta che il server non può più risolvere
+        await p.click('.real-approval-card .secondary-btn');
+        await p.attendi(700);
+        await p.screenshot('card-dopo-nega-bloccato', { nota: `richieste /approve bloccate finora: ${approveBloccate}` });
+      } else {
+        await p.screenshot(ambiente?.testo && ambiente.testo !== '—' ? 'ambiente-repo-annidati' : 'ambiente-repo-vuoto', { nota: `Repo annidati: ${ambiente?.testo}` });
+      }
+
+      if (ambiente?.testo && ambiente.testo !== '—') {
+        vistaRepoAnnidati = true;
+        if (!/fiducia separata/.test(ambiente.title || '')) p.difetto(`"Repo annidati" (${ambiente.testo}) non dichiara la fiducia separata nel title (title="${ambiente.title}")`, { severita: 'difetto' });
+      } else if (ambiente?.testo === '—') {
+        vistaRepoVuoto = true;
+      } else {
+        p.difetto(`campo "Repo annidati" non trovato o vuoto per la sessione ${id}: ${JSON.stringify(ambiente)}`, { severita: 'blocco' });
+      }
+    }
+
+    if (!vistaCardControllo) p.difetto('nessuna delle due sessioni seminate mostrava la card "file di controllo" — il seed o la card non funzionano', { severita: 'blocco' });
+    if (!vistaRepoAnnidati) p.difetto('nessuna sessione mostrava "Repo annidati" popolato (verso "ce ne sono")', { severita: 'blocco' });
+    if (!vistaRepoVuoto) p.difetto('nessuna sessione mostrava "Repo annidati" vuoto — "—" (verso "non ce ne sono, non inventare nulla")', { severita: 'blocco' });
+    p.nota(`richieste POST /approve intercettate e bloccate: ${approveBloccate}`);
+    await p.cdp.send('Fetch.disable');
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url}:${e.riga})`, { severita: 'blocco' });
+    if (p.difetti?.some((d) => d.severita === 'blocco')) process.exitCode = 1;
+  },
+
+  /**
    * ⭐⭐⭐ 04/9 — W0-03, LA SONDA DI RILASCIO: GPU e rAF da fermo.
    *
    * Il lag del 02/09 era FUORI dal codice (accelerazione hardware spenta nel

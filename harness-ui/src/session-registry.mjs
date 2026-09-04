@@ -65,6 +65,7 @@ import {
   verificaTrustMcp as verificaTrustMcpReale,
 } from './mcp-registry.mjs';
 import { caricaSkill as caricaSkillReale, SkillRegistryError } from './skill-registry.mjs';
+import { ePercorsoDiControllo } from './path-policy.mjs';
 import {
   elencaVoci as elencaVociReale, leggiVoce as leggiVoceLibreriaReale, salvaVoce as salvaVoceLibreriaReale,
   eliminaVoce as eliminaVoceLibreriaReale, LibraryStoreError,
@@ -716,6 +717,70 @@ export function createSessionRegistry({
     };
   }
 
+  /**
+   * ⭐⭐⭐ 04/9 — W1-13. I FILE DI CONTROLLO (`path-policy.mjs`,
+   * `FILE_DI_CONTROLLO`: hook, MCP, plugin, registro di fiducia, runtime
+   * del provider, istruzioni, skill, memoria) sono protetti da una
+   * scrittura del modello ANCHE in Full access e ANCHE con un permesso
+   * per-attrezzo `scrivi:'sempre'` esplicito.
+   *
+   * ⛔ Fatto misurato leggendo talosHarness.mjs PRIMA di scrivere questo:
+   * `verificaPermessoScrittura` non chiama MAI `chiediApprovazioneFn`
+   * quando il livello è pieno (`vaChiesto` resta `false`, ramo
+   * "nessun-vincolo"), e un override `'sempre'` esce ancora prima
+   * (`haOverride && override==='sempre' && !trifectaChiude`) — quel
+   * cancello non può proteggere questi file, per costruzione. Questo
+   * NON può vivere lì.
+   *
+   * ⇒ Vive qui, su `pre_tool_call`: il kernel lo chiama per OGNI
+   * attrezzo, indipendentemente da `livelloAccesso`/`permessiPerAttrezzo`
+   * (vedi la doc di `AZIONI_MUTANTI_PER_HOOK` nel kernel) — un `pre_tool_call`
+   * è l'UNICO punto che il desktop controlla per intero, prima che
+   * `verificaPermessoScrittura` veda la chiamata. Un rifiuto qui blocca
+   * SOLO 'scrivi' (l'unico attrezzo mutante con un `argomenti.percorso`
+   * verificabile — `shell`/`document_create` non lo hanno, vedi il
+   * resoconto W1-13: restano un buco dichiarato, non silenzioso).
+   *
+   * ⛔ Fallisce chiuso, mai un bypass silenzioso: un percorso che
+   * `ePercorsoDiControllo` non riesce a risolvere torna già `true` (sua
+   * doc), e un canale di approvazione che lancia o non decide MAI (nessun
+   * client capace di rispondere) lascia la richiesta onestamente in
+   * sospeso — mai un `consentito:true` per assenza di risposta, stessa
+   * disciplina di `richiediApprovazione` per "On request".
+   *
+   * ⛔ Passa SEMPRE da `richiediApprovazione` (la stessa funzione di "On
+   * request" sopra), non da `chiediApprovazioneFn`: quella può essere
+   * `undefined` proprio nei due casi che questo cancello deve coprire
+   * (Full access, per-attrezzo 'sempre') — un secondo canale,
+   * indipendente dalla policy scelta per il resto della sessione, non un
+   * uso più aggressivo dello stesso.
+   */
+  function costruisciCancelloFileDiControllo(voce) {
+    return async (evento) => {
+      if (evento?.tipo !== 'pre_tool_call' || evento.azione !== 'scrivi') return { consentito: true };
+      const percorso = evento.argomenti?.percorso;
+      if (typeof percorso !== 'string' || percorso.length === 0) return { consentito: true };
+      let controllo;
+      try {
+        controllo = ePercorsoDiControllo(voce.cartella, percorso);
+      } catch {
+        controllo = true; // un controllo che lancia fallisce chiuso, non un bypass silenzioso
+      }
+      if (!controllo) return { consentito: true };
+      let approvato = false;
+      try {
+        approvato = await richiediApprovazione(voce, { tipo: 'scrivi', percorso, fileDiControllo: true });
+      } catch {
+        approvato = false; // un cancello che lancia non autorizza in silenzio — stessa disciplina di chiediApprovazioneFn/hookFn
+      }
+      if (approvato) return { consentito: true };
+      return {
+        consentito: false,
+        motivo: `"${percorso}" è un file di controllo di TALOS (regole dell'agente, non un file del progetto): la scrittura richiede un'approvazione esplicita, negata o non concessa.`,
+      };
+    };
+  }
+
   async function eseguiRuntimeLocale({ voce, task, messaggiIniziali, runtimeId, modelId, reasoning, sessionId }) {
     const runtime = localRuntimes?.[runtimeId];
     if (!runtime || typeof runtime.generateStream !== 'function') {
@@ -1078,7 +1143,21 @@ export function createSessionRegistry({
       : undefined;
     // ⭐⭐⭐ FASE A (hook) — sempre costruito, sincrono: costruisciHookFn
     // rimanda il vero lavoro (I/O) alla prima tool-call, vedi la sua doc.
-    const hookFn = costruisciHookFn(voce);
+    const hookFnUtente = costruisciHookFn(voce);
+    /*
+     * ⭐⭐⭐ 04/9 — W1-13: il cancello sui file di controllo corre PRIMA di
+     * ogni hook utente — stesso principio "il primo che rifiuta vince"
+     * già in uso dentro costruisciHookFn per gli hook fra loro. Un hook
+     * `.harness-ui-hooks.json` (che il modello potrebbe aver scritto lui
+     * stesso, se questo cancello non lo fermasse) non può mai
+     * "approvare" una scrittura che questo cancello ha già rifiutato.
+     */
+    const cancelloFileDiControllo = costruisciCancelloFileDiControllo(voce);
+    const hookFn = async (evento) => {
+      const esitoCancello = await cancelloFileDiControllo(evento);
+      if (esitoCancello?.consentito === false) return esitoCancello;
+      return hookFnUtente(evento);
+    };
     /*
      * ⭐⭐⭐ FASE D (28/8) — sempre costruita (stesso principio di
      * hookFn/onDelega): il vero contenuto vive in voce.codaMessaggi,

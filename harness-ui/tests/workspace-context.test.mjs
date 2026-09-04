@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-import { leggiContestoWorkspace } from '../src/workspace-context.mjs';
+import { leggiContestoWorkspace, repoAnnidati } from '../src/workspace-context.mjs';
+
+/** Un repository git VERO (`git init`), non una cartella `.git` finta — stessa disciplina del resto del file. */
+function creaRepoVero(cartella) {
+  execFileSync('git', ['init', '--quiet', cartella]);
+}
 
 const quiRepo = dirname(dirname(fileURLToPath(import.meta.url))); // harness-ui/, dentro il repo git vero
 
@@ -43,4 +49,71 @@ test('un branch con output vuoto (git risponde ma senza testo) è null, non una 
 test('progetto viene passato attraverso senza modifiche, incluso null', () => {
   assert.equal(leggiContestoWorkspace({ cartella: '/x', progetto: 'inventario' }, { exec: () => 'main' }).progetto, 'inventario');
   assert.equal(leggiContestoWorkspace({ cartella: '/x' }, { exec: () => 'main' }).progetto, null);
+});
+
+/*
+ * ⭐⭐⭐ 04/9 — W1-13, `repoAnnidati`. Un repository git VERO (`git init`),
+ * mai una cartella `.git` finta: stessa disciplina "vero, non finto" già
+ * in uso dal resto di questo file (vedi `quiRepo` in cima).
+ */
+
+test('repoAnnidati: una sottocartella con un repository git VERO è trovata', () => {
+  const workspace = mkdtempSync(join(tmpdir(), 'repo-annidati-'));
+  try {
+    const sotto = join(workspace, 'progetto-annidato');
+    mkdirSync(sotto);
+    creaRepoVero(sotto);
+    assert.deepEqual(repoAnnidati(workspace), ['progetto-annidato']);
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('repoAnnidati AL CONTRARIO: una sottocartella VERA ma SENZA .git non è trovata', () => {
+  const workspace = mkdtempSync(join(tmpdir(), 'repo-annidati-'));
+  try {
+    mkdirSync(join(workspace, 'cartella-normale'));
+    assert.deepEqual(repoAnnidati(workspace), []);
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('repoAnnidati: node_modules è SALTATA anche se contiene un repository git vero', () => {
+  const workspace = mkdtempSync(join(tmpdir(), 'repo-annidati-'));
+  try {
+    const dentro = join(workspace, 'node_modules', 'un-pacchetto');
+    mkdirSync(dentro, { recursive: true });
+    creaRepoVero(dentro);
+    assert.deepEqual(repoAnnidati(workspace), []);
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('repoAnnidati AL CONTRARIO: una cartella con un nome SIMILE a node_modules (non esatto) NON è saltata — match esatto sul nome, non un prefisso', () => {
+  const workspace = mkdtempSync(join(tmpdir(), 'repo-annidati-'));
+  try {
+    const sotto = join(workspace, 'node_modules_extra');
+    mkdirSync(sotto);
+    creaRepoVero(sotto);
+    assert.deepEqual(repoAnnidati(workspace), ['node_modules_extra']);
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('repoAnnidati: una cartella radice illeggibile (inesistente) non lancia — elenco vuoto, non un\'eccezione', () => {
+  assert.deepEqual(repoAnnidati('C:\\percorso\\che\\di-sicuro-non-esiste-talos'), []);
+});
+
+test('repoAnnidati AL CONTRARIO: input degenere (non stringa/vuoto) torna elenco vuoto, non un\'eccezione', () => {
+  assert.deepEqual(repoAnnidati(undefined), []);
+  assert.deepEqual(repoAnnidati(''), []);
+  assert.deepEqual(repoAnnidati(123), []);
+});
+
+test('leggiContestoWorkspace: repoAnnidati è nel contesto restituito, sullo stesso repo git VERO usato per branch', () => {
+  const contesto = leggiContestoWorkspace({ cartella: quiRepo, progetto: null });
+  assert.ok(Array.isArray(contesto.repoAnnidati), 'sempre un array, mai undefined');
 });
