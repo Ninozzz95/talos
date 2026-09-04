@@ -40,7 +40,7 @@ labs, monorepo).
 | 9 | W2-16 | Electron 57.5 updater | 3 | R (era W2) | W2-15 | — |
 | 10 | W2-17 | Electron 57.6 hardening + GPU gate | 2 | R (era W2) | W2-13 | — |
 
-Somma fascia R (approvata): **19 gg** (R-01 1,5 · R-02 3 · W0-04 0,5 · Electron anticipato 14) — R-01 **fatta** (`3b0b4031`), R-02 **fatta** (`904792dd`, 04/09, Fable 5.1). Più **Q-01/Q-02, 1,5 gg** — approvate dall'owner il 03/09 sera («totalmente approvati») ed **entrambe fatte**: Q-01 consolidamento CSS (`219d110f`), Q-02 censimento funzioni morte chiuso a zero rimozioni, esito valido (nessun commit di codice). Dettagli: `GUIDA-QUICK-WIN-MONOLITE-2026-09-03.md`. ⛔ Costo esterno dell'owner: certificato Authenticode per la firma (senza, SmartScreen blocca l'installer).
+Somma fascia R (approvata): **19 gg** (R-01 1,5 · R-02 3 · W0-04 0,5 · Electron anticipato 14) — R-01 **fatta** (`3b0b4031`), R-02 **fatta** (`904792dd`), R-03 **fatta** (`4c62ac51`), W0-04 **fatta** (`4e0d7189`), W1-10 **fatta** (04/09, Fable 5.1). Più **Q-01/Q-02, 1,5 gg** — approvate dall'owner il 03/09 sera («totalmente approvati») ed **entrambe fatte**: Q-01 consolidamento CSS (`219d110f`), Q-02 censimento funzioni morte chiuso a zero rimozioni, esito valido (nessun commit di codice). Dettagli: `GUIDA-QUICK-WIN-MONOLITE-2026-09-03.md`. ⛔ Costo esterno dell'owner: certificato Authenticode per la firma (senza, SmartScreen blocca l'installer).
 
 ## Fascia A — essenziali
 
