@@ -3474,6 +3474,9 @@
     if (risultato.ownerRuntime && !risultato.ownerRuntime.pronto) problemi.push('servizio agente non pronto');
     if (risultato.catalogoTask && !risultato.catalogoTask.disponibile) problemi.push('attività predefinite non disponibili');
     if (risultato.sessioniPersistenza?.corrotte?.length) problemi.push(`${risultato.sessioniPersistenza.corrotte.length} sessione da controllare`);
+    // ⭐ 04/9, W0-01 — gli scarti non corrotti (vuota, senza intestazione, lettura fallita) prima sparivano: ora contano, col motivo dal server.
+    const scartateNonCorrotte = (risultato.sessioniPersistenza?.scartate || []).filter((s) => s.motivo !== 'corrotta').length;
+    if (scartateNonCorrotte > 0) problemi.push(`${scartateNonCorrotte} sessione scartata al ripristino (${risultato.sessioniPersistenza.dettaglio || 'vedi Doctor'})`);
     // ⭐ 04/9, R-03 — «spenta» è una scelta, non un problema; chiave/indirizzo mancanti sì.
     if (risultato.ricercaWeb && !risultato.ricercaWeb.pronta && risultato.ricercaWeb.fonte !== 'off') problemi.push('ricerca web non pronta');
     return problemi.length === 0

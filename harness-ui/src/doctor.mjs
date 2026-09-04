@@ -120,12 +120,22 @@ export async function diagnosi({
     };
   }
   if (sessioniPersistenza && typeof sessioniPersistenza === 'object') {
+    // ⭐ 04/9, W0-01 — ogni file scartato porta il suo motivo: il Doctor dice DOVE è finita la differenza fra totali e ripristinate.
+    const scartate = Array.isArray(sessioniPersistenza.scartate)
+      ? sessioniPersistenza.scartate.filter((s) => s && typeof s.sessionId === 'string').map((s) => ({ sessionId: s.sessionId, motivo: String(s.motivo || 'ignoto'), ...(s.dettaglio ? { dettaglio: String(s.dettaglio).slice(0, 200) } : {}) }))
+      : [];
+    const ripristinate = Number(sessioniPersistenza.ultimaLettura?.ripristinate) || 0;
+    const totali = Number(sessioniPersistenza.ultimaLettura?.totali) || 0;
+    const perMotivo = {};
+    for (const s of scartate) perMotivo[s.motivo] = (perMotivo[s.motivo] || 0) + 1;
     risultato.sessioniPersistenza = {
       corrotte: Array.isArray(sessioniPersistenza.corrotte) ? [...sessioniPersistenza.corrotte] : [],
-      ultimaLettura: {
-        ripristinate: Number(sessioniPersistenza.ultimaLettura?.ripristinate) || 0,
-        totali: Number(sessioniPersistenza.ultimaLettura?.totali) || 0,
-      },
+      scartate,
+      perMotivo,
+      ultimaLettura: { ripristinate, totali },
+      dettaglio: scartate.length === 0
+        ? `${ripristinate} sessioni ripristinate su ${totali}: nessuna scartata.`
+        : `${ripristinate} ripristinate, ${scartate.length} scartate su ${totali}: ${Object.entries(perMotivo).map(([m, n]) => `${n} ${m}`).join(', ')}.`,
     };
   }
   return risultato;

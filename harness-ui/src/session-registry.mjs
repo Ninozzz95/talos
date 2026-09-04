@@ -371,6 +371,7 @@ export function createSessionRegistry({
   const sessioni = new Map();
   let ultimoRipristino = { ripristinate: 0, totali: 0 };
   let sessioniCorrotte = [];
+  let sessioniScartate = []; // ⭐ 04/9, W0-01 — [{ sessionId, motivo, dettaglio? }]
   // ⭐⭐⭐ FASE C (28/8) — istanziato qui: `avviaESegui` è una function declaration (issata), riferibile prima della sua definizione testuale più sotto.
   const subagentOrchestrator = creaSubagentOrchestrator({ sessioni, avviaESeguiFn: avviaESegui });
   /*
@@ -1297,11 +1298,23 @@ export function createSessionRegistry({
       if (!cartellaStore) {
         ultimoRipristino = { ripristinate: 0, totali: 0 };
         sessioniCorrotte = [];
+        sessioniScartate = [];
         return ultimoRipristino;
       } // nessuna persistenza configurata: mai un tentativo di leggere un percorso che non c'è
       const id = await elencaSessioniPersistiteFn({ cartellaStore });
       let ripristinate = 0;
       const corrotte = [];
+      /*
+       * ⭐⭐⭐ 04/9 — W0-01, RESTORE ACCOUNTING. Ogni uscita di questo ciclo
+       * lascia un motivo: `vuota`, `senza-intestazione`, `corrotta`,
+       * `lettura-fallita`. Prima tre di queste erano `continue` muti e il
+       * Doctor diceva «N su M» senza poter dire dov'era finita la differenza
+       * (il 02/09: 1/17 ripristinate, 15 scartate in silenzio).
+       * Il conto torna per costruzione: ripristinate + scartate = totali
+       * (le sessioni già vive nel processo non sono né l'una né l'altra e
+       * non stanno nei totali del ripristino).
+       */
+      const scartate = [];
       for (const sessionId of id) {
         if (sessioni.has(sessionId)) continue; // già viva in questo processo: mai sovrascrivere
         let record;
@@ -1309,12 +1322,13 @@ export function createSessionRegistry({
           record = await leggiRegistroFn({ cartellaStore, sessionId });
         } catch (errore) {
           console.error(`[session-store] sessione ${sessionId} non ripristinata:`, errore instanceof Error ? errore.message : errore);
-          if (errore?.code === 'SESSION_STORE_CORRUPT') corrotte.push(sessionId);
+          if (errore?.code === 'SESSION_STORE_CORRUPT') { corrotte.push(sessionId); scartate.push({ sessionId, motivo: 'corrotta', dettaglio: errore.message }); }
+          else scartate.push({ sessionId, motivo: 'lettura-fallita', dettaglio: errore instanceof Error ? errore.message : String(errore) });
           continue;
         }
-        if (!record || record.length === 0) continue;
+        if (!record || record.length === 0) { scartate.push({ sessionId, motivo: 'vuota' }); continue; }
         const intestazione = record.find((r) => r.tipo === 'intestazione');
-        if (!intestazione) continue; // senza intestazione non c'è abbastanza per una voce onesta
+        if (!intestazione) { scartate.push({ sessionId, motivo: 'senza-intestazione', dettaglio: `${record.length} record, nessuna intestazione` }); continue; } // senza intestazione non c'è abbastanza per una voce onesta
         // ⛔ `type` (AG-UI, PascalCase) contro `tipo` (i record di questo file, italiano): due nomi di campo DIVERSI apposta, mai un'ambiguità nel distinguerli nello stesso file.
         // ⛔ 02/09 — i file scritti PRIMA di oggi contengono WorkspaceChanged (vedi broadcast()): stato del filesystem, non storia — si scartano al ripristino, così anche i log vecchi tornano leggeri senza riscriverli.
         const eventiFisici = record.filter((r) => typeof r.type === 'string' && r.type !== 'WorkspaceChanged');
@@ -1425,12 +1439,13 @@ export function createSessionRegistry({
       }
       ultimoRipristino = { ripristinate, totali: id.length };
       sessioniCorrotte = corrotte;
+      sessioniScartate = scartate;
       return ultimoRipristino;
     },
 
-    /** Stato di sola lettura dell'ultimo ripristino: non modifica né elimina i registri danneggiati. */
+    /** Stato di sola lettura dell'ultimo ripristino: non modifica né elimina i registri danneggiati. `scartate` (W0-01) porta il motivo di ogni file non ripristinato. */
     statoPersistenza() {
-      return { corrotte: [...sessioniCorrotte], ultimaLettura: { ...ultimoRipristino } };
+      return { corrotte: [...sessioniCorrotte], scartate: sessioniScartate.map((s) => ({ ...s })), ultimaLettura: { ...ultimoRipristino } };
     },
 
     /**
