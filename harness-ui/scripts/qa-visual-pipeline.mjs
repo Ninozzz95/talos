@@ -662,6 +662,77 @@ const SCENARI = {
   },
 
   /**
+   * ⭐⭐⭐ O-03 — owner 04/9: la radice dell'albero mostrava `libero:default`
+   * invece del nome della cartella vera. Stesso principio di
+   * `qa-file-di-controllo`: nessun modello, nessun costo — due sessioni
+   * seminate OFFLINE (script fuori dal repo, come lì) in una cartella
+   * store dedicata (`TALOS_HARNESS_UI_SESSIONS_DIR`), con ESATTAMENTE le
+   * due sessioni del seed:
+   *  - "O-03: cartella libera" — taskId sintetico `libero:default`
+   *    (esattamente il difetto riportato), cartella .../radice-vera
+   *  - "O-03: task del catalogo" — taskId `refactor-auth-flow` (un id
+   *    REALE del catalogo, non `libero:*`: la cura non deve leggere
+   *    NESSUN taskId), cartella .../refactor-auth-flow-9f21
+   * Copre due dei tipi di sessione del piano — cartella libera e task
+   * del catalogo, entrambi "ripresi dopo un riavvio" (`ripristina()` li
+   * rilegge dal disco a ogni avvio server, esattamente come qui) — più lo
+   * stato PENDENTE (prima di RunStarted, zero costo, stesso codice per
+   * progetto/cartella libera/workspace-launch: vedi avviaSessionePendente
+   * in app.js, che valorizza `previewWorkspaceName` allo stesso modo per
+   * tutti e tre i selettori).
+   */
+  async 'qa-albero-radice-cartella'(p) {
+    const viewport = viewportRichiesta(URL_BASE); // ⛔ matrice unica: vedi VIEWPORT_DESKTOP in testa al file
+    await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
+    await p.cdp.send('Page.reload', { ignoreCache: true });
+    await p.attendi(1500);
+
+    const idSessioni = await p.cdp.evaluate("[...document.querySelectorAll('.real-session-item')].map((el) => el.dataset.realSessionId)");
+    p.nota(`sessioni seminate trovate nella sidebar: ${JSON.stringify(idSessioni)}`);
+    if (idSessioni.length !== 2) p.difetto(`attese ESATTAMENTE 2 sessioni seminate (seed O-03), trovate ${idSessioni.length}: lo store puntato non è quello del seed`, { severita: 'blocco' });
+
+    const casi = [
+      { titolo: 'O-03: cartella libera', file: 'radice-cartella-libera', radiceAttesa: 'radice-vera', taskIdSintetico: 'libero:default' },
+      { titolo: 'O-03: task del catalogo', file: 'radice-task-catalogo', radiceAttesa: 'refactor-auth-flow-9f21', taskIdSintetico: 'refactor-auth-flow' },
+    ];
+    for (const caso of casi) {
+      const id = await p.cdp.evaluate(`[...document.querySelectorAll('.real-session-item')].find((el) => el.textContent.includes(${j(caso.titolo)}))?.dataset.realSessionId ?? null`);
+      if (!id) { p.difetto(`sessione seminata "${caso.titolo}" non trovata nella sidebar`, { severita: 'blocco' }); continue; }
+      await p.cdp.evaluate(`document.querySelector('[data-real-session-id=${j(id)}]')?.click()`);
+      await p.attendiCondizione(`document.querySelector('.real-session-item.active')?.dataset.realSessionId === ${j(id)}`, { descrizione: `sessione "${caso.titolo}" aperta` });
+      await p.click('#inspector-tab-files');
+      await p.attendiCondizione("!!document.querySelector('#inspector-files .tree-root strong')", { descrizione: `radice albero disegnata per "${caso.titolo}"` });
+      await p.attendi(700);
+      const radice = await p.cdp.evaluate("document.querySelector('#inspector-files .tree-root strong')?.textContent ?? null");
+      p.nota(`sessione "${caso.titolo}": radice albero = "${radice}"`);
+      await p.screenshot(caso.file, { nota: `radice: "${radice}" (attesa "${caso.radiceAttesa}")` });
+      if (radice !== caso.radiceAttesa) p.difetto(`radice dell'albero attesa "${caso.radiceAttesa}", trovata "${radice}" — sessione "${caso.titolo}"`, { severita: 'blocco' });
+      if (radice === caso.taskIdSintetico || /^libero:/.test(radice || '')) p.difetto(`la radice mostra ancora un taskId ("${radice}") invece del nome della cartella — il difetto O-03 non è chiuso`, { severita: 'blocco' });
+    }
+
+    // stato PENDENTE: nessuna POST fino al primo messaggio del composer — zero costo, stesso codice di rendering di un progetto allowlistato o di un workspace-launch (avviaSessionePendente valorizza previewWorkspaceName allo stesso modo nei tre casi).
+    const cartella = process.env.TALOS_QA_CARTELLA;
+    if (cartella) {
+      await p.click('#newSessionBtn');
+      await p.attendi(400);
+      await p.scegliCartellaNuovaSessione(cartella, { fullAccess: true });
+      await p.confermaNuovaSessione();
+      await p.attendiCondizione("!!document.querySelector('#inspector-files .tree-root strong')", { descrizione: 'radice PENDENTE disegnata' });
+      await p.attendi(500);
+      const radicePendente = await p.cdp.evaluate("document.querySelector('#inspector-files .tree-root strong')?.textContent ?? null");
+      const nomeCartellaAttesa = cartella.replace(/[\\/]+$/, '').split(/[\\/]/).pop();
+      p.nota(`radice PENDENTE (cartella libera "${cartella}", prima del primo messaggio — nessuna sessione reale ancora avviata): "${radicePendente}"`);
+      await p.screenshot('radice-pendente-cartella-libera', { nota: `attesa "${nomeCartellaAttesa}", trovata "${radicePendente}"` });
+      if (radicePendente !== nomeCartellaAttesa) p.difetto(`radice PENDENTE attesa "${nomeCartellaAttesa}", trovata "${radicePendente}"`, { severita: 'blocco' });
+    } else {
+      p.nota('TALOS_QA_CARTELLA non impostata: salto la verifica dello stato PENDENTE (progetto/cartella libera prima del primo messaggio)');
+    }
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url}:${e.riga})`, { severita: 'blocco' });
+    if (p.difetti?.some((d) => d.severita === 'blocco')) process.exitCode = 1;
+  },
+
+  /**
    * ⭐⭐⭐ 04/9 — W0-03, LA SONDA DI RILASCIO: GPU e rAF da fermo.
    *
    * Il lag del 02/09 era FUORI dal codice (accelerazione hardware spenta nel

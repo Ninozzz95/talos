@@ -7,12 +7,21 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const app = await readFile(join(root, 'public/app.js'), 'utf8');
 
-/** Estrae una funzione del monolite (IIFE senza export) e la istanzia con uno `state` finto: si prova il COMPORTAMENTO, non solo il testo. */
-function funzioneDalMonolite(nome, { state = {}, Date: DateFinto = Date } = {}) {
-  const inizio = app.indexOf(`  function ${nome}(`);
-  assert.ok(inizio > 0, `${nome} deve esistere in app.js`);
-  const fine = app.indexOf('\n  }\n', inizio);
-  const sorgente = app.slice(inizio, fine + 4);
+/**
+ * Estrae una funzione del monolite (IIFE senza export) e la istanzia con uno
+ * `state` finto: si prova il COMPORTAMENTO, non solo il testo.
+ * `deps`: nomi di altre funzioni del monolite che il corpo chiama — il loro
+ * sorgente viene incluso PRIMA, altrimenti `new Function` le vedrebbe come
+ * `ReferenceError` (nessuno scope esterno oltre `state`/`Date`).
+ */
+function funzioneDalMonolite(nome, { state = {}, Date: DateFinto = Date, deps = [] } = {}) {
+  const estrai = (n) => {
+    const inizio = app.indexOf(`  function ${n}(`);
+    assert.ok(inizio > 0, `${n} deve esistere in app.js`);
+    const fine = app.indexOf('\n  }\n', inizio);
+    return app.slice(inizio, fine + 4);
+  };
+  const sorgente = deps.map(estrai).join('\n') + estrai(nome);
   // eslint-disable-next-line no-new-func
   return new Function('state', 'Date', `${sorgente}\nreturn ${nome};`)(state, DateFinto);
 }
@@ -94,4 +103,69 @@ test('W1-13 (review) — ApprovalRequested e ApprovalResolved ridisegnano l\'ele
   assert.match(finoAlBreak, /aggiornaElencoSessioniReali\(\);/, 'risolta l\'approvazione, la riga deve smettere di dirlo');
   // AL CONTRARIO: lo stato che la riga mostra deve esistere davvero nella risposta del server, non essere inventato dal client
   assert.match(app, /inAttesaApprovazione\) return \{ classe: 'attesa'/);
+});
+
+/*
+ * ⭐⭐⭐ O-03 — owner 04/9: la radice dell'albero mostrava `libero:default`
+ * invece del nome della cartella vera. Causa: `state.realSession.taskId ||
+ * previewWorkspaceName || 'workspace'` — per una cartella libera/progetto
+ * `taskId` è un id SINTETICO lato client (`libero:${nomeCartella}`,
+ * startCustomSession) o lato server (`libero:workspace-launch` /
+ * `libero:full-access` / `libero:${cartellaId}`, session-registry.mjs
+ * avviaLibero) ed è quasi sempre valorizzato — l'`||` non arriva MAI a
+ * previewWorkspaceName, e mai a cartellaAssoluta (il dato onesto, da
+ * RunStarted→contesto.cartella) che prima non era nemmeno guardato.
+ * `nomeRadiceAlberoReale()` inverte la priorità: cartella vera (percorso →
+ * ultimo pezzo, nomeDaPercorso) prima di tutto, poi il nome scelto nel
+ * foglio "Nuova sessione" prima che RunStarted arrivi, mai il taskId.
+ */
+test('O-03 — nomeRadiceAlberoReale: la cartella VERA vince su un taskId sintetico "libero:*"', () => {
+  const state = { realSession: {
+    taskId: 'libero:default',
+    cartellaAssoluta: 'C:\\Users\\Antonino\\Desktop\\progetti\\il-mio-progetto',
+    previewWorkspaceName: null,
+  } };
+  const nomeRadiceAlberoReale = funzioneDalMonolite('nomeRadiceAlberoReale', { deps: ['nomeDaPercorso'], state });
+  assert.equal(nomeRadiceAlberoReale(), 'il-mio-progetto');
+});
+
+test('O-03 — nomeRadiceAlberoReale: anche su un taskId REALE del catalogo, la cartella vince (mai un id, di nessun tipo)', () => {
+  const state = { realSession: {
+    taskId: 'refactor-auth-flow',
+    cartellaAssoluta: '/tmp/talos-corpus/refactor-auth-flow-a1b2',
+    previewWorkspaceName: null,
+  } };
+  const nomeRadiceAlberoReale = funzioneDalMonolite('nomeRadiceAlberoReale', { deps: ['nomeDaPercorso'], state });
+  assert.equal(nomeRadiceAlberoReale(), 'refactor-auth-flow-a1b2');
+});
+
+test('O-03 — AL CONTRARIO, senza cartellaAssoluta: il nome scelto nel foglio "Nuova sessione" (previewWorkspaceName), non il taskId', () => {
+  const state = { realSession: {
+    taskId: 'libero:full-access',
+    cartellaAssoluta: null,
+    previewWorkspaceName: 'la-mia-cartella',
+  } };
+  const nomeRadiceAlberoReale = funzioneDalMonolite('nomeRadiceAlberoReale', { deps: ['nomeDaPercorso'], state });
+  assert.equal(nomeRadiceAlberoReale(), 'la-mia-cartella');
+});
+
+test('O-03 — AL CONTRARIO, senza NESSUN dato onesto: un placeholder generico, MAI il taskId sintetico o un id', () => {
+  const casi = [
+    { taskId: 'libero:default', cartellaAssoluta: null, previewWorkspaceName: null },
+    { taskId: 'libero:workspace-launch', cartellaAssoluta: '', previewWorkspaceName: '' },
+    { taskId: null, cartellaAssoluta: null, previewWorkspaceName: null },
+  ];
+  for (const realSession of casi) {
+    const nomeRadiceAlberoReale = funzioneDalMonolite('nomeRadiceAlberoReale', { deps: ['nomeDaPercorso'], state: { realSession } });
+    const risultato = nomeRadiceAlberoReale();
+    assert.equal(risultato, 'workspace');
+    assert.doesNotMatch(risultato, /^libero:/, 'mai un id sintetico come radice');
+  }
+});
+
+test('O-03 — cablaggio: la radice dell\'albero e il suo menu contestuale usano nomeRadiceAlberoReale(), mai più state.realSession.taskId', () => {
+  const corpo = app.slice(app.indexOf('async function renderizzaAlberoRealeUnaVolta('), app.indexOf('function aggiornaPuntiniStatoAlbero('));
+  assert.match(corpo, /textElement\('strong', '', nomeRadiceAlberoReale\(\)\)/, 'l\'etichetta a schermo della radice');
+  assert.match(corpo, /apriMenuAzioniFile\('', nomeRadiceAlberoReale\(\)/, 'il menu "Nuovo file/Nuova cartella" sulla radice');
+  assert.doesNotMatch(corpo, /state\.realSession\.taskId/, 'la radice non deve più leggere il taskId direttamente, in nessuna forma');
 });
