@@ -261,6 +261,48 @@ più lunga e a più dipendenze.
 
 Somma O: **13,75 gg** (O-07 solo la ricerca). Ordine consigliato nel piano A-Z: O-03 → O-02 → O-01 subito dopo W1-13; O-04 accanto a W1-02; O-06 → O-05 dopo P-03; O-07 dopo Wave 1.
 
+
+### O-08 — lo stato dell'arte per OGNI voce del foglio «+» (ricerca web del 04/09, obbligo dell'owner)
+
+> Fatta dall'orchestratore PRIMA di affidare la riga, così l'agente parte da qui invece di
+> cercarlo dopo. Ogni voce ha: cosa fa oggi da noi · cosa fa lo stato dell'arte · il +1 da prendere.
+
+- **Attrezzi** — oggi: elenco vero dei 43 con il costo in token (fatto in O-01, e nessun concorrente
+  esaminato dichiara il costo dell'intero set). Stato dell'arte: Hermes «MCP command center» con
+  health check e stima token per server; Claude Code non mostra un inventario. **+1 da tenere**:
+  siamo già avanti, manca solo poter **spegnere un attrezzo per questa sessione** dalla stessa riga
+  (oggi il permesso si sceglie in un altro foglio).
+- **Skills** — oggi: solo lettura delle cartelle `SKILL.md` dichiarate. Stato dell'arte (Claude
+  Platform Docs + skill-creator ufficiale, 2026): una skill è una cartella con `SKILL.md`,
+  frontmatter e **descrizione come innesco**, corpo sotto le 500 righe, indice e titoli perché
+  l'agente trovi la sezione senza leggere tutto; Anthropic pubblica una **skill che crea skill**
+  (intervista, scrive il file, lo prova, raffina la descrizione); si richiama a mano con `/nome`.
+  OpenCode ha un gate `permission.skill` allow/deny/ask. **+1**: dal nostro foglio si deve poter
+  **creare una skill dalla sessione corrente** («cattura quello che hai appena fatto in una skill»)
+  e **abilitarla o negarla** per la sessione, non solo leggerla.
+- **MCP** — oggi: elenco, allowlist, fiducia. Stato dell'arte (Claude Code 2.0.10+): on/off per
+  sessione dal menu, timeout 30 s–1 h, variabili d'ambiente, `alwaysAllow`, `disabledMcpServers`,
+  e in azienda `managed-mcp.json` con allow/deny a glob. **+1**: mostrare l'**origine** (progetto,
+  utente, gestito) e il **costo in token dello schema** di quel server, come già facciamo per gli attrezzi.
+- **Plugin** — oggi: manifesti, fiducia, avvisi dello scanner. Stato dell'arte: un plugin impacchetta
+  skill, sotto-agenti, hook, MCP e LSP; marketplace ufficiale con 101 voci e registri di comunità
+  oltre 14.000; `enabledPlugins` per progetto; **nessun riavvio** dopo l'installazione. **+1**:
+  dichiarare **cosa porta dentro** un plugin (quante skill, quanti hook, quali attrezzi) prima di fidarsi.
+- **Libreria** — oggi: elenco dei file in `.harness-ui-library/`. Stato dell'arte (VS Code, Claude
+  Code, Sourcegraph 2026): il contesto si aggiunge con una menzione (`@` o `#`) che accetta file,
+  cartelle, simboli, output del terminale e diff; e su basi grandi la ricerca puramente testuale
+  spreca il budget — meglio pochi file giusti che cinquanta che «menzionano» il simbolo.
+  **+1**: ogni file in Libreria dichiara **quanto costa in token** allegarlo, e l'allegato dice
+  quanto contesto sta consumando **prima** dell'invio.
+- **Il gesto «allega»** — Claude Code accetta immagini per incolla e trascinamento e file per
+  menzione, con tetti dichiarati (20 file per chat, 30 MB per file, formati immagine solo per
+  modelli con visione). ⇒ i tetti si **dichiarano a schermo**, non si scoprono sbattendoci.
+
+⛔ Fonti (04/09/2026): documentazione Claude Code su MCP, plugin e skill; Claude Platform Docs
+«Agent Skills»; repository `anthropics/skills`; documentazione Hermes Agent v0.21 e releasebot
+08/2026; documentazione OpenCode sui permessi; guida VS Code «Add context to chat»; Sourcegraph
+«Context Engineering» 2026.
+
 ### Q-01/Q-02 — quick win sul monolite, PRIMA di R-02 (PROPOSTA, in attesa del via esplicito — non approvate)
 
 > Owner 03/09, sera: «prima della R-02 vorrei componentizzare ed ottimizzare il monolite il più possibile senza che occupi molto tempo, modifiche quick win ed essenziali. Pianificalo e resta in attesa del mio via esplicito». A differenza di R-01/R-02 (già «approvo»), queste due righe sono **PROPOSTA**: nessuna parte senza un sì esplicito su quella riga. I fatti misurati su `app.js` (12.234 righe, 298 funzioni, sei sopra le 300 righe, test diretti solo testuali) e perché le sei funzioni grandi NON sono incluse (è Wave 3, non un quick win) stanno in `GUIDA-QUICK-WIN-MONOLITE-2026-09-03.md`.
