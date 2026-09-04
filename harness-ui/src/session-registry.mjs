@@ -767,6 +767,23 @@ export function createSessionRegistry({
         controllo = true; // un controllo che lancia fallisce chiuso, non un bypass silenzioso
       }
       if (!controllo) return { consentito: true };
+      /*
+       * ⛔⛔⛔ 04/9, REVIEW della riga: `richiediApprovazione` non ha timeout —
+       * se NESSUNO è iscritto alla sessione, quella Promise non si risolve mai
+       * e la tool-call resta appesa PER SEMPRE (riprodotto: 2 s di attesa e
+       * ancora nulla, in `tests/session-registry.test.mjs`). Succede in ogni
+       * corsa senza un client attaccato: TALOS-BANCO, una sessione avviata via
+       * HTTP prima che il browser apra lo stream, un client caduto.
+       * ⇒ Stessa disciplina del kernel quando `chiediApprovazioneFn` manca:
+       * si RIFIUTA dicendo perché. Un rifiuto il modello lo legge e lo
+       * riferisce; un'attesa infinita blocca il giro e non lo dice a nessuno.
+       */
+      if (voce.ascoltatori.size === 0) {
+        return {
+          consentito: false,
+          motivo: `"${percorso}" è un file di controllo di TALOS e la scrittura richiede un'approvazione esplicita, ma su questa sessione non c'è nessun canale di approvazione attivo (nessun client in ascolto). Apri la sessione nell'app e riprova.`,
+        };
+      }
       let approvato = false;
       try {
         approvato = await richiediApprovazione(voce, { tipo: 'scrivi', percorso, fileDiControllo: true });

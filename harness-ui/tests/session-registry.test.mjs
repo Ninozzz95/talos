@@ -4766,3 +4766,61 @@ test('W0-02 — ogni intestazione NUOVA porta schema: SCHEMA_SESSIONE (= 1)', as
     rmSync(cartellaStore, { recursive: true, force: true });
   }
 });
+
+/*
+ * ⭐⭐⭐ 04/9 — REVIEW di W1-13 (Opus 5, orchestratore): il cancello sui file
+ * di controllo chiedeva un'approvazione ANCHE quando NESSUNO può rispondere.
+ * `richiediApprovazione` non ha timeout: senza un ascoltatore iscritto la
+ * Promise non si risolve MAI e la tool-call resta appesa per sempre — una
+ * corsa headless (TALOS-BANCO, un client che non ha ancora aperto lo
+ * stream) si blocca invece di ricevere un rifiuto onesto. I sei test
+ * scritti con la riga non lo vedevano perché chiamano tutti `iscriviti()`
+ * prima di far scattare il cancello.
+ *
+ * ⛔ La disciplina giusta è quella del kernel: se il canale di approvazione
+ * non esiste, si RIFIUTA dicendo perché — mai un'attesa infinita, mai un
+ * `consentito:true` per assenza di risposta.
+ */
+test('⭐⭐⭐ W1-13 (review) — nessun ascoltatore iscritto: il cancello RIFIUTA subito invece di restare appeso per sempre', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaHooksFn: async () => ({ hooks: [] }),
+  });
+  registro.avvia('task-vero', { permessiScelto: 'Full access' });
+  // ⛔ NESSUN registro.iscriviti(): nessun client può rispondere.
+
+  const appeso = Symbol('appeso');
+  const esito = await Promise.race([
+    finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'scrivi', argomenti: { percorso: 'CLAUDE.md' }, giro: 0 }),
+    new Promise((resolve) => { const t = setTimeout(() => resolve(appeso), 2000); t.unref?.(); }),
+  ]);
+
+  assert.notEqual(esito, appeso, 'RIPRODOTTO: senza ascoltatori la tool-call resta appesa per sempre invece di ricevere un rifiuto');
+  assert.equal(esito.consentito, false);
+  assert.match(esito.motivo, /nessun canale di approvazione/);
+  assert.match(esito.motivo, /file di controllo/);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⭐⭐ ...e AL CONTRARIO, con un ascoltatore vivo la richiesta parte davvero e ATTENDE la risposta (nessun rifiuto automatico)', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaHooksFn: async () => ({ hooks: [] }),
+  });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Full access' });
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+
+  const ancoraInAttesa = Symbol('in-attesa');
+  const promessa = finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'scrivi', argomenti: { percorso: 'CLAUDE.md' }, giro: 0 });
+  const primo = await Promise.race([promessa, new Promise((resolve) => { const t = setTimeout(() => resolve(ancoraInAttesa), 300); t.unref?.(); })]);
+  assert.equal(primo, ancoraInAttesa, 'con un client vivo si aspetta la persona, non si rifiuta da soli');
+
+  const richiesta = ricevuti.find((e) => e.type === 'ApprovalRequested');
+  assert.ok(richiesta);
+  registro.rispondiApprovazione(sessionId, richiesta.requestId, true);
+  assert.deepEqual(await promessa, { consentito: true });
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});

@@ -9589,6 +9589,16 @@
         nascondiAttesaRisposta();
         const card = appendApprovalCard(evento.requestId, evento.azione);
         state.realSession.approvazioniPendenti.set(evento.requestId, card);
+        /*
+         * ⛔ 04/9, trovato guardando gli screenshot della corsa `qa-file-di-controllo`:
+         * la riga della sessione nella sidebar restava «in corso · live» mentre a
+         * schermo c'era una card di approvazione in attesa. Lo stato esisteva già
+         * (`inAttesaApprovazione` in `GET /sessions`, reso da `statoSessione`), ma
+         * NESSUNO ridisegnava l'elenco quando la richiesta arrivava: un badge che
+         * esiste e non si aggiorna è un badge che mente. Vale in entrambi i versi,
+         * vedi `ApprovalResolved` qui sotto.
+         */
+        aggiornaElencoSessioniReali();
         break;
       }
       case 'ApprovalResolved': {
@@ -9612,6 +9622,7 @@
           }
           state.realSession.approvazioniPendenti.delete(evento.requestId);
         }
+        aggiornaElencoSessioniReali(); // ⛔ 04/9 — l'altro verso: risolta l'approvazione, la riga deve smettere di dire «in attesa»
         break;
       }
       case 'RunError': {
