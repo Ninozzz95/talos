@@ -49,7 +49,7 @@ Somma fascia R (approvata): **19 gg** (R-01 1,5 · R-02 3 · W0-04 0,5 · Electr
 | 11 | W0-06 | `verify:all` (backend + frontend + fixture) | 0,5 | W0 | — | — |
 | 12 | W0-01 | Restore accounting: scarti classificati, Doctor li mostra | 1,5 | W0 | — | K-08 da verificare |
 | 13 | W0-02 | Versione di schema nell'intestazione JSONL | 1 | W0 | — | — |
-| 14 | W0-05 | Model Lab: «Annulla» chiama `/stop` | 0,25 | W0 | — | — |
+| 14 | W0-05 | Model Lab: «Annulla» chiama `/stop` — **NON APPLICABILE** 04/09: `/cancel` esiste e ferma la sessione (ledger §6), solo test che pinna il fatto | 0,25 | W0 | — | — |
 | 15 | W0-03 | Sonda di rilascio: GPU + rAF da fermo nella QA | 1 | W0 | — | — |
 | 16 | W1-12 | Aperti minori + nomi unici + resume con età e stima | 1,5 | W1 | — | — |
 | 17 | W1-13 | File di controllo protetti anche in Full access | 1 | W1 | — | — |
