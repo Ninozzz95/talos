@@ -111,8 +111,19 @@ async function main() {
     const { host, port } = await attendiHandshake(fileHandshake, ATTESA_MASSIMA_MS);
     const base = `http://${host}:${port}`;
     await attendiSalute(base, ATTESA_MASSIMA_MS);
-    const url = chiaveApiMancante() ? `${base}/#avvia-doctor=1` : `${base}/`;
-    console.log(`Harness UI pronto su ${base} — apro il browser${chiaveApiMancante() ? ' sulla schermata Doctor (chiave provider non impostata)' : ''}.`);
+    /*
+     * ⭐ 04/9, R-02 — la decisione «Doctor o no» si chiede al server, non
+     * alla variabile d'ambiente: una chiave può stare nel portachiavi senza
+     * essere in OPENROUTER_API_KEY, e con l'intro attiva è la pagina stessa
+     * a chiedere la chiave (nessun hash). Il Doctor come prima schermata
+     * resta per chi ha spento l'intro (TALOS_INTRO=0) e non ha accessi. Se
+     * lo stato non è leggibile (server vecchio) si torna al controllo di R-01.
+     */
+    let stato = null;
+    try { stato = (await (await fetch(`${base}/api/v1/setup/stato`)).json())?.data ?? null; } catch { stato = null; }
+    const apriDoctor = stato ? (stato.introDisattivato === true && stato.provider?.pronto !== true) : chiaveApiMancante();
+    const url = apriDoctor ? `${base}/#avvia-doctor=1` : `${base}/`;
+    console.log(`Harness UI pronto su ${base} — apro il browser${apriDoctor ? ' sulla schermata Doctor (nessun accesso a un modello configurato)' : ''}.`);
     apriBrowser(url);
   } catch (errore) {
     console.error(errore.message);

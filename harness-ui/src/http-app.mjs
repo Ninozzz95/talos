@@ -793,6 +793,8 @@ function scriviEventoSse(res, evento) {
 export function createHttpApp({
   staticHandler, sessionRegistry = null, listaTaskDisponibili = () => [],
   elencaCartelleProgetto = () => [], automationStore = null, diagnosiFn = null,
+  // ⭐ 04/9, R-02 — stato del primo avvio (src/setup-stato.mjs): quali passi dell'intro sono già fatti, letti dalla realtà, mai un segreto.
+  setupStatoFn = null,
   workspaceLaunchStore = null,
   workspaceBrowser = null,
   // ⭐⭐⭐ 28/8 — owner, coda: "directory più usate (tipo desktop downloads)". Zero config esterna (solo os.homedir()) — il default reale basta, nessun cablaggio in server.mjs come serve invece per elencaCartelleProgetto (quella dipende da TALOS_HARNESS_UI_PROJECT_DIRS).
@@ -2177,6 +2179,12 @@ export function createHttpApp({
           const errore = new Error('Capacità macchina non configurata'); errore.code = 'REPORT_UNAVAILABLE'; throw errore;
         }
         data = await capacitaMacchinaFn();
+      } else if (url.pathname === '/api/v1/setup/stato') {
+        requireNoQuery(url);
+        if (!setupStatoFn) {
+          const errore = new Error('Stato del primo avvio non configurato'); errore.code = 'REPORT_UNAVAILABLE'; throw errore;
+        }
+        data = await setupStatoFn();
       } else if (url.pathname === '/api/v1/doctor') {
         requireNoQuery(url);
         if (!diagnosiFn) {

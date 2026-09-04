@@ -56,6 +56,8 @@
     settingsSection: 'appearance',
     queueMode: false,
     permissions: 'Workspace write',
+    // ⭐ 04/9, R-02 — la persona ha DECISO cosa TALOS può fare da solo (gesto sulla scheda, non valore: vedi intro). Persistito nelle preferenze chat.
+    autonomiaScelta: false,
     /*
      * ⭐⭐⭐ FASE B (28/8) — override per-attrezzo, PIÙ SPECIFICO di
      * `permissions` sopra. `{}` = nessun override (comportamento di
@@ -297,6 +299,7 @@
   const commandDialog = $('#commandDialog');
   const commandSearch = $('#commandSearch');
   const sheetDialog = $('#sheetDialog');
+  const introDialog = $('#introDialog'); // ⭐ 04/9, R-02 — intro al primo avvio (modale nativa, vedi costruisciIntroPrimoAvvio)
   const harnessDialogBackdrop = $('#harnessDialogBackdrop');
   const sheetTitle = $('#sheetTitle');
   const sheetEyebrow = $('#sheetEyebrow');
@@ -5382,6 +5385,9 @@
     $$('[data-permission-choice]', sheetBody).forEach((button) => {
       button.addEventListener('click', () => {
         impostaPermesso(button.dataset.permissionChoice);
+        // ⭐ 04/9, R-02 — scegliere qui è decidere: stesso gesto dell'intro, stesso flag (mai marcato «scelto» un valore che nessuno ha toccato).
+        state.autonomiaScelta = true;
+        salvaPreferenzeChatDesktop();
         closeEmbeddedDialog(sheetDialog);
       });
     });
@@ -7883,7 +7889,7 @@
   };
   const DESKTOP_CHAT_DEFAULTS = {
     model: '', effort: null, showReasoning: false,
-    permissions: 'Workspace write', permessiPerAttrezzo: {},
+    permissions: 'Workspace write', permessiPerAttrezzo: {}, autonomiaScelta: false,
   };
   const TALOS_THEME_TOKENS = {
     forge: { bg: '#201d1a', panel: '#2b2621', accent: '#c08b3c', text: '#f5efe6', muted: '#b5a89a', border: '#4b3e31', radius: '14px', font: 'Instrument Sans' },
@@ -7947,6 +7953,7 @@
       model: typeof record.model === 'string' && record.model.length <= 160 ? record.model : '',
       effort: effortAmmessi.includes(record.effort) ? record.effort : null,
       showReasoning: boolValue(record.showReasoning, false),
+      autonomiaScelta: boolValue(record.autonomiaScelta, false),
       permissions: permessiAmmessi.includes(record.permissions) ? record.permissions : DESKTOP_CHAT_DEFAULTS.permissions,
       permessiPerAttrezzo: override,
     };
@@ -8003,6 +8010,7 @@
       showReasoning: state.showReasoning,
       permissions: state.permissions,
       permessiPerAttrezzo: state.permessiPerAttrezzo,
+      autonomiaScelta: state.autonomiaScelta,
     });
     salvaImpostazioniDesktop(documento);
   }
@@ -8010,6 +8018,7 @@
     const preferenze = leggiImpostazioniDesktop().chat;
     state.model = preferenze.model;
     state.effort = preferenze.effort;
+    state.autonomiaScelta = preferenze.autonomiaScelta;
     state.showReasoning = preferenze.showReasoning;
     state.permissions = preferenze.permissions;
     state.permessiPerAttrezzo = { ...preferenze.permessiPerAttrezzo };
@@ -11144,6 +11153,269 @@
   }
 
   /*
+   * ⭐⭐⭐ 04/9, R-02 — INTRO AL PRIMO AVVIO, stile mobile.
+   *
+   * Owner 03/09: «abbia un intro stile mobile». Il telefono
+   * (`TalosMobileSetupIntro.vue`, `setupProgress.ts`) ha già deciso come si
+   * fa, e qui si copia il METODO, non solo l'aspetto:
+   *
+   * 1. Un passo è «fatto» quando la cosa che chiede ESISTE — letto dalla
+   *    realtà (portachiavi via `/api/v1/setup/stato`, preferenze chat), mai
+   *    da un cursore salvato che può invecchiare e rimandare qualcuno su un
+   *    passo già finito.
+   * 2. Una decisione per schermata, con accanto la conseguenza.
+   * 3. NIENTE seconda casa per la stessa impostazione: la chiave si salva con
+   *    la STESSA rotta del Laboratorio modelli (`POST /providers/:id/key`),
+   *    il modello con lo STESSO `creaModelPicker`, l'autonomia con lo STESSO
+   *    `impostaPermesso` del foglio Permessi. L'intro presenta, non duplica.
+   * 4. «Scelto» è un GESTO, non un valore (lezione mobile `haDecisoAutonomia`):
+   *    `state.autonomiaScelta` diventa true solo toccando una scheda, mai
+   *    passando oltre con «Avanti» — altrimenti il default del giorno
+   *    dell'installazione resterebbe congelato per sempre come «scelta».
+   *
+   * Passi desktop ↔ mobile: accesso (identity+model) · modello · autonomia
+   * (autonomy) · cartella (al posto di pin/background, che sul desktop non
+   * hanno senso: l'ultimo passo apre il foglio «Nuova sessione» vero).
+   *
+   * ⛔ La chiave non passa MAI da qui a un log, al JSONL o a una risposta
+   * HTTP: viene mandata una volta alla rotta e il campo si svuota.
+   * ⛔ Non si ripresenta: `INTRO_STORAGE_KEY` ricorda «completata» o
+   * «saltata» finché esiste lo store del browser. `TALOS_INTRO=0` sul server
+   * la spegne del tutto (rollback del ledger).
+   */
+  const INTRO_STORAGE_KEY = 'talos.harness.desktop.intro.v1';
+  const INTRO_PASSI = Object.freeze([
+    { id: 'provider', etichetta: 'Accesso' },
+    { id: 'modello', etichetta: 'Modello' },
+    { id: 'autonomia', etichetta: 'Autonomia' },
+    { id: 'cartella', etichetta: 'Cartella' },
+  ]);
+  const INTRO_POLICY = Object.freeze([
+    ['Read only', 'Solo lettura', 'Legge il progetto e lancia comandi che non cambiano niente. Ogni scrittura viene rifiutata.', 'Minimo rischio'],
+    ['Workspace write', 'Scrive nel progetto', 'Scrive solo dentro la cartella della sessione. Shell e test passano dal cancello.', 'Consigliato'],
+    ['On request', 'Chiede prima', 'Ti chiede conferma prima di ogni azione che lascia traccia: scritture, comandi, rete.', 'Controllato'],
+    ['Full access', 'Accesso pieno', 'Filesystem e rete senza i cancelli ordinari. Solo se sai già cosa sta per fare.', 'Alto rischio'],
+  ]);
+
+  function leggiIntroLocale() {
+    try {
+      const raw = JSON.parse(window.localStorage.getItem(INTRO_STORAGE_KEY) || 'null');
+      return raw && typeof raw === 'object' && typeof raw.esito === 'string' ? raw : null;
+    } catch { return null; }
+  }
+  function salvaIntroLocale(esito) {
+    try { window.localStorage.setItem(INTRO_STORAGE_KEY, JSON.stringify({ esito, quando: new Date().toISOString() })); } catch { /* senza storage l'intro tornerà: meglio che sparire per sempre */ }
+  }
+
+  /** Come `talosSetupProgress` sul telefono: i passi fatti, il primo non fatto, se è tutto a posto. */
+  function progressoIntro(stato) {
+    const fatti = {
+      provider: Boolean(stato?.provider?.pronto),
+      modello: typeof state.model === 'string' && state.model !== '',
+      autonomia: state.autonomiaScelta === true,
+      cartella: false, // si «fa» aprendo il foglio Nuova sessione: non è un fatto persistito
+    };
+    const passi = INTRO_PASSI.map((passo) => ({ ...passo, fatto: fatti[passo.id] }));
+    const primo = passi.findIndex((passo) => !passo.fatto);
+    return { passi, indiceIniziale: primo === -1 ? passi.length - 1 : primo, tuttoPronto: passi.slice(0, 3).every((passo) => passo.fatto) };
+  }
+
+  /**
+   * Chiamata all'avvio (solo standalone). Apre l'intro SOLO se manca una
+   * delle tre cose senza cui TALOS non parte, e solo se non è già stata
+   * completata o saltata in questo browser. Un server che non espone lo
+   * stato (versione vecchia, non raggiungibile) non produce un intro
+   * fantasma: si tace.
+   */
+  async function apriIntroSeServe() {
+    if (!introDialog || leggiIntroLocale()) return false;
+    let stato;
+    try { stato = await apiGet('/api/v1/setup/stato'); } catch { return false; }
+    if (!stato || stato.introDisattivato) return false;
+    const progresso = progressoIntro(stato);
+    if (progresso.tuttoPronto) return false;
+    apriIntroPrimoAvvio(stato, progresso.indiceIniziale);
+    return true;
+  }
+
+  function apriIntroPrimoAvvio(statoIniziale, indiceIniziale = 0) {
+    if (!introDialog) return;
+    const intro = { stato: statoIniziale, indice: Math.max(0, Math.min(INTRO_PASSI.length - 1, indiceIniziale)), provider: null, chiaveEsiti: new Map() };
+    const rail = $('#introRail', introDialog);
+    const body = $('#introBody', introDialog);
+    const back = $('#introBack', introDialog);
+    const next = $('#introNext', introDialog);
+    const skip = $('#introSkip', introDialog);
+
+    function chiudi(esito) {
+      salvaIntroLocale(esito);
+      if (introDialog.open) introDialog.close();
+    }
+    async function ricaricaStato() {
+      try { intro.stato = await apiGet('/api/v1/setup/stato'); } catch { /* lo stato resta quello che avevamo: mai inventarne uno */ }
+    }
+    function disegnaRail() {
+      const { passi } = progressoIntro(intro.stato);
+      rail.replaceChildren(...passi.map((passo, posizione) => {
+        const li = document.createElement('li');
+        li.dataset.fatto = String(passo.fatto);
+        if (posizione === intro.indice) li.setAttribute('aria-current', 'step');
+        const linea = document.createElement('span'); linea.className = 'intro-rail-line'; linea.setAttribute('aria-hidden', 'true');
+        li.append(linea, textElement('span', 'intro-rail-label', passo.etichetta));
+        return li;
+      }));
+    }
+    function titolo(testo, sottotitolo) {
+      const h = document.createElement('h2'); h.className = 'intro-title'; h.id = 'introTitle'; h.textContent = testo;
+      const p = document.createElement('p'); p.className = 'intro-copy'; p.textContent = sottotitolo;
+      return [h, p];
+    }
+    function segnaEsito(nodo, esito, testo) { nodo.dataset.esito = esito; nodo.textContent = testo; }
+
+    // ---- passo 1: accesso (provider con chiave, o motore locale) ----
+    async function disegnaProvider() {
+      body.replaceChildren(...titolo('Da dove pensa TALOS', 'Serve un accesso a un modello: la chiave di un provider, salvata nel portachiavi di questo computer e mai nel browser, oppure un motore locale sul disco.'));
+      const lista = document.createElement('ul'); lista.className = 'intro-list';
+      lista.append(textElement('li', 'muted-copy', 'Leggo i provider…'));
+      body.append(lista);
+      let righe = [];
+      try { righe = (await apiGet('/api/v1/providers'))?.items ?? []; } catch (error) { lista.replaceChildren(textElement('li', 'muted-copy', messaggioErroreUtente(error, 'Il server locale non risponde: riprova fra un momento.'))); return; }
+      const locale = intro.stato?.provider?.localeConfigurato === true;
+      lista.replaceChildren(...righe.map((riga) => {
+        const li = document.createElement('li');
+        const scelta = document.createElement('button'); scelta.type = 'button'; scelta.className = 'intro-choice'; scelta.dataset.introProvider = riga.id;
+        const prova = intro.chiaveEsiti.get(riga.id);
+        const statoRiga = prova?.esito ?? (riga.requiresKey ? (riga.keyConfigured ? 'ok' : 'mancante') : 'ok');
+        scelta.dataset.stato = statoRiga === 'collegato' ? 'ok' : statoRiga === 'ok' || statoRiga === 'mancante' ? statoRiga : 'rotto';
+        const mark = textElement('span', 'intro-mark', (riga.label || riga.id).slice(0, 2).toUpperCase()); mark.setAttribute('aria-hidden', 'true');
+        const centro = document.createElement('span');
+        centro.append(textElement('strong', '', riga.label || riga.id), textElement('small', '', riga.requiresKey ? (riga.keyConfigured ? 'Chiave nel portachiavi' : 'Serve una chiave') : 'Nessuna chiave richiesta'));
+        const statoTesto = prova ? (prova.esito === 'collegato' ? (prova.modelli === null ? 'collegato' : `${prova.modelli} modelli`) : prova.esito === 'in-corso' ? 'sto chiedendo…' : prova.esito === 'non-autorizzato' ? 'chiave rifiutata' : 'non raggiungibile')
+          : riga.requiresKey ? (riga.keyConfigured ? 'chiave presente' : 'chiave mancante') : 'pronto';
+        scelta.append(mark, centro, textElement('span', 'intro-state', statoTesto));
+        scelta.addEventListener('click', () => { intro.provider = intro.provider === riga.id ? null : riga.id; disegnaProvider(); });
+        if (intro.provider === riga.id) scelta.classList.add('active');
+        li.append(scelta);
+        if (intro.provider === riga.id && riga.requiresKey) li.append(campoChiave(riga));
+        return li;
+      }));
+      const liLocale = document.createElement('li');
+      const localeBtn = document.createElement('button'); localeBtn.type = 'button'; localeBtn.className = 'intro-choice'; localeBtn.dataset.introProvider = 'local'; localeBtn.dataset.stato = locale ? 'ok' : 'mancante';
+      const markL = textElement('span', 'intro-mark', 'GP'); markL.setAttribute('aria-hidden', 'true');
+      const centroL = document.createElement('span');
+      centroL.append(textElement('strong', '', 'Motore locale (llama.cpp)'), textElement('small', '', locale ? 'Configurato su questo computer: i modelli sul disco si scelgono al passo successivo.' : 'Non configurato: si imposta dal Laboratorio modelli, dopo. Puoi continuare con un provider.'));
+      localeBtn.append(markL, centroL, textElement('span', 'intro-state', locale ? 'pronto' : 'assente'));
+      localeBtn.disabled = true;
+      liLocale.append(localeBtn);
+      lista.append(liLocale);
+      body.append(textElement('p', 'intro-note', 'Tutte le chiavi si possono cambiare dopo, da Impostazioni → Laboratorio modelli → Provider e accessi.'));
+    }
+    function campoChiave(riga) {
+      const wrap = document.createElement('div'); wrap.className = 'intro-key';
+      const label = document.createElement('label'); label.className = 'sheet-label'; label.textContent = `Chiave ${riga.label || riga.id}`; label.htmlFor = `introKey-${riga.id}`;
+      const input = document.createElement('input'); input.type = 'password'; input.id = `introKey-${riga.id}`; input.autocomplete = 'off'; input.spellcheck = false; input.placeholder = riga.keyConfigured ? 'Chiave già salvata: incollane una nuova per sostituirla' : 'Incolla la chiave'; input.dataset.introKeyInput = riga.id;
+      const rowBtn = document.createElement('div'); rowBtn.className = 'intro-key-row';
+      const salva = document.createElement('button'); salva.type = 'button'; salva.className = 'primary-btn'; salva.textContent = 'Salva e prova'; salva.dataset.introKeySave = riga.id;
+      const esito = textElement('span', 'intro-key-esito', riga.keyConfigured ? 'La chiave salvata resta finché non ne incolli un\'altra.' : 'Resta sul server locale, nel portachiavi del sistema.');
+      rowBtn.append(salva, esito);
+      wrap.append(label, input, rowBtn);
+      salva.addEventListener('click', async () => {
+        const valore = input.value;
+        if (!valore.trim()) { segnaEsito(esito, 'rotto', 'Incolla prima una chiave.'); input.focus(); return; }
+        salva.disabled = true; segnaEsito(esito, '', 'Salvo nel portachiavi…');
+        try {
+          await apiPost(`/api/v1/providers/${encodeURIComponent(riga.id)}/key`, { key: valore });
+          input.value = ''; // ⛔ il campo si svuota subito: la chiave è già dove deve stare, non resta nel DOM
+          segnaEsito(esito, '', 'Salvata. Chiedo al provider se la accetta…');
+          intro.chiaveEsiti.set(riga.id, { esito: 'in-corso' });
+          const prova = await apiPost(`/api/v1/providers/${encodeURIComponent(riga.id)}/test`, {});
+          intro.chiaveEsiti.set(riga.id, prova);
+          await ricaricaStato();
+          disegnaRail();
+          disegnaProvider();
+          if (prova?.esito === 'collegato') toast('Accesso pronto', `${riga.label || riga.id} accetta la chiave.`);
+        } catch (error) {
+          segnaEsito(esito, 'rotto', messaggioErroreUtente(error, 'Non sono riuscito a salvare la chiave.'));
+          salva.disabled = false;
+        }
+      });
+      input.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); salva.click(); } });
+      queueMicrotask(() => input.focus());
+      return wrap;
+    }
+
+    // ---- passo 2: modello di default ----
+    function disegnaModello() {
+      body.replaceChildren(...titolo('Con quale modello, di solito', 'È il modello con cui parte una sessione nuova. Lo cambi quando vuoi dalla pillola sopra alla chat, anche a metà lavoro.'));
+      const mount = document.createElement('div'); mount.className = 'intro-picker';
+      const picker = creaModelPicker({
+        valoreIniziale: state.model || '',
+        aggiornaModelloPrincipale: true,
+        sincronizzaSessione: false,
+        alSelezionato: () => { salvaPreferenzeChatDesktop(); aggiornaPillolaModello(); disegnaRail(); },
+      });
+      mount.append(picker.elemento);
+      body.append(mount, textElement('p', 'intro-note', state.model ? `Oggi: ${state.model}.` : 'Nessun modello scelto ancora: senza, la prima sessione te lo chiede.'));
+    }
+
+    // ---- passo 3: autonomia (una decisione, la stessa del foglio Permessi) ----
+    function disegnaAutonomia() {
+      body.replaceChildren(...titolo('Cosa può fare da solo', 'Una scelta sola, che vale per ogni sessione nuova. Il permesso per singolo attrezzo si regola dopo, dal foglio Permessi.'));
+      const lista = document.createElement('ul'); lista.className = 'intro-list';
+      lista.append(...INTRO_POLICY.map(([valore, nome, descrizione, nota]) => {
+        const li = document.createElement('li');
+        const scelta = document.createElement('button'); scelta.type = 'button'; scelta.className = 'intro-choice'; scelta.dataset.introPolicy = valore;
+        if (state.permissions === valore && state.autonomiaScelta) scelta.classList.add('active');
+        const mark = document.createElement('span'); mark.className = 'intro-mark'; mark.innerHTML = icon('i-shield'); mark.setAttribute('aria-hidden', 'true');
+        const centro = document.createElement('span'); centro.append(textElement('strong', '', nome), textElement('small', '', descrizione));
+        scelta.append(mark, centro, textElement('span', 'intro-state', nota));
+        scelta.addEventListener('click', () => {
+          impostaPermesso(valore, nome);
+          state.autonomiaScelta = true; // il gesto sulla scheda è la decisione
+          salvaPreferenzeChatDesktop();
+          disegnaRail();
+          disegnaAutonomia();
+        });
+        li.append(scelta);
+        return li;
+      }));
+      const nomeScelto = INTRO_POLICY.find(([valore]) => valore === state.permissions)?.[1] ?? state.permissions;
+      body.append(lista, textElement('p', 'intro-note', state.autonomiaScelta ? `Scelto: ${nomeScelto}. «Chiedi prima» resta una risposta legittima.` : 'Finché non tocchi una scheda vale il valore predefinito di oggi, che può cambiare con gli aggiornamenti: toccarla lo rende una tua scelta.'));
+    }
+
+    // ---- passo 4: la prima cartella (apre il foglio Nuova sessione vero) ----
+    function disegnaCartella() {
+      body.replaceChildren(...titolo('La prima cartella', 'TALOS lavora dentro una cartella per volta: la scegli a ogni sessione nuova, e i permessi di sopra valgono lì dentro. Nient\'altro viene toccato.'));
+      body.append(textElement('p', 'intro-note', 'Puoi anche aprire una cartella con il tasto destro in Esplora file, «Apri cartella con TALOS».'));
+    }
+
+    function disegnaPasso() {
+      const passo = INTRO_PASSI[intro.indice];
+      disegnaRail();
+      back.hidden = intro.indice === 0;
+      const ultimo = intro.indice === INTRO_PASSI.length - 1;
+      next.textContent = ultimo ? 'Scegli la cartella e inizia' : 'Avanti';
+      if (passo.id === 'provider') disegnaProvider();
+      else if (passo.id === 'modello') disegnaModello();
+      else if (passo.id === 'autonomia') disegnaAutonomia();
+      else disegnaCartella();
+      queueMicrotask(() => next.focus());
+    }
+
+    back.onclick = () => { if (intro.indice > 0) { intro.indice -= 1; disegnaPasso(); } };
+    next.onclick = () => {
+      if (intro.indice < INTRO_PASSI.length - 1) { intro.indice += 1; disegnaPasso(); return; }
+      chiudi('completata');
+      openRealTaskSheet();
+    };
+    skip.onclick = () => chiudi('saltata');
+    introDialog.oncancel = (event) => { event.preventDefault(); chiudi('saltata'); }; // Escape = salta, registrato come tale
+
+    disegnaPasso();
+    if (!introDialog.open) introDialog.showModal();
+  }
+
+  /*
    * ⭐ 03/9, R-01 — `scripts/avvia-talos.mjs` aggiunge `#avvia-doctor=1`
    * all'URL quando OPENROUTER_API_KEY non è impostata: la prima schermata
    * dopo il doppio clic deve dire perché, non aprire una chat che fallirà
@@ -12722,8 +12994,11 @@
     // ⛔ verificato al MOMENTO del fire, non alla schedulazione: un test (o
     // un embed reale) può marcare talos-embedded fra i due istanti.
     if (!HOST().classList.contains('talos-embedded')) {
-      apriDoctorDaLauncher();
+      const doctorDalLauncher = apriDoctorDaLauncher();
+      const cartellaDalLauncher = Boolean(leggiWorkspaceLaunchId());
       apriWorkspaceDaLauncher();
+      // ⭐ 04/9, R-02 — l'intro cede il passo ai flussi del lanciatore (Doctor, «Apri cartella con TALOS»): chi arriva con un'intenzione precisa non deve trovare un modale davanti.
+      if (!doctorDalLauncher && !cartellaDalLauncher) apriIntroSeServe();
       aggiornaElencoSessioniReali();
       renderAutomationsReali(); // ⭐ 27/8 — la card automazioni della sidebar è live da subito, non solo dopo aver aperto la vista
     }

@@ -56,3 +56,34 @@ export async function extractLegacyContract({ appPath, htmlPath, cssPath, aguiPa
     terminalFrames: { data: 0, control: 1 },
   };
 }
+
+/*
+ * ⭐ 04/9, R-02 — eseguibile da riga di comando, come il ledger desktop già
+ * prescriveva («rigenerare la fixture con node frontend/scripts/extract-legacy-contract.mjs»)
+ * ma il file era solo una libreria: lanciato, non scriveva niente e non lo
+ * diceva. Da qui: `node scripts/extract-legacy-contract.mjs --write` riscrive
+ * `tests/fixtures/legacy-contract.snapshot.json`; senza `--write` stampa il
+ * contratto e non tocca il disco.
+ */
+if (process.argv[1] && import.meta.url === (await import('node:url')).pathToFileURL(process.argv[1]).href) {
+  const { writeFile } = await import('node:fs/promises');
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const repoRoot = path.resolve(here, '../../..');
+  const fixturePath = path.join(here, '../tests/fixtures/legacy-contract.snapshot.json');
+  const contract = await extractLegacyContract({
+    appPath: path.join(repoRoot, 'harness-ui/public/app.js'),
+    htmlPath: path.join(repoRoot, 'harness-ui/public/index.html'),
+    cssPath: path.join(repoRoot, 'harness-ui/public/styles.css'),
+    aguiPath: path.join(repoRoot, 'harness-ui/src/agui-events.mjs'),
+    staticPath: path.join(repoRoot, 'harness-ui/src/static-files.mjs'),
+  });
+  const json = `${JSON.stringify(contract, null, 2)}\n`;
+  if (process.argv.includes('--write')) {
+    await writeFile(fixturePath, json);
+    console.log(`fixture riscritta: ${fixturePath} (app ${contract.assets.app.lines} righe, css ${contract.assets.css.lines}, html ${contract.assets.html.lines})`);
+  } else {
+    process.stdout.write(json);
+  }
+}

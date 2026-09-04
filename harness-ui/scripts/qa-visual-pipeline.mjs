@@ -803,6 +803,51 @@ const SCENARI = {
    * PROVIDER-HTTP-01..05. In questo modo la schermata può essere provata anche
    * quando il portachiavi della macchina non deve essere modificato.
    */
+  /**
+   * ⭐⭐⭐ 04/9 — R-02, INTRO AL PRIMO AVVIO. Azzera nel browser ciò che
+   * rende l'intro «già fatta» (l'esito salvato e il modello di default), non
+   * le chiavi sul server: così sulla macchina dell'owner l'intro si apre al
+   * passo «Modello» con l'accesso già verde, e i quattro passi si
+   * fotografano tutti con Indietro/Avanti. Nessuna chiave viene scritta.
+   */
+  async 'qa-intro-primo-avvio'(p) {
+    const viewport = viewportRichiesta(URL_BASE);
+    await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
+    await p.cdp.evaluate("(() => { localStorage.removeItem('talos.harness.desktop.intro.v1'); const k='talos.harness.desktop.settings.v1'; const d=JSON.parse(localStorage.getItem(k)||'{}'); d.chat={...(d.chat||{}), model:'', autonomiaScelta:false}; localStorage.setItem(k, JSON.stringify(d)); })()");
+    await p.cdp.evaluate('location.reload()');
+    await p.attendiCondizione("document.querySelector('#introDialog')?.open === true", { timeoutMs: 8000, descrizione: 'intro aperta al primo avvio' });
+    await p.attendi(400);
+    const passoIniziale = await p.cdp.evaluate("document.querySelector('#introRail [aria-current=\\\"step\\\"] .intro-rail-label')?.textContent");
+    p.nota(`passo iniziale: ${passoIniziale}`);
+    await p.screenshot('intro-passo-iniziale', { nota: 'l\'intro si apre sul primo passo NON fatto: l\'accesso è già verde nel binario, si parte dal modello' });
+    await p.click('#introBack');
+    await p.attendi(500);
+    await p.screenshot('intro-accesso', { nota: 'passo Accesso: provider con stato chiave, campo chiave solo per il provider toccato, motore locale dichiarato' });
+    await p.click('#introNext');
+    await p.attendi(400);
+    await p.click('#introNext');
+    await p.attendi(300);
+    await p.screenshot('intro-autonomia', { nota: 'passo Autonomia: quattro schede, nessuna attiva finché non si tocca (scelto = gesto)' });
+    await p.click('[data-intro-policy="Workspace write"]');
+    await p.attendi(300);
+    const scelta = await p.cdp.evaluate("JSON.parse(localStorage.getItem('talos.harness.desktop.settings.v1')).chat.autonomiaScelta");
+    if (scelta !== true) p.difetto('toccare una scheda di autonomia non registra la scelta', { severita: 'blocco' });
+    await p.screenshot('intro-autonomia-scelta', { nota: 'scheda toccata: attiva, binario verde, scelta persistita' });
+    await p.click('#introNext');
+    await p.attendi(300);
+    await p.screenshot('intro-cartella', { nota: 'ultimo passo: il bottone apre il foglio Nuova sessione vero' });
+    await p.click('#introNext');
+    await p.attendi(600);
+    const chiusa = await p.cdp.evaluate("document.querySelector('#introDialog')?.open === false && document.querySelector('#sheetDialog')?.open === true");
+    if (!chiusa) p.difetto('«Scegli la cartella e inizia» non apre il foglio Nuova sessione', { severita: 'blocco' });
+    await p.screenshot('intro-foglio-nuova-sessione', { nota: 'intro chiusa e registrata come completata; il chooser vero è aperto' });
+    await p.cdp.evaluate('location.reload()');
+    await p.attendi(1200);
+    const riaperta = await p.cdp.evaluate("document.querySelector('#introDialog')?.open === true");
+    if (riaperta) p.difetto('l\'intro si ripresenta dopo essere stata completata', { severita: 'blocco' });
+    await p.screenshot('intro-non-si-ripresenta', { nota: 'seconda apertura: nessun intro' });
+  },
+
   async 'qa-settings-provider-access'(p) {
     const viewport = viewportRichiesta(URL_BASE); // ⛔ matrice unica: vedi VIEWPORT_DESKTOP in testa al file
     await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });

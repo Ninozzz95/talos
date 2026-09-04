@@ -11,6 +11,7 @@ import { createStaticHandler } from './src/static-files.mjs';
 import { listaTaskDisponibili } from './src/task-catalog.mjs';
 import { elencaCartelleProgetto } from './src/custom-task.mjs';
 import { diagnosi } from './src/doctor.mjs';
+import { statoPrimoAvvio } from './src/setup-stato.mjs';
 import { createModelCatalog } from './src/model-catalog.mjs';
 import { creaRegistroTerminali, MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA } from './src/pty-terminal.mjs';
 import { creaGestoreTerminaleWs } from './src/terminal-ws.mjs';
@@ -436,6 +437,13 @@ async function startServer() {
     elencaCartelleProgetto: () => elencaCartelleProgetto(config.cartelleProgetto),
     automationStore,
     diagnosiFn,
+    // ⭐ 04/9, R-02 — l'intro al primo avvio legge da qui cosa manca davvero: chiavi nel portachiavi (solo i nomi dei provider), motore locale, cartelle. TALOS_INTRO=0 la spegne (rollback del ledger).
+    setupStatoFn: () => statoPrimoAvvio({
+      providerStore,
+      localeConfigurato: Boolean(config.llamaServerPath),
+      introDisattivato: process.env.TALOS_INTRO === '0',
+      cartelleProgetto: config.cartelleProgetto.length,
+    }),
     catalogoModelliFn: (opts) => modelCatalog.ottieni(opts),
     capacitaMacchinaFn: () => misuraCapacitaMacchina({ storagePath: config.publicDir }),
     localRuntimes,

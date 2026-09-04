@@ -398,6 +398,20 @@
     <div class="sheet-body" id="sheetBody"></div>
   </dialog>
 
+  <!-- ⭐⭐⭐ 04/9, R-02 — INTRO AL PRIMO AVVIO, stile mobile (TalosMobileSetupIntro.vue): una decisione per schermata, il binario dei passi in alto, «Salta per ora» sempre a portata. Modale nativa (showModal: focus, Escape e backdrop li fa il browser), riempita da costruisciIntroPrimoAvvio() in app.js; nessun mockup statico qui dentro. -->
+  <dialog class="intro-dialog" id="introDialog" aria-labelledby="introTitle" data-intro-dialog>
+    <header class="intro-head">
+      <span class="intro-brand" aria-hidden="true">TALOS</span>
+      <button type="button" class="intro-skip" id="introSkip" data-intro-skip>Salta per ora</button>
+    </header>
+    <ol class="intro-rail" id="introRail" aria-label="Passi del primo avvio"></ol>
+    <section class="intro-body" id="introBody"><h2 class="intro-title" id="introTitle">Primo avvio</h2></section>
+    <footer class="intro-foot">
+      <button type="button" class="secondary-btn intro-back" id="introBack" data-intro-back><svg><use href="#i-arrow-left"/></svg>Indietro</button>
+      <button type="button" class="primary-btn intro-next" id="introNext" data-intro-next>Avanti</button>
+    </footer>
+  </dialog>
+
   <div class="toast-region" id="toastRegion" aria-live="polite"></div>
   <!-- Terminale REALE (LEDGER-TERMINALE-REALE.md) — build UMD vendorizzate, PRIMA di app.js: si attaccano a window.Terminal / window.FitAddon / window.WebglAddon. -->
   <script src="vendor/xterm/xterm.js"></script>
