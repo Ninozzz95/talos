@@ -142,6 +142,46 @@ alla sidebar nuova. Le voci che devono comparire, con il nome che una persona ri
 con il nome scritto**, come fa Hermes con *Capabilities · Messaging · Artifacts*. Sono già
 funzionanti: nasconderle dietro un pulsante senza nome è l'unico motivo per cui sembrano assenti.
 
+## §4-ter — Sicurezza faccia a faccia: la loro «Safety», la nostra «Safety lens»
+
+`hermes/09-impostazioni-safety.png` contro `talos-v2/20-foglio-permessi.png`.
+
+**Loro** hanno nove controlli in una lista piatta: *Approval Mode* (a tendina, oggi «Smart» — cioè
+l'auto-approvazione decisa da un modello ausiliario), *Approval Timeout* (300 secondi: quanto una
+richiesta di approvazione aspetta prima di scadere), *Confirm MCP Reloads*, *Command Allowlist*
+(valori separati da virgola), *Redact Secrets* («nascondi i segreti trovati dal contenuto visibile
+al modello»), *Allow Private URLs*, *Browser Private URLs*, *Local Browser For Private URLs*, e
+*File Checkpoints* («crea istantanee di ripristino prima delle modifiche ai file», spento).
+
+**Noi** abbiamo due blocchi: la *policy di sessione* come quattro carte con l'etichetta del rischio
+a destra — Read only «Minimo rischio», Workspace write «Consigliato», On request «Controllato»,
+Full access «Alto rischio» — e sotto il *permesso per attrezzo*, che **precede** la policy, con
+cinque righe e una tendina ciascuna.
+
+- ✅ **Dove siamo meglio**: l'etichetta di rischio accanto a ogni livello (loro non dicono quale sia
+  il livello consigliato), e il permesso per attrezzo che vince sulla policy, spiegato sulla riga.
+- ⛔ **Quello che hanno e noi no**: il **timeout dell'approvazione** (e oggi ho scoperto e curato
+  proprio il caso in cui la nostra richiesta non si risolveva mai — loro lo trattano da anni come
+  un'impostazione), la **redazione dei segreti** prima che il modello li veda, l'**allowlist dei
+  comandi** come campo, i tre interruttori sugli **URL privati**, e i **checkpoint dei file** prima
+  di ogni modifica (per noi è la proposta P-11, per loro è una spunta).
+- ⛔ **Difetto visivo nostro, visto nello screenshot**: nelle righe del permesso per attrezzo il nome
+  e la spiegazione sono **incollati** («scrittura di un fileScrive un file — passa dal cancello
+  semantico»): `<strong>` e `<small>` sono due elementi in linea senza separazione. Va messo su due
+  righe, come fa Hermes con nome sopra e descrizione sotto in grigio.
+
+## §4-quater — Il nostro Capability hub dichiara esattamente ciò che loro hanno
+
+`talos-v2/06-capability-fondo-2.png`. In fondo al foglio, la sezione **«NON ANCORA IMPLEMENTATO»**
+elenca con onestà: *Toolsets*, *Computer use*, *Immagini in ingresso* («nessun canale immagine verso
+il modello: il kernel non manda nessun `image_url`»), *Gateways · Telegram, Discord, Slack,
+WhatsApp*, *Profiles*.
+
+⇒ Tre di quelle cinque voci sono **esattamente** ciò che Hermes ha già: *Messaging* è la loro voce di
+sidebar per i gateway, *Profiles* è il loro `Ctrl 1…5`, e la visione la instradano con un modello
+ausiliario dedicato. Il nostro elenco delle cose mancanti non è una lista di desideri: è la lista
+della spesa scritta guardando il concorrente.
+
 ## §5 — Taccuino: difetti nostri visti mentre confrontavo
 
 1. La sidebar mostra due elementi che non fanno niente finché non servono (suggerimento azioni,
@@ -150,6 +190,25 @@ funzionanti: nasconderle dietro un pulsante senza nome è l'unico motivo per cui
 3. Le righe sessione hanno quattro dati allo stesso contrasto: nessuna gerarchia di lettura.
 4. Nessun blocco di navigazione: le destinazioni sono icone senza nome.
 5. Nessun modo di fissare una sessione, con 73 sessioni nello store.
+
+## §5-bis — Quante schermate, e quante VERE
+
+⛔ Owner: «ogni passata che fai alla cieca è un errore che poi paghiamo dopo». Le schermate non si
+contano: si contano quelle **diverse**. Verificato confrontando l'impronta dei pixel, non i nomi dei
+passi.
+
+| | scatti | schermate DIVERSE | gesti senza effetto |
+|---|---:|---:|---:|
+| TALOS | 79 | **50** | 29 |
+| Hermes desktop | 50 | **45** | 5 |
+
+⛔ Il primo controllo che avevo scritto guardava il TESTO e diceva 32 doppioni su 57: sbagliato,
+perché scorrere un pannello non cambia . Un controllo che misura la cosa sbagliata è
+peggio di nessun controllo — dice «alla cieca» proprio quando non lo sei. Rifatto sui pixel.
+
+Cose imparate dai gesti a vuoto: **Escape chiude i fogli** (verificato: la schermata torna identica
+a quella di partenza), il fondale non li chiude, e il Capability hub finisce di scorrere prima di
+quanto pensassi — cioè tutto quel contenuto sta in due schermate scarse di scorrimento.
 
 ## §6 — Stato del giro
 
