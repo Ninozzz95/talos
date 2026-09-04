@@ -15,7 +15,7 @@
 |---|---|
 | TALOS | istanza **isolata** sulla porta **4195**, copia dello store (73 sessioni). ⛔ Il 4174 dell'owner non è mai stato toccato |
 | Hermes Agent desktop | **esiste**, ed è Electron 40 + React + Vite (`apps/desktop`, versione 0.17.0 nel checkout). Non era mai stato costruito su questa macchina: l'ho copiato in una cartella isolata, installato (1.186 pacchetti) e compilato. Gira con le **sessioni vere dell'owner** |
-| Codex | CLI 0.152.0, TUI nel terminale: **nessuna app desktop per Windows** |
+| Codex | CLI 0.152.0 **e app desktop**: `codex app` apre l’app ChatGPT con Codex dentro, già installata (⛔ correzione del §4-sexies: al §0 avevo scritto che non esisteva) |
 | Agent Canvas (OpenHands) | installato come pacchetto npm 1.12.0 |
 
 Strumento del giro: `censimento.mjs` (scratch), che registra **due canali** per ogni schermata —
@@ -214,6 +214,39 @@ Confronto onesto:
 ⇒ Sul **contenuto** siamo pari o meglio (43 attrezzi veri col costo, permessi per attrezzo,
 diagnosi dei giri). Sulla **forma** siamo molto indietro: loro hanno una pagina, noi un cassetto.
 È esattamente il motivo per cui l'owner ha chiesto il redesign.
+
+## §4-sexies — Codex: ⛔ CORREZIONE, l'app desktop ESISTE ed è dentro ChatGPT
+
+Nel §0 avevo scritto «Codex non ha un'app desktop per Windows». **Sbagliato**, e l'ho scoperto
+leggendo il suo aiuto: `codex app` — «Launch the Desktop app (opens the app installer if missing)».
+Lanciata: si apre l'**app ChatGPT**, con Codex dentro. Era già installata.
+
+`codex/03-codex-app.png`, `05-programmate.png`, e l'uscita intera del loro Doctor in `01-doctor.txt`.
+
+**Cosa ha, che noi non abbiamo:**
+- **Barra dei menu del sistema operativo** — File, Modifica, Vista, Guida — e tutta l'interfaccia
+  **in italiano**. Hermes è solo in inglese; noi siamo in italiano ma dentro un browser.
+- **Progetti come raggruppamento di primo livello**: la sidebar elenca *Progetti* e sotto ogni
+  progetto le sue chat (AVM → Desktop, Mobile, TALOS CODEX, prova…) con un «Mostra di più». Noi
+  abbiamo la cartella per sessione, non il progetto che le raggruppa.
+- **Destinazioni**: Nuova chat, **Pull request**, **Programmate**, **Plugin**, **Esplora**. Due di
+  queste sono lavoro che noi non mostriamo affatto (le PR e le esecuzioni pianificate).
+- **L'hero nomina il progetto**: «Cosa creiamo in AVM?» invece del nostro «Nessuna sessione attiva».
+- **Il limite d'uso è una carta nell'area principale** («Hai una nuova reimpostazione del limite di
+  utilizzo disponibile… scadrà tra 30 giorni»). Noi non diciamo niente sulla quota.
+- **Plugin e Skill come pagina**, con schede *Plugin | Skill*, ricerca, «Installati» in fila,
+  filtri *Pubblici · <organizzazione> · Personali*, e i *Popolari* con un `+` per riga.
+
+**Il loro Doctor è più ricco del nostro** (`01-doctor.txt`, 197 righe): note in testa (aggiornamento
+disponibile, build desktop disponibile, **246 file di rollout per 2,17 GB su disco**, avviso su
+Microsoft Defender, avviso «questo worktree non è su un Dev Drive»), poi controlli raggruppati
+(Environment, Background Server…) ognuno con ✓/⚠/○, i sotto-valori, e una riga «→» che dice **cosa
+fare**. In fondo: `21 ok · 1 idle · 5 notes · 2 warn · 0 fail degraded`, e le opzioni `--summary`,
+`--all`, `--json`. ⇒ Da rubare: il **conteggio finale per severità**, la riga di rimedio, e il fatto
+che dichiari **quanto spazio occupa lui stesso**.
+
+**Tutti e tre hanno un mercato, noi no**: Hermes il *Browse Hub* con nove registri, Codex la pagina
+*Plugin/Skill* con pubblici, aziendali e personali. Noi: nessuna distribuzione.
 
 ## §5 — Taccuino: difetti nostri visti mentre confrontavo
 
