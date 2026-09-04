@@ -20,6 +20,28 @@ window is a plain web page talking to it over loopback.
 Renderer: `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`, no preload.
 GPU: `ignore-gpu-blocklist` is on (the 2026-09-02 lag lesson); W2-17 measures whether it stays.
 
+## Lifecycle (W2-13)
+
+- **One instance.** `app.requestSingleInstanceLock()`: a second launch exits at once and the
+  first window comes to the front.
+- **The child is governed by a state machine** (`lifecycle.mjs`, pure, tested without Electron):
+  `fermo → avvio → pronto → in-chiusura → chiuso`; an unexpected exit is `crash` and the shell
+  restarts the child with a growing backoff (500 ms → 8 s, five attempts); after five
+  consecutive failures it gives up (`arreso`), warns in a dialog and stops trying. An exit we
+  asked for is never a crash. A restart that succeeds resets the counter.
+- **After a restart the window reloads on the new child** (new port/cookie), only then.
+- **Sleep and wake.** `powerMonitor` suspend/resume: on wake the shell probes `/api/v1/health`
+  instead of assuming; a child that died during sleep is treated as a crash.
+- **Window bounds** are saved to `labs/stores/electron-shell/window-state.json` (debounced) and
+  restored on the next launch, only if they still fall on a connected display.
+  `windowStatePersistence` does not exist in Electron 44 (checked in the official docs on
+  2026-09-04), so this is ours.
+
+Proven live on 2026-09-04 (Playwright `_electron`): child killed by pid → `crash` → restart →
+window reloaded, health 200 again in 7 s with a new pid; second instance exits 0; bounds set,
+app closed, relaunched with the same bounds. Not proven live: suspend/resume (cannot be
+simulated; covered by the state-machine tests).
+
 ## What it does NOT do
 
 No tray, no native notifications, no `talos://` protocol (W2-14); no installer (W2-15); no
