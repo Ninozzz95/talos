@@ -10,8 +10,9 @@
 > `GUIDA-FASCIA-R`, `GUIDA-WAVE-0/1/2/3/4-E-FINAL` e `GUIDA-PROPOSTE` (passi) · `LEDGER-KERNEL-RICHIESTE-DESKTOP`
 > (K-01…K-11, lane mobile, decide l'owner) · `DOSSIER-COMPETITOR-FUNZIONI-DISTINTIVE` +
 > `DOSSIER-COMPETITOR-ESTRATTI-CODICE` (il perché delle P-nn) · `REVIEW-STATE-OF-THE-ART-301,56-09-03`.
-> Regole d'esecuzione: §1 e §1,5-bis del ledger (modello ed effort per riga: chiedere all'owner di
-> cambiare modello se la sessione non usa quello consigliato).
+> Regole d'esecuzione: §1 e §1-bis del ledger. ⛔ Owner 04/09: FERMATA prima di OGNI riga con il consiglio
+> modello+effort; la riga la implementa UN agente alla volta orchestrato dalla sessione (Opus 5 high),
+> Fable solo sulle righe marcate Fable e avvisando prima.
 
 ## Come si legge una riga
 
@@ -55,10 +56,16 @@ Somma fascia R (approvata): **19 gg** (R-01 1,5 · R-02 3 · W0-04 0,5 · Electr
 | 15 | W0-03 | Sonda di rilascio: GPU + rAF da fermo nella QA | 1 | W0 | — | — |
 | 16 | W1-12 | Aperti minori + nomi unici + resume con età e stima | 1,5 | W1 | — | — |
 | 17 | W1-13 | File di controllo protetti anche in Full access | 1 | W1 | — | — |
+| 17a | **O-03** | Albero file: radice dice `libero:default` invece della cartella — owner 04/09 | 0,25 | ledger §3 O-01…O-07 | — | — |
+| 17b | **O-02** | «giri esauriti 24/24» frequente (locale, da provare API): diagnosi misurata + cura desktop + K-12 — owner 04/09 | 2 | ledger §3 O | — | K-12 |
+| 17c | **O-01** | Foglio «Aggiungi contesto» (pulsante +): ogni riga funzionante al 100%, zero mock — owner 04/09 | 1,5 | ledger §3 O | — | — |
 | 18 | W1-03 | Notifica del browser a fine giro / approvazione | 1 | W1 | — | — |
 | 19 | W1-01 | Schede terminale (`terminalId` ≠ `sessionId`) | 3,5 | W1 | W0-06 | — |
 | 20 | W1-02 | Process Ledger + stall guard | 2,5 | W1 | — | — |
+| 20a | **O-04** | Follow-up mentre la chat lavora + interruzione perfetti — owner 04/09 | 2 | ledger §3 O | W1-02 | — |
 | 21 | **P-03** | Evidence ledger + guardia «codice senza prova» | 2,5 | PROPOSTE | W1-02 | K-07 |
+| 21a | **O-06** | Censimento attrezzi fondamentali e oltre, scheda per modello — owner 04/09 | 2 | ledger §3 O | — | — |
+| 21b | **O-05** | Immagini al modello dal desktop (parità mobile e meglio) — owner 04/09 | 2,5 | ledger §3 O | O-06 | forse |
 | 22 | W1-08 | Costi stimati per sessione/giorno/modello | 2 | W1 | — | — |
 | 23 | W1-11 | Cinque viste di prima classe | 3 | W1 | — | — |
 | 24 | W1-07 | File viewer scrivibile, atomico, `FILE_STALE` | 3,5 | W1 | — | — |
@@ -71,8 +78,9 @@ Somma fascia R (approvata): **19 gg** (R-01 1,5 · R-02 3 · W0-04 0,5 · Electr
 | 31 | **P-07** | Hooks: eventi di ciclo di vita, http, fail-closed, prima/dopo | 2,5 | PROPOSTE | W1-02 | — |
 | 32 | **P-16** | Fallback di modello a due stadi con evento | 2 | PROPOSTE | W1-08 | — |
 | 33 | W1-09 | Tastiera e focus | 2,5 | W1 | — | — |
+| 33a | **O-07** | Lavori agentici di lunga durata + velocità dei tool: RICERCA prima (Fable xhigh, avvisare), poi righe stimate — owner 04/09 «più avanti, segnalo» | 1 | ledger §3 O | W1-02 | forse |
 
-Somma fascia A: **54,25 gg** (Wave 0 4,25 · Wave 1 31 · P 19).
+Somma fascia A: **64,5 gg** (Wave 0 4,25 · Wave 1 31 · P 19 · O 10,25 — O-07 ricerca 1 gg a parte).
 
 ## Fascia M — Mac e Linux (dopo Wave 1, fascia a parte, stima NON misurata)
 
@@ -153,7 +161,7 @@ Somma fascia C: **116,5 gg** (Wave 3 66,5 · Wave 4 36 · P 9 · FIN 5).
 
 ## Totale
 
-86 righe (59 del ledger + 18 PROPOSTE + 4 R + 3 M + 2 Q), **285,25 giorni-agente** stimati (fascia M esclusa: non misurata — vedi sopra) adapter/UI, kernel a parte. R-01, Q-01, Q-02 **fatte**; il resto attende il sì dell'owner riga per riga.
+93 righe (59 del ledger + 18 PROPOSTE + 4 R + 7 O + 3 M + 2 Q), **296,5 giorni-agente** stimati (fascia M esclusa: non misurata — vedi sopra) adapter/UI, kernel a parte. R-01, Q-01, Q-02 **fatte**; il resto attende il sì dell'owner riga per riga.
 Le stime seguono la regola del ledger: superata del 50 % la riga si ferma e si scrive perché.
 
 ## Le richieste al kernel, nell'ordine in cui servono
