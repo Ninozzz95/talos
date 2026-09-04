@@ -651,6 +651,220 @@ export function guardiaDiStallo(eventi, { istanti = null, adesso = null, soglie 
   };
 }
 
+/* =====================================================================
+ * ⭐⭐⭐ W1-03 (04/9) — LE TRE METRICHE DI SESSIONE, per la Board del
+ * redesign (decisione G3-G4): tasso di cache · tempo al primo token ·
+ * motivo di chiusura del giro.
+ *
+ * ⛔⛔ NESSUNA SCRITTURA NUOVA SUL DISCO. Tutte e tre si DERIVANO dagli
+ * eventi già persistiti, esattamente come `usageDaEventi` e come il
+ * process ledger qui sopra: la storia di ogni sessione passa già intera
+ * da `broadcast` (che scrive su `.sessions-store/`), quindi un campo
+ * nuovo sarebbe una seconda fonte di verità accanto a una che c'è già.
+ *
+ * ⭐ MISURATO sui 73 file di sessione VERI in `.sessions-store/`
+ * (60.437 eventi, sonda del 04/09) — non deciso a tavolino:
+ *  - `_sequenza` c'è su TUTTI i 60.437 eventi, ma l'ordine SUL DISCO è
+ *    diverso dall'ordine di `_sequenza` in 71 file su 73 ⇒ `eventiInOrdine`
+ *    è obbligatorio, non una precauzione;
+ *  - NESSUN evento persistito porta un orario (zero campi ts/timestamp/at):
+ *    il tempo esiste solo nella mappa `istanti` tenuta IN MEMORIA da
+ *    `broadcast` ⇒ per una sessione RIPRISTINATA il tempo al primo token
+ *    è `null` con il motivo DETTO, mai uno zero inventato;
+ *  - il primo pezzo che arriva dopo `RunStarted` è un evento di
+ *    RAGIONAMENTO in 55 sessioni su 71, di TESTO in 16, mai un
+ *    `TextMessageContent` prima del suo `TextMessageStart`;
+ *  - `RunError.code` sul disco vale `giri-esauriti` (8), `internal-error`
+ *    (5), `fermato` (2) — i tre codici sono letti, non inventati;
+ *  - come CHIUSURA finale: `fine-lavoro` 65, `giri-finiti` 6, `errore` 2;
+ *  - 71 sessioni su 73 portano `/usage`; il tasso di cache va da 0,0% a
+ *    99,2% (mediana 85,4%) e 5 sessioni hanno `cached_tokens` a ZERO con
+ *    `prompt_tokens` ben oltre le 1.024 ⇒ lo zero è MISURATO, e le 2
+ *    sessioni senza `/usage` sono NON MISURATE: due fatti diversi, due
+ *    parole diverse.
+ *
+ * ⭐ RICERCA WEB del 04/09, fatta PRIMA di scrivere (obbligo owner) — i
+ * VINCOLI che ha aggiunto, non la soluzione:
+ *  - OpenTelemetry, semantic conventions GenAI (`gen-ai-metrics.md`, main,
+ *    e opentelemetry.io/blog/2026/genai-observability): la metrica
+ *    standard è `gen_ai.client.operation.time_to_first_chunk` — "time to
+ *    receive the FIRST CHUNK", qualunque cosa contenga, non "il primo
+ *    token di testo"; e `gen_ai.server.time_to_first_token` è definita
+ *    "for SUCCESSFUL responses" ⇒ il tempo va sempre letto accanto
+ *    all'esito, mai da solo.
+ *  - Stessa spec, `gen_ai.usage`: esistono SOLO i tipi `input` e `output`
+ *    — NON esiste un tipo `cache_read` ⇒ un tasso di cache è una nostra
+ *    estensione dichiarata e deve portare con sé il proprio DENOMINATORE,
+ *    altrimenti non è confrontabile con niente.
+ *  - vLLM (docs.vllm.ai/en/stable/design/metrics/) e ClickHouse
+ *    "LLM inference latency: TTFT": per i modelli che ragionano si
+ *    misurano DUE tempi diversi — TTFT (primo chunk) e TTFV, "time to
+ *    first VISIBLE token", dopo la fase di pensiero — e "diverge by tens
+ *    of seconds"; la latenza percepita è la seconda. ⇒ Con 55 sessioni su
+ *    71 in cui il primo chunk è ragionamento, riportare un numero solo
+ *    sarebbe una media di due cose diverse: qui se ne riportano DUE.
+ *  - OpenAI, guida al prompt caching (developers.openai.com): `prompt_tokens`
+ *    COMPRENDE già i token letti dalla cache ⇒ il denominatore giusto è
+ *    `prompt_tokens` e il rapporto sta in [0,1]; il caching parte solo da
+ *    1.024 token e a scatti di 128 ⇒ uno 0% su un prompt corto è un fatto
+ *    normale, non un guasto.
+ *  - LiteLLM, issue aperte sulla normalizzazione di `finish_reason`, e le
+ *    tabelle Anthropic (`end_turn`/`max_tokens`/`max_turns`/…) contro
+ *    OpenAI (`stop`/`length`/`tool_calls`/…): i vocabolari "are similar but
+ *    not identical" e la mappatura "cannot be defaulted" ⇒ il codice
+ *    GREZZO viaggia sempre accanto al motivo normalizzato, e un codice mai
+ *    visto cade in `errore` DICENDO quale era, mai buttato via.
+ * ===================================================================== */
+
+const MOTIVO_USAGE_ASSENTE = 'nessun evento di consumo (StateDelta su /usage) in questa storia: il tasso di cache non è MISURATO, che è cosa diversa da uno zero misurato';
+const MOTIVO_PROMPT_ZERO = 'il consumo registrato non porta un prompt_tokens maggiore di zero: senza denominatore il tasso non esiste, e uno 0% sarebbe una risposta inventata';
+const MOTIVO_CACHED_ASSENTE = 'il consumo registrato non porta cached_tokens: il fornitore non ha dichiarato quanti token venissero dalla cache, e «non dichiarato» non è «nessuno»';
+const MOTIVO_CACHE_INCOERENTE = 'i token letti dalla cache risultano PIÙ del prompt intero: prompt_tokens comprende già quelli in cache (guida OpenAI al prompt caching), quindi questa contabilità è rotta e non si riporta un tasso oltre il 100%';
+const MOTIVO_PRIMO_TOKEN_SENZA_GIRO = 'nessun RunStarted in questa storia: senza l\'istante di partenza non c\'è un tempo al primo token da misurare';
+const MOTIVO_PRIMO_TOKEN_MAI_ARRIVATO = 'il giro è partito ma non è ancora arrivato un solo pezzo di risposta dal modello';
+const MOTIVO_PRIMO_VISIBILE_MAI_ARRIVATO = 'il giro non ha ancora prodotto testo visibile: finora solo ragionamento o chiamate ad attrezzi';
+const MOTIVO_CHIUSURA_APERTA = 'il giro è ancora in corso: non ha ancora un motivo di chiusura, e dirne uno adesso sarebbe una previsione';
+
+/**
+ * Gli eventi che valgono come «primo pezzo di risposta» del modello.
+ * ⭐ `ReasoningMessage*` è dentro perché nei dati veri è ciò che arriva per
+ * primo in 55 sessioni su 71: escluderlo misurerebbe la fine del ragionamento
+ * spacciandola per l'inizio della risposta.
+ * ⭐ `ToolCallStart` è dentro perché un giro può cominciare direttamente con
+ * una chiamata ad attrezzo (1 caso su 73): è output del modello a tutti gli
+ * effetti, ed è il "first chunk" della convenzione OpenTelemetry.
+ */
+const EVENTI_PRIMO_TOKEN = Object.freeze(['ReasoningMessageStart', 'ReasoningMessageContent', 'TextMessageStart', 'TextMessageContent', 'ToolCallStart']);
+/** Gli eventi che valgono come «primo token VISIBILE» (TTFV): solo il testo che la persona legge. */
+const EVENTI_PRIMO_TOKEN_VISIBILE = Object.freeze(['TextMessageStart', 'TextMessageContent']);
+
+/** Da un tipo di evento alla famiglia detta a parole: mai il nome tecnico fuori da qui. */
+function famigliaDelPrimoToken(tipo) {
+  if (tipo === 'ReasoningMessageStart' || tipo === 'ReasoningMessageContent') return 'ragionamento';
+  if (tipo === 'TextMessageStart' || tipo === 'TextMessageContent') return 'testo';
+  if (tipo === 'ToolCallStart') return 'attrezzo';
+  return null;
+}
+
+/**
+ * ⛔ Il MOTIVO DI CHIUSURA, normalizzato — e il codice GREZZO accanto.
+ * `null` significa «ancora in corso», mai «non lo so»: si smette di cercare al
+ * `RunStarted` (stessa disciplina di `ultimoEsitoDaEventi`), perché un
+ * `RunFinished` di un giro PRECEDENTE non chiude quello di adesso.
+ */
+function chiusuraDaEventi(ordinati) {
+  for (let i = ordinati.length - 1; i >= 0; i -= 1) {
+    const evento = ordinati[i];
+    if (evento?.type === 'RunError') {
+      const codice = typeof evento.code === 'string' ? evento.code : null;
+      if (codice === 'giri-esauriti') return { motivo: 'giri-finiti', codice };
+      if (codice === 'fermato') return { motivo: 'fermata', codice };
+      // ⛔ Un codice mai visto NON diventa un motivo nuovo inventato qui: cade
+      //    in `errore` e si porta dietro il proprio nome, così chi legge sa
+      //    cosa è successo (LiteLLM: la mappatura «cannot be defaulted»).
+      return { motivo: 'errore', codice };
+    }
+    if (evento?.type === 'RunFinished') return { motivo: 'fine-lavoro', codice: null };
+    if (evento?.type === 'RunStarted') return { motivo: null, codice: null };
+  }
+  return { motivo: null, codice: null };
+}
+
+/** Il tasso di cache dall'ULTIMO `/usage` della storia. ⛔ `null` non è `0`. */
+function cacheDaEventi(ordinati) {
+  let usage = null;
+  for (let i = ordinati.length - 1; i >= 0; i -= 1) {
+    if (ordinati[i]?.type !== 'StateDelta') continue;
+    const voce = ordinati[i].delta?.find((d) => d?.path === '/usage');
+    if (voce) { usage = voce.value; break; }
+  }
+  const vuoto = { frazione: null, percentuale: null, promptTokens: null, cachedTokens: null, denominatore: 'prompt_tokens' };
+  if (!usage || typeof usage !== 'object') return { ...vuoto, motivoAssente: MOTIVO_USAGE_ASSENTE };
+
+  const prompt = Number.isFinite(usage.prompt_tokens) ? usage.prompt_tokens : null;
+  const cached = Number.isFinite(usage.cached_tokens) ? usage.cached_tokens : null;
+  const base = { ...vuoto, promptTokens: prompt, cachedTokens: cached };
+  if (prompt === null || prompt <= 0) return { ...base, motivoAssente: MOTIVO_PROMPT_ZERO };
+  if (cached === null || cached < 0) return { ...base, motivoAssente: MOTIVO_CACHED_ASSENTE };
+  if (cached > prompt) return { ...base, motivoAssente: MOTIVO_CACHE_INCOERENTE };
+
+  const frazione = cached / prompt;
+  return { ...base, frazione, percentuale: Math.round(frazione * 100), motivoAssente: null };
+}
+
+/**
+ * ⭐⭐⭐ LE METRICHE DI UNA SESSIONE, derivate dai SOLI eventi persistiti.
+ *
+ * Stessa firma e stesso contratto di `processiDaEventi` qui sopra:
+ * `{registrato:false, motivo:'non-registrato'}` quando non c'è niente da
+ * leggere — che è un fatto diverso da «misurato e vale zero».
+ *
+ * ⛔ Il giro misurato è l'ULTIMO (`giri` dice quanti ce ne sono in tutto:
+ * 11 sessioni su 73 ne hanno più di uno, quindi la scelta non è accademica).
+ * Chiusura e tempo al primo token parlano perciò dello stesso giro, quello
+ * di adesso — mai una media fra giri diversi.
+ *
+ * @returns {{registrato:boolean, motivo:string|null, giri:number|null,
+ *   cache:object|null, primoToken:object|null, chiusura:object|null}}
+ */
+export function metricheDaEventi(eventi, { istanti = null, adesso = null } = {}) {
+  if (!Array.isArray(eventi) || eventi.length === 0) {
+    return { registrato: false, motivo: 'non-registrato', giri: null, cache: null, primoToken: null, chiusura: null };
+  }
+  const ordinati = eventiInOrdine(eventi);
+  const leggiIstante = creaLettoreIstanti(istanti);
+  const adessoNoto = Number.isFinite(adesso);
+
+  const giri = ordinati.filter((evento) => evento?.type === 'RunStarted').length;
+  let inizioGiro = -1;
+  for (let i = ordinati.length - 1; i >= 0; i -= 1) if (ordinati[i]?.type === 'RunStarted') { inizioGiro = i; break; }
+
+  const chiusuraNormalizzata = chiusuraDaEventi(ordinati);
+  const chiusura = {
+    motivo: chiusuraNormalizzata.motivo,
+    codice: chiusuraNormalizzata.codice,
+    motivoAssente: chiusuraNormalizzata.motivo === null ? MOTIVO_CHIUSURA_APERTA : null,
+  };
+
+  const primoToken = {
+    ms: null, tipo: null, msPrimoVisibile: null, inCorsoDaMs: null, motivoAssente: null, motivoVisibileAssente: null,
+  };
+  if (inizioGiro === -1) {
+    primoToken.motivoAssente = MOTIVO_PRIMO_TOKEN_SENZA_GIRO;
+    primoToken.motivoVisibileAssente = MOTIVO_PRIMO_TOKEN_SENZA_GIRO;
+  } else {
+    const sequenzaInizio = ordinati[inizioGiro]?._sequenza;
+    const istanteInizio = Number.isSafeInteger(sequenzaInizio) ? leggiIstante(sequenzaInizio) : null;
+    const dopo = ordinati.slice(inizioGiro + 1);
+    const primo = dopo.find((evento) => EVENTI_PRIMO_TOKEN.includes(evento?.type)) ?? null;
+    const primoVisibile = dopo.find((evento) => EVENTI_PRIMO_TOKEN_VISIBILE.includes(evento?.type)) ?? null;
+    primoToken.tipo = primo ? famigliaDelPrimoToken(primo.type) : null;
+
+    const distanza = (evento) => {
+      if (istanteInizio === null || !evento) return null;
+      const istante = Number.isSafeInteger(evento._sequenza) ? leggiIstante(evento._sequenza) : null;
+      return istante === null ? null : istante - istanteInizio;
+    };
+    primoToken.ms = distanza(primo);
+    primoToken.msPrimoVisibile = distanza(primoVisibile);
+
+    if (istanteInizio === null) {
+      // ⛔ Il caso NORMALE per una sessione ripresa da disco: nessun evento
+      //    persistito porta un orario, e il perché si DICE.
+      primoToken.motivoAssente = MOTIVO_SENZA_ISTANTI;
+      primoToken.motivoVisibileAssente = MOTIVO_SENZA_ISTANTI;
+    } else {
+      if (primo === null) primoToken.motivoAssente = MOTIVO_PRIMO_TOKEN_MAI_ARRIVATO;
+      else if (primoToken.ms === null) primoToken.motivoAssente = MOTIVO_SENZA_ISTANTI;
+      if (primoVisibile === null) primoToken.motivoVisibileAssente = MOTIVO_PRIMO_VISIBILE_MAI_ARRIVATO;
+      else if (primoToken.msPrimoVisibile === null) primoToken.motivoVisibileAssente = MOTIVO_SENZA_ISTANTI;
+      if (chiusura.motivo === null && adessoNoto) primoToken.inCorsoDaMs = adesso - istanteInizio;
+    }
+  }
+
+  return { registrato: true, motivo: null, giri, cache: cacheDaEventi(ordinati), primoToken, chiusura };
+}
+
 export function createSessionRegistry({
   avviaSessioneFn = avviaSessioneReale,
   preparaEsecuzioneFn,
@@ -2830,6 +3044,33 @@ export function createSessionRegistry({
       const ledger = processiDaEventi(voce.eventi, { istanti, adesso });
       const guardia = guardiaDiStallo(voce.eventi, { istanti, adesso, soglie: { ...soglieStallo, ...(soglie ?? {}) } });
       return { ok: true, registrato: ledger.registrato, processi: ledger.processi, motivo: ledger.motivo, guardia };
+    },
+
+    /**
+     * ⭐⭐⭐ W1-03 (04/9) — LE TRE METRICHE di UNA sessione, per la Board
+     * ridisegnata (decisione G3-G4): tasso di cache, tempo al primo token,
+     * motivo di chiusura del giro. Stessa forma di ritorno di
+     * `elencaProcessi` qui sopra: `{erroreAvvio, code}` per una sessione che
+     * non esiste, `{ok:true, …}` altrimenti.
+     *
+     * ⛔ `registrato:false` quando la sessione esiste ma non ha ancora un
+     * solo evento: «non registrato» non è «misurato e vale zero».
+     *
+     * ⛔⛔ Sola lettura, zero scritture nuove: gli istanti arrivano dalla
+     * mappa IN MEMORIA (`voce.istantiEvento`), tutto il resto dagli eventi
+     * già persistiti — un campo in più sul disco duplicherebbe una fonte di
+     * verità che c'è già.
+     *
+     * ⭐ La ricerca del 04/09 (DeepSeek Harness) mostra che le stesse tre
+     * colonne, là, esistono solo montando SigNoz e un plugin OpenTelemetry
+     * di terze parti, perché il loro nucleo non esporta niente. Qui sono
+     * dentro l'app, senza un collettore e senza un byte in più sul disco.
+     */
+    elencaMetriche(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      const metriche = metricheDaEventi(voce.eventi, { istanti: voce.istantiEvento ?? null, adesso: clock().getTime() });
+      return { ok: true, ...metriche };
     },
 
     async elencaServerMcp(sessionId) {

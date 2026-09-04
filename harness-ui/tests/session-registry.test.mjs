@@ -7,6 +7,7 @@ import test from 'node:test';
 import {
   createSessionRegistry as createSessionRegistryReale,
   guardiaDiStallo,
+  metricheDaEventi,
   processiDaEventi,
   SCHEMA_SESSIONE,
   SOGLIE_STALLO_PREDEFINITE,
@@ -5266,4 +5267,304 @@ test('⛔⛔ AL CONTRARIO — elencaProcessi su un id inesistente torna NOT_FOUN
   const esito = registro.elencaProcessi('mai-esistita');
   assert.equal(esito.code, 'NOT_FOUND');
   assert.ok(!('processi' in esito));
+});
+
+/* =====================================================================
+ * ⭐⭐⭐ W1-03 (04/9) — LE TRE METRICHE DI SESSIONE (`metricheDaEventi`):
+ * tasso di cache · tempo al primo token · motivo di chiusura del giro.
+ *
+ * ⭐ MISURATO PRIMA di scrivere, sui 73 file VERI di `.sessions-store/`
+ * (60.437 eventi): il primo pezzo di risposta dopo `RunStarted` è
+ * RAGIONAMENTO in 55 sessioni su 71 e testo in 16 · i codici di `RunError`
+ * sul disco sono `giri-esauriti` (8), `internal-error` (5), `fermato` (2) ·
+ * come chiusura finale: `fine-lavoro` 65, `giri-finiti` 6, `errore` 2 ·
+ * 71 sessioni su 73 portano `/usage`, il tasso va da 0% a 99% (mediana 85%)
+ * e 5 hanno una cache a ZERO VERO · l'ordine SUL DISCO è diverso da quello
+ * di `_sequenza` in 71 file su 73 · NESSUN evento persistito porta un
+ * orario.
+ *
+ * ⭐ RICERCA WEB del 04/09, PRIMA di scrivere: OpenTelemetry GenAI misura
+ * il «first CHUNK» (qualunque cosa contenga) e definisce
+ * `time_to_first_token` solo «for successful responses»; vLLM e ClickHouse
+ * distinguono TTFT da TTFV («time to first VISIBLE token», dopo il
+ * pensiero) perché «diverge by tens of seconds»; OpenAI dichiara che
+ * `prompt_tokens` COMPRENDE già i token in cache (⇒ il rapporto sta in
+ * [0,1]) e che il caching parte solo oltre i 1.024 token; LiteLLM ha issue
+ * aperte perché la mappatura dei `finish_reason` «cannot be defaulted»
+ * (⇒ il codice grezzo non si butta mai via).
+ * ===================================================================== */
+
+test('⛔⛔ AL CONTRARIO — metricheDaEventi senza NESSUN evento dice «non registrato», mai tre zeri spacciati per una misura', () => {
+  for (const vuoto of [[], null, undefined]) {
+    const m = metricheDaEventi(vuoto);
+    assert.equal(m.registrato, false);
+    assert.equal(m.motivo, 'non-registrato');
+    assert.equal(m.cache, null, '⛔ mai un 0% qui: «non registrato» non è «cache a zero»');
+    assert.equal(m.primoToken, null);
+    assert.equal(m.chiusura, null);
+    assert.equal(m.giri, null);
+  }
+});
+
+test('⭐⭐⭐ metricheDaEventi — il TASSO DI CACHE viene dall\'ULTIMO /usage, come frazione E come percentuale', () => {
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    { type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: { prompt_tokens: 1_000, completion_tokens: 10, cached_tokens: 100, giri: 1 } }] },
+    { type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: { prompt_tokens: 8_000, completion_tokens: 90, cached_tokens: 6_000, giri: 2 } }] },
+    { type: 'RunFinished', threadId: 't', runId: 'r', outcome: { type: 'success' } },
+  ]);
+  const { cache } = metricheDaEventi(eventi);
+  assert.equal(cache.frazione, 0.75, '⛔ l\'ultimo /usage è già una somma cumulativa: non si sommano fra loro');
+  assert.equal(cache.percentuale, 75);
+  assert.equal(cache.promptTokens, 8_000);
+  assert.equal(cache.cachedTokens, 6_000);
+  assert.equal(cache.denominatore, 'prompt_tokens', 'il denominatore viaggia col numero: OpenTelemetry non ha un tipo cache_read, quindi va dichiarato');
+  assert.equal(cache.motivoAssente, null);
+});
+
+test('⛔⛔ AL CONTRARIO — con prompt_tokens a ZERO il tasso è NULL con il motivo detto, MAI 0%', () => {
+  for (const rotto of [{ prompt_tokens: 0, cached_tokens: 0 }, { completion_tokens: 5 }, { prompt_tokens: -3, cached_tokens: 1 }]) {
+    const eventi = insequenza([
+      { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+      { type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: rotto }] },
+    ]);
+    const { cache } = metricheDaEventi(eventi);
+    assert.equal(cache.frazione, null);
+    assert.equal(cache.percentuale, null, '⛔ senza denominatore uno 0% sarebbe una risposta inventata');
+    assert.ok(cache.motivoAssente.includes('prompt_tokens'), 'il motivo NOMINA il campo che manca');
+  }
+});
+
+test('⛔⛔ AL CONTRARIO — «nessun consumo registrato» e «cache a zero» hanno DUE motivi DIVERSI, mai la stessa parola', () => {
+  const senzaUsage = metricheDaEventi(insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    { type: 'RunFinished', threadId: 't', runId: 'r', outcome: { type: 'success' } },
+  ]));
+  assert.equal(senzaUsage.cache.frazione, null);
+  assert.equal(senzaUsage.cache.promptTokens, null);
+  assert.ok(senzaUsage.cache.motivoAssente.includes('MISURATO'), 'non misurato si DICE, non si confonde con uno zero');
+
+  // Il VERSO OPPOSTO, e nei dati veri succede in 5 sessioni su 73: la cache
+  // è stata misurata e vale davvero zero.
+  const cacheAZero = metricheDaEventi(insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    { type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: { prompt_tokens: 12_000, completion_tokens: 40, cached_tokens: 0, giri: 1 } }] },
+  ]));
+  assert.equal(cacheAZero.cache.frazione, 0, 'uno ZERO MISURATO è un numero vero e va detto come tale');
+  assert.equal(cacheAZero.cache.percentuale, 0);
+  assert.equal(cacheAZero.cache.motivoAssente, null);
+  assert.notEqual(senzaUsage.cache.motivoAssente, cacheAZero.cache.motivoAssente);
+});
+
+test('⛔⛔ AL CONTRARIO — cached_tokens MAGGIORE di prompt_tokens è contabilità rotta: rifiutata, mai un tasso oltre il 100%', () => {
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    { type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: { prompt_tokens: 1_000, cached_tokens: 4_000, giri: 1 } }] },
+  ]);
+  const { cache } = metricheDaEventi(eventi);
+  assert.equal(cache.frazione, null, 'prompt_tokens COMPRENDE già i token in cache (guida OpenAI): questo non può succedere, e se succede non si riporta');
+  assert.equal(cache.percentuale, null);
+  assert.equal(cache.cachedTokens, 4_000, 'i due numeri grezzi restano leggibili: si nega il TASSO, non la misura');
+  assert.ok(cache.motivoAssente.includes('100%'));
+});
+
+test('⛔ AL CONTRARIO — cached_tokens ASSENTE non diventa zero: null col proprio motivo', () => {
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    { type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: { prompt_tokens: 9_000, completion_tokens: 20, giri: 1 } }] },
+  ]);
+  const { cache } = metricheDaEventi(eventi);
+  assert.equal(cache.frazione, null);
+  assert.equal(cache.cachedTokens, null);
+  assert.ok(cache.motivoAssente.includes('cached_tokens'));
+});
+
+test('⭐⭐⭐ metricheDaEventi — TEMPO AL PRIMO TOKEN: il primo pezzo è il RAGIONAMENTO, il primo VISIBILE è il testo, e i due NON coincidono', () => {
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    { type: 'ReasoningMessageStart', messageId: 'g1', role: 'reasoning' },
+    { type: 'ReasoningMessageContent', messageId: 'g1', delta: 'penso…' },
+    { type: 'ReasoningMessageEnd', messageId: 'g1' },
+    { type: 'TextMessageStart', messageId: 'm1', role: 'assistant' },
+    { type: 'TextMessageContent', messageId: 'm1', delta: 'ecco' },
+  ]);
+  const istanti = new Map([[1, 10_000], [2, 10_400], [3, 10_450], [4, 12_000], [5, 30_000], [6, 30_100]]);
+  const { primoToken } = metricheDaEventi(eventi, { istanti, adesso: 31_000 });
+  assert.equal(primoToken.ms, 400, 'TTFT = primo CHUNK qualunque, come la convenzione OpenTelemetry');
+  assert.equal(primoToken.tipo, 'ragionamento');
+  assert.equal(primoToken.msPrimoVisibile, 20_000, 'TTFV = primo token VISIBILE, dopo la fase di pensiero');
+  assert.notEqual(primoToken.ms, primoToken.msPrimoVisibile, '⛔ i due divergono «by tens of seconds»: riportarne uno solo sarebbe una media di due cose diverse');
+  assert.equal(primoToken.motivoAssente, null);
+  assert.equal(primoToken.motivoVisibileAssente, null);
+});
+
+test('⭐⭐ metricheDaEventi — un giro che comincia col TESTO ha TTFT e TTFV coincidenti, e il tipo lo dice', () => {
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    { type: 'TextMessageStart', messageId: 'm1', role: 'assistant' },
+    { type: 'TextMessageContent', messageId: 'm1', delta: 'ciao' },
+  ]);
+  const { primoToken } = metricheDaEventi(eventi, { istanti: new Map([[1, 1_000], [2, 1_320], [3, 1_400]]) });
+  assert.equal(primoToken.tipo, 'testo');
+  assert.equal(primoToken.ms, 320);
+  assert.equal(primoToken.msPrimoVisibile, 320);
+});
+
+test('⛔⛔ AL CONTRARIO — SENZA istanti (sessione ripresa da disco) il tempo è NULL col motivo detto, mai uno zero', () => {
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    { type: 'TextMessageStart', messageId: 'm1', role: 'assistant' },
+  ]);
+  const { primoToken } = metricheDaEventi(eventi);
+  assert.equal(primoToken.ms, null);
+  assert.equal(primoToken.msPrimoVisibile, null);
+  assert.equal(primoToken.inCorsoDaMs, null);
+  assert.ok(primoToken.motivoAssente.includes('nessun istante osservato'), 'è il caso NORMALE dei 73 file veri: nessun evento persistito porta un orario');
+  assert.equal(primoToken.tipo, 'testo', 'il TIPO del primo pezzo si legge lo stesso: non serve un orologio per sapere COSA è arrivato');
+});
+
+test('⛔⛔ AL CONTRARIO — giro partito e NESSUN pezzo di risposta: ms null, e il motivo è DIVERSO da quello di chi non ha istanti', () => {
+  const eventi = insequenza([{ type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } }]);
+  const conOrologio = metricheDaEventi(eventi, { istanti: new Map([[1, 5_000]]), adesso: 9_000 });
+  assert.equal(conOrologio.primoToken.ms, null);
+  assert.equal(conOrologio.primoToken.tipo, null);
+  assert.ok(conOrologio.primoToken.motivoAssente.includes('non è ancora arrivato'));
+  assert.equal(conOrologio.primoToken.inCorsoDaMs, 4_000, 'il giro è aperto: si dice da quanto, non si inventa un tempo al primo token');
+
+  const senzaOrologio = metricheDaEventi(eventi);
+  assert.notEqual(senzaOrologio.primoToken.motivoAssente, conOrologio.primoToken.motivoAssente, 'due assenze diverse, due motivi diversi');
+});
+
+test('⛔⛔ AL CONTRARIO — solo RAGIONAMENTO e nessun testo: TTFT c\'è, TTFV è null col proprio motivo', () => {
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    { type: 'ReasoningMessageStart', messageId: 'g1', role: 'reasoning' },
+    { type: 'ReasoningMessageContent', messageId: 'g1', delta: 'penso…' },
+  ]);
+  const { primoToken } = metricheDaEventi(eventi, { istanti: new Map([[1, 1_000], [2, 1_700], [3, 1_800]]) });
+  assert.equal(primoToken.ms, 700);
+  assert.equal(primoToken.tipo, 'ragionamento');
+  assert.equal(primoToken.msPrimoVisibile, null, '⛔ mai il TTFT riusato come TTFV: il testo visibile non è ancora arrivato');
+  assert.ok(primoToken.motivoVisibileAssente.includes('testo visibile'));
+});
+
+test('⭐ metricheDaEventi — anche una tool-call vale come primo pezzo di risposta (1 sessione su 73 comincia così)', () => {
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    { type: 'ToolCallStart', toolCallId: 'c1', toolCallName: 'elenca' },
+  ]);
+  const { primoToken } = metricheDaEventi(eventi, { istanti: new Map([[1, 2_000], [2, 2_250]]) });
+  assert.equal(primoToken.tipo, 'attrezzo');
+  assert.equal(primoToken.ms, 250);
+});
+
+test('⭐⭐⭐ metricheDaEventi — il MOTIVO DI CHIUSURA è normalizzato, e il codice GREZZO gli sta accanto', () => {
+  const conFinale = (finale) => metricheDaEventi(insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    { type: 'TextMessageStart', messageId: 'm1', role: 'assistant' },
+    finale,
+  ])).chiusura;
+
+  assert.deepEqual(conFinale({ type: 'RunFinished', threadId: 't', runId: 'r', outcome: { type: 'success' } }), { motivo: 'fine-lavoro', codice: null, motivoAssente: null });
+  assert.deepEqual(conFinale({ type: 'RunError', message: 'giri finiti', code: 'giri-esauriti' }), { motivo: 'giri-finiti', codice: 'giri-esauriti', motivoAssente: null });
+  assert.deepEqual(conFinale({ type: 'RunError', message: 'fermato', code: 'fermato' }), { motivo: 'fermata', codice: 'fermato', motivoAssente: null });
+  assert.deepEqual(conFinale({ type: 'RunError', message: 'boom', code: 'internal-error' }), { motivo: 'errore', codice: 'internal-error', motivoAssente: null });
+});
+
+test('⛔⛔ AL CONTRARIO — un codice di errore MAI VISTO non inventa un motivo nuovo: cade in «errore» DICENDO quale era', () => {
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    { type: 'RunError', message: 'boh', code: 'quota-del-fornitore-esaurita' },
+  ]);
+  const { chiusura } = metricheDaEventi(eventi);
+  assert.equal(chiusura.motivo, 'errore');
+  assert.equal(chiusura.codice, 'quota-del-fornitore-esaurita', '⛔ la mappatura dei finish_reason «cannot be defaulted» (LiteLLM): il grezzo non si butta mai via');
+
+  const senzaCodice = metricheDaEventi(insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    { type: 'RunError', message: 'boh' },
+  ]));
+  assert.equal(senzaCodice.chiusura.motivo, 'errore');
+  assert.equal(senzaCodice.chiusura.codice, null, 'un codice che non c\'è resta null, non una stringa "undefined"');
+});
+
+test('⛔⛔ AL CONTRARIO — un giro ANCORA APERTO non ha un motivo di chiusura: null e il perché, mai «errore» per prudenza', () => {
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    { type: 'ToolCallStart', toolCallId: 'c1', toolCallName: 'shell' },
+  ]);
+  const { chiusura } = metricheDaEventi(eventi);
+  assert.equal(chiusura.motivo, null);
+  assert.equal(chiusura.codice, null);
+  assert.ok(chiusura.motivoAssente.includes('ancora in corso'));
+});
+
+test('⛔⛔⛔ metricheDaEventi — un RunFinished del giro PRECEDENTE non chiude il giro di ADESSO (11 sessioni su 73 hanno più giri)', () => {
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r1', input: { consegna: 'primo' } },
+    { type: 'TextMessageStart', messageId: 'm1', role: 'assistant' },
+    { type: 'RunFinished', threadId: 't', runId: 'r1', outcome: { type: 'success' } },
+    { type: 'RunStarted', threadId: 't', runId: 'r2', input: { consegna: 'secondo' } },
+    { type: 'ReasoningMessageStart', messageId: 'g2', role: 'reasoning' },
+  ]);
+  const m = metricheDaEventi(eventi, { istanti: new Map([[1, 0], [2, 100], [3, 200], [4, 1_000], [5, 1_900]]), adesso: 3_000 });
+  assert.equal(m.giri, 2, 'quanti giri ci sono in tutto si DICE, così chi legge sa che il numero riguarda l\'ultimo');
+  assert.equal(m.chiusura.motivo, null, '⛔ il secondo giro è aperto: il RunFinished del primo non lo chiude');
+  assert.equal(m.primoToken.ms, 900, 'il tempo al primo token è quello del giro DI ADESSO, non del primo');
+  assert.equal(m.primoToken.tipo, 'ragionamento');
+  assert.equal(m.primoToken.inCorsoDaMs, 2_000);
+});
+
+test('⭐⭐⭐ metricheDaEventi riordina per _sequenza: sul disco l\'ordine è diverso in 71 file su 73', () => {
+  const ordinati = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    { type: 'ReasoningMessageStart', messageId: 'g1', role: 'reasoning' },
+    { type: 'TextMessageStart', messageId: 'm1', role: 'assistant' },
+    { type: 'RunFinished', threadId: 't', runId: 'r', outcome: { type: 'success' } },
+  ]);
+  const istanti = new Map([[1, 1_000], [2, 1_500], [3, 4_000], [4, 5_000]]);
+  const mescolati = [ordinati[3], ordinati[1], ordinati[0], ordinati[2]];
+  assert.deepEqual(metricheDaEventi(mescolati, { istanti }), metricheDaEventi(ordinati, { istanti }),
+    '⛔ letto nell\'ordine del file, il RunFinished verrebbe prima del RunStarted e la chiusura sarebbe SBAGLIATA ma plausibile');
+  assert.equal(metricheDaEventi(mescolati, { istanti }).primoToken.ms, 500);
+  assert.equal(metricheDaEventi(mescolati, { istanti }).chiusura.motivo, 'fine-lavoro');
+});
+
+test('⭐⭐⭐ elencaMetriche(sessionId) su una sessione VIVA: le tre metriche VERE, dagli eventi e dagli istanti osservati', async () => {
+  const finta = sessioneControllabile();
+  let ora = 1_000;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'm', chiave: 'k', clock: () => new Date(ora),
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  finta.emetti({ type: 'RunStarted', threadId: 't1', runId: 'r1', input: { consegna: 'c' } });
+  ora = 1_600; finta.emetti({ type: 'ReasoningMessageStart', messageId: 'g1', role: 'reasoning' });
+  ora = 4_000; finta.emetti({ type: 'TextMessageStart', messageId: 'm1', role: 'assistant' });
+  ora = 4_100; finta.emetti({ type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: { prompt_tokens: 20_000, completion_tokens: 300, cached_tokens: 17_000, giri: 3 } }] });
+
+  ora = 9_000;
+  const aperta = registro.elencaMetriche(sessionId);
+  assert.equal(aperta.ok, true);
+  assert.equal(aperta.registrato, true);
+  assert.equal(aperta.cache.percentuale, 85);
+  assert.equal(aperta.primoToken.ms, 600, 'TTFT: il ragionamento è il primo pezzo che arriva');
+  assert.equal(aperta.primoToken.tipo, 'ragionamento');
+  assert.equal(aperta.primoToken.msPrimoVisibile, 3_000, 'TTFV: il testo arriva molto dopo');
+  assert.equal(aperta.chiusura.motivo, null, 'il giro è ancora aperto');
+  assert.equal(aperta.primoToken.inCorsoDaMs, 8_000);
+
+  finta.concludi({ type: 'RunError', message: 'giri finiti', code: 'giri-esauriti' });
+  await Promise.resolve();
+  const chiusa = registro.elencaMetriche(sessionId);
+  assert.equal(chiusa.chiusura.motivo, 'giri-finiti');
+  assert.equal(chiusa.chiusura.codice, 'giri-esauriti');
+  assert.equal(chiusa.primoToken.inCorsoDaMs, null, '⛔ un giro chiuso non è «in corso da»: quel numero sparisce, non si congela');
+});
+
+test('⛔⛔ AL CONTRARIO — elencaMetriche su un id inesistente torna NOT_FOUND, mai tre metriche vuote', () => {
+  const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
+  const esito = registro.elencaMetriche('mai-esistita');
+  assert.equal(esito.code, 'NOT_FOUND');
+  assert.ok(!('cache' in esito));
 });
