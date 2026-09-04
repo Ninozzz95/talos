@@ -27,7 +27,12 @@ export function createInitialState() {
       composer: { text: '', attachments: [], mode: 'follow-up' },
       streamingMessageId: null,
     },
-    execution: { status: 'idle', runId: null, toolRuns: [], checkpoints: [], error: null },
+    // ⛔ `usage: null` significa «non misurato», e non e' lo stesso di zero
+    // misurato. Vive dentro `execution` di proposito: il reducer azzera
+    // `execution` a OGNI cambio di sessione, quindi il difetto G30 (la barra
+    // che mostra il consumo della sessione precedente) non puo' ripresentarsi
+    // per costruzione, invece che per disciplina di chi ridisegna.
+    execution: { status: 'idle', runId: null, toolRuns: [], checkpoints: [], error: null, usage: null },
     approvals: { pending: {}, resolved: {} },
     review: { files: {}, order: [], activePath: null, mode: 'unified', comments: {}, tests: null, risks: [] },
     files: { status: 'idle', root: null, nodes: {}, openPaths: [], activePath: null, preview: null, error: null },

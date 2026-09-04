@@ -8,6 +8,7 @@ export const ACTIONS = Object.freeze({
   SESSION_CLEARED: 'sessions/cleared',
   SESSION_EVENT_RECEIVED: 'sessions/event-received',
   EXECUTION_STATUS_CHANGED: 'execution/status-changed',
+  USAGE_UPDATED: 'execution/usage-updated',
   APPROVAL_REGISTERED: 'approvals/registered',
   APPROVAL_RESOLVED: 'approvals/resolved',
   REVIEW_UPDATED: 'review/updated',

@@ -90,5 +90,6 @@ export const selectStatusBar = memoizeInputs([
   (state) => state.runtime.phase,
   (state) => state.runtime.connection,
   (state) => state.execution.status,
+  (state) => state.execution.usage,
   (state) => state.notifications.announcement,
-], (phase, connection, execution, announcement) => ({ phase, connection, execution, announcement }));
+], (phase, connection, execution, usage, announcement) => ({ phase, connection, execution, usage, announcement }));

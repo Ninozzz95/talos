@@ -93,7 +93,10 @@ export function reducer(state, action) {
         runtime: { ...state.runtime, phase: 'ready-active' },
         sessions: { ...state.sessions, activeId: payload.id, generation: state.sessions.generation + 1 },
         conversation: { ...state.conversation, messages: normalizeItems(payload.messages), reasoning: {}, queue: [], streamingMessageId: null },
-        execution: { ...state.execution, status: 'idle', runId: null, error: null },
+        // ⛔ `usage` NON si eredita: aprire una sessione senza sapere quanto ha
+        // consumato e' «non misurato», non «zero». Chi ha davvero misurato zero
+        // (una sessione appena creata da noi) lo passa esplicitamente.
+        execution: { ...state.execution, status: 'idle', runId: null, error: null, usage: payload.usage ?? null },
       };
     }
     case ACTIONS.SESSION_CLEARED:
@@ -102,12 +105,19 @@ export function reducer(state, action) {
         runtime: { ...state.runtime, phase: 'ready-empty' },
         sessions: { ...state.sessions, activeId: null, generation: state.sessions.generation + 1 },
         conversation: { ...state.conversation, messages: [], reasoning: {}, queue: [], streamingMessageId: null },
-        execution: { ...state.execution, status: 'idle', runId: null, error: null },
+        execution: { ...state.execution, status: 'idle', runId: null, error: null, usage: null },
       };
     case ACTIONS.SESSION_EVENT_RECEIVED:
       return applySessionEvent(state, payload);
     case ACTIONS.EXECUTION_STATUS_CHANGED:
       return { ...state, execution: { ...state.execution, ...payload } };
+    case ACTIONS.USAGE_UPDATED: {
+      // Un consumo che arriva senza sessione aperta non ha di chi essere.
+      if (!state.sessions.activeId) return state;
+      if (payload.usage === null) return { ...state, execution: { ...state.execution, usage: null } };
+      if (!payload.usage || typeof payload.usage !== 'object') return state;
+      return { ...state, execution: { ...state.execution, usage: { ...state.execution.usage, ...payload.usage } } };
+    }
     case ACTIONS.APPROVAL_REGISTERED: {
       if (!payload.id) return state;
       return { ...state, approvals: { ...state.approvals, pending: { ...state.approvals.pending, [payload.id]: { ...payload, id: payload.id } } } };

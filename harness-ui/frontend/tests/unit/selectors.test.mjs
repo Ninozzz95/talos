@@ -22,7 +22,10 @@ test('PHASE2-STATE-INVARIANTS-01 selectors expose truthful cold values', () => {
   assert.equal(selectApprovalCount(state), 0);
   assert.deepEqual(selectReviewSummary(state), { changedFiles: 0, activePath: null, risks: 0 });
   assert.deepEqual(selectTerminalStatus(state), { status: 'disconnected', processCount: 0, activeId: null });
-  assert.deepEqual(selectStatusBar(state), { phase: 'booting', connection: 'connecting', execution: 'idle', announcement: '' });
+  // ⛔ `usage: null` e' il valore freddo ONESTO: a freddo non abbiamo misurato
+  // niente, e «non misurato» non e' zero. Uno `0` qui sarebbe la barra che
+  // dichiara un consumo che nessuno ha contato (difetto G30, al contrario).
+  assert.deepEqual(selectStatusBar(state), { phase: 'booting', connection: 'connecting', execution: 'idle', usage: null, announcement: '' });
 });
 
 test('PHASE2-SELECTOR-STABILITY-12 object selectors preserve identity across unrelated state changes', () => {
