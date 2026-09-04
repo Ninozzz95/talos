@@ -99,6 +99,27 @@ test('trovaPortaLibera: nessuna porta libera entro il tetto di tentativi → err
   );
 });
 
+/*
+ * ⭐⭐⭐ 04/9 — W0-04, scheletro `labs/`: i flag si accendono SOLO se dichiarati
+ * in `labs/feature-flags.json`; uno sconosciuto è CONFIG_INVALID con l'elenco
+ * di quelli ammessi; senza variabile nessun lab è acceso.
+ */
+// ⛔ moduleUrl = server.mjs, come in produzione: labs/feature-flags.json sta accanto al server, non ai test.
+test('W0-04 — TALOS_LABS accende solo flag dichiarati in labs/feature-flags.json; assente = nessuno', () => {
+  assert.deepEqual(loadConfig({}, new URL('../server.mjs', import.meta.url)).labs, []);
+  assert.deepEqual(loadConfig({ TALOS_LABS: '' }, new URL('../server.mjs', import.meta.url)).labs, []);
+  assert.deepEqual(loadConfig({ TALOS_LABS: 'electron-shell' }, new URL('../server.mjs', import.meta.url)).labs, ['electron-shell']);
+  assert.deepEqual(loadConfig({ TALOS_LABS: ' electron-shell , execution-fabric ' }, new URL('../server.mjs', import.meta.url)).labs, ['electron-shell', 'execution-fabric']);
+  assert.deepEqual(loadConfig({ TALOS_LABS: 'electron-shell,electron-shell' }, new URL('../server.mjs', import.meta.url)).labs, ['electron-shell'], 'i doppioni si contano una volta');
+});
+
+test('W0-04 — AL CONTRARIO: un flag sconosciuto è CONFIG_INVALID e il messaggio elenca i flag ammessi', () => {
+  assert.throws(
+    () => loadConfig({ TALOS_LABS: 'inventato' }, new URL('../server.mjs', import.meta.url)),
+    (errore) => errore instanceof ConfigurationError && /inventato/.test(errore.message) && /electron-shell/.test(errore.message) && /execution-fabric/.test(errore.message),
+  );
+});
+
 test('config accepts an explicit llama-server binary path and discovers the pinned local binary when present', () => {
   const explicit = loadConfig({ TALOS_LLAMA_SERVER_PATH: 'C:\\talos\\llama-server.exe' }, import.meta.url);
   assert.equal(explicit.llamaServerPath, 'C:\\talos\\llama-server.exe');

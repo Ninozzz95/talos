@@ -298,6 +298,10 @@ harness-ui/.provider-runtime.json.tmp
 # ⭐ 04/9, R-03 — scelta della fonte di ricerca web (search-source-store.mjs): stato di runtime, mai nel repo; la chiave sta nel portachiavi.
 harness-ui/.search-source.json
 harness-ui/.search-source.json.tmp-*
+# ⭐ 04/9, W0-04 — dati dei lab: solo i README restano nel repo.
+harness-ui/labs/stores/*
+!harness-ui/labs/stores/README.md
+!harness-ui/labs/stores/*/README.md
 
 # Generated image recovery copies are local runtime data, never source.
 harness-ui/.generated-images/
