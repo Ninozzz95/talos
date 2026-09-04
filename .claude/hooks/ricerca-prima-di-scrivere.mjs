@@ -53,6 +53,37 @@ import { readFileSync } from 'node:fs'
 
 import { eventiDelTurno } from './cancelli.mjs'
 
+/**
+ * ⛔⛔ 04/9, POCHE ORE DOPO AVERLO SCRITTO — questo cancello **negava sempre**
+ * a un agente delegato. `eventiDelTurno` azzera il conto a ogni messaggio
+ * `user` con contenuto testuale, e nel transcript di un agente **ogni
+ * risultato di strumento ha quella forma**: il conto ripartiva da zero dopo
+ * ogni chiamata, quindi nessuna ricerca risultava mai fatta. L'agente su
+ * W1-02 lo ha scoperto lavorando: aveva fatto sei ricerche vere e ha dovuto
+ * aggirare il cancello scrivendo i file con uno script.
+ *
+ * ⇒ Un cancello che nega anche a chi ha obbedito insegna solo ad aggirarlo.
+ * Qui si guarda una **finestra recente** del transcript invece del solo turno:
+ * se una ricerca c'è fra le ultime N voci, vale. Nella sessione principale il
+ * turno corrente sta comunque dentro la finestra; nel transcript di un agente
+ * la finestra sopravvive ai falsi azzeramenti.
+ */
+export function eventiRecenti(testoTranscript, finestra = 300) {
+    const righe = String(testoTranscript ?? '').split('\n').filter(Boolean)
+    const eventi = []
+    for (const riga of righe.slice(-finestra)) {
+        let voce
+        try { voce = JSON.parse(riga) } catch { continue }
+        const contenuto = voce?.message?.content
+        if (!Array.isArray(contenuto)) continue
+        for (const parte of contenuto) {
+            if (parte?.type !== 'tool_use') continue
+            eventi.push({ name: parte.name, command: parte?.input?.command ?? parte?.input?.file_path ?? '' })
+        }
+    }
+    return eventi
+}
+
 /** Estensioni che sono codice eseguibile del prodotto. */
 const ESTENSIONI_CODICE = ['.mjs', '.js', '.cjs', '.ts', '.tsx', '.jsx', '.vue', '.css', '.html', '.java', '.kt', '.py']
 
@@ -130,7 +161,10 @@ async function principale() {
     // ad aprire diventa un muro cieco, e un muro cieco viene aggirato invece che rispettato.
     if (transcript === '') process.exit(0)
 
-    if (serveRicerca({ strumento, percorso, eventi: eventiDelTurno(transcript) })) {
+    // Vale la ricerca più recente delle due letture: il turno (sessione principale)
+    // oppure la finestra (agente delegato, dove il turno si azzera di continuo).
+    const eventi = [...eventiDelTurno(transcript), ...eventiRecenti(transcript)]
+    if (serveRicerca({ strumento, percorso, eventi })) {
         nega(MOTIVO)
         process.exit(0)
     }

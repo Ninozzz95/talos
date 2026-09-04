@@ -46,5 +46,23 @@ p('un comando Bash non passa da qui', false, serveRicerca({ strumento: 'Bash', p
 p('nessun evento e scrittura di codice: BLOCCA', true, serveRicerca({ ...scritturaCodice, eventi: [] }))
 p('eventi assenti del tutto: BLOCCA lo stesso', true, serveRicerca({ ...scritturaCodice, eventi: undefined }))
 
-console.log(falliti === 0 ? '\nTutte verdi.' : `\n${falliti} PROVE FALLITE.`)
+// ⛔ 04/9 — il caso che ha rotto tutto: nel transcript di un AGENTE ogni
+// risultato di strumento è un messaggio `user` con contenuto testuale, e
+// `eventiDelTurno` azzerava il conto ogni volta. Risultato: negava sempre,
+// anche a chi aveva appena cercato. Questi due casi lo pinnano.
+const { eventiRecenti } = await import('./ricerca-prima-di-scrivere.mjs')
+
+const transcriptAgente = [
+  JSON.stringify({ type: 'user', message: { content: 'fai la riga W1-02' } }),
+  JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'WebSearch', input: { query: 'stato dell arte' } }] } }),
+  JSON.stringify({ type: 'user', message: { content: 'risultato della ricerca: ...' } }),
+  JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Read', input: { file_path: 'src/x.mjs' } }] } }),
+  JSON.stringify({ type: 'user', message: { content: 'contenuto del file ...' } }),
+].join('\n')
+
+p('AGENTE — la ricerca resta visibile anche dopo i risultati degli strumenti', true, eventiRecenti(transcriptAgente).some((e) => e.name === 'WebSearch'))
+p('AGENTE — e quindi il cancello NON blocca chi ha cercato', false, serveRicerca({ strumento: 'Edit', percorso: 'C:/…/harness-ui/src/config.mjs', eventi: eventiRecenti(transcriptAgente) }))
+p('AL CONTRARIO — un transcript senza nessuna ricerca blocca comunque', true, serveRicerca({ strumento: 'Edit', percorso: 'C:/…/harness-ui/src/config.mjs', eventi: eventiRecenti(JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Read', input: {} }] } })) }))
+
+console.log(falliti === 0 ? '\nTutte verdi (compresi i casi dell\'agente).' : `\n${falliti} PROVE FALLITE.`)
 process.exit(falliti === 0 ? 0 : 1)
