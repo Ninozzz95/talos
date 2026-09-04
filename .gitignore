@@ -59,6 +59,8 @@ harness-ui/.plugin-trust/
 # JSONL per evento, append-only) — dati locali generati a runtime,
 # stesso principio di .automations/ in cima a questo blocco.
 harness-ui/.sessions-store/
+# ⭐ 04/9 — la pulizia dello store mette da parte i file scartati qui accanto (mai cancellati): stessi dati privati, stesso trattamento.
+harness-ui/.sessions-store-scartate-*/
 
 # ⭐ 30/8 — FASE N, quarto sistema: le note dell'owner, GLOBALI (non
 # per-progetto, vedi la doc in notes-store.mjs) — dati locali generati
