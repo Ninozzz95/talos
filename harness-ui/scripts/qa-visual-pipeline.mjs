@@ -76,6 +76,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { BUDGET_RAF_P95_MS, percentili, riassuntoGpu, verdettoSonda } from './lib/statistiche-raf.mjs';
+
 const QUI = dirname(fileURLToPath(import.meta.url));
 const RADICE_HARNESS_UI = dirname(QUI);
 
@@ -151,6 +153,8 @@ function lanciaChrome({ porta, userDataDir, url }) {
     '--disable-backgrounding-occluded-windows',
     '--disable-renderer-backgrounding',
     '--disable-background-timer-throttling',
+    // ⭐ 04/9, W0-03 — flag in più per una corsa (es. `--disable-gpu` per provare che la sonda di rilascio fallisce onestamente senza accelerazione). Separati da spazi.
+    ...(process.env.TALOS_QA_CHROME_FLAGS || '').split(/\s+/).filter(Boolean),
     url,
   ], { stdio: 'ignore', windowsHide: true });
 }
@@ -167,6 +171,25 @@ async function attendiCdp(porta, tentativiMassimi = 30) {
     await new Promise((r) => setTimeout(r, 300));
   }
   throw new Error(`Chrome non risponde su CDP porta ${porta} entro il timeout`);
+}
+
+/**
+ * ⭐ 04/9, W0-03 — `SystemInfo.getInfo` risponde SOLO sul target browser
+ * (misurato: sul target pagina Chrome torna `-32000 … only supported on the
+ * browser target`). Si apre una seconda WebSocket su `/json/version`, si
+ * chiede, si chiude.
+ */
+async function infoSistemaDalBrowser(porta) {
+  const versione = await (await fetch(`http://127.0.0.1:${porta}/json/version`)).json();
+  const ws = new WebSocket(versione.webSocketDebuggerUrl);
+  await new Promise((resolve, reject) => { ws.addEventListener('open', resolve, { once: true }); ws.addEventListener('error', reject, { once: true }); });
+  try {
+    const risposta = new Promise((resolve, reject) => {
+      ws.addEventListener('message', (event) => { const m = JSON.parse(event.data); if (m.id === 1) (m.error ? reject(new Error(JSON.stringify(m.error))) : resolve(m.result)); });
+    });
+    ws.send(JSON.stringify({ id: 1, method: 'SystemInfo.getInfo' }));
+    return await risposta;
+  } finally { ws.close(); }
 }
 
 function chiudiChromeAlbero(pid) {
@@ -433,6 +456,8 @@ class Pipeline {
       urlBase: URL_BASE,
       eseguitoAlle: new Date().toISOString(),
       step: this.report,
+      // ⭐ 04/9, W0-03 — la sonda di rilascio (gpu, rafP50, rafP95, verdetto) entra nel report quando lo scenario la compila
+      ...(this.sonda ? { sonda: this.sonda } : {}),
       difetti: this.difetti || [],
       logConsole: this.cdp.logConsole,
       eccezioni: this.cdp.eccezioni,
@@ -465,6 +490,72 @@ class Pipeline {
 // osserva l'esecuzione, controlla la Review.
 // --------------------------------------------------------------------
 const SCENARI = {
+  /**
+   * ⭐⭐⭐ 04/9 — W0-03, LA SONDA DI RILASCIO: GPU e rAF da fermo.
+   *
+   * Il lag del 02/09 era FUORI dal codice (accelerazione hardware spenta nel
+   * Chrome dell'owner: mediana 6,1 ms con GPU, 109 ms senza, p95 212). Da
+   * allora un rilascio porta questa misura, presa in Chrome VERO sulla pagina
+   * a riposo: `SystemInfo.getInfo` (dispositivo, driver, `gpu_compositing`) e
+   * cinque secondi di delta fra frame di requestAnimationFrame, campionati
+   * DENTRO la pagina (il round-trip CDP sfalserebbe). Verdetto: esce 1 se il
+   * p95 supera il budget (50 ms, `TALOS_QA_RAF_BUDGET_MS` per cambiarlo).
+   *
+   * ⛔ Con `TALOS_QA_CHROME_FLAGS=--disable-gpu` la sonda deve dire la verità
+   * (compositing software, e il p95 che ne esce): è la prova al contrario.
+   * Non tocca il 4174: si passa `--url=` di un server di prova.
+   */
+  async 'qa-release-probe'(p) {
+    const BUDGET_MS = Number(process.env.TALOS_QA_RAF_BUDGET_MS || BUDGET_RAF_P95_MS);
+    const DURATA_MS = 5000;
+    const viewport = viewportRichiesta(URL_BASE); // ⛔ matrice unica: vedi VIEWPORT_DESKTOP in testa al file
+    await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
+    await p.cdp.send('Page.reload', { ignoreCache: true });
+    await p.attendi(1000);
+    await p.cdp.send('Page.bringToFront');
+    await p.attendi(1000); // assestamento: niente animazioni d'ingresso nel campione
+
+    const info = await infoSistemaDalBrowser(PORTA_CDP);
+    const gpu = riassuntoGpu(info);
+    p.nota(`GPU: ${gpu.dispositivo} · driver ${gpu.driver} · gpu_compositing=${gpu.compositing} · accelerata=${gpu.accelerata} (${gpu.dispositivi} dispositivi)`);
+    // ⛔ Una misura «a riposo» vale solo se si dice COSA c'era sullo schermo: il 02/09 il lag senza GPU veniva da 5 superfici con backdrop-filter + 2 sfere sfocate ANIMATE. Qui si conta.
+    const scena = await p.cdp.evaluate(`(() => {
+      const tutti = [...document.querySelectorAll('body *')];
+      const visibile = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth; };
+      const conBackdrop = tutti.filter((el) => { const cs = getComputedStyle(el); return (cs.backdropFilter && cs.backdropFilter !== 'none') && visibile(el); }).length;
+      const sfere = [...document.querySelectorAll('.scene-orb')].map((el) => getComputedStyle(el).animationName).filter((n) => n && n !== 'none').length;
+      return { sfondoAnimato: document.body.classList.contains('background-motion-active') || document.documentElement.classList.contains('background-motion-active'), sfereAnimate: sfere, superficiBackdrop: conBackdrop, vista: document.querySelector('.mode-tab[aria-pressed="true"]')?.textContent?.trim() ?? null, messaggi: document.querySelectorAll('.assistant-message, .user-message').length, viewport: innerWidth + 'x' + innerHeight };
+    })()`);
+    p.nota(`scena a riposo: ${JSON.stringify(scena)}`);
+
+    await p.cdp.evaluate(`(() => {
+      window.__qaCampioni = []; window.__qaCampionamentoFinito = false;
+      let prima = null; const fine = performance.now() + ${DURATA_MS};
+      const tick = (t) => { if (prima !== null) window.__qaCampioni.push(t - prima); prima = t; if (t < fine) requestAnimationFrame(tick); else window.__qaCampionamentoFinito = true; };
+      requestAnimationFrame(tick);
+    })()`);
+    await p.attendi(DURATA_MS + 500);
+    const campioni = await p.cdp.evaluate('window.__qaCampionamentoFinito ? window.__qaCampioni : null');
+    if (!Array.isArray(campioni) || campioni.length === 0) {
+      p.sonda = { gpu, rafP50: null, rafP95: null, campioni: 0, budgetMs: BUDGET_MS, verdetto: verdettoSonda({ rafP95: null, budgetMs: BUDGET_MS }) };
+      p.difetto(`SONDA DI RILASCIO MUTA: il campionatore rAF non ha finito in ${DURATA_MS + 500} ms (finestra in background? scheda strozzata?)`, { severita: 'blocco' });
+      process.exitCode = 1;
+      return;
+    }
+    const arrotondati = campioni.map((c) => Math.round(c * 10) / 10);
+    const { p50, p95 } = percentili(arrotondati, [50, 95]);
+    const verdetto = verdettoSonda({ rafP95: p95, budgetMs: BUDGET_MS });
+    p.sonda = { gpu, scena, rafP50: p50, rafP95: p95, rafMax: Math.max(...arrotondati), campioni: arrotondati.length, durataMs: DURATA_MS, budgetMs: BUDGET_MS, verdetto };
+    p.nota(`rAF da fermo su ${arrotondati.length} frame in ${DURATA_MS} ms: p50 ${p50} ms · p95 ${p95} ms · max ${p.sonda.rafMax} ms — ${verdetto.motivo}`);
+    await p.screenshot('release-probe', { nota: `pagina a riposo durante la sonda (GPU ${gpu.accelerata ? 'accelerata' : 'SOFTWARE'}, p95 ${p95} ms)` });
+    if (!gpu.accelerata) p.difetto(`accelerazione GPU spenta nel browser (gpu_compositing=${gpu.compositing}, ${gpu.dispositivo}): questa misura vale per un browser SOFTWARE, non per il desktop vero`, { severita: 'nota' });
+    if (!verdetto.ok) {
+      p.difetto(`SONDA DI RILASCIO FALLITA: ${verdetto.motivo} (GPU ${gpu.accelerata ? 'accelerata' : 'software'}: ${gpu.dispositivo})`, { severita: 'blocco' });
+      process.exitCode = 1;
+    }
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url}:${e.riga})`, { severita: 'blocco' });
+  },
+
   /**
    * ⭐⭐⭐ 03/9 — LA CATENA INTERA su un MODELLO LOCALE, dalla UI.
    *
