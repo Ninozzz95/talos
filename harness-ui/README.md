@@ -117,6 +117,15 @@ not expose directory listings.
 
 ## Tests and verification
 
+One command, from `harness-ui/`, runs everything that bites: the backend suite, the lab
+tests and the frontend `verify` (unit, contract snapshot, build):
+
+```powershell
+npm run verify:all
+```
+
+Read its exit code, not the last line of output. The backend suite alone:
+
 ```powershell
 node --test harness-ui/tests/*.test.mjs
 ```
