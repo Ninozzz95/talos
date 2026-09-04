@@ -60,11 +60,61 @@ function percorsoDi(cartellaStore, sessionId) {
  * o l'intestazione, o il record `messaggiFinali`) — questo modulo non
  * sa cosa contiene, solo che va in coda.
  */
+/*
+ * ⭐⭐⭐ 04/9 — W0-07: UNA CODA PER FILE. `fsp.appendFile` non è atomica per
+ * un record più grande di una singola scrittura di sistema: il contenuto
+ * viene spezzato, e un secondo append concorrente sullo stesso file si
+ * infila in mezzo. Il risultato è una riga JSONL illeggibile — cioè una
+ * sessione che `ripristina()` scarta per sempre, in silenzio.
+ *
+ * ⛔ Non è teoria: nello store dell'owner il file `b7b1b7d2…` (31/08) aveva
+ * 4 righe rotte, la prima spezzata a **1.572.866 byte, esattamente 1,5
+ * MiB**, e le successive iniziavano a metà percorso pur finendo con
+ * `_sequenza` coerenti. Erano `WorkspaceChanged` da 1-1,5 MB l'uno (il
+ * workspace era `C:\` intero). Quella conversazione — vera, conclusa con
+ * successo — è stata invisibile per quattro giorni; l'ho recuperata a mano
+ * il 04/09 buttando solo le righe illeggibili.
+ *
+ * ⇒ Le scritture dello STESSO file si mettono in fila. File diversi non si
+ * aspettano fra loro (la chiave della coda è il percorso), quindi una
+ * sessione lenta non rallenta le altre. Un errore su una scrittura non
+ * blocca la coda: la successiva parte comunque.
+ *
+ * ⭐ Ricerca web del 04/09 (obbligo dell'owner, fatta PRIMA di considerare
+ * chiusa questa cura): `O_APPEND` è atomico **per singola chiamata di
+ * scrittura** — due scrittori non si sovrappongono finché ogni record entra
+ * in UNA chiamata; un payload grande viene però spezzato in più chiamate, ed
+ * è lì che si intrecciano. La forma raccomandata è esattamente questa: «le
+ * scritture concorrenti sullo stesso file si mettono in coda e si
+ * serializzano con le Promise, mentre file diversi restano in parallelo».
+ * Due cose che la ricerca aggiunge e che qui NON sono risolte, registrate
+ * come debito nel ledger: (a) per un log si consiglia uno stream persistente
+ * invece di aprire e chiudere il file a ogni evento; (b) una scrittura
+ * riuscita vive nella cache del kernel finché non c'è un `fsync`, quindi un
+ * crash può perdere gli ultimi eventi — l'invariante da tenere è non
+ * trattare mai come record dei byte di coda non validati, e `ripristina()`
+ * già distingue l'ultima riga spezzata (crash a metà append) da una riga
+ * rotta in mezzo (danno vero).
+ */
+const codeDiScrittura = new Map();
+
 export async function registraRiga({ cartellaStore, sessionId, record }, deps = {}) {
   const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
   const appendFileFn = deps.appendFileFn ?? fsp.appendFile;
-  await mkdirFn(cartellaStore, { recursive: true });
-  await appendFileFn(percorsoDi(cartellaStore, sessionId), `${JSON.stringify(record)}\n`, 'utf8');
+  const percorso = percorsoDi(cartellaStore, sessionId);
+  // ⛔ Serializzato SUBITO, non dentro la coda: `record` potrebbe cambiare mentre questa scrittura aspetta il suo turno.
+  const riga = `${JSON.stringify(record)}\n`;
+  const precedente = codeDiScrittura.get(percorso) ?? Promise.resolve();
+  const corrente = precedente.catch(() => {}).then(async () => {
+    await mkdirFn(cartellaStore, { recursive: true });
+    await appendFileFn(percorso, riga, 'utf8');
+  });
+  codeDiScrittura.set(percorso, corrente);
+  // La mappa non deve crescere per sempre: chi è l'ultimo della fila la ripulisce.
+  corrente.catch(() => {}).finally(() => {
+    if (codeDiScrittura.get(percorso) === corrente) codeDiScrittura.delete(percorso);
+  });
+  return corrente;
 }
 
 /**
