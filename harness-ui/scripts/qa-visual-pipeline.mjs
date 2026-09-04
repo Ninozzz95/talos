@@ -944,6 +944,147 @@ const SCENARI = {
   },
 
   /**
+   * ⭐⭐⭐ O-02 — owner 04/9: «vedi perché mi spunta spesso `TALOS · errore
+   * [giri-esauriti] ⛔ giri esauriti: 24 su 24 usati senza chiudere il task`
+   * con modello locale e probabilmente su modelli a chiave».
+   *
+   * Stesso principio di `qa-file-di-controllo` e `qa-albero-radice-cartella`:
+   * NESSUN modello, NESSUN costo — due sessioni seminate OFFLINE copiando
+   * file VERI di `.sessions-store` in una cartella store dedicata
+   * (`TALOS_HARNESS_UI_SESSIONS_DIR`), mai il 4174:
+   *  - una che ha ESAURITO i giri (24 su 24, 34 chiamate ad attrezzi, con
+   *    ripetizioni identiche vere: `elenca {}` tre volte, `leggi server.mjs`
+   *    due volte) — è lì che la bolla deve portare la diagnosi;
+   *  - una SENZA nessun evento di attrezzo — è lì che il riepilogo del
+   *    Capability hub deve dire «non registrato» e mai «0 chiamate».
+   *
+   * ⛔ La sessione seminata è ripresa da `ripristina()` a ogni avvio del
+   * server, esattamente come una qualunque dell'owner: il replay SSE che
+   * ricostruisce la bolla è lo STESSO codice di una corsa dal vivo.
+   */
+  async 'qa-giri-esauriti-diagnosi'(p) {
+    const viewport = viewportRichiesta(URL_BASE); // ⛔ matrice unica: vedi VIEWPORT_DESKTOP in testa al file
+    await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
+    await p.cdp.send('Page.reload', { ignoreCache: true });
+    await p.attendi(1800);
+
+    /*
+     * ⛔⛔ Trovato GUARDANDO il primo screenshot di questo stesso scenario: il
+     * Chrome della pipeline parte con un profilo pulito, quindi l'intro del
+     * primo avvio (R-02) copre TUTTA la pagina — e `el.click()` funziona lo
+     * stesso sotto la modale, cioè le prove passavano fotografando una schermata
+     * in cui non si vedeva niente di ciò che dichiaravano di provare. Si chiude
+     * col suo controllo VERO («Salta per ora»), come farebbe una persona.
+     */
+    const introAperta = await p.cdp.evaluate("document.querySelector('#introDialog')?.open === true");
+    p.nota(`intro del primo avvio aperta all'ingresso: ${introAperta}`);
+    if (introAperta) {
+      await p.click('#introSkip');
+      await p.attendiCondizione("document.querySelector('#introDialog')?.open !== true", { descrizione: 'intro chiusa con «Salta per ora»' });
+      await p.attendi(600);
+    }
+
+    const idSessioni = await p.cdp.evaluate("[...document.querySelectorAll('.real-session-item')].map((el) => el.dataset.realSessionId)");
+    p.nota(`sessioni seminate trovate nella sidebar: ${JSON.stringify(idSessioni)}`);
+    if (idSessioni.length !== 2) p.difetto(`attese ESATTAMENTE 2 sessioni seminate, trovate ${idSessioni.length}: lo store puntato non è quello del seed`, { severita: 'blocco' });
+
+    const ID_ESAURITA = process.env.TALOS_QA_SESSIONE_ESAURITA || '022ccdf2-1baa-4bf1-a3c8-3a3f76301796';
+    const ID_SENZA_ATTREZZI = process.env.TALOS_QA_SESSIONE_SENZA_ATTREZZI || '00cf5b24-5a7d-4362-98d6-465f5b0af1e8';
+
+    /** Apre il Capability hub dal «+» VERO del composer e aspetta che i pannelli abbiano risposto (stesso gesto di `qa-capability-hub`). */
+    const apriHub = async () => {
+      await p.cdp.evaluate("document.querySelector('[data-mode=\"chat\"]')?.click()");
+      await p.attendi(300);
+      await p.click('#capabilityBtn');
+      await p.attendiCondizione("!!document.querySelector('#sheetDialog')?.open", { descrizione: 'foglio capability aperto' });
+      await p.attendiCondizione("!document.querySelector('#sheetBody')?.textContent.includes('Carico')", { descrizione: 'tutti i pannelli hanno risposto', timeoutMs: 12000 });
+      await p.attendi(400);
+    };
+    const chiudiHub = async () => {
+      await p.cdp.evaluate("document.querySelector('#closeSheet')?.click()");
+      await p.attendi(400);
+    };
+    const apriSessione = async (id) => {
+      await p.cdp.evaluate(`document.querySelector('[data-real-session-id=${j(id)}]')?.click()`);
+      await p.attendiCondizione(`document.querySelector('.real-session-item.active')?.dataset.realSessionId === ${j(id)}`, { descrizione: `sessione ${id} aperta` });
+      await p.attendi(1500);
+    };
+
+    // ---------- 1. La sessione che ha esaurito i giri: la BOLLA ----------
+    await apriSessione(ID_ESAURITA);
+    await p.attendiCondizione(
+      "[...document.querySelectorAll('.real-session-status')].some((el) => el.textContent.includes('giri esauriti'))",
+      { timeoutMs: 20000, descrizione: 'RunError giri-esauriti riprodotto dal replay SSE' },
+    );
+    await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('.real-session-status')].find((el) => el.textContent.includes('giri esauriti')); b?.scrollIntoView({ block: 'center' }); })()");
+    await p.attendi(400);
+    const bolla = await p.cdp.evaluate("[...document.querySelectorAll('.real-session-status')].find((el) => el.textContent.includes('giri esauriti'))?.textContent ?? null");
+    p.nota(`testo della bolla giri-esauriti: ${JSON.stringify(bolla)}`);
+    await p.screenshot('giri-esauriti-bolla-diagnosi', { nota: `la bolla deve dire CHI ha consumato i giri: «${String(bolla).slice(0, 220)}»` });
+    if (!bolla) { p.difetto('nessuna bolla `giri esauriti` trovata dopo il replay', { severita: 'blocco' }); return; }
+    if (!/chiamate ad attrezzi/.test(bolla)) p.difetto(`la bolla non dice quante chiamate ad attrezzi ci sono state: «${bolla}»`, { severita: 'blocco' });
+    if (!/(comando nel terminale|ricerca nei file|lettura di un file|elenco della cartella|esecuzione dei test)\s\d+/.test(bolla)) p.difetto(`la bolla non nomina nessun attrezzo col suo conteggio: «${bolla}»`, { severita: 'blocco' });
+    if (!/identiche a una precedente/.test(bolla)) p.difetto(`la bolla non dice quante chiamate erano identiche a una precedente: «${bolla}»`, { severita: 'blocco' });
+    if (/\b0 chiamate\b/.test(bolla)) p.difetto('la bolla mostra uno zero al posto di «non registrato»', { severita: 'blocco' });
+    /* ⛔⛔⛔ owner 04/9: «nella UI non compaiono nomi tecnici degli attrezzi». Vale in pieno per questa bolla. */
+    for (const tecnico of ['shell', 'cerca', 'leggi', 'elenca', 'prova', 'naviga', 'scrivi', 'web_search', 'time_now', 'document_create', 'delega_sottotask', 'artifact_create']) {
+      if (new RegExp(`\\b${tecnico}\\b`).test(bolla)) p.difetto(`nome TECNICO «${tecnico}» a schermo nella bolla dei giri esauriti`, { severita: 'blocco' });
+    }
+    if (!/Premi «Nuova»/.test(bolla)) p.difetto('la guida di continuità del 30/8 è sparita dalla bolla', { severita: 'difetto' });
+
+    // ---------- 2. Il contatore dei giri nel composer ----------
+    const contatore = await p.cdp.evaluate("(() => { const el = document.querySelector('[data-runtime-usage]'); return el ? { testo: el.textContent, stato: el.dataset.giriStato ?? null, title: el.title } : null; })()");
+    p.nota(`contatore giri del composer: ${JSON.stringify(contatore)}`);
+    await p.screenshot('giri-esauriti-contatore-composer', { nota: `contatore: «${contatore?.testo}» stato=${contatore?.stato}` });
+    if (!contatore) p.difetto('nessun contatore [data-runtime-usage] nel composer', { severita: 'blocco' });
+    else {
+      if (!/gir[oi]/.test(contatore.testo)) p.difetto(`il contatore non nomina i giri: «${contatore.testo}»`, { severita: 'difetto' });
+      if (!/su 24/.test(contatore.testo)) p.difetto(`il tetto dichiarato dal kernel (24) non compare nel contatore: «${contatore.testo}»`, { severita: 'difetto' });
+      if (contatore.stato !== 'vicino-al-tetto') p.difetto(`24 giri su 24 e il contatore non è marcato «vicino-al-tetto» (stato=${contatore.stato})`, { severita: 'difetto' });
+    }
+
+    // ---------- 3. Il riepilogo per attrezzo nel Capability hub ----------
+    await apriHub();
+    await p.cdp.evaluate("(() => { document.querySelector('.tools-panel-uso')?.scrollIntoView({ block: 'center' }); })()");
+    await p.attendi(300);
+    const hub = await p.cdp.evaluate(`(() => {
+      const body = document.querySelector('#sheetBody');
+      const usati = [...body.querySelectorAll('[data-tool-chiamate]')].map((el) => ({ nome: el.dataset.toolName, chiamate: Number(el.dataset.toolChiamate), ripetute: Number(el.dataset.toolRipetute || 0) }));
+      return { riepilogo: body.querySelector('.tools-panel-uso')?.textContent ?? null, usati, righe: body.querySelectorAll('[data-tool-name]').length };
+    })()`);
+    p.nota(`Capability hub, sessione ESAURITA: riepilogo=${JSON.stringify(hub.riepilogo)} · attrezzi usati=${JSON.stringify(hub.usati)} · righe totali=${hub.righe}`);
+    await p.screenshot('giri-esauriti-hub-riepilogo', { nota: `riepilogo uso attrezzi: «${String(hub.riepilogo).slice(0, 200)}»` });
+    if (!hub.riepilogo) p.difetto('il Capability hub non mostra nessun riepilogo dell\'uso degli attrezzi per la sessione aperta', { severita: 'blocco' });
+    else if (!/chiamate/.test(hub.riepilogo)) p.difetto(`il riepilogo non conta le chiamate: «${hub.riepilogo}»`, { severita: 'blocco' });
+    if (hub.usati.length === 0) p.difetto('nessuna riga attrezzo porta il conteggio d\'uso di questa sessione', { severita: 'blocco' });
+    if (!hub.usati.some((u) => u.ripetute > 0)) p.difetto('nessuna riga evidenzia le chiamate identiche, ma la sessione seminata ne ha', { severita: 'difetto' });
+    /* ⛔⛔⛔ owner 04/9: nessun nome tecnico fra le ETICHETTE delle righe (il nome grezzo resta solo in `data-tool-name` e nel title). */
+    const etichette = await p.cdp.evaluate("[...document.querySelectorAll('#sheetBody [data-tool-name] strong')].map((el) => el.textContent)");
+    const nomiGrezzi = await p.cdp.evaluate("[...document.querySelectorAll('#sheetBody [data-tool-name]')].filter((el) => el.querySelector('strong')?.textContent === el.dataset.toolName).map((el) => el.dataset.toolName)");
+    p.nota(`etichette delle righe attrezzo (prime 6): ${JSON.stringify(etichette.slice(0, 6))} · righe che mostrano ancora il nome tecnico: ${JSON.stringify(nomiGrezzi)}`);
+    /* ⛔ Se qui compare un nome, o la mappa non lo copre (attrezzo nato da `tool_create`: ripiego onesto, va etichettato) o qualcuno ha rimesso il nome grezzo come etichetta. In entrambi i casi va guardato. */
+    if (nomiGrezzi.length > 0) p.difetto(`${nomiGrezzi.length} righe mostrano il nome TECNICO come etichetta (mappa nomeUmanoAttrezzo incompleta?): ${nomiGrezzi.join(', ')}`, { severita: 'blocco' });
+    await chiudiHub();
+
+    // ---------- 4. AL CONTRARIO: una sessione SENZA eventi di attrezzo ----------
+    await apriSessione(ID_SENZA_ATTREZZI);
+    await apriHub();
+    const hubVuoto = await p.cdp.evaluate(`(() => {
+      const body = document.querySelector('#sheetBody');
+      return { riepilogo: body.querySelector('.tools-panel-uso')?.textContent ?? null, usati: body.querySelectorAll('[data-tool-chiamate]').length };
+    })()`);
+    p.nota(`Capability hub, sessione SENZA attrezzi: ${JSON.stringify(hubVuoto)}`);
+    await p.screenshot('giri-esauriti-hub-non-registrato', { nota: `atteso «non registrato», mai «0 chiamate»: «${String(hubVuoto.riepilogo).slice(0, 200)}»` });
+    if (!hubVuoto.riepilogo || !/non registrato/i.test(hubVuoto.riepilogo)) p.difetto(`una sessione senza eventi di attrezzo deve dire «non registrato»: «${hubVuoto.riepilogo}»`, { severita: 'blocco' });
+    if (/\b0 chiamate\b/.test(hubVuoto.riepilogo || '')) p.difetto('uno zero inventato al posto di «non registrato»', { severita: 'blocco' });
+    if (hubVuoto.usati !== 0) p.difetto(`${hubVuoto.usati} righe portano un conteggio d'uso su una sessione che non ha chiamato nessun attrezzo`, { severita: 'blocco' });
+    await chiudiHub();
+
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url}:${e.riga})`, { severita: 'blocco' });
+    if (p.difetti?.some((d) => d.severita === 'blocco')) process.exitCode = 1;
+  },
+
+  /**
    * ⭐⭐⭐ 04/9 — W0-03, LA SONDA DI RILASCIO: GPU e rAF da fermo.
    *
    * Il lag del 02/09 era FUORI dal codice (accelerazione hardware spenta nel
