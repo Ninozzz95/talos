@@ -17,15 +17,18 @@
  * Fonti: websocket.org/guides/reconnection/ · faqs.ably.com/connection-state-recovery
  * · oneuptime.com/blog/post/2026-01-27-websocket-reconnection/view
  *
- * ⛔⛔⛔ E qui c'è un LIMITE che non copro inventando: il nostro protocollo non
- * ha un segnale «ripreso». Il server rigioca il backlog alla riconnessione, ma
- * se il reaper ha chiuso la PTY nel frattempo (`MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA`)
- * `registro.apri` ne crea una NUOVA, con backlog vuoto — e da fuori le due
- * cose arrivano uguali. Dedurlo dall'assenza di backlog sarebbe un indovinello,
- * non una misura. ⇒ La superficie dice «riconnesso» e NON promette che la
- * shell sia la stessa; quando non lo sa, lo scrive. Il segnale va aggiunto al
- * protocollo (un frame di controllo `{evento:'agganciato', ripreso:bool}`):
- * finché non c'è, questa è la sola frase vera.
+ * ⭐⭐⭐ Il segnale «ripreso» ORA ESISTE, ed è misurato invece che dedotto. Il
+ * ponte manda `{evento:'agganciato', ripreso:bool}` prima di ogni byte, e la
+ * risposta viene dal registro delle PTY — l'unico che sa se ha riagganciato
+ * una shell viva o ne ha aperta una nuova perché il reaper aveva chiuso la
+ * precedente. Dall'esterno quei due casi sono identici (il backlog si rigioca
+ * comunque, e una PTY appena nata ha backlog vuoto come una viva che non ha
+ * ancora stampato): dedurlo sarebbe un indovinello.
+ *
+ * ⛔ Restano TRE esiti, non due: ripresa · shell nuova · **non dichiarato**.
+ * Un ponte che non manda il segnale non diventa «shell nuova» per comodità —
+ * si continua a dire che non lo sappiamo. Appiattire l'ignoto sul negativo è
+ * il modo in cui un'interfaccia comincia a mentire senza che nessuno lo scelga.
  *
  * ⛔ Un 403 NON si ritenta. È il registro che dice «questa scheda non è tua o
  * non esiste» (W1-01, forma di CVE-2026-59224): insistere sarebbe bussare a
@@ -101,7 +104,20 @@ export function createTerminalSurface({
   let statoCorrente = 'closed';
   let ultimaFrase = null;
   let avutoOutput = false;
+  let agganciamento = null;
   let distrutta = false;
+
+  /*
+   * La frase giusta per come siamo arrivati qui. Alla PRIMA connessione non
+   * c'è niente da riprendere, quindi «collegato» e basta; da lì in poi conta
+   * cosa ha dichiarato il ponte, e `null` resta «non dichiarato».
+   */
+  function statoDellAggancio() {
+    if (!avutoOutput) return 'open';
+    if (agganciamento === true) return 'reconnected-resumed';
+    if (agganciamento === false) return 'reconnected-new';
+    return 'reconnected-unknown';
+  }
 
   function scriviStato(chiave, extra = null) {
     statoCorrente = chiave;
@@ -153,16 +169,19 @@ export function createTerminalSurface({
         }
         scriviStato('error');
       },
+      onAttach: (ripreso) => {
+        agganciamento = ripreso;
+        // Il segnale può arrivare prima o dopo `onState('open')`: chi arriva
+        // secondo scrive lo stato, così l'ordine sul filo non decide la frase.
+        if (statoCorrente === 'open' || statoCorrente === 'reconnected-unknown'
+          || statoCorrente === 'reconnected-resumed' || statoCorrente === 'reconnected-new') {
+          scriviStato(statoDellAggancio());
+        }
+      },
       onState: (nuovo) => {
         if (nuovo === 'open') {
           tentativi = 0;
-          /*
-           * ⛔ «Riconnesso» e «la tua shell è ancora quella» NON sono la stessa
-           * frase, e il protocollo non ci dà modo di distinguerle: se il
-           * reaper ha chiuso la PTY, il server ne apre una nuova e da fuori si
-           * vede uguale. Quindi lo dichiariamo invece di indovinare.
-           */
-          scriviStato(avutoOutput ? 'reconnected-unknown' : 'open');
+          scriviStato(statoDellAggancio());
           return;
         }
         if (nuovo === 'closed' && statoCorrente !== 'exited' && statoCorrente !== 'forbidden') {
@@ -175,6 +194,9 @@ export function createTerminalSurface({
   function riprova() {
     if (distrutta) return;
     connessione = null;
+    // ⛔ Il dichiarato del ponte vale per LA connessione che l'ha detto: si
+    // azzera, altrimenti la prossima erediterebbe una risposta non sua.
+    agganciamento = null;
     if (tentativi >= TENTATIVI_MASSIMI) {
       // ⛔ Ritentare all'infinito nasconde a chi guarda che è finita.
       scriviStato('disconnected', String(tentativi));
@@ -222,6 +244,7 @@ export function createTerminalSurface({
       vista = null;
       tentativi = 0;
       avutoOutput = false;
+      agganciamento = null;
       ultimaFrase = null;
       if (!schedaOra) {
         corpo.replaceChildren();

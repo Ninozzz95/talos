@@ -213,8 +213,37 @@ export function creaRegistroTerminali(deps = {}) {
     return { viva: !voce.chiusa, enforcement: voce.enforcement, byteBacklog: voce.byteBacklog };
   }
 
+  /**
+   * ⭐⭐⭐ Come `apri`, ma DICE se ha ripreso una PTY viva o ne ha aperta una
+   * nuova.
+   *
+   * ⛔ Serve perché da fuori le due cose sono indistinguibili: il ponte
+   * rigioca il backlog in entrambi i casi, e una PTY appena creata ha backlog
+   * vuoto — che è anche l'aspetto di una shell viva che non ha ancora
+   * stampato niente. Dedurlo dall'assenza di backlog è un indovinello, non una
+   * misura, e l'interfaccia finiva per dire «riconnesso» senza poter sapere se
+   * la shell della persona fosse sopravvissuta. Lo stato dell'arte separa
+   * l'identità della CONNESSIONE da quella della SESSIONE e fa dichiarare al
+   * server se ha davvero ripreso (in Ably è il flag `resumed`, ricerca del
+   * 05/09/2026: faqs.ably.com/connection-state-recovery ·
+   * websocket.org/guides/reconnection/).
+   *
+   * ⛔ La risposta viene dallo STESSO controllo che fa `apri` («la voce esiste
+   * e non è chiusa»), letto un attimo prima: non è una seconda verità che può
+   * divergere dalla prima. Fra la lettura e la chiamata non c'è `await`.
+   *
+   * @returns {{voce:object, ripresa:boolean}} `ripresa:false` significa shell
+   *   NUOVA — la prima volta in assoluto, oppure dopo che il reaper ha chiuso
+   *   quella di prima.
+   */
+  function apriDichiarando({ id, cartella, cols, rows }) {
+    const esistente = terminali.get(id);
+    const ripresa = Boolean(esistente && !esistente.chiusa);
+    return { voce: apri({ id, cartella, cols, rows }), ripresa };
+  }
+
   return {
-    apri, scrivi, ridimensiona, segnaDisconnesso, chiudiForzato, reap, stato,
+    apri, apriDichiarando, scrivi, ridimensiona, segnaDisconnesso, chiudiForzato, reap, stato,
     /** ⛔ Solo per i test — mai usato dal codice di produzione. */
     _terminali: terminali,
   };

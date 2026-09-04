@@ -3,7 +3,7 @@ import { CONTROL_FRAME, DATA_FRAME, decodeTerminalFrame, encodeTerminalFrame } f
 export function createTerminalTransportFactory({ WebSocketImpl = globalThis.WebSocket, endpoint } = {}) {
   if (typeof WebSocketImpl !== 'function' || typeof endpoint !== 'function') throw new TypeError('WebSocket ed endpoint sono obbligatori');
   return Object.freeze({
-    open({ terminalId, onData = () => {}, onExit = () => {}, onError = () => {}, onState = () => {} }) {
+    open({ terminalId, onData = () => {}, onExit = () => {}, onError = () => {}, onState = () => {}, onAttach = () => {} }) {
       if (!terminalId) throw new TypeError('Identificativo terminale obbligatorio');
       const socket = new WebSocketImpl(endpoint(terminalId));
       socket.binaryType = 'arraybuffer';
@@ -17,7 +17,18 @@ export function createTerminalTransportFactory({ WebSocketImpl = globalThis.WebS
         if (frame.type === DATA_FRAME) { onData(frame.payload); return; }
         try {
           const control = JSON.parse(frame.payload);
-          if (control.evento === 'uscita') onExit(control.codice ?? null);
+          if (control.evento === 'uscita') { onExit(control.codice ?? null); return; }
+          /*
+           * ⭐⭐⭐ «Agganciato»: il server DICE se ha ripreso la shell viva o
+           * ne ha aperta una nuova. Arriva prima di ogni byte, così chi legge
+           * sa di che shell sono i dati che sta per ricevere.
+           * ⛔ `ripreso` si accetta solo come booleano vero: un campo assente o
+           * strano non diventa `false` per comodita' — sarebbe dire «shell
+           * nuova» senza saperlo. Si passa `null`, cioe' «non dichiarato».
+           */
+          if (control.evento === 'agganciato') {
+            onAttach(typeof control.ripreso === 'boolean' ? control.ripreso : null);
+          }
         } catch (error) { onError(error); }
       };
       const isOpen = () => socket.readyState === (WebSocketImpl.OPEN ?? 1);
