@@ -117,6 +117,540 @@ class LocalRuntimeSessionError extends Error {
   }
 }
 
+/* =====================================================================
+ * ⭐⭐⭐ W1-02 (04/9) — PROCESS LEDGER + GUARDIA DI STALLO.
+ *
+ * Due funzioni PURE sopra gli eventi già persistiti, sorelle di
+ * `usageDaEventi` (dentro `createSessionRegistry`): stessa disciplina —
+ * ⛔ NESSUNA scrittura nuova sul disco. Tutto ciò che serve è già nella
+ * storia della sessione (`ToolCallStart`/`Args`/`Result`, `RunStarted`,
+ * `ApprovalRequested`/`Resolved`); un secondo registro mutabile
+ * duplicherebbe una fonte di verità che esiste già.
+ *
+ * Sono esportate al livello del MODULO, non chiuse nella closure come
+ * `usageDaEventi`, per una ragione sola: essere provabili da sole, senza
+ * accendere un registro intero e una sessione finta.
+ *
+ * ## Ricerca del 04/09 (obbligo dell'owner: cercare PRIMA di decidere)
+ *
+ *  - **openclaw/openclaw#16808** (aperta 15/02/2026, chiusa su PR #17118):
+ *    «the existing watchdog checks process existence but not behavioral
+ *    patterns». Propone di segnalare quando lo stesso attrezzo con gli
+ *    stessi argomenti compare «> N times in the last M calls (suggested
+ *    N=10, M=20)», prima osservativo poi kill oltre il doppio della soglia.
+ *  - **openclaw/openclaw#16583** (14/02/2026, chiusa stale): «N identical
+ *    tool calls in a row (e.g. 3-5)» ⇒ iniettare un messaggio, mai abortire.
+ *  - **NousResearch/hermes-agent#512** (06/03/2026, aperta): «doom loop» = 3
+ *    chiamate identiche consecutive; in CLI chiede all'owner, non uccide.
+ *  - **Hermes Agent, documentazione strumenti (letta 04/09)**: la risposta di
+ *    un attrezzo porta sempre `status` (success/error/timeout/interrupted),
+ *    `duration_seconds` e, per un'uscita diversa da zero, `[exit 1]` in testa
+ *    — l'esito si vede senza aspettare che il modello lo racconti.
+ *  - **bitwarden/agent-access#139**: un prompt di approvazione senza TTL e
+ *    senza ANZIANITÀ desincronizza tutta la coda ⇒ «show request age».
+ *  - **gitkraken/vscode-gitlens#5230**: la risposta a un permesso si perde
+ *    dopo ~15 minuti di attesa e l'agente resta fermo per sempre.
+ *
+ * ## Dove andiamo OLTRE, e con quale numero
+ *
+ * ⛔ N=10 su M=20 non potrebbe scattare MAI qui. Misurato il 04/09 sui file
+ * di sessione veri di questo store: una sessione che esaurisce i giri fa
+ * **33 chiamate in tutto** (8 le altre), e le ripetizioni identiche sono
+ * **65 su 634 (10,3%)** — `elenca` 37%, `leggi` 18%, `cerca` 12%, `shell`
+ * 1%. Con quella soglia il ciclo finirebbe i 24 giri prima che la guardia
+ * apra bocca. ⇒ le nostre soglie sono **N=3 su M=10**, e sono PARAMETRI
+ * (`SOGLIE_STALLO_PREDEFINITE`, sovrascrivibili per chiamata), non numeri
+ * scritti dentro la logica.
+ *
+ * Secondo scarto dalla ricerca, deliberato: `giro-a-vuoto` richiede anche
+ * che l'ESITO non sia cambiato (result-aware). Tre `prova` di fila che
+ * tornano `3 falliti → 2 falliti → tutto verde` sono progresso, non stallo.
+ *
+ * ⛔⛔⛔ E la guardia è **osservativa**: `interviene:false`, sempre. Uccidere
+ * un processo è una decisione dell'owner — regola nata da un incidente vero
+ * (23/8: la sorveglianza gridava «3 ORFANI» e uno era la sessione Codex
+ * dell'owner, viva). Per lo stesso motivo ogni segnalazione porta **CHI**
+ * (comando, toolCallId, requestId) e **da quanto**, mai solo un conteggio.
+ * ===================================================================== */
+
+/**
+ * Le soglie della guardia. ⛔ Un default in UN posto solo, mai un numero
+ * ripetuto dentro la logica: chi vuole tararle passa `soglie` alla chiamata.
+ */
+export const SOGLIE_STALLO_PREDEFINITE = Object.freeze({
+  /*
+   * 60 s. La ricerca del 04/09 riporta due riferimenti: uno stallo di stream
+   * si riconosce con «30-60 secondi di silenzio totale», mentre il watchdog
+   * di inattività degli stream OpenAI-compatibili sta a 300 s. Prendiamo il
+   * valore basso PERCHÉ non uccidiamo niente: il costo di una segnalazione
+   * di troppo è una riga in più, quello di un timeout di troppo sarebbe un
+   * lavoro pagato buttato.
+   */
+  silenzioMs: 60_000,
+  /** N — quante chiamate identiche fanno un giro a vuoto (Hermes #512: 3). */
+  ripetizioniPerAllarme: 3,
+  /** M — la finestra scorrevole entro cui contarle (OpenClaw #16808: una finestra, non «di fila»). */
+  finestraChiamate: 10,
+});
+
+/**
+ * Gli attrezzi che lanciano DAVVERO un processo del sistema operativo.
+ * ⛔ Letto nel kernel, non indovinato: `shell` chiama `eseguiComandoSandboxato`
+ * e `prova` chiama `eseguiProva` (talosHarness.mjs) — sono gli unici due.
+ * `scrivi`, `leggi`, `elenca`, `cerca` non lanciano niente.
+ */
+export const ATTREZZI_CHE_LANCIANO_PROCESSI = Object.freeze(['shell', 'prova']);
+
+const MOTIVO_SENZA_ISTANTI = 'nessun istante osservato: gli eventi persistiti non portano un orario, quindi il tempo si conosce solo per una sessione seguita dal vivo da questo processo';
+const MOTIVO_ANCORA_IN_CORSO = 'il processo non ha ancora riportato un esito: la durata finale non esiste ancora';
+const MOTIVO_FINE_NON_OSSERVATA = 'l\'esito è arrivato senza che il suo istante fosse osservato (sessione ripresa a metà)';
+const MOTIVO_COMANDO_PROVA = 'l\'attrezzo `prova` esegue il comando di prova della sessione, che non viaggia negli argomenti della chiamata';
+const MOTIVO_ARGOMENTI_ROTTI = 'gli argomenti della chiamata non si sono ricomposti in JSON valido';
+
+/**
+ * ⛔ L'ordine dell'array NON è l'ordine degli eventi. Sul disco succede
+ * davvero: nel file `.sessions-store/ce764e5e…` le righe 28-30 portano
+ * `_sequenza` 28, 27, 29 — la coda di append serializza le scritture ma non
+ * l'ordine in cui arrivano. Unire i frammenti nell'ordine dell'array
+ * produrrebbe un comando SBAGLIATO ma plausibile, il peggiore dei difetti.
+ * Stessa guardia già usata da `ripristina()`: si riordina solo se OGNI
+ * evento ha un `_sequenza` valido, altrimenti si tiene l'ordine dato.
+ */
+function eventiInOrdine(eventi) {
+  if (!Array.isArray(eventi)) return [];
+  return eventi.every((evento) => Number.isSafeInteger(evento?._sequenza))
+    ? [...eventi].sort((a, b) => a._sequenza - b._sequenza)
+    : eventi;
+}
+
+/** Legge un istante di arrivo da una Map (o da un oggetto semplice). `null` quando non c'è. */
+function creaLettoreIstanti(istanti) {
+  if (istanti instanceof Map) {
+    return (sequenza) => {
+      const valore = istanti.get(sequenza);
+      return Number.isFinite(valore) ? valore : null;
+    };
+  }
+  if (istanti && typeof istanti === 'object') {
+    return (sequenza) => {
+      const valore = istanti[sequenza];
+      return Number.isFinite(valore) ? valore : null;
+    };
+  }
+  return () => null;
+}
+
+/** Riscrive un valore con le chiavi degli oggetti in ordine: `{a,b}` e `{b,a}` sono gli STESSI argomenti. */
+function stabile(valore) {
+  if (Array.isArray(valore)) return valore.map(stabile);
+  if (valore && typeof valore === 'object') {
+    const fuori = {};
+    for (const chiave of Object.keys(valore).sort()) fuori[chiave] = stabile(valore[chiave]);
+    return fuori;
+  }
+  return valore;
+}
+
+/**
+ * Ricompone le tool-call dagli eventi grezzi.
+ *
+ * ⛔⛔ I due casi che rendono questa funzione necessaria, entrambi VERI nei
+ * file di sessione: (1) gli argomenti arrivano in più `ToolCallArgs` da
+ * concatenare — e due chiamate dello stesso giro si INTRECCIANO, quindi la
+ * concatenazione è per `toolCallId`, mai globale; (2) un `ToolCallArgs` può
+ * comparire PRIMA del suo `ToolCallStart`, quindi il record si crea al primo
+ * evento che nomina l'id, non solo allo Start.
+ */
+function chiamateDaEventi(eventi) {
+  const ordinati = eventiInOrdine(eventi);
+  const perId = new Map();
+  let origineCorrente = 'agente';
+  let visti = 0;
+
+  const daiOCrea = (toolCallId) => {
+    let chiamata = perId.get(toolCallId);
+    if (!chiamata) {
+      visti += 1;
+      chiamata = {
+        toolCallId,
+        nome: null,
+        frammenti: [],
+        contenuto: null,
+        sequenzaInizio: null,
+        sequenzaFine: null,
+        sequenzaUltimoEvento: null,
+        origine: origineCorrente,
+        ordine: visti,
+        runConclusoDopo: null,
+      };
+      perId.set(toolCallId, chiamata);
+    }
+    return chiamata;
+  };
+
+  let runAperto = false;
+  let ultimaSequenza = null;
+  let ultimoTipo = null;
+  const approvazioni = new Map();
+
+  for (const evento of ordinati) {
+    const tipo = evento?.type;
+    if (Number.isSafeInteger(evento?._sequenza)) ultimaSequenza = evento._sequenza;
+    if (typeof tipo === 'string') ultimoTipo = tipo;
+
+    if (tipo === 'RunStarted') {
+      // ⛔ `input.comandoDiretto` è il campo che `eseguiComandoDiretto` mette
+      // nel RunStarted del `!comando` del composer (agent-service.mjs): è
+      // l'UNICA differenza fra «l'agente ha scelto» e «l'owner ha digitato».
+      origineCorrente = typeof evento.input?.comandoDiretto === 'string' ? 'comando-diretto' : 'agente';
+      runAperto = true;
+      continue;
+    }
+    if (tipo === 'RunFinished' || tipo === 'RunError') {
+      runAperto = false;
+      for (const chiamata of perId.values()) {
+        if (chiamata.contenuto === null && chiamata.runConclusoDopo === null) chiamata.runConclusoDopo = tipo;
+      }
+      continue;
+    }
+    if (tipo === 'ApprovalRequested' && typeof evento.requestId === 'string') {
+      approvazioni.set(evento.requestId, { requestId: evento.requestId, azione: evento.azione ?? null, sequenza: evento._sequenza ?? null });
+      continue;
+    }
+    if (tipo === 'ApprovalResolved' && typeof evento.requestId === 'string') {
+      approvazioni.delete(evento.requestId);
+      continue;
+    }
+
+    if (typeof evento?.toolCallId !== 'string' || evento.toolCallId === '') continue;
+    const chiamata = daiOCrea(evento.toolCallId);
+    if (Number.isSafeInteger(evento._sequenza)) chiamata.sequenzaUltimoEvento = evento._sequenza;
+    if (tipo === 'ToolCallStart') {
+      if (typeof evento.toolCallName === 'string') chiamata.nome = evento.toolCallName;
+      if (Number.isSafeInteger(evento._sequenza)) chiamata.sequenzaInizio = evento._sequenza;
+      chiamata.origine = origineCorrente;
+    } else if (tipo === 'ToolCallArgs') {
+      if (typeof evento.delta === 'string') chiamata.frammenti.push(evento.delta);
+    } else if (tipo === 'ToolCallResult') {
+      chiamata.contenuto = typeof evento.content === 'string' ? evento.content : String(evento.content ?? '');
+      if (Number.isSafeInteger(evento._sequenza)) chiamata.sequenzaFine = evento._sequenza;
+    }
+  }
+
+  const chiamate = [...perId.values()].sort((a, b) => {
+    const ca = a.sequenzaInizio ?? a.sequenzaUltimoEvento;
+    const cb = b.sequenzaInizio ?? b.sequenzaUltimoEvento;
+    if (Number.isSafeInteger(ca) && Number.isSafeInteger(cb) && ca !== cb) return ca - cb;
+    return a.ordine - b.ordine;
+  });
+
+  for (const chiamata of chiamate) {
+    chiamata.argomentiGrezzi = chiamata.frammenti.join('');
+    const testo = chiamata.argomentiGrezzi.trim();
+    if (testo === '') {
+      chiamata.argomenti = null;
+      chiamata.argomentiRicomposti = true; // niente da ricomporre non è un fallimento
+    } else {
+      try {
+        chiamata.argomenti = JSON.parse(testo);
+        chiamata.argomentiRicomposti = true;
+      } catch {
+        chiamata.argomenti = null;
+        chiamata.argomentiRicomposti = false;
+      }
+    }
+    chiamata.impronta = `${chiamata.nome ?? '?'} ${chiamata.argomentiRicomposti && chiamata.argomenti !== null ? JSON.stringify(stabile(chiamata.argomenti)) : testo}`;
+  }
+
+  return { ordinati, chiamate, runAperto, ultimaSequenza, ultimoTipo, approvazioniPendenti: [...approvazioni.values()] };
+}
+
+/** Il comando che una chiamata sta eseguendo, e — se non c'è — PERCHÉ non c'è. */
+function comandoDellaChiamata(chiamata) {
+  if (chiamata.nome === 'prova') return { comando: null, motivo: MOTIVO_COMANDO_PROVA };
+  if (!chiamata.argomentiRicomposti) return { comando: null, motivo: MOTIVO_ARGOMENTI_ROTTI };
+  const comando = chiamata.argomenti?.comando;
+  if (typeof comando === 'string' && comando !== '') return { comando, motivo: null };
+  return { comando: null, motivo: `la chiamata a \`${chiamata.nome ?? '?'}\` non porta un campo \`comando\`` };
+}
+
+/**
+ * L'esito di un processo, letto dalla stringa che il kernel già costruisce:
+ * `exit <codice> [sandbox: <livello>]\n<testo>` per `shell`, `exit <codice>\n…`
+ * per `prova`, `REFUSED. …` quando il cancello dei permessi ha detto no.
+ * ⛔ Un rifiuto NON ha un codice d'uscita: `null`, mai uno zero inventato.
+ */
+function esitoDelProcesso(chiamata) {
+  if (chiamata.contenuto === null) {
+    if (chiamata.runConclusoDopo === 'RunError') return { esito: 'interrotto', codiceUscita: null, sandbox: null };
+    if (chiamata.runConclusoDopo === 'RunFinished') return { esito: 'senza-esito', codiceUscita: null, sandbox: null };
+    return { esito: 'in-corso', codiceUscita: null, sandbox: null };
+  }
+  if (chiamata.contenuto.startsWith('REFUSED.')) return { esito: 'rifiutato', codiceUscita: null, sandbox: null };
+  const trovato = /^exit (-?\d+)(?: \[sandbox: ([^\]]*)\])?/.exec(chiamata.contenuto);
+  if (trovato) return { esito: 'concluso', codiceUscita: Number(trovato[1]), sandbox: trovato[2] ?? null };
+  return { esito: 'concluso', codiceUscita: null, sandbox: null };
+}
+
+/**
+ * ⭐⭐⭐ IL PROCESS LEDGER — l'elenco dei processi che questa sessione ha
+ * lanciato, ricostruito dai SOLI eventi già persistiti.
+ *
+ * `istanti` è una mappa `_sequenza → epoch ms` tenuta IN MEMORIA da
+ * `broadcast` (mai su disco: vedi il commento lì). Senza di essa — cioè per
+ * una sessione ripristinata dopo un riavvio — inizio e durata sono `null` e
+ * il perché è DETTO in `motivoTempoAssente`: ⛔ mai uno zero al posto di un
+ * dato che non c'è.
+ *
+ * @returns {{registrato:boolean, processi:Array<object>|null, motivo:string|null}}
+ *   `registrato:false` + `processi:null` quando non c'è NIENTE da leggere —
+ *   che è un fatto diverso da «nessun processo» (`registrato:true`, `[]`).
+ */
+export function processiDaEventi(eventi, { istanti = null, adesso = null } = {}) {
+  if (!Array.isArray(eventi) || eventi.length === 0) {
+    return { registrato: false, processi: null, motivo: 'non-registrato' };
+  }
+  const leggiIstante = creaLettoreIstanti(istanti);
+  const adessoNoto = Number.isFinite(adesso);
+  const { chiamate } = chiamateDaEventi(eventi);
+
+  const processi = chiamate
+    .filter((chiamata) => ATTREZZI_CHE_LANCIANO_PROCESSI.includes(chiamata.nome))
+    .map((chiamata) => {
+      const { esito, codiceUscita, sandbox } = esitoDelProcesso(chiamata);
+      const { comando, motivo: motivoComandoAssente } = comandoDellaChiamata(chiamata);
+      const inizioMs = chiamata.sequenzaInizio === null ? null : leggiIstante(chiamata.sequenzaInizio);
+      const fineMs = chiamata.sequenzaFine === null ? null : leggiIstante(chiamata.sequenzaFine);
+
+      let durataMs = null;
+      let motivoTempoAssente = null;
+      if (inizioMs === null) motivoTempoAssente = MOTIVO_SENZA_ISTANTI;
+      else if (fineMs !== null) durataMs = fineMs - inizioMs;
+      else motivoTempoAssente = esito === 'in-corso' ? MOTIVO_ANCORA_IN_CORSO : MOTIVO_FINE_NON_OSSERVATA;
+
+      return {
+        toolCallId: chiamata.toolCallId,
+        attrezzo: chiamata.nome,
+        origine: chiamata.origine,
+        comando,
+        motivoComandoAssente,
+        descrizione: typeof chiamata.argomenti?.descrizione === 'string' ? chiamata.argomenti.descrizione : null,
+        argomentiGrezzi: chiamata.argomentiGrezzi,
+        sequenzaInizio: chiamata.sequenzaInizio,
+        sequenzaFine: chiamata.sequenzaFine,
+        inizio: inizioMs === null ? null : new Date(inizioMs).toISOString(),
+        durataMs,
+        inCorsoDaMs: esito === 'in-corso' && inizioMs !== null && adessoNoto ? adesso - inizioMs : null,
+        motivoTempoAssente,
+        esito,
+        codiceUscita,
+        sandbox,
+      };
+    });
+
+  return { registrato: true, processi, motivo: null };
+}
+
+function secondi(ms) {
+  return Math.round(ms / 1000);
+}
+
+/** Il più lungo tratto di indici consecutivi dentro un gruppo (`[3,4,5,9]` → 3). */
+function piuLungaSequenzaConsecutiva(indici) {
+  let massimo = 1;
+  let corrente = 1;
+  for (let i = 1; i < indici.length; i += 1) {
+    corrente = indici[i] === indici[i - 1] + 1 ? corrente + 1 : 1;
+    if (corrente > massimo) massimo = corrente;
+  }
+  return massimo;
+}
+
+/** Quante volte al massimo il gruppo cade dentro una finestra scorrevole di `finestra` chiamate. */
+function massimoNellaFinestra(indici, finestra) {
+  let massimo = 1;
+  for (let i = 0; i < indici.length; i += 1) {
+    let conto = 0;
+    for (let j = i; j < indici.length && indici[j] - indici[i] <= finestra - 1; j += 1) conto += 1;
+    if (conto > massimo) massimo = conto;
+  }
+  return massimo;
+}
+
+/**
+ * ⭐⭐⭐ LA GUARDIA DI STALLO — riconosce due stalli diversi e li dice con
+ * parole diverse:
+ *
+ *  - **silenzio**: un processo, un giro o un cancello di permesso senza un
+ *    solo evento da più di `silenzioMs`. Il terzo caso è quello che ci
+ *    riguarda per davvero: l'agente è VIVO ma fermo davanti a
+ *    un'approvazione che nessuno darà (gitlens#5230, agent-access#139).
+ *  - **giro a vuoto**: lo stesso attrezzo con gli STESSI argomenti almeno
+ *    `ripetizioniPerAllarme` volte dentro `finestraChiamate`, **e** sempre
+ *    con lo stesso esito. Se l'esito cambia, qualcosa si muove: non è stallo.
+ *
+ * ⛔⛔⛔ OSSERVATIVA. `interviene:false` è nel contratto e provato da un test:
+ * questa funzione non ferma, non uccide, non riscrive niente — segnala, e
+ * decide l'owner. Ogni segnalazione porta CHI (comando, `toolCallId`,
+ * `requestId`) e DA QUANTO, mai un conteggio anonimo.
+ *
+ * ⛔ Il silenzio si misura solo se c'è un orologio (`adesso`) E gli istanti
+ * di arrivo: senza, `silenzioValutabile:false` e il motivo è detto — il
+ * giro a vuoto invece si legge dai soli eventi, e resta visibile.
+ */
+export function guardiaDiStallo(eventi, { istanti = null, adesso = null, soglie = null } = {}) {
+  const soglieEffettive = { ...SOGLIE_STALLO_PREDEFINITE, ...(soglie ?? {}) };
+  if (!Array.isArray(eventi) || eventi.length === 0) {
+    return {
+      osservata: false,
+      motivo: 'non-registrato',
+      interviene: false,
+      soglie: soglieEffettive,
+      silenzioValutabile: false,
+      motivoSilenzioNonValutabile: 'nessun evento registrato per questa sessione',
+      segnalazioni: null,
+    };
+  }
+
+  const leggiIstante = creaLettoreIstanti(istanti);
+  const adessoNoto = Number.isFinite(adesso);
+  const { chiamate, runAperto, ultimaSequenza, ultimoTipo, approvazioniPendenti } = chiamateDaEventi(eventi);
+  const istanteUltimoEvento = ultimaSequenza === null ? null : leggiIstante(ultimaSequenza);
+  const silenzioValutabile = adessoNoto && istanteUltimoEvento !== null;
+  const motivoSilenzioNonValutabile = silenzioValutabile
+    ? null
+    : (adessoNoto ? MOTIVO_SENZA_ISTANTI : 'nessun orologio passato alla guardia: «tace da N secondi» non si può dire senza sapere che ora è adesso');
+
+  const segnalazioni = [];
+  const sogliaS = secondi(soglieEffettive.silenzioMs);
+
+  if (silenzioValutabile) {
+    // 1) Il cancello di permesso. Va per primo ed ESCLUDE gli altri due: è la
+    //    causa specifica di quel silenzio, e dirla «il giro tace» sarebbe
+    //    vera e inutile.
+    for (const approvazione of approvazioniPendenti) {
+      const istante = approvazione.sequenza === null ? null : leggiIstante(approvazione.sequenza);
+      if (istante === null) continue;
+      const fermoDaMs = adesso - istante;
+      if (fermoDaMs < soglieEffettive.silenzioMs) continue;
+      const comando = typeof approvazione.azione?.comando === 'string' ? approvazione.azione.comando : null;
+      const percorso = typeof approvazione.azione?.percorso === 'string' ? approvazione.azione.percorso : null;
+      const soggettoDetto = [approvazione.azione?.tipo, comando ?? percorso].filter(Boolean).join(' ') || 'azione non dichiarata';
+      segnalazioni.push({
+        tipo: 'silenzio',
+        soggetto: 'approvazione',
+        requestId: approvazione.requestId,
+        toolCallId: null,
+        attrezzo: approvazione.azione?.tipo ?? null,
+        comando,
+        percorso,
+        fermoDaMs,
+        sogliaMs: soglieEffettive.silenzioMs,
+        descrizione: `Approvazione «${soggettoDetto}» (${approvazione.requestId}) in attesa da ${secondi(fermoDaMs)} s, soglia ${sogliaS} s: il giro è vivo ma non andrà avanti finché nessuno risponde.`,
+      });
+    }
+
+    if (approvazioniPendenti.length === 0) {
+      // 2) I processi ancora aperti: ognuno con il SUO comando e il SUO id.
+      const inCorso = chiamate.filter((chiamata) => ATTREZZI_CHE_LANCIANO_PROCESSI.includes(chiamata.nome) && chiamata.contenuto === null && chiamata.runConclusoDopo === null);
+      for (const chiamata of inCorso) {
+        const istante = chiamata.sequenzaUltimoEvento === null ? null : leggiIstante(chiamata.sequenzaUltimoEvento);
+        if (istante === null) continue;
+        const fermoDaMs = adesso - istante;
+        if (fermoDaMs < soglieEffettive.silenzioMs) continue;
+        const { comando } = comandoDellaChiamata(chiamata);
+        segnalazioni.push({
+          tipo: 'silenzio',
+          soggetto: 'processo',
+          requestId: null,
+          toolCallId: chiamata.toolCallId,
+          attrezzo: chiamata.nome,
+          comando,
+          percorso: null,
+          fermoDaMs,
+          sogliaMs: soglieEffettive.silenzioMs,
+          descrizione: `${chiamata.nome} «${comando ?? '(comando non dichiarato negli argomenti)'}» (${chiamata.toolCallId}) non produce output da ${secondi(fermoDaMs)} s, soglia ${sogliaS} s. La guardia segnala: fermarlo è una decisione dell'owner.`,
+        });
+      }
+
+      // 3) Il giro aperto senza nessun processo aperto: tace il ciclo stesso.
+      if (runAperto && inCorso.length === 0) {
+        const fermoDaMs = adesso - istanteUltimoEvento;
+        if (fermoDaMs >= soglieEffettive.silenzioMs) {
+          segnalazioni.push({
+            tipo: 'silenzio',
+            soggetto: 'giro',
+            requestId: null,
+            toolCallId: null,
+            attrezzo: null,
+            comando: null,
+            percorso: null,
+            fermoDaMs,
+            sogliaMs: soglieEffettive.silenzioMs,
+            ultimoEvento: ultimoTipo,
+            descrizione: `Il giro è ancora aperto e non arriva nessun evento da ${secondi(fermoDaMs)} s, soglia ${sogliaS} s (ultimo evento: ${ultimoTipo ?? 'ignoto'}).`,
+          });
+        }
+      }
+    }
+  }
+
+  // 4) Il giro a vuoto — si legge dai soli eventi, anche senza orologio.
+  const perImpronta = new Map();
+  chiamate.forEach((chiamata, indice) => {
+    if (typeof chiamata.nome !== 'string') return;
+    if (!perImpronta.has(chiamata.impronta)) perImpronta.set(chiamata.impronta, []);
+    perImpronta.get(chiamata.impronta).push(indice);
+  });
+
+  for (const indici of perImpronta.values()) {
+    if (indici.length < soglieEffettive.ripetizioniPerAllarme) continue;
+    const ripetizioni = massimoNellaFinestra(indici, soglieEffettive.finestraChiamate);
+    if (ripetizioni < soglieEffettive.ripetizioniPerAllarme) continue;
+    const gruppo = indici.map((indice) => chiamate[indice]);
+    const esiti = new Set(gruppo.map((chiamata) => chiamata.contenuto).filter((valore) => typeof valore === 'string'));
+    // ⛔ Result-aware: «senza che cambi niente». Esiti diversi = progresso.
+    if (esiti.size > 1) continue;
+    const prima = gruppo[0];
+    const { comando } = comandoDellaChiamata(prima);
+    const istantePrima = prima.sequenzaInizio === null ? null : leggiIstante(prima.sequenzaInizio);
+    const consecutive = piuLungaSequenzaConsecutiva(indici);
+    const idsTutti = gruppo.map((chiamata) => chiamata.toolCallId);
+    // ⛔ La descrizione è una riga da leggere, non un elenco: gli id per intero
+    // stanno in `toolCallIds`, qui i primi cinque e quanti restano — «CHI» resta
+    // dicibile anche quando i CHI sono quattordici.
+    const idsDetti = idsTutti.length > 5 ? `${idsTutti.slice(0, 5).join(', ')} e altri ${idsTutti.length - 5}` : idsTutti.join(', ');
+    segnalazioni.push({
+      tipo: 'giro-a-vuoto',
+      soggetto: 'attrezzo',
+      attrezzo: prima.nome,
+      comando,
+      argomenti: prima.argomentiGrezzi,
+      toolCallIds: idsTutti,
+      posizioni: indici,
+      ripetizioni,
+      occorrenzeTotali: indici.length,
+      consecutive,
+      esitiDistinti: esiti.size,
+      soglia: soglieEffettive.ripetizioniPerAllarme,
+      finestra: soglieEffettive.finestraChiamate,
+      attuale: indici.at(-1) >= chiamate.length - soglieEffettive.finestraChiamate,
+      ripetutoDaMs: istantePrima !== null && adessoNoto ? adesso - istantePrima : null,
+      descrizione: `${prima.nome} chiamato ${ripetizioni} volte con gli stessi identici argomenti ${prima.argomentiGrezzi || '(nessuno)'} entro ${soglieEffettive.finestraChiamate} chiamate — ${indici.length} in tutta la sessione, ${consecutive} di fila — sempre con lo stesso esito: ${idsDetti}.`,
+    });
+  }
+
+  return {
+    osservata: true,
+    motivo: null,
+    interviene: false,
+    soglie: soglieEffettive,
+    silenzioValutabile,
+    motivoSilenzioNonValutabile,
+    segnalazioni,
+  };
+}
+
 export function createSessionRegistry({
   avviaSessioneFn = avviaSessioneReale,
   preparaEsecuzioneFn,
@@ -323,6 +857,14 @@ export function createSessionRegistry({
   chiaveFn = null,
   cartelleProgetto = [],
   clock = () => new Date(),
+  /*
+   * ⭐⭐⭐ 04/9 — W1-02: le soglie della guardia di stallo. Sono un PARAMETRO
+   * del registro, non numeri dentro la logica: il default vive in un posto
+   * solo (`SOGLIE_STALLO_PREDEFINITE`) ed è tarato sui nostri numeri veri
+   * (04/9: 65 ripetizioni identiche su 634 chiamate, e 33 chiamate al massimo
+   * in una sessione che esaurisce i giri — vedi il commento del blocco sopra).
+   */
+  soglieStallo = SOGLIE_STALLO_PREDEFINITE,
   /*
    * ⭐⭐⭐ 28/8, owner: "l'harness desktop diventa l'unica chat, con tutti i
    * tool come la generazione di artefatti oppure la ricerca web" — sempre
@@ -619,6 +1161,24 @@ export function createSessionRegistry({
      */
     const effimero = evento.type === 'WorkspaceChanged';
     if (!effimero) voce.eventi.push(evento);
+    /*
+     * ⭐⭐⭐ 04/9 — W1-02, l'istante in cui questo evento è arrivato. Serve al
+     * process ledger per dire "quanto è durato" e alla guardia per dire "tace
+     * da quanto".
+     *
+     * ⛔⛔ IN MEMORIA, mai su disco. `registraRigaFn` serializza `evento` per
+     * intero (`JSON.stringify(record)`, session-store.mjs): un campo in più
+     * sull'oggetto finirebbe in OGNI riga JSONL di OGNI sessione — una
+     * scrittura nuova che nessuno ha chiesto, e una seconda fonte di verità
+     * accanto a quella che c'è già. Stessa disciplina dichiarata da
+     * `usageDaEventi`: si legge ciò che è persistito, non si aggiunge.
+     *
+     * ⇒ Conseguenza DICHIARATA, non nascosta: una sessione ripristinata dopo
+     * un riavvio non ha istanti, e il ledger lo dice (`motivoTempoAssente`)
+     * invece di inventare uno zero. La mappa è proporzionale a `voce.eventi`,
+     * che è già interamente in memoria: un numero per evento, non un oggetto.
+     */
+    if (!effimero) (voce.istantiEvento ??= new Map()).set(evento._sequenza, clock().getTime());
     for (const ascoltatore of voce.ascoltatori) ascoltatore(evento);
     if (evento.type === 'RunFinished' || evento.type === 'RunError') {
       voce.conclusa = true;
@@ -2245,6 +2805,31 @@ export function createSessionRegistry({
      */
     async elencaAttrezziPredefiniti() {
       return costruisciElencoAttrezzi(null);
+    },
+
+    /**
+     * ⭐⭐⭐ W1-02 (04/9) — IL PROCESS LEDGER di UNA sessione, più la guardia
+     * di stallo su quella stessa storia. Stessa forma di ritorno delle altre
+     * `elenca*` qui sopra: `{erroreAvvio, code}` per una sessione che non
+     * esiste, `{ok:true, …}` altrimenti.
+     *
+     * ⛔ `registrato:false` + `processi:null` quando la sessione esiste ma
+     * non ha ancora un solo evento: «non registrato» e «nessun processo» sono
+     * due fatti diversi e non si dicono con la stessa parola.
+     *
+     * ⛔⛔⛔ Nessuna azione, mai: `guardia.interviene` è `false` per contratto.
+     * Questo metodo LEGGE. Fermare un processo resta `ferma(sessionId)`, cioè
+     * una decisione dell'owner — 23/8, la sorveglianza gridava «3 ORFANI» e
+     * uno era la sessione Codex dell'owner, viva.
+     */
+    elencaProcessi(sessionId, { soglie = null } = {}) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      const istanti = voce.istantiEvento ?? null;
+      const adesso = clock().getTime();
+      const ledger = processiDaEventi(voce.eventi, { istanti, adesso });
+      const guardia = guardiaDiStallo(voce.eventi, { istanti, adesso, soglie: { ...soglieStallo, ...(soglie ?? {}) } });
+      return { ok: true, registrato: ledger.registrato, processi: ledger.processi, motivo: ledger.motivo, guardia };
     },
 
     async elencaServerMcp(sessionId) {

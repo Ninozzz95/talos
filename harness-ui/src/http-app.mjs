@@ -2340,6 +2340,13 @@ export function createHttpApp({
         // ⭐⭐⭐ O-01 (04/9): il Capability hub elenca gli attrezzi VERI offerti al modello (43, letti dal kernel) invece dei sette scritti a mano nel template — stesso principio esatto di mcpMatch qui sotto.
         const toolsMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/tools$/.exec(url.pathname);
         const mcpMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/mcp$/.exec(url.pathname);
+        // ⭐⭐⭐ W1-02 (04/9) — il PROCESS LEDGER di una sessione: i processi che ha
+        // lanciato (attrezzo `shell`/`prova` e comandi diretti dell'owner), con
+        // comando, origine, inizio, durata ed esito, più la GUARDIA DI STALLO
+        // (silenzio · giro a vuoto) sulla stessa storia. Stesso principio esatto di
+        // mcpMatch qui sopra: sola lettura, ricostruito dagli eventi già persistiti,
+        // ⛔ nessuna azione — la guardia SEGNALA, fermare è `POST .../stop`.
+        const processesMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/processes$/.exec(url.pathname);
         // ⭐⭐⭐ 29/8 — FASE F: il Capability hub elenca le skill dichiarate — stesso principio, senza il concetto di fiducia (le skill non ce l'hanno).
         const skillsMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/skills$/.exec(url.pathname);
         // ⭐⭐⭐ 29/8 — FASE N: il Capability hub elenca le voci di Libreria del progetto — stesso principio esatto di skillsMatch appena sopra (nessun concetto di fiducia).
@@ -2473,6 +2480,29 @@ export function createHttpApp({
             throw errore;
           }
           data = { server: esito.server, errore: esito.errore };
+        } else if (processesMatch) {
+          requireNoQuery(url);
+          let sessionId;
+          try {
+            sessionId = decodeURIComponent(processesMatch[1]);
+          } catch {
+            sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+            return;
+          }
+          const esito = await sessionRegistry.elencaProcessi(sessionId);
+          if ('erroreAvvio' in esito) {
+            const errore = new Error(esito.erroreAvvio);
+            errore.code = esito.code;
+            throw errore;
+          }
+          /*
+           * ⛔ `registrato` viaggia accanto a `processi`: una sessione che non ha
+           * ancora un solo evento torna `processi:null` + `motivo:'non-registrato'`,
+           * MAI `[]` — «non registrato» e «nessun processo» sono due fatti diversi
+           * e chi legge questa rotta deve poterli distinguere (stesso principio
+           * "gli stati sono tre" di hooksMatch/mcpMatch qui sopra).
+           */
+          data = { registrato: esito.registrato, processi: esito.processi, motivo: esito.motivo, guardia: esito.guardia };
         } else if (skillsMatch) {
           requireNoQuery(url);
           let sessionId;
