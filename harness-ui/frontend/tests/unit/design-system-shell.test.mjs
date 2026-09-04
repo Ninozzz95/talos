@@ -142,6 +142,8 @@ const compositore = (extra = {}) => createComposer({
   label: 'Messaggio',
   sendLabel: 'Invia',
   stopLabel: 'Ferma',
+  attachLabel: 'Allega file o immagini',
+  capabilityLabel: 'Capability',
   ...extra,
 });
 
@@ -188,16 +190,22 @@ test('COMPOSER-04 ⭐ la coda è visibile per costruzione: un messaggio accodato
   assert.equal(trova(coda, (e) => e.className === 'talos-queue__text').textContent, 'Poi aggiorna il ledger con i numeri veri');
 });
 
-test('COMPOSER-05 AL CONTRARIO senza nome del campo o senza i due stati del pulsante non si monta', () => {
-  assert.throws(() => createComposer({ document: doc(), sendLabel: 'Invia', stopLabel: 'Ferma' }), /nome del campo/);
-  assert.throws(() => createComposer({ document: doc(), label: 'Messaggio', sendLabel: 'Invia' }), /due stati del pulsante/);
+test('COMPOSER-05 AL CONTRARIO senza i nomi obbligatori non si monta', () => {
+  const base = { document: doc(), label: 'Messaggio', sendLabel: 'Invia', stopLabel: 'Ferma', attachLabel: 'Allega', capabilityLabel: 'Capability' };
+  assert.throws(() => createComposer({ ...base, label: undefined }), /nome del campo/);
+  assert.throws(() => createComposer({ ...base, stopLabel: undefined }), /due stati del pulsante/);
+  // ⛔ Il pulsante che allega è l'ALTERNATIVA DA TASTIERA al trascinamento:
+  // senza, chi non usa il mouse resta fuori. Per questo non è opzionale.
+  assert.throws(() => createComposer({ ...base, attachLabel: undefined }), /alternativa da tastiera/);
+  // ⛔ O-08: due pulsanti separati, «Capability» e «+».
+  assert.throws(() => createComposer({ ...base, capabilityLabel: undefined }), /due pulsanti separati/);
 });
 
 test('COMPOSER-06 le pillole si montano e si sostituiscono senza duplicarsi', () => {
   const d = doc();
   const a = d.createElement('span');
   const b = d.createElement('span');
-  const c = createComposer({ document: d, label: 'Messaggio', sendLabel: 'Invia', stopLabel: 'Ferma', pills: [a] });
+  const c = createComposer({ document: d, label: 'Messaggio', sendLabel: 'Invia', stopLabel: 'Ferma', attachLabel: 'Allega', capabilityLabel: 'Capability', pills: [a] });
   const zona = trova(c.element, (e) => e.className === 'talos-composer__pills');
   assert.deepEqual(zona.children, [a]);
   c.update({ pills: [a, b] });

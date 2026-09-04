@@ -392,3 +392,21 @@ test('PHASE6-COMPOSER-15 — un solo pulsante con due stati, la striscia educata
   await expect(striscia).toBeHidden();
   await expect(coda).toBeHidden();
 });
+
+test('PHASE7-ALLEGATI-16 — due pulsanti separati, il selettore di file è reale, e l\'allegato dichiara il costo', async ({ page }) => {
+  await openLab(page);
+  const composer = page.locator('[data-testid="ds-composer"]');
+  // O-08: «Capability» ha la sua parola, il «+» allega e basta.
+  await expect(composer.getByRole('button', { name: 'Capability' })).toBeVisible();
+  await expect(composer.getByRole('button', { name: 'Allega file o immagini' })).toBeVisible();
+  // ⛔ L'alternativa da tastiera al trascinamento è un <input type="file"> vero.
+  const selettore = composer.locator('input[type="file"]');
+  await expect(selettore).toHaveCount(1);
+  await expect(selettore).toHaveAttribute('accept', 'image/*,.md,.json');
+  // B9: l'allegato dice quanto contesto costa, come stima.
+  const allegato = composer.locator('.talos-attachment');
+  await expect(allegato).toContainText('schermata.png');
+  await expect(allegato.locator('.talos-attachment__cost')).toContainText('1240 token');
+  const tilde = await allegato.locator('.talos-attachment__cost').evaluate((el) => getComputedStyle(el, '::before').content);
+  expect(tilde).toContain('~');
+});
