@@ -78,3 +78,20 @@ test('W1-12 — cablaggio nel monolite: sottotitolo a tre stati, riga pendente, 
   assert.match(resume, /toast\('Ripresa della sessione'/);
   assert.match(resume, /riprendere costa \$\{stimaTokenRipresa\(voceElenco\.usage\)\}/);
 });
+
+/*
+ * ⭐ 04/9 — REVIEW di W1-13: la riga della sessione nella sidebar diceva
+ * «in corso · live» mentre a schermo c'era una card di approvazione in
+ * attesa (visto negli screenshot di `qa-file-di-controllo`). Lo stato
+ * c'era già (`inAttesaApprovazione` da `GET /sessions`, reso da
+ * `statoSessione`): mancava chi ridisegna l'elenco quando l'evento arriva.
+ */
+test('W1-13 (review) — ApprovalRequested e ApprovalResolved ridisegnano l\'elenco delle sessioni, nei due versi', () => {
+  const richiesta = app.slice(app.lastIndexOf("case 'ApprovalRequested': {"), app.lastIndexOf("case 'ApprovalResolved': {"));
+  assert.match(richiesta, /aggiornaElencoSessioniReali\(\);/, 'arrivata la richiesta, la riga deve poter dire «in attesa di approvazione»');
+  const risolta = app.slice(app.lastIndexOf("case 'ApprovalResolved': {"));
+  const finoAlBreak = risolta.slice(0, risolta.indexOf('\n      }'));
+  assert.match(finoAlBreak, /aggiornaElencoSessioniReali\(\);/, 'risolta l\'approvazione, la riga deve smettere di dirlo');
+  // AL CONTRARIO: lo stato che la riga mostra deve esistere davvero nella risposta del server, non essere inventato dal client
+  assert.match(app, /inAttesaApprovazione\) return \{ classe: 'attesa'/);
+});

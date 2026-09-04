@@ -74,7 +74,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { BUDGET_RAF_P95_MS, percentili, riassuntoGpu, verdettoSonda } from './lib/statistiche-raf.mjs';
 
@@ -5607,7 +5607,25 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error('Pipeline fallita:', error);
-  process.exitCode = 1;
-});
+/*
+ * ⛔⛔⛔ 04/9 — QUESTA GUARDIA COSTA DENARO SE MANCA. `main()` stava qui nudo:
+ * ogni `import` di questo file ne ESEGUIVA la pipeline intera. E c'è un
+ * import in `tests/viewport-desktop.test.mjs` (legge `VIEWPORT_DESKTOP` e
+ * `viewportRichiesta`), quindi OGNI `npm run verify:all` apriva Chrome,
+ * puntava al 4174 — il server VIVO dell'owner, l'URL di default — e faceva
+ * partire lo scenario `nuova-sessione-compito-libero`: una sessione VERA,
+ * con una chiamata VERA a un modello a pagamento, dentro una suite di test.
+ * Misurato il 04/09 nel log di `verify:all`: «Scenario: nuova-sessione-compito-libero
+ * · URL: http://127.0.0.1:4174/» in mezzo ai test, e 73 cartelle di corse in
+ * `.qa-runs/`. Trovato leggendo il log fino in fondo, non nei soli test verdi.
+ *
+ * ⇒ La pipeline gira SOLO se questo file è il programma lanciato. Importarlo
+ * (per una costante, per un test) non deve fare NIENTE.
+ */
+const eseguitoDirettamente = process.argv[1] !== undefined && pathToFileURL(process.argv[1]).href === import.meta.url;
+if (eseguitoDirettamente) {
+  main().catch((error) => {
+    console.error('Pipeline fallita:', error);
+    process.exitCode = 1;
+  });
+}

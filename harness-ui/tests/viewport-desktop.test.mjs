@@ -50,3 +50,25 @@ test('VIEWPORT-DESKTOP-03 — AL CONTRARIO: una viewport sconosciuta NON ricade 
   assert.throws(() => viewportRichiesta('http://x/?qa=tablet'), /sconosciuta/);
   assert.equal(VIEWPORT_DESKTOP.length, 2);
 });
+
+/*
+ * ⛔⛔⛔ 04/9 — LA GUARDIA CHE COSTA DENARO SE MANCA. `qa-visual-pipeline.mjs`
+ * chiamava `main()` a livello di modulo: importarlo — come fa il test qui
+ * sopra per leggere `VIEWPORT_DESKTOP` — faceva partire la pipeline VERA,
+ * che punta al 4174 di default (il server vivo dell'owner) e avvia una
+ * sessione con una chiamata a un modello A PAGAMENTO. Cioè: ogni
+ * `npm run verify:all` spendeva soldi. Misurato nel log del 04/09
+ * («Scenario: nuova-sessione-compito-libero · URL: http://127.0.0.1:4174/»
+ * in mezzo ai test).
+ *
+ * ⛔ Questo test non guarda il testo del file: importa il modulo in un
+ * processo figlio e verifica che non succeda NIENTE.
+ */
+test('QA-PIPELINE-GUARDIA — importare la pipeline non la ESEGUE (nessuno scenario, nessuna sessione, nessun costo)', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const modulo = new URL('../scripts/qa-visual-pipeline.mjs', import.meta.url).href;
+  const uscita = execFileSync(process.execPath, ['-e', `import(${JSON.stringify(modulo)}).then(() => console.log('IMPORTATO'))`], { encoding: 'utf8', timeout: 30_000 });
+  assert.match(uscita, /IMPORTATO/);
+  assert.doesNotMatch(uscita, /Scenario:/, 'un import non deve far partire nessuno scenario');
+  assert.doesNotMatch(uscita, /4174/, 'un import non deve nemmeno nominare il server vivo dell\'owner');
+});
