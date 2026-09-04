@@ -15,7 +15,14 @@ import { defineComponent } from '../ui/component.js';
  * ⛔ E l'ora e i giri hanno la loro unita' per chi ascolta: «7 giri», non «7».
  */
 const STATI = new Set(['live', 'waiting', 'done', 'error', 'interrupted']);
-const TONO_DELLO_STATO = new Map([
+/*
+ * ⛔ Due vocabolari che si somigliano e NON sono lo stesso: lo stato di una
+ * sessione (`done`, `error`, `interrupted`) e il tono di un pallino
+ * (`success`, `danger`, `neutral`). Passare l'uno dove va l'altro lancia, e la
+ * prova della Board l'ha preso — per questo la mappa si ESPORTA invece di
+ * essere riscritta in ogni superficie.
+ */
+export const PALLINO_PER_STATO_SESSIONE = new Map([
   ['live', 'live'], ['waiting', 'warning'], ['done', 'success'], ['error', 'danger'], ['interrupted', 'neutral'],
 ]);
 
@@ -59,7 +66,7 @@ export const createSessionItem = defineComponent('SessionItem', (initialProps = 
     if (!props.statusLabel) throw new TypeError('SessionItem richiede il nome dello stato, non solo il suo colore');
 
     titolo.textContent = String(props.title);
-    pallino.className = `talos-dot talos-dot--sm talos-dot--${TONO_DELLO_STATO.get(props.status)}`;
+    pallino.className = `talos-dot talos-dot--sm talos-dot--${PALLINO_PER_STATO_SESSIONE.get(props.status)}`;
     statoTesto.textContent = props.model ? `${props.statusLabel} · ${props.model}` : String(props.statusLabel);
     quando.textContent = props.when ? String(props.when) : '';
     if (props.turns !== undefined && props.turns !== null) {
