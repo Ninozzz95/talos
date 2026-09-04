@@ -14,8 +14,12 @@ lockfile, nothing to install there.
 
 **Windows, double-click**: run `harness-ui/scripts/avvia-talos.cmd`. It
 starts the server on the first free port from `4174` up, waits for it to
-answer, and opens your browser — on the Doctor screen if no provider key is
-configured yet, on the chat otherwise. Nothing to set first.
+answer, and opens your browser. Nothing to set first: on the first run a
+four-step intro asks for what TALOS cannot start without — a provider key
+(saved in the OS keyring, never in the browser) or a local engine, a default
+model, how much it may do on its own — and then opens the folder picker. It
+does not come back once completed or skipped. Set `TALOS_INTRO=0` to disable
+it; the launcher then opens the Doctor screen when no access is configured.
 
 **From a terminal**, from the repository root:
 
