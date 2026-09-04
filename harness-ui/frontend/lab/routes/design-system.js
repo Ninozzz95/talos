@@ -8,8 +8,11 @@ import {
   createListRow,
   createMeasure,
   createMenuButton,
+  createNavGroup,
+  createNavItem,
   createSelect,
   createSheet,
+  createSessionItem,
   createStatusDot,
   createSwitch,
   createTabs,
@@ -244,6 +247,50 @@ export function mountDesignSystemLab(root) {
   elenco.row.append(contenitore);
   grid.append(elenco.group);
   components.push(permesso, costo, ...righe.map(([c]) => c));
+
+  /* Fase 3: la sidebar come struttura, non come fila di bottoni. */
+  const navigazione = headingGroup(documentObj, 'Sidebar');
+  navigazione.group.classList.add('design-system-lab__group--wide');
+  const nav = documentObj.createElement('nav');
+  nav.setAttribute('aria-label', 'Navigazione di prova');
+  let luogoCorrente = 'capability';
+  const vociLuoghi = [
+    { id: 'capability', label: 'Capability', count: 43, unit: 'attrezzi' },
+    { id: 'board', label: 'Board', count: 69, unit: 'sessioni' },
+  ].map((voce) => createNavItem({
+    document: documentObj,
+    label: voce.label,
+    count: voce.count,
+    countUnit: voce.unit,
+    current: luogoCorrente === voce.id,
+    testId: `ds-nav-${voce.id}`,
+    onPress: () => {
+      luogoCorrente = voce.id;
+      for (const [componente, id] of coppieLuoghi) componente.update({ current: id === luogoCorrente });
+      announcements.announce(`${voce.label} aperto`);
+    },
+  }));
+  const coppieLuoghi = vociLuoghi.map((componente, i) => [componente, ['capability', 'board'][i]]);
+  const gruppoLuoghi = createNavGroup({ document: documentObj, label: 'Luoghi', items: vociLuoghi.map((v) => v.element), testId: 'ds-nav-group' });
+
+  const listaSessioni = documentObj.createElement('ul');
+  listaSessioni.className = 'talos-nav-list';
+  listaSessioni.setAttribute('aria-label', 'Sessioni di prova');
+  const sessioni = [
+    { id: 'w1-02', title: 'W1-02 registro processi', status: 'live', statusLabel: 'in corso', model: 'claude-opus-5', when: '18:09', turns: 7 },
+    { id: 'hermes', title: 'Confronto Hermes e Codex', status: 'error', statusLabel: 'giri finiti', model: 'claude-sonnet-5', when: 'ieri', turns: 24 },
+  ].map((sessione) => createSessionItem({
+    document: documentObj,
+    ...sessione,
+    current: sessione.id === 'w1-02',
+    testId: `ds-session-${sessione.id}`,
+    onPress: () => announcements.announce(`${sessione.title} aperta`),
+  }));
+  for (const s of sessioni) listaSessioni.append(s.element);
+  nav.append(gruppoLuoghi.element, listaSessioni);
+  navigazione.row.append(nav);
+  grid.append(navigazione.group);
+  components.push(...vociLuoghi, gruppoLuoghi, ...sessioni);
 
   assertTalosDesignTokens(documentObj.defaultView.getComputedStyle(html));
   html.dataset.visualReady = 'true';

@@ -7,6 +7,7 @@ import { createListRow } from '../../src/design-system/list-row.js';
 import { createMeasure } from '../../src/design-system/measure.js';
 import { createSelect } from '../../src/design-system/select.js';
 import { createStatusDot } from '../../src/design-system/status-dot.js';
+import { fakeDocument, testoDi, trova } from './fake-dom.mjs';
 
 /*
  * Un DOM finto piccolo, come in `dom.test.mjs`: queste primitive toccano
@@ -14,50 +15,7 @@ import { createStatusDot } from '../../src/design-system/status-dot.js';
  * silenzio. Il comportamento nel browser vero resta coperto dal banco
  * Playwright del design system.
  */
-function fakeDocument() {
-  function creaElemento(tagName) {
-    const el = {
-      nodeType: 1,
-      tagName: String(tagName).toUpperCase(),
-      className: '',
-      textContent: '',
-      value: '',
-      type: '',
-      id: '',
-      hidden: false,
-      selected: false,
-      dataset: {},
-      attributi: new Map(),
-      children: [],
-      parent: null,
-      classList: {
-        add(...nomi) { el.className = [...new Set(`${el.className} ${nomi.join(' ')}`.trim().split(/\s+/))].join(' '); },
-      },
-      ascoltatori: new Map(),
-      setAttribute(nome, valore) { el.attributi.set(nome, String(valore)); },
-      getAttribute(nome) { return el.attributi.has(nome) ? el.attributi.get(nome) : null; },
-      removeAttribute(nome) { el.attributi.delete(nome); },
-      hasAttribute(nome) { return el.attributi.has(nome); },
-      append(...nodi) { for (const n of nodi) { n.parent = el; el.children.push(n); } },
-      insertBefore(nodo, riferimento) {
-        nodo.parent = el;
-        const i = el.children.indexOf(riferimento);
-        el.children.splice(i < 0 ? el.children.length : i, 0, nodo);
-      },
-      replaceChildren(...nodi) { el.children = nodi; for (const n of nodi) n.parent = el; },
-      contains(nodo) { return el.children.includes(nodo); },
-      remove() { if (el.parent) el.parent.children = el.parent.children.filter((c) => c !== el); },
-      addEventListener(tipo, fn) { el.ascoltatori.set(tipo, [...(el.ascoltatori.get(tipo) || []), fn]); },
-      removeEventListener(tipo, fn) { el.ascoltatori.set(tipo, (el.ascoltatori.get(tipo) || []).filter((f) => f !== fn)); },
-      lancia(tipo, evento) { for (const fn of el.ascoltatori.get(tipo) || []) fn(evento); },
-      focus() { el.focused = true; },
-    };
-    return el;
-  }
-  return { createElement: creaElemento };
-}
 const doc = () => fakeDocument();
-const testoDi = (el) => (el.children.length ? el.children.map(testoDi).join('') : el.textContent);
 
 /* ---------------- Measure: la provenienza del numero ---------------- */
 

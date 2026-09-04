@@ -7,6 +7,8 @@ export { applicaScorciatoia, createKbd, scorciatoiaAria, validaScorciatoia } fro
 export { createField } from './field.js';
 export { createSelect } from './select.js';
 export { createListRow } from './list-row.js';
+export { createNavGroup, createNavItem } from './nav-item.js';
+export { createSessionItem } from './session-item.js';
 export { createSwitch } from './switch.js';
 export { createTabs } from './tabs.js';
 export { createFloatingPositioner } from './floating-position.js';
