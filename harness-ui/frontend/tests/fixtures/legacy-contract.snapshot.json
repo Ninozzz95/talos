@@ -2,19 +2,19 @@
   "source": "harness-ui/public",
   "assets": {
     "app": {
-      "lines": 13099,
-      "bytes": 708547,
-      "sha256": "2fb0c28c98f99125f5457602d91be333e336b2db501d8a0df83587ddb5ec9e16"
+      "lines": 13235,
+      "bytes": 719154,
+      "sha256": "0e30332eae1b6c3dfc0ebf86b0a75da0a374d9a619bd69d8daccc5563820b7e8"
     },
     "html": {
-      "lines": 426,
-      "bytes": 60510,
-      "sha256": "e97ebf8b3d5dec56b297b032c9f003b81eb41a59afb5dd8737e0f8a64927014f"
+      "lines": 428,
+      "bytes": 61362,
+      "sha256": "8d866da24015fd28afe118fdba7b7cef8b18fb0e4e15b3e6864b87ac3ea63d62"
     },
     "css": {
-      "lines": 2825,
-      "bytes": 230006,
-      "sha256": "3fe85294b800c3b7b77c1e815b91c7021aebfdb4d9129a16c0933484ac746de5"
+      "lines": 2834,
+      "bytes": 230796,
+      "sha256": "b36f45f19f133a03b3e2bfbee35c71ff22ad3ecd5923cf552dc858889d88d7d5"
     }
   },
   "hostGlobals": [
@@ -88,6 +88,7 @@
     "/api/v1/projects",
     "/api/v1/providers",
     "/api/v1/runtime",
+    "/api/v1/search-source",
     "/api/v1/sessions",
     "/api/v1/setup",
     "/api/v1/tasks",

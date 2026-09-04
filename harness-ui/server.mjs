@@ -12,6 +12,8 @@ import { listaTaskDisponibili } from './src/task-catalog.mjs';
 import { elencaCartelleProgetto } from './src/custom-task.mjs';
 import { diagnosi } from './src/doctor.mjs';
 import { statoPrimoAvvio } from './src/setup-stato.mjs';
+import { createSearchSourceStore } from './src/search-source-store.mjs';
+import { ENDPOINT_SENTINELLA_DUCKDUCKGO, creaTrasportoSenzaChiave } from './src/duckduckgo-search.mjs';
 import { createModelCatalog } from './src/model-catalog.mjs';
 import { creaRegistroTerminali, MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA } from './src/pty-terminal.mjs';
 import { creaGestoreTerminaleWs } from './src/terminal-ws.mjs';
@@ -59,6 +61,38 @@ async function startServer() {
     runtimeFile: fileURLToPath(new URL('.provider-runtime.json', import.meta.url)),
   });
   providerStore.loadFromKeyring();
+
+  /*
+   * ⭐⭐⭐ 04/9 — R-03, la fonte della ricerca web dalle Impostazioni (parità
+   * mobile) e la ricerca SENZA chiave. Stesso portachiavi dei provider
+   * (servizio diverso), scelta in `.search-source.json` accanto al server,
+   * `TALOS_HARNESS_SEARCH_*` come seme finché non si sceglie dalla UI.
+   * Il trasporto senza chiave (DuckDuckGo) è iniettato al kernel come
+   * `richiediRicercaFn` SOLO per quella fonte: per Tavily/Brave/SearXNG/custom
+   * il kernel usa il suo, con la guardia DNS pubblica.
+   */
+  const searchSourceStore = createSearchSourceStore({
+    env: process.env,
+    keyring: providerKeyring,
+    file: fileURLToPath(new URL('.search-source.json', import.meta.url)),
+  });
+  const trasportoSenzaChiave = creaTrasportoSenzaChiave();
+  const ricercaWebFn = () => searchSourceStore.perKernel({ trasportoSenzaChiave, sentinellaDuckDuckGo: ENDPOINT_SENTINELLA_DUCKDUCKGO });
+  const provaRicercaWebFn = async (query) => {
+    const { ricercaWeb, richiediRicercaFn } = ricercaWebFn();
+    if (!ricercaWeb) { const errore = new Error('La fonte non è pronta'); errore.code = 'SEARCH_NOT_READY'; throw errore; }
+    let risultati;
+    if (richiediRicercaFn) {
+      const u = new URL(ricercaWeb.endpoint); u.searchParams.set('q', query); u.searchParams.set('count', '3');
+      risultati = JSON.parse((await richiediRicercaFn(u)).corpo).results ?? [];
+    } else {
+      if (!config.ownerRuntimeModule) { const errore = new Error('Kernel non configurato: la prova con una fonte a chiave passa dal kernel'); errore.code = 'SEARCH_STORE_UNAVAILABLE'; throw errore; }
+      const kernel = await import(pathToFileURL(config.ownerRuntimeModule).href);
+      try { risultati = await kernel.eseguiRicercaWeb(query, 3, ricercaWeb); }
+      catch (errore) { const e = new Error(errore?.message ?? 'ricerca fallita'); e.code = 'SEARCH_FAILED'; throw e; }
+    }
+    return { fonte: searchSourceStore.fonte(), risultati: risultati.length, titoli: risultati.slice(0, 3).map((r) => r.title) };
+  };
 
   /*
    * ⭐⭐⭐ 03/9 — la prova della credenziale. Legge la chiave dal portachiavi
@@ -331,7 +365,8 @@ async function startServer() {
     chiaveFn: () => providerStore.getKey('openrouter') ?? config.chiaveApi,
     cartelleProgetto: config.cartelleProgetto,
     taskCatalogProvider,
-    ricercaWeb: config.ricercaWeb,
+    ricercaWeb: config.ricercaWeb, // seme dell'ambiente: resta per compatibilità, ma è ricercaWebFn a valere a ogni giro
+    ricercaWebFn,
     // ⭐⭐⭐ 29/8 — FASE D, firma Ed25519 delle ricevute. Stesso principio di
     // ricercaWeb: undefined quando non configurata (vedi config.mjs), le
     // ricevute restano non firmate — comportamento di sempre.
@@ -423,6 +458,7 @@ async function startServer() {
     };
     return diagnosi({
       chiaveConfigurata: providerStore.hasKey('openrouter'), cartelleProgetto: config.cartelleProgetto,
+      ricercaWeb: searchSourceStore.listPublic(),
       providerRows: providerStore.listPublic(), providerStoreAvailable: Boolean(providerKeyring),
       ownerRuntime: ownerRuntimeState,
       catalogoTask: { disponibile: Boolean(taskCatalogProvider), dettaglio: taskCatalogProvider ? 'Elenco attività predefinite disponibile.' : 'L’elenco delle attività predefinite non è disponibile in questa installazione.' },
@@ -444,6 +480,8 @@ async function startServer() {
       introDisattivato: process.env.TALOS_INTRO === '0',
       cartelleProgetto: config.cartelleProgetto.length,
     }),
+    searchSourceStore,
+    provaRicercaWebFn,
     catalogoModelliFn: (opts) => modelCatalog.ottieni(opts),
     capacitaMacchinaFn: () => misuraCapacitaMacchina({ storagePath: config.publicDir }),
     localRuntimes,

@@ -3183,6 +3183,142 @@
       try { window.localStorage.setItem(SETTINGS_SECTION_STORAGE_KEY, selected); } catch { /* preferenza non bloccante */ }
     }
     if (selected === 'models' && !state.modelLab.initialized) inizializzaModelLab();
+    if (selected === 'tools') void caricaPannelloRicercaWeb(); // ⭐ 04/9, R-03 — stato vero dal server a ogni apertura della scheda
+  }
+
+  /*
+   * ⭐⭐⭐ 04/9 — R-03, ORIGINE DELLA RICERCA WEB nelle Impostazioni.
+   *
+   * Owner: «nel desktop mancano posti nelle impostazioni per settare chiavi per
+   * la ricerca web mentre sul mobile sì: sistema e rendi coerente al massimo;
+   * se è possibile dare al modello modi per fare una ricerca web anche se una
+   * chiave non è impostata, fallo». Stessa scheda del telefono
+   * (`TalosMobileSearchSourcePanel.vue`: una fonte fra più, radiogroup;
+   * chiave/indirizzo solo per la fonte scelta; «Disattiva» e «Dimentica la
+   * chiave» separati perché costano cose diverse; una riga di prontezza che
+   * dice la verità), più la fonte SENZA chiave che il mobile non ha.
+   *
+   * Tutto lo stato viene dal server (`/api/v1/search-source`): la chiave si
+   * manda una volta e il campo si svuota; in lettura non torna mai.
+   */
+  const RICERCA_LINK = { tavily: 'https://app.tavily.com', brave: 'https://api-dashboard.search.brave.com' };
+  async function caricaPannelloRicercaWeb() {
+    const mount = $('#searchSourceMount');
+    if (!mount) return;
+    let stato;
+    try { stato = await apiGet('/api/v1/search-source'); }
+    catch (error) { mount.replaceChildren(textElement('p', 'muted-copy', messaggioErroreUtente(error, 'Il server locale non risponde: riprova fra un momento.'))); return; }
+    disegnaPannelloRicercaWeb(mount, stato);
+  }
+  function disegnaPannelloRicercaWeb(mount, stato, feedback = null) {
+    const fonteScelta = stato.fonti.find((f) => f.id === stato.source) || null;
+    const gruppo = document.createElement('div');
+    gruppo.className = 'search-source-list';
+    gruppo.setAttribute('role', 'radiogroup');
+    gruppo.setAttribute('aria-label', 'Origine della ricerca web');
+    for (const fonte of stato.fonti) {
+      const scelta = document.createElement('button');
+      scelta.type = 'button';
+      scelta.className = `intro-choice search-source-choice${stato.source === fonte.id ? ' active' : ''}`;
+      scelta.setAttribute('role', 'radio');
+      scelta.setAttribute('aria-checked', String(stato.source === fonte.id));
+      scelta.dataset.searchSource = fonte.id;
+      const mark = document.createElement('span'); mark.className = 'intro-mark'; mark.setAttribute('aria-hidden', 'true');
+      mark.innerHTML = stato.source === fonte.id ? icon('i-check') : icon('i-web');
+      const centro = document.createElement('span');
+      centro.append(textElement('strong', '', fonte.label), textElement('small', '', fonte.nota));
+      const statoTesto = fonte.keyless ? 'senza chiave' : fonte.needsKey ? (fonte.keyConfigured ? 'chiave presente' : 'chiave mancante') : 'indirizzo tuo';
+      scelta.append(mark, centro, textElement('span', 'intro-state', statoTesto));
+      scelta.addEventListener('click', () => azioneRicercaWeb(mount, () => apiPost('/api/v1/search-source', { source: fonte.id }), `Fonte: ${fonte.label}.`));
+      gruppo.append(scelta);
+    }
+    const spenta = document.createElement('button');
+    spenta.type = 'button';
+    spenta.className = `intro-choice search-source-choice${stato.source === 'off' ? ' active' : ''}`;
+    spenta.setAttribute('role', 'radio'); spenta.setAttribute('aria-checked', String(stato.source === 'off')); spenta.dataset.searchSource = 'off';
+    const markOff = document.createElement('span'); markOff.className = 'intro-mark'; markOff.setAttribute('aria-hidden', 'true'); markOff.innerHTML = stato.source === 'off' ? icon('i-check') : icon('i-x');
+    const centroOff = document.createElement('span');
+    centroOff.append(textElement('strong', '', 'Nessuna ricerca web'), textElement('small', '', 'Il modello non proporrà la ricerca: l\'attrezzo web_search dichiarerà «non configurato».'));
+    spenta.append(markOff, centroOff, textElement('span', 'intro-state', 'spenta'));
+    spenta.addEventListener('click', () => azioneRicercaWeb(mount, () => apiPost('/api/v1/search-source', { source: 'off' }), 'Ricerca web disattivata.'));
+    gruppo.append(spenta);
+
+    const dettagli = document.createElement('div');
+    dettagli.className = 'search-source-details';
+    if (fonteScelta && (fonteScelta.needsKey || fonteScelta.keyConfigured)) {
+      const campo = document.createElement('label'); campo.className = 'provider-field';
+      const testo = document.createElement('span');
+      testo.append(textElement('span', '', 'Chiave API'), fonteScelta.keyConfigured ? textElement('small', 'muted-copy', ' · una chiave è già salvata') : '');
+      const input = document.createElement('input'); input.type = 'password'; input.autocomplete = 'off'; input.spellcheck = false; input.dataset.searchKeyInput = fonteScelta.id;
+      input.placeholder = fonteScelta.keyConfigured ? 'Sostituisci la chiave salvata' : 'Incolla la chiave';
+      input.setAttribute('aria-label', `Chiave API ${fonteScelta.label}`);
+      const riga = document.createElement('div'); riga.className = 'provider-actions';
+      const salva = document.createElement('button'); salva.type = 'button'; salva.className = 'primary-btn compact'; salva.textContent = 'Salva chiave'; salva.dataset.searchAction = 'save-key';
+      salva.addEventListener('click', () => {
+        const valore = input.value;
+        azioneRicercaWeb(mount, async () => { const esito = await apiPost('/api/v1/search-source/key', { source: fonteScelta.id, key: valore }); input.value = ''; return esito; }, 'Chiave salvata nel portachiavi di questo computer.');
+      });
+      input.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); salva.click(); } });
+      riga.append(salva);
+      if (RICERCA_LINK[fonteScelta.id]) {
+        const link = document.createElement('a'); link.className = 'secondary-btn compact'; link.href = RICERCA_LINK[fonteScelta.id]; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = `Ottieni una chiave ${fonteScelta.label}`;
+        riga.append(link);
+      }
+      if (fonteScelta.keyConfigured) {
+        const dimentica = document.createElement('button'); dimentica.type = 'button'; dimentica.className = 'secondary-btn compact danger'; dimentica.textContent = 'Dimentica la chiave'; dimentica.dataset.searchAction = 'forget-key';
+        dimentica.addEventListener('click', () => azioneRicercaWeb(mount, () => apiPost('/api/v1/search-source/key/remove', { source: fonteScelta.id }), 'Chiave rimossa dal portachiavi. Per riaccendere la ricerca ne serve una nuova.'));
+        riga.append(dimentica);
+      }
+      campo.append(testo, input);
+      dettagli.append(campo, riga);
+    }
+    if (fonteScelta && fonteScelta.needsEndpoint) {
+      const campo = document.createElement('label'); campo.className = 'provider-field';
+      const input = document.createElement('input'); input.type = 'url'; input.autocomplete = 'off'; input.spellcheck = false; input.value = stato.endpoint || ''; input.placeholder = 'https://searx.example.org'; input.dataset.searchEndpointInput = fonteScelta.id;
+      input.setAttribute('aria-label', 'Indirizzo istanza');
+      const riga = document.createElement('div'); riga.className = 'provider-actions';
+      const salva = document.createElement('button'); salva.type = 'button'; salva.className = 'secondary-btn compact'; salva.textContent = 'Salva indirizzo'; salva.dataset.searchAction = 'save-endpoint';
+      salva.addEventListener('click', () => azioneRicercaWeb(mount, () => apiPost('/api/v1/search-source', { source: fonteScelta.id, endpoint: input.value }), 'Indirizzo salvato.'));
+      input.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); salva.click(); } });
+      riga.append(salva);
+      campo.append(textElement('span', '', 'Indirizzo istanza'), input);
+      dettagli.append(campo, riga);
+    }
+    const azioni = document.createElement('div'); azioni.className = 'provider-actions';
+    const prova = document.createElement('button'); prova.type = 'button'; prova.className = 'secondary-btn compact'; prova.textContent = 'Prova la ricerca'; prova.dataset.searchAction = 'test';
+    prova.disabled = stato.readiness !== 'pronta';
+    prova.addEventListener('click', () => azioneRicercaWeb(mount, async () => {
+      const esito = await apiPost('/api/v1/search-source/test', { query: 'TALOS local-first coding agent' });
+      return { ...stato, __prova: esito };
+    }, null));
+    azioni.append(prova);
+    const prontezza = textElement('p', 'search-source-readiness', ({
+      pronta: fonteScelta?.keyless ? 'Pronto, senza chiave: il modello può cercare sul web con DuckDuckGo. Sotto uso intenso DuckDuckGo può rifiutare, e l\'esito lo dirà.' : 'Pronto: il modello può cercare sul web e soltanto la query lascia questo computer.',
+      'chiave-mancante': 'Serve ancora una chiave. La ricerca web resta disattivata finché non viene impostata.',
+      'indirizzo-mancante': 'Serve ancora l\'indirizzo dell\'istanza. La ricerca web resta disattivata finché non viene impostato.',
+      spenta: 'Nessuna fonte scelta: TALOS non proporrà la ricerca web al modello.',
+    })[stato.readiness] || stato.readiness);
+    prontezza.dataset.searchReadiness = stato.readiness;
+    const esitoProva = stato.__prova ? textElement('p', 'search-source-feedback', `Prova riuscita con ${stato.__prova.fonte}: ${stato.__prova.risultati} risultati${stato.__prova.titoli?.length ? ` — ${stato.__prova.titoli.join(' · ')}` : ''}.`) : null;
+    if (esitoProva) esitoProva.setAttribute('role', 'status');
+    const messaggio = feedback ? textElement('p', 'search-source-feedback', feedback) : null;
+    if (messaggio) messaggio.setAttribute('role', 'status');
+    mount.replaceChildren(gruppo, dettagli, azioni, prontezza, ...(esitoProva ? [esitoProva] : []), ...(messaggio ? [messaggio] : []));
+  }
+  async function azioneRicercaWeb(mount, esegui, feedbackOk) {
+    mount.setAttribute('aria-busy', 'true');
+    try {
+      const stato = await esegui();
+      disegnaPannelloRicercaWeb(mount, stato, feedbackOk);
+      queueMicrotask(() => { void renderSettingsRiepiloghi(); });
+    } catch (error) {
+      let stato = null;
+      try { stato = await apiGet('/api/v1/search-source'); } catch { /* lo stato resta quello a schermo */ }
+      if (stato) disegnaPannelloRicercaWeb(mount, stato, messaggioErroreUtente(error, 'L\'operazione non è riuscita.'));
+      else toast('Ricerca web', messaggioErroreUtente(error, 'L\'operazione non è riuscita.'));
+    } finally {
+      mount.removeAttribute('aria-busy');
+    }
   }
 
   function inizializzaSettingsNavigation() {

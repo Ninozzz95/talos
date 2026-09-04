@@ -53,6 +53,8 @@ const API_ERROR_CODES = new Set([
   'WORKSPACE_NOT_AVAILABLE',
   'WORKSPACE_ALREADY_EXISTS',
   'PROVIDER_INVALID', 'PROVIDER_KEY_REQUIRED', 'PROVIDER_KEY_INVALID', 'PROVIDER_STORE_UNAVAILABLE', 'PROVIDER_RUNTIME_INVALID', 'PROVIDER_RUNTIME_UNAVAILABLE',
+  // ⭐ 04/9, R-03 — fonte della ricerca web (search-source-store.mjs, duckduckgo-search.mjs).
+  'SEARCH_SOURCE_INVALID', 'SEARCH_KEY_REQUIRED', 'SEARCH_KEY_INVALID', 'SEARCH_ENDPOINT_INVALID', 'SEARCH_STORE_UNAVAILABLE', 'SEARCH_NOT_READY', 'SEARCH_BLOCKED', 'SEARCH_UNREACHABLE', 'SEARCH_FAILED',
   'RUNTIME_NOT_AVAILABLE',
   'RUNTIME_UNREACHABLE',
   'RUNTIME_OPERATION_UNSUPPORTED',
@@ -130,6 +132,15 @@ const STATUS_BY_CODE = Object.freeze({
   PROVIDER_STORE_UNAVAILABLE: 503,
   PROVIDER_RUNTIME_INVALID: 422,
   PROVIDER_RUNTIME_UNAVAILABLE: 503,
+  SEARCH_SOURCE_INVALID: 422,
+  SEARCH_KEY_REQUIRED: 422,
+  SEARCH_KEY_INVALID: 422,
+  SEARCH_ENDPOINT_INVALID: 422,
+  SEARCH_STORE_UNAVAILABLE: 503,
+  SEARCH_NOT_READY: 409,
+  SEARCH_BLOCKED: 502,
+  SEARCH_UNREACHABLE: 502,
+  SEARCH_FAILED: 502,
   RUNTIME_NOT_AVAILABLE: 503,
   RUNTIME_UNREACHABLE: 503,
   RUNTIME_OPERATION_UNSUPPORTED: 409,
@@ -173,6 +184,15 @@ const MESSAGE_BY_CODE = Object.freeze({
   CONFIG_INVALID: 'Configurazione non valida',
   QUERY_INVALID: 'Query non valida',
   REPORT_UNAVAILABLE: 'Rapporto non ancora prodotto',
+  SEARCH_SOURCE_INVALID: 'Fonte di ricerca non valida',
+  SEARCH_KEY_REQUIRED: 'Serve una chiave per questa fonte',
+  SEARCH_KEY_INVALID: 'Chiave di ricerca non valida',
+  SEARCH_ENDPOINT_INVALID: 'Indirizzo della fonte non valido',
+  SEARCH_STORE_UNAVAILABLE: 'Portachiavi della ricerca non disponibile',
+  SEARCH_NOT_READY: 'La fonte di ricerca non è pronta',
+  SEARCH_BLOCKED: 'La fonte di ricerca ha rifiutato la richiesta',
+  SEARCH_UNREACHABLE: 'La fonte di ricerca non è raggiungibile',
+  SEARCH_FAILED: 'La ricerca non è riuscita',
   PAYLOAD_LIMIT: 'Contenuto oltre il limite consentito',
   METHOD_NOT_ALLOWED: 'Metodo non consentito',
   NOT_FOUND: 'Risorsa non trovata',
@@ -795,6 +815,8 @@ export function createHttpApp({
   elencaCartelleProgetto = () => [], automationStore = null, diagnosiFn = null,
   // ⭐ 04/9, R-02 — stato del primo avvio (src/setup-stato.mjs): quali passi dell'intro sono già fatti, letti dalla realtà, mai un segreto.
   setupStatoFn = null,
+  // ⭐ 04/9, R-03 — fonte della ricerca web scelta dalle Impostazioni (parità mobile) + prova reale.
+  searchSourceStore = null, provaRicercaWebFn = null,
   workspaceLaunchStore = null,
   workspaceBrowser = null,
   // ⭐⭐⭐ 28/8 — owner, coda: "directory più usate (tipo desktop downloads)". Zero config esterna (solo os.homedir()) — il default reale basta, nessun cablaggio in server.mjs come serve invece per elencaCartelleProgetto (quella dipende da TALOS_HARNESS_UI_PROJECT_DIRS).
@@ -961,6 +983,46 @@ export function createHttpApp({
      * esce non deve poter partire da un link, da un prefetch del browser o da
      * una barra degli indirizzi.
      */
+    /*
+     * ⭐⭐⭐ 04/9 — R-03, fonte della ricerca web. Stessa disciplina delle rotte
+     * provider: corpo con SOLO i campi attesi, chiave mai in risposta, errori
+     * con codice dichiarato. `/test` esegue una ricerca VERA con la fonte
+     * corrente e torna quanti risultati e i primi titoli — mai la chiave.
+     */
+    const searchSourceMatch = /^\/api\/v1\/search-source(?:\/(key|key\/remove|test))?$/.exec(url.pathname);
+    if (method === 'POST' && searchSourceMatch) {
+      try {
+        requireNoQuery(url);
+        if (!searchSourceStore) { const error = new Error('Fonte di ricerca non configurata'); error.code = 'SEARCH_STORE_UNAVAILABLE'; throw error; }
+        const azione = searchSourceMatch[1] ?? 'source';
+        const body = await leggiCorpoJson(req, 16 * 1024);
+        const keys = Object.keys(body || {});
+        let data;
+        if (azione === 'source') {
+          if (keys.some((k) => !['source', 'endpoint'].includes(k)) || typeof body.source !== 'string' || (Object.hasOwn(body, 'endpoint') && typeof body.endpoint !== 'string')) {
+            const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error;
+          }
+          data = searchSourceStore.setSource({ source: body.source, endpoint: body.endpoint });
+        } else if (azione === 'key') {
+          if (keys.length !== 2 || typeof body.source !== 'string' || typeof body.key !== 'string') { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
+          data = searchSourceStore.setKey(body.source, body.key);
+        } else if (azione === 'key/remove') {
+          if (keys.length !== 1 || typeof body.source !== 'string') { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
+          data = searchSourceStore.clearKey(body.source);
+        } else {
+          if (keys.some((k) => k !== 'query') || (Object.hasOwn(body, 'query') && typeof body.query !== 'string')) { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
+          if (typeof provaRicercaWebFn !== 'function') { const error = new Error('Prova della ricerca non configurata'); error.code = 'SEARCH_STORE_UNAVAILABLE'; throw error; }
+          if (searchSourceStore.prontezza() !== 'pronta') { const error = new Error('La fonte non è pronta'); error.code = 'SEARCH_NOT_READY'; throw error; }
+          data = await provaRicercaWebFn(body.query || 'TALOS local-first coding agent');
+        }
+        sendJson(res, 200, successEnvelope(data, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
     const providerTestMatch = /^\/api\/v1\/providers\/([^/]+)\/test$/.exec(url.pathname);
     if (method === 'POST' && providerTestMatch) {
       try {
@@ -2179,6 +2241,10 @@ export function createHttpApp({
           const errore = new Error('Capacità macchina non configurata'); errore.code = 'REPORT_UNAVAILABLE'; throw errore;
         }
         data = await capacitaMacchinaFn();
+      } else if (url.pathname === '/api/v1/search-source') {
+        requireNoQuery(url);
+        if (!searchSourceStore) { const error = new Error('Fonte di ricerca non configurata'); error.code = 'SEARCH_STORE_UNAVAILABLE'; throw error; }
+        data = searchSourceStore.listPublic();
       } else if (url.pathname === '/api/v1/setup/stato') {
         requireNoQuery(url);
         if (!setupStatoFn) {

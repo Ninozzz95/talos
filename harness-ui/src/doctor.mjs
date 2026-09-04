@@ -57,6 +57,8 @@ function controllaGit(spawnSyncFn) {
  */
 export async function diagnosi({
   chiaveConfigurata, cartelleProgetto, providerRows, providerStoreAvailable, ownerRuntime, catalogoTask, sessioniPersistenza,
+  // ⭐ 04/9, R-03 — stato pubblico della fonte di ricerca web (search-source-store.listPublic()): fonte, prontezza; mai una chiave.
+  ricercaWeb,
   eseguiComandoSandboxatoFn = eseguiComandoSandboxatoLocale, spawnSyncFn,
 } = {}) {
   // ⛔ Una cartella usa-e-getta SOLO per il comando diagnostico, mai una
@@ -75,6 +77,18 @@ export async function diagnosi({
     git: controllaGit(spawnSyncFn),
     naviga: true, // built-in, nessuna dipendenza esterna da verificare
   };
+  if (ricercaWeb && typeof ricercaWeb === 'object') {
+    const fonte = Array.isArray(ricercaWeb.fonti) ? ricercaWeb.fonti.find((f) => f.id === ricercaWeb.source) : null;
+    risultato.ricercaWeb = {
+      fonte: ricercaWeb.source,
+      etichetta: fonte?.label ?? (ricercaWeb.source === 'off' ? 'Spenta' : ricercaWeb.source),
+      pronta: ricercaWeb.readiness === 'pronta',
+      dettaglio: ricercaWeb.readiness === 'pronta' ? (fonte?.keyless ? 'Pronta, senza chiave: DuckDuckGo (pagina pubblica, può bloccare sotto uso intenso).' : `Pronta: ${fonte?.label ?? ricercaWeb.source}.`)
+        : ricercaWeb.readiness === 'spenta' ? 'Spenta da te: il modello non cercherà sul web.'
+          : ricercaWeb.readiness === 'chiave-mancante' ? `Serve ancora la chiave di ${fonte?.label ?? ricercaWeb.source}.`
+            : `Serve ancora l'indirizzo dell'istanza ${fonte?.label ?? ricercaWeb.source}.`,
+    };
+  }
   if (Array.isArray(cartelleProgetto)) {
     risultato.cartelleProgetto = {
       disponibili: cartelleProgetto.length > 0,

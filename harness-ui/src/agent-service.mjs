@@ -209,6 +209,8 @@ export async function avviaSessione({
    */
   permessi = null,
   strumentiEstesi, ricercaWeb,
+  // ⭐ 04/9, R-03 — trasporto iniettato per la ricerca SENZA chiave (DuckDuckGo, `duckduckgo-search.mjs`): inoltrato al kernel com'è (parametro `richiediRicercaFn` di talosLavora), undefined per le fonti con chiave.
+  richiediRicercaFn,
   /*
    * ⭐⭐⭐ 29/8 — FASE K, R2 planner costoso + editor economico. Stesso
    * principio di `ricercaWeb`/`reasoning`: inoltrato SENZA logica
@@ -1302,7 +1304,7 @@ export async function avviaSessione({
     const esito = await talosLavoraFn({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
       onGiro, onScrittura, onDelta, reasoning,
-      strumentiEstesi, ricercaWeb, onArtefatto, onDocumento, onImmagine, modelloPlanner,
+      strumentiEstesi, ricercaWeb, richiediRicercaFn, onArtefatto, onDocumento, onImmagine, modelloPlanner,
       livelloAccesso, chiediApprovazioneFn, hookFn: hookFnConPlugin, permessiPerAttrezzo, onDelega, codaMessaggiFn,
       firma, toolMcp, chiamaToolMcpFn, skillsDisponibili, caricaSkillFn, toolPlugin, eseguiToolPluginFn,
       onLibreriaLista, onLibreriaCerca, onLibreriaLeggi, onLibreriaOrigine,
