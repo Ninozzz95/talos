@@ -3640,6 +3640,114 @@
   }
 
   /**
+   * ⭐⭐⭐⭐ O-01 (04/9), owner: «ogni riga della modale che si apre deve
+   * essere funzionante al 100% e non avere funzionalità o ui mock».
+   *
+   * ⛔ La sezione «Attrezzi dell'harness · sempre offerti al modello» era
+   * SETTE nomi scritti dentro la stringa di template (`elenca`, `cerca`,
+   * `leggi`, `scrivi`, `prova`, `shell`, `naviga`) con una casella
+   * `checked disabled` accanto. Il kernel ne offre 43: quei sette più i 36
+   * di `strumentiEstesi` (session-registry.mjs) — `web_search`,
+   * `document_create`, `generate_image`, `delega_sottotask`, Libreria,
+   * Notes, Tasks, Memory, Deep Research, Tool Forge. Trentasei attrezzi
+   * VERI, che il modello riceve a ogni giro, invisibili nel pannello che
+   * dichiarava di elencarli tutti: un inventario incompleto presentato come
+   * completo è uno stato inventato quanto un contatore inventato.
+   *
+   * Stesso identico pattern degli altri nove pannelli di questo foglio
+   * (MCP, skill, plugin, Libreria, Note, Attività, Memoria, Ricerche,
+   * Forge): un mount point riempito da una rotta vera.
+   *
+   * ⛔ UNICA differenza dagli altri nove, e voluta: senza sessione attiva
+   * NON si ferma. Gli altri parlano di cose che appartengono a una
+   * sessione o al suo progetto; gli attrezzi appartengono al kernel e alla
+   * configurazione del server, e l'owner apre questo foglio soprattutto
+   * PRIMA di aver avviato qualcosa. Si chiede `/api/v1/tools` (nessuna
+   * sessione, nessun permesso per-attrezzo scelto da nessuno) e lo si
+   * DICHIARA nell'intestazione — mai spacciato per lo stato di una
+   * sessione che non esiste.
+   */
+  async function caricaPannelloAttrezzi() {
+    const mount = $('#toolsListMount', sheetBody);
+    if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
+    const conSessione = Boolean(state.realSession.id);
+    mount.replaceChildren(textElement('p', 'board-empty', 'Carico gli attrezzi…'));
+    let dati;
+    try {
+      dati = await apiGet(conSessione ? `/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tools` : '/api/v1/tools');
+    } catch (error) {
+      mount.replaceChildren(textElement('p', 'board-empty', `Attrezzi non osservabili: ${error.message}`));
+      return;
+    }
+    if (mount !== $('#toolsListMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
+    if (!dati.attrezzi) {
+      mount.replaceChildren(textElement('p', 'board-empty', dati.errore || 'Attrezzi non osservati.'));
+      return;
+    }
+    if (dati.attrezzi.length === 0) {
+      mount.replaceChildren(textElement('p', 'board-empty', 'Nessun attrezzo offerto al modello in questa configurazione.'));
+      return;
+    }
+    /*
+     * ⭐ Il +1 misurabile: quanto COSTA avere questi attrezzi offerti a ogni
+     * giro. Hermes Agent v0.21 mostra la stima di token dello schema per
+     * server MCP; qui è per OGNI attrezzo e in totale. ⛔ Dichiarata
+     * «stima» perché lo è (caratteri del JSON / 4, l'euristica affermata):
+     * un numero misurato su ciò che va sul filo, mai un numero inventato.
+     */
+    const token = dati.attrezzi.reduce((somma, a) => somma + (a.tokenSchemaStimati || 0), 0);
+    const intestazione = textElement('p', 'tools-panel-summary', conSessione
+      ? `${dati.attrezzi.length} attrezzi offerti a questa sessione · ~${token.toLocaleString('it-IT')} token di schema a ogni giro (stima)`
+      : `${dati.attrezzi.length} attrezzi che riceverà la prossima sessione · ~${token.toLocaleString('it-IT')} token di schema a ogni giro (stima) · nessuna sessione aperta: i permessi per-attrezzo non sono ancora scelti da nessuno`);
+    mount.replaceChildren(intestazione, ...dati.attrezzi.map((a) => rigaAttrezzo(a)));
+  }
+
+  /**
+   * ⭐⭐⭐ O-01 (04/9) — una riga per attrezzo. TRE fatti diversi, mai
+   * confusi in una sola etichetta: è offerto (essere in questa lista), la
+   * sua dipendenza esterna è pronta (`web_search` senza fonte configurata
+   * è offerto ma non funziona), e una sua chiamata passa o no dal cancello
+   * per-attrezzo del foglio Permessi.
+   * ⛔ Nessuna casella `disabled`: mimare un interruttore che non esiste è
+   * la finta che questa riga del piano doveva togliere.
+   */
+  function rigaAttrezzo(attrezzo) {
+    const riga = document.createElement('div');
+    riga.className = 'sheet-option';
+    riga.setAttribute('role', 'group');
+    riga.dataset.toolName = attrezzo.nome;
+    const iconEl = document.createElement('span');
+    iconEl.className = 'sheet-icon';
+    iconEl.innerHTML = icon(ICONA_ATTREZZO[attrezzo.nome] || (attrezzo.categoria === 'base' ? 'i-code' : 'i-bolt'));
+    const testo = document.createElement('span');
+    testo.append(
+      textElement('strong', null, attrezzo.nome),
+      textElement('small', null, attrezzo.descrizione.length > 150 ? `${attrezzo.descrizione.slice(0, 150)}…` : attrezzo.descrizione),
+    );
+    const chip = document.createElement('span');
+    chip.className = 'tool-chips';
+    if (attrezzo.dipendenza) {
+      chip.append(textElement('span', `status-chip ${attrezzo.dipendenza.stato === 'pronta' ? 'success' : 'error'}`, attrezzo.dipendenza.dettaglio));
+    }
+    if (attrezzo.permessoConfigurabile) {
+      chip.append(textElement('span', 'status-chip', attrezzo.permesso ? `permesso: ${attrezzo.permesso}` : 'permesso: come la sessione'));
+    }
+    chip.append(textElement('span', 'status-chip success', 'offerto'));
+    riga.append(iconEl, testo, chip);
+    /* ⛔ QA visiva di O-01: la descrizione a schermo è tagliata a 150 caratteri — quella INTERA (la stessa che riceve il modello) deve restare leggibile, non sparire nel taglio. */
+    riga.title = `${attrezzo.descrizione}\n\n~${attrezzo.tokenSchemaStimati} token di schema (stima) · attrezzo ${attrezzo.categoria}`;
+    return riga;
+  }
+
+  /** ⭐ O-01 — solo estetica: un nome senza icona nota ricade su quella della sua categoria, mai su una sbagliata. */
+  const ICONA_ATTREZZO = {
+    elenca: 'i-list', cerca: 'i-search', leggi: 'i-eye', scrivi: 'i-code', prova: 'i-check',
+    shell: 'i-terminal', naviga: 'i-web', web_search: 'i-search', artifact_create: 'i-layout',
+    document_create: 'i-files', time_now: 'i-history', delega_sottotask: 'i-branch',
+    generate_image: 'i-image', tool_create: 'i-settings',
+  };
+
+  /**
    * ⭐⭐⭐ 29/8 — FASE E, piano `elegant-spinning-dongarra.md`. Stesso
    * identico pattern di caricaPannelloHooks() appena sopra, per i
    * server MCP: riempie `#mcpListMount` nel foglio "capabilities" coi
@@ -4031,7 +4139,17 @@
         toast('Non riuscito', error.message);
       }
     });
-    riga.append(iconEl, testo, statoEl, bottone);
+    /*
+     * ⛔ Trovato dalla QA visiva di O-01 (screenshot «foglio in fondo»):
+     * `.sheet-option` è una griglia a TRE colonne, e questa riga ne appendeva
+     * QUATTRO — il bottone finiva a capo, sbordando a sinistra della card.
+     * Difetto vecchio, visibile solo scorrendo fino in fondo: stato e azione
+     * viaggiano insieme nella terza colonna, come le pastiglie degli attrezzi.
+     */
+    const azioni = document.createElement('span');
+    azioni.className = 'tool-chips';
+    azioni.append(statoEl, bottone);
+    riga.append(iconEl, testo, azioni);
     return riga;
   }
 
@@ -5000,10 +5118,52 @@
    * da caricaAlberoSessione() (dati reali di GET .../children). Aggiunto.
    */
   const TIPI_FOGLIO_INTERAMENTE_ONESTI = new Set(['model', 'permissions', 'capabilities', 'control', 'fileViewer', 'renameFile', 'deleteFile', 'createFile', 'export', 'sessionTree', 'deleteSession']);
-  function openSheet(type) {
+  /**
+   * ⭐⭐⭐ O-01 (04/9) — `ancoraAlComposer`: «Apertura del pulsante +»
+   * (Impostazioni → Interazione) offriva «Cassetto» e «Menu», e le due voci
+   * facevano ESATTAMENTE la stessa cosa: `applicaAspettoDesktop` scriveva
+   * `data-talos-composer-plus` sull'host e nessuna riga di CSS o di JS lo
+   * leggeva — un'impostazione inerte è UI finta quanto un contatore
+   * inventato. Il marcatore lo mette SOLO chi apre dal «+» del composer
+   * (`#capabilityBtn`): la stessa modale aperta dal Context rail o dalla
+   * palette resta centrata, perché lì non c'è nessun «+» a cui ancorarsi.
+   */
+  function openSheet(type, { ancoraAlComposer = false } = {}) {
     const content = sheetTemplates[type];
     if (!content) return;
     sheetDialog.classList.remove('sheet-dialog--new-session');
+    sheetDialog.classList.toggle('sheet-dialog--dal-composer', ancoraAlComposer);
+    /*
+     * ⛔ Trovato nella QA visiva di O-01 (screenshot 06): con «Menu» il
+     * foglio si ancorava al bordo SINISTRO della finestra, cioè sopra la
+     * sidebar delle sessioni — un menu ancorato a niente. La posizione si
+     * MISURA sul bottone che l'ha aperto, mai su un valore scritto nel CSS:
+     * la sidebar si può stringere, chiudere e ridimensionare.
+     */
+    if (ancoraAlComposer) {
+      const rettangolo = $('#capabilityBtn')?.getBoundingClientRect();
+      /*
+       * ⛔⛔ Trovato dalla QA visiva di O-01, secondo giro (store VUOTO,
+       * viewport desktop): il foglio finiva a `y = -676`, cioè FUORI dallo
+       * schermo. Con la vista Board davanti, il composer è in un pannello
+       * nascosto e `getBoundingClientRect()` torna tutti zeri — e
+       * `innerHeight - 0` spingeva il foglio sopra il bordo alto. Una misura
+       * presa da un elemento non disposto non è una misura: senza rettangolo
+       * VERO si tolgono le proprietà e comanda il default del CSS. Il clamp
+       * copre il caso limite di un composer altissimo su una finestra bassa.
+       */
+      if (rettangolo && rettangolo.width > 0 && rettangolo.height > 0) {
+        const bordoBasso = Math.round(window.innerHeight - rettangolo.top + 10);
+        sheetDialog.style.setProperty('--talos-sheet-anchor-left', `${Math.max(8, Math.round(rettangolo.left))}px`);
+        sheetDialog.style.setProperty('--talos-sheet-anchor-bottom', `${Math.max(8, Math.min(bordoBasso, window.innerHeight - 120))}px`);
+      } else {
+        sheetDialog.style.removeProperty('--talos-sheet-anchor-left');
+        sheetDialog.style.removeProperty('--talos-sheet-anchor-bottom');
+      }
+    } else {
+      sheetDialog.style.removeProperty('--talos-sheet-anchor-left');
+      sheetDialog.style.removeProperty('--talos-sheet-anchor-bottom');
+    }
     sheetEyebrow.textContent = content.eyebrow;
     sheetTitle.textContent = content.title;
     sheetBody.innerHTML = content.html();
@@ -5011,7 +5171,7 @@
     showEmbeddedDialog(sheetDialog);
     wireSheetActions(type);
     if (type === 'control') { refreshDoctorBadge(); caricaPannelloHooks(); }
-    if (type === 'capabilities') { caricaPannelloMcp(); caricaPannelloSkill(); caricaPannelloPlugin(); caricaPannelloLibreria(); caricaPannelloNote(); caricaPannelloAttivita(); caricaPannelloMemoria(); caricaPannelloRicerca(); caricaPannelloForge(); }
+    if (type === 'capabilities') { caricaPannelloAttrezzi(); caricaPannelloMcp(); caricaPannelloSkill(); caricaPannelloPlugin(); caricaPannelloLibreria(); caricaPannelloNote(); caricaPannelloAttivita(); caricaPannelloMemoria(); caricaPannelloRicerca(); caricaPannelloForge(); }
     if (type === 'sessionTree') caricaAlberoSessione();
     /*
      * ⭐⭐⭐ 27/8, owner: "riaprire lo stesso componente della selezione del
@@ -5118,6 +5278,8 @@
             ['prova', 'Esegue la suite di test del progetto'],
             ['shell', 'Comando di shell nella cartella progetto'],
             ['document_create', 'Genera un documento (PDF, foglio, slide, report)'],
+            /* ⛔ O-01 (04/9) — MANCAVA: `generate_image` è il quinto in ATTREZZI_CON_PERMESSO_PER_ATTREZZO (config.mjs) dal 29/8, e questo foglio ne mostrava quattro. Il Capability hub dichiara «permesso per-attrezzo nel foglio Permessi»: su questo attrezzo era una promessa vuota. */
+            ['generate_image', 'Genera un’immagine — passa dal cancello per-attrezzo come gli altri quattro'],
           ].map(([tool, desc]) => `
             <div class="sheet-toggle-row">
               <span><strong>${tool}</strong><small>${desc}</small></span>
@@ -5195,19 +5357,8 @@
        */
       html: () => `
         <div class="sheet-section">
-          <span class="sheet-label">Attrezzi dell'harness · sempre offerti al modello · permesso per-tool nel foglio Permessi</span>
-          ${[
-            ['elenca', 'Elenca i file del workspace, con le dimensioni', 'i-list'],
-            ['cerca', 'Trova file ovunque nel workspace, per testo o nome', 'i-search'],
-            ['leggi', 'Legge un file del workspace', 'i-eye'],
-            ['scrivi', 'Scrive un file, sostituendolo per intero — passa dal cancello semantico', 'i-code'],
-            ['prova', 'Esegue la suite di test del progetto: è il giudice', 'i-check'],
-            ['shell', 'Comando di shell nella cartella progetto — WSL2 se c’è, altrimenti dichiarato', 'i-terminal'],
-            ['naviga', 'Legge una pagina web pubblica — DNS pinnato, solo http/https', 'i-web'],
-          ].map(([name, desc, ico]) => `
-            <div class="sheet-option" role="group">
-              <span class="sheet-icon">${icon(ico)}</span><span><strong>${name}</strong><small>${desc}</small></span><span><input aria-label="${name}, sempre attivo" type="checkbox" checked disabled></span>
-            </div>`).join('')}
+          <span class="sheet-label">Attrezzi · quelli che il kernel offre DAVVERO al modello · il permesso per-attrezzo si sceglie nel foglio Permessi</span>
+          <div id="toolsListMount"></div>
         </div>
         <div class="sheet-section">
           <span class="sheet-label">Skills · cartelle SKILL.md dichiarate in .harness-ui-skills/, per progetto</span>
@@ -5248,18 +5399,19 @@
         <div class="sheet-section">
           <span class="sheet-label">Non ancora implementato</span>
           ${[
-            ['Toolsets', 'i-code'], ['Computer use', 'i-layout'],
-            ['Gateways · Telegram, Discord, Slack, WhatsApp', 'i-link'],
-            ['Profiles', 'i-robot'],
-          ].map(([name, ico]) => `
+            ['Toolsets', 'Raggruppare gli attrezzi in insiemi accendibili per sessione', 'i-code'],
+            ['Computer use', 'Pilotare schermo, mouse e tastiera — oggi TALOS legge solo il testo delle pagine, con naviga', 'i-layout'],
+            ['Immagini in ingresso', 'Allegare uno screenshot al messaggio — nessun canale immagine verso il modello: il kernel non manda nessun image_url', 'i-image'],
+            ['Gateways · Telegram, Discord, Slack, WhatsApp', 'Parlare con TALOS da un’app di messaggistica', 'i-link'],
+            ['Profiles', 'Insiemi di preferenze salvate e richiamabili per tipo di lavoro', 'i-robot'],
+          ].map(([name, desc, ico]) => `
             <div class="sheet-option" role="group">
-              <span class="sheet-icon">${icon(ico)}</span><span><strong>${name}</strong><small>Non ancora implementato</small></span><span><input aria-label="${name}, non implementato" type="checkbox" disabled></span>
+              <span class="sheet-icon">${icon(ico)}</span><span><strong>${name}</strong><small>${desc}</small></span><span class="status-chip">non implementato</span>
             </div>`).join('')}
         </div>
         <div class="sheet-section">
-          <span class="sheet-label">Input rapido</span>
-          <button class="sheet-option" data-capability-action="file"><span class="sheet-icon">${icon('i-files')}</span><span><strong>Allega file</strong><small>Seleziona dal workspace o dispositivo</small></span><span>+</span></button>
-          <button class="sheet-option" data-capability-action="image"><span class="sheet-icon">${icon('i-image')}</span><span><strong>Screenshot / immagine</strong><small>Contesto visivo per il task</small></span><span>+</span></button>
+          <span class="sheet-label">Aggiungi contesto al messaggio</span>
+          <button class="sheet-option" data-capability-action="file"><span class="sheet-icon">${icon('i-files')}</span><span><strong>Allega un file del workspace</strong><small>Lo aggiunge al messaggio come riferimento @, dai file veri della sessione</small></span><span>@</span></button>
         </div>`,
     },
     control: {
@@ -5548,10 +5700,21 @@
         toast('Permesso per-attrezzo aggiornato', select.value ? `${tool}: ${select.options[select.selectedIndex].textContent}` : `${tool}: torna alla policy sessione`);
       });
     });
+    /*
+     * ⭐⭐⭐ O-01 (04/9) — era l'unica azione DICHIARATAMENTE finta rimasta
+     * nel foglio: «File picker simulato · Il mockup rappresenta il flusso
+     * senza backend», su entrambe le righe. «Allega file» ora apre il foglio
+     * dei riferimenti @, che elenca i file VERI del workspace della sessione
+     * (`suggerimentiRiferimentiReali`) e li scrive nel composer — e senza
+     * sessione dice onestamente che non ce ne sono, invece di fingere un
+     * picker. ⛔ «Screenshot / immagine» non esiste più come azione: non
+     * c'è nessun canale immagine verso il modello (zero `image_url` nel
+     * kernel), quindi è sceso fra le voci «Non ancora implementato» invece
+     * di restare un bottone che promette qualcosa di impossibile.
+     */
     $$('[data-capability-action]', sheetBody).forEach((button) => {
       button.addEventListener('click', () => {
-        toast(button.dataset.capabilityAction === 'file' ? 'File picker simulato' : 'Cattura visiva pronta', 'Il mockup rappresenta il flusso senza backend.');
-        closeEmbeddedDialog(sheetDialog);
+        if (button.dataset.capabilityAction === 'file') openSheet('references');
       });
     });
     $$('[data-environment-choice]', sheetBody).forEach((button) => {
@@ -7323,6 +7486,7 @@
     abilita('copy', Boolean(pagina));
     const back = $('[data-browser-action="back"]');
     if (back) back.setAttribute('aria-label', `Pagina letta precedente${contatore}`);
+    aggiornaRigaBrowserCapability(); // O-01 — la scheda Capability conta le pagine vere, non un «Non osservato» fisso
   }
 
   /**
@@ -9181,6 +9345,80 @@
     if (demoBadge) demoBadge.hidden = true;
   }
 
+  /**
+   * ⭐⭐⭐ O-01 (04/9) — la scheda «Capability» del Context rail, sorella
+   * del foglio del pulsante «+» (lo stesso bottone «Gestisci capability»
+   * apre quel foglio).
+   *
+   * ⛔ Le sue quattro righe erano TESTO STATICO in index.html, mai toccato
+   * da una riga di JS: «Attrezzi —», «MCP —», «Web search: Non
+   * osservato», «Browser: Non osservato». I due trattini erano il caso
+   * peggiore: né un numero vero né la dichiarazione onesta che gli altri
+   * due avevano.
+   *
+   * ⭐ Il +1 sui concorrenti: la riga «Web search» dice la FONTE REALE
+   * configurata adesso (letta dalla stessa `ricercaWebFn` che il kernel
+   * riceve a ogni giro), non un «configurato/non configurato» dedotto
+   * dall'esistenza di una chiave. È esattamente il difetto aperto su Hermes
+   * Agent (issue #13301, agosto 2026): il suo setup dichiara «not
+   * configured» per gli attrezzi gestiti dal gateway — web search compresa —
+   * perché guarda le chiavi nel .env invece della configurazione con cui
+   * l'attrezzo gira davvero.
+   */
+  async function aggiornaSchedaCapability() {
+    const scrivi = (chiave, testo, titolo = '') => {
+      const el = $(`[data-capability-row="${chiave}"]`);
+      if (!el) return;
+      el.textContent = testo;
+      el.title = titolo;
+    };
+    aggiornaRigaBrowserCapability();
+    const sessione = state.realSession.id;
+    try {
+      const dati = await apiGet(sessione ? `/api/v1/sessions/${encodeURIComponent(sessione)}/tools` : '/api/v1/tools');
+      if (!dati.attrezzi) {
+        scrivi('attrezzi', 'Non osservato', dati.errore || '');
+        scrivi('ricerca', 'Non osservato', dati.errore || '');
+      } else {
+        const token = dati.attrezzi.reduce((somma, a) => somma + (a.tokenSchemaStimati || 0), 0);
+        scrivi('attrezzi', String(dati.attrezzi.length), `~${token} token di schema a ogni giro (stima)${sessione ? '' : ' · nessuna sessione aperta: sono quelli che riceverà la prossima'}`);
+        const ricerca = dati.attrezzi.find((a) => a.nome === 'web_search');
+        if (!ricerca) scrivi('ricerca', 'non offerta', 'L\'attrezzo web_search non è fra quelli offerti in questa configurazione.');
+        else if (ricerca.dipendenza?.stato === 'pronta') scrivi('ricerca', ricerca.dipendenza.dettaglio.replace(/^Fonte: /, ''), ricerca.dipendenza.dettaglio);
+        else scrivi('ricerca', 'senza fonte', ricerca.dipendenza?.dettaglio || '');
+      }
+    } catch (errore) {
+      scrivi('attrezzi', 'Non osservato', errore.message);
+      scrivi('ricerca', 'Non osservato', errore.message);
+    }
+    if (!sessione) {
+      scrivi('mcp', 'Non osservato', 'I server MCP sono dichiarati dal progetto della sessione: senza una sessione aperta non c\'è un progetto da leggere.');
+      return;
+    }
+    try {
+      const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(sessione)}/mcp`);
+      if (dati.errore) scrivi('mcp', 'dichiarazione non valida', dati.errore);
+      else if (!dati.server || dati.server.length === 0) scrivi('mcp', '0', 'Nessun server MCP dichiarato in questo progetto (.harness-ui-mcp.json).');
+      else scrivi('mcp', `${dati.server.length} (${dati.server.filter((x) => x.fidato).length} fidati)`, dati.server.map((x) => x.id).join(', '));
+    } catch (errore) {
+      scrivi('mcp', 'Non osservato', errore.message);
+    }
+  }
+
+  /** ⭐ O-01 — la sola riga della scheda che si legge da uno stato già in memoria: nessuna fetch, quindi si può chiamare a ogni pagina letta. */
+  function aggiornaRigaBrowserCapability() {
+    const el = $('[data-capability-row="browser"]');
+    if (!el) return;
+    const pagine = state.realSession.browserPagine?.length ?? 0;
+    if (!state.realSession.id) {
+      el.textContent = 'Non osservato';
+      el.title = 'Nessuna sessione aperta: le pagine lette appartengono a una sessione.';
+      return;
+    }
+    el.textContent = pagine === 0 ? 'nessuna pagina letta' : `${pagine} pagin${pagine === 1 ? 'a letta' : 'e lette'}`;
+    el.title = 'TALOS legge il testo delle pagine con l\'attrezzo naviga; compaiono nella vista Browser.';
+  }
+
   function handleRealEvent(evento, generation) {
     if (generation !== state.realSession.generation) return; // sessione più vecchia: scartato, non renderizzato
     /*
@@ -10316,6 +10554,7 @@
     if (state.realSession.deferHistoricalRendering) mantieniFondoDuranteRipristino(generation);
     aggiornaSottotitoloSessione(); // W1-12 — con una sessione aperta il sottotitolo non dice «premi Nuova»
     aggiornaElencoSessioniReali();
+    void aggiornaSchedaCapability(); // O-01 — attrezzi/MCP/ricerca/browser sono per-sessione: la scheda segue, non resta al valore di prima
   }
 
   /**
@@ -12594,7 +12833,7 @@
   $$('[data-control-action]').forEach((button) => button.addEventListener('click', () => {
     if (button.dataset.controlAction === 'doctor') eseguiDoctor();
   }));
-  $('#capabilityBtn').addEventListener('click', () => openSheet('capabilities'));
+  $('#capabilityBtn').addEventListener('click', () => openSheet('capabilities', { ancoraAlComposer: true }));
   $('#manageCapabilitiesBtn').addEventListener('click', () => openSheet('capabilities'));
   $('#closeSheet').addEventListener('click', () => closeEmbeddedDialog(sheetDialog));
 
@@ -12721,6 +12960,16 @@
     apriPopoverNotifiche(event.currentTarget);
   });
   const notificheTimer = window.setInterval(() => { if (document.visibilityState === 'visible') void aggiornaElencoSessioniReali(); }, 15_000);
+
+  /*
+   * ⛔⛔ Trovato dalla QA visiva di O-01, secondo giro: con lo store VUOTO le
+   * quattro righe della scheda «Capability» restavano tutte «Non osservato»
+   * — perché l'unico chiamante era `passaASessione`, che senza sessioni non
+   * viene MAI eseguito. Gli attrezzi però sono osservabili anche allora
+   * (`/api/v1/tools`): all'avvio si chiede, e la scheda dice il vero fin dal
+   * primo secondo, non solo dopo il primo click su una sessione.
+   */
+  void aggiornaSchedaCapability();
 
   $$('[data-file-entry]').forEach((button) => button.addEventListener('click', () => {
     $$('[data-file-entry]').forEach((entry) => entry.classList.toggle('active', entry === button));

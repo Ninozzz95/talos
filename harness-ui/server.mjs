@@ -396,6 +396,15 @@ async function startServer() {
      * ricerca sui tre concorrenti che fanno la stessa cosa.
      */
     cartellaStore: config.cartellaStore,
+    /*
+     * ⭐⭐⭐ O-01 (04/9) — il Capability hub («+» del composer) elenca gli
+     * attrezzi VERI chiedendoli al kernel, invece dei sette scritti a mano nel
+     * template (il kernel ne offre 43). Stesso principio di `chiaveFn`: una
+     * funzione, non un valore — il kernel si carica pigramente e una sola
+     * volta, e un'installazione senza kernel dice «non osservato» invece di
+     * elencare zero attrezzi.
+     */
+    attrezziKernelFn: () => ownerRuntime.attrezziKernel(),
   });
   /*
    * ⭐⭐⭐ FASE L (30/8) — ricostruisce le sessioni persistite PRIMA di

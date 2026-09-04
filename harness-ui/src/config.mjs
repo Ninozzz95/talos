@@ -256,7 +256,8 @@ export function permessiRichiestaValido(raw) {
  * il secondo.
  */
 // ⭐ 29/8 — FASE H: `generate_image` aggiunto, quinto attrezzo con ricevuta nel kernel (talosHarness.mjs, ATTREZZI_CON_RICEVUTA) — stesso trattamento degli altri quattro.
-const ATTREZZI_CON_PERMESSO_PER_ATTREZZO = new Set(['scrivi', 'prova', 'shell', 'document_create', 'generate_image']);
+/** ⭐ O-01 (04/9) — esportato: il Capability hub mostra su OGNI attrezzo se ha un cancello per-attrezzo, e deve leggerlo da QUI, mai da un secondo elenco. */
+export const ATTREZZI_CON_PERMESSO_PER_ATTREZZO = new Set(['scrivi', 'prova', 'shell', 'document_create', 'generate_image']);
 const VALORI_PERMESSO_PER_ATTREZZO = new Set(['sempre', 'chiedi', 'nega']);
 
 /** Stesso principio di reasoningRichiestaValido: pura, nessun throw. */

@@ -2832,3 +2832,43 @@ body.reduce-motion #compactSessionBtn.is-loading svg { animation: none; }
 .search-source-readiness { margin: 12px 0 0; color: var(--muted); font-size: calc(11px * var(--talos-ui-font-scale)); line-height: 1.5; }
 .search-source-readiness[data-search-readiness="pronta"] { color: var(--ok, var(--accent)); }
 .search-source-feedback { margin: 6px 0 0; color: var(--text-2); font-size: calc(11px * var(--talos-ui-font-scale)); }
+
+/*
+ * ⭐⭐⭐ O-01 (04/9) — il pannello «Attrezzi» del Capability hub: 43 righe
+ * vere al posto di sette scritte a mano, con la loro riga di riepilogo e
+ * fino a tre pastiglie di stato per riga (dipendenza, permesso, offerto).
+ */
+.tools-panel-summary { margin: 0 0 8px; color: var(--muted); font-size: calc(11px * var(--talos-ui-font-scale)); }
+.tool-chips { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px; }
+.tool-chips .status-chip { white-space: nowrap; }
+/* ⛔ Usata anche dalla riga Tool Forge (stato + bottone nella STESSA cella): senza questo il `secondary-btn` prende la larghezza piena e va a capo. */
+.tool-chips .secondary-btn { width: auto; min-height: 28px; padding: 0 10px; }
+
+/*
+ * ⭐⭐⭐ O-01 (04/9) — «Apertura del pulsante +» (Impostazioni → Interazione).
+ * ⛔ Era un'impostazione INERTE: `applicaAspettoDesktop` scriveva
+ * `data-talos-composer-plus` sull'host e NESSUNA riga di CSS o di JS lo
+ * leggeva — «Cassetto» e «Menu» aprivano lo stesso identico foglio
+ * centrato. Ora «Menu» lo ancora in basso a sinistra, sopra il composer da
+ * cui è stato aperto, e più stretto: un menu, non un cassetto. Vale SOLO
+ * per il foglio aperto dal «+» (`sheet-dialog--dal-composer`, messo da openSheet):
+ * ogni altro foglio resta centrato come sempre.
+ */
+:root[data-talos-composer-plus="menu"] .sheet-dialog.sheet-dialog--dal-composer,
+:host([data-talos-composer-plus="menu"]) .sheet-dialog.sheet-dialog--dal-composer {
+  /* ⛔ I due valori li MISURA openSheet() sul «+» vero: la sidebar si stringe e si chiude, un left fisso ancorerebbe il menu a niente. I fallback servono solo se il bottone non c'è. */
+  inset: auto auto var(--talos-sheet-anchor-bottom, 96px) var(--talos-sheet-anchor-left, 24px);
+  width: min(560px, calc(100vw - 48px));
+  max-height: min(74dvh, 780px);
+  margin: 0;
+  border-radius: 14px;
+}
+@media (max-width: 1040px) {
+  :root[data-talos-composer-plus="menu"] .sheet-dialog.sheet-dialog--dal-composer,
+  :host([data-talos-composer-plus="menu"]) .sheet-dialog.sheet-dialog--dal-composer {
+    inset: auto 0 0 0;
+    width: 100vw;
+    margin: 0;
+    border-radius: 18px 18px 0 0;
+  }
+}
