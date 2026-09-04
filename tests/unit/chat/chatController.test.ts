@@ -242,7 +242,7 @@ function makeDeps() {
             debug_diagnostics: false,
         },
         search: {
-            source: null as 'tavily' | 'brave' | 'searxng' | 'custom' | null,
+            source: null as 'tavily' | 'brave' | 'searxng' | 'custom' | 'duckduckgo' | null,
             endpoint: null as string | null,
         },
         tools: {

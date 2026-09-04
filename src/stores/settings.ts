@@ -585,16 +585,30 @@ function parseToolPermissions(value: unknown): TalosToolPermissions {
  * which source is selected. D3 then hangs off `source === null`: with nothing
  * chosen the web tools are not offered to the model at all, so it cannot
  * promise a search it will not perform.
+ *
+ * R-03 (2026-09-04) changes what a null `source` DEFAULTS to, not what it
+ * means: `touched` is the seam. The desktop's fresh store defaults straight
+ * to `'duckduckgo'` (`search-source-store.mjs`) because it has no history —
+ * mobile's `source` has ALSO been the "off" switch since D3
+ * (`TalosMobileSearchSourcePanel.vue`'s "Turn web search off"/"Forget the
+ * key" both write `source: null` on purpose), so a blanket "null defaults to
+ * DuckDuckGo" would silently turn search back on for anyone who deliberately
+ * turned it off. `touched` is false ONLY for an install that has never once
+ * called `setSearchPreferences`; that setter stamps it true on every call,
+ * including a deliberate `source: null` — see `parseSearchPreferences` below.
  */
 export interface TalosMobileSearchPreferences {
     source: TalosSearchSourceId | null
     /** SearXNG and custom: the instance the user runs or trusts. */
     endpoint: string | null
+    /** R-03 bookkeeping only — see the class comment. Never patched directly. */
+    touched: boolean
 }
 
 const TALOS_DEFAULT_SEARCH_PREFERENCES: TalosMobileSearchPreferences = {
     source: null,
     endpoint: null,
+    touched: false,
 }
 
 /**
@@ -633,14 +647,33 @@ function parseResearchModels(value: unknown): TalosResearchModelPreferences {
 function parseSearchPreferences(value: unknown): TalosMobileSearchPreferences {
     const record = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
     const source = record.source
-    const known = source === 'tavily' || source === 'brave' || source === 'searxng' || source === 'custom'
+    const known = source === 'tavily' || source === 'brave' || source === 'searxng'
+        || source === 'custom' || source === 'duckduckgo'
     const endpoint = typeof record.endpoint === 'string' && record.endpoint.trim() !== ''
         ? record.endpoint.trim()
         : TALOS_DEFAULT_SEARCH_PREFERENCES.endpoint
-    // Fail closed: anything unrecognised reads as "no source chosen", which by
-    // D3 means the web tools are not offered at all — never as a half-configured
-    // source the model would try and fail to use.
-    return { source: known ? source : TALOS_DEFAULT_SEARCH_PREFERENCES.source, endpoint }
+    const touched = record.touched === true
+    // Fail closed for anything unrecognised: it reads as "no explicit source",
+    // which by D3 means the web tools are not offered at all — never as a
+    // half-configured source the model would try and fail to use. Choosing a
+    // REAL source is unambiguously an act of touching this control.
+    if (known) return { source: source as TalosSearchSourceId, endpoint, touched: true }
+    /*
+     * R-03 parity with the desktop (`search-source-store.mjs`): an install
+     * that has NEVER touched this control starts on DuckDuckGo, so the model
+     * can search before anyone opens a settings screen. One that has —
+     * even down to explicitly "Turn web search off" — keeps null meaning
+     * OFF: resurrecting a deliberate refusal is worse than never shipping
+     * the keyless default.
+     *
+     * ⛔ Known gap, accepted rather than hidden: an install saved BEFORE this
+     * field existed reads back `touched: undefined` regardless of whether it
+     * had ever opened this panel, so it also gets the new default. There is
+     * no bit in that old file that can tell "never opened this screen" apart
+     * from "opened it and turned search off" — this can only mis-fire once,
+     * for a file that predates today, and never again afterwards.
+     */
+    return { source: touched ? null : 'duckduckgo', endpoint, touched }
 }
 
 function parseSecurityPreferences(value: unknown): TalosMobileSecurityPreferences {
@@ -1063,7 +1096,7 @@ export interface SettingsStore {
         actions: readonly TalosToolAction[],
     ): Promise<void>
     revokeToolAuthorization(tool: string): Promise<void>
-    setSearchPreferences(patch: Partial<TalosMobileSearchPreferences>): Promise<void>
+    setSearchPreferences(patch: Partial<Omit<TalosMobileSearchPreferences, 'touched'>>): Promise<void>
     setResearchModels(patch: Partial<TalosResearchModelPreferences>): Promise<void>
     setTone(preset: TalosToneId): Promise<void>
     setAiDefaults(patch: Partial<TalosAiDefaults>): Promise<void>
@@ -1385,7 +1418,13 @@ export function useSettingsStore(): SettingsStore {
         },
         setSearchPreferences(patch) {
             return commit(() => ({
-                overrides: { search: parseSearchPreferences({ ...state.search, ...patch }) },
+                // R-03: `touched: true` wins regardless of `patch` (it is
+                // excluded from the patch type above, but this is the line
+                // that actually matters) — every call here, including one
+                // that deliberately writes `source: null`, is the seam that
+                // stops `parseSearchPreferences` from re-defaulting an
+                // explicit "off" back to DuckDuckGo on its own round trip.
+                overrides: { search: parseSearchPreferences({ ...state.search, ...patch, touched: true }) },
             }))
         },
         setResearchModels(patch) {

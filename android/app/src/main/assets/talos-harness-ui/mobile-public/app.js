@@ -25,6 +25,49 @@
   function HOST() { return window.__talosHarnessHost || document.documentElement; }
   const $ = (selector, root = ROOT()) => root.querySelector(selector);
   const $$ = (selector, root = ROOT()) => [...root.querySelectorAll(selector)];
+
+  /*
+   * ⭐ 4/9 — LEDGER §79, owner: "la lingua della app è impostata su
+   * italiano (sistema) ma interfaccia codice è in inglese". Non un
+   * motore di traduzione nuovo (quello vero vive nel nativo,
+   * mobile/src/i18n/) — solo le stringhe più visibili e ricorrenti di
+   * QUESTO bundle, inglese come sorgente/origine di verità sempre.
+   * `window.__talosHarnessLocale` (piantato da HarnessSessionScreen.vue,
+   * letto una volta qui al boot) decide se applicare il dizionario.
+   * Nessuna voce trovata → resta l'inglese di sempre, mai una stringa
+   * vuota o rotta.
+   */
+  const DIZIONARIO_IT = {
+    Chat: 'Chat',
+    Terminal: 'Terminale',
+    Board: 'Bacheca',
+    Review: 'Revisione',
+    Browser: 'Browser',
+    More: 'Altro',
+    Running: 'In corso',
+    Stopped: 'Fermato',
+    'Type a command…': 'Scrivi un comando…',
+    'No command run in this session.': 'Nessun comando eseguito in questa sessione.',
+    'The session is still running: a direct command waits for it to finish.':
+      'La sessione è ancora in corso: un comando diretto aspetta che concluda.',
+    'Command to run on the device': 'Comando da eseguire sul dispositivo',
+    'Run command': 'Esegui comando',
+  };
+  function t(testoInglese) {
+    return (window.__talosHarnessLocale === 'it' && DIZIONARIO_IT[testoInglese]) || testoInglese;
+  }
+  /** Applicata una sola volta al boot: le etichette statiche dei due tab bar (desktop e mobile) e il placeholder del composer del Terminale. */
+  function applicaLocalizzazioneStatica() {
+    $$('.mode-tab').forEach((bottone) => { bottone.textContent = t(bottone.textContent); });
+    $$('.mobile-nav button span').forEach((etichetta) => { etichetta.textContent = t(etichetta.textContent); });
+    const inputTerminale = $('[data-terminal-input]');
+    if (inputTerminale) {
+      inputTerminale.placeholder = t(inputTerminale.placeholder);
+      inputTerminale.setAttribute('aria-label', t(inputTerminale.getAttribute('aria-label')));
+    }
+    const invioTerminale = $('.terminal-composer-send');
+    if (invioTerminale) invioTerminale.setAttribute('aria-label', t(invioTerminale.getAttribute('aria-label')));
+  }
   /*
    * Piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 3 (`adb reverse`).
    * Su desktop questa pagina gira DENTRO ciò che `server.mjs` serve da
@@ -480,7 +523,7 @@
     if (options.mode) state.mode = options.mode;
     else if (view === 'dashboard') state.mode = 'dashboard';
     else if (view === 'chat') state.mode = 'chat';
-    else if (view === 'terminal') state.mode = 'terminal'; // ⭐ 27/8 — il tab "Terminale" (ex "Split", che non affiancava niente) evidenzia se stesso anche quando ci si arriva da altrove (⌘T, `!comando`)
+    else if (view === 'terminal') { state.mode = 'terminal'; aggiornaComposerTerminale(); } // ⭐ 27/8 — il tab "Terminale" (ex "Split", che non affiancava niente) evidenzia se stesso anche quando ci si arriva da altrove (⌘T, `!comando`) · ⭐ 4/9 — LEDGER §76.2: aggiorna anche l'hint del comando diretto ogni volta che si entra qui
     else state.mode = null;
     views.forEach((pane) => {
       if (pane !== target && pane !== previous) pane.classList.remove('active', 'motion-enter', 'motion-exit');
@@ -2828,7 +2871,7 @@
     runStrip?.classList.toggle('is-stopped', !state.running);
     const label = $('strong', runStateToggle);
     const timer = runStateToggle?.querySelector('span:last-child');
-    if (label) label.textContent = state.running ? 'Running' : 'Stopped';
+    if (label) label.textContent = state.running ? t('Running') : t('Stopped');
     /*
      * ⭐⭐⭐ 3/9 — era `timer.textContent = state.running ? '01:42' : '—'`:
      * una STRINGA LETTERALE, mai un tempo vero (trovato leggendo il
@@ -3792,7 +3835,7 @@
     const terminalWindow = $('[data-view="terminal"] .terminal-window');
     if (terminalWindow) {
       const code = document.createElement('code');
-      code.textContent = 'No command run in this session.';
+      code.textContent = t('No command run in this session.');
       terminalWindow.replaceChildren(code);
       const demoBadge = $('.demo-surface-badge', $('[data-view="terminal"]'));
       if (demoBadge) demoBadge.hidden = true; // onesto e vuoto, non "demo": non è un dato finto da segnalare
@@ -3905,7 +3948,7 @@
   async function runDirectShell(comando, silenzioso) {
     if (!state.realSession.id) {
       toast('No real session running', 'Start a task from the corpus before using a direct command.');
-      return;
+      return false;
     }
     const sessionId = state.realSession.id;
     const taskId = state.realSession.taskId;
@@ -3916,8 +3959,10 @@
       collegaEventiSessione(sessionId, generation);
       aggiornaElencoSessioniReali();
       if (!silenzioso) toast('Command sent', comando);
+      return true; // ⭐ 4/9 — LEDGER §76.2: il nuovo composer del Terminale lo usa per svuotare il campo SOLO a invio riuscito, mai su un rifiuto onesto del server (es. sessione ancora in corso)
     } catch (error) {
       toast('Command not run', error.message);
+      return false;
     }
   }
 
@@ -5300,6 +5345,7 @@
         chiudiGruppoToolCorrente(); // ⭐ 30/8 — il giro è concluso: un eventuale prossimo giro (follow-up, resume) apre un gruppo tutto suo
         state.realSession.eventoTerminaleVisto = true;
         aggiornaElencoSessioniReali(); // lo stato in #sessionList passa da "in corso" a "concluso" (visibile solo standalone, vedi nota di testa)
+        aggiornaComposerTerminale(); // ⭐ 4/9 — LEDGER §76.2: se la persona è già sul tab Terminale, l'hint "in corso" sparisce nel momento vero, non al prossimo cambio tab
         break;
       }
       case 'ApprovalRequested': {
@@ -5382,6 +5428,7 @@
         nascondiAttesaRisposta();
         appendStatusNote(`${evento.code ? `[${evento.code}] ` : ''}${evento.message}`, true);
         state.realSession.eventoTerminaleVisto = true;
+        aggiornaComposerTerminale(); // ⭐ 4/9 — LEDGER §76.2, gemello del caso RunFinished sopra
         break;
       }
       /*
@@ -7065,6 +7112,52 @@
   });
 
   /*
+   * ⭐ 4/9, owner (LEDGER §76.2): "nel terminale puoi vedere i comandi ma
+   * non scrivere comandi tu stesso, errore critico io devo poter
+   * scrivere". La capacità esisteva già — `!comando` nel composer della
+   * CHAT chiama runDirectShell, che POSTa su un endpoint server già
+   * completo (session-registry.mjs `shell()`, "Il comando diretto...
+   * FUORI dal ciclo di talosLavora") — semplicemente mai raggiungibile
+   * dalla vista Terminale stessa, che restava pura lettura. Riusa
+   * runDirectShell alla lettera, zero logica duplicata.
+   */
+  function aggiornaComposerTerminale() {
+    const hint = $('[data-terminal-hint]');
+    if (!hint) return;
+    if (!state.realSession.id) {
+      hint.hidden = true;
+      return;
+    }
+    // stesso significato già in uso altrove (submitPrompt, la coda vs
+    // il resume): eventoTerminaleVisto false = un giro è ancora in
+    // corso su questa sessione. shell() lo rifiuterebbe comunque lato
+    // server (SESSION_NOT_READY) — questo è solo l'avviso onesto
+    // PRIMA del tentativo, mai un secondo giudice che può sbagliare
+    // rispetto al server.
+    hint.hidden = state.realSession.eventoTerminaleVisto !== false;
+    hint.textContent = t('The session is still running: a direct command waits for it to finish.');
+  }
+  const terminalComposer = $('[data-terminal-composer]');
+  terminalComposer?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const input = $('[data-terminal-input]');
+    const send = $('.terminal-composer-send', terminalComposer);
+    const comando = input.value.trim();
+    if (!comando) return;
+    input.disabled = true;
+    if (send) send.disabled = true;
+    try {
+      const riuscito = await runDirectShell(comando, false);
+      if (riuscito) input.value = ''; // ⛔ mai svuotare su un rifiuto onesto (es. "sessione ancora in corso"): la persona deve poter ritentare senza riscrivere
+    } finally {
+      input.disabled = false;
+      if (send) send.disabled = false;
+      aggiornaComposerTerminale();
+      input.focus();
+    }
+  });
+
+  /*
    * ⭐⭐⭐ FASE D (28/8) — "Annulla" chiama DAVVERO POST .../queue/annulla
    * (svuotaCoda toglie l'ULTIMO messaggio accodato, mai il primo — vedi
    * la sua doc in session-registry.mjs) invece di limitarsi a nascondere
@@ -7378,6 +7471,7 @@
    */
 
   ensureDemoLabels();
+  applicaLocalizzazioneStatica();
   /*
    * ⛔⛔⛔ 27/8 (3626c9bd), owner: "il caricamento della pagina non deve
    * azzerare le sessioni in corso... se aggiorno adesso le sessioni passate

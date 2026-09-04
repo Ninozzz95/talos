@@ -372,7 +372,7 @@ interface TalosChatControllerSendRuntime {
     readonly toolPermissions: Readonly<TalosToolPermissions>
     readonly agentTools: Readonly<TalosAgentToolEnabled>
     readonly search: Readonly<{
-        source: 'tavily' | 'brave' | 'searxng' | 'custom' | null
+        source: 'tavily' | 'brave' | 'searxng' | 'custom' | 'duckduckgo' | null
         endpoint: string | null
     }>
     readonly imageProvider: TalosImageProvider | null
@@ -702,7 +702,7 @@ export interface ChatControllerDeps {
             readonly tool_authorizations: TalosToolAuthorizationGrantsV1
             /** F1: which web-search source is configured, if any (D3). */
             readonly search?: {
-                readonly source?: 'tavily' | 'brave' | 'searxng' | 'custom' | null
+                readonly source?: 'tavily' | 'brave' | 'searxng' | 'custom' | 'duckduckgo' | null
                 readonly endpoint?: string | null
             }
             /**

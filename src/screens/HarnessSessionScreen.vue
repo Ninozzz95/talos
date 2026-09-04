@@ -127,7 +127,7 @@ function harnessUiAssetUrl(fileName: 'index.html' | 'styles.css' | 'app.js'): st
 
 const route = useRoute()
 const router = useRouter()
-const { t } = useTalosI18n()
+const { t, locale } = useTalosI18n()
 const settings = useSettingsStore()
 const toasts = useTalosMobileToasts()
 
@@ -606,6 +606,7 @@ function teardown(): void {
     delete (window as unknown as { __talosHarnessHostPermissionChange?: unknown }).__talosHarnessHostPermissionChange
     delete (window as unknown as { __talosHarnessApiBase?: unknown }).__talosHarnessApiBase
     delete (window as unknown as { __talosHarnessRichiediDato?: unknown }).__talosHarnessRichiediDato
+    delete (window as unknown as { __talosHarnessLocale?: unknown }).__talosHarnessLocale
     scriptEl?.remove()
     scriptEl = null
 }
@@ -847,6 +848,12 @@ async function mountMockup(): Promise<void> {
         ;(window as unknown as { __talosHarnessApiBase?: string }).__talosHarnessApiBase = talosHarnessUiApiBase()
         ;(window as unknown as { __talosHarnessRichiediDato?: (tipo: string, args: unknown) => Promise<unknown> })
             .__talosHarnessRichiediDato = talosHarnessRichiediDato
+        // ⭐ 4/9 — LEDGER §79, owner: la lingua di Codice deve seguire quella
+        // dell'app (oggi era fissa in inglese). Letta una sola volta qui,
+        // come gli altri ponti sopra: un cambio lingua a sessione già aperta
+        // vale dal prossimo ingresso in Codice, non a caldo — la stessa
+        // scelta "semplice" già presa per il resto di questo lavoro.
+        ;(window as unknown as { __talosHarnessLocale?: string }).__talosHarnessLocale = locale.value
 
         await new Promise<void>((resolve, reject) => {
             const script = document.createElement('script')

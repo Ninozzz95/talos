@@ -6,6 +6,44 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.26
+
+Codice's Terminal tab can now run a command itself, not just show one, its
+interface follows the app's language, and web search works without a key.
+
+### Codice's Terminal tab can run a command, not just show one
+
+The Terminal tab showed a live log of commands the agent ran, but had no
+way for a person to type one in themselves — that ability existed only
+one screen over, reachable by typing `!command` into the chat. The
+Terminal tab now has its own composer that runs a command directly on
+the device, with an honest note when a session is still busy instead of
+a field that quietly does nothing.
+
+### Codice follows the app's language
+
+Codice's interface — its tabs, its Running/Stopped state, the Terminal's
+own messages — stayed in English regardless of what language the rest of
+the app was set to. It now follows the app's language, falling back to
+English only where nothing has been translated yet. The Terminal's new
+composer (above) was also restyled to match the pill-shaped, glass
+composer used everywhere else in the app, instead of standing out with
+a look of its own.
+
+### DuckDuckGo: a fifth web search option that needs no key
+
+Every web search option until now — Tavily, Brave, SearXNG, a custom
+endpoint — needed a key or an address before the model could search the
+web at all. DuckDuckGo needs neither: it reads DuckDuckGo's own public
+results page. It isn't an official API, and under heavy use it can
+answer with a block instead of results — when that happens TALOS says so
+plainly, rather than reporting an empty web.
+
+### Fixed
+
+- The Terminal's composer could end up sitting partly behind the bottom
+  navigation bar on narrower screens, its send button cut in half.
+
 ## v0.1.25
 
 The previous release corrected one bug by introducing its opposite:

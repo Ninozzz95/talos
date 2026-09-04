@@ -744,7 +744,45 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .diff-toolbar > div { display: flex; gap: 6px; }
 .diff-panel pre { min-height: 420px; font-size: 11px; }
 
-.terminal-window { min-height: calc(100dvh - 210px); margin: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-deep); padding: 18px; overflow: auto; color: var(--text-2); font: 12px/1.7 var(--font-mono); box-shadow: inset 0 0 80px var(--surface-highlight-faint); }
+/*
+ * ⭐⭐⭐ 4/9 — owner: "il campo input terminale è tagliato a fondo pagina
+ * quando clicchi nel pulsante terminale". RIPRODOTTO dal vivo su viewport
+ * telefono (`wm size 1080x2400`): il composer finiva a metà dentro
+ * `.mobile-nav`, bottone d'invio tagliato in due dalla barra fissa.
+ *
+ * Causa: `.terminal-window` prendeva la sua altezza da `calc(100dvh - Npx)`
+ * — un budget FISSO, indovinato, per "tutto il resto" (topbar, tab, riga di
+ * stato, intestazione del riquadro, il composer stesso, il margine di
+ * sicurezza sopra `.mobile-nav`). Ogni volta che UNA di quelle parti cambia
+ * taglia (il §79 qui sopra ha allungato il margine del composer di 12px e
+ * corretto N di conseguenza, ma non abbastanza sulla rottura mobile-nav) il
+ * numero va ritoccato a mano altrove, e finché nessuno lo fa il riquadro
+ * del log resta troppo alto e spinge il composer oltre il bordo visibile.
+ *
+ * Cura strutturale, non un'altra costante: `.terminal-shell` diventa una
+ * colonna flex alta ESATTAMENTE quanto lo spazio vero disponibile
+ * (`min-height: 100%` dentro `.view-pane`, che è già `inset: 0`), e SOLO
+ * `.terminal-window` cresce (`flex: 1 1 auto`) per riempire ciò che resta
+ * DOPO che intestazione e composer hanno preso la loro taglia vera. Il
+ * `padding-bottom` di `.terminal-shell` (riga sopra, invariato) resta lo
+ * spazio riservato sopra `.mobile-nav` — con la colonna flex, quello spazio
+ * è finalmente rispettato invece che eroso dal calcolo indovinato. Zero
+ * numeri da tenere sincronizzati a mano quando composer o intestazione
+ * cambiano taglia di nuovo.
+ */
+.terminal-shell { display: flex; flex-direction: column; min-height: 100%; }
+.terminal-window { flex: 1 1 auto; min-height: 160px; margin: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-deep); padding: 18px; overflow: auto; color: var(--text-2); font: 12px/1.7 var(--font-mono); box-shadow: inset 0 0 80px var(--surface-highlight-faint); }
+/* ⭐ 4/9 — LEDGER §76.2/§79: il comando diretto (`!comando`) raggiungibile anche da qui. Owner, 4/9: "stilisticamente identica al chat composer" — stessa pelle di .composer/.send-btn (riga 561/576), non un secondo stile per la stessa idea (scrivere ed inviare). ⛔ Corretto anche il bersaglio tocco: il mockup del terminale cita "48px" ma è testo INVENTATO (il finto log di test più sotto) — il vero .send-btn della chat è 42px, ed è quello che ora si eredita davvero. */
+.terminal-composer { display: flex; align-items: center; gap: 8px; margin: 22px 0 0; padding: 10px 10px 10px 16px; border: 1px solid var(--line-strong); background: var(--surface-glass-strong); backdrop-filter: blur(20px); border-radius: 15px; box-shadow: var(--shadow), inset 0 1px var(--surface-highlight-subtle); }
+.terminal-composer-prompt { flex: none; color: var(--accent-2); font: 13px var(--font-mono); }
+.terminal-composer-input { flex: 1; min-width: 0; height: 42px; border: 0; background: transparent; color: var(--text); outline: 0; caret-color: var(--accent-2); font-size: 14px; font-family: var(--font-mono); }
+.terminal-composer-input::placeholder { color: var(--muted); }
+.terminal-composer-input:disabled { opacity: .55; }
+.terminal-composer-send { flex: none; width: 42px; height: 42px; border: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer; background: var(--accent); color: var(--on-accent); box-shadow: inset 0 1px var(--surface-highlight-strong), 0 5px 14px var(--accent-soft); }
+.terminal-composer-send:hover { background: var(--accent-2); }
+.terminal-composer-send:disabled { opacity: .55; }
+.terminal-composer-send svg { width: 18px; height: 18px; }
+.terminal-composer-hint { margin: 8px 2px 0; color: var(--text-2); font: 12px/1.4 var(--font-mono); }
 .prompt { color: var(--accent-2); }.path { color: var(--secondary); }.branch { color: var(--info); }
 .cursor { display: inline-block; width: 8px; height: 16px; background: var(--text); vertical-align: -2px; animation: blink var(--motion-activity) steps(1) infinite; }
 .status-chip { display: inline-flex; align-items: center; min-height: 25px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: var(--surface-highlight-subtle); font-size: 9px; }
@@ -1018,7 +1056,10 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
   .review-summary { grid-template-columns: repeat(2,1fr); }
   .diff-toolbar { align-items: flex-start; flex-direction: column; padding: 9px 10px; }
   .diff-panel pre { min-height: 420px; font-size: 9px; }
-  .terminal-window { min-height: calc(100dvh - 175px - var(--mobile-nav-h)); font-size: 10px; }
+  /* Stessa cura della regola base: `flex: 1 1 auto` (sopra) già assorbe la
+     differenza di spazio del breakpoint stretto — qui resta solo un pavimento
+     più basso, perché lo schermo è più piccolo, e il font ridotto. */
+  .terminal-window { min-height: 120px; font-size: 10px; }
   .browser-shell { width: calc(100% - 12px); }
   .browser-bar { grid-template-columns: auto minmax(0,1fr); }
   .browser-tools { display: none; }

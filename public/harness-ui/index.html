@@ -210,6 +210,25 @@ $ npm run test:unit -- composer
 
 <span class="prompt">antonino@talos</span> <span class="path">~/dev/talos</span> <span class="branch">feat/mobile-code</span>
 $ <span class="cursor"> </span></code></pre>
+            <!--
+              ⭐ 4/9, owner (LEDGER §76.2): "nel terminale puoi vedere i
+              comandi ma non scrivere comandi tu stesso, errore critico
+              io devo poter scrivere". La capacità di eseguire un
+              comando scelto dalla persona esisteva già lato server
+              (session-registry.mjs `shell()`, raggiunta oggi solo da
+              "!comando" nel composer della chat) — qui la stessa
+              chiamata (runDirectShell) diventa raggiungibile da QUESTA
+              vista, dove "Terminal" la fa davvero aspettare.
+            -->
+            <form class="terminal-composer" data-terminal-composer>
+              <span class="terminal-composer-prompt" aria-hidden="true">$</span>
+              <input type="text" class="terminal-composer-input" data-terminal-input
+                placeholder="Type a command…" autocomplete="off" autocorrect="off"
+                autocapitalize="off" spellcheck="false" inputmode="text"
+                aria-label="Command to run on the device">
+              <button type="submit" class="terminal-composer-send" aria-label="Run command"><svg aria-hidden="true"><use href="#i-send"/></svg></button>
+            </form>
+            <p class="terminal-composer-hint" data-terminal-hint hidden></p>
           </div>
         </section>
 

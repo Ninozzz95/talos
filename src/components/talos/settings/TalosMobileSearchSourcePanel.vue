@@ -41,6 +41,7 @@ const NOTE_KEYS: Record<TalosSearchSourceId, string> = {
     brave: 'search.braveNote',
     searxng: 'search.searxngNote',
     custom: 'search.customNote',
+    duckduckgo: 'search.duckduckgoNote',
 }
 
 async function refreshKeyState(): Promise<void> {
