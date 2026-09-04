@@ -369,6 +369,19 @@ Somma O: **16,75 gg** (O-07 solo la ricerca). Ordine consigliato nel piano A-Z: 
   - ⛔ **Difetto 1, curato (`58780145`): un byte NUL crudo dentro `src/session-registry.mjs`** (riga 362, separatore dell'impronta). Effetto: il file più grande del progetto, 3.572 righe, risponde «Binary file matches» a **grep** — cieco a ogni ricerca. Git mostrava ancora il diff solo perché la sua euristica guarda i primi 8.000 byte e il NUL stava a **17.184**. Curato con la forma escape in sorgente: stringa a runtime **identica byte per byte**, 193.425 → 193.430 byte, zero NUL.
   - ⛔ **Difetto 2, curato (`12516d9f`), segnalato dall'agente stesso: il cancello della ricerca web negava SEMPRE a un agente delegato.** `eventiDelTurno` azzera il conto a ogni messaggio `user` con contenuto testuale, e nel transcript di un agente **ogni risultato di strumento ha quella forma**. Riprodotto: sullo stesso transcript la vecchia lettura nega (`true`), la nuova no (`false`). Cura: `eventiRecenti()` guarda le ultime 300 voci; la decisione usa l'unione delle due letture. 25 prove verdi (erano 22), e il file dei test aveva un `process.exit` a metà che nascondeva le tre nuove. ⛔ L'agente aveva fatto sei ricerche vere e **ha dovuto aggirare il cancello** con uno script: un cancello che nega a chi ha obbedito insegna solo ad aggirarlo.
   - ⛔ **Lo script della cura ha MENTITO al primo giro**: passando da bash a Node il heredoc ha mangiato una barra rovesciata, quindi sostituiva un NUL con un NUL e stampava «fatto» — file identico, stesso offset, `EXIT:0`. Se ne accorge solo chi **rimisura il file dopo la scrittura**, mai chi legge l'uscita dello script. Stessa famiglia della lezione sui dollari mangiati da `String.replace`.
+- **⛔⛔ 04/09 — LE RIGHE O E W NON SONO CANCELLATE DAL REFACTOR: si agganciano alle superfici.** Owner, dopo aver scelto l'estrazione modulare: «non dimenticare mai assolutamente al mondo queste fasi, bisogna sistemarle e verificarle; implementala appena è possibile». `harness-ui/public/` è **congelato da un contratto testato** (`frontend/tests/contract/legacy-contract-snapshot.test.mjs` blocca byte e sha256 di `app.js`, `index.html`, `styles.css`): implementare le O lì significherebbe farle **due volte**, una nel monolite che poi si butta. ⇒ Ogni superficie estratta si porta dietro le sue righe e non si dichiara chiusa senza:
+  | Superficie estratta | Righe che porta con sé |
+  |---|---|
+  | Conversazione | **O-04** (follow-up mentre lavora, interruzione) |
+  | Compositore | **O-05** (immagini al modello), **O-08** (due pulsanti) |
+  | Sidebar | **O-09** (PUNTO CRITICO, stile Hermes), **W1-11** (cinque viste di prima classe) |
+  | Capability | **O-06** (censimento attrezzi, quali attrezzi riceve ogni modello) |
+  | Terminale | **W1-01** (schede terminale) |
+  | Review | **W1-06** (due sorgenti dichiarate) |
+  | Board | metriche di sessione (cache, primo token, motivo di chiusura) |
+  | Doctor | **W0-09** (pagina più nuova del server) |
+  ⛔ Restano fuori dall'aggancio e vogliono una decisione a sé: **O-07** (ricerca prima), **K-12** (tetto dei giri, kernel), **W0-07** (fsync e stream persistente della coda di scrittura).
+
 ## 8 — Parità competitiva (dossier del 03/09/2026)
 
 Il dossier `DOSSIER-COMPETITOR-FUNZIONI-DISTINTIVE-2026-09-03.md` legge nel codice 11 concorrenti (Hermes per
