@@ -1747,3 +1747,105 @@ test('quando sessionRegistry non è configurato, le rotte nuove tornano 404/405 
     'senza registro, /api/v1/sessions non è una rotta POST nota: torna al blanket-405');
   assert.equal((await fetch(`${base}/api/v1/tasks`)).status, 200, 'i task restano un elenco leggibile a sé stante');
 });
+
+/* =====================================================================
+ * ⭐⭐⭐ W1-02 (04/9) — GET /api/v1/sessions/:id/processes.
+ *
+ * ⛔ Provata con un registro VERO, non col fake di questo file: il valore
+ * della rotta è che il ledger arrivi ricostruito dagli eventi VERI passando
+ * per `elencaProcessi()` vero — un fake che restituisce un oggetto già
+ * pronto proverebbe solo che l'involucro JSON funziona.
+ * ===================================================================== */
+
+function registroVeroConEventi(t, { emetti = null, clock = null } = {}) {
+  let onEvento = null;
+  const avviaSessioneFn = async (input) => {
+    onEvento = input.onEvento;
+    if (typeof emetti === 'function') emetti(onEvento);
+    return new Promise(() => {}); // resta viva: nessun RunFinished
+  };
+  const preparaEsecuzioneFn = (taskId) => {
+    if (taskId !== 'sconto-a-scaglioni') throw new TaskCatalogError(`Task non ammesso: ${taskId}`);
+    return { cartella: 'C:\\corpus\\sconto-a-scaglioni-9f2', comandoProva: 'npm test', task: { id: taskId, consegna: 'c' } };
+  };
+  return createSessionRegistry({
+    avviaSessioneFn, preparaEsecuzioneFn, guardaWorkspaceFn: () => () => {}, modello: 'm', chiave: 'k',
+    ...(clock ? { clock } : {}),
+  });
+}
+
+test('⭐⭐⭐ W1-02 — GET /api/v1/sessions/:id/processes torna il ledger dei processi VERI e la guardia di stallo (registro VERO)', async (t) => {
+  let ora = 1_000;
+  const registro = registroVeroConEventi(t, {
+    clock: () => new Date(ora),
+    emetti: (onEvento) => {
+      onEvento({ type: 'RunStarted', threadId: 't', runId: 'r1', input: { consegna: 'c' } });
+      ora = 2_000;
+      onEvento({ type: 'ToolCallStart', toolCallId: 'call_1', toolCallName: 'shell' });
+      ora = 2_050;
+      onEvento({ type: 'ToolCallArgs', toolCallId: 'call_1', delta: '{"comando":"npm ' });
+      ora = 2_100;
+      onEvento({ type: 'ToolCallArgs', toolCallId: 'call_1', delta: 'run build"}' });
+    },
+  });
+  const { base } = await listen(t, { sessionRegistry: registro });
+  const { sessionId } = registro.avvia('sconto-a-scaglioni');
+  await Promise.resolve();
+
+  ora = 200_000;
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/processes`);
+  assert.equal(risposta.status, 200);
+  const corpo = await risposta.json();
+  assert.equal(corpo.ok, true);
+  assert.equal(corpo.meta.schema, API_SCHEMA);
+  assert.equal(corpo.data.registrato, true);
+  assert.equal(corpo.data.processi.length, 1);
+  assert.equal(corpo.data.processi[0].attrezzo, 'shell');
+  assert.equal(corpo.data.processi[0].origine, 'agente');
+  assert.equal(corpo.data.processi[0].comando, 'npm run build', 'i frammenti degli argomenti arrivano RICOMPOSTI fino all\'HTTP');
+  assert.equal(corpo.data.processi[0].esito, 'in-corso');
+  assert.equal(corpo.data.processi[0].durataMs, null);
+  assert.equal(typeof corpo.data.processi[0].motivoTempoAssente, 'string');
+  assert.equal(corpo.data.guardia.interviene, false, '⛔ la rotta consegna una guardia OSSERVATIVA: nessuna azione, nessuna uccisione');
+  const silenzi = corpo.data.guardia.segnalazioni.filter((s) => s.tipo === 'silenzio');
+  assert.equal(silenzi.length, 1);
+  assert.equal(silenzi[0].soggetto, 'processo');
+  assert.equal(silenzi[0].toolCallId, 'call_1');
+  assert.equal(silenzi[0].comando, 'npm run build');
+  assert.equal(silenzi[0].fermoDaMs, 197_900);
+  assert.equal(corpo.data.guardia.soglie.silenzioMs, 60_000);
+});
+
+test('⛔⛔ AL CONTRARIO — GET .../processes su una sessione VIVA ma senza un solo evento dice «non registrato», mai una lista vuota', async (t) => {
+  const registro = registroVeroConEventi(t, { emetti: () => {} });
+  const { base } = await listen(t, { sessionRegistry: registro });
+  const { sessionId } = registro.avvia('sconto-a-scaglioni');
+  await Promise.resolve();
+
+  const corpo = await (await fetch(`${base}/api/v1/sessions/${sessionId}/processes`)).json();
+  assert.equal(corpo.ok, true);
+  assert.equal(corpo.data.registrato, false);
+  assert.equal(corpo.data.processi, null);
+  assert.equal(corpo.data.motivo, 'non-registrato');
+  assert.equal(corpo.data.guardia.osservata, false);
+  assert.equal(corpo.data.guardia.segnalazioni, null);
+});
+
+test('⛔ AL CONTRARIO — GET .../processes su una sessione inesistente: 404 NOT_FOUND', async (t) => {
+  const registro = registroVeroConEventi(t);
+  const { base } = await listen(t, { sessionRegistry: registro });
+  const risposta = await fetch(`${base}/api/v1/sessions/mai-esistita/processes`);
+  assert.equal(risposta.status, 404);
+  assert.equal((await risposta.json()).error.code, 'NOT_FOUND');
+});
+
+test('⛔ GET .../processes rifiuta una query string, come le rotte vicine (requireNoQuery)', async (t) => {
+  const registro = registroVeroConEventi(t, { emetti: () => {} });
+  const { base } = await listen(t, { sessionRegistry: registro });
+  const { sessionId } = registro.avvia('sconto-a-scaglioni');
+  await Promise.resolve();
+
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/processes?soglia=1`);
+  assert.equal(risposta.status, 400);
+  assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
+});

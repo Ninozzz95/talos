@@ -4,7 +4,13 @@ import { tmpdir } from 'node:os';
 import { join, parse as parsePath } from 'node:path';
 import test from 'node:test';
 
-import { createSessionRegistry as createSessionRegistryReale, SCHEMA_SESSIONE } from '../src/session-registry.mjs';
+import {
+  createSessionRegistry as createSessionRegistryReale,
+  guardiaDiStallo,
+  processiDaEventi,
+  SCHEMA_SESSIONE,
+  SOGLIE_STALLO_PREDEFINITE,
+} from '../src/session-registry.mjs';
 import { CustomTaskError } from '../src/custom-task.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
 import { WorkspaceTreeError } from '../src/workspace-tree.mjs';
@@ -4880,4 +4886,384 @@ test('⭐⭐ ...e AL CONTRARIO, con un ascoltatore vivo la richiesta parte davve
   registro.rispondiApprovazione(sessionId, richiesta.requestId, true);
   assert.deepEqual(await promessa, { consentito: true });
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+/* =====================================================================
+ * ⭐⭐⭐ W1-02 (04/9) — PROCESS LEDGER + GUARDIA DI STALLO.
+ *
+ * Ricerca web del 04/09, fatta PRIMA di scegliere le soglie (obbligo owner):
+ *  - openclaw/openclaw#16808 (aperta 15/02/2026, chiusa su PR #17118):
+ *    «the existing watchdog checks process existence but not behavioral
+ *    patterns»; propone «same tool + same arguments > N times in the last M
+ *    calls (suggested N=10, M=20)», prima osservativo poi kill a 2× soglia.
+ *  - openclaw/openclaw#16583 (14/02/2026, chiusa stale): «N identical tool
+ *    calls in a row (e.g. 3-5)», intervento = iniettare un messaggio, mai
+ *    abortire.
+ *  - NousResearch/hermes-agent#512 (06/03/2026, aperta): doom loop = 3
+ *    chiamate identiche consecutive; in CLI chiede all'utente, non uccide.
+ *  - bitwarden/agent-access#139: un prompt di approvazione senza TTL e senza
+ *    anzianità desincronizza tutto ⇒ «show request age».
+ *  - gitkraken/vscode-gitlens#5230: la risposta a un permesso si perde dopo
+ *    ~15 minuti e l'agente resta fermo per sempre.
+ *
+ * ⭐ DOVE ANDIAMO OLTRE, e perché: N=10/M=20 non potrebbe scattare MAI da noi.
+ * Misurato il 04/09 sui file di sessione veri: una sessione che esaurisce i
+ * giri fa 33 chiamate in tutto (8 le altre), e le ripetizioni identiche sono
+ * 65 su 634 (10,3%) — `elenca` 37%, `leggi` 18%, `cerca` 12%, `shell` 1%.
+ * Con N=10 in una finestra di 20 nessuna sessione nostra raggiungerebbe la
+ * soglia prima di finire i 24 giri. Le nostre soglie sono N=3 su M=10, e sono
+ * PARAMETRICHE (SOGLIE_STALLO_PREDEFINITE, sovrascrivibili per chiamata).
+ * ⛔ E la guardia è OSSERVATIVA: `interviene:false` sempre — uccidere un
+ * processo è una decisione dell'owner, non della guardia.
+ * ===================================================================== */
+
+/** Costruisce una sequenza di eventi con `_sequenza` progressivo, come li scrive `broadcast`. */
+function insequenza(eventi) {
+  return eventi.map((evento, indice) => ({ ...evento, _sequenza: indice + 1 }));
+}
+
+function chiamataShell(toolCallId, comando, { esito = null, frammenti = null } = {}) {
+  const pezzi = frammenti ?? [JSON.stringify({ comando })];
+  const eventi = [{ type: 'ToolCallStart', toolCallId, toolCallName: 'shell' }];
+  for (const delta of pezzi) eventi.push({ type: 'ToolCallArgs', toolCallId, delta });
+  if (esito !== null) eventi.push({ type: 'ToolCallResult', toolCallId, messageId: `m-${toolCallId}`, content: esito });
+  return eventi;
+}
+
+test('⛔⛔ AL CONTRARIO — processiDaEventi senza NESSUN evento dice «non registrato», mai una lista vuota spacciata per «nessun processo»', () => {
+  for (const vuoto of [[], null, undefined]) {
+    const esito = processiDaEventi(vuoto);
+    assert.equal(esito.registrato, false, 'una sessione senza eventi non è una sessione senza processi');
+    assert.equal(esito.processi, null, '⛔ mai [] qui: sarebbero due fatti diversi detti con la stessa parola');
+    assert.equal(esito.motivo, 'non-registrato');
+  }
+});
+
+test('⭐ processiDaEventi con eventi VERI ma nessun processo torna una lista vuota VERA (registrato:true)', () => {
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    { type: 'ToolCallStart', toolCallId: 'c1', toolCallName: 'leggi' },
+    { type: 'ToolCallArgs', toolCallId: 'c1', delta: '{"percorso":"a.mjs"}' },
+    { type: 'ToolCallResult', toolCallId: 'c1', messageId: 'm', content: 'export const a = 1' },
+    { type: 'RunFinished', threadId: 't', runId: 'r', outcome: { type: 'success' } },
+  ]);
+  const esito = processiDaEventi(eventi);
+  assert.equal(esito.registrato, true);
+  assert.deepEqual(esito.processi, [], 'leggi non lancia un processo: la lista è vuota, e questo è un fatto vero');
+});
+
+test('⭐⭐⭐ processiDaEventi ricompone gli argomenti spezzati per toolCallId — mai concatenati alla cieca fra chiamate intrecciate', () => {
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    { type: 'ToolCallStart', toolCallId: 'a', toolCallName: 'shell' },
+    { type: 'ToolCallStart', toolCallId: 'b', toolCallName: 'shell' },
+    { type: 'ToolCallArgs', toolCallId: 'a', delta: '{' },
+    { type: 'ToolCallArgs', toolCallId: 'b', delta: '{"comando":' },
+    { type: 'ToolCallArgs', toolCallId: 'a', delta: '"comando": "ls -la &&' },
+    { type: 'ToolCallArgs', toolCallId: 'b', delta: '"npm test"}' },
+    { type: 'ToolCallArgs', toolCallId: 'a', delta: ' find . -type f"}' },
+    { type: 'ToolCallResult', toolCallId: 'a', messageId: 'm1', content: 'exit 0 [sandbox: wsl2]\ntotal 4' },
+    { type: 'ToolCallResult', toolCallId: 'b', messageId: 'm2', content: 'exit 1 [sandbox: wsl2]\nFAIL' },
+  ]);
+  const { processi } = processiDaEventi(eventi);
+  assert.equal(processi.length, 2);
+  assert.equal(processi[0].comando, 'ls -la && find . -type f');
+  assert.equal(processi[1].comando, 'npm test');
+  assert.equal(processi[0].codiceUscita, 0);
+  assert.equal(processi[1].codiceUscita, 1);
+  assert.equal(processi[1].sandbox, 'wsl2');
+});
+
+test('⭐⭐⭐ processiDaEventi ricompone anche quando ToolCallArgs arriva PRIMA del suo ToolCallStart', () => {
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    { type: 'ToolCallArgs', toolCallId: 'z', delta: '{"comando":"git ' },
+    { type: 'ToolCallArgs', toolCallId: 'z', delta: 'status --short"}' },
+    { type: 'ToolCallStart', toolCallId: 'z', toolCallName: 'shell' },
+    { type: 'ToolCallResult', toolCallId: 'z', messageId: 'm', content: 'exit 0 [sandbox: none]\n' },
+  ]);
+  const { processi } = processiDaEventi(eventi);
+  assert.equal(processi.length, 1);
+  assert.equal(processi[0].attrezzo, 'shell');
+  assert.equal(processi[0].comando, 'git status --short');
+  assert.equal(processi[0].sandbox, 'none');
+});
+
+test('⭐⭐⭐ processiDaEventi riordina per _sequenza: sul disco i frammenti arrivano DAVVERO fuori ordine', () => {
+  // ⛔ Non ipotetico: nel file .sessions-store/ce764e5e… le righe 28-30 portano
+  // _sequenza 28, 27, 29 — la coda di append non garantisce l'ordine del file.
+  const eventi = [
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' }, _sequenza: 1 },
+    { type: 'ToolCallStart', toolCallId: 'q', toolCallName: 'shell', _sequenza: 2 },
+    { type: 'ToolCallArgs', toolCallId: 'q', delta: '{"comando":"echo ', _sequenza: 3 },
+    { type: 'ToolCallArgs', toolCallId: 'q', delta: 'fine"}', _sequenza: 5 },
+    { type: 'ToolCallArgs', toolCallId: 'q', delta: 'uno due ', _sequenza: 4 },
+    { type: 'ToolCallResult', toolCallId: 'q', messageId: 'm', content: 'exit 0 [sandbox: wsl2]\nuno due fine', _sequenza: 6 },
+  ];
+  const { processi } = processiDaEventi(eventi);
+  assert.equal(processi[0].comando, 'echo uno due fine', 'i frammenti si uniscono in ordine di _sequenza, non di array');
+});
+
+test('⭐⭐ processiDaEventi distingue l\'ORIGINE: comando diretto dell\'owner vs chiamata dell\'agente', () => {
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't1', runId: 'r1', input: { consegna: 'fai una cosa' } },
+    ...chiamataShell('a', 'npm test', { esito: 'exit 0 [sandbox: wsl2]\nok' }),
+    { type: 'RunFinished', threadId: 't1', runId: 'r1', outcome: { type: 'success' } },
+    { type: 'RunStarted', threadId: 't2', runId: 'r2', input: { comandoDiretto: 'git log -1' } },
+    ...chiamataShell('b', 'git log -1', { esito: 'exit 0 [sandbox: wsl2]\ncommit…' }),
+    { type: 'RunFinished', threadId: 't2', runId: 'r2', outcome: { type: 'success' } },
+  ]);
+  const { processi } = processiDaEventi(eventi);
+  assert.deepEqual(processi.map((p) => p.origine), ['agente', 'comando-diretto']);
+});
+
+test('⭐⭐ processiDaEventi legge l\'esito VERO: exit code, sandbox, REFUSED e prova', () => {
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    ...chiamataShell('a', 'rm -rf /', { esito: 'REFUSED. This command matches a hardline pattern with no recovery path (rm-rf-root). The command was not run, at any permission level.' }),
+    { type: 'ToolCallStart', toolCallId: 'p', toolCallName: 'prova' },
+    { type: 'ToolCallArgs', toolCallId: 'p', delta: '{}' },
+    { type: 'ToolCallResult', toolCallId: 'p', messageId: 'm', content: 'exit 1\n1 test fallito' },
+  ]);
+  const { processi } = processiDaEventi(eventi);
+  assert.equal(processi[0].esito, 'rifiutato');
+  assert.equal(processi[0].codiceUscita, null, '⛔ un comando rifiutato non ha un codice d\'uscita: mai uno zero inventato');
+  assert.equal(processi[1].attrezzo, 'prova');
+  assert.equal(processi[1].esito, 'concluso');
+  assert.equal(processi[1].codiceUscita, 1);
+  assert.equal(processi[1].sandbox, null, 'prova non passa dal sandbox tiering di shell');
+  assert.equal(typeof processi[1].motivoComandoAssente, 'string', 'il comando di prova non viaggia negli argomenti: si dichiara');
+});
+
+test('⛔⛔ processiDaEventi: un processo mai concluso ha durata NULL DICHIARATA, mai uno zero inventato', () => {
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    ...chiamataShell('a', 'npm run build'),
+  ]);
+  const { processi } = processiDaEventi(eventi, { istanti: new Map([[1, 1_000], [2, 2_000], [3, 2_100]]), adesso: 95_000 });
+  assert.equal(processi[0].esito, 'in-corso');
+  assert.equal(processi[0].durataMs, null);
+  assert.notEqual(processi[0].durataMs, 0);
+  assert.equal(typeof processi[0].motivoTempoAssente, 'string');
+  assert.equal(processi[0].inCorsoDaMs, 93_000, 'quanto è passato dall\'avvio SI SA: è la durata finale che non si sa');
+});
+
+test('⭐⭐⭐ processiDaEventi con istanti osservati dà inizio e durata VERI', () => {
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    ...chiamataShell('a', 'npm test', { esito: 'exit 0 [sandbox: wsl2]\nok' }),
+  ]);
+  const istanti = new Map([[1, 1_000], [2, 2_000], [3, 2_010], [4, 7_500]]);
+  const { processi } = processiDaEventi(eventi, { istanti, adesso: 9_000 });
+  assert.equal(processi[0].inizio, new Date(2_000).toISOString());
+  assert.equal(processi[0].durataMs, 5_500);
+  assert.equal(processi[0].motivoTempoAssente, null);
+});
+
+test('⛔⛔ AL CONTRARIO — senza istanti (sessione ripristinata dal disco) inizio e durata sono NULL e il motivo è DETTO', () => {
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    ...chiamataShell('a', 'npm test', { esito: 'exit 0 [sandbox: wsl2]\nok' }),
+  ]);
+  const { processi } = processiDaEventi(eventi);
+  assert.equal(processi[0].inizio, null);
+  assert.equal(processi[0].durataMs, null);
+  assert.match(processi[0].motivoTempoAssente, /istante/i);
+});
+
+/* --------------------------- guardia di stallo --------------------------- */
+
+test('⛔⛔ AL CONTRARIO — guardiaDiStallo senza eventi: osservata:false e segnalazioni NULL, mai un [] che si legge «tutto bene»', () => {
+  const guardia = guardiaDiStallo([]);
+  assert.equal(guardia.osservata, false);
+  assert.equal(guardia.segnalazioni, null);
+  assert.equal(guardia.motivo, 'non-registrato');
+});
+
+test('⭐⭐⭐ guardiaDiStallo — SILENZIO di un processo: dice CHI (comando + id) e da quanto tace', () => {
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    ...chiamataShell('call_abc', 'npm run build'),
+  ]);
+  const istanti = new Map([[1, 1_000], [2, 2_000], [3, 2_100]]);
+  const guardia = guardiaDiStallo(eventi, { istanti, adesso: 92_100, soglie: { silenzioMs: 60_000 } });
+  assert.equal(guardia.osservata, true);
+  assert.equal(guardia.interviene, false, '⛔ la guardia SEGNALA, non uccide: uccidere è una decisione dell\'owner');
+  const silenzi = guardia.segnalazioni.filter((s) => s.tipo === 'silenzio');
+  assert.equal(silenzi.length, 1);
+  assert.equal(silenzi[0].soggetto, 'processo');
+  assert.equal(silenzi[0].toolCallId, 'call_abc');
+  assert.equal(silenzi[0].comando, 'npm run build');
+  assert.equal(silenzi[0].fermoDaMs, 90_000);
+  assert.match(silenzi[0].descrizione, /npm run build/);
+});
+
+test('⭐ guardiaDiStallo — sotto la soglia NON segnala niente (la soglia è un parametro, non un numero scritto a mano)', () => {
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    ...chiamataShell('call_abc', 'npm run build'),
+  ]);
+  const istanti = new Map([[1, 1_000], [2, 2_000], [3, 2_100]]);
+  assert.deepEqual(guardiaDiStallo(eventi, { istanti, adesso: 32_100, soglie: { silenzioMs: 60_000 } }).segnalazioni, []);
+  assert.equal(guardiaDiStallo(eventi, { istanti, adesso: 32_100, soglie: { silenzioMs: 10_000 } }).segnalazioni.length, 1);
+  assert.equal(SOGLIE_STALLO_PREDEFINITE.silenzioMs, 60_000);
+});
+
+test('⭐⭐⭐ guardiaDiStallo — STALLO SU UN CANCELLO DI PERMESSO: parole PROPRIE, non «il giro tace»', () => {
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    { type: 'ApprovalRequested', requestId: 'req-1', azione: { tipo: 'shell', comando: 'npm publish' } },
+  ]);
+  const istanti = new Map([[1, 1_000], [2, 2_000]]);
+  const guardia = guardiaDiStallo(eventi, { istanti, adesso: 302_000, soglie: { silenzioMs: 60_000 } });
+  const silenzi = guardia.segnalazioni.filter((s) => s.tipo === 'silenzio');
+  assert.equal(silenzi.length, 1, '⛔ una sola segnalazione: la causa specifica (l\'approvazione) sostituisce quella generica (il giro)');
+  assert.equal(silenzi[0].soggetto, 'approvazione');
+  assert.equal(silenzi[0].requestId, 'req-1');
+  assert.equal(silenzi[0].comando, 'npm publish');
+  assert.equal(silenzi[0].fermoDaMs, 300_000);
+  assert.match(silenzi[0].descrizione, /approvazione/i);
+});
+
+test('⭐ guardiaDiStallo — un\'approvazione già RISOLTA e un giro CONCLUSO non sono uno stallo', () => {
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    { type: 'ApprovalRequested', requestId: 'req-1', azione: { tipo: 'shell', comando: 'npm publish' } },
+    { type: 'ApprovalResolved', requestId: 'req-1', approvato: true },
+    { type: 'RunFinished', threadId: 't', runId: 'r', outcome: { type: 'success' } },
+  ]);
+  const istanti = new Map([[1, 1_000], [2, 2_000], [3, 3_000], [4, 3_100]]);
+  const guardia = guardiaDiStallo(eventi, { istanti, adesso: 900_000, soglie: { silenzioMs: 60_000 } });
+  assert.deepEqual(guardia.segnalazioni.filter((s) => s.tipo === 'silenzio'), [], 'un giro CONCLUSO non tace: è finito');
+});
+
+test('⭐⭐⭐ guardiaDiStallo — GIRO A VUOTO: stesso attrezzo, stessi identici argomenti, stesso esito', () => {
+  const ripetuta = (id) => [
+    { type: 'ToolCallStart', toolCallId: id, toolCallName: 'elenca' },
+    { type: 'ToolCallArgs', toolCallId: id, delta: '{"percorso":"src"}' },
+    { type: 'ToolCallResult', toolCallId: id, messageId: `m-${id}`, content: 'src/a.mjs\nsrc/b.mjs' },
+  ];
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    ...ripetuta('e1'), ...ripetuta('e2'), ...ripetuta('e3'),
+  ]);
+  const guardia = guardiaDiStallo(eventi, { soglie: { ripetizioniPerAllarme: 3, finestraChiamate: 10 } });
+  const vuoti = guardia.segnalazioni.filter((s) => s.tipo === 'giro-a-vuoto');
+  assert.equal(vuoti.length, 1);
+  assert.equal(vuoti[0].attrezzo, 'elenca');
+  assert.equal(vuoti[0].ripetizioni, 3);
+  assert.equal(vuoti[0].consecutive, 3);
+  assert.equal(vuoti[0].esitiDistinti, 1);
+  assert.deepEqual(vuoti[0].toolCallIds, ['e1', 'e2', 'e3'], 'ogni segnalazione porta CHI, non solo QUANTI');
+  assert.equal(guardia.interviene, false);
+});
+
+test('⭐⭐ guardiaDiStallo — gli stessi argomenti con le chiavi in ordine diverso sono gli STESSI argomenti', () => {
+  const ripetuta = (id, delta) => [
+    { type: 'ToolCallStart', toolCallId: id, toolCallName: 'cerca' },
+    { type: 'ToolCallArgs', toolCallId: id, delta },
+    { type: 'ToolCallResult', toolCallId: id, messageId: `m-${id}`, content: 'nessun risultato' },
+  ];
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    ...ripetuta('c1', '{"nome":"matematica","dove":"src"}'),
+    ...ripetuta('c2', '{"dove":"src","nome":"matematica"}'),
+    ...ripetuta('c3', '{"nome":"matematica","dove":"src"}'),
+  ]);
+  const vuoti = guardiaDiStallo(eventi).segnalazioni.filter((s) => s.tipo === 'giro-a-vuoto');
+  assert.equal(vuoti.length, 1);
+  assert.equal(vuoti[0].ripetizioni, 3);
+});
+
+test('⛔⛔ AL CONTRARIO — se l\'ESITO cambia non è un giro a vuoto: qualcosa è cambiato', () => {
+  const chiamata = (id, contenuto) => [
+    { type: 'ToolCallStart', toolCallId: id, toolCallName: 'prova' },
+    { type: 'ToolCallArgs', toolCallId: id, delta: '{}' },
+    { type: 'ToolCallResult', toolCallId: id, messageId: `m-${id}`, content: contenuto },
+  ];
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    ...chiamata('p1', 'exit 1\n3 falliti'),
+    ...chiamata('p2', 'exit 1\n2 falliti'),
+    ...chiamata('p3', 'exit 0\ntutto verde'),
+  ]);
+  assert.deepEqual(guardiaDiStallo(eventi).segnalazioni.filter((s) => s.tipo === 'giro-a-vuoto'), []);
+});
+
+test('⛔⛔ AL CONTRARIO — due sole ripetizioni sotto la soglia N non sono un giro a vuoto', () => {
+  const ripetuta = (id) => [
+    { type: 'ToolCallStart', toolCallId: id, toolCallName: 'elenca' },
+    { type: 'ToolCallArgs', toolCallId: id, delta: '{}' },
+    { type: 'ToolCallResult', toolCallId: id, messageId: `m-${id}`, content: 'a\nb' },
+  ];
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    ...ripetuta('e1'), ...ripetuta('e2'),
+  ]);
+  assert.deepEqual(guardiaDiStallo(eventi).segnalazioni, []);
+});
+
+test('⛔⛔⛔ guardiaDiStallo — senza istanti il SILENZIO non è valutabile e si DICHIARA, ma il giro a vuoto si vede lo stesso', () => {
+  const ripetuta = (id) => [
+    { type: 'ToolCallStart', toolCallId: id, toolCallName: 'elenca' },
+    { type: 'ToolCallArgs', toolCallId: id, delta: '{}' },
+    { type: 'ToolCallResult', toolCallId: id, messageId: `m-${id}`, content: 'a\nb' },
+  ];
+  const eventi = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    ...ripetuta('e1'), ...ripetuta('e2'), ...ripetuta('e3'),
+    ...chiamataShell('s1', 'npm run build'),
+  ]);
+  const guardia = guardiaDiStallo(eventi);
+  assert.equal(guardia.silenzioValutabile, false);
+  assert.equal(typeof guardia.motivoSilenzioNonValutabile, 'string');
+  assert.deepEqual(guardia.segnalazioni.filter((s) => s.tipo === 'silenzio'), [], 'senza un orologio non si può dire «tace da N secondi»: non lo si inventa');
+  assert.equal(guardia.segnalazioni.filter((s) => s.tipo === 'giro-a-vuoto').length, 1, 'il giro a vuoto si legge dai soli eventi, senza orologio');
+});
+
+test('⭐⭐⭐ elencaProcessi(sessionId) su una sessione VIVA: processi veri, durata osservata, guardia che non uccide', async () => {
+  const finta = sessioneControllabile();
+  let ora = 1_000;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'm', chiave: 'k', clock: () => new Date(ora),
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  ora = 2_000; finta.emetti({ type: 'ToolCallStart', toolCallId: 'call_1', toolCallName: 'shell' });
+  ora = 2_100; finta.emetti({ type: 'ToolCallArgs', toolCallId: 'call_1', delta: '{"comando":"npm run build"}' });
+
+  ora = 2_200;
+  const primo = registro.elencaProcessi(sessionId);
+  assert.equal(primo.ok, true);
+  assert.equal(primo.registrato, true);
+  assert.equal(primo.processi.length, 1);
+  assert.equal(primo.processi[0].comando, 'npm run build');
+  assert.equal(primo.processi[0].esito, 'in-corso');
+  assert.equal(primo.processi[0].durataMs, null);
+  assert.equal(primo.processi[0].inizio, new Date(2_000).toISOString());
+
+  ora = 200_000;
+  const fermo = registro.elencaProcessi(sessionId, { soglie: { silenzioMs: 60_000 } });
+  const silenzi = fermo.guardia.segnalazioni.filter((s) => s.tipo === 'silenzio');
+  assert.equal(silenzi.length, 1);
+  assert.equal(silenzi[0].comando, 'npm run build');
+  assert.equal(fermo.guardia.interviene, false);
+  assert.equal(registro.esporta(sessionId).conclusa, false, '⛔ la guardia OSSERVA: la sessione segnalata resta viva');
+
+  ora = 8_000;
+  finta.emetti({ type: 'ToolCallResult', toolCallId: 'call_1', messageId: 'm', content: 'exit 0 [sandbox: wsl2]\nfatto' });
+  const chiuso = registro.elencaProcessi(sessionId);
+  assert.equal(chiuso.processi[0].esito, 'concluso');
+  assert.equal(chiuso.processi[0].codiceUscita, 0);
+  assert.equal(chiuso.processi[0].durataMs, 6_000);
+
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await Promise.resolve();
+});
+
+test('⛔⛔ AL CONTRARIO — elencaProcessi su un id inesistente torna NOT_FOUND, mai una lista vuota', () => {
+  const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
+  const esito = registro.elencaProcessi('mai-esistita');
+  assert.equal(esito.code, 'NOT_FOUND');
+  assert.ok(!('processi' in esito));
 });
