@@ -388,6 +388,95 @@ button.talos-list-row:focus-visible {
 .talos-list-row__aside { display: flex; align-items: center; gap: var(--talos-space-sm); flex: none; }
 .talos-list { border: var(--talos-focus-width) solid var(--talos-border); border-radius: var(--talos-radius-card); overflow: hidden; }
 
+/* NavItem e NavGroup — la sidebar e' una lista vera: `<ul>`/`<li>` senza
+   pallini, cosi' la struttura resta per chi ascolta e sparisce per chi guarda. */
+.talos-nav-list { margin: 0; padding: 0; list-style: none; }
+.talos-nav-item-wrap { display: block; }
+.talos-nav-item {
+  width: 100%;
+  min-height: var(--talos-touch-target);
+  display: flex;
+  align-items: center;
+  gap: var(--talos-space-inline);
+  padding: 0 var(--talos-space-control);
+  border: var(--talos-focus-width) solid transparent;
+  border-radius: calc(var(--talos-radius-control) - var(--talos-space-xs));
+  background: transparent;
+  color: var(--talos-assistant-text);
+  font: 500 var(--talos-font-size-sm) / 1 var(--talos-font-ui);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--talos-motion-duration-control) var(--talos-motion-ease);
+}
+.talos-nav-item:hover { background: var(--talos-card-hover); color: var(--talos-text); }
+.talos-nav-item:focus-visible {
+  outline: var(--talos-focus-width) solid var(--talos-ring);
+  outline-offset: var(--talos-focus-offset);
+}
+.talos-nav-item[aria-current='page'] {
+  border-color: var(--talos-accent-border);
+  background: var(--talos-accent-soft);
+  color: var(--talos-text);
+}
+.talos-nav-item__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.talos-nav-item__count { font-family: var(--talos-font-mono); font-size: var(--talos-font-size-xs); color: var(--talos-muted); }
+
+/* SessionItem — la riga della cronologia. */
+.talos-session-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--talos-space-inline);
+  align-items: center;
+  padding: var(--talos-space-control);
+  border: var(--talos-focus-width) solid transparent;
+  border-radius: var(--talos-radius-control);
+  background: transparent;
+  color: var(--talos-assistant-text);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--talos-motion-duration-control) var(--talos-motion-ease);
+}
+.talos-session-item:hover { background: var(--talos-card-subtle); }
+.talos-session-item:focus-visible {
+  outline: var(--talos-focus-width) solid var(--talos-ring);
+  outline-offset: var(--talos-focus-offset);
+}
+.talos-session-item[aria-current='true'] {
+  border-color: var(--talos-accent-border);
+  background: var(--talos-accent-soft);
+  box-shadow: inset var(--talos-focus-width) 0 var(--talos-accent);
+  color: var(--talos-text);
+}
+.talos-session-item__title {
+  display: block;
+  font-weight: 600;
+  color: var(--talos-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.talos-session-item__sub {
+  display: flex;
+  align-items: center;
+  gap: var(--talos-space-sm);
+  margin-top: var(--talos-space-xs);
+  color: var(--talos-muted);
+  font-size: var(--talos-font-size-xs);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.talos-session-item__aside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--talos-space-xs);
+  flex: none;
+  font-family: var(--talos-font-mono);
+  font-size: var(--talos-font-size-xs);
+  color: var(--talos-muted);
+}
+
 @media (forced-colors: active) {
   .talos-button,
   .talos-switch,
@@ -395,5 +484,7 @@ button.talos-list-row:focus-visible {
   .talos-menu__item { forced-color-adjust: auto; }
   .talos-measure--estimate { border-bottom-color: CanvasText; }
   .talos-dot { background: CanvasText; }
-  .talos-list-row[aria-selected='true'] { background: Highlight; color: HighlightText; }
+  .talos-list-row[aria-selected='true'],
+  .talos-nav-item[aria-current='page'],
+  .talos-session-item[aria-current='true'] { background: Highlight; color: HighlightText; }
 }
