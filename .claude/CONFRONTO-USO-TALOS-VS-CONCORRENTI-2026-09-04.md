@@ -107,6 +107,41 @@ Il pannello scorciatoie è il censimento più onesto delle funzioni di un'app. D
 - **Confine del workspace separato dal permesso** (chiuso oggi, W0-08): limitare i percorsi per
   profilo è una richiesta **ancora aperta** in Hermes (#92424) e OpenCode (#5529).
 
+## §4-bis — ⛔⛔⛔ PUNTO CRITICO (owner, 04/09): al desktop mancano le sezioni che il mobile ha già
+
+> «nel desktop mancano tutte le sezioni della sidebar come sul mobile — memoria, libreria, ricerca,
+> attività eccetera. Le funzionalità dovrebbero già esserci ma dobbiamo essere sicuri: mettilo nel
+> taccuino, da inserire immancabilmente, dato che la sidebar verrà rifatta stile Hermes.»
+
+**Verificato, non dedotto.** Il mobile ha **dieci destinazioni di primo livello** (rotte in
+`mobile/src/router/index.ts`): `/chats`, `/context`, `/doctor`, `/harness`, `/memory`, `/notes`,
+`/research`, `/settings`, `/tasks`, `/toolforge`. Il desktop ha **le stesse cose lato server** —
+ognuna con la sua rotta in `src/http-app.mjs` (`/sessions/:id/` + `library`, `notes`, `tasks`,
+`memory`, `research`, `tool-forge`, `skills`, `mcp`, `plugins`, più `/diagnosi` per il Doctor) — ma
+**nessuna è una destinazione**: vivono tutte dentro UN foglio, il Capability hub, raggiungibile da
+un pulsante senza nome.
+
+⇒ Non è un lavoro di backend: **è già tutto lì**. È un lavoro di navigazione, e va fatto insieme
+alla sidebar nuova. Le voci che devono comparire, con il nome che una persona riconosce:
+
+| Sezione | Cosa c'è già lato desktop | Oggi si raggiunge da |
+|---|---|---|
+| Chat / Sessioni | elenco sessioni | sidebar (unica cosa che è già lì) |
+| Libreria | `GET /sessions/:id/library` | foglio capability, in fondo |
+| Memoria | `GET /sessions/:id/memory` | foglio capability |
+| Note | `GET /sessions/:id/notes` | foglio capability |
+| Attività | `GET /sessions/:id/tasks` | foglio capability |
+| Ricerca approfondita | `GET /sessions/:id/research` | foglio capability |
+| Officina attrezzi | `GET /sessions/:id/tool-forge` | foglio capability |
+| Skill | `GET /sessions/:id/skills` | foglio capability |
+| Connettori (MCP) e Plugin | `GET /sessions/:id/mcp`, `/plugins` | foglio capability |
+| Doctor | `GET /api/v1/diagnosi` | foglio «Control plane» |
+| Contesto | context rail | colonna di destra |
+
+⛔ Da fare insieme alla riga O-08 (i due pulsanti) e alla sidebar nuova: **una sezione per ognuna,
+con il nome scritto**, come fa Hermes con *Capabilities · Messaging · Artifacts*. Sono già
+funzionanti: nasconderle dietro un pulsante senza nome è l'unico motivo per cui sembrano assenti.
+
 ## §5 — Taccuino: difetti nostri visti mentre confrontavo
 
 1. La sidebar mostra due elementi che non fanno niente finché non servono (suggerimento azioni,
