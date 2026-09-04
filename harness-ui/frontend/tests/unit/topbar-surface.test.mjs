@@ -170,3 +170,28 @@ test('TOP-14 AL CONTRARIO senza store, documento o viste non si monta', () => {
   assert.throws(() => createTopbarSurface({ store: s, labels: ETICHETTE }), /dipendenze topbar mancanti/);
   assert.throws(() => createTopbarSurface({ documentObj: fakeDocument(), store: s, labels: { views: [] } }), /richiede le sue etichette/);
 });
+
+test('TOP-15 ⭐⭐ le viste non disegnano pannelli qui: i loro pannelli sono l\'area principale', () => {
+  const s = store();
+  const t = monta(s);
+  // ⛔ Un pannello vuoto disegnato nella barra prometterebbe un contenuto che
+  // non c'è — e nel giro visivo dava alla barra un'altezza che spingeva le
+  // schede sopra il titolo.
+  assert.equal(t.element.querySelector('[role="tabpanel"]'), null);
+});
+
+test('TOP-16 ⭐⭐ una vista senza il suo id NON riceve un aria-controls appeso al vuoto', () => {
+  const s = store();
+  const t = monta(s);
+  // Nessuna vista dichiara `controls`: meglio l'attributo assente che un
+  // riferimento a un elemento che non esiste.
+  assert.equal(t.element.querySelector('[data-tab-id="chat"]').getAttribute('aria-controls'), null);
+
+  const conId = createTopbarSurface({
+    documentObj: fakeDocument(),
+    store: s,
+    labels: { ...ETICHETTE, views: [{ id: 'chat', label: 'Chat', controls: 'area-principale' }, { id: 'diff', label: 'Review' }] },
+  });
+  assert.equal(conId.element.querySelector('[data-tab-id="chat"]').getAttribute('aria-controls'), 'area-principale');
+  assert.equal(conId.element.querySelector('[data-tab-id="diff"]').getAttribute('aria-controls'), null);
+});
