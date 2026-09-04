@@ -6898,6 +6898,14 @@
    * campo giusto è già lì.
    */
   function descriviAzioneApprovazione(azione) {
+    /*
+     * ⭐⭐⭐ 04/9 — W1-13: il cancello sui file di controllo (session-registry.mjs,
+     * costruisciCancelloFileDiControllo) manda `fileDiControllo:true` sulla
+     * STESSA forma {tipo:'scrivi', percorso} — la card deve dirlo: non è
+     * "scrivi un file", è "riscrivi una regola dell'agente" (hook, MCP,
+     * istruzioni, memoria), anche quando la sessione è in Full access.
+     */
+    if (azione?.tipo === 'scrivi' && azione.fileDiControllo) return `Vuole scrivere un file di controllo di TALOS (regole dell'agente, non un file del progetto): ${azione.percorso}`;
     if (azione?.tipo === 'scrivi') return `Vuole scrivere il file: ${azione.percorso}`;
     if (azione?.tipo === 'shell') return `Vuole eseguire il comando: ${azione.comando}`;
     if (azione?.tipo === 'document_create') return `Vuole creare un documento (formato ${azione.formato || '?'})`;
@@ -9121,10 +9129,30 @@
     const branch = $('#envBranch');
     const worktree = $('#envWorktree');
     const root = $('#envRoot');
+    const repoAnnidati = $('#envRepoAnnidati');
     if (workspace) workspace.textContent = contesto.progetto || '—';
     if (branch) branch.textContent = contesto.branch || '—';
     if (worktree) worktree.textContent = '—'; // mai un repository git nel corpus di oggi, vedi doc in workspace-context.mjs
     if (root) root.textContent = contesto.cartella;
+    /*
+     * ⭐⭐⭐ 04/9 — W1-13: `contesto.repoAnnidati` arriva già da
+     * workspace-context.mjs (repoAnnidati()), inoltrato senza modifiche da
+     * RunStarted.contesto — niente qui lo calcola di nuovo. Onesto come
+     * `worktree` sopra: "—" quando l'elenco è vuoto, MAI un elenco
+     * inventato. La dicitura dichiara esplicitamente la fiducia separata
+     * (Claude Code 2.1.232: un repo annidato non eredita CLAUDE.md/hook
+     * del workspace) — non solo "ce ne sono N".
+     */
+    if (repoAnnidati) {
+      const elenco = Array.isArray(contesto.repoAnnidati) ? contesto.repoAnnidati : [];
+      if (elenco.length === 0) {
+        repoAnnidati.textContent = '—';
+        repoAnnidati.title = '';
+      } else {
+        repoAnnidati.textContent = `${elenco.length} (fiducia separata)`;
+        repoAnnidati.title = `Hanno una fiducia separata dal workspace: ${elenco.join(', ')}`;
+      }
+    }
     // ⭐⭐⭐ 28/8 — tenuta anche in stato, non solo nel DOM: serve a "Imposta come radice" (menu dell'albero) per calcolare il percorso assoluto di una sottocartella.
     state.realSession.cartellaAssoluta = contesto.cartella || null;
     const sezione = $('[data-inspector-section="context"]');
