@@ -120,6 +120,20 @@ test('W0-04 — AL CONTRARIO: un flag sconosciuto è CONFIG_INVALID e il messagg
   );
 });
 
+/* ⭐⭐⭐ 04/9 — W1-10, token di loopback per la shell Electron. */
+test('W1-10 — TALOS_HARNESS_UI_TOKEN: assente = undefined (browser-first di sempre); valido se ≥ 32 caratteri senza spazi', () => {
+  assert.equal(loadConfig({}, import.meta.url).token, undefined);
+  assert.equal(loadConfig({ TALOS_HARNESS_UI_TOKEN: '' }, import.meta.url).token, undefined);
+  const t = 'a'.repeat(32);
+  assert.equal(loadConfig({ TALOS_HARNESS_UI_TOKEN: ` ${t} ` }, import.meta.url).token, t);
+});
+
+test('W1-10 — AL CONTRARIO: un token corto o con spazi è CONFIG_INVALID', () => {
+  for (const cattivo of ['corto', 'a'.repeat(31), `${'a'.repeat(20)} ${'b'.repeat(20)}`]) {
+    assert.throws(() => loadConfig({ TALOS_HARNESS_UI_TOKEN: cattivo }, import.meta.url), ConfigurationError);
+  }
+});
+
 test('config accepts an explicit llama-server binary path and discovers the pinned local binary when present', () => {
   const explicit = loadConfig({ TALOS_LLAMA_SERVER_PATH: 'C:\\talos\\llama-server.exe' }, import.meta.url);
   assert.equal(explicit.llamaServerPath, 'C:\\talos\\llama-server.exe');

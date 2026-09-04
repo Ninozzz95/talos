@@ -1,0 +1,14 @@
+{
+  "name": "talos-electron-shell-lab",
+  "private": true,
+  "version": "0.0.1",
+  "description": "LAB W1-10 — thin Electron shell around the real Harness UI server (a separate Node child, loopback token). Off by default; see README.md.",
+  "type": "module",
+  "main": "main.mjs",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "44.2.0"
+  }
+}
