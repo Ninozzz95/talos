@@ -232,9 +232,168 @@
   to { opacity: 1; transform: translateX(0); }
 }
 
+/* ==========================================================================
+   Fase 1 del redesign (04/09/2026) — le sei primitive nuove.
+   Ogni valore viene dai token del contratto: nessun numero inventato.
+   ========================================================================== */
+
+/* Measure — la provenienza del numero (decisione H25).
+   La tilde e la sottolineatura sono FORMA: chi non distingue i colori vede
+   comunque che quel numero e' una stima, e chi ascolta lo sente dal testo
+   `sr-only` che il componente scrive. */
+.talos-measure {
+  font-family: var(--talos-font-mono);
+  font-size: var(--talos-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--talos-text);
+}
+.talos-measure--estimate {
+  color: var(--talos-muted);
+  border-bottom: 1px dotted var(--talos-border-strong);
+}
+.talos-measure--estimate::before { content: '~'; }
+
+/* StatusDot */
+.talos-dot {
+  width: var(--talos-space-sm);
+  height: var(--talos-space-sm);
+  flex: none;
+  display: inline-block;
+  border-radius: var(--talos-radius-pill);
+  background: var(--talos-border-strong);
+}
+.talos-dot--sm { width: var(--talos-space-xs); height: var(--talos-space-xs); }
+.talos-dot--success { background: var(--talos-success); }
+.talos-dot--warning { background: var(--talos-warning); }
+.talos-dot--danger { background: var(--talos-danger); }
+.talos-dot--live {
+  background: var(--talos-accent-hover);
+  box-shadow: 0 0 0 var(--talos-space-xs) var(--talos-accent-soft);
+}
+
+/* Kbd — testo d'aiuto accanto al comando; la semantica sta su
+   `aria-keyshortcuts` del controllo, non qui. */
+.talos-kbd {
+  font-family: var(--talos-font-mono);
+  font-size: var(--talos-font-size-xs);
+  color: var(--talos-muted);
+  border: var(--talos-focus-width) solid var(--talos-border);
+  border-radius: calc(var(--talos-radius-control) - var(--talos-space-sm));
+  padding: 0 var(--talos-space-xs);
+  background: var(--talos-panel-soft);
+  white-space: nowrap;
+}
+
+/* Field e Select — elementi nativi, con la loro label vera. */
+.talos-field { position: relative; display: block; }
+.talos-field__label { display: block; margin-bottom: var(--talos-space-xs); color: var(--talos-muted); font-size: var(--talos-font-size-xs); }
+.talos-field__input {
+  width: 100%;
+  min-height: var(--talos-primary-height);
+  padding: 0 var(--talos-space-control) 0 calc(var(--talos-space-control) * 3);
+  border: var(--talos-focus-width) solid var(--talos-border);
+  border-radius: var(--talos-radius-control);
+  background: var(--talos-panel-soft);
+  color: var(--talos-text);
+  font: 500 var(--talos-font-size-sm) / 1 var(--talos-font-ui);
+}
+.talos-field__input::placeholder { color: var(--talos-muted); }
+.talos-field__input:focus-visible {
+  outline: var(--talos-focus-width) solid var(--talos-ring);
+  outline-offset: var(--talos-focus-offset);
+}
+.talos-field__icon {
+  position: absolute;
+  left: var(--talos-space-control);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--talos-muted);
+  pointer-events: none;
+}
+.talos-field--sm .talos-field__input { min-height: var(--talos-control-height); }
+.talos-select-field { display: inline-block; }
+.talos-select {
+  min-height: var(--talos-control-height);
+  padding: 0 var(--talos-space-control);
+  border: var(--talos-focus-width) solid var(--talos-border);
+  border-radius: calc(var(--talos-radius-control) - var(--talos-space-xs));
+  background: var(--talos-panel-soft);
+  color: var(--talos-text);
+  font: 500 var(--talos-font-size-sm) / 1 var(--talos-font-ui);
+}
+.talos-select:focus-visible {
+  outline: var(--talos-focus-width) solid var(--talos-ring);
+  outline-offset: var(--talos-focus-offset);
+}
+.talos-select--sm { min-height: calc(var(--talos-control-height) - var(--talos-space-sm)); font-size: var(--talos-font-size-xs); }
+
+/* ListRow — la riga di lavoro. Il titolo e la descrizione stanno su DUE
+   righe: oggi sono incollati, ed e' il difetto E6 del censimento. */
+.talos-list-row {
+  width: 100%;
+  min-height: var(--talos-touch-target);
+  display: flex;
+  align-items: center;
+  gap: var(--talos-space-control);
+  padding: var(--talos-space-sm) var(--talos-space-card);
+  border: 0;
+  border-top: var(--talos-focus-width) solid var(--talos-border-subtle);
+  background: transparent;
+  color: var(--talos-assistant-text);
+  text-align: left;
+  font: 500 var(--talos-font-size-sm) / 1.4 var(--talos-font-ui);
+}
+.talos-list-row:first-child { border-top: 0; }
+button.talos-list-row { cursor: pointer; }
+button.talos-list-row:hover { background: var(--talos-card-subtle); }
+button.talos-list-row:focus-visible {
+  outline: var(--talos-focus-width) solid var(--talos-ring);
+  outline-offset: calc(var(--talos-focus-offset) * -1);
+}
+.talos-list-row[aria-selected='true'] {
+  background: var(--talos-accent-soft);
+  box-shadow: inset var(--talos-focus-width) 0 var(--talos-accent);
+}
+.talos-list-row--muted { opacity: 0.55; }
+.talos-list-row--done { opacity: 0.6; }
+.talos-list-row__icon {
+  width: var(--talos-touch-target);
+  height: var(--talos-touch-target);
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: var(--talos-focus-width) solid var(--talos-border-subtle);
+  border-radius: calc(var(--talos-radius-control) - var(--talos-space-xs));
+  background: var(--talos-panel-soft);
+  color: var(--talos-muted);
+}
+.talos-list-row__text { flex: 1; min-width: 0; }
+.talos-list-row__title {
+  display: block;
+  font-weight: 600;
+  color: var(--talos-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.talos-list-row__sub {
+  display: block;
+  margin-top: 1px;
+  color: var(--talos-muted);
+  font-size: var(--talos-font-size-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.talos-list-row__aside { display: flex; align-items: center; gap: var(--talos-space-sm); flex: none; }
+.talos-list { border: var(--talos-focus-width) solid var(--talos-border); border-radius: var(--talos-radius-card); overflow: hidden; }
+
 @media (forced-colors: active) {
   .talos-button,
   .talos-switch,
   .talos-tabs__tab,
   .talos-menu__item { forced-color-adjust: auto; }
+  .talos-measure--estimate { border-bottom-color: CanvasText; }
+  .talos-dot { background: CanvasText; }
+  .talos-list-row[aria-selected='true'] { background: Highlight; color: HighlightText; }
 }
