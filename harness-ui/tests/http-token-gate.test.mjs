@@ -57,7 +57,7 @@ function registroFinto() { const voce = { ascoltatori: new Set(), backlog: [] };
 class WssFinta { handleUpgrade(_req, _socket, _head, cb) { cb({ OPEN: 1, readyState: 1, send() {}, on() {} }); } }
 
 test('TOKEN-05 — upgrade WebSocket del terminale: con token e senza cookie è 401 e il socket muore; col cookie passa; senza token configurato passa come oggi', () => {
-  const conToken = creaGestoreTerminaleWs({ registro: registroFinto(), originiConsentite: null, risolviCartella: () => 'C:/x', token: TOKEN }, { WebSocketServer: WssFinta });
+  const conToken = creaGestoreTerminaleWs({ registro: registroFinto(), originiConsentite: null, risolviScheda: (id) => ({ terminalId: id, sessionId: id, cartella: 'C:/x' }), token: TOKEN }, { WebSocketServer: WssFinta });
   const s1 = socketFinto();
   conToken.gestisciUpgrade({ url: '/api/v1/terminal/ws?id=s1', headers: {} }, s1, Buffer.alloc(0));
   assert.ok(s1.scritture.some((d) => /401 Unauthorized/.test(String(d))));
@@ -66,7 +66,7 @@ test('TOKEN-05 — upgrade WebSocket del terminale: con token e senza cookie è 
   conToken.gestisciUpgrade({ url: '/api/v1/terminal/ws?id=s1', headers: { cookie: `talos_token=${TOKEN}` } }, s2, Buffer.alloc(0));
   assert.equal(s2.distrutto, false);
   assert.equal(s2.scritture.length, 0);
-  const senzaToken = creaGestoreTerminaleWs({ registro: registroFinto(), originiConsentite: null, risolviCartella: () => 'C:/x' }, { WebSocketServer: WssFinta });
+  const senzaToken = creaGestoreTerminaleWs({ registro: registroFinto(), originiConsentite: null, risolviScheda: (id) => ({ terminalId: id, sessionId: id, cartella: 'C:/x' }) }, { WebSocketServer: WssFinta });
   const s3 = socketFinto();
   senzaToken.gestisciUpgrade({ url: '/api/v1/terminal/ws?id=s1', headers: {} }, s3, Buffer.alloc(0));
   assert.equal(s3.distrutto, false);

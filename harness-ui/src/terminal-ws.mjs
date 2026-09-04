@@ -29,7 +29,23 @@ function leggiCookieGrezzo(grezzo, nome) {
   return null;
 }
 
-export function creaGestoreTerminaleWs({ registro, originiConsentite, risolviCartella, token = null }, deps = {}) {
+/**
+ * ⭐⭐⭐ W1-01 (05/9) — `?id=` non è più il `sessionId`: è il **`terminalId`**,
+ * e una sessione può averne più d'uno.
+ *
+ * ⛔⛔⛔ Il parametro `risolviCartella` (che tornava SEMPRE una cartella, al
+ * peggio la prima configurata) è stato sostituito da `risolviScheda`, che ha
+ * il diritto di dire **no**: `null` ⇒ upgrade rifiutato, e nessuna PTY nasce.
+ * Prima di oggi un id sconosciuto non veniva respinto — cadeva sul primo
+ * progetto — quindi con un `terminalId` libero qualunque stringa avrebbe
+ * aperto una shell. È la forma esatta di **CVE-2026-59224** (Open WebUI,
+ * 2026): un id scelto dal client che decide a quale PTY ti attacchi. E il
+ * terminale è l'endpoint dove un buco non è un buco: **CVE-2026-39987**
+ * (Marimo, 2026) era `/terminal/ws`, l'unica WebSocket senza controllo
+ * d'autenticazione, cioè RCE pre-auth. Entrambe lette il 05/09/2026, fonti nel
+ * ledger `.claude/LEDGER-W1-01-SCHEDE-TERMINALE-2026-09-05.md`.
+ */
+export function creaGestoreTerminaleWs({ registro, originiConsentite, risolviScheda, token = null }, deps = {}) {
   const WSS = deps.WebSocketServer ?? WebSocketServer;
   const wss = new WSS({ noServer: true });
 
@@ -62,14 +78,29 @@ export function creaGestoreTerminaleWs({ registro, originiConsentite, risolviCar
       socket.destroy();
       return;
     }
+    /*
+     * ⛔⛔⛔ 05/9, W1-01 — IL CANCELLO. Si chiede al registro delle schede
+     * PRIMA di completare l'upgrade: un `terminalId` che il server non ha
+     * creato (e che non è un `sessionId` vivo) riceve 403 e il socket muore
+     * QUI. ⛔ `registro.apri` non viene nemmeno sfiorato: la prova che conta
+     * non è lo status code, è che la PTY non nasca — ed è così che i test la
+     * misurano (contano gli spawn, non le risposte).
+     */
+    const scheda = risolviScheda(id);
+    if (!scheda) {
+      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+      socket.destroy();
+      return;
+    }
     wss.handleUpgrade(req, socket, head, (ws) => {
-      collega(ws, id);
+      collega(ws, scheda);
     });
   }
 
-  function collega(ws, id) {
-    const cartella = risolviCartella(id);
-    const voce = registro.apri({ id, cartella });
+  function collega(ws, scheda) {
+    /* ⛔ L'id e la cartella vengono dalla SCHEDA del registro, mai dalla query: il client nomina, il server decide. */
+    const id = scheda.terminalId;
+    const voce = registro.apri({ id, cartella: scheda.cartella });
 
     // ⭐ Riconnessione (F5, o WS caduta): replay del backlog PRIMA di tornare live — stesso principio del Last-Event-ID già in uso per SSE, qui su una PTY invece che su un run agente.
     for (const pezzo of voce.backlog) {

@@ -192,3 +192,92 @@ test('⛔⛔⛔ AL CONTRARIO — decodificaFrame su input vuoto o tipo ignoto to
   assert.equal(decodificaFrame(Buffer.alloc(0)), null);
   assert.equal(decodificaFrame(Buffer.from([99, 1, 2, 3])), null);
 });
+
+/*
+ * ⭐⭐⭐ W1-01 (05/9) — IL CRITERIO DELLA RIGA. Fino al 04/9 l'id della PTY *era*
+ * il sessionId, quindi «due schede nella stessa sessione» non era nemmeno
+ * esprimibile. Questi test provano la cosa che la riga chiede: due schede della
+ * STESSA sessione sono due PTY separate, con I/O e backlog separati.
+ */
+
+test('⭐⭐⭐ DUE SCHEDE della stessa sessione NON condividono I/O: scrivo in una, l\'altra non vede niente', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  const a = registro.apri({ id: 'sess-1', cartella: 'C:/lavoro' });        // prima scheda (id === sessionId)
+  const b = registro.apri({ id: 'term-2', cartella: 'C:/lavoro' });        // seconda scheda della stessa sessione
+  assert.equal(ptyCreate.length, 2, 'due schede = due PTY vere, mai una condivisa');
+
+  const vistiDaA = [];
+  const vistiDaB = [];
+  a.ascoltatori.add((evento) => vistiDaA.push(evento));
+  b.ascoltatori.add((evento) => vistiDaB.push(evento));
+
+  registro.scrivi('term-2', 'echo solo-per-b\r');
+  assert.deepEqual(ptyCreate[0].p.scritture, [], 'la tastiera della scheda B non deve MAI finire nella shell della scheda A');
+  assert.deepEqual(ptyCreate[1].p.scritture, ['echo solo-per-b\r']);
+
+  ptyCreate[1].p._emettiDati('output di b');
+  assert.deepEqual(vistiDaA, [], 'l\'output di B non arriva agli ascoltatori di A');
+  assert.deepEqual(vistiDaB, [{ tipo: 'dati', dati: 'output di b' }]);
+  assert.deepEqual(a.backlog, [], 'e nemmeno nel backlog di A: un F5 su A non deve rigiocare l\'output di B');
+  assert.deepEqual(b.backlog, ['output di b']);
+});
+
+test('⭐⭐⭐ il tetto del backlog è PER SCHEDA, non globale: riempire una non svuota l\'altra', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  const a = registro.apri({ id: 'scheda-a', cartella: 'C:/x' });
+  const b = registro.apri({ id: 'scheda-b', cartella: 'C:/x' });
+  b._notaDiProva = true;
+  ptyCreate[1].p._emettiDati('riga preziosa di B');
+
+  const pezzo = 'x'.repeat(1000);
+  for (let i = 0; i < Math.ceil(BACKLOG_MASSIMO_BYTE / 1000) + 20; i += 1) ptyCreate[0].p._emettiDati(pezzo);
+
+  assert.ok(a.byteBacklog <= BACKLOG_MASSIMO_BYTE, `A resta sotto il suo tetto (${a.byteBacklog})`);
+  assert.deepEqual(b.backlog, ['riga preziosa di B'], 'il traffico di A non deve sfrattare il backlog di B — il tetto è di 200.000 byte CIASCUNA');
+  assert.equal(b.byteBacklog, Buffer.byteLength('riga preziosa di B', 'utf8'));
+});
+
+test('⛔⛔⛔ AL CONTRARIO — chiudere UNA scheda non tocca le altre della stessa sessione', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  registro.apri({ id: 'sess-1', cartella: 'C:/x' });
+  registro.apri({ id: 'term-2', cartella: 'C:/x' });
+  registro.chiudiForzato('term-2');
+  assert.equal(ptyCreate[1].p.uccisa, true);
+  assert.equal(ptyCreate[0].p.uccisa, false, 'la scheda che nessuno ha chiuso resta viva');
+  assert.equal(registro._terminali.has('sess-1'), true);
+  assert.equal(registro._terminali.has('term-2'), false);
+});
+
+test('⭐⭐⭐ il reaper delle PTY orfane continua a valere PER OGNI scheda, non solo per la prima', () => {
+  const { registro, ptyCreate, avanza } = registroPerTest();
+  registro.apri({ id: 'sess-1', cartella: 'C:/x' });
+  registro.apri({ id: 'term-2', cartella: 'C:/x' });
+  registro.apri({ id: 'term-3', cartella: 'C:/x' });
+  registro.segnaDisconnesso('term-2');
+  registro.segnaDisconnesso('term-3');
+  avanza(MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA * 60_000 + 1);
+  registro.reap();
+  assert.equal(ptyCreate[0].p.uccisa, false, 'sess-1 è ancora attaccata: non si tocca');
+  assert.equal(ptyCreate[1].p.uccisa, true);
+  assert.equal(ptyCreate[2].p.uccisa, true, 'la terza scheda non deve sfuggire al reaper solo perché è la terza');
+  assert.deepEqual([...registro._terminali.keys()], ['sess-1']);
+});
+
+test('⭐⭐⭐ SHUTDOWN — chiudere tutte le schede fotografando le chiavi (come fa server.mjs) non ne lascia nemmeno una viva', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  for (const id of ['sess-1', 'term-2', 'term-3', 'term-4']) registro.apri({ id, cartella: 'C:/x' });
+  /* ⛔ Esattamente la riga di server.mjs: le chiavi si fotografano PRIMA, perché chiudiForzato cancella dalla stessa Map. */
+  for (const id of [...registro._terminali.keys()]) registro.chiudiForzato(id);
+  assert.equal(registro._terminali.size, 0, 'zero PTY superstiti allo shutdown');
+  assert.deepEqual(ptyCreate.map((c) => c.p.uccisa), [true, true, true, true]);
+});
+
+test('⭐⭐ stato(): tre fatti distinti — viva, uscita, inesistente', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  registro.apri({ id: 'viva', cartella: 'C:/x' });
+  registro.apri({ id: 'morta', cartella: 'C:/x' });
+  ptyCreate[1].p._emettiUscita(0, undefined);
+  assert.equal(registro.stato('viva').viva, true);
+  assert.equal(registro.stato('morta').viva, false);
+  assert.equal(registro.stato('mai-esistita'), null, '⛔ null non è {viva:false}: "non c\'è" e "è uscita" sono due fatti diversi');
+});
