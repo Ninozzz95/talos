@@ -8925,6 +8925,26 @@
     return treeRenderInFlight;
   }
 
+  /**
+   * ⭐⭐⭐ O-03 — owner 04/9: la radice dell'albero mostrava `libero:default`
+   * invece del nome della cartella vera. `state.realSession.taskId` NON è
+   * mai il nome di una cartella: per un task del catalogo è l'id del
+   * corpus, per una sessione libera è un id SINTETICO — lato client
+   * `libero:${nomeCartella}` (startCustomSession) o lato server
+   * `libero:workspace-launch` / `libero:full-access` / `libero:${cartellaId}`
+   * (session-registry.mjs, avviaLibero) — ed è quasi sempre valorizzato,
+   * quindi un `||` che lo controlla per primo non arriva mai al dato onesto.
+   * Ordine corretto: la cartella VERA (RunStarted→contesto.cartella,
+   * cartellaAssoluta — via aggiornaPannelloAmbiente, l'unica fonte di
+   * verità), poi il nome scelto nel foglio "Nuova sessione" prima che
+   * RunStarted arrivi (previewWorkspaceName, avviaSessionePendente), mai
+   * il taskId. Se nessuno dei due è ancora noto: un placeholder generico
+   * onesto, mai un identificativo interno.
+   */
+  function nomeRadiceAlberoReale() {
+    return nomeDaPercorso(state.realSession.cartellaAssoluta) || state.realSession.previewWorkspaceName || 'workspace';
+  }
+
   /** Piano §1.3, riga "Contesto workspace" — l'albero file REALE, radice + tutto ciò che era già aperto (treeOpen), riscaricato dal vivo. */
   async function renderizzaAlberoRealeUnaVolta() {
     if (!state.realSession.id && !state.realSession.previewProjectId) return;
@@ -8938,11 +8958,12 @@
 
     const radice = document.createElement('div');
     radice.className = 'tree-root';
-    radice.append(iconaSvgAlbero('i-files'), textElement('strong', '', state.realSession.taskId || state.realSession.previewWorkspaceName || 'workspace'));
+    radice.append(iconaSvgAlbero('i-files'), textElement('strong', '', nomeRadiceAlberoReale()));
     // ⭐⭐⭐ 28/8, owner: "comandi crud in generale" — creare un file/una cartella senza dover prima cliccare col destro su una cartella esistente: la radice stessa accetta lo stesso menu, ridotto alle due sole voci di creazione (percorsoBase '').
     if (!alberoInAnteprima()) radice.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      apriMenuAzioniFile('', state.realSession.taskId || 'workspace', { x: e.clientX, y: e.clientY }, true, true);
+      // ⛔ O-03, verificato: soloCreazione=true qui sotto ⇒ apriMenuAzioniFile mostra SOLO "Nuovo file"/"Nuova cartella" (avviaCreaVoce), che non legge mai `nome` — questo parametro è inerte in questo punto di chiamata, ma resta onesto invece di un `libero:*` morto lì dentro.
+      apriMenuAzioniFile('', nomeRadiceAlberoReale(), { x: e.clientX, y: e.clientY }, true, true);
     });
     // ⭐ stesso drop-target delle cartelle, ma per "portare fuori" un elemento alla radice.
     if (!alberoInAnteprima()) radice.addEventListener('dragover', (e) => {
