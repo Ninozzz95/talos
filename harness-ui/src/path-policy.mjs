@@ -14,6 +14,70 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
  * solo ospitate nello stesso file.
  */
 
+import { existsSync as esisteSync, realpathSync as realpathSyncNativa } from 'node:fs';
+import { basename as nomeBase, dirname as cartellaDi, relative as relativoA, resolve as risolvi, sep as separatore } from 'node:path';
+
+/**
+ * ⭐⭐⭐ 04/9 — W1-13, I FILE DI CONTROLLO DI TALOS (review 03/09: Hermes
+ * v0.21.0 PR #30397, Claude Code 2.1.232). Sono i file che decidono COSA
+ * l'agente può fare: hook, MCP, plugin, registro di fiducia, runtime del
+ * provider, istruzioni (`CLAUDE.md`/`AGENTS.md`/`.claude/`), skill, memoria.
+ * Una scrittura del modello su uno di questi non è una modifica al
+ * progetto: è una modifica alle REGOLE — e va approvata a mano ANCHE in
+ * Full access, anche con un permesso per-attrezzo «sempre».
+ *
+ * `file`: per nome, a qualunque profondità (un `CLAUDE.md` annidato è
+ * letto comunque). `cartelleOvunque`: per segmento, a qualunque profondità
+ * (anche FUORI dal workspace: `~/.claude/` è controllo per chiunque).
+ * `cartelleAllaRadice`: solo come primo segmento sotto il workspace — un
+ * progetto che si chiama `skills` non deve diventare tutto intoccabile.
+ */
+export const FILE_DI_CONTROLLO = Object.freeze({
+  file: Object.freeze(['.harness-ui-hooks.json', '.harness-ui-mcp.json', '.provider-runtime.json', 'CLAUDE.md', 'AGENTS.md']),
+  cartelleOvunque: Object.freeze(['.harness-ui-plugins', '.hooks-trust', '.claude', '.memory-store']),
+  cartelleAllaRadice: Object.freeze(['skills']),
+});
+
+/** Il percorso REALE anche di un file che non esiste ancora: si risale al primo antenato esistente, lo si risolve (symlink/junction), si riattacca il resto. */
+function percorsoRealeAncheSeManca(assoluto, realpathFn) {
+  const resto = [];
+  let corrente = assoluto;
+  while (!esisteSync(corrente)) {
+    const padre = cartellaDi(corrente);
+    if (padre === corrente) return assoluto; // radice del volume inesistente: niente da risolvere
+    resto.unshift(nomeBase(corrente));
+    corrente = padre;
+  }
+  return risolvi(realpathFn(corrente), ...resto);
+}
+
+/**
+ * True se `percorso` (relativo al workspace o assoluto) tocca un file di
+ * controllo. ⛔ Confronto sul percorso REALE: `../`, symlink e junction
+ * che puntano a uno di quei file non lo aggirano. Mai un'eccezione: un
+ * percorso che non si riesce a risolvere torna `true` (fallisce chiuso —
+ * meglio una card di troppo che una regola riscritta in silenzio).
+ */
+export function ePercorsoDiControllo(cartella, percorso, { realpathFn = realpathSyncNativa } = {}) {
+  if (typeof cartella !== 'string' || cartella.length === 0 || typeof percorso !== 'string' || percorso.length === 0) return false;
+  let radice;
+  let reale;
+  try {
+    radice = percorsoRealeAncheSeManca(risolvi(cartella), realpathFn);
+    reale = percorsoRealeAncheSeManca(risolvi(cartella, percorso), realpathFn);
+  } catch {
+    return true;
+  }
+  if (FILE_DI_CONTROLLO.file.includes(nomeBase(reale))) return true;
+  const relativo = relativoA(radice, reale);
+  const dentro = relativo !== '' && !relativo.startsWith('..') && !relativo.includes(`..${separatore}`);
+  const segmenti = (dentro ? relativo : reale).split(/[\\/]+/).filter(Boolean);
+  const cartelle = segmenti.slice(0, -1);
+  if (cartelle.some((s) => FILE_DI_CONTROLLO.cartelleOvunque.includes(s))) return true;
+  if (dentro && cartelle.length > 0 && FILE_DI_CONTROLLO.cartelleAllaRadice.includes(cartelle[0])) return true;
+  return false;
+}
+
 export class PathPolicyError extends Error {
   constructor(message, code = 'PATH_NOT_ALLOWED') {
     super(message);
