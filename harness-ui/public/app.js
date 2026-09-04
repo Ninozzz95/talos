@@ -5542,8 +5542,8 @@
             ['generate_image', 'Genera un’immagine — passa dal cancello per-attrezzo come gli altri quattro'],
           ].map(([tool, desc]) => `
             <div class="sheet-toggle-row">
-              <span><strong>${tool}</strong><small>${desc}</small></span>
-              <select data-tool-permission-select="${tool}" aria-label="Permesso per-attrezzo: ${tool}">
+              <span><strong title="${tool}">${nomeUmanoAttrezzo(tool)}</strong><small>${desc}</small></span>
+              <select data-tool-permission-select="${tool}" aria-label="Permesso per l'attrezzo ${nomeUmanoAttrezzo(tool)}">
                 <option value="" ${!state.permessiPerAttrezzo[tool] ? 'selected' : ''}>Come la sessione</option>
                 <option value="sempre" ${state.permessiPerAttrezzo[tool] === 'sempre' ? 'selected' : ''}>Sempre consentito</option>
                 <option value="chiedi" ${state.permessiPerAttrezzo[tool] === 'chiedi' ? 'selected' : ''}>Chiedi conferma</option>
@@ -7974,7 +7974,8 @@
           const info = toolBuffer.get(evento.toolCallId) || { nome: '(sconosciuto)', argomenti: '' };
           let argFormattati = info.argomenti;
           try { argFormattati = JSON.stringify(JSON.parse(info.argomenti), null, 2); } catch { /* args non-JSON o incompleti: mostrati grezzi, mai persi */ }
-          righe.push(`**🔧 ${info.nome}**`, '', 'Argomenti:', blocco(argFormattati || '(nessuno)', 'json'), '', 'Esito (completo, mai troncato):', blocco(String(evento.content ?? '')), '');
+          // ⛔ 04/9, owner: niente nomi tecnici come etichetta. Nome umano primario, identificativo come dettaglio — la forma raccomandata dall'Agent Client Protocol («title» in evidenza, «name» secondario).
+          righe.push(`**🔧 ${nomeUmanoAttrezzo(info.nome)}** · \`${info.nome}\``, '', 'Argomenti:', blocco(argFormattati || '(nessuno)', 'json'), '', 'Esito (completo, mai troncato):', blocco(String(evento.content ?? '')), '');
           toolBuffer.delete(evento.toolCallId);
           break;
         }
