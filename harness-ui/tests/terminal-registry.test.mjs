@@ -185,3 +185,83 @@ test('⛔⛔ una scheda standalone non compare nell\'elenco di NESSUNA sessione'
   assert.equal(registro.elenca('sess-1').items.length, 0);
   assert.equal(registro.elenca('sess-2').items.length, 0);
 });
+
+/*
+ * ⭐⭐⭐ Le schede si dimenticano — ma solo quelle che nessuno usa.
+ *
+ * ⛔ Il registro delle PTY chiude le SHELL orfane in minuti; la scheda invece
+ * restava per sempre, di proposito (un F5 dieci minuti dopo deve riaprire nella
+ * cartella giusta, non prendere 403). Il prezzo era crescita non misurata su un
+ * server acceso per settimane.
+ */
+test('⭐⭐⭐ una scheda ferma oltre il tetto viene dimenticata, e si DICE quale', () => {
+  let ora = new Date('2026-09-05T00:00:00Z');
+  const registro = creaRegistroSchedeTerminale({
+    cartellaDiSessione: (id) => (id === 's1' ? 'C:/ws' : null),
+    statoPtyFn: () => ({ viva: false }),
+    clock: () => ora,
+    orePrimaDiDimenticare: 24,
+  });
+  registro.risolviPerConnessione('s1');
+  assert.equal(registro.misura().schede, 1);
+
+  ora = new Date('2026-09-05T23:00:00Z');
+  assert.deepEqual(registro.dimenticaLeVecchie().tolte, [], 'a 23 ore non si tocca niente');
+
+  ora = new Date('2026-09-06T01:00:00Z');
+  const esito = registro.dimenticaLeVecchie();
+  assert.equal(esito.tolte.length, 1);
+  assert.equal(esito.tolte[0].terminalId, 's1');
+  assert.equal(esito.tolte[0].sessionId, 's1');
+  assert.equal(esito.restano, 0);
+});
+
+test('⭐⭐⭐ AL CONTRARIO — una scheda con la SHELL ANCORA VIVA non si tocca mai, per vecchia che sia', () => {
+  let ora = new Date('2026-09-05T00:00:00Z');
+  const registro = creaRegistroSchedeTerminale({
+    cartellaDiSessione: () => 'C:/ws',
+    // ⛔ Buttare la scheda di una PTY viva lascerebbe un processo acceso che
+    // nessuno può più raggiungere: è la perdita che questa cura dovrebbe
+    // evitare, fatta dalla cura stessa.
+    statoPtyFn: () => ({ viva: true }),
+    clock: () => ora,
+    orePrimaDiDimenticare: 1,
+  });
+  registro.risolviPerConnessione('s1');
+  ora = new Date('2026-09-30T00:00:00Z');
+  assert.deepEqual(registro.dimenticaLeVecchie().tolte, []);
+  assert.equal(registro.misura().schede, 1);
+});
+
+test('⭐⭐ agganciarsi RIMANDA la scadenza: è l\'uso che tiene viva una scheda', () => {
+  let ora = new Date('2026-09-05T00:00:00Z');
+  const registro = creaRegistroSchedeTerminale({
+    cartellaDiSessione: () => 'C:/ws',
+    statoPtyFn: () => ({ viva: false }),
+    clock: () => ora,
+    orePrimaDiDimenticare: 24,
+  });
+  registro.risolviPerConnessione('s1');
+  ora = new Date('2026-09-05T20:00:00Z');
+  registro.risolviPerConnessione('s1');
+  ora = new Date('2026-09-06T10:00:00Z'); // 14 h dall'ultimo aggancio, 34 dalla nascita
+  assert.deepEqual(registro.dimenticaLeVecchie().tolte, [], 'conta l’ultimo aggancio, non la nascita');
+});
+
+test('⭐⭐ la misura si legge: quante schede, quante con la shell viva, da quanto tace la più vecchia', () => {
+  let ora = new Date('2026-09-05T00:00:00Z');
+  const vive = new Set(['s1']);
+  const registro = creaRegistroSchedeTerminale({
+    cartellaDiSessione: () => 'C:/ws',
+    statoPtyFn: (id) => ({ viva: vive.has(id) }),
+    clock: () => ora,
+  });
+  registro.risolviPerConnessione('s1');
+  registro.risolviPerConnessione('s2');
+  ora = new Date('2026-09-05T02:00:00Z');
+  const m = registro.misura();
+  assert.equal(m.schede, 2);
+  assert.equal(m.conShellViva, 1);
+  assert.equal(m.piuVecchiaFermaDaMs, 2 * 60 * 60 * 1000);
+  assert.equal(m.orePrimaDiDimenticare, 24);
+});

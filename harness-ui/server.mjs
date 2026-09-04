@@ -632,7 +632,23 @@ async function startServer() {
     token: config.token, // ⭐ 04/9, W1-10
   });
   server.on('upgrade', (req, socket, head) => terminaleWs.gestisciUpgrade(req, socket, head));
-  const reaperTerminali = setInterval(() => registroTerminali.reap(), MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA * 60_000).unref();
+  /*
+   * ⛔ Due pulizie DIVERSE sullo stesso battito, e non si confondono: il
+   * registro delle PTY chiude le SHELL orfane (minuti), il registro delle
+   * schede dimentica le SCHEDE che nessuno tocca da un giorno. La seconda e'
+   * programmata e non probabilistica di proposito — una GC che passa «a volte»
+   * su un server acceso per settimane puo' non passare mai (ricerca 05/09/2026,
+   * cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html).
+   * ⛔ E cio' che viene tolto si DICE: una scheda sparita in silenzio si
+   * presenta come un 403 inspiegabile alla riconnessione successiva.
+   */
+  const reaperTerminali = setInterval(() => {
+    registroTerminali.reap();
+    const { tolte, restano } = registroSchedeTerminale.dimenticaLeVecchie();
+    for (const scheda of tolte) {
+      console.info(`[terminali] scheda dimenticata ${scheda.terminalId} (sessione ${scheda.sessionId ?? 'nessuna'}, ${scheda.origine}): ferma da ${Math.round(scheda.fermaDaMs / 3_600_000)} h. Restano ${restano}.`);
+    }
+  }, MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA * 60_000).unref();
 
   automationScheduler.avvia();
 
