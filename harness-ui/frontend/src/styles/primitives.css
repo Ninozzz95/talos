@@ -592,13 +592,99 @@ button.talos-list-row:focus-visible {
 .talos-receipt__text { flex: 1; min-width: 12rem; color: var(--talos-text); font-size: var(--talos-font-size-sm); }
 .talos-receipt__hash { font-family: var(--talos-font-mono); font-size: var(--talos-font-size-xs); color: var(--talos-accent-hover); }
 
+/* ==========================================================================
+   Fase 5 — le pagine: tabella della Board, controlli del Doctor, impostazioni.
+   ========================================================================== */
+.talos-table-wrap { overflow-x: auto; border: var(--talos-focus-width) solid var(--talos-border); border-radius: var(--talos-radius-card); }
+.talos-table { border-collapse: collapse; width: 100%; }
+.talos-table__caption {
+  padding: var(--talos-space-control) var(--talos-space-card);
+  border-bottom: var(--talos-focus-width) solid var(--talos-border);
+  color: var(--talos-muted);
+  font-size: var(--talos-font-size-xs);
+  text-align: left;
+}
+.talos-table th {
+  padding: var(--talos-space-inline) var(--talos-space-card);
+  border-bottom: var(--talos-focus-width) solid var(--talos-border);
+  color: var(--talos-muted);
+  font: 500 var(--talos-font-size-xs) / 1 var(--talos-font-ui);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: left;
+  white-space: nowrap;
+}
+.talos-table tbody th {
+  color: var(--talos-text);
+  font: 600 var(--talos-font-size-sm) / 1.4 var(--talos-font-ui);
+  letter-spacing: normal;
+  text-transform: none;
+}
+.talos-table td {
+  padding: 0 var(--talos-space-card);
+  height: var(--talos-touch-target);
+  border-bottom: var(--talos-focus-width) solid var(--talos-border-subtle);
+  color: var(--talos-assistant-text);
+  font-size: var(--talos-font-size-sm);
+  white-space: nowrap;
+}
+.talos-table tbody th { border-bottom: var(--talos-focus-width) solid var(--talos-border-subtle); }
+.talos-table tbody tr:last-child th,
+.talos-table tbody tr:last-child td { border-bottom: 0; }
+.talos-table tbody tr:hover th,
+.talos-table tbody tr:hover td { background: var(--talos-card-subtle); }
+.talos-table .num { text-align: right; }
+.talos-table__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--talos-space-xs);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+.talos-table__sort:hover { color: var(--talos-text); }
+.talos-table__sort:focus-visible { outline: var(--talos-focus-width) solid var(--talos-ring); outline-offset: var(--talos-focus-offset); }
+.talos-table th[aria-sort] .talos-table__sort { color: var(--talos-text); }
+.talos-table__arrow { color: var(--talos-accent-hover); }
+
+.talos-check-card { display: flex; gap: var(--talos-space-control); padding: var(--talos-space-card); margin-bottom: var(--talos-space-inline); }
+.talos-check-card__stripe { width: 3px; flex: none; align-self: stretch; border-radius: 2px; background: var(--talos-success); }
+.talos-check-card--info .talos-check-card__stripe { background: var(--talos-info); }
+.talos-check-card--warning .talos-check-card__stripe { background: var(--talos-warning); }
+.talos-check-card--danger .talos-check-card__stripe { background: var(--talos-danger); }
+.talos-check-card__body { flex: 1; min-width: 0; }
+.talos-check-card__head { display: flex; align-items: center; gap: var(--talos-space-inline); flex-wrap: wrap; }
+.talos-check-card__title { font-weight: 600; color: var(--talos-text); }
+.talos-check-card__text { margin: var(--talos-space-xs) 0 0; color: var(--talos-assistant-text); font-size: var(--talos-font-size-sm); }
+.talos-check-card__actions { display: flex; align-items: center; gap: var(--talos-space-sm); flex-wrap: wrap; margin-top: var(--talos-space-inline); }
+
+.talos-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--talos-space-md);
+  min-height: calc(var(--talos-primary-height) * 1.4);
+  padding: var(--talos-space-sm) 0;
+  border-top: var(--talos-focus-width) solid var(--talos-border-subtle);
+}
+.talos-setting:first-child { border-top: 0; }
+.talos-setting__label { display: block; font-weight: 500; font-size: var(--talos-font-size-sm); color: var(--talos-text); }
+.talos-setting__scope { display: block; margin-top: 1px; color: var(--talos-muted); font-size: var(--talos-font-size-xs); }
+.talos-setting__control { flex: none; }
+
 @media (forced-colors: active) {
   .talos-button,
   .talos-switch,
   .talos-tabs__tab,
   .talos-menu__item { forced-color-adjust: auto; }
   .talos-measure--estimate { border-bottom-color: CanvasText; }
-  .talos-dot { background: CanvasText; }
+  .talos-dot,
+  .talos-check-card__stripe { background: CanvasText; }
   .talos-list-row[aria-selected='true'],
   .talos-nav-item[aria-current='page'],
   .talos-session-item[aria-current='true'] { background: Highlight; color: HighlightText; }

@@ -280,3 +280,46 @@ test('PHASE4-MEASURE-10 — una stima si distingue da una misura senza usare il 
   const sottolineatura = await stimata.evaluate((el) => getComputedStyle(el).borderBottomStyle);
   expect(sottolineatura).toBe('dotted');
 });
+
+test('PHASE5-TABLE-11 — l\'ordinamento è un bottone vero, aria-sort sta sul th e la freccia non si annuncia due volte', async ({ page }) => {
+  await openLab(page);
+  const tabella = page.locator('[data-testid="ds-data-table"] table');
+  // Il nome della tabella è una didascalia visibile, non un attributo.
+  await expect(tabella.locator('caption')).toHaveText('Tutte le sessioni');
+  await expect(tabella).toHaveAccessibleName('Tutte le sessioni');
+
+  // aria-sort solo sulla colonna attiva.
+  await expect(tabella.locator('th[aria-sort]')).toHaveCount(1);
+  await expect(tabella.locator('th[aria-sort]')).toHaveAttribute('aria-sort', 'descending');
+
+  // Si raggiunge con Tab e si attiva con la tastiera: è un <button> vero.
+  const bottoneGiri = page.getByRole('button', { name: /^Giri/ });
+  await bottoneGiri.focus();
+  await expect(bottoneGiri).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(tabella.locator('th[aria-sort]')).toHaveAttribute('aria-sort', 'ascending');
+  await expect(page.locator('[role="status"][aria-live="polite"]')).toContainText('Giri, crescente');
+
+  // La freccia è decorativa: lo stato lo dice aria-sort.
+  await expect(tabella.locator('.talos-table__arrow').first()).toHaveAttribute('aria-hidden', 'true');
+
+  // La prima colonna è l'intestazione della riga: i numeri sanno di chi sono.
+  await expect(tabella.locator('tbody th[scope="row"]').first()).toHaveText('W1-02 registro processi');
+});
+
+test('PHASE5-CHECK-12 — la severità è una parola, e un avviso porta sempre il suo rimedio', async ({ page }) => {
+  await openLab(page);
+  const avviso = page.locator('[data-testid="ds-check-card"]');
+  await expect(avviso).toContainText('avviso');
+  await expect(avviso.locator('.talos-check-card__stripe')).toHaveAttribute('aria-hidden', 'true');
+  await expect(avviso.getByRole('button', { name: 'Riavvia il server' })).toBeVisible();
+  // Un «ok» non ha rimedio perché non c'è niente da fare.
+  await expect(page.locator('[data-testid="ds-check-card-ok"] .talos-check-card__actions')).toBeHidden();
+});
+
+test('PHASE5-SETTING-13 — ogni impostazione dichiara QUANDO morde, e il controllo prende il nome dall\'etichetta', async ({ page }) => {
+  await openLab(page);
+  const riga = page.locator('[data-testid="ds-setting-row"]');
+  await expect(riga).toContainText('vale da subito, anche per la sessione aperta');
+  await expect(riga.locator('select')).toHaveAccessibleName('Modello principale');
+});
