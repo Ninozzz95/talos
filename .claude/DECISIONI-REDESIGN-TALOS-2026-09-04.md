@@ -203,8 +203,29 @@ Fonti: [Claude Code, osservatori a profondità illimitata](https://github.com/an
 [Hermes, sicurezza e backend](https://hermes-agent.nousresearch.com/docs/user-guide/security) ·
 [Hermes, i profili non isolano](https://hermes-agent.nousresearch.com/docs/user-guide/profiles)
 
-## F-H — non ancora chieste
+## F · NUOVA SESSIONE E SCELTA DEL WORKSPACE — decisa il 04/09
 
-Restano **F** (nuova sessione e workspace), **G** (viste della sessione), **H**
-(doctor, errori, primo avvio, voce dell'interfaccia). Si chiedono nell'interfaccia, a
-gruppi, come le prime cinque.
+| # | Decisione |
+|---|---|
+| F1-F2 | **Modale in due passi**: prima «dove si lavora», poi «come si lavora». Oggi chiediamo tutto insieme in due colonne dense. |
+| F3-F5 | Nel primo passo ci sono **tutte e quattro** le vie: recenti in cima · progetti con quante sessioni (come Codex) · scelte rapide di Windows · albero per sfogliare. |
+| F6 | L'albero diventa una **colonna stretta con ricerca per nome**. |
+| F7-F8 | Campo per incollare il percorso **in cima**, e la **cartella scelta accanto al pulsante di conferma** (oggi è in basso a sinistra, lontana dal pulsante che la usa). |
+| F9-F10 | Prima di aprire: **numero di file e avviso se è una radice** (Desktop, Home, radice di un disco). Applica E17. |
+| F11-F14 | Nel secondo passo restano **tutti e quattro**: modello con default già scelto · cursore del ragionamento · quattro carte del permesso · comando dei test rilevato. ⚠️ Il planner opzionale **esce** dalla creazione (diventa un modello ausiliario, D7). |
+| F16 | Default **scrittura nel workspace**, mai accesso pieno. |
+| F17 | **Nessun nome alla creazione**: lo scrive il primo messaggio, come già facciamo. |
+| F18 | **«Continua da…»**: si può partire da una sessione esistente creando un ramo (si lega a B25). |
+| F19-F21 | **Tutte e tre le informazioni git**, confermate dopo un chiarimento (l'owner aveva selezionato anche «niente git», che le escludeva): ramo corrente selezionabile · avviso sulle modifiche non salvate · repository annidati con fiducia separata. |
+| F22 | Comando dei test **sempre correggibile, e dichiara come l'ha trovato** («trovato in package.json»). Un rilevamento che non dice la fonte è indistinguibile da un'invenzione. |
+| F23-F24 | **Una riga col totale** («43 attrezzi, ~7,5k token per giro»), **senza** possibilità di spegnerli qui: si fa dopo in Capability. |
+| F25-F26 | Il pulsante **nomina la cartella**, e annullare **non perde la configurazione**. |
+| F27 | **«Riapri l'ultima sessione»** in cima allo stato vuoto. |
+| F28 | Una sessione creata e non ancora avviata **non compare** finché non parte. ⚠️ **Cambia il comportamento di oggi** (oggi le pendenti si vedono nella sidebar) e apre un debito: una sessione creata e mai avviata resta nello store senza essere visibile — va **cancellata o raccolta**, non solo nascosta. |
+| F29 | **Nessuna sessione senza cartella**: senza workspace metà attrezzi non ha senso, e va detto invece di partire azzoppati. |
+| F30 | Il primo messaggio suggerito **dipende dal progetto**, come lo stato vuoto (B3). |
+
+## G-H — non ancora chieste
+
+Restano **G** (viste della sessione: board, terminale, colonna di destra, albero) e
+**H** (doctor, errori, primo avvio, voce dell'interfaccia).
