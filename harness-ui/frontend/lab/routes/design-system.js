@@ -3,7 +3,9 @@ import {
   createActivityBundle,
   createApprovalCard,
   createBadge,
+  createCheckCard,
   createConversation,
+  createDataTable,
   createButton,
   createField,
   createIconButton,
@@ -14,6 +16,7 @@ import {
   createNavGroup,
   createNavItem,
   createSelect,
+  createSettingRow,
   createSheet,
   createSessionItem,
   createSignedReceipt,
@@ -409,6 +412,71 @@ export function mountDesignSystemLab(root) {
   gruppoPermesso.group.append(mostraPermesso.element);
   grid.append(gruppoPermesso.group);
   components.push(consenti, nega, cartaPermesso, mostraPermesso);
+
+  /* Fase 5: le pagine — Board, Doctor, impostazioni. */
+  const pagine = headingGroup(documentObj, 'Pagine');
+  pagine.group.classList.add('design-system-lab__group--wide');
+
+  const costoStimato = createMeasure({ document: documentObj, value: '0,08', unit: '$', provenance: 'estimated' });
+  let ordine = { column: 'giri', direction: 'descending' };
+  let tabella;
+  tabella = createDataTable({
+    document: documentObj,
+    caption: 'Tutte le sessioni',
+    columns: [
+      { id: 'sessione', label: 'Sessione', rowHeader: true },
+      { id: 'stato', label: 'Stato' },
+      { id: 'giri', label: 'Giri', align: 'end', sortable: true },
+      { id: 'cache', label: 'Cache', align: 'end', sortable: true },
+      { id: 'costo', label: 'Costo', align: 'end' },
+    ],
+    rows: [
+      { cells: { sessione: 'W1-02 registro processi', stato: 'in corso', giri: '7', cache: '87%', costo: costoStimato.element } },
+      { cells: { sessione: 'Cancello ricerca web', stato: 'conclusa', giri: '3', cache: '91%', costo: '$0,02' } },
+    ],
+    sort: ordine,
+    announce: (messaggio) => announcements.announce(messaggio),
+    onSort: (prossimo) => { ordine = prossimo; tabella.update({ sort: ordine }); },
+    testId: 'ds-data-table',
+  });
+  pagine.row.append(tabella.element);
+
+  const riavvia = createButton({ document: documentObj, label: 'Riavvia il server', variant: 'primary', testId: 'ds-check-fix' });
+  const avviso = createCheckCard({
+    document: documentObj,
+    severity: 'warning',
+    severityLabel: 'avviso',
+    title: 'La pagina è più nuova del server',
+    text: 'La pagina caricata è la 0.4.12, il server che risponde è la 0.4.9.',
+    actions: [riavvia.element],
+    testId: 'ds-check-card',
+  });
+  const nota = createCheckCard({
+    document: documentObj,
+    severity: 'ok',
+    severityLabel: 'ok',
+    title: 'Suite di verifica',
+    text: '1.565 test su 1.565 verdi, uscita 0.',
+    testId: 'ds-check-card-ok',
+  });
+  pagine.group.append(avviso.element, nota.element);
+
+  const modelloImpostazione = createSelect({
+    document: documentObj,
+    label: 'Modello principale',
+    options: [{ value: 'claude-opus-5', label: 'claude-opus-5' }, { value: 'claude-sonnet-5', label: 'claude-sonnet-5' }],
+    value: 'claude-opus-5',
+  });
+  const rigaImpostazione = createSettingRow({
+    document: documentObj,
+    label: 'Modello principale',
+    scope: 'vale da subito, anche per la sessione aperta',
+    control: modelloImpostazione.element,
+    testId: 'ds-setting-row',
+  });
+  pagine.group.append(rigaImpostazione.element);
+  grid.append(pagine.group);
+  components.push(costoStimato, tabella, riavvia, avviso, nota, modelloImpostazione, rigaImpostazione);
 
   assertTalosDesignTokens(documentObj.defaultView.getComputedStyle(html));
   html.dataset.visualReady = 'true';
