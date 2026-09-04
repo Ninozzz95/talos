@@ -3305,6 +3305,13 @@ const SCENARI = {
    * del PROCESSO SERVER, non della sessione. Qui si manda per davvero
    * il primo messaggio, si aspetta RunStarted, POI si apre il
    * Terminale — il confronto corretto.
+   *
+   * ⭐ 05/9, W1-01 — quel `risolviCartella` non esiste più: oggi la WebSocket
+   * chiede a `terminal-registry.mjs`, che per un id senza sessione dà al
+   * massimo la porta standalone legacy (una cartella DICHIARATA in server.mjs,
+   * mai `process.cwd()`) e per tutto il resto rifiuta. ⇒ Questa diagnostica
+   * resta corretta com'è, e anzi ora è OBBLIGATORIA: senza la sessione vera
+   * non si sta guardando il terminale di quella sessione.
    */
   async 'qa-diagnostica-terminale-sessione-vera'(p) {
     const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/preventivo-html';

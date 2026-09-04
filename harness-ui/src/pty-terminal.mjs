@@ -32,7 +32,22 @@ const PERCORSI_GIT_BASH_WINDOWS = [
   'C:\\Program Files (x86)\\Git\\bin\\bash.exe',
 ];
 
-/** Tetto del backlog per terminale — un replay alla riconnessione, non uno storico infinito. */
+/**
+ * Tetto del backlog **PER SCHEDA** — un replay alla riconnessione, non uno
+ * storico infinito.
+ *
+ * ⛔⛔ W1-01 (05/9): verificato che il tetto è per voce del registro e non
+ * globale (`voce.byteBacklog` vive dentro la singola voce), perché con più
+ * schede per sessione un tetto globale farebbe sparire il backlog di una
+ * scheda quando ne parla un'altra. Il numero è **200.000 byte per scheda**:
+ * dichiarato, non infinito. Stessa disciplina di VS Code, che limita lo
+ * scrollback ripristinato di una sessione persistente con
+ * `terminal.integrated.persistentSessionScrollback` (default **100 righe**,
+ * code.visualstudio.com/docs/terminal/advanced, letto il 05/09/2026) invece di
+ * rigiocare tutto. ⛔ E il backlog DEVE stare qui: `node-pty` non tiene
+ * scrollback proprio — lo scrollback vive in xterm, lato client, e un F5 lo
+ * azzera (ricerca 05/09/2026).
+ */
 export const BACKLOG_MASSIMO_BYTE = 200_000;
 
 /** Una PTY disconnessa da più di così viene chiusa dal reaper — pulizia di schede mai più tornate, non un limite sulla shell viva. */
@@ -85,12 +100,18 @@ export function decodificaFrame(dati) {
 }
 
 /**
- * Registro delle PTY vive, per id (id = sessionId quando una sessione
- * agente è aperta, altrimenti un id di terminale standalone — vedi
- * `terminal-ws.mjs`). Una riconnessione sullo STESSO id riaggancia la
- * PTY viva invece di aprirne una seconda (un F5 non perde la shell) —
- * stesso principio del `Last-Event-ID` già in uso per SSE, qui
+ * Registro delle PTY vive, per id. Una riconnessione sullo STESSO id
+ * riaggancia la PTY viva invece di aprirne una seconda (un F5 non perde la
+ * shell) — stesso principio del `Last-Event-ID` già in uso per SSE, qui
  * applicato a una PTY invece che a un run dell'agente.
+ *
+ * ⛔⛔ W1-01 (05/9) — l'id NON è più il `sessionId`: è il **`terminalId`**, e
+ * una sessione può averne più d'uno. Chi decide quali id esistono, a quale
+ * sessione appartengono e in quale cartella si aprono è
+ * `terminal-registry.mjs`; questo file non autorizza niente, tiene solo in
+ * vita le PTY. ⇒ Ogni id ha la sua voce, quindi la sua PTY, il suo backlog e
+ * i suoi ascoltatori: due schede della stessa sessione **non condividono
+ * I/O**, ed è il criterio della riga (provato in `pty-terminal.test.mjs`).
  */
 export function creaRegistroTerminali(deps = {}) {
   const spawnPtyFn = deps.spawnPtyFn ?? spawnPty;
@@ -179,8 +200,21 @@ export function creaRegistroTerminali(deps = {}) {
     }
   }
 
+  /**
+   * ⭐ W1-01 (05/9) — lo stato di UNA PTY, senza esporre la voce mutabile del
+   * registro fuori da qui (stesso principio di `cartellaDi` in
+   * `session-registry.mjs`). Serve all'elenco delle schede per dire «shell
+   * viva» / «shell già uscita»: `null` significa «nessuna PTY per questo id»,
+   * che è un terzo fatto e non si confonde con `{viva:false}`.
+   */
+  function stato(id) {
+    const voce = terminali.get(id);
+    if (!voce) return null;
+    return { viva: !voce.chiusa, enforcement: voce.enforcement, byteBacklog: voce.byteBacklog };
+  }
+
   return {
-    apri, scrivi, ridimensiona, segnaDisconnesso, chiudiForzato, reap,
+    apri, scrivi, ridimensiona, segnaDisconnesso, chiudiForzato, reap, stato,
     /** ⛔ Solo per i test — mai usato dal codice di produzione. */
     _terminali: terminali,
   };

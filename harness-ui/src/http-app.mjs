@@ -57,6 +57,8 @@ const API_ERROR_CODES = new Set([
   'SEARCH_SOURCE_INVALID', 'SEARCH_KEY_REQUIRED', 'SEARCH_KEY_INVALID', 'SEARCH_ENDPOINT_INVALID', 'SEARCH_STORE_UNAVAILABLE', 'SEARCH_NOT_READY', 'SEARCH_BLOCKED', 'SEARCH_UNREACHABLE', 'SEARCH_FAILED',
   // ⭐ 04/9, W1-10 — token di loopback della shell Electron: /api/* senza il cookie talos_token.
   'AUTH_REQUIRED',
+  /* ⭐⭐⭐ 05/9, W1-01 — schede terminale per sessione (src/terminal-registry.mjs). Il tetto NON è burocrazia: su Windows ogni PTY porta con sé un processo conhost (node-pty#471). */
+  'TERMINAL_LIMIT_REACHED', 'TERMINAL_STORE_UNAVAILABLE',
   'RUNTIME_NOT_AVAILABLE',
   'RUNTIME_UNREACHABLE',
   'RUNTIME_OPERATION_UNSUPPORTED',
@@ -102,6 +104,9 @@ const STATUS_BY_CODE = Object.freeze({
    * risolvibile, invece di accusare il server.
    */
   RUNTIME_ALREADY_RUNNING: 409,
+  /** ⭐ 05/9, W1-01 — stessa famiglia: la richiesta è legittima, è lo STATO attuale (otto schede già aperte) a impedirla. Chiudine una e riprova. */
+  TERMINAL_LIMIT_REACHED: 409,
+  TERMINAL_STORE_UNAVAILABLE: 503,
   HF_TRANSFER_COLLISION: 409,
   SESSION_STORE_WRITE_FAILED: 503,
   /** ⭐ 27/8 — un tetto duro dell'automazione violato (intervallo/limite fuori range) è un errore di CONTENUTO, non di forma: stesso status di ROW_INVALID. */
@@ -197,6 +202,8 @@ const MESSAGE_BY_CODE = Object.freeze({
   SEARCH_UNREACHABLE: 'La fonte di ricerca non è raggiungibile',
   SEARCH_FAILED: 'La ricerca non è riuscita',
   AUTH_REQUIRED: 'Questo server accetta solo la finestra TALOS che lo ha avviato',
+  TERMINAL_LIMIT_REACHED: 'Hai già il massimo di terminali aperti per questa sessione: chiudine uno e riprova',
+  TERMINAL_STORE_UNAVAILABLE: 'I terminali non sono disponibili su questo server',
   PAYLOAD_LIMIT: 'Contenuto oltre il limite consentito',
   METHOD_NOT_ALLOWED: 'Metodo non consentito',
   NOT_FOUND: 'Risorsa non trovata',
@@ -837,6 +844,15 @@ export function createHttpApp({
   token = null,
   workspaceLaunchStore = null,
   workspaceBrowser = null,
+  /*
+   * ⭐⭐⭐ 05/9, W1-01 — il registro delle SCHEDE terminale
+   * (src/terminal-registry.mjs). Facoltativo come ogni altro store: senza,
+   * le tre rotte rispondono TERMINAL_STORE_UNAVAILABLE invece di fingere.
+   * ⛔ È l'unica porta da cui nasce un `terminalId`: la WebSocket
+   * (`terminal-ws.mjs`) può solo CHIEDERE al registro, mai crearci dentro
+   * una voce partendo da una stringa arrivata dal client.
+   */
+  terminalRegistry = null,
   // ⭐⭐⭐ 28/8 — owner, coda: "directory più usate (tipo desktop downloads)". Zero config esterna (solo os.homedir()) — il default reale basta, nessun cablaggio in server.mjs come serve invece per elencaCartelleProgetto (quella dipende da TALOS_HARNESS_UI_PROJECT_DIRS).
   cartelleFrequentiFn = cartelleFrequentiReale,
   catalogoModelliFn = null, clock = () => new Date(), leggiArtefattoFn = leggiArtefattoReale,
@@ -1132,6 +1148,67 @@ export function createHttpApp({
         const stopped = sessionRegistry.ferma(sessionId);
         if (!stopped) { const error = new Error('Sessione non trovata'); error.code = 'NOT_FOUND'; throw error; }
         sendJson(res, 200, successEnvelope({ ok: true, sessionId }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    /*
+     * ⭐⭐⭐ 05/9, W1-01 — LE SCHEDE TERMINALE di una sessione. Stessa forma
+     * esatta di `/sessions/:id/cancel` qui sopra (POST nominata prima del
+     * blanket-405, `requireNoQuery`, id da `split('/')[4]`, NOT_FOUND per un id
+     * ignoto), e stesso cancello a token di W1-10: queste rotte stanno sotto
+     * `/api/`, quindi senza il cookie `talos_token` sono già 401 molto prima di
+     * arrivare qui — ⛔ verificato, nessuna scorciatoia aggiunta.
+     *
+     * ⛔⛔⛔ Questa POST è l'UNICA porta da cui nasce un `terminalId` nuovo, ed
+     * è il server a sceglierlo. Il client non può proporne uno: è la cura
+     * diretta di CVE-2026-59224 (Open WebUI, 2026), dove un `session_id`
+     * ricevuto dal client e concatenato senza validazione permetteva di
+     * agganciarsi alla PTY di un'altra persona.
+     */
+    if (method === 'POST' && /^\/api\/v1\/sessions\/([^/]+)\/terminals$/.test(url.pathname)) {
+      try {
+        requireNoQuery(url);
+        if (!terminalRegistry) { const error = new Error('Terminali non disponibili'); error.code = 'TERMINAL_STORE_UNAVAILABLE'; throw error; }
+        const body = await leggiCorpoJson(req);
+        /* ⛔ AL CONTRARIO — un corpo con QUALUNQUE chiave è rifiutato: la sessione la dice il percorso, mai il corpo (altrimenti tornerebbe un id scelto dal client da un'altra porta). */
+        const keys = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : [];
+        if (keys.length !== 0) { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
+        const sessionId = decodeURIComponent(url.pathname.split('/')[4]);
+        const esito = terminalRegistry.crea({ sessionId });
+        if ('erroreAvvio' in esito) { const error = new Error(esito.erroreAvvio); error.code = esito.code; throw error; }
+        sendJson(res, 200, successEnvelope(esito, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    /*
+     * ⭐⭐⭐ 05/9, W1-01 — chiusura ESPLICITA di una scheda: chiude anche la PTY
+     * vera (il registro delle schede ha `chiudiPtyFn` iniettato in server.mjs).
+     * ⛔⛔ La proprietà si VERIFICA: chiudere un terminale di un'altra sessione
+     * risponde NOT_FOUND, lo stesso codice di uno inesistente — distinguere i
+     * due casi regalerebbe a chi prova id a caso una sonda per scoprire quali
+     * esistono (OWASP API1:2023 BOLA, ricerca 05/09/2026).
+     */
+    if (method === 'POST' && /^\/api\/v1\/sessions\/([^/]+)\/terminals\/([^/]+)\/close$/.test(url.pathname)) {
+      try {
+        requireNoQuery(url);
+        if (!terminalRegistry) { const error = new Error('Terminali non disponibili'); error.code = 'TERMINAL_STORE_UNAVAILABLE'; throw error; }
+        const body = await leggiCorpoJson(req);
+        const keys = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : [];
+        if (keys.length !== 0) { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
+        const parti = url.pathname.split('/');
+        const sessionId = decodeURIComponent(parti[4]);
+        const terminalId = decodeURIComponent(parti[6]);
+        const esito = terminalRegistry.chiudi({ sessionId, terminalId });
+        if ('erroreAvvio' in esito) { const error = new Error(esito.erroreAvvio); error.code = esito.code; throw error; }
+        sendJson(res, 200, successEnvelope(esito, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
@@ -2353,6 +2430,13 @@ export function createHttpApp({
         // sola lettura, DERIVATE dagli eventi già persistiti, ⛔ nessuna scrittura
         // nuova sul disco e nessun collettore esterno da montare.
         const metricsMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/metrics$/.exec(url.pathname);
+        // ⭐⭐⭐ W1-01 (05/9) — le SCHEDE TERMINALE di una sessione. Stesso principio
+        // esatto di processesMatch qui sopra (sola lettura, per-sessione), con una
+        // differenza che conta: ⛔ elenca SOLO le schede di QUESTA sessione, mai
+        // tutte quelle vive sul server — un terminale di un'altra sessione non si
+        // vede nemmeno per nome, altrimenti l'elenco stesso diventerebbe la sonda
+        // che permette di indovinare un terminalId da usare sulla WebSocket.
+        const terminalsMatch = terminalRegistry && /^\/api\/v1\/sessions\/([^/]+)\/terminals$/.exec(url.pathname);
         // ⭐⭐⭐ 29/8 — FASE F: il Capability hub elenca le skill dichiarate — stesso principio, senza il concetto di fiducia (le skill non ce l'hanno).
         const skillsMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/skills$/.exec(url.pathname);
         // ⭐⭐⭐ 29/8 — FASE N: il Capability hub elenca le voci di Libreria del progetto — stesso principio esatto di skillsMatch appena sopra (nessun concetto di fiducia).
@@ -2374,7 +2458,23 @@ export function createHttpApp({
         // ⭐⭐⭐ 28/8 — non SESSION-scoped: un artefatto ha un id UUID già globalmente unico (agent-service.mjs), stesso principio di /api/v1/models.
         const artifactMatch = /^\/api\/v1\/artifacts\/([^/]+)$/.exec(url.pathname);
 
-        if (projectTreeMatch) {
+        if (terminalsMatch) {
+          requireNoQuery(url);
+          let sessionId;
+          try {
+            sessionId = decodeURIComponent(terminalsMatch[1]);
+          } catch {
+            sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+            return;
+          }
+          const esito = terminalRegistry.elenca(sessionId);
+          if ('erroreAvvio' in esito) {
+            const errore = new Error(esito.erroreAvvio);
+            errore.code = esito.code;
+            throw errore;
+          }
+          data = { items: esito.items };
+        } else if (projectTreeMatch) {
           let projectId;
           try {
             projectId = decodeURIComponent(projectTreeMatch[1]);

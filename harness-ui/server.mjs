@@ -16,6 +16,7 @@ import { createSearchSourceStore } from './src/search-source-store.mjs';
 import { ENDPOINT_SENTINELLA_DUCKDUCKGO, creaTrasportoSenzaChiave } from './src/duckduckgo-search.mjs';
 import { createModelCatalog } from './src/model-catalog.mjs';
 import { creaRegistroTerminali, MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA } from './src/pty-terminal.mjs';
+import { creaRegistroSchedeTerminale } from './src/terminal-registry.mjs'; // ⭐ 05/9, W1-01
 import { creaGestoreTerminaleWs } from './src/terminal-ws.mjs';
 import { misuraCapacitaMacchina } from './src/machine-capacity.mjs';
 import { createLocalModelStore } from './src/local-model-store.mjs';
@@ -475,9 +476,50 @@ async function startServer() {
       sessioniPersistenza: typeof sessionRegistry.statoPersistenza === 'function' ? sessionRegistry.statoPersistenza() : undefined,
     });
   };
+  /*
+   * ⭐⭐⭐ 05/9, W1-01 — I DUE registri del terminale, montati QUI (prima erano
+   * più in basso, dopo `createHttpApp`) perché ora le rotte HTTP hanno bisogno
+   * di quello delle schede. Sono due di proposito:
+   *   · `registroTerminali` (pty-terminal.mjs) — il ciclo di vita delle PTY:
+   *     spawn, backlog per scheda, reap delle orfane;
+   *   · `registroSchedeTerminale` (terminal-registry.mjs) — CHI può attaccarsi
+   *     a quale PTY, e in quale cartella.
+   *
+   * ⛔⛔⛔ Il difetto che questa separazione chiude, misurato il 05/9 su questo
+   * stesso file: `risolviCartella` faceva
+   * `sessionRegistry.cartellaDi(id) ?? config.cartelleProgetto[0]?.percorso ?? process.cwd()`
+   * — un id SCONOSCIUTO non veniva rifiutato, cadeva sul primo progetto.
+   * Finché l'id ERA il sessionId il danno era contenuto; con schede multiple
+   * qualunque stringa avrebbe aperto una shell. Ora la cartella la decide il
+   * registro delle schede, UNA volta, alla creazione — mai il client, mai a
+   * ogni connessione. Forma esatta di CVE-2026-59224 (Open WebUI, 2026).
+   */
+  const registroTerminali = creaRegistroTerminali();
+  const registroSchedeTerminale = creaRegistroSchedeTerminale({
+    cartellaDiSessione: (sessionId) => sessionRegistry.cartellaDi(sessionId),
+    chiudiPtyFn: (terminalId) => registroTerminali.chiudiForzato(terminalId),
+    statoPtyFn: (terminalId) => registroTerminali.stato(terminalId),
+    /*
+     * ⛔⛔ DEBITO DICHIARATO, non un fallback. Misurato il 05/9 leggendo
+     * `public/app.js` (congelato dal contratto, non modificabile):
+     * `idTerminaleCorrente()` usa il `sessionId` quando una sessione c'è, e
+     * ALTRIMENTI inventa un `crypto.randomUUID()` lato client — il "terminale
+     * standalone", raggiungibile aprendo il tab Terminale prima di avviare
+     * qualsiasi cosa. Senza questa riga quella funzione del monolite smette di
+     * funzionare. La differenza con il `??` di prima: la cartella è nominata
+     * QUI, una volta sola, ed è sotto lo stesso tetto delle altre schede — non
+     * è una catena di ripieghi valutata a ogni connessione, e le rotte nuove
+     * non producono MAI una scheda di questo tipo.
+     * ⛔ Si spegne mettendo `null` il giorno in cui il frontend nuovo
+     * sostituisce il monolite.
+     */
+    cartellaStandaloneLegacy: config.cartelleProgetto[0]?.percorso ?? process.cwd(),
+  });
+
   const app = createHttpApp({
     staticHandler: createStaticHandler(config.publicDir),
     sessionRegistry,
+    terminalRegistry: registroSchedeTerminale, // ⭐ 05/9, W1-01
     // Un catalogo non configurato è uno stato degradato osservabile, non un crash HTTP.
     listaTaskDisponibili: () => (taskCatalogProvider ? listaTaskDisponibili(taskCatalogProvider) : []),
     elencaCartelleProgetto: () => elencaCartelleProgetto(config.cartelleProgetto),
@@ -576,17 +618,17 @@ async function startServer() {
    * ⭐⭐⭐ 28/8 — Terminale REALE (LEDGER-TERMINALE-REALE.md). Nessuna
    * porta nuova: l'upgrade WebSocket avviene sullo STESSO `server`,
    * quindi eredita lo stesso bind loopback-only di ogni altra rotta.
-   * `risolviCartella`: la PTY di un id che combacia una sessione VERA
-   * parte nel suo workspace; altrimenti (terminale standalone, nessuna
-   * sessione aperta) cade sul primo progetto configurato — mai un
-   * `cartella` inventata o presa dal client senza validazione.
+   *
+   * ⭐⭐⭐ 05/9, W1-01 — `risolviCartella` (che tornava SEMPRE una cartella) è
+   * diventato `risolviScheda`, che ha il diritto di dire **no**: un
+   * `terminalId` che il server non ha creato riceve 403 e la PTY non nasce
+   * nemmeno. I due registri sono montati più in alto, insieme alle rotte.
    */
-  const registroTerminali = creaRegistroTerminali();
   const originiTerminaleConsentite = new Set(ALIAS_LOOPBACK.map((host) => `http://${host}:${portaAscolto}`));
   const terminaleWs = creaGestoreTerminaleWs({
     registro: registroTerminali,
     originiConsentite: originiTerminaleConsentite,
-    risolviCartella: (id) => sessionRegistry.cartellaDi(id) ?? config.cartelleProgetto[0]?.percorso ?? process.cwd(),
+    risolviScheda: (terminalId) => registroSchedeTerminale.risolviPerConnessione(terminalId),
     token: config.token, // ⭐ 04/9, W1-10
   });
   server.on('upgrade', (req, socket, head) => terminaleWs.gestisciUpgrade(req, socket, head));
@@ -599,7 +641,14 @@ async function startServer() {
     if (shutdownStarted) return;
     shutdownStarted = true;
     clearInterval(reaperTerminali);
-    for (const id of registroTerminali._terminali.keys()) registroTerminali.chiudiForzato(id);
+    /*
+     * ⛔⛔ 05/9, W1-01 — le chiavi si fotografano PRIMA di iterare: ora le
+     * schede per sessione sono molte, `chiudiForzato` cancella dalla stessa
+     * Map su cui si sta iterando, e una PTY lasciata viva su Windows lascia
+     * dietro di sé anche il suo `conhost` (node-pty#471). Zero PTY superstiti
+     * allo shutdown, contate dal test.
+     */
+    for (const id of [...registroTerminali._terminali.keys()]) registroTerminali.chiudiForzato(id);
     await closeRuntimeResources('shutdown', {
       resources: [
         { stop: () => automationScheduler.ferma() },
