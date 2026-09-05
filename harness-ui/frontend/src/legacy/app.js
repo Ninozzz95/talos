@@ -17,7 +17,8 @@ import { creaMemoryRow, aggiornaPaginaMemoria } from '../components/memoria.js';
 import { aggiornaBoard, creaRigaBoard, cartellaDaExport } from '../components/board.js'; // 05/9 Fase 2: Board
 import { creaPilaToast } from '../components/toast.js';
 import { creaSorveglianzaConnessione, aggiornaStatoConnessione } from '../components/connessione.js'; // 05/9 T-15: stato onesto della connessione
-import { aggiornaPannelloNotifiche, apriPannelloNotifiche, nomeCampanella } from '../components/notifiche.js'; // 06/9 T-17: pannello «Aspetta te» del mockup // 05/9 Fase 2: Toast del mockup (T-16)
+import { aggiornaPannelloNotifiche, apriPannelloNotifiche, nomeCampanella } from '../components/notifiche.js'; // 06/9 T-17: pannello «Aspetta te» del mockup
+import { aggiornaInstallati, montaInstallati, gb } from '../components/modelli-installati.js'; // 06/9 B6.8: scheda «Installati» del Model Lab // 05/9 Fase 2: Toast del mockup (T-16)
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
@@ -2516,42 +2517,83 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   }
 
   // P1 Model Lab: lista installati con ricerca e azioni reali.
+  /**
+   * 06/9 B6.8 (piano di Astra, fatto da Claude): la scheda «Installati» è il pannello del
+   * mockup (`components/modelli-installati.js`). Il modello caricato lo dice il motore locale
+   * (llama.cpp «ready» + il modello scelto); RAM da `state.modelLab.capacity`; il verdetto
+   * «Entra» da `state.modelLab.fit` (si chiede con «Verifica compatibilità», mai da solo).
+   */
+  function runtimeInstallati() {
+    const llama = (state.modelLab.runtimes || []).find((r) => r.runtimeId === 'llama.cpp');
+    const mem = state.modelLab.capacity?.memory;
+    const caricato = llama?.runtimeState === 'ready' ? (state.modelLab.selectedRuntimeModel || null) : null;
+    const fitCaricato = caricato ? state.modelLab.fit.get(caricato)?.esito?.memory?.requiredBytes : undefined;
+    return {
+      caricato,
+      ramTotaleBytes: mem?.totalBytes,
+      liberiBytes: mem?.freeBytes,
+      usatiDalModelloBytes: Number.isFinite(fitCaricato) ? fitCaricato : undefined,
+      allocabiliBytes: Number.isFinite(mem?.freeBytes) ? Math.max(0, mem.freeBytes - 1024 ** 3) : undefined,
+      contestoStimaToken: 8192,
+    };
+  }
+  let modelloInstallatoScelto = null;
   function renderizzaModelliLocaliModelLab() {
-    const mount = $('#modelLabInstalledList');
-    if (!mount) return;
-    if (state.modelLab.installedError) { mount.replaceChildren(textElement('p', 'model-lab-empty', `Modelli locali non disponibili: ${state.modelLab.installedError.message}`)); return; }
-    const query = String(state.modelLab.installedSearch || '').trim().toLowerCase();
-    const visible = state.modelLab.installed.filter((model) => !query || [model.name, model.id, model.repo].some((value) => String(value || '').toLowerCase().includes(query)));
-    if (visible.length === 0) { mount.replaceChildren(textElement('p', 'model-lab-empty', 'Nessun modello locale osservabile.')); return; }
-    mount.replaceChildren(...visible.map((model) => {
-      const row = document.createElement('article'); row.className = 'model-lab-installed-item';
-      row.append(textElement('strong', '', model.name || model.id), textElement('span', '', `${model.state} · ${model.license || 'licenza non dichiarata'} · ${formattaByteModelLab(model.bytes)}`), textElement('small', '', `${model.repo || 'origine non dichiarata'} · sha256 ${String(model.sha256 || '').slice(0, 12) || 'non dichiarato'}`));
-      const actions = document.createElement('div'); actions.className = 'model-lab-installed-actions';
-      const rename = document.createElement('button'); rename.className = 'secondary-btn compact'; rename.type = 'button'; rename.textContent = 'Rinomina';
-      rename.addEventListener('click', async () => { const next = window.prompt('Come vuoi chiamare questo modello?', model.name || model.id); if (next === null) return; try { await apiPost(`/api/v1/local-models/${encodeURIComponent(model.id)}/rename`, { name: next }); await caricaModelliLocaliModelLab(); } catch (error) { window.alert(error.message || 'Rinomina non riuscita.'); } });
-      const copy = document.createElement('button'); copy.className = 'secondary-btn compact'; copy.type = 'button'; copy.textContent = 'Copia percorso';
-      copy.addEventListener('click', async () => { try { await navigator.clipboard?.writeText(model.path || ''); copy.textContent = 'Percorso copiato'; window.setTimeout(() => { copy.textContent = 'Copia percorso'; }, 1800); } catch { copy.textContent = 'Copia non riuscita'; } });
-      const remove = document.createElement('button'); remove.className = 'secondary-btn compact danger'; remove.type = 'button'; remove.textContent = 'Elimina';
-      remove.addEventListener('click', async () => { if (!window.confirm(`Eliminare ${model.name || model.id}?`)) return; try { await apiPost(`/api/v1/local-models/${encodeURIComponent(model.id)}/delete`, {}); await caricaModelliLocaliModelLab(); } catch (error) { window.alert(error.message || 'Eliminazione non riuscita.'); } });
-      /*
-       * ⭐ Fase 5 punto 4 — "girerà su QUESTA macchina?", chiesto PRIMA di
-       * caricare. Non parte da solo a ogni render: `/fit` legge l'header
-       * GGUF dal disco e misura la macchina, farlo per ogni riga a ogni
-       * ridisegno sarebbe lavoro vero speso senza che nessuno l'abbia
-       * chiesto. È un gesto esplicito, e resta in memoria per la sessione.
-       */
-      const verifica = document.createElement('button');
-      verifica.className = 'secondary-btn compact'; verifica.type = 'button'; verifica.textContent = 'Verifica compatibilità';
-      /*
-       * ⛔ 02/9 — un aggancio stabile per la QA visiva, che finora non
-       * premeva MAI questo pulsante: senza, il selettore sarebbe la stringa
-       * dell'etichetta, cioè una prova che si rompe alla prima riscrittura
-       * del testo — e il testo è la cosa che più spesso si riscrive.
-       */
-      verifica.dataset.verifyFit = model.id;
-      verifica.addEventListener('click', () => { void verificaCompatibilitaModello(model.id); });
-      actions.append(rename, copy, verifica, remove); row.append(actions, nodoVerdettoFit(model.id)); return row;
-    }));
+    const panel = $('#modelLabInstalledPanel');
+    if (!panel || !panel.dataset.installatiMontato) return;
+    modelloInstallatoScelto = aggiornaInstallati(panel, state.modelLab.installed, {
+      query: state.modelLab.installedSearch,
+      stato: state.modelLab.installedStateFilter || 'tutti',
+      selezionato: modelloInstallatoScelto,
+      runtime: runtimeInstallati(),
+      fit: state.modelLab.fit,
+      errore: state.modelLab.installedError,
+      caricamento: state.modelLab.loadingInstalled,
+      seleziona: (id) => { modelloInstallatoScelto = id; renderizzaModelliLocaliModelLab(); },
+      nodoFit: (id) => nodoVerdettoFit(id),
+      azioni: {
+        verifica: (id) => { void verificaCompatibilitaModello(id); },
+        libera: () => { void liberaMemoriaModello(); },
+        copia: async (id) => { const m = state.modelLab.installed.find((x) => x.id === id); try { await navigator.clipboard?.writeText(m?.path || ''); toast('Percorso copiato', m?.path || ''); } catch { toast('Percorso non copiato', 'Il browser non ha dato accesso agli appunti.'); } },
+        rinomina: (id) => apriRinominaModelloLocale(id),
+        elimina: (id) => apriEliminaModelloLocale(id),
+      },
+    });
+  }
+  /** Rinomina ed elimina passano dai dialoghi del mockup (veloRinominaModello / veloEliminaModello), non da prompt/confirm. */
+  function apriRinominaModelloLocale(id) {
+    const m = state.modelLab.installed.find((x) => x.id === id); if (!m) return;
+    const velo = $('#veloRinominaModello'); const campo = $('#nomeModelloLab'); if (!velo || !campo) return;
+    campo.value = m.name || m.id;
+    velo.dataset.modelId = id;
+    apriVeloMockup('veloRinominaModello');
+  }
+  function apriEliminaModelloLocale(id) {
+    const m = state.modelLab.installed.find((x) => x.id === id); if (!m) return;
+    const velo = $('#veloEliminaModello'); if (!velo) return;
+    velo.dataset.modelId = id;
+    const testo = velo.querySelector('.talos-dialog__body p');
+    if (testo) testo.textContent = `Rimuove «${m.name || m.id}» (${gb(m.bytes)}) dal disco. Dovrai scaricarlo o importarlo di nuovo per usarlo.`;
+    apriVeloMockup('veloEliminaModello');
+  }
+  async function confermaDialogoModelloLocale(azione) {
+    const velo = $(azione === 'rinomina' ? '#veloRinominaModello' : '#veloEliminaModello'); const id = velo?.dataset.modelId; if (!id) return;
+    const m = state.modelLab.installed.find((x) => x.id === id);
+    try {
+      if (azione === 'rinomina') {
+        const next = $('#nomeModelloLab')?.value.trim(); if (!next) return;
+        await apiPost(`/api/v1/local-models/${encodeURIComponent(id)}/rename`, { name: next });
+        toast('Modello rinominato', next);
+      } else {
+        await apiPost(`/api/v1/local-models/${encodeURIComponent(id)}/delete`, {});
+        toast('Modello eliminato', `${m?.name || id} non è più sul disco.`);
+        if (modelloInstallatoScelto === id) modelloInstallatoScelto = null;
+      }
+      chiudiVeloMockup(velo.id);
+      await caricaModelliLocaliModelLab();
+    } catch (error) {
+      toast(azione === 'rinomina' ? 'Rinomina non riuscita' : 'Eliminazione non riuscita', error.message);
+    }
   }
 
   function renderizzaRuntimeModelLab() {
@@ -2646,7 +2688,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       controls.innerHTML = '<label class="setting-control"><span>Ordina</span><select id="modelLabHfSortControl" aria-label="Ordina risultati Hugging Face"><option value="downloads">Download</option><option value="likes">Preferiti</option><option value="created">Più recenti</option><option value="lastModified">Aggiornati</option></select></label><label class="setting-control"><span>Autore</span><input id="modelLabHfAuthorControl" type="search" aria-label="Filtra per autore Hugging Face" placeholder="Organizzazione" /></label><label class="setting-control"><span>Filtri</span><input id="modelLabHfFiltersControl" type="search" aria-label="Filtra modelli Hugging Face" placeholder="q4, text-generation" /></label><button class="secondary-btn compact" id="modelLabHfNextButtonControl" type="button" hidden>Carica altri risultati</button>';
       hfPanel.insertBefore(controls, hfPanel.querySelector('.model-lab-catalog-layout'));
     }
-    if (installedPanel && !installedPanel.querySelector('[data-model-lab-enhanced="installed"]')) {
+    if (installedPanel && !installedPanel.dataset.installatiMontato && !installedPanel.querySelector('[data-model-lab-enhanced="installed"]')) {
       const controls = document.createElement('div'); controls.dataset.modelLabEnhanced = 'installed'; controls.className = 'model-lab-enhanced-controls';
       controls.innerHTML = '<label class="search-field"><svg><use href="#i-search"></use></svg><input id="modelLabInstalledSearchControl" type="search" placeholder="Cerca modelli installati..." aria-label="Cerca modelli installati" /></label><input id="modelLabImportInput" type="file" accept=".gguf,application/octet-stream" hidden /><button class="secondary-btn compact" id="modelLabImportButton" type="button">Importa .gguf</button><button class="secondary-btn compact danger" id="modelLabImportCancelButton" type="button" hidden>Annulla</button><progress id="modelLabImportProgress" max="100" value="0" hidden aria-label="Avanzamento importazione"></progress><span class="settings-status" id="modelLabImportStatus" aria-live="polite"></span>';
       installedPanel.insertBefore(controls, $('#modelLabInstalledList'));
@@ -3412,6 +3454,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     state.modelLab.initialized = true;
     montaCorniceModelLab($('#modelLabCardSettings') || $('#modelLabCard'));
     montaCatalogoModelli($('#modelLabCatalogPanel'), $('#panel-catalogo'));
+    montaInstallati($('#modelLabInstalledPanel'), $('#panel-installati')); // 06/9 B6.8
     montaMisuraMemoria($('#modelLabOverviewPanel'), $('#panel-runtime [data-c=MemoryMeter]'));
     montaPannelloRuntime($('#modelLabRuntimeGate'));
     montaProviderPanel($('#modelLabProvidersPanel'));
@@ -3433,6 +3476,10 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     $('#modelLabHfSearchButton')?.addEventListener('click', () => cercaHuggingFaceModelLab());
     $('#modelLabHfSearch')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') cercaHuggingFaceModelLab(); });
     $('#modelLabHfNextButtonControl')?.addEventListener('click', () => cercaHuggingFaceModelLab({ append: true }));
+    $('#modelLabInstalledStateFilter')?.addEventListener('change', (event) => { state.modelLab.installedStateFilter = event.target.value; renderizzaModelliLocaliModelLab(); }); // 06/9 B6.8
+    $$('[data-lab-dialog-action]').forEach((b) => b.addEventListener('click', () => { void confermaDialogoModelloLocale(b.dataset.labDialogAction); })); // 06/9 B6.8: i dialoghi del mockup
+    $('#modelLabInstalledPanel [data-clear="installati"]')?.addEventListener('click', () => { state.modelLab.installedSearch = ''; state.modelLab.installedStateFilter = 'tutti'; const c = $('#modelLabInstalledSearchControl'); if (c) c.value = ''; const f = $('#modelLabInstalledStateFilter'); if (f) f.value = 'tutti'; renderizzaModelliLocaliModelLab(); });
+    $('#modelLabInstalledPanel [data-lab-go="runtime"]')?.addEventListener('click', () => setModelLabSection('overview'));
     $('#modelLabInstalledSearchControl')?.addEventListener('input', (event) => { state.modelLab.installedSearch = event.target.value; renderizzaModelliLocaliModelLab(); });
     /*
      * ⛔ 03/9 — DELEGA, non aggancio per nodo: le schede provider ora nascono
