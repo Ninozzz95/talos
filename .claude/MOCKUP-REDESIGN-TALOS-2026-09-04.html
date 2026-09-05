@@ -571,10 +571,16 @@ button{background:none; border:0; cursor:pointer; padding:0}
 #schermoModelLab .talos-toolbar>input{width:auto;min-width:0}
 #schermoModelLab .talos-kv__k{white-space:normal;overflow:visible;text-overflow:clip}
 #promptProva{min-height:calc(var(--talos-control-height) * 3);resize:vertical;padding:var(--talos-space-control)}
+.talos-toast-region{position:fixed;right:var(--talos-space-md);bottom:var(--talos-space-lg);width:min(var(--talos-inspector-w),calc(100% - var(--talos-space-lg) - var(--talos-space-lg)));display:grid;gap:var(--talos-space-sm);z-index:calc(var(--talos-z-app-overlay) - 1)}
+.talos-toast{padding:var(--talos-space-md);background:var(--talos-panel);box-shadow:var(--talos-shadow-floating)}
+.talos-toast p{margin-block:var(--talos-space-sm);overflow-wrap:anywhere}
+.talos-notification-panel{position:fixed;width:var(--talos-inspector-w);max-width:calc(100vw - var(--talos-space-lg));padding:var(--talos-space-md);z-index:var(--talos-z-menu);background:var(--talos-panel);box-shadow:var(--talos-shadow-floating)}
+.talos-notification-panel h2{font-size:var(--talos-font-size-md)}
 </style>
 
 <!-- ===================== REGIA DEL MOCKUP (non è prodotto) ===================== -->
 <div class="talos-regia" data-c="MockupRegia">
+<button class="talos-button talos-button--secondary talos-button--sm" data-toast-demo>Messaggi</button>
 <label class="talos-muted talos-browser__meta">Browser <select class="talos-select talos-select--sm" id="statoBrowser"><option value="pagina">Pagina acquisita</option><option value="vuoto">Nessuna pagina</option><option value="bloccata">Richiesta di permesso</option><option value="caricamento">Caricamento</option></select></label>
   <span class="talos-regia__name">Plancia TALOS</span>
   <span class="talos-regia__note">mockup sul tema Calm · 240 decisioni · ingegneria 04/09</span>
@@ -658,7 +664,7 @@ button{background:none; border:0; cursor:pointer; padding:0}
     <div class="talos-brand" data-c="Brand">
       <span class="talos-brand__mark" aria-hidden="true"><svg class="glyph"><use href="#glifo"/></svg></span>
       <div class="talos-brand__copy"><strong>TALOS</strong><span>Codice</span></div>
-      <button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" title="Notifiche: 1 cosa aspetta te"><svg class="i"><use href="#i-bell"/></svg></button>
+      <button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" id="campanella" title="Notifiche: 1 cosa aspetta te" aria-label="Notifiche: 1 cosa aspetta te" aria-expanded="false" aria-controls="pannelloNotifiche" aria-haspopup="dialog"><svg class="i"><use href="#i-bell"/></svg></button>
     </div>
 
     <div class="talos-sidebar__actions">
@@ -1236,7 +1242,7 @@ Una segnalazione di stallo non termina il processo.</pre>
       <div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>Componenti</h1></div><span class="talos-topbar__path">ogni blocco del mockup, in ogni stato · mappa a frontend/src/design-system</span><span class="talos-grow"></span><span class="talos-badge talos-badge--sm" id="contoComponenti">— blocchi</span></div>
       <div class="talos-page" data-c="Page">
         <div class="talos-page__head"><span class="talos-eyebrow">Inventario</span><h2>Un blocco, una fabbrica</h2><p>Le primitive portano le classi di <code class="talos-mono">primitives.css</code> e i nomi delle fabbriche di <code class="talos-mono">design-system/index.js</code>. I blocchi nuovi seguono la stessa grammatica BEM e dichiarano proprietà e stati.</p></div>
-        <div class="talos-inventory" id="inventario">
+        <div class="talos-inventory" id="inventario"><div class="talos-card talos-inventory__item"><div class="talos-inventory__name"><b>Toast · ToastRegion · NotificationPanel</b><span>Tre toni; campanella per le richieste in attesa</span></div><div class="talos-inventory__demo"><button class="talos-button talos-button--secondary" data-toast-demo>Mostra messaggi</button></div></div>
 <div class="talos-card talos-inventory__item"><div class="talos-inventory__name"><b>ModelLabScreen · DownloadQueue · DownloadRow · MemoryMeter · ModelTrial</b><span>Sei schede, formati, accessi e stati di esempio</span></div><div class="talos-inventory__demo"><button class="talos-button talos-button--secondary" data-vaia="modellab">Apri Model Lab</button></div></div>
 <div class="talos-card talos-inventory__item"><div class="talos-inventory__name"><b>IntroDialog</b><span>Cartella · accesso e modello · quattro politiche · fine</span></div><div class="talos-inventory__demo"><button class="talos-button talos-button--secondary" data-apre-velo="veloIntro">Apri primo avvio</button></div></div>
 <div class="talos-card talos-inventory__item"><div class="talos-inventory__name"><b>CommandPalette</b><span>15 comandi originali · ricerca · tastiera</span></div><div class="talos-inventory__demo"><button class="talos-button talos-button--secondary" data-apre-velo="veloComandi">Apri Comandi</button></div></div>
@@ -1422,6 +1428,8 @@ Una segnalazione di stallo non termina il processo.</pre>
   </aside>
 </div>
 
+<div class="talos-toast-region" id="regioneToast" data-c="ToastRegion" aria-label="Messaggi" hidden><div class="talos-card talos-toast" data-c="Toast" id="toast-nota"><div role="status" aria-atomic="true"><span class="talos-badge talos-badge--sm talos-badge--accent">Nota</span><p>La lettura della pagina è pronta.</p></div><div class="talos-toolbar"><button class="talos-button talos-button--secondary talos-button--sm" data-toast-action="browser">Esamina pagina</button><span class="talos-grow"></span><button class="talos-button talos-button--ghost talos-icon-button" data-toast-chiudi="nota" aria-label="Chiudi messaggio nota"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></div></div><div class="talos-card talos-toast" data-c="Toast" id="toast-riuscito"><div role="status" aria-atomic="true"><span class="talos-badge talos-badge--sm talos-badge--success">Riuscito</span><p>Qwen3 8B è disponibile sul disco.</p></div><div class="talos-toolbar"><button class="talos-button talos-button--secondary talos-button--sm" data-toast-action="installati">Apri modelli</button><span class="talos-grow"></span><button class="talos-button talos-button--ghost talos-icon-button" data-toast-chiudi="riuscito" aria-label="Chiudi messaggio riuscito"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></div></div><div class="talos-card talos-toast" data-c="Toast" id="toast-guasto"><div role="status" aria-atomic="true"><span class="talos-badge talos-badge--sm talos-badge--danger">Guasto</span><p>Download interrotto. I dati già ricevuti sono conservati.</p></div><div class="talos-toolbar"><button class="talos-button talos-button--secondary talos-button--sm" data-toast-action="download">Vedi download</button><span class="talos-grow"></span><button class="talos-button talos-button--ghost talos-icon-button" data-toast-chiudi="guasto" aria-label="Chiudi messaggio guasto"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></div></div></div>
+<div class="talos-card talos-notification-panel" id="pannelloNotifiche" data-c="NotificationPanel" role="dialog" aria-labelledby="titoloNotifiche" hidden><div class="talos-toolbar"><h2 id="titoloNotifiche">Aspetta te</h2><span class="talos-grow"></span><button class="talos-button talos-button--ghost talos-icon-button" id="chiudiNotifiche" aria-label="Chiudi notifiche"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></div><p class="talos-muted">Una richiesta da decidere.</p><button class="talos-list-row" data-c="ListRow" data-notifica="approvazione"><span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#i-shield"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Store sessioni: pulizia</span><span class="talos-list-row__sub">Vuole scrivere fuori dalla cartella · 17:51</span></span></button></div>
 <!-- ===================== NUOVA SESSIONE (F1-F30) ===================== -->
 <div class="overlay-layer overlay-layer--modal" id="veloNuova" data-c="OverlayLayer" hidden>
   <div class="talos-dialog" data-c="Dialog" role="dialog" aria-modal="true" aria-labelledby="titoloNuova">
@@ -1647,7 +1655,7 @@ Una segnalazione di stallo non termina il processo.</pre>
   document.querySelectorAll("[data-vaia]").forEach(function(b){ b.addEventListener("click", function(){ mostra(b.dataset.vaia); }); });
 
   /* ---- Disclosure (Altro, attrezzi del giro) ---- */
-  document.querySelectorAll("[aria-expanded][aria-controls]:not([data-browser-demo])").forEach(function(t){
+  document.querySelectorAll("[aria-expanded][aria-controls]:not([data-browser-demo]):not([aria-haspopup])").forEach(function(t){
     t.addEventListener("click", function(){ var c = document.getElementById(t.getAttribute("aria-controls")); if (!c) return; var a = t.getAttribute("aria-expanded") === "true"; t.setAttribute("aria-expanded", String(!a)); c.hidden = a; });
   });
 
@@ -1812,7 +1820,7 @@ Una segnalazione di stallo non termina il processo.</pre>
 
  function aggiornaModalita(){
  const aperti=[...document.querySelectorAll('.overlay-layer:not([hidden])')];
- document.querySelector('.talos-shell').inert=aperti.length>0;document.querySelector('.talos-regia').inert=aperti.length>0;
+ document.querySelector('.talos-shell').inert=aperti.length>0;document.getElementById('regioneToast').inert=aperti.length>0;document.querySelector('.talos-regia').inert=aperti.length>0;
  aperti.forEach((v,i)=>v.inert=i!==aperti.length-1);
  }
  document.addEventListener('keydown',e=>{
@@ -1977,12 +1985,26 @@ Una segnalazione di stallo non termina il processo.</pre>
  if(a==='annulla'){document.getElementById('downloadStato').textContent='Annullato';document.getElementById('downloadPausa').disabled=true;chiudi('veloAnnullaDownload');}
  }));
 
+
+ function mostraToastDemo(){document.getElementById('regioneToast').hidden=false;document.querySelectorAll('#regioneToast .talos-toast').forEach(t=>t.hidden=false);}
+ function chiudiToast(id){const t=document.getElementById('toast-'+id);const fuoco=t.contains(document.activeElement);t.hidden=true;const altro=document.querySelector('#regioneToast .talos-toast:not([hidden]) button');if(!altro)document.getElementById('regioneToast').hidden=true;if(fuoco)(altro||document.getElementById('campanella')).focus();}
+ document.querySelectorAll('[data-toast-demo]').forEach(b=>b.addEventListener('click',mostraToastDemo));
+ document.querySelectorAll('[data-toast-chiudi]').forEach(b=>b.addEventListener('click',()=>chiudiToast(b.dataset.toastChiudi)));
+ document.querySelectorAll('[data-toast-action]').forEach(b=>b.addEventListener('click',()=>{document.getElementById('regioneToast').hidden=true;if(b.dataset.toastAction==='browser')mostra('browser');else labGo(b.dataset.toastAction);}));
+ function chiudiPannelloNotifiche(fuoco=true){document.getElementById('pannelloNotifiche').hidden=true;const b=document.getElementById('campanella');b.setAttribute('aria-expanded','false');if(fuoco)b.focus();}
+ function apriPannelloNotifiche(){const b=document.getElementById('campanella'),p=document.getElementById('pannelloNotifiche');if(!p.hidden){chiudiPannelloNotifiche();return;}p.hidden=false;b.setAttribute('aria-expanded','true');const r=b.getBoundingClientRect(),spazio=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--talos-space-sm'))||8;p.style.top=(r.bottom+spazio)+'px';p.style.left=Math.max(spazio,Math.min(r.left,innerWidth-p.offsetWidth-spazio))+'px';p.querySelector('[data-notifica]').focus();}
+ document.getElementById('campanella').addEventListener('click',apriPannelloNotifiche);document.getElementById('chiudiNotifiche').addEventListener('click',()=>chiudiPannelloNotifiche());
+ document.querySelector('[data-notifica]').addEventListener('click',()=>{chiudiPannelloNotifiche(false);apri('veloPermessi');});
+ document.addEventListener('pointerdown',e=>{const p=document.getElementById('pannelloNotifiche');if(!p.hidden&&!p.contains(e.target)&&!document.getElementById('campanella').contains(e.target))chiudiPannelloNotifiche(false);});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!document.getElementById('pannelloNotifiche').hidden){e.preventDefault();chiudiPannelloNotifiche();}});
+
   disegnaLingua();
 
   /* ---- Apertura diretta dall'URL: #board, #review, #nuova, #permessi, #chiaro, #compatta ---- */
   function mostraHash(){
   var h = (location.hash || "").slice(1);
   if (SCHERMI[h]) mostra(h); else mostra("chat");
+ if(h==="toast")mostraToastDemo();
   if (h === "intro") apri("veloIntro"); else if (h === "comandi") apriComandi(); else if (h === "nuova") apri("veloNuova"); else if (h === "permessi") apri("veloPermessi");
   else if (h === "chiaro") radice.setAttribute("data-theme","light");
   else if (h === "compatta") radice.setAttribute("data-densita","compatta");
