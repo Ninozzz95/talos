@@ -529,6 +529,14 @@ Non misurabile: frecce fra le schede dei file (serve una sessione con due file: 
 a pagamento). Terminale e Browser restano fuori (B1/K-I di Astra).
 Cancelli: unit 84/84, statico 195/195, componenti Review+Conversazione 6/6.
 
+### R-10 (06/09 ~02:45) — ProviderCard (c66e2109) e raccordo Runtime (768ae6fd): ACCETTATI, uniti in `6f56e4e6`
+
+Sette fornitori come schede a disclosure (APG disclosure citato), tre fatti distinti (chiave ·
+configurazione · prova), bozze preservate, recupero errori; il pannello Runtime ora con
+`talos-field`/`talos-label`/`talos-textarea`, azioni primaria/secondaria e badge di stato — la
+richiesta R-08/R-09 è soddisfatta. Cancelli sulla lane unita: template diff 0, unit 87/87,
+statico 195/195, componenti 90/90, build ok.
+
 - T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
   15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
   statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo
