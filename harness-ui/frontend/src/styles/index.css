@@ -680,3 +680,25 @@ button{background:none; border:0; cursor:pointer; padding:0}
  .talos-shell.details-open .talos-inspector__head{display:flex;align-items:center;gap:var(--talos-space-sm)}
  .talos-shell.details-open .talos-resizer--inspector{display:none}
 }
+
+.talos-range{width:100%;accent-color:var(--talos-accent)}
+.talos-range__labels{display:flex;justify-content:space-between;font-size:var(--talos-font-size-xs);color:var(--talos-muted)}
+.talos-model-options{max-height:calc(var(--talos-row) * 5);overflow-y:auto}
+[data-modello-gruppo]:not([open]) summary .i{transform:rotate(-90deg)}
+
+#veloModello .talos-dialog__body{display:flex;overflow:hidden}
+#veloModello [data-c="ModelPicker"]{flex:1;min-height:0}
+#veloModello [data-c="ModelPicker"]> *{flex-shrink:0}
+#veloModello .talos-model-options{flex:1 1 auto;min-height:var(--talos-row)}
+
+.talos-dialog{position:relative}
+.talos-dialog>.talos-resizer--dialog{z-index:var(--talos-z-menu)}
+.talos-resizer--dialog-width{left:auto;right:0;top:var(--talos-space-lg);bottom:var(--talos-space-lg);width:var(--talos-space-sm)}
+.talos-resizer--dialog-height{left:var(--talos-space-lg);right:var(--talos-space-lg);top:auto;bottom:0;width:auto;height:var(--talos-space-sm);cursor:row-resize}
+.talos-resizer--dialog-height::after{left:0;right:0;top:auto;bottom:0;width:auto;height:var(--talos-focus-width)}
+.talos-resizer--dialog-both{left:auto;right:var(--talos-space-xs);top:auto;bottom:var(--talos-space-xs);width:var(--talos-space-md);height:var(--talos-space-md);border-right:var(--talos-focus-width) solid var(--talos-muted);border-bottom:var(--talos-focus-width) solid var(--talos-muted);border-bottom-right-radius:var(--talos-radius-control);cursor:nwse-resize}
+.talos-resizer--dialog-both::after{display:none}
+.talos-resizer--dialog-both:hover,.talos-resizer--dialog-both:focus-visible{border-color:var(--talos-accent)}
+.talos-dialog[data-user-sized] .talos-dialog__body{overflow:auto}
+#veloModello .talos-dialog[data-user-sized] .talos-dialog__body{display:block}
+#veloModello input[type=checkbox]{accent-color:var(--talos-accent)}
