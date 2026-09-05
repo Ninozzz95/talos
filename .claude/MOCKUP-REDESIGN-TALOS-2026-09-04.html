@@ -258,8 +258,9 @@ button{background:none; border:0; cursor:pointer; padding:0}
 .talos-topbar__title h1{min-width:0}
 .talos-topbar .talos-tabs, .talos-topbar__actions{flex:none}
 .talos-topbar{container-type:inline-size; overflow:hidden}
-@container (max-width:760px){ .talos-topbar__path, .talos-topbar [data-azione="comprimi"]{display:none} .talos-topbar__title{min-width:min(140px,30%)} }
-@container (max-width:640px){ .talos-topbar [data-azione="comandi"]{display:none} .talos-topbar__actions{gap:4px} }
+@container (max-width:900px){ .talos-topbar__path{display:none} .talos-topbar__title{min-width:min(140px,30%)} }
+@container (max-width:820px){ .talos-topbar [data-azione="comprimi"]{display:none} }
+@container (max-width:720px){ .talos-topbar [data-azione="comandi"]{display:none} .talos-topbar__actions{gap:4px} }
 .talos-topbar__title h1{font-size:15px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .talos-topbar__title .i{color:var(--talos-muted)}
 .talos-topbar__path{font-family:var(--talos-font-mono); font-size:11.5px; color:var(--talos-muted); white-space:nowrap; flex:1 1 0; min-width:40px; overflow:hidden; text-overflow:ellipsis}
@@ -364,6 +365,7 @@ button{background:none; border:0; cursor:pointer; padding:0}
 .talos-resizer--composer{top:2px; left:2px; bottom:auto; width:18px; height:18px; border:1px solid var(--talos-border-strong); border-right:0; border-bottom:0; border-radius:10px 0 0 0; cursor:nwse-resize; color:var(--talos-muted); opacity:.55}
 .talos-resizer--composer::after{display:none}
 .talos-resizer--composer:hover,.talos-resizer--composer:focus-visible{opacity:1; border-color:var(--talos-accent)}
+.talos-resizer--composer:focus-visible{outline:2px solid var(--talos-ring); outline-offset:2px}
 .talos-composer.composer-resizing{user-select:none}
 .talos-chip__label{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .talos-composer__bar .talos-composer__mic{margin-left:auto}
@@ -602,8 +604,8 @@ button{background:none; border:0; cursor:pointer; padding:0}
 .talos-browser__back{transform:rotate(90deg)}
 .talos-browser__next{transform:rotate(-90deg)}
 .talos-browser__sr{position:absolute;clip-path:inset(100%);overflow:hidden;width:0;height:0}
-.talos-topbar:has([data-vistetab]){height:auto;min-height:var(--talos-topbar-h);flex-wrap:wrap;padding-block:var(--talos-space-sm)}
-.talos-topbar [data-vistetab]{flex-wrap:wrap}
+.talos-topbar:has([data-vistetab]){flex-wrap:nowrap}
+.talos-topbar [data-vistetab]{flex-wrap:nowrap}
 #veloComandi .talos-dialog__body{display:flex;flex-direction:column;overflow:hidden}
 #veloComandi .talos-dialog__field{flex:none}
 #risultatiComandi{overflow-y:auto;min-height:0}
@@ -686,7 +688,7 @@ button{background:none; border:0; cursor:pointer; padding:0}
       <button class="talos-tabs__tab" role="tab" data-schermo="vuota" aria-selected="false">Vuota</button>
       <button class="talos-tabs__tab" role="tab" data-schermo="terminale" aria-selected="false">Terminale</button>
       <button class="talos-tabs__tab" role="tab" data-schermo="review" aria-selected="false">Review</button>
-      <button class="talos-tabs__tab" role="tab" data-schermo="browser" aria-selected="false">Browser</button>
+      <button class="talos-tabs__tab" role="tab" data-vaia="browser" data-schermo="browser" aria-selected="false">Browser</button>
 <button class="talos-tabs__tab" role="tab" data-schermo="modellab" aria-selected="false">Model Lab</button>
       <button class="talos-tabs__tab" role="tab" data-schermo="capability" aria-selected="false">Capability</button>
       <button class="talos-tabs__tab" role="tab" data-schermo="board" aria-selected="false">Board</button>
