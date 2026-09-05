@@ -1,5 +1,6 @@
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
+import { aggiungiGiroAllaSpine, creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
 import { aggiornaTopbar } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati
 import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 05/9 Fase 2: WorkspaceFooter — il piede della sidebar dice cartella, tema e chi serve il modello // 05/9 Fase 2: SessionItem — la riga della sidebar è un componente del mockup
 
@@ -6531,12 +6532,88 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
     }
   }
 
+  /*
+   * 05/9 Fase 2: Conversazione. Il mockup raggruppa la chat in TURNI
+   * (`.talos-turn`): a sinistra la spine con il numero del giro e un tick per
+   * ogni giro, a destra il messaggio. Un messaggio della persona apre un turno
+   * suo; tutto cio' che TALOS produce fino al messaggio successivo della
+   * persona (testo, attrezzi, note, approvazioni, artefatti, attesa) sta in
+   * UN turno di TALOS, e ogni nuovo giro (RunStarted) aggiunge un numero alla
+   * spine. Chi monta nella chat chiama `nellaChat(elemento, tipo)`.
+   */
+  function turnoTalosCorrente() {
+    const conversation = $('#conversation');
+    const ultimo = conversation?.lastElementChild;
+    if (ultimo?.classList.contains('talos-turn') && ultimo.dataset.turno === 'talos') return ultimo;
+    const precedente = [...(conversation?.querySelectorAll('.talos-turn-spine__n') || [])].pop();
+    const base = precedente ? Number(precedente.textContent) + 1 : 1;
+    const turno = creaTurno({ numeri: [{ n: base, tick: 1, tono: 'current' }] });
+    turno.dataset.turno = 'talos';
+    turno.dataset.spineBase = String(base);
+    turno.append(creaMessaggioTalos({ modello: nomeModelloBreve(state.realSession.currentRunModel), ora: state.realSession.deferHistoricalRendering ? '' : oraMessaggio() }));
+    conversation?.appendChild(turno);
+    markMotionEnter(turno);
+    return turno;
+  }
+  function nomeModelloBreve(modello) {
+    if (typeof modello !== 'string' || !modello.trim()) return '';
+    return modello.replace(/^~/u, '').split('/').pop();
+  }
+  /** Monta un blocco nella chat: 'utente' apre un turno; tutto il resto entra nel messaggio TALOS del turno corrente. */
+  function nellaChat(elemento, tipo = 'talos') {
+    const conversation = $('#conversation');
+    if (!conversation) return elemento;
+    if (tipo === 'utente') {
+      const precedente = [...conversation.querySelectorAll('.talos-turn-spine__n')].pop();
+      const turno = creaTurno({ numeri: [{ n: precedente ? Number(precedente.textContent) + 1 : 1, tick: 1 }] });
+      turno.dataset.turno = 'utente';
+      turno.append(elemento);
+      conversation.appendChild(turno);
+      return turno;
+    }
+    const turno = turnoTalosCorrente();
+    const messaggio = turno.querySelector(':scope > .talos-message');
+    /*
+     * I numeri della spine sono i GIRI del modello: ogni volta che TALOS riparte
+     * a scrivere o a usare attrezzi dopo un blocco precedente, la spine guadagna
+     * un numero (nel mockup: 2, 3, 4 nello stesso turno). Il primo blocco usa il
+     * numero con cui il turno e' nato.
+     */
+    const eBloccoDiGiro = elemento.getAttribute('data-c') === 'ActivityBundle' && !elemento.classList.contains('real-reasoning-note');
+    if (eBloccoDiGiro && messaggio.querySelector(':scope > [data-c="ActivityBundle"]:not(.real-reasoning-note)')) {
+      const spine = turno.querySelector('.talos-turn-spine');
+      const n = spine.querySelectorAll('.talos-turn-spine__n').length + Number(turno.dataset.spineBase || 1);
+      impostaTonoUltimoTick(spine, null);
+      aggiungiGiroAllaSpine(spine, { n, tick: 1, tono: 'current' });
+    }
+    // l'attesa resta sempre in fondo al messaggio
+    const attesa = messaggio.querySelector(':scope > .talos-waiting');
+    if (attesa && elemento !== attesa) messaggio.insertBefore(elemento, attesa); else messaggio.append(elemento);
+    return elemento;
+  }
+  /** A ogni nuovo giro dentro lo stesso turno TALOS la spine guadagna un numero. */
+  function segnaGiroNellaSpine() {
+    const conversation = $('#conversation');
+    const ultimo = conversation?.lastElementChild;
+    if (!ultimo?.classList.contains('talos-turn') || ultimo.dataset.turno !== 'talos') return;
+    const spine = ultimo.querySelector('.talos-turn-spine');
+    impostaTonoUltimoTick(spine, null);
+    const n = spine.querySelectorAll('.talos-turn-spine__n').length + Number(ultimo.dataset.spineBase || 1);
+    aggiungiGiroAllaSpine(spine, { n, tick: 1, tono: 'current' });
+  }
+  /** Il tick del giro corrente cresce con gli attrezzi usati (fino a 5) e prende il tono dell'esito. */
+  function aggiornaTickGiro({ attrezzi = null, tono } = {}) {
+    const conversation = $('#conversation');
+    const ultimo = conversation?.lastElementChild;
+    if (!ultimo?.classList.contains('talos-turn')) return;
+    const tick = ultimo.querySelector('.talos-turn-spine__tick:last-of-type');
+    if (!tick) return;
+    if (Number.isFinite(attrezzi)) tick.dataset.tick = String(Math.min(5, Math.max(1, attrezzi)));
+    if (tono !== undefined) impostaTonoUltimoTick(ultimo.querySelector('.talos-turn-spine'), tono);
+  }
+
   function appendRealTaskStart(task, contesto = null) {
     const conversation = $('#conversation');
-    const article = document.createElement('article');
-    article.className = 'message user-message';
-    const bubble = document.createElement('div');
-    bubble.className = 'message-bubble';
     /*
      * ⛔⛔ 27/8, trovato dalla pipeline QA visiva: per un comando diretto
      * (agent-service.mjs, eseguiComandoDiretto → runStarted({input:
@@ -6553,19 +6630,15 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
      * secondo) — solo un F5/resume, che riparte da zero e replica
      * l'evento VERO, lo rivelava. Tre forme distinte, tre etichette oneste.
      */
-    bubble.textContent = task.consegna || task.consegnaCorta || task.comandoDiretto || (task.id ? task.id : 'Comando diretto');
-    const meta = document.createElement('div');
-    meta.className = 'message-meta';
-    const span = document.createElement('span');
-    span.textContent = task.id
+    const testoBolla = task.consegna || task.consegnaCorta || task.comandoDiretto || (task.id ? task.id : 'Comando diretto');
+    const etichettaMeta = (task.id
       ? `Task reale · ${task.id}`
       : (task.consegna || task.consegnaCorta)
         ? `Compito libero${task.progetto ? ` · ${task.progetto}` : ''}`
-        : 'Comando diretto';
-    span.textContent += etichettaPermessiGiro(contesto);
-    meta.appendChild(span);
-    article.append(bubble, meta);
-    conversation.appendChild(article);
+        : 'Comando diretto') + etichettaPermessiGiro(contesto);
+    // 05/9 Fase 2: Conversazione — il messaggio della persona nel blocco del mockup (ora · etichetta del giro)
+    const article = nellaChat(creaMessaggioUtente({ testo: testoBolla, ora: state.realSession.deferHistoricalRendering ? '' : oraMessaggio(), meta: etichettaMeta }), 'utente');
+    void conversation;
     markMotionEnter(article);
     /* ⛔ 28/8, owner: "auto centramento dello scroll dei messaggi appena se ne invia uno nuovo (meta schermo)" — questa era l'UNICA delle sei chiamate scrollIntoView di questo file con block:'center' invece di 'end': ogni messaggio inviato veniva centrato a metà schermo invece di scorrere in fondo come ogni altro elemento appeso alla conversazione. */
     scorriAllaBollaAppesa(article);
@@ -6586,17 +6659,8 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
      * quella che la persona vede.
      */
     if (typeof text === 'string' && text.trim() !== '') state.realSession.ultimaDomanda = text;
-    const conversation = $('#conversation');
-    const article = document.createElement('article');
-    article.className = 'message user-message';
-    const bubble = document.createElement('div');
-    bubble.className = 'message-bubble';
-    bubble.textContent = text;
-    const meta = document.createElement('div');
-    meta.className = 'message-meta';
-    meta.appendChild(textElement('span', '', `Follow-up${etichettaPermessiGiro(contesto)}`));
-    article.append(bubble, meta);
-    conversation.appendChild(article);
+    // 05/9 Fase 2: Conversazione — il follow-up e' un messaggio della persona nel blocco del mockup
+    const article = nellaChat(creaMessaggioUtente({ testo: text, ora: state.realSession.deferHistoricalRendering ? '' : oraMessaggio(), meta: `Follow-up${etichettaPermessiGiro(contesto)}` }), 'utente');
     markMotionEnter(article);
     scorriAllaBollaAppesa(article);
   }
@@ -6682,57 +6746,10 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
       if (label) label.textContent = etichetta;
       return;
     }
-    const conversation = $('#conversation');
-    const article = document.createElement('article');
-    article.className = 'message assistant-message compact-message real-waiting-note';
-    article.setAttribute('role', 'status');
-    article.setAttribute('aria-live', 'polite');
-    article.setAttribute('aria-atomic', 'true');
-    /*
-     * ⛔⛔⛔ 02/9 — owner: "il logo non è animato come il mobile, ci deve
-     * essere una linea che attraversa i dot, usa direttamente la stessa
-     * identica immagine animata del mobile". Questa è ORA la porta esatta
-     * di `mobile/src/components/brand/TalosLineLoader.vue` (F4-#24/F5-#30):
-     * stesso viewBox 96×16, stessa traccia fioca, stesso sweep che disegna
-     * da sinistra a destra, stessi tre nodi VUOTI a cx 16/48/80 r 4 che si
-     * riempiono quando la linea li raggiunge. Il desktop aveva divergito su
-     * tre soli pallini che pulsano (viewBox 48×18, nessuna linea): non era
-     * la stessa immagine. ⛔ Il regolamento del progetto è
-     * [[mobile-harness-ui-si-allinea-sempre-al-desktop]] per il
-     * COMPORTAMENTO; qui l'owner ordina l'opposto per questa GRAFICA, ed è
-     * un ordine esplicito e diretto — il mobile è la fonte. Stili in
-     * styles.css, portati riga per riga da `mobile/src/style.css`.
-     */
-    const svgNs = 'http://www.w3.org/2000/svg';
-    const svg = document.createElementNS(svgNs, 'svg');
-    svg.setAttribute('class', 'talos-line-loader');
-    svg.setAttribute('viewBox', '0 0 96 16');
-    // ⛔ 02/9 — owner: "troppo grande, fallo più piccolo e coerente". La
-    // misura vera la decide il CSS (agganciata alla scala del testo, vedi
-    // `.talos-line-loader` in styles.css); questi due attributi sono solo
-    // il ripiego se il foglio non arriva, e ne rispettano il rapporto.
-    svg.setAttribute('width', '48');
-    svg.setAttribute('height', '8');
-    svg.setAttribute('aria-hidden', 'true');
-    for (const classe of ['talos-line-loader-track', 'talos-line-loader-sweep']) {
-      const linea = document.createElementNS(svgNs, 'line');
-      linea.setAttribute('class', classe);
-      linea.setAttribute('x1', '4'); linea.setAttribute('y1', '8');
-      linea.setAttribute('x2', '92'); linea.setAttribute('y2', '8');
-      svg.append(linea);
-    }
-    for (const cx of [16, 48, 80]) {
-      const nodo = document.createElementNS(svgNs, 'circle');
-      nodo.setAttribute('class', 'talos-line-loader-node');
-      nodo.setAttribute('cx', String(cx)); nodo.setAttribute('cy', '8'); nodo.setAttribute('r', '4');
-      svg.append(nodo);
-    }
-    const elapsed = textElement('span', 'run-activity-elapsed', '0s');
-    elapsed.setAttribute('aria-hidden', 'true');
-    const labelEl = textElement('span', 'run-activity-label', etichetta);
+    // 05/9 Fase 2: Conversazione — l'attesa e' lo scheletro del mockup con la riga animata del marchio (stessa immagine del mobile)
+    const { blocco: article, label: labelEl, elapsed } = creaAttesa({ etichetta });
     article.dataset.activity = stato;
-    article.append(svg, labelEl, elapsed);
-    conversation.appendChild(article);
+    nellaChat(article);
     state.realSession.attesaBubble = article;
     state.realSession.attesaAvviataA = typeof performance !== 'undefined' && typeof performance.now === 'function'
       ? performance.now()
@@ -6778,93 +6795,35 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
   function ensureAssistantMessageElement(messageId) {
     const existing = state.realSession.messageElements.get(messageId);
     if (existing) return existing;
-    const conversation = $('#conversation');
-    const article = document.createElement('article');
-    article.className = 'message assistant-message compact-message';
-    const meta = document.createElement('div');
-    meta.className = 'assistant-meta';
-    const glyph = document.createElement('span');
-    glyph.className = 'talos-glyph';
-    glyph.appendChild(textElement('span', 'brand-glyph-mark', ''));
-    meta.append(glyph, document.createTextNode(`TALOS · ${state.realSession.currentRunModel || 'sessione reale'}`));
+    /*
+     * 05/9 Fase 2: Conversazione. Il testo di TALOS scorre nel messaggio del
+     * turno corrente: `article` e' il contenitore del testo (`.assistant-copy`,
+     * il gancio del render incrementale) e le azioni (copia · ascolta · chiedi
+     * di nuovo) sono il blocco del mockup, visibile al passaggio del mouse.
+     * Il turno porta gia' la testata (avatar · TALOS · modello · ora).
+     */
+    const turno = turnoTalosCorrente();
+    const messaggio = turno.querySelector(':scope > .talos-message');
+    const testataMeta = messaggio.querySelector('.talos-message__meta');
+    if (testataMeta && state.realSession.currentRunModel) testataMeta.textContent = [nomeModelloBreve(state.realSession.currentRunModel), state.realSession.deferHistoricalRendering ? '' : oraMessaggio()].filter(Boolean).join(' · ');
+    const article = document.createElement('div');
+    article.className = 'talos-message__copy';
     const copy = document.createElement('div');
     copy.className = 'assistant-copy';
-    article.append(meta, copy);
-    /*
-     * ⭐⭐⭐ 03/9 — owner: «sotto ogni risposta mancano i pulsantini per
-     * copiare la risposta, salvarla nella libreria etc».
-     *
-     * ## Cosa c'era davvero, misurato prima di scrivere
-     *
-     * `.message-actions` esisteva nel CSS **e** aveva un gestore di click —
-     * ma NESSUNA riga di codice la creava: impalcatura morta. E il gestore
-     * era un residuo di mockup: `retry` mostrava il toast «Rigenerazione
-     * avviata» senza rigenerare niente, e like/dislike accendevano un
-     * pulsante senza salvare da nessuna parte. Renderla visibile così
-     * avrebbe messo a schermo tre bottoni finti su quattro.
-     *
-     * ## Perché queste tre e non le quattro del mobile
-     *
-     * Il mobile ha copia · leggi · rigenera · salva in Libreria. Qui la
-     * Libreria NON ESISTE ancora (è il lavoro `NAV-CAPABILITY-FIRSTCLASS-01`,
-     * già in coda): un bottone «Salva in Libreria» che non salva sarebbe
-     * «APERTA non è FATTA» un'altra volta. Manca, e resta scritto che manca.
-     *
-     * ⛔ E non si chiama «Rigenera»: qui rimanda la stessa domanda come
-     * NUOVO turno, non sostituisce la risposta — l'architettura della
-     * sessione è ad append. Il pulsante dice quello che fa.
-     *
-     * ⭐ Ricerca 03/9 (uxpatternsguide.com/patterns/chat-interface,
-     * setproduct.com): le azioni per messaggio vanno DOPO il testo nel DOM,
-     * mai prima — se stanno prima, lo screen reader annuncia «copia,
-     * rigenera» prima di una sola parola della risposta. Per questo la barra
-     * è appesa dopo `.assistant-copy` e non nella riga di intestazione.
-     */
-    const azioni = document.createElement('div');
-    azioni.className = 'message-actions';
-    azioni.setAttribute('role', 'group');
-    azioni.setAttribute('aria-label', 'Azioni sulla risposta');
-    const bottoneAzione = (nome, etichetta, iconaId, alClic) => {
-      const bottone = document.createElement('button');
-      bottone.type = 'button';
-      bottone.dataset.messageAction = nome;
-      bottone.setAttribute('aria-label', etichetta);
-      bottone.title = etichetta;
-      bottone.innerHTML = `<svg><use href="#${iconaId}"/></svg>`;
-      bottone.addEventListener('click', alClic);
-      return bottone;
-    };
-    azioni.append(bottoneAzione('copy', 'Copia la risposta', 'i-copy', () => {
-      copyText(copy.textContent || '', 'Risposta copiata');
-    }));
-    /*
-     * ⛔ Il bottone «Ascolta» esisteva già, ma nella riga di INTESTAZIONE,
-     * cioè prima del testo: sbagliato per lo stesso motivo di sopra, e
-     * incoerente ora che le altre azioni stanno sotto. Spostato qui, con la
-     * stessa classe e lo stesso comportamento di prima — e sempre solo se il
-     * motore di sintesi esiste davvero.
-     */
-    if (sintesiVoceDisponibile) {
-      const ascolta = bottoneAzione('listen', 'Ascolta la risposta', 'i-play', () => leggiVoceAlta(copy.textContent || '', ascolta));
-      ascolta.classList.add('assistant-listen-btn');
-      ascolta.setAttribute('aria-pressed', 'false');
-      azioni.append(ascolta);
-    }
-    const chiediDiNuovo = bottoneAzione('ask-again', 'Chiedi di nuovo', 'i-history', () => {
+    article.append(copy);
+    nellaChat(article);
+    const azioni = creaAzioniMessaggio({ ascolta: sintesiVoceDisponibile });
+    azioni.querySelector('[data-message-action="copy"]').addEventListener('click', () => copyText(copy.textContent || '', 'Risposta copiata'));
+    const ascolta = azioni.querySelector('[data-message-action="listen"]');
+    if (ascolta) ascolta.addEventListener('click', () => leggiVoceAlta(copy.textContent || '', ascolta));
+    azioni.querySelector('[data-message-action="ask-again"]').addEventListener('click', () => {
       const domanda = state.realSession.ultimaDomanda;
       if (!domanda) { toast('Nessuna domanda da rimandare', 'Questa risposta non ha una domanda registrata in questa sessione.'); return; }
       void resumeSession(domanda);
     });
-    azioni.append(chiediDiNuovo);
-    article.append(azioni);
-    /*
-     * ⭐⭐⭐ 29/8 — FASE J, TTS: un bottone per bubble, aggiunto UNA sola
-     * volta qui in `meta` (mai ricreato dagli aggiornamenti streaming,
-     * che toccano solo `.assistant-copy` — vedi la doc sopra la
-     * funzione). Costruito solo se `speechSynthesis` esiste — mai un
-     * bottone che sembra funzionare e non fa niente.
-     */
-    conversation.appendChild(article);
+    const vecchieAzioni = messaggio.querySelector(':scope > .talos-message__actions');
+    if (vecchieAzioni) vecchieAzioni.remove();
+    nellaChat(azioni);
     markMotionEnter(article);
     state.realSession.messageElements.set(messageId, article);
     return article;
@@ -6905,43 +6864,20 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
    */
   function apriBatchSeServe() {
     if (state.realSession.batchAttivo) return state.realSession.batchAttivo;
-    const conversation = $('#conversation');
-    const article = document.createElement('article');
-    article.className = 'message assistant-message compact-message tool-batch';
-    const summary = document.createElement('button');
-    summary.type = 'button';
-    summary.className = 'tool-note-summary tool-batch-summary';
-    summary.setAttribute('aria-expanded', 'false');
-    const glyph = document.createElement('span');
-    glyph.className = 'talos-glyph';
-    glyph.textContent = '⚙';
-    const summaryText = document.createElement('span');
-    summaryText.className = 'tool-note-summary-text';
-    summaryText.textContent = 'Attività…';
-    const diffBadge = document.createElement('span');
-    diffBadge.className = 'tool-note-diff';
-    diffBadge.hidden = true;
-    const chevron = document.createElement('span');
-    chevron.className = 'tool-note-chevron';
-    chevron.textContent = '›';
-    chevron.setAttribute('aria-hidden', 'true');
-    summary.append(glyph, summaryText, diffBadge, chevron);
-    const contenitore = document.createElement('div');
-    contenitore.className = 'tool-batch-items';
-    contenitore.hidden = true;
-    summary.addEventListener('click', () => {
-      const aperto = summary.getAttribute('aria-expanded') === 'true';
-      summary.setAttribute('aria-expanded', String(!aperto));
-      contenitore.hidden = aperto;
-    });
-    article.append(summary, contenitore);
-    conversation.appendChild(article);
+    // 05/9 Fase 2: Conversazione — il batch e' l'ActivityBundle del mockup (testa richiudibile, righe dentro)
+    const attivita = creaAttivita({ riassunto: 'Attivita\u2026' });
+    const article = attivita.card;
+    const { contenitore, summaryText } = attivita;
+    const diffBadge = { hidden: true, replaceChildren() {} }; // il badge del diff vive nella testa: vedi aggiornaRiassuntoBatch
+    nellaChat(article);
     markMotionEnter(article);
     scorriAllaBollaAppesa(article);
     const batch = {
       contenitore,
       summaryText,
       diffBadge,
+      testa: attivita.testa,
+      attrezzi: 0,
       contatori: { letti: 0, cercati: 0, comandi: 0, comandiErrore: 0, nuovi: 0, modificati: 0, altro: 0, falliti: 0, diffAgg: 0, diffRim: 0 },
       // Lo Start non è un successo. Questi contatori descrivono soltanto
       // ciò che è ancora vivo; i totali sopra avanzano al ToolCallResult.
@@ -7024,14 +6960,7 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
       ? `${parti[0].charAt(0).toUpperCase()}${parti[0].slice(1)}${parti.slice(1).map((p) => `, ${p}`).join('')}`
       : 'Attività…';
     // ⛔ SOLO se il batch ha scritto qualcosa — un batch di sole letture/ricerche/comandi non mostra un diff totale (spec owner, screenshot 1).
-    if (c.diffAgg > 0 || c.diffRim > 0) {
-      batch.diffBadge.hidden = false;
-      batch.diffBadge.replaceChildren(
-        textElement('span', 'add', `+${c.diffAgg}`),
-        document.createTextNode(' '),
-        textElement('span', 'del', `-${c.diffRim}`),
-      );
-    }
+    if (c.diffAgg > 0 || c.diffRim > 0) impostaDiffAttivita(batch.testa, c.diffAgg, c.diffRim); // 05/9 Fase 2: «+18 −2» nella testa del bundle
   }
 
   /**
@@ -7050,41 +6979,37 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
    * DENTRO il contenitore del batch invece che direttamente in
    * conversazione — la riga in sé resta IDENTICA, cambia solo dove vive.
    */
-  function appendToolNote(riassuntoIniziale, { classeExtra = '', glifo = '⚙', contenitore } = {}) {
-    const conversation = contenitore ?? $('#conversation');
-    const article = document.createElement('article');
-    article.className = `message assistant-message compact-message real-tool-note${classeExtra ? ` ${classeExtra}` : ''}`;
-    const summary = document.createElement('button');
-    summary.type = 'button';
-    summary.className = 'tool-note-summary';
-    summary.setAttribute('aria-expanded', 'false');
-    const glyph = document.createElement('span');
-    glyph.className = 'talos-glyph';
-    glyph.textContent = glifo;
-    const summaryText = document.createElement('span');
-    summaryText.className = 'tool-note-summary-text';
-    summaryText.textContent = riassuntoIniziale;
-    const chevron = document.createElement('span');
-    chevron.className = 'tool-note-chevron';
-    chevron.textContent = '›';
-    chevron.setAttribute('aria-hidden', 'true');
-    summary.append(glyph, summaryText, chevron);
-    const detail = document.createElement('div');
-    detail.className = 'assistant-copy tool-note-detail';
-    detail.hidden = true;
-    summary.addEventListener('click', () => {
-      const aperto = summary.getAttribute('aria-expanded') === 'true';
-      summary.setAttribute('aria-expanded', String(!aperto));
-      detail.hidden = aperto;
-    });
-    article.append(summary, detail);
-    conversation.appendChild(article);
+  function appendToolNote(riassuntoIniziale, { classeExtra = '', glifo = '⚙', contenitore, attrezzo = '' } = {}) {
+    /*
+     * 05/9 Fase 2: Conversazione — ogni attrezzo e' una ToolRow del mockup:
+     * icona per attrezzo, nome umano, dettaglio (percorso/comando) e pallino
+     * dell'esito; il corpo espandibile (`detail`) tiene argomenti ed esito.
+     * Il ragionamento (`real-reasoning-note`) usa la stessa riga con l'icona
+     * del cervello, in un suo bundle.
+     */
+    void glifo;
+    const nomeAttrezzo = attrezzo || (classeExtra.includes('reasoning') ? 'memory_write' : ''); // l'icona della riga segue l'attrezzo
+    const riga = creaRigaAttrezzo({ attrezzo: nomeAttrezzo, nome: riassuntoIniziale, dettaglio: '', esito: null, conDettaglio: true });
+    let article = riga.riga;
+    const summaryText = riga.summaryText;
+    const detail = riga.corpo;
+    detail.classList.add('assistant-copy');
+    if (contenitore) {
+      if (classeExtra) article.classList.add(...classeExtra.split(' ').filter(Boolean));
+      contenitore.append(article, detail);
+    } else {
+      const bundle = creaAttivita({ riassunto: riassuntoIniziale, aperto: false });
+      bundle.contenitore.append(riga.riga, detail);
+      if (classeExtra) bundle.card.classList.add(...classeExtra.split(' ').filter(Boolean));
+      article = bundle.card; // e' il bundle che si nasconde/mostra (aggiornaVisibilitaRagionamento)
+      nellaChat(article);
+    }
     markMotionEnter(article);
     window.setTimeout(() => {
       if (article.hidden) return;
       if (!$('#conversation')?.classList.contains('is-restoring')) article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' });
     }, 40);
-    return { article, summaryText, detail };
+    return { article, summaryText, detail, dettaglio: riga.dettaglio }; // 05/9 Fase 2: anche il dettaglio mono della riga
   }
 
   function aggiornaVisibilitaRagionamento() {
@@ -7120,23 +7045,11 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
    * script permessi, ogni via di fuga negata — il confine vero.
    */
   function appendArtifactCard(titolo, id) {
-    const conversation = $('#conversation');
-    const article = document.createElement('article');
-    article.className = 'message assistant-message compact-message real-artifact-card';
-    const header = document.createElement('div');
-    header.className = 'artifact-card-header';
-    const glyph = document.createElement('span');
-    glyph.className = 'talos-glyph';
-    glyph.textContent = '🧩';
-    header.append(glyph, textElement('span', 'artifact-card-title', titolo || 'Artefatto'));
-    const frame = document.createElement('iframe');
-    frame.className = 'artifact-card-frame';
-    frame.setAttribute('sandbox', 'allow-scripts');
-    frame.setAttribute('referrerpolicy', 'no-referrer');
-    frame.setAttribute('title', titolo || 'Artefatto');
-    frame.src = API(`/api/v1/artifacts/${encodeURIComponent(id)}`);
-    article.append(header, frame);
-    conversation.appendChild(article);
+    // 05/9 Fase 2: Conversazione — la scheda dell'artefatto del mockup; «Apri» lo apre in una scheda del browser
+    const src = API(`/api/v1/artifacts/${encodeURIComponent(id)}`);
+    const { card: article, frame } = creaArtefatto({ titolo: titolo || 'Artefatto', src, onApri: () => window.open(src, '_blank', 'noopener') });
+    article.classList.add('real-artifact-card');
+    nellaChat(article);
     markMotionEnter(article);
     scorriAllaBollaAppesa(article);
     return { frame };
@@ -7352,21 +7265,12 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
   }
 
   function appendStatusNote(text, isError = false, { meta: etichettaMeta = null } = {}) {
-    const conversation = $('#conversation');
-    const article = document.createElement('article');
-    article.className = `message assistant-message compact-message real-session-status${isError ? ' real-session-error' : ''}`;
-    const meta = document.createElement('div');
-    meta.className = 'assistant-meta';
-    const glyph = document.createElement('span');
-    glyph.className = 'talos-glyph';
-    glyph.textContent = isError ? '!' : '✓';
-    // ⭐ 04/9, W1-12 — la meta non dice «concluso» a una nota che parla del giro IN CORSO (impostazioni cambiate): chi chiama passa l'etichetta giusta.
-    meta.append(glyph, document.createTextNode(etichettaMeta || (isError ? 'TALOS · errore' : 'TALOS · concluso')));
-    const copy = document.createElement('div');
-    copy.className = 'assistant-copy';
-    copy.textContent = text;
-    article.append(meta, copy);
-    conversation.appendChild(article);
+    // 05/9 Fase 2: Conversazione — la nota di sistema del mockup (badge Nota/Errore, titolo = l'etichetta di prima)
+    const article = creaNotaSistema({ tipo: isError ? 'danger' : 'info', badge: isError ? 'Errore' : 'Nota', titolo: etichettaMeta || (isError ? 'TALOS · errore' : 'TALOS · concluso'), testo: text });
+    article.classList.add('real-session-status');
+    if (isError) article.classList.add('real-session-error');
+    nellaChat(article);
+    if (isError) aggiornaTickGiro({ tono: 'danger' });
     markMotionEnter(article);
     scorriAllaBollaAppesa(article);
   }
@@ -7431,49 +7335,32 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
    * doc security.md). Questa card è esattamente il pareggio-e-supera.
    */
   function appendApprovalCard(requestId, azione) {
-    const conversation = $('#conversation');
-    const article = document.createElement('article');
-    article.className = 'message assistant-message compact-message real-approval-card';
-    article.dataset.requestId = requestId;
-    const meta = document.createElement('div');
-    meta.className = 'assistant-meta';
-    const glyph = document.createElement('span');
-    glyph.className = 'talos-glyph';
-    glyph.textContent = '⏸';
-    meta.append(glyph, document.createTextNode('TALOS · in attesa di approvazione'));
-    const copy = document.createElement('div');
-    copy.className = 'assistant-copy';
-    copy.textContent = descriviAzioneApprovazione(azione);
-    const azioniRiga = document.createElement('div');
-    azioniRiga.className = 'sheet-actions';
-    const negaBtn = document.createElement('button');
-    negaBtn.type = 'button';
-    negaBtn.className = 'secondary-btn';
-    negaBtn.textContent = 'Nega';
-    const approvaBtn = document.createElement('button');
-    approvaBtn.type = 'button';
-    approvaBtn.className = 'primary-btn';
-    approvaBtn.textContent = 'Approva';
     /*
-     * ⛔⛔⛔ 28/8, trovato dal vivo (screenshot ispezionato, non solo la
-     * corsa dello script): "Approvato (da un altro client). — Approvato."
-     * — il testo raddoppiava. Causa: DUE canali riportavano lo STESSO
-     * fatto senza coordinarsi — questo click locale scriveva il testo
-     * SUBITO dopo la POST, e l'evento SSE ApprovalResolved (che il
-     * server manda SEMPRE, anche per la risposta di QUESTA stessa
-     * scheda) arrivava per un canale indipendente e lo scriveva DI
-     * NUOVO, senza sapere che era "lui stesso" ad averlo già fatto —
-     * stessa famiglia di difetto già vista stanotte per i bubble
-     * duplicati via `_sequenza`. Cura: il click locale disabilita SOLO
-     * i bottoni (reattività immediata) — il testo/la rimozione dei
-     * bottoni li fa SEMPRE e SOLO il case 'ApprovalResolved' quando
-     * l'evento arriva davvero, un SOLO punto che scrive, mai due.
+     * 05/9 Fase 2: Conversazione — la scheda di approvazione del mockup: cosa
+     * chiede (badge), il bersaglio, il perche', e tre risposte. «Per questa
+     * sessione» approva E ricorda «sempre» per quell'attrezzo nelle
+     * impostazioni della sessione (permessiPerAttrezzo), cosi' la prossima
+     * volta non chiede. Il piede porta `sheet-actions` e il perche'
+     * `assistant-copy`: ApprovalResolved li trova come prima.
      */
+    const bersaglio = azione?.percorso || azione?.comando || azione?.question || azione?.title || '';
+    const badge = azione?.tipo === 'scrivi' ? 'Chiede di scrivere' : (azione?.tipo === 'shell' || azione?.tipo === 'prova') ? 'Chiede di eseguire' : azione?.tipo === 'research_start' ? 'Chiede di cercare' : 'Chiede il permesso';
+    const scheda = creaApprovazione({ badge, bersaglio, perche: descriviAzioneApprovazione(azione), nota: 'Vale solo per questa richiesta' });
+    const article = scheda.scheda;
+    article.classList.add('real-approval-card');
+    article.dataset.requestId = requestId;
+    const negaBtn = scheda.pulsanti.nega;
+    const approvaBtn = scheda.pulsanti.unaVolta;
+    const sessioneBtn = scheda.pulsanti.sessione;
     let rispostaDataDaQuestaScheda = false;
-    const rispondi = async (approvato) => {
+    const rispondi = async (approvato, perSessione = false) => {
       negaBtn.disabled = true;
       approvaBtn.disabled = true;
+      sessioneBtn.disabled = true;
       rispostaDataDaQuestaScheda = true;
+      if (approvato && perSessione && azione?.tipo) {
+        try { await sincronizzaImpostazioniSessione({ permessiPerAttrezzo: { ...(state.permessiPerAttrezzo || {}), [azione.tipo]: 'sempre' } }); } catch { /* il permesso resta «chiedi»: la risposta alla richiesta parte comunque */ }
+      }
       try {
         await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/approve`, { requestId, approvato });
         // ⛔ NIENT'ALTRO qui apposta — vedi il commento sopra: il case ApprovalResolved finalizza la card, sempre e solo lui.
@@ -7481,15 +7368,15 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
         rispostaDataDaQuestaScheda = false;
         negaBtn.disabled = false;
         approvaBtn.disabled = false;
+        sessioneBtn.disabled = false;
         toast('Risposta non riuscita', error.message);
       }
     };
     negaBtn.addEventListener('click', () => rispondi(false));
     approvaBtn.addEventListener('click', () => rispondi(true));
-    azioniRiga.append(negaBtn, approvaBtn);
-    article.append(meta, copy, azioniRiga);
-    conversation.appendChild(article);
-    // ⭐ letto dal case 'ApprovalResolved' per distinguere "ho risposto io da questa scheda" da "ha risposto un altro client" — mai un secondo testo duplicato, mai una wording sbagliata.
+    sessioneBtn.addEventListener('click', () => rispondi(true, true));
+    nellaChat(article);
+    aggiornaTickGiro({ tono: 'warning' });
     article._rispostaDataQui = () => rispostaDataDaQuestaScheda;
     markMotionEnter(article);
     scorriAllaBollaAppesa(article);
@@ -9764,6 +9651,7 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
          * impostato da resumeSession subito prima della POST).
          */
         state.realSession.runCount = (state.realSession.runCount || 0) + 1;
+        segnaGiroNellaSpine(); // 05/9 Fase 2: Conversazione - un numero in piu' nella spine del turno
         /*
          * ⛔⛔⛔ 02/9 — disarma il "sopprimi lo scroll" armato da
          * resumeSession() (vedi il commento lì): confronta col NUMERO di
@@ -9897,9 +9785,11 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
         nascondiAttesaRisposta(); // il primo attrezzo chiamato: sappiamo già cosa sta facendo, la ruota non serve più
         // ⭐⭐⭐ 30/8 — raggruppamento (owner, "come fa Claude"): la riga nasce DENTRO il batch corrente, non più direttamente in conversazione. Vedi apriBatchSeServe.
         const batch = apriBatchSeServe();
-        const bubble = appendToolNote(riassuntoAttrezzoInCorso(evento.toolCallName, null), { contenitore: batch.contenitore });
-        bubble.article.dataset.toolState = 'running';
+        const bubble = appendToolNote(riassuntoAttrezzoInCorso(evento.toolCallName, null), { contenitore: batch.contenitore, attrezzo: evento.toolCallName });
+        impostaEsitoRiga(bubble.article, 'running'); // 05/9 Fase 2: pallino «in corso»
         bubble.article.setAttribute('aria-busy', 'true');
+        batch.attrezzi = (batch.attrezzi || 0) + 1;
+        aggiornaTickGiro({ attrezzi: batch.attrezzi });
         bubble.summaryText.setAttribute('role', 'status');
         bubble.summaryText.setAttribute('aria-live', 'polite');
         bubble.summaryText.setAttribute('aria-atomic', 'true');
@@ -9934,6 +9824,7 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
           try { argomentiParsati = JSON.parse(info.argomenti); } catch { /* delta ancora incompleto: il riassunto resta quello generico finché non arriva tutto */ }
           if (argomentiParsati) info.argomentiParsati = argomentiParsati;
           if (argomentiParsati && info.summaryText) info.summaryText.textContent = riassuntoAttrezzoInCorso(info.nome, argomentiParsati);
+          if (argomentiParsati && info.dettaglio) info.dettaglio.textContent = bersaglioAttrezzoNudo(info.nome, argomentiParsati); // 05/9 Fase 2: il dettaglio mono della ToolRow
           if (info.detail) renderizzaArgomentiAttrezzo(info.detail, info.argomenti);
         }
         break;
@@ -9958,10 +9849,9 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
         const fallito = info ? esitoAttrezzoFallito(info.nome, testoEsito) : false;
         if (info?.summaryText) info.summaryText.textContent = riassuntoAttrezzoConcluso(info.nome, info.argomentiParsati, testoEsito, fallito);
         if (info?.article) {
-          info.article.dataset.toolState = fallito ? 'error' : 'complete';
+          impostaEsitoRiga(info.article, fallito ? 'error' : 'success'); // 05/9 Fase 2: il pallino della ToolRow
           info.article.setAttribute('aria-busy', 'false');
-          const glifo = info.summaryText?.previousElementSibling;
-          if (glifo?.classList.contains('talos-glyph')) glifo.textContent = fallito ? '!' : '✓';
+          if (info.dettaglio && info.argomentiParsati) info.dettaglio.textContent = bersaglioAttrezzoNudo(info.nome, info.argomentiParsati);
         }
         if (info?.detail) {
           const separatore = document.createElement('div');
@@ -10128,6 +10018,7 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
         if (state.realSession.redirectPendingId) mostraAttesaRisposta('redirect');
         else nascondiAttesaRisposta(); // rete di sicurezza: un giro che chiude senza aver mai prodotto testo/tool-call (raro, non impossibile) non deve lasciare la ruota a girare per sempre
         chiudiBatchTool(); // 30/8 — fine turno: un batch di tool-call aperto non resta orfano fino al prossimo giro
+        aggiornaTickGiro({ tono: null }); // 05/9 Fase 2: il giro non e' piu' current
         state.realSession.eventoTerminaleVisto = !state.realSession.redirectPendingId;
         syncRunComposerState();
         mostraSuggerimentoComposer(suggerimentoDaUltimoAttrezzo()); // ⭐ 3/9 — item 10: dopo syncRunComposerState, cosi' se c'e' un redirect pendente runRealeAttivo() lo vede ancora attivo e non propone niente
