@@ -1,3 +1,4 @@
+import { creaLibraryRow, aggiornaPaginaLibreria } from '../components/libreria.js'; // 05/9 Fase 2: Libreria
 import { creaTaskRow, aggiornaPaginaAttivita } from '../components/attivita.js'; // 05/9 Fase 2: Attività
 import { creaMemoryRow, aggiornaPaginaMemoria } from '../components/memoria.js'; // 05/9 Fase 2: Memoria
 import { aggiornaBoard, creaRigaBoard, cartellaDaExport } from '../components/board.js'; // 05/9 Fase 2: Board
@@ -1162,6 +1163,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     window.__talosHarnessHostViewChange?.(view);
     if (view === 'settings') inizializzaModelLab();
     if (view === 'dashboard') ensureSessionsBoard();
+    if (view === 'libreria') caricaPannelloLibreria({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Libreria
     if (view === 'attivita') caricaPannelloAttivita({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Attività
     if (view === 'memoria') caricaPannelloMemoria({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Memoria
     if (view === 'automations') renderAutomationsReali();
@@ -4113,48 +4115,40 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * bottone "Fida" (una voce di Libreria non ha un gate di fiducia,
    * vedi library-store.mjs).
    */
-  async function caricaPannelloLibreria() {
-    const mount = $('#libraryListMount', sheetBody);
-    if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
-    if (!state.realSession.id) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione attiva — apri o avvia un task per vedere la Libreria del progetto.'));
-      return;
+  // 05/9 Fase 2: Libreria — metadati del progetto, stesso endpoint e canale di navigazione.
+  const generazioniLibreria = new WeakMap();
+  async function caricaPannelloLibreria({ pagina = false } = {}) {
+    const mount = pagina ? $('#schermoLibreria') : $('#libraryListMount', sheetBody);
+    if (!mount) return;
+    const sessionId = state.realSession.id;
+    const generation = (generazioniLibreria.get(mount) || 0) + 1;
+    generazioniLibreria.set(mount, generation);
+    const attuale = () => generazioniLibreria.get(mount) === generation && state.realSession.id === sessionId && (pagina ? state.view === 'libreria' && !mount.hidden : mount === $('#libraryListMount', sheetBody));
+    function mostra(voci, { errore = null, caricamento = false } = {}) {
+      if (pagina) {
+        aggiornaPaginaLibreria(mount, voci, { errore, caricamento, onAggiorna: () => caricaPannelloLibreria({ pagina: true }) });
+      } else {
+        mount.setAttribute('role', voci.length ? 'list' : 'group');
+        mount.replaceChildren(...voci.map(rigaVoceLibreria));
+        if (!voci.length) mount.append(textElement('p', 'board-empty', errore || (caricamento ? 'Caricamento Libreria…' : 'Nessun file in Libreria per questo progetto.')));
+      }
     }
-    mount.replaceChildren(textElement('p', 'board-empty', 'Carico la Libreria…'));
-    let dati;
+    if (embeddedDemoOnly()) { mostra([], { errore: 'Nessun backend collegato.' }); return; }
+    if (!sessionId) { mostra([], { errore: 'Apri una sessione per leggere la Libreria del progetto.' }); return; }
+    mostra([], { caricamento: true });
     try {
-      dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/library`);
+      const dati = await apiGet('/api/v1/sessions/' + encodeURIComponent(sessionId) + '/library');
+      if (!attuale()) return;
+      if (dati.errore) { mostra([], { errore: 'Libreria non disponibile: ' + dati.errore }); return; }
+      if (!Array.isArray(dati.voci) || dati.voci.some(v => !v || typeof v !== 'object' || Array.isArray(v))) throw new Error('Elenco della Libreria non valido');
+      mostra(dati.voci);
     } catch (error) {
-      mount.replaceChildren(textElement('p', 'board-empty', `Libreria non disponibile: ${error.message}`));
-      return;
+      if (attuale()) mostra([], { errore: 'Libreria non disponibile: ' + error.message });
     }
-    if (mount !== $('#libraryListMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
-    if (dati.errore) {
-      mount.replaceChildren(textElement('p', 'board-empty', `.harness-ui-library non valida: ${dati.errore}`));
-      return;
-    }
-    if (!dati.voci || dati.voci.length === 0) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessun file in Libreria per questo progetto (.harness-ui-library/).'));
-      return;
-    }
-    mount.replaceChildren(...dati.voci.map((voce) => rigaVoceLibreria(voce)));
   }
 
-  /** ⭐⭐⭐ 29/8 — sempre attiva (una voce di Libreria non ha un gate di fiducia): niente bottone, solo il riassunto. */
   function rigaVoceLibreria(voce) {
-    const riga = document.createElement('div');
-    riga.className = 'sheet-option';
-    riga.setAttribute('role', 'group');
-    const iconEl = document.createElement('span');
-    iconEl.className = 'sheet-icon';
-    iconEl.innerHTML = icon(voce.fileType === 'image' ? 'i-image' : 'i-files');
-    const testo = document.createElement('span');
-    testo.append(
-      textElement('strong', null, voce.nome),
-      textElement('small', null, `${voce.origine === 'generated' ? 'Generato' : 'Caricato'} · ${voce.fileType}`),
-    );
-    riga.append(iconEl, testo, textElement('span', 'status-chip success', voce.origine === 'generated' ? 'generato' : 'caricato'));
-    return riga;
+    return creaLibraryRow(voce);
   }
 
   /**
