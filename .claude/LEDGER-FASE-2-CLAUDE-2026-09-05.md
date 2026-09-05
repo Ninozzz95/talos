@@ -477,3 +477,20 @@ Dopo l'unione di Astra la testata andava A CAPO su due righe (suo CSS `flex-wrap
 quarta scheda «Browser»): ripristinata su una riga, adattiva per larghezza (percorso ≤900,
 Comprimi ≤820, Comandi ≤720); la scheda «Browser» porta `data-vaia="browser"` e apre la vista
 browser del monolite finché Astra non innesta `#schermoBrowser`.
+
+---
+
+## R-02 · Review dei sei innesti di Astra (Board, Memoria, Attività, Libreria, Ricerca, Officina) e degli undici commit di mockup — ✅ accettati e uniti
+
+Letti commit per commit (`6ea01e80`, `86f108e1`, `9bc1fadb`, `d6b2b99d`, `316484d0`, `0ec35981`;
+mockup `893f9d18`…`e7087b2c`): stesso metodo (componente + fixture + laboratorio + riga nel
+cancello + unit + prova dal vivo 4177/4179 + screenshot a tre larghezze + ricerca citata), solo le
+sue funzioni del monolite toccate. Guardate `Board/app-reale-1440` (73 sessioni vere, filtri,
+colonne oneste con «—») e `ForgeList/app-vuota-1440` (stato vuoto onesto). Uniti in
+`lane/harness-desktop`; dopo l'unione: unit **49/49**, componenti **45/45**, statico **194/195** —
+l'unico rosso è un errore di I/O (`UNKNOWN … open dialogo-elimina-cartella-1280.png`) dei SUOI
+test che scrivono screenshot dentro `.claude/immagini/astra-mockup/` (file committati): da
+spostare in `artifacts/` (prompt R-02, punto 1). Corretto da me l'import di `nomi-attrezzi`
+(spostato in `src/components/`). Prompt per Astra: `.claude/PROMPT-ASTRA-2026-09-05-R02-SEI-PAGINE.md`
+(screenshot in artifacts, merge prima di ogni innesto, OAuth/computer-use = PROPOSTE non
+autorizzate, coda del brief, decisione dell'owner sul cutover).
