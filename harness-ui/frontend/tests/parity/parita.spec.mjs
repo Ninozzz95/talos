@@ -329,3 +329,12 @@ if(process.env.ASTRA_ORIGINALE_URL)test('ASTRA Originale Intro dati 4179',async(
  const c=await browser.newContext({viewport:info.project.use.viewport,locale:'it-IT',reducedMotion:'reduce'});const p=await c.newPage();
  try{await p.goto(process.env.ASTRA_ORIGINALE_URL);await expect(p.locator('#introDialog')).toBeVisible({timeout:15000});const d=path.resolve(radice,'../../.claude/immagini/astra-mockup');await p.screenshot({path:path.join(d,'originale-intro-modello-'+info.project.use.viewport.width+'.png')});await p.locator('#introBack').click();await p.screenshot({path:path.join(d,'originale-intro-accesso-'+info.project.use.viewport.width+'.png')});}finally{await c.close();}
 });
+
+test('ASTRA Palette testata e alias',async({browser},info)=>{
+ const {contesto,pagina:p}=await apri(browser,MOCKUP,{js:true,viewport:info.project.use.viewport});
+ try{await p.locator('#schermoChat [data-azione="comandi"]').click();await expect(p.locator('#veloComandi')).toBeVisible();await p.locator('#cercaComando').fill('Agents, hooks e doctor');await expect(p.locator('[data-command="control"]')).toBeVisible();await p.locator('#cercaComando').fill('');await p.locator('#cercaComando').press('End');await expect(p.locator('#cercaComando')).toHaveAttribute('aria-activedescendant','comando-share');await p.locator('#cercaComando').press('Home');await expect(p.locator('#cercaComando')).toHaveAttribute('aria-activedescendant','comando-new');await expect(p.locator('#veloComandi')).not.toContainText('esempio interattivo');}finally{await contesto.close();}
+});
+if(process.env.ASTRA_ORIGINALE_URL)test('ASTRA Originale Palette 15 comandi',async({browser},info)=>{
+ const c=await browser.newContext({viewport:info.project.use.viewport,locale:'it-IT',reducedMotion:'reduce'});const p=await c.newPage();
+ try{await p.goto(process.env.ASTRA_ORIGINALE_URL);await expect(p.locator('#introDialog')).toBeVisible({timeout:15000});await p.locator('#introSkip').click();await p.keyboard.press('Control+k');await expect(p.locator('#commandDialog')).toBeVisible();await expect(p.locator('#commandResults [data-command]')).toHaveCount(15);await p.screenshot({path:path.resolve(radice,'../../.claude/immagini/astra-mockup/originale-palette-'+info.project.use.viewport.width+'.png')});}finally{await c.close();}
+});
