@@ -92,3 +92,8 @@ Generazione/build verdi; test:lab 144/144; Playwright diretto con originale 171/
 Cosa deve fare l’owner: nulla per sbloccare. Cosa fa Astra dopo: Rinomina sessione. Cosa rimane: otto dialoghi A7 e parte B.
 
 Controllo sul merge finale: ricevuti breakpoint e testata su una riga, anello di focus del composer e tastiera sidebar di Claude (non una modifica ai dialoghi). Rigenerazione/build e test:lab ripetuti: 144/144; riaperti i tre PNG Ambiente con il guscio aggiornato. Il diretto 171/171 precede questo ultimo merge; nessuna modifica ai riferimenti originali.
+
+## A7.3 — Rinomina sessione, consuntivo 05/09/2026
+Un campo preselezionato, limite 80, Annulla/Salva, errore associato al campo vuoto, trim e suffisso per nome già usato. Conferma nel Toast e nome conservato alla riapertura della fixture; Escape/Annulla conservano il precedente. Riusi Dialog/OverlayLayer/Resizer/Field/Button/Toast: zero blocchi, token, CSS e icone nuovi. Aperti i sei PNG dialogo-rinomina/originale-dialogo-rinomina a 1440/1280/1024. Il nuovo campo comunica il limite e la gestione dei doppioni prima della conferma; errore vuoto ora esplicito. Nessuna modifica al markup riservato.
+Generazione/build verdi; test:lab 150/150; Playwright diretto con originale 180/180. Test di nome con markup (<img>) conferma testo inerte, nessuna interpretazione HTML. Originale osservato senza sessione, fixture con nome dimostrativo; nessuna equivalenza dei dati dichiarata. Il salvataggio API e l’aggiornamento delle etichette reali restano B7, riusando renameForm e nomeUnicoSessione originali; nessuna persistenza server dichiarata per la regia.
+Cosa deve fare l’owner: nulla per sbloccare. Cosa fa Astra dopo: Riferimenti @. Cosa rimane: sette dialoghi A7 e parte B.
