@@ -1,3 +1,4 @@
+import {montaImpostazioni,mostraSezioneImpostazioni} from '../components/impostazioni.js';
 import {controlliDoctor,contaGravitaDoctor,aggiornaDoctor} from '../components/doctor.js';
 import {aggiornaEstensioni,collegaSchedeCapability,mostraSchedaCapability} from '../components/estensioni.js';
 import { aggiornaPaginaCapability, creaToolListRow } from '../components/capability.js';
@@ -3363,7 +3364,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   function riempiFatti(id, coppie) {
     const dl = $(`#${id}`);
     if (!dl) return;
-    dl.replaceChildren(...coppie.map(([k, v]) => { const riga = document.createElement('div'); riga.append(textElement('dt', '', k), textElement('dd', '', v)); return riga; }));
+    dl.replaceChildren(...coppie.map(([k, v]) => { const riga = document.createElement('div'); riga.className = 'talos-kv'; riga.append(textElement('dt', 'talos-kv__k', k), textElement('dd', 'talos-kv__v', v)); return riga; }));
   }
   async function renderSettingsRiepiloghi() {
     const impostazioni = leggiImpostazioniDesktop();
@@ -3409,9 +3410,9 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
         const provider = risposta.items || risposta.providers || (Array.isArray(risposta) ? risposta : []);
         lista.replaceChildren(...provider.map((p) => {
           const li = document.createElement('li');
-          const stato = p.execution === 'local' || p.requiresKey === false
-            ? (p.endpointConfigured ? `indirizzo impostato: ${p.endpoint}` : 'locale, nessuna chiave richiesta')
-            : (p.keyConfigured ? 'chiave configurata sul server' : 'nessuna chiave');
+          const stato = p.execution === 'runtime locale'
+            ? (p.endpointConfigured ? `indirizzo impostato: ${p.endpoint}` : 'runtime locale, nessuna chiave richiesta')
+            : (p.keyConfigured ? 'chiave configurata sul server' : p.requiresKey === false ? 'accesso pubblico, chiave non richiesta' : 'nessuna chiave');
           li.append(textElement('strong', '', p.label || p.id), textElement('span', `settings-provider-state ${p.keyConfigured || p.endpointConfigured ? 'is-ok' : ''}`, stato));
           return li;
         }));
@@ -3442,6 +3443,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (persist) {
       try { window.localStorage.setItem(SETTINGS_SECTION_STORAGE_KEY, selected); } catch { /* preferenza non bloccante */ }
     }
+    mostraSezioneImpostazioni($('#schermoImpostazioni'), selected);
     if (selected === 'models' && !state.modelLab.initialized) inizializzaModelLab();
     if (selected === 'tools') void caricaPannelloRicercaWeb(); // ⭐ 04/9, R-03 — stato vero dal server a ogni apertura della scheda
   }
@@ -3582,7 +3584,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   }
 
   function inizializzaSettingsNavigation() {
-    $$('[data-settings-tab]').forEach((tab) => {
+    montaImpostazioni($('#schermoImpostazioni'), leggiImpostazioniDesktop().appearance, { recupera: id => $('#' + id), cambiaSezione: setSettingsSection });
+    $$('[data-settings-tab]').filter(tab => !tab.closest('#schermoImpostazioni')).forEach((tab) => {
       tab.addEventListener('click', () => setSettingsSection(tab.dataset.settingsTab));
       tab.addEventListener('keydown', (event) => {
         if (!['ArrowDown', 'ArrowRight', 'ArrowUp', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
@@ -8802,7 +8805,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     const chat = $('#chatFontScaleSelect');
     if (ui) ui.value = safe.uiFontScale;
     if (chat) chat.value = safe.chatFontScale;
-    for (const [key, id] of Object.entries({ composerShape: 'composerShapeSelect', composerPlus: 'composerPlusSelect', messageStyle: 'messageStyleSelect', streamingAnimation: 'streamingAnimationSelect', windowPresentation: 'windowPresentationSelect' })) { const input = $(`#${id}`); if (input) input.value = safe[key]; }
+    for (const [key, id] of Object.entries({ themePreset: 'themePresetSelect', colorMode: 'colorModeSelect', composerShape: 'composerShapeSelect', composerPlus: 'composerPlusSelect', messageStyle: 'messageStyleSelect', streamingAnimation: 'streamingAnimationSelect', windowPresentation: 'windowPresentationSelect' })) { const input = $(`#${id}`); if (input) input.value = safe[key]; }
     const immersive = $('#immersiveHeaderToggle'); if (immersive) immersive.checked = safe.immersiveHeader;
     const fullWidth = $('#chatFullWidthToggle'); if (fullWidth) fullWidth.checked = safe.chatFullWidth;
     aggiornaBackgroundDesktop();

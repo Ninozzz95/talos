@@ -1,3 +1,5 @@
+import {montaImpostazioni} from '../src/components/impostazioni.js';
+import {IMPOSTAZIONI} from './fixtures/impostazioni.js';
 import {aggiornaDoctor} from '../src/components/doctor.js';
 import {DOCTOR,ADESSO_DOCTOR} from './fixtures/doctor.js';
 import {aggiornaEstensioni,collegaSchedeCapability,mostraSchedaCapability} from '../src/components/estensioni.js';
@@ -64,6 +66,8 @@ document.documentElement.setAttribute('data-schermo', 'chat');
 const componente = new URLSearchParams(location.search).get('componente') || '';
 
 const LABORATORI = {
+ SettingsNav(){document.querySelector('#schermoImpostazioni [role=tablist]').replaceChildren();montaImpostazioni(document.querySelector('#schermoImpostazioni'),IMPOSTAZIONI);},
+ SettingRow(){montaImpostazioni(document.querySelector('#schermoImpostazioni'),IMPOSTAZIONI);},
  CheckCard(){aggiornaDoctor(document.querySelector('#schermoDoctor'),DOCTOR,{ricevutoAlle:ADESSO_DOCTOR});},
   ExtensionList_skills() {const s=document.querySelector('#schermoCapability');collegaSchedeCapability(s,()=>{});mostraSchedaCapability(s,'skills');aggiornaEstensioni(s.querySelector('[data-cap-panel=skills]'),ESTENSIONI.skills,{tipo:'skills',ambito:'fixture'});},
   ExtensionList_mcp() {const s=document.querySelector('#schermoCapability');collegaSchedeCapability(s,()=>{});mostraSchedaCapability(s,'mcp');aggiornaEstensioni(s.querySelector('[data-cap-panel=mcp]'),ESTENSIONI.mcp,{tipo:'mcp',ambito:'fixture'});},

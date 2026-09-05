@@ -1479,3 +1479,107 @@ Prove aperte e copiate manualmente da artifacts (18 PNG):
 Cosa deve fare l’owner · Nulla per continuare. Prova su http://127.0.0.1:4177/ → Comandi → Agenti, regole e Doctor → Doctor.
 Cosa fai tu dopo · Impostazioni e Model Lab (B6).
 Cosa rimane · B6 Impostazioni/ModelLab→B2→B7 (creazione automazioni e ToastRegion inclusi)→B1→B8→Browser K-I. OAuth/computer-use solo PROPOSTE. Nessun push.
+
+## B6.2 Impostazioni — ricognizione e piano prima degli edit, 05/09/2026
+Merge dopo20004be aggiornato. Letti markup originale,38 controlli DOM reali, appearanceControlMap, normalizzaAspettoDesktop, leggi/salvaImpostazioniDesktop, applicaAspettoDesktop, inizializzaSettingsNavigation, setSettingsSection, renderSettingsRiepiloghi e ponte. Perimetro TALOS UI.
+Ricerca fresca06/08–05/09: release Hermes v2026.8.31/29112be31/08, ClaudeCode v2.1.261/d7dbd9a04/09, Codex rust-v0.153.4/3d2ee5104/09 riverificate. Docs stabili verificate05/09 (data modifica non esposta): https://hermes-agent.nousresearch.com/docs/user-guide/configuration/ ; https://code.claude.com/docs/en/settings ; https://developers.openai.com/codex/app/settings → https://learn.chatgpt.com/docs/reference/settings ; https://www.w3.org/WAI/ARIA/apg/patterns/switch/ ; https://www.w3.org/WAI/ARIA/apg/patterns/tabs/ .
+| Fonte | Forza | Limite/gap osservato | Decisione / +1 misurabile |
+|---|---|---|---|
+| Hermes | Configurazione risolta, valori non segreti separati e precedenza esplicita | CLI override/config/env possono differire; GUI non misurata | Adattare ambito locale esplicito e stato effettivo, riusare store TALOS senza nuovo protocollo |
+| ClaudeCode | Config salva automaticamente e valida il contenuto | Config tab copre un sottoinsieme; Status elenca fonti ma non origine di ogni chiave | Adattare conservazione di tutti38 controlli originali e ricerca per nome/opzione; nessuna preferenza implicita presentata come attiva |
+| Codex | Temi chiaro/scuro/sistema, font separati e personalizzazione | GUI/backend possono divergere; nessun difetto di qualità inventato | Adattare stato osservabile dopo reload e verifica pixel dell’effetto, mantenendo il sistema di token approvato |
+| WAI | Switch con nome stabile e stato; tab navigabili | Input senza label (slider originali) non sufficientemente identificabili | Adottare controlli nativi, label esplicite, frecce e Home/End sui tab; ricerca senza perdita delle preferenze |
+File previsti esatti:
+- .claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html
+- .claude/LEDGER-ASTRA-FASE-2-2026-09-05.md
+- .claude/CONSEGNA-ASTRA-FASE-2-2026-09-05.md
+- harness-ui/frontend/src/components/impostazioni.js
+- harness-ui/frontend/src/components/impostazioni-campi.js
+- harness-ui/frontend/src/legacy/app.js
+- harness-ui/frontend/index.template.html
+- harness-ui/frontend/src/styles/index.css
+- harness-ui/frontend/lab/fixtures/impostazioni.js
+- harness-ui/frontend/lab/main.js
+- harness-ui/frontend/tests/unit/impostazioni.test.mjs
+- harness-ui/frontend/tests/parity/componenti.spec.mjs
+- harness-ui/frontend/tests/parity/impostazioni-vivo.spec.mjs
+- harness-ui/frontend/playwright.astra.config.mjs
+Pubblici previsti: CAMPI_IMPOSTAZIONI, SEZIONI_IMPOSTAZIONI, filtraImpostazioni, creaSettingRow, montaImpostazioni, mostraSezioneImpostazioni. Fixture IMPOSTAZIONI. Locali: inizializzaSettingsNavigation/setSettingsSection/renderSettingsRiepiloghi/riempiFatti restano; introdurre aggiornaStatoImpostazioni solo se necessario, annotandolo prima. Riusare i38 controlli originali per id, spostandoli dentro le righe canoniche così conservano valori e listener; in laboratorio stessi controlli creati da fixture. Nessun id duplicato, nessun edit a ponte/frammenti.
+RED SET-COPERTURA38 e SET-RICERCA (modulo mancante), SET-PERSISTENZA (controlli originali nascosti), SET-SLIDER-NOME, SET-TASTIERA. GREEN unità, componenti SettingsNav/SettingRow x3, prove native app e reload, verify e cancello completo componenti. Originale: tutte8 sezioni e dettaglio dei controlli a1440/1280/1024, output artifacts/astra-fase2/Impostazioni; solo prove aperte promosse alla consegna. Rollback commit senza migrazioni.
+Gap da chiudere prima della consegna complessiva: il CSS nuovo non usa ancora chat-full-width, --talos-ui-font-scale, --talos-chat-font-size e gli attributi di stile Chat/composer. applicaThemeDesktop conserva per ora solo chiaro/scuro, come annotato dall’orchestratore. La sola persistenza NON dimostra effetto. Collegamento dei preset/movimento nella tranche B8; adattamenti Chat/composer richiedono raccordo nel perimetro orchestratore, senza modificare le sue schermate. ModelLab e fonte ricerca web restano gli innesti B6 successivi, non vengono dichiarati fatti da questo componente. Non chiamare B6 completa finché tutte queste prove non chiudono.
+
+B6.2 avanti: merge aggiornato e quattro docs B6.2 riaperte05/09 prima implementazione. Aperte27 foto originali (sette sezioni, più due posizioni Aspetto, a tre larghezze). Cursori privi di nome accessibile e titolo sessione sovrapposto riprodotti visivamente; i test permanenti sono SET-SLIDER-NOME e SET-RIEPILOGO-INTEGRO. CSS solo sotto Settings: controlli nativi con classi esistenti, righe che avvolgono testi e valori; nessun token. Canonico usa id demo prefissati per non collidere coi frammenti; innesto trasferisce i nodi originali e gli output. Riepiloghi e azioni originali trasferiti senza clonare listener. ModelLab/search-source restano componenti successivi, preservati intanto negli stessi slot.
+
+SET-BOOT riprodotto3/3 e stack puntuale: una sostituzione testuale dello script di edit ha trasformato il selettore multiplo $$ in $, causando filter is not a function. Diagnosi col test live; ricerca MDN String.replace e tre fonti B6.2 riaperte05/09 prima fix. Correggere unicamente il selettore in inizializzaSettingsNavigation, mantenendo test di avvio/navigazione/persistenza; prossime sostituzioni tramite callback per non interpretare dollari.
+
+SET-NOME-UNIVOCO: dopo lo spostamento il selettore nativo resta associato anche alla label nascosta dell’originale: nome annunciato due volte, SET-PERSISTENZA fallisce sulla scelta Modalità colore. WAI Forms Labels e tre fonti B6.2 riaperte05/09: rimuovere soltanto il vecchio attributo for dalle label del nodo trasferito; la nuova label conserva un nome stabile. File impostazioni.js; accettazione tutti38 nomi accessibili esatti, nessun id duplicato.
+
+SettingsNav: prova resa dai dati rafforzata, il laboratorio svuota davvero i tab prima del montaggio. RED:16 nodi mancanti a1440. Fonti B6.2 e WAI Tabs riaperte05/09 prima completamento: montaImpostazioni crea le otto voci da SEZIONI_IMPOSTAZIONI, poi collega selezione/frecce. Nessun nuovo simbolo pubblico né canale di regia.
+
+SET-PROVIDER-LOCALE RED: GET vero e provider-credential-store.mjs:23 espongono execution=runtime locale, non local; il mio adattamento descriveva Ollama come accesso pubblico. Correggere confronto sul valore reale; Hugging Face resta catalogo/download senza chiave obbligatoria. Foto delle azioni mostrano bottoni adiacenti: sostituire la classe provvisoria talos-inline con elementi dei blocchi già presenti (talos-setting__control e talos-settings__actions), gap8px e wrapping; zero nuovi blocchi/token. Fonti B6.2 e MDN gap riaperte05/09. File: impostazioni.js, mockup/generated, app.js, test impostazioni-vivo. SearchSource e ModelLab non ancora consegnabili graficamente; innesti successivi B6.
+
+Ultima revisione testi (fonti B6.2 riaperte05/09): intestazione nav Sezioni, poiché alcune voci interrogano il server; risultato ricerca Preferenze trovate: N evita il plurale errato. Verifica precedente invalidata da modifiche in corso; seconda verifica194/195 con errore artefatto ENOENT causato da due Playwright nella stessa cartella temporanea. Eseguire ora i cancelli in sequenza, su sorgenti fermi; nessun aggiramento delle asserzioni.
+
+## B6.2 consegna SettingsNav e SettingRow — 05/09/2026
+Merge richiesto dal richiamo RICERCA-WEB-NON-PREVISTA eseguito: fast-forward a 8c686aec (solo documenti). Nessuna schermata ricerca web nuova: la configurazione search-source resta nella sezione Strumenti agente e permessi di Impostazioni. Ricerca approfondita già consegnata resta invariata.
+
+Riusati SettingsNav, SettingsSection, SettingRow, Select, Switch, KV, Card, Page e Topbar; nessun nuovo blocco, token, icona o dipendenza. Aggiunti solo elementi CSS talos-setting__control e talos-settings__actions. Tutti38 controlli originali trasferiti con id e listener, comprese14 scelte tema; gli output dei cursori sono conservati. Riepiloghi e azioni originali riusati. Template e CSS rigenerati dal canonico.
+
+| Aspetto | Originale → proposta | Evidenza / verdetto |
+|---|---|---|
+| Copertura | 38 controlli → stessi38, medesime opzioni e store | Cambio di ogni controllo con mouse/tastiera e reload alle tre larghezze. Nessun id duplicato. Effetto grafico completo ancora da provare nella tranche B8 |
+| Ricerca e passi | Nessuna ricerca preferenze → filtro per nome e opzioni | bilanciata trova Qualità in una sola operazione; risultato vuoto esplicito e ripristino della sezione |
+| Accessibilità | Cursori privi di nome →38 label esplicite, valore e unità | Nomi accessibili esatti; frecce verticali/Home/End e un solo tab nella sequenza di focus |
+| Semantica | Provider descritti genericamente → runtime locale/accesso pubblico/chiave configurata | Ollama e Hugging Face distinti sui dati reali; configurazione non presentata come prova connessione |
+| Responsive/densità | Titolo sessione sovrapposto nel riepilogo → testo a capo entro KV | Originale e proposta aperti a1440/1280/1024; topbar su una riga, campi senza sovrapposizioni |
+| Persistenza/recupero | Store originale → medesimo store e ripristino movimento | Tutti38 valori ritrovati; reset movimento conserva tema. Nessun nuovo messaggio che prometta salvataggio riuscito |
+
+Cancelli verdi su sorgenti fermi: npm run verify =63 unità/contratti,30 file deterministici,195/195 statici; componenti69/69; prove app15/15 (più3/3 ricognizione originale). Dati reali server4177 e store browser isolato Playwright. Non è una prova agente tramite modello e non viene dichiarata tale. Screenshot:27 originali e30 app esaminati, più12 parità; gli stati finali cambiati sono stati riaperti. Le foto della configurazione ricerca web attuale restano diagnostiche in artifacts perché il suo innesto è ancora da fare. Copiate solo33 prove selezionate elencate sotto.
+
+Ancore delle regressioni corrette (righe al momento di questa consegna):
+- SET-BOOT: harness-ui/frontend/src/legacy/app.js:3588, selettore $$ ripristinato; percorso di avvio/navigazione coperto da tests/parity/impostazioni-vivo.spec.mjs:5.
+- SET-NOME-UNIVOCO: harness-ui/frontend/src/components/impostazioni.js:17, rimozione della vecchia associazione label; tutti38 nomi verificati in tests/parity/impostazioni-vivo.spec.mjs:12.
+- SET-PROVIDER-LOCALE: harness-ui/frontend/src/legacy/app.js:3413, confronto con execution=runtime locale, contratto effettivo.
+- SET-RIEPILOGO-INTEGRO: harness-ui/frontend/src/styles/index.css:533 (generato dal canonico), wrapping dei KV, test permanente :26.
+- Race degli artefatti Playwright: verifica invalidata da due suite concorrenti sulla stessa directory temporanea; cancelli rieseguiti in sequenza senza modificare asserzioni. Non era un difetto prodotto.
+
+Limiti aperti: B6 NON completa. Fonte/chiave/prova ricerca web e sei schede ModelLab richiedono i prossimi innesti. La persistenza delle preferenze non prova tutti gli effetti: preset/movimento restano B8; dimensioni e stili Chat/composer necessitano raccordo col perimetro orchestratore. Restano B7-DIALOGO-CREAZIONE-AUT e B7-TOAST-FUORI-REGIONE. Nessuna modifica a sidebar/testata/Chat/Review/ponte/frammenti/public. Nessun push.
+
+Prove aperte e selezionate:
+- .claude/immagini/astra-fase2/Impostazioni/originale-appearance-1440.png
+- .claude/immagini/astra-fase2/Impostazioni/app-aspetto-1440.png
+- .claude/immagini/astra-fase2/Impostazioni/originale-movimento-1440.png
+- .claude/immagini/astra-fase2/Impostazioni/app-movimento-1440.png
+- .claude/immagini/astra-fase2/Impostazioni/app-ricerca-1440.png
+- .claude/immagini/astra-fase2/Impostazioni/originale-providers-1440.png
+- .claude/immagini/astra-fase2/Impostazioni/app-providers-1440.png
+- .claude/immagini/astra-fase2/Impostazioni/originale-appearance-1280.png
+- .claude/immagini/astra-fase2/Impostazioni/app-aspetto-1280.png
+- .claude/immagini/astra-fase2/Impostazioni/originale-movimento-1280.png
+- .claude/immagini/astra-fase2/Impostazioni/app-movimento-1280.png
+- .claude/immagini/astra-fase2/Impostazioni/app-ricerca-1280.png
+- .claude/immagini/astra-fase2/Impostazioni/originale-providers-1280.png
+- .claude/immagini/astra-fase2/Impostazioni/app-providers-1280.png
+- .claude/immagini/astra-fase2/Impostazioni/originale-appearance-1024.png
+- .claude/immagini/astra-fase2/Impostazioni/app-aspetto-1024.png
+- .claude/immagini/astra-fase2/Impostazioni/originale-movimento-1024.png
+- .claude/immagini/astra-fase2/Impostazioni/app-movimento-1024.png
+- .claude/immagini/astra-fase2/Impostazioni/app-ricerca-1024.png
+- .claude/immagini/astra-fase2/Impostazioni/originale-providers-1024.png
+- .claude/immagini/astra-fase2/Impostazioni/app-providers-1024.png
+- .claude/immagini/astra-fase2/Impostazioni/comp-SettingsNav-desktop-1440x900-mockup.png
+- .claude/immagini/astra-fase2/Impostazioni/comp-SettingsNav-desktop-1440x900-app.png
+- .claude/immagini/astra-fase2/Impostazioni/comp-SettingRow-desktop-1440x900-mockup.png
+- .claude/immagini/astra-fase2/Impostazioni/comp-SettingRow-desktop-1440x900-app.png
+- .claude/immagini/astra-fase2/Impostazioni/comp-SettingsNav-desktop-1280x800-mockup.png
+- .claude/immagini/astra-fase2/Impostazioni/comp-SettingsNav-desktop-1280x800-app.png
+- .claude/immagini/astra-fase2/Impostazioni/comp-SettingRow-desktop-1280x800-mockup.png
+- .claude/immagini/astra-fase2/Impostazioni/comp-SettingRow-desktop-1280x800-app.png
+- .claude/immagini/astra-fase2/Impostazioni/comp-SettingsNav-desktop-1024x800-mockup.png
+- .claude/immagini/astra-fase2/Impostazioni/comp-SettingsNav-desktop-1024x800-app.png
+- .claude/immagini/astra-fase2/Impostazioni/comp-SettingRow-desktop-1024x800-mockup.png
+- .claude/immagini/astra-fase2/Impostazioni/comp-SettingRow-desktop-1024x800-app.png
+
+Cosa deve fare l’owner · Nulla per proseguire. Impostazioni provabili su http://127.0.0.1:4177/.
+Cosa fai tu dopo · Completare fonte/chiave/prova dentro Impostazioni, poi ModelLab.
+Cosa rimane · B6→B2→B7→B1→B8→Browser K-I; OAuth e computer-use solo PROPOSTE.
