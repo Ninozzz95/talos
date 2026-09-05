@@ -486,6 +486,10 @@ button{background:none; border:0; cursor:pointer; padding:0}
 .talos-table tbody tr:hover td{background:var(--talos-card-subtle)}
 .talos-table .num{text-align:right}
 .talos-table .title{font-weight:600; color:var(--talos-text)}
+/* B3: nomi reali lunghi, nel solo DataTable Board; fonte MDN aria-sort 05/09/2026. */
+.talos-board-session{display:block;max-width:260px;padding:0;border:0;background:none;color:inherit;font:inherit;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.talos-board-model{max-width:170px;overflow:hidden;text-overflow:ellipsis}
+#schermoBoard .talos-table-wrap{max-height:calc(100dvh - 350px)}
 .talos-count{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:14px}
 .talos-check-card{display:flex; gap:12px; padding:14px 16px; margin-bottom:10px}
 .talos-check-card__stripe{width:3px; border-radius:2px; background:var(--talos-success); flex:none; align-self:stretch}

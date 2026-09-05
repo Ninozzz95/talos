@@ -1,3 +1,5 @@
+import { aggiornaBoard } from '../src/components/board.js';
+import { ADESSO_BOARD, SESSIONI_BOARD, METRICHE_BOARD, CARTELLE_BOARD } from './fixtures/board.js';
 import template from '../index.template.html';
 import { creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaFallimentoAttrezzo, creaFileToccati, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRicevuta, creaRigaAttrezzo, creaTurno } from '../src/components/conversazione.js';
 import { aggiornaPiedeChat } from '../src/components/chat-foot.js';
@@ -44,6 +46,9 @@ document.documentElement.setAttribute('data-schermo', 'chat');
 const componente = new URLSearchParams(location.search).get('componente') || '';
 
 const LABORATORI = {
+  Board() {
+    aggiornaBoard(document.getElementById('schermoBoard'), SESSIONI_BOARD, {adesso:ADESSO_BOARD,metriche:METRICHE_BOARD,cartelle:CARTELLE_BOARD,cartelleCaricate:true});
+  },
   EmptyState() {
     const vecchia = document.querySelector('#schermoVuota .talos-conversation__column.talos-empty');
     vecchia.replaceWith(creaStatoVuoto(VUOTA));
