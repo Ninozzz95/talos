@@ -24,6 +24,7 @@ import { montaHf } from '../components/hf-catalogo.js';
 import { aggiornaCodaDownload, montaCodaDownload, stimaFraLetture } from '../components/download-coda.js'; // 06/9 B6.10: scheda «Download»
 import { aggiornaInspector, processiDagliEventi } from '../components/inspector.js'; // 06/9 B2: la colonna dei dettagli dice il vero
 import { contaDiff } from '../components/review.js'; // 06/9 B2: +N −M dei file toccati
+import { collegaRidimensionamentoDialoghi, preparaMisuraDialogo } from '../components/dialoghi.js'; // 06/9 B7: dialoghi ridimensionabili e ricordati
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
@@ -13887,6 +13888,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     const v = $(`#${id}`); if (!v) return;
     ultimoFuocoVelo = ROOT().activeElement;
     v.hidden = false;
+    preparaMisuraDialogo(v); // 06/9 B7: la misura ricordata di QUESTO dialogo, se c'è
     const corpo = v.querySelector('.talos-dialog__body');
     const scelto = corpo && corpo.querySelector('[role="radio"][aria-checked="true"]');
     const primo = scelto || (corpo && corpo.querySelector('input, button, select')) || v.querySelector('input, button, select');
@@ -13898,6 +13900,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (ultimoFuocoVelo?.focus) ultimoFuocoVelo.focus();
   }
   document.addEventListener('keydown', (event) => { if (event.key === 'Escape') $$('.overlay-layer').forEach((v) => chiudiVeloMockup(v.id)); });
+  collegaRidimensionamentoDialoghi(ROOT()); // 06/9 B7: le tre maniglie di ogni velo (trascina, frecce, doppio clic)
   setInspectorTab($('.inspector-tabs button.active'));
   renderReviewFile('composer');
   autoGrowTextarea();
