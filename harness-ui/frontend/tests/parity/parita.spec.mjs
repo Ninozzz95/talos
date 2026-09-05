@@ -44,7 +44,7 @@ const FONT_LOCALI = [
 ].map(([famiglia, peso, file]) => `@font-face{font-family:'${famiglia}';font-weight:${peso};font-style:normal;font-display:block;src:url('${FONT_DIR}/${file}.woff2') format('woff2')}`).join('');
 
 const SCHERMATE = ['schermoChat', 'schermoVuota', 'schermoTerminale', 'schermoReview', 'schermoCapability', 'schermoBoard', 'schermoMemoria', 'schermoAttivita', 'schermoImpostazioni', 'schermoDoctor', 'schermoLibreria', 'schermoRicerca', 'schermoOfficina', 'schermoAutomazioni', 'schermoBrowser'];
-const DIALOGHI = ['veloNuova', 'veloPermessi', 'veloAlbero', 'veloComandi'];
+const DIALOGHI = ['veloNuova', 'veloPermessi', 'veloAlbero', 'veloComandi', 'veloIntro'];
 /* Soglia: differenza per pixel (0..1) e quota massima di pixel diversi. */
 const SOGLIA_PIXEL = 0.12;
 const QUOTA_MASSIMA = 0.004;
@@ -259,5 +259,25 @@ test('ASTRA Palette 15 comandi ricerca tastiera',async({browser},info)=>{
   await p.locator('#cercaComando').fill('browser');await p.locator('#cercaComando').press('Enter');await expect(p.locator('#schermoBrowser')).toBeVisible();
   await p.keyboard.press('Control+k');await p.locator('#cercaComando').press('ArrowDown');await expect(p.locator('#cercaComando')).toHaveAttribute('aria-activedescendant','comando-resume');
   await p.keyboard.press('Escape');await expect(p.locator('#veloComandi')).toBeHidden();
+ }finally{await contesto.close();}
+});
+
+test('ASTRA Intro quattro passi e quattro politiche',async({browser},info)=>{
+ const {contesto,pagina:p}=await apri(browser,MOCKUP,{js:true,viewport:info.project.use.viewport});
+ const dir=path.resolve(radice,'../../.claude/immagini/astra-mockup');await mkdir(dir,{recursive:true});
+ const foto=async nome=>p.screenshot({path:path.join(dir,'intro-'+nome+'-'+info.project.use.viewport.width+'.png')});
+ try{
+  await p.goto(MOCKUP+'#intro');
+  await expect(p.locator('#veloIntro')).toBeVisible();
+  await foto('cartella');
+  await p.locator('#introCartella').fill('C:/progetti/esempio');await p.locator('#introAvanti').click();
+  await expect(p.locator('#passoIntroModello')).toBeVisible();await foto('modello');
+  await p.locator('#introChiave').fill('chiave-fittizia');await p.locator('#introEsitoAccesso').selectOption('rifiutata');await p.locator('#introProvaAccesso').click();await expect(p.locator('#introChiave')).toHaveValue('');await expect(p.locator('#introAccessoStato')).toContainText('chiave rifiutata');
+  await p.locator('#introModello').selectOption('claude-opus-5');await p.locator('#introAvanti').click();
+  await expect(p.locator('#veloIntro [data-intro-policy]')).toHaveCount(4);await expect(p.locator('#introAvanti')).toBeDisabled();
+  await p.locator('[data-intro-policy="Workspace write"]').click();await foto('permessi');
+  await p.locator('#introIndietro').click();await expect(p.locator('#introModello')).toHaveValue('claude-opus-5');await p.locator('#introAvanti').click();
+  await p.locator('#introAvanti').click();await expect(p.locator('#introRiepilogo')).toContainText('C:/progetti/esempio');await foto('fine');
+  await p.locator('#introAvanti').click();await expect(p.locator('#veloIntro')).toBeHidden();await expect(p.locator('#veloNuova')).toBeVisible();
  }finally{await contesto.close();}
 });
