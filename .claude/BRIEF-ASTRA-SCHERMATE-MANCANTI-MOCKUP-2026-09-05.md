@@ -35,7 +35,7 @@ corretto dopo averlo guardato. Un lavoro che non è stato riguardato non è cons
 
 ## 1. Il file che tocchi, e come è fatto
 
-`.claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html` (190 KB), parti da **commit `ed18c56e`**
+`.claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html` (190 KB), parti da **commit `2c554509`**
 del branch `lane/harness-desktop`, in un **worktree tuo** (`git worktree add`), mai nel
 worktree di un'altra sessione. È un frammento HTML (senza `<html>`/`<body>`: li aggiunge
 la pubblicazione). Dentro:
