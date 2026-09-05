@@ -1,5 +1,13 @@
 import { defineConfig } from '@playwright/test';
 
+/*
+ * Il laboratorio del frontend, dal 05/09/2026, e' UNA cosa sola: il cancello di
+ * parita' fra la app e il mockup approvato (`tests/parity/parita.spec.mjs`).
+ * Le tre viewport sono quelle DESKTOP dichiarate — 1440×900, 1280×800 e
+ * 1024×800, dove le colonne si stringono per prime. Nessun server: il mockup e
+ * la app statica si aprono dal disco; con `TALOS_PARITA_APP=http://…` la app
+ * si legge da un server vero.
+ */
 const viewports = [
   ['desktop-1440x900', { width: 1440, height: 900 }],
   ['desktop-1280x800', { width: 1280, height: 800 }],
@@ -7,30 +15,18 @@ const viewports = [
 ];
 
 export default defineConfig({
-  testDir: './tests',
-  testMatch: ['browser/lab-bootstrap.spec.mjs', 'component/*.spec.mjs', 'integration/application-lifecycle.spec.mjs'],
-  timeout: 30_000,
+  testDir: './tests/parity',
+  testMatch: ['*.spec.mjs'],
+  timeout: 60_000,
   fullyParallel: false,
   forbidOnly: true,
   retries: 0,
   workers: 1,
-  reporter: [['list'], ['json', { outputFile: 'artifacts/phase-03-playwright.json' }]],
+  reporter: [['list'], ['json', { outputFile: 'artifacts/parita.json' }]],
   use: {
-    baseURL: 'http://127.0.0.1:4175',
     channel: 'chrome',
     headless: true,
-    locale: 'it-IT',
-    timezoneId: 'Europe/Rome',
-    colorScheme: 'dark',
-    reducedMotion: 'no-preference',
     trace: 'retain-on-failure',
-    screenshot: 'only-on-failure',
   },
   projects: viewports.map(([name, viewport]) => ({ name, use: { viewport } })),
-  webServer: {
-    command: 'node scripts/serve-lab.mjs',
-    url: 'http://127.0.0.1:4175/health',
-    timeout: 30_000,
-    reuseExistingServer: false,
-  },
 });

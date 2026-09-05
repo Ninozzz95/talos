@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it" data-talos-entrypoint="strangler">
+<html lang="it" data-talos-entrypoint="app">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -9,7 +9,789 @@
     <link rel="stylesheet" href="./styles.css">
   </head>
   <body>
-    <main id="app" tabindex="-1"></main>
+<svg width="0" height="0" class="talos-sprite" aria-hidden="true">
+  <symbol id="glifo" viewBox="0 0 32 32"><path d="M8 23 16 7l8 16h-4l-1.7-3.7h-5L11.6 23H8Zm7.2-7h1.6L16 14.2 15.2 16Z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+  <symbol id="i-files" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></symbol>
+  <symbol id="i-brain" viewBox="0 0 24 24"><path d="M9 4a4 4 0 0 0-4 4v1a4 4 0 0 0 1 7.9V18a3 3 0 0 0 5 2.2V4.8A3 3 0 0 0 9 4ZM15 4a4 4 0 0 1 4 4v1a4 4 0 0 1-1 7.9V18a3 3 0 0 1-5 2.2V4.8A3 3 0 0 1 15 4Z"/></symbol>
+  <symbol id="i-check-sq" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="m8 12 3 3 5-6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></symbol>
+  <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M12 15h5"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 9-3 3 3 3M16 9l3 3-3 3M14 5l-4 14"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m8 10 4 4 4-4"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="m4 4 17 8-17 8 3-8-3-8Z"/><path d="M7 12h14"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 9a6 6 0 1 1 12 0c0 7 3 7 3 8H3c0-1 3-1 3-8ZM10 21h4"/></symbol>
+  <symbol id="i-branch" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="6" cy="19" r="2"/><path d="M6 7v10M8 17c5 0 8-2 8-9"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4.5 6v5.5c0 4.6 3 7.8 7.5 9.5 4.5-1.7 7.5-4.9 7.5-9.5V6L12 3Z"/><path d="m9 12 2 2 4-5"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="m9 6 9 6-9 6V6Z"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-diff" viewBox="0 0 24 24"><path d="M12 3v18M5 8h6M5 16h6M13 12h6"/></symbol>
+</svg>
+<!-- ===================== REGIA DEL MOCKUP (non è prodotto) ===================== -->
+<div class="talos-shell" data-c="AppShell">
+
+  <!-- ===================== SIDEBAR ===================== -->
+  <nav class="talos-sidebar" data-c="Sidebar" aria-label="Navigazione principale">
+    <div class="talos-brand" data-c="Brand">
+      <span class="talos-brand__mark" aria-hidden="true"><svg class="glyph"><use href="#glifo"/></svg></span>
+      <div class="talos-brand__copy"><strong>TALOS</strong><span>Codice</span></div>
+      <button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" title="Notifiche: 1 cosa aspetta te"><svg class="i"><use href="#i-bell"/></svg></button>
+    </div>
+
+    <div class="talos-sidebar__actions">
+      <div class="talos-field" data-c="Field"><svg class="i talos-field__icon"><use href="#i-search"/></svg><input class="talos-field__input" data-ph="cerca" placeholder="Cerca chat…" aria-label="Cerca nelle conversazioni"></div>
+      <button class="talos-button talos-button--primary" data-c="Button" id="voceNuova"><svg class="i"><use href="#i-plus"/></svg><span data-t="nuova">Nuova</span></button>
+    </div>
+
+    <div class="talos-sidebar__block" data-c="NavGroup">
+      <div class="talos-sidebar__block-head"><span class="talos-eyebrow" data-t="luoghi">Luoghi</span></div>
+      <button class="talos-nav-item" data-c="NavItem" data-vaia="capability"><svg class="i"><use href="#i-list"/></svg><span class="talos-nav-item__label">Capability</span><span class="talos-nav-item__count">43</span></button>
+      <button class="talos-nav-item" data-c="NavItem" data-vaia="board"><svg class="i"><use href="#i-grid"/></svg><span class="talos-nav-item__label">Board</span><span class="talos-nav-item__count">69</span></button>
+      <button class="talos-nav-item" data-c="NavItem" data-vaia="libreria"><svg class="i"><use href="#i-files"/></svg><span class="talos-nav-item__label">Libreria</span><span class="talos-nav-item__count">18</span></button>
+      <button class="talos-nav-item" data-c="NavItem" data-vaia="memoria"><svg class="i"><use href="#i-brain"/></svg><span class="talos-nav-item__label">Memoria</span><span class="talos-nav-item__count">7</span></button>
+      <button class="talos-nav-item" data-c="NavItem" data-vaia="attivita"><svg class="i"><use href="#i-check-sq"/></svg><span class="talos-nav-item__label">Attività</span><span class="talos-nav-item__count">4</span></button>
+      <button class="talos-nav-item" data-c="NavItem" id="altroLuoghi" aria-expanded="false" aria-controls="luoghiAltri"><svg class="i"><use href="#i-more"/></svg><span class="talos-nav-item__label" data-t="altro">Altro</span></button>
+      <div id="luoghiAltri" hidden>
+        <button class="talos-nav-item" data-c="NavItem"><svg class="i"><use href="#i-doc"/></svg><span class="talos-nav-item__label">Note</span><span class="talos-nav-item__count">11</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="ricerca"><svg class="i"><use href="#i-globe"/></svg><span class="talos-nav-item__label">Ricerca approfondita</span><span class="talos-nav-item__count">6</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="officina"><svg class="i"><use href="#i-code"/></svg><span class="talos-nav-item__label">Officina attrezzi</span><span class="talos-nav-item__count">2</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="automazioni"><svg class="i"><use href="#i-clock"/></svg><span class="talos-nav-item__label">Automazioni</span><span class="talos-nav-item__count">3</span></button>
+      </div>
+    </div>
+
+    <div class="talos-sidebar__block" data-c="NavGroup">
+      <div class="talos-sidebar__block-head"><span class="talos-eyebrow" data-t="fissate">Fissate</span></div>
+      <button class="talos-session-item" data-c="SessionItem">
+        <span><span class="talos-session-item__title">Redesign — 240 decisioni</span><span class="talos-session-item__sub"><span class="talos-dot talos-dot--sm talos-dot--success"></span>conclusa · claude-opus-5</span></span>
+        <span class="talos-session-item__aside"><span>ieri</span><span>32 giri</span></span>
+      </button>
+    </div>
+
+    <div class="talos-sidebar__block talos-sidebar__sessions" data-c="SessionList">
+      <div class="talos-sidebar__block-head"><span class="talos-eyebrow" data-t="sessioni">Sessioni</span><span class="talos-nav-item__count">69</span></div>
+      <button class="talos-session-item" data-c="SessionItem" aria-current="true">
+        <span><span class="talos-session-item__title">W1-02 registro processi</span><span class="talos-session-item__sub"><span class="talos-dot talos-dot--sm talos-dot--live"></span>in corso · claude-opus-5</span></span>
+        <span class="talos-session-item__aside"><span>18:09</span><span>7 giri</span></span>
+      </button>
+      <button class="talos-session-item" data-c="SessionItem">
+        <span><span class="talos-session-item__title">Store sessioni: pulizia</span><span class="talos-session-item__sub"><span class="talos-dot talos-dot--sm talos-dot--warning"></span>aspetta te · claude-opus-5</span></span>
+        <span class="talos-session-item__aside"><span>17:51</span><span>5 giri</span></span>
+      </button>
+      <button class="talos-session-item" data-c="SessionItem">
+        <span><span class="talos-session-item__title">Cancello ricerca web</span><span class="talos-session-item__sub"><span class="talos-dot talos-dot--sm talos-dot--success"></span>conclusa · claude-opus-5</span></span>
+        <span class="talos-session-item__aside"><span>17:10</span><span>3 giri</span></span>
+      </button>
+      <button class="talos-session-item" data-c="SessionItem">
+        <span><span class="talos-session-item__title">Confronto Hermes e Codex</span><span class="talos-session-item__sub"><span class="talos-dot talos-dot--sm talos-dot--danger"></span>giri finiti · claude-sonnet-5</span></span>
+        <span class="talos-session-item__aside"><span>ieri</span><span>24 giri</span></span>
+      </button>
+      <button class="talos-session-item" data-c="SessionItem">
+        <span><span class="talos-session-item__title">Sonda di rilascio GPU</span><span class="talos-session-item__sub"><span class="talos-dot talos-dot--sm talos-dot--success"></span>conclusa · claude-sonnet-5</span></span>
+        <span class="talos-session-item__aside"><span>2 g</span><span>9 giri</span></span>
+      </button>
+      <button class="talos-session-item" data-c="SessionItem">
+        <span><span class="talos-session-item__title">Recupero sessione b7b1b7d2</span><span class="talos-session-item__sub"><span class="talos-dot talos-dot--sm"></span>interrotta · claude-opus-5</span></span>
+        <span class="talos-session-item__aside"><span>3 g</span><span>2 giri</span></span>
+      </button>
+    </div>
+
+    <div class="talos-sidebar__foot" data-c="WorkspaceFooter">
+      <span class="talos-avatar"><svg class="glyph"><use href="#glifo"/></svg></span>
+      <div class="talos-grow"><div class="talos-sidebar__foot-title">Workspace locale</div><div class="talos-sidebar__foot-sub">Tema Calm · locale</div></div>
+      <button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" data-vaia="impostazioni" title="Impostazioni (Ctrl ,)"><svg class="i"><use href="#i-settings"/></svg></button>
+    </div>
+    <button class="talos-resizer talos-resizer--sidebar" data-ridimensiona="sidebar" aria-label="Ridimensiona la barra laterale" title="Trascina per ridimensionare, doppio click per il valore normale"></button>
+  </nav>
+
+  <!-- ===================== CENTRO ===================== -->
+  <main class="talos-screen" id="centro">
+
+    <!-- ---------- CHAT AL LAVORO ---------- -->
+    <section class="talos-screen" id="schermoChat" data-c="SessionScreen">
+      <div class="talos-topbar" data-c="Topbar">
+        <div class="talos-topbar__title"><h1>W1-02 registro processi</h1><svg class="i"><use href="#i-chev"/></svg></div>
+        <span class="talos-topbar__path">~/Desktop/projects/AVM-harness-desktop</span>
+        <div class="talos-tabs" data-c="Tabs"><div class="talos-tabs__list" role="tablist" data-vistetab aria-label="Viste della sessione">
+          <button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-selected="true">Chat</button>
+          <button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-selected="false">Terminale <span class="talos-tabs__count">2</span></button>
+          <button class="talos-tabs__tab" role="tab" data-vaia="review" aria-selected="false">Review <span class="talos-tabs__count">3</span></button>
+        </div></div>
+        <div class="talos-topbar__actions"><button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" data-apre-velo="veloAlbero" title="Albero dei rami"><svg class="i"><use href="#i-branch"/></svg></button><button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" title="Riprendi"><svg class="i"><use href="#i-play"/></svg></button></div>
+      </div>
+
+      <div class="talos-conversation" data-c="Conversation"><div class="talos-conversation__column">
+        <div class="talos-turn" data-c="Turn">
+          <div class="talos-turn-spine" data-c="TurnSpine"><span class="talos-turn-spine__n">1</span><span class="talos-turn-spine__tick" style="--tick:1"></span></div>
+          <div class="talos-message talos-message--user" data-c="Message">
+            <div class="talos-message__head"><span class="talos-message__who">Tu</span><span class="talos-message__meta">18:04</span></div>
+            <div class="talos-message__body"><p>Aggiungi la guardia di stallo al registro dei processi e falla riconoscere due casi diversi: silenzio prolungato e giri a vuoto. Non deve uccidere niente.</p></div>
+          </div>
+        </div>
+
+        <div class="talos-turn" data-c="Turn">
+          <div class="talos-turn-spine" data-c="TurnSpine">
+            <span class="talos-turn-spine__n">2</span><span class="talos-turn-spine__tick" style="--tick:2"></span>
+            <span class="talos-turn-spine__n">3</span><span class="talos-turn-spine__tick talos-turn-spine__tick--info" style="--tick:4"></span>
+            <span class="talos-turn-spine__n">4</span><span class="talos-turn-spine__tick" style="--tick:1"></span>
+          </div>
+          <div class="talos-message" data-c="Message">
+            <div class="talos-message__head"><span class="talos-avatar talos-avatar--sm"><svg class="glyph"><use href="#glifo"/></svg></span><span class="talos-message__who talos-message__who--talos">TALOS</span><span class="talos-message__meta">claude-opus-5 · 18:04</span></div>
+            <p>Ho letto il registro esistente e i quattro file di prova. La guardia serve due condizioni diverse, quindi le tengo separate: il silenzio si misura sull'ultimo evento arrivato, il giro a vuoto sul confronto fra chiamate identiche.</p>
+
+            <div class="talos-card talos-activity" data-c="ActivityBundle">
+              <button class="talos-activity__head" aria-expanded="false" aria-controls="attGiro2">
+                <svg class="i talos-activity__chev"><use href="#i-chev"/></svg>
+                <span class="talos-grow">7 attrezzi usati in questo giro · 1 fallito</span>
+                <span class="talos-mono talos-measure">3,1 s</span><span class="talos-mono talos-measure--estimate">1,9k token</span>
+              </button>
+              <div class="talos-activity__body" id="attGiro2" hidden>
+                <div class="talos-tool-row" data-c="ToolRow"><span class="talos-tool-row__icon"><svg class="i"><use href="#i-eye"/></svg></span><span class="talos-tool-row__name">Lettura di un file</span><span class="talos-tool-row__detail">src/session-registry.mjs</span><span class="talos-dot talos-dot--success"></span></div>
+                <div class="talos-tool-row" data-c="ToolRow"><span class="talos-tool-row__icon"><svg class="i"><use href="#i-search"/></svg></span><span class="talos-tool-row__name">Ricerca nei file</span><span class="talos-tool-row__detail">guardiaDiStallo</span><span class="talos-dot talos-dot--success"></span></div>
+                <div class="talos-tool-row" data-c="ToolRow"><span class="talos-tool-row__icon"><svg class="i"><use href="#i-terminal"/></svg></span><span class="talos-tool-row__name">Comando nel terminale</span><span class="talos-tool-row__detail">node --test tests/*.test.mjs</span><span class="talos-dot talos-dot--success"></span></div>
+                <div class="talos-tool-failure" data-c="ToolFailure">
+                  <div class="talos-tool-failure__title">Il comando non ha trovato la cartella</div>
+                  <p>«labs/electron-shell» non esiste nel percorso da cui è partito il comando. Riprova dalla radice del progetto, oppure correggi il percorso.</p>
+                  <div class="talos-tool-failure__actions"><button class="talos-button talos-button--secondary talos-button--sm">Riprova dalla radice</button><button class="talos-button talos-button--ghost talos-button--sm">Dettagli tecnici</button><span class="talos-code">TALOS-SHELL-404</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="talos-system-note" data-c="SystemNote">
+              <span class="talos-badge talos-badge--info talos-badge--sm">Nota</span>
+              <div><div class="talos-system-note__title">Permesso cambiato a metà lavoro</div><p>Da «sola lettura» a «scrittura nel workspace», deciso da te alle 18:06. I giri precedenti restano registrati col permesso di allora.</p></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="talos-turn" data-c="Turn">
+          <div class="talos-turn-spine" data-c="TurnSpine"><span class="talos-turn-spine__n">5</span><span class="talos-turn-spine__tick" style="--tick:3"></span><span class="talos-turn-spine__n">6</span><span class="talos-turn-spine__tick talos-turn-spine__tick--warning" style="--tick:5"></span></div>
+          <div class="talos-message" data-c="Message">
+            <div class="talos-message__head"><span class="talos-avatar talos-avatar--sm"><svg class="glyph"><use href="#glifo"/></svg></span><span class="talos-message__who talos-message__who--talos">TALOS</span><span class="talos-message__meta">claude-opus-5 · 18:07</span></div>
+            <p>La guardia è scritta e i test la coprono nei due versi. Prima di applicare la modifica al file vero ti mostro cosa cambia.</p>
+
+            <div class="talos-approval" data-c="ApprovalCard">
+              <div class="talos-approval__head">
+                <span class="talos-badge talos-badge--accent"><svg class="i i--sm"><use href="#i-shield"/></svg>Chiede di scrivere</span>
+                <span class="talos-mono talos-measure talos-grow talos-truncate">src/session-registry.mjs</span>
+                <span class="talos-diff-num talos-diff-num--plus">+18</span><span class="talos-diff-num talos-diff-num--minus">−2</span>
+              </div>
+              <p class="talos-approval__why">Serve per aggiungere le soglie della guardia che hai chiesto: 60 secondi di silenzio e tre ripetizioni identiche.</p>
+              <div class="talos-diff" data-c="DiffView">
+                <div class="talos-diff__line talos-diff__line--del">− const SOGLIE = { silenzioMs: 30_000 };</div>
+                <div class="talos-diff__line talos-diff__line--add">+ export const SOGLIE_STALLO_PREDEFINITE = Object.freeze({</div>
+                <div class="talos-diff__line talos-diff__line--add">+   silenzioMs: 60_000,        // 30-60 s è lo stato dell'arte</div>
+                <div class="talos-diff__line talos-diff__line--add">+   ripetizioniPerAllarme: 3,  // 65 identiche su 634, misurato</div>
+                <div class="talos-diff__line talos-diff__line--add">+ });</div>
+              </div>
+              <div class="talos-approval__foot">
+                <button class="talos-button talos-button--primary talos-button--md">Consenti una volta</button>
+                <button class="talos-button talos-button--secondary">Per questa sessione</button>
+                <button class="talos-button talos-button--ghost talos-button--danger">Nega</button>
+                <span class="talos-grow"></span>
+                <span class="talos-approval__foot-note">Scade a fine sessione</span>
+              </div>
+            </div>
+
+            <div class="talos-receipt" data-c="SignedReceipt">
+              <span class="talos-badge talos-badge--success talos-badge--sm">Ricevuta firmata</span>
+              <span class="talos-receipt__text">Scrittura eseguita: 18 righe aggiunte, 2 tolte, alle 18:08:12.</span>
+              <span class="talos-receipt__hash">a1f4…9c02</span>
+            </div>
+
+            <div class="talos-card talos-touched" data-c="TouchedFiles">
+              <div class="talos-touched__head"><span class="talos-eyebrow">File toccati in questo giro</span></div>
+              <div class="talos-touched__row"><span class="talos-touched__name">src/session-registry.mjs</span><span class="talos-diff-num talos-diff-num--plus">+18</span><span class="talos-diff-num talos-diff-num--minus">−2</span><button class="talos-button talos-button--ghost talos-button--sm">Apri</button><button class="talos-button talos-button--secondary talos-button--sm" data-vaia="review">Differenza</button></div>
+              <div class="talos-touched__row"><span class="talos-touched__name">tests/session-registry.test.mjs</span><span class="talos-diff-num talos-diff-num--plus">+64</span><span class="talos-diff-num talos-diff-num--minus">−0</span><button class="talos-button talos-button--ghost talos-button--sm">Apri</button><button class="talos-button talos-button--secondary talos-button--sm" data-vaia="review">Differenza</button></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="talos-turn" data-c="Turn">
+          <div class="talos-turn-spine" data-c="TurnSpine"><span class="talos-turn-spine__n">7</span><span class="talos-turn-spine__tick talos-turn-spine__tick--current" style="--tick:2"></span></div>
+          <div class="talos-message" data-c="Message">
+            <div class="talos-message__head"><span class="talos-avatar talos-avatar--sm"><svg class="glyph"><use href="#glifo"/></svg></span><span class="talos-message__who talos-message__who--talos">TALOS</span><span class="talos-message__meta">claude-opus-5 · 18:09</span></div>
+            <p>Lancio la suite completa per vedere se qualcosa è regredito…</p>
+            <div class="talos-stack" aria-hidden="true"><span class="talos-skeleton talos-skeleton--w90"></span><span class="talos-skeleton talos-skeleton--w70"></span><span class="talos-skeleton talos-skeleton--w40"></span></div>
+          </div>
+        </div>
+      </div></div>
+
+      <div class="talos-chat-foot" data-c="ChatFooter">
+        <div class="talos-status-strip" data-c="StatusStrip" role="status">
+          <span class="talos-status-strip__pulse"></span>
+          <span class="talos-status-strip__what">Comando nel terminale · <span class="talos-mono talos-measure">node --test tests/*.test.mjs</span></span>
+          <span class="talos-mono talos-muted">giro 7 · 41 s</span>
+          <button class="talos-button talos-button--secondary talos-button--sm"><svg class="i i--sm"><use href="#i-stop"/></svg>Ferma <span class="talos-kbd">Esc</span></button>
+        </div>
+        <div class="talos-queue" data-c="MessageQueue">
+          <span class="talos-badge talos-badge--sm">1 in coda</span>
+          <span class="talos-queue__text">«Poi aggiorna il ledger con i numeri veri» — parte alla fine di questo giro</span>
+          <button class="talos-button talos-button--ghost talos-button--sm">Togli</button>
+        </div>
+        <div class="talos-composer" data-c="Composer">
+          <div class="talos-composer__input" tabindex="0" role="textbox" aria-label="Messaggio">Scrivi… Invio indirizza il giro in corso, Ctrl+Invio accoda</div>
+          <div class="talos-composer__bar">
+            <button class="talos-composer__attach" data-c="AttachButton" title="Allega file, immagini, screenshot"><svg class="i"><use href="#i-plus"/></svg></button>
+            <span class="talos-badge talos-badge--lg" data-c="Chip"><svg class="i i--sm"><use href="#i-bolt"/></svg>claude-opus-5 <span class="talos-kbd">Ctrl ⇧ M</span></span>
+            <span class="talos-badge talos-badge--lg talos-badge--warning" data-c="Chip"><svg class="i i--sm"><use href="#i-shield"/></svg>Scrittura nel workspace</span>
+            <span class="talos-badge talos-badge--lg" data-c="Chip">Giri <span class="talos-mono talos-measure">7</span></span>
+            <span class="talos-badge talos-badge--lg" data-c="Chip">Sessione <span class="talos-mono talos-measure--estimate">$0,08</span></span>
+            <button class="talos-send talos-send--stop" data-c="SendButton" title="Ferma"><svg class="i"><use href="#i-stop"/></svg></button>
+          </div>
+        </div>
+        <div class="talos-statusbar" data-c="StatusBar"><span>Tema Calm · locale</span><span>41,2k token · 7 giri</span><span>cache 87%</span><span>primo token 1,4 s</span></div>
+      </div>
+    </section>
+
+    <!-- ---------- CHAT VUOTA ---------- -->
+    <section class="talos-screen" id="schermoVuota" data-c="EmptySessionScreen" hidden>
+      <div class="talos-topbar" data-c="Topbar">
+        <div class="talos-topbar__title"><h1>Nuova conversazione</h1></div>
+        <span class="talos-topbar__path">~/Desktop/projects/AVM-harness-desktop</span>
+        <div class="talos-tabs"><div class="talos-tabs__list" role="tablist"><button class="talos-tabs__tab" role="tab" aria-selected="true">Chat</button><button class="talos-tabs__tab" role="tab" aria-selected="false">Terminale</button><button class="talos-tabs__tab" role="tab" aria-selected="false">Review</button></div></div>
+      </div>
+      <div class="talos-conversation talos-conversation--empty" data-c="EmptyState"><div class="talos-conversation__column talos-empty">
+        <span class="talos-brand__mark talos-empty__mark" aria-hidden="true"><svg class="glyph"><use href="#glifo"/></svg></span>
+        <h2 class="talos-empty__title">Cosa costruiamo in <span class="talos-empty__project">AVM-harness-desktop</span>?</h2>
+        <p class="talos-empty__lead">TALOS legge, scrive ed esegue nella cartella che gli apri. Ogni azione lascia una ricevuta firmata, e niente esce da questa macchina se non lo chiedi tu.</p>
+        <div class="talos-card talos-list" data-c="SuggestionList">
+          <button class="talos-list-row" data-c="ListRow"><span class="talos-list-row__icon"><svg class="i"><use href="#i-check-sq"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Fai passare la suite di test</span><span class="talos-list-row__sub">trovata in package.json · node --test tests/*.test.mjs · 1.565 test</span></span><span class="talos-kbd">↵</span></button>
+          <button class="talos-list-row" data-c="ListRow"><span class="talos-list-row__icon"><svg class="i"><use href="#i-doc"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Spiegami src/session-registry.mjs</span><span class="talos-list-row__sub">il file più grande del progetto: 3.572 righe</span></span><span class="talos-kbd">↵</span></button>
+          <button class="talos-list-row" data-c="ListRow"><span class="talos-list-row__icon"><svg class="i"><use href="#i-search"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Trova le righe di ledger ancora aperte</span><span class="talos-list-row__sub">cerca «[ ]» in .claude/LEDGER-ROADMAP-DESKTOP</span></span><span class="talos-kbd">↵</span></button>
+        </div>
+        <div class="talos-cluster talos-empty__foot"><button class="talos-button talos-button--secondary talos-button--sm"><svg class="i i--sm"><use href="#i-clock"/></svg>Riapri l'ultima sessione</button><span class="talos-muted talos-empty__hint">Gli esempi nascono da cosa c'è nella cartella.</span></div>
+      </div></div>
+      <div class="talos-chat-foot" data-c="ChatFooter">
+        <div class="talos-composer" data-c="Composer">
+          <div class="talos-composer__input" tabindex="0" role="textbox" aria-label="Messaggio">Scrivi il primo messaggio…</div>
+          <div class="talos-composer__bar">
+            <button class="talos-composer__attach" title="Allega"><svg class="i"><use href="#i-plus"/></svg></button>
+            <span class="talos-badge talos-badge--lg"><svg class="i i--sm"><use href="#i-bolt"/></svg>claude-opus-5</span>
+            <span class="talos-badge talos-badge--lg talos-badge--warning"><svg class="i i--sm"><use href="#i-shield"/></svg>Scrittura nel workspace</span>
+            <span class="talos-badge talos-badge--lg">43 attrezzi · <span class="talos-mono talos-measure--estimate">7,5k token per giro</span></span>
+            <button class="talos-send" title="Invia"><svg class="i"><use href="#i-send"/></svg></button>
+          </div>
+        </div>
+        <div class="talos-statusbar"><span>Tema Calm · locale</span><span>0 token · 0 giri</span></div>
+      </div>
+    </section>
+
+    <!-- ---------- TERMINALE (G8-G10) ---------- -->
+    <section class="talos-screen" id="schermoTerminale" data-c="TerminalScreen" hidden>
+      <div class="talos-topbar" data-c="Topbar">
+        <div class="talos-topbar__title"><h1>W1-02 registro processi</h1></div>
+        <span class="talos-topbar__path">~/Desktop/projects/AVM-harness-desktop</span>
+        <div class="talos-tabs"><div class="talos-tabs__list" role="tablist" data-vistetab><button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-selected="false">Chat</button><button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-selected="true">Terminale <span class="talos-tabs__count">2</span></button><button class="talos-tabs__tab" role="tab" data-vaia="review" aria-selected="false">Review <span class="talos-tabs__count">3</span></button></div></div>
+      </div>
+      <div class="talos-terminal" data-c="TerminalPane">
+        <div class="talos-terminal__tabs" role="tablist">
+          <button class="talos-terminal__tab" role="tab" aria-selected="true"><span class="talos-dot talos-dot--live"></span>agente · giro 7</button>
+          <button class="talos-terminal__tab" role="tab" aria-selected="false"><span class="talos-dot talos-dot--success"></span>tu · PowerShell</button>
+          <button class="talos-terminal__tab" role="tab" aria-selected="false"><svg class="i i--sm"><use href="#i-plus"/></svg>Nuovo</button>
+          <span class="talos-grow"></span>
+          <span class="talos-badge talos-badge--success talos-badge--sm">Isolato · sandbox locale</span>
+          <span class="talos-badge talos-badge--sm">harness-ui/</span>
+        </div>
+        <div class="talos-terminal__body"><span class="p">❯</span> node --test tests/*.test.mjs
+<span class="dim">✔ W0-07 — due appendFile concorrenti sullo stesso file non si intrecciano (12.4ms)</span>
+<span class="dim">✔ W1-13 — cancello sui file di controllo: senza ascoltatori rifiuta subito (2.1ms)</span>
+<span class="dim">✔ W1-02 — guardiaDiStallo: silenzio di 61 s su un processo aperto → allarme «processo» (0.9ms)</span>
+<span class="dim">✔ W1-02 — giro-a-vuoto: tre chiamate identiche con esito invariato → allarme (1.3ms)</span>
+<span class="dim">✔ W1-02 — AL CONTRARIO: tre prova da «3 falliti» a «tutto verde» NON è stallo (1.1ms)</span>
+<span class="dim">…</span>
+<span class="ok">ℹ tests 1565  ℹ pass 1565  ℹ fail 0</span>
+<span class="dim">ℹ duration_ms 15603</span>
+<span class="p">❯</span> <span class="dim">▍</span></div>
+        <div class="talos-terminal__foot"><span>Lanciato dall'agente al giro 7</span><span>·</span><span class="talos-mono">41 s</span><span>·</span><span>in corso</span><span class="talos-grow"></span><span>Ogni comando dichiara chi l'ha lanciato e dove.</span></div>
+      </div>
+    </section>
+
+    <!-- ---------- REVIEW (G23-G24) — prima non esisteva: il tasto non apriva niente ---------- -->
+    <section class="talos-screen" id="schermoReview" data-c="ReviewScreen" hidden>
+      <div class="talos-topbar" data-c="Topbar">
+        <div class="talos-topbar__title"><h1>W1-02 registro processi</h1></div>
+        <span class="talos-topbar__path">3 file modificati · +112 −2</span>
+        <div class="talos-tabs"><div class="talos-tabs__list" role="tablist" data-vistetab><button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-selected="false">Chat</button><button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-selected="false">Terminale <span class="talos-tabs__count">2</span></button><button class="talos-tabs__tab" role="tab" data-vaia="review" aria-selected="true">Review <span class="talos-tabs__count">3</span></button></div></div>
+        <div class="talos-topbar__actions"><button class="talos-button talos-button--secondary talos-button--sm">Accetta tutto</button><button class="talos-button talos-button--ghost talos-button--sm talos-button--danger">Scarta tutto</button></div>
+      </div>
+      <div class="talos-review" data-c="ReviewPane">
+        <div class="talos-card talos-list talos-review__files" data-c="ReviewFileList">
+          <button class="talos-list-row" aria-selected="true"><span class="talos-list-row__text"><span class="talos-list-row__title talos-mono">src/session-registry.mjs</span><span class="talos-list-row__sub">giro 5 · scrittura con ricevuta a1f4…9c02</span></span><span class="talos-list-row__aside"><span class="talos-diff-num talos-diff-num--plus">+18</span><span class="talos-diff-num talos-diff-num--minus">−2</span></span></button>
+          <button class="talos-list-row"><span class="talos-list-row__text"><span class="talos-list-row__title talos-mono">tests/session-registry.test.mjs</span><span class="talos-list-row__sub">giro 5 · scrittura con ricevuta b73c…10ee</span></span><span class="talos-list-row__aside"><span class="talos-diff-num talos-diff-num--plus">+64</span></span></button>
+          <button class="talos-list-row"><span class="talos-list-row__text"><span class="talos-list-row__title talos-mono">src/http-app.mjs</span><span class="talos-list-row__sub">giro 6 · scrittura con ricevuta 91aa…4f07</span></span><span class="talos-list-row__aside"><span class="talos-diff-num talos-diff-num--plus">+30</span></span></button>
+        </div>
+        <div class="talos-card talos-review__diff" data-c="DiffView">
+          <div class="talos-review__diff-head"><span class="talos-mono talos-measure talos-grow talos-truncate">src/session-registry.mjs</span><span class="talos-badge talos-badge--success talos-badge--sm">Ricevuta a1f4…9c02</span><span class="talos-diff-num talos-diff-num--plus">+18</span><span class="talos-diff-num talos-diff-num--minus">−2</span></div>
+          <div class="talos-diff">
+            <div class="talos-diff__line talos-diff__line--ctx">@@ -178,8 +178,24 @@ export const SOGLIE_STALLO_PREDEFINITE</div>
+            <div class="talos-diff__line talos-diff__line--ctx">  /*</div>
+            <div class="talos-diff__line talos-diff__line--ctx">   * Le soglie sono PARAMETRI, non numeri nella logica.</div>
+            <div class="talos-diff__line talos-diff__line--ctx">   */</div>
+            <div class="talos-diff__line talos-diff__line--del">− const SOGLIE = { silenzioMs: 30_000 };</div>
+            <div class="talos-diff__line talos-diff__line--del">− export function guardiaDiStallo(eventi) { return valuta(eventi, SOGLIE); }</div>
+            <div class="talos-diff__line talos-diff__line--add">+ export const SOGLIE_STALLO_PREDEFINITE = Object.freeze({</div>
+            <div class="talos-diff__line talos-diff__line--add">+   silenzioMs: 60_000,        // 30-60 s è lo stato dell'arte (ricerca 04/09)</div>
+            <div class="talos-diff__line talos-diff__line--add">+   ripetizioniPerAllarme: 3,  // misurato: 65 identiche su 634 chiamate</div>
+            <div class="talos-diff__line talos-diff__line--add">+   finestraChiamate: 10,</div>
+            <div class="talos-diff__line talos-diff__line--add">+ });</div>
+            <div class="talos-diff__line talos-diff__line--add">+</div>
+            <div class="talos-diff__line talos-diff__line--add">+ export function guardiaDiStallo(eventi, { istanti, adesso, soglie } = {}) {</div>
+            <div class="talos-diff__line talos-diff__line--add">+   const soglieEffettive = { ...SOGLIE_STALLO_PREDEFINITE, ...(soglie ?? {}) };</div>
+            <div class="talos-diff__line talos-diff__line--add">+   return { silenzio: valutaSilenzio(eventi, istanti, adesso, soglieEffettive),</div>
+            <div class="talos-diff__line talos-diff__line--add">+            giroAVuoto: valutaRipetizioni(eventi, soglieEffettive), interviene: false };</div>
+            <div class="talos-diff__line talos-diff__line--add">+ }</div>
+          </div>
+          <div class="talos-review__foot"><button class="talos-button talos-button--primary talos-button--md">Accetta questo file</button><button class="talos-button talos-button--secondary">Apri nell'editor</button><button class="talos-button talos-button--ghost talos-button--danger">Scarta</button><span class="talos-grow"></span><span class="talos-muted talos-approval__foot-note">Scartare ripristina il file dal checkpoint del giro 4.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- CAPABILITY (C1-C11) ---------- -->
+    <section class="talos-screen" id="schermoCapability" data-c="CapabilityScreen" hidden>
+      <div class="talos-topbar" data-c="Topbar">
+        <div class="talos-topbar__title"><h1>Capability</h1></div>
+        <span class="talos-grow"></span>
+        <div class="talos-tabs" data-c="Tabs"><div class="talos-tabs__list" role="tablist" aria-label="Sezioni di Capability">
+          <button class="talos-tabs__tab" role="tab" aria-selected="true">Attrezzi <span class="talos-tabs__count">43</span></button>
+          <button class="talos-tabs__tab" role="tab" aria-selected="false">Skill <span class="talos-tabs__count">12</span></button>
+          <button class="talos-tabs__tab" role="tab" aria-selected="false">Connettori <span class="talos-tabs__count">3</span></button>
+          <button class="talos-tabs__tab" role="tab" aria-selected="false">Plugin <span class="talos-tabs__count">1</span></button>
+        </div></div>
+      </div>
+      <div class="talos-page" data-c="Page">
+        <div class="talos-page__head"><span class="talos-eyebrow">Attrezzi</span><h2>Quello che il modello può usare</h2><p>Spegnere un attrezzo vale per questa sessione. Il permesso sulla riga vince sulla politica della sessione.</p></div>
+        <div class="talos-toolbar" data-c="Toolbar">
+          <div class="talos-field talos-field--sm"><svg class="i talos-field__icon"><use href="#i-search"/></svg><input class="talos-field__input" placeholder="cerca: leggi file, terminale, web…" aria-label="Cerca fra gli attrezzi"></div>
+          <div class="talos-tabs talos-tabs--pills" data-c="FilterChips"><div class="talos-tabs__list" role="tablist" aria-label="Filtri"><button class="talos-tabs__tab" role="tab" aria-selected="true">Più usati qui</button><button class="talos-tabs__tab" role="tab" aria-selected="false">Hanno un cancello</button><button class="talos-tabs__tab" role="tab" aria-selected="false">Non supportati</button></div></div>
+          <span class="talos-grow"></span>
+          <span class="talos-badge">Totale <span class="talos-mono talos-measure--estimate">7.454 token</span> · <span class="talos-mono talos-measure--estimate">3,7% della finestra</span></span>
+        </div>
+        <div class="talos-split">
+          <div class="talos-card talos-list" data-c="ToolList" role="listbox" aria-label="Attrezzi">
+            <button class="talos-list-row" role="option" aria-selected="true"><span class="talos-list-row__icon"><svg class="i"><use href="#i-terminal"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Comando nel terminale</span><span class="talos-list-row__sub">esegue un comando nella cartella della sessione</span></span><span class="talos-list-row__aside"><span class="talos-mono talos-measure">308</span><span class="talos-mono talos-measure--estimate">412 tok</span><span class="talos-badge talos-badge--warning">Chiede</span></span></button>
+            <button class="talos-list-row" role="option" aria-selected="false"><span class="talos-list-row__icon"><svg class="i"><use href="#i-search"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Ricerca nei file</span><span class="talos-list-row__sub">cerca un testo dentro la cartella, senza aprirla tutta</span></span><span class="talos-list-row__aside"><span class="talos-mono talos-measure">234</span><span class="talos-mono talos-measure--estimate">198 tok</span><span class="talos-badge">Come la sessione</span></span></button>
+            <button class="talos-list-row" role="option" aria-selected="false"><span class="talos-list-row__icon"><svg class="i"><use href="#i-eye"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Lettura di un file</span><span class="talos-list-row__sub">legge un file del workspace</span></span><span class="talos-list-row__aside"><span class="talos-mono talos-measure">176</span><span class="talos-mono talos-measure--estimate">156 tok</span><span class="talos-badge">Come la sessione</span></span></button>
+            <button class="talos-list-row" role="option" aria-selected="false"><span class="talos-list-row__icon"><svg class="i"><use href="#i-code"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Scrittura di un file</span><span class="talos-list-row__sub">crea o modifica un file, sempre con ricevuta</span></span><span class="talos-list-row__aside"><span class="talos-mono talos-measure">41</span><span class="talos-mono talos-measure--estimate">203 tok</span><span class="talos-badge talos-badge--warning">Chiede</span></span></button>
+            <button class="talos-list-row" role="option" aria-selected="false"><span class="talos-list-row__icon"><svg class="i"><use href="#i-globe"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Ricerca sul web</span><span class="talos-list-row__sub">interroga il web e cita le fonti</span></span><span class="talos-list-row__aside"><span class="talos-mono talos-measure">18</span><span class="talos-mono talos-measure--estimate">287 tok</span><span class="talos-badge talos-badge--warning">Chiede</span></span></button>
+            <button class="talos-list-row talos-list-row--muted" role="option" aria-selected="false"><span class="talos-list-row__icon"><svg class="i"><use href="#i-eye"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Analisi di un'immagine</span><span class="talos-list-row__sub">il modello scelto non riceve immagini: resta spento</span></span><span class="talos-list-row__aside"><span class="talos-mono talos-measure">0</span><span class="talos-mono talos-measure--estimate">146 tok</span><span class="talos-badge">Non supportato</span></span></button>
+          </div>
+          <aside class="talos-card talos-detail" data-c="DetailPanel">
+            <h3>Comando nel terminale</h3>
+            <p class="talos-detail__desc">Esegue un comando nella cartella della sessione e restituisce l'uscita, con il codice di uscita vero.</p>
+            <div class="talos-kv"><span class="talos-kv__k">Costo dello schema</span><span class="talos-kv__v talos-measure--estimate">412 token</span></div>
+            <div class="talos-kv"><span class="talos-kv__k">Permesso</span><span class="talos-badge talos-badge--warning talos-badge--sm">Chiede sempre</span></div>
+            <div class="talos-kv"><span class="talos-kv__k">Vince sulla sessione</span><span class="talos-kv__v">sì</span></div>
+            <span class="talos-eyebrow">Ultime tre chiamate</span>
+            <div class="talos-kv"><span class="talos-kv__k">node --test tests/*.test.mjs</span><span class="talos-kv__v">15,6 s</span></div>
+            <div class="talos-kv"><span class="talos-kv__k">git status --short</span><span class="talos-kv__v">0,3 s</span></div>
+            <div class="talos-kv"><span class="talos-kv__k">npm run verify:all</span><span class="talos-kv__v">18,1 s</span></div>
+            <span class="talos-eyebrow">Testo inviato al modello</span>
+            <p class="talos-detail__raw">Run a shell command in the session workspace and return its stdout, stderr and exit code.</p>
+            <div class="talos-where">Gli attrezzi forgiati vivono in <code>.harness-ui-tools/</code></div>
+          </aside>
+        </div>
+        <div class="talos-pending" data-c="PendingList"><span class="talos-eyebrow">Non ancora implementate</span><ul><li>Mercato delle skill</li><li>Profili di preferenze</li><li>Vista «file toccati oggi»</li><li>Tema ad alto contrasto</li></ul></div>
+        <div class="talos-card talos-scope" data-c="ScopeNote"><span class="talos-scope__text">Le modifiche a permessi e attrezzi valgono <b>da subito</b> in questa sessione. Spegnere un connettore vale dalla sessione successiva.</span></div>
+      </div>
+    </section>
+
+    <!-- ---------- BOARD (G2-G7) ---------- -->
+    <section class="talos-screen" id="schermoBoard" data-c="BoardScreen" hidden>
+      <div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>Board</h1></div><span class="talos-topbar__path">69 sessioni · 6 cartelle</span></div>
+      <div class="talos-page" data-c="Page">
+        <div class="talos-page__head"><span class="talos-eyebrow">Tutte le sessioni</span><h2>Cosa sta girando, cosa è costato</h2><p>Cache, tempo al primo token e motivo di chiusura si vedono qui dentro, senza montare un sistema di osservabilità a parte.</p></div>
+        <div class="talos-toolbar" data-c="Toolbar">
+          <div class="talos-tabs talos-tabs--pills" data-c="FilterChips"><div class="talos-tabs__list" role="tablist" aria-label="Stato"><button class="talos-tabs__tab" role="tab" aria-selected="true">Tutte</button><button class="talos-tabs__tab" role="tab" aria-selected="false">In corso</button><button class="talos-tabs__tab" role="tab" aria-selected="false">Aspettano te</button><button class="talos-tabs__tab" role="tab" aria-selected="false">Concluse</button><button class="talos-tabs__tab" role="tab" aria-selected="false">Errore</button><button class="talos-tabs__tab" role="tab" aria-selected="false">Interrotte</button></div></div>
+          <span class="talos-grow"></span>
+          <select class="talos-select" data-c="Select" aria-label="Cartella"><option>Tutte le cartelle</option><option>AVM-harness-desktop</option><option>AVM</option></select>
+        </div>
+        <div class="talos-card talos-table-wrap" data-c="DataTable">
+          <table class="talos-table">
+            <thead><tr><th>Sessione</th><th>Stato</th><th>Modello</th><th class="num">Giri</th><th class="num">Token</th><th class="num">Cache</th><th class="num">Primo token</th><th>Chiusa per</th><th class="num">Costo</th><th>Ultima</th></tr></thead>
+            <tbody>
+              <tr><td class="title">W1-02 registro processi</td><td><span class="talos-badge talos-badge--accent talos-badge--sm">In corso</span></td><td class="talos-mono">claude-opus-5</td><td class="num talos-mono talos-measure">7</td><td class="num talos-mono talos-measure">41,2k</td><td class="num talos-mono talos-measure">87%</td><td class="num talos-mono talos-measure">1,4 s</td><td class="talos-muted">—</td><td class="num talos-mono talos-measure--estimate">$0,08</td><td class="talos-muted">2 min fa</td></tr>
+              <tr><td class="title">Store sessioni: pulizia</td><td><span class="talos-badge talos-badge--warning talos-badge--sm">Aspetta te</span></td><td class="talos-mono">claude-opus-5</td><td class="num talos-mono talos-measure">5</td><td class="num talos-mono talos-measure">22,4k</td><td class="num talos-mono talos-measure">84%</td><td class="num talos-mono talos-measure">1,1 s</td><td class="talos-muted">—</td><td class="num talos-mono talos-measure--estimate">$0,04</td><td class="talos-muted">18 min fa</td></tr>
+              <tr><td class="title">Cancello ricerca web</td><td><span class="talos-badge talos-badge--success talos-badge--sm">Conclusa</span></td><td class="talos-mono">claude-opus-5</td><td class="num talos-mono talos-measure">3</td><td class="num talos-mono talos-measure">12,8k</td><td class="num talos-mono talos-measure">91%</td><td class="num talos-mono talos-measure">0,9 s</td><td>fine lavoro</td><td class="num talos-mono talos-measure--estimate">$0,02</td><td class="talos-muted">1 ora fa</td></tr>
+              <tr><td class="title">Confronto Hermes e Codex</td><td><span class="talos-badge talos-badge--danger talos-badge--sm">Errore</span></td><td class="talos-mono">claude-sonnet-5</td><td class="num talos-mono talos-measure">24</td><td class="num talos-mono talos-measure">98,1k</td><td class="num talos-mono talos-measure">62%</td><td class="num talos-mono talos-measure">3,1 s</td><td>giri finiti</td><td class="num talos-mono talos-measure--estimate">$0,21</td><td class="talos-muted">ieri</td></tr>
+              <tr><td class="title">Sonda di rilascio GPU</td><td><span class="talos-badge talos-badge--success talos-badge--sm">Conclusa</span></td><td class="talos-mono">claude-sonnet-5</td><td class="num talos-mono talos-measure">9</td><td class="num talos-mono talos-measure">31,7k</td><td class="num talos-mono talos-measure">88%</td><td class="num talos-mono talos-measure">1,2 s</td><td>fine lavoro</td><td class="num talos-mono talos-measure--estimate">$0,05</td><td class="talos-muted">2 giorni fa</td></tr>
+              <tr><td class="title">Recupero sessione b7b1b7d2</td><td><span class="talos-badge talos-badge--sm">Interrotta</span></td><td class="talos-mono">claude-opus-5</td><td class="num talos-mono talos-measure">2</td><td class="num talos-mono talos-measure">8,9k</td><td class="num talos-mono talos-measure">79%</td><td class="num talos-mono talos-measure">1,0 s</td><td>fermata da te</td><td class="num talos-mono talos-measure--estimate">$0,01</td><td class="talos-muted">3 giorni fa</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="talos-page__note">I costi sono <b>stime</b>, riconoscibili dalla tilde e dalla sottolineatura: la spesa vera la dichiara il credito del fornitore.</p>
+      </div>
+    </section>
+
+    <!-- ---------- MEMORIA (C22-C23) ---------- -->
+    <section class="talos-screen" id="schermoMemoria" data-c="MemoryScreen" hidden>
+      <div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>Memoria</h1></div><span class="talos-topbar__path">7 ricordi · 3 strati</span></div>
+      <div class="talos-page" data-c="Page">
+        <div class="talos-page__head"><span class="talos-eyebrow">Memoria</span><h2>Quello che TALOS ricorda di te</h2><p>Tre strati, come sul mobile: di lavoro (questa sessione), episodica (cosa è successo), semantica (cosa vale sempre). Ogni ricordo si corregge a mano e dice quando è stato usato l'ultima volta.</p></div>
+        <div class="talos-toolbar"><div class="talos-tabs talos-tabs--pills" data-c="FilterChips"><div class="talos-tabs__list" role="tablist" aria-label="Strato"><button class="talos-tabs__tab" role="tab" aria-selected="true">Tutti</button><button class="talos-tabs__tab" role="tab" aria-selected="false">Di lavoro</button><button class="talos-tabs__tab" role="tab" aria-selected="false">Episodica</button><button class="talos-tabs__tab" role="tab" aria-selected="false">Semantica</button></div></div></div>
+        <div class="talos-card talos-list" data-c="MemoryList">
+          <div class="talos-list-row" data-c="MemoryRow"><span class="talos-list-row__icon"><svg class="i"><use href="#i-brain"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">I commit non portano mai co-authoring</span><span class="talos-list-row__sub">semantica · usata 2 minuti fa · 41 volte</span></span><span class="talos-list-row__aside"><span class="talos-badge talos-badge--accent">Sempre</span><button class="talos-button talos-button--ghost talos-button--sm">Correggi</button></span></div>
+          <div class="talos-list-row" data-c="MemoryRow"><span class="talos-list-row__icon"><svg class="i"><use href="#i-brain"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">La suite si lancia con npm run verify:all</span><span class="talos-list-row__sub">semantica · usata 18 minuti fa · 12 volte</span></span><span class="talos-list-row__aside"><span class="talos-badge talos-badge--accent">Sempre</span><button class="talos-button talos-button--ghost talos-button--sm">Correggi</button></span></div>
+          <div class="talos-list-row" data-c="MemoryRow"><span class="talos-list-row__icon"><svg class="i"><use href="#i-clock"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Il 04/09 la sessione b7b1b7d2 è stata recuperata da un record spezzato</span><span class="talos-list-row__sub">episodica · usata ieri · 2 volte</span></span><span class="talos-list-row__aside"><span class="talos-badge">Episodio</span><button class="talos-button talos-button--ghost talos-button--sm">Correggi</button></span></div>
+          <div class="talos-list-row" data-c="MemoryRow"><span class="talos-list-row__icon"><svg class="i"><use href="#i-bolt"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">In questa sessione: la guardia non deve uccidere processi</span><span class="talos-list-row__sub">di lavoro · usata ora · scade a fine sessione</span></span><span class="talos-list-row__aside"><span class="talos-badge talos-badge--info">Sessione</span><button class="talos-button talos-button--ghost talos-button--sm">Correggi</button></span></div>
+        </div>
+        <div class="talos-where">I ricordi vivono in <code>.harness-ui-memory/</code> · un ricordo cancellato non torna.</div>
+      </div>
+    </section>
+
+    <!-- ---------- ATTIVITÀ (C24-C25) ---------- -->
+    <section class="talos-screen" id="schermoAttivita" data-c="TasksScreen" hidden>
+      <div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>Attività</h1></div><span class="talos-topbar__path">4 aperte · 11 fatte</span></div>
+      <div class="talos-page" data-c="Page">
+        <div class="talos-page__head"><span class="talos-eyebrow">Attività</span><h2>Cose con uno stato</h2><p>Le note sono testo; le attività hanno uno stato e un autore. Un'attività che ti sei dato tu e una che si è dato l'agente si giudicano in modo diverso.</p></div>
+        <div class="talos-toolbar"><div class="talos-tabs talos-tabs--pills" data-c="FilterChips"><div class="talos-tabs__list" role="tablist" aria-label="Filtro"><button class="talos-tabs__tab" role="tab" aria-selected="true">Aperte</button><button class="talos-tabs__tab" role="tab" aria-selected="false">Fatte</button><button class="talos-tabs__tab" role="tab" aria-selected="false">Mie</button><button class="talos-tabs__tab" role="tab" aria-selected="false">Dell'agente</button></div></div><span class="talos-grow"></span><button class="talos-button talos-button--secondary talos-button--sm"><svg class="i i--sm"><use href="#i-plus"/></svg>Nuova attività</button></div>
+        <div class="talos-card talos-list" data-c="TaskList">
+          <div class="talos-list-row" data-c="TaskRow"><button class="talos-checkbox" role="checkbox" aria-checked="false" aria-label="Segna come fatta"></button><span class="talos-list-row__text"><span class="talos-list-row__title">Aggiornare il ledger con i numeri veri di W1-02</span><span class="talos-list-row__sub">creata dall'agente · giro 5 · da fare</span></span><span class="talos-list-row__aside"><span class="talos-badge"><svg class="glyph i--xs"><use href="#glifo"/></svg>Agente</span></span></div>
+          <div class="talos-list-row" data-c="TaskRow"><button class="talos-checkbox" role="checkbox" aria-checked="false" aria-label="Segna come fatta"></button><span class="talos-list-row__text"><span class="talos-list-row__title">Provare la dettatura vocale a fine implementazione</span><span class="talos-list-row__sub">creata da te · 04/09 · rimandata</span></span><span class="talos-list-row__aside"><span class="talos-badge"><svg class="i i--xs"><use href="#i-user"/></svg>Tu</span></span></div>
+          <div class="talos-list-row" data-c="TaskRow"><button class="talos-checkbox" role="checkbox" aria-checked="false" aria-label="Segna come fatta"></button><span class="talos-list-row__text"><span class="talos-list-row__title">Pannello Processi nell'inspector</span><span class="talos-list-row__sub">creata dall'agente · W1-02 · in attesa del redesign</span></span><span class="talos-list-row__aside"><span class="talos-badge"><svg class="glyph i--xs"><use href="#glifo"/></svg>Agente</span></span></div>
+          <div class="talos-list-row talos-list-row--done" data-c="TaskRow"><button class="talos-checkbox" role="checkbox" aria-checked="true" aria-label="Fatta"><svg class="i i--sm"><use href="#i-check"/></svg></button><span class="talos-list-row__text"><span class="talos-list-row__title">Curare il byte NUL in session-registry.mjs</span><span class="talos-list-row__sub">creata dall'agente · fatta alle 17:52 · commit 58780145</span></span><span class="talos-list-row__aside"><span class="talos-badge talos-badge--success">Fatta</span></span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- IMPOSTAZIONI (D1-D30) ---------- -->
+    <section class="talos-screen" id="schermoImpostazioni" data-c="SettingsScreen" hidden>
+      <div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>Impostazioni</h1></div><span class="talos-grow"></span><button class="talos-button talos-button--ghost talos-button--sm">Esporta</button><button class="talos-button talos-button--ghost talos-button--sm">Importa</button><button class="talos-button talos-button--ghost talos-button--sm">Ripristina</button></div>
+      <div class="talos-page" data-c="Page">
+        <div class="talos-settings">
+          <nav class="talos-card talos-settings__nav" data-c="SettingsNav" aria-label="Sezioni delle impostazioni">
+            <div class="talos-field talos-field--sm"><svg class="i talos-field__icon"><use href="#i-search"/></svg><input class="talos-field__input" placeholder="cerca un'impostazione…" aria-label="Cerca un'impostazione"></div>
+            <span class="talos-eyebrow">Comportamento</span>
+            <button class="talos-nav-item" aria-current="page"><span class="talos-nav-item__label">Modelli</span></button>
+            <button class="talos-nav-item"><span class="talos-nav-item__label">Permessi</span></button>
+            <button class="talos-nav-item"><span class="talos-nav-item__label">Memoria e contesto</span></button>
+            <button class="talos-nav-item"><span class="talos-nav-item__label">Scorciatoie</span><span class="talos-kbd">Ctrl /</span></button>
+            <button class="talos-nav-item"><span class="talos-nav-item__label">Aspetto</span></button>
+            <span class="talos-eyebrow">Infrastruttura</span>
+            <button class="talos-nav-item"><span class="talos-nav-item__label">Provider</span></button>
+            <button class="talos-nav-item"><span class="talos-nav-item__label">Sicurezza</span></button>
+            <button class="talos-nav-item"><span class="talos-nav-item__label">Costi</span></button>
+            <button class="talos-nav-item"><span class="talos-nav-item__label">Doctor</span><span class="talos-badge talos-badge--warning talos-badge--sm">2</span></button>
+            <button class="talos-nav-item"><span class="talos-nav-item__label">Informazioni</span></button>
+          </nav>
+          <div>
+            <div class="talos-card talos-settings__section" data-c="SettingsSection">
+              <span class="talos-eyebrow">Modelli</span><h3>Un modello per mestiere</h3>
+              <p>Di default tutti usano il modello scelto nel compositore. Ogni riga dice quando morde.</p>
+              <div class="talos-setting" data-c="SettingRow"><div><span class="talos-setting__label">Modello principale</span><span class="talos-setting__scope">vale da subito, anche per la sessione aperta</span></div><select class="talos-select" aria-label="Modello principale"><option>claude-opus-5</option><option>claude-sonnet-5</option><option>locale · qwen3.7-flash</option></select></div>
+              <div class="talos-setting" data-c="SettingRow"><div><span class="talos-setting__label">Visione (immagini)</span><span class="talos-setting__scope">vale dalle sessioni nuove</span></div><select class="talos-select" aria-label="Modello per la visione"><option>come il principale</option><option>claude-sonnet-5</option></select></div>
+              <div class="talos-setting" data-c="SettingRow"><div><span class="talos-setting__label">Compattazione del contesto</span><span class="talos-setting__scope">vale dalle sessioni nuove</span></div><select class="talos-select" aria-label="Modello per la compattazione"><option>come il principale</option><option>claude-haiku-4-5</option></select></div>
+              <div class="talos-setting" data-c="SettingRow"><div><span class="talos-setting__label">Titoli delle sessioni</span><span class="talos-setting__scope">vale da subito</span></div><select class="talos-select" aria-label="Modello per i titoli"><option>claude-haiku-4-5</option><option>come il principale</option></select></div>
+              <div class="talos-setting" data-c="SettingRow"><div><span class="talos-setting__label">Approvazioni automatiche</span><span class="talos-setting__scope">giudica le richieste a basso rischio · vale dalle sessioni nuove</span></div><select class="talos-select" aria-label="Modello per le approvazioni"><option>spento</option><option>claude-haiku-4-5</option></select></div>
+              <div class="talos-setting" data-c="SettingRow"><div><span class="talos-setting__label">Tetto dei giri</span><span class="talos-setting__scope">illimitato, con freno a costo o tempo · vale dalle sessioni nuove</span></div><span class="talos-badge">freno a <span class="talos-mono talos-measure">$1,00</span> o <span class="talos-mono talos-measure">30 min</span></span></div>
+            </div>
+            <div class="talos-card talos-settings__section" data-c="SettingsSection">
+              <span class="talos-eyebrow">Aspetto</span><h3>Tema e densità</h3>
+              <p>I temi sono quelli che l'app ha già, riordinati.</p>
+              <div class="talos-setting" data-c="SettingRow"><div><span class="talos-setting__label">Tema TALOS</span><span class="talos-setting__scope">vale da subito</span></div><select class="talos-select" aria-label="Tema"><option>Calm</option><option>Paper</option><option>Ember</option><option>Forge</option></select></div>
+              <div class="talos-setting" data-c="SettingRow"><div><span class="talos-setting__label">Modalità colore</span><span class="talos-setting__scope">vale da subito</span></div><div class="talos-tabs"><div class="talos-tabs__list" role="tablist" aria-label="Modalità colore"><button class="talos-tabs__tab" role="tab" aria-selected="true">Segui il sistema</button><button class="talos-tabs__tab" role="tab" aria-selected="false">Scuro</button><button class="talos-tabs__tab" role="tab" aria-selected="false">Chiaro</button></div></div></div>
+              <div class="talos-setting" data-c="SettingRow"><div><span class="talos-setting__label">Densità</span><span class="talos-setting__scope">vale da subito</span></div><div class="talos-tabs"><div class="talos-tabs__list" role="tablist" aria-label="Densità"><button class="talos-tabs__tab" role="tab" aria-selected="true">Comoda</button><button class="talos-tabs__tab" role="tab" aria-selected="false">Compatta</button></div></div></div>
+              <div class="talos-setting" data-c="SettingRow"><div><span class="talos-setting__label">Lingua dell'interfaccia</span><span class="talos-setting__scope">i testi verso il modello restano in inglese, dichiarato</span></div><select class="talos-select" aria-label="Lingua"><option>Segui il sistema</option><option>Italiano</option><option>English</option></select></div>
+              <div class="talos-setting" data-c="SettingRow"><div><span class="talos-setting__label">Riduci il movimento</span><span class="talos-setting__scope">vale da subito, ovunque</span></div><button class="talos-switch" data-c="Switch" role="switch" aria-checked="false" aria-label="Riduci il movimento"><span class="talos-switch__thumb"></span></button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- DOCTOR (H1-H10) ---------- -->
+    <section class="talos-screen" id="schermoDoctor" data-c="DoctorScreen" hidden>
+      <div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>Doctor</h1></div><span class="talos-topbar__path">ultimo controllo: 2 minuti fa</span><span class="talos-grow"></span><button class="talos-button talos-button--ghost talos-button--sm">Esporta in JSON</button><button class="talos-button talos-button--secondary talos-button--sm">Ricontrolla</button></div>
+      <div class="talos-page" data-c="Page">
+        <div class="talos-count" data-c="SeverityCount"><span class="talos-badge talos-badge--success"><b>21</b>&nbsp;ok</span><span class="talos-badge talos-badge--info"><b>1</b>&nbsp;nota</span><span class="talos-badge talos-badge--warning"><b>2</b>&nbsp;avvisi</span><span class="talos-badge talos-badge--danger"><b>0</b>&nbsp;guasti</span></div>
+        <div class="talos-card talos-check-card talos-check-card--warning" data-c="CheckCard"><span class="talos-check-card__stripe"></span><div class="talos-check-card__body"><div class="talos-check-card__title">La pagina è più nuova del server</div><p>La pagina caricata è la <span class="talos-mono talos-measure">0.4.12</span>, il server che risponde è la <span class="talos-mono talos-measure">0.4.9</span>. Alcune richieste rispondono «non trovata» finché non si allineano.</p><div class="talos-check-card__actions"><button class="talos-button talos-button--primary talos-button--md">Riavvia il server</button><button class="talos-button talos-button--ghost talos-button--sm">Cosa cambia</button></div></div></div>
+        <div class="talos-card talos-check-card talos-check-card--warning" data-c="CheckCard"><span class="talos-check-card__stripe"></span><div class="talos-check-card__body"><div class="talos-check-card__title">Una cartella di lavoro è molto grande</div><p>La sessione «Confronto Hermes» ha come workspace l'intero Desktop: <span class="talos-mono talos-measure">48.213 file</span>, <span class="talos-mono talos-measure">12.004</span> osservati. Una sessione così ha già prodotto un registro da <span class="talos-mono talos-measure">1,9 MB</span> riletto a ogni apertura.</p><div class="talos-check-card__actions"><button class="talos-button talos-button--secondary">Restringi a projects/AVM</button><button class="talos-button talos-button--ghost talos-button--sm">Lascia com'è</button></div></div></div>
+        <div class="talos-card talos-check-card talos-check-card--info" data-c="CheckCard"><span class="talos-check-card__stripe"></span><div class="talos-check-card__body"><div class="talos-check-card__title">Spazio occupato</div><p>App <span class="talos-mono talos-measure">318 MB</span> · store delle sessioni <span class="talos-mono talos-measure">1,4 GB</span> su 69 sessioni. Nessuna azione necessaria.</p><div class="talos-check-card__actions"><button class="talos-button talos-button--ghost talos-button--sm">Apri la cartella dei dati</button></div></div></div>
+        <div class="talos-card talos-check-card" data-c="CheckCard"><span class="talos-check-card__stripe"></span><div class="talos-check-card__body"><div class="talos-check-card__title">Suite di verifica</div><p><span class="talos-mono talos-measure">1.565 test su 1.565</span> verdi, uscita <span class="talos-mono talos-measure">0</span>, misurati 4 minuti fa.</p></div></div>
+        <div class="talos-card talos-check-card" data-c="CheckCard"><span class="talos-check-card__stripe"></span><div class="talos-check-card__body"><div class="talos-check-card__title">Chiavi dei fornitori</div><p>Anthropic impostata il <span class="talos-mono talos-measure">29/08</span>, verificata <span class="talos-mono talos-measure">2 min fa</span>. La chiave non è mai visibile.</p></div></div>
+      </div>
+    </section>
+
+    <!-- ---------- COMPONENTI: l'inventario di ingegneria ---------- -->
+    <section class="talos-screen" id="schermoLibreria" data-c="LibraryScreen" hidden>
+      <div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>Libreria</h1></div><span class="talos-topbar__path">18 documenti · <span class="talos-measure--estimate">62,4k token</span> in tutto</span><span class="talos-grow"></span><button class="talos-button talos-button--secondary talos-button--sm"><svg class="i i--sm"><use href="#i-plus"/></svg>Aggiungi documento</button></div>
+      <div class="talos-page" data-c="Page">
+        <div class="talos-page__head"><span class="talos-eyebrow">Libreria</span><h2>Documenti che il modello può leggere</h2><p>Ogni documento dichiara quanto contesto costa prima di entrarci, come gli allegati del compositore.</p></div>
+        <div class="talos-toolbar" data-c="Toolbar">
+          <div class="talos-field talos-field--sm"><svg class="i talos-field__icon"><use href="#i-search"/></svg><input class="talos-field__input" placeholder="cerca nei documenti…" aria-label="Cerca nei documenti"></div>
+          <div class="talos-tabs talos-tabs--pills" data-c="FilterChips"><div class="talos-tabs__list" role="tablist" aria-label="Filtro"><button class="talos-tabs__tab" role="tab" aria-selected="true">Tutti</button><button class="talos-tabs__tab" role="tab" aria-selected="false">Sempre nel contesto</button><button class="talos-tabs__tab" role="tab" aria-selected="false">A richiesta</button></div></div>
+          <span class="talos-grow"></span>
+          <span class="talos-badge">Nel contesto ora: <span class="talos-mono talos-measure--estimate">8,2k token</span></span>
+        </div>
+        <div class="talos-card talos-list" data-c="LibraryList">
+          <div class="talos-list-row" data-c="LibraryRow"><span class="talos-list-row__icon"><svg class="i"><use href="#i-doc"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">DECISIONI-REDESIGN-TALOS-2026-09-04.md</span><span class="talos-list-row__sub">aggiunto oggi · 348 righe · usato in 3 sessioni</span></span><span class="talos-list-row__aside"><span class="talos-mono talos-measure--estimate">5,1k token</span><span class="talos-badge talos-badge--accent">Sempre</span><button class="talos-button talos-button--ghost talos-button--sm">Apri</button></span></div>
+          <div class="talos-list-row" data-c="LibraryRow"><span class="talos-list-row__icon"><svg class="i"><use href="#i-doc"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">LEDGER-ROADMAP-DESKTOP-2026-09-03.md</span><span class="talos-list-row__sub">aggiunto il 03/09 · 59 righe di piano · usato in 12 sessioni</span></span><span class="talos-list-row__aside"><span class="talos-mono talos-measure--estimate">3,1k token</span><span class="talos-badge">A richiesta</span><button class="talos-button talos-button--ghost talos-button--sm">Apri</button></span></div>
+          <div class="talos-list-row" data-c="LibraryRow"><span class="talos-list-row__icon"><svg class="i"><use href="#i-files"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">contratto-eventi.json</span><span class="talos-list-row__sub">aggiunto il 02/09 · schema degli eventi di sessione</span></span><span class="talos-list-row__aside"><span class="talos-mono talos-measure--estimate">1,4k token</span><span class="talos-badge">A richiesta</span><button class="talos-button talos-button--ghost talos-button--sm">Apri</button></span></div>
+          <div class="talos-list-row" data-c="LibraryRow"><span class="talos-list-row__icon"><svg class="i"><use href="#i-doc"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">DOSSIER-COMPETITOR-2026-09-03.md</span><span class="talos-list-row__sub">aggiunto il 03/09 · 11 concorrenti letti nel codice</span></span><span class="talos-list-row__aside"><span class="talos-mono talos-measure--estimate">18,7k token</span><span class="talos-badge talos-badge--warning">Pesante</span><button class="talos-button talos-button--ghost talos-button--sm">Apri</button></span></div>
+        </div>
+        <div class="talos-where">I documenti vivono in <code>.harness-ui-library/</code> · «Sempre» li mette nel contesto di ogni giro, e il costo si somma.</div>
+      </div>
+    </section>
+
+    <!-- ---------- RICERCA APPROFONDITA (C26) ---------- -->
+    <section class="talos-screen" id="schermoRicerca" data-c="ResearchScreen" hidden>
+      <div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>Ricerca approfondita</h1></div><span class="talos-topbar__path">6 rapporti</span><span class="talos-grow"></span><button class="talos-button talos-button--primary talos-button--md"><svg class="i i--sm"><use href="#i-globe"/></svg>Nuova ricerca</button></div>
+      <div class="talos-page" data-c="Page">
+        <div class="talos-page__head"><span class="talos-eyebrow">Ricerca</span><h2>Rapporti che restano</h2><p>Ogni ricerca è un rapporto riapribile con le sue fonti e la sua data, non righe perse dentro una conversazione.</p></div>
+        <div class="talos-card talos-list" data-c="ReportList">
+          <button class="talos-list-row" data-c="ReportRow"><span class="talos-list-row__icon"><svg class="i"><use href="#i-globe"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Lingua dell'interfaccia: cosa fanno Claude Code e Codex</span><span class="talos-list-row__sub">04/09 · 5 fonti · Claude Code e Codex hanno l'interfaccia cablata in inglese</span></span><span class="talos-list-row__aside"><span class="talos-badge talos-badge--success talos-badge--sm">Ha cambiato la decisione</span><span class="talos-mono talos-muted">18:42</span></span></button>
+          <button class="talos-list-row" data-c="ReportRow"><span class="talos-list-row__icon"><svg class="i"><use href="#i-globe"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Come DeepSeek Harness traccia ogni corsa</span><span class="talos-list-row__sub">04/09 · 2 fonti · il loro cruscotto non è nel prodotto: è SigNoz via un plugin esterno</span></span><span class="talos-list-row__aside"><span class="talos-badge talos-badge--success talos-badge--sm">Ha cambiato la decisione</span><span class="talos-mono talos-muted">18:20</span></span></button>
+          <button class="talos-list-row" data-c="ReportRow"><span class="talos-list-row__icon"><svg class="i"><use href="#i-globe"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Radice enorme come workspace: le difese dei concorrenti</span><span class="talos-list-row__sub">04/09 · 6 fonti · nessuno dei tre la previene</span></span><span class="talos-list-row__aside"><span class="talos-badge talos-badge--success talos-badge--sm">Ha cambiato la decisione</span><span class="talos-mono talos-muted">18:05</span></span></button>
+          <button class="talos-list-row" data-c="ReportRow"><span class="talos-list-row__icon"><svg class="i"><use href="#i-globe"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Token di design: il formato W3C stabile</span><span class="talos-list-row__sub">04/09 · 3 fonti · DTCG 2025.10, $value/$type, riferimenti per percorso</span></span><span class="talos-list-row__aside"><span class="talos-badge talos-badge--sm">Applicata</span><span class="talos-mono talos-muted">19:10</span></span></button>
+          <button class="talos-list-row" data-c="ReportRow"><span class="talos-list-row__icon"><svg class="i"><use href="#i-globe"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Stati di caricamento nelle interfacce che scrivono</span><span class="talos-list-row__sub">04/09 · 4 fonti · niente sotto 300 ms, scheletro da 1 a 10 s</span></span><span class="talos-list-row__aside"><span class="talos-badge talos-badge--sm">Applicata</span><span class="talos-mono talos-muted">19:04</span></span></button>
+        </div>
+        <div class="talos-where">I rapporti vivono in <code>.harness-ui-research/</code> · ogni riga porta la data e il numero di fonti: una ricerca senza citazioni non è una ricerca.</div>
+      </div>
+    </section>
+
+    <!-- ---------- OFFICINA ATTREZZI (C27) ---------- -->
+    <section class="talos-screen" id="schermoOfficina" data-c="ForgeScreen" hidden>
+      <div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>Officina attrezzi</h1></div><span class="talos-topbar__path">2 attrezzi forgiati dal modello</span></div>
+      <div class="talos-page" data-c="Page">
+        <div class="talos-page__head"><span class="talos-eyebrow">Officina</span><h2>Attrezzi che il modello si è scritto</h2><p>Girano sulla tua macchina: il codice si legge, e si spegne in un gesto. Sola lettura — per cambiarli si chiede al modello, così la ricevuta resta.</p></div>
+        <div class="talos-split">
+          <div class="talos-card talos-list" data-c="ForgeList" role="listbox" aria-label="Attrezzi forgiati">
+            <button class="talos-list-row" role="option" aria-selected="true"><span class="talos-list-row__icon"><svg class="i"><use href="#i-code"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">conta_righe_per_estensione</span><span class="talos-list-row__sub">creato al giro 12 della sessione «Store sessioni» · usato 4 volte</span></span><span class="talos-list-row__aside"><span class="talos-badge talos-badge--success talos-badge--sm">Attivo</span></span></button>
+            <button class="talos-list-row" role="option" aria-selected="false"><span class="talos-list-row__icon"><svg class="i"><use href="#i-code"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">estrai_blocchi_css</span><span class="talos-list-row__sub">creato al giro 3 di questa sessione · usato 1 volta</span></span><span class="talos-list-row__aside"><span class="talos-badge talos-badge--sm">Spento</span></span></button>
+          </div>
+          <aside class="talos-card talos-detail" data-c="DetailPanel">
+            <h3>conta_righe_per_estensione</h3>
+            <p class="talos-detail__desc">Conta le righe dei file del workspace raggruppandole per estensione. Solo lettura.</p>
+            <div class="talos-kv"><span class="talos-kv__k">Costo dello schema</span><span class="talos-kv__v talos-measure--estimate">96 token</span></div>
+            <div class="talos-kv"><span class="talos-kv__k">Permesso</span><span class="talos-badge talos-badge--sm">Come la sessione</span></div>
+            <div class="talos-kv"><span class="talos-kv__k">Ultima chiamata</span><span class="talos-kv__v">17:41 · 0,4 s</span></div>
+            <button class="talos-button talos-button--secondary talos-button--block talos-forge__off"><svg class="i"><use href="#i-stop"/></svg>Disabilita questo attrezzo</button>
+            <div class="talos-where">Il codice vive in <code>.harness-ui-tools/conta_righe_per_estensione.mjs</code></div>
+          </aside>
+        </div>
+        <div class="talos-card talos-codeblock" data-c="CodeBlock">
+          <div class="talos-codeblock__head"><span class="talos-mono talos-measure">.harness-ui-tools/conta_righe_per_estensione.mjs</span><span class="talos-badge talos-badge--sm">sola lettura</span><span class="talos-grow"></span><span class="talos-badge talos-badge--success talos-badge--sm">Ricevuta 7c31…b4a0</span></div>
+          <pre class="talos-codeblock__body"><span class="dim">// Forgiato dal modello al giro 12, il 04/09. Nessuna scrittura, nessuna rete.</span>
+<span class="k">import</span> { readdirSync, readFileSync, statSync } <span class="k">from</span> <span class="s">'node:fs'</span>;
+<span class="k">import</span> { join, extname } <span class="k">from</span> <span class="s">'node:path'</span>;
+
+<span class="k">export function</span> <span class="fn">esegui</span>({ cartella, salta = [<span class="s">'node_modules'</span>, <span class="s">'.git'</span>] }) {
+  <span class="k">const</span> conta = {};
+  (<span class="k">function</span> <span class="fn">scendi</span>(dir) {
+    <span class="k">for</span> (<span class="k">const</span> nome <span class="k">of</span> readdirSync(dir)) {
+      <span class="k">if</span> (salta.includes(nome)) <span class="k">continue</span>;
+      <span class="k">const</span> p = join(dir, nome);
+      <span class="k">if</span> (statSync(p).isDirectory()) { scendi(p); <span class="k">continue</span>; }
+      <span class="k">const</span> est = extname(nome) || <span class="s">'(senza estensione)'</span>;
+      conta[est] = (conta[est] ?? <span class="n">0</span>) + readFileSync(p, <span class="s">'utf8'</span>).split(<span class="s">'\n'</span>).length;
+    }
+  })(cartella);
+  <span class="k">return</span> conta;
+}</pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- AUTOMAZIONI (G25-G26) ---------- -->
+    <section class="talos-screen" id="schermoAutomazioni" data-c="AutomationsScreen" hidden>
+      <div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>Automazioni</h1></div><span class="talos-topbar__path">3 programmate · 1 in errore</span><span class="talos-grow"></span><button class="talos-button talos-button--primary talos-button--md"><svg class="i i--sm"><use href="#i-plus"/></svg>Nuova automazione</button></div>
+      <div class="talos-page" data-c="Page">
+        <div class="talos-page__head"><span class="talos-eyebrow">Automazioni</span><h2>Cose che girano da sole</h2><p>Ognuna porta la sua storia: quando è partita, com'è andata, quanto è costata. Un'automazione senza storia è un rischio che non puoi giudicare.</p></div>
+        <div class="talos-card talos-automation" data-c="AutomationRow">
+          <div class="talos-automation__head"><span class="talos-dot talos-dot--success"></span><span class="talos-automation__name">Suite di verifica ogni mattina</span><span class="talos-badge talos-badge--sm">tutti i giorni · 08:00</span><span class="talos-grow"></span><span class="talos-mono talos-muted">prossima fra 13 h</span><button class="talos-switch" role="switch" aria-checked="true" aria-label="Attiva"><span class="talos-switch__thumb"></span></button></div>
+          <div class="talos-automation__runs">
+            <div class="talos-kv"><span class="talos-kv__k">oggi 08:00 · 1.565 test verdi</span><span class="talos-kv__v"><span class="talos-badge talos-badge--success talos-badge--sm">ok</span> 18,1 s · <span class="talos-measure--estimate">$0,00</span></span></div>
+            <div class="talos-kv"><span class="talos-kv__k">ieri 08:00 · 1.539 test verdi</span><span class="talos-kv__v"><span class="talos-badge talos-badge--success talos-badge--sm">ok</span> 17,4 s · <span class="talos-measure--estimate">$0,00</span></span></div>
+            <div class="talos-kv"><span class="talos-kv__k">02/09 08:00 · 6 rossi</span><span class="talos-kv__v"><span class="talos-badge talos-badge--danger talos-badge--sm">fallita</span> 16,9 s · <span class="talos-measure--estimate">$0,00</span></span></div>
+          </div>
+        </div>
+        <div class="talos-card talos-automation" data-c="AutomationRow">
+          <div class="talos-automation__head"><span class="talos-dot talos-dot--danger"></span><span class="talos-automation__name">Pulizia dello store oltre i 30 giorni</span><span class="talos-badge talos-badge--sm">ogni domenica · 03:00</span><span class="talos-grow"></span><span class="talos-mono talos-muted">ultima: fallita</span><button class="talos-switch" role="switch" aria-checked="true" aria-label="Attiva"><span class="talos-switch__thumb"></span></button></div>
+          <div class="talos-automation__runs">
+            <div class="talos-kv"><span class="talos-kv__k">01/09 03:00 · permesso negato su .sessions-store</span><span class="talos-kv__v"><span class="talos-badge talos-badge--danger talos-badge--sm">fallita</span> 0,2 s</span></div>
+            <div class="talos-kv"><span class="talos-kv__k">25/08 03:00 · 4 file archiviati</span><span class="talos-kv__v"><span class="talos-badge talos-badge--success talos-badge--sm">ok</span> 1,1 s</span></div>
+          </div>
+          <div class="talos-automation__fix"><span class="talos-grow">Serve il permesso di scrittura sulla cartella dello store: l'automazione gira con «sola lettura».</span><button class="talos-button talos-button--secondary talos-button--sm">Cambia il permesso</button></div>
+        </div>
+        <div class="talos-card talos-automation" data-c="AutomationRow">
+          <div class="talos-automation__head"><span class="talos-dot"></span><span class="talos-automation__name">Dossier concorrenti</span><span class="talos-badge talos-badge--sm">ogni lunedì · 09:00</span><span class="talos-grow"></span><span class="talos-mono talos-muted">in pausa</span><button class="talos-switch" role="switch" aria-checked="false" aria-label="Attiva"><span class="talos-switch__thumb"></span></button></div>
+          <div class="talos-automation__runs"><div class="talos-kv"><span class="talos-kv__k">Mai eseguita: messa in pausa alla creazione.</span><span class="talos-kv__v talos-muted">—</span></div></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===================== COLONNA DI DESTRA ===================== -->
+  <aside class="talos-inspector" data-c="Inspector" aria-label="Dettagli della sessione">
+    <button class="talos-resizer talos-resizer--inspector" data-ridimensiona="inspector" aria-label="Ridimensiona la colonna dei dettagli" title="Trascina per ridimensionare, doppio click per il valore normale"></button>
+    <div class="talos-inspector__head"><span class="talos-eyebrow">Sessione</span><h2>W1-02 registro processi</h2></div>
+    <div class="talos-tabs talos-tabs--underline talos-inspector__tabs" data-c="Tabs"><div class="talos-tabs__list" role="tablist" id="railTabs" aria-label="Sezioni della colonna">
+      <button class="talos-tabs__tab" role="tab" aria-selected="true" data-rail="contesto" aria-controls="railContesto">Contesto</button>
+      <button class="talos-tabs__tab" role="tab" aria-selected="false" data-rail="file" aria-controls="railFile" title="File toccati dal giro">File</button>
+      <button class="talos-tabs__tab" role="tab" aria-selected="false" data-rail="agenti" aria-controls="railAgenti" title="Sotto-agenti">Agenti</button>
+      <button class="talos-tabs__tab" role="tab" aria-selected="false" data-rail="processi" aria-controls="railProcessi">Processi</button>
+    </div></div>
+
+    <div class="talos-inspector__body" id="railContesto" role="tabpanel">
+      <div class="talos-card talos-inspector-card" data-c="InspectorCard"><div class="talos-inspector-card__head"><b>Ambiente</b><svg class="i"><use href="#i-branch"/></svg></div>
+        <div class="talos-kv"><span class="talos-kv__k">Ramo</span><span class="talos-kv__v">lane/harness-desktop</span></div>
+        <div class="talos-kv"><span class="talos-kv__k">Worktree</span><span class="talos-kv__v">AVM-harness-desktop</span></div>
+        <div class="talos-kv"><span class="talos-kv__k">Non salvate</span><span class="talos-kv__v">2 file</span></div>
+        <div class="talos-kv"><span class="talos-kv__k">Repo annidati</span><span class="talos-kv__v">1 · fiducia separata</span></div></div>
+      <div class="talos-card talos-inspector-card" data-c="InspectorCard"><div class="talos-inspector-card__head"><b>Finestra del contesto</b><span class="talos-mono talos-mono--xs talos-muted">200k</span></div>
+        <div class="talos-kv"><span class="talos-kv__k">Attrezzi</span><span class="talos-kv__v talos-measure--estimate">7,5k · 3,7%</span></div>
+        <div class="talos-kv"><span class="talos-kv__k">Istruzioni</span><span class="talos-kv__v talos-measure--estimate">4,1k · 2,0%</span></div>
+        <div class="talos-kv"><span class="talos-kv__k">Memoria</span><span class="talos-kv__v talos-measure--estimate">1,8k · 0,9%</span></div>
+        <div class="talos-kv"><span class="talos-kv__k">Conversazione</span><span class="talos-kv__v">41,2k · 20,6%</span></div>
+        <div class="talos-kv"><span class="talos-kv__k">Libera</span><span class="talos-kv__v">145,4k · 72,8%</span></div></div>
+      <div class="talos-card talos-inspector-card" data-c="TurnIndex"><div class="talos-inspector-card__head"><b>Indice dei giri</b></div>
+        <div class="talos-kv"><span class="talos-kv__k">1 · La richiesta</span><span class="talos-kv__v">0,4k</span></div>
+        <div class="talos-kv"><span class="talos-kv__k">2 · Lettura del registro</span><span class="talos-kv__v">1,9k</span></div>
+        <div class="talos-kv"><span class="talos-kv__k">3 · Le due condizioni</span><span class="talos-kv__v">4,2k</span></div>
+        <div class="talos-kv"><span class="talos-kv__k">5 · Scrittura e ricevuta</span><span class="talos-kv__v">6,1k</span></div>
+        <div class="talos-kv"><span class="talos-kv__k">7 · Suite completa</span><span class="talos-kv__v talos-kv__v--accent">in corso</span></div></div>
+      <button class="talos-button talos-button--secondary talos-button--block" data-apre-velo="veloAlbero"><svg class="i"><use href="#i-branch"/></svg>Apri l'albero dei rami</button>
+    </div>
+    <div class="talos-inspector__body" id="railFile" role="tabpanel" hidden>
+      <div class="talos-card talos-inspector-card" data-c="InspectorCard"><div class="talos-inspector-card__head"><b>File toccati in questa sessione</b></div>
+        <div class="talos-kv"><span class="talos-kv__k">src/session-registry.mjs</span><span class="talos-kv__v talos-diff-num--plus">+18 −2</span></div>
+        <div class="talos-kv"><span class="talos-kv__k">tests/session-registry.test.mjs</span><span class="talos-kv__v talos-diff-num--plus">+64</span></div>
+        <div class="talos-kv"><span class="talos-kv__k">src/http-app.mjs</span><span class="talos-kv__v talos-diff-num--plus">+30</span></div></div>
+      <p class="talos-inspector__hint">Durante un lavoro la domanda è cosa è cambiato: l'albero della cartella sta dietro un interruttore.</p>
+      <button class="talos-button talos-button--secondary talos-button--block"><svg class="i"><use href="#i-folder"/></svg>Mostra l'albero della cartella</button>
+    </div>
+    <div class="talos-inspector__body" id="railAgenti" role="tabpanel" hidden>
+      <div class="talos-card talos-inspector-card" data-c="EmptyState"><div class="talos-inspector-card__head"><b>Sotto-agenti</b></div><p class="talos-inspector__hint">Nessun sotto-agente in questa sessione. Quando ce ne sarà uno, qui compaiono i suoi giri, le sue richieste di permesso e il pulsante per fermarlo.</p></div>
+    </div>
+    <div class="talos-inspector__body" id="railProcessi" role="tabpanel" hidden>
+      <div class="talos-card talos-process" data-c="ProcessRow"><div class="talos-process__cmd">node --test tests/*.test.mjs</div><div class="talos-process__meta"><span class="talos-badge talos-badge--accent talos-badge--sm">In corso</span><span>agente · giro 7</span><span class="talos-grow"></span><span class="talos-mono talos-measure">41 s</span></div></div>
+      <div class="talos-card talos-process" data-c="ProcessRow"><div class="talos-process__cmd">npm run verify:all</div><div class="talos-process__meta"><span class="talos-dot talos-dot--success"></span><span>agente · giro 5</span><span class="talos-grow"></span><span class="talos-mono talos-measure">18,1 s · uscita 0</span></div></div>
+      <div class="talos-card talos-process" data-c="ProcessRow"><div class="talos-process__cmd">git status --short</div><div class="talos-process__meta"><span class="talos-dot talos-dot--success"></span><span>tu · terminale</span><span class="talos-grow"></span><span class="talos-mono talos-measure">0,3 s · uscita 0</span></div></div>
+      <div class="talos-card talos-process" data-c="ProcessRow"><div class="talos-process__cmd">gradlew assembleDebug</div><div class="talos-process__meta"><span class="talos-dot talos-dot--danger"></span><span>agente · giro 3</span><span class="talos-grow"></span><span class="talos-mono talos-measure">74 s</span></div><div class="talos-process__stall">Nessuna uscita da 74 secondi. Il processo è vivo: potrebbe aspettare un input. TALOS non lo ferma da solo.</div></div>
+    </div>
+  </aside>
+</div>
+
+<!-- ===================== NUOVA SESSIONE (F1-F30) ===================== -->
+<div class="overlay-layer overlay-layer--modal" id="veloNuova" data-c="OverlayLayer" hidden>
+  <div class="talos-dialog" data-c="Dialog" role="dialog" aria-modal="true" aria-labelledby="titoloNuova">
+    <div class="talos-dialog__header">
+      <div class="talos-grow"><span class="talos-eyebrow">Nuova sessione</span><h2 class="talos-dialog__title" id="titoloNuova">Su quale progetto lavora TALOS?</h2>
+        <div class="talos-steps" data-c="Steps"><span class="talos-step" aria-current="step"><span class="talos-step__n">1</span>Dove si lavora</span><span class="talos-step"><span class="talos-step__n">2</span>Come si lavora</span></div></div>
+      <button class="talos-button talos-button--secondary talos-icon-button" data-chiudi="veloNuova" title="Chiudi"><svg class="i"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="talos-dialog__body">
+      <div class="talos-field talos-dialog__field"><svg class="i talos-field__icon"><use href="#i-folder"/></svg><input class="talos-field__input" placeholder="incolla un percorso, oppure cerca una cartella…" aria-label="Percorso o ricerca"></div>
+      <div class="talos-picker" data-c="FolderPicker">
+        <nav class="talos-card talos-settings__nav talos-picker__nav" aria-label="Da dove scegliere">
+          <button class="talos-nav-item" aria-current="page"><svg class="i"><use href="#i-clock"/></svg><span class="talos-nav-item__label">Recenti</span></button>
+          <button class="talos-nav-item"><svg class="i"><use href="#i-grid"/></svg><span class="talos-nav-item__label">Progetti</span><span class="talos-nav-item__count">6</span></button>
+          <button class="talos-nav-item"><svg class="i"><use href="#i-folder"/></svg><span class="talos-nav-item__label">Desktop</span></button>
+          <button class="talos-nav-item"><svg class="i"><use href="#i-folder"/></svg><span class="talos-nav-item__label">Documenti</span></button>
+          <button class="talos-nav-item"><svg class="i"><use href="#i-search"/></svg><span class="talos-nav-item__label">Sfoglia…</span></button>
+        </nav>
+        <div class="talos-card talos-list" role="listbox" aria-label="Cartelle recenti">
+          <button class="talos-list-row" role="option" aria-selected="true"><span class="talos-list-row__icon"><svg class="i"><use href="#i-folder"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">AVM-harness-desktop</span><span class="talos-list-row__sub">~/Desktop/projects · lane/harness-desktop · 2 file non salvati</span></span><span class="talos-list-row__aside"><span class="talos-mono talos-muted">12 sessioni</span></span></button>
+          <button class="talos-list-row" role="option" aria-selected="false"><span class="talos-list-row__icon"><svg class="i"><use href="#i-folder"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">AVM</span><span class="talos-list-row__sub">~/Desktop/projects · main · pulito</span></span><span class="talos-list-row__aside"><span class="talos-mono talos-muted">41 sessioni</span></span></button>
+          <button class="talos-list-row" role="option" aria-selected="false"><span class="talos-list-row__icon"><svg class="i"><use href="#i-folder"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Desktop</span><span class="talos-list-row__sub">~/Desktop · non è un repository</span></span><span class="talos-list-row__aside"><span class="talos-mono talos-muted">3 sessioni</span></span></button>
+        </div>
+      </div>
+      <div class="talos-callout" data-c="Callout"><span class="talos-badge talos-badge--warning talos-badge--sm">Cartella grande</span><div><b>Desktop contiene <span class="talos-mono">48.213 file</span> in <span class="talos-mono">6.402 cartelle</span>.</b> Aprirla intera fa osservare <span class="talos-mono talos-measure--estimate">12.000 cartelle</span> e rallenta ogni apertura. Conviene aprire <b>Desktop/projects/AVM-harness-desktop</b> e aggiungere il resto quando serve.</div></div>
+    </div>
+    <div class="talos-dialog__footer">
+      <span class="talos-dialog__footer-note">Cartella scelta: <span class="talos-mono talos-measure">~/Desktop/projects/AVM-harness-desktop</span></span>
+      <span class="talos-grow"></span>
+      <button class="talos-button talos-button--ghost" data-chiudi="veloNuova">Annulla</button>
+      <button class="talos-button talos-button--primary">Avanti: come si lavora</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== PERMESSI (E1-E30) ===================== -->
+<div class="overlay-layer overlay-layer--modal" id="veloPermessi" data-c="OverlayLayer" hidden>
+  <div class="talos-dialog" data-c="Dialog" role="dialog" aria-modal="true" aria-labelledby="titoloPermessi">
+    <div class="talos-dialog__header">
+      <div class="talos-grow"><span class="talos-eyebrow">Permessi · valgono per questa sessione</span><h2 class="talos-dialog__title" id="titoloPermessi">Quanto può fare TALOS qui</h2></div>
+      <button class="talos-button talos-button--secondary talos-icon-button" data-chiudi="veloPermessi" title="Chiudi"><svg class="i"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="talos-dialog__body">
+      <div class="talos-choice-grid" data-c="ChoiceCards" role="radiogroup" aria-label="Livello di permesso">
+        <button class="talos-choice" role="radio" aria-checked="false"><span class="talos-choice__title">Sola lettura</span><span class="talos-badge talos-badge--success talos-badge--sm">rischio basso</span><p>Può leggere ed eseguire comandi che non cambiano niente.</p></button>
+        <button class="talos-choice" role="radio" aria-checked="true"><span class="talos-choice__title">Scrittura nel workspace</span><span class="talos-badge talos-badge--warning talos-badge--sm">rischio medio</span><p>Scrive solo dentro la cartella aperta. <span class="talos-choice__hint">Consigliato</span></p></button>
+        <button class="talos-choice" role="radio" aria-checked="false"><span class="talos-choice__title">Comandi liberi</span><span class="talos-badge talos-badge--warning talos-badge--sm">rischio alto</span><p>Esegue qualunque comando nella cartella, senza chiedere ogni volta.</p></button>
+        <button class="talos-choice" role="radio" aria-checked="false"><span class="talos-choice__title">Accesso pieno</span><span class="talos-badge talos-badge--danger talos-badge--sm">rischio molto alto</span><p>Scrive ovunque sul disco. Richiede la spunta «ho capito cosa comporta».</p></button>
+      </div>
+      <div class="talos-toolbar talos-toolbar--inset"><span class="talos-eyebrow">Per attrezzo</span><div class="talos-tabs talos-tabs--pills"><div class="talos-tabs__list" role="tablist" aria-label="Filtro attrezzi"><button class="talos-tabs__tab" role="tab" aria-selected="true">Tutti e 43</button><button class="talos-tabs__tab" role="tab" aria-selected="false">Hanno un cancello</button></div></div><span class="talos-grow"></span><span class="talos-muted talos-approval__foot-note">Il permesso dell'attrezzo vince sulla politica della sessione</span></div>
+      <div class="talos-card talos-list" data-c="ToolPermissionList">
+        <div class="talos-list-row"><span class="talos-list-row__icon"><svg class="i"><use href="#i-terminal"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Comando nel terminale</span><span class="talos-list-row__sub">esegue un comando nella cartella della sessione</span></span><span class="talos-list-row__aside"><select class="talos-select talos-select--sm" aria-label="Permesso per il terminale"><option>Chiede sempre</option><option>Come la sessione</option><option>Mai in questa sessione</option></select></span></div>
+        <div class="talos-list-row"><span class="talos-list-row__icon"><svg class="i"><use href="#i-code"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Scrittura di un file</span><span class="talos-list-row__sub">crea o modifica un file, sempre con ricevuta</span></span><span class="talos-list-row__aside"><select class="talos-select talos-select--sm" aria-label="Permesso per la scrittura"><option>Chiede sempre</option><option>Come la sessione</option><option>Mai in questa sessione</option></select></span></div>
+        <div class="talos-list-row"><span class="talos-list-row__icon"><svg class="i"><use href="#i-search"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Ricerca nei file</span><span class="talos-list-row__sub">cerca un testo dentro la cartella, senza aprirla tutta</span></span><span class="talos-list-row__aside"><select class="talos-select talos-select--sm" aria-label="Permesso per la ricerca"><option>Come la sessione</option><option>Chiede sempre</option><option>Mai in questa sessione</option></select></span></div>
+      </div>
+      <div class="talos-card talos-scope" data-c="ScopeNote"><span class="talos-scope__text">I file di controllo (<span class="talos-mono">.claude/</span>, <span class="talos-mono">package.json</span>, gli hook) chiedono <b>sempre</b> una conferma singola, anche con «per questa sessione».</span><button class="talos-button talos-button--secondary talos-button--sm">Vedi l'elenco</button></div>
+    </div>
+    <div class="talos-dialog__footer">
+      <button class="talos-button talos-button--secondary">Riporta a «scrittura nel workspace»</button>
+      <span class="talos-grow"></span>
+      <button class="talos-button talos-button--primary" data-chiudi="veloPermessi">Fatto</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ===================== ALBERO DEI RAMI (G17-G19) ===================== -->
+<div class="overlay-layer overlay-layer--modal" id="veloAlbero" data-c="OverlayLayer" hidden>
+  <div class="talos-dialog talos-dialog--medium" data-c="Dialog" role="dialog" aria-modal="true" aria-labelledby="titoloAlbero">
+    <div class="talos-dialog__header">
+      <div class="talos-grow"><span class="talos-eyebrow">Albero della sessione</span><h2 class="talos-dialog__title" id="titoloAlbero">I rami di W1-02 registro processi</h2></div>
+      <button class="talos-button talos-button--secondary talos-icon-button" data-chiudi="veloAlbero" title="Chiudi"><svg class="i"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="talos-dialog__body">
+      <p class="talos-dialog__lead">Modificare un tuo messaggio crea un ramo invece di sovrascrivere: le due strade restano confrontabili, e ogni nodo dice quanto è costato.</p>
+      <div class="talos-tree" data-c="BranchTree" role="tree" aria-label="Rami della sessione">
+        <div class="talos-tree__node" role="treeitem" aria-selected="false" aria-level="1">
+          <span class="talos-tree__rail"></span>
+          <span class="talos-tree__dot talos-tree__dot--done"></span>
+          <span class="talos-tree__text"><span class="talos-tree__title">Giri 1-4 · tronco comune</span><span class="talos-tree__sub">la richiesta, la lettura del registro, le due condizioni</span></span>
+          <span class="talos-tree__aside"><span class="talos-mono talos-measure">6,5k</span><span class="talos-mono talos-muted">4 giri</span></span>
+        </div>
+        <div class="talos-tree__node talos-tree__node--branch" role="treeitem" aria-selected="false" aria-level="2">
+          <span class="talos-tree__rail"></span>
+          <span class="talos-tree__dot"></span>
+          <span class="talos-tree__text"><span class="talos-tree__title">Ramo A · soglie scritte a mano</span><span class="talos-tree__sub">abbandonato al giro 6 · «i numeri nella logica non si spiegano»</span></span>
+          <span class="talos-tree__aside"><span class="talos-mono talos-measure">3,2k</span><span class="talos-mono talos-muted">2 giri</span><button class="talos-button talos-button--ghost talos-button--sm">Riapri</button></span>
+        </div>
+        <div class="talos-tree__node talos-tree__node--branch talos-tree__node--current" role="treeitem" aria-selected="true" aria-level="2">
+          <span class="talos-tree__rail"></span>
+          <span class="talos-tree__dot talos-tree__dot--live"></span>
+          <span class="talos-tree__text"><span class="talos-tree__title">Ramo B · soglie come parametri</span><span class="talos-tree__sub">sessione corrente · giri 5-7 · scrittura, ricevuta, suite in corso</span></span>
+          <span class="talos-tree__aside"><span class="talos-mono talos-measure">31,5k</span><span class="talos-mono talos-muted">3 giri</span><span class="talos-badge talos-badge--accent talos-badge--sm">Qui</span></span>
+        </div>
+      </div>
+      <div class="talos-card talos-scope"><span class="talos-scope__text">Il ramo A resta leggibile e riapribile: nessun giro pagato viene cancellato da una modifica.</span></div>
+    </div>
+    <div class="talos-dialog__footer">
+      <button class="talos-button talos-button--secondary">Confronta A e B</button>
+      <span class="talos-grow"></span>
+      <button class="talos-button talos-button--primary" data-chiudi="veloAlbero">Chiudi</button>
+    </div>
+  </div>
+</div>
+
+<!-- I token di Calm nel formato DTCG 2025.10 ($value/$type, riferimenti per percorso):
+     leggibile da Style Dictionary, Terrazzo, Figma e Tokens Studio senza conversioni. -->
     <script type="module" src="./app.js"></script>
   </body>
 </html>
