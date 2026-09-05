@@ -1,8 +1,10 @@
 import template from '../index.template.html';
 import { LUOGHI, LUOGHI_ALTRI, creaNavItem } from '../src/components/nav-item.js';
 import { creaSessionItem } from '../src/components/session-item.js';
+import { creaWorkspaceFooter } from '../src/components/workspace-footer.js';
 import { CONTEGGI } from './fixtures/luoghi.js';
 import { ADESSO, CORRENTE, FISSATE, SESSIONI } from './fixtures/sessioni.js';
+import { WORKSPACE } from './fixtures/workspace.js';
 
 /*
  * IL LABORATORIO DEI COMPONENTI — la parità «a partire dai dati».
@@ -32,6 +34,10 @@ document.documentElement.setAttribute('data-schermo', 'chat');
 const componente = new URLSearchParams(location.search).get('componente') || '';
 
 const LABORATORI = {
+  WorkspaceFooter() {
+    const finto = document.querySelector('.talos-sidebar .talos-sidebar__foot');
+    finto.replaceWith(creaWorkspaceFooter(WORKSPACE));
+  },
   NavItem() {
     /* Le voci dei Luoghi rifatte dal componente: le prime cinque prima di «Altro», le altre dentro #luoghiAltri. */
     const altro = document.getElementById('altroLuoghi');

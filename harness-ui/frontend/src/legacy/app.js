@@ -1,5 +1,6 @@
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
-import { creaSessionItem, statoSessione } from '../components/session-item.js'; // 05/9 Fase 2: SessionItem — la riga della sidebar è un componente del mockup
+import { creaSessionItem, statoSessione } from '../components/session-item.js';
+import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 05/9 Fase 2: WorkspaceFooter — il piede della sidebar dice cartella, tema e chi serve il modello // 05/9 Fase 2: SessionItem — la riga della sidebar è un componente del mockup
 
 (() => {
   'use strict';
@@ -4830,7 +4831,7 @@ import { creaSessionItem, statoSessione } from '../components/session-item.js'; 
           opt.addEventListener('click', async () => {
             const applicaScelta = () => {
               valoreScelto = valore;
-              if (aggiornaModelloPrincipale) state.model = valore;
+              if (aggiornaModelloPrincipale) { state.model = valore; aggiornaPiedeSidebar(); } // 05/9 Fase 2: WorkspaceFooter
               aggiornaTriggerLabel();
               if (aggiornaModelloPrincipale) {
                 aggiornaPillolaModello();
@@ -4934,7 +4935,7 @@ import { creaSessionItem, statoSessione } from '../components/session-item.js'; 
             const applicaScelta = () => {
               valoreScelto = modello.id;
               if (aggiornaModelloPrincipale) {
-                state.model = modello.id;
+                state.model = modello.id; aggiornaPiedeSidebar(); // 05/9 Fase 2: WorkspaceFooter
                 // Se l'owner ha mosso lo slider mentre il salvataggio era in
                 // corso, la sua scelta più recente è già accodata e vince.
                 if (state.effort === effortAlClick) state.effort = prossimoEffort;
@@ -6511,7 +6512,7 @@ import { creaSessionItem, statoSessione } from '../components/session-item.js'; 
     const modello = typeof contesto.modello === 'string' ? contesto.modello.trim() : '';
     if (modello && state.model && modello !== state.model) {
       cambi.push(`modello ${state.model} → ${modello}`);
-      state.model = modello;
+      state.model = modello; aggiornaPiedeSidebar(); // 05/9 Fase 2: WorkspaceFooter
       aggiornaPillolaModello();
     }
     if (PERMESSI_SESSIONE_VALIDI.includes(contesto.permessi) && contesto.permessi !== state.permissions) {
@@ -8813,6 +8814,7 @@ import { creaSessionItem, statoSessione } from '../components/session-item.js'; 
     const safe = normalizzaAspettoDesktop(appearance);
     const host = HOST();
     applicaThemeDesktop(safe);
+    aggiornaPiedeSidebar(); // 05/9 Fase 2: WorkspaceFooter segue il tema
     host.style.setProperty('--talos-ui-font-scale', String(UI_FONT_SCALE_FACTORS[safe.uiFontScale]));
     host.style.setProperty('--talos-chat-font-size', CHAT_FONT_SCALE_SIZES[safe.chatFontScale]);
     host.dataset.talosComposerShape = safe.composerShape;
@@ -10884,7 +10886,25 @@ import { creaSessionItem, statoSessione } from '../components/session-item.js'; 
    * nessun messaggio) → «in attesa del primo messaggio»; sessione reale
    * aperta → nascosto.
    */
+  /*
+   * 05/9 Fase 2: WorkspaceFooter. «Workspace locale · Tema Calm · locale» nel
+   * mockup era testo: qui è la cartella della sessione aperta (o il nome scelto
+   * in «Nuova» prima del primo giro), il preset del tema delle impostazioni
+   * desktop e chi serve il modello (locale / fornitore). Chiamata da
+   * aggiornaSottotitoloSessione (ogni ridisegno della sidebar), da
+   * applicaThemeDesktop e dopo ogni cambio di state.model.
+   */
+  function aggiornaPiedeSidebar() {
+    aggiornaWorkspaceFooter($('#sessionsPanel .talos-sidebar__foot'), {
+      cartella: state.realSession.cartellaAssoluta,
+      nomeAnteprima: state.realSession.previewWorkspaceName,
+      tema: document.documentElement.dataset.talosTheme, // il preset applicato (applicaThemeDesktop lo scrive sulla radice)
+      modello: state.model,
+    });
+  }
+
   function aggiornaSottotitoloSessione() {
+    aggiornaPiedeSidebar(); // 05/9 Fase 2: WorkspaceFooter
     const small = sessionTitle?.parentElement?.querySelector('small');
     if (!small) return;
     if (state.realSession.id) { small.hidden = true; return; }

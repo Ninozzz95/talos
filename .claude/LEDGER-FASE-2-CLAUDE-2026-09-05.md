@@ -111,3 +111,39 @@ Immagini in `.claude/immagini/fase2-claude/NavItem/`.
 
 **Taccuino**: T-02 (footer) resta per S-03. Le voci dentro «Altro» non si vedono nel confronto
 dal vivo (disclosure chiuso): si guardano in S-03 aprendolo.
+
+---
+
+## S-03 · WorkspaceFooter (il piede della sidebar) — ✅ verde, aspetta l'owner
+
+**Blocco**: `WorkspaceFooter` (+ `IconButton` impostazioni con `data-vaia="impostazioni"`).
+**Fixture**: `lab/fixtures/workspace.js` (nessuna sessione, tema `calm`, modello `local:…` →
+«Workspace locale / Tema Calm · locale», le parole del mockup). **Componente**:
+`src/components/workspace-footer.js` — `creaWorkspaceFooter`, `aggiornaWorkspaceFooter`,
+`testiPiede`, `nomeDaPercorso`, `fornitoreDelModello`, `NOMI_TEMA`.
+**Monolite**: nuova `aggiornaPiedeSidebar()` chiamata da `aggiornaSottotitoloSessione` (ogni
+ridisegno della sidebar), da `applicaAspettoDesktop` (cambio tema) e dopo ogni assegnazione di
+`state.model`. Titolo = cartella della sessione (`cartellaAssoluta`, la verità di RunStarted) o
+il nome scelto in «Nuova» prima del primo giro, altrimenti «Workspace locale»; sottotitolo =
+«Tema <preset>» dalla radice (`data-talos-theme`, scritto da `applicaThemeDesktop`) e «· locale»
+per `local:<id>` o «· <fornitore>» per `fornitore/modello`; niente secondo pezzo se il modello
+non lo dice. Il `~` davanti al modello è l'alias del catalogo (`src/model-catalog.mjs`, 27/8):
+tolto prima di leggere il fornitore, come fa il picker.
+
+**Ricerca** (05/09/2026): VS Code «Custom Layout» (code.visualstudio.com/docs/configure/
+custom-layout) e forum Cursor «VSCode traditional side panel»: il piede della barra laterale
+porta identità/workspace a sinistra e l'ingranaggio delle impostazioni a destra — la stessa
+disposizione del mockup, confermata.
+
+**Cancelli**: componenti **9/9** (S-01+S-02+S-03 × 3 viewport) · statico **54/54** · unit
+**6/6** (radice del disco «C:\» mostrata com'è, alias `~` tolto, modello senza fornitore → niente
+secondo pezzo).
+
+**Dal vivo** (4175, store copiato): prima e dopo l'apertura di una sessione il piede dice
+«C:\ / Tema Calm · deepseek» — la sessione aperta ha come cartella la radice del disco (è la
+sessione «workspace = C:\» già nota dalla review del 02/09) e il modello `~deepseek/…`. La
+app originale (4180) mostra un testo fisso «Workspace locale / Tema TALOS · locale» che NON è un
+dato: qui non è un metro. Immagini in `.claude/immagini/fase2-claude/WorkspaceFooter/`.
+
+**Taccuino**: nessun difetto nuovo. La sidebar è finita (S-01, S-02, S-03): restano T-03
+(selezione multipla, da disegnare nel mockup) e T-04 (pin, Fase 3). Prossimo: **S-04 Topbar**.
