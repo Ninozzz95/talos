@@ -811,3 +811,17 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-model-lab .talos-tabs__list{display:flex;max-width:100%;overflow-x:auto;scrollbar-width:thin}
 [data-memory-level="critico"] [data-memory-label]{color:var(--talos-danger)}
 [data-memory-level="alto"] [data-memory-label]{color:var(--talos-warning)}
+/* RuntimeCard: dati e azioni nel lessico del mockup. */
+.talos-runtime-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:var(--talos-space-control)}
+.talos-runtime-card .talos-kv__k{white-space:normal;flex:0 0 100px}
+.talos-runtime-card .talos-kv__v{overflow-wrap:anywhere;text-align:right}
+.talos-runtime-card__models{margin:var(--talos-space-sm) 0;padding-left:var(--talos-space-md);font-size:var(--talos-font-size-sm);overflow-wrap:anywhere}
+.talos-runtime-card ul.talos-runtime-card__models{list-style:disc;margin:8px 0;padding-left:16px;max-height:96px;overflow:auto}
+#schermoImpostazioni .talos-runtime-card li,.talos-runtime-card li{padding:0;border:0;font-size:13px;line-height:1.5}
+.talos-runtime-card{min-width:0}
+.talos-runtime-card__error{color:var(--talos-warning);overflow-wrap:anywhere}
+.talos-runtime-panel{background:transparent!important;border:0!important;padding:0!important;font-family:var(--talos-font-ui)!important}
+.talos-runtime-panel h4{margin:0}
+.talos-runtime-panel .model-lab-runtime-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--talos-space-control)}
+.talos-runtime-panel .setting-control,.talos-runtime-panel .model-lab-prompt{display:flex;flex-direction:column;align-items:stretch;gap:var(--talos-space-sm)}
+.talos-runtime-panel .talos-select{width:100%;min-width:0}

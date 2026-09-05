@@ -1,3 +1,5 @@
+import {creaRuntimeModello} from '../src/components/runtime-modelli.js';
+import {RUNTIME_MODELLI} from './fixtures/runtime-modelli.js';
 import {creaMisuraMemoria} from '../src/components/misura-memoria.js';
 import {CAPACITA_MEMORIA,RUNTIME_MEMORIA} from './fixtures/misura-memoria.js';
 import {aggiornaCatalogoModelli} from '../src/components/catalogo-modelli.js';
@@ -74,6 +76,7 @@ document.documentElement.setAttribute('data-schermo', 'chat');
 const componente = new URLSearchParams(location.search).get('componente') || '';
 
 const LABORATORI = {
+ RuntimeCard(){document.querySelector('#panel-runtime [data-c=RuntimeCard]').replaceWith(creaRuntimeModello(RUNTIME_MODELLI[0]));},
  MemoryMeter(){document.querySelector('#panel-runtime [data-c=MemoryMeter]').replaceWith(creaMisuraMemoria({capacita:CAPACITA_MEMORIA,runtimes:RUNTIME_MEMORIA}));},
  CatalogoModelli(){const p=document.querySelector('#panel-catalogo');p.querySelector('[data-catalog-list]').replaceChildren();p.querySelector('[data-catalog-detail]').replaceChildren();aggiornaCatalogoModelli(p,CATALOGO_MODELLI);},
  FonteRicerca(){const s=document.querySelector('#setting-source-preview [data-settings-reuse]');s.replaceChildren();aggiornaFonteRicerca(s,FONTE_RICERCA);},

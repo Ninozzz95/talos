@@ -16,6 +16,7 @@ import { MOCKUP, apri, confrontaPixel, mostra, struttura, testi } from './aiuto.
 const LAB = process.env.TALOS_LAB_URL || `http://127.0.0.1:${process.env.TALOS_LAB_PORT || 4176}`;
 
 const COMPONENTI = [
+ {nome:'RuntimeCard',schermata:'schermoModelLab',selettore:'#panel-runtime [data-c=RuntimeCard]' },
  {nome:'MemoryMeter',schermata:'schermoModelLab',selettore:'#panel-runtime [data-c=MemoryMeter]'},
  {nome:'CatalogoModelli',schermata:'schermoModelLab',selettore:'#panel-catalogo'},
  {nome:'FonteRicerca',schermata:'schermoImpostazioni',selettore:'#setting-source-preview'},
@@ -54,7 +55,7 @@ test.describe('parità dei componenti ↔ mockup', () => {
       await a.pagina.waitForSelector('html[data-visual-ready="true"]');
       await mostra(m.pagina, comp.schermata);
       await mostra(a.pagina, comp.schermata);
-      if(comp.nome==='MemoryMeter'){for(const p of [m.pagina,a.pagina])await p.evaluate(()=>{for(const n of document.querySelectorAll('#schermoModelLab [role=tabpanel]'))n.hidden=n.id!=='panel-runtime';});}
+      if(['MemoryMeter','RuntimeCard'].includes(comp.nome)){for(const p of [m.pagina,a.pagina])await p.evaluate(()=>{for(const n of document.querySelectorAll('#schermoModelLab [role=tabpanel]'))n.hidden=n.id!=='panel-runtime';});}
       if(comp.nome==='CatalogoModelli'){for(const p of [m.pagina,a.pagina])await p.evaluate(()=>{for(const n of document.querySelectorAll('#schermoModelLab [role=tabpanel]'))n.hidden=n.id!=='panel-catalogo';});expect(await a.pagina.locator('[data-catalog-detail] .talos-kv__k').nth(3).evaluate(n=>n.getBoundingClientRect().width),'CAT-ETICHETTA-INTEGRA').toBeGreaterThanOrEqual(90);}
       if(comp.nome==='FonteRicerca'){for(const p of [m.pagina,a.pagina])await p.evaluate(()=>{for(const el of document.querySelectorAll('#schermoImpostazioni [data-settings-panel]'))el.hidden=el.dataset.settingsPanel!=='tools';});}
       if(comp.sezione){await expect(a.pagina.locator('#capPanel-'+comp.sezione+' [data-ext-detail] .talos-kv__k').first(),'EXT-ETICHETTE-INTEGRE').toHaveCSS('white-space','normal');expect(await a.pagina.locator(comp.selettore+' use').evaluateAll(ns=>ns.every(n=>document.querySelector(n.getAttribute('href')))), 'EXT-ICONA-ESISTENTE').toBe(true);await m.pagina.locator('[data-cap-tab='+comp.sezione+']').click();await a.pagina.locator('[data-cap-tab='+comp.sezione+']').click();}
