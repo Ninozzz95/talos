@@ -1759,3 +1759,38 @@ B6.4 cancelli finali: npm run verify verde (69/69 contratti,195/195 statici, bui
 Cosa deve fare l’owner · Nessuna azione necessaria.
 Cosa fai tu dopo · Runtime/memoria e completamento Model Lab.
 Cosa rimane · Restanti schede B6 → B2 → B7 → B1 → B8 → Browser K-I.
+
+
+## R06 — Cornice Model Lab, prima degli edit (05/09/2026)
+Owner TALOS UI. Merge lane/harness-desktop 5c50dcd1 eseguito. MemoryMeter salvato separatamente nello stash astra-memoria-prima-R06; riprenderlo dopo questo commit.
+Ricerca fresca 05/09, finestra 06/08–05/09: https://github.com/NousResearch/hermes-agent/releases/tag/v2026.8.31 (31/08, 29112be); https://github.com/anthropics/claude-code/releases/tag/v2.1.261 (04/09, d7dbd9a); https://github.com/openai/codex/releases/tag/rust-v0.153.4 (04/09, 3d2ee51). Documenti stabili riverificati oggi, data di aggiornamento non esposta: https://hermes-agent.nousresearch.com/docs/user-guide/configuration/ ; https://code.claude.com/docs/en/model-config ; https://learn.chatgpt.com/docs/config-file/config-advanced ; https://www.w3.org/WAI/ARIA/apg/patterns/tabs/ .
+Decisioni: adattare configurazione distinta da disponibilità osservata (Hermes provider/config, Claude alias e model config, Codex provider/config); tutti documentano configurazione esplicita, che da sola non dimostra un runtime locale raggiungibile. Non deduco difetti delle loro GUI da questi documenti. +1 verificabile TALOS rispetto al nostro originale: quattro fatti separati leggibili, stato runtime realmente osservato invece di Gated fisso; niente credenziali ritenute valide dal conteggio modelli. Adottare APG tablist/fuoco/frecce/Home/End con attivazione manuale per evitare richieste HF involontarie; adattare Tabs/KV/Badge del mockup, nessuna libreria o protocollo nuovo. Nessuna superiorità globale dichiarata; audit Hermes vietato dall’owner.
+Screenshot aperti: CatalogoModelli/app-catalogo-1440.png e originale-catalogo-1440.png (già esistono anche 1280/1024, da riverificare nella consegna). Difetto originale/proposta: quattro righe e sei tab grezzi nella nuova app; correzione richiesta R06 conserva tutte le rotte e gli ID.
+File esatti:
+- .claude/LEDGER-ASTRA-FASE-2-2026-09-05.md
+- .claude/CONSEGNA-ASTRA-FASE-2-2026-09-05.md
+- .claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html
+- harness-ui/frontend/index.template.html
+- harness-ui/frontend/src/styles/index.css
+- harness-ui/frontend/src/components/cornice-model-lab.js
+- harness-ui/frontend/src/legacy/app.js
+- harness-ui/frontend/tests/unit/cornice-model-lab.test.mjs
+- harness-ui/frontend/tests/parity/catalogo-modelli-vivo.spec.mjs
+Simboli: aggiungere etichettaRuntimeLaboratorio, montaCorniceModelLab, aggiornaStatoCorniceModelLab; innestare inizializzaModelLab e renderizzaRuntimeModelLab/caricaRuntimeModelLab, mantenere setModelLabSection con roving tabindex, ID machineCapacityStatus/modelLabProviderStatus/modelLabCatalogStatus/modelLabRuntimeBadge e sei data-model-lab-tab/panel invariati. Nessun frammento legacy modificato. CSS nello stesso mockup, template e CSS rigenerati.
+RED: R06-CORNICE (classi KV/Tabs mancanti, Gated presente), R06-STATO (valore tecnico fisso), R06-TASTIERA (frecce ignorate), R06-VUOTI (ricerca senza risultati e combinazione fornitore senza corrispondenze, screenshot separati). Unit etichetta: non osservato, errore, caricamento, osservato senza modelli, disponibile. GREEN: node --test tests/unit/cornice-model-lab.test.mjs; npm run build; npx playwright test --config=playwright.astra.config.mjs catalogo-modelli-vivo.spec.mjs --grep CAT-|R06- (eseguire con argomento regex quotato); npm run verify; TALOS_LAB_PORT=4178 npm run test:componenti. Prova HTTP reale GET runtime/catalogo, tutte le sei schede e reload; nessun caricamento modello reale richiesto da questa correzione grafica. Screenshot intera pagina 1440/1280/1024 aperti, non solo ritaglio catalogo. Rollback: revert del solo commit R06, mai altri cambi.
+
+R06 RED registrato: zero KV nell’app precedente e modulo mancante. Primo innesto visivamente corretto; il test cercava erroneamente modelLabCardSettings (ID inesistente: montaImpostazioni sposta modelLabCard preservandolo). Corretto il selettore del test in modelLabCard, senza indebolire le quattro righe/sei schede o le prove di stato. Screenshot r06-ricerca-vuota-1440 già aperto: testata leggibile e risultati assenti espliciti.
+
+Aggiunta caratterizzazione R06-SEI-SCHEDE: aprire i sei pannelli, una sola selezione attiva, ricaricare e ritrovare la cornice. Le chiamate HF sono fixture vuote in questa prova di navigazione; non equivale a testare l’intero flusso HF. verify fresco: 73 unit, 195 statici, 30 asset e determinismo verdi.
+
+
+## R06 — Testata Model Lab e filtri vuoti (05/09/2026)
+La testata ora riusa PageHead, KeyValue, Badge e Tabs del mockup. Quattro righe ordinate; sei schede con selezione visibile, frecce/Home/End e attivazione manuale. Il valore fisso Gated è sostituito dalla disponibilità effettivamente osservata: verifica in corso, fallita, nessun runtime raggiunto, nessun modello disponibile, runtime disponibili. Tutti gli ID e gli handler delle sei sezioni sono preservati. CSS aggiunto nel file canonico e rigenerato; nessun token nuovo, nessuna nuova rotta, nessun frammento legacy modificato.
+Confronto visivo: aperti originale-catalogo-1440/1280/1024 e le 9 immagini R06. Rispetto al precedente innesto, label e valori non si incollano e le schede sono distinguibili. Rispetto all’originale, maggiore leggibilità e stato osservato al posto di una promessa tecnica fissa. A 1024 la striscia scorre orizzontalmente, come la variante Tabs approvata; tastiera verificata fino a Download. Nessuna superiorità su tutti i competitor dichiarata.
+Evidenze: .claude/immagini/astra-fase2/R06-ModelLab/testata-{1440,1280,1024}.png; ricerca-vuota-{1440,1280,1024}.png; fornitore-vuoto-{1440,1280,1024}.png. Il secondo stato vuoto è la combinazione di un fornitore reale del catalogo di prova con una ricerca che non ha modelli presso quel fornitore; non si inventa un provider vuoto nell’API. Cancellando la ricerca tornano 65 risultati. Fixture distinte dalle prove con GET reale.
+Limite esplicito: R06 veste la cornice esistente; non chiude le sei schede del Model Lab. MemoryMeter già avviato riprende dopo questo commit, poi completare runtime/prova/installati/HF/download/accessi secondo il brief.
+Cosa deve fare l’owner: nessuna operazione necessaria; può vedere la correzione su http://127.0.0.1:4177, Impostazioni → Laboratorio modelli → Catalogo API.
+Cosa fai tu dopo: riprendere MemoryMeter e completare B6, mantenendo questa cornice.
+Cosa rimane: resto B6 → B2 → B7 (setupModalResize e Intro con albero compatto) → B1 Terminale K-G → B8 → Browser K-I. OAuth e computer-use restano proposte successive.
+
+Cancellli finali R06: verify 73/73 unit, 195/195 statici, 30 asset e build deterministica; componenti 78/78 su 4178; Catalogo/R06 vivo 21/21 su 4177, compresi GET reale, tutte le sei schede e reload. git diff --check verde. R06 correzione testata e stati vuoti CHIUSA; B6 complessivo APERTO.

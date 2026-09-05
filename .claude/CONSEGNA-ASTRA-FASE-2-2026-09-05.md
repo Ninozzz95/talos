@@ -452,3 +452,15 @@ B6.4 cancelli finali: npm run verify verde (69/69 contratti,195/195 statici, bui
 Cosa deve fare l’owner · Nessuna azione necessaria.
 Cosa fai tu dopo · Runtime/memoria e completamento Model Lab.
 Cosa rimane · Restanti schede B6 → B2 → B7 → B1 → B8 → Browser K-I.
+
+
+## R06 — Testata Model Lab e filtri vuoti (05/09/2026)
+La testata ora riusa PageHead, KeyValue, Badge e Tabs del mockup. Quattro righe ordinate; sei schede con selezione visibile, frecce/Home/End e attivazione manuale. Il valore fisso Gated è sostituito dalla disponibilità effettivamente osservata: verifica in corso, fallita, nessun runtime raggiunto, nessun modello disponibile, runtime disponibili. Tutti gli ID e gli handler delle sei sezioni sono preservati. CSS aggiunto nel file canonico e rigenerato; nessun token nuovo, nessuna nuova rotta, nessun frammento legacy modificato.
+Confronto visivo: aperti originale-catalogo-1440/1280/1024 e le 9 immagini R06. Rispetto al precedente innesto, label e valori non si incollano e le schede sono distinguibili. Rispetto all’originale, maggiore leggibilità e stato osservato al posto di una promessa tecnica fissa. A 1024 la striscia scorre orizzontalmente, come la variante Tabs approvata; tastiera verificata fino a Download. Nessuna superiorità su tutti i competitor dichiarata.
+Evidenze: .claude/immagini/astra-fase2/R06-ModelLab/testata-{1440,1280,1024}.png; ricerca-vuota-{1440,1280,1024}.png; fornitore-vuoto-{1440,1280,1024}.png. Il secondo stato vuoto è la combinazione di un fornitore reale del catalogo di prova con una ricerca che non ha modelli presso quel fornitore; non si inventa un provider vuoto nell’API. Cancellando la ricerca tornano 65 risultati. Fixture distinte dalle prove con GET reale.
+Limite esplicito: R06 veste la cornice esistente; non chiude le sei schede del Model Lab. MemoryMeter già avviato riprende dopo questo commit, poi completare runtime/prova/installati/HF/download/accessi secondo il brief.
+Cosa deve fare l’owner: nessuna operazione necessaria; può vedere la correzione su http://127.0.0.1:4177, Impostazioni → Laboratorio modelli → Catalogo API.
+Cosa fai tu dopo: riprendere MemoryMeter e completare B6, mantenendo questa cornice.
+Cosa rimane: resto B6 → B2 → B7 (setupModalResize e Intro con albero compatto) → B1 Terminale K-G → B8 → Browser K-I. OAuth e computer-use restano proposte successive.
+
+Cancellli finali R06: verify 73/73 unit, 195/195 statici, 30 asset e build deterministica; componenti 78/78 su 4178; Catalogo/R06 vivo 21/21 su 4177, compresi GET reale, tutte le sei schede e reload. git diff --check verde. R06 correzione testata e stati vuoti CHIUSA; B6 complessivo APERTO.
