@@ -493,6 +493,27 @@ indirizzo, data di verifica, dettaglio d'errore. Nota di review: quattro `!impor
 cutover quando il CSS legacy sparisce (riga di pulizia, non bloccante). Cancelli sulla lane
 unita: template diff 0, unit 84/84, statico 195/195, componenti 84/84, build ok.
 
+### Confronto con Hermes — gruppo 2 (navigazione), 06/09 ~01:30: 7/7 PASS dopo tre correzioni nostre
+
+- **T-17** (trovato dal confronto, CHIUSO): il campanello apriva il menu legacy
+  `.notifications-menu` che nessun CSS disegnava più — esisteva nel DOM e non si vedeva. Ora apre
+  il pannello «Aspetta te» del mockup (`components/notifiche.js`, `#pannelloNotifiche`): titolo e
+  sommario onesti, una `ListRow` per notifica, «Segna tutte come viste» (aggiunto anche al mockup),
+  fuoco alla prima riga o alla chiusura, Esc e clic fuori chiudono e il fuoco torna al campanello,
+  il cui nome dice QUANTE cose aspettano. Il primo innesto si chiudeva nello stesso clic: la regia
+  dei disclosure (`aria-controls`) e il mio gestore commutavano entrambi — `stopPropagation` sul
+  campanello. Ricerca 06/09: W3C APG dialog-modal (NON modale qui), Carbon «Notification»
+  accessibility (area persistente raggiungibile, fuoco dentro all'apertura), accessibility.build
+  focus management. Prove: laboratorio `NotificationPanel` nel cancello componenti (87/87), dal vivo
+  `notifiche-vivo.mjs` (aperto → fuoco su Chiudi → Esc → nascosto, fuoco sul campanello),
+  screenshot `foto/notifiche-intera.png`.
+- **Ricerca sessioni**: la casella filtrava SOLO le righe demo `.session-item`; le sessioni vere
+  restavano tutte a schermo (74 su 74, era così anche nell'originale). Ora filtra anche
+  `.real-session-item`: «sottrai» 74→37, «ciao» 74→28.
+- **Nomi accessibili**: sette IconButton (barra laterale, albero, comandi, contesto, dettagli,
+  riprendi, impostazioni) avevano solo `title`; ora `aria-label` dal mockup (APG names-and-descriptions).
+Cancelli: unit 84/84, statico 195/195, componenti 87/87. Esiti in `artifacts/confronto/navigazione/esiti.json`.
+
 - T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
   15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
   statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo

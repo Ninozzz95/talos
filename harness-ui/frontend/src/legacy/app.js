@@ -15,7 +15,8 @@ import { creaTaskRow, aggiornaPaginaAttivita } from '../components/attivita.js';
 import { creaMemoryRow, aggiornaPaginaMemoria } from '../components/memoria.js'; // 05/9 Fase 2: Memoria
 import { aggiornaBoard, creaRigaBoard, cartellaDaExport } from '../components/board.js'; // 05/9 Fase 2: Board
 import { creaPilaToast } from '../components/toast.js';
-import { creaSorveglianzaConnessione, aggiornaStatoConnessione } from '../components/connessione.js'; // 05/9 T-15: stato onesto della connessione // 05/9 Fase 2: Toast del mockup (T-16)
+import { creaSorveglianzaConnessione, aggiornaStatoConnessione } from '../components/connessione.js'; // 05/9 T-15: stato onesto della connessione
+import { aggiornaPannelloNotifiche, apriPannelloNotifiche, nomeCampanella } from '../components/notifiche.js'; // 06/9 T-17: pannello «Aspetta te» del mockup // 05/9 Fase 2: Toast del mockup (T-16)
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
@@ -5214,66 +5215,39 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     const badge = $('#notificationsBadge');
     if (badge) { badge.textContent = String(notifiche.length); badge.hidden = notifiche.length === 0; }
     const bottone = $('#notificationsBtn');
-    if (bottone) bottone.setAttribute('aria-label', notifiche.length === 0 ? 'Notifiche: nessuna' : `Notifiche: ${notifiche.length}`);
+    if (bottone) bottone.setAttribute('aria-label', nomeCampanella(notifiche.length)); // 06/9 T-17: dice QUANTE cose aspettano te, come nel mockup
   }
   function segnaNotificaVista(sessione) {
     const viste = leggiNotificheViste() || {};
     viste[sessione.sessionId] = statoNotificaSessione(sessione);
     salvaNotificheViste(viste);
   }
+  /**
+   * 06/9 T-17 (confronto con Hermes): il menu legacy `.notifications-menu` non
+   * aveva più un CSS che lo disegnasse. Ora il campanello apre il pannello
+   * «Aspetta te» del mockup (`#pannelloNotifiche`, components/notifiche.js):
+   * stesse notifiche, stesse azioni (apri la sessione, segna tutte come viste).
+   */
+  let chiudiPannelloNotifiche = null;
   function apriPopoverNotifiche(ancoraEl) {
-    document.querySelector('.notifications-menu')?.remove();
-    const menu = document.createElement('div');
-    menu.className = 'ft-actions-menu session-actions-menu notifications-menu';
-    menu.setAttribute('role', 'menu');
-    menu.setAttribute('aria-label', 'Notifiche');
+    const pannello = $('#pannelloNotifiche');
+    if (!pannello) return;
+    if (chiudiPannelloNotifiche) { chiudiPannelloNotifiche(true); chiudiPannelloNotifiche = null; return; }
     const notifiche = state.notifiche || [];
-    const etichette = { approvazione: 'aspetta la tua approvazione', conclusa: 'ha finito', interrotta: 'si è interrotta' };
-    const glifi = { approvazione: 'i-shield', conclusa: 'i-check', interrotta: 'i-stop' };
-    if (notifiche.length === 0) {
-      menu.appendChild(textElement('p', 'notifications-empty', 'Nessuna notifica: nessun\'altra sessione chiede attenzione.'));
-    }
-    for (const { sessione, stato } of notifiche) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'ft-actions-menu-item notifications-item';
-      button.setAttribute('role', 'menuitem');
-      const testo = document.createElement('span');
-      testo.append(textElement('strong', '', sessione.nome || sessione.taskId || 'Sessione'), textElement('small', '', `${etichette[stato]} · ${formattaOraSessione(sessione.avviataAlle)}`));
-      button.append(iconaSvgAlbero(glifi[stato] || 'i-bell'), testo);
-      button.addEventListener('click', () => {
-        chiudi();
+    const { righe, tutte } = aggiornaPannelloNotifiche(pannello, notifiche, { ora: (sessione) => formattaOraSessione(sessione) });
+    righe.forEach((riga, indice) => {
+      const { sessione } = notifiche[indice];
+      riga.addEventListener('click', () => {
+        chiudiPannelloNotifiche?.(false); chiudiPannelloNotifiche = null;
         segnaNotificaVista(sessione);
         passaASessione(sessione.sessionId, sessione.taskId || sessione.sessionId, sessione.nome || sessione.taskId, normalizzaModelloSessione(sessione), sessione);
       });
-      menu.appendChild(button);
-    }
-    if (notifiche.length > 0) {
-      const tutte = document.createElement('button');
-      tutte.type = 'button';
-      tutte.className = 'ft-actions-menu-item notifications-mark-all';
-      tutte.setAttribute('role', 'menuitem');
-      tutte.append(iconaSvgAlbero('i-check'), textElement('span', '', 'Segna tutte come viste'));
-      tutte.addEventListener('click', () => { for (const { sessione } of notifiche) segnaNotificaVista(sessione); chiudi(); void aggiornaElencoSessioniReali(); });
-      menu.appendChild(tutte);
-    }
-    document.body.appendChild(menu);
-    const rect = ancoraEl.getBoundingClientRect();
-    menu.style.top = `${rect.bottom + 6}px`;
-    menu.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - menu.getBoundingClientRect().width - 8))}px`;
-    ancoraEl.setAttribute('aria-expanded', 'true');
-    function chiudi() {
-      menu.remove();
-      ancoraEl.setAttribute('aria-expanded', 'false');
-      document.removeEventListener('click', onClick, true);
-      document.removeEventListener('keydown', onKey);
-    }
-    function onClick(event) { if (!menu.contains(event.target) && event.target !== ancoraEl && !ancoraEl.contains(event.target)) chiudi(); }
-    function onKey(event) { if (event.key === 'Escape') { chiudi(); ancoraEl.focus(); } }
-    document.addEventListener('click', onClick, true);
-    document.addEventListener('keydown', onKey);
-    (menu.querySelector('button') || menu).focus?.();
+    });
+    tutte?.addEventListener('click', () => { for (const { sessione } of notifiche) segnaNotificaVista(sessione); chiudiPannelloNotifiche?.(true); chiudiPannelloNotifiche = null; void aggiornaElencoSessioniReali(); });
+    const chiudi = apriPannelloNotifiche(pannello, ancoraEl);
+    chiudiPannelloNotifiche = (fuoco) => { chiudi(fuoco); chiudiPannelloNotifiche = null; };
   }
+
 
   function apriMenuAzioniSessione(sessione, posizionamento) {
     document.querySelector('.session-actions-menu')?.remove();
@@ -13214,8 +13188,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   $('#settingsNuovaSessioneAltrove')?.addEventListener('click', () => createNewSession());
 
   $('#notificationsBtn')?.addEventListener('click', (event) => {
-    const aperto = document.querySelector('.notifications-menu');
-    if (aperto) { aperto.remove(); event.currentTarget.setAttribute('aria-expanded', 'false'); return; }
+    event.stopPropagation(); // il campanello ha aria-controls: senza questo la regia dei disclosure lo richiudeva nello stesso clic (doppio toggle)
     apriPopoverNotifiche(event.currentTarget);
   });
   const notificheTimer = window.setInterval(() => { if (document.visibilityState === 'visible') void aggiornaElencoSessioniReali(); }, 15_000);
@@ -13275,7 +13248,9 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
 
   $('#sessionSearch').addEventListener('input', (event) => {
     const q = event.target.value.toLowerCase().trim();
-    $$('.session-item').forEach((item) => item.hidden = q && !item.textContent.toLowerCase().includes(q));
+    // 06/09 confronto Hermes (gruppo navigazione): la casella filtrava SOLO le righe demo
+    // `.session-item`; le sessioni vere (`.real-session-item`) restavano tutte a schermo — 74 su 74.
+    $$('.session-item, .real-session-item').forEach((item) => { item.hidden = Boolean(q) && !item.textContent.toLowerCase().includes(q); });
   });
 
   $$('.session-item').forEach((item) => {

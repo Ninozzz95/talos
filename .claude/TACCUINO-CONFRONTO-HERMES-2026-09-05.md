@@ -123,3 +123,15 @@ Correzioni fatte durante il giro (cancelli verdi): `aria-label` sul pulsante «+
 sui tre pulsanti delle azioni del messaggio (mockup + `conversazione.js`); fonte: W3C APG
 «Providing Accessible Names and Descriptions» e tecnica ARIA14, WebAIM Million 2025 (27,7% delle
 home page con pulsanti senza nome), letti il 05/09/2026.
+
+## Misure dal vivo — 06/09, gruppo 2 (navigazione), `--gruppo=navigazione`: 7/7 PASS
+
+| Passo | TALOS | Hermes | Cosa ho visto |
+|---|---|---|---|
+| Cerca una sessione dalla casella | 74→37 righe (**prima della correzione: 74→74, la casella non filtrava le sessioni vere**) | 312→24 | Hermes cerca su 312 sessioni istantaneamente; noi su 74. Da misurare con 500 |
+| Fatti per riga di sessione | 2 fatti in 66 px (stato · modello · giri · tempo) | 1 in 26 px | scelta nostra: più fatti, metà densità |
+| Comprimi la barra laterale | 276→64→276 px (icone) | 360→0→360 px (sparisce) | +1 nostro: in modalità icone i Luoghi restano raggiungibili |
+| Ctrl+K palette | 16 voci → 8 con «sess», Esc chiude | 62 voci → 202 (!) con «sess», Esc chiude | Hermes con «sess» MOSTRA PIÙ voci (202): la ricerca apre le sessioni dentro la palette. +1 da valutare: sessioni nella nostra palette (oggi 16 comandi) |
+| Pulsanti della testata con nome | 8 pulsanti, 0 senza nome (**prima: 5 senza nome**), 4 tab | 7, 0 senza nome, 3 tab | pari |
+| Nascondi la colonna di destra | 340→0→340 px | «Show/Hide right sidebar» | pari |
+| Notifiche | «Notifiche: nessuna», si apre (**prima: menu invisibile, T-17**) | nessun pulsante notifiche nella finestra | Hermes affida le notifiche al sistema (`notifications.tsx` = toast); noi abbiamo un pannello «Aspetta te» che elenca le sessioni che chiedono attenzione: +1 nostro |

@@ -39,6 +39,8 @@ import { LUOGHI, LUOGHI_ALTRI, creaNavItem } from '../src/components/nav-item.js
 import { CONVERSAZIONE } from './fixtures/conversazione.js';
 import { PIEDE } from './fixtures/piede.js';
 import { TOAST } from './fixtures/toast.js';
+import { NOTIFICHE, ORA_NOTIFICA, ETICHETTA_MOCKUP } from './fixtures/notifiche.js';
+import { aggiornaPannelloNotifiche } from '../src/components/notifiche.js';
 import { creaToast } from '../src/components/toast.js';
 import { creaSessionItem } from '../src/components/session-item.js';
 import { aggiornaTopbar } from '../src/components/topbar.js';
@@ -108,6 +110,13 @@ const LABORATORI = {
     for (const voce of REVIEW.voci) elenco.append(creaRigaFileReview(voce, { attiva: voce.path === REVIEW.corrente }));
     aggiornaDiffReview(schermo.querySelector('.talos-review__diff'), REVIEW.voci.find((v) => v.path === REVIEW.corrente));
     schermo.querySelector('.talos-topbar__path').textContent = riassuntoReview(REVIEW.voci);
+  },
+  NotificationPanel() {
+    const pannello = document.querySelector('#pannelloNotifiche');
+    const { righe } = aggiornaPannelloNotifiche(pannello, NOTIFICHE, { ora: ORA_NOTIFICA });
+    // il mockup scrive il PERCHÉ («Vuole scrivere fuori dalla cartella») al posto dell'etichetta generica
+    righe[0].querySelector('.talos-list-row__sub').textContent = `${ETICHETTA_MOCKUP} · ${ORA_NOTIFICA()}`;
+    pannello.hidden = false;
   },
   Toast() {
     const regione = document.querySelector('#regioneToast');
