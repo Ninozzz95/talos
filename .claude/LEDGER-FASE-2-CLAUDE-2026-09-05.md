@@ -194,3 +194,202 @@ Immagini in `.claude/immagini/fase2-claude/Topbar/`.
   **S-06 Piede**.
 - T-07 la colonna dei dettagli mostra ancora i dati d'esempio del mockup (B2, Astra).
 - T-08 badge Terminale assente finché le schede non hanno una UI (B1, Astra).
+
+---
+
+## S-05 · Conversazione (Turn, Message, ActivityBundle, ToolRow, ToolFailure, SystemNote, ApprovalCard, DiffView, SignedReceipt, TouchedFiles, ArtifactCard, attesa) — ✅ verde, aspetta l'owner
+
+**Blocchi**: tutti quelli della chat del mockup. **Fixture**: `lab/fixtures/conversazione.js` (la
+chat del mockup come dati, nella forma che il monolite ha dopo gli eventi dello stream).
+**Componente**: `src/components/conversazione.js` — fabbriche `creaTurno`, `creaMessaggioUtente`,
+`creaMessaggioTalos`, `creaAzioniMessaggio`, `creaAttivita`, `creaRigaAttrezzo`,
+`creaFallimentoAttrezzo`, `creaNotaSistema`, `creaApprovazione`, `creaDiff`, `creaRicevuta`,
+`creaFileToccati`, `creaArtefatto`, `creaAttesa`; `ICONA_ATTREZZO` (icona per attrezzo, i nomi che
+riceve il modello non cambiano).
+**Monolite** (`handleRealEvent` e gli `append*` — il cervello resta, cambia il DOM che emette):
+nuove `nellaChat`, `turnoTalosCorrente`, `segnaGiroNellaSpine`, `aggiornaTickGiro`;
+`appendRealTaskStart`/`appendUserFollowUp` → Message utente in un Turn; `ensureAssistantMessageElement`
+→ testo nel Message TALOS del turno corrente (involucro `.talos-message__copy` con dentro
+`.assistant-copy`, il gancio del render incrementale) + azioni copia/ascolta/chiedi di nuovo;
+`apriBatchSeServe` → ActivityBundle (riassunto e «+18 −2» in testa); `appendToolNote` → ToolRow con
+icona dell'attrezzo, dettaglio mono (`bersaglioAttrezzoNudo`), pallino running/success/error e corpo
+espandibile (argomenti + esito); il ragionamento è un bundle suo, nascosto come prima
+(`real-reasoning-note`); `appendStatusNote` → SystemNote (Nota/Errore, tick rosso sul giro);
+`appendApprovalCard` → ApprovalCard con «Consenti una volta · Per questa sessione · Nega» (per
+sessione = approva e ricorda «sempre» per quell'attrezzo via `sincronizzaImpostazioniSessione`;
+`sheet-actions`/`assistant-copy` restano i ganci di ApprovalResolved); `appendArtifactCard` →
+ArtifactCard (iframe isolato + «Apri»); `mostraAttesaRisposta` → scheletro del mockup con la riga
+animata del marchio (stessa immagine del mobile, owner 02/9). I numeri della spine sono i giri:
+uno per bundle di attrezzi (il ragionamento non conta); il tick cresce con gli attrezzi (fino a 5)
+e prende il tono dell'esito (current → nessuno a fine giro, warning su approvazione, danger su
+errore). Nel replay di una cronologia l'ora NON si scrive (non c'è nel flusso: non si inventa).
+**Ponte/regia**: il clic sui disclosure (`[aria-expanded][aria-controls]`) è della regia portata in
+app.js: il componente non aggiunge un secondo gestore (prima si annullavano a vicenda); da
+tastiera Invio/Spazio sulla riga.
+**Mockup toccato** (nel suo linguaggio): azioni sul messaggio (`.talos-message__actions`, visibili
+al passaggio del mouse; simboli `i-copy`/`i-history` dallo sprite originale), corpo espandibile
+della ToolRow (`pre.talos-tool-row__body`, esempio dentro il bundle chiuso), `ArtifactCard`
+(scheda con anteprima in iframe) nel terzo turno, riga animata dell'attesa sopra lo scheletro;
+**composer**: barra su una riga sola (owner: «il pulsante send non deve andare a capo»), chip che
+si stringono con i puntini, scorciatoie nascoste sotto 1280.
+
+**Ricerca** (05/09/2026): AG-UI «Messages» (docs.ag-ui.com/concepts/messages), LangChain «From
+Token Streams to Agent Streams», fuselabcreative.com «UI Design for AI Agents 2026»: filo della
+conversazione separato dall'attività dell'agente, attrezzi raggruppati e aggiornabili nel tempo,
+eventi di ciclo distinti dai messaggi — la forma del mockup.
+
+**Cancelli**: componenti **15/15** (5 componenti × 3 viewport; la Conversazione confronta l'intera
+chat del mockup ricostruita dai dati: struttura, parole, pixel) · statico **54/54**.
+
+**Dal vivo** (4175, sessione «Add and export a function `sottrai`…», 9 giri, contro l'originale
+4180 sulla stessa sessione; 1440 e 1024; zero errori): 2 turni (1 persona, 1 TALOS), 10 bundle
+(7 di ragionamento nascosti), 18 righe attrezzo, 21 blocchi di testo con lo stesso contenuto
+dell'originale («Let me find the project files.», l'elenco puntato, il codice inline); bundle e
+righe si aprono (esito vero: `ENOENT … C:\.automations`); spine 1 · 2 3 4. Immagini in
+`.claude/immagini/fase2-claude/Conversazione/`.
+
+**Non verificato dal vivo** (vuole il kernel: `TALOS_OWNER_RUNTIME_MODULE`, un modello a chiave e
+i soldi dell'owner): lo streaming in diretta, l'attesa animata, ApprovalCard con «Per questa
+sessione», ArtifactCard con un artefatto vero, SignedReceipt e TouchedFiles (il monolite oggi
+non emette ricevute né file-per-giro: il blocco esiste, l'innesto arriva con la Review, S-07).
+
+**Taccuino**
+- T-09 il piede della chat è ancora testo del mockup (StatusStrip «giro 7 · 41 s», chip
+  «claude-opus-5 · Scrittura nel workspace · Giri 7 · Sessione ~$0,08», barra di stato «41,2k
+  token…»): **S-06 Piede**, con il composer ridimensionabile (`talos-harness-composer-size-v1`).
+- T-10 il dialogo «Albero sessione» aperto dal titolo è il foglio legacy senza CSS (B7 Astra +
+  regola dell'owner: dialoghi ridimensionabili e ricordati, `talos-harness-modal-sizes-v1`).
+
+---
+
+## S-06 · ChatFooter (striscia del giro, coda, composer, barra di stato) — ✅ verde, aspetta l'owner
+
+**Blocchi**: `ChatFooter`, `StatusStrip`, `MessageQueue`, `Composer`, `AttachButton`, `Chip` ×4,
+`SendButton`, `StatusBar`, `IconButton` (microfono). **Fixture**: `lab/fixtures/piede.js` (un giro
+in corso, `usage` come da StateDelta /usage, permesso col valore interno).
+**Componente**: `src/components/chat-foot.js` — `aggiornaPiedeChat`, `etichettaPermesso` (H22: Sola
+lettura · Su richiesta · Scrittura nel workspace · Accesso completo), `tonoPermesso`, `testiUsage`
+(41,2k token · 7 giri · cache 87% · velocità), `testoLatenza` (primo token 1,4 s), `kilo`.
+**Monolite**: nuova `aggiornaPiedeChatDaStato()` (cosa sta facendo TALOS = la riga attrezzo in
+corso o l'etichetta dell'attesa; giro = `usage.giri`; secondi dall'inizio del giro; TTFT dalle
+misure di latenza `invio → primoDelta`; modello breve; permesso; tema dal piede della sidebar),
+chiamata da `syncRunComposerState`, dal timer dell'attesa (ogni secondo), da
+`aggiornaRiassuntoBatch`, da `aggiornaComposerUsage` e da `aggiornaPillolaPermessi`. Il ramo
+legacy dei nodi `[data-runtime-*]` si spegne quando c'è il piede del mockup. Il chip del modello
+mostra il nome breve. ⛔ Il costo («Sessione ~$0,08») non si stima da soli: senza un dato dal
+server il chip resta nascosto.
+**Mockup toccato** (nel suo linguaggio, per non perdere NIENTE dell'originale — regola
+dell'owner): maniglia di ridimensionamento `.talos-resizer--composer` (angolo in alto a
+sinistra, come l'originale; `#composerResizeHandle` → `setupComposerResize`: trascinamento,
+frecce, doppio clic, misura ricordata in `talos-harness-composer-size-v1`), i chip modello e
+permesso sono pulsanti (`data-open-sheet`), «Reindirizza» (`#redirectRunButton`, appare con testo
+scritto durante un giro), microfono (`i-mic` dallo sprite originale, dettatura), «+» =
+`#capabilityBtn` (aggiungi contesto), ganci `data-run-what/-meta`, `.stop-run`, `[data-runtime-*]`,
+`[data-statusbar]`; il composer è una colonna flex (il testo riempie la misura scelta, la barra
+sta in fondo) e consuma le variabili che il monolite scrive (`--composer-canonical-h`,
+`--composer-max-w`, `--composer-textarea-max-h`); scorciatoia nel chip nascosta quando il
+composer è stretto (`@container`).
+
+**Ricerca** (05/09/2026): resize handle fra fratelli flex con misura in localStorage e frecce da
+tastiera (glama.ai backlog-mcp `viewer/components/resize-handle.ts`); `<textarea>` MDN (`resize`);
+la maniglia unica a doppio verso è quella dell'originale (`setupComposerResize`, 3/9).
+
+**Cancelli**: componenti **18/18** · statico **54/54**.
+
+**Dal vivo** (4175, sessione conclusa da 9 giri, 1440 e 1024, zero errori): chip
+«deepseek-v4-flash-latest · Accesso completo · Giri 9», costo nascosto, striscia e coda nascoste
+(nessun giro in corso), barra «Tema Calm · deepseek · 92,1k token · 9 giri · cache 83%»;
+trascinando la maniglia il composer passa da 727×110 a 732×239, la misura è in
+`talos-harness-composer-size-v1`, sopravvive al ricarico, il doppio clic la azzera; il chip del
+modello apre «Modello», quello del permesso «Permessi di esecuzione». Immagini in
+`.claude/immagini/fase2-claude/ChatFooter/`.
+
+**Non verificato dal vivo** (vuole il kernel): la striscia durante un giro (cosa · giro · secondi ·
+Ferma), «Reindirizza», la coda con un messaggio vero, la dettatura.
+
+**Taccuino**: l'ambiente (chip dell'originale) vive nella colonna dei dettagli (B2, Astra): il
+foglio «Ambiente» resta raggiungibile da lì. I fogli aperti dai chip sono ancora i dialoghi legacy
+senza CSS (B7 Astra, T-10).
+
+---
+
+## S-07 · Review (ReviewPane, ReviewFileList, DiffView) — ✅ verde, aspetta l'owner
+
+**Blocchi**: `ReviewScreen` (testata con sommario e azioni), `ReviewPane`, `ReviewFileList`
+(righe `talos-list-row`), `DiffView` (testa, righe, piede). **Fixture**: `lab/fixtures/review.js`
+(le tre voci del mockup nella forma di `reviewFiles`: percorso, `code` [tipo, testo] col segno nel
+testo, giro, ricevuta, conteggi). **Componente**: `src/components/review.js` — `creaRigaFileReview`,
+`aggiornaDiffReview`, `contaDiff` (dalla voce se il server ha contato, altrimenti dalle righe),
+`riassuntoReview` («3 file modificati · +112 −2»), `sottotitoloFile` («giro 5 · nuovo file»),
+`nascondiAzioniFase3`.
+**Monolite**: `renderRealReviewList` → righe del mockup in `.talos-review__files` (attiva = il
+file scelto o l'ultimo scritto), sommario nella testata della Review, titolo = la sessione, stato
+vuoto onesto; `renderReviewFile` → `aggiornaDiffReview` (righe col numero e il segno come nell'
+originale, avviso «simboli spariti» come SystemNote nel linguaggio del mockup); la voce di
+`reviewFiles` porta `giro` (il giro in cui è stata scritta). `aggiornaTestataSessione` aggiorna
+titolo e badge delle schede su TUTTE le testate di sessione (Chat, Terminale, Review); la Review
+tiene il suo sommario al posto del percorso.
+**Mockup toccato**: «Copia i diff» (`#copyAllDiffs`, funzione dell'originale) nella testata della
+Review; Accetta tutto · Scarta tutto · Accetta questo file · Apri nell'editor · Scarta e la nota
+«Scartare ripristina…» portano `data-richiede="fase3"`: dal vivo restano NASCOSTI finché non hanno
+una rotta (mai un pulsante che non fa niente); «−0» non si scrive (come nel mockup).
+
+**Ricerca** (05/09/2026): review dell'agente = elenco file con +/−, diff per file, accetta/scarta
+per file — Copilot «Edits Review», Cursor; Claude Code lo ha nel Code tab del desktop e non
+nell'estensione VS Code (github.com/anthropics/claude-code/issues/33932); diffity, Agent Diff
+Viewer. Il mockup è a quel livello; le azioni aspettano il kernel.
+
+**Cancelli**: componenti **21/21** · statico **54/54**.
+
+**Dal vivo** (4175, sessione «Rispondi con una sola parola: ciao.» con un file scritto, 1440 e
+1024, zero errori): «1 file modificato · +11 −0» in testata, riga «screenshot-desktop.ps1 · giro
+4 · nuovo file · +11», diff di 12 righe numerate, «Copia i diff» → toast «Diff di 1 file copiato»,
+azioni della Fase 3 nascoste. Immagini in `.claude/immagini/fase2-claude/Review/`.
+
+**Taccuino / per l'owner**
+- T-11 **Accetta / Scarta / Apri nell'editor** (per file e per tutto) vogliono rotte nuove del
+  kernel (ripristino dal checkpoint del giro, apertura nell'editor): contratto congelato → Fase 3,
+  con una riga K nel ledger kernel. Fino ad allora i pulsanti non si vedono.
+- T-12 le **ricevute firmate** per scrittura (badge «Ricevuta a1f4…9c02», blocco SignedReceipt):
+  il server ha la chiave (`TALOS_HARNESS_RECEIPT_*`) ma il flusso non emette l'hash al client →
+  Fase 3.
+
+---
+
+## S-07-bis · Review a SCHEDE (owner 05/09: «schede in alto e diff piena larghezza sotto, stile VS Code») — ✅ verde
+
+Ricerca (05/09/2026): Hermes Desktop, Review pane (hermes-agent.nousresearch.com/docs/user-guide/
+desktop): file modificati in elenco o albero, diff con ambito Uncommitted · Branch · Last turn,
+stage/revert/commit dallo stesso pannello; VS Code: schede dei file in alto, editor di diff a
+tutta larghezza. **Mockup ridisegnato**: `ReviewFileTabs` (una `talos-tabs__list` con una scheda
+per file: percorso mono, +A, −R) sopra il `DiffView` a tutta larghezza (testa: percorso, ricevuta,
++/−, «giro N»); via l'elenco a colonna. **Componente**: `creaRigaFileReview` emette la scheda
+(`role="tab"`, roving tabindex); **monolite**: frecce/Home/End sulle schede (attivazione
+automatica: il diff è già nel DOM). Cancelli **24/24** e **54/54**; dal vivo 1440/1024 su una
+sessione con un file scritto, zero errori. Immagini in `immagini/fase2-claude/Review/*schede*`.
+Resta per la Fase 3 (T-11): ambito Non committato · Ramo · Ultimo giro (W1-06, servizio git),
+Accetta/Scarta, vista affiancata.
+
+## S-08 · EmptyState (lo stato vuoto di una sessione nuova) — ✅ verde
+
+**Componente**: `src/components/stato-vuoto.js` — `creaStatoVuoto`, `suggerimentiDallaCartella`
+(dai FATTI: `.claude` → ledger aperti, `src` → mappa, `tests` → test; package.json/README quando
+il browser del workspace elencherà anche i file: oggi elenca solo cartelle). **Monolite**:
+`montaStatoVuoto` al posto dell'hero in `avviaSessionePendente` — il blocco entra nella colonna
+della Chat (UN composer, quello vero), «Riapri l'ultima sessione» apre davvero l'ultima, un
+suggerimento riempie il composer senza inviare; `nuovaGenerazioneSessione` lo toglie. Cancelli
+verdi; dal vivo (Nuova → «Continua nella chat — AVM-harness-desktop»): titolo con la cartella,
+riga guida, «Riapri l'ultima sessione», zero errori; nessun suggerimento perché la cartella scelta
+è un progetto con id (niente percorso per il browser) → T-13: leggere i fatti anche per i
+progetti allowlistati (`/api/v1/projects` porta il percorso?) — da verificare.
+
+## S-09 · Le due colonne si comprimono e si ricordano (owner 05/09: «le due sidebar devono essere collassabili») — ✅ verde
+
+Pulsante «Comprimi o espandi la barra laterale» nel marchio della sidebar (mockup, `i-menu` dallo
+sprite originale) → `#sessionsCollapseBtn` → `toggleSessionsPanel` del monolite; la barra compressa
+è la modalità a icone del mockup (`data-sidebar="icone"`, CSS già pronto, 64 px). Il toggle
+«Dettagli» della testata comprime la colonna destra. Entrambi si ricordano in
+`talos-harness-panel-widths` (chiave del contratto) e si riapplicano all'avvio; il flag si scrive
+solo sul gesto della persona (il sync dell'avvio lo cancellava). Dal vivo: 276→64 px, ricarico,
+entrambe ricordate, riapertura, zero errori. Immagini in `immagini/fase2-claude/Collassi/`.
+Per Astra B8 restano: densità, tema chiaro, lingua.

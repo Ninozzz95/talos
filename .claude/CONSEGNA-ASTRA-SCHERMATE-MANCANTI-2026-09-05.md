@@ -67,3 +67,7 @@ Albero aperto nella rail File con toggle Nascondi/Mostra, cinque comandi origina
 Generazione/build verdi; test:lab 126/126; npx con originale 144/144, zero flaky. Aperti e riaperti i sei PNG albero-file/menu-file dopo correzione del filtro, tre originali 4179, confronto con la rail canonica. L'originale senza sessioni mostra albero vuoto e comandi disabilitati; nessun confronto numerico con la fixture. Beneficio verificato: albero separabile dai file toccati, filtro con portata esplicita, menu raggiungibile da Shift+F10 e contenuto entro il viewport.
 Limiti parte B2: lettura lazy reale, cache/sessione, risalita con fratelli reali, mutazioni ed errori. La risalita della regia espone la portata di sola lettura ma non carica dati. Apri/rinomina/elimina/radice e creazione si collegano ai dialoghi A7 ancora da consegnare. I file toccati restano nel riepilogo: B2 deve collegare anche quelle righe al menu comune.
 Cosa deve fare l'owner: nulla per sbloccare. Cosa fa Astra dopo: dieci dialoghi A7, iniziando da Modello. Cosa rimane: A7 e parte B.
+
+## Merge orchestratore c5b570a2 (include 9d1db1ba)
+Review a schede, Chat, composer, stato vuoto e collassi ricevuti. Generazione/build verdi; parità 126/126, componenti 24/24. Parti riservate conservate; dettaglio dei due conflitti e osservazione sulla selezione della scheda Review nel ledger.
+Cosa deve fare l'owner: nulla. Cosa fa Astra dopo: riprende i dialoghi, Intro compatta e maniglie. Cosa rimane: parte A residua e parte B; B8 solo densità, chiaro, lingua.

@@ -110,6 +110,7 @@ export function montaPonteLegacy(documentObj = document) {
   const sidebar = uno(radice, '.talos-sidebar');
   battezza(sidebar, { id: 'sessionsPanel', classi: ['sessions-panel'] });
   battezza(uno(sidebar, '.talos-brand .talos-icon-button'), { id: 'notificationsBtn' });
+  battezza(uno(sidebar, '.talos-brand [data-azione="barra"]'), { id: 'sessionsCollapseBtn' }); // 05/9 Fase 2: la barra si comprime a icone (e si ricorda)
   battezza(uno(sidebar, '.talos-sidebar__actions .talos-field__input'), { id: 'sessionSearch' });
   battezza(uno(sidebar, '#voceNuova'), { id: 'newSessionBtn' });
   const sessioni = uno(sidebar, '.talos-sidebar__sessions');
@@ -163,6 +164,8 @@ export function montaPonteLegacy(documentObj = document) {
   coda.hidden = true;
   const compositore = uno(piede, '#composerForm');
   battezza(uno(compositore, '.talos-send'), { classi: ['send-btn'] });
+  battezza(uno(compositore, '.talos-composer__mic'), { classi: ['composer-mic'] }); // 05/9 Fase 2: ChatFooter — il microfono dell'originale (dettatura)
+  battezza(uno(piede, '.talos-statusbar'), { classi: ['runtime-status'] });
   battezza(uno(chat, '.talos-topbar__title h1'), { id: 'sessionTitle' });
   /*
    * 05/9 Fase 2: Topbar. Il titolo con il chevron e il pulsante «Albero dei rami»

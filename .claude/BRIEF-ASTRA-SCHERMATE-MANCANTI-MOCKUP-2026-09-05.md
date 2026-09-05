@@ -127,6 +127,20 @@ ragionamento con cursore), **environment** (ramo, worktree, radice, repo annidat
 `control` e `capabilities` **non li disegni**: sono già il Doctor e la Capability.
 Tutti nello stesso `OverlayLayer` + `Dialog` di `veloNuova`, stessa testata, stesso piede.
 
+## 2-bis. Regola critica dell'owner (05/09): MAI SOTTO L'ORIGINALE
+
+«Se ogni singolo aspetto è inferiore alla UI originale, quale è il senso di implementarlo?» Per
+ogni schermata e dialogo che disegni, elenca nel ledger le funzioni dell'originale
+(`public/index.html` + `public/app.js`) e spuntale una per una: ciò che manca si aggiunge nel
+linguaggio del mockup, non si rimanda. In particolare:
+- **l'intro porta l'albero delle cartelle in versione compatta dentro il dialogo** (come il
+  chooser dell'originale: recenti, progetti, scelte rapide, albero con ricerca — F3-F6);
+- **tutti i dialoghi sono ridimensionabili e la misura è ricordata** (chiave del contratto
+  `talos-harness-modal-sizes-v1`, come `setupModalResize` nell'originale): maniglia nel
+  linguaggio del mockup (`.talos-resizer`), doppio clic per la misura normale;
+- ogni screenshot si guarda tutto, a standard alto: un difetto visibile si corregge nello
+  stesso giro.
+
 ## 3. Cosa NON fare
 
 - Non toccare le schermate e i dialoghi esistenti, se non per aggiungere la voce di

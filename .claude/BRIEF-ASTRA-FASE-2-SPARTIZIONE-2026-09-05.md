@@ -35,6 +35,15 @@ Ordine consigliato per te: **A → B3 → B5 → B4 → B6 → B2 → B7 → B1 
 «dati → righe», che sono il tuo SessionItem, verso le cose con più meccanica). Ogni lettera è
 una consegna a sé, con il suo commit e il suo sì dell'owner.
 
+## 1-bis. Aggiornamento 05/09 sera (commit `9d1db1ba`): cosa è già fatto da Claude
+
+Fatti e verificati dal vivo (ledger `LEDGER-FASE-2-CLAUDE-2026-09-05.md`): S-01 SessionItem, S-02 NavItem,
+S-03 WorkspaceFooter, S-04 Topbar (+ Comandi/Comprimi/Dettagli), S-05 Conversazione, S-06 ChatFooter
+(composer con maniglia ricordata, chip, microfono, Reindirizza), S-07 Review **a schede** (ordine
+dell'owner: schede in alto, diff a tutta larghezza), S-08 stato vuoto, S-09 le due colonne si
+comprimono e si ricordano. ⛔ Di B8 resta a te SOLO: densità, tema chiaro, lingua (la sidebar a icone
+è fatta). ⛔ Prima di ogni edit: `merge lane/harness-desktop`.
+
 ## 2. Com'è fatta la app oggi (leggi questi file, nell'ordine, prima di toccare qualcosa)
 
 ```
