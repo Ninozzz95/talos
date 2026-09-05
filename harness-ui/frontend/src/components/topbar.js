@@ -60,7 +60,7 @@ export function aggiornaTopbar(topbar, dati = {}) {
   const h1 = topbar.querySelector('.talos-topbar__title h1');
   if (h1 && typeof dati.titolo === 'string' && h1.textContent !== dati.titolo) h1.textContent = dati.titolo;
   const percorso = topbar.querySelector('.talos-topbar__path');
-  if (percorso) {
+  if (percorso && 'percorso' in dati) { // chi non passa il percorso non lo tocca (la Review ci scrive il sommario dei file)
     const testo = typeof dati.percorso === 'string' && dati.percorso.trim() ? dati.percorso.trim() : '';
     percorso.textContent = testo;
     percorso.title = testo;

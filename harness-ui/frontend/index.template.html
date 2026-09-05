@@ -337,7 +337,7 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
         <div class="talos-topbar__title"><h1>W1-02 registro processi</h1></div>
         <span class="talos-topbar__path">3 file modificati · +112 −2</span>
         <div class="talos-tabs"><div class="talos-tabs__list" role="tablist" data-vistetab><button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-selected="false">Chat</button><button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-selected="false">Terminale <span class="talos-tabs__count">2</span></button><button class="talos-tabs__tab" role="tab" data-vaia="review" aria-selected="true">Review <span class="talos-tabs__count">3</span></button></div></div>
-        <div class="talos-topbar__actions"><button class="talos-button talos-button--secondary talos-button--sm">Accetta tutto</button><button class="talos-button talos-button--ghost talos-button--sm talos-button--danger">Scarta tutto</button></div>
+        <div class="talos-topbar__actions"><button class="talos-button talos-button--secondary talos-button--sm" id="copyAllDiffs" title="Copia tutti i diff negli appunti"><svg class="i i--sm"><use href="#i-copy"/></svg>Copia i diff</button><button class="talos-button talos-button--secondary talos-button--sm" data-richiede="fase3">Accetta tutto</button><button class="talos-button talos-button--ghost talos-button--sm talos-button--danger" data-richiede="fase3">Scarta tutto</button></div>
       </div>
       <div class="talos-review" data-c="ReviewPane">
         <div class="talos-card talos-list talos-review__files" data-c="ReviewFileList">
@@ -366,7 +366,7 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
             <div class="talos-diff__line talos-diff__line--add">+            giroAVuoto: valutaRipetizioni(eventi, soglieEffettive), interviene: false };</div>
             <div class="talos-diff__line talos-diff__line--add">+ }</div>
           </div>
-          <div class="talos-review__foot"><button class="talos-button talos-button--primary talos-button--md">Accetta questo file</button><button class="talos-button talos-button--secondary">Apri nell'editor</button><button class="talos-button talos-button--ghost talos-button--danger">Scarta</button><span class="talos-grow"></span><span class="talos-muted talos-approval__foot-note">Scartare ripristina il file dal checkpoint del giro 4.</span></div>
+          <div class="talos-review__foot"><button class="talos-button talos-button--primary talos-button--md" data-richiede="fase3">Accetta questo file</button><button class="talos-button talos-button--secondary" data-richiede="fase3">Apri nell'editor</button><button class="talos-button talos-button--ghost talos-button--danger" data-richiede="fase3">Scarta</button><span class="talos-grow"></span><span class="talos-muted talos-approval__foot-note" data-richiede="fase3">Scartare ripristina il file dal checkpoint del giro 4.</span></div>
         </div>
       </div>
     </section>
