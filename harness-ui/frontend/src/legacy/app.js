@@ -1,3 +1,4 @@
+import {aggiornaProviderList,montaProviderPanel} from '../components/provider-card.js';
 import {aggiornaElencoRuntime,montaPannelloRuntime} from '../components/runtime-modelli.js';
 import {normalizzaCapacita,aggiornaMisuraMemoria,montaMisuraMemoria} from '../components/misura-memoria.js';
 import {montaCorniceModelLab,aggiornaStatoCorniceModelLab} from '../components/cornice-model-lab.js';
@@ -2226,6 +2227,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     nodo.dataset.seg = stato;
     return nodo;
   }
+  // 05/9 Fase 2: ProviderCard, configurazione e verifica restano distinte.
   function renderizzaProviderModelLab() {
     const rows = Array.isArray(state.modelLab.providers) ? state.modelLab.providers : [];
     const status = $('#modelLabProviderStatus');
@@ -2245,122 +2247,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
           : (conChiave > 0 ? `${conChiave} con chiave · nessuno ancora provato` : 'Nessun accesso configurato');
       }
     }
-    const lista = $('#providerList');
-    if (!lista) return;
-    if (state.modelLab.providerError) { lista.replaceChildren(textElement('p', 'model-lab-empty', state.modelLab.providerError.message)); return; }
-    if (rows.length === 0) { lista.replaceChildren(textElement('p', 'model-lab-empty', state.modelLab.loadingProviders ? 'Leggo gli accessi…' : 'Nessun provider dichiarato dal server.')); return; }
-
-    lista.replaceChildren(...rows.map((row) => {
-      const prova = state.modelLab.provePr?.get(row.id) || null;
-      const aperta = state.modelLab.providerAperti?.has(row.id);
-      const card = document.createElement('article');
-      card.className = 'provider-row';
-      card.dataset.providerId = row.id;
-      if (prova) card.dataset.provaEsito = prova.esito;
-
-      const testa = document.createElement('button');
-      testa.type = 'button';
-      testa.className = 'provider-row-head';
-      testa.setAttribute('aria-expanded', String(Boolean(aperta)));
-      testa.dataset.providerToggle = row.id;
-      const tessera = textElement('span', 'provider-mark', monogrammaProvider(row));
-      tessera.setAttribute('aria-hidden', 'true');
-      const centro = document.createElement('span');
-      centro.className = 'provider-row-main';
-      centro.append(textElement('strong', 'provider-row-name', row.label || row.id));
-      const segmenti = document.createElement('span');
-      segmenti.className = 'provider-segments';
-      // 1 — la chiave. Chi non la richiede non ha un segmento vuoto: ha «non serve».
-      if (!row.requiresKey) segmenti.append(segmentoProvider('ok', 'chiave non serve'));
-      else segmenti.append(segmentoProvider(row.keyConfigured ? 'ok' : 'mancante', row.keyConfigured ? 'chiave' : 'chiave mancante'));
-      // 2 — l'indirizzo, solo per chi lo espone: mostrarlo agli altri sarebbe una casella non riempibile.
-      if (row.supportsEndpoint) segmenti.append(segmentoProvider(row.endpoint ? 'ok' : 'mancante', row.endpointConfigured ? 'indirizzo tuo' : (row.endpoint ? 'indirizzo predefinito' : 'indirizzo mancante')));
-      // 3 — la prova: l'unico segmento che parla del PROVIDER e non di noi.
-      if (!prova) segmenti.append(segmentoProvider('mancante', 'mai provato'));
-      else if (prova.esito === 'in-corso') segmenti.append(segmentoProvider('mancante', 'sto chiedendo…'));
-      else if (prova.esito === 'collegato') segmenti.append(segmentoProvider('ok', prova.modelli === null ? 'collegato' : `${prova.modelli} modelli`));
-      else segmenti.append(segmentoProvider('rotto', prova.esito === 'non-autorizzato' ? 'credenziale rifiutata' : prova.esito === 'irraggiungibile' ? 'non raggiungibile' : prova.esito));
-      centro.append(segmenti);
-      const freccia = document.createElement('span');
-      freccia.className = 'provider-row-chevron';
-      freccia.innerHTML = icon('i-chevron');
-      testa.append(tessera, centro, freccia);
-      card.append(testa);
-
-      if (!aperta) return card;
-
-      const corpo = document.createElement('div');
-      corpo.className = 'provider-row-body';
-      if (row.requiresKey || row.keyConfigured) {
-        const campo = document.createElement('label');
-        campo.className = 'provider-field';
-        campo.append(textElement('span', 'provider-field-label', row.keyConfigured ? 'Sostituisci la chiave' : 'Chiave API'));
-        const input = document.createElement('input');
-        input.type = 'password';
-        input.className = 'sheet-input';
-        input.autocomplete = 'off';
-        input.spellcheck = false;
-        input.placeholder = row.keyConfigured ? 'Incolla una chiave nuova per sostituirla' : 'Incolla la chiave';
-        input.dataset.providerKey = row.id;
-        campo.append(input);
-        corpo.append(campo);
-      }
-      if (row.supportsEndpoint) {
-        const campo = document.createElement('label');
-        campo.className = 'provider-field';
-        campo.append(textElement('span', 'provider-field-label', 'Indirizzo del servizio'));
-        const input = document.createElement('input');
-        input.type = 'url';
-        input.className = 'sheet-input provider-endpoint-input';
-        input.value = row.endpoint || '';
-        input.dataset.providerEndpoint = row.id;
-        campo.append(input);
-        corpo.append(campo);
-      }
-      const campoTempo = document.createElement('label');
-      campoTempo.className = 'provider-field provider-field-narrow';
-      campoTempo.append(textElement('span', 'provider-field-label', 'Tempo massimo (secondi)'));
-      const tempo = document.createElement('input');
-      tempo.type = 'number'; tempo.min = '5'; tempo.max = '300';
-      tempo.className = 'sheet-input';
-      tempo.value = String(row.timeoutSeconds || 60);
-      tempo.dataset.providerTimeout = row.id;
-      campoTempo.append(tempo);
-      corpo.append(campoTempo);
-
-      const azioni = document.createElement('div');
-      azioni.className = 'provider-actions';
-      const salva = document.createElement('button');
-      salva.type = 'button'; salva.className = 'primary-btn compact'; salva.dataset.providerAction = 'save-key'; salva.textContent = 'Salva chiave';
-      const provaBtn = document.createElement('button');
-      provaBtn.type = 'button'; provaBtn.className = 'secondary-btn compact'; provaBtn.dataset.providerAction = 'test'; provaBtn.textContent = 'Prova collegamento';
-      azioni.append(salva, provaBtn);
-      if (row.supportsEndpoint) {
-        const salvaLink = document.createElement('button');
-        salvaLink.type = 'button'; salvaLink.className = 'secondary-btn compact'; salvaLink.dataset.providerAction = 'save-runtime'; salvaLink.textContent = 'Salva indirizzo';
-        azioni.append(salvaLink);
-      }
-      /* ⛔ «Rimuovi» è silenzioso e sta in fondo: cancella una credenziale, e
-         non può avere lo stesso invito di «Salva». */
-      if (row.keyConfigured) {
-        const rimuovi = document.createElement('button');
-        rimuovi.type = 'button'; rimuovi.className = 'text-btn provider-remove'; rimuovi.dataset.providerAction = 'remove-key'; rimuovi.textContent = 'Rimuovi la chiave';
-        azioni.append(rimuovi);
-      }
-      corpo.append(azioni);
-
-      if (prova && prova.esito !== 'in-corso') {
-        const esito = textElement('p', 'provider-prova', prova.motivo + (Number.isFinite(prova.millisecondi) ? ` · ${prova.millisecondi} ms` : ''));
-        esito.dataset.provaEsito = prova.esito;
-        corpo.append(esito);
-      }
-      const feedback = textElement('p', 'provider-feedback', '');
-      feedback.dataset.providerFeedback = row.id;
-      feedback.hidden = true;
-      corpo.append(feedback);
-      card.append(corpo);
-      return card;
-    }));
+    aggiornaProviderList($('#providerList'),rows,{aperte:state.modelLab.providerAperti,prove:state.modelLab.provePr,occupati:state.modelLab.providerOccupati,caricamento:state.modelLab.loadingProviders,errore:state.modelLab.providerError});
+    const refresh=$('#providerRefresh');if(refresh)refresh.disabled=state.modelLab.loadingProviders;
   }
 
   /**
@@ -2369,6 +2257,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * dell'owner: parte solo su gesto, mai a ogni ridisegno.
    */
   async function provaProviderModelLab(providerId) {
+    if(state.modelLab.provePr?.get(providerId)?.esito==='in-corso'||state.modelLab.providerOccupati?.has(providerId))return;
     state.modelLab.provePr ??= new Map();
     state.modelLab.provePr.set(providerId, { esito: 'in-corso', motivo: 'Chiedo al provider…', modelli: null, millisecondi: null });
     renderizzaProviderModelLab();
@@ -2402,48 +2291,32 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (!feedback) return;
     feedback.textContent = message;
     feedback.classList.toggle('is-error', errore);
+    feedback.setAttribute('role',errore?'alert':'status');
     feedback.hidden = false;
     if (!errore) window.setTimeout(() => { if (feedback.textContent === message) feedback.hidden = true; }, 3500);
   }
 
   async function gestisciAzioneProvider(button) {
-    const card = button.closest('[data-provider-id]');
-    const provider = card?.dataset.providerId;
-    const action = button.dataset.providerAction;
-    if (!provider || !action) return;
-    const original = button.textContent;
-    button.disabled = true;
+    const card=button.closest('[data-provider-id]'),provider=card?.dataset.providerId,action=button.dataset.providerAction;
+    if(!provider||!action||state.modelLab.provePr?.get(provider)?.esito==='in-corso')return;
+    state.modelLab.providerOccupati??=new Set();if(state.modelLab.providerOccupati.has(provider))return;
+    if(action==='test'){await provaProviderModelLab(provider);return;}
+    const key=card.querySelector('[data-provider-key]')?.value||'',endpoint=card.querySelector('[data-provider-endpoint]')?.value||'',timeoutSeconds=Number(card.querySelector('[data-provider-timeout]')?.value||60);
+    const corrente=()=>$('#providerList')?.querySelector('[data-provider-id="'+provider+'"]');
+    state.modelLab.providerOccupati.add(provider);renderizzaProviderModelLab();
     try {
-      if (action === 'test') {
-        // ⛔ La prova ridisegna la lista: il bottone che stiamo tenendo per
-        // mano sparisce. Si esce subito, senza toccarlo dopo.
-        await provaProviderModelLab(provider);
-        return;
-      }
-      if (action === 'save-key') {
-        const input = card.querySelector('[data-provider-key]');
-        await apiPost(`/api/v1/providers/${encodeURIComponent(provider)}/key`, { key: input?.value || '' });
-        if (input) input.value = '';
-        mostraEsitoProvider(card, 'Chiave salvata nel portachiavi del computer.');
-      } else if (action === 'remove-key') {
-        await apiPost(`/api/v1/providers/${encodeURIComponent(provider)}/key/remove`, {});
-        mostraEsitoProvider(card, 'Chiave rimossa.');
-      } else if (action === 'save-runtime') {
-        const endpoint = card.querySelector('[data-provider-endpoint]')?.value || '';
-        const timeoutSeconds = Number(card.querySelector('[data-provider-timeout]')?.value || 60);
-        await apiPost(`/api/v1/providers/${encodeURIComponent(provider)}/runtime`, { endpoint, timeoutSeconds });
-        mostraEsitoProvider(card, 'Collegamento salvato.');
-      } else if (action === 'reset-runtime') {
-        await apiPost(`/api/v1/providers/${encodeURIComponent(provider)}/runtime/reset`, {});
-        mostraEsitoProvider(card, 'Indirizzo predefinito ripristinato.');
-      }
+      const base='/api/v1/providers/'+encodeURIComponent(provider);let messaggio;
+      if(action==='save-key'){await apiPost(base+'/key',{key});const input=corrente()?.querySelector('[data-provider-key]');if(input)input.value='';messaggio='Chiave salvata nel portachiavi del computer.';}
+      else if(action==='remove-key'){await apiPost(base+'/key/remove',{});const input=corrente()?.querySelector('[data-provider-key]');if(input)input.value='';messaggio='Chiave rimossa.';}
+      else if(action==='save-runtime'){await apiPost(base+'/runtime',{endpoint,timeoutSeconds});messaggio='Collegamento salvato.';}
+      else if(action==='reset-runtime'){await apiPost(base+'/runtime/reset',{});messaggio='Indirizzo predefinito ripristinato.';}
+      else return;
+      state.modelLab.provePr?.delete(provider);
+      mostraEsitoProvider(corrente(),messaggio);
       await caricaProviderModelLab();
-    } catch (error) {
-      mostraEsitoProvider(card, error.message || 'Non è stato possibile salvare questa modifica.', true);
-    } finally {
-      button.disabled = false;
-      button.textContent = original;
-    }
+      if(action==='reset-runtime'){const row=state.modelLab.providers?.find(r=>r.id===provider),input=corrente()?.querySelector('[data-provider-endpoint]');if(row&&input)input.value=row.endpoint||'';}
+    }catch(error){mostraEsitoProvider(corrente(),error.message||'Non è stato possibile salvare questa modifica.',true);}
+    finally{state.modelLab.providerOccupati.delete(provider);renderizzaProviderModelLab();const feedback=corrente()?.querySelector('[data-provider-feedback]');if(feedback&&!feedback.hidden)feedback.scrollIntoView({block:'nearest'});}
   }
 
   /*
@@ -3538,6 +3411,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     montaCatalogoModelli($('#modelLabCatalogPanel'), $('#panel-catalogo'));
     montaMisuraMemoria($('#modelLabOverviewPanel'), $('#panel-runtime [data-c=MemoryMeter]'));
     montaPannelloRuntime($('#modelLabRuntimeGate'));
+    montaProviderPanel($('#modelLabProvidersPanel'));
+    $('#providerRefresh')?.addEventListener('click',caricaProviderModelLab);
     ensureModelLabControls();
     $$('[data-model-lab-tab]').forEach((tab) => tab.addEventListener('click', () => setModelLabSection(tab.dataset.modelLabTab)));
     $('#modelLabSearch')?.addEventListener('input', (event) => { state.modelLab.search = event.target.value; renderizzaCatalogoModelLab(); });

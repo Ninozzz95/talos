@@ -825,3 +825,20 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-runtime-panel .model-lab-runtime-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--talos-space-control)}
 .talos-runtime-panel .setting-control,.talos-runtime-panel .model-lab-prompt{display:flex;flex-direction:column;align-items:stretch;gap:var(--talos-space-sm)}
 .talos-runtime-panel .talos-select{width:100%;min-width:0}
+.talos-provider-list{display:flex;flex-direction:column;gap:var(--talos-space-control)}
+.talos-provider{min-width:0;overflow:hidden}
+.talos-provider__head{display:flex;align-items:center;justify-content:space-between;gap:var(--talos-space-control);width:100%;padding:var(--talos-space-control) var(--talos-space-md);background:transparent;border:0;text-align:left;color:inherit;font:inherit;cursor:pointer}
+.talos-provider__head:after{content:'+';flex-shrink:0;color:var(--talos-muted)}
+.talos-provider__head[aria-expanded=true]:after{content:'−'}
+.talos-provider__head:focus-visible{outline:2px solid var(--talos-accent);outline-offset:-3px}
+.talos-provider__name{min-width:110px;margin-right:auto}
+.talos-provider__head .talos-cluster{justify-content:flex-end}
+.talos-provider__body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--talos-space-control);padding:var(--talos-space-md);border-top:1px solid var(--talos-border)}
+.talos-provider__body[hidden]{display:none}
+.talos-provider__body>.talos-cluster,.talos-provider__body>p{grid-column:1/-1;margin:0;overflow-wrap:anywhere}
+.talos-provider__field{min-width:0;gap:var(--talos-space-sm)}
+.talos-provider__field .talos-field__input{width:100%;min-width:0}
+.talos-provider-panel .provider-heading-actions{display:flex;gap:var(--talos-space-sm);flex-wrap:wrap}
+.talos-provider-panel .talos-page__head h4{margin:0}
+.talos-provider [role=alert]{color:var(--talos-danger)}
+@media(max-width:1100px){.talos-provider__head{flex-wrap:wrap}.talos-provider__head .talos-cluster{justify-content:flex-start}.talos-provider__body{grid-template-columns:minmax(0,1fr)}}
