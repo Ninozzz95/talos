@@ -783,3 +783,101 @@ ATTIVITA-REALE RED confermato prima dell’innesto: nel bundle precedente manca 
 **Cosa deve fare l’owner:** può provare Attività su http://127.0.0.1:4177; nessuna operazione necessaria per proseguire. **Cosa fai tu dopo:** Libreria, poi Ricerca/Officina/Automazioni (resto B5). **Cosa rimane:** Note, B4 → B6 → B2 → B7 → B1 → B8; allineamento del contratto CSS condiviso da Claude; OAuth e piano computer-use dopo le schermate.
 
 Chiusura dei componenti: npx playwright test --config=playwright.componenti.config.mjs, porta laboratorio 4178, **33/33**. TaskRow 3/3, incluso controllo permanente del campo a 36 px.
+
+## B5.3 · Piano esecutivo LibraryRow / Libreria — 05/09/2026
+
+Ricerca prima dell’edit; finestra 06/08–05/09/2026. Merge lane/harness-desktop aggiornato a 81cc5cc5, base locale dopo TaskRow 9bc1fad. Sottosistema TALOS UI, endpoint/backend invariati.
+
+| Fonte esatta | Versione/data e forza osservata | Limite documentato / decisione / +1 verificabile |
+|---|---|---|
+| https://hermes-agent.nousresearch.com/docs/user-guide/features/document-extraction | Verificata oggi, data editoriale non esposta. Estrazione multi-formato, output paginato, avvisi copertura delle scansioni | PDF senza testo richiede OCR; controllo copertura assente senza Poppler, limite 50 MB. Adattare principio: elenco non equivale a contenuto letto. In questa UI nessun token o copertura inventati; estrazione/OCR fuori contratto B5.3, nessuna superiorità dichiarata |
+| https://github.com/NousResearch/hermes-agent/releases/tag/v2026.8.31 | 31/08, v0.21.0, 29112be: document-to-action-items fra le skill, gestione file reale | Non prova un archivio equivalente alla nostra Libreria. Adattare provenienza persistita, rifiutare pipeline simulata |
+| https://code.claude.com/docs/en/desktop | Verificata oggi, data editoriale non esposta: allegati immagini/PDF/file e @mention | @mention non disponibile cloud/WSL. Adattare chiarezza del contesto: dichiarare ambito progetto, distinguere elencato/in contesto; test assenza badge Sempre e token finti |
+| https://github.com/anthropics/claude-code/releases/tag/v2.1.261 | 04/09, d7dbd9a: errore policy visibile | Nessuna nuova API Libreria equivalente verificata in questa release. Adottare errore distinto da vuoto e riprova visibile |
+| https://learn.chatgpt.com/docs/codex/ide | Verificata oggi (redirect da developers.openai.com/codex/ide/features): file aperti e selezioni nel composer | Superficie IDE, non prova un archivio con provenienza. Il +1 locale richiesto è trovare nome completo/provenienza e data senza aprire il file. Gap: non attribuire a Codex mancanze d’archiviazione non provate |
+| https://github.com/openai/codex/releases/tag/rust-v0.153.4 | 04/09, 3d2ee51, release verificata oggi | Nessuna novità LibraryRow rivendicata. Tentativo lettura sorgente tools/handlers/read_file.rs non riuscito: non usato come prova |
+| https://www.w3.org/WAI/ARIA/apg/patterns/tabs/ | Documento stabile ricontrollato oggi | Adottare tastiera roving, frecce/Home/End; ricerca locale sul nome, tipo, provenienza. Un filtro vuoto non simula un archivio vuoto |
+
+**Originale ispezionato.** Aperto screenshot della pagina mockup 4177 con conteggi/costi statici, e del foglio originale 4179 con Libreria vuota, 1280×720. API reale restituisce {voci:[],errore:null}. Letti caricaPannelloLibreria/rigaVoceLibreria, http-app.mjs e session-registry.mjs elencaLibreria: OGNI voce espone solo id/nome/fileType/origine/aggiornatoIl. Letti library-store.mjs e library-policy-store.mjs interi. Il modello possiede strumenti lettura/mutazione/policy, ma la UI HTTP possiede soltanto GET elenco. Il backend supporta solo agentic_on_demand_v1; policy e contenuto non sono nel payload della pagina. Quindi non dedurre costo token, righe, sessioni d’uso, autore, Sempre o inclusione effettiva. Mobile ha viewer dedicati; nessuna rotta desktop equivalente verificata.
+
+**Decisioni prima di scrivere.** Copiare i blocchi canonici; rendere i metadata reali, filtri Tutti/Caricati/Generati e ricerca esplicitamente per nome/tipo/provenienza. Dettagli/Chiudi rende nome lungo e aggiornamento completo; non apre il contenuto. Aggiungi documento, Apri contenuto, Sempre, A richiesta e costo corrente nascosti data-richiede=fase3. Nessun pacchetto nuovo: adattatore UI sul contratto AVM esistente. +1 sull’originale: un clic dalla sidebar, ricerca e provenienza verificabile, dettagli non troncati, errore/riprova. Target, non promessa di superiorità ai concorrenti.
+
+**File esatti:**
+- .claude/LEDGER-ASTRA-FASE-2-2026-09-05.md
+- .claude/CONSEGNA-ASTRA-FASE-2-2026-09-05.md
+- .claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html
+- harness-ui/frontend/src/components/libreria.js
+- harness-ui/frontend/lab/fixtures/libreria.js
+- harness-ui/frontend/lab/main.js
+- harness-ui/frontend/tests/unit/libreria.test.mjs
+- harness-ui/frontend/tests/parity/componenti.spec.mjs
+- harness-ui/frontend/tests/parity/libreria-vivo.spec.mjs
+- harness-ui/frontend/playwright.astra.config.mjs
+- harness-ui/frontend/src/legacy/app.js
+- harness-ui/frontend/index.template.html
+- harness-ui/frontend/src/styles/index.css
+
+**Immagini previste, tutte da aprire:**
+- .claude/immagini/astra-fase2/LibraryRow/mockup-1440.png
+- .claude/immagini/astra-fase2/LibraryRow/componente-1440.png
+- .claude/immagini/astra-fase2/LibraryRow/app-vuota-1440.png
+- .claude/immagini/astra-fase2/LibraryRow/originale-vuota-1440.png
+- .claude/immagini/astra-fase2/LibraryRow/fixture-dettagli-1440.png
+- .claude/immagini/astra-fase2/LibraryRow/fixture-filtro-vuoto-1440.png
+- .claude/immagini/astra-fase2/LibraryRow/app-errore-1440.png
+- .claude/immagini/astra-fase2/LibraryRow/mockup-1280.png
+- .claude/immagini/astra-fase2/LibraryRow/componente-1280.png
+- .claude/immagini/astra-fase2/LibraryRow/app-vuota-1280.png
+- .claude/immagini/astra-fase2/LibraryRow/originale-vuota-1280.png
+- .claude/immagini/astra-fase2/LibraryRow/fixture-dettagli-1280.png
+- .claude/immagini/astra-fase2/LibraryRow/fixture-filtro-vuoto-1280.png
+- .claude/immagini/astra-fase2/LibraryRow/app-errore-1280.png
+- .claude/immagini/astra-fase2/LibraryRow/mockup-1024.png
+- .claude/immagini/astra-fase2/LibraryRow/componente-1024.png
+- .claude/immagini/astra-fase2/LibraryRow/app-vuota-1024.png
+- .claude/immagini/astra-fase2/LibraryRow/originale-vuota-1024.png
+- .claude/immagini/astra-fase2/LibraryRow/fixture-dettagli-1024.png
+- .claude/immagini/astra-fase2/LibraryRow/fixture-filtro-vuoto-1024.png
+- .claude/immagini/astra-fase2/LibraryRow/app-errore-1024.png
+
+**Simboli.** Nuovi esportati tipoVoceLibreria, origineVoceLibreria, testiVoceLibreria, filtraLibreria, creaLibraryRow, aggiornaPaginaLibreria; privati el, renderLibreria, PAGINE. Compatibilità caricaPannelloLibreria({pagina=false}={}), rigaVoceLibreria(voce) mantenuta; solo import e ramo setView libreria aggiunti al monolite. Validazione array/oggetti, generazione per mount/sessione, demo isolata come Memoria/Attività.
+
+**RED/GREEN.** LIBRERIA-TIPO, LIBRERIA-ORIGINE-IGNOTA, LIBRERIA-METADATI, LIBRERIA-FILTRO: prima modulo assente, poi node --test tests/unit/libreria.test.mjs. Parità componente prima dell’innesto. Reale: vuoto e reload; fixture quattro record in schema API, tastiera e dettaglio, nessuna scrittura; 503/payload invalido/riprova e risposta obsoleta. Cancellli statico 195 e componenti, npm run verify (fallimento preesistente CSS esplicitamente atteso), verify-build e git diff --check. Prova umana: aprire screenshot equivalenti e pagina in app. Runtime assente: non è una prova modello. Rollback: ripristino dei soli file della consegna via commit inverso, nessuno store modificato.
+
+RED unità confermato: modulo libreria.js assente. Sprite verificato: i-image non esiste nel mockup; riuso i-files per immagini con etichetta visibile «Immagine», i-doc per documenti. Nessuna nuova icona.
+
+### B5.3 · Correzione dalla visione dei PNG
+
+Ho aperto i tre mockup: i-files disegna una cartella, quindi peggiora il riconoscimento delle immagini rispetto all’originale. Respinta questa scelta prima dell’innesto. Ricerca rinnovata 05/09: https://www.w3.org/WAI/tutorials/images/functional/ (aggiornato 12/04/2017, ricontrollato oggi), e le tre pagine Hermes Document Extraction / Claude Desktop / Codex IDE della matrice. Decisione: riusare ESATTAMENTE i-image da public/index.html:47, nello sprite canonico esistente. Simbolo nuovo nel mockup: 1, importato dall’originale; token 0. La semantica resta anche testuale con «Immagine», SVG decorativo aria-hidden. Scenario permanente LIBRERIA-ICONA-IMMAGINE RED atteso files ≠ image.
+
+Parità LibraryRow corretta 3/3; aperti tutti i sei PNG finali, 1440/1280/1024. Icona immagine ripristinata. Per la copertura della provenienza aggiungo tre confronti originali popolati con le stesse fixture API, nessuna scrittura sul disco:
+- .claude/immagini/astra-fase2/LibraryRow/originale-fixture-1440.png
+- .claude/immagini/astra-fase2/LibraryRow/originale-fixture-1280.png
+- .claude/immagini/astra-fase2/LibraryRow/originale-fixture-1024.png
+
+LIBRERIA-REALE RED confermato sul bundle senza innesto: [data-library-esito] assente. Prima dell’innesto restano le fonti appena riaperte (Hermes Document Extraction, Claude Desktop, Codex IDE, WAI), 05/09. Pagina e vecchio foglio conservano endpoint e sessione; nessun contenuto o policy letti implicitamente.
+
+## B5.3 · Consegna LibraryRow / Libreria — 05/09/2026
+
+**Cosa mostra.** Nome, tipo, provenienza e aggiornamento da GET /api/v1/sessions/:id/library. Filtri Tutti/Caricati/Generati, ricerca sui metadata, Dettagli/Chiudi per nome lungo e data completa. Ambito progetto esplicito. La pagina distingue elenco vuoto, filtro senza risultati, caricamento ed errore; Aggiorna riprova. Le risposte obsolete non sostituiscono quelle nuove.
+
+**Blocchi riusati.** LibraryScreen, Topbar, Page, Toolbar, FilterChips, LibraryList, LibraryRow, campi/pulsanti/badge. Nessun tipo di blocco nuovo, nessun token di design o dipendenza nuova. Una regola CSS canonica circoscritta al testo espanso. Un simbolo aggiunto allo stesso sprite: i-image copiato dall’originale public/index.html:47. Il tentativo con i-files è stato respinto dopo apertura degli screenshot perché mostrava una cartella; scenario permanente LIBRERIA-ICONA-IMMAGINE, RED files → GREEN image.
+
+| Aspetto | Originale osservato | Proposta / beneficio | Limite e verdetto |
+|---|---|---|---|
+| Copertura | Elenco in Capability, nome/tipo/origine | Stessi file e metadata, aggiornamento reso visibile | Nessuna lettura contenuto né mutazione HTTP prevista dall’originale |
+| Semantica | document/image raw, provenienza ripetuta | Documento/Immagine, Caricato/Generato; valori ignoti espliciti | Nessun costo, autore o uso in sessioni inventato |
+| Clarity/densità | Sezione sotto altri quattro elenchi | Pagina raggiungibile dalla sidebar, ricerca e filtri nello stesso spazio | Un clic per nome esteso nei casi che eccedono la riga |
+| Tastiera | Righe passive | Frecce/Home/End sui filtri; Enter/Spazio sui dettagli; focus visibile | Modifica/caricamento/Apri nascosti con data-richiede=fase3 |
+| Responsive | Originale vuoto e popolato alle tre larghezze | 1440/1280/1024: controlli raggiungibili, nome lungo a capo in dettaglio | Verifica desktop, nessuna certificazione mobile |
+| Errori/recupero | Errore nel foglio Capability | Testata e messaggio coerenti, riprova senza riaprire, payload invalido segnalato | Un errore non è convertito in archivio vuoto |
+| Contesto/persistenza | Elenco metadata per progetto | Reload legge ancora lo stesso endpoint; nessuna scrittura | L’API non espone policy: elenco ≠ nel contesto. Filtri temporanei |
+| Prestazioni | Caricamento dei metadata senza contenuto | Ricerca locale senza chiamate al modello o lettura implicita del file | Non misurato su volumi grandi; nessuna superiorità prestazionale dichiarata |
+
+**Cosa ho guardato.** Tutti i 24 PNG finali sotto .claude/immagini/astra-fase2/LibraryRow, percorsi esatti nel piano: sei parità mockup/componente scuri, diciotto app/originale chiari. Originale e nuova app usano gli stessi quattro record sintetici nel confronto popolato; vuoto e reload usano il backend reale senza fixture. Nessun file dei progetti creato o modificato. Il pannello originale non consentiva apertura/aggiunta dalla propria API. Il modello mantiene i suoi strumenti e la policy backend; qui non li simulo.
+
+**Verifiche.** Unità Libreria 5/5. Prove reali/intercettate Libreria 9/9: vuoto/reload, provenienza, nome completo, icona immagine, tastiera, nessuna scrittura, 503, payload invalido, riprova e risposta obsoleta. npm run test:lab **195/195**. Build deterministica **30 file**. npm run verify **336/337**, unico fallimento preesistente PHASE3-TOKEN-CONTRACT-01 sui colori raw del CSS generato: gate generale ancora rosso, nessun bypass. Log in C:/Users/Antonino/AppData/Local/Temp/astra-library-verify.log.
+
+**Cosa deve fare l’owner:** può provare Libreria su http://127.0.0.1:4177; nessuna azione necessaria per proseguire. **Cosa fai tu dopo:** Ricerca, Officina e Automazioni. **Cosa rimane:** Note, resto della parte B, contratto CSS condiviso; integrazioni OAuth e piano computer-use dopo le schermate. Il runtime agente è assente: questa consegna non certifica chat o strumenti con un modello reale.
+
+Chiusura componenti B5.3: npx playwright test --config=playwright.componenti.config.mjs, porta 4178, **36/36**. git diff --check pulito.
