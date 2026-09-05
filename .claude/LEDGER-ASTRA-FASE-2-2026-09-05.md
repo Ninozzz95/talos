@@ -1697,3 +1697,65 @@ Gates freschi:42/42 prove live (24 Impostazioni+18 FonteRicerca), npm run verify
 Cosa deve fare l’owner · Nessuna azione necessaria. Impostazioni disponibili su http://127.0.0.1:4177/.
 Cosa fai tu dopo · Riprendere il catalogo Model Lab già salvato, poi le altre schede.
 Cosa rimane · B6 Model Lab → B2 → B7 → B1 → B8 → Browser K-I. OAuth e computer-use restano proposte.
+
+## B6.4 Catalogo API del Model Lab — piano prima degli edit,05/09
+Merge dopo c6c583b già aggiornato. Sottosistema TALOS UI. Primo componente delle schede ModelLab: CatalogoModelli con ListRow/DetailPanel. L’innesto progressivo resta nella scheda originale Catalogo API dentro Impostazioni; la navigazione complessiva a sei schede si collega dopo gli altri renderer. Nessuna nuova pagina separata o dato demo nella app.
+Ispezionati model-catalog.mjs intero, renderizzaCatalogoModelLab/renderizzaDettaglioModelLab/filtraCatalogoModelLab/caricaCatalogoModelLab e inizializzaModelLab; letta risposta reale4177:431 modelli, campi modelli/daCache/aggiornatoAlle; prezzi upstream USD per token, non per milione. Originale rende soltanto primi120 senza continuazione, prima selezione non marcata finché ridisegna, prezzi privi di unità. Fixture copia3 record effettivi, timestamp fissato. Test su oltre120 record per rendere il limite osservabile.
+Ricerca fresca05/09 finestra06/08–05/09: Hermesv2026.8.31(29112be,31/08) https://github.com/NousResearch/hermes-agent/releases/tag/v2026.8.31 ; ClaudeCode2.1.261(d7dbd9a,04/09) https://github.com/anthropics/claude-code/releases/tag/v2.1.261 ; Codex0.153.4(3d2ee51,04/09) https://github.com/openai/codex/releases/tag/rust-v0.153.4 . Docs stabili riverificate, data modifica non esposta: https://hermes-agent.nousresearch.com/docs/user-guide/configuration/ ; https://code.claude.com/docs/en/model-config ; https://learn.chatgpt.com/docs/config-file/config-advanced ; https://openrouter.ai/docs/api/api-reference/models/list-all-models-and-their-properties ; https://www.w3.org/WAI/ARIA/apg/patterns/tabs/ .
+Hermes: catalogo ampio e ricerca nel picker; override manuali di prezzo/contesto distinguono configurazione da osservazione. Adattare ricerca nome/ID/provider, fonte e aggiornamento visibili; non importare override nel dato osservato. ClaudeCode: alias comodi ma variabili nel tempo/provider; conservare ID completo e marcare alias senza fingere versione fissata. Codex: provider locali/remoti configurabili, configurazione non prova disponibilità; nessun badge «Accesso pronto» dedotto dal solo catalogo. +1 misurabile: tutte le righe raggiungibili, prezzo in unità leggibile, ID e fonte sempre espliciti, errore distinto da filtro vuoto. Nessun confronto prestazioni non misurato.
+Adottare API OpenRouter già integrata, nessun nuovo SDK o backend; adattare dati dietro componente AVM, conservare prezzi grezzi nel dettaglio tecnico. Riutilizzare i blocchi approvati, non assumere un costo assente o negativo pari a zero. Azione «Usa nella sessione» senza rotta originale nascosta con data-richiede=fase3. Fornitori usa il canale originale setModelLabSection('providers').
+File esatti:
+- .claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html
+- .claude/LEDGER-ASTRA-FASE-2-2026-09-05.md
+- .claude/CONSEGNA-ASTRA-FASE-2-2026-09-05.md
+- harness-ui/frontend/src/components/catalogo-modelli.js
+- harness-ui/frontend/src/legacy/app.js
+- harness-ui/frontend/index.template.html
+- harness-ui/frontend/src/styles/index.css
+- harness-ui/frontend/lab/fixtures/catalogo-modelli.js
+- harness-ui/frontend/lab/main.js
+- harness-ui/frontend/tests/unit/catalogo-modelli.test.mjs
+- harness-ui/frontend/tests/parity/catalogo-modelli-vivo.spec.mjs
+- harness-ui/frontend/tests/parity/componenti.spec.mjs
+- harness-ui/frontend/playwright.astra.config.mjs
+Export: normalizzaCatalogoModelli, filtraModelli, prezzoPerMilione, creaRigaCatalogo, aggiornaDettaglioCatalogo, aggiornaCatalogoModelli, montaCatalogoModelli. Compatibilità: quattro funzioni originali catalogo e tutti id modelLabSearch/modelLabProviderFilter/modelLabRefreshButton/modelLabCatalogCount/modelLabCatalogList/modelLabModelDetail/modelLabCatalogPanel, listener originali. Aggiunta pagina lista a blocchi120, pulsante «Mostra altri», ripristino focus soltanto se ancora sulla riga, filtro reimposta blocco.
+RED: CAT-CONTRATTO, CAT-PREZZO (unità mancanti/negative), CAT-OLTRE120, CAT-SELEZIONE, CAT-ERRORE; unità modulo assente e E2E limite originale. GREEN unità mirate, parità CatalogoModelli x3, app+originale x3, build/verify e componenti interi in sequenza. Confronto tre larghezze, test ricerca naturale nel campo, filtro, refresh, errore/retry/query conservata, elenco completo e nessuna falsa accessibilità. GET reale separato senza mutazioni. Le altre schede continuano sul comportamento originale fino ai loro innesti. Rollback singolo commit frontend; nessuna migrazione.
+
+CAT-ETICHETTA-INTEGRA: sei foto parità aperte prima innesto, 1440/1280 spezzano «Parametri supportati» in troppe righe perché il valore comprime la chiave. Parità3/3 non basta. Prima fix riaperte05/09 MDN CSS minmax e tre docs competitor del piano. Test permanente larghezza chiave≥90px; grid due colonne sul solo dettaglio catalogo, minimo90px per la chiave. Nessun nuovo token né CSS chat.
+
+B6.4 ripresa dopo R05: merge lane/harness-desktop eseguito, stash ripristinato conservando entrambi i ledger. Riaperte05/09 prima innesto le quattro fonti configurazione Hermes/ClaudeCode/Codex e contratto OpenRouter del piano: decisioni invariate (ID esatto, dati osservati, prezzi/unità, configurazione distinta da accesso). Tre immagini CatalogoModelli finali e tre dettagli originali aperti: chiave parametri leggibile; pannelli lunghi richiedono scorrimento. Innesto app.js mantiene listener e rotte originali, conclude loading prima del render finale. Identificato token errore inesistente talos-color-danger: test CAT-ERRORE deve confrontare il colore con talos-danger; correggere il solo riferimento canonico dopo RED.
+
+CAT-ERRORE-TOKEN RED confermato: colore testo ordinario invece del token errore del tema attivo. Correzione solo del riferimento inesistente, nessun token nuovo; test confronta il tema attivo (chiaro nell’app, scuro nel laboratorio), non un colore scuro fissato.
+
+CAT-SELEZIONE-VISIBILE: screenshot app dopo innesto mostra riga semanticamente scelta ma senza accento; CSS approvato era limitato a schermoModelLab mentre il montaggio progressivo è in Settings. WAI APG Button e docs Hermes/ClaudeCode/Codex riaperte05/09: stato visivo deve corrispondere a quello annunciato. Aggiungere test permanente differenza sfondo prima/seconda riga e riusare regola approvata sul data-catalog-panel. Stesse classi/token, nessun cambiamento alle altre superfici. La cornice ModelLab originale è ancora priva dello stile canonico: resta lavoro esplicito del prossimo innesto, non dichiarare schermata completa.
+
+CAT-DETTAGLIO-SPAZIO: le foto1440 mostrano valore parametri su una parola per riga: regola Settings max-width65% restringe ulteriormente la cella grid. Fonti tre competitor e MDN max-width riaperte05/09 (docs stabili, nessuna novità mensile affermata). Test permanente max-width:none nel solo dettaglio catalogo; estendere eccezione già usata da Capability. Confermare con foto e prezzo originale aperto da tastiera; ingresso Fornitori sul canale originale senza perdere la selezione tornando al catalogo.
+
+CAT-DETTAGLIO-SPAZIO RED65% confermato; eccezione max-width:none applicata solo al dettaglio catalogo in Settings.
+
+CAT-FORNITORI-CANALE: percorso esteso trova doppio aggancio: callback live setModelLabSection e bubbling sul data-apre-velo prototipo aprono insieme la scheda e una modale. Ispezione handler ROOT conferma. MDN stopPropagation (13/10/2025, riverificato05/09) e tre docs competitor appena riaperte. Test permanente deve vedere providers senza veloFornitori e poter tornare al catalogo. Se callback fornita, fermare propagazione nel solo bottone; senza callback mantenere regia del mockup. Suite precedente interrotta perché il click successivo era bloccato dalla modale: non contare verde.
+
+Cancello statico: ASTRA Model Lab sélection cohérente cercava vecchie fixture Google/Qwen e pretendeva una readiness credenziali non derivabile dal catalogo. RED statico riprodotto; allineare il test alle tre fixture osservate Aion, verificando selezione, ID, prezzi distinti, ingresso e stato non verificato; conservare invariati i passi HF/installati. Nuovo file nel perimetro: harness-ui/frontend/tests/parity/parita.spec.mjs. OpenRouter e docs tre competitor riaperte05/09 confermano separazione listing/accesso. Nessuno skip né allentamento del confronto pixel.
+
+## B6.4 CatalogoModelli — componente innestato,05/09
+Catalogo nel pannello originale del Model Lab, forma ListRow/DetailPanel del mockup. Ricerca per nome/ID/fornitore, filtro, aggiornamento forzato, dettaglio completo; tutte le righe raggiungibili con Mostra altri. Prezzi per milione di token e valori originali apribili da tastiera. Fonte e data visibili; nessun accesso dichiarato dal solo elenco. Fornitori e accessi usa il canale originale, senza aprire anche il velo dimostrativo.
+Riusati ListRow, DetailPanel, Field, Select, Button, Card e token esistenti. Zero blocchi o token nuovi; zero dipendenze. Nuovo modulo catalogo-modelli.js, sette export elencati nel piano; quattro funzioni monolite restano compatibili. Nessuna modifica backend/storage.
+| Aspetto | Originale → componente | Esito e limite |
+|---|---|---|
+| Copertura | Elenco fermo a120 → continuazione | Test131 righe, ultima selezionabile; nessuna riga scartata dal filtro |
+| Selezione | Primo dettaglio senza prima riga marcata → coerenti | Stato annunciato, accento visivo e focus conservato |
+| Prezzi | Decimali senza unità → USD per milione + originale per token | Test0,8/1,6USD, zero distinto da mancante |
+| Errori | Errore distinto dalla ricerca vuota | 503 e risposta malformata recuperabili, query conservata |
+| Layout | Pannello originale confrontato alle tre larghezze | Campi leggibili, dettaglio non compresso, scorrimento per contenuti lunghi |
+| Stato | Catalogo non prova le credenziali | Nessun badge Accesso pronto o azione Usa senza rotta |
+| Persistenza | Catalogo e filtri restano in memoria della pagina come prima | Refresh cache server invariato; nessuna promessa di filtri persistiti al reload |
+12/12 prove live finali, inclusi GET reali4177; fixture dichiarate per131 righe, prezzi ed errori. Originale3/3 osservato prima innesto. Nessuna esecuzione modello rivendicata. Regressioni permanenti: CAT-ETICHETTA-INTEGRA, CAT-ERRORE-TOKEN, CAT-SELEZIONE-VISIBILE, CAT-DETTAGLIO-SPAZIO, CAT-FORNITORI-CANALE. Statico aggiornato alle fixture osservate conserva i passi HF/installati, nessuno skip.
+27 screenshot app/originale aperti e selezionati in .claude/immagini/astra-fase2/CatalogoModelli/. La cornice Model Lab è ancora quella legacy senza stile: questo commit consegna il componente catalogo, NON tutte le sei schede. La cornice e gli altri renderer sono il passo successivo obbligatorio.
+Cosa deve fare l’owner · Nessuna azione necessaria. Catalogo su http://127.0.0.1:4177/ → Impostazioni → Laboratorio modelli → Catalogo API.
+Cosa fai tu dopo · Innestare cornice, memoria/runtime e le altre schede del Model Lab.
+Cosa rimane · B6 restante → B2 → B7 → B1 → B8 → Browser K-I; OAuth e computer-use proposte.
+
+B6.4 cancelli finali: npm run verify verde (69/69 contratti,195/195 statici, build30 asset e30 file deterministici);75/75 componenti su4178;12/12 Catalogo live e42/42 Impostazioni/FonteRicerca dopo innesto. git diff --check verde. Sei immagini parità finali aperte e aggiunte:33 prove selezionate complessive. Nessun push.
+Cosa deve fare l’owner · Nessuna azione necessaria.
+Cosa fai tu dopo · Runtime/memoria e completamento Model Lab.
+Cosa rimane · Restanti schede B6 → B2 → B7 → B1 → B8 → Browser K-I.

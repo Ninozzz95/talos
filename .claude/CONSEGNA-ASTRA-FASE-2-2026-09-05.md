@@ -429,3 +429,26 @@ Gates freschi:42/42 prove live (24 Impostazioni+18 FonteRicerca), npm run verify
 Cosa deve fare l’owner · Nessuna azione necessaria. Impostazioni disponibili su http://127.0.0.1:4177/.
 Cosa fai tu dopo · Riprendere il catalogo Model Lab già salvato, poi le altre schede.
 Cosa rimane · B6 Model Lab → B2 → B7 → B1 → B8 → Browser K-I. OAuth e computer-use restano proposte.
+
+## B6.4 CatalogoModelli — componente innestato,05/09
+Catalogo nel pannello originale del Model Lab, forma ListRow/DetailPanel del mockup. Ricerca per nome/ID/fornitore, filtro, aggiornamento forzato, dettaglio completo; tutte le righe raggiungibili con Mostra altri. Prezzi per milione di token e valori originali apribili da tastiera. Fonte e data visibili; nessun accesso dichiarato dal solo elenco. Fornitori e accessi usa il canale originale, senza aprire anche il velo dimostrativo.
+Riusati ListRow, DetailPanel, Field, Select, Button, Card e token esistenti. Zero blocchi o token nuovi; zero dipendenze. Nuovo modulo catalogo-modelli.js, sette export elencati nel piano; quattro funzioni monolite restano compatibili. Nessuna modifica backend/storage.
+| Aspetto | Originale → componente | Esito e limite |
+|---|---|---|
+| Copertura | Elenco fermo a120 → continuazione | Test131 righe, ultima selezionabile; nessuna riga scartata dal filtro |
+| Selezione | Primo dettaglio senza prima riga marcata → coerenti | Stato annunciato, accento visivo e focus conservato |
+| Prezzi | Decimali senza unità → USD per milione + originale per token | Test0,8/1,6USD, zero distinto da mancante |
+| Errori | Errore distinto dalla ricerca vuota | 503 e risposta malformata recuperabili, query conservata |
+| Layout | Pannello originale confrontato alle tre larghezze | Campi leggibili, dettaglio non compresso, scorrimento per contenuti lunghi |
+| Stato | Catalogo non prova le credenziali | Nessun badge Accesso pronto o azione Usa senza rotta |
+| Persistenza | Catalogo e filtri restano in memoria della pagina come prima | Refresh cache server invariato; nessuna promessa di filtri persistiti al reload |
+12/12 prove live finali, inclusi GET reali4177; fixture dichiarate per131 righe, prezzi ed errori. Originale3/3 osservato prima innesto. Nessuna esecuzione modello rivendicata. Regressioni permanenti: CAT-ETICHETTA-INTEGRA, CAT-ERRORE-TOKEN, CAT-SELEZIONE-VISIBILE, CAT-DETTAGLIO-SPAZIO, CAT-FORNITORI-CANALE. Statico aggiornato alle fixture osservate conserva i passi HF/installati, nessuno skip.
+27 screenshot app/originale aperti e selezionati in .claude/immagini/astra-fase2/CatalogoModelli/. La cornice Model Lab è ancora quella legacy senza stile: questo commit consegna il componente catalogo, NON tutte le sei schede. La cornice e gli altri renderer sono il passo successivo obbligatorio.
+Cosa deve fare l’owner · Nessuna azione necessaria. Catalogo su http://127.0.0.1:4177/ → Impostazioni → Laboratorio modelli → Catalogo API.
+Cosa fai tu dopo · Innestare cornice, memoria/runtime e le altre schede del Model Lab.
+Cosa rimane · B6 restante → B2 → B7 → B1 → B8 → Browser K-I; OAuth e computer-use proposte.
+
+B6.4 cancelli finali: npm run verify verde (69/69 contratti,195/195 statici, build30 asset e30 file deterministici);75/75 componenti su4178;12/12 Catalogo live e42/42 Impostazioni/FonteRicerca dopo innesto. git diff --check verde. Sei immagini parità finali aperte e aggiunte:33 prove selezionate complessive. Nessun push.
+Cosa deve fare l’owner · Nessuna azione necessaria.
+Cosa fai tu dopo · Runtime/memoria e completamento Model Lab.
+Cosa rimane · Restanti schede B6 → B2 → B7 → B1 → B8 → Browser K-I.

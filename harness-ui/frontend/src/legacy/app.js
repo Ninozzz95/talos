@@ -1,3 +1,4 @@
+import {normalizzaCatalogoModelli,filtraModelli,aggiornaDettaglioCatalogo,aggiornaCatalogoModelli,montaCatalogoModelli} from '../components/catalogo-modelli.js';
 import {normalizzaFonteRicerca,normalizzaProvaRicerca,aggiornaFonteRicerca} from '../components/fonte-ricerca.js';
 import {montaImpostazioni,mostraSezioneImpostazioni} from '../components/impostazioni.js';
 import {controlliDoctor,contaGravitaDoctor,aggiornaDoctor} from '../components/doctor.js';
@@ -3102,62 +3103,27 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
 
   function renderizzaDettaglioModelLab(model) {
     const mount = $('#modelLabModelDetail');
-    if (!mount) return;
-    if (!model) {
-      mount.replaceChildren(textElement('p', 'model-lab-empty', 'Seleziona un modello per vedere capacità osservate, contesto e prezzi.'));
-      return;
-    }
-    mount.replaceChildren(
-      textElement('span', 'eyebrow', 'Dettagli osservati'),
-      textElement('h4', '', model.nome),
-      textElement('code', 'model-lab-model-id', model.id),
-      textElement('p', 'muted-copy', model.description || 'Il provider non ha fornito una descrizione.'),
-      textElement('p', 'model-lab-detail-row', `Provider · ${model.provider}`),
-      textElement('p', 'model-lab-detail-row', `Contesto · ${formattaContestoModelLab(model.contextLength)}`),
-      textElement('p', 'model-lab-detail-row', `Input · ${model.inputModalities?.join(', ') || 'non dichiarato'}`),
-      textElement('p', 'model-lab-detail-row', `Output · ${model.outputModalities?.join(', ') || 'non dichiarato'}`),
-      textElement('p', 'model-lab-detail-row', `Parametri · ${model.supportedParameters?.join(', ') || 'non dichiarati'}`),
-      textElement('p', 'model-lab-detail-row', `Prezzo input · ${model.prezzoPrompt ?? 'non dichiarato'}`),
-      textElement('p', 'model-lab-detail-row', `Prezzo output · ${model.prezzoCompletion ?? 'non dichiarato'}`),
-    );
+    if (mount) aggiornaDettaglioCatalogo(mount, model, { fornitori: () => setModelLabSection('providers') });
   }
 
   function filtraCatalogoModelLab() {
-    const { catalog } = state.modelLab;
-    if (!catalog?.modelli) return [];
-    const query = state.modelLab.search.trim().toLowerCase();
-    return catalog.modelli.filter((model) => {
-      const matchesQuery = !query || [model.id, model.nome, model.provider].some((value) => String(value || '').toLowerCase().includes(query));
-      return matchesQuery && (state.modelLab.provider === 'all' || model.provider === state.modelLab.provider);
-    });
+    return filtraModelli(state.modelLab.catalog?.modelli || [], state.modelLab.search, state.modelLab.provider);
   }
 
   function renderizzaCatalogoModelLab() {
-    const list = $('#modelLabCatalogList');
-    const count = $('#modelLabCatalogCount');
-    if (!list || !count) return;
-    if (state.modelLab.catalogError) {
-      list.replaceChildren(textElement('p', 'model-lab-empty', `Catalogo non disponibile: ${state.modelLab.catalogError.message}`));
-      count.textContent = 'Catalogo non disponibile';
-      renderizzaDettaglioModelLab(null);
-      return;
-    }
-    const filtered = filtraCatalogoModelLab();
-    count.textContent = state.modelLab.catalog ? `${filtered.length} di ${state.modelLab.catalog.modelli.length} modelli osservati` : 'Catalogo non caricato';
-    list.replaceChildren();
-    if (!state.modelLab.catalog) { list.appendChild(textElement('p', 'model-lab-empty', 'Apri questa sezione per caricare il catalogo reale.')); return; }
-    if (filtered.length === 0) { list.appendChild(textElement('p', 'model-lab-empty', 'Nessun modello corrisponde ai filtri.')); renderizzaDettaglioModelLab(null); return; }
-    for (const model of filtered.slice(0, 120)) {
-      const button = document.createElement('button');
-      button.type = 'button'; button.className = 'model-lab-list-item'; button.setAttribute('aria-selected', String(state.modelLab.selectedModel?.id === model.id));
-      button.append(textElement('strong', '', model.nome), textElement('small', '', `${model.provider} · ${model.id}${model.contextLength ? ` · ${Math.round(model.contextLength / 1000)}k ctx` : ''}`));
-      button.addEventListener('click', () => { state.modelLab.selectedModel = model; renderizzaCatalogoModelLab(); renderizzaDettaglioModelLab(model); });
-      list.appendChild(button);
-    }
-    if (!state.modelLab.selectedModel || !filtered.some((model) => model.id === state.modelLab.selectedModel.id)) {
-      state.modelLab.selectedModel = filtered[0];
-      renderizzaDettaglioModelLab(filtered[0]);
-    }
+    const panel = $('#modelLabCatalogPanel');
+    if (!panel?.dataset.catalogMounted) return;
+    const lab = state.modelLab;
+    const filtro = JSON.stringify([lab.search, lab.provider]);
+    if (lab.catalogFiltro !== filtro) { lab.catalogFiltro = filtro; lab.catalogLimite = 120; }
+    lab.selectedModel = aggiornaCatalogoModelli(panel, lab.catalog, {
+      query: lab.search, provider: lab.provider, selezionato: lab.selectedModel,
+      limite: lab.catalogLimite || 120, caricamento: lab.loadingCatalog,
+      errore: lab.catalogError ? 'Catalogo non disponibile: ' + lab.catalogError.message : '',
+      seleziona: model => { lab.selectedModel = model; renderizzaCatalogoModelLab(); },
+      altri: () => { lab.catalogLimite += 120; renderizzaCatalogoModelLab(); },
+      fornitori: () => setModelLabSection('providers'),
+    });
   }
 
   /*
@@ -3298,21 +3264,19 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     state.modelLab.catalogError = null;
     renderizzaCatalogoModelLab();
     try {
-      state.modelLab.catalog = await apiGet(`/api/v1/models${forza ? '?forza=1' : ''}`);
+      state.modelLab.catalog = normalizzaCatalogoModelli(await apiGet(`/api/v1/models${forza ? '?forza=1' : ''}`));
       const providers = [...new Set(state.modelLab.catalog.modelli.map((model) => model.provider))].sort();
       const select = $('#modelLabProviderFilter');
       if (select) {
         const current = state.modelLab.provider;
-        select.replaceChildren(new Option('Tutti i provider', 'all'), ...providers.map((provider) => new Option(provider, provider)));
+        select.replaceChildren(new Option('Tutti i fornitori', 'all'), ...providers.map((provider) => new Option(provider, provider)));
         select.value = providers.includes(current) ? current : 'all';
         state.modelLab.provider = select.value;
       }
       const status = $('#modelLabCatalogStatus'); if (status) status.textContent = `${state.modelLab.catalog.modelli.length} modelli osservati`;
-      renderizzaCatalogoModelLab();
     } catch (error) {
       state.modelLab.catalogError = error;
-      renderizzaCatalogoModelLab();
-    } finally { state.modelLab.loadingCatalog = false; }
+    } finally { state.modelLab.loadingCatalog = false; renderizzaCatalogoModelLab(); }
   }
 
   function setModelLabSection(section) {
@@ -3579,6 +3543,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   function inizializzaModelLab() {
     if (state.modelLab.initialized) return;
     state.modelLab.initialized = true;
+    montaCatalogoModelli($('#modelLabCatalogPanel'), $('#panel-catalogo'));
     ensureModelLabControls();
     $$('[data-model-lab-tab]').forEach((tab) => tab.addEventListener('click', () => setModelLabSection(tab.dataset.modelLabTab)));
     $('#modelLabSearch')?.addEventListener('input', (event) => { state.modelLab.search = event.target.value; renderizzaCatalogoModelLab(); });

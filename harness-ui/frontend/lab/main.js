@@ -1,3 +1,5 @@
+import {aggiornaCatalogoModelli} from '../src/components/catalogo-modelli.js';
+import {CATALOGO_MODELLI} from './fixtures/catalogo-modelli.js';
 import {aggiornaFonteRicerca} from '../src/components/fonte-ricerca.js';
 import {FONTE_RICERCA} from './fixtures/fonte-ricerca.js';
 import {montaImpostazioni} from '../src/components/impostazioni.js';
@@ -68,6 +70,7 @@ document.documentElement.setAttribute('data-schermo', 'chat');
 const componente = new URLSearchParams(location.search).get('componente') || '';
 
 const LABORATORI = {
+ CatalogoModelli(){const p=document.querySelector('#panel-catalogo');p.querySelector('[data-catalog-list]').replaceChildren();p.querySelector('[data-catalog-detail]').replaceChildren();aggiornaCatalogoModelli(p,CATALOGO_MODELLI);},
  FonteRicerca(){const s=document.querySelector('#setting-source-preview [data-settings-reuse]');s.replaceChildren();aggiornaFonteRicerca(s,FONTE_RICERCA);},
  SettingsNav(){document.querySelector('#schermoImpostazioni [role=tablist]').replaceChildren();montaImpostazioni(document.querySelector('#schermoImpostazioni'),IMPOSTAZIONI);},
  SettingRow(){montaImpostazioni(document.querySelector('#schermoImpostazioni'),IMPOSTAZIONI);},
