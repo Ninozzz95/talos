@@ -64,6 +64,9 @@ test('FINTO-04 ⭐⭐ un selettore che non capisce LANCIA, non risponde null', (
   // c'è: il finto mentirebbe per omissione. Meglio un errore rumoroso.
   assert.throws(() => radice.querySelector('div > span'), /combinatori non supportati/);
   assert.throws(() => radice.querySelector('li:nth-child(2)'), /non supportato/);
+  // ⛔ Il discendente veniva mangiato: `[data-x="1"] input` diventava «un
+  // elemento che è insieme l'uno e l'altro», cioè nessuno. Ora lo dice.
+  assert.throws(() => radice.querySelector('[data-testid="x"] input'), /combinatore discendente non supportato/);
   assert.throws(() => radice.querySelector(''), /selettore mancante/);
 });
 

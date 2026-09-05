@@ -61,6 +61,18 @@ function compilaSelettore(selettore) {
   if (/[>+~]/.test(selettore)) {
     throw new Error(`combinatori non supportati dal DOM finto: «${selettore}»`);
   }
+  /*
+   * ⛔ Il combinatore DISCENDENTE (`A B`) non e' supportato, e va detto. Prima
+   * lo spazio veniva mangiato e `[data-testid="x"] input` diventava «un
+   * elemento che e' insieme quell'attributo E un input» — cioe' nessuno: la
+   * prova falliva senza spiegare, e nel browser avrebbe trovato l'elemento.
+   * Un finto che non sa una forma lo dichiara, invece di rispondere qualcosa.
+   */
+  for (const pezzo of selettore.split(',')) {
+    if (/\S\s+\S/.test(pezzo.trim())) {
+      throw new Error(`combinatore discendente non supportato dal DOM finto: «${pezzo.trim()}». Cerca il contenitore e poi dentro.`);
+    }
+  }
   const alternative = selettore.split(',').map((pezzo) => compilaSemplice(pezzo));
   return (el) => alternative.some((prova) => prova(el));
 }
