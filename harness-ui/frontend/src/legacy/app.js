@@ -1,3 +1,4 @@
+import {aggiornaElencoRuntime,montaPannelloRuntime} from '../components/runtime-modelli.js';
 import {normalizzaCapacita,aggiornaMisuraMemoria,montaMisuraMemoria} from '../components/misura-memoria.js';
 import {montaCorniceModelLab,aggiornaStatoCorniceModelLab} from '../components/cornice-model-lab.js';
 import {normalizzaCatalogoModelli,filtraModelli,aggiornaDettaglioCatalogo,aggiornaCatalogoModelli,montaCatalogoModelli} from '../components/catalogo-modelli.js';
@@ -2171,7 +2172,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   }
 
   function runtimeModelLabPronto(runtime) {
-    return runtime?.state === 'observed' && Array.isArray(runtime.models) && runtime.models.length > 0;
+    return runtime?.state === 'observed' && (runtime.runtimeId !== 'llama.cpp' || runtime.runtimeState === 'ready') && !runtime.modelsError && Array.isArray(runtime.models) && runtime.models.length > 0;
   }
 
   /**
@@ -2689,27 +2690,20 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     const runButton = $('#modelLabRunButton');
     const prompt = $('#modelLabPrompt');
     if (!list || !status || !runtimeSelect || !modelSelect || !runButton || !prompt) return;
-    if (state.modelLab.runtimeError) {
-      status.textContent = `Runtime non disponibili: ${state.modelLab.runtimeError.message}`;
-      list.replaceChildren(textElement('p', 'model-lab-empty', 'La lettura dello stato runtime è fallita.'));
-      runtimeSelect.replaceChildren(new Option('Nessun runtime osservato', ''));
+    const loading = state.modelLab.loadingRuntime;
+    const refresh = $('#modelLabRuntimeRefresh');
+    if (refresh) refresh.disabled = loading;
+    aggiornaElencoRuntime(list, state.modelLab.runtimes, {caricamento: loading, errore: state.modelLab.runtimeError});
+    if (loading || state.modelLab.runtimeError) {
+      status.textContent = loading ? 'Verifica in corso…' : 'Verifica non riuscita';
+      runtimeSelect.replaceChildren(new Option(loading ? 'Verifica in corso…' : 'Nessun runtime osservato', ''));
       modelSelect.replaceChildren(new Option('Nessun modello osservato', ''));
       runtimeSelect.disabled = modelSelect.disabled = runButton.disabled = prompt.disabled = true;
       return;
     }
     const pronti = state.modelLab.runtimes.filter(runtimeModelLabPronto);
-    status.textContent = pronti.length > 0 ? `${pronti.length} runtime pronto${pronti.length === 1 ? '' : 'i'} · stato osservato` : 'Nessun runtime pronto';
-    list.replaceChildren(...(state.modelLab.runtimes.length > 0 ? state.modelLab.runtimes.map((runtime) => {
-      const row = document.createElement('article');
-      row.className = `model-lab-runtime-item ${runtimeModelLabPronto(runtime) ? 'ready' : 'unavailable'}`;
-      row.dataset.runtimeState = runtime.state || 'unknown';
-      row.append(
-        textElement('strong', '', runtime.runtimeId),
-        textElement('span', '', runtimeModelLabPronto(runtime) ? `${runtime.models.length} modelli · ${runtime.models.map((model) => model.name || model.id).join(', ')}` : 'non raggiunto'),
-        textElement('small', '', runtime.modelsError ? `modelli non letti · ${runtime.modelsError}` : (runtime.observedAt ? `misurato ${new Date(runtime.observedAt).toLocaleTimeString()}` : 'misura non disponibile')),
-      );
-      return row;
-    }) : [textElement('p', 'model-lab-empty', 'Nessun runtime osservato.')]));
+    const raggiunti = state.modelLab.runtimes.filter(r => r.state === 'observed' && (r.runtimeId !== 'llama.cpp' || r.runtimeState === 'ready')).length;
+    status.textContent = raggiunti ? raggiunti + (raggiunti === 1 ? ' motore raggiunto' : ' motori raggiunti') + ' · ' + pronti.length + ' con modelli disponibili' : 'Nessun runtime raggiunto';
     /*
      * ⛔⛔⛔ 02/9 (notte) — TERZO difetto dello stesso pannello, trovato
      * premendo il pulsante per davvero con un modello CARICATO: il
@@ -2739,7 +2733,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     state.modelLab.loadingRuntime = true;
     state.modelLab.runtimeError = null;
     aggiornaPannelloMemoria();
-    aggiornaStatoCorniceModelLab($('#modelLabCardSettings') || $('#modelLabCard'), [], {caricamento: true});
+    renderizzaRuntimeModelLab();
     try {
       const data = await apiGet('/api/v1/runtime');
       state.modelLab.runtimes = Array.isArray(data?.items) ? data.items : [];
@@ -3543,6 +3537,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     montaCorniceModelLab($('#modelLabCardSettings') || $('#modelLabCard'));
     montaCatalogoModelli($('#modelLabCatalogPanel'), $('#panel-catalogo'));
     montaMisuraMemoria($('#modelLabOverviewPanel'), $('#panel-runtime [data-c=MemoryMeter]'));
+    montaPannelloRuntime($('#modelLabRuntimeGate'));
     ensureModelLabControls();
     $$('[data-model-lab-tab]').forEach((tab) => tab.addEventListener('click', () => setModelLabSection(tab.dataset.modelLabTab)));
     $('#modelLabSearch')?.addEventListener('input', (event) => { state.modelLab.search = event.target.value; renderizzaCatalogoModelLab(); });

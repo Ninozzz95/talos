@@ -1,0 +1,1 @@
+export const RUNTIME_MODELLI = [{runtimeId:'llama.cpp',state:'observed',runtimeState:'ready',baseUrl:'http://127.0.0.1:8080',observedAt:'2026-09-05T19:00:00.000Z',models:[{id:'modello-prova',name:'Modello di prova'}]}];
