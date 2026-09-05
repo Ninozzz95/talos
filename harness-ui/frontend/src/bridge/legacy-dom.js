@@ -166,6 +166,9 @@ export function montaPonteLegacy(documentObj = document) {
   battezza(uno(compositore, '.talos-send'), { classi: ['send-btn'] });
   battezza(uno(compositore, '.talos-composer__mic'), { classi: ['composer-mic'] }); // 05/9 Fase 2: ChatFooter — il microfono dell'originale (dettatura)
   battezza(uno(piede, '.talos-statusbar'), { classi: ['runtime-status'] });
+  // 05/9 Fase 2 (T-16): i tre toast dimostrativi del mockup restano nel documento
+  // (il cancello statico li conta) ma nascosti e marcati: la pila viva li ignora.
+  for (const demo of documentObj.querySelectorAll('#regioneToast .talos-toast')) { demo.hidden = true; demo.dataset.demo = '1'; }
   battezza(uno(chat, '.talos-topbar__title h1'), { id: 'sessionTitle' });
   /*
    * 05/9 Fase 2: Topbar. Il titolo con il chevron e il pulsante «Albero dei rami»
