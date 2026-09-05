@@ -135,3 +135,12 @@ home page con pulsanti senza nome), letti il 05/09/2026.
 | Pulsanti della testata con nome | 8 pulsanti, 0 senza nome (**prima: 5 senza nome**), 4 tab | 7, 0 senza nome, 3 tab | pari |
 | Nascondi la colonna di destra | 340→0→340 px | «Show/Hide right sidebar» | pari |
 | Notifiche | «Notifiche: nessuna», si apre (**prima: menu invisibile, T-17**) | nessun pulsante notifiche nella finestra | Hermes affida le notifiche al sistema (`notifications.tsx` = toast); noi abbiamo un pannello «Aspetta te» che elenca le sessioni che chiedono attenzione: +1 nostro |
+
+## Misure dal vivo — 06/09, gruppo 3 (sessione), `--gruppo=sessione` su 4182 (store del kernel vero)
+
+| Passo | TALOS | Hermes | Cosa ho visto |
+|---|---|---|---|
+| Apri la Review di una sessione con file scritti | 1 file, 1 riga, «Copia i diff» attivo (**prima: riga «−» fantasma e stato vuoto con scheda finta**) | Ctrl+G apre il pannello Review nella colonna destra: «No diffs», azioni View as list · Stage all · Revert all · Refresh tree | La Review di Hermes è git (stage/revert), la nostra è per giro: il nostro +1 è vedere il diff anche senza repo; il loro è chiudere il ciclo (stage → commit). K-B/K-D in Fase 3 |
+| Frecce fra le schede dei file | non misurato (una sola scheda) | albero, non schede | — |
+| Colonna di destra | Contesto · File · Agenti · Processi, 14 coppie chiave-valore | BRANCH · NEW SESSION · TERMINAL · «1. pwsh.exe» | Hermes tiene TERMINALE e REVIEW nella colonna destra, sempre a portata; noi Terminale e Review sono viste. Il terminale «1. pwsh.exe» con «New terminal» e «Hide terminal» è la parità per B1 (K-G) |
+| Albero dei rami | pulsante «Apri l'albero dei rami» (Fase 3) | scheda «BRANCH» accanto alla sessione | Hermes fa del ramo una SCHEDA di sessione: da valutare per BranchTree |

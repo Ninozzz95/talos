@@ -514,6 +514,21 @@ unita: template diff 0, unit 84/84, statico 195/195, componenti 84/84, build ok.
   riprendi, impostazioni) avevano solo `title`; ora `aria-label` dal mockup (APG names-and-descriptions).
 Cancelli: unit 84/84, statico 195/195, componenti 87/87. Esiti in `artifacts/confronto/navigazione/esiti.json`.
 
+### Confronto con Hermes — gruppo 3 (sessione), 06/09 ~02:30: 3 PASS, 1 non misurabile
+
+Istanza 4182 = app nuova sullo store del kernel vero (`scratchpad/store-vivo`, 3 sessioni con
+file scritti, senza kernel: solo lettura). Due difetti nostri trovati e curati:
+- **Review vuota**: finta scheda «−» e «Nessun file scritto finora» ripetuto nel diff. Ora uno
+  `EmptyState` del mockup (`#vuotoReview`, aggiunto anche al mockup) e schede+diff nascosti
+  finché non c'è un file.
+- **Diff di un file creato «+1 −1»** con una riga «−» vuota: `''.split('
+')` dava una riga
+  fantasma; `righeDelTesto` toglie il caso vuoto e l'a-capo finale (git-scm.com/docs/git-diff,
+  diffchecker.pro Unified Diff 2026, letti il 06/09). Ora «+1», 1 riga.
+Non misurabile: frecce fra le schede dei file (serve una sessione con due file: la prossima prova
+a pagamento). Terminale e Browser restano fuori (B1/K-I di Astra).
+Cancelli: unit 84/84, statico 195/195, componenti Review+Conversazione 6/6.
+
 - T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
   15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
   statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo
