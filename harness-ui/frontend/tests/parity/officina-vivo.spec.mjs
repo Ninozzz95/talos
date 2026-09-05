@@ -4,7 +4,7 @@ import path from 'node:path';
 import {STRUMENTI_FORGIATI as STRUMENTI} from '../../lab/fixtures/officina.js';
 import {avviaForgeDiProva} from './forge-backend-fixture.mjs';
 const APP='http://127.0.0.1:4177',ORIGINALE='http://127.0.0.1:4179',ROTTE=/\/api\/v1\/sessions\/[^/]+\/tool-forge(?:\/[^/]+\/enable)?$/;
-const FOTO=path.resolve('../../.claude/immagini/astra-fase2/ForgeList'),VUOTO='Nessun tool forgiato (.tool-forge-store/, globale — non del progetto). Il modello ne crea uno con tool_create.';
+const FOTO=path.resolve('artifacts/astra-fase2/ForgeList'),VUOTO='Nessun tool forgiato (.tool-forge-store/, globale — non del progetto). Il modello ne crea uno con tool_create.';
 async function pronta(page,url=APP){await page.goto(url);const salta=page.getByRole('button',{name:'Salta per ora',exact:true});if(await salta.isVisible())await salta.click();if(url===APP)await expect(page.getByRole('button',{name:'Libreria 0',exact:true})).toBeVisible();}
 async function apriOfficina(page){const voce=page.getByRole('button',{name:/^Officina attrezzi \d+$/});if(!await voce.isVisible())await page.getByRole('button',{name:'Altro',exact:true}).click();await voce.click();}
 async function foto(page,nome,info){await mkdir(FOTO,{recursive:true});await page.screenshot({path:path.join(FOTO,nome+'-'+info.project.use.viewport.width+'.png')});}

@@ -4,7 +4,7 @@ import path from 'node:path';
 import {AUTOMAZIONI as AUTOMAZIONI_FIX,ADESSO} from '../../lab/fixtures/automazioni.js';
 import {avviaAutomazioniDiProva} from './automation-backend-fixture.mjs';
 const APP='http://127.0.0.1:4177',ORIGINALE='http://127.0.0.1:4179',ROTTE=/\/api\/v1\/(?:automations(?:\/[^/]+\/(?:toggle|elimina))?|tasks)$/;
-const FOTO=path.resolve('../../.claude/immagini/astra-fase2/AutomationRow');
+const FOTO=path.resolve('artifacts/astra-fase2/AutomationRow');
 async function foto(page,nome,info){await mkdir(FOTO,{recursive:true});await page.screenshot({path:path.join(FOTO,nome+'-'+info.project.use.viewport.width+'.png'),animations:'disabled'});}
 async function pronta(page,url=APP){await page.goto(url);const salta=page.getByRole('button',{name:'Salta per ora',exact:true});if(await salta.isVisible())await salta.click();if(url===APP)await expect(page.getByRole('button',{name:'Libreria 0',exact:true})).toBeVisible();}
 async function apriAutomazioni(page){const voce=page.getByRole('button',{name:/^Automazioni(?: \d+)?$/});if(!await voce.isVisible())await page.getByRole('button',{name:'Altro',exact:true}).click();await voce.click();}

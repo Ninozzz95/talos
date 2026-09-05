@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 import {mkdir,writeFile} from 'node:fs/promises';
 import path from 'node:path';
 const APP='http://127.0.0.1:4177', ORIGINALE='http://127.0.0.1:4179';
-const FOTO=path.resolve('../../.claude/immagini/astra-fase2/Board');
+const FOTO=path.resolve('artifacts/astra-fase2/Board');
 async function avvia(page,url=APP) {
  await page.goto(url);const salta=page.getByRole('button',{name:'Salta per ora',exact:true});
  if(await salta.isVisible()) await salta.click();

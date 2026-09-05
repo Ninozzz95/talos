@@ -3,7 +3,7 @@ import {mkdir} from 'node:fs/promises';
 import path from 'node:path';
 import {ATTIVITA} from '../../lab/fixtures/attivita.js';
 const APP='http://127.0.0.1:4177',ORIGINALE='http://127.0.0.1:4179';
-const FOTO=path.resolve('../../.claude/immagini/astra-fase2/TaskRow');
+const FOTO=path.resolve('artifacts/astra-fase2/TaskRow');
 async function pronta(page,url=APP) {
  await page.goto(url);const salta=page.getByRole('button',{name:'Salta per ora',exact:true});if(await salta.isVisible())await salta.click();
  if(url===APP)await expect(page.getByRole('button',{name:'Attività 0',exact:true})).toBeVisible();
