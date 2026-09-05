@@ -650,6 +650,24 @@ albero di C:\ con 46 righe, processi = il comando bash vero della sessione) e su
 finestra del modello (il catalogo dei modelli non è in memoria prima di aprire il foglio: resta
 «finestra non dichiarata» — riga di lavoro: leggere `contextLength` dal catalogo all'avvio).
 
+### B7a — dialoghi ridimensionabili e RICORDATI (06/09 ~10:30): FATTO (owner 05/09: «le modali devono essere ridimensionate e ricordate»)
+
+`components/dialoghi.js`: la regia del mockup portata nella app — le tre maniglie di ogni velo
+(`[data-dialog-resize]` larghezza · altezza · entrambe): trascinamento con pointer capture,
+frecce ±16 px con il fuoco sulla maniglia, doppio clic = misura normale; limiti per velo (la
+palette è più stretta) e per finestra; misura salvata per dialogo nella STESSA chiave del
+monolite (`talos-harness-modal-sizes-v1`) con le chiavi logiche del mockup (`sheet:model`,
+`dialog:introDialog`, …), quindi le misure ricordate prima del ridisegno valgono ancora.
+Innesto: `apriVeloMockup` applica la misura ricordata; `collegaRidimensionamentoDialoghi(ROOT())`
+all'avvio. Ricerca 06/09: w3c/aria#1443 (nessun ruolo ARIA per le maniglie), UXPin keyboard
+patterns 2026, Salesforce accessible drag&drop (maniglia focalizzabile guidata dalle frecce).
+Prove: unit `tests/unit/dialoghi.test.mjs` (limiti, misura, memoria anche con storage corrotto),
+unit 105/105, componenti 105/105; dal vivo su 4175 (`dialoghi-vivo.mjs`, velo «Albero dei
+rami»): 720×518 → trascinato 892×630 e ricordato come `sheet:sessionTree` → frecce 908×646 →
+ricarico: 908×646 → doppio clic: 720×518 e memoria vuota; 0 errori di pagina. Screenshot
+`foto/dialogo-ridimensionato.png`. ⛔ Taccuino T-18: il velo «Albero dei rami» mostra ancora i
+rami DIMOSTRATIVI del mockup (Fase 3, BranchTree): da rendere onesto subito (stato vuoto).
+
 - T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
   15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
   statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo
