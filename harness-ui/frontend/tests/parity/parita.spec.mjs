@@ -44,7 +44,7 @@ const FONT_LOCALI = [
 ].map(([famiglia, peso, file]) => `@font-face{font-family:'${famiglia}';font-weight:${peso};font-style:normal;font-display:block;src:url('${FONT_DIR}/${file}.woff2') format('woff2')}`).join('');
 
 const SCHERMATE = ['schermoChat', 'schermoVuota', 'schermoTerminale', 'schermoReview', 'schermoCapability', 'schermoBoard', 'schermoMemoria', 'schermoAttivita', 'schermoImpostazioni', 'schermoDoctor', 'schermoLibreria', 'schermoRicerca', 'schermoOfficina', 'schermoAutomazioni', 'schermoBrowser'];
-const DIALOGHI = ['veloNuova', 'veloPermessi', 'veloAlbero'];
+const DIALOGHI = ['veloNuova', 'veloPermessi', 'veloAlbero', 'veloComandi'];
 /* Soglia: differenza per pixel (0..1) e quota massima di pixel diversi. */
 const SOGLIA_PIXEL = 0.12;
 const QUOTA_MASSIMA = 0.004;
@@ -201,6 +201,7 @@ test.describe('parità app ↔ mockup', () => {
       await mostra(m.pagina, 'schermoChat', velo);
       await mostra(a.pagina, 'schermoChat', velo);
       expect(await struttura(a.pagina, `#${velo}`)).toEqual(await struttura(m.pagina, `#${velo}`));
+      if(velo==='veloComandi'){const d=path.resolve(radice,'../../.claude/immagini/astra-mockup');await mkdir(d,{recursive:true});await m.pagina.screenshot({path:path.join(d,'palette-'+info.project.use.viewport.width+'.png')});}
       const nome = `${velo}-${info.project.name}`;
       const esito = await confrontaPixel(nome, await m.pagina.locator(`#${velo} .talos-dialog`).screenshot(), await a.pagina.locator(`#${velo} .talos-dialog`).screenshot());
       expect(esito.ok, `${nome}: ${esito.motivo} — vedi artifacts/parita/${nome}-diff.png`).toBe(true);
@@ -245,3 +246,18 @@ test.describe('parità app ↔ mockup', () => {
   expect(errori).toEqual([]);
  } finally {await contesto.close();}
  });
+
+test('ASTRA Palette 15 comandi ricerca tastiera',async({browser},info)=>{
+ const {contesto,pagina:p}=await apri(browser,MOCKUP,{js:true,viewport:info.project.use.viewport});
+ try{
+  await p.keyboard.press('Control+k');
+  await expect(p.locator('#veloComandi')).toBeVisible();
+  await expect(p.locator('#veloComandi [data-command]')).toHaveCount(15);
+  const nomi=await p.locator('#veloComandi [data-command] .talos-list-row__title').allTextContents();
+  for(const nome of nomi){await p.locator('#cercaComando').fill(nome);await expect(p.locator('#veloComandi [data-command]:visible')).toHaveCount(1);}
+  await p.locator('#cercaComando').fill('inesistente-xyz');await expect(p.locator('#comandiVuoti')).toBeVisible();
+  await p.locator('#cercaComando').fill('browser');await p.locator('#cercaComando').press('Enter');await expect(p.locator('#schermoBrowser')).toBeVisible();
+  await p.keyboard.press('Control+k');await p.locator('#cercaComando').press('ArrowDown');await expect(p.locator('#cercaComando')).toHaveAttribute('aria-activedescendant','comando-resume');
+  await p.keyboard.press('Escape');await expect(p.locator('#veloComandi')).toBeHidden();
+ }finally{await contesto.close();}
+});

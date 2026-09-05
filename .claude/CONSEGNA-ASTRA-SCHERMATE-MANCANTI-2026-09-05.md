@@ -12,3 +12,8 @@ Annullate le aggiunte datate 05/09 ai due AGENTS indicati dall’owner. Nessun p
 Cosa deve fare l’owner: esaminare le schermate quando desidera.
 Cosa faccio dopo: Palette completa, poi altre schermate A.
 Cosa rimane: Intro, Model Lab, Toast, albero, dialoghi; Parte B.
+
+## Palette
+Tutti i 15 comandi originali sono presenti e trovabili, con gruppi, descrizioni, Kbd, selezione e stato vuoto. Ctrl K, frecce, Invio ed Escape verificati. I comandi che richiedono backend sono dimostrativi nella regia; Rinomina/Esporta si collegano ai fogli A7. Nessuna funzione originale esclusa dal piano di collegamento B.
+Riusa Dialog, Field, ListRow, Kbd e sprite originale; zero token nuovi. 66/66 nel cancello e nel comando npx, poi 6/6 mirati alla correzione visiva. Aperti i tre PNG palette-1440/1280/1024 dopo la correzione dell’icona e della ricerca fissa.
+Cosa deve fare l’owner: può guardare i PNG. Cosa faccio dopo: Intro. Cosa rimane: Model Lab, Toast, albero, dialoghi e Parte B.
