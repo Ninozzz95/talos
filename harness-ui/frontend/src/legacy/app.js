@@ -1,3 +1,4 @@
+import { creaForgeRow, aggiornaPaginaOfficina } from '../components/officina.js'; // 05/9 Fase 2: Officina
 import { creaReportRow, aggiornaPaginaRicerca } from '../components/ricerca.js'; // 05/9 Fase 2: Ricerca
 import { creaLibraryRow, aggiornaPaginaLibreria } from '../components/libreria.js'; // 05/9 Fase 2: Libreria
 import { creaTaskRow, aggiornaPaginaAttivita } from '../components/attivita.js'; // 05/9 Fase 2: Attività
@@ -1165,6 +1166,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (view === 'settings') inizializzaModelLab();
     if (view === 'dashboard') ensureSessionsBoard();
     if (view === 'ricerca') caricaPannelloRicerca({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Ricerca
+    if (view === 'officina') caricaPannelloForge({ pagina: true }); // 05/9 Fase 2: pagina Officina
     if (view === 'libreria') caricaPannelloLibreria({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Libreria
     if (view === 'attivita') caricaPannelloAttivita({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Attività
     if (view === 'memoria') caricaPannelloMemoria({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Memoria
@@ -4336,84 +4338,65 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * tutta la fase — un vero toggle, non un bottone "Fida" a senso
    * unico come MCP/Plugin.
    */
-  async function caricaPannelloForge() {
-    const mount = $('#forgeListMount', sheetBody);
-    if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
-    if (!state.realSession.id) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione attiva — apri o avvia un task per vedere i tool forgiati.'));
-      return;
+  // 05/9 Fase 2: dati globali Officina e mutazione owner esplicita.
+  const generazioniForge = new WeakMap();
+  const pannelliForge = new Set();
+  let scritturaForge = null;
+  function pannelliForgeAttuali() {
+    for (const pannello of pannelliForge) if (!pannello.attuale()) pannelliForge.delete(pannello);
+    return [...pannelliForge];
+  }
+  async function caricaPannelloForge({ pagina = false } = {}) {
+    const mount = pagina ? $('#schermoOfficina') : $('#forgeListMount', sheetBody);
+    if (!mount) return;
+    const sessionId = state.realSession.id;
+    const generation = (generazioniForge.get(mount) || 0) + 1;
+    generazioniForge.set(mount, generation);
+    const attuale = () => generazioniForge.get(mount) === generation && state.realSession.id === sessionId && (pagina ? state.view === 'officina' && !mount.hidden : mount === $('#forgeListMount', sheetBody));
+    let strumenti = [], vista = { errore: null, caricamento: false, erroreAzione: null };
+    function mostra(nuovi = strumenti, opzioni = vista) {
+      strumenti = nuovi; vista = opzioni;
+      const azioni = { ...vista, salvataggio: Boolean(scritturaForge), salvataggioId: scritturaForge?.id || null, onAggiorna: () => caricaPannelloForge({ pagina }), onAbilita: abilita };
+      if (pagina) aggiornaPaginaOfficina(mount, strumenti, azioni);
+      else {
+        mount.setAttribute('role', 'group');
+        mount.replaceChildren(...strumenti.map(s => rigaToolForgiato(s, azioni)));
+        if (!strumenti.length) mount.append(textElement('p', 'board-empty', vista.errore || (vista.caricamento ? 'Caricamento Officina…' : 'Nessun attrezzo creato dal modello. Gli attrezzi sono condivisi tra tutti i progetti.')));
+        if (vista.erroreAzione) { const errore = textElement('p', 'board-empty', vista.erroreAzione); errore.setAttribute('role', 'alert'); mount.prepend(errore); }
+      }
     }
-    mount.replaceChildren(textElement('p', 'board-empty', 'Carico i tool forgiati…'));
-    let dati;
+    async function abilita(strumento, abilitato) {
+      if (!attuale() || scritturaForge || typeof abilitato !== 'boolean' || !strumenti.some(s => s.id === strumento.id && typeof s.abilitato === 'boolean')) return;
+      const id = strumento.id;
+      scritturaForge = { id };
+      for (const p of pannelliForgeAttuali()) p.mostraAzione(null);
+      try {
+        await apiPost('/api/v1/sessions/' + encodeURIComponent(sessionId) + '/tool-forge/' + encodeURIComponent(id) + '/enable', { abilitato });
+        scritturaForge = null;
+        await Promise.all(pannelliForgeAttuali().map(p => p.ricarica()));
+      } catch (error) {
+        scritturaForge = null;
+        for (const p of pannelliForgeAttuali()) p.mostraAzione('Modifica di «' + strumento.titolo + '» non salvata: ' + error.message);
+      }
+    }
+    pannelliForgeAttuali();
+    pannelliForge.add({ attuale, ricarica: () => caricaPannelloForge({ pagina }), mostraAzione: erroreAzione => mostra(strumenti, { ...vista, erroreAzione }) });
+    if (embeddedDemoOnly()) { mostra([], { errore: 'Nessun backend collegato.' }); return; }
+    if (!sessionId) { mostra([], { errore: 'Apri una sessione per leggere gli attrezzi.' }); return; }
+    mostra([], { caricamento: true, errore: null, erroreAzione: null });
     try {
-      dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tool-forge`);
+      const dati = await apiGet('/api/v1/sessions/' + encodeURIComponent(sessionId) + '/tool-forge');
+      if (!attuale()) return;
+      if (dati.errore) { mostra([], { errore: 'Officina non disponibile: ' + dati.errore, caricamento: false }); return; }
+      if (!Array.isArray(dati.strumenti) || dati.strumenti.some(s => !s || typeof s !== 'object' || Array.isArray(s) || typeof s.id !== 'string' || !s.id)) throw new Error('Elenco degli attrezzi non valido');
+      mostra(dati.strumenti, { errore: null, caricamento: false, erroreAzione: null });
     } catch (error) {
-      mount.replaceChildren(textElement('p', 'board-empty', `Tool forgiati non disponibili: ${error.message}`));
-      return;
+      if (attuale()) mostra([], { errore: 'Officina non disponibile: ' + error.message, caricamento: false, erroreAzione: null });
     }
-    if (mount !== $('#forgeListMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
-    if (dati.errore) {
-      mount.replaceChildren(textElement('p', 'board-empty', `.tool-forge-store non valido: ${dati.errore}`));
-      return;
-    }
-    if (!dati.strumenti || dati.strumenti.length === 0) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessun tool forgiato (.tool-forge-store/, globale — non del progetto). Il modello ne crea uno con tool_create.'));
-      return;
-    }
-    mount.replaceChildren(...dati.strumenti.map((strumento) => rigaToolForgiato(strumento)));
   }
 
-  /**
-   * ⭐⭐⭐⭐⭐ L'UNICA mutazione owner-facing di tutta FASE N — vedi la
-   * doc in tool-forge-store.mjs sul perché: abilitare/disabilitare non
-   * è mai un tool del modello, nemmeno sul mobile (station-only su
-   * entrambe le piattaforme). Il bottone dice l'AZIONE ("Abilita"/
-   * "Disabilita"), lo status-chip accanto dice lo STATO — due fatti
-   * diversi, mai confusi in una sola etichetta.
-   */
-  function rigaToolForgiato(strumento) {
-    const riga = document.createElement('div');
-    riga.className = 'sheet-option';
-    riga.setAttribute('role', 'group');
-    const iconEl = document.createElement('span');
-    iconEl.className = 'sheet-icon';
-    iconEl.innerHTML = icon('i-settings');
-    const testo = document.createElement('span');
-    testo.append(
-      textElement('strong', null, strumento.titolo),
-      textElement('small', null, `${strumento.descrizione} · ${strumento.capacita.join(', ') || 'nessuna capacità'}`),
-    );
-    const statoEl = textElement('span', `status-chip ${strumento.abilitato ? 'success' : ''}`, strumento.abilitato ? 'abilitato' : 'disabilitato');
-    const bottone = document.createElement('button');
-    bottone.type = 'button';
-    bottone.className = 'secondary-btn';
-    bottone.textContent = strumento.abilitato ? 'Disabilita' : 'Abilita';
-    bottone.addEventListener('click', async () => {
-      const prossimoStato = !strumento.abilitato;
-      bottone.disabled = true;
-      bottone.textContent = prossimoStato ? 'Abilito…' : 'Disabilito…';
-      try {
-        await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tool-forge/${encodeURIComponent(strumento.id)}/enable`, { abilitato: prossimoStato });
-        toast(prossimoStato ? 'Tool abilitato' : 'Tool disabilitato', strumento.titolo);
-        caricaPannelloForge();
-      } catch (error) {
-        bottone.disabled = false;
-        bottone.textContent = strumento.abilitato ? 'Disabilita' : 'Abilita';
-        toast('Non riuscito', error.message);
-      }
-    });
-    /*
-     * ⛔ Trovato dalla QA visiva di O-01 (screenshot «foglio in fondo»):
-     * `.sheet-option` è una griglia a TRE colonne, e questa riga ne appendeva
-     * QUATTRO — il bottone finiva a capo, sbordando a sinistra della card.
-     * Difetto vecchio, visibile solo scorrendo fino in fondo: stato e azione
-     * viaggiano insieme nella terza colonna, come le pastiglie degli attrezzi.
-     */
-    const azioni = document.createElement('span');
-    azioni.className = 'tool-chips';
-    azioni.append(statoEl, bottone);
-    riga.append(iconEl, testo, azioni);
-    return riga;
+  function rigaToolForgiato(strumento, opzioni = {}) {
+    return creaForgeRow(strumento, { ...opzioni, selezionabile: false });
   }
 
   /** ⭐⭐⭐ 29/8 — sempre attiva (le skill non hanno un gate di fiducia): niente bottone, solo il riassunto. */
