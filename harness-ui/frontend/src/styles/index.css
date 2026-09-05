@@ -732,3 +732,9 @@ button{background:none; border:0; cursor:pointer; padding:0}
 /* 05/9 Fase 2: Officina, dati completi anche nelle righe strette. */
 [data-forge-id] .talos-list-row__title,[data-forge-id] .talos-list-row__sub{white-space:pre-wrap;overflow-wrap:anywhere}
 #schermoOfficina .talos-detail h3,#schermoOfficina .talos-detail__desc{overflow-wrap:anywhere}
+
+/* B4 ToolList: descrizioni e stati leggibili senza taglio. */
+#schermoCapability .talos-list-row__title,#schermoCapability .talos-list-row__sub{white-space:normal;overflow-wrap:anywhere}
+#schermoCapability .talos-list-row__aside{max-width:180px;white-space:nowrap;flex-shrink:0;flex-direction:column;align-items:flex-end;gap:4px}
+#schermoCapability [data-cap-list]{max-height:480px;overflow:auto}
+#schermoCapability .talos-detail__desc{overflow-wrap:anywhere}
