@@ -690,3 +690,96 @@ Non verificato: lettura di memorie realmente scritte da un modello, chat multi-t
 **Cosa deve fare l’owner:** aprire http://127.0.0.1:4177 → Memoria e valutare gli screenshot.
 **Cosa fai tu dopo:** TaskRow/Attività, prossimo componente B5.
 **Cosa rimane:** Note e altre pagine B5, B4 → B6 → B2 → B7 → B1 → B8; debito CSS/rotte fase 3; OAuth e piano computer-use.
+
+## B5.2 — TaskRow / Attività · piano prima dell’edit, 05/09/2026
+
+Base 86f108e, merge upstream 81cc5cc5 già aggiornato. Sottosistema TALOS UI. Apertura e screenshot esaminati in browser su 4177 e 4179: il mockup dichiara quattro aperte/undici fatte e autori fittizi; API vera /api/v1/sessions/5b30b23d-008f-479f-a078-7b4aea6fbe37/tasks → {attivita:[],errore:null}, /children → {figli:[]}. Originale Tasks vuoto nel foglio capability.
+
+Premesse false §9: tasks-store.mjs espone {id,titolo,descrizione,priorita,stato,creataAlle,aggiornataAlle}; tre stati todo/doing/done, tre priorità low/normal/high; nessun autore, giro, commit, rimando, scadenza o rotta HTTP di creazione/completamento. http-app.mjs tasksMatch delega solo elencaAttivita. Non inferire autore da stato/sessione; indicarlo come non registrato. Mie/Dell’agente, checkbox di completamento e Nuova attività restano hidden data-richiede=fase3. Nessuna nuova rotta/backend. rigaFiglio appartiene al foglio Albero sessione via /children, contratto diverso da Task: si preserva e si estrae con l’albero in B2/B7, senza spacciare una delega per attività globale.
+
+Fonte mobile letta: mobile/src/screens/TasksScreen.vue e tasks-store.mjs: elenco default, ricerca su titolo/descrizione, filtri all/todo/doing/done e priorità visibile. Si adatta questo modello al markup TaskRow approvato. Nessuna griglia/CRUD/pianificazione introdotta senza rotta. Originale conserva tutta la descrizione nel DOM ma la riga compatta può troncarla; la variante mette Leggi/Chiudi, testo espanso senza taglio, priorità sempre leggibile e stato con testo.
+
+Ricerca fresca, finestra 06/08–05/09/2026: WAI Tabs https://www.w3.org/WAI/ARIA/apg/patterns/tabs/ e Disclosure https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/, stabili riverificati oggi (data aggiornamento non dichiarata); adottare tastiera nativa, aria-selected/expanded e cambio scheda automatico poiché il filtro è locale. Hermes Kanban https://hermes-agent.nousresearch.com/docs/user-guide/features/kanban, lista durabile con stato/assegnatario/filtri: forza tracciabilità, limite un solo assegnatario per attività; non riprodurre il suo dispatch in B5. Claude Code https://code.claude.com/docs/en/interactive-mode#task-list, checklist persistente e richiamabile da tastiera, vista fino a 5 task: forza continuità, limite di esposizione immediata documentato. Codex https://learn.chatgpt.com/docs/features, gestione del lavoro parallelo per progetti: forza contesto del lavoro, nessun limite di una lista CRUD di attività personali verificato (prodotti diversi; non inventarlo). Pin esterni riverificati: Hermes v2026.8.31/29112be del 31/08; Claude v2.1.261/d7dbd9a del 04/09; Codex rust-v0.153.4/3d2ee51 del 04/09, URL tag nei riferimenti B5.1. Le release recenti sono verificate separatamente dalle pagine stabili, non dimostrano novità mensili per queste liste. Nessuna integrazione nuova, contratto desktop esistente adattato. +1 misurabile TALOS per questa estrazione: tutte le righe ricevute accessibili senza richiesta modello, ricerca completa, filtri da tastiera, priorità/stato espliciti, autore sconosciuto dichiarato, nessuna lista vuota in caso d’errore. Confronto di superiorità generale non eseguito.
+
+File esatti, nessuna cancellazione:
+- .claude/LEDGER-ASTRA-FASE-2-2026-09-05.md
+- .claude/CONSEGNA-ASTRA-FASE-2-2026-09-05.md
+- .claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html
+- harness-ui/frontend/src/components/attivita.js
+- harness-ui/frontend/lab/fixtures/attivita.js
+- harness-ui/frontend/lab/main.js
+- harness-ui/frontend/tests/unit/attivita.test.mjs
+- harness-ui/frontend/tests/parity/componenti.spec.mjs
+- harness-ui/frontend/tests/parity/attivita-vivo.spec.mjs
+- harness-ui/frontend/playwright.astra.config.mjs
+- harness-ui/frontend/src/legacy/app.js
+- harness-ui/frontend/index.template.html
+- harness-ui/frontend/src/styles/index.css
+- .claude/immagini/astra-fase2/TaskRow/mockup-1440.png
+- .claude/immagini/astra-fase2/TaskRow/componente-1440.png
+- .claude/immagini/astra-fase2/TaskRow/app-vuota-1440.png
+- .claude/immagini/astra-fase2/TaskRow/originale-vuota-1440.png
+- .claude/immagini/astra-fase2/TaskRow/fixture-lettura-1440.png
+- .claude/immagini/astra-fase2/TaskRow/fixture-filtro-vuoto-1440.png
+- .claude/immagini/astra-fase2/TaskRow/app-errore-1440.png
+- .claude/immagini/astra-fase2/TaskRow/mockup-1280.png
+- .claude/immagini/astra-fase2/TaskRow/componente-1280.png
+- .claude/immagini/astra-fase2/TaskRow/app-vuota-1280.png
+- .claude/immagini/astra-fase2/TaskRow/originale-vuota-1280.png
+- .claude/immagini/astra-fase2/TaskRow/fixture-lettura-1280.png
+- .claude/immagini/astra-fase2/TaskRow/fixture-filtro-vuoto-1280.png
+- .claude/immagini/astra-fase2/TaskRow/app-errore-1280.png
+- .claude/immagini/astra-fase2/TaskRow/mockup-1024.png
+- .claude/immagini/astra-fase2/TaskRow/componente-1024.png
+- .claude/immagini/astra-fase2/TaskRow/app-vuota-1024.png
+- .claude/immagini/astra-fase2/TaskRow/originale-vuota-1024.png
+- .claude/immagini/astra-fase2/TaskRow/fixture-lettura-1024.png
+- .claude/immagini/astra-fase2/TaskRow/fixture-filtro-vuoto-1024.png
+- .claude/immagini/astra-fase2/TaskRow/app-errore-1024.png
+
+Export nuovi: statoAttivita, prioritaAttivita, testiAttivita, riepilogoAttivita, filtraAttivita, creaTaskRow, aggiornaPaginaAttivita. Innesto solo rigaAttivita, caricaPannelloAttivita, generazioniAttivita privato e attivazione della pagina in setView; compatibilità delle chiamate originali senza argomenti. Nuova singola variante CSS TaskRow espansa dentro il mockup, nessun token.
+
+RED unità ATTIVITA-STATO-IGNOTO, ATTIVITA-PRIORITA, ATTIVITA-TESTO, ATTIVITA-FILTRI, ATTIVITA-CONTEGGIO; import assente. Poi parità TaskRow a 1440/1280/1024, apertura delle sei immagini, innesto; test live ATTIVITA-REALE (vuoto/reload/confronto originale), ATTIVITA-FIXTURE (4 dati sintetici, tre stati, ricerca completa, tastiera, zero scritture), ATTIVITA-RECUPERO (503, payload non valido, retry, risposta obsoleta). Build, unità, test:lab, verify con debito CSS preesistente, componenti e prova live. Store copiato senza scritture; nessun giro modello dichiarato. Rollback: revert del singolo commit, nessuna migrazione o dato scritto.
+
+Owner: nessuna preparazione. Astra: implementa e verifica TaskRow; aggiorna qui e nella consegna. Rimane: Note/altre B5 e richieste di rotte/campi sopra, poi ordine B4→B6→B2→B7→B1→B8.
+
+Precisazione fonti prima del codice: la pagina Claude attuale conferma fino a cinque task, ma la checklist richiede opt-in sui modelli recenti (sezione Task list, righe 643–650 della lettura odierna); non è una funzione sempre attiva. La pagina OpenAI features ora reindirizza alla panoramica ChatGPT Learn: conferma progetti/chat e lavoro lungo, non una specifica lista personale CRUD; nessuna conclusione più forte. RED import assente confermato.
+
+B5.2 taccuino prima della correzione in batch: 5/5 unità e 3/3 parità, sei immagini APERTE. Difetto visto a occhio non rilevato dalla sola parità: il nuovo campo ricerca manca delle classi talos-field__input/talos-field__icon; adotto il blocco esatto già usato in Memoria, nessun CSS nuovo. Fonte fresca https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/input/search (05/09/2026, ricerca accessibile con nome esplicito). Scenario permanente ATTIVITA-CAMPO-COERENTE: altezza input 36 px e classe del blocco canonico. Rimuovo il data-c WhereOnDisk aggiunto per errore: il footer riusa talos-where senza nuovo blocco. La riga fatta espansa deve restare leggibile a opacità piena; scoped al solo TaskRow aperto, nessun colore nuovo.
+
+RED ATTIVITA-CAMPO-COERENTE confermato: 27px ricevuti contro 36px del blocco approvato. L’icona Da fare diventa i-list (già nello sprite): i-check-sq contiene una spunta e può confondersi con Fatta. Nessuna icona nuova.
+
+### B5.2 · Passaggio all’API dopo parità (05/09/2026)
+
+Merge lane/harness-desktop: già aggiornato a 81cc5cc5. Ricontrollati prima dell’innesto: https://hermes-agent.nousresearch.com/docs/user-guide/features/kanban/ (documento stabile, data editoriale non esposta), https://code.claude.com/docs/en/interactive-mode#task-list (idem), https://github.com/openai/codex/releases/tag/rust-v0.153.4 (04/09/2026, 3d2ee51). Restano valide le decisioni puntuali e i limiti della matrice B5.2: adottare la leggibilità dello stato, adattare filtri/lettura al contratto reale; non simulare autori o assegnazioni che l’API non registra. Nessuna pretesa di superiorità sul Kanban multiagente. Il +1 verificabile sul pannello originale è trovare il testo completo, filtrare lo stato con tastiera e riprovare senza perdere il contesto.
+
+Parità TaskRow 3/3: aperti personalmente tutti i sei PNG corretti di mockup e componente, 1440×900, 1280×800, 1024×800. Campo coerente alto 36 px, comandi raggiungibili, nessun nuovo tipo di blocco/token/icona. Prima dell’innesto eseguo ATTIVITA-REALE: attesa RED sui dati statici ancora presenti nel bundle.
+
+ATTIVITA-REALE RED confermato prima dell’innesto: nel bundle precedente manca [data-task-esito], test fermo sull’attesa «0 attività» (1280×800). Ora innesto soltanto import, setView, caricaPannelloAttivita e rigaAttivita.
+
+## B5.2 · Consegna TaskRow / Attività — 05/09/2026
+
+**Cosa mostra.** Dati GET /api/v1/sessions/:id/tasks: titolo, descrizione integrale, priorità, stato todo/doing/done, aggiornamento. Autore non registrato perché il contratto non lo contiene. Conteggi derivati, filtri per stato e ricerca su titolo/descrizione/priorità/stato. Leggi/Chiudi espande senza cambiare il dato. Stato vuoto globale, caricamento, errore distinguibili; Aggiorna riprova. Risposte obsolete scartate dopo cambio pagina o sessione. Vecchio foglio mantenuto sullo stesso componente.
+
+**Blocchi riusati.** TasksScreen, Topbar, Page, Toolbar, FilterChips, TaskList, TaskRow, campi, badge e pulsanti canonici. Blocchi nuovi: 0. Token aggiunti: 0. Icone aggiunte: 0. Nel CSS canonico solo due regole circoscritte alla lettura espansa: testo a capo e opacità piena dell’attività conclusa. Template e CSS rigenerati. Nessuna nuova dipendenza né chiave di persistenza.
+
+| Aspetto | Originale osservato | Risultato / beneficio verificato | Limite / verdetto |
+|---|---|---|---|
+| Copertura | Capability → elenco globale con titolo, descrizione, priorità e stato | Stessi campi dell’API, descrizione completa disponibile, data aggiornata in lettura | Creazione/modifica non erano rotte del pannello originale; restano fase 3 |
+| Semantica | todo/doing/done e priorità raw | Da fare/In corso/Fatta; fallback espliciti per valori ignoti | Nessun autore, giro o commit inventato |
+| Chiarezza/densità | Sezione bassa del foglio Capability, scorrimento necessario | Pagina propria, quattro righe compatte, testo integrale con Leggi | Non sono i figli delegati; rigaFiglio resta per B2/B7 |
+| Passi | Aprire Capability e scorrere | Un clic su Attività; ricerca e filtri sul posto | Leggi richiede un clic per il dettaglio esteso, il sommario resta immediato |
+| Tastiera | Righe passive | Tab, Home/End e frecce sui filtri; Enter/Spazio su Leggi/Chiudi | Azioni di modifica nascoste, nessun checkbox finto |
+| Dimensioni | Originale e proposta aperti alle tre larghezze | 1440/1280/1024: comandi e testo leggibili, campo alto 36 px | Verifica desktop, nessuna certificazione mobile |
+| Stato/recupero | Errore nel foglio; riapertura per rileggere | Errore visibile anche nella testata, pulsante Aggiorna; dato invalido non diventa zero | Fixture 503 e risposta ritardata distinte dal backend reale |
+| Persistenza/latenza | Dati globali su disco, GET su apertura | Reload rilegge la stessa API; ricerca locale senza scritture o chiamate modello | Filtri temporanei; nessun benchmark prestazionale su grandi volumi |
+
+**Cosa ho guardato.** Originale 4179 e nuova app 4177; 21 PNG aperti, elencati nel piano B5.2, sotto .claude/immagini/astra-fase2/TaskRow: mockup e componente scuri, app vuota/lettura/filtro vuoto/errore e originale vuoto chiari; tre larghezze. Aperta anche la pagina reale scura nel browser dell’app. Corretto il campo ricerca inizialmente senza classi del mockup: scenario permanente ATTIVITA-CAMPO-COERENTE, RED 27 px → GREEN 36 px. Corretta l’icona Da fare e l’opacità della lettura delle attività concluse.
+
+**Prove.** Unità Task 5/5; Attività dal vivo 9/9 (backend reale vuoto, fixture quattro record, tastiera, filtro sul testo oltre l’anteprima, nessuna scrittura, 503, payload [null], riprova e risposta obsoleta). Statico npx playwright test --config=playwright.lab.config.mjs: 195/195. Build deterministica: 30 file. npm run verify: **331/332**, unico fallimento preesistente PHASE3-TOKEN-CONTRACT-01 sui colori raw del CSS generato, riprodotto già su 81cc5cc5; nessun aggiramento. Log locale: C:/Users/Antonino/AppData/Local/Temp/astra-task-verify.log. Gate generale NON dichiarato verde.
+
+**Confini.** Nessuna modifica a chat, review, sidebar, testata della chat, bridge, frammenti, backend o store. Azioni Nuova attività/Mie/Dell’agente/Segna come fatta nascoste con data-richiede="fase3". Il runtime agente non è configurato su questa istanza: sono prove UI/API, non accettazione conversazionale o esecuzione del modello. Note richiede ancora il contenitore e il canale dedicati (§9 già registrato).
+
+**Cosa deve fare l’owner:** può provare Attività su http://127.0.0.1:4177; nessuna operazione necessaria per proseguire. **Cosa fai tu dopo:** Libreria, poi Ricerca/Officina/Automazioni (resto B5). **Cosa rimane:** Note, B4 → B6 → B2 → B7 → B1 → B8; allineamento del contratto CSS condiviso da Claude; OAuth e piano computer-use dopo le schermate.
+
+Chiusura dei componenti: npx playwright test --config=playwright.componenti.config.mjs, porta laboratorio 4178, **33/33**. TaskRow 3/3, incluso controllo permanente del campo a 36 px.

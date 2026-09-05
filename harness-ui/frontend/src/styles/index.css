@@ -722,3 +722,5 @@ button{background:none; border:0; cursor:pointer; padding:0}
 .talos-intro-folders:empty{display:none}
 
 #introMessaggio:empty{display:none}
+[data-c="TaskRow"][data-aperta="true"] .talos-list-row__sub,[data-c="TaskRow"][data-aperta="true"] .talos-list-row__title{white-space:pre-wrap;overflow-wrap:anywhere}
+[data-c="TaskRow"][data-aperta="true"]{opacity:1}

@@ -1,3 +1,5 @@
+import { aggiornaPaginaAttivita } from '../src/components/attivita.js';
+import { ATTIVITA } from './fixtures/attivita.js';
 import { aggiornaPaginaMemoria } from '../src/components/memoria.js';
 import { MEMORIE } from './fixtures/memoria.js';
 import { aggiornaBoard } from '../src/components/board.js';
@@ -48,6 +50,7 @@ document.documentElement.setAttribute('data-schermo', 'chat');
 const componente = new URLSearchParams(location.search).get('componente') || '';
 
 const LABORATORI = {
+  TaskRow() { aggiornaPaginaAttivita(document.querySelector('#schermoAttivita'), ATTIVITA); },
   MemoryRow() { aggiornaPaginaMemoria(document.getElementById('schermoMemoria'), MEMORIE); },
   Board() {
     aggiornaBoard(document.getElementById('schermoBoard'), SESSIONI_BOARD, {adesso:ADESSO_BOARD,metriche:METRICHE_BOARD,cartelle:CARTELLE_BOARD,cartelleCaricate:true});
