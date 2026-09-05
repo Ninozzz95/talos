@@ -440,6 +440,22 @@ dall'owner (non dal CLI).
   altro client)»: il monolite perde `_rispostaDataQui` al ricarico. Onesto ma impreciso; si cura
   ricordando la richiesta risposta nello store della sessione (Fase 3, con le ricevute).
 - Istanza 4181 (kernel, a pagamento) SPENTA a prova finita.
+- T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
+  15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
+  statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo
+  all'invio compare il toast «Invio non riuscito: Failed to fetch» — testo grezzo del browser in
+  inglese (H22), da `app.js:10554-10555`. Al ritorno del server nessun «ricollegato». Hermes ha
+  `gateway-connecting-overlay.tsx` per questo stato. ⇒ riga di lavoro dopo il cutover: stato
+  onesto della connessione nella statusbar (`runtime-status` è mio) con testo umano, e prova al
+  contrario nello script di confronto. Stesso cervello sull'originale: comportamento identico per
+  costruzione (4180 spento al momento della prova, non rilanciato).
+- T-16 (stesso screenshot `foto/caduta-4175-invio.png`): i toast del monolite (`toast()`) escono
+  in basso a SINISTRA come testo grezzo in grassetto, fuori dalla shell, senza il linguaggio del
+  mockup (nessun `talos-toast`); e il toast «Ripresa della sessione avviata 1 g fa · riprendere
+  costa circa 92.1k token (stima)» resta in coda e riappare al primo invio. Il contenitore dei
+  toast è DOM legacy: va battezzato col `Toast` del mockup (chi: B7 Astra se i dialoghi/notifiche
+  sono suoi, altrimenti io nel bridge) — da decidere nella prossima review, non lasciare cadere.
+
 
 **Giro 3** (artefatto + reindirizzo): con un testo scritto durante il giro «Reindirizza» compare
 (prima nascosto) e, premuto, il modello risponde alla correzione («di' solo quante funzioni»: «2
