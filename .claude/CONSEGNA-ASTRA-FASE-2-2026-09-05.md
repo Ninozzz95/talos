@@ -220,3 +220,52 @@ Prove selezionate e aperte, copiate manualmente da artifacts (23 PNG):
 Cosa deve fare l’owner · Nulla per continuare; prova su http://127.0.0.1:4177/ → Capability.
 Cosa fai tu dopo · B4 Skill/Connettori/Plugin/Hook, poi coda R02.
 Cosa rimane · B4 estensioni; B6; B2; B7 (anche modulo creazione automazioni e ToastRegion); B1; B8; Browser K-I. OAuth/computer-use restano PROPOSTE. Nessun push.
+
+## B4.2 consegna ExtensionList — 05/09/2026
+Skill, Connettori MCP, Plugin e Hook innestati negli endpoint originali. Ricerca per nome, id e metadati, dettaglio completo dei dati disponibili, tab e lista da tastiera, errori persistenti, aggiornamento e fiducia confermata dal server. Riusati Page, Tabs, Toolbar, ToolList, DetailPanel, KeyValue e badge; zero nuovi blocchi, token, icone o dipendenze. Quattro regole CSS circoscritte per lista e testo intero; template/CSS rigenerati. Locale aggiunto anche mostraInventarioEstensioni; sei export del piano invariati.
+
+| Aspetto | Originale → proposta | Prova e verdetto |
+|---|---|---|
+| Copertura | Inventari nel foglio Control/Capability → quattro pannelli con gli stessi GET e POST trust | Skill senza fiducia inventata; comando/argomenti/allowlist MCP, tool/hook/avvisi plugin, eventi hook presenti. Canali originali conservati |
+| Semantica | Etichetta attivo derivata dalla fiducia → Fidato/Da fidare | Fiducia non significa connessione o esecuzione. Per hook il comando non è esposto dall’API: percorso di origine e limite dichiarati |
+| Chiarezza | Righe piccole senza ricerca → filtro, descrizione e metadati leggibili | Originale e proposta aperti a1440/1280/1024; etichette senza troncamento dopo correzione |
+| Azioni e accessibilità | Fida sulla riga → selezione e revisione del dettaglio prima di Fida | Per altre righe può aggiungere un passo: beneficio è leggere i dati prima di fidare, non una riduzione universale. Tab manuali, frecce/Home/End; fuoco ritorna al dettaglio confermato |
+| Stato, errori e recupero | Risposta effimera → errore persistente con bersaglio e retry | Manifesto corrotto/riparato reali, POST503 controllato, nessuna falsa conferma e nessuna scrittura concorrente |
+| Persistenza | Registro esistente → stesso id/hash | MCP/plugin/hook restano fidati dopo reload, manifesto MCP cambiato richiede nuova fiducia; warnings plugin restano visibili |
+| Responsive | Modale → affiancati a1440/1280, sovrapposti a1024 | Fida raggiungibile; testi interi. Nessun benchmark di latenza o confronto prestazionale dichiarato |
+
+Verifiche: unità4/4; componenti60/60; prova app15/15 alle tre larghezze; persistenza rafforzata dopo reload per tutti e tre i tipi nuovamente3/3. npm run verify verde (build, contratti/unità, determinismo e statico195/195). Prove HTTP con createHttpApp, registry, manifesti e file di fiducia reali in directory temporanee isolate; contenuti di esempio dichiarati, nessuna estensione o processo MCP eseguiti. Istanza4177 senza cataloghi mostra vuoto onesto. Nessuna superiorità end-to-end sui competitor dichiarata: i +1 documentati sono i criteri locali verificati.
+Regressioni permanenti chiuse: EXT-REGIA-JSON, EXT-ICONA-ESISTENTE, EXT-ETICHETTE-INTEGRE, EXT-FOCUS-FIDUCIA, EXT-RISPOSTA-OBSOLETA, EXT-RECUPERO. Limite ereditato: trust macchina/id (non isolamento progetto); hash hook sul comando. Nessuna modifica backend.
+Prove selezionate e aperte, copiate manualmente da artifacts (29 PNG):
+- .claude/immagini/astra-fase2/ExtensionList/app-skills-1440.png
+- .claude/immagini/astra-fase2/ExtensionList/app-mcp-1440.png
+- .claude/immagini/astra-fase2/ExtensionList/app-plugins-1440.png
+- .claude/immagini/astra-fase2/ExtensionList/app-hooks-1440.png
+- .claude/immagini/astra-fase2/ExtensionList/originale-plugins-1440.png
+- .claude/immagini/astra-fase2/ExtensionList/originale-hooks-1440.png
+- .claude/immagini/astra-fase2/ExtensionList/app-skills-1280.png
+- .claude/immagini/astra-fase2/ExtensionList/app-mcp-1280.png
+- .claude/immagini/astra-fase2/ExtensionList/app-plugins-1280.png
+- .claude/immagini/astra-fase2/ExtensionList/app-hooks-1280.png
+- .claude/immagini/astra-fase2/ExtensionList/originale-plugins-1280.png
+- .claude/immagini/astra-fase2/ExtensionList/originale-hooks-1280.png
+- .claude/immagini/astra-fase2/ExtensionList/app-skills-1024.png
+- .claude/immagini/astra-fase2/ExtensionList/app-mcp-1024.png
+- .claude/immagini/astra-fase2/ExtensionList/app-plugins-1024.png
+- .claude/immagini/astra-fase2/ExtensionList/app-hooks-1024.png
+- .claude/immagini/astra-fase2/ExtensionList/originale-plugins-1024.png
+- .claude/immagini/astra-fase2/ExtensionList/originale-hooks-1024.png
+- .claude/immagini/astra-fase2/ExtensionList/app-fidata-plugins-1440.png
+- .claude/immagini/astra-fase2/ExtensionList/app-modificata-1440.png
+- .claude/immagini/astra-fase2/ExtensionList/app-errore-fiducia-1440.png
+- .claude/immagini/astra-fase2/ExtensionList/app-errore-lettura-1440.png
+- .claude/immagini/astra-fase2/ExtensionList/app-vuota-1440.png
+- .claude/immagini/astra-fase2/ExtensionList/comp-ExtensionList_mcp-desktop-1440x900-mockup.png
+- .claude/immagini/astra-fase2/ExtensionList/comp-ExtensionList_mcp-desktop-1440x900-app.png
+- .claude/immagini/astra-fase2/ExtensionList/comp-ExtensionList_mcp-desktop-1280x800-mockup.png
+- .claude/immagini/astra-fase2/ExtensionList/comp-ExtensionList_mcp-desktop-1280x800-app.png
+- .claude/immagini/astra-fase2/ExtensionList/comp-ExtensionList_mcp-desktop-1024x800-mockup.png
+- .claude/immagini/astra-fase2/ExtensionList/comp-ExtensionList_mcp-desktop-1024x800-app.png
+Cosa deve fare l’owner · Nulla per proseguire; può provare Capability su http://127.0.0.1:4177/.
+Cosa fai tu dopo · B6 Diagnostica, Impostazioni e Model Lab.
+Cosa rimane · B6→B2→B7 (anche creazione automazioni e ToastRegion)→B1→B8→Browser K-I. OAuth/computer-use restano PROPOSTE. Nessun push.

@@ -1322,3 +1322,90 @@ Prove selezionate e aperte, copiate manualmente da artifacts (23 PNG):
 Cosa deve fare l’owner · Nulla per continuare; prova su http://127.0.0.1:4177/ → Capability.
 Cosa fai tu dopo · B4 Skill/Connettori/Plugin/Hook, poi coda R02.
 Cosa rimane · B4 estensioni; B6; B2; B7 (anche modulo creazione automazioni e ToastRegion); B1; B8; Browser K-I. OAuth/computer-use restano PROPOSTE. Nessun push.
+
+## B4.2 ExtensionList — piano prima degli edit, 05/09/2026
+Owner TALOS UI; merge lane/harness-desktop eseguito dopo8f1674a. Scope: Skill, Connettori MCP, Plugin e Hook della pagina Capability, conservando i quattro canali originali. Componente unico di inventario con lista/dettaglio, ricerca, tastiera, stati vuoto/errore/fiducia, aggiornamento e fiducia via endpoint esistenti. Nessun kernel/processo avviato, nessuna nuova API né store.
+Ricerca fresca06/08–05/09: riaperte le release Hermes v2026.8.31/29112be31/08, Claude Code v2.1.261/d7dbd9a04/09, Codex rust-v0.153.4/3d2ee5104/09 agli URL del B4.1. Docs stabili verificate oggi (data modifica non esposta): https://hermes-agent.nousresearch.com/docs/user-guide/features/plugins ; https://code.claude.com/docs/en/plugins ; https://code.claude.com/docs/en/hooks-guide ; https://developers.openai.com/codex/hooks (redirect ufficiale https://learn.chatgpt.com/docs/hooks); https://www.w3.org/WAI/ARIA/apg/patterns/tabs/ .
+| Comparatore | Forza | Limite/gap verificato | Decisione e +1 misurabile |
+|---|---|---|---|
+| Hermes | Inventario distinto enabled/disabled/not enabled, consenso per plugin e scansione | I pack elencano skill ma non le installano automaticamente (gap documentato); non misurata la GUI | Adattare distinzione inventario/fiducia/esecuzione; non importare marketplace né suggerire installazione inesistente. Ogni tab mostra solo capacità API reali |
+| Claude Code | Plugin raggruppano componenti, diagnostica errori e reload documentati | Hook eseguibili richiedono sorgenti fidate; nessuna garanzia di sicurezza da installazione | Adattare avvisi e metadati leggibili prima della fiducia; preservare warnings dopo trust; azioni isolate per id/sessione |
+| Codex | Fiducia associata a hash hook, modifiche richiedono nuova review | Attivare plugin non implica fidare hook; nessun difetto UI inventato | Adattare stato Fidato esplicito, mai Attivo; verificare reload e invalidazione hash nel registry TALOS |
+| WAI | Tab con focus e selezione distinti per pannelli caricati a richiesta | Attivazione automatica con rete può rallentare navigazione | Adottare frecce/Home/End per focus, Enter/Spazio per attivare; lista/dettaglio separati |
+Backend letto: skill-registry, mcp-registry, plugin-registry, hook-registry, session-registry. MCP API espone comando/argomenti/allowlist; plugin espone hook/tool e avvisi; hook espone solo id/eventi/fidato, non il comando: non fingere una review del comando. Fiducia hook legata solo al comando, MCP alla dichiarazione, plugin al manifesto; nessuna modifica del confine in questo lavoro. Scope del registro fiducia macchina/id, non inventare isolamento per progetto.
+File esatti:
+- .claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html
+- .claude/LEDGER-ASTRA-FASE-2-2026-09-05.md
+- .claude/CONSEGNA-ASTRA-FASE-2-2026-09-05.md
+- harness-ui/frontend/src/components/estensioni.js
+- harness-ui/frontend/src/legacy/app.js
+- harness-ui/frontend/index.template.html
+- harness-ui/frontend/src/styles/index.css
+- harness-ui/frontend/lab/fixtures/estensioni.js
+- harness-ui/frontend/lab/main.js
+- harness-ui/frontend/tests/unit/estensioni.test.mjs
+- harness-ui/frontend/tests/parity/componenti.spec.mjs
+- harness-ui/frontend/tests/parity/estensioni-backend-fixture.mjs
+- harness-ui/frontend/tests/parity/estensioni-vivo.spec.mjs
+- harness-ui/frontend/playwright.astra.config.mjs
+Pubblici nuovi: datiEstensione, filtraEstensioni, creaExtensionRow, aggiornaEstensioni, collegaSchedeCapability, mostraSchedaCapability; fixture ESTENSIONI; helper avviaEstensioniDiProva. Locali monolite caricaCapability, caricaEstensioniCapability, fidaEstensioneCapability; preservare caricaPannelloSkill/Mcp/Plugin/Hooks e rigaSkill/rigaServerMcp/rigaPlugin/rigaHook.
+RED EXT-STATO/EXT-DETTAGLI/EXT-RICERCA senza modulo; EXT-PAGINE prima innesto tab non presenti. GREEN node --test tests/unit/estensioni.test.mjs; test componenti ExtensionList quattro tipi x3; playwright.astra estensioni-vivo x3; verify e componenti4178. Scenari permanenti EXT-ORIGINALE, EXT-FIDUCIA-PERSISTITA, EXT-HASH-CAMBIATO, EXT-AVVISI-CONSERVATI, EXT-RECUPERO, EXT-RISPOSTA-OBSOLETA. HTTP/registry/manifeste e fiducia su file temporanei reali; zero sottoprocessi delle estensioni eseguiti. Originale prima edit e proposta dopo a1440/1280/1024, tutte le prove dichiarate aperte. Screenshot in artifacts/astra-fase2/ExtensionList, selezione manuale alla consegna. Rollback del solo commit, nessuna migrazione.
+
+EXT-ORIGINALE: aperte sei PNG a1440/1280/1024: skill/MCP/plugin insieme, Hook nel foglio Control. Stato fidato etichettato attivo senza prova esecuzione; MCP non mostra argomenti, hook eventi tecnici. RED unità modulo assente osservato; EXT-PAGINE attende tab Skill inesistente.
+
+EXT-REGIA-JSON: primo confronto12/12 rosso perché la navigazione era stata inserita per errore nello script dati JSON. Ricerca MDN script + tre docs competitor riaperte05/09: separare dati e codice, nessun token modificato. Sposto le sole righe nuove nello script regia esistente. EXT-ICONA-ESISTENTE: i-link non appartiene allo sprite canonico, riuso i-globe; test permanentemente verifica la destinazione di ogni use del componente.
+
+Prima dell’innesto B4.2: merge e tre fonti plugins/hooks riaperte05/09. Il componente ora coincide nelle prime cinque prove; nessuna nuova dipendenza. Collegamento a GET/POST invariati con generazione per sezione e sessione catturata. Fiducia confermata soltanto dalla rilettura; nessuna azione mentre un salvataggio è in corso.
+
+QA visiva prima versione: aperte quattro schermate app1440. EXT-ETICHETTE-INTEGRE: le chiavi lunghe del dettaglio (Attrezzi ammessi/Istruzioni complete) ereditano ellissi dal KV, da correggere con wrapping circoscritto. EXT-FOCUS-FIDUCIA: dopo Fida il bottone sparisce; prevedere fuoco sul titolo del dettaglio solo se la persona non si è spostata. Test RED aggiunti prima della correzione.
+
+Correzione EXT-FOCUS-FIDUCIA dopo RED: ricerca WAI keyboard-interface e MDN white-space con tre fonti competitor B4.2 riaperte05/09. Ripristino fuoco sul titolo solo se era sul bottone della stessa voce/sessione e nessun altro controllo lo ha preso; chiavi KV complete senza ellissi. File corretti estensioni.js e mockup, poi generazione; nessun handler condiviso modificato.
+
+## B4.2 consegna ExtensionList — 05/09/2026
+Skill, Connettori MCP, Plugin e Hook innestati negli endpoint originali. Ricerca per nome, id e metadati, dettaglio completo dei dati disponibili, tab e lista da tastiera, errori persistenti, aggiornamento e fiducia confermata dal server. Riusati Page, Tabs, Toolbar, ToolList, DetailPanel, KeyValue e badge; zero nuovi blocchi, token, icone o dipendenze. Quattro regole CSS circoscritte per lista e testo intero; template/CSS rigenerati. Locale aggiunto anche mostraInventarioEstensioni; sei export del piano invariati.
+
+| Aspetto | Originale → proposta | Prova e verdetto |
+|---|---|---|
+| Copertura | Inventari nel foglio Control/Capability → quattro pannelli con gli stessi GET e POST trust | Skill senza fiducia inventata; comando/argomenti/allowlist MCP, tool/hook/avvisi plugin, eventi hook presenti. Canali originali conservati |
+| Semantica | Etichetta attivo derivata dalla fiducia → Fidato/Da fidare | Fiducia non significa connessione o esecuzione. Per hook il comando non è esposto dall’API: percorso di origine e limite dichiarati |
+| Chiarezza | Righe piccole senza ricerca → filtro, descrizione e metadati leggibili | Originale e proposta aperti a1440/1280/1024; etichette senza troncamento dopo correzione |
+| Azioni e accessibilità | Fida sulla riga → selezione e revisione del dettaglio prima di Fida | Per altre righe può aggiungere un passo: beneficio è leggere i dati prima di fidare, non una riduzione universale. Tab manuali, frecce/Home/End; fuoco ritorna al dettaglio confermato |
+| Stato, errori e recupero | Risposta effimera → errore persistente con bersaglio e retry | Manifesto corrotto/riparato reali, POST503 controllato, nessuna falsa conferma e nessuna scrittura concorrente |
+| Persistenza | Registro esistente → stesso id/hash | MCP/plugin/hook restano fidati dopo reload, manifesto MCP cambiato richiede nuova fiducia; warnings plugin restano visibili |
+| Responsive | Modale → affiancati a1440/1280, sovrapposti a1024 | Fida raggiungibile; testi interi. Nessun benchmark di latenza o confronto prestazionale dichiarato |
+
+Verifiche: unità4/4; componenti60/60; prova app15/15 alle tre larghezze; persistenza rafforzata dopo reload per tutti e tre i tipi nuovamente3/3. npm run verify verde (build, contratti/unità, determinismo e statico195/195). Prove HTTP con createHttpApp, registry, manifesti e file di fiducia reali in directory temporanee isolate; contenuti di esempio dichiarati, nessuna estensione o processo MCP eseguiti. Istanza4177 senza cataloghi mostra vuoto onesto. Nessuna superiorità end-to-end sui competitor dichiarata: i +1 documentati sono i criteri locali verificati.
+Regressioni permanenti chiuse: EXT-REGIA-JSON, EXT-ICONA-ESISTENTE, EXT-ETICHETTE-INTEGRE, EXT-FOCUS-FIDUCIA, EXT-RISPOSTA-OBSOLETA, EXT-RECUPERO. Limite ereditato: trust macchina/id (non isolamento progetto); hash hook sul comando. Nessuna modifica backend.
+Prove selezionate e aperte, copiate manualmente da artifacts (29 PNG):
+- .claude/immagini/astra-fase2/ExtensionList/app-skills-1440.png
+- .claude/immagini/astra-fase2/ExtensionList/app-mcp-1440.png
+- .claude/immagini/astra-fase2/ExtensionList/app-plugins-1440.png
+- .claude/immagini/astra-fase2/ExtensionList/app-hooks-1440.png
+- .claude/immagini/astra-fase2/ExtensionList/originale-plugins-1440.png
+- .claude/immagini/astra-fase2/ExtensionList/originale-hooks-1440.png
+- .claude/immagini/astra-fase2/ExtensionList/app-skills-1280.png
+- .claude/immagini/astra-fase2/ExtensionList/app-mcp-1280.png
+- .claude/immagini/astra-fase2/ExtensionList/app-plugins-1280.png
+- .claude/immagini/astra-fase2/ExtensionList/app-hooks-1280.png
+- .claude/immagini/astra-fase2/ExtensionList/originale-plugins-1280.png
+- .claude/immagini/astra-fase2/ExtensionList/originale-hooks-1280.png
+- .claude/immagini/astra-fase2/ExtensionList/app-skills-1024.png
+- .claude/immagini/astra-fase2/ExtensionList/app-mcp-1024.png
+- .claude/immagini/astra-fase2/ExtensionList/app-plugins-1024.png
+- .claude/immagini/astra-fase2/ExtensionList/app-hooks-1024.png
+- .claude/immagini/astra-fase2/ExtensionList/originale-plugins-1024.png
+- .claude/immagini/astra-fase2/ExtensionList/originale-hooks-1024.png
+- .claude/immagini/astra-fase2/ExtensionList/app-fidata-plugins-1440.png
+- .claude/immagini/astra-fase2/ExtensionList/app-modificata-1440.png
+- .claude/immagini/astra-fase2/ExtensionList/app-errore-fiducia-1440.png
+- .claude/immagini/astra-fase2/ExtensionList/app-errore-lettura-1440.png
+- .claude/immagini/astra-fase2/ExtensionList/app-vuota-1440.png
+- .claude/immagini/astra-fase2/ExtensionList/comp-ExtensionList_mcp-desktop-1440x900-mockup.png
+- .claude/immagini/astra-fase2/ExtensionList/comp-ExtensionList_mcp-desktop-1440x900-app.png
+- .claude/immagini/astra-fase2/ExtensionList/comp-ExtensionList_mcp-desktop-1280x800-mockup.png
+- .claude/immagini/astra-fase2/ExtensionList/comp-ExtensionList_mcp-desktop-1280x800-app.png
+- .claude/immagini/astra-fase2/ExtensionList/comp-ExtensionList_mcp-desktop-1024x800-mockup.png
+- .claude/immagini/astra-fase2/ExtensionList/comp-ExtensionList_mcp-desktop-1024x800-app.png
+Cosa deve fare l’owner · Nulla per proseguire; può provare Capability su http://127.0.0.1:4177/.
+Cosa fai tu dopo · B6 Diagnostica, Impostazioni e Model Lab.
+Cosa rimane · B6→B2→B7 (anche creazione automazioni e ToastRegion)→B1→B8→Browser K-I. OAuth/computer-use restano PROPOSTE. Nessun push.
