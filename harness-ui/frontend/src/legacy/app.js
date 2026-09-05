@@ -1,7 +1,7 @@
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
-import { aggiornaPiedeChat } from '../components/chat-foot.js'; // 05/9 Fase 2: ChatFooter — striscia del giro, chip e barra di stato dai dati
+import { aggiornaPiedeChat, etichettaPermesso } from '../components/chat-foot.js'; // 05/9 Fase 2: ChatFooter — striscia del giro, chip e barra di stato dai dati
 import { aggiornaDiffReview, creaRigaFileReview, nascondiAzioniFase3, riassuntoReview } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno del mockup
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
 import { aggiornaTopbar } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati
@@ -6548,7 +6548,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * eseguito davvero, anche se le pillole nel frattempo dicono altro.
    */
   function etichettaPermessiGiro(contesto) {
-    return PERMESSI_SESSIONE_VALIDI.includes(contesto?.permessi) ? ` · ${contesto.permessi}` : '';
+    return PERMESSI_SESSIONE_VALIDI.includes(contesto?.permessi) ? ` · ${etichettaPermesso(contesto.permessi)}` : ''; // 05/9 Fase 2: nome umano (H22), mai «On request» a schermo
   }
 
   /**
