@@ -1,4 +1,5 @@
 import { createBoardSurface } from '../../src/app/surfaces/board.js';
+import { createDoctorSurface } from '../../src/app/surfaces/doctor.js';
 import { createCapabilitySurface } from '../../src/app/surfaces/capability.js';
 import { createInspectorSurface } from '../../src/app/surfaces/inspector.js';
 import { createSidebarSurface } from '../../src/app/surfaces/sidebar.js';
@@ -274,6 +275,33 @@ export function mountSurfacesLab(root) {
   b7.corpo.append(barra.element);
   pagina.append(b7.sezione);
   componenti.push(barra);
+
+  const doctor = createDoctorSurface({
+    documentObj,
+    testId: 'lab-doctor',
+    labels: {
+      regionLabel: 'Doctor',
+      notChecked: 'Questo controllo non è stato eseguito.',
+      missingRemedy: 'Questo problema non ha ancora un rimedio scritto: segnalalo.',
+      severities: { ok: 'a posto', info: 'nota', warning: 'da guardare', danger: 'guasto' },
+      order: ['chiaveApi', 'shell', 'git', 'naviga', 'sessioniPersistenza'],
+      checks: {
+        chiaveApi: { title: 'Chiave del fornitore', ok: 'Configurata.', fail: 'Nessuna chiave configurata.', failSeverity: 'danger', remedy: 'Apri le impostazioni' },
+        shell: { title: 'Shell', ok: 'Comandi eseguiti con enforcement {v}.' },
+        git: { title: 'Git', ok: 'Disponibile.', fail: 'Non trovato nel PATH.', failSeverity: 'warning', remedy: 'Installa Git' },
+        naviga: { title: 'Navigazione web', ok: 'Attiva.', fail: 'Non disponibile.', failSeverity: 'warning' },
+        sessioniPersistenza: { title: 'Persistenza delle sessioni', failSeverity: 'danger', remedy: 'Apri la cartella dello store' },
+      },
+    },
+    onRemedy: () => {},
+  });
+  // ⛔ Di proposito manca `sessioniPersistenza`: è il caso che conta, e a
+  // schermo deve leggersi «non verificato», mai un verde.
+  doctor.update({ diagnosi: { chiaveApi: true, shell: 'desktop', git: false, naviga: true } });
+  const b8 = blocco(documentObj, 'Doctor', 'Un controllo assente NON è verde: diventa una nota che dice «non verificato».');
+  b8.corpo.append(doctor.element);
+  pagina.append(b8.sezione);
+  componenti.push(doctor);
 
   html.dataset.visualReady = 'true';
 
