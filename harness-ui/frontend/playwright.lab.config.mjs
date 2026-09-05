@@ -16,7 +16,7 @@ const viewports = [
 
 export default defineConfig({
   testDir: './tests/parity',
-  testMatch: ['*.spec.mjs'],
+  testMatch: ['parita.spec.mjs'], // il cancello dei componenti ha il suo config (serve un server): playwright.componenti.config.mjs
   timeout: 60_000,
   fullyParallel: false,
   forbidOnly: true,
