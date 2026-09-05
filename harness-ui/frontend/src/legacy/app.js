@@ -11093,6 +11093,33 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       button.classList.add('real-session-item'); // il vocabolario del monolite (selezione multipla, is-selected)
       pezzi.push(button);
     }
+    /*
+     * 05/9 Fase 2 (H27-H30, tastiera come cancello): 74 righe = 74 fermate di Tab
+     * era il difetto trovato camminando la pagina. Roving tabindex: una sola
+     * fermata (la sessione aperta, o la prima), frecce su/giu' e Home/End
+     * per muoversi, Invio/Spazio aprono (e' un <button>).
+     */
+    const righe = pezzi.filter((el) => el.classList.contains('talos-session-item'));
+    const fermata = righe.find((el) => el.getAttribute('aria-current') === 'true') || righe[0];
+    for (const riga of righe) riga.tabIndex = riga === fermata ? 0 : -1;
+    if (!contenitore.dataset.tastiera) {
+      contenitore.dataset.tastiera = 'si';
+      contenitore.addEventListener('keydown', (event) => {
+        const tutte = [...contenitore.querySelectorAll('.talos-session-item')];
+        const i = tutte.indexOf(document.activeElement);
+        if (i < 0 || tutte.length === 0) return;
+        let j = i;
+        if (event.key === 'ArrowDown') j = Math.min(tutte.length - 1, i + 1);
+        else if (event.key === 'ArrowUp') j = Math.max(0, i - 1);
+        else if (event.key === 'Home') j = 0;
+        else if (event.key === 'End') j = tutte.length - 1;
+        else return;
+        event.preventDefault();
+        tutte[i].tabIndex = -1;
+        tutte[j].tabIndex = 0;
+        tutte[j].focus();
+      });
+    }
     contenitore.replaceChildren(...pezzi);
     aggiornaToolbarSelezioneSessioni();
     aggiornaSottotitoloSessione(); // W1-12 — l'elenco si ridisegna a ogni transizione: il sottotitolo lo segue
