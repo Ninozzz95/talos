@@ -59,6 +59,15 @@ const API_ERROR_CODES = new Set([
   'AUTH_REQUIRED',
   /* ⭐⭐⭐ 05/9, W1-01 — schede terminale per sessione (src/terminal-registry.mjs). Il tetto NON è burocrazia: su Windows ogni PTY porta con sé un processo conhost (node-pty#471). */
   'TERMINAL_LIMIT_REACHED', 'TERMINAL_STORE_UNAVAILABLE',
+  /*
+   * ⭐⭐⭐ 05/9, W1-05 — lo stato Git di una sessione (src/git-service.mjs),
+   * la sorgente «Non committato» della Review a due sorgenti (W1-06).
+   * ⛔ Non c'è un codice per il push, perché non c'è un push: si chiede
+   * all'owner, ogni volta.
+   */
+  'GIT_NOT_A_REPOSITORY', 'GIT_PATH_INVALID', 'GIT_PATHS_REQUIRED', 'GIT_MESSAGE_REQUIRED',
+  'GIT_NOTHING_TO_COMMIT', 'GIT_WORKTREE_DIFFERS', 'GIT_COMMAND_FAILED', 'GIT_STORE_UNAVAILABLE',
+  'GIT_TIMEOUT', 'GIT_OUTPUT_TOO_LARGE',
   'RUNTIME_NOT_AVAILABLE',
   'RUNTIME_UNREACHABLE',
   'RUNTIME_OPERATION_UNSUPPORTED',
@@ -107,6 +116,25 @@ const STATUS_BY_CODE = Object.freeze({
   /** ⭐ 05/9, W1-01 — stessa famiglia: la richiesta è legittima, è lo STATO attuale (otto schede già aperte) a impedirla. Chiudine una e riprova. */
   TERMINAL_LIMIT_REACHED: 409,
   TERMINAL_STORE_UNAVAILABLE: 503,
+  /*
+   * ⭐⭐⭐ 05/9, W1-05. La famiglia dei 409 è la stessa di SESSION_NOT_READY:
+   * la richiesta è legittima, è lo STATO attuale a impedirla, e si risolve.
+   * ⛔ GIT_WORKTREE_DIFFERS in particolare NON è un errore del client: è git
+   * che, con un percorso esplicito, committerebbe l'albero di lavoro invece
+   * di ciò che è in stage (misurato il 05/09) — si rifiuta invece di
+   * committare in silenzio la cosa sbagliata.
+   */
+  GIT_NOT_A_REPOSITORY: 409,
+  GIT_NOTHING_TO_COMMIT: 409,
+  GIT_WORKTREE_DIFFERS: 409,
+  GIT_PATH_INVALID: 422,
+  GIT_PATHS_REQUIRED: 422,
+  GIT_MESSAGE_REQUIRED: 422,
+  GIT_STORE_UNAVAILABLE: 503,
+  /** ⛔ 504: git non ha risposto in tempo. Non è colpa di chi ha chiesto, e non è un guasto del server: è un'attesa scaduta a monte. */
+  GIT_TIMEOUT: 504,
+  GIT_OUTPUT_TOO_LARGE: 413,
+  GIT_COMMAND_FAILED: 500,
   HF_TRANSFER_COLLISION: 409,
   SESSION_STORE_WRITE_FAILED: 503,
   /** ⭐ 27/8 — un tetto duro dell'automazione violato (intervallo/limite fuori range) è un errore di CONTENUTO, non di forma: stesso status di ROW_INVALID. */
@@ -204,6 +232,16 @@ const MESSAGE_BY_CODE = Object.freeze({
   AUTH_REQUIRED: 'Questo server accetta solo la finestra TALOS che lo ha avviato',
   TERMINAL_LIMIT_REACHED: 'Hai già il massimo di terminali aperti per questa sessione: chiudine uno e riprova',
   TERMINAL_STORE_UNAVAILABLE: 'I terminali non sono disponibili su questo server',
+  GIT_NOT_A_REPOSITORY: 'Questa cartella non è un repository git',
+  GIT_PATH_INVALID: 'Percorso non valido per questa sessione',
+  GIT_PATHS_REQUIRED: 'Serve almeno un percorso esplicito',
+  GIT_MESSAGE_REQUIRED: 'Il commit vuole un messaggio',
+  GIT_NOTHING_TO_COMMIT: 'Non c’è niente da committare su questi percorsi',
+  GIT_WORKTREE_DIFFERS: 'Alcuni file sono cambiati dopo essere stati messi in stage',
+  GIT_COMMAND_FAILED: 'git non è riuscito a completare l’operazione',
+  GIT_STORE_UNAVAILABLE: 'Le funzioni git non sono disponibili su questo server',
+  GIT_TIMEOUT: 'git non ha risposto entro il tempo massimo',
+  GIT_OUTPUT_TOO_LARGE: 'L’uscita di git supera il limite consentito',
   PAYLOAD_LIMIT: 'Contenuto oltre il limite consentito',
   METHOD_NOT_ALLOWED: 'Metodo non consentito',
   NOT_FOUND: 'Risorsa non trovata',
@@ -853,6 +891,13 @@ export function createHttpApp({
    * una voce partendo da una stringa arrivata dal client.
    */
   terminalRegistry = null,
+  /*
+   * ⭐⭐⭐ 05/9, W1-05 — lo stato Git di una sessione (src/git-service.mjs).
+   * Facoltativo come ogni altro store: senza, le cinque rotte rispondono
+   * GIT_STORE_UNAVAILABLE invece di fingere un repository pulito.
+   * ⛔⛔ Non espone il push, e non può: quella porta non esiste nel servizio.
+   */
+  gitService = null,
   // ⭐⭐⭐ 28/8 — owner, coda: "directory più usate (tipo desktop downloads)". Zero config esterna (solo os.homedir()) — il default reale basta, nessun cablaggio in server.mjs come serve invece per elencaCartelleProgetto (quella dipende da TALOS_HARNESS_UI_PROJECT_DIRS).
   cartelleFrequentiFn = cartelleFrequentiReale,
   catalogoModelliFn = null, clock = () => new Date(), leggiArtefattoFn = leggiArtefattoReale,
@@ -1207,6 +1252,53 @@ export function createHttpApp({
         const sessionId = decodeURIComponent(parti[4]);
         const terminalId = decodeURIComponent(parti[6]);
         const esito = terminalRegistry.chiudi({ sessionId, terminalId });
+        if ('erroreAvvio' in esito) { const error = new Error(esito.erroreAvvio); error.code = esito.code; throw error; }
+        sendJson(res, 200, successEnvelope(esito, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    /*
+     * ⭐⭐⭐ 05/9, W1-05 — LE TRE SCRITTURE GIT di una sessione: stage,
+     * unstage, commit. Stessa forma esatta delle POST terminale qui sopra
+     * (nominate prima del blanket-405, `requireNoQuery`, sessionId da
+     * `split('/')[4]`, NOT_FOUND per un id ignoto) e stesso cancello a token
+     * di W1-10: stanno sotto `/api/`, quindi senza il cookie `talos_token`
+     * sono già 401 molto prima di arrivare qui.
+     *
+     * ⛔⛔⛔ NON ESISTE una POST di push, e non è una dimenticanza: il push si
+     * chiede all'owner ogni volta. `src/git-service.mjs` non ha quella porta,
+     * e `tests/git-service.test.mjs` la pinna leggendo il sorgente — se
+     * qualcuno la aggiungesse, quel test diventa rosso.
+     *
+     * ⛔⛔ I percorsi arrivano dal client e sono SEMPRE espliciti: non esiste
+     * una forma "tutto". L'indice git è CONDIVISO con l'owner e con le altre
+     * sessioni, e `git commit` fotografa l'intero indice, non solo ciò che
+     * uno ha appena aggiunto — un `-A` o un `.` da qui raccoglierebbe lavoro
+     * non nostro, ed è un difetto già pagato una volta in questo progetto.
+     * La convalida dei percorsi (assoluti, `..`, magia di pathspec, `-`
+     * iniziale) sta nel servizio, in un posto solo: GIT_PATH_INVALID.
+     */
+    if (method === 'POST' && /^\/api\/v1\/sessions\/([^/]+)\/git\/(stage|unstage|commit)$/.test(url.pathname)) {
+      try {
+        requireNoQuery(url);
+        if (!gitService) { const error = new Error('Git non disponibile'); error.code = 'GIT_STORE_UNAVAILABLE'; throw error; }
+        const body = await leggiCorpoJson(req);
+        const parti = url.pathname.split('/');
+        const sessionId = decodeURIComponent(parti[4]);
+        const azione = parti[6];
+        /* ⛔ AL CONTRARIO — solo le chiavi previste da QUESTA azione: un corpo che ne porta altre è rifiutato, mai ignorato in silenzio (un `messaggio` su uno stage vorrebbe dire che chi chiama ha capito un'altra cosa). */
+        const ammesse = azione === 'commit' ? ['percorsi', 'messaggio'] : ['percorsi'];
+        const chiavi = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : null;
+        if (chiavi === null || chiavi.some((k) => !ammesse.includes(k))) {
+          const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error;
+        }
+        const esito = azione === 'commit'
+          ? await gitService.commit({ sessionId, percorsi: body.percorsi, messaggio: body.messaggio })
+          : await gitService[azione]({ sessionId, percorsi: body.percorsi });
         if ('erroreAvvio' in esito) { const error = new Error(esito.erroreAvvio); error.code = esito.code; throw error; }
         sendJson(res, 200, successEnvelope(esito, clock), method);
       } catch (error) {
@@ -2437,6 +2529,18 @@ export function createHttpApp({
         // vede nemmeno per nome, altrimenti l'elenco stesso diventerebbe la sonda
         // che permette di indovinare un terminalId da usare sulla WebSocket.
         const terminalsMatch = terminalRegistry && /^\/api\/v1\/sessions\/([^/]+)\/terminals$/.exec(url.pathname);
+        /*
+         * ⭐⭐⭐ W1-05 (05/9) — le due LETTURE git di una sessione. Stesso
+         * principio esatto di processesMatch/metricsMatch qui sopra: sola
+         * lettura, per-sessione, derivata da ciò che esiste già.
+         * ⛔ E davvero sola lettura anche dal punto di vista di git: ogni
+         * comando porta `--no-optional-locks`, così un pannello Review che si
+         * aggiorna non si prende `index.lock` sotto le mani di chi sta
+         * lavorando nella stessa cartella — l'indice qui è CONDIVISO con
+         * l'owner e con le altre sessioni (git(1), ricerca 05/09/2026).
+         */
+        const gitStatusMatch = gitService && /^\/api\/v1\/sessions\/([^/]+)\/git\/status$/.exec(url.pathname);
+        const gitBranchMatch = gitService && /^\/api\/v1\/sessions\/([^/]+)\/git\/branch$/.exec(url.pathname);
         // ⭐⭐⭐ 29/8 — FASE F: il Capability hub elenca le skill dichiarate — stesso principio, senza il concetto di fiducia (le skill non ce l'hanno).
         const skillsMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/skills$/.exec(url.pathname);
         // ⭐⭐⭐ 29/8 — FASE N: il Capability hub elenca le voci di Libreria del progetto — stesso principio esatto di skillsMatch appena sopra (nessun concetto di fiducia).
@@ -2458,7 +2562,26 @@ export function createHttpApp({
         // ⭐⭐⭐ 28/8 — non SESSION-scoped: un artefatto ha un id UUID già globalmente unico (agent-service.mjs), stesso principio di /api/v1/models.
         const artifactMatch = /^\/api\/v1\/artifacts\/([^/]+)$/.exec(url.pathname);
 
-        if (terminalsMatch) {
+        if (gitStatusMatch || gitBranchMatch) {
+          requireNoQuery(url);
+          const trovato = gitStatusMatch ?? gitBranchMatch;
+          let sessionId;
+          try {
+            sessionId = decodeURIComponent(trovato[1]);
+          } catch {
+            sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+            return;
+          }
+          const esito = gitStatusMatch
+            ? await gitService.stato({ sessionId })
+            : await gitService.ramo({ sessionId });
+          if ('erroreAvvio' in esito) {
+            const errore = new Error(esito.erroreAvvio);
+            errore.code = esito.code;
+            throw errore;
+          }
+          data = esito;
+        } else if (terminalsMatch) {
           requireNoQuery(url);
           let sessionId;
           try {

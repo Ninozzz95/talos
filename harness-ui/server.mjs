@@ -17,6 +17,7 @@ import { ENDPOINT_SENTINELLA_DUCKDUCKGO, creaTrasportoSenzaChiave } from './src/
 import { createModelCatalog } from './src/model-catalog.mjs';
 import { creaRegistroTerminali, MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA } from './src/pty-terminal.mjs';
 import { creaRegistroSchedeTerminale } from './src/terminal-registry.mjs'; // ⭐ 05/9, W1-01
+import { creaServizioGit } from './src/git-service.mjs'; // ⭐ 05/9, W1-05
 import { creaGestoreTerminaleWs } from './src/terminal-ws.mjs';
 import { misuraCapacitaMacchina } from './src/machine-capacity.mjs';
 import { createLocalModelStore } from './src/local-model-store.mjs';
@@ -520,6 +521,18 @@ async function startServer() {
     staticHandler: createStaticHandler(config.publicDir),
     sessionRegistry,
     terminalRegistry: registroSchedeTerminale, // ⭐ 05/9, W1-01
+    /*
+     * ⭐⭐⭐ 05/9, W1-05 — lo stato Git di una sessione: la sorgente
+     * «Non committato» della Review a due sorgenti (W1-06).
+     * ⛔ La cartella la decide SOLO il registro delle sessioni, esattamente
+     * come per le schede terminale: il client nomina una sessione, non
+     * sceglie mai un percorso di lavoro. Un id sconosciuto torna `null` e il
+     * servizio risponde NOT_FOUND — nessun ripiego sul primo progetto
+     * configurato, che era il difetto di `server.mjs:589` chiuso da W1-01.
+     * ⛔⛔ Non c'è nessun push da cablare: quella porta non esiste nel
+     * servizio, per regola dell'owner.
+     */
+    gitService: creaServizioGit({ cartellaDiSessione: (sessionId) => sessionRegistry.cartellaDi(sessionId) }),
     // Un catalogo non configurato è uno stato degradato osservabile, non un crash HTTP.
     listaTaskDisponibili: () => (taskCatalogProvider ? listaTaskDisponibili(taskCatalogProvider) : []),
     elencaCartelleProgetto: () => elencaCartelleProgetto(config.cartelleProgetto),
