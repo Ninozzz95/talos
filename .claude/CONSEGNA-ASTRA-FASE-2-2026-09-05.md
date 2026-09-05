@@ -148,3 +148,13 @@ Cosa fai tu dopo · Automazioni per chiudere B5, poi B4 → B6 → B2 → B7 →
 Cosa rimane · Gate di chat naturale con runtime owner; limite CSS condiviso e richieste Fase 3; OAuth e piano computer-use dopo le schermate. Nessun push.
 
 Chiusura B5.5: test:lab 195/195. La suite componenti 42/42 è partita per omissione della variabile sulla porta di default 4176; processo terminato, controllo mirato ripetuto esplicitamente su 4178: ForgeList 3/3. Nessun uso della 4174. Porte dei due server di confronto sempre 4177/4179.
+
+## B5.6 — Automazioni, renderer pronto per review
+
+Elenco reale, ricerca, filtri, dettagli, pausa/attivazione ed eliminazione persistenti. Nuova automazione crea davvero un record in pausa; il suo aspetto legacy resta da convertire in B7 (difetto registrato e screenshot aperto). Non dichiaro chiuso il flusso visivo completo prima di questa correzione.
+
+Prove: 5/5 unità, 15/15 percorsi reali isolati, 45/45 componenti. Statico 194/195 alla prima corsa +1/1 caso ripetuto per errore filesystem nella scrittura della PNG Toast; verify 350/351, unico errore CSS condiviso preesistente. Build 30 asset e diff pulito. Tutte le 36 immagini aperte in immagini/astra-fase2/AutomationRow/, confronto originale/proposta dettagliato nel ledger. Nessuno scheduler o modello eseguito.
+
+Cosa deve fare l'owner · Nessuna azione; prova facoltativa Altro → Automazioni, 4177.
+Cosa fai tu dopo · Capability.
+Cosa rimane · B4 → B6 → B2 → B7 → B1 → B8, Browser, CSS condiviso, poi OAuth e piano computer-use.

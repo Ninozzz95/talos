@@ -593,6 +593,8 @@ button{background:none; border:0; cursor:pointer; padding:0}
 .talos-automation{margin-bottom:10px; overflow:hidden}
 .talos-automation__head{display:flex; align-items:center; gap:10px; padding:12px 14px; flex-wrap:wrap}
 .talos-automation__name{font-weight:600; font-size:13.5px}
+#schermoAutomazioni .talos-automation__name{flex-basis:180px;min-width:0;overflow-wrap:anywhere}
+#schermoAutomazioni .talos-kv__v{white-space:normal;text-align:right;overflow-wrap:anywhere}
 .talos-automation__runs{padding:2px 14px 10px; border-top:1px solid var(--talos-border-subtle)}
 .talos-automation__fix{display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:10px 14px; border-top:1px solid var(--talos-border-subtle); background:var(--talos-warning-soft); color:var(--talos-assistant-text); font-size:13px}
 .talos-tree{display:flex; flex-direction:column; gap:6px; margin:14px 0}

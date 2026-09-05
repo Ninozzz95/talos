@@ -1087,3 +1087,112 @@ Cosa fai tu dopo · Automazioni per chiudere B5, poi B4 → B6 → B2 → B7 →
 Cosa rimane · Gate di chat naturale con runtime owner; limite CSS condiviso e richieste Fase 3; OAuth e piano computer-use dopo le schermate. Nessun push.
 
 Chiusura B5.5: test:lab 195/195. La suite componenti 42/42 è partita per omissione della variabile sulla porta di default 4176; processo terminato, controllo mirato ripetuto esplicitamente su 4178: ForgeList 3/3. Nessun uso della 4174. Porte dei due server di confronto sempre 4177/4179.
+
+
+## B5.6 AutomationRow — piano prima degli edit, 05/09/2026
+Sottosistema TALOS UI, base 0ec3598, merge lane/harness-desktop aggiornato. Perimetro: schermoAutomazioni, componente e renderAutomationsReali. La creazione esistente openNewAutomationSheet resta funzionante e sarà convertita come dialogo in B7; qui il pulsante Nuova automazione richiama proprio quel canale. Nessuna modifica allo scheduler/store/ponte/frammenti/sidebar/Chat/Review.
+
+Ricerca fresca finestra 06/08–05/09/2026. Release riaperte oggi: Hermes v0.21.0 v2026.8.31 29112be, 31/08 https://github.com/NousResearch/hermes-agent/releases/tag/v2026.8.31; Claude v2.1.261 d7dbd9a 04/09 https://github.com/anthropics/claude-code/releases/tag/v2.1.261; Codex rust-v0.153.4 3d2ee51 04/09 https://github.com/openai/codex/releases/tag/rust-v0.153.4. Documenti seguenti stabili riverificati oggi, date proprie non verificate, non dichiarati novità dell'ultimo mese.
+| Fonte | Forza / limite documentato | Decisione e +1 misurabile |
+|---|---|---|
+| Hermes Cron https://hermes-agent.nousresearch.com/docs/user-guide/features/cron/ | Cron naturale, cronologia persistente claimed/running/terminal, unknown dopo crash, incidenti riconosciuti; dipende dal processo gateway/scheduler, un tentativo unknown non viene rilanciato automaticamente | Adattare distinzione schedulazione/risultato. +1 obiettivo UI: ogni numero qualificato, ultimo avvio non venduto come successo. Storico Hermes è più ricco dell'HTTP TALOS: gap dichiarato, non finta superiorità |
+| Claude Desktop scheduled tasks https://code.claude.com/docs/en/desktop-scheduled-tasks | Elenco, pause, esecuzioni in nuova sessione, frequenza e cartella; app/computer accesi e scarto temporale deterministico | Adattare stato/prossimo avvio/requisiti locali. +1 obiettivo: limite giornaliero e conteggio UTC sulla riga, azione confermata con rilettura; nessun claim di precisione temporale senza test scheduler |
+| Codex Scheduled https://learn.chatgpt.com/docs/automations?surface=app | Ricerca All/Active/Paused, worktree/local, run consultabili; locale richiede app/computer attivi, web non accede alla cartella locale | Adattare ricerca/filtri e gestione; +1 obiettivo: pausa persistita e fallimento d'azione accanto alla riga senza stato ottimistico. TALOS non ha storico/esiti/costi collegati e non replica una inbox finta |
+| WAI Switch https://www.w3.org/WAI/ARIA/apg/patterns/switch/ | Etichetta stabile, aria-checked booleano, Space attiva; stato sconosciuto non è false | Adottare switch con nome dell'automazione, separare testo Attiva/In pausa e messaggi; test tastiera/salvataggio/errore |
+
+API reali lette: GET /api/v1/automations items:[]; GET /api/v1/tasks items:[] (server 4177). Schema da createAutomationStore: id,taskId,nome,intervalloMinuti,limiteAlGiorno,attiva,creataAlle,ultimaEsecuzione,prossimaEsecuzione,eseguiteOggi,giornoContatore. Create nasce in pausa; intervallo intero >=5, limite intero 1–10. Toggle/elimina reali via POST esistenti. Il contatore è del giorno UTC, lo scheduler tratta come zero il conteggio di una data precedente. registraEsecuzione registra avvio, non completamento; nessun esito/storico/costo dall'HTTP. Lista dello store nasconde errori filesystem/corruzione: gap esistente. Scheduler/timer non viene attivato nel test isolato.
+Originale: la sola entrata Automazioni è nella attention-card, che sparisce con elenco vuoto (verificato DOM e sorgente); palette originale non contiene Automazioni. Per ispezionare il flusso popolo soltanto uno store temporaneo reale, inoltro API di test e apro il pulsante Apri visibile. Nessuna scrittura alle automazioni owner. Il mockup attuale mostra cron/esiti/costi/permessi non esposti: sostituire con gli undici campi veri, mai togliere creazione/pausa/attivazione/eliminazione originali.
+File esatti:
+- .claude/LEDGER-ASTRA-FASE-2-2026-09-05.md
+- .claude/CONSEGNA-ASTRA-FASE-2-2026-09-05.md
+- .claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html
+- harness-ui/frontend/src/components/automazioni.js
+- harness-ui/frontend/lab/fixtures/automazioni.js
+- harness-ui/frontend/lab/main.js
+- harness-ui/frontend/tests/unit/automazioni.test.mjs
+- harness-ui/frontend/tests/parity/componenti.spec.mjs
+- harness-ui/frontend/tests/parity/automazioni-vivo.spec.mjs
+- harness-ui/frontend/tests/parity/automation-backend-fixture.mjs
+- harness-ui/frontend/playwright.astra.config.mjs
+- harness-ui/frontend/src/legacy/app.js
+- harness-ui/frontend/index.template.html
+- harness-ui/frontend/src/styles/index.css
+Immagini esatte:
+- .claude/immagini/astra-fase2/AutomationRow/mockup-1440.png
+- .claude/immagini/astra-fase2/AutomationRow/componente-1440.png
+- .claude/immagini/astra-fase2/AutomationRow/app-vuota-1440.png
+- .claude/immagini/astra-fase2/AutomationRow/fixture-elenco-1440.png
+- .claude/immagini/astra-fase2/AutomationRow/fixture-pausa-1440.png
+- .claude/immagini/astra-fase2/AutomationRow/fixture-filtro-1440.png
+- .claude/immagini/astra-fase2/AutomationRow/app-errore-1440.png
+- .claude/immagini/astra-fase2/AutomationRow/errore-azione-1440.png
+- .claude/immagini/astra-fase2/AutomationRow/originale-fixture-1440.png
+- .claude/immagini/astra-fase2/AutomationRow/originale-creazione-1440.png
+- .claude/immagini/astra-fase2/AutomationRow/app-creazione-1440.png
+- .claude/immagini/astra-fase2/AutomationRow/mockup-1280.png
+- .claude/immagini/astra-fase2/AutomationRow/componente-1280.png
+- .claude/immagini/astra-fase2/AutomationRow/app-vuota-1280.png
+- .claude/immagini/astra-fase2/AutomationRow/fixture-elenco-1280.png
+- .claude/immagini/astra-fase2/AutomationRow/fixture-pausa-1280.png
+- .claude/immagini/astra-fase2/AutomationRow/fixture-filtro-1280.png
+- .claude/immagini/astra-fase2/AutomationRow/app-errore-1280.png
+- .claude/immagini/astra-fase2/AutomationRow/errore-azione-1280.png
+- .claude/immagini/astra-fase2/AutomationRow/originale-fixture-1280.png
+- .claude/immagini/astra-fase2/AutomationRow/originale-creazione-1280.png
+- .claude/immagini/astra-fase2/AutomationRow/app-creazione-1280.png
+- .claude/immagini/astra-fase2/AutomationRow/mockup-1024.png
+- .claude/immagini/astra-fase2/AutomationRow/componente-1024.png
+- .claude/immagini/astra-fase2/AutomationRow/app-vuota-1024.png
+- .claude/immagini/astra-fase2/AutomationRow/fixture-elenco-1024.png
+- .claude/immagini/astra-fase2/AutomationRow/fixture-pausa-1024.png
+- .claude/immagini/astra-fase2/AutomationRow/fixture-filtro-1024.png
+- .claude/immagini/astra-fase2/AutomationRow/app-errore-1024.png
+- .claude/immagini/astra-fase2/AutomationRow/errore-azione-1024.png
+- .claude/immagini/astra-fase2/AutomationRow/originale-fixture-1024.png
+- .claude/immagini/astra-fase2/AutomationRow/originale-creazione-1024.png
+- .claude/immagini/astra-fase2/AutomationRow/app-creazione-1024.png
+- .claude/immagini/astra-fase2/AutomationRow/prima-originale-1280.png
+- .claude/immagini/astra-fase2/AutomationRow/prima-creazione-1280.png
+- .claude/immagini/astra-fase2/AutomationRow/prima-mockup-1280.png
+Nessuna cancellazione. Pubblici: statoAutomazione, testiAutomazione, filtraAutomazioni, riepilogoAutomazioni, creaAutomationRow, aggiornaPaginaAutomazioni; fixture AUTOMAZIONI, ATTIVITA_AUTOMAZIONI, ADESSO; helper avviaAutomazioniDiProva. Compatibilità renderAutomationsReali, aggiornaWidgetAutomazioni e openNewAutomationSheet conservate. Dispatch e data-automation-action=new esistenti, nessuna regia parallela.
+RED: import modulo mancante; AUT-STATO/AUT-CONTEGGIO-UTC/AUT-DATE/AUT-FILTRO/AUT-RIEPILOGO. Prima del codice UI: catture originali e mockup aperte. Poi markup canonico, fixture, componente, lab/parità e immagini aperte PRIMA dell'innesto. RED live: pagina ancora esempi finché non collegata. GREEN: vuoto reale, creazione reale in pausa su store isolato, toggle/pause/delete persistiti dopo reload, ricerca/stato, tastiera, errore GET/POST/payload, no doppio POST, ritorno alla pagina in volo. Test originali con stessi record. Form legacy provato ma conversione visiva in B7. Il runtime modello non è disponibile: nessuna promessa di gate chat naturale superato.
+Regressioni: componenti completi, test:lab, verify con rosso CSS preesistente esplicito, build deterministica e diff --check. Rollback singolo commit UI, nessuna migrazione. Blocchi/tokens/sprite nuovi previsti 0; CSS solo nel mockup se serve a testo/reflow, generatore dopo ogni modifica canonica.
+
+Aggiornamento base prima degli edit: il merge effettivo ha importato 5df583cb (merge locale 36870e5b), solo documenti. Letto PROMPT-ASTRA-2026-09-05-BROWSER-E-TESTATA.md: requisito browser vero a schede registrato come lavoro residuo; non si dichiarerà sufficiente il lettore di testo. K-I attende kernel/Electron, da trattare nel suo passo e con ricerca primaria propria. Piano Automazioni invariato.
+
+Ispezione iniziale completata: aperte originale-fixture e modulo creazione 1280x800, mockup 1280x720. La prima cattura immediata del click nel browser integrato era ancora il frame Officina; ricatturata dopo DOM Automazioni verificato. Nella prima immagine originale si vede anche testo Chat sovrapposto durante transizione: acquisizioni finali con animazioni disattivate, senza alterare dati. Lista e modulo originali hanno toggle/elimina/creazione reali; la prossima esecuzione a limite raggiunto non è qualificata nell'originale.
+
+Passi 4–6, 05/09: RED modulo mancante osservato. Prima di markup/componente riaperte Hermes Cron (gateway), Claude scheduled (pause), Codex Scheduled (Paused), WAI Switch: etichetta stabile, stato solo confermato, contatore UTC coerente col backend. Form legacy resta operativo, nessun handler di creazione duplicato. Decisioni adottare/adattare/gap del piano confermate.
+
+Correzione del solo raccordo laboratorio: LABORATORI invoca le funzioni senza argomenti, AutomationRow(root) usava root non fornito e non raggiungeva visualReady. Corsa interrotta, nessun verde dichiarato. Adeguamento al pattern document.querySelector degli altri componenti. Fonti di ricerca/stato riaperte (Hermes pause, Claude Status, Codex Search scheduled), decisioni invariate.
+
+QA visiva prima dell'innesto: parità 3/3 ma proposta non accettabile. AUT-FILTRO-STILE-CANONICO: classi talos-chip/talos-filter-chips inesistenti, etichette attaccate; AUT-DENSITA-COMANDI: troppe informazioni espanse, terzo switch fuori viewport a 1280/1024. Registrati come test permanenti in componenti.spec. Correzione batch: usare esattamente FilterChips esistente, tenere prossimo avvio/conteggio/limite visibili e spostare creazione/ultimo avvio/id in disclosure Dettagli. Nessun campo dell'originale nascosto; è solo informazione aggiuntiva. Titolo usa base flessibile per mantenere switch nella testata. Fonti riaperte 05/09: Hermes/Claude/Codex scheduled sopra (lista + dettaglio), WAI Disclosure https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/. Adattare progressive disclosure, obiettivo verificabile: tutti e tre gli switch dentro il viewport delle fixture e filtri con classe canonica.
+
+Ripresa 05/09: merge aggiornato; riaperte le tre fonti scheduled e WAI Disclosure prima della correzione batch. RED AUT-FILTRO-STILE-CANONICO riprodotto a 1024. Contratto disclosure: apertura conservata per id durante refresh, focus sul pulsante; dati originali restano visibili.
+
+Innesto: AUT-VUOTO RED osservato (1280, dati esempio rimasti). Parità corretta 3/3 e sei PNG aperti. Ricerca riaperta 05/09 su Hermes Cron, Claude Desktop Scheduled, Codex Scheduled e WAI Switch. Adattamento API esistente; nessuna libreria necessaria per il renderer. Helper interni mostraAutomazioni e modificaAutomazione, generazione GET globale e blocco POST globale: automazioni sono globali, nessun legame inventato alla sessione. Focus, filtri e disclosure conservati; una scrittura per volta anche uscendo/rientrando.
+
+AUT-RECUPERO prima corsa: timeout nel selettore di navigazione, non nel salvataggio. Trace: il contatore sidebar è omesso quando GET fallisce; pulsante visibile «Automazioni», test pretendeva cifra. Corretto selettore sulla stessa etichetta umana con conteggio opzionale; cleanup store garantito anche a browser già chiuso. B7-DIALOGO-CREAZIONE-AUT registrato: screenshot mostra foglio legacy senza stile; funziona, ma la consegna completa resta aperta finché convertito in B7.
+
+Fixture di errore corretta al contratto envelope HTTP {ok,data/error}: la prima versione con items alla radice provava il rifiuto envelope, non la riga null. Nessuna modifica al contratto o al prodotto per far passare la prova.
+
+## B5.6 AutomationRow — risultato e verifica, 05/09/2026
+Renderer della pagina collegato a GET /api/v1/automations, POST toggle/elimina reali. Originale openNewAutomationSheet mantiene creazione e tetti server: test su store temporaneo reale, scheduler spento. Stesse 3 automazioni confrontate nell'originale e nella proposta. Stato reale 4177 vuoto, nessun record owner creato.
+
+| Aspetto | Originale | Proposta / beneficio provato | Verdetto |
+|---|---|---|---|
+| Dati e semantica | Nome, frequenza, massimo, prossima ora, stato | Stessi campi; giorno UTC, avvii registrati distinti dagli esiti, limite raggiunto esplicito | Conservato, precisione migliorata |
+| Ricerca e dettaglio | Elenco, nessun filtro | Nome e attività, Tutte/Attive/In pausa, dettagli espandibili con data creazione/ultimo avvio/id | Aggiunto e provato |
+| Pausa/attiva/elimina | POST esistenti, nessun blocco globale | Stesso POST, stato solo dopo rilettura, doppio invio bloccato, errore recuperabile anche uscendo/rientrando | Provato con HTTP/store reali |
+| Tastiera e reflow | Pulsanti semplici, descrizione piccola | Switch con etichetta stabile, Space, disclosure Enter/Space, tab con frecce, titolo intero | Tre larghezze verificate; in fondo si scorre |
+| Densità | Tre righe più corte | Più dati leggibili; tre switch visibili, metadati aggiuntivi a richiesta | Tradeoff esplicito: più alte dell'originale, nessuna perdita di azioni |
+| Creazione | Dialogo resizable stilizzato | Funziona ma foglio legacy è visivamente senza stile nel nuovo corpo | B7-DIALOGO-CREAZIONE-AUT aperto: non accettato come consegna finale |
+
+Prove: unità Automazioni 5/5; percorsi vivo 15/15 (5 scenari x3: originale, vuoto reale, persistenza/filtri/disclosure, creazione, recupero). Componenti completi 45/45 su 4178. Statico: prima corsa 194/195, unico errore filesystem UNKNOWN scrivendo toast-1440.png; caso identico ripetuto senza edit 1/1. Copertura finale 195 casi superati, non dichiarata prima corsa interamente verde. Verify 350/351: unico PHASE3-TOKEN-CONTRACT-01 preesistente, stesso problema già misurato prima degli edit. Build deterministica 30 asset; diff --check verde. Log Temp/astra-automation-verify.log e Temp/astra-automation-lab.log.
+
+Immagini: 33 finali +3 iniziali in .claude/immagini/astra-fase2/AutomationRow/, tutte aperte; confronto mockup/componente dark e app/originale light a 1440/1280/1024. Ulteriore apertura e screenshot manuale nel browser integrato su 4177, dark, vuoto reale. Nessun audit Hermes GUI. Originale contiene anche scorciatoia statica al task sconto-a-scaglioni, separata dalle automazioni API: task assente nel catalogo locale; non presentata come schedulazione disponibile.
+Blocchi riusati AutomationsScreen, Topbar di pagina, Page, Toolbar, FilterChips, AutomationRow; nuovi blocchi/token/simboli 0/0/0. CSS due regole circoscritte nel mockup per titolo e valori lunghi, template/CSS generati. Sorgente legacy toccato solo renderAutomationsReali e helper dedicati, import; creazione, widget, backend, ponte, frammenti e superfici Claude conservati.
+
+Cosa deve fare l'owner · Nessuna azione per proseguire; può provare Altro → Automazioni su http://127.0.0.1:4177/.
+Cosa fai tu dopo · B4 Capability; B7 chiuderà il difetto visivo del modulo di creazione prima della consegna completa.
+Cosa rimane · B4 → B6 → B2 → B7 → B1 → B8 e Browser vero a schede; contratto CSS condiviso; runtime per gate chat naturale, poi OAuth e piano computer-use. Nessun push.

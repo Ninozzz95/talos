@@ -1,3 +1,5 @@
+import { aggiornaPaginaAutomazioni } from '../src/components/automazioni.js';
+import { AUTOMAZIONI, ADESSO as ADESSO_AUTOMAZIONI } from './fixtures/automazioni.js';
 import { aggiornaPaginaOfficina } from '../src/components/officina.js';
 import { STRUMENTI_FORGIATI } from './fixtures/officina.js';
 import { aggiornaPaginaRicerca } from '../src/components/ricerca.js';
@@ -56,6 +58,7 @@ document.documentElement.setAttribute('data-schermo', 'chat');
 const componente = new URLSearchParams(location.search).get('componente') || '';
 
 const LABORATORI = {
+  AutomationRow() { aggiornaPaginaAutomazioni(document.querySelector('#schermoAutomazioni'), AUTOMAZIONI, { adesso: ADESSO_AUTOMAZIONI }); },
   ForgeList() { aggiornaPaginaOfficina(document.querySelector('#schermoOfficina'), STRUMENTI_FORGIATI); },
   ReportRow() { aggiornaPaginaRicerca(document.querySelector('#schermoRicerca'), RICERCHE); },
   LibraryRow() { aggiornaPaginaLibreria(document.querySelector('#schermoLibreria'), LIBRERIA); },

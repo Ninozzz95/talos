@@ -1,0 +1,44 @@
+import {test,expect} from '@playwright/test';
+import {mkdir} from 'node:fs/promises';
+import path from 'node:path';
+import {AUTOMAZIONI as AUTOMAZIONI_FIX,ADESSO} from '../../lab/fixtures/automazioni.js';
+import {avviaAutomazioniDiProva} from './automation-backend-fixture.mjs';
+const APP='http://127.0.0.1:4177',ORIGINALE='http://127.0.0.1:4179',ROTTE=/\/api\/v1\/(?:automations(?:\/[^/]+\/(?:toggle|elimina))?|tasks)$/;
+const FOTO=path.resolve('../../.claude/immagini/astra-fase2/AutomationRow');
+async function foto(page,nome,info){await mkdir(FOTO,{recursive:true});await page.screenshot({path:path.join(FOTO,nome+'-'+info.project.use.viewport.width+'.png'),animations:'disabled'});}
+async function pronta(page,url=APP){await page.goto(url);const salta=page.getByRole('button',{name:'Salta per ora',exact:true});if(await salta.isVisible())await salta.click();if(url===APP)await expect(page.getByRole('button',{name:'Libreria 0',exact:true})).toBeVisible();}
+async function apriAutomazioni(page){const voce=page.getByRole('button',{name:/^Automazioni(?: \d+)?$/});if(!await voce.isVisible())await page.getByRole('button',{name:'Altro',exact:true}).click();await voce.click();}
+test('AUT-ORIGINALE: leggo le automazioni e apro il modulo esistente',async({page},info)=>{
+ const lab=await avviaAutomazioniDiProva();try{
+  await page.route(ROTTE,r=>lab.inoltra(r));await pronta(page,ORIGINALE);await expect(page.locator('.attention-card')).toBeVisible();await page.locator('.attention-card').getByRole('button',{name:'Apri',exact:true}).click();await expect(page.locator('#automationListReal .automation-row')).toHaveCount(3);await foto(page,'originale-fixture',info);
+  await page.getByRole('button',{name:'Nuova automazione',exact:true}).click();await expect(page.getByRole('button',{name:'Crea automazione',exact:true})).toBeVisible();await foto(page,'originale-creazione',info);
+ }finally{try{await page.unrouteAll({behavior:'wait'});}finally{await lab.chiudi();}}
+});
+
+test('AUT-VUOTO: apro Automazioni e vedo solo i dati realmente presenti',async({page},info)=>{
+ await pronta(page);await apriAutomazioni(page);const p=page.locator('#schermoAutomazioni');await expect(p.getByText('Nessuna automazione creata.',{exact:true})).toBeVisible({timeout:5000});await expect(p.locator('[data-c="AutomationRow"]')).toHaveCount(0);await page.reload();await apriAutomazioni(page);await expect(p.getByText('Nessuna automazione creata.',{exact:true})).toBeVisible();await foto(page,'app-vuota',info);
+ await p.getByRole('button',{name:'Nuova automazione',exact:true}).click();await expect(page.getByText('Non ci sono ancora attività pronte per creare un’automazione.',{exact:false})).toBeVisible();
+});
+
+test('AUT-PERSISTENZA: metto in pausa, cerco, riattivo ed elimino una sola automazione',async({page},info)=>{
+ const lab=await avviaAutomazioniDiProva();try{
+  await page.route(ROTTE,r=>lab.inoltra(r));await pronta(page);await apriAutomazioni(page);const p=page.locator('#schermoAutomazioni'),righe=p.locator('[data-c="AutomationRow"]');await expect(righe).toHaveCount(3);await expect(p.getByRole('switch').first()).toBeEnabled();await foto(page,'fixture-elenco',info);
+  const nome='Automazione Riepilogo delle attività',sw=p.getByRole('switch',{name:nome,exact:true});await sw.focus();await page.keyboard.press('Space');await expect(sw).toHaveAttribute('aria-checked','false');await expect(sw).toBeEnabled();await expect(sw).toBeFocused();expect((await lab.elenca()).find(a=>a.nome==='Riepilogo delle attività').attiva).toBe(false);await foto(page,'fixture-pausa',info);
+  await page.reload();await apriAutomazioni(page);await expect(sw).toHaveAttribute('aria-checked','false');await expect(sw).toBeEnabled();
+  const prima=righe.filter({hasText:'Riepilogo delle attività'}),det=prima.getByRole('button',{name:'Dettagli',exact:true});await det.focus();await page.keyboard.press('Enter');await expect(det).toHaveAttribute('aria-expanded','true');await expect(prima.getByText('Ultimo avvio registrato',{exact:true})).toBeVisible();await p.getByRole('button',{name:'Aggiorna',exact:true}).click();await expect(sw).toBeEnabled();await expect(det).toHaveAttribute('aria-expanded','true');await det.click();
+  await p.getByRole('searchbox').fill('promemoria');await expect(righe).toHaveCount(1);await expect(righe.first()).toContainText(AUTOMAZIONI_FIX[1].nome);await foto(page,'fixture-filtro',info);await p.getByRole('searchbox').fill('');await p.getByRole('tab',{name:'In pausa',exact:true}).click();await expect(righe).toHaveCount(2);await p.getByRole('tab',{name:'Tutte',exact:true}).click();
+  await sw.click();await expect(sw).toHaveAttribute('aria-checked','true');await expect(sw).toBeEnabled();await p.getByRole('button',{name:'Elimina '+AUTOMAZIONI_FIX[1].nome,exact:true}).click();await expect(righe).toHaveCount(2);expect((await lab.elenca()).some(a=>a.nome===AUTOMAZIONI_FIX[1].nome)).toBe(false);await page.reload();await apriAutomazioni(page);await expect(righe).toHaveCount(2);await expect(sw).toHaveAttribute('aria-checked','true');
+ }finally{try{await page.unrouteAll({behavior:'wait'});}finally{await lab.chiudi();}}
+});
+test('AUT-CREAZIONE: scelgo una attività e creo una automazione che nasce in pausa',async({page},info)=>{
+ const lab=await avviaAutomazioniDiProva({vuoto:true});try{
+  await page.route(ROTTE,r=>lab.inoltra(r));await pronta(page);await apriAutomazioni(page);const p=page.locator('#schermoAutomazioni');await expect(p.getByText('Nessuna automazione creata.',{exact:true})).toBeVisible();await p.getByRole('button',{name:'Nuova automazione',exact:true}).click();const dialog=page.locator('#sheetDialog');await expect(dialog.getByRole('button',{name:'Crea automazione',exact:true})).toBeVisible();await dialog.getByRole('combobox').selectOption(AUTOMAZIONI_FIX[0].taskId);await dialog.getByRole('spinbutton').nth(0).fill('15');await dialog.getByRole('spinbutton').nth(1).fill('2');await foto(page,'app-creazione',info);await dialog.getByRole('button',{name:'Crea automazione',exact:true}).click();await expect(p.locator('[data-c="AutomationRow"]')).toHaveCount(1);await expect(p.getByRole('switch')).toHaveAttribute('aria-checked','false');const [a]=await lab.elenca();expect(a).toMatchObject({taskId:AUTOMAZIONI_FIX[0].taskId,intervalloMinuti:15,limiteAlGiorno:2,attiva:false});await page.reload();await apriAutomazioni(page);await expect(p.getByRole('switch')).toHaveAttribute('aria-checked','false');
+ }finally{try{await page.unrouteAll({behavior:'wait'});}finally{await lab.chiudi();}}
+});
+test('AUT-RECUPERO: un errore non cambia lo stato, posso riprovare anche dopo essere uscito',async({page},info)=>{
+ const lab=await avviaAutomazioniDiProva();let erroreGet=true,corrotto=false,errorePost=true,ricevuti=0,sblocca;const attesa=new Promise(r=>sblocca=r);try{
+  await page.route(ROTTE,async r=>{if(r.request().method()==='POST'){ricevuti++;if(errorePost){await attesa;return r.fulfill({status:503,json:{ok:false,error:{code:'UNAVAILABLE',message:'Server temporaneamente non disponibile'}}});}}else if(r.request().url().endsWith('/automations')){if(erroreGet)return r.fulfill({status:503,json:{ok:false,error:{code:'UNAVAILABLE',message:'Server temporaneamente non disponibile'}}});if(corrotto)return r.fulfill({json:{ok:true,data:{items:[null]}}});}return lab.inoltra(r);});
+  await pronta(page);await apriAutomazioni(page);const p=page.locator('#schermoAutomazioni');await expect(p.locator('[data-auto-esito]')).toHaveAttribute('role','alert');await expect(p.locator('[data-c="AutomationRow"]')).toHaveCount(0);await foto(page,'app-errore',info);erroreGet=false;corrotto=true;await p.getByRole('button',{name:'Aggiorna',exact:true}).click();await expect(p.locator('[data-auto-esito]')).toContainText('Elenco delle automazioni non valido');corrotto=false;await p.getByRole('button',{name:'Aggiorna',exact:true}).click();const sw=p.getByRole('switch',{name:'Automazione Riepilogo delle attività',exact:true});await expect(sw).toBeEnabled();await sw.click();await expect(sw).toBeDisabled();await expect(sw).toHaveAttribute('aria-checked','true');expect(ricevuti).toBe(1);
+  await page.getByRole('button',{name:/^Board/}).click();await apriAutomazioni(page);await expect(sw).toBeDisabled();sblocca();await expect(p.locator('[data-auto-errore-azione]')).toContainText('non salvata');await expect(sw).toBeEnabled();await expect(sw).toHaveAttribute('aria-checked','true');await foto(page,'errore-azione',info);errorePost=false;await sw.click();await expect(sw).toHaveAttribute('aria-checked','false');await expect(sw).toBeEnabled();await expect(p.locator('[data-auto-errore-azione]')).toBeHidden();expect(ricevuti).toBe(2);expect((await lab.elenca()).find(a=>a.nome==='Riepilogo delle attività').attiva).toBe(false);
+ }finally{sblocca();try{await page.unrouteAll({behavior:'wait'});}finally{await lab.chiudi();}}
+});
