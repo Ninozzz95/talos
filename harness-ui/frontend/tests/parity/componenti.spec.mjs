@@ -16,6 +16,7 @@ import { MOCKUP, apri, confrontaPixel, mostra, struttura, testi } from './aiuto.
 const LAB = process.env.TALOS_LAB_URL || `http://127.0.0.1:${process.env.TALOS_LAB_PORT || 4176}`;
 
 const COMPONENTI = [
+  { nome: 'AutomationRow', schermata: 'schermoAutomazioni', selettore: '#schermoAutomazioni' },
   { nome: 'ForgeList', schermata: 'schermoOfficina', selettore: '#schermoOfficina' },
   { nome: 'ReportRow', schermata: 'schermoRicerca', selettore: '#schermoRicerca' },
   { nome: 'LibraryRow', schermata: 'schermoLibreria', selettore: '#schermoLibreria' },
@@ -43,6 +44,10 @@ test.describe('parità dei componenti ↔ mockup', () => {
       await mostra(a.pagina, comp.schermata);
       expect(await struttura(a.pagina, comp.selettore), 'struttura').toEqual(await struttura(m.pagina, comp.selettore));
       expect(await testi(a.pagina, comp.selettore), 'parole').toEqual(await testi(m.pagina, comp.selettore));
+      if (comp.nome === 'AutomationRow') {
+        await expect(a.pagina.locator('[data-auto-stato]').first(), 'AUT-FILTRO-STILE-CANONICO').toHaveClass(/\btalos-tabs__tab\b/);
+        expect(await a.pagina.locator('#schermoAutomazioni [role="switch"]').last().evaluate(n => n.getBoundingClientRect().bottom <= innerHeight), 'AUT-DENSITA-COMANDI').toBe(true);
+      }
       if (comp.nome === 'TaskRow') {
         // ATTIVITA-CAMPO-COERENTE: la parità da sola può replicare un campo privo dello stile canonico.
         await expect(a.pagina.locator('[data-task-query]')).toHaveCSS('height', '36px');

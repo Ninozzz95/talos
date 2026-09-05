@@ -1,3 +1,4 @@
+import { creaAutomationRow, aggiornaPaginaAutomazioni } from '../components/automazioni.js';
 import { creaForgeRow, aggiornaPaginaOfficina } from '../components/officina.js'; // 05/9 Fase 2: Officina
 import { creaReportRow, aggiornaPaginaRicerca } from '../components/ricerca.js'; // 05/9 Fase 2: Ricerca
 import { creaLibraryRow, aggiornaPaginaLibreria } from '../components/libreria.js'; // 05/9 Fase 2: Libreria
@@ -11129,62 +11130,41 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     }
   }
 
-  async function renderAutomationsReali() {
-    const contenitore = $('#automationListReal');
-    if (!contenitore) return;
-    let elenco;
+  // 05/9 Fase 2: AutomationRow, stato confermato dal server e scritture serializzate.
+  let generazioneAutomazioni = 0, scritturaAutomazioni = null;
+  let datiAutomazioni = [], vistaAutomazioni = {};
+  function mostraAutomazioni() {
+    const schermo = $('#schermoAutomazioni');
+    const opzioni = { ...vistaAutomazioni, salvataggio: Boolean(scritturaAutomazioni || vistaAutomazioni.caricamento), salvataggioId: scritturaAutomazioni?.id || null, onAggiorna: renderAutomationsReali, onToggle: (a, attiva) => modificaAutomazione(a, 'toggle', { attiva }), onElimina: a => modificaAutomazione(a, 'elimina', {}) };
+    if (schermo) aggiornaPaginaAutomazioni(schermo, datiAutomazioni, opzioni);
+    const legacy = $('#automationListReal');
+    if (legacy && !schermo?.contains(legacy)) { legacy.setAttribute('role', 'list'); legacy.replaceChildren(...datiAutomazioni.map(a => creaAutomationRow(a, opzioni))); }
+  }
+  async function modificaAutomazione(a, azione, corpo) {
+    if (scritturaAutomazioni || vistaAutomazioni.caricamento || !datiAutomazioni.some(voce => voce.id === a.id) || (azione === 'toggle' && typeof corpo.attiva !== 'boolean')) return;
+    scritturaAutomazioni = { id: a.id };generazioneAutomazioni++;
+    vistaAutomazioni = { ...vistaAutomazioni, erroreAzione: null };mostraAutomazioni();
     try {
-      elenco = (await apiGet('/api/v1/automations')).items;
-    } catch {
-      return; // ⛔ un refresh fallito non è un'azione richiesta, non merita un toast
+      await apiPost('/api/v1/automations/' + encodeURIComponent(a.id) + '/' + azione, corpo);
+      await renderAutomationsReali();
+    } catch (error) {
+      vistaAutomazioni = { ...vistaAutomazioni, erroreAzione: 'Modifica di «' + a.nome + '» non salvata: ' + error.message };
+    } finally { scritturaAutomazioni = null;mostraAutomazioni(); }
+  }
+  async function renderAutomationsReali() {
+    const generazione = ++generazioneAutomazioni;
+    vistaAutomazioni = { errore: null, erroreAzione: null, caricamento: true };mostraAutomazioni();
+    try {
+      const dati = await apiGet('/api/v1/automations');
+      if (generazione !== generazioneAutomazioni) return;
+      if (!Array.isArray(dati.items) || dati.items.some(a => !a || typeof a !== 'object' || Array.isArray(a) || typeof a.id !== 'string' || !a.id)) throw new Error('Elenco delle automazioni non valido');
+      datiAutomazioni = dati.items;vistaAutomazioni = { errore: null, erroreAzione: null, caricamento: false };
+      aggiornaWidgetAutomazioni(datiAutomazioni);
+    } catch (error) {
+      if (generazione !== generazioneAutomazioni) return;
+      datiAutomazioni = [];vistaAutomazioni = { errore: 'Automazioni non disponibili: ' + error.message, erroreAzione: null, caricamento: false };
     }
-    aggiornaWidgetAutomazioni(elenco);
-    if (elenco.length > 0) {
-      const demoBadge = $('.demo-surface-badge', $('[data-view="automations"]'));
-      if (demoBadge) demoBadge.hidden = true;
-    }
-    const pezzi = elenco.map((automazione) => {
-      const article = document.createElement('article');
-      article.className = 'automation-row';
-      const iconWrap = document.createElement('div');
-      iconWrap.className = 'automation-icon';
-      iconWrap.innerHTML = icon(automazione.attiva ? 'i-clock' : 'i-history');
-      const testo = document.createElement('div');
-      const stato = automazione.attiva
-        ? `attiva · ogni ${automazione.intervalloMinuti} min · max ${automazione.limiteAlGiorno}/giorno · prossima ${formattaOraSessione(automazione.prossimaEsecuzione)}`
-        : `in pausa · ogni ${automazione.intervalloMinuti} min · max ${automazione.limiteAlGiorno}/giorno`;
-      testo.append(textElement('strong', '', automazione.nome), textElement('small', '', stato));
-      const chip = document.createElement('span');
-      chip.className = `status-chip${automazione.attiva ? ' success' : ''}`;
-      chip.textContent = automazione.attiva ? 'Attiva' : 'Pausa';
-      const toggleBtn = document.createElement('button');
-      toggleBtn.className = 'secondary-btn compact';
-      toggleBtn.textContent = automazione.attiva ? 'Pausa' : 'Attiva';
-      toggleBtn.addEventListener('click', async () => {
-        try {
-          await apiPost(`/api/v1/automations/${encodeURIComponent(automazione.id)}/toggle`, { attiva: !automazione.attiva });
-          toast(automazione.attiva ? 'Automazione in pausa' : 'Automazione attivata', automazione.nome);
-          renderAutomationsReali();
-        } catch (error) {
-          toast('Operazione non riuscita', error.message);
-        }
-      });
-      const eliminaBtn = document.createElement('button');
-      eliminaBtn.className = 'secondary-btn compact';
-      eliminaBtn.textContent = 'Elimina';
-      eliminaBtn.addEventListener('click', async () => {
-        try {
-          await apiPost(`/api/v1/automations/${encodeURIComponent(automazione.id)}/elimina`, {});
-          toast('Automazione eliminata', automazione.nome);
-          renderAutomationsReali();
-        } catch (error) {
-          toast('Operazione non riuscita', error.message);
-        }
-      });
-      article.append(iconWrap, testo, chip, toggleBtn, eliminaBtn);
-      return article;
-    });
-    contenitore.replaceChildren(...pezzi);
+    mostraAutomazioni();
   }
 
   /** Il foglio "Nuova automazione": task dal corpus + intervallo + limite giornaliero, gli stessi tetti duri validati anche lato server. */
