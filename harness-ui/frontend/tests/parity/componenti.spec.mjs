@@ -16,6 +16,10 @@ import { MOCKUP, apri, confrontaPixel, mostra, struttura, testi } from './aiuto.
 const LAB = process.env.TALOS_LAB_URL || `http://127.0.0.1:${process.env.TALOS_LAB_PORT || 4176}`;
 
 const COMPONENTI = [
+  {nome:'ExtensionList_skills',schermata:'schermoCapability',selettore:'#schermoCapability',sezione:'skills'},
+  {nome:'ExtensionList_mcp',schermata:'schermoCapability',selettore:'#schermoCapability',sezione:'mcp'},
+  {nome:'ExtensionList_plugins',schermata:'schermoCapability',selettore:'#schermoCapability',sezione:'plugins'},
+  {nome:'ExtensionList_hooks',schermata:'schermoCapability',selettore:'#schermoCapability',sezione:'hooks'},
   { nome: 'ToolList', schermata: 'schermoCapability', selettore: '#schermoCapability' },
   { nome: 'AutomationRow', schermata: 'schermoAutomazioni', selettore: '#schermoAutomazioni' },
   { nome: 'ForgeList', schermata: 'schermoOfficina', selettore: '#schermoOfficina' },
@@ -43,6 +47,7 @@ test.describe('parità dei componenti ↔ mockup', () => {
       await a.pagina.waitForSelector('html[data-visual-ready="true"]');
       await mostra(m.pagina, comp.schermata);
       await mostra(a.pagina, comp.schermata);
+      if(comp.sezione){await expect(a.pagina.locator('#capPanel-'+comp.sezione+' [data-ext-detail] .talos-kv__k').first(),'EXT-ETICHETTE-INTEGRE').toHaveCSS('white-space','normal');expect(await a.pagina.locator(comp.selettore+' use').evaluateAll(ns=>ns.every(n=>document.querySelector(n.getAttribute('href')))), 'EXT-ICONA-ESISTENTE').toBe(true);await m.pagina.locator('[data-cap-tab='+comp.sezione+']').click();await a.pagina.locator('[data-cap-tab='+comp.sezione+']').click();}
       expect(await struttura(a.pagina, comp.selettore), 'struttura').toEqual(await struttura(m.pagina, comp.selettore));
       expect(await testi(a.pagina, comp.selettore), 'parole').toEqual(await testi(m.pagina, comp.selettore));
       if (comp.nome === 'AutomationRow') {

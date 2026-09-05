@@ -1,3 +1,5 @@
+import {aggiornaEstensioni,collegaSchedeCapability,mostraSchedaCapability} from '../src/components/estensioni.js';
+import {ESTENSIONI} from './fixtures/estensioni.js';
 import { aggiornaPaginaCapability } from '../src/components/capability.js';
 import { ATTREZZI } from './fixtures/capability.js';
 import { aggiornaPaginaAutomazioni } from '../src/components/automazioni.js';
@@ -60,6 +62,10 @@ document.documentElement.setAttribute('data-schermo', 'chat');
 const componente = new URLSearchParams(location.search).get('componente') || '';
 
 const LABORATORI = {
+  ExtensionList_skills() {const s=document.querySelector('#schermoCapability');collegaSchedeCapability(s,()=>{});mostraSchedaCapability(s,'skills');aggiornaEstensioni(s.querySelector('[data-cap-panel=skills]'),ESTENSIONI.skills,{tipo:'skills',ambito:'fixture'});},
+  ExtensionList_mcp() {const s=document.querySelector('#schermoCapability');collegaSchedeCapability(s,()=>{});mostraSchedaCapability(s,'mcp');aggiornaEstensioni(s.querySelector('[data-cap-panel=mcp]'),ESTENSIONI.mcp,{tipo:'mcp',ambito:'fixture'});},
+  ExtensionList_plugins() {const s=document.querySelector('#schermoCapability');collegaSchedeCapability(s,()=>{});mostraSchedaCapability(s,'plugins');aggiornaEstensioni(s.querySelector('[data-cap-panel=plugins]'),ESTENSIONI.plugins,{tipo:'plugins',ambito:'fixture'});},
+  ExtensionList_hooks() {const s=document.querySelector('#schermoCapability');collegaSchedeCapability(s,()=>{});mostraSchedaCapability(s,'hooks');aggiornaEstensioni(s.querySelector('[data-cap-panel=hooks]'),ESTENSIONI.hooks,{tipo:'hooks',ambito:'fixture'});},
   ToolList() { aggiornaPaginaCapability(document.querySelector('#schermoCapability'), ATTREZZI, {ambito:'fixture'}); },
   AutomationRow() { aggiornaPaginaAutomazioni(document.querySelector('#schermoAutomazioni'), AUTOMAZIONI, { adesso: ADESSO_AUTOMAZIONI }); },
   ForgeList() { aggiornaPaginaOfficina(document.querySelector('#schermoOfficina'), STRUMENTI_FORGIATI); },

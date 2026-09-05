@@ -1,3 +1,4 @@
+import {aggiornaEstensioni,collegaSchedeCapability,mostraSchedaCapability} from '../components/estensioni.js';
 import { aggiornaPaginaCapability, creaToolListRow } from '../components/capability.js';
 import { creaAutomationRow, aggiornaPaginaAutomazioni } from '../components/automazioni.js';
 import { creaForgeRow, aggiornaPaginaOfficina } from '../components/officina.js'; // 05/9 Fase 2: Officina
@@ -1168,7 +1169,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (view === 'settings') inizializzaModelLab();
     if (view === 'dashboard') ensureSessionsBoard();
     if (view === 'ricerca') caricaPannelloRicerca({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Ricerca
-    if (view === 'capability') caricaPannelloAttrezzi({ pagina: true }); // 05/9 Fase 2: ToolList
+    if (view === 'capability') caricaCapability(); // 05/9 Fase 2: inventari
     if (view === 'officina') caricaPannelloForge({ pagina: true }); // 05/9 Fase 2: pagina Officina
     if (view === 'libreria') caricaPannelloLibreria({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Libreria
     if (view === 'attivita') caricaPannelloAttivita({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Attività
@@ -4052,6 +4053,60 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * l'elenco (quella parte vive in mcp-session.mjs, usata quando la
    * sessione lavora per davvero).
    */
+
+  // B4.2 — gli inventari usano esclusivamente le rotte e i registri esistenti.
+  let sezioneCapability = 'attrezzi', scritturaEstensione = null;
+  const inventariEstensioni = new Map();
+  function caricaCapability() {
+    const schermo = $('#schermoCapability');
+    if (!schermo) return;
+    collegaSchedeCapability(schermo, tipo => { sezioneCapability = tipo; caricaCapability(); });
+    mostraSchedaCapability(schermo, sezioneCapability);
+    if (sezioneCapability === 'attrezzi') caricaPannelloAttrezzi({ pagina: true });
+    else caricaEstensioniCapability(sezioneCapability);
+  }
+  function mostraInventarioEstensioni(tipo) {
+    const p = inventariEstensioni.get(tipo), panel = $('#capPanel-' + tipo);
+    if (!p || !panel || p.sessionId !== state.realSession.id) return;
+    aggiornaEstensioni(panel, p.voci, { tipo, ambito: p.sessionId, errore: p.errore, erroreAzione: p.erroreAzione, caricamento: p.caricamento, salvataggio: Boolean(scritturaEstensione), onAggiorna: () => caricaEstensioniCapability(tipo), onFida: v => fidaEstensioneCapability(tipo, v, p.sessionId) });
+  }
+  async function caricaEstensioniCapability(tipo) {
+    if (!['skills', 'mcp', 'plugins', 'hooks'].includes(tipo)) return;
+    const sessionId = state.realSession.id, prima = inventariEstensioni.get(tipo);
+    const p = { sessionId, voci: prima?.sessionId === sessionId ? prima.voci : [], errore: null, erroreAzione: prima?.sessionId === sessionId ? prima.erroreAzione : null, caricamento: true };
+    inventariEstensioni.set(tipo, p); mostraInventarioEstensioni(tipo);
+    const attuale = () => inventariEstensioni.get(tipo) === p && state.realSession.id === sessionId;
+    if (!sessionId || embeddedDemoOnly()) { p.caricamento = false; p.voci = []; p.errore = 'Apri una sessione per leggere le estensioni del progetto.'; mostraInventarioEstensioni(tipo); return; }
+    try {
+      const dati = await apiGet('/api/v1/sessions/' + encodeURIComponent(sessionId) + '/' + tipo);
+      if (!attuale()) return;
+      if (dati.errore) throw new Error(dati.errore);
+      const voci = dati[{skills:'skills',mcp:'server',plugins:'plugin',hooks:'hooks'}[tipo]];
+      const stringhe = a => Array.isArray(a) && a.every(v => typeof v === 'string');
+      const valida = v => v && typeof v.id === 'string' && v.id.length && (tipo === 'skills' ? typeof v.name === 'string' && typeof v.description === 'string' : typeof v.fidato === 'boolean') && (tipo !== 'mcp' || typeof v.comando === 'string' && stringhe(v.argomenti) && stringhe(v.allowlist)) && (tipo !== 'hooks' || stringhe(v.eventi)) && (tipo !== 'plugins' || typeof v.nome === 'string' && typeof v.descrizione === 'string' && Array.isArray(v.tools) && Array.isArray(v.hooks) && v.tools.every(t => t && typeof t.nome === 'string' && typeof t.descrizione === 'string' && typeof t.comando === 'string') && v.hooks.every(h => h && typeof h.id === 'string' && stringhe(h.eventi) && typeof h.comando === 'string') && Array.isArray(v.avvisi) && v.avvisi.every(a => a && typeof a.origine === 'string' && typeof a.avviso === 'string'));
+      if (!Array.isArray(voci) || !voci.every(valida) || new Set(voci.map(v => v.id)).size !== voci.length) throw new Error('Inventario con voci non valide');
+      p.voci = voci;
+    } catch (e) { if (!attuale()) return; p.voci = []; p.errore = 'Inventario non disponibile: ' + e.message; }
+    finally { if (attuale()) { p.caricamento = false; mostraInventarioEstensioni(tipo); } }
+  }
+  async function fidaEstensioneCapability(tipo, voce, sessionId) {
+    if (scritturaEstensione || !sessionId || state.realSession.id !== sessionId || !['mcp', 'plugins', 'hooks'].includes(tipo) || voce.fidato !== false) return;
+    const p = inventariEstensioni.get(tipo);
+    if (!p || p.caricamento || p.sessionId !== sessionId || !p.voci.includes(voce)) return;
+    scritturaEstensione = {tipo, id:voce.id, sessionId}; p.erroreAzione = null;
+    for (const t of inventariEstensioni.keys()) mostraInventarioEstensioni(t);
+    try {
+      await apiPost('/api/v1/sessions/' + encodeURIComponent(sessionId) + '/' + tipo + '/' + encodeURIComponent(voce.id) + '/trust', {});
+      if (state.realSession.id === sessionId) await caricaEstensioniCapability(tipo);
+    } catch (e) {
+      const attuale = inventariEstensioni.get(tipo);
+      if (attuale?.sessionId === sessionId && state.realSession.id === sessionId) attuale.erroreAzione = 'Fiducia per ' + (voce.nome || voce.id) + ' non salvata: ' + e.message;
+    } finally {
+      scritturaEstensione = null;
+      for (const t of inventariEstensioni.keys()) mostraInventarioEstensioni(t);
+    }
+  }
+
   async function caricaPannelloMcp() {
     const mount = $('#mcpListMount', sheetBody);
     if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
