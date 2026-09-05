@@ -194,3 +194,68 @@ Immagini in `.claude/immagini/fase2-claude/Topbar/`.
   **S-06 Piede**.
 - T-07 la colonna dei dettagli mostra ancora i dati d'esempio del mockup (B2, Astra).
 - T-08 badge Terminale assente finché le schede non hanno una UI (B1, Astra).
+
+---
+
+## S-05 · Conversazione (Turn, Message, ActivityBundle, ToolRow, ToolFailure, SystemNote, ApprovalCard, DiffView, SignedReceipt, TouchedFiles, ArtifactCard, attesa) — ✅ verde, aspetta l'owner
+
+**Blocchi**: tutti quelli della chat del mockup. **Fixture**: `lab/fixtures/conversazione.js` (la
+chat del mockup come dati, nella forma che il monolite ha dopo gli eventi dello stream).
+**Componente**: `src/components/conversazione.js` — fabbriche `creaTurno`, `creaMessaggioUtente`,
+`creaMessaggioTalos`, `creaAzioniMessaggio`, `creaAttivita`, `creaRigaAttrezzo`,
+`creaFallimentoAttrezzo`, `creaNotaSistema`, `creaApprovazione`, `creaDiff`, `creaRicevuta`,
+`creaFileToccati`, `creaArtefatto`, `creaAttesa`; `ICONA_ATTREZZO` (icona per attrezzo, i nomi che
+riceve il modello non cambiano).
+**Monolite** (`handleRealEvent` e gli `append*` — il cervello resta, cambia il DOM che emette):
+nuove `nellaChat`, `turnoTalosCorrente`, `segnaGiroNellaSpine`, `aggiornaTickGiro`;
+`appendRealTaskStart`/`appendUserFollowUp` → Message utente in un Turn; `ensureAssistantMessageElement`
+→ testo nel Message TALOS del turno corrente (involucro `.talos-message__copy` con dentro
+`.assistant-copy`, il gancio del render incrementale) + azioni copia/ascolta/chiedi di nuovo;
+`apriBatchSeServe` → ActivityBundle (riassunto e «+18 −2» in testa); `appendToolNote` → ToolRow con
+icona dell'attrezzo, dettaglio mono (`bersaglioAttrezzoNudo`), pallino running/success/error e corpo
+espandibile (argomenti + esito); il ragionamento è un bundle suo, nascosto come prima
+(`real-reasoning-note`); `appendStatusNote` → SystemNote (Nota/Errore, tick rosso sul giro);
+`appendApprovalCard` → ApprovalCard con «Consenti una volta · Per questa sessione · Nega» (per
+sessione = approva e ricorda «sempre» per quell'attrezzo via `sincronizzaImpostazioniSessione`;
+`sheet-actions`/`assistant-copy` restano i ganci di ApprovalResolved); `appendArtifactCard` →
+ArtifactCard (iframe isolato + «Apri»); `mostraAttesaRisposta` → scheletro del mockup con la riga
+animata del marchio (stessa immagine del mobile, owner 02/9). I numeri della spine sono i giri:
+uno per bundle di attrezzi (il ragionamento non conta); il tick cresce con gli attrezzi (fino a 5)
+e prende il tono dell'esito (current → nessuno a fine giro, warning su approvazione, danger su
+errore). Nel replay di una cronologia l'ora NON si scrive (non c'è nel flusso: non si inventa).
+**Ponte/regia**: il clic sui disclosure (`[aria-expanded][aria-controls]`) è della regia portata in
+app.js: il componente non aggiunge un secondo gestore (prima si annullavano a vicenda); da
+tastiera Invio/Spazio sulla riga.
+**Mockup toccato** (nel suo linguaggio): azioni sul messaggio (`.talos-message__actions`, visibili
+al passaggio del mouse; simboli `i-copy`/`i-history` dallo sprite originale), corpo espandibile
+della ToolRow (`pre.talos-tool-row__body`, esempio dentro il bundle chiuso), `ArtifactCard`
+(scheda con anteprima in iframe) nel terzo turno, riga animata dell'attesa sopra lo scheletro;
+**composer**: barra su una riga sola (owner: «il pulsante send non deve andare a capo»), chip che
+si stringono con i puntini, scorciatoie nascoste sotto 1280.
+
+**Ricerca** (05/09/2026): AG-UI «Messages» (docs.ag-ui.com/concepts/messages), LangChain «From
+Token Streams to Agent Streams», fuselabcreative.com «UI Design for AI Agents 2026»: filo della
+conversazione separato dall'attività dell'agente, attrezzi raggruppati e aggiornabili nel tempo,
+eventi di ciclo distinti dai messaggi — la forma del mockup.
+
+**Cancelli**: componenti **15/15** (5 componenti × 3 viewport; la Conversazione confronta l'intera
+chat del mockup ricostruita dai dati: struttura, parole, pixel) · statico **54/54**.
+
+**Dal vivo** (4175, sessione «Add and export a function `sottrai`…», 9 giri, contro l'originale
+4180 sulla stessa sessione; 1440 e 1024; zero errori): 2 turni (1 persona, 1 TALOS), 10 bundle
+(7 di ragionamento nascosti), 18 righe attrezzo, 21 blocchi di testo con lo stesso contenuto
+dell'originale («Let me find the project files.», l'elenco puntato, il codice inline); bundle e
+righe si aprono (esito vero: `ENOENT … C:\.automations`); spine 1 · 2 3 4. Immagini in
+`.claude/immagini/fase2-claude/Conversazione/`.
+
+**Non verificato dal vivo** (vuole il kernel: `TALOS_OWNER_RUNTIME_MODULE`, un modello a chiave e
+i soldi dell'owner): lo streaming in diretta, l'attesa animata, ApprovalCard con «Per questa
+sessione», ArtifactCard con un artefatto vero, SignedReceipt e TouchedFiles (il monolite oggi
+non emette ricevute né file-per-giro: il blocco esiste, l'innesto arriva con la Review, S-07).
+
+**Taccuino**
+- T-09 il piede della chat è ancora testo del mockup (StatusStrip «giro 7 · 41 s», chip
+  «claude-opus-5 · Scrittura nel workspace · Giri 7 · Sessione ~$0,08», barra di stato «41,2k
+  token…»): **S-06 Piede**, con il composer ridimensionabile (`talos-harness-composer-size-v1`).
+- T-10 il dialogo «Albero sessione» aperto dal titolo è il foglio legacy senza CSS (B7 Astra +
+  regola dell'owner: dialoghi ridimensionabili e ricordati, `talos-harness-modal-sizes-v1`).

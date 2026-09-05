@@ -188,6 +188,16 @@ button{background:none; border:0; cursor:pointer; padding:0}
 /* scheletro (stato di caricamento 1-10 s, ricerca 04/09) */
 .talos-skeleton{display:block; height:12px; border-radius:6px; background:linear-gradient(90deg,var(--talos-card-hover),var(--talos-card-subtle),var(--talos-card-hover)); background-size:200% 100%; animation:talos-shimmer 1.4s var(--talos-motion-ease) infinite}
 .talos-skeleton--w40{width:40%} .talos-skeleton--w70{width:70%} .talos-skeleton--w90{width:90%}
+.talos-waiting{margin-top:6px}
+.talos-waiting__row{display:flex; align-items:center; gap:10px; min-height:22px; font-size:12.5px; color:var(--talos-muted)}
+.talos-waiting__label{flex:1 1 auto; min-width:0}
+.talos-line-loader{display:block; width:48px; height:8px; overflow:visible; flex:none}
+.talos-line-loader-track{stroke:var(--talos-accent); stroke-opacity:.18; stroke-width:2; stroke-linecap:round}
+.talos-line-loader-sweep{stroke:var(--talos-accent); stroke-width:2; stroke-linecap:round; stroke-dasharray:88; stroke-dashoffset:88; animation:talosLineSweep 2.2s ease-in-out infinite}
+.talos-line-loader-node{fill:transparent; stroke:var(--talos-accent); stroke-width:2; animation:talosLineNodeFill 2.2s ease-in-out infinite}
+.talos-line-loader-node:nth-of-type(2){animation-delay:.5s} .talos-line-loader-node:nth-of-type(3){animation-delay:1s}
+@keyframes talosLineSweep{0%{stroke-dashoffset:88} 70%,100%{stroke-dashoffset:0}}
+@keyframes talosLineNodeFill{0%,12%{fill:transparent} 22%,82%{fill:var(--talos-accent)} 100%{fill:transparent}}
 @keyframes talos-shimmer{0%{background-position:200% 0} 100%{background-position:-200% 0}}
 
 /* ---------- 4. REGIA DEL MOCKUP (non è prodotto) ---------- */
@@ -317,6 +327,15 @@ button{background:none; border:0; cursor:pointer; padding:0}
 .talos-receipt{display:flex; align-items:center; gap:10px; margin:10px 0; padding:10px 14px; border-radius:var(--talos-radius-card); border:1px dashed var(--talos-accent-border); background:var(--talos-accent-soft); flex-wrap:wrap}
 .talos-receipt__text{flex:1; min-width:200px; font-size:13px; color:var(--talos-text)}
 .talos-receipt__hash{font-family:var(--talos-font-mono); font-size:11.5px; color:var(--talos-accent-hover)}
+.talos-message__actions{display:flex; gap:2px; margin-top:6px; opacity:0; transition:opacity var(--talos-motion-duration-control) var(--talos-motion-ease)}
+.talos-message:hover .talos-message__actions, .talos-message:focus-within .talos-message__actions{opacity:1}
+.talos-tool-row[role="button"]{cursor:pointer}
+.talos-tool-row__body{margin:0 6px 6px 50px; padding:8px 10px; border-radius:9px; background:var(--talos-panel-soft); border:1px solid var(--talos-border-subtle); font-family:var(--talos-font-mono); font-size:11.5px; line-height:1.55; color:var(--talos-muted); white-space:pre-wrap; overflow-wrap:anywhere; max-height:240px; overflow:auto}
+.talos-tool-row[aria-expanded="false"] + .talos-tool-row__body{display:none}
+.talos-artifact{margin:10px 0; overflow:hidden}
+.talos-artifact__head{display:flex; align-items:center; gap:10px; padding:8px 8px 8px 14px; border-bottom:1px solid var(--talos-border-subtle)}
+.talos-artifact__title{font-weight:600; font-size:13.5px; color:var(--talos-text)}
+.talos-artifact__frame{display:block; width:100%; height:320px; border:0; background:var(--talos-window-bg)}
 .talos-touched{margin-top:10px; overflow:hidden}
 .talos-touched__head{padding:10px 14px; border-bottom:1px solid var(--talos-border-subtle)}
 .talos-touched__row{display:flex; align-items:center; gap:10px; min-height:var(--talos-row); padding:0 14px}
@@ -334,7 +353,11 @@ button{background:none; border:0; cursor:pointer; padding:0}
 .talos-composer{border:1px solid var(--talos-border-strong); border-radius:18px; background:var(--talos-panel); padding:14px 14px 12px; box-shadow:var(--talos-shadow-card)}
 .talos-composer:focus-within{border-color:var(--talos-accent-border); box-shadow:0 0 0 3px var(--talos-accent-soft)}
 .talos-composer__input{appearance:none;-webkit-appearance:none;display:block;width:100%;border:0;outline:0;resize:none;background:transparent;font:inherit;color:inherit;overflow:hidden;min-height:40px; font-size:15px; color:var(--talos-muted); font-style:italic; padding:2px 4px 10px; outline:none}
-.talos-composer__bar{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.talos-composer__bar{display:flex; align-items:center; gap:6px; flex-wrap:nowrap; min-width:0}
+.talos-composer__bar .talos-badge--lg{flex:0 1 auto; min-width:0; max-width:220px; overflow:hidden; white-space:nowrap; padding:0 10px}
+.talos-composer__bar .talos-badge--lg > :not(.i){overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.talos-composer__bar .talos-composer__attach, .talos-composer__bar .talos-send{flex:none}
+@media (max-width:1280px){ .talos-composer__bar .talos-kbd{display:none} .talos-composer__bar .talos-badge--lg{max-width:170px} }
 .talos-composer__attach{width:38px; height:38px; border-radius:50%; border:1px solid var(--talos-border); background:var(--talos-panel-soft); display:grid; place-items:center; color:var(--talos-assistant-text)}
 .talos-composer__attach:hover{border-color:var(--talos-accent-border); color:var(--talos-accent-hover)}
 .talos-send{width:42px; height:42px; border-radius:50%; background:var(--talos-accent); color:var(--talos-text-on-accent); display:grid; place-items:center; margin-left:auto; box-shadow:inset 0 1px rgba(255,255,255,.14),0 5px 14px var(--talos-accent-soft); transition:transform var(--talos-motion-duration-control) var(--talos-motion-ease)}
@@ -607,7 +630,7 @@ button{background:none; border:0; cursor:pointer; padding:0}
   <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></symbol>
   <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
-  <symbol id="i-command" viewBox="0 0 24 24"><path d="M9 6V5a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v14a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6Z"/></symbol><symbol id="i-layout" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M9 10h12"/></symbol><symbol id="i-diff" viewBox="0 0 24 24"><path d="M12 3v18M5 8h6M5 16h6M13 12h6"/></symbol>
+  <symbol id="i-command" viewBox="0 0 24 24"><path d="M9 6V5a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v14a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6Z"/></symbol><symbol id="i-layout" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M9 10h12"/></symbol><symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol><symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></symbol><symbol id="i-diff" viewBox="0 0 24 24"><path d="M12 3v18M5 8h6M5 16h6M13 12h6"/></symbol>
 </svg>
 
 <div class="talos-shell" data-c="AppShell">
@@ -728,7 +751,9 @@ button{background:none; border:0; cursor:pointer; padding:0}
               </button>
               <div class="talos-activity__body" id="attGiro2" hidden>
                 <div class="talos-tool-row" data-c="ToolRow"><span class="talos-tool-row__icon"><svg class="i"><use href="#i-eye"/></svg></span><span class="talos-tool-row__name">Lettura di un file</span><span class="talos-tool-row__detail">src/session-registry.mjs</span><span class="talos-dot talos-dot--success"></span></div>
-                <div class="talos-tool-row" data-c="ToolRow"><span class="talos-tool-row__icon"><svg class="i"><use href="#i-search"/></svg></span><span class="talos-tool-row__name">Ricerca nei file</span><span class="talos-tool-row__detail">guardiaDiStallo</span><span class="talos-dot talos-dot--success"></span></div>
+                <div class="talos-tool-row" data-c="ToolRow" role="button" tabindex="0" aria-expanded="true" aria-controls="attGiro2Riga2"><span class="talos-tool-row__icon"><svg class="i"><use href="#i-search"/></svg></span><span class="talos-tool-row__name">Ricerca nei file</span><span class="talos-tool-row__detail">guardiaDiStallo</span><span class="talos-dot talos-dot--success"></span></div>
+                <pre class="talos-tool-row__body" id="attGiro2Riga2">src/session-registry.mjs:41  export function guardiaDiStallo(registro, soglie)
+tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PREDEFINITE)</pre>
                 <div class="talos-tool-row" data-c="ToolRow"><span class="talos-tool-row__icon"><svg class="i"><use href="#i-terminal"/></svg></span><span class="talos-tool-row__name">Comando nel terminale</span><span class="talos-tool-row__detail">node --test tests/*.test.mjs</span><span class="talos-dot talos-dot--success"></span></div>
                 <div class="talos-tool-failure" data-c="ToolFailure">
                   <div class="talos-tool-failure__title">Il comando non ha trovato la cartella</div>
@@ -742,6 +767,7 @@ button{background:none; border:0; cursor:pointer; padding:0}
               <span class="talos-badge talos-badge--info talos-badge--sm">Nota</span>
               <div><div class="talos-system-note__title">Permesso cambiato a metà lavoro</div><p>Da «sola lettura» a «scrittura nel workspace», deciso da te alle 18:06. I giri precedenti restano registrati col permesso di allora.</p></div>
             </div>
+            <div class="talos-message__actions" role="group" aria-label="Azioni sulla risposta"><button class="talos-button talos-button--ghost talos-icon-button talos-button--sm" title="Copia la risposta"><svg class="i i--sm"><use href="#i-copy"/></svg></button><button class="talos-button talos-button--ghost talos-icon-button talos-button--sm" title="Ascolta la risposta" aria-pressed="false"><svg class="i i--sm"><use href="#i-play"/></svg></button><button class="talos-button talos-button--ghost talos-icon-button talos-button--sm" title="Chiedi di nuovo"><svg class="i i--sm"><use href="#i-history"/></svg></button></div>
           </div>
         </div>
 
@@ -785,6 +811,11 @@ button{background:none; border:0; cursor:pointer; padding:0}
               <div class="talos-touched__row"><span class="talos-touched__name">src/session-registry.mjs</span><span class="talos-diff-num talos-diff-num--plus">+18</span><span class="talos-diff-num talos-diff-num--minus">−2</span><button class="talos-button talos-button--ghost talos-button--sm">Apri</button><button class="talos-button talos-button--secondary talos-button--sm" data-vaia="review">Differenza</button></div>
               <div class="talos-touched__row"><span class="talos-touched__name">tests/session-registry.test.mjs</span><span class="talos-diff-num talos-diff-num--plus">+64</span><span class="talos-diff-num talos-diff-num--minus">−0</span><button class="talos-button talos-button--ghost talos-button--sm">Apri</button><button class="talos-button talos-button--secondary talos-button--sm" data-vaia="review">Differenza</button></div>
             </div>
+
+            <div class="talos-card talos-artifact" data-c="ArtifactCard">
+              <div class="talos-artifact__head"><span class="talos-badge talos-badge--accent talos-badge--sm">Artefatto</span><span class="talos-artifact__title talos-grow talos-truncate">Rapporto sulle soglie di stallo</span><span class="talos-mono talos-muted">html</span><button class="talos-button talos-button--ghost talos-button--sm">Apri</button></div>
+              <iframe class="talos-artifact__frame" title="Rapporto sulle soglie di stallo" sandbox="allow-scripts" srcdoc="&lt;p style='font:14px Instrument Sans,sans-serif;color:#cfc9bf;margin:16px'&gt;Anteprima dell'artefatto&lt;/p&gt;"></iframe>
+            </div>
           </div>
         </div>
 
@@ -793,7 +824,7 @@ button{background:none; border:0; cursor:pointer; padding:0}
           <div class="talos-message" data-c="Message">
             <div class="talos-message__head"><span class="talos-avatar talos-avatar--sm"><svg class="glyph"><use href="#glifo"/></svg></span><span class="talos-message__who talos-message__who--talos">TALOS</span><span class="talos-message__meta">claude-opus-5 · 18:09</span></div>
             <p>Lancio la suite completa per vedere se qualcosa è regredito…</p>
-            <div class="talos-stack" aria-hidden="true"><span class="talos-skeleton talos-skeleton--w90"></span><span class="talos-skeleton talos-skeleton--w70"></span><span class="talos-skeleton talos-skeleton--w40"></span></div>
+            <div class="talos-stack talos-waiting" role="status" aria-live="polite" aria-atomic="true"><div class="talos-waiting__row"><svg class="talos-line-loader" viewBox="0 0 96 16" width="48" height="8" aria-hidden="true"><line class="talos-line-loader-track" x1="4" y1="8" x2="92" y2="8"/><line class="talos-line-loader-sweep" x1="4" y1="8" x2="92" y2="8"/><circle class="talos-line-loader-node" cx="16" cy="8" r="4"/><circle class="talos-line-loader-node" cx="48" cy="8" r="4"/><circle class="talos-line-loader-node" cx="80" cy="8" r="4"/></svg><span class="talos-waiting__label">Sto eseguendo…</span><span class="talos-mono talos-muted">0s</span></div><div class="talos-stack" aria-hidden="true"><span class="talos-skeleton talos-skeleton--w90"></span><span class="talos-skeleton talos-skeleton--w70"></span><span class="talos-skeleton talos-skeleton--w40"></span></div></div>
           </div>
         </div>
       </div></div>

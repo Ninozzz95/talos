@@ -1,5 +1,7 @@
 import template from '../index.template.html';
+import { creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaFallimentoAttrezzo, creaFileToccati, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRicevuta, creaRigaAttrezzo, creaTurno } from '../src/components/conversazione.js';
 import { LUOGHI, LUOGHI_ALTRI, creaNavItem } from '../src/components/nav-item.js';
+import { CONVERSAZIONE } from './fixtures/conversazione.js';
 import { creaSessionItem } from '../src/components/session-item.js';
 import { aggiornaTopbar } from '../src/components/topbar.js';
 import { creaWorkspaceFooter } from '../src/components/workspace-footer.js';
@@ -36,6 +38,38 @@ document.documentElement.setAttribute('data-schermo', 'chat');
 const componente = new URLSearchParams(location.search).get('componente') || '';
 
 const LABORATORI = {
+  Conversazione() {
+    const colonna = document.querySelector('#schermoChat .talos-conversation__column');
+    for (const finto of colonna.querySelectorAll(':scope > .talos-turn')) finto.remove();
+    for (const t of CONVERSAZIONE) {
+      const turno = creaTurno({ numeri: t.numeri });
+      if (t.tipo === 'utente') {
+        turno.append(creaMessaggioUtente({ testo: t.testo, ora: t.ora }));
+        colonna.append(turno);
+        continue;
+      }
+      const messaggio = creaMessaggioTalos({ modello: t.modello, ora: t.ora, paragrafi: t.paragrafi });
+      if (t.attivita) {
+        const a = creaAttivita({ id: t.attivita.id, riassunto: t.attivita.riassunto, tempo: t.attivita.tempo, token: t.attivita.token });
+        for (const r of t.attivita.righe) {
+          const riga = creaRigaAttrezzo(r);
+          a.contenitore.append(riga.riga);
+          if (riga.corpo) { riga.corpo.textContent = r.corpo || ''; if (r.aperto) riga.riga.setAttribute('aria-expanded', 'true'); a.contenitore.append(riga.corpo); }
+        }
+        if (t.attivita.fallimento) a.contenitore.append(creaFallimentoAttrezzo(t.attivita.fallimento));
+        messaggio.append(a.card);
+      }
+      if (t.nota) messaggio.append(creaNotaSistema(t.nota));
+      if (t.approvazione) messaggio.append(creaApprovazione(t.approvazione).scheda);
+      if (t.ricevuta) messaggio.append(creaRicevuta(t.ricevuta));
+      if (t.fileToccati) messaggio.append(creaFileToccati(t.fileToccati));
+      if (t.artefatto) messaggio.append(creaArtefatto(t.artefatto).card);
+      if (t.attesa) messaggio.append(creaAttesa(t.attesa).blocco);
+      if (t.azioni) messaggio.append(creaAzioniMessaggio());
+      turno.append(messaggio);
+      colonna.append(turno);
+    }
+  },
   Topbar() {
     /* Prima si svuota ciò che il mockup scrive a mano, poi il componente lo riscrive dai dati. */
     const topbar = document.querySelector('#schermoChat .talos-topbar');
