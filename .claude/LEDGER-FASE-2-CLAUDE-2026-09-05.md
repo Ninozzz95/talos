@@ -494,3 +494,15 @@ spostare in `artifacts/` (prompt R-02, punto 1). Corretto da me l'import di `nom
 (spostato in `src/components/`). Prompt per Astra: `.claude/PROMPT-ASTRA-2026-09-05-R02-SEI-PAGINE.md`
 (screenshot in artifacts, merge prima di ogni innesto, OAuth/computer-use = PROPOSTE non
 autorizzate, coda del brief, decisione dell'owner sul cutover).
+
+---
+
+## R-03 · Le due correzioni di Astra (`9f12edd6`, `d1b87890`) — ✅ accettate e unite
+
+`9f12edd6` riallinea Officina e Automazioni al dizionario canonico dei nomi (`nomi-attrezzi` in
+`src/components/`); `d1b87890` sposta gli screenshot dei test in `artifacts/astra-mockup` (53) e
+`artifacts/parita` (4), con un unit test che lo garantisce (`test-artifacts.test.mjs`). Dopo
+l'unione (fast-forward): unit **50/50**, statico **195/195**, componenti **45/45**, e il cancello
+non tocca più nessun file committato (0 PNG modificati). I due stash dei PNG rigenerati
+(`png-astra-mockup-rigenerati-dai-test-2026-09-05` e `-bis`) non servono più: si possono
+buttare quando l'owner vuole (io non butto niente).
