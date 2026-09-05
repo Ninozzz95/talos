@@ -369,3 +369,56 @@ Prove aperte e selezionate:
 Cosa deve fare l’owner · Nulla per proseguire. Impostazioni provabili su http://127.0.0.1:4177/.
 Cosa fai tu dopo · Completare fonte/chiave/prova dentro Impostazioni, poi ModelLab.
 Cosa rimane · B6→B2→B7→B1→B8→Browser K-I; OAuth e computer-use solo PROPOSTE.
+
+## B6.3 FonteRicerca — consegna verificata 05/09/2026
+Dentro Impostazioni → Strumenti agente e permessi: cinque fonti originali più off, scelta persistita sul server, chiave/sostituzione/rimozione nel portachiavi, indirizzo, collegamenti sicuri e prova reale tramite le rotte esistenti. Nessun endpoint né storage aggiunto. Nuovo modulo FonteRicerca; riusati ChoiceCards, SettingRow, Field, Button, Card, token esistenti. Zero nuovi blocchi visivi, zero token CSS, zero dipendenze. Mockup rigenerato:16 schermate,113 blocchi.
+
+| Aspetto | Originale → proposta | Beneficio verificato / limite |
+|---|---|---|
+| Copertura | Tutte6 scelte e azioni conservate | Aggiunta chiave facoltativa custom già supportata dal server |
+| Prova | Query fissa → testo libero | Invio e retry con frasi naturali; configurazione distinta da connessione verificata |
+| Tastiera | Radio tabulabili → gruppo con frecce e ingresso unico | Focus restituito al controllo; nessun richiamo se la persona cambia pagina |
+| Errori | Segnalazione generica → errore nel pannello, retry e campi conservati | Risposta malformata non diventa successo; vecchi risultati invalidati |
+| Layout | Confronto originale/app1440/1280/1024 | Stesse scelte, forma canonica; campi lunghi scorrono, esito/errore completamente nel viewport |
+| Persistenza | Backend originale conservato | Ricarico browser e riapertura store su file; chiave esclusa dal JSON della scelta |
+| Limiti | Indirizzo unico per fonte attiva | Cambiare fonte azzera indirizzo come prima; nessuna promessa di prestazioni/superiorità globale |
+Verdetto: innesto verificato nel perimetro. Preserva funzioni e migliora configurazione custom, prova e recupero; accettazione visiva finale dell’owner distinta dai cancelli.
+
+Verifiche fresche: build;66 unità/contratti;30 asset deterministici;195/195 statici;72/72 componenti (TALOS_LAB_PORT4178);36/36 percorsi app (18 FonteRicerca +18 Impostazioni, incluso SET-RACCORDO-ATTRIBUTI dopo reload); originale3/3 e backend HTTP/store10/10 nella stessa fase. Nessuno skip né retry automatico. Il test di configurazione usa HTTP/store reali isolati con chiavi artificiali e portachiavi in memoria; la risposta del motore di ricerca è una fixture dichiarata, non una chiamata pagata. GET4177 reale verificato separatamente. Nessuna esecuzione agente dichiarata senza modello disponibile.
+Regressioni permanenti: FONTE-ESITO-SCADUTO, FONTE-ESITO-VISIBILE (incluso1024 e margine di scorrimento12px), FONTE-LETTURA-TERMINATA, FONTE-RECUPERO, FONTE-CONCORRENZA. Tutte nel test fonte-ricerca-vivo; normalizzatori unitari rifiutano risposte invalide. Immagini finali aperte personalmente,29 selezionate sotto; le restanti sono diagnostiche negli artifacts ignorati. Parità FonteRicerca identica nelle tre larghezze.
+Raccordo866a8a9f unito in7fa26452; ulteriore merge prima consegna già aggiornato. CSS Chat/composer conservato; attributi/variabili originali e provenienza Hermes registrati nel ledger alla voce Raccordo B6. B8 resta responsabile della verifica degli effetti tema/scena/movimento. Nessuna modifica ad AGENTS, ponte, frammenti o public; nessun push.
+
+Prove aperte e selezionate:
+- .claude/immagini/astra-fase2/FonteRicerca/originale-scelte-1440.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-scelte-1440.png
+- .claude/immagini/astra-fase2/FonteRicerca/originale-custom-1440.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-custom-1440.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-prova-1440.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-errore-prova-1440.png
+- .claude/immagini/astra-fase2/FonteRicerca/originale-scelte-1280.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-scelte-1280.png
+- .claude/immagini/astra-fase2/FonteRicerca/originale-custom-1280.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-custom-1280.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-prova-1280.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-errore-prova-1280.png
+- .claude/immagini/astra-fase2/FonteRicerca/originale-scelte-1024.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-scelte-1024.png
+- .claude/immagini/astra-fase2/FonteRicerca/originale-custom-1024.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-custom-1024.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-prova-1024.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-errore-prova-1024.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-tavily-1440.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-brave-1280.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-searxng-1024.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-errore-lettura-1280.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-errore-salvataggio-1024.png
+- .claude/immagini/astra-fase2/FonteRicerca/comp-FonteRicerca-desktop-1024x800-app.png
+- .claude/immagini/astra-fase2/FonteRicerca/comp-FonteRicerca-desktop-1024x800-mockup.png
+- .claude/immagini/astra-fase2/FonteRicerca/comp-FonteRicerca-desktop-1280x800-app.png
+- .claude/immagini/astra-fase2/FonteRicerca/comp-FonteRicerca-desktop-1280x800-mockup.png
+- .claude/immagini/astra-fase2/FonteRicerca/comp-FonteRicerca-desktop-1440x900-app.png
+- .claude/immagini/astra-fase2/FonteRicerca/comp-FonteRicerca-desktop-1440x900-mockup.png
+
+Cosa deve fare l’owner · Può provare Impostazioni su http://127.0.0.1:4177/. Nessuna azione necessaria per proseguire.
+Cosa fai tu dopo · Innestare le sei schede e gli accessi del Model Lab, preservando tutte le funzioni originali.
+Cosa rimane · B6 ModelLab → B2 → B7 → B1 → B8 → Browser K-I. OAuth e computer-use restano PROPOSTE.

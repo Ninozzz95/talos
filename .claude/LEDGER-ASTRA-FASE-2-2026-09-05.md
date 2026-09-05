@@ -1583,3 +1583,101 @@ Prove aperte e selezionate:
 Cosa deve fare l’owner · Nulla per proseguire. Impostazioni provabili su http://127.0.0.1:4177/.
 Cosa fai tu dopo · Completare fonte/chiave/prova dentro Impostazioni, poi ModelLab.
 Cosa rimane · B6→B2→B7→B1→B8→Browser K-I; OAuth e computer-use solo PROPOSTE.
+
+## B6.3 configurazione fonte ricerca dentro Impostazioni — piano prima degli edit, 05/09/2026
+Merge dopo dc7ec32 aggiornato. Nessuna nuova schermata: contenitore esistente della sezione tools in schermoImpostazioni. TALOS UI, senza modifiche backend. Letti per intero caricaPannelloRicercaWeb/disegnaPannelloRicercaWeb/azioneRicercaWeb, search-source-store.mjs e test HTTP/store. GET reale: cinque fonti duckduckgo/tavily/brave/searxng/custom più off; source/endpoint/readiness/fonti, mai chiave. POST scelta, key, key/remove, test restano esatti. Chiave nel portachiavi, scelta su JSON server; nessun nuovo storage browser.
+Ricerca06/08–05/09, fonti riaperte05/09 prima degli edit: https://github.com/NousResearch/hermes-agent/releases/tag/v2026.8.31 (31/08,29112be), https://github.com/anthropics/claude-code/releases/tag/v2.1.261 (04/09,d7dbd9a), https://github.com/openai/codex/releases/tag/rust-v0.153.4 (04/09,3d2ee51). Docs stabili riverificate, aggiornamento non esposto: https://hermes-agent.nousresearch.com/docs/user-guide/features/web-search ; https://code.claude.com/docs/en/tools-reference ; https://learn.chatgpt.com/docs/config-file/config-basic ; https://www.w3.org/WAI/ARIA/apg/patterns/radio/ . SearXNG motori: https://docs.searxng.org/dev/engines/index.html (build2026.9.5+28b61729c). About espone anche build06/09: non assunto come release disponibile05/09.
+| Fonte | Forza | Limite/gap verificato | Decisione / +1 misurabile |
+|---|---|---|---|
+| Hermes | Scelta esplicita persistita, ricerca/estrazione separate | Auto-config iniziale può scegliere destinatario da credenziali o ring; limiti free-tier dichiarati | Adattare destinatario sempre esplicito e nessun cambio automatico; preservare5 fonti e off, reload prova scelta |
+| ClaudeCode | Errori ricerca distinti dai risultati, retry backend | Backend WebSearch fisso; alternative via MCP | Adattare errore persistente e retry manuale, scelta diretta tra5 backend già implementati, zero installazioni |
+| Codex | Modi cached/indexed/live/disabled espliciti, risultati non fidati | Cache non è dato live; nessuna equivalenza con verifica connessione | Adattare configurata ≠ prova riuscita e disattivazione ≠ blocco di tutta la rete; non inventare modalità cache assenti nel backend |
+| WAI | Un solo ingresso Tab e frecce nel gruppo radio | Originale radio tutti tabulabili senza frecce | Adottare roving e selezione da frecce, preservare focus e bloccare doppie mutazioni |
+Originale: sei scelte, chiave/sostituzione/rimozione, indirizzo, link ottenimento chiave, prova con query fissa. +1 locale: query prova editabile nell'API già prevista; chiave opzionale custom finalmente inseribile; errore/retry persistente senza perdere campi; risposta invalida mai successo. Rifiutate note non dimostrate su quote/prezzi e “nessuna terza parte vede la query”: SearXNG interroga altri motori. Riusare ChoiceCards/SettingRow/Card/Button/Input del canonico, zero nuovi blocchi/token/dipendenze.
+File esatti:
+- .claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html
+- .claude/LEDGER-ASTRA-FASE-2-2026-09-05.md
+- .claude/CONSEGNA-ASTRA-FASE-2-2026-09-05.md
+- harness-ui/frontend/src/components/fonte-ricerca.js
+- harness-ui/frontend/src/legacy/app.js
+- harness-ui/frontend/index.template.html
+- harness-ui/frontend/src/styles/index.css
+- harness-ui/frontend/lab/fixtures/fonte-ricerca.js
+- harness-ui/frontend/lab/main.js
+- harness-ui/frontend/tests/unit/fonte-ricerca.test.mjs
+- harness-ui/frontend/tests/parity/fonte-ricerca-vivo.spec.mjs
+- harness-ui/frontend/tests/parity/fonte-ricerca-backend-fixture.mjs
+- harness-ui/frontend/tests/parity/componenti.spec.mjs
+- harness-ui/frontend/playwright.astra.config.mjs
+Export nuovi normalizzaFonteRicerca, normalizzaProvaRicerca, creaScelteFonte, aggiornaFonteRicerca; fixture FONTE_RICERCA; fixture backend avviaFonteDiProva. Compatibili caricaPannelloRicercaWeb/disegnaPannelloRicercaWeb/azioneRicercaWeb; locali statoFonteRicerca, ricercaWebInCorso, messaggioFonteRicerca; mount originale searchSourceMount. Caricamento e mutazione seriali; nessun secondo canale di navigazione. Modulo rende DOM soltanto, callbacks dal monolite.
+RED FONTE-CONTRATTO, FONTE-PROVA-INVALIDA (modulo assente), FONTE-CUSTOM-CHIAVE (originale non permette inserimento), FONTE-TASTIERA, FONTE-RECUPERO/CONCORRENZA. GREEN node --test tests/unit/fonte-ricerca.test.mjs; componenti FonteRicerca x3; frontend playwright.astra fonte-ricerca-vivo x3; test HTTP/store esistenti, npm run verify e componenti completo in sequenza. Prove in linguaggio umano: scelgo tuttefonti, salvo/rimuovo chiave artificiale in portachiavi in memoria, indirizzo testato su store isolato, reload file reale; prova rete dichiarata fixture. Prova GET reale4177 separata. Non cambiare credenziali personali né impostazioni del server condiviso durante suite. Backend HTTP di laboratorio4178 con store temporaneo e keyring in memoria, come fixture estensioni; trasporto prova controllato, nessuna chiamata pagata. Chiamata agente/composer con modello assente resta gap: questa consegna è configurazione UI, non nuova capacità di ricerca.
+Originale e proposta agli stessi stati/viewports1440/1280/1024, artifacts/astra-fase2/FonteRicerca; apertura manuale e copie selezionate solo alla consegna. Rollback commitfrontend senza migrazioni. Limite backend mantenuto: l'indirizzo non è ricordato separatamente per ogni fonte; cambiando fonte si azzera.
+
+RED constatati: unità modulo assente; FONTE-CUSTOM-CHIAVE fallisce perché il campo non esiste. Aperte cinque foto originali1440: scelta e quattro stati. Il layout originale impone scorrimento per i campi; nuova composizione riusa griglia ChoiceCards e campi canonici, con dettaglio della sola fonte scelta.
+
+### Raccordo B6 ricevuto e applicato — 05/09
+Merge866a8a9f riuscito dopo stash limitato ai14 file B6.3, riapplicato senza conflitti. Modifiche chat/composer restano integralmente dell'orchestratore. Nessun loro CSS aggiunto da Astra. Regola permanente per gli edit: String.prototype.replace usa sempre callback di rimpiazzo (s.replace(a, () => b)), mai stringa; rileggere tutte le righe toccate. Il significato speciale di $$/$&/$1 è già annotato nella memoria02/09 e ora anche in questo ledger.
+Hermes delle foto hermes-confronto1480×964: app desktop Electron0.17.0, NON dashboard web. Eseguibile: C:/Users/Antonino/AppData/Local/Temp/claude/C--Users-Antonino-Desktop-projects-AVM-harness-desktop/af5c3844-a5da-4bb5-a142-7740e39b623d/scratchpad/confronto/hermes-root/node_modules/electron/dist/electron.exe ; argomento assoluto: C:/Users/Antonino/AppData/Local/Temp/claude/C--Users-Antonino-Desktop-projects-AVM-harness-desktop/af5c3844-a5da-4bb5-a142-7740e39b623d/scratchpad/confronto/hermes-root/apps/desktop . Nessuna porta dashboard documentata. Provenienza recuperata da CONSEGNA-ASTRA-CONFRONTO-HERMES e osservazioni.json; bundle electron-main.mjs SHA256942065f5039a18a4afc2a68ee6d39371b8a90f45e9957f4868c0aa17dc53e799, commit sorgente installato87086bc5d7812f9f38c6dd36e391ab0fcec92468. Corrispondenza completa bundle/sorgente non provata. Il vecchio manifesto segnala file con estensionePNG ma codificaJPEG e restorePending della trasparenza: dati storici, non una nuova verifica runtime. Nessun Hermes riavviato in questa fase.
+Valori che i38 controlli scrivono attraverso i listener originali, da applicaAspettoDesktop/aggiornaBackgroundDesktop/applicaThemeDesktop: --talos-ui-font-scale, --talos-chat-font-size; data-talos-composer-shape, -composer-plus, -message-style, -streaming-animation, -window-presentation; classi chat-full-width, immersive-header, reduce-motion. Tema: data-talos-theme, -color-mode, -resolved-color-mode, -scene. Movimento: data-talos-motion-mode/-quality/-profile/-easing; variabili --talos-motion-speed/-intensity/-glow/-density/-depth/-trails/-contrast/-parallax/-duration-scale/-ui-intensity/-stagger/-ease/-ease-exit; durate --talos-motion-duration-control/-surface-enter/-surface-exit/-disclosure/-popover/-tab-change/-composer-expand/-composer-collapse/-message-insert/-response-progress/-success-confirm/-theme-transition; --talos-background-cycle/-shift-x/-shift-y. Nessun nuovo protocollo: già emessi dal monolite. B8 chiuderà le prove degli effetti con il raccordo CSS dell'orchestratore.
+Prima innesto FonteRicerca: tre fonti competitor riaperte05/09; parità3/3 e6 immagini aperte. Focus preservato soltanto se la persona non si sposta; GET e POST seriali, errori in linea e campi conservati; esito prova distinto dalla sola readiness. Primo test componenti partito con default4176; da qui tutti i cancelli componente con TALOS_LAB_PORT=4178 esplicito.
+
+FONTE-ESITO-SCADUTO RED riprodotto: dopo prova riuscita, prova fallita nasconde i risultati ma conservava la frase «ha risposto». File src/legacy/app.js, catch di azioneRicercaWeb. Ricerca fresca05/09: tre fonti B6.3 e WAI Understanding status-messages riaperte; stato deve riferirsi alla richiesta corrente. Prima di avviare qualsiasi richiesta invalidare la prova precedente e ripristinare la readiness non verificata. Nessun cambio API né CSS. Rimuovere anche RICERCA_LINK ormai inutilizzata nel monolite: link sicuri unicamente nel componente. Test permanente FONTE-PROVA/FONTE-ESITO-SCADUTO.
+
+FONTE-ESITO-VISIBILE: foto app-prova/app-errore-prova1440 mostrano esito sotto il bordo visibile; la sola toBeVisible non basta. FONTE-LETTURA-TERMINATA: placeholder originale «Lettura dello stato…» sopravvive al GET fallito. Ricerca05/09 MDN scrollIntoView e WAI status-messages più tre fonti B6.3 riaperte prima fix. File app.js e fonte-ricerca-vivo: test toBeInViewport(ratio1) su esito/errore, nessun placeholder dopo errore. Scroll nearest/instant solo se focus ancora nell’operazione e se pagina visibile; nessun focus rubato se naviga altrove. Stato iniziale svuota soltanto il placeholder legacy, non i campi.
+
+Raccordo aspetto, verifica richiesta dal prompt: aggiunto al perimetro esatto harness-ui/frontend/tests/parity/impostazioni-vivo.spec.mjs, scenario SET-RACCORDO-ATTRIBUTI. Nessun edit prodotto: guida controlli originali e verifica sulla radice valori usati dal CSS orchestratore (scala/font/stili/classi/movimento), anche dopo reload. Fonti configurazione Hermes/ClaudeCode/Codex B6.2 riaperte05/09. Questa è prova del raccordo dati; non viene spacciata per verifica completa di tutti gli effetti di B8.
+
+FONTE-ESITO-VISIBILE1024: dopo scroll nearest il rettangolo termina0,3px oltre il bordo (intersection ratio0,99799). Mantengo la richiesta di visibilità completa; applico scroll-margin-block12px a esito/errore nel solo Settings, come MDN scrollIntoView Using scroll-margin-top/bottom (riverificato05/09 insieme ai tre competitor). Canonico e generati già nel perimetro. Nessuna soglia di test abbassata.
+
+## B6.3 FonteRicerca — consegna verificata 05/09/2026
+Dentro Impostazioni → Strumenti agente e permessi: cinque fonti originali più off, scelta persistita sul server, chiave/sostituzione/rimozione nel portachiavi, indirizzo, collegamenti sicuri e prova reale tramite le rotte esistenti. Nessun endpoint né storage aggiunto. Nuovo modulo FonteRicerca; riusati ChoiceCards, SettingRow, Field, Button, Card, token esistenti. Zero nuovi blocchi visivi, zero token CSS, zero dipendenze. Mockup rigenerato:16 schermate,113 blocchi.
+
+| Aspetto | Originale → proposta | Beneficio verificato / limite |
+|---|---|---|
+| Copertura | Tutte6 scelte e azioni conservate | Aggiunta chiave facoltativa custom già supportata dal server |
+| Prova | Query fissa → testo libero | Invio e retry con frasi naturali; configurazione distinta da connessione verificata |
+| Tastiera | Radio tabulabili → gruppo con frecce e ingresso unico | Focus restituito al controllo; nessun richiamo se la persona cambia pagina |
+| Errori | Segnalazione generica → errore nel pannello, retry e campi conservati | Risposta malformata non diventa successo; vecchi risultati invalidati |
+| Layout | Confronto originale/app1440/1280/1024 | Stesse scelte, forma canonica; campi lunghi scorrono, esito/errore completamente nel viewport |
+| Persistenza | Backend originale conservato | Ricarico browser e riapertura store su file; chiave esclusa dal JSON della scelta |
+| Limiti | Indirizzo unico per fonte attiva | Cambiare fonte azzera indirizzo come prima; nessuna promessa di prestazioni/superiorità globale |
+Verdetto: innesto verificato nel perimetro. Preserva funzioni e migliora configurazione custom, prova e recupero; accettazione visiva finale dell’owner distinta dai cancelli.
+
+Verifiche fresche: build;66 unità/contratti;30 asset deterministici;195/195 statici;72/72 componenti (TALOS_LAB_PORT4178);36/36 percorsi app (18 FonteRicerca +18 Impostazioni, incluso SET-RACCORDO-ATTRIBUTI dopo reload); originale3/3 e backend HTTP/store10/10 nella stessa fase. Nessuno skip né retry automatico. Il test di configurazione usa HTTP/store reali isolati con chiavi artificiali e portachiavi in memoria; la risposta del motore di ricerca è una fixture dichiarata, non una chiamata pagata. GET4177 reale verificato separatamente. Nessuna esecuzione agente dichiarata senza modello disponibile.
+Regressioni permanenti: FONTE-ESITO-SCADUTO, FONTE-ESITO-VISIBILE (incluso1024 e margine di scorrimento12px), FONTE-LETTURA-TERMINATA, FONTE-RECUPERO, FONTE-CONCORRENZA. Tutte nel test fonte-ricerca-vivo; normalizzatori unitari rifiutano risposte invalide. Immagini finali aperte personalmente,29 selezionate sotto; le restanti sono diagnostiche negli artifacts ignorati. Parità FonteRicerca identica nelle tre larghezze.
+Raccordo866a8a9f unito in7fa26452; ulteriore merge prima consegna già aggiornato. CSS Chat/composer conservato; attributi/variabili originali e provenienza Hermes registrati nel ledger alla voce Raccordo B6. B8 resta responsabile della verifica degli effetti tema/scena/movimento. Nessuna modifica ad AGENTS, ponte, frammenti o public; nessun push.
+
+Prove aperte e selezionate:
+- .claude/immagini/astra-fase2/FonteRicerca/originale-scelte-1440.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-scelte-1440.png
+- .claude/immagini/astra-fase2/FonteRicerca/originale-custom-1440.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-custom-1440.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-prova-1440.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-errore-prova-1440.png
+- .claude/immagini/astra-fase2/FonteRicerca/originale-scelte-1280.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-scelte-1280.png
+- .claude/immagini/astra-fase2/FonteRicerca/originale-custom-1280.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-custom-1280.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-prova-1280.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-errore-prova-1280.png
+- .claude/immagini/astra-fase2/FonteRicerca/originale-scelte-1024.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-scelte-1024.png
+- .claude/immagini/astra-fase2/FonteRicerca/originale-custom-1024.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-custom-1024.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-prova-1024.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-errore-prova-1024.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-tavily-1440.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-brave-1280.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-searxng-1024.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-errore-lettura-1280.png
+- .claude/immagini/astra-fase2/FonteRicerca/app-errore-salvataggio-1024.png
+- .claude/immagini/astra-fase2/FonteRicerca/comp-FonteRicerca-desktop-1024x800-app.png
+- .claude/immagini/astra-fase2/FonteRicerca/comp-FonteRicerca-desktop-1024x800-mockup.png
+- .claude/immagini/astra-fase2/FonteRicerca/comp-FonteRicerca-desktop-1280x800-app.png
+- .claude/immagini/astra-fase2/FonteRicerca/comp-FonteRicerca-desktop-1280x800-mockup.png
+- .claude/immagini/astra-fase2/FonteRicerca/comp-FonteRicerca-desktop-1440x900-app.png
+- .claude/immagini/astra-fase2/FonteRicerca/comp-FonteRicerca-desktop-1440x900-mockup.png
+
+Cosa deve fare l’owner · Può provare Impostazioni su http://127.0.0.1:4177/. Nessuna azione necessaria per proseguire.
+Cosa fai tu dopo · Innestare le sei schede e gli accessi del Model Lab, preservando tutte le funzioni originali.
+Cosa rimane · B6 ModelLab → B2 → B7 → B1 → B8 → Browser K-I. OAuth e computer-use restano PROPOSTE.

@@ -777,3 +777,14 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 #schermoCapability [data-ext-detail] .talos-kv{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);align-items:start;gap:12px}
 #schermoCapability [data-ext-detail] .talos-kv__k{white-space:normal;overflow-wrap:anywhere}
 #schermoCapability [data-ext-detail] .talos-kv__v{white-space:normal;overflow-wrap:anywhere;max-width:none}
+
+/* B6: fonte della ricerca, soltanto dentro Impostazioni. */
+#schermoImpostazioni [data-source-settings] .talos-choice-grid{grid-template-columns:repeat(2,minmax(0,1fr));margin:16px 0}
+#schermoImpostazioni [data-source-settings] .talos-choice{min-height:76px;overflow-wrap:anywhere}
+#schermoImpostazioni [data-source-settings] .talos-field{display:grid;gap:7px;margin:12px 0}
+#schermoImpostazioni [data-source-settings] .talos-field__input{padding:0 12px;min-width:0}
+#schermoImpostazioni [data-source-settings] .talos-settings__actions{margin:12px 0}
+#schermoImpostazioni [data-search-error]{color:var(--talos-danger);border-left:2px solid currentColor;padding-left:12px}
+#schermoImpostazioni [data-search-result]{border-top:1px solid var(--talos-border);padding-top:12px;overflow-wrap:anywhere}
+#schermoImpostazioni [data-search-result] ul{padding-left:20px}
+#schermoImpostazioni [data-search-result],#schermoImpostazioni [data-search-error]{scroll-margin-block:12px}
