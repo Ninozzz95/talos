@@ -1,3 +1,5 @@
+import {aggiornaFonteRicerca} from '../src/components/fonte-ricerca.js';
+import {FONTE_RICERCA} from './fixtures/fonte-ricerca.js';
 import {montaImpostazioni} from '../src/components/impostazioni.js';
 import {IMPOSTAZIONI} from './fixtures/impostazioni.js';
 import {aggiornaDoctor} from '../src/components/doctor.js';
@@ -66,6 +68,7 @@ document.documentElement.setAttribute('data-schermo', 'chat');
 const componente = new URLSearchParams(location.search).get('componente') || '';
 
 const LABORATORI = {
+ FonteRicerca(){const s=document.querySelector('#setting-source-preview [data-settings-reuse]');s.replaceChildren();aggiornaFonteRicerca(s,FONTE_RICERCA);},
  SettingsNav(){document.querySelector('#schermoImpostazioni [role=tablist]').replaceChildren();montaImpostazioni(document.querySelector('#schermoImpostazioni'),IMPOSTAZIONI);},
  SettingRow(){montaImpostazioni(document.querySelector('#schermoImpostazioni'),IMPOSTAZIONI);},
  CheckCard(){aggiornaDoctor(document.querySelector('#schermoDoctor'),DOCTOR,{ricevutoAlle:ADESSO_DOCTOR});},

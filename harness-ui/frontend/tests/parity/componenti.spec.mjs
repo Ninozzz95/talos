@@ -16,6 +16,7 @@ import { MOCKUP, apri, confrontaPixel, mostra, struttura, testi } from './aiuto.
 const LAB = process.env.TALOS_LAB_URL || `http://127.0.0.1:${process.env.TALOS_LAB_PORT || 4176}`;
 
 const COMPONENTI = [
+ {nome:'FonteRicerca',schermata:'schermoImpostazioni',selettore:'#setting-source-preview'},
  {nome:'SettingsNav',schermata:'schermoImpostazioni',selettore:'#schermoImpostazioni .talos-settings__nav'},
  {nome:'SettingRow',schermata:'schermoImpostazioni',selettore:'#schermoImpostazioni [data-settings-group=design]'},
  {nome:'CheckCard',schermata:'schermoDoctor',selettore:'#schermoDoctor'},
@@ -50,6 +51,7 @@ test.describe('parità dei componenti ↔ mockup', () => {
       await a.pagina.waitForSelector('html[data-visual-ready="true"]');
       await mostra(m.pagina, comp.schermata);
       await mostra(a.pagina, comp.schermata);
+      if(comp.nome==='FonteRicerca'){for(const p of [m.pagina,a.pagina])await p.evaluate(()=>{for(const el of document.querySelectorAll('#schermoImpostazioni [data-settings-panel]'))el.hidden=el.dataset.settingsPanel!=='tools';});}
       if(comp.sezione){await expect(a.pagina.locator('#capPanel-'+comp.sezione+' [data-ext-detail] .talos-kv__k').first(),'EXT-ETICHETTE-INTEGRE').toHaveCSS('white-space','normal');expect(await a.pagina.locator(comp.selettore+' use').evaluateAll(ns=>ns.every(n=>document.querySelector(n.getAttribute('href')))), 'EXT-ICONA-ESISTENTE').toBe(true);await m.pagina.locator('[data-cap-tab='+comp.sezione+']').click();await a.pagina.locator('[data-cap-tab='+comp.sezione+']').click();}
       expect(await struttura(a.pagina, comp.selettore), 'struttura').toEqual(await struttura(m.pagina, comp.selettore));
       expect(await testi(a.pagina, comp.selettore), 'parole').toEqual(await testi(m.pagina, comp.selettore));

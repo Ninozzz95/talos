@@ -32,3 +32,10 @@ test('SET-MOVIMENTO: regolo un cursore e ripristino il movimento senza perdere i
  await pronta(page,APP);const s=page.locator('#schermoImpostazioni');const tema=s.getByRole('combobox',{name:'Tema TALOS',exact:true});await tema.selectOption('noir');const velocita=s.getByRole('slider',{name:'Velocità',exact:true});await velocita.focus();await page.keyboard.press('End');await expect(velocita).toHaveValue('200');await expect(s.locator('#motionSpeedOutput')).toHaveText('200');await foto(page,'app-movimento',info);
  await s.getByRole('button',{name:'Ripristina movimento',exact:true}).click();await expect(velocita).toHaveValue('100');await expect(s.locator('#motionSpeedOutput')).toHaveText('100');await expect(tema).toHaveValue('noir');await foto(page,'app-animazioni',info);
 });
+
+test('SET-RACCORDO-ATTRIBUTI: le mie preferenze raggiungono il disegno della chat',async({page})=>{
+ await pronta(page,APP);const s=page.locator('#schermoImpostazioni'),root=page.locator('html');await s.getByRole('tab',{name:'Aspetto e movimento',exact:true}).click();
+ for(const [id,value] of [['uiFontScaleSelect','large'],['chatFontScaleSelect','expanded'],['messageStyleSelect','bubbles'],['composerShapeSelect','compact']])await s.locator('#'+id).selectOption(value);
+ await s.locator('#immersiveHeaderToggle').setChecked(true);await s.locator('#reducedMotionToggle').setChecked(true);await s.getByRole('tab',{name:'Chat e composer',exact:true}).click();await s.locator('#chatFullWidthToggle').setChecked(true);
+ for(const dopo of [false,true]){if(dopo)await page.reload();await expect(root).toHaveAttribute('data-talos-message-style','bubbles');await expect(root).toHaveAttribute('data-talos-composer-shape','compact');await expect(root).toHaveClass(/chat-full-width/);await expect(root).toHaveClass(/immersive-header/);await expect(page.locator('body')).toHaveClass(/reduce-motion/);expect(await root.evaluate(n=>n.style.getPropertyValue('--talos-ui-font-scale'))).toBe('1.15');expect(await root.evaluate(n=>n.style.getPropertyValue('--talos-chat-font-size'))).toBe('1.1875rem');}
+});
