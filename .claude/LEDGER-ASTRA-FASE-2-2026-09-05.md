@@ -1409,3 +1409,73 @@ Prove selezionate e aperte, copiate manualmente da artifacts (29 PNG):
 Cosa deve fare l’owner · Nulla per proseguire; può provare Capability su http://127.0.0.1:4177/.
 Cosa fai tu dopo · B6 Diagnostica, Impostazioni e Model Lab.
 Cosa rimane · B6→B2→B7 (anche creazione automazioni e ToastRegion)→B1→B8→Browser K-I. OAuth/computer-use restano PROPOSTE. Nessun push.
+
+## B6.1 Doctor — piano prima degli edit, 05/09/2026
+Merge lane/harness-desktop aggiornato dopo cad3d10. TALOS UI: SeverityCount/CheckCard sui dati GET /api/v1/doctor; nessun backend né contratto nuovo. Letti doctor.mjs, doctor.test.mjs, eseguiDoctor/riassuntoDoctor e risposta vera4177. Rimpiazzare esempi non osservabili (versioni, peso store, suite) con dati del contratto. Conservare tutti i segnali originali e aggiungere dettaglio, gravità, istante di ricezione, JSON scaricabile e recupero persistente. Le azioni di riparazione senza rotta non vengono promesse.
+Ricerca fresca06/08–05/09: release Hermes v2026.8.31/29112be31/08, ClaudeCode v2.1.261/d7dbd9a04/09, Codex rust-v0.153.4/3d2ee5104/09 riaperte agli URL B4.1. Fonti stabili riverificate05/09 (data aggiornamento non esposta): https://hermes-agent.nousresearch.com/docs/getting-started/installation ; https://code.claude.com/docs/en/debug-your-config ; https://developers.openai.com/codex/app/troubleshooting → https://learn.chatgpt.com/docs/reference/troubleshooting ; https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html .
+| Fonte | Forza | Limite/gap documentato | Decisione / +1 da verificare |
+|---|---|---|---|
+| Hermes | Doctor distingue metodo installazione e dipendenze mancanti | Ambienti/service PATH diversi richiedono rimedi diversi; GUI non misurata | Adattare contesto ambiente esplicito; desktop non spacciato per WSL2, nessuna riparazione generica |
+| Claude Code | Doctor valida configurazione; comandi dedicati mostrano cosa è caricato | Configurazione corretta non implica MCP avviato o hook eseguito | Adattare distinzione configurato/verificato/non osservato in ogni scheda; nessun falso successo |
+| Codex | Diagnostica con log e passaggi di recupero | CLI e desktop possono avere versioni differenti; log da rivedere prima di condividere | Adattare prova ricevuta esportabile localmente senza raccolta log o invio automatico; non inventare versioni mancanti |
+| WAI | role=status/alert rende esiti annunciabili | Troppe live region generano rumore | Adottare una sola sintesi status e un solo errore; niente focus rubato dal controllo asincrono |
+File esatti:
+- .claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html
+- .claude/LEDGER-ASTRA-FASE-2-2026-09-05.md
+- .claude/CONSEGNA-ASTRA-FASE-2-2026-09-05.md
+- harness-ui/frontend/src/components/doctor.js
+- harness-ui/frontend/src/legacy/app.js
+- harness-ui/frontend/index.template.html
+- harness-ui/frontend/src/styles/index.css
+- harness-ui/frontend/lab/fixtures/doctor.js
+- harness-ui/frontend/lab/main.js
+- harness-ui/frontend/tests/unit/doctor.test.mjs
+- harness-ui/frontend/tests/parity/componenti.spec.mjs
+- harness-ui/frontend/tests/parity/doctor-vivo.spec.mjs
+- harness-ui/frontend/playwright.astra.config.mjs
+Nuovi export: controlliDoctor, contaGravitaDoctor, creaCheckCard, aggiornaDoctor; fixture DOCTOR e ADESSO_DOCTOR. Locali paginaDoctor, caricaDoctor, esportaDoctor; eseguiDoctor e riassuntoDoctor restano simboli compatibili; refreshDoctorBadge riusa sintesi. CheckCard copia struttura canonica, nessuna libreria nuova.
+RED DOCTOR-SEMANTICA (desktop e naviga/configurazione non equivalgono a verifica remota), DOCTOR-PARZIALE, DOCTOR-SCARTI, DOCTOR-INVALIDO e DOCTOR-PAGINA prima innesto. GREEN node --test tests/unit/doctor.test.mjs; componenti CheckCard x3, doctor-vivo x3, npm run verify, intero cancello componenti4178. Flusso originale attivato da Control; pagina nuova dalla nav e da Control; ricarica, fallimento GET, retry, esportazione del dato visto. Prova dati veri4177 e risposte controllate per errori; non si dichiara nuovo test modello o connessione provider. Foto originale/proposta a1440/1280/1024 in artifacts/astra-fase2/Doctor, apertura manuale e sole prove scelte in .claude/immagini alla consegna. Rollback solo commit frontend, nessuna migrazione.
+
+Ancore Doctor: la sidebar non ha una rotta Doctor; il test si apre dal comando Control già esistente. Nessuna voce nuova nella sidebar, proprietà orchestratore. Il pannello Settings verrà collegato in B6.2.
+
+Originale Doctor aperto alle tre larghezze: Control mostra il solo badge. Il dettaglio nasce come toast con durata3,3s; lo screenshot deve attendere anche la chiusura del backdrop, altrimenti documenta la transizione. RED pagina: data-doctor-esito assente, unità: modulo assente.
+
+Prima innesto Doctor: fonti competitor B6.1 riaperte e merge aggiornato05/09. Parità3/3; prima coppia1440 aperta. Mantengo componenti e endpoint, nessun secondo canale di navigazione. EseguiDoctor apre setView(doctor), che carica una richiesta condivisa senza doppioni; gli errori conservano il dato precedente dichiarandolo e il JSON corrisponde al dato esposto.
+
+DOCTOR-FOCUS riprodotto3/3: disabilitare Ricontrolla durante GET fa perdere il focus. Ricerca WAI keyboard-interface e tre fonti B6.1 riaperte05/09 prima della correzione. Ripristinare soltanto il pulsante di partenza se ancora nella pagina Doctor e nessun altro elemento ha il focus. Nessun focus spostato quando la persona naviga altrove. File app.js, test doctor-vivo; nessuna variazione grafica.
+
+## B6.1 consegna Doctor — 05/09/2026
+SeverityCount e CheckCard innestati sul GET /api/v1/doctor esistente, dal comando Doctor del foglio Control. Tutti i segnali originali sono conservati; la pagina mostra11 categorie ordinate per gravità, una sintesi annunciabile, errori persistenti, Ricontrolla e download JSON del risultato effettivamente visto. Riusati DoctorScreen, Topbar, Page, SeverityCount e CheckCard; zero nuovi blocchi, token, icone, dipendenze o regole CSS. Locali aggiunti paginaDoctor, mostraDoctor, caricaDoctor, esportaDoctor; eseguiDoctor/riassuntoDoctor/refreshDoctorBadge preservati. Template e CSS rigenerati.
+
+| Aspetto | Originale → proposta | Evidenza e verdetto |
+|---|---|---|
+| Copertura e chiarezza | Badge e toast3,3s → risultato persistente, categorie e dettaglio | Originale e nuova app aperti a1440/1280/1024 sullo stesso backend: servizio agente e catalogo non pronti, Git disponibile,73 sessioni ripristinate |
+| Semantica | Desktop genericamente da controllare → tipo ambiente esplicito; configurazione separata dall’esecuzione | Chiave/navigazione/ricerca non sono prove di connessione. Shell desktop dichiarata senza attestare isolamento WSL2 |
+| Errori e recupero | Toast → errore con Ricontrolla | GET503, risposta invalida, dati parziali, retry e ultimo risultato conservato provati; export disabilitato finché manca un dato valido |
+| Accessibilità | Feedback effimero → status/alert separati, titolo e gravità testuali | DOCTOR-FOCUS RED→GREEN: Ricontrolla conserva il focus se la persona non si sposta; nessuna informazione affidata al solo colore |
+| Responsive e densità | Sintesi breve →11 schede scrollabili | Topbar resta su una riga, controlli accessibili alle tre larghezze, fondo pagina esaminato. A1024 l’ora in testata segue la regola comune di occultamento; resta nel JSON esportato |
+| Persistenza e prova | Nessun report scaricabile → JSON del risultato e ora di ricezione | Download letto e confrontato; reload esegue un controllo fresco. Nessuna nuova chiave localStorage né invio dei dati |
+
+Verifiche: unità Doctor4/4; prova app12/12; npm run verify verde:61 unità/contratti, determinismo30file, statico195/195; componenti63/63. Esame visivo:6 originali/proposta,3 fondi pagina,3 casi errore/parziale/scarti,6 immagini di parità. Prove correnti vere su4177; errori e sessioni scartate sono risposte controllate dichiarate. Nessuna chiamata al modello o prova remota provider dichiarata. Nessun pulsante di riparazione inventato.
+Prove aperte e copiate manualmente da artifacts (18 PNG):
+- .claude/immagini/astra-fase2/Doctor/originale-1440.png
+- .claude/immagini/astra-fase2/Doctor/app-1440.png
+- .claude/immagini/astra-fase2/Doctor/app-dettagli-1440.png
+- .claude/immagini/astra-fase2/Doctor/originale-1280.png
+- .claude/immagini/astra-fase2/Doctor/app-1280.png
+- .claude/immagini/astra-fase2/Doctor/app-dettagli-1280.png
+- .claude/immagini/astra-fase2/Doctor/originale-1024.png
+- .claude/immagini/astra-fase2/Doctor/app-1024.png
+- .claude/immagini/astra-fase2/Doctor/app-dettagli-1024.png
+- .claude/immagini/astra-fase2/Doctor/app-errore-1440.png
+- .claude/immagini/astra-fase2/Doctor/app-parziale-1440.png
+- .claude/immagini/astra-fase2/Doctor/app-scarti-1440.png
+- .claude/immagini/astra-fase2/Doctor/comp-CheckCard-desktop-1440x900-mockup.png
+- .claude/immagini/astra-fase2/Doctor/comp-CheckCard-desktop-1440x900-app.png
+- .claude/immagini/astra-fase2/Doctor/comp-CheckCard-desktop-1280x800-mockup.png
+- .claude/immagini/astra-fase2/Doctor/comp-CheckCard-desktop-1280x800-app.png
+- .claude/immagini/astra-fase2/Doctor/comp-CheckCard-desktop-1024x800-mockup.png
+- .claude/immagini/astra-fase2/Doctor/comp-CheckCard-desktop-1024x800-app.png
+Cosa deve fare l’owner · Nulla per continuare. Prova su http://127.0.0.1:4177/ → Comandi → Agenti, regole e Doctor → Doctor.
+Cosa fai tu dopo · Impostazioni e Model Lab (B6).
+Cosa rimane · B6 Impostazioni/ModelLab→B2→B7 (creazione automazioni e ToastRegion inclusi)→B1→B8→Browser K-I. OAuth/computer-use solo PROPOSTE. Nessun push.

@@ -269,3 +269,39 @@ Prove selezionate e aperte, copiate manualmente da artifacts (29 PNG):
 Cosa deve fare l’owner · Nulla per proseguire; può provare Capability su http://127.0.0.1:4177/.
 Cosa fai tu dopo · B6 Diagnostica, Impostazioni e Model Lab.
 Cosa rimane · B6→B2→B7 (anche creazione automazioni e ToastRegion)→B1→B8→Browser K-I. OAuth/computer-use restano PROPOSTE. Nessun push.
+
+## B6.1 consegna Doctor — 05/09/2026
+SeverityCount e CheckCard innestati sul GET /api/v1/doctor esistente, dal comando Doctor del foglio Control. Tutti i segnali originali sono conservati; la pagina mostra11 categorie ordinate per gravità, una sintesi annunciabile, errori persistenti, Ricontrolla e download JSON del risultato effettivamente visto. Riusati DoctorScreen, Topbar, Page, SeverityCount e CheckCard; zero nuovi blocchi, token, icone, dipendenze o regole CSS. Locali aggiunti paginaDoctor, mostraDoctor, caricaDoctor, esportaDoctor; eseguiDoctor/riassuntoDoctor/refreshDoctorBadge preservati. Template e CSS rigenerati.
+
+| Aspetto | Originale → proposta | Evidenza e verdetto |
+|---|---|---|
+| Copertura e chiarezza | Badge e toast3,3s → risultato persistente, categorie e dettaglio | Originale e nuova app aperti a1440/1280/1024 sullo stesso backend: servizio agente e catalogo non pronti, Git disponibile,73 sessioni ripristinate |
+| Semantica | Desktop genericamente da controllare → tipo ambiente esplicito; configurazione separata dall’esecuzione | Chiave/navigazione/ricerca non sono prove di connessione. Shell desktop dichiarata senza attestare isolamento WSL2 |
+| Errori e recupero | Toast → errore con Ricontrolla | GET503, risposta invalida, dati parziali, retry e ultimo risultato conservato provati; export disabilitato finché manca un dato valido |
+| Accessibilità | Feedback effimero → status/alert separati, titolo e gravità testuali | DOCTOR-FOCUS RED→GREEN: Ricontrolla conserva il focus se la persona non si sposta; nessuna informazione affidata al solo colore |
+| Responsive e densità | Sintesi breve →11 schede scrollabili | Topbar resta su una riga, controlli accessibili alle tre larghezze, fondo pagina esaminato. A1024 l’ora in testata segue la regola comune di occultamento; resta nel JSON esportato |
+| Persistenza e prova | Nessun report scaricabile → JSON del risultato e ora di ricezione | Download letto e confrontato; reload esegue un controllo fresco. Nessuna nuova chiave localStorage né invio dei dati |
+
+Verifiche: unità Doctor4/4; prova app12/12; npm run verify verde:61 unità/contratti, determinismo30file, statico195/195; componenti63/63. Esame visivo:6 originali/proposta,3 fondi pagina,3 casi errore/parziale/scarti,6 immagini di parità. Prove correnti vere su4177; errori e sessioni scartate sono risposte controllate dichiarate. Nessuna chiamata al modello o prova remota provider dichiarata. Nessun pulsante di riparazione inventato.
+Prove aperte e copiate manualmente da artifacts (18 PNG):
+- .claude/immagini/astra-fase2/Doctor/originale-1440.png
+- .claude/immagini/astra-fase2/Doctor/app-1440.png
+- .claude/immagini/astra-fase2/Doctor/app-dettagli-1440.png
+- .claude/immagini/astra-fase2/Doctor/originale-1280.png
+- .claude/immagini/astra-fase2/Doctor/app-1280.png
+- .claude/immagini/astra-fase2/Doctor/app-dettagli-1280.png
+- .claude/immagini/astra-fase2/Doctor/originale-1024.png
+- .claude/immagini/astra-fase2/Doctor/app-1024.png
+- .claude/immagini/astra-fase2/Doctor/app-dettagli-1024.png
+- .claude/immagini/astra-fase2/Doctor/app-errore-1440.png
+- .claude/immagini/astra-fase2/Doctor/app-parziale-1440.png
+- .claude/immagini/astra-fase2/Doctor/app-scarti-1440.png
+- .claude/immagini/astra-fase2/Doctor/comp-CheckCard-desktop-1440x900-mockup.png
+- .claude/immagini/astra-fase2/Doctor/comp-CheckCard-desktop-1440x900-app.png
+- .claude/immagini/astra-fase2/Doctor/comp-CheckCard-desktop-1280x800-mockup.png
+- .claude/immagini/astra-fase2/Doctor/comp-CheckCard-desktop-1280x800-app.png
+- .claude/immagini/astra-fase2/Doctor/comp-CheckCard-desktop-1024x800-mockup.png
+- .claude/immagini/astra-fase2/Doctor/comp-CheckCard-desktop-1024x800-app.png
+Cosa deve fare l’owner · Nulla per continuare. Prova su http://127.0.0.1:4177/ → Comandi → Agenti, regole e Doctor → Doctor.
+Cosa fai tu dopo · Impostazioni e Model Lab (B6).
+Cosa rimane · B6 Impostazioni/ModelLab→B2→B7 (creazione automazioni e ToastRegion inclusi)→B1→B8→Browser K-I. OAuth/computer-use solo PROPOSTE. Nessun push.

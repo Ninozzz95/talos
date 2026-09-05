@@ -1,3 +1,4 @@
+import {controlliDoctor,contaGravitaDoctor,aggiornaDoctor} from '../components/doctor.js';
 import {aggiornaEstensioni,collegaSchedeCapability,mostraSchedaCapability} from '../components/estensioni.js';
 import { aggiornaPaginaCapability, creaToolListRow } from '../components/capability.js';
 import { creaAutomationRow, aggiornaPaginaAutomazioni } from '../components/automazioni.js';
@@ -1169,6 +1170,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (view === 'settings') inizializzaModelLab();
     if (view === 'dashboard') ensureSessionsBoard();
     if (view === 'ricerca') caricaPannelloRicerca({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Ricerca
+    if (view === 'doctor') caricaDoctor(); // 05/9 Fase 2: CheckCard
     if (view === 'capability') caricaCapability(); // 05/9 Fase 2: inventari
     if (view === 'officina') caricaPannelloForge({ pagina: true }); // 05/9 Fase 2: pagina Officina
     if (view === 'libreria') caricaPannelloLibreria({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Libreria
@@ -3722,27 +3724,28 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * `shell` usa davvero, git, naviga) — e riporta onestamente cosa
    * manca, mai un bluff.
    */
+  // 05/9 Fase 2: Doctor, stessi controlli nel badge e nella pagina.
   function riassuntoDoctor(risultato) {
-    const problemi = [];
-    if (!risultato.chiaveApi) problemi.push('chiave API assente');
-    if (risultato.shell !== 'wsl2') problemi.push('ambiente di lavoro da controllare');
-    if (!risultato.git) problemi.push('git non trovato');
-    if (!risultato.naviga) problemi.push('browser non disponibile');
-    if (risultato.cartelleProgetto && !risultato.cartelleProgetto.disponibili) problemi.push('nessuna cartella di progetto disponibile');
-    if (risultato.ownerRuntime && !risultato.ownerRuntime.pronto) problemi.push('servizio agente non pronto');
-    if (risultato.catalogoTask && !risultato.catalogoTask.disponibile) problemi.push('attività predefinite non disponibili');
-    if (risultato.sessioniPersistenza?.corrotte?.length) problemi.push(`${risultato.sessioniPersistenza.corrotte.length} sessione da controllare`);
-    // ⭐ 04/9, W0-01 — gli scarti non corrotti (vuota, senza intestazione, lettura fallita) prima sparivano: ora contano, col motivo dal server.
-    const scartateNonCorrotte = (risultato.sessioniPersistenza?.scartate || []).filter((s) => s.motivo !== 'corrotta').length;
-    if (scartateNonCorrotte > 0) problemi.push(`${scartateNonCorrotte} sessione scartata al ripristino (${risultato.sessioniPersistenza.dettaglio || 'vedi Doctor'})`);
-    // ⭐ 04/9, R-03 — «spenta» è una scelta, non un problema; chiave/indirizzo mancanti sì.
-    if (risultato.ricercaWeb && !risultato.ricercaWeb.pronta && risultato.ricercaWeb.fonte !== 'off') problemi.push('ricerca web non pronta');
-    return problemi.length === 0
-      ? { badge: 'Healthy', dettaglio: `Chiave API ok · ambiente ${risultato.shell} · git ok · browser ok · agente pronto.` }
-      : { badge: `${problemi.length} da rivedere`, dettaglio: `${problemi.join(' · ')}.` };
+    const voci=controlliDoctor(risultato),n=contaGravitaDoctor(voci),problemi=n.warning+n.danger;
+    return {badge:problemi?problemi+' da rivedere':'Nessun problema rilevato',dettaglio:voci.filter(v=>v.gravita==='danger'||v.gravita==='warning').map(v=>v.titolo+': '+v.righe.join(' ')).join(' · ')||'Controlli disponibili completati; leggi le note per le verifiche non eseguite.'};
+  }
+  const paginaDoctor={risultato:null,ricevutoAlle:null,errore:'',caricamento:false};
+  function mostraDoctor(){const s=document.querySelector('#schermoDoctor');if(s)aggiornaDoctor(s,paginaDoctor.risultato,{...paginaDoctor,onRicontrolla:caricaDoctor,onEsporta:esportaDoctor});}
+  async function caricaDoctor(){
+    if(paginaDoctor.caricamento)return;
+    const fuoco=document.activeElement;
+    paginaDoctor.caricamento=true;paginaDoctor.errore='';mostraDoctor();
+    try{const risultato=await apiGet('/api/v1/doctor');controlliDoctor(risultato);paginaDoctor.risultato=risultato;paginaDoctor.ricevutoAlle=new Date().toISOString();}
+    catch(error){paginaDoctor.errore='Doctor non disponibile: '+error.message;}
+    finally{paginaDoctor.caricamento=false;mostraDoctor();if(fuoco?.matches('[data-doctor-refresh]')&&document.activeElement===document.body&&!document.querySelector('#schermoDoctor')?.hidden)fuoco.focus({preventScroll:true});}
+  }
+  function esportaDoctor(){
+    if(!paginaDoctor.risultato||paginaDoctor.caricamento)return;
+    const contenuto={ricevutoAlle:paginaDoctor.ricevutoAlle,risultato:paginaDoctor.risultato};
+    const url=URL.createObjectURL(new Blob([JSON.stringify(contenuto,null,2)],{type:'application/json'}));
+    const link=document.createElement('a');link.href=url;link.download='talos-diagnosi-'+paginaDoctor.ricevutoAlle.slice(0,10)+'.json';document.body.append(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
 
-  /** Aggiorna lo stato accanto al bottone Doctor dentro il foglio "control", se è aperto — stesso principio di refresh automatico già in uso per le Automazioni. */
   async function refreshDoctorBadge() {
     const badgeEl = $('[data-doctor-status]', sheetBody);
     if (!badgeEl) return;
@@ -3753,18 +3756,9 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     }
   }
 
-  async function eseguiDoctor() {
-    let risultato;
-    try {
-      risultato = await apiGet('/api/v1/doctor');
-    } catch (error) {
-      toast('Doctor non disponibile', error.message);
-      return;
-    }
-    const { badge, dettaglio } = riassuntoDoctor(risultato);
-    toast(`Doctor: ${badge}`, dettaglio);
-    const badgeEl = $('[data-doctor-status]', sheetBody);
-    if (badgeEl) badgeEl.textContent = badge;
+  function eseguiDoctor() {
+    closeEmbeddedDialog(sheetDialog);
+    setView('doctor');
   }
 
   /**
