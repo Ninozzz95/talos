@@ -96,3 +96,30 @@ Chiusura dei componenti: npx playwright test --config=playwright.componenti.conf
 **Cosa deve fare l’owner:** può provare Libreria su http://127.0.0.1:4177; nessuna azione necessaria per proseguire. **Cosa fai tu dopo:** Ricerca, Officina e Automazioni. **Cosa rimane:** Note, resto della parte B, contratto CSS condiviso; integrazioni OAuth e piano computer-use dopo le schermate. Il runtime agente è assente: questa consegna non certifica chat o strumenti con un modello reale.
 
 Chiusura componenti B5.3: npx playwright test --config=playwright.componenti.config.mjs, porta 4178, **36/36**. git diff --check pulito.
+
+
+## B5.4 ReportRow / Ricerca — consegna 05/09/2026
+La pagina Ricerca approfondita legge il progetto della sessione reale. Titolo intero sempre leggibile, cinque stati in italiano, filtro per stato e ricerca nel titolo completo; Dettagli aggiunge l'ora di avvio. Pulsante Aggiorna, caricamento, errore esplicito, riprova; risposte obsolete escluse anche uscendo verso Board e rientrando. Il precedente foglio Capability usa lo stesso ReportRow. Nessuna rotta nuova.
+
+| Aspetto | Originale osservato | Proposta verificata / beneficio | Regressione / verdetto |
+|---|---|---|---|
+| Copertura dati | Titolo, data ridotta, cinque stati grezzi, ambito progetto | Stessi quattro campi, titolo senza tagli, ora completa disponibile, stati italiani distinti | Parità preservata; nessuna fonte o valutazione aggiunta senza dati |
+| Consultazione / passi | Nel lungo Capability hub, scroll fino alla ricerca; nessun filtro | Altro → Ricerca approfondita; ricerca su titolo/stato e sei filtri | Zero click per leggere il titolo; Dettagli solo per l'ora. RICERCA-TITOLO-NON-TRONCATO corretto con RED→GREEN |
+| Forma / densità / responsive | Modale, testi piccoli, contenuto circondato da sezioni estranee | Stesso linguaggio del mockup, lista centrale; 1440/1280 toolbar su una riga, 1024 su due, titolo mai troncato | Foto originali e finali aperte a tre larghezze; nessuna modifica alla Topbar Chat |
+| Tastiera / semantica | Elenco passivo e stati grezzi | Pulsanti nativi, lista, tabs con roving tabindex, Enter/Space, Home/End, aria-expanded | Verificato in Playwright; non dichiarata conformità completa a screen reader o WCAG |
+| Limiti / qualità | Nessun totale né fonti dall'API | Numero di voci elencate e limite 20 visibili; Conclusa non significa fonti certificate | Gap backend dichiarato: report/fonti/paginazione non esposti in HTTP; controlli dipendenti hidden fase3 |
+| Errori / recupero / persistenza | Messaggi nel foglio, caricatore non proteggeva completamente dal cambio sessione | Errore distinto da zero, Aggiorna, payload non valido respinto, generazione per mount e sessione | 503/[null]/retry/risposta obsoleta provati. Dati ricaricati dal backend dopo reload; filtri locali alla pagina, non preferenze persistite |
+| Latenza / sicurezza | GET elenco; nessuna azione di creazione UI | Stesso GET, filtro locale senza nuove chiamate, testo via textContent | Nessun benchmark di latenza né qualità modello eseguito; nessuna mutazione API dalle interazioni provate |
+
+Prove: unitari specifici 5/5; live Ricerca 9/9 dopo la correzione del titolo; suite componenti completa 39/39; build deterministica 30 file e git diff --check verdi. npm run verify: **341/342**, resta solo PHASE3-TOKEN-CONTRACT-01 (colori raw del CSS generato, preesistente su 81cc5cc5 come già documentato in B3). Log locale: C:/Users/Antonino/AppData/Local/Temp/astra-research-verify.log. Il cancello complessivo NON è dichiarato verde.
+
+Evidenza visiva: 27 screenshot finali nella cartella .claude/immagini/astra-fase2/ReportRow/ (mockup, componente, app-vuota, originale-vuota, fixture-elenco, fixture-dettagli, fixture-filtro-vuoto, app-errore, originale-fixture × 1440/1280/1024), tutti aperti; più due catture iniziali 1280x720. Il confronto dark mockup/componente è identico; confronto light originale/app sugli stessi cinque record di fixture o sullo stesso vuoto reale. Contatore sidebar 0 nelle fixture intenzionale: arriva dall'API reale prima dell'intercettazione della sola lista, non è un valore prodotto nel backend. Controllo aggiuntivo manuale nel browser integrato: pagina finale dark 4177, vuoto reale. Le cinque ricerche popolate NON sono ricerche realmente eseguite.
+Blocchi nuovi 0, token nuovi 0, simboli sprite nuovi 0. Una regola CSS nel mockup, limitata a ReportRow; template e CSS rigenerati. Backend/store/public/ponte e superfici Claude invariati.
+
+Restano richieste Fase 3: lettura del rapporto e fonti; paginazione/totale; errori di filesystem che research-store oggi nasconde; nessuna simulazione di queste capacità. Il gate di chat naturale con runtime vero resta da fare nell'ambiente owner: il server di confronto non ha quel runtime. OAuth e piano computer-use restano registrati, dopo le schermate.
+
+Cosa deve fare l'owner · Guardare Ricerca approfondita su http://127.0.0.1:4177/ (Altro) e gli screenshot popolati; il progetto locale al momento ha zero ricerche.
+Cosa fai tu dopo · Officina attrezzi, poi Automazioni per completare B5, quindi l'ordine B4 → B6 → B2 → B7 → B1 → B8.
+Cosa rimane · Chiusura owner, limite CSS condiviso da allineare con Claude, gap Fase 3 e parti B residue. Nessun push.
+
+Cancello statico finale B5.4: **195/195**. Componenti **39/39**, live Ricerca **9/9**. Verify generale **341/342** per il difetto CSS preesistente dichiarato sopra.

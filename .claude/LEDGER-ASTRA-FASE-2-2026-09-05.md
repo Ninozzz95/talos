@@ -881,3 +881,109 @@ LIBRERIA-REALE RED confermato sul bundle senza innesto: [data-library-esito] ass
 **Cosa deve fare l’owner:** può provare Libreria su http://127.0.0.1:4177; nessuna azione necessaria per proseguire. **Cosa fai tu dopo:** Ricerca, Officina e Automazioni. **Cosa rimane:** Note, resto della parte B, contratto CSS condiviso; integrazioni OAuth e piano computer-use dopo le schermate. Il runtime agente è assente: questa consegna non certifica chat o strumenti con un modello reale.
 
 Chiusura componenti B5.3: npx playwright test --config=playwright.componenti.config.mjs, porta 4178, **36/36**. git diff --check pulito.
+
+
+## B5.4 — ReportRow / Ricerca — piano esecutivo 05/09/2026 (prima degli edit)
+Sottosistema TALOS UI. Base d6b2b99d; merge lane/harness-desktop eseguito, già aggiornato a 81cc5cc5. Nessuna modifica alle superfici di Claude, al ponte, a public/ o al backend.
+
+Ricerca fresca: finestra 06/08–05/09/2026. Release aperte oggi: Hermes v0.21.0/tag v2026.8.31, 29112be, 31/08 (https://github.com/NousResearch/hermes-agent/releases/tag/v2026.8.31); Claude Code v2.1.261, d7dbd9a, 04/09 (https://github.com/anthropics/claude-code/releases/tag/v2.1.261); Codex rust-v0.153.4, 3d2ee51, 04/09 (https://github.com/openai/codex/releases/tag/rust-v0.153.4). Le date di release NON datano automaticamente i comportamenti delle documentazioni seguenti; documenti stabili, data di aggiornamento non esposta, riverificati oggi.
+
+| Fonte ispezionata | Forza e limite documentato | Decisione e +1 TALOS da provare |
+|---|---|---|
+| Hermes Grounded Citations 1.1.0, MIT — https://hermes-agent.nousresearch.com/docs/user-guide/skills/bundled/research/research-grounded-citations | Lega le citazioni a URL e citazioni verificabili; richiede evidenze recuperate, non dimostra da solo correttezza del rapporto. Non eseguito qui. | Adattare il principio: nessun numero di fonti o giudizio inventato. +1 mirato: elenco persistito per progetto con stati e filtri; RICERCA-SEMANTICA impedisce di confondere conclusione e verifica delle fonti. Nessuna superiorità sulla qualità delle ricerche dichiarata. |
+| Claude Code Tools reference, WebSearch — https://code.claude.com/docs/en/tools-reference#websearch-tool-behavior | Titoli/URL, filtri dominio e retry; leggere il contenuto richiede WebFetch. Limite per sessione 200 richieste; notifica del raggiungimento non visibile all'utente. | Adattare distinzione esito/contenuto. +1 obiettivo osservabile: stato interrotto/errore, limiti e recupero visibili nell'elenco. RICERCA-RECUPERO prova 503, payload errato e retry. Backend TALOS non espone fonte, contenuto o contatore: niente false capacità. |
+| Codex Web search — https://learn.chatgpt.com/docs/web-search; config — https://learn.chatgpt.com/docs/config-file/config-advanced | Traccia le ricerche e distingue indice/live; custom provider richiede endpoint/modello/runtime compatibili, il solo flag non abilita ricerca. | Adattare trasparenza dello stato: titolo, avvio completo e cinque stati reali ricercabili. +1 obiettivo: archivio trasversale del progetto filtrabile senza scorrere trascrizioni. Non si deduce che Codex non abbia un archivio equivalente: non verificato. |
+| WAI APG Tabs e Disclosure — https://www.w3.org/WAI/ARIA/apg/patterns/tabs/ ; https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/ | Tastiera/roving tabindex e pulsante nativo aria-expanded; non sostituiscono verifica del layout o screen reader. | Adottare, senza dipendenze nuove. Enter/Space e frecce/Home/End, campo canonico 36px, titolo intero. |
+
+Ispezione locale: schermoRicerca (5 righe statiche ma testata 6 rapporti, fonti/verdetti dimostrativi); caricaPannelloRicerca/rigaRicerca originali (GET, titolo, data ISO troncata, stato grezzo, nessuna azione); session-registry.elencaRicerche; research-orchestrator.elenca/statoVivo/leggi; research-store.elencaRicerche; HTTP GET /api/v1/sessions/:id/research. Dati reali letti: ricerche:[], errore:null. Schema righe ESATTO: id, titolo, stato, avviataAlle. Ambito progetto. Stati running/paused/done/cancelled/failed. Nessun totale nell'HTTP; page_size richiesto 50 ma orchestratore limita a 20 e registry scarta totale. Elenco ordinato per avvio decrescente. Il report completo esiste nel confine degli attrezzi modello, non in una rotta UI: Apri rapporto e Nuova ricerca restano hidden data-richiede=fase3. Nessun contatore fonti, giudizio qualità, durata o ripresa inventati.
+Gap preesistente: research-store converte errori di lettura directory in [] e ignora JSON corrotti. La UI non può diagnosticare un errore che il backend omette; richiesta di Fase 3, non coperta da una falsa promessa di recupero. Endpoint senza paginazione: mostrare esplicitamente massimo 20 ricerche recenti, conteggio delle sole voci elencate. Non introdurre una rotta o navigazione alla chat per un id non verificato.
+
+Confronto iniziale effettuato NEL browser: originale 4179 Capability hub, sezione Deep Research vuota, scroll profondo e testo tenue; mockup 4177 pagina Ricerca, dati dimostrativi. Entrambe le immagini 1280x720 catturate e APERTE. Target: preservare quattro campi, migliorare consultazione con ricerca nel titolo/stato, filtri e data completa; parità di struttura/parole/pixel col mockup aggiornato prima dell'innesto. Nessuna promessa di riapertura rapporto già funzionante: l'originale non aveva tale azione.
+
+File da creare/modificare (nessuna cancellazione):
+- .claude/LEDGER-ASTRA-FASE-2-2026-09-05.md
+- .claude/CONSEGNA-ASTRA-FASE-2-2026-09-05.md
+- .claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html
+- harness-ui/frontend/src/components/ricerca.js
+- harness-ui/frontend/lab/fixtures/ricerca.js
+- harness-ui/frontend/lab/main.js
+- harness-ui/frontend/tests/unit/ricerca.test.mjs
+- harness-ui/frontend/tests/parity/componenti.spec.mjs
+- harness-ui/frontend/tests/parity/ricerca-vivo.spec.mjs
+- harness-ui/frontend/playwright.astra.config.mjs
+- harness-ui/frontend/src/legacy/app.js
+- harness-ui/frontend/index.template.html
+- harness-ui/frontend/src/styles/index.css
+Immagini esatte da creare:
+- .claude/immagini/astra-fase2/ReportRow/mockup-1440.png
+- .claude/immagini/astra-fase2/ReportRow/componente-1440.png
+- .claude/immagini/astra-fase2/ReportRow/app-vuota-1440.png
+- .claude/immagini/astra-fase2/ReportRow/originale-vuota-1440.png
+- .claude/immagini/astra-fase2/ReportRow/fixture-dettagli-1440.png
+- .claude/immagini/astra-fase2/ReportRow/fixture-filtro-vuoto-1440.png
+- .claude/immagini/astra-fase2/ReportRow/app-errore-1440.png
+- .claude/immagini/astra-fase2/ReportRow/originale-fixture-1440.png
+- .claude/immagini/astra-fase2/ReportRow/mockup-1280.png
+- .claude/immagini/astra-fase2/ReportRow/componente-1280.png
+- .claude/immagini/astra-fase2/ReportRow/app-vuota-1280.png
+- .claude/immagini/astra-fase2/ReportRow/originale-vuota-1280.png
+- .claude/immagini/astra-fase2/ReportRow/fixture-dettagli-1280.png
+- .claude/immagini/astra-fase2/ReportRow/fixture-filtro-vuoto-1280.png
+- .claude/immagini/astra-fase2/ReportRow/app-errore-1280.png
+- .claude/immagini/astra-fase2/ReportRow/originale-fixture-1280.png
+- .claude/immagini/astra-fase2/ReportRow/mockup-1024.png
+- .claude/immagini/astra-fase2/ReportRow/componente-1024.png
+- .claude/immagini/astra-fase2/ReportRow/app-vuota-1024.png
+- .claude/immagini/astra-fase2/ReportRow/originale-vuota-1024.png
+- .claude/immagini/astra-fase2/ReportRow/fixture-dettagli-1024.png
+- .claude/immagini/astra-fase2/ReportRow/fixture-filtro-vuoto-1024.png
+- .claude/immagini/astra-fase2/ReportRow/app-errore-1024.png
+- .claude/immagini/astra-fase2/ReportRow/originale-fixture-1024.png
+- .claude/immagini/astra-fase2/ReportRow/prima-mockup-1280.png
+- .claude/immagini/astra-fase2/ReportRow/prima-originale-1280.png
+
+Simboli pubblici: statoRicerca, testiRicerca, riepilogoRicerche, filtraRicerche, creaReportRow, aggiornaPaginaRicerca. Fixture RICERCHE, ADESSO fisso. Compatibilità: caricaPannelloRicerca({pagina=false}), rigaRicerca, researchListMount; data-vaia=ricerca e setView esistenti. Unica aggiunta al dispatch setView: caricamento della pagina Ricerca. Gestione pagina/foglio con generazione per mount, id sessione, vista attuale; risposta obsoleta ignorata. Nessun refactor dei caricatori degli altri componenti.
+RED: tests/unit/ricerca.test.mjs fallisce per modulo mancante. RICERCA-STATO, RICERCA-SEMANTICA, RICERCA-TITOLO-DATA, RICERCA-FILTRO, RICERCA-ELENCO-PARZIALE. Test live prima dell'innesto fallisce per assenza data-research-esito funzionante. GREEN: node --test tests/unit/ricerca.test.mjs; generatore; parità componente ReportRow 3 viewport; innesto; build; ricerca-vivo 9 scenari (3x3): API vera vuota/reload e originale; sei fixture nella forma vera con filtri/tastiera/dettagli e stesso originale; errore 503/payload/retry/risposta obsoleta. Nessuna scrittura API. Schermate finali prese e aperte a 1440/1280/1024.
+Regressione: test:lab, suite componenti completa, npm run verify (difetto preesistente PHASE3-TOKEN-CONTRACT-01 da distinguere), verify-build e git diff --check. Gate upstream reale: UI→GET del server 4177 senza intercept per il vuoto; popolato/errore sono fixture esplicite, nessuna esecuzione modello. Gate conversazionale in lingua naturale resta NON eseguito: server senza runtime owner. Rollback: revert del solo commit ReportRow, senza cambiare dati/contratti/server.
+Blocchi riusati: ResearchScreen, Topbar di questa sola pagina, Page, Toolbar, FilterChips, ReportList, ReportRow, Field, Badge, Button e sprite i-globe/i-search. Nuovi blocchi 0, nuovi token 0, nuove icone 0; sola regola CSS locale al titolo/sottotitolo espanso, disegnata prima nel mockup. Il laboratorio precede l'innesto (§3).
+
+Precisazione prima del codice: cinque fixture popolate, una per ogni stato reale, e valore sconosciuto nel test unitario. Nessun sesto stato inventato nel mockup.
+
+§3 step 4–6: RED modulo mancante osservato; unitari 5/5 GREEN; parità ReportRow 3/3 GREEN; aperte le 6 immagini mockup/componente. A 1024 toolbar su due righe, testata della pagina sempre una riga; filtri/azioni leggibili. Nessun difetto visivo nuovo rilevato. Prima dell’innesto: scenario reale del test live deve fallire mostrando le cinque righe statiche.
+
+§3 step 7 — refresh web 05/09 prima dell’innesto: riaperte le stesse URL esatte di Hermes Grounded Citations (evidence), Claude Tools reference (WebSearch error result), Codex Web search (runtime/provider). Confermati confini evidenza/esito e disponibilità; decisioni immutate, nessuna debolezza dedotta da un test non eseguito. Merge nuovamente già aggiornato. RED live osservato: atteso 0 ricerche reali, ricevute 5 statiche.
+
+### RICERCA-TITOLO-NON-TRONCATO — regressione scoperta aprendo gli originali popolati
+Il primo 9/9 live non basta: originale-fixture 1280/1024 mostra il titolo intero; il mockup/componente iniziale lo tronca fino al click Dettagli. La frase precedente «nessun difetto» era limitata alla parità, NON al confronto di copertura. Correzione obbligatoria prima della consegna: titolo sempre a capo, data completa su Dettagli. Ricerca fresca 05/09: WAI Reflow https://www.w3.org/WAI/WCAG22/Understanding/reflow.html (stabile, riverificata oggi); riaperte oggi Hermes Grounded Citations, Claude Tools reference e Codex Web search alle URL del piano: preservare la leggibilità delle informazioni senza attribuire loro verifiche non svolte. Nessuna misurazione UI competitor nuova. +1 misurabile rispetto alla proposta scartata: zero click per il titolo completo anche a 1024, test scrollWidth<=clientWidth, titolo sempre presente. Adottare reflow locale, nessun token nuovo. RED aggiunto al test fixture prima dell’edit CSS. File invariati rispetto al piano, tre immagini aggiuntive di elenco completo:
+- .claude/immagini/astra-fase2/ReportRow/fixture-elenco-1440.png
+- .claude/immagini/astra-fase2/ReportRow/fixture-elenco-1280.png
+- .claude/immagini/astra-fase2/ReportRow/fixture-elenco-1024.png
+
+RED RICERCA-TITOLO-NON-TRONCATO osservato a 1024: scrollWidth supera clientWidth. Applicata nel solo mockup la regola di ritorno a capo su ogni titolo ReportRow, senza cambiare componenti o gli altri blocchi.
+
+
+## B5.4 ReportRow / Ricerca — consegna 05/09/2026
+La pagina Ricerca approfondita legge il progetto della sessione reale. Titolo intero sempre leggibile, cinque stati in italiano, filtro per stato e ricerca nel titolo completo; Dettagli aggiunge l'ora di avvio. Pulsante Aggiorna, caricamento, errore esplicito, riprova; risposte obsolete escluse anche uscendo verso Board e rientrando. Il precedente foglio Capability usa lo stesso ReportRow. Nessuna rotta nuova.
+
+| Aspetto | Originale osservato | Proposta verificata / beneficio | Regressione / verdetto |
+|---|---|---|---|
+| Copertura dati | Titolo, data ridotta, cinque stati grezzi, ambito progetto | Stessi quattro campi, titolo senza tagli, ora completa disponibile, stati italiani distinti | Parità preservata; nessuna fonte o valutazione aggiunta senza dati |
+| Consultazione / passi | Nel lungo Capability hub, scroll fino alla ricerca; nessun filtro | Altro → Ricerca approfondita; ricerca su titolo/stato e sei filtri | Zero click per leggere il titolo; Dettagli solo per l'ora. RICERCA-TITOLO-NON-TRONCATO corretto con RED→GREEN |
+| Forma / densità / responsive | Modale, testi piccoli, contenuto circondato da sezioni estranee | Stesso linguaggio del mockup, lista centrale; 1440/1280 toolbar su una riga, 1024 su due, titolo mai troncato | Foto originali e finali aperte a tre larghezze; nessuna modifica alla Topbar Chat |
+| Tastiera / semantica | Elenco passivo e stati grezzi | Pulsanti nativi, lista, tabs con roving tabindex, Enter/Space, Home/End, aria-expanded | Verificato in Playwright; non dichiarata conformità completa a screen reader o WCAG |
+| Limiti / qualità | Nessun totale né fonti dall'API | Numero di voci elencate e limite 20 visibili; Conclusa non significa fonti certificate | Gap backend dichiarato: report/fonti/paginazione non esposti in HTTP; controlli dipendenti hidden fase3 |
+| Errori / recupero / persistenza | Messaggi nel foglio, caricatore non proteggeva completamente dal cambio sessione | Errore distinto da zero, Aggiorna, payload non valido respinto, generazione per mount e sessione | 503/[null]/retry/risposta obsoleta provati. Dati ricaricati dal backend dopo reload; filtri locali alla pagina, non preferenze persistite |
+| Latenza / sicurezza | GET elenco; nessuna azione di creazione UI | Stesso GET, filtro locale senza nuove chiamate, testo via textContent | Nessun benchmark di latenza né qualità modello eseguito; nessuna mutazione API dalle interazioni provate |
+
+Prove: unitari specifici 5/5; live Ricerca 9/9 dopo la correzione del titolo; suite componenti completa 39/39; build deterministica 30 file e git diff --check verdi. npm run verify: **341/342**, resta solo PHASE3-TOKEN-CONTRACT-01 (colori raw del CSS generato, preesistente su 81cc5cc5 come già documentato in B3). Log locale: C:/Users/Antonino/AppData/Local/Temp/astra-research-verify.log. Il cancello complessivo NON è dichiarato verde.
+
+Evidenza visiva: 27 screenshot finali nella cartella .claude/immagini/astra-fase2/ReportRow/ (mockup, componente, app-vuota, originale-vuota, fixture-elenco, fixture-dettagli, fixture-filtro-vuoto, app-errore, originale-fixture × 1440/1280/1024), tutti aperti; più due catture iniziali 1280x720. Il confronto dark mockup/componente è identico; confronto light originale/app sugli stessi cinque record di fixture o sullo stesso vuoto reale. Contatore sidebar 0 nelle fixture intenzionale: arriva dall'API reale prima dell'intercettazione della sola lista, non è un valore prodotto nel backend. Controllo aggiuntivo manuale nel browser integrato: pagina finale dark 4177, vuoto reale. Le cinque ricerche popolate NON sono ricerche realmente eseguite.
+Blocchi nuovi 0, token nuovi 0, simboli sprite nuovi 0. Una regola CSS nel mockup, limitata a ReportRow; template e CSS rigenerati. Backend/store/public/ponte e superfici Claude invariati.
+
+Restano richieste Fase 3: lettura del rapporto e fonti; paginazione/totale; errori di filesystem che research-store oggi nasconde; nessuna simulazione di queste capacità. Il gate di chat naturale con runtime vero resta da fare nell'ambiente owner: il server di confronto non ha quel runtime. OAuth e piano computer-use restano registrati, dopo le schermate.
+
+Cosa deve fare l'owner · Guardare Ricerca approfondita su http://127.0.0.1:4177/ (Altro) e gli screenshot popolati; il progetto locale al momento ha zero ricerche.
+Cosa fai tu dopo · Officina attrezzi, poi Automazioni per completare B5, quindi l'ordine B4 → B6 → B2 → B7 → B1 → B8.
+Cosa rimane · Chiusura owner, limite CSS condiviso da allineare con Claude, gap Fase 3 e parti B residue. Nessun push.
+
+Chiusura dei cancelli B5.4: npm run test:lab **195/195** (2,1 min); completo, senza errori. Confronto finale e git diff --check eseguiti. Il solo rosso resta il contratto CSS preesistente, 341/342 nel verify.

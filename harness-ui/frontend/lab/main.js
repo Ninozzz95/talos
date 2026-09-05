@@ -1,3 +1,5 @@
+import { aggiornaPaginaRicerca } from '../src/components/ricerca.js';
+import { RICERCHE } from './fixtures/ricerca.js';
 import { aggiornaPaginaLibreria } from '../src/components/libreria.js';
 import { LIBRERIA } from './fixtures/libreria.js';
 import { aggiornaPaginaAttivita } from '../src/components/attivita.js';
@@ -52,6 +54,7 @@ document.documentElement.setAttribute('data-schermo', 'chat');
 const componente = new URLSearchParams(location.search).get('componente') || '';
 
 const LABORATORI = {
+  ReportRow() { aggiornaPaginaRicerca(document.querySelector('#schermoRicerca'), RICERCHE); },
   LibraryRow() { aggiornaPaginaLibreria(document.querySelector('#schermoLibreria'), LIBRERIA); },
   TaskRow() { aggiornaPaginaAttivita(document.querySelector('#schermoAttivita'), ATTIVITA); },
   MemoryRow() { aggiornaPaginaMemoria(document.getElementById('schermoMemoria'), MEMORIE); },

@@ -1,3 +1,4 @@
+import { creaReportRow, aggiornaPaginaRicerca } from '../components/ricerca.js'; // 05/9 Fase 2: Ricerca
 import { creaLibraryRow, aggiornaPaginaLibreria } from '../components/libreria.js'; // 05/9 Fase 2: Libreria
 import { creaTaskRow, aggiornaPaginaAttivita } from '../components/attivita.js'; // 05/9 Fase 2: Attività
 import { creaMemoryRow, aggiornaPaginaMemoria } from '../components/memoria.js'; // 05/9 Fase 2: Memoria
@@ -1163,6 +1164,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     window.__talosHarnessHostViewChange?.(view);
     if (view === 'settings') inizializzaModelLab();
     if (view === 'dashboard') ensureSessionsBoard();
+    if (view === 'ricerca') caricaPannelloRicerca({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Ricerca
     if (view === 'libreria') caricaPannelloLibreria({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Libreria
     if (view === 'attivita') caricaPannelloAttivita({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Attività
     if (view === 'memoria') caricaPannelloMemoria({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Memoria
@@ -4288,48 +4290,40 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * Libreria: il messaggio "vuoto" lo dice, mai la frase "globale" già
    * usata per gli altri tre.
    */
-  async function caricaPannelloRicerca() {
-    const mount = $('#researchListMount', sheetBody);
-    if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
-    if (!state.realSession.id) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione attiva — apri o avvia un task per vedere le Ricerche.'));
-      return;
+  // 05/9 Fase 2: ReportRow — ricerche del progetto, stesso endpoint e canale di navigazione.
+  const generazioniRicerca = new WeakMap();
+  async function caricaPannelloRicerca({ pagina = false } = {}) {
+    const mount = pagina ? $('#schermoRicerca') : $('#researchListMount', sheetBody);
+    if (!mount) return;
+    const sessionId = state.realSession.id;
+    const generation = (generazioniRicerca.get(mount) || 0) + 1;
+    generazioniRicerca.set(mount, generation);
+    const attuale = () => generazioniRicerca.get(mount) === generation && state.realSession.id === sessionId && (pagina ? state.view === 'ricerca' && !mount.hidden : mount === $('#researchListMount', sheetBody));
+    function mostra(ricerche, { errore = null, caricamento = false } = {}) {
+      if (pagina) {
+        aggiornaPaginaRicerca(mount, ricerche, { errore, caricamento, onAggiorna: () => caricaPannelloRicerca({ pagina: true }) });
+      } else {
+        mount.setAttribute('role', ricerche.length ? 'list' : 'group');
+        mount.replaceChildren(...ricerche.map(rigaRicerca));
+        if (!ricerche.length) mount.append(textElement('p', 'board-empty', errore || (caricamento ? 'Caricamento ricerche…' : 'Nessuna ricerca avviata in questo progetto.')));
+      }
     }
-    mount.replaceChildren(textElement('p', 'board-empty', 'Carico le Ricerche…'));
-    let dati;
+    if (embeddedDemoOnly()) { mostra([], { errore: 'Nessun backend collegato.' }); return; }
+    if (!sessionId) { mostra([], { errore: 'Apri una sessione per leggere le ricerche del progetto.' }); return; }
+    mostra([], { caricamento: true });
     try {
-      dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/research`);
+      const dati = await apiGet('/api/v1/sessions/' + encodeURIComponent(sessionId) + '/research');
+      if (!attuale()) return;
+      if (dati.errore) { mostra([], { errore: 'Ricerche non disponibili: ' + dati.errore }); return; }
+      if (!Array.isArray(dati.ricerche) || dati.ricerche.some(r => !r || typeof r !== 'object' || Array.isArray(r))) throw new Error('Elenco delle ricerche non valido');
+      mostra(dati.ricerche);
     } catch (error) {
-      mount.replaceChildren(textElement('p', 'board-empty', `Ricerche non disponibili: ${error.message}`));
-      return;
+      if (attuale()) mostra([], { errore: 'Ricerche non disponibili: ' + error.message });
     }
-    if (mount !== $('#researchListMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
-    if (dati.errore) {
-      mount.replaceChildren(textElement('p', 'board-empty', `.harness-ui-research non valido: ${dati.errore}`));
-      return;
-    }
-    if (!dati.ricerche || dati.ricerche.length === 0) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna ricerca avviata in questo progetto.'));
-      return;
-    }
-    mount.replaceChildren(...dati.ricerche.map((ricerca) => rigaRicerca(ricerca)));
   }
 
-  /** ⭐⭐⭐ FASE N, ottavo sistema (30/8) — sempre attiva (una ricerca non ha un gate di fiducia): niente bottone, lo stato VIVO al posto dell'origine (running/paused/done/cancelled/failed — mai un fisso "attivo" come le skill). */
   function rigaRicerca(ricerca) {
-    const riga = document.createElement('div');
-    riga.className = 'sheet-option';
-    riga.setAttribute('role', 'group');
-    const iconEl = document.createElement('span');
-    iconEl.className = 'sheet-icon';
-    iconEl.innerHTML = icon('i-search');
-    const testo = document.createElement('span');
-    testo.append(
-      textElement('strong', null, ricerca.titolo),
-      textElement('small', null, String(ricerca.avviataAlle).slice(0, 10)),
-    );
-    riga.append(iconEl, testo, textElement('span', `status-chip ${ricerca.stato === 'done' ? 'success' : ''}`, ricerca.stato));
-    return riga;
+    return creaReportRow(ricerca);
   }
 
   /**
