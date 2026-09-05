@@ -110,6 +110,7 @@ export function montaPonteLegacy(documentObj = document) {
   const sidebar = uno(radice, '.talos-sidebar');
   battezza(sidebar, { id: 'sessionsPanel', classi: ['sessions-panel'] });
   battezza(uno(sidebar, '.talos-brand .talos-icon-button'), { id: 'notificationsBtn' });
+  battezza(uno(sidebar, '.talos-brand [data-azione="barra"]'), { id: 'sessionsCollapseBtn' }); // 05/9 Fase 2: la barra si comprime a icone (e si ricorda)
   battezza(uno(sidebar, '.talos-sidebar__actions .talos-field__input'), { id: 'sessionSearch' });
   battezza(uno(sidebar, '#voceNuova'), { id: 'newSessionBtn' });
   const sessioni = uno(sidebar, '.talos-sidebar__sessions');
