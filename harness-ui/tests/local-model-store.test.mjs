@@ -110,3 +110,29 @@ test('MODEL-STORE-RENAME-02 rifiuta nomi vuoti o troppo lunghi', async () => {
     await assert.rejects(store.rename(valid.id, 'x'.repeat(161)), (error) => error.code === 'MODEL_INVALID');
   });
 });
+
+test('MODEL-STORE-REMOVE-01 «Elimina» toglie anche i pesi e la cartella del modello, mai la radice', async () => {
+  await withStore(async (store, rootDir) => {
+    const { mkdir, writeFile, stat } = await import('node:fs/promises');
+    const cartella = join(rootDir, 'lfm2-6b-q6');
+    await mkdir(cartella, { recursive: true });
+    await writeFile(join(cartella, 'LFM2.5-2.6B-Q6_K.gguf'), 'pesi');
+    await writeFile(join(rootDir, 'altro.txt'), 'non mio');
+    await store.register(valid);
+    assert.equal(await store.remove(valid.id), true);
+    await assert.rejects(stat(join(cartella, 'LFM2.5-2.6B-Q6_K.gguf')), 'il peso è stato cancellato');
+    await assert.rejects(stat(cartella), 'la cartella del modello è stata cancellata');
+    assert.equal(await store.inspect(valid.id), null, 'il manifest non c\'è più');
+    await stat(join(rootDir, 'altro.txt')); // il verso contrario: un file fuori dalla cartella del modello resta
+    await stat(rootDir);
+  });
+});
+
+test('MODEL-STORE-REMOVE-02 senza manifest cancella solo ciò che è suo e non tocca la radice', async () => {
+  await withStore(async (store, rootDir) => {
+    const { writeFile, stat } = await import('node:fs/promises');
+    await writeFile(join(rootDir, 'altro.txt'), 'non mio');
+    assert.equal(await store.remove('inesistente'), true);
+    await stat(join(rootDir, 'altro.txt'));
+  });
+});
