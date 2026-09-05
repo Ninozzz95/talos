@@ -39,3 +39,18 @@ test('SET-RACCORDO-ATTRIBUTI: le mie preferenze raggiungono il disegno della cha
  await s.locator('#immersiveHeaderToggle').setChecked(true);await s.locator('#reducedMotionToggle').setChecked(true);await s.getByRole('tab',{name:'Chat e composer',exact:true}).click();await s.locator('#chatFullWidthToggle').setChecked(true);
  for(const dopo of [false,true]){if(dopo)await page.reload();await expect(root).toHaveAttribute('data-talos-message-style','bubbles');await expect(root).toHaveAttribute('data-talos-composer-shape','compact');await expect(root).toHaveClass(/chat-full-width/);await expect(root).toHaveClass(/immersive-header/);await expect(page.locator('body')).toHaveClass(/reduce-motion/);expect(await root.evaluate(n=>n.style.getPropertyValue('--talos-ui-font-scale'))).toBe('1.15');expect(await root.evaluate(n=>n.style.getPropertyValue('--talos-chat-font-size'))).toBe('1.1875rem');}
 });
+
+
+test('SET-NOMI-PERMESSI: leggo lo stesso permesso della chat, in italiano',async({page},info)=>{
+ await page.route('**/api/v1/sessions',r=>r.fulfill({json:{ok:true,data:{items:[]}}}));
+ for(const [valore,nome] of [['Read only','Sola lettura'],['On request','Su richiesta'],['Workspace write','Scrittura nel workspace'],['Full access','Accesso completo']]){
+  await page.addInitScript(p=>{if(window.top!==window)return;localStorage.setItem('talos.harness.desktop.settings.v1',JSON.stringify({chat:{permissions:p}}));},valore);await pronta(page,APP);await page.getByRole('tab',{name:'Strumenti agente e permessi',exact:true}).click();const riga=page.locator('#settingsToolsFacts .talos-kv').filter({hasText:'Policy attiva'});await expect(riga.locator('dd')).toHaveText(nome);await expect(riga.locator('dd')).not.toHaveText(valore);if(valore==='Full access')await foto(page,'r05-permessi',info);
+ }
+});
+test('SET-NOMI-ASPETTO: il riepilogo usa le parole dei controlli',async({page},info)=>{
+ await pronta(page,APP);const s=page.locator('#schermoImpostazioni');
+ for(const campo of CAMPI_IMPOSTAZIONI.filter(c=>['chatFontScale','messageStyle','streamingAnimation','composerShape'].includes(c.chiave)))for(const [valore,nome] of campo.opzioni){
+  await s.getByRole('tab',{name:'Aspetto e movimento',exact:true}).click();await s.locator('#'+campo.id).selectOption(valore);await s.getByRole('tab',{name:'Chat e composer',exact:true}).click();const riga=s.locator('#settingsChatFacts .talos-kv').filter({hasText:campo.titolo});await expect(riga.locator('dd')).toHaveText(nome);
+ }
+ await foto(page,'r05-aspetto',info);await page.reload();await page.getByRole('button',{name:/^Impostazioni(?: \(Ctrl ,\))?$/}).click();await s.getByRole('tab',{name:'Chat e composer',exact:true}).click();await expect(s.locator('#settingsChatFacts')).not.toContainText('expanded');await expect(s.locator('#settingsChatFacts')).toContainText('Grande');
+});
