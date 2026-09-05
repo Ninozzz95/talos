@@ -799,3 +799,9 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 [data-catalog-panel] .talos-list-row__title{white-space:normal;overflow-wrap:anywhere}
 [data-catalog-panel] [role=alert]{color:var(--talos-danger)}
 @container (max-width:700px){[data-catalog-panel] .talos-split{grid-template-columns:minmax(0,1fr)}[data-catalog-panel] .talos-detail{position:static}}
+.talos-model-lab>.talos-page__head{margin-bottom:var(--talos-space-md)}
+.talos-model-lab .model-lab-ledger{margin-bottom:var(--talos-space-md)}
+.talos-model-lab .model-lab-ledger .talos-kv{min-height:34px;align-items:baseline}
+.talos-model-lab .model-lab-ledger .talos-kv__v{white-space:normal;line-height:1.45;text-align:right;border:0;background:var(--talos-panel-soft);font-family:var(--talos-font-ui)}
+.talos-model-lab>.talos-tabs{margin-bottom:var(--talos-space-lg);border-bottom:1px solid var(--talos-border-subtle)}
+.talos-model-lab .talos-tabs__list{display:flex;max-width:100%;overflow-x:auto;scrollbar-width:thin}
