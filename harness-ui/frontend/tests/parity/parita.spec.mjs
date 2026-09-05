@@ -43,7 +43,7 @@ const FONT_LOCALI = [
   ['JetBrains Mono', 500, 'jetbrains-mono-latin-500-normal'],
 ].map(([famiglia, peso, file]) => `@font-face{font-family:'${famiglia}';font-weight:${peso};font-style:normal;font-display:block;src:url('${FONT_DIR}/${file}.woff2') format('woff2')}`).join('');
 
-const SCHERMATE = ['schermoChat', 'schermoVuota', 'schermoTerminale', 'schermoReview', 'schermoCapability', 'schermoBoard', 'schermoMemoria', 'schermoAttivita', 'schermoImpostazioni', 'schermoDoctor', 'schermoLibreria', 'schermoRicerca', 'schermoOfficina', 'schermoAutomazioni', 'schermoBrowser'];
+const SCHERMATE = ['schermoChat', 'schermoVuota', 'schermoTerminale', 'schermoReview', 'schermoCapability', 'schermoBoard', 'schermoMemoria', 'schermoAttivita', 'schermoImpostazioni', 'schermoDoctor', 'schermoLibreria', 'schermoRicerca', 'schermoOfficina', 'schermoAutomazioni', 'schermoBrowser', 'schermoModelLab'];
 const DIALOGHI = ['veloNuova', 'veloPermessi', 'veloAlbero', 'veloComandi', 'veloIntro'];
 /* Soglia: differenza per pixel (0..1) e quota massima di pixel diversi. */
 const SOGLIA_PIXEL = 0.12;
@@ -196,6 +196,13 @@ test.describe('parità app ↔ mockup', () => {
     });
   }
 
+  for(const pannello of ['catalogo','hf','download','runtime','prova']){
+    test('PARITA Model Lab '+pannello,async({},info)=>{
+      for(const p of [m.pagina,a.pagina]){await mostra(p,'schermoModelLab');await p.evaluate(n=>{document.querySelectorAll('#schermoModelLab [role=tabpanel]').forEach(x=>x.hidden=x.id!=='panel-'+n);document.querySelectorAll('#labTabs [role=tab]').forEach(x=>x.setAttribute('aria-selected',String(x.id==='tab-'+n)));},pannello);}
+      expect(await struttura(a.pagina,'#panel-'+pannello)).toEqual(await struttura(m.pagina,'#panel-'+pannello));
+      const esito=await confrontaPixel('modellab-'+pannello+'-'+info.project.name,await m.pagina.locator('.talos-shell').screenshot(),await a.pagina.locator('.talos-shell').screenshot());expect(esito.ok,esito.motivo).toBe(true);
+    });
+  }
   for (const velo of DIALOGHI) {
     test(`PARITA dialogo ${velo}`, async ({}, info) => {
       await mostra(m.pagina, 'schermoChat', velo);
@@ -280,4 +287,28 @@ test('ASTRA Intro quattro passi e quattro politiche',async({browser},info)=>{
   await p.locator('#introAvanti').click();await expect(p.locator('#introRiepilogo')).toContainText('C:/progetti/esempio');await foto('fine');
   await p.locator('#introAvanti').click();await expect(p.locator('#veloIntro')).toBeHidden();await expect(p.locator('#veloNuova')).toBeVisible();
  }finally{await contesto.close();}
+});
+
+test('ASTRA Model Lab sei schede e recupero funzioni',async({browser},info)=>{
+ const {contesto,pagina:p}=await apri(browser,MOCKUP,{js:true,viewport:info.project.use.viewport});
+ const d=path.resolve(radice,'../../.claude/immagini/astra-mockup');await mkdir(d,{recursive:true});
+ try{
+ await p.goto(MOCKUP+'#modellab');await expect(p.locator('#schermoModelLab')).toBeVisible();
+ await expect(p.locator('#labTabs [role=tab]')).toHaveCount(6);
+ for(const s of ['installati','catalogo','hf','download','runtime','prova']){await p.locator('#tab-'+s).click();await expect(p.locator('#panel-'+s)).toBeVisible();await p.screenshot({path:path.join(d,'modellab-'+s+'-'+info.project.use.viewport.width+'.png')});}
+ await p.locator('#tab-installati').click();await expect(p.getByRole('button',{name:'Importa .gguf',exact:true})).toBeVisible();
+ await p.locator('#tab-hf').click();await expect(p.locator('#ordineHf option')).toHaveText(['Download','Preferiti','Più recenti','Aggiornati']);
+ await p.locator('#autoreHf').fill('nessun-autore');await expect(p.locator('#vuotoHf')).toBeVisible();await p.locator('#autoreHf').fill('');
+ await p.locator('#tagHf').fill('gguf');await p.locator('#altriHf').click();await expect(p.locator('#listaHf [data-hf]')).toHaveCount(3);
+ await p.locator('#hfTuttiFile').click();await expect(p.locator('#veloFileModello')).toBeVisible();await p.locator('#veloFileModello [data-chiudi]').click();
+ await p.locator('#hfScarica').click();await expect(p.locator('#panel-download')).toBeVisible();await expect(p.locator('#downloadAggiunto')).toContainText('.gguf');
+ await p.locator('#downloadPausa').click();await expect(p.locator('#downloadStato')).toContainText('pausa');
+ await p.locator('#tab-runtime').click();await p.locator('#runtimeBackend').selectOption('ollama');await expect(p.locator('#runtimeBackendNome')).toHaveText('Ollama');
+ await p.getByRole('button',{name:'Fornitori e accessi',exact:true}).click();await expect(p.getByRole('button',{name:'Prova tutti',exact:true})).toBeVisible();await expect(p.locator('#providerIndirizzo')).toBeVisible();await expect(p.locator('#providerTimeout')).toBeVisible();await expect(p.getByRole('button',{name:'Rimuovi chiave',exact:true})).toBeVisible();
+ }finally{await contesto.close();}
+});
+
+test('ASTRA Model Lab sélection cohérente',async({browser},info)=>{
+ const {contesto,pagina:p}=await apri(browser,MOCKUP,{js:true,viewport:info.project.use.viewport});
+ try{await p.goto(MOCKUP+'#modellab');await p.locator('#tab-catalogo').click();await p.locator('[data-catalog][data-provider="Google"]').click();await expect(p.locator('#catalogoStato')).toContainText('Accesso da impostare');await p.locator('[data-catalog][data-provider="Qwen"]').click();await expect(p.locator('#catalogoIngresso')).toHaveText('Testo e codice');await p.locator('#tab-hf').click();await p.locator('[data-hf="gemma"]').click();await expect(p.locator('#hfTuttiFile')).toBeDisabled();await p.locator('#tab-installati').click();await p.locator('#azioneModello').click();await expect(p.locator('[data-model="qwen8"]')).not.toContainText('Caricato');}finally{await contesto.close();}
 });
