@@ -54,6 +54,8 @@ export async function apriHermes() {
   const errori = [];
   pagina.on('pageerror', (e) => errori.push(String(e.message).slice(0, 200)));
   await pagina.waitForTimeout(1000);
+  // la finestra di Hermes resta aperta fra un giro e l'altro: si parte da uno stato pulito (dialoghi chiusi, home)
+  for (let i = 0; i < 3; i += 1) { await pagina.keyboard.press('Escape'); await pagina.waitForTimeout(150); }
   return { nome: 'hermes', browser, pagina, errori, avvio, chiudi: () => browser.close() /* stacca, non chiude l'app */ };
 }
 

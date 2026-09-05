@@ -537,6 +537,12 @@ configurazione · prova), bozze preservate, recupero errori; il pannello Runtime
 richiesta R-08/R-09 è soddisfatta. Cancelli sulla lane unita: template diff 0, unit 87/87,
 statico 195/195, componenti 90/90, build ok.
 
+### Confronto con Hermes — gruppo 4 (pagine), 06/09 ~03:15: 6/6 PASS
+
+Pagine di Astra misurate con lo stesso strumento: nessun controllo senza nome, nessun errore di
+pagina. Osservazioni per il ledger (non correzioni): Libreria e Capability vanno rimisurate sullo
+store del kernel vero; «Auxiliary models» di Hermes (modello per compito) = PROPOSTA nuova.
+
 - T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
   15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
   statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo

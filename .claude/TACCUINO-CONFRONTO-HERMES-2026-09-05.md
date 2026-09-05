@@ -144,3 +144,15 @@ home page con pulsanti senza nome), letti il 05/09/2026.
 | Frecce fra le schede dei file | non misurato (una sola scheda) | albero, non schede | — |
 | Colonna di destra | Contesto · File · Agenti · Processi, 14 coppie chiave-valore | BRANCH · NEW SESSION · TERMINAL · «1. pwsh.exe» | Hermes tiene TERMINALE e REVIEW nella colonna destra, sempre a portata; noi Terminale e Review sono viste. Il terminale «1. pwsh.exe» con «New terminal» e «Hide terminal» è la parità per B1 (K-G) |
 | Albero dei rami | pulsante «Apri l'albero dei rami» (Fase 3) | scheda «BRANCH» accanto alla sessione | Hermes fa del ramo una SCHEDA di sessione: da valutare per BranchTree |
+
+## Misure dal vivo — 06/09, gruppo 4 (pagine), `--gruppo=pagine`: 6/6 PASS (pagine di Astra, righe per lui)
+
+| Pagina | TALOS | Hermes | Cosa ho visto |
+|---|---|---|---|
+| Capability ↔ Capabilities | 1,0 s, 11 controlli con nome, 1 riga (store di prova: «runtime agente non configurato», onesto) | 1,5 s, 6 righe; Skills 61 · Tools 23 · MCP · Browse Hub, un interruttore per skill | Hermes: catalogo ricco con hub; noi: schede Attrezzi/Skill/Connettori/Plugin/Hook (R-04). Da misurare con lo store del kernel vero (4182) |
+| Board ↔ sidebar | 1,0 s, 74 righe, 84 controlli | la sidebar stessa: 373 righe | Hermes non ha una Board: l'elenco è la sidebar. Il nostro Board con filtri e conteggi è un +1 |
+| Libreria ↔ Artifacts | 0 file nello store di prova | 44 artefatti in tabella (Titolo · Posizione · Sessione) con filtri All · Images · Files · Links | Hermes raccoglie link e file per sessione con data; la nostra Libreria è per progetto. Da misurare su 4182 (sessione con artefatto HTML) |
+| Memoria, Attività | 1 e 2 righe | nessuna pagina (memoria = file/skill; cron in sidebar) | +1 nostro dichiarato |
+| Impostazioni ↔ Settings | 0,96 s, 49 controlli tutti con nome (23 con `<label>` associata) | modale con 19 sezioni, 47 controlli | **Hermes «Auxiliary models»**: un modello dedicato per compito (Vision, Web extract, Compression, Skills hub, Approval, MCP, Title gen, Curator) — riga PROPOSTA per il ledger (kernel: modello per ruolo). Le nostre Impostazioni sono una pagina, le loro un modale sopra la chat |
+
+Correzione allo strumento: il conteggio «senza nome» ora rispetta `<label>` associata e `aria-labelledby` (accname 1.2); Hermes si riporta a uno stato pulito (Esc) prima di ogni passo.
