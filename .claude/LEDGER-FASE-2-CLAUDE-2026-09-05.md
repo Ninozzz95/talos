@@ -310,3 +310,46 @@ Ferma), «Reindirizza», la coda con un messaggio vero, la dettatura.
 **Taccuino**: l'ambiente (chip dell'originale) vive nella colonna dei dettagli (B2, Astra): il
 foglio «Ambiente» resta raggiungibile da lì. I fogli aperti dai chip sono ancora i dialoghi legacy
 senza CSS (B7 Astra, T-10).
+
+---
+
+## S-07 · Review (ReviewPane, ReviewFileList, DiffView) — ✅ verde, aspetta l'owner
+
+**Blocchi**: `ReviewScreen` (testata con sommario e azioni), `ReviewPane`, `ReviewFileList`
+(righe `talos-list-row`), `DiffView` (testa, righe, piede). **Fixture**: `lab/fixtures/review.js`
+(le tre voci del mockup nella forma di `reviewFiles`: percorso, `code` [tipo, testo] col segno nel
+testo, giro, ricevuta, conteggi). **Componente**: `src/components/review.js` — `creaRigaFileReview`,
+`aggiornaDiffReview`, `contaDiff` (dalla voce se il server ha contato, altrimenti dalle righe),
+`riassuntoReview` («3 file modificati · +112 −2»), `sottotitoloFile` («giro 5 · nuovo file»),
+`nascondiAzioniFase3`.
+**Monolite**: `renderRealReviewList` → righe del mockup in `.talos-review__files` (attiva = il
+file scelto o l'ultimo scritto), sommario nella testata della Review, titolo = la sessione, stato
+vuoto onesto; `renderReviewFile` → `aggiornaDiffReview` (righe col numero e il segno come nell'
+originale, avviso «simboli spariti» come SystemNote nel linguaggio del mockup); la voce di
+`reviewFiles` porta `giro` (il giro in cui è stata scritta). `aggiornaTestataSessione` aggiorna
+titolo e badge delle schede su TUTTE le testate di sessione (Chat, Terminale, Review); la Review
+tiene il suo sommario al posto del percorso.
+**Mockup toccato**: «Copia i diff» (`#copyAllDiffs`, funzione dell'originale) nella testata della
+Review; Accetta tutto · Scarta tutto · Accetta questo file · Apri nell'editor · Scarta e la nota
+«Scartare ripristina…» portano `data-richiede="fase3"`: dal vivo restano NASCOSTI finché non hanno
+una rotta (mai un pulsante che non fa niente); «−0» non si scrive (come nel mockup).
+
+**Ricerca** (05/09/2026): review dell'agente = elenco file con +/−, diff per file, accetta/scarta
+per file — Copilot «Edits Review», Cursor; Claude Code lo ha nel Code tab del desktop e non
+nell'estensione VS Code (github.com/anthropics/claude-code/issues/33932); diffity, Agent Diff
+Viewer. Il mockup è a quel livello; le azioni aspettano il kernel.
+
+**Cancelli**: componenti **21/21** · statico **54/54**.
+
+**Dal vivo** (4175, sessione «Rispondi con una sola parola: ciao.» con un file scritto, 1440 e
+1024, zero errori): «1 file modificato · +11 −0» in testata, riga «screenshot-desktop.ps1 · giro
+4 · nuovo file · +11», diff di 12 righe numerate, «Copia i diff» → toast «Diff di 1 file copiato»,
+azioni della Fase 3 nascoste. Immagini in `.claude/immagini/fase2-claude/Review/`.
+
+**Taccuino / per l'owner**
+- T-11 **Accetta / Scarta / Apri nell'editor** (per file e per tutto) vogliono rotte nuove del
+  kernel (ripristino dal checkpoint del giro, apertura nell'editor): contratto congelato → Fase 3,
+  con una riga K nel ledger kernel. Fino ad allora i pulsanti non si vedono.
+- T-12 le **ricevute firmate** per scrittura (badge «Ricevuta a1f4…9c02», blocco SignedReceipt):
+  il server ha la chiave (`TALOS_HARNESS_RECEIPT_*`) ma il flusso non emette l'hash al client →
+  Fase 3.

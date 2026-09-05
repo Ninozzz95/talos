@@ -2,6 +2,7 @@ import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2:
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
 import { aggiornaPiedeChat } from '../components/chat-foot.js'; // 05/9 Fase 2: ChatFooter — striscia del giro, chip e barra di stato dai dati
+import { aggiornaDiffReview, creaRigaFileReview, nascondiAzioniFase3, riassuntoReview } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno del mockup
 import { aggiornaTopbar } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati
 import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../components/workspace-footer.js'; // 05/9 Fase 2: WorkspaceFooter — il piede della sidebar dice cartella, tema e chi serve il modello // 05/9 Fase 2: SessionItem — la riga della sidebar è un componente del mockup
 
@@ -6435,37 +6436,14 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   }
 
   function renderReviewFile(key) {
-    // ⭐ 26/8, riconciliazione desktop→mobile — le voci reali vivono in
-    // state.realSession.reviewFiles (una per percorso scritto), non nel
-    // fisso `reviewFiles` demo: chiave "real:<percorso>" le distingue,
-    // stesso schema già in produzione su lane/harness-ui.
-    // ⭐ 02/09 — solo voci REALI (state.realSession.reviewFiles): l'oggetto demo con TalosComposer.vue non esiste più.
+    // 05/9 Fase 2: Review — il DiffView del mockup (testa, righe col numero e il segno, avviso sui simboli spariti)
     const file = key.startsWith('real:') ? state.realSession.reviewFiles.get(key.slice(5)) : null;
-    if (!file || !diffPath || !diffCode) return;
+    const schermo = $('#schermoReview');
+    if (!file || !schermo) return;
     state.reviewFileCorrente = file.path;
-    diffPath.textContent = file.path;
-    $('#diffEmpty')?.setAttribute('hidden', '');
-    $('#diffPre')?.removeAttribute('hidden');
+    for (const riga of schermo.querySelectorAll('.talos-review__files .talos-list-row')) riga.setAttribute('aria-selected', String(riga.dataset.reviewFile === key));
+    aggiornaDiffReview(schermo.querySelector('.talos-review__diff'), file);
     $$('[data-review-action]').forEach((b) => { b.disabled = false; });
-    diffCode.replaceChildren(...file.code.map(([kind, text]) => {
-      const span = document.createElement('span');
-      span.className = kind;
-      span.textContent = text;
-      return span;
-    }));
-    markMotionEnter(diffCode);
-    /*
-     * ⛔⛔⛔ 30/8 — vedi il blocco di doc su REGEX_SIMBOLI_TOP_LEVEL/
-     * simboliSpariti: qui il dettaglio COMPLETO (i nomi, non solo il
-     * conteggio già mostrato sulla tab) — un elemento ricreato ogni
-     * volta (mai lasciato per un file che non lo ha più).
-     */
-    $('#reviewSymbolWarning')?.remove();
-    if (file.simboliPersi?.length > 0) {
-      const avviso = textElement('p', 'review-symbol-warning-banner', `⚠ Questa riscrittura fa sparire ${file.simboliPersi.length === 1 ? 'una funzione/classe presente' : `${file.simboliPersi.length} funzioni/classi presenti`} prima e non più dopo: ${file.simboliPersi.join(', ')}. Controlla che non sia una perdita involontaria.`);
-      avviso.id = 'reviewSymbolWarning';
-      diffPath.closest('.diff-toolbar')?.after(avviso);
-    }
   }
 
   function setInspectorTab(button) {
@@ -8084,6 +8062,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     const simboliPersi = haPrima ? simboliSpariti(operazione.prima ?? '', dopo) : [];
     state.realSession.reviewFiles.set(percorso, {
       path: percorso,
+      giro: state.realSession.runCount || null, // 05/9 Fase 2: Review — «giro N» nella riga
       nuovo: operazione.op === 'add',
       diffVero: righeGrezze !== null,
       code: formattaRigheConNumero(righe),
@@ -8189,44 +8168,34 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * esiste almeno una scrittura vera.
    */
   function renderRealReviewList() {
-    const contenitore = $('[data-view="diff"] .file-review-list');
+    /*
+     * 05/9 Fase 2: Review. Le righe sono `talos-list-row` del mockup
+     * (percorso, «giro N · nuovo file/file modificato», +A −R); il sommario va
+     * nella testata della schermata («3 file modificati · +112 −2»); i pulsanti
+     * che aspettano una rotta (Accetta/Scarta/Apri nell'editor) restano nascosti.
+     */
+    const schermo = $('#schermoReview');
+    const contenitore = schermo?.querySelector('.talos-review__files');
     if (!contenitore) return;
     const voci = [...state.realSession.reviewFiles.values()];
     aggiornaTestataSessione(); // 05/9 Fase 2: Topbar — il badge della Review segue i file toccati
-    const ultimoPercorso = voci.at(-1)?.path;
-    contenitore.replaceChildren(...voci.map((file) => {
-      const attiva = file.path === ultimoPercorso;
-      const button = document.createElement('button');
-      button.className = `file-review${attiva ? ' active' : ''}`;
-      button.dataset.reviewFile = `real:${file.path}`;
-      button.setAttribute('aria-pressed', String(attiva));
-      const etichetta = document.createElement('span');
-      const svgNs = 'http://www.w3.org/2000/svg';
-      const icona = document.createElementNS(svgNs, 'svg');
-      const uso = document.createElementNS(svgNs, 'use');
-      uso.setAttribute('href', '#i-diff'); // ⛔ mai innerHTML: costruito nodo per nodo
-      icona.append(uso);
-      etichetta.append(icona, textElement('strong', '', file.path.split('/').pop()));
-      button.append(etichetta, textElement('span', 'diff-stats', `${file.nuovo ? 'nuovo' : 'modificato'} · ${file.code.length} righe`));
-      // ⛔⛔⛔ 30/8 — vedi il blocco di doc su REGEX_SIMBOLI_TOP_LEVEL/simboliSpariti: un avviso VISIBILE, non un blocco, quando la riscrittura fa sparire funzioni/classi che c'erano prima.
-      if (file.simboliPersi?.length > 0) {
-        button.append(textElement('span', 'diff-stats review-symbol-warning', `⚠ ${file.simboliPersi.length} simbol${file.simboliPersi.length === 1 ? 'o sparito' : 'i spariti'}`));
-      }
-      button.addEventListener('click', () => {
-        $$('.file-review', contenitore).forEach((f) => { f.classList.remove('active'); f.setAttribute('aria-pressed', 'false'); });
-        button.classList.add('active');
-        button.setAttribute('aria-pressed', 'true');
-        renderReviewFile(button.dataset.reviewFile);
-      });
-      return button;
-    }));
+    const ultimoPercorso = state.reviewFileCorrente && state.realSession.reviewFiles.has(state.reviewFileCorrente) ? state.reviewFileCorrente : voci.at(-1)?.path;
+    contenitore.replaceChildren(...voci.map((file) => creaRigaFileReview(file, {
+      attiva: file.path === ultimoPercorso,
+      onApri: () => renderReviewFile(`real:${file.path}`),
+    })));
     if (voci.length === 0) {
-      const vuoto = textElement('p', 'board-empty review-empty', 'Nessun file scritto finora.');
+      const vuoto = textElement('p', 'talos-muted review-empty', 'Nessun file scritto finora.');
       vuoto.id = 'reviewEmptyList';
+      vuoto.style.padding = '12px 14px';
       contenitore.appendChild(vuoto);
+      aggiornaDiffReview(schermo.querySelector('.talos-review__diff'), null);
     }
-    const titolo = $('[data-view="diff"] .view-heading h2');
-    if (titolo) titolo.textContent = voci.length === 0 ? 'Nessuna modifica in questa sessione' : `${voci.length} file modificat${voci.length === 1 ? 'o' : 'i'}`;
+    const percorsoTestata = schermo.querySelector('.talos-topbar__path');
+    if (percorsoTestata) percorsoTestata.textContent = riassuntoReview(voci);
+    const titoloTestata = schermo.querySelector('.talos-topbar__title h1');
+    if (titoloTestata && state.session) titoloTestata.textContent = state.session;
+    nascondiAzioniFase3(schermo);
   }
 
   /**
@@ -10873,12 +10842,16 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * ancora una UI (B1, Astra): finché non c'è, il badge non si scrive.
    */
   function aggiornaTestataSessione() {
-    aggiornaTopbar($('#schermoChat .talos-topbar'), {
+    const dati = {
       titolo: state.session,
       percorso: state.realSession.cartellaAssoluta,
       schedeTerminale: null,
       fileReview: state.realSession.reviewFiles instanceof Map ? state.realSession.reviewFiles.size : 0,
-    });
+    };
+    aggiornaTopbar($('#schermoChat .talos-topbar'), dati);
+    aggiornaTopbar($('#schermoTerminale .talos-topbar'), dati);
+    // la Review ha nella testata il sommario dei file, non il percorso: solo titolo e schede
+    aggiornaTopbar($('#schermoReview .talos-topbar'), { titolo: dati.titolo, schedeTerminale: dati.schedeTerminale, fileReview: dati.fileReview });
   }
 
   function aggiornaSottotitoloSessione() {
