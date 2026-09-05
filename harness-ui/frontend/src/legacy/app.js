@@ -1,3 +1,4 @@
+import {normalizzaCapacita,aggiornaMisuraMemoria,montaMisuraMemoria} from '../components/misura-memoria.js';
 import {montaCorniceModelLab,aggiornaStatoCorniceModelLab} from '../components/cornice-model-lab.js';
 import {normalizzaCatalogoModelli,filtraModelli,aggiornaDettaglioCatalogo,aggiornaCatalogoModelli,montaCatalogoModelli} from '../components/catalogo-modelli.js';
 import {normalizzaFonteRicerca,normalizzaProvaRicerca,aggiornaFonteRicerca} from '../components/fonte-ricerca.js';
@@ -2679,6 +2680,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   }
 
   function renderizzaRuntimeModelLab() {
+    aggiornaPannelloMemoria();
     aggiornaStatoCorniceModelLab($('#modelLabCardSettings') || $('#modelLabCard'), state.modelLab.runtimes, {caricamento: state.modelLab.loadingRuntime, errore: state.modelLab.runtimeError});
     const list = $('#modelLabRuntimeList');
     const status = $('#modelLabRuntimeStatus');
@@ -2736,6 +2738,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (state.modelLab.loadingRuntime) return;
     state.modelLab.loadingRuntime = true;
     state.modelLab.runtimeError = null;
+    aggiornaPannelloMemoria();
     aggiornaStatoCorniceModelLab($('#modelLabCardSettings') || $('#modelLabCard'), [], {caricamento: true});
     try {
       const data = await apiGet('/api/v1/runtime');
@@ -2745,6 +2748,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       state.modelLab.runtimes = [];
     } finally {
       state.modelLab.loadingRuntime = false;
+      state.modelLab.runtimeMeasured = true;
       renderizzaRuntimeModelLab();
     }
   }
@@ -3190,62 +3194,19 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * pulsante che libera quella — l'unica memoria di cui siamo padroni.
    */
   function aggiornaPannelloMemoria() {
-    const capacita = state.modelLab.capacity;
-    const barra = $('#memoriaBarraUsata');
-    const etichetta = $('#memoriaBarraEtichetta');
-    const tenuta = $('#memoriaTenuta');
-    const bottone = $('#memoriaScarica');
-    if (!etichetta) return;
-    const totale = capacita?.memory?.totalBytes;
-    const libera = capacita?.memory?.freeBytes;
-    if (!Number.isFinite(totale) || !Number.isFinite(libera) || totale <= 0) {
-      etichetta.textContent = 'Memoria non misurata.';
-      if (barra) barra.style.width = '0%';
-      if (bottone) bottone.disabled = true;
-      return;
-    }
-    const usata = Math.max(0, totale - libera);
-    const percentuale = Math.min(100, Math.round((usata / totale) * 100));
-    if (barra) {
-      barra.style.width = `${percentuale}%`;
-      // ⛔ Non solo il colore: la percentuale è scritta nell'etichetta qui sotto.
-      barra.dataset.memoriaLivello = percentuale >= 90 ? 'critico' : percentuale >= 75 ? 'alto' : 'ok';
-    }
-    etichetta.textContent = `${formattaByteModelLab(usata)} in uso su ${formattaByteModelLab(totale)} · ${formattaByteModelLab(libera)} liberi (${percentuale}%)`;
-    /*
-     * ⛔ Quanto ne tiene TALOS si dichiara solo se un modello è DAVVERO
-     * caricato: `runtimes` riporta lo stato osservato del runtime locale.
-     * Senza quel dato non si scrive una stima — sarebbe un numero inventato
-     * proprio dove la persona sta per premere un pulsante.
-     */
-    /*
-     * ⛔⛔⛔ 02/9 (notte) — QUI leggevo due proprietà del runtime con nomi
-     * che mi ero INVENTATO (una in italiano e una in inglese, in cascata
-     * con `||`): nessuna delle due esiste nella risposta del server.
-     * ⛔ Il nome esatto non si ripete qui apposta: un test lo vieta, e
-     * citarlo alla lettera lo farebbe scattare sulla documentazione invece
-     * che sul codice — è già successo due volte stanotte. Effetto: sempre `null`, pulsante disabilitato per
-     * sempre, funzione morta — e la prova dal vivo non l'ha vista perché
-     * «disabilitato» sembrava l'esito giusto (nessun modello era
-     * caricato). Trovato solo caricandone uno DAVVERO.
-     * ⇒ Il fatto osservabile è `runtimeState`: il supervisor dichiara
-     * `ready` quando il runtime è su con un modello dentro. Il server non
-     * espone QUALE modello sia (status() dà stato, porta e baseUrl), e
-     * quindi non lo si scrive: si dice che c'è, non si inventa il nome.
-     */
-    const runtimeLocale = (state.modelLab.runtimes || []).find((r) => r.runtimeId === 'llama.cpp');
-    const runtimeCarico = runtimeLocale?.runtimeState === 'ready';
-    if (tenuta) {
-      tenuta.hidden = false;
-      tenuta.textContent = runtimeCarico
-        ? 'TALOS tiene in memoria il runtime locale con un modello caricato.'
-        : 'TALOS non tiene nessun modello in memoria adesso.';
-    }
-    if (bottone) bottone.disabled = !runtimeCarico;
+    aggiornaMisuraMemoria($('#modelLabOverviewPanel [data-memory-meter]'), {
+      capacita: state.modelLab.capacity, runtimes: state.modelLab.runtimes,
+      caricamento: state.modelLab.loadingCapacity, caricamentoRuntime: state.modelLab.loadingRuntime,
+      runtimeVerificato: Boolean(state.modelLab.runtimeMeasured), scaricamento: Boolean(state.modelLab.unloading),
+      errore: state.modelLab.capacityError?.message || '', erroreRuntime: state.modelLab.runtimeError?.message || '',
+    });
   }
 
   async function liberaMemoriaModello() {
     const bottone = $('#memoriaScarica');
+    if (state.modelLab.unloading || bottone?.disabled) return;
+    state.modelLab.unloading = true;
+    aggiornaPannelloMemoria();
     const originale = bottone?.textContent;
     if (bottone) { bottone.disabled = true; bottone.textContent = 'Liberazione…'; }
     const primaLiberi = state.modelLab.capacity?.memory?.freeBytes;
@@ -3273,6 +3234,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     } catch (error) {
       toast('Memoria non liberata', error.message || 'Il runtime locale non ha risposto.');
     } finally {
+      state.modelLab.unloading = false;
       if (bottone) { bottone.textContent = originale || 'Libera la memoria del modello'; }
       aggiornaPannelloMemoria();
     }
@@ -3280,22 +3242,17 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
 
   async function caricaCapacitaMacchina() {
     if (state.modelLab.loadingCapacity || state.modelLab.capacity) return;
-    state.modelLab.loadingCapacity = true;
+    state.modelLab.loadingCapacity = true; state.modelLab.capacityError = null;
+    aggiornaPannelloMemoria();
+    const status = $('#machineCapacityStatus'); if (status) status.textContent = 'Misurazione…';
     try {
-      const data = await apiGet('/api/v1/model-lab/capacity');
-      state.modelLab.capacity = data;
-      const set = (id, value) => { const el = $(`#${id}`); if (el) el.textContent = value; };
-      set('machineCapacityStatus', 'Misurata');
-      set('machineMemoryMetric', formattaByteModelLab(data.memory?.totalBytes));
-      set('machineFreeMemoryMetric', formattaByteModelLab(data.memory?.freeBytes));
-      set('machineStorageMetric', formattaByteModelLab(data.storage?.availableBytes));
-      set('machineAllocatableMetric', formattaByteModelLab(data.storage?.allocatableBytes));
-      set('machineCapacityDetail', `${data.platform || 'host'} · ${data.arch || 'arch'} · ${new Date(data.measuredAt).toLocaleTimeString()}`);
-      aggiornaPannelloMemoria();
+      state.modelLab.capacity = normalizzaCapacita(await apiGet('/api/v1/model-lab/capacity'));
+      if (status) status.textContent = 'Misurata';
     } catch (error) {
-      const el = $('#machineCapacityStatus'); if (el) el.textContent = 'Non disponibile';
-      const detail = $('#machineCapacityDetail'); if (detail) detail.textContent = error.message || 'Misura non disponibile';
-    } finally { state.modelLab.loadingCapacity = false; }
+      state.modelLab.capacity = null;
+      state.modelLab.capacityError = error;
+      if (status) status.textContent = 'Non disponibile';
+    } finally { state.modelLab.loadingCapacity = false; aggiornaPannelloMemoria(); }
   }
 
   async function caricaCatalogoModelLab({ forza = false } = {}) {
@@ -3585,6 +3542,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     state.modelLab.initialized = true;
     montaCorniceModelLab($('#modelLabCardSettings') || $('#modelLabCard'));
     montaCatalogoModelli($('#modelLabCatalogPanel'), $('#panel-catalogo'));
+    montaMisuraMemoria($('#modelLabOverviewPanel'), $('#panel-runtime [data-c=MemoryMeter]'));
     ensureModelLabControls();
     $$('[data-model-lab-tab]').forEach((tab) => tab.addEventListener('click', () => setModelLabSection(tab.dataset.modelLabTab)));
     $('#modelLabSearch')?.addEventListener('input', (event) => { state.modelLab.search = event.target.value; renderizzaCatalogoModelLab(); });

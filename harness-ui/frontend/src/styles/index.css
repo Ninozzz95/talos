@@ -792,6 +792,9 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 #schermoImpostazioni [data-search-result],#schermoImpostazioni [data-search-error]{scroll-margin-block:12px}
 
 /* 05/9 B6: catalogo nella larghezza effettiva del suo pannello. */
+[data-memory-meter] .talos-kv__k{white-space:normal;overflow-wrap:anywhere}
+#schermoImpostazioni [data-memory-meter] .talos-kv__v{max-width:none}
+[data-memory-meter] [role=alert]{color:var(--talos-danger)}
 [data-catalog-panel]{container-type:inline-size}
 [data-catalog-list]{max-height:480px;overflow:auto}
 [data-catalog-detail] .talos-kv{display:grid;grid-template-columns:minmax(90px,.8fr) minmax(0,1.4fr);gap:10px}
@@ -806,3 +809,5 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-model-lab .model-lab-ledger .talos-kv__v{white-space:normal;line-height:1.45;text-align:right;border:0;background:var(--talos-panel-soft);font-family:var(--talos-font-ui)}
 .talos-model-lab>.talos-tabs{margin-bottom:var(--talos-space-lg);border-bottom:1px solid var(--talos-border-subtle)}
 .talos-model-lab .talos-tabs__list{display:flex;max-width:100%;overflow-x:auto;scrollbar-width:thin}
+[data-memory-level="critico"] [data-memory-label]{color:var(--talos-danger)}
+[data-memory-level="alto"] [data-memory-label]{color:var(--talos-warning)}
