@@ -556,6 +556,25 @@ pesi non si lasciano cancellare i manifest vanno via lo stesso. Ricerca 06/09: o
 rompeva HF-DIRECT-CONTROLS-01 (cancel su una CARTELLA: rm senza recursive) — trovato dalla suite,
 curato; suite server 1678/1678.
 
+### B6.8 — scheda «Installati» del Model Lab (06/09 ~05:00): FATTA, dal piano di Astra
+
+`components/modelli-installati.js` (dati → riga `ListRow` con stato e verdetto «Entra» · dettaglio
+`DetailPanel` con formato/disco/origine/licenza, stima, azione principale «Verifica compatibilità»
+o «Libera memoria», Rinomina · Copia percorso · Elimina dal disco · ricerca e filtro di stato · riga
+della memoria · stato vuoto con «Azzera ricerca»), fixture con le tre righe del mockup, voce nel
+laboratorio e nel cancello componenti (`ModelliInstallati` su `#schermoModelLab`), unit
+`tests/unit/modelli-installati.test.mjs` (numeri con la virgola, quattro verdetti, filtro anche al
+contrario). Innesto in `app.js`: `montaInstallati` sposta il pannello del mockup in
+`#modelLabInstalledPanel` rinominando i controlli con gli id che il monolite ascolta (ricerca,
+importazione, progresso, annulla); rinomina ed elimina passano dai dialoghi del mockup
+(`veloRinominaModello`/`veloEliminaModello`, `data-lab-dialog-action`) invece di prompt/confirm;
+«Copia percorso» aggiunto al mockup (era del monolite). Ricerca 06/09: LM Studio «My Models»
+(lmstudio.ai/docs/cli, datacamp) distingue sul disco/caricato. Prove: componenti 93/93 (Installati
+3/3 struttura+parole+pixel), unit 91/91, statico 195/195; dal vivo su 4175 con i TRE modelli veri
+dell'owner (4,6 · 10,8 · 15,2 GB; 32 GB di RAM, 12,9 liberi): lista, dettaglio «GGUF · Q4_K_M»,
+dialogo Elimina aperto e chiuso con Esc, ricerca senza esito → stato vuoto → Azzera → 3 righe;
+0 errori di pagina; screenshot `foto/installati-4175.png`.
+
 - T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
   15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
   statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo

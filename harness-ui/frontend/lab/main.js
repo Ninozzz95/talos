@@ -41,6 +41,8 @@ import { LUOGHI, LUOGHI_ALTRI, creaNavItem } from '../src/components/nav-item.js
 import { CONVERSAZIONE } from './fixtures/conversazione.js';
 import { PIEDE } from './fixtures/piede.js';
 import { TOAST } from './fixtures/toast.js';
+import { MODELLI_INSTALLATI, RUNTIME_INSTALLATI, FIT_INSTALLATI } from './fixtures/modelli-installati.js';
+import { aggiornaInstallati } from '../src/components/modelli-installati.js';
 import { NOTIFICHE, ORA_NOTIFICA, ETICHETTA_MOCKUP } from './fixtures/notifiche.js';
 import { aggiornaPannelloNotifiche } from '../src/components/notifiche.js';
 import { creaToast } from '../src/components/toast.js';
@@ -120,6 +122,10 @@ const LABORATORI = {
     // il mockup scrive il PERCHÉ («Vuole scrivere fuori dalla cartella») al posto dell'etichetta generica
     righe[0].querySelector('.talos-list-row__sub').textContent = `${ETICHETTA_MOCKUP} · ${ORA_NOTIFICA()}`;
     pannello.hidden = false;
+  },
+  ModelliInstallati() {
+    const panel = document.querySelector('#panel-installati');
+    aggiornaInstallati(panel, MODELLI_INSTALLATI, { runtime: RUNTIME_INSTALLATI, fit: FIT_INSTALLATI, selezionato: 'qwen8' });
   },
   Toast() {
     const regione = document.querySelector('#regioneToast');
