@@ -513,6 +513,29 @@ button{background:none; border:0; cursor:pointer; padding:0}
 .talos-setting{display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:56px; padding:8px 0; border-top:1px solid var(--talos-border-subtle)}
 .talos-setting__label{display:block; font-weight:500; font-size:13.5px}
 .talos-setting__scope{display:block; font-size:12px; color:var(--talos-muted); margin-top:1px}
+
+/* Settings: controlli nativi, con gli stessi token del mockup. */
+#schermoImpostazioni .talos-settings__nav .talos-nav-item{height:auto;min-height:40px}
+#schermoImpostazioni .talos-nav-item__label{white-space:normal}
+#schermoImpostazioni .talos-setting>div:first-child{min-width:0}
+#schermoImpostazioni .talos-setting>.talos-select{width:220px;max-width:50%;flex-shrink:0}
+#schermoImpostazioni input.talos-switch{appearance:none;flex-shrink:0;margin:0}
+#schermoImpostazioni input.talos-switch::before{content:"";width:calc(var(--talos-control-height) - 12px);height:calc(var(--talos-control-height) - 12px);border-radius:var(--talos-radius-pill);background:var(--talos-muted);transition:transform var(--talos-motion-duration-control) var(--talos-motion-ease)}
+#schermoImpostazioni input.talos-switch:checked{border-color:var(--talos-accent-border);background:var(--talos-accent-soft)}
+#schermoImpostazioni input.talos-switch:checked::before{background:var(--talos-accent);transform:translateX(calc(var(--talos-control-height) * .75))}
+#schermoImpostazioni .talos-setting>.talos-setting__control{width:220px;max-width:50%;flex-shrink:0;display:flex;align-items:center;gap:12px}
+#schermoImpostazioni input[type=range]{width:100%;min-width:0;accent-color:var(--talos-accent)}
+#schermoImpostazioni .talos-measure{min-width:46px;text-align:right}
+#schermoImpostazioni .talos-settings__actions{display:flex;gap:8px;flex-wrap:wrap}
+#schermoImpostazioni .talos-setting>.talos-setting__control{flex-wrap:nowrap}
+#schermoImpostazioni ul{list-style:none;padding:0}
+#schermoImpostazioni dl{margin:12px 0}
+#schermoImpostazioni .talos-kv{gap:18px}
+#schermoImpostazioni .talos-kv__k,#schermoImpostazioni .talos-kv__v{white-space:normal;overflow-wrap:anywhere;min-width:0}
+#schermoImpostazioni .talos-kv__v{margin:0;max-width:65%}
+#schermoImpostazioni li{padding:10px 0;border-top:1px solid var(--talos-border-subtle);font-size:13px;overflow-wrap:anywhere}
+#schermoImpostazioni li strong{display:block;margin-bottom:4px}
+
 .talos-terminal{flex:1 1 auto; min-height:0; margin:14px 18px; border-radius:var(--talos-radius-card); border:1px solid var(--talos-border); background:var(--talos-window-bg); display:flex; flex-direction:column; overflow:hidden}
 .talos-terminal__tabs{display:flex; align-items:center; gap:2px; padding:8px 10px; border-bottom:1px solid var(--talos-border); background:var(--talos-panel)}
 .talos-terminal__tab{height:32px; padding:0 12px; border-radius:8px; color:var(--talos-muted); font-size:13px; display:inline-flex; align-items:center; gap:8px}
