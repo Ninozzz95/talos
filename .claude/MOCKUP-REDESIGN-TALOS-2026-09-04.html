@@ -1007,7 +1007,7 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
               <span class="talos-badge talos-badge--info talos-badge--sm">Nota</span>
               <div><div class="talos-system-note__title">Permesso cambiato a metà lavoro</div><p>Da «sola lettura» a «scrittura nel workspace», deciso da te alle 18:06. I giri precedenti restano registrati col permesso di allora.</p></div>
             </div>
-            <div class="talos-message__actions" role="group" aria-label="Azioni sulla risposta"><button class="talos-button talos-button--ghost talos-icon-button talos-button--sm" title="Copia la risposta"><svg class="i i--sm"><use href="#i-copy"/></svg></button><button class="talos-button talos-button--ghost talos-icon-button talos-button--sm" title="Ascolta la risposta" aria-pressed="false"><svg class="i i--sm"><use href="#i-play"/></svg></button><button class="talos-button talos-button--ghost talos-icon-button talos-button--sm" title="Chiedi di nuovo"><svg class="i i--sm"><use href="#i-history"/></svg></button></div>
+            <div class="talos-message__actions" role="group" aria-label="Azioni sulla risposta"><button class="talos-button talos-button--ghost talos-icon-button talos-button--sm" title="Copia la risposta" aria-label="Copia la risposta"><svg class="i i--sm"><use href="#i-copy"/></svg></button><button class="talos-button talos-button--ghost talos-icon-button talos-button--sm" title="Ascolta la risposta" aria-label="Ascolta la risposta" aria-pressed="false"><svg class="i i--sm"><use href="#i-play"/></svg></button><button class="talos-button talos-button--ghost talos-icon-button talos-button--sm" title="Chiedi di nuovo" aria-label="Chiedi di nuovo"><svg class="i i--sm"><use href="#i-history"/></svg></button></div>
           </div>
         </div>
 
@@ -1085,7 +1085,7 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
           <button type="button" class="talos-resizer talos-resizer--composer" id="composerResizeHandle" aria-label="Ridimensiona il composer (doppio clic per la misura normale)" title="Trascina per ridimensionare · doppio clic per la misura normale"></button>
           <textarea class="talos-composer__input" id="composerInput" rows="1" placeholder="Scrivi… Invio indirizza il giro in corso, Ctrl+Invio accoda" aria-label="Messaggio"></textarea>
           <div class="talos-composer__bar">
-            <button class="talos-composer__attach" data-c="AttachButton" id="capabilityBtn" title="Aggiungi contesto: file, immagini, screenshot"><svg class="i"><use href="#i-plus"/></svg></button>
+            <button class="talos-composer__attach" data-c="AttachButton" aria-label="Aggiungi contesto" id="capabilityBtn" title="Aggiungi contesto: file, immagini, screenshot"><svg class="i"><use href="#i-plus"/></svg></button>
             <button type="button" class="talos-badge talos-badge--lg" data-c="Chip" data-open-sheet="model" title="Cambia modello"><svg class="i i--sm"><use href="#i-bolt"/></svg><span class="talos-chip__label">claude-opus-5</span> <span class="talos-kbd">Ctrl ⇧ M</span></button>
             <button type="button" class="talos-badge talos-badge--lg talos-badge--warning" data-c="Chip" data-open-sheet="permissions" title="Cambia il permesso"><svg class="i i--sm"><use href="#i-shield"/></svg><span class="talos-chip__label">Scrittura nel workspace</span></button>
             <span class="talos-badge talos-badge--lg" data-c="Chip" data-runtime-giri>Giri <span class="talos-mono talos-measure">7</span></span>

@@ -97,3 +97,29 @@
 - Drag&drop di un file: dove finisce e cosa vede l'agente.
 - Un dialogo sopra un altro (Modello sopra Intro), un toast sopra un dialogo, il server spento all'avvio: tre prove AL CONTRARIO.
 - Onestà: task-trappola (premessa falsa): chi inventa (dal banco del 28/8 Hermes barava 3/3).
+
+## Misure dal vivo — 05/09 notte, gruppo 1 (chat), `node scripts/confronto/confronto.mjs --gruppo=chat`
+
+Strumento: `harness-ui/frontend/scripts/confronto/` (`avvia-hermes.mjs` apre la copia compilata di
+Hermes Desktop 0.17.0 con `--remote-debugging-port=9705`; `guida.mjs` apre TALOS su 4175 e si
+aggancia a Hermes via `connectOverCDP`, stessa azione sulle due app, foto affiancate in
+`artifacts/confronto/chat/<nn>-<blocco>/affiancato.png`, `esiti.json`). Nessun invio al modello.
+
+| Passo | TALOS | Hermes | Esito | Cosa ho visto nelle foto |
+|---|---|---|---|---|
+| Apri la prima sessione (1 gesto) | filo in 53 ms, 2 turni | 65 ms, 2 turni | PASS | Hermes NON mostra la risposta finale dell'assistente nel trascritto di una sessione conclusa: solo il messaggio utente e due righe «Explored 5 files, ran 3 commands». TALOS mostra tutto |
+| Tab dalla pagina al composer | 7 tasti | 6 (e 2 in un giro precedente: dipende da dove cade il clic) | FAIL (misura da fissare) | Hermes ha un «focus chord» (`composer/focus-chord.ts`) per portare il fuoco al composer. **Riga di lavoro**: scorciatoia per il composer (es. `Ctrl+/`), e misura con punto di partenza fisso |
+| Scrivi tre righe | 40→80 px, invia visibile | 28→47 px, invia visibile | PASS | pari |
+| Azioni del composer con nome | 6 azioni, 0 senza nome (**prima della correzione: il «+» era senza nome**) | 6, 0 senza nome | PASS | Hermes: Add context · Model · Voice dictation · Read replies aloud · Wake word · Start voice conversation. Noi: + · modello · permesso · giri · Voce · Invia. Il chip «Giri» è uno `span` (stato, non azione): giusto |
+| Azioni sul messaggio al passaggio | 3 (Copia · Ascolta · Chiedi di nuovo; **prima: solo `title`, nessun nome**) | 2 sul messaggio utente (Edit message · Restore checkpoint) | PASS | **Hermes ha «Modifica messaggio» e «Ripristina checkpoint» sul messaggio UTENTE**: riga K-J (fork da un turno) confermata dal vivo |
+| Apri il riepilogo delle attività | +107 caratteri, 3 righe attrezzo | +179 caratteri | PASS | Le righe di Hermes dicono il COMANDO («Ran find . -type f», «Read magazzino.py»); le nostre dicono l'esito e il file («Lettura non riuscita · src/matematica.mjs») ma la ricerca non dice COSA ha cercato. **+1 da fare**: la riga della ricerca mostra la query |
+| Barra di stato | «92,1k token · 9 giri · cache 83%» + connessione | nessun conteggio a schermo | PASS | vantaggio nostro netto: Hermes non mostra token, giri, cache né lo stato della connessione |
+
+Densità (foto): a 1440×900 la sidebar di Hermes mostra ~24 sessioni su una riga ciascuna; la
+nostra ~6 su due righe (stato · modello · giri). Scelta nostra (più fatti per riga), da tenere
+d'occhio con 500 sessioni.
+
+Correzioni fatte durante il giro (cancelli verdi): `aria-label` sul pulsante «+» del composer e
+sui tre pulsanti delle azioni del messaggio (mockup + `conversazione.js`); fonte: W3C APG
+«Providing Accessible Names and Descriptions» e tecnica ARIA14, WebAIM Million 2025 (27,7% delle
+home page con pulsanti senza nome), letti il 05/09/2026.

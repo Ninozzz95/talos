@@ -473,6 +473,17 @@ finché non hanno senso. Screenshot al contrario consegnati (errore misura/runti
 tre larghezze). Cancelli sulla lane unita: template diff 0, unit 79/79, statico 195/195,
 componenti 81/81, build ok.
 
+### Confronto con Hermes — strumento e primo giro (05/09 notte, owner «VIA»)
+
+`scripts/confronto/{avvia-hermes,guida,confronto}.mjs` + `passi/chat.mjs`: 7 passi, 6 PASS,
+1 FAIL (Tab al composer: misura instabile, riga di lavoro per una scorciatoia). Hermes Desktop
+0.17.0 (copia compilata del 04/09) si avvia con lo switch di Chromium; il suo
+`HERMES_DESKTOP_CDP_PORT` vale solo in modalità sviluppo. Mezz'ora persa su un'istanza fantasma
+(blocco di istanza unica + `tasklist /FI` rotto da Git Bash): lezione in memoria
+`tasklist-fi-da-git-bash-dice-zero`. Due difetti nostri trovati e curati dal confronto
+(nomi accessibili di «+» e delle azioni del messaggio). Tabella e osservazioni nel taccuino.
+Cancelli: unit 79/79, statico 195/195, componenti Conversazione+ChatFooter 6/6.
+
 - T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
   15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
   statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo
