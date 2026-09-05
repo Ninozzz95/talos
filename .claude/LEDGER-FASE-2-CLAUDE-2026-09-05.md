@@ -432,3 +432,11 @@ uno suo): ora mostrano il modello del GIRO (`currentRunModel`).
 **Non ancora visto dal vivo**: ArtifactCard con un artefatto vero (il compito non ne ha creati),
 «Reindirizza» durante un giro, la dettatura. Costo: due giri flash, letto dal credito del fornitore
 dall'owner (non dal CLI).
+
+**Taccuino dopo la prova dal vivo**
+- Curato nello stesso giro: la meta del messaggio della persona diceva «On request» (nome
+  tecnico): ora «Su richiesta» (H22, stessa mappa del chip).
+- T-14 dopo un ricarico, una scheda di approvazione risolta da QUESTA scheda dice «Approvato (da un
+  altro client)»: il monolite perde `_rispostaDataQui` al ricarico. Onesto ma impreciso; si cura
+  ricordando la richiesta risposta nello store della sessione (Fase 3, con le ricevute).
+- Istanza 4181 (kernel, a pagamento) SPENTA a prova finita.
