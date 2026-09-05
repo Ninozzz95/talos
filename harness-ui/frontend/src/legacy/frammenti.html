@@ -56,7 +56,7 @@
               <!-- ⭐⭐⭐ 04/9, R-03 — RICERCA WEB: la fonte si sceglie qui, come sul mobile (TalosMobileSearchSourcePanel.vue), più DuckDuckGo senza chiave. Riempita da caricaPannelloRicercaWeb() in app.js con lo stato vero del server; nessuna chiave passa mai dal browser in lettura. -->
               <article class="settings-card settings-info-card" data-settings-panel="tools" id="settingsSearchPanel" hidden><div class="settings-card-heading"><div><span class="eyebrow">Ricerca web</span><h3>Origine della ricerca web</h3></div></div><p class="muted-copy">TALOS non possiede un indice del web: interroga uno di questi servizi. Le pagine vengono lette su questo computer; solo la query lo lascia. Senza chiave usa DuckDuckGo.</p><div id="searchSourceMount" aria-live="polite"><p class="muted-copy">Lettura dello stato…</p></div></article>
               <article class="settings-card settings-info-card" data-settings-panel="privacy" id="settingsPrivacyPanel" hidden><div class="settings-card-heading"><div><span class="eyebrow">Dati</span><h3>Privacy e dati locali</h3></div></div><p class="muted-copy">Le preferenze restano in questo browser; chiavi, percorsi assoluti e log tecnici non vengono salvati nell’interfaccia.</p><ul class="settings-facts-list" id="settingsPrivacyList"><li class="muted-copy">Lettura…</li></ul><span class="settings-status">Nessuna credenziale salvata nel browser</span><div class="provider-actions"><button type="button" class="secondary-btn compact danger" id="settingsSvuotaLocali">Svuota le preferenze di questo browser</button></div></article>
-              <article class="settings-card settings-info-card" data-settings-panel="workspace" id="settingsWorkspacePanel" hidden><div class="settings-card-heading"><div><span class="eyebrow">Workspace</span><h3>File e workspace</h3></div></div><p class="muted-copy">Il workspace attivo e l’albero dei file si gestiscono dal Context rail, con operazioni reali e permessi espliciti.</p><dl class="settings-facts" id="settingsWorkspaceFacts"><div><dt>Workspace attivo</dt><dd>—</dd></div></dl><div class="provider-actions"><button type="button" class="secondary-btn compact" data-open-panel="inspector">Apri l’albero dei file</button><button type="button" class="secondary-btn compact" id="settingsNuovaSessioneAltrove">Nuova sessione in un’altra cartella</button></div></article>
+              <article class="settings-card settings-info-card" data-settings-panel="workspace" id="settingsWorkspacePanel" hidden><div class="settings-card-heading"><div><span class="eyebrow">Workspace</span><h3>File e workspace</h3></div></div><p class="muted-copy">Il workspace attivo e l’albero dei file si gestiscono dal Context rail, con operazioni reali e permessi espliciti.</p><dl class="settings-facts" id="settingsWorkspaceFacts"><div><dt>Workspace attivo</dt><dd>—</dd></div></dl><div class="provider-actions"><button type="button" class="secondary-btn compact" data-legacy-open-panel="inspector">Apri l’albero dei file</button><button type="button" class="secondary-btn compact" id="settingsNuovaSessioneAltrove">Nuova sessione in un’altra cartella</button></div></article>
               <article class="settings-card control-plane-card" data-settings-panel="account" id="settingsAccountPanel" hidden><h3>Account, Doctor e backup</h3><p class="muted-copy">Parità CLI senza costringere l’utente al terminale.</p><div class="control-grid"><button data-open-sheet="control">Agents</button><button data-open-sheet="control">Hooks</button><button data-open-sheet="capabilities">Skills</button><button data-open-sheet="capabilities">Plugins</button><button data-open-sheet="capabilities">MCP</button><button data-control-action="doctor">Doctor</button></div></article>
               </div>
             </div>
@@ -180,7 +180,7 @@
         <div class="topbar-left">
 <button class="icon-btn mobile-only" data-open-panel="sessions" aria-label="Apri sessioni"><svg class="sessions-menu-icon"><use href="#i-menu"/></svg><svg class="embedded-session-back-icon"><use href="#i-arrow-left"/></svg></button>
           <button class="icon-btn desktop-only" id="sessionsCollapseBtn" aria-label="Comprimi o espandi le sessioni" aria-expanded="true"><svg><use href="#i-menu"/></svg></button>
-          <button class="title-button" id="sessionTitleButton" data-open-sheet="sessionTree" aria-haspopup="dialog" aria-label="Apri dettagli e albero della sessione">
+          <button class="title-button" data-legacy-id="sessionTitleButton" data-open-sheet="sessionTree" aria-haspopup="dialog" aria-label="Apri dettagli e albero della sessione">
             <span><strong data-legacy-id="sessionTitle" data-current-session-title>Nessuna sessione</strong><small>premi «Nuova» per iniziare</small></span>
             <svg><use href="#i-chevron"/></svg>
           </button>
@@ -200,9 +200,9 @@
             app.js.
           -->
           <button class="icon-btn" data-legacy-id="resumeSessionBtn" aria-label="Riprendi la sessione"><svg><use href="#i-play"/></svg></button>
-          <button class="icon-btn" id="compactSessionBtn" aria-label="Comprimi il contesto"><svg><use href="#i-grid"/></svg></button>
-          <button class="icon-btn" id="commandPaletteBtn" aria-label="Comandi"><svg><use href="#i-command"/></svg></button>
-          <button class="icon-btn desktop-context-toggle" data-open-panel="inspector" aria-label="Mostra o nascondi inspector" aria-expanded="true"><svg><use href="#i-layout"/></svg></button>
+          <button class="icon-btn" data-legacy-id="compactSessionBtn" aria-label="Comprimi il contesto"><svg><use href="#i-grid"/></svg></button>
+          <button class="icon-btn" data-legacy-id="commandPaletteBtn" aria-label="Comandi"><svg><use href="#i-command"/></svg></button>
+          <button class="icon-btn" data-legacy-open-panel="inspector" aria-label="Mostra o nascondi inspector" aria-expanded="true"><svg><use href="#i-layout"/></svg></button>
         </div>
       </header>
 <!-- STRATO VISIBILE -->
