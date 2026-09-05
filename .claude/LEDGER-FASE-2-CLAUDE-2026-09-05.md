@@ -19,7 +19,7 @@ Porte mie: 4175 app nuova · 4176 laboratorio · 4180 app originale. Mai il 4174
 
 ---
 
-## S-01 · SessionItem (la riga di sessione della sidebar) — ✅ verde, aspetta l'owner
+## S-01 · SessionItem (la riga di sessione della sidebar) — ✅ verde · APPROVATA dall'owner il 05/09 («Approvate»)
 
 **Blocchi del mockup**: `SessionItem` (in `SessionList` e nel `NavGroup` «Fissate»).
 **Fixture**: `lab/fixtures/sessioni.js`, 7 sessioni nella forma di `GET /api/v1/sessions`
@@ -80,7 +80,7 @@ T-03 e T-04 (sopra), per nome.
 
 ---
 
-## S-02 · NavItem (i Luoghi con i badge di conteggio) — ✅ verde, aspetta l'owner
+## S-02 · NavItem (i Luoghi con i badge di conteggio) — ✅ verde · APPROVATA dall'owner il 05/09 («Approvate»)
 
 **Blocchi**: `NavItem` (5 + «Altro» + 4 dentro `#luoghiAltri`). **Fixture**: `lab/fixtures/luoghi.js`
 (i conteggi del mockup, già ridotti a numero). **Componente**: `src/components/nav-item.js` —
@@ -114,7 +114,7 @@ dal vivo (disclosure chiuso): si guardano in S-03 aprendolo.
 
 ---
 
-## S-03 · WorkspaceFooter (il piede della sidebar) — ✅ verde, aspetta l'owner
+## S-03 · WorkspaceFooter (il piede della sidebar) — ✅ verde · APPROVATA dall'owner il 05/09 («Approvate»)
 
 **Blocco**: `WorkspaceFooter` (+ `IconButton` impostazioni con `data-vaia="impostazioni"`).
 **Fixture**: `lab/fixtures/workspace.js` (nessuna sessione, tema `calm`, modello `local:…` →
@@ -150,7 +150,7 @@ dato: qui non è un metro. Immagini in `.claude/immagini/fase2-claude/WorkspaceF
 
 ---
 
-## S-04 · Topbar (la testata della sessione) — ✅ verde, aspetta l'owner
+## S-04 · Topbar (la testata della sessione) — ✅ verde · APPROVATA dall'owner il 05/09 («Approvate»)
 
 **Blocchi**: `Topbar`, `Tabs`, `IconButton` ×5. **Fixture**: `lab/fixtures/testata.js`.
 **Componente**: `src/components/topbar.js` — `aggiornaTopbar`, `impostaConteggioScheda`
@@ -197,7 +197,7 @@ Immagini in `.claude/immagini/fase2-claude/Topbar/`.
 
 ---
 
-## S-05 · Conversazione (Turn, Message, ActivityBundle, ToolRow, ToolFailure, SystemNote, ApprovalCard, DiffView, SignedReceipt, TouchedFiles, ArtifactCard, attesa) — ✅ verde, aspetta l'owner
+## S-05 · Conversazione (Turn, Message, ActivityBundle, ToolRow, ToolFailure, SystemNote, ApprovalCard, DiffView, SignedReceipt, TouchedFiles, ArtifactCard, attesa) — ✅ verde · APPROVATA dall'owner il 05/09 («Approvate»)
 
 **Blocchi**: tutti quelli della chat del mockup. **Fixture**: `lab/fixtures/conversazione.js` (la
 chat del mockup come dati, nella forma che il monolite ha dopo gli eventi dello stream).
@@ -262,7 +262,7 @@ non emette ricevute né file-per-giro: il blocco esiste, l'innesto arriva con la
 
 ---
 
-## S-06 · ChatFooter (striscia del giro, coda, composer, barra di stato) — ✅ verde, aspetta l'owner
+## S-06 · ChatFooter (striscia del giro, coda, composer, barra di stato) — ✅ verde · APPROVATA dall'owner il 05/09 («Approvate»)
 
 **Blocchi**: `ChatFooter`, `StatusStrip`, `MessageQueue`, `Composer`, `AttachButton`, `Chip` ×4,
 `SendButton`, `StatusBar`, `IconButton` (microfono). **Fixture**: `lab/fixtures/piede.js` (un giro
@@ -313,7 +313,7 @@ senza CSS (B7 Astra, T-10).
 
 ---
 
-## S-07 · Review (ReviewPane, ReviewFileList, DiffView) — ✅ verde, aspetta l'owner
+## S-07 · Review (ReviewPane, ReviewFileList, DiffView) — ✅ verde · APPROVATA dall'owner il 05/09 («Approvate»)
 
 **Blocchi**: `ReviewScreen` (testata con sommario e azioni), `ReviewPane`, `ReviewFileList`
 (righe `talos-list-row`), `DiffView` (testa, righe, piede). **Fixture**: `lab/fixtures/review.js`
@@ -398,3 +398,37 @@ Per Astra B8 restano: densità, tema chiaro, lingua.
 percorso — quindi per un progetto con id lo stato vuoto non può leggere i fatti della cartella
 (niente suggerimenti, onestamente). Serve il percorso nella risposta (o una rotta
 `workspace-browser?projectId=`): riga K per il kernel/server, Fase 3.
+
+
+---
+
+## S-10 · La prova DAL VIVO col kernel (autorizzata dall'owner il 05/09) — ✅ fatta
+
+Istanza 4181: `frontend/dist`, store nuovo, progetto usa-e-getta `prova-vivo` (package.json con
+`npm test`, `src/matematica.mjs`, un test), kernel `talosHarness.mjs`, modello `z-ai/glm-4.7-flash`
+(fascia flash, a chiave; qwen ha un solo fornitore → 429). Screenshot DURANTE, ogni 3 s.
+
+**Giro 1** («Aggiungi ed esporta sottrai… poi fai passare la suite»): 27 s, 7 giri, 62,0k token,
+primo token 2,9 s. Visto dal vivo, nel disegno del mockup: l'attesa animata, poi lo streaming del
+testo, la striscia del giro con COSA sta facendo («Scrittura di src/matematica.mjs… · giro 4 · 12 s
+· Ferma»), i bundle («2 file letti, 1 ricerca completata», «2 file modificati, 1 comando eseguito
++5 −2»), le righe attrezzo running → success, il badge Review 2, la spine 2·3·4, il chip
+«glm-4.7-flash» e «Tema Calm · z-ai» nel piede. TALOS ha davvero scritto `sottrai` e il test e la
+suite passa. Zero errori di pagina.
+
+**Giro 2** (permesso «Su richiesta», «Crea NOTE.md…»): la ApprovalCard del mockup compare per
+`date -u` (badge «Chiede di eseguire», comando in mono, «Vuole eseguire il comando…», tre
+risposte, «Vale solo per questa richiesta»; la riga in sidebar dice «aspetta te»); «Consenti una
+volta» risponde davvero; la seconda richiesta (scrittura di NOTE.md) resta in attesa finché
+qualcuno risponde — e dopo un RICARICO della pagina la scheda pendente è ancora lì con i pulsanti
+attivi (persistenza vera); «Per questa sessione» approva e ricorda; `npm test` chiede di nuovo
+(attrezzo diverso: giusto); a fine giro la scheda dice «— Approvato.» senza pulsanti; NOTE.md esiste
+con la data vera. Immagini in `.claude/immagini/fase2-claude/Vivo/`.
+
+**Difetto trovato e curato nello stesso giro**: il chip del modello diceva «Scegli il modello» e
+il piede «Tema Calm» senza fornitore quando la persona non ha scelto un modello (il server ne ha
+uno suo): ora mostrano il modello del GIRO (`currentRunModel`).
+
+**Non ancora visto dal vivo**: ArtifactCard con un artefatto vero (il compito non ne ha creati),
+«Reindirizza» durante un giro, la dettatura. Costo: due giri flash, letto dal credito del fornitore
+dall'owner (non dal CLI).
