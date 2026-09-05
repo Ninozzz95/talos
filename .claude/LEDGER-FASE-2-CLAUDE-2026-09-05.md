@@ -668,6 +668,36 @@ ricarico: 908×646 → doppio clic: 720×518 e memoria vuota; 0 errori di pagina
 `foto/dialogo-ridimensionato.png`. ⛔ Taccuino T-18: il velo «Albero dei rami» mostra ancora i
 rami DIMOSTRATIVI del mockup (Fase 3, BranchTree): da rendere onesto subito (stato vuoto).
 
+### B7b — l'Intro del primo avvio è il velo del mockup, con i dati veri (06/09 ~11:30): FATTA
+
+`components/intro.js`: la regia dei quattro passi del mockup (cartella · modello · permessi ·
+pronto) con gli adattatori del monolite — cartelle dal browser del workspace
+(`/api/v1/workspace-browser`, albero COMPATTO con lettura pigra all'apertura, frecce/Home/End/
+lettera, ricerca, «Vai su», percorso a mano, Nuova cartella via `/workspace-browser/folders`,
+Copia percorso; scorciatoie Recenti (`/frequent-dirs`) · Progetti · Scelte rapide (dai
+`recommended` del server)), fornitori da `/providers` con chiave salvata nel portachiavi e prova
+(`/providers/:id/key` + `/test`), modelli dal catalogo + modelli locali, politica dei permessi
+(→ `impostaPermesso` + preferenze), riepilogo e privacy (locale/remoto). «Inizia» chiude, ricorda
+l'esito (`salvaIntroLocale`) e apre la sessione in attesa del primo messaggio sulla cartella scelta
+(`avviaSessionePendente`, con l'id del progetto se la cartella è un progetto). All'avvio
+`apriIntroSeServe` apre il velo (non più il dialogo nativo legacy) al passo giusto; «Ripeti il
+primo avvio» passa dallo stesso componente. Bonus per B2: il catalogo dei modelli si legge una volta
+per la «Finestra del contesto». Prove: unit `tests/unit/intro.test.mjs` (percorsi Windows, nomi,
+cancelli fra i passi), unit 108/108, statico 195/195, componenti 105/105; dal vivo su 4175 con un
+profilo nuovo (`intro-vivo.mjs`): l'Intro si apre da sola al primo avvio · albero di C:\ con 32
+righe vere · «Users» aperto con la freccia (35) · Scelte rapide = Download/Documenti · Desktop dai
+Recenti → cartella scelta · 8 fornitori, 96 modelli · Avanti bloccato finché non si sceglie la
+politica · riepilogo «Cartella: …\Desktop · Modello: OpenAI GPT Latest · Permessi: Scrive nel
+progetto» · Inizia → velo chiuso, chat con workspace «Desktop» e «Scrivi il primo messaggio…»,
+esito «completata» ricordato; 0 errori di pagina. Screenshot `foto/intro-0.png`, `intro-1.png`,
+`intro-3.png`. Ricerca 06/09: userpilot/formbricks onboarding 2026 (primo valore in pochi passi,
+si può saltare). ⛔ NON VERIFICATO: salvataggio di una chiave vera (non tocco il portachiavi
+dell'owner in una prova).
+
+- **T-18 CHIUSA**: il velo «Albero dei rami» (BranchTree, Fase 3) non mostra più i rami
+  dimostrativi del mockup: titolo «I rami di questa sessione», una frase onesta, «Confronta A e B»
+  nascosto (bridge).
+
 - T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
   15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
   statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo

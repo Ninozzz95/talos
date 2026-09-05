@@ -25,6 +25,7 @@ import { aggiornaCodaDownload, montaCodaDownload, stimaFraLetture } from '../com
 import { aggiornaInspector, processiDagliEventi } from '../components/inspector.js'; // 06/9 B2: la colonna dei dettagli dice il vero
 import { contaDiff } from '../components/review.js'; // 06/9 B2: +N −M dei file toccati
 import { collegaRidimensionamentoDialoghi, preparaMisuraDialogo } from '../components/dialoghi.js'; // 06/9 B7: dialoghi ridimensionabili e ricordati
+import { creaIntro, normalizzaCartella as normalizzaCartellaIntro, ultimoSegmento as ultimoSegmentoIntro } from '../components/intro.js'; // 06/9 B7b: l'Intro del mockup con i dati veri
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
@@ -6253,8 +6254,13 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (attivo && giri.length) giri[giri.length - 1].inCorso = true;
     return giri;
   }
+  let catalogoRichiesto = false;
   function finestraDelModelloCorrente() {
     const id = state.model || state.realSession.currentRunModel;
+    if (!state.modelLab?.catalogoModelli?.modelli && !catalogoRichiesto) {
+      catalogoRichiesto = true; // una lettura sola: il catalogo è cache lato server
+      void apiGet('/api/v1/models').then((c) => { if (c?.modelli) { state.modelLab.catalogoModelli = c; aggiornaInspectorDaStato(); } }).catch(() => {});
+    }
     const m = (state.modelLab?.catalogoModelli?.modelli || []).find((x) => x.id === id) || null;
     return Number.isFinite(m?.contextLength) ? m.contextLength : null;
   }
@@ -12012,15 +12018,79 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * stato (versione vecchia, non raggiungibile) non produce un intro
    * fantasma: si tace.
    */
+  /**
+   * 06/9 B7b — l'Intro è il velo del mockup (`#veloIntro`, components/intro.js): cartella con
+   * l'albero compatto del computer, fornitore e chiave, modello, permessi, riepilogo. I dati
+   * arrivano dalle API del server; le scelte tornano allo stato del monolite. Il dialogo nativo
+   * legacy (`#introDialog`) non si apre più.
+   */
+  let introMockup = null;
+  function apiIntro() {
+    return {
+      cartelle: (path) => apiGet(`/api/v1/workspace-browser${path ? `?path=${encodeURIComponent(path)}` : ''}`),
+      luoghi: async () => {
+        const [radice, frequenti] = await Promise.all([apiGet('/api/v1/workspace-browser'), apiGet('/api/v1/frequent-dirs').catch(() => ({ items: [] }))]);
+        const rec = Array.isArray(radice?.recommended) ? radice.recommended : [];
+        const voce = (x) => ({ nome: x.label || x.etichetta || ultimoSegmentoIntro(x.path || x.percorso), path: normalizzaCartellaIntro(x.path || x.percorso), projectId: x.projectId ?? null });
+        return {
+          radice: radice?.root || null,
+          progetti: rec.filter((r) => r.kind === 'project').map(voce),
+          gruppi: {
+            recenti: (frequenti?.items || []).map(voce),
+            progetti: rec.filter((r) => r.kind === 'project').map(voce),
+            rapide: rec.filter((r) => r.kind === 'known').map(voce),
+          },
+        };
+      },
+      creaCartella: (parentPath, name) => apiPost('/api/v1/workspace-browser/folders', { parentPath, name }),
+      providers: async () => (await apiGet('/api/v1/providers'))?.items ?? [],
+      salvaChiave: (id, key) => apiPost(`/api/v1/providers/${encodeURIComponent(id)}/key`, { key }),
+      provaProvider: (id) => apiPost(`/api/v1/providers/${encodeURIComponent(id)}/test`, {}),
+      modelli: async () => {
+        const [catalogo, locali] = await Promise.all([apiGet('/api/v1/models').catch(() => null), apiGet('/api/v1/local-models').catch(() => null)]);
+        if (catalogo?.modelli) state.modelLab.catalogoModelli = catalogo; // serve anche alla «Finestra del contesto» (B2)
+        return [
+          ...((locali?.items || []).map((m) => ({ id: m.id, nome: m.name || m.id, provider: 'local', locale: true }))),
+          ...((catalogo?.modelli || []).map((m) => ({ id: m.id, nome: m.nome || m.id, provider: m.provider }))),
+        ];
+      },
+    };
+  }
+  function apriIntroMockup(indice = 0, statoSetup = null) {
+    const velo = $('#veloIntro'); if (!velo) return false;
+    if (!introMockup) {
+      introMockup = creaIntro(velo, {
+        api: apiIntro(),
+        iniziale: { cartella: '', modello: state.model || '', politica: state.autonomiaScelta ? state.permissions : null, localeConfigurato: statoSetup?.provider?.localeConfigurato === true },
+        azioni: {
+          impostaPermesso: (valore, nome) => { impostaPermesso(valore, nome); state.autonomiaScelta = true; salvaPreferenzeChatDesktop(); },
+          impostaModello: (id) => { if (!id) return; state.model = id; aggiornaPiedeSidebar(); salvaPreferenzeChatDesktop(); aggiornaPillolaModello(); },
+          concludi: (esito, scelte) => {
+            salvaIntroLocale(esito);
+            chiudiVeloMockup('veloIntro');
+            if (esito !== 'completata' || !scelte.cartella) return;
+            const progetto = (introMockup?.progetti || []).find((p) => normalizzaCartellaIntro(p.path) === normalizzaCartellaIntro(scelte.cartella));
+            avviaSessionePendente({ cartellaId: progetto?.projectId || undefined, cartellaLibera: progetto?.projectId ? undefined : scelte.cartella, nomeCartella: ultimoSegmentoIntro(scelte.cartella), modello: state.model, effort: state.effort, permessi: state.permissions, permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
+            toast('Prima sessione pronta', `${ultimoSegmentoIntro(scelte.cartella)} · scrivi il primo messaggio`);
+          },
+        },
+      });
+    }
+    apriVeloMockup('veloIntro');
+    void introMockup.apri(indice).then(() => { /* i progetti per riconoscere una cartella-progetto */ });
+    return true;
+  }
   async function apriIntroSeServe() {
-    if (!introDialog || leggiIntroLocale()) return false;
+    if (leggiIntroLocale()) return false;
     let stato;
     try { stato = await apiGet('/api/v1/setup/stato'); } catch { return false; }
     if (!stato || stato.introDisattivato) return false;
     const progresso = progressoIntro(stato);
     if (progresso.tuttoPronto) return false;
-    apriIntroPrimoAvvio(stato, progresso.indiceIniziale);
-    return true;
+    // passi del mockup: 0 cartella · 1 modello (con fornitore e chiave) · 2 permessi · 3 pronto
+    const primo = progresso.passi.find((p) => !p.fatto)?.id;
+    const indice = primo === 'provider' || primo === 'modello' ? 1 : primo === 'autonomia' ? 2 : 0;
+    return apriIntroMockup(indice, stato);
   }
 
   function apriIntroPrimoAvvio(statoIniziale, indiceIniziale = 0) {
@@ -13886,6 +13956,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   let ultimoFuocoVelo = null;
   function apriVeloMockup(id) {
     const v = $(`#${id}`); if (!v) return;
+    if (id === 'veloIntro' && !introMockup) { void apiGet('/api/v1/setup/stato').catch(() => null).then((stato) => apriIntroMockup(0, stato)); return; } // 06/9 B7b: «Ripeti il primo avvio»
     ultimoFuocoVelo = ROOT().activeElement;
     v.hidden = false;
     preparaMisuraDialogo(v); // 06/9 B7: la misura ricordata di QUESTO dialogo, se c'è
