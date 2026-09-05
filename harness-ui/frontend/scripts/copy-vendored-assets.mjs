@@ -14,6 +14,7 @@ const FONT_NAMES = Object.freeze([
   'jetbrains-mono-latin-ext-400-normal.woff2',
   'jetbrains-mono-latin-ext-500-normal.woff2',
 ]);
+const PRISM_NAMES = Object.freeze(['LICENSE-prism', 'README.md', 'prism.js']);
 const XTERM_NAMES = Object.freeze([
   'LICENSE-addon-fit', 'LICENSE-addon-webgl', 'LICENSE-xterm', 'README.md',
   'addon-fit.js', 'addon-webgl.js', 'xterm.css', 'xterm.js',
@@ -31,6 +32,7 @@ export async function copyVendoredAssets({ frontendRoot, outputDir }) {
   const entries = [
     ...FONT_NAMES.map((name) => ({ source: path.join(assetsRoot, 'fonts', name), relativePath: `fonts/${name}` })),
     ...XTERM_NAMES.map((name) => ({ source: path.join(assetsRoot, 'xterm', name), relativePath: `vendor/xterm/${name}` })),
+    ...PRISM_NAMES.map((name) => ({ source: path.join(assetsRoot, 'prism', name), relativePath: `vendor/prism/${name}` })),
     {
       source: path.join(frontendRoot, 'node_modules', '@tanstack', 'virtual-core', 'LICENSE'),
       relativePath: 'vendor/tanstack/LICENSE-virtual-core',

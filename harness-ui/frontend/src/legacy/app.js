@@ -1042,6 +1042,22 @@
       button.classList.toggle('active', active);
       button.setAttribute('aria-pressed', String(active));
     });
+    /*
+     * ⭐ 05/9, fase 1: il mockup segna il luogo corrente con `aria-current`
+     * sui `[data-vaia]` della sidebar e con `aria-selected` sulle viste della
+     * testata (`[data-vistetab] [role=tab]`). Stessa mappa vista→schermo di
+     * `setView`, tenuta qui in un posto solo.
+     */
+    const schermoCorrente = document.documentElement.getAttribute('data-schermo');
+    $$('.talos-sidebar [data-vaia]').forEach((voce) => {
+      if (voce.dataset.vaia === schermoCorrente) voce.setAttribute('aria-current', 'page');
+      else voce.removeAttribute('aria-current');
+    });
+    $$('[data-vistetab] [role="tab"]').forEach((tab) => {
+      const attiva = tab.dataset.vaia === schermoCorrente;
+      tab.setAttribute('aria-selected', String(attiva));
+      tab.tabIndex = attiva ? 0 : -1;
+    });
   }
 
   function setEmbeddedTopbarHidden(hidden) {
@@ -1112,6 +1128,20 @@
     }
     target.classList.add('active');
     if (previous !== target) markMotionEnter(target);
+    /*
+     * ⭐⭐⭐ 05/9, fase 1 del piano «il mockup diventa la app»: le viste sono
+     * le schermate del mockup, che si mostrano con `hidden` e con i due
+     * attributi di radice che la regia del mockup scrive — `data-vista`
+     * («sessione» per chat/vuota/terminale/review, «pagina» per il resto:
+     * `:root[data-vista="pagina"]` nasconde la colonna dei dettagli e cambia
+     * la griglia) e `data-schermo`. È ESATTAMENTE `mostra()` del mockup,
+     * fatto qui perché `setView` è il solo posto da cui si naviga.
+     */
+    views.forEach((pane) => { pane.hidden = pane !== target; });
+    const SCHERMO_PER_VISTA = { chat: 'chat', vuota: 'vuota', terminal: 'terminale', diff: 'review', capability: 'capability', dashboard: 'board', memoria: 'memoria', attivita: 'attivita', settings: 'impostazioni', doctor: 'doctor', libreria: 'libreria', ricerca: 'ricerca', officina: 'officina', automations: 'automazioni', browser: 'browser' };
+    const schermo = SCHERMO_PER_VISTA[view] || view;
+    document.documentElement.setAttribute('data-vista', ['chat', 'vuota', 'terminale', 'review', 'browser'].includes(schermo) ? 'sessione' : 'pagina');
+    document.documentElement.setAttribute('data-schermo', schermo);
     syncNavigationState();
     target.scrollTop = 0;
     resetEmbeddedTopbarScroll(view === 'chat' ? chatConversation : target);
@@ -8652,60 +8682,20 @@
       root.dataset.talosResolvedColorMode = mode;
       root.dataset.talosScene = scene;
     }
+    /*
+     * ⭐⭐⭐ 05/9, fase 1 del piano «il mockup diventa la app»: i colori NON si
+     * scrivono più come stili in linea sulla radice. Il foglio è quello del
+     * mockup e i suoi token sono la sola fonte; il chiaro/scuro è
+     * `:root[data-theme="light"]`, come nel mockup. Senza questo innesto la
+     * app partiva con la palette CHIARA del vecchio CSS sopra il tema Calm
+     * scuro (`colorMode: system` su una macchina senza preferenza scura), e
+     * ogni pixel divergeva dal mockup. I preset di tema del vecchio pannello
+     * Aspetto tornano quando la Fase 2 ridisegna quel pannello.
+     */
     const light = mode === 'light';
-    const colors = light ? { bg: '#f5f3ee', panel: '#fffdf8', accent: theme.accent, text: '#24211e', muted: '#756e65', border: '#d9d0c3' } : theme;
-    const mix = (primary, weight, secondary) => `color-mix(in srgb, ${primary} ${weight}%, ${secondary})`;
-    const semantic = {
-      codeBg: mix(colors.bg, light ? 94 : 78, '#000'),
-      panelSoft: mix(colors.panel, light ? 92 : 88, colors.bg),
-      card: mix(colors.panel, light ? 94 : 86, colors.text),
-      windowBg: mix(colors.panel, light ? 97 : 82, colors.text),
-      assistantText: mix(colors.text, 82, colors.muted),
-      borderStrong: mix(colors.border, 72, colors.text),
-      accentHover: mix(colors.accent, 84, light ? '#000' : '#fff'),
-      accentSoft: mix(colors.accent, 14, 'transparent'),
-      accentBorder: mix(colors.accent, 34, 'transparent'),
-      accentText: '#151411',
-      secondary: light ? '#426d64' : mix(colors.muted, 72, '#7cc7b4'),
-      success: light ? '#3f7650' : '#77a884',
-      successSoft: mix(light ? '#3f7650' : '#77a884', 13, 'transparent'),
-      successBorder: mix(light ? '#3f7650' : '#77a884', 28, 'transparent'),
-      danger: light ? '#a9463d' : '#d87d72',
-      dangerSoft: mix(light ? '#a9463d' : '#d87d72', 13, 'transparent'),
-      info: light ? '#41688f' : '#7f9fc4',
-      ring: colors.accent,
-      ringSoft: mix(colors.accent, 12, 'transparent'),
-    };
-    const style = host.style;
-    style.setProperty('--talos-background', colors.bg);
-    style.setProperty('--talos-code-bg', semantic.codeBg);
-    style.setProperty('--talos-panel', colors.panel);
-    style.setProperty('--talos-panel-soft', semantic.panelSoft);
-    style.setProperty('--talos-card', semantic.card);
-    style.setProperty('--talos-window-bg', semantic.windowBg);
-    style.setProperty('--talos-accent', colors.accent);
-    style.setProperty('--talos-accent-hover', semantic.accentHover);
-    style.setProperty('--talos-accent-soft', semantic.accentSoft);
-    style.setProperty('--talos-accent-border', semantic.accentBorder);
-    style.setProperty('--talos-accent-text', semantic.accentText);
-    style.setProperty('--talos-text', colors.text);
-    style.setProperty('--talos-assistant-text', semantic.assistantText);
-    style.setProperty('--talos-muted', colors.muted);
-    style.setProperty('--talos-border', colors.border);
-    style.setProperty('--talos-border-strong', semantic.borderStrong);
-    style.setProperty('--talos-secondary', semantic.secondary);
-    style.setProperty('--talos-success', semantic.success);
-    style.setProperty('--talos-success-soft', semantic.successSoft);
-    style.setProperty('--talos-success-border', semantic.successBorder);
-    style.setProperty('--talos-danger', semantic.danger);
-    style.setProperty('--talos-danger-soft', semantic.dangerSoft);
-    style.setProperty('--talos-info', semantic.info);
-    style.setProperty('--talos-ring', semantic.ring);
-    style.setProperty('--talos-ring-soft', semantic.ringSoft);
-    style.setProperty('--talos-radius-card', theme.radius);
-    style.setProperty('--talos-radius-control', theme.radius);
-    style.setProperty('--talos-font-ui', theme.font);
-    root.style.setProperty('color-scheme', mode === 'light' ? 'light' : 'dark');
+    if (light) root.setAttribute('data-theme', 'light'); else root.removeAttribute('data-theme');
+    root.style.setProperty('color-scheme', light ? 'light' : 'dark');
+    const colors = { bg: getComputedStyle(root).getPropertyValue('--talos-background').trim() || (light ? '#f5f3ee' : '#1e1f22') };
     const meta = document.querySelector('meta[name="theme-color"]');
     meta?.setAttribute('content', colors.bg);
   }
@@ -13748,8 +13738,8 @@
   // comodità di sola interfaccia di questo mockup (non è dato reale).
   const PANEL_RESIZE_LIMITS = { sessions: [220, 420], inspector: [280, 720] };
   const PANEL_RESIZE_STORAGE_KEY = 'talos-harness-panel-widths';
-  const PANEL_RESIZE_VAR = { sessions: '--sidebar', inspector: '--inspector' };
-  const PANEL_RESIZE_DEFAULT = { sessions: 292, inspector: 340 };
+  const PANEL_RESIZE_VAR = { sessions: '--talos-sidebar-w', inspector: '--talos-inspector-w' }; // ⭐ 05/9, fase 1: i token del mockup, non quelli del vecchio CSS
+  const PANEL_RESIZE_DEFAULT = { sessions: 276, inspector: 340 }; // ⭐ 05/9: le larghezze base del mockup (--talos-sidebar-w: 276px)
 
   function readSavedPanelWidths() {
     try {
@@ -13771,7 +13761,7 @@
 
   function applyPanelWidth(which, px) {
     const [min, configuredMax] = PANEL_RESIZE_LIMITS[which];
-    const sidebarWidth = parseInt(getComputedStyle(HOST()).getPropertyValue('--sidebar'), 10) || PANEL_RESIZE_DEFAULT.sessions;
+    const sidebarWidth = parseInt(getComputedStyle(HOST()).getPropertyValue('--talos-sidebar-w'), 10) || PANEL_RESIZE_DEFAULT.sessions;
     const viewportMax = which === 'inspector' && window.innerWidth > 1040
       ? Math.max(min, window.innerWidth - sidebarWidth - 520)
       : configuredMax;
@@ -13888,6 +13878,47 @@
   setQueueMode(false);
   setRunState(true);
   syncRunComposerState();
+  /*
+   * ⭐⭐⭐ 05/9, fase 1 del piano «il mockup diventa la app» — la REGIA del
+   * mockup portata dentro app.js, tale e quale: i luoghi della sidebar e le
+   * viste della testata (`[data-vaia]`) navigano con `setView`; i pulsanti
+   * `[data-apre-velo]`/`[data-chiudi]` aprono e chiudono i veli del mockup
+   * con `hidden`, portando il fuoco dentro e riportandolo indietro; Esc e il
+   * clic fuori chiudono; i `[aria-expanded][aria-controls]` sono disclosure.
+   * Nessuna logica di prodotto: solo il comportamento che il mockup già ha.
+   */
+  const VISTA_PER_VAIA = { chat: 'chat', vuota: 'vuota', terminale: 'terminal', review: 'diff', capability: 'capability', board: 'dashboard', memoria: 'memoria', attivita: 'attivita', impostazioni: 'settings', doctor: 'doctor', libreria: 'libreria', ricerca: 'ricerca', officina: 'officina', automazioni: 'automations', browser: 'browser' };
+  ROOT().addEventListener('click', (event) => {
+    const vaia = event.target.closest?.('[data-vaia]');
+    if (vaia && VISTA_PER_VAIA[vaia.dataset.vaia]) { setView(VISTA_PER_VAIA[vaia.dataset.vaia]); return; }
+    const apre = event.target.closest?.('[data-apre-velo]');
+    if (apre) { apriVeloMockup(apre.dataset.apreVelo); return; }
+    const chiude = event.target.closest?.('[data-chiudi]');
+    if (chiude) { chiudiVeloMockup(chiude.dataset.chiudi); return; }
+    const velo = event.target.closest?.('.overlay-layer');
+    if (velo && event.target === velo) { chiudiVeloMockup(velo.id); return; }
+    const disclosure = event.target.closest?.('[aria-expanded][aria-controls]');
+    if (disclosure && !disclosure.matches('[role="tab"]')) {
+      const c = $(`#${disclosure.getAttribute('aria-controls')}`);
+      if (c) { const aperto = disclosure.getAttribute('aria-expanded') === 'true'; disclosure.setAttribute('aria-expanded', String(!aperto)); c.hidden = aperto; }
+    }
+  });
+  let ultimoFuocoVelo = null;
+  function apriVeloMockup(id) {
+    const v = $(`#${id}`); if (!v) return;
+    ultimoFuocoVelo = ROOT().activeElement;
+    v.hidden = false;
+    const corpo = v.querySelector('.talos-dialog__body');
+    const scelto = corpo && corpo.querySelector('[role="radio"][aria-checked="true"]');
+    const primo = scelto || (corpo && corpo.querySelector('input, button, select')) || v.querySelector('input, button, select');
+    primo?.focus();
+  }
+  function chiudiVeloMockup(id) {
+    const v = $(`#${id}`); if (!v || v.hidden) return;
+    v.hidden = true;
+    if (ultimoFuocoVelo?.focus) ultimoFuocoVelo.focus();
+  }
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape') $$('.overlay-layer').forEach((v) => chiudiVeloMockup(v.id)); });
   setInspectorTab($('.inspector-tabs button.active'));
   renderReviewFile('composer');
   autoGrowTextarea();

@@ -59,6 +59,8 @@ export async function buildFrontend({
     assetNames: 'assets/[name]-[hash]',
     bundle: true,
     format: 'esm',
+    // I frammenti HTML del monolite (src/legacy/frammenti.html) entrano nel bundle come testo.
+    loader: { '.html': 'text' },
     platform: 'browser',
     target: ['chrome120'],
     charset: 'utf8',
