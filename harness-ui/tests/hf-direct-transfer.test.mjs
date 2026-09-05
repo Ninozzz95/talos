@@ -32,6 +32,10 @@ test('HF-DIRECT-01 scarica, verifica e pubblica ready', async (t) => {
   assert.equal(result.state, 'running');
   for (let i = 0; i < 20 && transfer.status('org-model').state !== 'ready'; i += 1) await new Promise((resolve) => setTimeout(resolve, 5));
   assert.equal(transfer.status('org-model').state, 'ready');
+  // 06/09 B6.10: la coda a schermo vuole file, repository e ora di fine, non l'id interno
+  assert.equal(transfer.status('org-model').file, 'model.gguf');
+  assert.equal(transfer.status('org-model').repo, 'org/model');
+  assert.ok(Number.isFinite(Date.parse(transfer.status('org-model').finishedAt)), 'finishedAt è una data');
   assert.deepEqual(await readFile(join(root, 'org-model', 'model.gguf')), bytes);
   assert.equal((await store.inspect('org-model')).state, 'ready');
 });

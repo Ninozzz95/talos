@@ -600,6 +600,29 @@ allocabile», 12,8 GB allocabili), «Tutti i file» 14 righe, scheda aperta, ric
 vuoto e dettaglio nascosto; 0 errori di pagina. Screenshot `foto/hf-4175-dettaglio.png`.
 Nota: la scheda mostra il front matter YAML grezzo del README (renderer legacy) — riga di pulizia.
 
+### B6.10 — scheda «Download» del Model Lab (06/09 ~07:30): FATTA
+
+`components/download-coda.js`: conteggi per stato (in corso · in pausa · falliti · completati),
+«Mostra solo attivi», una `DownloadRow` per trasferimento nelle tre forme del mockup — in corso
+(barra, percento · ricevuti di totali · velocità · rimanente, Pausa, Annulla → `veloAnnullaDownload`),
+fallito (scheda d'errore col motivo umano, «Ricevuti X. Puoi riprovare dal punto salvato», Riprova,
+Dettagli che apre i fatti grezzi), completato («verifica del file riuscita», «Vedi modello» →
+Installati). Velocità e tempo rimanente si stimano fra due letture successive (`stimaFraLetture`):
+il server non li dà e un numero inventato non si scrive. Fixture con le tre righe del mockup,
+laboratorio + cancello (`CodaDownload`, 3/3 al primo giro), unit `download-coda.test.mjs`.
+Server: `status()` di `hf-direct-transfer.mjs` ora porta `repo`, `file`, `name`, `finishedAt`
+(la coda a schermo diceva l'id interno); test aggiornato, suite 1678/1678.
+⛔ Trovato e curato: il velo «Annulla download» ha `data-lab-dialog-action="annulla"` e il mio
+gestore B6.8 (`[data-lab-dialog-action]` generico) lo avrebbe preso per «elimina modello» — ora
+ascolta solo rinomina/elimina. Ricerca 06/09: AB Download Manager 2026, Vortex download
+management, Continuata docs (stati, riprova per voce, verifica sha256 prima di «pronto»).
+Prove: componenti 99/99, unit 98/98, statico 195/195; dal vivo su 4175 con un download VERO e
+piccolo (Qwen3-0.6B Q8_0, 0,6 GB): riga «in corso» con barra, Pausa → «1 in pausa», Riprendi →
+«1 in corso», Annulla dal velo → «Annullato»; i tre modelli reali dell'owner compaiono come
+«Completato · verifica del file riuscita»; 0 errori di pagina. Screenshot
+`foto/download-4175-incorso.png`. ⛔ NON VERIFICATO dal vivo: la forma «fallito» (serve una
+caduta di rete durante un download: provata solo nel laboratorio e a unità).
+
 - T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
   15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
   statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo
