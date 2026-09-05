@@ -120,6 +120,17 @@ export function montaPonteLegacy(documentObj = document) {
    * Si tolgono qui, non nel mockup, che resta la vetrina con i suoi esempi.
    */
   for (const finta of sessioni.querySelectorAll('.talos-session-item')) finta.remove();
+  /*
+   * 05/9 Fase 2 — il blocco «Fissate» del mockup mostra una riga d'esempio; la app
+   * non ha ancora il pin delle sessioni (vuole un campo `fissata` nell'API, cioè il
+   * contratto sbloccato in Fase 3). Finché non c'è: via la riga finta e blocco
+   * nascosto — uno stato vuoto onesto, non un dato inventato. `data-fissate` è
+   * l'aggancio con cui app.js lo riaccenderà.
+   */
+  const fissate = uno(sidebar, '[data-c="NavGroup"]:has(.talos-eyebrow[data-t="fissate"])');
+  for (const finta of fissate.querySelectorAll('.talos-session-item')) finta.remove();
+  fissate.dataset.fissate = 'vuoto';
+  fissate.hidden = true;
   battezza(uno(sidebar, '.talos-resizer--sidebar'), { classi: ['panel-resize-handle'], dati: { resize: 'sessions' } });
 
   /* 4) Le schermate diventano le «viste» del monolite: `.view-pane[data-view]`. */
