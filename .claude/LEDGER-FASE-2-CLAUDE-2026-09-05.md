@@ -464,6 +464,15 @@ guardato tutto; al contrario `ricerca-vuota` e `fornitore-vuoto` consegnati. Can
 unita: template diff 0, unit 76/76, statico 195/195, componenti 78/78, build ok. Prompt:
 `.claude/PROMPT-ASTRA-2026-09-05-R07-CORNICE-MODEL-LAB.md` (gli passo Toast e connessione).
 
+### R-08 (05/09 ~23:55) — MemoryMeter (98552518): ACCETTATO, unito (fast-forward)
+
+`components/memoria-misura.js`: misure del server (schema `talos.model-lab.capacity/1`) senza
+stime per processo, «Non misurata» dove manca il dato, `meter` con soglie 75/90 e etichetta
+parlante, tre errori distinti (misura · runtime · scarico) con `role=alert`, azioni disabilitate
+finché non hanno senso. Screenshot al contrario consegnati (errore misura/runtime/scarica alle
+tre larghezze). Cancelli sulla lane unita: template diff 0, unit 79/79, statico 195/195,
+componenti 81/81, build ok.
+
 - T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
   15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
   statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo
