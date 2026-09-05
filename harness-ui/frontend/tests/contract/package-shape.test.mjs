@@ -12,7 +12,8 @@ test('il pacchetto frontend ha toolchain e comandi pinned senza cutover implicit
   const pkg = JSON.parse(await readFile(packagePath, 'utf8'));
   assert.equal(pkg.private, true);
   assert.equal(pkg.type, 'module');
-  for (const name of ['build', 'build:lab', 'test:unit', 'test:browser', 'test:lab', 'test', 'verify']) {
+  // 05/9: via test:browser (suite di Opus cancellata); test:componenti e' il cancello dei componenti
+  for (const name of ['build', 'build:lab', 'test:unit', 'test:componenti', 'test:lab', 'test', 'verify']) {
     assert.equal(typeof pkg.scripts?.[name], 'string', `script mancante: ${name}`);
   }
   assert.equal(pkg.scripts.build, 'node scripts/build.mjs');
