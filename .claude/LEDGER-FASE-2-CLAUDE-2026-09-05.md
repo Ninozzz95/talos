@@ -575,6 +575,31 @@ dell'owner (4,6 · 10,8 · 15,2 GB; 32 GB di RAM, 12,9 liberi): lista, dettaglio
 dialogo Elimina aperto e chiuso con Esc, ricerca senza esito → stato vuoto → Azzera → 3 righe;
 0 errori di pagina; screenshot `foto/installati-4175.png`.
 
+### B6.9 — scheda «Hugging Face» del Model Lab (06/09 ~06:15): FATTA
+
+`components/hf-catalogo.js`: righe dei repository (`ListRow` con tipo/licenza, badge «Autore del
+modello» o «Accesso richiesto»), dettaglio `DetailPanel` (nome, autore, licenza, revisione, «Tutti i
+file» → `veloFileModello` riempito con i file veri e sha256 presente/assente, «Scegli il file» come
+radiogroup con una scelta per variante GGUF — i set `-0000N-of-0000M` stanno insieme e un set
+incompleto lo dice — con dimensione e stima in parole, callout per i repository con accesso
+richiesto, riga della stima «X necessari · Y allocabili», «Rimisura su questo PC», «Scarica sul
+computer · X GB» disabilitato se set incompleto/sha assente/accesso richiesto, «Leggi la scheda
+del modello» che apre la scheda in linea), stato vuoto con «Azzera ricerca», «Carica altri
+risultati». Fixture con i due repository e le tre varianti del mockup; laboratorio + cancello
+(`CatalogoHf` su `#schermoModelLab`, 3/3 al primo giro); unit `tests/unit/hf-catalogo.test.mjs`.
+Innesto in `app.js`: `montaHf` rimappa ricerca/autore/ordine/tag/lista/altri sugli id del
+monolite; `renderizzaHfConMockup` disegna lista e dettaglio dal componente e lascia il legacy
+solo se il pannello non è montato; ordina/autore/tag rilanciano la ricerca; download e misura
+usano le API di prima. ⛔ Trovato dal vivo: il dettaglio non elencava i file perché non passavo
+`revision` all'endpoint (elenca solo con la revisione: «fase 2» del server) — curato; e il pulsante
+della scheda si richiudeva nello stesso clic (regia dei disclosure): `stopPropagation`.
+Ricerca 06/09: Hub API (search/author/sort, gated). Prove: componenti 96/96, unit 94/94, statico
+195/195; dal vivo su 4175 con una ricerca VERA («qwen3 8b gguf» → 20 repository), dettaglio con
+12 varianti, misura su questo PC («~4,3 GB di memoria · entra» … «F16 · 15,3 GB · oltre la memoria
+allocabile», 12,8 GB allocabili), «Tutti i file» 14 righe, scheda aperta, ricerca senza esito → stato
+vuoto e dettaglio nascosto; 0 errori di pagina. Screenshot `foto/hf-4175-dettaglio.png`.
+Nota: la scheda mostra il front matter YAML grezzo del README (renderer legacy) — riga di pulizia.
+
 - T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
   15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
   statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo

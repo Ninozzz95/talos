@@ -18,7 +18,9 @@ import { aggiornaBoard, creaRigaBoard, cartellaDaExport } from '../components/bo
 import { creaPilaToast } from '../components/toast.js';
 import { creaSorveglianzaConnessione, aggiornaStatoConnessione } from '../components/connessione.js'; // 05/9 T-15: stato onesto della connessione
 import { aggiornaPannelloNotifiche, apriPannelloNotifiche, nomeCampanella } from '../components/notifiche.js'; // 06/9 T-17: pannello «Aspetta te» del mockup
-import { aggiornaInstallati, montaInstallati, gb } from '../components/modelli-installati.js'; // 06/9 B6.8: scheda «Installati» del Model Lab // 05/9 Fase 2: Toast del mockup (T-16)
+import { aggiornaInstallati, montaInstallati, gb } from '../components/modelli-installati.js'; // 06/9 B6.8: scheda «Installati» del Model Lab
+import { aggiornaHf, gruppiVarianti } from '../components/hf-catalogo.js'; // 06/9 B6.9: scheda «Hugging Face» del Model Lab
+import { montaHf } from '../components/hf-catalogo.js'; // 05/9 Fase 2: Toast del mockup (T-16)
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
@@ -2683,7 +2685,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
 
   function ensureModelLabControls() {
     const hfPanel = $('#modelLabHfPanel'); const installedPanel = $('#modelLabInstalledPanel');
-    if (hfPanel && !hfPanel.querySelector('[data-model-lab-enhanced="hf"]')) {
+    if (hfPanel && !hfPanel.dataset.hfMontato && !hfPanel.querySelector('[data-model-lab-enhanced="hf"]')) {
       const controls = document.createElement('div'); controls.dataset.modelLabEnhanced = 'hf'; controls.className = 'model-lab-enhanced-controls';
       controls.innerHTML = '<label class="setting-control"><span>Ordina</span><select id="modelLabHfSortControl" aria-label="Ordina risultati Hugging Face"><option value="downloads">Download</option><option value="likes">Preferiti</option><option value="created">Più recenti</option><option value="lastModified">Aggiornati</option></select></label><label class="setting-control"><span>Autore</span><input id="modelLabHfAuthorControl" type="search" aria-label="Filtra per autore Hugging Face" placeholder="Organizzazione" /></label><label class="setting-control"><span>Filtri</span><input id="modelLabHfFiltersControl" type="search" aria-label="Filtra modelli Hugging Face" placeholder="q4, text-generation" /></label><button class="secondary-btn compact" id="modelLabHfNextButtonControl" type="button" hidden>Carica altri risultati</button>';
       hfPanel.insertBefore(controls, hfPanel.querySelector('.model-lab-catalog-layout'));
@@ -2838,7 +2840,60 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     renderizzaHfDetailModelLab();
   }
 
+  /** 06/9 B6.9: con il pannello del mockup montato, lista e dettaglio li disegna `components/hf-catalogo.js`. */
+  function renderizzaHfConMockup() {
+    const panel = $('#modelLabHfPanel');
+    if (!panel?.dataset.hfMontato) return false;
+    const detail = state.modelLab.hfDetail;
+    const stima = new Map();
+    if (state.modelLab.hfStima?.inCorso) for (const g of gruppiVarianti(detail?.files)) stima.set(g.chiave, { inCorso: true });
+    else for (const [k, v] of state.modelLab.hfStima?.perVariante || []) stima.set(k, v);
+    aggiornaHf(panel, state.modelLab.hfResults, {
+      selezionato: state.modelLab.hfSelected, detail, stima, scelta: state.modelLab.hfVariante || null,
+      errore: state.modelLab.hfError, caricamento: state.modelLab.hfCaricamento === true, altri: Boolean(state.modelLab.hfCursor),
+      seleziona: (repo) => { void apriDettaglioHf(repo); },
+      azioni: {
+        scegli: (chiave) => { state.modelLab.hfVariante = chiave; renderizzaHfConMockup(); },
+        misura: (gruppi) => { void misuraVariantiHfModelLab(gruppi.map((g) => ({ chiave: g.chiave, bytes: g.bytes }))); },
+        scarica: (g, det) => { void avviaDownloadHf(det, g.file, g.bytes); },
+        tuttiFile: (det) => riempiVeloFileModello(det),
+        scheda: (det, bottone) => mostraSchedaModelloHf(det, bottone),
+      },
+    });
+    return true;
+  }
+  async function apriDettaglioHf(repo) {
+    const item = state.modelLab.hfResults.find((r) => (r.repo || r.id) === repo); if (!item) return;
+    state.modelLab.hfSelected = repo; state.modelLab.hfDetail = null; state.modelLab.hfStima = null; state.modelLab.hfVariante = null;
+    renderizzaHfConMockup();
+    // ⛔ senza `revision` l'endpoint NON elenca i file (fase 2 del dettaglio): il primo giro dal vivo mostrava «Nessun file GGUF» su Qwen3-8B-GGUF
+    try { state.modelLab.hfDetail = await apiGet(`/api/v1/huggingface/repo?repo=${encodeURIComponent(item.repo)}&revision=${encodeURIComponent(item.revision || 'main')}`); }
+    catch (error) { state.modelLab.hfError = error; }
+    renderizzaHfConMockup();
+  }
+  async function avviaDownloadHf(detail, files, bytes) {
+    const id = `${detail.repo.replace(/[^a-z0-9_-]/giu, '-')}-${String(detail.revision || 'main').slice(0, 12)}-${files[0].path.replace(/[^a-z0-9]/giu, '-')}`.slice(0, 120);
+    try {
+      await apiPost('/api/v1/huggingface/download', { id, repo: detail.repo, revision: detail.revision, files: files.map((file) => ({ path: file.path, bytes: file.sizeBytes, sha256: file.sha256 })), bytes, sha256: files[0].sha256, license: detail.license || 'unknown', path: id });
+      toast('Download avviato', `${files[0].path} · ${gb(bytes)}`);
+      setModelLabSection('downloads'); caricaDownloadModelLab();
+    } catch (error) { toast('Download non avviato', error.message); }
+  }
+  function riempiVeloFileModello(detail) {
+    const velo = $('#veloFileModello'); if (!velo) return;
+    const nota = velo.querySelector('.talos-dialog__body .talos-muted'); if (nota) nota.textContent = detail.revision ? `Revisione ${String(detail.revision).slice(0, 12)}` : 'Revisione da verificare prima del download';
+    const lista = velo.querySelector('.talos-list'); if (!lista) return;
+    lista.replaceChildren(...(detail.files || []).map((f) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'talos-list-row'; b.append(iconaSvgAlbero('i-doc'), document.createTextNode(` ${f.path} · ${gb(Number(f.sizeBytes || 0))}${f.sha256 ? '' : ' · sha256 assente'}`)); return b; }));
+    const piede = velo.querySelector('.talos-dialog__footer-note'); if (piede) piede.textContent = `${(detail.files || []).length} file nel repository`;
+  }
+  function mostraSchedaModelloHf(detail, bottone) {
+    const cont = $('#hfScheda'); if (!cont) return;
+    const aperto = !cont.hidden;
+    cont.hidden = aperto; bottone?.setAttribute('aria-expanded', String(!aperto));
+    if (!aperto) cont.replaceChildren(renderizzaModelCardReadme(detail));
+  }
   function renderizzaHfDetailModelLab() {
+    if (renderizzaHfConMockup()) return;
     const mount = $('#modelLabHfDetail'); if (!mount) return; const detail = state.modelLab.hfDetail;
     if (!detail) { mount.replaceChildren(textElement('p', 'model-lab-empty', 'Seleziona un repository per vedere i file GGUF.')); return; }
     const card = document.createElement('article'); card.className = 'hf-repo-card';
@@ -2975,7 +3030,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     card.append(heading, tags, stats, barra, corpo);
     mount.replaceChildren(card);
   }
-  function renderizzaHfRisultatiModelLab() { const mount = $('#modelLabHfResults'); if (!mount) return; if (state.modelLab.hfError) { mount.replaceChildren(textElement('p', 'model-lab-empty', state.modelLab.hfError.message)); return; } if (!state.modelLab.hfResults.length) { mount.replaceChildren(textElement('p', 'model-lab-empty', 'Nessun repository GGUF trovato.')); return; } mount.replaceChildren(...state.modelLab.hfResults.map((item) => { const button = document.createElement('button'); button.type = 'button'; button.className = 'model-lab-list-item'; button.append(textElement('strong', '', item.repo), textElement('small', '', `${item.downloads ?? '—'} download · ${item.gated ? 'gated' : 'pubblico'}`)); button.addEventListener('click', async () => { state.modelLab.hfDetail = null; /* ⛔ la stima appartiene al repository che l'ha prodotta: cambiando modello va via, altrimenti si attribuisce a uno il verdetto di un altro */ state.modelLab.hfStima = null; state.modelLab.hfDetailTab = 'quantizzazioni'; renderizzaHfDetailModelLab(); try { state.modelLab.hfDetail = await apiGet(`/api/v1/huggingface/repo?repo=${encodeURIComponent(item.repo)}&revision=${encodeURIComponent(item.revision || '')}`); } catch (error) { state.modelLab.hfError = error; } renderizzaHfDetailModelLab(); }); return button; })); }
+  function renderizzaHfRisultatiModelLab() { if (renderizzaHfConMockup()) return; const mount = $('#modelLabHfResults'); if (!mount) return; if (state.modelLab.hfError) { mount.replaceChildren(textElement('p', 'model-lab-empty', state.modelLab.hfError.message)); return; } if (!state.modelLab.hfResults.length) { mount.replaceChildren(textElement('p', 'model-lab-empty', 'Nessun repository GGUF trovato.')); return; } mount.replaceChildren(...state.modelLab.hfResults.map((item) => { const button = document.createElement('button'); button.type = 'button'; button.className = 'model-lab-list-item'; button.append(textElement('strong', '', item.repo), textElement('small', '', `${item.downloads ?? '—'} download · ${item.gated ? 'gated' : 'pubblico'}`)); button.addEventListener('click', async () => { state.modelLab.hfDetail = null; /* ⛔ la stima appartiene al repository che l'ha prodotta: cambiando modello va via, altrimenti si attribuisce a uno il verdetto di un altro */ state.modelLab.hfStima = null; state.modelLab.hfDetailTab = 'quantizzazioni'; renderizzaHfDetailModelLab(); try { state.modelLab.hfDetail = await apiGet(`/api/v1/huggingface/repo?repo=${encodeURIComponent(item.repo)}&revision=${encodeURIComponent(item.revision || '')}`); } catch (error) { state.modelLab.hfError = error; } renderizzaHfDetailModelLab(); }); return button; })); }
 
   function aggiungiBloccoStreamModelLab(tipo, titolo, contenuto) {
     const mount = $('#modelLabStream');
@@ -3435,6 +3490,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     const author = $('#modelLabHfAuthorControl')?.value?.trim() || '';
     const filters = ($('#modelLabHfFiltersControl')?.value || '').split(',').map((value) => value.trim()).filter(Boolean).slice(0, 8);
     const status = $('#modelLabHfStatus'); if (status) status.textContent = 'Ricerca in corso...';
+    state.modelLab.hfCaricamento = true; renderizzaHfConMockup();
     try {
       const params = new URLSearchParams({ query: state.modelLab.hfQuery, limit: '20', sort, direction: '-1' });
       if (state.modelLab.hfCursor) params.set('cursor', state.modelLab.hfCursor);
@@ -3445,6 +3501,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       state.modelLab.hfCursor = data.nextCursor || null;
       if (status) status.textContent = `${state.modelLab.hfResults.length} repository osservati`;
     } catch (error) { state.modelLab.hfError = error; if (!append) state.modelLab.hfResults = []; if (status) status.textContent = 'Ricerca non disponibile'; }
+    state.modelLab.hfCaricamento = false;
     const next = $('#modelLabHfNextButtonControl'); if (next) next.hidden = !state.modelLab.hfCursor;
     renderizzaHfRisultatiModelLab();
   }
@@ -3455,6 +3512,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     montaCorniceModelLab($('#modelLabCardSettings') || $('#modelLabCard'));
     montaCatalogoModelli($('#modelLabCatalogPanel'), $('#panel-catalogo'));
     montaInstallati($('#modelLabInstalledPanel'), $('#panel-installati')); // 06/9 B6.8
+    montaHf($('#modelLabHfPanel'), $('#panel-hf')); // 06/9 B6.9
     montaMisuraMemoria($('#modelLabOverviewPanel'), $('#panel-runtime [data-c=MemoryMeter]'));
     montaPannelloRuntime($('#modelLabRuntimeGate'));
     montaProviderPanel($('#modelLabProvidersPanel'));
@@ -3476,6 +3534,9 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     $('#modelLabHfSearchButton')?.addEventListener('click', () => cercaHuggingFaceModelLab());
     $('#modelLabHfSearch')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') cercaHuggingFaceModelLab(); });
     $('#modelLabHfNextButtonControl')?.addEventListener('click', () => cercaHuggingFaceModelLab({ append: true }));
+    $('#modelLabHfSortControl')?.addEventListener('change', () => { if (state.modelLab.hfQuery) cercaHuggingFaceModelLab(); }); // 06/9 B6.9
+    for (const id of ['modelLabHfAuthorControl', 'modelLabHfFiltersControl']) $(`#${id}`)?.addEventListener('keydown', (event) => { if (event.key === 'Enter') cercaHuggingFaceModelLab(); });
+    $('#modelLabHfPanel [data-clear="hf"]')?.addEventListener('click', () => { for (const id of ['modelLabHfSearch', 'modelLabHfAuthorControl', 'modelLabHfFiltersControl']) { const c = $(`#${id}`); if (c) c.value = ''; } state.modelLab.hfResults = []; state.modelLab.hfError = null; state.modelLab.hfCursor = null; renderizzaHfConMockup(); });
     $('#modelLabInstalledStateFilter')?.addEventListener('change', (event) => { state.modelLab.installedStateFilter = event.target.value; renderizzaModelliLocaliModelLab(); }); // 06/9 B6.8
     $$('[data-lab-dialog-action]').forEach((b) => b.addEventListener('click', () => { void confermaDialogoModelloLocale(b.dataset.labDialogAction); })); // 06/9 B6.8: i dialoghi del mockup
     $('#modelLabInstalledPanel [data-clear="installati"]')?.addEventListener('click', () => { state.modelLab.installedSearch = ''; state.modelLab.installedStateFilter = 'tutti'; const c = $('#modelLabInstalledSearchControl'); if (c) c.value = ''; const f = $('#modelLabInstalledStateFilter'); if (f) f.value = 'tutti'; renderizzaModelliLocaliModelLab(); });
