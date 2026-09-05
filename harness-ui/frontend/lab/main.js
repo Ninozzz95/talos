@@ -1,3 +1,5 @@
+import { aggiornaPaginaOfficina } from '../src/components/officina.js';
+import { STRUMENTI_FORGIATI } from './fixtures/officina.js';
 import { aggiornaPaginaRicerca } from '../src/components/ricerca.js';
 import { RICERCHE } from './fixtures/ricerca.js';
 import { aggiornaPaginaLibreria } from '../src/components/libreria.js';
@@ -54,6 +56,7 @@ document.documentElement.setAttribute('data-schermo', 'chat');
 const componente = new URLSearchParams(location.search).get('componente') || '';
 
 const LABORATORI = {
+  ForgeList() { aggiornaPaginaOfficina(document.querySelector('#schermoOfficina'), STRUMENTI_FORGIATI); },
   ReportRow() { aggiornaPaginaRicerca(document.querySelector('#schermoRicerca'), RICERCHE); },
   LibraryRow() { aggiornaPaginaLibreria(document.querySelector('#schermoLibreria'), LIBRERIA); },
   TaskRow() { aggiornaPaginaAttivita(document.querySelector('#schermoAttivita'), ATTIVITA); },

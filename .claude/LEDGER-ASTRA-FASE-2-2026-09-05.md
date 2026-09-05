@@ -987,3 +987,103 @@ Cosa fai tu dopo · Officina attrezzi, poi Automazioni per completare B5, quindi
 Cosa rimane · Chiusura owner, limite CSS condiviso da allineare con Claude, gap Fase 3 e parti B residue. Nessun push.
 
 Chiusura dei cancelli B5.4: npm run test:lab **195/195** (2,1 min); completo, senza errori. Confronto finale e git diff --check eseguiti. Il solo rosso resta il contratto CSS preesistente, 341/342 nel verify.
+
+
+## B5.5 — Officina / ForgeList — piano prima degli edit, 05/09/2026
+Sottosistema TALOS UI. Base 316484d; merge lane/harness-desktop eseguito prima degli edit, già aggiornato. Solo pagina Officina, caricaPannelloForge, rigaToolForgiato e un dispatch pagina; nessuna modifica a backend, ponte, frammenti, Chat/Review/sidebar/testata Chat. Mappa nomi umani centrale riusata, non duplicata.
+
+Ricerca fresca, finestra 06/08–05/09/2026. Release riaperte: Hermes v0.21.0 v2026.8.31 29112be (31/08) https://github.com/NousResearch/hermes-agent/releases/tag/v2026.8.31; Claude Code v2.1.261 d7dbd9a (04/09) https://github.com/anthropics/claude-code/releases/tag/v2.1.261; Codex rust-v0.153.4 3d2ee51 (04/09) https://github.com/openai/codex/releases/tag/rust-v0.153.4. Le pagine seguenti sono documenti correnti riaperti oggi, data propria non verificabile; non spacciati per pubblicati nell'ultimo mese.
+
+| Fonte | Forza / limite documentato | Decisione / +1 misurabile |
+|---|---|---|
+| Hermes Plugins https://hermes-agent.nousresearch.com/docs/user-guide/features/plugins | Abilitazione esplicita e deny prevalente, pin immutabili; codice Python in-process: capability consent non è isolamento. La stessa pagina contiene un esempio introduttivo di caricamento immediato, chiarito dalla sezione opt-in. | Adattare distinzione installato/abilitato e capacità. +1 obiettivo: elenco leggibile e azione reversibile con esito persistito visibile. Non chiamare sandbox né audit la semplice abilitazione. Nessun giudizio di superiorità esecutiva non misurato. |
+| Claude Plugins https://code.claude.com/docs/en/discover-plugins | Ricerca/dettaglio/scope e enable/disable senza disinstallare; cambiamenti non già attivati richiedono reload, con possibile invalidazione cache. | Adattare filtro e dettagli; +1 obiettivo: stato dopo conferma server, persistito e riletto dopo reload della pagina. Non si promette invalidazione cache o attivazione immediata in un giro modello già in corso. |
+| Codex MCP https://learn.chatgpt.com/docs/extend/mcp | Enable separato dalla configurazione, deny dopo allow, policy per attrezzo e timeout espliciti; serve configurazione corretta, le policy MCP non dimostrano isolamento del processo. | Adattare separazione stato/capacità/azione; +1 obiettivo: capacità in linguaggio umano prima di abilitare e errore d'azione visibile senza successo ottimistico. Contratto TALOS limitato a enable globale booleano: nessuna finta policy granulare. |
+| WAI Listbox https://www.w3.org/WAI/ARIA/apg/patterns/listbox/ | Selezione singola e navigazione tastiera; il contenuto delle opzioni non ospita controlli interattivi. | Adottare per selezione/dettaglio; Abilita/Disabilita nel pannello separato. Frecce/Home/End cambiano solo selezione, mai permessi. |
+
+Ispezione locale: schermoOfficina, caricaPannelloForge/rigaToolForgiato, session-registry.elencaToolForgiati/abilitaToolForgiato, tool-forge-store, forge-contract, createHttpApp e test esistenti. GET reale 4177 confermato strumenti:[], errore:null. Schema sette campi: id, titolo, descrizione, capacita[], rischio, abilitato booleano, installatoAlle. GLOBALE, tutti i progetti. Rischi R1/R2/R3 dichiarati dal contratto; otto capacità con azioni note: tasks.list/create/setStatus, notes.list/create/update, memory.search/create. Non sono moduli JS con filesystem: sono flow validati con capacità limitate. Il mockup attuale mostra codice JS, giro/chiamate/token/ricevuta inventati rispetto all'HTTP. Tutti questi dati non disponibili vengono rimossi o hidden data-richiede=fase3; CodeBlock resta predisposto e nascosto, non sostituito con codice simulato. Originale non espone lettura codice o modifica; preserva invece la mutazione reale POST /api/v1/sessions/:id/tool-forge/:toolId/enable {abilitato:boolean}.
+Originale e mockup 4179/4177 visti e screenshot aperti a 1280x720 prima dell'edit. Stato e azione distinti. Descrizione/capacità originali restano visibili per ogni riga; dettaglio aggiunge installazione e rischio riportato, non presunto audit. Titoli/descrizioni sempre a capo, anche a 1024. Nessuna nuova conferma richiesta per l'azione già espressa dal click.
+
+File esatti:
+- .claude/LEDGER-ASTRA-FASE-2-2026-09-05.md
+- .claude/CONSEGNA-ASTRA-FASE-2-2026-09-05.md
+- .claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html
+- harness-ui/frontend/src/components/officina.js
+- harness-ui/frontend/lab/fixtures/officina.js
+- harness-ui/frontend/lab/main.js
+- harness-ui/frontend/tests/unit/officina.test.mjs
+- harness-ui/frontend/tests/parity/componenti.spec.mjs
+- harness-ui/frontend/tests/parity/officina-vivo.spec.mjs
+- harness-ui/frontend/playwright.astra.config.mjs
+- harness-ui/frontend/src/legacy/app.js
+- harness-ui/frontend/index.template.html
+- harness-ui/frontend/src/styles/index.css
+- harness-ui/frontend/tests/parity/forge-backend-fixture.mjs
+Immagini esatte:
+- .claude/immagini/astra-fase2/ForgeList/mockup-1440.png
+- .claude/immagini/astra-fase2/ForgeList/componente-1440.png
+- .claude/immagini/astra-fase2/ForgeList/app-vuota-1440.png
+- .claude/immagini/astra-fase2/ForgeList/originale-vuota-1440.png
+- .claude/immagini/astra-fase2/ForgeList/fixture-elenco-1440.png
+- .claude/immagini/astra-fase2/ForgeList/fixture-dettaglio-1440.png
+- .claude/immagini/astra-fase2/ForgeList/originale-fixture-1440.png
+- .claude/immagini/astra-fase2/ForgeList/app-errore-1440.png
+- .claude/immagini/astra-fase2/ForgeList/errore-abilitazione-1440.png
+- .claude/immagini/astra-fase2/ForgeList/mockup-1280.png
+- .claude/immagini/astra-fase2/ForgeList/componente-1280.png
+- .claude/immagini/astra-fase2/ForgeList/app-vuota-1280.png
+- .claude/immagini/astra-fase2/ForgeList/originale-vuota-1280.png
+- .claude/immagini/astra-fase2/ForgeList/fixture-elenco-1280.png
+- .claude/immagini/astra-fase2/ForgeList/fixture-dettaglio-1280.png
+- .claude/immagini/astra-fase2/ForgeList/originale-fixture-1280.png
+- .claude/immagini/astra-fase2/ForgeList/app-errore-1280.png
+- .claude/immagini/astra-fase2/ForgeList/errore-abilitazione-1280.png
+- .claude/immagini/astra-fase2/ForgeList/mockup-1024.png
+- .claude/immagini/astra-fase2/ForgeList/componente-1024.png
+- .claude/immagini/astra-fase2/ForgeList/app-vuota-1024.png
+- .claude/immagini/astra-fase2/ForgeList/originale-vuota-1024.png
+- .claude/immagini/astra-fase2/ForgeList/fixture-elenco-1024.png
+- .claude/immagini/astra-fase2/ForgeList/fixture-dettaglio-1024.png
+- .claude/immagini/astra-fase2/ForgeList/originale-fixture-1024.png
+- .claude/immagini/astra-fase2/ForgeList/app-errore-1024.png
+- .claude/immagini/astra-fase2/ForgeList/errore-abilitazione-1024.png
+- .claude/immagini/astra-fase2/ForgeList/prima-mockup-1280.png
+- .claude/immagini/astra-fase2/ForgeList/prima-originale-1280.png
+Nessuna cancellazione. Simboli pubblici: statoToolForgiato, capacitaToolForgiato, testiToolForgiato, filtraOfficina, creaForgeRow, aggiornaPaginaOfficina; fixture STRUMENTI_FORGIATI e ADESSO. Compatibilità: caricaPannelloForge({pagina=false}), rigaToolForgiato, forgeListMount e data-vaia=officina. Caricamento/mutazione catturano sessione+generazione+mount; nessun successo prima della risposta. Stato malformato non trattato come false. Il pulsante disponibile mantiene lo stato attuale su errore, permette riprova; richieste duplicate bloccate durante salvataggio. Ricaricamento dopo successo legge dal server. Nel foglio vecchio si mantiene bottone per riga fuori dall'opzione selezionabile; il componente creaForgeRow ha modalità pagina/foglio senza perdere azione.
+RED unitario: modulo mancante; FORGE-STATO, FORGE-CAPACITA, FORGE-METADATI, FORGE-FILTRO. Lab parità prima dell'innesto, tre viewport e immagini aperte. Poi RED live pagina vuota finché il monolite non è collegato. GREEN live: vuoto reale 4177/reload + originale; fixture su tre voci vere nello schema, selezione tastiera/ricerca/capacità, enable e disable REALI su store isolato riletto e persistito; 503/errore POST/payload malformato/risposta obsoleta.
+Il test forge-backend-fixture.mjs usa createHttpApp + createSessionRegistry + tool-forge-store REALI, sessione di prova ripristinata e manifesti validati in una directory temporanea sotto tmpdir. Porta 4178 soltanto durante i test live, mai insieme al laboratorio di parità. Le sole richieste /tool-forge delle pagine di test vengono inoltrate al laboratorio via route.fetch, con lo stesso id osservato; codice modello mai eseguito. nessun tool/installazione/dato dell'owner modificato. Chiude server e verifica percorso assoluto dentro la cartella temporanea prima della pulizia. Sessione e manifesti sono fixture dichiarate, non prove di generazione da un modello.
+Regressioni: unitari frontend, suite componenti, test:lab 195, verify-build, diff --check; npm run verify con unico errore CSS condiviso da segnalare, non aggirare. Contratti backend non modificati. Rollback solo commit Officina, nessuna migrazione. Gate chat naturale su runtime owner resta separato e non eseguito in questo ambiente.
+Riusa ForgeScreen, Topbar della pagina, Page, Toolbar, FilterChips, ForgeList, DetailPanel, CodeBlock, Badge/Button/sprite. Blocchi nuovi 0, token nuovi 0, icone nuove 0. CSS strettamente nel mockup per testi lunghi e errore locale; dopo rigenerare template e CSS, mai editarli a mano.
+
+§3 4–6: RED modulo mancante; unitari Officina 4/4; parità ForgeList 3/3 e sei PNG aperti. A 1024 il pannello dettagli passa sotto la lista, come il CSS canonico; la pagina scorre. Precisazione controller prima dell’innesto: salvataggioId identifica l’attrezzo della richiesta; selezionare un altro non deve mostrarlo falsamente «in salvataggio». Test OFFICINA-RECUPERO verifica anche questo e un solo POST mentre occupato.
+
+§3 passo 7, 05/09/2026: RED live osservato OFFICINA-REALE 1440: attesi 0 attrezzi/0 abilitati, ricevuti i 3 esempi/1 abilitato del mockup. Merge upstream ancora aggiornato. Riaperti prima dell'innesto Hermes Plugins, Claude discover-plugins, Codex MCP (URL e pin sopra, finestra invariata). Adattamento: controller unico di mutazione in volo condiviso fra pagina e foglio, sessione/id catturati; selezione mai muta capacità; risposta POST confermata e successivo GET, errore mantiene dati precedenti. I controller ancora visibili ricevono esito anche se si esce e rientra durante la richiesta. Nessuna duplicazione di rotta o gestore del ponte. Il limite upstream installazione/attivazione resta distinto dall'esecuzione; +1 verificabile con store isolato reale e reload.
+
+Regressioni permanenti RED osservate, 05/09: OFFICINA-SELEZIONE-DOPO-SALVATAGGIO (in OFFICINA-PERSISTENZA) perdeva la voce al GET di ricaricamento e mostrava lo stato della prima; OFFICINA-SALVATAGGIO-ID (in OFFICINA-RECUPERO) mostrava Salvataggio anche sull'altra voce selezionata. Correzione prevista: conservare selezione durante caricamento; etichetta di salvataggio solo sull'id interessato, disabilitazione globale per impedire doppio POST. Riaperti Hermes opt-in, Claude reload, Codex enabled e WAI Listbox https://www.w3.org/WAI/ARIA/apg/patterns/listbox/: preservare selezione distinta da focus/azione, nessuna attivazione implicita. Pulizia del test dopo RED attende i route handler in volo (Playwright Page.unrouteAll behavior wait, https://playwright.dev/docs/api/class-page#page-unroute-all, docs stabili riverificate oggi); errore secondario route already handled non è errore prodotto. Rafforzare prova titolo selezionato dopo entrambe le mutazioni.
+
+Verifica aggiuntiva mirata del solo controller introdotto: estendere OFFICINA-RECUPERO con uscita a Board e rientro durante POST sospeso; l'azione resta disabilitata e il nuovo pannello riceve il fallimento, nessun doppio POST. Fonti competitor riaperte oggi nelle sezioni disabled/enable/allowlist (stessi URL/pin); decisione invariata: stato persistito e azione distinta, non un nuovo protocollo. Nessun cambio prodotto in questo passo.
+
+
+## B5.5 Officina / ForgeList — consegna 05/09/2026
+Pagina collegata al GET globale /tool-forge. Titoli e descrizioni completi, capacità in italiano, stato distinto dall'azione; rischio e data installazione riportati dal backend. Abilita/Disabilita usa il POST esistente e rilegge il risultato. Una richiesta alla volta, sessione catturata; cambi di pagina e risposte obsolete gestiti. Nessun codice JS, costo, esecuzione o ricevuta inventati.
+
+| Aspetto | Originale osservato | Proposta / beneficio verificato | Verdetto e limiti |
+|---|---|---|---|
+| Copertura | Titolo, descrizione, capacità tecniche, stato, Abilita/Disabilita nel foglio lungo | Stessi dati/azioni; capacità in italiano, data completa e rischio dal contratto; stato ignoto non concede azioni | Parità dei comportamenti esposti; nessuna nuova capacità backend dichiarata |
+| Ricerca / passi | Scroll nel Capability hub, azione diretta per riga | Accesso Altro → Officina; filtro per stato, ricerca anche per identificatore tecnico; selezione e comando nel dettaglio | Per una voce non selezionata serve selezione + azione. Il foglio conserva l'azione diretta per riga; non dichiarato guadagno di click per ogni uso |
+| Forma / densità | Testi piccoli nella modale originale, sezioni estranee attorno | Stesso mockup, descrizioni e titoli senza tagli, capacità sempre visibili | 1440/1280 dettaglio a lato; 1024 sotto e pagina scorre. Azione raggiunta e provata anche sotto la piega |
+| Tastiera / semantica | Pulsanti di azione nativi | Tabs e listbox, frecce/Home/End; selezione non invia richieste; azione separata dalle opzioni | Verificato, nessuna attestazione completa WCAG/screen reader |
+| Stato / recupero | Fallimento con toast; riga ricaricata dopo successo | Errore di lista distinto da vuoto, Aggiorna; errore di salvataggio nomina la voce e mantiene stato; riprova reale | 503, payload [null], POST fallito, cambio selezione, uscita/rientro in volo, risposta obsoleta provati |
+| Persistenza / sicurezza | Enable booleano globale nello store | Stesso endpoint: nuovo stato solo dopo POST+GET, poi reload; nessun doppio POST mentre occupato | Prova reale HTTP → registry → store temporaneo. Fixture dichiarate, nessun flow/modello eseguito; dati owner invariati |
+| Prestazioni / limiti | Nessuna API definizione né storico | Stesso GET, ricerca locale; CodeBlock nascosto fase3, limite della definizione visibile | Non misurata latenza/superiorità esecutiva; errori filesystem nascosti dallo store restano gap backend |
+
+Regressioni permanenti corrette con RED→GREEN: OFFICINA-SELEZIONE-DOPO-SALVATAGGIO e OFFICINA-SALVATAGGIO-ID, coperte rispettivamente da OFFICINA-PERSISTENZA e OFFICINA-RECUPERO. Live 9/9, ulteriore recupero con navigazione in volo 3/3; unitari specifici 4/4; suite componenti completa 42/42; build deterministica 30 file, diff --check verde. Verify: **345/346**, unico rosso preesistente PHASE3-TOKEN-CONTRACT-01 del CSS condiviso (stesso di B3, non aggirato). Log C:/Users/Antonino/AppData/Local/Temp/astra-forge-verify.log.
+
+Visivo: 27 PNG finali a 1440/1280/1024 e due iniziali in .claude/immagini/astra-fase2/ForgeList/, tutti aperti. Mockup/componente identici in dark; app/originale confrontate in light con vuoto reale e stessi tre record nello store isolato. Ulteriore ispezione manuale in browser integrato, pagina dark reale 4177. Le tre voci popolate sono fixture validate, non attrezzi creati da un modello owner. Conteggio sidebar zero nella prova popolata: lista inoltrata al server isolato, contatore separato resta quello del server 4177.
+Blocchi riusati ForgeScreen, Topbar di pagina, Page, Toolbar, FilterChips, ForgeList, DetailPanel, CodeBlock nascosto; blocchi/token/simboli nuovi **0/0/0**. Due regole CSS per testi lunghi nel mockup; template/CSS rigenerati. Backend, public, ponte, frammenti e superfici Claude non modificati.
+
+Cosa deve fare l'owner · Provare Altro → Officina attrezzi su http://127.0.0.1:4177/; l'ambiente locale ha zero attrezzi, i casi popolati sono negli screenshot.
+Cosa fai tu dopo · Automazioni per chiudere B5, poi B4 → B6 → B2 → B7 → B1 → B8.
+Cosa rimane · Gate di chat naturale con runtime owner; limite CSS condiviso e richieste Fase 3; OAuth e piano computer-use dopo le schermate. Nessun push.
+
+Chiusura B5.5: test:lab 195/195. La suite componenti 42/42 è partita per omissione della variabile sulla porta di default 4176; processo terminato, controllo mirato ripetuto esplicitamente su 4178: ForgeList 3/3. Nessun uso della 4174. Porte dei due server di confronto sempre 4177/4179.

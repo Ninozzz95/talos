@@ -727,3 +727,6 @@ button{background:none; border:0; cursor:pointer; padding:0}
 [data-c="LibraryRow"][data-aperta="true"] .talos-list-row__title,[data-c="LibraryRow"][data-aperta="true"] .talos-list-row__sub{white-space:pre-wrap;overflow-wrap:anywhere}
 /* 05/9 Fase 2: ReportRow, titolo sempre intero; data completa su richiesta. */
 [data-c="ReportRow"] .talos-list-row__title,[data-c="ReportRow"][data-aperta="true"] .talos-list-row__sub{white-space:pre-wrap;overflow-wrap:anywhere}
+/* 05/9 Fase 2: Officina, dati completi anche nelle righe strette. */
+[data-forge-id] .talos-list-row__title,[data-forge-id] .talos-list-row__sub{white-space:pre-wrap;overflow-wrap:anywhere}
+#schermoOfficina .talos-detail h3,#schermoOfficina .talos-detail__desc{overflow-wrap:anywhere}

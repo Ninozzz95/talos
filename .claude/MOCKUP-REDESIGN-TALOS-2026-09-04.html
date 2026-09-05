@@ -694,6 +694,9 @@ button{background:none; border:0; cursor:pointer; padding:0}
 [data-c="LibraryRow"][data-aperta="true"] .talos-list-row__title,[data-c="LibraryRow"][data-aperta="true"] .talos-list-row__sub{white-space:pre-wrap;overflow-wrap:anywhere}
 /* 05/9 Fase 2: ReportRow, titolo sempre intero; data completa su richiesta. */
 [data-c="ReportRow"] .talos-list-row__title,[data-c="ReportRow"][data-aperta="true"] .talos-list-row__sub{white-space:pre-wrap;overflow-wrap:anywhere}
+/* 05/9 Fase 2: Officina, dati completi anche nelle righe strette. */
+[data-forge-id] .talos-list-row__title,[data-forge-id] .talos-list-row__sub{white-space:pre-wrap;overflow-wrap:anywhere}
+#schermoOfficina .talos-detail h3,#schermoOfficina .talos-detail__desc{overflow-wrap:anywhere}
 </style>
 
 <!-- ===================== REGIA DEL MOCKUP (non è prodotto) ===================== -->
@@ -1455,44 +1458,28 @@ Una segnalazione di stallo non termina il processo.</pre>
 
     <!-- ---------- OFFICINA ATTREZZI (C27) ---------- -->
     <section class="talos-screen" id="schermoOfficina" data-c="ForgeScreen" hidden>
-      <div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>Officina attrezzi</h1></div><span class="talos-topbar__path">2 attrezzi forgiati dal modello</span></div>
+      <div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>Officina attrezzi</h1></div><span class="talos-topbar__path">3 attrezzi · 1 abilitato</span></div>
       <div class="talos-page" data-c="Page">
-        <div class="talos-page__head"><span class="talos-eyebrow">Officina</span><h2>Attrezzi che il modello si è scritto</h2><p>Girano sulla tua macchina: il codice si legge, e si spegne in un gesto. Sola lettura — per cambiarli si chiede al modello, così la ricevuta resta.</p></div>
-        <div class="talos-split">
-          <div class="talos-card talos-list" data-c="ForgeList" role="listbox" aria-label="Attrezzi forgiati">
-            <button class="talos-list-row" role="option" aria-selected="true"><span class="talos-list-row__icon"><svg class="i"><use href="#i-code"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">conta_righe_per_estensione</span><span class="talos-list-row__sub">creato al giro 12 della sessione «Store sessioni» · usato 4 volte</span></span><span class="talos-list-row__aside"><span class="talos-badge talos-badge--success talos-badge--sm">Attivo</span></span></button>
-            <button class="talos-list-row" role="option" aria-selected="false"><span class="talos-list-row__icon"><svg class="i"><use href="#i-code"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">estrai_blocchi_css</span><span class="talos-list-row__sub">creato al giro 3 di questa sessione · usato 1 volta</span></span><span class="talos-list-row__aside"><span class="talos-badge talos-badge--sm">Spento</span></span></button>
+        <div class="talos-page__head"><span class="talos-eyebrow">Officina</span><h2>Attrezzi creati dal modello</h2><p>Controlla cosa possono fare prima di abilitarli. La scelta vale in tutte le conversazioni, anche di altri progetti.</p><p data-forge-esito role="status">3 attrezzi · 1 abilitato</p><p data-forge-errore-azione role="alert" hidden></p></div>
+        <div class="talos-toolbar" data-c="Toolbar"><div class="talos-field talos-field--sm"><svg class="i talos-field__icon" aria-hidden="true"><use href="#i-search"/></svg><input type="search" class="talos-field__input" data-forge-query placeholder="Cerca gli attrezzi…" aria-label="Cerca per nome, descrizione o capacità"></div><div class="talos-tabs talos-tabs--pills" data-c="FilterChips"><div class="talos-tabs__list" role="tablist" aria-label="Stato degli attrezzi"><button type="button" class="talos-tabs__tab" data-forge-stato="tutti" role="tab" aria-selected="true" aria-controls="officinaRisultati" tabindex="0">Tutti</button><button type="button" class="talos-tabs__tab" data-forge-stato="abilitati" role="tab" aria-selected="false" aria-controls="officinaRisultati" tabindex="-1">Abilitati</button><button type="button" class="talos-tabs__tab" data-forge-stato="disabilitati" role="tab" aria-selected="false" aria-controls="officinaRisultati" tabindex="-1">Disabilitati</button></div></div><span class="talos-grow"></span><button type="button" class="talos-button talos-button--secondary talos-button--sm" data-forge-refresh>Aggiorna</button></div>
+        <div class="talos-split" id="officinaRisultati" role="tabpanel" aria-label="Attrezzi filtrati">
+          <div class="talos-card talos-list" data-c="ForgeList" data-forge-list role="listbox" aria-label="Attrezzi creati dal modello">
+            <button type="button" class="talos-list-row" data-forge-id="riepilogo-attivita" role="option" aria-selected="true" aria-controls="officinaDettaglio" tabindex="0"><span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#i-code"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Riepilogo delle attività</span><span class="talos-list-row__sub">Legge le attività salvate e restituisce quelle ancora da completare.</span><span class="talos-list-row__sub">elenco delle attività</span></span><span class="talos-list-row__aside"><span class="talos-badge talos-badge--success talos-badge--sm">Abilitato</span></span></button>
+            <button type="button" class="talos-list-row" data-forge-id="annota-promemoria" role="option" aria-selected="false" aria-controls="officinaDettaglio" tabindex="-1"><span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#i-code"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Annota un promemoria</span><span class="talos-list-row__sub">Crea una nota con il testo richiesto e la rende disponibile nelle altre conversazioni.</span><span class="talos-list-row__sub">scrittura di una nota</span></span><span class="talos-list-row__aside"><span class="talos-badge talos-badge--sm">Disabilitato</span></span></button>
+            <button type="button" class="talos-list-row" data-forge-id="memorizza-preferenze" role="option" aria-selected="false" aria-controls="officinaDettaglio" tabindex="-1"><span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#i-code"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Memorizza le preferenze condivise tra le conversazioni e i progetti</span><span class="talos-list-row__sub">Salva una preferenza esplicita nella memoria globale. Le conversazioni successive potranno leggerla.</span><span class="talos-list-row__sub">scrittura in memoria</span></span><span class="talos-list-row__aside"><span class="talos-badge talos-badge--sm">Disabilitato</span></span></button>
           </div>
-          <aside class="talos-card talos-detail" data-c="DetailPanel">
-            <h3>conta_righe_per_estensione</h3>
-            <p class="talos-detail__desc">Conta le righe dei file del workspace raggruppandole per estensione. Solo lettura.</p>
-            <div class="talos-kv"><span class="talos-kv__k">Costo dello schema</span><span class="talos-kv__v talos-measure--estimate">96 token</span></div>
-            <div class="talos-kv"><span class="talos-kv__k">Permesso</span><span class="talos-badge talos-badge--sm">Come la sessione</span></div>
-            <div class="talos-kv"><span class="talos-kv__k">Ultima chiamata</span><span class="talos-kv__v">17:41 · 0,4 s</span></div>
-            <button class="talos-button talos-button--secondary talos-button--block talos-forge__off"><svg class="i"><use href="#i-stop"/></svg>Disabilita questo attrezzo</button>
-            <div class="talos-where">Il codice vive in <code>.harness-ui-tools/conta_righe_per_estensione.mjs</code></div>
+          <aside class="talos-card talos-detail" data-c="DetailPanel" id="officinaDettaglio" data-forge-dettaglio aria-label="Dettagli dell'attrezzo">
+            <h3>Riepilogo delle attività</h3><p class="talos-detail__desc" data-forge-descrizione>Legge le attività salvate e restituisce quelle ancora da completare.</p>
+            <div class="talos-kv"><span class="talos-kv__k">Stato</span><span class="talos-badge talos-badge--success talos-badge--sm" data-forge-stato-attuale>Abilitato</span></div>
+            <p class="talos-eyebrow">Può usare</p><p class="talos-detail__desc" data-forge-capacita>elenco delle attività</p>
+            <div class="talos-kv"><span class="talos-kv__k">Installato</span><span class="talos-kv__v" data-forge-installato>04/09/2026, 18:00:00</span></div>
+            <div class="talos-kv"><span class="talos-kv__k">Rischio dichiarato</span><span class="talos-kv__v" data-forge-rischio>R1</span></div>
+            <button type="button" class="talos-button talos-button--secondary talos-button--block talos-forge__off" data-forge-abilita aria-label="Disabilita Riepilogo delle attività">Disabilita questo attrezzo</button>
+            <div class="talos-where">L'abilitazione resta salvata. Non avvia l'attrezzo.</div>
           </aside>
         </div>
-        <div class="talos-card talos-codeblock" data-c="CodeBlock">
-          <div class="talos-codeblock__head"><span class="talos-mono talos-measure">.harness-ui-tools/conta_righe_per_estensione.mjs</span><span class="talos-badge talos-badge--sm">sola lettura</span><span class="talos-grow"></span><span class="talos-badge talos-badge--success talos-badge--sm">Ricevuta 7c31…b4a0</span></div>
-          <pre class="talos-codeblock__body"><span class="dim">// Forgiato dal modello al giro 12, il 04/09. Nessuna scrittura, nessuna rete.</span>
-<span class="k">import</span> { readdirSync, readFileSync, statSync } <span class="k">from</span> <span class="s">'node:fs'</span>;
-<span class="k">import</span> { join, extname } <span class="k">from</span> <span class="s">'node:path'</span>;
-
-<span class="k">export function</span> <span class="fn">esegui</span>({ cartella, salta = [<span class="s">'node_modules'</span>, <span class="s">'.git'</span>] }) {
-  <span class="k">const</span> conta = {};
-  (<span class="k">function</span> <span class="fn">scendi</span>(dir) {
-    <span class="k">for</span> (<span class="k">const</span> nome <span class="k">of</span> readdirSync(dir)) {
-      <span class="k">if</span> (salta.includes(nome)) <span class="k">continue</span>;
-      <span class="k">const</span> p = join(dir, nome);
-      <span class="k">if</span> (statSync(p).isDirectory()) { scendi(p); <span class="k">continue</span>; }
-      <span class="k">const</span> est = extname(nome) || <span class="s">'(senza estensione)'</span>;
-      conta[est] = (conta[est] ?? <span class="n">0</span>) + readFileSync(p, <span class="s">'utf8'</span>).split(<span class="s">'\n'</span>).length;
-    }
-  })(cartella);
-  <span class="k">return</span> conta;
-}</pre>
-        </div>
+        <div class="talos-card talos-codeblock" data-c="CodeBlock" hidden data-richiede="fase3"><div class="talos-codeblock__head"><span class="talos-mono talos-measure">Definizione dell'attrezzo</span></div><pre class="talos-codeblock__body"></pre></div>
+        <div class="talos-where">Attrezzi globali. La lettura della definizione completa non è ancora disponibile qui.</div>
       </div>
     </section>
 
