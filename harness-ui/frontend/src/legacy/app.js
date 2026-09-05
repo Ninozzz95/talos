@@ -3356,12 +3356,6 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * peso), workspace attivo. Niente scritto a mano: ogni riga viene da uno
    * stato o da una risposta del server.
    */
-  const ETICHETTE_ASPETTO = {
-    chatFontScale: { xcompact: 'Extra piccolo', compact: 'Compatto', default: 'Predefinito', large: 'Grande', xlarge: 'Extra grande' },
-    messageStyle: { sections: 'Sezioni', bubbles: 'Bolle', plain: 'Piatto' },
-    streamingAnimation: { fade: 'Dissolvenza', typewriter: 'Macchina da scrivere', none: 'Nessuna' },
-    composerShape: { standard: 'Standard', compact: 'Compatto', classic: 'Classico' },
-  };
   function riempiFatti(id, coppie) {
     const dl = $(`#${id}`);
     if (!dl) return;
@@ -3370,7 +3364,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   async function renderSettingsRiepiloghi() {
     const impostazioni = leggiImpostazioniDesktop();
     const a = impostazioni.appearance;
-    const etichetta = (gruppo, valore) => ETICHETTE_ASPETTO[gruppo]?.[valore] || String(valore);
+    // 05/9 R05: il riepilogo usa le parole del controllo originale, senza una seconda mappa.
+    const etichetta = (gruppo, valore) => [...($(`#${gruppo}Select`)?.options || [])].find(opzione => opzione.value === valore)?.textContent || 'Non impostato';
     riempiFatti('settingsChatFacts', [
       ['Testo chat', etichetta('chatFontScale', a.chatFontScale)],
       ['Stile dei messaggi', etichetta('messageStyle', a.messageStyle)],
@@ -3381,7 +3376,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     ]);
     const regole = Object.keys(state.permessiPerAttrezzo || impostazioni.chat.permessiPerAttrezzo || {}).length;
     riempiFatti('settingsToolsFacts', [
-      ['Policy attiva', String(state.permissions || impostazioni.chat.permissions || 'Workspace write')],
+      ['Policy attiva', etichettaPermesso(state.permissions || impostazioni.chat.permissions || 'Workspace write')],
       ['Regole per attrezzo', regole === 0 ? 'Nessuna' : `${regole}`],
       ['Sessione', state.realSession.id ? (state.session || 'sessione aperta') : 'nessuna aperta: valgono i valori predefiniti'],
     ]);
