@@ -1,3 +1,4 @@
+import { creaTaskRow, aggiornaPaginaAttivita } from '../components/attivita.js'; // 05/9 Fase 2: Attività
 import { creaMemoryRow, aggiornaPaginaMemoria } from '../components/memoria.js'; // 05/9 Fase 2: Memoria
 import { aggiornaBoard, creaRigaBoard, cartellaDaExport } from '../components/board.js'; // 05/9 Fase 2: Board
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
@@ -1161,6 +1162,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     window.__talosHarnessHostViewChange?.(view);
     if (view === 'settings') inizializzaModelLab();
     if (view === 'dashboard') ensureSessionsBoard();
+    if (view === 'attivita') caricaPannelloAttivita({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Attività
     if (view === 'memoria') caricaPannelloMemoria({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Memoria
     if (view === 'automations') renderAutomationsReali();
     if (view === 'terminal') apriVistaTerminaleReale(); // ⭐ 28/8 — Terminale REALE: montaggio/connessione PIGRI, solo alla prima apertura del tab (LEDGER-TERMINALE-REALE.md)
@@ -4209,48 +4211,40 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * ⭐⭐⭐ FASE N, quinto sistema (30/8) — stesso identico pattern di
    * caricaPannelloNote() sopra.
    */
-  async function caricaPannelloAttivita() {
-    const mount = $('#tasksListMount', sheetBody);
-    if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
-    if (!state.realSession.id) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione attiva — apri o avvia un task per vedere i Tasks.'));
-      return;
+  // 05/9 Fase 2: Attività — stesso endpoint, pagina e vecchio foglio isolati.
+  const generazioniAttivita = new WeakMap();
+  async function caricaPannelloAttivita({ pagina = false } = {}) {
+    const mount = pagina ? $('#schermoAttivita') : $('#tasksListMount', sheetBody);
+    if (!mount) return;
+    const sessionId = state.realSession.id;
+    const generation = (generazioniAttivita.get(mount) || 0) + 1;
+    generazioniAttivita.set(mount, generation);
+    const attuale = () => generazioniAttivita.get(mount) === generation && state.realSession.id === sessionId && (pagina ? state.view === 'attivita' && !mount.hidden : mount === $('#tasksListMount', sheetBody));
+    function mostra(attivita, { errore = null, caricamento = false } = {}) {
+      if (pagina) {
+        aggiornaPaginaAttivita(mount, attivita, { errore, caricamento, onAggiorna: () => caricaPannelloAttivita({ pagina: true }) });
+      } else {
+        mount.setAttribute('role', attivita.length ? 'list' : 'group');
+        mount.replaceChildren(...attivita.map(rigaAttivita));
+        if (!attivita.length) mount.append(textElement('p', 'board-empty', errore || (caricamento ? 'Caricamento attività…' : 'Nessuna attività salvata. Le attività sono globali, disponibili alle tue conversazioni.')));
+      }
     }
-    mount.replaceChildren(textElement('p', 'board-empty', 'Carico i Tasks…'));
-    let dati;
+    if (embeddedDemoOnly()) { mostra([], { errore: 'Nessun backend collegato.' }); return; }
+    if (!sessionId) { mostra([], { errore: 'Apri una sessione per leggere le attività salvate.' }); return; }
+    mostra([], { caricamento: true });
     try {
-      dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tasks`);
+      const dati = await apiGet('/api/v1/sessions/' + encodeURIComponent(sessionId) + '/tasks');
+      if (!attuale()) return;
+      if (dati.errore) { mostra([], { errore: 'Attività non disponibili: ' + dati.errore }); return; }
+      if (!Array.isArray(dati.attivita) || dati.attivita.some(m => !m || typeof m !== 'object' || Array.isArray(m))) throw new Error('Elenco delle attività non valido');
+      mostra(dati.attivita);
     } catch (error) {
-      mount.replaceChildren(textElement('p', 'board-empty', `Tasks non disponibili: ${error.message}`));
-      return;
+      if (attuale()) mostra([], { errore: 'Attività non disponibili: ' + error.message });
     }
-    if (mount !== $('#tasksListMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
-    if (dati.errore) {
-      mount.replaceChildren(textElement('p', 'board-empty', `.tasks-store non valido: ${dati.errore}`));
-      return;
-    }
-    if (!dati.attivita || dati.attivita.length === 0) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna attività (.tasks-store/, globale — non del progetto).'));
-      return;
-    }
-    mount.replaceChildren(...dati.attivita.map((attivita) => rigaAttivita(attivita)));
   }
 
-  /** ⭐⭐⭐ FASE N, quinto sistema (30/8) — sempre attiva (un'attività non ha un gate di fiducia): niente bottone, lo stato al posto del riassunto — mai lo stesso status-chip "attivo" fisso delle skill, qui varia davvero (todo/doing/done). */
   function rigaAttivita(attivita) {
-    const riga = document.createElement('div');
-    riga.className = 'sheet-option';
-    riga.setAttribute('role', 'group');
-    const iconEl = document.createElement('span');
-    iconEl.className = 'sheet-icon';
-    iconEl.innerHTML = icon('i-files');
-    const testo = document.createElement('span');
-    testo.append(
-      textElement('strong', null, attivita.titolo),
-      textElement('small', null, `${attivita.priorita}${attivita.descrizione ? ` · ${attivita.descrizione}` : ''}`),
-    );
-    riga.append(iconEl, testo, textElement('span', `status-chip ${attivita.stato === 'done' ? 'success' : ''}`, attivita.stato));
-    return riga;
+    return creaTaskRow(attivita);
   }
 
   /**

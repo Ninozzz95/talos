@@ -16,6 +16,7 @@ import { MOCKUP, apri, confrontaPixel, mostra, struttura, testi } from './aiuto.
 const LAB = process.env.TALOS_LAB_URL || `http://127.0.0.1:${process.env.TALOS_LAB_PORT || 4176}`;
 
 const COMPONENTI = [
+  { nome: 'TaskRow', schermata: 'schermoAttivita', selettore: '#schermoAttivita' },
   { nome: 'MemoryRow', schermata: 'schermoMemoria', selettore: '#schermoMemoria' },
   { nome: 'Board', schermata: 'schermoBoard', selettore: '#schermoBoard' },
   { nome: 'SessionItem', schermata: 'schermoChat', selettore: '.talos-sidebar' },
@@ -39,6 +40,10 @@ test.describe('parità dei componenti ↔ mockup', () => {
       await mostra(a.pagina, comp.schermata);
       expect(await struttura(a.pagina, comp.selettore), 'struttura').toEqual(await struttura(m.pagina, comp.selettore));
       expect(await testi(a.pagina, comp.selettore), 'parole').toEqual(await testi(m.pagina, comp.selettore));
+      if (comp.nome === 'TaskRow') {
+        // ATTIVITA-CAMPO-COERENTE: la parità da sola può replicare un campo privo dello stile canonico.
+        await expect(a.pagina.locator('[data-task-query]')).toHaveCSS('height', '36px');
+      }
       const nome = `comp-${comp.nome}-${info.project.name}`;
       const esito = await confrontaPixel(nome, await m.pagina.locator(comp.selettore).screenshot(), await a.pagina.locator(comp.selettore).screenshot());
       expect(esito.ok, `${nome}: ${esito.motivo} — vedi artifacts/parita/${nome}-diff.png`).toBe(true);
