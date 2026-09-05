@@ -158,3 +158,12 @@ Prove: 5/5 unità, 15/15 percorsi reali isolati, 45/45 componenti. Statico 194/1
 Cosa deve fare l'owner · Nessuna azione; prova facoltativa Altro → Automazioni, 4177.
 Cosa fai tu dopo · Capability.
 Cosa rimane · B4 → B6 → B2 → B7 → B1 → B8, Browser, CSS condiviso, poi OAuth e piano computer-use.
+
+## Raccordo con la rimozione upstream dello strato parallelo
+
+Raccordo verificato: npm run verify interamente verde (build, contratti/unità, determinismo 30 file, laboratorio 195/195); parità ForgeList 3/3. La rimozione del vecchio test CSS arriva dal commit upstream che elimina lo strato parallelo, non da un aggiramento locale. Corretto un import dopo la rilocazione del dizionario e uno spazio finale; nessun cambiamento visivo.
+Cosa deve fare l'owner · Nulla.
+Cosa fai tu dopo · Capability.
+Cosa rimane · B4, B6, B2, B7, B1, B8 e Browser; poi OAuth e piano computer-use.
+
+Rettifica del controllo precedente: uno spazio finale in automazioni.js era stato segnalato dal controllo cached senza testo visibile. Corretto in questo commit.

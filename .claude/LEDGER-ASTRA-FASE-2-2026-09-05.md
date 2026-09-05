@@ -1196,3 +1196,11 @@ Blocchi riusati AutomationsScreen, Topbar di pagina, Page, Toolbar, FilterChips,
 Cosa deve fare l'owner · Nessuna azione per proseguire; può provare Altro → Automazioni su http://127.0.0.1:4177/.
 Cosa fai tu dopo · B4 Capability; B7 chiuderà il difetto visivo del modulo di creazione prima della consegna completa.
 Cosa rimane · B4 → B6 → B2 → B7 → B1 → B8 e Browser vero a schede; contratto CSS condiviso; runtime per gate chat naturale, poi OAuth e piano computer-use. Nessun push.
+
+## Raccordo dopo merge 6e0154e8 — 05/09/2026
+Upstream 18212e09 +96f02a69 elimina lo strato parallelo (decisione owner), compreso il vecchio test TOKEN-CONTRACT, e sposta nomi-attrezzi.js in components. RED build: Officina importa ancora ../app/nomi-attrezzi.js. File esatti di correzione: harness-ui/frontend/src/components/officina.js (solo import), harness-ui/frontend/src/components/automazioni.js (solo spazio finale riga 30), questo ledger e CONSEGNA-ASTRA-FASE-2-2026-09-05.md. Nessun simbolo pubblico o comportamento cambia. Ricerca 05/09: riaperte le tre release 29112be/d7dbd9a/3d2ee51 e docs di tool inventory già citate; decisione adattare al percorso canonico deciso upstream, nessuna libreria alternativa per una rilocazione. +1 richiesto: unico dizionario umano importabile, nessuna duplicazione. Gate permanente PHASE1-BUILD-PARALLEL-01 + unità Officina + parità ForgeList. La frase precedente diff pulito era prematura: il controllo cached ha segnalato uno spazio finale, il proxy non mostrava il messaggio; corretto qui, nessuna riscrittura dei commit.
+
+Raccordo verificato: npm run verify interamente verde (build, contratti/unità, determinismo 30 file, laboratorio 195/195); parità ForgeList 3/3. La rimozione del vecchio test CSS arriva dal commit upstream che elimina lo strato parallelo, non da un aggiramento locale. Corretto un import dopo la rilocazione del dizionario e uno spazio finale; nessun cambiamento visivo.
+Cosa deve fare l'owner · Nulla.
+Cosa fai tu dopo · Capability.
+Cosa rimane · B4, B6, B2, B7, B1, B8 e Browser; poi OAuth e piano computer-use.
