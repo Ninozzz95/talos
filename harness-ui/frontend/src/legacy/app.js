@@ -20,7 +20,8 @@ import { creaSorveglianzaConnessione, aggiornaStatoConnessione } from '../compon
 import { aggiornaPannelloNotifiche, apriPannelloNotifiche, nomeCampanella } from '../components/notifiche.js'; // 06/9 T-17: pannello «Aspetta te» del mockup
 import { aggiornaInstallati, montaInstallati, gb } from '../components/modelli-installati.js'; // 06/9 B6.8: scheda «Installati» del Model Lab
 import { aggiornaHf, gruppiVarianti } from '../components/hf-catalogo.js'; // 06/9 B6.9: scheda «Hugging Face» del Model Lab
-import { montaHf } from '../components/hf-catalogo.js'; // 05/9 Fase 2: Toast del mockup (T-16)
+import { montaHf } from '../components/hf-catalogo.js';
+import { aggiornaCodaDownload, montaCodaDownload, stimaFraLetture } from '../components/download-coda.js'; // 06/9 B6.10: scheda «Download» // 05/9 Fase 2: Toast del mockup (T-16)
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
@@ -3513,6 +3514,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     montaCatalogoModelli($('#modelLabCatalogPanel'), $('#panel-catalogo'));
     montaInstallati($('#modelLabInstalledPanel'), $('#panel-installati')); // 06/9 B6.8
     montaHf($('#modelLabHfPanel'), $('#panel-hf')); // 06/9 B6.9
+    montaCodaDownload($('#modelLabDownloadsPanel'), $('#panel-download')); // 06/9 B6.10
     montaMisuraMemoria($('#modelLabOverviewPanel'), $('#panel-runtime [data-c=MemoryMeter]'));
     montaPannelloRuntime($('#modelLabRuntimeGate'));
     montaProviderPanel($('#modelLabProvidersPanel'));
@@ -3536,9 +3538,12 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     $('#modelLabHfNextButtonControl')?.addEventListener('click', () => cercaHuggingFaceModelLab({ append: true }));
     $('#modelLabHfSortControl')?.addEventListener('change', () => { if (state.modelLab.hfQuery) cercaHuggingFaceModelLab(); }); // 06/9 B6.9
     for (const id of ['modelLabHfAuthorControl', 'modelLabHfFiltersControl']) $(`#${id}`)?.addEventListener('keydown', (event) => { if (event.key === 'Enter') cercaHuggingFaceModelLab(); });
+    $('#modelLabDownloadsPanel [data-action="soloAttivi"]')?.addEventListener('click', () => { downloadSoloAttivi = !downloadSoloAttivi; renderizzaDownloadConMockup(); }); // 06/9 B6.10
+    $('#veloAnnullaDownload [data-lab-dialog-action="annullaDownload"], #veloAnnullaDownload .talos-button--danger')?.addEventListener('click', async () => { const id = $('#veloAnnullaDownload')?.dataset.downloadId; if (!id) return; try { await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(id)}/cancel`, {}); toast('Download annullato', id); } catch (error) { toast('Annullamento non riuscito', error.message); } chiudiVeloMockup('veloAnnullaDownload'); caricaDownloadModelLab(); });
     $('#modelLabHfPanel [data-clear="hf"]')?.addEventListener('click', () => { for (const id of ['modelLabHfSearch', 'modelLabHfAuthorControl', 'modelLabHfFiltersControl']) { const c = $(`#${id}`); if (c) c.value = ''; } state.modelLab.hfResults = []; state.modelLab.hfError = null; state.modelLab.hfCursor = null; renderizzaHfConMockup(); });
     $('#modelLabInstalledStateFilter')?.addEventListener('change', (event) => { state.modelLab.installedStateFilter = event.target.value; renderizzaModelliLocaliModelLab(); }); // 06/9 B6.8
-    $$('[data-lab-dialog-action]').forEach((b) => b.addEventListener('click', () => { void confermaDialogoModelloLocale(b.dataset.labDialogAction); })); // 06/9 B6.8: i dialoghi del mockup
+    // 06/9 B6.8: i dialoghi del mockup — SOLO rinomina/elimina: «annulla» è del velo Annulla download (B6.10) e non deve mai toccare un modello
+    $$('[data-lab-dialog-action="rinomina"], [data-lab-dialog-action="elimina"]').forEach((b) => b.addEventListener('click', () => { void confermaDialogoModelloLocale(b.dataset.labDialogAction); }));
     $('#modelLabInstalledPanel [data-clear="installati"]')?.addEventListener('click', () => { state.modelLab.installedSearch = ''; state.modelLab.installedStateFilter = 'tutti'; const c = $('#modelLabInstalledSearchControl'); if (c) c.value = ''; const f = $('#modelLabInstalledStateFilter'); if (f) f.value = 'tutti'; renderizzaModelliLocaliModelLab(); });
     $('#modelLabInstalledPanel [data-lab-go="runtime"]')?.addEventListener('click', () => setModelLabSection('overview'));
     $('#modelLabInstalledSearchControl')?.addEventListener('input', (event) => { state.modelLab.installedSearch = event.target.value; renderizzaModelliLocaliModelLab(); });
@@ -13860,7 +13865,35 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     host.insertBefore(badge, host.firstElementChild);
   }
 
+  const lettureDownload = new Map(); // id → { bytes, totalBytes, state, quando } dell'ultima lettura, per velocità e rimanente
+  const stimeDownload = new Map();
+  let downloadSoloAttivi = false;
+  function aggiornaStimeDownload() {
+    const adesso = new Date().toISOString();
+    for (const item of state.modelLab.downloads) {
+      const prima = lettureDownload.get(item.id);
+      const dopo = { bytes: item.bytes, totalBytes: item.totalBytes, state: item.state, quando: adesso };
+      const stima = stimaFraLetture(prima, dopo);
+      if (stima) stimeDownload.set(item.id, stima); else if (item.state !== 'running') stimeDownload.delete(item.id);
+      lettureDownload.set(item.id, dopo);
+    }
+  }
+  function renderizzaDownloadConMockup() {
+    const panel = $('#modelLabDownloadsPanel');
+    if (!panel?.dataset.downloadMontato) return false;
+    aggiornaStimeDownload();
+    const badge = $('#modelLabDownloadQueueBadge');
+    const active = state.modelLab.downloads.filter((item) => ['queued', 'running', 'verifying', 'paused', 'failed'].includes(item.state));
+    if (badge) { badge.hidden = active.length === 0; badge.textContent = active.length ? `↓ ${active.length}` : '↓ 0'; }
+    const chiama = (verbo) => async (id) => { try { await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(id)}/${verbo}`, {}); } catch (error) { toast('Comando non eseguito', error.message); } caricaDownloadModelLab(); };
+    aggiornaCodaDownload(panel, state.modelLab.downloads, {
+      soloAttivi: downloadSoloAttivi, stime: stimeDownload,
+      azioni: { pausa: chiama('pause'), riprendi: chiama('resume'), annulla: (id) => { const velo = $('#veloAnnullaDownload'); if (velo) velo.dataset.downloadId = id; }, vediModello: () => setModelLabSection('installed') },
+    });
+    return true;
+  }
   function renderizzaDownloadModelLab() {
+    if (renderizzaDownloadConMockup()) return;
     const mount = $('#modelLabDownloadsList'); const badge = $('#modelLabDownloadQueueBadge'); if (!mount) return;
     const active = state.modelLab.downloads.filter((item) => ['queued', 'running', 'verifying', 'paused', 'failed'].includes(item.state));
     if (badge) { badge.hidden = active.length === 0; badge.textContent = active.length ? `↓ ${active.length}` : '↓ 0'; }

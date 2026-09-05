@@ -63,7 +63,7 @@ export function createHfDirectTransfer({ rootDir, modelStore, hubClient, fetchIm
       }
       await (await import('node:fs/promises')).rename(`${target}.partial`, target); record.baseBytes += file.bytes;
     }
-    record.state = 'verifying'; await verify(request); record.state = 'ready'; record.progress = 100; record.bytes = request.bytes;
+    record.state = 'verifying'; await verify(request); record.state = 'ready'; record.progress = 100; record.bytes = request.bytes; record.finishedAt = now().toISOString();
   }
   function pump() { while (active < maxConcurrent && queue.length) { const record = queue.shift(); active += 1; if (record.state === 'queued') record.state = 'running'; download(record).catch((error) => { if (!['paused', 'cancelled'].includes(record.state)) { record.state = 'failed'; record.reason = error.code || 'HF_DOWNLOAD_FAILED'; } }).finally(() => { active -= 1; pump(); }); } }
   async function start(value) {
@@ -78,7 +78,8 @@ export function createHfDirectTransfer({ rootDir, modelStore, hubClient, fetchIm
     const record = { id: request.id, request, state: 'queued', progress: 0, bytes: 0, baseBytes: 0, reason: null, startedAt: now().toISOString(), abort: new AbortController() }; records.set(request.id, record); queue.push(record); pump();
     return status(request.id);
   }
-  function status(id) { const record = records.get(id); return record ? { id: record.id, state: record.state, progress: record.progress, bytes: record.bytes, totalBytes: record.request.bytes, reason: record.reason, startedAt: record.startedAt } : null; }
+  // 06/09 B6.10: la coda a schermo dice il FILE e il repository, non l'id interno (`repo`, `file`, `name`, `finishedAt`)
+  function status(id) { const record = records.get(id); return record ? { id: record.id, state: record.state, progress: record.progress, bytes: record.bytes, totalBytes: record.request.bytes, reason: record.reason, startedAt: record.startedAt, repo: record.request.repo ?? null, file: record.request.files?.[0]?.path ?? null, name: record.request.name ?? null, finishedAt: record.finishedAt ?? (record.state === 'ready' ? record.request.updatedAt ?? null : null) } : null; }
   async function pause(id) { const record = records.get(id); if (!record || !['queued', 'running'].includes(record.state)) return false; record.state = 'paused'; record.reason = 'PAUSED_BY_OWNER'; record.abort.abort(); return true; }
   async function resume(id) {
     const record = records.get(id);
