@@ -1,3 +1,5 @@
+import {creaProviderCard} from '../src/components/provider-card.js';
+import {PROVIDER_CARD} from './fixtures/provider-card.js';
 import {creaRuntimeModello} from '../src/components/runtime-modelli.js';
 import {RUNTIME_MODELLI} from './fixtures/runtime-modelli.js';
 import {creaMisuraMemoria} from '../src/components/misura-memoria.js';
@@ -76,6 +78,7 @@ document.documentElement.setAttribute('data-schermo', 'chat');
 const componente = new URLSearchParams(location.search).get('componente') || '';
 
 const LABORATORI = {
+ ProviderCard(){document.querySelector('#veloFornitori [data-c=ProviderCard]').replaceWith(creaProviderCard(PROVIDER_CARD[4],{aperta:true}));},
  RuntimeCard(){document.querySelector('#panel-runtime [data-c=RuntimeCard]').replaceWith(creaRuntimeModello(RUNTIME_MODELLI[0]));},
  MemoryMeter(){document.querySelector('#panel-runtime [data-c=MemoryMeter]').replaceWith(creaMisuraMemoria({capacita:CAPACITA_MEMORIA,runtimes:RUNTIME_MEMORIA}));},
  CatalogoModelli(){const p=document.querySelector('#panel-catalogo');p.querySelector('[data-catalog-list]').replaceChildren();p.querySelector('[data-catalog-detail]').replaceChildren();aggiornaCatalogoModelli(p,CATALOGO_MODELLI);},
