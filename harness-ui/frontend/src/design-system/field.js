@@ -20,10 +20,26 @@ export const createField = defineComponent('Field', (initialProps = {}) => {
   const wrap = documentObj.createElement('div');
   const label = documentObj.createElement('label');
   const input = documentObj.createElement('input');
+  const errore = documentObj.createElement('p');
   contatore += 1;
   input.id = initialProps.id || `talos-field-${contatore}`;
   label.setAttribute('for', input.id);
-  wrap.append(label, input);
+  /*
+   * ⛔ L'elemento del messaggio ESISTE SEMPRE, anche vuoto, e `aria-describedby`
+   * lo nomina fin dal montaggio: l'associazione resta stabile e non va
+   * ricablata quando un errore compare. E' la forma raccomandata (ricerca del
+   * 05/09/2026, smashingmagazine.com/2023/02/guide-accessible-form-validation/
+   * · webaim.org/techniques/formvalidation/ ·
+   * w3.org/WAI/WCAG22/working-examples/aria-invalid-data-format).
+   *
+   * ⛔ E NON e' una regione live: un campo che grida a ogni tasto e'
+   * inservibile. Chi valida decide QUANDO (alla perdita del fuoco, o dopo una
+   * pausa) e il fuoco che si sposta basta a far annunciare il messaggio.
+   */
+  errore.id = `${input.id}-errore`;
+  errore.className = 'talos-field__error';
+  input.setAttribute('aria-describedby', errore.id);
+  wrap.append(label, input, errore);
 
   let props = { size: 'md', type: 'search', labelVisible: false, ...initialProps };
   let iconaCorrente = null;
@@ -43,6 +59,13 @@ export const createField = defineComponent('Field', (initialProps = {}) => {
     if (props.value !== undefined && input.value !== props.value) input.value = String(props.value);
     if (props.disabled) input.setAttribute('disabled', '');
     else input.removeAttribute('disabled');
+    // `aria-invalid` SOLO quando c'e' davvero un errore: dichiararlo sempre
+    // renderebbe il campo permanentemente sbagliato per chi ascolta.
+    const messaggio = props.error ? String(props.error) : '';
+    errore.textContent = messaggio;
+    errore.hidden = !messaggio;
+    if (messaggio) input.setAttribute('aria-invalid', 'true');
+    else input.removeAttribute('aria-invalid');
     if (props.icon && props.icon !== iconaCorrente) {
       if (iconaCorrente && typeof iconaCorrente.remove === 'function') iconaCorrente.remove();
       props.icon.classList?.add('talos-field__icon');

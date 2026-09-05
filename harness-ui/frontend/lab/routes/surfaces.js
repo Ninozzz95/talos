@@ -2,6 +2,7 @@ import { createBoardSurface } from '../../src/app/surfaces/board.js';
 import { createDoctorSurface } from '../../src/app/surfaces/doctor.js';
 import { createCapabilitySurface } from '../../src/app/surfaces/capability.js';
 import { createInspectorSurface } from '../../src/app/surfaces/inspector.js';
+import { createSettingsSurface } from '../../src/app/surfaces/settings.js';
 import { createSidebarSurface } from '../../src/app/surfaces/sidebar.js';
 import { createStatusBarSurface } from '../../src/app/surfaces/status-bar.js';
 import { createTerminalSurface } from '../../src/app/surfaces/terminal.js';
@@ -302,6 +303,40 @@ export function mountSurfacesLab(root) {
   b8.corpo.append(doctor.element);
   pagina.append(b8.sezione);
   componenti.push(doctor);
+
+  const impostazioni = createSettingsSurface({
+    documentObj,
+    store,
+    testId: 'lab-settings',
+    labels: {
+      regionLabel: 'Impostazioni',
+      save: 'Salva', discard: 'Scarta le modifiche',
+      unsaved: 'Hai modifiche non salvate.',
+      sections: [
+        {
+          id: 'aspetto', label: 'Aspetto', saving: 'auto',
+          rows: [
+            { id: 'temaChiaro', type: 'switch', label: 'Tema chiaro', scope: 'vale da subito' },
+            { id: 'animazioni', type: 'switch', label: 'Sfondi animati', scope: 'vale da subito' },
+          ],
+        },
+        {
+          id: 'fornitore', label: 'Fornitore', saving: 'explicit',
+          rows: [
+            { id: 'chiaveApi', type: 'password', label: 'Chiave API', scope: 'vale dalle sessioni nuove', placeholder: 'sk-…' },
+            { id: 'modello', type: 'select', label: 'Modello', scope: 'vale dalle sessioni nuove', options: [{ value: 'opus', label: 'claude-opus-5' }, { value: 'sonnet', label: 'claude-sonnet-5' }] },
+          ],
+        },
+      ],
+    },
+  });
+  // ⛔ Un errore e delle modifiche non salvate: sono i due stati che a schermo
+  // devono leggersi, non quello a riposo.
+  impostazioni.update({ dirty: { fornitore: true }, validation: { chiaveApi: 'La chiave deve iniziare con «sk-».' } });
+  const b9 = blocco(documentObj, 'Impostazioni', 'Gli interruttori si salvano da soli; i campi vogliono «Salva». I due modi non si mescolano.');
+  b9.corpo.append(impostazioni.element);
+  pagina.append(b9.sezione);
+  componenti.push(impostazioni);
 
   html.dataset.visualReady = 'true';
 

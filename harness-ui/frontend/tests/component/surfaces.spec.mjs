@@ -129,3 +129,24 @@ test('SUP-VIS-09 ⭐⭐⭐ nel Doctor un controllo NON eseguito non è verde a s
   // E un controllo davvero fallito resta visibile come tale.
   await expect(doctor.locator('[data-controllo="git"]')).toHaveClass(/talos-check-card--warning/);
 });
+
+test('SUP-VIS-10 ⭐⭐ le Impostazioni non mescolano i due modi di salvare, e lo si vede', async ({ page }) => {
+  await apriLaboratorio(page);
+  const impostazioni = page.locator('[data-testid="lab-settings"]');
+  // La sezione automatica non ha «Salva»: dirlo sarebbe il contrario del vero.
+  await expect(impostazioni.locator('[data-sezione="aspetto"] [data-testid="settings-save-aspetto"]')).toHaveCount(0);
+  const esplicita = impostazioni.locator('[data-sezione="fornitore"]');
+  await expect(esplicita.locator('[data-testid="settings-save-fornitore"]')).toBeVisible();
+  await expect(esplicita).toContainText('Hai modifiche non salvate');
+});
+
+test('SUP-VIS-11 ⭐⭐ un errore di validazione si vede E il campo si dichiara non valido', async ({ page }) => {
+  await apriLaboratorio(page);
+  const campo = page.locator('[data-testid="settings-chiaveApi"]');
+  await expect(campo).toContainText('deve iniziare con «sk-»');
+  const input = campo.locator('input');
+  await expect(input).toHaveAttribute('aria-invalid', 'true');
+  // Il messaggio è legato al campo: il legame non si crea quando serve.
+  const id = await campo.locator('.talos-field__error').getAttribute('id');
+  await expect(input).toHaveAttribute('aria-describedby', id);
+});

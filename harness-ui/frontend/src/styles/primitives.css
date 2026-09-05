@@ -298,6 +298,22 @@
   font: 500 var(--talos-font-size-sm) / 1 var(--talos-font-ui);
 }
 .talos-field__input::placeholder { color: var(--talos-muted); }
+
+/*
+ * ⛔ Il messaggio d'errore ha il colore del pericolo, ma il colore non e' il
+ * messaggio: il testo c'e' comunque, ed e' legato al campo da
+ * `aria-describedby`. E il campo invalido si vede anche dal BORDO, non solo
+ * dallo scritto sotto — chi non distingue i colori ha comunque due segnali.
+ */
+.talos-field__error {
+  margin: var(--talos-space-xs) 0 0;
+  color: var(--talos-danger);
+  font-size: var(--talos-font-size-sm);
+}
+
+.talos-field__input[aria-invalid='true'] {
+  border-color: var(--talos-danger);
+}
 .talos-field__input:focus-visible {
   outline: var(--talos-focus-width) solid var(--talos-ring);
   outline-offset: var(--talos-focus-offset);
