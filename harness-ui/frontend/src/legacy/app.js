@@ -11,7 +11,8 @@ import { creaLibraryRow, aggiornaPaginaLibreria } from '../components/libreria.j
 import { creaTaskRow, aggiornaPaginaAttivita } from '../components/attivita.js'; // 05/9 Fase 2: Attività
 import { creaMemoryRow, aggiornaPaginaMemoria } from '../components/memoria.js'; // 05/9 Fase 2: Memoria
 import { aggiornaBoard, creaRigaBoard, cartellaDaExport } from '../components/board.js'; // 05/9 Fase 2: Board
-import { creaPilaToast } from '../components/toast.js'; // 05/9 Fase 2: Toast del mockup (T-16)
+import { creaPilaToast } from '../components/toast.js';
+import { creaSorveglianzaConnessione, aggiornaStatoConnessione } from '../components/connessione.js'; // 05/9 T-15: stato onesto della connessione // 05/9 Fase 2: Toast del mockup (T-16)
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
@@ -351,7 +352,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   const sendButton = $('.send-btn', composerForm);
   const queuedMessage = $('#queuedMessage');
   const sessionTitle = $('#sessionTitle');
-  const toastRegion = $('#regioneToast') || $('#toastRegion'); // 05/9 Fase 2: la regione del mockup (in basso a destra), non quella grezza del monolite
+  const toastRegion = $('#regioneToast') || $('#toastRegion');
+  let sorveglianza = null; // 05/9 T-15 — assegnata più sotto, dopo toast(); i chiamanti usano `sorveglianza?.` // 05/9 Fase 2: la regione del mockup (in basso a destra), non quella grezza del monolite
   const runStrip = $('.run-strip');
   const runStateToggle = $('#runStateToggle');
   const desktopInspectorToggle = $('.desktop-context-toggle');
@@ -1481,6 +1483,44 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     return mostraToast(String(title), message == null ? '' : String(message?.message ?? message), opzioni);
   }
 
+  /**
+   * 05/9 T-15, owner «approvato adesso»: a server caduto lo schermo taceva.
+   * La sorveglianza (`components/connessione.js`) ascolta le fetch centrali,
+   * l'EventSource e gli eventi offline/online del browser, conferma con un
+   * battito su /api/v1/health solo quando qualcosa non va, scrive lo stato
+   * nella barra di stato del mockup e riapre lo stream al ritorno.
+   */
+  const barraStatoChat = $('#schermoChat .talos-statusbar');
+  sorveglianza = creaSorveglianzaConnessione({
+    ping: async () => {
+      try { const r = await fetch(API('/api/v1/health'), { cache: 'no-store' }); return r.ok; } catch { return false; }
+    },
+    suCambio: (stato, dettagli) => {
+      aggiornaStatoConnessione(barraStatoChat, stato, dettagli);
+      if (stato === 'ricollegato') toast('Collegato di nuovo', 'Il server risponde: puoi continuare.');
+    },
+    suRicollegato: () => {
+      const s = state.realSession.eventSource;
+      if (state.realSession.id && !state.realSession.eventoTerminaleVisto && (!s || s.readyState === EventSource.CLOSED)) {
+        collegaEventiSessione(state.realSession.id, state.realSession.generation);
+      }
+    },
+  });
+  window.addEventListener('offline', () => sorveglianza.segnalaBrowser(false));
+  window.addEventListener('online', () => sorveglianza.segnalaBrowser(true));
+  barraStatoChat?.querySelector('[data-runtime-riprova]')?.addEventListener('click', () => sorveglianza.riprova());
+  /** fetch delle API centrali: ogni esito informa la sorveglianza (T-15). */
+  async function fetchSorvegliata(url, init) {
+    try {
+      const risposta = await fetch(url, init);
+      sorveglianza?.segnalaRete(true);
+      return risposta;
+    } catch (error) {
+      sorveglianza?.segnalaRete(false, 'fetch');
+      throw error;
+    }
+  }
+
   // REAL_DATA_RENDER_START
   function textElement(tagName, className, value) {
     const element = document.createElement(tagName);
@@ -2081,7 +2121,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   }
 
   async function apiGet(pathname) {
-    const response = await fetch(API(pathname), {
+    const response = await fetchSorvegliata(API(pathname), {
       method: 'GET',
       headers: { Accept: 'application/json' },
       cache: 'no-store',
@@ -3603,7 +3643,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
 
   /** ⭐ 26/8, riconciliazione desktop→mobile — stesso contratto envelope di apiGet, per POST /api/v1/sessions/*. */
   async function apiPost(pathname, body) {
-    const response = await fetch(API(pathname), {
+    const response = await fetchSorvegliata(API(pathname), {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -10159,6 +10199,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     segnaTappaLatenza('sseCollegato');
     state.realSession.eventSource = source;
     source.onmessage = (message) => {
+      sorveglianza?.segnalaEventoVivo(); // T-15: il canale è vivo
       segnaTappaLatenza('primoEvento'); // ⭐ il canale è vivo: da qui in poi il ritardo è del modello, non della nostra connessione
       let evento;
       try { evento = JSON.parse(message.data); } catch { return; }
@@ -10184,6 +10225,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
         state.realSession.eventSource = null;
         return;
       }
+      sorveglianza?.segnalaSse(source.readyState); // T-15: 0 = riprova da solo, 2 = ha rinunciato
       if (source.readyState === EventSource.CLOSED) {
         appendStatusNote('Connessione agli eventi interrotta.', true);
       }
