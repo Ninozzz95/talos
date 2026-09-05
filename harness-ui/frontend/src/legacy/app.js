@@ -1,3 +1,4 @@
+import { creaMemoryRow, aggiornaPaginaMemoria } from '../components/memoria.js'; // 05/9 Fase 2: Memoria
 import { aggiornaBoard, creaRigaBoard, cartellaDaExport } from '../components/board.js'; // 05/9 Fase 2: Board
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
@@ -1160,6 +1161,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     window.__talosHarnessHostViewChange?.(view);
     if (view === 'settings') inizializzaModelLab();
     if (view === 'dashboard') ensureSessionsBoard();
+    if (view === 'memoria') caricaPannelloMemoria({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Memoria
     if (view === 'automations') renderAutomationsReali();
     if (view === 'terminal') apriVistaTerminaleReale(); // ⭐ 28/8 — Terminale REALE: montaggio/connessione PIGRI, solo alla prima apertura del tab (LEDGER-TERMINALE-REALE.md)
   }
@@ -4255,48 +4257,40 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * ⭐⭐⭐ FASE N, sesto sistema (30/8) — stesso identico pattern di
    * caricaPannelloAttivita() sopra.
    */
-  async function caricaPannelloMemoria() {
-    const mount = $('#memoryListMount', sheetBody);
-    if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
-    if (!state.realSession.id) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione attiva — apri o avvia un task per vedere la Memory.'));
-      return;
+  // 05/9 Fase 2: Memoria — stesso endpoint, pagina e vecchio foglio isolati.
+  const generazioniMemoria = new WeakMap();
+  async function caricaPannelloMemoria({ pagina = false } = {}) {
+    const mount = pagina ? $('#schermoMemoria') : $('#memoryListMount', sheetBody);
+    if (!mount) return;
+    const sessionId = state.realSession.id;
+    const generation = (generazioniMemoria.get(mount) || 0) + 1;
+    generazioniMemoria.set(mount, generation);
+    const attuale = () => generazioniMemoria.get(mount) === generation && state.realSession.id === sessionId && (pagina ? state.view === 'memoria' && !mount.hidden : mount === $('#memoryListMount', sheetBody));
+    function mostra(memorie, { errore = null, caricamento = false } = {}) {
+      if (pagina) {
+        aggiornaPaginaMemoria(mount, memorie, { errore, caricamento, onAggiorna: () => caricaPannelloMemoria({ pagina: true }) });
+      } else {
+        mount.setAttribute('role', memorie.length ? 'list' : 'group');
+        mount.replaceChildren(...memorie.map(rigaMemoria));
+        if (!memorie.length) mount.append(textElement('p', 'board-empty', errore || (caricamento ? 'Caricamento ricordi…' : 'Nessun ricordo salvato. I ricordi sono globali, disponibili alle tue conversazioni.')));
+      }
     }
-    mount.replaceChildren(textElement('p', 'board-empty', 'Carico la Memory…'));
-    let dati;
+    if (embeddedDemoOnly()) { mostra([], { errore: 'Nessun backend collegato.' }); return; }
+    if (!sessionId) { mostra([], { errore: 'Apri una sessione per leggere i ricordi salvati.' }); return; }
+    mostra([], { caricamento: true });
     try {
-      dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/memory`);
+      const dati = await apiGet('/api/v1/sessions/' + encodeURIComponent(sessionId) + '/memory');
+      if (!attuale()) return;
+      if (dati.errore) { mostra([], { errore: 'Ricordi non disponibili: ' + dati.errore }); return; }
+      if (!Array.isArray(dati.memorie) || dati.memorie.some(m => !m || typeof m !== 'object' || Array.isArray(m))) throw new Error('Elenco dei ricordi non valido');
+      mostra(dati.memorie);
     } catch (error) {
-      mount.replaceChildren(textElement('p', 'board-empty', `Memory non disponibile: ${error.message}`));
-      return;
+      if (attuale()) mostra([], { errore: 'Ricordi non disponibili: ' + error.message });
     }
-    if (mount !== $('#memoryListMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
-    if (dati.errore) {
-      mount.replaceChildren(textElement('p', 'board-empty', `.memory-store non valido: ${dati.errore}`));
-      return;
-    }
-    if (!dati.memorie || dati.memorie.length === 0) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna memoria (.memory-store/, globale — non del progetto).'));
-      return;
-    }
-    mount.replaceChildren(...dati.memorie.map((memoria) => rigaMemoria(memoria)));
   }
 
-  /** ⭐⭐⭐ FASE N, sesto sistema (30/8) — sempre attiva (una memoria non ha un gate di fiducia): niente bottone, il genere al posto dell'origine. */
   function rigaMemoria(memoria) {
-    const riga = document.createElement('div');
-    riga.className = 'sheet-option';
-    riga.setAttribute('role', 'group');
-    const iconEl = document.createElement('span');
-    iconEl.className = 'sheet-icon';
-    iconEl.innerHTML = icon('i-bolt');
-    const testo = document.createElement('span');
-    testo.append(
-      textElement('strong', null, memoria.titolo),
-      textElement('small', null, memoria.contenuto.length > 80 ? `${memoria.contenuto.slice(0, 80)}…` : memoria.contenuto),
-    );
-    riga.append(iconEl, testo, textElement('span', 'status-chip success', memoria.genere));
-    return riga;
+    return creaMemoryRow(memoria);
   }
 
   /**

@@ -1,3 +1,5 @@
+import { aggiornaPaginaMemoria } from '../src/components/memoria.js';
+import { MEMORIE } from './fixtures/memoria.js';
 import { aggiornaBoard } from '../src/components/board.js';
 import { ADESSO_BOARD, SESSIONI_BOARD, METRICHE_BOARD, CARTELLE_BOARD } from './fixtures/board.js';
 import template from '../index.template.html';
@@ -46,6 +48,7 @@ document.documentElement.setAttribute('data-schermo', 'chat');
 const componente = new URLSearchParams(location.search).get('componente') || '';
 
 const LABORATORI = {
+  MemoryRow() { aggiornaPaginaMemoria(document.getElementById('schermoMemoria'), MEMORIE); },
   Board() {
     aggiornaBoard(document.getElementById('schermoBoard'), SESSIONI_BOARD, {adesso:ADESSO_BOARD,metriche:METRICHE_BOARD,cartelle:CARTELLE_BOARD,cartelleCaricate:true});
   },
