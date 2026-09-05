@@ -164,6 +164,24 @@ export function montaPonteLegacy(documentObj = document) {
   const compositore = uno(piede, '#composerForm');
   battezza(uno(compositore, '.talos-send'), { classi: ['send-btn'] });
   battezza(uno(chat, '.talos-topbar__title h1'), { id: 'sessionTitle' });
+  /*
+   * 05/9 Fase 2: Topbar. Il titolo con il chevron e il pulsante «Albero dei rami»
+   * aprono il foglio VERO della sessione (openSheet('sessionTree') del monolite),
+   * non il velo statico del mockup con i suoi dati d'esempio: via `data-apre-velo`,
+   * al suo posto `data-open-sheet`, che il monolite cabla all'avvio. Le tre azioni
+   * aggiunte al mockup (Comandi, Comprimi il contesto, Dettagli) prendono gli id
+   * e i data-* con cui il monolite le trova.
+   */
+  const titolo = uno(chat, '.talos-topbar__title');
+  battezza(titolo, { id: 'sessionTitleButton', dati: { 'open-sheet': 'sessionTree' } });
+  titolo.setAttribute('role', 'button');
+  titolo.tabIndex = 0;
+  const albero = uno(chat, '.talos-topbar__actions [data-apre-velo="veloAlbero"]');
+  albero.removeAttribute('data-apre-velo');
+  battezza(albero, { dati: { 'open-sheet': 'sessionTree' } });
+  battezza(uno(chat, '.talos-topbar__actions [data-azione="comandi"]'), { id: 'commandPaletteBtn' });
+  battezza(uno(chat, '.talos-topbar__actions [data-azione="comprimi"]'), { id: 'compactSessionBtn' });
+  battezza(uno(chat, '.talos-topbar__actions [data-azione="dettagli"]'), { classi: ['desktop-context-toggle'], dati: { 'open-panel': 'inspector' } }); // il monolite ascolta il toggle SOLO con questa classe (toggleDesktopInspector)
   battezza(uno(chat, '.talos-topbar__actions .talos-icon-button[title="Riprendi"]'), { id: 'resumeSessionBtn' });
   battezza(uno(chat, '.talos-topbar'), { classi: ['topbar'] });
   battezza(uno(chat, '.talos-topbar__actions'), { classi: ['topbar-right'] });
