@@ -440,6 +440,36 @@ dall'owner (non dal CLI).
   altro client)»: il monolite perde `_rispostaDataQui` al ricarico. Onesto ma impreciso; si cura
   ricordando la richiesta risposta nello store della sessione (Fase 3, con le ricevute).
 - Istanza 4181 (kernel, a pagamento) SPENTA a prova finita.
+- T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
+  15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
+  statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo
+  all'invio compare il toast «Invio non riuscito: Failed to fetch» — testo grezzo del browser in
+  inglese (H22), da `app.js:10554-10555`. Al ritorno del server nessun «ricollegato». Hermes ha
+  `gateway-connecting-overlay.tsx` per questo stato. ⇒ riga di lavoro dopo il cutover: stato
+  onesto della connessione nella statusbar (`runtime-status` è mio) con testo umano, e prova al
+  contrario nello script di confronto. Stesso cervello sull'originale: comportamento identico per
+  costruzione (4180 spento al momento della prova, non rilanciato).
+- T-16 (stesso screenshot `foto/caduta-4175-invio.png`): i toast del monolite (`toast()`) escono
+  in basso a SINISTRA come testo grezzo in grassetto, fuori dalla shell, senza il linguaggio del
+  mockup (nessun `talos-toast`); e il toast «Ripresa della sessione avviata 1 g fa · riprendere
+  costa circa 92.1k token (stima)» resta in coda e riappare al primo invio. Il contenitore dei
+  toast è DOM legacy: va battezzato col `Toast` del mockup (chi: B7 Astra se i dialoghi/notifiche
+  sono suoi, altrimenti io nel bridge) — da decidere nella prossima review, non lasciare cadere.
+  ✅ CHIUSA 05/09 21:40, ordine dell'owner («bruttissima quella notifica in basso a sinistra,
+  sistemala bene»): componente `src/components/toast.js` col markup del mockup (badge col tono,
+  testo, azione facoltativa, chiusura `#i-x`), pila in `#regioneToast` (basso a destra, al più
+  tre, timer fermo sotto il mouse e col fuoco, guasti che restano finché non li chiudi,
+  `role=alert` per i guasti), variante `talos-toast--breve` nel mockup per i toast senza azione
+  (chiusura in alto a destra, scheda bassa); `toast()` del monolite rimappata senza toccare i 25
+  punti di chiamata; H22: «Failed to fetch» → «Il server non risponde. Controlla che TALOS sia
+  avviato e riprova.» (`messaggioUmano`). Ricerca 05/09: phoca.cz a11y-component-lab/toast,
+  ariaui.dev toast, designsystemproblems.com toast accessibility (status/alert, ≥5 s, errori
+  persistenti, max 3, pausa su hover/fuoco). Prove: laboratorio `Toast` nel cancello componenti
+  (75/75, tre larghezze, struttura+parole+pixel contro i tre toast del mockup), unit
+  `tests/unit/toast.test.mjs`, statico 195/195, dal vivo su 4175 con `caduta-vivo.mjs`
+  (screenshot `foto/caduta-4175-invio.png`: due toast nel linguaggio del mockup). T-15 (nessun
+  segnale a server caduto) resta APERTA.
+
 
 **Giro 3** (artefatto + reindirizzo): con un testo scritto durante il giro «Reindirizza» compare
 (prima nascosto) e, premuto, il modello risponde alla correzione («di' solo quante funzioni»: «2

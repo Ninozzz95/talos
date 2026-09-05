@@ -665,6 +665,7 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-toast-region{position:fixed;right:var(--talos-space-md);bottom:var(--talos-space-lg);width:min(var(--talos-inspector-w),calc(100% - var(--talos-space-lg) - var(--talos-space-lg)));display:grid;gap:var(--talos-space-sm);z-index:calc(var(--talos-z-app-overlay) - 1)}
 .talos-toast{padding:var(--talos-space-md);background:var(--talos-panel);box-shadow:var(--talos-shadow-floating)}
 .talos-toast p{margin-block:var(--talos-space-sm);overflow-wrap:anywhere}
+.talos-toast{position:relative}.talos-toast--breve>[role]{padding-inline-end:2.25rem}.talos-toast--breve .talos-toolbar{position:absolute;inset-inline-end:var(--talos-space-sm);inset-block-start:var(--talos-space-sm)}
 .talos-notification-panel{position:fixed;width:var(--talos-inspector-w);max-width:calc(100vw - var(--talos-space-lg));padding:var(--talos-space-md);z-index:var(--talos-z-menu);background:var(--talos-panel);box-shadow:var(--talos-shadow-floating)}
 .talos-notification-panel h2{font-size:var(--talos-font-size-md)}
 
