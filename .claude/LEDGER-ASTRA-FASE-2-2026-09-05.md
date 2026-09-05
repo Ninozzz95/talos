@@ -598,3 +598,95 @@ I nomi sostituiscono il segnaposto immagini del piano iniziale; nessun altro PNG
 - .claude/immagini/astra-fase2/Board/app-metriche-destra-1024.png
 - .claude/immagini/astra-fase2/Board/app-filtro-errore-1024.png
 - .claude/immagini/astra-fase2/Board/app-errore-1024.png
+
+## B5.1 — Memoria, piano prima dell'edit · 05/09/2026
+
+Base: 6ea01e8 unita con lane/harness-desktop 81cc5cc5. Sottosistema TALOS UI. Originale ispezionato e screenshot APERTO: Gestisci capability → Memory, lista vuota globale. Pagina statica ispezionata e screenshot APERTO: quattro righe fittizie, «7 ricordi / 3 strati» e Correggi senza rotta.
+
+Premesse false registrate PRIMA dell'implementazione: GET /sessions/5b30b23d-008f-479f-a078-7b4aea6fbe37/memory → {memorie:[],errore:null}; /notes → {note:[],errore:null}. memory-store.mjs: GENERI = preference/project_fact/procedure/policy_note; record {id,titolo,contenuto,genere,creataAlle,aggiornataAlle}. Scope globale. Nessun contatore d'uso, tre strati o rotta HTTP di modifica manuale. Si applica l'ordine owner successivo: azioni senza rotta hidden data-richiede=fase3; nessun backend nuovo e nessun dato inventato. La variante funzionante del mockup avrà i quattro generi reali e il contenuto originale; strati/uso/Correggi richiedono fase 3. Il link al deposito deve chiamarsi .memory-store, non .harness-ui-memory.
+
+Ricerca 05/09/2026: https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Roles/list_role (12/05/2025, documento stabile riletto); https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/; https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html (nessuna data di aggiornamento verificabile in questi ultimi due). Adattare i ruoli list/listitem al markup approvato; pulsante nativo con aria-expanded per leggere tutto il contenuto; stato/errori senza spostare focus. Non si spaccia questa verifica per una novità mensile. Il vecchio testo è troncato a 80 caratteri: target +1 verificabile = anteprima conservata + lettura integrale senza un modello, filtri reali per genere e ricerca su titolo/contenuto, nessun falso numero.
+
+File da modificare/creare, nessuna cancellazione:
+- .claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html
+- .claude/LEDGER-ASTRA-FASE-2-2026-09-05.md
+- .claude/CONSEGNA-ASTRA-FASE-2-2026-09-05.md
+- harness-ui/frontend/src/components/memoria.js
+- harness-ui/frontend/lab/fixtures/memoria.js
+- harness-ui/frontend/lab/main.js
+- harness-ui/frontend/tests/unit/memoria.test.mjs
+- harness-ui/frontend/tests/parity/componenti.spec.mjs
+- harness-ui/frontend/tests/parity/memoria-vivo.spec.mjs
+- harness-ui/frontend/playwright.astra.config.mjs
+- harness-ui/frontend/src/legacy/app.js (rigaMemoria, caricaPannelloMemoria, un'attivazione della SOLA pagina memoria in setView, stato/generazione Memoria)
+- harness-ui/frontend/index.template.html (generato)
+- harness-ui/frontend/src/styles/index.css (generato)
+
+Simboli nuovi: genereMemoria, testiMemoria, filtraMemorie, creaMemoryRow, aggiornaPaginaMemoria. Nessuna modifica a rigaNota in questo componente: l'instradamento delle Note rimane da collegare in B5/B4, il pannello originale rimane accessibile e intatto. Le funzioni della chat/Sidebar/Review, il ponte, public e le 7 chiavi/23 eventi/19 endpoint congelati restano invariati. Nessuno store globale sarà scritto per costruire una prova.
+
+RED: MEMORIA-GENERI, MEMORIA-TESTO-INTEGRO, MEMORIA-RICERCA (query su contenuto completo, ignoto non diventa preferenza); import assente. Poi parità MemoryRow, innesto, API vuota reale 4177/4179, errore e recupero, fixture HTTP esplicitamente sintetica per dettaglio/filtro/cambio sessione durante fetch. GREEN: unità mirate, componenti, test:lab, verify (con debito CSS B3 già registrato), test vivo Memoria. Rollback: revert del solo commit, nessuna scrittura persistente.
+
+Cosa deve fare l'owner: nessuna preparazione. Cosa fai tu dopo: rendere il componente, provare e commit. Cosa rimane: altri componenti B5, B4/B6/B2/B7/B1/B8, rotte e metadati sopra per fase 3, OAuth e piano computer-use.
+
+
+B5.1 prima dell’innesto, 05/09/2026: unità 3/3 e parità MemoryRow 3/3; aperte tutte le sei immagini (tre mockup e tre componente). Una sola variante CSS per espandere testo/titolo, zero token e zero blocchi nuovi. Per isolare pagina e vecchio foglio si usa il parametro privato pagina e una WeakMap generazioniMemoria per mount; rigaNota e tutto il resto del foglio restano intatti.
+
+B5.1 manifest esplicito prima delle catture:
+- .claude/immagini/astra-fase2/MemoryRow/mockup-1440.png
+- .claude/immagini/astra-fase2/MemoryRow/componente-1440.png
+- .claude/immagini/astra-fase2/MemoryRow/app-vuota-1440.png
+- .claude/immagini/astra-fase2/MemoryRow/originale-vuota-1440.png
+- .claude/immagini/astra-fase2/MemoryRow/fixture-lettura-1440.png
+- .claude/immagini/astra-fase2/MemoryRow/fixture-filtro-vuoto-1440.png
+- .claude/immagini/astra-fase2/MemoryRow/app-errore-1440.png
+- .claude/immagini/astra-fase2/MemoryRow/mockup-1280.png
+- .claude/immagini/astra-fase2/MemoryRow/componente-1280.png
+- .claude/immagini/astra-fase2/MemoryRow/app-vuota-1280.png
+- .claude/immagini/astra-fase2/MemoryRow/originale-vuota-1280.png
+- .claude/immagini/astra-fase2/MemoryRow/fixture-lettura-1280.png
+- .claude/immagini/astra-fase2/MemoryRow/fixture-filtro-vuoto-1280.png
+- .claude/immagini/astra-fase2/MemoryRow/app-errore-1280.png
+- .claude/immagini/astra-fase2/MemoryRow/mockup-1024.png
+- .claude/immagini/astra-fase2/MemoryRow/componente-1024.png
+- .claude/immagini/astra-fase2/MemoryRow/app-vuota-1024.png
+- .claude/immagini/astra-fase2/MemoryRow/originale-vuota-1024.png
+- .claude/immagini/astra-fase2/MemoryRow/fixture-lettura-1024.png
+- .claude/immagini/astra-fase2/MemoryRow/fixture-filtro-vuoto-1024.png
+- .claude/immagini/astra-fase2/MemoryRow/app-errore-1024.png
+Le immagini fixture-* mostrano dati HTTP sintetici, non memorie presenti nel deposito. App-vuota e originale-vuota usano la rotta vera, senza intercettazione.
+
+### B5.1 — correzione della prova, 05/09/2026
+Fonte riverificata prima dell’edit: https://playwright.dev/docs/actionability e https://playwright.dev/docs/api/class-response#response-finished (documentazione stabile, senza data di modifica dichiarata). Pin locale Playwright 1.62.1. Adotto click con controlli di raggiungibilità, senza force, e attesa esplicita della risposta completata. Il test MEMORIA-REALE falliva a 1024 perché il pannello originale era fuori viewport: prima si apre .desktop-context-toggle, già presente nel codice originale e nelle prove A6. MEMORIA-RECUPERO deve attendere la risposta obsoleta completata prima dell’asserzione, con rilascio in finally. Solo tests/parity/memoria-vivo.spec.mjs; nessun cambiamento del prodotto.
+
+### B5.1 — numero sconosciuto diverso da zero · 05/09/2026
+Rilevato guardando app-errore alle tre larghezze: il messaggio di errore è corretto, ma il percorso nella testata mostra ancora 0 ricordi quando la lettura fallisce. Ricerca fresca: WCAG Status Messages, https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html, documento stabile riverificato oggi. Decisione adottata: rappresentare caricamento ed errore esplicitamente, conteggio solo su lettura riuscita. File: src/components/memoria.js (renderMemoria privato), tests/parity/memoria-vivo.spec.mjs (MEMORIA-RECUPERO-NON-ZERO, estensione del caso esistente), ledger e consegna; nessun CSS/contratto/endpoint nuovo. Prima RED a 1440, poi modifica di una assegnazione e GREEN di tutte le prove Memoria.
+
+Confronto documentale compatto prima del fix, finestra 06/08–05/09/2026 (nessun nuovo audit Hermes). Hermes: https://github.com/NousResearch/hermes-agent/releases/tag/v2026.8.31, v0.21.0 commit 29112be, 31/08/2026: continuità/memoria dei cron e protezione dei file istruzione; https://hermes-agent.nousresearch.com/docs/user-guide/features/memory/ documenta depositi distinti e limiti 2200/1375 caratteri. Forza: stato persistente e capacità limitata esplicita; limite: il contenuto va consolidato per entrare nel prompt. Claude Code: https://github.com/anthropics/claude-code/releases/tag/v2.1.261, d7dbd9a, 04/09/2026: motivo della policy non caricata visibile in status/doctor; https://code.claude.com/docs/en/memory: memoria automatica con file tematici, prime 200 righe o 25KB lette all’avvio. Forza: continuità e leggibilità; limite documentato: contenuto oltre soglia non caricato inizialmente. Codex: https://github.com/openai/codex/releases/tag/rust-v0.153.4, 3d2ee51, 04/09/2026, nessuna novità memoria in questa release; https://learn.chatgpt.com/docs/agent-configuration/agents-md: gerarchia esplicita con limite predefinito 32KiB. Forza: istruzioni con scope definito; limite: budget di caricamento finito. Documenti stabili riverificati oggi, data di modifica non verificata; non attribuisco questi limiti alle release citate. Nessun difetto UI dei competitor affermato senza prova. Adatto visibilità dello scope, integrità del testo e motivo di errore al contratto TALOS; rifiuto di importare gli store/protocolli competitor nel componente di sola lettura. +1 misurabile per TALOS su questi aspetti: conteggio solo dopo lettura riuscita, testo intero disponibile e ricercabile senza chiamate modello, dati mancanti distinti da lista vuota. Limiti di prompt/caricamento effettivo del modello restano fuori da B5.1; nessuna superiorità complessiva dichiarata.
+
+RED confermato: MEMORIA-RECUPERO a 1440 attende Ricordi non disponibili e riceve 0 ricordi · globali. Il cancello statico prima del fix è 195/195.
+
+## B5.1 — MemoryRow consegnabile · 05/09/2026
+
+La pagina Memoria usa GET /api/v1/sessions/:id/memory e le righe del mockup. Nello store di confronto non ci sono ricordi: 4177 e 4179 mostrano entrambi il vuoto. Ricerca su titolo e contenuto completo, quattro generi veri, Leggi/Chiudi da tastiera, data di aggiornamento quando presente, errore/ricarico e risposta obsoleta verificati. Correggi resta hidden data-richiede=fase3: nessuna rotta di scrittura inventata.
+
+| Aspetto | Originale desktop | Componente | Evidenza/verdetto |
+|---|---|---|---|
+| Dati e scope | lista globale nel foglio capability | stessa API e stesso vuoto, genere conservato con nome italiano | app-vuota/originale-vuota a 1440/1280/1024; parità dei dati vuoti |
+| Testo | anteprima a 80 caratteri | anteprima + contenuto intero espandibile e data disponibile | MEMORIA-FIXTURE, testo oltre 80 caratteri trovato e letto; beneficio provato con fixture |
+| Accesso | aprire il foglio e scorrere alla memoria | voce Memoria, lista dedicata | screenshot aperti; nessuna modifica della sidebar |
+| Stato | messaggio nel mount | caricamento, errore distinto da zero, Aggiorna e guardia sulle risposte obsolete | RED numero falso riprodotto e risolto; MEMORIA-RECUPERO 3 viewport |
+| Tastiera e forma | righe passive | tab con frecce/Home/End; Enter/Spazio Leggi/Chiudi; focus visibile | parità struttura/parole/pixel e screenshot lettura aperti |
+| Responsive | foglio originale con scorrimento | testo espanso va a capo; a 1024 Aggiorna si dispone sotto i filtri ed è raggiungibile | 21 immagini aperte, nessun taglio del contenuto espanso |
+| Persistenza | deposito globale sul disco | sola lettura, ricarico rilegge il deposito | niente richieste di scrittura nella prova; filtri temporanei, non impostazioni persistenti |
+
+Blocchi riusati: MemoryRow, MemoryList, FilterChips, Field, Button, Badge, PageHeader, WhereOnDisk e sprite esistente. Blocchi nuovi 0, token nuovi 0; una sola regola CSS scoped alla riga espansa, definita nel mockup e rigenerata. Il codice mobile MemoryScreen.vue conferma ricerca su titolo/contenuto e quattro generi; i suoi scope/CRUD/stato non sono disponibili nell’endpoint desktop e non vengono simulati.
+
+Cancelli: unità Memoria 3/3; componenti completi 30/30, MemoryRow ripetuto dopo il fix 3/3; live Board+Memoria 21/21, Memoria ripetuta dopo il fix 9/9; statico 195/195; build 30 asset e determinismo verde. verify rimane ROSSO per il solo PHASE3-TOKEN-CONTRACT-01 preesistente (326/327 unità/contratti): index.css generato contiene colori già nella base 81cc5cc5; nessun bypass del test. Ultimo fix cambia solo la testata in caricamento/errore, non il mockup statico. Tutti i 21 PNG del manifesto sono stati aperti; i tre errori sono stati riaperti dopo il fix. Dati fixture separati dai risultati reali.
+
+Richieste a Claude: allineare contratto CSS e generazione canonica; collegamento Note assente (decisione C2, NavItem data-conteggio=note senza data-vaia, nessuno schermoNote nel mockup e nessuna mappa nel ponte). Per §9 non invento una rotta o una pagina e non tocco sidebar/ponte. rigaNota resta da estrarre quando il contenitore è definito. C22/C23 richiedono API per strati, ultima lettura e modifica; non certificati da questa pagina.
+
+Non verificato: lettura di memorie realmente scritte da un modello, chat multi-turn, screen reader su dispositivo, volumi superiori alle quattro fixture, CRUD e uso effettivo nel prompt. TALOS_OWNER_RUNTIME_MODULE assente: nessuna prova modello dichiarata.
+
+**Cosa deve fare l’owner:** aprire http://127.0.0.1:4177 → Memoria e valutare gli screenshot.
+**Cosa fai tu dopo:** TaskRow/Attività, prossimo componente B5.
+**Cosa rimane:** Note e altre pagine B5, B4 → B6 → B2 → B7 → B1 → B8; debito CSS/rotte fase 3; OAuth e piano computer-use.

@@ -457,6 +457,7 @@ button{background:none; border:0; cursor:pointer; padding:0}
 .talos-list-row:first-child{border-top:0}
 .talos-list-row:hover{background:var(--talos-card-subtle)}
 .talos-list-row[aria-selected="true"]{background:linear-gradient(90deg,var(--talos-accent-soft),transparent); box-shadow:inset 2px 0 var(--talos-accent)}
+[data-c="MemoryRow"][data-aperta="true"] .talos-list-row__sub,[data-c="MemoryRow"][data-aperta="true"] .talos-list-row__title{white-space:pre-wrap;overflow-wrap:anywhere}
 .talos-list-row--muted{opacity:.55}
 .talos-list-row--done{opacity:.6}
 .talos-list-row__icon{width:34px; height:34px; border-radius:10px; background:var(--talos-panel-soft); border:1px solid var(--talos-border-subtle); display:grid; place-items:center; color:var(--talos-muted); flex:none}
