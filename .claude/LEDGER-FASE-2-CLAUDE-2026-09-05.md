@@ -440,3 +440,10 @@ dall'owner (non dal CLI).
   altro client)»: il monolite perde `_rispostaDataQui` al ricarico. Onesto ma impreciso; si cura
   ricordando la richiesta risposta nello store della sessione (Fase 3, con le ricevute).
 - Istanza 4181 (kernel, a pagamento) SPENTA a prova finita.
+
+**Giro 3** (artefatto + reindirizzo): con un testo scritto durante il giro «Reindirizza» compare
+(prima nascosto) e, premuto, il modello risponde alla correzione («di' solo quante funzioni»: «2
+funzioni»); `artifact_create` produce una ArtifactCard vera («Funzioni matematica.mjs», iframe
+isolato su `/api/v1/artifacts/<id>`, «Apri»). 22 s, zero errori. Immagini: `artefatto-vero.png`,
+`reindirizza-durante-il-giro.png`, `artefatto-giro-concluso.png`. Resta non visto dal vivo solo la
+dettatura (serve un microfono). Istanza 4181 spenta di nuovo.
