@@ -393,3 +393,8 @@ sprite originale) → `#sessionsCollapseBtn` → `toggleSessionsPanel` del monol
 solo sul gesto della persona (il sync dell'avvio lo cancellava). Dal vivo: 276→64 px, ricarico,
 entrambe ricordate, riapertura, zero errori. Immagini in `immagini/fase2-claude/Collassi/`.
 Per Astra B8 restano: densità, tema chiaro, lingua.
+
+**T-13** (verificato 05/09 sera): `GET /api/v1/projects` risponde solo `{id, nome}` — nessun
+percorso — quindi per un progetto con id lo stato vuoto non può leggere i fatti della cartella
+(niente suggerimenti, onestamente). Serve il percorso nella risposta (o una rotta
+`workspace-browser?projectId=`): riga K per il kernel/server, Fase 3.
