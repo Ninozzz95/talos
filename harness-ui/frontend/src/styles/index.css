@@ -691,7 +691,7 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-lab__rule{border:0;border-top:var(--talos-focus-width) solid var(--talos-border);margin-block:var(--talos-space-md)}
 .talos-lab__download{padding:var(--talos-space-md);border-bottom:var(--talos-focus-width) solid var(--talos-border)}
 .talos-lab__meter{display:block;width:100%;height:var(--talos-space-md);accent-color:var(--talos-accent);margin-block:var(--talos-space-md)}
-#schermoModelLab .talos-list-row[aria-pressed="true"]{background:var(--talos-accent-soft);box-shadow:inset var(--talos-focus-width) 0 var(--talos-accent)}
+#schermoModelLab .talos-list-row[aria-pressed="true"],[data-catalog-panel] .talos-list-row[aria-pressed="true"]{background:var(--talos-accent-soft);box-shadow:inset var(--talos-focus-width) 0 var(--talos-accent)}
 #schermoModelLab .talos-toolbar>input{width:auto;min-width:0}
 #schermoModelLab .talos-kv__k{white-space:normal;overflow:visible;text-overflow:clip}
 #promptProva{min-height:calc(var(--talos-control-height) * 3);resize:vertical;padding:var(--talos-space-control)}
@@ -788,3 +788,13 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 #schermoImpostazioni [data-search-result]{border-top:1px solid var(--talos-border);padding-top:12px;overflow-wrap:anywhere}
 #schermoImpostazioni [data-search-result] ul{padding-left:20px}
 #schermoImpostazioni [data-search-result],#schermoImpostazioni [data-search-error]{scroll-margin-block:12px}
+
+/* 05/9 B6: catalogo nella larghezza effettiva del suo pannello. */
+[data-catalog-panel]{container-type:inline-size}
+[data-catalog-list]{max-height:480px;overflow:auto}
+[data-catalog-detail] .talos-kv{display:grid;grid-template-columns:minmax(90px,.8fr) minmax(0,1.4fr);gap:10px}
+[data-catalog-panel] .talos-kv__k,[data-catalog-panel] .talos-kv__v,[data-catalog-panel] code{white-space:normal;overflow-wrap:anywhere;min-width:0}
+#schermoImpostazioni [data-catalog-detail] .talos-kv__v{max-width:none}
+[data-catalog-panel] .talos-list-row__title{white-space:normal;overflow-wrap:anywhere}
+[data-catalog-panel] [role=alert]{color:var(--talos-danger)}
+@container (max-width:700px){[data-catalog-panel] .talos-split{grid-template-columns:minmax(0,1fr)}[data-catalog-panel] .talos-detail{position:static}}
