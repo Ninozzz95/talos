@@ -589,3 +589,4 @@ button{background:none; border:0; cursor:pointer; padding:0}
 #veloComandi .talos-dialog__body{display:flex;flex-direction:column;overflow:hidden}
 #veloComandi .talos-dialog__field{flex:none}
 #risultatiComandi{overflow-y:auto;min-height:0}
+#veloIntro [data-intro-passo][aria-current="step"],#veloIntro [data-intro-policy][aria-checked="true"]{background:var(--talos-accent-soft);color:var(--talos-accent-text);box-shadow:inset var(--talos-focus-width) 0 var(--talos-accent)}
