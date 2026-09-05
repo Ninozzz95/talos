@@ -208,7 +208,7 @@ test.describe('parità app ↔ mockup', () => {
       await mostra(m.pagina, 'schermoChat', velo);
       await mostra(a.pagina, 'schermoChat', velo);
       expect(await struttura(a.pagina, `#${velo}`)).toEqual(await struttura(m.pagina, `#${velo}`));
-      if(velo==='veloComandi'){const d=path.resolve(radice,'../../.claude/immagini/astra-mockup');await mkdir(d,{recursive:true});await m.pagina.screenshot({path:path.join(d,'palette-'+info.project.use.viewport.width+'.png')});}
+      if(['veloComandi','veloNuova'].includes(velo)){const d=path.resolve(radice,'../../.claude/immagini/astra-mockup');await mkdir(d,{recursive:true});await m.pagina.screenshot({path:path.join(d,(velo==='veloComandi'?'palette-':'nuova-riferimento-')+info.project.use.viewport.width+'.png')});}
       const nome = `${velo}-${info.project.name}`;
       const esito = await confrontaPixel(nome, await m.pagina.locator(`#${velo} .talos-dialog`).screenshot(), await a.pagina.locator(`#${velo} .talos-dialog`).screenshot());
       expect(esito.ok, `${nome}: ${esito.motivo} — vedi artifacts/parita/${nome}-diff.png`).toBe(true);
@@ -279,13 +279,13 @@ test('ASTRA Intro quattro passi e quattro politiche',async({browser},info)=>{
   await foto('cartella');
   await p.locator('#introCartella').fill('C:/progetti/esempio');await p.locator('#introAvanti').click();
   await expect(p.locator('#passoIntroModello')).toBeVisible();await foto('modello');
-  await p.locator('#introChiave').fill('chiave-fittizia');await p.locator('#introEsitoAccesso').selectOption('rifiutata');await p.locator('#introProvaAccesso').click();await expect(p.locator('#introChiave')).toHaveValue('');await expect(p.locator('#introAccessoStato')).toContainText('chiave rifiutata');
+  await p.locator('#introFornitore').selectOption('OpenRouter');await p.locator('#introChiave').fill('chiave-fittizia');await p.locator('#introProvaAccesso').click();await expect(p.locator('#introChiave')).toHaveValue('');await expect(p.locator('#introAccessoStato')).toContainText('Accesso da verificare');
   await p.locator('#introModello').selectOption('claude-opus-5');await p.locator('#introAvanti').click();
   await expect(p.locator('#veloIntro [data-intro-policy]')).toHaveCount(4);await expect(p.locator('#introAvanti')).toBeDisabled();
   await p.locator('[data-intro-policy="Workspace write"]').click();await foto('permessi');
   await p.locator('#introIndietro').click();await expect(p.locator('#introModello')).toHaveValue('claude-opus-5');await p.locator('#introAvanti').click();
   await p.locator('#introAvanti').click();await expect(p.locator('#introRiepilogo')).toContainText('C:/progetti/esempio');await foto('fine');
-  await p.locator('#introAvanti').click();await expect(p.locator('#veloIntro')).toBeHidden();await expect(p.locator('#veloNuova')).toBeVisible();
+  await p.locator('#introAvanti').click();await expect(p.locator('#veloIntro')).toBeHidden();await expect(p.locator('#schermoVuota')).toBeVisible();
  }finally{await contesto.close();}
 });
 
@@ -311,4 +311,21 @@ test('ASTRA Model Lab sei schede e recupero funzioni',async({browser},info)=>{
 test('ASTRA Model Lab sélection cohérente',async({browser},info)=>{
  const {contesto,pagina:p}=await apri(browser,MOCKUP,{js:true,viewport:info.project.use.viewport});
  try{await p.goto(MOCKUP+'#modellab');await p.locator('#tab-catalogo').click();await p.locator('[data-catalog][data-provider="Google"]').click();await expect(p.locator('#catalogoStato')).toContainText('Accesso da impostare');await p.locator('[data-catalog][data-provider="Qwen"]').click();await expect(p.locator('#catalogoIngresso')).toHaveText('Testo e codice');await p.locator('#tab-hf').click();await p.locator('[data-hf="gemma"]').click();await expect(p.locator('#hfTuttiFile')).toBeDisabled();await p.locator('#tab-installati').click();await p.locator('#azioneModello').click();await expect(p.locator('[data-model="qwen8"]')).not.toContainText('Caricato');}finally{await contesto.close();}
+});
+
+test('ASTRA Intro decisioni H16 H20 e avvio condizionale',async({browser},info)=>{
+ const {contesto,pagina:p}=await apri(browser,MOCKUP,{js:true,viewport:info.project.use.viewport});
+ try{
+ await expect(p.locator('#veloIntro')).toBeHidden();await p.goto(MOCKUP+'#impostazioni');
+ await p.getByRole('button',{name:'Ripeti il primo avvio',exact:true}).click();
+ await p.locator('#introAvanti').click();await expect(p.locator('#introFornitore')).toHaveValue('local');await expect(p.locator('#introPrivacy')).toContainText('Nessuna telemetria, niente esce da questa macchina');
+ await p.locator('#introFornitore').selectOption('OpenRouter');await expect(p.locator('#introAccesso')).toBeVisible();await expect(p.locator('#introPrivacyRemoto')).toBeVisible();await expect(p.locator('#introEsitoAccesso')).toHaveCount(0);await p.screenshot({path:path.resolve(radice,'../../.claude/immagini/astra-mockup/intro-remoto-'+info.project.use.viewport.width+'.png')});
+ await p.locator('#introFornitore').selectOption('local');await p.locator('#introModello').selectOption('qwen-local');await p.locator('#introAvanti').click();await p.locator('[data-intro-policy="Full access"]').click();await expect(p.locator('#introAvanti')).toBeDisabled();await p.locator('#introConfermaPieno').check();await p.locator('#introAvanti').click();await p.locator('#introAvanti').click();await expect(p.locator('#schermoVuota')).toBeVisible();await expect(p.locator('#schermoVuota textarea')).toHaveValue(/Esamina/);
+ await p.goto(MOCKUP);await expect(p.locator('#veloIntro')).toBeHidden();
+ await p.evaluate(()=>localStorage.setItem('talos.mockup.intro.v1',JSON.stringify({provider:{pronto:false},modello:'',politica:'',esito:'da-completare'})));await p.reload();await expect(p.locator('#veloIntro')).toBeVisible();await p.locator('#introSalta').click();await p.reload();await expect(p.locator('#veloIntro')).toBeHidden();
+ }finally{await contesto.close();}
+});
+if(process.env.ASTRA_ORIGINALE_URL)test('ASTRA Originale Intro dati 4179',async({browser},info)=>{
+ const c=await browser.newContext({viewport:info.project.use.viewport,locale:'it-IT',reducedMotion:'reduce'});const p=await c.newPage();
+ try{await p.goto(process.env.ASTRA_ORIGINALE_URL);await expect(p.locator('#introDialog')).toBeVisible({timeout:15000});const d=path.resolve(radice,'../../.claude/immagini/astra-mockup');await p.screenshot({path:path.join(d,'originale-intro-modello-'+info.project.use.viewport.width+'.png')});await p.locator('#introBack').click();await p.screenshot({path:path.join(d,'originale-intro-accesso-'+info.project.use.viewport.width+'.png')});}finally{await c.close();}
 });
