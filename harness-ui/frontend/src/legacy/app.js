@@ -1,3 +1,4 @@
+import {montaCorniceModelLab,aggiornaStatoCorniceModelLab} from '../components/cornice-model-lab.js';
 import {normalizzaCatalogoModelli,filtraModelli,aggiornaDettaglioCatalogo,aggiornaCatalogoModelli,montaCatalogoModelli} from '../components/catalogo-modelli.js';
 import {normalizzaFonteRicerca,normalizzaProvaRicerca,aggiornaFonteRicerca} from '../components/fonte-ricerca.js';
 import {montaImpostazioni,mostraSezioneImpostazioni} from '../components/impostazioni.js';
@@ -2678,6 +2679,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   }
 
   function renderizzaRuntimeModelLab() {
+    aggiornaStatoCorniceModelLab($('#modelLabCardSettings') || $('#modelLabCard'), state.modelLab.runtimes, {caricamento: state.modelLab.loadingRuntime, errore: state.modelLab.runtimeError});
     const list = $('#modelLabRuntimeList');
     const status = $('#modelLabRuntimeStatus');
     const runtimeSelect = $('#modelLabRuntimeSelect');
@@ -2734,6 +2736,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (state.modelLab.loadingRuntime) return;
     state.modelLab.loadingRuntime = true;
     state.modelLab.runtimeError = null;
+    aggiornaStatoCorniceModelLab($('#modelLabCardSettings') || $('#modelLabCard'), [], {caricamento: true});
     try {
       const data = await apiGet('/api/v1/runtime');
       state.modelLab.runtimes = Array.isArray(data?.items) ? data.items : [];
@@ -3318,7 +3321,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
 
   function setModelLabSection(section) {
     state.modelLab.section = section;
-    $$('[data-model-lab-tab]').forEach((tab) => { const active = tab.dataset.modelLabTab === section; tab.classList.toggle('active', active); tab.setAttribute('aria-selected', String(active)); });
+    $$('[data-model-lab-tab]').forEach((tab) => { const active = tab.dataset.modelLabTab === section; tab.classList.toggle('active', active); tab.setAttribute('aria-selected', String(active)); tab.tabIndex = active ? 0 : -1; });
     $$('[data-model-lab-panel]').forEach((panel) => { const active = panel.dataset.modelLabPanel === section; panel.classList.toggle('active', active); panel.hidden = !active; if (active) markMotionEnter(panel); });
     if (section === 'catalog' && !state.modelLab.catalog && !state.modelLab.catalogError) caricaCatalogoModelLab();
     if (section === 'installed' && !state.modelLab.loadingInstalled && state.modelLab.installed.length === 0 && !state.modelLab.installedError) caricaModelliLocaliModelLab();
@@ -3580,6 +3583,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   function inizializzaModelLab() {
     if (state.modelLab.initialized) return;
     state.modelLab.initialized = true;
+    montaCorniceModelLab($('#modelLabCardSettings') || $('#modelLabCard'));
     montaCatalogoModelli($('#modelLabCatalogPanel'), $('#panel-catalogo'));
     ensureModelLabControls();
     $$('[data-model-lab-tab]').forEach((tab) => tab.addEventListener('click', () => setModelLabSection(tab.dataset.modelLabTab)));
