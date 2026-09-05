@@ -1,9 +1,11 @@
 import template from '../index.template.html';
 import { LUOGHI, LUOGHI_ALTRI, creaNavItem } from '../src/components/nav-item.js';
 import { creaSessionItem } from '../src/components/session-item.js';
+import { aggiornaTopbar } from '../src/components/topbar.js';
 import { creaWorkspaceFooter } from '../src/components/workspace-footer.js';
 import { CONTEGGI } from './fixtures/luoghi.js';
 import { ADESSO, CORRENTE, FISSATE, SESSIONI } from './fixtures/sessioni.js';
+import { TESTATA } from './fixtures/testata.js';
 import { WORKSPACE } from './fixtures/workspace.js';
 
 /*
@@ -34,6 +36,14 @@ document.documentElement.setAttribute('data-schermo', 'chat');
 const componente = new URLSearchParams(location.search).get('componente') || '';
 
 const LABORATORI = {
+  Topbar() {
+    /* Prima si svuota ciò che il mockup scrive a mano, poi il componente lo riscrive dai dati. */
+    const topbar = document.querySelector('#schermoChat .talos-topbar');
+    topbar.querySelector('h1').textContent = '';
+    topbar.querySelector('.talos-topbar__path').textContent = '';
+    for (const badge of topbar.querySelectorAll('.talos-tabs__count')) badge.remove();
+    aggiornaTopbar(topbar, TESTATA);
+  },
   WorkspaceFooter() {
     const finto = document.querySelector('.talos-sidebar .talos-sidebar__foot');
     finto.replaceWith(creaWorkspaceFooter(WORKSPACE));

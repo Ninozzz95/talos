@@ -1,5 +1,6 @@
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
+import { aggiornaTopbar } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati
 import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 05/9 Fase 2: WorkspaceFooter — il piede della sidebar dice cartella, tema e chi serve il modello // 05/9 Fase 2: SessionItem — la riga della sidebar è un componente del mockup
 
 (() => {
@@ -6125,7 +6126,7 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
         }
         if (!state.sessioneTarget || targetSessionId === state.realSession.id) {
           state.session = nomeUnico;
-          sessionTitle.textContent = state.session;
+          sessionTitle.textContent = state.session; aggiornaTestataSessione(); // 05/9 Fase 2: Topbar
           $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
           const activeSession = $('.talos-session-item[aria-current="true"] .talos-session-item__title'); // 05/9 Fase 2: SessionItem
           if (activeSession) activeSession.textContent = state.session;
@@ -8191,6 +8192,7 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
    */
   function aggiornaSommarioReviewReale() {
     const voci = [...state.realSession.reviewFiles.values()];
+    aggiornaTestataSessione(); // 05/9 Fase 2: Topbar — il badge della Review segue i file toccati
     const nuovi = voci.filter((f) => f.nuovo).length;
     const modificati = voci.length - nuovi;
     const impostaTesto = (id, testo) => { const el = $(`#${id}`); if (el) el.textContent = testo; };
@@ -8241,6 +8243,7 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
     const contenitore = $('[data-view="diff"] .file-review-list');
     if (!contenitore) return;
     const voci = [...state.realSession.reviewFiles.values()];
+    aggiornaTestataSessione(); // 05/9 Fase 2: Topbar — il badge della Review segue i file toccati
     const ultimoPercorso = voci.at(-1)?.path;
     contenitore.replaceChildren(...voci.map((file) => {
       const attiva = file.path === ultimoPercorso;
@@ -9619,6 +9622,7 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
     }
     // ⭐⭐⭐ 28/8 — tenuta anche in stato, non solo nel DOM: serve a "Imposta come radice" (menu dell'albero) per calcolare il percorso assoluto di una sottocartella.
     state.realSession.cartellaAssoluta = contesto.cartella || null;
+    aggiornaTestataSessione(); aggiornaPiedeSidebar(); // 05/9 Fase 2: la cartella è arrivata (RunStarted)
     const sezione = $('[data-inspector-section="context"]');
     const demoBadge = sezione && $('.demo-surface-badge', sezione);
     if (demoBadge) demoBadge.hidden = true;
@@ -10377,7 +10381,7 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
     state.realSession.taskId = task.id;
     state.realSession.treeWorkspaceKey = `task:${task.id}`;
     state.session = `Task reale · ${task.id}`;
-    sessionTitle.textContent = state.session;
+    sessionTitle.textContent = state.session; aggiornaTestataSessione(); // 05/9 Fase 2: Topbar
     /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
     $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
     setView('chat');
@@ -10512,7 +10516,7 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
       const generation = nuovaGenerazioneSessione();
       state.realSession.taskId = taskIdOrigine;
       state.session = `Task reale · ${taskIdOrigine} (fork)`;
-      sessionTitle.textContent = state.session;
+      sessionTitle.textContent = state.session; aggiornaTestataSessione(); // 05/9 Fase 2: Topbar
     /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
     $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
       appendStatusNote(`Fork avviato dalla sessione ${idOrigine.slice(0, 8)}… — stessa cartella, stessa storia.`);
@@ -10866,7 +10870,7 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
     state.realSession.treeWorkspaceKey = `session:${sessionId}`;
     state.session = nome || `Task reale · ${taskId}`; // ⭐ un nome scelto dall'owner vince sul taskId
     applicaImpostazioniSessione(contrattoSessione);
-    sessionTitle.textContent = state.session;
+    sessionTitle.textContent = state.session; aggiornaTestataSessione(); // 05/9 Fase 2: Topbar
     /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
     $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
     setView('chat');
@@ -10903,8 +10907,25 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
     });
   }
 
+  /*
+   * 05/9 Fase 2: Topbar. Titolo = state.session (la parola della sidebar);
+   * percorso = la cartella della sessione, intero (la app non conosce la home:
+   * un «~» sarebbe inventato), assente senza cartella; Review = i file toccati
+   * (`reviewFiles`); Terminale = le schede aperte — le schede (W1-01) non hanno
+   * ancora una UI (B1, Astra): finché non c'è, il badge non si scrive.
+   */
+  function aggiornaTestataSessione() {
+    aggiornaTopbar($('#schermoChat .talos-topbar'), {
+      titolo: state.session,
+      percorso: state.realSession.cartellaAssoluta,
+      schedeTerminale: null,
+      fileReview: state.realSession.reviewFiles instanceof Map ? state.realSession.reviewFiles.size : 0,
+    });
+  }
+
   function aggiornaSottotitoloSessione() {
     aggiornaPiedeSidebar(); // 05/9 Fase 2: WorkspaceFooter
+    aggiornaTestataSessione(); // 05/9 Fase 2: Topbar
     const small = sessionTitle?.parentElement?.querySelector('small');
     if (!small) return;
     if (state.realSession.id) { small.hidden = true; return; }
@@ -12295,7 +12316,7 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
     if (modello) { state.model = modello; aggiornaPillolaModello(); }
     if (effort) state.effort = effort;
     state.session = `Nuova · ${nomeCartella}`;
-    sessionTitle.textContent = state.session;
+    sessionTitle.textContent = state.session; aggiornaTestataSessione(); // 05/9 Fase 2: Topbar
     $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
     aggiornaSottotitoloSessione(); // W1-12 — «in attesa del primo messaggio»
     aggiornaElencoSessioniReali(); // W1-12 — la riga pendente compare, evidenziata
@@ -12348,7 +12369,7 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
         ? `launch:${workspaceLaunchId}`
         : `path:${cartellaLibera || nomeCartella}`;
     state.session = `Compito libero · ${nomeCartella}`;
-    sessionTitle.textContent = state.session;
+    sessionTitle.textContent = state.session; aggiornaTestataSessione(); // 05/9 Fase 2: Topbar
     /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
     $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
     setView('chat');
@@ -12439,7 +12460,7 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
       // ⛔ la generazione può essere già cambiata (un'altra sessione avviata nel frattempo) — mai scrivere il titolo di una sessione che non è più quella a schermo.
       if (generation !== state.realSession.generation) return;
       state.session = titoloAutomatico;
-      sessionTitle.textContent = state.session;
+      sessionTitle.textContent = state.session; aggiornaTestataSessione(); // 05/9 Fase 2: Topbar
       $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
       if (titoloDisambiguato) toast('Titolo della sessione', `«${titoloAutomatico}» · rinominata per evitare un doppione con una sessione viva`);
       aggiornaElencoSessioniReali();
@@ -12829,7 +12850,7 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
       return;
     }
     state.session = 'Nuova sessione';
-    sessionTitle.textContent = state.session;
+    sessionTitle.textContent = state.session; aggiornaTestataSessione(); // 05/9 Fase 2: Topbar
     /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
     $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
     $$('.session-item').forEach((item) => item.classList.remove('active'));

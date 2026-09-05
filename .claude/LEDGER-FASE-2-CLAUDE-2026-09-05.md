@@ -147,3 +147,50 @@ dato: qui non è un metro. Immagini in `.claude/immagini/fase2-claude/WorkspaceF
 
 **Taccuino**: nessun difetto nuovo. La sidebar è finita (S-01, S-02, S-03): restano T-03
 (selezione multipla, da disegnare nel mockup) e T-04 (pin, Fase 3). Prossimo: **S-04 Topbar**.
+
+---
+
+## S-04 · Topbar (la testata della sessione) — ✅ verde, aspetta l'owner
+
+**Blocchi**: `Topbar`, `Tabs`, `IconButton` ×5. **Fixture**: `lab/fixtures/testata.js`.
+**Componente**: `src/components/topbar.js` — `aggiornaTopbar`, `impostaConteggioScheda`
+(aggiorna il markup del template dai dati, non lo ricrea: il monolite lo trova per id).
+**Monolite**: nuova `aggiornaTestataSessione()` chiamata da `aggiornaSottotitoloSessione`, dopo
+ogni `sessionTitle.textContent = state.session` (8 punti), all'arrivo della cartella
+(RunStarted) e a ogni ridisegno della Review. Titolo = `state.session`; percorso =
+`cartellaAssoluta` intero (la app non conosce la home: un «~» sarebbe inventato), assente
+senza cartella; badge Review = `reviewFiles.size`; badge Terminale = NON scritto finché le
+schede W1-01 non hanno una UI (B1, Astra).
+**Ponte**: il titolo col chevron e il pulsante «Albero dei rami» aprono il foglio VERO
+(`data-open-sheet="sessionTree"`) invece del velo statico del mockup; i tre pulsanti nuovi
+prendono `#commandPaletteBtn`, `#compactSessionBtn` e `data-open-panel="inspector"` +
+`desktop-context-toggle` (il monolite ascolta il toggle solo con quella classe). I doppioni
+legacy degli stessi id/classi nei frammenti nascosti sono stati demossi a `data-legacy-*`.
+**Mockup toccato** (nel suo linguaggio): tre `IconButton` in più nella testata — «Comandi
+(Ctrl K)», «Comprimi il contesto», «Mostra o nascondi i dettagli» (`aria-expanded`) — con due
+simboli portati dallo sprite originale (`i-command`, `i-layout`, stesso tratto 1.6); le schede
+e le azioni della testata `flex:none` e il titolo `min-width:0` (con i nomi VERI delle sessioni
+«Review» finiva tagliato); `.talos-shell.inspector-collapsed` nasconde la colonna dei dettagli
+come già fa `data-vista="pagina"`.
+
+**Ricerca** (05/09/2026): WAI-ARIA APG «Tabs Pattern» (w3.org/WAI/ARIA/apg/patterns/tabs):
+attivazione automatica al focus solo se i pannelli sono già nel DOM (lo sono), roving
+tabindex; il toggle di una regione usa `aria-expanded` (è ciò che `syncInspectorToggle` scrive).
+
+**Cancelli**: componenti **12/12** (4 componenti × 3 viewport) · statico **54/54**.
+
+**Dal vivo** (4175, sessione aperta, 1440 e 1024, zero errori): titolo vero con i puntini,
+percorso «C:\», tre schede visibili a entrambe le larghezze; il titolo e «Albero dei rami»
+aprono «Albero sessione»; «Comandi» apre «Comandi TALOS»; «Dettagli» nasconde e rimostra la
+colonna (`inspector-collapsed`, `display:none`/`flex`, `aria-expanded` false/true);
+«Comprimi» parte (nessun errore) ma senza kernel sul 4175 non c'è un giro da comprimere.
+Immagini in `.claude/immagini/fase2-claude/Topbar/`.
+
+**Taccuino**
+- T-05 il dialogo «Comandi TALOS» è il DOM legacy senza CSS (icone giganti): il velo della
+  palette nel linguaggio del mockup è la parte A di Astra (§2.4) + B7; finché non arriva, il
+  pulsante apre il foglio vecchio.
+- T-06 a 1024 la barra del composer va a capo («Sessione ~$0,08» sotto): da guardare in
+  **S-06 Piede**.
+- T-07 la colonna dei dettagli mostra ancora i dati d'esempio del mockup (B2, Astra).
+- T-08 badge Terminale assente finché le schede non hanno una UI (B1, Astra).
