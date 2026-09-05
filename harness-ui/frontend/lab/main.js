@@ -32,6 +32,8 @@ import { VUOTA } from './fixtures/vuota.js';
 import { LUOGHI, LUOGHI_ALTRI, creaNavItem } from '../src/components/nav-item.js';
 import { CONVERSAZIONE } from './fixtures/conversazione.js';
 import { PIEDE } from './fixtures/piede.js';
+import { TOAST } from './fixtures/toast.js';
+import { creaToast } from '../src/components/toast.js';
 import { creaSessionItem } from '../src/components/session-item.js';
 import { aggiornaTopbar } from '../src/components/topbar.js';
 import { creaWorkspaceFooter } from '../src/components/workspace-footer.js';
@@ -97,6 +99,11 @@ const LABORATORI = {
     for (const voce of REVIEW.voci) elenco.append(creaRigaFileReview(voce, { attiva: voce.path === REVIEW.corrente }));
     aggiornaDiffReview(schermo.querySelector('.talos-review__diff'), REVIEW.voci.find((v) => v.path === REVIEW.corrente));
     schermo.querySelector('.talos-topbar__path').textContent = riassuntoReview(REVIEW.voci);
+  },
+  Toast() {
+    const regione = document.querySelector('#regioneToast');
+    regione.replaceChildren(...TOAST.map((t) => creaToast(t).scheda));
+    regione.hidden = false;
   },
   ChatFooter() {
     /* Prima si svuota ciò che il mockup scrive a mano, poi il componente lo riscrive dai dati. */
