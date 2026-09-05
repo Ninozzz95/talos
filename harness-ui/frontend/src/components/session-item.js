@@ -100,7 +100,7 @@ function el(documentObj, tag, className, testo) {
  *
  *   <button class="talos-session-item" data-c="SessionItem" [aria-current="true"]>
  *     <span><span class="talos-session-item__title">…</span>
- *           <span class="talos-session-item__sub"><span class="talos-dot talos-dot--sm [talos-dot--tono]"></span>stato · modello</span></span>
+ *           <span class="talos-session-item__sub"><span class="talos-dot talos-dot--sm [talos-dot--tono]"></span><span class="talos-session-item__state">stato · modello</span></span></span>
  *     <span class="talos-session-item__aside"><span>ora</span><span>N giri</span></span>
  *   </button>
  *
@@ -133,7 +133,7 @@ export function creaSessionItem(sessione, opzioni = {}) {
   const sotto = el(documentObj, 'span', 'talos-session-item__sub');
   const pallino = el(documentObj, 'span', `talos-dot talos-dot--sm${stato.tono ? ` talos-dot--${stato.tono}` : ''}`);
   const modello = opzioni.pendente ? null : nomeModello(sessione.modello);
-  sotto.append(pallino, documentObj.createTextNode(modello ? `${stato.testo} · ${modello}` : stato.testo));
+  sotto.append(pallino, el(documentObj, 'span', 'talos-session-item__state', modello ? `${stato.testo} · ${modello}` : stato.testo));
   testo.append(titolo, sotto);
 
   const aside = el(documentObj, 'span', 'talos-session-item__aside');

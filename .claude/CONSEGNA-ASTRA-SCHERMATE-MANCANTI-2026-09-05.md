@@ -29,3 +29,7 @@ Sei schede integrate nel mockup, tutte le nove lacune UI recuperate. Catalogo, H
 Cosa deve fare l’owner: può guardare le sei schede. Cosa faccio dopo: Toast. Cosa rimane: albero, dialoghi, server e parte B.
 
 Verifica finale Model Lab: anche npx playwright test --config=playwright.lab.config.mjs 96/96.
+
+## Base aggiornata dell’orchestratore
+Merge da lane/harness-desktop a 28b1a035. Conflitti risolti conservando Browser e nuove azioni di testata. Template rigenerato. Parità statica 96/96; componenti 12/12 sulla 4178.
+Cosa deve fare l’owner: nulla per sbloccare. Cosa faccio dopo: completamento Intro H16–H20. Cosa rimane: adeguamento Palette e Model Lab, Toast, albero, dialoghi e parte B.
