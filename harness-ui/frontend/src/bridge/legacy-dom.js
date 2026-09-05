@@ -232,6 +232,14 @@ export function montaPonteLegacy(documentObj = document) {
   const alberoFile = inspector.querySelector('#alberoFile');
   if (alberoFile) { alberoFile.classList.add('file-tree'); alberoFile.replaceChildren(); }
   for (const demo of inspector.querySelectorAll('#railProcessi [data-c="ProcessRow"]')) demo.remove();
+  // 06/9 T-18: l'albero dei rami è Fase 3 (BranchTree): via i rami DIMOSTRATIVI del mockup, resta una frase onesta
+  const veloAlbero = documentObj.querySelector('#veloAlbero');
+  if (veloAlbero) {
+    const titolo = veloAlbero.querySelector('.talos-dialog__title'); if (titolo) titolo.textContent = 'I rami di questa sessione';
+    const albero = veloAlbero.querySelector('[data-c="BranchTree"]');
+    if (albero) { albero.replaceChildren(); const p = documentObj.createElement('p'); p.className = 'talos-inspector__hint'; p.textContent = 'Nessun ramo ancora. Quando modificherai un tuo messaggio, la sessione si dividerà qui: il ramo vecchio resta leggibile e riapribile.'; albero.appendChild(p); }
+    for (const b of veloAlbero.querySelectorAll('.talos-dialog__footer .talos-button--secondary, .talos-dialog__body .talos-card')) b.hidden = true;
+  }
 
   /* 8) Le maniglie leggono/scrivono i token del mockup (vedi PANEL_RESIZE_VAR in app.js). */
 
