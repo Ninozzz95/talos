@@ -45,3 +45,10 @@ Comandi dalla testata funzionante, 15 identità originali conservate, etichette 
 Test:lab 102/102; originale 4179 6/6 (Intro e Palette). Aperti i tre PNG Palette e i tre dell’originale; confronto con Nuova canonica già aperta: stessa testata, corpo scorrevole, piede e focus. Il contenuto scorre sotto la ricerca fissa; tutti i comandi trovati uno per uno. La ricerca originale ha gli stessi 15 data-command, verificati nel DOM e nel sorgente.
 Non verificato: collegamento ai metodi operativi originali, affidato a B7; Rinomina/Esporta attendono i veli A7. Nessuna pretesa che le bozze della regia sostituiscano resume/fork/compact/export/share.
 Cosa deve fare l’owner: approvare il disegno dagli screenshot. Cosa faccio dopo: Model Lab secondo la revisione. Cosa rimane: altre schermate A e tutta la parte B.
+
+### Model Lab — riallineamento A3, 05/09/2026
+Sei schede e sette fornitori. Rimossi i controlli per simulare l'esito. Accesso dalle Impostazioni (D1), fornitori in Dialog. Riusa lo stesso sistema del mockup; zero token aggiunti. Screenshot aperti: modellab-{installati,catalogo,hf,download,runtime,prova,fornitori}-{1440,1280,1024}.png; confronto originale-modellab-{overview,providers,catalog,installed,huggingface,downloads} alle stesse larghezze e veloNuova.
+Copertura ripristinata: import .gguf, quattro ordinamenti HF, autore/tag, altri risultati, tre motori, tutti i file, risposta/parametri del catalogo, accessi avanzati. Legenda memoria, file conservato quando si scarica dalla RAM, pausa/ripresa e risposta parziale sono visibili. Le fixture non attestano chiamate ai servizi: B6 deve collegare quelle originali.
+Cosa deve fare l'owner: valutare gli screenshot alla consegna della parte A. Cosa fa Astra dopo: Browser, Toast, albero e dialoghi. Cosa rimane: parte A restante e tutti i collegamenti della parte B.
+
+Verifica finale A3: build 30 asset; test:lab 108/108; Playwright diretto 108/108; confronto originale 9/9.
