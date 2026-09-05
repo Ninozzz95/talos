@@ -44,6 +44,8 @@ const COMPONENTI = [
   { nome: 'ModelliInstallati', schermata: 'schermoModelLab', selettore: '#panel-installati' }, // 06/9 B6.8
   { nome: 'CatalogoHf', schermata: 'schermoModelLab', selettore: '#panel-hf' }, // 06/9 B6.9
   { nome: 'CodaDownload', schermata: 'schermoModelLab', selettore: '#panel-download' }, // 06/9 B6.10
+  { nome: 'Inspector', schermata: 'schermoChat', selettore: '#inspectorSessione' }, // 06/9 B2
+  { nome: 'Inspector_processi', schermata: 'schermoChat', selettore: '#inspectorSessione' }, // 06/9 B2: la scheda Processi
   { nome: 'Toast', schermata: 'schermoChat', selettore: '#regioneToast' }, // 05/9 T-16: la pila dei messaggi
   { nome: 'NotificationPanel', schermata: 'schermoChat', selettore: '#pannelloNotifiche' }, // 06/9 T-17: «Aspetta te»
   { nome: 'ChatFooter', schermata: 'schermoChat', selettore: '#schermoChat .talos-chat-foot' },
@@ -65,6 +67,7 @@ test.describe('parità dei componenti ↔ mockup', () => {
       if(comp.nome==='CatalogoModelli'){for(const p of [m.pagina,a.pagina])await p.evaluate(()=>{for(const n of document.querySelectorAll('#schermoModelLab [role=tabpanel]'))n.hidden=n.id!=='panel-catalogo';});expect(await a.pagina.locator('[data-catalog-detail] .talos-kv__k').nth(3).evaluate(n=>n.getBoundingClientRect().width),'CAT-ETICHETTA-INTEGRA').toBeGreaterThanOrEqual(90);}
       if(comp.nome==='FonteRicerca'){for(const p of [m.pagina,a.pagina])await p.evaluate(()=>{for(const el of document.querySelectorAll('#schermoImpostazioni [data-settings-panel]'))el.hidden=el.dataset.settingsPanel!=='tools';});}
       if(comp.sezione){await expect(a.pagina.locator('#capPanel-'+comp.sezione+' [data-ext-detail] .talos-kv__k').first(),'EXT-ETICHETTE-INTEGRE').toHaveCSS('white-space','normal');expect(await a.pagina.locator(comp.selettore+' use').evaluateAll(ns=>ns.every(n=>document.querySelector(n.getAttribute('href')))), 'EXT-ICONA-ESISTENTE').toBe(true);await m.pagina.locator('[data-cap-tab='+comp.sezione+']').click();await a.pagina.locator('[data-cap-tab='+comp.sezione+']').click();}
+      if (comp.nome === 'Inspector_processi') { for (const p of [m.pagina, a.pagina]) await p.evaluate(() => { for (const t of document.querySelectorAll('#railTabs [role=tab]')) t.setAttribute('aria-selected', String(t.dataset.rail === 'processi')); for (const b of document.querySelectorAll('.talos-inspector__body')) b.hidden = b.id !== 'railProcessi'; }); }
       if (comp.nome === 'CodaDownload') { for (const p of [m.pagina, a.pagina]) await p.evaluate(() => { for (const n of document.querySelectorAll('#schermoModelLab [role=tabpanel]')) n.hidden = n.id !== 'panel-download'; }); }
       if (comp.nome === 'CatalogoHf') { for (const p of [m.pagina, a.pagina]) await p.evaluate(() => { for (const n of document.querySelectorAll('#schermoModelLab [role=tabpanel]')) n.hidden = n.id !== 'panel-hf'; }); }
       if (comp.nome === 'ModelliInstallati') { for (const p of [m.pagina, a.pagina]) await p.evaluate(() => { for (const n of document.querySelectorAll('#schermoModelLab [role=tabpanel]')) n.hidden = n.id !== 'panel-installati'; }); }
@@ -80,6 +83,8 @@ test.describe('parità dei componenti ↔ mockup', () => {
         // ATTIVITA-CAMPO-COERENTE: la parità da sola può replicare un campo privo dello stile canonico.
         await expect(a.pagina.locator('[data-task-query]')).toHaveCSS('height', '36px');
       }
+      // 06/9 B2: sotto i 1040 px la colonna dei dettagli è un pannello a scomparsa (chiuso) in entrambe le pagine: struttura e parole si confrontano, i pixel no
+      if (comp.nome.startsWith('Inspector') && viewport.width <= 1040) { await m.contesto.close(); await a.contesto.close(); return; }
       const nome = `comp-${comp.nome}-${info.project.name}`;
       const esito = await confrontaPixel(nome, await m.pagina.locator(comp.selettore).screenshot(), await a.pagina.locator(comp.selettore).screenshot());
       expect(esito.ok, `${nome}: ${esito.motivo} — vedi artifacts/parita/${nome}-diff.png`).toBe(true);

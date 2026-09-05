@@ -623,6 +623,33 @@ piccolo (Qwen3-0.6B Q8_0, 0,6 GB): riga «in corso» con barra, Pausa → «1 in
 `foto/download-4175-incorso.png`. ⛔ NON VERIFICATO dal vivo: la forma «fallito» (serve una
 caduta di rete durante un download: provata solo nel laboratorio e a unità).
 
+### B2 — la colonna dei dettagli (06/09 ~09:30): FATTA, e dice il vero
+
+⛔ Trovato prima di iniziare: in produzione la colonna mostrava ancora i valori DIMOSTRATIVI del
+mockup («W1-02 registro processi», un ramo, tre file toccati, quattro processi mai esistiti).
+`components/inspector.js` + innesto in `app.js` (`aggiornaInspectorDaStato`, stessa cadenza del
+piede della chat): titolo = nome della sessione · Ambiente da `RunStarted.contesto` (ramo,
+worktree, non salvate, repo annidati; «—» dove il dato non c'è, anche nel replay) · Finestra del
+contesto da `usage` (Conversazione, Libera; la finestra del modello quando il catalogo la
+dichiara, la ripartizione per categoria SOLO se il kernel la dichiara — percentuali troncate al
+decimo e «Libera» che chiude a 100 come nel mockup) · Indice dei giri dalla spine della
+conversazione (numero, riassunto del gruppo di attività, attrezzi, «in corso») · File toccati da
+`reviewFiles` (+N −M) · Agenti (stato vuoto onesto del mockup) · Processi dai comandi eseguiti
+(`ToolCallStart`/`Args`/`Result` di `shell` con ora di ricezione e giro: comando, stato, durata,
+uscita, «Nessuna uscita da N secondi»). L'albero della cartella è quello del monolite disegnato
+DENTRO `#alberoFile` del mockup (bridge: `#inspector-files` → `#alberoCartella`, id legacy
+duplicati demoti; righe con le classi del mockup, freccia solo sulle cartelle, «mod.»/«nuovo» come
+parola, icone del monolite tradotte nei simboli del mockup e con la classe `i`). Fixture con i
+valori del mockup, laboratorio + cancello (`Inspector` e `Inspector_processi` su `#inspectorSessione`;
+sotto i 1040 px la colonna è un pannello chiuso: si confrontano struttura e parole, non i pixel),
+unit `tests/unit/inspector.test.mjs`. Ricerca 06/09: Codex /status (token contro finestra),
+Context Lens (ripartizione per categoria). Prove: componenti 105/105, unit 102/102, statico
+195/195; dal vivo su 4175 (titolo vero, Conversazione 92,1k, indice dei giri con i riassunti veri,
+albero di C:\ con 46 righe, processi = il comando bash vero della sessione) e su 4182
+(«Repo annidati nessuno» dal contesto replayed, albero di prova-vivo). ⛔ NON VERIFICATO: la
+finestra del modello (il catalogo dei modelli non è in memoria prima di aprire il foglio: resta
+«finestra non dichiarata» — riga di lavoro: leggere `contextLength` dal catalogo all'avvio).
+
 - T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
   15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
   statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo
