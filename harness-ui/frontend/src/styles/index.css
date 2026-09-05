@@ -842,3 +842,12 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-provider-panel .talos-page__head h4{margin:0}
 .talos-provider [role=alert]{color:var(--talos-danger)}
 @media(max-width:1100px){.talos-provider__head{flex-wrap:wrap}.talos-provider__head .talos-cluster{justify-content:flex-start}.talos-provider__body{grid-template-columns:minmax(0,1fr)}}
+.talos-field--stack{display:grid;gap:var(--talos-space-sm);min-width:0}
+.talos-label{font-size:var(--talos-font-size-sm);color:var(--talos-muted);line-height:1.4}
+.talos-textarea{display:block;width:100%;min-height:88px;padding:12px;border:1px solid var(--talos-border);border-radius:var(--talos-radius-control);background:var(--talos-panel-soft);color:var(--talos-text);font:inherit;line-height:1.5;resize:vertical;box-sizing:border-box}
+.talos-textarea:focus-visible{outline:2px solid var(--talos-ring);outline-offset:var(--talos-focus-offset)}
+.talos-runtime-panel>.talos-lab__heading{margin:var(--talos-space-md) 0 var(--talos-space-sm)}
+.talos-runtime-panel>.talos-badge{display:inline-flex;margin-bottom:var(--talos-space-control)}
+.talos-runtime-panel .model-lab-runtime-controls{margin:var(--talos-space-control) 0}
+.talos-runtime-panel .model-lab-runtime-actions{display:flex;gap:var(--talos-space-sm);flex-wrap:wrap;margin:var(--talos-space-control) 0}
+.talos-runtime-panel>.talos-field--stack{margin:var(--talos-space-control) 0}

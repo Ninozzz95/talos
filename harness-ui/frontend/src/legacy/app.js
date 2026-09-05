@@ -2564,6 +2564,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     const runButton = $('#modelLabRunButton');
     const prompt = $('#modelLabPrompt');
     if (!list || !status || !runtimeSelect || !modelSelect || !runButton || !prompt) return;
+    // 05/9 R09: stato osservato nello stesso Badge della cornice canonica.
+    status.className='talos-badge talos-badge--sm'+(state.modelLab.runtimeError?' talos-badge--warning':'');
     const loading = state.modelLab.loadingRuntime;
     const refresh = $('#modelLabRuntimeRefresh');
     if (refresh) refresh.disabled = loading;

@@ -2004,3 +2004,40 @@ Regressione B6 finale: Catalogo / cornice / MemoryMeter / RuntimeCard 81/81, olt
 Cosa deve fare l’owner: verificare la consegna su 4177.
 Cosa fai tu dopo: raccordo visivo Runtime richiesto dalla review R-08/R-09, poi Installati.
 Cosa rimane: resto B6 e consegne B2, B7, B1, B8, Browser K-I.
+
+## R-09 — raccordo controlli Runtime, 05/09/2026
+
+Provider consegnato c66e210; poi merge lane/harness-desktop con review R08/R09. Owned TALOS UI. File previsti:
+- .claude/LEDGER-ASTRA-FASE-2-2026-09-05.md
+- .claude/CONSEGNA-ASTRA-FASE-2-2026-09-05.md
+- .claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html
+- harness-ui/frontend/index.template.html
+- harness-ui/frontend/src/styles/index.css
+- harness-ui/frontend/src/components/runtime-modelli.js
+- harness-ui/frontend/src/legacy/app.js
+- harness-ui/frontend/tests/parity/runtime-modelli-vivo.spec.mjs
+Simboli: montaPannelloRuntime, renderizzaRuntimeModelLab; nessuna firma pubblica mutata. RED R09-CONTROLLI: tre label nel linguaggio canonico, textarea UI, Prova runtime primario, badge warning su fallimento e ritorno neutro dopo recupero. GREEN Runtime3larghezze, unit/contratti, statici/componenti; screenshot originale RuntimeCard già aperto e nuova schermata errore/pronto. Rollback commit isolato, niente backend.
+Ricerca odierna (finestra 06/08→05/09): https://www.w3.org/WAI/tutorials/forms/labels/ ; https://hermes-agent.nousresearch.com/docs/user-guide/local-models ; https://code.claude.com/docs/en/third-party-integrations ; https://github.com/openai/codex/blob/rust-v0.153.4/codex-rs/ollama/src/lib.rs . Pin release verificati oggi: Hermes v2026.8.31/29112be, Claude2.1.261/d7dbd9a, Codex0.153.4/3d2ee51. Le pagine stabili non espongono aggiornamento: non le attribuisco al mese. Hermes espone un flusso locale gestito, Claude separa infrastrutture e autenticazione, Codex delega disponibilità a Ollama: punti forti conservati come separazione di selezione/stato. Nessun benchmark dei loro controlli né debolezza inventata. +1 misurabile qui: etichette collegate ai tre controlli, gerarchia di azione distinta, errore testuale col badge e recupero neutro. Adotto WAI e blocchi proprietari esistenti; scarto nuovi framework perché è un raccordo DOM, non un nuovo runtime. Quattro !important su .talos-runtime-panel (CSS canonico circa riga790) accettati dalla review solo fino al cutover: da eliminare insieme al CSS legacy.
+
+## R-09 — controlli Runtime nel linguaggio del mockup
+
+Riusati Field, Label, Textarea, Badge e Button; titolo con talos-lab__heading. Tre controlli etichettati e associati agli ID originali, richiesta in font UI senza rientro da ricerca, Prova runtime primaria, Aggiorna secondaria. Errore della lettura in Badge warning, dato precedente cancellato come prima; nessun nuovo gestore di prova. Il testo scritto resta alla rilettura.
+
+Confronto: originale e consegna RuntimeCard precedente mostravano etichette nude e textarea mono; ora forma canonica uniforme, senza perdere select, testo, azioni, abilitazioni o percorsi di errore. Test R09-CONTROLLI prima fallito sulla label, poi verde3larghezze; intera suite Runtime30/30. Non affermo inferenza riuscita: resta il raccordo API per la richiesta libera documentato in B6.6. Quattro !important del contenitore sono accettati temporaneamente dalla review e vanno rimossi insieme al CSS legacy al cutover (regola .talos-runtime-panel nel mockup). Nuovi token: zero; due classi di base Label/Textarea definite nel canonico prima della generazione.
+
+Prove aperte a pari stato/larghezza, contro le precedenti in RuntimeCard:
+- .claude/immagini/astra-fase2/RuntimeControls/r09-pronto-1440.png
+- .claude/immagini/astra-fase2/RuntimeControls/r09-errore-1440.png
+- .claude/immagini/astra-fase2/RuntimeControls/r09-pronto-1280.png
+- .claude/immagini/astra-fase2/RuntimeControls/r09-errore-1280.png
+- .claude/immagini/astra-fase2/RuntimeControls/r09-pronto-1024.png
+- .claude/immagini/astra-fase2/RuntimeControls/r09-errore-1024.png
+
+Cosa deve fare l’owner: guardare Panoramica → Runtime locale su 4177.
+Cosa fai tu dopo: Installati, poi Hugging Face e Download.
+Cosa rimane: prova libera locale e seguito B6 → B2 → B7 → B1 → B8 → Browser.
+
+R-09, cancelli finali: npm run verify verde (87 unitari, determinismo30asset, 195 statici), componenti90/90 dopo il merge della NotificationPanel di Claude, Runtime30/30. Screenshot pronto/errore aperti alle tre larghezze; prova in linguaggio naturale digitata, senza attribuire al backend una risposta non eseguita.
+Cosa deve fare l’owner: guardare Runtime su4177.
+Cosa fai tu dopo: Installati.
+Cosa rimane: resto B6 e B2/B7/B1/B8/Browser.
