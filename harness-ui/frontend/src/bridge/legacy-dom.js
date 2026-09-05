@@ -163,6 +163,8 @@ export function montaPonteLegacy(documentObj = document) {
   coda.hidden = true;
   const compositore = uno(piede, '#composerForm');
   battezza(uno(compositore, '.talos-send'), { classi: ['send-btn'] });
+  battezza(uno(compositore, '.talos-composer__mic'), { classi: ['composer-mic'] }); // 05/9 Fase 2: ChatFooter — il microfono dell'originale (dettatura)
+  battezza(uno(piede, '.talos-statusbar'), { classi: ['runtime-status'] });
   battezza(uno(chat, '.talos-topbar__title h1'), { id: 'sessionTitle' });
   /*
    * 05/9 Fase 2: Topbar. Il titolo con il chevron e il pulsante «Albero dei rami»

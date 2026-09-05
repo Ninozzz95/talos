@@ -259,3 +259,54 @@ non emette ricevute né file-per-giro: il blocco esiste, l'innesto arriva con la
   token…»): **S-06 Piede**, con il composer ridimensionabile (`talos-harness-composer-size-v1`).
 - T-10 il dialogo «Albero sessione» aperto dal titolo è il foglio legacy senza CSS (B7 Astra +
   regola dell'owner: dialoghi ridimensionabili e ricordati, `talos-harness-modal-sizes-v1`).
+
+---
+
+## S-06 · ChatFooter (striscia del giro, coda, composer, barra di stato) — ✅ verde, aspetta l'owner
+
+**Blocchi**: `ChatFooter`, `StatusStrip`, `MessageQueue`, `Composer`, `AttachButton`, `Chip` ×4,
+`SendButton`, `StatusBar`, `IconButton` (microfono). **Fixture**: `lab/fixtures/piede.js` (un giro
+in corso, `usage` come da StateDelta /usage, permesso col valore interno).
+**Componente**: `src/components/chat-foot.js` — `aggiornaPiedeChat`, `etichettaPermesso` (H22: Sola
+lettura · Su richiesta · Scrittura nel workspace · Accesso completo), `tonoPermesso`, `testiUsage`
+(41,2k token · 7 giri · cache 87% · velocità), `testoLatenza` (primo token 1,4 s), `kilo`.
+**Monolite**: nuova `aggiornaPiedeChatDaStato()` (cosa sta facendo TALOS = la riga attrezzo in
+corso o l'etichetta dell'attesa; giro = `usage.giri`; secondi dall'inizio del giro; TTFT dalle
+misure di latenza `invio → primoDelta`; modello breve; permesso; tema dal piede della sidebar),
+chiamata da `syncRunComposerState`, dal timer dell'attesa (ogni secondo), da
+`aggiornaRiassuntoBatch`, da `aggiornaComposerUsage` e da `aggiornaPillolaPermessi`. Il ramo
+legacy dei nodi `[data-runtime-*]` si spegne quando c'è il piede del mockup. Il chip del modello
+mostra il nome breve. ⛔ Il costo («Sessione ~$0,08») non si stima da soli: senza un dato dal
+server il chip resta nascosto.
+**Mockup toccato** (nel suo linguaggio, per non perdere NIENTE dell'originale — regola
+dell'owner): maniglia di ridimensionamento `.talos-resizer--composer` (angolo in alto a
+sinistra, come l'originale; `#composerResizeHandle` → `setupComposerResize`: trascinamento,
+frecce, doppio clic, misura ricordata in `talos-harness-composer-size-v1`), i chip modello e
+permesso sono pulsanti (`data-open-sheet`), «Reindirizza» (`#redirectRunButton`, appare con testo
+scritto durante un giro), microfono (`i-mic` dallo sprite originale, dettatura), «+» =
+`#capabilityBtn` (aggiungi contesto), ganci `data-run-what/-meta`, `.stop-run`, `[data-runtime-*]`,
+`[data-statusbar]`; il composer è una colonna flex (il testo riempie la misura scelta, la barra
+sta in fondo) e consuma le variabili che il monolite scrive (`--composer-canonical-h`,
+`--composer-max-w`, `--composer-textarea-max-h`); scorciatoia nel chip nascosta quando il
+composer è stretto (`@container`).
+
+**Ricerca** (05/09/2026): resize handle fra fratelli flex con misura in localStorage e frecce da
+tastiera (glama.ai backlog-mcp `viewer/components/resize-handle.ts`); `<textarea>` MDN (`resize`);
+la maniglia unica a doppio verso è quella dell'originale (`setupComposerResize`, 3/9).
+
+**Cancelli**: componenti **18/18** · statico **54/54**.
+
+**Dal vivo** (4175, sessione conclusa da 9 giri, 1440 e 1024, zero errori): chip
+«deepseek-v4-flash-latest · Accesso completo · Giri 9», costo nascosto, striscia e coda nascoste
+(nessun giro in corso), barra «Tema Calm · deepseek · 92,1k token · 9 giri · cache 83%»;
+trascinando la maniglia il composer passa da 727×110 a 732×239, la misura è in
+`talos-harness-composer-size-v1`, sopravvive al ricarico, il doppio clic la azzera; il chip del
+modello apre «Modello», quello del permesso «Permessi di esecuzione». Immagini in
+`.claude/immagini/fase2-claude/ChatFooter/`.
+
+**Non verificato dal vivo** (vuole il kernel): la striscia durante un giro (cosa · giro · secondi ·
+Ferma), «Reindirizza», la coda con un messaggio vero, la dettatura.
+
+**Taccuino**: l'ambiente (chip dell'originale) vive nella colonna dei dettagli (B2, Astra): il
+foglio «Ambiente» resta raggiungibile da lì. I fogli aperti dai chip sono ancora i dialoghi legacy
+senza CSS (B7 Astra, T-10).
