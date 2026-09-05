@@ -575,6 +575,7 @@ button{background:none; border:0; cursor:pointer; padding:0}
 
 <!-- ===================== REGIA DEL MOCKUP (non è prodotto) ===================== -->
 <div class="talos-regia" data-c="MockupRegia">
+<label class="talos-muted talos-browser__meta">Browser <select class="talos-select talos-select--sm" id="statoBrowser"><option value="pagina">Pagina acquisita</option><option value="vuoto">Nessuna pagina</option><option value="bloccata">Richiesta di permesso</option><option value="caricamento">Caricamento</option></select></label>
   <span class="talos-regia__name">Plancia TALOS</span>
   <span class="talos-regia__note">mockup sul tema Calm · 240 decisioni · ingegneria 04/09</span>
   <span class="talos-grow"></span>
@@ -968,10 +969,9 @@ button{background:none; border:0; cursor:pointer; padding:0}
       </div>
     </section>
 
-<section id="schermoBrowser" class="talos-screen" data-c="BrowserScreen" hidden><div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>W1-02 registro processi</h1></div><span class="talos-grow"></span><div class="talos-tabs" data-c="Tabs"><div class="talos-tabs__list" role="tablist" aria-label="Viste della sessione" data-vistetab><button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-controls="schermoChat" aria-selected="false">Chat</button><button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-controls="schermoTerminale" aria-selected="false">Terminale</button><button class="talos-tabs__tab" role="tab" data-vaia="review" aria-controls="schermoReview" aria-selected="false">Review</button><button class="talos-tabs__tab" role="tab" data-vaia="browser" aria-controls="schermoBrowser" aria-selected="true">Browser</button></div></div></div>
+<section id="schermoBrowser" class="talos-screen" data-c="BrowserScreen" hidden><div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>W1-02 registro processi</h1></div><span class="talos-grow"></span><div class="talos-tabs" data-c="Tabs"><div class="talos-tabs__list" role="tablist" aria-label="Viste della sessione" data-vistetab><button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-controls="schermoChat" aria-selected="false">Chat</button><button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-controls="schermoTerminale" aria-selected="false">Terminale <span class="talos-tabs__count">2</span></button><button class="talos-tabs__tab" role="tab" data-vaia="review" aria-controls="schermoReview" aria-selected="false">Review <span class="talos-tabs__count">3</span></button><button class="talos-tabs__tab" role="tab" data-vaia="browser" aria-controls="schermoBrowser" aria-selected="true">Browser</button></div></div></div>
 <div class="talos-page  talos-browser" data-c="Page">
-  <div class="talos-toolbar"><div><h2 class="talos-browser__heading">Letture della sessione</h2><p class="talos-muted talos-browser__meta" id="browserRiepilogo">Testo acquisito dall’agente · 2 pagine di esempio</p></div>
-    <label class="talos-muted talos-browser__meta">Stato dimostrativo <select class="talos-select talos-select--sm" id="statoBrowser"><option value="pagina">Pagina acquisita</option><option value="vuoto">Nessuna pagina</option><option value="bloccata">Richiesta di permesso</option><option value="caricamento">Caricamento</option></select></label>
+  <div class="talos-toolbar"><div><h2 class="talos-browser__heading">Letture della sessione</h2><p class="talos-muted talos-browser__meta" id="browserRiepilogo">Testo acquisito dall’agente · 2 pagine</p></div>
   </div>
   <div class="talos-card talos-browser__space" data-c="BrowserViewport">
     <div class="talos-browser__bar">
@@ -989,19 +989,18 @@ button{background:none; border:0; cursor:pointer; padding:0}
     </div>
     <div id="browserAvviso" class="talos-browser__notice" role="status" hidden></div>
     <div id="browserBloccato" class="talos-browser__request" hidden>
-      <span class="talos-badge talos-badge--sm talos-badge--warning">Richiesta dimostrativa</span><h3 class="talos-browser__heading">Consentire questa lettura?</h3>
+      <span class="talos-badge talos-badge--sm talos-badge--warning">In attesa di te</span><h3 class="talos-browser__heading">Consentire questa lettura?</h3>
       <p class="talos-muted">L’agente chiede di leggere https://example.org/documentazione. La scelta vale per questa richiesta.</p>
       <div class="talos-cluster"><button class="talos-button talos-button--primary talos-button--sm" data-action="consentiBrowser">Consenti una volta</button><button class="talos-button talos-button--secondary talos-button--sm" data-action="negaBrowser">Nega</button></div>
-      <p class="talos-muted talos-browser__meta" id="browserPermessoNota">Simulazione: nessuna richiesta di rete viene eseguita.</p>
+      <p class="talos-muted talos-browser__meta" id="browserPermessoNota">Il permesso vale una sola volta, per questo indirizzo.</p>
     </div>
     <div id="browserCaricamento" class="talos-browser__request" hidden>
-      <h3 class="talos-browser__heading">Lettura in corso…</h3><p class="talos-muted">Simulazione di attesa. L’ultima pagina acquisita resta consultabile.</p>
-      <button class="talos-button talos-button--primary talos-button--sm" data-action="completaBrowser">Completa esempio</button>
+      <h3 class="talos-browser__heading">Lettura in corso…</h3><p class="talos-muted">L’ultima pagina acquisita resta consultabile.</p>
       <button class="talos-button talos-button--secondary talos-button--sm" data-action="annullaBrowser">Annulla navigazione</button>
     </div>
     <div id="browserVuoto" class="talos-empty talos-browser__pad" hidden><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg><h3>Nessuna pagina letta</h3><p class="talos-muted">Le letture dell’agente appariranno qui, con indirizzo e testo acquisito.</p></div>
     <article id="browserPagina" aria-labelledby="browserTitolo">
-      <header class="talos-browser__head"><h2 id="browserTitolo">Registro dei processi</h2><p class="talos-muted talos-browser__meta" id="browserProvenienza">Agente · 05/09, 10:42 (Roma) · 365 caratteri · esempio</p></header>
+      <header class="talos-browser__head"><h2 id="browserTitolo">Registro dei processi</h2><p class="talos-muted talos-browser__meta" id="browserProvenienza">Agente · 05/09, 10:42 (Roma) · 365 caratteri</p></header>
       <pre id="browserTesto" class="talos-browser__text" tabindex="0" aria-label="Testo acquisito della pagina">Registro dei processi
 
 Il registro raccoglie i processi avviati durante una sessione e mostra l’ultimo evento ricevuto.
@@ -1014,7 +1013,7 @@ Riconoscere uno stallo
 Una segnalazione di stallo non termina il processo.</pre>
       <div id="browserEditorNota" class="talos-browser__note" hidden>
         <label class="talos-stack" for="browserNotaInput">Nota su questa lettura<textarea class="talos-field__input" id="browserNotaInput" rows="3" placeholder="Un dubbio, un controllo da fare…" aria-describedby="browserNotaScope"></textarea></label>
-        <div class="talos-cluster"><span id="browserNotaScope" class="talos-muted talos-browser__meta">Solo in questo mockup · si azzera al ricaricamento</span><span class="talos-grow"></span><button class="talos-button talos-button--primary talos-button--sm" data-action="conservaNotaBrowser">Conserva nota</button><button class="talos-button talos-button--ghost talos-button--sm" data-action="chiudiNotaBrowser">Annulla</button></div>
+        <div class="talos-cluster"><span id="browserNotaScope" class="talos-muted talos-browser__meta">Nota non inviata · si azzera al ricaricamento</span><span class="talos-grow"></span><button class="talos-button talos-button--primary talos-button--sm" data-action="conservaNotaBrowser">Conserva nota</button><button class="talos-button talos-button--ghost talos-button--sm" data-action="chiudiNotaBrowser">Annulla</button></div>
       </div>
       <div id="browserNotaSalvata" class="talos-browser__note" role="status" hidden></div>
     </article>
@@ -1026,7 +1025,7 @@ Una segnalazione di stallo non termina il processo.</pre>
       <button class="talos-browser__entry" data-pagina-browser="1" aria-current="page"><span class="talos-muted talos-browser__meta">02 · Agente · 10:42</span><strong>Registro dei processi</strong><span class="talos-muted talos-browser__meta">example.org/documentazione</span></button>
     </div>
   </nav>
-  <p id="browserLimiti" class="talos-muted talos-browser__meta talos-browser__space">Copia testuale, senza navigazione interattiva. Dati e note dimostrativi: si azzerano al ricaricamento.</p>
+  <p id="browserLimiti" class="talos-muted talos-browser__meta talos-browser__space">Copia testuale, senza navigazione interattiva. Le note locali si azzerano al ricaricamento.</p>
 </div></section>
 
 <section id="schermoModelLab" class="talos-screen" data-c="ModelLabScreen" hidden><div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>Model Lab</h1></div><span class="talos-grow"></span><button class="talos-button talos-button--secondary talos-button--sm" data-c="Button" data-apre-velo="veloFornitori">Fornitori e accessi</button></div><div class="talos-page " data-c="Page"><div class="talos-tabs talos-tabs--underline talos-lab__tabs" data-c="Tabs"><div class="talos-tabs__list" role="tablist" aria-label="Schede Model Lab" id="labTabs"><button id="tab-installati" class="talos-tabs__tab" role="tab" aria-selected="true" aria-controls="panel-installati" tabindex="0" data-panel="panel-installati">Installati</button><button id="tab-catalogo" class="talos-tabs__tab" role="tab" aria-selected="false" aria-controls="panel-catalogo" tabindex="-1" data-panel="panel-catalogo">Catalogo</button><button id="tab-hf" class="talos-tabs__tab" role="tab" aria-selected="false" aria-controls="panel-hf" tabindex="-1" data-panel="panel-hf">Hugging Face</button><button id="tab-download" class="talos-tabs__tab" role="tab" aria-selected="false" aria-controls="panel-download" tabindex="-1" data-panel="panel-download">Download ↓ 1</button><button id="tab-runtime" class="talos-tabs__tab" role="tab" aria-selected="false" aria-controls="panel-runtime" tabindex="-1" data-panel="panel-runtime">Runtime</button><button id="tab-prova" class="talos-tabs__tab" role="tab" aria-selected="false" aria-controls="panel-prova" tabindex="-1" data-panel="panel-prova">Prova</button></div></div><p class="talos-page__note" role="status" id="labMessaggio"></p><section role="tabpanel" id="panel-installati" aria-labelledby="tab-installati" ><div class="talos-page__head "><div><h2>Modelli sul computer</h2><p>Carica un modello per usarlo. Il file resta sul disco quando liberi la memoria.</p></div></div>
@@ -1747,12 +1746,12 @@ Una segnalazione di stallo non termina il processo.</pre>
   const vuoto=$('#statoBrowser').value==='vuoto', pagina=pagineBrowserDemo[indiceBrowserDemo];
   $('#browserVuoto').hidden=!vuoto;$('#browserPagina').hidden=vuoto;
   $('#schermoBrowser [data-c="BrowserHistory"]').hidden=vuoto;
-  $('#browserRiepilogo').textContent=vuoto?'Nessuna lettura acquisita · stato di esempio':'Testo acquisito dall’agente · 2 pagine di esempio';
+  $('#browserRiepilogo').textContent=vuoto?'Nessuna lettura acquisita':'Testo acquisito dall’agente · 2 pagine';
   $('#urlBrowser').value=vuoto?'':pagina.url;
   $('#browserPosizione').textContent=vuoto?'0 pagine':'Lettura '+(indiceBrowserDemo+1)+' di '+pagineBrowserDemo.length;
   $('#browserTitolo').textContent=pagina.titolo;
   $('#browserTesto').textContent=pagina.testo;
-  $('#browserProvenienza').textContent=pagina.autore+' · '+new Intl.DateTimeFormat('it-IT',{timeZone:'Europe/Rome',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(pagina.quando))+' (Roma) · '+pagina.testo.length+' caratteri · esempio';
+  $('#browserProvenienza').textContent=pagina.autore+' · '+new Intl.DateTimeFormat('it-IT',{timeZone:'Europe/Rome',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(pagina.quando))+' (Roma) · '+pagina.testo.length+' caratteri';
   $$('#schermoBrowser [data-browser-demo]').forEach(b=>{b.disabled=vuoto||(b.dataset.browserDemo==='back'&&indiceBrowserDemo===0)||(b.dataset.browserDemo==='forward'&&indiceBrowserDemo===pagineBrowserDemo.length-1);});
   $$('#schermoBrowser [data-pagina-browser]').forEach(b=>{b.disabled=vuoto;if(!vuoto&&Number(b.dataset.paginaBrowser)===indiceBrowserDemo)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
   const nota=annotazioniBrowserDemo.get(pagina.id)||'';
@@ -1801,9 +1800,8 @@ Una segnalazione di stallo non termina il processo.</pre>
  if(a==='copy')void copiaPaginaBrowser();
  if(a==='open')window.open(pagineBrowserDemo[indiceBrowserDemo].url,'_blank','noopener,noreferrer');
  if(a==='note'){$('#browserEditorNota').hidden=!$('#browserEditorNota').hidden;renderizzaBrowserDemo();if(!$('#browserEditorNota').hidden)$('#browserNotaInput').focus();}
- if(b.dataset.action==='consentiBrowser'){concludiRichiestaBrowser('Permesso simulato. Nessuna navigazione reale.');selezionaPaginaBrowser(1);}
+ if(b.dataset.action==='consentiBrowser'){concludiRichiestaBrowser('Permesso accordato per questa lettura.');selezionaPaginaBrowser(1);}
  if(b.dataset.action==='negaBrowser')concludiRichiestaBrowser('Richiesta negata. Letture precedenti conservate.');
- if(b.dataset.action==='completaBrowser')concludiRichiestaBrowser('Lettura di esempio completata.');
  if(b.dataset.action==='annullaBrowser')concludiRichiestaBrowser('Navigazione annullata. Ultima lettura conservata.');
  if(b.dataset.action==='conservaNotaBrowser')conservaNotaBrowser();
  if(b.dataset.action==='chiudiNotaBrowser'){bozzeBrowserDemo.delete(pagineBrowserDemo[indiceBrowserDemo].id);$('#browserEditorNota').hidden=true;renderizzaBrowserDemo();$('[data-browser-demo="note"]').focus();}

@@ -52,3 +52,7 @@ Copertura ripristinata: import .gguf, quattro ordinamenti HF, autore/tag, altri 
 Cosa deve fare l'owner: valutare gli screenshot alla consegna della parte A. Cosa fa Astra dopo: Browser, Toast, albero e dialoghi. Cosa rimane: parte A restante e tutti i collegamenti della parte B.
 
 Verifica finale A3: build 30 asset; test:lab 108/108; Playwright diretto 108/108; confronto originale 9/9.
+
+### Browser — riallineamento A1, 05/09/2026
+Nessun selettore di stati nella schermata. Cronologia, autore/orario, lettura testuale, permessi e annotazione conservati; Terminale 2 e Review 3 in testata. Screenshot browser-1440/1280/1024 e originale-browser-1440/1280/1024 aperti. Gate 111/111, poi 123/123 includendo originale; 12/12 dopo correzione della sola attesa nelle catture. Resta l'innesto dei dati reali.
+Cosa deve fare l'owner: valutare alla consegna A. Cosa fa Astra dopo: Toast e campanella. Cosa rimane: albero, dieci dialoghi e parte B.

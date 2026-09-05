@@ -229,16 +229,16 @@ test.describe('parità app ↔ mockup', () => {
   await expect(p.locator('#browserTesto')).toContainText('<button id="astra-untrusted">');
   await expect(p.locator('#astra-untrusted')).toHaveCount(0);
   await expect(p.locator('[data-browser-demo="back"]')).toBeDisabled();
-  await p.locator('#statoBrowser').selectOption('bloccata');
+  await p.locator('#statoBrowser').evaluate(s=>{s.value='bloccata';s.dispatchEvent(new Event('change'));});
   await p.locator('[data-action="negaBrowser"]').click();
   await expect(p.locator('#urlBrowser')).toHaveValue('https://example.org/');
-  await p.locator('#statoBrowser').selectOption('bloccata');
+  await p.locator('#statoBrowser').evaluate(s=>{s.value='bloccata';s.dispatchEvent(new Event('change'));});
   await p.locator('[data-action="consentiBrowser"]').click();
   await expect(p.locator('#urlBrowser')).toHaveValue('https://example.org/documentazione');
-  await p.locator('#statoBrowser').selectOption('vuoto');
+  await p.locator('#statoBrowser').evaluate(s=>{s.value='vuoto';s.dispatchEvent(new Event('change'));});
   await expect(p.locator('#browserVuoto')).toBeVisible();
   await expect(p.locator('[data-browser-demo="annotate"]')).toBeDisabled();
-  await p.locator('#statoBrowser').selectOption('pagina');
+  await p.locator('#statoBrowser').evaluate(s=>{s.value='pagina';s.dispatchEvent(new Event('change'));});
   await p.locator('[data-browser-demo="reload"]').click();
   await expect(p.locator('#browserCaricamento')).toBeVisible();
   await p.locator('[data-action="annullaBrowser"]').click();
@@ -349,3 +349,6 @@ if(process.env.ASTRA_ORIGINALE_URL)test('ASTRA Originale Model Lab dati 4179',as
 });
 
 test('ASTRA Model Lab fornitori completi',async({browser},info)=>{const {contesto,pagina:p}=await apri(browser,MOCKUP,{js:true,viewport:info.project.use.viewport});try{await p.goto(MOCKUP+'#modellab');await p.getByRole('button',{name:'Fornitori e accessi',exact:true}).click();await expect(p.locator('#providerLab option')).toHaveCount(7);await p.locator('#providerChiave').fill('chiave-di-test');await p.locator('#providerLab').selectOption('DeepSeek');await expect(p.locator('#providerChiave')).toHaveValue('');await expect(p.locator('#providerIndirizzo')).toHaveValue('');await p.screenshot({path:path.resolve(radice,'../../.claude/immagini/astra-mockup/modellab-fornitori-'+info.project.use.viewport.width+'.png')});}finally{await contesto.close();}});
+
+test('ASTRA Browser senza controlli di prototipo',async({browser},info)=>{const {contesto,pagina:p}=await apri(browser,MOCKUP,{js:true,viewport:info.project.use.viewport});try{await p.goto(MOCKUP+'#browser');await expect(p.locator('#schermoBrowser #statoBrowser')).toHaveCount(0);await expect(p.locator('#schermoBrowser [data-vaia=terminale]')).toContainText('2');await expect(p.locator('#schermoBrowser [data-vaia=review]')).toContainText('3');await expect(p.locator('#schermoBrowser')).not.toContainText(/dimostrativ|di esempio|simulazion/i);}finally{await contesto.close();}});
+if(process.env.ASTRA_ORIGINALE_URL)test('ASTRA Originale Browser dati 4179',async({browser},info)=>{const c=await browser.newContext({viewport:info.project.use.viewport,locale:'it-IT',reducedMotion:'reduce'});const p=await c.newPage();try{await p.goto(process.env.ASTRA_ORIGINALE_URL);await expect(p.locator('#introDialog')).toBeVisible({timeout:15000});await p.locator('#introSkip').click();await p.keyboard.press('Control+k');await p.locator('#commandResults [data-command=browser]').click();await expect(p.locator('#commandDialog')).toBeHidden();await expect(p.locator('#harnessDialogBackdrop')).toBeHidden();await expect(p.locator('.view-pane[data-view=browser]')).toBeVisible();await p.screenshot({path:path.resolve(radice,'../../.claude/immagini/astra-mockup/originale-browser-'+info.project.use.viewport.width+'.png')});}finally{await c.close();}});
