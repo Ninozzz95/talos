@@ -16,6 +16,7 @@
 | K-F | ApprovalCard «— Approvato (da un altro client)» dopo un ricarico (T-14) | la risposta all'approvazione porta `clientId`/`richiedente` nell'evento ApprovalResolved | rispondi, ricarica → «Approvato.» senza «da un altro client» |
 | K-G | Testata: badge «Terminale N» (schede W1-01) | il numero di schede aperte nel registro terminali esposto al client (evento o `GET /api/v1/sessions/:id/terminals`) — B1 Astra ne fa la UI | apri due schede → «Terminale 2» |
 | K-H | Chip «Sessione ~$0,08» (costo stimato) | costo nel `usage` (`costo_stimato`, dal listino del fornitore) — mai stimato dal client | il chip compare solo quando il server lo manda |
+| K-I | Browser integrato a schede (owner 05/09: «esattamente come Hermes e Codex»): l'agente apre una scheda vera, la legge, la persona annota | strumenti del kernel `apri_pagina(url)` / `leggi_pagina(scheda, da, quante)` / annotazione (Hermes: `open_preview`/`read_preview`, merge 05/08/2026; Codex: browser in-app condiviso, 04/2026); nel guscio Electron una webview per scheda, eventi `PaginaAperta`/`PaginaLetta` al client | l'agente apre un dev server locale in una scheda, la persona annota un elemento, l'agente lo modifica e verifica |
 
 Cutover in sé (piano Fase 3): `public/` ← build di `frontend/dist`; via il frontend parallelo di Opus
 (`src/app/*`, `src/services/*`, `src/styles/surfaces.css`, `lab/routes/*`, i suoi test: decide
