@@ -221,6 +221,17 @@ export function montaPonteLegacy(documentObj = document) {
    */
   const legacyFiles = legacy.querySelector('#inspector-files');
   if (legacyFiles) battezza(uno(inspector, '#railFile'), { id: 'railFile' });
+  // 06/9 B2: l'albero del monolite si disegna DENTRO #alberoFile del mockup; via le righe dimostrative e,
+  // nel frammento nascosto, gli id dei controlli che il mockup ha già (altrimenti $() troverebbe quelli nascosti).
+  // `#inspector-files .file-tree` / `.ft-tree` / `.ft-node` sono i selettori del monolite: #inspector-files diventa
+  // #alberoCartella del mockup (il disclosure «Nascondi l'albero» segue), .file-tree è #alberoFile svuotato.
+  if (legacyFiles) { legacyFiles.dataset.legacyId = legacyFiles.id; legacyFiles.removeAttribute('id'); }
+  for (const nodo of legacy.querySelectorAll('[id^="fileTree"]')) { nodo.dataset.legacyId = nodo.id; nodo.removeAttribute('id'); }
+  const alberoCartella = inspector.querySelector('#alberoCartella');
+  if (alberoCartella) { alberoCartella.id = 'inspector-files'; for (const b of inspector.querySelectorAll('[aria-controls="alberoCartella"]')) b.setAttribute('aria-controls', 'inspector-files'); }
+  const alberoFile = inspector.querySelector('#alberoFile');
+  if (alberoFile) { alberoFile.classList.add('file-tree'); alberoFile.replaceChildren(); }
+  for (const demo of inspector.querySelectorAll('#railProcessi [data-c="ProcessRow"]')) demo.remove();
 
   /* 8) Le maniglie leggono/scrivono i token del mockup (vedi PANEL_RESIZE_VAR in app.js). */
 

@@ -21,7 +21,9 @@ import { aggiornaPannelloNotifiche, apriPannelloNotifiche, nomeCampanella } from
 import { aggiornaInstallati, montaInstallati, gb } from '../components/modelli-installati.js'; // 06/9 B6.8: scheda «Installati» del Model Lab
 import { aggiornaHf, gruppiVarianti } from '../components/hf-catalogo.js'; // 06/9 B6.9: scheda «Hugging Face» del Model Lab
 import { montaHf } from '../components/hf-catalogo.js';
-import { aggiornaCodaDownload, montaCodaDownload, stimaFraLetture } from '../components/download-coda.js'; // 06/9 B6.10: scheda «Download» // 05/9 Fase 2: Toast del mockup (T-16)
+import { aggiornaCodaDownload, montaCodaDownload, stimaFraLetture } from '../components/download-coda.js'; // 06/9 B6.10: scheda «Download»
+import { aggiornaInspector, processiDagliEventi } from '../components/inspector.js'; // 06/9 B2: la colonna dei dettagli dice il vero
+import { contaDiff } from '../components/review.js'; // 06/9 B2: +N −M dei file toccati
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
@@ -6227,8 +6229,52 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     });
   }
 
+  /**
+   * 06/9 B2 — la colonna dei dettagli dal vivo: titolo, Ambiente (RunStarted.contesto), Finestra
+   * del contesto (usage; la finestra del modello quando il catalogo la dichiara), Indice dei giri
+   * (dalla conversazione), File toccati (reviewFiles), Processi (comandi dagli eventi). Prima
+   * mostrava i valori dimostrativi del mockup.
+   */
+  function giriPerInspector() {
+    const attivo = runRealeAttivo();
+    // un giro = un numero nella spine; il suo titolo è il riassunto del gruppo di attività corrispondente
+    const giri = [];
+    for (const t of $('#conversation')?.querySelectorAll('.talos-turn[data-turno="talos"]') || []) {
+      const numeri = [...t.querySelectorAll('.talos-turn-spine__n')].map((n) => Number(n.textContent)).filter(Number.isFinite);
+      const gruppi = [...t.querySelectorAll('[data-c="ActivityBundle"]:not(.real-reasoning-note)')];
+      const risposta = t.querySelector('.assistant-copy p, .assistant-copy')?.textContent?.trim().split(/\s+/).slice(0, 5).join(' ');
+      numeri.forEach((numero, i) => {
+        const g = gruppi[i];
+        const riassunto = g?.querySelector('.tool-note-summary-text')?.textContent?.trim() || (i === numeri.length - 1 && risposta) || 'Risposta';
+        giri.push({ numero, titolo: riassunto.length > 32 ? `${riassunto.slice(0, 31)}…` : riassunto, attrezzi: g ? g.querySelectorAll('[data-c="ToolRow"]').length : 0, inCorso: false });
+      });
+    }
+    if (attivo && giri.length) giri[giri.length - 1].inCorso = true;
+    return giri;
+  }
+  function finestraDelModelloCorrente() {
+    const id = state.model || state.realSession.currentRunModel;
+    const m = (state.modelLab?.catalogoModelli?.modelli || []).find((x) => x.id === id) || null;
+    return Number.isFinite(m?.contextLength) ? m.contextLength : null;
+  }
+  function aggiornaInspectorDaStato() {
+    const inspector = $('#inspectorSessione') || $('.talos-inspector');
+    if (!inspector) return;
+    const file = [...(state.realSession.reviewFiles?.values?.() || [])].map((v) => { const c = contaDiff(v); return { path: v.path, aggiunte: c.aggiunte, rimozioni: c.rimozioni }; });
+    aggiornaInspector(inspector, {
+      titolo: state.realSession.id ? (state.session || 'Sessione') : 'Nessuna sessione aperta',
+      contesto: state.realSession.contesto || null,
+      usage: state.realSession.usage,
+      finestra: finestraDelModelloCorrente(),
+      ripartizione: state.realSession.ripartizioneContesto || null,
+      giri: giriPerInspector(),
+      file,
+      processi: processiDagliEventi(state.realSession.eventiAttrezzi),
+    });
+  }
   function syncRunComposerState() {
     aggiornaPiedeChatDaStato(); // 05/9 Fase 2: ChatFooter
+    aggiornaInspectorDaStato(); // 06/9 B2
     const attivo = runRealeAttivo();
     const haTesto = composerInput.value.trim().length > 0;
     const redirectOccupato = state.realSession.redirectRequestInFlight || Boolean(state.realSession.redirectPendingId);
@@ -8741,8 +8787,13 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   function iconaSvgAlbero(nomeSimbolo) {
     const svgNs = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(svgNs, 'svg');
+    svg.setAttribute('class', 'i'); // 06/9 B2: l'icona del mockup ha una misura; senza classe l'SVG riempiva la colonna
+    svg.setAttribute('aria-hidden', 'true');
     const uso = document.createElementNS(svgNs, 'use');
-    uso.setAttribute('href', `#${nomeSimbolo}`);
+    // i simboli del monolite che il foglio del mockup non ha, tradotti nei suoi (altrimenti l'icona è vuota)
+    const ALIAS = { 'i-chevron-right': 'i-chev', 'i-file': 'i-doc', 'i-chevron': 'i-chev' };
+    const nome = document.getElementById(nomeSimbolo) ? nomeSimbolo : (ALIAS[nomeSimbolo] || nomeSimbolo);
+    uso.setAttribute('href', `#${nome}`);
     svg.append(uso);
     return svg;
   }
@@ -8815,12 +8866,15 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (cartella) li.setAttribute('aria-expanded', 'false');
 
     const row = document.createElement('div');
-    row.className = `ft-row ${cartella ? 'ft-row-folder' : 'ft-row-leaf'}`;
+    row.className = `ft-row ${cartella ? 'ft-row-folder' : 'ft-row-leaf'} talos-file-row`; // 06/9 B2: riga del mockup
+    row.dataset.c = 'FileTreeRow';
     row.tabIndex = -1;
 
     const chev = document.createElement('span');
     chev.className = 'ft-chevron';
     chev.appendChild(iconaSvgAlbero('i-chevron-right'));
+    chev.firstElementChild?.classList.add('talos-file-chevron');
+    chev.hidden = !cartella; // un file non si apre: niente freccia (il mockup la mette solo sulle cartelle)
     row.appendChild(chev);
 
     const icon = document.createElement('span');
@@ -8829,13 +8883,14 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     icon.appendChild(iconaSvgAlbero(cartella ? 'i-folder' : categoria === 'code' ? 'i-code' : 'i-file'));
     row.appendChild(icon);
 
-    row.appendChild(textElement('span', 'ft-name', nome));
+    row.appendChild(textElement('span', 'ft-name talos-file-row__name', nome));
 
     const stato = !cartella ? statoFileAlbero(percorsoCompleto) : null;
     if (stato) {
       const dot = document.createElement('span');
-      dot.className = `ft-status-dot ft-${stato}`;
+      dot.className = `ft-status-dot ft-${stato} talos-file-row__state`;
       dot.title = stato === 'new' ? 'Nuovo' : 'Modificato';
+      dot.textContent = stato === 'new' ? 'nuovo' : 'mod.'; // 06/9 B2: la parola del mockup, non solo un pallino
       row.appendChild(dot);
     }
 
@@ -8856,7 +8911,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (!alberoInAnteprima()) {
       const azioniBtn = document.createElement('button');
       azioniBtn.type = 'button';
-      azioniBtn.className = 'ft-actions-btn';
+      azioniBtn.className = 'ft-actions-btn talos-button talos-button--ghost talos-button--sm talos-icon-button';
       azioniBtn.setAttribute('aria-label', `Azioni su ${nome}`);
       azioniBtn.appendChild(iconaSvgAlbero('i-more'));
       azioniBtn.addEventListener('click', (event) => {
@@ -9254,7 +9309,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (demoBadge) demoBadge.hidden = true;
 
     const radice = document.createElement('div');
-    radice.className = 'tree-root';
+    radice.className = 'tree-root talos-file-row'; // 06/9 B2: la radice come riga del mockup
     radice.append(iconaSvgAlbero('i-files'), textElement('strong', '', nomeRadiceAlberoReale()));
     // ⭐⭐⭐ 28/8, owner: "comandi crud in generale" — creare un file/una cartella senza dover prima cliccare col destro su una cartella esistente: la radice stessa accetta lo stesso menu, ridotto alle due sole voci di creazione (percorsoBase '').
     if (!alberoInAnteprima()) radice.addEventListener('contextmenu', (e) => {
@@ -9287,6 +9342,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
 
     const ul = document.createElement('ul');
     ul.className = 'ft-tree';
+    ul.setAttribute('role', 'group'); // 06/9 B2: il rientro del mockup vale per [role=group]
     ul.setAttribute('role', 'tree');
     ul.setAttribute('aria-label', 'File del workspace');
     ul.addEventListener('keydown', (e) => {
@@ -9582,8 +9638,9 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
      * ⛔ Del ToolCallResult si copia solo l'id: il `content` può essere
      * enorme e per contare le chiamate non serve.
      */
-    if (evento.type === 'ToolCallStart' || evento.type === 'ToolCallArgs') state.realSession.eventiAttrezzi.push(evento);
-    else if (evento.type === 'ToolCallResult') state.realSession.eventiAttrezzi.push({ type: 'ToolCallResult', toolCallId: evento.toolCallId });
+    if (evento.type === 'ToolCallStart') state.realSession.eventiAttrezzi.push({ type: 'ToolCallStart', toolCallId: evento.toolCallId, toolCallName: evento.toolCallName, ricevutoA: Date.now(), giro: state.realSession.runCount || null }); // 06/9 B2: ora e giro per «Processi»
+    else if (evento.type === 'ToolCallArgs') state.realSession.eventiAttrezzi.push({ type: 'ToolCallArgs', toolCallId: evento.toolCallId, delta: evento.delta });
+    else if (evento.type === 'ToolCallResult') state.realSession.eventiAttrezzi.push({ type: 'ToolCallResult', toolCallId: evento.toolCallId, ricevutoA: Date.now(), errore: Boolean(evento.isError || evento.error) });
     switch (evento.type) {
       case 'RunStarted': {
         streamingAutoFollow = true; // un nuovo giro ri-arma il "segui il centro" — stesso principio di resetThreadScroll() in Hermes
@@ -9652,7 +9709,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
             appendUserFollowUp(evento.input.consegna, evento.contesto); // replay dopo un reload: nessun ottimismo l'ha già mostrato
           }
         }
-        if (evento.contesto) aggiornaPannelloAmbiente(evento.contesto);
+        if (evento.contesto) { aggiornaPannelloAmbiente(evento.contesto); state.realSession.contesto = evento.contesto; } // 06/9 B2
         programmaRenderAlberoReale();
         break;
       }
@@ -12166,7 +12223,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     const contenitore = $('#inspector-files .file-tree');
     if (!contenitore) return;
     const radice = document.createElement('div');
-    radice.className = 'tree-root';
+    radice.className = 'tree-root talos-file-row'; // 06/9 B2: la radice come riga del mockup
     radice.append(iconaSvgAlbero('i-files'), textElement('strong', '', nomeCartella));
     contenitore.replaceChildren(
       radice,
