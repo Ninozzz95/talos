@@ -23,8 +23,9 @@ export function aggiornaElencoRuntime(list,runtimes=[],{caricamento=false,errore
 }
 export function montaPannelloRuntime(gate){
  if(!gate)return;gate.classList.add('talos-runtime-panel');
- gate.querySelector('h4')?.classList.add('talos-lab__heading');gate.querySelector('#modelLabRuntimeStatus')?.classList.add('talos-muted');
- for(const select of gate.querySelectorAll('select'))select.classList.add('talos-select');
- for(const button of gate.querySelectorAll('button')){button.classList.add('talos-button','talos-button--secondary','talos-button--sm');button.dataset.c='Button';}
- gate.querySelector('textarea')?.classList.add('talos-field__input');
+ gate.querySelector('h4')?.classList.add('talos-lab__heading');
+ const status=gate.querySelector('#modelLabRuntimeStatus');if(status){status.className='talos-badge talos-badge--sm';status.dataset.c='Badge';status.setAttribute('role','status');}
+ for(const control of gate.querySelectorAll('select,textarea')){const label=control.closest('label');if(label){label.className='talos-field talos-field--stack';label.htmlFor=control.id;label.querySelector('span')?.classList.add('talos-label');}control.className=control.tagName==='TEXTAREA'?'talos-textarea':'talos-select';}
+ for(const button of gate.querySelectorAll('button')){button.className='talos-button talos-button--'+(button.id==='modelLabRunButton'?'primary':'secondary')+' talos-button--sm';button.dataset.c='Button';}
+ const backend=gate.querySelector('#modelLabRuntimeSelect')?.closest('label')?.querySelector('span');if(backend)backend.textContent='Motore';
 }

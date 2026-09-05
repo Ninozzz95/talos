@@ -502,3 +502,72 @@ Chiusura RuntimeCard: 84/84 unit, 195/195 statici, 84/84 componenti; build deter
 Cosa deve fare l’owner: nulla; può provare Panoramica su 4177.
 Cosa fai tu dopo: Provider, Installati, Hugging Face e Download.
 Cosa rimane: resto B6, raccordo Prova, B2 → B7 → B1 → B8 → Browser K-I.
+
+## B6.7 — ProviderCard, consegna 05/09/2026
+
+Sette fornitori reali da GET /api/v1/providers. Riusati Card, Badge, Button, Field, disclosure e token del mockup; nuovo ProviderCard con le quattro funzioni esportate annotate nel piano. Nessun token né dipendenza aggiunti. Il dialogo canonico usa la stessa fabbrica del laboratorio; le schede native chiamano le API già presenti.
+
+| Aspetto | Originale osservato | Consegna | Prova / verdetto |
+|---|---|---|---|
+| Hugging Face | Salva chiave senza campo, timeout non supportato | Token facoltativo inseribile, timeout assente | PROV-HF-TOKEN: beneficio verificato |
+| Anthropic/Gemini | Tempo editabile senza Salva | Salva tempo massimo sulla rotta esistente | PROV-TIMEOUT, ricarico 45 secondi |
+| Bozze | Aprire altra scheda ridisegna e cancella | Nodi input preservati anche chiudendo la scheda; nessuna chiave in storage browser | PROV-DRAFT / TASTIERA |
+| Stato | Catalogo raggiunto può dire Credenziale accettata | Chiave presente, servizio raggiunto, esecuzione distinti; limite OpenRouter esplicito | PROV-SONDA / TUTTI |
+| Recupero | Feedback perso dopo rilettura; ripristino senza bottone | Feedback conservato, errore in vista, Aggiorna e Ripristina indirizzo operativi | PROV-ERRORE-CHIAVE / RIPRISTINO / LISTA / ERRORE-IN-VISTA |
+| Attesa | Azioni concorrenti sulla stessa scheda | Comandi e input disabilitati durante operazione sul fornitore | PROV-ATTESA |
+
+Ricerca e pin: sezione B6.7 del ledger; WCAG Error Identification riaperto oggi, applicato al difetto visto a 1024/1280. RED geometrico fallito a 1024 (feedback sotto viewport), poi GREEN sulle tre larghezze. Le prove delle mutazioni usano risposte controllate e chiavi fittizie; nessuna credenziale reale modificata. Upstream OpenRouter catalogo pubblico HTTP 200 / 431 modelli verificato senza Authorization: non è certificazione della chiave. Esecuzione modello e OAuth non certificati da questa consegna. Richiesta backend: verifica dedicata OpenRouter /key; nessun cambiamento backend in questo commit.
+
+Screenshot selezionati e aperti:
+- .claude/immagini/astra-fase2/ProviderCard/originale-hf-1440.png
+- .claude/immagini/astra-fase2/ProviderCard/app-hf-1440.png
+- .claude/immagini/astra-fase2/ProviderCard/app-errore-salva-1440.png
+- .claude/immagini/astra-fase2/ProviderCard/comp-app-1440.png
+- .claude/immagini/astra-fase2/ProviderCard/comp-mockup-1440.png
+- .claude/immagini/astra-fase2/ProviderCard/originale-hf-1280.png
+- .claude/immagini/astra-fase2/ProviderCard/app-hf-1280.png
+- .claude/immagini/astra-fase2/ProviderCard/app-errore-salva-1280.png
+- .claude/immagini/astra-fase2/ProviderCard/comp-app-1280.png
+- .claude/immagini/astra-fase2/ProviderCard/comp-mockup-1280.png
+- .claude/immagini/astra-fase2/ProviderCard/originale-hf-1024.png
+- .claude/immagini/astra-fase2/ProviderCard/app-hf-1024.png
+- .claude/immagini/astra-fase2/ProviderCard/app-errore-salva-1024.png
+- .claude/immagini/astra-fase2/ProviderCard/comp-app-1024.png
+- .claude/immagini/astra-fase2/ProviderCard/comp-mockup-1024.png
+
+Cosa deve fare l’owner: guardare Provider in Impostazioni → Laboratorio modelli su http://127.0.0.1:4177; nessuna configurazione necessaria per proseguire.
+Cosa fai tu dopo: Installati, Hugging Face e Download.
+Cosa rimane: raccordo Prova libera col runtime locale (richiesta già nel ledger), resto B6, B2, B7, B1, B8 e Browser K-I.
+
+ProviderCard — verifica finale: npm run verify verde (87 unitari, build deterministica30asset, 195 statici); test:componenti87/87; Provider30/30 più GET reale3/3. Le tre prove reali aggiunte, aperte e archiviate:
+- .claude/immagini/astra-fase2/ProviderCard/app-server-reale-1440.png
+- .claude/immagini/astra-fase2/ProviderCard/app-server-reale-1280.png
+- .claude/immagini/astra-fase2/ProviderCard/app-server-reale-1024.png
+
+Regressione B6 finale: Catalogo / cornice / MemoryMeter / RuntimeCard 81/81, oltre ai 33 scenari Provider.
+Cosa deve fare l’owner: verificare la consegna su 4177.
+Cosa fai tu dopo: raccordo visivo Runtime richiesto dalla review R-08/R-09, poi Installati.
+Cosa rimane: resto B6 e consegne B2, B7, B1, B8, Browser K-I.
+
+## R-09 — controlli Runtime nel linguaggio del mockup
+
+Riusati Field, Label, Textarea, Badge e Button; titolo con talos-lab__heading. Tre controlli etichettati e associati agli ID originali, richiesta in font UI senza rientro da ricerca, Prova runtime primaria, Aggiorna secondaria. Errore della lettura in Badge warning, dato precedente cancellato come prima; nessun nuovo gestore di prova. Il testo scritto resta alla rilettura.
+
+Confronto: originale e consegna RuntimeCard precedente mostravano etichette nude e textarea mono; ora forma canonica uniforme, senza perdere select, testo, azioni, abilitazioni o percorsi di errore. Test R09-CONTROLLI prima fallito sulla label, poi verde3larghezze; intera suite Runtime30/30. Non affermo inferenza riuscita: resta il raccordo API per la richiesta libera documentato in B6.6. Quattro !important del contenitore sono accettati temporaneamente dalla review e vanno rimossi insieme al CSS legacy al cutover (regola .talos-runtime-panel nel mockup). Nuovi token: zero; due classi di base Label/Textarea definite nel canonico prima della generazione.
+
+Prove aperte a pari stato/larghezza, contro le precedenti in RuntimeCard:
+- .claude/immagini/astra-fase2/RuntimeControls/r09-pronto-1440.png
+- .claude/immagini/astra-fase2/RuntimeControls/r09-errore-1440.png
+- .claude/immagini/astra-fase2/RuntimeControls/r09-pronto-1280.png
+- .claude/immagini/astra-fase2/RuntimeControls/r09-errore-1280.png
+- .claude/immagini/astra-fase2/RuntimeControls/r09-pronto-1024.png
+- .claude/immagini/astra-fase2/RuntimeControls/r09-errore-1024.png
+
+Cosa deve fare l’owner: guardare Panoramica → Runtime locale su 4177.
+Cosa fai tu dopo: Installati, poi Hugging Face e Download.
+Cosa rimane: prova libera locale e seguito B6 → B2 → B7 → B1 → B8 → Browser.
+
+R-09, cancelli finali: npm run verify verde (87 unitari, determinismo30asset, 195 statici), componenti90/90 dopo il merge della NotificationPanel di Claude, Runtime30/30. Screenshot pronto/errore aperti alle tre larghezze; prova in linguaggio naturale digitata, senza attribuire al backend una risposta non eseguita.
+Cosa deve fare l’owner: guardare Runtime su4177.
+Cosa fai tu dopo: Installati.
+Cosa rimane: resto B6 e B2/B7/B1/B8/Browser.

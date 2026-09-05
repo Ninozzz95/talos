@@ -1942,3 +1942,102 @@ Chiusura RuntimeCard: 84/84 unit, 195/195 statici, 84/84 componenti; build deter
 Cosa deve fare l’owner: nulla; può provare Panoramica su 4177.
 Cosa fai tu dopo: Provider, Installati, Hugging Face e Download.
 Cosa rimane: resto B6, raccordo Prova, B2 → B7 → B1 → B8 → Browser K-I.
+
+## B6.7 ProviderCard — piano prima degli edit, 05/09/2026
+Merge lane completato dopo cb095d3. Proprietà TALOS UI: estrarre renderizzaProviderModelLab nel lessico canonico, conservare i sette provider e i contratti server.
+Ricerca fresca finestra 06/08–05/09. Fonti/pin: Hermes v2026.8.31 29112be (31/08), https://github.com/NousResearch/hermes-agent/blob/v2026.8.31/website/docs/integrations/providers.md ; Claude v2.1.261 d7dbd9a (04/09), https://github.com/anthropics/claude-code/releases/tag/v2.1.261 e https://code.claude.com/docs/en/authentication ; Codex rust-v0.153.4 3d2ee51 (04/09), https://github.com/openai/codex/blob/rust-v0.153.4/codex-rs/model-provider-info/src/lib.rs . Sorgenti versionate riaperte oggi; documenti auth stabili riverificati, data ultima modifica non esposta.
+Forze: Hermes provider/endpoint configurabili, Claude metodi di autenticazione distinti e diagnosi, Codex adapter provider con timeout e credenziali esterne. Limite della sola configurazione: non dimostra esecuzione o credenziale valida; niente debolezze globali inventate. +1 misurabile TALOS: chiave presente, endpoint e prova distinti; scritture seguite da rilettura; errore e retry; nessun segreto in storage web. Adattare i contratti esistenti dietro componenti AVM, nessun SDK/dipendenza/backend nuovo. OAuth resta proposta separata.
+WAI disclosure https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/ : bottone nativo aria-expanded/controls, Enter/Space, campi etichettati. HF token https://huggingface.co/docs/hub/security-tokens : token di accesso distinto dal catalogo pubblico; campo facoltativo necessario per repository protetti.
+OpenRouter https://openrouter.ai/docs/api/api-reference/models/get-models e https://openrouter.ai/docs/api/api-reference/api-keys/get-current-key : il catalogo non certifica la chiave. Prova read-only fatta oggi senza Authorization: GET https://openrouter.ai/api/v1/models HTTP200,431modelli. Il probe backend attuale usa /models e risponde Credenziale accettata anche su catalogo pubblico: UI non ripete questa conclusione, dice Servizio raggiunto; backend da correggere con rotta /key in fase appropriata.
+Problemi originali verificati: requiresKey=false nasconde il campo HF/Ollama ma lascia Salva; timeout visibile Anthropic/Gemini senza Salva; HF timeout non supportato; reset-runtime esiste ma nessun pulsante; prove concorrenti ridisegnano tutte le righe perdendo i campi digitati; successo salvataggio sparisce al render. Backend provider-credential-store.mjs accetta chiavi per tutti, tempo 5–300 per tutti salvo HF, endpoint solo supportsEndpoint. POST runtime richiede endpoint string anche quando non usato (invia stringa vuota), timeoutSeconds; reset richiede corpo vuoto. GET public non espone supportsTimeout: adattamento esplicito per i sette ID, HF escluso; nessun indizio inventato da truthy.
+File esatti: .claude/LEDGER-ASTRA-FASE-2-2026-09-05.md; .claude/CONSEGNA-ASTRA-FASE-2-2026-09-05.md; .claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html; harness-ui/frontend/index.template.html; harness-ui/frontend/src/styles/index.css; harness-ui/frontend/src/components/provider-card.js; harness-ui/frontend/src/legacy/app.js; harness-ui/frontend/lab/main.js; harness-ui/frontend/lab/fixtures/provider-card.js; harness-ui/frontend/tests/unit/provider-card.test.mjs; harness-ui/frontend/tests/parity/provider-card-vivo.spec.mjs; harness-ui/frontend/tests/parity/componenti.spec.mjs; harness-ui/frontend/playwright.astra.config.mjs. Screenshot generati in artifacts, elenco esatto prima della copia finale.
+Simboli nuovi statoProvider, creaProviderCard, aggiornaProviderList, montaProviderPanel, fixture PROVIDER_CARD. Compatibilità: providerList/providerTestAll, data-provider-id/toggle/action/key/endpoint/timeout/feedback. Renderer, provaProviderModelLab e gestisciAzioneProvider restano wrapper API; caricaProviderModelLab conservato. MonogrammaProvider/segmentoProvider rimossi solo se inutilizzati dopo estrazione. Regia canonica providerLab/providerIndirizzo/providerTimeout/providerChiave/providerStato mantenuta. Canonico una ProviderCard aperta nel veloFornitori, app sette righe espandibili dallo stesso componente; nessun nuovo meccanismo di routing.
+RED: PROV-HF-TOKEN facoltativo editabile; PROV-TIMEOUT salvataggio Anthropic/Gemini; PROV-SONDA non chiamare credenziale valida un catalogo; PROV-DRAFT preservare testo non salvato quando aggiorna un altro provider; PROV-CONCORRENZA niente doppia richiesta; PROV-ERRORE-CHIAVE retry e input protetto; PROV-RESET endpoint reale; PROV-SETTE e PROV-TUTTI copertura completa; PROV-RELOAD dati riletti; PROV-ERRORE-ELENCO e vuoto; password mai precompilata, nessuno storage web.
+GREEN: node --test tests/unit/provider-card.test.mjs; node scripts/mockup-to-template.mjs; npm run verify; test:componenti TALOS_LAB_PORT4178; npx playwright test --config=playwright.astra.config.mjs provider-card-vivo.spec.mjs; regressioni runtime/memoria/catalogo. Originale+proposta tre viewport con immagini aperte. Mutazioni test su risposte HTTP controllate, mai chiavi reali sovrascritte. Lettura provider reale e sonda read-only senza inferenza. Rollback un commit, nessuna migrazione.
+
+ProviderCard, aggiornamento verifica 05/09/2026: riesaminate disclosure WAI e release Hermes v2026.8.31 / Claude Code 2.1.261 / Codex rust-v0.153.4 (fonti già appuntate sopra). Il test iniziale passa 6/6 a 1440. Confronto aperto con originale: token HF prima assente e tempo Anthropic prima non salvabile, ora entrambi operativi sulle rotte esistenti. Amplio prove nominate PROV-RIPRISTINO, PROV-ATTESA, PROV-LISTA, PROV-TASTIERA e acquisizione a pari scroll; correggo riferimento token --talos-muted (nessun token nuovo).
+
+PROV-ERRORE-IN-VISTA (05/09/2026): screenshot 1280/1024 mostra feedback sotto bordo dopo render. WCAG 2.2 Error Identification https://www.w3.org/WAI/WCAG22/Understanding/error-identification.html riaperto oggi; release Hermes/Claude/Codex sopra riaperte con URL pin. Adotto identificazione testuale con role=alert e scroll nearest del solo feedback conclusivo. File aggiuntivi nessuno: app.js gestisciAzioneProvider e provider-card-vivo.spec.mjs. RED: rettangolo feedback deve stare entro viewport; GREEN stesso scenario3larghezze+intera Provider. Non affermo vantaggio sui competitor senza la loro prova visiva.
+
+## B6.7 — ProviderCard, consegna 05/09/2026
+
+Sette fornitori reali da GET /api/v1/providers. Riusati Card, Badge, Button, Field, disclosure e token del mockup; nuovo ProviderCard con le quattro funzioni esportate annotate nel piano. Nessun token né dipendenza aggiunti. Il dialogo canonico usa la stessa fabbrica del laboratorio; le schede native chiamano le API già presenti.
+
+| Aspetto | Originale osservato | Consegna | Prova / verdetto |
+|---|---|---|---|
+| Hugging Face | Salva chiave senza campo, timeout non supportato | Token facoltativo inseribile, timeout assente | PROV-HF-TOKEN: beneficio verificato |
+| Anthropic/Gemini | Tempo editabile senza Salva | Salva tempo massimo sulla rotta esistente | PROV-TIMEOUT, ricarico 45 secondi |
+| Bozze | Aprire altra scheda ridisegna e cancella | Nodi input preservati anche chiudendo la scheda; nessuna chiave in storage browser | PROV-DRAFT / TASTIERA |
+| Stato | Catalogo raggiunto può dire Credenziale accettata | Chiave presente, servizio raggiunto, esecuzione distinti; limite OpenRouter esplicito | PROV-SONDA / TUTTI |
+| Recupero | Feedback perso dopo rilettura; ripristino senza bottone | Feedback conservato, errore in vista, Aggiorna e Ripristina indirizzo operativi | PROV-ERRORE-CHIAVE / RIPRISTINO / LISTA / ERRORE-IN-VISTA |
+| Attesa | Azioni concorrenti sulla stessa scheda | Comandi e input disabilitati durante operazione sul fornitore | PROV-ATTESA |
+
+Ricerca e pin: sezione B6.7 del ledger; WCAG Error Identification riaperto oggi, applicato al difetto visto a 1024/1280. RED geometrico fallito a 1024 (feedback sotto viewport), poi GREEN sulle tre larghezze. Le prove delle mutazioni usano risposte controllate e chiavi fittizie; nessuna credenziale reale modificata. Upstream OpenRouter catalogo pubblico HTTP 200 / 431 modelli verificato senza Authorization: non è certificazione della chiave. Esecuzione modello e OAuth non certificati da questa consegna. Richiesta backend: verifica dedicata OpenRouter /key; nessun cambiamento backend in questo commit.
+
+Screenshot selezionati e aperti:
+- .claude/immagini/astra-fase2/ProviderCard/originale-hf-1440.png
+- .claude/immagini/astra-fase2/ProviderCard/app-hf-1440.png
+- .claude/immagini/astra-fase2/ProviderCard/app-errore-salva-1440.png
+- .claude/immagini/astra-fase2/ProviderCard/comp-app-1440.png
+- .claude/immagini/astra-fase2/ProviderCard/comp-mockup-1440.png
+- .claude/immagini/astra-fase2/ProviderCard/originale-hf-1280.png
+- .claude/immagini/astra-fase2/ProviderCard/app-hf-1280.png
+- .claude/immagini/astra-fase2/ProviderCard/app-errore-salva-1280.png
+- .claude/immagini/astra-fase2/ProviderCard/comp-app-1280.png
+- .claude/immagini/astra-fase2/ProviderCard/comp-mockup-1280.png
+- .claude/immagini/astra-fase2/ProviderCard/originale-hf-1024.png
+- .claude/immagini/astra-fase2/ProviderCard/app-hf-1024.png
+- .claude/immagini/astra-fase2/ProviderCard/app-errore-salva-1024.png
+- .claude/immagini/astra-fase2/ProviderCard/comp-app-1024.png
+- .claude/immagini/astra-fase2/ProviderCard/comp-mockup-1024.png
+
+Cosa deve fare l’owner: guardare Provider in Impostazioni → Laboratorio modelli su http://127.0.0.1:4177; nessuna configurazione necessaria per proseguire.
+Cosa fai tu dopo: Installati, Hugging Face e Download.
+Cosa rimane: raccordo Prova libera col runtime locale (richiesta già nel ledger), resto B6, B2, B7, B1, B8 e Browser K-I.
+
+ProviderCard — verifica finale: npm run verify verde (87 unitari, build deterministica30asset, 195 statici); test:componenti87/87; Provider30/30 più GET reale3/3. Le tre prove reali aggiunte, aperte e archiviate:
+- .claude/immagini/astra-fase2/ProviderCard/app-server-reale-1440.png
+- .claude/immagini/astra-fase2/ProviderCard/app-server-reale-1280.png
+- .claude/immagini/astra-fase2/ProviderCard/app-server-reale-1024.png
+
+Regressione B6 finale: Catalogo / cornice / MemoryMeter / RuntimeCard 81/81, oltre ai 33 scenari Provider.
+Cosa deve fare l’owner: verificare la consegna su 4177.
+Cosa fai tu dopo: raccordo visivo Runtime richiesto dalla review R-08/R-09, poi Installati.
+Cosa rimane: resto B6 e consegne B2, B7, B1, B8, Browser K-I.
+
+## R-09 — raccordo controlli Runtime, 05/09/2026
+
+Provider consegnato c66e210; poi merge lane/harness-desktop con review R08/R09. Owned TALOS UI. File previsti:
+- .claude/LEDGER-ASTRA-FASE-2-2026-09-05.md
+- .claude/CONSEGNA-ASTRA-FASE-2-2026-09-05.md
+- .claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html
+- harness-ui/frontend/index.template.html
+- harness-ui/frontend/src/styles/index.css
+- harness-ui/frontend/src/components/runtime-modelli.js
+- harness-ui/frontend/src/legacy/app.js
+- harness-ui/frontend/tests/parity/runtime-modelli-vivo.spec.mjs
+Simboli: montaPannelloRuntime, renderizzaRuntimeModelLab; nessuna firma pubblica mutata. RED R09-CONTROLLI: tre label nel linguaggio canonico, textarea UI, Prova runtime primario, badge warning su fallimento e ritorno neutro dopo recupero. GREEN Runtime3larghezze, unit/contratti, statici/componenti; screenshot originale RuntimeCard già aperto e nuova schermata errore/pronto. Rollback commit isolato, niente backend.
+Ricerca odierna (finestra 06/08→05/09): https://www.w3.org/WAI/tutorials/forms/labels/ ; https://hermes-agent.nousresearch.com/docs/user-guide/local-models ; https://code.claude.com/docs/en/third-party-integrations ; https://github.com/openai/codex/blob/rust-v0.153.4/codex-rs/ollama/src/lib.rs . Pin release verificati oggi: Hermes v2026.8.31/29112be, Claude2.1.261/d7dbd9a, Codex0.153.4/3d2ee51. Le pagine stabili non espongono aggiornamento: non le attribuisco al mese. Hermes espone un flusso locale gestito, Claude separa infrastrutture e autenticazione, Codex delega disponibilità a Ollama: punti forti conservati come separazione di selezione/stato. Nessun benchmark dei loro controlli né debolezza inventata. +1 misurabile qui: etichette collegate ai tre controlli, gerarchia di azione distinta, errore testuale col badge e recupero neutro. Adotto WAI e blocchi proprietari esistenti; scarto nuovi framework perché è un raccordo DOM, non un nuovo runtime. Quattro !important su .talos-runtime-panel (CSS canonico circa riga790) accettati dalla review solo fino al cutover: da eliminare insieme al CSS legacy.
+
+## R-09 — controlli Runtime nel linguaggio del mockup
+
+Riusati Field, Label, Textarea, Badge e Button; titolo con talos-lab__heading. Tre controlli etichettati e associati agli ID originali, richiesta in font UI senza rientro da ricerca, Prova runtime primaria, Aggiorna secondaria. Errore della lettura in Badge warning, dato precedente cancellato come prima; nessun nuovo gestore di prova. Il testo scritto resta alla rilettura.
+
+Confronto: originale e consegna RuntimeCard precedente mostravano etichette nude e textarea mono; ora forma canonica uniforme, senza perdere select, testo, azioni, abilitazioni o percorsi di errore. Test R09-CONTROLLI prima fallito sulla label, poi verde3larghezze; intera suite Runtime30/30. Non affermo inferenza riuscita: resta il raccordo API per la richiesta libera documentato in B6.6. Quattro !important del contenitore sono accettati temporaneamente dalla review e vanno rimossi insieme al CSS legacy al cutover (regola .talos-runtime-panel nel mockup). Nuovi token: zero; due classi di base Label/Textarea definite nel canonico prima della generazione.
+
+Prove aperte a pari stato/larghezza, contro le precedenti in RuntimeCard:
+- .claude/immagini/astra-fase2/RuntimeControls/r09-pronto-1440.png
+- .claude/immagini/astra-fase2/RuntimeControls/r09-errore-1440.png
+- .claude/immagini/astra-fase2/RuntimeControls/r09-pronto-1280.png
+- .claude/immagini/astra-fase2/RuntimeControls/r09-errore-1280.png
+- .claude/immagini/astra-fase2/RuntimeControls/r09-pronto-1024.png
+- .claude/immagini/astra-fase2/RuntimeControls/r09-errore-1024.png
+
+Cosa deve fare l’owner: guardare Panoramica → Runtime locale su 4177.
+Cosa fai tu dopo: Installati, poi Hugging Face e Download.
+Cosa rimane: prova libera locale e seguito B6 → B2 → B7 → B1 → B8 → Browser.
+
+R-09, cancelli finali: npm run verify verde (87 unitari, determinismo30asset, 195 statici), componenti90/90 dopo il merge della NotificationPanel di Claude, Runtime30/30. Screenshot pronto/errore aperti alle tre larghezze; prova in linguaggio naturale digitata, senza attribuire al backend una risposta non eseguita.
+Cosa deve fare l’owner: guardare Runtime su4177.
+Cosa fai tu dopo: Installati.
+Cosa rimane: resto B6 e B2/B7/B1/B8/Browser.
