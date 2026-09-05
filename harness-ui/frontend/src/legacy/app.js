@@ -1,3 +1,4 @@
+import { aggiornaBoard, creaRigaBoard, cartellaDaExport } from '../components/board.js'; // 05/9 Fase 2: Board
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
@@ -107,6 +108,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     // (la stessa rotta che alimenta già la sidebar), mai le campagne di
     // uno strumento di misura esterno.
     board: {
+      metriche: {}, cartelle: {}, cartelleCaricate: false, cartelleRichieste: false,
+      caricamento: false, metricheInCaricamento: false, cartelleInCaricamento: false, errore: null, avviso: null,
       initialized: false,
       bootstrapPromise: null,
       sessioni: [],
@@ -2033,60 +2036,32 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     return data.toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' });
   }
 
+  // 05/9 Fase 2: Board — righe e comandi nel DataTable approvato.
   function creaRigaSessioneBoard(sessione) {
-    const article = document.createElement('article');
-    article.className = 'session-board-row';
-    article.tabIndex = 0;
-
-    const identity = document.createElement('span');
-    const titolo = sessione.nome || sessione.taskId || 'Sessione';
-    const modelloParte = sessione.modello ? ` · ${sessione.modello}` : '';
-    identity.append(
-      textElement('strong', '', titolo),
-      textElement('small', '', `${formattaOraSessione(sessione.avviataAlle)}${modelloParte} · ${formattaUsageBreve(sessione.usage, { finita: Boolean(sessione.conclusa || sessione.interrotta) })}`),
-    );
-
-    const stato = sessione.interrotta
-      ? { testo: 'Interrotta', classe: 'error' }
-      : sessione.ultimoEsito === 'errore'
-        ? { testo: 'Errore', classe: 'error' } // 02/09 — RunError non è "Conclusa"
-        : sessione.conclusa
-          ? { testo: 'Conclusa', classe: 'success' }
-          : { testo: 'In corso', classe: '' };
-    const chip = textElement('span', `status-chip ${stato.classe}`.trim(), stato.testo);
-
-    article.append(identity, chip);
-    // ⭐ 31/8 P0 — la Board usa lo stesso menu azioni della sidebar, non una
-    // scorciatoia che apre direttamente la conferma di eliminazione.
-    article.addEventListener('contextmenu', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      apriMenuAzioniSessione({ ...sessione, nome: titolo }, { x: event.clientX, y: event.clientY, focusElement: article });
+    return creaRigaBoard(sessione, {
+      metriche: state.board.metriche[sessione.sessionId],
+      onApri: s => passaASessione(s.sessionId, s.taskId, s.nome, s.modello, s),
+      onMenu: (s, punto) => apriMenuAzioniSessione(s, punto),
     });
-    return article;
   }
 
-  /*
-   * ⛔⛔⛔ 30/8, QA visiva (Task 14) — trovato dal vivo con 154 sessioni
-   * reali sotto: il badge "Demo UI · non collegato" (`ensureDemoLabels()`,
-   * scoped a `[data-demo-surface="board"]`) non veniva MAI nascosto qui,
-   * a differenza di `aggiornaElencoSessioniReali()` (la sidebar), che lo
-   * fa esplicitamente. Stesso identico badge già trovato-e-corretto in
-   * più superfici diverse di questo stesso file (sidebar sessioni,
-   * albero file, tree) — un pattern ricorrente: ogni superficie con dati
-   * reali deve nasconderlo A MANO, non c'è un meccanismo automatico.
-   */
   function renderSessionsBoard(sessioni) {
-    sessionsBoardList.replaceChildren();
-    if (sessioni.length > 0) {
-      const demoBadge = sessionsBoardList.closest('[data-demo-surface="board"]')?.querySelector('.demo-surface-badge');
-      if (demoBadge) demoBadge.hidden = true;
-    }
-    if (sessioni.length === 0) {
-      sessionsBoardList.appendChild(textElement('p', 'board-empty', 'Nessuna sessione ancora — premi «Nuova» per iniziare.'));
-      return;
-    }
-    for (const sessione of sessioni) sessionsBoardList.appendChild(creaRigaSessioneBoard(sessione));
+    const schermo = $('#schermoBoard');
+    if (!schermo) return;
+    aggiornaBoard(schermo, sessioni, {
+      metriche: state.board.metriche, cartelle: state.board.cartelle,
+      cartelleCaricate: state.board.cartelleCaricate,
+      caricamento: state.board.caricamento,
+      metricheInCaricamento: state.board.metricheInCaricamento,
+      cartelleInCaricamento: state.board.cartelleInCaricamento,
+      errore: state.board.errore, avviso: state.board.avviso,
+      onApri: s => passaASessione(s.sessionId, s.taskId, s.nome, s.modello, s),
+      onMenu: (s, punto) => apriMenuAzioniSessione(s, punto),
+      onAggiorna: refreshSessionsBoard,
+      onCartelle: caricaCartelleSessioniBoard,
+    });
+    const badge = sessionsBoardList.closest('[data-demo-surface="board"]')?.querySelector('.demo-surface-badge');
+    if (badge) badge.hidden = true;
   }
 
   async function apiGet(pathname) {
@@ -5170,39 +5145,78 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     return { elemento: wrap, getValore: () => (toccato ? LIVELLI_RAGIONAMENTO[indice].valore : null) };
   }
 
+  // 05/9 Fase 2: Board — letture reali limitate, risultati obsoleti ignorati.
+  async function leggiDettagliBoard(sessioni, generation, leggi, ricevi) {
+    let prossimo = 0, errori = 0;
+    async function worker() {
+      while (generation === state.board.generation && prossimo < sessioni.length) {
+        const sessione = sessioni[prossimo++];
+        try {
+          const dato = await leggi(sessione);
+          if (generation === state.board.generation) ricevi(sessione, dato);
+        } catch { errori += 1; }
+      }
+    }
+    await Promise.all(Array.from({length:Math.min(4, sessioni.length)}, worker));
+    return errori;
+  }
+
+  async function caricaCartelleSessioniBoard() {
+    if (embeddedDemoOnly()) return;
+    state.board.cartelleRichieste = true;
+    if (state.board.caricamento || state.board.cartelleInCaricamento || state.board.cartelleCaricate) return;
+    const generation = state.board.generation;
+    state.board.cartelleInCaricamento = true;
+    renderSessionsBoard(state.board.sessioni);
+    const errori = await leggiDettagliBoard(state.board.sessioni, generation,
+      s => apiGet('/api/v1/sessions/' + encodeURIComponent(s.sessionId) + '/export'),
+      (s, esportazione) => { state.board.cartelle[s.sessionId] = cartellaDaExport(esportazione); });
+    if (generation !== state.board.generation) return;
+    state.board.cartelleInCaricamento = false;
+    state.board.cartelleCaricate = errori === 0;
+    if (errori) state.board.avviso = 'Cartelle non disponibili per ' + errori + ' sessioni. Premi Aggiorna per riprovare.';
+    renderSessionsBoard(state.board.sessioni);
+  }
+
   async function refreshSessionsBoard() {
+    if (embeddedDemoOnly()) { renderEmbeddedSessionsBoardDemo(true); return; }
     const generation = state.board.generation += 1;
+    Object.assign(state.board, {caricamento:true,metricheInCaricamento:false,cartelleInCaricamento:false,errore:null,avviso:null,metriche:{},cartelle:{},cartelleCaricate:false});
     if (refreshSessionsBoardButton) refreshSessionsBoardButton.disabled = true;
+    renderSessionsBoard(state.board.sessioni);
     try {
       const { items } = await apiGet('/api/v1/sessions');
       if (generation !== state.board.generation) return;
+      if (!Array.isArray(items)) throw new Error('Elenco sessioni non valido');
       state.board.sessioni = items;
       state.board.initialized = true;
+      state.board.metricheInCaricamento = true;
       renderSessionsBoard(items);
-      // ⭐ 26/8, riconciliazione desktop→mobile — trovato con una prova vera
-      // (browser reale contro il server vero, non ipotizzato): il badge
-      // "Demo UI" della Board restava visibile anche a dati reali caricati,
-      // difetto preesistente. Stesso principio già applicato ad
-      // aggiornaAlberoReale/aggiornaPannelloAmbiente: dati reali arrivati,
-      // l'etichetta demo deve sparire.
-      const demoBadgeBoard = $('.demo-surface-badge', $('[data-view="dashboard"]'));
-      if (demoBadgeBoard) demoBadgeBoard.hidden = true;
+      const errori = await leggiDettagliBoard(items, generation,
+        s => apiGet('/api/v1/sessions/' + encodeURIComponent(s.sessionId) + '/metrics'),
+        (s, metriche) => { state.board.metriche[s.sessionId] = metriche; });
+      if (generation !== state.board.generation) return;
+      if (errori) state.board.avviso = 'Metriche non disponibili per ' + errori + ' sessioni. Premi Aggiorna per riprovare.';
     } catch (error) {
       if (generation !== state.board.generation) return;
       state.board.sessioni = [];
-      sessionsBoardList.replaceChildren(textElement('p', 'board-empty', boardErrorMessage(error)));
+      state.board.errore = boardErrorMessage(error);
     } finally {
-      if (generation === state.board.generation && refreshSessionsBoardButton) refreshSessionsBoardButton.disabled = false;
+      if (generation === state.board.generation) {
+        state.board.caricamento = false;
+        state.board.metricheInCaricamento = false;
+        if (refreshSessionsBoardButton) refreshSessionsBoardButton.disabled = false;
+        renderSessionsBoard(state.board.sessioni);
+        if (state.board.cartelleRichieste && !state.board.errore) await caricaCartelleSessioniBoard();
+      }
     }
   }
 
   function renderEmbeddedSessionsBoardDemo(announce = false) {
     state.board.initialized = true;
     state.board.sessioni = [];
-    boardEyebrow.textContent = 'Codice · Demo UI';
-    boardTitle.textContent = 'Anteprima sessioni';
-    boardDescription.textContent = 'Questa superficie mobile non ha un backend: nessuna sessione reale viene letta o simulata.';
-    sessionsBoardList.replaceChildren(textElement('p', 'board-empty', 'Nessun dato mobile collegato.'));
+    state.board.errore = 'Nessun dato mobile collegato.';
+    renderSessionsBoard([]);
     if (announce) toast('Board demo non collegata', 'Nessuna richiesta di rete è stata eseguita.');
   }
 

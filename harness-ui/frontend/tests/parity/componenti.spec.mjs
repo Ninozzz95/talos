@@ -16,6 +16,7 @@ import { MOCKUP, apri, confrontaPixel, mostra, struttura, testi } from './aiuto.
 const LAB = process.env.TALOS_LAB_URL || `http://127.0.0.1:${process.env.TALOS_LAB_PORT || 4176}`;
 
 const COMPONENTI = [
+  { nome: 'Board', schermata: 'schermoBoard', selettore: '#schermoBoard' },
   { nome: 'SessionItem', schermata: 'schermoChat', selettore: '.talos-sidebar' },
   { nome: 'NavItem', schermata: 'schermoChat', selettore: '.talos-sidebar' },
   { nome: 'WorkspaceFooter', schermata: 'schermoChat', selettore: '.talos-sidebar' },
