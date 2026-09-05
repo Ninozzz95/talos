@@ -702,3 +702,16 @@ button{background:none; border:0; cursor:pointer; padding:0}
 .talos-dialog[data-user-sized] .talos-dialog__body{overflow:auto}
 #veloModello .talos-dialog[data-user-sized] .talos-dialog__body{display:block}
 #veloModello input[type=checkbox]{accent-color:var(--talos-accent)}
+
+.talos-intro-folders{max-height:calc(var(--talos-row)*5);overflow:auto}
+#passoIntroCartella .talos-stack{gap:var(--talos-space-sm)}
+#introCartellaSu .i{transform:rotate(90deg)}
+
+#introCartella{width:auto;min-width:0;flex:1 1 0;padding-inline:var(--talos-space-md)}
+#passoIntroCartella .talos-toolbar{flex-wrap:nowrap;margin-bottom:0}
+#passoIntroCartella .talos-field{min-width:0}
+.talos-intro-folders{max-height:calc(var(--talos-row)*4)}
+
+.talos-intro-folders:empty{display:none}
+
+#introMessaggio:empty{display:none}
