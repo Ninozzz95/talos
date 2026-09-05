@@ -1,3 +1,5 @@
+import { creaSessionItem, statoSessione } from '../components/session-item.js'; // 05/9 Fase 2: SessionItem — la riga della sidebar è un componente del mockup
+
 (() => {
   'use strict';
 
@@ -6123,7 +6125,7 @@
           state.session = nomeUnico;
           sessionTitle.textContent = state.session;
           $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
-          const activeSession = $('.session-item.active .session-main strong');
+          const activeSession = $('.talos-session-item[aria-current="true"] .talos-session-item__title'); // 05/9 Fase 2: SessionItem
           if (activeSession) activeSession.textContent = state.session;
         }
         state.sessioneTarget = null;
@@ -10892,17 +10894,9 @@
   /** ⭐ 04/9, W1-12 — la riga della sessione PENDENTE nella sidebar (prima non esisteva: la cartella era scelta ma l'elenco non la mostrava, e nessuna riga era evidenziata). */
   function rigaSessionePendente() {
     if (!state.pendingCustomSession || state.realSession.id) return [];
-    const riga = document.createElement('div');
-    riga.className = 'session-item real-session-item active is-pending';
-    riga.setAttribute('aria-current', 'true');
-    const main = document.createElement('span');
-    main.className = 'session-main';
-    const stato = document.createElement('small');
-    stato.className = 'session-stato';
-    stato.dataset.sessionState = 'pendente';
-    stato.append(textElement('span', 'session-stato-punto', ''), textElement('span', '', 'in attesa del primo messaggio'));
-    main.append(textElement('strong', '', `Nuova · ${state.pendingCustomSession.nomeCartella}`), stato);
-    riga.append(main);
+    // 05/9 Fase 2: SessionItem — la riga pendente è lo stesso blocco del mockup
+    const riga = creaSessionItem({ nomeCartella: state.pendingCustomSession.nomeCartella }, { pendente: true, corrente: true });
+    riga.classList.add('real-session-item', 'is-pending');
     return [riga];
   }
 
@@ -10955,7 +10949,7 @@
     if (!contenitore) {
       contenitore = document.createElement('div');
       contenitore.id = 'realSessionsBlock';
-      $('#sessionList')?.prepend(contenitore);
+      $('#sessionList')?.append(contenitore); // 05/9 Fase 2: dopo la testata «Sessioni · N» del mockup, non prima
     }
     return contenitore;
   }
@@ -10983,16 +10977,7 @@
    * chiusa, ma non è finita — dirle uguali sarebbe la bugia che stiamo
    * togliendo.
    */
-  function statoSessione(sessione) {
-    if (sessione.inAttesaApprovazione) return { classe: 'attesa', testo: 'in attesa di approvazione' };
-    if (!sessione.conclusa) return { classe: 'vivo', testo: 'in corso · live' };
-    if (sessione.interrotta) return { classe: 'interrotto', testo: 'interrotta' };
-    if (sessione.ultimoEsito === 'errore') return { classe: 'errore', testo: 'conclusa con errore' };
-    if (sessione.ultimoEsito === 'successo') return { classe: 'successo', testo: 'conclusa' };
-    // ⛔ Nessun esito registrato ≠ successo: le sessioni vecchie non lo
-    // hanno, e chiamarle "riuscite" sarebbe inventare un fatto.
-    return { classe: 'ignoto', testo: 'conclusa · esito non registrato' };
-  }
+  // 05/9 Fase 2: statoSessione vive in components/session-item.js (stesso ordine degli stati, parole del mockup)
 
   async function aggiornaElencoSessioniReali() {
     const contenitore = contenitoreSessioniReali();
@@ -11026,99 +11011,36 @@
     if (elenco.length === 0) {
       state.sessionSelection.active = false;
       state.sessionSelection.selected.clear();
+      const conteggioVuoto = $('#sessionList .talos-sidebar__block-head .talos-nav-item__count');
+      if (conteggioVuoto) conteggioVuoto.textContent = '0'; // 05/9 Fase 2
       contenitore.replaceChildren(...pendente);
       aggiornaToolbarSelezioneSessioni();
       aggiornaSottotitoloSessione();
       return;
     }
 
-    const pezzi = [textElement('div', 'list-heading', 'Sessioni reali'), ...pendente];
+    /*
+     * 05/9 Fase 2: SessionItem. Ogni riga è il blocco `data-c="SessionItem"` del
+     * mockup, emesso da components/session-item.js dai dati VERI di
+     * GET /api/v1/sessions. Restano del monolite: l'apertura (passaASessione),
+     * la selezione multipla, il menu con il tasto destro. Il titolo «Sessioni
+     * reali» non c'è più: la testata del mockup («Sessioni · N») dice il conteggio.
+     */
+    const conteggio = $('#sessionList .talos-sidebar__block-head .talos-nav-item__count');
+    if (conteggio) conteggio.textContent = String(elenco.length);
+    const pezzi = [...pendente];
     for (const sessione of elenco) {
-      const button = document.createElement('div');
-      button.className = `session-item real-session-item${sessione.sessionId === state.realSession.id ? ' active' : ''}${state.sessionSelection.active ? ' is-selection-mode' : ''}`;
-      button.tabIndex = 0;
-      button.setAttribute('role', 'button');
-      button.dataset.realSessionId = sessione.sessionId;
-      const main = document.createElement('span');
-      main.className = 'session-main';
       const etichetta = sessione.nome || sessione.taskId; // ⭐ un nome scelto dall'owner vince sempre sul taskId
-      /*
-       * ⭐⭐⭐ 02/9 — la riga diceva solo «concluso» o «in corso»: una
-       * sessione FALLITA e una RIUSCITA si leggevano identiche. Il server
-       * mandava già tutto (`ultimoEsito`, `interrotta`,
-       * `inAttesaApprovazione`, `modello`, `usage`) e la riga ne usava
-       * due campi su otto — il divario con i concorrenti non era di dati,
-       * era di resa (vedi DOSSIER-LISTA-SESSIONI-CONFRONTO-2026-09-02.md).
-       * ⛔ Nessun dato inventato: ogni pezzo qui sotto esiste nella
-       * risposta di `GET /api/v1/sessions`, e ciò che manca non si scrive.
-       */
-      const stato = statoSessione(sessione);
-      const riga = document.createElement('small');
-      riga.className = 'session-stato';
-      riga.dataset.sessionState = stato.classe;
-      riga.append(textElement('span', 'session-stato-punto', ''), textElement('span', '', stato.testo));
-      // ⭐ Il modello, come fa Hermes: è la domanda più frequente su una
-      // sessione vecchia («con quale modello l'avevo fatta?»).
-      /*
-       * ⛔ 02/9 — solo il NOME del modello, senza il prefisso del provider
-       * (google/gemini-3.7-flash -> gemini-3.7-flash): misurato dal
-       * vivo, con il prefisso il nome veniva TRONCATO e i giri finivano
-       * fuori dalla riga. Il provider e' gia' nella scheda della sessione,
-       * qui ruberebbe spazio a un dato che non si vede da nessun'altra
-       * parte. Nessuna informazione persa, solo non ripetuta.
-       */
-      if (sessione.modello) riga.append(textElement('span', 'session-stato-extra', String(sessione.modello).split('/').pop()));
-      /*
-       * ⛔ Token e giri SOLO se il server li ha davvero contati: `usage`
-       * è null per le sessioni registrate prima che il conteggio
-       * esistesse, e lì non si scrive nulla invece di uno zero finto.
-       */
-
-      main.append(textElement('strong', '', sessione.forkDa ? `${etichetta} · fork` : etichetta), riga);
-      const meta = document.createElement('span');
-      meta.className = 'session-meta';
-      /*
-       * ⛔ 02/9 — i giri vanno QUI, nella colonna destra, non nella riga di
-       * stato: misurato dal vivo, in una sidebar da 292px lo stato + il
-       * modello + i giri si troncavano a «6 g». Un fatto troncato e' peggio
-       * di un fatto assente — sembra un dato, ma non si legge. Questa
-       * colonna ha gia' una riga libera sotto l'ora (grid-template-rows:
-       * auto 1fr), ed e' il posto giusto per un conteggio.
-       * ⛔ Solo se il server li ha davvero contati: `usage` è null sulle
-       * sessioni registrate prima che il conteggio esistesse, e lì non si
-       * scrive nulla invece di uno zero finto.
-       */
-      meta.append(textElement('span', '', formattaOraSessione(sessione.avviataAlle)));
-      const giri = sessione.usage?.giri;
-      if (Number.isFinite(giri) && giri > 0) meta.append(textElement('span', 'session-meta-giri', `${giri} gir${giri === 1 ? 'o' : 'i'}`));
-      if (state.sessionSelection.active) {
-        const checkLabel = document.createElement('label');
-        checkLabel.className = 'session-selection-check';
-        checkLabel.title = `Seleziona ${etichetta}`;
-        const check = document.createElement('input');
-        check.type = 'checkbox';
-        check.dataset.sessionSelect = sessione.sessionId;
-        check.checked = state.sessionSelection.selected.has(sessione.sessionId);
-        check.setAttribute('aria-label', `Seleziona ${etichetta}`);
-        check.addEventListener('click', (event) => event.stopPropagation());
-        check.addEventListener('change', () => toggleSessionSelection(sessione.sessionId, check.checked));
-        checkLabel.appendChild(check);
-        button.append(checkLabel);
-      }
-      button.append(main, meta);
-      button.addEventListener('click', () => passaASessione(sessione.sessionId, sessione.taskId, sessione.nome, sessione.modello, sessione));
-      button.addEventListener('keydown', (event) => {
-        if (event.key !== 'Enter' && event.key !== ' ') return;
-        event.preventDefault();
-        passaASessione(sessione.sessionId, sessione.taskId, sessione.nome, sessione.modello, sessione);
+      const button = creaSessionItem(sessione, {
+        corrente: sessione.sessionId === state.realSession.id,
+        selezione: state.sessionSelection.active
+          ? { attiva: true, selezionata: state.sessionSelection.selected.has(sessione.sessionId), onToggle: (checked) => toggleSessionSelection(sessione.sessionId, checked) }
+          : null,
+        onApri: () => passaASessione(sessione.sessionId, sessione.taskId, sessione.nome, sessione.modello, sessione),
+        /* ⭐ 31/8 P0 — tasto destro apre il menu completo condiviso con la Board e con il menu CRUD dei Files. */
+        onMenu: (event) => apriMenuAzioniSessione({ ...sessione, nome: etichetta }, { x: event.clientX, y: event.clientY, focusElement: button }),
       });
-      /* ⭐ 31/8 P0 — tasto destro apre il menu completo condiviso con la
-       * Board e con il menu CRUD dei Files. */
-      button.addEventListener('contextmenu', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        apriMenuAzioniSessione({ ...sessione, nome: etichetta }, { x: event.clientX, y: event.clientY, focusElement: button });
-      });
+      button.classList.add('real-session-item'); // il vocabolario del monolite (selezione multipla, is-selected)
       pezzi.push(button);
     }
     contenitore.replaceChildren(...pezzi);
