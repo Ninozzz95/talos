@@ -422,3 +422,10 @@ Prove aperte e selezionate:
 Cosa deve fare l’owner · Può provare Impostazioni su http://127.0.0.1:4177/. Nessuna azione necessaria per proseguire.
 Cosa fai tu dopo · Innestare le sei schede e gli accessi del Model Lab, preservando tutte le funzioni originali.
 Cosa rimane · B6 ModelLab → B2 → B7 → B1 → B8 → Browser K-I. OAuth e computer-use restano PROPOSTE.
+
+## R05 — consegna verificata05/09
+Policy attiva usa etichettaPermesso condivisa. Tutti gli undici valori d’aspetto usano le etichette dei controlli originali; nessuna mappa privata. Valori salvati e permessi effettivi invariati. RED riprodotti e regressioni permanenti SET-NOMI-PERMESSI/SET-NOMI-ASPETTO verdi.
+Gates freschi:42/42 prove live (24 Impostazioni+18 FonteRicerca), npm run verify verde (build30 asset,66 contratti,30 file deterministici,195 statici),72/72 confronti componenti; git diff --check verde. Sei screenshot R05 aperti alle larghezze1440/1280/1024, permessi/aspetto: .claude/immagini/astra-fase2/R05-Impostazioni/. Nessun taglio delle etichette osservato. Prima: nomi tecnici e diciture discordanti documentati dalle prove RED e dalle immagini Settings/FonteRicerca; dopo: etichette umane coerenti. Gli screenshot delle policy usano sessioni vuote controllate, quelli d’aspetto l’inventario esistente: non sono un confronto pixel a parità di dati. Nessuna esecuzione agente rivendicata.
+Cosa deve fare l’owner · Nessuna azione necessaria. Impostazioni disponibili su http://127.0.0.1:4177/.
+Cosa fai tu dopo · Riprendere il catalogo Model Lab già salvato, poi le altre schede.
+Cosa rimane · B6 Model Lab → B2 → B7 → B1 → B8 → Browser K-I. OAuth e computer-use restano proposte.
