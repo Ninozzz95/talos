@@ -6,6 +6,7 @@
     <meta name="color-scheme" content="dark light">
     <link rel="icon" href="data:,">
     <title>TALOS Codice</title>
+    <link rel="stylesheet" href="./vendor/xterm/xterm.css">
     <link rel="stylesheet" href="./styles.css">
   </head>
   <body>
@@ -792,6 +793,11 @@
 
 <!-- I token di Calm nel formato DTCG 2025.10 ($value/$type, riferimenti per percorso):
      leggibile da Style Dictionary, Terrazzo, Figma e Tokens Studio senza conversioni. -->
+    <!-- vendor: il terminale vero (xterm) e il colore del codice (Prism), come nella app originale -->
+    <script src="./vendor/xterm/xterm.js"></script>
+    <script src="./vendor/xterm/addon-fit.js"></script>
+    <script src="./vendor/xterm/addon-webgl.js"></script>
+    <script src="./vendor/prism/prism.js"></script>
     <script type="module" src="./app.js"></script>
   </body>
 </html>

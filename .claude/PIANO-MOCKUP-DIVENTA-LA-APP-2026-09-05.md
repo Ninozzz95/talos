@@ -96,7 +96,7 @@ tutte le altre:
 | Sidebar | `aggiornaElencoSessioniReali`, `statoSessione`, contatori | SessionItem, NavItem, NavGroup, WorkspaceFooter |
 | Topbar | `aggiornaSottotitoloSessione`, titolo, viste | Topbar, Tabs |
 | Chat | `appendRealTaskStart`, `appendUserFollowUp`, `ensureAssistantMessageElement`+streaming, `apriBatchSeServe`/`appendToolNote`, `appendApprovalCard`, `appendStatusNote`, `appendArtifactCard`, `mostraAttesaRisposta` | Turn, TurnSpine, Message, ActivityBundle, ToolRow, ToolFailure, ApprovalCard, DiffView, SignedReceipt, SystemNote, TouchedFiles, skeleton |
-| Piede della chat | `syncRunComposerState`, `renderizzaBannerCoda`, `aggiornaPillola*`, `aggiornaContatoreUsage` | StatusStrip, MessageQueue, Composer, AttachButton, Chip, SendButton, StatusBar |
+| Piede della chat | `syncRunComposerState`, `renderizzaBannerCoda`, `aggiornaPillola*`, `aggiornaContatoreUsage`, **`setupComposerResize`** (owner 05/09: «ricorda il composer ridimensionabile come nella app originale» — maniglia nel mockup, misura ricordata in `talos-harness-composer-size-v1`, chiave del contratto) | StatusStrip, MessageQueue, Composer (+ maniglia), AttachButton, Chip, SendButton, StatusBar |
 | Chat vuota | `costruisciConversationHero` | EmptySessionScreen, SuggestionList |
 | Terminale | `montaTerminaleSeServe`, `impostaChipTerminale` + schede W1-01 | TerminalPane |
 | Review | `renderRealReviewList`, `updateRealReview` | ReviewPane, ReviewFileList, DiffView |
