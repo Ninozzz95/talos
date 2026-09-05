@@ -506,3 +506,13 @@ l'unione (fast-forward): unit **50/50**, statico **195/195**, componenti **45/45
 non tocca più nessun file committato (0 PNG modificati). I due stash dei PNG rigenerati
 (`png-astra-mockup-rigenerati-dai-test-2026-09-05` e `-bis`) non servono più: si possono
 buttare quando l'owner vuole (io non butto niente).
+
+---
+
+## R-04 · Capability (attrezzi e permessi, skill/connettori/plugin/hook) e Doctor di Astra (`8f1674ad`, `cad3d10b`, `20004be0`) — ✅ accettati e uniti
+
+Stesso metodo; funzioni toccate solo sue (`caricaPannelloAttrezzi`, `caricaCapability`,
+`caricaEstensioni*`, `eseguiDoctor`, `esportaDoctor`); il template rigenerato dal mockup non cambia
+di una riga (nessuna modifica a mano). Doctor dal vivo: 11 controlli veri raggruppati per
+gravità con il conteggio in testa (H1-H5), «Esporta in JSON» (H7), «Ricontrolla»; ogni avviso dice
+cosa fare. Dopo l'unione (fast-forward): unit **61/61**, statico **195/195**, componenti **63/63**.
