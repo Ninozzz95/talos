@@ -254,7 +254,8 @@ button{background:none; border:0; cursor:pointer; padding:0}
 
 /* ---------- 7. TOPBAR ---------- */
 .talos-topbar{flex:none; height:var(--talos-topbar-h); display:flex; align-items:center; gap:12px; padding:0 18px; border-bottom:1px solid var(--talos-border)}
-.talos-topbar__title{display:flex; align-items:center; gap:8px; flex:0 1 auto; min-width:0; max-width:min(340px,50%)}
+.talos-topbar__title{display:flex; align-items:center; gap:8px; flex:0 1 auto; min-width:min(180px,32%); max-width:min(340px,50%)}
+.talos-topbar__title h1{min-width:0}
 .talos-topbar .talos-tabs, .talos-topbar__actions{flex:none}
 .talos-topbar__title h1{font-size:15px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .talos-topbar__title .i{color:var(--talos-muted)}
@@ -374,7 +375,7 @@ button{background:none; border:0; cursor:pointer; padding:0}
 .talos-composer__bar .talos-composer__attach, .talos-composer__bar .talos-send{flex:none}
 .talos-composer{container-type:inline-size}
 @container (max-width:820px){ .talos-composer__bar .talos-kbd{display:none} }
-@container (max-width:640px){ .talos-composer__bar .talos-badge--lg{max-width:150px} }
+@container (max-width:640px){ .talos-composer__bar .talos-badge--lg{max-width:190px; padding:0 8px} .talos-composer__bar{gap:4px} }
 .talos-composer__attach{width:38px; height:38px; border-radius:50%; border:1px solid var(--talos-border); background:var(--talos-panel-soft); display:grid; place-items:center; color:var(--talos-assistant-text)}
 .talos-composer__attach:hover{border-color:var(--talos-accent-border); color:var(--talos-accent-hover)}
 .talos-send{width:42px; height:42px; border-radius:50%; background:var(--talos-accent); color:var(--talos-text-on-accent); display:grid; place-items:center; margin-left:auto; box-shadow:inset 0 1px rgba(255,255,255,.14),0 5px 14px var(--talos-accent-soft); transition:transform var(--talos-motion-duration-control) var(--talos-motion-ease)}

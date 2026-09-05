@@ -6350,7 +6350,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     redirectRunButton.setAttribute('aria-label', 'Reindirizza con il testo scritto');
     // ⭐ 3/9 — item 10: un suggerimento vale solo a riposo, campo vuoto, niente in coda.
     if (suggerimentoComposerAttivo && (attivo || haTesto)) svuotaSuggerimentoComposer();
-    composerInput.placeholder = attivo ? 'Scrivi un follow-up…' : (suggerimentoComposerAttivo || 'Scrivi a TALOS...');
+    composerInput.placeholder = attivo ? 'Scrivi un follow-up…' : (suggerimentoComposerAttivo || (state.pendingCustomSession && !state.realSession.id ? 'Scrivi il primo messaggio…' : 'Scrivi… Invio indirizza il giro in corso, Ctrl+Invio accoda')); // 05/9 Fase 2: le parole del mockup
   }
 
   function mostraSuggerimentoComposer(testo) {
@@ -12326,6 +12326,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     // quando la sessione vera abilita l'albero file ordinario.
     if (!cartellaId) renderizzaRadiceWorkspacePendente(nomeCartella);
     // ⛔ nuovaGenerazioneSessione() ha appena svuotato #conversation (replaceChildren) — l'empty-state originale non esiste più nel DOM, va ricreato, non cercato.
+    svuotaSuggerimentoComposer(); // 05/9 Fase 2: un suggerimento della sessione PRECEDENTE non ha senso su una nuova
+    syncRunComposerState();
     void montaStatoVuoto({ nomeCartella, cartellaLibera }); // 05/9 Fase 2: EmptyState al posto dell'hero
     // ⭐ 30/8 — stesso principio di sopra, sul tab Files: nuovaGenerazioneSessione() (dentro resettaSuperficiRealiDedicate) ha già scritto il placeholder GENERICO "nessuna cartella ancora scelta" — ma qui la cartella è già nota, prima ancora del primo messaggio. Nessuna nuova sorgente di verità: nomeCartella è lo stesso valore che finisce nel titolo sessione qui sopra.
     window.setTimeout(() => composerInput.focus(), 0);
