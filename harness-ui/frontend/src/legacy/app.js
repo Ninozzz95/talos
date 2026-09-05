@@ -6329,7 +6329,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       tettoGiri: state.realSession.tettoGiriDichiarato,
       latenzaMs: latenzaPrimoTokenMs(),
       costo: null,
-      modello: nomeModelloBreve(state.model),
+      modello: nomeModelloBreve(state.model || state.realSession.currentRunModel), // il modello del giro se non ne e' scelto uno
       permesso: state.permissions,
       tema: testiTema,
     });
@@ -10853,7 +10853,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * applicaThemeDesktop e dopo ogni cambio di state.model.
    */
   function testiPiedeSidebar() {
-    return testiPiedeWorkspace({ cartella: state.realSession.cartellaAssoluta, nomeAnteprima: state.realSession.previewWorkspaceName, tema: document.documentElement.dataset.talosTheme, modello: state.model });
+    return testiPiedeWorkspace({ cartella: state.realSession.cartellaAssoluta, nomeAnteprima: state.realSession.previewWorkspaceName, tema: document.documentElement.dataset.talosTheme, modello: state.model || state.realSession.currentRunModel });
   }
   function aggiornaPiedeSidebar() {
     aggiornaPiedeChatDaStato.tema = () => testiPiedeSidebar().sotto; // 05/9 Fase 2: la barra di stato della chat ripete «Tema … · locale»
