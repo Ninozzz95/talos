@@ -454,6 +454,16 @@ catalogo affiorano le righe GREZZE del Model Lab originale (statistiche e strisc
 difetto dei toast (T-16): superficie del monolite nuda dentro il mockup. Chiesto ad Astra di
 vestirla nella prossima consegna: `.claude/PROMPT-ASTRA-2026-09-05-R06-MODEL-LAB.md`.
 
+### R-07 (05/09 ~23:20) — cornice Model Lab (3ddd37b8): ACCETTATO, unito in `2ab60bbb`
+
+Risposta alla R-06: `components/cornice-model-lab.js` veste la testata originale del Model Lab
+(quattro righe → `talos-kv` con badge, striscia → `talos-tabs` con frecce/Home/End) senza toccare
+id, controlli o rotte; «Gated» sparito, lo stato del runtime è una parola onesta («Nessun runtime
+raggiunto» · «N runtime disponibili» · «Verifica in corso…»). Screenshot `testata-1440.png`
+guardato tutto; al contrario `ricerca-vuota` e `fornitore-vuoto` consegnati. Cancelli sulla lane
+unita: template diff 0, unit 76/76, statico 195/195, componenti 78/78, build ok. Prompt:
+`.claude/PROMPT-ASTRA-2026-09-05-R07-CORNICE-MODEL-LAB.md` (gli passo Toast e connessione).
+
 - T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
   15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
   statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo
