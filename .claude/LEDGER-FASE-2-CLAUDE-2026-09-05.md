@@ -484,6 +484,15 @@ componenti 81/81, build ok.
 (nomi accessibili di «+» e delle azioni del messaggio). Tabella e osservazioni nel taccuino.
 Cancelli: unit 79/79, statico 195/195, componenti Conversazione+ChatFooter 6/6.
 
+### R-09 (06/09 ~00:30) — RuntimeCard del Model Lab (cb095d3f): ACCETTATO, unito in `624ef8f3`
+
+`components/runtime-modelli.js`: una scheda per motore (Ollama · LM Studio · llama.cpp) con
+stato onesto («Raggiunto» / «Non raggiunto» / fasi di llama.cpp in parole), elenco modelli,
+indirizzo, data di verifica, dettaglio d'errore. Nota di review: quattro `!important` in
+`.talos-runtime-panel` per vincere il CSS legacy del pannello — accettato ora, da togliere al
+cutover quando il CSS legacy sparisce (riga di pulizia, non bloccante). Cancelli sulla lane
+unita: template diff 0, unit 84/84, statico 195/195, componenti 84/84, build ok.
+
 - T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
   15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
   statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo
