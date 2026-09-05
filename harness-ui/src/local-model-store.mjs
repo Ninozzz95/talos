@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
-import { isAbsolute, join, relative, resolve } from 'node:path';
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 export const LOCAL_MODEL_STATES = ['incomplete', 'ready', 'failed'];
 
@@ -60,7 +60,7 @@ function validateManifest(value, rootDir) {
 
 export function createLocalModelStore({ rootDir, fsImpl = {}, now = () => new Date() } = {}) {
   if (typeof rootDir !== 'string' || !isAbsolute(rootDir)) throw new LocalModelStoreError('rootDir must be absolute', 'MODEL_STORE_MISCONFIGURED');
-  const fs = { mkdir, readFile, readdir, rename, rm, writeFile, ...fsImpl };
+  const fs = { mkdir, readFile, readdir, rename, rm, stat, writeFile, ...fsImpl };
   const manifestDir = join(rootDir, 'manifests');
   const locks = new Set();
   const manifestPath = (id) => join(manifestDir, `${id}.json`);
@@ -143,8 +143,33 @@ export function createLocalModelStore({ rootDir, fsImpl = {}, now = () => new Da
     return locks.delete(id);
   }
 
+  /**
+   * 06/09 (richiesta INST-DELETE-FILE lasciata da Astra): «Elimina» toglieva solo i manifest e
+   * lasciava i pesi sul disco. Ora cancella anche la cartella del modello, ma SOLO se sta dentro
+   * `rootDir` (il manifest lo garantisce già; qui si riverifica prima di un `rm` ricorsivo:
+   * risolvi, poi `relative()` che non inizi con `..` e non sia assoluto — openreplay «Preventing
+   * Path Traversal in Node.js», googleapis/nodejs-storage #2654, letti il 06/09/2026). Mai la
+   * radice stessa, mai un percorso fuori: in quei casi restano i manifest via e i pesi intatti.
+   */
   async function remove(id) {
     if (locks.has(id)) throw new LocalModelStoreError(`model ${id} is locked`, 'MODEL_LOCKED');
+    const current = await inspect(id).catch(() => null);
+    if (current?.path) {
+      // `path` è la CARTELLA del modello (download HF: `org-model/`) o il FILE principale
+      // (import locale: `<id>/<peso>.gguf`): si guarda sul disco, non si indovina.
+      try {
+        const radice = resolve(rootDir);
+        const dentro = (assoluto) => { const d = relative(radice, assoluto); return d !== '' && d !== '..' && !d.startsWith(`..${sep}`) && !d.startsWith('../') && !isAbsolute(d); };
+        const bersaglio = resolve(radice, current.path);
+        const eCartella = await fs.stat(bersaglio).then((s) => s.isDirectory()).catch(() => false);
+        const cartella = eCartella ? bersaglio : dirname(bersaglio);
+        if (!eCartella) for (const b of [bersaglio, ...(current.files || []).map((f) => resolve(cartella, f.path))]) if (dentro(b)) await fs.rm(b, { force: true });
+        // la cartella del modello è sua per costruzione: via anche quella, mai la radice
+        if (cartella !== radice && dentro(cartella)) await fs.rm(cartella, { recursive: true, force: true });
+      } catch {
+        // i pesi non si sono lasciati cancellare: i manifest vanno via lo stesso (comportamento di prima)
+      }
+    }
     await fs.rm(manifestPath(id), { force: true });
     await fs.rm(namePath(id), { force: true });
     return true;

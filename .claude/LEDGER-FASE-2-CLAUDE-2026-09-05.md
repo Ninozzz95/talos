@@ -543,6 +543,19 @@ Pagine di Astra misurate con lo stesso strumento: nessun controllo senza nome, n
 pagina. Osservazioni per il ledger (non correzioni): Libreria e Capability vanno rimisurate sullo
 store del kernel vero; «Auxiliary models» di Hermes (modello per compito) = PROPOSTA nuova.
 
+### 06/09 ~03:45 — Astra ha finito i crediti: la sua coda è mia, inline (owner: «farai tutto tu, inline»)
+
+Prima riga chiusa: la richiesta server INST-DELETE-FILE che Astra aveva lasciato — «Elimina» di un
+modello locale toglieva solo i manifest e lasciava i pesi sul disco. `local-model-store.mjs
+remove()` ora cancella file e cartella del modello, solo dentro `rootDir` (riverifica di
+contenimento con `path.relative` prima di un rm ricorsivo; il `path` del manifest può essere la
+cartella del download HF o il file dell'import locale: si guarda con `stat`), mai la radice; se i
+pesi non si lasciano cancellare i manifest vanno via lo stesso. Ricerca 06/09: openreplay
+«Preventing Path Traversal in Node.js», googleapis/nodejs-storage #2654. Prove: due test nuovi
+(REMOVE-01 pesi+cartella via, file estraneo intatto; REMOVE-02 senza manifest), il primo giro
+rompeva HF-DIRECT-CONTROLS-01 (cancel su una CARTELLA: rm senza recursive) — trovato dalla suite,
+curato; suite server 1678/1678.
+
 - T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
   15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
   statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo
