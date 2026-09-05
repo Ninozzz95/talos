@@ -616,3 +616,89 @@ button{background:none; border:0; cursor:pointer; padding:0}
 @media (max-width:760px){ .talos-picker{grid-template-columns:minmax(0,1fr)} }
 @media (prefers-reduced-motion: reduce){ *{animation:none !important; transition:none !important} }
 .talos-composer__input::placeholder{color:var(--talos-muted);opacity:1}
+
+/* Browser: composizione delle primitive del mockup, nessun token nuovo. */
+.talos-browser__bar,.talos-browser__tools{display:flex;align-items:center;gap:var(--talos-space-sm);padding:var(--talos-space-control);flex-wrap:wrap}
+.talos-browser__bar .talos-field{flex:1;min-width:0}
+.talos-browser__meta{font-size:var(--talos-font-size-xs)}
+.talos-browser__heading{font-size:var(--talos-font-size-md)}
+.talos-browser__space{margin-top:var(--talos-space-md)}
+.talos-browser__head,.talos-browser__pad,.talos-browser__request,.talos-browser__notice,.talos-browser__note{padding:var(--talos-space-md)}
+.talos-browser__request,.talos-browser__note{background:var(--talos-panel-soft)}
+.talos-browser__request>*+*{margin-top:var(--talos-space-sm)}
+.talos-browser__head h2{font-size:var(--talos-font-size-lg)}
+.talos-browser__text{white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:var(--talos-space-md);font-family:var(--talos-font-mono);font-size:var(--talos-font-size-xs);color:var(--talos-assistant-text)}
+.talos-browser__history-list{display:flex;gap:var(--talos-space-sm);flex-wrap:wrap;margin-top:var(--talos-space-sm)}
+.talos-browser__entry{flex:1;display:flex;flex-direction:column;gap:var(--talos-space-xs);text-align:left;padding:var(--talos-space-control);border:var(--talos-focus-width) solid var(--talos-border);border-radius:var(--talos-radius-card);background:var(--talos-card);overflow-wrap:anywhere}
+.talos-browser__entry[aria-current="page"]{border-color:var(--talos-accent-border);background:var(--talos-accent-soft)}
+.talos-browser__note{white-space:pre-wrap;overflow-wrap:anywhere}
+.talos-browser__back{transform:rotate(90deg)}
+.talos-browser__next{transform:rotate(-90deg)}
+.talos-browser__sr{position:absolute;clip-path:inset(100%);overflow:hidden;width:0;height:0}
+.talos-topbar:has([data-vistetab]){height:auto;min-height:var(--talos-topbar-h);flex-wrap:wrap;padding-block:var(--talos-space-sm)}
+.talos-topbar [data-vistetab]{flex-wrap:wrap}
+#veloComandi .talos-dialog__body{display:flex;flex-direction:column;overflow:hidden}
+#veloComandi .talos-dialog__field{flex:none}
+#risultatiComandi{overflow-y:auto;min-height:0}
+#veloIntro [data-intro-passo][aria-current="step"],#veloIntro [data-intro-policy][aria-checked="true"]{background:var(--talos-accent-soft);color:var(--talos-accent-text);box-shadow:inset var(--talos-focus-width) 0 var(--talos-accent)}
+.talos-lab__tabs{margin-bottom:var(--talos-space-md)}
+#labTabs{flex-wrap:wrap}
+.talos-lab__space{margin-top:var(--talos-space-md)}
+.talos-lab__heading{font-size:var(--talos-font-size-md)}
+.talos-lab__rule{border:0;border-top:var(--talos-focus-width) solid var(--talos-border);margin-block:var(--talos-space-md)}
+.talos-lab__download{padding:var(--talos-space-md);border-bottom:var(--talos-focus-width) solid var(--talos-border)}
+.talos-lab__meter{display:block;width:100%;height:var(--talos-space-md);accent-color:var(--talos-accent);margin-block:var(--talos-space-md)}
+#schermoModelLab .talos-list-row[aria-pressed="true"]{background:var(--talos-accent-soft);box-shadow:inset var(--talos-focus-width) 0 var(--talos-accent)}
+#schermoModelLab .talos-toolbar>input{width:auto;min-width:0}
+#schermoModelLab .talos-kv__k{white-space:normal;overflow:visible;text-overflow:clip}
+#promptProva{min-height:calc(var(--talos-control-height) * 3);resize:vertical;padding:var(--talos-space-control)}
+.talos-toast-region{position:fixed;right:var(--talos-space-md);bottom:var(--talos-space-lg);width:min(var(--talos-inspector-w),calc(100% - var(--talos-space-lg) - var(--talos-space-lg)));display:grid;gap:var(--talos-space-sm);z-index:calc(var(--talos-z-app-overlay) - 1)}
+.talos-toast{padding:var(--talos-space-md);background:var(--talos-panel);box-shadow:var(--talos-shadow-floating)}
+.talos-toast p{margin-block:var(--talos-space-sm);overflow-wrap:anywhere}
+.talos-notification-panel{position:fixed;width:var(--talos-inspector-w);max-width:calc(100vw - var(--talos-space-lg));padding:var(--talos-space-md);z-index:var(--talos-z-menu);background:var(--talos-panel);box-shadow:var(--talos-shadow-floating)}
+.talos-notification-panel h2{font-size:var(--talos-font-size-md)}
+
+/* Albero della cartella: stessa rail, dati caricati e azioni per riga. */
+.talos-file-tree{padding-block:var(--talos-space-sm);font-size:var(--talos-font-size-xs)}
+.talos-file-tree [role=group]{padding-left:var(--talos-space-md)}
+.talos-file-row{display:flex;align-items:center;gap:var(--talos-space-xs);min-height:var(--talos-row);padding-inline:var(--talos-space-xs);border-radius:var(--talos-radius-control);cursor:pointer}
+.talos-file-row__name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.talos-file-row__state{font-size:var(--talos-font-size-xs);color:var(--talos-accent)}
+.talos-file-tree [aria-selected=true]>.talos-file-row{background:var(--talos-accent-soft);color:var(--talos-text)}
+.talos-file-tree [role=treeitem]:focus-visible{outline:none}
+.talos-file-tree [role=treeitem]:focus-visible>.talos-file-row{outline:var(--talos-focus-width) solid var(--talos-accent);outline-offset:var(--talos-focus-width)}
+.talos-file-row:hover{background:var(--talos-card)}
+.talos-file-tree [aria-expanded=false]>.talos-file-row>.talos-file-chevron{transform:rotate(-90deg)}
+.talos-file-tools{margin-block:var(--talos-space-sm);gap:var(--talos-space-xs)}
+.talos-context-menu{position:fixed;z-index:var(--talos-z-menu);width:var(--talos-inspector-w);max-width:calc(100vw - var(--talos-space-lg));padding:var(--talos-space-sm);background:var(--talos-panel);box-shadow:var(--talos-shadow-floating)}
+.talos-context-menu [role=menuitem]{justify-content:flex-start;width:100%;font-size:var(--talos-font-size-sm)}
+.talos-context-menu__title{padding:var(--talos-space-sm);overflow-wrap:anywhere;font-size:var(--talos-font-size-xs);color:var(--talos-muted)}
+.talos-inspector-close{display:none}
+@media(max-width:1240px){
+ .talos-shell.details-open .talos-inspector{display:flex;position:fixed;inset:0 0 0 auto;width:min(var(--talos-inspector-w),100vw);z-index:calc(var(--talos-z-app-overlay) - 1);box-shadow:var(--talos-shadow-floating)}
+ .talos-shell.details-open .talos-inspector-close{display:inline-flex}
+ .talos-shell.details-open .talos-inspector__head{display:flex;align-items:center;gap:var(--talos-space-sm)}
+ .talos-shell.details-open .talos-resizer--inspector{display:none}
+}
+
+.talos-range{width:100%;accent-color:var(--talos-accent)}
+.talos-range__labels{display:flex;justify-content:space-between;font-size:var(--talos-font-size-xs);color:var(--talos-muted)}
+.talos-model-options{max-height:calc(var(--talos-row) * 5);overflow-y:auto}
+[data-modello-gruppo]:not([open]) summary .i{transform:rotate(-90deg)}
+
+#veloModello .talos-dialog__body{display:flex;overflow:hidden}
+#veloModello [data-c="ModelPicker"]{flex:1;min-height:0}
+#veloModello [data-c="ModelPicker"]> *{flex-shrink:0}
+#veloModello .talos-model-options{flex:1 1 auto;min-height:var(--talos-row)}
+
+.talos-dialog{position:relative}
+.talos-dialog>.talos-resizer--dialog{z-index:var(--talos-z-menu)}
+.talos-resizer--dialog-width{left:auto;right:0;top:var(--talos-space-lg);bottom:var(--talos-space-lg);width:var(--talos-space-sm)}
+.talos-resizer--dialog-height{left:var(--talos-space-lg);right:var(--talos-space-lg);top:auto;bottom:0;width:auto;height:var(--talos-space-sm);cursor:row-resize}
+.talos-resizer--dialog-height::after{left:0;right:0;top:auto;bottom:0;width:auto;height:var(--talos-focus-width)}
+.talos-resizer--dialog-both{left:auto;right:var(--talos-space-xs);top:auto;bottom:var(--talos-space-xs);width:var(--talos-space-md);height:var(--talos-space-md);border-right:var(--talos-focus-width) solid var(--talos-muted);border-bottom:var(--talos-focus-width) solid var(--talos-muted);border-bottom-right-radius:var(--talos-radius-control);cursor:nwse-resize}
+.talos-resizer--dialog-both::after{display:none}
+.talos-resizer--dialog-both:hover,.talos-resizer--dialog-both:focus-visible{border-color:var(--talos-accent)}
+.talos-dialog[data-user-sized] .talos-dialog__body{overflow:auto}
+#veloModello .talos-dialog[data-user-sized] .talos-dialog__body{display:block}
+#veloModello input[type=checkbox]{accent-color:var(--talos-accent)}
