@@ -1,3 +1,4 @@
+import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js'; // 05/9 Fase 2: SessionItem — la riga della sidebar è un componente del mockup
 
 (() => {
@@ -10944,6 +10945,50 @@ import { creaSessionItem, statoSessione } from '../components/session-item.js'; 
     }
   }
 
+  /*
+   * 05/9 Fase 2: NavItem. I badge dei Luoghi nella sidebar del mockup erano
+   * numeri d'esempio (43 · 69 · 18 · 7 · 4 · 11 · 6 · 2 · 3): qui diventano
+   * dati. Board = le sessioni appena lette; Capability = gli attrezzi del
+   * kernel (`/api/v1/tools`, non dipende da una sessione); Automazioni =
+   * `/api/v1/automations`; Libreria · Memoria · Attività · Note · Ricerca ·
+   * Officina = le liste della sessione APERTA — senza sessione il badge non
+   * c'è (null), perché non c'è un numero vero da scrivere.
+   * ⛔ Una rotta che fallisce lascia il badge com'era o assente: mai uno zero
+   * finto. Le liste per sessione si rileggono solo se la sessione è cambiata
+   * o sono passati 15 s: la sidebar si ridisegna spesso, sei fetch a giro no.
+   */
+  const contatoriLuoghi = { sessione: undefined, quando: 0 };
+  async function aggiornaContatoriLuoghi(numeroSessioni) {
+    const radice = $('#sessionsPanel');
+    if (!radice) return;
+    aggiornaConteggiNav(radice, { board: numeroSessioni });
+    const conta = async (percorso, campo) => {
+      try {
+        const dati = await apiGet(percorso);
+        return Array.isArray(dati?.[campo]) ? dati[campo].length : undefined;
+      } catch {
+        return undefined; // il badge resta com'era: un dato non arrivato non è uno zero
+      }
+    };
+    const id = state.realSession.id || null;
+    const stessa = id === contatoriLuoghi.sessione && Date.now() - contatoriLuoghi.quando < 15_000;
+    if (stessa) return;
+    contatoriLuoghi.sessione = id;
+    contatoriLuoghi.quando = Date.now();
+    const [capability, automazioni] = await Promise.all([conta('/api/v1/tools', 'attrezzi'), conta('/api/v1/automations', 'items')]);
+    aggiornaConteggiNav(radice, { capability, automazioni });
+    if (!id) {
+      aggiornaConteggiNav(radice, { libreria: null, memoria: null, attivita: null, note: null, ricerca: null, officina: null });
+      return;
+    }
+    const liste = [['libreria', 'library', 'voci'], ['memoria', 'memory', 'memorie'], ['attivita', 'tasks', 'attivita'], ['note', 'notes', 'note'], ['ricerca', 'research', 'ricerche'], ['officina', 'tool-forge', 'strumenti']];
+    const valori = await Promise.all(liste.map(([, rotta, campo]) => conta(`/api/v1/sessions/${encodeURIComponent(id)}/${rotta}`, campo)));
+    if (state.realSession.id !== id) return; // la sessione è cambiata mentre le fetch erano in volo
+    const conteggi = {};
+    liste.forEach(([chiave], i) => { conteggi[chiave] = valori[i]; });
+    aggiornaConteggiNav(radice, conteggi);
+  }
+
   function contenitoreSessioniReali() {
     let contenitore = $('#realSessionsBlock');
     if (!contenitore) {
@@ -11005,6 +11050,7 @@ import { creaSessionItem, statoSessione } from '../components/session-item.js'; 
     }
     elenco = Array.isArray(elenco) ? elenco.map((sessione) => ({ ...sessione, modello: normalizzaModelloSessione(sessione) })) : [];
     state.sessionSelection.available = new Map(elenco.map((sessione) => [sessione.sessionId, sessione]));
+    void aggiornaContatoriLuoghi(elenco.length); // 05/9 Fase 2: NavItem
     for (const id of [...state.sessionSelection.selected]) {
       if (!state.sessionSelection.available.has(id)) state.sessionSelection.selected.delete(id);
     }

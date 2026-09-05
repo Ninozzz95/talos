@@ -1,5 +1,7 @@
 import template from '../index.template.html';
+import { LUOGHI, LUOGHI_ALTRI, creaNavItem } from '../src/components/nav-item.js';
 import { creaSessionItem } from '../src/components/session-item.js';
+import { CONTEGGI } from './fixtures/luoghi.js';
 import { ADESSO, CORRENTE, FISSATE, SESSIONI } from './fixtures/sessioni.js';
 
 /*
@@ -30,6 +32,14 @@ document.documentElement.setAttribute('data-schermo', 'chat');
 const componente = new URLSearchParams(location.search).get('componente') || '';
 
 const LABORATORI = {
+  NavItem() {
+    /* Le voci dei Luoghi rifatte dal componente: le prime cinque prima di «Altro», le altre dentro #luoghiAltri. */
+    const altro = document.getElementById('altroLuoghi');
+    const altri = document.getElementById('luoghiAltri');
+    for (const finta of document.querySelectorAll('.talos-sidebar .talos-nav-item:not(#altroLuoghi)')) finta.remove();
+    for (const luogo of LUOGHI) altro.before(creaNavItem(luogo, { conteggio: CONTEGGI[luogo.vaia] }));
+    for (const luogo of LUOGHI_ALTRI) altri.append(creaNavItem(luogo, { conteggio: CONTEGGI[luogo.vaia || luogo.conteggio] }));
+  },
   SessionItem() {
     const fissate = document.querySelector('.talos-sidebar__block:has(.talos-eyebrow[data-t="fissate"])');
     const sessioni = document.querySelector('.talos-sidebar__sessions');

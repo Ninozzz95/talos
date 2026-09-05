@@ -77,3 +77,37 @@ chiaro (B8, Astra).
 Cosa deve fare l'owner: guardare le immagini di `immagini/fase2-claude/SessionItem/` e dire
 sì/no · Cosa faccio io: S-02 NavItem e S-03 WorkspaceFooter, poi la Topbar · Cosa rimane:
 T-03 e T-04 (sopra), per nome.
+
+---
+
+## S-02 · NavItem (i Luoghi con i badge di conteggio) — ✅ verde, aspetta l'owner
+
+**Blocchi**: `NavItem` (5 + «Altro» + 4 dentro `#luoghiAltri`). **Fixture**: `lab/fixtures/luoghi.js`
+(i conteggi del mockup, già ridotti a numero). **Componente**: `src/components/nav-item.js` —
+`creaNavItem`, `impostaConteggioNav`, `aggiornaConteggiNav`, `LUOGHI`, `LUOGHI_ALTRI`.
+**Monolite**: nuova `aggiornaContatoriLuoghi(n)` chiamata da `aggiornaElencoSessioniReali`:
+Board = sessioni lette; Capability = `attrezzi.length` di `/api/v1/tools`; Automazioni =
+`items.length`; Libreria · Memoria · Attività · Note · Ricerca · Officina = le liste della
+sessione aperta (`voci`, `memorie`, `attivita`, `note`, `ricerche`, `strumenti`), rilette solo se
+la sessione cambia o dopo 15 s. Senza sessione, o su rotta fallita/`null`, il badge NON c'è.
+**Mockup toccato**: il pulsante «Note» (che non ha una schermata) porta `data-conteggio="note"`
+per essere indirizzabile; nessun cambio visivo.
+
+**Ricerca** (05/09/2026): il conteggio resta testo visibile del pulsante — niente `aria-label`
+che duplichi il testo (non tradotto dai browser, sovrascrive il nome accessibile:
+aditus.io/aria/aria-label; web-accessibility-checker.com «ARIA labels best practices»);
+badge `aria-hidden` + nome in `aria-label` solo per pulsanti a sola icona
+(opensource.ebay.com/evo-web icon-button). Hermes web dashboard (docs «memory», 2026) mostra la
+memoria come percentuale d'uso: qui i numeri sono dimensioni di liste, come nel mockup.
+
+**Cancelli**: componenti **6/6** (SessionItem + NavItem × 3 viewport) · statico **54/54** ·
+unit `tests/unit/componenti-sidebar.test.mjs` 5/5 (anche al verso contrario: esito assente ≠
+successo, data non valida → «»).
+
+**Dal vivo** (4175, store copiato, sessione aperta): Board **74**, Libreria **0**, Memoria **1**,
+Attività **2**; Capability SENZA badge perché `/api/v1/tools` risponde `attrezzi:null`
+(«runtime agente non configurato» sulla porta di prova: sul 4174 dell'owner il kernel c'è).
+Immagini in `.claude/immagini/fase2-claude/NavItem/`.
+
+**Taccuino**: T-02 (footer) resta per S-03. Le voci dentro «Altro» non si vedono nel confronto
+dal vivo (disclosure chiuso): si guardano in S-03 aprendolo.
