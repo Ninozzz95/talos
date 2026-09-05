@@ -7696,9 +7696,16 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    */
   const RIGHE_MASSIME_DIFF = 1500;
 
+  /*
+   * 06/09 (confronto con Hermes, Review di NOTE.md appena creato): «+1 −1» con una riga «−» vuota.
+   * `''.split('\n')` dà `['']` — una riga fantasma. Un file creato non ha righe tolte (nel diff
+   * unificato il vecchio è /dev/null: git-scm.com/docs/git-diff, letto il 06/09/2026); e un solo
+   * a-capo finale non è una riga (diffchecker.pro «Unified Diff Format», 2026).
+   */
+  const righeDelTesto = (testo) => { const t = String(testo ?? '').replace(/\r\n/g, '\n').replace(/\n$/, ''); return t === '' ? [] : t.split('\n'); };
   function calcolaDiffRighe(prima, dopo) {
-    const a = prima.split('\n');
-    const b = dopo.split('\n');
+    const a = righeDelTesto(prima);
+    const b = righeDelTesto(dopo);
     if (a.length > RIGHE_MASSIME_DIFF || b.length > RIGHE_MASSIME_DIFF) return null;
     const n = a.length;
     const m = b.length;
@@ -8100,12 +8107,15 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       attiva: file.path === ultimoPercorso,
       onApri: () => renderReviewFile(`real:${file.path}`),
     })));
-    if (voci.length === 0) {
-      const vuoto = textElement('span', 'talos-tabs__tab talos-review__scheda talos-muted review-empty', 'Nessun file scritto finora.');
-      vuoto.id = 'reviewEmptyList';
-      contenitore.appendChild(vuoto);
-      aggiornaDiffReview(schermo.querySelector('.talos-review__diff'), null);
-    }
+    // 06/09 confronto Hermes: stato vuoto ONESTO — una scheda EmptyState del mockup al posto della
+    // finta scheda «−» con la stessa frase ripetuta nel diff; il DiffView si nasconde finché non c'è un file.
+    const vuotoReview = schermo.querySelector('#vuotoReview');
+    const cardDiff = schermo.querySelector('.talos-review__diff');
+    const schedeReview = contenitore.closest('.talos-tabs');
+    if (vuotoReview) vuotoReview.hidden = voci.length > 0;
+    if (cardDiff) cardDiff.hidden = voci.length === 0;
+    if (schedeReview) schedeReview.hidden = voci.length === 0;
+    if (voci.length === 0) aggiornaDiffReview(cardDiff, null);
     const percorsoTestata = schermo.querySelector('.talos-topbar__path');
     if (percorsoTestata) percorsoTestata.textContent = riassuntoReview(voci);
     const titoloTestata = schermo.querySelector('.talos-topbar__title h1');
