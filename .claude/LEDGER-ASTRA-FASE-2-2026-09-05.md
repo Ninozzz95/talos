@@ -1204,3 +1204,65 @@ Raccordo verificato: npm run verify interamente verde (build, contratti/unità, 
 Cosa deve fare l'owner · Nulla.
 Cosa fai tu dopo · Capability.
 Cosa rimane · B4, B6, B2, B7, B1, B8 e Browser; poi OAuth e piano computer-use.
+
+## B4.1 ToolList e DetailPanel — piano prima degli edit, 05/09/2026
+Owner TALOS UI. Base 9f12edd; merge lane/harness-desktop aggiornato. Originale aperto nel browser 4179, dialogo Strumenti, skill e connettori: dieci sezioni, permessi in foglio separato; catalogo non osservabile perché runtime non configurato. Non spacciare le sei righe fixture per i 43 attrezzi dell'owner. Skill/MCP/plugin/hook saranno il prossimo componente B4; i loro canali originali restano disponibili durante il raccordo.
+
+Ricerca fresca, finestra 06/08–05/09. Release verificate: Hermes v0.21.0 del 31/08 commit29112be https://github.com/NousResearch/hermes-agent/releases/tag/v2026.8.31 ; Claude Code v2.1.261 del 04/09 d7dbd9a https://github.com/anthropics/claude-code/releases/tag/v2.1.261 ; Codex0.153.4 del04/09 3d2ee51 https://github.com/openai/codex/releases/tag/rust-v0.153.4 . Documenti stabili riverificati oggi, data aggiornamento non esposta: https://hermes-agent.nousresearch.com/docs/user-guide/features/tools/ ; https://code.claude.com/docs/en/permissions ; https://developers.openai.com/codex/mcp (redirect ufficiale learn.chatgpt.com/docs/extend/mcp?surface=cli); WAI https://www.w3.org/WAI/ARIA/apg/patterns/listbox/ e https://www.w3.org/WAI/ARIA/apg/patterns/tabs/ .
+
+| Confronto | Forza documentata | Limite verificato / gap | Decisione e +1 misurabile TALOS |
+|---|---|---|---|
+| Hermes | Inventario derivato dal codice, toolset per piattaforma; release mostra schema e uso MCP | Disponibilità dipende da credenziali/configurazione; non svolto audit GUI in questo passo | Adattare distinzione offerto/dipendenza/permesso con stato mancante esplicito e filtro; non inventare prestazioni |
+| Claude | Regole deny/ask/allow, precedenza esplicita e enforcement | Nomi visibili e canonici possono differire; docs segnalano regole scritte sul nome visibile non corrispondenti | Adattare selezione su nome umano, POST usa id canonico catturato; nessuna sintassi da digitare; 4 scelte persistite e rilette |
+| Codex | Allow/deny list, policy per tool, timeout e attivazione server distinti | Modello di configurazione con più livelli; nessuna prova qui di suo fallimento UI | Adattare confini distinti e ambito accanto al selettore; non importare config TOML nel dominio TALOS |
+| WAI | Listbox tastiera + dettaglio separato dalle opzioni | Un'opzione non contiene controlli interattivi annidati | Adottare frecce/Home/End, focus conservato; selettore nativo nel dettaglio |
+
+Obiettivi: tutti i campi originali preservati, descrizione intera leggibile senza hover, filtro per nome umano/descrizione, nessun numero di costo o uso inventato, stima incompleta dichiarata. Permessi per cinque attrezzi configurabili, stesso endpoint settings e chiave esistente; nessun controllo spegni inventato. Nessuna nuova dipendenza. Backend e 43 upstream non eseguibili in ambiente: prova HTTP+session-registry+JSONL reali con catalogo fixture dichiarato, nessun modello.
+
+File esatti:
+- .claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html
+- .claude/LEDGER-ASTRA-FASE-2-2026-09-05.md
+- .claude/CONSEGNA-ASTRA-FASE-2-2026-09-05.md
+- harness-ui/frontend/src/components/capability.js
+- harness-ui/frontend/src/legacy/app.js
+- harness-ui/frontend/index.template.html
+- harness-ui/frontend/src/styles/index.css
+- harness-ui/frontend/lab/fixtures/capability.js
+- harness-ui/frontend/lab/main.js
+- harness-ui/frontend/tests/unit/capability.test.mjs
+- harness-ui/frontend/tests/parity/componenti.spec.mjs
+- harness-ui/frontend/tests/parity/capability-backend-fixture.mjs
+- harness-ui/frontend/tests/parity/capability-vivo.spec.mjs
+- harness-ui/frontend/playwright.astra.config.mjs
+Pubblici nuovi: permessoAttrezzo, stimaSchemaAttrezzi, filtraAttrezzi, creaToolListRow, aggiornaPaginaCapability; fixture ATTREZZI; helper test avviaCapabilityDiProva. Compatibilità: caricaPannelloAttrezzi/rigaAttrezzo, setView dispatch proprio, sincronizzaImpostazioniSessione invariato, nomiUmanoAttrezzo canonico invariato. Helper locali mostraCapability e salvaPermessoCapability. Nessuna modifica ponte/main/frammenti/kernel/public/chat.
+RED CAP-STIMA-SCONOSCIUTA/CAP-PERMESSO/CAP-FILTRO senza modulo; CAP-VUOTO prima innesto conserva dati finti. GREEN node --test tests/unit/capability.test.mjs; componente ToolList x3; playwright.astra capability-vivo x3; npm run verify + componenti4178. Scenari: CAP-ORIGINALE screenshot dati equivalenti; CAP-PERSISTENZA ricerca/selezione/quattro scelte POST e reload; CAP-RECUPERO null/503/salvataggio fallito/cambio selezione/navigazione. Foto originali/app/stati a1440/1280/1024 in .claude/immagini/astra-fase2/ToolList/, aperte prima del verdetto. Rollback del solo commit, nessuna migrazione né modifica dati owner.
+
+## R-02 — correzione prioritaria, 05/09/2026
+Sei pagine e undici mockup ACCETTATI e UNITI, come PROMPT-ASTRA-2026-09-05-R02-SEI-PAGINE.md. Nuovo merge fatto prima degli edit. Automazioni già consegnata d5dfbb76 con prove e immagini; import dizionario corretto9f12edd e verify verde. B4 in preparazione (test non ancora verdi, nessun innesto).
+Problema misurato: parita.spec.mjs e gli otto test vivi di Astra scrivono direttamente nelle immagini di consegna. Ricerca fresca finestra06/08–05/09: Playwright1.62.1 locale; https://playwright.dev/docs/test-snapshots e https://playwright.dev/docs/api/class-testinfo#test-info-output-path riverificati oggi (docs stabili, data modifica non esposta). Distinguere baseline approvate da output runtime; adottare artifacts già ignorata, conservare nomi, pixel e soglie. Riaperte release Hermes29112be31/08, Clauded7dbd9a04/09, Codex3d2ee5104/09 agli URL del B4. Forza: evidenze/versioni verificabili; non è documentata da queste release la loro politica locale delle PNG, gap esplicito. Nessuna debolezza inventata. +1 misurabile qui: zero immagini di consegna riscritte dal cancello, tutti gli output ancora disponibili. Non occorre una nuova libreria né modificare UI.
+File esatti:
+- harness-ui/frontend/tests/parity/attivita-vivo.spec.mjs
+- harness-ui/frontend/tests/parity/automazioni-vivo.spec.mjs
+- harness-ui/frontend/tests/parity/board-vivo.spec.mjs
+- harness-ui/frontend/tests/parity/libreria-vivo.spec.mjs
+- harness-ui/frontend/tests/parity/memoria-vivo.spec.mjs
+- harness-ui/frontend/tests/parity/officina-vivo.spec.mjs
+- harness-ui/frontend/tests/parity/parita.spec.mjs
+- harness-ui/frontend/tests/parity/ricerca-vivo.spec.mjs
+- harness-ui/frontend/tests/unit/test-artifacts.test.mjs
+- .claude/LEDGER-ASTRA-FASE-2-2026-09-05.md
+- .claude/CONSEGNA-ASTRA-FASE-2-2026-09-05.md
+Anche capability-vivo.spec.mjs appena creato passa ad artifacts, ma resta fuori da questo commit perché B4 aperta. Nessun nuovo simbolo pubblico. Test RED permanente R02-ARTEFATTI-SEPARATI: i produttori sotto tests/parity non puntano alla cartella delle consegne; GREEN node --test tests/unit/test-artifacts.test.mjs, npm run test:lab195/195 e confronto SHA256 di tutte le PNG prima/dopo. Nessuno screenshot nuovo richiesto, pixel invariati. La copia delle sole prove scelte in .claude/immagini avverrà esplicitamente alla consegna. Rollback del commit sui soli test/docs.
+
+| Stato | Proposta | Parità da valutare | +1 da dimostrare | Costo |
+|---|---|---|---|---|
+| PROPOSTA, non implementare | Accesso account Anthropic e ChatGPT | Flussi documentati Hermes/Codex e possibilità ufficiali dei fornitori | Accesso recuperabile e stato account esplicito senza perdita dei percorsi API | Non misurato |
+| PROPOSTA, non implementare | Computer-use integrato e ricognizione tecnica dettagliata | ChatGPT, Hermes, Claude e Codex, API/permessi reali | Piano eseguibile con prove per backend, frontend, controllo owner e recupero | Non misurato |
+Promozione riservata all'owner, una proposta alla volta; nessuna implementazione né dossier ora. Coda vincolante: B4→B6→B2→B7→B1→B8→Browser K-I. Cutover/contratto K-A…K-I all'orchestratore.
+
+B4 preparazione: primo confronto originale interrotto per recepire R02; selettore del test corretto da data-tool-permission a data-tool-permission-select, e apertura inspector compatto esplicita a1024. Nessun bug prodotto corretto per far passare il test. Output ora artifacts/astra-fase2/ToolList; copia manuale alla consegna.
+
+R-02 verificata: regressione RED→GREEN1/1; statico195/195 a1440/1280/1024. SHA256 prima/dopo:472 PNG identiche, zero nuovi file nella cartella consegne. Output di esecuzione presenti in artifacts/astra-mockup; nessuna modifica UI né screenshot da promuovere in questa correzione. Diff --check verde. Restano fuori staging le PNG già sporche prima della correzione: non riscrivo prove approvate né modifiche altrui.
+Cosa deve fare l'owner · Nulla.
+Cosa fai tu dopo · Capability.
+Cosa rimane · B4→B6→B2→B7→B1→B8→Browser K-I. OAuth e computer-use solo PROPOSTE.

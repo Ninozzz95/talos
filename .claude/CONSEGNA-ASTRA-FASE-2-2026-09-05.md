@@ -167,3 +167,15 @@ Cosa fai tu dopo · Capability.
 Cosa rimane · B4, B6, B2, B7, B1, B8 e Browser; poi OAuth e piano computer-use.
 
 Rettifica del controllo precedente: uno spazio finale in automazioni.js era stato segnalato dal controllo cached senza testo visibile. Corretto in questo commit.
+
+## R-02 recepita
+Board, Memoria, Attività, Libreria, Ricerca, Officina e gli undici mockup citati sono accettati e uniti dall'orchestratore. Automazioni consegnata d5dfbb76; il suo modulo di creazione resta nel lavoro B7. Correzione degli output di test in verifica: artifacts ignorata, copia delle prove solo alla consegna. Import nomi-attrezzi già riallineato e verify verde nel raccordo9f12edd.
+OAuth e computer-use sono PROPOSTE nel ledger, non implementazioni in coda. Nessun costo stimato senza misura. Cutover e sblocco del contratto restano all'orchestratore.
+Cosa deve fare l'owner · Nulla per proseguire.
+Cosa fai tu dopo · Chiudere la verifica R-02 e completare Capability.
+Cosa rimane · B4→B6→B2→B7→B1→B8→Browser K-I.
+
+R-02 verificata: regressione RED→GREEN1/1; statico195/195 a1440/1280/1024. SHA256 prima/dopo:472 PNG identiche, zero nuovi file nella cartella consegne. Output di esecuzione presenti in artifacts/astra-mockup; nessuna modifica UI né screenshot da promuovere in questa correzione. Diff --check verde. Restano fuori staging le PNG già sporche prima della correzione: non riscrivo prove approvate né modifiche altrui.
+Cosa deve fare l'owner · Nulla.
+Cosa fai tu dopo · Capability.
+Cosa rimane · B4→B6→B2→B7→B1→B8→Browser K-I. OAuth e computer-use solo PROPOSTE.
