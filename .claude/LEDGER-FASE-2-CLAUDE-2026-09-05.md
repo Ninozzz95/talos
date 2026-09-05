@@ -516,3 +516,18 @@ Stesso metodo; funzioni toccate solo sue (`caricaPannelloAttrezzi`, `caricaCapab
 di una riga (nessuna modifica a mano). Doctor dal vivo: 11 controlli veri raggruppati per
 gravità con il conteggio in testa (H1-H5), «Esporta in JSON» (H7), «Ricontrolla»; ogni avviso dice
 cosa fare. Dopo l'unione (fast-forward): unit **61/61**, statico **195/195**, componenti **63/63**.
+
+---
+
+## S-12 · Le impostazioni d'aspetto agiscono sulla chat (raccordo con B6 di Astra) — ✅
+
+Il monolite (`applicaAspettoDesktop`) scrive sulla radice `--talos-ui-font-scale`,
+`--talos-chat-font-size`, `data-talos-message-style`, `data-talos-composer-shape`, le classi
+`chat-full-width`/`immersive-header` e `body.reduce-motion`: il CSS del mockup ora li onora
+(scala dell'intera app con `zoom`, testo dei messaggi, bolle per TALOS, composer classico/compatto,
+chat a tutta larghezza, testata immersiva, niente animazioni). Verificato dal vivo scrivendo le
+preferenze nella chiave `talos.harness.desktop.settings.v1` e ricaricando: zoom 1,15, bolle,
+composer compatto (raggio 11px), colonna senza limite. Cancelli: statico 195/195, componenti 63/63.
+Ricerca 05/09/2026: rem/`clamp()` e scala per proprietà personalizzate (MDN font-size, CSS-Tricks
+«Accessible font sizing», csswg #6709). Preset di tema, scena e movimento restano B8 (Astra) e li
+onorerò allo stesso modo. Prompt per Astra: `.claude/PROMPT-ASTRA-2026-09-05-B6-RACCORDO-ASPETTO.md`.
