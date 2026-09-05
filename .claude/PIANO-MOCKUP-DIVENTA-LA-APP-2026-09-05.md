@@ -166,5 +166,12 @@ Niente si chiude su un test verde.
   modello: era la direzione. ≈ 3 giorni.
 - **Fase 3**: Fable 5.1, high. ½ giorno.
 
+**Aggiornamento 05/09 (owner: «fable consuma troppo, dividi in parti eque»)** — la Fase 2 è
+spartita a metà con **Astra** (chatgpt 6): io Sidebar, Topbar, Chat, Piede, Chat vuota, Review e
+il cutover; Astra le 7 schermate mancanti nel mockup + Terminale, Colonna destra, Board,
+Capability, le sei pagine, Impostazioni/Doctor/Model Lab, Dialoghi e le meccaniche della regia.
+Perimetri, porte (4177/4178/4179), worktree `lane/astra-fase2` e metodo in
+`.claude/BRIEF-ASTRA-FASE-2-SPARTIZIONE-2026-09-05.md`. Base: `1813e27a`.
+
 ⛔ Il servizio Git (agente in volo su W1-05): quando atterra **non si tocca e non
 si rivede** finché questo piano non è chiuso, come ordinato.
