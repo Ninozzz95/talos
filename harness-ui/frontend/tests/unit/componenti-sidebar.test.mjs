@@ -2,6 +2,21 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { nomeModello, oraCompatta, statoSessione } from '../../src/components/session-item.js';
 import { LUOGHI, LUOGHI_ALTRI } from '../../src/components/nav-item.js';
+import { fornitoreDelModello, nomeDaPercorso, testiPiede } from '../../src/components/workspace-footer.js';
+
+test('WorkspaceFooter: cartella, tema e fornitore dai dati del monolite — e niente inventato', () => {
+  assert.equal(nomeDaPercorso('C:\\Users\\Antonino\\Desktop\\projects\\AVM\\'), 'AVM');
+  assert.equal(nomeDaPercorso('/home/nino/talos'), 'talos');
+  assert.equal(nomeDaPercorso(null), null);
+  assert.equal(nomeDaPercorso('C:\\'), 'C:\\'); // la radice del disco non ha un nome: si mostra com'è
+  assert.equal(nomeDaPercorso('/'), '/');
+  assert.equal(fornitoreDelModello('local:qwen3-8b'), 'locale');
+  assert.equal(fornitoreDelModello('google/gemini-3.7-flash'), 'google');
+  assert.equal(fornitoreDelModello('claude-opus-5'), null);
+  assert.deepEqual(testiPiede({ cartella: null, tema: 'calm', modello: 'local:x' }), { titolo: 'Workspace locale', sotto: 'Tema Calm · locale' });
+  assert.deepEqual(testiPiede({ cartella: 'D:\\lavoro\\talos', tema: 'forge', modello: 'claude-opus-5' }), { titolo: 'talos', sotto: 'Tema Forge' });
+  assert.equal(testiPiede({ cartella: null, nomeAnteprima: 'nuovo-progetto', tema: 'ignoto' }).titolo, 'nuovo-progetto');
+});
 
 /*
  * Le funzioni PURE dei componenti della sidebar (Fase 2, S-01 e S-02). Il
