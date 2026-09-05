@@ -57,7 +57,7 @@ async function apri(browser, url, { js, viewport }) {
    * cervello» si ottiene bloccando la richiesta di `app.js`, non spegnendo il
    * motore della pagina.
    */
-  const contesto = await browser.newContext({ viewport, reducedMotion: 'reduce' });
+  const contesto = await browser.newContext({ viewport, reducedMotion: 'reduce', locale: 'it-IT' }); // it-IT: la regia del mockup traduce da navigator.language
   if (!js) await contesto.route('**/app.js', (rotta) => rotta.abort());
   /*
    * ⛔ STESSI FONT da entrambe le parti. Il mockup chiede Instrument Sans e
