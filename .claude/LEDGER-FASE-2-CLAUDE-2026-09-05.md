@@ -440,6 +440,20 @@ dall'owner (non dal CLI).
   altro client)»: il monolite perde `_rispostaDataQui` al ricarico. Onesto ma impreciso; si cura
   ricordando la richiesta risposta nello store della sessione (Fase 3, con le ricevute).
 - Istanza 4181 (kernel, a pagamento) SPENTA a prova finita.
+### R-06 (05/09 ~22:15) — R05 etichette (8e338c1f) + B6.4 CatalogoModelli (bb836a25): ACCETTATI, uniti
+
+Owner: «procedi, r05». L'unione è stata un fast-forward sul merge di Astra `7de75f24`, che
+conteneva già il suo commit successivo (Catalogo modelli): rivisto anche quello. Cancelli sulla
+lane unita: template fedele (diff 0), unit 72/72, statico 195/195, componenti 78/78, build ok.
+Codice: `components/catalogo-modelli.js` con normalizzazione stretta, «Non dichiarato» al posto
+dei buchi, parole umane per modalità e parametri, prezzi per milione in it-IT, ripristino di
+fuoco e scroll, «Usa nella sessione» marcato fase3, nota onesta sulle credenziali.
+Taccuino sul suo screenshot `app-catalogo-1440.png` (regola: tutto lo schermo): sopra il
+catalogo affiorano le righe GREZZE del Model Lab originale (statistiche e striscia
+«PanoramicaProviderCatalogo API…» tutta attaccata) e «Gated» è un nome tecnico (H22). Stesso
+difetto dei toast (T-16): superficie del monolite nuda dentro il mockup. Chiesto ad Astra di
+vestirla nella prossima consegna: `.claude/PROMPT-ASTRA-2026-09-05-R06-MODEL-LAB.md`.
+
 - T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
   15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
   statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo
