@@ -10,6 +10,7 @@ import { creaLibraryRow, aggiornaPaginaLibreria } from '../components/libreria.j
 import { creaTaskRow, aggiornaPaginaAttivita } from '../components/attivita.js'; // 05/9 Fase 2: Attività
 import { creaMemoryRow, aggiornaPaginaMemoria } from '../components/memoria.js'; // 05/9 Fase 2: Memoria
 import { aggiornaBoard, creaRigaBoard, cartellaDaExport } from '../components/board.js'; // 05/9 Fase 2: Board
+import { creaPilaToast } from '../components/toast.js'; // 05/9 Fase 2: Toast del mockup (T-16)
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
@@ -349,7 +350,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   const sendButton = $('.send-btn', composerForm);
   const queuedMessage = $('#queuedMessage');
   const sessionTitle = $('#sessionTitle');
-  const toastRegion = $('#toastRegion');
+  const toastRegion = $('#regioneToast') || $('#toastRegion'); // 05/9 Fase 2: la regione del mockup (in basso a destra), non quella grezza del monolite
   const runStrip = $('.run-strip');
   const runStateToggle = $('#runStateToggle');
   const desktopInspectorToggle = $('.desktop-context-toggle');
@@ -1462,25 +1463,21 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     return true;
   }
 
-  function toast(title, message = '') {
-    if (toastRegion.children.length >= 3) {
-      const oldest = toastRegion.firstElementChild;
-      animateExit(oldest, {}, () => oldest?.remove());
-    }
-    const el = document.createElement('div');
-    el.className = 'toast';
-    el.setAttribute('role', 'status');
-    const strong = document.createElement('strong');
-    strong.textContent = String(title);
-    el.appendChild(strong);
-    if (message) {
-      const span = document.createElement('span');
-      span.textContent = String(message);
-      el.appendChild(span);
-    }
-    toastRegion.appendChild(el);
-    markMotionEnter(el);
-    window.setTimeout(() => animateExit(el, {}, () => el.remove()), 3300);
+  /**
+   * 05/9 Fase 2 (T-16, owner: «bruttissima quella notifica in basso a sinistra,
+   * sistemala bene»): il toast è il componente del mockup (`components/toast.js`)
+   * — badge col tono dedotto dal titolo, testo umano (H22: «Failed to fetch»
+   * diventa una frase), azione facoltativa, chiusura, timer che si ferma sotto
+   * il mouse, guasti che restano finché non li chiudi, al più tre in pila.
+   * L'animazione d'uscita resta quella del monolite (motion token).
+   */
+  const mostraToast = creaPilaToast(toastRegion, {
+    animaUscita: (el, fine) => animateExit(el, {}, fine),
+    entra: (el) => markMotionEnter(el),
+    fuocoDiRitorno: () => $('#campanella') || $('#composerInput'),
+  });
+  function toast(title, message = '', opzioni = {}) {
+    return mostraToast(String(title), message == null ? '' : String(message?.message ?? message), opzioni);
   }
 
   // REAL_DATA_RENDER_START

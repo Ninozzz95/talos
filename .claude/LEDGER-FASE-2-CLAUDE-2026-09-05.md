@@ -455,6 +455,20 @@ dall'owner (non dal CLI).
   costa circa 92.1k token (stima)» resta in coda e riappare al primo invio. Il contenitore dei
   toast è DOM legacy: va battezzato col `Toast` del mockup (chi: B7 Astra se i dialoghi/notifiche
   sono suoi, altrimenti io nel bridge) — da decidere nella prossima review, non lasciare cadere.
+  ✅ CHIUSA 05/09 21:40, ordine dell'owner («bruttissima quella notifica in basso a sinistra,
+  sistemala bene»): componente `src/components/toast.js` col markup del mockup (badge col tono,
+  testo, azione facoltativa, chiusura `#i-x`), pila in `#regioneToast` (basso a destra, al più
+  tre, timer fermo sotto il mouse e col fuoco, guasti che restano finché non li chiudi,
+  `role=alert` per i guasti), variante `talos-toast--breve` nel mockup per i toast senza azione
+  (chiusura in alto a destra, scheda bassa); `toast()` del monolite rimappata senza toccare i 25
+  punti di chiamata; H22: «Failed to fetch» → «Il server non risponde. Controlla che TALOS sia
+  avviato e riprova.» (`messaggioUmano`). Ricerca 05/09: phoca.cz a11y-component-lab/toast,
+  ariaui.dev toast, designsystemproblems.com toast accessibility (status/alert, ≥5 s, errori
+  persistenti, max 3, pausa su hover/fuoco). Prove: laboratorio `Toast` nel cancello componenti
+  (75/75, tre larghezze, struttura+parole+pixel contro i tre toast del mockup), unit
+  `tests/unit/toast.test.mjs`, statico 195/195, dal vivo su 4175 con `caduta-vivo.mjs`
+  (screenshot `foto/caduta-4175-invio.png`: due toast nel linguaggio del mockup). T-15 (nessun
+  segnale a server caduto) resta APERTA.
 
 
 **Giro 3** (artefatto + reindirizzo): con un testo scritto durante il giro «Reindirizza» compare
