@@ -138,6 +138,7 @@ export function creaAzioniMessaggio({ ascolta = true } = {}, opzioni = {}) {
     const b = el(documentObj, 'button', 'talos-button talos-button--ghost talos-icon-button talos-button--sm');
     b.type = 'button';
     b.title = titolo;
+    b.setAttribute('aria-label', titolo); // 05/09 confronto Hermes: il solo `title` è un nome di ultima risorsa (W3C APG names-and-descriptions, ARIA14)
     b.dataset.messageAction = nome;
     b.append(simbolo(documentObj, 'i i--sm', icona));
     return b;

@@ -42,6 +42,7 @@ const COMPONENTI = [
   { nome: 'Topbar', schermata: 'schermoChat', selettore: '#schermoChat .talos-topbar' },
   { nome: 'Conversazione', schermata: 'schermoChat', selettore: '#schermoChat .talos-conversation' },
   { nome: 'Toast', schermata: 'schermoChat', selettore: '#regioneToast' }, // 05/9 T-16: la pila dei messaggi
+  { nome: 'NotificationPanel', schermata: 'schermoChat', selettore: '#pannelloNotifiche' }, // 06/9 T-17: «Aspetta te»
   { nome: 'ChatFooter', schermata: 'schermoChat', selettore: '#schermoChat .talos-chat-foot' },
   { nome: 'Review', schermata: 'schermoReview', selettore: '#schermoReview' },
   { nome: 'EmptyState', schermata: 'schermoVuota', selettore: '#schermoVuota .talos-conversation' },
@@ -61,6 +62,7 @@ test.describe('parità dei componenti ↔ mockup', () => {
       if(comp.nome==='CatalogoModelli'){for(const p of [m.pagina,a.pagina])await p.evaluate(()=>{for(const n of document.querySelectorAll('#schermoModelLab [role=tabpanel]'))n.hidden=n.id!=='panel-catalogo';});expect(await a.pagina.locator('[data-catalog-detail] .talos-kv__k').nth(3).evaluate(n=>n.getBoundingClientRect().width),'CAT-ETICHETTA-INTEGRA').toBeGreaterThanOrEqual(90);}
       if(comp.nome==='FonteRicerca'){for(const p of [m.pagina,a.pagina])await p.evaluate(()=>{for(const el of document.querySelectorAll('#schermoImpostazioni [data-settings-panel]'))el.hidden=el.dataset.settingsPanel!=='tools';});}
       if(comp.sezione){await expect(a.pagina.locator('#capPanel-'+comp.sezione+' [data-ext-detail] .talos-kv__k').first(),'EXT-ETICHETTE-INTEGRE').toHaveCSS('white-space','normal');expect(await a.pagina.locator(comp.selettore+' use').evaluateAll(ns=>ns.every(n=>document.querySelector(n.getAttribute('href')))), 'EXT-ICONA-ESISTENTE').toBe(true);await m.pagina.locator('[data-cap-tab='+comp.sezione+']').click();await a.pagina.locator('[data-cap-tab='+comp.sezione+']').click();}
+      if (comp.nome === 'NotificationPanel') { for (const p of [m.pagina, a.pagina]) await p.evaluate(() => { const n = document.querySelector('#pannelloNotifiche'); n.hidden = false; n.style.position = 'static'; }); }
       if (comp.nome === 'Toast') { for (const p of [m.pagina, a.pagina]) await p.evaluate(() => { const r = document.querySelector('#regioneToast'); r.hidden = false; for (const t of r.querySelectorAll('.talos-toast')) t.hidden = false; }); }
       expect(await struttura(a.pagina, comp.selettore), 'struttura').toEqual(await struttura(m.pagina, comp.selettore));
       expect(await testi(a.pagina, comp.selettore), 'parole').toEqual(await testi(m.pagina, comp.selettore));
