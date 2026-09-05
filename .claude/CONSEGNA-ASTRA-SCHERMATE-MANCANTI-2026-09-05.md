@@ -22,3 +22,10 @@ Cosa deve fare l’owner: può guardare i PNG. Cosa faccio dopo: Intro. Cosa rim
 Quattro passi nel veloIntro: cartella → modello e accesso → permessi → fine. Conservate tutte le quattro politiche originali, prova accesso con errori, scelta modello, ritorno, salto e apertura Nuova sessione. Regia esplicitamente dimostrativa; niente chiavi salvate o inviate.
 72/72 test:lab e 72/72 npx. Aperti tutti i dodici PNG intro-{passo}-{larghezza}; corretti stato selezionato e riepilogo italiano. Zero token nuovi.
 Cosa deve fare l’owner: può esaminare i quattro passi. Cosa faccio dopo: Model Lab. Cosa rimane: altre quattro consegne A e Parte B.
+
+## Model Lab
+Sei schede integrate nel mockup, tutte le nove lacune UI recuperate. Catalogo, Hugging Face, coda download, runtime e prova condividono lo stesso stile. Cinque dialoghi di supporto inclusi. Operazioni con dati dimostrativi espliciti; collegamento reale in parte B.
+18 screenshot aperti (6 schede × 3 larghezze). Corrette spaziature e selezioni incoerenti. Rigenerazione, build e test:lab 96/96 verdi. Zero token e icone nuovi.
+Cosa deve fare l’owner: può guardare le sei schede. Cosa faccio dopo: Toast. Cosa rimane: albero, dialoghi, server e parte B.
+
+Verifica finale Model Lab: anche npx playwright test --config=playwright.lab.config.mjs 96/96.

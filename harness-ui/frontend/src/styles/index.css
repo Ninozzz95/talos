@@ -590,3 +590,14 @@ button{background:none; border:0; cursor:pointer; padding:0}
 #veloComandi .talos-dialog__field{flex:none}
 #risultatiComandi{overflow-y:auto;min-height:0}
 #veloIntro [data-intro-passo][aria-current="step"],#veloIntro [data-intro-policy][aria-checked="true"]{background:var(--talos-accent-soft);color:var(--talos-accent-text);box-shadow:inset var(--talos-focus-width) 0 var(--talos-accent)}
+.talos-lab__tabs{margin-bottom:var(--talos-space-md)}
+#labTabs{flex-wrap:wrap}
+.talos-lab__space{margin-top:var(--talos-space-md)}
+.talos-lab__heading{font-size:var(--talos-font-size-md)}
+.talos-lab__rule{border:0;border-top:var(--talos-focus-width) solid var(--talos-border);margin-block:var(--talos-space-md)}
+.talos-lab__download{padding:var(--talos-space-md);border-bottom:var(--talos-focus-width) solid var(--talos-border)}
+.talos-lab__meter{display:block;width:100%;height:var(--talos-space-md);accent-color:var(--talos-accent);margin-block:var(--talos-space-md)}
+#schermoModelLab .talos-list-row[aria-pressed="true"]{background:var(--talos-accent-soft);box-shadow:inset var(--talos-focus-width) 0 var(--talos-accent)}
+#schermoModelLab .talos-toolbar>input{width:auto;min-width:0}
+#schermoModelLab .talos-kv__k{white-space:normal;overflow:visible;text-overflow:clip}
+#promptProva{min-height:calc(var(--talos-control-height) * 3);resize:vertical;padding:var(--talos-space-control)}
