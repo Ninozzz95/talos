@@ -531,3 +531,12 @@ composer compatto (raggio 11px), colonna senza limite. Cancelli: statico 195/195
 Ricerca 05/09/2026: rem/`clamp()` e scala per proprietà personalizzate (MDN font-size, CSS-Tricks
 «Accessible font sizing», csswg #6709). Preset di tema, scena e movimento restano B8 (Astra) e li
 onorerò allo stesso modo. Prompt per Astra: `.claude/PROMPT-ASTRA-2026-09-05-B6-RACCORDO-ASPETTO.md`.
+
+---
+
+## R-05 · B6 Impostazioni di Astra (`dc7ec327` navigazione e controlli, `c6c583bf` fonte e prova della ricerca web) — ✅ accettati e uniti
+
+Funzioni toccate solo sue (`disegnaPannelloRicercaWeb`, `azioneRicercaWeb`, montaggio delle
+Impostazioni); template rigenerato dal mockup senza differenze; i 38 controlli originali
+conservati con gli stessi nodi (i miei ganci d'aspetto S-12 li leggono). Dopo l'unione
+(fast-forward): unit **66/66**, statico **195/195**, componenti **72/72**.
