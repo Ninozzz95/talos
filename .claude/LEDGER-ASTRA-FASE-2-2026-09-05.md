@@ -1794,3 +1794,66 @@ Cosa fai tu dopo: riprendere MemoryMeter e completare B6, mantenendo questa corn
 Cosa rimane: resto B6 → B2 → B7 (setupModalResize e Intro con albero compatto) → B1 Terminale K-G → B8 → Browser K-I. OAuth e computer-use restano proposte successive.
 
 Cancellli finali R06: verify 73/73 unit, 195/195 statici, 30 asset e build deterministica; componenti 78/78 su 4178; Catalogo/R06 vivo 21/21 su 4177, compresi GET reale, tutte le sei schede e reload. git diff --check verde. R06 correzione testata e stati vuoti CHIUSA; B6 complessivo APERTO.
+
+## B6.5 MemoryMeter — piano prima degli edit05/09
+Merge lane/harness-desktop eseguito dopo bb836a2; include Toast dell’orchestratore, B7-TOAST-FUORI-REGIONE ora chiuso da lui, non duplicare. Primo blocco della pagina runtime: memoria e disco, fonte API invariata. Ispezionati caricaCapacitaMacchina/aggiornaPannelloMemoria/liberaMemoriaModello/renderizzaRuntimeModelLab, frammento originale e mockup MemoryMeter; GET reali4177/capacity e/runtime. Il contratto distingue RAM totale/libera da disco available/reserve/allocatable. Non espone byte del modello né memoria per processo. Il mockup attribuiva la riserva disco alla RAM e inventava memoria TALOS: sostituire con sole misure e stato osservato.
+Ricerca fresca05/09, finestra06/08–05/09: pin nuovamente aperti https://github.com/NousResearch/hermes-agent/releases/tag/v2026.8.31 (29112be31/08), https://github.com/anthropics/claude-code/releases/tag/v2.1.261 (d7dbd9a04/09), https://github.com/openai/codex/releases/tag/rust-v0.153.4 (3d2ee5104/09). Docs stabili riverificate: https://hermes-agent.nousresearch.com/docs/user-guide/configuration/ ; https://code.claude.com/docs/en/model-config ; https://learn.chatgpt.com/docs/config-file/config-advanced ; https://docs.ollama.com/api/ps ; https://lmstudio.ai/docs/developer/rest/list ; https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md ; https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/meter . Date pubblicazione delle docs non esposte; master llama non fissato come dipendenza, nessuna integrazione nuova.
+Ollama distingue modelli caricati da catalogo, LM Studio loaded_instances da modelli disponibili; preservare distinzione senza inventare campi che il nostro backend non fornisce. Hermes/Codex configurano provider locali dietro endpoint, Claude distingue alias e contesto effettivo: il nome o la selezione non provano RAM occupata né caricamento. Adattare al contratto AVM già presente, rifiutare numeri non osservati. +1 verificabile: separazione RAM/disco, misura temporizzata, 0liberi distinto da misura mancante, errore non trasformato in nessun modello, scarica solo llama.cpp via rotta esistente. Nessuna superiorità globale rivendicata.
+File esatti:
+- .claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html
+- .claude/LEDGER-ASTRA-FASE-2-2026-09-05.md
+- .claude/CONSEGNA-ASTRA-FASE-2-2026-09-05.md
+- harness-ui/frontend/src/components/misura-memoria.js
+- harness-ui/frontend/src/legacy/app.js
+- harness-ui/frontend/index.template.html
+- harness-ui/frontend/src/styles/index.css
+- harness-ui/frontend/lab/fixtures/misura-memoria.js
+- harness-ui/frontend/lab/main.js
+- harness-ui/frontend/tests/unit/misura-memoria.test.mjs
+- harness-ui/frontend/tests/parity/misura-memoria-vivo.spec.mjs
+- harness-ui/frontend/tests/parity/componenti.spec.mjs
+- harness-ui/frontend/playwright.astra.config.mjs
+Export: normalizzaCapacita, datiMemoria, creaMisuraMemoria, aggiornaMisuraMemoria, montaMisuraMemoria. Compatibilità: caricaCapacitaMacchina, aggiornaPannelloMemoria, liberaMemoriaModello, ids machineMemoryMetric/machineFreeMemoryMetric/machineStorageMetric/machineAllocatableMetric/machineCapacityDetail/memoriaBarraEtichetta/memoriaTenuta/memoriaRimisura/memoriaScarica. Mantiene i listener originali. Il blocco si innesta nella Panoramica originale; cornice finale e altre schede restano da completare.
+RED MEM-CONTRATTO, MEM-RAM-DISCO, MEM-ERRORE-MISURA, MEM-ERRORE-RUNTIME, MEM-SCARICA-CORPO/CONCORRENZA. GREEN unità, parità MemoryMeter tre larghezze, originale/app a dati equivalenti, reload/rimisura/errori/retry e chiamata unload esatta in fixture; GET reale separato. Prova unload controllata, nessun runtime reale avviato/chiuso nel test. Screenshot salvati in artifacts prima di selezione. Rollback commit frontend, niente migrazioni. Riusa MemoryMeter/Badge/Button/Card, nessun token nuovo.
+
+B6.5 RED: modulo assente; dopo GET503 il vecchio12GB rimane visibile (MEM-ERRORE-MISURA). Sei foto originali aperte1440/1280/1024: quattro metriche corrette nel server, etichetta riserva ambigua e grande scorrimento prima delle azioni. Il nuovo blocco usa GiB per valori binari, spiegazione breve, nessuna attribuzione per processo. Regia dimostrativa mantiene scaricamento simulato ma non cambia misure senza una nuova rilevazione.
+
+B6.5 ripresa dopo R06 3ddd37b: merge lane/harness-desktop include Connessione dell’orchestratore; preservata. Stash MemoryMeter applicato, unico conflitto ledger risolto mantenendo integralmente R06 e B6.5. Aperte tutte le 6 immagini di parità MemoryMeter 1440/1280/1024: corrispondono al mockup, righe e azioni leggibili. Ricerca nuovamente verificata prima dell’innesto: release Hermes 29112be, Claude d7dbd9a, Codex 3d2ee51 e docs Ollama /api/ps, LM Studio loaded_instances, MDN meter (stesse URL esatte sopra, 05/09/2026). Nessuna dipendenza aggiunta.
+Amendamento precisione: stato modello indipendente dalla capacità; capacità mancante non significa nessun modello. Durante la lettura runtime scrivere Verifica del modello in corso; durante unload impedire duplicati e rimisura. Nuovi scenari permanenti MEM-INIZIALE e MEM-SCARICA-CONCORRENZA nel file vivo già pianificato. In caso di runtime non risposto, errore esplicito e scaricamento disabilitato. Mantengo aggiornamenti su errore runtime (il ritorno anticipato originale saltava il pannello).
+
+B6.5 innesto: RED concorrenza riprodotto (Rimisura restava attivo durante unload), quindi 15/15 prove vive verdi su tre larghezze. Capacità ora validata, errori eliminano valori obsoleti, modello verificato indipendentemente dalla RAM; aggiornamento anche nel ramo errore runtime e guardia unload. Aggiunte MEM-ERRORE-SCARICA (errore e retry senza perdere stato) e MEM-SERVER-REALE (capacità e rimisura da server senza fixture).
+
+MEM-PRESSIONE-RAM, regressione individuata rileggendo originale public/styles.css:2617–2620 e app.js:3161: il meter nuovo non aveva soglie e poteva restare verde anche a RAM piena. Ricerca fresca 05/09: https://html.spec.whatwg.org/multipage/form-elements.html#the-meter-element ; https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/meter (ultima modifica 24/04/2026, documento stabile riverificato); release Hermes/Claude/Codex nuovamente aperte (URL e pin sopra, invariati). Adottare semantica HTML low/high/optimum, mantenere soglie originali 75/90 e aggiungere testo per non affidarsi al colore. Nessun dato o confronto prestazionale dei competitor inventato: +1 misurabile sul nostro originale = avviso leggibile anche senza distinguere i colori. File/simboli già pianificati: creaMisuraMemoria, aggiornaMisuraMemoria, canonico/CSS generato, test vivo. RED: a RAM libera zero deve apparire RAM quasi esaurita, meter optimum 0; poi recupero con Rimisura.
+
+R07 letto: R06 accettato su lane. Toast e Connessione riusati; tutte le chiamate MemoryMeter passano dalle apiGet/apiPost esistenti. MEM-PRESSIONE-RAM RED riprodotto a 100% senza avviso. Aggiunte soglie HTML 75/90 con optimum 0 e frasi Molta RAM in uso/RAM quasi esaurita oltre al colore, token esistenti.
+
+Il merge richiesto da R07 ha segnalato sovrapposizione ai CSS/canonico ancora in lavorazione. Prima della verifica finale salvo solo i 13 percorsi MemoryMeter, unisco lane e riapplico, preservando le nuove regole dell’orchestratore. Nessun lavoro altrui viene scartato.
+
+R07 merge 94fa175f completato con stash dei soli file MemoryMeter e riapplicazione senza conflitti. MEM-PRESSIONE-RAM 3/3 verde; tre foto aperte: barra cambia colore e avviso esplicito, recupero con Rimisura. Aggiunto confronto originale a RAM piena (MEM-ORIGINALE-PRESSIONE) per documentare lo stato equivalente, oltre alle sei foto originali già aperte.
+
+
+## B6.5 — MemoryMeter, pannello memoria e disco (05/09/2026)
+Innesto nel Model Lab: il blocco MemoryMeter del mockup sostituisce le quattro metriche e il pannello memoria originali. Riusa Card, Badge, Button, KeyValue e meter HTML, stesso sprite e stessi token. Nessun token nuovo. Mantiene i due pulsanti originali e i loro listener, GET capacità, GET runtime e POST unload con runtimeId llama.cpp; le chiamate passano da apiGet/apiPost, Toast e Connessione sono quelli dell’orchestratore. R06 e R07 preservati.
+La RAM totale/libera è distinta dal disco disponibile/riservato/allocabile. Valori in GiB, data della misura, nessuna memoria per processo o modello inventata. Il mockup prima attribuiva la riserva del disco alla RAM: corretto. Durante una lettura fallita le vecchie misure spariscono; durante la verifica del runtime non si dichiara un modello assente. Liberazione e rimisura non si sovrappongono. Se unload fallisce, resta possibile riprovare e lo stato non finge un successo. RAM alta: segnale cromatico preservato e frase esplicita aggiunta.
+Confronto originale/proposta: stesse capacità e azioni; cinque valori separati contro quattro con riserva ambigua, azioni vicine ai dati, avvisi testuali e numerici oltre al colore, zero distinto da dato mancante. Screenshot originali e proposta aperti a 1440/1280/1024, compresi errore misura, errore runtime, errore unload, scaricamento, capacità reale e RAM piena. Foto in .claude/immagini/astra-fase2/MemoryMeter/. Verdetto del componente: miglioramento dimostrato su chiarezza e recupero dagli errori; nessuna superiorità globale sui competitor rivendicata.
+Limite reale: GET capacità e rimisura esercitati contro il server 4177; nessun motore locale pronto era disponibile per una liberazione reale. Scaricamento, errori, concorrenza e retry sono provati con risposte HTTP controllate. Non dichiaro eseguito un modello locale. La Panoramica completa e le altre sezioni B6 non sono ancora chiuse.
+Cosa deve fare l’owner: nessuna operazione necessaria; può provare Impostazioni → Laboratorio modelli → Panoramica su http://127.0.0.1:4177.
+Cosa fai tu dopo: completare runtime e Prova nella Panoramica, poi Provider, Installati, Hugging Face e Download.
+Cosa rimane: resto B6 → B2 → B7 → B1 Terminale K-G → B8 → Browser K-I; OAuth e computer-use restano proposte successive.
+
+Verifica finale MemoryMeter dopo merge R07: 79 unit, 195 statici, build 30 asset deterministica, 81 componenti verdi. Parità MemoryMeter tre larghezze aggiornata e aperta. La suite viva combinata include MemoryMeter, R06/Catalogo, Impostazioni e FonteRicerca per verificare che l’innesto non danneggi le sezioni già consegnate.
+
+| Aspetto | Originale | MemoryMeter | Evidenza / verdetto |
+|---|---|---|---|
+| Copertura | RAM totale/libera, disco, scarica e rimisura | Stessi dati e comandi, più riserva disco separata | MEM-RAM-DISCO e MEM-SCARICA-CORPO verdi; conservata |
+| Semantica | Riserva disco non chiaramente distinta, vecchi valori dopo errore | GiB espliciti, dato mancante distinto da zero, nessuna attribuzione al modello | MEM-CONTRATTO, MEM-ERRORE-MISURA, MEM-PRESSIONE-RAM; corretta |
+| Accessibilità | Barra con testo percentuale | Meter nativo etichettato, soglie e avviso in parole, pulsanti nativi mantenuti | Parità tre larghezze; copertura semantica ampliata |
+| Responsività | Metriche alte e azioni dopo ulteriore scorrimento | Righe compatte, azioni nel medesimo blocco, parole intere | Foto app/originale a 1440/1280/1024 aperte; migliorata |
+| Attesa/errori | Lettura runtime saltava aggiornamento memoria su errore; Rimisura concorrente | Attesa dichiarata, errore visibile e operazioni serializzate | MEM-INIZIALE, MEM-ERRORE-RUNTIME, MEM-SCARICA-CONCORRENZA; corretta |
+| Recupero/persistenza | Capacità riletta all’avvio, unload con rotta nativa | Stessa fonte riletta al reload, errore unload non perde retry | MEM-RAM-DISCO reload, MEM-ERRORE-SCARICA, MEM-SERVER-REALE; conservata |
+| Limiti | Nessuna misura RAM per processo esposta | Non la inventa; unload reale non eseguito senza motore disponibile | Dichiarato, nessun confronto di latenza o prestazioni rivendicato |
+
+Chiusura B6.5 MemoryMeter: 79/79 unit, 195/195 statici, 81/81 componenti; suite viva combinata 93/93 (memoria, Catalogo/R06, Impostazioni, FonteRicerca). Build 30 asset e determinismo verdi. 36 immagini selezionate e conservate; confronto con originale e mockup aperto. Le chiamate unload restano prove HTTP controllate, GET capacità reale verificato.
+Cosa deve fare l’owner: nulla; può provare la Panoramica su 4177.
+Cosa fai tu dopo: runtime e Prova, poi le altre schede B6.
+Cosa rimane: resto B6 → B2 → B7 → B1 → B8 → Browser K-I.

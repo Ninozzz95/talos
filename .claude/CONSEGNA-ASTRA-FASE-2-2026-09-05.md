@@ -464,3 +464,28 @@ Cosa fai tu dopo: riprendere MemoryMeter e completare B6, mantenendo questa corn
 Cosa rimane: resto B6 → B2 → B7 (setupModalResize e Intro con albero compatto) → B1 Terminale K-G → B8 → Browser K-I. OAuth e computer-use restano proposte successive.
 
 Cancellli finali R06: verify 73/73 unit, 195/195 statici, 30 asset e build deterministica; componenti 78/78 su 4178; Catalogo/R06 vivo 21/21 su 4177, compresi GET reale, tutte le sei schede e reload. git diff --check verde. R06 correzione testata e stati vuoti CHIUSA; B6 complessivo APERTO.
+
+
+## B6.5 — MemoryMeter, pannello memoria e disco (05/09/2026)
+Innesto nel Model Lab: il blocco MemoryMeter del mockup sostituisce le quattro metriche e il pannello memoria originali. Riusa Card, Badge, Button, KeyValue e meter HTML, stesso sprite e stessi token. Nessun token nuovo. Mantiene i due pulsanti originali e i loro listener, GET capacità, GET runtime e POST unload con runtimeId llama.cpp; le chiamate passano da apiGet/apiPost, Toast e Connessione sono quelli dell’orchestratore. R06 e R07 preservati.
+La RAM totale/libera è distinta dal disco disponibile/riservato/allocabile. Valori in GiB, data della misura, nessuna memoria per processo o modello inventata. Il mockup prima attribuiva la riserva del disco alla RAM: corretto. Durante una lettura fallita le vecchie misure spariscono; durante la verifica del runtime non si dichiara un modello assente. Liberazione e rimisura non si sovrappongono. Se unload fallisce, resta possibile riprovare e lo stato non finge un successo. RAM alta: segnale cromatico preservato e frase esplicita aggiunta.
+Confronto originale/proposta: stesse capacità e azioni; cinque valori separati contro quattro con riserva ambigua, azioni vicine ai dati, avvisi testuali e numerici oltre al colore, zero distinto da dato mancante. Screenshot originali e proposta aperti a 1440/1280/1024, compresi errore misura, errore runtime, errore unload, scaricamento, capacità reale e RAM piena. Foto in .claude/immagini/astra-fase2/MemoryMeter/. Verdetto del componente: miglioramento dimostrato su chiarezza e recupero dagli errori; nessuna superiorità globale sui competitor rivendicata.
+Limite reale: GET capacità e rimisura esercitati contro il server 4177; nessun motore locale pronto era disponibile per una liberazione reale. Scaricamento, errori, concorrenza e retry sono provati con risposte HTTP controllate. Non dichiaro eseguito un modello locale. La Panoramica completa e le altre sezioni B6 non sono ancora chiuse.
+Cosa deve fare l’owner: nessuna operazione necessaria; può provare Impostazioni → Laboratorio modelli → Panoramica su http://127.0.0.1:4177.
+Cosa fai tu dopo: completare runtime e Prova nella Panoramica, poi Provider, Installati, Hugging Face e Download.
+Cosa rimane: resto B6 → B2 → B7 → B1 Terminale K-G → B8 → Browser K-I; OAuth e computer-use restano proposte successive.
+
+| Aspetto | Originale | MemoryMeter | Evidenza / verdetto |
+|---|---|---|---|
+| Copertura | RAM totale/libera, disco, scarica e rimisura | Stessi dati e comandi, più riserva disco separata | MEM-RAM-DISCO e MEM-SCARICA-CORPO verdi; conservata |
+| Semantica | Riserva disco non chiaramente distinta, vecchi valori dopo errore | GiB espliciti, dato mancante distinto da zero, nessuna attribuzione al modello | MEM-CONTRATTO, MEM-ERRORE-MISURA, MEM-PRESSIONE-RAM; corretta |
+| Accessibilità | Barra con testo percentuale | Meter nativo etichettato, soglie e avviso in parole, pulsanti nativi mantenuti | Parità tre larghezze; copertura semantica ampliata |
+| Responsività | Metriche alte e azioni dopo ulteriore scorrimento | Righe compatte, azioni nel medesimo blocco, parole intere | Foto app/originale a 1440/1280/1024 aperte; migliorata |
+| Attesa/errori | Lettura runtime saltava aggiornamento memoria su errore; Rimisura concorrente | Attesa dichiarata, errore visibile e operazioni serializzate | MEM-INIZIALE, MEM-ERRORE-RUNTIME, MEM-SCARICA-CONCORRENZA; corretta |
+| Recupero/persistenza | Capacità riletta all’avvio, unload con rotta nativa | Stessa fonte riletta al reload, errore unload non perde retry | MEM-RAM-DISCO reload, MEM-ERRORE-SCARICA, MEM-SERVER-REALE; conservata |
+| Limiti | Nessuna misura RAM per processo esposta | Non la inventa; unload reale non eseguito senza motore disponibile | Dichiarato, nessun confronto di latenza o prestazioni rivendicato |
+
+Chiusura B6.5 MemoryMeter: 79/79 unit, 195/195 statici, 81/81 componenti; suite viva combinata 93/93 (memoria, Catalogo/R06, Impostazioni, FonteRicerca). Build 30 asset e determinismo verdi. 36 immagini selezionate e conservate; confronto con originale e mockup aperto. Le chiamate unload restano prove HTTP controllate, GET capacità reale verificato.
+Cosa deve fare l’owner: nulla; può provare la Panoramica su 4177.
+Cosa fai tu dopo: runtime e Prova, poi le altre schede B6.
+Cosa rimane: resto B6 → B2 → B7 → B1 → B8 → Browser K-I.
