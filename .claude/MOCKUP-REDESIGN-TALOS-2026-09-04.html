@@ -532,6 +532,27 @@ button{background:none; border:0; cursor:pointer; padding:0}
 @media (max-width:760px){ .talos-picker{grid-template-columns:minmax(0,1fr)} }
 @media (prefers-reduced-motion: reduce){ *{animation:none !important; transition:none !important} }
 .talos-composer__input::placeholder{color:var(--talos-muted);opacity:1}
+
+/* Browser: composizione delle primitive del mockup, nessun token nuovo. */
+.talos-browser__bar,.talos-browser__tools{display:flex;align-items:center;gap:var(--talos-space-sm);padding:var(--talos-space-control);flex-wrap:wrap}
+.talos-browser__bar .talos-field{flex:1;min-width:0}
+.talos-browser__meta{font-size:var(--talos-font-size-xs)}
+.talos-browser__heading{font-size:var(--talos-font-size-md)}
+.talos-browser__space{margin-top:var(--talos-space-md)}
+.talos-browser__head,.talos-browser__pad,.talos-browser__request,.talos-browser__notice,.talos-browser__note{padding:var(--talos-space-md)}
+.talos-browser__request,.talos-browser__note{background:var(--talos-panel-soft)}
+.talos-browser__request>*+*{margin-top:var(--talos-space-sm)}
+.talos-browser__head h2{font-size:var(--talos-font-size-lg)}
+.talos-browser__text{white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:var(--talos-space-md);font-family:var(--talos-font-mono);font-size:var(--talos-font-size-xs);color:var(--talos-assistant-text)}
+.talos-browser__history-list{display:flex;gap:var(--talos-space-sm);flex-wrap:wrap;margin-top:var(--talos-space-sm)}
+.talos-browser__entry{flex:1;display:flex;flex-direction:column;gap:var(--talos-space-xs);text-align:left;padding:var(--talos-space-control);border:var(--talos-focus-width) solid var(--talos-border);border-radius:var(--talos-radius-card);background:var(--talos-card);overflow-wrap:anywhere}
+.talos-browser__entry[aria-current="page"]{border-color:var(--talos-accent-border);background:var(--talos-accent-soft)}
+.talos-browser__note{white-space:pre-wrap;overflow-wrap:anywhere}
+.talos-browser__back{transform:rotate(90deg)}
+.talos-browser__next{transform:rotate(-90deg)}
+.talos-browser__sr{position:absolute;clip-path:inset(100%);overflow:hidden;width:0;height:0}
+.talos-topbar:has([data-vistetab]){height:auto;min-height:var(--talos-topbar-h);flex-wrap:wrap;padding-block:var(--talos-space-sm)}
+.talos-topbar [data-vistetab]{flex-wrap:wrap}
 </style>
 
 <!-- ===================== REGIA DEL MOCKUP (non è prodotto) ===================== -->
@@ -545,6 +566,7 @@ button{background:none; border:0; cursor:pointer; padding:0}
       <button class="talos-tabs__tab" role="tab" data-schermo="vuota" aria-selected="false">Vuota</button>
       <button class="talos-tabs__tab" role="tab" data-schermo="terminale" aria-selected="false">Terminale</button>
       <button class="talos-tabs__tab" role="tab" data-schermo="review" aria-selected="false">Review</button>
+      <button class="talos-tabs__tab" role="tab" data-schermo="browser" aria-selected="false">Browser</button>
       <button class="talos-tabs__tab" role="tab" data-schermo="capability" aria-selected="false">Capability</button>
       <button class="talos-tabs__tab" role="tab" data-schermo="board" aria-selected="false">Board</button>
       <button class="talos-tabs__tab" role="tab" data-schermo="memoria" aria-selected="false">Memoria</button>
@@ -694,7 +716,7 @@ button{background:none; border:0; cursor:pointer; padding:0}
           <button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-selected="true">Chat</button>
           <button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-selected="false">Terminale <span class="talos-tabs__count">2</span></button>
           <button class="talos-tabs__tab" role="tab" data-vaia="review" aria-selected="false">Review <span class="talos-tabs__count">3</span></button>
-        </div></div>
+        <button class="talos-tabs__tab" role="tab" data-vaia="browser" aria-controls="schermoBrowser" aria-selected="false">Browser</button></div></div>
         <div class="talos-topbar__actions"><button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" data-apre-velo="veloAlbero" title="Albero dei rami"><svg class="i"><use href="#i-branch"/></svg></button><button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" title="Riprendi"><svg class="i"><use href="#i-play"/></svg></button></div>
       </div>
 
@@ -860,7 +882,7 @@ button{background:none; border:0; cursor:pointer; padding:0}
       <div class="talos-topbar" data-c="Topbar">
         <div class="talos-topbar__title"><h1>W1-02 registro processi</h1></div>
         <span class="talos-topbar__path">~/Desktop/projects/AVM-harness-desktop</span>
-        <div class="talos-tabs"><div class="talos-tabs__list" role="tablist" data-vistetab><button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-selected="false">Chat</button><button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-selected="true">Terminale <span class="talos-tabs__count">2</span></button><button class="talos-tabs__tab" role="tab" data-vaia="review" aria-selected="false">Review <span class="talos-tabs__count">3</span></button></div></div>
+        <div class="talos-tabs"><div class="talos-tabs__list" role="tablist" data-vistetab><button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-selected="false">Chat</button><button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-selected="true">Terminale <span class="talos-tabs__count">2</span></button><button class="talos-tabs__tab" role="tab" data-vaia="review" aria-selected="false">Review <span class="talos-tabs__count">3</span></button><button class="talos-tabs__tab" role="tab" data-vaia="browser" aria-controls="schermoBrowser" aria-selected="false">Browser</button></div></div>
       </div>
       <div class="talos-terminal" data-c="TerminalPane">
         <div class="talos-terminal__tabs" role="tablist">
@@ -890,7 +912,7 @@ button{background:none; border:0; cursor:pointer; padding:0}
       <div class="talos-topbar" data-c="Topbar">
         <div class="talos-topbar__title"><h1>W1-02 registro processi</h1></div>
         <span class="talos-topbar__path">3 file modificati · +112 −2</span>
-        <div class="talos-tabs"><div class="talos-tabs__list" role="tablist" data-vistetab><button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-selected="false">Chat</button><button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-selected="false">Terminale <span class="talos-tabs__count">2</span></button><button class="talos-tabs__tab" role="tab" data-vaia="review" aria-selected="true">Review <span class="talos-tabs__count">3</span></button></div></div>
+        <div class="talos-tabs"><div class="talos-tabs__list" role="tablist" data-vistetab><button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-selected="false">Chat</button><button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-selected="false">Terminale <span class="talos-tabs__count">2</span></button><button class="talos-tabs__tab" role="tab" data-vaia="review" aria-selected="true">Review <span class="talos-tabs__count">3</span></button><button class="talos-tabs__tab" role="tab" data-vaia="browser" aria-controls="schermoBrowser" aria-selected="false">Browser</button></div></div>
         <div class="talos-topbar__actions"><button class="talos-button talos-button--secondary talos-button--sm">Accetta tutto</button><button class="talos-button talos-button--ghost talos-button--sm talos-button--danger">Scarta tutto</button></div>
       </div>
       <div class="talos-review" data-c="ReviewPane">
@@ -924,6 +946,67 @@ button{background:none; border:0; cursor:pointer; padding:0}
         </div>
       </div>
     </section>
+
+<section id="schermoBrowser" class="talos-screen" data-c="BrowserScreen" hidden><div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>W1-02 registro processi</h1></div><span class="talos-grow"></span><div class="talos-tabs" data-c="Tabs"><div class="talos-tabs__list" role="tablist" aria-label="Viste della sessione" data-vistetab><button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-controls="schermoChat" aria-selected="false">Chat</button><button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-controls="schermoTerminale" aria-selected="false">Terminale</button><button class="talos-tabs__tab" role="tab" data-vaia="review" aria-controls="schermoReview" aria-selected="false">Review</button><button class="talos-tabs__tab" role="tab" data-vaia="browser" aria-controls="schermoBrowser" aria-selected="true">Browser</button></div></div></div>
+<div class="talos-page  talos-browser" data-c="Page">
+  <div class="talos-toolbar"><div><h2 class="talos-browser__heading">Letture della sessione</h2><p class="talos-muted talos-browser__meta" id="browserRiepilogo">Testo acquisito dall’agente · 2 pagine di esempio</p></div>
+    <label class="talos-muted talos-browser__meta">Stato dimostrativo <select class="talos-select talos-select--sm" id="statoBrowser"><option value="pagina">Pagina acquisita</option><option value="vuoto">Nessuna pagina</option><option value="bloccata">Richiesta di permesso</option><option value="caricamento">Caricamento</option></select></label>
+  </div>
+  <div class="talos-card talos-browser__space" data-c="BrowserViewport">
+    <div class="talos-browser__bar">
+      <button class="talos-button talos-button--secondary talos-button--sm talos-icon-button" data-browser-demo="back" aria-label="Pagina letta precedente" title="Pagina letta precedente"><svg class="i talos-browser__back" aria-hidden="true"><use href="#i-chev"/></svg></button>
+      <button class="talos-button talos-button--secondary talos-button--sm talos-icon-button" data-browser-demo="forward" disabled aria-label="Pagina letta successiva" title="Pagina letta successiva"><svg class="i talos-browser__next" aria-hidden="true"><use href="#i-chev"/></svg></button>
+      <div class="talos-field"><svg class="i talos-field__icon" aria-hidden="true"><use href="#i-globe"/></svg><label class="talos-browser__sr" for="urlBrowser">Indirizzo della pagina acquisita</label><input class="talos-field__input" id="urlBrowser" value="https://example.org/documentazione" readonly aria-describedby="browserLimiti"></div>
+      <button class="talos-button talos-button--secondary talos-button--sm talos-icon-button" data-browser-demo="open" aria-label="Apri fuori da TALOS" title="Apri fuori da TALOS"><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg></button>
+    </div>
+    <div class="talos-browser__tools">
+      <span class="talos-muted talos-browser__meta" id="browserPosizione" role="status">Lettura 2 di 2</span><span class="talos-grow"></span>
+      <button class="talos-button talos-button--ghost talos-button--sm" data-browser-demo="reload">Rileggi</button>
+      <button class="talos-button talos-button--secondary talos-button--sm" data-browser-demo="annotate" title="Prepara una bozza nella chat senza inviarla">Annota</button>
+      <button class="talos-button talos-button--ghost talos-button--sm" data-browser-demo="note" aria-expanded="false" aria-controls="browserEditorNota">Nota locale</button>
+      <button class="talos-button talos-button--ghost talos-button--sm" data-browser-demo="copy">Copia testo</button>
+    </div>
+    <div id="browserAvviso" class="talos-browser__notice" role="status" hidden></div>
+    <div id="browserBloccato" class="talos-browser__request" hidden>
+      <span class="talos-badge talos-badge--sm talos-badge--warning">Richiesta dimostrativa</span><h3 class="talos-browser__heading">Consentire questa lettura?</h3>
+      <p class="talos-muted">L’agente chiede di leggere https://example.org/documentazione. La scelta vale per questa richiesta.</p>
+      <div class="talos-cluster"><button class="talos-button talos-button--primary talos-button--sm" data-action="consentiBrowser">Consenti una volta</button><button class="talos-button talos-button--secondary talos-button--sm" data-action="negaBrowser">Nega</button></div>
+      <p class="talos-muted talos-browser__meta" id="browserPermessoNota">Simulazione: nessuna richiesta di rete viene eseguita.</p>
+    </div>
+    <div id="browserCaricamento" class="talos-browser__request" hidden>
+      <h3 class="talos-browser__heading">Lettura in corso…</h3><p class="talos-muted">Simulazione di attesa. L’ultima pagina acquisita resta consultabile.</p>
+      <button class="talos-button talos-button--primary talos-button--sm" data-action="completaBrowser">Completa esempio</button>
+      <button class="talos-button talos-button--secondary talos-button--sm" data-action="annullaBrowser">Annulla navigazione</button>
+    </div>
+    <div id="browserVuoto" class="talos-empty talos-browser__pad" hidden><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg><h3>Nessuna pagina letta</h3><p class="talos-muted">Le letture dell’agente appariranno qui, con indirizzo e testo acquisito.</p></div>
+    <article id="browserPagina" aria-labelledby="browserTitolo">
+      <header class="talos-browser__head"><h2 id="browserTitolo">Registro dei processi</h2><p class="talos-muted talos-browser__meta" id="browserProvenienza">Agente · 05/09, 10:42 (Roma) · 365 caratteri · esempio</p></header>
+      <pre id="browserTesto" class="talos-browser__text" tabindex="0" aria-label="Testo acquisito della pagina">Registro dei processi
+
+Il registro raccoglie i processi avviati durante una sessione e mostra l’ultimo evento ricevuto.
+
+Riconoscere uno stallo
+- Silenzio prolungato: nessun nuovo evento.
+- Giri a vuoto: la stessa richiesta ripetuta senza progresso.
+- Il processo resta disponibile per una decisione dell’utente.
+
+Una segnalazione di stallo non termina il processo.</pre>
+      <div id="browserEditorNota" class="talos-browser__note" hidden>
+        <label class="talos-stack" for="browserNotaInput">Nota su questa lettura<textarea class="talos-field__input" id="browserNotaInput" rows="3" placeholder="Un dubbio, un controllo da fare…" aria-describedby="browserNotaScope"></textarea></label>
+        <div class="talos-cluster"><span id="browserNotaScope" class="talos-muted talos-browser__meta">Solo in questo mockup · si azzera al ricaricamento</span><span class="talos-grow"></span><button class="talos-button talos-button--primary talos-button--sm" data-action="conservaNotaBrowser">Conserva nota</button><button class="talos-button talos-button--ghost talos-button--sm" data-action="chiudiNotaBrowser">Annulla</button></div>
+      </div>
+      <div id="browserNotaSalvata" class="talos-browser__note" role="status" hidden></div>
+    </article>
+  </div>
+  <nav class="talos-browser__history talos-browser__space" aria-label="Pagine lette in questa sessione" data-c="BrowserHistory">
+    <h3 class="talos-browser__heading">Cronologia <span class="talos-muted talos-browser__meta">· scegli una lettura</span></h3>
+    <div class="talos-browser__history-list">
+      <button class="talos-browser__entry" data-pagina-browser="0"><span class="talos-muted talos-browser__meta">01 · Agente · 10:39</span><strong>Pagina iniziale del progetto</strong><span class="talos-muted talos-browser__meta">example.org</span></button>
+      <button class="talos-browser__entry" data-pagina-browser="1" aria-current="page"><span class="talos-muted talos-browser__meta">02 · Agente · 10:42</span><strong>Registro dei processi</strong><span class="talos-muted talos-browser__meta">example.org/documentazione</span></button>
+    </div>
+  </nav>
+  <p id="browserLimiti" class="talos-muted talos-browser__meta talos-browser__space">Copia testuale, senza navigazione interattiva. Dati e note dimostrativi: si azzerano al ricaricamento.</p>
+</div></section>
 
     <!-- ---------- CAPABILITY (C1-C11) ---------- -->
     <section class="talos-screen" id="schermoCapability" data-c="CapabilityScreen" hidden>
@@ -1096,6 +1179,7 @@ button{background:none; border:0; cursor:pointer; padding:0}
       <div class="talos-page" data-c="Page">
         <div class="talos-page__head"><span class="talos-eyebrow">Inventario</span><h2>Un blocco, una fabbrica</h2><p>Le primitive portano le classi di <code class="talos-mono">primitives.css</code> e i nomi delle fabbriche di <code class="talos-mono">design-system/index.js</code>. I blocchi nuovi seguono la stessa grammatica BEM e dichiarano proprietà e stati.</p></div>
         <div class="talos-inventory" id="inventario">
+          <div class="talos-card talos-inventory__item"><div class="talos-inventory__name"><b>BrowserScreen · BrowserViewport · BrowserHistory</b><span>Letture della sessione</span></div><div class="talos-inventory__demo"><button class="talos-button talos-button--secondary" data-vaia="browser">Apri Browser</button></div><div class="talos-inventory__props">URL · testo letterale · cronologia · note · permesso · attesa · vuoto</div></div>
           <div class="talos-card talos-inventory__item"><div class="talos-inventory__name"><b>Button</b><span>createButton · variant · size · disabled</span></div><div class="talos-inventory__demo"><button class="talos-button talos-button--primary">Primary</button><button class="talos-button talos-button--secondary">Secondary</button><button class="talos-button talos-button--ghost">Ghost</button><button class="talos-button talos-button--ghost talos-button--danger">Danger</button><button class="talos-button talos-button--secondary talos-button--sm">sm</button><button class="talos-button talos-button--secondary" disabled>disabled</button></div><div class="talos-inventory__props">variant: primary | secondary | ghost | danger · size: sm | md | lg</div></div>
           <div class="talos-card talos-inventory__item"><div class="talos-inventory__name"><b>IconButton</b><span>createIconButton</span></div><div class="talos-inventory__demo"><button class="talos-button talos-button--secondary talos-icon-button" title="Notifiche"><svg class="i"><use href="#i-bell"/></svg></button><button class="talos-button talos-button--secondary talos-icon-button" title="Rami"><svg class="i"><use href="#i-branch"/></svg></button><button class="talos-button talos-button--ghost talos-icon-button" title="Chiudi"><svg class="i"><use href="#i-x"/></svg></button></div><div class="talos-inventory__props">come Button, con label obbligatoria (title/aria-label)</div></div>
           <div class="talos-card talos-inventory__item"><div class="talos-inventory__name"><b>Badge</b><span>createBadge · tone · size · dot</span></div><div class="talos-inventory__demo"><span class="talos-badge">Neutro</span><span class="talos-badge talos-badge--accent">Accento</span><span class="talos-badge talos-badge--success">Ok</span><span class="talos-badge talos-badge--warning">Avviso</span><span class="talos-badge talos-badge--danger">Guasto</span><span class="talos-badge talos-badge--info">Nota</span><span class="talos-badge talos-badge--sm talos-badge--dot talos-badge--success">con punto</span></div><div class="talos-inventory__props">tone: neutral | accent | success | warning | danger | info · size: sm | md | lg</div></div>
@@ -1461,17 +1545,17 @@ button{background:none; border:0; cursor:pointer; padding:0}
   });
 
   /* ---- Schermate: una sola sorgente di verità (data-vista sul root) ---- */
-  var SCHERMI = {chat:"schermoChat", vuota:"schermoVuota", terminale:"schermoTerminale", review:"schermoReview", capability:"schermoCapability", board:"schermoBoard", memoria:"schermoMemoria", attivita:"schermoAttivita", libreria:"schermoLibreria", ricerca:"schermoRicerca", officina:"schermoOfficina", automazioni:"schermoAutomazioni", impostazioni:"schermoImpostazioni", doctor:"schermoDoctor", componenti:"schermoComponenti"};
-  var DI_SESSIONE = {chat:1, vuota:1, terminale:1, review:1};
+  var SCHERMI = {chat:"schermoChat", vuota:"schermoVuota", terminale:"schermoTerminale", review:"schermoReview", browser:"schermoBrowser", capability:"schermoCapability", board:"schermoBoard", memoria:"schermoMemoria", attivita:"schermoAttivita", libreria:"schermoLibreria", ricerca:"schermoRicerca", officina:"schermoOfficina", automazioni:"schermoAutomazioni", impostazioni:"schermoImpostazioni", doctor:"schermoDoctor", componenti:"schermoComponenti"};
+  var DI_SESSIONE = {chat:1, vuota:1, terminale:1, review:1, browser:1};
   function mostra(nome){
     if (!SCHERMI[nome]) return;
     Object.keys(SCHERMI).forEach(function(k){ var el = document.getElementById(SCHERMI[k]); if (el) el.hidden = (k !== nome); });
     radice.setAttribute("data-vista", DI_SESSIONE[nome] ? "sessione" : "pagina");
     radice.setAttribute("data-schermo", nome);
-    var reg = document.getElementById("regiaSchermo"); var b = reg.querySelector('[data-schermo="' + nome + '"]'); if (b) selezionaTab(reg, b);
+    var reg = document.getElementById("regiaSchermo"); var b = reg.querySelector('[data-schermo="' + nome + '"]'); if (b) reg.querySelectorAll('[role="tab"]').forEach(function(t){t.setAttribute("aria-selected", String(t === b));t.tabIndex = t === b ? 0 : -1;});
     document.querySelectorAll('.talos-sidebar [data-vaia]').forEach(function(v){ if (v.dataset.vaia === nome) v.setAttribute("aria-current","page"); else v.removeAttribute("aria-current"); });
     // Le tre viste della sessione condividono la stessa tablist Chat/Terminale/Review: si allineano tutte.
-    document.querySelectorAll('[data-vistetab] [role="tab"]').forEach(function(t){ t.setAttribute("aria-selected", String(t.dataset.vaia === nome)); });
+    document.querySelectorAll('[data-vistetab] [role="tab"]').forEach(function(t){ t.setAttribute("aria-selected", String(t.dataset.vaia === nome)); t.tabIndex = t.dataset.vaia === nome ? 0 : -1; });
   }
   document.getElementById("regiaSchermo").addEventListener("talos:tab", function(e){ mostra(e.detail.tab.dataset.schermo); });
   document.getElementById("regiaDensita").addEventListener("talos:tab", function(e){ radice.setAttribute("data-densita", e.detail.tab.dataset.densita); });
@@ -1481,7 +1565,7 @@ button{background:none; border:0; cursor:pointer; padding:0}
   document.querySelectorAll("[data-vaia]").forEach(function(b){ b.addEventListener("click", function(){ mostra(b.dataset.vaia); }); });
 
   /* ---- Disclosure (Altro, attrezzi del giro) ---- */
-  document.querySelectorAll("[aria-expanded][aria-controls]").forEach(function(t){
+  document.querySelectorAll("[aria-expanded][aria-controls]:not([data-browser-demo])").forEach(function(t){
     t.addEventListener("click", function(){ var c = document.getElementById(t.getAttribute("aria-controls")); if (!c) return; var a = t.getAttribute("aria-expanded") === "true"; t.setAttribute("aria-expanded", String(!a)); c.hidden = a; });
   });
 
@@ -1565,6 +1649,84 @@ button{background:none; border:0; cursor:pointer; padding:0}
   /* ---- Inventario: conta i blocchi dichiarati ---- */
   var nomi = {}; document.querySelectorAll("[data-c]").forEach(function(el){ nomi[el.dataset.c] = 1; });
   var conto = document.getElementById("contoComponenti"); if (conto) conto.textContent = Object.keys(nomi).length + " blocchi · " + document.querySelectorAll("[data-c]").length + " istanze";
+
+
+ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+ const pagineBrowserDemo = [{"id":"home","url":"https://example.org/","titolo":"Pagina iniziale del progetto","autore":"Agente","quando":"2026-09-05T08:39:00.000Z","testo":"Progetto di esempio\n\nQuesta è una lettura dimostrativa, conservata nella sessione.\nLa documentazione descrive il registro dei processi.\n\nTesto non attendibile, mostrato letteralmente:\n\u003cbutton id=\"astra-untrusted\">Non eseguire\u003c/button>"},{"id":"docs","url":"https://example.org/documentazione","titolo":"Registro dei processi","autore":"Agente","quando":"2026-09-05T08:42:00.000Z","testo":"Registro dei processi\n\nIl registro raccoglie i processi avviati durante una sessione e mostra l’ultimo evento ricevuto.\n\nRiconoscere uno stallo\n- Silenzio prolungato: nessun nuovo evento.\n- Giri a vuoto: la stessa richiesta ripetuta senza progresso.\n- Il processo resta disponibile per una decisione dell’utente.\n\nUna segnalazione di stallo non termina il processo."}];
+ let indiceBrowserDemo = pagineBrowserDemo.length-1;
+ const annotazioniBrowserDemo = new Map();
+ const bozzeBrowserDemo = new Map();
+ function selezionaPaginaBrowser(indice){
+  if(!Number.isInteger(indice)||indice<0||indice>=pagineBrowserDemo.length||$('#statoBrowser').value==='vuoto')return;
+  indiceBrowserDemo=indice;$('#browserEditorNota').hidden=true;renderizzaBrowserDemo();
+ }
+ function renderizzaBrowserDemo(){
+  const vuoto=$('#statoBrowser').value==='vuoto', pagina=pagineBrowserDemo[indiceBrowserDemo];
+  $('#browserVuoto').hidden=!vuoto;$('#browserPagina').hidden=vuoto;
+  $('#schermoBrowser [data-c="BrowserHistory"]').hidden=vuoto;
+  $('#browserRiepilogo').textContent=vuoto?'Nessuna lettura acquisita · stato di esempio':'Testo acquisito dall’agente · 2 pagine di esempio';
+  $('#urlBrowser').value=vuoto?'':pagina.url;
+  $('#browserPosizione').textContent=vuoto?'0 pagine':'Lettura '+(indiceBrowserDemo+1)+' di '+pagineBrowserDemo.length;
+  $('#browserTitolo').textContent=pagina.titolo;
+  $('#browserTesto').textContent=pagina.testo;
+  $('#browserProvenienza').textContent=pagina.autore+' · '+new Intl.DateTimeFormat('it-IT',{timeZone:'Europe/Rome',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(pagina.quando))+' (Roma) · '+pagina.testo.length+' caratteri · esempio';
+  $$('#schermoBrowser [data-browser-demo]').forEach(b=>{b.disabled=vuoto||(b.dataset.browserDemo==='back'&&indiceBrowserDemo===0)||(b.dataset.browserDemo==='forward'&&indiceBrowserDemo===pagineBrowserDemo.length-1);});
+  $$('#schermoBrowser [data-pagina-browser]').forEach(b=>{b.disabled=vuoto;if(!vuoto&&Number(b.dataset.paginaBrowser)===indiceBrowserDemo)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
+  const nota=annotazioniBrowserDemo.get(pagina.id)||'';
+  $('#browserNotaInput').value=bozzeBrowserDemo.get(pagina.id)??nota;
+  $('#browserNotaSalvata').hidden=!nota||vuoto;
+  $('#browserNotaSalvata').textContent=nota?'Nota locale · Non inviata · si azzera al ricaricamento\n'+nota:'';
+  if(vuoto)$('#browserEditorNota').hidden=true;
+  $('[data-browser-demo="note"]').setAttribute('aria-expanded',String(!$('#browserEditorNota').hidden));
+ }
+ function annotaPaginaBrowser(){
+  const pagina=pagineBrowserDemo[indiceBrowserDemo], composer=$('#composerInput');
+  const testo='Riguardo alla pagina '+pagina.url+': ';
+  composer.value=(composer.value.trim()?composer.value+'\n\n':'')+testo;
+  mostra('chat');composer.focus();composer.setSelectionRange(composer.value.length,composer.value.length);
+ }
+ function conservaNotaBrowser(){
+  const testo=$('#browserNotaInput').value.trim(), pagina=pagineBrowserDemo[indiceBrowserDemo];
+  if(testo)annotazioniBrowserDemo.set(pagina.id,testo);else annotazioniBrowserDemo.delete(pagina.id);
+  bozzeBrowserDemo.delete(pagina.id);
+  $('#browserEditorNota').hidden=true;renderizzaBrowserDemo();$('[data-browser-demo="note"]').focus();
+ }
+ async function copiaPaginaBrowser(){
+  const testo=pagineBrowserDemo[indiceBrowserDemo].testo;
+  try{await navigator.clipboard.writeText(testo);$('#browserAvviso').textContent='Testo copiato negli appunti.';}
+  catch{const range=document.createRange();range.selectNodeContents($('#browserTesto'));const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);$('#browserTesto').focus();$('#browserAvviso').textContent='Copia automatica non disponibile. Il testo è selezionato: premi Ctrl+C o ⌘C.';}
+  $('#browserAvviso').hidden=false;
+ }
+ function concludiRichiestaBrowser(messaggio){
+  $('#statoBrowser').value='pagina';cambiaStatoBrowser();
+  $('#browserAvviso').textContent=messaggio;$('#browserAvviso').hidden=false;
+ }
+ function cambiaStatoBrowser(){
+  const state=$('#statoBrowser').value;
+  $('#browserBloccato').hidden=state!=='bloccata';$('#browserCaricamento').hidden=state!=='caricamento';
+  $('#browserAvviso').hidden=true;renderizzaBrowserDemo();
+ }
+
+ document.querySelector('#schermoBrowser').addEventListener('click',e=>{
+ const b=e.target.closest('button');if(!b||b.disabled)return;
+ if(b.hasAttribute('data-pagina-browser'))selezionaPaginaBrowser(Number(b.dataset.paginaBrowser));
+ const a=b.dataset.browserDemo;
+ if(a==='reload'){$('#statoBrowser').value='caricamento';cambiaStatoBrowser();}
+ if(a==='back')selezionaPaginaBrowser(indiceBrowserDemo-1);
+ if(a==='forward')selezionaPaginaBrowser(indiceBrowserDemo+1);
+ if(a==='annotate')annotaPaginaBrowser();
+ if(a==='copy')void copiaPaginaBrowser();
+ if(a==='open')window.open(pagineBrowserDemo[indiceBrowserDemo].url,'_blank','noopener,noreferrer');
+ if(a==='note'){$('#browserEditorNota').hidden=!$('#browserEditorNota').hidden;renderizzaBrowserDemo();if(!$('#browserEditorNota').hidden)$('#browserNotaInput').focus();}
+ if(b.dataset.action==='consentiBrowser'){concludiRichiestaBrowser('Permesso simulato. Nessuna navigazione reale.');selezionaPaginaBrowser(1);}
+ if(b.dataset.action==='negaBrowser')concludiRichiestaBrowser('Richiesta negata. Letture precedenti conservate.');
+ if(b.dataset.action==='completaBrowser')concludiRichiestaBrowser('Lettura di esempio completata.');
+ if(b.dataset.action==='annullaBrowser')concludiRichiestaBrowser('Navigazione annullata. Ultima lettura conservata.');
+ if(b.dataset.action==='conservaNotaBrowser')conservaNotaBrowser();
+ if(b.dataset.action==='chiudiNotaBrowser'){bozzeBrowserDemo.delete(pagineBrowserDemo[indiceBrowserDemo].id);$('#browserEditorNota').hidden=true;renderizzaBrowserDemo();$('[data-browser-demo="note"]').focus();}
+ });
+ $('#browserNotaInput').addEventListener('input',e=>bozzeBrowserDemo.set(pagineBrowserDemo[indiceBrowserDemo].id,e.target.value));
+ $('#statoBrowser').addEventListener('change',cambiaStatoBrowser);
 
   disegnaLingua();
 
