@@ -374,6 +374,17 @@ button{background:none; border:0; cursor:pointer; padding:0}
 .talos-artifact__head{display:flex; align-items:center; gap:10px; padding:8px 8px 8px 14px; border-bottom:1px solid var(--talos-border-subtle)}
 .talos-artifact__title{font-weight:600; font-size:13.5px; color:var(--talos-text)}
 .talos-artifact__frame{display:block; width:100%; height:320px; border:0; background:var(--talos-window-bg)}
+/* Le impostazioni d'aspetto dell'originale (Impostazioni → Aspetto), applicate dal monolite sulla radice: qui il CSS le onora (05/09, raccordo con B6 di Astra) */
+:root{--talos-ui-font-scale:1}
+.talos-shell{zoom:var(--talos-ui-font-scale, 1)}
+.talos-message p, .talos-message__copy, .talos-message__body p{font-size:var(--talos-chat-font-size, 14px)}
+:root[data-talos-message-style="bubbles"] .talos-message:not(.talos-message--user) > p, :root[data-talos-message-style="bubbles"] .talos-message:not(.talos-message--user) > .talos-message__copy{background:var(--talos-panel-soft); border:1px solid var(--talos-border-subtle); border-radius:14px; padding:12px 16px}
+:root[data-talos-composer-shape="classic"] .talos-composer{border-radius:8px}
+:root[data-talos-composer-shape="compact"] .talos-composer{padding:8px 10px 6px; border-radius:11px}
+:root[data-talos-composer-shape="compact"] .talos-composer__input{min-height:32px}
+:root.chat-full-width .talos-conversation__column, :root.chat-full-width .talos-chat-foot > *{max-width:none}
+:root.immersive-header .talos-topbar{border-bottom-color:transparent}
+body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{animation:none!important; transition:none!important}
 .talos-touched{margin-top:10px; overflow:hidden}
 .talos-touched__head{padding:10px 14px; border-bottom:1px solid var(--talos-border-subtle)}
 .talos-touched__row{display:flex; align-items:center; gap:10px; min-height:var(--talos-row); padding:0 14px}
