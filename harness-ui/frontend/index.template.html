@@ -129,7 +129,7 @@
           <button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-selected="true">Chat</button>
           <button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-selected="false">Terminale <span class="talos-tabs__count">2</span></button>
           <button class="talos-tabs__tab" role="tab" data-vaia="review" aria-selected="false">Review <span class="talos-tabs__count">3</span></button>
-        </div></div>
+        <button class="talos-tabs__tab" role="tab" data-vaia="browser" aria-controls="schermoBrowser" aria-selected="false">Browser</button></div></div>
         <div class="talos-topbar__actions"><button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" data-apre-velo="veloAlbero" title="Albero dei rami"><svg class="i"><use href="#i-branch"/></svg></button><button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" title="Riprendi"><svg class="i"><use href="#i-play"/></svg></button></div>
       </div>
 
@@ -295,7 +295,7 @@
       <div class="talos-topbar" data-c="Topbar">
         <div class="talos-topbar__title"><h1>W1-02 registro processi</h1></div>
         <span class="talos-topbar__path">~/Desktop/projects/AVM-harness-desktop</span>
-        <div class="talos-tabs"><div class="talos-tabs__list" role="tablist" data-vistetab><button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-selected="false">Chat</button><button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-selected="true">Terminale <span class="talos-tabs__count">2</span></button><button class="talos-tabs__tab" role="tab" data-vaia="review" aria-selected="false">Review <span class="talos-tabs__count">3</span></button></div></div>
+        <div class="talos-tabs"><div class="talos-tabs__list" role="tablist" data-vistetab><button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-selected="false">Chat</button><button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-selected="true">Terminale <span class="talos-tabs__count">2</span></button><button class="talos-tabs__tab" role="tab" data-vaia="review" aria-selected="false">Review <span class="talos-tabs__count">3</span></button><button class="talos-tabs__tab" role="tab" data-vaia="browser" aria-controls="schermoBrowser" aria-selected="false">Browser</button></div></div>
       </div>
       <div class="talos-terminal" data-c="TerminalPane">
         <div class="talos-terminal__tabs" role="tablist">
@@ -325,7 +325,7 @@
       <div class="talos-topbar" data-c="Topbar">
         <div class="talos-topbar__title"><h1>W1-02 registro processi</h1></div>
         <span class="talos-topbar__path">3 file modificati · +112 −2</span>
-        <div class="talos-tabs"><div class="talos-tabs__list" role="tablist" data-vistetab><button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-selected="false">Chat</button><button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-selected="false">Terminale <span class="talos-tabs__count">2</span></button><button class="talos-tabs__tab" role="tab" data-vaia="review" aria-selected="true">Review <span class="talos-tabs__count">3</span></button></div></div>
+        <div class="talos-tabs"><div class="talos-tabs__list" role="tablist" data-vistetab><button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-selected="false">Chat</button><button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-selected="false">Terminale <span class="talos-tabs__count">2</span></button><button class="talos-tabs__tab" role="tab" data-vaia="review" aria-selected="true">Review <span class="talos-tabs__count">3</span></button><button class="talos-tabs__tab" role="tab" data-vaia="browser" aria-controls="schermoBrowser" aria-selected="false">Browser</button></div></div>
         <div class="talos-topbar__actions"><button class="talos-button talos-button--secondary talos-button--sm">Accetta tutto</button><button class="talos-button talos-button--ghost talos-button--sm talos-button--danger">Scarta tutto</button></div>
       </div>
       <div class="talos-review" data-c="ReviewPane">
@@ -359,6 +359,67 @@
         </div>
       </div>
     </section>
+
+<section id="schermoBrowser" class="talos-screen" data-c="BrowserScreen" hidden><div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>W1-02 registro processi</h1></div><span class="talos-grow"></span><div class="talos-tabs" data-c="Tabs"><div class="talos-tabs__list" role="tablist" aria-label="Viste della sessione" data-vistetab><button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-controls="schermoChat" aria-selected="false">Chat</button><button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-controls="schermoTerminale" aria-selected="false">Terminale</button><button class="talos-tabs__tab" role="tab" data-vaia="review" aria-controls="schermoReview" aria-selected="false">Review</button><button class="talos-tabs__tab" role="tab" data-vaia="browser" aria-controls="schermoBrowser" aria-selected="true">Browser</button></div></div></div>
+<div class="talos-page  talos-browser" data-c="Page">
+  <div class="talos-toolbar"><div><h2 class="talos-browser__heading">Letture della sessione</h2><p class="talos-muted talos-browser__meta" id="browserRiepilogo">Testo acquisito dall’agente · 2 pagine di esempio</p></div>
+    <label class="talos-muted talos-browser__meta">Stato dimostrativo <select class="talos-select talos-select--sm" id="statoBrowser"><option value="pagina">Pagina acquisita</option><option value="vuoto">Nessuna pagina</option><option value="bloccata">Richiesta di permesso</option><option value="caricamento">Caricamento</option></select></label>
+  </div>
+  <div class="talos-card talos-browser__space" data-c="BrowserViewport">
+    <div class="talos-browser__bar">
+      <button class="talos-button talos-button--secondary talos-button--sm talos-icon-button" data-browser-demo="back" aria-label="Pagina letta precedente" title="Pagina letta precedente"><svg class="i talos-browser__back" aria-hidden="true"><use href="#i-chev"/></svg></button>
+      <button class="talos-button talos-button--secondary talos-button--sm talos-icon-button" data-browser-demo="forward" disabled aria-label="Pagina letta successiva" title="Pagina letta successiva"><svg class="i talos-browser__next" aria-hidden="true"><use href="#i-chev"/></svg></button>
+      <div class="talos-field"><svg class="i talos-field__icon" aria-hidden="true"><use href="#i-globe"/></svg><label class="talos-browser__sr" for="urlBrowser">Indirizzo della pagina acquisita</label><input class="talos-field__input" id="urlBrowser" value="https://example.org/documentazione" readonly aria-describedby="browserLimiti"></div>
+      <button class="talos-button talos-button--secondary talos-button--sm talos-icon-button" data-browser-demo="open" aria-label="Apri fuori da TALOS" title="Apri fuori da TALOS"><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg></button>
+    </div>
+    <div class="talos-browser__tools">
+      <span class="talos-muted talos-browser__meta" id="browserPosizione" role="status">Lettura 2 di 2</span><span class="talos-grow"></span>
+      <button class="talos-button talos-button--ghost talos-button--sm" data-browser-demo="reload">Rileggi</button>
+      <button class="talos-button talos-button--secondary talos-button--sm" data-browser-demo="annotate" title="Prepara una bozza nella chat senza inviarla">Annota</button>
+      <button class="talos-button talos-button--ghost talos-button--sm" data-browser-demo="note" aria-expanded="false" aria-controls="browserEditorNota">Nota locale</button>
+      <button class="talos-button talos-button--ghost talos-button--sm" data-browser-demo="copy">Copia testo</button>
+    </div>
+    <div id="browserAvviso" class="talos-browser__notice" role="status" hidden></div>
+    <div id="browserBloccato" class="talos-browser__request" hidden>
+      <span class="talos-badge talos-badge--sm talos-badge--warning">Richiesta dimostrativa</span><h3 class="talos-browser__heading">Consentire questa lettura?</h3>
+      <p class="talos-muted">L’agente chiede di leggere https://example.org/documentazione. La scelta vale per questa richiesta.</p>
+      <div class="talos-cluster"><button class="talos-button talos-button--primary talos-button--sm" data-action="consentiBrowser">Consenti una volta</button><button class="talos-button talos-button--secondary talos-button--sm" data-action="negaBrowser">Nega</button></div>
+      <p class="talos-muted talos-browser__meta" id="browserPermessoNota">Simulazione: nessuna richiesta di rete viene eseguita.</p>
+    </div>
+    <div id="browserCaricamento" class="talos-browser__request" hidden>
+      <h3 class="talos-browser__heading">Lettura in corso…</h3><p class="talos-muted">Simulazione di attesa. L’ultima pagina acquisita resta consultabile.</p>
+      <button class="talos-button talos-button--primary talos-button--sm" data-action="completaBrowser">Completa esempio</button>
+      <button class="talos-button talos-button--secondary talos-button--sm" data-action="annullaBrowser">Annulla navigazione</button>
+    </div>
+    <div id="browserVuoto" class="talos-empty talos-browser__pad" hidden><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg><h3>Nessuna pagina letta</h3><p class="talos-muted">Le letture dell’agente appariranno qui, con indirizzo e testo acquisito.</p></div>
+    <article id="browserPagina" aria-labelledby="browserTitolo">
+      <header class="talos-browser__head"><h2 id="browserTitolo">Registro dei processi</h2><p class="talos-muted talos-browser__meta" id="browserProvenienza">Agente · 05/09, 10:42 (Roma) · 365 caratteri · esempio</p></header>
+      <pre id="browserTesto" class="talos-browser__text" tabindex="0" aria-label="Testo acquisito della pagina">Registro dei processi
+
+Il registro raccoglie i processi avviati durante una sessione e mostra l’ultimo evento ricevuto.
+
+Riconoscere uno stallo
+- Silenzio prolungato: nessun nuovo evento.
+- Giri a vuoto: la stessa richiesta ripetuta senza progresso.
+- Il processo resta disponibile per una decisione dell’utente.
+
+Una segnalazione di stallo non termina il processo.</pre>
+      <div id="browserEditorNota" class="talos-browser__note" hidden>
+        <label class="talos-stack" for="browserNotaInput">Nota su questa lettura<textarea class="talos-field__input" id="browserNotaInput" rows="3" placeholder="Un dubbio, un controllo da fare…" aria-describedby="browserNotaScope"></textarea></label>
+        <div class="talos-cluster"><span id="browserNotaScope" class="talos-muted talos-browser__meta">Solo in questo mockup · si azzera al ricaricamento</span><span class="talos-grow"></span><button class="talos-button talos-button--primary talos-button--sm" data-action="conservaNotaBrowser">Conserva nota</button><button class="talos-button talos-button--ghost talos-button--sm" data-action="chiudiNotaBrowser">Annulla</button></div>
+      </div>
+      <div id="browserNotaSalvata" class="talos-browser__note" role="status" hidden></div>
+    </article>
+  </div>
+  <nav class="talos-browser__history talos-browser__space" aria-label="Pagine lette in questa sessione" data-c="BrowserHistory">
+    <h3 class="talos-browser__heading">Cronologia <span class="talos-muted talos-browser__meta">· scegli una lettura</span></h3>
+    <div class="talos-browser__history-list">
+      <button class="talos-browser__entry" data-pagina-browser="0"><span class="talos-muted talos-browser__meta">01 · Agente · 10:39</span><strong>Pagina iniziale del progetto</strong><span class="talos-muted talos-browser__meta">example.org</span></button>
+      <button class="talos-browser__entry" data-pagina-browser="1" aria-current="page"><span class="talos-muted talos-browser__meta">02 · Agente · 10:42</span><strong>Registro dei processi</strong><span class="talos-muted talos-browser__meta">example.org/documentazione</span></button>
+    </div>
+  </nav>
+  <p id="browserLimiti" class="talos-muted talos-browser__meta talos-browser__space">Copia testuale, senza navigazione interattiva. Dati e note dimostrativi: si azzerano al ricaricamento.</p>
+</div></section>
 
     <!-- ---------- CAPABILITY (C1-C11) ---------- -->
     <section class="talos-screen" id="schermoCapability" data-c="CapabilityScreen" hidden>

@@ -43,7 +43,7 @@ const FONT_LOCALI = [
   ['JetBrains Mono', 500, 'jetbrains-mono-latin-500-normal'],
 ].map(([famiglia, peso, file]) => `@font-face{font-family:'${famiglia}';font-weight:${peso};font-style:normal;font-display:block;src:url('${FONT_DIR}/${file}.woff2') format('woff2')}`).join('');
 
-const SCHERMATE = ['schermoChat', 'schermoVuota', 'schermoTerminale', 'schermoReview', 'schermoCapability', 'schermoBoard', 'schermoMemoria', 'schermoAttivita', 'schermoImpostazioni', 'schermoDoctor', 'schermoLibreria', 'schermoRicerca', 'schermoOfficina', 'schermoAutomazioni'];
+const SCHERMATE = ['schermoChat', 'schermoVuota', 'schermoTerminale', 'schermoReview', 'schermoCapability', 'schermoBoard', 'schermoMemoria', 'schermoAttivita', 'schermoImpostazioni', 'schermoDoctor', 'schermoLibreria', 'schermoRicerca', 'schermoOfficina', 'schermoAutomazioni', 'schermoBrowser'];
 const DIALOGHI = ['veloNuova', 'veloPermessi', 'veloAlbero'];
 /* Soglia: differenza per pixel (0..1) e quota massima di pixel diversi. */
 const SOGLIA_PIXEL = 0.12;
@@ -100,7 +100,7 @@ async function apri(browser, url, { js, viewport }) {
  * disegno. Qui si fa ESATTAMENTE ciò che fa `mostra()` nel mockup, e in Fase 1
  * `setView()` di `app.js` farà lo stesso.
  */
-const DI_SESSIONE = new Set(['chat', 'vuota', 'terminale', 'review']);
+const DI_SESSIONE = new Set(['chat', 'vuota', 'terminale', 'review', 'browser']);
 const nomeBreve = (id) => id.replace(/^schermo/, '').toLowerCase();
 async function mostra(pagina, id, velo = null) {
   const nome = nomeBreve(id);
@@ -109,6 +109,7 @@ async function mostra(pagina, id, velo = null) {
     for (const v of document.querySelectorAll('[id^="velo"]')) v.hidden = v.id !== veloAperto;
     document.documentElement.setAttribute('data-vista', sessione ? 'sessione' : 'pagina');
     document.documentElement.setAttribute('data-schermo', nome);
+    for (const t of document.querySelectorAll('[data-vistetab] [role=tab]')) { t.setAttribute('aria-selected',String(t.dataset.vaia===nome)); t.tabIndex=t.dataset.vaia===nome?0:-1; }
   }, { mostrata: id, veloAperto: velo, nome, sessione: DI_SESSIONE.has(nome) });
 }
 
@@ -140,7 +141,12 @@ async function confrontaPixel(nome, a, b) {
   const diversi = pixelmatch(pa.data, pb.data, diff.data, pa.width, pa.height, { threshold: SOGLIA_PIXEL });
   const quota = diversi / (pa.width * pa.height);
   const ok = quota <= QUOTA_MASSIMA;
-  // Le immagini si scrivono solo quando servono a qualcuno: sul rosso.
+  if(nome.startsWith('schermoBrowser')){
+    const consegna=path.resolve(radice,'../../.claude/immagini/astra-mockup');
+    await mkdir(consegna,{recursive:true});
+    await writeFile(path.join(consegna,'browser-'+pa.width+'.png'),a);
+  }
+  // Le differenze si conservano sul rosso.
   if (!ok) {
     await writeFile(path.join(ARTEFATTI, `${nome}-mockup.png`), a);
     await writeFile(path.join(ARTEFATTI, `${nome}-app.png`), b);
@@ -201,3 +207,41 @@ test.describe('parità app ↔ mockup', () => {
     });
   }
 });
+
+ test('ASTRA Browser navigazione, letture e permessi', async ({browser}, info) => {
+ const {contesto,pagina:p}=await apri(browser,MOCKUP,{js:true,viewport:info.project.use.viewport});
+ const errori=[];p.on('pageerror',e=>errori.push(e.message));
+ try {
+  await expect(p.locator('#schermoBrowser')).toHaveCount(1);
+  await p.locator('#schermoChat [data-vaia="browser"]').click();
+  await expect(p.locator('#schermoBrowser')).toBeVisible();
+  await expect(p.locator('#schermoBrowser [data-vaia=browser]')).toHaveAttribute('aria-selected','true');
+  await expect(p.locator('#browserTesto')).toContainText('registro raccoglie');
+  await p.locator('[data-browser-demo="back"]').click();
+  await expect(p.locator('#browserTesto')).toContainText('<button id="astra-untrusted">');
+  await expect(p.locator('#astra-untrusted')).toHaveCount(0);
+  await expect(p.locator('[data-browser-demo="back"]')).toBeDisabled();
+  await p.locator('#statoBrowser').selectOption('bloccata');
+  await p.locator('[data-action="negaBrowser"]').click();
+  await expect(p.locator('#urlBrowser')).toHaveValue('https://example.org/');
+  await p.locator('#statoBrowser').selectOption('bloccata');
+  await p.locator('[data-action="consentiBrowser"]').click();
+  await expect(p.locator('#urlBrowser')).toHaveValue('https://example.org/documentazione');
+  await p.locator('#statoBrowser').selectOption('vuoto');
+  await expect(p.locator('#browserVuoto')).toBeVisible();
+  await expect(p.locator('[data-browser-demo="annotate"]')).toBeDisabled();
+  await p.locator('#statoBrowser').selectOption('pagina');
+  await p.locator('[data-browser-demo="reload"]').click();
+  await expect(p.locator('#browserCaricamento')).toBeVisible();
+  await p.locator('[data-action="annullaBrowser"]').click();
+  await p.locator('[data-browser-demo="note"]').click();
+  await p.locator('#browserNotaInput').fill('Nota conservata');
+  await p.locator('[data-action="conservaNotaBrowser"]').click();
+  await expect(p.locator('#browserNotaSalvata')).toContainText('Nota conservata');
+  expect(await p.locator('#schermoBrowser').evaluate(e=>e.scrollWidth<=e.clientWidth)).toBe(true);
+  await p.locator('[data-browser-demo="annotate"]').click();
+  await expect(p.locator('#schermoChat')).toBeVisible();
+  await expect(p.locator('#composerInput')).toHaveValue(/Riguardo alla pagina https:/);
+  expect(errori).toEqual([]);
+ } finally {await contesto.close();}
+ });

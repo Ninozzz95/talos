@@ -565,3 +565,24 @@ button{background:none; border:0; cursor:pointer; padding:0}
 @media (max-width:760px){ .talos-picker{grid-template-columns:minmax(0,1fr)} }
 @media (prefers-reduced-motion: reduce){ *{animation:none !important; transition:none !important} }
 .talos-composer__input::placeholder{color:var(--talos-muted);opacity:1}
+
+/* Browser: composizione delle primitive del mockup, nessun token nuovo. */
+.talos-browser__bar,.talos-browser__tools{display:flex;align-items:center;gap:var(--talos-space-sm);padding:var(--talos-space-control);flex-wrap:wrap}
+.talos-browser__bar .talos-field{flex:1;min-width:0}
+.talos-browser__meta{font-size:var(--talos-font-size-xs)}
+.talos-browser__heading{font-size:var(--talos-font-size-md)}
+.talos-browser__space{margin-top:var(--talos-space-md)}
+.talos-browser__head,.talos-browser__pad,.talos-browser__request,.talos-browser__notice,.talos-browser__note{padding:var(--talos-space-md)}
+.talos-browser__request,.talos-browser__note{background:var(--talos-panel-soft)}
+.talos-browser__request>*+*{margin-top:var(--talos-space-sm)}
+.talos-browser__head h2{font-size:var(--talos-font-size-lg)}
+.talos-browser__text{white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:var(--talos-space-md);font-family:var(--talos-font-mono);font-size:var(--talos-font-size-xs);color:var(--talos-assistant-text)}
+.talos-browser__history-list{display:flex;gap:var(--talos-space-sm);flex-wrap:wrap;margin-top:var(--talos-space-sm)}
+.talos-browser__entry{flex:1;display:flex;flex-direction:column;gap:var(--talos-space-xs);text-align:left;padding:var(--talos-space-control);border:var(--talos-focus-width) solid var(--talos-border);border-radius:var(--talos-radius-card);background:var(--talos-card);overflow-wrap:anywhere}
+.talos-browser__entry[aria-current="page"]{border-color:var(--talos-accent-border);background:var(--talos-accent-soft)}
+.talos-browser__note{white-space:pre-wrap;overflow-wrap:anywhere}
+.talos-browser__back{transform:rotate(90deg)}
+.talos-browser__next{transform:rotate(-90deg)}
+.talos-browser__sr{position:absolute;clip-path:inset(100%);overflow:hidden;width:0;height:0}
+.talos-topbar:has([data-vistetab]){height:auto;min-height:var(--talos-topbar-h);flex-wrap:wrap;padding-block:var(--talos-space-sm)}
+.talos-topbar [data-vistetab]{flex-wrap:wrap}
