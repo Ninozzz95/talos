@@ -1,3 +1,4 @@
+import { aggiornaPaginaCapability, creaToolListRow } from '../components/capability.js';
 import { creaAutomationRow, aggiornaPaginaAutomazioni } from '../components/automazioni.js';
 import { creaForgeRow, aggiornaPaginaOfficina } from '../components/officina.js'; // 05/9 Fase 2: Officina
 import { creaReportRow, aggiornaPaginaRicerca } from '../components/ricerca.js'; // 05/9 Fase 2: Ricerca
@@ -1167,6 +1168,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (view === 'settings') inizializzaModelLab();
     if (view === 'dashboard') ensureSessionsBoard();
     if (view === 'ricerca') caricaPannelloRicerca({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Ricerca
+    if (view === 'capability') caricaPannelloAttrezzi({ pagina: true }); // 05/9 Fase 2: ToolList
     if (view === 'officina') caricaPannelloForge({ pagina: true }); // 05/9 Fase 2: pagina Officina
     if (view === 'libreria') caricaPannelloLibreria({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Libreria
     if (view === 'attivita') caricaPannelloAttivita({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Attività
@@ -3922,7 +3924,52 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * DICHIARA nell'intestazione — mai spacciato per lo stato di una
    * sessione che non esiste.
    */
-  async function caricaPannelloAttrezzi() {
+  // 05/9 Fase 2: ToolList, stesso catalogo e stesso salvataggio dei permessi.
+  let generazioneCapability = 0, datiCapability = [], ambitoCapability = null, scritturaCapability = false, vistaCapability = {};
+  function mostraCapability(opzioni = {}) {
+    const schermo = document.getElementById('schermoCapability'); if (!schermo) return;
+    vistaCapability = { ...vistaCapability, ...opzioni };
+    aggiornaPaginaCapability(schermo, datiCapability, { ...vistaCapability, ambito: ambitoCapability, salvataggio: scritturaCapability,
+      uso: ambitoCapability === state.realSession.id && ambitoCapability ? riassuntoAttrezziDaEventi(state.realSession.eventiAttrezzi) : null,
+      onAggiorna: () => caricaPannelloAttrezzi({ pagina: true }), onPermesso: salvaPermessoCapability });
+  }
+  async function salvaPermessoCapability(attrezzo, valore) {
+    const id = state.realSession.id, nome = attrezzo.nome;
+    if (scritturaCapability || !id || id !== ambitoCapability || !attrezzo.permessoConfigurabile || !['', 'sempre', 'chiedi', 'nega'].includes(valore)) return;
+    const precedente = attrezzo.permesso || undefined;
+    const prossimi = { ...state.permessiPerAttrezzo };
+    for (const a of datiCapability) if (a.permessoConfigurabile) { if (a.permesso) prossimi[a.nome] = a.permesso; else delete prossimi[a.nome]; }
+    if (valore) prossimi[nome] = valore; else delete prossimi[nome];
+    scritturaCapability = true; mostraCapability({ erroreAzione: '' });
+    state.permessiPerAttrezzo = prossimi;
+    try {
+      await sincronizzaImpostazioniSessione({ permessiPerAttrezzo: Object.keys(prossimi).length ? { ...prossimi } : null });
+      if (state.realSession.id === id) await caricaPannelloAttrezzi({ pagina: true });
+    } catch (error) {
+      if (state.realSession.id === id) {
+        if (state.permessiPerAttrezzo[nome] === (valore || undefined)) { if (precedente === undefined) delete state.permessiPerAttrezzo[nome]; else state.permessiPerAttrezzo[nome] = precedente; salvaPreferenzeChatDesktop(); }
+        mostraCapability({ erroreAzione: 'Permesso per '+(nomeUmanoAttrezzo(nome)||'questo attrezzo')+' non salvato: '+error.message });
+      }
+    } finally { scritturaCapability = false; mostraCapability(); }
+  }
+  async function caricaPannelloAttrezzi({ pagina = false } = {}) {
+    if (pagina) {
+      const id = state.realSession.id || null, generazione = ++generazioneCapability;
+      if (ambitoCapability !== id) datiCapability = [];
+      ambitoCapability = id; mostraCapability({ caricamento: true, errore: '', erroreAzione: '' });
+      try {
+        const dati = await apiGet(id ? '/api/v1/sessions/'+encodeURIComponent(id)+'/tools' : '/api/v1/tools');
+        if (generazione !== generazioneCapability || (state.realSession.id || null) !== id) return;
+        if (dati.errore || !Array.isArray(dati.attrezzi)) throw new Error(dati.errore || 'Il catalogo degli attrezzi non è osservabile.');
+        if (dati.attrezzi.some(a => !a || typeof a !== 'object' || typeof a.nome !== 'string' || !a.nome.trim()) || new Set(dati.attrezzi.map(a=>a.nome)).size !== dati.attrezzi.length) throw new Error('Il catalogo contiene voci non valide. Riprova con Aggiorna.');
+        datiCapability = dati.attrezzi; mostraCapability({ caricamento: false, errore: '' });
+      } catch (error) {
+        if (generazione !== generazioneCapability || (state.realSession.id || null) !== id) return;
+        datiCapability = []; mostraCapability({ caricamento: false, errore: error.message });
+      }
+      return;
+    }
+
     const mount = $('#toolsListMount', sheetBody);
     if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
     const conSessione = Boolean(state.realSession.id);
@@ -3985,56 +4032,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * la finta che questa riga del piano doveva togliere.
    */
   function rigaAttrezzo(attrezzo, uso = null) {
-    const riga = document.createElement('div');
-    riga.className = 'sheet-option';
-    riga.setAttribute('role', 'group');
-    riga.dataset.toolName = attrezzo.nome;
-    const iconEl = document.createElement('span');
-    iconEl.className = 'sheet-icon';
-    iconEl.innerHTML = icon(ICONA_ATTREZZO[attrezzo.nome] || (attrezzo.categoria === 'base' ? 'i-code' : 'i-bolt'));
-    const testo = document.createElement('span');
-    /*
-     * ⛔⛔⛔ owner 04/9: «nella UI non compaiono nomi tecnici degli attrezzi».
-     * L'etichetta principale è il nome umano (nomeUmanoAttrezzo, unica mappa);
-     * il nome tecnico resta come dettaglio secondario nel `title` qui sotto e
-     * in `data-tool-name` (dato, non testo a schermo) — e soprattutto resta
-     * INTATTO nel contratto col kernel, che questa riga non tocca.
-     */
-    testo.append(
-      textElement('strong', null, nomeUmanoAttrezzo(attrezzo.nome)),
-      textElement('small', null, attrezzo.descrizione.length > 150 ? `${attrezzo.descrizione.slice(0, 150)}…` : attrezzo.descrizione),
-    );
-    const chip = document.createElement('span');
-    chip.className = 'tool-chips';
-    if (attrezzo.dipendenza) {
-      chip.append(textElement('span', `status-chip ${attrezzo.dipendenza.stato === 'pronta' ? 'success' : 'error'}`, attrezzo.dipendenza.dettaglio));
-    }
-    if (attrezzo.permessoConfigurabile) {
-      chip.append(textElement('span', 'status-chip', attrezzo.permesso ? `permesso: ${attrezzo.permesso}` : 'permesso: come la sessione'));
-    }
-    chip.append(textElement('span', 'status-chip success', 'offerto'));
-    /*
-     * ⭐⭐⭐ O-02 (04/9) — quante volte QUESTA sessione lo ha chiamato, e
-     * quante di quelle chiamate erano identiche a una precedente. ⛔ Un
-     * attrezzo offerto e mai chiamato non riceve «usato 0 volte»: la sua
-     * assenza dal riepilogo è già il fatto, e uno zero in una riga e un
-     * «non registrato» nell'intestazione si leggerebbero uguali.
-     */
-    if (uso && uso.chiamate > 0) {
-      riga.dataset.toolChiamate = String(uso.chiamate);
-      chip.append(textElement('span', 'status-chip', `usato ${uso.chiamate} volt${uso.chiamate === 1 ? 'a' : 'e'}`));
-      if (uso.ripetute > 0) {
-        riga.dataset.toolRipetute = String(uso.ripetute);
-        chip.append(textElement('span', 'status-chip avviso', `${uso.ripetute} identich${uso.ripetute === 1 ? 'a' : 'e'}`));
-      }
-    }
-    riga.append(iconEl, testo, chip);
-    /* ⛔ QA visiva di O-01: la descrizione a schermo è tagliata a 150 caratteri — quella INTERA (la stessa che riceve il modello) deve restare leggibile, non sparire nel taglio. */
-    const usoTitle = uso && uso.chiamate > 0
-      ? `\nIn questa sessione: ${uso.chiamate} chiamate, di cui ${uso.ripetute} identiche a una precedente.`
-      : '';
-    riga.title = `${attrezzo.descrizione}\n\nNome tecnico (quello che riceve il modello): ${attrezzo.nome}\n~${attrezzo.tokenSchemaStimati} token di schema (stima) · attrezzo ${attrezzo.categoria}${usoTitle}`;
-    return riga;
+    return creaToolListRow(attrezzo, { selezionabile: false, uso });
   }
 
   /** ⭐ O-01 — solo estetica: un nome senza icona nota ricade su quella della sua categoria, mai su una sbagliata. */

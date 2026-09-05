@@ -16,6 +16,7 @@ import { MOCKUP, apri, confrontaPixel, mostra, struttura, testi } from './aiuto.
 const LAB = process.env.TALOS_LAB_URL || `http://127.0.0.1:${process.env.TALOS_LAB_PORT || 4176}`;
 
 const COMPONENTI = [
+  { nome: 'ToolList', schermata: 'schermoCapability', selettore: '#schermoCapability' },
   { nome: 'AutomationRow', schermata: 'schermoAutomazioni', selettore: '#schermoAutomazioni' },
   { nome: 'ForgeList', schermata: 'schermoOfficina', selettore: '#schermoOfficina' },
   { nome: 'ReportRow', schermata: 'schermoRicerca', selettore: '#schermoRicerca' },
@@ -55,6 +56,12 @@ test.describe('parità dei componenti ↔ mockup', () => {
       const nome = `comp-${comp.nome}-${info.project.name}`;
       const esito = await confrontaPixel(nome, await m.pagina.locator(comp.selettore).screenshot(), await a.pagina.locator(comp.selettore).screenshot());
       expect(esito.ok, `${nome}: ${esito.motivo} — vedi artifacts/parita/${nome}-diff.png`).toBe(true);
+      if (comp.nome === 'ToolList') {
+        expect(await a.pagina.locator('[data-cap-list] .talos-measure--estimate').allTextContents(), 'CAP-STIMA-PREFISSO').not.toEqual(expect.arrayContaining([expect.stringMatching(/^~/)]));
+        await a.pagina.locator('[data-cap-list] [role=option]').first().focus();await a.pagina.keyboard.press('End');await expect(a.pagina.locator('[data-cap-list] [role=option]').last()).toBeFocused();
+        expect(await a.pagina.locator('[data-cap-list]').evaluate(n=>n.getBoundingClientRect().height),'CAP-LISTA-LUNGA').toBeLessThanOrEqual(480);
+        await a.pagina.keyboard.press('Home');
+      }
       await m.contesto.close();
       await a.contesto.close();
     });

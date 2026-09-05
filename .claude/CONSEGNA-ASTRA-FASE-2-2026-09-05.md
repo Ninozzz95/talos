@@ -179,3 +179,44 @@ R-02 verificata: regressione RED→GREEN1/1; statico195/195 a1440/1280/1024. SHA
 Cosa deve fare l'owner · Nulla.
 Cosa fai tu dopo · Capability.
 Cosa rimane · B4→B6→B2→B7→B1→B8→Browser K-I. OAuth e computer-use solo PROPOSTE.
+
+## B4.1 consegna ToolList + DetailPanel — 05/09/2026
+Componente innestato sul catalogo HTTP e sul salvataggio impostazioni esistente. Ricerca per nome umano e tecnico, tre filtri, descrizione integra, stima e dipendenza separate dal permesso, quattro scelte con conferma server, ricarica e recupero. Nessuna nuova dipendenza, token, icona o blocco; riusati ToolList, DetailPanel, Toolbar, FilterChips, ScopeNote, PendingList. Quattro regole CSS circoscritte nel mockup canonico; template/CSS rigenerati.
+
+| Aspetto | Originale → proposta | Prova e verdetto |
+|---|---|---|
+| Copertura | Inventario nel foglio + permessi in altro foglio → selettore nel dettaglio, canale originale conservato | Quattro valori, POST/registry/JSONL/reload verificati. B4.1 funzionale; B4 completa ancora aperta |
+| Chiarezza | Descrizioni e uso piccoli nella modale → testo intero e separazione offerto/dipendenza/policy | Originale e app con sei voci equivalenti aperti alle tre larghezze; beneficio leggibilità e ricerca |
+| Accesso | Lista senza selezione → frecce/Home/End e selettore nativo | Fuoco mantenuto dopo salvataggio senza rubarlo se la persona si sposta; test permanente |
+| Responsive/densità | Modale centrata → lista/dettaglio affiancati a1440/1280, sovrapposti a1024 | A1280 la sesta riga con uso può richiedere scroll interno; ricerca mostra un risultato e dettaglio. Non si afferma meno passi in ogni situazione |
+| Errori | Toast generico → errore persistente con nome attrezzo e ripristino valore confermato | GET503/null e POST503, selezione diversa e Board/ritorno provati. Toast legacy ancora privo di stile: scenario B7-TOAST-FUORI-REGIONE, da chiudere prima del cutover |
+| Persistenza e latenza | Endpoint invariato → azioni serializzate e risposta obsoleta scartata | Salvataggio HTTP vero su registry e file isolati; nessun benchmark di velocità dichiarato |
+
+Verifiche finali: unità Capability3/3; componenti48/48; prova app12/12 a1440/1280/1024; npm run verify verde: build,53 unità/contratti, determinismo30file, statico195/195. Diff --check verde. Parità ToolList: immagini a1440/1280 identiche SHA256;1024 sotto soglia invariata, aperte entrambe. Aperto anche browser reale4177: runtime assente correttamente dichiarato, nessun falso catalogo. Le sei voci del test sono fixture dichiarate; API/registry/JSONL sono reali. Catalogo completo43 e chiamata al modello non verificati perché runtime locale non configurato: nessuna superiorità su tale copertura dichiarata. CAP-LISTA-LUNGA verifica altezza480 e End su sei voci, non uno stress test43.
+Prove selezionate e aperte, copiate manualmente da artifacts (23 PNG):
+- .claude/immagini/astra-fase2/ToolList/app-catalogo-1024.png
+- .claude/immagini/astra-fase2/ToolList/app-catalogo-1280.png
+- .claude/immagini/astra-fase2/ToolList/app-catalogo-1440.png
+- .claude/immagini/astra-fase2/ToolList/app-dettaglio-1024.png
+- .claude/immagini/astra-fase2/ToolList/app-dettaglio-1280.png
+- .claude/immagini/astra-fase2/ToolList/app-dettaglio-1440.png
+- .claude/immagini/astra-fase2/ToolList/app-dipendenza-1440.png
+- .claude/immagini/astra-fase2/ToolList/app-errore-lettura-1440.png
+- .claude/immagini/astra-fase2/ToolList/app-errore-salvataggio-1440.png
+- .claude/immagini/astra-fase2/ToolList/app-non-osservabile-1440.png
+- .claude/immagini/astra-fase2/ToolList/app-ricaricata-1440.png
+- .claude/immagini/astra-fase2/ToolList/originale-catalogo-1024.png
+- .claude/immagini/astra-fase2/ToolList/originale-catalogo-1280.png
+- .claude/immagini/astra-fase2/ToolList/originale-catalogo-1440.png
+- .claude/immagini/astra-fase2/ToolList/originale-permessi-1024.png
+- .claude/immagini/astra-fase2/ToolList/originale-permessi-1280.png
+- .claude/immagini/astra-fase2/ToolList/originale-permessi-1440.png
+- .claude/immagini/astra-fase2/ToolList/comp-ToolList-desktop-1440x900-mockup.png
+- .claude/immagini/astra-fase2/ToolList/comp-ToolList-desktop-1440x900-app.png
+- .claude/immagini/astra-fase2/ToolList/comp-ToolList-desktop-1280x800-mockup.png
+- .claude/immagini/astra-fase2/ToolList/comp-ToolList-desktop-1280x800-app.png
+- .claude/immagini/astra-fase2/ToolList/comp-ToolList-desktop-1024x800-mockup.png
+- .claude/immagini/astra-fase2/ToolList/comp-ToolList-desktop-1024x800-app.png
+Cosa deve fare l’owner · Nulla per continuare; prova su http://127.0.0.1:4177/ → Capability.
+Cosa fai tu dopo · B4 Skill/Connettori/Plugin/Hook, poi coda R02.
+Cosa rimane · B4 estensioni; B6; B2; B7 (anche modulo creazione automazioni e ToastRegion); B1; B8; Browser K-I. OAuth/computer-use restano PROPOSTE. Nessun push.

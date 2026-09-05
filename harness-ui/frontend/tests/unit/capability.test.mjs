@@ -1,0 +1,7 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {permessoAttrezzo,stimaSchemaAttrezzi,filtraAttrezzi} from '../../src/components/capability.js';
+import {ATTREZZI} from '../../lab/fixtures/capability.js';
+test('CAP-PERMESSO: distingue ereditato, esplicito e non configurabile',()=>{assert.equal(permessoAttrezzo(ATTREZZI[0]),'Chiedi sempre');assert.equal(permessoAttrezzo(ATTREZZI[1]),'Politica della sessione');assert.equal(permessoAttrezzo(ATTREZZI[3]),'Come la sessione');assert.equal(permessoAttrezzo(ATTREZZI[5]),'Nega');assert.equal(permessoAttrezzo({...ATTREZZI[0],permesso:'sconosciuto'}),'Permesso non riconosciuto');});
+test('CAP-STIMA-SCONOSCIUTA: zero misurato diverso da assenza e somma incompleta',()=>{assert.deepEqual(stimaSchemaAttrezzi([{tokenSchemaStimati:0},{}]),{totale:0,mancanti:1});assert.deepEqual(stimaSchemaAttrezzi([{tokenSchemaStimati:5},{tokenSchemaStimati:NaN},{tokenSchemaStimati:-1}]),{totale:5,mancanti:2});});
+test('CAP-FILTRO: trova nome umano, id e testo mantenendo ordine',()=>{assert.deepEqual(filtraAttrezzi(ATTREZZI,{query:'terminale'}).map(a=>a.nome),['shell']);assert.deepEqual(filtraAttrezzi(ATTREZZI,{query:'web_search'}).map(a=>a.nome),['web_search']);assert.deepEqual(filtraAttrezzi(ATTREZZI,{filtro:'permessi'}).map(a=>a.nome),['shell','scrivi','document_create']);assert.deepEqual(filtraAttrezzi(ATTREZZI,{filtro:'dipendenze'}).map(a=>a.nome),['web_search']);});
