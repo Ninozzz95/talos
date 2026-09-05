@@ -43,8 +43,8 @@ const FONT_LOCALI = [
   ['JetBrains Mono', 500, 'jetbrains-mono-latin-500-normal'],
 ].map(([famiglia, peso, file]) => `@font-face{font-family:'${famiglia}';font-weight:${peso};font-style:normal;font-display:block;src:url('${FONT_DIR}/${file}.woff2') format('woff2')}`).join('');
 
-const SCHERMATE = ['schermoChat', 'schermoVuota', 'schermoTerminale', 'schermoReview', 'schermoCapability', 'schermoBoard', 'schermoMemoria', 'schermoAttivita', 'schermoImpostazioni', 'schermoDoctor', 'schermoLibreria', 'schermoRicerca', 'schermoOfficina', 'schermoAutomazioni'];
-const DIALOGHI = ['veloNuova', 'veloPermessi', 'veloAlbero'];
+const SCHERMATE = ['schermoChat', 'schermoVuota', 'schermoTerminale', 'schermoReview', 'schermoCapability', 'schermoBoard', 'schermoMemoria', 'schermoAttivita', 'schermoImpostazioni', 'schermoDoctor', 'schermoLibreria', 'schermoRicerca', 'schermoOfficina', 'schermoAutomazioni', 'schermoBrowser', 'schermoModelLab'];
+const DIALOGHI = ['veloNuova', 'veloPermessi', 'veloAlbero', 'veloComandi', 'veloIntro', 'veloModello'];
 /* Soglia: differenza per pixel (0..1) e quota massima di pixel diversi. */
 const SOGLIA_PIXEL = 0.12;
 const QUOTA_MASSIMA = 0.004;
@@ -100,7 +100,7 @@ async function apri(browser, url, { js, viewport }) {
  * disegno. Qui si fa ESATTAMENTE ciò che fa `mostra()` nel mockup, e in Fase 1
  * `setView()` di `app.js` farà lo stesso.
  */
-const DI_SESSIONE = new Set(['chat', 'vuota', 'terminale', 'review']);
+const DI_SESSIONE = new Set(['chat', 'vuota', 'terminale', 'review', 'browser']);
 const nomeBreve = (id) => id.replace(/^schermo/, '').toLowerCase();
 async function mostra(pagina, id, velo = null) {
   const nome = nomeBreve(id);
@@ -109,6 +109,7 @@ async function mostra(pagina, id, velo = null) {
     for (const v of document.querySelectorAll('[id^="velo"]')) v.hidden = v.id !== veloAperto;
     document.documentElement.setAttribute('data-vista', sessione ? 'sessione' : 'pagina');
     document.documentElement.setAttribute('data-schermo', nome);
+    for (const t of document.querySelectorAll('[data-vistetab] [role=tab]')) { t.setAttribute('aria-selected',String(t.dataset.vaia===nome)); t.tabIndex=t.dataset.vaia===nome?0:-1; }
   }, { mostrata: id, veloAperto: velo, nome, sessione: DI_SESSIONE.has(nome) });
 }
 
@@ -140,7 +141,12 @@ async function confrontaPixel(nome, a, b) {
   const diversi = pixelmatch(pa.data, pb.data, diff.data, pa.width, pa.height, { threshold: SOGLIA_PIXEL });
   const quota = diversi / (pa.width * pa.height);
   const ok = quota <= QUOTA_MASSIMA;
-  // Le immagini si scrivono solo quando servono a qualcuno: sul rosso.
+  if(nome.startsWith('schermoBrowser')){
+    const consegna=path.resolve(radice,'../../.claude/immagini/astra-mockup');
+    await mkdir(consegna,{recursive:true});
+    await writeFile(path.join(consegna,'browser-'+pa.width+'.png'),a);
+  }
+  // Le differenze si conservano sul rosso.
   if (!ok) {
     await writeFile(path.join(ARTEFATTI, `${nome}-mockup.png`), a);
     await writeFile(path.join(ARTEFATTI, `${nome}-app.png`), b);
@@ -190,14 +196,175 @@ test.describe('parità app ↔ mockup', () => {
     });
   }
 
+  for(const pannello of ['catalogo','hf','download','runtime','prova']){
+    test('PARITA Model Lab '+pannello,async({},info)=>{
+      for(const p of [m.pagina,a.pagina]){await mostra(p,'schermoModelLab');await p.evaluate(n=>{document.querySelectorAll('#schermoModelLab [role=tabpanel]').forEach(x=>x.hidden=x.id!=='panel-'+n);document.querySelectorAll('#labTabs [role=tab]').forEach(x=>x.setAttribute('aria-selected',String(x.id==='tab-'+n)));},pannello);}
+      expect(await struttura(a.pagina,'#panel-'+pannello)).toEqual(await struttura(m.pagina,'#panel-'+pannello));
+      const esito=await confrontaPixel('modellab-'+pannello+'-'+info.project.name,await m.pagina.locator('.talos-shell').screenshot(),await a.pagina.locator('.talos-shell').screenshot());expect(esito.ok,esito.motivo).toBe(true);
+    });
+  }
+  for(const id of ['regioneToast','pannelloNotifiche']){test('PARITA blocco '+id,async({},info)=>{try{for(const p of [m.pagina,a.pagina]){await mostra(p,'schermoChat');await p.locator('#'+id).evaluate(e=>{e.hidden=false;if(e.id==='pannelloNotifiche'){e.style.top='60px';e.style.left='20px';}});}expect(await struttura(a.pagina,'#'+id)).toEqual(await struttura(m.pagina,'#'+id));const esito=await confrontaPixel(id+'-'+info.project.name,await m.pagina.locator('#'+id).screenshot(),await a.pagina.locator('#'+id).screenshot());expect(esito.ok,esito.motivo).toBe(true);}finally{for(const p of [m.pagina,a.pagina])await p.locator('#'+id).evaluate(e=>e.hidden=true);}});}
+  test('PARITA rail File aperta',async({},info)=>{try{for(const p of [m.pagina,a.pagina]){await mostra(p,'schermoChat');await p.evaluate(()=>{document.querySelector('.talos-shell').classList.add('details-open');document.querySelectorAll('.talos-inspector__body').forEach(e=>e.hidden=e.id!=='railFile');document.querySelectorAll('[data-rail]').forEach(e=>e.setAttribute('aria-selected',String(e.dataset.rail==='file')));});}expect(await struttura(a.pagina,'#railFile')).toEqual(await struttura(m.pagina,'#railFile'));const r=await confrontaPixel('railFile-'+info.project.name,await m.pagina.locator('#railFile').screenshot(),await a.pagina.locator('#railFile').screenshot());expect(r.ok,r.motivo).toBe(true);}finally{for(const p of [m.pagina,a.pagina])await p.evaluate(()=>{document.querySelector('.talos-shell').classList.remove('details-open');document.querySelectorAll('.talos-inspector__body').forEach(e=>e.hidden=e.id!=='railContesto');document.querySelectorAll('[data-rail]').forEach(e=>e.setAttribute('aria-selected',String(e.dataset.rail==='contesto')));});}});
   for (const velo of DIALOGHI) {
     test(`PARITA dialogo ${velo}`, async ({}, info) => {
       await mostra(m.pagina, 'schermoChat', velo);
       await mostra(a.pagina, 'schermoChat', velo);
       expect(await struttura(a.pagina, `#${velo}`)).toEqual(await struttura(m.pagina, `#${velo}`));
+      if(['veloComandi','veloNuova'].includes(velo)){const d=path.resolve(radice,'../../.claude/immagini/astra-mockup');await mkdir(d,{recursive:true});await m.pagina.screenshot({path:path.join(d,(velo==='veloComandi'?'palette-':'nuova-riferimento-')+info.project.use.viewport.width+'.png')});}
       const nome = `${velo}-${info.project.name}`;
       const esito = await confrontaPixel(nome, await m.pagina.locator(`#${velo} .talos-dialog`).screenshot(), await a.pagina.locator(`#${velo} .talos-dialog`).screenshot());
       expect(esito.ok, `${nome}: ${esito.motivo} — vedi artifacts/parita/${nome}-diff.png`).toBe(true);
     });
   }
 });
+
+ test('ASTRA Browser navigazione, letture e permessi', async ({browser}, info) => {
+ const {contesto,pagina:p}=await apri(browser,MOCKUP,{js:true,viewport:info.project.use.viewport});
+ const errori=[];p.on('pageerror',e=>errori.push(e.message));
+ try {
+  await expect(p.locator('#schermoBrowser')).toHaveCount(1);
+  await p.locator('#schermoChat [data-vaia="browser"]').click();
+  await expect(p.locator('#schermoBrowser')).toBeVisible();
+  await expect(p.locator('#schermoBrowser [data-vaia=browser]')).toHaveAttribute('aria-selected','true');
+  await expect(p.locator('#browserTesto')).toContainText('registro raccoglie');
+  await p.locator('[data-browser-demo="back"]').click();
+  await expect(p.locator('#browserTesto')).toContainText('<button id="astra-untrusted">');
+  await expect(p.locator('#astra-untrusted')).toHaveCount(0);
+  await expect(p.locator('[data-browser-demo="back"]')).toBeDisabled();
+  await p.locator('#statoBrowser').evaluate(s=>{s.value='bloccata';s.dispatchEvent(new Event('change'));});
+  await p.locator('[data-action="negaBrowser"]').click();
+  await expect(p.locator('#urlBrowser')).toHaveValue('https://example.org/');
+  await p.locator('#statoBrowser').evaluate(s=>{s.value='bloccata';s.dispatchEvent(new Event('change'));});
+  await p.locator('[data-action="consentiBrowser"]').click();
+  await expect(p.locator('#urlBrowser')).toHaveValue('https://example.org/documentazione');
+  await p.locator('#statoBrowser').evaluate(s=>{s.value='vuoto';s.dispatchEvent(new Event('change'));});
+  await expect(p.locator('#browserVuoto')).toBeVisible();
+  await expect(p.locator('[data-browser-demo="annotate"]')).toBeDisabled();
+  await p.locator('#statoBrowser').evaluate(s=>{s.value='pagina';s.dispatchEvent(new Event('change'));});
+  await p.locator('[data-browser-demo="reload"]').click();
+  await expect(p.locator('#browserCaricamento')).toBeVisible();
+  await p.locator('[data-action="annullaBrowser"]').click();
+  await p.locator('[data-browser-demo="note"]').click();
+  await p.locator('#browserNotaInput').fill('Nota conservata');
+  await p.locator('[data-action="conservaNotaBrowser"]').click();
+  await expect(p.locator('#browserNotaSalvata')).toContainText('Nota conservata');
+  expect(await p.locator('#schermoBrowser').evaluate(e=>e.scrollWidth<=e.clientWidth)).toBe(true);
+  await p.locator('[data-browser-demo="annotate"]').click();
+  await expect(p.locator('#schermoChat')).toBeVisible();
+  await expect(p.locator('#composerInput')).toHaveValue(/Riguardo alla pagina https:/);
+  expect(errori).toEqual([]);
+ } finally {await contesto.close();}
+ });
+
+test('ASTRA Palette 15 comandi ricerca tastiera',async({browser},info)=>{
+ const {contesto,pagina:p}=await apri(browser,MOCKUP,{js:true,viewport:info.project.use.viewport});
+ try{
+  await p.keyboard.press('Control+k');
+  await expect(p.locator('#veloComandi')).toBeVisible();
+  await expect(p.locator('#veloComandi [data-command]')).toHaveCount(15);
+  const nomi=await p.locator('#veloComandi [data-command] .talos-list-row__title').allTextContents();
+  for(const nome of nomi){await p.locator('#cercaComando').fill(nome);await expect(p.locator('#veloComandi [data-command]:visible')).toHaveCount(1);}
+  await p.locator('#cercaComando').fill('inesistente-xyz');await expect(p.locator('#comandiVuoti')).toBeVisible();
+  await p.locator('#cercaComando').fill('browser');await p.locator('#cercaComando').press('Enter');await expect(p.locator('#schermoBrowser')).toBeVisible();
+  await p.keyboard.press('Control+k');await p.locator('#cercaComando').press('ArrowDown');await expect(p.locator('#cercaComando')).toHaveAttribute('aria-activedescendant','comando-resume');
+  await p.keyboard.press('Escape');await expect(p.locator('#veloComandi')).toBeHidden();
+ }finally{await contesto.close();}
+});
+
+test('ASTRA Intro quattro passi e quattro politiche',async({browser},info)=>{
+ const {contesto,pagina:p}=await apri(browser,MOCKUP,{js:true,viewport:info.project.use.viewport});
+ const dir=path.resolve(radice,'../../.claude/immagini/astra-mockup');await mkdir(dir,{recursive:true});
+ const foto=async nome=>p.screenshot({path:path.join(dir,'intro-'+nome+'-'+info.project.use.viewport.width+'.png')});
+ try{
+  await p.goto(MOCKUP+'#intro');
+  await expect(p.locator('#veloIntro')).toBeVisible();
+  await foto('cartella');
+  await p.locator('#introCartella').fill('C:/progetti/esempio');await p.locator('#introAvanti').click();
+  await expect(p.locator('#passoIntroModello')).toBeVisible();await foto('modello');
+  await p.locator('#introFornitore').selectOption('OpenRouter');await p.locator('#introChiave').fill('chiave-fittizia');await p.locator('#introProvaAccesso').click();await expect(p.locator('#introChiave')).toHaveValue('');await expect(p.locator('#introAccessoStato')).toContainText('Accesso da verificare');
+  await p.locator('#introModello').selectOption('claude-opus-5');await p.locator('#introAvanti').click();
+  await expect(p.locator('#veloIntro [data-intro-policy]')).toHaveCount(4);await expect(p.locator('#introAvanti')).toBeDisabled();
+  await p.locator('[data-intro-policy="Workspace write"]').click();await foto('permessi');
+  await p.locator('#introIndietro').click();await expect(p.locator('#introModello')).toHaveValue('claude-opus-5');await p.locator('#introAvanti').click();
+  await p.locator('#introAvanti').click();await expect(p.locator('#introRiepilogo')).toContainText('C:/progetti/esempio');await foto('fine');
+  await p.locator('#introAvanti').click();await expect(p.locator('#veloIntro')).toBeHidden();await expect(p.locator('#schermoVuota')).toBeVisible();
+ }finally{await contesto.close();}
+});
+
+test('ASTRA Model Lab sei schede e recupero funzioni',async({browser},info)=>{
+ const {contesto,pagina:p}=await apri(browser,MOCKUP,{js:true,viewport:info.project.use.viewport});
+ const d=path.resolve(radice,'../../.claude/immagini/astra-mockup');await mkdir(d,{recursive:true});
+ try{
+ await p.goto(MOCKUP+'#modellab');await expect(p.locator('#schermoModelLab')).toBeVisible();
+ await expect(p.locator('#labTabs [role=tab]')).toHaveCount(6);
+ for(const s of ['installati','catalogo','hf','download','runtime','prova']){await p.locator('#tab-'+s).click();await expect(p.locator('#panel-'+s)).toBeVisible();await p.screenshot({path:path.join(d,'modellab-'+s+'-'+info.project.use.viewport.width+'.png')});}
+ await p.locator('#tab-installati').click();await expect(p.getByRole('button',{name:'Importa .gguf',exact:true})).toBeVisible();
+ await p.locator('#tab-hf').click();await expect(p.locator('#ordineHf option')).toHaveText(['Download','Preferiti','Più recenti','Aggiornati']);
+ await p.locator('#autoreHf').fill('nessun-autore');await expect(p.locator('#vuotoHf')).toBeVisible();await p.locator('#autoreHf').fill('');
+ await p.locator('#tagHf').fill('gguf');await p.locator('#altriHf').click();await expect(p.locator('#listaHf [data-hf]')).toHaveCount(3);
+ await p.locator('#hfTuttiFile').click();await expect(p.locator('#veloFileModello')).toBeVisible();await p.locator('#veloFileModello [data-chiudi]').click();
+ await p.locator('#hfScarica').click();await expect(p.locator('#panel-download')).toBeVisible();await expect(p.locator('#downloadAggiunto')).toContainText('.gguf');
+ await p.locator('#downloadPausa').click();await expect(p.locator('#downloadStato')).toContainText('pausa');
+ await p.locator('#tab-runtime').click();await p.locator('#runtimeBackend').selectOption('ollama');await expect(p.locator('#runtimeBackendNome')).toHaveText('Ollama');
+ await p.getByRole('button',{name:'Fornitori e accessi',exact:true}).click();await expect(p.getByRole('button',{name:'Prova tutti',exact:true})).toBeVisible();await expect(p.locator('#providerIndirizzo')).toBeVisible();await expect(p.locator('#providerTimeout')).toBeVisible();await expect(p.getByRole('button',{name:'Rimuovi chiave',exact:true})).toBeVisible();
+ }finally{await contesto.close();}
+});
+
+test('ASTRA Model Lab sélection cohérente',async({browser},info)=>{
+ const {contesto,pagina:p}=await apri(browser,MOCKUP,{js:true,viewport:info.project.use.viewport});
+ try{await p.goto(MOCKUP+'#modellab');await p.locator('#tab-catalogo').click();await p.locator('[data-catalog][data-provider="Google"]').click();await expect(p.locator('#catalogoStato')).toContainText('Accesso da impostare');await p.locator('[data-catalog][data-provider="Qwen"]').click();await expect(p.locator('#catalogoIngresso')).toHaveText('Testo e codice');await p.locator('#tab-hf').click();await p.locator('[data-hf="gemma"]').click();await expect(p.locator('#hfTuttiFile')).toBeDisabled();await p.locator('#tab-installati').click();await p.locator('#azioneModello').click();await expect(p.locator('[data-model="qwen8"]')).not.toContainText('Caricato');}finally{await contesto.close();}
+});
+
+test('ASTRA Intro decisioni H16 H20 e avvio condizionale',async({browser},info)=>{
+ const {contesto,pagina:p}=await apri(browser,MOCKUP,{js:true,viewport:info.project.use.viewport});
+ try{
+ await expect(p.locator('#veloIntro')).toBeHidden();await p.goto(MOCKUP+'#impostazioni');
+ await p.getByRole('button',{name:'Ripeti il primo avvio',exact:true}).click();
+ await p.locator('#introAvanti').click();await expect(p.locator('#introFornitore')).toHaveValue('local');await expect(p.locator('#introPrivacy')).toContainText('Nessuna telemetria, niente esce da questa macchina');
+ await p.locator('#introFornitore').selectOption('OpenRouter');await expect(p.locator('#introAccesso')).toBeVisible();await expect(p.locator('#introPrivacyRemoto')).toBeVisible();await expect(p.locator('#introEsitoAccesso')).toHaveCount(0);await p.screenshot({path:path.resolve(radice,'../../.claude/immagini/astra-mockup/intro-remoto-'+info.project.use.viewport.width+'.png')});
+ await p.locator('#introFornitore').selectOption('local');await p.locator('#introModello').selectOption('qwen-local');await p.locator('#introAvanti').click();await p.locator('[data-intro-policy="Full access"]').click();await expect(p.locator('#introAvanti')).toBeDisabled();await p.locator('#introConfermaPieno').check();await p.locator('#introAvanti').click();await p.locator('#introAvanti').click();await expect(p.locator('#schermoVuota')).toBeVisible();await expect(p.locator('#schermoVuota textarea')).toHaveValue(/Esamina/);
+ await p.goto(MOCKUP);await expect(p.locator('#veloIntro')).toBeHidden();
+ await p.evaluate(()=>localStorage.setItem('talos.mockup.intro.v1',JSON.stringify({provider:{pronto:false},modello:'',politica:'',esito:'da-completare'})));await p.reload();await expect(p.locator('#veloIntro')).toBeVisible();await p.locator('#introSalta').click();await p.reload();await expect(p.locator('#veloIntro')).toBeHidden();
+ }finally{await contesto.close();}
+});
+if(process.env.ASTRA_ORIGINALE_URL)test('ASTRA Originale Intro dati 4179',async({browser},info)=>{
+ const c=await browser.newContext({viewport:info.project.use.viewport,locale:'it-IT',reducedMotion:'reduce'});const p=await c.newPage();
+ try{await p.goto(process.env.ASTRA_ORIGINALE_URL);await expect(p.locator('#introDialog')).toBeVisible({timeout:15000});const d=path.resolve(radice,'../../.claude/immagini/astra-mockup');await p.screenshot({path:path.join(d,'originale-intro-modello-'+info.project.use.viewport.width+'.png')});await p.locator('#introBack').click();await p.screenshot({path:path.join(d,'originale-intro-accesso-'+info.project.use.viewport.width+'.png')});}finally{await c.close();}
+});
+
+test('ASTRA Palette testata e alias',async({browser},info)=>{
+ const {contesto,pagina:p}=await apri(browser,MOCKUP,{js:true,viewport:info.project.use.viewport});
+ try{const comando=p.locator('#schermoChat [data-azione="comandi"]');if(await comando.isVisible())await comando.click();else await p.keyboard.press('Control+k');await expect(p.locator('#veloComandi')).toBeVisible();await p.locator('#cercaComando').fill('Agents, hooks e doctor');await expect(p.locator('[data-command="control"]')).toBeVisible();await p.locator('#cercaComando').fill('');await p.locator('#cercaComando').press('End');await expect(p.locator('#cercaComando')).toHaveAttribute('aria-activedescendant','comando-share');await p.locator('#cercaComando').press('Home');await expect(p.locator('#cercaComando')).toHaveAttribute('aria-activedescendant','comando-new');await expect(p.locator('#veloComandi')).not.toContainText('esempio interattivo');}finally{await contesto.close();}
+});
+if(process.env.ASTRA_ORIGINALE_URL)test('ASTRA Originale Palette 15 comandi',async({browser},info)=>{
+ const c=await browser.newContext({viewport:info.project.use.viewport,locale:'it-IT',reducedMotion:'reduce'});const p=await c.newPage();
+ try{await p.goto(process.env.ASTRA_ORIGINALE_URL);await expect(p.locator('#introDialog')).toBeVisible({timeout:15000});await p.locator('#introSkip').click();await p.keyboard.press('Control+k');await expect(p.locator('#commandDialog')).toBeVisible();await expect(p.locator('#commandResults [data-command]')).toHaveCount(15);await p.screenshot({path:path.resolve(radice,'../../.claude/immagini/astra-mockup/originale-palette-'+info.project.use.viewport.width+'.png')});}finally{await c.close();}
+});
+
+test('ASTRA Model Lab linguaggio prodotto',async({browser},info)=>{
+ const {contesto,pagina:p}=await apri(browser,MOCKUP,{js:true,viewport:info.project.use.viewport});
+ try{await p.goto(MOCKUP+'#modellab');await expect(p.locator('#providerEsito')).toHaveCount(0);await expect(p.locator('#schermoModelLab')).not.toContainText(/fixture|dimostrativ|di esempio/);await p.getByRole('button',{name:'Fornitori e accessi',exact:true}).click();await expect(p.locator('#veloFornitori')).not.toContainText(/fixture|dimostrativ|di esempio/);await p.locator('#providerChiave').fill('');await p.locator('[data-provider-action=salva]').click();await expect(p.locator('#providerStato')).toContainText('Inserisci');}finally{await contesto.close();}
+});
+if(process.env.ASTRA_ORIGINALE_URL)test('ASTRA Originale Model Lab dati 4179',async({browser},info)=>{
+ const c=await browser.newContext({viewport:info.project.use.viewport,locale:'it-IT',reducedMotion:'reduce'});const p=await c.newPage();
+ try{await p.goto(process.env.ASTRA_ORIGINALE_URL);await expect(p.locator('#introDialog')).toBeVisible({timeout:15000});await p.locator('#introSkip').click();await p.getByRole('button',{name:'Impostazioni',exact:true}).click();await p.locator('[data-settings-tab=models]').click();for(const tab of ['overview','providers','catalog','installed','huggingface','downloads']){await p.locator('[data-model-lab-tab='+tab+']').click();await expect(p.locator('[data-model-lab-panel='+tab+']')).toBeVisible();await p.screenshot({path:path.resolve(radice,'../../.claude/immagini/astra-mockup/originale-modellab-'+tab+'-'+info.project.use.viewport.width+'.png')});}}finally{await c.close();}
+});
+
+test('ASTRA Model Lab fornitori completi',async({browser},info)=>{const {contesto,pagina:p}=await apri(browser,MOCKUP,{js:true,viewport:info.project.use.viewport});try{await p.goto(MOCKUP+'#modellab');await p.getByRole('button',{name:'Fornitori e accessi',exact:true}).click();await expect(p.locator('#providerLab option')).toHaveCount(7);await p.locator('#providerChiave').fill('chiave-di-test');await p.locator('#providerLab').selectOption('DeepSeek');await expect(p.locator('#providerChiave')).toHaveValue('');await expect(p.locator('#providerIndirizzo')).toHaveValue('');await p.screenshot({path:path.resolve(radice,'../../.claude/immagini/astra-mockup/modellab-fornitori-'+info.project.use.viewport.width+'.png')});}finally{await contesto.close();}});
+
+test('ASTRA Browser senza controlli di prototipo',async({browser},info)=>{const {contesto,pagina:p}=await apri(browser,MOCKUP,{js:true,viewport:info.project.use.viewport});try{await p.goto(MOCKUP+'#browser');await expect(p.locator('#schermoBrowser #statoBrowser')).toHaveCount(0);await expect(p.locator('#schermoBrowser [data-vaia=terminale]')).toContainText('2');await expect(p.locator('#schermoBrowser [data-vaia=review]')).toContainText('3');await expect(p.locator('#schermoBrowser')).not.toContainText(/dimostrativ|di esempio|simulazion/i);}finally{await contesto.close();}});
+if(process.env.ASTRA_ORIGINALE_URL)test('ASTRA Originale Browser dati 4179',async({browser},info)=>{const c=await browser.newContext({viewport:info.project.use.viewport,locale:'it-IT',reducedMotion:'reduce'});const p=await c.newPage();try{await p.goto(process.env.ASTRA_ORIGINALE_URL);await expect(p.locator('#introDialog')).toBeVisible({timeout:15000});await p.locator('#introSkip').click();await p.keyboard.press('Control+k');await p.locator('#commandResults [data-command=browser]').click();await expect(p.locator('#commandDialog')).toBeHidden();await expect(p.locator('#harnessDialogBackdrop')).toBeHidden();await expect(p.locator('.view-pane[data-view=browser]')).toBeVisible();await p.screenshot({path:path.resolve(radice,'../../.claude/immagini/astra-mockup/originale-browser-'+info.project.use.viewport.width+'.png')});}finally{await c.close();}});
+
+test('ASTRA Toast toni azione chiusura',async({browser},info)=>{const {contesto,pagina:p}=await apri(browser,MOCKUP,{js:true,viewport:info.project.use.viewport});try{await p.goto(MOCKUP+'#toast');expect(await p.evaluate(()=>{const rules=[...document.styleSheets].flatMap(s=>{try{return [...s.cssRules];}catch{return [];}}).filter(r=>/talos-toast|talos-notification-panel/.test(r.selectorText||''));return rules.flatMap(r=>[...r.cssText.matchAll(/var\((--[\w-]+)/g)].map(m=>m[1])).filter(v=>!getComputedStyle(document.documentElement).getPropertyValue(v).trim());})).toEqual([]);await expect(p.locator('#regioneToast [role=status]:visible')).toHaveCount(3);await p.screenshot({path:path.resolve(radice,'../../.claude/immagini/astra-mockup/toast-'+info.project.use.viewport.width+'.png')});await p.locator('[data-toast-chiudi=nota]').click();await expect(p.locator('#regioneToast [role=status]:visible')).toHaveCount(2);await p.locator('[data-toast-action=download]').click();await expect(p.locator('#panel-download')).toBeVisible();await p.locator('#campanella').click();await expect(p.locator('#pannelloNotifiche')).toBeVisible();await expect(p.locator('#campanella')).toHaveAttribute('aria-expanded','true');await expect(p.locator('#pannelloNotifiche [data-notifica]')).toHaveCount(1);await p.screenshot({path:path.resolve(radice,'../../.claude/immagini/astra-mockup/campanella-'+info.project.use.viewport.width+'.png')});await p.keyboard.press('Escape');await expect(p.locator('#pannelloNotifiche')).toBeHidden();await expect(p.locator('#campanella')).toBeFocused();await p.locator('#campanella').click();await expect(p.locator('#pannelloNotifiche')).toBeVisible();await p.locator('[data-notifica]').click();await expect(p.locator('#veloPermessi')).toBeVisible();}finally{await contesto.close();}});
+
+if(process.env.ASTRA_ORIGINALE_URL)test('ASTRA Originale notifiche e toast 4179',async({browser},info)=>{const c=await browser.newContext({viewport:info.project.use.viewport,locale:'it-IT',reducedMotion:'reduce'});const p=await c.newPage();try{await p.goto(process.env.ASTRA_ORIGINALE_URL);await expect(p.locator('#introDialog')).toBeVisible({timeout:15000});await p.locator('#introSkip').click();await p.locator('#notificationsBtn').click();await expect(p.locator('.notifications-menu')).toBeVisible();await p.screenshot({path:path.resolve(radice,'../../.claude/immagini/astra-mockup/originale-notifiche-'+info.project.use.viewport.width+'.png')});await p.keyboard.press('Escape');await expect(p.getByText('Nessuna sessione',{exact:true}).first()).toBeVisible();await p.keyboard.press('Control+k');await p.locator('#commandResults [data-command=resume]').click();await expect(p.locator('#commandDialog')).toBeHidden();await expect(p.locator('#harnessDialogBackdrop')).toBeHidden();await expect(p.locator('.toast')).toContainText('Nessuna sessione reale');await p.screenshot({path:path.resolve(radice,'../../.claude/immagini/astra-mockup/originale-toast-'+info.project.use.viewport.width+'.png')});}finally{await c.close();}});
+
+test('ASTRA Albero rail e tastiera',async({browser},info)=>{const {contesto,pagina:p}=await apri(browser,MOCKUP,{js:true,viewport:info.project.use.viewport});try{if(info.project.use.viewport.width<=1240)await p.locator('#schermoChat [data-azione=dettagli]').click();await p.locator('[data-rail=file]').click();await expect(p.locator('#alberoCartella')).toBeVisible();await p.screenshot({path:path.resolve(radice,'../../.claude/immagini/astra-mockup/albero-file-'+info.project.use.viewport.width+'.png')});const root=p.locator('#alberoFile [role=treeitem]').first();await root.focus();await p.keyboard.press('ArrowRight');await expect(p.locator('#alberoFile [role=treeitem][data-path="src"]')).toBeFocused();await p.keyboard.press('ArrowRight');await expect(p.locator('#alberoFile [data-path="src/session-registry.mjs"]')).toBeFocused();await p.keyboard.press('Shift+F10');await expect(p.locator('#menuFile')).toBeVisible();await expect(p.locator('#menuFile [role=menuitem]')).toHaveCount(6);await p.screenshot({path:path.resolve(radice,'../../.claude/immagini/astra-mockup/menu-file-'+info.project.use.viewport.width+'.png')});await p.keyboard.press('Escape');await expect(p.locator('#alberoFile [data-path="src/session-registry.mjs"]')).toBeFocused();await p.locator('#fileTreeFilter').fill('session-registry.test');await expect(p.locator('#alberoFile [data-path="tests/session-registry.test.mjs"]')).toBeVisible();await expect(p.locator('#alberoFile [data-path="README.md"]')).toBeHidden();await p.locator('#fileTreeFilter').fill('introuvable');await expect(p.locator('#alberoVuoto')).toBeVisible();await p.locator('#fileTreeFilter').fill('');await p.locator('#fileTreeCollapse').click();await expect(root).toHaveAttribute('aria-expanded','false');await p.locator('#fileTreeUp').click();await expect(p.locator('#alberoFuori')).toBeVisible();await p.locator('#fileTreeUp').click();await p.locator('#toggleAlbero').click();await expect(p.locator('#alberoCartella')).toBeHidden();if(info.project.use.viewport.width<=1240){await p.locator('#chiudiDettagli').click();await expect(p.locator('#schermoChat [data-azione=dettagli]')).toBeFocused();}}finally{await contesto.close();}});
+
+if(process.env.ASTRA_ORIGINALE_URL)test('ASTRA Originale albero file 4179',async({browser},info)=>{const c=await browser.newContext({viewport:info.project.use.viewport,locale:'it-IT',reducedMotion:'reduce'});const p=await c.newPage();try{await p.goto(process.env.ASTRA_ORIGINALE_URL);await expect(p.locator('#introDialog')).toBeVisible({timeout:15000});await p.locator('#introSkip').click();await expect(p.locator('#harnessDialogBackdrop')).toBeHidden();if(info.project.use.viewport.width<=1240)await p.locator('.desktop-context-toggle').click();await p.locator('#inspector-tab-files').click();await expect(p.locator('#inspector-files')).toBeVisible();await p.screenshot({path:path.resolve(radice,'../../.claude/immagini/astra-mockup/originale-albero-file-'+info.project.use.viewport.width+'.png')});}finally{await c.close();}});
+
+test('ASTRA Dialogo Modello',async({browser},info)=>{const {contesto,pagina:p}=await apri(browser,MOCKUP,{js:true,viewport:info.project.use.viewport});try{await p.locator('#composerForm [data-open-sheet=model]').click();await expect(p.locator('#veloModello')).toBeVisible();await expect(p.locator('#mostraRagionamentoDialogo')).toBeInViewport({ratio:1});await p.screenshot({path:path.resolve(radice,'../../.claude/immagini/astra-mockup/dialogo-modello-'+info.project.use.viewport.width+'.png')});await p.locator('#cercaModelloDialogo').fill('non-esiste');await expect(p.locator('#modelliDialogoVuoti')).toBeVisible();await p.locator('#cercaModelloDialogo').fill('');await p.locator('#ragionamentoDialogo').focus();await p.keyboard.press('End');await expect(p.locator('#valoreRagionamentoDialogo')).toHaveText('Massimo');await expect(p.locator('#ragionamentoDialogo')).toHaveAttribute('aria-valuetext','Massimo');await p.locator('#ragionamentoAutomatico').click();await expect(p.locator('#valoreRagionamentoDialogo')).toHaveText('Automatico');await p.locator('[data-fonte-modello=locali]').click();await expect(p.locator('#modelliDialogoLocali')).toBeVisible();await p.locator('[data-modello-dialogo="local:qwen3-8b"]').click();await expect(p.locator('#veloModello')).toBeHidden();await expect(p.locator('#composerForm [data-open-sheet=model] .talos-chip__label')).toHaveText('Qwen3 8B');await expect(p.locator('#composerForm [data-open-sheet=model]')).toBeFocused();await p.keyboard.press('Control+Shift+m');await expect(p.locator('#veloModello')).toBeVisible();await p.locator('#apriLaboratorioDaModello').click();await expect(p.locator('#schermoModelLab')).toBeVisible();}finally{await contesto.close();}});
+
+if(process.env.ASTRA_ORIGINALE_URL)test('ASTRA Originale dialogo Modello 4179',async({browser},info)=>{const c=await browser.newContext({viewport:info.project.use.viewport,locale:'it-IT',reducedMotion:'reduce'});const p=await c.newPage();try{await p.goto(process.env.ASTRA_ORIGINALE_URL);await expect(p.locator('#introDialog')).toBeVisible({timeout:15000});await p.locator('#introSkip').click();await expect(p.locator('#harnessDialogBackdrop')).toBeHidden();await p.locator('[data-open-sheet=model]').first().click();await expect(p.locator('#modelPickerMount')).toBeVisible();await expect(p.locator('.effort-picker-range')).toBeVisible();await p.screenshot({path:path.resolve(radice,'../../.claude/immagini/astra-mockup/originale-dialogo-modello-'+info.project.use.viewport.width+'.png')});}finally{await c.close();}});
+
+test('ASTRA Dialoghi misura persistita',async({browser},info)=>{const {contesto,pagina:p}=await apri(browser,MOCKUP,{js:true,viewport:info.project.use.viewport});try{await p.locator('#composerForm [data-open-sheet=model]').click();const dialog=p.locator('#veloModello .talos-dialog'),handle=p.locator('#veloModello [data-dialog-resize=both]');await expect(handle).toBeVisible();expect(await p.locator('.overlay-layer .talos-dialog').evaluateAll(ds=>ds.every(d=>d.querySelectorAll('[data-dialog-resize]').length===3))).toBe(true);const before=await dialog.boundingBox();await handle.focus();await p.keyboard.press('ArrowRight');await expect.poll(async()=>Math.round((await dialog.boundingBox()).width)).toBe(Math.round(before.width+16));const r=await handle.boundingBox();await p.mouse.move(r.x+r.width/2,r.y+r.height/2);await p.mouse.down();await p.mouse.move(r.x+r.width/2+24,r.y+r.height/2-24,{steps:4});await p.mouse.up();const saved=await p.evaluate(()=>JSON.parse(localStorage.getItem('talos-harness-modal-sizes-v1'))['sheet:model']);expect(saved.width).toBeGreaterThan(before.width+16);await p.reload();await p.locator('#composerForm [data-open-sheet=model]').click();await expect.poll(async()=>Math.round((await dialog.boundingBox()).width)).toBe(saved.width);await p.locator('#veloModello [data-c=SettingRow]').scrollIntoViewIfNeeded();await p.locator('#mostraRagionamentoDialogo').uncheck();await expect(p.locator('#mostraRagionamentoDialogo')).not.toBeChecked();await expect(p.locator('#mostraRagionamentoDialogo')).toBeInViewport({ratio:1});await p.screenshot({path:path.resolve(radice,'../../.claude/immagini/astra-mockup/dialogo-misura-'+info.project.use.viewport.width+'.png')});await handle.dblclick();await expect.poll(async()=>Math.round((await dialog.boundingBox()).width)).toBe(Math.round(before.width));expect(await p.evaluate(()=>JSON.parse(localStorage.getItem('talos-harness-modal-sizes-v1'))['sheet:model'])).toBeUndefined();}finally{await contesto.close();}});
