@@ -1857,3 +1857,88 @@ Chiusura B6.5 MemoryMeter: 79/79 unit, 195/195 statici, 81/81 componenti; suite 
 Cosa deve fare l’owner: nulla; può provare la Panoramica su 4177.
 Cosa fai tu dopo: runtime e Prova, poi le altre schede B6.
 Cosa rimane: resto B6 → B2 → B7 → B1 → B8 → Browser K-I.
+
+
+## B6.6 RuntimeCard — piano prima degli edit (05/09/2026)
+Ambito TALOS UI. Merge lane già aggiornato. Difetto verificato: renderizzaRuntimeModelLab chiama non raggiunto anche state=observed con models=[]; la selezione per una prova viene confusa con la raggiungibilità. GET reale 4177 osserva Ollama e LM Studio unknown/RUNTIME_UNREACHABLE, nessun modello eseguito.
+Ricerca fresca finestra 06/08–05/09: Hermes https://github.com/NousResearch/hermes-agent/releases/tag/v2026.8.31 (31/08, 29112be); Claude Code https://github.com/anthropics/claude-code/releases/tag/v2.1.261 (04/09, d7dbd9a); Codex https://github.com/openai/codex/releases/tag/rust-v0.153.4 (04/09, 3d2ee51). Riaperti prima del passo. Configurazioni stabili riverificate oggi: https://hermes-agent.nousresearch.com/docs/user-guide/configuration/ ; https://code.claude.com/docs/en/model-config ; https://learn.chatgpt.com/docs/config-file/config-advanced . Forza condivisa: scelta esplicita di modello/provider, da preservare. Limite delle sole configurazioni: non provano la salute del processo locale; non è una debolezza globale dimostrata dei prodotti. +1 obiettivo TALOS: stato osservato, data e causa distinti dalla scelta, provati in tre larghezze.
+Semantica upstream: https://docs.ollama.com/api/tags elenca disponibili; https://docs.ollama.com/api/ps elenca caricati; https://lmstudio.ai/docs/developer/rest/list distingue loaded_instances. Documenti stabili, data di aggiornamento non esposta: non dichiarati novità del mese. Il nostro adapter normalizzato NON espone loaded_instances, quindi per Ollama/LM Studio caricamento non rilevato, mai tutti caricati. Adattare dietro componente AVM; nessun pacchetto aggiunto, nessun cambiamento backend.
+File esatti: .claude/LEDGER-ASTRA-FASE-2-2026-09-05.md; .claude/CONSEGNA-ASTRA-FASE-2-2026-09-05.md; .claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html; harness-ui/frontend/index.template.html; harness-ui/frontend/styles/talos.css; harness-ui/frontend/src/components/runtime-modelli.js; harness-ui/frontend/src/legacy/app.js; harness-ui/frontend/lab/main.js; harness-ui/frontend/lab/fixtures/runtime-modelli.js; harness-ui/frontend/tests/unit/runtime-modelli.test.mjs; harness-ui/frontend/tests/parity/runtime-modelli-vivo.spec.mjs; harness-ui/frontend/tests/parity/componenti.spec.mjs; harness-ui/frontend/playwright.astra.config.mjs. Screenshot prodotti e selezionati saranno enumerati prima di copiarli nel repository.
+Simboli: nuovi datiRuntimeModello, creaRuntimeModello, aggiornaElencoRuntime, montaPannelloRuntime; fixture RUNTIME_MODELLI. Cambiano renderizzaRuntimeModelLab e feedback caricamento in caricaRuntimeModelLab, più mount. Stabili tutti gli ID runtime/select/model/prompt/prova/cancel/stream e i loro listener; regia runtimeBackend/runtimeBackendNome/runtimeIndirizzo/runtimeConteggio del mockup preservata. Blocchi Card/DetailPanel/Badge/KeyValue/EmptyState, nessun token nuovo.
+RED RUN-OSSERVATO-VUOTO: observed + zero modelli non deve dire non raggiunto; RUN-ELENCO-ERRORE: motore raggiunto ma catalogo fallito; RUN-CARICATI: lista disponibile non certifica RAM; RUN-RIPROVA: HTTP503 cancella vecchio elenco, Riprova lo recupera; RUN-SELEZIONE: scelta backend e modello mantenuta alla rilettura; RUN-INIZIALE: attesa esplicita senza false assenze. Unit dati e test vivo prima dell’implementazione. Originale e proposta stessi stati a 1440/1280/1024, immagini aperte.
+GREEN: node --test tests/unit/runtime-modelli.test.mjs; node scripts/mockup-to-template.mjs; npm run verify; npm run test:componenti con TALOS_LAB_PORT=4178; npx playwright test --config=playwright.astra.config.mjs runtime-modelli-vivo.spec.mjs misura-memoria-vivo.spec.mjs catalogo-modelli-vivo.spec.mjs. Rollback: singolo commit, nessuna migrazione o stato persistente nuovo. Prove reali GET runtime; esecuzione modello fuori da questa consegna.
+Richiesta raccordo Prova: avviaProvaRuntimeModelLab non legge modelLabPrompt, sceglie il primo task di GET tasks. POST sessions accetta taskId/provider/runtimeId/modelId, non prompt; POST sessions/custom accetta consegna e cartella, non provider/runtimeId/modelId (requireCustomTaskBody). Nessuna rotta trial/freeprompt locale trovata in http-app. Contratto backend mancante registrato: non inventare funzionamento o dire che il prompt è stato eseguito. Proseguo con componenti indipendenti.
+
+Correzione percorso verificato prima del CSS: il generatore scrive harness-ui/frontend/src/styles/surfaces.css, non styles/talos.css. RED unit riprodotto: modulo ancora assente.
+
+RUN-OSSERVATO-VUOTO RED vivo riprodotto 1440: expected Raggiunto, ricevuto ollama/non raggiunto/misurato21:00. Originale-stati1440 catturato e aperto prima della sostituzione.
+
+Innesto precisa anche runtimeModelLabPronto: modelsError esclude il motore dalla prova anche se una risposta contiene una lista vecchia. Stato della lettura disabilita temporaneamente selettori e avvio. Nessuna nuova rotta.
+
+Precisazione generatore verificata nel suo sorgente: CSS effettivo harness-ui/frontend/src/styles/index.css. Nessun edit a surfaces.css. Prima verifica generale interrotta perché partita prima del completamento del canonico; non conta come prova. Le suite finali saranno seriali.
+RUN-DENSITA: prima immagine 1440 mostra due schede impilate per oltre 500px; il CSS generico di Impostazioni aggiunge 10px a ogni voce modello. Ricerca fresca 05/09: MDN grid-template-columns https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/grid-template-columns e tre configurazioni competitor sopra riaperte; adottare grid auto-fit standard per due/tre schede quando c’è spazio e mantenere colonna singola a 1024. +1 misurabile: a 1280/1440 due schede allo stesso livello; nessuna perdita di nomi, data o azioni. Reset locale del padding elenco, nessun token nuovo. RED aggiunto al test RUN-SELEZIONE.
+
+Cancello linguaggio prodotto fallito: la nota Dati di esempio nel solo mockup viola ASTRA Model Lab linguaggio prodotto. Ricerca release competitor riaperta 05/09 (pin invariati). Il contesto dell’artefatto è già mockup; ripristino la dicitura di prodotto Modelli caricati mantenendo il conteggio e la regia; nessuna fixture entra nei dati reali. Test esistente resta invariato. RUN-DENSITA ora verde.
+
+RUN-SUPERVISORE: server.mjs:255 dichiara observed quando il supervisore è interrogabile, anche se runtimeState è unavailable/loading/stopping/failed. Sorgenti llama-server-supervisor.mjs:80,178,322,349 verificati: stato fermo è unavailable (stopped mantenuto per compatibilità), non prova engine raggiungibile. README ufficiale llama.cpp tools/server riletto 05/09: health distingue loading da ready; URL https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md, riferimento non nuova dipendenza. Release tre competitor riverificate, pin invariati. Adattare stato supervisore già fornito; +1 test: nessun badge Raggiunto né avvio durante arresto/caricamento/errore. File e simboli già enumerati; test datiRuntimeModello e gate vivo aggiunti prima del fix.
+
+## B6.6 RuntimeCard — esito e confronto
+La Panoramica usa RuntimeCard dal mockup, generata dai dati di GET /api/v1/runtime. Blocchi riusati Card, Badge, KeyValue, Button e Select; blocco nuovo RuntimeCard (funzioni datiRuntimeModello, creaRuntimeModello, aggiornaElencoRuntime, montaPannelloRuntime). Token aggiunti: zero. I controlli originali e i loro listener sono preservati; apiGet mantiene la sorveglianza Connessione, nessun fetch autonomo e nessun Toast duplicato.
+| Aspetto | Originale | Proposta / beneficio verificabile |
+|---|---|---|
+| Copertura | motore, nomi, data, selettori e prova | stessi dati/comandi, indirizzo osservato aggiunto quando esposto dal server |
+| Semantica | observed con zero modelli mostrava non raggiunto | raggiungibilità distinta da catalogo vuoto o fallito; disponibili non significa caricati |
+| Processo locale | observed del controllore poteva sembrare motore pronto | caricamento/arresto/guasto/non avviato derivati dal supervisore, prova disabilitata |
+| Chiarezza/densità | tre righe strette, stato ambiguo | badge e tre KeyValue; due schede affiancate a 1280/1440, singola a 1024, testo intero |
+| Accessibilità | campi nativi e data poco leggibile | campi nativi mantenuti, aria-busy, errore role=alert, testo di stato oltre al colore |
+| Recupero | errore separato ma dati poco interpretabili | lettura cancella dati vecchi, blocca avvio, Aggiorna recupera dati e selezione |
+| Persistenza | lettura dal server ad ogni apertura | stessa fonte, nessuna nuova cache o chiave localStorage |
+| Limiti | prompt della Prova ignorato già nell’originale | limite registrato separatamente, nessuna esecuzione locale dichiarata |
+Originale catturato e aperto a 1440/1280/1024, confronto con componente nel mockup e nella app alle stesse larghezze. Nessun benchmark di latenza o superiorità globale dei competitor. Verdetto RuntimeCard: correzione semantica e recupero dimostrati; Panoramica completa/Prova restano da chiudere.
+RED riprodotti: modulo assente; observed-vuoto; schede inutilmente impilate; supervisore unavailable segnato Raggiunto. Cancello linguaggio prodotto corretto senza indebolire il test. Primo giro vivo del supervisore fallito perché dist ancora precedente (sorgente corretto, stringa Arresto in corso assente nel bundle): build esplicita e nuova verifica richiesta prima del commit.
+Cosa deve fare l’owner: nulla; lettura su 4177, Impostazioni → Laboratorio modelli → Panoramica.
+Cosa fai tu dopo: Provider, Installati, Hugging Face e Download, raccordo Prova tramite contratto backend reale.
+Cosa rimane: resto B6 → B2 → B7 → B1 Terminale K-G → B8 → Browser K-I; OAuth/computer-use successivi.
+
+Prove selezionate da copiare, percorsi esatti:
+.claude/immagini/astra-fase2/RuntimeCard/app-arresto-1024.png
+.claude/immagini/astra-fase2/RuntimeCard/app-arresto-1280.png
+.claude/immagini/astra-fase2/RuntimeCard/app-arresto-1440.png
+.claude/immagini/astra-fase2/RuntimeCard/app-attesa-1024.png
+.claude/immagini/astra-fase2/RuntimeCard/app-attesa-1280.png
+.claude/immagini/astra-fase2/RuntimeCard/app-attesa-1440.png
+.claude/immagini/astra-fase2/RuntimeCard/app-errore-1024.png
+.claude/immagini/astra-fase2/RuntimeCard/app-errore-1280.png
+.claude/immagini/astra-fase2/RuntimeCard/app-errore-1440.png
+.claude/immagini/astra-fase2/RuntimeCard/app-errore-lista-1024.png
+.claude/immagini/astra-fase2/RuntimeCard/app-errore-lista-1280.png
+.claude/immagini/astra-fase2/RuntimeCard/app-errore-lista-1440.png
+.claude/immagini/astra-fase2/RuntimeCard/app-nessun-motore-1024.png
+.claude/immagini/astra-fase2/RuntimeCard/app-nessun-motore-1280.png
+.claude/immagini/astra-fase2/RuntimeCard/app-nessun-motore-1440.png
+.claude/immagini/astra-fase2/RuntimeCard/app-nome-lungo-1024.png
+.claude/immagini/astra-fase2/RuntimeCard/app-nome-lungo-1280.png
+.claude/immagini/astra-fase2/RuntimeCard/app-nome-lungo-1440.png
+.claude/immagini/astra-fase2/RuntimeCard/app-server-reale-1024.png
+.claude/immagini/astra-fase2/RuntimeCard/app-server-reale-1280.png
+.claude/immagini/astra-fase2/RuntimeCard/app-server-reale-1440.png
+.claude/immagini/astra-fase2/RuntimeCard/app-stati-1024.png
+.claude/immagini/astra-fase2/RuntimeCard/app-stati-1280.png
+.claude/immagini/astra-fase2/RuntimeCard/app-stati-1440.png
+.claude/immagini/astra-fase2/RuntimeCard/app-vuoto-1024.png
+.claude/immagini/astra-fase2/RuntimeCard/app-vuoto-1280.png
+.claude/immagini/astra-fase2/RuntimeCard/app-vuoto-1440.png
+.claude/immagini/astra-fase2/RuntimeCard/originale-stati-1024.png
+.claude/immagini/astra-fase2/RuntimeCard/originale-stati-1280.png
+.claude/immagini/astra-fase2/RuntimeCard/originale-stati-1440.png
+.claude/immagini/astra-fase2/RuntimeCard/comp-RuntimeCard-desktop-1024x800-app.png
+.claude/immagini/astra-fase2/RuntimeCard/comp-RuntimeCard-desktop-1024x800-mockup.png
+.claude/immagini/astra-fase2/RuntimeCard/comp-RuntimeCard-desktop-1280x800-app.png
+.claude/immagini/astra-fase2/RuntimeCard/comp-RuntimeCard-desktop-1280x800-mockup.png
+.claude/immagini/astra-fase2/RuntimeCard/comp-RuntimeCard-desktop-1440x900-app.png
+.claude/immagini/astra-fase2/RuntimeCard/comp-RuntimeCard-desktop-1440x900-mockup.png
+
+Chiusura RuntimeCard: 84/84 unit, 195/195 statici, 84/84 componenti; build deterministica 30 asset, 69/69 prove vive combinate (runtime, memoria, catalogo/R06) dopo build esplicita. 36 immagini conservate: originale, app, errori, vuoto, attesa, nomi lunghi, arresto e confronto pixel del componente. Screenshot aperti alle tre larghezze. git diff --check verde.
+Cosa deve fare l’owner: nulla; può provare Panoramica su 4177.
+Cosa fai tu dopo: Provider, Installati, Hugging Face e Download.
+Cosa rimane: resto B6, raccordo Prova, B2 → B7 → B1 → B8 → Browser K-I.

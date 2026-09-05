@@ -489,3 +489,16 @@ Chiusura B6.5 MemoryMeter: 79/79 unit, 195/195 statici, 81/81 componenti; suite 
 Cosa deve fare l’owner: nulla; può provare la Panoramica su 4177.
 Cosa fai tu dopo: runtime e Prova, poi le altre schede B6.
 Cosa rimane: resto B6 → B2 → B7 → B1 → B8 → Browser K-I.
+
+## B6.6 — RuntimeCard nel Model Lab
+Mostra ogni motore con stato osservato, modelli disponibili, stato di caricamento, indirizzo e data. Un motore raggiunto senza modelli non viene più indicato come irraggiungibile. Per Ollama/LM Studio l’elenco disponibile non viene spacciato per modelli caricati; llama.cpp distingue avvio, arresto e guasto. Aggiorna conserva la selezione e consente recupero dopo errore.
+Riuso Card, Badge, KeyValue, Button, Select; componente RuntimeCard nuovo, zero token aggiunti. Mockup canonico rigenerato, nessuna modifica ai frammenti legacy, ponte, backend, Chat/Review/sidebar/testata. Screenshot originali e proposta a 1440/1280/1024 aperti; schede affiancate quando c’è spazio, dati interi a 1024. Dettagli/matrice nel ledger B6.6.
+Prova reale: GET runtime e nuova lettura sul server locale; qui Ollama e LM Studio risultano irraggiungibili, nessuna inferenza eseguita. Prove di errore/attesa e selezione usano HTTP controllato. Il prompt libero della Prova era ignorato dall’originale: manca un contratto backend locale che accetti consegna+runtime+modello. Registrato il raccordo, non dichiarato funzionante.
+Cosa deve fare l’owner: nulla; può leggere la Panoramica su http://127.0.0.1:4177.
+Cosa fai tu dopo: Provider → Installati → Hugging Face → Download; poi raccordo Prova.
+Cosa rimane: resto B6 → B2 → B7 → B1 → B8 → Browser K-I.
+
+Chiusura RuntimeCard: 84/84 unit, 195/195 statici, 84/84 componenti; build deterministica 30 asset, 69/69 prove vive combinate (runtime, memoria, catalogo/R06) dopo build esplicita. 36 immagini conservate: originale, app, errori, vuoto, attesa, nomi lunghi, arresto e confronto pixel del componente. Screenshot aperti alle tre larghezze. git diff --check verde.
+Cosa deve fare l’owner: nulla; può provare Panoramica su 4177.
+Cosa fai tu dopo: Provider, Installati, Hugging Face e Download.
+Cosa rimane: resto B6, raccordo Prova, B2 → B7 → B1 → B8 → Browser K-I.
