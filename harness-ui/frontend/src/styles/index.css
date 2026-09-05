@@ -604,3 +604,8 @@ button{background:none; border:0; cursor:pointer; padding:0}
 #schermoModelLab .talos-toolbar>input{width:auto;min-width:0}
 #schermoModelLab .talos-kv__k{white-space:normal;overflow:visible;text-overflow:clip}
 #promptProva{min-height:calc(var(--talos-control-height) * 3);resize:vertical;padding:var(--talos-space-control)}
+.talos-toast-region{position:fixed;right:var(--talos-space-md);bottom:var(--talos-space-lg);width:min(var(--talos-inspector-w),calc(100% - var(--talos-space-lg) - var(--talos-space-lg)));display:grid;gap:var(--talos-space-sm);z-index:calc(var(--talos-z-app-overlay) - 1)}
+.talos-toast{padding:var(--talos-space-md);background:var(--talos-panel);box-shadow:var(--talos-shadow-floating)}
+.talos-toast p{margin-block:var(--talos-space-sm);overflow-wrap:anywhere}
+.talos-notification-panel{position:fixed;width:var(--talos-inspector-w);max-width:calc(100vw - var(--talos-space-lg));padding:var(--talos-space-md);z-index:var(--talos-z-menu);background:var(--talos-panel);box-shadow:var(--talos-shadow-floating)}
+.talos-notification-panel h2{font-size:var(--talos-font-size-md)}
