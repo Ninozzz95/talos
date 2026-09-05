@@ -463,6 +463,26 @@ vestirla nella prossima consegna: `.claude/PROMPT-ASTRA-2026-09-05-R06-MODEL-LAB
   onesto della connessione nella statusbar (`runtime-status` è mio) con testo umano, e prova al
   contrario nello script di confronto. Stesso cervello sull'originale: comportamento identico per
   costruzione (4180 spento al momento della prova, non rilanciato).
+  ✅ CHIUSA 05/09 ~23:00, owner «t 15 approvato adesso». Componente
+  `src/components/connessione.js`: macchina a quattro stati (collegato · riconnessione · caduto ·
+  ricollegato) che ascolta le due fetch centrali del monolite (`apiGet`/`apiPost` via
+  `fetchSorvegliata`), l'EventSource (`onerror` con readyState 0 = riprova da solo, 2 = ha
+  rinunciato; `onmessage` = canale vivo) e gli eventi offline/online del browser (presi come
+  sospetto, mai come verità), e conferma con un battito su `/api/v1/health` SOLO quando qualcosa
+  non va (2 s → 4 → 8 → 15 s tetto; dopo 4 tentativi «Il server non risponde» + pulsante
+  Riprova; da sano non batte mai). Al ritorno: «Collegato di nuovo» per 4 s, toast riuscito, e
+  gancio che riapre lo stream della sessione se era CLOSED senza evento terminale. Nel mockup:
+  `<span data-runtime-connessione>` con pallino (warning/danger/success) + `Riprova` nella
+  barra di stato, testo umano (H22). Ricerca 05/09: MDN EventSource + html.spec.whatwg.org §9.2
+  (CONNECTING vs CLOSED), websocket.org/guides/reconnection e coder/mux #1194 2025 (indicatore
+  dopo il primo tentativo fallito, riprova manuale dopo la resa), xjavascript.com e
+  websocket.org/guides/heartbeat (navigator.onLine inaffidabile: battito vero). Prove: unit
+  `tests/unit/connessione.test.mjs` (3, col tempo finto, anche al verso contrario), unit totale
+  75/75, statico 195/195, componenti 78/78, dal vivo `caduta-vivo.mjs` su 4175: 3 s «Connessione
+  persa · riprovo (2)», 8 s «(3)», 15 s «Il server non risponde» + Riprova, al ritorno 2,5 s
+  «Collegato di nuovo», 8,5 s barra pulita; screenshot `foto/caduta-4175-15s.png` e
+  `-ritorno.png`. ⛔ NON VERIFICATO dal vivo: la riapertura dello stream al ritorno (la sessione
+  della prova era conclusa: nessuno stream da riaprire) — provata a unità (gancio chiamato).
 - T-16 (stesso screenshot `foto/caduta-4175-invio.png`): i toast del monolite (`toast()`) escono
   in basso a SINISTRA come testo grezzo in grassetto, fuori dalla shell, senza il linguaggio del
   mockup (nessun `talos-toast`); e il toast «Ripresa della sessione avviata 1 g fa · riprendere
