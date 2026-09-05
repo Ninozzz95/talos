@@ -1,8 +1,9 @@
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
+import { aggiornaPiedeChat } from '../components/chat-foot.js'; // 05/9 Fase 2: ChatFooter — striscia del giro, chip e barra di stato dai dati
 import { aggiornaTopbar } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati
-import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 05/9 Fase 2: WorkspaceFooter — il piede della sidebar dice cartella, tema e chi serve il modello // 05/9 Fase 2: SessionItem — la riga della sidebar è un componente del mockup
+import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../components/workspace-footer.js'; // 05/9 Fase 2: WorkspaceFooter — il piede della sidebar dice cartella, tema e chi serve il modello // 05/9 Fase 2: SessionItem — la riga della sidebar è un componente del mockup
 
 (() => {
   'use strict';
@@ -5924,9 +5925,11 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
   }
 
   /** Aggiorna la pillola del composer che apre il foglio Modello — selettore stabile (`data-open-sheet="model"`), non un confronto sul testo attuale come faceva il codice precedente. */
+  function piedeDelMockup() { return Boolean($('#schermoChat .talos-chat-foot')); }
+
   function aggiornaPillolaModello() {
     const span = $('[data-open-sheet="model"] span');
-    const label = state.model || 'Seleziona modello';
+    const label = piedeDelMockup() ? (nomeModelloBreve(state.model) || 'Scegli il modello') : (state.model || 'Seleziona modello'); // 05/9 Fase 2: il chip mostra il nome breve
     if (span) span.textContent = label;
     const activeModel = $('#modelLabActiveModel');
     if (activeModel) activeModel.textContent = label;
@@ -5950,6 +5953,8 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
    * dopo la prima, la seconda si vede arrivare.
    */
   function aggiornaComposerUsage(usage) {
+    aggiornaPiedeChatDaStato(); // 05/9 Fase 2: ChatFooter — token · giri · cache · primo token dai dati
+    if (piedeDelMockup()) return; // i nodi [data-runtime-*] li scrive il componente, non questo ramo legacy
     const usageNode = $('[data-runtime-usage]');
     const tetto = state.realSession.tettoGiriDichiarato;
     if (usageNode) {
@@ -5980,6 +5985,7 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
    * potrebbero divergere.
    */
   function aggiornaPillolaPermessi() {
+    aggiornaPiedeChatDaStato(); // 05/9 Fase 2: il chip del permesso col nome umano (H22)
     $$('.selector-pill span').filter((span) => ['Workspace write', 'Read only', 'On request', 'Full access'].includes(span.textContent)).forEach((span) => { span.textContent = state.permissions; });
     window.__talosHarnessHostPermissionChange?.(state.permissions);
   }
@@ -6261,7 +6267,61 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
   }
 
   /** Un solo punto sincronizza semantica, icona e azioni del composer. */
+  /*
+   * 05/9 Fase 2: ChatFooter. La striscia del giro in corso (cosa sta facendo
+   * TALOS, giro, secondi, Ferma), i chip (modello · permesso · giri · costo) e
+   * la barra di stato (tema · token e giri · cache · primo token) sono DATI
+   * dello stato: si riscrivono qui, da syncRunComposerState (ogni transizione
+   * del giro), dal timer dell'attesa (ogni secondo), da aggiornaRiassuntoBatch
+   * (ogni attrezzo) e da aggiornaComposerUsage (ogni StateDelta /usage).
+   * ⛔ Il costo non si stima da soli: senza un dato dal server il chip non c'e'.
+   */
+  let giroAvviatoA = null;
+  function latenzaPrimoTokenMs() {
+    const misure = [misuraLatenzaCorrente, ...[...misureLatenzaPassate].reverse()].filter(Boolean);
+    for (const m of misure) {
+      const inizio = m.tappe.get('invio') ?? m.tappe.get('runStarted');
+      const primo = m.tappe.get('primoDelta');
+      if (Number.isFinite(inizio) && Number.isFinite(primo) && primo > inizio) return primo - inizio;
+    }
+    return null;
+  }
+  function cosaStaFacendo() {
+    const batch = state.realSession.batchAttivo;
+    const riga = batch?.contenitore?.querySelector('[data-tool-state="running"]');
+    if (riga) return { cosa: riga.querySelector('.talos-tool-row__name')?.textContent || 'Attrezzo in corso', dettaglio: riga.querySelector('.talos-tool-row__detail')?.textContent || '' };
+    const attesa = state.realSession.attesaBubble?.querySelector('.run-activity-label')?.textContent;
+    if (attesa) return { cosa: attesa, dettaglio: '' };
+    if (state.realSession.messageElements.size > 0) return { cosa: 'TALOS sta scrivendo', dettaglio: '' };
+    return { cosa: 'TALOS sta lavorando', dettaglio: '' };
+  }
+  function aggiornaPiedeChatDaStato() {
+    const piede = $('#schermoChat .talos-chat-foot');
+    if (!piede) return;
+    const attivo = runRealeAttivo();
+    if (attivo && giroAvviatoA === null) giroAvviatoA = performance.now();
+    if (!attivo) giroAvviatoA = null;
+    const { cosa, dettaglio } = attivo ? cosaStaFacendo() : { cosa: '', dettaglio: '' };
+    const usage = state.realSession.usage;
+    const testiTema = aggiornaPiedeChatDaStato.tema?.() || '';
+    aggiornaPiedeChat(piede, {
+      attivo,
+      cosa,
+      dettaglio,
+      giro: Number.isFinite(Number(usage?.giri)) ? Number(usage.giri) : null,
+      secondi: attivo && giroAvviatoA !== null ? (performance.now() - giroAvviatoA) / 1000 : null,
+      usage,
+      tettoGiri: state.realSession.tettoGiriDichiarato,
+      latenzaMs: latenzaPrimoTokenMs(),
+      costo: null,
+      modello: nomeModelloBreve(state.model),
+      permesso: state.permissions,
+      tema: testiTema,
+    });
+  }
+
   function syncRunComposerState() {
+    aggiornaPiedeChatDaStato(); // 05/9 Fase 2: ChatFooter
     const attivo = runRealeAttivo();
     const haTesto = composerInput.value.trim().length > 0;
     const redirectOccupato = state.realSession.redirectRequestInFlight || Boolean(state.realSession.redirectPendingId);
@@ -6761,6 +6821,7 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
         : Date.now();
       const secondiTrascorsi = Math.max(0, Math.floor((ora - state.realSession.attesaAvviataA) / 1000));
       elapsed.textContent = `${secondiTrascorsi}s`;
+      aggiornaPiedeChatDaStato(); // 05/9 Fase 2: ChatFooter — i secondi della striscia
       /*
        * ⛔ Solo mentre lo stato resta 'attesa': 'reasoning'/'preparing'/
        * 'redirect' sono segnali VERI arrivati dal kernel (vedi
@@ -6941,6 +7002,7 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
    * trascurabile (poche decine di tool-call per batch, non migliaia.
    */
   function aggiornaRiassuntoBatch(batch) {
+    aggiornaPiedeChatDaStato(); // 05/9 Fase 2: ChatFooter
     const c = batch.contatori;
     const parti = [];
     if (c.letti > 0) parti.push(formattaConteggioAttivita('letto', c.letti));
@@ -10789,7 +10851,12 @@ import { aggiornaWorkspaceFooter } from '../components/workspace-footer.js'; // 
    * aggiornaSottotitoloSessione (ogni ridisegno della sidebar), da
    * applicaThemeDesktop e dopo ogni cambio di state.model.
    */
+  function testiPiedeSidebar() {
+    return testiPiedeWorkspace({ cartella: state.realSession.cartellaAssoluta, nomeAnteprima: state.realSession.previewWorkspaceName, tema: document.documentElement.dataset.talosTheme, modello: state.model });
+  }
   function aggiornaPiedeSidebar() {
+    aggiornaPiedeChatDaStato.tema = () => testiPiedeSidebar().sotto; // 05/9 Fase 2: la barra di stato della chat ripete «Tema … · locale»
+    aggiornaPiedeChatDaStato();
     aggiornaWorkspaceFooter($('#sessionsPanel .talos-sidebar__foot'), {
       cartella: state.realSession.cartellaAssoluta,
       nomeAnteprima: state.realSession.previewWorkspaceName,

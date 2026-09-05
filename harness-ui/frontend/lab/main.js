@@ -1,7 +1,9 @@
 import template from '../index.template.html';
 import { creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaFallimentoAttrezzo, creaFileToccati, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRicevuta, creaRigaAttrezzo, creaTurno } from '../src/components/conversazione.js';
+import { aggiornaPiedeChat } from '../src/components/chat-foot.js';
 import { LUOGHI, LUOGHI_ALTRI, creaNavItem } from '../src/components/nav-item.js';
 import { CONVERSAZIONE } from './fixtures/conversazione.js';
+import { PIEDE } from './fixtures/piede.js';
 import { creaSessionItem } from '../src/components/session-item.js';
 import { aggiornaTopbar } from '../src/components/topbar.js';
 import { creaWorkspaceFooter } from '../src/components/workspace-footer.js';
@@ -38,6 +40,13 @@ document.documentElement.setAttribute('data-schermo', 'chat');
 const componente = new URLSearchParams(location.search).get('componente') || '';
 
 const LABORATORI = {
+  ChatFooter() {
+    /* Prima si svuota ciò che il mockup scrive a mano, poi il componente lo riscrive dai dati. */
+    const piede = document.querySelector('#schermoChat .talos-chat-foot');
+    for (const el of piede.querySelectorAll('[data-run-what], [data-run-meta], .talos-chip__label, [data-runtime-giri] .talos-mono, [data-runtime-costo] .talos-mono, .talos-statusbar span')) el.textContent = '';
+    piede.querySelector('[data-open-sheet="permissions"]').classList.remove('talos-badge--warning');
+    aggiornaPiedeChat(piede, PIEDE);
+  },
   Conversazione() {
     const colonna = document.querySelector('#schermoChat .talos-conversation__column');
     for (const finto of colonna.querySelectorAll(':scope > .talos-turn')) finto.remove();

@@ -21,6 +21,7 @@ const COMPONENTI = [
   { nome: 'WorkspaceFooter', schermata: 'schermoChat', selettore: '.talos-sidebar' },
   { nome: 'Topbar', schermata: 'schermoChat', selettore: '#schermoChat .talos-topbar' },
   { nome: 'Conversazione', schermata: 'schermoChat', selettore: '#schermoChat .talos-conversation' },
+  { nome: 'ChatFooter', schermata: 'schermoChat', selettore: '#schermoChat .talos-chat-foot' },
 ];
 
 test.describe('parità dei componenti ↔ mockup', () => {
