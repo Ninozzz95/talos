@@ -609,3 +609,26 @@ button{background:none; border:0; cursor:pointer; padding:0}
 .talos-toast p{margin-block:var(--talos-space-sm);overflow-wrap:anywhere}
 .talos-notification-panel{position:fixed;width:var(--talos-inspector-w);max-width:calc(100vw - var(--talos-space-lg));padding:var(--talos-space-md);z-index:var(--talos-z-menu);background:var(--talos-panel);box-shadow:var(--talos-shadow-floating)}
 .talos-notification-panel h2{font-size:var(--talos-font-size-md)}
+
+/* Albero della cartella: stessa rail, dati caricati e azioni per riga. */
+.talos-file-tree{padding-block:var(--talos-space-sm);font-size:var(--talos-font-size-xs)}
+.talos-file-tree [role=group]{padding-left:var(--talos-space-md)}
+.talos-file-row{display:flex;align-items:center;gap:var(--talos-space-xs);min-height:var(--talos-row);padding-inline:var(--talos-space-xs);border-radius:var(--talos-radius-control);cursor:pointer}
+.talos-file-row__name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.talos-file-row__state{font-size:var(--talos-font-size-xs);color:var(--talos-accent)}
+.talos-file-tree [aria-selected=true]>.talos-file-row{background:var(--talos-accent-soft);color:var(--talos-text)}
+.talos-file-tree [role=treeitem]:focus-visible{outline:none}
+.talos-file-tree [role=treeitem]:focus-visible>.talos-file-row{outline:var(--talos-focus-width) solid var(--talos-accent);outline-offset:var(--talos-focus-width)}
+.talos-file-row:hover{background:var(--talos-card)}
+.talos-file-tree [aria-expanded=false]>.talos-file-row>.talos-file-chevron{transform:rotate(-90deg)}
+.talos-file-tools{margin-block:var(--talos-space-sm);gap:var(--talos-space-xs)}
+.talos-context-menu{position:fixed;z-index:var(--talos-z-menu);width:var(--talos-inspector-w);max-width:calc(100vw - var(--talos-space-lg));padding:var(--talos-space-sm);background:var(--talos-panel);box-shadow:var(--talos-shadow-floating)}
+.talos-context-menu [role=menuitem]{justify-content:flex-start;width:100%;font-size:var(--talos-font-size-sm)}
+.talos-context-menu__title{padding:var(--talos-space-sm);overflow-wrap:anywhere;font-size:var(--talos-font-size-xs);color:var(--talos-muted)}
+.talos-inspector-close{display:none}
+@media(max-width:1240px){
+ .talos-shell.details-open .talos-inspector{display:flex;position:fixed;inset:0 0 0 auto;width:min(var(--talos-inspector-w),100vw);z-index:calc(var(--talos-z-app-overlay) - 1);box-shadow:var(--talos-shadow-floating)}
+ .talos-shell.details-open .talos-inspector-close{display:inline-flex}
+ .talos-shell.details-open .talos-inspector__head{display:flex;align-items:center;gap:var(--talos-space-sm)}
+ .talos-shell.details-open .talos-resizer--inspector{display:none}
+}
