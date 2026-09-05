@@ -447,3 +447,18 @@ funzioni»); `artifact_create` produce una ArtifactCard vera («Funzioni matemat
 isolato su `/api/v1/artifacts/<id>`, «Apri»). 22 s, zero errori. Immagini: `artefatto-vero.png`,
 `reindirizza-durante-il-giro.png`, `artefatto-giro-concluso.png`. Resta non visto dal vivo solo la
 dettatura (serve un microfono). Istanza 4181 spenta di nuovo.
+
+---
+
+## R-01 · Review del commit di Astra `c2985683` («selettore modello e dialoghi ridimensionabili») — ✅ accettato e unito (`fb0e5fda`)
+
+Guardato `dialogo-modello-1440.png` e il diff del mockup: il dialogo «Modello e ragionamento»
+parla la lingua del mockup (due fonti OpenRouter/Locali, ricerca, gruppi richiudibili, «Attuale»,
+cursore del ragionamento con «Automatico», «Mostra ragionamento», «La scelta vale dal prossimo
+invio», Fatto); tre maniglie per dialogo (`.talos-resizer--dialog-*`) con misura ricordata; via
+l'anteprima separata: tutto DENTRO il mockup, come chiesto. Ricerca citata (APG dialog-modal,
+MDN setPointerCapture). Test nuovi nel cancello statico (ASTRA Dialogo Modello, misura
+persistita) verdi anche sul mio albero dopo l'unione: statico **135/135**, componenti **24/24**.
+Nota per Astra (già nel suo ledger): «Comandi» nascosto sotto 640 px di testata è voluto (Ctrl K
+resta). Da B7: le maniglie vanno innestate su `setupModalResize` del monolite
+(`talos-harness-modal-sizes-v1`), non duplicate.
