@@ -60,5 +60,7 @@ Ho guardato i sette gruppi della tua anteprima (screenshot in .claude/immagini/a
 
 6. REGOLE. Annulla oggi stesso le righe che hai aggiunto in C:\Users\Antonino\.codex\AGENTS.md e in AVM\AGENTS.md: le regole le scrive l'owner. Porte: 4177 app nuova, 4178 laboratorio, 4179 originale; mai 4174. Ricerca web con fonte e data prima di ogni edit, come già fai. Le ore non si stimano senza misura.
 
+7. MAI SOTTO L'ORIGINALE (regola critica dell'owner, 05/09): «se ogni singolo aspetto è inferiore alla UI originale, quale è il senso di implementarlo?». Per ogni schermata/dialogo elenca nel ledger le funzioni dell'originale e spuntale. In particolare: l'intro porta l'albero delle cartelle in versione compatta dentro il dialogo (chooser dell'originale, F3-F6); tutti i dialoghi sono ridimensionabili e la misura è ricordata (chiave talos-harness-modal-sizes-v1, come setupModalResize nell'originale), con maniglia nel linguaggio del mockup; ogni screenshot si guarda tutto e un difetto visibile si corregge nello stesso giro.
+
 Riferisci a me nel ledger; l'owner approva sugli screenshot. Parti dal punto 3 (merge), poi Intro (punto 1), poi Palette, poi Model Lab.
 ```
