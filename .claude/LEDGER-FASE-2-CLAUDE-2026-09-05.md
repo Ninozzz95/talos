@@ -462,3 +462,18 @@ persistita) verdi anche sul mio albero dopo l'unione: statico **135/135**, compo
 Nota per Astra (già nel suo ledger): «Comandi» nascosto sotto 640 px di testata è voluto (Ctrl K
 resta). Da B7: le maniglie vanno innestate su `setupModalResize` del monolite
 (`talos-harness-modal-sizes-v1`), non duplicate.
+
+---
+
+## S-11 · Tastiera e tema chiaro sulle mie superfici (H27-H30) — ✅
+
+Camminata con Tab dal campo «Cerca chat…» (4175): Nuova → i Luoghi → Altro → UNA fermata sulla
+lista delle sessioni (roving tabindex: frecce su/giù, Home/End; prima erano 74 fermate, una per
+riga) → Impostazioni → maniglia → titolo → UNA fermata sulle schede → Albero · Comandi · Comprimi ·
+Dettagli · Riprendi → i bundle della chat → copia · ascolta · chiedi di nuovo → maniglia del
+composer (ora con anello di fuoco) → messaggio. Nessuna fermata invisibile. Tema chiaro: stessa
+pagina, palette chiara del mockup, leggibile (immagine `chat-chiaro-nuova-1440-cima`).
+Dopo l'unione di Astra la testata andava A CAPO su due righe (suo CSS `flex-wrap:wrap` con la
+quarta scheda «Browser»): ripristinata su una riga, adattiva per larghezza (percorso ≤900,
+Comprimi ≤820, Comandi ≤720); la scheda «Browser» porta `data-vaia="browser"` e apre la vista
+browser del monolite finché Astra non innesta `#schermoBrowser`.
