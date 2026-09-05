@@ -3,6 +3,7 @@ import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
 import { aggiornaPiedeChat } from '../components/chat-foot.js'; // 05/9 Fase 2: ChatFooter — striscia del giro, chip e barra di stato dai dati
 import { aggiornaDiffReview, creaRigaFileReview, nascondiAzioniFase3, riassuntoReview } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno del mockup
+import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
 import { aggiornaTopbar } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati
 import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../components/workspace-footer.js'; // 05/9 Fase 2: WorkspaceFooter — il piede della sidebar dice cartella, tema e chi serve il modello // 05/9 Fase 2: SessionItem — la riga della sidebar è un componente del mockup
 
@@ -1172,6 +1173,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     }
     appShell.classList.toggle('inspector-collapsed');
     syncInspectorToggle();
+    ricordaCollasso('inspectorCollapsed', appShell.classList.contains('inspector-collapsed')); // 05/9 Fase 2: si ricorda
     riclampaComposerUserSized(); // ⭐ 3/9 — item 10: la colonna del context rail è appena cambiata, il tetto del composer con lei
   }
 
@@ -1180,6 +1182,17 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   function syncSessionsToggle() {
     const expanded = window.innerWidth <= 1040 || !appShell.classList.contains('sessions-collapsed');
     sessionsCollapseBtn?.setAttribute('aria-expanded', String(expanded));
+    // 05/9 Fase 2 (owner: «le due sidebar devono essere collassabili»): la barra compressa e' la modalita' a icone del mockup
+    if (expanded) document.documentElement.removeAttribute('data-sidebar'); else document.documentElement.setAttribute('data-sidebar', 'icone');
+  }
+
+  /** 05/9 Fase 2 — i collassi delle due colonne si ricordano nella chiave del contratto delle larghezze (talos-harness-panel-widths). */
+  function ricordaCollasso(campo, valore) {
+    try {
+      const saved = readSavedPanelWidths();
+      if (valore) saved[campo] = true; else delete saved[campo];
+      window.localStorage.setItem(PANEL_RESIZE_STORAGE_KEY, JSON.stringify(saved));
+    } catch { /* storage negato: si parte espansi la prossima volta, nessun crash */ }
   }
 
   function toggleSessionsPanel() {
@@ -1189,6 +1202,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     }
     appShell.classList.toggle('sessions-collapsed');
     syncSessionsToggle();
+    ricordaCollasso('sessionsCollapsed', appShell.classList.contains('sessions-collapsed')); // 05/9 Fase 2: si ricorda (solo su gesto della persona)
     riclampaComposerUserSized(); // ⭐ 3/9 — item 10: stesso motivo del gemello per l'inspector — la colonna della lista sessioni è appena cambiata
   }
 
@@ -6441,7 +6455,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     const schermo = $('#schermoReview');
     if (!file || !schermo) return;
     state.reviewFileCorrente = file.path;
-    for (const riga of schermo.querySelectorAll('.talos-review__files .talos-list-row')) riga.setAttribute('aria-selected', String(riga.dataset.reviewFile === key));
+    for (const scheda of schermo.querySelectorAll('.talos-review__scheda[role="tab"]')) { const attiva = scheda.dataset.reviewFile === key; scheda.setAttribute('aria-selected', String(attiva)); scheda.tabIndex = attiva ? 0 : -1; }
     aggiornaDiffReview(schermo.querySelector('.talos-review__diff'), file);
     $$('[data-review-action]').forEach((b) => { b.disabled = false; });
   }
@@ -8175,7 +8189,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
      * che aspettano una rotta (Accetta/Scarta/Apri nell'editor) restano nascosti.
      */
     const schermo = $('#schermoReview');
-    const contenitore = schermo?.querySelector('.talos-review__files');
+    const contenitore = schermo?.querySelector('.talos-review__schede .talos-tabs__list'); // owner 05/09: schede in alto, diff sotto
     if (!contenitore) return;
     const voci = [...state.realSession.reviewFiles.values()];
     aggiornaTestataSessione(); // 05/9 Fase 2: Topbar — il badge della Review segue i file toccati
@@ -8185,9 +8199,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       onApri: () => renderReviewFile(`real:${file.path}`),
     })));
     if (voci.length === 0) {
-      const vuoto = textElement('p', 'talos-muted review-empty', 'Nessun file scritto finora.');
+      const vuoto = textElement('span', 'talos-tabs__tab talos-review__scheda talos-muted review-empty', 'Nessun file scritto finora.');
       vuoto.id = 'reviewEmptyList';
-      vuoto.style.padding = '12px 14px';
       contenitore.appendChild(vuoto);
       aggiornaDiffReview(schermo.querySelector('.talos-review__diff'), null);
     }
@@ -8196,6 +8209,24 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     const titoloTestata = schermo.querySelector('.talos-topbar__title h1');
     if (titoloTestata && state.session) titoloTestata.textContent = state.session;
     nascondiAzioniFase3(schermo);
+    // tastiera sulle schede dei file (WAI-ARIA tabs, attivazione automatica: il diff e' gia' nel DOM)
+    if (!contenitore.dataset.tastiera) {
+      contenitore.dataset.tastiera = 'si';
+      contenitore.addEventListener('keydown', (event) => {
+        const schede = [...contenitore.querySelectorAll('[role="tab"]')];
+        const i = schede.indexOf(document.activeElement);
+        if (i < 0 || schede.length === 0) return;
+        let j = i;
+        if (event.key === 'ArrowRight') j = (i + 1) % schede.length;
+        else if (event.key === 'ArrowLeft') j = (i - 1 + schede.length) % schede.length;
+        else if (event.key === 'Home') j = 0;
+        else if (event.key === 'End') j = schede.length - 1;
+        else return;
+        event.preventDefault();
+        schede[j].focus();
+        schede[j].click();
+      });
+    }
   }
 
   /**
@@ -10249,6 +10280,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       state.realSession.eventSource = null;
     }
     if (!continua) {
+      smontaStatoVuoto(); // 05/9 Fase 2: EmptyState
       $('#conversation').replaceChildren();
       $('#conversation').classList.remove('is-restoring'); // un ripristino interrotto da una nuova generazione non lascia la chat nascosta
       aggiornaSpazioCodaConversazione($('#conversation')); // conversazione vuota: niente spazio in coda, l'hero resta centrato
@@ -12234,6 +12266,39 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (demoBadge) demoBadge.hidden = true;
   }
 
+  /*
+   * 05/9 Fase 2: EmptyState. La colonna della chat diventa lo stato vuoto del
+   * mockup: titolo con la cartella, riga guida, fino a tre suggerimenti letti
+   * dai FATTI della cartella (il browser del workspace elenca le cartelle alla
+   * radice: .claude → ledger, src → mappa, tests → test) che riempiono il
+   * composer senza inviare, e «Riapri l'ultima sessione» se ne esiste una.
+   * Il primo messaggio (nuovaGenerazioneSessione) lo toglie.
+   */
+  async function montaStatoVuoto({ nomeCartella, cartellaLibera }) {
+    const conversation = $('#conversation');
+    if (!conversation) return;
+    conversation.classList.add('talos-empty');
+    conversation.closest('.talos-conversation')?.classList.add('talos-conversation--empty');
+    let voci = [];
+    if (cartellaLibera) {
+      try { voci = (await apiGet(`/api/v1/workspace-browser?path=${encodeURIComponent(cartellaLibera)}`)).items || []; } catch { voci = []; }
+    }
+    if (!state.pendingCustomSession || state.realSession.id) return; // nel frattempo la sessione e' partita: niente da montare
+    const suggerimenti = suggerimentiDallaCartella({ voci });
+    const ultima = [...state.sessionSelection.available.values()].sort((a, b) => new Date(b.avviataAlle).getTime() - new Date(a.avviataAlle).getTime())[0] || null;
+    const colonna = creaStatoVuoto({ progetto: nomeCartella, suggerimenti, ultimaSessione: ultima ? { nome: ultima.nome || ultima.taskId } : null }, {
+      onSuggerimento: (s) => { composerInput.value = s.testo || s.titolo; composerInput.dispatchEvent(new Event('input', { bubbles: true })); composerInput.focus(); },
+      onRiapri: () => { if (ultima) passaASessione(ultima.sessionId, ultima.taskId, ultima.nome, ultima.modello, ultima); },
+    });
+    conversation.replaceChildren(...colonna.childNodes);
+  }
+  function smontaStatoVuoto() {
+    const conversation = $('#conversation');
+    if (!conversation) return;
+    conversation.classList.remove('talos-empty');
+    conversation.closest('.talos-conversation')?.classList.remove('talos-conversation--empty');
+  }
+
   function avviaSessionePendente({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo }) {
     nuovaGenerazioneSessione();
     state.pendingCustomSession = { cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo };
@@ -12261,7 +12326,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     // quando la sessione vera abilita l'albero file ordinario.
     if (!cartellaId) renderizzaRadiceWorkspacePendente(nomeCartella);
     // ⛔ nuovaGenerazioneSessione() ha appena svuotato #conversation (replaceChildren) — l'empty-state originale non esiste più nel DOM, va ricreato, non cercato.
-    $('#conversation').appendChild(costruisciConversationHero(`Sessione pronta su ${nomeCartella}.`, 'Scrivi qui sotto cosa deve fare TALOS per iniziare.'));
+    void montaStatoVuoto({ nomeCartella, cartellaLibera }); // 05/9 Fase 2: EmptyState al posto dell'hero
     // ⭐ 30/8 — stesso principio di sopra, sul tab Files: nuovaGenerazioneSessione() (dentro resettaSuperficiRealiDedicate) ha già scritto il placeholder GENERICO "nessuna cartella ancora scelta" — ma qui la cartella è già nota, prima ancora del primo messaggio. Nessuna nuova sorgente di verità: nomeCartella è lo stesso valore che finisce nel titolo sessione qui sopra.
     window.setTimeout(() => composerInput.focus(), 0);
   }
@@ -13713,6 +13778,10 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
 
   function loadPanelWidths() {
     const saved = readSavedPanelWidths();
+    if (saved.sessionsCollapsed && window.innerWidth > 1040) appShell.classList.add('sessions-collapsed'); // 05/9 Fase 2: collassi ricordati
+    if (saved.inspectorCollapsed && window.innerWidth > 1040) appShell.classList.add('inspector-collapsed');
+    syncSessionsToggle();
+    syncInspectorToggle();
     for (const which of Object.keys(PANEL_RESIZE_VAR)) {
       if (typeof saved[which] === 'number') applyPanelWidth(which, saved[which]);
     }

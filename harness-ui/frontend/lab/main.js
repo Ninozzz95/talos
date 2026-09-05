@@ -2,7 +2,9 @@ import template from '../index.template.html';
 import { creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaFallimentoAttrezzo, creaFileToccati, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRicevuta, creaRigaAttrezzo, creaTurno } from '../src/components/conversazione.js';
 import { aggiornaPiedeChat } from '../src/components/chat-foot.js';
 import { aggiornaDiffReview, creaRigaFileReview, riassuntoReview } from '../src/components/review.js';
+import { creaStatoVuoto } from '../src/components/stato-vuoto.js';
 import { REVIEW } from './fixtures/review.js';
+import { VUOTA } from './fixtures/vuota.js';
 import { LUOGHI, LUOGHI_ALTRI, creaNavItem } from '../src/components/nav-item.js';
 import { CONVERSAZIONE } from './fixtures/conversazione.js';
 import { PIEDE } from './fixtures/piede.js';
@@ -42,10 +44,14 @@ document.documentElement.setAttribute('data-schermo', 'chat');
 const componente = new URLSearchParams(location.search).get('componente') || '';
 
 const LABORATORI = {
+  EmptyState() {
+    const vecchia = document.querySelector('#schermoVuota .talos-conversation__column.talos-empty');
+    vecchia.replaceWith(creaStatoVuoto(VUOTA));
+  },
   Review() {
     const schermo = document.getElementById('schermoReview');
-    const elenco = schermo.querySelector('.talos-review__files');
-    for (const finto of elenco.querySelectorAll('.talos-list-row')) finto.remove();
+    const elenco = schermo.querySelector('.talos-review__schede .talos-tabs__list');
+    for (const finto of elenco.querySelectorAll('.talos-review__scheda')) finto.remove();
     for (const voce of REVIEW.voci) elenco.append(creaRigaFileReview(voce, { attiva: voce.path === REVIEW.corrente }));
     aggiornaDiffReview(schermo.querySelector('.talos-review__diff'), REVIEW.voci.find((v) => v.path === REVIEW.corrente));
     schermo.querySelector('.talos-topbar__path').textContent = riassuntoReview(REVIEW.voci);

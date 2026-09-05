@@ -64,21 +64,26 @@ export function sottotitoloFile(voce = {}) {
   return pezzi.join(' · ');
 }
 
-/** Una riga dell'elenco dei file. */
+/**
+ * Una SCHEDA di file (owner 05/09: «schede in alto e diff a piena larghezza
+ * sotto, stile VS Code», come il Review di Hermes Desktop): `role="tab"`, il
+ * percorso in mono, +A e −R (−0 non si scrive). Il sottotitolo (giro, ricevuta,
+ * simboli spariti) va nel `title` e nella testa del diff.
+ */
 export function creaRigaFileReview(voce, { attiva = false, onApri, document: documentObj = globalThis.document } = {}) {
-  const riga = el(documentObj, 'button', 'talos-list-row');
-  riga.type = 'button';
-  riga.setAttribute('aria-selected', String(Boolean(attiva)));
-  riga.dataset.reviewFile = `real:${voce.path}`;
-  const testo = el(documentObj, 'span', 'talos-list-row__text');
-  testo.append(el(documentObj, 'span', 'talos-list-row__title talos-mono', voce.path), el(documentObj, 'span', 'talos-list-row__sub', sottotitoloFile(voce)));
-  const aside = el(documentObj, 'span', 'talos-list-row__aside');
+  const scheda = el(documentObj, 'button', 'talos-tabs__tab talos-review__scheda');
+  scheda.type = 'button';
+  scheda.setAttribute('role', 'tab');
+  scheda.setAttribute('aria-selected', String(Boolean(attiva)));
+  scheda.tabIndex = attiva ? 0 : -1;
+  scheda.dataset.reviewFile = `real:${voce.path}`;
+  scheda.title = sottotitoloFile(voce);
+  scheda.append(el(documentObj, 'span', 'talos-mono', voce.path));
   const c = contaDiff(voce);
-  aside.append(el(documentObj, 'span', 'talos-diff-num talos-diff-num--plus', `+${c.aggiunte}`));
-  if (c.rimozioni > 0) aside.append(el(documentObj, 'span', 'talos-diff-num talos-diff-num--minus', `−${c.rimozioni}`)); // come nel mockup: «−0» non si scrive
-  riga.append(testo, aside);
-  if (typeof onApri === 'function') riga.addEventListener('click', onApri);
-  return riga;
+  scheda.append(el(documentObj, 'span', 'talos-diff-num talos-diff-num--plus', `+${c.aggiunte}`));
+  if (c.rimozioni > 0) scheda.append(el(documentObj, 'span', 'talos-diff-num talos-diff-num--minus', `−${c.rimozioni}`));
+  if (typeof onApri === 'function') scheda.addEventListener('click', onApri);
+  return scheda;
 }
 
 /** Riscrive il DiffView (testa, righe, avviso sui simboli) per la voce data; `null` = stato vuoto. */
@@ -103,6 +108,8 @@ export function aggiornaDiffReview(card, voce) {
     const meno = testa.querySelector('.talos-diff-num--minus');
     if (piu) { piu.hidden = false; piu.textContent = `+${c.aggiunte}`; }
     if (meno) { meno.hidden = c.rimozioni === 0; meno.textContent = `−${c.rimozioni}`; } // «−0» non si scrive
+    const giro = testa.querySelector('.talos-muted');
+    if (giro) { giro.hidden = !Number.isFinite(voce.giro); if (Number.isFinite(voce.giro)) giro.textContent = `giro ${voce.giro}`; }
   }
   if (diff) {
     diff.replaceChildren(...(voce.code || []).map((riga) => {

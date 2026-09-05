@@ -353,3 +353,43 @@ azioni della Fase 3 nascoste. Immagini in `.claude/immagini/fase2-claude/Review/
 - T-12 le **ricevute firmate** per scrittura (badge «Ricevuta a1f4…9c02», blocco SignedReceipt):
   il server ha la chiave (`TALOS_HARNESS_RECEIPT_*`) ma il flusso non emette l'hash al client →
   Fase 3.
+
+---
+
+## S-07-bis · Review a SCHEDE (owner 05/09: «schede in alto e diff piena larghezza sotto, stile VS Code») — ✅ verde
+
+Ricerca (05/09/2026): Hermes Desktop, Review pane (hermes-agent.nousresearch.com/docs/user-guide/
+desktop): file modificati in elenco o albero, diff con ambito Uncommitted · Branch · Last turn,
+stage/revert/commit dallo stesso pannello; VS Code: schede dei file in alto, editor di diff a
+tutta larghezza. **Mockup ridisegnato**: `ReviewFileTabs` (una `talos-tabs__list` con una scheda
+per file: percorso mono, +A, −R) sopra il `DiffView` a tutta larghezza (testa: percorso, ricevuta,
++/−, «giro N»); via l'elenco a colonna. **Componente**: `creaRigaFileReview` emette la scheda
+(`role="tab"`, roving tabindex); **monolite**: frecce/Home/End sulle schede (attivazione
+automatica: il diff è già nel DOM). Cancelli **24/24** e **54/54**; dal vivo 1440/1024 su una
+sessione con un file scritto, zero errori. Immagini in `immagini/fase2-claude/Review/*schede*`.
+Resta per la Fase 3 (T-11): ambito Non committato · Ramo · Ultimo giro (W1-06, servizio git),
+Accetta/Scarta, vista affiancata.
+
+## S-08 · EmptyState (lo stato vuoto di una sessione nuova) — ✅ verde
+
+**Componente**: `src/components/stato-vuoto.js` — `creaStatoVuoto`, `suggerimentiDallaCartella`
+(dai FATTI: `.claude` → ledger aperti, `src` → mappa, `tests` → test; package.json/README quando
+il browser del workspace elencherà anche i file: oggi elenca solo cartelle). **Monolite**:
+`montaStatoVuoto` al posto dell'hero in `avviaSessionePendente` — il blocco entra nella colonna
+della Chat (UN composer, quello vero), «Riapri l'ultima sessione» apre davvero l'ultima, un
+suggerimento riempie il composer senza inviare; `nuovaGenerazioneSessione` lo toglie. Cancelli
+verdi; dal vivo (Nuova → «Continua nella chat — AVM-harness-desktop»): titolo con la cartella,
+riga guida, «Riapri l'ultima sessione», zero errori; nessun suggerimento perché la cartella scelta
+è un progetto con id (niente percorso per il browser) → T-13: leggere i fatti anche per i
+progetti allowlistati (`/api/v1/projects` porta il percorso?) — da verificare.
+
+## S-09 · Le due colonne si comprimono e si ricordano (owner 05/09: «le due sidebar devono essere collassabili») — ✅ verde
+
+Pulsante «Comprimi o espandi la barra laterale» nel marchio della sidebar (mockup, `i-menu` dallo
+sprite originale) → `#sessionsCollapseBtn` → `toggleSessionsPanel` del monolite; la barra compressa
+è la modalità a icone del mockup (`data-sidebar="icone"`, CSS già pronto, 64 px). Il toggle
+«Dettagli» della testata comprime la colonna destra. Entrambi si ricordano in
+`talos-harness-panel-widths` (chiave del contratto) e si riapplicano all'avvio; il flag si scrive
+solo sul gesto della persona (il sync dell'avvio lo cancellava). Dal vivo: 276→64 px, ricarico,
+entrambe ricordate, riapertura, zero errori. Immagini in `immagini/fase2-claude/Collassi/`.
+Per Astra B8 restano: densità, tema chiaro, lingua.
