@@ -1,5 +1,5 @@
 /** Officina nel mockup; GET /tool-forge e azione owner separata. WAI Listbox, 05/09/2026. */
-import {nomeUmanoAttrezzo} from '../app/nomi-attrezzi.js';
+import {nomeUmanoAttrezzo} from './nomi-attrezzi.js';
 // Adattamento degli id delle capacità ai nomi umani già canonici; nessun nome verso il modello cambia.
 const ALIAS=new Map([['tasks.list','tasks_list'],['tasks.create','tasks_create'],['tasks.setStatus','tasks_update'],['notes.list','notes_list'],['notes.create','notes_create'],['notes.update','notes_update'],['memory.search','memory_search'],['memory.create','memory_write']]);
 export function statoToolForgiato(abilitato){
