@@ -58,9 +58,17 @@ export function aggiornaPannelloNotifiche(pannello, notifiche = [], { ora = () =
   if (!pannello) return { righe: [], tutte: null };
   const titolo = pannello.querySelector('#titoloNotifiche, h2');
   if (titolo) titolo.textContent = titoloNotifiche(notifiche.length);
-  // via tutto ciò che sta dopo la toolbar (le righe demo del mockup o il giro precedente)
+  /*
+   * Via tutto ciò che sta dopo la toolbar (le righe demo del mockup o il giro
+   * precedente) — ⛔ TRANNE il blocco del consenso alle notifiche di sistema,
+   * che è un piede fisso e non una notifica. Trovato dal vivo il 06/09: senza
+   * questa eccezione il pulsante «Avvisami anche fuori dalla finestra» spariva
+   * al primo ridisegno, cioè sempre, perché il pannello si ridisegna a ogni
+   * aggiornamento dell'elenco sessioni.
+   */
   const toolbar = pannello.querySelector('.talos-toolbar');
-  for (const n of [...pannello.children]) if (n !== toolbar) n.remove();
+  const sistema = pannello.querySelector('.talos-notification-panel__sistema');
+  for (const n of [...pannello.children]) if (n !== toolbar && n !== sistema) n.remove();
   pannello.append(el(documentObj, 'p', 'talos-muted', sommarioNotifiche(notifiche.length)));
   const righe = [];
   for (const { sessione, stato } of notifiche) {
@@ -84,6 +92,8 @@ export function aggiornaPannelloNotifiche(pannello, notifiche = [], { ora = () =
     tutte.append(icona(documentObj, 'i-check'), documentObj.createTextNode(' Segna tutte come viste'));
     pannello.appendChild(tutte);
   }
+  // il piede del consenso resta l'ULTIMA cosa del pannello, sotto le righe e sotto «Segna tutte»
+  if (sistema) pannello.appendChild(sistema);
   return { righe, tutte };
 }
 
@@ -112,4 +122,53 @@ export function apriPannelloNotifiche(pannello, campanella, { document: document
   pannello.querySelector('#chiudiNotifiche, [aria-label="Chiudi notifiche"]')?.addEventListener('click', () => chiudi(true), { once: true });
   (pannello.querySelector('.talos-list-row') || pannello.querySelector('#chiudiNotifiche'))?.focus();
   return chiudi;
+}
+
+/*
+ * ─────────────────────────────────────────────────────────────────────────────
+ * G29 — LA NOTIFICA DI SISTEMA.
+ *
+ * Decisione G22/G29: «Ciò che aspetta te si vede in TUTTI E TRE i modi:
+ * contrassegno sulla sessione · pannello notifiche · **notifica di sistema**».
+ * Dei tre, i primi due c'erano già (la riga della sessione dice «aspetta te»,
+ * il pannello è quello qui sopra); la terza no.
+ *
+ * ── Ricerca 06/09/2026, e i vincoli che ne sono usciti ──
+ * · MDN, «Using the Notifications API» e `Notification.requestPermission()`:
+ *   il permesso **si chiede solo da un gesto della persona** — «browsers will
+ *   explicitly disallow notification permission requests not triggered in
+ *   response to a user gesture» (Firefox dalla 72). ⇒ NON si può chiedere
+ *   all'avvio: il pulsante sta dentro il pannello, e lo preme chi vuole.
+ * · Pushpad, «The notification prompt can only be triggered by a user gesture»:
+ *   il doppio consenso — prima un controllo nostro, poi quello del browser —
+ *   è la forma che non brucia il permesso (una volta negato, non si richiede).
+ * · ⛔ E non si avvisa mai mentre la persona sta GUARDANDO la finestra: una
+ *   notifica di sistema per una cosa già a schermo è solo rumore.
+ */
+
+/**
+ * Se mandare o no la notifica di sistema. Pura: decide, non manda.
+ * @param {{permesso:string, visibile:boolean, quante:number, giaAvvisate:Set|Array}} stato
+ */
+export function deveAvvisareFuoriDallaFinestra({ permesso, visibile, notifiche = [], giaAvvisate = [] } = {}) {
+  if (permesso !== 'granted') return [];
+  // ⛔ la finestra è sotto gli occhi: quello che aspetta si vede già nel pannello e sulla riga.
+  if (visibile) return [];
+  const viste = giaAvvisate instanceof Set ? giaAvvisate : new Set(giaAvvisate || []);
+  return notifiche.filter((n) => n?.sessione?.sessionId && !viste.has(`${n.sessione.sessionId}:${n.stato}`));
+}
+
+/** Il testo di una notifica di sistema: titolo corto, corpo che dice cosa aspetta. */
+export function testoNotificaSistema(notifica) {
+  const nome = notifica?.sessione?.nome || notifica?.sessione?.taskId || 'Una sessione';
+  const cosa = ETICHETTE_NOTIFICA?.[notifica?.stato] || 'chiede attenzione';
+  return { titolo: 'TALOS · aspetta te', corpo: `${nome} — ${cosa}`, tag: `${notifica?.sessione?.sessionId}:${notifica?.stato}` };
+}
+
+/** Cosa scrivere sotto il pulsante, secondo lo stato del permesso. */
+export function statoConsensoNotifiche(permesso, supportato = true) {
+  if (!supportato) return { testo: 'Questo browser non manda notifiche di sistema.', chiedibile: false };
+  if (permesso === 'granted') return { testo: 'Attive: TALOS avvisa solo quando non è in primo piano.', chiedibile: false };
+  if (permesso === 'denied') return { testo: 'Negate nelle impostazioni del browser. Si riattivano da lì, non da qui.', chiedibile: false };
+  return { testo: 'Solo quando TALOS non è in primo piano.', chiedibile: true };
 }

@@ -124,3 +124,28 @@ test('C10-DESCRIZIONI: 43 attrezzi, tutte in italiano, senza markdown a schermo'
   assert.equal(m.descrizioneAttrezzo('__proto__'), null);
   assert.deepEqual(m.attrezziSenzaDescrizione(['elenca', 'non_esiste']), ['non_esiste']);
 });
+
+test('G29-NOTIFICA-SISTEMA: si manda solo col permesso, solo a finestra nascosta, una volta sola', async () => {
+  const m = await import('../../src/components/notifiche.js');
+  const una = [{ sessione: { sessionId: 's1', nome: 'Pulizia store' }, stato: 'approvazione' }];
+  // ⛔ senza permesso non si manda niente, e non si chiede di nascosto
+  assert.deepEqual(m.deveAvvisareFuoriDallaFinestra({ permesso: 'default', visibile: false, notifiche: una }), []);
+  assert.deepEqual(m.deveAvvisareFuoriDallaFinestra({ permesso: 'denied', visibile: false, notifiche: una }), []);
+  // ⛔ con la finestra sotto gli occhi non si manda: quello che aspetta si vede già
+  assert.deepEqual(m.deveAvvisareFuoriDallaFinestra({ permesso: 'granted', visibile: true, notifiche: una }), []);
+  // col permesso e la finestra nascosta, si manda
+  assert.equal(m.deveAvvisareFuoriDallaFinestra({ permesso: 'granted', visibile: false, notifiche: una }).length, 1);
+  // ⛔ e una volta sola: la chiave è sessione:stato
+  assert.deepEqual(m.deveAvvisareFuoriDallaFinestra({ permesso: 'granted', visibile: false, notifiche: una, giaAvvisate: ['s1:approvazione'] }), []);
+  // ma un NUOVO stato della stessa sessione è una notifica nuova
+  const conclusa = [{ sessione: { sessionId: 's1' }, stato: 'conclusa' }];
+  assert.equal(m.deveAvvisareFuoriDallaFinestra({ permesso: 'granted', visibile: false, notifiche: conclusa, giaAvvisate: ['s1:approvazione'] }).length, 1);
+  const t = m.testoNotificaSistema(una[0]);
+  assert.equal(t.tag, 's1:approvazione');
+  assert.match(t.corpo, /Pulizia store/);
+  // lo stato del consenso dice il vero, e non offre di richiedere quando è negato
+  assert.equal(m.statoConsensoNotifiche('granted').chiedibile, false);
+  assert.equal(m.statoConsensoNotifiche('denied').chiedibile, false);
+  assert.equal(m.statoConsensoNotifiche('default').chiedibile, true);
+  assert.equal(m.statoConsensoNotifiche('default', false).chiedibile, false);
+});
