@@ -39,6 +39,7 @@
 | O-28 | «nel browser il contenuto si vede così» — «Letture della sessione» mostra l'HTML grezzo della pagina | Vista Browser | ✅ | misurato: cornice visibile su https://example.org, caricata, due modi; il testo dell’agente esce ripulito col sorgente sotto |
 | O-29 | «la bolla di domanda non deve avere larghezza al massimo: bolla di chat con la codina, da destra» | Conversazione | ✅ | misurato: bolla al 67% della colonna, a destra, angolo-codina in basso a destra |
 | O-30 | «non riesco ad aprire la sidebar di destra dopo averla collassata» | Colonna destra | ✅ | due gestori sullo stesso clic si annullavano; verificato su 4 viste, dalla Review alla Chat, e dopo un ricaricamento |
+| O-31 | «se navigo io manualmente in una pagina, il modello deve leggere QUELLA pagina» («funzione critica») | Vista Browser | 🔴 aperto | oggi l'agente vede solo le pagine che ha aperto lui |
 
 ---
 
@@ -258,3 +259,37 @@ prodotto quattro sessioni figlie, otto giri e 76,8k token, tutte fallite; i figl
 dicesse. La causa sta nel kernel (`talosHarness.mjs`, la delega sulla stessa cartella del padre viene
 rifiutata e il modello riscrive il percorso in forma WSL per farla passare): **fuori dalla mia lane**,
 e va detto all'owner invece di aggirato.
+
+### O-31 · Quello che guardo io, lo deve vedere anche lui — 🔴 APERTO, critico
+
+**Cosa chiede l'owner.** «Se navigo manualmente in una pagina del browser, il modello deve leggere
+anche quella. Per esempio gli chiedo di cercare l'ultima versione di Python, poi vado su YouTube e
+gli chiedo quali video mi consiglia: lui deve rispondere in base alla pagina che vede.»
+
+**Ricerca tecnica, 06/09/2026** (browser-use «Leaving Playwright for CDP», microsoft/playwright
+#21780, vercel-labs/agent-browser #279, Browserbase «Taming iframes»):
+
+- una pagina di un'altra origine dentro una cornice **non si può leggere** dal JavaScript della
+  pagina che la ospita: è il confine di origine del browser, e non c'è trucco che lo aggiri;
+- chi ci riesce lo fa **fuori dalla pagina**: con il protocollo di DevTools (CDP) attaccato al
+  browser, o con un motore che possiede la finestra. TALOS gira dentro il Chrome dell'owner: non
+  possiede quella finestra e non può attaccarcisi;
+- resta la via del **proxy**, che TALOS ha già per i dev server locali: la pagina diventa della
+  nostra origine e allora si legge tutta.
+
+**Le tre vie, e cosa costa ognuna.**
+
+1. **Lettura lato server all'atto della navigazione** (la più semplice, si fa oggi): quando digiti
+   un indirizzo nella barra della vista Browser, il server legge quella pagina e la mette nel
+   contesto della sessione, esattamente come farebbe l'attrezzo `naviga`. ⛔ Costo onesto da
+   dichiarare a schermo: il server non ha i tuoi cookie, quindi di YouTube vede la **home pubblica**,
+   non la tua — e su una pagina dietro login vedrebbe la schermata di accesso.
+2. **Proxy esteso a qualunque sito**: la pagina passa dal nostro server, diventa della nostra
+   origine, e l'agente vede *esattamente* il DOM che vedi tu. Più lavoro (riscrittura di CSP, base,
+   risorse) e più rischio; oggi il proxy è limitato ai server locali proprio per questo.
+3. **Un browser posseduto da TALOS** (finestra Chrome avviata da noi con il protocollo di DevTools):
+   è la via che usano gli agenti di navigazione seri, e l'unica che vede anche le pagine dietro
+   login, perché sarebbe **la tua sessione dentro quella finestra**. È il lavoro più grande dei tre.
+
+**Proposta**: fare subito la (1), che copre il caso che l'owner ha descritto, dichiarando a schermo
+cosa vede l'agente; e tenere la (3) come la vera risposta, da decidere insieme.
