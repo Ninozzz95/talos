@@ -20,6 +20,8 @@ import { creaSorveglianzaConnessione, aggiornaStatoConnessione } from '../compon
 import { aggiornaPannelloNotifiche, apriPannelloNotifiche, nomeCampanella } from '../components/notifiche.js'; // 06/9 T-17: pannello «Aspetta te» del mockup
 import { aggiornaInstallati, montaInstallati, gb } from '../components/modelli-installati.js'; // 06/9 B6.8: scheda «Installati» del Model Lab
 import { aggiornaHf, gruppiVarianti } from '../components/hf-catalogo.js'; // 06/9 B6.9: scheda «Hugging Face» del Model Lab
+import { aggiornaCosti } from '../components/costi-consumo.js'; // 06/9 D21/D22: costi e consumo per giorno e per modello
+import { aggiornaContesto, ripartizioneContesto } from '../components/contesto.js'; // 06/9 D26: ripartizione della finestra di contesto
 import { montaHf } from '../components/hf-catalogo.js';
 import { aggiornaCodaDownload, montaCodaDownload, stimaFraLetture } from '../components/download-coda.js'; // 06/9 B6.10: scheda «Download»
 import { aggiornaInspector, processiDagliEventi } from '../components/inspector.js'; // 06/9 B2: la colonna dei dettagli dice il vero
@@ -3313,7 +3315,18 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     }
   }
 
-  const SETTINGS_SECTIONS = ['appearance', 'chat', 'models', 'providers', 'tools', 'privacy', 'workspace', 'account'];
+  /*
+   * ⛔ 06/09, D2 — «Dieci sezioni in due gruppi: comportamento · infrastruttura».
+   * L'audit le trovava OTTO e senza gruppi. L'ordine qui sotto è quello a
+   * schermo, gruppo per gruppo, perché è anche l'ordine che percorrono le
+   * frecce della tastiera: se i due elenchi divergono, la navigazione salta.
+   *   comportamento: aspetto · chat · tools · memoria · privacy
+   *   infrastruttura: models · providers · costi · workspace · account
+   * `privacy` tiene il suo id storico (la chiave salvata e i `data-settings-go`
+   * puntano lì) ma a schermo si chiama «Sicurezza e privacy», che è la sezione
+   * a parte chiesta da D13: vale SEMPRE, mentre i permessi valgono per sessione.
+   */
+  const SETTINGS_SECTIONS = ['appearance', 'chat', 'tools', 'memoria', 'privacy', 'models', 'providers', 'costi', 'workspace', 'account'];
   const SETTINGS_SECTION_STORAGE_KEY = 'talos.harness.desktop.settings.section.v1';
 
   /** List-detail Settings: una sola categoria visibile e un solo punto di verità per il tab attivo. */
@@ -3411,6 +3424,118 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     mostraSezioneImpostazioni($('#schermoImpostazioni'), selected);
     if (selected === 'models' && !state.modelLab.initialized) inizializzaModelLab();
     if (selected === 'tools') void caricaPannelloRicercaWeb(); // ⭐ 04/9, R-03 — stato vero dal server a ogni apertura della scheda
+    // 06/9 D26 e D21/D22: si leggono all'APERTURA della sezione, non a ogni ridisegno.
+    if (selected === 'memoria') void caricaRipartizioneContesto();
+    if (selected === 'costi') void caricaCostiConsumo();
+  }
+
+  /*
+   * D5 — «Esporta, importa e ripristina, tutte e tre». L'audit del 06/09: ❌
+   * «Nessuno dei tre».
+   *
+   * ⛔ Tutto qui dentro, senza una rotta nuova: le preferenze del desktop
+   * vivono in `localStorage` di questo browser, quindi esportarle è scrivere un
+   * file, importarle è leggerlo, ripristinarle è cancellare la chiave. Un giro
+   * dal server non aggiungerebbe niente e aggiungerebbe una superficie.
+   *
+   * ⛔ L'importazione NON scrive quello che trova: passa da
+   * `salvaImpostazioniDesktop`, che normalizza campo per campo. Un file
+   * modificato a mano (o di una versione futura) non può iniettare chiavi
+   * arbitrarie nelle preferenze.
+   */
+  function montaTrasferimentoImpostazioni() {
+    const esito = $('#settingsTrasferimentoEsito');
+    const dillo = (testo, guasto = false) => { if (!esito) return; esito.textContent = testo; esito.classList.toggle('talos-testo--guasto', Boolean(guasto)); };
+
+    $('#settingsEsporta')?.addEventListener('click', () => {
+      try {
+        const documento = { ...leggiImpostazioniDesktop(), esportate: new Date().toISOString(), app: 'TALOS Harness Desktop' };
+        const blob = new Blob([`${JSON.stringify(documento, null, 2)}\n`], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `talos-preferenze-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a); a.click(); a.remove();
+        // ⛔ l'URL si revoca DOPO il clic, o su Firefox il file scaricato arriva vuoto
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        dillo('Preferenze esportate nel file scaricato.');
+      } catch (errore) { dillo(`Esportazione non riuscita: ${errore.message}`, true); }
+    });
+
+    const campo = $('#settingsImportaFile');
+    $('#settingsImporta')?.addEventListener('click', () => campo?.click());
+    campo?.addEventListener('change', async () => {
+      const file = campo.files?.[0];
+      if (!file) return;
+      try {
+        const testo = await file.text();
+        const letto = JSON.parse(testo);
+        if (!letto || typeof letto !== 'object' || Array.isArray(letto)) throw new Error('il file non contiene un documento di preferenze');
+        salvaImpostazioniDesktop(letto); // normalizza: quello che non riconosce non entra
+        const documento = leggiImpostazioniDesktop();
+        applicaAspettoDesktop(documento.appearance);
+        montaImpostazioni($('#schermoImpostazioni'), documento.appearance, { recupera: (id) => $('#' + id), cambiaSezione: setSettingsSection });
+        sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(documento.appearance));
+        dillo(`Preferenze importate da «${file.name}».`);
+        toast('Preferenze importate', file.name);
+      } catch (errore) {
+        dillo(`Importazione non riuscita: ${errore.message}. Il file deve essere quello prodotto da «Esporta».`, true);
+      } finally { campo.value = ''; }
+    });
+
+    $('#settingsRipristina')?.addEventListener('click', () => {
+      // ⛔ distruttivo: si chiede prima, e si dice esattamente cosa NON viene toccato.
+      if (!window.confirm('Rimetto tutte le preferenze ai valori iniziali?\n\nTema, densità, lingua, preferenze della chat e cartelle ricordate tornano come appena installato.\nLe conversazioni e i file NON vengono toccati.')) return;
+      try {
+        window.localStorage.removeItem(DESKTOP_SETTINGS_KEY);
+        const documento = leggiImpostazioniDesktop();
+        applicaAspettoDesktop(documento.appearance);
+        montaImpostazioni($('#schermoImpostazioni'), documento.appearance, { recupera: (id) => $('#' + id), cambiaSezione: setSettingsSection });
+        sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(documento.appearance));
+        dillo('Preferenze riportate ai valori iniziali. Le conversazioni non sono state toccate.');
+        toast('Preferenze ripristinate', 'Le conversazioni non sono state toccate');
+      } catch (errore) { dillo(`Ripristino non riuscito: ${errore.message}`, true); }
+    });
+  }
+
+  /*
+   * D26 — la ripartizione della finestra di contesto.
+   * ⛔ I token non li stimo io: `/api/v1/tools` dichiara `tokenSchemaStimati`
+   * per ogni attrezzo. Qui si somma e si divide per la finestra del modello.
+   */
+  async function caricaRipartizioneContesto() {
+    const pannello = $('[data-settings-panel="memoria"]');
+    if (!pannello) return;
+    let attrezzi = [];
+    try { attrezzi = (await apiGet('/api/v1/tools'))?.attrezzi || []; }
+    catch { aggiornaContesto(pannello, null); const e = $('#contestoEtichetta'); if (e) e.textContent = 'Gli attrezzi non si leggono adesso: il server locale non risponde.'; return; }
+    /*
+     * ⛔ La finestra è quella del modello SCELTO, e se il catalogo non la
+     * dichiara resta `null`: `ripartizioneContesto` in quel caso non calcola
+     * nessuna percentuale, invece di dividere per un numero di comodo.
+     */
+    let finestra = null;
+    try {
+      // ⛔ la rotta risponde `{modelli}`, non `{items}`, e il campo è `contextLength`:
+      // scritto a memoria la prima volta, e la ripartizione restava senza percentuale.
+      const modelli = (await apiGet('/api/v1/models'))?.modelli || [];
+      const scelto = modelli.find((m) => m?.id === state.model);
+      const v = Number(scelto?.contextLength);
+      if (Number.isFinite(v) && v > 0) finestra = v;
+    } catch { /* senza catalogo si mostrano i token senza percentuale */ }
+    aggiornaContesto(pannello, ripartizioneContesto({ attrezzi, finestra }));
+  }
+
+  /** D21/D22 — consumo per giorno e per modello, dalla SOLA lista delle sessioni (mai una chiamata per sessione: BH-18). */
+  async function caricaCostiConsumo() {
+    const pannello = $('[data-settings-panel="costi"]');
+    if (!pannello) return;
+    try {
+      const sessioni = (await apiGet('/api/v1/sessions'))?.items || [];
+      aggiornaCosti(pannello, sessioni);
+    } catch {
+      const nota = $('#costiNota');
+      if (nota) nota.textContent = 'Le sessioni non si leggono adesso: il server locale non risponde.';
+    }
   }
 
   /*
@@ -3499,6 +3624,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
 
   function inizializzaSettingsNavigation() {
     montaImpostazioni($('#schermoImpostazioni'), leggiImpostazioniDesktop().appearance, { recupera: id => $('#' + id), cambiaSezione: setSettingsSection });
+    montaTrasferimentoImpostazioni(); // 06/9 D5: esporta · importa · ripristina
     sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(leggiImpostazioniDesktop().appearance)); // 06/9 B8
     $$('[data-settings-tab]').filter(tab => !tab.closest('#schermoImpostazioni')).forEach((tab) => {
       tab.addEventListener('click', () => setSettingsSection(tab.dataset.settingsTab));
