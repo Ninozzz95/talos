@@ -77,9 +77,13 @@ export function aggiornaTopbar(topbar, dati = {}) {
   const percorso = topbar.querySelector('.talos-topbar__path');
   if (percorso && 'percorso' in dati) { // chi non passa il percorso non lo tocca (la Review ci scrive il sommario dei file)
     const testo = typeof dati.percorso === 'string' && dati.percorso.trim() ? dati.percorso.trim() : '';
-    percorso.textContent = nomeCartella(testo);
-    percorso.title = testo;
-    percorso.hidden = testo === '';
+    // 06/9: regola unica per il terzo posto — la cartella, e dopo un separatore il riassunto della vista
+    const riassunto = typeof dati.riassunto === 'string' ? dati.riassunto.trim() : '';
+    const nome = nomeCartella(testo);
+    const scritta = [nome, riassunto].filter(Boolean).join(' · ');
+    percorso.textContent = scritta;
+    percorso.title = [testo, riassunto].filter(Boolean).join(' · ');
+    percorso.hidden = scritta === '';
   }
   if ('schedeTerminale' in dati) impostaConteggioScheda(topbar.querySelector('[role="tab"][data-vaia="terminale"]'), dati.schedeTerminale);
   if ('fileReview' in dati) impostaConteggioScheda(topbar.querySelector('[role="tab"][data-vaia="review"]'), dati.fileReview);
