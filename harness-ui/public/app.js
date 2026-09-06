@@ -7818,6 +7818,69 @@ var init_errori = __esm({
   }
 });
 
+// src/components/allegati.js
+function stimaTokenTesto(caratteri) {
+  const n = Number(caratteri);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.ceil(n / 4);
+}
+function stimaTokenImmagine(larghezza, altezza, famiglia = "claude") {
+  const w = Number(larghezza);
+  const h = Number(altezza);
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return 0;
+  if (famiglia === "openai") {
+    const riquadri = Math.ceil(w / 512) * Math.ceil(h / 512);
+    return 85 + 170 * riquadri;
+  }
+  if (famiglia === "gemini") {
+    const riquadri = Math.ceil(w / 768) * Math.ceil(h / 768);
+    return 258 * Math.max(1, riquadri);
+  }
+  return Math.min(TETTO_IMMAGINE, Math.ceil(w * h / 750));
+}
+function famigliaModello(id) {
+  const s = String(id || "").toLowerCase();
+  if (/claude|anthropic/.test(s)) return "claude";
+  if (/gpt|openai|o[1-9]-/.test(s)) return "openai";
+  if (/gemini|google/.test(s)) return "gemini";
+  return "claude";
+}
+function etichettaCosto(token) {
+  const n = Number(token);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  if (n < 1e3) return `~${n} token`;
+  return `~${(n / 1e3).toFixed(n < 1e4 ? 1 : 0).replace(".", ",")}k token`;
+}
+function costoAllegato(allegato, modello) {
+  if (!allegato) return { token: 0, etichetta: "" };
+  const token = allegato.tipo === "immagine" ? stimaTokenImmagine(allegato.larghezza, allegato.altezza, famigliaModello(modello)) : stimaTokenTesto(allegato.caratteri);
+  return { token, etichetta: etichettaCosto(token) };
+}
+function costoTotale(allegati = [], modello) {
+  const token = (Array.isArray(allegati) ? allegati : []).reduce((somma, a) => somma + costoAllegato(a, modello).token, 0);
+  return { token, etichetta: etichettaCosto(token) };
+}
+function nomeBreveAllegato(percorso, massimo = 28) {
+  const nome = String(percorso || "").split(/[\\/]/).pop() || "";
+  if (nome.length <= massimo) return nome;
+  const punto = nome.lastIndexOf(".");
+  const estensione = punto > 0 ? nome.slice(punto) : "";
+  const testa = nome.slice(0, Math.max(1, massimo - estensione.length - 1));
+  return `${testa}…${estensione}`;
+}
+var VIE_ALLEGATO, TETTO_IMMAGINE;
+var init_allegati = __esm({
+  "src/components/allegati.js"() {
+    VIE_ALLEGATO = Object.freeze([
+      { id: "workspace", etichetta: "File del progetto", aiuto: "Scegli fra i file della cartella di questa sessione", icona: "i-folder" },
+      { id: "disco", etichetta: "File dal disco", aiuto: "Un file qualunque del computer", icona: "i-file" },
+      { id: "immagine", etichetta: "Immagine", aiuto: "Una foto o uno schema da guardare", icona: "i-image" },
+      { id: "schermata", etichetta: "Ultima schermata", aiuto: "L’ultimo screenshot che hai scattato", icona: "i-camera" }
+    ]);
+    TETTO_IMMAGINE = 1568;
+  }
+});
+
 // src/components/stato-vuoto.js
 function el21(documentObj, tag, className, testo3) {
   const nodo4 = documentObj.createElement(tag);
@@ -8024,6 +8087,7 @@ var init_app = __esm({
     init_scorciatoie();
     init_chat_foot();
     init_errori();
+    init_allegati();
     init_review();
     init_stato_vuoto();
     init_topbar();
@@ -18762,6 +18826,158 @@ ${testo3}` : testo3;
         }).catch(() => {
         });
       }
+      const allegatiComposer = [];
+      function elencoAllegati() {
+        return $2("#schermoChat .talos-allegati");
+      }
+      function disegnaAllegati() {
+        const riga = elencoAllegati();
+        if (!riga) return;
+        riga.hidden = allegatiComposer.length === 0;
+        const conteggio2 = $2("[data-allegati-conteggio]", riga);
+        if (conteggio2) conteggio2.textContent = `${allegatiComposer.length} allegat${allegatiComposer.length === 1 ? "o" : "i"}`;
+        const lista = $2("[data-allegati-lista]", riga);
+        if (lista) {
+          lista.replaceChildren();
+          allegatiComposer.forEach((a, indice2) => {
+            const li = document.createElement("li");
+            li.className = "talos-allegati__voce";
+            const nome = document.createElement("span");
+            nome.className = "talos-allegati__nome";
+            nome.textContent = a.nome || nomeBreveAllegato(a.percorso || "");
+            nome.title = a.percorso || a.nome || "";
+            const costo = document.createElement("span");
+            costo.className = "talos-allegati__costo";
+            costo.textContent = a.costoIgnoto ? "costo ignoto" : costoAllegato(a, state.model).etichetta;
+            if (a.costoIgnoto) costo.title = "Non sono riuscito a leggere le misure dell’immagine: il costo vero lo vedrai nel consumo del giro.";
+            const togli = document.createElement("button");
+            togli.type = "button";
+            togli.className = "talos-allegati__togli";
+            togli.textContent = "×";
+            togli.setAttribute("aria-label", `Togli ${nome.textContent}`);
+            togli.addEventListener("click", () => {
+              allegatiComposer.splice(indice2, 1);
+              disegnaAllegati();
+            });
+            li.append(nome, costo, togli);
+            lista.append(li);
+          });
+        }
+        const totale2 = $2("[data-allegati-costo]", riga);
+        if (totale2) totale2.textContent = costoTotale(allegatiComposer, state.model).etichetta;
+      }
+      function aggiungiAllegato(allegato) {
+        if (!allegato) return;
+        if (allegatiComposer.length >= 10) {
+          toast("Troppi allegati", "Dieci per messaggio è già tanto contesto: togline uno prima di aggiungerne un altro.");
+          return;
+        }
+        allegatiComposer.push(allegato);
+        disegnaAllegati();
+        syncRunComposerState();
+      }
+      function testoConAllegati(testo3) {
+        if (allegatiComposer.length === 0) return testo3;
+        const righe = allegatiComposer.map((a) => a.tipo === "immagine" ? `- immagine allegata: ${a.nome}${a.larghezza ? ` (${a.larghezza}×${a.altezza})` : ""}` : `- file allegato: ${a.percorso || a.nome}`);
+        return `${testo3}
+
+Allegati di questo messaggio:
+${righe.join("\n")}`;
+      }
+      function svuotaAllegati() {
+        allegatiComposer.length = 0;
+        disegnaAllegati();
+      }
+      function apriMenuAllega(ancora) {
+        const menu = $2("#menuAllega");
+        if (!menu) return;
+        menu.replaceChildren();
+        for (const via of VIE_ALLEGATO) {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "talos-menu__voce";
+          b.setAttribute("role", "menuitem");
+          const forte = document.createElement("strong");
+          forte.textContent = via.etichetta;
+          const piccolo = document.createElement("small");
+          piccolo.textContent = via.aiuto;
+          const testo3 = document.createElement("span");
+          testo3.append(forte, piccolo);
+          b.append(testo3);
+          b.addEventListener("click", () => {
+            chiudiMenuAllega();
+            scegliAllegato(via.id);
+          });
+          menu.append(b);
+        }
+        menu.hidden = false;
+        const r = ancora?.getBoundingClientRect();
+        if (r) {
+          menu.style.left = `${Math.max(8, r.left)}px`;
+          menu.style.top = `${Math.max(8, r.top - menu.offsetHeight - 8)}px`;
+        }
+        menu.querySelector("button")?.focus();
+      }
+      function chiudiMenuAllega() {
+        const m = $2("#menuAllega");
+        if (m) m.hidden = true;
+      }
+      function scegliAllegato(via) {
+        if (via === "workspace") {
+          openSheet("files", { ancoraAlComposer: true });
+          return;
+        }
+        if (via === "schermata") {
+          toast("Ultima schermata", "Incolla lo screenshot nel composer con Ctrl+V: TALOS lo allega e ti dice quanto contesto costa.");
+          return;
+        }
+        const input = document.createElement("input");
+        input.type = "file";
+        if (via === "immagine") input.accept = "image/*";
+        input.addEventListener("change", async () => {
+          for (const file of [...input.files || []]) await allegaFile(file);
+        });
+        input.click();
+      }
+      async function allegaFile(file) {
+        if (!file) return;
+        const immagine = /^image\//.test(file.type || "");
+        if (immagine) {
+          const misure = await misuraImmagine(file).catch(() => ({ larghezza: 0, altezza: 0 }));
+          aggiungiAllegato({ tipo: "immagine", nome: file.name || "immagine incollata", ...misure, costoIgnoto: !(misure.larghezza > 0) });
+          return;
+        }
+        let caratteri = file.size;
+        try {
+          caratteri = (await file.text()).length;
+        } catch {
+        }
+        aggiungiAllegato({ tipo: "testo", nome: nomeBreveAllegato(file.name), percorso: file.name, caratteri });
+      }
+      async function misuraImmagine(file) {
+        if (typeof createImageBitmap === "function") {
+          try {
+            const bitmap = await createImageBitmap(file);
+            const misure = { larghezza: bitmap.width, altezza: bitmap.height };
+            bitmap.close?.();
+            if (misure.larghezza > 0) return misure;
+          } catch {
+          }
+        }
+        return new Promise((risolvi, rifiuta) => {
+          const url = URL.createObjectURL(file);
+          const img = new Image();
+          img.onload = () => {
+            risolvi({ larghezza: img.naturalWidth, altezza: img.naturalHeight });
+            URL.revokeObjectURL(url);
+          };
+          img.onerror = () => {
+            URL.revokeObjectURL(url);
+            rifiuta(new Error("immagine illeggibile"));
+          };
+          img.src = url;
+        });
+      }
       function submitPrompt(text) {
         const value = String(text || "").trim();
         if (!value) return false;
@@ -19255,7 +19471,39 @@ ${testo3}` : testo3;
       $$("[data-control-action]").forEach((button2) => button2.addEventListener("click", () => {
         if (button2.dataset.controlAction === "doctor") eseguiDoctor();
       }));
-      $2("#capabilityBtn").addEventListener("click", () => openSheet("capabilities", { ancoraAlComposer: true }));
+      $2("#capabilityBtn").addEventListener("click", (evento) => {
+        evento.stopPropagation();
+        const menu = $2("#menuAllega");
+        if (menu && !menu.hidden) {
+          chiudiMenuAllega();
+          return;
+        }
+        apriMenuAllega($2("#capabilityBtn"));
+      });
+      ROOT().addEventListener("click", (evento) => {
+        if (!evento.target.closest?.("#menuAllega, #capabilityBtn")) chiudiMenuAllega();
+      });
+      composerInput.addEventListener("paste", (evento) => {
+        const file = [...evento.clipboardData?.files || []];
+        if (file.length === 0) return;
+        evento.preventDefault();
+        for (const f of file) void allegaFile(f);
+      });
+      const piedeChat = $2("#schermoChat .talos-chat-foot");
+      if (piedeChat) {
+        piedeChat.addEventListener("dragover", (evento) => {
+          evento.preventDefault();
+          piedeChat.classList.add("is-drop");
+        });
+        piedeChat.addEventListener("dragleave", (evento) => {
+          if (evento.target === piedeChat) piedeChat.classList.remove("is-drop");
+        });
+        piedeChat.addEventListener("drop", (evento) => {
+          evento.preventDefault();
+          piedeChat.classList.remove("is-drop");
+          for (const f of [...evento.dataTransfer?.files || []]) void allegaFile(f);
+        });
+      }
       $2("#manageCapabilitiesBtn").addEventListener("click", () => openSheet("capabilities"));
       $2("#closeSheet").addEventListener("click", () => closeEmbeddedDialog(sheetDialog));
       $$(".inspector-tabs button").forEach((button2) => {
@@ -19473,8 +19721,9 @@ ${testo3}` : testo3;
       }
       composerForm.addEventListener("submit", (event) => {
         event.preventDefault();
-        const text = composerInput.value.trim();
+        const text = testoConAllegati(composerInput.value.trim());
         if (!submitPrompt(text)) return;
+        svuotaAllegati();
         composerInput.value = "";
         autoGrowTextarea();
         syncRunComposerState();
