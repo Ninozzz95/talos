@@ -39,7 +39,7 @@ import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaN
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione, come quella di ChatGPT desktop
 import { montaScorciatoie, normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
 import { aggiornaPiedeChat, etichettaPermesso, fondoInVista, nomeModelloUmano } from '../components/chat-foot.js';
-import { spiegaErrore } from '../components/errori.js';
+import { spiegaErrore, spiegaRifiutoAttrezzo } from '../components/errori.js';
 import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js';
 import { frasiRitratto, avvisoRitratto } from '../components/cartella-ritratto.js'; // 06/9 F9/F10/F19-F21 // 06/9: il sorgente di una pagina non si legge
 import { VIE_ALLEGATO, TETTI_ALLEGATI, allegatoPesante, costoAllegato, costoTotale, frasiTetti, nomeBreveAllegato } from '../components/allegati.js'; // 06/9 B4/B6/B7/B9: il «+» allega, e ogni allegato dichiara il suo costo // 06/9 O-22/O-23: gli errori del giro detti a una persona // 05/9 Fase 2: ChatFooter — striscia del giro, chip e barra di stato dai dati
@@ -7741,7 +7741,23 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       riga.className = 'tool-arg-row';
       const testoValore = typeof valore === 'string' ? valore : JSON.stringify(valore);
       riga.appendChild(textElement('span', 'tool-arg-key', `${chiave}:`));
-      if (testoValore.includes('\n') || testoValore.length > 80) {
+      /*
+       * ⛔ 06/9, owner con lo screenshot: un `html` di duemila caratteri finiva a schermo per intero,
+       * su una riga sola scorrevole — illeggibile, e per giunta era il valore MENO utile della
+       * chiamata. Sopra una certa taglia si dice quanto è grande e lo si apre solo se lo chiedi.
+       */
+      const TETTO_VALORE = 400;
+      if (testoValore.length > TETTO_VALORE) {
+        const dettaglio = document.createElement('details');
+        dettaglio.className = 'tool-arg-lungo';
+        const riassunto = document.createElement('summary');
+        riassunto.textContent = `${testoValore.length.toLocaleString('it-IT')} caratteri`;
+        const pre = document.createElement('pre');
+        pre.className = 'tool-result-block';
+        pre.appendChild(textElement('code', '', testoValore));
+        dettaglio.append(riassunto, pre);
+        riga.appendChild(dettaglio);
+      } else if (testoValore.includes('\n') || testoValore.length > 80) {
         const pre = document.createElement('pre');
         pre.className = 'tool-result-block';
         pre.appendChild(textElement('code', '', testoValore));
@@ -10761,6 +10777,16 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
           separatore.className = 'tool-arg-key';
           separatore.textContent = 'Esito:';
           info.detail.appendChild(separatore);
+          /*
+           * ⛔ 06/9, owner con lo screenshot: l'esito era «REFUSED. Empty html: nothing was created.»
+           * — inglese e gergo. Un REFUSED non è un guasto: è il kernel che ha detto di no, e chi
+           * legge deve capire COSA è mancato. Si traduce; il testo del kernel resta sotto, perché è
+           * quello che si incolla in una segnalazione.
+           */
+          const rifiuto = spiegaRifiutoAttrezzo(testoEsito);
+          if (rifiuto.rifiutato) {
+            info.detail.appendChild(textElement('p', 'tool-rifiuto', rifiuto.detto));
+          }
           const pre = document.createElement('pre');
           pre.className = 'tool-result-block';
           pre.appendChild(textElement('code', '', testoEsito));
