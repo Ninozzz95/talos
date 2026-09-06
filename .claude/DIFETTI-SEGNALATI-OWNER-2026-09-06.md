@@ -27,16 +27,16 @@
 | O-16 | «i comandi devono essere formattati in codice, così è brutto» | Carta di approvazione | ✅ | blocco codice monospazio con scorrimento; esito su una riga sua |
 | O-17 | «JavaScriptCopia» attaccato | Blocchi di codice in chat | ✅ | misurato: intestazione alta 41px, «JavaScript» e «Copia» a 8px di distanza |
 | O-18 | «la schermata huggingface è orrenda, ridisegnala» | Model Lab | 🔜 delegato | metà «luoghi», worktree `AVM-harness-luoghi` |
-| O-19 | «mentre il modello scrive lo scrolling deve seguirlo» | Conversazione | 🔧 | scroller corretto; ⛔ non ancora visto durante un giro vero |
-| O-20 | «cliccando una sessione va a fine conversazione» | Elenco sessioni | 🔧 | scroller corretto; ⛔ non ancora provato aprendo una sessione lunga |
+| O-19 | «mentre il modello scrive lo scrolling deve seguirlo» | Conversazione | ✅ | misurato su un giro vero: il fondo del testo resta fra il 28% e il 48% dell’altezza, mai incollato al composer |
+| O-20 | «cliccando una sessione va a fine conversazione» | Elenco sessioni | ✅ | misurato: aprendo una sessione la distanza dal fondo è **0 px** |
 | O-21 | «scrollata al massimo deve stare a metà pagina» | Conversazione | ✅ | misurato dal vivo: fondo dell'ultimo messaggio al **48%** dell'altezza visibile, spazio in coda 342px su 684px |
-| O-22 | «flusso SSE senza contenuto ne tool_calls» | Errori in chat | 🔧 | tradotto da components/errori.js; ⛔ non ancora visto in una sessione vera |
-| O-23 | «HTTP 400 … exceeds the available context size» | Errori / modelli locali | 🔧 | tradotto coi numeri veri (17.993 su 16.384) e tre rimedi; ⛔ idem |
+| O-22 | «flusso SSE senza contenuto ne tool_calls» | Errori in chat | ✅ | la nota tradotta si vede su una sessione vera; trovato e mappato un terzo errore («il motore locale non si è acceso in tempo») |
+| O-23 | «HTTP 400 … exceeds the available context size» | Errori / modelli locali | ✅ | tradotto coi numeri veri, tre rimedi, testo del server richiuso sotto — verificato dal vivo |
 | O-24 | identificatore grezzo del modello locale a schermo | Intestazione, pillola | ✅ | misurato dal vivo: pillola «gpt oss · 20b», id completo nel suggerimento |
 | O-25 | «le bolle di domanda devono essere colore accent, oro nel tema Calm» | Conversazione | ✅ | accento velato col suo bordo, verificato: rgba(192,139,60,.14) |
 | O-26 | *(trovato da me nello screenshot di O-21)* le tabelle markdown non vengono rese: a schermo restano `\| Funzione \| ✅ | misurato: 1 tabella resa (4 colonne, 2 righe), zero pipe rimaste a schermo |---\|---\|` | Conversazione, markdown | 🔧 in corso | il renderer non conosce le tabelle |
 | O-27 | «non far partire l'animazione di scroll se la conversazione è già scrollata alla fine» | Conversazione | ✅ | niente animazione entro 24px dal fondo; nessuna se il fondo è in vista |
-| O-28 | «nel browser il contenuto si vede così» — «Letture della sessione» mostra l'HTML grezzo della pagina | Vista Browser | 🔧 | modo «Pagina» predefinito + «Testo dell’agente» ripulito col sorgente sotto; ⛔ non ancora provato su una lettura vera |
+| O-28 | «nel browser il contenuto si vede così» — «Letture della sessione» mostra l'HTML grezzo della pagina | Vista Browser | ✅ | misurato: cornice visibile su https://example.org, caricata, due modi; il testo dell’agente esce ripulito col sorgente sotto |
 | O-29 | «la bolla di domanda non deve avere larghezza al massimo: bolla di chat con la codina, da destra» | Conversazione | ✅ | misurato: bolla al 67% della colonna, a destra, angolo-codina in basso a destra |
 | O-30 | «non riesco ad aprire la sidebar di destra dopo averla collassata» | Colonna destra | ✅ | due gestori sullo stesso clic si annullavano; verificato su 4 viste, dalla Review alla Chat, e dopo un ricaricamento |
 
@@ -220,3 +220,24 @@ e non a riaprirla dalla Chat.
 **Verificato tre volte** (owner: «double e triple check ad ogni implementazione»): chiude e riapre da
 tutte e quattro le viste; chiuso dalla Review si riapre dalla Chat (il caso esatto segnalato); e dopo
 un ricaricamento il collasso è ricordato e il pulsante lo riapre lo stesso.
+
+## Verifica finale del 06/09 — le cure provate su sessioni vere
+
+Prova `V01-scorrimento-e-browser` (una sola sessione vera, glm-5.3-flash, consegna «apri
+https://example.org»), taccuino in `.claude/taccuini/`:
+
+- **O-19** lo scorrimento segue il testo mentre arriva: sei campioni, il fondo resta fra il 28% e il
+  48% dell'altezza visibile — mai incollato al composer. **PASSA**
+- **O-20** aprendo un'altra sessione e tornando: distanza dal fondo **0 px**. **PASSA**
+- **O-28** la lettura si apre come **pagina renderizzata** (`https://example.org/`, cornice caricata,
+  due modi a schermo); il modo «Testo dell'agente» mostra il testo ripulito, senza un solo tag, col
+  sorgente richiuso sotto. **PASSA**
+
+Sonda `sonda-nota-errore` sulla sessione vera **0363607d** dell'owner (modello locale):
+
+- **O-22/O-23** la nota è tradotta davvero: «Il motore locale non si è acceso in tempo», il perché coi
+  numeri presi dall'errore (1,4 GB, 36 secondi), tre rimedi, e il testo del server richiuso sotto.
+  ⭐ Riaprendo quella sessione è saltato fuori un **terzo** errore che l'owner non mi aveva mostrato —
+  la nota lo dichiarava onestamente come «non ancora tradotto», ed è stato il segnale per mapparlo.
+- Difetto trovato guardando lo screenshot e corretto nello stesso giro: il triangolino del dettaglio
+  si leggeva «b8» — un escape CSS senza terminatore veniva letto come `` più il testo «b8».

@@ -7740,6 +7740,29 @@ var init_errori = __esm({
         }
       },
       {
+        /*
+         * ⛔ 06/9, trovato riaprendo una sessione VERA dell'owner (0363607d) per verificare la cura:
+         * l'errore non era nessuno dei due che mi aveva mostrato, era un terzo — «llama-server non e'
+         * diventato pronto entro 36 s (modello di 12 GB)». La nota lo diceva onestamente («questa forma
+         * non e' ancora tradotta»), ed e' proprio il segnale che serviva una regola in piu'.
+         */
+        id: "runtime-non-pronto",
+        riconosce: (t2) => /llama-server non è diventato pronto|non è diventato pronto entro|runtime non pronto|failed to load model/i.test(t2),
+        spiega: (t2) => {
+          const secondi = (/entro (\d+)\s*s/i.exec(t2) || [])[1];
+          const taglia = (/modello di ([^)]+)\)/i.exec(t2) || [])[1];
+          return {
+            cosa: "Il motore locale non si è acceso in tempo.",
+            perche: `Caricare un modello dal disco alla memoria richiede tempo${taglia ? ` (qui ${taglia})` : ""}${secondi ? `, e l'attesa si è fermata a ${secondi} secondi` : ""}. Non è un guasto del compito: è il motore che stava ancora partendo.`,
+            rimedi: [
+              "Riprova: al secondo tentativo il modello è spesso già in memoria e parte subito.",
+              "Apri il Laboratorio e accendi il modello prima di avviare la sessione.",
+              "Se succede sempre, scegli una quantizzazione più piccola: meno gigabyte da caricare, meno attesa."
+            ]
+          };
+        }
+      },
+      {
         id: "risposta-vuota",
         riconosce: (t2) => /flusso SSE senza contenuto|senza contenuto ne tool_calls|empty (?:response|stream)/i.test(t2),
         spiega: () => ({

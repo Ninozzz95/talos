@@ -1907,7 +1907,7 @@ body.reduce-motion *::after {
   display: none;
 }
 .talos-system-note__tecnico > summary::before {
-  content: "b8";
+  content: "▸";
   display: inline-block;
   margin-right: 6px;
   transition: transform var(--talos-motion-duration-control,.15s) var(--talos-motion-ease);
