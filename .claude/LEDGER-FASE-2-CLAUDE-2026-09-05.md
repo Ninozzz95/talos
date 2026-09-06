@@ -1130,3 +1130,12 @@ Funzioni toccate solo sue (`disegnaPannelloRicercaWeb`, `azioneRicercaWeb`, mont
 Impostazioni); template rigenerato dal mockup senza differenze; i 38 controlli originali
 conservati con gli stessi nodi (i miei ganci d'aspetto S-12 li leggono). Dopo l'unione
 (fast-forward): unit **66/66**, statico **195/195**, componenti **72/72**.
+
+## 06/09 — La modale del primo avvio: lo spazio vuoto in basso
+
+Owner (screenshot del 4174): «sistema lo spazio enorme nella parte inferiore della modale».
+
+- **Riproduzione.** Profilo pulito su 4175: la modale è aderente al contenuto (passo 1: dialogo 731 px, corpo 573, pannello 496). Con una misura ricordata sotto `dialog:introDialog` (la stessa chiave del monolite, tenuta apposta al cutover) la modale prende l'altezza ricordata (810 px) e l'albero delle cartelle resta bloccato a 4 righe: 335 px di vuoto sotto. Script `scratchpad/intro-altezza.mjs`.
+- **Causa.** La misura ricordata era scritta come `style.height` inline: nessuna regola del foglio poteva dire «qui l'altezza non vale», e `.talos-intro-folders` aveva `max-height` a 4 righe anche dentro una modale allargata.
+- **Cura** (mockup + `dialoghi.js` + `intro.js`, template rigenerato): la misura vive in due custom property (`--talos-dialog-w/h`) applicate da `.talos-dialog[data-user-sized]`; nel primo avvio l'altezza ricordata vale solo sul passo Cartella (`#veloIntro[data-intro-passo-attivo]`), dove l'albero cresce a riempirla (catena flex con `min-height:0`); gli altri passi restano aderenti al contenuto e le maniglie dell'altezza sono nascoste lì. Fonte 06/09/2026: PatternFly, Wizard design guidelines («the modal adjusts to the body of each step»).
+- **Riverifica.** Stesso script: ricordata passo 1 dialogo 810 con pannello 496 → 575 (albero cresciuto, 6 righe visibili); passi 2-4 → 551/557/588 come da profilo pulito. Unit 125/125, componenti 111/111, statico 195/195. Servito sul 4174 (solo `public/`, nessun riavvio).

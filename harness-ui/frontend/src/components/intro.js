@@ -48,6 +48,7 @@ export function creaIntro(velo, { api, azioni = {}, iniziale = {}, document: d =
   function mostraPasso(n) {
     st.passo = Math.max(0, Math.min(PASSI - 1, n));
     for (const p of velo.querySelectorAll('[data-intro-panel]')) p.hidden = Number(p.dataset.introPanel) !== st.passo;
+    velo.dataset.introPassoAttivo = String(st.passo); // il foglio: altezza ricordata solo dove l'albero la usa
     for (const b of velo.querySelectorAll('[data-intro-passo]')) { if (Number(b.dataset.introPasso) === st.passo) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current'); }
     const titolo = $('titoloveloIntro'); if (titolo) titolo.textContent = `Primo avvio · ${st.passo + 1} di ${PASSI}`;
     const indietro = $('introIndietro'); if (indietro) indietro.disabled = st.passo === 0;

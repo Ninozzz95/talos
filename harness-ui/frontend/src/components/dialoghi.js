@@ -51,7 +51,8 @@ export function dimenticaMisura(chiave, storage = globalThis.localStorage) {
 function applica(dialogo, velo, width, height, finestra) {
   const pad = parseFloat(finestra.getComputedStyle(velo).paddingLeft) || 24;
   const m = misuraDialogo(width, height, limitiDialogo(velo.id, { innerWidth: finestra.innerWidth, innerHeight: finestra.innerHeight, pad }));
-  dialogo.style.width = `${m.width}px`; dialogo.style.height = `${m.height}px`; dialogo.dataset.userSized = 'true';
+  // la misura vive in due custom property: il foglio decide dove vale (nel primo avvio l'altezza solo sul passo Cartella)
+  dialogo.style.setProperty('--talos-dialog-w', `${m.width}px`); dialogo.style.setProperty('--talos-dialog-h', `${m.height}px`); dialogo.dataset.userSized = 'true';
   return m;
 }
 
@@ -61,7 +62,7 @@ export function preparaMisuraDialogo(velo, { finestra = globalThis.window, stora
   d.dataset.dialogResizeKey = CHIAVI_MISURA[velo.id] || `sheet:${velo.id}`;
   const s = leggiMisure(storage)[d.dataset.dialogResizeKey];
   if (s && Number.isFinite(s.width) && Number.isFinite(s.height)) return applica(d, velo, s.width, s.height, finestra);
-  d.style.removeProperty('width'); d.style.removeProperty('height'); delete d.dataset.userSized;
+  d.style.removeProperty('--talos-dialog-w'); d.style.removeProperty('--talos-dialog-h'); delete d.dataset.userSized;
   return null;
 }
 
@@ -91,7 +92,7 @@ export function collegaRidimensionamentoDialoghi(radice = globalThis.document, {
       const m = applica(d, velo, r.width + (hor ? (e.key === 'ArrowRight' ? PASSO_TASTIERA : -PASSO_TASTIERA) : 0), r.height + (ver ? (e.key === 'ArrowDown' ? PASSO_TASTIERA : -PASSO_TASTIERA) : 0), finestra);
       salvaMisura(chiave(), m, storage);
     });
-    h.addEventListener('dblclick', () => { d.style.removeProperty('width'); d.style.removeProperty('height'); delete d.dataset.userSized; dimenticaMisura(chiave(), storage); });
+    h.addEventListener('dblclick', () => { d.style.removeProperty('--talos-dialog-w'); d.style.removeProperty('--talos-dialog-h'); delete d.dataset.userSized; dimenticaMisura(chiave(), storage); });
     collegate += 1;
   }
   return collegate;

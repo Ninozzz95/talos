@@ -3669,6 +3669,38 @@ body.reduce-motion *::after {
 .talos-intro-folders:empty {
   display: none;
 }
+.talos-dialog[data-user-sized] {
+  width: var(--talos-dialog-w);
+  height: var(--talos-dialog-h);
+}
+#veloIntro:not([data-intro-passo-attivo="0"]) .talos-dialog[data-user-sized] {
+  height: auto;
+}
+#veloIntro:not([data-intro-passo-attivo="0"]) .talos-resizer--dialog-height,
+#veloIntro:not([data-intro-passo-attivo="0"]) .talos-resizer--dialog-both {
+  display: none;
+}
+#veloIntro .talos-dialog__body {
+  display: flex;
+  flex-direction: column;
+}
+#veloIntro .talos-picker {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+#veloIntro .talos-picker > .talos-stack {
+  min-height: 0;
+}
+#passoIntroCartella,
+#passoIntroCartella [data-c=FolderPicker] {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.talos-dialog[data-user-sized] .talos-intro-folders {
+  flex: 1 1 auto;
+  min-height: calc(var(--talos-row)*4);
+  max-height: none;
+}
 #introMessaggio:empty {
   display: none;
 }
