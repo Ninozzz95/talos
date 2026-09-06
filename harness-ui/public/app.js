@@ -19226,7 +19226,7 @@ ${testo3}` : testo3;
       $2("#compactSessionBtn").addEventListener("click", () => compactSession());
       ROOT().addEventListener("click", (evento) => {
         const b = evento.target.closest?.(".talos-topbar__actions [data-azione]");
-        if (!b || b.id) return;
+        if (!b || b.id || b.dataset.openPanel) return;
         if (b.dataset.azione === "comandi") openCommandPalette();
         else if (b.dataset.azione === "comprimi") compactSession();
         else if (b.dataset.azione === "dettagli" && window.innerWidth > 1040) toggleDesktopInspector();
