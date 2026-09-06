@@ -296,6 +296,16 @@ test('⭐⭐⭐ GET /api/v1/artifacts/:id: HTML intero, CON la sua CSP permissiv
   assert.match(csp, /script-src 'unsafe-inline'/, 'permissiva per lo script del modello, qui e SOLO qui');
   assert.doesNotMatch(csp, /script-src 'self'/, 'MAI l\'intestazione globale del resto di Harness UI');
   assert.equal(response.headers.get('x-frame-options'), 'SAMEORIGIN', 'diverso da DENY: la NOSTRA pagina deve poterlo incorporare');
+  /*
+   * ⛔⛔⛔ 06/9, caccia ai bug CB-01, provato dal vivo: «Apri» portava questo HTML — scritto dal
+   * MODELLO — sull'origine della app, e da lì uno script leggeva il localStorage di TALOS e ne
+   * portava fuori il contenuto con una navigazione top-level (la CSP fermava fetch, non location).
+   * La direttiva `sandbox` mette il documento in un'origine opaca (niente localStorage, niente
+   * cookie) e, non concedendo `allow-top-navigation`, toglie anche la via d'uscita.
+   */
+  assert.match(csp, /^sandbox allow-scripts;/, "origine opaca: l'HTML del modello non tocca i dati della app");
+  assert.doesNotMatch(csp, /allow-same-origin/, 'con allow-same-origin la sandbox non servirebbe a niente');
+  assert.doesNotMatch(csp, /allow-top-navigation/, "la navigazione top-level era la via d'uscita dei dati");
   assert.equal(await response.text(), '<!doctype html><html><body>ciao</body></html>');
 });
 

@@ -3090,8 +3090,25 @@ export function createHttpApp({
             sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
             return;
           }
+          /*
+           * ⛔⛔⛔ 06/9, caccia ai bug (CB-01), provato non ipotizzato: il pulsante «Apri» della
+           * carta apriva questo indirizzo in una scheda nuova, cioè l'HTML SCRITTO DAL MODELLO
+           * finiva sull'origine della app. Da lì uno script leggeva il `localStorage` di TALOS
+           * (misurate le chiavi delle impostazioni) e portava fuori il valore con una navigazione
+           * top-level: la CSP fermava `fetch`, non `location.href`.
+           * L'iframe in chat era già protetto (`sandbox="allow-scripts"` senza `allow-same-origin`);
+           * il pulsante «Apri» usciva da quella protezione e non ne metteva un'altra.
+           * ⇒ La protezione si sposta dove non si può aggirare: sulla RISPOSTA. La direttiva
+           * `sandbox` della CSP applica a un documento di primo livello le stesse regole dell'iframe
+           * (MDN, «CSP: sandbox», letto 06/09/2026): senza `allow-same-origin` l'origine è opaca —
+           * niente localStorage, niente cookie della app — e senza `allow-top-navigation` la
+           * navigazione che portava fuori i dati non parte. `allow-scripts` resta, perché un
+           * artefatto che non può muoversi non serve a niente.
+           * ⛔ `sandbox` in CSP funziona SOLO come intestazione HTTP, mai come <meta>: per questo
+           * sta qui e non dentro l'HTML.
+           */
           send(res, 200, 'text/html; charset=utf-8', html, method, {
-            'Content-Security-Policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; frame-ancestors 'self'",
+            'Content-Security-Policy': "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; frame-ancestors 'self'",
             'X-Frame-Options': 'SAMEORIGIN',
           });
           return;
