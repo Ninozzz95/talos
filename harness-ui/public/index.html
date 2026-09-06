@@ -69,7 +69,7 @@
       <button class="talos-nav-item" data-c="NavItem" data-vaia="attivita"><svg class="i"><use href="#i-check-sq"/></svg><span class="talos-nav-item__label" data-t="attivita">Attività</span><span class="talos-nav-item__count">4</span></button>
       <button class="talos-nav-item" data-c="NavItem" id="altroLuoghi" aria-expanded="false" aria-controls="luoghiAltri"><svg class="i"><use href="#i-more"/></svg><span class="talos-nav-item__label" data-t="altro">Altro</span></button>
       <div id="luoghiAltri" hidden>
-        <button class="talos-nav-item" data-c="NavItem" data-conteggio="note"><svg class="i"><use href="#i-doc"/></svg><span class="talos-nav-item__label">Note</span><span class="talos-nav-item__count">11</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="note" data-conteggio="note"><svg class="i"><use href="#i-doc"/></svg><span class="talos-nav-item__label">Note</span><span class="talos-nav-item__count">11</span></button>
         <button class="talos-nav-item" data-c="NavItem" data-vaia="ricerca"><svg class="i"><use href="#i-globe"/></svg><span class="talos-nav-item__label">Ricerca approfondita</span><span class="talos-nav-item__count">6</span></button>
         <button class="talos-nav-item" data-c="NavItem" data-vaia="officina"><svg class="i"><use href="#i-code"/></svg><span class="talos-nav-item__label">Officina attrezzi</span><span class="talos-nav-item__count">2</span></button>
         <button class="talos-nav-item" data-c="NavItem" data-vaia="automazioni"><svg class="i"><use href="#i-clock"/></svg><span class="talos-nav-item__label">Automazioni</span><span class="talos-nav-item__count">3</span></button>
@@ -533,6 +533,23 @@ Una segnalazione di stallo non termina il processo.</pre>
     </section>
 
     <!-- ---------- MEMORIA (C22-C23) ---------- -->
+    <!-- ---------- NOTE (C24) ----------
+         ⛔ 06/9 — la prova T14 l'ha trovata così: una voce di menu con un contatore VIVO («Note 1»,
+         e la nota c'era davvero sul disco) e NESSUNA pagina dietro. Il clic finiva nella chat.
+         Un contatore che promette un luogo che non esiste è peggio di una voce assente.
+         La decisione C24 vuole Note e Attività SEPARATI: questa è la casa delle note.
+         Forma presa da Granola (letta 06/09/2026): la nota resta un documento di chi la legge —
+         l'agente la scrive, tu la cerchi, la copi e te la porti via. -->
+    <section class="talos-screen" id="schermoNote" data-c="NotesScreen" hidden>
+      <div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>Note</h1></div><span class="talos-topbar__path" data-note-sommario>2 note</span></div>
+      <div class="talos-page" data-c="Page">
+        <div class="talos-page__head"><span class="talos-eyebrow">Note</span><h2>Quello che TALOS ha annotato</h2><p>Appunti presi dall’agente mentre lavora: quello che ha capito, quello che ha lasciato a metà, quello che vale la pena ricordare. Sono globali, come la Memoria.</p><p class="talos-page__note" data-note-stato role="status">2 note</p></div>
+        <div class="talos-toolbar"><span class="talos-grow"></span><div class="talos-field talos-field--sm"><svg class="talos-field__icon i" aria-hidden="true"><use href="#i-search"/></svg><input type="search" class="talos-field__input" id="cercaNota" aria-label="Cerca fra le note" placeholder="Cerca nel titolo e nel testo…" autocomplete="off"></div></div>
+        <div class="talos-card"><ul class="talos-note-lista" id="elencoNote" role="list"></ul></div>
+        <div class="talos-empty" id="noteVuote" data-c="EmptyState" hidden><svg class="i" aria-hidden="true"><use href="#i-doc"/></svg><h3>Nessuna nota</h3><p class="talos-muted">TALOS scrive una nota quando trova qualcosa che vale la pena ricordare. Compariranno qui.</p></div>
+      </div>
+    </section>
+
     <section class="talos-screen" id="schermoMemoria" data-c="MemoryScreen" hidden>
       <div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>Memoria</h1></div><span class="talos-topbar__path">4 ricordi · globali</span></div>
       <div class="talos-page" data-c="Page">
