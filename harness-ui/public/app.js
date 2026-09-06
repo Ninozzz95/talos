@@ -8605,6 +8605,7 @@ var init_app = __esm({
     init_scorciatoie();
     init_chat_foot();
     init_errori();
+    init_testo_pagina();
     init_allegati();
     init_review();
     init_stato_vuoto();
@@ -15655,11 +15656,31 @@ var init_app = __esm({
             voce.stato = "bloccata";
             voce.motivo = esito?.motivo || "Il sito non consente di essere mostrato dentro TALOS";
           }
+          void dallaPaginaAgliOcchiDelModello(voce);
         } catch (error) {
           voce.stato = "bloccata";
           voce.motivo = error.message || "Il server non ha potuto controllare la pagina";
         }
         renderizzaBrowser();
+      }
+      async function dallaPaginaAgliOcchiDelModello(voce) {
+        if (!voce?.url || !/^https?:/i.test(voce.url)) return;
+        try {
+          const pagina = await apiGet(`/api/v1/browser/leggi?url=${encodeURIComponent(voce.url)}`);
+          const grezzo = String(pagina?.corpo || "");
+          if (!grezzo.trim()) return;
+          const pulito = sembraHtml(grezzo) ? testoLeggibile(grezzo) : grezzo;
+          if (!pulito.trim()) return;
+          const nome = `Pagina aperta: ${voce.titolo || hostDaUrl(voce.url) || voce.url}`;
+          const indice2 = allegatiComposer.findIndex((a) => a.daBrowser);
+          const allegato = { tipo: "testo", nome, percorso: voce.url, caratteri: pulito.length, contenuto: pulito, daBrowser: true };
+          if (indice2 >= 0) allegatiComposer.splice(indice2, 1, allegato);
+          else allegatiComposer.push(allegato);
+          disegnaAllegati();
+          syncRunComposerState();
+        } catch (errore) {
+          console.warn("[browser] la pagina non è stata letta per il modello:", errore?.message || errore);
+        }
       }
       async function runDirectShell(comando, silenzioso) {
         if (!state.realSession.id) {
@@ -19588,13 +19609,33 @@ ${testo3}` : testo3;
         disegnaAllegati();
         syncRunComposerState();
       }
+      const TETTO_TESTO_ALLEGATO = 2e4;
       function testoConAllegati(testo3) {
         if (allegatiComposer.length === 0) return testo3;
-        const righe = allegatiComposer.map((a) => a.tipo === "immagine" ? `- immagine allegata: ${a.nome}${a.larghezza ? ` (${a.larghezza}×${a.altezza})` : ""}` : `- file allegato: ${a.percorso || a.nome}`);
-        return `${testo3}
+        const righe = [];
+        const blocchi = [];
+        for (const a of allegatiComposer) {
+          if (a.tipo === "immagine") {
+            righe.push(`- immagine allegata: ${a.nome}${a.larghezza ? ` (${a.larghezza}×${a.altezza})` : ""}`);
+            continue;
+          }
+          if (a.contenuto) {
+            const corpo = String(a.contenuto).slice(0, TETTO_TESTO_ALLEGATO);
+            const tagliato = String(a.contenuto).length > TETTO_TESTO_ALLEGATO;
+            blocchi.push(`--- ${a.nome} (${a.percorso || ""})${tagliato ? ` — primi ${TETTO_TESTO_ALLEGATO.toLocaleString("it-IT")} caratteri` : ""} ---
+${corpo}`);
+            righe.push(`- ${a.nome}${a.percorso ? ` (${a.percorso})` : ""}`);
+            continue;
+          }
+          righe.push(`- file allegato: ${a.percorso || a.nome}`);
+        }
+        const testa = `${testo3}
 
 Allegati di questo messaggio:
 ${righe.join("\n")}`;
+        return blocchi.length ? `${testa}
+
+${blocchi.join("\n\n")}` : testa;
       }
       function svuotaAllegati() {
         allegatiComposer.length = 0;

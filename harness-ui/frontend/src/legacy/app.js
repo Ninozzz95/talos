@@ -31,7 +31,7 @@ import { creaIntro, normalizzaCartella as normalizzaCartellaIntro, ultimoSegment
 import { creaSchedeTerminale, ETICHETTA_STATO as ETICHETTA_STATO_TERMINALE, TESTI as TESTI_TERMINALE, prossimaAttivaDopoChiusura, SCHEDE_MASSIME as SCHEDE_MASSIME_TERMINALE } from '../components/terminale.js'; // 06/9 B1: il Terminale a schede (K-G)
 import { LINGUE as LINGUE_MENU, risolviLingua, applicaLingua, etichettaLinguaRisolta, t as tr, EVENTO_LINGUA } from '../components/lingua.js'; // 06/9 B8 + P-i18n: la lingua dei menu e delle superfici
 import { ritraduciImpostazioni } from '../components/impostazioni.js'; // P-i18n
-import { creaBrowser, prossimaDopoChiusura as prossimaDopoChiusuraBrowser, MASSIMO_SCHEDE as MASSIMO_SCHEDE_BROWSER, localeAnnotabile } from '../components/browser.js'; // 06/9 K-I: il Browser a schede
+import { creaBrowser, prossimaDopoChiusura as prossimaDopoChiusuraBrowser, MASSIMO_SCHEDE as MASSIMO_SCHEDE_BROWSER, localeAnnotabile, hostDaUrl } from '../components/browser.js'; // 06/9 K-I: il Browser a schede
 import { impacchetta as impacchettaAnnotazioni } from '../components/annotazioni.js'; // Browser oltre Hermes 06/9
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
@@ -40,6 +40,7 @@ import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la bar
 import { montaScorciatoie, normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
 import { aggiornaPiedeChat, etichettaPermesso, fondoInVista, nomeModelloUmano } from '../components/chat-foot.js';
 import { spiegaErrore } from '../components/errori.js';
+import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js'; // 06/9: il sorgente di una pagina non si legge
 import { VIE_ALLEGATO, TETTI_ALLEGATI, allegatoPesante, costoAllegato, costoTotale, frasiTetti, nomeBreveAllegato } from '../components/allegati.js'; // 06/9 B4/B6/B7/B9: il «+» allega, e ogni allegato dichiara il suo costo // 06/9 O-22/O-23: gli errori del giro detti a una persona // 05/9 Fase 2: ChatFooter — striscia del giro, chip e barra di stato dai dati
 import { aggiornaDiffReview, creaRigaFileReview, nascondiAzioniFase3, riassuntoReview } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno del mockup
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
@@ -8497,10 +8498,42 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       voce.titolo = esito?.titolo || null;
       // un dev server locale passa dal proxy: la cornice è nostra anche se il sito vietasse l'incorniciatura
       if (esito?.incorniciabile || voce.proxata) { if (voce.stato === 'caricamento') voce.stato = 'pronta'; } else { voce.stato = 'bloccata'; voce.motivo = esito?.motivo || 'Il sito non consente di essere mostrato dentro TALOS'; }
+      void dallaPaginaAgliOcchiDelModello(voce); // 06/9: quello che guardi tu, lo deve vedere anche lui
     } catch (error) {
       voce.stato = 'bloccata'; voce.motivo = error.message || 'Il server non ha potuto controllare la pagina';
     }
     renderizzaBrowser();
+  }
+
+  /*
+   * ⛔⛔⛔ 06/9, owner, due volte e in maiuscolo: «IL MODELLO DEVE LEGGERE LA PAGINA DOVE VADO IO,
+   * DEVE AVERE GLI OCCHI SULLA SEZIONE BROWSER ANCHE SE SONO IO A NAVIGARCI DENTRO».
+   * Il testo lo legge il SERVER (`/api/v1/browser/leggi`, stessa funzione dell'attrezzo `naviga`):
+   * dalla pagina non si può, il confine di origine lo vieta. Poi diventa un allegato del prossimo
+   * messaggio — visibile, col suo costo in token scritto accanto, e togliibile con un clic.
+   * ⛔ Nessun contesto iniettato di nascosto: se non lo vedi nella riga degli allegati, non parte.
+   * ⛔ E il server non ha i tuoi cookie: di un sito dietro login vede la versione pubblica. Lo dice
+   * il nome dell'allegato, non un asterisco in fondo a una pagina di aiuto.
+   */
+  async function dallaPaginaAgliOcchiDelModello(voce) {
+    if (!voce?.url || !/^https?:/i.test(voce.url)) return;
+    try {
+      const pagina = await apiGet(`/api/v1/browser/leggi?url=${encodeURIComponent(voce.url)}`);
+      const grezzo = String(pagina?.corpo || '');
+      if (!grezzo.trim()) return;
+      const pulito = sembraHtml(grezzo) ? testoLeggibile(grezzo) : grezzo;
+      if (!pulito.trim()) return;
+      const nome = `Pagina aperta: ${voce.titolo || hostDaUrl(voce.url) || voce.url}`;
+      // una sola pagina alla volta: aprirne un'altra sostituisce la precedente, non le somma
+      const indice = allegatiComposer.findIndex((a) => a.daBrowser);
+      const allegato = { tipo: 'testo', nome, percorso: voce.url, caratteri: pulito.length, contenuto: pulito, daBrowser: true };
+      if (indice >= 0) allegatiComposer.splice(indice, 1, allegato); else allegatiComposer.push(allegato);
+      disegnaAllegati();
+      syncRunComposerState();
+    } catch (errore) {
+      // ⛔ mai un toast per ogni pagina che non si legge: è un di più, non un compito che hai chiesto
+      console.warn('[browser] la pagina non è stata letta per il modello:', errore?.message || errore);
+    }
   }
 
   /**
@@ -13441,12 +13474,30 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     syncRunComposerState();
   }
   /** Il testo che accompagna il messaggio: i percorsi, non i byte (vedi la doc di allegati.js). */
+  const TETTO_TESTO_ALLEGATO = 20_000; // ~5k token: oltre, una pagina sola mangerebbe mezza finestra
   function testoConAllegati(testo) {
     if (allegatiComposer.length === 0) return testo;
-    const righe = allegatiComposer.map((a) => (a.tipo === 'immagine'
-      ? `- immagine allegata: ${a.nome}${a.larghezza ? ` (${a.larghezza}×${a.altezza})` : ''}`
-      : `- file allegato: ${a.percorso || a.nome}`));
-    return `${testo}\n\nAllegati di questo messaggio:\n${righe.join('\n')}`;
+    const righe = [];
+    const blocchi = [];
+    for (const a of allegatiComposer) {
+      if (a.tipo === 'immagine') { righe.push(`- immagine allegata: ${a.nome}${a.larghezza ? ` (${a.larghezza}×${a.altezza})` : ''}`); continue; }
+      /*
+       * ⛔⛔⛔ 06/9, owner: «il modello deve avere gli occhi sulla sezione Browser anche se sono io a
+       * navigarci dentro». Per un FILE del progetto basta il percorso — l'agente lo apre da sé, e i
+       * byte nel messaggio sarebbero sprecati. Per una PAGINA no: il modello non può aprirla come
+       * la vedi tu, quindi il testo viaggia col messaggio. Chi ha un `contenuto` lo porta.
+       */
+      if (a.contenuto) {
+        const corpo = String(a.contenuto).slice(0, TETTO_TESTO_ALLEGATO);
+        const tagliato = String(a.contenuto).length > TETTO_TESTO_ALLEGATO;
+        blocchi.push(`--- ${a.nome} (${a.percorso || ''})${tagliato ? ` — primi ${TETTO_TESTO_ALLEGATO.toLocaleString('it-IT')} caratteri` : ''} ---\n${corpo}`);
+        righe.push(`- ${a.nome}${a.percorso ? ` (${a.percorso})` : ''}`);
+        continue;
+      }
+      righe.push(`- file allegato: ${a.percorso || a.nome}`);
+    }
+    const testa = `${testo}\n\nAllegati di questo messaggio:\n${righe.join('\n')}`;
+    return blocchi.length ? `${testa}\n\n${blocchi.join('\n\n')}` : testa;
   }
   function svuotaAllegati() { allegatiComposer.length = 0; disegnaAllegati(); }
 

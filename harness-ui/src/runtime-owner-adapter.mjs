@@ -586,6 +586,27 @@ export function createOwnerRuntimeAdapter({
     return runtime[nome](...argomenti);
   };
   return Object.freeze({
+    /*
+     * ⛔⛔⛔ 06/9, owner, due volte e in maiuscolo: «IL MODELLO DEVE LEGGERE LA PAGINA DOVE VADO IO,
+     * DEVE AVERE GLI OCCHI SULLA SEZIONE BROWSER ANCHE SE SONO IO A NAVIGARCI DENTRO».
+     * Una pagina di un'altra origine dentro una cornice NON si legge dal JavaScript della pagina che
+     * la ospita — è il confine di origine del browser, e non c'è trucco che lo aggiri (ricerca
+     * 06/09/2026: browser-use «Leaving Playwright for CDP», microsoft/playwright #21780). Chi ci
+     * riesce lo fa fuori dalla pagina: qui la legge il SERVER, con la stessa funzione dell'attrezzo
+     * `naviga` — cioè con la stessa validazione già scritta e già provata contro gli indirizzi
+     * interni (SSRF: allowlist di schema, niente indirizzi privati, catena di redirect limitata),
+     * invece di scrivere una seconda validazione che diverge dalla prima.
+     * ⛔ Il server non ha i cookie della persona: di un sito dietro login vede la versione pubblica.
+     * Va detto a schermo, non nascosto.
+     */
+    async leggiPagina(url) {
+      const runtime = await carica();
+      if (typeof runtime.leggiPaginaSicura !== 'function') {
+        throw new OwnerRuntimeUnavailableError('Il runtime agente non espone la lettura di una pagina.', 'OWNER_RUNTIME_CONTRACT_INVALID');
+      }
+      const pagina = await runtime.leggiPaginaSicura(String(url ?? ''));
+      return { url: String(pagina?.url ?? url ?? ''), stato: Number(pagina?.stato ?? 0) || 0, corpo: String(pagina?.corpo ?? '') };
+    },
     async runtimeSnapshot() {
       if (!specifier) return parseRuntimeOwnerSnapshot(null);
       const runtime = await carica();
