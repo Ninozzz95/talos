@@ -15,8 +15,9 @@ import {
  * da session-registry.mjs) — questo modulo opera SOLO su ciò che gli
  * viene iniettato, mai un secondo registro nascosto.
  */
-function vocePadre({ cartella = '/padre', profonditaDelega = 0 } = {}) {
-  return { cartella, profonditaDelega, conclusa: false, padreId: null };
+function vocePadre({ cartella = '/padre', profonditaDelega = 0, modello = null, reasoning = null, permessi = null, permessiPerAttrezzo = null } = {}) {
+  // 06/9: il figlio eredita modello/sforzo/permessi della madre — la voce di prova li porta come la vera
+  return { cartella, profonditaDelega, conclusa: false, padreId: null, modello, reasoning, permessi, permessiPerAttrezzo };
 }
 
 test('contaFigliAttivi: 0 senza figli, ignora sessioni con padreId diverso o assente', () => {
@@ -25,7 +26,7 @@ test('contaFigliAttivi: 0 senza figli, ignora sessioni con padreId diverso o ass
     ['estranea', { cartella: '/altro', padreId: null, conclusa: false }],
     ['figlio-di-altro-padre', { cartella: '/x', padreId: 'padre-2', conclusa: false }],
   ]);
-  const orch = creaSubagentOrchestrator({ sessioni, avviaESeguiFn: () => ({ sessionId: 'mai' }) });
+  const orch = creaSubagentOrchestrator({ sessioni, cartellaEsisteFn: () => true, avviaESeguiFn: () => ({ sessionId: 'mai' }) });
   assert.equal(orch.contaFigliAttivi('padre-1'), 0);
 });
 
@@ -36,7 +37,7 @@ test('contaFigliAttivi: conta SOLO i figli non conclusi dello stesso padre', () 
     ['figlio-attivo-2', { cartella: '/f2', padreId: 'padre-1', conclusa: false }],
     ['figlio-concluso', { cartella: '/f3', padreId: 'padre-1', conclusa: true }],
   ]);
-  const orch = creaSubagentOrchestrator({ sessioni, avviaESeguiFn: () => ({ sessionId: 'mai' }) });
+  const orch = creaSubagentOrchestrator({ sessioni, cartellaEsisteFn: () => true, avviaESeguiFn: () => ({ sessionId: 'mai' }) });
   assert.equal(orch.contaFigliAttivi('padre-1'), 2, 'un figlio concluso non conta più come attivo');
 });
 
@@ -47,7 +48,7 @@ test('elencaFigli: elenco vero, ordinato per avvio, include task/conclusa/esitoD
     ['figlio-a', { cartella: '/a', padreId: 'padre-1', conclusa: false, task: { consegna: 'compito A' }, avviataAlle: '2026-08-28T09:00:00.000Z', esitoDelega: null }],
     ['estraneo', { cartella: '/e', padreId: 'padre-2', conclusa: false, task: { consegna: 'non mio' }, avviataAlle: '2026-08-28T08:00:00.000Z' }],
   ]);
-  const orch = creaSubagentOrchestrator({ sessioni, avviaESeguiFn: () => ({ sessionId: 'mai' }) });
+  const orch = creaSubagentOrchestrator({ sessioni, cartellaEsisteFn: () => true, avviaESeguiFn: () => ({ sessionId: 'mai' }) });
   const figli = orch.elencaFigli('padre-1');
   assert.deepEqual(figli.map((f) => f.sessionId), ['figlio-a', 'figlio-b'], 'ordinati per avviataAlle, il più vecchio prima');
   assert.equal(figli[0].task, 'compito A');
@@ -58,27 +59,65 @@ test('elencaFigli: elenco vero, ordinato per avvio, include task/conclusa/esitoD
 test('⛔⛔⛔ delegaSottoTask: sessione padre inesistente — rifiutato, avviaESeguiFn MAI chiamata', async () => {
   const sessioni = new Map();
   let chiamata = false;
-  const orch = creaSubagentOrchestrator({ sessioni, avviaESeguiFn: () => { chiamata = true; return { sessionId: 'mai' }; } });
+  const orch = creaSubagentOrchestrator({ sessioni, cartellaEsisteFn: () => true, avviaESeguiFn: () => { chiamata = true; return { sessionId: 'mai' }; } });
   const esito = await orch.delegaSottoTask({ sessionPadreId: 'fantasma', task: 'x', cartella: '/y' });
   assert.equal(esito.esito, 'rifiutato');
   assert.match(esito.motivo, /non esiste più/);
   assert.equal(chiamata, false);
 });
 
-test('⛔⛔⛔ delegaSottoTask: cartella UGUALE al padre — rifiutato, avviaESeguiFn MAI chiamata', async () => {
-  const sessioni = new Map([['padre-1', vocePadre({ cartella: '/stessa' })]]);
+test('⭐⭐⭐ 06/9 — delegaSottoTask: cartella UGUALE al padre, o assente, PARTE nella cartella del padre', async () => {
+  /*
+   * ⛔⛔⛔ Fino al 06/9 questo test pinnava il divieto («rifiutato, avviaESeguiFn MAI chiamata»).
+   * Capovolto su una MISURA: dal vivo, un giro con una sola delega ha prodotto quattro sessioni
+   * figlie, otto giri, 76,8k token, tutte fallite — il modello vedeva un rifiuto sul caso normale
+   * (delegare un pezzo dello STESSO progetto) e aggirava riscrivendo il percorso in forma WSL
+   * (`/mnt/c/…`), che passava il confronto e su Windows non esiste.
+   * Stato dell'arte (Hermes Agent «Subagent delegation», 06/09/2026): per difetto i sotto-agenti
+   * condividono la cartella del padre.
+   */
+  const sessioni = new Map([['padre-1', vocePadre({ cartella: '/progetto', modello: 'z-ai/glm-5.3-flash', reasoning: 'high', permessi: 'Full access' })]]);
+  const viste = [];
+  const orch = creaSubagentOrchestrator({
+    sessioni,
+    cartellaEsisteFn: () => true,
+    avviaESeguiFn: (opzioni) => {
+      viste.push(opzioni);
+      opzioni.onConclusioneFn({ ok: true, esito: { detto: 'fatto', comeFinita: 'concluso' } });
+      return { sessionId: `figlio-${viste.length}` };
+    },
+  });
+  const uguale = await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/progetto' });
+  assert.equal(uguale.esito, 'concluso');
+  assert.equal(viste[0].cartella, '/progetto');
+  // e senza cartella si lavora dove lavora il padre
+  const assente = await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'y' });
+  assert.equal(assente.esito, 'concluso');
+  assert.equal(viste[1].cartella, '/progetto');
+  // ⭐ il figlio EREDITA il modello della madre: prima partiva col modello di difetto, e nessuno lo diceva
+  assert.equal(viste[0].modelloRichiesta, 'z-ai/glm-5.3-flash');
+  assert.equal(viste[0].reasoningRichiesto, 'high');
+  assert.equal(viste[0].permessiRichiesti, 'Full access');
+});
+
+test('⛔⛔⛔ AL CONTRARIO — delegaSottoTask: cartella che NON esiste sul disco (il percorso in forma WSL) — rifiutata, avviaESeguiFn MAI chiamata', async () => {
+  const sessioni = new Map([['padre-1', vocePadre({ cartella: 'C:\progetto' })]]);
   let chiamata = false;
-  const orch = creaSubagentOrchestrator({ sessioni, avviaESeguiFn: () => { chiamata = true; return { sessionId: 'mai' }; } });
-  const esito = await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/stessa' });
+  const orch = creaSubagentOrchestrator({
+    sessioni,
+    cartellaEsisteFn: (p) => p === 'C:\progetto',
+    avviaESeguiFn: () => { chiamata = true; return { sessionId: 'mai' }; },
+  });
+  const esito = await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/mnt/c/progetto' });
   assert.equal(esito.esito, 'rifiutato');
-  assert.match(esito.motivo, /diversa da quella del padre/);
-  assert.equal(chiamata, false);
+  assert.match(esito.motivo, /non esiste su questo computer/);
+  assert.equal(chiamata, false, 'una cartella inesistente non deve MAI far partire un figlio destinato a morire');
 });
 
 test(`⛔⛔⛔ delegaSottoTask: profondità oltre il limite (${LIMITE_PROFONDITA_DELEGA}) — rifiutato col numero VERO nel motivo`, async () => {
   const sessioni = new Map([['padre-1', vocePadre({ profonditaDelega: LIMITE_PROFONDITA_DELEGA })]]);
   let chiamata = false;
-  const orch = creaSubagentOrchestrator({ sessioni, avviaESeguiFn: () => { chiamata = true; return { sessionId: 'mai' }; } });
+  const orch = creaSubagentOrchestrator({ sessioni, cartellaEsisteFn: () => true, avviaESeguiFn: () => { chiamata = true; return { sessionId: 'mai' }; } });
   const esito = await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/diversa' });
   assert.equal(esito.esito, 'rifiutato');
   assert.match(esito.motivo, new RegExp(`limite ${LIMITE_PROFONDITA_DELEGA}`));
@@ -90,6 +129,7 @@ test(`⭐⭐ AL CONTRARIO — delegaSottoTask: profondità ESATTAMENTE al limite
   let profonditaRicevuta;
   const orch = creaSubagentOrchestrator({
     sessioni,
+    cartellaEsisteFn: () => true,
     avviaESeguiFn: (opzioni) => { profonditaRicevuta = opzioni.profonditaDelega; return { sessionId: 'figlio-vero' }; },
   });
   orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/diversa' }); // non attesa: la Promise resta pending finché onConclusioneFn non scatta, non serve qui
@@ -102,7 +142,7 @@ test(`⛔⛔⛔ delegaSottoTask: ${LIMITE_FIGLI_CONCORRENTI}° figlio già attiv
     sessioni.set(`figlio-${i}`, { cartella: `/f${i}`, padreId: 'padre-1', conclusa: false });
   }
   let chiamata = false;
-  const orch = creaSubagentOrchestrator({ sessioni, avviaESeguiFn: () => { chiamata = true; return { sessionId: 'mai' }; } });
+  const orch = creaSubagentOrchestrator({ sessioni, cartellaEsisteFn: () => true, avviaESeguiFn: () => { chiamata = true; return { sessionId: 'mai' }; } });
   const esito = await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/undicesimo' });
   assert.equal(esito.esito, 'rifiutato');
   assert.match(esito.motivo, new RegExp(`${LIMITE_FIGLI_CONCORRENTI} figli concorrenti`));
@@ -114,6 +154,7 @@ test('⭐⭐⭐ delegaSottoTask: avvio riuscito — avviaESeguiFn riceve task/ca
   let opzioniRicevute;
   const orch = creaSubagentOrchestrator({
     sessioni,
+    cartellaEsisteFn: () => true,
     avviaESeguiFn: (opzioni) => {
       opzioniRicevute = opzioni;
       opzioni.onConclusioneFn({ ok: true, esito: { detto: 'fatto per davvero', comeFinita: 'concluso' } });
@@ -134,6 +175,7 @@ test('⛔⛔ AL CONTRARIO — la Promise resta PENDING finché onConclusioneFn n
   let onConclusioneCatturata;
   const orch = creaSubagentOrchestrator({
     sessioni,
+    cartellaEsisteFn: () => true,
     avviaESeguiFn: (opzioni) => { onConclusioneCatturata = opzioni.onConclusioneFn; return { sessionId: 'figlio-vero' }; },
   });
   let risolta = false;
@@ -150,6 +192,7 @@ test('⛔⛔⛔ AL CONTRARIO — avviaESeguiFn che rifiuta SUBITO (es. chiave AP
   const sessioni = new Map([['padre-1', vocePadre()]]);
   const orch = creaSubagentOrchestrator({
     sessioni,
+    cartellaEsisteFn: () => true,
     avviaESeguiFn: () => ({ erroreAvvio: 'Chiave API non configurata sul server (OPENROUTER_API_KEY)', code: 'CONFIG_INVALID' }),
   });
   const esito = await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/figlio' });
@@ -225,6 +268,7 @@ test('⭐⭐ J — il callback associa il verdetto e l evidenza alla figlia anch
   const sessioni = new Map([['padre-1', vocePadre()]]);
   const orch = creaSubagentOrchestrator({
     sessioni,
+    cartellaEsisteFn: () => true,
     avviaESeguiFn: (opzioni) => {
       sessioni.set('figlio-vero', {
         padreId: 'padre-1',

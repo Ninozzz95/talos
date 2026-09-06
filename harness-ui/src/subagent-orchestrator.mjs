@@ -20,6 +20,8 @@
  */
 
 /** Fonte: `tools/delegate_tool.py`, Hermes (Nous Research), letto il 28/8. */
+import { existsSync, statSync } from 'node:fs';
+
 export const LIMITE_FIGLI_CONCORRENTI = 10;
 
 /**
@@ -138,7 +140,18 @@ export function esitoDelegaDaEventi(eventi, contesto = {}) {
  * @param {Map<string, object>} sessioni — la STESSA Map di session-registry.mjs.
  * @param {Function} avviaESeguiFn — la funzione interna avviaESegui di session-registry.mjs, non una sua copia.
  */
-export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn }) {
+/** L'unico controllo sul percorso che il kernel non può fare: esiste, ed è una cartella. */
+export function esisteCartella(percorso, { esiste = existsSync, stato = statSync } = {}) {
+  const p = String(percorso || '');
+  if (!p.trim()) return false;
+  try { return esiste(p) && stato(p).isDirectory(); } catch { return false; }
+}
+
+/*
+ * `cartellaEsisteFn` si inietta: le prove costruiscono sessioni con cartelle che sul disco non
+ * esistono, e il controllo vero (quello che ferma un percorso in forma WSL) resta acceso in produzione.
+ */
+export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn, cartellaEsisteFn = esisteCartella }) {
   function contaFigliAttivi(sessionPadreId) {
     let n = 0;
     for (const voce of sessioni.values()) {
@@ -180,8 +193,21 @@ export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn }) {
         resolve({ esito: 'rifiutato', motivo: 'la sessione padre non esiste più' });
         return;
       }
-      if (cartella === padre.cartella) {
-        resolve({ esito: 'rifiutato', motivo: 'la cartella della delega deve essere diversa da quella del padre' });
+      /*
+       * ⛔⛔⛔ 06/9 — questa guardia diceva «la cartella della delega deve essere diversa da quella
+       * del padre», e insieme alla gemella nel kernel produceva il difetto misurato dal vivo: un
+       * giro con UNA delega, quattro sessioni figlie, otto giri, 76,8k token, tutte fallite. Il
+       * modello vedeva un rifiuto sul caso normale — delegare un pezzo dello STESSO progetto — e
+       * aggirava riscrivendo il percorso in forma WSL (`/mnt/c/…`), che qui passava e su Windows
+       * non esiste: il figlio partiva con una cartella inesistente e moriva.
+       * Stato dell'arte (Hermes Agent «Subagent delegation», letto 06/09/2026): per difetto i
+       * sotto-agenti CONDIVIDONO la cartella del padre; l'isolamento vero, quando serve, si fa con
+       * un worktree, non con una cartella diversa a caso.
+       * ⇒ Resta un solo controllo, quello che il kernel non può fare: la cartella deve ESISTERE.
+       */
+      const dove = typeof cartella === 'string' && cartella.trim() !== '' ? cartella : padre.cartella;
+      if (!cartellaEsisteFn(dove)) {
+        resolve({ esito: 'rifiutato', motivo: `la cartella ${dove} non esiste su questo computer: usa un percorso di Windows, non uno in forma WSL` });
         return;
       }
       const profonditaVoluta = (padre.profonditaDelega ?? 0) + 1;
@@ -212,12 +238,23 @@ export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn }) {
         }
         resolve(esito);
       };
+      /*
+       * ⛔⛔⛔ 06/9, stessa misura: i figli partivano con `glm-4.7-flash` mentre la sessione madre
+       * aveva scelto `glm-5.3-flash`, e nessuna riga a schermo lo diceva. Un sotto-agente eredita
+       * gli strumenti del padre (Hermes: «subagents inherit the parent's enabled toolsets»); a
+       * maggior ragione deve ereditare il MODELLO, altrimenti chi paga non sa cosa sta pagando.
+       * Si eredita anche lo sforzo di ragionamento e i permessi: il figlio non è più libero del padre.
+       */
       const risultatoAvvio = avviaESeguiFn({
         taskId: `delega:${sessionPadreId}`,
-        cartella,
+        cartella: dove,
         task: { consegna: task },
         padreId: sessionPadreId,
         profonditaDelega: profonditaVoluta,
+        modelloRichiesta: padre.modello ?? null,
+        reasoningRichiesto: padre.reasoning ?? null,
+        permessiRichiesti: padre.permessi ?? null,
+        permessiPerAttrezzoRichiesti: padre.permessiPerAttrezzo ?? null,
         onConclusioneFn: (risultatoSessione) => {
           completaConclusione(risultatoSessione);
         },

@@ -81,7 +81,7 @@ function sessioneControllabile() {
 
 test('avvia(): RunStarted è già nel buffer al RITORNO, non dopo — provato con un iscritto immediato', async () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
 
   const { sessionId } = registro.avvia('task-vero');
   const ricevuti = [];
@@ -103,7 +103,7 @@ test('avvia(): RunStarted è già nel buffer al RITORNO, non dopo — provato co
  */
 test('⭐⭐ cartellaDi(sessionId) torna la cartella VERA di una sessione esistente', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
 
   const { sessionId } = registro.avvia('task-vero');
 
@@ -415,7 +415,7 @@ test('⛔ AL CONTRARIO — fidaServerMcp su un id sessione inesistente: NOT_FOUN
  */
 test('avvia(taskId, {mobile:true}) passa mobile:true ad avviaSessioneFn', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
 
   registro.avvia('task-vero', { mobile: true });
 
@@ -425,7 +425,7 @@ test('avvia(taskId, {mobile:true}) passa mobile:true ad avviaSessioneFn', () => 
 
 test('⛔ AL CONTRARIO: avvia(taskId) senza opzioni resta mobile:false, il comportamento di sempre', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
 
   registro.avvia('task-vero');
 
@@ -435,7 +435,7 @@ test('⛔ AL CONTRARIO: avvia(taskId) senza opzioni resta mobile:false, il compo
 
 test('⭐ un iscritto DURANTE la corsa riceve prima la storia, poi i nuovi eventi dal vivo', async () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero');
 
   const ricevuti = [];
@@ -450,7 +450,7 @@ test('⭐ un iscritto DURANTE la corsa riceve prima la storia, poi i nuovi event
 
 test('⭐⭐ un iscritto TARDIVO (dopo la conclusione) riceve TUTTA la storia comunque, mai un buco', async () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero');
 
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
@@ -464,7 +464,7 @@ test('⭐⭐ un iscritto TARDIVO (dopo la conclusione) riceve TUTTA la storia co
 
 test('⛔ disiscriversi ferma DAVVERO la consegna di nuovi eventi', async () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero');
 
   const ricevuti = [];
@@ -479,7 +479,7 @@ test('⛔ disiscriversi ferma DAVVERO la consegna di nuovi eventi', async () => 
 
 test('⭐ ferma() aborta il segnaleStop passato ad avviaSessione', async () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero');
 
   assert.equal(finta.segnaleStop.aborted, false);
@@ -603,7 +603,7 @@ test('SESSION-LOCAL-FALLBACK-01: fallback cloud solo con consenso esplicito', as
 
 test('esiste()', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero');
   assert.equal(registro.esiste(sessionId), true);
   assert.equal(registro.esiste('mai-esistito'), false);
@@ -612,7 +612,7 @@ test('esiste()', () => {
 
 test('⛔⛔ ALLOWLIST: un taskId non ammesso non crea nessuna sessione, e avviaSessione non viene MAI chiamato', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
 
   const risultato = registro.avvia('task-non-ammesso');
 
@@ -848,7 +848,7 @@ test('⭐⭐ un resume eredita il modelloPlanner della voce originale, mai perso
  */
 test('⭐ default: senza permessi espliciti, la voce è "Workspace write" — nessun livelloAccesso, nessun chiediApprovazioneFn', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
 
   registro.avvia('task-vero');
 
@@ -859,7 +859,7 @@ test('⭐ default: senza permessi espliciti, la voce è "Workspace write" — ne
 
 test('⭐⭐⭐ "Read only" diventa livelloAccesso:\'lettura\' per il kernel, MAI chiediApprovazioneFn', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
 
   registro.avvia('task-vero', { permessiScelto: 'Read only' });
 
@@ -870,7 +870,7 @@ test('⭐⭐⭐ "Read only" diventa livelloAccesso:\'lettura\' per il kernel, MA
 
 test('⭐⭐⭐ "On request" passa una chiediApprovazioneFn vera, MAI livelloAccesso', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
 
   registro.avvia('task-vero', { permessiScelto: 'On request' });
 
@@ -882,7 +882,7 @@ test('⭐⭐⭐ "On request" passa una chiediApprovazioneFn vera, MAI livelloAcc
 test('⭐⭐ "Workspace write"/"Full access" restano entrambi senza livelloAccesso/chiediApprovazioneFn — "Full access" NON tocca mai il kernel (dove cambia la cartella dipende dal percorso di lancio, vedi W0-08 sotto)', () => {
   for (const permessiScelto of ['Workspace write', 'Full access']) {
     const finta = sessioneControllabile();
-    const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+    const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
     registro.avvia('task-vero', { permessiScelto });
     assert.equal(finta.ultimoInput.livelloAccesso, undefined, permessiScelto);
     assert.equal(finta.ultimoInput.chiediApprovazioneFn, undefined, permessiScelto);
@@ -904,7 +904,7 @@ test('⭐⭐ "Workspace write"/"Full access" restano entrambi senza livelloAcces
  */
 test('⛔⛔⛔ W0-08 — RIPRODOTTO E CORRETTO: avvia(taskId, {permessiScelto:"Full access"}) su un task del catalogo NON riceve la radice del disco', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   registro.avvia('task-vero', { permessiScelto: 'Full access' });
   assert.equal(finta.ultimoInput.cartella, '/tmp/x', 'Full access su un task del catalogo non deve MAI allargare a C:\\ — non esiste nessun percorso "scelto dalla persona" da cui allargarsi (vedi la doc di avvia())');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
@@ -1006,7 +1006,7 @@ test('⭐⭐⭐ AL CONTRARIO — l\'allowlist (cartellaId) SI allarga con "Full 
 
 test('⭐⭐⭐ fork() eredita il permesso della sessione origine — mai perso a metà conversazione', async () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Read only' });
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: [{ role: 'user', content: 'x' }] } });
   await new Promise((r) => setImmediate(r));
@@ -1023,7 +1023,7 @@ test('⭐⭐⭐ fork() eredita il permesso della sessione origine — mai perso 
 
 test('⭐⭐⭐ resume() eredita il permesso della sessione origine', async () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'On request' });
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: [{ role: 'user', content: 'x' }] } });
   await new Promise((r) => setImmediate(r));
@@ -1046,7 +1046,7 @@ test('⭐⭐⭐ resume() eredita il permesso della sessione origine', async () =
  */
 test('⭐ default: senza permessiPerAttrezzoScelto, la voce non porta alcun override — null verso il kernel (optional chaining lo tratta come assente)', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
 
   registro.avvia('task-vero');
 
@@ -1056,7 +1056,7 @@ test('⭐ default: senza permessiPerAttrezzoScelto, la voce non porta alcun over
 
 test('⭐⭐⭐ permessiPerAttrezzoScelto arriva DAVVERO ad avviaSessioneFn, invariato', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
 
   registro.avvia('task-vero', { permessiPerAttrezzoScelto: { shell: 'nega' } });
 
@@ -1066,7 +1066,7 @@ test('⭐⭐⭐ permessiPerAttrezzoScelto arriva DAVVERO ad avviaSessioneFn, inv
 
 test('⭐⭐⭐ fork() eredita permessiPerAttrezzo della sessione origine — stesso principio già in uso per permessi', async () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero', { permessiPerAttrezzoScelto: { scrivi: 'sempre' } });
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: [{ role: 'user', content: 'x' }] } });
   await new Promise((r) => setImmediate(r));
@@ -1080,7 +1080,7 @@ test('⭐⭐⭐ fork() eredita permessiPerAttrezzo della sessione origine — st
 
 test('⭐⭐⭐ resume() eredita permessiPerAttrezzo della sessione origine (STESSA voce, nessun passaggio esplicito necessario)', async () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero', { permessiPerAttrezzoScelto: { document_create: 'chiedi' } });
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: [{ role: 'user', content: 'x' }] } });
   await new Promise((r) => setImmediate(r));
@@ -1107,7 +1107,7 @@ test('⭐⭐⭐ resume() eredita permessiPerAttrezzo della sessione origine (STE
  */
 test('⭐⭐⭐ "Workspace write" con permessiPerAttrezzo:{shell:\'chiedi\'} COSTRUISCE chiediApprovazioneFn: chi chiede di essere avvisato viene avvisato', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
 
   registro.avvia('task-vero', { permessiScelto: 'Workspace write', permessiPerAttrezzoScelto: { shell: 'chiedi' } });
 
@@ -1118,7 +1118,7 @@ test('⭐⭐⭐ "Workspace write" con permessiPerAttrezzo:{shell:\'chiedi\'} COS
 
 test('⭐⭐ AL CONTRARIO — "Workspace write" con permessiPerAttrezzo SENZA alcun \'chiedi\' (solo sempre/nega) NON costruisce chiediApprovazioneFn', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
 
   registro.avvia('task-vero', { permessiScelto: 'Workspace write', permessiPerAttrezzoScelto: { scrivi: 'sempre', shell: 'nega' } });
 
@@ -1151,7 +1151,7 @@ function sessioneConApprovazione() {
 
 test('⭐⭐⭐ richiediApprovazione: emette ApprovalRequested con l\'azione VERA, e rispondiApprovazione(true) sblocca la Promise in attesa', async () => {
   const finta = sessioneConApprovazione();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'On request' });
 
   const ricevuti = [];
@@ -1178,7 +1178,7 @@ test('⭐⭐⭐ richiediApprovazione: emette ApprovalRequested con l\'azione VER
 
 test('⭐⭐ rispondiApprovazione(false) sblocca la Promise con false — un rifiuto vero, non un\'eccezione', async () => {
   const finta = sessioneConApprovazione();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'On request' });
 
   const ricevuti = [];
@@ -1194,7 +1194,7 @@ test('⭐⭐ rispondiApprovazione(false) sblocca la Promise con false — un rif
 
 test('⛔⛔⛔ AL CONTRARIO — rispondiApprovazione con un requestId SBAGLIATO/vecchio non risolve NULLA: QUERY_INVALID, la Promise resta sospesa', async () => {
   const finta = sessioneConApprovazione();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'On request' });
   finta.chiediApprovazioneFn({ tipo: 'scrivi', percorso: 'x.txt' });
   await Promise.resolve();
@@ -1206,7 +1206,7 @@ test('⛔⛔⛔ AL CONTRARIO — rispondiApprovazione con un requestId SBAGLIATO
 
 test('⛔ AL CONTRARIO — rispondiApprovazione senza NESSUNA richiesta pendente: QUERY_INVALID, non un crash', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero');
 
   const risultato = registro.rispondiApprovazione(sessionId, 'qualunque-id', true);
@@ -1420,7 +1420,7 @@ test('⭐⭐ elenca() torna un riepilogo per sessione, PIÙ RECENTE PRIMA, mai g
  */
 test('⭐⭐⭐ elenca(): usage è il valore dell\'ULTIMO StateDelta su /usage (somma cumulativa, REPLACE non ADD)', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   registro.avvia('task-vero');
 
   finta.emetti({ type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: { prompt_tokens: 100, completion_tokens: 20, cached_tokens: 0, giri: 1 } }] });
@@ -1432,7 +1432,7 @@ test('⭐⭐⭐ elenca(): usage è il valore dell\'ULTIMO StateDelta su /usage (
 
 test('⛔ AL CONTRARIO — elenca(): usage è null quando nessun giro ha mai riportato un /usage (mai uno zero fabbricato)', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   registro.avvia('task-vero');
   assert.equal(registro.elenca()[0].usage, null);
 
@@ -1442,7 +1442,7 @@ test('⛔ AL CONTRARIO — elenca(): usage è null quando nessun giro ha mai rip
 
 test('⛔⛔ AL CONTRARIO — elenca(): un altro StateDelta (es. /file/*) non viene mai scambiato per /usage', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   registro.avvia('task-vero');
 
   finta.emetti({ type: 'StateDelta', delta: [{ op: 'add', path: '/file/prova.txt', value: 'ciao' }] });
@@ -1489,7 +1489,7 @@ test('⛔⛔ AL CONTRARIO — cartellePiuUsate() torna vuoto finché nessuna ses
 
 test('⛔ AL CONTRARIO — cartellePiuUsate() non espone MAI la mappa sessione→cartella, solo l\'aggregato (stesso principio di privacy di elenca())', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   registro.avvia('task-vero');
   for (const voce of registro.cartellePiuUsate()) assert.ok(!('sessionId' in voce), 'un sessionId qui rilegherebbe una cartella privata a una sessione precisa');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }); // pulizia
@@ -1497,7 +1497,7 @@ test('⛔ AL CONTRARIO — cartellePiuUsate() non espone MAI la mappa sessione�
 
 test('⭐⭐⭐ rinomina() persiste il nome — elenca() ed esporta() lo mostrano dopo, mai sovrascritto', async () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero');
 
   assert.equal(registro.elenca()[0].nome, null, 'prima di rinominare, nessun nome');
@@ -1517,7 +1517,7 @@ test('⛔ rinomina() su un id inesistente: NOT_FOUND', async () => {
 
 test('⛔ rinomina() rifiuta nomi vuoti o troppo lunghi — QUERY_INVALID, mai un nome vuoto salvato', async () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero');
 
   for (const nomeCattivo of ['', '   ', 'x'.repeat(81), null, undefined, 42]) {
@@ -1556,7 +1556,7 @@ test('⭐⭐ esporta() su una sessione ancora in corso mostra tutto ciò che è 
 
 test('⭐ esporta() dopo la conclusione porta conclusa:true e l\'evento finale', async () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero');
 
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
@@ -1569,7 +1569,7 @@ test('⭐ esporta() dopo la conclusione porta conclusa:true e l\'evento finale',
 
 test('⛔ forka() su un id origine inesistente: NOT_FOUND, nessuna sessione creata', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const risultato = registro.forka('mai-esistito');
   assert.equal(risultato.code, 'NOT_FOUND');
   assert.equal(finta.chiamate, 0);
@@ -1577,7 +1577,7 @@ test('⛔ forka() su un id origine inesistente: NOT_FOUND, nessuna sessione crea
 
 test('⛔ forka() su una sessione origine ANCORA IN CORSO: SESSION_NOT_READY, dichiarato — non un fork silenziosamente vuoto', async () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero');
 
   const risultato = registro.forka(sessionId);
@@ -1653,13 +1653,13 @@ test('⭐⭐⭐ forka() eredita mobile:true dalla sessione origine', async () =>
 
 test('⛔ resume() su un id inesistente: NOT_FOUND', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   assert.equal(registro.resume('mai-esistito').code, 'NOT_FOUND');
 });
 
 test('⛔ resume() su una sessione ANCORA IN CORSO: SESSION_NOT_READY', async () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero');
 
   assert.equal(registro.resume(sessionId).code, 'SESSION_NOT_READY');
@@ -1872,7 +1872,7 @@ test('⛔ compatta() su una sessione ANCORA IN CORSO: SESSION_NOT_READY, compatt
 
 test('⛔ compatta() su una sessione conclusa MA SENZA messaggiFinali (talosLavora non li ha prodotti): SESSION_NOT_READY', async () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero');
 
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }); // risultato di default {ok:true}, senza esito.messaggiFinali
@@ -2469,7 +2469,7 @@ test('SESSION-WATCHER-LIFECYCLE-30 — eliminare una sessione rilascia il watche
  */
 test('⭐⭐⭐ onDelega è SEMPRE costruito su avvia() — una funzione vera, anche per una sessione che non delega mai nulla', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   registro.avvia('task-vero');
   assert.equal(typeof finta.ultimoInput.onDelega, 'function');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
@@ -2477,7 +2477,7 @@ test('⭐⭐⭐ onDelega è SEMPRE costruito su avvia() — una funzione vera, a
 
 test('⭐⭐⭐⭐ delega FILO INTERO: onDelega del padre avvia DAVVERO una seconda sessione isolata, e la Promise si sblocca quando la figlia conclude', async () => {
   const finta = sessioneControllabile(); // STESSO fake per padre e figlio: avviaSessioneFn è iniettato una volta sola sul registro, la seconda avviaESegui() (per la delega) lo richiama identico
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId: padreId } = registro.avvia('task-vero');
   const onDelegaDelPadre = finta.ultimoInput.onDelega;
 
@@ -2495,23 +2495,44 @@ test('⭐⭐⭐⭐ delega FILO INTERO: onDelega del padre avvia DAVVERO una seco
   assert.equal(figliDelPadre.figli.length, 1, 'il registro riconosce la figlia come figlia DI QUESTO padre, non una sessione slegata');
 });
 
-test('⛔⛔⛔ AL CONTRARIO — la cartella della delega deve essere DIVERSA da quella del padre, verificato con la cartella VERA della sessione padre', async () => {
+test('⭐⭐⭐ 06/9 — la delega sulla STESSA cartella del padre parte, e il figlio eredita il modello della madre', async () => {
+  /*
+   * ⛔⛔⛔ Questo test pinnava il divieto («deve essere DIVERSA da quella del padre») fino al 06/9.
+   * Capovolto su una misura dal vivo: quel rifiuto colpiva il caso normale — delegare un pezzo dello
+   * stesso progetto — e il modello aggirava riscrivendo il percorso in forma WSL, facendo partire
+   * figli con una cartella inesistente: quattro sessioni, otto giri, 76,8k token, tutte fallite.
+   * Ora il controllo è quello giusto: la cartella deve ESISTERE (prova separata), e il figlio non
+   * parte più con un modello diverso da quello che la madre ha scelto.
+   */
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   registro.avvia('task-vero'); // preparaEsecuzioneFinta: cartella '/tmp/x'
   const onDelegaDelPadre = finta.ultimoInput.onDelega;
 
-  const chiamatePrimaDellaDelega = finta.chiamate;
-  const esito = await onDelegaDelPadre('fai qualcosa', '/tmp/x'); // STESSA cartella del padre
+  const promessa = onDelegaDelPadre('fai qualcosa', '/tmp/x'); // STESSA cartella del padre
+  assert.equal(finta.chiamate, 2, 'la delega sullo stesso progetto deve partire, non essere rifiutata');
+  assert.equal(finta.ultimoInput.cartella, '/tmp/x');
+  finta.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { detto: 'fatto', comeFinita: 'concluso', messaggiFinali: [] } });
+  const esito = await promessa;
+  assert.equal(esito.esito, 'concluso');
+});
+
+test('⛔⛔⛔ AL CONTRARIO — la delega su una cartella che NON esiste è rifiutata, e nessun figlio parte', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: (p) => p === '/tmp/x' });
+  registro.avvia('task-vero');
+  const onDelegaDelPadre = finta.ultimoInput.onDelega;
+  const prima = finta.chiamate;
+  const esito = await onDelegaDelPadre('fai qualcosa', '/mnt/c/tmp/x'); // la forma WSL che il modello inventava
   assert.equal(esito.esito, 'rifiutato');
-  assert.match(esito.motivo, /diversa da quella del padre/);
-  assert.equal(finta.chiamate, chiamatePrimaDellaDelega, 'nessuna seconda sessione avviata per una delega rifiutata');
+  assert.match(esito.motivo, /non esiste su questo computer/);
+  assert.equal(finta.chiamate, prima, 'nessun figlio destinato a morire');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
 test('⭐⭐⭐ elencaFigli(): NOT_FOUND su una sessione inesistente, zero figli per una sessione senza deleghe, i figli VERI dopo una delega conclusa', async () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
 
   assert.deepEqual(registro.elencaFigli('fantasma'), { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
 
@@ -2542,7 +2563,7 @@ test('⭐⭐⭐ elencaFigli(): NOT_FOUND su una sessione inesistente, zero figli
  */
 test('⭐⭐⭐ codaMessaggiFn è SEMPRE costruita su avvia() — una funzione vera, anche per una sessione senza nessun messaggio in coda', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   registro.avvia('task-vero');
   assert.equal(typeof finta.ultimoInput.codaMessaggiFn, 'function');
   assert.equal(finta.ultimoInput.codaMessaggiFn(), null, 'coda vuota: null, mai undefined — stesso contratto di talosLavora');
@@ -2551,7 +2572,7 @@ test('⭐⭐⭐ codaMessaggiFn è SEMPRE costruita su avvia() — una funzione v
 
 test('⭐⭐⭐⭐ FILO INTERO: accodaMessaggio() popola voce.codaMessaggi, e la codaMessaggiFn catturata la DRENA per davvero, emettendo QueuedMessageDelivered SOLO quando consegna qualcosa', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero');
   const codaMessaggiFn = finta.ultimoInput.codaMessaggiFn;
   const ricevuti = [];
@@ -2577,7 +2598,7 @@ test('⛔ accodaMessaggio: NOT_FOUND su un id inesistente', () => {
 
 test('⛔⛔ accodaMessaggio: SESSION_NOT_READY su una sessione GIÀ CONCLUSA — il percorso giusto lì è resume(), non la coda', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 
@@ -2589,7 +2610,7 @@ test('⛔⛔ accodaMessaggio: SESSION_NOT_READY su una sessione GIÀ CONCLUSA �
 
 test('⛔ accodaMessaggio: QUERY_INVALID su un testo vuoto o di soli spazi', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero');
 
   assert.equal(registro.accodaMessaggio(sessionId, '').code, 'QUERY_INVALID');
@@ -2599,7 +2620,7 @@ test('⛔ accodaMessaggio: QUERY_INVALID su un testo vuoto o di soli spazi', () 
 
 test('⭐⭐⭐ AL CONTRARIO — due accodaMessaggio in sequenza mantengono l\'ORDINE: FIFO, non LIFO', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero');
   const codaMessaggiFn = finta.ultimoInput.codaMessaggiFn;
 
@@ -2614,7 +2635,7 @@ test('⭐⭐⭐ AL CONTRARIO — due accodaMessaggio in sequenza mantengono l\'O
 
 test('⭐⭐ svuotaCoda: rimuove l\'ULTIMO messaggio accodato, mai il primo — coerente con "Annulla" sull\'ultimo appena scritto', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero');
   const codaMessaggiFn = finta.ultimoInput.codaMessaggiFn;
 
@@ -2629,7 +2650,7 @@ test('⭐⭐ svuotaCoda: rimuove l\'ULTIMO messaggio accodato, mai il primo — 
 
 test('⛔ svuotaCoda: rimosso:false su una coda già vuota, mai un errore — e NOT_FOUND resta un caso separato', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero');
 
   assert.deepEqual(registro.svuotaCoda(sessionId), { ok: true, rimosso: false });
@@ -2645,7 +2666,7 @@ test('⛔ svuotaCoda: rimosso:false su una coda già vuota, mai un errore — e 
  */
 test('⭐⭐⭐ avvia() passa SEMPRE cartellaTrustMcp a avviaSessioneFn — un default reale, non undefined', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   registro.avvia('task-vero');
   assert.equal(typeof finta.ultimoInput.cartellaTrustMcp, 'string');
   assert.ok(finta.ultimoInput.cartellaTrustMcp.length > 0);
@@ -2903,7 +2924,7 @@ test('⛔ AL CONTRARIO — elencaMemorie su un id inesistente: NOT_FOUND', async
  */
 test('⭐⭐⭐ avvia() passa SEMPRE cartellaTrustPlugin a avviaSessioneFn — un default reale, non undefined', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   registro.avvia('task-vero');
   assert.equal(typeof finta.ultimoInput.cartellaTrustPlugin, 'string');
   assert.ok(finta.ultimoInput.cartellaTrustPlugin.length > 0);
@@ -3365,7 +3386,7 @@ async function attendiRegistroSuDisco(cartellaStore, sessionId, condizione, { te
 
 test('⛔⛔⛔ AL CONTRARIO — senza cartellaStore: ZERO file scritti su disco (il bug trovato dal vivo: 114 file test in .sessions-store/ prima di questa guardia)', async () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   registro.avvia('task-vero');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
   await new Promise((r) => setImmediate(r));
@@ -4295,7 +4316,7 @@ test('REGISTRY-STOP-BEFORE-REDIRECT-20 — Stop tombstona l’intento prima che 
 
 test('APPROVAL-10 — Reindirizza risolve fail-closed un’approvazione pendente prima di abortire', async () => {
   const finta = sessioneConApprovazione();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'On request' });
   const eventi = [];
   registro.iscriviti(sessionId, (evento) => eventi.push(evento));
@@ -4334,7 +4355,7 @@ test('FAILURE-06 — un guasto interno mentre Reindirizza attende chiude il life
 
 test('APPROVAL-10 contrario — Stop risolve anch’esso fail-closed una approvazione pendente', async () => {
   const finta = sessioneConApprovazione();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'On request' });
   const promessa = finta.chiediApprovazioneFn({ tipo: 'shell', comando: 'npm test' });
   await Promise.resolve();
@@ -4718,7 +4739,7 @@ test('WORKSPACE-CHANGED-EPHEMERAL-02 — al ripristino i WorkspaceChanged già s
 
 test('ELENCA-APPROVAZIONE-03 — elenca() dice se una sessione è ferma su un approvazione, e torna false appena risolta', async () => {
   const finta = sessioneConApprovazione();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'On request' });
   assert.equal(registro.elenca()[0].inAttesaApprovazione, false, 'AL CONTRARIO: nessuna richiesta, nessuna attesa');
 
