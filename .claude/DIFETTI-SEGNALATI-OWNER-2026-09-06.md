@@ -47,8 +47,8 @@
 | O-36 | «Attività non riuscita» mostra JSON grezzo e `REFUSED. Empty html: nothing was created.` | Conversazione, errori | 🔧 | il rifiuto si legge in italiano e l'argomento enorme si apre a richiesta; ⛔ non ancora rivisto dal vivo su un rifiuto vero |
 | O-37 | «con i modelli a chiave API gli artefatti vengono creati ma non salvati nella Libreria» | Artefatti / Libreria | 🔴 aperto | segnalato dall'owner, da riprodurre |
 | O-38 | «al posto di Tema Calm metti l'output medio di token al secondo se uso un modello locale; se non è locale togli la scritta» | Barra di stato | ✅ | `testoVelocitaLocale`, con la prova nei due versi |
-| O-39 | «rendere tutte le scrollbar completamente custom e più compatte (meno larghe)» | Tutta l'app, 30 scroller | 🔴 in coda | misurato: nessuna è custom — 3 hanno solo `scrollbar-width:thin`, le altre 27 sono quelle di Windows |
-| O-40 | «fare in modo che tutti i tooltip siano custom e stilizzati secondo il tema» | Tutta l'app, 220 tooltip | 🔴 in coda | misurato: 156 `title=` nel template + 64 assegnati da JS, e **zero** `role="tooltip"` |
+| O-39 | «rendere tutte le scrollbar completamente custom e più compatte (meno larghe)» | Tutta l'app, 30 scroller | ✅ | un blocco solo su `*` sui token; dal vivo a 3 viewport × 2 temi: **0 scroller con la barra di sistema**, colore che segue il tema |
+| O-40 | «fare in modo che tutti i tooltip siano custom e stilizzati secondo il tema» | Tutta l'app, 220 tooltip | ✅ | `tooltip.js` + `popover=hint` + ancoraggio CSS; dal vivo: si apre col mouse E col fuoco, hoverable, Esc lo chiude, `title` migrati al volo |
 
 ---
 

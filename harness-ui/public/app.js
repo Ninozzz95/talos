@@ -8280,6 +8280,127 @@ var init_chat_foot = __esm({
   }
 });
 
+// src/components/tooltip.js
+function migraTitle(elemento) {
+  if (!elemento || typeof elemento.getAttribute !== "function") return "";
+  const gia = elemento.getAttribute(ATTRIBUTO);
+  if (gia) return gia;
+  const tag = String(elemento.tagName || "").toLowerCase();
+  if (tag === "iframe" || elemento.ownerSVGElement || tag === "svg") return "";
+  const titolo2 = elemento.getAttribute("title");
+  if (!titolo2 || !titolo2.trim()) return "";
+  elemento.setAttribute(ATTRIBUTO, titolo2.trim());
+  elemento.removeAttribute("title");
+  return titolo2.trim();
+}
+function bersaglioDi(nodo4) {
+  let corrente = nodo4;
+  while (corrente && corrente.nodeType === 1) {
+    if (corrente.hasAttribute?.(ATTRIBUTO) || corrente.hasAttribute?.("title")) return corrente;
+    corrente = corrente.parentElement;
+  }
+  return null;
+}
+function latoPreferito(rettangolo, finestra) {
+  const r = rettangolo || {};
+  const w = Number(finestra?.width) || 0;
+  const h = Number(finestra?.height) || 0;
+  const sopra = Number(r.top) || 0;
+  const sotto = h - (Number(r.bottom) || 0);
+  if (sopra < 64 && sotto > sopra) return "block-end";
+  if (sotto < 64 && sopra > sotto) return "block-start";
+  const destra = w - (Number(r.right) || 0);
+  if (sopra < 64 && sotto < 64) return destra > (Number(r.left) || 0) ? "inline-end" : "inline-start";
+  return "block-start";
+}
+function collegaTooltip(documentObj = globalThis.document, { ritardo = RITARDO_MS } = {}) {
+  if (!documentObj || documentObj.__talosTooltipCollegato) return () => {
+  };
+  documentObj.__talosTooltipCollegato = true;
+  const bolla = documentObj.getElementById("talosTip");
+  if (!bolla) return () => {
+  };
+  const testo3 = bolla.querySelector("[data-tip-testo]") || bolla;
+  let bersaglio = null;
+  let timer = null;
+  let dentroLaBolla = false;
+  const chiudi = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    if (bersaglio) {
+      bersaglio.removeAttribute("aria-describedby");
+      bersaglio.style.anchorName = "";
+      bersaglio = null;
+    }
+    try {
+      bolla.hidePopover?.();
+    } catch {
+    }
+    bolla.hidden = true;
+  };
+  const apri = (elemento, frase) => {
+    bersaglio = elemento;
+    testo3.textContent = frase;
+    elemento.setAttribute("aria-describedby", "talosTip");
+    elemento.style.anchorName = "--talos-tip";
+    const lato = latoPreferito(elemento.getBoundingClientRect(), { width: globalThis.innerWidth, height: globalThis.innerHeight });
+    bolla.style.positionArea = lato;
+    bolla.hidden = false;
+    try {
+      bolla.showPopover?.();
+    } catch {
+    }
+  };
+  const suEntrata = (evento) => {
+    const elemento = bersaglioDi(evento.target);
+    if (!elemento || elemento === bersaglio) return;
+    const frase = migraTitle(elemento);
+    if (!frase) return;
+    chiudi();
+    timer = setTimeout(() => apri(elemento, frase), ritardo);
+  };
+  const suUscita = (evento) => {
+    if (!bersaglio) return;
+    const verso = evento.relatedTarget;
+    if (verso && (bolla.contains(verso) || bersaglio.contains(verso))) return;
+    if (dentroLaBolla) return;
+    chiudi();
+  };
+  bolla.addEventListener("pointerenter", () => {
+    dentroLaBolla = true;
+  });
+  bolla.addEventListener("pointerleave", () => {
+    dentroLaBolla = false;
+    chiudi();
+  });
+  documentObj.addEventListener("pointerover", suEntrata, true);
+  documentObj.addEventListener("pointerout", suUscita, true);
+  documentObj.addEventListener("focusin", suEntrata, true);
+  documentObj.addEventListener("focusout", suUscita, true);
+  documentObj.addEventListener("keydown", (evento) => {
+    if (evento.key === "Escape") chiudi();
+  }, true);
+  documentObj.addEventListener("pointerdown", chiudi, true);
+  documentObj.defaultView?.addEventListener?.("scroll", chiudi, { capture: true, passive: true });
+  return () => {
+    chiudi();
+    documentObj.__talosTooltipCollegato = false;
+    documentObj.removeEventListener("pointerover", suEntrata, true);
+    documentObj.removeEventListener("pointerout", suUscita, true);
+    documentObj.removeEventListener("focusin", suEntrata, true);
+    documentObj.removeEventListener("focusout", suUscita, true);
+  };
+}
+var ATTRIBUTO, RITARDO_MS;
+var init_tooltip = __esm({
+  "src/components/tooltip.js"() {
+    ATTRIBUTO = "data-tip";
+    RITARDO_MS = 350;
+  }
+});
+
 // src/components/errori.js
 function spiegaRifiutoAttrezzo(esito) {
   const testo3 = String(esito ?? "").trim();
@@ -8832,6 +8953,7 @@ var init_app = __esm({
     init_cronologia();
     init_scorciatoie();
     init_chat_foot();
+    init_tooltip();
     init_errori();
     init_note();
     init_testo_pagina();
@@ -21357,6 +21479,7 @@ ${blocchi.join("\n\n")}` : testa;
       })();
       collegaNavigazioneSpina($2("#conversation"));
       collegaCronologia($2("#schermoChat .talos-cronologia"), $2("#conversation"));
+      collegaTooltip(document);
       normalizzaTastiScritti(ROOT());
       collegaScorciatoieTerminale();
       collegaRidisegnoLingua();
