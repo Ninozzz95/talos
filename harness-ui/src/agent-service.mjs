@@ -29,6 +29,7 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import { createOwnerRuntimeAdapter } from './runtime-owner-adapter.mjs';
 import { salvaArtefatto as salvaArtefattoReale } from './artifact-store.mjs';
+import { salvaVoce as salvaVoceLibreriaReale } from './library-store.mjs'; // 06/9: un artefatto e' lavoro, e il lavoro si ritrova
 import { generateTalosDocument as generateTalosDocumentReale, TALOS_SOURCE_TEXT_FORMATS, verifyTalosDocument as verifyTalosDocumentReale } from './document-generator.mjs';
 import { generaImmagineOpenRouter as generaImmagineOpenRouterReale } from './image-generator.mjs';
 import { leggiContestoWorkspace as leggiContestoWorkspaceReale } from './workspace-context.mjs';
@@ -357,6 +358,16 @@ export async function avviaSessione({
   talosLavoraFn = talosLavoraReale,
   leggiContestoWorkspaceFn = leggiContestoWorkspaceReale,
   salvaArtefattoFn = salvaArtefattoReale,
+  /*
+   * ⛔⛔⛔ 06/9, owner: «con i modelli a chiave API gli artefatti vengono creati, ma non salvati
+   * nella libreria». Vero, e peggio di così: non erano salvati DA NESSUNA PARTE. `artifact-store.mjs`
+   * li tiene in una Map in memoria — dichiarato nella sua doc, «non sopravvive a un riavvio del
+   * server» — quindi un artefatto spariva al primo riavvio e non compariva mai in Libreria.
+   * Un artefatto è lavoro prodotto per la persona, non un'anteprima: si salva dove lo ritrova.
+   * La Map resta com'è (serve a servire la rotta senza toccare il disco a ogni apertura); qui si
+   * aggiunge la copia durevole, nella Libreria del progetto.
+   */
+  salvaVoceLibreriaFn = salvaVoceLibreriaReale,
   generateTalosDocumentFn = generateTalosDocumentReale,
   verifyTalosDocumentFn = verifyTalosDocumentReale,
   creaFileWorkspaceFn = creaFileWorkspaceReale,
@@ -817,6 +828,22 @@ export async function avviaSessione({
     const id = randomUUID();
     salvaArtefattoFn(id, html);
     onEvento(artifactCreated({ messageId: randomUUID(), id, titolo }));
+    /*
+     * La copia durevole, in Libreria. ⛔ Non blocca e non fa fallire il giro: se la Libreria non è
+     * scrivibile l'artefatto resta comunque a schermo e apribile — meglio un artefatto senza copia
+     * che un giro rotto per una scrittura. Il motivo si vede nel log del server, mai in silenzio.
+     */
+    try {
+      await salvaVoceLibreriaFn({
+        cartella,
+        nome: `${(titolo || 'artefatto').replace(/[\\/:*?"<>|]/g, '-').slice(0, 80)}.html`,
+        mediaType: 'text/html',
+        origine: 'generated',
+        testo: html,
+      });
+    } catch (errore) {
+      console.error('[artefatti] copia in Libreria non riuscita:', errore instanceof Error ? errore.message : errore);
+    }
     return { id };
   };
 

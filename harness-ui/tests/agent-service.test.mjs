@@ -2531,3 +2531,45 @@ test('⛔⛔ AL CONTRARIO — onForgeCrea: installaToolForgiatoFn che lancia Too
   assert.equal(esito.ok, false);
   assert.equal(esito.esito, 'That tool could not be created: a tool with id "my-tool" already exists — pick a different id.');
 });
+
+test('⭐⭐⭐ 06/9 — un artefatto creato finisce ANCHE in Libreria, non solo nella memoria del server', async () => {
+  /*
+   * ⛔ Owner: «con i modelli a chiave API gli artefatti vengono creati, ma non salvati nella
+   * libreria». Vero, e peggio: non erano salvati da nessuna parte — artifact-store.mjs li tiene in
+   * una Map in memoria, che un riavvio del server azzera (dichiarato nella sua doc). Un artefatto è
+   * lavoro prodotto per la persona: si salva dove lo ritrova.
+   */
+  const inMemoria = [];
+  const inLibreria = [];
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, artefatti: [{ titolo: 'Grafico: vendite/mese', html: '<!doctype html><p>ciao</p>' }] },
+  });
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    salvaArtefattoFn: (id, h) => inMemoria.push({ id, html: h }),
+    salvaVoceLibreriaFn: async (voce) => { inLibreria.push(voce); return 'lib-1'; },
+  });
+  assert.equal(inMemoria.length, 1, 'la copia in memoria resta: serve a servire la rotta senza toccare il disco');
+  assert.equal(inLibreria.length, 1, "e adesso c'è anche la copia durevole");
+  assert.equal(inLibreria[0].cartella, '/tmp/x', 'nella Libreria del progetto di questa sessione');
+  assert.equal(inLibreria[0].mediaType, 'text/html');
+  assert.equal(inLibreria[0].origine, 'generated');
+  assert.equal(inLibreria[0].nome, 'Grafico- vendite-mese.html', 'il titolo diventa un nome di file valido, senza caratteri proibiti');
+  assert.equal(inLibreria[0].testo, '<!doctype html><p>ciao</p>');
+});
+
+test("⛔⛔ AL CONTRARIO — se la Libreria non è scrivibile l'artefatto resta comunque a schermo", async () => {
+  const eventi = [];
+  const inMemoria = [];
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, artefatti: [{ titolo: 'x', html: '<p>x</p>' }] },
+  });
+  const esito = await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn,
+    salvaArtefattoFn: (id, h) => inMemoria.push({ id, html: h }),
+    salvaVoceLibreriaFn: async () => { throw new Error('disco pieno'); },
+  });
+  assert.equal(inMemoria.length, 1, 'meglio un artefatto senza copia che un giro rotto per una scrittura');
+  assert.ok(eventi.some((e) => e.type === 'ArtifactCreated'), "e l'artefatto compare comunque in chat");
+  assert.ok(esito, 'il giro non fallisce');
+});
