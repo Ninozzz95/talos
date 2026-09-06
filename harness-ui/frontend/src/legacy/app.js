@@ -17,7 +17,7 @@ import { creaMemoryRow, aggiornaPaginaMemoria } from '../components/memoria.js';
 import { aggiornaBoard, creaRigaBoard, cartellaDaExport } from '../components/board.js'; // 05/9 Fase 2: Board
 import { creaPilaToast } from '../components/toast.js';
 import { creaSorveglianzaConnessione, aggiornaStatoConnessione } from '../components/connessione.js'; // 05/9 T-15: stato onesto della connessione
-import { aggiornaPannelloNotifiche, apriPannelloNotifiche, nomeCampanella } from '../components/notifiche.js'; // 06/9 T-17: pannello «Aspetta te» del mockup
+import { aggiornaPannelloNotifiche, apriPannelloNotifiche, nomeCampanella, deveAvvisareFuoriDallaFinestra, testoNotificaSistema, statoConsensoNotifiche } from '../components/notifiche.js'; // 06/9 T-17: pannello «Aspetta te» del mockup; 06/9 G29: notifica di sistema
 import { aggiornaInstallati, montaInstallati, gb } from '../components/modelli-installati.js'; // 06/9 B6.8: scheda «Installati» del Model Lab
 import { aggiornaHf, gruppiVarianti } from '../components/hf-catalogo.js'; // 06/9 B6.9: scheda «Hugging Face» del Model Lab
 import { aggiornaCosti } from '../components/costi-consumo.js'; // 06/9 D21/D22: costi e consumo per giorno e per modello
@@ -5425,6 +5425,59 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     // 06/9: anche il `title`, non solo l'etichetta per il lettore di schermo — restava fermo su «1 cosa
     // aspetta te» del mockup mentre l'aria-label diceva il vero (trovato nella mappa delle superfici).
     if (bottone) { const nome = nomeCampanella(notifiche.length); bottone.setAttribute('aria-label', nome); bottone.title = nome; }
+    avvisaFuoriDallaFinestra(notifiche); // G29: il terzo dei tre modi
+  }
+
+  /*
+   * G29 — la notifica di SISTEMA, il terzo modo in cui «ciò che aspetta te» si
+   * deve vedere (gli altri due: la riga della sessione e il pannello).
+   *
+   * ⛔ Si manda SOLO se la finestra non è sotto gli occhi: una notifica di
+   * sistema per una cosa già a schermo è rumore. E ognuna si manda una volta
+   * sola — la chiave è `sessione:stato`, la stessa granularità con cui il
+   * pannello considera «vista» una notifica.
+   */
+  const notificheDiSistemaMandate = new Set();
+  function avvisaFuoriDallaFinestra(notifiche) {
+    if (typeof Notification === 'undefined') return;
+    const daMandare = deveAvvisareFuoriDallaFinestra({
+      permesso: Notification.permission,
+      visibile: document.visibilityState === 'visible',
+      notifiche,
+      giaAvvisate: notificheDiSistemaMandate,
+    });
+    for (const n of daMandare) {
+      const { titolo, corpo, tag } = testoNotificaSistema(n);
+      try {
+        const avviso = new Notification(titolo, { body: corpo, tag, silent: false });
+        // Cliccarla porta dove serve: la finestra torna davanti e la sessione si apre.
+        // stessa via che usa una riga del pannello: una sola porta per «apri quella sessione»
+        avviso.addEventListener('click', () => { window.focus(); segnaNotificaVista(n.sessione); passaASessione(n.sessione.sessionId, n.sessione.taskId || n.sessione.sessionId, n.sessione.nome || n.sessione.taskId, normalizzaModelloSessione(n.sessione), n.sessione); avviso.close(); });
+        notificheDiSistemaMandate.add(tag);
+      } catch { /* una notifica che non parte non deve fermare l'elenco */ }
+    }
+  }
+
+  /** Il consenso si chiede da un GESTO: i browser rifiutano la richiesta fuori da un clic. */
+  function montaConsensoNotifiche() {
+    const bottone = $('#notificheSistema'); const stato = $('#notificheSistemaStato');
+    if (!bottone || !stato) return;
+    const supportato = typeof Notification !== 'undefined';
+    const dipingi = () => {
+      const s = statoConsensoNotifiche(supportato ? Notification.permission : 'default', supportato);
+      stato.textContent = s.testo;
+      bottone.hidden = !s.chiedibile;
+    };
+    dipingi(); // si ridipinge a ogni apertura: il permesso può essere cambiato dal browser nel frattempo
+    // ⛔ l'ascoltatore UNA volta sola: il pannello si apre e si chiude molte volte, e un
+    // `addEventListener` per apertura vorrebbe dire N richieste di permesso per un clic solo.
+    if (bottone.dataset.consensoMontato) return;
+    bottone.dataset.consensoMontato = 'true';
+    bottone.addEventListener('click', async () => {
+      if (!supportato) return;
+      try { await Notification.requestPermission(); } catch { /* il rifiuto è una risposta */ }
+      dipingi();
+    });
   }
   function segnaNotificaVista(sessione) {
     const viste = leggiNotificheViste() || {};
@@ -5453,6 +5506,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       });
     });
     tutte?.addEventListener('click', () => { for (const { sessione } of notifiche) segnaNotificaVista(sessione); chiudiPannelloNotifiche?.(true); chiudiPannelloNotifiche = null; void aggiornaElencoSessioniReali(); });
+    montaConsensoNotifiche(); // G29: il pulsante del consenso vive nel pannello
     const chiudi = apriPannelloNotifiche(pannello, ancoraEl);
     chiudiPannelloNotifiche = (fuoco) => { chiudi(fuoco); chiudiPannelloNotifiche = null; };
   }
