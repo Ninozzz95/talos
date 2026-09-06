@@ -3513,15 +3513,20 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
      * dichiara resta `null`: `ripartizioneContesto` in quel caso non calcola
      * nessuna percentuale, invece di dividere per un numero di comodo.
      */
-    let finestra = null;
-    try {
-      // ⛔ la rotta risponde `{modelli}`, non `{items}`, e il campo è `contextLength`:
-      // scritto a memoria la prima volta, e la ripartizione restava senza percentuale.
-      const modelli = (await apiGet('/api/v1/models'))?.modelli || [];
-      const scelto = modelli.find((m) => m?.id === state.model);
-      const v = Number(scelto?.contextLength);
-      if (Number.isFinite(v) && v > 0) finestra = v;
-    } catch { /* senza catalogo si mostrano i token senza percentuale */ }
+    /*
+     * ⛔ La finestra si legge dal catalogo GIÀ in memoria, con la stessa
+     * funzione che usa la pagina Capability: due letture diverse della stessa
+     * cosa finiscono per dire due numeri diversi. Se il catalogo non è ancora
+     * arrivato lo si chiede una volta e lo si mette dove lo trovano tutti.
+     */
+    let finestra = finestraContestoDelModello();
+    if (finestra == null && state.model) {
+      try {
+        const catalogo = await apiGet('/api/v1/models');
+        if (catalogo?.modelli) state.modelLab.catalogoModelli = catalogo;
+        finestra = finestraContestoDelModello();
+      } catch { /* senza catalogo si mostrano i token senza percentuale */ }
+    }
     aggiornaContesto(pannello, ripartizioneContesto({ attrezzi, finestra }));
   }
 
@@ -4008,10 +4013,25 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    */
   // 05/9 Fase 2: ToolList, stesso catalogo e stesso salvataggio dei permessi.
   let generazioneCapability = 0, datiCapability = [], ambitoCapability = null, scritturaCapability = false, vistaCapability = {};
+  /*
+   * C6 — la finestra di contesto del modello scelto, dal catalogo già in
+   * memoria (`state.catalogoModelli`). ⛔ Torna `null` quando il modello non è
+   * scelto o il catalogo non dichiara la finestra: chi disegna, in quel caso,
+   * scrive il totale senza percentuale invece di dividere per un numero
+   * inventato. Il campo è `contextLength`, come risponde `/api/v1/models`.
+   */
+  function finestraContestoDelModello() {
+    // stessa lettura che usa già la «Finestra del contesto» dell'inspector: un solo catalogo in memoria
+    const scelto = (state.modelLab?.catalogoModelli?.modelli || []).find((m) => m?.id === state.model);
+    const v = Number(scelto?.contextLength);
+    return Number.isFinite(v) && v > 0 ? v : null;
+  }
   function mostraCapability(opzioni = {}) {
     const schermo = document.getElementById('schermoCapability'); if (!schermo) return;
     vistaCapability = { ...vistaCapability, ...opzioni };
     aggiornaPaginaCapability(schermo, datiCapability, { ...vistaCapability, ambito: ambitoCapability, salvataggio: scritturaCapability,
+      // C6 (06/9): la finestra del modello scelto, per dire che PERCENTUALE è il totale degli schemi.
+      finestraContesto: finestraContestoDelModello(),
       uso: ambitoCapability === state.realSession.id && ambitoCapability ? riassuntoAttrezziDaEventi(state.realSession.eventiAttrezzi) : null,
       onAggiorna: () => caricaPannelloAttrezzi({ pagina: true }), onPermesso: salvaPermessoCapability });
   }
