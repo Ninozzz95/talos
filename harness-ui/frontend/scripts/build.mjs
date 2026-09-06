@@ -53,7 +53,7 @@ export async function buildFrontend({
   await mkdir(output, { recursive: true });
   const result = await esbuild.build({
     absWorkingDir: FRONTEND_ROOT,
-    entryPoints: { app: entryPoint, styles: 'src/styles/index.css' },
+    entryPoints: { app: entryPoint, styles: 'src/styles/main.css' },
     outdir: output,
     entryNames: '[name]',
     assetNames: 'assets/[name]-[hash]',
