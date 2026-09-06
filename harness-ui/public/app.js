@@ -5140,8 +5140,8 @@ function dimenticaMisura(chiave, storage = globalThis.localStorage) {
 function applica(dialogo, velo, width, height, finestra) {
   const pad = parseFloat(finestra.getComputedStyle(velo).paddingLeft) || 24;
   const m = misuraDialogo(width, height, limitiDialogo(velo.id, { innerWidth: finestra.innerWidth, innerHeight: finestra.innerHeight, pad }));
-  dialogo.style.width = `${m.width}px`;
-  dialogo.style.height = `${m.height}px`;
+  dialogo.style.setProperty("--talos-dialog-w", `${m.width}px`);
+  dialogo.style.setProperty("--talos-dialog-h", `${m.height}px`);
   dialogo.dataset.userSized = "true";
   return m;
 }
@@ -5151,8 +5151,8 @@ function preparaMisuraDialogo(velo, { finestra = globalThis.window, storage = gl
   d.dataset.dialogResizeKey = CHIAVI_MISURA[velo.id] || `sheet:${velo.id}`;
   const s = leggiMisure(storage)[d.dataset.dialogResizeKey];
   if (s && Number.isFinite(s.width) && Number.isFinite(s.height)) return applica(d, velo, s.width, s.height, finestra);
-  d.style.removeProperty("width");
-  d.style.removeProperty("height");
+  d.style.removeProperty("--talos-dialog-w");
+  d.style.removeProperty("--talos-dialog-h");
   delete d.dataset.userSized;
   return null;
 }
@@ -5199,8 +5199,8 @@ function collegaRidimensionamentoDialoghi(radice = globalThis.document, { finest
       salvaMisura(chiave(), m, storage);
     });
     h.addEventListener("dblclick", () => {
-      d.style.removeProperty("width");
-      d.style.removeProperty("height");
+      d.style.removeProperty("--talos-dialog-w");
+      d.style.removeProperty("--talos-dialog-h");
       delete d.dataset.userSized;
       dimenticaMisura(chiave(), storage);
     });
@@ -5262,6 +5262,7 @@ function creaIntro(velo, { api, azioni = {}, iniziale = {}, document: d = global
   function mostraPasso(n) {
     st.passo = Math.max(0, Math.min(PASSI - 1, n));
     for (const p of velo.querySelectorAll("[data-intro-panel]")) p.hidden = Number(p.dataset.introPanel) !== st.passo;
+    velo.dataset.introPassoAttivo = String(st.passo);
     for (const b of velo.querySelectorAll("[data-intro-passo]")) {
       if (Number(b.dataset.introPasso) === st.passo) b.setAttribute("aria-current", "step");
       else b.removeAttribute("aria-current");

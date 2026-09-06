@@ -798,6 +798,17 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-intro-folders{max-height:calc(var(--talos-row)*4)}
 
 .talos-intro-folders:empty{display:none}
+/* Misura ricordata (06/09): la misura sta in due custom property, così il foglio decide dove vale. Nel primo avvio l'altezza
+   ricordata vale solo sul passo Cartella, dove l'albero cresce per riempirla (è il motivo per cui si allarga); gli altri passi
+   restano aderenti al contenuto, come da profilo pulito (PatternFly, wizard: «the modal adjusts to the body of each step»). */
+.talos-dialog[data-user-sized]{width:var(--talos-dialog-w);height:var(--talos-dialog-h)}
+#veloIntro:not([data-intro-passo-attivo="0"]) .talos-dialog[data-user-sized]{height:auto}
+#veloIntro:not([data-intro-passo-attivo="0"]) .talos-resizer--dialog-height,#veloIntro:not([data-intro-passo-attivo="0"]) .talos-resizer--dialog-both{display:none}
+#veloIntro .talos-dialog__body{display:flex;flex-direction:column}
+#veloIntro .talos-picker{flex:1 1 auto;min-height:0}
+#veloIntro .talos-picker>.talos-stack{min-height:0}
+#passoIntroCartella,#passoIntroCartella [data-c="FolderPicker"]{flex:1 1 auto;min-height:0}
+.talos-dialog[data-user-sized] .talos-intro-folders{flex:1 1 auto;min-height:calc(var(--talos-row)*4);max-height:none}
 
 #introMessaggio:empty{display:none}
 [data-c="TaskRow"][data-aperta="true"] .talos-list-row__sub,[data-c="TaskRow"][data-aperta="true"] .talos-list-row__title{white-space:pre-wrap;overflow-wrap:anywhere}
