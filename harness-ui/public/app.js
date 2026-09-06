@@ -8401,6 +8401,40 @@ var init_tooltip = __esm({
   }
 });
 
+// src/components/permessi.js
+function passaInSilenzio(valore, policySessione) {
+  if (valore === "sempre") return true;
+  if (valore === "chiedi" || valore === "nega") return false;
+  return POLICY_CHE_SCRIVONO_IN_SILENZIO.has(String(policySessione || ""));
+}
+function scriviChiuso(permessiPerAttrezzo) {
+  const v = permessiPerAttrezzo?.scrivi;
+  return v === "nega" || v === "chiedi";
+}
+function porteLateraliAperte(permessiPerAttrezzo = {}, policySessione = "") {
+  if (!scriviChiuso(permessiPerAttrezzo)) return { aperte: [], avviso: "" };
+  const aperte = Object.keys(SCRIVONO_LO_STESSO).filter((attrezzo) => passaInSilenzio(permessiPerAttrezzo?.[attrezzo], policySessione));
+  if (aperte.length === 0) return { aperte: [], avviso: "" };
+  const nomi2 = aperte.map((a) => SCRIVONO_LO_STESSO[a]);
+  const elenco2 = nomi2.length === 1 ? nomi2[0] : `${nomi2.slice(0, -1).join(", ")} e ${nomi2.at(-1)}`;
+  const verbo = aperte.length === 1 ? "resta una via" : "restano vie";
+  return {
+    aperte,
+    avviso: `Hai chiuso «Scrivi un file», ma ${verbo} per scrivere lo stesso: ${elenco2}. Sono attrezzi diversi, ognuno col suo cancello.`
+  };
+}
+var SCRIVONO_LO_STESSO, POLICY_CHE_SCRIVONO_IN_SILENZIO;
+var init_permessi = __esm({
+  "src/components/permessi.js"() {
+    SCRIVONO_LO_STESSO = Object.freeze({
+      shell: "un comando nel terminale",
+      document_create: "la creazione di un documento",
+      generate_image: "la generazione di un’immagine"
+    });
+    POLICY_CHE_SCRIVONO_IN_SILENZIO = /* @__PURE__ */ new Set(["Workspace write", "Full access"]);
+  }
+});
+
 // src/components/errori.js
 function spiegaRifiutoAttrezzo(esito) {
   const testo3 = String(esito ?? "").trim();
@@ -8954,6 +8988,7 @@ var init_app = __esm({
     init_scorciatoie();
     init_chat_foot();
     init_tooltip();
+    init_permessi();
     init_errori();
     init_note();
     init_testo_pagina();
@@ -13877,6 +13912,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
               </select>
             </div>`).join("")}
         </div>
+        ${(() => {
+            const { aperte, avviso } = porteLateraliAperte(state.permessiPerAttrezzo, state.permissions);
+            if (!avviso) return "";
+            return `<p class="sheet-avviso" role="status">${avviso} <button type="button" class="talos-button talos-button--sm" data-chiudi-porte-laterali="${aperte.join(",")}">Chiudi anche ${aperte.length === 1 ? "quella" : "quelle"}</button></p>`;
+          })()}
         <p class="muted-copy">Un «chiedi» su un attrezzo accende il canale di approvazione per tutta la sessione: finché resta acceso, TALOS chiede conferma anche per le altre azioni che lasciano traccia. È il limite del kernel di oggi, dichiarato invece che nascosto.</p>`
         },
         environment: {
@@ -14279,6 +14319,18 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
             else delete state.permessiPerAttrezzo[tool];
             sincronizzaImpostazioniSessione({ permessiPerAttrezzo: Object.keys(state.permessiPerAttrezzo).length ? { ...state.permessiPerAttrezzo } : null });
             toast("Permesso per-attrezzo aggiornato", select.value ? `${tool}: ${select.options[select.selectedIndex].textContent}` : `${tool}: torna alla policy sessione`);
+            openSheet("permissions");
+          });
+        });
+        $$("[data-chiudi-porte-laterali]", sheetBody).forEach((bottone3) => {
+          bottone3.addEventListener("click", () => {
+            const quali = String(bottone3.dataset.chiudiPorteLaterali || "").split(",").filter(Boolean);
+            if (!quali.length) return;
+            const comeScrivi = state.permessiPerAttrezzo.scrivi === "nega" ? "nega" : "chiedi";
+            for (const attrezzo of quali) state.permessiPerAttrezzo[attrezzo] = comeScrivi;
+            sincronizzaImpostazioniSessione({ permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
+            toast("Chiuse anche le altre vie", `${quali.map(nomeUmanoAttrezzo2).join(", ")}: ${comeScrivi === "nega" ? "nega sempre" : "chiedi conferma"}`);
+            openSheet("permissions");
           });
         });
         $$("[data-capability-action]", sheetBody).forEach((button2) => {

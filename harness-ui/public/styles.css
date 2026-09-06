@@ -2322,6 +2322,112 @@ body.reduce-motion *::after {
   text-transform: none;
   letter-spacing: normal;
 }
+.sheet-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 0 0 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--talos-border);
+  border-radius: 10px;
+  background: var(--talos-card-subtle, transparent);
+  color: var(--talos-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sheet-option:hover {
+  border-color: var(--talos-border-strong);
+}
+.sheet-option > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.sheet-option > span:last-child {
+  margin-left: auto;
+  flex: 0 0 auto;
+  color: var(--talos-muted);
+  font-size: 11.5px;
+  text-align: right;
+}
+.sheet-option strong {
+  font-weight: 600;
+}
+.sheet-option small {
+  color: var(--talos-muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.sheet-option .sheet-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  color: var(--talos-muted);
+}
+.sheet-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--talos-border-subtle);
+}
+.sheet-toggle-row:last-child {
+  border-bottom: 0;
+}
+.sheet-toggle-row > span:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.sheet-toggle-row strong {
+  font-weight: 600;
+}
+.sheet-toggle-row small {
+  color: var(--talos-muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.sheet-toggle-row select {
+  flex: 0 0 auto;
+  min-width: 170px;
+}
+.sheet-avviso button {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 4px 11px;
+  border: 1px solid var(--talos-accent-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--talos-accent-text);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sheet-avviso button:hover {
+  background: var(--talos-accent-soft);
+  border-color: var(--talos-accent);
+}
+.sheet-avviso {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 10px 0 0;
+  padding: 9px 11px;
+  border-radius: 10px;
+  border: 1px solid var(--talos-accent-border);
+  background: var(--talos-accent-soft);
+  color: var(--talos-text);
+  font-size: 12px;
+  line-height: 1.5;
+  text-transform: none;
+  letter-spacing: normal;
+}
 .workspace-chooser-selection .workspace-chooser-avviso {
   display: block;
   margin-top: 6px;
