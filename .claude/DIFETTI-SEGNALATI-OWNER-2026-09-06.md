@@ -47,6 +47,8 @@
 | O-36 | «Attività non riuscita» mostra JSON grezzo e `REFUSED. Empty html: nothing was created.` | Conversazione, errori | 🔧 | il rifiuto si legge in italiano e l'argomento enorme si apre a richiesta; ⛔ non ancora rivisto dal vivo su un rifiuto vero |
 | O-37 | «con i modelli a chiave API gli artefatti vengono creati ma non salvati nella Libreria» | Artefatti / Libreria | 🔴 aperto | segnalato dall'owner, da riprodurre |
 | O-38 | «al posto di Tema Calm metti l'output medio di token al secondo se uso un modello locale; se non è locale togli la scritta» | Barra di stato | ✅ | `testoVelocitaLocale`, con la prova nei due versi |
+| O-39 | «rendere tutte le scrollbar completamente custom e più compatte (meno larghe)» | Tutta l'app, 30 scroller | 🔴 in coda | misurato: nessuna è custom — 3 hanno solo `scrollbar-width:thin`, le altre 27 sono quelle di Windows |
+| O-40 | «fare in modo che tutti i tooltip siano custom e stilizzati secondo il tema» | Tutta l'app, 220 tooltip | 🔴 in coda | misurato: 156 `title=` nel template + 64 assegnati da JS, e **zero** `role="tooltip"` |
 
 ---
 
@@ -349,3 +351,91 @@ quello della sessione.
 
 ⛔ Da fare prima: leggere il miglioratore del mobile (lettura consentita) e cercare come lo fanno gli
 altri, che è la regola prima di scrivere.
+
+### O-39 · Le scrollbar: nessuna è nostra, e sono grosse — segnalato il 06/09
+
+**Cosa ha chiesto l'owner.** «Rendere tutte le scrollbar completamente custom e più compatte (meno
+larghe).»
+
+**Cosa ho misurato**, contando nel mockup (che è la fonte del disegno) e non a occhio:
+
+| Fatto | Numero |
+|---|---|
+| Elementi che scorrono (`overflow: auto\|scroll`) | **30** |
+| Con una scrollbar davvero disegnata da noi | **0** |
+| Con `scrollbar-width:thin` (solo `.talos-tabs__list`) | 3 dichiarazioni, 1 selettore |
+| Con `::-webkit-scrollbar` | 1, e serve a **nasconderla** (`display:none`) |
+
+⇒ Tutto il resto mostra la scrollbar di sistema: su Windows ~15 px di grigio che non conosce il tema
+Calm, identica in chiaro e in scuro. Anche i tre `thin` non sono nostri: `scrollbar-width` accetta
+solo `auto|thin|none`, quindi «thin» è la barra **di sistema stretta**, non la nostra.
+
+**Cosa dice lo stato dell'arte** (letto il 06/09/2026 — [Chrome for Developers, «Scrollbar
+styling»](https://developer.chrome.com/docs/css-ui/scrollbar-styling), [MDN
+`::-webkit-scrollbar`](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Selectors/::-webkit-scrollbar),
+[ishadeed, «Custom Scrollbars In CSS»](https://ishadeed.com/article/custom-scrollbars-css/)):
+
+- le due proprietà **standard** sono `scrollbar-width` (`auto|thin|none`) e `scrollbar-color`
+  (pollice e binario). Sono semplici e portabili, ma **non permettono** raggio, stato al passaggio
+  del mouse, angoli o margini: esattamente ciò che serve per farle nostre;
+- `::-webkit-scrollbar` dà quel controllo (`-thumb`, `-track`, `-corner`, `-button`) ed è
+  disponibile su Chrome, Edge, Safari e Opera. ⭐ **TALOS Desktop gira su Chromium**, quindi qui non
+  è un ripiego: è la via principale, con le standard come rete di sicurezza sotto `@supports`;
+- ⛔ **vincolo che non conoscevo e che cambia il disegno**: dando una larghezza a
+  `::-webkit-scrollbar` la barra diventa **sempre a sovrapposizione** (overlay) — smette di
+  riservarsi spazio nel flusso. Su un elenco stretto come la sidebar significa che il pollice
+  finisce **sopra** il testo: va previsto un `padding-right`, oppure si accetta la sovrapposizione
+  e la si rende leggibile (pollice semitrasparente che si accende al passaggio).
+
+**Come la farei** (da decidere insieme, niente codice finché non è il suo turno): un blocco solo nel
+mockup, sui token del tema, applicato a `*` invece che ai 30 scroller uno per uno — pollice
+`var(--talos-border)` che diventa `var(--talos-muted)` al passaggio, binario trasparente, **8 px**
+contro i ~15 di sistema (i 6 px sono un bersaglio scomodo da afferrare col mouse), raggio pieno,
+niente frecce. Le due standard nello stesso blocco per chi non è Chromium. ⛔ E una prova che le
+conti: oggi non c'è niente che si accorga se un pannello nuovo nasce con la barra di sistema.
+
+### O-40 · I tooltip: sono 220 e sono tutti quelli di Windows — segnalato il 06/09
+
+**Cosa ha chiesto l'owner.** «Fare in modo che tutti i tooltip siano custom e stilizzati secondo il
+tema.»
+
+**Cosa ho misurato:**
+
+| Fatto | Numero |
+|---|---|
+| `title="…"` scritti nel template | **156** |
+| `title` assegnati dal codice a runtime | **64** |
+| Totale tooltip dell'app | **220** |
+| Con `role="tooltip"` | **0** |
+
+⇒ Nessun tooltip è nostro. Sono tutti il riquadro giallino del sistema operativo: **ritardo di circa
+un secondo che non si può cambiare**, nessun colore del tema, sparizione automatica dopo pochi
+secondi anche se stai ancora leggendo, nessuna formattazione, e **niente** su touch o da tastiera.
+⛔ Uno l'ho aggiunto io stamattina (il consiglio sulle sessioni interrotte): quella riga è la prova
+che il difetto continua a crescere finché non c'è il pezzo giusto da usare.
+
+**Cosa dice lo stato dell'arte** (letto il 06/09/2026 — [MDN, «Using the Popover
+API»](https://developer.mozilla.org/en-US/docs/Web/API/Popover_API/Using), [GoogleChrome,
+«position-aware-tooltips»](https://github.com/GoogleChrome/modern-web-guidance/blob/main/skills/modern-web-guidance/guides/ui-atoms/position-aware-tooltips.md),
+[Voorhoede, «The Popover API: your new best friend for
+tooltips»](https://www.voorhoede.nl/en/blog/the-popover-api-your-new-best-friend-for-tooltips/)):
+
+- l'API **Popover** è supportata da tutti i browser principali e porta gratis il livello superiore
+  (niente `z-index` da inseguire) e la chiusura leggera con Esc;
+- il **posizionamento ad ancora** CSS (`position-anchor`, `position-area`, `@position-try`) fa
+  quello per cui prima serviva una libreria: attaccarsi al bersaglio e **ripiegare da solo** quando
+  non c'è spazio, senza JavaScript. ⛔ Vincolo: in produzione è **Chrome/Edge** (Firefox dietro
+  flag, Safari in lavorazione) — per noi va bene, siamo su Chromium, ma va scritto, non dato per
+  scontato;
+- ⛔ **accessibilità, ed è la parte che si sbaglia**: il pezzo non basta che appaia. Serve
+  `aria-describedby` dal grilletto al riquadro e `role="tooltip"`, altrimenti si sostituisce un
+  tooltip che almeno gli screen reader leggono con uno che **non esiste** per chi non vede.
+
+**Come lo farei** (da decidere insieme): un componente solo, `src/components/tooltip.js`, con
+`ancoraTooltip(elemento, testo)`; il markup nel mockup con i token del tema; una migrazione che
+sostituisce i 220 `title` con l'attributo nostro **in un passaggio solo**, così non restano due
+sistemi vivi insieme; ritardo di apertura scelto da noi (~350 ms) e chiusura immediata; il `title`
+nativo **tolto** dove il nostro subentra, altrimenti compaiono tutti e due.
+
+⛔ **Ordine consigliato**: O-39 prima (è un blocco di CSS e una prova, mezza giornata), O-40 dopo
+(tocca 220 punti e vuole il componente, la migrazione e le prove di accessibilità).
