@@ -40,7 +40,8 @@ import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la bar
 import { montaScorciatoie, normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
 import { aggiornaPiedeChat, etichettaPermesso, fondoInVista, nomeModelloUmano } from '../components/chat-foot.js';
 import { spiegaErrore } from '../components/errori.js';
-import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js'; // 06/9: il sorgente di una pagina non si legge
+import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js';
+import { frasiRitratto, avvisoRitratto } from '../components/cartella-ritratto.js'; // 06/9 F9/F10/F19-F21 // 06/9: il sorgente di una pagina non si legge
 import { VIE_ALLEGATO, TETTI_ALLEGATI, allegatoPesante, costoAllegato, costoTotale, frasiTetti, nomeBreveAllegato } from '../components/allegati.js'; // 06/9 B4/B6/B7/B9: il «+» allega, e ogni allegato dichiara il suo costo // 06/9 O-22/O-23: gli errori del giro detti a una persona // 05/9 Fase 2: ChatFooter — striscia del giro, chip e barra di stato dai dati
 import { aggiornaDiffReview, creaRigaFileReview, nascondiAzioniFase3, riassuntoReview } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno del mockup
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
@@ -12318,7 +12319,14 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
 
     const selectedCard = document.createElement('div');
     selectedCard.className = 'workspace-chooser-selection';
-    selectedCard.innerHTML = `${icon('i-folder-open')}<span><small>Cartella scelta</small><strong data-workspace-selected-path>Nessuna cartella scelta</strong></span>`;
+    /*
+     * ⭐⭐⭐ 06/9 — decisioni F9, F10, F19, F20, F21: prima di dare una cartella a un agente devi
+     * sapere cosa c'è dentro. Quanti file, se è una radice, il ramo, le modifiche non salvate, i
+     * repo annidati, le istruzioni già presenti. Prima si scopriva avviando la sessione e
+     * guardandola annaspare; il conto lo fa il server (workspace-info.mjs) con un tetto di
+     * scansione dichiarato, perché contare una cartella enorme è esso stesso il problema.
+     */
+    selectedCard.innerHTML = `${icon('i-folder-open')}<span><small>Cartella scelta</small><strong data-workspace-selected-path>Nessuna cartella scelta</strong><small class="workspace-chooser-ritratto" data-workspace-ritratto hidden></small><small class="workspace-chooser-avviso" data-workspace-avviso hidden></small></span>`;
     left.append(leftHead, pathBar, treeTools, newFolderForm, treeFrame, selectedCard);
 
     const right = document.createElement('section');
@@ -12430,9 +12438,31 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       return local.current?.recommended?.find((item) => pathKey(item.path) === target)?.projectId ?? null;
     }
 
+    let ritrattoChiestoPer = null;
+    async function chiediRitrattoCartella(percorso) {
+      if (!percorso || ritrattoChiestoPer === percorso) return;
+      ritrattoChiestoPer = percorso;
+      const riga = $('[data-workspace-ritratto]', selectedCard);
+      const avviso = $('[data-workspace-avviso]', selectedCard);
+      if (riga) { riga.hidden = false; riga.textContent = 'Guardo cosa c’è dentro…'; }
+      if (avviso) avviso.hidden = true;
+      try {
+        const r = await apiGet(`/api/v1/workspace-info?path=${encodeURIComponent(percorso)}`);
+        if (ritrattoChiestoPer !== percorso) return; // la scelta è già cambiata: questa risposta non la riguarda
+        if (riga) { const testo = frasiRitratto(r); riga.hidden = !testo; riga.textContent = testo; }
+        if (avviso) { const testo = avvisoRitratto(r); avviso.hidden = !testo; avviso.textContent = testo; }
+      } catch (errore) {
+        if (ritrattoChiestoPer !== percorso) return;
+        // ⛔ un ritratto che non arriva non blocca la scelta: si tace, non si inventa un numero
+        if (riga) { riga.hidden = true; riga.textContent = ''; }
+        console.warn('[nuova sessione] ritratto della cartella non disponibile:', errore?.message || errore);
+      }
+    }
+
     function aggiornaConfermaWorkspaceChooser() {
       const selectedPath = $('[data-workspace-selected-path]', selectedCard);
       if (selectedPath) selectedPath.textContent = local.selected?.path || 'Nessuna cartella scelta';
+
       const allowlisted = Boolean(local.selected?.projectId);
       const ready = !local.busy && Boolean(local.selected) && (allowlisted || local.permission === 'Full access');
       submit.disabled = !ready;
@@ -12606,6 +12636,13 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
         const data = await apiGet(`/api/v1/workspace-browser${suffix}`);
         if (generation !== local.requestGeneration || !form.isConnected) return false;
         local.current = data;
+        /*
+         * ⛔ misurato: chiedendo il ritratto dentro `aggiornaConfermaWorkspaceChooser` partiva anche
+         * quando `local.current` era ancora la cartella PRECEDENTE, e le due risposte si
+         * rincorrevano — a schermo restavano i numeri della radice. Si chiede QUI, dove la cartella
+         * aperta è un fatto, una volta sola per cartella.
+         */
+        void chiediRitrattoCartella(data.path);
         local.collapsed = false;
         pathInput.value = data.path;
         upButton.disabled = !data.parent;

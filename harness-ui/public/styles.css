@@ -2180,6 +2180,28 @@ body.reduce-motion *::after {
   background: var(--talos-card-subtle);
   outline: none;
 }
+.workspace-chooser-ritratto {
+  display: block;
+  margin-top: 4px;
+  color: var(--talos-muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.workspace-chooser-avviso {
+  display: block;
+  margin-top: 6px;
+  padding: 6px 9px;
+  border-radius: 9px;
+  border: 1px solid var(--talos-accent-border);
+  background: var(--talos-accent-soft);
+  color: var(--talos-text);
+  font-size: 11.5px;
+  line-height: 1.5;
+  text-transform: none;
+  letter-spacing: normal;
+}
 .talos-menu__nota {
   margin: 6px 4px 2px;
   padding-top: 6px;
