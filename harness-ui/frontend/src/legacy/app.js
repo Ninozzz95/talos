@@ -40,6 +40,7 @@ import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la bar
 import { montaScorciatoie, normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
 import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nomeModelloUmano } from '../components/chat-foot.js';
 import { collegaTooltip } from '../components/tooltip.js'; // 06/9 O-40: i suggerimenti sono nostri, col tema e con la tastiera
+import { porteLateraliAperte } from '../components/permessi.js'; // 06/9 T03-D2: chiudere «scrivi» non chiude il terminale, e va detto
 import { spiegaErrore, spiegaRifiutoAttrezzo } from '../components/errori.js';
 import { montaNote } from '../components/note.js'; // 06/9 C24: la pagina delle Note // 06/9 O-22/O-23/O-36: gli errori e i rifiuti detti a una persona
 import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js'; // 06/9 O-28/O-31: il sorgente di una pagina non si legge
@@ -5965,6 +5966,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
               </select>
             </div>`).join('')}
         </div>
+        ${(() => {
+          /*
+           * ⛔ T03-D2 — il difetto peggiore trovato dalle prove, e rimasto fuori da ogni tabella per
+           * tre giorni: chi chiude «scrivi» crede di aver chiuso la porta ai file, e il terminale
+           * scrive lo stesso. Il meccanismo è giusto (ogni attrezzo ha il suo cancello), ma
+           * l'interfaccia lasciava credere una cosa falsa proprio dove si decide la sicurezza.
+           * L'avviso compare SOLO quando la combinazione è davvero ingannevole, così resta leggibile.
+           */
+          const { aperte, avviso } = porteLateraliAperte(state.permessiPerAttrezzo, state.permissions);
+          if (!avviso) return '';
+          return `<p class="sheet-avviso" role="status">${avviso} <button type="button" class="talos-button talos-button--sm" data-chiudi-porte-laterali="${aperte.join(',')}">Chiudi anche ${aperte.length === 1 ? 'quella' : 'quelle'}</button></p>`;
+        })()}
         <p class="muted-copy">Un «chiedi» su un attrezzo accende il canale di approvazione per tutta la sessione: finché resta acceso, TALOS chiede conferma anche per le altre azioni che lasciano traccia. È il limite del kernel di oggi, dichiarato invece che nascosto.</p>`,
     },
     environment: {
@@ -6399,6 +6412,24 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         else delete state.permessiPerAttrezzo[tool];
         sincronizzaImpostazioniSessione({ permessiPerAttrezzo: Object.keys(state.permessiPerAttrezzo).length ? { ...state.permessiPerAttrezzo } : null });
         toast('Permesso per-attrezzo aggiornato', select.value ? `${tool}: ${select.options[select.selectedIndex].textContent}` : `${tool}: torna alla policy sessione`);
+        openSheet('permissions'); // l'avviso delle porte laterali si ricalcola sulla scelta appena fatta
+      });
+    });
+    /*
+     * ⛔ T03-D2 — l'avviso non basta che informi: deve poter essere AGITO sul posto. Chi ha appena
+     * scoperto che il terminale scrive lo stesso non deve andare a cercare la riga giusta in un
+     * elenco di cinque: un colpo e sono chiuse tutte, con lo stesso cancello che ha scelto per
+     * «scrivi» (se ha detto «nega», nega; se ha detto «chiedi», chiedi — non si decide per lui).
+     */
+    $$('[data-chiudi-porte-laterali]', sheetBody).forEach((bottone) => {
+      bottone.addEventListener('click', () => {
+        const quali = String(bottone.dataset.chiudiPorteLaterali || '').split(',').filter(Boolean);
+        if (!quali.length) return;
+        const comeScrivi = state.permessiPerAttrezzo.scrivi === 'nega' ? 'nega' : 'chiedi';
+        for (const attrezzo of quali) state.permessiPerAttrezzo[attrezzo] = comeScrivi;
+        sincronizzaImpostazioniSessione({ permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
+        toast('Chiuse anche le altre vie', `${quali.map(nomeUmanoAttrezzo).join(', ')}: ${comeScrivi === 'nega' ? 'nega sempre' : 'chiedi conferma'}`);
+        openSheet('permissions');
       });
     });
     /*
