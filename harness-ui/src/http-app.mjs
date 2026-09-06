@@ -1,6 +1,7 @@
 import { leggiArtefatto as leggiArtefattoReale } from './artifact-store.mjs';
 import { verificaIncorniciabile } from './browser-frame.mjs'; // K-I 06/9: la cornice del Browser si decide dalle intestazioni della pagina
-import { proxyPagina } from './browser-proxy.mjs'; // Browser oltre Hermes 06/9: il proxy locale per annotare gli elementi
+import { proxyPagina } from './browser-proxy.mjs';
+import { leggiPaginaPerLaVista } from './agent-service.mjs'; // 06/9: gli occhi del modello sulla pagina dove navighi TU // Browser oltre Hermes 06/9: il proxy locale per annotare gli elementi
 import { modelloRichiestaValido, permessiPerAttrezzoRichiestaValido, permessiRichiestaValido, reasoningRichiestaValido } from './config.mjs';
 import { cartelleFrequenti as cartelleFrequentiReale } from './frequent-dirs.mjs';
 import { RUNTIME_BOOTSTRAP_SCHEMA, RUNTIME_RESOURCE_SCHEMA, parseBootstrapEnvelope } from './runtime-contract.mjs';
@@ -933,6 +934,7 @@ export function createHttpApp({
   // ⭐⭐⭐ 28/8 — owner, coda: "directory più usate (tipo desktop downloads)". Zero config esterna (solo os.homedir()) — il default reale basta, nessun cablaggio in server.mjs come serve invece per elencaCartelleProgetto (quella dipende da TALOS_HARNESS_UI_PROJECT_DIRS).
   cartelleFrequentiFn = cartelleFrequentiReale,
   catalogoModelliFn = null, clock = () => new Date(), leggiArtefattoFn = leggiArtefattoReale,
+  leggiPaginaFn = leggiPaginaPerLaVista, // 06/9: iniettabile, cosi' le prove non escono in rete
   capacitaMacchinaFn = null,
   localRuntimes = null, localModelStore = null, localModelTransfer = null, hfHubClient = null,
   localRuntimeProbe = null,
@@ -2606,7 +2608,27 @@ export function createHttpApp({
           sendHtmlProxato(res, esito.html, method);
           return;
         }
-        if (browserFrameMatch) {
+        /*
+         * ⛔⛔⛔ 06/9, owner, due volte e in maiuscolo: «IL MODELLO DEVE LEGGERE LA PAGINA DOVE VADO
+         * IO, DEVE AVERE GLI OCCHI SULLA SEZIONE BROWSER ANCHE SE SONO IO A NAVIGARCI DENTRO».
+         * Dal browser non si può: una pagina di un'altra origine dentro una cornice non si legge dal
+         * JavaScript che la ospita, ed è il confine di origine, non un limite nostro (ricerca
+         * 06/09/2026: browser-use «Leaving Playwright for CDP», microsoft/playwright #21780).
+         * Quindi la legge il server, con la STESSA funzione dell'attrezzo `naviga` — stessa
+         * validazione degli indirizzi, già scritta e già provata, invece di una seconda che diverge.
+         * ⛔ Il server non ha i cookie della persona: di un sito dietro login vede la versione
+         * pubblica, e la vista lo dichiara a schermo.
+         * ⛔ Sta DENTRO questa catena, non prima: fuori impostava `data` e poi cadeva nel ramo
+         * finale che risponde NOT_FOUND — misurato con una curl, non dedotto.
+         */
+        if (url.pathname === '/api/v1/browser/leggi') {
+          const indirizzo = url.searchParams.get('url');
+          if (typeof indirizzo !== 'string' || indirizzo.length === 0 || indirizzo.length > 2048) {
+            const error = new Error('Indirizzo mancante'); error.code = 'QUERY_INVALID'; throw error;
+          }
+          const pagina = await leggiPaginaFn(indirizzo);
+          data = { url: pagina.url, stato: pagina.stato, corpo: pagina.corpo };
+        } else if (browserFrameMatch) {
           const indirizzo = url.searchParams.get('url');
           if (typeof indirizzo !== 'string' || indirizzo.length === 0 || indirizzo.length > 2048) { const error = new Error('Indirizzo mancante'); error.code = 'QUERY_INVALID'; throw error; }
           const origineNostra = `http://${req.headers.host || '127.0.0.1'}`;

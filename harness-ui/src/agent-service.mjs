@@ -109,6 +109,16 @@ import {
 
 const OWNER_RUNTIME = createOwnerRuntimeAdapter();
 const chiamaConRitenta = (options) => OWNER_RUNTIME.chiamaConRitenta(options);
+
+/*
+ * ⛔⛔⛔ 06/9, owner: «il modello deve avere gli occhi sulla sezione Browser anche se sono io a
+ * navigarci dentro». La pagina la legge il SERVER, con la stessa funzione dell'attrezzo `naviga`
+ * (validazione degli indirizzi già scritta e provata): dal browser non si può, il confine di
+ * origine lo vieta. Esportata qui perché la rotta HTTP la usi senza conoscere l'adattatore.
+ */
+export function leggiPaginaPerLaVista(url) {
+  return OWNER_RUNTIME.leggiPagina(url);
+}
 const compattaConversazioneReale = (messaggi, chiamaModello) => OWNER_RUNTIME.compattaConversazione(messaggi, chiamaModello);
 const eseguiComandoSandboxatoReale = (...args) => OWNER_RUNTIME.eseguiComandoSandboxato(...args);
 const eseguiFlowForge = (...args) => OWNER_RUNTIME.eseguiFlowForge(...args);

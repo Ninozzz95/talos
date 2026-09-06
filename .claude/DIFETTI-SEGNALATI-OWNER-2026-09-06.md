@@ -39,7 +39,7 @@
 | O-28 | «nel browser il contenuto si vede così» — «Letture della sessione» mostra l'HTML grezzo della pagina | Vista Browser | ✅ | misurato: cornice visibile su https://example.org, caricata, due modi; il testo dell’agente esce ripulito col sorgente sotto |
 | O-29 | «la bolla di domanda non deve avere larghezza al massimo: bolla di chat con la codina, da destra» | Conversazione | ✅ | misurato: bolla al 67% della colonna, a destra, angolo-codina in basso a destra |
 | O-30 | «non riesco ad aprire la sidebar di destra dopo averla collassata» | Colonna destra | ✅ | due gestori sullo stesso clic si annullavano; verificato su 4 viste, dalla Review alla Chat, e dopo un ricaricamento |
-| O-31 | «se navigo io manualmente in una pagina, il modello deve leggere QUELLA pagina» («funzione critica») | Vista Browser | 🔴 aperto | oggi l'agente vede solo le pagine che ha aperto lui |
+| O-31 | «il modello deve avere gli occhi sulla sezione Browser anche se sono io a navigarci dentro» | Vista Browser | ✅ | provato dal vivo: navigo su example.org, chiedo, e il modello risponde sulla pagina — «They've attached the page content» |
 | O-32 | «se scrollo un po' piu' in alto e aspetto qualche secondo mi porta con uno snap alla fine» | Conversazione | ✅ | l'osservatore del ripristino si stacca al primo scorrimento della persona — misurato: resta fermo 15 s |
 | O-33 | «la chat a tutta larghezza non funziona, si vede buttata a sinistra» | Conversazione | ✅ | respiro simmetrico; misurato 736 (44/44), 819 a colonna chiusa, 1076 a tutta larghezza |
 | O-34 | «il ragionamento in corso non scompare col fondo inquadrato, e scompare quando sali» | Striscia di stato | 🔧 | «in fondo» ora guarda la fine del CONTENUTO; ⛔ il caso «sono salito» non ancora visto dal vivo |
