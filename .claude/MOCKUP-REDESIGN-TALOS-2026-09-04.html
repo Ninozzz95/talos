@@ -536,6 +536,11 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 /* ⛔ text-transform:none esplicito: dentro la carta della cartella scelta i <small> ereditano il
    maiuscoletto delle etichette, e questi sono CONTENUTI, non etichette (decisione H23: maiuscole
    solo per le etichette di sezione). Visto nello screenshot: «PIÙ DI 20.000 FILE · 2.375 CARTELLE». */
+/* 06/9 — un REFUSED del kernel tradotto: si legge prima del testo originale, che resta sotto.
+   E un argomento enorme (un `html` di duemila caratteri) non si stampa intero: si apre a richiesta. */
+.tool-rifiuto{margin:4px 0 0; color:var(--talos-text); font-size:12.5px}
+.tool-arg-lungo{margin:2px 0 0}
+.tool-arg-lungo > summary{cursor:pointer; color:var(--talos-muted); font-size:11.5px}
 .workspace-chooser-ritratto{display:block; margin-top:4px; color:var(--talos-muted); font-size:11.5px; line-height:1.5; text-transform:none; letter-spacing:normal}
 .workspace-chooser-avviso{display:block; margin-top:6px; padding:6px 9px; border-radius:9px; border:1px solid var(--talos-accent-border); background:var(--talos-accent-soft); color:var(--talos-text); font-size:11.5px; line-height:1.5; text-transform:none; letter-spacing:normal}
 .talos-menu__nota{margin:6px 4px 2px; padding-top:6px; border-top:1px solid var(--talos-border-subtle); color:var(--talos-muted); font-size:11.5px; line-height:1.45}

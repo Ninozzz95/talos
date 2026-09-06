@@ -122,6 +122,41 @@ const REGOLE = [
   },
 ];
 
+/*
+ * ⛔ 06/9, owner con lo screenshot: nel riquadro «Attività non riuscita» comparivano gli argomenti
+ * grezzi della chiamata (`{"titolo":"GPT Tokenizer Interactive Demo","html":"<!doctype html>…`) e il
+ * rifiuto del kernel in inglese: `REFUSED. Empty html: nothing was created.`
+ * Il rifiuto NON è un errore: è il kernel che ha detto di no, e chi legge deve capire cosa è
+ * mancato. Qui si traduce; il testo originale resta accanto, perché è quello che si incolla in una
+ * segnalazione.
+ */
+const RIFIUTI = [
+  { prova: /empty html|html vuoto/i, detto: 'L’HTML era vuoto: non è stato creato niente.' },
+  { prova: /cartella is required|folder is required/i, detto: 'Manca la cartella: il sotto-agente non è partito.' },
+  { prova: /must be different from your own/i, detto: 'La cartella del figlio non poteva essere la stessa del padre.' },
+  { prova: /must be a string/i, detto: 'Il percorso non era scritto come testo.' },
+  { prova: /no delegation channel|delegation is not configured/i, detto: 'Questa sessione non può delegare a un sotto-agente.' },
+  { prova: /not configured on this harness|no generator|no saver/i, detto: 'Questa capacità non è configurata su questo TALOS.' },
+  { prova: /non ha un canale di approvazione|approval channel/i, detto: 'Serviva un permesso che questa sessione non poteva chiedere.' },
+  { prova: /too large|troppo grande/i, detto: 'Il contenuto era troppo grande per essere accettato.' },
+];
+
+/**
+ * Un esito che comincia con REFUSED è un NO dichiarato dal kernel, non un guasto.
+ * @returns {{rifiutato:boolean, detto:string, tecnico:string}}
+ */
+export function spiegaRifiutoAttrezzo(esito) {
+  const testo = String(esito ?? '').trim();
+  if (!/^REFUSED\b/i.test(testo)) return { rifiutato: false, detto: '', tecnico: testo };
+  const resto = testo.replace(/^REFUSED\.?\s*/i, '');
+  const trovato = RIFIUTI.find((r) => r.prova.test(resto));
+  return {
+    rifiutato: true,
+    detto: trovato ? trovato.detto : 'L’attrezzo ha rifiutato la richiesta.',
+    tecnico: testo,
+  };
+}
+
 /**
  * Traduce l'errore di un giro. Torna sempre qualcosa: se non riconosciamo la forma, lo diciamo
  * invece di inventare una causa.

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spiegaErrore, erroreInUnaRiga } from '../../src/components/errori.js';
+import { spiegaErrore, erroreInUnaRiga, spiegaRifiutoAttrezzo } from '../../src/components/errori.js';
 
 // 06/09 — i due errori che l'owner ha visto a schermo con un modello locale, e il verso contrario.
 
@@ -65,4 +65,21 @@ test('ERRORI-RUNTIME: il motore locale che non si accende in tempo, trovato su u
   const senza = spiegaErrore('failed to load model', 'internal-error');
   assert.equal(senza.id, 'runtime-non-pronto');
   assert.doesNotMatch(senza.perche, /\(qui/);
+});
+
+test('RIFIUTI: un REFUSED del kernel si legge in italiano, e il testo originale resta', () => {
+  // il caso che l'owner ha visto: «REFUSED. Empty html: nothing was created.»
+  const r = spiegaRifiutoAttrezzo('REFUSED. Empty html: nothing was created.');
+  assert.equal(r.rifiutato, true);
+  assert.match(r.detto, /HTML era vuoto/);
+  assert.equal(r.tecnico, 'REFUSED. Empty html: nothing was created.');
+  // altri rifiuti veri del kernel
+  assert.match(spiegaRifiutoAttrezzo('REFUSED. cartella is required and must be a non-empty absolute path.').detto, /Manca la cartella/);
+  assert.match(spiegaRifiutoAttrezzo('REFUSED. cartella must be a string (an absolute path)').detto, /non era scritto come testo/);
+  // un rifiuto che non conosciamo si dichiara tale, senza inventare un motivo
+  assert.equal(spiegaRifiutoAttrezzo('REFUSED. qualcosa di nuovo').detto, 'L’attrezzo ha rifiutato la richiesta.');
+  // AL CONTRARIO: un esito normale NON è un rifiuto, e non si tocca
+  assert.equal(spiegaRifiutoAttrezzo('ok: 3 file letti').rifiutato, false);
+  assert.equal(spiegaRifiutoAttrezzo('').rifiutato, false);
+  assert.equal(spiegaRifiutoAttrezzo(null).rifiutato, false);
 });

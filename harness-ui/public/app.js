@@ -8203,6 +8203,17 @@ var init_chat_foot = __esm({
 });
 
 // src/components/errori.js
+function spiegaRifiutoAttrezzo(esito) {
+  const testo3 = String(esito ?? "").trim();
+  if (!/^REFUSED\b/i.test(testo3)) return { rifiutato: false, detto: "", tecnico: testo3 };
+  const resto = testo3.replace(/^REFUSED\.?\s*/i, "");
+  const trovato = RIFIUTI.find((r) => r.prova.test(resto));
+  return {
+    rifiutato: true,
+    detto: trovato ? trovato.detto : "L’attrezzo ha rifiutato la richiesta.",
+    tecnico: testo3
+  };
+}
 function spiegaErrore(messaggio, codice = "") {
   const tecnico = String(messaggio ?? "").trim();
   const testo3 = `${codice} ${tecnico}`;
@@ -8220,7 +8231,7 @@ function spiegaErrore(messaggio, codice = "") {
     riconosciuto: false
   };
 }
-var REGOLE;
+var REGOLE, RIFIUTI;
 var init_errori = __esm({
   "src/components/errori.js"() {
     REGOLE = [
@@ -8318,6 +8329,16 @@ var init_errori = __esm({
           rimedi: ["Aspetta qualche istante e riprova.", "Oppure scegli un altro modello o un altro fornitore."]
         })
       }
+    ];
+    RIFIUTI = [
+      { prova: /empty html|html vuoto/i, detto: "L’HTML era vuoto: non è stato creato niente." },
+      { prova: /cartella is required|folder is required/i, detto: "Manca la cartella: il sotto-agente non è partito." },
+      { prova: /must be different from your own/i, detto: "La cartella del figlio non poteva essere la stessa del padre." },
+      { prova: /must be a string/i, detto: "Il percorso non era scritto come testo." },
+      { prova: /no delegation channel|delegation is not configured/i, detto: "Questa sessione non può delegare a un sotto-agente." },
+      { prova: /not configured on this harness|no generator|no saver/i, detto: "Questa capacità non è configurata su questo TALOS." },
+      { prova: /non ha un canale di approvazione|approval channel/i, detto: "Serviva un permesso che questa sessione non poteva chiedere." },
+      { prova: /too large|troppo grande/i, detto: "Il contenuto era troppo grande per essere accettato." }
     ];
   }
 });
@@ -14928,7 +14949,18 @@ var init_app = __esm({
           riga.className = "tool-arg-row";
           const testoValore = typeof valore === "string" ? valore : JSON.stringify(valore);
           riga.appendChild(textElement("span", "tool-arg-key", `${chiave}:`));
-          if (testoValore.includes("\n") || testoValore.length > 80) {
+          const TETTO_VALORE = 400;
+          if (testoValore.length > TETTO_VALORE) {
+            const dettaglio = document.createElement("details");
+            dettaglio.className = "tool-arg-lungo";
+            const riassunto = document.createElement("summary");
+            riassunto.textContent = `${testoValore.length.toLocaleString("it-IT")} caratteri`;
+            const pre = document.createElement("pre");
+            pre.className = "tool-result-block";
+            pre.appendChild(textElement("code", "", testoValore));
+            dettaglio.append(riassunto, pre);
+            riga.appendChild(dettaglio);
+          } else if (testoValore.includes("\n") || testoValore.length > 80) {
             const pre = document.createElement("pre");
             pre.className = "tool-result-block";
             pre.appendChild(textElement("code", "", testoValore));
@@ -17479,6 +17511,10 @@ ${testo3}` : testo3;
               separatore.className = "tool-arg-key";
               separatore.textContent = "Esito:";
               info.detail.appendChild(separatore);
+              const rifiuto = spiegaRifiutoAttrezzo(testoEsito);
+              if (rifiuto.rifiutato) {
+                info.detail.appendChild(textElement("p", "tool-rifiuto", rifiuto.detto));
+              }
               const pre = document.createElement("pre");
               pre.className = "tool-result-block";
               pre.appendChild(textElement("code", "", testoEsito));

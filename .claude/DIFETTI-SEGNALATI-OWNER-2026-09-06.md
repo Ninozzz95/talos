@@ -44,7 +44,7 @@
 | O-33 | «la chat a tutta larghezza non funziona, si vede buttata a sinistra» | Conversazione | ✅ | respiro simmetrico; misurato 736 (44/44), 819 a colonna chiusa, 1076 a tutta larghezza |
 | O-34 | «il ragionamento in corso non scompare col fondo inquadrato, e scompare quando sali» | Striscia di stato | 🔧 | «in fondo» ora guarda la fine del CONTENUTO; ⛔ il caso «sono salito» non ancora visto dal vivo |
 | O-35 | «se clicco *Per questa sessione* continua a chiedermi permesso anche con full access» | Permessi / kernel | 🔧 in corso | la clausola del kernel che chiede quando esiste un canale, ora autorizzato a toglierla |
-| O-36 | «Attività non riuscita» mostra JSON grezzo e `REFUSED. Empty html: nothing was created.` | Conversazione, errori | 🔴 aperto | argomenti dell'attrezzo e rifiuto del kernel a schermo, in inglese |
+| O-36 | «Attività non riuscita» mostra JSON grezzo e `REFUSED. Empty html: nothing was created.` | Conversazione, errori | 🔧 | il rifiuto si legge in italiano e l'argomento enorme si apre a richiesta; ⛔ non ancora rivisto dal vivo su un rifiuto vero |
 | O-37 | «con i modelli a chiave API gli artefatti vengono creati ma non salvati nella Libreria» | Artefatti / Libreria | 🔴 aperto | segnalato dall'owner, da riprodurre |
 | O-38 | «al posto di Tema Calm metti l'output medio di token al secondo se uso un modello locale; se non è locale togli la scritta» | Barra di stato | ✅ | `testoVelocitaLocale`, con la prova nei due versi |
 
