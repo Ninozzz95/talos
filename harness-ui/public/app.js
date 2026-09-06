@@ -3440,6 +3440,41 @@ var init_memoria = __esm({
   }
 });
 
+// src/components/consumo-sessione.js
+function sommaUsage(a, b) {
+  if (!a || typeof a !== "object") return b && typeof b === "object" ? { ...b } : null;
+  if (!b || typeof b !== "object") return { ...a };
+  const somma = (chiave) => {
+    const x = numero2(a[chiave]);
+    const y = numero2(b[chiave]);
+    if (x === null && y === null) return null;
+    return (x ?? 0) + (y ?? 0);
+  };
+  const risultato = { ...a, ...b };
+  for (const chiave of ["prompt_tokens", "completion_tokens", "cached_tokens", "giri"]) {
+    const valore = somma(chiave);
+    if (valore === null) delete risultato[chiave];
+    else risultato[chiave] = valore;
+  }
+  if (numero2(b.tokens_per_second) === null && numero2(a.tokens_per_second) !== null) risultato.tokens_per_second = a.tokens_per_second;
+  return risultato;
+}
+function usageDellaSessione(sessione) {
+  if (!sessione || typeof sessione !== "object") return null;
+  if (sessione.usageSessione && typeof sessione.usageSessione === "object") return sessione.usageSessione;
+  return sessione.usage && typeof sessione.usage === "object" ? sessione.usage : null;
+}
+function esecuzioniDellaSessione(sessione) {
+  const u = sessione?.usageSessione;
+  return u && Number.isFinite(Number(u.esecuzioni)) ? Number(u.esecuzioni) : null;
+}
+var numero2;
+var init_consumo_sessione = __esm({
+  "src/components/consumo-sessione.js"() {
+    numero2 = (valore) => Number.isFinite(Number(valore)) ? Number(valore) : null;
+  }
+});
+
 // src/components/session-item.js
 function statoSessione(sessione) {
   let classe;
@@ -3492,7 +3527,7 @@ function creaSessionItem(sessione, opzioni = {}) {
   const aside = el12(documentObj, "span", "talos-session-item__aside");
   if (!opzioni.pendente) {
     aside.append(el12(documentObj, "span", null, oraCompatta(sessione.avviataAlle, opzioni.adesso)));
-    const giri = sessione.usage?.giri;
+    const giri = usageDellaSessione(sessione)?.giri;
     if (Number.isFinite(giri) && giri > 0) aside.append(el12(documentObj, "span", null, `${giri} gir${giri === 1 ? "o" : "i"}`));
   }
   if (opzioni.selezione?.attiva) {
@@ -3521,6 +3556,7 @@ function creaSessionItem(sessione, opzioni = {}) {
 var TONI, ETICHETTE;
 var init_session_item = __esm({
   "src/components/session-item.js"() {
+    init_consumo_sessione();
     TONI = Object.freeze({
       attesa: "warning",
       vivo: "live",
@@ -3537,41 +3573,6 @@ var init_session_item = __esm({
       ignoto: "conclusa · esito non registrato",
       pendente: "in attesa del primo messaggio"
     });
-  }
-});
-
-// src/components/consumo-sessione.js
-function sommaUsage(a, b) {
-  if (!a || typeof a !== "object") return b && typeof b === "object" ? { ...b } : null;
-  if (!b || typeof b !== "object") return { ...a };
-  const somma = (chiave) => {
-    const x = numero2(a[chiave]);
-    const y = numero2(b[chiave]);
-    if (x === null && y === null) return null;
-    return (x ?? 0) + (y ?? 0);
-  };
-  const risultato = { ...a, ...b };
-  for (const chiave of ["prompt_tokens", "completion_tokens", "cached_tokens", "giri"]) {
-    const valore = somma(chiave);
-    if (valore === null) delete risultato[chiave];
-    else risultato[chiave] = valore;
-  }
-  if (numero2(b.tokens_per_second) === null && numero2(a.tokens_per_second) !== null) risultato.tokens_per_second = a.tokens_per_second;
-  return risultato;
-}
-function usageDellaSessione(sessione) {
-  if (!sessione || typeof sessione !== "object") return null;
-  if (sessione.usageSessione && typeof sessione.usageSessione === "object") return sessione.usageSessione;
-  return sessione.usage && typeof sessione.usage === "object" ? sessione.usage : null;
-}
-function esecuzioniDellaSessione(sessione) {
-  const u = sessione?.usageSessione;
-  return u && Number.isFinite(Number(u.esecuzioni)) ? Number(u.esecuzioni) : null;
-}
-var numero2;
-var init_consumo_sessione = __esm({
-  "src/components/consumo-sessione.js"() {
-    numero2 = (valore) => Number.isFinite(Number(valore)) ? Number(valore) : null;
   }
 });
 
@@ -5390,6 +5391,12 @@ function righeFinestra(usage = null, finestra = null, ripartizione = null) {
   righe.push(["Libera", finestra && usati !== null ? `${kilo(Math.max(0, finestra - occupati))} · ${numPercento.format(Math.max(0, Math.round((100 - percentoOccupato) * 10) / 10))}%` : "—"]);
   return { titoloDestra: finestra ? kilo(finestra) : "finestra non dichiarata", righe };
 }
+function titoloRispostaDaTurno(turno, parole = 5) {
+  const nodo4 = turno && typeof turno.querySelector === "function" ? turno.querySelector(SELETTORE_RISPOSTA_TURNO) : null;
+  const testo3 = typeof nodo4?.textContent === "string" ? nodo4.textContent.trim() : "";
+  if (!testo3) return "";
+  return testo3.split(/\s+/).slice(0, parole).join(" ");
+}
 function righeGiri(giri = []) {
   return giri.map((g) => [`${g.numero} · ${g.titolo || "Giro"}`, g.inCorso ? "in corso" : Number.isFinite(g.token) ? kilo(g.token) : Number.isFinite(g.attrezzi) ? `${g.attrezzi} ${g.attrezzi === 1 ? "attrezzo" : "attrezzi"}` : "—", g.inCorso ? "accent" : ""]);
 }
@@ -5551,11 +5558,12 @@ function processiDagliEventi(eventi2 = [], { adesso = Date.now(), nomiComando = 
   for (const p of lista) if (p.stato === "in-corso" && Number.isFinite(p.avviatoA)) p.fermoDaMs = adesso - p.avviatoA;
   return lista.reverse();
 }
-var num, numPercento;
+var num, numPercento, SELETTORE_RISPOSTA_TURNO;
 var init_inspector = __esm({
   "src/components/inspector.js"() {
     num = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 });
     numPercento = new Intl.NumberFormat("it-IT", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    SELETTORE_RISPOSTA_TURNO = ".talos-message__copy .assistant-copy";
   }
 });
 
@@ -8225,6 +8233,7 @@ function aggiornaPiedeChat(piede, dati = {}) {
     giriChip.classList.toggle("talos-badge--warning", stato === "vicino");
     const n = giriChip.querySelector(".talos-mono");
     if (n && u.giri !== null) n.textContent = Number.isFinite(Number(dati.tettoGiri)) && Number(dati.tettoGiri) > 0 ? `${u.giri}/${dati.tettoGiri}` : String(u.giri);
+    giriChip.title = Number.isFinite(Number(dati.tettoGiri)) && Number(dati.tettoGiri) > 0 ? `Giri del modello in questo invio, sul tetto di ${dati.tettoGiri} dichiarato dal kernel. Il numero accanto ai token conta invece tutta la sessione.` : "Giri del modello in questo invio. Il numero accanto ai token conta invece tutta la sessione.";
   }
   const costoChip = piede.querySelector("[data-runtime-costo]");
   if (costoChip) {
@@ -14202,7 +14211,7 @@ var init_app = __esm({
         for (const t2 of $2("#conversation")?.querySelectorAll('.talos-turn[data-turno="talos"]') || []) {
           const numeri = [...t2.querySelectorAll(".talos-turn-spine__n")].map((n) => Number(n.textContent)).filter(Number.isFinite);
           const gruppi = [...t2.querySelectorAll('[data-c="ActivityBundle"]:not(.real-reasoning-note)')];
-          const risposta = t2.querySelector(".assistant-copy p, .assistant-copy")?.textContent?.trim().split(/\s+/).slice(0, 5).join(" ");
+          const risposta = titoloRispostaDaTurno(t2);
           numeri.forEach((numero5, i) => {
             const g = gruppi[i];
             const riassunto = g?.querySelector(".tool-note-summary-text")?.textContent?.trim() || i === numeri.length - 1 && risposta || "Risposta";

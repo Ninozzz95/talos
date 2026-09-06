@@ -24,7 +24,7 @@ import { aggiornaCosti } from '../components/costi-consumo.js'; // 06/9 D21/D22:
 import { aggiornaContesto, ripartizioneContesto } from '../components/contesto.js'; // 06/9 D26: ripartizione della finestra di contesto
 import { montaHf } from '../components/hf-catalogo.js';
 import { aggiornaCodaDownload, montaCodaDownload, stimaFraLetture } from '../components/download-coda.js'; // 06/9 B6.10: scheda «Download»
-import { aggiornaInspector, processiDagliEventi } from '../components/inspector.js'; // 06/9 B2: la colonna dei dettagli dice il vero
+import { aggiornaInspector, processiDagliEventi, titoloRispostaDaTurno } from '../components/inspector.js'; // 06/9 B2: la colonna dei dettagli dice il vero; CB-03: il titolo del giro è la RISPOSTA, non il ragionamento
 import { contaDiff } from '../components/review.js'; // 06/9 B2: +N −M dei file toccati
 import { collegaRidimensionamentoDialoghi, preparaMisuraDialogo } from '../components/dialoghi.js'; // 06/9 B7: dialoghi ridimensionabili e ricordati
 import { creaIntro, normalizzaCartella as normalizzaCartellaIntro, ultimoSegmento as ultimoSegmentoIntro } from '../components/intro.js'; // 06/9 B7b: l'Intro del mockup con i dati veri
@@ -6674,7 +6674,25 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     for (const t of $('#conversation')?.querySelectorAll('.talos-turn[data-turno="talos"]') || []) {
       const numeri = [...t.querySelectorAll('.talos-turn-spine__n')].map((n) => Number(n.textContent)).filter(Number.isFinite);
       const gruppi = [...t.querySelectorAll('[data-c="ActivityBundle"]:not(.real-reasoning-note)')];
-      const risposta = t.querySelector('.assistant-copy p, .assistant-copy')?.textContent?.trim().split(/\s+/).slice(0, 5).join(' ');
+      /*
+       * ⛔⛔⛔ 06/9, CB-03 — qui c'era `.assistant-copy p, .assistant-copy`, e il titolo dei
+       * giri diventava il RAGIONAMENTO del modello, in inglese, anche col ragionamento SPENTO:
+       * misurato su una sessione vera con `z-ai/glm-5.3-flash` (sonda `.gravi/sonde/03-indice-giri.mjs`)
+       * — l'indice diceva «3 · The user asks in Italian:», «6 · Simple: 31 × 12 =», «8 · 44 × 9 = 396.»
+       * mentre le risposte vere erano «17 × 23 = 391», «31 × 12 = 372», «44 × 9 = 396».
+       * CAUSA: `assistant-copy` è una classe-gancio che portano ANCHE il corpo del ragionamento
+       * (`appendToolNote`, che la aggiunge a ogni `detail`), le note di sistema e il «perché» di una
+       * carta di approvazione; il ragionamento è il PRIMO blocco del turno, quindi vinceva sempre.
+       * La riga qui sopra escludeva già `.real-reasoning-note` dai gruppi: questa no.
+       * ⇒ Si nomina la risposta per quello che è: il corpo del messaggio di TALOS
+       * (`.talos-message__copy`, creato da `ensureAssistantMessageElement`).
+       * Ricerca 06/09/2026: AG-UI, «Reasoning» (docs.ag-ui.com/concepts/reasoning) — il ragionamento
+       * è un messaggio con `role: "reasoning"`, tenuto distinto dalla risposta finale «to avoid
+       * polluting conversation history»; MDN, «aria-hidden» — un elemento marcato così è tolto
+       * dall'albero di accessibilità, e il ragionamento spento porta proprio `aria-hidden="true"`:
+       * ripescarne il testo per farne un'etichetta visibile lo rimette a schermo da un'altra porta.
+       */
+      const risposta = titoloRispostaDaTurno(t);
       numeri.forEach((numero, i) => {
         const g = gruppi[i];
         const riassunto = g?.querySelector('.tool-note-summary-text')?.textContent?.trim() || (i === numeri.length - 1 && risposta) || 'Risposta';
