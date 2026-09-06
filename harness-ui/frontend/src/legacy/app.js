@@ -33,10 +33,11 @@ import { creaBrowser, prossimaDopoChiusura as prossimaDopoChiusuraBrowser, MASSI
 import { impacchetta as impacchettaAnnotazioni } from '../components/annotazioni.js'; // Browser oltre Hermes 06/9
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
-import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
+import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaNotaErrore, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione, come quella di ChatGPT desktop
 import { montaScorciatoie, normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
-import { aggiornaPiedeChat, etichettaPermesso } from '../components/chat-foot.js'; // 05/9 Fase 2: ChatFooter — striscia del giro, chip e barra di stato dai dati
+import { aggiornaPiedeChat, etichettaPermesso, nomeModelloUmano } from '../components/chat-foot.js';
+import { spiegaErrore } from '../components/errori.js'; // 06/9 O-22/O-23: gli errori del giro detti a una persona // 05/9 Fase 2: ChatFooter — striscia del giro, chip e barra di stato dai dati
 import { aggiornaDiffReview, creaRigaFileReview, nascondiAzioniFase3, riassuntoReview } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno del mockup
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
 import { aggiornaTopbar } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati
@@ -6360,6 +6361,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       attivo,
       cosa,
       dettaglio,
+      modelloId: state.model || state.realSession.currentRunModel,
       permessiPerAttrezzo: state.permessiPerAttrezzo,
       giro: Number.isFinite(Number(usage?.giri)) ? Number(usage.giri) : null,
       secondi: attivo && giroAvviatoA !== null ? (performance.now() - giroAvviatoA) / 1000 : null,
@@ -6716,8 +6718,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     return turno;
   }
   function nomeModelloBreve(modello) {
-    if (typeof modello !== 'string' || !modello.trim()) return '';
-    return modello.replace(/^~/u, '').split('/').pop();
+    // 06/9 (H22, owner): un id locale non e' un nome. La traduzione vive in un posto solo, chat-foot.js.
+    return nomeModelloUmano(modello);
   }
   /** Monta un blocco nella chat: 'utente' apre un turno; tutto il resto entra nel messaggio TALOS del turno corrente. */
   function nellaChat(elemento, tipo = 'talos') {
@@ -7491,9 +7493,12 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     }
   }
 
-  function appendStatusNote(text, isError = false, { meta: etichettaMeta = null } = {}) {
+  function appendStatusNote(text, isError = false, { meta: etichettaMeta = null, spiegazione = null } = {}) {
     // 05/9 Fase 2: Conversazione — la nota di sistema del mockup (badge Nota/Errore, titolo = l'etichetta di prima)
-    const article = creaNotaSistema({ tipo: isError ? 'danger' : 'info', badge: isError ? 'Errore' : 'Nota', titolo: etichettaMeta || (isError ? 'TALOS · errore' : 'TALOS · concluso'), testo: text });
+    // 06/9: un errore SPIEGATO ha una nota sua (cosa · perche' · cosa fare, col testo del server richiuso).
+    const article = spiegazione
+      ? creaNotaErrore({ titolo: etichettaMeta || 'TALOS · errore', spiegazione })
+      : creaNotaSistema({ tipo: isError ? 'danger' : 'info', badge: isError ? 'Errore' : 'Nota', titolo: etichettaMeta || (isError ? 'TALOS · errore' : 'TALOS · concluso'), testo: text });
     article.classList.add('real-session-status');
     if (isError) article.classList.add('real-session-error');
     nellaChat(article);
@@ -10695,7 +10700,16 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
           guida = ` — ${testoDiagnosiGiri(riassunto)}. ${consiglioDaRiassunto(riassunto)}`
             + ' Il prossimo messaggio continuerà questo task nella stessa sessione. Premi «Nuova» per iniziare un task separato.';
         }
-        appendStatusNote(`${evento.code ? `[${evento.code}] ` : ''}${evento.message}${guida}`, true);
+        /*
+         * ⛔ 06/9, owner con due screenshot da un modello locale: qui arrivava il testo del server
+         * cosi' com'era, gergo e JSON compresi. Ora si traduce (components/errori.js): cosa e'
+         * successo, perche', cosa puoi fare — e il grezzo resta in un dettaglio richiuso.
+         * La diagnosi dei giri esauriti, che questa sessione sa costruire dai suoi eventi, si
+         * aggiunge ai rimedi invece di essere appiccicata in coda alla frase.
+         */
+        const spiegazione = spiegaErrore(evento.message, evento.code);
+        if (guida) spiegazione.rimedi = [guida.replace(/^\s*—\s*/, ''), ...spiegazione.rimedi];
+        appendStatusNote('', true, { spiegazione });
         state.realSession.eventoTerminaleVisto = !state.realSession.redirectPendingId;
         syncRunComposerState();
         break;

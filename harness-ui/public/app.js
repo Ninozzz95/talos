@@ -6955,6 +6955,31 @@ function creaNotaSistema({ tipo = "info", badge: badge4 = "Nota", titolo: titolo
   nota.append(corpo);
   return nota;
 }
+function creaNotaErrore({ badge: badge4 = "Errore", titolo: titolo2 = "TALOS · errore", spiegazione = null } = {}, opzioni = {}) {
+  const documentObj = opzioni.document || globalThis.document;
+  const nota = el20(documentObj, "div", "talos-system-note talos-system-note--errore");
+  nota.setAttribute("data-c", "SystemNote");
+  nota.append(el20(documentObj, "span", "talos-badge talos-badge--danger talos-badge--sm", badge4));
+  const corpo = el20(documentObj, "div");
+  if (titolo2) corpo.append(el20(documentObj, "div", "talos-system-note__title", titolo2));
+  corpo.append(el20(documentObj, "p", "assistant-copy", spiegazione?.cosa || ""));
+  if (spiegazione?.perche) corpo.append(el20(documentObj, "p", "talos-system-note__perche", spiegazione.perche));
+  if (Array.isArray(spiegazione?.rimedi) && spiegazione.rimedi.length) {
+    const lista = el20(documentObj, "ul", "talos-system-note__rimedi");
+    for (const r of spiegazione.rimedi) lista.append(el20(documentObj, "li", "", r));
+    corpo.append(lista);
+  }
+  if (spiegazione?.tecnico) {
+    const dettaglio = documentObj.createElement("details");
+    dettaglio.className = "talos-system-note__tecnico";
+    const riassunto = documentObj.createElement("summary");
+    riassunto.textContent = "Testo del server";
+    dettaglio.append(riassunto, el20(documentObj, "pre", "talos-system-note__grezzo", spiegazione.tecnico));
+    corpo.append(dettaglio);
+  }
+  nota.append(corpo);
+  return nota;
+}
 function creaDiff(righe = [], opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
   const diff = el20(documentObj, "div", "talos-diff");
@@ -7408,6 +7433,24 @@ function etichettaPermessoConEccezioni(permesso, permessiPerAttrezzo) {
   if (regole.length === 0) return base;
   return `${base} · ${regole.length} eccezion${regole.length === 1 ? "e" : "i"}`;
 }
+function nomeModelloUmano(id) {
+  if (typeof id !== "string" || !id.trim()) return "";
+  const grezzo = id.trim();
+  if (!/^local:/i.test(grezzo)) return grezzo.replace(/^~/u, "").split("/").pop();
+  let resto = grezzo.replace(/^local:/i, "").replace(/[-_.]gguf$/i, "");
+  const quant = /[-_](IQ\d\w*|Q\d(?:[-_]\d)?(?:[-_][A-Z]+)*)(?=[-_]|$)/i.exec(resto);
+  const parametri = /(?:^|[-_])(\d+(?:[.,]\d+)?B)(?:[-_]A(\d+(?:[.,]\d+)?B))?(?=[-_]|$)/i.exec(resto);
+  let nome = resto;
+  if (parametri) nome = resto.slice(0, parametri.index);
+  nome = nome.replace(/[-_](GGUF|MLX|AWQ|GPTQ)$/i, "");
+  const pezzi = nome.split(/[-_]/).filter(Boolean);
+  if (pezzi.length > 1) pezzi.shift();
+  const pulito = pezzi.join(" ").replace(/\s+/g, " ").trim();
+  const parti = [pulito || resto];
+  if (parametri) parti.push(parametri[2] ? `${parametri[1]} (${parametri[2].replace(/^A/i, "")} attivi)` : parametri[1]);
+  if (quant) parti.push(quant[1].toUpperCase().replace(/-/g, "_"));
+  return parti.filter(Boolean).join(" · ");
+}
 function tonoPermesso(permesso) {
   if (permesso === "Full access") return "danger";
   if (permesso === "Workspace write") return "warning";
@@ -7481,6 +7524,8 @@ function aggiornaPiedeChat(piede, dati = {}) {
   }
   const modello = piede.querySelector('[data-open-sheet="model"] .talos-chip__label');
   if (modello) modello.textContent = dati.modello || "Scegli il modello";
+  const pillolaModello = piede.querySelector('[data-open-sheet="model"]');
+  if (pillolaModello) pillolaModello.title = dati.modelloId ? `Cambia modello · ${dati.modelloId}` : "Cambia modello";
   const permesso = piede.querySelector('[data-open-sheet="permissions"]');
   if (permesso) {
     const label = permesso.querySelector(".talos-chip__label");
@@ -7520,6 +7565,103 @@ var init_chat_foot = __esm({
       "Workspace write": "Scrittura nel workspace",
       "Full access": "Accesso completo"
     });
+  }
+});
+
+// src/components/errori.js
+function spiegaErrore(messaggio, codice = "") {
+  const tecnico = String(messaggio ?? "").trim();
+  const testo3 = `${codice} ${tecnico}`;
+  for (const regola of REGOLE) {
+    if (!regola.riconosce(testo3, codice)) continue;
+    const s = regola.spiega(tecnico);
+    return { id: regola.id, ...s, tecnico, riconosciuto: true };
+  }
+  return {
+    id: "sconosciuto",
+    cosa: "Il giro si è interrotto per un errore.",
+    perche: "Questa forma di errore non è ancora tradotta: qui sotto c’è il testo che ha mandato il server, così com’è.",
+    rimedi: ["Riprova il giro.", "Se si ripete, apri Doctor e allega il testo qui sotto."],
+    tecnico,
+    riconosciuto: false
+  };
+}
+var REGOLE;
+var init_errori = __esm({
+  "src/components/errori.js"() {
+    REGOLE = [
+      {
+        id: "contesto-pieno",
+        riconosce: (t2) => /exceed_context_size|exceeds the available context size|context (?:size|length) exceeded/i.test(t2),
+        spiega: (t2) => {
+          const numeri = /\((\d+)\s*tokens?\)[^(]*\((\d+)\s*tokens?\)/i.exec(t2) || [];
+          const chiesti = Number(numeri[1]) || null;
+          const finestra = Number(numeri[2]) || Number((/n_ctx"?\s*:\s*(\d+)/i.exec(t2) || [])[1]) || null;
+          const misura = chiesti && finestra ? ` Servivano ${chiesti.toLocaleString("it-IT")} token, la finestra ne tiene ${finestra.toLocaleString("it-IT")}.` : "";
+          return {
+            cosa: "La conversazione non entra nella finestra del modello.",
+            perche: `Questo modello legge una quantità di testo limitata, e la sessione l'ha superata.${misura}`,
+            rimedi: [
+              "Compatta il contesto: il riassunto sostituisce la storia e il giro riparte più leggero.",
+              "Scegli un modello con una finestra più grande, o riavvia quello locale con una finestra maggiore (in llama.cpp è «--ctx-size»; attenzione: con «--parallel» viene divisa fra gli slot).",
+              "Restringi la cartella della sessione: un albero grande entra nel contesto a ogni giro."
+            ]
+          };
+        }
+      },
+      {
+        id: "risposta-vuota",
+        riconosce: (t2) => /flusso SSE senza contenuto|senza contenuto ne tool_calls|empty (?:response|stream)/i.test(t2),
+        spiega: () => ({
+          cosa: "Il modello ha chiuso il turno senza dire niente e senza chiamare nessun attrezzo.",
+          perche: "Capita soprattutto con i modelli locali: la generazione finisce subito, per un modello di chat servito senza il suo formato di conversazione, per una finestra già piena, o per un campionamento che tronca al primo token.",
+          rimedi: [
+            "Riprova il giro: se succede una volta sola, era la generazione.",
+            "Se si ripete, guarda il modello nel Laboratorio: formato della conversazione e finestra dichiarata.",
+            "Prova lo stesso messaggio con un modello di rete: se lì funziona, il problema è nel runtime locale, non nella sessione."
+          ]
+        })
+      },
+      {
+        id: "giri-esauriti",
+        riconosce: (t2, codice) => codice === "giri-esauriti",
+        spiega: () => ({
+          cosa: "Il giro ha finito i passi che aveva a disposizione senza chiudere il compito.",
+          perche: "Ogni sessione ha un tetto di passi: serve a non lasciare un agente a girare all’infinito.",
+          rimedi: [
+            "Il prossimo messaggio continua lo stesso compito nella stessa sessione.",
+            "Premi «Nuova» per iniziare un compito separato, con il suo tetto."
+          ]
+        })
+      },
+      {
+        id: "senza-canale-approvazione",
+        riconosce: (t2) => /canale di approvazione|approvazione non disponibile/i.test(t2),
+        spiega: () => ({
+          cosa: "L’agente ha chiesto un permesso che questa sessione non è in grado di chiedere a te.",
+          perche: "Il permesso dell’attrezzo dice «chiedi conferma», ma la sessione è partita senza un canale per farlo.",
+          rimedi: ["Riapri il foglio dei permessi e scegli di nuovo, poi riavvia il giro."]
+        })
+      },
+      {
+        id: "rete",
+        riconosce: (t2) => /ECONNREFUSED|ETIMEDOUT|fetch failed|network error|socket hang up/i.test(t2),
+        spiega: () => ({
+          cosa: "La richiesta non è arrivata al modello.",
+          perche: "Il servizio non ha risposto: può essere la rete, il fornitore, o il runtime locale spento.",
+          rimedi: ["Controlla la connessione e riprova.", "Se il modello è locale, verifica che il runtime sia acceso nel Laboratorio."]
+        })
+      },
+      {
+        id: "quota",
+        riconosce: (t2) => /\b429\b|rate.?limit|quota|insufficient (?:credit|balance)/i.test(t2),
+        spiega: () => ({
+          cosa: "Il fornitore ha rifiutato la richiesta per limiti di traffico o di credito.",
+          perche: "Non è un errore del compito: è il conto o la soglia di chiamate al minuto.",
+          rimedi: ["Aspetta qualche istante e riprova.", "Oppure scegli un altro modello o un altro fornitore."]
+        })
+      }
+    ];
   }
 });
 
@@ -7728,6 +7870,7 @@ var init_app = __esm({
     init_cronologia();
     init_scorciatoie();
     init_chat_foot();
+    init_errori();
     init_review();
     init_stato_vuoto();
     init_topbar();
@@ -13062,6 +13205,7 @@ var init_app = __esm({
           attivo,
           cosa,
           dettaglio,
+          modelloId: state.model || state.realSession.currentRunModel,
           permessiPerAttrezzo: state.permessiPerAttrezzo,
           giro: Number.isFinite(Number(usage?.giri)) ? Number(usage.giri) : null,
           secondi: attivo && giroAvviatoA !== null ? (performance.now() - giroAvviatoA) / 1e3 : null,
@@ -13305,8 +13449,7 @@ var init_app = __esm({
         return turno;
       }
       function nomeModelloBreve(modello) {
-        if (typeof modello !== "string" || !modello.trim()) return "";
-        return modello.replace(/^~/u, "").split("/").pop();
+        return nomeModelloUmano(modello);
       }
       function nellaChat(elemento, tipo = "talos") {
         const conversation = $2("#conversation");
@@ -13852,8 +13995,8 @@ var init_app = __esm({
           contenitore.appendChild(riga);
         }
       }
-      function appendStatusNote(text, isError = false, { meta: etichettaMeta = null } = {}) {
-        const article = creaNotaSistema({ tipo: isError ? "danger" : "info", badge: isError ? "Errore" : "Nota", titolo: etichettaMeta || (isError ? "TALOS · errore" : "TALOS · concluso"), testo: text });
+      function appendStatusNote(text, isError = false, { meta: etichettaMeta = null, spiegazione = null } = {}) {
+        const article = spiegazione ? creaNotaErrore({ titolo: etichettaMeta || "TALOS · errore", spiegazione }) : creaNotaSistema({ tipo: isError ? "danger" : "info", badge: isError ? "Errore" : "Nota", titolo: etichettaMeta || (isError ? "TALOS · errore" : "TALOS · concluso"), testo: text });
         article.classList.add("real-session-status");
         if (isError) article.classList.add("real-session-error");
         nellaChat(article);
@@ -16508,7 +16651,9 @@ ${testo3}` : testo3;
               const riassunto = riassuntoAttrezziDaEventi(state.realSession.eventiAttrezzi);
               guida = ` — ${testoDiagnosiGiri(riassunto)}. ${consiglioDaRiassunto(riassunto)} Il prossimo messaggio continuerà questo task nella stessa sessione. Premi «Nuova» per iniziare un task separato.`;
             }
-            appendStatusNote(`${evento.code ? `[${evento.code}] ` : ""}${evento.message}${guida}`, true);
+            const spiegazione = spiegaErrore(evento.message, evento.code);
+            if (guida) spiegazione.rimedi = [guida.replace(/^\s*—\s*/, ""), ...spiegazione.rimedi];
+            appendStatusNote("", true, { spiegazione });
             state.realSession.eventoTerminaleVisto = !state.realSession.redirectPendingId;
             syncRunComposerState();
             break;
