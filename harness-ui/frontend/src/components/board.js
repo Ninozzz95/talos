@@ -3,9 +3,11 @@
  */
 import { statoSessione, nomeModello } from './session-item.js';
 import { plurale } from './plurale.js'; // BH-12: «1 ricordi» — il plurale vive in un posto solo
+// ⛔ 06/9, CB-04: le colonne Giri/Token/Cache promettono la SESSIONE, non l'ultimo invio.
+import { usageDellaSessione, esecuzioniDellaSessione } from './consumo-sessione.js';
 const NUMERO = new Intl.NumberFormat('it-IT', {maximumFractionDigits:1});
 const valido = n => typeof n === 'number' && Number.isFinite(n) && n >= 0;
-const totale = s => valido(s.usage?.prompt_tokens) && valido(s.usage?.completion_tokens) ? s.usage.prompt_tokens + s.usage.completion_tokens : null;
+const totale = s => { const u = usageDellaSessione(s); return valido(u?.prompt_tokens) && valido(u?.completion_tokens) ? u.prompt_tokens + u.completion_tokens : null; };
 const compatto = n => !valido(n) ? '—' : n >= 1000 ? NUMERO.format(n / 1000) + 'k' : NUMERO.format(n);
 const MOTIVI = {'fine-lavoro':'fine lavoro','giri-finiti':'giri finiti',fermata:'fermata da te',errore:'errore'};
 const STATO = {vivo:['In corso','accent'],attesa:['Aspetta te','warning'],successo:['Conclusa','success'],errore:['Errore','danger'],interrotto:['Interrotta',null],ignoto:['Conclusa · esito non registrato',null]};
@@ -31,8 +33,8 @@ export function tempoBoard(iso, adesso = new Date()) {
 export function testiBoard(sessione, metriche = {}, adesso = new Date()) {
   return {
     titolo:sessione.nome || sessione.taskId || 'Sessione', modello:nomeModello(sessione.modello) || '—',
-    giri:valido(sessione.usage?.giri) ? String(sessione.usage.giri) : '—', token:compatto(totale(sessione)),
-    cache:(valido(metriche?.cache?.percentuale) ? NUMERO.format(metriche.cache.percentuale) + '%' : '—') + (valido(sessione.usage?.cached_tokens) ? ' · ' + compatto(sessione.usage.cached_tokens) : ''),
+    giri:valido(usageDellaSessione(sessione)?.giri) ? String(usageDellaSessione(sessione).giri) : '—', token:compatto(totale(sessione)),
+    cache:(valido(metriche?.cache?.percentuale) ? NUMERO.format(metriche.cache.percentuale) + '%' : '—') + (valido(usageDellaSessione(sessione)?.cached_tokens) ? ' · ' + compatto(usageDellaSessione(sessione).cached_tokens) : ''),
     primo:valido(metriche?.primoToken?.ms) ? (metriche.primoToken.ms / 1000).toFixed(1).replace('.',',') + ' s' : '—',
     chiusura:MOTIVI[metriche?.chiusura?.motivo] || (metriche?.chiusura?.motivo ? 'altro motivo' : '—'),
     avviata:tempoBoard(sessione.avviataAlle, adesso),
@@ -68,10 +70,16 @@ export function creaRigaBoard(sessione, {document:doc=globalThis.document,metric
   const modello=el(doc,'td','talos-mono talos-board-model',t.modello); modello.title=sessione.modello || 'Modello non registrato'; riga.append(modello);
   for (const campo of ['giri','token','cache','primo']) {
     const cella=el(doc,'td','num talos-mono talos-measure',t[campo]);
-    if (campo==='token' && valido(totale(sessione))) cella.title=totale(sessione).toLocaleString('it-IT')+' token · ingresso + uscita';
+    // ⛔ 06/9, CB-04: il suggerimento dice su quanti INVII è fatta la somma — «22,3k» senza
+    //    quel dettaglio si leggeva come il consumo di un turno solo, e lo era davvero.
+    const invii=esecuzioniDellaSessione(sessione);
+    const daInvii=valido(invii) ? ' · '+invii+' invi'+(invii===1?'o':'i') : '';
+    if (campo==='token' && valido(totale(sessione))) cella.title=totale(sessione).toLocaleString('it-IT')+' token · ingresso + uscita · tutta la sessione'+daInvii;
+    if (campo==='giri' && t.giri!=='—') cella.title='Giri del modello in tutta la sessione'+daInvii;
     if (campo==='primo' && t.primo==='—') cella.title=metriche?.primoToken?.motivoAssente || 'Tempo non registrato';
     if (campo==='cache') {
-      cella.title=valido(sessione.usage?.cached_tokens) ? sessione.usage.cached_tokens.toLocaleString('it-IT')+' token in cache' : metriche?.cache?.motivoAssente || 'Cache non registrata';
+      const cached=usageDellaSessione(sessione)?.cached_tokens;
+      cella.title=valido(cached) ? cached.toLocaleString('it-IT')+' token riletti dalla cache in tutta la sessione'+daInvii : metriche?.cache?.motivoAssente || 'Cache non registrata';
       cella.setAttribute('aria-label',t.cache+' · '+cella.title);
     }
     riga.append(cella);

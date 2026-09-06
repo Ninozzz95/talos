@@ -9,7 +9,15 @@ import { pesoAttrezzi, ripartizioneContesto, frasiRipartizione } from '../../src
  * non deve comparire come zero, e un totale deve dire chi ha lasciato fuori.
  */
 
-const GIORNO = (giorno, extra = {}) => ({ avviata: `${giorno}T10:00:00.000Z`, giri: 3, modello: 'z-ai/glm-5.3-flash', usage: { prompt_tokens: 1000, completion_tokens: 200, cached_tokens: 800 }, ...extra });
+/*
+ * ⛔⛔⛔ 06/9 — questo fixture era scritto a mano e NON somigliava al corpo vero
+ * di `/api/v1/sessions`: la data lì si chiama `avviataAlle` (non `avviata`) e i
+ * giri stanno dentro il consumo (non a livello di sessione). Con quei nomi la
+ * pagina Costi contava zero su tutto, e il test era verde lo stesso. Adesso il
+ * fixture ha la forma VERA — `usageSessione`, il totale della conversazione
+ * (CB-04) — e i vecchi nomi restano provati a parte, come compatibilità.
+ */
+const GIORNO = (giorno, extra = {}) => ({ avviataAlle: `${giorno}T10:00:00.000Z`, modello: 'z-ai/glm-5.3-flash', usageSessione: { prompt_tokens: 1000, completion_tokens: 200, cached_tokens: 800, giri: 3, esecuzioni: 2 }, ...extra });
 
 test('COSTI-GIORNO: si raggruppa per giorno locale, dal più recente', () => {
   const righe = consumoPerGiorno([GIORNO('2026-09-06'), GIORNO('2026-09-06'), GIORNO('2026-09-05')]);
@@ -26,20 +34,40 @@ test('COSTI-GIORNO: si raggruppa per giorno locale, dal più recente', () => {
 
 test('COSTI-MODELLO: si raggruppa per modello, dal più consumato', () => {
   const righe = consumoPerModello([
-    GIORNO('2026-09-06', { modello: 'a/uno', usage: { prompt_tokens: 10, completion_tokens: 0 } }),
-    GIORNO('2026-09-06', { modello: 'b/due', usage: { prompt_tokens: 900, completion_tokens: 100 } }),
+    GIORNO('2026-09-06', { modello: 'a/uno', usageSessione: { prompt_tokens: 10, completion_tokens: 0 } }),
+    GIORNO('2026-09-06', { modello: 'b/due', usageSessione: { prompt_tokens: 900, completion_tokens: 100 } }),
   ]);
   assert.deepEqual(righe.map((r) => r.chiave), ['b/due', 'a/uno']);
   // ⛔ verso contrario: senza modello dichiarato la riga non si inventa
-  assert.equal(consumoPerModello([{ avviata: '2026-09-06T10:00:00Z', modello: '' }]).length, 0);
+  assert.equal(consumoPerModello([{ avviataAlle: '2026-09-06T10:00:00Z', modello: '' }]).length, 0);
+});
+
+test('COSTI-SESSIONE: si contano i token di TUTTA la conversazione, non quelli dell ultimo invio (CB-04)', () => {
+  // Il corpo vero: `usage` è l'ultimo invio, `usageSessione` la somma dei tre.
+  const sessione = {
+    avviataAlle: '2026-09-06T10:00:00.000Z', modello: 'z-ai/glm-5.3-flash',
+    usage: { prompt_tokens: 7716, completion_tokens: 25, cached_tokens: 7616, giri: 1 },
+    usageSessione: { prompt_tokens: 23060, completion_tokens: 121, cached_tokens: 15232, giri: 3, esecuzioni: 3 },
+  };
+  const [riga] = consumoPerGiorno([sessione]);
+  assert.equal(riga.token, 23181, '⛔ 7.741 sarebbe il solo ultimo invio: misurato su tre invii veri');
+  assert.equal(riga.cache, 15232);
+  assert.equal(riga.giri, 3, 'i giri stanno dentro il consumo, non a livello di sessione');
+  // ⛔ AL CONTRARIO — una registrazione vecchia, senza `usageSessione`, non sparisce: si legge
+  //    quello che c'è (l'ultimo invio) invece di dichiarare zero.
+  const vecchia = { avviataAlle: sessione.avviataAlle, modello: sessione.modello, usage: sessione.usage };
+  assert.equal(consumoPerGiorno([vecchia])[0].token, 7741);
+  // ⛔ AL CONTRARIO — un campo `giri` a livello di sessione non esiste nel corpo vero e non
+  //    deve diventare un numero: quello era il difetto («0 giri» su ogni riga, oppure inventati).
+  assert.equal(consumoPerGiorno([{ avviataAlle: sessione.avviataAlle, modello: 'a/uno', giri: 99, usageSessione: { prompt_tokens: 1, completion_tokens: 1 } }])[0].giri, 0);
 });
 
 test('COSTI-CHI-MANCA: il riepilogo dichiara le sessioni che NON ha potuto contare', () => {
   const r = riepilogoConsumo([
     GIORNO('2026-09-06'),
-    { avviata: '2026-09-06T10:00:00Z', modello: 'a/uno' }, // senza usage
-    { modello: 'a/uno', usage: { prompt_tokens: 5, completion_tokens: 5 } }, // senza data
-    { avviata: '2026-09-06T10:00:00Z', usage: { prompt_tokens: 1, completion_tokens: 1 } }, // senza modello
+    { avviataAlle: '2026-09-06T10:00:00Z', modello: 'a/uno' }, // senza usage
+    { modello: 'a/uno', usageSessione: { prompt_tokens: 5, completion_tokens: 5 } }, // senza data
+    { avviataAlle: '2026-09-06T10:00:00Z', usageSessione: { prompt_tokens: 1, completion_tokens: 1 } }, // senza modello
   ]);
   assert.equal(r.sessioni, 4);
   assert.equal(r.senzaToken, 1);

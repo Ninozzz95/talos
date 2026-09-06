@@ -131,17 +131,30 @@ export function testoVelocitaLocale(modelloId, velocita) {
   return String(velocita || '').trim();
 }
 
-export function testiUsage(usage, { tettoGiri = null } = {}) {
-  if (!usage || typeof usage !== 'object') return { tokenGiri: '', cache: '', giri: null, velocita: '' };
-  const prompt = Number(usage.prompt_tokens ?? 0) || 0;
-  const completion = Number(usage.completion_tokens ?? 0) || 0;
-  const cache = Number(usage.cached_tokens ?? 0) || 0;
-  const giri = Number.isFinite(Number(usage.giri)) ? Number(usage.giri) : null;
+/*
+ * ⛔⛔⛔ 06/9, CB-04 — DUE numeri, non uno. `usage` è il consumo dell'INVIO IN
+ * CORSO (il kernel azzera il suo contatore a ogni invio: `talosHarness.mjs:4560`)
+ * e serve al solo confronto col tetto dei giri, «9 su 24». `usageSessione` è il
+ * totale della CONVERSAZIONE, ed è ciò che la barra promette quando scrive
+ * «22,3k token · cache 66%». Misurato su tre invii veri: 23.060 token spesi,
+ * 7.716 dichiarati. Ricerca 06/09/2026: OpenAI «Counting tokens» (usage è per
+ * richiesta, la somma la fa chi chiama) e OpenRouter «Prompt Caching» (il tasso
+ * di sessione è somma dei cached su somma dei prompt, pesato sui token).
+ */
+export function testiUsage(usage, { tettoGiri = null, usageSessione = null } = {}) {
+  const sessione = usageSessione && typeof usageSessione === 'object' ? usageSessione : usage;
+  if ((!usage || typeof usage !== 'object') && (!sessione || typeof sessione !== 'object')) return { tokenGiri: '', cache: '', giri: null, velocita: '' };
+  const prompt = Number(sessione?.prompt_tokens ?? 0) || 0;
+  const completion = Number(sessione?.completion_tokens ?? 0) || 0;
+  const cache = Number(sessione?.cached_tokens ?? 0) || 0;
+  // ⛔ i giri della barra sono quelli della SESSIONE; quello del chip col tetto è dell'invio in corso
+  const giriSessione = Number.isFinite(Number(sessione?.giri)) ? Number(sessione.giri) : null;
+  const giri = Number.isFinite(Number(usage?.giri)) ? Number(usage.giri) : null;
   const totale = prompt + completion;
   const parti = [];
   if (totale > 0) parti.push(`${kilo(totale)} token`);
-  if (giri !== null) parti.push(`${giri} gir${giri === 1 ? 'o' : 'i'}${Number.isFinite(tettoGiri) && tettoGiri > 0 ? ` su ${tettoGiri}` : ''}`);
-  const throughput = Number(usage.tokens_per_second ?? usage.tokensPerSecond);
+  if (giriSessione !== null) parti.push(`${giriSessione} gir${giriSessione === 1 ? 'o' : 'i'}${Number.isFinite(tettoGiri) && tettoGiri > 0 && sessione === usage ? ` su ${tettoGiri}` : ''}`);
+  const throughput = Number(usage?.tokens_per_second ?? usage?.tokensPerSecond ?? sessione?.tokens_per_second ?? sessione?.tokensPerSecond);
   return {
     tokenGiri: parti.join(' · '),
     cache: cache > 0 && prompt > 0 ? `cache ${Math.round((cache / prompt) * 100)}%` : '',
@@ -172,7 +185,9 @@ function scrivi(el, testo) {
  * @param {string} [dati.dettaglio] il dettaglio mono (il comando, il file)
  * @param {number|null} [dati.giro] il giro corrente
  * @param {number|null} [dati.secondi] secondi dall'inizio del giro
- * @param {object|null} [dati.usage]
+ * @param {'collegato'|'perso'} [dati.contatto] stato del contatto col server (CB-20-bis)
+ * @param {object|null} [dati.usage] il consumo dell'INVIO in corso (tetto dei giri)
+ * @param {object|null} [dati.usageSessione] il consumo di TUTTA la conversazione (token, giri, cache della barra)
  * @param {number|null} [dati.tettoGiri]
  * @param {number|null} [dati.latenzaMs] tempo al primo token
  * @param {string|null} [dati.costo] «$0,08» già formattato, o null (non si stima da soli)
@@ -208,7 +223,22 @@ export function aggiornaPiedeChat(piede, dati = {}) {
      * Ricerca 06/09/2026: shadcn/ui «Message scroller» e TanStack Virtual «Chat» — un solo indicatore per
      * stato, legato a `isAtEnd()`, invece di un doppione sempre acceso.
      */
-    striscia.hidden = !dati.attivo || dati.inFondo === true;
+    /*
+     * ⛔⛔⛔ 06/9, CB-20-bis — «il server cade e la chat dice il contrario per un minuto».
+     * Misurato: la barra in fondo diceva «Il server non risponde · Riprova» mentre questa
+     * striscia continuava a dire «TALOS sta lavorando · giro 3» col pulsante «Ferma», per
+     * 45 s di fila su 30 campioni. Due parti della stessa schermata, due verità opposte.
+     * ⇒ Quando il contatto è perso la striscia NON tace: è l'unico posto della chat che può
+     *   dire che non sappiamo più cosa stia succedendo, e tacere lì significa lasciare in
+     *   piedi l'ultima cosa detta, che era «sta lavorando».
+     * Ricerca 06/09/2026 — timetobuildbob.com, «The Stale Event Problem: Fixing SSE
+     * Reconnects in Streaming AI UIs»: a stream caduto la UI non deve continuare a mostrare
+     * «running»; serve un indicatore PERSISTENTE («Reconnecting…», poi «Disconnected»), non
+     * un toast che sparisce, e mai uno stato ambiguo «still running».
+     */
+    const contattoPerso = dati.attivo === true && dati.contatto === 'perso';
+    striscia.hidden = !dati.attivo || (dati.inFondo === true && !contattoPerso);
+    striscia.classList.toggle('talos-status-strip--senza-contatto', contattoPerso);
     /*
      * 06/9, owner: «se ci clicchi ti deve portare in fondo giù». La striscia compare proprio quando
      * stai leggendo più su: è il posto naturale dove chiedere «riportami dove sta scrivendo».
@@ -226,8 +256,8 @@ export function aggiornaPiedeChat(piede, dati = {}) {
     const cosa = striscia.querySelector('[data-run-what]');
     if (cosa) {
       cosa.replaceChildren();
-      cosa.append(documentObj.createTextNode(dati.cosa || 'TALOS sta lavorando'));
-      if (dati.dettaglio) {
+      cosa.append(documentObj.createTextNode(contattoPerso ? 'Contatto col server perso' : (dati.cosa || 'TALOS sta lavorando')));
+      if (dati.dettaglio && !contattoPerso) {
         cosa.append(documentObj.createTextNode(' · '));
         const mono = documentObj.createElement('span');
         mono.className = 'talos-mono talos-measure';
@@ -239,7 +269,20 @@ export function aggiornaPiedeChat(piede, dati = {}) {
     const pezzi = [];
     if (Number.isFinite(dati.giro)) pezzi.push(`giro ${dati.giro}`);
     if (Number.isFinite(dati.secondi)) pezzi.push(`${Math.max(0, Math.round(dati.secondi))} s`);
-    scrivi(meta, pezzi.join(' · '));
+    /*
+     * ⛔ Senza contatto NON si dice «il giro è fallito» (sul server può benissimo star
+     *    continuando, e al ritorno lo stream lo racconta): si dice che non lo sappiamo.
+     *    E i secondi si smettono di contare: un contatore che avanza senza notizie è una
+     *    misura inventata, uno fermo sembra un blocco. Si toglie.
+     */
+    scrivi(meta, contattoPerso ? 'non so se il giro sta ancora andando' : pezzi.join(' · '));
+    const ferma = striscia.querySelector('.stop-run');
+    if (ferma) {
+      // ⛔ «Ferma» manda una POST al server: col server irraggiungibile non arriverebbe.
+      //    Un pulsante che non può fare la sua cosa lo DICE, invece di fingere.
+      ferma.disabled = contattoPerso;
+      ferma.title = contattoPerso ? 'Il server non risponde: la richiesta di fermare non arriverebbe.' : '';
+    }
   }
   // chip del modello e del permesso
   const modello = piede.querySelector('[data-open-sheet="model"] .talos-chip__label');
@@ -260,7 +303,7 @@ export function aggiornaPiedeChat(piede, dati = {}) {
     if (tono) permesso.classList.add(`talos-badge--${tono}`);
   }
   // giri e costo
-  const u = testiUsage(dati.usage, { tettoGiri: dati.tettoGiri });
+  const u = testiUsage(dati.usage, { tettoGiri: dati.tettoGiri, usageSessione: dati.usageSessione });
   const giriChip = piede.querySelector('[data-runtime-giri]');
   if (giriChip) {
     /*
@@ -274,6 +317,14 @@ export function aggiornaPiedeChat(piede, dati = {}) {
     giriChip.classList.toggle('talos-badge--warning', stato === 'vicino');
     const n = giriChip.querySelector('.talos-mono');
     if (n && u.giri !== null) n.textContent = Number.isFinite(Number(dati.tettoGiri)) && Number(dati.tettoGiri) > 0 ? `${u.giri}/${dati.tettoGiri}` : String(u.giri);
+    /*
+     * ⛔ 06/9, CB-13 — nella stessa barra ci sono due numeri che si chiamano entrambi «giri»:
+     *    questo è dell'INVIO in corso (è quello che può finire contro il tetto), quello accanto
+     *    ai token è di TUTTA la conversazione. Chi guarda deve poterlo sapere senza indovinare.
+     */
+    giriChip.title = Number.isFinite(Number(dati.tettoGiri)) && Number(dati.tettoGiri) > 0
+      ? `Giri del modello in questo invio, sul tetto di ${dati.tettoGiri} dichiarato dal kernel. Il numero accanto ai token conta invece tutta la sessione.`
+      : 'Giri del modello in questo invio. Il numero accanto ai token conta invece tutta la sessione.';
   }
   const costoChip = piede.querySelector('[data-runtime-costo]');
   if (costoChip) {

@@ -314,3 +314,7 @@ harness-ui/public.prima-del-cutover-*/
 harness-ui/public.nuovo-*/
 # 06/09: il log del server 4174 riavviato da Claude (stdout/stderr del processo)
 harness-ui/.talos-4174*.log
+
+# Prove della caccia ai difetti GRAVI del 06/09 — sonde, log e foto, fuori dal repo
+.gravi/
+harness-ui/.talos-4198*.log
