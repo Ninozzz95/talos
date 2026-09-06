@@ -1219,3 +1219,11 @@ dalla POST, mai all'elenco.
 ⛔ Resta un fatto vero e diverso, che riguarda il **kernel** (fuori dalla mia lane): le deleghe non
 ereditano il modello della sessione madre e girano con `glm-4.7-flash`, e nella prova di oggi sono
 fallite tutte e quattro. Da segnalare all'owner, non da curare qui.
+
+## 06/09 — Il pannello delle scorciatoie (D10-D12) e il suggerimento della campanella
+
+- `Ctrl+/` apriva la palette dei comandi (ripiego di stamattina). Ora apre il **pannello vero**: velo `#veloScorciatoie` nel mockup, righe generate dal registro di `scorciatoie.js` (nome · area · combinazione già scritta per la piattaforma), ricerca in cima che filtra, stato vuoto onesto, e le tre maniglie di ridimensionamento come ogni altro dialogo (la parità statica lo pretende: `ogni .talos-dialog ha 3 [data-dialog-resize]`).
+- Verificato dal vivo: `Ctrl+/` apre 7 righe con `Ctrl K · Ctrl N · Ctrl ⇧ M · Ctrl , · Ctrl / · Ctrl \` · Ctrl ⇧ \``; cercando «terminale» restano 2 righe; con una parola che non esiste compare lo stato vuoto; `Esc` chiude.
+- **Notifiche**: il pannello funzionava già (340×126, stato vuoto onesto). Il difetto vero era il `title` della campanella, fermo su «Notifiche: 1 cosa aspetta te» del mockup mentre l'etichetta per il lettore di schermo diceva il vero: ora si aggiornano insieme.
+
+Cancelli: unit 131/131, componenti 111/111, statico 195/195.

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { suApple, etichettaTasto, normalizzaTastiScritti, riconosci, SCORCIATOIE } from '../../src/components/scorciatoie.js';
+import { suApple, etichettaTasto, montaScorciatoie, normalizzaTastiScritti, riconosci, SCORCIATOIE } from '../../src/components/scorciatoie.js';
 
 /** Radice finta: basta `querySelectorAll('kbd')` e `textContent` (le unit di questo repo non caricano un DOM). */
 function radiceFinta(testi) {
@@ -58,4 +58,25 @@ test('SCORCIATOIE-REGISTRO: ogni riga ha id, combinazione, area e nome, e nessun
     assert.ok(!proibite.includes(s.combo), `${s.combo} è del browser`);
   }
   assert.equal(new Set(SCORCIATOIE.map((s) => s.combo)).size, SCORCIATOIE.length, 'due righe con la stessa combinazione');
+});
+
+test('SCORCIATOIE-PANNELLO: il registro diventa righe, la ricerca filtra, lo stato vuoto compare', () => {
+  // radice finta: bastano querySelector e replaceChildren (le unit di questo repo non caricano un DOM)
+  const creati = [];
+  const nodo = (tag) => { const n = { tag, className: '', dataset: {}, figli: [], textContent: '', hidden: false, setAttribute() {}, append(...x) { this.figli.push(...x); }, replaceChildren(...x) { this.figli = x; }, addEventListener() {}, querySelectorAll: () => [] }; creati.push(n); return n; };
+  const elenco = nodo('div'); const vuoto = nodo('p'); const cerca = { value: '', dataset: {}, addEventListener() {} };
+  const velo = {
+    ownerDocument: { createElement: nodo },
+    querySelector: (s) => (s === '#elencoScorciatoie' ? elenco : s === '#scorciatoieVuote' ? vuoto : s === '#cercaScorciatoia' ? cerca : null),
+  };
+  assert.equal(montaScorciatoie(velo, { apple: false }), SCORCIATOIE.length);
+  assert.equal(elenco.figli.length, SCORCIATOIE.length);
+  assert.equal(vuoto.hidden, true);
+  // filtro
+  cerca.value = 'terminale';
+  assert.equal(montaScorciatoie(velo, { apple: false }), 2);
+  // AL CONTRARIO: una ricerca che non trova niente accende lo stato vuoto
+  cerca.value = 'zzz';
+  assert.equal(montaScorciatoie(velo, { apple: false }), 0);
+  assert.equal(vuoto.hidden, false);
 });
