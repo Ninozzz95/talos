@@ -459,8 +459,13 @@ function chiamateDelFrontend() {
  * Ciò che gira DENTRO la pagina. Sta in una stringa e non in una funzione importata perché
  * `page.evaluate` serializza il codice: qui c'è la sola cosa che il browser sa fare meglio di noi —
  * dire cosa è visibile, e con quale testo.
+ *
+ * ⛔ È una funzione CHIAMATA SUBITO, `(() => {…})()`, non `() => {…}`: quando `evaluate` riceve una
+ *    stringa la valuta come ESPRESSIONE e restituisce il valore. Una freccia da sola è un oggetto
+ *    funzione, che non si serializza — e torna `undefined`, cioè il giro si rompe due righe dopo
+ *    con un errore che non nomina la causa. Misurato al primo lancio, non previsto.
  */
-const RACCOLTA_NELLA_PAGINA = `() => {
+const RACCOLTA_NELLA_PAGINA = `(() => {
   const visibile = (el) => (typeof el.checkVisibility === 'function'
     ? el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })
     : !el.hidden && el.getClientRects().length > 0);
@@ -573,16 +578,18 @@ const RACCOLTA_NELLA_PAGINA = `() => {
       /*
        * ⭐ La sola cosa che separa un contatore sano dal difetto delle «Note»: il luogo a cui manda
        *    esiste come vista MONTATA? Non basta che la mappa conosca la chiave — il 06/9 mancava
-       *    proprio la riga che dà `data-view` a #schermoNote, e setView usciva subito.
+       *    proprio la riga che dava l'attributo data-view a #schermoNote, e setView usciva subito.
+       * ⛔ Niente apici inversi in questo commento: sta DENTRO un template literal, e il primo che
+       *    ci finisce lo chiude a metà. Il file non si caricava affatto per questo.
        */
       vistaMontata: Boolean(v.dataset.vaia && document.querySelector('[data-view="' + ((window.__cancelloViste || {})[v.dataset.vaia] || '\\u0000') + '"]')),
     }));
 
   return { nodi: nodi.filter(Boolean), testi, schermo: { sessioni, barra, contatori } };
-}`;
+})()`;
 
 /** Toglie i contrassegni che la raccolta ha messo: la pagina torna com'era prima di guardarla. */
-const PULISCI_NELLA_PAGINA = `() => { for (const el of document.querySelectorAll('[data-cancello-nodo]')) el.removeAttribute('data-cancello-nodo'); }`;
+const PULISCI_NELLA_PAGINA = `(() => { for (const el of document.querySelectorAll('[data-cancello-nodo]')) el.removeAttribute('data-cancello-nodo'); })()`;
 
 /**
  * Gli ascoltatori, dal protocollo. ⛔ `page.evaluate` non ha i permessi per `getEventListeners`:
@@ -788,7 +795,7 @@ async function giro({ base, vistePerVaia, nomiTecnici, veliVivi }) {
   } finally {
     await browser.close();
   }
-  return { reperti, trafficoPerSuperficie, modiDiApertura, copertura, quadroStati };
+  return { reperti, trafficoPerSuperficie, modiDiApertura, copertura, quadroStati, cartellaScelta };
 }
 
 /** Apre la modale «Nuova sessione» e legge cosa la carta DICE della cartella scelta. */
@@ -801,7 +808,15 @@ async function leggiCartellaScelta(pagina) {
       if (!carta) return null;
       return {
         percorsoScelto: (carta.textContent || '').trim(),
-        percorsoDescritto: (carta.textContent || '').trim(),
+        /*
+         * ⛔ VUOTO, e di proposito. La tentazione è scrivere qui lo stesso testo della carta: la
+         *    regola S07 confronterebbe una stringa con sé stessa e direbbe «rispettata» senza aver
+         *    provato niente — il difetto peggiore dichiarato dal contratto (il test del 06/9 che
+         *    passava verde su una forma che il server non produce). Il ritratto a schermo NON dice
+         *    quale percorso sta descrivendo, e finché non lo dirà S07 resta MUTA e il rapporto la
+         *    elenca fra le mute. Una regola muta dichiarata vale più di una verde inventata.
+         */
+        percorsoDescritto: '',
         avviso: (document.querySelector('[data-workspace-avviso]')?.textContent || '').trim(),
         ritratto: (document.querySelector('[data-workspace-ritratto]')?.textContent || '').trim(),
       };
@@ -830,10 +845,10 @@ const scappa = (t) => String(t ?? '').replace(/\|/g, '\\|').replace(/\s+/g, ' ')
 
 function tabella(righe) {
   if (!righe.length) return '_Nessun reperto._\n';
-  const fuori = ['| dove | cosa manca | gravità | visto in |', '|---|---|---|---|'];
+  const fuori = ['| classe | dove | cosa manca | gravità | visto in |', '|---|---|---|---|---|'];
   for (const r of righe) {
     const dove = r.contesti && r.contesti.size ? (r.contesti.size >= 6 ? 'tutte le combinazioni' : `${r.contesti.size} combinazioni`) : '—';
-    fuori.push(`| \`${scappa(r.dove)}\` | ${scappa(r.cosa)} | **${r.gravita}** | ${dove} |`);
+    fuori.push(`| ${scappa(r.classe)} | \`${scappa(r.dove)}\` | ${scappa(r.cosa)} | **${r.gravita}** | ${dove} |`);
   }
   return `${fuori.join('\n')}\n`;
 }
@@ -950,9 +965,16 @@ async function principale() {
 
     // Le chiavi VERE della mappa di navigazione e gli id dei veli VIVI: sono i valori su cui le
     // deleghe discriminano, e vanno presi dal codice servito, non ricopiati a mano qui.
-    const mappa = testi.sorgenti['public/app.js'].match(/VISTA_PER_VAIA\s*=\s*(?:Object\.freeze\()?\{([^}]*)\}/);
+    /*
+     * ⛔ `VISTA_PER_VAIA\d*`, non `VISTA_PER_VAIA`: esbuild rinomina la seconda copia in
+     *    `VISTA_PER_VAIA2` quando due moduli dichiarano lo stesso nome (qui il ponte e il
+     *    monolite). Cercando il nome esatto si legge una sola delle due mappe, e le chiavi che
+     *    stanno solo nell'altra diventerebbero «valori non riconosciuti»: accuse inventate.
+     */
     const vistePerVaia = {};
-    for (const m of (mappa?.[1] ?? '').matchAll(/([a-zA-Z]+)\s*:\s*"([^"]+)"/g)) vistePerVaia[m[1]] = m[2];
+    for (const mappa of testi.sorgenti['public/app.js'].matchAll(/VISTA_PER_VAIA\d*\s*=\s*(?:Object\.freeze\()?\{([^}]*)\}/g)) {
+      for (const m of mappa[1].matchAll(/([a-zA-Z]+)\s*:\s*["']([^"']+)["']/g)) vistePerVaia[m[1]] = m[2];
+    }
     if (!Object.keys(vistePerVaia).length) muori('non ho saputo leggere VISTA_PER_VAIA dal bundle servito: senza i valori veri la classe 2 accuserebbe a caso');
     const veliVivi = [...testi.html['public/index.html'].matchAll(/id="(velo[A-Za-z]+)"/g)].map((m) => m[1]);
     parla(`viste per data-vaia: ${Object.keys(vistePerVaia).length} · veli vivi: ${veliVivi.length}`);
@@ -975,9 +997,15 @@ async function principale() {
     ];
 
     // ── classe 5, statica + traffico vero ──
+    /*
+     * ⛔ `chiamate` non è una lista scritta a mano: è il TRAFFICO VERO osservato mentre quella
+     *    schermata era aperta, unito a ciò che è dichiarato sopra per le superfici che si
+     *    riempiono al primo avvio e non più. È il limite che il modulo stesso dichiara —
+     *    «rotta mai chiamata è un sospetto statico, la prova è il traffico».
+     */
     const superfici = SUPERFICI.map((s) => {
       if (s.statica || s.eventi) return s;
-      const osservate = [...(esito.trafficoPerSuperficie.get(s.id) || [])];
+      const osservate = [...(esito.trafficoPerSuperficie.get(s.schermata) || [])];
       const dichiarate = s.chiamateDichiarate || [];
       return { ...s, chiamate: [...new Set([...osservate, ...dichiarate])] };
     });
@@ -1007,14 +1035,14 @@ async function principale() {
       datiApi.luoghi = {};
       for (const c of schermo.contatori) {
         const chiave = c.luogo || c.nome;
-        datiApi.luoghi[chiave] = { esiste: Boolean(c.vaia && vistePerVaia[c.vaia]) };
+        datiApi.luoghi[chiave] = { esiste: Boolean(c.vaia && vistePerVaia[c.vaia] && c.vistaMontata) };
       }
-      if (esito.quadroStati.cartella) {
-        const percorso = esito.quadroStati.cartella.percorsoScelto;
+      if (esito.cartellaScelta) {
+        const percorso = esito.cartellaScelta.percorsoScelto;
         const info = await chiedi(server.base, `/api/v1/workspace-info?path=${encodeURIComponent(percorso)}`).catch(() => null);
         if (info) {
           datiApi.cartella = { percorso, ritratto: info };
-          schermo.cartella = { percorsoDescritto: esito.quadroStati.cartella.percorsoDescritto, avviso: esito.quadroStati.cartella.avviso };
+          schermo.cartella = { percorsoDescritto: esito.cartellaScelta.percorsoDescritto, avviso: esito.cartellaScelta.avviso };
         }
       }
       stati = statiBugiardi(datiApi, schermo);
