@@ -9,6 +9,7 @@ import {
   guardiaDiStallo,
   metricheDaEventi,
   processiDaEventi,
+  usageSessioneDaEventi,
   SCHEMA_SESSIONE,
   SOGLIE_STALLO_PREDEFINITE,
 } from '../src/session-registry.mjs';
@@ -5357,7 +5358,7 @@ test('⛔⛔ AL CONTRARIO — metricheDaEventi senza NESSUN evento dice «non re
   }
 });
 
-test('⭐⭐⭐ metricheDaEventi — il TASSO DI CACHE viene dall\'ULTIMO /usage, come frazione E come percentuale', () => {
+test('⭐⭐⭐ metricheDaEventi — il TASSO DI CACHE viene dall\'ULTIMO /usage DI OGNI INVIO (qui uno solo), come frazione E come percentuale', () => {
   const eventi = insequenza([
     { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
     { type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: { prompt_tokens: 1_000, completion_tokens: 10, cached_tokens: 100, giri: 1 } }] },
@@ -5371,6 +5372,99 @@ test('⭐⭐⭐ metricheDaEventi — il TASSO DI CACHE viene dall\'ULTIMO /usage
   assert.equal(cache.cachedTokens, 6_000);
   assert.equal(cache.denominatore, 'prompt_tokens', 'il denominatore viaggia col numero: OpenTelemetry non ha un tipo cache_read, quindi va dichiarato');
   assert.equal(cache.motivoAssente, null);
+});
+
+/* =====================================================================
+ * ⛔⛔⛔ 06/9 — CB-04: IL CONSUMO È DELLA SESSIONE, NON DELL'ULTIMO INVIO.
+ *
+ * MISURATO su tre invii veri prima di scrivere una riga di cura (sonda
+ * `.gravi/sonde/01-consumo.mjs`, `z-ai/glm-5.3-flash`, sessione
+ * 53ea52d1-4ead-4bcd-9eef-837d37e3d534): in storia ci sono TRE eventi
+ * `/usage`, uno per invio, e il totale vero è {23.060, 121, cache 15.232,
+ * 3 giri} contro i {7.716, 25, 7.616, 1} che si vedevano.
+ * CAUSA: il kernel dichiara il contatore DENTRO il ciclo di una singola
+ * esecuzione (`talosHarness.mjs:4560`) e riparte da zero a ogni invio.
+ * RICERCA 06/09/2026: OpenAI «Counting tokens» (usage è per richiesta, la
+ * somma la fa chi chiama) · OpenRouter «Prompt Caching» (il tasso di sessione
+ * è somma dei cached su somma dei prompt) · LangSmith «Cost tracking»
+ * («a trace covers one turn, a session covers a whole conversation»).
+ * ===================================================================== */
+
+const TRE_INVII_VERI = () => insequenza([
+  { type: 'RunStarted', threadId: 't', runId: 'r1', input: { consegna: 'c' } },
+  { type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: { prompt_tokens: 7_669, completion_tokens: 68, cached_tokens: 7_616, giri: 1 } }] },
+  { type: 'RunFinished', threadId: 't', runId: 'r1', outcome: { type: 'success' } },
+  { type: 'RunStarted', threadId: 't', runId: 'r2', input: { consegna: 'c', seguito: true } },
+  { type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: { prompt_tokens: 7_675, completion_tokens: 28, cached_tokens: 0, giri: 1 } }] },
+  { type: 'RunFinished', threadId: 't', runId: 'r2', outcome: { type: 'success' } },
+  { type: 'RunStarted', threadId: 't', runId: 'r3', input: { consegna: 'c', seguito: true } },
+  { type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: { prompt_tokens: 7_716, completion_tokens: 25, cached_tokens: 7_616, giri: 1 } }] },
+  { type: 'RunFinished', threadId: 't', runId: 'r3', outcome: { type: 'success' } },
+]);
+
+test('⭐⭐⭐ CB-04 — usageSessioneDaEventi somma i totali di OGNI invio: i numeri veri della sonda', () => {
+  const totale = usageSessioneDaEventi(TRE_INVII_VERI());
+  assert.equal(totale.prompt_tokens, 23_060, '⛔ 7.716 sarebbe il solo ultimo invio');
+  assert.equal(totale.completion_tokens, 121);
+  assert.equal(totale.cached_tokens, 15_232, '⛔ i token di cache misurati e poi persi sono il cuore del difetto');
+  assert.equal(totale.giri, 3);
+  assert.equal(totale.esecuzioni, 3, 'chi legge deve sapere su quanti invii è fatta la somma');
+  assert.equal(totale.ultimaEsecuzione.prompt_tokens, 7_716, 'il dato di TURNO resta leggibile: il tetto dei giri parla di quello');
+});
+
+test('⛔⛔ AL CONTRARIO — dentro UN SOLO invio l’ultimo /usage è già il totale: non si somma due volte', () => {
+  const unInvio = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    { type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: { prompt_tokens: 1_000, completion_tokens: 10, cached_tokens: 100, giri: 1 } }] },
+    { type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: { prompt_tokens: 8_000, completion_tokens: 90, cached_tokens: 6_000, giri: 2 } }] },
+  ]);
+  const totale = usageSessioneDaEventi(unInvio);
+  assert.equal(totale.prompt_tokens, 8_000, '⛔ 9.000 vorrebbe dire aver sommato un valore cumulativo con se stesso');
+  assert.equal(totale.giri, 2);
+  assert.equal(totale.esecuzioni, 1);
+});
+
+test('⛔⛔ AL CONTRARIO — senza NESSUN consumo registrato il totale è null, mai quattro zeri', () => {
+  const senzaNiente = insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: {} },
+    { type: 'RunFinished', threadId: 't', runId: 'r', outcome: { type: 'success' } },
+  ]);
+  for (const senza of [[], null, undefined, senzaNiente]) {
+    assert.equal(usageSessioneDaEventi(senza), null, '«non misurato» non è «zero»');
+  }
+});
+
+test('⛔⛔ AL CONTRARIO — se NESSUN invio dichiara cached_tokens, il totale li lascia a null invece di sommare zeri', () => {
+  const totale = usageSessioneDaEventi(insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r1', input: {} },
+    { type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: { prompt_tokens: 500, completion_tokens: 5, giri: 1 } }] },
+    { type: 'RunStarted', threadId: 't', runId: 'r2', input: {} },
+    { type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: { prompt_tokens: 700, completion_tokens: 7, giri: 1 } }] },
+  ]));
+  assert.equal(totale.prompt_tokens, 1_200);
+  assert.equal(totale.cached_tokens, null, '⛔ uno 0 qui direbbe «cache misurata e nulla»: il fornitore non ha detto niente');
+  assert.equal(totale.esecuzioniConCache, 0);
+});
+
+test('⭐⭐⭐ CB-04 — il TASSO DI CACHE della sessione è PESATO sui token, non la media delle percentuali', () => {
+  const { cache } = metricheDaEventi(TRE_INVII_VERI());
+  assert.equal(cache.promptTokens, 23_060, 'denominatore = somma dei prompt (OpenRouter, guida al prompt caching)');
+  assert.equal(cache.cachedTokens, 15_232);
+  assert.equal(cache.percentuale, 66, '⛔ quello che si vedeva era il 99% dell’ultimo invio');
+  assert.equal(cache.esecuzioni, 3);
+  assert.equal(cache.motivoAssente, null);
+});
+
+test('⛔⛔ AL CONTRARIO — un invio che NON dichiara la cache non entra nel denominatore (né con uno zero né col suo prompt)', () => {
+  const { cache } = metricheDaEventi(insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r1', input: {} },
+    { type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: { prompt_tokens: 1_000, completion_tokens: 5, cached_tokens: 500, giri: 1 } }] },
+    { type: 'RunStarted', threadId: 't', runId: 'r2', input: {} },
+    { type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: { prompt_tokens: 9_000, completion_tokens: 5, giri: 1 } }] },
+  ]));
+  assert.equal(cache.percentuale, 50, '⛔ con i 9.000 non dichiarati nel denominatore uscirebbe 5%: una cache schiacciata da un dato che nessuno ha misurato');
+  assert.equal(cache.promptTokens, 1_000);
+  assert.equal(cache.cachedTokens, 500);
 });
 
 test('⛔⛔ AL CONTRARIO — con prompt_tokens a ZERO il tasso è NULL con il motivo detto, MAI 0%', () => {

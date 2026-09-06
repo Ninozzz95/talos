@@ -3540,6 +3540,41 @@ var init_session_item = __esm({
   }
 });
 
+// src/components/consumo-sessione.js
+function sommaUsage(a, b) {
+  if (!a || typeof a !== "object") return b && typeof b === "object" ? { ...b } : null;
+  if (!b || typeof b !== "object") return { ...a };
+  const somma = (chiave) => {
+    const x = numero2(a[chiave]);
+    const y = numero2(b[chiave]);
+    if (x === null && y === null) return null;
+    return (x ?? 0) + (y ?? 0);
+  };
+  const risultato = { ...a, ...b };
+  for (const chiave of ["prompt_tokens", "completion_tokens", "cached_tokens", "giri"]) {
+    const valore = somma(chiave);
+    if (valore === null) delete risultato[chiave];
+    else risultato[chiave] = valore;
+  }
+  if (numero2(b.tokens_per_second) === null && numero2(a.tokens_per_second) !== null) risultato.tokens_per_second = a.tokens_per_second;
+  return risultato;
+}
+function usageDellaSessione(sessione) {
+  if (!sessione || typeof sessione !== "object") return null;
+  if (sessione.usageSessione && typeof sessione.usageSessione === "object") return sessione.usageSessione;
+  return sessione.usage && typeof sessione.usage === "object" ? sessione.usage : null;
+}
+function esecuzioniDellaSessione(sessione) {
+  const u = sessione?.usageSessione;
+  return u && Number.isFinite(Number(u.esecuzioni)) ? Number(u.esecuzioni) : null;
+}
+var numero2;
+var init_consumo_sessione = __esm({
+  "src/components/consumo-sessione.js"() {
+    numero2 = (valore) => Number.isFinite(Number(valore)) ? Number(valore) : null;
+  }
+});
+
 // src/components/board.js
 function statoBoard(sessione) {
   const chiave = statoSessione(sessione).classe;
@@ -3564,9 +3599,9 @@ function testiBoard(sessione, metriche = {}, adesso = /* @__PURE__ */ new Date()
   return {
     titolo: sessione.nome || sessione.taskId || "Sessione",
     modello: nomeModello(sessione.modello) || "—",
-    giri: valido(sessione.usage?.giri) ? String(sessione.usage.giri) : "—",
+    giri: valido(usageDellaSessione(sessione)?.giri) ? String(usageDellaSessione(sessione).giri) : "—",
     token: compatto(totale(sessione)),
-    cache: (valido(metriche?.cache?.percentuale) ? NUMERO2.format(metriche.cache.percentuale) + "%" : "—") + (valido(sessione.usage?.cached_tokens) ? " · " + compatto(sessione.usage.cached_tokens) : ""),
+    cache: (valido(metriche?.cache?.percentuale) ? NUMERO2.format(metriche.cache.percentuale) + "%" : "—") + (valido(usageDellaSessione(sessione)?.cached_tokens) ? " · " + compatto(usageDellaSessione(sessione).cached_tokens) : ""),
     primo: valido(metriche?.primoToken?.ms) ? (metriche.primoToken.ms / 1e3).toFixed(1).replace(".", ",") + " s" : "—",
     chiusura: MOTIVI[metriche?.chiusura?.motivo] || (metriche?.chiusura?.motivo ? "altro motivo" : "—"),
     avviata: tempoBoard(sessione.avviataAlle, adesso)
@@ -3610,10 +3645,14 @@ function creaRigaBoard(sessione, { document: doc = globalThis.document, metriche
   riga.append(modello);
   for (const campo2 of ["giri", "token", "cache", "primo"]) {
     const cella = el13(doc, "td", "num talos-mono talos-measure", t2[campo2]);
-    if (campo2 === "token" && valido(totale(sessione))) cella.title = totale(sessione).toLocaleString("it-IT") + " token · ingresso + uscita";
+    const invii = esecuzioniDellaSessione(sessione);
+    const daInvii = valido(invii) ? " · " + invii + " invi" + (invii === 1 ? "o" : "i") : "";
+    if (campo2 === "token" && valido(totale(sessione))) cella.title = totale(sessione).toLocaleString("it-IT") + " token · ingresso + uscita · tutta la sessione" + daInvii;
+    if (campo2 === "giri" && t2.giri !== "—") cella.title = "Giri del modello in tutta la sessione" + daInvii;
     if (campo2 === "primo" && t2.primo === "—") cella.title = metriche?.primoToken?.motivoAssente || "Tempo non registrato";
     if (campo2 === "cache") {
-      cella.title = valido(sessione.usage?.cached_tokens) ? sessione.usage.cached_tokens.toLocaleString("it-IT") + " token in cache" : metriche?.cache?.motivoAssente || "Cache non registrata";
+      const cached = usageDellaSessione(sessione)?.cached_tokens;
+      cella.title = valido(cached) ? cached.toLocaleString("it-IT") + " token riletti dalla cache in tutta la sessione" + daInvii : metriche?.cache?.motivoAssente || "Cache non registrata";
       cella.setAttribute("aria-label", t2.cache + " · " + cella.title);
     }
     riga.append(cella);
@@ -3751,9 +3790,13 @@ var init_board = __esm({
   "src/components/board.js"() {
     init_session_item();
     init_plurale();
+    init_consumo_sessione();
     NUMERO2 = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 });
     valido = (n) => typeof n === "number" && Number.isFinite(n) && n >= 0;
-    totale = (s) => valido(s.usage?.prompt_tokens) && valido(s.usage?.completion_tokens) ? s.usage.prompt_tokens + s.usage.completion_tokens : null;
+    totale = (s) => {
+      const u = usageDellaSessione(s);
+      return valido(u?.prompt_tokens) && valido(u?.completion_tokens) ? u.prompt_tokens + u.completion_tokens : null;
+    };
     compatto = (n) => !valido(n) ? "—" : n >= 1e3 ? NUMERO2.format(n / 1e3) + "k" : NUMERO2.format(n);
     MOTIVI = { "fine-lavoro": "fine lavoro", "giri-finiti": "giri finiti", fermata: "fermata da te", errore: "errore" };
     STATO = { vivo: ["In corso", "accent"], attesa: ["Aspetta te", "warning"], successo: ["Conclusa", "success"], errore: ["Errore", "danger"], interrotto: ["Interrotta", null], ignoto: ["Conclusa · esito non registrato", null] };
@@ -4175,12 +4218,12 @@ var init_notifiche = __esm({
 function gb(bytes) {
   const n = Number(bytes);
   if (!Number.isFinite(n) || n < 0) return "—";
-  return `${numero2.format(n / GB)} GB`;
+  return `${numero3.format(n / GB)} GB`;
 }
 function contestoK(token) {
   const n = Number(token);
   if (!Number.isFinite(n) || n <= 0) return null;
-  return n >= 1e6 ? `${numero2.format(n / 1e6)}M token` : `${Math.round(n / 1024)}k token`;
+  return n >= 1e6 ? `${numero3.format(n / 1e6)}M token` : `${Math.round(n / 1024)}k token`;
 }
 function verdettoEntra(fit, runtime = {}) {
   const esito = fit?.esito;
@@ -4428,11 +4471,11 @@ function montaInstallati(originale, canonico, { document: documentObj = globalTh
   }
   aggiornaDettaglioInstallato(originale.querySelector('[data-c="DetailPanel"]'), null, { document: documentObj });
 }
-var GB, numero2, STATI_INSTALLATO;
+var GB, numero3, STATI_INSTALLATO;
 var init_modelli_installati = __esm({
   "src/components/modelli-installati.js"() {
     GB = 1024 ** 3;
-    numero2 = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 });
+    numero3 = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 });
     STATI_INSTALLATO = Object.freeze({
       caricato: { etichetta: "Caricato", tono: "accent" },
       disco: { etichetta: "Sul disco", tono: "" },
@@ -4471,7 +4514,7 @@ function conteggio(n) {
   if (!Number.isFinite(v) || v < 0) return null;
   if (v >= 1e6) return `${new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 }).format(v / 1e6)} M`;
   if (v >= 1e3) return `${new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 }).format(v / 1e3)} k`;
-  return numero3.format(v);
+  return numero4.format(v);
 }
 function gruppiVarianti(files = []) {
   const gruppi = /* @__PURE__ */ new Map();
@@ -4797,7 +4840,7 @@ function montaHf(originale, canonico) {
   const altri = originale.querySelector("#modelLabHfNextButtonControl");
   if (altri) altri.hidden = true;
 }
-var BIT_PER_PESO, SUFFISSO, PAVIMENTO_CONSIGLIO, GLOSSE, numero3, TIPI2;
+var BIT_PER_PESO, SUFFISSO, PAVIMENTO_CONSIGLIO, GLOSSE, numero4, TIPI2;
 var init_hf_catalogo = __esm({
   "src/components/hf-catalogo.js"() {
     init_modelli_installati();
@@ -4846,7 +4889,7 @@ var init_hf_catalogo = __esm({
       [/^(IQ1|TQ1)/u, "1 bit · sperimentale, spesso inservibile"],
       [/^MXFP4$/u, "4 bit a blocchi · formato nuovo"]
     ];
-    numero3 = new Intl.NumberFormat("it-IT");
+    numero4 = new Intl.NumberFormat("it-IT");
     TIPI2 = { "text-generation": "Conversazione e codice", "text2text-generation": "Testo", "image-text-to-text": "Immagini e testo", "automatic-speech-recognition": "Voce", "feature-extraction": "Embedding" };
   }
 });
@@ -4860,7 +4903,7 @@ function compatto2(n) {
   return NUM.format(v);
 }
 function giornoDi(sessione) {
-  const grezza = sessione?.avviata || sessione?.creata || sessione?.chiusa;
+  const grezza = sessione?.avviataAlle || sessione?.avviata || sessione?.creata || sessione?.chiusa;
   if (!grezza) return null;
   const d = new Date(grezza);
   if (Number.isNaN(d.getTime())) return null;
@@ -4873,13 +4916,13 @@ function raggruppa(sessioni, chiaveDi) {
     if (k == null) continue;
     const v = per.get(k) || { chiave: k, sessioni: 0, giri: 0, token: 0, cache: 0, tokenNoti: 0 };
     v.sessioni += 1;
-    if (numeroValido(s?.giri)) v.giri += Number(s.giri);
+    if (numeroValido(usageDellaSessione(s)?.giri)) v.giri += Number(usageDellaSessione(s).giri);
     const t2 = tokenDi(s);
     if (t2 != null) {
       v.token += t2;
       v.tokenNoti += 1;
     }
-    if (numeroValido(s?.usage?.cached_tokens)) v.cache += Number(s.usage.cached_tokens);
+    if (numeroValido(usageDellaSessione(s)?.cached_tokens)) v.cache += Number(usageDellaSessione(s).cached_tokens);
     per.set(k, v);
   }
   return [...per.values()];
@@ -4893,11 +4936,11 @@ function consumoPerModello(sessioni = []) {
 function riepilogoConsumo(sessioni = []) {
   const totali = { sessioni: sessioni.length, giri: 0, token: 0, cache: 0, senzaToken: 0, senzaData: 0, senzaModello: 0 };
   for (const s of sessioni) {
-    if (numeroValido(s?.giri)) totali.giri += Number(s.giri);
+    if (numeroValido(usageDellaSessione(s)?.giri)) totali.giri += Number(usageDellaSessione(s).giri);
     const t2 = tokenDi(s);
     if (t2 == null) totali.senzaToken += 1;
     else totali.token += t2;
-    if (numeroValido(s?.usage?.cached_tokens)) totali.cache += Number(s.usage.cached_tokens);
+    if (numeroValido(usageDellaSessione(s)?.cached_tokens)) totali.cache += Number(usageDellaSessione(s).cached_tokens);
     if (giornoDi(s) == null) totali.senzaData += 1;
     if (!(typeof s?.modello === "string" && s.modello.trim() !== "")) totali.senzaModello += 1;
   }
@@ -4970,11 +5013,13 @@ var NUM, numeroValido, tokenDi;
 var init_costi_consumo = __esm({
   "src/components/costi-consumo.js"() {
     init_session_item();
+    init_consumo_sessione();
     NUM = new Intl.NumberFormat("it-IT");
     numeroValido = (v) => Number.isFinite(Number(v)) && Number(v) >= 0;
     tokenDi = (s) => {
-      const dentro = Number(s?.usage?.prompt_tokens);
-      const fuori = Number(s?.usage?.completion_tokens);
+      const u = usageDellaSessione(s) || {};
+      const dentro = Number(u.prompt_tokens);
+      const fuori = Number(u.completion_tokens);
       if (!numeroValido(dentro) && !numeroValido(fuori)) return null;
       return (numeroValido(dentro) ? dentro : 0) + (numeroValido(fuori) ? fuori : 0);
     };
@@ -8086,17 +8131,19 @@ function testoVelocitaLocale(modelloId, velocita) {
   if (!/^local:/i.test(id)) return "";
   return String(velocita || "").trim();
 }
-function testiUsage(usage, { tettoGiri = null } = {}) {
-  if (!usage || typeof usage !== "object") return { tokenGiri: "", cache: "", giri: null, velocita: "" };
-  const prompt = Number(usage.prompt_tokens ?? 0) || 0;
-  const completion = Number(usage.completion_tokens ?? 0) || 0;
-  const cache = Number(usage.cached_tokens ?? 0) || 0;
-  const giri = Number.isFinite(Number(usage.giri)) ? Number(usage.giri) : null;
+function testiUsage(usage, { tettoGiri = null, usageSessione = null } = {}) {
+  const sessione = usageSessione && typeof usageSessione === "object" ? usageSessione : usage;
+  if ((!usage || typeof usage !== "object") && (!sessione || typeof sessione !== "object")) return { tokenGiri: "", cache: "", giri: null, velocita: "" };
+  const prompt = Number(sessione?.prompt_tokens ?? 0) || 0;
+  const completion = Number(sessione?.completion_tokens ?? 0) || 0;
+  const cache = Number(sessione?.cached_tokens ?? 0) || 0;
+  const giriSessione = Number.isFinite(Number(sessione?.giri)) ? Number(sessione.giri) : null;
+  const giri = Number.isFinite(Number(usage?.giri)) ? Number(usage.giri) : null;
   const totale2 = prompt + completion;
   const parti = [];
   if (totale2 > 0) parti.push(`${kilo2(totale2)} token`);
-  if (giri !== null) parti.push(`${giri} gir${giri === 1 ? "o" : "i"}${Number.isFinite(tettoGiri) && tettoGiri > 0 ? ` su ${tettoGiri}` : ""}`);
-  const throughput = Number(usage.tokens_per_second ?? usage.tokensPerSecond);
+  if (giriSessione !== null) parti.push(`${giriSessione} gir${giriSessione === 1 ? "o" : "i"}${Number.isFinite(tettoGiri) && tettoGiri > 0 && sessione === usage ? ` su ${tettoGiri}` : ""}`);
+  const throughput = Number(usage?.tokens_per_second ?? usage?.tokensPerSecond ?? sessione?.tokens_per_second ?? sessione?.tokensPerSecond);
   return {
     tokenGiri: parti.join(" · "),
     cache: cache > 0 && prompt > 0 ? `cache ${Math.round(cache / prompt * 100)}%` : "",
@@ -8170,7 +8217,7 @@ function aggiornaPiedeChat(piede, dati = {}) {
     const tono = tonoPermesso(dati.permesso);
     if (tono) permesso.classList.add(`talos-badge--${tono}`);
   }
-  const u = testiUsage(dati.usage, { tettoGiri: dati.tettoGiri });
+  const u = testiUsage(dati.usage, { tettoGiri: dati.tettoGiri, usageSessione: dati.usageSessione });
   const giriChip = piede.querySelector("[data-runtime-giri]");
   if (giriChip) {
     const stato = statoGiri(u.giri, dati.tettoGiri);
@@ -8604,6 +8651,7 @@ var init_app = __esm({
     init_cronologia();
     init_scorciatoie();
     init_chat_foot();
+    init_consumo_sessione();
     init_errori();
     init_allegati();
     init_review();
@@ -8862,8 +8910,26 @@ var init_app = __esm({
            * null finché nessun giro ha mai riportato consumo — mai un
            * contatore finto, la stessa onestà di IGNOTO-vs-GRATIS già in uso
            * lato kernel. Vedi il case 'StateDelta' e la riga "Main" nel
-           * foglio Albero sessione. */
+           * foglio Albero sessione.
+           * ⛔⛔⛔ 06/9, CB-04 — questo è il consumo dell'INVIO IN CORSO, non della
+           * sessione: il kernel dichiara il suo contatore dentro il ciclo di una
+           * singola esecuzione (`talosHarness.mjs:4560`) e riparte da zero a ogni
+           * invio. Serve così com'è a due cose e a due sole: il tetto dei giri
+           * («9 su 24») e la «Finestra del contesto», che misura quanto è pieno il
+           * contesto ADESSO. Tutto ciò che promette «la sessione» legge
+           * `usageSessione` qui sotto. */
           usage: null,
+          /**
+           * ⛔⛔⛔ 06/9, CB-04 — il consumo di TUTTA la conversazione: la somma dei
+           * totali di ogni invio (`usageEsecuzioniPrecedenti` + `usage`). Misurato
+           * su tre invii veri: 23.060 token contro i 7.716 che si vedevano, e una
+           * cache al 66% dove la Board diceva 0%. Lo leggono il piede della chat,
+           * il nodo «Main» dell'albero e la Board. `null` finché nessun invio ha
+           * riportato consumo — mai uno zero fabbricato.
+           */
+          usageSessione: null,
+          /** La somma dei totali degli invii GIÀ CHIUSI (fino all'ultimo `RunStarted`). */
+          usageEsecuzioniPrecedenti: null,
           /**
            * ⭐⭐⭐ O-02 (04/9) — il registro degli eventi di attrezzo di QUESTA
            * sessione: `{type, toolCallId, toolCallName?, delta?}`, riempito in
@@ -10024,10 +10090,12 @@ var init_app = __esm({
         const completion = Number(usage.completion_tokens ?? 0) || 0;
         const cache = Number(usage.cached_tokens ?? 0) || 0;
         const totale2 = prompt + completion;
-        const kilo3 = (n) => n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n);
+        const kilo3 = (n) => n >= 1e3 ? `${(n / 1e3).toFixed(1).replace(".", ",")}k` : String(n);
         const cacheParte = cache > 0 ? ` · cache ${kilo3(cache)}` : "";
         const tetto = Number.isFinite(tettoGiri) && tettoGiri > 0 ? ` su ${tettoGiri}` : "";
-        return `${kilo3(totale2)} token · ${usage.giri} gir${usage.giri === 1 ? "o" : "i"}${tetto}${cacheParte}${live ? " · live" : ""}`;
+        const giri = Number.isFinite(Number(usage.giri)) ? Number(usage.giri) : null;
+        const parteGiri = giri === null ? "" : ` · ${giri} gir${giri === 1 ? "o" : "i"}${tetto}`;
+        return `${kilo3(totale2)} token${parteGiri}${cacheParte}${live ? " · live" : ""}`;
       }
       function nomeUmanoAttrezzo2(nome) {
         const UMANI = {
@@ -10155,7 +10223,7 @@ var init_app = __esm({
       }
       function aggiornaContatoreUsage() {
         const nodo4 = $2("[data-usage-summary]");
-        if (nodo4) nodo4.textContent = `Main · ${formattaUsageBreve(state.realSession.usage, { live: true, tettoGiri: state.realSession.tettoGiriDichiarato })}`;
+        if (nodo4) nodo4.textContent = `Main · ${formattaUsageBreve(state.realSession.usageSessione || state.realSession.usage, { live: true })}`;
       }
       function formattaOraSessione(iso) {
         const data = new Date(iso);
@@ -10230,8 +10298,8 @@ var init_app = __esm({
         if (value >= 1e3) return `${Math.round(value / 1e3)}k token`;
         return `${Math.round(value)} token`;
       }
-      function formattaContoModelLab(numero4) {
-        const value = Number(numero4);
+      function formattaContoModelLab(numero5) {
+        const value = Number(numero5);
         if (!Number.isFinite(value) || value < 0) return null;
         return new Intl.NumberFormat("it-IT", { notation: "compact", maximumFractionDigits: 1 }).format(value);
       }
@@ -13641,7 +13709,7 @@ var init_app = __esm({
           html: () => `
         <div class="sheet-section session-tree-sheet">
           <span class="sheet-label">Sessione</span>
-          <button class="sheet-option active" data-session-action="main"><span class="sheet-icon">${icon("i-list")}</span><span><strong data-current-session-title>${state.session.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;")}</strong><small data-usage-summary>Main · ${formattaUsageBreve(state.realSession.usage)}</small></span><span>●</span></button>
+          <button class="sheet-option active" data-session-action="main"><span class="sheet-icon">${icon("i-list")}</span><span><strong data-current-session-title>${state.session.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;")}</strong><small data-usage-summary>Main · ${formattaUsageBreve(state.realSession.usageSessione || state.realSession.usage)}</small></span><span>●</span></button>
         </div>
         <div class="sheet-section">
           <!--
@@ -14106,6 +14174,7 @@ var init_app = __esm({
         if (!attivo) giroAvviatoA = null;
         const { cosa, dettaglio } = attivo ? cosaStaFacendo() : { cosa: "", dettaglio: "" };
         const usage = state.realSession.id ? state.realSession.usage : null;
+        const usageSessione = state.realSession.id ? state.realSession.usageSessione : null;
         const testiTema = aggiornaPiedeChatDaStato.tema?.() || "";
         aggiornaPiedeChat(piede, {
           attivo,
@@ -14116,6 +14185,7 @@ var init_app = __esm({
           giro: Number.isFinite(Number(usage?.giri)) ? Number(usage.giri) : null,
           secondi: attivo && giroAvviatoA !== null ? (performance.now() - giroAvviatoA) / 1e3 : null,
           usage,
+          usageSessione,
           tettoGiri: state.realSession.tettoGiriDichiarato,
           inFondo: fondoConversazioneInVista(),
           latenzaMs: latenzaPrimoTokenMs(),
@@ -14133,10 +14203,10 @@ var init_app = __esm({
           const numeri = [...t2.querySelectorAll(".talos-turn-spine__n")].map((n) => Number(n.textContent)).filter(Number.isFinite);
           const gruppi = [...t2.querySelectorAll('[data-c="ActivityBundle"]:not(.real-reasoning-note)')];
           const risposta = t2.querySelector(".assistant-copy p, .assistant-copy")?.textContent?.trim().split(/\s+/).slice(0, 5).join(" ");
-          numeri.forEach((numero4, i) => {
+          numeri.forEach((numero5, i) => {
             const g = gruppi[i];
             const riassunto = g?.querySelector(".tool-note-summary-text")?.textContent?.trim() || i === numeri.length - 1 && risposta || "Risposta";
-            giri.push({ numero: numero4, titolo: riassunto.length > 32 ? `${riassunto.slice(0, 31)}…` : riassunto, attrezzi: g ? g.querySelectorAll('[data-c="ToolRow"]').length : 0, inCorso: false });
+            giri.push({ numero: numero5, titolo: riassunto.length > 32 ? `${riassunto.slice(0, 31)}…` : riassunto, attrezzi: g ? g.querySelectorAll('[data-c="ToolRow"]').length : 0, inCorso: false });
           });
         }
         if (attivo && giri.length) giri[giri.length - 1].inCorso = true;
@@ -15723,10 +15793,10 @@ var init_app = __esm({
         return righe;
       }
       function formattaRigheConNumero(righe) {
-        let numero4 = 0;
+        let numero5 = 0;
         return righe.map(([tipo, testo3]) => {
-          if (tipo !== "del") numero4 += 1;
-          const colNumero = tipo === "del" ? "".padStart(4) : String(numero4).padStart(4);
+          if (tipo !== "del") numero5 += 1;
+          const colNumero = tipo === "del" ? "".padStart(4) : String(numero5).padStart(4);
           const marcatore = tipo === "add" ? "+" : tipo === "del" ? "-" : " ";
           return [tipo, `${colNumero} ${marcatore} ${testo3}`];
         });
@@ -17261,6 +17331,9 @@ ${testo3}` : testo3;
           case "RunStarted": {
             streamingAutoFollow = true;
             streamingLastTargetTop = null;
+            state.realSession.usageEsecuzioniPrecedenti = sommaUsage(state.realSession.usageEsecuzioniPrecedenti, state.realSession.usage);
+            state.realSession.usage = null;
+            state.realSession.usageSessione = state.realSession.usageEsecuzioniPrecedenti;
             state.realSession.currentRunModel = typeof evento.contesto?.modello === "string" && evento.contesto.modello.trim() ? evento.contesto.modello.trim() : state.model || null;
             state.realSession.redirectPendingId = null;
             state.realSession.eventoTerminaleVisto = false;
@@ -17450,6 +17523,7 @@ ${testo3}` : testo3;
             const path = evento.delta?.[0]?.path;
             if (path === "/usage") {
               state.realSession.usage = evento.delta[0].value;
+              state.realSession.usageSessione = sommaUsage(state.realSession.usageEsecuzioniPrecedenti, state.realSession.usage);
               aggiornaContatoreUsage();
               aggiornaComposerUsage(state.realSession.usage);
               break;
@@ -17653,6 +17727,8 @@ ${testo3}` : testo3;
           state.realSession.redirectRequestIntentId = null;
           state.realSession.attesaBubble = null;
           state.realSession.usage = null;
+          state.realSession.usageSessione = null;
+          state.realSession.usageEsecuzioniPrecedenti = null;
           state.realSession.eventiAttrezzi = [];
           state.realSession.tettoGiriDichiarato = null;
           state.realSession.approvazioniPendenti = /* @__PURE__ */ new Map();

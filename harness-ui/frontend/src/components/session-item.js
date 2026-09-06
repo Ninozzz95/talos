@@ -23,6 +23,7 @@
  * restano globali per il monolite (blog.master.dev/light-dom-only, letto il
  * 05/09/2026). Nessuno shadow DOM.
  */
+import { usageDellaSessione } from './consumo-sessione.js'; // 06/9 CB-04: i giri della sessione, non dell'ultimo invio
 
 /** Tono del pallino per ogni stato: le classi `talos-dot--*` del mockup. */
 const TONI = Object.freeze({
@@ -139,7 +140,9 @@ export function creaSessionItem(sessione, opzioni = {}) {
   const aside = el(documentObj, 'span', 'talos-session-item__aside');
   if (!opzioni.pendente) {
     aside.append(el(documentObj, 'span', null, oraCompatta(sessione.avviataAlle, opzioni.adesso)));
-    const giri = sessione.usage?.giri;
+    // ⛔ 06/9, CB-04: la riga dell'elenco parla della SESSIONE, quindi i giri sono quelli di
+    //    tutta la conversazione: `usage` è il solo ultimo invio, e diceva «1 giro» su tre.
+    const giri = usageDellaSessione(sessione)?.giri;
     if (Number.isFinite(giri) && giri > 0) aside.append(el(documentObj, 'span', null, `${giri} gir${giri === 1 ? 'o' : 'i'}`));
   }
 
