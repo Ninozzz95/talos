@@ -1183,3 +1183,20 @@ Cura, tutta nel mockup più una delega in `app.js`:
 - le **azioni di sessione** (albero dei rami · comandi · comprimi · dettagli) ora stanno in tutte e quattro le viste; l'originale della chat tiene il suo id e il suo ascoltatore, le copie passano da una delega su `[data-azione]`, e `data-apre-velo` era già delegato.
 
 Riverifica dal vivo sul 4174: quattro viste, **4 schede ciascuna**, altezza 60, padding `0 18px`, gap 12, centro delle schede 688 su tutte; «Comandi» e «Albero dei rami» aperti da Terminale, Review e Browser. Unit 130/130, componenti 111/111, statico 195/195.
+
+## 06/09 — La barra della conversazione: fusi i giri dentro la navigazione, come ChatGPT desktop
+
+Owner, tre volte, l'ultima furioso: «la barra deve essere estremamente simile a quella di ChatGPT applicazione desktop… all'estrema sinistra, compatta in altezza; al passaggio la riga si espande e mostra la conversazione in un fumetto; cliccando ti manda lì» · «i numeri dei giri devono SPARIRE» · «fondi il componente dei giri nella navigation history, il meglio dei due mondi» · «resta fissa mentre scorro» · «lampeggio soft col tema attuale» · «formatta bene il fumetto».
+
+**Misurata dal vivo, non a memoria.** L'app ChatGPT desktop è installata come pacchetto dello Store (`OpenAI.Codex 26.901.6511.0`, contiene `ChatGPT.exe`, motore Chromium): avviata con `--remote-debugging-port` e ispezionata in sola lettura. Anatomia: `<nav>` assoluta a **16 px** dal bordo, centrata in verticale, `z-index 20`, larga **36 px**; scorrevole interno `max-height: min(70vh,40rem)` con barra nascosta e **maschera sfumata** ai bordi; **un bottone per messaggio dell'utente**, 36×10 px; dentro un segno 26×2 con `transition: all` e la linea larga secondo la distanza dal fuoco: **26 · 20 · 14 · 10 · 6**, l'attiva piena e le altre al 50%. Al passaggio del mouse **la lente si sposta** (misurato: 14·20·**26**·20·14·10·6 → 10·14·20·**26**·20·14·6).
+
+**Fatto** (`components/cronologia.js` nuovo, markup e CSS nel mockup):
+- barra all'estrema sinistra, **ancorata alla schermata** e non al contenitore che scorre: resta ferma mentre la conversazione scorre (misurato: x 292, y 185 prima e dopo);
+- **una voce per giro**, col numero, il tono dell'esito e quanti attrezzi: è la spina di prima, fusa qui. La spina resta nel DOM come dato e **non si vede più** (owner: i numeri devono sparire);
+- lente identica alla loro (26·20·14·10·6) che segue il mouse; il colore della linea porta l'esito (verde, info, avviso, errore, in corso);
+- **fumetto** strutturato: «GIRO 3 · 2 ATTREZZI» e sotto la richiesta, tagliata a tre righe, largo 280 px, aperto verso i messaggi;
+- clic → porta al giro e la conversazione **lampeggia una volta**, 1,5 s, col colore d'accento del tema e un padding coerente; col movimento ridotto resta una velatura ferma.
+
+⛔ Due difetti miei trovati e chiusi nello stesso giro: con la spina a `display:none` il messaggio scivolava nella colonna larga 0 (una parola per riga) — ora la posizione nella griglia è dichiarata; e il fumetto ereditava la larghezza della barra (36 px) — ora è `width:max-content`.
+
+Cancelli: unit 130/130, componenti 111/111, statico 195/195.

@@ -34,6 +34,7 @@ import { impacchetta as impacchettaAnnotazioni } from '../components/annotazioni
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
+import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione, come quella di ChatGPT desktop
 import { normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
 import { aggiornaPiedeChat, etichettaPermesso } from '../components/chat-foot.js'; // 05/9 Fase 2: ChatFooter — striscia del giro, chip e barra di stato dai dati
 import { aggiornaDiffReview, creaRigaFileReview, nascondiAzioniFase3, riassuntoReview } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno del mockup
@@ -211,6 +212,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       taskBubbleMostrata: false,
       /** Piano §1.3, riga Review — percorso -> {path, code, nuovo}, UNA voce per file scritto, non solo l'ultima. */
       reviewFiles: new Map(),
+      /** 06/9 — le deleghe a sotto-agenti di questa sessione (GET .../children), per la scheda «Agenti» della colonna. */
+      figli: [],
       /** Piano §1.3, riga "Contesto workspace" — la cartella corrente sfogliata nell'albero file reale, '' = radice. */
       /** ⭐⭐⭐ 27/8 — l'albero VERO: cache per livello (percorso -> voci già scaricate, mai ributtate finché non cambia qualcosa) + quali cartelle sono aperte (persiste fra un redraw e l'altro, così riaprire un run non richiude tutto). Sostituisce treePercorso, il vecchio modello "un livello alla volta con su/giù". */
       treeCache: new Map(),
@@ -6316,7 +6319,27 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       giri: giriPerInspector(),
       file,
       processi: processiDagliEventi(state.realSession.eventiAttrezzi),
+      agenti: state.realSession.figli || [],
     });
+  }
+
+  /*
+   * ⛔ 06/9, owner: «ho spawnato un sottoagente ma non si vede nulla in tab agenti». Le deleghe vere
+   * stanno dietro `GET /api/v1/sessions/:id/children` (la stessa che riempie il foglio «Albero
+   * sessione»): qui si leggono una volta all'apertura della sessione e a ogni fine giro, e finiscono
+   * nella colonna. Mai un'invenzione: senza deleghe resta lo stato vuoto.
+   */
+  async function caricaFigliSessione() {
+    const id = state.realSession.id;
+    if (!id) { state.realSession.figli = []; aggiornaInspectorDaStato(); return; }
+    try {
+      const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(id)}/children`);
+      if (state.realSession.id !== id) return; // la sessione e' cambiata mentre la richiesta era in volo
+      state.realSession.figli = Array.isArray(dati?.figli) ? dati.figli : [];
+    } catch {
+      state.realSession.figli = []; // una delega non leggibile non inventa righe
+    }
+    aggiornaInspectorDaStato();
   }
   function syncRunComposerState() {
     aggiornaPiedeChatDaStato(); // 05/9 Fase 2: ChatFooter
@@ -10356,6 +10379,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
         state.realSession.redirectInvalidatedIds.add(evento.redirectId);
         state.realSession.redirectPendingId = null;
         state.realSession.eventoTerminaleVisto = true;
+        void caricaFigliSessione(); // 06/9: a giro finito si rileggono le deleghe per la scheda «Agenti»
         nascondiAttesaRisposta();
         appendStatusNote(`Reindirizzamento non riuscito: ${evento.message}`, true);
         toast('Reindirizzamento non riuscito', evento.message);
@@ -11145,6 +11169,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     setView('chat');
     closePanels();
     collegaEventiSessione(sessionId, generation);
+    void caricaFigliSessione(); // 06/9: la scheda «Agenti» della colonna si riempie dalle deleghe vere
     if (state.realSession.deferHistoricalRendering) mantieniFondoDuranteRipristino(generation);
     aggiornaSottotitoloSessione(); // W1-12 — con una sessione aperta il sottotitolo non dice «premi Nuova»
     aggiornaElencoSessioniReali();
@@ -14353,7 +14378,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       requestAnimationFrame(() => { inCoda = false; aggiornaPiedeChatDaStato(); });
     }, { passive: true });
   })();
-  collegaNavigazioneSpina($('#conversation')); // 06/9: la spina dei giri si naviga, come la barra della cronologia di ChatGPT
+  collegaNavigazioneSpina($('#conversation'));
+  collegaCronologia($('#schermoChat .talos-cronologia'), $('#conversation')); // 06/9: barra a sinistra, lente, fumetto, clic che porta al messaggio // 06/9: la spina dei giri si naviga, come la barra della cronologia di ChatGPT
   normalizzaTastiScritti(ROOT()); // 06/9 audit: «⌘N» nella palette su Windows
   collegaScorciatoieTerminale(); // 06/9 B1: Ctrl+` e Ctrl+Shift+`, e la barra delle schede onesta da subito
   collegaRidisegnoLingua(); // P-i18n 06/9

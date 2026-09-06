@@ -300,7 +300,44 @@ button{background:none; border:0; cursor:pointer; padding:0}
 .talos-topbar__actions{display:flex; gap:6px}
 
 /* ---------- 8. CONVERSAZIONE + SPINA DEI GIRI ---------- */
-.talos-conversation{flex:1 1 auto; min-height:0; overflow-y:auto; padding:8px 0 12px}
+/* Barra di navigazione della conversazione — owner 06/09: «estremamente simile a quella di ChatGPT
+   desktop: all'estrema sinistra, compatta in altezza; al passaggio la riga si espande, mostra la
+   conversazione in un fumetto, e cliccando ti manda li'». Misure prese DAL VIVO nell'app ChatGPT
+   desktop il 06/09/2026: nav assoluta a 16 px dal bordo, centrata in verticale, larga 36 px; dentro
+   uno scorrevole alto al massimo min(70vh,40rem) con la barra nascosta e la sfumatura ai bordi; una
+   voce per messaggio dell'utente, 36x10 px; la linea larga 26-20-14-10-6 secondo la distanza dalla
+   voce a fuoco, l'attiva piena e le altre al 50%. */
+.talos-screen{position:relative}
+.talos-cronologia{position:absolute; left:16px; top:50%; transform:translateY(-50%); z-index:20; width:36px; display:flex; align-items:center}
+.talos-cronologia[hidden]{display:none}
+.talos-cronologia__lista{display:flex; flex-direction:column; max-height:min(70vh,40rem); overflow-y:auto; overscroll-behavior:contain; scrollbar-width:none; -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 40px,#000 calc(100% - 40px),transparent 100%); mask-image:linear-gradient(to bottom,transparent 0,#000 40px,#000 calc(100% - 40px),transparent 100%)}
+.talos-cronologia__lista::-webkit-scrollbar{display:none}
+.talos-cronologia__voce{display:flex; align-items:center; width:36px; height:10px; flex:none; padding:0; border:0; background:none; cursor:pointer; outline:none}
+.talos-cronologia__segno{display:flex; align-items:center; width:26px; height:2px}
+.talos-cronologia__linea{display:block; width:var(--lente,6px); height:2px; border-radius:1px; background:var(--talos-muted); opacity:.5; transition:width var(--talos-motion-duration-control) var(--talos-motion-ease), opacity var(--talos-motion-duration-control) var(--talos-motion-ease), background-color var(--talos-motion-duration-control) var(--talos-motion-ease)}
+.talos-cronologia__voce--attiva .talos-cronologia__linea{background:var(--talos-accent); opacity:1}
+/* il tono del giro, che prima stava nei tick verdi della spina: si e' fuso qui */
+.talos-cronologia__voce[data-tono="utente"] .talos-cronologia__linea{background:var(--talos-success)}
+.talos-cronologia__voce[data-tono="info"] .talos-cronologia__linea{background:var(--talos-info)}
+.talos-cronologia__voce[data-tono="warning"] .talos-cronologia__linea{background:var(--talos-warning)}
+.talos-cronologia__voce[data-tono="danger"] .talos-cronologia__linea{background:var(--talos-danger); opacity:1}
+.talos-cronologia__voce[data-tono="current"] .talos-cronologia__linea{background:var(--talos-accent-hover); opacity:1}
+.talos-cronologia__fumetto{display:flex; flex-direction:column; gap:3px}
+.talos-cronologia__fumetto-capo{font-size:11px; letter-spacing:.04em; text-transform:uppercase; color:var(--talos-muted)}
+.talos-cronologia__fumetto-testo{display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; color:var(--talos-text)}
+/* Owner 06/09: «quando clicco su una voce la conversazione deve lampeggiare in modo soft col tema
+   attuale, leggero e non disturbante». Un solo battito da un secondo e mezzo, col colore d'accento gia'
+   in uso, e col movimento ridotto resta una velatura ferma che sfuma. */
+@keyframes talos-lampeggio{0%{background:transparent}18%{background:var(--talos-accent-soft)}100%{background:transparent}}
+.talos-turn--raggiunto{animation:talos-lampeggio 1.5s var(--talos-motion-ease) 1; border-radius:var(--talos-radius-card, 14px); padding-inline:var(--talos-row-pad); margin-inline:calc(-1 * var(--talos-row-pad))}
+@media (prefers-reduced-motion: reduce){ .talos-turn--raggiunto{animation:none; background:var(--talos-accent-soft); transition:background 1.2s linear} }
+.talos-cronologia__voce:hover .talos-cronologia__linea{opacity:1}
+.talos-cronologia__voce:focus-visible .talos-cronologia__linea{background:var(--talos-accent); opacity:1; box-shadow:0 0 0 var(--talos-focus-width) var(--talos-accent-soft)}
+.talos-cronologia__fumetto{position:absolute; left:calc(100% + 8px); transform:translateY(-50%); width:max-content; max-width:min(280px,32vw); padding:8px 10px; border:1px solid var(--talos-border); border-radius:var(--talos-radius-control); background:var(--talos-panel); color:var(--talos-text); box-shadow:var(--talos-shadow-floating); font-size:12.5px; line-height:1.45; pointer-events:none; z-index:21}
+.talos-cronologia__fumetto[hidden]{display:none}
+@media (max-width:1040px){ .talos-cronologia{display:none} }
+.talos-conversation{flex:1 1 auto; min-height:0; overflow-y:auto; padding:8px 0 12px 44px}
+@media (max-width:1040px){ .talos-conversation{padding-left:0} }
 /* La conversazione sta al CENTRO dell'area (owner 04/09), non appoggiata a sinistra:
    colonna a larghezza massima, e il piede della chat allineato alla stessa colonna. */
 /* Owner 06/09: «la barra con i segmentini verdi portata all'estrema sinistra, non attaccata alla chat»,
@@ -320,10 +357,19 @@ button{background:none; border:0; cursor:pointer; padding:0}
 .talos-empty__lead{color:var(--talos-muted); margin:10px 0 20px; max-width:58ch; font-size:14.5px}
 .talos-empty__foot{margin-top:14px}
 .talos-empty__hint{font-size:12px}
-.talos-turn{display:grid; grid-template-columns:46px minmax(0,1fr) 46px; align-items:stretch}
+/* Owner 06/09: «i numeri dei giri devono SPARIRE» e «fondi il componente dei giri nella navigation
+   history: il meglio dei due mondi». La spina resta nel DOM come DATO (numero del giro, tono dell'esito,
+   quanti attrezzi) — la barra della cronologia a sinistra la legge e la disegna — ma non occupa piu'
+   spazio nella conversazione. */
+.talos-turn{display:grid; grid-template-columns:0 minmax(0,1fr) 46px; align-items:stretch}
+/* ⛔ con la spina a display:none il messaggio scivolava nella prima colonna (larga 0) e il testo andava
+   a capo a ogni parola: la posizione si dichiara, non si lascia decidere all'ordine dei figli. */
+.talos-turn > *:not(.talos-turn-spine){grid-column:2}
 .talos-turn > *{min-width:0}
 .talos-turn-spine{position:relative; display:flex; flex-direction:column; align-items:flex-start; padding:22px 0 0 22px; gap:4px}
 .talos-turn-spine::before{content:""; position:absolute; top:0; bottom:0; left:21px; width:1px; background:var(--talos-border)}
+/* owner 06/09: «i numeri dei giri devono SPARIRE» — la spina resta come DATO per la barra, ma non si vede */
+.talos-turn-spine{display:none}
 .talos-turn-spine__n{position:relative; z-index:1; font-family:var(--talos-font-mono); font-size:10.5px; color:var(--talos-muted); background:var(--talos-background); padding:2px 0; margin-left:-4px; width:9px; text-align:center}
 .talos-turn-spine__tick{position:relative; z-index:1; height:3px; border-radius:2px; background:var(--talos-success); opacity:.85; width:calc(8px + var(--tick,1) * 4px); padding:0; border:0; display:block}
 button.talos-turn-spine__tick{cursor:pointer; transition:transform var(--talos-motion-duration-control) var(--talos-motion-ease), opacity var(--talos-motion-duration-control) var(--talos-motion-ease)}

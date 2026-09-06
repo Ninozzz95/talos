@@ -95,6 +95,55 @@ export function datiProcesso(p = {}) {
 
 function el(d, tag, classe, testo) { const n = d.createElement(tag); if (classe) n.className = classe; if (testo != null) n.textContent = testo; return n; }
 function kv(d, k, v, classeV = '') { const r = el(d, 'div', 'talos-kv'); r.append(el(d, 'span', 'talos-kv__k', k), el(d, 'span', `talos-kv__v${classeV ? ` ${classeV}` : ''}`, v)); return r; }
+/**
+ * La scheda «Agenti» della colonna: le deleghe VERE della sessione (`GET /api/v1/sessions/:id/children`).
+ * ⛔ 06/9, owner: «ho spawnato un sottoagente ma non si vede nulla in tab agenti». Era vero: qui c'era un
+ * ramo vuoto con un commento («per ora il kernel non emette sotto-agenti») mentre la rotta esisteva già ed
+ * era usata solo dal foglio «Albero sessione». Il dato e il disegno c'erano: mancava il filo.
+ * Ogni riga porta il compito, lo stato della delega e il modello; senza deleghe resta lo stato vuoto del
+ * mockup, che è una frase onesta, non un buco.
+ */
+export function disegnaAgenti(d, contenitore, agenti) {
+  const lista = Array.isArray(agenti) ? agenti : [];
+  contenitore.replaceChildren();
+  if (!lista.length) {
+    const vuoto = el(d, 'div', 'talos-card talos-inspector-card'); vuoto.dataset.c = 'EmptyState';
+    const head = el(d, 'div', 'talos-inspector-card__head'); head.appendChild(el(d, 'b', '', 'Sotto-agenti'));
+    vuoto.append(head, el(d, 'p', 'talos-inspector__hint', 'Nessun sotto-agente in questa sessione. Quando ce ne sarà uno, qui compaiono i suoi giri, le sue richieste di permesso e il pulsante per fermarlo.'));
+    contenitore.appendChild(vuoto);
+    return 0;
+  }
+  for (const a of lista) {
+    const card = el(d, 'div', 'talos-card talos-inspector-card');
+    card.dataset.c = 'AgentRow';
+    card.dataset.stato = statoDelega(a);
+    if (a.sessionId) card.dataset.sessioneFiglia = a.sessionId;
+    const head = el(d, 'div', 'talos-inspector-card__head');
+    head.append(el(d, 'b', '', tronca(a.task || 'Delega senza compito registrato', 52)), el(d, 'span', `talos-badge talos-badge--sm${statoDelega(a) === 'fallita' ? ' talos-badge--danger' : statoDelega(a) === 'conclusa' ? ' talos-badge--success' : ''}`, etichettaDelega(a)));
+    card.append(head);
+    // ⛔ il server manda `avviataAlle` ed `evidenzaDelega` (scritture, artefatti, chiamate ad attrezzi):
+    // si mostra quello che c'e' davvero, mai una riga «Modello —» che non ha dietro nessun dato.
+    const ev = a.evidenzaDelega && typeof a.evidenzaDelega === 'object' ? a.evidenzaDelega : null;
+    const righe = [];
+    if (a.avviataAlle) righe.push(['Avviata', oraBreve(a.avviataAlle)]);
+    if (ev) righe.push(['Ha fatto', `${Number(ev.toolCalls || 0)} chiamate · ${Number(ev.scritture || 0)} scritture`]);
+    for (const [k, v] of righe) {
+      const kv = el(d, 'div', 'talos-kv');
+      kv.append(el(d, 'span', 'talos-kv__k', k), el(d, 'span', 'talos-kv__v talos-mono', v));
+      card.append(kv);
+    }
+    contenitore.appendChild(card);
+  }
+  return lista.length;
+}
+function statoDelega(a) { if (!a?.conclusa) return 'in-corso'; return a.esitoDelega === 'fallito' ? 'fallita' : 'conclusa'; }
+function etichettaDelega(a) { const s = statoDelega(a); return s === 'in-corso' ? 'In corso' : s === 'fallita' ? 'Non riuscita' : 'Conclusa'; }
+function oraBreve(iso) {
+  const t = new Date(iso);
+  return Number.isNaN(t.getTime()) ? '—' : t.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+}
+function tronca(t, n) { const s = String(t || '').trim(); return s.length > n ? `${s.slice(0, n - 1)}…` : s; }
+
 function riempiCard(d, card, righe, { classiValore = () => '' } = {}) {
   if (!card) return;
   for (const n of [...card.querySelectorAll('.talos-kv')]) n.remove();
@@ -122,9 +171,7 @@ export function aggiornaInspector(inspector, dati = {}, { document: d = globalTh
   const file = righeFile(dati.file);
   riempiCard(d, fileCard, file.length ? file : [['Nessun file scritto finora', '—']], { classiValore: (r) => (r[1].startsWith('+') ? 'talos-diff-num--plus' : '') });
   const agenti = inspector.querySelector('#railAgenti');
-  if (agenti && Array.isArray(dati.agenti) && dati.agenti.length) {
-    // per ora il kernel non emette sotto-agenti: la forma resta quella del mockup (stato vuoto)
-  }
+  if (agenti) disegnaAgenti(d, agenti, dati.agenti);
   const processi = inspector.querySelector('#railProcessi');
   if (processi) {
     processi.replaceChildren();
