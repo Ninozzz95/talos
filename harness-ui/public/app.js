@@ -4884,6 +4884,55 @@ function kv3(d, k, v, classeV = "") {
   r.append(el18(d, "span", "talos-kv__k", k), el18(d, "span", `talos-kv__v${classeV ? ` ${classeV}` : ""}`, v));
   return r;
 }
+function disegnaAgenti(d, contenitore, agenti) {
+  const lista = Array.isArray(agenti) ? agenti : [];
+  contenitore.replaceChildren();
+  if (!lista.length) {
+    const vuoto = el18(d, "div", "talos-card talos-inspector-card");
+    vuoto.dataset.c = "EmptyState";
+    const head = el18(d, "div", "talos-inspector-card__head");
+    head.appendChild(el18(d, "b", "", "Sotto-agenti"));
+    vuoto.append(head, el18(d, "p", "talos-inspector__hint", "Nessun sotto-agente in questa sessione. Quando ce ne sarà uno, qui compaiono i suoi giri, le sue richieste di permesso e il pulsante per fermarlo."));
+    contenitore.appendChild(vuoto);
+    return 0;
+  }
+  for (const a of lista) {
+    const card = el18(d, "div", "talos-card talos-inspector-card");
+    card.dataset.c = "AgentRow";
+    card.dataset.stato = statoDelega(a);
+    if (a.sessionId) card.dataset.sessioneFiglia = a.sessionId;
+    const head = el18(d, "div", "talos-inspector-card__head");
+    head.append(el18(d, "b", "", tronca(a.task || "Delega senza compito registrato", 52)), el18(d, "span", `talos-badge talos-badge--sm${statoDelega(a) === "fallita" ? " talos-badge--danger" : statoDelega(a) === "conclusa" ? " talos-badge--success" : ""}`, etichettaDelega(a)));
+    card.append(head);
+    const ev = a.evidenzaDelega && typeof a.evidenzaDelega === "object" ? a.evidenzaDelega : null;
+    const righe = [];
+    if (a.avviataAlle) righe.push(["Avviata", oraBreve2(a.avviataAlle)]);
+    if (ev) righe.push(["Ha fatto", `${Number(ev.toolCalls || 0)} chiamate · ${Number(ev.scritture || 0)} scritture`]);
+    for (const [k, v] of righe) {
+      const kv4 = el18(d, "div", "talos-kv");
+      kv4.append(el18(d, "span", "talos-kv__k", k), el18(d, "span", "talos-kv__v talos-mono", v));
+      card.append(kv4);
+    }
+    contenitore.appendChild(card);
+  }
+  return lista.length;
+}
+function statoDelega(a) {
+  if (!a?.conclusa) return "in-corso";
+  return a.esitoDelega === "fallito" ? "fallita" : "conclusa";
+}
+function etichettaDelega(a) {
+  const s = statoDelega(a);
+  return s === "in-corso" ? "In corso" : s === "fallita" ? "Non riuscita" : "Conclusa";
+}
+function oraBreve2(iso) {
+  const t2 = new Date(iso);
+  return Number.isNaN(t2.getTime()) ? "—" : t2.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+}
+function tronca(t2, n) {
+  const s = String(t2 || "").trim();
+  return s.length > n ? `${s.slice(0, n - 1)}…` : s;
+}
 function riempiCard(d, card, righe, { classiValore = () => "" } = {}) {
   if (!card) return;
   for (const n of [...card.querySelectorAll(".talos-kv")]) n.remove();
@@ -4911,8 +4960,7 @@ function aggiornaInspector(inspector, dati = {}, { document: d = globalThis.docu
   const file = righeFile(dati.file);
   riempiCard(d, fileCard, file.length ? file : [["Nessun file scritto finora", "—"]], { classiValore: (r) => r[1].startsWith("+") ? "talos-diff-num--plus" : "" });
   const agenti = inspector.querySelector("#railAgenti");
-  if (agenti && Array.isArray(dati.agenti) && dati.agenti.length) {
-  }
+  if (agenti) disegnaAgenti(d, agenti, dati.agenti);
   const processi = inspector.querySelector("#railProcessi");
   if (processi) {
     processi.replaceChildren();
@@ -7021,6 +7069,210 @@ var init_conversazione = __esm({
   }
 });
 
+// src/components/cronologia.js
+function larghezzaLente(indice2, fuoco) {
+  if (!Number.isFinite(indice2) || !Number.isFinite(fuoco)) return LENTE[LENTE.length - 1];
+  const d = Math.abs(Math.trunc(indice2) - Math.trunc(fuoco));
+  return LENTE[Math.min(d, LENTE.length - 1)];
+}
+function anteprima(testo3, massimo = 140) {
+  const s = String(testo3 || "").replace(/\s+/g, " ").trim();
+  if (!s) return "Messaggio senza testo";
+  return s.length > massimo ? `${s.slice(0, massimo - 1)}…` : s;
+}
+function vociDaConversazione(conversazione) {
+  if (!conversazione) return [];
+  const voci = [];
+  let ultimoDetto = "";
+  for (const turno of conversazione.querySelectorAll(".talos-turn")) {
+    const numeri = [...turno.querySelectorAll(".talos-turn-spine__n")];
+    const segni = [...turno.querySelectorAll(".talos-turn-spine__tick")];
+    const diUtente = turno.dataset.turno === "utente" || Boolean(turno.querySelector(".talos-message--user"));
+    if (diUtente) {
+      const suo = turno.querySelector(".talos-message--user .talos-message__body")?.textContent;
+      if (suo && suo.trim()) ultimoDetto = suo;
+    }
+    const rispostaVisibile = [...turno.querySelectorAll(".talos-message__body p, .talos-message__copy p")].find((p) => !p.closest(".real-reasoning-note") && p.textContent.trim())?.textContent;
+    const testoTurno = anteprima(ultimoDetto || rispostaVisibile || "Risposta di TALOS");
+    if (!numeri.length) {
+      voci.push({ indice: voci.length, elemento: turno, numero: null, tono: null, attrezzi: 0, testo: testoTurno, diUtente });
+      continue;
+    }
+    numeri.forEach((n, i) => {
+      const segno = segni[i];
+      const tono = TONI3.find((t2) => segno?.classList.contains(`talos-turn-spine__tick--${t2}`)) || null;
+      voci.push({
+        indice: voci.length,
+        elemento: turno,
+        numero: Number(n.textContent) || null,
+        tono,
+        attrezzi: Number(segno?.dataset.tick || 1),
+        testo: testoTurno,
+        diUtente
+      });
+    });
+  }
+  return voci.slice(0, VOCI_MASSIME);
+}
+function testoFumetto(voce) {
+  if (!voce) return "";
+  const capo = [];
+  if (Number.isFinite(voce.numero)) capo.push(`Giro ${voce.numero}`);
+  if (voce.tono === "danger") capo.push("errore");
+  else if (voce.tono === "warning") capo.push("avviso");
+  else if (voce.tono === "current") capo.push("in corso");
+  if (voce.attrezzi > 1) capo.push(`${voce.attrezzi} attrezzi`);
+  return capo.length ? `${capo.join(" · ")}
+${voce.testo}` : voce.testo;
+}
+function riempiFumetto(fumetto, voce) {
+  if (!fumetto) return;
+  fumetto.replaceChildren();
+  if (!voce) return;
+  const d = fumetto.ownerDocument;
+  const capo = [];
+  if (Number.isFinite(voce.numero)) capo.push(`Giro ${voce.numero}`);
+  if (voce.tono === "danger") capo.push("errore");
+  else if (voce.tono === "warning") capo.push("avviso");
+  else if (voce.tono === "current") capo.push("in corso");
+  if (voce.attrezzi > 1) capo.push(`${voce.attrezzi} attrezzi`);
+  if (capo.length) {
+    const testa = d.createElement("b");
+    testa.className = "talos-cronologia__fumetto-capo";
+    testa.textContent = capo.join(" · ");
+    fumetto.append(testa);
+  }
+  const corpo = d.createElement("span");
+  corpo.className = "talos-cronologia__fumetto-testo";
+  corpo.textContent = voce.testo;
+  fumetto.append(corpo);
+}
+function aggiornaCronologia(nav, conversazione, { fuoco = null } = {}) {
+  if (!nav || !conversazione) return 0;
+  const d = nav.ownerDocument;
+  const voci = vociDaConversazione(conversazione);
+  const lista = nav.querySelector(".talos-cronologia__lista") || nav;
+  nav.hidden = voci.length < 2;
+  const esistenti = [...lista.querySelectorAll(".talos-cronologia__voce")];
+  for (let i = esistenti.length; i < voci.length; i += 1) {
+    const b = d.createElement("button");
+    b.type = "button";
+    b.className = "talos-cronologia__voce";
+    const segno = d.createElement("span");
+    segno.className = "talos-cronologia__segno";
+    const linea = d.createElement("span");
+    linea.className = "talos-cronologia__linea";
+    segno.append(linea);
+    b.append(segno);
+    lista.append(b);
+  }
+  for (let i = voci.length; i < esistenti.length; i += 1) esistenti[i].remove();
+  const attivo = Number.isFinite(fuoco) ? fuoco : Number(nav.dataset.attiva || 0);
+  [...lista.querySelectorAll(".talos-cronologia__voce")].forEach((b, i) => {
+    const v = voci[i];
+    b.dataset.indice = String(i);
+    b.dataset.tono = v.tono || (v.diUtente ? "utente" : "");
+    b.setAttribute("aria-label", Number.isFinite(v.numero) ? `Vai al giro ${v.numero}` : `Vai al messaggio ${i + 1}`);
+    b.title = testoFumetto(v);
+    b.classList.toggle("talos-cronologia__voce--attiva", i === attivo);
+    b.querySelector(".talos-cronologia__linea").style.setProperty("--lente", `${larghezzaLente(i, attivo)}px`);
+  });
+  nav.dataset.attiva = String(attivo);
+  return voci.length;
+}
+function collegaCronologia(nav, conversazione, { finestra = globalThis } = {}) {
+  if (!nav || !conversazione || nav.dataset.collegata === "si") return () => {
+  };
+  nav.dataset.collegata = "si";
+  const d = nav.ownerDocument;
+  const fumetto = d.createElement("div");
+  fumetto.className = "talos-cronologia__fumetto";
+  fumetto.setAttribute("role", "tooltip");
+  fumetto.hidden = true;
+  nav.append(fumetto);
+  const voceDa = (evento) => evento.target?.closest?.(".talos-cronologia__voce") || null;
+  const indiceDi = (b) => Number(b?.dataset.indice ?? -1);
+  nav.addEventListener("pointerover", (e) => {
+    const b = voceDa(e);
+    if (!b) return;
+    const i = indiceDi(b);
+    aggiornaCronologia(nav, conversazione, { fuoco: i });
+    riempiFumetto(fumetto, vociDaConversazione(conversazione)[i]);
+    fumetto.hidden = !fumetto.textContent;
+    const r = b.getBoundingClientRect();
+    const rn = nav.getBoundingClientRect();
+    fumetto.style.top = `${Math.round(r.top - rn.top + r.height / 2)}px`;
+  });
+  nav.addEventListener("pointerleave", () => {
+    fumetto.hidden = true;
+    aggiornaCronologia(nav, conversazione, { fuoco: Number(nav.dataset.attivaVera || nav.dataset.attiva || 0) });
+  });
+  nav.addEventListener("focusin", (e) => {
+    const b = voceDa(e);
+    if (b) {
+      riempiFumetto(fumetto, vociDaConversazione(conversazione)[indiceDi(b)]);
+      fumetto.hidden = false;
+      const r = b.getBoundingClientRect();
+      const rn = nav.getBoundingClientRect();
+      fumetto.style.top = `${Math.round(r.top - rn.top + r.height / 2)}px`;
+    }
+  });
+  nav.addEventListener("focusout", () => {
+    fumetto.hidden = true;
+  });
+  nav.addEventListener("click", (e) => {
+    const b = voceDa(e);
+    if (!b) return;
+    const voci = vociDaConversazione(conversazione);
+    const v = voci[indiceDi(b)];
+    if (!v) return;
+    const ridotto = finestra.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    v.elemento.scrollIntoView({ behavior: ridotto ? "auto" : "smooth", block: "center" });
+    for (const t2 of conversazione.querySelectorAll(".talos-turn--raggiunto")) t2.classList.remove("talos-turn--raggiunto");
+    void v.elemento.offsetWidth;
+    v.elemento.classList.add("talos-turn--raggiunto");
+    finestra.setTimeout(() => v.elemento.classList.remove("talos-turn--raggiunto"), 1600);
+    nav.dataset.attivaVera = String(indiceDi(b));
+    aggiornaCronologia(nav, conversazione, { fuoco: indiceDi(b) });
+  });
+  let inCoda = false;
+  const seguiScorrimento = () => {
+    if (inCoda) return;
+    inCoda = true;
+    (finestra.requestAnimationFrame || setTimeout)(() => {
+      inCoda = false;
+      const voci = vociDaConversazione(conversazione);
+      if (!voci.length) return;
+      const meta = conversazione.getBoundingClientRect().top + conversazione.clientHeight / 2;
+      let attiva = 0;
+      voci.forEach((v, i) => {
+        if (v.elemento.getBoundingClientRect().top <= meta) attiva = i;
+      });
+      nav.dataset.attivaVera = String(attiva);
+      if (fumetto.hidden) aggiornaCronologia(nav, conversazione, { fuoco: attiva });
+    });
+  };
+  conversazione.addEventListener("scroll", seguiScorrimento, { passive: true });
+  const osservatore = new finestra.MutationObserver(() => {
+    aggiornaCronologia(nav, conversazione);
+  });
+  osservatore.observe(conversazione, { childList: true, subtree: true });
+  aggiornaCronologia(nav, conversazione);
+  return () => {
+    conversazione.removeEventListener("scroll", seguiScorrimento);
+    osservatore.disconnect();
+    delete nav.dataset.collegata;
+  };
+}
+var LENTE, VOCI_MASSIME, TONI3;
+var init_cronologia = __esm({
+  "src/components/cronologia.js"() {
+    LENTE = Object.freeze([26, 20, 14, 10, 6]);
+    VOCI_MASSIME = 200;
+    TONI3 = ["current", "info", "warning", "danger"];
+  }
+});
+
 // src/components/scorciatoie.js
 function suApple(nav = globalThis.navigator) {
   const p = String(nav?.userAgentData?.platform || nav?.platform || "").toLowerCase();
@@ -7396,6 +7648,7 @@ var init_app = __esm({
     init_nav_item();
     init_session_item();
     init_conversazione();
+    init_cronologia();
     init_scorciatoie();
     init_chat_foot();
     init_review();
@@ -7560,6 +7813,8 @@ var init_app = __esm({
           taskBubbleMostrata: false,
           /** Piano §1.3, riga Review — percorso -> {path, code, nuovo}, UNA voce per file scritto, non solo l'ultima. */
           reviewFiles: /* @__PURE__ */ new Map(),
+          /** 06/9 — le deleghe a sotto-agenti di questa sessione (GET .../children), per la scheda «Agenti» della colonna. */
+          figli: [],
           /** Piano §1.3, riga "Contesto workspace" — la cartella corrente sfogliata nell'albero file reale, '' = radice. */
           /** ⭐⭐⭐ 27/8 — l'albero VERO: cache per livello (percorso -> voci già scaricate, mai ributtate finché non cambia qualcosa) + quali cartelle sono aperte (persiste fra un redraw e l'altro, così riaprire un run non richiude tutto). Sostituisce treePercorso, il vecchio modello "un livello alla volta con su/giù". */
           treeCache: /* @__PURE__ */ new Map(),
@@ -10525,7 +10780,7 @@ var init_app = __esm({
         const successo = figlio.conclusa && figlio.esitoDelega === "concluso";
         const fallita = figlio.conclusa && figlio.esitoDelega === "fallito";
         testo3.append(
-          textElement("strong", null, tronca(figlio.task || "(compito non registrato)", 60)),
+          textElement("strong", null, tronca2(figlio.task || "(compito non registrato)", 60)),
           textElement("small", null, figlio.conclusa ? `Delega · ${figlio.esitoDelega || "conclusa"}` : "Delega · in corso")
         );
         const statoEl = textElement("span", successo ? "status-chip success" : fallita ? "status-chip error" : "status-chip", successo ? "✓" : fallita ? "!" : "●");
@@ -12723,8 +12978,25 @@ var init_app = __esm({
           ripartizione: state.realSession.ripartizioneContesto || null,
           giri: giriPerInspector(),
           file,
-          processi: processiDagliEventi(state.realSession.eventiAttrezzi)
+          processi: processiDagliEventi(state.realSession.eventiAttrezzi),
+          agenti: state.realSession.figli || []
         });
+      }
+      async function caricaFigliSessione() {
+        const id = state.realSession.id;
+        if (!id) {
+          state.realSession.figli = [];
+          aggiornaInspectorDaStato();
+          return;
+        }
+        try {
+          const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(id)}/children`);
+          if (state.realSession.id !== id) return;
+          state.realSession.figli = Array.isArray(dati?.figli) ? dati.figli : [];
+        } catch {
+          state.realSession.figli = [];
+        }
+        aggiornaInspectorDaStato();
       }
       function syncRunComposerState() {
         aggiornaPiedeChatDaStato();
@@ -12963,7 +13235,7 @@ var init_app = __esm({
         }
         if (testoEl) {
           const extra = coda.length > 1 ? ` (+${coda.length - 1} altr${coda.length - 1 === 1 ? "o" : "i"})` : "";
-          testoEl.textContent = `${tronca(coda[0], 60)}${extra}`;
+          testoEl.textContent = `${tronca2(coda[0], 60)}${extra}`;
         }
         const demoBadge = $2(".demo-surface-badge", queuedMessage);
         if (demoBadge) demoBadge.hidden = true;
@@ -13177,7 +13449,7 @@ var init_app = __esm({
         scorriAllaBollaAppesa(article);
         return { frame };
       }
-      function tronca(testo3, massimo) {
+      function tronca2(testo3, massimo) {
         const t2 = String(testo3 ?? "");
         return t2.length > massimo ? `${t2.slice(0, massimo)}…` : t2;
       }
@@ -13190,13 +13462,13 @@ var init_app = __esm({
           case "cerca":
             return [a.nome, a.testo].filter(Boolean).map((v) => `"${v}"`).join(" · ");
           case "shell":
-            return a.descrizione ? tronca(a.descrizione, 60) : a.comando ? tronca(a.comando, 60) : "";
+            return a.descrizione ? tronca2(a.descrizione, 60) : a.comando ? tronca2(a.comando, 60) : "";
           case "naviga":
             return a.url || "";
           case "web_search":
-            return a.query ? `"${tronca(a.query, 60)}"` : "";
+            return a.query ? `"${tronca2(a.query, 60)}"` : "";
           case "delega_sottotask":
-            return a.task ? tronca(a.task, 60) : "";
+            return a.task ? tronca2(a.task, 60) : "";
           default:
             return "";
         }
@@ -13241,15 +13513,15 @@ var init_app = __esm({
           case "prova":
             return "Esecuzione dei test…";
           case "shell":
-            return a.descrizione ? `${tronca(a.descrizione, 92)}…` : a.comando ? `Esecuzione di ${tronca(a.comando, 80)}…` : "Esecuzione comando…";
+            return a.descrizione ? `${tronca2(a.descrizione, 92)}…` : a.comando ? `Esecuzione di ${tronca2(a.comando, 80)}…` : "Esecuzione comando…";
           case "naviga":
-            return a.url ? `Apertura di ${tronca(a.url, 90)}…` : "Apertura pagina…";
+            return a.url ? `Apertura di ${tronca2(a.url, 90)}…` : "Apertura pagina…";
           case "delega_sottotask":
-            return a.task ? `Sotto-attività: ${tronca(a.task, 84)}…` : "Avvio sotto-attività…";
+            return a.task ? `Sotto-attività: ${tronca2(a.task, 84)}…` : "Avvio sotto-attività…";
           case "memory_write":
-            return a.title ? `Salvataggio memoria: ${tronca(a.title, 60)}…` : "Salvataggio in memoria…";
+            return a.title ? `Salvataggio memoria: ${tronca2(a.title, 60)}…` : "Salvataggio in memoria…";
           case "research_start":
-            return a.question ? `Ricerca approfondita: ${tronca(a.question, 60)}…` : "Avvio ricerca approfondita…";
+            return a.question ? `Ricerca approfondita: ${tronca2(a.question, 60)}…` : "Avvio ricerca approfondita…";
           // ⛔ owner 04/9: qui finivano `web_search(…)`, `time_now(…)`, `document_create(…)` — nomi TECNICI a schermo. Il ripiego ora è il nome umano (nomeUmanoAttrezzo, unica mappa), e resta il nome grezzo solo per un attrezzo che nessuno ha ancora etichettato.
           default:
             return `${nomeUmanoAttrezzo2(nome)}…`;
@@ -13282,7 +13554,7 @@ var init_app = __esm({
            * sempre, la vista Terminale).
            */
           case "shell":
-            return a.descrizione ? tronca(a.descrizione, 80) : a.comando ? `Comando: ${a.comando}` : "Comando shell…";
+            return a.descrizione ? tronca2(a.descrizione, 80) : a.comando ? `Comando: ${a.comando}` : "Comando shell…";
           case "naviga":
             return a.url ? `Pagina web: ${a.url}` : "Lettura pagina web…";
           case "web_search":
@@ -13293,13 +13565,13 @@ var init_app = __esm({
             return a.title ? `Documento: ${a.title}.${a.format || "?"}` : "Creazione documento…";
           // ⭐⭐⭐ 29/8 — FASE H: il prompt è la parte che l'owner vuole vedere subito, stessa tronca corta già usata per delega_sottotask.
           case "generate_image":
-            return a.prompt ? `Immagine: ${tronca(a.prompt, 60)}` : "Generazione immagine…";
+            return a.prompt ? `Immagine: ${tronca2(a.prompt, 60)}` : "Generazione immagine…";
           case "time_now":
             return "Data e ora correnti";
           // ⭐ 28/8 — zero argomenti, nessun placeholder "…" da mostrare
           // ⭐⭐⭐ FASE C (28/8) — sub-agenti: il task è la parte che l'owner vuole vedere subito, tronca corta come già fatto per gli altri riassunti "in corso".
           case "delega_sottotask":
-            return a.task ? `Delega: ${tronca(a.task, 60)}` : "Delega a un sotto-agente…";
+            return a.task ? `Delega: ${tronca2(a.task, 60)}` : "Delega a un sotto-agente…";
           /*
            * ⛔⛔ 30/8, QA visiva (Task 8/11) — due casi mancanti, trovati dal
            * vivo (mostravano il nome grezzo "memory_write(…)"/mai
@@ -13309,9 +13581,9 @@ var init_app = __esm({
            * research_start → {depth,question}.
            */
           case "memory_write":
-            return a.title ? `Memoria: ${tronca(a.title, 60)}` : "Salvataggio in memoria…";
+            return a.title ? `Memoria: ${tronca2(a.title, 60)}` : "Salvataggio in memoria…";
           case "research_start":
-            return a.question ? `Ricerca approfondita: ${tronca(a.question, 60)}` : "Avvio ricerca approfondita…";
+            return a.question ? `Ricerca approfondita: ${tronca2(a.question, 60)}` : "Avvio ricerca approfondita…";
           // ⛔ owner 04/9: qui finivano `web_search(…)`, `time_now(…)`, `document_create(…)` — nomi TECNICI a schermo. Il ripiego ora è il nome umano (nomeUmanoAttrezzo, unica mappa), e resta il nome grezzo solo per un attrezzo che nessuno ha ancora etichettato.
           default:
             return `${nomeUmanoAttrezzo2(nome)}…`;
@@ -13320,7 +13592,7 @@ var init_app = __esm({
       function riassuntoEsitoAttrezzo(nome, riassuntoBase, testoEsito) {
         if (nome === "delega_sottotask") {
           if (/^REFUSED\./.test(testoEsito || "")) return "✗ Delega rifiutata";
-          return `🧩 Sotto-agente: ${tronca(testoEsito, 100)}`;
+          return `🧩 Sotto-agente: ${tronca2(testoEsito, 100)}`;
         }
         if (nome !== "prova") return riassuntoBase;
         const pass = /ℹ?\s*pass\s+(\d+)/i.exec(testoEsito)?.[1];
@@ -13337,7 +13609,7 @@ var init_app = __esm({
       function riassuntoAttrezzoConcluso(nome, argomenti, testoEsito, fallito) {
         const descrizioneModello = typeof argomenti?.descrizione === "string" ? argomenti.descrizione.trim() : "";
         if (nome === "shell" && descrizioneModello) {
-          const descrizione = tronca(descrizioneModello, 92);
+          const descrizione = tronca2(descrizioneModello, 92);
           return fallito ? `${descrizione} — non riuscito` : descrizione;
         }
         if (nome === "delega_sottotask" || nome === "prova") {
@@ -15981,6 +16253,7 @@ ${testo3}` : testo3;
             state.realSession.redirectInvalidatedIds.add(evento.redirectId);
             state.realSession.redirectPendingId = null;
             state.realSession.eventoTerminaleVisto = true;
+            void caricaFigliSessione();
             nascondiAttesaRisposta();
             appendStatusNote(`Reindirizzamento non riuscito: ${evento.message}`, true);
             toast("Reindirizzamento non riuscito", evento.message);
@@ -16498,6 +16771,7 @@ ${testo3}` : testo3;
         setView("chat");
         closePanels();
         collegaEventiSessione(sessionId, generation);
+        void caricaFigliSessione();
         if (state.realSession.deferHistoricalRendering) mantieniFondoDuranteRipristino(generation);
         aggiornaSottotitoloSessione();
         aggiornaElencoSessioniReali();
@@ -19155,6 +19429,7 @@ ${testo3}` : testo3;
         }, { passive: true });
       })();
       collegaNavigazioneSpina($2("#conversation"));
+      collegaCronologia($2("#schermoChat .talos-cronologia"), $2("#conversation"));
       normalizzaTastiScritti(ROOT());
       collegaScorciatoieTerminale();
       collegaRidisegnoLingua();
