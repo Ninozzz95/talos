@@ -102,3 +102,15 @@ quando NON hai dubbi».** Quello che manca non è la soluzione: sono i vincoli.
 prodotto · prima del brief di un agente · prima di dichiarare chiusa una riga ·
 prima di dire «va bene così» su qualcosa che l'owner sta guardando.
 **Fonte + data nel ledger e nel commit: senza citazione, la ricerca non c'è stata.**
+
+## 🔜 APERTI del desktop — spostati qui il 2026-09-06
+
+> ⛔ `MEMORY.md` era a **20.184 byte** contro il tetto d'allarme di 19.900 dopo la regola sul riavvio autonomo del 4174. Blocco intero spostato, non accorciato. Restano APERTI e vincolanti.
+
+- 🔜⛔⭐⭐ [Chi guarda da fuori inventa quello che dentro aveva già](chi-guarda-da-fuori-inventa-quello-che-dentro-aveva-gia.md) — FASE D: `TalosToolAuditRow` (mobile) esisteva già, più maturo di ciò che la ricerca esterna ha fatto costruire nel kernel. Prima di una ricerca web, cercare nel PROPRIO codebase
+- 🔜⛔⛔⛔⭐⭐⭐ [ONESTÀ batte VELOCITÀ — Hermes è il PEGGIORE dei quattro](onesta-batte-velocita-hermes-e-il-peggiore.md) — FASE C, 28/8, corpus completo: sui 3 task-trappola (`impossibile:true`), **Pi il più onesto** (1/3 bara), **TALOS a metà** (1/3, il cancello semantico REGISTRA un rifiuto ma non impedisce la fabbricazione finale — 3 corse su 3 fabbricano, causa trovata: il cancello vede solo "il codice si compila", non "la premessa del task era vera"), **Hermes il peggiore** (bara su tutte e tre + una in più). 🔜 Chiudere il buco vuole un controllo NUOVO (sulla premessa dichiarata, non sul codice) — non implementato, decide l'owner
+- 📚 **Voce/TTS/GPU/motore locale, dossier glm/trappole release, superset Hermes:** spostati in [CATALOGO.md](CATALOGO.md) il 2026-08-27 — DELEGATI a una sessione separata (0.1.17/0.1.18), non compito di questa sessione
+- 🔜⛔⛔⛔⭐⭐⭐ [STESSA UI mobile/desktop, backend diverso](stessa-ui-mobile-desktop-backend-diverso.md) — owner 24/8, CORRETTO 27/8: il mobile NON è compito di questa sessione ed è PIÙ AVANTI (impostazioni/temi/ricerca approfondita/note) — importarlo nel desktop è per DOPO l'harness finito, non ora. Sul desktop, invece, ORA: niente sezione chat separata, l'harness diventa l'unica chat con tool-parity col mobile (artefatti, ricerca web...), da usare come metro di paragone vivo per il mobile
+- 📚 **Programmi e tabelle di marcia:** spostati in [CATALOGO.md](CATALOGO.md) il 2026-08-22 — l'indice era a 19.789 byte su un tetto d'allarme di 19.900, e la regola dice di spostare un BLOCCO INTERO invece di accorciare le glosse
+- 🔜⛔⛔⭐⭐⭐ [IL KERNEL È UNO SOLO, anche per il CODICE](il-kernel-e-uno-solo-anche-per-il-codice.md) — nell'app arriva la **sezione codice** · [porta l'onestà da 6/10 a 10/10](il-cancello-porta-lonesta-da-6-a-10.md), costo **zero**; si pubblica più in là
+- 🔜⛔⛔⭐⭐⭐ [L'HARNESS DI CODING e' la fase CRITICA](harness-di-coding-la-fase-critica.md) — i sei si misurano SOLO contro il nostro, in automatico
