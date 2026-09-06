@@ -25,6 +25,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { simboliMancanti, classiSenzaRegola } from './riferimenti-morti.mjs';
+import { funzioniMaiChiamate } from './funzioni-morte.mjs';
 
 // ⛔ i percorsi partono dalla radice del frontend, non da dove sta lo script: cosi' si lancia da
 //    qualunque cartella senza che «funziona solo se sei nel posto giusto» diventi una trappola.
@@ -45,3 +46,8 @@ for (const v of s.slice(0, 12)) console.log('  ', JSON.stringify(v).slice(0, 160
 const c = classiSenzaRegola({ html, css, sorgenti });
 console.log('\n== CLASSI USATE SENZA NESSUNA REGOLA:', c.length, '(SOSPETTI da guardare, non difetti confermati)');
 for (const v of c.slice(0, 25)) console.log('  ', JSON.stringify(v).slice(0, 150));
+
+const morte = funzioniMaiChiamate(sorgenti['legacy/app.js']);
+console.log();
+console.log('== FUNZIONI DICHIARATE E MAI CHIAMATE:', morte.length);
+for (const m of morte) console.log('   ', m.nome);
