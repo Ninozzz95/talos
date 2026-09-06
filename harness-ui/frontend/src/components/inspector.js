@@ -185,8 +185,9 @@ export function disegnaAgenti(d, contenitore, agenti) {
   }
   return lista.length;
 }
-function statoDelega(a) { if (!a?.conclusa) return 'in-corso'; return a.esitoDelega === 'fallito' ? 'fallita' : 'conclusa'; }
-function etichettaDelega(a) { const s = statoDelega(a); return s === 'in-corso' ? 'In corso' : s === 'fallita' ? 'Non riuscita' : 'Conclusa'; }
+// ⛔ 06/9, T05-D3: «interrotta» PRIMA di «in corso» — un figlio che nessuno sta più eseguendo non è vivo.
+function statoDelega(a) { if (a?.interrotta === true) return 'interrotta'; if (!a?.conclusa) return 'in-corso'; return a.esitoDelega === 'fallito' ? 'fallita' : 'conclusa'; }
+function etichettaDelega(a) { const s = statoDelega(a); return s === 'interrotta' ? 'Interrotta' : s === 'in-corso' ? 'In corso' : s === 'fallita' ? 'Non riuscita' : 'Conclusa'; }
 function oraBreve(iso) {
   const t = new Date(iso);
   return Number.isNaN(t.getTime()) ? '—' : t.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });

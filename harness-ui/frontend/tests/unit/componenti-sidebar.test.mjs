@@ -33,6 +33,29 @@ test('statoSessione: l\'ordine degli stati — attesa prima di vivo, interrotta 
   assert.equal(statoSessione({ conclusa: true, ultimoEsito: 'successo' }).tono, 'success');
 });
 
+test('⛔ T05-D3: una sessione uccisa dal riavvio del server NON è «in corso» — è interrotta', () => {
+  /*
+   * Il caso VERO che il server manda (session-registry, ripristino: `interrotta: !conclusa`):
+   * `conclusa:false` E `interrotta:true`. Il test che c'era provava `{conclusa:true, interrotta:true}`,
+   * una combinazione che il server non produce MAI — per questo passava con l'ordine sbagliato,
+   * mentre a schermo quattro sessioni morte da due ore dicevano ancora «in corso» col pallino vivo.
+   */
+  const morta = statoSessione({ conclusa: false, interrotta: true });
+  assert.equal(morta.classe, 'interrotto');
+  assert.equal(morta.tono, null, 'niente pallino vivo su una sessione che nessuno sta eseguendo');
+  assert.equal(morta.testo, 'interrotta', 'corta come le sorelle: in 180 px una frase lunga tronca e mangia il modello');
+  assert.match(morta.aiuto, /Scrivi un messaggio per riprenderla/u, 'dire che è ferma non basta: il come-si-riparte vive nel titolo della riga');
+  assert.equal(statoSessione({ conclusa: true, ultimoEsito: 'successo' }).aiuto, null, 'nessun titolo dove non serve');
+});
+
+test('⛔ AL CONTRARIO — una sessione DAVVERO viva resta «in corso», e chi aspetta te vince su tutto', () => {
+  // `interrotta` si azzera quando un giro riparte: metterla per prima non può spegnere una sessione viva.
+  assert.equal(statoSessione({ conclusa: false, interrotta: false }).classe, 'vivo');
+  assert.equal(statoSessione({ conclusa: false, interrotta: false }).tono, 'live');
+  // e una sessione interrotta che però aspetta una risposta chiede ancora qualcosa alla persona
+  assert.equal(statoSessione({ conclusa: false, interrotta: true, inAttesaApprovazione: true }).classe, 'attesa');
+});
+
 test('statoSessione: nessun esito registrato NON è un successo (niente pallino colorato)', () => {
   const s = statoSessione({ conclusa: true });
   assert.equal(s.classe, 'ignoto');

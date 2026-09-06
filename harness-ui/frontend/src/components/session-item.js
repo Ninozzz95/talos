@@ -53,8 +53,21 @@ const ETICHETTE = Object.freeze({
 export function statoSessione(sessione) {
   let classe;
   if (sessione.inAttesaApprovazione) classe = 'attesa';
-  else if (!sessione.conclusa) classe = 'vivo';
+  /*
+   * ⛔ 06/9, prova T05-D3 — l'ordine era invertito rispetto alla convenzione dichiarata in cima a
+   * questo file, e il difetto si vedeva a schermo: quattro sessioni delle 16:02-16:08 dicevano
+   * ancora «in corso» alle 18:32. Il server manda `conclusa:false` E `interrotta:true` per una
+   * sessione uccisa dalla morte del processo (session-registry, ripristino: `interrotta: !conclusa`),
+   * e `!conclusa` intercettava il caso prima che `interrotta` potesse parlare. Risultato: una
+   * sessione che NESSUNO sta eseguendo restava «in corso» per sempre, col pallino vivo.
+   * ⛔ `interrotta` si azzera quando un giro riparte (session-registry, `voce.interrotta = false`):
+   *    metterla per prima non può quindi spegnere una sessione davvero viva.
+   * Stesso difetto in opencode #17680 e #19023 (letti 06/09/2026): «Web UI shows permanent Thinking
+   * spinner after stream interruption or server restart» — e la conclusione è la stessa, l'interfaccia
+   * deve dichiarare il giro interrotto perché il worker non riprende dopo la morte del processo.
+   */
   else if (sessione.interrotta) classe = 'interrotto';
+  else if (!sessione.conclusa) classe = 'vivo';
   else if (sessione.ultimoEsito === 'errore') classe = 'errore';
   else if (sessione.ultimoEsito === 'successo') classe = 'successo';
   else classe = 'ignoto';
@@ -64,7 +77,15 @@ export function statoSessione(sessione) {
    * il mockup mostra («giri finiti»). Se non c'è, non si inventa.
    */
   const testo = classe === 'errore' && sessione.motivoChiusura === 'giri-finiti' ? 'giri finiti' : ETICHETTE[classe];
-  return { classe, testo, tono: TONI[classe] ?? null };
+  /*
+   * ⛔ 06/9, misurato sullo screenshot: «interrotta · scrivi per riprenderla» TRONCAVA la riga e si
+   * mangiava il nome del modello — il consiglio rubava l'informazione. In 180 px l'etichetta resta
+   * corta come le sorelle («conclusa», «in corso»); il come-si-riparte vive nel titolo della riga,
+   * dove non costa niente a nessuno (claude-code #69456, letto 06/09/2026: offrire la ripresa,
+   * non gridarla).
+   */
+  const aiuto = classe === 'interrotto' ? 'Interrotta dalla morte del processo: nessuno la sta eseguendo. Scrivi un messaggio per riprenderla.' : null;
+  return { classe, testo, tono: TONI[classe] ?? null, aiuto };
 }
 
 /**
@@ -128,6 +149,7 @@ export function creaSessionItem(sessione, opzioni = {}) {
     : `${sessione.nome || sessione.taskId || ''}${sessione.forkDa ? ' · fork' : ''}`;
   const stato = opzioni.pendente ? { classe: 'pendente', testo: ETICHETTE.pendente, tono: null } : statoSessione(sessione);
   riga.dataset.sessionState = stato.classe;
+  if (stato.aiuto) riga.title = stato.aiuto; // il consiglio dove non ruba spazio alla riga
 
   const testo = el(documentObj, 'span');
   const titolo = el(documentObj, 'span', 'talos-session-item__title', etichetta);

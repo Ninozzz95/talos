@@ -4122,9 +4122,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const testo = document.createElement('span');
     const successo = figlio.conclusa && figlio.esitoDelega === 'concluso';
     const fallita = figlio.conclusa && figlio.esitoDelega === 'fallito';
+    // ⛔ 06/9, T05-D3: un figlio ucciso dalla morte del processo diceva «in corso» per sempre.
+    const stato = figlio.interrotta === true ? 'Delega · interrotta'
+      : figlio.conclusa ? `Delega · ${figlio.esitoDelega || 'conclusa'}`
+      : 'Delega · in corso';
     testo.append(
       textElement('strong', null, tronca(figlio.task || '(compito non registrato)', 60)),
-      textElement('small', null, figlio.conclusa ? `Delega · ${figlio.esitoDelega || 'conclusa'}` : 'Delega · in corso'),
+      textElement('small', null, stato),
     );
     const statoEl = textElement('span', successo ? 'status-chip success' : fallita ? 'status-chip error' : 'status-chip', successo ? '✓' : fallita ? '!' : '●');
     riga.append(iconEl, testo, statoEl);
@@ -12016,7 +12020,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const base = String(nome || '').trim();
     if (!base) return { nome: base, cambiato: false };
     const nomiVivi = new Set([...state.sessionSelection.available.values()]
-      .filter((s) => s.sessionId !== sessionId && !s.conclusa && s.nome)
+      // ⛔ 06/9, T05-D3: una sessione interrotta è chiusa — il suo nome può tornare libero, come quello di una conclusa.
+      .filter((s) => s.sessionId !== sessionId && !s.conclusa && !s.interrotta && s.nome)
       .map((s) => s.nome));
     let candidato = base;
     for (let n = 2; nomiVivi.has(candidato); n += 1) candidato = `${base}-${n}`;
