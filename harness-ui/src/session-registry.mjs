@@ -770,26 +770,129 @@ function chiusuraDaEventi(ordinati) {
   return { motivo: null, codice: null };
 }
 
-/** Il tasso di cache dall'ULTIMO `/usage` della storia. ⛔ `null` non è `0`. */
-function cacheDaEventi(ordinati) {
-  let usage = null;
-  for (let i = ordinati.length - 1; i >= 0; i -= 1) {
-    if (ordinati[i]?.type !== 'StateDelta') continue;
-    const voce = ordinati[i].delta?.find((d) => d?.path === '/usage');
-    if (voce) { usage = voce.value; break; }
+/* =====================================================================
+ * ⛔⛔⛔ 06/9 — CB-04: «il consumo mostrato è quello dell'ULTIMO INVIO,
+ * non della sessione».
+ *
+ * MISURATO prima di scrivere (sonda `.gravi/sonde/01-consumo.mjs`, tre
+ * invii veri con `z-ai/glm-5.3-flash`, sessione
+ * 53ea52d1-4ead-4bcd-9eef-837d37e3d534): in storia ci sono TRE eventi
+ * `/usage`, uno per invio — {7669, 68, cache 7616, giri 1} · {7675, 28,
+ * cache 0, giri 1} · {7716, 25, cache 7616, giri 1}. Il totale VERO della
+ * sessione è {23.060, 121, cache 15.232, 3 giri}; la app ne dichiarava
+ * {7.716, 25, cache 7.616, 1 giro} — il solo ultimo invio, cioè un terzo
+ * del consumo, e una cache al 99% invece del 66%.
+ *
+ * CAUSA, alla fonte: `conto` è dichiarato DENTRO il ciclo di una singola
+ * esecuzione del kernel (`talosHarness.mjs:4560`, `const conto = {…}`) e
+ * riparte da zero a ogni invio. `/usage` è quindi cumulativo DENTRO
+ * un'esecuzione e NON fra esecuzioni: leggerne l'ultimo dà il totale di
+ * quell'invio, mai quello della sessione. Il commento storico più sotto
+ * («l'ULTIMO che compare nella storia è il totale finale») era vero finché
+ * una sessione era fatta di un invio solo.
+ *
+ * RICERCA WEB 06/09/2026, fatta PRIMA di scrivere — i VINCOLI, non la cura:
+ *  - OpenAI, «Counting tokens» (developers.openai.com/api/docs/guides/
+ *    token-counting) + Help Center «What are tokens»: `usage` è riportato
+ *    PER RICHIESTA e per un totale su più turni «you would need to manually
+ *    sum up the values from each individual API response yourself» ⇒ la
+ *    somma è compito di chi chiama, nessun campo la porta già fatta.
+ *  - OpenRouter, «Prompt Caching» (openrouter.ai/docs/guides/best-practices/
+ *    prompt-caching): il tasso di cache di una sessione si calcola «sum all
+ *    cached_tokens / sum total prompt_tokens» — PESATO sui token, non come
+ *    media delle percentuali dei singoli invii (numero diverso e senza
+ *    significato).
+ *  - LangSmith, «Cost tracking» (docs.langchain.com/langsmith/cost-tracking):
+ *    «A trace covers one turn. A session covers a whole conversation», e
+ *    senza il legame di thread «token counts and costs from those runs won't
+ *    be included in thread-level aggregations». È esattamente questo guasto:
+ *    un numero di TURNO mostrato dove è promesso un totale di SESSIONE.
+ *
+ * ⇒ Il confine fra due esecuzioni è `RunStarted`: di ogni esecuzione si
+ *   tiene l'ULTIMO `/usage` (il suo totale) e li si somma. I due fatti
+ *   restano distinti e leggibili entrambi: `ultimaEsecuzione` (il tetto dei
+ *   giri parla di quella) e la somma (token e cache della sessione).
+ * ===================================================================== */
+
+/**
+ * I totali di consumo, UNO PER ESECUZIONE, in ordine.
+ * @returns {Array<object>} l'ultimo `/usage` di ogni esecuzione (mai gli intermedi)
+ */
+function usagePerEsecuzione(ordinati) {
+  const finali = [];
+  let corrente = null;
+  for (const evento of ordinati) {
+    if (evento?.type === 'RunStarted') {
+      if (corrente) finali.push(corrente);
+      corrente = null;
+      continue;
+    }
+    if (evento?.type !== 'StateDelta') continue;
+    const voce = evento.delta?.find((d) => d?.path === '/usage');
+    if (voce && voce.value && typeof voce.value === 'object') corrente = voce.value;
   }
-  const vuoto = { frazione: null, percentuale: null, promptTokens: null, cachedTokens: null, denominatore: 'prompt_tokens' };
-  if (!usage || typeof usage !== 'object') return { ...vuoto, motivoAssente: MOTIVO_USAGE_ASSENTE };
+  if (corrente) finali.push(corrente);
+  return finali;
+}
 
-  const prompt = Number.isFinite(usage.prompt_tokens) ? usage.prompt_tokens : null;
-  const cached = Number.isFinite(usage.cached_tokens) ? usage.cached_tokens : null;
-  const base = { ...vuoto, promptTokens: prompt, cachedTokens: cached };
-  if (prompt === null || prompt <= 0) return { ...base, motivoAssente: MOTIVO_PROMPT_ZERO };
+/**
+ * ⭐⭐⭐ Il consumo dell'INTERA sessione: la somma dei totali per esecuzione.
+ * ⛔ `null` quando nessuna esecuzione ha mai riportato consumo — «non
+ * misurato» non è «zero», la stessa disciplina di `cacheDaEventi`.
+ * `esecuzioni` dice su quanti invii è fatta la somma; `ultimaEsecuzione`
+ * conserva il dato di TURNO, perché il tetto dei giri parla di quello.
+ */
+export function usageSessioneDaEventi(eventi) {
+  const finali = usagePerEsecuzione(eventiInOrdine(eventi));
+  if (finali.length === 0) return null;
+  const numero = (valore) => (Number.isFinite(valore) ? valore : 0);
+  const somma = finali.reduce((acc, u) => ({
+    prompt_tokens: acc.prompt_tokens + numero(u.prompt_tokens),
+    completion_tokens: acc.completion_tokens + numero(u.completion_tokens),
+    cached_tokens: acc.cached_tokens + numero(u.cached_tokens),
+    giri: acc.giri + numero(u.giri),
+  }), { prompt_tokens: 0, completion_tokens: 0, cached_tokens: 0, giri: 0 });
+  // ⛔ Nessuna esecuzione ha dichiarato `cached_tokens` ⇒ `null`, mai lo zero
+  //    che verrebbe fuori dalla somma: «non dichiarato» non è «nessuno».
+  const conCache = finali.filter((u) => Number.isFinite(u.cached_tokens));
+  return {
+    ...somma,
+    cached_tokens: conCache.length === 0 ? null : somma.cached_tokens,
+    esecuzioni: finali.length,
+    esecuzioniConCache: conCache.length,
+    ultimaEsecuzione: finali[finali.length - 1],
+  };
+}
+
+/**
+ * Il tasso di cache dell'INTERA sessione: somma dei `cached_tokens` sulla
+ * somma dei `prompt_tokens`, esecuzione per esecuzione (OpenRouter, guida al
+ * prompt caching). ⛔ `null` non è `0`.
+ */
+function cacheDaEventi(ordinati) {
+  const finali = usagePerEsecuzione(ordinati);
+  const vuoto = { frazione: null, percentuale: null, promptTokens: null, cachedTokens: null, denominatore: 'prompt_tokens', esecuzioni: 0 };
+  if (finali.length === 0) return { ...vuoto, motivoAssente: MOTIVO_USAGE_ASSENTE };
+
+  /*
+   * ⛔ Numeratore e denominatore vengono dalle STESSE esecuzioni: un invio che
+   *    non dichiara `cached_tokens` non entra né con uno zero (sarebbe una
+   *    cache inventata) né col solo `prompt_tokens` (gonfierebbe il
+   *    denominatore e schiaccerebbe il tasso).
+   */
+  const conPrompt = finali.filter((u) => Number.isFinite(u.prompt_tokens) && u.prompt_tokens > 0);
+  const conCache = conPrompt.filter((u) => Number.isFinite(u.cached_tokens));
+  const prompt = conPrompt.length === 0 ? null : conPrompt.reduce((n, u) => n + u.prompt_tokens, 0);
+  const cached = conCache.length === 0 ? null : conCache.reduce((n, u) => n + u.cached_tokens, 0);
+  const base = { ...vuoto, esecuzioni: finali.length, promptTokens: prompt, cachedTokens: cached };
+  if (prompt === null) return { ...base, motivoAssente: MOTIVO_PROMPT_ZERO };
   if (cached === null || cached < 0) return { ...base, motivoAssente: MOTIVO_CACHED_ASSENTE };
-  if (cached > prompt) return { ...base, motivoAssente: MOTIVO_CACHE_INCOERENTE };
+  // Il denominatore del TASSO è quello delle sole esecuzioni che hanno dichiarato la cache.
+  const promptConCache = conCache.reduce((n, u) => n + u.prompt_tokens, 0);
+  if (cached > promptConCache) return { ...base, motivoAssente: MOTIVO_CACHE_INCOERENTE };
 
-  const frazione = cached / prompt;
-  return { ...base, frazione, percentuale: Math.round(frazione * 100), motivoAssente: null };
+  const frazione = cached / promptConCache;
+  return { ...base, promptTokens: promptConCache, frazione, percentuale: Math.round(frazione * 100), motivoAssente: null };
 }
 
 /**
@@ -1190,8 +1293,13 @@ export function createSessionRegistry({
    * (talosHarness.mjs, `conto` — `{prompt_tokens, completion_tokens,
    * cached_tokens, giri}`) arriva già dentro un evento `StateDelta` reale
    * su `path:'/usage'` (agui-events.mjs, `eventoPerUsage`), REPLACE sempre
-   * perché è già una somma cumulativa — l'ULTIMO che compare nella storia
-   * di una sessione è il totale finale. Quella storia è GIÀ persistita per
+   * perché è già una somma cumulativa DENTRO UNA SOLA ESECUZIONE — l'ULTIMO
+   * che compare è il totale di QUELL'INVIO, non della sessione (il kernel
+   * dichiara `conto` dentro il ciclo e lo azzera a ogni invio:
+   * `talosHarness.mjs:4560`). ⛔ 06/9, CB-04: il totale della conversazione
+   * lo dà `usageSessioneDaEventi`, che somma i finali di ogni esecuzione;
+   * questa funzione resta perché il tetto dei giri parla dell'invio in corso
+   * e di nient'altro. Quella storia è GIÀ persistita per
    * intero (ogni evento passa da `broadcast`, che scrive su
    * `.sessions-store/`) — un secondo campo mutabile scritto a parte
    * duplicherebbe una fonte di verità già esistente, stessa disciplina di
@@ -3796,6 +3904,17 @@ export function createSessionRegistry({
           // cambiamento (o senza mai un giro con `usage`, es. un errore
           // immediato) torna onestamente `null`, mai uno zero fabbricato.
           usage: usageDaEventi(voce.eventi),
+          /*
+           * ⛔⛔⛔ 06/9 — CB-04. `usage` qui sopra è il consumo dell'ULTIMO
+           * INVIO (il kernel azzera `conto` a ogni esecuzione): resta perché
+           * il tetto dei giri («9 su 24») parla di quello e di nient'altro.
+           * `usageSessione` è il totale della CONVERSAZIONE — la somma dei
+           * totali di ogni invio — ed è il numero che la Board e il piede
+           * della chat promettono. Due fatti diversi, due campi diversi:
+           * misurato su tre invii veri, 23.060 token contro i 7.716 che si
+           * vedevano. Vedi il blocco di testa di `usageSessioneDaEventi`.
+           */
+          usageSessione: usageSessioneDaEventi(voce.eventi),
         }))
         .sort((a, b) => b.avviataAlle.localeCompare(a.avviataAlle));
     },

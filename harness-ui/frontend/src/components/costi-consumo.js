@@ -31,6 +31,15 @@
  */
 // H22: il nome umano del modello vive in UN posto solo, quello che usa già la Board.
 import { nomeModello } from './session-item.js';
+/*
+ * ⛔⛔⛔ 06/9, CB-04 — questa pagina sommava `usage`, che è il consumo del SOLO
+ * ULTIMO INVIO di ogni sessione (il kernel azzera il contatore a ogni invio):
+ * su tre invii veri erano 7.716 token contro i 23.060 spesi. E i giri li
+ * leggeva da `s.giri`, un campo che la rotta `/api/v1/sessions` non ha mai
+ * avuto — quindi «0 giri» su ogni riga. Il totale di sessione ora ha un nome
+ * suo, `usageSessione`, e un posto solo che lo sa leggere.
+ */
+import { usageDellaSessione } from './consumo-sessione.js';
 
 const NUM = new Intl.NumberFormat('it-IT');
 
@@ -45,7 +54,8 @@ export function compatto(n) {
 
 const numeroValido = (v) => Number.isFinite(Number(v)) && Number(v) >= 0;
 const tokenDi = (s) => {
-  const dentro = Number(s?.usage?.prompt_tokens); const fuori = Number(s?.usage?.completion_tokens);
+  const u = usageDellaSessione(s) || {};
+  const dentro = Number(u.prompt_tokens); const fuori = Number(u.completion_tokens);
   if (!numeroValido(dentro) && !numeroValido(fuori)) return null;
   return (numeroValido(dentro) ? dentro : 0) + (numeroValido(fuori) ? fuori : 0);
 };
@@ -56,7 +66,14 @@ const tokenDi = (s) => {
  * appartiene alla sera di chi l'ha lanciata, non al giorno dopo in UTC.
  */
 export function giornoDi(sessione) {
-  const grezza = sessione?.avviata || sessione?.creata || sessione?.chiusa;
+  /*
+   * ⛔⛔ 06/9 — il campo che la rotta manda DAVVERO si chiama `avviataAlle`, e
+   *    non era fra quelli letti: ogni sessione finiva in «senza data» e la
+   *    pagina restava vuota per costruzione, mai un errore da nessuna parte.
+   *    Trovato riparando CB-04, verificato sul corpo vero di `/api/v1/sessions`.
+   *    Gli altri tre nomi restano: li usano i fixture e le esportazioni.
+   */
+  const grezza = sessione?.avviataAlle || sessione?.avviata || sessione?.creata || sessione?.chiusa;
   if (!grezza) return null;
   const d = new Date(grezza);
   if (Number.isNaN(d.getTime())) return null;
@@ -71,10 +88,10 @@ function raggruppa(sessioni, chiaveDi) {
     if (k == null) continue;
     const v = per.get(k) || { chiave: k, sessioni: 0, giri: 0, token: 0, cache: 0, tokenNoti: 0 };
     v.sessioni += 1;
-    if (numeroValido(s?.giri)) v.giri += Number(s.giri);
+    if (numeroValido(usageDellaSessione(s)?.giri)) v.giri += Number(usageDellaSessione(s).giri);
     const t = tokenDi(s);
     if (t != null) { v.token += t; v.tokenNoti += 1; }
-    if (numeroValido(s?.usage?.cached_tokens)) v.cache += Number(s.usage.cached_tokens);
+    if (numeroValido(usageDellaSessione(s)?.cached_tokens)) v.cache += Number(usageDellaSessione(s).cached_tokens);
     per.set(k, v);
   }
   return [...per.values()];
@@ -104,10 +121,10 @@ export function consumoPerModello(sessioni = []) {
 export function riepilogoConsumo(sessioni = []) {
   const totali = { sessioni: sessioni.length, giri: 0, token: 0, cache: 0, senzaToken: 0, senzaData: 0, senzaModello: 0 };
   for (const s of sessioni) {
-    if (numeroValido(s?.giri)) totali.giri += Number(s.giri);
+    if (numeroValido(usageDellaSessione(s)?.giri)) totali.giri += Number(usageDellaSessione(s).giri);
     const t = tokenDi(s);
     if (t == null) totali.senzaToken += 1; else totali.token += t;
-    if (numeroValido(s?.usage?.cached_tokens)) totali.cache += Number(s.usage.cached_tokens);
+    if (numeroValido(usageDellaSessione(s)?.cached_tokens)) totali.cache += Number(usageDellaSessione(s).cached_tokens);
     if (giornoDi(s) == null) totali.senzaData += 1;
     if (!(typeof s?.modello === 'string' && s.modello.trim() !== '')) totali.senzaModello += 1;
   }

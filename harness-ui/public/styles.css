@@ -674,6 +674,11 @@ button {
   background: var(--talos-accent-hover);
   box-shadow: 0 0 0 4px var(--talos-accent-soft);
 }
+:root[data-contatto=perso] .talos-dot--live {
+  background: var(--talos-border-strong);
+  box-shadow: none;
+  animation: none;
+}
 .talos-diff-num {
   font-family: var(--talos-font-mono);
   font-size: 12px;
@@ -1881,6 +1886,18 @@ body.reduce-motion *::after {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.talos-status-strip--senza-contatto {
+  border-color: var(--talos-warning);
+  background: color-mix(in srgb, var(--talos-warning) 8%, var(--talos-panel));
+}
+.talos-status-strip--senza-contatto .talos-status-strip__pulse {
+  background: var(--talos-warning);
+  animation: none;
+}
+.talos-status-strip--senza-contatto .stop-run[disabled] {
+  opacity: .55;
+  cursor: not-allowed;
 }
 .talos-system-note__perche {
   margin: 6px 0 0;

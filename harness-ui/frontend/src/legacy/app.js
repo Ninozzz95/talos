@@ -24,7 +24,7 @@ import { aggiornaCosti } from '../components/costi-consumo.js'; // 06/9 D21/D22:
 import { aggiornaContesto, ripartizioneContesto } from '../components/contesto.js'; // 06/9 D26: ripartizione della finestra di contesto
 import { montaHf } from '../components/hf-catalogo.js';
 import { aggiornaCodaDownload, montaCodaDownload, stimaFraLetture } from '../components/download-coda.js'; // 06/9 B6.10: scheda «Download»
-import { aggiornaInspector, processiDagliEventi } from '../components/inspector.js'; // 06/9 B2: la colonna dei dettagli dice il vero
+import { aggiornaInspector, processiDagliEventi, titoloRispostaDaTurno } from '../components/inspector.js'; // 06/9 B2: la colonna dei dettagli dice il vero; CB-03: il titolo del giro è la RISPOSTA, non il ragionamento
 import { contaDiff } from '../components/review.js'; // 06/9 B2: +N −M dei file toccati
 import { collegaRidimensionamentoDialoghi, preparaMisuraDialogo } from '../components/dialoghi.js'; // 06/9 B7: dialoghi ridimensionabili e ricordati
 import { creaIntro, normalizzaCartella as normalizzaCartellaIntro, ultimoSegmento as ultimoSegmentoIntro } from '../components/intro.js'; // 06/9 B7b: l'Intro del mockup con i dati veri
@@ -39,9 +39,10 @@ import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaN
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione, come quella di ChatGPT desktop
 import { montaScorciatoie, normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
 import { aggiornaPiedeChat, etichettaPermesso, fondoInVista, nomeModelloUmano } from '../components/chat-foot.js';
-import { spiegaErrore, spiegaRifiutoAttrezzo } from '../components/errori.js';
-import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js';
-import { frasiRitratto, avvisoRitratto } from '../components/cartella-ritratto.js'; // 06/9 F9/F10/F19-F21 // 06/9: il sorgente di una pagina non si legge
+import { spiegaErrore, spiegaRifiutoAttrezzo } from '../components/errori.js'; // 06/9 O-22/O-23/O-36: gli errori e i rifiuti detti a una persona
+import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js'; // 06/9 O-28/O-31: il sorgente di una pagina non si legge
+import { frasiRitratto, avvisoRitratto } from '../components/cartella-ritratto.js'; // 06/9 F9/F10/F19-F21: cosa c'e' nella cartella
+import { sommaUsage, usageDellaSessione } from '../components/consumo-sessione.js'; // 06/9 CB-04: il consumo della SESSIONE, non dell'ultimo invio
 import { VIE_ALLEGATO, TETTI_ALLEGATI, allegatoPesante, costoAllegato, costoTotale, frasiTetti, nomeBreveAllegato } from '../components/allegati.js'; // 06/9 B4/B6/B7/B9: il «+» allega, e ogni allegato dichiara il suo costo // 06/9 O-22/O-23: gli errori del giro detti a una persona // 05/9 Fase 2: ChatFooter — striscia del giro, chip e barra di stato dai dati
 import { aggiornaDiffReview, creaRigaFileReview, nascondiAzioniFase3, riassuntoReview } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno del mockup
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
@@ -126,6 +127,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     sessionSelection: { active: false, selected: new Set(), available: new Map(), deleting: false },
     /** Ragionamento nascosto di default; il foglio Modello lo rende opt-in. */
     showReasoning: false,
+    /** 06/9 CB-20-bis — lo stato del contatto col server, dalla sorveglianza T-15: la chat e la barra di stato leggono lo STESSO dato. */
+    connessione: 'collegato',
     // ⭐ 28/8 — stesso principio di `model`: null = nessuna scelta esplicita, "reasoning" resta assente dal corpo della richiesta (comportamento di sempre). Un valore fra quelli di LIVELLI_RAGIONAMENTO appena l'owner tocca lo slider dell'effort picker.
     effort: null,
     environment: null,
@@ -312,8 +315,26 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
        * null finché nessun giro ha mai riportato consumo — mai un
        * contatore finto, la stessa onestà di IGNOTO-vs-GRATIS già in uso
        * lato kernel. Vedi il case 'StateDelta' e la riga "Main" nel
-       * foglio Albero sessione. */
+       * foglio Albero sessione.
+       * ⛔⛔⛔ 06/9, CB-04 — questo è il consumo dell'INVIO IN CORSO, non della
+       * sessione: il kernel dichiara il suo contatore dentro il ciclo di una
+       * singola esecuzione (`talosHarness.mjs:4560`) e riparte da zero a ogni
+       * invio. Serve così com'è a due cose e a due sole: il tetto dei giri
+       * («9 su 24») e la «Finestra del contesto», che misura quanto è pieno il
+       * contesto ADESSO. Tutto ciò che promette «la sessione» legge
+       * `usageSessione` qui sotto. */
       usage: null,
+      /**
+       * ⛔⛔⛔ 06/9, CB-04 — il consumo di TUTTA la conversazione: la somma dei
+       * totali di ogni invio (`usageEsecuzioniPrecedenti` + `usage`). Misurato
+       * su tre invii veri: 23.060 token contro i 7.716 che si vedevano, e una
+       * cache al 66% dove la Board diceva 0%. Lo leggono il piede della chat,
+       * il nodo «Main» dell'albero e la Board. `null` finché nessun invio ha
+       * riportato consumo — mai uno zero fabbricato.
+       */
+      usageSessione: null,
+      /** La somma dei totali degli invii GIÀ CHIUSI (fino all'ultimo `RunStarted`). */
+      usageEsecuzioniPrecedenti: null,
       /**
        * ⭐⭐⭐ O-02 (04/9) — il registro degli eventi di attrezzo di QUESTA
        * sessione: `{type, toolCallId, toolCallName?, delta?}`, riempito in
@@ -1577,6 +1598,27 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     },
     suCambio: (stato, dettagli) => {
       aggiornaStatoConnessione(barraStatoChat, stato, dettagli);
+      /*
+       * ⛔⛔⛔ 06/9, CB-20-bis — QUI stava il buco: la sorveglianza sapeva che il server
+       * non risponde e lo scriveva SOLO nella barra in fondo; la chat, che è la parte
+       * grande e centrale, continuava a dire «TALOS sta lavorando · giro 3» col pulsante
+       * «Ferma» acceso. Misurato: 45 s, 30 campioni, due verità opposte a 170 px di
+       * distanza. Adesso lo stato è uno e lo leggono tutte e due.
+       */
+      state.connessione = stato;
+      /*
+       * ⛔ 06/9, CB-20-bis — anche la barra laterale mentiva in piccolo: la riga della
+       *    sessione continuava a dire «in corso» col pallino che PULSA. Quell'elenco viene
+       *    da `GET /api/v1/sessions`, cioè da una lettura che col server giù non si può più
+       *    rinfrescare: è fermo all'ultima volta, e va detto invece di animarlo. La classe
+       *    sta sulla radice così una regola sola copre l'elenco senza ridisegnarlo.
+       */
+      document.documentElement.dataset.contatto = (stato === 'riconnessione' || stato === 'caduto') ? 'perso' : 'ok';
+      const elenco = $('#sessionList') || $('.talos-sidebar__sessions');
+      if (elenco) elenco.title = document.documentElement.dataset.contatto === 'perso'
+        ? 'Il server non risponde: questo elenco è fermo all’ultima lettura riuscita.'
+        : '';
+      syncRunComposerState();
       if (stato === 'ricollegato') toast('Collegato di nuovo', 'Il server risponde: puoi continuare.');
     },
     suRicollegato: () => {
@@ -2008,10 +2050,14 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     const completion = Number(usage.completion_tokens ?? 0) || 0;
     const cache = Number(usage.cached_tokens ?? 0) || 0;
     const totale = prompt + completion;
-    const kilo = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+    // ⛔ 06/9, T10-D7: qui i numeri uscivano all'inglese («76.8k token») accanto a una barra di
+    //    stato che scriveva «76,8k» — lo stesso dato, due lingue, a dieci centimetri di distanza.
+    const kilo = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1).replace('.', ',')}k` : String(n));
     const cacheParte = cache > 0 ? ` · cache ${kilo(cache)}` : '';
     const tetto = Number.isFinite(tettoGiri) && tettoGiri > 0 ? ` su ${tettoGiri}` : '';
-    return `${kilo(totale)} token · ${usage.giri} gir${usage.giri === 1 ? 'o' : 'i'}${tetto}${cacheParte}${live ? ' · live' : ''}`;
+    const giri = Number.isFinite(Number(usage.giri)) ? Number(usage.giri) : null;
+    const parteGiri = giri === null ? '' : ` · ${giri} gir${giri === 1 ? 'o' : 'i'}${tetto}`;
+    return `${kilo(totale)} token${parteGiri}${cacheParte}${live ? ' · live' : ''}`;
   }
 
   /*
@@ -2210,7 +2256,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   /** Ripatcha la riga "Main" del foglio Albero sessione SE è già aperto — non riapre né forza un redraw di tutto il foglio, stesso principio di aggiornaPillolaModello(). */
   function aggiornaContatoreUsage() {
     const nodo = $('[data-usage-summary]');
-    if (nodo) nodo.textContent = `Main · ${formattaUsageBreve(state.realSession.usage, { live: true, tettoGiri: state.realSession.tettoGiriDichiarato })}`;
+    // ⛔ 06/9, CB-04: «Main» è il nodo della SESSIONE — qui va il totale della conversazione, non l'ultimo invio.
+    if (nodo) nodo.textContent = `Main · ${formattaUsageBreve(state.realSession.usageSessione || state.realSession.usage, { live: true })}`;
   }
 
   /**
@@ -6049,7 +6096,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       html: () => `
         <div class="sheet-section session-tree-sheet">
           <span class="sheet-label">Sessione</span>
-          <button class="sheet-option active" data-session-action="main"><span class="sheet-icon">${icon('i-list')}</span><span><strong data-current-session-title>${state.session.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}</strong><small data-usage-summary>Main · ${formattaUsageBreve(state.realSession.usage)}</small></span><span>●</span></button>
+          <button class="sheet-option active" data-session-action="main"><span class="sheet-icon">${icon('i-list')}</span><span><strong data-current-session-title>${state.session.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}</strong><small data-usage-summary>Main · ${formattaUsageBreve(state.realSession.usageSessione || state.realSession.usage)}</small></span><span>●</span></button>
         </div>
         <div class="sheet-section">
           <!--
@@ -6524,6 +6571,23 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     return Boolean(state.realSession.id && !state.realSession.eventoTerminaleVisto);
   }
 
+  /*
+   * ⛔⛔⛔ 06/9, CB-20-bis — «abbiamo perso il contatto col server».
+   * Non è «il giro è fallito»: sul server può benissimo star continuando, e al ritorno
+   * lo stream lo racconta. È il terzo stato che mancava, e vale dal PRIMO battito
+   * fallito — cioè esattamente da quando la barra di stato comincia a dirlo — perché
+   * il difetto non era il silenzio, era che due parti della stessa schermata dicevano
+   * cose opposte.
+   * Ricerca 06/09/2026 (timetobuildbob.com, «The Stale Event Problem: Fixing SSE
+   * Reconnects in Streaming AI UIs»): a stream caduto la UI non deve continuare a
+   * mostrare «running»; serve un indicatore persistente, e la macchina a stati deve
+   * distinguere «sto riprovando» da «ho rinunciato» — quella distinzione la porta già
+   * la barra di stato, qui basta non contraddirla.
+   */
+  function contattoPerso() {
+    return state.connessione === 'riconnessione' || state.connessione === 'caduto';
+  }
+
   /**
    * ⭐⭐⭐ 3/9 — item 10: il placeholder-suggerimento è un TERZO stato del
    * composer, non uno nuovo scollegato dagli altri due (attivo/non attivo)
@@ -6616,6 +6680,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
      * dichiarare: si tace, invece di mentire con un numero vero di qualcun altro.
      */
     const usage = state.realSession.id ? state.realSession.usage : null;
+    // ⛔ 06/9, CB-04: la barra promette il consumo della CONVERSAZIONE; il tetto dei giri parla dell'invio in corso.
+    const usageSessione = state.realSession.id ? state.realSession.usageSessione : null;
     const testiTema = aggiornaPiedeChatDaStato.tema?.() || '';
     aggiornaPiedeChat(piede, {
       attivo,
@@ -6626,8 +6692,11 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       giro: Number.isFinite(Number(usage?.giri)) ? Number(usage.giri) : null,
       secondi: attivo && giroAvviatoA !== null ? (performance.now() - giroAvviatoA) / 1000 : null,
       usage,
+      usageSessione,
       tettoGiri: state.realSession.tettoGiriDichiarato,
       inFondo: fondoConversazioneInVista(),
+      contatto: contattoPerso() ? 'perso' : 'collegato', // 06/9 CB-20-bis
+
       latenzaMs: latenzaPrimoTokenMs(),
       costo: null,
       modello: nomeModelloBreve(state.model || state.realSession.currentRunModel), // il modello del giro se non ne e' scelto uno
@@ -6649,14 +6718,37 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     for (const t of $('#conversation')?.querySelectorAll('.talos-turn[data-turno="talos"]') || []) {
       const numeri = [...t.querySelectorAll('.talos-turn-spine__n')].map((n) => Number(n.textContent)).filter(Number.isFinite);
       const gruppi = [...t.querySelectorAll('[data-c="ActivityBundle"]:not(.real-reasoning-note)')];
-      const risposta = t.querySelector('.assistant-copy p, .assistant-copy')?.textContent?.trim().split(/\s+/).slice(0, 5).join(' ');
+      /*
+       * ⛔⛔⛔ 06/9, CB-03 — qui c'era `.assistant-copy p, .assistant-copy`, e il titolo dei
+       * giri diventava il RAGIONAMENTO del modello, in inglese, anche col ragionamento SPENTO:
+       * misurato su una sessione vera con `z-ai/glm-5.3-flash` (sonda `.gravi/sonde/03-indice-giri.mjs`)
+       * — l'indice diceva «3 · The user asks in Italian:», «6 · Simple: 31 × 12 =», «8 · 44 × 9 = 396.»
+       * mentre le risposte vere erano «17 × 23 = 391», «31 × 12 = 372», «44 × 9 = 396».
+       * CAUSA: `assistant-copy` è una classe-gancio che portano ANCHE il corpo del ragionamento
+       * (`appendToolNote`, che la aggiunge a ogni `detail`), le note di sistema e il «perché» di una
+       * carta di approvazione; il ragionamento è il PRIMO blocco del turno, quindi vinceva sempre.
+       * La riga qui sopra escludeva già `.real-reasoning-note` dai gruppi: questa no.
+       * ⇒ Si nomina la risposta per quello che è: il corpo del messaggio di TALOS
+       * (`.talos-message__copy`, creato da `ensureAssistantMessageElement`).
+       * Ricerca 06/09/2026: AG-UI, «Reasoning» (docs.ag-ui.com/concepts/reasoning) — il ragionamento
+       * è un messaggio con `role: "reasoning"`, tenuto distinto dalla risposta finale «to avoid
+       * polluting conversation history»; MDN, «aria-hidden» — un elemento marcato così è tolto
+       * dall'albero di accessibilità, e il ragionamento spento porta proprio `aria-hidden="true"`:
+       * ripescarne il testo per farne un'etichetta visibile lo rimette a schermo da un'altra porta.
+       */
+      const risposta = titoloRispostaDaTurno(t);
       numeri.forEach((numero, i) => {
         const g = gruppi[i];
         const riassunto = g?.querySelector('.tool-note-summary-text')?.textContent?.trim() || (i === numeri.length - 1 && risposta) || 'Risposta';
         giri.push({ numero, titolo: riassunto.length > 32 ? `${riassunto.slice(0, 31)}…` : riassunto, attrezzi: g ? g.querySelectorAll('[data-c="ToolRow"]').length : 0, inCorso: false });
       });
     }
-    if (attivo && giri.length) giri[giri.length - 1].inCorso = true;
+    if (attivo && giri.length) {
+      // ⛔ 06/9, CB-20-bis: col server irraggiungibile il giro non è «in corso», è un giro
+      //    di cui non abbiamo più notizie. Due fatti diversi, due parole diverse.
+      if (contattoPerso()) giri[giri.length - 1].senzaContatto = true;
+      else giri[giri.length - 1].inCorso = true;
+    }
     return giri;
   }
   let catalogoRichiesto = false;
@@ -6712,8 +6804,14 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     const redirectOccupato = state.realSession.redirectRequestInFlight || Boolean(state.realSession.redirectPendingId);
     const use = $('use', sendButton);
     sendButton.classList.toggle('is-stop', attivo);
-    sendButton.setAttribute('aria-label', attivo ? 'Interrompi risposta' : 'Invia');
-    sendButton.title = attivo ? 'Interrompi al prossimo punto sicuro' : 'Invia';
+    /*
+     * ⛔ 06/9, CB-20-bis — col server irraggiungibile «Interrompi» manda una POST che non
+     *    arriva: il pulsante lo dice invece di fingere. Non si disabilita (resta
+     *    raggiungibile da tastiera e il suo titolo si legge): cambia quello che promette.
+     */
+    const senzaContatto = attivo && contattoPerso();
+    sendButton.setAttribute('aria-label', senzaContatto ? 'Il server non risponde' : attivo ? 'Interrompi risposta' : 'Invia');
+    sendButton.title = senzaContatto ? 'Il server non risponde: la richiesta di fermare non arriverebbe.' : attivo ? 'Interrompi al prossimo punto sicuro' : 'Invia';
     if (use) use.setAttribute('href', attivo ? '#i-stop' : '#i-send');
     redirectRunButton.hidden = !(attivo && haTesto);
     redirectRunButton.disabled = redirectOccupato;
@@ -10541,6 +10639,18 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       case 'RunStarted': {
         streamingAutoFollow = true; // un nuovo giro ri-arma il "segui il centro" — stesso principio di resetThreadScroll() in Hermes
         streamingLastTargetTop = null;
+        /*
+         * ⛔⛔⛔ 06/9, CB-04 — QUI è il confine fra due invii: il consumo
+         * dell'invio che si chiude entra nel totale della sessione, e il
+         * contatore del turno riparte da «non ancora dichiarato» (mai da zero:
+         * il kernel non ha ancora detto niente su questo invio). Senza questa
+         * riga il totale della conversazione sarebbe l'ultimo turno, che è
+         * esattamente il difetto misurato — 7.716 token dichiarati su 23.060
+         * spesi. Vale sia dal vivo sia al replay di una cronologia.
+         */
+        state.realSession.usageEsecuzioniPrecedenti = sommaUsage(state.realSession.usageEsecuzioniPrecedenti, state.realSession.usage);
+        state.realSession.usage = null;
+        state.realSession.usageSessione = state.realSession.usageEsecuzioniPrecedenti;
         state.realSession.currentRunModel = typeof evento.contesto?.modello === 'string' && evento.contesto.modello.trim()
           ? evento.contesto.modello.trim()
           : (state.model || null);
@@ -10839,7 +10949,16 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
          */
         const path = evento.delta?.[0]?.path;
         if (path === '/usage') {
+          /*
+           * ⛔⛔⛔ 06/9, CB-04 — questo valore è cumulativo DENTRO l'invio in
+           * corso e riparte da zero al successivo: tenerlo com'è dà il totale
+           * di un turno, non della conversazione. Il totale di sessione è la
+           * somma degli invii già chiusi (accumulati al `RunStarted`) più
+           * quello in corso. Vale identico al replay di una cronologia: gli
+           * eventi passano tutti da qui, nello stesso ordine.
+           */
           state.realSession.usage = evento.delta[0].value;
+          state.realSession.usageSessione = sommaUsage(state.realSession.usageEsecuzioniPrecedenti, state.realSession.usage);
           aggiornaContatoreUsage();
           aggiornaComposerUsage(state.realSession.usage);
           break;
@@ -11191,6 +11310,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       state.realSession.redirectRequestIntentId = null;
       state.realSession.attesaBubble = null; // il nodo è già sparito con replaceChildren() qui sopra
       state.realSession.usage = null; // Fase 3 — un resume (continua:true) TIENE il conto, una sessione nuova riparte da IGNOTO
+      state.realSession.usageSessione = null; // 06/9 CB-04 — idem per il totale della conversazione
+      state.realSession.usageEsecuzioniPrecedenti = null;
       state.realSession.eventiAttrezzi = []; // O-02 — la diagnosi dei giri parla della sessione che si sta guardando, mai di quella prima
       state.realSession.tettoGiriDichiarato = null; // O-02 — il tetto lo dichiara il kernel di QUESTA sessione (il planner ne ha uno diverso), mai ereditato
       state.realSession.approvazioniPendenti = new Map(); // le card sono già sparite con replaceChildren() qui sopra, la mappa le segue
@@ -15235,7 +15356,15 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   document.addEventListener('keydown', (event) => { if (event.key === 'Escape') $$('.overlay-layer').forEach((v) => chiudiVeloMockup(v.id)); });
   collegaRidimensionamentoDialoghi(ROOT()); // 06/9 B7: le tre maniglie di ogni velo (trascina, frecce, doppio clic)
   (() => { // 06/9: la striscia compare solo scorrendo in alto — si ridisegna quando la conversazione scorre
-    const c = $('#conversation');
+    /*
+     * ⛔⛔ 06/9, trovato riparando CB-20-bis — l'ascoltatore stava su `#conversation`, che è
+     * la COLONNA interna e non scorre: chi scorre è `.talos-conversation` (la stessa causa
+     * di O-19/O-20/O-21, rimasta in un posto in più). Risultato misurato: scorrendo in alto
+     * la striscia NON ricompariva, perché niente la ridisegnava — e la richiesta dell'owner
+     * O-11 («deve apparire quando si scrolla in alto») era servita solo finché un timer del
+     * giro chiamava per conto suo. Si usa `scrollerConversazione`, come tutto il resto.
+     */
+    const c = scrollerConversazione($('#conversation'));
     if (!c) return;
     let inCoda = false;
     c.addEventListener('scroll', () => {
