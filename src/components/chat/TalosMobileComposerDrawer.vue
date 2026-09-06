@@ -1,17 +1,20 @@
 <script setup lang="ts">
-import { SwitchRoot, SwitchThumb } from 'reka-ui'
-import { TALOS_SWITCH_THUMB_CLASS, TALOS_SWITCH_TRACK_CLASS } from '@/lib/switchStyles'
 /**
  * F3-T4bis (owner #13, Claude screenshots) — the organized "Add to chat"
- * bottom drawer. Big single-shot tiles up top (they act and close), calm
- * toggle rows for modes (they act and stay), an inline effort segment and
- * quiet action rows. Loaded lazily by the composer only in drawer mode.
+ * bottom drawer. Big single-shot tiles up top (they act and close), quiet
+ * action rows below. Loaded lazily by the composer only in drawer mode.
+ *
+ * ⛔⛔⛔ Owner 6/9: reasoning/effort AND "browse the web" both removed from
+ * here — "non hanno senso lì". Reasoning/effort has its own home (the
+ * "Model & reasoning" drawer). Browse mode has none here anymore: in
+ * drawer mode there is currently no way to toggle it (the classic/dropdown
+ * composer keeps its own copy of the switch, untouched) — owner's explicit
+ * call, not an oversight.
  */
 import {
-    Camera as CameraIcon, Database, FlaskConical, Globe2, Images, Paperclip, Sparkles,
+    Camera as CameraIcon, Database, FlaskConical, Images, Paperclip, Sparkles,
 } from '@lucide/vue'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
-import TalosMobileEffortPicker from '@/components/chat/TalosMobileEffortPicker.vue'
 import type { TalosMobileEffortLevel } from '@/lib/mobileEffort'
 
 const props = defineProps<{
@@ -121,45 +124,6 @@ function single(
                         </span>
                         {{ $t('navigation.modelLab') }}
                     </button>
-                </div>
-
-                <SwitchRoot
-                    data-testid="talos-drawer-browse"
-                    :model-value="browseMode"
-                    class="talos-pressable flex min-h-13 w-full items-center gap-3 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 px-3 text-left"
-                    @update:model-value="emit('toggleBrowse', $event)"
-                >
-                    <span class="flex size-9 items-center justify-center rounded-full bg-[var(--talos-active)]">
-                        <Globe2 class="size-4" aria-hidden="true" />
-                    </span>
-                    <span class="min-w-0 flex-1 text-sm">{{ $t('chat.browseWeb') }}</span>
-                    <!-- `data-state` a mano: reka lo mette sulla RIGA, che qui e'
-                         il SwitchRoot, non su questo binario. Senza,
-                         il pomello si muove e il binario resta spento. -->
-                    <span :class="TALOS_SWITCH_TRACK_CLASS" :data-state="browseMode ? 'checked' : 'unchecked'" aria-hidden="true">
-                        <SwitchThumb :class="TALOS_SWITCH_THUMB_CLASS" />
-                    </span>
-                </SwitchRoot>
-
-                <!--
-                    ⛔⛔ Owner 2026-08-27: questo drawer aveva la SUA implementazione
-                    dell'effort — bottoni, mai passata al segmented slider che
-                    `TalosMobileEffortPicker` porta nel drawer "Model & reasoning"
-                    dal refactor `b86bdd46`. Due superfici della stessa scelta con
-                    due linguaggi diversi. Stesso componente, stessi prop/eventi —
-                    è un drop-in replacement per costruzione (vedi il commento in
-                    testa a `TalosMobileEffortPicker.vue`).
-                -->
-                <div v-if="effortLevels.length || supportsThinking" class="rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3">
-                    <TalosMobileEffortPicker
-                        :effort-levels="effortLevels"
-                        :selected-effort="selectedEffort"
-                        :supports-thinking="supportsThinking"
-                        :thinking="thinking"
-                        @select-effort="emit('selectEffort', $event)"
-                        @select-thinking="emit('selectThinking', $event)"
-                        @request-close="emit('close')"
-                    />
                 </div>
 
                 <!-- F4-#20: never a mute disabled row — the tap explains itself. -->

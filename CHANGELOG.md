@@ -6,6 +6,29 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.27
+
+The "+" menu is less cluttered: it no longer shows a second copy of the
+reasoning/effort control, and it no longer offers a web-browsing toggle
+that, on the default composer, had nowhere reliable left to live.
+
+### One fewer place to set reasoning effort
+
+The "+" menu's organized drawer showed its own reasoning/effort picker —
+the exact same control already reachable by tapping the model name, with
+no indication the two were connected. It's gone from the "+" menu now;
+the model name stays the one place to set it.
+
+### The "+" menu no longer offers web browsing
+
+Both the "+" menu's organized drawer and its dropdown listed a "Browse
+the web" toggle. Removed from both. On the classic composer it still has
+its own icon button in the toolbar, unchanged. On the default composer
+(the newer, Claude-style one) there is currently no way to turn browsing
+on or off from the "+" menu — a deliberate simplification, not an
+oversight, and not yet replaced with another way to reach it from that
+composer.
+
 ## v0.1.26
 
 Codice's Terminal tab can now run a command itself, not just show one, its

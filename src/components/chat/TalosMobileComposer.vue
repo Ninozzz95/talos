@@ -914,7 +914,10 @@ watch(() => props.prompt, () => {
                 <button type="button" role="menuitem" data-testid="talos-plus-menu-attach" :disabled="!attachmentsAvailable" class="talos-pressable flex min-h-touch w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)] disabled:opacity-50" @click="emit('attach'); closePlusMenu()"><Paperclip class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.attachFile') }}</button>
                 <button type="button" role="menuitem" :disabled="!contextAvailable" class="talos-pressable flex min-h-touch w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)] disabled:opacity-50" @click="emit('openContext'); closePlusMenu()"><Database class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('navigation.library') }}</button>
                 <button type="button" role="menuitem" class="talos-pressable flex min-h-touch w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="emit('openModelLab'); closePlusMenu()"><SlidersHorizontal class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('navigation.modelLab') }}</button>
-                <button type="button" role="menuitem" :aria-pressed="browseMode" class="talos-pressable flex min-h-touch w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="emit('toggleBrowse', !browseMode); closePlusMenu()"><Globe2 class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ browseMode ? $t('chat.browseOn') : $t('chat.browseWeb') }}</button>
+                <!-- ⛔⛔⛔ Owner 6/9: "naviga sul web... toglila anche dal
+                     drop-down" — tolta anche qui, non solo dal drawer
+                     organizzato. Non ha più una sede nel menu "+", in
+                     nessuna delle due modalità. -->
                 <button type="button" role="menuitem" class="talos-pressable flex min-h-touch w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="closePlusMenu(); requestPromptEnhancement()"><Sparkles class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.improvePrompt') }}</button>
             </div>
             </Transition>
