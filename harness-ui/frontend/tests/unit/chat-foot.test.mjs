@@ -60,6 +60,15 @@ test('PIEDE-FONDO: «sono in fondo» guarda la fine del CONTENUTO, non del conte
   assert.equal(fondoInVista({ scrollHeight: 2000, scrollTop: 974, clientHeight: 684, coda: 342 }), true);
   // e appena sale davvero, la striscia deve tornare
   assert.equal(fondoInVista({ scrollHeight: 2000, scrollTop: 500, clientHeight: 684, coda: 342 }), false);
+  /*
+   * ⛔ Il caso MISURATO il 06/9 durante un giro vero: salito di 320 px con coda 314. Con la vecchia
+   * tolleranza di 24 questo diceva «sono in fondo» mentre l'ultimo messaggio era già fuori schermo,
+   * e la striscia del ragionamento restava muta proprio quando serviva.
+   */
+  assert.equal(fondoInVista({ scrollHeight: 1731, scrollTop: 413, clientHeight: 998, coda: 314 }), false, 'salito di 320 con coda 314: NON sono in fondo');
+  // AL CONTRARIO — davvero in fondo, con solo il rumore sub-pixel di mezzo: resta «in fondo»
+  assert.equal(fondoInVista({ scrollHeight: 1731, scrollTop: 733, clientHeight: 998, coda: 314 }), true, 'distanza 0: in fondo');
+  assert.equal(fondoInVista({ scrollHeight: 1731, scrollTop: 730, clientHeight: 998, coda: 314 }), true, 'distanza 3: rumore sub-pixel, ancora in fondo');
   // senza spazio in coda vale il conto di sempre
   assert.equal(fondoInVista({ scrollHeight: 1000, scrollTop: 980, clientHeight: 20, coda: 0 }), true);
   assert.equal(fondoInVista({ scrollHeight: 1000, scrollTop: 100, clientHeight: 20, coda: 0 }), false);

@@ -91,7 +91,19 @@ export function nomeModelloUmano(id) {
  * ⇒ «Sono in fondo» vuol dire che si vede la fine del CONTENUTO: lo spazio in coda si sottrae,
  * perché è vuoto per costruzione. Funzione pura, così la si prova senza un browser.
  */
-export function fondoInVista({ scrollHeight = 0, scrollTop = 0, clientHeight = 0, coda = 0, soglia = 24 } = {}) {
+/*
+ * ⛔⛔ 06/9, MISURATO durante un giro vero (O-34, terzo tentativo): salito di **320 px** con una coda
+ * di **314**, la striscia restava NASCOSTA — `320 <= 314 + 24` è vero. L'ultimo messaggio era già
+ * uscito dallo schermo dal basso e la chat continuava a credersi «in fondo»: una **zona morta di 24
+ * px** creata dal sommare la tolleranza alla coda.
+ * ⇒ La soglia serve SOLO al rumore sub-pixel, non a perdonare uno scorrimento vero.
+ * Ricerca 06/09/2026 (MDN `Element.scrollHeight`; sqlpey «Detecting Scroll to Bottom»): `scrollHeight`
+ * INCLUDE il padding — quindi sottrarre la coda è giusto — ma `scrollTop` è frazionario mentre gli
+ * altri due sono arrotondati, e la tolleranza raccomandata è **1-5 px**, non 24.
+ * ⛔ Da non confondere con `CONVERSAZIONE_FONDO_SOGLIA_PX` (app.js), che è un'altra domanda: «devo
+ *   animare o saltare?». Quella resta 24: sbagliarla costa un'animazione di troppo, non una bugia.
+ */
+export function fondoInVista({ scrollHeight = 0, scrollTop = 0, clientHeight = 0, coda = 0, soglia = 4 } = {}) {
   const distanza = Number(scrollHeight) - Number(scrollTop) - Number(clientHeight);
   if (!Number.isFinite(distanza)) return true;
   return distanza <= Math.max(0, Number(coda) || 0) + soglia;
