@@ -25,6 +25,8 @@ export default Object.freeze({
     'Aspetto e movimento': 'Appearance and motion', 'Chat e composer': 'Chat and composer', 'Laboratorio modelli': 'Model Lab',
     'Provider e accessi': 'Providers and access', 'Strumenti agente e permessi': 'Agent tools and permissions',
     'Privacy e dati locali': 'Privacy and local data', 'File e workspace': 'Files and workspace', 'Account, Doctor e backup': 'Account, Doctor and backup',
+    // 06/09, D2/D13/D21/D22/D26 — le tre sezioni nuove delle Impostazioni
+    'Memoria e contesto': 'Memory and context', 'Sicurezza e privacy': 'Security and privacy', 'Costi e consumo': 'Cost and usage',
     // titoli delle righe
     'Animazione risposta': 'Reply animation', 'Animazioni interfaccia': 'Interface animations', 'Apertura del pulsante +': 'The “+” button opens',
     'Bagliore': 'Glow', 'Chat a tutta larghezza': 'Full-width chat', 'Composer': 'Composer', 'Contrasto': 'Contrast', 'Curva': 'Easing',

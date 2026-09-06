@@ -714,6 +714,22 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-hf-misura__quando{font-size:11.5px}
 .talos-hf-nessuno{margin-top:10px}
 /*
+ * 06/09 — D26, la ripartizione della finestra di contesto: una barra sola,
+ * non tre numeri sparsi. Le fette usano i colori già in uso per gli stati,
+ * e la barra ha sempre un fondo visibile (lo spazio che RESTA è informazione
+ * quanto quello occupato).
+ */
+.talos-contesto{display:flex; height:14px; border-radius:999px; overflow:hidden; background:var(--talos-panel-soft); border:1px solid var(--talos-border-subtle); margin:12px 0 8px}
+.talos-contesto__fetta{display:block; height:100%}
+.talos-contesto__fetta--attrezzi{background:var(--talos-accent)}
+.talos-contesto__fetta--istruzioni{background:var(--talos-accent-border)}
+.talos-contesto__fetta--memoria{background:var(--talos-muted)}
+.talos-contesto-voce{display:flex; align-items:baseline; gap:8px; padding:6px 0; border-top:1px solid var(--talos-border-subtle); font-size:13px}
+.talos-contesto-voce:first-child{border-top:0}
+.talos-contesto-voce__punto{width:9px; height:9px; border-radius:3px; flex:none}
+.talos-contesto-voce__k{flex:1; min-width:0}
+.talos-contesto-voce__v{font-variant-numeric:tabular-nums; color:var(--talos-muted)}
+/*
  * 06/09 — la lista delle varianti scorre dentro di sé.
  * Misurato dal vivo: un repository vero (Qwen3-Coder-30B) porta 27 varianti, e
  * il pannello di dettaglio diventava alto 3.566 px dentro una colonna da 320.
