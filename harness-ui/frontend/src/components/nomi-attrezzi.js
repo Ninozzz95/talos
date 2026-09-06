@@ -105,3 +105,85 @@ export function corrispondeARicerca(id, query, catalogo = null) {
   const nome = nomeUmanoAttrezzo(id, catalogo);
   return String(id ?? '').toLowerCase().includes(q) || (nome !== null && nome.toLowerCase().includes(q));
 }
+
+/*
+ * ─────────────────────────────────────────────────────────────────────────────
+ * C10 — LA DESCRIZIONE NOSTRA, IN ITALIANO.
+ *
+ * Owner, decisione C10: «Descrizione **nostra in italiano**; quella del kernel
+ * resta visibile come "testo inviato al modello"». L'audit del 06/09: ❌ «Le
+ * righe mostrano solo l'inglese del kernel: "Lists the files of the workspace,
+ * with their sizes…"».
+ *
+ * ⛔ NON sono traduzioni. Il testo del kernel è scritto PER IL MODELLO: dice
+ * quando chiamare l'attrezzo, cosa non fare, quale id passare. A una persona
+ * che guarda l'elenco serve un'altra cosa — che cosa fa questo attrezzo al suo
+ * computer e ai suoi dati. Due destinatari, due testi.
+ *
+ * ⛔ E il testo del kernel NON si tocca: è il contratto col modello (regola
+ * dell'owner del 04/09). Qui si aggiunge, non si sostituisce: il grezzo resta
+ * visibile nel pannello di dettaglio, etichettato.
+ *
+ * ⛔ Quello che non ha una descrizione nostra torna `null`, e la superficie
+ * mostra l'inglese del kernel dicendo che è quello: mai una frase inventata.
+ */
+export const DESCRIZIONI_ATTREZZI = Object.freeze({
+  elenca: 'Guarda quali file ci sono nella cartella del progetto, ai primi livelli.',
+  cerca: 'Trova file in tutto il progetto, anche in fondo, per nome o per il testo che contengono.',
+  leggi: 'Legge un file del progetto.',
+  scrivi: 'Riscrive un file del progetto per intero. È una modifica al tuo disco.',
+  prova: 'Lancia la suite di test del progetto ed è il giudice: il compito è finito quando passa.',
+  shell: 'Esegue un comando nel terminale, dentro la cartella del progetto. È l’attrezzo che può fare qualunque cosa: installare, spostare, cancellare.',
+  naviga: 'Apre una pagina web pubblica e ne legge il contenuto. Solo lettura, solo http e https.',
+  web_search: 'Cerca sul web e riporta le pagine trovate con titolo, indirizzo e data dichiarata dalla fonte.',
+  artifact_create: 'Costruisce una paginetta interattiva e la mostra dentro la chat.',
+  document_create: 'Crea un documento vero (PDF, Word, foglio di calcolo, presentazione) e lo salva nel progetto.',
+  time_now: 'Chiede che ora e che giorno è su questo computer, invece di indovinarlo.',
+  delega_sottotask: 'Affida un pezzo di lavoro a una sessione figlia, che lavora in una cartella sua e riporta solo il risultato.',
+  generate_image: 'Genera un’immagine da una descrizione e la salva nel progetto come file vero.',
+  library_list: 'Elenca i file della Libreria del progetto.',
+  library_search: 'Cerca fra i file della Libreria e riporta i pezzi che corrispondono.',
+  library_read: 'Legge un file della Libreria.',
+  library_file_origin: 'Dice da dove viene un file della Libreria: se è stato generato o portato dentro, da quale modello e quando.',
+  library_rename: 'Cambia il nome a un file della Libreria.',
+  library_delete: 'Toglie un file dalla Libreria. Non si torna indietro.',
+  library_export: 'Salva una copia di un file della Libreria dentro il progetto, come file visibile.',
+  library_context_policy_update: 'Cambia quanto della Libreria può entrare nelle conversazioni.',
+  notes_list: 'Elenca le tue note, dalla più aggiornata.',
+  notes_create: 'Scrive una nota per te.',
+  notes_update: 'Cambia il titolo o il testo di una nota che esiste già.',
+  notes_delete: 'Cancella una tua nota, per sempre.',
+  tasks_list: 'Elenca le tue attività, con stato e priorità.',
+  tasks_create: 'Aggiunge un’attività alla tua lista.',
+  tasks_complete: 'Segna un’attività come fatta, o la rimette in corso.',
+  tasks_update: 'Cambia titolo, dettaglio o priorità di un’attività che esiste già.',
+  tasks_delete: 'Cancella un’attività, per sempre.',
+  memory_search: 'Cerca fra le cose che hai chiesto a TALOS di ricordare.',
+  memory_write: 'Salva una cosa che hai chiesto tu di ricordare per le prossime conversazioni.',
+  memory_update: 'Corregge un ricordo che esiste già, invece di aggiungerne un secondo che dice il contrario.',
+  memory_delete: 'Fa dimenticare un ricordo, così non viene più usato.',
+  research_list: 'Elenca le ricerche approfondite fatte su questo progetto e com’è finita ognuna.',
+  research_start: 'Avvia una ricerca approfondita: cerca sul web, legge le fonti e scrive un rapporto. Dura minuti e consuma credito vero.',
+  research_read: 'Legge il rapporto scritto da una ricerca finita.',
+  research_rename: 'Cambia solo l’etichetta di una ricerca: non rifà niente.',
+  research_pause: 'Ferma una ricerca in corso tenendo quello che ha già raccolto.',
+  research_resume: 'Riprende una ricerca in pausa da dove si era fermata.',
+  research_cancel: 'Ferma una ricerca per sempre. Quello che ha raccolto resta leggibile.',
+  research_delete: 'Cancella una ricerca e il suo rapporto, per sempre.',
+  tool_create: 'Costruisce un attrezzo nuovo, descritto a parole, che TALOS potrà chiamare da qui in avanti.',
+});
+
+/**
+ * La descrizione nostra di un attrezzo, o `null` se non l'abbiamo scritta.
+ * ⛔ `null` NON si sostituisce con l'inglese qui dentro: chi disegna deve poter
+ * dire «questo è il testo del kernel», e non può se le due cose si confondono.
+ */
+export function descrizioneAttrezzo(id) {
+  const chiave = String(id ?? '');
+  return Object.prototype.hasOwnProperty.call(DESCRIZIONI_ATTREZZI, chiave) ? DESCRIZIONI_ATTREZZI[chiave] : null;
+}
+
+/** Gli id senza una descrizione nostra: il debito di C10, misurato invece che dichiarato chiuso. */
+export function attrezziSenzaDescrizione(ids) {
+  return [...new Set(ids || [])].filter((id) => descrizioneAttrezzo(id) === null);
+}

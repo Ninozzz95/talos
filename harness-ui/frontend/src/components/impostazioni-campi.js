@@ -690,37 +690,24 @@ export const CAMPI_IMPOSTAZIONI = [
     "gruppo": "chat"
   }
 ];
+/*
+ * D2 (06/09) — «Dieci sezioni in due gruppi: comportamento · infrastruttura».
+ * ⛔ Questo elenco è l'UNICA fonte: `montaImpostazioni` ricostruisce da qui le
+ * voci di navigazione, quindi aggiungere una sezione solo nel mockup non basta
+ * (provato dal vivo il 06/09: il markup aveva le dieci voci giuste e il
+ * componente le riscriveva con le vecchie otto).
+ * ⛔ `privacy` tiene il suo id storico — la chiave salvata e i `data-settings-go`
+ * puntano lì — ma a schermo è «Sicurezza e privacy», la sezione a sé di D13.
+ */
 export const SEZIONI_IMPOSTAZIONI = [
-  {
-    "id": "appearance",
-    "titolo": "Aspetto e movimento"
-  },
-  {
-    "id": "chat",
-    "titolo": "Chat e composer"
-  },
-  {
-    "id": "models",
-    "titolo": "Laboratorio modelli"
-  },
-  {
-    "id": "providers",
-    "titolo": "Provider e accessi"
-  },
-  {
-    "id": "tools",
-    "titolo": "Strumenti agente e permessi"
-  },
-  {
-    "id": "privacy",
-    "titolo": "Privacy e dati locali"
-  },
-  {
-    "id": "workspace",
-    "titolo": "File e workspace"
-  },
-  {
-    "id": "account",
-    "titolo": "Account, Doctor e backup"
-  }
+  { "id": "appearance", "titolo": "Aspetto e movimento", "gruppo": "comportamento" },
+  { "id": "chat", "titolo": "Chat e composer", "gruppo": "comportamento" },
+  { "id": "tools", "titolo": "Strumenti agente e permessi", "gruppo": "comportamento" },
+  { "id": "memoria", "titolo": "Memoria e contesto", "gruppo": "comportamento" },
+  { "id": "privacy", "titolo": "Sicurezza e privacy", "gruppo": "comportamento" },
+  { "id": "models", "titolo": "Laboratorio modelli", "gruppo": "infrastruttura" },
+  { "id": "providers", "titolo": "Provider e accessi", "gruppo": "infrastruttura" },
+  { "id": "costi", "titolo": "Costi e consumo", "gruppo": "infrastruttura" },
+  { "id": "workspace", "titolo": "File e workspace", "gruppo": "infrastruttura" },
+  { "id": "account", "titolo": "Account, Doctor e backup", "gruppo": "infrastruttura" }
 ];

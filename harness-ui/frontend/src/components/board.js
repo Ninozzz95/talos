@@ -2,6 +2,7 @@
  * MDN aria-sort e WAI-ARIA Table Pattern, riletti 05/09/2026. Nessun dato utente in innerHTML.
  */
 import { statoSessione, nomeModello } from './session-item.js';
+import { plurale } from './plurale.js'; // BH-12: «1 ricordi» — il plurale vive in un posto solo
 const NUMERO = new Intl.NumberFormat('it-IT', {maximumFractionDigits:1});
 const valido = n => typeof n === 'number' && Number.isFinite(n) && n >= 0;
 const totale = s => valido(s.usage?.prompt_tokens) && valido(s.usage?.completion_tokens) ? s.usage.prompt_tokens + s.usage.completion_tokens : null;
@@ -142,9 +143,9 @@ function renderBoard(schermo,vista) {
   selettore.value=vista.cartella;
   for (const tab of schermo.querySelectorAll('[data-board-stato]')) {const attivo=tab.dataset.boardStato===vista.stato;tab.setAttribute('aria-selected',String(attivo));tab.tabIndex=attivo?0:-1;}
   const aggiornamento=schermo.querySelector('[data-board-refresh]');aggiornamento.disabled=Boolean(opzioni.caricamento); aggiornamento.textContent=opzioni.caricamento?'Aggiornamento…':'Aggiorna';
-  schermo.querySelector('.talos-topbar__path').textContent=sessioni.length+' sessioni'+(opzioni.cartelleCaricate?' · '+percorsi.length+' cartelle':'');
+  schermo.querySelector('.talos-topbar__path').textContent=plurale(sessioni.length,'sessione')+(opzioni.cartelleCaricate?' · '+percorsi.length+' cartelle':'');
   const esito=schermo.querySelector('#boardEsito');
-  esito.textContent=opzioni.errore || (visibili.length===sessioni.length ? sessioni.length+' sessioni' : visibili.length+' di '+sessioni.length+' sessioni')+(opzioni.metricheInCaricamento?' · Caricamento metriche…':'')+(opzioni.cartelleInCaricamento?' · Caricamento cartelle…':'')+(opzioni.avviso?' · '+opzioni.avviso:'');
+  esito.textContent=opzioni.errore || (visibili.length===sessioni.length ? plurale(sessioni.length,'sessione') : visibili.length+' di '+plurale(sessioni.length,'sessione'))+(opzioni.metricheInCaricamento?' · Caricamento metriche…':'')+(opzioni.cartelleInCaricamento?' · Caricamento cartelle…':'')+(opzioni.avviso?' · '+opzioni.avviso:'');
   esito.setAttribute('role',opzioni.errore?'alert':'status');
   const attivo=doc.activeElement?.closest('[data-board-session-id]')?.dataset.boardSessionId;
   const tabella=creaTabellaBoard(visibili,{...opzioni,ordine:vista.ordine,vuoto:opzioni.errore || (opzioni.caricamento?'Caricamento sessioni…':sessioni.length?'Nessuna sessione corrisponde ai filtri.':'Nessuna sessione ancora — premi «Nuova» per iniziare.')});
