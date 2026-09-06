@@ -39,6 +39,7 @@ import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaN
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione, come quella di ChatGPT desktop
 import { montaScorciatoie, normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
 import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nomeModelloUmano } from '../components/chat-foot.js';
+import { montaProgetti, progettiConSessioni } from '../components/progetti.js'; // 06/9: la voce «Progetti» aveva un contatore e nessuna pagina
 import { collegaTooltip } from '../components/tooltip.js'; // 06/9 O-40: i suggerimenti sono nostri, col tema e con la tastiera
 import { porteLateraliAperte } from '../components/permessi.js'; // 06/9 T03-D2: chiudere «scrivi» non chiude il terminale, e va detto
 import { spiegaErrore, spiegaRifiutoAttrezzo } from '../components/errori.js';
@@ -1268,7 +1269,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
      * fatto qui perché `setView` è il solo posto da cui si naviga.
      */
     views.forEach((pane) => { pane.hidden = pane !== target; });
-    const SCHERMO_PER_VISTA = { chat: 'chat', vuota: 'vuota', terminal: 'terminale', diff: 'review', capability: 'capability', dashboard: 'board', memoria: 'memoria', attivita: 'attivita', note: 'note', settings: 'impostazioni', doctor: 'doctor', libreria: 'libreria', ricerca: 'ricerca', officina: 'officina', automations: 'automazioni', browser: 'browser' };
+    const SCHERMO_PER_VISTA = { chat: 'chat', vuota: 'vuota', terminal: 'terminale', diff: 'review', capability: 'capability', dashboard: 'board', memoria: 'memoria', attivita: 'attivita', note: 'note', progetti: 'progetti', settings: 'impostazioni', doctor: 'doctor', libreria: 'libreria', ricerca: 'ricerca', officina: 'officina', automations: 'automazioni', browser: 'browser' };
     const schermo = SCHERMO_PER_VISTA[view] || view;
     document.documentElement.setAttribute('data-vista', ['chat', 'vuota', 'terminale', 'review', 'browser'].includes(schermo) ? 'sessione' : 'pagina');
     document.documentElement.setAttribute('data-schermo', schermo);
@@ -1286,6 +1287,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (view === 'attivita') caricaPannelloAttivita({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Attività
     if (view === 'memoria') caricaPannelloMemoria({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Memoria
     if (view === 'note') void caricaPaginaNote(); // 06/9 C24: la voce «Note» aveva un contatore e nessuna pagina
+    if (view === 'progetti') void caricaPaginaProgetti(); // 06/9: stessa storia delle Note, trovata dal cancello
     if (view === 'automations') renderAutomationsReali();
     if (view === 'browser') renderizzaBrowser(); // 06/9 K-I
     if (view === 'terminal') apriVistaTerminaleReale(); // ⭐ 28/8 — Terminale REALE: montaggio/connessione PIGRI, solo alla prima apertura del tab (LEDGER-TERMINALE-REALE.md)
@@ -1300,6 +1302,32 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * non si finge un elenco vuoto, si dice perche'.
    */
   let noteCaricate = [];
+  /*
+   * ⛔ 06/9 — la voce «Progetti» aveva un contatore che diceva 6 e nessuna pagina dietro: identica
+   * alle «Note», e stavolta l'ha trovata il CANCELLO invece di un paio d'occhi. La rotta
+   * `/api/v1/projects` c'era già; mancava il posto dove leggerla.
+   * ⛔ I progetti sono GLOBALI e non hanno bisogno di una sessione aperta: si caricano sempre.
+   *   Le sessioni servono solo a dire cosa è successo dentro ognuno.
+   */
+  async function caricaPaginaProgetti() {
+    const schermo = $('#schermoProgetti');
+    if (!schermo) return;
+    const stato = $('[data-progetti-stato]', schermo);
+    if (stato) stato.textContent = 'Leggo i progetti…';
+    try {
+      const [elenco, sessioni] = await Promise.all([
+        apiGet('/api/v1/projects'),
+        apiGet('/api/v1/sessions').catch(() => ({ items: [] })), // senza le sessioni i progetti si vedono lo stesso
+      ]);
+      montaProgetti(schermo, progettiConSessioni(elenco?.items || [], sessioni?.items || []), {
+        onApriSessione: (s) => { if (s?.sessionId) passaASessione(s.sessionId, s.sessionId, s.nome); },
+      });
+    } catch (errore) {
+      montaProgetti(schermo, []);
+      if (stato) stato.textContent = `I progetti non si leggono: ${messaggioErroreUtente(errore, 'riprova fra un momento')}`;
+    }
+  }
+
   async function caricaPaginaNote() {
     const schermo = $('#schermoNote');
     if (!schermo) return;
@@ -15413,7 +15441,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * clic fuori chiudono; i `[aria-expanded][aria-controls]` sono disclosure.
    * Nessuna logica di prodotto: solo il comportamento che il mockup già ha.
    */
-  const VISTA_PER_VAIA = { chat: 'chat', vuota: 'vuota', terminale: 'terminal', review: 'diff', capability: 'capability', board: 'dashboard', memoria: 'memoria', attivita: 'attivita', note: 'note', impostazioni: 'settings', doctor: 'doctor', libreria: 'libreria', ricerca: 'ricerca', officina: 'officina', automazioni: 'automations', browser: 'browser' };
+  const VISTA_PER_VAIA = { chat: 'chat', vuota: 'vuota', terminale: 'terminal', review: 'diff', capability: 'capability', board: 'dashboard', memoria: 'memoria', attivita: 'attivita', note: 'note', progetti: 'progetti', impostazioni: 'settings', doctor: 'doctor', libreria: 'libreria', ricerca: 'ricerca', officina: 'officina', automazioni: 'automations', browser: 'browser' };
   ROOT().addEventListener('click', (event) => {
     const vaia = event.target.closest?.('[data-vaia]');
     if (vaia && VISTA_PER_VAIA[vaia.dataset.vaia]) { setView(VISTA_PER_VAIA[vaia.dataset.vaia]); return; }
