@@ -218,6 +218,14 @@ titoli** (A6), la barra di stato che su una sessione nuova mostra **i consumi di
 | F29 | Nessuna sessione senza cartella | ✅ | Il foglio esige la cartella |
 | F30 | Primo messaggio suggerito dal progetto | ✅ | Esempi dedotti |
 
+⛔ **RITIRATO il 06/09**: avevo scritto che la modale avviava un modello diverso da quello scelto. Riprodotto: non è vero, era la mia sonda che scambiava una **delega del kernel** (che gira con `glm-4.7-flash`) per la sessione sotto prova.
+
+⛔ **RITIRATO il 06/09.** Avevo scritto qui che «il modello scelto non è quello avviato» (scelto 5.3,
+partito 4.7). **Non è vero.** Riprodotto catturando la richiesta: il client manda `z-ai/glm-5.3-flash` e
+la sessione nasce con `z-ai/glm-5.3-flash`. Era la mia sonda a prendere «la prima sessione nuova»
+dell'elenco, e fra quelle c'erano le **deleghe del kernel** (`taskId: delega:…`), che girano con
+`glm-4.7-flash`. Resta vero, e riguarda il kernel: **le deleghe non ereditano il modello della madre**.
+
 ⛔ **Fuori tabella, trovato provando la modale come farebbe una persona (06/09).** Con una cartella
 fuori dall'elenco dei progetti il server esige «Accesso pieno»: se scegli «Scrittura nel workspace»,
 cioè il default deciso in F16, il primo messaggio **resta nel composer** e appare la nota «Serve

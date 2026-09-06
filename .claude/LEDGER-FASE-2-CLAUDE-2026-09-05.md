@@ -1200,3 +1200,22 @@ Owner, tre volte, l'ultima furioso: «la barra deve essere estremamente simile a
 ⛔ Due difetti miei trovati e chiusi nello stesso giro: con la spina a `display:none` il messaggio scivolava nella colonna larga 0 (una parola per riga) — ora la posizione nella griglia è dichiarata; e il fumetto ereditava la larghezza della barra (36 px) — ora è `width:max-content`.
 
 Cancelli: unit 130/130, componenti 111/111, statico 195/195.
+
+## 06/09 — RITIRATA: «il modello scelto non è quello avviato» era un errore MIO di misura
+
+Avevo scritto (piano e audit) che la modale «Nuova sessione» avviava `glm-4.7-flash` mentre nel selettore
+era scelto `glm-5.3-flash`, e su quella base l'avevo messa in cima alle cose da curare. **Non è vero.**
+
+Riprodotto oggi con la cattura della richiesta (`scratchpad/modello-sbagliato.mjs`): il client manda
+`"modello":"z-ai/glm-5.3-flash"`, il server risponde 200 e la sessione nasce con
+`modello: z-ai/glm-5.3-flash`. Nessuna sostituzione.
+
+**La causa dell'abbaglio.** La guardia del mio pilota (`banco-umano/sessione.mjs`) prendeva «la prima
+sessione nuova comparsa nell'elenco» — e fra quelle c'erano le **deleghe** create dal kernel
+(`taskId: delega:<madre>`), che partono con `z-ai/glm-4.7-flash`. Verificato ora: 4 sessioni su 84 sono
+deleghe, tutte 4.7; tutte le sessioni normali sono 5.3. ⇒ La guardia si aggancia al `sessionId` tornato
+dalla POST, mai all'elenco.
+
+⛔ Resta un fatto vero e diverso, che riguarda il **kernel** (fuori dalla mia lane): le deleghe non
+ereditano il modello della sessione madre e girano con `glm-4.7-flash`, e nella prova di oggi sono
+fallite tutte e quattro. Da segnalare all'owner, non da curare qui.
