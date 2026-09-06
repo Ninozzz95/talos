@@ -22,6 +22,8 @@
  * F2 rinomina), e ogni scheda dichiara dove sta e chi l'ha aperta (piede).
  */
 
+import { t } from './lingua.js';
+
 export const ZONA_CHIUSURA_PX = 26; // la larghezza della «×» disegnata dal CSS in coda alla scheda
 export const SCHEDE_MASSIME = 8; // stesso tetto di `SCHEDE_MASSIME_PER_SESSIONE` del server (conhost superstiti su Windows)
 
@@ -29,7 +31,7 @@ export const TESTI = Object.freeze({
   nuovo: 'Nuovo',
   nuovaScheda: 'Apri una nuova scheda',
   nuovaSchedaSenzaSessione: 'Apri una sessione per avere più schede',
-  troppeSchede: `Hai già ${SCHEDE_MASSIME} schede aperte: chiudine una`,
+  troppeSchede: 'Hai già {n} schede aperte: chiudine una', // {n} = SCHEDE_MASSIME, sostituito da t()
   chiudi: 'Chiudi',
   chiudiAltre: 'Chiudi le altre',
   chiudiTutte: 'Chiudi tutte',
@@ -77,7 +79,7 @@ export function titoloScheda(voce, tutte = [voce]) {
   const shell = nomeShell(voce.shell, voce.comando);
   const omonime = tutte.filter((v) => !v.titolo && v.origine !== 'agente' && nomeShell(v.shell, v.comando) === shell);
   const posizione = omonime.indexOf(voce);
-  return `tu · ${shell}${omonime.length > 1 && posizione > 0 ? ` ${posizione + 1}` : ''}`;
+  return `${t('tu')} · ${shell}${omonime.length > 1 && posizione > 0 ? ` ${posizione + 1}` : ''}`;
 }
 
 /** Chi prende il fuoco quando si chiude la scheda in posizione `indice` (Hermes `closeTerminal`). */
@@ -114,7 +116,7 @@ function creaMenuContestuale(root) {
   menu.id = 'menuSchedaTerminale';
   menu.className = 'talos-card talos-context-menu';
   menu.setAttribute('role', 'menu');
-  menu.setAttribute('aria-label', 'Azioni sulla scheda');
+  menu.setAttribute('aria-label', t('Azioni sulla scheda'));
   menu.hidden = true;
   root.append(menu);
   return menu;
@@ -143,10 +145,10 @@ export function creaSchedeTerminale(pane, { azioni = {}, root = document.body } 
     titolo.textContent = titoloScheda(voce, stato.schede);
     menu.append(titolo);
     const voci = [
-      [TESTI.rinomina, () => avviaRinomina(voce), true],
-      [TESTI.chiudi, () => azioni.chiudi?.(voce.terminalId), true],
-      [TESTI.chiudiAltre, () => azioni.chiudiAltre?.(voce.terminalId), stato.schede.length > 1],
-      [TESTI.chiudiTutte, () => azioni.chiudiTutte?.(), stato.schede.length > 0],
+      [t(TESTI.rinomina), () => avviaRinomina(voce), true],
+      [t(TESTI.chiudi), () => azioni.chiudi?.(voce.terminalId), true],
+      [t(TESTI.chiudiAltre), () => azioni.chiudiAltre?.(voce.terminalId), stato.schede.length > 1],
+      [t(TESTI.chiudiTutte), () => azioni.chiudiTutte?.(), stato.schede.length > 0],
     ];
     for (const [testo, fai, abilitato] of voci) {
       const b = document.createElement('button');
@@ -196,7 +198,7 @@ export function creaSchedeTerminale(pane, { azioni = {}, root = document.body } 
       input.className = 'talos-input talos-terminal__rinomina';
       input.value = voce.titolo || titolo;
       input.maxLength = 40;
-      input.setAttribute('aria-label', TESTI.rinomina);
+      input.setAttribute('aria-label', t(TESTI.rinomina));
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); chiudiRinomina(true); }
         if (e.key === 'Escape') { e.preventDefault(); chiudiRinomina(false); }
@@ -248,9 +250,9 @@ export function creaSchedeTerminale(pane, { azioni = {}, root = document.body } 
     nuovo.setAttribute('aria-selected', 'false');
     nuovo.type = 'button';
     nuovo.dataset.terminaleNuova = '';
-    nuovo.append(svgIcona('i-plus'), document.createTextNode(TESTI.nuovo));
+    nuovo.append(svgIcona('i-plus'), document.createTextNode(t(TESTI.nuovo)));
     nuovo.disabled = !stato.puoAprire;
-    nuovo.title = stato.puoAprire ? `${TESTI.nuovaScheda} (Ctrl+Shift+\`)` : (stato.motivoNoNuova || TESTI.nuovaSchedaSenzaSessione);
+    nuovo.title = stato.puoAprire ? `${t(TESTI.nuovaScheda)} (Ctrl+Shift+\`)` : (stato.motivoNoNuova || t(TESTI.nuovaSchedaSenzaSessione));
     nuovo.setAttribute('aria-label', nuovo.title);
     nuovo.addEventListener('click', () => azioni.nuova?.());
     tabs.append('\n', nuovo);
@@ -274,7 +276,7 @@ export function creaSchedeTerminale(pane, { azioni = {}, root = document.body } 
         if (p.dettaglio) { const d = span(p.dettaglio, 'talos-mono'); d.title = p.dettaglio; foot.append(span('·'), d); }
         if (p.stato) foot.append(span('·'), span(p.stato));
         const g = document.createElement('span'); g.className = 'talos-grow';
-        foot.append(g, span(p.nota ?? TESTI.nota));
+        foot.append(g, span(p.nota ?? t(TESTI.nota)));
       }
     }
   }

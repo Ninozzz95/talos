@@ -1,4 +1,5 @@
 import {CAMPI_IMPOSTAZIONI, SEZIONI_IMPOSTAZIONI} from './impostazioni-campi.js';
+import { t } from './lingua.js';
 const testo = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('it');
 export function filtraImpostazioni(campi, query) {
   const termini = testo(query).trim().split(/\s+/).filter(Boolean);
@@ -7,14 +8,15 @@ export function filtraImpostazioni(campi, query) {
 function nodo(tag, classe, testo) { const el = document.createElement(tag); if (classe) el.className = classe; if (testo != null) el.textContent = testo; return el; }
 export function creaSettingRow(campo, valore, {controllo, output, prefisso='setting-'} = {}) {
   const riga = nodo('div','talos-setting'); riga.dataset.c = 'SettingRow'; riga.dataset.settingRow = campo.id;
-  const info = nodo('div'); const label = nodo('label','talos-setting__label',campo.titolo);
+  const info = nodo('div'); const label = nodo('label','talos-setting__label',t(campo.titolo));
   const input = controllo || document.createElement(campo.tipo === 'select' ? 'select' : 'input');
   if (!controllo) {
     input.id = prefisso + campo.id;
-    if (campo.tipo === 'select') for (const [value, nome] of campo.opzioni) {const op = nodo('option','',nome);op.value=value;input.append(op);}
+    if (campo.tipo === 'select') for (const [value, nome] of campo.opzioni) {const op = nodo('option','',t(nome));op.value=value;op.dataset.testoIt=nome;input.append(op);}
     else {input.type=campo.tipo;if(campo.tipo==='range'){input.min=campo.min;input.max=campo.max;}}
   }
-  if (controllo) for (const vecchiaLabel of [...input.labels]) vecchiaLabel.removeAttribute('for');
+  if (controllo) { for (const vecchiaLabel of [...input.labels]) vecchiaLabel.removeAttribute('for'); if (campo.tipo === 'select') for (const op of input.options) { const originale = op.dataset.testoIt || op.textContent; op.dataset.testoIt = originale; op.textContent = t(originale); } }
+  label.dataset.testoIt = campo.titolo;
   label.htmlFor=input.id; info.append(label); riga.append(info);
   if (campo.tipo === 'checkbox') { input.className='talos-switch';input.setAttribute('role','switch');input.dataset.c='Switch';input.checked=Boolean(valore);riga.append(input); }
   else {
@@ -52,4 +54,21 @@ export function montaImpostazioni(schermo, valori, {recupera, cambiaSezione} = {
   const scegli=id=>{if(ricerca)ricerca.value='';if(cambiaSezione)cambiaSezione(id);else mostraSezioneImpostazioni(schermo,id);};
   tabs.forEach((tab,i)=>{tab.addEventListener('click',()=>scegli(tab.dataset.settingsTab));tab.addEventListener('keydown',e=>{if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key))return;e.preventDefault();const next=e.key==='Home'?0:e.key==='End'?tabs.length-1:(i+(e.key==='ArrowDown'?1:-1)+tabs.length)%tabs.length;tabs[next].focus();scegli(tabs[next].dataset.settingsTab);});});
   mostraSezioneImpostazioni(schermo,'appearance');
+}
+
+/**
+ * P-i18n (06/09) — ritraduce la schermata già montata quando cambia la lingua: etichette delle
+ * righe, opzioni dei select (il testo italiano resta in `data-testo-it`), voci di navigazione delle
+ * sezioni. Niente rimontaggio: i controlli e i loro ascoltatori restano quelli.
+ */
+export function ritraduciImpostazioni(schermo) {
+  if (!schermo) return 0;
+  let n = 0;
+  for (const label of schermo.querySelectorAll('.talos-setting__label[data-testo-it]')) { label.textContent = t(label.dataset.testoIt); n += 1; }
+  for (const op of schermo.querySelectorAll('.talos-setting select option[data-testo-it]')) { op.textContent = t(op.dataset.testoIt); n += 1; }
+  for (const sezione of SEZIONI_IMPOSTAZIONI) {
+    const voce = schermo.querySelector(`[data-settings-tab="${sezione.id}"] .talos-nav-item__label`);
+    if (voce) { voce.textContent = t(sezione.titolo); n += 1; }
+  }
+  return n;
 }

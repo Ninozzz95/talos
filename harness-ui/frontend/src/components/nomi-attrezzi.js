@@ -21,6 +21,8 @@
  * se ne accorga. Restituire l'id sarebbe comodo e romperebbe la regola in
  * silenzio, proprio nel caso in cui serve saperlo.
  */
+import { t } from './lingua.js';
+
 export const NOMI_UMANI_ATTREZZI = Object.freeze({
   elenca: 'elenco della cartella',
   cerca: 'ricerca nei file',
@@ -73,10 +75,15 @@ export const NOMI_UMANI_ATTREZZI = Object.freeze({
  * @param {Record<string,string>} [catalogo] traduzioni per la lingua corrente,
  *   con le stesse chiavi: la mappa resta una, cambiano i valori (decisione H21)
  */
-export function nomeUmanoAttrezzo(id, catalogo = null) {
+function nomeUmanoAttrezzoItaliano(id, catalogo = null) {
   const chiave = String(id ?? '');
   if (catalogo && Object.prototype.hasOwnProperty.call(catalogo, chiave)) return catalogo[chiave];
   return Object.prototype.hasOwnProperty.call(NOMI_UMANI_ATTREZZI, chiave) ? NOMI_UMANI_ATTREZZI[chiave] : null;
+}
+
+/** Il nome umano nella lingua dei menu (P-i18n 06/09): la tabella resta italiana, la traduzione la dà t(). */
+export function nomeUmanoAttrezzo(id, catalogo = null) {
+  return t(nomeUmanoAttrezzoItaliano(id, catalogo));
 }
 
 /** Gli id tecnici per cui non abbiamo ancora un nome: un debito che si misura. */

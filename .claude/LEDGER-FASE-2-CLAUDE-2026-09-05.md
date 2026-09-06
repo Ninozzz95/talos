@@ -897,6 +897,41 @@ shell): finché non lo riavvia lui, lì il terminale e il Browser degradano.
 - **Backup del monolite**: si tiene ma FUORI dall'harness (owner): spostato in
   `C:\Users\Antonino\Desktop\projects\AVM-harness-desktop-backup\public.prima-del-cutover-2026-09-06-03-43-54\`.
 
+### P-i18n, prima fascia — la lingua per categorie (06/09 ~23:30): FATTA
+
+**Misura prima di partire** (owner: «stima da misurare sul numero di stringhe»): Hermes Desktop
+`i18n/en.ts` = 42 categorie, 2.544 stringhe. Da noi: Impostazioni 48 titoli + 8 sezioni + ~70
+opzioni; 43 nomi umani degli attrezzi; ~40 testi dei componenti (terminale, browser, connessione);
+129 chiamate `toast(` nel monolite; 1.609 frammenti di testo statico nel template (5.999 parole,
+gran parte contenuto dimostrativo che l'app sostituisce). Prima fascia = menu + Impostazioni +
+attrezzi + componenti + stati (~330 frasi). Seconda fascia = toast (129 chiamate) e testo statico
+delle pagine (titoli, spiegazioni, stati vuoti): stimata sui conteggi, non a occhio.
+
+**Forma.** `src/i18n/en.js`: dizionario per categorie come Hermes (menu, impostazioni, attrezzi,
+terminale, browser, connessione); la CHIAVE è la frase italiana così com'è nel codice (gettext/
+Lingui, lingui.dev «Explicit vs generated IDs», 06/09/2026): niente identificatori inventati, il
+codice resta leggibile, una frase senza traduzione resta italiana invece di sparire.
+`lingua.js`: `impostaLingua`, `t(frase, {n})` con segnaposto, `tn(uno, molti, n)` col plurale di
+`Intl.PluralRules` sulla lingua risolta (locize «i18n pluralization 2026»), `traduzioniMancanti` per
+la copertura. Cambio lingua SENZA ricaricare: `applicaLingua` emette `talos:lingua` sulla radice e
+il monolite ridisegna terminale, browser, Impostazioni (`ritraduciImpostazioni`: etichette, opzioni
+— l'italiano resta in `data-testo-it` — e voci delle sezioni, senza rimontare i controlli).
+Hermes cambia lingua a caldo ma non la ricorda al riavvio (issue #26665); qui vive nello store.
+
+Prove: `tests/unit/i18n-copertura.test.mjs` misura la copertura sulle frasi VERE del codice
+(Impostazioni 126+, attrezzi 43, componenti 30+: 0 mancanti; AL CONTRARIO una frase inventata
+risulta mancante; t/tn in italiano restituiscono la frase, in inglese traducono, interpolano e
+declinano; una lingua ignota ricade sull'italiano). Unit 123/123, statico 195/195, componenti
+111/111. Dal vivo su 4175: English → «Appearance and motion · Chat and composer · Model Lab»,
+righe «TALOS theme · Color mode · List density · Menu language», opzioni «Extra small · Small ·
+Default», «Follow the system (Italian)»; Terminale «New», «Same machine, no isolation», «Opened by
+you · … · connected · Every tab says who opened it and where.»; Browser «No pages yet», «0 readings by
+the agent · 1 page opened by you», «Opened by you · live inside TALOS»; dopo F5 resta `lang=en`;
+ripristino pulito; 0 errori. Foto `i18n-impostazioni-en.png`, `i18n-terminale-en.png`,
+`i18n-browser-en.png`. ⛔ Seconda fascia NON fatta (dichiarata sopra): i toast e il testo statico
+del template — ad esempio il titolo dello stato vuoto del Browser «Nessuna pagina letta» resta
+italiano perché è nel template, non nel codice.
+
 - T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
   15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
   statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo
