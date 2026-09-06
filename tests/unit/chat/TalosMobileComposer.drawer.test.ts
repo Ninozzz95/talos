@@ -60,30 +60,44 @@ describe('composer drawer mode (F3-T4bis)', () => {
         await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-composer-drawer"]').exists()).toBe(false))
     })
 
-    it('toggles browse mode from the drawer switch without closing it', async () => {
+    /**
+     * ⛔⛔⛔ Owner 6/9: "naviga sul web... non ha senso lì [nel drawer del +],
+     * sparisce e basta" — sostituisce il test precedente, che verificava il
+     * toggle proprio qui. Non spostato altrove: la modalità classica
+     * (drawerMode:false, dropdown) tiene la sua copia del toggle, invariata
+     * — resta l'unico modo di attivare la navigazione web quando il
+     * composer è in drawer mode.
+     */
+    it('non mostra più il toggle "naviga sul web" nel drawer organizzato', async () => {
         const wrapper = mountComposer({ drawerMode: true })
         await wrapper.get('[aria-label="Add to chat"]').trigger('click')
         await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-composer-drawer"]').exists()).toBe(true))
-        await wrapper.get('[data-testid="talos-drawer-browse"]').trigger('click')
-        expect(wrapper.emitted('toggleBrowse')).toEqual([[true]])
-        expect(wrapper.find('[data-testid="talos-composer-drawer"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-drawer-browse"]').exists()).toBe(false)
     })
 
     /**
-     * ⛔⛔ Owner 2026-08-27, segnalato dal vivo: il drawer "+" aveva la SUA
-     * implementazione a bottoni per l'effort — mai passata al segmented
-     * slider (`TalosMobileEffortPicker`) che il drawer "Model & reasoning"
-     * usa dal refactor `b86bdd46`. Due superfici della stessa scelta con due
-     * linguaggi diversi. Questo prova che ora sono lo STESSO componente.
+     * ⛔⛔ Owner 2026-08-27: il drawer "+" aveva la SUA implementazione a
+     * bottoni per l'effort — mai passata al segmented slider
+     * (`TalosMobileEffortPicker`) che il drawer "Model & reasoning" usa dal
+     * refactor `b86bdd46`. Prima cura: farli condividere lo stesso
+     * componente (questo test verificava proprio quello).
+     *
+     * ⛔⛔⛔ Owner 6/9, un passo oltre: "togli dal drawer del + la sezione
+     * ragionamento/effort... non ha senso lì" — condividere il componente
+     * non bastava, era comunque una SECONDA superficie per la stessa
+     * scelta. Il drawer "+" ora non mostra affatto reasoning/effort: quella
+     * scelta vive SOLO nel drawer dedicato "Model & reasoning" (verificato
+     * poco sotto, "the model chip opens the dedicated model & reasoning
+     * drawer").
      */
-    it('il drawer "+" usa lo stesso slider condiviso del drawer "Model & reasoning", non bottoni suoi', async () => {
+    it('il drawer "+" NON mostra reasoning/effort: quella scelta vive solo nel drawer "Model & reasoning"', async () => {
         const wrapper = mountComposer({ drawerMode: true })
         await wrapper.get('[aria-label="Add to chat"]').trigger('click')
         await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-composer-drawer"]').exists()).toBe(true))
-        expect(wrapper.find('[data-testid="talos-mobile-effort-picker"]').exists()).toBe(true)
-        expect(wrapper.find('[data-testid="talos-mobile-effort-slider"]').exists()).toBe(true)
-        expect(wrapper.find('[data-testid="talos-mobile-thinking-toggle"]').exists()).toBe(true)
-        // I vecchi bottoni non esistono più: un solo linguaggio, non due.
+        expect(wrapper.find('[data-testid="talos-mobile-effort-picker"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="talos-mobile-effort-slider"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="talos-mobile-thinking-toggle"]').exists()).toBe(false)
+        // I vecchi bottoni propri del drawer non esistono più da tempo.
         expect(wrapper.find('[data-testid="talos-drawer-thinking"]').exists()).toBe(false)
         expect(wrapper.find('[data-testid^="talos-drawer-effort-"]').exists()).toBe(false)
     })
