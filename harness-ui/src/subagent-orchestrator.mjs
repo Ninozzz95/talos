@@ -169,6 +169,13 @@ export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn, cartellaEsis
           sessionId,
           task: voce.task?.consegna ?? null,
           conclusa: voce.conclusa,
+          /*
+           * ⛔ 06/9, T05-D3 un piano più sotto: senza questo campo un sotto-agente ucciso dalla
+           * morte del processo restava «In corso» per sempre nella scheda Agenti e nel foglio
+           * dell'albero — e il frontend non aveva NIENTE con cui dire il vero, perché il dato
+           * non usciva da qui. Il registro la conosce (`interrotta: !conclusa` al ripristino).
+           */
+          interrotta: voce.interrotta === true,
           esitoDelega: voce.esitoDelega ?? null,
           evidenzaDelega: voce.evidenzaDelega ?? null,
           avviataAlle: voce.avviataAlle ?? null,

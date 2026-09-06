@@ -56,6 +56,22 @@ test('elencaFigli: elenco vero, ordinato per avvio, include task/conclusa/esitoD
   assert.equal(figli[1].esitoDelega, 'concluso');
 });
 
+test('⛔ T05-D3: un figlio ucciso dalla morte del processo esce con interrotta:true — non «in corso» per sempre', () => {
+  /*
+   * Senza questo campo la scheda Agenti e il foglio dell'albero dicevano «In corso» a un
+   * sotto-agente che nessuno stava più eseguendo, e non avevano NIENTE con cui dire il vero:
+   * il dato non usciva da qui. Il registro lo sa (`interrotta: !conclusa` al ripristino).
+   */
+  const sessioni = new Map([
+    ['padre-1', vocePadre()],
+    ['morto', { cartella: '/m', padreId: 'padre-1', conclusa: false, interrotta: true, task: { consegna: 'ucciso dal riavvio' }, avviataAlle: '2026-09-06T09:00:00.000Z' }],
+    ['vivo', { cartella: '/v', padreId: 'padre-1', conclusa: false, task: { consegna: 'davvero in corso' }, avviataAlle: '2026-09-06T10:00:00.000Z' }],
+  ]);
+  const figli = creaSubagentOrchestrator({ sessioni, cartellaEsisteFn: () => true, avviaESeguiFn: () => ({ sessionId: 'mai' }) }).elencaFigli('padre-1');
+  assert.equal(figli[0].interrotta, true, 'il figlio morto lo dichiara');
+  assert.equal(figli[1].interrotta, false, 'AL CONTRARIO — un figlio vivo non diventa interrotto, e il campo c’è sempre');
+});
+
 test('⛔⛔⛔ delegaSottoTask: sessione padre inesistente — rifiutato, avviaESeguiFn MAI chiamata', async () => {
   const sessioni = new Map();
   let chiamata = false;

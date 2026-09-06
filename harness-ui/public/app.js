@@ -3479,13 +3479,14 @@ var init_consumo_sessione = __esm({
 function statoSessione(sessione) {
   let classe;
   if (sessione.inAttesaApprovazione) classe = "attesa";
-  else if (!sessione.conclusa) classe = "vivo";
   else if (sessione.interrotta) classe = "interrotto";
+  else if (!sessione.conclusa) classe = "vivo";
   else if (sessione.ultimoEsito === "errore") classe = "errore";
   else if (sessione.ultimoEsito === "successo") classe = "successo";
   else classe = "ignoto";
   const testo3 = classe === "errore" && sessione.motivoChiusura === "giri-finiti" ? "giri finiti" : ETICHETTE[classe];
-  return { classe, testo: testo3, tono: TONI[classe] ?? null };
+  const aiuto = classe === "interrotto" ? "Interrotta dalla morte del processo: nessuno la sta eseguendo. Scrivi un messaggio per riprenderla." : null;
+  return { classe, testo: testo3, tono: TONI[classe] ?? null, aiuto };
 }
 function oraCompatta(iso, adesso = /* @__PURE__ */ new Date()) {
   const data = new Date(iso);
@@ -3517,6 +3518,7 @@ function creaSessionItem(sessione, opzioni = {}) {
   const etichetta = opzioni.pendente ? `Nuova · ${sessione.nomeCartella || ""}` : `${sessione.nome || sessione.taskId || ""}${sessione.forkDa ? " · fork" : ""}`;
   const stato = opzioni.pendente ? { classe: "pendente", testo: ETICHETTE.pendente, tono: null } : statoSessione(sessione);
   riga.dataset.sessionState = stato.classe;
+  if (stato.aiuto) riga.title = stato.aiuto;
   const testo3 = el12(documentObj, "span");
   const titolo2 = el12(documentObj, "span", "talos-session-item__title", etichetta);
   const sotto = el12(documentObj, "span", "talos-session-item__sub");
@@ -5458,12 +5460,13 @@ function disegnaAgenti(d, contenitore, agenti) {
   return lista.length;
 }
 function statoDelega(a) {
+  if (a?.interrotta === true) return "interrotta";
   if (!a?.conclusa) return "in-corso";
   return a.esitoDelega === "fallito" ? "fallita" : "conclusa";
 }
 function etichettaDelega(a) {
   const s = statoDelega(a);
-  return s === "in-corso" ? "In corso" : s === "fallita" ? "Non riuscita" : "Conclusa";
+  return s === "interrotta" ? "Interrotta" : s === "in-corso" ? "In corso" : s === "fallita" ? "Non riuscita" : "Conclusa";
 }
 function oraBreve2(iso) {
   const t2 = new Date(iso);
@@ -12188,9 +12191,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         const testo3 = document.createElement("span");
         const successo = figlio.conclusa && figlio.esitoDelega === "concluso";
         const fallita = figlio.conclusa && figlio.esitoDelega === "fallito";
+        const stato = figlio.interrotta === true ? "Delega · interrotta" : figlio.conclusa ? `Delega · ${figlio.esitoDelega || "conclusa"}` : "Delega · in corso";
         testo3.append(
           textElement("strong", null, tronca2(figlio.task || "(compito non registrato)", 60)),
-          textElement("small", null, figlio.conclusa ? `Delega · ${figlio.esitoDelega || "conclusa"}` : "Delega · in corso")
+          textElement("small", null, stato)
         );
         const statoEl = textElement("span", successo ? "status-chip success" : fallita ? "status-chip error" : "status-chip", successo ? "✓" : fallita ? "!" : "●");
         riga.append(iconEl, testo3, statoEl);
@@ -18456,7 +18460,7 @@ ${testo3}` : testo3;
       function nomeUnicoSessione(nome, sessionId) {
         const base = String(nome || "").trim();
         if (!base) return { nome: base, cambiato: false };
-        const nomiVivi = new Set([...state.sessionSelection.available.values()].filter((s) => s.sessionId !== sessionId && !s.conclusa && s.nome).map((s) => s.nome));
+        const nomiVivi = new Set([...state.sessionSelection.available.values()].filter((s) => s.sessionId !== sessionId && !s.conclusa && !s.interrotta && s.nome).map((s) => s.nome));
         let candidato = base;
         for (let n = 2; nomiVivi.has(candidato); n += 1) candidato = `${base}-${n}`;
         return { nome: candidato, cambiato: candidato !== base };
