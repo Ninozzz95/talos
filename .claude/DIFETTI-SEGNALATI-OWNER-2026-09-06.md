@@ -323,3 +323,28 @@ inglese: `REFUSED. Empty html: nothing was created.` Due difetti in uno — il J
 occhi di una persona, e il rifiuto va detto in italiano con il rimedio. La nota d'errore sotto lo
 conferma dichiarandosi «non ancora tradotta»: è la stessa famiglia di O-22/O-23, e va nella stessa
 mappa.
+
+---
+
+## Proposte dell'owner (non difetti: cose da costruire)
+
+### P-01 · Un «miglioratore del prompt», col contesto della chat a scelta — proposto il 06/09
+
+**Cosa ha chiesto.** «Aggiungi la proposta di un prompt enhancer, un po' come fa il mobile, ma con la
+differenza di un **interruttore che aggiunge tutta l'ultima parte di contesto della chat**, per una
+risposta più dettagliata ma lenta.»
+
+**Come sta.** Il mobile ha già un miglioratore del prompt; il desktop no. La differenza che l'owner
+chiede è nostra e non ce l'ha nessuno dei due: un interruttore che decide **cosa vede** il
+miglioratore — solo la frase che hai scritto, oppure la frase *più la coda della conversazione*.
+Il costo si dichiara prima di premere: più contesto significa una riscrittura più mirata e un'attesa
+più lunga, ed è esattamente il genere di scelta che TALOS mostra invece di decidere di nascosto.
+
+**Come la vedo (da discutere, non ancora autorizzata).** Un pulsante nel composer, accanto al «+»;
+l'interruttore «usa la conversazione» accanto; il prompt riscritto compare **in anteprima** con la
+possibilità di rifiutarlo, mai sostituito d'ufficio; il costo stimato in token della coda inclusa,
+come già fanno gli allegati. Il modello che riscrive è quello ausiliario delle impostazioni, non
+quello della sessione.
+
+⛔ Da fare prima: leggere il miglioratore del mobile (lettura consentita) e cercare come lo fanno gli
+altri, che è la regola prima di scrivere.
