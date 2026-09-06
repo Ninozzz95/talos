@@ -738,6 +738,40 @@ tronca coi puntini e resta leggibile nel `title`; i pallini delle schede erano c
 lanciati dal modello, come Hermes `ensureAgentTerminal`) — il componente le disegna, l'app non le
 produce: i comandi dell'agente passano dal kernel, non da una PTY. Registrata come proposta.
 
+### B8 — densità, tema chiaro, lingua (06/09 ~16:00): FATTA
+
+**Densità**: nuova riga «Densità delle liste» (Comoda · Compatta) in Impostazioni › Aspetto, chiave
+`uiDensity` nello store dell'aspetto; il mockup la esprime con `data-densita="compatta"` sulla radice
+(token delle righe: sessione 66→52 px). **Lingua**: riga «Lingua dei menu» (Segui il sistema ·
+Italiano · English), chiave `uiLanguage`; `components/lingua.js` porta la meccanica del mockup (H21:
+la PREFERENZA e la lingua RISOLTA sono due cose — l'opzione «Segui il sistema» mostra fra parentesi la
+lingua che ne risulta; `lang` sulla radice; si traducono SOLO gli elementi marcati `data-t`/`data-ph`
+— sidebar, luoghi, schede della testata, «Comandi» — e il primo nodo di testo, così il badge
+«Terminale 2» resta). I contenuti restano come sono, e la riga si chiama «dei menu» per dirlo.
+Ricerca 06/09: phrase.com «Detecting a user's locale», MDN Navigator.language, W3C i18n (la scelta
+esplicita vince sul rilevamento; senza scelta, `navigator.languages`); setproduct «Data table UI
+2026» (densità in modi nominati, compatta per chi lavora a lungo). Le due righe non hanno un controllo
+legacy dietro: `SET-COPERTURA38` passa da «esattamente 38» a «nessuno dei 38 perso + queste due».
+
+**Tema chiaro**: giro visivo di 21 screenshot in modalità chiara su 4175 (chat, terminale, review,
+browser, capability, board, memoria, attività, libreria, ricerca, officina, automazioni, le 8 sezioni
+delle Impostazioni), fogli in `foto/chiaro/`. Coerente ovunque; due difetti trovati e curati: la
+scala ANSI del terminale, intonata allo scuro, era illeggibile sul fondo chiaro → due scale scelte
+dal tema risolto, e le shell già aperte si ricolorano al cambio di tema; la scheda «Browser» della
+testata portava alla **Board** (`data-mode="undefined"`: mancava in `VISTA_PER_VAIA` e in
+`VISTA_PER_SCHERMATA`, e il gestore dei mode-tab finiva nel ramo «altro») → ora apre la sua schermata
+(la testata della Review non ha la scheda Browser: è il mockup).
+
+Prove: unit 115/115 (`lingua.test.mjs`: risoluzione, dizionario simmetrico, applica solo il primo
+nodo di testo), statico 195/195, componenti 108/108; dal vivo (`b8-vivo.mjs`): en+compatta →
+«New · Places · Library · Memory · Tasks · More · Terminal · Search chats…», righe 66→54 px, `lang=en`,
+tutto ricordato dopo F5, ripristino pulito; 0 errori di pagina. Foto `b8-chat-en-compatta.png`.
+⛔ NON FATTO: tradurre i contenuti (titoli di sezione, testi delle pagine): il dizionario copre la
+navigazione, come il mockup; estenderlo è una riga a parte.
+⛔ Visto nel giro chiaro e NON di B8: la schermata Browser mostra ancora le letture dimostrative del
+mockup («W1-02 registro processi», example.org, cronologia finta) — è il blocco Browser a schede (K-I),
+il prossimo.
+
 - T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
   15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
   statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo

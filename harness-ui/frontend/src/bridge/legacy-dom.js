@@ -36,6 +36,7 @@ export const VISTA_PER_SCHERMATA = Object.freeze({
   chat: 'schermoChat',
   vuota: 'schermoVuota',
   terminal: 'schermoTerminale',
+  browser: 'schermoBrowser', // 06/9 B8: senza questa riga setView('browser') non trovava la vista e la scheda «Browser» non faceva niente
   diff: 'schermoReview',
   capability: 'schermoCapability',
   dashboard: 'schermoBoard',
@@ -51,7 +52,7 @@ export const VISTA_PER_SCHERMATA = Object.freeze({
 
 /** `data-vaia` del mockup → vista del monolite (`setView`). */
 export const VISTA_PER_VAIA = Object.freeze({
-  chat: 'chat', vuota: 'vuota', terminale: 'terminal', review: 'diff', capability: 'capability',
+  chat: 'chat', vuota: 'vuota', terminale: 'terminal', review: 'diff', browser: 'browser', capability: 'capability', // 06/9 B8 (taccuino tema chiaro): la scheda «Browser» aveva data-mode="undefined" e portava alla Board
   board: 'dashboard', memoria: 'memoria', attivita: 'attivita', impostazioni: 'settings',
   doctor: 'doctor', libreria: 'libreria', ricerca: 'ricerca', officina: 'officina', automazioni: 'automations',
 });
