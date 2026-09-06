@@ -1,3 +1,4 @@
+import { plurale } from './plurale.js'; // BH-12: «1 ricordi» — il plurale vive in un posto solo
 /** TaskRow del mockup, dati tasks-store.mjs. WAI Tabs/Disclosure, 05/09/2026. */
 const STATI=new Map([
  ['todo',{testo:'Da fare',icona:'list',tono:null}],
@@ -54,7 +55,7 @@ function renderAttivita(schermo,pagina){
  for(const tab of schermo.querySelectorAll('[data-task-stato]')){const attivo=pagina.stato===tab.dataset.taskStato;tab.setAttribute('aria-selected',String(attivo));tab.tabIndex=attivo?0:-1;}
  schermo.querySelector('[data-task-refresh]').disabled=Boolean(opzioni.caricamento);
  schermo.querySelector('.talos-topbar__path').textContent=opzioni.errore?'Attività non disponibili':opzioni.caricamento?'Caricamento attività…':riepilogoAttivita(attivita);
- const esito=schermo.querySelector('[data-task-esito]');esito.textContent=opzioni.errore||(opzioni.caricamento?'Caricamento attività…':visibili.length===attivita.length?attivita.length+' attività':visibili.length+' di '+attivita.length+' attività');esito.setAttribute('role',opzioni.errore?'alert':'status');
+ const esito=schermo.querySelector('[data-task-esito]');esito.textContent=opzioni.errore||(opzioni.caricamento?'Caricamento attività…':visibili.length===attivita.length?plurale(attivita.length,'attività'):visibili.length+' di '+plurale(attivita.length,'attività'));esito.setAttribute('role',opzioni.errore?'alert':'status');
  const lista=schermo.querySelector('[data-task-list]'),attivo=doc.activeElement?.closest('[data-task-id]')?.dataset.taskId;lista.setAttribute('role',visibili.length?'list':'group');
  lista.replaceChildren(...visibili.map(a=>creaTaskRow(a,{document:doc,aperta:pagina.aperte.has(a.id),onEspandi:aperta=>{if(aperta)pagina.aperte.add(a.id);else pagina.aperte.delete(a.id);}})));
  if(!visibili.length)lista.append(el(doc,'p','talos-list-row talos-muted',opzioni.errore||(opzioni.caricamento?'Caricamento attività…':attivita.length?'Nessuna attività corrisponde ai filtri.':'Nessuna attività salvata. Le attività sono globali, disponibili alle tue conversazioni.')));

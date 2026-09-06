@@ -1,3 +1,4 @@
+import { plurale } from './plurale.js'; // BH-12: «1 ricordi» — il plurale vive in un posto solo
 /** MemoryRow del mockup. Contratto: memory-store.mjs, 05/09/2026.
  * WAI Disclosure + WCAG Status Messages: contenuto integro, stato e focus espliciti.
  */
@@ -51,8 +52,8 @@ function renderMemoria(schermo,pagina) {
  const {memorie,opzioni}=pagina,visibili=filtraMemorie(memorie,pagina),doc=schermo.ownerDocument;
  for(const tab of schermo.querySelectorAll('[data-memory-genere]')){const attivo=pagina.genere===tab.dataset.memoryGenere;tab.setAttribute('aria-selected',String(attivo));tab.tabIndex=attivo?0:-1;}
  schermo.querySelector('[data-memory-refresh]').disabled=Boolean(opzioni.caricamento);
- schermo.querySelector('.talos-topbar__path').textContent=opzioni.errore?'Ricordi non disponibili':opzioni.caricamento?'Caricamento ricordi…':memorie.length+' ricordi · globali';
- const esito=schermo.querySelector('[data-memory-stato]');esito.textContent=opzioni.errore || (opzioni.caricamento?'Caricamento ricordi…':visibili.length===memorie.length?memorie.length+' ricordi':visibili.length+' di '+memorie.length+' ricordi');esito.setAttribute('role',opzioni.errore?'alert':'status');
+ schermo.querySelector('.talos-topbar__path').textContent=opzioni.errore?'Ricordi non disponibili':opzioni.caricamento?'Caricamento ricordi…':plurale(memorie.length,'ricordo')+' · globali';
+ const esito=schermo.querySelector('[data-memory-stato]');esito.textContent=opzioni.errore || (opzioni.caricamento?'Caricamento ricordi…':visibili.length===memorie.length?plurale(memorie.length,'ricordo'):visibili.length+' di '+plurale(memorie.length,'ricordo'));esito.setAttribute('role',opzioni.errore?'alert':'status');
  const lista=schermo.querySelector('[data-memory-list]');lista.setAttribute('role',visibili.length?'list':'group');
  const attivo=doc.activeElement?.closest('[data-memory-id]')?.dataset.memoryId;
  lista.replaceChildren(...visibili.map(m=>creaMemoryRow(m,{document:doc,aperta:pagina.aperte.has(m.id),onEspandi:a=>{if(a)pagina.aperte.add(m.id);else pagina.aperte.delete(m.id);}})));

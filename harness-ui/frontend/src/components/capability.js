@@ -1,5 +1,6 @@
 /** ToolList nel mockup. WAI Listbox + inventari Hermes/Claude/Codex, 05/09/2026. */
 import {nomeUmanoAttrezzo,corrispondeARicerca,descrizioneAttrezzo} from './nomi-attrezzi.js';
+import { plurale } from './plurale.js'; // BH-12: «1 ricordi» — il plurale vive in un posto solo
 const PERMESSI={'':'Come la sessione',sempre:'Consenti sempre',chiedi:'Chiedi sempre',nega:'Nega'};
 export function permessoAttrezzo(a){return a.permessoConfigurabile?PERMESSI[a.permesso??'']||'Permesso non riconosciuto':'Politica della sessione';}
 export function stimaSchemaAttrezzi(attrezzi){return attrezzi.reduce((s,a)=>Number.isFinite(a.tokenSchemaStimati)&&a.tokenSchemaStimati>=0?{...s,totale:s.totale+a.tokenSchemaStimati}:{...s,mancanti:s.mancanti+1},{totale:0,mancanti:0});}
@@ -56,7 +57,7 @@ export function aggiornaPaginaCapability(schermo,attrezzi,opzioni={}){
 function render(schermo,p){
  const {attrezzi,opzioni:o}=p,doc=schermo.ownerDocument,visibili=filtraAttrezzi(attrezzi,p),uso=new Map((o.uso?.perAttrezzo||[]).map(a=>[a.nome,a]));
  if(!o.caricamento&&!visibili.some(a=>a.nome===p.scelto))p.scelto=visibili[0]?.nome||null;
- const resumo=schermo.querySelector('[data-cap-esito]');resumo.textContent=o.errore||(o.caricamento?'Caricamento degli attrezzi…':visibili.length+' di '+attrezzi.length+' attrezzi offerti');resumo.setAttribute('role',o.errore?'alert':'status');
+ const resumo=schermo.querySelector('[data-cap-esito]');resumo.textContent=o.errore||(o.caricamento?'Caricamento degli attrezzi…':visibili.length+' di '+plurale(attrezzi.length,'attrezzo')+' offerti');resumo.setAttribute('role',o.errore?'alert':'status');
  schermo.querySelector('[data-cap-count]').textContent=o.errore||o.caricamento?'—':attrezzi.length;
 /*
   * C5 e C6 (06/09) — il totale in cima, e il totale come PERCENTUALE della

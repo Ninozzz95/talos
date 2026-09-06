@@ -149,3 +149,31 @@ test('G29-NOTIFICA-SISTEMA: si manda solo col permesso, solo a finestra nascosta
   assert.equal(m.statoConsensoNotifiche('default').chiedibile, true);
   assert.equal(m.statoConsensoNotifiche('default', false).chiedibile, false);
 });
+
+test('BH-12 PLURALE: «1 ricordi» non esiste più, e lo zero prende il plurale', async () => {
+  const { plurale, parola } = await import('../../src/components/plurale.js');
+  assert.equal(plurale(1, 'ricordo'), '1 ricordo');
+  assert.equal(plurale(2, 'ricordo'), '2 ricordi');
+  // ⛔ in italiano lo ZERO prende il plurale: non basta `n === 1`
+  assert.equal(plurale(0, 'ricordo'), '0 ricordi');
+  assert.equal(plurale(1, 'attrezzo'), '1 attrezzo');
+  assert.equal(plurale(1, 'sessione'), '1 sessione');
+  assert.equal(plurale(1, 'controllo'), '1 controllo');
+  // gli invariabili restano invariabili, e sono dichiarati apposta
+  assert.equal(plurale(1, 'file'), '1 file');
+  assert.equal(plurale(9, 'file'), '9 file');
+  assert.equal(plurale(1, 'attività'), '1 attività');
+  assert.equal(plurale(9, 'attività'), '9 attività');
+  /*
+   * I numeri grandi si formattano all'italiana — e l'italiano NON raggruppa i
+   * numeri di quattro cifre (regola «min2» di CLDR: il separatore compare da
+   * cinque in su). Verificato su questo runtime, non dedotto: è il motivo per
+   * cui «7454 token» a schermo è giusto e «7.454» sarebbe sbagliato.
+   */
+  assert.equal(plurale(1234, 'sessione'), '1234 sessioni');
+  assert.equal(plurale(12345, 'sessione'), '12.345 sessioni');
+  // ⛔ verso contrario: un numero che non è un numero non produce «NaN ricordi»
+  assert.equal(plurale(undefined, 'ricordo'), '0 ricordi');
+  assert.equal(plurale(NaN, 'ricordo'), '0 ricordi');
+  assert.equal(parola(1, 'giro'), 'giro');
+});

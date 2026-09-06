@@ -1,5 +1,6 @@
 /** Officina nel mockup; GET /tool-forge e azione owner separata. WAI Listbox, 05/09/2026. */
 import {nomeUmanoAttrezzo} from './nomi-attrezzi.js';
+import { plurale } from './plurale.js'; // BH-12: «1 ricordi» — il plurale vive in un posto solo
 // Adattamento degli id delle capacità ai nomi umani già canonici; nessun nome verso il modello cambia.
 const ALIAS=new Map([['tasks.list','tasks_list'],['tasks.create','tasks_create'],['tasks.setStatus','tasks_update'],['notes.list','notes_list'],['notes.create','notes_create'],['notes.update','notes_update'],['memory.search','memory_search'],['memory.create','memory_write']]);
 export function statoToolForgiato(abilitato){
@@ -45,9 +46,9 @@ export function aggiornaPaginaOfficina(schermo,strumenti,opzioni={}){
 function renderOfficina(schermo,pagina){
  const {strumenti,opzioni}=pagina,doc=schermo.ownerDocument,visibili=filtraOfficina(strumenti,pagina),abilitati=strumenti.filter(s=>s.abilitato===true).length;
  if(!opzioni.caricamento&&!visibili.some(s=>s.id===pagina.scelto))pagina.scelto=visibili[0]?.id||null;
- const riepilogo=strumenti.length+' attrezzi · '+abilitati+(abilitati===1?' abilitato':' abilitati');
+ const riepilogo=plurale(strumenti.length,'attrezzo')+' · '+abilitati+(abilitati===1?' abilitato':' abilitati');
  schermo.querySelector('.talos-topbar__path').textContent=opzioni.errore?'Officina non disponibile':opzioni.caricamento?'Caricamento Officina…':riepilogo;
- const esito=schermo.querySelector('[data-forge-esito]');esito.textContent=opzioni.errore||(opzioni.caricamento?'Caricamento Officina…':visibili.length===strumenti.length?riepilogo:visibili.length+' di '+strumenti.length+' attrezzi');esito.setAttribute('role',opzioni.errore?'alert':'status');
+ const esito=schermo.querySelector('[data-forge-esito]');esito.textContent=opzioni.errore||(opzioni.caricamento?'Caricamento Officina…':visibili.length===strumenti.length?riepilogo:visibili.length+' di '+plurale(strumenti.length,'attrezzo'));esito.setAttribute('role',opzioni.errore?'alert':'status');
  schermo.querySelector('[data-forge-refresh]').disabled=Boolean(opzioni.caricamento||opzioni.salvataggio);
  const erroreAzione=schermo.querySelector('[data-forge-errore-azione]');erroreAzione.textContent=opzioni.erroreAzione||'';erroreAzione.hidden=!opzioni.erroreAzione;
  for(const tab of schermo.querySelectorAll('[data-forge-stato]')){const attivo=pagina.stato===tab.dataset.forgeStato;tab.setAttribute('aria-selected',String(attivo));tab.tabIndex=attivo?0:-1;}

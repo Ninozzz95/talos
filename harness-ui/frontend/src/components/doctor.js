@@ -1,3 +1,4 @@
+import { plurale } from './plurale.js'; // BH-12: «1 ricordi» — il plurale vive in un posto solo
 // 05/9 Fase 2: Doctor; il grado di certezza segue il dato, non la sua presenza.
 const GRAVITA={danger:'Guasto',warning:'Avviso',info:'Nota',success:'OK'};
 const ORDINE={danger:0,warning:1,info:2,success:3};
@@ -36,7 +37,7 @@ export function aggiornaDoctor(s,risultato,opzioni={}){
  const loading=!!opzioni.caricamento,errore=opzioni.errore||'',voci=risultato?controlliDoctor(risultato):[],n=contaGravitaDoctor(voci);const q=sel=>s.querySelector(sel);
  q('[data-doctor-refresh]').disabled=loading;q('[data-doctor-refresh]').textContent=loading?'Controllo…':'Ricontrolla';q('[data-doctor-export]').disabled=!risultato||loading;
  q('[data-doctor-tempo]').textContent=opzioni.ricevutoAlle?'Ricevuto '+new Intl.DateTimeFormat('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Rome'}).format(new Date(opzioni.ricevutoAlle)):'Controllo non eseguito';
- q('[data-doctor-esito]').textContent=loading?'Controllo in corso…':risultato?voci.length+' controlli · '+(n.warning+n.danger)+' da rivedere'+(errore?' · ultimo risultato conservato.':'.'):'Nessun risultato disponibile.';
+ q('[data-doctor-esito]').textContent=loading?'Controllo in corso…':risultato?plurale(voci.length,'controllo')+' · '+(n.warning+n.danger)+' da rivedere'+(errore?' · ultimo risultato conservato.':'.'):'Nessun risultato disponibile.';
  q('[data-doctor-errore]').textContent=errore;q('[data-doctor-errore]').hidden=!errore;q('[data-doctor-counts]').hidden=!risultato;
  for(const [k,v] of Object.entries(n))q('[data-doctor-count='+k+']').textContent=String(v);
  const lista=q('[data-doctor-list]');lista.setAttribute('aria-busy',String(loading));lista.replaceChildren(...voci.map(v=>creaCheckCard(v,{document:s.ownerDocument})));
