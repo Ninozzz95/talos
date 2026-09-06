@@ -26,6 +26,7 @@ import { aggiornaInspector, processiDagliEventi } from '../components/inspector.
 import { contaDiff } from '../components/review.js'; // 06/9 B2: +N −M dei file toccati
 import { collegaRidimensionamentoDialoghi, preparaMisuraDialogo } from '../components/dialoghi.js'; // 06/9 B7: dialoghi ridimensionabili e ricordati
 import { creaIntro, normalizzaCartella as normalizzaCartellaIntro, ultimoSegmento as ultimoSegmentoIntro } from '../components/intro.js'; // 06/9 B7b: l'Intro del mockup con i dati veri
+import { creaSchedeTerminale, ETICHETTA_STATO as ETICHETTA_STATO_TERMINALE, TESTI as TESTI_TERMINALE, prossimaAttivaDopoChiusura, SCHEDE_MASSIME as SCHEDE_MASSIME_TERMINALE } from '../components/terminale.js'; // 06/9 B1: il Terminale a schede (K-G)
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
@@ -7457,18 +7458,34 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    */
   const TIPO_FRAME_DATI_CLIENT = 0;
   const TIPO_FRAME_CONTROLLO_CLIENT = 1;
+  const CHIAVE_SCHEDE_TERMINALE = 'talos-harness-terminali-v1';
 
+  /*
+   * ⭐⭐⭐ 06/9 B1 (K-G) — il Terminale A SCHEDE. Una sessione ha più shell vere (registro
+   * W1-01: `GET/POST /api/v1/sessions/:id/terminals`, `POST …/:terminalId/close`, tetto 8);
+   * ogni scheda è una xterm.js sua, con la sua WebSocket verso la sua PTY. Le schede a video,
+   * il menu contestuale e il piede sono di `components/terminale.js`.
+   *
+   * ⛔ Tre vincoli letti alla fonte il 06/09/2026, non dedotti:
+   *  · xterm.js non sa misurarsi dentro un elemento `display:none` (xterm.js #3029, #494):
+   *    una scheda si MONTA solo quando è visibile, e si rimisura quando torna visibile;
+   *  · i browser limitano i contesti WebGL vivi per pagina (xterm.js #4379): il renderer
+   *    WebGL è acceso SOLO sulla scheda attiva e si spegne su quella che va in secondo piano —
+   *    le altre restano montate col renderer DOM, così lo scrollback non si perde;
+   *  · alla chiusura il fuoco passa alla vicina che prende il posto, poi alla precedente
+   *    (Hermes `closeTerminal`, `terminals.ts`).
+   *
+   * ⛔ Senza sessione resta UNA scheda sola (l'id standalone che il server accetta per
+   * compatibilità): «Nuovo» è disabilitato e lo dice.
+   */
   function statoTerminale() {
     if (!state.terminal) {
-      state.terminal = {
-        ws: null, idConnesso: null, term: null, fit: null, montato: false, standaloneId: null, resizeObserver: null, enforcementColore: null,
-      };
+      state.terminal = { schede: new Map(), ordine: [], attiva: null, sessioneId: undefined, standaloneId: null, ui: null, enforcementColore: null, vistaPrima: null };
     }
     return state.terminal;
   }
 
-  function idTerminaleCorrente() {
-    if (state.realSession.id) return state.realSession.id;
+  function idStandaloneTerminale() {
     const t = statoTerminale();
     if (!t.standaloneId) {
       t.standaloneId = window.crypto?.randomUUID?.() ?? `standalone-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -7481,14 +7498,14 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     const stile = getComputedStyle(document.documentElement);
     const leggi = (nome, rip) => stile.getPropertyValue(nome).trim() || rip;
     return {
-      background: leggi('--bg-deep', '#17181b'),
-      foreground: leggi('--text-2', '#d6d2ca'),
-      cursor: leggi('--accent', '#c08b3c'),
-      cursorAccent: leggi('--bg-deep', '#17181b'),
-      selectionBackground: leggi('--accent-soft', 'rgba(192,139,60,.3)'),
+      background: leggi('--talos-window-bg', leggi('--bg-deep', '#17181b')),
+      foreground: leggi('--talos-assistant-text', leggi('--text-2', '#d6d2ca')),
+      cursor: leggi('--talos-accent', leggi('--accent', '#c08b3c')),
+      cursorAccent: leggi('--talos-window-bg', leggi('--bg-deep', '#17181b')),
+      selectionBackground: leggi('--talos-accent-soft', leggi('--accent-soft', 'rgba(192,139,60,.3)')),
       black: '#1c1d20', red: '#e2685f', green: '#8fbf7f', yellow: '#c9a35e',
-      blue: '#7aa2d6', magenta: '#c08bd0', cyan: '#7fc1c9', white: leggi('--text-2', '#d6d2ca'),
-      brightBlack: '#54565c', brightRed: '#ef8981', brightGreen: '#a9d99b', brightYellow: leggi('--accent-2', '#d7a554'),
+      blue: '#7aa2d6', magenta: '#c08bd0', cyan: '#7fc1c9', white: leggi('--talos-assistant-text', '#d6d2ca'),
+      brightBlack: '#54565c', brightRed: '#ef8981', brightGreen: '#a9d99b', brightYellow: leggi('--talos-accent-hover', '#d7a554'),
       brightBlue: '#96b8e6', brightMagenta: '#d6a6e2', brightCyan: '#9ad6dd', brightWhite: '#f1efe9',
     };
   }
@@ -7501,31 +7518,107 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     return frame;
   }
 
-  function impostaChipTerminale(testo, stato) {
-    const chip = $('#terminalStatusChip');
-    if (!chip) return;
-    chip.textContent = testo;
-    chip.classList.toggle('success', stato === 'ok'); // stessa classe già usata da .status-chip altrove, non una seconda convenzione
-    chip.classList.toggle('error', stato === 'error');
+  /* I nomi scelti dalla persona e la scheda attiva per sessione, nel browser (Hermes: `hermes.desktop.terminals.v1`). */
+  function memoriaSchedeTerminale() { try { return JSON.parse(localStorage.getItem(CHIAVE_SCHEDE_TERMINALE) || '{}') || {}; } catch { return {}; } }
+  function salvaMemoriaSchedeTerminale(memoria) { try { localStorage.setItem(CHIAVE_SCHEDE_TERMINALE, JSON.stringify(memoria)); } catch { /* quota o finestra privata: si perde solo il nome */ } }
+  function titoloRicordatoTerminale(id) { return memoriaSchedeTerminale().nomi?.[id] || null; }
+  function ricordaTitoloTerminale(id, titolo) { const m = memoriaSchedeTerminale(); m.nomi = { ...(m.nomi || {}), [id]: titolo }; salvaMemoriaSchedeTerminale(m); }
+  function dimenticaTitoloTerminale(id) { const m = memoriaSchedeTerminale(); if (m.nomi?.[id]) { delete m.nomi[id]; salvaMemoriaSchedeTerminale(m); } }
+  function ricordaAttivaTerminale(sessioneId, id) { if (!sessioneId) return; const m = memoriaSchedeTerminale(); m.attive = { ...(m.attive || {}), [sessioneId]: id }; salvaMemoriaSchedeTerminale(m); }
+
+  function uiSchedeTerminale() {
+    const t = statoTerminale();
+    if (t.ui) return t.ui;
+    const pane = $('#schermoTerminale .talos-terminal');
+    if (!pane) return null;
+    const radice = ROOT();
+    t.ui = creaSchedeTerminale(pane, {
+      root: radice.body || radice,
+      azioni: {
+        seleziona: (id) => attivaSchedaTerminale(id),
+        nuova: () => { void nuovaSchedaTerminale(); },
+        chiudi: (id) => { void chiudiSchedaTerminale(id); },
+        chiudiAltre: (id) => { for (const altra of [...t.ordine]) if (altra !== id) void chiudiSchedaTerminale(altra); },
+        chiudiTutte: () => { for (const id of [...t.ordine]) void chiudiSchedaTerminale(id); },
+        rinomina: (id, titolo) => { const v = t.schede.get(id); if (!v) return; v.titolo = titolo; ricordaTitoloTerminale(id, titolo); renderizzaSchedeTerminale(); },
+      },
+    });
+    return t.ui;
   }
 
-  function inviaResizeTerminale() {
-    const t = statoTerminale();
-    if (!t.term || t.ws?.readyState !== WebSocket.OPEN) return;
-    t.ws.send(codificaFrameClient(TIPO_FRAME_CONTROLLO_CLIENT, JSON.stringify({ tipo: 'resize', cols: t.term.cols, rows: t.term.rows })));
+  /** K-G: il numero di schede della sessione corrente, `null` finché non è noto (il badge non si scrive). */
+  function contaSchedeTerminale() {
+    const t = state.terminal;
+    if (!t || !state.realSession.id || t.sessioneId !== state.realSession.id) return null;
+    return t.ordine.length;
   }
 
-  /** @returns {boolean} true se una xterm.js viva esiste (appena montata o già presente) — mai aprire la WebSocket (collegaTerminaleWs) se questo torna false: nessun posto dove scrivere l'output, e nei test/negli ambienti senza vendor/xterm caricato sarebbe una connessione di rete a vuoto. */
-  function montaTerminaleSeServe() {
+  function renderizzaSchedeTerminale() {
+    const ui = uiSchedeTerminale();
+    if (!ui) return;
     const t = statoTerminale();
-    if (t.montato) return true;
-    const contenitore = $('#realTerminalMount');
-    if (!contenitore || !window.Terminal || !window.FitAddon) {
-      impostaChipTerminale('xterm.js non caricato', 'error'); // onesto: mai un pannello silenziosamente inerte
+    // la shell la dichiara il server all'aggancio: le schede non ancora agganciate prendono quella già vista (stesso server, stessa scelta), così i nomi non cambiano quando si aprono
+    const shellNota = [...t.schede.values()].find((v) => v.shell)?.shell || null;
+    const schede = t.ordine.map((id) => t.schede.get(id)).filter(Boolean)
+      .map((v) => ({ ...v, shell: v.shell || shellNota, stato: v.stato === 'connesso' && v.terminalId === t.attiva ? 'live' : v.stato }));
+    const attiva = t.schede.get(t.attiva) || null;
+    const conSessione = Boolean(state.realSession.id);
+    // la cartella è quella che il server ha DICHIARATO per la scheda; per la scheda senza sessione la sceglie il server e qui non si inventa
+    const cartella = attiva?.cartella || (attiva?.origine === 'standalone' ? '' : state.realSession.cartellaAssoluta) || '';
+    const segmento = cartella ? ultimoSegmentoIntro(cartella) : '';
+    const nomeCartella = segmento ? (/[\/]$/.test(segmento) ? segmento : `${segmento}/`) : '';
+    const colori = t.enforcementColore && t.enforcementColore !== 'webgl' ? ` Colori limitati (${t.enforcementColore}).` : '';
+    ui.aggiorna({
+      schede,
+      attiva: t.attiva,
+      puoAprire: conSessione && t.ordine.length < SCHEDE_MASSIME_TERMINALE,
+      motivoNoNuova: conSessione ? TESTI_TERMINALE.troppeSchede : TESTI_TERMINALE.nuovaSchedaSenzaSessione,
+      badges: [
+        { chiave: 'isolamento', testo: 'Stessa macchina, senza isolamento', titolo: 'La shell gira sul tuo computer, nella cartella della sessione: nessuna sandbox.' },
+        ...(nomeCartella ? [{ chiave: 'cartella', testo: nomeCartella, titolo: `${cartella} · shell sul tuo computer, senza isolamento` }] : []),
+      ],
+      piede: attiva
+        ? { chi: TESTI_TERMINALE.apertaDaTe, dettaglio: cartella || (attiva.origine === 'standalone' ? 'cartella predefinita del server' : ''), stato: `${ETICHETTA_STATO_TERMINALE[attiva.stato] ?? attiva.stato}${attiva.ripreso ? ' · shell ripresa' : ''}`, nota: `${TESTI_TERMINALE.nota}${colori}` }
+        : { chi: TESTI_TERMINALE.nessunaScheda, dettaglio: cartella, stato: '', nota: conSessione ? 'Premi Nuovo per aprire una shell in questa cartella.' : TESTI_TERMINALE.nuovaSchedaSenzaSessione },
+    });
+    aggiornaTestataSessione(); // K-G: il badge «Terminale N» nella testata
+  }
+
+  function registraSchedaTerminale(voce) {
+    const t = statoTerminale();
+    if (t.schede.has(voce.terminalId)) return t.schede.get(voce.terminalId);
+    const record = {
+      terminalId: voce.terminalId, cartella: voce.cartella || '', origine: voce.origine === 'standalone' ? 'standalone' : 'tu',
+      titolo: titoloRicordatoTerminale(voce.terminalId), shell: null, comando: '', stato: 'attesa', ripreso: null,
+      term: null, fit: null, webgl: null, ws: null, mount: null, osservatore: null,
+    };
+    t.schede.set(voce.terminalId, record);
+    t.ordine.push(voce.terminalId);
+    return record;
+  }
+
+  function inviaResizeTerminale(record) {
+    if (!record?.term || record.ws?.readyState !== WebSocket.OPEN) return;
+    record.ws.send(codificaFrameClient(TIPO_FRAME_CONTROLLO_CLIENT, JSON.stringify({ tipo: 'resize', cols: record.term.cols, rows: record.term.rows })));
+  }
+
+  function impostaStatoScheda(record, stato) { record.stato = stato; renderizzaSchedeTerminale(); }
+
+  /** Monta la xterm.js di una scheda dentro il corpo — SOLO quando la scheda è visibile (xterm.js #3029). */
+  function montaSchedaTerminale(record) {
+    if (record.term) return true;
+    const corpo = $('#realTerminalMount');
+    if (!corpo || !window.Terminal || !window.FitAddon) {
+      statoTerminale().enforcementColore = 'xterm.js non caricato'; // onesto: mai un pannello silenziosamente inerte
       return false;
     }
+    const mount = document.createElement('div');
+    mount.className = 'talos-terminal__mount';
+    mount.dataset.terminaleMount = record.terminalId;
+    corpo.append(mount);
+    record.mount = mount;
     const term = new window.Terminal({
-      fontFamily: getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim() || 'Menlo, Consolas, monospace',
+      fontFamily: getComputedStyle(document.documentElement).getPropertyValue('--talos-font-mono').trim() || 'Menlo, Consolas, monospace',
       fontSize: 13,
       cursorBlink: true,
       scrollback: 5000,
@@ -7533,107 +7626,218 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     });
     const fit = new window.FitAddon.FitAddon();
     term.loadAddon(fit);
-    term.open(contenitore);
+    term.open(mount);
+    fit.fit();
+    term.onData((dati) => {
+      if (record.ws?.readyState === WebSocket.OPEN) record.ws.send(codificaFrameClient(TIPO_FRAME_DATI_CLIENT, dati));
+    });
     /*
-     * ⛔⛔⛔ 28/8 — trovato dal vivo: xterm.js v6 (core) ha SOLO un renderer
-     * DOM, niente più canvas incluso. Il renderer DOM colora il testo
-     * iniettando un `<style>` dinamico con regole `.xterm-fg-N` — ma la
-     * CSP di questo server è `style-src 'self'` (niente `'unsafe-inline'`,
-     * deliberato, vedi http-app.mjs), quindi il browser scarta quello
-     * stylesheet in silenzio: la classe giusta finiva sullo span
-     * (verificato: `class="xterm-fg-2"`), ma ZERO regole CSS la
-     * definivano da nessuna parte — ogni carattere nello stesso colore.
-     * `@xterm/addon-webgl` dipinge pixel GPU veri, niente CSS coinvolto:
-     * stesso renderer che usa VS Code, non un ripiego. Se il contesto
-     * WebGL non è disponibile (GPU assente/bloccata), si ricade sul
-     * renderer DOM — funzionante, solo senza colori ANSI, dichiarato
-     * onestamente via `t.enforcementColore`, mai un fallimento silenzioso.
+     * ⛔ 28/8: xterm.js ridimensiona SE STESSO dentro l'elemento osservato — il resize alla PTY
+     * parte SOLO se cols/rows sono davvero cambiati (seconda difesa oltre all'altezza fissa in CSS).
      */
+    const osservatore = new ResizeObserver(() => {
+      if (mount.hidden) return;
+      const primaCols = term.cols;
+      const primaRows = term.rows;
+      fit.fit();
+      if (term.cols !== primaCols || term.rows !== primaRows) inviaResizeTerminale(record);
+    });
+    osservatore.observe(mount);
+    Object.assign(record, { term, fit, osservatore });
+    return true;
+  }
+
+  /*
+   * ⛔⛔⛔ 28/8 — xterm.js v6 (core) ha SOLO il renderer DOM, che colora con uno <style> dinamico
+   * scartato dalla CSP (`style-src 'self'`): `@xterm/addon-webgl` dipinge pixel GPU veri. E i
+   * contesti WebGL per pagina sono contati (xterm.js #4379): uno solo, sulla scheda attiva.
+   * `preserveDrawingBuffer:true` — altrimenti ogni lettura dei pixel (screenshot, verifica) vede un canvas vuoto.
+   */
+  function accendiWebglTerminale(record) {
+    const t = statoTerminale();
+    if (record.webgl || !record.term) return;
+    if (!window.WebglAddon) { t.enforcementColore = 'dom (WebGL non disponibile)'; return; }
     try {
-      // preserveDrawingBuffer:true — altrimenti il buffer WebGL si pulisce dopo ogni presentazione: qualunque lettura successiva dei pixel (screenshot, verifica) vedrebbe un canvas vuoto anche col rendering perfettamente corretto.
       const webgl = new window.WebglAddon.WebglAddon(true);
-      webgl.onContextLoss(() => { webgl.dispose(); t.enforcementColore = 'dom (contesto WebGL perso)'; });
-      term.loadAddon(webgl);
+      webgl.onContextLoss(() => { webgl.dispose(); record.webgl = null; t.enforcementColore = 'dom (contesto WebGL perso)'; renderizzaSchedeTerminale(); });
+      record.term.loadAddon(webgl);
+      record.webgl = webgl;
       t.enforcementColore = 'webgl';
     } catch {
       t.enforcementColore = 'dom (WebGL non disponibile)';
     }
-    fit.fit();
-    term.onData((dati) => {
-      if (t.ws?.readyState === WebSocket.OPEN) t.ws.send(codificaFrameClient(TIPO_FRAME_DATI_CLIENT, dati));
-    });
-    /*
-     * ⛔⛔⛔ 28/8 — trovato dal vivo: xterm.js ridimensiona SE STESSO dentro
-     * l'elemento osservato — un `fit()` incondizionato ad ogni tick del
-     * ResizeObserver, con un contenitore la cui altezza potesse dipendere
-     * dal contenuto (`min-height`, corretto sotto in styles.css), produceva
-     * un loop di retroazione (ogni fit rendeva il box un filo più alto,
-     * il ResizeObserver lo notava, un altro fit...). `height` fissa in CSS
-     * rompe il loop alla radice; questo guard resta come SECONDA difesa,
-     * indipendente dalla prima: invia il resize alla PTY SOLO se cols/rows
-     * sono DAVVERO cambiati, mai ad ogni tick — un tick che ricalcola lo
-     * stesso valore (rumore di misura, non un vero cambiamento) non deve
-     * generare traffico né, tantomeno, poter alimentare un loop.
-     */
-    const osservatore = new ResizeObserver(() => {
-      const primaCols = term.cols;
-      const primaRows = term.rows;
-      fit.fit();
-      if (term.cols !== primaCols || term.rows !== primaRows) inviaResizeTerminale();
-    });
-    osservatore.observe(contenitore);
-    t.term = term;
-    t.fit = fit;
-    t.resizeObserver = osservatore;
-    t.montato = true;
-    return true;
   }
 
-  /** Chiude la WS corrente (se c'è) e pulisce lo schermo — chiamata SOLO al cambio di id (nuova/altra sessione), mai per un timeout arbitrario: la shell "non ha limiti" per richiesta esplicita dell'owner. */
-  function scollegaTerminaleReale() {
-    const t = statoTerminale();
-    if (t.ws) { t.ws.onclose = null; t.ws.close(); t.ws = null; t.idConnesso = null; }
-    t.term?.clear();
-    impostaChipTerminale('in attesa', null);
+  function spegniWebglTerminale(record) {
+    if (!record.webgl) return;
+    try { record.webgl.dispose(); } catch { /* già perso */ }
+    record.webgl = null;
   }
 
-  function collegaTerminaleWs() {
-    const t = statoTerminale();
-    const id = idTerminaleCorrente();
-    if (t.ws && t.idConnesso === id) return; // già connesso a questo stesso id — un F5/riapertura del tab riaggancia, non riapre
-    t.ws?.close();
-    impostaChipTerminale('connessione…', null);
+  function collegaWsScheda(record) {
+    if (record.ws && (record.ws.readyState === WebSocket.OPEN || record.ws.readyState === WebSocket.CONNECTING)) return;
+    impostaStatoScheda(record, 'connessione');
     const protocollo = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${protocollo}://${window.location.host}/api/v1/terminal/ws?id=${encodeURIComponent(id)}`);
+    const ws = new WebSocket(`${protocollo}://${window.location.host}/api/v1/terminal/ws?id=${encodeURIComponent(record.terminalId)}`);
     ws.binaryType = 'arraybuffer';
-    t.ws = ws;
-    t.idConnesso = id;
-    ws.onopen = () => { impostaChipTerminale('connesso', 'ok'); inviaResizeTerminale(); };
+    record.ws = ws;
+    ws.onopen = () => { impostaStatoScheda(record, 'connesso'); inviaResizeTerminale(record); };
     ws.onmessage = (evento) => {
       const buf = new Uint8Array(evento.data);
       if (buf.length === 0) return;
       const tipo = buf[0];
       const corpo = new TextDecoder().decode(buf.subarray(1));
-      if (tipo === TIPO_FRAME_DATI_CLIENT) {
-        t.term?.write(corpo);
-        return;
-      }
+      if (tipo === TIPO_FRAME_DATI_CLIENT) { record.term?.write(corpo); return; }
       try {
         const messaggio = JSON.parse(corpo);
-        if (messaggio.evento === 'uscita') {
-          t.term?.writeln(`\r\n[processo terminato, codice ${messaggio.codice}]`);
-          impostaChipTerminale('terminato', 'error');
+        if (messaggio.evento === 'agganciato') {
+          record.ripreso = messaggio.ripreso === true;
+          if (messaggio.shell) { record.shell = messaggio.shell; record.comando = messaggio.comando || ''; }
+          renderizzaSchedeTerminale();
+        } else if (messaggio.evento === 'uscita') {
+          record.term?.writeln(`\r\n[shell chiusa, codice ${messaggio.codice}]`);
+          impostaStatoScheda(record, 'terminato');
         }
       } catch { /* messaggio di controllo malformato: ignorato, mai un crash della connessione */ }
     };
-    ws.onclose = () => { if (t.idConnesso === id) impostaChipTerminale('disconnesso', 'error'); };
+    ws.onclose = () => { if (record.ws === ws && record.stato !== 'terminato') impostaStatoScheda(record, 'disconnesso'); };
+  }
+
+  function attivaSchedaTerminale(id) {
+    const t = statoTerminale();
+    const record = t.schede.get(id);
+    if (!record) return;
+    t.attiva = id;
+    ricordaAttivaTerminale(t.sessioneId, id);
+    for (const altra of t.schede.values()) {
+      if (altra === record) continue;
+      if (altra.mount) altra.mount.hidden = true;
+      spegniWebglTerminale(altra);
+    }
+    if (record.mount) record.mount.hidden = false;
+    if (state.view === 'terminal' && montaSchedaTerminale(record)) {
+      accendiWebglTerminale(record);
+      collegaWsScheda(record);
+      requestAnimationFrame(() => { record.fit?.fit(); inviaResizeTerminale(record); record.term?.focus(); });
+    }
+    renderizzaSchedeTerminale();
+  }
+
+  async function caricaSchedeTerminale() {
+    const t = statoTerminale();
+    const sessioneId = state.realSession.id || null;
+    t.sessioneId = sessioneId;
+    let voci = [];
+    if (sessioneId) {
+      try {
+        const risposta = await apiGet(`/api/v1/sessions/${encodeURIComponent(sessioneId)}/terminals`);
+        voci = Array.isArray(risposta?.items) ? risposta.items : [];
+      } catch { voci = []; }
+      if (t.sessioneId !== sessioneId) return; // nel frattempo la sessione è cambiata
+      // la prima scheda ha `terminalId === sessionId` e la sua cartella la decide il REGISTRO del server (W1-01):
+      // si chiede al server (la POST col registro vuoto restituisce proprio la prima scheda, senza aprire nessuna shell)
+      if (voci.length === 0) {
+        try { const prima = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessioneId)}/terminals`, {}); if (prima?.terminalId) voci = [prima]; } catch { /* sotto: senza cartella dichiarata */ }
+        if (t.sessioneId !== sessioneId) return;
+        if (voci.length === 0) voci = [{ terminalId: sessioneId, cartella: '', origine: 'prima-scheda' }];
+      }
+    } else {
+      voci = [{ terminalId: idStandaloneTerminale(), cartella: '', origine: 'standalone' }];
+    }
+    for (const voce of voci) registraSchedaTerminale(voce);
+    const ricordata = memoriaSchedeTerminale().attive?.[sessioneId];
+    t.attiva = t.schede.has(ricordata) ? ricordata : t.ordine[0] ?? null;
+  }
+
+  async function nuovaSchedaTerminale() {
+    const t = statoTerminale();
+    const sessioneId = state.realSession.id;
+    if (!sessioneId) { toast('Serve una sessione', TESTI_TERMINALE.nuovaSchedaSenzaSessione); return; }
+    if (t.ordine.length >= SCHEDE_MASSIME_TERMINALE) { toast('Troppe schede', TESTI_TERMINALE.troppeSchede); return; }
+    try {
+      let voce = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessioneId)}/terminals`, {});
+      // col registro vuoto la prima POST restituisce la prima scheda (terminalId === sessionId), che qui esiste già
+      if (voce?.terminalId && t.schede.has(voce.terminalId)) voce = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessioneId)}/terminals`, {});
+      if (!voce?.terminalId) throw new Error('Il server non ha restituito una scheda');
+      registraSchedaTerminale(voce);
+      attivaSchedaTerminale(voce.terminalId);
+    } catch (error) {
+      toast('Scheda non aperta', error.message);
+    }
+  }
+
+  function smontaSchedaTerminale(record) {
+    if (record.ws) { record.ws.onclose = null; record.ws.close(); record.ws = null; }
+    record.osservatore?.disconnect();
+    spegniWebglTerminale(record);
+    try { record.term?.dispose(); } catch { /* già smontata */ }
+    record.mount?.remove();
+    Object.assign(record, { term: null, fit: null, mount: null, osservatore: null });
+  }
+
+  async function chiudiSchedaTerminale(id) {
+    const t = statoTerminale();
+    const record = t.schede.get(id);
+    if (!record) return;
+    const indice = t.ordine.indexOf(id);
+    const prossima = prossimaAttivaDopoChiusura(t.ordine, indice);
+    smontaSchedaTerminale(record);
+    t.schede.delete(id);
+    t.ordine.splice(indice, 1);
+    dimenticaTitoloTerminale(id);
+    if (t.attiva === id) { t.attiva = null; if (prossima) attivaSchedaTerminale(prossima); }
+    renderizzaSchedeTerminale();
+    t.ui?.fuocoSullaAttiva();
+    if (t.sessioneId && record.origine !== 'standalone') {
+      try { await apiPost(`/api/v1/sessions/${encodeURIComponent(t.sessioneId)}/terminals/${encodeURIComponent(id)}/close`, {}); } catch (error) { toast('Shell non chiusa sul server', error.message); }
+    }
+  }
+
+  /** Al cambio di sessione: via tutte le schede (WebSocket, xterm, mount). Mai per un timeout: la shell «non ha limiti». */
+  function scollegaTerminaleReale() {
+    const t = statoTerminale();
+    for (const record of t.schede.values()) smontaSchedaTerminale(record);
+    t.schede.clear();
+    t.ordine = [];
+    t.attiva = null;
+    t.sessioneId = undefined;
+    renderizzaSchedeTerminale();
   }
 
   /** Punto d'ingresso unico, chiamato da setView('terminal') e da resettaSuperficiRealiDedicate() quando il tab è già aperto. */
   function apriVistaTerminaleReale() {
-    if (!montaTerminaleSeServe()) return; // niente xterm.js disponibile: niente WS aperta a vuoto (vale nei test, e in un deploy rotto)
-    collegaTerminaleWs();
-    requestAnimationFrame(() => statoTerminale().fit?.fit());
+    const t = statoTerminale();
+    if (!$('#realTerminalMount') || !window.Terminal || !window.FitAddon) { t.enforcementColore = 'xterm.js non caricato'; renderizzaSchedeTerminale(); return; }
+    const sessioneId = state.realSession.id || null;
+    const avvia = () => {
+      if (t.attiva && t.schede.has(t.attiva)) attivaSchedaTerminale(t.attiva);
+      else if (t.ordine[0]) attivaSchedaTerminale(t.ordine[0]);
+      else renderizzaSchedeTerminale();
+    };
+    if (t.sessioneId === sessioneId && t.ordine.length > 0) { avvia(); return; }
+    if (t.sessioneId !== sessioneId) scollegaTerminaleReale();
+    t.sessioneId = sessioneId;
+    renderizzaSchedeTerminale();
+    void caricaSchedeTerminale().then(() => { if (state.view === 'terminal' && t.sessioneId === sessioneId) avvia(); });
+  }
+
+  /** Ctrl+` mostra/nasconde il Terminale, Ctrl+Shift+` apre una scheda nuova (stesse combinazioni di Hermes `view.showTerminal` / `view.newTerminal`). */
+  function collegaScorciatoieTerminale() {
+    ROOT().addEventListener('keydown', (event) => {
+      if (!event.ctrlKey || event.altKey || event.code !== 'Backquote') return;
+      event.preventDefault();
+      const t = statoTerminale();
+      if (event.shiftKey) {
+        if (state.view !== 'terminal') { t.vistaPrima = state.view; setView('terminal'); }
+        void nuovaSchedaTerminale();
+      } else if (state.view === 'terminal') {
+        setView(t.vistaPrima && t.vistaPrima !== 'terminal' ? t.vistaPrima : (state.realSession.id ? 'chat' : 'vuota'));
+      } else {
+        t.vistaPrima = state.view;
+        setView('terminal');
+      }
+    });
+    renderizzaSchedeTerminale(); // subito onesta: niente schede dimostrative del mockup, «Nuovo» spento senza sessione
   }
 
   /**
@@ -10845,7 +11049,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     const dati = {
       titolo: state.session,
       percorso: state.realSession.cartellaAssoluta,
-      schedeTerminale: null,
+      schedeTerminale: contaSchedeTerminale(), // 06/9 B1 (K-G): le schede vere della sessione, null finché non lette
       fileReview: state.realSession.reviewFiles instanceof Map ? state.realSession.reviewFiles.size : 0,
     };
     aggiornaTopbar($('#schermoChat .talos-topbar'), dati);
@@ -13972,6 +14176,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   }
   document.addEventListener('keydown', (event) => { if (event.key === 'Escape') $$('.overlay-layer').forEach((v) => chiudiVeloMockup(v.id)); });
   collegaRidimensionamentoDialoghi(ROOT()); // 06/9 B7: le tre maniglie di ogni velo (trascina, frecce, doppio clic)
+  collegaScorciatoieTerminale(); // 06/9 B1: Ctrl+` e Ctrl+Shift+`, e la barra delle schede onesta da subito
   setInspectorTab($('.inspector-tabs button.active'));
   renderReviewFile('composer');
   autoGrowTextarea();

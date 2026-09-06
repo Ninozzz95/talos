@@ -522,6 +522,28 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-terminal__body{flex:1; padding:14px 16px; font-family:var(--talos-font-mono); font-size:12.5px; line-height:1.7; color:var(--talos-assistant-text); overflow:auto; white-space:pre}
 .talos-terminal__body .p{color:var(--talos-accent-hover)} .talos-terminal__body .ok{color:var(--talos-success)} .talos-terminal__body .ko{color:var(--talos-danger)} .talos-terminal__body .dim{color:var(--talos-muted)}
 .talos-terminal__foot{display:flex; align-items:center; gap:10px; padding:8px 14px; border-top:1px solid var(--talos-border); font-size:12px; color:var(--talos-muted); background:var(--talos-panel)}
+/* B1 06/09 — Terminale A SCHEDE (K-G): il corpo ospita una xterm.js vera per scheda (una visibile, le altre montate e nascoste: xterm.js #3029 non si misura in display:none); le schede non si spezzano e la barra scorre quando sono tante; nel piede il percorso si tronca coi puntini (taccuino 06/09, terminale-2.png). */
+.talos-terminal__tabs{overflow:hidden; min-width:0}
+.talos-terminal__tabs .talos-grow{flex:1 1 0; min-width:6px}
+.talos-terminal__tab{position:relative; flex:0 0 auto; white-space:nowrap}
+.talos-terminal__tab[data-terminale-id]{flex:0 1 auto; min-width:96px; max-width:200px; padding-right:26px; overflow:hidden; text-overflow:ellipsis; display:block; line-height:32px; text-align:left}
+.talos-terminal__tab[data-terminale-id] .talos-dot{display:inline-block; margin-right:8px; vertical-align:middle}
+.talos-terminal__tab:disabled{opacity:.45; cursor:not-allowed}
+.talos-terminal__tabs .talos-badge{flex:0 6 auto; min-width:44px; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap} /* i badge cedono spazio per primi (taccuino 06/09, terminale-5.png: le schede si troncavano con tre schede sole) */
+.talos-terminal__tab[data-terminale-id]::after{content:'×'; position:absolute; right:6px; top:50%; width:16px; height:16px; margin-top:-8px; border-radius:4px; line-height:16px; text-align:center; font-size:13px; color:var(--talos-muted); opacity:0; transition:opacity 120ms ease}
+.talos-terminal__tab[data-terminale-id]:hover::after, .talos-terminal__tab[data-terminale-id]:focus-visible::after, .talos-terminal__tab[data-terminale-id][aria-selected="true"]::after{opacity:1}
+.talos-terminal__rinomina{height:22px; width:140px; padding:0 6px; font-size:12px}
+.talos-terminal__body.terminal-window{position:relative; padding:8px 12px; overflow:hidden; white-space:normal}
+.talos-terminal__mount{height:100%}
+.talos-terminal__mount[hidden]{display:none}
+.talos-terminal__mount .xterm{height:100%}
+.talos-terminal__mount .xterm .xterm-viewport{background-color:transparent} /* xterm.css lo vuole #000: sotto l'ultima riga si vedeva una banda nera (taccuino 06/09, terminale-4.png) */
+.talos-terminal__foot>span{white-space:nowrap}
+.talos-terminal__foot>.talos-mono{min-width:0; max-width:46%; overflow:hidden; text-overflow:ellipsis}
+.talos-terminal__foot>span:last-child{overflow:hidden; text-overflow:ellipsis}
+.talos-terminal{container-type:inline-size}
+.talos-terminal__tabs:has([data-terminale-id]:nth-of-type(3)) [data-badge="isolamento"]{display:none} /* da tre schede in su il badge dell'isolamento lascia il posto alle schede: la frase intera resta nel title del badge della cartella (taccuino 06/09, terminale-7-laptop.png) */
+@container (max-width:720px){ .talos-terminal__tabs [data-badge="isolamento"]{display:none} } /* sul portatile (1024: riquadro ~712px) il badge lungo perdeva 2px e mostrava i puntini */
 .talos-review{flex:1 1 auto; min-height:0; display:flex; flex-direction:column; gap:10px; padding:12px 18px 14px}
 .talos-review__schede{flex:none; min-width:0}
 .talos-review__schede .talos-tabs__list{display:flex; max-width:100%; overflow-x:auto; scrollbar-width:thin}

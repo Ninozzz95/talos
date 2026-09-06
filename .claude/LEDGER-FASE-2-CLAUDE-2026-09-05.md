@@ -698,6 +698,46 @@ dell'owner in una prova).
   dimostrativi del mockup: titolo «I rami di questa sessione», una frase onesta, «Confronta A e B»
   nascosto (bridge).
 
+### B1 — il Terminale A SCHEDE (K-G) (06/09 ~14:30): FATTA
+
+`components/terminale.js` (barra `.talos-terminal__tabs` + piede, dai dati) sopra il registro W1-01 del
+server: una sessione ha più shell vere, ognuna con la sua xterm.js e la sua WebSocket verso la sua PTY.
+«Nuovo» = `POST /sessions/:id/terminals` (tetto 8, il server dà l'id); chiusura = `POST …/close`;
+all'apertura le schede tornano da `GET …/terminals` (dopo un F5 la shell viva si RIPRENDE — il piede
+dice «connessa · shell ripresa», dal segnale `agganciato` del ponte). Nomi: la shell dichiarata dal
+server (`git-bash` → «tu · Git Bash», numerate le omonime) finché la persona non rinomina (F2 o doppio
+clic; ricordato nel browser, `talos-harness-terminali-v1`, con la scheda attiva per sessione). Chiudi
+con la «×» (disegnata dal CSS: la struttura resta quella del mockup), clic centrale, Ctrl+clic, Canc,
+o dal menu contestuale (Rinomina · Chiudi · Chiudi le altre · Chiudi tutte); alla chiusura il fuoco va
+alla vicina che prende il posto (Hermes `closeTerminal`). Tastiera nella lista: frecce cicliche,
+Home/End, Canc, F2, Shift+F10. Ctrl+` mostra/nasconde il Terminale, Ctrl+Shift+` apre una scheda
+(le stesse combinazioni di Hermes `view.showTerminal`/`view.newTerminal`). Senza sessione: una scheda
+sola (l'id standalone che il server accetta), «Nuovo» spento e lo dice. K-G: il badge «Terminale N»
+nella testata conta le schede vere (`contaSchedeTerminale`, `null` finché non lette). Via l'output
+dimostrativo del mockup dal corpo (bridge) e il badge falso «Isolato · sandbox locale»: ora dice
+«Stessa macchina, senza isolamento» + la cartella dichiarata dal registro.
+
+Vincoli letti alla fonte (06/09/2026): xterm.js #3029/#494 — non si misura in `display:none` ⇒ una
+scheda si monta solo quando è visibile e si rimisura al ritorno; xterm.js #4379 — i contesti WebGL
+per pagina sono contati ⇒ WebGL acceso SOLO sulla scheda attiva, spento su quella che va in secondo
+piano (misurato: 3 canvas con 1, 2 o 4 schede); Hermes `terminals.ts`/`rail.tsx` per la parità dei
+gesti. Server: `terminal-ws.mjs` manda `shell`/`comando` nell'evento `agganciato` (additivo; test
+aggiornati), `pty-terminal.mjs` conserva il comando scelto.
+
+Prove: unit `tests/unit/terminale.test.mjs` (nomi, fuoco alla chiusura, ciclo, tetto) — unit 112/112;
+statico 195/195; componenti 108/108 (nuova voce `Terminale`, struttura+parole+pixel a tre viewport);
+server 1678/1678. Dal vivo su 4175 (`terminale-vivo.mjs`): Nuovo → «tu · Git Bash 2», badge
+«Terminale 2»; `echo` nella seconda visibile in foto; ArrowLeft cambia scheda (mount nascosto/visibile,
+WebGL sempre 1); F2 → «build» ricordato; menu con 4 voci; F5 → 3 schede dal server, «shell ripresa»;
+Canc → il fuoco alla vicina, lista del server coerente; Ctrl+` va e torna; clic sulla «×» chiude;
+clic centrale chiude; 0 errori di pagina. Taccuino visivo (5 giri di screenshot, desktop 1440 e
+laptop 1024): schede che andavano a capo → nowrap; percorso nel piede su tre righe → una riga con
+puntini e `title`; banda nera sotto l'ultima riga (xterm.css `.xterm-viewport{background:#000}`) →
+trasparente; badge tagliato a destra → i badge cedono spazio per primi; con 4 schede a 1024 tutto si
+tronca coi puntini e resta leggibile nel `title`; i pallini delle schede erano collassati a 0px (span inline con `width`) → inline-block; da tre schede in su, e sotto 720px di riquadro, il badge «Stessa macchina, senza isolamento» lascia il posto alle schede (la frase resta nel `title` del badge della cartella). ⛔ NON FATTO: le schede «agente» (mirror dei comandi
+lanciati dal modello, come Hermes `ensureAgentTerminal`) — il componente le disegna, l'app non le
+produce: i comandi dell'agente passano dal kernel, non da una PTY. Registrata come proposta.
+
 - T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
   15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
   statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo
