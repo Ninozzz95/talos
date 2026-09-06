@@ -1799,6 +1799,61 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
         i += 1;
         continue;
       }
+      /*
+       * ⛔ 06/9 — trovato guardando uno screenshot di una risposta vera: una tabella markdown
+       * arrivava a schermo come testo grezzo, «| Funzione | Input atteso |» e «|---|---|» in fila.
+       * Il modello le usa spesso (riepiloghi, confronti, casi limite) e qui non esistevano.
+       * Forma GFM: una riga di celle, poi una riga di separatori (con l'allineamento opzionale
+       * `:---`, `---:`, `:---:`), poi le righe di dati. Durante lo streaming una tabella ancora
+       * aperta si rende con le righe già arrivate invece di lampeggiare come testo grezzo
+       * (ricerca 06/09/2026: ant-design/x PR #1322 «cache incomplete table tokens», streamdown.ai
+       * — si bufferizza il markdown incompleto, non lo si mostra crudo).
+       */
+      // il `|` \u00e8 obbligatorio: senza, una riga di soli trattini \u00e8 un separatore orizzontale, non una tabella
+      const separatoreTabella = (r) => typeof r === 'string' && r.includes('|') && /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/.test(r) && r.includes('-');
+      const celle = (r) => {
+        let t = r.trim();
+        if (t.startsWith('|')) t = t.slice(1);
+        if (t.endsWith('|')) t = t.slice(0, -1);
+        return t.split('|').map((c) => c.trim());
+      };
+      if (riga.includes('|') && i + 1 < righe.length && separatoreTabella(righe[i + 1]) && celle(riga).length > 1) {
+        chiudiParagrafo();
+        const intestazioni = celle(riga);
+        const allineamenti = celle(righe[i + 1]).map((c) => (c.startsWith(':') && c.endsWith(':') ? 'center' : c.endsWith(':') ? 'right' : c.startsWith(':') ? 'left' : ''));
+        const involucro = document.createElement('div');
+        involucro.className = 'md-table-wrap'; // la tabella scorre dentro il suo contenitore, non allarga la chat
+        const tabella = document.createElement('table');
+        tabella.className = 'md-table';
+        const thead = document.createElement('thead');
+        const trTesta = document.createElement('tr');
+        intestazioni.forEach((testo, n) => {
+          const th = document.createElement('th');
+          if (allineamenti[n]) th.style.textAlign = allineamenti[n];
+          applicaInline(th, testo);
+          trTesta.appendChild(th);
+        });
+        thead.appendChild(trTesta);
+        tabella.appendChild(thead);
+        const tbody = document.createElement('tbody');
+        i += 2;
+        while (i < righe.length && righe[i].includes('|') && righe[i].trim() !== '') {
+          const valori = celle(righe[i]);
+          const tr = document.createElement('tr');
+          for (let n = 0; n < intestazioni.length; n += 1) {
+            const td = document.createElement('td');
+            if (allineamenti[n]) td.style.textAlign = allineamenti[n];
+            applicaInline(td, valori[n] ?? '');
+            tr.appendChild(td);
+          }
+          tbody.appendChild(tr);
+          i += 1;
+        }
+        tabella.appendChild(tbody);
+        involucro.appendChild(tabella);
+        frammento.appendChild(involucro);
+        continue;
+      }
       if (listaMatch || listaNumMatch) {
         chiudiParagrafo();
         const ordinata = !!listaNumMatch;
