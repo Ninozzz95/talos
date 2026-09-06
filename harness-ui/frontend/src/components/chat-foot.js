@@ -104,6 +104,15 @@ export function nomeModelloUmano(id) {
  *   animare o saltare?». Quella resta 24: sbagliarla costa un'animazione di troppo, non una bugia.
  */
 export function fondoInVista({ scrollHeight = 0, scrollTop = 0, clientHeight = 0, coda = 0, soglia = 4 } = {}) {
+  /*
+   * ⛔ 06/9, owner: «nella chat appena iniziata non ha senso farla vedere finché non appare uno
+   *    scroll». Aveva ragione a chiedere se era previsto: NON lo era. Misurato, oggi il caso non si
+   *    verifica (63 campioni senza nulla da scorrere, striscia visibile 0 volte) — ma succede per
+   *    CONSEGUENZA del conto sulla coda, non perché qualcuno l'abbia deciso. Un comportamento
+   *    giusto per caso si rompe alla prima modifica del padding o di un arrotondamento.
+   * ⇒ Se non c'è niente da scorrere sei in fondo per DEFINIZIONE, e non c'è aritmetica di mezzo.
+   */
+  if (Number(scrollHeight) <= Number(clientHeight)) return true;
   const distanza = Number(scrollHeight) - Number(scrollTop) - Number(clientHeight);
   if (!Number.isFinite(distanza)) return true;
   return distanza <= Math.max(0, Number(coda) || 0) + soglia;

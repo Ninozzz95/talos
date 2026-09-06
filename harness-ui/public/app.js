@@ -8126,6 +8126,7 @@ function nomeModelloUmano(id) {
   return parti.filter(Boolean).join(" · ");
 }
 function fondoInVista({ scrollHeight = 0, scrollTop = 0, clientHeight = 0, coda = 0, soglia = 4 } = {}) {
+  if (Number(scrollHeight) <= Number(clientHeight)) return true;
   const distanza = Number(scrollHeight) - Number(scrollTop) - Number(clientHeight);
   if (!Number.isFinite(distanza)) return true;
   return distanza <= Math.max(0, Number(coda) || 0) + soglia;

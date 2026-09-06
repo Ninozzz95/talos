@@ -66,6 +66,15 @@ test('PIEDE-FONDO: «sono in fondo» guarda la fine del CONTENUTO, non del conte
    * e la striscia del ragionamento restava muta proprio quando serviva.
    */
   assert.equal(fondoInVista({ scrollHeight: 1731, scrollTop: 413, clientHeight: 998, coda: 314 }), false, 'salito di 320 con coda 314: NON sono in fondo');
+  /*
+   * ⛔ owner 06/9: in una chat appena iniziata la striscia non deve comparire finché non c'è
+   *    davvero uno scroll. Niente da scorrere = in fondo, senza far dipendere la risposta dalla
+   *    coda: qui la coda è ENORME apposta, e non deve cambiare l'esito.
+   */
+  assert.equal(fondoInVista({ scrollHeight: 400, scrollTop: 0, clientHeight: 560, coda: 999 }), true, 'chat nuova: niente da scorrere');
+  assert.equal(fondoInVista({ scrollHeight: 560, scrollTop: 0, clientHeight: 560, coda: 0 }), true, 'esattamente pieno: niente scroll');
+  // AL CONTRARIO — appena c'è un pelo da scorrere oltre la coda, la risposta torna a dipendere dal conto
+  assert.equal(fondoInVista({ scrollHeight: 900, scrollTop: 0, clientHeight: 560, coda: 100 }), false, 'si puo scorrere e sono in cima: non sono in fondo');
   // AL CONTRARIO — davvero in fondo, con solo il rumore sub-pixel di mezzo: resta «in fondo»
   assert.equal(fondoInVista({ scrollHeight: 1731, scrollTop: 733, clientHeight: 998, coda: 314 }), true, 'distanza 0: in fondo');
   assert.equal(fondoInVista({ scrollHeight: 1731, scrollTop: 730, clientHeight: 998, coda: 314 }), true, 'distanza 3: rumore sub-pixel, ancora in fondo');
