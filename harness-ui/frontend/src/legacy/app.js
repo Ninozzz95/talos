@@ -39,7 +39,8 @@ import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaN
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione, come quella di ChatGPT desktop
 import { montaScorciatoie, normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
 import { aggiornaPiedeChat, etichettaPermesso, fondoInVista, nomeModelloUmano } from '../components/chat-foot.js';
-import { spiegaErrore, spiegaRifiutoAttrezzo } from '../components/errori.js'; // 06/9 O-22/O-23/O-36: gli errori e i rifiuti detti a una persona
+import { spiegaErrore, spiegaRifiutoAttrezzo } from '../components/errori.js';
+import { montaNote } from '../components/note.js'; // 06/9 C24: la pagina delle Note // 06/9 O-22/O-23/O-36: gli errori e i rifiuti detti a una persona
 import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js'; // 06/9 O-28/O-31: il sorgente di una pagina non si legge
 import { frasiRitratto, avvisoRitratto } from '../components/cartella-ritratto.js'; // 06/9 F9/F10/F19-F21: cosa c'e' nella cartella
 import { sommaUsage, usageDellaSessione } from '../components/consumo-sessione.js'; // 06/9 CB-04: il consumo della SESSIONE, non dell'ultimo invio
@@ -1265,7 +1266,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
      * fatto qui perché `setView` è il solo posto da cui si naviga.
      */
     views.forEach((pane) => { pane.hidden = pane !== target; });
-    const SCHERMO_PER_VISTA = { chat: 'chat', vuota: 'vuota', terminal: 'terminale', diff: 'review', capability: 'capability', dashboard: 'board', memoria: 'memoria', attivita: 'attivita', settings: 'impostazioni', doctor: 'doctor', libreria: 'libreria', ricerca: 'ricerca', officina: 'officina', automations: 'automazioni', browser: 'browser' };
+    const SCHERMO_PER_VISTA = { chat: 'chat', vuota: 'vuota', terminal: 'terminale', diff: 'review', capability: 'capability', dashboard: 'board', memoria: 'memoria', attivita: 'attivita', note: 'note', settings: 'impostazioni', doctor: 'doctor', libreria: 'libreria', ricerca: 'ricerca', officina: 'officina', automations: 'automazioni', browser: 'browser' };
     const schermo = SCHERMO_PER_VISTA[view] || view;
     document.documentElement.setAttribute('data-vista', ['chat', 'vuota', 'terminale', 'review', 'browser'].includes(schermo) ? 'sessione' : 'pagina');
     document.documentElement.setAttribute('data-schermo', schermo);
@@ -1282,9 +1283,53 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (view === 'libreria') caricaPannelloLibreria({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Libreria
     if (view === 'attivita') caricaPannelloAttivita({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Attività
     if (view === 'memoria') caricaPannelloMemoria({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Memoria
+    if (view === 'note') void caricaPaginaNote(); // 06/9 C24: la voce «Note» aveva un contatore e nessuna pagina
     if (view === 'automations') renderAutomationsReali();
     if (view === 'browser') renderizzaBrowser(); // 06/9 K-I
     if (view === 'terminal') apriVistaTerminaleReale(); // ⭐ 28/8 — Terminale REALE: montaggio/connessione PIGRI, solo alla prima apertura del tab (LEDGER-TERMINALE-REALE.md)
+  }
+
+  /*
+   * ⛔ 06/9, prova T14: «Note» era una voce di menu con un contatore VIVO e nessuna pagina — il clic
+   * finiva nella chat. Le note esistevano davvero (`.notes-store/`, e la rotta le restituisce), solo
+   * non avevano un posto dove essere lette. Qui la pagina si riempie da quella rotta; la ricerca
+   * filtra mentre scrivi, e «Copia» porta via il testo.
+   * ⛔ Le note sono GLOBALI (come la Memoria) ma la rotta e' per-sessione: senza una sessione aperta
+   * non si finge un elenco vuoto, si dice perche'.
+   */
+  let noteCaricate = [];
+  async function caricaPaginaNote() {
+    const schermo = $('#schermoNote');
+    if (!schermo) return;
+    const id = state.realSession.id;
+    const stato = $('[data-note-stato]', schermo);
+    if (!id) {
+      noteCaricate = [];
+      montaNote(schermo, [], { cerca: '' });
+      if (stato) stato.textContent = 'Apri una sessione per vedere le note.';
+      return;
+    }
+    if (stato) stato.textContent = 'Leggo le note…';
+    try {
+      const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(id)}/notes`);
+      noteCaricate = Array.isArray(dati?.note) ? dati.note : [];
+    } catch (errore) {
+      noteCaricate = [];
+      if (stato) stato.textContent = `Le note non si leggono: ${messaggioErroreUtente(errore, 'riprova fra un momento')}`;
+      return;
+    }
+    disegnaPaginaNote();
+  }
+  function disegnaPaginaNote() {
+    const schermo = $('#schermoNote');
+    if (!schermo) return;
+    const cerca = $('#cercaNota', schermo)?.value || '';
+    montaNote(schermo, noteCaricate, {
+      cerca,
+      onCopia: (nota) => copyText(`${nota?.titolo || ''}
+
+${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
+    });
   }
 
   function syncInspectorToggle() {
@@ -14487,6 +14532,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (button.dataset.controlAction === 'doctor') eseguiDoctor();
   }));
   // 06/9 B4: il «+» serve SOLO ad allegare. Il Capability hub resta raggiungibile dal suo luogo.
+  // 06/9 C24: la ricerca fra le note filtra mentre scrivi, senza rileggere il server
+  $('#cercaNota')?.addEventListener('input', () => disegnaPaginaNote());
   $('#capabilityBtn').addEventListener('click', (evento) => {
     evento.stopPropagation();
     const menu = $('#menuAllega');
@@ -15320,7 +15367,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * clic fuori chiudono; i `[aria-expanded][aria-controls]` sono disclosure.
    * Nessuna logica di prodotto: solo il comportamento che il mockup già ha.
    */
-  const VISTA_PER_VAIA = { chat: 'chat', vuota: 'vuota', terminale: 'terminal', review: 'diff', capability: 'capability', board: 'dashboard', memoria: 'memoria', attivita: 'attivita', impostazioni: 'settings', doctor: 'doctor', libreria: 'libreria', ricerca: 'ricerca', officina: 'officina', automazioni: 'automations', browser: 'browser' };
+  const VISTA_PER_VAIA = { chat: 'chat', vuota: 'vuota', terminale: 'terminal', review: 'diff', capability: 'capability', board: 'dashboard', memoria: 'memoria', attivita: 'attivita', note: 'note', impostazioni: 'settings', doctor: 'doctor', libreria: 'libreria', ricerca: 'ricerca', officina: 'officina', automazioni: 'automations', browser: 'browser' };
   ROOT().addEventListener('click', (event) => {
     const vaia = event.target.closest?.('[data-vaia]');
     if (vaia && VISTA_PER_VAIA[vaia.dataset.vaia]) { setView(VISTA_PER_VAIA[vaia.dataset.vaia]); return; }

@@ -674,11 +674,6 @@ button {
   background: var(--talos-accent-hover);
   box-shadow: 0 0 0 4px var(--talos-accent-soft);
 }
-:root[data-contatto=perso] .talos-dot--live {
-  background: var(--talos-border-strong);
-  box-shadow: none;
-  animation: none;
-}
 .talos-diff-num {
   font-family: var(--talos-font-mono);
   font-size: 12px;
@@ -1887,18 +1882,6 @@ body.reduce-motion *::after {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.talos-status-strip--senza-contatto {
-  border-color: var(--talos-warning);
-  background: color-mix(in srgb, var(--talos-warning) 8%, var(--talos-panel));
-}
-.talos-status-strip--senza-contatto .talos-status-strip__pulse {
-  background: var(--talos-warning);
-  animation: none;
-}
-.talos-status-strip--senza-contatto .stop-run[disabled] {
-  opacity: .55;
-  cursor: not-allowed;
-}
 .talos-system-note__perche {
   margin: 6px 0 0;
   font-size: 13px;
@@ -2209,6 +2192,56 @@ body.reduce-motion *::after {
   cursor: pointer;
   color: var(--talos-muted);
   font-size: 11.5px;
+}
+.talos-note-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.talos-note {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+}
+.talos-note + .talos-note {
+  border-top-color: var(--talos-border-subtle);
+}
+.talos-note:hover {
+  background: var(--talos-card-subtle);
+  border-color: var(--talos-border-subtle);
+}
+.talos-note__testa {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.talos-note__titolo {
+  font-weight: 600;
+  color: var(--talos-text);
+}
+.talos-note__quando {
+  margin-left: auto;
+  color: var(--talos-muted);
+  font-family: var(--talos-font-mono);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.talos-note__corpo {
+  margin: 6px 0 0;
+  max-width: 78ch;
+  color: var(--talos-assistant-text);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.talos-note__azioni {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 0;
 }
 .workspace-chooser-ritratto {
   display: block;

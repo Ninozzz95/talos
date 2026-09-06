@@ -8424,6 +8424,84 @@ var init_errori = __esm({
   }
 });
 
+// src/components/note.js
+function titoloNota(nota) {
+  const t2 = String(nota?.titolo ?? "").trim();
+  if (t2) return t2;
+  const prima = String(nota?.contenuto ?? "").split("\n").map((r) => r.trim()).find(Boolean);
+  return prima ? prima.slice(0, 80) : "Nota senza titolo";
+}
+function quandoNota(quando, adesso = /* @__PURE__ */ new Date()) {
+  if (quando === null || quando === void 0 || quando === "") return "";
+  const d = quando instanceof Date ? quando : new Date(quando);
+  if (Number.isNaN(d.getTime())) return "";
+  const ore = (adesso.getTime() - d.getTime()) / 36e5;
+  const orario = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  if (ore < 0) return orario;
+  if (ore < 24 && d.getDate() === adesso.getDate()) return `oggi ${orario}`;
+  if (ore < 48) return `ieri ${orario}`;
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")} ${orario}`;
+}
+function filtraNote(note, cerca) {
+  const q = String(cerca ?? "").trim().toLowerCase();
+  const lista = Array.isArray(note) ? note : [];
+  if (!q) return lista;
+  return lista.filter((n) => `${n?.titolo ?? ""} ${n?.contenuto ?? ""}`.toLowerCase().includes(q));
+}
+function sommarioNote(quante) {
+  const n = Number(quante) || 0;
+  if (n === 0) return "nessuna nota";
+  return n === 1 ? "1 nota" : `${n} note`;
+}
+function montaNote(schermo, note, { cerca = "", onCopia = null, adesso = /* @__PURE__ */ new Date() } = {}) {
+  if (!schermo) return 0;
+  const d = schermo.ownerDocument || globalThis.document;
+  const lista = schermo.querySelector("#elencoNote");
+  const vuoto = schermo.querySelector("#noteVuote");
+  const stato = schermo.querySelector("[data-note-stato]");
+  const sommario = schermo.querySelector("[data-note-sommario]");
+  const filtrate = filtraNote(note, cerca);
+  if (stato) stato.textContent = cerca ? `${sommarioNote(filtrate.length)} su ${sommarioNote(Array.isArray(note) ? note.length : 0)}` : sommarioNote(filtrate.length);
+  if (sommario) sommario.textContent = sommarioNote(Array.isArray(note) ? note.length : 0);
+  if (!lista) return filtrate.length;
+  lista.replaceChildren();
+  for (const nota of filtrate) {
+    const li = d.createElement("li");
+    li.className = "talos-note";
+    const testa = d.createElement("div");
+    testa.className = "talos-note__testa";
+    const titolo2 = d.createElement("span");
+    titolo2.className = "talos-note__titolo";
+    titolo2.textContent = titoloNota(nota);
+    const quando = d.createElement("span");
+    quando.className = "talos-note__quando";
+    quando.textContent = quandoNota(nota?.aggiornataAlle ?? nota?.quando ?? nota?.creataAlle ?? nota?.createdAt, adesso);
+    testa.append(titolo2, quando);
+    const corpo = d.createElement("p");
+    corpo.className = "talos-note__corpo";
+    corpo.textContent = String(nota?.contenuto ?? "");
+    li.append(testa, corpo);
+    if (typeof onCopia === "function") {
+      const azioni = d.createElement("div");
+      azioni.className = "talos-note__azioni";
+      const copia = d.createElement("button");
+      copia.type = "button";
+      copia.className = "talos-button talos-button--ghost talos-button--sm";
+      copia.textContent = "Copia";
+      copia.addEventListener("click", () => onCopia(nota));
+      azioni.append(copia);
+      li.append(azioni);
+    }
+    lista.append(li);
+  }
+  if (vuoto) vuoto.hidden = filtrate.length > 0;
+  return filtrate.length;
+}
+var init_note = __esm({
+  "src/components/note.js"() {
+  }
+});
+
 // src/components/cartella-ritratto.js
 function numeroItaliano(n) {
   const v = Number(n);
@@ -8743,6 +8821,7 @@ var init_app = __esm({
     init_scorciatoie();
     init_chat_foot();
     init_errori();
+    init_note();
     init_testo_pagina();
     init_cartella_ritratto();
     init_consumo_sessione();
@@ -9609,7 +9688,7 @@ var init_app = __esm({
         views.forEach((pane) => {
           pane.hidden = pane !== target;
         });
-        const SCHERMO_PER_VISTA = { chat: "chat", vuota: "vuota", terminal: "terminale", diff: "review", capability: "capability", dashboard: "board", memoria: "memoria", attivita: "attivita", settings: "impostazioni", doctor: "doctor", libreria: "libreria", ricerca: "ricerca", officina: "officina", automations: "automazioni", browser: "browser" };
+        const SCHERMO_PER_VISTA = { chat: "chat", vuota: "vuota", terminal: "terminale", diff: "review", capability: "capability", dashboard: "board", memoria: "memoria", attivita: "attivita", note: "note", settings: "impostazioni", doctor: "doctor", libreria: "libreria", ricerca: "ricerca", officina: "officina", automations: "automazioni", browser: "browser" };
         const schermo = SCHERMO_PER_VISTA[view] || view;
         document.documentElement.setAttribute("data-vista", ["chat", "vuota", "terminale", "review", "browser"].includes(schermo) ? "sessione" : "pagina");
         document.documentElement.setAttribute("data-schermo", schermo);
@@ -9626,9 +9705,44 @@ var init_app = __esm({
         if (view === "libreria") caricaPannelloLibreria({ pagina: true });
         if (view === "attivita") caricaPannelloAttivita({ pagina: true });
         if (view === "memoria") caricaPannelloMemoria({ pagina: true });
+        if (view === "note") void caricaPaginaNote();
         if (view === "automations") renderAutomationsReali();
         if (view === "browser") renderizzaBrowser();
         if (view === "terminal") apriVistaTerminaleReale();
+      }
+      let noteCaricate = [];
+      async function caricaPaginaNote() {
+        const schermo = $2("#schermoNote");
+        if (!schermo) return;
+        const id = state.realSession.id;
+        const stato = $2("[data-note-stato]", schermo);
+        if (!id) {
+          noteCaricate = [];
+          montaNote(schermo, [], { cerca: "" });
+          if (stato) stato.textContent = "Apri una sessione per vedere le note.";
+          return;
+        }
+        if (stato) stato.textContent = "Leggo le note…";
+        try {
+          const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(id)}/notes`);
+          noteCaricate = Array.isArray(dati?.note) ? dati.note : [];
+        } catch (errore) {
+          noteCaricate = [];
+          if (stato) stato.textContent = `Le note non si leggono: ${messaggioErroreUtente(errore, "riprova fra un momento")}`;
+          return;
+        }
+        disegnaPaginaNote();
+      }
+      function disegnaPaginaNote() {
+        const schermo = $2("#schermoNote");
+        if (!schermo) return;
+        const cerca = $2("#cercaNota", schermo)?.value || "";
+        montaNote(schermo, noteCaricate, {
+          cerca,
+          onCopia: (nota) => copyText(`${nota?.titolo || ""}
+
+${nota?.contenuto || ""}`.trim(), "Nota copiata")
+        });
       }
       function syncInspectorToggle() {
         const expanded = window.innerWidth <= 1040 || !appShell.classList.contains("inspector-collapsed");
@@ -20469,6 +20583,7 @@ ${blocchi.join("\n\n")}` : testa;
       $$("[data-control-action]").forEach((button2) => button2.addEventListener("click", () => {
         if (button2.dataset.controlAction === "doctor") eseguiDoctor();
       }));
+      $2("#cercaNota")?.addEventListener("input", () => disegnaPaginaNote());
       $2("#capabilityBtn").addEventListener("click", (evento) => {
         evento.stopPropagation();
         const menu = $2("#menuAllega");
@@ -21153,7 +21268,7 @@ ${blocchi.join("\n\n")}` : testa;
       setQueueMode(false);
       setRunState(true);
       syncRunComposerState();
-      const VISTA_PER_VAIA2 = { chat: "chat", vuota: "vuota", terminale: "terminal", review: "diff", capability: "capability", board: "dashboard", memoria: "memoria", attivita: "attivita", impostazioni: "settings", doctor: "doctor", libreria: "libreria", ricerca: "ricerca", officina: "officina", automazioni: "automations", browser: "browser" };
+      const VISTA_PER_VAIA2 = { chat: "chat", vuota: "vuota", terminale: "terminal", review: "diff", capability: "capability", board: "dashboard", memoria: "memoria", attivita: "attivita", note: "note", impostazioni: "settings", doctor: "doctor", libreria: "libreria", ricerca: "ricerca", officina: "officina", automazioni: "automations", browser: "browser" };
       ROOT().addEventListener("click", (event) => {
         const vaia = event.target.closest?.("[data-vaia]");
         if (vaia && VISTA_PER_VAIA2[vaia.dataset.vaia]) {
@@ -21639,6 +21754,8 @@ var VISTA_PER_SCHERMATA = Object.freeze({
   dashboard: "schermoBoard",
   memoria: "schermoMemoria",
   attivita: "schermoAttivita",
+  note: "schermoNote",
+  // 06/9 C24: senza questa riga #schermoNote non riceveva `data-view` e setView('note') usciva subito
   settings: "schermoImpostazioni",
   doctor: "schermoDoctor",
   libreria: "schermoLibreria",
@@ -21657,6 +21774,7 @@ var VISTA_PER_VAIA = Object.freeze({
   board: "dashboard",
   memoria: "memoria",
   attivita: "attivita",
+  note: "note",
   impostazioni: "settings",
   doctor: "doctor",
   libreria: "libreria",

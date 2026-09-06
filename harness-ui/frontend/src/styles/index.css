@@ -214,10 +214,6 @@ button{background:none; border:0; cursor:pointer; padding:0}
 .talos-dot--sm{width:6px; height:6px}
 .talos-dot--success{background:var(--talos-success)} .talos-dot--danger{background:var(--talos-danger)} .talos-dot--warning{background:var(--talos-warning)}
 .talos-dot--live{background:var(--talos-accent-hover); box-shadow:0 0 0 4px var(--talos-accent-soft)}
-/* ⛔ 06/9, CB-20-bis — col server irraggiungibile l'elenco delle sessioni è fermo all'ultima
-   lettura: un pallino «vivo» che pulsa è una promessa che non possiamo mantenere. Si spegne
-   il tono, non si cancella la riga: il dato resta, cambia quello che dichiara. */
-:root[data-contatto="perso"] .talos-dot--live{background:var(--talos-border-strong); box-shadow:none; animation:none}
 .talos-diff-num{font-family:var(--talos-font-mono); font-size:12px}
 .talos-diff-num--plus{color:var(--talos-success)} .talos-diff-num--minus{color:var(--talos-danger)}
 .talos-code{font-family:var(--talos-font-mono); font-size:11px; color:var(--talos-muted); border:1px solid var(--talos-border); border-radius:6px; padding:2px 7px; background:var(--talos-panel-soft)}
@@ -488,13 +484,6 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-status-strip__pulse{width:8px; height:8px; border-radius:50%; background:var(--talos-accent-hover); flex:none; animation:talos-pulse 1.6s var(--talos-motion-ease) infinite}
 @keyframes talos-pulse{0%,100%{opacity:.35; transform:scale(.9)} 50%{opacity:1; transform:scale(1)}}
 .talos-status-strip__what{flex:1; min-width:0; font-size:13px; color:var(--talos-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-/* ⛔⛔ 06/9, CB-20-bis — il contatto col server è perso mentre un giro è aperto: la striscia
-   smette di pulsare (un battito è una promessa di vita) e prende il tono d'avviso, lo stesso che
-   la barra di stato usa per «Il server non risponde». Il pulsante Ferma resta a schermo ma
-   disabilitato: la sua POST non arriverebbe. */
-.talos-status-strip--senza-contatto{border-color:var(--talos-warning); background:color-mix(in srgb, var(--talos-warning) 8%, var(--talos-panel))}
-.talos-status-strip--senza-contatto .talos-status-strip__pulse{background:var(--talos-warning); animation:none}
-.talos-status-strip--senza-contatto .stop-run[disabled]{opacity:.55; cursor:not-allowed}
 /* 06/9, owner: «i comandi devono essere formattati bene in codice, così è troppo brutto».
    Il comando di una richiesta di approvazione è una cosa che si LEGGE prima di dire sì: monospazio,
    fondo suo, a capo solo dove il comando lo permette, e scorrimento orizzontale invece di un muro
@@ -585,6 +574,17 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .tool-rifiuto{margin:4px 0 0; color:var(--talos-text); font-size:12.5px}
 .tool-arg-lungo{margin:2px 0 0}
 .tool-arg-lungo > summary{cursor:pointer; color:var(--talos-muted); font-size:11.5px}
+/* 06/9 C24 — le note: una riga per nota, il titolo che si legge e il testo sotto in tono spento.
+   Nessuna carta con ombra: sono appunti, non oggetti da collezionare. */
+.talos-note-lista{display:flex; flex-direction:column; gap:2px; margin:0; padding:0; list-style:none}
+.talos-note{padding:12px 14px; border-radius:12px; border:1px solid transparent}
+.talos-note + .talos-note{border-top-color:var(--talos-border-subtle)}
+.talos-note:hover{background:var(--talos-card-subtle); border-color:var(--talos-border-subtle)}
+.talos-note__testa{display:flex; align-items:baseline; gap:10px}
+.talos-note__titolo{font-weight:600; color:var(--talos-text)}
+.talos-note__quando{margin-left:auto; color:var(--talos-muted); font-family:var(--talos-font-mono); font-size:11.5px; white-space:nowrap}
+.talos-note__corpo{margin:6px 0 0; max-width:78ch; color:var(--talos-assistant-text); font-size:13px; line-height:1.55; white-space:pre-wrap; overflow-wrap:anywhere}
+.talos-note__azioni{display:flex; gap:8px; margin:8px 0 0}
 .workspace-chooser-ritratto{display:block; margin-top:4px; color:var(--talos-muted); font-size:11.5px; line-height:1.5; text-transform:none; letter-spacing:normal}
 .workspace-chooser-avviso{display:block; margin-top:6px; padding:6px 9px; border-radius:9px; border:1px solid var(--talos-accent-border); background:var(--talos-accent-soft); color:var(--talos-text); font-size:11.5px; line-height:1.5; text-transform:none; letter-spacing:normal}
 .talos-menu__nota{margin:6px 4px 2px; padding-top:6px; border-top:1px solid var(--talos-border-subtle); color:var(--talos-muted); font-size:11.5px; line-height:1.45}
