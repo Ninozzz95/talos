@@ -171,7 +171,18 @@
 }
 @keyframes talos-tip-entra{from{opacity:0; transform:translateY(2px)}to{opacity:1; transform:none}}
 
-*{scrollbar-width:thin; scrollbar-color:var(--talos-border-strong) transparent}
+/* ⛔⛔ 06/9, MISURATO in una finestra VERA (headless non disegna affatto le scrollbar, nemmeno
+   quelle di sistema: tre casi a confronto davano tutti «2px» e nessuna immagine).
+   Il primo giro di questa cura metteva le proprieta standard INSIEME a quelle WebKit, e le standard
+   VINCONO: disattivano `::-webkit-scrollbar` e lasciano la barra di SISTEMA, solo piu stretta e
+   ricolorata. Le tre misure affiancate:
+     · standard + webkit  -> 11 px, `scrollbar-width: thin`, e le FRECCE ancora li, malgrado io le
+                             avessi disattivate: la prova che le mie regole erano inerti;
+     · solo webkit        ->  9 px, pollice arrotondato, niente frecce: la nostra;
+     · niente (com'era)   -> 16 px, la barra piena di Windows.
+   ⇒ Le due tecniche non si sommano: si sceglie. Le WebKit sono il disegno (siamo su Chromium), le
+   standard restano come RIPIEGO dove le WebKit non esistono, e solo li — dentro `@supports`, mai
+   accanto. */
 *::-webkit-scrollbar{width:8px; height:8px}
 *::-webkit-scrollbar-track{background:transparent}
 *::-webkit-scrollbar-thumb{background:var(--talos-border-strong); border:2px solid transparent; border-radius:999px; background-clip:padding-box}
@@ -179,6 +190,11 @@
 *::-webkit-scrollbar-corner{background:transparent}
 /* niente frecce: sono due bersagli che nessuno usa e rubano 32px alla corsa del pollice */
 *::-webkit-scrollbar-button{display:none}
+/* Il ripiego per chi non ha le pseudo-classi WebKit (Firefox): sottile e coi nostri colori. Sta
+   QUI dentro e non accanto alle regole sopra, perche' fuori le disattiverebbe. */
+@supports not selector(::-webkit-scrollbar){
+  *{scrollbar-width:thin; scrollbar-color:var(--talos-border-strong) transparent}
+}
 
 html,body{height:100%}
 body{margin:0; background:var(--talos-background); color:var(--talos-text); font-family:var(--talos-font-ui); font-size:14px; line-height:1.5; display:flex; flex-direction:column; overflow:hidden; -webkit-font-smoothing:antialiased}

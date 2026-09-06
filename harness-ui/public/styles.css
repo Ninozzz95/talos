@@ -212,10 +212,6 @@
     transform: none;
   }
 }
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--talos-border-strong) transparent;
-}
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -238,6 +234,12 @@
 }
 *::-webkit-scrollbar-button {
   display: none;
+}
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--talos-border-strong) transparent;
+  }
 }
 html,
 body {
