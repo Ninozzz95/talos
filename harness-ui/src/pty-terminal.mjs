@@ -138,6 +138,7 @@ export function creaRegistroTerminali(deps = {}) {
       id,
       handle,
       enforcement: scelta.enforcement,
+      comando: scelta.comando, // 06/9 B1: il nome della shell arriva alla scheda (Hermes `reportTerminalShell`)
       backlog: [],
       byteBacklog: 0,
       ultimaDisconnessioneMs: null,

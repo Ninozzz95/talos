@@ -45,6 +45,8 @@ import { MODELLI_INSTALLATI, RUNTIME_INSTALLATI, FIT_INSTALLATI } from './fixtur
 import { RISULTATI_HF, DETTAGLIO_HF, STIMA_HF } from './fixtures/hf-catalogo.js';
 import { DOWNLOAD, STIME_DOWNLOAD } from './fixtures/download-coda.js';
 import { INSPECTOR } from './fixtures/inspector.js';
+import { SCHEDE_TERMINALE, CORNICE_TERMINALE } from './fixtures/terminale.js';
+import { creaSchedeTerminale } from '../src/components/terminale.js';
 import { aggiornaInspector } from '../src/components/inspector.js';
 import { aggiornaCodaDownload } from '../src/components/download-coda.js';
 import { aggiornaHf } from '../src/components/hf-catalogo.js';
@@ -134,6 +136,9 @@ const LABORATORI = {
   },
   Inspector_processi() {
     aggiornaInspector(document.querySelector('#inspectorSessione'), INSPECTOR);
+  },
+  Terminale() { // 06/9 B1: le schede e il piede; il corpo resta quello del mockup
+    creaSchedeTerminale(document.querySelector('#schermoTerminale .talos-terminal')).aggiorna({ schede: SCHEDE_TERMINALE, ...CORNICE_TERMINALE });
   },
   CodaDownload() {
     aggiornaCodaDownload(document.querySelector('#panel-download'), DOWNLOAD, { stime: STIME_DOWNLOAD });

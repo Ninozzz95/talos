@@ -132,7 +132,7 @@ test('⭐⭐⭐ il backlog viene rimandato al client PRIMA di ogni evento live, 
    */
   const agganciato = decodificaFrame(ws.inviati[0]);
   assert.equal(agganciato.tipo, TIPO_FRAME_CONTROLLO);
-  assert.deepEqual(JSON.parse(agganciato.payload.toString('utf8')), { evento: 'agganciato', ripreso: false });
+  assert.deepEqual(JSON.parse(agganciato.payload.toString('utf8')), { evento: 'agganciato', ripreso: false, shell: null, comando: null });
   assert.deepEqual(decodificaFrame(ws.inviati[1]), { tipo: TIPO_FRAME_DATI, payload: Buffer.from('uno') });
   assert.deepEqual(decodificaFrame(ws.inviati[2]), { tipo: TIPO_FRAME_DATI, payload: Buffer.from('due') });
 });
@@ -144,7 +144,7 @@ test('⭐⭐⭐ AGGANCIATO — il ponte DICE se ha ripreso una shell viva o ne h
     const gestore = creaGestoreTerminaleWs({ registro, originiConsentite: ORIGINE_OK, risolviScheda: schedaFinta() }, { WebSocketServer: wssFinta(ws) });
     gestore.gestisciUpgrade(reqFinto({}), socketFinto(), Buffer.alloc(0));
     const primo = decodificaFrame(ws.inviati[0]);
-    assert.deepEqual(JSON.parse(primo.payload.toString('utf8')), { evento: 'agganciato', ripreso: ripresa });
+    assert.deepEqual(JSON.parse(primo.payload.toString('utf8')), { evento: 'agganciato', ripreso: ripresa, shell: null, comando: null });
   }
 });
 

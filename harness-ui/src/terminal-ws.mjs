@@ -121,7 +121,8 @@ export function creaGestoreTerminaleWs({ registro, originiConsentite, risolviSch
      * silenzio ogni altro evento di controllo — nessun `else`, nessun crash.
      */
     const { voce, ripresa } = registro.apriDichiarando({ id, cartella: scheda.cartella });
-    ws.send(codificaFrame(TIPO_FRAME_CONTROLLO, JSON.stringify({ evento: 'agganciato', ripreso: ripresa })));
+    /* 06/9 B1 — la scheda prende il nome della shell che il server ha scelto DAVVERO (`enforcement` di `sceltaShell`), non uno indovinato dal client. */
+    ws.send(codificaFrame(TIPO_FRAME_CONTROLLO, JSON.stringify({ evento: 'agganciato', ripreso: ripresa, shell: voce.enforcement ?? null, comando: voce.comando ?? null })));
 
     // ⭐ Riconnessione (F5, o WS caduta): replay del backlog PRIMA di tornare live — stesso principio del Last-Event-ID già in uso per SSE, qui su una PTY invece che su un run agente.
     for (const pezzo of voce.backlog) {

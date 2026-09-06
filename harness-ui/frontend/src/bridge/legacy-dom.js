@@ -194,7 +194,9 @@ export function montaPonteLegacy(documentObj = document) {
 
   /* 6) Il terminale. */
   const terminale = uno(radice, '#schermoTerminale');
-  battezza(uno(terminale, '.talos-terminal__body'), { id: 'realTerminalMount', classi: ['terminal-window'] });
+  const corpoTerminale = uno(terminale, '.talos-terminal__body');
+  battezza(corpoTerminale, { id: 'realTerminalMount', classi: ['terminal-window'] });
+  if (corpoTerminale) corpoTerminale.replaceChildren(); // 06/9 B1: via l'output dimostrativo del mockup — qui dentro vivono SOLO le shell vere (una per scheda)
   battezza(uno(terminale, '.talos-terminal__foot'), { id: 'terminalStatusChip' });
 
   /* 7) La colonna dei dettagli. */

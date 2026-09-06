@@ -45,6 +45,7 @@ const COMPONENTI = [
   { nome: 'CatalogoHf', schermata: 'schermoModelLab', selettore: '#panel-hf' }, // 06/9 B6.9
   { nome: 'CodaDownload', schermata: 'schermoModelLab', selettore: '#panel-download' }, // 06/9 B6.10
   { nome: 'Inspector', schermata: 'schermoChat', selettore: '#inspectorSessione' }, // 06/9 B2
+  { nome: 'Terminale', schermata: 'schermoTerminale', selettore: '#schermoTerminale .talos-terminal' }, // 06/9 B1: schede e piede
   { nome: 'Inspector_processi', schermata: 'schermoChat', selettore: '#inspectorSessione' }, // 06/9 B2: la scheda Processi
   { nome: 'Toast', schermata: 'schermoChat', selettore: '#regioneToast' }, // 05/9 T-16: la pila dei messaggi
   { nome: 'NotificationPanel', schermata: 'schermoChat', selettore: '#pannelloNotifiche' }, // 06/9 T-17: «Aspetta te»
