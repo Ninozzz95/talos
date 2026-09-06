@@ -710,6 +710,14 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-tabs__tab[data-browser-tab]:hover::after,.talos-tabs__tab[data-browser-tab]:focus-visible::after,.talos-tabs__tab[data-browser-tab][aria-selected="true"]::after{opacity:1}
 .talos-browser__live{height:min(70vh,760px);min-height:360px;padding:var(--talos-space-sm)}
 .talos-browser__live iframe{width:100%;height:100%;border:0;border-radius:var(--talos-radius-card);background:#fff}
+/* Browser oltre Hermes 06/09 — i commenti sugli elementi della pagina viva */
+.talos-browser__annotazioni{padding:var(--talos-space-md);border-top:1px solid var(--talos-border-subtle)}
+.talos-browser__annotazioni-testa{gap:var(--talos-space-sm)}
+.talos-browser__annotazioni-lista{list-style:none;margin:var(--talos-space-sm) 0 0;padding:0;display:grid;gap:var(--talos-space-sm)}
+.talos-annotazione{padding:var(--talos-space-sm) var(--talos-space-md);border:1px solid var(--talos-border);border-radius:var(--talos-radius-card);background:var(--talos-card-subtle);display:grid;gap:6px}
+.talos-annotazione__testa{display:flex;align-items:center;gap:var(--talos-space-sm)}
+.talos-annotazione__selettore{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--talos-font-size-xs)}
+.talos-annotazione textarea{min-height:44px;resize:vertical}
 .talos-topbar:has([data-vistetab]){flex-wrap:nowrap}
 .talos-topbar [data-vistetab]{flex-wrap:nowrap}
 #veloComandi .talos-dialog__body{display:flex;flex-direction:column;overflow:hidden}

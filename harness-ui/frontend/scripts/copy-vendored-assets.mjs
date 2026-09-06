@@ -50,6 +50,7 @@ export async function copyVendoredAssets({ frontendRoot, outputDir }) {
       relativePath: 'vendor/floating-ui/LICENSE-utils',
     },
     { source: path.join(assetsRoot, 'talos/brand/logo-short.svg'), relativePath: 'talos/brand/logo-short.svg' },
+    { source: path.join(assetsRoot, 'talos/browser-annota.js'), relativePath: 'talos/browser-annota.js' }, // Browser oltre Hermes 06/9
   ].sort((a, b) => (a.relativePath < b.relativePath ? -1 : (a.relativePath > b.relativePath ? 1 : 0)));
   const files = [];
   for (const entry of entries) {

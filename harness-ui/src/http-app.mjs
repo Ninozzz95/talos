@@ -1,5 +1,6 @@
 import { leggiArtefatto as leggiArtefattoReale } from './artifact-store.mjs';
 import { verificaIncorniciabile } from './browser-frame.mjs'; // K-I 06/9: la cornice del Browser si decide dalle intestazioni della pagina
+import { proxyPagina } from './browser-proxy.mjs'; // Browser oltre Hermes 06/9: il proxy locale per annotare gli elementi
 import { modelloRichiestaValido, permessiPerAttrezzoRichiestaValido, permessiRichiestaValido, reasoningRichiestaValido } from './config.mjs';
 import { cartelleFrequenti as cartelleFrequentiReale } from './frequent-dirs.mjs';
 import { RUNTIME_BOOTSTRAP_SCHEMA, RUNTIME_RESOURCE_SCHEMA, parseBootstrapEnvelope } from './runtime-contract.mjs';
@@ -60,6 +61,7 @@ const API_ERROR_CODES = new Set([
   'AUTH_REQUIRED',
   /* ⭐⭐⭐ 05/9, W1-01 — schede terminale per sessione (src/terminal-registry.mjs). Il tetto NON è burocrazia: su Windows ogni PTY porta con sé un processo conhost (node-pty#471). */
   'TERMINAL_LIMIT_REACHED', 'TERMINAL_STORE_UNAVAILABLE',
+  'BROWSER_PROXY_SOLO_LOCALE', 'BROWSER_PROXY_NON_HTML', 'BROWSER_PROXY_TROPPO_GRANDE', 'BROWSER_PROXY_IRRAGGIUNGIBILE', // Browser oltre Hermes 06/9
   /*
    * ⭐⭐⭐ 05/9, W1-05 — lo stato Git di una sessione (src/git-service.mjs),
    * la sorgente «Non committato» della Review a due sorgenti (W1-06).
@@ -116,6 +118,10 @@ const STATUS_BY_CODE = Object.freeze({
   RUNTIME_ALREADY_RUNNING: 409,
   /** ⭐ 05/9, W1-01 — stessa famiglia: la richiesta è legittima, è lo STATO attuale (otto schede già aperte) a impedirla. Chiudine una e riprova. */
   TERMINAL_LIMIT_REACHED: 409,
+  BROWSER_PROXY_SOLO_LOCALE: 403, // Browser oltre Hermes 06/9: il proxy con annotazione solo per un dev server locale
+  BROWSER_PROXY_NON_HTML: 415,
+  BROWSER_PROXY_TROPPO_GRANDE: 413,
+  BROWSER_PROXY_IRRAGGIUNGIBILE: 502,
   TERMINAL_STORE_UNAVAILABLE: 503,
   /*
    * ⭐⭐⭐ 05/9, W1-05. La famiglia dei 409 è la stessa di SESSION_NOT_READY:
@@ -233,6 +239,10 @@ const MESSAGE_BY_CODE = Object.freeze({
   AUTH_REQUIRED: 'Questo server accetta solo la finestra TALOS che lo ha avviato',
   TERMINAL_LIMIT_REACHED: 'Hai già il massimo di terminali aperti per questa sessione: chiudine uno e riprova',
   TERMINAL_STORE_UNAVAILABLE: 'I terminali non sono disponibili su questo server',
+  BROWSER_PROXY_SOLO_LOCALE: 'Il proxy con annotazione vale solo per un dev server sul tuo computer',
+  BROWSER_PROXY_NON_HTML: 'Non è una pagina HTML',
+  BROWSER_PROXY_TROPPO_GRANDE: 'La pagina supera i 5 MB',
+  BROWSER_PROXY_IRRAGGIUNGIBILE: 'La pagina non risponde',
   GIT_NOT_A_REPOSITORY: 'Questa cartella non è un repository git',
   GIT_PATH_INVALID: 'Percorso non valido per questa sessione',
   GIT_PATHS_REQUIRED: 'Serve almeno un percorso esplicito',
@@ -316,6 +326,25 @@ function send(res, statusCode, contentType, body, method, extraHeaders = {}) {
     ...SECURITY_HEADERS,
     ...extraHeaders,
     'Content-Type': contentType,
+    'Content-Length': payload.length,
+  });
+  res.end(method === 'HEAD' ? undefined : payload);
+}
+
+/*
+ * Browser oltre Hermes (06/9) — il documento PROXATO di un dev server locale. ⛔ Niente CSP di
+ * TALOS qui (bloccherebbe script, stili e immagini del dev server, che restano sulla loro origine
+ * via <base>): resta `frame-ancestors 'self'` — solo TALOS può incorniciarlo — e `no-store`.
+ */
+function sendHtmlProxato(res, html, method) {
+  if (res.destroyed || res.writableEnded) return;
+  const payload = Buffer.from(html, 'utf8');
+  res.writeHead(200, {
+    'Cache-Control': 'no-store',
+    'Content-Security-Policy': "frame-ancestors 'self'",
+    'Referrer-Policy': 'no-referrer',
+    'X-Content-Type-Options': 'nosniff',
+    'Content-Type': 'text/html; charset=utf-8',
     'Content-Length': payload.length,
   });
   res.end(method === 'HEAD' ? undefined : payload);
@@ -2566,7 +2595,17 @@ export function createHttpApp({
         const artifactMatch = /^\/api\/v1\/artifacts\/([^/]+)$/.exec(url.pathname);
         // K-I 06/9 — la cornice del Browser: `?url=` e si risponde con le intestazioni lette, mai con la pagina
         const browserFrameMatch = url.pathname === '/api/v1/browser/incorniciabile';
+        // Browser oltre Hermes 06/9 — la pagina di un dev server LOCALE resa della nostra origine, con l'overlay iniettato
+        const browserProxyMatch = url.pathname === '/api/v1/browser/proxy';
 
+        if (browserProxyMatch) {
+          const indirizzo = url.searchParams.get('url');
+          if (typeof indirizzo !== 'string' || indirizzo.length === 0 || indirizzo.length > 2048) { const error = new Error('Indirizzo mancante'); error.code = 'QUERY_INVALID'; throw error; }
+          const esito = await proxyPagina(indirizzo, { fetchFn, origineNostra: `http://${req.headers.host || '127.0.0.1'}` });
+          if (!esito.ok) { const error = new Error(esito.motivo); error.code = esito.codice; throw error; }
+          sendHtmlProxato(res, esito.html, method);
+          return;
+        }
         if (browserFrameMatch) {
           const indirizzo = url.searchParams.get('url');
           if (typeof indirizzo !== 'string' || indirizzo.length === 0 || indirizzo.length > 2048) { const error = new Error('Indirizzo mancante'); error.code = 'QUERY_INVALID'; throw error; }
