@@ -1,0 +1,464 @@
+/* Foglio «Nuova sessione» del monolite — tampone del 06/09/2026.
+   Estratto dal backup fuori dal repo (public.prima-del-cutover-2026-09-06) da scripts/../scratchpad/estrai-css-foglio.py:
+   solo le regole di dialog.sheet-dialog e del workspace chooser, scopate sul dialog, con i token che usano.
+   Vive finché «Nuova sessione» non è portata nel veloNuova del mockup (fase successiva). */
+dialog.sheet-dialog{--mobile-control:44px;--bg-deep: var(--talos-code-bg, #17181b);--surface: var(--talos-panel, #25262a);--surface-2: var(--talos-panel-soft, #2b2c30);--surface-3: var(--talos-card, #313237);--surface-elevated: var(--talos-window-bg, #34353a);--text: var(--talos-text, #f3f0e9);--text-2: var(--talos-assistant-text, #d6d2ca);--muted: var(--talos-muted, #9c9da2);--muted-2: color-mix(in srgb, var(--talos-muted, #777980) 76%, var(--talos-background, #1e1f22));--line: var(--talos-border, #36373b);--line-strong: var(--talos-border-strong, #4a4b50);--accent: var(--talos-accent, #c08b3c);--accent-2: var(--talos-accent-hover, #d7a554);--accent-soft: var(--talos-accent-soft, rgba(192, 139, 60, .14));--accent-strong: var(--talos-accent-border, rgba(192, 139, 60, .34));--on-accent: var(--talos-accent-text, #151411);--success: var(--talos-success, #77a884);--success-soft: var(--talos-success-soft, rgba(119, 168, 132, .13));--success-strong: var(--talos-success-border, rgba(119, 168, 132, .25));--danger: var(--talos-danger, #d87d72);--danger-soft: var(--talos-danger-soft, rgba(216, 125, 114, .13));--info: var(--talos-info, #7f9fc4);--focus: var(--talos-ring, #d8a650);--focus-soft: var(--talos-ring-soft, rgba(192, 139, 60, .09));--surface-highlight: color-mix(in srgb, var(--text) 4%, transparent);--surface-highlight-strong: color-mix(in srgb, var(--text) 14%, transparent);--surface-highlight-subtle: color-mix(in srgb, var(--text) 2%, transparent);--surface-highlight-faint: color-mix(in srgb, var(--text) .8%, transparent);--scrim: rgba(0, 0, 0, .54);--shadow: 0 18px 52px rgba(0,0,0,.28);--shadow-sm: 0 8px 24px rgba(0,0,0,.18);--radius-control: var(--talos-radius-control, 12px);--touch: max(36px, var(--talos-touch-target, 48px));--font-ui: var(--talos-font-ui, "Instrument Sans", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);--font-mono: var(--talos-font-mono, "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace);--talos-ui-font-scale: 1;--motion-control: var(--talos-motion-duration-control, 160ms);--motion-disclosure: var(--talos-motion-duration-disclosure, 180ms);--motion-popover: var(--talos-motion-duration-popover, 180ms);--motion-activity: var(--talos-motion-duration-activity-progress, 1200ms);--motion-theme: var(--talos-motion-duration-theme-transition, 220ms);--motion-ease: var(--talos-motion-ease, cubic-bezier(.2,.7,.2,1))}
+dialog.sheet-dialog .demo-surface-badge{
+  position: static;
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  flex: 0 0 auto;
+  margin: 8px;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--amber) 42%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  color: var(--amber);
+  font: 600 calc(10px * var(--talos-ui-font-scale))/1.2 var(--font-mono);
+  letter-spacing: .02em;
+  pointer-events: none;
+  box-shadow: var(--shadow-sm);
+}
+dialog.sheet-dialog .demo-surface-badge[hidden]{ display: none; }
+dialog.sheet-dialog svg{ width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+dialog.sheet-dialog .badge-dot{ position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 17px; height: 17px; border-radius: 99px; background: var(--accent); color: var(--on-accent); font-size: calc(10px * var(--talos-ui-font-scale)); font-weight: 800; }
+dialog.sheet-dialog .icon-btn,dialog.sheet-dialog .mini-icon,dialog.sheet-dialog .round-btn{ border: 0; background: transparent; display: inline-grid; place-items: center; cursor: pointer; }
+dialog.sheet-dialog .icon-btn{ width: var(--touch); min-width: var(--touch); height: var(--touch); flex: 0 0 var(--touch); border-radius: var(--radius-control); position: relative; color: var(--text-2); }
+dialog.sheet-dialog .icon-btn:hover{ background: var(--surface-highlight); color: var(--text); }
+dialog.sheet-dialog .search-field{ height: var(--touch); display: grid; grid-template-columns: 20px minmax(0,1fr) auto; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); color: var(--muted); }
+dialog.sheet-dialog .search-field input{ min-width: 0; width: 100%; border: 0; outline: 0; color: var(--text); background: transparent; font-size: calc(14px * var(--talos-ui-font-scale)); }
+dialog.sheet-dialog kbd{ font-family: var(--font-mono); font-size: calc(10px * var(--talos-ui-font-scale)); padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); background: var(--surface-highlight-subtle); }
+dialog.sheet-dialog .primary-btn,dialog.sheet-dialog .secondary-btn,dialog.sheet-dialog .text-btn{ border: 0; cursor: pointer; }
+dialog.sheet-dialog .primary-btn{ min-height: var(--touch); padding: 0 16px; border-radius: var(--radius-control); background: var(--accent); color: var(--on-accent); font-weight: 750; display: inline-flex; align-items: center; justify-content: center; gap: 8px; box-shadow: inset 0 1px var(--surface-highlight-strong), 0 6px 18px var(--accent-soft); }
+dialog.sheet-dialog .primary-btn:hover{ background: var(--accent-2); }
+dialog.sheet-dialog .primary-btn.compact,dialog.sheet-dialog .secondary-btn.compact{ min-height: 36px; height: 36px; padding: 0 12px; border-radius: 10px; font-size: calc(13px * var(--talos-ui-font-scale)); }
+dialog.sheet-dialog .primary-btn.danger{ background: var(--danger); box-shadow: inset 0 1px var(--surface-highlight-strong), 0 6px 18px var(--danger-soft); }
+dialog.sheet-dialog .primary-btn.danger:hover{ background: var(--danger); filter: brightness(1.08); }
+dialog.sheet-dialog .secondary-btn{ min-height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text-2); }
+dialog.sheet-dialog .secondary-btn:hover{ border-color: var(--line-strong); background: var(--surface-3); }
+dialog.sheet-dialog .secondary-btn.full{ width: 100%; margin-top: 10px; }
+dialog.sheet-dialog .text-btn{ background: transparent; color: var(--accent-2); padding: 6px 0; font-size: calc(13px * var(--talos-ui-font-scale)); font-weight: 650; }
+dialog.sheet-dialog .session-selection-toolbar{ margin: 0 12px 8px; padding: 8px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); display: grid; gap: 8px; }
+dialog.sheet-dialog .session-selection-toolbar[hidden]{ display: none; }
+dialog.sheet-dialog .session-selection-toolbar-row{ display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+dialog.sheet-dialog .session-selection-toolbar .text-btn{ min-height: 36px; padding: 0 4px; white-space: nowrap; }
+dialog.sheet-dialog .session-selection-count{ margin-left: auto; color: var(--muted); font-size: calc(11px * var(--talos-ui-font-scale)); white-space: nowrap; }
+dialog.sheet-dialog .secondary-btn.danger{ color: var(--danger); border-color: var(--danger-soft); }
+dialog.sheet-dialog .secondary-btn.danger:hover:not(:disabled){ background: var(--danger-soft); border-color: var(--danger); }
+dialog.sheet-dialog .secondary-btn:disabled,dialog.sheet-dialog .text-btn:disabled{ opacity: .48; cursor: not-allowed; }
+dialog.sheet-dialog .session-item.active{ background: linear-gradient(90deg, var(--accent-soft), color-mix(in srgb, var(--accent) 8%, transparent)); border-color: var(--accent-strong); box-shadow: inset 2px 0 var(--accent); }
+dialog.sheet-dialog .session-item.is-selection-mode{ grid-template-columns: 28px minmax(0,1fr) auto; }
+dialog.sheet-dialog .session-item.is-selected{ background: var(--accent-soft); border-color: var(--accent-strong); }
+dialog.sheet-dialog .session-selection-check{ width: 28px; height: 36px; display: grid; place-items: center; cursor: pointer; }
+dialog.sheet-dialog .session-selection-check input{ width: 18px; height: 18px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+dialog.sheet-dialog .session-item:focus-visible,dialog.sheet-dialog .session-selection-check input:focus-visible{ outline: 2px solid var(--focus); outline-offset: 2px; }
+dialog.sheet-dialog .session-meta svg{ width: 17px; height: 17px; margin-top: auto; }
+dialog.sheet-dialog .mode-tab.active{ background: var(--surface-3); color: var(--text); box-shadow: inset 0 0 0 1px var(--surface-highlight-subtle); }
+dialog.sheet-dialog .title-button svg{ width: 16px; height: 16px; color: var(--muted); }
+dialog.sheet-dialog .context-chip{ min-height: 36px; max-width: 230px; min-width: 0; flex: 0 0 auto; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); border-radius: 10px; display: inline-flex; align-items: center; gap: 7px; padding: 0 10px; cursor: pointer; font-size: calc(11px * var(--talos-ui-font-scale)); transition: border-color var(--motion-control) var(--motion-ease), background-color var(--motion-control) var(--motion-ease); }
+dialog.sheet-dialog .context-chip span{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+dialog.sheet-dialog .context-chip svg{ width: 16px; height: 16px; }
+dialog.sheet-dialog .view-pane.active{ display: block; }
+dialog.sheet-dialog .chat-view.active{ display: flex; flex-direction: column; }
+dialog.sheet-dialog .eyebrow{ display: block; color: var(--muted); font-size: calc(9px * var(--talos-ui-font-scale)); text-transform: uppercase; letter-spacing: .14em; font-weight: 750; }
+dialog.sheet-dialog .plan-label svg{ width: 15px; height: 15px; }
+dialog.sheet-dialog .mini-icon svg{ width: 14px; height: 14px; }
+dialog.sheet-dialog .token.keyword,dialog.sheet-dialog .token.selector,dialog.sheet-dialog .token.important,dialog.sheet-dialog .token.atrule,dialog.sheet-dialog .token.rule{ color: var(--accent-2); }
+dialog.sheet-dialog .real-reasoning-note .tool-note-summary-text{ font-style: italic; }
+dialog.sheet-dialog .real-reasoning-note .tool-note-detail{ font-style: italic; color: var(--muted); }
+dialog.sheet-dialog .message-actions svg{ width: 15px; height: 15px; }
+dialog.sheet-dialog .compact-message{ margin-bottom: 0; }
+dialog.sheet-dialog .tool-icon svg{ width: 17px; height: 17px; }
+dialog.sheet-dialog .bundle-status svg{ width: 14px; height: 14px; }
+dialog.sheet-dialog .tool-state svg{ width: 13px; height: 13px; }
+dialog.sheet-dialog .approval-card > .demo-surface-badge{ grid-column: 1 / -1; margin: 0 0 4px; }
+dialog.sheet-dialog .composer-suggestion-hint{ position: absolute; right: 56px; top: 15px; font-size: 10px; color: var(--muted-2); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; pointer-events: none; opacity: 0; transition: opacity .15s ease; }
+dialog.sheet-dialog .composer textarea.composer-has-suggestion ~ .composer-suggestion-hint{ opacity: 1; }
+dialog.sheet-dialog .composer-resize-handle svg{ width: 9px; height: 9px; }
+dialog.sheet-dialog .composer-mic.recording svg{ animation: pulse var(--motion-activity) var(--motion-ease) infinite; }
+dialog.sheet-dialog .assistant-listen-btn svg{ width: 14px; height: 14px; }
+dialog.sheet-dialog .selector-pill{ min-width: 0; max-width: 230px; height: 38px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-highlight-faint); color: var(--text-2); display: inline-flex; align-items: center; gap: 7px; padding: 0 10px; cursor: pointer; }
+dialog.sheet-dialog .selector-pill span{ min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(11px * var(--talos-ui-font-scale)); }
+dialog.sheet-dialog .selector-pill svg{ width: 15px; height: 15px; flex: 0 0 auto; }
+dialog.sheet-dialog .queue-toggle{ min-height: 36px; height: 36px; border-radius: 9px; border: 0; background: transparent; color: var(--muted); font-size: calc(10px * var(--talos-ui-font-scale)); cursor: pointer; padding: 0 8px; border: 1px solid transparent; }
+dialog.sheet-dialog .queue-toggle.active{ color: var(--accent-2); background: var(--accent-soft); }
+dialog.sheet-dialog .send-btn[aria-busy="true"],dialog.sheet-dialog .queue-toggle[aria-busy="true"]{ cursor: progress; opacity: .72; }
+dialog.sheet-dialog .send-btn svg{ width: 18px; height: 18px; }
+dialog.sheet-dialog .queued-message > .demo-surface-badge{ flex-basis: 100%; margin: 0 0 4px; }
+dialog.sheet-dialog .inspector-tabs button.active{ background: var(--surface-2); color: var(--text); }
+dialog.sheet-dialog .inspector-section.active{ display: block; }
+dialog.sheet-dialog .card-title svg{ width: 16px; height: 16px; color: var(--muted); }
+dialog.sheet-dialog .muted-copy{ margin: 0 0 10px; color: var(--muted); font-size: calc(10px * var(--talos-ui-font-scale)); line-height: 1.55; }
+dialog.sheet-dialog .memory-chip{ display: inline-flex; align-items: center; min-height: 28px; padding: 0 9px; margin: 3px 4px 0 0; border-radius: 8px; background: var(--surface-highlight); color: var(--text-2); font: calc(9px * var(--talos-ui-font-scale)) var(--font-mono); }
+dialog.sheet-dialog .tree-root,dialog.sheet-dialog .file-tree button{ min-height: 36px; width: 100%; display: flex; align-items: center; gap: 8px; border: 0; background: transparent; color: var(--text-2); border-radius: 8px; text-align: left; cursor: pointer; }
+dialog.sheet-dialog .tree-root{ padding: 0 8px; }
+dialog.sheet-dialog .tree-root svg{ width: 16px; height: 16px; }
+dialog.sheet-dialog .file-tree button:hover,dialog.sheet-dialog .file-tree button.active{ background: var(--surface-2); }
+dialog.sheet-dialog .ft-command svg{ width: 15px; height: 15px; }
+dialog.sheet-dialog .ft-search-hint{ margin: 0 0 6px; font-size: calc(9.5px * var(--talos-ui-font-scale)); color: var(--muted-2); min-height: 12px; }
+dialog.sheet-dialog .ft-search-hint b{ color: var(--text-2); font-weight: 600; }
+dialog.sheet-dialog .ft-outside-zone-head svg{ width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 1.8; flex-shrink: 0; }
+dialog.sheet-dialog .ft-outside-zone-close svg{ width: 11px; height: 11px; }
+dialog.sheet-dialog .ft-outside-row-adopt svg{ width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+dialog.sheet-dialog .ft-outside-row svg{ width: 13px; height: 13px; stroke: var(--muted); fill: none; stroke-width: 1.6; flex-shrink: 0; }
+dialog.sheet-dialog .ft-outside-row.ft-outside-row-up svg{ stroke: var(--text-2); }
+dialog.sheet-dialog .ft-session-boundary .tree-root{ color: var(--text); }
+dialog.sheet-dialog .ft-session-boundary-head svg{ width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 1.8; flex-shrink: 0; }
+dialog.sheet-dialog .ft-row.ft-selected{ background: var(--accent-soft); color: var(--text); }
+dialog.sheet-dialog .ft-row.ft-selected .ft-name{ color: var(--text); font-weight: 500; }
+dialog.sheet-dialog .ft-row.ft-row-drag-over,dialog.sheet-dialog .tree-root.ft-row-drag-over{ box-shadow: inset 0 0 0 1.5px var(--accent); background: var(--accent-soft); border-radius: 7px; }
+dialog.sheet-dialog .ft-chevron svg{ width: 9px; height: 9px; stroke: currentColor; fill: none; stroke-width: 2.4; }
+dialog.sheet-dialog .ft-icon svg{ width: 14px; height: 14px; stroke-width: 1.6; fill: none; }
+dialog.sheet-dialog .ft-icon-folder svg{ stroke: var(--accent-2); }
+dialog.sheet-dialog .ft-icon-folder.ft-open svg{ stroke: var(--accent); }
+dialog.sheet-dialog .ft-icon-file svg{ stroke: var(--muted); }
+dialog.sheet-dialog .ft-icon-code svg{ stroke: var(--info); }
+dialog.sheet-dialog .ft-row:hover .ft-actions-btn,dialog.sheet-dialog .ft-row:focus-within .ft-actions-btn,dialog.sheet-dialog .ft-row.ft-selected .ft-actions-btn{ display: inline-flex; }
+dialog.sheet-dialog .ft-actions-btn svg{ width: 17px; height: 17px; }
+dialog.sheet-dialog .ft-actions-menu-item svg{ width: 15px; height: 15px; flex-shrink: 0; color: var(--muted); }
+dialog.sheet-dialog .ft-actions-menu-item-danger svg{ color: var(--danger); }
+dialog.sheet-dialog .agent-card svg{ width: 16px; height: 16px; color: var(--success); }
+dialog.sheet-dialog .file-review.active{ border-color: var(--accent-strong); background: var(--accent-soft); }
+dialog.sheet-dialog .file-review svg{ width: 14px; height: 14px; }
+dialog.sheet-dialog .status-chip{ display: inline-flex; align-items: center; min-height: 25px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: var(--surface-highlight-subtle); font-size: calc(9px * var(--talos-ui-font-scale)); }
+dialog.sheet-dialog .status-chip.success{ color: var(--success); border-color: var(--success-strong); background: var(--success-soft); }
+dialog.sheet-dialog .status-chip.error{ color: var(--danger); border-color: var(--danger-soft); background: var(--danger-soft); }
+dialog.sheet-dialog .status-chip.avviso{ color: var(--accent-2); border-color: var(--accent-strong); background: var(--accent-soft); }
+dialog.sheet-dialog .plugin-panel-item .sheet-option{ margin-bottom: 4px; }
+dialog.sheet-dialog .plugin-panel-warnings .status-chip{ display: block; width: fit-content; white-space: normal; text-align: left; line-height: 1.4; height: auto; min-height: 0; padding: 4px 8px; }
+dialog.sheet-dialog .widget-head svg{ width: 16px; height: 16px; }
+dialog.sheet-dialog .agent-row svg{ width: 16px; height: 16px; color: var(--success); }
+dialog.sheet-dialog .board-heading-actions svg{ width: 14px; height: 14px; }
+dialog.sheet-dialog .session-board-row .status-chip{ justify-self: end; }
+dialog.sheet-dialog .automation-icon svg{ width: 17px; height: 17px; }
+dialog.sheet-dialog .settings-category-nav button.active,dialog.sheet-dialog .settings-category-nav button[aria-selected="true"]{ color: var(--text); border-color: var(--accent-strong); background: var(--accent-soft); }
+dialog.sheet-dialog .setting-control select{ min-width: 132px; min-height: 36px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--text-2); padding: 6px 8px; font: inherit; }
+.harness-dialog-backdrop{ position: fixed; inset: 0; z-index: 198; border: 0; background: var(--scrim); backdrop-filter: blur(5px); will-change: opacity; transition: opacity var(--motion-popover) var(--motion-ease); }
+.harness-dialog-backdrop[hidden]{ display: none; }
+dialog.sheet-dialog .command-dialog,.sheet-dialog{ position: fixed; z-index: 199; padding: 0; border: 1px solid var(--line-strong); background: var(--surface-elevated); color: var(--text); box-shadow: var(--shadow); }
+dialog.sheet-dialog .command-dialog.dialog-user-sized[open],.sheet-dialog.dialog-user-sized[open]{ display: flex; flex-direction: column; }
+dialog.sheet-dialog .dialog-user-sized .sheet-head,dialog.sheet-dialog .dialog-user-sized .command-search{ flex: 0 0 auto; }
+dialog.sheet-dialog .dialog-user-sized .sheet-body,.sheet-dialog--new-session.dialog-user-sized .sheet-body,dialog.sheet-dialog .dialog-user-sized .command-results{ flex: 1 1 auto; min-height: 0; height: auto; max-height: none; }
+dialog.sheet-dialog .dialog-resizing{ user-select: none; }
+.dialog-resize-handle{ display: block; position: absolute; z-index: 8; margin: 0; border: 0; outline: 0; background: transparent; padding: 0; touch-action: none; opacity: .72; }
+.dialog-resize-handle::after{ content: ''; position: absolute; border-radius: 999px; background: var(--line-strong); transition: background var(--motion-hover) var(--motion-ease), opacity var(--motion-hover) var(--motion-ease); opacity: .6; }
+.dialog-resize-handle:hover::after,.dialog-resize-handle:focus-visible::after,dialog.sheet-dialog .dialog-resizing .dialog-resize-handle::after{ background: var(--accent-2); opacity: 1; }
+.dialog-resize-handle:focus-visible{ box-shadow: inset 0 0 0 2px var(--focus); }
+.dialog-resize-handle--width{ top: 72px; right: 0; bottom: 22px; width: 9px; cursor: ew-resize; }
+.dialog-resize-handle--width::after{ top: 50%; right: 2px; width: 3px; height: 42px; transform: translateY(-50%); }
+.dialog-resize-handle--height{ right: 22px; bottom: 0; left: 22px; height: 9px; cursor: ns-resize; }
+.dialog-resize-handle--height::after{ bottom: 2px; left: 50%; width: 42px; height: 3px; transform: translateX(-50%); }
+.dialog-resize-handle--both{ right: 0; bottom: 0; width: 22px; height: 22px; cursor: nwse-resize; }
+.dialog-resize-handle--both::after{ right: 4px; bottom: 4px; width: 10px; height: 10px; border-radius: 0 0 3px; border-right: 2px solid var(--line-strong); border-bottom: 2px solid var(--line-strong); background: transparent; }
+.dialog-resize-handle--both:hover::after,.dialog-resize-handle--both:focus-visible::after,dialog.sheet-dialog .dialog-resizing .dialog-resize-handle--both::after{ border-color: var(--accent-2); background: transparent; }
+dialog.sheet-dialog .command-dialog::backdrop,.sheet-dialog::backdrop{ background: transparent; }
+dialog.sheet-dialog .command-search svg{ color: var(--muted); }
+dialog.sheet-dialog .command-results svg{ width: 17px; height: 17px; color: var(--muted); }
+.sheet-dialog{ inset: 0; width: min(880px, calc(100vw - 24px)); border-radius: 16px; margin: auto; }
+dialog.sheet-dialog .sheet-handle{ display: none; }
+dialog.sheet-dialog .sheet-head{ min-height: 70px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px 0 16px; border-bottom: 1px solid var(--line); }
+dialog.sheet-dialog .sheet-head h2{ margin: 4px 0 0; font-size: calc(17px * var(--talos-ui-font-scale)); font-weight: 650; }
+dialog.sheet-dialog .sheet-body{ max-height: min(880px, calc(100dvh - 96px)); overflow: auto; padding: 12px; }
+dialog.sheet-dialog .sheet-section{ margin-bottom: 16px; }
+dialog.sheet-dialog .sheet-label{ display: block; color: var(--muted); font-size: calc(9px * var(--talos-ui-font-scale)); text-transform: uppercase; letter-spacing: .12em; margin: 0 0 7px 3px; }
+dialog.sheet-dialog .sheet-option{ width: 100%; min-height: 54px; display: grid; grid-template-columns: 38px minmax(0,1fr) auto; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--text-2); padding: 7px 10px; margin-bottom: 6px; text-align: left; cursor: pointer; }
+dialog.sheet-dialog .sheet-option:hover,dialog.sheet-dialog .sheet-option.active{ border-color: var(--accent-strong); background: var(--accent-soft); }
+dialog.sheet-dialog .sheet-option .sheet-icon{ width: 36px; height: 36px; border-radius: 9px; background: var(--surface-3); display: grid; place-items: center; color: var(--accent-2); }
+dialog.sheet-dialog .sheet-option .sheet-icon svg{ width: 16px; height: 16px; }
+dialog.sheet-dialog .sheet-option strong,dialog.sheet-dialog .sheet-option small{ display: block; }
+dialog.sheet-dialog .sheet-option strong{ font-size: calc(11px * var(--talos-ui-font-scale)); }
+dialog.sheet-dialog .sheet-option small{ color: var(--muted); font-size: calc(9px * var(--talos-ui-font-scale)); margin-top: 3px; }
+dialog.sheet-dialog .sheet-option > span:last-child{ color: var(--muted); font-size: calc(10px * var(--talos-ui-font-scale)); }
+dialog.sheet-dialog .sheet-shortcuts{ display: flex; flex-wrap: wrap; gap: 6px; margin: -2px 0 10px; }
+dialog.sheet-dialog .sheet-shortcut-chip{ min-height: 36px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--text-2); padding: 5px 12px; font-size: calc(11px * var(--talos-ui-font-scale)); cursor: pointer; }
+dialog.sheet-dialog .sheet-shortcut-chip:hover{ border-color: var(--accent-strong); background: var(--accent-soft); color: var(--text); }
+dialog.sheet-dialog .sheet-toggle-row{ min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--line); font-size: calc(11px * var(--talos-ui-font-scale)); }
+dialog.sheet-dialog .sheet-toggle-row span{ color: var(--text-2); }
+dialog.sheet-dialog .sheet-toggle-row input{ width: 36px; min-width: 36px; height: 36px; min-height: 36px; accent-color: var(--accent); }
+dialog.sheet-dialog .sheet-toggle-row select{ flex: 0 0 auto; min-height: 36px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--text); font: inherit; font-size: calc(11px * var(--talos-ui-font-scale)); padding: 5px 8px; cursor: pointer; }
+dialog.sheet-dialog .sheet-toggle-row select:hover{ border-color: var(--accent-strong); }
+dialog.sheet-dialog .sheet-toggle-row select:focus-visible{ outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (max-width: 1280px){dialog.sheet-dialog .environment-chip{ display: none; }}
+dialog.sheet-dialog .model-lab-queue-badge{ min-width: 42px; justify-content: center; padding-inline: 10px; }
+@media (max-width: 1040px){dialog.sheet-dialog .desktop-context-toggle{ display: grid; }}
+dialog.sheet-dialog .sessions-panel[data-demo-surface="sessions"] > .demo-surface-badge{ margin: 8px 14px; }
+dialog.sheet-dialog .chat-view .conversation > .demo-surface-badge{ margin: 0 0 12px; }
+dialog.sheet-dialog .inspector-panel > .demo-surface-badge{ margin: 8px 12px; }
+@media (max-width: 780px), (max-height: 540px) and (orientation: landscape){dialog.sheet-dialog .topbar-right .icon-btn{ width: 42px; height: 42px; }dialog.sheet-dialog .bundle-status svg{ font-size: initial; }dialog.sheet-dialog .approval-actions .secondary-btn:first-child{ display: none; }dialog.sheet-dialog .approval-actions .primary-btn{ min-height: 40px; }dialog.sheet-dialog .selector-pill{ max-width: min(56vw, 250px); }dialog.sheet-dialog .queue-toggle{ display: none; }dialog.sheet-dialog .mobile-nav button.active{ color: var(--accent-2); background: var(--accent-soft); }dialog.sheet-dialog .mobile-nav svg{ width: 18px; height: 18px; }dialog.sheet-dialog .automation-row .secondary-btn{ grid-column: 2 / -1; width: 100%; }.sheet-dialog{ width: 100vw; min-width: 0; max-width: 100vw; box-sizing: border-box; margin: auto 0 0; border-radius: 18px 18px 0 0; border-bottom: 0; padding-bottom: max(0px, env(safe-area-inset-bottom)); overflow-x: hidden; }.dialog-resize-handle{ display: none; }dialog.sheet-dialog .sheet-handle{ display: block; width: 36px; height: 4px; border-radius: 99px; background: var(--line-strong); margin: 7px auto 0; }dialog.sheet-dialog .sheet-head{ min-height: 62px; }.sheet-dialog[data-demo-surface="dynamic-sheet"] > .demo-surface-badge{ margin: 8px 16px 0; }dialog.sheet-dialog .sheet-body{ max-height: 68dvh; padding-bottom: 18px; }}
+@media (max-width: 430px){dialog.sheet-dialog .selector-pill{ max-width: calc(100vw - 150px); }dialog.sheet-dialog .approval-actions .secondary-btn{ width: 100%; }}
+@media (max-width: 360px){dialog.sheet-dialog .primary-btn{ width: 100%; }dialog.sheet-dialog .selector-pill span{ max-width: 135px; }}
+dialog.sheet-dialog .topology-actions .secondary-btn{ padding: 0 6px; min-width: 0; }
+dialog.sheet-dialog .session-tree-sheet .sheet-option{ position: relative; }
+dialog.sheet-dialog ::selection{ background: var(--accent-strong); color: var(--text); }
+dialog.sheet-dialog .view-pane,dialog.sheet-dialog .session-list,dialog.sheet-dialog .inspector-body,dialog.sheet-dialog .sheet-body,dialog.sheet-dialog .command-results,dialog.sheet-dialog pre{ overscroll-behavior: contain; }
+dialog.sheet-dialog .session-list,dialog.sheet-dialog .inspector-body,dialog.sheet-dialog .sheet-body,dialog.sheet-dialog .command-results{ scrollbar-gutter: stable; }
+dialog.sheet-dialog .context-chip:hover{ border-color: var(--line-strong); background: var(--surface-2); }
+dialog.sheet-dialog .mission-card,dialog.sheet-dialog .activity-bundle,dialog.sheet-dialog .approval-card,dialog.sheet-dialog .widget,dialog.sheet-dialog .settings-card,dialog.sheet-dialog .automation-row,dialog.sheet-dialog .inspector-card,dialog.sheet-dialog .composer,dialog.sheet-dialog .sheet-option,dialog.sheet-dialog .file-review,dialog.sheet-dialog .diff-panel{ transition: border-color var(--motion-control) var(--motion-ease), background-color var(--motion-theme) var(--motion-ease), box-shadow var(--motion-control) var(--motion-ease); }
+dialog.sheet-dialog :host(.motion-windows-off) .sheet-dialog,dialog.sheet-dialog :host(.motion-windows-off) .command-dialog,dialog.sheet-dialog :host(.motion-windows-off) .inspector-panel,dialog.sheet-dialog :host(.motion-windows-off) .sessions-panel{ transition: none !important; }
+dialog.sheet-dialog .model-lab-tabs button.active{ border-bottom-color: var(--accent); color: var(--text); }
+dialog.sheet-dialog .model-lab-panel.active{ display: block; }
+dialog.sheet-dialog .model-lab-panel[data-model-lab-panel]:not(.active){ display: none !important; }
+dialog.sheet-dialog .provider-card-toggle{ display: flex; width: 100%; min-height: 72px; align-items: center; justify-content: space-between; gap: 12px; border: 0; padding: 12px; color: inherit; background: transparent; text-align: left; cursor: pointer; }
+dialog.sheet-dialog .provider-card-toggle > span:first-child{ min-width: 0; }
+dialog.sheet-dialog .provider-card-toggle strong{ margin: 0; }
+dialog.sheet-dialog .provider-card-toggle .provider-state{ margin-top: 5px; }
+dialog.sheet-dialog .provider-card-toggle[aria-expanded="true"] .provider-chevron{ transform: rotate(180deg); }
+dialog.sheet-dialog .provider-card .provider-field[hidden]{ display: none; }
+dialog.sheet-dialog .provider-field{ min-height: 40px; display: flex; flex-direction: column; gap: 5px; }
+dialog.sheet-dialog .provider-field input{ width: min(60%, 260px); min-width: 0; border: 1px solid var(--line); border-radius: 7px; padding: 7px 8px; color: var(--text-2); background: var(--surface); font: inherit; }
+dialog.sheet-dialog .model-lab-filters .search-field{ min-width: 0; }
+dialog.sheet-dialog .model-lab-list-item:hover,dialog.sheet-dialog .model-lab-list-item[aria-selected="true"]{ background: var(--accent-soft); }
+dialog.sheet-dialog .model-lab-detail .muted-copy{ margin: 10px 0; line-height: 1.4; }
+dialog.sheet-dialog .model-lab-filter-chips{ display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+dialog.sheet-dialog .model-lab-filter-chips span{ padding: 5px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font: calc(9px * var(--talos-ui-font-scale)) var(--font-mono); }
+dialog.sheet-dialog .hf-repo-actions .secondary-btn{ display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+dialog.sheet-dialog .hf-repo-actions .secondary-btn svg{ width: 13px; height: 13px; }
+dialog.sheet-dialog .model-lab-disabled-grid .search-field{ opacity: .65; }
+dialog.sheet-dialog .model-lab-runtime-controls select{ width: 100%; min-width: 0; max-width: 100%; }
+dialog.sheet-dialog .model-lab-runtime-actions .secondary-btn,dialog.sheet-dialog .model-lab-runtime-actions .primary-btn{ flex: 1 1 130px; }
+dialog.sheet-dialog .bundle-header[aria-expanded="false"] .bundle-status svg{ transform: rotate(-90deg); }
+dialog.sheet-dialog .bundle-status svg{ transition: transform var(--motion-disclosure) var(--motion-ease); }
+dialog.sheet-dialog #compactSessionBtn.is-loading svg{ animation: talosCompactSpin var(--motion-activity) linear infinite; }
+dialog.sheet-dialog body.reduce-motion #compactSessionBtn.is-loading svg{ animation: none; }
+dialog.sheet-dialog .queue-toggle:hover{ border-color: var(--line); color: var(--text-2); }
+dialog.sheet-dialog .queue-toggle.active,dialog.sheet-dialog .queue-toggle[aria-pressed="true"]{ border-color: var(--accent-strong); }
+dialog.sheet-dialog .inspector-tabs button[aria-selected="true"]{ background: var(--surface-2); color: var(--text); }
+dialog.sheet-dialog .command-dialog,.sheet-dialog{ overflow: clip; }
+dialog.sheet-dialog .command-close svg{ width: 17px; height: 17px; }
+.sheet-dialog,dialog.sheet-dialog .command-dialog{ animation: dialog-enter var(--motion-popover) var(--motion-ease) both; }
+dialog.sheet-dialog .sheet-option:focus-visible,dialog.sheet-dialog .command-results button:focus-visible{ outline-offset: -2px; }
+.harness-dialog-backdrop.motion-enter{ animation: code-backdrop-enter var(--motion-popover) var(--motion-ease) both; }
+@media (hover: hover) and (pointer: fine){dialog.sheet-dialog .icon-btn:active,dialog.sheet-dialog .round-btn:active,dialog.sheet-dialog .send-btn:active,dialog.sheet-dialog .primary-btn:active,dialog.sheet-dialog .secondary-btn:active,dialog.sheet-dialog .mode-tab:active{ transform: translateY(1px); }}
+@media (max-width: 780px), (max-height: 540px) and (orientation: landscape){dialog.sheet-dialog .topbar .icon-btn{ width: var(--mobile-control); min-width: var(--mobile-control); height: var(--mobile-control); flex-basis: var(--mobile-control); }dialog.sheet-dialog .eyebrow{ font-size: calc(10px * var(--talos-ui-font-scale)); }dialog.sheet-dialog .round-btn,dialog.sheet-dialog .selector-pill{ min-height: var(--mobile-control); height: var(--mobile-control); }dialog.sheet-dialog .sheet-option{ min-height: 60px; grid-template-columns: 42px minmax(0,1fr) auto; }dialog.sheet-dialog .sheet-option .sheet-icon{ width: 40px; height: 40px; }dialog.sheet-dialog .sheet-option strong{ font-size: calc(12px * var(--talos-ui-font-scale)); }dialog.sheet-dialog .sheet-option small{ font-size: calc(10px * var(--talos-ui-font-scale)); line-height: 1.35; }dialog.sheet-dialog .sheet-option > span:last-child{ font-size: calc(11px * var(--talos-ui-font-scale)); }dialog.sheet-dialog .sheet-toggle-row{ min-height: 52px; font-size: calc(12px * var(--talos-ui-font-scale)); }dialog.sheet-dialog .sheet-toggle-row input{ width: 22px; height: 22px; }dialog.sheet-dialog .sheet-body{ max-height: min(72dvh, calc(100dvh - 96px)); }dialog.sheet-dialog .text-btn{ min-height: 40px; display: inline-flex; align-items: center; }}
+@media (max-width: 430px){dialog.sheet-dialog .selector-pill{ max-width: calc(100vw - 154px); }}
+@media (max-width: 360px){dialog.sheet-dialog .selector-pill span{ max-width: 128px; }}
+dialog.sheet-dialog .sheet-input{ width: 100%; min-height: 48px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); padding: 0 12px; outline: 0; font-size: calc(14px * var(--talos-ui-font-scale)); }
+dialog.sheet-dialog .sheet-input:focus{ border-color: var(--focus); box-shadow: 0 0 0 2px var(--focus-soft); }
+dialog.sheet-dialog .sheet-hint{ display: block; margin: 8px 3px 0; color: var(--muted); font-size: calc(11px * var(--talos-ui-font-scale)); }
+dialog.sheet-dialog .sheet-chip-row{ display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+dialog.sheet-dialog .chip{ min-height: 30px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); font: calc(10px * var(--talos-ui-font-scale)) var(--font-mono); cursor: pointer; }
+dialog.sheet-dialog .chip:hover{ color: var(--text); border-color: var(--focus); }
+dialog.sheet-dialog .sheet-actions{ display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+dialog.sheet-dialog .sheet-actions .secondary-btn,dialog.sheet-dialog .sheet-actions .primary-btn{ min-height: 44px; }
+dialog.sheet-dialog .model-picker{ margin-bottom: 12px; }
+dialog.sheet-dialog .model-picker-trigger{ display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; text-align: left; }
+dialog.sheet-dialog .model-picker-trigger[hidden]{ display: none; }
+dialog.sheet-dialog .model-picker-trigger-label{ min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: calc(12px * var(--talos-ui-font-scale)) var(--font-mono); }
+dialog.sheet-dialog .model-picker-chevron svg{ width: 14px; height: 14px; color: var(--muted); flex: 0 0 auto; }
+dialog.sheet-dialog .model-picker-trigger[aria-expanded="true"] .model-picker-chevron svg{ transform: rotate(180deg); }
+dialog.sheet-dialog .model-picker-panel{ display: flex; flex-direction: column; gap: 8px; margin-top: 6px; padding: 10px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface-elevated); box-shadow: var(--shadow); }
+dialog.sheet-dialog .model-picker-panel[hidden]{ display: none; }
+dialog.sheet-dialog .model-picker-search{ position: relative; display: block; flex: 0 0 auto; }
+dialog.sheet-dialog .model-picker-search svg{ position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--muted); pointer-events: none; }
+dialog.sheet-dialog .model-picker-search input{ padding-left: 32px; }
+dialog.sheet-dialog .model-picker-list{ max-height: 42vh; overflow-y: auto; }
+dialog.sheet-dialog .model-picker-group-header{ width: 100%; display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 4px; border: 0; background: transparent; color: var(--muted); font-size: calc(10px * var(--talos-ui-font-scale)); font-weight: 700; text-transform: uppercase; letter-spacing: .08em; cursor: pointer; }
+dialog.sheet-dialog .model-picker-group-header:hover{ color: var(--text-2); }
+dialog.sheet-dialog .model-picker-group-count{ color: var(--muted); font-weight: 500; text-transform: none; letter-spacing: 0; }
+dialog.sheet-dialog .model-picker-group-chevron{ margin-left: auto; display: flex; }
+dialog.sheet-dialog .model-picker-group-chevron svg{ width: 12px; height: 12px; transition: transform var(--motion-control) var(--motion-ease); }
+dialog.sheet-dialog .model-picker-group-header[aria-expanded="true"] .model-picker-group-chevron svg{ transform: rotate(180deg); }
+dialog.sheet-dialog .model-picker-option{ margin-bottom: 4px; grid-template-columns: 30px minmax(0,1fr) auto; min-height: 46px; }
+dialog.sheet-dialog .model-picker-option .sheet-icon{ width: 28px; height: 28px; }
+dialog.sheet-dialog .model-picker-option .sheet-icon svg{ width: 13px; height: 13px; }
+dialog.sheet-dialog .model-picker-option strong{ font-size: calc(11px * var(--talos-ui-font-scale)); }
+dialog.sheet-dialog .model-picker-option small{ font: calc(9px * var(--talos-ui-font-scale)) var(--font-mono); color: var(--muted); }
+dialog.sheet-dialog .model-picker-option > span:last-child svg{ width: 14px; height: 14px; color: var(--accent-2); }
+dialog.sheet-dialog .model-picker-footer{ display: flex; align-items: center; justify-content: space-between; gap: 8px; flex: 0 0 auto; border-top: 1px solid var(--line); padding-top: 8px; }
+dialog.sheet-dialog .model-picker-footer .text-btn{ display: inline-flex; align-items: center; gap: 5px; }
+dialog.sheet-dialog .model-picker-footer .text-btn svg{ width: 13px; height: 13px; }
+dialog.sheet-dialog .model-picker-meta{ color: var(--muted); font-size: calc(10px * var(--talos-ui-font-scale)); }
+dialog.sheet-dialog .effort-picker{ margin-top: 6px; padding: 10px 12px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+dialog.sheet-dialog .effort-picker-head{ display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+dialog.sheet-dialog .effort-picker-label{ color: var(--muted); font-size: calc(10px * var(--talos-ui-font-scale)); text-transform: uppercase; letter-spacing: .04em; }
+dialog.sheet-dialog .effort-picker-selected{ color: var(--accent); font-size: calc(13px * var(--talos-ui-font-scale)); font-weight: 600; }
+dialog.sheet-dialog .effort-picker-range{ width: 100%; margin: 10px 0 2px; accent-color: var(--accent); cursor: pointer; }
+dialog.sheet-dialog .effort-picker-labels{ position: relative; height: 15px; margin-top: 2px; }
+dialog.sheet-dialog .effort-picker-tick{ position: absolute; top: 0; transform: translateX(-50%); color: var(--muted); font-size: calc(9.5px * var(--talos-ui-font-scale)); white-space: nowrap; transition: color var(--motion-disclosure) ease, font-weight var(--motion-disclosure) ease; }
+dialog.sheet-dialog .effort-picker-tick:first-child{ transform: none; }
+dialog.sheet-dialog .effort-picker-tick:last-child{ transform: translateX(-100%); }
+dialog.sheet-dialog .effort-picker-tick-selected{ color: var(--accent); font-weight: 600; }
+@media (max-width: 780px), (max-height: 540px) and (orientation: landscape){dialog.sheet-dialog .sheet-input{ min-height: 52px; font-size: calc(16px * var(--talos-ui-font-scale)); }dialog.sheet-dialog .sheet-actions{ display: grid; grid-template-columns: 1fr 1fr; }}
+@media (max-width: 780px), (max-height: 540px) and (orientation: landscape){dialog.sheet-dialog .text-btn{ min-height: 44px; }}
+@media (max-width: 780px), (max-height: 540px) and (orientation: landscape){dialog.sheet-dialog .board-heading-actions .primary-btn,dialog.sheet-dialog .board-heading-actions .secondary-btn{ min-height: 44px; width: 100%; }}
+dialog.sheet-dialog :host(.talos-embedded-wide-short) .composer-toolbar .selector-pill,dialog.sheet-dialog :host(.talos-embedded-wide-short) .composer-toolbar .queue-toggle,dialog.sheet-dialog :host(.talos-embedded-wide-short) .composer-toolbar .composer-spacer{ display: none; }
+dialog.sheet-dialog :host(.talos-embedded-wide-short) .mobile-nav button.active,dialog.sheet-dialog :host(.talos-embedded-wide-short) .mobile-nav button[aria-current="page"]{
+  color: var(--accent-2);
+  background: var(--accent-soft);
+}
+.sheet-dialog.sheet-dialog--new-session{
+  width: min(1240px, calc(100vw - 24px));
+  height: min(820px, calc(100dvh - 32px));
+  max-width: none;
+}
+.sheet-dialog--new-session .sheet-head{ min-height: 72px; padding-inline: 20px 14px; }
+.sheet-dialog--new-session .sheet-body{ height: calc(100% - 72px); max-height: none; overflow: hidden; padding: 0; }
+dialog.sheet-dialog .workspace-chooser{ height: 100%; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+dialog.sheet-dialog .workspace-chooser-shortcuts{ min-height: 76px; display: flex; align-items: center; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; padding: 12px 18px; border-bottom: 1px solid var(--line); scrollbar-width: none; }
+dialog.sheet-dialog .workspace-chooser-shortcuts::-webkit-scrollbar{ display: none; }
+dialog.sheet-dialog .workspace-chooser-shortcut{ flex: 0 0 auto; min-width: 150px; min-height: 50px; display: grid; grid-template-columns: 28px minmax(0,1fr); align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text-2); padding: 7px 10px; text-align: left; cursor: pointer; transition: border-color var(--motion-hover) var(--motion-ease), background var(--motion-hover) var(--motion-ease), transform var(--motion-hover) var(--motion-ease); }
+dialog.sheet-dialog .workspace-chooser-shortcut:hover{ border-color: var(--line-strong); background: var(--surface-2); transform: translateY(-1px); }
+dialog.sheet-dialog .workspace-chooser-shortcut.active,dialog.sheet-dialog .workspace-chooser-shortcut[aria-pressed="true"]{ border-color: var(--accent-strong); background: var(--accent-soft); color: var(--text); }
+dialog.sheet-dialog .workspace-chooser-shortcut svg{ width: 18px; height: 18px; color: var(--accent-2); }
+dialog.sheet-dialog .workspace-chooser-shortcut span,dialog.sheet-dialog .workspace-chooser-shortcut strong,dialog.sheet-dialog .workspace-chooser-shortcut small{ display: block; min-width: 0; }
+dialog.sheet-dialog .workspace-chooser-shortcut strong{ max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(11px * var(--talos-ui-font-scale)); }
+dialog.sheet-dialog .workspace-chooser-shortcut small{ margin-top: 2px; color: var(--muted); font-size: calc(8px * var(--talos-ui-font-scale)); }
+dialog.sheet-dialog .workspace-chooser-columns{ min-height: 0; display: grid; grid-template-columns: minmax(0, 1.22fr) minmax(360px, .78fr); }
+dialog.sheet-dialog .workspace-chooser-browser,dialog.sheet-dialog .workspace-chooser-settings{ min-width: 0; min-height: 0; padding: 18px; }
+dialog.sheet-dialog .workspace-chooser-browser{ display: grid; grid-template-rows: auto auto auto auto minmax(0, 1fr) auto; gap: 10px; border-right: 1px solid var(--line); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+dialog.sheet-dialog .workspace-chooser-settings{ overflow-y: auto; overscroll-behavior: contain; padding: 18px 20px 22px; scrollbar-gutter: stable; }
+dialog.sheet-dialog .workspace-chooser-section-head h3{ margin: 5px 0 4px; color: var(--text); font-size: calc(16px * var(--talos-ui-font-scale)); font-weight: 680; }
+dialog.sheet-dialog .workspace-chooser-section-head p{ margin: 0; color: var(--muted); font-size: calc(10px * var(--talos-ui-font-scale)); line-height: 1.45; }
+dialog.sheet-dialog .workspace-chooser-pathbar{ min-width: 0; display: grid; grid-template-columns: 38px minmax(0,1fr) auto; align-items: center; gap: 6px; }
+dialog.sheet-dialog .workspace-chooser-up,dialog.sheet-dialog .workspace-chooser-go{ min-height: 38px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text-2); cursor: pointer; }
+dialog.sheet-dialog .workspace-chooser-up{ width: 38px; display: grid; place-items: center; }
+dialog.sheet-dialog .workspace-chooser-up svg{ width: 16px; height: 16px; }
+dialog.sheet-dialog .workspace-chooser-up:disabled{ opacity: .42; cursor: default; }
+dialog.sheet-dialog .workspace-chooser-go{ padding-inline: 13px; font-weight: 650; }
+dialog.sheet-dialog .workspace-chooser-path{ width: 100%; min-width: 0; min-height: 38px; border: 1px solid var(--line); border-radius: 8px; outline: 0; background: var(--surface); color: var(--text-2); padding: 0 11px; font: calc(10px * var(--talos-ui-font-scale))/1.3 var(--font-mono); }
+dialog.sheet-dialog .workspace-chooser-path:focus{ border-color: var(--focus); box-shadow: 0 0 0 2px var(--focus-soft); }
+dialog.sheet-dialog .workspace-chooser-tree-tools{ min-height: 34px; display: flex; align-items: center; gap: 3px; padding: 2px; border-bottom: 1px solid var(--line); }
+dialog.sheet-dialog .workspace-chooser-tree-tools-spacer{ flex: 1 1 auto; }
+dialog.sheet-dialog .workspace-chooser-tree-tool{ width: 31px; height: 31px; display: grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; transition: color var(--motion-hover) var(--motion-ease), background var(--motion-hover) var(--motion-ease); }
+dialog.sheet-dialog .workspace-chooser-tree-tool svg{ width: 16px; height: 16px; }
+dialog.sheet-dialog .workspace-chooser-tree-tool:hover:not(:disabled),dialog.sheet-dialog .workspace-chooser-tree-tool:focus-visible{ color: var(--text); background: var(--surface-2); }
+dialog.sheet-dialog .workspace-chooser-tree-tool:focus-visible{ outline: 2px solid var(--focus); outline-offset: 1px; }
+dialog.sheet-dialog .workspace-chooser-tree-tool:disabled{ opacity: .34; cursor: default; }
+dialog.sheet-dialog .workspace-chooser-new-folder{ min-width: 0; display: grid; grid-template-columns: minmax(0,1fr) auto auto; align-items: center; gap: 6px; padding: 8px; border: 1px solid var(--accent-strong); border-radius: 9px; background: var(--accent-soft); }
+dialog.sheet-dialog .workspace-chooser-new-folder[hidden]{ display: none; }
+dialog.sheet-dialog .workspace-chooser-new-folder input{ min-width: 0; min-height: 36px; border: 1px solid var(--line); border-radius: 7px; outline: 0; background: var(--surface); color: var(--text); padding: 0 10px; font: inherit; }
+dialog.sheet-dialog .workspace-chooser-new-folder input:focus{ border-color: var(--focus); box-shadow: 0 0 0 2px var(--focus-soft); }
+dialog.sheet-dialog .workspace-chooser-new-folder-status{ grid-column: 1 / -1; min-height: 0; color: var(--muted); font-size: calc(9px * var(--talos-ui-font-scale)); }
+dialog.sheet-dialog .workspace-chooser-new-folder-status:empty{ display: none; }
+dialog.sheet-dialog .workspace-chooser-tree-frame{ min-height: 230px; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); padding: 6px; scrollbar-gutter: stable; }
+dialog.sheet-dialog .workspace-chooser-tree{ display: grid; gap: 2px; }
+dialog.sheet-dialog .workspace-chooser-tree[aria-busy="true"]{ opacity: .64; }
+dialog.sheet-dialog .workspace-chooser-tree-row{ width: 100%; min-height: 38px; display: grid; grid-template-columns: 18px 20px minmax(0,1fr) auto; align-items: center; gap: 7px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--text-2); padding: 0 8px; text-align: left; cursor: default; transition: background var(--motion-hover) var(--motion-ease), border-color var(--motion-hover) var(--motion-ease); }
+dialog.sheet-dialog .workspace-chooser-tree-row[aria-level="2"]{ padding-left: 22px; }
+dialog.sheet-dialog .workspace-chooser-tree-row:hover{ background: var(--surface-2); }
+dialog.sheet-dialog .workspace-chooser-tree-row[aria-selected="true"]{ border-color: var(--accent-strong); background: var(--accent-soft); color: var(--text); }
+dialog.sheet-dialog .workspace-chooser-tree-row:focus-visible{ outline: 2px solid var(--focus); outline-offset: -2px; }
+dialog.sheet-dialog .workspace-chooser-tree-row svg{ width: 16px; height: 16px; color: var(--muted); }
+dialog.sheet-dialog .workspace-chooser-tree-row > svg{ color: var(--accent-2); }
+dialog.sheet-dialog .workspace-chooser-tree-toggle{ width: 18px; min-height: 28px; display: grid; place-items: center; cursor: pointer; }
+dialog.sheet-dialog .workspace-chooser-tree-row > span:not(.workspace-chooser-tree-spacer):not(.workspace-chooser-tree-toggle){ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(11px * var(--talos-ui-font-scale)); }
+dialog.sheet-dialog .workspace-chooser-tree-row small{ color: var(--accent-2); font-size: calc(8px * var(--talos-ui-font-scale)); text-transform: uppercase; letter-spacing: .08em; }
+dialog.sheet-dialog .workspace-chooser-tree-spacer{ width: 16px; }
+dialog.sheet-dialog .workspace-chooser-tree-state{ min-height: 60px; display: grid; place-items: center; gap: 10px; color: var(--muted); padding: 18px; text-align: center; font-size: calc(10px * var(--talos-ui-font-scale)); }
+dialog.sheet-dialog .workspace-chooser-tree-state[hidden]{ display: none; }
+dialog.sheet-dialog .workspace-chooser-tree-state p{ margin: 0; }
+dialog.sheet-dialog .workspace-chooser-error-actions{ display: flex; align-items: center; justify-content: center; gap: 8px; }
+dialog.sheet-dialog .workspace-chooser-selection{ min-width: 0; min-height: 54px; display: grid; grid-template-columns: 32px minmax(0,1fr); align-items: center; gap: 9px; border-top: 1px solid var(--line); padding: 9px 3px 0; position: sticky; bottom: 0; background: var(--surface-elevated); z-index: 1; }
+dialog.sheet-dialog .workspace-chooser-selection > svg{ width: 20px; height: 20px; color: var(--accent-2); }
+dialog.sheet-dialog .workspace-chooser-selection span,dialog.sheet-dialog .workspace-chooser-selection small,dialog.sheet-dialog .workspace-chooser-selection strong{ display: block; min-width: 0; }
+dialog.sheet-dialog .workspace-chooser-selection small{ color: var(--muted); font-size: calc(8px * var(--talos-ui-font-scale)); text-transform: uppercase; letter-spacing: .1em; }
+dialog.sheet-dialog .workspace-chooser-selection strong{ margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font: 600 calc(10px * var(--talos-ui-font-scale))/1.35 var(--font-mono); }
+dialog.sheet-dialog .workspace-chooser-setting-group{ padding: 15px 0; border-bottom: 1px solid var(--line); }
+dialog.sheet-dialog .workspace-chooser-setting-group:last-child{ border-bottom: 0; }
+dialog.sheet-dialog .workspace-chooser-setting-group .model-picker-panel{ max-height: 330px; }
+dialog.sheet-dialog .workspace-chooser-help{ display: block; margin-top: 7px; color: var(--muted); font-size: calc(9px * var(--talos-ui-font-scale)); line-height: 1.45; }
+dialog.sheet-dialog .workspace-chooser-inline-toggle{ min-height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 8px 11px; }
+dialog.sheet-dialog .workspace-chooser-inline-toggle span,dialog.sheet-dialog .workspace-chooser-inline-toggle strong,dialog.sheet-dialog .workspace-chooser-inline-toggle small{ display: block; }
+dialog.sheet-dialog .workspace-chooser-inline-toggle strong{ color: var(--text-2); font-size: calc(10px * var(--talos-ui-font-scale)); }
+dialog.sheet-dialog .workspace-chooser-inline-toggle small{ margin-top: 3px; color: var(--muted); font-size: calc(8px * var(--talos-ui-font-scale)); }
+dialog.sheet-dialog .workspace-chooser-inline-toggle input{ width: 38px; height: 38px; flex: 0 0 auto; accent-color: var(--accent); }
+dialog.sheet-dialog .workspace-chooser-permissions{ display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 7px; }
+dialog.sheet-dialog .workspace-chooser-permission{ min-width: 0; min-height: 54px; display: grid; grid-template-columns: 24px minmax(0,1fr); align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--text-2); padding: 8px; text-align: left; cursor: pointer; }
+dialog.sheet-dialog .workspace-chooser-permission[aria-pressed="true"]{ border-color: var(--accent-strong); background: var(--accent-soft); color: var(--text); }
+dialog.sheet-dialog .workspace-chooser-permission > svg{ width: 17px; height: 17px; color: var(--accent-2); }
+dialog.sheet-dialog .workspace-chooser-permission span,dialog.sheet-dialog .workspace-chooser-permission strong,dialog.sheet-dialog .workspace-chooser-permission small{ display: block; min-width: 0; }
+dialog.sheet-dialog .workspace-chooser-permission strong{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(9px * var(--talos-ui-font-scale)); }
+dialog.sheet-dialog .workspace-chooser-permission small{ margin-top: 2px; color: var(--muted); font-size: calc(8px * var(--talos-ui-font-scale)); }
+dialog.sheet-dialog .workspace-chooser-policy-gate{ min-height: 42px; margin: 8px 0 0; border-radius: 8px; background: var(--surface-2); color: var(--muted); padding: 9px 10px; font-size: calc(9px * var(--talos-ui-font-scale)); line-height: 1.45; }
+dialog.sheet-dialog .workspace-chooser-footer{ min-height: 72px; display: flex; align-items: center; justify-content: flex-end; gap: 9px; border-top: 1px solid var(--line); background: var(--surface-elevated); padding: 12px 18px; }
+dialog.sheet-dialog .workspace-chooser-footer .primary-btn{ min-width: 250px; }
+dialog.sheet-dialog .workspace-chooser-footer .primary-btn:disabled{ opacity: .46; cursor: not-allowed; box-shadow: none; }
+@media (max-width: 1180px){dialog.sheet-dialog .workspace-chooser-columns{ grid-template-columns: minmax(0, 1.08fr) minmax(330px, .92fr); }dialog.sheet-dialog .workspace-chooser-browser,dialog.sheet-dialog .workspace-chooser-settings{ padding: 14px; }dialog.sheet-dialog .workspace-chooser-shortcut{ min-width: 135px; }}
+@media (max-width: 780px), (max-height: 540px) and (orientation: landscape){.sheet-dialog.sheet-dialog--new-session{ height: min(92dvh, 920px); }.sheet-dialog--new-session .sheet-body{ height: calc(100% - 62px); max-height: none; }dialog.sheet-dialog .workspace-chooser{ overflow: hidden; }dialog.sheet-dialog .workspace-chooser-shortcuts{ min-height: 68px; padding: 9px 12px; }dialog.sheet-dialog .workspace-chooser-columns{ display: block; overflow-y: auto; }dialog.sheet-dialog .workspace-chooser-browser,dialog.sheet-dialog .workspace-chooser-settings{ min-height: auto; }dialog.sheet-dialog .workspace-chooser-browser{ border-right: 0; border-bottom: 1px solid var(--line); }dialog.sheet-dialog .workspace-chooser-tree-frame{ height: 320px; }dialog.sheet-dialog .workspace-chooser-settings{ overflow: visible; }dialog.sheet-dialog .workspace-chooser-footer{ padding-bottom: max(12px, env(safe-area-inset-bottom)); }dialog.sheet-dialog .workspace-chooser-footer .primary-btn{ min-width: 0; flex: 1; }}
+dialog.sheet-dialog .badge-dot[hidden]{ display: none; }
+@container topbar (max-width: 1040px){dialog.sheet-dialog .environment-chip{ max-width: 40px; padding: 0; justify-content: center; }dialog.sheet-dialog .environment-chip span[data-environment-label]{ display: none; }}
+dialog.sheet-dialog .search-field input{ min-width: 64px; }
+@container sessions (max-width: 300px){dialog.sheet-dialog .search-field kbd{ display: none; }dialog.sheet-dialog .search-field{ grid-template-columns: 20px minmax(0, 1fr); }}
+dialog.sheet-dialog .topology-actions .secondary-btn{ white-space: nowrap; width: 100%; justify-content: center; }
+@container inspector (max-width: 300px){dialog.sheet-dialog .topology-actions .secondary-btn{ font-size: calc(12px * var(--talos-ui-font-scale)); padding: 0 8px; }}
+.sheet-dialog.sheet-dialog--new-session{ height: min(980px, calc(100dvh - 32px)); }
+dialog.sheet-dialog .workspace-chooser-browser > .workspace-chooser-tree,dialog.sheet-dialog .workspace-chooser-browser [role="tree"]{ min-height: 180px; }
+dialog.sheet-dialog .hf-detail-tab.active{ color: var(--text); border-bottom-color: var(--accent); }
+dialog.sheet-dialog .hf-detail-tab.active .hf-detail-tab-count{ color: var(--text-2); }
+dialog.sheet-dialog .model-picker-sources{ display: flex; gap: 2px; padding: 6px 6px 0; border-bottom: 1px solid var(--line); }
+dialog.sheet-dialog .model-picker-source{ display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 0; border-bottom: 2px solid transparent; border-radius: 6px 6px 0 0; background: transparent; color: var(--muted); font: inherit; font-size: calc(12px * var(--talos-ui-font-scale)); cursor: pointer; }
+dialog.sheet-dialog .model-picker-source:hover{ color: var(--text); background: var(--surface-highlight-subtle); }
+dialog.sheet-dialog .model-picker-source:focus-visible{ outline: 2px solid var(--accent); outline-offset: -2px; }
+dialog.sheet-dialog .model-picker-source.active{ color: var(--text); border-bottom-color: var(--accent); }
+dialog.sheet-dialog .model-picker-source-count{ padding: 1px 6px; border-radius: 999px; background: var(--surface-highlight-subtle); color: var(--muted); font-variant-numeric: tabular-nums; font-size: calc(10px * var(--talos-ui-font-scale)); }
+dialog.sheet-dialog .model-picker-source-note{ margin: 0 0 8px; padding: 8px 10px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; background: var(--surface-highlight-subtle); color: var(--text-2); font-size: calc(11px * var(--talos-ui-font-scale)); line-height: 1.5; }
+dialog.sheet-dialog .model-picker-local-row{ display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 8px; color: var(--text-2); font-size: calc(12px * var(--talos-ui-font-scale)); }
+dialog.sheet-dialog .model-picker-local-row:nth-child(even){ background: var(--surface-highlight-subtle); }
+dialog.sheet-dialog .model-picker-local-row > small{ color: var(--muted); font-variant-numeric: tabular-nums; }
+dialog.sheet-dialog .provider-row-chevron svg{ width: 14px; height: 14px; }
+dialog.sheet-dialog .provider-field-label{ color: var(--muted); font-size: calc(10.5px * var(--talos-ui-font-scale)); text-transform: uppercase; letter-spacing: 0.06em; }
+dialog.sheet-dialog .provider-field-narrow{ max-width: 200px; }
+dialog.sheet-dialog .settings-card .provider-field,dialog.sheet-dialog .provider-field{
+  min-height: 0;
+  align-items: stretch;
+  justify-content: flex-start;
+  border-bottom: 0;
+  text-align: left;
+}
+dialog.sheet-dialog .provider-row-body .sheet-input{ width: 100%; }
+dialog.sheet-dialog .intro-dialog{ position: fixed; inset: 0; margin: auto; width: min(640px, calc(100vw - 24px)); max-height: min(760px, calc(100dvh - 32px)); padding: 0; border: 1px solid var(--line-strong); border-radius: 18px; background: var(--surface-elevated); color: var(--text); box-shadow: var(--shadow); display: flex; flex-direction: column; overflow: hidden; }
+dialog.sheet-dialog .intro-dialog:not([open]){ display: none; }
+dialog.sheet-dialog .intro-dialog::backdrop{ background: color-mix(in srgb, var(--bg-deep) 62%, transparent); backdrop-filter: blur(6px); }
+dialog.sheet-dialog .intro-head{ display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 6px; }
+dialog.sheet-dialog .intro-brand{ font-family: var(--font-ui); font-weight: 750; font-size: calc(11px * var(--talos-ui-font-scale)); letter-spacing: .3em; text-transform: uppercase; color: var(--accent); }
+dialog.sheet-dialog .intro-skip{ min-height: 36px; padding: 0 10px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font-size: calc(12px * var(--talos-ui-font-scale)); cursor: pointer; }
+dialog.sheet-dialog .intro-skip:hover,dialog.sheet-dialog .intro-skip:focus-visible{ color: var(--text); background: var(--surface-highlight-subtle); }
+dialog.sheet-dialog .intro-rail{ list-style: none; display: flex; gap: 12px; margin: 0; padding: 8px 20px 0; }
+dialog.sheet-dialog .intro-rail li{ flex: 1; min-width: 0; }
+dialog.sheet-dialog .intro-rail-line{ display: block; height: 2px; border-radius: 999px; background: var(--line); transition: background-color var(--motion-control) var(--motion-ease); }
+dialog.sheet-dialog .intro-rail li[data-fatto="true"] .intro-rail-line{ background: var(--accent); }
+dialog.sheet-dialog .intro-rail li[aria-current="step"] .intro-rail-line{ background: var(--text); }
+dialog.sheet-dialog .intro-rail-label{ display: block; margin-top: 8px; font-size: calc(9px * var(--talos-ui-font-scale)); letter-spacing: .2em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+dialog.sheet-dialog .intro-rail li[aria-current="step"] .intro-rail-label{ color: var(--text); }
+dialog.sheet-dialog .intro-body{ flex: 1 1 auto; min-height: 0; overflow: auto; padding: 22px 20px 8px; }
+dialog.sheet-dialog .intro-title{ margin: 0; font-size: calc(22px * var(--talos-ui-font-scale)); font-weight: 650; line-height: 1.2; }
+dialog.sheet-dialog .intro-copy{ margin: 10px 0 0; color: var(--muted); font-size: calc(13px * var(--talos-ui-font-scale)); line-height: 1.6; }
+dialog.sheet-dialog .intro-copy strong{ color: var(--text); font-weight: 600; }
+dialog.sheet-dialog .intro-list{ list-style: none; margin: 18px 0 0; padding: 0; display: grid; gap: 6px; }
+dialog.sheet-dialog .intro-choice{ width: 100%; min-height: 54px; display: grid; grid-template-columns: 34px minmax(0,1fr) auto; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 12px; background: transparent; color: var(--text-2); padding: 8px 12px; text-align: left; cursor: pointer; transition: border-color var(--motion-control) var(--motion-ease), background-color var(--motion-control) var(--motion-ease); }
+dialog.sheet-dialog .intro-choice:hover,dialog.sheet-dialog .intro-choice:focus-visible{ border-color: var(--line-strong); background: var(--surface-highlight-subtle); }
+dialog.sheet-dialog .intro-choice.active{ border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+dialog.sheet-dialog .intro-choice strong{ display: block; font-size: calc(13px * var(--talos-ui-font-scale)); color: var(--text); }
+dialog.sheet-dialog .intro-choice small{ display: block; margin-top: 2px; font-size: calc(11px * var(--talos-ui-font-scale)); color: var(--muted); }
+dialog.sheet-dialog .intro-choice .intro-mark{ width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: var(--surface-2); color: var(--text-2); font-weight: 700; font-size: calc(12px * var(--talos-ui-font-scale)); }
+dialog.sheet-dialog .intro-choice .intro-state{ font-family: var(--font-mono); font-size: calc(10px * var(--talos-ui-font-scale)); color: var(--muted); white-space: nowrap; }
+dialog.sheet-dialog .intro-choice[data-stato="ok"] .intro-state{ color: var(--ok, var(--accent)); }
+dialog.sheet-dialog .intro-choice[data-stato="rotto"] .intro-state{ color: var(--danger); }
+dialog.sheet-dialog .intro-key{ display: grid; gap: 8px; margin: 8px 0 4px; padding: 12px; border: 1px dashed var(--line-strong); border-radius: 12px; }
+dialog.sheet-dialog .intro-key input{ min-height: 40px; width: 100%; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); padding: 0 12px; font-family: var(--font-mono); font-size: calc(12px * var(--talos-ui-font-scale)); }
+dialog.sheet-dialog .intro-key input:focus-visible{ outline: 2px solid var(--focus); outline-offset: 1px; border-color: var(--focus); }
+dialog.sheet-dialog .intro-key-row{ display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+dialog.sheet-dialog .intro-key-esito{ font-size: calc(11px * var(--talos-ui-font-scale)); color: var(--muted); }
+dialog.sheet-dialog .intro-key-esito[data-esito="ok"]{ color: var(--ok, var(--accent)); }
+dialog.sheet-dialog .intro-key-esito[data-esito="rotto"]{ color: var(--danger); }
+dialog.sheet-dialog .intro-note{ margin: 14px 0 0; color: var(--muted); font-size: calc(11px * var(--talos-ui-font-scale)); line-height: 1.5; }
+dialog.sheet-dialog .intro-picker{ margin-top: 16px; }
+dialog.sheet-dialog .intro-foot{ display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 20px 18px; border-top: 1px solid var(--line); }
+dialog.sheet-dialog .intro-foot .intro-back[hidden]{ display: none; }
+dialog.sheet-dialog .intro-foot .intro-back{ display: inline-flex; align-items: center; gap: 6px; }
+dialog.sheet-dialog .intro-foot .intro-back svg{ width: 15px; height: 15px; }
+dialog.sheet-dialog .intro-foot .intro-next{ margin-left: auto; min-width: 140px; }
+@media (max-width: 780px){dialog.sheet-dialog .intro-dialog{ width: 100vw; max-height: 100dvh; margin: 0; border-radius: 0; border: 0; }dialog.sheet-dialog .intro-rail-label{ letter-spacing: .12em; }}
+dialog.sheet-dialog .search-source-choice .intro-mark svg{ width: 15px; height: 15px; }
+dialog.sheet-dialog .search-source-details .provider-field input{ width: 100%; }
+dialog.sheet-dialog .tool-chips{ display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px; }
+dialog.sheet-dialog .tool-chips .status-chip{ white-space: nowrap; }
+dialog.sheet-dialog .tool-chips .secondary-btn{ width: auto; min-height: 28px; padding: 0 10px; }
+@media (max-width: 1040px){dialog.sheet-dialog :root[data-talos-composer-plus="menu"] .sheet-dialog.sheet-dialog--dal-composer,dialog.sheet-dialog :host([data-talos-composer-plus="menu"]) .sheet-dialog.sheet-dialog--dal-composer{
+    inset: auto 0 0 0;
+    width: 100vw;
+    margin: 0;
+    border-radius: 18px 18px 0 0;
+  }}
