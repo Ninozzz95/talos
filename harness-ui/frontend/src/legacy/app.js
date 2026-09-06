@@ -7772,8 +7772,18 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   function appendStatusNote(text, isError = false, { meta: etichettaMeta = null, spiegazione = null } = {}) {
     // 05/9 Fase 2: Conversazione — la nota di sistema del mockup (badge Nota/Errore, titolo = l'etichetta di prima)
     // 06/9: un errore SPIEGATO ha una nota sua (cosa · perche' · cosa fare, col testo del server richiuso).
+    /*
+     * 06/9 (T05-D2): «Hai fermato il giro» non e' un errore. Stessa forma — cosa, perche', cosa
+     * puoi fare — ma badge e titolo lo dicono per quello che e'.
+     */
+    const fermato = spiegazione?.id === 'fermato-da-te';
     const article = spiegazione
-      ? creaNotaErrore({ titolo: etichettaMeta || 'TALOS · errore', spiegazione })
+      ? creaNotaErrore({
+        titolo: etichettaMeta || (fermato ? 'TALOS · fermato' : 'TALOS · errore'),
+        badge: fermato ? 'Fermato' : 'Errore',
+        tono: fermato ? 'accent' : 'danger',
+        spiegazione,
+      })
       : creaNotaSistema({ tipo: isError ? 'danger' : 'info', badge: isError ? 'Errore' : 'Nota', titolo: etichettaMeta || (isError ? 'TALOS · errore' : 'TALOS · concluso'), testo: text });
     article.classList.add('real-session-status');
     if (isError) article.classList.add('real-session-error');

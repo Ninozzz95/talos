@@ -83,3 +83,15 @@ test('RIFIUTI: un REFUSED del kernel si legge in italiano, e il testo originale 
   assert.equal(spiegaRifiutoAttrezzo('').rifiutato, false);
   assert.equal(spiegaRifiutoAttrezzo(null).rifiutato, false);
 });
+
+test('ERRORI-STOP: fermare un giro non è un guasto, e non si chiede di riprovare', () => {
+  // T05-D2: premendo «Ferma» usciva una carta rossa con «[internal-error] This operation was aborted»
+  const s = spiegaErrore('This operation was aborted', 'internal-error');
+  assert.equal(s.id, 'fermato-da-te');
+  assert.equal(s.cosa, 'Hai fermato il giro.');
+  assert.match(s.perche, /punto sicuro/);
+  assert.equal(s.rimedi.length, 1);
+  assert.doesNotMatch(s.rimedi[0], /Riprova/i, 'non si suggerisce di riprovare ciò che hai fermato apposta');
+  // AL CONTRARIO: un errore vero resta un errore
+  assert.notEqual(spiegaErrore('fetch failed', 'internal-error').id, 'fermato-da-te');
+});

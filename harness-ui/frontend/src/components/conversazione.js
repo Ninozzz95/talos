@@ -340,11 +340,12 @@ export function creaNotaSistema({ tipo = 'info', badge = 'Nota', titolo = '', te
  * in un dettaglio richiudibile, chiuso: serve per una segnalazione, non per essere letto ogni volta.
  * La spiegazione la costruisce `components/errori.js`; questo componente la mostra e basta.
  */
-export function creaNotaErrore({ badge = 'Errore', titolo = 'TALOS · errore', spiegazione = null } = {}, opzioni = {}) {
+export function creaNotaErrore({ badge = 'Errore', titolo = 'TALOS · errore', spiegazione = null, tono = 'danger' } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const nota = el(documentObj, 'div', 'talos-system-note talos-system-note--errore');
+  const nota = el(documentObj, 'div', `talos-system-note talos-system-note--${tono === 'danger' ? 'errore' : 'nota'}`);
   nota.setAttribute('data-c', 'SystemNote');
-  nota.append(el(documentObj, 'span', 'talos-badge talos-badge--danger talos-badge--sm', badge));
+  // 06/9 (T05-D2): un giro fermato da te non e' un guasto — stessa forma, tono diverso
+  nota.append(el(documentObj, 'span', `talos-badge talos-badge--${tono} talos-badge--sm`, badge));
   const corpo = el(documentObj, 'div');
   if (titolo) corpo.append(el(documentObj, 'div', 'talos-system-note__title', titolo));
   corpo.append(el(documentObj, 'p', 'assistant-copy', spiegazione?.cosa || ''));

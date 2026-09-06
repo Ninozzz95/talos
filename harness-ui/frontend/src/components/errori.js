@@ -69,6 +69,21 @@ const REGOLE = [
     },
   },
   {
+    /*
+     * ⛔⛔ 06/9, prova T05-D2: premi «Ferma», ed esce una carta ROSSA con «[internal-error] This
+     * operation was aborted». Fermare un giro non è un guasto: è una cosa che hai chiesto tu, e
+     * l'unica notizia è che è successa. La carta resta (serve a dire che il giro è finito lì), ma
+     * dice il vero e non chiede di riprovare come se fosse andato storto qualcosa.
+     */
+    id: 'fermato-da-te',
+    riconosce: (t) => /operation was aborted|AbortError|aborted by user|fermato dall'utente/i.test(t),
+    spiega: () => ({
+      cosa: 'Hai fermato il giro.',
+      perche: 'Il lavoro si è chiuso al primo punto sicuro, come chiesto. Quello che era già fatto resta: i file scritti restano scritti.',
+      rimedi: ['Scrivi un altro messaggio per continuare da qui, nella stessa sessione.'],
+    }),
+  },
+  {
     id: 'risposta-vuota',
     riconosce: (t) => /flusso SSE senza contenuto|senza contenuto ne tool_calls|empty (?:response|stream)/i.test(t),
     spiega: () => ({
