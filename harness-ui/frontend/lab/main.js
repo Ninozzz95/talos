@@ -141,7 +141,7 @@ const LABORATORI = {
   },
   Browser() { // 06/9 K-I: le due letture del mockup, la seconda attiva
     const schede = LETTURE_BROWSER.map((l, i) => ({ ...l, id: `lettura-${i}`, tipo: 'lettura', origine: 'agente' }));
-    creaBrowser(document.querySelector('#schermoBrowser')).aggiorna({ schede, attiva: schede[STATO_BROWSER.attiva].id, note: {}, richiesta: null });
+    creaBrowser(document.querySelector('#schermoBrowser'), { modoIniziale: 'testo' }).aggiorna({ schede, attiva: schede[STATO_BROWSER.attiva].id, note: {}, richiesta: null });
   },
   Terminale() { // 06/9 B1: le schede e il piede; il corpo resta quello del mockup
     creaSchedeTerminale(document.querySelector('#schermoTerminale .talos-terminal')).aggiorna({ schede: SCHEDE_TERMINALE, ...CORNICE_TERMINALE });

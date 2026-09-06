@@ -412,6 +412,10 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
     </div>
     <div id="browserVuoto" class="talos-empty talos-browser__pad" hidden><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg><h3>Nessuna pagina letta</h3><p class="talos-muted">Le letture dell’agente appariranno qui, con indirizzo e testo acquisito.</p></div>
     <article id="browserPagina" aria-labelledby="browserTitolo">
+      <div class="talos-browser__modi" role="group" aria-label="Come guardare questa pagina">
+        <button type="button" class="talos-button talos-button--ghost talos-button--sm" data-browser-modo="pagina" aria-pressed="false">Pagina</button>
+        <button type="button" class="talos-button talos-button--secondary talos-button--sm" data-browser-modo="testo" aria-pressed="true">Testo dell’agente</button>
+      </div>
       <header class="talos-browser__head"><h2 id="browserTitolo">Registro dei processi</h2><p class="talos-muted talos-browser__meta" id="browserProvenienza">Agente · 05/09, 10:42 (Roma) · 365 caratteri</p></header>
       <pre id="browserTesto" class="talos-browser__text" tabindex="0" aria-label="Testo acquisito della pagina">Registro dei processi
 

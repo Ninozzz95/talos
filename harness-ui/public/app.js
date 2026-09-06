@@ -6259,6 +6259,79 @@ var init_annotazioni = __esm({
   }
 });
 
+// src/components/testo-pagina.js
+function sembraHtml(grezzo) {
+  const t2 = String(grezzo || "");
+  if (!t2.trim()) return false;
+  if (/<!DOCTYPE\s+html/i.test(t2) || /<html[\s>]/i.test(t2)) return true;
+  const tag = t2.match(/<\/?(div|p|span|a|li|ul|ol|table|section|article|nav|header|footer|meta|script|style|h[1-6])\b/gi) || [];
+  return tag.length >= 4;
+}
+function decodifica(testo3) {
+  return testo3.replace(/&#x([0-9a-f]+);/gi, (_, n) => {
+    try {
+      return String.fromCodePoint(parseInt(n, 16));
+    } catch {
+      return " ";
+    }
+  }).replace(/&#(\d+);/g, (_, n) => {
+    try {
+      return String.fromCodePoint(Number(n));
+    } catch {
+      return " ";
+    }
+  }).replace(/&([a-z]+);/gi, (intero2, nome) => Object.hasOwn(ENTITA, nome.toLowerCase()) ? ENTITA[nome.toLowerCase()] : intero2);
+}
+function testoLeggibile(grezzo) {
+  const t2 = String(grezzo || "");
+  if (!sembraHtml(t2)) return t2;
+  let s = t2;
+  s = s.replace(/<script\b[\s\S]*?<\/script\s*>/gi, " ");
+  s = s.replace(/<style\b[\s\S]*?<\/style\s*>/gi, " ");
+  s = s.replace(/<noscript\b[\s\S]*?<\/noscript\s*>/gi, " ");
+  s = s.replace(/<head\b[\s\S]*?<\/head\s*>/gi, " ");
+  s = s.replace(/<!--[\s\S]*?-->/g, " ");
+  s = s.replace(/<(nav|footer|aside)\b[\s\S]*?<\/\1\s*>/gi, " ");
+  s = s.replace(/<\/(p|div|section|article|h[1-6]|li|tr|blockquote|pre)\s*>/gi, "\n");
+  s = s.replace(/<br\s*\/?>/gi, "\n");
+  s = s.replace(/<\/t[dh]\s*>/gi, "	");
+  s = s.replace(/<[^>]*>/g, "");
+  s = decodifica(s);
+  s = s.replace(/\r/g, "").split("\n").map((r) => r.replace(/[ \t]+/g, " ").trim()).join("\n");
+  s = s.replace(/\n{3,}/g, "\n\n").trim();
+  return s;
+}
+function riassuntoPulizia(grezzo) {
+  const g = String(grezzo || "");
+  if (!sembraHtml(g)) return null;
+  const pulito = testoLeggibile(g);
+  return { caratteriPrima: g.length, caratteriDopo: pulito.length, righe: pulito ? pulito.split("\n").length : 0 };
+}
+var ENTITA;
+var init_testo_pagina = __esm({
+  "src/components/testo-pagina.js"() {
+    ENTITA = {
+      amp: "&",
+      lt: "<",
+      gt: ">",
+      quot: '"',
+      apos: "'",
+      nbsp: " ",
+      laquo: "«",
+      raquo: "»",
+      hellip: "…",
+      mdash: "—",
+      ndash: "–",
+      rsquo: "’",
+      lsquo: "‘",
+      ldquo: "“",
+      rdquo: "”",
+      middot: "·",
+      euro: "€"
+    };
+  }
+});
+
 // src/components/browser.js
 function localeAnnotabile(url) {
   try {
@@ -6313,7 +6386,7 @@ function prossimaDopoChiusura(lista, indice2) {
   const resto = lista.filter((_, i) => i !== indice2);
   return resto[indice2] ?? resto[indice2 - 1] ?? null;
 }
-function creaBrowser(schermo, { azioni = {} } = {}) {
+function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
   const el22 = {
     riepilogo: $(schermo, "#browserRiepilogo"),
     schede: $(schermo, "#browserSchede"),
@@ -6346,9 +6419,11 @@ function creaBrowser(schermo, { azioni = {} } = {}) {
     conservaNota: $(schermo, '[data-action="conservaNotaBrowser"]'),
     chiudiNota: $(schermo, '[data-action="chiudiNotaBrowser"]'),
     bloccatoTesto: $(schermo, "#browserBloccato p.talos-muted"),
-    annotazioni: $(schermo, "#browserAnnotazioni")
+    annotazioni: $(schermo, "#browserAnnotazioni"),
+    modi: [...schermo.querySelectorAll("[data-browser-modo]")]
+    // 06/9 O-28: Pagina / Testo dell'agente
   };
-  let stato = { schede: [], attiva: null, note: {}, richiesta: null, annotazioni: {}, annotaAttivo: false };
+  let stato = { schede: [], attiva: null, note: {}, richiesta: null, annotazioni: {}, annotaAttivo: false, modo: modoIniziale === "testo" ? "testo" : "pagina" };
   const frameAttivo = () => el22.live?.querySelector("iframe") || null;
   const dialogaConOverlay = (messaggio) => {
     try {
@@ -6403,6 +6478,15 @@ function creaBrowser(schermo, { azioni = {} } = {}) {
     const s = attiva();
     if (s) azioni.copia?.(s);
   });
+  for (const b of el22.modi || []) {
+    b.addEventListener("click", () => {
+      const scelto = b.dataset.browserModo === "testo" ? "testo" : "pagina";
+      if (stato.modo === scelto) return;
+      stato.modo = scelto;
+      if (scelto === "testo") mostraAvviso("");
+      renderizza();
+    });
+  }
   el22.nota?.addEventListener("click", (e) => {
     e.stopPropagation();
     const aperto = !el22.editorNota.hidden;
@@ -6548,9 +6632,33 @@ function creaBrowser(schermo, { azioni = {} } = {}) {
       el22.cronologia.append(b);
     });
   }
+  function scriviTestoAcquisito(grezzo) {
+    const contenitore = el22.testo;
+    if (!contenitore) return;
+    contenitore.replaceChildren();
+    if (!sembraHtml(grezzo)) {
+      contenitore.textContent = grezzo;
+      return;
+    }
+    const pulito = document.createElement("div");
+    pulito.className = "talos-browser__testo-pulito";
+    pulito.textContent = testoLeggibile(grezzo);
+    const dettaglio = document.createElement("details");
+    dettaglio.className = "talos-browser__sorgente";
+    const riassunto = document.createElement("summary");
+    const misure = riassuntoPulizia(grezzo);
+    riassunto.textContent = misure ? t("Sorgente ricevuto dall’agente ({n} caratteri)", { n: misure.caratteriPrima.toLocaleString("it-IT") }) : t("Sorgente ricevuto dall’agente");
+    const pre = document.createElement("pre");
+    pre.className = "talos-browser__text";
+    pre.textContent = grezzo;
+    dettaglio.append(riassunto, pre);
+    contenitore.append(pulito, dettaglio);
+  }
   function renderizzaCornice(s) {
     if (!el22.live) return;
-    const vuole = s && s.tipo === "viva" && s.stato !== "bloccata";
+    const vuoleViva = s && s.tipo === "viva" && s.stato !== "bloccata";
+    const vuoleLettura = s && s.tipo !== "viva" && stato.modo === "pagina" && Boolean(s.url) && /^https?:/i.test(s.url);
+    const vuole = vuoleViva || vuoleLettura;
     el22.live.hidden = !vuole;
     if (!vuole) {
       el22.live.replaceChildren();
@@ -6567,6 +6675,19 @@ function creaBrowser(schermo, { azioni = {} } = {}) {
       frame.addEventListener("load", () => azioni.caricata?.(s.id));
       frame.src = s.proxata ? `${PROXY_BROWSER}${encodeURIComponent(s.url)}` : s.url;
       frame.dataset.proxata = String(Boolean(s.proxata));
+      if (s.tipo !== "viva") {
+        frame.dataset.caricata = "no";
+        frame.addEventListener("load", () => {
+          frame.dataset.caricata = "si";
+          mostraAvviso("");
+        }, { once: true });
+        setTimeout(() => {
+          if (!frame.isConnected || frame.dataset.caricata === "si") return;
+          stato.modo = "testo";
+          mostraAvviso(t("Questo sito non si lascia mostrare dentro TALOS. Qui sotto c’è il testo che ha letto l’agente."));
+          renderizza();
+        }, 4e3);
+      }
       el22.live.append(frame);
     }
   }
@@ -6597,11 +6718,19 @@ function creaBrowser(schermo, { azioni = {} } = {}) {
     if (el22.articolo) el22.articolo.hidden = !s;
     const testata = el22.titolo?.closest("header");
     if (testata) testata.hidden = !s || s.tipo === "viva";
-    if (el22.testo) el22.testo.hidden = !s || s.tipo === "viva";
-    if (s && s.tipo !== "viva") {
+    const lettura = Boolean(s) && s.tipo !== "viva";
+    for (const b of el22.modi || []) {
+      b.hidden = !lettura;
+      const suo = b.dataset.browserModo === stato.modo;
+      b.setAttribute("aria-pressed", String(suo));
+      b.classList.toggle("talos-button--secondary", suo);
+      b.classList.toggle("talos-button--ghost", !suo);
+    }
+    if (el22.testo) el22.testo.hidden = !lettura || stato.modo === "pagina";
+    if (lettura) {
       if (el22.titolo) el22.titolo.textContent = titoloDaLettura(s);
       if (el22.provenienza) el22.provenienza.textContent = formattaProvenienza(s);
-      if (el22.testo) el22.testo.textContent = s.testo || "";
+      if (el22.testo && stato.modo !== "pagina") scriviTestoAcquisito(s.testo || "");
     }
     mostraAvviso(s?.tipo === "viva" && s.stato === "bloccata" ? t("{motivo}. {invito}: usa «Rileggi».", { motivo: s.motivo || t("Il sito non consente di essere mostrato dentro TALOS"), invito: t(TESTI3.chiediAllAgente) }) : "");
     renderizzaCornice(s);
@@ -6669,6 +6798,7 @@ var init_browser = __esm({
   "src/components/browser.js"() {
     init_lingua();
     init_annotazioni();
+    init_testo_pagina();
     TESTI3 = Object.freeze({
       intestazione: "Letture della sessione",
       riepilogoLetture: (n) => tn("Testo acquisito dall’agente · {n} pagina", "Testo acquisito dall’agente · {n} pagine", n),
