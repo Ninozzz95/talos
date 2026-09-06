@@ -378,12 +378,13 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
 <section id="schermoBrowser" class="talos-screen" data-c="BrowserScreen" hidden><div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>W1-02 registro processi</h1></div><span class="talos-grow"></span><div class="talos-tabs" data-c="Tabs"><div class="talos-tabs__list" role="tablist" aria-label="Viste della sessione" data-vistetab><button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-controls="schermoChat" aria-selected="false" data-t="chat">Chat</button><button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-controls="schermoTerminale" aria-selected="false" data-t="terminale">Terminale <span class="talos-tabs__count">2</span></button><button class="talos-tabs__tab" role="tab" data-vaia="review" aria-controls="schermoReview" aria-selected="false" data-t="review">Review <span class="talos-tabs__count">3</span></button><button class="talos-tabs__tab" role="tab" data-vaia="browser" aria-controls="schermoBrowser" aria-selected="true" data-t="browser">Browser</button></div></div></div>
 <div class="talos-page  talos-browser" data-c="Page">
   <div class="talos-toolbar"><div><h2 class="talos-browser__heading">Letture della sessione</h2><p class="talos-muted talos-browser__meta" id="browserRiepilogo">Testo acquisito dall’agente · 2 pagine</p></div>
+    <div class="talos-tabs talos-tabs--compact" data-c="Tabs"><div class="talos-tabs__list" role="tablist" id="browserSchede" aria-label="Pagine aperte"><button class="talos-tabs__tab" role="tab" data-browser-tab="0" aria-selected="false">Pagina iniziale del progetto</button><button class="talos-tabs__tab" role="tab" data-browser-tab="1" aria-selected="true">Registro dei processi</button></div></div>
   </div>
   <div class="talos-card talos-browser__space" data-c="BrowserViewport">
     <div class="talos-browser__bar">
       <button class="talos-button talos-button--secondary talos-button--sm talos-icon-button" data-browser-demo="back" aria-label="Pagina letta precedente" title="Pagina letta precedente"><svg class="i talos-browser__back" aria-hidden="true"><use href="#i-chev"/></svg></button>
       <button class="talos-button talos-button--secondary talos-button--sm talos-icon-button" data-browser-demo="forward" disabled aria-label="Pagina letta successiva" title="Pagina letta successiva"><svg class="i talos-browser__next" aria-hidden="true"><use href="#i-chev"/></svg></button>
-      <div class="talos-field"><svg class="i talos-field__icon" aria-hidden="true"><use href="#i-globe"/></svg><label class="talos-browser__sr" for="urlBrowser">Indirizzo della pagina acquisita</label><input class="talos-field__input" id="urlBrowser" value="https://example.org/documentazione" readonly aria-describedby="browserLimiti"></div>
+      <div class="talos-field"><svg class="i talos-field__icon" aria-hidden="true"><use href="#i-globe"/></svg><label class="talos-browser__sr" for="urlBrowser">Indirizzo della pagina acquisita</label><input class="talos-field__input" id="urlBrowser" value="https://example.org/documentazione" placeholder="Apri un indirizzo dentro TALOS…" inputmode="url" spellcheck="false" aria-describedby="browserLimiti"></div>
       <button class="talos-button talos-button--secondary talos-button--sm talos-icon-button" data-browser-demo="open" aria-label="Apri fuori da TALOS" title="Apri fuori da TALOS"><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg></button>
     </div>
     <div class="talos-browser__tools">
@@ -423,6 +424,7 @@ Una segnalazione di stallo non termina il processo.</pre>
       </div>
       <div id="browserNotaSalvata" class="talos-browser__note" role="status" hidden></div>
     </article>
+    <div id="browserLive" class="talos-browser__live" hidden></div>
   </div>
   <nav class="talos-browser__history talos-browser__space" aria-label="Pagine lette in questa sessione" data-c="BrowserHistory">
     <h3 class="talos-browser__heading">Cronologia <span class="talos-muted talos-browser__meta">· scegli una lettura</span></h3>

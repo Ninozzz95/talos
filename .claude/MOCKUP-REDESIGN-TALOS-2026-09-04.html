@@ -668,6 +668,15 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-browser__back{transform:rotate(90deg)}
 .talos-browser__next{transform:rotate(-90deg)}
 .talos-browser__sr{position:absolute;clip-path:inset(100%);overflow:hidden;width:0;height:0}
+/* K-I 06/09 — Browser a schede: le schede nella toolbar (una per lettura o pagina aperta, con la «×» dal CSS) e la cornice viva per le pagine che consentono di essere mostrate dentro TALOS */
+.talos-browser .talos-toolbar{display:flex;align-items:flex-start;gap:var(--talos-space-md);flex-wrap:wrap}
+.talos-browser .talos-toolbar .talos-tabs{max-width:100%}
+.talos-browser .talos-tabs__list{flex-wrap:wrap}
+.talos-tabs__tab[data-browser-tab]{position:relative;max-width:220px;padding-right:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.talos-tabs__tab[data-browser-tab]::after{content:'×';position:absolute;right:6px;top:50%;width:16px;height:16px;margin-top:-8px;border-radius:4px;line-height:16px;text-align:center;font-size:13px;color:var(--talos-muted);opacity:0;transition:opacity 120ms ease}
+.talos-tabs__tab[data-browser-tab]:hover::after,.talos-tabs__tab[data-browser-tab]:focus-visible::after,.talos-tabs__tab[data-browser-tab][aria-selected="true"]::after{opacity:1}
+.talos-browser__live{height:min(70vh,760px);min-height:360px;padding:var(--talos-space-sm)}
+.talos-browser__live iframe{width:100%;height:100%;border:0;border-radius:var(--talos-radius-card);background:#fff}
 .talos-topbar:has([data-vistetab]){flex-wrap:nowrap}
 .talos-topbar [data-vistetab]{flex-wrap:nowrap}
 #veloComandi .talos-dialog__body{display:flex;flex-direction:column;overflow:hidden}
@@ -1269,12 +1278,13 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
 <section id="schermoBrowser" class="talos-screen" data-c="BrowserScreen" hidden><div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>W1-02 registro processi</h1></div><span class="talos-grow"></span><div class="talos-tabs" data-c="Tabs"><div class="talos-tabs__list" role="tablist" aria-label="Viste della sessione" data-vistetab><button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-controls="schermoChat" aria-selected="false" data-t="chat">Chat</button><button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-controls="schermoTerminale" aria-selected="false" data-t="terminale">Terminale <span class="talos-tabs__count">2</span></button><button class="talos-tabs__tab" role="tab" data-vaia="review" aria-controls="schermoReview" aria-selected="false" data-t="review">Review <span class="talos-tabs__count">3</span></button><button class="talos-tabs__tab" role="tab" data-vaia="browser" aria-controls="schermoBrowser" aria-selected="true" data-t="browser">Browser</button></div></div></div>
 <div class="talos-page  talos-browser" data-c="Page">
   <div class="talos-toolbar"><div><h2 class="talos-browser__heading">Letture della sessione</h2><p class="talos-muted talos-browser__meta" id="browserRiepilogo">Testo acquisito dall’agente · 2 pagine</p></div>
+    <div class="talos-tabs talos-tabs--compact" data-c="Tabs"><div class="talos-tabs__list" role="tablist" id="browserSchede" aria-label="Pagine aperte"><button class="talos-tabs__tab" role="tab" data-browser-tab="0" aria-selected="false">Pagina iniziale del progetto</button><button class="talos-tabs__tab" role="tab" data-browser-tab="1" aria-selected="true">Registro dei processi</button></div></div>
   </div>
   <div class="talos-card talos-browser__space" data-c="BrowserViewport">
     <div class="talos-browser__bar">
       <button class="talos-button talos-button--secondary talos-button--sm talos-icon-button" data-browser-demo="back" aria-label="Pagina letta precedente" title="Pagina letta precedente"><svg class="i talos-browser__back" aria-hidden="true"><use href="#i-chev"/></svg></button>
       <button class="talos-button talos-button--secondary talos-button--sm talos-icon-button" data-browser-demo="forward" disabled aria-label="Pagina letta successiva" title="Pagina letta successiva"><svg class="i talos-browser__next" aria-hidden="true"><use href="#i-chev"/></svg></button>
-      <div class="talos-field"><svg class="i talos-field__icon" aria-hidden="true"><use href="#i-globe"/></svg><label class="talos-browser__sr" for="urlBrowser">Indirizzo della pagina acquisita</label><input class="talos-field__input" id="urlBrowser" value="https://example.org/documentazione" readonly aria-describedby="browserLimiti"></div>
+      <div class="talos-field"><svg class="i talos-field__icon" aria-hidden="true"><use href="#i-globe"/></svg><label class="talos-browser__sr" for="urlBrowser">Indirizzo della pagina acquisita</label><input class="talos-field__input" id="urlBrowser" value="https://example.org/documentazione" placeholder="Apri un indirizzo dentro TALOS…" inputmode="url" spellcheck="false" aria-describedby="browserLimiti"></div>
       <button class="talos-button talos-button--secondary talos-button--sm talos-icon-button" data-browser-demo="open" aria-label="Apri fuori da TALOS" title="Apri fuori da TALOS"><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg></button>
     </div>
     <div class="talos-browser__tools">
@@ -1314,6 +1324,7 @@ Una segnalazione di stallo non termina il processo.</pre>
       </div>
       <div id="browserNotaSalvata" class="talos-browser__note" role="status" hidden></div>
     </article>
+    <div id="browserLive" class="talos-browser__live" hidden></div>
   </div>
   <nav class="talos-browser__history talos-browser__space" aria-label="Pagine lette in questa sessione" data-c="BrowserHistory">
     <h3 class="talos-browser__heading">Cronologia <span class="talos-muted talos-browser__meta">· scegli una lettura</span></h3>

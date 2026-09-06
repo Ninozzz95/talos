@@ -701,6 +701,15 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-browser__back{transform:rotate(90deg)}
 .talos-browser__next{transform:rotate(-90deg)}
 .talos-browser__sr{position:absolute;clip-path:inset(100%);overflow:hidden;width:0;height:0}
+/* K-I 06/09 — Browser a schede: le schede nella toolbar (una per lettura o pagina aperta, con la «×» dal CSS) e la cornice viva per le pagine che consentono di essere mostrate dentro TALOS */
+.talos-browser .talos-toolbar{display:flex;align-items:flex-start;gap:var(--talos-space-md);flex-wrap:wrap}
+.talos-browser .talos-toolbar .talos-tabs{max-width:100%}
+.talos-browser .talos-tabs__list{flex-wrap:wrap}
+.talos-tabs__tab[data-browser-tab]{position:relative;max-width:220px;padding-right:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.talos-tabs__tab[data-browser-tab]::after{content:'×';position:absolute;right:6px;top:50%;width:16px;height:16px;margin-top:-8px;border-radius:4px;line-height:16px;text-align:center;font-size:13px;color:var(--talos-muted);opacity:0;transition:opacity 120ms ease}
+.talos-tabs__tab[data-browser-tab]:hover::after,.talos-tabs__tab[data-browser-tab]:focus-visible::after,.talos-tabs__tab[data-browser-tab][aria-selected="true"]::after{opacity:1}
+.talos-browser__live{height:min(70vh,760px);min-height:360px;padding:var(--talos-space-sm)}
+.talos-browser__live iframe{width:100%;height:100%;border:0;border-radius:var(--talos-radius-card);background:#fff}
 .talos-topbar:has([data-vistetab]){flex-wrap:nowrap}
 .talos-topbar [data-vistetab]{flex-wrap:nowrap}
 #veloComandi .talos-dialog__body{display:flex;flex-direction:column;overflow:hidden}

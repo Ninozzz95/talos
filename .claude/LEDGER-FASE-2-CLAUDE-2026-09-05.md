@@ -772,6 +772,74 @@ navigazione, come il mockup; estenderlo è una riga a parte.
 mockup («W1-02 registro processi», example.org, cronologia finta) — è il blocco Browser a schede (K-I),
 il prossimo.
 
+### K-I — il Browser a schede (06/09 ~19:00): FATTA nella misura possibile in un guscio browser
+
+`components/browser.js` riempie la schermata Browser del mockup coi dati veri (stessi nodi, stesse
+classi): le **letture** dell'agente (attrezzo `naviga`: il testo che il modello ha ricevuto, con
+indirizzo, ora di Roma e caratteri) e le **pagine aperte dalla persona** scrivendo l'indirizzo nella
+barra (Invio; Esc ripristina; «localhost:5173» → http, «example.org» → https, una frase non è un
+indirizzo e lo dice). Ogni pagina è una scheda (strip nella toolbar, «×» dal CSS, clic centrale,
+Ctrl+clic, frecce/Home/End/Canc; alla chiusura il fuoco va alla vicina); indietro/avanti scorrono
+le schede; «Apri fuori da TALOS», «Copia testo», «Annota» (bozza nel composer, non inviata, come
+Hermes), «Nota locale» (per sessione e indirizzo, ricordata nel browser), «Rileggi» (sulla pagina
+viva ricarica; su una lettura prepara la richiesta all'agente), cronologia delle letture. Una
+richiesta dell'agente di leggere una pagina sotto «chiedi» compare anche qui (#browserBloccato) e i
+suoi pulsanti rispondono alla stessa scheda di approvazione della chat.
+
+**La cornice viva.** Una pagina aperta dalla persona si mostra DENTRO TALOS in un `<iframe>` quando il
+sito lo consente. Chi decide è il server: `GET /api/v1/browser/incorniciabile?url=` (nuovo
+`src/browser-frame.mjs`) legge X-Frame-Options e `frame-ancestors` della risposta (MDN, letto il
+06/09/2026: `frame-ancestors` prevale; DENY/SAMEORIGIN vietano; solo http/https, mai credenziali,
+6 s di attesa, il corpo non si scarica — si legge solo fino a `</title>` per il nome della scheda). La
+CSP di TALOS aggiunge `frame-src 'self' http://localhost:* http://127.0.0.1:* https:` (ciò che NOI
+incorniciamo; `frame-ancestors 'none'` resta). Quando il sito vieta, la scheda lo dice col motivo e
+propone di farla leggere all'agente. Test server `tests/browser-frame.test.mjs` (4, anche AL
+CONTRARIO: CSP senza frame-ancestors lascia decidere XFO; lo stream si annulla dopo il titolo).
+
+**Cosa NON pareggia Hermes/Codex, e perché.** Hermes Desktop è Electron: una webview per scheda, con un
+overlay iniettato per annotare un ELEMENTO della pagina (`preview-annotate-host.ts`) e `open_preview`/
+`read_preview` come attrezzi del modello. Qui il guscio è un browser: una cornice di un'altra origine
+non si può leggere né annotare dall'esterno (same-origin policy), e gli attrezzi del kernel
+(`apri_pagina`/`leggi_pagina` della riga K-I) non sono nella mia lane. Restano PROPOSTE: (a) un
+proxy locale che riscriva la pagina sulla nostra origine (come VS Code Live Preview) per annotare
+elementi; (b) i due attrezzi del kernel + eventi `PaginaAperta`/`PaginaLetta`; (c) un guscio
+Electron. Registrate, non implementate.
+
+Prove: unit 120/120 (`browser.test.mjs`: host, titolo, indirizzi, provenienza nel formato del
+mockup, chiusura), statico 195/195, componenti 111/111 (nuova voce `Browser`: struttura+parole+pixel
+a tre viewport con le due letture del mockup), server 1682/1682. Dal vivo su 4175
+(`browser-vivo.mjs`, con un dev server locale su 4199): stato vuoto onesto («Nessuna pagina ancora»,
+niente letture dimostrative); «localhost:4199» → scheda «Dev server TALOS» viva nella cornice
+(letto `document.title` dentro la cornice); «github.com» → «La pagina dichiara «frame-ancestors» e
+non include TALOS…»; «cerca qualcosa» → campo non valido con avviso; nota conservata e mostrata;
+Annota → composer «Riguardo alla pagina https://github.com/: »; frecce/Canc sulle schede; testata
+del Browser con la sessione vera (era «W1-02 registro processi»); 0 errori di pagina. Foto
+`browser-1.png`, `browser-2-dev.png`, `browser-3-bloccato.png`. ⛔ NON VERIFICATO dal vivo: una
+lettura VERA dell'agente (nessuna sessione del negozio di prova ha usato `naviga`; costerebbe una
+corsa a pagamento) — la resa delle letture è provata nel laboratorio con le due letture del mockup.
+Taccuino: la strip delle schede vuota disegnava una pillola → nascosta senza schede; «Cronologia»
+senza letture → nascosta.
+
+### Ricerca chiesta dall'owner (06/09): lingua — best practice, documentazione, concorrenti
+
+- **Hermes Desktop** (PR #38241, issues #40239/#51217/#26665, deepwiki 10.8, letti il 06/09/2026):
+  strato i18n leggero, inglese predefinito, 4 lingue (en, zh, zh-hant, ja), scelta in Impostazioni ›
+  Aspetto e salvata in `config.yaml` (`display.language`) — con un difetto aperto: al riavvio torna
+  in inglese. Dizionario diviso per categorie: comune, avvio, notifiche, scorciatoie, impostazioni,
+  **nomi umani degli attrezzi** (`toolTitles`).
+- **Claude Code** (issues #31413/#29147/#65963, claudelog): la lingua delle RISPOSTE si imposta, la UI
+  del CLI (permessi, «Allow/Deny», stati) è inglese fisso.
+- **Codex Desktop** (issues #13032/#13094/#13107/#19239): la lingua segue il sistema, l'override è
+  dietro un flag remoto e spesso non si applica: la scelta della persona non vince.
+- **Best practice** (POEditor, localizejs, daily.dev, lingoport): stringhe fuori dal codice in file
+  di risorse; prima le più frequenti (permessi, errori, impostazioni, aiuto); +30–50% di spazio per
+  le traduzioni; mai sovrascrivere la scelta esplicita col rilevamento automatico.
+- ⇒ **PROPOSTA P-i18n** (decide l'owner): estendere `lingua.js` per categorie come Hermes — comune
+  (menu, già fatto), impostazioni (titoli e opzioni), notifiche e toast, nomi umani degli attrezzi
+  (già in un posto solo: `nomi-attrezzi.js`), scheda di approvazione — con l'inglese completo come
+  seconda lingua e le stringhe in un file di risorse; i contenuti (messaggi, file, log) restano nella
+  lingua in cui sono. Stima: da misurare sul numero di stringhe, non a occhio.
+
 - T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
   15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
   statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo

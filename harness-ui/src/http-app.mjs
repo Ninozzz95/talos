@@ -1,4 +1,5 @@
 import { leggiArtefatto as leggiArtefattoReale } from './artifact-store.mjs';
+import { verificaIncorniciabile } from './browser-frame.mjs'; // K-I 06/9: la cornice del Browser si decide dalle intestazioni della pagina
 import { modelloRichiestaValido, permessiPerAttrezzoRichiestaValido, permessiRichiestaValido, reasoningRichiestaValido } from './config.mjs';
 import { cartelleFrequenti as cartelleFrequentiReale } from './frequent-dirs.mjs';
 import { RUNTIME_BOOTSTRAP_SCHEMA, RUNTIME_RESOURCE_SCHEMA, parseBootstrapEnvelope } from './runtime-contract.mjs';
@@ -297,7 +298,7 @@ const MESSAGE_BY_CODE = Object.freeze({
 
 const SECURITY_HEADERS = Object.freeze({
   'Cache-Control': 'no-store',
-  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
+  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'self' http://localhost:* http://127.0.0.1:* https:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'", // K-I 06/9: `frame-src` è ciò che NOI incorniciamo (un dev server locale, una pagina https); `frame-ancestors 'none'` resta: nessuno incornicia TALOS
   'Referrer-Policy': 'no-referrer',
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
@@ -891,6 +892,8 @@ export function createHttpApp({
    * una voce partendo da una stringa arrivata dal client.
    */
   terminalRegistry = null,
+  /** K-I 06/9 — il fetch in uscita per la verifica della cornice del Browser (iniettabile nei test). */
+  fetchFn = globalThis.fetch,
   /*
    * ⭐⭐⭐ 05/9, W1-05 — lo stato Git di una sessione (src/git-service.mjs).
    * Facoltativo come ogni altro store: senza, le cinque rotte rispondono
@@ -2561,8 +2564,15 @@ export function createHttpApp({
         const childrenMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/children$/.exec(url.pathname);
         // ⭐⭐⭐ 28/8 — non SESSION-scoped: un artefatto ha un id UUID già globalmente unico (agent-service.mjs), stesso principio di /api/v1/models.
         const artifactMatch = /^\/api\/v1\/artifacts\/([^/]+)$/.exec(url.pathname);
+        // K-I 06/9 — la cornice del Browser: `?url=` e si risponde con le intestazioni lette, mai con la pagina
+        const browserFrameMatch = url.pathname === '/api/v1/browser/incorniciabile';
 
-        if (gitStatusMatch || gitBranchMatch) {
+        if (browserFrameMatch) {
+          const indirizzo = url.searchParams.get('url');
+          if (typeof indirizzo !== 'string' || indirizzo.length === 0 || indirizzo.length > 2048) { const error = new Error('Indirizzo mancante'); error.code = 'QUERY_INVALID'; throw error; }
+          const origineNostra = `http://${req.headers.host || '127.0.0.1'}`;
+          data = await verificaIncorniciabile(indirizzo, { fetchFn, origineNostra });
+        } else if (gitStatusMatch || gitBranchMatch) {
           requireNoQuery(url);
           const trovato = gitStatusMatch ?? gitBranchMatch;
           let sessionId;
