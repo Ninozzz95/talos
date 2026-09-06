@@ -878,6 +878,25 @@ pagina. ⛔ Il 4174 dell'owner gira dal 04/09 16:31 col codice del server di ALL
 bisogno delle rotte nate dopo (schede terminale W1-01, git W1-05, cornice del Browser, nome della
 shell): finché non lo riavvia lui, lì il terminale e il Browser degradano.
 
+### Dopo il cutover — le decisioni dell'owner eseguite (06/09 ~21:30)
+
+- **4174 riavviato da me** (owner: «non devi più chiedermi il permesso per riavviare il server;
+  mantienilo attivo con le ultime modifiche»): PID 5656 (dal 04/09 16:31) → nuovo processo con lo
+  stesso comando (`node server.mjs` in `harness-ui`), `TALOS_OWNER_RUNTIME_MODULE` = il kernel
+  dell'owner (percorso in `DECISIONE-KERNEL-DUE-COPIE-2026-09-02.md`, file presente, 348 KB),
+  chiavi dal profilo utente; health 200, **73/73 sessioni ripristinate**, la rotta della cornice
+  risponde. Log in `harness-ui/.talos-4174.log` (ignorato da git). Avviso del doctor, non bloccante:
+  «Il runtime agente non espone il catalogo task richiesto». Da ora ogni commit che tocca il server
+  finisce con un riavvio + health.
+- **Cancellazioni approvate**: i test del monolite marcati skip sono stati TOLTI (18 blocchi, 31
+  test: server 1623/1623, 0 skip); del frontend parallelo di Opus restavano `lab/routes/*` (5 file
+  con import verso `src/app/*` che non esiste più), `src/styles/surfaces.css` (mai nel bundle) e
+  `tests/component/design-system.spec.mjs` (PHASE3-TOKEN-CONTRACT-01, rosso, fuori dai cancelli):
+  cancellati. `tests/browser/baseline-shell.spec.mjs` NON è di Opus (prova la shell servita dal server
+  vero, `playwright.config.mjs`) e resta: fuori dai cancelli di oggi, da rivedere sulla build nuova.
+- **Backup del monolite**: si tiene ma FUORI dall'harness (owner): spostato in
+  `C:\Users\Antonino\Desktop\projects\AVM-harness-desktop-backup\public.prima-del-cutover-2026-09-06-03-43-54\`.
+
 - T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
   15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
   statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo
