@@ -23,7 +23,7 @@ export const CHIAVI_MISURA = Object.freeze({
   veloScorciatoie: 'sheet:shortcuts', veloNuova: 'sheet:new-session', veloComandi: 'command:palette', veloModello: 'sheet:model', veloPermessi: 'sheet:permissions',
   veloAlbero: 'sheet:sessionTree', veloIntro: 'dialog:introDialog', veloAmbiente: 'sheet:environment', veloRinomina: 'sheet:rename',
   veloRiferimenti: 'sheet:references', veloFile: 'sheet:fileViewer', veloRinominaFile: 'sheet:renameFile', veloEliminaFile: 'sheet:deleteFile',
-  veloEliminaSessione: 'sheet:deleteSession', veloCreaFile: 'sheet:createFile', veloEsporta: 'sheet:export',
+  veloEliminaSessione: 'sheet:deleteSession', veloCreaFile: 'sheet:createFile', veloEsporta: 'sheet:export', veloFermaGiro: 'dialog:stopRun',
 });
 
 /** Il minimo dipende dal velo (la palette è più stretta), il massimo dalla finestra meno il bordo del velo. */

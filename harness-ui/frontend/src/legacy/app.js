@@ -382,6 +382,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   const redirectRunButton = $('#redirectRunButton');
   const sendButton = $('.send-btn', composerForm);
   const queuedMessage = $('#queuedMessage');
+  const bivioInvio = $('.talos-bivio'); // 06/9 B14 — il bivio esplicito dell'Invio durante un giro
   const sessionTitle = $('#sessionTitle');
   const toastRegion = $('#regioneToast') || $('#toastRegion');
   let sorveglianza = null; // 05/9 T-15 — assegnata più sotto, dopo toast(); i chiamanti usano `sorveglianza?.` // 05/9 Fase 2: la regione del mockup (in basso a destra), non quella grezza del monolite
@@ -6263,6 +6264,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       attivo,
       cosa,
       dettaglio,
+      permessiPerAttrezzo: state.permessiPerAttrezzo,
       giro: Number.isFinite(Number(usage?.giri)) ? Number(usage.giri) : null,
       secondi: attivo && giroAvviatoA !== null ? (performance.now() - giroAvviatoA) / 1000 : null,
       usage,
@@ -6360,7 +6362,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     redirectRunButton.setAttribute('aria-label', 'Reindirizza con il testo scritto');
     // ⭐ 3/9 — item 10: un suggerimento vale solo a riposo, campo vuoto, niente in coda.
     if (suggerimentoComposerAttivo && (attivo || haTesto)) svuotaSuggerimentoComposer();
-    composerInput.placeholder = attivo ? 'Scrivi un follow-up…' : (suggerimentoComposerAttivo || (state.pendingCustomSession && !state.realSession.id ? 'Scrivi il primo messaggio…' : 'Scrivi… Invio indirizza il giro in corso, Ctrl+Invio accoda')); // 05/9 Fase 2: le parole del mockup
+    composerInput.placeholder = attivo ? 'Scrivi un follow-up… Invio per scegliere, Ctrl+Invio accoda' : (suggerimentoComposerAttivo || (state.pendingCustomSession && !state.realSession.id ? 'Scrivi il primo messaggio…' : 'Scrivi… Invio indirizza il giro in corso, Ctrl+Invio accoda')); // 05/9 Fase 2: le parole del mockup
   }
 
   function mostraSuggerimentoComposer(testo) {
@@ -6739,26 +6741,88 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * visibile, mai due stati da tenere sincronizzati a mano.
    */
   function renderizzaBannerCoda() {
+    /*
+     * ⛔ 06/9, misurato dal vivo (prova T04, sessione 84866d85): il messaggio
+     * andava DAVVERO in coda sul server e a schermo non compariva niente — solo
+     * un toast che sparisce. Causa: il ponte del mockup mette `hidden` su
+     * `.talos-queue` (legacy-dom.js) e il foglio nuovo ha `[hidden]{display:none
+     * !important}`, mentre qui si accendeva la sola classe `.show` del monolite.
+     * Decisione B15: la coda è A VISTA, col conteggio e col modo di togliere un
+     * messaggio — quindi `hidden` è l'unico interruttore, e lo tiene questa
+     * funzione sola (nessuno stato doppio da sincronizzare a mano).
+     */
     const coda = state.realSession.codaMessaggi;
-    const testoEl = $('#queuedMessageText', queuedMessage);
+    const testoEl = $('#queuedMessageText', queuedMessage) || $('[data-coda-testo]', queuedMessage);
+    const conteggioEl = $('[data-coda-conteggio]', queuedMessage);
     if (coda.length === 0) {
-      if (queuedMessage.classList.contains('show')) {
+      if (!queuedMessage.hidden) {
         animateExit(queuedMessage, { durationToken: '--talos-motion-duration-composer-collapse' }, () => {
           queuedMessage.classList.remove('show');
+          queuedMessage.hidden = true;
         });
       }
       return;
     }
+    if (conteggioEl) conteggioEl.textContent = `${coda.length} in coda`;
     if (testoEl) {
       const extra = coda.length > 1 ? ` (+${coda.length - 1} altr${coda.length - 1 === 1 ? 'o' : 'i'})` : '';
-      testoEl.textContent = `${tronca(coda[0], 60)}${extra}`;
+      testoEl.textContent = `«${tronca(coda[0], 60)}»${extra} — parte alla fine di questo giro`;
     }
     const demoBadge = $('.demo-surface-badge', queuedMessage);
     if (demoBadge) demoBadge.hidden = true;
-    if (!queuedMessage.classList.contains('show')) {
+    if (queuedMessage.hidden) {
+      queuedMessage.hidden = false;
       queuedMessage.classList.add('show');
       markMotionEnter(queuedMessage);
     }
+  }
+
+  /*
+   * ⭐⭐⭐ 06/9 — decisione B14, presa dall'owner CONTRO il mio consiglio (io dicevo
+   * «indirizza sempre»): l'Invio durante un giro non decide da solo. Compare un bivio
+   * con due pulsanti sotto il composer — «Indirizza ora» cambia il giro in corso al
+   * prossimo punto sicuro, «Accoda» lo consegna alla fine. Misurato prima della cura
+   * (prova T04): l'Invio accodava in silenzio, e chi voleva correggere il giro non aveva
+   * modo di saperlo. `Ctrl+Invio` salta il bivio e accoda diretto (B15): chi sa già cosa
+   * vuole non paga una domanda in più.
+   * ⛔ Il testo NON esce dal composer finché non si sceglie: annullare non deve mai
+   * costare la frase appena scritta.
+   */
+  function apriBivioInvio(testo) {
+    if (!bivioInvio) { accodaMessaggioReale(testo); return; }
+    bivioInvio.dataset.testoInSospeso = testo;
+    const etichetta = $('[data-bivio-testo]', bivioInvio);
+    if (etichetta) etichetta.textContent = `«${tronca(testo, 46)}» — il giro è in corso: lo indirizzo adesso o lo metto in coda?`;
+    if (bivioInvio.hidden) { bivioInvio.hidden = false; markMotionEnter(bivioInvio); }
+    $('[data-bivio="indirizza"]', bivioInvio)?.focus();
+  }
+  function chiudiBivioInvio({ tornaAlComposer = false } = {}) {
+    if (!bivioInvio || bivioInvio.hidden) return;
+    bivioInvio.hidden = true;
+    delete bivioInvio.dataset.testoInSospeso;
+    if (tornaAlComposer) composerInput.focus();
+  }
+  function svuotaComposerDopoScelta() {
+    composerInput.value = '';
+    autoGrowTextarea();
+    syncRunComposerState();
+  }
+
+  /*
+   * ⭐⭐⭐ 06/9 — decisione B16, anche questa contro il mio consiglio (io dicevo senza
+   * conferma): Esc ferma il giro, ma chiede prima. Escape smonta sempre lo strato più
+   * alto per primo (WAI-ARIA APG, pattern dialog, letto 06/09/2026): qui arriva solo
+   * quando non c'è nessun velo aperto, nessun pannello e nessun bivio da chiudere.
+   */
+  function chiediSeFermareIlGiro() {
+    const velo = $('#veloFermaGiro');
+    if (!velo) { stopRealSession(); return; }
+    const nome = $('#fermaGiroNome', velo);
+    if (nome) nome.textContent = state.session || 'Sessione in corso';
+    const errore = $('#fermaGiroErrore', velo);
+    if (errore) errore.hidden = true;
+    apriVeloMockup('veloFermaGiro');
+    $('#fermaGiroAnnulla', velo)?.focus(); // il tasto sicuro prende il fuoco, non quello che ferma
   }
 
   /**
@@ -13822,6 +13886,16 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   composerInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
       event.preventDefault();
+      const testo = composerInput.value.trim();
+      const durante = Boolean(testo) && runRealeAttivo();
+      // B15: Ctrl+Invio (⌘+Invio su Apple) accoda diretto, senza passare dal bivio.
+      if (event.ctrlKey || event.metaKey) {
+        if (durante) { chiudiBivioInvio(); svuotaComposerDopoScelta(); accodaMessaggioReale(testo); return; }
+        composerForm.requestSubmit();
+        return;
+      }
+      // B14: durante un giro l'Invio non sceglie per te.
+      if (durante) { apriBivioInvio(testo); return; }
       composerForm.requestSubmit();
     }
     /*
@@ -13889,6 +13963,23 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * il banner: prima di questo fix il testo restava comunque in coda sul
    * server, e sarebbe arrivato al modello lo stesso nonostante "Annulla".
    */
+  bivioInvio?.addEventListener('click', (event) => {
+    const bottone = event.target.closest('[data-bivio]');
+    if (!bottone) return;
+    const testo = bivioInvio.dataset.testoInSospeso || composerInput.value.trim();
+    const scelta = bottone.dataset.bivio;
+    if (scelta === 'annulla') { chiudiBivioInvio({ tornaAlComposer: true }); return; }
+    if (!testo) { chiudiBivioInvio({ tornaAlComposer: true }); return; }
+    chiudiBivioInvio();
+    if (scelta === 'indirizza') { reindirizzaSessioneReale(testo); return; }
+    svuotaComposerDopoScelta();
+    accodaMessaggioReale(testo);
+  });
+  $('#fermaGiroConferma')?.addEventListener('click', async () => {
+    chiudiVeloMockup('veloFermaGiro');
+    await stopRealSession();
+  });
+
   $('#cancelQueued').addEventListener('click', async () => {
     if (!state.realSession.id || state.realSession.codaMessaggi.length === 0) return;
     try {
@@ -14007,7 +14098,24 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       apriVeloMockup('veloScorciatoie');
     }
     if (event.key === 'Escape' && (commandDialog.open || sheetDialog.open)) dismissTransientLayers();
+    else if (event.key === 'Escape' && bivioInvio && !bivioInvio.hidden) chiudiBivioInvio({ tornaAlComposer: true });
     else if (event.key === 'Escape' && (sessionsPanel.classList.contains('open') || inspectorPanel.classList.contains('open'))) closePanels();
+    /*
+     * B16 — l'ultimo anello della catena: quando non c'è più niente da chiudere e un
+     * giro sta girando, Esc chiede se fermarlo. Mai prima: uno strato aperto si smonta
+     * per primo (WAI-ARIA APG), altrimenti Esc diventerebbe imprevedibile.
+     */
+    else if (event.key === 'Escape' && runRealeAttivo() && !$('.overlay-layer:not([hidden])') && !ROOT().querySelector('dialog[open]')) {
+      event.preventDefault();
+      /*
+       * ⛔ 06/9, misurato (prova T04): aprendo il velo QUI dentro non compariva niente. Causa: più
+       * in basso c'è un secondo ascoltatore di Escape su `document` che chiude TUTTI i veli aperti
+       * — registrato dopo questo, quindi girava subito dopo e chiudeva il velo appena aperto, nello
+       * stesso evento. Il velo si apre quando la catena di Escape è finita: così ogni ascoltatore
+       * fa il suo mestiere senza che uno disfi il lavoro dell'altro.
+       */
+      setTimeout(chiediSeFermareIlGiro, 0);
+    }
   });
 
   /*

@@ -455,6 +455,11 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-status-strip__what{flex:1; min-width:0; font-size:13px; color:var(--talos-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .talos-queue{display:flex; align-items:center; gap:10px; padding:8px 14px; margin-bottom:8px; border-radius:11px; border:1px dashed var(--talos-border-strong); color:var(--talos-assistant-text); font-size:13px}
 .talos-queue__text{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+/* 06/9 B14 — l'Invio durante un giro non decide da solo: due pulsanti espliciti, sotto il composer.
+   Stessa grammatica della coda (bordo tratteggiato = «in sospeso, deciso da te»), accento sull'azione
+   che indirizza subito perche' e' quella che cambia il giro in corso. */
+.talos-bivio{display:flex; align-items:center; gap:10px; margin-top:8px; padding:8px 14px; border-radius:11px; border:1px dashed var(--talos-accent-border); background:var(--talos-accent-soft); color:var(--talos-text); font-size:13px}
+.talos-bivio__testo{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .talos-composer{border:1px solid var(--talos-border-strong); border-radius:18px; background:var(--talos-panel); padding:14px 14px 12px; box-shadow:var(--talos-shadow-card)}
 .talos-composer:focus-within{border-color:var(--talos-accent-border); box-shadow:0 0 0 3px var(--talos-accent-soft)}
 .talos-composer{position:relative; min-height:var(--composer-canonical-h, auto); display:flex; flex-direction:column}
