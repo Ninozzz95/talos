@@ -40,6 +40,12 @@
 | O-29 | «la bolla di domanda non deve avere larghezza al massimo: bolla di chat con la codina, da destra» | Conversazione | ✅ | misurato: bolla al 67% della colonna, a destra, angolo-codina in basso a destra |
 | O-30 | «non riesco ad aprire la sidebar di destra dopo averla collassata» | Colonna destra | ✅ | due gestori sullo stesso clic si annullavano; verificato su 4 viste, dalla Review alla Chat, e dopo un ricaricamento |
 | O-31 | «se navigo io manualmente in una pagina, il modello deve leggere QUELLA pagina» («funzione critica») | Vista Browser | 🔴 aperto | oggi l'agente vede solo le pagine che ha aperto lui |
+| O-32 | «se scrollo un po' piu' in alto e aspetto qualche secondo mi porta con uno snap alla fine» | Conversazione | ✅ | l'osservatore del ripristino si stacca al primo scorrimento della persona — misurato: resta fermo 15 s |
+| O-33 | «la chat a tutta larghezza non funziona, si vede buttata a sinistra» | Conversazione | ✅ | respiro simmetrico; misurato 736 (44/44), 819 a colonna chiusa, 1076 a tutta larghezza |
+| O-34 | «il ragionamento in corso non scompare col fondo inquadrato, e scompare quando sali» | Striscia di stato | 🔧 | «in fondo» ora guarda la fine del CONTENUTO; ⛔ il caso «sono salito» non ancora visto dal vivo |
+| O-35 | «se clicco *Per questa sessione* continua a chiedermi permesso anche con full access» | Permessi / kernel | 🔧 in corso | la clausola del kernel che chiede quando esiste un canale, ora autorizzato a toglierla |
+| O-36 | «Attività non riuscita» mostra JSON grezzo e `REFUSED. Empty html: nothing was created.` | Conversazione, errori | 🔴 aperto | argomenti dell'attrezzo e rifiuto del kernel a schermo, in inglese |
+| O-37 | «con i modelli a chiave API gli artefatti vengono creati ma non salvati nella Libreria» | Artefatti / Libreria | 🔴 aperto | segnalato dall'owner, da riprodurre |
 
 ---
 
@@ -293,3 +299,27 @@ gli chiedo quali video mi consiglia: lui deve rispondere in base alla pagina che
 
 **Proposta**: fare subito la (1), che copre il caso che l'owner ha descritto, dichiarando a schermo
 cosa vede l'agente; e tenere la (3) come la vera risposta, da decidere insieme.
+
+### O-35 · «Per questa sessione» che continua a chiedere — la cura vera, finalmente
+
+**Cosa vede l'owner.** Con la sessione su «Accesso completo» arriva lo stesso la carta, e la carta
+stessa lo spiega: «comando nel terminale ha il cancello Chiedi conferma». Premendo **Per questa
+sessione** quell'attrezzo passa a «sempre»… e la richiesta successiva torna uguale.
+
+**Perché.** La cura del 06/9 al canale delle approvazioni (una sessione che ha *un* attrezzo su
+«chiedi» ottiene un canale) ha un costo che avevo dichiarato quel giorno: il kernel, quando il canale
+esiste, chiede **anche per gli attrezzi senza cancello** — la clausola `vaChiesto` include
+`!haOverride && Boolean(chiediApprovazioneFn)`. Quindi finché *un solo* attrezzo resta su «chiedi»,
+tutti gli altri continuano a chiedere, e «Per questa sessione» non basta.
+
+**La cura definitiva era fuori dalla mia lane, e l'owner l'ha autorizzata il 06/9**: togliere quella
+clausola e far decidere `livelloAccesso`, che `talosHarness.mjs` già riconosce.
+
+### O-36 · «Attività non riuscita» con il JSON dell'attrezzo a schermo
+
+Nel riquadro compaiono gli **argomenti grezzi** della chiamata
+(`{"titolo":"GPT Tokenizer Interactive Demo","html":"<!doctype html>…`) e il rifiuto del kernel in
+inglese: `REFUSED. Empty html: nothing was created.` Due difetti in uno — il JSON non è per gli
+occhi di una persona, e il rifiuto va detto in italiano con il rimedio. La nota d'errore sotto lo
+conferma dichiarandosi «non ancora tradotta»: è la stessa famiglia di O-22/O-23, e va nella stessa
+mappa.

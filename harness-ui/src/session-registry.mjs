@@ -1936,7 +1936,16 @@ export function createSessionRegistry({
      * QUALE cartella diventa `cartella` più in alto, in avviaLibero,
      * mai qui).
      */
-    const livelloAccesso = voce.permessi === 'Read only' ? 'lettura' : undefined;
+    /*
+     * ⭐⭐⭐ 06/9 — la cura definitiva, autorizzata dall'owner: la politica si dichiara al kernel come
+     * LIVELLO, non come effetto collaterale dell'esistenza di un canale. «Su richiesta» ora è
+     * `livelloAccesso:'su-richiesta'`, che il kernel riconosce da sempre (`richiestoDalLivello`);
+     * insieme alla clausola tolta là dentro, questo fa sì che «Per questa sessione» funzioni davvero:
+     * un attrezzo passato a «sempre» smette di chiedere anche se un ALTRO attrezzo resta su «chiedi».
+     */
+    const livelloAccesso = voce.permessi === 'Read only'
+      ? 'lettura'
+      : voce.permessi === 'On request' ? 'su-richiesta' : undefined;
     /*
      * ⛔⛔⛔ FASE B (28/8) — RIPIEGO TEMPORANEO, non la cura finale.
      *
@@ -2074,7 +2083,12 @@ export function createSessionRegistry({
       // ⭐⭐⭐ FASE K (29/8) — `?? undefined`: `voce.modelloPlanner` è `null` per una sessione senza planner (mai passato a talosLavoraFn come `null`, che il kernel tratterebbe diversamente da "assente" in un controllo `typeof`).
       modelloPlanner: voce.modelloPlanner ?? undefined,
       livelloAccesso, chiediApprovazioneFn, hookFn,
-      permessiPerAttrezzo: voce.permessiPerAttrezzo,
+      /*
+       * ⛔ 06/9: sempre un OGGETTO, mai `null` — se il kernel ricevesse `null` non ci sarebbe
+       * niente da mutare, e un permesso cambiato a metà giro non lo raggiungerebbe (vedi
+       * aggiornaImpostazioni). La voce tiene lo stesso oggetto che il kernel ha in mano.
+       */
+      permessiPerAttrezzo: (voce.permessiPerAttrezzo ||= {}),
       // ⭐⭐⭐ FASE C (28/8) — sub-agenti: sempre costruito (stesso principio di hookFn), il vero lavoro (limiti, isolamento) vive tutto dentro subagentOrchestrator.delegaSottoTask.
       onDelega: (taskFiglio, cartellaFiglio) => subagentOrchestrator.delegaSottoTask({ sessionPadreId: sessionId, task: taskFiglio, cartella: cartellaFiglio }),
       codaMessaggiFn,
@@ -2848,7 +2862,22 @@ export function createSessionRegistry({
       voce.modelloPlanner = prossimo.modelloPlanner;
       voce.reasoning = prossimo.reasoning;
       voce.permessi = prossimo.permessi;
-      voce.permessiPerAttrezzo = prossimo.permessiPerAttrezzo;
+      /*
+       * ⛔⛔⛔ 06/9, owner: «se clicco “Per questa sessione” continua a chiedermi permesso».
+       * Misurato: il permesso ARRIVAVA (la sessione finiva con `{shell:'sempre'}`) e la carta
+       * tornava lo stesso, 47 volte per lo stesso comando. Causa: il kernel riceve la mappa dei
+       * permessi per RIFERIMENTO all'avvio del giro, e qui la si SOSTITUIVA con un oggetto nuovo —
+       * il giro in corso continuava a leggere quella vecchia, dove l'attrezzo diceva ancora
+       * «chiedi». Un cambio a metà giro non arrivava mai a chi doveva riceverlo.
+       * ⇒ La mappa si MUTA in luogo: stesso oggetto, contenuto nuovo. Chi la tiene in mano
+       * (il kernel, dentro `verificaPermessoScrittura`) vede il cambio al prossimo controllo.
+       */
+      if (voce.permessiPerAttrezzo && prossimo.permessiPerAttrezzo && voce.permessiPerAttrezzo !== prossimo.permessiPerAttrezzo) {
+        for (const chiave of Object.keys(voce.permessiPerAttrezzo)) delete voce.permessiPerAttrezzo[chiave];
+        Object.assign(voce.permessiPerAttrezzo, prossimo.permessiPerAttrezzo);
+      } else {
+        voce.permessiPerAttrezzo = prossimo.permessiPerAttrezzo;
+      }
       voce.modelId = modelId;
       voce.cartella = cartellaProssima;
       return { ok: true };

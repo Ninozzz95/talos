@@ -868,13 +868,22 @@ test('⭐⭐⭐ "Read only" diventa livelloAccesso:\'lettura\' per il kernel, MA
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
-test('⭐⭐⭐ "On request" passa una chiediApprovazioneFn vera, MAI livelloAccesso', () => {
+test('⭐⭐⭐ 06/9 — "On request" dichiara il LIVELLO al kernel, oltre al canale', () => {
+  /*
+   * ⛔⛔⛔ Fino al 06/9 questo test pinnava «MAI livelloAccesso»: la politica arrivava al kernel solo
+   * come effetto collaterale dell'esistenza del canale. Owner, dal vivo: «se clicco “Per questa
+   * sessione” continua a chiedermi permesso anche con full access completamente acceso» — ed era
+   * proprio quella la causa: col canale presente il kernel chiedeva anche per gli attrezzi senza
+   * cancello, quindi passarne uno a «sempre» non cambiava niente. Ora la politica si dichiara come
+   * livello (`su-richiesta`), il kernel ha perso la clausola sul canale, e il canale torna a essere
+   * il mezzo. Vedi AVM-harness, talosHarness.mjs, `vaChiesto`.
+   */
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
 
   registro.avvia('task-vero', { permessiScelto: 'On request' });
 
-  assert.equal(finta.ultimoInput.livelloAccesso, undefined);
+  assert.equal(finta.ultimoInput.livelloAccesso, 'su-richiesta');
   assert.equal(typeof finta.ultimoInput.chiediApprovazioneFn, 'function');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
@@ -1044,13 +1053,34 @@ test('⭐⭐⭐ resume() eredita il permesso della sessione origine', async () =
  * di `permessiScelto`. Stesso stile/stessi fake della pillola permessi
  * appena sopra.
  */
-test('⭐ default: senza permessiPerAttrezzoScelto, la voce non porta alcun override — null verso il kernel (optional chaining lo tratta come assente)', () => {
+test('⭐ 06/9 — senza permessiPerAttrezzoScelto il kernel riceve una mappa VUOTA, non null', () => {
+  /*
+   * ⛔ Prima era `null`, e il kernel lo trattava come «nessun override»: giusto in sé, sbagliato per
+   * ciò che serve dopo. Un permesso cambiato a metà giro («Per questa sessione») deve raggiungere il
+   * giro IN CORSO, e il kernel tiene la mappa per riferimento: su `null` non c'è niente da mutare.
+   * Una mappa vuota si comporta identica per il kernel (nessuna chiave, nessun override) ed è un
+   * oggetto vivo che può ricevere il cambio.
+   */
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
 
   registro.avvia('task-vero');
 
-  assert.equal(finta.ultimoInput.permessiPerAttrezzo, null);
+  assert.deepEqual(finta.ultimoInput.permessiPerAttrezzo, {});
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⭐⭐⭐ 06/9 — «Per questa sessione»: il permesso cambiato a metà giro raggiunge il giro IN CORSO', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId } = registro.avvia('task-vero', { permessiPerAttrezzoScelto: { shell: 'chiedi' } });
+  const mappaDelKernel = finta.ultimoInput.permessiPerAttrezzo;
+  assert.deepEqual(mappaDelKernel, { shell: 'chiedi' });
+
+  registro.aggiornaImpostazioni(sessionId, { permessiPerAttrezzo: { shell: 'sempre' } });
+
+  // ⛔ la prova che conta: NON che la voce sia aggiornata, ma che lo veda chi ha la mappa in mano
+  assert.deepEqual(mappaDelKernel, { shell: 'sempre' }, 'il kernel deve vedere il cambio senza riavviare il giro');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 

@@ -1,6 +1,6 @@
 # T03-permessi — Permesso «chiede prima» e permesso per attrezzo: la carta di approvazione
 
-> Prova d'uso sul 4174, guidata come farebbe una persona. 2026-09-06 12:21
+> Prova d'uso sul 4174, guidata come farebbe una persona. 2026-09-06 15:54
 
 ## Passi
 
@@ -16,22 +16,17 @@
 > ⛔ **T03-permessi-D2** (grave): chiudere il cancello sulla sola «scrittura di un file» NON basta: il modello scrive lo stesso con «comando nel terminale» (misurato: printf > src/nuovo.mjs). Chi chiede di essere avvisato prima di una scrittura deve chiudere due cancelli, e non lo sa — prova: sessione 1ee3cb76, processo shell
 - **sessione avviata** ✅
   - atteso: una sessione vera che dovrà scrivere un file
-  - visto: ac3e0ed2
+  - visto: 14a8549c
 - **la carta di approvazione** ✅
   - atteso: arriva e dice cosa, perché, e mostra la differenza (E9, E10)
-  - visto: {"testo":"Chiede di scriveresrc/nuovo.mjsVuole scrivere il file: src/nuovo.mjsConsenti una voltaPer questa sessioneNegaVale solo per questa richiesta","perche":true,"differenza":false,"pulsanti":["Consenti una volta","Per questa sessione","Nega"]}
-
-> ⛔ **T03-permessi-D3** (grave): la carta non mostra la differenza prima/dopo della scrittura (decisione E10)
+  - visto: {"testo":"Chiede di scriveresrc/nuovo.mjsVuole scrivere questo file:src/nuovo.mjsChiede perché «scrittura di un file» ha il cancello «Chiedi conferma», anche con la sessione su «Accesso completo».Consenti una voltaPer questa sessioneNegaVale solo per questa ri
 - **richiesta di approvazione** ✅
   - atteso: una carta che dice cosa e perché
-  - visto: Chiede di scriveresrc/nuovo.mjsVuole scrivere il file: src/nuovo.mjs — Approvato.
-- **richiesta di approvazione** ✅
-  - atteso: una carta che dice cosa e perché
-  - visto: Chiede di scriveresrc/nuovo.mjsVuole scrivere il file: src/nuovo.mjs — Approvato.
+  - visto: Chiede di scriveresrc/nuovo.mjsVuole scrivere questo file:src/nuovo.mjsChiede perché «scrittura di un file» ha il cancello «Chiedi conferma», anche con la sessione su «Accesso completo».Approvato
 - **esito del giro** ✅
   - atteso: conclusa
-  - visto: conclusa=true · esito successo · approvazioni 2
+  - visto: conclusa=true · esito successo · approvazioni 1
 
 ## Verdetto
 
-**PASSA CON RISERVA** — difetti trovati: 3 (T03-permessi-D1, T03-permessi-D2, T03-permessi-D3).
+**PASSA CON RISERVA** — difetti trovati: 2 (T03-permessi-D1, T03-permessi-D2).
