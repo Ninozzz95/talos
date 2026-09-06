@@ -454,6 +454,17 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
    i numeri restano allineati con le cifre tabulari, e la tabella scorre dentro il suo contenitore
    invece di allargare la colonna della chat (Codex PR #24636, letta 06/09/2026: una tabella stretta
    va gestita, non lasciata sfondare). */
+/* 06/9 — la nota di un errore spiegato: cosa è successo (tono normale), perché (spento), cosa puoi
+   fare (elenco), e il testo del server chiuso in un dettaglio. Nessun rosso addosso al testo: il badge
+   dice già che è un errore, e una parete rossa rende meno leggibile proprio ciò che va letto. */
+.talos-system-note__perche{margin:6px 0 0; font-size:13px; color:var(--talos-muted)}
+.talos-system-note__rimedi{margin:8px 0 0; padding-left:18px; font-size:13px; color:var(--talos-assistant-text); display:flex; flex-direction:column; gap:4px}
+.talos-system-note__tecnico{margin:10px 0 0}
+.talos-system-note__tecnico > summary{cursor:pointer; font-size:12px; color:var(--talos-muted); list-style:none}
+.talos-system-note__tecnico > summary::-webkit-details-marker{display:none}
+.talos-system-note__tecnico > summary::before{content:'b8'; display:inline-block; margin-right:6px; transition:transform var(--talos-motion-duration-control,.15s) var(--talos-motion-ease)}
+.talos-system-note__tecnico[open] > summary::before{transform:rotate(90deg)}
+.talos-system-note__grezzo{margin:8px 0 0; padding:10px 12px; border-radius:10px; border:1px solid var(--talos-border); background:var(--talos-code-bg, rgba(0,0,0,.18)); font-family:var(--talos-font-mono); font-size:12px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; overflow:auto; max-height:12em}
 .assistant-copy .md-table-wrap{margin:12px 0; overflow-x:auto; overscroll-behavior-x:contain}
 .assistant-copy .md-table{border-collapse:collapse; width:100%; font-size:13px; font-variant-numeric:tabular-nums}
 .assistant-copy .md-table th{text-align:left; padding:7px 12px 7px 0; border-bottom:1px solid var(--talos-border-strong); color:var(--talos-muted); font-weight:600; white-space:nowrap}

@@ -333,6 +333,39 @@ export function creaNotaSistema({ tipo = 'info', badge = 'Nota', titolo = '', te
   return nota;
 }
 
+/*
+ * ⛔ 06/9 — la nota di sistema con dentro un errore SPIEGATO. Prima l'errore del giro arrivava a
+ * schermo come lo mandava il server: `[internal-error] HTTP 400 dopo 4 tentativi: {"error":{…}}`.
+ * Qui la nota prende tre pezzi — cosa è successo, perché, cosa puoi fare — e tiene il testo tecnico
+ * in un dettaglio richiudibile, chiuso: serve per una segnalazione, non per essere letto ogni volta.
+ * La spiegazione la costruisce `components/errori.js`; questo componente la mostra e basta.
+ */
+export function creaNotaErrore({ badge = 'Errore', titolo = 'TALOS · errore', spiegazione = null } = {}, opzioni = {}) {
+  const documentObj = opzioni.document || globalThis.document;
+  const nota = el(documentObj, 'div', 'talos-system-note talos-system-note--errore');
+  nota.setAttribute('data-c', 'SystemNote');
+  nota.append(el(documentObj, 'span', 'talos-badge talos-badge--danger talos-badge--sm', badge));
+  const corpo = el(documentObj, 'div');
+  if (titolo) corpo.append(el(documentObj, 'div', 'talos-system-note__title', titolo));
+  corpo.append(el(documentObj, 'p', 'assistant-copy', spiegazione?.cosa || ''));
+  if (spiegazione?.perche) corpo.append(el(documentObj, 'p', 'talos-system-note__perche', spiegazione.perche));
+  if (Array.isArray(spiegazione?.rimedi) && spiegazione.rimedi.length) {
+    const lista = el(documentObj, 'ul', 'talos-system-note__rimedi');
+    for (const r of spiegazione.rimedi) lista.append(el(documentObj, 'li', '', r));
+    corpo.append(lista);
+  }
+  if (spiegazione?.tecnico) {
+    const dettaglio = documentObj.createElement('details');
+    dettaglio.className = 'talos-system-note__tecnico';
+    const riassunto = documentObj.createElement('summary');
+    riassunto.textContent = 'Testo del server';
+    dettaglio.append(riassunto, el(documentObj, 'pre', 'talos-system-note__grezzo', spiegazione.tecnico));
+    corpo.append(dettaglio);
+  }
+  nota.append(corpo);
+  return nota;
+}
+
 /* ---------------------------------------------------------- Approval/Diff */
 
 /** Le righe di un diff: [{ tipo: 'add'|'del'|'ctx', testo }]. */

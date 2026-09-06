@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { statoGiri, etichettaPermesso, etichettaPermessoConEccezioni, tonoPermesso } from '../../src/components/chat-foot.js';
+import { statoGiri, etichettaPermesso, etichettaPermessoConEccezioni, tonoPermesso, nomeModelloUmano } from '../../src/components/chat-foot.js';
 
 // 06/09 — B12 (il contatore dei giri) e B11 (la pillola del permesso dice il vero, eccezioni comprese).
 
@@ -36,4 +36,21 @@ test('PIEDE-ECCEZIONI: la pillola dichiara i cancelli per attrezzo, che il perme
   assert.equal(etichettaPermessoConEccezioni('Full access', {}), 'Accesso completo');
   assert.equal(etichettaPermessoConEccezioni('Full access', null), 'Accesso completo');
   assert.equal(etichettaPermessoConEccezioni('Full access', { scrivi: '', shell: null }), 'Accesso completo');
+});
+
+test('PIEDE-MODELLO: un identificatore locale diventa un nome, non una targa (H22)', () => {
+  // il caso che l'owner ha visto a schermo, su due righe
+  assert.equal(
+    nomeModelloUmano('local:bartowski-nvidia_Nemotron-Cascade-2-30B-A3B-GGUF-931b595fc71b-nvidia-Nemotron-Cascade-2-30B-A3B-Q4-0-gguf'),
+    'nvidia Nemotron Cascade 2 · 30B (3B attivi) · Q4_0',
+  );
+  // MoE con quantizzazione a super-blocchi: i parametri attivi si dicono, non si nascondono
+  assert.equal(nomeModelloUmano('local:unsloth-Qwen3.5-35B-A3B-GGUF-abc123-Qwen3.5-35B-A3B-Q4_K_M-gguf'), 'Qwen3.5 · 35B (3B attivi) · Q4_K_M');
+  // AL CONTRARIO: un modello di rete resta com'era, senza inventare pezzi
+  assert.equal(nomeModelloUmano('z-ai/glm-5.3-flash'), 'glm-5.3-flash');
+  assert.equal(nomeModelloUmano('claude-opus-5'), 'claude-opus-5');
+  // e ciò che non si sa leggere non si butta: si mostra quel che c'è
+  assert.equal(nomeModelloUmano('local:strano'), 'strano');
+  assert.equal(nomeModelloUmano(''), '');
+  assert.equal(nomeModelloUmano(null), '');
 });

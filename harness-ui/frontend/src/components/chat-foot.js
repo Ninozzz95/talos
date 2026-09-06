@@ -50,6 +50,38 @@ export function etichettaPermessoConEccezioni(permesso, permessiPerAttrezzo) {
   return `${base} · ${regole.length} eccezion${regole.length === 1 ? 'e' : 'i'}`;
 }
 
+/*
+ * ⛔ 06/9, owner con lo screenshot: a schermo compariva
+ * `local:bartowski-nvidia_Nemotron-Cascade-2-30B-A3B-GGUF-931b595fc71b-nvidia-Nemotron-Cascade-2-30B-A3B-Q4-0-gguf`,
+ * su due righe, sia nell'intestazione del messaggio sia nella pillola del composer. La decisione H22
+ * vieta gli identificatori grezzi a schermo, ma per i modelli locali non esisteva nessuna traduzione:
+ * si stampava la chiave del runtime.
+ * Il nome di un GGUF non è un nome: è una targa. La convenzione di llama.cpp (letta 06/09/2026 —
+ * blog.starmorph.com «LLM model names decoded», kuware.com «Demystifying GGUF file names») mette in
+ * fila autore, famiglia, parametri totali, parametri ATTIVI per i MoE (`A3B` = 3B attivi) e la
+ * quantizzazione (`Q4_0`, `Q4_K_M`: 4 bit, K = super-blocchi, M = variante media). Qui se ne ricava
+ * una riga leggibile; l'identificatore intero resta nel suggerimento del puntatore, mai perso.
+ */
+export function nomeModelloUmano(id) {
+  if (typeof id !== 'string' || !id.trim()) return '';
+  const grezzo = id.trim();
+  if (!/^local:/i.test(grezzo)) return grezzo.replace(/^~/u, '').split('/').pop();
+  let resto = grezzo.replace(/^local:/i, '').replace(/[-_.]gguf$/i, '');
+  const quant = /[-_](IQ\d\w*|Q\d(?:[-_]\d)?(?:[-_][A-Z]+)*)(?=[-_]|$)/i.exec(resto);
+  const parametri = /(?:^|[-_])(\d+(?:[.,]\d+)?B)(?:[-_]A(\d+(?:[.,]\d+)?B))?(?=[-_]|$)/i.exec(resto);
+  let nome = resto;
+  if (parametri) nome = resto.slice(0, parametri.index);
+  nome = nome.replace(/[-_](GGUF|MLX|AWQ|GPTQ)$/i, '');
+  const pezzi = nome.split(/[-_]/).filter(Boolean);
+  if (pezzi.length > 1) pezzi.shift(); // il primo segmento è chi ha pubblicato il file, non il modello
+  // un secondo prefisso di fabbrica (nvidia_Nemotron…) sparisce solo se si ripete dentro al nome
+  const pulito = pezzi.join(' ').replace(/\s+/g, ' ').trim();
+  const parti = [pulito || resto];
+  if (parametri) parti.push(parametri[2] ? `${parametri[1]} (${parametri[2].replace(/^A/i, '')} attivi)` : parametri[1]);
+  if (quant) parti.push(quant[1].toUpperCase().replace(/-/g, '_'));
+  return parti.filter(Boolean).join(' · ');
+}
+
 /** Il tono del chip del permesso: attenzione quando scrive o ha tutto. */
 export function tonoPermesso(permesso) {
   if (permesso === 'Full access') return 'danger';
@@ -168,6 +200,9 @@ export function aggiornaPiedeChat(piede, dati = {}) {
   // chip del modello e del permesso
   const modello = piede.querySelector('[data-open-sheet="model"] .talos-chip__label');
   if (modello) modello.textContent = dati.modello || 'Scegli il modello';
+  // l'identificatore intero resta raggiungibile: a schermo il nome, nel suggerimento la targa
+  const pillolaModello = piede.querySelector('[data-open-sheet="model"]');
+  if (pillolaModello) pillolaModello.title = dati.modelloId ? `Cambia modello · ${dati.modelloId}` : 'Cambia modello';
   const permesso = piede.querySelector('[data-open-sheet="permissions"]');
   if (permesso) {
     const label = permesso.querySelector('.talos-chip__label');
