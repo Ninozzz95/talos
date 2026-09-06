@@ -53,3 +53,16 @@ test('ERRORI-SCONOSCIUTO: non si inventa una causa, si dice che non si sa e si m
 test('ERRORI-UNA-RIGA: per i posti stretti resta solo il «cosa»', () => {
   assert.match(erroreInUnaRiga('flusso SSE senza contenuto ne tool_calls', 'internal-error'), /senza dire niente/);
 });
+
+test('ERRORI-RUNTIME: il motore locale che non si accende in tempo, trovato su una sessione vera', () => {
+  const s = spiegaErrore('llama-server non è diventato pronto entro 36 s (modello di 12 GB)', 'internal-error');
+  assert.equal(s.id, 'runtime-non-pronto');
+  assert.match(s.cosa, /non si è acceso in tempo/);
+  assert.match(s.perche, /12 GB/); // la taglia dichiarata nell'errore si usa
+  assert.match(s.perche, /36 secondi/);
+  assert.equal(s.rimedi.length, 3);
+  // AL CONTRARIO: senza numeri la frase resta sensata
+  const senza = spiegaErrore('failed to load model', 'internal-error');
+  assert.equal(senza.id, 'runtime-non-pronto');
+  assert.doesNotMatch(senza.perche, /\(qui/);
+});
