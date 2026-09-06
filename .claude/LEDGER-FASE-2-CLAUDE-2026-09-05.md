@@ -932,6 +932,54 @@ ripristino pulito; 0 errori. Foto `i18n-impostazioni-en.png`, `i18n-terminale-en
 del template — ad esempio il titolo dello stato vuoto del Browser «Nessuna pagina letta» resta
 italiano perché è nel template, non nel codice.
 
+### Browser OLTRE Hermes — annotare gli elementi di una pagina viva (07/09 ~01:30): FATTA
+
+**Come fa Hermes** (`lib/preview-annotate/*`, `right-rail/terminal`, letti il 06/09/2026): webview
+Electron per scheda; overlay iniettato che evidenzia l'elemento, spillo numerato, scheda per il
+commento, ritaglio dell'immagine; «flush» mette nel composer i ritagli e un prompt con
+`Selector:`/`HTML:` per commento, raggruppati per contenitore (`group.ts`: si confrontano i
+percorsi degli antenati). Mai inviato da solo. Il limite: l'agente riceve pixel e testo.
+
+**Come facciamo noi, in un guscio browser.** `src/browser-proxy.mjs` + `GET /api/v1/browser/proxy?url=`:
+la pagina di un dev server LOCALE passa dal nostro server e diventa della nostra origine (proxy
+locale, come VS Code Live Preview; fonti: gist cprima, niutech x-frame-bypass, usamaejaz — letti
+il 06/09/2026): via la CSP in pagina e le intestazioni di cornice, `<base>` sull'origine vera così
+script/stili/immagini si caricano dal dev server, il nostro `talos/browser-annota.js` per primo nel
+`<head>` (cattura gli errori di console PRIMA degli script della pagina), risposta con
+`frame-ancestors 'self'` e senza la CSP di TALOS. ⛔ SOLO localhost/127.0.0.1/::1: una pagina
+proxata gira nella NOSTRA origine (vede localStorage e cookie di TALOS) — per il proprio dev server
+va bene, un sito remoto resta nella cornice normale (altra origine) o bloccato; codici
+`BROWSER_PROXY_SOLO_LOCALE` 403, `NON_HTML` 415, `TROPPO_GRANDE` 413 (5 MB), `IRRAGGIUNGIBILE` 502.
+Trovato dal vivo: con `<base>` sul dev server, lo script `/talos/…` finiva LÀ (overlay assente) →
+indirizzo assoluto di TALOS.
+
+**Cosa porta ogni commento all'agente, oltre a Hermes:** selettore STABILE (id → data-testid/
+data-test/data-cy/name/aria-label → classi stabili + nth-of-type, verificato unico), tag, testo,
+HTML (800 caratteri), 16 stili calcolati che contano, posizione, catena degli antenati, indizi sul
+sorgente SOLO quando esistono (Vue `__vueParentComponent.type.__file`, `data-v-inspector`; React
+≤18 `_debugSource` — React 19 l'ha tolto, issue #31981/#32574; nome del componente; framework
+Vite/Next/Nuxt/Svelte), e gli errori di console della pagina. `components/annotazioni.js` impacchetta
+in testo con etichette fisse, raggruppa per contenitore come Hermes, chiude con la consegna «trova il
+codice che produce quell'elemento, applica la modifica e verifica». Il pannello «Commenti sulla
+pagina» (mockup, sotto la cornice) accende/spegne l'annotazione, elenca gli spilli con selettore e
+nota, «Togli», «Svuota», «Porta i commenti nella chat» → composer, MAI inviato. La navigazione dentro
+il proxy resta nel proxy (i link tornano al genitore, che riapre l'indirizzo). Un link «×» via Esc
+spegne l'annotazione.
+
+Prove: server `tests/browser-proxy.test.mjs` (locale/remoto, riscrittura, redirect fuori, non-HTML,
+morto) + http-app 18/18; frontend `tests/unit/annotazioni.test.mjs` (gruppi per contenitore, righe
+del pacchetto, niente «Sorgente» inventata, errori in coda); unit 125/125, statico 195/195,
+componenti 111/111, server suite intera; dal vivo su 4175 col dev server 4199 (`annota-vivo.mjs`):
+scheda proxata, `<base>` giusto, overlay pronto, cursore a mirino, clic sul pulsante → spillo «1» e
+commento `#b`, nota, secondo clic sul titolo → `h1`, «Porta i commenti nella chat» → composer con
+1.113 caratteri (zone `#b` e `h1`, stili, HTML, consegna finale), toast; `example.com` → cornice
+normale, non proxata, niente pannello; 0 errori di pagina. Foto `annota-2.png`, `annota-3-composer.png`.
+⛔ NON FATTO: il ritaglio dell'immagine dell'elemento (Hermes lo ha; qui servirebbe una libreria di
+rasterizzazione nella pagina proxata) — l'agente riceve la struttura, che per un agente di codice vale
+di più: da misurare sul banco (tempo dall'annotazione alla modifica giusta), non affermato.
+⛔ NON VERIFICATO: gli indizi sul sorgente su un dev server Vue/React vero (il dev server di prova è
+HTML puro: la riga «Sorgente» non compare, com'è giusto).
+
 - T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
   15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
   statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo

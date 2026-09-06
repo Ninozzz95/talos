@@ -29,7 +29,8 @@ import { creaIntro, normalizzaCartella as normalizzaCartellaIntro, ultimoSegment
 import { creaSchedeTerminale, ETICHETTA_STATO as ETICHETTA_STATO_TERMINALE, TESTI as TESTI_TERMINALE, prossimaAttivaDopoChiusura, SCHEDE_MASSIME as SCHEDE_MASSIME_TERMINALE } from '../components/terminale.js'; // 06/9 B1: il Terminale a schede (K-G)
 import { LINGUE as LINGUE_MENU, risolviLingua, applicaLingua, etichettaLinguaRisolta, t as tr, EVENTO_LINGUA } from '../components/lingua.js'; // 06/9 B8 + P-i18n: la lingua dei menu e delle superfici
 import { ritraduciImpostazioni } from '../components/impostazioni.js'; // P-i18n
-import { creaBrowser, prossimaDopoChiusura as prossimaDopoChiusuraBrowser, MASSIMO_SCHEDE as MASSIMO_SCHEDE_BROWSER } from '../components/browser.js'; // 06/9 K-I: il Browser a schede
+import { creaBrowser, prossimaDopoChiusura as prossimaDopoChiusuraBrowser, MASSIMO_SCHEDE as MASSIMO_SCHEDE_BROWSER, localeAnnotabile } from '../components/browser.js'; // 06/9 K-I: il Browser a schede
+import { impacchetta as impacchettaAnnotazioni } from '../components/annotazioni.js'; // Browser oltre Hermes 06/9
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
@@ -279,6 +280,10 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       browserChiuse: new Set(),
       browserAttiva: null,
       browserRichiesta: null,
+      /** Browser oltre Hermes 06/9 — i commenti sugli elementi, per scheda viva: { [id]: [{nota, fatto}] }, e se si sta annotando. */
+      browserAnnotazioni: {},
+      browserAnnotaAttivo: false,
+      browserErroriPagina: {},
       /** ⭐⭐⭐ 27/8, R1 — messageId(ragionamento) -> {summaryText, detail, grezzo}, la bolla collassabile che ospita il ragionamento in streaming (riusa la stessa forma di appendToolNote, non un componente nuovo). Il testo grezzo si accumula qui per lo stesso motivo di testoGrezzoMessaggi: renderizzaMarkdownSemplice lavora sul totale, non sul delta. */
       ragionamentoBubble: new Map(),
       /** ⛔⛔⛔ 27/8, owner: "ricevo risposte duplicate" — ogni evento.`_sequenza` (assegnato dal server, vedi session-registry.mjs broadcast()) entra qui la PRIMA volta che passa da handleRealEvent; una riconnessione (EventSource nativo dopo una caduta, o runDirectShell che ne apre una fresca) rimanda l'intero buffer da capo, e questo Set lo riconosce e lo scarta invece di duplicare bubble/testo. Sopravvive a un `continua:true` (stessa sessione, nuovo giro) — si azzera SOLO per una sessione davvero diversa. */
@@ -7918,7 +7923,28 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       apri: (url) => { void apriPaginaVivaBrowser(url); },
       caricata: (id) => { const v = state.realSession.browserVive.find((x) => x.id === id); if (v && v.stato === 'caricamento') { v.stato = 'pronta'; renderizzaBrowser(); } },
       rileggi: (s) => { if (s.tipo === 'viva') { void apriPaginaVivaBrowser(s.url, s.id); } else preparaCommentoNelComposer(`Rileggi la pagina ${s.url} e dimmi cosa è cambiato.`); },
-      annota: (s) => preparaCommentoNelComposer(`Riguardo alla pagina ${s.url}: `),
+      annota: (s, attivo) => {
+        if (typeof attivo === 'boolean') { state.realSession.browserAnnotaAttivo = attivo; renderizzaBrowser(); return; }
+        preparaCommentoNelComposer(`Riguardo alla pagina ${s.url}: `);
+      },
+      annotazione: (s, fatto) => {
+        const rs = state.realSession; const lista = rs.browserAnnotazioni[s.id] || (rs.browserAnnotazioni[s.id] = []);
+        lista.push({ nota: '', fatto });
+        if (Array.isArray(fatto?.errori)) rs.browserErroriPagina[s.id] = fatto.errori;
+        renderizzaBrowser();
+        $(`#browserAnnotazioni .talos-annotazione:last-child textarea`)?.focus();
+      },
+      notaAnnotazione: (s, i, testo) => { const l = state.realSession.browserAnnotazioni[s.id]; if (l?.[i]) l[i].nota = testo; },
+      togliAnnotazione: (s, i) => { const l = state.realSession.browserAnnotazioni[s.id]; if (l) l.splice(i, 1); renderizzaBrowser(); },
+      svuotaAnnotazioni: (s) => { state.realSession.browserAnnotazioni[s.id] = []; renderizzaBrowser(); },
+      inviaAnnotazioni: (s) => {
+        const rs = state.realSession; const lista = rs.browserAnnotazioni[s.id] || [];
+        if (!lista.length) return;
+        const pacchetto = impacchettaAnnotazioni({ url: s.url, titolo: s.titolo || null }, lista, rs.browserErroriPagina[s.id] || []);
+        rs.browserAnnotaAttivo = false;
+        preparaCommentoNelComposer(pacchetto);
+        toast('Commenti nel composer', `${lista.length} ${lista.length === 1 ? 'commento' : 'commenti'} sulla pagina: rileggi e invia quando vuoi.`);
+      },
       copia: (s) => { if (s.testo) copyText(s.testo, 'Testo della pagina copiato'); },
       apriFuori: (s) => { if (/^https?:\/\//i.test(s.url)) window.open(s.url, '_blank', 'noopener'); },
       salvaNota: (s, testo) => { salvaNotaBrowser(s.url, testo); renderizzaBrowser(); toast(testo ? 'Nota conservata' : 'Nota tolta', 'Resta in questo browser, per questa sessione.'); },
@@ -7933,7 +7959,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (!schede.some((x) => x.id === rs.browserAttiva)) rs.browserAttiva = schede.length ? schede[schede.length - 1].id : null;
     const m = /^lettura-(\d+)$/.exec(rs.browserAttiva || '');
     rs.browserIndice = m ? Number(m[1]) : -1;
-    ui.aggiorna({ schede, attiva: rs.browserAttiva, note: noteBrowser(), richiesta: rs.browserRichiesta });
+    ui.aggiorna({ schede, attiva: rs.browserAttiva, note: noteBrowser(), richiesta: rs.browserRichiesta, annotazioni: rs.browserAnnotazioni, annotaAttivo: rs.browserAnnotaAttivo });
     aggiornaRigaBrowserCapability(); // O-01 — la scheda Capability conta le pagine vere, non un «Non osservato» fisso
   }
   /** Compatibilità coi chiamanti di prima (appendBrowserEntry, il reset di sessione): mostra la lettura all'indice dato. */
@@ -7955,8 +7981,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     const rs = state.realSession;
     if (!idEsistente && schedeBrowser().length >= MASSIMO_SCHEDE_BROWSER) { toast('Troppe schede', `Chiudine una: il massimo è ${MASSIMO_SCHEDE_BROWSER}.`); return; }
     const gia = idEsistente ? rs.browserVive.find((x) => x.id === idEsistente) : null;
-    const voce = gia || { id: `viva-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`, tipo: 'viva', origine: 'tu', url, titolo: null, quando: new Date().toISOString(), stato: 'caricamento', motivo: null };
-    if (gia) { gia.url = url; gia.stato = 'caricamento'; gia.motivo = null; gia.quando = new Date().toISOString(); } else rs.browserVive.push(voce);
+    const voce = gia || { id: `viva-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`, tipo: 'viva', origine: 'tu', url, titolo: null, quando: new Date().toISOString(), stato: 'caricamento', motivo: null, proxata: localeAnnotabile(url) };
+    if (gia) { gia.url = url; gia.stato = 'caricamento'; gia.motivo = null; gia.quando = new Date().toISOString(); gia.proxata = localeAnnotabile(url); rs.browserAnnotazioni[gia.id] = []; } else rs.browserVive.push(voce);
     rs.browserAttiva = voce.id;
     renderizzaBrowser();
     try {
@@ -7964,7 +7990,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       if (!rs.browserVive.includes(voce)) return; // chiusa nel frattempo
       voce.url = esito?.url || url;
       voce.titolo = esito?.titolo || null;
-      if (esito?.incorniciabile) { if (voce.stato === 'caricamento') voce.stato = 'pronta'; } else { voce.stato = 'bloccata'; voce.motivo = esito?.motivo || 'Il sito non consente di essere mostrato dentro TALOS'; }
+      // un dev server locale passa dal proxy: la cornice è nostra anche se il sito vietasse l'incorniciatura
+      if (esito?.incorniciabile || voce.proxata) { if (voce.stato === 'caricamento') voce.stato = 'pronta'; } else { voce.stato = 'bloccata'; voce.motivo = esito?.motivo || 'Il sito non consente di essere mostrato dentro TALOS'; }
     } catch (error) {
       voce.stato = 'bloccata'; voce.motivo = error.message || 'Il server non ha potuto controllare la pagina';
     }

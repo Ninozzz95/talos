@@ -57,6 +57,11 @@
       "sha256": "febff5240f817b09cfa28bb4341d38bb975fee2b8520fc4b540c6fda3e2cd290"
     },
     {
+      "path": "talos/browser-annota.js",
+      "bytes": 11688,
+      "sha256": "3400686413d6ad4bcb9a6970a9ba93cca71a50ddf72e5cc789ae3bd188a098cf"
+    },
+    {
       "path": "vendor/floating-ui/LICENSE-core",
       "bytes": 1089,
       "sha256": "0e4c9a9b6c71019cbbea3bdc20b01223110a9035700f9c960c8fcbf78c2325ce"

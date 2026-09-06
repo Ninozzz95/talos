@@ -6064,7 +6064,141 @@ var init_terminale = __esm({
   }
 });
 
+// src/components/annotazioni.js
+function percorsoContenitore(selettore) {
+  const parti = String(selettore || "").split(" > ").filter(Boolean);
+  return parti.length <= 1 ? parti : parti.slice(0, -1);
+}
+function raggruppa(annotazioni) {
+  if (annotazioni.length === 0) return [];
+  const percorsi = annotazioni.map((a) => percorsoContenitore(a.fatto?.selettore));
+  const massima = Math.max(...percorsi.map((p) => p.length));
+  let scelta = 1;
+  for (let d = 1; d <= massima; d += 1) {
+    const chiavi = new Set(percorsi.map((p) => p.slice(0, d).join(" > ")));
+    scelta = d;
+    if (chiavi.size > 1) break;
+  }
+  const gruppi = /* @__PURE__ */ new Map();
+  annotazioni.forEach((a, i) => {
+    const chiave = percorsi[i].slice(0, scelta).join(" > ") || a.fatto?.tag || "pagina";
+    if (!gruppi.has(chiave)) gruppi.set(chiave, []);
+    gruppi.get(chiave).push(a);
+  });
+  return [...gruppi.entries()].map(([contenitore, voci]) => ({ contenitore, voci }));
+}
+function stiliInRiga(stili) {
+  const voci = Object.entries(stili || {}).slice(0, 10).map(([k, v]) => `${k}: ${v}`);
+  return voci.join("; ");
+}
+function impacchettaAnnotazione(a, indice2) {
+  const f = a.fatto || {};
+  const righe = [`#${indice2 + 1} ${a.nota ? `— ${a.nota}` : "— (senza commento)"}`];
+  if (f.selettore) righe.push(`Elemento: ${f.selettore}`);
+  if (f.tag) righe.push(`Tag: <${f.tag}>${f.testo ? ` · testo: «${f.testo}»` : ""}`);
+  if (f.sorgente?.file || f.sorgente?.componente) righe.push(`Sorgente: ${[f.sorgente.componente, f.sorgente.file].filter(Boolean).join(" · ")}`);
+  if (f.rect) righe.push(`Posizione: x ${f.rect.x}, y ${f.rect.y}, ${f.rect.larghezza}×${f.rect.altezza} px`);
+  if (f.stili && Object.keys(f.stili).length) righe.push(`Stili: ${stiliInRiga(f.stili)}`);
+  if (f.antenati?.length) righe.push(`Dentro: ${f.antenati.join(" > ")}`);
+  if (f.html) righe.push("HTML:", "```html", f.html, "```");
+  return righe.join("\n");
+}
+function impacchetta(pagina, annotazioni, errori = []) {
+  const n = annotazioni.length;
+  const testa = [`Annotazioni sulla pagina ${pagina.url}${pagina.titolo ? ` («${pagina.titolo}»)` : ""} — ${n} ${n === 1 ? "commento" : "commenti"}.`];
+  const gruppi = raggruppa(annotazioni);
+  if (gruppi.length > 1) testa.push(`Sono raggruppati per zona della pagina (${gruppi.length} zone): zone diverse toccano probabilmente file diversi.`);
+  const corpo = [];
+  let indice2 = 0;
+  for (const g of gruppi) {
+    if (gruppi.length > 1) corpo.push(`
+## Zona: ${g.contenitore}`);
+    for (const a of g.voci) {
+      corpo.push(impacchettaAnnotazione(a, indice2));
+      indice2 += 1;
+    }
+  }
+  const coda = [];
+  if (errori.length) {
+    coda.push(`
+Errori di console della pagina (${errori.length}):`);
+    for (const e of errori.slice(0, 10)) coda.push(`- [${e.tipo}] ${e.testo}`);
+  }
+  coda.push("\nPer ogni commento: trova il codice che produce quell’elemento, applica la modifica e verifica nella pagina.");
+  return [...testa, ...corpo, ...coda].join("\n");
+}
+function renderizzaAnnotazioni(pannello, { annotazioni, attivo, onNota, onTogli, onSvuota, onInvia, onAttiva }) {
+  if (!pannello) return;
+  pannello.hidden = !attivo && annotazioni.length === 0;
+  const lista = pannello.querySelector("[data-annotazioni-lista]");
+  const conteggio2 = pannello.querySelector("[data-annotazioni-conteggio]");
+  const bottoneAttiva = pannello.querySelector("[data-annotazioni-attiva]");
+  const bottoneInvia = pannello.querySelector("[data-annotazioni-invia]");
+  const bottoneSvuota = pannello.querySelector("[data-annotazioni-svuota]");
+  if (conteggio2) conteggio2.textContent = annotazioni.length === 0 ? attivo ? "Clicca un elemento nella pagina" : "Nessun commento" : `${annotazioni.length} ${annotazioni.length === 1 ? "commento" : "commenti"}`;
+  if (bottoneAttiva) {
+    bottoneAttiva.setAttribute("aria-pressed", String(attivo));
+    bottoneAttiva.textContent = attivo ? "Smetti di annotare" : "Annota un elemento";
+    bottoneAttiva.onclick = () => onAttiva?.(!attivo);
+  }
+  if (bottoneInvia) {
+    bottoneInvia.disabled = annotazioni.length === 0;
+    bottoneInvia.onclick = () => onInvia?.();
+  }
+  if (bottoneSvuota) {
+    bottoneSvuota.disabled = annotazioni.length === 0;
+    bottoneSvuota.onclick = () => onSvuota?.();
+  }
+  if (!lista) return;
+  lista.replaceChildren();
+  annotazioni.forEach((a, i) => {
+    const li = document.createElement("li");
+    li.className = "talos-annotazione";
+    const testa = document.createElement("div");
+    testa.className = "talos-annotazione__testa";
+    const num2 = document.createElement("span");
+    num2.className = "talos-badge talos-badge--accent talos-badge--sm";
+    num2.textContent = String(i + 1);
+    const sel = document.createElement("code");
+    sel.className = "talos-mono talos-annotazione__selettore";
+    sel.textContent = a.fatto?.selettore || a.fatto?.tag || "elemento";
+    sel.title = a.fatto?.html || "";
+    const togli = document.createElement("button");
+    togli.type = "button";
+    togli.className = "talos-button talos-button--ghost talos-button--sm";
+    togli.textContent = "Togli";
+    togli.addEventListener("click", () => onTogli?.(i));
+    testa.append(num2, sel, togli);
+    const meta = document.createElement("p");
+    meta.className = "talos-muted talos-browser__meta";
+    const pezzi = [a.fatto?.testo ? `«${a.fatto.testo.slice(0, 80)}»` : "", a.fatto?.sorgente?.componente || "", a.fatto?.sorgente?.file || ""].filter(Boolean);
+    meta.textContent = pezzi.join(" · ");
+    const nota = document.createElement("textarea");
+    nota.className = "talos-field__input";
+    nota.rows = 2;
+    nota.placeholder = "Cosa deve cambiare qui?";
+    nota.value = a.nota || "";
+    nota.addEventListener("input", () => onNota?.(i, nota.value));
+    li.append(testa, meta, nota);
+    lista.append(li);
+  });
+}
+var MASSIMO_ANNOTAZIONI;
+var init_annotazioni = __esm({
+  "src/components/annotazioni.js"() {
+    MASSIMO_ANNOTAZIONI = 24;
+  }
+});
+
 // src/components/browser.js
+function localeAnnotabile(url) {
+  try {
+    const h = new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    return h === "localhost" || h === "127.0.0.1" || h === "::1" || h.endsWith(".localhost");
+  } catch {
+    return false;
+  }
+}
 function hostDaUrl(url) {
   try {
     const u = new URL(String(url));
@@ -6142,9 +6276,36 @@ function creaBrowser(schermo, { azioni = {} } = {}) {
     annulla: $(schermo, '[data-action="annullaBrowser"]'),
     conservaNota: $(schermo, '[data-action="conservaNotaBrowser"]'),
     chiudiNota: $(schermo, '[data-action="chiudiNotaBrowser"]'),
-    bloccatoTesto: $(schermo, "#browserBloccato p.talos-muted")
+    bloccatoTesto: $(schermo, "#browserBloccato p.talos-muted"),
+    annotazioni: $(schermo, "#browserAnnotazioni")
   };
-  let stato = { schede: [], attiva: null, note: {}, richiesta: null };
+  let stato = { schede: [], attiva: null, note: {}, richiesta: null, annotazioni: {}, annotaAttivo: false };
+  const frameAttivo = () => el22.live?.querySelector("iframe") || null;
+  const dialogaConOverlay = (messaggio) => {
+    try {
+      frameAttivo()?.contentWindow?.postMessage({ fonte: "talos-genitore", ...messaggio }, "*");
+    } catch {
+    }
+  };
+  window.addEventListener("message", (e) => {
+    const m = e.data;
+    if (!m || m.fonte !== "talos-annota") return;
+    const f = frameAttivo();
+    if (!f || e.source !== f.contentWindow) return;
+    const s = attiva();
+    if (!s || s.tipo !== "viva") return;
+    if (m.tipo === "elemento") azioni.annotazione?.(s, m.fatto);
+    else if (m.tipo === "naviga" && m.url) azioni.apri?.(m.url, s.id);
+    else if (m.tipo === "esc") azioni.annota?.(s, false);
+    else if (m.tipo === "pronta") {
+      if (m.titolo && !s.titolo) {
+        s.titolo = m.titolo;
+        renderizza();
+      }
+      if (stato.annotaAttivo) dialogaConOverlay({ tipo: "annota", attivo: true });
+      azioni.caricata?.(s.id);
+    }
+  });
   const attiva = () => stato.schede.find((s) => s.id === stato.attiva) || null;
   const indiceAttiva = () => stato.schede.findIndex((s) => s.id === stato.attiva);
   el22.indietro?.addEventListener("click", () => {
@@ -6165,7 +6326,9 @@ function creaBrowser(schermo, { azioni = {} } = {}) {
   });
   el22.annota?.addEventListener("click", () => {
     const s = attiva();
-    if (s) azioni.annota?.(s);
+    if (!s) return;
+    if (s.tipo === "viva" && s.proxata) azioni.annota?.(s, !stato.annotaAttivo);
+    else azioni.annota?.(s);
   });
   el22.copia?.addEventListener("click", () => {
     const s = attiva();
@@ -6333,7 +6496,8 @@ function creaBrowser(schermo, { azioni = {} } = {}) {
       frame.setAttribute("referrerpolicy", "no-referrer");
       frame.title = titoloDaLettura(s);
       frame.addEventListener("load", () => azioni.caricata?.(s.id));
-      frame.src = s.url;
+      frame.src = s.proxata ? `${PROXY_BROWSER}${encodeURIComponent(s.url)}` : s.url;
+      frame.dataset.proxata = String(Boolean(s.proxata));
       el22.live.append(frame);
     }
   }
@@ -6386,11 +6550,41 @@ function creaBrowser(schermo, { azioni = {} } = {}) {
     const nav = el22.cronologia?.closest("nav");
     if (nav) nav.hidden = letture === 0;
     if (el22.limiti) el22.limiti.textContent = t(vive > 0 ? TESTI3.limitiVive : TESTI3.limitiLetture);
+    const annotabile = Boolean(s && s.tipo === "viva" && s.proxata && s.stato !== "bloccata");
+    if (el22.annotazioni) {
+      const lista = annotabile ? stato.annotazioni[s.id] || [] : [];
+      if (!annotabile) {
+        el22.annotazioni.hidden = true;
+      } else {
+        renderizzaAnnotazioni(el22.annotazioni, {
+          annotazioni: lista,
+          attivo: stato.annotaAttivo,
+          onAttiva: (on) => azioni.annota?.(s, on),
+          onNota: (i2, testo3) => azioni.notaAnnotazione?.(s, i2, testo3),
+          onTogli: (i2) => {
+            dialogaConOverlay({ tipo: "togli", numero: i2 + 1 });
+            azioni.togliAnnotazione?.(s, i2);
+          },
+          onSvuota: () => {
+            dialogaConOverlay({ tipo: "svuota" });
+            azioni.svuotaAnnotazioni?.(s);
+          },
+          onInvia: () => azioni.inviaAnnotazioni?.(s)
+        });
+        el22.annotazioni.hidden = false;
+      }
+    }
+    if (el22.annota) {
+      el22.annota.setAttribute("aria-pressed", String(annotabile && stato.annotaAttivo));
+      el22.annota.title = annotabile ? t("Segna gli elementi della pagina da cambiare: i commenti finiscono nel composer") : t("Prepara una bozza nella chat senza inviarla");
+    }
+    dialogaConOverlay({ tipo: "annota", attivo: annotabile && stato.annotaAttivo });
   }
   return {
     /** @param {{schede?:Array, attiva?:string|null, note?:object, richiesta?:object|null}} nuovo */
     aggiorna(nuovo) {
       stato = { ...stato, ...nuovo };
+      if (stato.annotaAttivo && stato.annotazioni && Object.values(stato.annotazioni).flat().length >= MASSIMO_ANNOTAZIONI) stato.annotaAttivo = false;
       renderizza();
     },
     fuocoSullaScheda() {
@@ -6401,10 +6595,11 @@ function creaBrowser(schermo, { azioni = {} } = {}) {
     }
   };
 }
-var TESTI3, MASSIMO_SCHEDE, oraRoma, giornoRoma, $;
+var TESTI3, MASSIMO_SCHEDE, PROXY_BROWSER, oraRoma, giornoRoma, $;
 var init_browser = __esm({
   "src/components/browser.js"() {
     init_lingua();
+    init_annotazioni();
     TESTI3 = Object.freeze({
       intestazione: "Letture della sessione",
       riepilogoLetture: (n) => tn("Testo acquisito dall’agente · {n} pagina", "Testo acquisito dall’agente · {n} pagine", n),
@@ -6423,6 +6618,7 @@ var init_browser = __esm({
       nessunaScheda: "Nessuna pagina letta"
     });
     MASSIMO_SCHEDE = 12;
+    PROXY_BROWSER = "/api/v1/browser/proxy?url=";
     oraRoma = new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit" });
     giornoRoma = new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit" });
     $ = (radice, sel) => radice.querySelector(sel);
@@ -7065,6 +7261,7 @@ var init_app = __esm({
     init_lingua();
     init_impostazioni();
     init_browser();
+    init_annotazioni();
     init_nav_item();
     init_session_item();
     init_conversazione();
@@ -7301,6 +7498,10 @@ var init_app = __esm({
           browserChiuse: /* @__PURE__ */ new Set(),
           browserAttiva: null,
           browserRichiesta: null,
+          /** Browser oltre Hermes 06/9 — i commenti sugli elementi, per scheda viva: { [id]: [{nota, fatto}] }, e se si sta annotando. */
+          browserAnnotazioni: {},
+          browserAnnotaAttivo: false,
+          browserErroriPagina: {},
           /** ⭐⭐⭐ 27/8, R1 — messageId(ragionamento) -> {summaryText, detail, grezzo}, la bolla collassabile che ospita il ragionamento in streaming (riusa la stessa forma di appendToolNote, non un componente nuovo). Il testo grezzo si accumula qui per lo stesso motivo di testoGrezzoMessaggi: renderizzaMarkdownSemplice lavora sul totale, non sul delta. */
           ragionamentoBubble: /* @__PURE__ */ new Map(),
           /** ⛔⛔⛔ 27/8, owner: "ricevo risposte duplicate" — ogni evento.`_sequenza` (assegnato dal server, vedi session-registry.mjs broadcast()) entra qui la PRIMA volta che passa da handleRealEvent; una riconnessione (EventSource nativo dopo una caduta, o runDirectShell che ne apre una fresca) rimanda l'intero buffer da capo, e questo Set lo riconosce e lo scarta invece di duplicare bubble/testo. Sopravvive a un `continua:true` (stessa sessione, nuovo giro) — si azzera SOLO per una sessione davvero diversa. */
@@ -13679,7 +13880,44 @@ var init_app = __esm({
               void apriPaginaVivaBrowser(s.url, s.id);
             } else preparaCommentoNelComposer(`Rileggi la pagina ${s.url} e dimmi cosa è cambiato.`);
           },
-          annota: (s) => preparaCommentoNelComposer(`Riguardo alla pagina ${s.url}: `),
+          annota: (s, attivo) => {
+            if (typeof attivo === "boolean") {
+              state.realSession.browserAnnotaAttivo = attivo;
+              renderizzaBrowser();
+              return;
+            }
+            preparaCommentoNelComposer(`Riguardo alla pagina ${s.url}: `);
+          },
+          annotazione: (s, fatto) => {
+            const rs = state.realSession;
+            const lista = rs.browserAnnotazioni[s.id] || (rs.browserAnnotazioni[s.id] = []);
+            lista.push({ nota: "", fatto });
+            if (Array.isArray(fatto?.errori)) rs.browserErroriPagina[s.id] = fatto.errori;
+            renderizzaBrowser();
+            $2(`#browserAnnotazioni .talos-annotazione:last-child textarea`)?.focus();
+          },
+          notaAnnotazione: (s, i, testo3) => {
+            const l = state.realSession.browserAnnotazioni[s.id];
+            if (l?.[i]) l[i].nota = testo3;
+          },
+          togliAnnotazione: (s, i) => {
+            const l = state.realSession.browserAnnotazioni[s.id];
+            if (l) l.splice(i, 1);
+            renderizzaBrowser();
+          },
+          svuotaAnnotazioni: (s) => {
+            state.realSession.browserAnnotazioni[s.id] = [];
+            renderizzaBrowser();
+          },
+          inviaAnnotazioni: (s) => {
+            const rs = state.realSession;
+            const lista = rs.browserAnnotazioni[s.id] || [];
+            if (!lista.length) return;
+            const pacchetto = impacchetta({ url: s.url, titolo: s.titolo || null }, lista, rs.browserErroriPagina[s.id] || []);
+            rs.browserAnnotaAttivo = false;
+            preparaCommentoNelComposer(pacchetto);
+            toast("Commenti nel composer", `${lista.length} ${lista.length === 1 ? "commento" : "commenti"} sulla pagina: rileggi e invia quando vuoi.`);
+          },
           copia: (s) => {
             if (s.testo) copyText(s.testo, "Testo della pagina copiato");
           },
@@ -13706,7 +13944,7 @@ var init_app = __esm({
         if (!schede.some((x) => x.id === rs.browserAttiva)) rs.browserAttiva = schede.length ? schede[schede.length - 1].id : null;
         const m = /^lettura-(\d+)$/.exec(rs.browserAttiva || "");
         rs.browserIndice = m ? Number(m[1]) : -1;
-        ui.aggiorna({ schede, attiva: rs.browserAttiva, note: noteBrowser(), richiesta: rs.browserRichiesta });
+        ui.aggiorna({ schede, attiva: rs.browserAttiva, note: noteBrowser(), richiesta: rs.browserRichiesta, annotazioni: rs.browserAnnotazioni, annotaAttivo: rs.browserAnnotaAttivo });
         aggiornaRigaBrowserCapability();
       }
       function mostraPaginaBrowser(indice2) {
@@ -13731,12 +13969,14 @@ var init_app = __esm({
           return;
         }
         const gia = idEsistente ? rs.browserVive.find((x) => x.id === idEsistente) : null;
-        const voce = gia || { id: `viva-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`, tipo: "viva", origine: "tu", url, titolo: null, quando: (/* @__PURE__ */ new Date()).toISOString(), stato: "caricamento", motivo: null };
+        const voce = gia || { id: `viva-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`, tipo: "viva", origine: "tu", url, titolo: null, quando: (/* @__PURE__ */ new Date()).toISOString(), stato: "caricamento", motivo: null, proxata: localeAnnotabile(url) };
         if (gia) {
           gia.url = url;
           gia.stato = "caricamento";
           gia.motivo = null;
           gia.quando = (/* @__PURE__ */ new Date()).toISOString();
+          gia.proxata = localeAnnotabile(url);
+          rs.browserAnnotazioni[gia.id] = [];
         } else rs.browserVive.push(voce);
         rs.browserAttiva = voce.id;
         renderizzaBrowser();
@@ -13745,7 +13985,7 @@ var init_app = __esm({
           if (!rs.browserVive.includes(voce)) return;
           voce.url = esito?.url || url;
           voce.titolo = esito?.titolo || null;
-          if (esito?.incorniciabile) {
+          if (esito?.incorniciabile || voce.proxata) {
             if (voce.stato === "caricamento") voce.stato = "pronta";
           } else {
             voce.stato = "bloccata";

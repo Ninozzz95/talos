@@ -19,6 +19,7 @@
  */
 
 import { t, tn } from './lingua.js';
+import { renderizzaAnnotazioni, MASSIMO_ANNOTAZIONI } from './annotazioni.js';
 
 export const TESTI = Object.freeze({
   intestazione: 'Letture della sessione',
@@ -39,6 +40,12 @@ export const TESTI = Object.freeze({
 });
 
 export const MASSIMO_SCHEDE = 12;
+
+/** Un dev server sul computer della persona: la scheda passa dal proxy locale e si può annotare. */
+export function localeAnnotabile(url) {
+  try { const h = new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, ''); return h === 'localhost' || h === '127.0.0.1' || h === '::1' || h.endsWith('.localhost'); } catch { return false; }
+}
+export const PROXY_BROWSER = '/api/v1/browser/proxy?url=';
 
 /** L'host e il percorso corto di un indirizzo, per le schede e la cronologia (mockup: «example.org/documentazione»). */
 export function hostDaUrl(url) {
@@ -117,8 +124,20 @@ export function creaBrowser(schermo, { azioni = {} } = {}) {
     consenti: $(schermo, '[data-action="consentiBrowser"]'), nega: $(schermo, '[data-action="negaBrowser"]'), annulla: $(schermo, '[data-action="annullaBrowser"]'),
     conservaNota: $(schermo, '[data-action="conservaNotaBrowser"]'), chiudiNota: $(schermo, '[data-action="chiudiNotaBrowser"]'),
     bloccatoTesto: $(schermo, '#browserBloccato p.talos-muted'),
+    annotazioni: $(schermo, '#browserAnnotazioni'),
   };
-  let stato = { schede: [], attiva: null, note: {}, richiesta: null };
+  let stato = { schede: [], attiva: null, note: {}, richiesta: null, annotazioni: {}, annotaAttivo: false };
+  const frameAttivo = () => el.live?.querySelector('iframe') || null;
+  const dialogaConOverlay = (messaggio) => { try { frameAttivo()?.contentWindow?.postMessage({ fonte: 'talos-genitore', ...messaggio }, '*'); } catch { /* cornice non pronta */ } };
+  window.addEventListener('message', (e) => {
+    const m = e.data; if (!m || m.fonte !== 'talos-annota') return;
+    const f = frameAttivo(); if (!f || e.source !== f.contentWindow) return;
+    const s = attiva(); if (!s || s.tipo !== 'viva') return;
+    if (m.tipo === 'elemento') azioni.annotazione?.(s, m.fatto);
+    else if (m.tipo === 'naviga' && m.url) azioni.apri?.(m.url, s.id);
+    else if (m.tipo === 'esc') azioni.annota?.(s, false);
+    else if (m.tipo === 'pronta') { if (m.titolo && !s.titolo) { s.titolo = m.titolo; renderizza(); } if (stato.annotaAttivo) dialogaConOverlay({ tipo: 'annota', attivo: true }); azioni.caricata?.(s.id); }
+  });
   const attiva = () => stato.schede.find((s) => s.id === stato.attiva) || null;
   const indiceAttiva = () => stato.schede.findIndex((s) => s.id === stato.attiva);
 
@@ -127,7 +146,7 @@ export function creaBrowser(schermo, { azioni = {} } = {}) {
   el.avanti?.addEventListener('click', () => { const i = indiceAttiva(); if (i >= 0 && i < stato.schede.length - 1) azioni.seleziona?.(stato.schede[i + 1].id); });
   el.fuori?.addEventListener('click', () => { const s = attiva(); if (s) azioni.apriFuori?.(s); });
   el.rileggi?.addEventListener('click', () => { const s = attiva(); if (s) azioni.rileggi?.(s); });
-  el.annota?.addEventListener('click', () => { const s = attiva(); if (s) azioni.annota?.(s); });
+  el.annota?.addEventListener('click', () => { const s = attiva(); if (!s) return; if (s.tipo === 'viva' && s.proxata) azioni.annota?.(s, !stato.annotaAttivo); else azioni.annota?.(s); });
   el.copia?.addEventListener('click', () => { const s = attiva(); if (s) azioni.copia?.(s); });
   el.nota?.addEventListener('click', (e) => { e.stopPropagation(); const aperto = !el.editorNota.hidden; el.editorNota.hidden = aperto; el.nota.setAttribute('aria-expanded', String(!aperto)); if (!aperto) { const s = attiva(); el.notaInput.value = (s && stato.note[s.url]) || ''; el.notaInput.focus(); } });
   el.conservaNota?.addEventListener('click', () => { const s = attiva(); if (!s) return; azioni.salvaNota?.(s, el.notaInput.value.trim()); el.editorNota.hidden = true; el.nota?.setAttribute('aria-expanded', 'false'); el.nota?.focus(); });
@@ -211,7 +230,8 @@ export function creaBrowser(schermo, { azioni = {} } = {}) {
       frame.setAttribute('referrerpolicy', 'no-referrer');
       frame.title = titoloDaLettura(s);
       frame.addEventListener('load', () => azioni.caricata?.(s.id));
-      frame.src = s.url;
+      frame.src = s.proxata ? `${PROXY_BROWSER}${encodeURIComponent(s.url)}` : s.url; // un dev server locale passa dal proxy: stessa origine, annotabile
+      frame.dataset.proxata = String(Boolean(s.proxata));
       el.live.append(frame);
     }
   }
@@ -257,11 +277,26 @@ export function creaBrowser(schermo, { azioni = {} } = {}) {
     renderizzaCronologia();
     const nav = el.cronologia?.closest('nav'); if (nav) nav.hidden = letture === 0; // niente «Cronologia · scegli una lettura» senza letture
     if (el.limiti) el.limiti.textContent = t(vive > 0 ? TESTI.limitiVive : TESTI.limitiLetture);
+    // il pannello dei commenti: solo su una pagina viva proxata
+    const annotabile = Boolean(s && s.tipo === 'viva' && s.proxata && s.stato !== 'bloccata');
+    if (el.annotazioni) {
+      const lista = annotabile ? (stato.annotazioni[s.id] || []) : [];
+      if (!annotabile) { el.annotazioni.hidden = true; } else {
+        renderizzaAnnotazioni(el.annotazioni, {
+          annotazioni: lista, attivo: stato.annotaAttivo,
+          onAttiva: (on) => azioni.annota?.(s, on), onNota: (i, testo) => azioni.notaAnnotazione?.(s, i, testo), onTogli: (i) => { dialogaConOverlay({ tipo: 'togli', numero: i + 1 }); azioni.togliAnnotazione?.(s, i); },
+          onSvuota: () => { dialogaConOverlay({ tipo: 'svuota' }); azioni.svuotaAnnotazioni?.(s); }, onInvia: () => azioni.inviaAnnotazioni?.(s),
+        });
+        el.annotazioni.hidden = false;
+      }
+    }
+    if (el.annota) { el.annota.setAttribute('aria-pressed', String(annotabile && stato.annotaAttivo)); el.annota.title = annotabile ? t('Segna gli elementi della pagina da cambiare: i commenti finiscono nel composer') : t('Prepara una bozza nella chat senza inviarla'); }
+    dialogaConOverlay({ tipo: 'annota', attivo: annotabile && stato.annotaAttivo });
   }
 
   return {
     /** @param {{schede?:Array, attiva?:string|null, note?:object, richiesta?:object|null}} nuovo */
-    aggiorna(nuovo) { stato = { ...stato, ...nuovo }; renderizza(); },
+    aggiorna(nuovo) { stato = { ...stato, ...nuovo }; if (stato.annotaAttivo && stato.annotazioni && Object.values(stato.annotazioni).flat().length >= MASSIMO_ANNOTAZIONI) stato.annotaAttivo = false; renderizza(); },
     fuocoSullaScheda() { el.schede?.querySelector('[aria-selected="true"]')?.focus(); },
     get stato() { return stato; },
   };

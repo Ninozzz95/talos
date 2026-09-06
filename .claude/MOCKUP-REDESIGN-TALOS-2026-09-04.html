@@ -677,6 +677,14 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-tabs__tab[data-browser-tab]:hover::after,.talos-tabs__tab[data-browser-tab]:focus-visible::after,.talos-tabs__tab[data-browser-tab][aria-selected="true"]::after{opacity:1}
 .talos-browser__live{height:min(70vh,760px);min-height:360px;padding:var(--talos-space-sm)}
 .talos-browser__live iframe{width:100%;height:100%;border:0;border-radius:var(--talos-radius-card);background:#fff}
+/* Browser oltre Hermes 06/09 — i commenti sugli elementi della pagina viva */
+.talos-browser__annotazioni{padding:var(--talos-space-md);border-top:1px solid var(--talos-border-subtle)}
+.talos-browser__annotazioni-testa{gap:var(--talos-space-sm)}
+.talos-browser__annotazioni-lista{list-style:none;margin:var(--talos-space-sm) 0 0;padding:0;display:grid;gap:var(--talos-space-sm)}
+.talos-annotazione{padding:var(--talos-space-sm) var(--talos-space-md);border:1px solid var(--talos-border);border-radius:var(--talos-radius-card);background:var(--talos-card-subtle);display:grid;gap:6px}
+.talos-annotazione__testa{display:flex;align-items:center;gap:var(--talos-space-sm)}
+.talos-annotazione__selettore{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--talos-font-size-xs)}
+.talos-annotazione textarea{min-height:44px;resize:vertical}
 .talos-topbar:has([data-vistetab]){flex-wrap:nowrap}
 .talos-topbar [data-vistetab]{flex-wrap:nowrap}
 #veloComandi .talos-dialog__body{display:flex;flex-direction:column;overflow:hidden}
@@ -1325,6 +1333,7 @@ Una segnalazione di stallo non termina il processo.</pre>
       <div id="browserNotaSalvata" class="talos-browser__note" role="status" hidden></div>
     </article>
     <div id="browserLive" class="talos-browser__live" hidden></div>
+    <div id="browserAnnotazioni" class="talos-browser__annotazioni" data-c="BrowserAnnotations" hidden><div class="talos-cluster talos-browser__annotazioni-testa"><span class="talos-eyebrow">Commenti sulla pagina</span><span class="talos-muted talos-browser__meta" data-annotazioni-conteggio>Nessun commento</span><span class="talos-grow"></span><button type="button" class="talos-button talos-button--secondary talos-button--sm" data-annotazioni-attiva aria-pressed="false">Annota un elemento</button><button type="button" class="talos-button talos-button--ghost talos-button--sm" data-annotazioni-svuota disabled>Svuota</button><button type="button" class="talos-button talos-button--primary talos-button--sm" data-annotazioni-invia disabled>Porta i commenti nella chat</button></div><ul class="talos-browser__annotazioni-lista" data-annotazioni-lista></ul><p class="talos-muted talos-browser__meta">Ogni commento porta all’agente il selettore, l’HTML, gli stili e, quando la pagina li espone, il file del componente. Niente parte da solo: i commenti finiscono nel composer.</p></div>
   </div>
   <nav class="talos-browser__history talos-browser__space" aria-label="Pagine lette in questa sessione" data-c="BrowserHistory">
     <h3 class="talos-browser__heading">Cronologia <span class="talos-muted talos-browser__meta">· scegli una lettura</span></h3>
