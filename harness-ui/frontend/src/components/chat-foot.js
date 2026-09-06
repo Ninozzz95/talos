@@ -82,6 +82,21 @@ export function nomeModelloUmano(id) {
   return parti.filter(Boolean).join(' · ');
 }
 
+/*
+ * ⛔ 06/9, owner: «il ragionamento in corso non scompare quando il fondo della chat è inquadrato, e
+ * scompare quando sali su» — cioè al contrario. Due cure dello stesso giorno si pestavano i piedi:
+ * sotto l'ultimo messaggio c'è mezzo schermo di spazio (la cura «la chat si ferma a metà pagina»),
+ * quindi il fondo dello SCROLL sta mezzo schermo sotto il fondo del TESTO. Chiedere «quanto manca al
+ * fondo dello scroll» rispondeva ~340px anche mentre stavi guardando la fine.
+ * ⇒ «Sono in fondo» vuol dire che si vede la fine del CONTENUTO: lo spazio in coda si sottrae,
+ * perché è vuoto per costruzione. Funzione pura, così la si prova senza un browser.
+ */
+export function fondoInVista({ scrollHeight = 0, scrollTop = 0, clientHeight = 0, coda = 0, soglia = 24 } = {}) {
+  const distanza = Number(scrollHeight) - Number(scrollTop) - Number(clientHeight);
+  if (!Number.isFinite(distanza)) return true;
+  return distanza <= Math.max(0, Number(coda) || 0) + soglia;
+}
+
 /** Il tono del chip del permesso: attenzione quando scrive o ha tutto. */
 export function tonoPermesso(permesso) {
   if (permesso === 'Full access') return 'danger';
@@ -179,6 +194,20 @@ export function aggiornaPiedeChat(piede, dati = {}) {
      * stato, legato a `isAtEnd()`, invece di un doppione sempre acceso.
      */
     striscia.hidden = !dati.attivo || dati.inFondo === true;
+    /*
+     * 06/9, owner: «se ci clicchi ti deve portare in fondo giù». La striscia compare proprio quando
+     * stai leggendo più su: è il posto naturale dove chiedere «riportami dove sta scrivendo».
+     * Il pulsante «Ferma» dentro la striscia resta suo: si esclude, non si copre.
+     */
+    if (!striscia.dataset.portaInFondo) {
+      striscia.dataset.portaInFondo = '1';
+      striscia.style.cursor = 'pointer';
+      striscia.setAttribute('title', 'Torna dove sta scrivendo');
+      striscia.addEventListener('click', (evento) => {
+        if (evento.target.closest('button')) return;
+        striscia.dispatchEvent(new CustomEvent('talos-vai-in-fondo', { bubbles: true }));
+      });
+    }
     const cosa = striscia.querySelector('[data-run-what]');
     if (cosa) {
       cosa.replaceChildren();

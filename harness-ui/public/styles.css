@@ -1318,7 +1318,7 @@ button {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 8px 0 12px 44px;
+  padding: 8px 44px 12px;
 }
 @media (max-width: 1040px) {
   .talos-conversation {
@@ -1799,9 +1799,11 @@ button.talos-turn-spine__tick:focus-visible {
 :root[data-talos-composer-shape=compact] .talos-composer__input {
   min-height: 32px;
 }
-:root.chat-full-width .talos-conversation__column,
-:root.chat-full-width .talos-chat-foot > * {
+:root.chat-full-width .talos-conversation__column {
   max-width: none;
+}
+:root.chat-full-width .talos-chat-foot > * {
+  max-width: calc(100% - 56px);
 }
 :root.immersive-header .talos-topbar {
   border-bottom-color: transparent;

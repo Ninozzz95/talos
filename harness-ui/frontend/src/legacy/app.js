@@ -36,7 +36,7 @@ import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaNotaErrore, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione, come quella di ChatGPT desktop
 import { montaScorciatoie, normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
-import { aggiornaPiedeChat, etichettaPermesso, nomeModelloUmano } from '../components/chat-foot.js';
+import { aggiornaPiedeChat, etichettaPermesso, fondoInVista, nomeModelloUmano } from '../components/chat-foot.js';
 import { spiegaErrore } from '../components/errori.js';
 import { VIE_ALLEGATO, TETTI_ALLEGATI, allegatoPesante, costoAllegato, costoTotale, frasiTetti, nomeBreveAllegato } from '../components/allegati.js'; // 06/9 B4/B6/B7/B9: il «+» allega, e ogni allegato dichiara il suo costo // 06/9 O-22/O-23: gli errori del giro detti a una persona // 05/9 Fase 2: ChatFooter — striscia del giro, chip e barra di stato dai dati
 import { aggiornaDiffReview, creaRigaFileReview, nascondiAzioniFase3, riassuntoReview } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno del mockup
@@ -6337,11 +6337,30 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     return { cosa: 'TALOS sta lavorando', dettaglio: '' };
   }
   /** Vero quando il fondo della conversazione e' in vista: la striscia sopra il composer non serve. */
+  /*
+   * ⛔ 06/9, owner: «il ragionamento in corso non scompare quando il fondo della chat è inquadrato,
+   * e scompare quando sali su» — cioè esattamente al contrario. Non era un caso: le due cure di oggi
+   * si pestavano i piedi. Sotto l'ultimo messaggio c'è mezzo schermo di spazio (la cura di O-21, «la
+   * chat si ferma a metà pagina»), quindi il fondo dello SCROLL sta mezzo schermo sotto il fondo del
+   * TESTO: guardando la fine della conversazione la distanza dal fondo restava ~340px e la striscia
+   * si credeva «scrollata in su». Salendo davvero, il testo cresceva sopra e per un attimo il conto
+   * tornava — da qui il comportamento invertito che l'owner ha visto.
+   * ⇒ «Sono in fondo» vuol dire che si vede la fine del CONTENUTO, non del contenitore: lo spazio in
+   * coda si sottrae, perché è vuoto per costruzione.
+   */
   function fondoConversazioneInVista() {
     const c = scrollerConversazione();
     if (!c) return true;
-    return c.scrollHeight - c.scrollTop - c.clientHeight <= 24;
+    const colonna = $('#conversation');
+    const coda = colonna ? (parseFloat(getComputedStyle(colonna).paddingBottom) || 0) : 0;
+    return fondoInVista({ scrollHeight: c.scrollHeight, scrollTop: c.scrollTop, clientHeight: c.clientHeight, coda });
   }
+  // 06/9: la striscia chiede di tornare in fondo, la chat la porta (l'evento sale dal componente)
+  ROOT().addEventListener('talos-vai-in-fondo', () => {
+    const sc = scrollerConversazione();
+    if (sc) scorriInFondoConversazione(sc);
+  });
+
   function aggiornaPiedeChatDaStato() {
     const piede = $('#schermoChat .talos-chat-foot');
     if (!piede) return;
@@ -11319,12 +11338,47 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   function mantieniFondoDuranteRipristino(generation) {
     const conversation = $('#conversation');
     if (!conversation) return;
-    const inFondo = () => { aggiornaSpazioCodaConversazione(conversation); const sc = scrollerConversazione(conversation); if (sc) sc.scrollTop = sc.scrollHeight; };
+    /*
+     * ⛔⛔⛔ 06/9, owner: «se scrollo un po' più in alto e aspetto qualche secondo mi porta con uno
+     * snap alla fine chat». Riprodotto e misurato: scrollato a 1039 su 2779, dopo 2,5 s si torna a
+     * 2779, e ci si resta. Causa: questo osservatore vive fino a 30 secondi e riporta in fondo a
+     * OGNI mutazione — attributi `class` e `style` compresi, cioè anche le animazioni d'ingresso e
+     * ogni ridisegno di stato. Finché nessuno tocca lo scroll è quello che vogliamo (la cronologia
+     * si costruisce e il fondo resta il fondo); dal momento in cui la persona scorre, comanda lei.
+     * ⇒ Il primo scorrimento non nostro che si allontana dal fondo stacca tutto, per sempre.
+     */
+    let nostro = false;
+    let smesso = false;
+    const inFondo = () => {
+      if (smesso) return;
+      aggiornaSpazioCodaConversazione(conversation);
+      const sc = scrollerConversazione(conversation);
+      if (!sc) return;
+      nostro = true;
+      sc.scrollTop = sc.scrollHeight;
+      // il flag si spegne dopo che l'evento `scroll` di QUESTA assegnazione è stato consegnato
+      window.setTimeout(() => { nostro = false; }, 0);
+    };
     // Scopre la conversazione SOLO quando è già in fondo: prima porta il fondo, poi toglie is-restoring, poi ribatte il fondo (togliere la classe non cambia il layout, ma costa zero essere sicuri).
     const scopri = () => { if (generation !== state.realSession.generation) return; inFondo(); conversation.classList.remove('is-restoring'); inFondo(); };
     const osservatore = new MutationObserver(inFondo);
     // ⛔ 02/09 — misurato dal vivo: 12320 su 12334, 14px sopra il fondo per 4s filati. L'ultima MUTAZIONE di figli non è l'ultimo cambio di altezza: markMotionEnter cambia una classe (attributo, non childList) un frame dopo l'inserimento e il layout cresce ancora. Si osservano anche gli attributi, e alla fine del ripristino si ribatte il fondo su due frame successivi.
     osservatore.observe(conversation, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class', 'style'] });
+    const scroller = scrollerConversazione(conversation);
+    const smetti = () => {
+      if (smesso) return;
+      smesso = true;
+      osservatore.disconnect();
+      window.clearInterval(fermaSeFinito);
+      conversation.classList.remove('is-restoring'); // mai lasciare la conversazione nascosta perché la persona ha scorso
+      scroller?.removeEventListener('scroll', suScroll);
+    };
+    function suScroll() {
+      if (nostro || smesso || !scroller) return;
+      const distanza = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+      if (distanza > 40) smetti(); // si è allontanata dal fondo di sua volontà: da qui comanda lei
+    }
+    scroller?.addEventListener('scroll', suScroll, { passive: true });
     const fermaSeFinito = window.setInterval(() => {
       if (generation !== state.realSession.generation || state.realSession.eventoTerminaleVisto) {
         osservatore.disconnect();
@@ -11333,9 +11387,9 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       }
     }, 200);
     // Rete di sicurezza per la VISIBILITÀ: una sessione conclusa senza evento terminale nel replay (interrotta) non resta nascosta per sempre — 8s bastano a qualunque cronologia vista finora (1.235 righe in ~1s).
-    window.setTimeout(scopri, 8_000);
+    window.setTimeout(() => { if (!smesso) scopri(); }, 8_000);
     // Rete di sicurezza: mai un osservatore vivo per sempre se il segnale di fine non arriva (connessione caduta, sessione mai conclusa per davvero).
-    window.setTimeout(() => { osservatore.disconnect(); window.clearInterval(fermaSeFinito); }, 30_000);
+    window.setTimeout(smetti, 30_000);
   }
 
   function passaASessione(sessionId, taskId, nome, modello, impostazioniSessione = null) {

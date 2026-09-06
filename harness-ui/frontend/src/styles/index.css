@@ -336,7 +336,11 @@ button{background:none; border:0; cursor:pointer; padding:0}
 .talos-cronologia__fumetto{position:absolute; left:calc(100% + 8px); transform:translateY(-50%); width:max-content; max-width:min(280px,32vw); padding:8px 10px; border:1px solid var(--talos-border); border-radius:var(--talos-radius-control); background:var(--talos-panel); color:var(--talos-text); box-shadow:var(--talos-shadow-floating); font-size:12.5px; line-height:1.45; pointer-events:none; z-index:21}
 .talos-cronologia__fumetto[hidden]{display:none}
 @media (max-width:1040px){ .talos-cronologia{display:none} }
-.talos-conversation{flex:1 1 auto; min-height:0; overflow-y:auto; padding:8px 0 12px 44px}
+/* 06/9, owner: «la chat si vede buttata a sinistra». I 44px servono a non far passare il testo
+   sotto la barra della cronologia, ma stavano SOLO a sinistra: il centro della conversazione era
+   spostato di 22px, e a colonna destra chiusa si vedeva a occhio nudo. Respiro uguale sui due lati:
+   la barra continua a stare nel suo, e la colonna torna al centro vero. */
+.talos-conversation{flex:1 1 auto; min-height:0; overflow-y:auto; padding:8px 44px 12px}
 @media (max-width:1040px){ .talos-conversation{padding-left:0} }
 /* La conversazione sta al CENTRO dell'area (owner 04/09), non appoggiata a sinistra:
    colonna a larghezza massima, e il piede della chat allineato alla stessa colonna. */
@@ -454,7 +458,18 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 :root[data-talos-composer-shape="classic"] .talos-composer{border-radius:8px}
 :root[data-talos-composer-shape="compact"] .talos-composer{padding:8px 10px 6px; border-radius:11px}
 :root[data-talos-composer-shape="compact"] .talos-composer__input{min-height:32px}
-:root.chat-full-width .talos-conversation__column, :root.chat-full-width .talos-chat-foot > *{max-width:none}
+/* 06/9, owner: «la chat a tutta larghezza non funziona, si vede buttata a sinistra». Il tetto veniva
+   tolto (e quello funzionava), ma la conversazione ha 44px di respiro solo a SINISTRA — lo spazio
+   della barra della cronologia — e zero a destra: senza tetto il testo correva fino al bordo e
+   sembrava spinto da una parte. A tutta larghezza il respiro dev'essere lo stesso sui due lati. */
+/*
+ * ⛔ misurato subito dopo la prima cura, e la prima cura era peggio del male: mettendo 44px di
+ * respiro a destra sul contenitore, a finestra normale (824px utili) la colonna passava da 780 a
+ * 736 — cioè «tutta larghezza» RESTRINGEVA. Il respiro si prende dalla colonna, non dal
+ * contenitore: così non scende mai sotto la misura normale e cresce ovunque ci sia spazio vero.
+ */
+:root.chat-full-width .talos-conversation__column{max-width:none}
+:root.chat-full-width .talos-chat-foot > *{max-width:calc(100% - 56px)}
 :root.immersive-header .talos-topbar{border-bottom-color:transparent}
 body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{animation:none!important; transition:none!important}
 .talos-touched{margin-top:10px; overflow:hidden}
