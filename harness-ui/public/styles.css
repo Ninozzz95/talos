@@ -2243,7 +2243,7 @@ body.reduce-motion *::after {
   gap: 8px;
   margin: 8px 0 0;
 }
-.workspace-chooser-ritratto {
+.workspace-chooser-selection .workspace-chooser-ritratto {
   display: block;
   margin-top: 4px;
   color: var(--talos-muted);
@@ -2252,7 +2252,7 @@ body.reduce-motion *::after {
   text-transform: none;
   letter-spacing: normal;
 }
-.workspace-chooser-avviso {
+.workspace-chooser-selection .workspace-chooser-avviso {
   display: block;
   margin-top: 6px;
   padding: 6px 9px;
