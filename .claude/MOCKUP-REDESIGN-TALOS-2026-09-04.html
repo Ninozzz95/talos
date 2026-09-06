@@ -313,7 +313,12 @@ button{background:none; border:0; cursor:pointer; padding:0}
    stessa misura di prima (nessuna regressione di lettura). I tick sono bottoni: cliccarli porta al giro,
    come la barra della cronologia di ChatGPT. Fonti 06/09/2026: WAI-ARIA APG «Landmarks/Navigation» per la
    nav con etichetta, MDN «scrollIntoView» (comportamento smooth che rispetta prefers-reduced-motion). */
-.talos-conversation__column{max-width:calc(92px + var(--talos-measure-w)); margin:0 auto; width:100%}
+/* 06/9, owner: «la conversazione scrollata al massimo deve essere centrata a metà pagina».
+   Sotto l'ultimo messaggio ci vuole mezzo schermo di spazio, altrimenti «fine conversazione»
+   significa «incollato al composer» e il «segui mentre scrive» non può mai centrare niente.
+   Il valore lo misura la regia (metà dell'altezza visibile, `--stream-follow-space`); qui vale 0
+   finché non c'è una conversazione vera, così la schermata vuota resta centrata com'è. */
+.talos-conversation__column{max-width:calc(92px + var(--talos-measure-w)); margin:0 auto; width:100%; padding-bottom:var(--stream-follow-space, 0px)}
 .talos-chat-foot > *{max-width:min(var(--talos-measure-w), calc(100% - 56px)); margin-left:auto; margin-right:auto}
 .talos-conversation--empty{display:grid; place-items:center; padding:28px}
 .talos-empty{max-width:var(--talos-measure-w); width:100%}
@@ -353,8 +358,19 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 .talos-message p{color:var(--talos-assistant-text); margin-bottom:10px; line-height:1.6}
 .talos-message p:last-child{margin-bottom:0}
 .talos-message code{font-family:var(--talos-font-mono); font-size:12.5px; color:var(--talos-text); background:var(--talos-panel-soft); padding:1px 5px; border-radius:5px}
-.talos-message--user .talos-message__body{background:var(--talos-panel-soft); border:1px solid var(--talos-border-subtle); border-radius:14px; padding:12px 16px}
+/* 06/9, owner: «le bolle di domanda devono essere colorate in colore accent, nel tema Calm oro».
+   Oro velato, non oro pieno: il fondo è l'accento al 14% con il suo bordo — lo stesso linguaggio dei
+   badge d'accento e del lampeggio della cronologia, così la chat resta una cosa sola. Il testo tiene
+   il colore normale: su un oro pieno perderebbe contrasto proprio dove si rilegge quello che hai chiesto. */
+.talos-message--user{display:flex; flex-direction:column; align-items:flex-end}
+/* 06/9, owner: «la bolla di domanda non deve avere larghezza al massimo, deve essere una bolla di chat
+   con la codina e partire da destra». Così la domanda si riconosce dalla FORMA prima che dal colore:
+   larghezza sul contenuto (tetto al 72% della colonna), ancorata a destra, e l'angolo in basso a destra
+   quadrato che fa da codina — la stessa che usa qualunque chat, senza triangoli appiccicati che si
+   staccano quando la bolla va a capo. La riga dell'autore segue la bolla, a destra. */
+.talos-message--user .talos-message__body{max-width:min(72%, 44rem); width:fit-content; margin-left:auto; background:var(--talos-accent-soft); border:1px solid var(--talos-accent-border); border-radius:16px 16px 4px 16px; padding:12px 16px}
 .talos-message--user .talos-message__body p{color:var(--talos-text)}
+.talos-message--user .talos-message__meta, .talos-message--user .talos-msg-meta{justify-content:flex-end; text-align:right}
 
 .talos-activity{margin:10px 0; overflow:hidden}
 .talos-activity__head{display:flex; align-items:center; gap:10px; width:100%; min-height:44px; padding:0 14px; text-align:left; color:var(--talos-assistant-text)}
@@ -420,6 +436,32 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-status-strip__pulse{width:8px; height:8px; border-radius:50%; background:var(--talos-accent-hover); flex:none; animation:talos-pulse 1.6s var(--talos-motion-ease) infinite}
 @keyframes talos-pulse{0%,100%{opacity:.35; transform:scale(.9)} 50%{opacity:1; transform:scale(1)}}
 .talos-status-strip__what{flex:1; min-width:0; font-size:13px; color:var(--talos-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+/* 06/9, owner: «i comandi devono essere formattati bene in codice, così è troppo brutto».
+   Il comando di una richiesta di approvazione è una cosa che si LEGGE prima di dire sì: monospazio,
+   fondo suo, a capo solo dove il comando lo permette, e scorrimento orizzontale invece di un muro
+   di testo giustificato. Tetto in altezza perché un `node -e` può essere lunghissimo. */
+/* 06/9, owner con lo screenshot cerchiato in blu: a schermo si leggeva «JavaScriptCopia».
+   Il markup dell'intestazione del blocco di codice esisteva già (code-block-head/-lang/-copy,
+   `renderizzaMarkdown` in app.js) ma dopo il passaggio al foglio nuovo NESSUNA regola lo vestiva:
+   nome del linguaggio e pulsante finivano incollati, senza barra e senza spazio.
+   Forma: una barra sottile sopra il codice, linguaggio a sinistra in tono spento, «Copia» a destra;
+   niente maiuscoletto, niente icona in più — il blocco resta il protagonista. Il codice scorre da solo
+   invece di allargare la conversazione. Fonti 06/09/2026: streamdown.ai/docs/code-blocks (intestazione
+   con lingua e copia, stato «copiato» temporaneo), shiki.style (nessun contrasto proprio: eredita il tema). */
+.assistant-copy .code-block{position:relative}
+.assistant-copy .code-block-head{display:flex; align-items:center; gap:8px; padding:6px 10px 6px 12px; border-bottom:1px solid var(--talos-border, var(--line)); background:var(--talos-panel-strong, rgba(255,255,255,.03))}
+.assistant-copy .code-block-lang{flex:1; min-width:0; font-family:var(--talos-font-mono); font-size:11.5px; letter-spacing:.01em; color:var(--talos-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.assistant-copy .code-block-copy{flex:none; border:1px solid transparent; border-radius:8px; padding:3px 9px; background:transparent; color:var(--talos-muted); font:inherit; font-size:11.5px; cursor:pointer; transition:color var(--talos-motion-duration-fast,.12s) var(--talos-motion-ease), background var(--talos-motion-duration-fast,.12s) var(--talos-motion-ease), border-color var(--talos-motion-duration-fast,.12s) var(--talos-motion-ease)}
+.assistant-copy .code-block-copy:hover{color:var(--talos-text); background:var(--talos-accent-soft); border-color:var(--talos-accent-border)}
+.assistant-copy .code-block-copy:focus-visible{outline:2px solid var(--talos-accent-border); outline-offset:2px}
+.assistant-copy .code-block-copy.is-fatto{color:var(--talos-success, var(--talos-text)); border-color:transparent; background:transparent}
+.assistant-copy .code-block-copy[disabled]{opacity:.55; cursor:default}
+.assistant-copy .code-block pre{overflow-x:auto}
+/* mentre il blocco arriva ancora dal modello: il bordo lo dice, senza animazioni che distraggono */
+.assistant-copy .code-block-in-arrivo{border-color:var(--talos-accent-border)}
+.talos-approval__codice{margin:8px 0 0; padding:10px 12px; border-radius:10px; border:1px solid var(--talos-border); background:var(--talos-code-bg, var(--talos-surface-sunken, rgba(0,0,0,.18))); color:var(--talos-text); font-family:var(--talos-font-mono); font-size:12.5px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; overflow-x:auto; overflow-y:auto; max-height:14em}
+.talos-approval__motivo{margin:8px 0 0; font-size:12.5px; color:var(--talos-muted)}
+.talos-approval__esito{margin:8px 0 0; font-size:12.5px; font-weight:600}
 .talos-queue{display:flex; align-items:center; gap:10px; padding:8px 14px; margin-bottom:8px; border-radius:11px; border:1px dashed var(--talos-border-strong); color:var(--talos-assistant-text); font-size:13px}
 .talos-queue__text{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 /* 06/9 B14 — l'Invio durante un giro non decide da solo: due pulsanti espliciti, sotto il composer.
@@ -1200,7 +1242,9 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
                 <span class="talos-mono talos-measure talos-grow talos-truncate">src/session-registry.mjs</span>
                 <span class="talos-diff-num talos-diff-num--plus">+18</span><span class="talos-diff-num talos-diff-num--minus">−2</span>
               </div>
-              <p class="talos-approval__why">Serve per aggiungere le soglie della guardia che hai chiesto: 60 secondi di silenzio e tre ripetizioni identiche.</p>
+              <p class="talos-approval__why">Vuole scrivere questo file. Serve per aggiungere le soglie della guardia che hai chiesto: 60 secondi di silenzio e tre ripetizioni identiche.</p>
+              <pre class="talos-approval__codice" tabindex="0">src/session-registry.mjs</pre>
+              <p class="talos-approval__motivo">Chiede perché «scrittura di un file» ha il cancello «Chiedi conferma», anche con la sessione su «Accesso completo».</p>
               <div class="talos-diff" data-c="DiffView">
                 <div class="talos-diff__line talos-diff__line--del">− const SOGLIE = { silenzioMs: 30_000 };</div>
                 <div class="talos-diff__line talos-diff__line--add">+ export const SOGLIE_STALLO_PREDEFINITE = Object.freeze({</div>

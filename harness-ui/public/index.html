@@ -194,7 +194,9 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
                 <span class="talos-mono talos-measure talos-grow talos-truncate">src/session-registry.mjs</span>
                 <span class="talos-diff-num talos-diff-num--plus">+18</span><span class="talos-diff-num talos-diff-num--minus">−2</span>
               </div>
-              <p class="talos-approval__why">Serve per aggiungere le soglie della guardia che hai chiesto: 60 secondi di silenzio e tre ripetizioni identiche.</p>
+              <p class="talos-approval__why">Vuole scrivere questo file. Serve per aggiungere le soglie della guardia che hai chiesto: 60 secondi di silenzio e tre ripetizioni identiche.</p>
+              <pre class="talos-approval__codice" tabindex="0">src/session-registry.mjs</pre>
+              <p class="talos-approval__motivo">Chiede perché «scrittura di un file» ha il cancello «Chiedi conferma», anche con la sessione su «Accesso completo».</p>
               <div class="talos-diff" data-c="DiffView">
                 <div class="talos-diff__line talos-diff__line--del">− const SOGLIE = { silenzioMs: 30_000 };</div>
                 <div class="talos-diff__line talos-diff__line--add">+ export const SOGLIE_STALLO_PREDEFINITE = Object.freeze({</div>

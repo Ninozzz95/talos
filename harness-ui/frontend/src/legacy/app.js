@@ -33,7 +33,7 @@ import { creaBrowser, prossimaDopoChiusura as prossimaDopoChiusuraBrowser, MASSI
 import { impacchetta as impacchettaAnnotazioni } from '../components/annotazioni.js'; // Browser oltre Hermes 06/9
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
-import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
+import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione, come quella di ChatGPT desktop
 import { montaScorciatoie, normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
 import { aggiornaPiedeChat, etichettaPermesso } from '../components/chat-foot.js'; // 05/9 Fase 2: ChatFooter — striscia del giro, chip e barra di stato dai dati
@@ -617,13 +617,31 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * metà, non alla fine") e torna 0 su una conversazione vuota, così
    * l'hero resta centrato.
    */
+  /*
+   * ⛔⛔⛔ 06/9, owner, tre segnalazioni in una: «quando il modello scrive lo scrolling deve
+   * seguire il suo posizionamento», «quando clicco su una sessione deve andare a fine
+   * conversazione», «la conversazione scrollata al massimo deve essere centrata a metà pagina».
+   * Erano già tutte e tre implementate — e tutte e tre sull'elemento SBAGLIATO. Dopo il passaggio
+   * al mockup, `#conversation` è la COLONNA interna (`.talos-conversation__column`, senza overflow):
+   * chi scorre è il contenitore `.talos-conversation`. `scrollTop`, `scrollHeight`, `clientHeight` e
+   * l'ascoltatore `scroll` finivano quindi su un elemento che non scorre: assegnare `scrollTop` non
+   * faceva niente, e il bersaglio «a metà» era calcolato su un'altezza che non era quella visibile.
+   * Una funzione sola risponde «chi scorre», e tutti la usano: mai due idee dello stesso elemento.
+   */
+  function scrollerConversazione(nodo = $('#conversation')) {
+    if (!nodo) return null;
+    return nodo.closest?.('.talos-conversation') || nodo;
+  }
+
   function aggiornaSpazioCodaConversazione(conversation) {
     if (!conversation) return;
-    const haMessaggi = !!conversation.querySelector('.message');
-    const spazio = haMessaggi ? Math.ceil(conversation.clientHeight / 2) : 0;
+    const scroller = scrollerConversazione(conversation);
+    const haMessaggi = !!conversation.querySelector('.message, .talos-turn');
+    const spazio = haMessaggi ? Math.ceil((scroller?.clientHeight || conversation.clientHeight) / 2) : 0;
     if (spazio === spazioCodaConversazioneUltimo) return;
     spazioCodaConversazioneUltimo = spazio;
-    conversation.style.setProperty('--stream-follow-space', `${spazio}px`);
+    // la variabile vive sul contenitore: il padding-bottom è della colonna, che ne è figlia
+    (scroller || conversation).style.setProperty('--stream-follow-space', `${spazio}px`);
   }
 
   function scrollStreamingOutput(element) {
@@ -642,15 +660,16 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
         return;
       }
       aggiornaSpazioCodaConversazione(conversation); // prima di leggere scrollHeight: il clamp a maxScroll deve vedere lo spazio in coda
-      const containerRect = conversation.getBoundingClientRect();
+      const scroller = scrollerConversazione(conversation) || conversation;
+      const containerRect = scroller.getBoundingClientRect();
       const targetRect = target.getBoundingClientRect();
-      const fondoContenuto = conversation.scrollTop + (targetRect.bottom - containerRect.top);
-      const maxScroll = Math.max(0, conversation.scrollHeight - conversation.clientHeight);
-      const nuovoTop = Math.max(0, Math.min(maxScroll, fondoContenuto - conversation.clientHeight / 2));
+      const fondoContenuto = scroller.scrollTop + (targetRect.bottom - containerRect.top);
+      const maxScroll = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      const nuovoTop = Math.max(0, Math.min(maxScroll, fondoContenuto - scroller.clientHeight / 2));
       streamingLastTargetTop = nuovoTop;
       // Istantaneo, mai 'smooth': vedi il commento di Hermes citato sopra.
-      conversation.scrollTop = nuovoTop;
-      logStreaming('scroll', { nuovoTop: Math.round(nuovoTop), scrollHeight: conversation.scrollHeight, clientHeight: conversation.clientHeight });
+      scroller.scrollTop = nuovoTop;
+      logStreaming('scroll', { nuovoTop: Math.round(nuovoTop), scrollHeight: scroller.scrollHeight, clientHeight: scroller.clientHeight });
     });
   }
 
@@ -668,12 +687,13 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   function collegaSeguiFondoConversazione() {
     const conversation = $('#conversation');
     if (!conversation) return;
-    conversation.addEventListener('scroll', () => {
+    const scroller = scrollerConversazione(conversation) || conversation;
+    scroller.addEventListener('scroll', () => {
       if (streamingLastTargetTop === null) return;
-      streamingAutoFollow = Math.abs(conversation.scrollTop - streamingLastTargetTop) <= CONVERSATION_FOLLOW_EPSILON_PX;
+      streamingAutoFollow = Math.abs(scroller.scrollTop - streamingLastTargetTop) <= CONVERSATION_FOLLOW_EPSILON_PX;
     }, { passive: true });
     // Lo spazio in coda è metà dell'altezza VISIBILE: se la finestra cambia, cambia anche lui.
-    if (typeof ResizeObserver === 'function') new ResizeObserver(() => aggiornaSpazioCodaConversazione(conversation)).observe(conversation);
+    if (typeof ResizeObserver === 'function') new ResizeObserver(() => aggiornaSpazioCodaConversazione(conversation)).observe(scroller);
   }
   collegaSeguiFondoConversazione();
 
@@ -1050,10 +1070,31 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
        * verificata in passaASessione per il riclic sessione. Misurato:
        * scrollIntoView 0px mossi; scrollTo diretto, in ~60ms, esatto.
        */
-      if (conversazione) {
-        conversazione.scrollTo({ top: conversazione.scrollHeight, behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth' });
-      }
+      /*
+       * ⛔ 06/9, owner: «non far partire l'animazione di scroll se la conversazione è già scrollata
+       * alla fine». Strumentato prima di scrivere: qui si chiamava `scrollTo` su `#conversation`, che
+       * dopo il passaggio al mockup è la COLONNA (non scorre) — quindi la chiamata era inerte e
+       * l'animazione la faceva partire qualcun altro. Corretto il bersaglio, resta il punto vero:
+       * un'animazione che parte da fermo per arrivare dov'è già è un movimento senza informazione.
+       * Se il fondo è già in vista si aggiusta di scatto (o non si muove niente); si anima solo quando
+       * c'è davvero una distanza da percorrere, così il movimento significa «ti sto portando altrove».
+       * Ricerca 06/09/2026: shadcn/ui «Message scroller» e stackblitz-labs/use-stick-to-bottom — si
+       * segue solo mentre si sta già in fondo, e si distingue lo scorrimento della persona da quello
+       * dell'animazione senza debounce.
+       */
+      const scroller = scrollerConversazione(conversazione);
+      if (scroller) scorriInFondoConversazione(scroller);
     }, 40);
+  }
+
+  /** Il fondo, con l'animazione solo se serve davvero. Soglia condivisa con fondoConversazioneInVista. */
+  const CONVERSAZIONE_FONDO_SOGLIA_PX = 24;
+  function scorriInFondoConversazione(scroller) {
+    if (!scroller) return;
+    const distanza = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+    if (distanza <= CONVERSAZIONE_FONDO_SOGLIA_PX) { scroller.scrollTop = scroller.scrollHeight; return; } // già in fondo: nessuna animazione
+    const ridotto = document.body.classList.contains('reduce-motion');
+    scroller.scrollTo({ top: scroller.scrollHeight, behavior: ridotto ? 'auto' : 'smooth' });
   }
 
   function icon(id) {
@@ -6240,7 +6281,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   }
   /** Vero quando il fondo della conversazione e' in vista: la striscia sopra il composer non serve. */
   function fondoConversazioneInVista() {
-    const c = $('#conversation');
+    const c = scrollerConversazione();
     if (!c) return true;
     return c.scrollHeight - c.scrollTop - c.clientHeight <= 24;
   }
@@ -7135,7 +7176,10 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     markMotionEnter(article);
     window.setTimeout(() => {
       if (article.hidden) return;
-      if (!$('#conversation')?.classList.contains('is-restoring')) article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' });
+      if ($('#conversation')?.classList.contains('is-restoring')) return;
+      // 06/9 (owner): se il fondo è già in vista non c'è niente da raggiungere — nessuna animazione.
+      if (fondoConversazioneInVista()) return;
+      article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' });
     }, 40);
     return { article, summaryText, detail, dettaglio: riga.dettaglio }; // 05/9 Fase 2: anche il dettaglio mono della riga
   }
@@ -7418,12 +7462,12 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
      * "scrivi un file", è "riscrivi una regola dell'agente" (hook, MCP,
      * istruzioni, memoria), anche quando la sessione è in Full access.
      */
-    if (azione?.tipo === 'scrivi' && azione.fileDiControllo) return `Vuole scrivere un file di controllo di TALOS (regole dell'agente, non un file del progetto): ${azione.percorso}`;
-    if (azione?.tipo === 'scrivi') return `Vuole scrivere il file: ${azione.percorso}`;
-    if (azione?.tipo === 'shell') return `Vuole eseguire il comando: ${azione.comando}`;
+    if (azione?.tipo === 'scrivi' && azione.fileDiControllo) return 'Vuole scrivere un file di controllo di TALOS: una regola dell’agente (hook, MCP, istruzioni, memoria), non un file del progetto.';
+    if (azione?.tipo === 'scrivi') return 'Vuole scrivere questo file:';
+    if (azione?.tipo === 'shell') return 'Vuole eseguire questo comando nel terminale:';
     if (azione?.tipo === 'document_create') return `Vuole creare un documento (formato ${azione.formato || '?'})`;
     // ⭐⭐⭐ FASE B (28/8) — `prova` è il quarto attrezzo gated da verificaPermessoScrittura (trovato leggendo talosHarness.mjs): senza questo ramo, un permesso per-attrezzo `prova:'chiedi'` mostrava la card col fallback generico invece del comando VERO.
-    if (azione?.tipo === 'prova') return `Vuole eseguire la suite di test: ${azione.comando}`;
+    if (azione?.tipo === 'prova') return 'Vuole eseguire la suite di test:';
     /*
      * ⛔⛔⛔ 30/8, QA visiva (Task 11) — caso mancante trovato dal vivo,
      * con la prova nell'evento grezzo persistito
@@ -7444,6 +7488,36 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
      */
     if (azione?.tipo === 'research_start') return azione.question ? `Vuole avviare una ricerca approfondita: ${azione.question}` : 'Vuole avviare una ricerca approfondita.';
     return 'Vuole eseguire un\'azione che modifica qualcosa.';
+  }
+
+  /** Il testo esatto da mettere nel blocco codice della carta: comando o percorso, mai una frase. */
+  function codiceAzioneApprovazione(azione) {
+    if (azione?.tipo === 'shell' || azione?.tipo === 'prova') return azione.comando || '';
+    if (azione?.tipo === 'scrivi') return azione.percorso || '';
+    if (azione?.tipo === 'naviga') return azione.url || '';
+    return '';
+  }
+
+  /*
+   * ⛔ 06/9, owner: «non capisco perché spunta “chiede di eseguire” quando siamo in full access».
+   * Domanda giusta, e la carta non rispondeva. Tre motivi possibili, tutti veri in casi diversi:
+   *  1. un cancello per ATTREZZO su «chiedi» — sopravvive alla scelta della politica, e viene
+   *     ereditato dalla sessione che stavi guardando quando hai premuto «Nuova» (misurato in T04);
+   *  2. la politica della sessione è «Su richiesta»;
+   *  3. la sessione ha un canale di approvazione aperto per via di un ALTRO attrezzo: il kernel di
+   *     oggi, quando il canale c'è, chiede anche per gli attrezzi senza cancello (clausola
+   *     `vaChiesto` in talosHarness.mjs). È il costo dichiarato della cura del 06/9 al canale.
+   * La carta lo dice in italiano invece di lasciarlo indovinare.
+   */
+  function motivoRichiestaApprovazione(azione) {
+    const perAttrezzo = state.permessiPerAttrezzo || {};
+    const regola = azione?.tipo ? perAttrezzo[azione.tipo] : null;
+    const politica = etichettaPermesso(state.permissions);
+    if (regola === 'chiedi') return `Chiede perché «${nomeUmanoAttrezzo(azione.tipo)}» ha il cancello «Chiedi conferma», anche con la sessione su «${politica}».`;
+    if (state.permissions === 'On request') return `Chiede perché la sessione è su «${politica}»: ogni azione che cambia qualcosa passa da te.`;
+    const altri = Object.entries(perAttrezzo).filter(([, v]) => v === 'chiedi').map(([k]) => nomeUmanoAttrezzo(k));
+    if (altri.length) return `Chiede perché questa sessione ha un canale di approvazione aperto per ${altri.join(' e ')}: finché c'è, il kernel chiede anche per gli altri attrezzi.`;
+    return `Chiede perché questa azione tocca qualcosa fuori dalla sola lettura, e la sessione è su «${politica}».`;
   }
 
   /**
@@ -7473,7 +7547,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
      */
     const bersaglio = azione?.percorso || azione?.comando || azione?.question || azione?.title || '';
     const badge = azione?.tipo === 'scrivi' ? 'Chiede di scrivere' : (azione?.tipo === 'shell' || azione?.tipo === 'prova') ? 'Chiede di eseguire' : azione?.tipo === 'research_start' ? 'Chiede di cercare' : 'Chiede il permesso';
-    const scheda = creaApprovazione({ badge, bersaglio, perche: descriviAzioneApprovazione(azione), nota: 'Vale solo per questa richiesta' });
+    const scheda = creaApprovazione({ badge, bersaglio, perche: descriviAzioneApprovazione(azione), codice: codiceAzioneApprovazione(azione), motivo: motivoRichiestaApprovazione(azione), nota: 'Vale solo per questa richiesta' });
     const article = scheda.scheda;
     article.classList.add('real-approval-card');
     article.dataset.requestId = requestId;
@@ -10524,13 +10598,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
         const card = state.realSession.approvazioniPendenti.get(evento.requestId);
         if (card) {
           const daQuiStessa = card._rispostaDataQui?.() === true;
-          const azioniRiga = card.querySelector('.sheet-actions');
-          if (azioniRiga) azioniRiga.remove();
-          const copy = card.querySelector('.assistant-copy');
-          if (copy) {
-            const esito = evento.approvato ? 'Approvato' : 'Negato';
-            copy.textContent += daQuiStessa ? ` — ${esito}.` : ` — ${esito} (da un altro client).`;
-          }
+          // 06/9: l'esito non si concatena più alla frase (si leggeva come parte del comando): riga sua, col tono.
+          segnaEsitoApprovazione(card, { approvato: Boolean(evento.approvato), altrove: !daQuiStessa });
           state.realSession.approvazioniPendenti.delete(evento.requestId);
         }
         aggiornaElencoSessioniReali(); // ⛔ 04/9 — l'altro verso: risolta l'approvazione, la riga deve smettere di dire «in attesa»
@@ -11180,7 +11249,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   function mantieniFondoDuranteRipristino(generation) {
     const conversation = $('#conversation');
     if (!conversation) return;
-    const inFondo = () => { aggiornaSpazioCodaConversazione(conversation); conversation.scrollTop = conversation.scrollHeight; };
+    const inFondo = () => { aggiornaSpazioCodaConversazione(conversation); const sc = scrollerConversazione(conversation); if (sc) sc.scrollTop = sc.scrollHeight; };
     // Scopre la conversazione SOLO quando è già in fondo: prima porta il fondo, poi toglie is-restoring, poi ribatte il fondo (togliere la classe non cambia il layout, ma costa zero essere sicuri).
     const scopri = () => { if (generation !== state.realSession.generation) return; inFondo(); conversation.classList.remove('is-restoring'); inFondo(); };
     const osservatore = new MutationObserver(inFondo);
@@ -11219,7 +11288,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
        * serve un MutationObserver. */
       const conversation = $('#conversation');
       aggiornaSpazioCodaConversazione(conversation);
-      if (conversation) conversation.scrollTop = conversation.scrollHeight;
+      if (conversation) { aggiornaSpazioCodaConversazione(conversation); const sc = scrollerConversazione(conversation); if (sc) sc.scrollTop = sc.scrollHeight; }
       return;
     }
     const generation = nuovaGenerazioneSessione();

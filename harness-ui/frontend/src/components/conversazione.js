@@ -350,7 +350,15 @@ export function creaDiff(righe = [], opzioni = {}) {
  * `pulsanti` riceve i tre handler; `piede` porta la classe-gancio
  * `sheet-actions` che ApprovalResolved rimuove; `perche` porta `assistant-copy`.
  */
-export function creaApprovazione({ badge = 'Chiede di scrivere', bersaglio = '', aggiunte = null, rimozioni = null, perche = '', diff = null, nota = 'Scade a fine sessione', onUnaVolta, onSessione, onNega } = {}, opzioni = {}) {
+/*
+ * ⛔ 06/9, owner davanti allo schermo: «i comandi devono essere formattati bene in codice, così è
+ * troppo brutto» — un `node --input-type=module -e '…'` finiva come paragrafo giustificato dentro la
+ * frase «Vuole eseguire il comando: …», illeggibile proprio nel momento in cui va letto: prima di dire
+ * sì. Ora la carta ha tre pezzi distinti: la frase (cosa vuole fare), il `codice` (cosa esattamente,
+ * in monospazio, con il suo fondo e lo scorrimento), il `motivo` (perché lo sta chiedendo).
+ * E l'esito non si appiccica più in coda alla frase: ha una riga sua.
+ */
+export function creaApprovazione({ badge = 'Chiede di scrivere', bersaglio = '', aggiunte = null, rimozioni = null, perche = '', codice = '', motivo = '', diff = null, nota = 'Scade a fine sessione', onUnaVolta, onSessione, onNega } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
   const scheda = el(documentObj, 'div', 'talos-approval');
   scheda.setAttribute('data-c', 'ApprovalCard');
@@ -363,6 +371,18 @@ export function creaApprovazione({ badge = 'Chiede di scrivere', bersaglio = '',
   scheda.append(testa);
   const perchéEl = el(documentObj, 'p', 'talos-approval__why assistant-copy', perche);
   scheda.append(perchéEl);
+  let codiceEl = null;
+  if (codice) {
+    codiceEl = el(documentObj, 'pre', 'talos-approval__codice', String(codice));
+    codiceEl.tabIndex = 0; // si scorre anche da tastiera: un comando lungo non si legge col solo mouse
+    codiceEl.setAttribute('aria-label', 'Il comando esatto che l’agente vuole eseguire');
+    scheda.append(codiceEl);
+  }
+  let motivoEl = null;
+  if (motivo) {
+    motivoEl = el(documentObj, 'p', 'talos-approval__motivo', motivo);
+    scheda.append(motivoEl);
+  }
   if (Array.isArray(diff) && diff.length > 0) scheda.append(creaDiff(diff, opzioni));
   const piede = el(documentObj, 'div', 'talos-approval__foot sheet-actions');
   const bottone = (classi, testo, onClick) => {
@@ -376,7 +396,24 @@ export function creaApprovazione({ badge = 'Chiede di scrivere', bersaglio = '',
   const nega = bottone('talos-button talos-button--ghost talos-button--danger', 'Nega', onNega);
   piede.append(unaVolta, sessione, nega, el(documentObj, 'span', 'talos-grow'), el(documentObj, 'span', 'talos-approval__foot-note', nota));
   scheda.append(piede);
-  return { scheda, perche: perchéEl, piede, pulsanti: { unaVolta, sessione, nega } };
+  return { scheda, perche: perchéEl, codice: codiceEl, motivo: motivoEl, piede, pulsanti: { unaVolta, sessione, nega } };
+}
+
+/**
+ * L'esito di una richiesta di approvazione: toglie i pulsanti e mette una riga sua, col tono giusto.
+ * Prima l'esito veniva concatenato in coda alla frase del perché — si leggeva come parte del comando.
+ */
+export function segnaEsitoApprovazione(scheda, { approvato = false, altrove = false } = {}, opzioni = {}) {
+  if (!scheda) return null;
+  const documentObj = opzioni.document || scheda.ownerDocument || globalThis.document;
+  scheda.querySelector('.talos-approval__foot')?.remove();
+  scheda.querySelector('.sheet-actions')?.remove();
+  const esistente = scheda.querySelector('.talos-approval__esito');
+  if (esistente) esistente.remove();
+  const riga = el(documentObj, 'p', `talos-approval__esito talos-approval__esito--${approvato ? 'si' : 'no'}`, `${approvato ? 'Approvato' : 'Negato'}${altrove ? ' da un’altra finestra' : ''}`);
+  riga.setAttribute('role', 'status');
+  scheda.append(riga);
+  return riga;
 }
 
 /** La ricevuta firmata di una scrittura. */
