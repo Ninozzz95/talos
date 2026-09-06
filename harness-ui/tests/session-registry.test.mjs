@@ -1105,14 +1105,14 @@ test('⭐⭐⭐ resume() eredita permessiPerAttrezzo della sessione origine (STE
  * ripiego SICURO: 'chiedi' per-attrezzo sotto una policy diversa da "On
  * request" fallisce chiuso (REFUSED), mai una card che trapela altrove.
  */
-test('⛔⛔⛔ "Workspace write" con permessiPerAttrezzo:{shell:\'chiedi\'} NON costruisce chiediApprovazioneFn (ripiego sicuro, non la cura finale)', () => {
+test('⭐⭐⭐ "Workspace write" con permessiPerAttrezzo:{shell:\'chiedi\'} COSTRUISCE chiediApprovazioneFn: chi chiede di essere avvisato viene avvisato', () => {
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
 
   registro.avvia('task-vero', { permessiScelto: 'Workspace write', permessiPerAttrezzoScelto: { shell: 'chiedi' } });
 
   assert.equal(finta.ultimoInput.livelloAccesso, undefined, '"Workspace write" non diventa mai lettura da solo');
-  assert.equal(finta.ultimoInput.chiediApprovazioneFn, undefined, 'ripiego sicuro: solo "On request" costruisce il canale — shell:\'chiedi\' qui fallirà chiuso nel kernel, mai un\'approvazione che trapela su scrivi');
+  assert.equal(typeof finta.ultimoInput.chiediApprovazioneFn, 'function', 'un solo attrezzo su «chiedi» basta a costruire il canale: senza, il kernel NEGA invece di chiedere (misurato dal vivo il 06/9)');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 

@@ -5528,7 +5528,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
                 <option value="nega" ${state.permessiPerAttrezzo[tool] === 'nega' ? 'selected' : ''}>Nega sempre</option>
               </select>
             </div>`).join('')}
-        </div>`,
+        </div>
+        <p class="muted-copy">Un «chiedi» su un attrezzo accende il canale di approvazione per tutta la sessione: finché resta acceso, TALOS chiede conferma anche per le altre azioni che lasciano traccia. È il limite del kernel di oggi, dichiarato invece che nascosto.</p>`,
     },
     environment: {
       eyebrow: 'Environment proof',
