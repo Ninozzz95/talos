@@ -125,6 +125,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     sessionSelection: { active: false, selected: new Set(), available: new Map(), deleting: false },
     /** Ragionamento nascosto di default; il foglio Modello lo rende opt-in. */
     showReasoning: false,
+    /** 06/9 CB-20-bis — lo stato del contatto col server, dalla sorveglianza T-15: la chat e la barra di stato leggono lo STESSO dato. */
+    connessione: 'collegato',
     // ⭐ 28/8 — stesso principio di `model`: null = nessuna scelta esplicita, "reasoning" resta assente dal corpo della richiesta (comportamento di sempre). Un valore fra quelli di LIVELLI_RAGIONAMENTO appena l'owner tocca lo slider dell'effort picker.
     effort: null,
     environment: null,
@@ -1594,6 +1596,27 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     },
     suCambio: (stato, dettagli) => {
       aggiornaStatoConnessione(barraStatoChat, stato, dettagli);
+      /*
+       * ⛔⛔⛔ 06/9, CB-20-bis — QUI stava il buco: la sorveglianza sapeva che il server
+       * non risponde e lo scriveva SOLO nella barra in fondo; la chat, che è la parte
+       * grande e centrale, continuava a dire «TALOS sta lavorando · giro 3» col pulsante
+       * «Ferma» acceso. Misurato: 45 s, 30 campioni, due verità opposte a 170 px di
+       * distanza. Adesso lo stato è uno e lo leggono tutte e due.
+       */
+      state.connessione = stato;
+      /*
+       * ⛔ 06/9, CB-20-bis — anche la barra laterale mentiva in piccolo: la riga della
+       *    sessione continuava a dire «in corso» col pallino che PULSA. Quell'elenco viene
+       *    da `GET /api/v1/sessions`, cioè da una lettura che col server giù non si può più
+       *    rinfrescare: è fermo all'ultima volta, e va detto invece di animarlo. La classe
+       *    sta sulla radice così una regola sola copre l'elenco senza ridisegnarlo.
+       */
+      document.documentElement.dataset.contatto = (stato === 'riconnessione' || stato === 'caduto') ? 'perso' : 'ok';
+      const elenco = $('#sessionList') || $('.talos-sidebar__sessions');
+      if (elenco) elenco.title = document.documentElement.dataset.contatto === 'perso'
+        ? 'Il server non risponde: questo elenco è fermo all’ultima lettura riuscita.'
+        : '';
+      syncRunComposerState();
       if (stato === 'ricollegato') toast('Collegato di nuovo', 'Il server risponde: puoi continuare.');
     },
     suRicollegato: () => {
@@ -6546,6 +6569,23 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     return Boolean(state.realSession.id && !state.realSession.eventoTerminaleVisto);
   }
 
+  /*
+   * ⛔⛔⛔ 06/9, CB-20-bis — «abbiamo perso il contatto col server».
+   * Non è «il giro è fallito»: sul server può benissimo star continuando, e al ritorno
+   * lo stream lo racconta. È il terzo stato che mancava, e vale dal PRIMO battito
+   * fallito — cioè esattamente da quando la barra di stato comincia a dirlo — perché
+   * il difetto non era il silenzio, era che due parti della stessa schermata dicevano
+   * cose opposte.
+   * Ricerca 06/09/2026 (timetobuildbob.com, «The Stale Event Problem: Fixing SSE
+   * Reconnects in Streaming AI UIs»): a stream caduto la UI non deve continuare a
+   * mostrare «running»; serve un indicatore persistente, e la macchina a stati deve
+   * distinguere «sto riprovando» da «ho rinunciato» — quella distinzione la porta già
+   * la barra di stato, qui basta non contraddirla.
+   */
+  function contattoPerso() {
+    return state.connessione === 'riconnessione' || state.connessione === 'caduto';
+  }
+
   /**
    * ⭐⭐⭐ 3/9 — item 10: il placeholder-suggerimento è un TERZO stato del
    * composer, non uno nuovo scollegato dagli altri due (attivo/non attivo)
@@ -6653,6 +6693,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       usageSessione,
       tettoGiri: state.realSession.tettoGiriDichiarato,
       inFondo: fondoConversazioneInVista(),
+      contatto: contattoPerso() ? 'perso' : 'collegato', // 06/9 CB-20-bis
+
       latenzaMs: latenzaPrimoTokenMs(),
       costo: null,
       modello: nomeModelloBreve(state.model || state.realSession.currentRunModel), // il modello del giro se non ne e' scelto uno
@@ -6699,7 +6741,12 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
         giri.push({ numero, titolo: riassunto.length > 32 ? `${riassunto.slice(0, 31)}…` : riassunto, attrezzi: g ? g.querySelectorAll('[data-c="ToolRow"]').length : 0, inCorso: false });
       });
     }
-    if (attivo && giri.length) giri[giri.length - 1].inCorso = true;
+    if (attivo && giri.length) {
+      // ⛔ 06/9, CB-20-bis: col server irraggiungibile il giro non è «in corso», è un giro
+      //    di cui non abbiamo più notizie. Due fatti diversi, due parole diverse.
+      if (contattoPerso()) giri[giri.length - 1].senzaContatto = true;
+      else giri[giri.length - 1].inCorso = true;
+    }
     return giri;
   }
   let catalogoRichiesto = false;
@@ -6755,8 +6802,14 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     const redirectOccupato = state.realSession.redirectRequestInFlight || Boolean(state.realSession.redirectPendingId);
     const use = $('use', sendButton);
     sendButton.classList.toggle('is-stop', attivo);
-    sendButton.setAttribute('aria-label', attivo ? 'Interrompi risposta' : 'Invia');
-    sendButton.title = attivo ? 'Interrompi al prossimo punto sicuro' : 'Invia';
+    /*
+     * ⛔ 06/9, CB-20-bis — col server irraggiungibile «Interrompi» manda una POST che non
+     *    arriva: il pulsante lo dice invece di fingere. Non si disabilita (resta
+     *    raggiungibile da tastiera e il suo titolo si legge): cambia quello che promette.
+     */
+    const senzaContatto = attivo && contattoPerso();
+    sendButton.setAttribute('aria-label', senzaContatto ? 'Il server non risponde' : attivo ? 'Interrompi risposta' : 'Invia');
+    sendButton.title = senzaContatto ? 'Il server non risponde: la richiesta di fermare non arriverebbe.' : attivo ? 'Interrompi al prossimo punto sicuro' : 'Invia';
     if (use) use.setAttribute('href', attivo ? '#i-stop' : '#i-send');
     redirectRunButton.hidden = !(attivo && haTesto);
     redirectRunButton.disabled = redirectOccupato;
@@ -15167,7 +15220,15 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   document.addEventListener('keydown', (event) => { if (event.key === 'Escape') $$('.overlay-layer').forEach((v) => chiudiVeloMockup(v.id)); });
   collegaRidimensionamentoDialoghi(ROOT()); // 06/9 B7: le tre maniglie di ogni velo (trascina, frecce, doppio clic)
   (() => { // 06/9: la striscia compare solo scorrendo in alto — si ridisegna quando la conversazione scorre
-    const c = $('#conversation');
+    /*
+     * ⛔⛔ 06/9, trovato riparando CB-20-bis — l'ascoltatore stava su `#conversation`, che è
+     * la COLONNA interna e non scorre: chi scorre è `.talos-conversation` (la stessa causa
+     * di O-19/O-20/O-21, rimasta in un posto in più). Risultato misurato: scorrendo in alto
+     * la striscia NON ricompariva, perché niente la ridisegnava — e la richiesta dell'owner
+     * O-11 («deve apparire quando si scrolla in alto») era servita solo finché un timer del
+     * giro chiamava per conto suo. Si usa `scrollerConversazione`, come tutto il resto.
+     */
+    const c = scrollerConversazione($('#conversation'));
     if (!c) return;
     let inCoda = false;
     c.addEventListener('scroll', () => {

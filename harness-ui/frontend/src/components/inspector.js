@@ -113,9 +113,19 @@ export function titoloRispostaDaTurno(turno, parole = 5) {
   return testo.split(/\s+/).slice(0, parole).join(' ');
 }
 
-/** Le righe di «Indice dei giri». `giri` = [{ numero, titolo, token?, attrezzi?, inCorso? }]. */
+/**
+ * Le righe di «Indice dei giri». `giri` = [{ numero, titolo, token?, attrezzi?, inCorso?, senzaContatto? }].
+ * ⛔ 06/9, CB-20-bis: col server irraggiungibile un giro non è «in corso» — è un giro di cui
+ * non abbiamo più notizie. Sono due fatti diversi e prendono due parole diverse.
+ */
 export function righeGiri(giri = []) {
-  return giri.map((g) => [`${g.numero} · ${g.titolo || 'Giro'}`, g.inCorso ? 'in corso' : Number.isFinite(g.token) ? kilo(g.token) : (Number.isFinite(g.attrezzi) ? `${g.attrezzi} ${g.attrezzi === 1 ? 'attrezzo' : 'attrezzi'}` : '—'), g.inCorso ? 'accent' : '']);
+  return giri.map((g) => {
+    const misura = g.senzaContatto ? 'senza contatto'
+      : g.inCorso ? 'in corso'
+        : Number.isFinite(g.token) ? kilo(g.token)
+          : (Number.isFinite(g.attrezzi) ? `${g.attrezzi} ${g.attrezzi === 1 ? 'attrezzo' : 'attrezzi'}` : '—');
+    return [`${g.numero} · ${g.titolo || 'Giro'}`, misura, g.senzaContatto ? 'warning' : g.inCorso ? 'accent' : ''];
+  });
 }
 
 /** Le righe di «File toccati». `file` = [{ path, aggiunte, rimozioni }]. */

@@ -185,6 +185,7 @@ function scrivi(el, testo) {
  * @param {string} [dati.dettaglio] il dettaglio mono (il comando, il file)
  * @param {number|null} [dati.giro] il giro corrente
  * @param {number|null} [dati.secondi] secondi dall'inizio del giro
+ * @param {'collegato'|'perso'} [dati.contatto] stato del contatto col server (CB-20-bis)
  * @param {object|null} [dati.usage] il consumo dell'INVIO in corso (tetto dei giri)
  * @param {object|null} [dati.usageSessione] il consumo di TUTTA la conversazione (token, giri, cache della barra)
  * @param {number|null} [dati.tettoGiri]
@@ -222,7 +223,22 @@ export function aggiornaPiedeChat(piede, dati = {}) {
      * Ricerca 06/09/2026: shadcn/ui «Message scroller» e TanStack Virtual «Chat» — un solo indicatore per
      * stato, legato a `isAtEnd()`, invece di un doppione sempre acceso.
      */
-    striscia.hidden = !dati.attivo || dati.inFondo === true;
+    /*
+     * ⛔⛔⛔ 06/9, CB-20-bis — «il server cade e la chat dice il contrario per un minuto».
+     * Misurato: la barra in fondo diceva «Il server non risponde · Riprova» mentre questa
+     * striscia continuava a dire «TALOS sta lavorando · giro 3» col pulsante «Ferma», per
+     * 45 s di fila su 30 campioni. Due parti della stessa schermata, due verità opposte.
+     * ⇒ Quando il contatto è perso la striscia NON tace: è l'unico posto della chat che può
+     *   dire che non sappiamo più cosa stia succedendo, e tacere lì significa lasciare in
+     *   piedi l'ultima cosa detta, che era «sta lavorando».
+     * Ricerca 06/09/2026 — timetobuildbob.com, «The Stale Event Problem: Fixing SSE
+     * Reconnects in Streaming AI UIs»: a stream caduto la UI non deve continuare a mostrare
+     * «running»; serve un indicatore PERSISTENTE («Reconnecting…», poi «Disconnected»), non
+     * un toast che sparisce, e mai uno stato ambiguo «still running».
+     */
+    const contattoPerso = dati.attivo === true && dati.contatto === 'perso';
+    striscia.hidden = !dati.attivo || (dati.inFondo === true && !contattoPerso);
+    striscia.classList.toggle('talos-status-strip--senza-contatto', contattoPerso);
     /*
      * 06/9, owner: «se ci clicchi ti deve portare in fondo giù». La striscia compare proprio quando
      * stai leggendo più su: è il posto naturale dove chiedere «riportami dove sta scrivendo».
@@ -240,8 +256,8 @@ export function aggiornaPiedeChat(piede, dati = {}) {
     const cosa = striscia.querySelector('[data-run-what]');
     if (cosa) {
       cosa.replaceChildren();
-      cosa.append(documentObj.createTextNode(dati.cosa || 'TALOS sta lavorando'));
-      if (dati.dettaglio) {
+      cosa.append(documentObj.createTextNode(contattoPerso ? 'Contatto col server perso' : (dati.cosa || 'TALOS sta lavorando')));
+      if (dati.dettaglio && !contattoPerso) {
         cosa.append(documentObj.createTextNode(' · '));
         const mono = documentObj.createElement('span');
         mono.className = 'talos-mono talos-measure';
@@ -253,7 +269,20 @@ export function aggiornaPiedeChat(piede, dati = {}) {
     const pezzi = [];
     if (Number.isFinite(dati.giro)) pezzi.push(`giro ${dati.giro}`);
     if (Number.isFinite(dati.secondi)) pezzi.push(`${Math.max(0, Math.round(dati.secondi))} s`);
-    scrivi(meta, pezzi.join(' · '));
+    /*
+     * ⛔ Senza contatto NON si dice «il giro è fallito» (sul server può benissimo star
+     *    continuando, e al ritorno lo stream lo racconta): si dice che non lo sappiamo.
+     *    E i secondi si smettono di contare: un contatore che avanza senza notizie è una
+     *    misura inventata, uno fermo sembra un blocco. Si toglie.
+     */
+    scrivi(meta, contattoPerso ? 'non so se il giro sta ancora andando' : pezzi.join(' · '));
+    const ferma = striscia.querySelector('.stop-run');
+    if (ferma) {
+      // ⛔ «Ferma» manda una POST al server: col server irraggiungibile non arriverebbe.
+      //    Un pulsante che non può fare la sua cosa lo DICE, invece di fingere.
+      ferma.disabled = contattoPerso;
+      ferma.title = contattoPerso ? 'Il server non risponde: la richiesta di fermare non arriverebbe.' : '';
+    }
   }
   // chip del modello e del permesso
   const modello = piede.querySelector('[data-open-sheet="model"] .talos-chip__label');
