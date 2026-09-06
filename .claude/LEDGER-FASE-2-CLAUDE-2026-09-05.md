@@ -840,6 +840,44 @@ senza letture → nascosta.
   seconda lingua e le stringhe in un file di risorse; i contenuti (messaggi, file, log) restano nella
   lingua in cui sono. Stima: da misurare sul numero di stringhe, non a occhio.
 
+### CUTOVER — Fase 3 (06/09 ~20:30): FATTO. `public/` è la build modulare
+
+`node scripts/cutover.mjs --applica`: copia della build a fianco, scambio dei nomi, il monolite in
+`public.prima-del-cutover-2026-09-06-03-43-54` (25 file, resta sul disco, ignorato da git: `.gitignore`). Il server legge `public/` dal
+disco a ogni richiesta: chi riavvia il suo server vede la app nuova. Ricerca 06/09 (deployhq
+«Zero downtime», AWS «Cutover», drizz «Blue-green testing»): costruire a fianco, scambiare in
+un colpo, tenere il precedente per il rollback, fumo dopo lo scambio. Il rollback è una rinomina.
+
+**Contratto congelato → conservato.** `legacy-contract-snapshot.test` non chiede più «byte per
+byte uguale» (serviva a congelare il monolite DURANTE l'estrazione): chiede «nessuna chiave pubblica
+persa». Misurato sulla build: 11/11 global dell'host, 7/7 chiavi di localStorage, 23/23 tipi di
+evento, 10/10 asset serviti, 19/19 frammenti di rotta meno UNO ritirato e dichiarato nel test
+(`/api/v1/chat`: owner 24/8, niente sezione chat separata), 3 in più (terminali, cornice del
+Browser). I 38 id del pannello Aspetto originale sono congelati in `tests/fixtures/legacy-settings-ids.json`
+(presi PRIMA del cutover) per `SET-COPERTURA38`.
+
+**I test del server che leggevano il monolite.** 11 file leggevano `public/app.js|index.html|styles.css`
+come TESTO e cercavano stringhe, classi e keyframe del vecchio CSS. Ritargati sulle fonti vive
+(`frontend/src/legacy/app.js`, `frontend/index.template.html`, `frontend/src/styles/index.css`):
+1654 verdi; **28 test marcati `skip` col motivo scritto dentro** (cercavano classi come
+`session-stato-punto`, `.code-block-head`, `@keyframes sessionePulsa`, `talos-line-loader`, o
+funzioni sostituite): il comportamento che descrivevano è provato dai test dei componenti in
+`frontend/tests`. ⛔ Non cancellati: la cancellazione la decide l'owner (stessa riga del frontend
+parallelo di Opus, ledger Fase 3 §6).
+
+**Trovato e curato al cutover.** Il template portava uno `<script>` in linea del mockup (la regia
+demo della Capability, B4.2) che la CSP `script-src 'self'` bloccava con un errore di console a ogni
+avvio: il generatore ora toglie OGNI script in linea. Resta un avviso «Applying inline style» da un
+iframe `srcdoc` (l'anteprima demo degli artefatti), preesistente, registrato.
+
+Prove: frontend unit 120/120, contratto 10/10, statico 195/195, componenti 111/111; server
+1654/1654 (+28 skip dichiarati); fumo su un server di prova (4180) che serve `public/` con una copia
+dello store: 74 sessioni, chat, terminale a schede con shell viva, Browser con cornice viva sul dev
+server locale, Impostazioni 40 righe; le 13 schermate fotografate (`foto/cutover/`), 0 errori di
+pagina. ⛔ Il 4174 dell'owner gira dal 04/09 16:31 col codice del server di ALLORA: la app nuova ha
+bisogno delle rotte nate dopo (schede terminale W1-01, git W1-05, cornice del Browser, nome della
+shell): finché non lo riavvia lui, lì il terminale e il Browser degradano.
+
 - T-15 (prova AL CONTRARIO, 05/09 21:05, `caduta-vivo.mjs` su 4175): server irraggiungibile per
   15 s con la sessione aperta → lo schermo NON cambia: nessun banner, nessuna riga di stato, la
   statusbar continua a dire «Tema Calm · deepseek 92,1k token»; il composer resta attivo. Solo

@@ -1,0 +1,160 @@
+{
+  "schema": "talos.desktop.frontend-build.v1",
+  "mode": "production-strangler",
+  "entries": {
+    "script": "app.js",
+    "style": "styles.css"
+  },
+  "files": [
+    {
+      "path": "app.js",
+      "bytes": 999541,
+      "sha256": "9badbe0a91f5bf02fb0641d83db3371b6d6c9486b3acab6253db0ceeaf397a6a"
+    },
+    {
+      "path": "asset-manifest.json",
+      "bytes": 4464,
+      "sha256": "9b6ec53e80ea6315ab2efae282c7f9cd09680df8139b1e91a31bd284ead75375"
+    },
+    {
+      "path": "fonts/instrument-sans-latin-400-normal.woff2",
+      "bytes": 16860,
+      "sha256": "9a91efaa3599a6ef01b2f49e9ec670e3a2f39baeef09c73198f1052cf3bb0850"
+    },
+    {
+      "path": "fonts/instrument-sans-latin-500-normal.woff2",
+      "bytes": 17232,
+      "sha256": "9d3547da16d950d12a677c772a3ff9b69846e60e7dcd1b5efd540993f7286532"
+    },
+    {
+      "path": "fonts/instrument-sans-latin-600-normal.woff2",
+      "bytes": 17408,
+      "sha256": "efb770916eda95a0e31d80cccde9651d4e8617010b21220e9f227c4820d675da"
+    },
+    {
+      "path": "fonts/instrument-sans-latin-ext-400-normal.woff2",
+      "bytes": 6856,
+      "sha256": "a7bedd76b981e6cc8dd4cf918d7d22f4a1833af2f337798b317030e9e1d9b615"
+    },
+    {
+      "path": "fonts/instrument-sans-latin-ext-500-normal.woff2",
+      "bytes": 6980,
+      "sha256": "37de060fbb3d90e059573c16e2a1384218d898aa6deb300b3b3498248123c64d"
+    },
+    {
+      "path": "fonts/instrument-sans-latin-ext-600-normal.woff2",
+      "bytes": 6948,
+      "sha256": "ed2412451550a2da085eb856e0d0277a84a6194ac237a953e6e2c9d690ee10e4"
+    },
+    {
+      "path": "fonts/jetbrains-mono-latin-400-normal.woff2",
+      "bytes": 21168,
+      "sha256": "14425ba9c695763c1547f48a206b7aa60350a33ae23de09f0407877f3fcd89eb"
+    },
+    {
+      "path": "fonts/jetbrains-mono-latin-500-normal.woff2",
+      "bytes": 21832,
+      "sha256": "cb182feeed4d798ff6961d3c79f7026279448fca0676438aaecb21f3fc39553a"
+    },
+    {
+      "path": "fonts/jetbrains-mono-latin-ext-400-normal.woff2",
+      "bytes": 7336,
+      "sha256": "505dfba8ecbe77e82765f36d317ed7ef4ac42719dc5f4ae68d1c483fd22d0d14"
+    },
+    {
+      "path": "fonts/jetbrains-mono-latin-ext-500-normal.woff2",
+      "bytes": 7528,
+      "sha256": "879df9319f1cbf633bee1dd489e376a9e1e8c458f4abddcfe381cb83b5e6b027"
+    },
+    {
+      "path": "index.html",
+      "bytes": 292602,
+      "sha256": "395a441aa8307f4c5240e043eb2526df74f82cbd22f6c6528525bb4d7cc5e35e"
+    },
+    {
+      "path": "styles.css",
+      "bytes": 90530,
+      "sha256": "92399455ca19f3318de31685b340516ef8e70ee48cb815edbdf79069a424fe98"
+    },
+    {
+      "path": "talos/brand/logo-short.svg",
+      "bytes": 1219,
+      "sha256": "febff5240f817b09cfa28bb4341d38bb975fee2b8520fc4b540c6fda3e2cd290"
+    },
+    {
+      "path": "vendor/floating-ui/LICENSE-core",
+      "bytes": 1089,
+      "sha256": "0e4c9a9b6c71019cbbea3bdc20b01223110a9035700f9c960c8fcbf78c2325ce"
+    },
+    {
+      "path": "vendor/floating-ui/LICENSE-dom",
+      "bytes": 1089,
+      "sha256": "0e4c9a9b6c71019cbbea3bdc20b01223110a9035700f9c960c8fcbf78c2325ce"
+    },
+    {
+      "path": "vendor/floating-ui/LICENSE-utils",
+      "bytes": 1089,
+      "sha256": "0e4c9a9b6c71019cbbea3bdc20b01223110a9035700f9c960c8fcbf78c2325ce"
+    },
+    {
+      "path": "vendor/prism/LICENSE-prism",
+      "bytes": 1066,
+      "sha256": "2b947f0901a7ffcf08a89957da9783c0e9c6e72cb6ce8e959f501ab5409e4d2b"
+    },
+    {
+      "path": "vendor/prism/README.md",
+      "bytes": 2786,
+      "sha256": "0565b7cf02ae234857f9c20e256c9695b35a7b91697a3c306bcc919f43399e21"
+    },
+    {
+      "path": "vendor/prism/prism.js",
+      "bytes": 57892,
+      "sha256": "eb466a02d4908021df6ad9c9d07066d5932d4d842c825807b738aff8f4af50f2"
+    },
+    {
+      "path": "vendor/tanstack/LICENSE-virtual-core",
+      "bytes": 1079,
+      "sha256": "a405ee70c632bb938acb7ac5f210e814409b3760ea9d2329d8ed8ffcfd11a0e7"
+    },
+    {
+      "path": "vendor/xterm/LICENSE-addon-fit",
+      "bytes": 1103,
+      "sha256": "e256f01188af527e4d06d21d06fbf785ae9c50d4b328bf03cbe0ba7f0aa4228f"
+    },
+    {
+      "path": "vendor/xterm/LICENSE-addon-webgl",
+      "bytes": 1103,
+      "sha256": "21b975c39532001d431dc3b2c29fbff691d83f370833a66b54698bda290fde0e"
+    },
+    {
+      "path": "vendor/xterm/LICENSE-xterm",
+      "bytes": 1261,
+      "sha256": "b569f629d00f2626a8100df2a1798210535621e42164dfd426a6fe5aac7b0ccd"
+    },
+    {
+      "path": "vendor/xterm/README.md",
+      "bytes": 2445,
+      "sha256": "0ed46297384af11a6278cbff35787359135c17425d5d501d4a09db935c411e64"
+    },
+    {
+      "path": "vendor/xterm/addon-fit.js",
+      "bytes": 1521,
+      "sha256": "ba3ea256ce0620a0992a197d6c9baea64823fc93d8da07a9e366ca9943c18527"
+    },
+    {
+      "path": "vendor/xterm/addon-webgl.js",
+      "bytes": 247535,
+      "sha256": "b85f8d4b3e9756bebb757e3fe47134d70f03ea3d6b187624426d2e2b65dec06c"
+    },
+    {
+      "path": "vendor/xterm/xterm.css",
+      "bytes": 7112,
+      "sha256": "854a7c0fb70e8b1a083c16797ab827299fb18744f5ad34f227b48337e33293c6"
+    },
+    {
+      "path": "vendor/xterm/xterm.js",
+      "bytes": 488663,
+      "sha256": "14903579ff54664cd72f8e8699e6961a6272c21863ec1c3b118cdc8af5d4a972"
+    }
+  ]
+}

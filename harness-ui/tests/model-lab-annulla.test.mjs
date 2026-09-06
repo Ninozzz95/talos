@@ -20,7 +20,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
  * rosso — è il modo in cui il difetto immaginato potrebbe nascere davvero.
  */
 test('W0-05 — annullaProvaRuntimeModelLab chiama /cancel (invariato)', async () => {
-  const app = await readFile(join(root, 'public/app.js'), 'utf8');
+  const app = await readFile(join(root, 'frontend/src/legacy/app.js'), 'utf8');
   const inizio = app.indexOf('async function annullaProvaRuntimeModelLab');
   assert.ok(inizio > 0);
   const corpo = app.slice(inizio, app.indexOf('\n  }\n', inizio));

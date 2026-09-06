@@ -308,3 +308,7 @@ harness-ui/labs/stores/*
 # Generated image recovery copies are local runtime data, never source.
 harness-ui/.generated-images/
 harness-ui/.workspace-launch-token
+
+# Fase 3 (06/09): il cutover lascia accanto a public/ il backup del monolite e la cartella di scambio — restano sul disco, mai in git
+harness-ui/public.prima-del-cutover-*/
+harness-ui/public.nuovo-*/

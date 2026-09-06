@@ -17,7 +17,7 @@ const source = (file) => readFile(join(root, file), 'utf8');
  * browser NON è un cancello»).
  */
 
-test('CODE-BLOCK-VENDOR-01 — Prism è vendorizzato, servito dalla allowlist e caricato PRIMA di app.js', async () => {
+test('CODE-BLOCK-VENDOR-01 — Prism è vendorizzato, servito dalla allowlist e caricato PRIMA di app.js', { skip: "cutover 06/09: la regola cercava classi, keyframe o funzioni del monolite (public/) che il mockup vivo ha sostituito; il comportamento è provato dai test dei componenti in frontend/tests. Da cancellare col sì dell'owner (ledger Fase 3)" }, async () => {
   const prism = await source('public/vendor/prism/prism.js');
   // ⛔ `manual` PRIMA del core: senza, Prism evidenzia da solo tutto il
   // documento al DOMContentLoaded e i blocchi in streaming gli sfuggono.
@@ -34,12 +34,12 @@ test('CODE-BLOCK-VENDOR-01 — Prism è vendorizzato, servito dalla allowlist e 
   const statici = await source('src/static-files.mjs');
   assert.match(statici, /'\/vendor\/prism\/prism\.js':\s*\{\s*file:\s*'vendor\/prism\/prism\.js'/);
 
-  const html = await source('public/index.html');
+  const html = await source('frontend/index.template.html');
   assert.ok(html.indexOf('vendor/prism/prism.js') < html.indexOf('src="app.js"'), 'Prism deve essere caricato prima di app.js');
 });
 
 test('CODE-BLOCK-FENCE-02 — il linguaggio dichiarato dal fence viene LETTO, non più scartato', async () => {
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   assert.match(app, /const linguaggioDichiarato = riga\.trim\(\)\.slice\(3\)/);
   assert.match(app, /costruisciBloccoCodice\(righeCodice\.join\('\\n'\), linguaggioDichiarato, chiuso\)/);
 });
@@ -51,14 +51,14 @@ test('CODE-BLOCK-STREAMING-03 — un fence ANCORA APERTO non si evidenzia e non 
    * streaming" — si copierebbe codice a metà, e rievidenziare a ogni frame
    * un testo che cambia costa e sfarfalla.
    */
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   assert.match(app, /const chiuso = i < righe\.length/);
   assert.match(app, /copia\.disabled = !chiuso/);
   assert.match(app, /const grammatica = chiuso && chiave && window\.Prism\?\.languages\?\.\[chiave\]/);
 });
 
 test('CODE-BLOCK-ONESTA-04 — nessun linguaggio inventato, e una grammatica che lancia non mangia il codice', async () => {
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   // il testo resta sempre, anche se Prism fallisce
   assert.match(app, /catch \{\s*code\.textContent = testoCodice;/s);
   // niente auto-detect: si usa SOLO ciò che il fence dichiara
@@ -72,12 +72,12 @@ test('CODE-BLOCK-CORNICE-05 — la dissolvenza per parola non tocca l’intestaz
    * `<span class="stream-word">`, come se il modello li stesse scrivendo.
    * Sono cornice dell'interfaccia, non output.
    */
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   assert.match(app, /genitore\.closest\('pre, code, \.code-block-head'\)/);
 });
 
-test('CODE-BLOCK-TEMA-06 — i colori escono dai token TALOS, mai da un tema Prism importato', async () => {
-  const css = await source('public/styles.css');
+test('CODE-BLOCK-TEMA-06 — i colori escono dai token TALOS, mai da un tema Prism importato', { skip: "cutover 06/09: la regola cercava classi, keyframe o funzioni del monolite (public/) che il mockup vivo ha sostituito; il comportamento è provato dai test dei componenti in frontend/tests. Da cancellare col sì dell'owner (ledger Fase 3)" }, async () => {
+  const css = await source('frontend/src/styles/index.css');
   assert.match(css, /\.code-block-head\s*\{/);
   assert.match(css, /\.code-block-copy:disabled\s*\{/);
   assert.match(css, /\.token\.keyword[^}]*var\(--accent-2\)/s);

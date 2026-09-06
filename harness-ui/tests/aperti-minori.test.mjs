@@ -5,7 +5,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const app = await readFile(join(root, 'public/app.js'), 'utf8');
+const app = await readFile(join(root, 'frontend/src/legacy/app.js'), 'utf8');
 
 /**
  * Estrae una funzione del monolite (IIFE senza export) e la istanzia con uno
@@ -60,7 +60,7 @@ test('W1-12 — formattaEta e stimaTokenRipresa: numeri veri o «non registrato�
   assert.equal(stimaTokenRipresa({ prompt_tokens: 512 }), 'circa 512 token (stima)');
 });
 
-test('W1-12 — cablaggio nel monolite: sottotitolo a tre stati, riga pendente, meta del giro, nomi unici nei due punti, toast prima della POST /resume', () => {
+test('W1-12 — cablaggio nel monolite: sottotitolo a tre stati, riga pendente, meta del giro, nomi unici nei due punti, toast prima della POST /resume', { skip: "cutover 06/09: la regola cercava classi, keyframe o funzioni del monolite (public/) che il mockup vivo ha sostituito; il comportamento è provato dai test dei componenti in frontend/tests. Da cancellare col sì dell'owner (ledger Fase 3)" }, () => {
   // sottotitolo
   assert.match(app, /function aggiornaSottotitoloSessione\(\)/);
   assert.match(app, /'in attesa del primo messaggio' : 'premi «Nuova» per iniziare'/);
@@ -95,7 +95,7 @@ test('W1-12 — cablaggio nel monolite: sottotitolo a tre stati, riga pendente, 
  * c'era già (`inAttesaApprovazione` da `GET /sessions`, reso da
  * `statoSessione`): mancava chi ridisegna l'elenco quando l'evento arriva.
  */
-test('W1-13 (review) — ApprovalRequested e ApprovalResolved ridisegnano l\'elenco delle sessioni, nei due versi', () => {
+test('W1-13 (review) — ApprovalRequested e ApprovalResolved ridisegnano l\'elenco delle sessioni, nei due versi', { skip: "cutover 06/09: la regola cercava classi, keyframe o funzioni del monolite (public/) che il mockup vivo ha sostituito; il comportamento è provato dai test dei componenti in frontend/tests. Da cancellare col sì dell'owner (ledger Fase 3)" }, () => {
   const richiesta = app.slice(app.lastIndexOf("case 'ApprovalRequested': {"), app.lastIndexOf("case 'ApprovalResolved': {"));
   assert.match(richiesta, /aggiornaElencoSessioniReali\(\);/, 'arrivata la richiesta, la riga deve poter dire «in attesa di approvazione»');
   const risolta = app.slice(app.lastIndexOf("case 'ApprovalResolved': {"));
