@@ -5259,6 +5259,15 @@ function creaIntro(velo, { api, azioni = {}, iniziale = {}, document: d = global
     const m = $2("introMessaggio");
     if (m) m.textContent = t2 || "";
   };
+  function cartellaAutorizzata() {
+    if (!st.cartella) return true;
+    const scelta = normalizzaCartella(st.cartella);
+    const progetti = (st.gruppi?.progetti || []).map((p) => normalizzaCartella(p.path));
+    return progetti.some((p) => p && (scelta === p || scelta.startsWith(`${p}/`)));
+  }
+  function serveAccessoPieno() {
+    return Boolean(st.cartella) && !cartellaAutorizzata();
+  }
   function mostraPasso(n) {
     st.passo = Math.max(0, Math.min(PASSI - 1, n));
     for (const p of velo.querySelectorAll("[data-intro-panel]")) p.hidden = Number(p.dataset.introPanel) !== st.passo;
@@ -5274,9 +5283,18 @@ function creaIntro(velo, { api, azioni = {}, iniziale = {}, document: d = global
     const pieno = $2("introPienoAvviso");
     if (pieno) pieno.hidden = st.politica !== "Full access";
     const avanti = $2("introAvanti");
+    const fuoriProgetti = serveAccessoPieno();
     if (avanti) {
-      avanti.disabled = st.passo === 2 && (!st.politica || st.politica === "Full access" && !$2("introConfermaPieno")?.checked);
+      const politicaImpossibile = fuoriProgetti && st.politica !== null && st.politica !== "Full access";
+      avanti.disabled = st.passo === 2 && (!st.politica || politicaImpossibile || st.politica === "Full access" && !$2("introConfermaPieno")?.checked);
       avanti.textContent = st.passo === PASSI - 1 ? "Inizia" : "Avanti";
+    }
+    const statoPolitica = $2("introPoliticaStato");
+    if (statoPolitica && st.passo === 2) {
+      if (fuoriProgetti && st.politica && st.politica !== "Full access") statoPolitica.textContent = `${ultimoSegmento(st.cartella)} è fuori dai progetti autorizzati: con questa cartella funziona solo «Accesso pieno». Scegli un'altra cartella o l'accesso pieno.`;
+      else if (fuoriProgetti && !st.politica) statoPolitica.textContent = `${ultimoSegmento(st.cartella)} è fuori dai progetti autorizzati: serve «Accesso pieno».`;
+      else if (st.politica) statoPolitica.textContent = `Scelto: ${velo.querySelector('[data-intro-policy][aria-checked="true"] .talos-list-row__title')?.textContent || st.politica}`;
+      else statoPolitica.textContent = "Scegli una politica. Avanti non conferma un valore predefinito al posto tuo.";
     }
     const r = $2("introRiepilogo");
     if (r) r.textContent = riepilogo({ cartella: st.cartella, modello: $2("introModello")?.selectedOptions?.[0]?.textContent || st.modello, politica: velo.querySelector('[data-intro-policy][aria-checked="true"] .talos-list-row__title')?.textContent });
@@ -6705,9 +6723,48 @@ function aggiungiGiroAllaSpine(spine, { n, tick = 1, tono = null } = {}) {
   if (!spine) return;
   const documentObj = spine.ownerDocument;
   spine.append(el20(documentObj, "span", "talos-turn-spine__n", n));
-  const segno = el20(documentObj, "span", `talos-turn-spine__tick${tono ? ` talos-turn-spine__tick--${tono}` : ""}`);
+  const segno = el20(documentObj, "button", `talos-turn-spine__tick${tono ? ` talos-turn-spine__tick--${tono}` : ""}`);
+  segno.type = "button";
   segno.dataset.tick = String(Math.min(5, Math.max(1, Math.trunc(tick) || 1)));
+  segno.dataset.giro = String(n ?? "");
+  segno.setAttribute("aria-label", "Vai al giro");
+  segno.title = `Giro ${n ?? ""}`.trim();
   spine.append(segno);
+}
+function collegaNavigazioneSpina(conversazione) {
+  if (!conversazione || conversazione.dataset.spinaCollegata === "si") return () => {
+  };
+  conversazione.dataset.spinaCollegata = "si";
+  const documentObj = conversazione.ownerDocument;
+  const finestra = documentObj.defaultView || globalThis;
+  conversazione.addEventListener("click", (evento) => {
+    const tick = evento.target.closest?.(".talos-turn-spine__tick");
+    if (!tick) return;
+    const turno = tick.closest(".talos-turn");
+    if (!turno) return;
+    const ridotto = finestra.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    turno.scrollIntoView({ behavior: ridotto ? "auto" : "smooth", block: "start" });
+  });
+  if (typeof finestra.IntersectionObserver !== "function") return () => {
+  };
+  const osservatore = new finestra.IntersectionObserver((voci) => {
+    for (const voce of voci) {
+      const spina = voce.target.querySelector(".talos-turn-spine");
+      if (!spina) continue;
+      for (const t2 of spina.querySelectorAll(".talos-turn-spine__tick")) t2.classList.toggle("talos-turn-spine__tick--visibile", voce.isIntersecting);
+    }
+  }, { root: conversazione, threshold: 0.35 });
+  const guarda = () => {
+    for (const turno of conversazione.querySelectorAll(".talos-turn")) osservatore.observe(turno);
+  };
+  guarda();
+  const mutazioni = new finestra.MutationObserver(guarda);
+  mutazioni.observe(conversazione, { childList: true, subtree: true });
+  return () => {
+    osservatore.disconnect();
+    mutazioni.disconnect();
+    delete conversazione.dataset.spinaCollegata;
+  };
 }
 function impostaTonoUltimoTick(spine, tono) {
   const ultimo = spine?.querySelector(".talos-turn-spine__tick:last-of-type");
@@ -6937,10 +6994,7 @@ function creaAttesa({ etichetta = "Sto pensando…" } = {}, opzioni = {}) {
   const elapsed = el20(documentObj, "span", "talos-mono talos-muted run-activity-elapsed", "0s");
   elapsed.setAttribute("aria-hidden", "true");
   riga.append(svg, label, elapsed);
-  const scheletro = el20(documentObj, "div", "talos-stack");
-  scheletro.setAttribute("aria-hidden", "true");
-  for (const w of ["w90", "w70", "w40"]) scheletro.append(el20(documentObj, "span", `talos-skeleton talos-skeleton--${w}`));
-  blocco.append(riga, scheletro);
+  blocco.append(riga);
   return { blocco, label, elapsed };
 }
 var SVG_NS, ICONA_ATTREZZO;
@@ -6964,6 +7018,62 @@ var init_conversazione = __esm({
       time_now: "i-clock",
       research_start: "i-globe"
     });
+  }
+});
+
+// src/components/scorciatoie.js
+function suApple(nav = globalThis.navigator) {
+  const p = String(nav?.userAgentData?.platform || nav?.platform || "").toLowerCase();
+  return p.includes("mac") || p.includes("ios") || p.includes("iphone") || p.includes("ipad");
+}
+function etichettaTasto(combo, { apple = suApple() } = {}) {
+  const testo3 = String(combo || "").trim();
+  if (!testo3) return "";
+  const parti = testo3.replace(/⌘/g, "mod ").replace(/\bCtrl\b/gi, "mod").replace(/\bCmd\b/gi, "mod").replace(/\bShift\b/gi, "⇧").split(/[+\s]+/).filter(Boolean);
+  return parti.map((p) => p === "mod" ? apple ? "⌘" : "Ctrl" : p).join(apple ? "" : " ");
+}
+function normalizzaTastiScritti(radice = globalThis.document, { apple = suApple() } = {}) {
+  let cambiati = 0;
+  for (const nodo4 of radice.querySelectorAll("kbd")) {
+    const testo3 = (nodo4.textContent || "").trim();
+    if (!/⌘|ctrl|cmd|shift/i.test(testo3)) continue;
+    const nuovo = etichettaTasto(testo3, { apple });
+    if (nuovo && nuovo !== testo3) {
+      nodo4.textContent = nuovo;
+      cambiati += 1;
+    }
+  }
+  return cambiati;
+}
+function riconosci(evento, { apple = suApple() } = {}) {
+  if (!evento) return null;
+  const mod = apple ? evento.metaKey : evento.ctrlKey;
+  if (!mod || evento.altKey) return null;
+  const tasto = String(evento.key || "").toLowerCase();
+  if (evento.shiftKey) {
+    if (tasto === "m") return "modello";
+    if (tasto === "`" || tasto === "~") return "terminaleNuovo";
+    return null;
+  }
+  if (tasto === "k") return "comandi";
+  if (tasto === "n") return "nuova";
+  if (tasto === ",") return "impostazioni";
+  if (tasto === "/") return "scorciatoie";
+  if (tasto === "`") return "terminale";
+  return null;
+}
+var SCORCIATOIE;
+var init_scorciatoie = __esm({
+  "src/components/scorciatoie.js"() {
+    SCORCIATOIE = Object.freeze([
+      { id: "comandi", combo: "mod K", area: "Ovunque", nome: "Apri i comandi" },
+      { id: "nuova", combo: "mod N", area: "Ovunque", nome: "Nuova sessione" },
+      { id: "modello", combo: "mod ⇧ M", area: "Chat", nome: "Cambia il modello" },
+      { id: "impostazioni", combo: "mod ,", area: "Ovunque", nome: "Apri le impostazioni" },
+      { id: "scorciatoie", combo: "mod /", area: "Ovunque", nome: "Mostra le scorciatoie" },
+      { id: "terminale", combo: "mod `", area: "Sessione", nome: "Mostra o nascondi il terminale" },
+      { id: "terminaleNuovo", combo: "mod ⇧ `", area: "Sessione", nome: "Nuova scheda del terminale" }
+    ]);
   }
 });
 
@@ -7009,6 +7119,15 @@ function scrivi(el22, testo3) {
   if (el22.textContent !== t2) el22.textContent = t2;
   el22.hidden = t2 === "";
 }
+function statoGiri(giri, tettoGiri) {
+  if (!Number.isFinite(Number(giri))) return null;
+  const n = Number(giri);
+  const tetto = Number(tettoGiri);
+  if (!Number.isFinite(tetto) || tetto <= 0) return n > 0 ? "quieto" : null;
+  const quota = n / tetto;
+  if (quota < 0.5) return null;
+  return quota >= 0.8 ? "vicino" : "quieto";
+}
 function aggiornaPiedeChat(piede, dati = {}) {
   if (!piede) return;
   const documentObj = piede.ownerDocument;
@@ -7046,9 +7165,11 @@ function aggiornaPiedeChat(piede, dati = {}) {
   const u = testiUsage(dati.usage, { tettoGiri: dati.tettoGiri });
   const giriChip = piede.querySelector("[data-runtime-giri]");
   if (giriChip) {
-    giriChip.hidden = u.giri === null;
+    const stato = statoGiri(u.giri, dati.tettoGiri);
+    giriChip.hidden = stato === null;
+    giriChip.classList.toggle("talos-badge--warning", stato === "vicino");
     const n = giriChip.querySelector(".talos-mono");
-    if (n && u.giri !== null) n.textContent = String(u.giri);
+    if (n && u.giri !== null) n.textContent = Number.isFinite(Number(dati.tettoGiri)) && Number(dati.tettoGiri) > 0 ? `${u.giri}/${dati.tettoGiri}` : String(u.giri);
   }
   const costoChip = piede.querySelector("[data-runtime-costo]");
   if (costoChip) {
@@ -7153,6 +7274,12 @@ var init_stato_vuoto = __esm({
 });
 
 // src/components/topbar.js
+function nomeCartella(percorso) {
+  const testo3 = String(percorso || "").trim();
+  if (!testo3 || !/[\\/]/.test(testo3)) return testo3;
+  const parti = testo3.replace(/[\\/]+$/, "").split(/[\\/]+/).filter(Boolean);
+  return parti.length ? parti[parti.length - 1] : testo3;
+}
 function impostaConteggioScheda(tab, conteggio2) {
   if (!tab) return;
   let badge4 = tab.querySelector(".talos-tabs__count");
@@ -7177,7 +7304,7 @@ function aggiornaTopbar(topbar, dati = {}) {
   const percorso = topbar.querySelector(".talos-topbar__path");
   if (percorso && "percorso" in dati) {
     const testo3 = typeof dati.percorso === "string" && dati.percorso.trim() ? dati.percorso.trim() : "";
-    percorso.textContent = testo3;
+    percorso.textContent = nomeCartella(testo3);
     percorso.title = testo3;
     percorso.hidden = testo3 === "";
   }
@@ -7266,6 +7393,7 @@ var init_app = __esm({
     init_nav_item();
     init_session_item();
     init_conversazione();
+    init_scorciatoie();
     init_chat_foot();
     init_review();
     init_stato_vuoto();
@@ -11424,7 +11552,7 @@ var init_app = __esm({
           }
           if (aperto && !event.composedPath().includes(wrap)) chiudi();
         }
-        window.setTimeout(() => document.addEventListener("click", onDocumentClick), 0);
+        if (!apriSubito) window.setTimeout(() => document.addEventListener("click", onDocumentClick), 0);
         aggiornaTriggerLabel();
         if (apriSubito) {
           trigger.hidden = true;
@@ -12521,7 +12649,7 @@ var init_app = __esm({
         if (attivo && giroAvviatoA === null) giroAvviatoA = performance.now();
         if (!attivo) giroAvviatoA = null;
         const { cosa, dettaglio } = attivo ? cosaStaFacendo() : { cosa: "", dettaglio: "" };
-        const usage = state.realSession.usage;
+        const usage = state.realSession.id ? state.realSession.usage : null;
         const testiTema = aggiornaPiedeChatDaStato.tema?.() || "";
         aggiornaPiedeChat(piede, {
           attivo,
@@ -13493,7 +13621,7 @@ var init_app = __esm({
         const conSessione = Boolean(state.realSession.id);
         const cartella = attiva?.cartella || (attiva?.origine === "standalone" ? "" : state.realSession.cartellaAssoluta) || "";
         const segmento = cartella ? ultimoSegmento(cartella) : "";
-        const nomeCartella = segmento ? /[\/]$/.test(segmento) ? segmento : `${segmento}/` : "";
+        const nomeCartella2 = segmento ? /[\/]$/.test(segmento) ? segmento : `${segmento}/` : "";
         const colori = t2.enforcementColore && t2.enforcementColore !== "webgl" ? ` ${t("Colori limitati ({motivo}).", { motivo: t2.enforcementColore })}` : "";
         ui.aggiorna({
           schede,
@@ -13502,7 +13630,7 @@ var init_app = __esm({
           motivoNoNuova: conSessione ? t(TESTI2.troppeSchede, { n: SCHEDE_MASSIME }) : t(TESTI2.nuovaSchedaSenzaSessione),
           badges: [
             { chiave: "isolamento", testo: t("Stessa macchina, senza isolamento"), titolo: t("La shell gira sul tuo computer, nella cartella della sessione: nessuna sandbox.") },
-            ...nomeCartella ? [{ chiave: "cartella", testo: nomeCartella, titolo: `${cartella} · ${t("shell sul tuo computer, senza isolamento")}` }] : []
+            ...nomeCartella2 ? [{ chiave: "cartella", testo: nomeCartella2, titolo: `${cartella} · ${t("shell sul tuo computer, senza isolamento")}` }] : []
           ],
           piede: attiva ? { chi: t(TESTI2.apertaDaTe), dettaglio: cartella || (attiva.origine === "standalone" ? t("cartella predefinita del server") : ""), stato: `${t(ETICHETTA_STATO[attiva.stato] ?? attiva.stato)}${attiva.ripreso ? ` · ${t("shell ripresa")}` : ""}`, nota: `${t(TESTI2.nota)}${colori}` } : { chi: t(TESTI2.nessunaScheda), dettaglio: cartella, stato: "", nota: conSessione ? t("Premi Nuovo per aprire una shell in questa cartella.") : t(TESTI2.nuovaSchedaSenzaSessione) }
         });
@@ -17694,12 +17822,12 @@ ${testo3}` : testo3;
         eseguiDoctor();
         return true;
       }
-      function renderizzaRadiceWorkspacePendente(nomeCartella) {
+      function renderizzaRadiceWorkspacePendente(nomeCartella2) {
         const contenitore = $2("#inspector-files .file-tree");
         if (!contenitore) return;
         const radice = document.createElement("div");
         radice.className = "tree-root talos-file-row";
-        radice.append(iconaSvgAlbero("i-files"), textElement("strong", "", nomeCartella));
+        radice.append(iconaSvgAlbero("i-files"), textElement("strong", "", nomeCartella2));
         contenitore.replaceChildren(
           radice,
           textElement("p", "board-empty", "I file appariranno appena inizi la sessione.")
@@ -17707,7 +17835,7 @@ ${testo3}` : testo3;
         const demoBadge = $2(".demo-surface-badge", $2('[data-inspector-section="files"]'));
         if (demoBadge) demoBadge.hidden = true;
       }
-      async function montaStatoVuoto({ nomeCartella, cartellaLibera }) {
+      async function montaStatoVuoto({ nomeCartella: nomeCartella2, cartellaLibera }) {
         const conversation = $2("#conversation");
         if (!conversation) return;
         conversation.classList.add("talos-empty");
@@ -17723,7 +17851,7 @@ ${testo3}` : testo3;
         if (!state.pendingCustomSession || state.realSession.id) return;
         const suggerimenti = suggerimentiDallaCartella({ voci });
         const ultima = [...state.sessionSelection.available.values()].sort((a, b) => new Date(b.avviataAlle).getTime() - new Date(a.avviataAlle).getTime())[0] || null;
-        const colonna = creaStatoVuoto({ progetto: nomeCartella, suggerimenti, ultimaSessione: ultima ? { nome: ultima.nome || ultima.taskId } : null }, {
+        const colonna = creaStatoVuoto({ progetto: nomeCartella2, suggerimenti, ultimaSessione: ultima ? { nome: ultima.nome || ultima.taskId } : null }, {
           onSuggerimento: (s) => {
             composerInput.value = s.testo || s.titolo;
             composerInput.dispatchEvent(new Event("input", { bubbles: true }));
@@ -17741,18 +17869,18 @@ ${testo3}` : testo3;
         conversation.classList.remove("talos-empty");
         conversation.closest(".talos-conversation")?.classList.remove("talos-conversation--empty");
       }
-      function avviaSessionePendente({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo }) {
+      function avviaSessionePendente({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella: nomeCartella2, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo }) {
         nuovaGenerazioneSessione();
-        state.pendingCustomSession = { cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo };
+        state.pendingCustomSession = { cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella: nomeCartella2, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo };
         state.realSession.previewProjectId = cartellaId || null;
-        state.realSession.previewWorkspaceName = nomeCartella;
-        state.realSession.treeWorkspaceKey = cartellaId ? `project:${cartellaId}` : workspaceLaunchId ? `launch:${workspaceLaunchId}` : `path:${cartellaLibera || nomeCartella}`;
+        state.realSession.previewWorkspaceName = nomeCartella2;
+        state.realSession.treeWorkspaceKey = cartellaId ? `project:${cartellaId}` : workspaceLaunchId ? `launch:${workspaceLaunchId}` : `path:${cartellaLibera || nomeCartella2}`;
         if (modello) {
           state.model = modello;
           aggiornaPillolaModello();
         }
         if (effort) state.effort = effort;
-        state.session = `Nuova · ${nomeCartella}`;
+        state.session = `Nuova · ${nomeCartella2}`;
         sessionTitle.textContent = state.session;
         aggiornaTestataSessione();
         $$("[data-current-session-title]").forEach((label) => {
@@ -17764,22 +17892,22 @@ ${testo3}` : testo3;
         closePanels();
         const fileTab = $2("#inspector-tab-files");
         if (fileTab) setInspectorTab(fileTab);
-        if (!cartellaId) renderizzaRadiceWorkspacePendente(nomeCartella);
+        if (!cartellaId) renderizzaRadiceWorkspacePendente(nomeCartella2);
         svuotaSuggerimentoComposer();
         syncRunComposerState();
-        void montaStatoVuoto({ nomeCartella, cartellaLibera });
+        void montaStatoVuoto({ nomeCartella: nomeCartella2, cartellaLibera });
         window.setTimeout(() => composerInput.focus(), 0);
       }
       function titoloDalPrimoMessaggio(testo3) {
         return String(testo3 || "").replace(/\s+/g, " ").trim().slice(0, 80);
       }
-      async function startCustomSession({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, consegna, comandoProva, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo }) {
+      async function startCustomSession({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella: nomeCartella2, consegna, comandoProva, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo }) {
         iniziaMisuraLatenza("primo messaggio della sessione");
         const generation = nuovaGenerazioneSessione();
-        const taskSintetico = { id: `libero:${nomeCartella}`, consegna };
+        const taskSintetico = { id: `libero:${nomeCartella2}`, consegna };
         state.realSession.taskId = taskSintetico.id;
-        state.realSession.treeWorkspaceKey = cartellaId ? `project:${cartellaId}` : workspaceLaunchId ? `launch:${workspaceLaunchId}` : `path:${cartellaLibera || nomeCartella}`;
-        state.session = `Compito libero · ${nomeCartella}`;
+        state.realSession.treeWorkspaceKey = cartellaId ? `project:${cartellaId}` : workspaceLaunchId ? `launch:${workspaceLaunchId}` : `path:${cartellaLibera || nomeCartella2}`;
+        state.session = `Compito libero · ${nomeCartella2}`;
         sessionTitle.textContent = state.session;
         aggiornaTestataSessione();
         $$("[data-current-session-title]").forEach((label) => {
@@ -17789,7 +17917,7 @@ ${testo3}` : testo3;
         closePanels();
         appendRealTaskStart(taskSintetico);
         mostraAttesaRisposta();
-        toast("Avvio in corso", `${nomeCartella} · esecuzione diretta sulla cartella vera, nessuna copia.`);
+        toast("Avvio in corso", `${nomeCartella2} · esecuzione diretta sulla cartella vera, nessuna copia.`);
         let sessionId;
         try {
           const client = window.__talosHarnessApiBase ? "mobile" : "desktop";
@@ -17860,9 +17988,9 @@ ${testo3}` : testo3;
           return true;
         }
         if (state.pendingCustomSession) {
-          const { cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, modelloPlanner } = state.pendingCustomSession;
+          const { cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella: nomeCartella2, modelloPlanner } = state.pendingCustomSession;
           if (cartellaLibera && state.permissions !== "Full access") {
-            toast("Serve Full access", `${nomeCartella} è fuori dall'elenco delle cartelle: per avviarla serve Full access. Cambia il permesso dalla pillola e invia di nuovo.`);
+            toast("Serve Full access", `${nomeCartella2} è fuori dall'elenco delle cartelle: per avviarla serve Full access. Cambia il permesso dalla pillola e invia di nuovo.`);
             return false;
           }
           state.pendingCustomSession = null;
@@ -17870,7 +17998,7 @@ ${testo3}` : testo3;
             cartellaId,
             cartellaLibera,
             workspaceLaunchId,
-            nomeCartella,
+            nomeCartella: nomeCartella2,
             consegna: value,
             modello: state.model,
             effort: state.effort,
@@ -17894,8 +18022,8 @@ ${testo3}` : testo3;
           toast("Nessuna sessione attiva", "Premi «Nuova» in alto per scegliere una cartella e iniziare.");
           return;
         }
-        const [{ id: cartellaId, nome: nomeCartella }] = progetti;
-        startCustomSession({ cartellaId, nomeCartella, consegna, modello: state.model, effort: state.effort });
+        const [{ id: cartellaId, nome: nomeCartella2 }] = progetti;
+        startCustomSession({ cartellaId, nomeCartella: nomeCartella2, consegna, modello: state.model, effort: state.effort });
       }
       function announceComposerAction(action) {
         if (action === "references") {
@@ -18648,14 +18776,22 @@ ${testo3}` : testo3;
         else ensureSessionsBoard();
       });
       ROOT().addEventListener("keydown", (event) => {
-        const mod = event.metaKey || event.ctrlKey;
-        if (mod && event.key.toLowerCase() === "k") {
+        const quale = riconosci(event);
+        if (quale === "comandi") {
           event.preventDefault();
           openCommandPalette();
-        }
-        if (mod && event.key.toLowerCase() === "n") {
+        } else if (quale === "nuova") {
           event.preventDefault();
           createNewSession();
+        } else if (quale === "modello") {
+          event.preventDefault();
+          openSheet("model", { ancoraAlComposer: true });
+        } else if (quale === "impostazioni") {
+          event.preventDefault();
+          setView("settings");
+        } else if (quale === "scorciatoie") {
+          event.preventDefault();
+          openCommandPalette();
         }
         if (event.key === "Escape" && (commandDialog.open || sheetDialog.open)) dismissTransientLayers();
         else if (event.key === "Escape" && (sessionsPanel.classList.contains("open") || inspectorPanel.classList.contains("open"))) closePanels();
@@ -18977,6 +19113,8 @@ ${testo3}` : testo3;
         if (event.key === "Escape") $$(".overlay-layer").forEach((v) => chiudiVeloMockup(v.id));
       });
       collegaRidimensionamentoDialoghi(ROOT());
+      collegaNavigazioneSpina($2("#conversation"));
+      normalizzaTastiScritti(ROOT());
       collegaScorciatoieTerminale();
       collegaRidisegnoLingua();
       renderizzaBrowser();

@@ -33,7 +33,8 @@ import { creaBrowser, prossimaDopoChiusura as prossimaDopoChiusuraBrowser, MASSI
 import { impacchetta as impacchettaAnnotazioni } from '../components/annotazioni.js'; // Browser oltre Hermes 06/9
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
-import { aggiungiGiroAllaSpine, creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
+import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
+import { normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
 import { aggiornaPiedeChat, etichettaPermesso } from '../components/chat-foot.js'; // 05/9 Fase 2: ChatFooter — striscia del giro, chip e barra di stato dai dati
 import { aggiornaDiffReview, creaRigaFileReview, nascondiAzioniFase3, riassuntoReview } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno del mockup
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
@@ -4973,7 +4974,15 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
      * registrazione al giro di eventi successivo — lo stesso pattern
      * usato ovunque per "click fuori per chiudere".
      */
-    window.setTimeout(() => document.addEventListener('click', onDocumentClick), 0);
+    /*
+     * ⛔⛔ 06/9, owner: «quando clicco lo slider ragionamento il selettore modello sparisce». Riprodotto:
+     * nel foglio «Modello» il picker è montato con `apriSubito` (il trigger è nascosto, il pannello È il
+     * foglio) e sotto di lui vivono il cursore del ragionamento e l'interruttore «Mostra ragionamento»:
+     * cliccarli è un clic FUORI da `wrap`, quindi il pannello si chiudeva e restava un foglio vuoto,
+     * senza modo di riaprirlo. Il «clic fuori chiude» ha senso solo quando il picker è una tendina fra
+     * altri campi («Nuova sessione»): con `apriSubito` non si registra proprio.
+     */
+    if (!apriSubito) window.setTimeout(() => document.addEventListener('click', onDocumentClick), 0);
 
     aggiornaTriggerLabel();
     /*
@@ -6229,7 +6238,14 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (attivo && giroAvviatoA === null) giroAvviatoA = performance.now();
     if (!attivo) giroAvviatoA = null;
     const { cosa, dettaglio } = attivo ? cosaStaFacendo() : { cosa: '', dettaglio: '' };
-    const usage = state.realSession.usage;
+    /*
+     * ⛔⛔ 06/9 — decisione G30 («la barra di stato deve dire il vero»), verificata rotta
+     * nell'audit: su una sessione NUOVA la barra mostrava «92,1k token · 9 giri · cache 83%»,
+     * cioè i consumi della sessione PRECEDENTE, perché `state.realSession.usage` sopravvive
+     * finché non arriva il primo evento. Senza una sessione reale aperta non c'è consumo da
+     * dichiarare: si tace, invece di mentire con un numero vero di qualcun altro.
+     */
+    const usage = state.realSession.id ? state.realSession.usage : null;
     const testiTema = aggiornaPiedeChatDaStato.tema?.() || '';
     aggiornaPiedeChat(piede, {
       attivo,
@@ -13910,16 +13926,19 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     else ensureSessionsBoard();
   });
 
+  /*
+   * ⭐⭐⭐ 06/9 — audit delle decisioni: la pillola del modello disegnava «Ctrl ⇧ M» e il tasto
+   * non apriva niente; il pulsante Impostazioni prometteva «Ctrl ,» e nemmeno. Una scorciatoia
+   * scritta a schermo è una promessa: qui il registro di `scorciatoie.js` diventa il gesto vero,
+   * col modificatore della piattaforma (⌘ su Apple, Ctrl altrove).
+   */
   ROOT().addEventListener('keydown', (event) => {
-    const mod = event.metaKey || event.ctrlKey;
-    if (mod && event.key.toLowerCase() === 'k') {
-      event.preventDefault();
-      openCommandPalette();
-    }
-    if (mod && event.key.toLowerCase() === 'n') {
-      event.preventDefault();
-      createNewSession();
-    }
+    const quale = riconosci(event);
+    if (quale === 'comandi') { event.preventDefault(); openCommandPalette(); }
+    else if (quale === 'nuova') { event.preventDefault(); createNewSession(); }
+    else if (quale === 'modello') { event.preventDefault(); openSheet('model', { ancoraAlComposer: true }); }
+    else if (quale === 'impostazioni') { event.preventDefault(); setView('settings'); }
+    else if (quale === 'scorciatoie') { event.preventDefault(); openCommandPalette(); }
     if (event.key === 'Escape' && (commandDialog.open || sheetDialog.open)) dismissTransientLayers();
     else if (event.key === 'Escape' && (sessionsPanel.classList.contains('open') || inspectorPanel.classList.contains('open'))) closePanels();
   });
@@ -14290,6 +14309,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   }
   document.addEventListener('keydown', (event) => { if (event.key === 'Escape') $$('.overlay-layer').forEach((v) => chiudiVeloMockup(v.id)); });
   collegaRidimensionamentoDialoghi(ROOT()); // 06/9 B7: le tre maniglie di ogni velo (trascina, frecce, doppio clic)
+  collegaNavigazioneSpina($('#conversation')); // 06/9: la spina dei giri si naviga, come la barra della cronologia di ChatGPT
+  normalizzaTastiScritti(ROOT()); // 06/9 audit: «⌘N» nella palette su Windows
   collegaScorciatoieTerminale(); // 06/9 B1: Ctrl+` e Ctrl+Shift+`, e la barra delle schede onesta da subito
   collegaRidisegnoLingua(); // P-i18n 06/9
   renderizzaBrowser(); // 06/9 K-I: via le letture dimostrative del mockup da subito

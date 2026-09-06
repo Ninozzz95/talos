@@ -31,3 +31,22 @@ test('INTRO-PASSI: non si salta un passo senza la scelta; «Accesso pieno» vuol
   assert.equal(riepilogo({ cartella: 'C:\\x', modello: 'GLM 4.7 flash', politica: 'Scrive nel progetto' }), 'Cartella: C:\\x · Modello: GLM 4.7 flash · Permessi: Scrive nel progetto');
   assert.equal(riepilogo({}), 'Cartella: da scegliere · Modello: da scegliere · Permessi: da scegliere');
 });
+
+// 06/09 — audit delle decisioni E17/F16: la combinazione «cartella fuori dai progetti + permesso
+// diverso da Accesso pieno» è impossibile per il server, e va detta DOVE si sceglie.
+test('INTRO-CARTELLA-FUORI: Avanti non passa con una combinazione che il server rifiuterebbe', () => {
+  const progetti = ['C:/progetti/AVM'];
+  const dentro = (cartella) => progetti.some((p) => cartella === p || cartella.startsWith(`${p}/`));
+  assert.equal(dentro('C:/progetti/AVM'), true);
+  assert.equal(dentro('C:/progetti/AVM/src'), true);
+  assert.equal(dentro('C:/Users/x/Temp/prova'), false);
+  // la regola dell'Avanti, come la applica mostraPasso
+  const bloccato = (cartella, politica, confermaPieno = false) => {
+    const fuori = !dentro(cartella);
+    return !politica || (fuori && politica !== 'Full access') || (politica === 'Full access' && !confermaPieno);
+  };
+  assert.equal(bloccato('C:/Users/x/Temp/prova', 'Workspace write'), true);
+  assert.equal(bloccato('C:/Users/x/Temp/prova', 'Full access', true), false);
+  assert.equal(bloccato('C:/progetti/AVM', 'Workspace write'), false);
+  assert.equal(bloccato('C:/progetti/AVM', null), true);
+});

@@ -214,7 +214,20 @@ export function modelloRichiestaValido(raw) {
  * non inventati: `effort` controlla il budget di token di ragionamento,
  * `summary` la verbosità di quanto ne viene mostrato.
  */
-const EFFORT_AMMESSI = new Set(['xhigh', 'high', 'medium', 'low', 'minimal', 'none']);
+/*
+ * ⛔⛔⛔ 06/9 — trovato provando una sessione vera dal primo avvio: scegliendo «Z.ai GLM 5.3 Flash»
+ * dal foglio dei modelli, il primo messaggio tornava «Query non valida» e la sessione non partiva
+ * MAI. Causa: il catalogo che serviamo noi (`/api/v1/models`, dati OpenRouter) dichiara per quel
+ * modello `supportedEfforts: ["max","high","low"]` con `defaultEffort: "max"`, la UI adotta il
+ * livello dichiarato dal modello, e questo cancello non conosceva `max`. Non è un caso isolato:
+ * **59 modelli del catalogo dichiarano `max`**, 8 lo hanno come predefinito.
+ * Ricerca 06/09/2026 (openrouter.ai «Reasoning tokens»; big-AGI #940; OpenRouterTeam/ai-sdk-provider,
+ * «Provider options and reasoning»): l'insieme canonico è xhigh/high/medium/low/minimal/none, e i
+ * modelli Claude accettano anche `max`; ciò che un modello non supporta viene mappato da OpenRouter
+ * sul livello più vicino. ⇒ Il cancello ammette anche `max`: rifiutare un valore che il NOSTRO
+ * catalogo dichiara è un cancello che litiga con i propri dati.
+ */
+const EFFORT_AMMESSI = new Set(['max', 'xhigh', 'high', 'medium', 'low', 'minimal', 'none']);
 const SUMMARY_AMMESSI = new Set(['auto', 'concise', 'detailed']);
 
 /** Stesso principio di modelloRichiestaValido: pura, nessun throw. */

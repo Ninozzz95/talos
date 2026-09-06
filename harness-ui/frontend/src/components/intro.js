@@ -44,6 +44,22 @@ export function creaIntro(velo, { api, azioni = {}, iniziale = {}, document: d =
   const st = { passo: 0, politica: iniziale.politica || null, cartella: normalizzaCartella(iniziale.cartella || ''), radice: null, fuoco: null, aperte: new Set(), figli: new Map(), caricando: new Set(), testo: '', timer: null, modello: iniziale.modello || '', providers: [], modelli: [] };
   const messaggio = (t) => { const m = $('introMessaggio'); if (m) m.textContent = t || ''; };
 
+  /*
+   * ⛔⛔ 06/9 — trovato provando il primo avvio come farebbe una persona: si sceglie una cartella
+   * qualunque, si sceglie «Scrive nel progetto», si preme Inizia… e il primo messaggio viene
+   * RIFIUTATO, perché il server esige «Accesso pieno» per una cartella fuori dai progetti
+   * autorizzati. Lo scoprivi solo dopo aver scritto il compito. Qui la stessa regola vive dove si
+   * sceglie (decisioni E17 e F16): al passo dei permessi, e Avanti non passa se la combinazione è
+   * impossibile.
+   */
+  function cartellaAutorizzata() {
+    if (!st.cartella) return true;
+    const scelta = normalizzaCartella(st.cartella);
+    const progetti = (st.gruppi?.progetti || []).map((p) => normalizzaCartella(p.path));
+    return progetti.some((p) => p && (scelta === p || scelta.startsWith(`${p}/`)));
+  }
+  function serveAccessoPieno() { return Boolean(st.cartella) && !cartellaAutorizzata(); }
+
   // ---------- passi ----------
   function mostraPasso(n) {
     st.passo = Math.max(0, Math.min(PASSI - 1, n));
@@ -54,7 +70,19 @@ export function creaIntro(velo, { api, azioni = {}, iniziale = {}, document: d =
     const indietro = $('introIndietro'); if (indietro) indietro.disabled = st.passo === 0;
     const pieno = $('introPienoAvviso'); if (pieno) pieno.hidden = st.politica !== 'Full access';
     const avanti = $('introAvanti');
-    if (avanti) { avanti.disabled = st.passo === 2 && (!st.politica || (st.politica === 'Full access' && !$('introConfermaPieno')?.checked)); avanti.textContent = st.passo === PASSI - 1 ? 'Inizia' : 'Avanti'; }
+    const fuoriProgetti = serveAccessoPieno();
+    if (avanti) {
+      const politicaImpossibile = fuoriProgetti && st.politica !== null && st.politica !== 'Full access';
+      avanti.disabled = st.passo === 2 && (!st.politica || politicaImpossibile || (st.politica === 'Full access' && !$('introConfermaPieno')?.checked));
+      avanti.textContent = st.passo === PASSI - 1 ? 'Inizia' : 'Avanti';
+    }
+    const statoPolitica = $('introPoliticaStato');
+    if (statoPolitica && st.passo === 2) {
+      if (fuoriProgetti && st.politica && st.politica !== 'Full access') statoPolitica.textContent = `${ultimoSegmento(st.cartella)} è fuori dai progetti autorizzati: con questa cartella funziona solo «Accesso pieno». Scegli un'altra cartella o l'accesso pieno.`;
+      else if (fuoriProgetti && !st.politica) statoPolitica.textContent = `${ultimoSegmento(st.cartella)} è fuori dai progetti autorizzati: serve «Accesso pieno».`;
+      else if (st.politica) statoPolitica.textContent = `Scelto: ${velo.querySelector('[data-intro-policy][aria-checked="true"] .talos-list-row__title')?.textContent || st.politica}`;
+      else statoPolitica.textContent = 'Scegli una politica. Avanti non conferma un valore predefinito al posto tuo.';
+    }
     const r = $('introRiepilogo');
     if (r) r.textContent = riepilogo({ cartella: st.cartella, modello: $('introModello')?.selectedOptions?.[0]?.textContent || st.modello, politica: velo.querySelector('[data-intro-policy][aria-checked="true"] .talos-list-row__title')?.textContent });
     const priv = $('introPrivacy'); const privR = $('introPrivacyRemoto'); const locale = fornitoreLocale();

@@ -102,6 +102,20 @@ function scrivi(el, testo) {
  * @param {string} [dati.permesso] il valore interno (Read only…)
  * @param {string} [dati.tema] «Tema Calm · locale»
  */
+/**
+ * Quando si mostra la pillola dei giri, e con che tono (decisione B12, 06/09).
+ * @returns {'quieto'|'vicino'|null} null = non si mostra
+ */
+export function statoGiri(giri, tettoGiri) {
+  if (!Number.isFinite(Number(giri))) return null;
+  const n = Number(giri);
+  const tetto = Number(tettoGiri);
+  if (!Number.isFinite(tetto) || tetto <= 0) return n > 0 ? 'quieto' : null; // senza tetto dichiarato non c'è una percentuale: si mostra e basta
+  const quota = n / tetto;
+  if (quota < 0.5) return null;
+  return quota >= 0.8 ? 'vicino' : 'quieto';
+}
+
 export function aggiornaPiedeChat(piede, dati = {}) {
   if (!piede) return;
   const documentObj = piede.ownerDocument;
@@ -142,9 +156,17 @@ export function aggiornaPiedeChat(piede, dati = {}) {
   const u = testiUsage(dati.usage, { tettoGiri: dati.tettoGiri });
   const giriChip = piede.querySelector('[data-runtime-giri]');
   if (giriChip) {
-    giriChip.hidden = u.giri === null;
+    /*
+     * ⛔ 06/9 — decisione B12: il contatore dei giri «compare dal 50% del tetto, in grigio, e si
+     * accende avvicinandosi». Prima compariva sempre: con 9 giri su 24 (il 37%) diceva un numero
+     * che non chiedeva niente a nessuno. Sotto la soglia si tace; da lì in su è quieto fino
+     * all'80%, poi diventa un avviso.
+     */
+    const stato = statoGiri(u.giri, dati.tettoGiri);
+    giriChip.hidden = stato === null;
+    giriChip.classList.toggle('talos-badge--warning', stato === 'vicino');
     const n = giriChip.querySelector('.talos-mono');
-    if (n && u.giri !== null) n.textContent = String(u.giri);
+    if (n && u.giri !== null) n.textContent = Number.isFinite(Number(dati.tettoGiri)) && Number(dati.tettoGiri) > 0 ? `${u.giri}/${dati.tettoGiri}` : String(u.giri);
   }
   const costoChip = piede.querySelector('[data-runtime-costo]');
   if (costoChip) {

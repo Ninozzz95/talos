@@ -56,7 +56,7 @@
     </div>
 
     <div class="talos-sidebar__actions">
-      <div class="talos-field" data-c="Field"><svg class="i talos-field__icon"><use href="#i-search"/></svg><input class="talos-field__input" data-ph="cerca" placeholder="Cerca chat…" aria-label="Cerca nelle conversazioni"></div>
+      <div class="talos-field" data-c="Field"><svg class="i talos-field__icon"><use href="#i-search"/></svg><input class="talos-field__input" data-ph="cerca" placeholder="Cerca fra le chat…" aria-label="Cerca fra i titoli delle chat"></div>
       <button class="talos-button talos-button--primary" data-c="Button" id="voceNuova"><svg class="i"><use href="#i-plus"/></svg><span data-t="nuova">Nuova</span></button>
     </div>
 
@@ -126,8 +126,7 @@
     <!-- ---------- CHAT AL LAVORO ---------- -->
     <section class="talos-screen" id="schermoChat" data-c="SessionScreen">
       <div class="talos-topbar" data-c="Topbar">
-        <div class="talos-topbar__title"><h1>W1-02 registro processi</h1><svg class="i"><use href="#i-chev"/></svg></div>
-        <span class="talos-topbar__path">~/Desktop/projects/AVM-harness-desktop</span>
+        <div class="talos-topbar__title"><h1>W1-02 registro processi</h1><svg class="i"><use href="#i-chev"/></svg><span class="talos-topbar__path" title="~/Desktop/projects/AVM-harness-desktop">AVM-harness-desktop</span></div>
         <div class="talos-tabs" data-c="Tabs"><div class="talos-tabs__list" role="tablist" data-vistetab aria-label="Viste della sessione">
           <button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-selected="true" data-t="chat">Chat</button>
           <button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-selected="false" data-t="terminale">Terminale <span class="talos-tabs__count">2</span></button>
@@ -138,7 +137,7 @@
 
       <div class="talos-conversation" data-c="Conversation"><div class="talos-conversation__column">
         <div class="talos-turn" data-c="Turn">
-          <div class="talos-turn-spine" data-c="TurnSpine"><span class="talos-turn-spine__n">1</span><span class="talos-turn-spine__tick" data-tick="1"></span></div>
+          <div class="talos-turn-spine" data-c="TurnSpine"><span class="talos-turn-spine__n">1</span><button type="button" class="talos-turn-spine__tick" data-tick="1"></span aria-label="Vai al giro"></button></div>
           <div class="talos-message talos-message--user" data-c="Message">
             <div class="talos-message__head"><span class="talos-message__who">Tu</span><span class="talos-message__meta">18:04</span></div>
             <div class="talos-message__body"><p>Aggiungi la guardia di stallo al registro dei processi e falla riconoscere due casi diversi: silenzio prolungato e giri a vuoto. Non deve uccidere niente.</p></div>
@@ -147,9 +146,9 @@
 
         <div class="talos-turn" data-c="Turn">
           <div class="talos-turn-spine" data-c="TurnSpine">
-            <span class="talos-turn-spine__n">2</span><span class="talos-turn-spine__tick" data-tick="2"></span>
-            <span class="talos-turn-spine__n">3</span><span class="talos-turn-spine__tick talos-turn-spine__tick--info" data-tick="4"></span>
-            <span class="talos-turn-spine__n">4</span><span class="talos-turn-spine__tick" data-tick="1"></span>
+            <span class="talos-turn-spine__n">2</span><button type="button" class="talos-turn-spine__tick" data-tick="2"></span aria-label="Vai al giro"></button>
+            <span class="talos-turn-spine__n">3</span><button type="button" class="talos-turn-spine__tick talos-turn-spine__tick--info" data-tick="4"></span aria-label="Vai al giro"></button>
+            <span class="talos-turn-spine__n">4</span><button type="button" class="talos-turn-spine__tick" data-tick="1"></span aria-label="Vai al giro"></button>
           </div>
           <div class="talos-message" data-c="Message">
             <div class="talos-message__head"><span class="talos-avatar talos-avatar--sm"><svg class="glyph"><use href="#glifo"/></svg></span><span class="talos-message__who talos-message__who--talos">TALOS</span><span class="talos-message__meta">claude-opus-5 · 18:04</span></div>
@@ -184,7 +183,7 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
         </div>
 
         <div class="talos-turn" data-c="Turn">
-          <div class="talos-turn-spine" data-c="TurnSpine"><span class="talos-turn-spine__n">5</span><span class="talos-turn-spine__tick" data-tick="3"></span><span class="talos-turn-spine__n">6</span><span class="talos-turn-spine__tick talos-turn-spine__tick--warning" data-tick="5"></span></div>
+          <div class="talos-turn-spine" data-c="TurnSpine"><span class="talos-turn-spine__n">5</span><button type="button" class="talos-turn-spine__tick" data-tick="3"></span aria-label="Vai al giro"></button><span class="talos-turn-spine__n">6</span><button type="button" class="talos-turn-spine__tick talos-turn-spine__tick--warning" data-tick="5"></span aria-label="Vai al giro"></button></div>
           <div class="talos-message" data-c="Message">
             <div class="talos-message__head"><span class="talos-avatar talos-avatar--sm"><svg class="glyph"><use href="#glifo"/></svg></span><span class="talos-message__who talos-message__who--talos">TALOS</span><span class="talos-message__meta">claude-opus-5 · 18:07</span></div>
             <p>La guardia è scritta e i test la coprono nei due versi. Prima di applicare la modifica al file vero ti mostro cosa cambia.</p>
@@ -232,11 +231,11 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
         </div>
 
         <div class="talos-turn" data-c="Turn">
-          <div class="talos-turn-spine" data-c="TurnSpine"><span class="talos-turn-spine__n">7</span><span class="talos-turn-spine__tick talos-turn-spine__tick--current" data-tick="2"></span></div>
+          <div class="talos-turn-spine" data-c="TurnSpine"><span class="talos-turn-spine__n">7</span><button type="button" class="talos-turn-spine__tick talos-turn-spine__tick--current" data-tick="2"></span aria-label="Vai al giro"></button></div>
           <div class="talos-message" data-c="Message">
             <div class="talos-message__head"><span class="talos-avatar talos-avatar--sm"><svg class="glyph"><use href="#glifo"/></svg></span><span class="talos-message__who talos-message__who--talos">TALOS</span><span class="talos-message__meta">claude-opus-5 · 18:09</span></div>
             <p>Lancio la suite completa per vedere se qualcosa è regredito…</p>
-            <div class="talos-stack talos-waiting" role="status" aria-live="polite" aria-atomic="true"><div class="talos-waiting__row"><svg class="talos-line-loader" viewBox="0 0 96 16" width="48" height="8" aria-hidden="true"><line class="talos-line-loader-track" x1="4" y1="8" x2="92" y2="8"/><line class="talos-line-loader-sweep" x1="4" y1="8" x2="92" y2="8"/><circle class="talos-line-loader-node" cx="16" cy="8" r="4"/><circle class="talos-line-loader-node" cx="48" cy="8" r="4"/><circle class="talos-line-loader-node" cx="80" cy="8" r="4"/></svg><span class="talos-waiting__label">Sto eseguendo…</span><span class="talos-mono talos-muted">0s</span></div><div class="talos-stack" aria-hidden="true"><span class="talos-skeleton talos-skeleton--w90"></span><span class="talos-skeleton talos-skeleton--w70"></span><span class="talos-skeleton talos-skeleton--w40"></span></div></div>
+            <div class="talos-stack talos-waiting" role="status" aria-live="polite" aria-atomic="true"><div class="talos-waiting__row"><svg class="talos-line-loader" viewBox="0 0 96 16" width="48" height="8" aria-hidden="true"><line class="talos-line-loader-track" x1="4" y1="8" x2="92" y2="8"/><line class="talos-line-loader-sweep" x1="4" y1="8" x2="92" y2="8"/><circle class="talos-line-loader-node" cx="16" cy="8" r="4"/><circle class="talos-line-loader-node" cx="48" cy="8" r="4"/><circle class="talos-line-loader-node" cx="80" cy="8" r="4"/></svg><span class="talos-waiting__label">Sto eseguendo…</span><span class="talos-mono talos-muted">0s</span></div></div>
           </div>
         </div>
       </div></div>
@@ -274,8 +273,7 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
     <!-- ---------- CHAT VUOTA ---------- -->
     <section class="talos-screen" id="schermoVuota" data-c="EmptySessionScreen" hidden>
       <div class="talos-topbar" data-c="Topbar">
-        <div class="talos-topbar__title"><h1>Nuova conversazione</h1></div>
-        <span class="talos-topbar__path">~/Desktop/projects/AVM-harness-desktop</span>
+        <div class="talos-topbar__title"><h1>Nuova conversazione</h1><span class="talos-topbar__path" title="~/Desktop/projects/AVM-harness-desktop">AVM-harness-desktop</span></div>
         <div class="talos-tabs"><div class="talos-tabs__list" role="tablist"><button class="talos-tabs__tab" role="tab" aria-selected="true">Chat</button><button class="talos-tabs__tab" role="tab" aria-selected="false">Terminale</button><button class="talos-tabs__tab" role="tab" aria-selected="false">Review</button></div></div>
       </div>
       <div class="talos-conversation talos-conversation--empty" data-c="EmptyState"><div class="talos-conversation__column talos-empty">
@@ -307,8 +305,7 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
     <!-- ---------- TERMINALE (G8-G10) ---------- -->
     <section class="talos-screen" id="schermoTerminale" data-c="TerminalScreen" hidden>
       <div class="talos-topbar" data-c="Topbar">
-        <div class="talos-topbar__title"><h1>W1-02 registro processi</h1></div>
-        <span class="talos-topbar__path">~/Desktop/projects/AVM-harness-desktop</span>
+        <div class="talos-topbar__title"><h1>W1-02 registro processi</h1><span class="talos-topbar__path" title="~/Desktop/projects/AVM-harness-desktop">AVM-harness-desktop</span></div>
         <div class="talos-tabs"><div class="talos-tabs__list" role="tablist" data-vistetab><button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-selected="false" data-t="chat">Chat</button><button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-selected="true" data-t="terminale">Terminale <span class="talos-tabs__count">2</span></button><button class="talos-tabs__tab" role="tab" data-vaia="review" aria-selected="false" data-t="review">Review <span class="talos-tabs__count">3</span></button><button class="talos-tabs__tab" role="tab" data-vaia="browser" aria-controls="schermoBrowser" aria-selected="false" data-t="browser">Browser</button></div></div>
       </div>
       <div class="talos-terminal" data-c="TerminalPane">
