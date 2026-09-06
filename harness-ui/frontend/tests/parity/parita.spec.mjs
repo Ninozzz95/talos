@@ -302,7 +302,8 @@ test('ASTRA Model Lab sei schede e recupero funzioni',async({browser},info)=>{
  await expect(p.locator('#labTabs [role=tab]')).toHaveCount(6);
  for(const s of ['installati','catalogo','hf','download','runtime','prova']){await p.locator('#tab-'+s).click();await expect(p.locator('#panel-'+s)).toBeVisible();await p.screenshot({path:path.join(d,'modellab-'+s+'-'+info.project.use.viewport.width+'.png')});}
  await p.locator('#tab-installati').click();await expect(p.getByRole('button',{name:'Importa .gguf',exact:true})).toBeVisible();
- await p.locator('#tab-hf').click();await expect(p.locator('#ordineHf option')).toHaveText(['Download','Preferiti','Più recenti','Aggiornati']);
+ // 06/09: le voci dicono che sono un ORDINE, non un filtro — «Download» da solo si leggeva come «mostrami i download».
+ await p.locator('#tab-hf').click();await expect(p.locator('#ordineHf option')).toHaveText(['Più scaricati','Più apprezzati','Più recenti','Aggiornati di recente']);
  await p.locator('#autoreHf').fill('nessun-autore');await expect(p.locator('#vuotoHf')).toBeVisible();await p.locator('#autoreHf').fill('');
  await p.locator('#tagHf').fill('gguf');await p.locator('#altriHf').click();await expect(p.locator('#listaHf [data-hf]')).toHaveCount(3);
  await p.locator('#hfTuttiFile').click();await expect(p.locator('#veloFileModello')).toBeVisible();await p.locator('#veloFileModello [data-chiudi]').click();

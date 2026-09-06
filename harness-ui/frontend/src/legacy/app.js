@@ -2895,6 +2895,22 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     try { state.modelLab.hfDetail = await apiGet(`/api/v1/huggingface/repo?repo=${encodeURIComponent(item.repo)}&revision=${encodeURIComponent(item.revision || 'main')}`); }
     catch (error) { state.modelLab.hfError = error; }
     renderizzaHfConMockup();
+    /*
+     * ⛔⛔ 06/09 — la misura parte QUI, all'apertura del repository.
+     *
+     * La regola scritta più sopra («si misura SU RICHIESTA, non a ogni
+     * ridisegno») resta intatta, e questa non la viola: aprire un repository È
+     * una richiesta della persona, un ridisegno no. La differenza pratica,
+     * misurata sul 4178 prima della cura: quindici varianti tutte con scritto
+     * «non ancora misurato», e il pulsante che le misura in fondo alla colonna,
+     * sotto la piega — cioè l'unico numero che decide la scelta era anche
+     * l'unico che non si vedeva mai. Il pulsante resta e dice «Rimisura»: la
+     * memoria libera cambia mentre si lavora, quindi una misura si rifà.
+     */
+    const gruppiApertura = gruppiVarianti(state.modelLab.hfDetail?.files);
+    if (gruppiApertura.length && state.modelLab.hfSelected === repo) {
+      await misuraVariantiHfModelLab(gruppiApertura.map((g) => ({ chiave: g.chiave, bytes: g.bytes })));
+    }
   }
   async function avviaDownloadHf(detail, files, bytes) {
     const id = `${detail.repo.replace(/[^a-z0-9_-]/giu, '-')}-${String(detail.revision || 'main').slice(0, 12)}-${files[0].path.replace(/[^a-z0-9]/giu, '-')}`.slice(0, 120);
@@ -3560,6 +3576,28 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     $('#modelLabCancelButton')?.addEventListener('click', () => annullaProvaRuntimeModelLab());
     $('#modelLabHfSearchButton')?.addEventListener('click', () => cercaHuggingFaceModelLab());
     $('#modelLabHfSearch')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') cercaHuggingFaceModelLab(); });
+    /*
+     * ⛔⛔ 06/09 — la ricerca si avvia anche SCRIVENDO, non solo con Invio.
+     *
+     * Trovato dal vivo: `montaHf()` gira PRIMA di questi ascoltatori e
+     * sostituisce i figli del pannello con quelli del mockup, che **non ha il
+     * pulsante «Cerca»**. Quindi `#modelLabHfSearchButton` non esiste più, la
+     * riga sopra lega il nulla (`?.`) e l'unico modo di cercare rimasto era
+     * premere Invio — un'affordance che a schermo non c'è scritta da nessuna
+     * parte. Chi scriveva e aspettava vedeva la lista di prima e la credeva
+     * il risultato della sua ricerca.
+     *
+     * Il ritardo è quello che usano gli hub di modelli per una ricerca remota:
+     * si aspetta che la persona smetta di scrivere invece di chiamare l'API a
+     * ogni tasto. Sotto i due caratteri non si chiama: `q=z` non è una ricerca.
+     */
+    let attesaRicercaHf = null;
+    $('#modelLabHfSearch')?.addEventListener('input', (event) => {
+      clearTimeout(attesaRicercaHf);
+      const testo = event.target.value.trim();
+      if (testo.length > 0 && testo.length < 2) return;
+      attesaRicercaHf = setTimeout(() => cercaHuggingFaceModelLab(), 450);
+    });
     $('#modelLabHfNextButtonControl')?.addEventListener('click', () => cercaHuggingFaceModelLab({ append: true }));
     $('#modelLabHfSortControl')?.addEventListener('change', () => { if (state.modelLab.hfQuery) cercaHuggingFaceModelLab(); }); // 06/9 B6.9
     for (const id of ['modelLabHfAuthorControl', 'modelLabHfFiltersControl']) $(`#${id}`)?.addEventListener('keydown', (event) => { if (event.key === 'Enter') cercaHuggingFaceModelLab(); });
