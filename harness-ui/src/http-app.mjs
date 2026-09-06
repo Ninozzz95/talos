@@ -1,7 +1,8 @@
 import { leggiArtefatto as leggiArtefattoReale } from './artifact-store.mjs';
 import { verificaIncorniciabile } from './browser-frame.mjs'; // K-I 06/9: la cornice del Browser si decide dalle intestazioni della pagina
 import { proxyPagina } from './browser-proxy.mjs';
-import { leggiPaginaPerLaVista } from './agent-service.mjs'; // 06/9: gli occhi del modello sulla pagina dove navighi TU // Browser oltre Hermes 06/9: il proxy locale per annotare gli elementi
+import { leggiPaginaPerLaVista } from './agent-service.mjs';
+import { ritrattoCartella } from './workspace-info.mjs'; // 06/9 F9/F10/F19-F21: cosa c'e' dentro la cartella, PRIMA di darla a un agente // 06/9: gli occhi del modello sulla pagina dove navighi TU // Browser oltre Hermes 06/9: il proxy locale per annotare gli elementi
 import { modelloRichiestaValido, permessiPerAttrezzoRichiestaValido, permessiRichiestaValido, reasoningRichiestaValido } from './config.mjs';
 import { cartelleFrequenti as cartelleFrequentiReale } from './frequent-dirs.mjs';
 import { RUNTIME_BOOTSTRAP_SCHEMA, RUNTIME_RESOURCE_SCHEMA, parseBootstrapEnvelope } from './runtime-contract.mjs';
@@ -935,6 +936,7 @@ export function createHttpApp({
   cartelleFrequentiFn = cartelleFrequentiReale,
   catalogoModelliFn = null, clock = () => new Date(), leggiArtefattoFn = leggiArtefattoReale,
   leggiPaginaFn = leggiPaginaPerLaVista, // 06/9: iniettabile, cosi' le prove non escono in rete
+  ritrattoCartellaFn = ritrattoCartella, // 06/9: iniettabile, cosi' le prove non camminano il disco vero
   capacitaMacchinaFn = null,
   localRuntimes = null, localModelStore = null, localModelTransfer = null, hfHubClient = null,
   localRuntimeProbe = null,
@@ -2621,7 +2623,20 @@ export function createHttpApp({
          * ⛔ Sta DENTRO questa catena, non prima: fuori impostava `data` e poi cadeva nel ramo
          * finale che risponde NOT_FOUND — misurato con una curl, non dedotto.
          */
-        if (url.pathname === '/api/v1/browser/leggi') {
+        /*
+         * ⭐⭐⭐ 06/9 — decisioni F9, F10, F19, F20, F21, tutte ❌ nell'audit: la modale «Nuova
+         * sessione» non diceva niente della cartella che stai per dare a un agente. Quanti file ha,
+         * se è una radice, il ramo, le modifiche non salvate, i repo annidati: si scoprivano
+         * avviando la sessione e guardandola annaspare. Il conto vive in workspace-info.mjs, con il
+         * tetto di scansione dichiarato — contare una cartella enorme è esso stesso il problema.
+         */
+        if (url.pathname === '/api/v1/workspace-info') {
+          const percorso = url.searchParams.get('path');
+          if (typeof percorso !== 'string' || percorso.length === 0 || percorso.length > 4096) {
+            const error = new Error('Percorso mancante'); error.code = 'QUERY_INVALID'; throw error;
+          }
+          data = await ritrattoCartellaFn(percorso);
+        } else if (url.pathname === '/api/v1/browser/leggi') {
           const indirizzo = url.searchParams.get('url');
           if (typeof indirizzo !== 'string' || indirizzo.length === 0 || indirizzo.length > 2048) {
             const error = new Error('Indirizzo mancante'); error.code = 'QUERY_INVALID'; throw error;

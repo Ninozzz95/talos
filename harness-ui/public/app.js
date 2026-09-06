@@ -8322,6 +8322,42 @@ var init_errori = __esm({
   }
 });
 
+// src/components/cartella-ritratto.js
+function numeroItaliano(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return "0";
+  return String(Math.trunc(Math.abs(v))).replace(/\B(?=(\d{3})+(?!\d))/g, ".").replace(/^/, v < 0 ? "-" : "");
+}
+function frasiRitratto(ritratto) {
+  if (!ritratto || ritratto.leggibile !== true) return "";
+  const pezzi = [];
+  pezzi.push(ritratto.oltreIlTetto ? `più di ${numeroItaliano(ritratto.tetto)} file` : `${numeroItaliano(ritratto.file)} file`);
+  if (Number(ritratto.cartelle) > 0) pezzi.push(`${numeroItaliano(ritratto.cartelle)} cartelle`);
+  if (ritratto.git?.ramo) pezzi.push(`ramo ${ritratto.git.ramo}`);
+  if (Number.isFinite(Number(ritratto.git?.nonSalvate))) {
+    const n = Number(ritratto.git.nonSalvate);
+    pezzi.push(n === 0 ? "niente da salvare" : `${numeroItaliano(n)} modifiche non salvate`);
+  }
+  const annidati = ritratto.git?.repoAnnidati?.length || 0;
+  if (annidati > 0) pezzi.push(annidati === 1 ? "1 repo annidato" : `${numeroItaliano(annidati)} repo annidati`);
+  if (ritratto.istruzioni?.length) pezzi.push(`istruzioni: ${ritratto.istruzioni.join(", ")}`);
+  return pezzi.join(" · ");
+}
+function avvisoRitratto(ritratto) {
+  if (!ritratto || ritratto.leggibile !== true) return "";
+  if (ritratto.radice === true) {
+    return "Questa è una cartella radice: l’agente vedrebbe tutto quello che c’è sotto. Scegli il progetto, non il disco.";
+  }
+  if (ritratto.oltreIlTetto === true) {
+    return `Qui ci sono più di ${numeroItaliano(ritratto.tetto)} file: l’albero pesa a ogni giro. Se puoi, scegli una sottocartella.`;
+  }
+  return "";
+}
+var init_cartella_ritratto = __esm({
+  "src/components/cartella-ritratto.js"() {
+  }
+});
+
 // src/components/allegati.js
 function frasiTetti() {
   return `Fino a ${TETTI_ALLEGATI.quanti} allegati per messaggio · oltre ${Math.round(TETTI_ALLEGATI.caratteriPerAllegato / 1e3)}k caratteri un file da solo pesa quanto mezza conversazione`;
@@ -8606,6 +8642,7 @@ var init_app = __esm({
     init_chat_foot();
     init_errori();
     init_testo_pagina();
+    init_cartella_ritratto();
     init_allegati();
     init_review();
     init_stato_vuoto();
@@ -18521,7 +18558,7 @@ ${testo3}` : testo3;
         treeFrame.append(tree, treeState);
         const selectedCard = document.createElement("div");
         selectedCard.className = "workspace-chooser-selection";
-        selectedCard.innerHTML = `${icon("i-folder-open")}<span><small>Cartella scelta</small><strong data-workspace-selected-path>Nessuna cartella scelta</strong></span>`;
+        selectedCard.innerHTML = `${icon("i-folder-open")}<span><small>Cartella scelta</small><strong data-workspace-selected-path>Nessuna cartella scelta</strong><small class="workspace-chooser-ritratto" data-workspace-ritratto hidden></small><small class="workspace-chooser-avviso" data-workspace-avviso hidden></small></span>`;
         left.append(leftHead, pathBar, treeTools, newFolderForm, treeFrame, selectedCard);
         const right = document.createElement("section");
         right.className = "workspace-chooser-settings";
@@ -18622,6 +18659,39 @@ ${testo3}` : testo3;
           const direct = local.current?.items?.find((item) => pathKey(item.path) === target)?.projectId;
           if (direct) return direct;
           return local.current?.recommended?.find((item) => pathKey(item.path) === target)?.projectId ?? null;
+        }
+        let ritrattoChiestoPer = null;
+        async function chiediRitrattoCartella(percorso) {
+          if (!percorso || ritrattoChiestoPer === percorso) return;
+          ritrattoChiestoPer = percorso;
+          const riga = $2("[data-workspace-ritratto]", selectedCard);
+          const avviso = $2("[data-workspace-avviso]", selectedCard);
+          if (riga) {
+            riga.hidden = false;
+            riga.textContent = "Guardo cosa c’è dentro…";
+          }
+          if (avviso) avviso.hidden = true;
+          try {
+            const r = await apiGet(`/api/v1/workspace-info?path=${encodeURIComponent(percorso)}`);
+            if (ritrattoChiestoPer !== percorso) return;
+            if (riga) {
+              const testo3 = frasiRitratto(r);
+              riga.hidden = !testo3;
+              riga.textContent = testo3;
+            }
+            if (avviso) {
+              const testo3 = avvisoRitratto(r);
+              avviso.hidden = !testo3;
+              avviso.textContent = testo3;
+            }
+          } catch (errore) {
+            if (ritrattoChiestoPer !== percorso) return;
+            if (riga) {
+              riga.hidden = true;
+              riga.textContent = "";
+            }
+            console.warn("[nuova sessione] ritratto della cartella non disponibile:", errore?.message || errore);
+          }
         }
         function aggiornaConfermaWorkspaceChooser() {
           const selectedPath = $2("[data-workspace-selected-path]", selectedCard);
@@ -18798,6 +18868,7 @@ ${testo3}` : testo3;
             const data = await apiGet(`/api/v1/workspace-browser${suffix}`);
             if (generation !== local.requestGeneration || !form.isConnected) return false;
             local.current = data;
+            void chiediRitrattoCartella(data.path);
             local.collapsed = false;
             pathInput.value = data.path;
             upButton.disabled = !data.parent;
