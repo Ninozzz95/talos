@@ -1500,14 +1500,27 @@ button.talos-turn-spine__tick:focus-visible {
   padding: 1px 5px;
   border-radius: 5px;
 }
+.talos-message--user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
 .talos-message--user .talos-message__body {
+  max-width: min(72%, 44rem);
+  width: fit-content;
+  margin-left: auto;
   background: var(--talos-accent-soft);
   border: 1px solid var(--talos-accent-border);
-  border-radius: 14px;
+  border-radius: 16px 16px 4px 16px;
   padding: 12px 16px;
 }
 .talos-message--user .talos-message__body p {
   color: var(--talos-text);
+}
+.talos-message--user .talos-message__meta,
+.talos-message--user .talos-msg-meta {
+  justify-content: flex-end;
+  text-align: right;
 }
 .talos-activity {
   margin: 10px 0;
@@ -1866,6 +1879,41 @@ body.reduce-motion *::after {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.assistant-copy .md-table-wrap {
+  margin: 12px 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+.assistant-copy .md-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.assistant-copy .md-table th {
+  text-align: left;
+  padding: 7px 12px 7px 0;
+  border-bottom: 1px solid var(--talos-border-strong);
+  color: var(--talos-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.assistant-copy .md-table td {
+  padding: 7px 12px 7px 0;
+  border-bottom: 1px solid var(--talos-border-subtle);
+  vertical-align: top;
+  color: var(--talos-assistant-text);
+}
+.assistant-copy .md-table tr:last-child td {
+  border-bottom: 0;
+}
+.assistant-copy .md-table th:last-child,
+.assistant-copy .md-table td:last-child {
+  padding-right: 0;
+}
+.assistant-copy .md-table code {
+  font-size: 12px;
 }
 .assistant-copy .code-block {
   position: relative;

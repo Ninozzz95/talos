@@ -8447,10 +8447,20 @@ var init_app = __esm({
         window.setTimeout(() => {
           const conversazione = $2("#conversation");
           if (!article.isConnected || conversazione?.classList.contains("is-restoring")) return;
-          if (conversazione) {
-            conversazione.scrollTo({ top: conversazione.scrollHeight, behavior: document.body.classList.contains("reduce-motion") ? "auto" : "smooth" });
-          }
+          const scroller = scrollerConversazione(conversazione);
+          if (scroller) scorriInFondoConversazione(scroller);
         }, 40);
+      }
+      const CONVERSAZIONE_FONDO_SOGLIA_PX = 24;
+      function scorriInFondoConversazione(scroller) {
+        if (!scroller) return;
+        const distanza = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+        if (distanza <= CONVERSAZIONE_FONDO_SOGLIA_PX) {
+          scroller.scrollTop = scroller.scrollHeight;
+          return;
+        }
+        const ridotto = document.body.classList.contains("reduce-motion");
+        scroller.scrollTo({ top: scroller.scrollHeight, behavior: ridotto ? "auto" : "smooth" });
       }
       function icon(id) {
         return `<svg aria-hidden="true"><use href="#${id}"/></svg>`;
@@ -9003,6 +9013,50 @@ var init_app = __esm({
             applicaInline(h, titoloMatch[2]);
             frammento.appendChild(h);
             i += 1;
+            continue;
+          }
+          const separatoreTabella = (r) => typeof r === "string" && r.includes("|") && /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/.test(r) && r.includes("-");
+          const celle = (r) => {
+            let t2 = r.trim();
+            if (t2.startsWith("|")) t2 = t2.slice(1);
+            if (t2.endsWith("|")) t2 = t2.slice(0, -1);
+            return t2.split("|").map((c) => c.trim());
+          };
+          if (riga.includes("|") && i + 1 < righe.length && separatoreTabella(righe[i + 1]) && celle(riga).length > 1) {
+            chiudiParagrafo();
+            const intestazioni = celle(riga);
+            const allineamenti = celle(righe[i + 1]).map((c) => c.startsWith(":") && c.endsWith(":") ? "center" : c.endsWith(":") ? "right" : c.startsWith(":") ? "left" : "");
+            const involucro = document.createElement("div");
+            involucro.className = "md-table-wrap";
+            const tabella = document.createElement("table");
+            tabella.className = "md-table";
+            const thead = document.createElement("thead");
+            const trTesta = document.createElement("tr");
+            intestazioni.forEach((testo4, n) => {
+              const th = document.createElement("th");
+              if (allineamenti[n]) th.style.textAlign = allineamenti[n];
+              applicaInline(th, testo4);
+              trTesta.appendChild(th);
+            });
+            thead.appendChild(trTesta);
+            tabella.appendChild(thead);
+            const tbody = document.createElement("tbody");
+            i += 2;
+            while (i < righe.length && righe[i].includes("|") && righe[i].trim() !== "") {
+              const valori = celle(righe[i]);
+              const tr = document.createElement("tr");
+              for (let n = 0; n < intestazioni.length; n += 1) {
+                const td = document.createElement("td");
+                if (allineamenti[n]) td.style.textAlign = allineamenti[n];
+                applicaInline(td, valori[n] ?? "");
+                tr.appendChild(td);
+              }
+              tbody.appendChild(tr);
+              i += 1;
+            }
+            tabella.appendChild(tbody);
+            involucro.appendChild(tabella);
+            frammento.appendChild(involucro);
             continue;
           }
           if (listaMatch || listaNumMatch) {
@@ -13561,7 +13615,9 @@ var init_app = __esm({
         markMotionEnter(article);
         window.setTimeout(() => {
           if (article.hidden) return;
-          if (!$2("#conversation")?.classList.contains("is-restoring")) article.scrollIntoView({ behavior: document.body.classList.contains("reduce-motion") ? "auto" : "smooth", block: "end" });
+          if ($2("#conversation")?.classList.contains("is-restoring")) return;
+          if (fondoConversazioneInVista()) return;
+          article.scrollIntoView({ behavior: document.body.classList.contains("reduce-motion") ? "auto" : "smooth", block: "end" });
         }, 40);
         return { article, summaryText, detail, dettaglio: riga.dettaglio };
       }
