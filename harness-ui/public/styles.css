@@ -171,6 +171,47 @@
 * {
   box-sizing: border-box;
 }
+.talos-tip {
+  position: fixed;
+  margin: 0;
+  inset: auto;
+  z-index: 60;
+  position-anchor: --talos-tip;
+  position-area: block-start;
+  position-try-fallbacks: flip-block, flip-inline;
+  max-width: min(320px, 42ch);
+  padding: 7px 10px;
+  border: 1px solid var(--talos-border-strong);
+  border-radius: 9px;
+  background: var(--talos-card);
+  color: var(--talos-text);
+  font-size: 12px;
+  line-height: 1.45;
+  text-transform: none;
+  letter-spacing: normal;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .28);
+  pointer-events: auto;
+  margin-block: 6px;
+  margin-inline: 6px;
+}
+.talos-tip:popover-open {
+  display: block;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .talos-tip {
+    animation: talos-tip-entra 110ms ease-out;
+  }
+}
+@keyframes talos-tip-entra {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--talos-border-strong) transparent;

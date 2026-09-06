@@ -39,6 +39,7 @@ import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaN
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione, come quella di ChatGPT desktop
 import { montaScorciatoie, normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
 import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nomeModelloUmano } from '../components/chat-foot.js';
+import { collegaTooltip } from '../components/tooltip.js'; // 06/9 O-40: i suggerimenti sono nostri, col tema e con la tastiera
 import { spiegaErrore, spiegaRifiutoAttrezzo } from '../components/errori.js';
 import { montaNote } from '../components/note.js'; // 06/9 C24: la pagina delle Note // 06/9 O-22/O-23/O-36: gli errori e i rifiuti detti a una persona
 import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js'; // 06/9 O-28/O-31: il sorgente di una pagina non si legge
@@ -15436,6 +15437,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   })();
   collegaNavigazioneSpina($('#conversation'));
   collegaCronologia($('#schermoChat .talos-cronologia'), $('#conversation')); // 06/9: barra a sinistra, lente, fumetto, clic che porta al messaggio // 06/9: la spina dei giri si naviga, come la barra della cronologia di ChatGPT
+  collegaTooltip(document); // 06/9 O-40: un ascoltatore solo, delegato — vale anche per ciò che nasce dopo
   normalizzaTastiScritti(ROOT()); // 06/9 audit: «⌘N» nella palette su Windows
   collegaScorciatoieTerminale(); // 06/9 B1: Ctrl+` e Ctrl+Shift+`, e la barra delle schede onesta da subito
   collegaRidisegnoLingua(); // P-i18n 06/9
