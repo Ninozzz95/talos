@@ -1969,7 +1969,24 @@ export function createSessionRegistry({
      * restano pienamente funzionanti sotto qualunque policy: non toccati
      * da questo limite.
      */
-    const chiediApprovazioneFn = voce.permessi === 'On request'
+    /*
+     * ⭐⭐⭐ 06/9 — il ripiego di FASE B finiva per NEGARE invece di chiedere. Misurato dal vivo
+     * (prova T03): con «Accesso pieno» e il permesso per attrezzo «scrittura → chiedi», il modello
+     * riceve REFUSED e scrive a schermo «il tool di scrittura è stato rifiutato: richiede
+     * un'approvazione non disponibile in questa sessione», poi ci riprova con la shell e viene
+     * rifiutato pure lì. Chi ha chiesto di essere avvisato non viene avvisato: gli viene detto di no.
+     *
+     * ⇒ Il canale si costruisce anche quando ALMENO UN attrezzo dice «chiedi», sotto qualunque
+     * politica. Il costo, dichiarato e non nascosto: il kernel di oggi tratta «canale presente» come
+     * «questa sessione chiede sempre» (`vaChiesto` include `!haOverride && Boolean(chiediApprovazioneFn)`
+     * in `verificaPermessoScrittura`), quindi verranno chieste anche le azioni SENZA override. Meglio
+     * chiedere più del necessario che negare in silenzio ciò che l'owner ha chiesto di poter approvare.
+     * Il foglio dei permessi lo scrive in chiaro. La cura definitiva sta nel kernel (fuori dalla mia
+     * lane): togliere quella clausola e usare `livelloAccesso: 'su-richiesta'`, che il kernel già
+     * riconosce (`talosHarness.mjs`, tipo `LivelloAccessoHarness`).
+     */
+    const qualcheAttrezzoChiede = Object.values(voce.permessiPerAttrezzo || {}).some((v) => v === 'chiedi');
+    const chiediApprovazioneFn = voce.permessi === 'On request' || qualcheAttrezzoChiede
       ? (azione) => richiediApprovazione(voce, azione)
       : undefined;
     // ⭐⭐⭐ FASE A (hook) — sempre costruito, sincrono: costruisciHookFn

@@ -1235,3 +1235,38 @@ Owner: «metti la maniglietta sull'angolo in alto a sinistra del composer per fa
 C'era già un angolo, ma restava invisibile per due motivi: opacità 0,55 e — soprattutto — la regola base `.talos-resizer` stava **dopo** quella del composer nel foglio, quindi vinceva per ordine e riportava larghezza 10 px e cursore `col-resize`. Misurato: la maniglia era 10×20 con il cursore sbagliato.
 
 Ora: blocco spostato dopo la regola base, 20×20, cursore `nwse-resize`, opacità 0,75 a riposo, due trattini in diagonale dentro l'angolo (il segno che ovunque significa «questo si trascina») e accensione col colore d'accento al passaggio o col fuoco. Trascinandola il composer passa da 40 a 130 px di altezza: misurato.
+
+## 06/09 — «Chiedi» su un attrezzo NEGAVA invece di chiedere (prova T03)
+
+Owner, ieri: «col permesso per attrezzo “chiedi” non è comparsa nessuna richiesta di approvazione».
+Verificato, e la causa è nella nostra lane.
+
+**Riproduzione** (prova `T03-permessi`, sessione `3977f367`): politica «Accesso pieno», permesso per
+attrezzo «scrittura di un file → chiedi» e «comando nel terminale → chiedi», consegna «crea
+src/nuovo.mjs». Nessuna carta di approvazione, nessun file creato, sessione «conclusa con successo».
+In chat il modello scriveva: «Il tool di scrittura è stato rifiutato (richiede un'approvazione non
+disponibile in questa sessione)… anche la shell è bloccata… non posso creare il file in questa sessione».
+
+**Causa.** `session-registry.mjs` costruiva `chiediApprovazioneFn` **solo** per la politica «On
+request» (ripiego dichiarato di FASE B, 28/8, in attesa che il kernel avesse un `livelloAccesso`
+esplicito). Il kernel, senza canale, per un attrezzo con override «chiedi» **rifiuta**
+(`verificaPermessoScrittura` → «non ha un canale di approvazione attivo»). Cioè: chi chiedeva di
+essere avvisato riceveva un no, in silenzio.
+
+**Cura.** Il canale si costruisce anche quando **almeno un attrezzo** dice «chiedi», sotto qualunque
+politica. Costo dichiarato, non nascosto: il kernel di oggi tratta «canale presente» come «questa
+sessione chiede sempre» (`vaChiesto` include `!haOverride && Boolean(chiediApprovazioneFn)`), quindi
+chiede anche per gli attrezzi senza override. Meglio chiedere più del necessario che negare in
+silenzio ciò che l'owner ha chiesto di poter approvare — e il foglio dei permessi lo scrive in chiaro.
+La cura definitiva sta nel **kernel** (fuori dalla mia lane): togliere quella clausola e usare
+`livelloAccesso: 'su-richiesta'`, che `talosHarness.mjs` già riconosce (`LivelloAccessoHarness`).
+
+**Riverifica** (stessa prova, server riavviato): la carta arriva — «Chiede di scrivere · src/nuovo.mjs ·
+Consenti una volta / Per questa sessione / Nega» — il giro si conclude con **2 approvazioni** e il file
+viene creato. Suite del server **1626/1626** (la prova che fissava il ripiego è stata riscritta, col
+perché di allora conservato). Unit 131/131.
+
+**Resta aperto**: la carta non mostra la differenza prima/dopo della scrittura (decisione E10), e nel
+foglio compaiono 5 attrezzi invece di tutti e 43 col filtro «hanno un cancello» (E7).
+⛔ NON VERIFICATO: che col solo «scrivi → chiedi» ora venga chiesto anche per la shell (dovrebbe, per
+la stessa clausola del kernel): serve una prova dedicata.
