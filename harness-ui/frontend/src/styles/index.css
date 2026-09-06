@@ -628,6 +628,25 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-toolbar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:14px}
 .talos-toolbar .talos-field{width:280px}
 .talos-toolbar--inset{margin:18px 0 10px}
+/*
+ * 06/09 — la barra della scheda Hugging Face stava su TRE righe a QUATTRO
+ * larghezze diverse (280 · 818 · 215 · 110 px misurati): la ricerca stretta, il
+ * campo autore che prendeva tutta la riga da solo, l'ordinamento e i tag sotto.
+ * Qui la ricerca cresce, gli altri tre hanno una larghezza dichiarata, e stanno
+ * tutti su una riga sola con la stessa linea di base.
+ */
+.talos-toolbar--hf{flex-wrap:nowrap; align-items:center}
+.talos-toolbar--hf .talos-field{flex:1 1 auto; width:auto; min-width:220px}
+.talos-toolbar--hf .talos-toolbar__autore{flex:0 0 200px; width:200px}
+.talos-toolbar--hf .talos-toolbar__tag{flex:0 0 180px; width:180px}
+.talos-toolbar--hf .talos-select{flex:0 0 150px}
+@media (max-width:1100px){
+  .talos-toolbar--hf{flex-wrap:wrap}
+  .talos-toolbar--hf .talos-field{flex:1 1 100%}
+  .talos-toolbar--hf .talos-toolbar__autore,
+  .talos-toolbar--hf .talos-toolbar__tag,
+  .talos-toolbar--hf .talos-select{flex:1 1 0; width:auto; min-width:0}
+}
 .talos-list{overflow:hidden}
 .talos-list-row{display:flex; align-items:center; gap:12px; width:100%; min-height:var(--talos-row); padding:8px 14px; text-align:left; color:var(--talos-assistant-text); border-top:1px solid var(--talos-border-subtle)}
 .talos-list-row:first-child{border-top:0}
@@ -642,6 +661,14 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-list-row__title{display:block; font-weight:600; font-size:13.5px; color:var(--talos-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .talos-list-row__sub{display:block; font-size:12px; color:var(--talos-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:1px}
 .talos-list-row__aside{display:flex; align-items:center; gap:8px; flex:none}
+/*
+ * 06/09 — scaricamenti e preferiti sulla riga del repository. Il server li
+ * manda da sempre e la riga li buttava: sono l'unico segnale di reputazione
+ * che una riga può portare, e sono anche i due criteri con cui la barra
+ * ordina. Tabellari, così le cifre restano incolonnate fra una riga e l'altra.
+ */
+.talos-list-row__misure{display:flex; align-items:center; gap:10px; font-size:11.5px; color:var(--talos-muted); font-variant-numeric:tabular-nums}
+.talos-list-row__misura{white-space:nowrap}
 .talos-split{display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:14px; align-items:start}
 .talos-detail{padding:16px; position:sticky; top:0}
 .talos-detail h3{font-size:15px}
@@ -773,6 +800,53 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-choice p{font-size:12.5px; margin-top:8px; color:var(--talos-muted)}
 .talos-choice[aria-checked="true"] p{color:var(--talos-assistant-text)}
 .talos-choice__hint{display:inline; color:var(--talos-accent-hover); font-size:12.5px; font-weight:600}
+/*
+ * 06/09 — la scelta della variante GGUF nella scheda Hugging Face.
+ *
+ * `__title` porta il nome del file e, sulla variante consigliata, il suo badge:
+ * il titolo diventa una riga a due estremi invece di una parola sola.
+ * `__glossa` è la traduzione umana della sigla (`IQ4_XS` → «4 bit compressi»),
+ * regola H22: il nome tecnico resta perché è il nome del file che si scarica,
+ * ma non viaggia mai da solo.
+ *
+ * ⛔ Tutto scoped a `#hfFileChoices`: `.talos-choice` la usano anche le carte
+ * dei permessi e i passi dell'intro, e un `display:flex` globale sul titolo
+ * spezzerebbe quelle senza che nessuno se ne accorga.
+ */
+#hfFileChoices .talos-choice__title{display:flex; align-items:baseline; justify-content:space-between; gap:8px}
+#hfFileChoices .talos-choice__glossa{display:block; font-size:11.5px; margin-bottom:4px}
+#hfFileChoices .talos-choice[aria-checked="true"] .talos-choice__glossa{color:var(--talos-assistant-text)}
+/* La barra che misura sta SOPRA la lista: sotto quindici varianti non la vedeva nessuno. */
+.talos-hf-misura{display:flex; align-items:baseline; gap:10px; margin:2px 0 10px; flex-wrap:wrap}
+.talos-hf-misura__quando{font-size:11.5px}
+.talos-hf-nessuno{margin-top:10px}
+/* G29 — il consenso alle notifiche di sistema, in fondo al pannello «Aspetta te». */
+.talos-notification-panel__sistema{margin-top:10px; padding-top:10px; border-top:1px solid var(--talos-border-subtle)}
+.talos-notification-panel__sistema p{margin-top:6px; font-size:11.5px}
+/*
+ * 06/09 — D26, la ripartizione della finestra di contesto: una barra sola,
+ * non tre numeri sparsi. Le fette usano i colori già in uso per gli stati,
+ * e la barra ha sempre un fondo visibile (lo spazio che RESTA è informazione
+ * quanto quello occupato).
+ */
+.talos-contesto{display:flex; height:14px; border-radius:999px; overflow:hidden; background:var(--talos-panel-soft); border:1px solid var(--talos-border-subtle); margin:12px 0 8px}
+.talos-contesto__fetta{display:block; height:100%}
+.talos-contesto__fetta--attrezzi{background:var(--talos-accent)}
+.talos-contesto__fetta--istruzioni{background:var(--talos-accent-border)}
+.talos-contesto__fetta--memoria{background:var(--talos-muted)}
+.talos-contesto-voce{display:flex; align-items:baseline; gap:8px; padding:6px 0; border-top:1px solid var(--talos-border-subtle); font-size:13px}
+.talos-contesto-voce:first-child{border-top:0}
+.talos-contesto-voce__punto{width:9px; height:9px; border-radius:3px; flex:none}
+.talos-contesto-voce__k{flex:1; min-width:0}
+.talos-contesto-voce__v{font-variant-numeric:tabular-nums; color:var(--talos-muted)}
+/*
+ * 06/09 — la lista delle varianti scorre dentro di sé.
+ * Misurato dal vivo: un repository vero (Qwen3-Coder-30B) porta 27 varianti, e
+ * il pannello di dettaglio diventava alto 3.566 px dentro una colonna da 320.
+ * Con il tetto, il pulsante «Scarica» resta raggiungibile senza attraversare
+ * tutta la scala delle quantizzazioni.
+ */
+#hfFileChoices{max-height:min(46vh,420px); overflow-y:auto; padding-right:4px}
 .talos-picker{display:grid; grid-template-columns:190px minmax(0,1fr); gap:14px}
 .talos-picker__nav{position:static}
 .talos-callout{display:flex; gap:12px; align-items:flex-start; margin-top:12px; padding:12px 14px; border-radius:var(--talos-radius-card); border:1px solid var(--talos-warning-border); background:var(--talos-warning-soft); font-size:13px; color:var(--talos-assistant-text)}
@@ -1053,6 +1127,14 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-model-lab .model-lab-ledger .talos-kv{min-height:34px;align-items:baseline}
 .talos-model-lab .model-lab-ledger .talos-kv__v{white-space:normal;line-height:1.45;text-align:right;border:0;background:var(--talos-panel-soft);font-family:var(--talos-font-ui)}
 .talos-model-lab>.talos-tabs{margin-bottom:var(--talos-space-lg);border-bottom:1px solid var(--talos-border-subtle)}
+/*
+ * 06/09 — a 1024 px le sei schede non ci stanno nella carta delle Impostazioni
+ * e l'ultima visibile veniva TAGLIATA a metà parola («Hugging» senza «Face»).
+ * Stessa cura già adottata dalle schede della Review: la striscia scorre in
+ * orizzontale dentro di sé, invece di far scorrere la pagina o perdere una scheda.
+ */
+.talos-model-lab>.talos-tabs .talos-tabs__list{display:flex; max-width:100%; overflow-x:auto; scrollbar-width:thin}
+.talos-model-lab>.talos-tabs .talos-tabs__tab{white-space:nowrap; flex:none}
 .talos-model-lab .talos-tabs__list{display:flex;max-width:100%;overflow-x:auto;scrollbar-width:thin}
 [data-memory-level="critico"] [data-memory-label]{color:var(--talos-danger)}
 [data-memory-level="alto"] [data-memory-label]{color:var(--talos-warning)}

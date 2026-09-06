@@ -48,8 +48,22 @@ export function montaImpostazioni(schermo, valori, {recupera, cambiaSezione} = {
   for(const campo of CAMPI_IMPOSTAZIONI){const vecchia=schermo.querySelector('[data-setting-row="'+campo.id+'"]');if(!vecchia)continue;const controllo=recupera?.(campo.id);const output=campo.tipo==='range'?recupera?.(campo.chiave+'Output'):null;vecchia.replaceWith(creaSettingRow(campo,valori[campo.chiave],{controllo,output}));}
   for(const slot of schermo.querySelectorAll('[data-settings-reuse]')){const originale=recupera?.(slot.dataset.settingsReuse);if(!originale)continue;originale.className=slot.className;slot.replaceWith(originale);}
   const ricerca=schermo.querySelector('[data-settings-query]');ricerca?.addEventListener('input',()=>applicaFiltro(schermo,schermo.dataset.settingsSection || 'appearance'));
-  const lista=schermo.querySelector('.talos-settings__nav [role=tablist]');
-  lista?.replaceChildren(...SEZIONI_IMPOSTAZIONI.map(sezione=>{const tab=nodo('button','talos-nav-item');tab.type='button';tab.id='setting-tab-'+sezione.id;tab.dataset.settingsTab=sezione.id;tab.setAttribute('role','tab');tab.setAttribute('aria-controls','setting-panel-'+sezione.id);tab.append(nodo('span','talos-nav-item__label',sezione.titolo));return tab;}));
+  /*
+   * D2 (06/09) — le voci si distribuiscono nei DUE gruppi dichiarati da
+   * `SEZIONI_IMPOSTAZIONI`, una tablist per gruppo.
+   * ⛔ Prima riempiva `.talos-settings__nav [role=tablist]`, cioè la PRIMA
+   * tablist e basta: col markup a due gruppi ci finivano tutte e dieci, e le
+   * cinque del secondo gruppo restavano quelle scritte nel mockup — duplicate e
+   * mai aggiornate. Trovato dal vivo: la navigazione mostrava 8+5 voci invece
+   * di 5+5, e le sezioni nuove non si aprivano.
+   */
+  const liste=[...schermo.querySelectorAll('.talos-settings__nav [role=tablist]')];
+  const voce=sezione=>{const tab=nodo('button','talos-nav-item');tab.type='button';tab.id='setting-tab-'+sezione.id;tab.dataset.settingsTab=sezione.id;tab.setAttribute('role','tab');tab.setAttribute('aria-controls','setting-panel-'+sezione.id);tab.append(nodo('span','talos-nav-item__label',t(sezione.titolo)));return tab;};
+  if(liste.length<=1)liste[0]?.replaceChildren(...SEZIONI_IMPOSTAZIONI.map(voce));
+  else{
+    const gruppi=[...new Set(SEZIONI_IMPOSTAZIONI.map(s=>s.gruppo||'comportamento'))];
+    liste.forEach((lista,i)=>{const g=lista.dataset.settingsGruppo||gruppi[i];lista.replaceChildren(...SEZIONI_IMPOSTAZIONI.filter(s=>(s.gruppo||'comportamento')===g).map(voce));});
+  }
   const tabs=[...schermo.querySelectorAll('[data-settings-tab]')];
   const scegli=id=>{if(ricerca)ricerca.value='';if(cambiaSezione)cambiaSezione(id);else mostraSezioneImpostazioni(schermo,id);};
   tabs.forEach((tab,i)=>{tab.addEventListener('click',()=>scegli(tab.dataset.settingsTab));tab.addEventListener('keydown',e=>{if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key))return;e.preventDefault();const next=e.key==='Home'?0:e.key==='End'?tabs.length-1:(i+(e.key==='ArrowDown'?1:-1)+tabs.length)%tabs.length;tabs[next].focus();scegli(tabs[next].dataset.settingsTab);});});

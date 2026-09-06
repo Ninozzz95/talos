@@ -1,3 +1,4 @@
+import { plurale } from './plurale.js'; // BH-12: «1 ricordi» — il plurale vive in un posto solo
 /** LibraryRow del mockup, metadati GET /library. WAI Tabs/Disclosure, 05/09/2026. */
 const TIPI=new Map([['document',{testo:'Documento',icona:'doc'}],['image',{testo:'Immagine',icona:'image'}]]);
 const ORIGINI=new Map([['uploaded','Caricato'],['generated','Generato']]);
@@ -43,8 +44,8 @@ function renderLibreria(schermo,pagina){
  const {voci,opzioni}=pagina,visibili=filtraLibreria(voci,pagina),doc=schermo.ownerDocument;
  for(const tab of schermo.querySelectorAll('[data-library-origine]')){const attivo=pagina.origine===tab.dataset.libraryOrigine;tab.setAttribute('aria-selected',String(attivo));tab.tabIndex=attivo?0:-1;}
  schermo.querySelector('[data-library-refresh]').disabled=Boolean(opzioni.caricamento);
- schermo.querySelector('.talos-topbar__path').textContent=opzioni.errore?'Libreria non disponibile':opzioni.caricamento?'Caricamento Libreria…':voci.length+' file · Token non disponibili';
- const esito=schermo.querySelector('[data-library-esito]');esito.textContent=opzioni.errore||(opzioni.caricamento?'Caricamento Libreria…':visibili.length===voci.length?voci.length+' file':visibili.length+' di '+voci.length+' file');esito.setAttribute('role',opzioni.errore?'alert':'status');
+ schermo.querySelector('.talos-topbar__path').textContent=opzioni.errore?'Libreria non disponibile':opzioni.caricamento?'Caricamento Libreria…':plurale(voci.length,'file')+' · Token non disponibili';
+ const esito=schermo.querySelector('[data-library-esito]');esito.textContent=opzioni.errore||(opzioni.caricamento?'Caricamento Libreria…':visibili.length===voci.length?plurale(voci.length,'file'):visibili.length+' di '+plurale(voci.length,'file'));esito.setAttribute('role',opzioni.errore?'alert':'status');
  const lista=schermo.querySelector('[data-library-list]'),attivo=doc.activeElement?.closest('[data-library-id]')?.dataset.libraryId;lista.setAttribute('role',visibili.length?'list':'group');
  lista.replaceChildren(...visibili.map(v=>creaLibraryRow(v,{document:doc,aperta:pagina.aperte.has(v.id),onEspandi:aperta=>{if(aperta)pagina.aperte.add(v.id);else pagina.aperte.delete(v.id);}})));
  if(!visibili.length)lista.append(el(doc,'p','talos-list-row talos-muted',opzioni.errore||(opzioni.caricamento?'Caricamento Libreria…':voci.length?'Nessun file corrisponde ai filtri.':'Nessun file in Libreria per questo progetto.')));

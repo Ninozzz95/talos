@@ -17,9 +17,11 @@ import { creaMemoryRow, aggiornaPaginaMemoria } from '../components/memoria.js';
 import { aggiornaBoard, creaRigaBoard, cartellaDaExport } from '../components/board.js'; // 05/9 Fase 2: Board
 import { creaPilaToast } from '../components/toast.js';
 import { creaSorveglianzaConnessione, aggiornaStatoConnessione } from '../components/connessione.js'; // 05/9 T-15: stato onesto della connessione
-import { aggiornaPannelloNotifiche, apriPannelloNotifiche, nomeCampanella } from '../components/notifiche.js'; // 06/9 T-17: pannello «Aspetta te» del mockup
+import { aggiornaPannelloNotifiche, apriPannelloNotifiche, nomeCampanella, deveAvvisareFuoriDallaFinestra, testoNotificaSistema, statoConsensoNotifiche } from '../components/notifiche.js'; // 06/9 T-17: pannello «Aspetta te» del mockup; 06/9 G29: notifica di sistema
 import { aggiornaInstallati, montaInstallati, gb } from '../components/modelli-installati.js'; // 06/9 B6.8: scheda «Installati» del Model Lab
 import { aggiornaHf, gruppiVarianti } from '../components/hf-catalogo.js'; // 06/9 B6.9: scheda «Hugging Face» del Model Lab
+import { aggiornaCosti } from '../components/costi-consumo.js'; // 06/9 D21/D22: costi e consumo per giorno e per modello
+import { aggiornaContesto, ripartizioneContesto } from '../components/contesto.js'; // 06/9 D26: ripartizione della finestra di contesto
 import { montaHf } from '../components/hf-catalogo.js';
 import { aggiornaCodaDownload, montaCodaDownload, stimaFraLetture } from '../components/download-coda.js'; // 06/9 B6.10: scheda «Download»
 import { aggiornaInspector, processiDagliEventi } from '../components/inspector.js'; // 06/9 B2: la colonna dei dettagli dice il vero
@@ -2993,6 +2995,22 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     try { state.modelLab.hfDetail = await apiGet(`/api/v1/huggingface/repo?repo=${encodeURIComponent(item.repo)}&revision=${encodeURIComponent(item.revision || 'main')}`); }
     catch (error) { state.modelLab.hfError = error; }
     renderizzaHfConMockup();
+    /*
+     * ⛔⛔ 06/09 — la misura parte QUI, all'apertura del repository.
+     *
+     * La regola scritta più sopra («si misura SU RICHIESTA, non a ogni
+     * ridisegno») resta intatta, e questa non la viola: aprire un repository È
+     * una richiesta della persona, un ridisegno no. La differenza pratica,
+     * misurata sul 4178 prima della cura: quindici varianti tutte con scritto
+     * «non ancora misurato», e il pulsante che le misura in fondo alla colonna,
+     * sotto la piega — cioè l'unico numero che decide la scelta era anche
+     * l'unico che non si vedeva mai. Il pulsante resta e dice «Rimisura»: la
+     * memoria libera cambia mentre si lavora, quindi una misura si rifà.
+     */
+    const gruppiApertura = gruppiVarianti(state.modelLab.hfDetail?.files);
+    if (gruppiApertura.length && state.modelLab.hfSelected === repo) {
+      await misuraVariantiHfModelLab(gruppiApertura.map((g) => ({ chiave: g.chiave, bytes: g.bytes })));
+    }
   }
   async function avviaDownloadHf(detail, files, bytes) {
     const id = `${detail.repo.replace(/[^a-z0-9_-]/giu, '-')}-${String(detail.revision || 'main').slice(0, 12)}-${files[0].path.replace(/[^a-z0-9]/giu, '-')}`.slice(0, 120);
@@ -3395,7 +3413,18 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     }
   }
 
-  const SETTINGS_SECTIONS = ['appearance', 'chat', 'models', 'providers', 'tools', 'privacy', 'workspace', 'account'];
+  /*
+   * ⛔ 06/09, D2 — «Dieci sezioni in due gruppi: comportamento · infrastruttura».
+   * L'audit le trovava OTTO e senza gruppi. L'ordine qui sotto è quello a
+   * schermo, gruppo per gruppo, perché è anche l'ordine che percorrono le
+   * frecce della tastiera: se i due elenchi divergono, la navigazione salta.
+   *   comportamento: aspetto · chat · tools · memoria · privacy
+   *   infrastruttura: models · providers · costi · workspace · account
+   * `privacy` tiene il suo id storico (la chiave salvata e i `data-settings-go`
+   * puntano lì) ma a schermo si chiama «Sicurezza e privacy», che è la sezione
+   * a parte chiesta da D13: vale SEMPRE, mentre i permessi valgono per sessione.
+   */
+  const SETTINGS_SECTIONS = ['appearance', 'chat', 'tools', 'memoria', 'privacy', 'models', 'providers', 'costi', 'workspace', 'account'];
   const SETTINGS_SECTION_STORAGE_KEY = 'talos.harness.desktop.settings.section.v1';
 
   /** List-detail Settings: una sola categoria visibile e un solo punto di verità per il tab attivo. */
@@ -3493,6 +3522,123 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     mostraSezioneImpostazioni($('#schermoImpostazioni'), selected);
     if (selected === 'models' && !state.modelLab.initialized) inizializzaModelLab();
     if (selected === 'tools') void caricaPannelloRicercaWeb(); // ⭐ 04/9, R-03 — stato vero dal server a ogni apertura della scheda
+    // 06/9 D26 e D21/D22: si leggono all'APERTURA della sezione, non a ogni ridisegno.
+    if (selected === 'memoria') void caricaRipartizioneContesto();
+    if (selected === 'costi') void caricaCostiConsumo();
+  }
+
+  /*
+   * D5 — «Esporta, importa e ripristina, tutte e tre». L'audit del 06/09: ❌
+   * «Nessuno dei tre».
+   *
+   * ⛔ Tutto qui dentro, senza una rotta nuova: le preferenze del desktop
+   * vivono in `localStorage` di questo browser, quindi esportarle è scrivere un
+   * file, importarle è leggerlo, ripristinarle è cancellare la chiave. Un giro
+   * dal server non aggiungerebbe niente e aggiungerebbe una superficie.
+   *
+   * ⛔ L'importazione NON scrive quello che trova: passa da
+   * `salvaImpostazioniDesktop`, che normalizza campo per campo. Un file
+   * modificato a mano (o di una versione futura) non può iniettare chiavi
+   * arbitrarie nelle preferenze.
+   */
+  function montaTrasferimentoImpostazioni() {
+    const esito = $('#settingsTrasferimentoEsito');
+    const dillo = (testo, guasto = false) => { if (!esito) return; esito.textContent = testo; esito.classList.toggle('talos-testo--guasto', Boolean(guasto)); };
+
+    $('#settingsEsporta')?.addEventListener('click', () => {
+      try {
+        const documento = { ...leggiImpostazioniDesktop(), esportate: new Date().toISOString(), app: 'TALOS Harness Desktop' };
+        const blob = new Blob([`${JSON.stringify(documento, null, 2)}\n`], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `talos-preferenze-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a); a.click(); a.remove();
+        // ⛔ l'URL si revoca DOPO il clic, o su Firefox il file scaricato arriva vuoto
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        dillo('Preferenze esportate nel file scaricato.');
+      } catch (errore) { dillo(`Esportazione non riuscita: ${errore.message}`, true); }
+    });
+
+    const campo = $('#settingsImportaFile');
+    $('#settingsImporta')?.addEventListener('click', () => campo?.click());
+    campo?.addEventListener('change', async () => {
+      const file = campo.files?.[0];
+      if (!file) return;
+      try {
+        const testo = await file.text();
+        const letto = JSON.parse(testo);
+        if (!letto || typeof letto !== 'object' || Array.isArray(letto)) throw new Error('il file non contiene un documento di preferenze');
+        salvaImpostazioniDesktop(letto); // normalizza: quello che non riconosce non entra
+        const documento = leggiImpostazioniDesktop();
+        applicaAspettoDesktop(documento.appearance);
+        montaImpostazioni($('#schermoImpostazioni'), documento.appearance, { recupera: (id) => $('#' + id), cambiaSezione: setSettingsSection });
+        sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(documento.appearance));
+        dillo(`Preferenze importate da «${file.name}».`);
+        toast('Preferenze importate', file.name);
+      } catch (errore) {
+        dillo(`Importazione non riuscita: ${errore.message}. Il file deve essere quello prodotto da «Esporta».`, true);
+      } finally { campo.value = ''; }
+    });
+
+    $('#settingsRipristina')?.addEventListener('click', () => {
+      // ⛔ distruttivo: si chiede prima, e si dice esattamente cosa NON viene toccato.
+      if (!window.confirm('Rimetto tutte le preferenze ai valori iniziali?\n\nTema, densità, lingua, preferenze della chat e cartelle ricordate tornano come appena installato.\nLe conversazioni e i file NON vengono toccati.')) return;
+      try {
+        window.localStorage.removeItem(DESKTOP_SETTINGS_KEY);
+        const documento = leggiImpostazioniDesktop();
+        applicaAspettoDesktop(documento.appearance);
+        montaImpostazioni($('#schermoImpostazioni'), documento.appearance, { recupera: (id) => $('#' + id), cambiaSezione: setSettingsSection });
+        sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(documento.appearance));
+        dillo('Preferenze riportate ai valori iniziali. Le conversazioni non sono state toccate.');
+        toast('Preferenze ripristinate', 'Le conversazioni non sono state toccate');
+      } catch (errore) { dillo(`Ripristino non riuscito: ${errore.message}`, true); }
+    });
+  }
+
+  /*
+   * D26 — la ripartizione della finestra di contesto.
+   * ⛔ I token non li stimo io: `/api/v1/tools` dichiara `tokenSchemaStimati`
+   * per ogni attrezzo. Qui si somma e si divide per la finestra del modello.
+   */
+  async function caricaRipartizioneContesto() {
+    const pannello = $('[data-settings-panel="memoria"]');
+    if (!pannello) return;
+    let attrezzi = [];
+    try { attrezzi = (await apiGet('/api/v1/tools'))?.attrezzi || []; }
+    catch { aggiornaContesto(pannello, null); const e = $('#contestoEtichetta'); if (e) e.textContent = 'Gli attrezzi non si leggono adesso: il server locale non risponde.'; return; }
+    /*
+     * ⛔ La finestra è quella del modello SCELTO, e se il catalogo non la
+     * dichiara resta `null`: `ripartizioneContesto` in quel caso non calcola
+     * nessuna percentuale, invece di dividere per un numero di comodo.
+     */
+    /*
+     * ⛔ La finestra si legge dal catalogo GIÀ in memoria, con la stessa
+     * funzione che usa la pagina Capability: due letture diverse della stessa
+     * cosa finiscono per dire due numeri diversi. Se il catalogo non è ancora
+     * arrivato lo si chiede una volta e lo si mette dove lo trovano tutti.
+     */
+    let finestra = finestraContestoDelModello();
+    if (finestra == null && state.model) {
+      try {
+        const catalogo = await apiGet('/api/v1/models');
+        if (catalogo?.modelli) state.modelLab.catalogoModelli = catalogo;
+        finestra = finestraContestoDelModello();
+      } catch { /* senza catalogo si mostrano i token senza percentuale */ }
+    }
+    aggiornaContesto(pannello, ripartizioneContesto({ attrezzi, finestra }));
+  }
+
+  /** D21/D22 — consumo per giorno e per modello, dalla SOLA lista delle sessioni (mai una chiamata per sessione: BH-18). */
+  async function caricaCostiConsumo() {
+    const pannello = $('[data-settings-panel="costi"]');
+    if (!pannello) return;
+    try {
+      const sessioni = (await apiGet('/api/v1/sessions'))?.items || [];
+      aggiornaCosti(pannello, sessioni);
+    } catch {
+      const nota = $('#costiNota');
+      if (nota) nota.textContent = 'Le sessioni non si leggono adesso: il server locale non risponde.';
+    }
   }
 
   /*
@@ -3581,6 +3727,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
 
   function inizializzaSettingsNavigation() {
     montaImpostazioni($('#schermoImpostazioni'), leggiImpostazioniDesktop().appearance, { recupera: id => $('#' + id), cambiaSezione: setSettingsSection });
+    montaTrasferimentoImpostazioni(); // 06/9 D5: esporta · importa · ripristina
     sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(leggiImpostazioniDesktop().appearance)); // 06/9 B8
     $$('[data-settings-tab]').filter(tab => !tab.closest('#schermoImpostazioni')).forEach((tab) => {
       tab.addEventListener('click', () => setSettingsSection(tab.dataset.settingsTab));
@@ -3658,6 +3805,28 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     $('#modelLabCancelButton')?.addEventListener('click', () => annullaProvaRuntimeModelLab());
     $('#modelLabHfSearchButton')?.addEventListener('click', () => cercaHuggingFaceModelLab());
     $('#modelLabHfSearch')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') cercaHuggingFaceModelLab(); });
+    /*
+     * ⛔⛔ 06/09 — la ricerca si avvia anche SCRIVENDO, non solo con Invio.
+     *
+     * Trovato dal vivo: `montaHf()` gira PRIMA di questi ascoltatori e
+     * sostituisce i figli del pannello con quelli del mockup, che **non ha il
+     * pulsante «Cerca»**. Quindi `#modelLabHfSearchButton` non esiste più, la
+     * riga sopra lega il nulla (`?.`) e l'unico modo di cercare rimasto era
+     * premere Invio — un'affordance che a schermo non c'è scritta da nessuna
+     * parte. Chi scriveva e aspettava vedeva la lista di prima e la credeva
+     * il risultato della sua ricerca.
+     *
+     * Il ritardo è quello che usano gli hub di modelli per una ricerca remota:
+     * si aspetta che la persona smetta di scrivere invece di chiamare l'API a
+     * ogni tasto. Sotto i due caratteri non si chiama: `q=z` non è una ricerca.
+     */
+    let attesaRicercaHf = null;
+    $('#modelLabHfSearch')?.addEventListener('input', (event) => {
+      clearTimeout(attesaRicercaHf);
+      const testo = event.target.value.trim();
+      if (testo.length > 0 && testo.length < 2) return;
+      attesaRicercaHf = setTimeout(() => cercaHuggingFaceModelLab(), 450);
+    });
     $('#modelLabHfNextButtonControl')?.addEventListener('click', () => cercaHuggingFaceModelLab({ append: true }));
     $('#modelLabHfSortControl')?.addEventListener('change', () => { if (state.modelLab.hfQuery) cercaHuggingFaceModelLab(); }); // 06/9 B6.9
     for (const id of ['modelLabHfAuthorControl', 'modelLabHfFiltersControl']) $(`#${id}`)?.addEventListener('keydown', (event) => { if (event.key === 'Enter') cercaHuggingFaceModelLab(); });
@@ -3942,10 +4111,25 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    */
   // 05/9 Fase 2: ToolList, stesso catalogo e stesso salvataggio dei permessi.
   let generazioneCapability = 0, datiCapability = [], ambitoCapability = null, scritturaCapability = false, vistaCapability = {};
+  /*
+   * C6 — la finestra di contesto del modello scelto, dal catalogo già in
+   * memoria (`state.catalogoModelli`). ⛔ Torna `null` quando il modello non è
+   * scelto o il catalogo non dichiara la finestra: chi disegna, in quel caso,
+   * scrive il totale senza percentuale invece di dividere per un numero
+   * inventato. Il campo è `contextLength`, come risponde `/api/v1/models`.
+   */
+  function finestraContestoDelModello() {
+    // stessa lettura che usa già la «Finestra del contesto» dell'inspector: un solo catalogo in memoria
+    const scelto = (state.modelLab?.catalogoModelli?.modelli || []).find((m) => m?.id === state.model);
+    const v = Number(scelto?.contextLength);
+    return Number.isFinite(v) && v > 0 ? v : null;
+  }
   function mostraCapability(opzioni = {}) {
     const schermo = document.getElementById('schermoCapability'); if (!schermo) return;
     vistaCapability = { ...vistaCapability, ...opzioni };
     aggiornaPaginaCapability(schermo, datiCapability, { ...vistaCapability, ambito: ambitoCapability, salvataggio: scritturaCapability,
+      // C6 (06/9): la finestra del modello scelto, per dire che PERCENTUALE è il totale degli schemi.
+      finestraContesto: finestraContestoDelModello(),
       uso: ambitoCapability === state.realSession.id && ambitoCapability ? riassuntoAttrezziDaEventi(state.realSession.eventiAttrezzi) : null,
       onAggiorna: () => caricaPannelloAttrezzi({ pagina: true }), onPermesso: salvaPermessoCapability });
   }
@@ -5339,6 +5523,59 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     // 06/9: anche il `title`, non solo l'etichetta per il lettore di schermo — restava fermo su «1 cosa
     // aspetta te» del mockup mentre l'aria-label diceva il vero (trovato nella mappa delle superfici).
     if (bottone) { const nome = nomeCampanella(notifiche.length); bottone.setAttribute('aria-label', nome); bottone.title = nome; }
+    avvisaFuoriDallaFinestra(notifiche); // G29: il terzo dei tre modi
+  }
+
+  /*
+   * G29 — la notifica di SISTEMA, il terzo modo in cui «ciò che aspetta te» si
+   * deve vedere (gli altri due: la riga della sessione e il pannello).
+   *
+   * ⛔ Si manda SOLO se la finestra non è sotto gli occhi: una notifica di
+   * sistema per una cosa già a schermo è rumore. E ognuna si manda una volta
+   * sola — la chiave è `sessione:stato`, la stessa granularità con cui il
+   * pannello considera «vista» una notifica.
+   */
+  const notificheDiSistemaMandate = new Set();
+  function avvisaFuoriDallaFinestra(notifiche) {
+    if (typeof Notification === 'undefined') return;
+    const daMandare = deveAvvisareFuoriDallaFinestra({
+      permesso: Notification.permission,
+      visibile: document.visibilityState === 'visible',
+      notifiche,
+      giaAvvisate: notificheDiSistemaMandate,
+    });
+    for (const n of daMandare) {
+      const { titolo, corpo, tag } = testoNotificaSistema(n);
+      try {
+        const avviso = new Notification(titolo, { body: corpo, tag, silent: false });
+        // Cliccarla porta dove serve: la finestra torna davanti e la sessione si apre.
+        // stessa via che usa una riga del pannello: una sola porta per «apri quella sessione»
+        avviso.addEventListener('click', () => { window.focus(); segnaNotificaVista(n.sessione); passaASessione(n.sessione.sessionId, n.sessione.taskId || n.sessione.sessionId, n.sessione.nome || n.sessione.taskId, normalizzaModelloSessione(n.sessione), n.sessione); avviso.close(); });
+        notificheDiSistemaMandate.add(tag);
+      } catch { /* una notifica che non parte non deve fermare l'elenco */ }
+    }
+  }
+
+  /** Il consenso si chiede da un GESTO: i browser rifiutano la richiesta fuori da un clic. */
+  function montaConsensoNotifiche() {
+    const bottone = $('#notificheSistema'); const stato = $('#notificheSistemaStato');
+    if (!bottone || !stato) return;
+    const supportato = typeof Notification !== 'undefined';
+    const dipingi = () => {
+      const s = statoConsensoNotifiche(supportato ? Notification.permission : 'default', supportato);
+      stato.textContent = s.testo;
+      bottone.hidden = !s.chiedibile;
+    };
+    dipingi(); // si ridipinge a ogni apertura: il permesso può essere cambiato dal browser nel frattempo
+    // ⛔ l'ascoltatore UNA volta sola: il pannello si apre e si chiude molte volte, e un
+    // `addEventListener` per apertura vorrebbe dire N richieste di permesso per un clic solo.
+    if (bottone.dataset.consensoMontato) return;
+    bottone.dataset.consensoMontato = 'true';
+    bottone.addEventListener('click', async () => {
+      if (!supportato) return;
+      try { await Notification.requestPermission(); } catch { /* il rifiuto è una risposta */ }
+      dipingi();
+    });
   }
   function segnaNotificaVista(sessione) {
     const viste = leggiNotificheViste() || {};
@@ -5367,6 +5604,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       });
     });
     tutte?.addEventListener('click', () => { for (const { sessione } of notifiche) segnaNotificaVista(sessione); chiudiPannelloNotifiche?.(true); chiudiPannelloNotifiche = null; void aggiornaElencoSessioniReali(); });
+    montaConsensoNotifiche(); // G29: il pulsante del consenso vive nel pannello
     const chiudi = apriPannelloNotifiche(pannello, ancoraEl);
     chiudiPannelloNotifiche = (fuoco) => { chiudi(fuoco); chiudiPannelloNotifiche = null; };
   }
