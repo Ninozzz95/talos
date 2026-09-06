@@ -1884,6 +1884,25 @@ body.reduce-motion *::after {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.talos-bivio {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px 14px;
+  border-radius: 11px;
+  border: 1px dashed var(--talos-accent-border);
+  background: var(--talos-accent-soft);
+  color: var(--talos-text);
+  font-size: 13px;
+}
+.talos-bivio__testo {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .talos-composer {
   border: 1px solid var(--talos-border-strong);
   border-radius: 18px;

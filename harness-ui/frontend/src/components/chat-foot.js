@@ -34,6 +34,22 @@ export function etichettaPermesso(permesso) {
   return NOME_PERMESSO[permesso] || (typeof permesso === 'string' && permesso.trim() ? permesso : 'Permesso non scelto');
 }
 
+/*
+ * ⛔ 06/9, misurato dal vivo (prova T04, sessione 84866d85): una sessione creata scegliendo
+ * «Accesso completo» è partita con `scrivi:'chiedi'` e `shell:'chiedi'` addosso — due cancelli
+ * chiusi in una prova PRECEDENTE, che il server ricorda e riapplica a ogni sessione nuova. La
+ * pillola diceva solo «Accesso completo»: chi guardava non aveva nessun modo di saperlo, e ha
+ * visto arrivare richieste di approvazione che il permesso scelto non prometteva.
+ * Decisione B11 («pillola del permesso col colore del rischio»): la pillola dice lo stato VERO,
+ * eccezioni comprese. Funzione pura, così la si prova senza DOM.
+ */
+export function etichettaPermessoConEccezioni(permesso, permessiPerAttrezzo) {
+  const base = etichettaPermesso(permesso);
+  const regole = permessiPerAttrezzo && typeof permessiPerAttrezzo === 'object' ? Object.values(permessiPerAttrezzo).filter(Boolean) : [];
+  if (regole.length === 0) return base;
+  return `${base} · ${regole.length} eccezion${regole.length === 1 ? 'e' : 'i'}`;
+}
+
 /** Il tono del chip del permesso: attenzione quando scrive o ha tutto. */
 export function tonoPermesso(permesso) {
   if (permesso === 'Full access') return 'danger';
@@ -155,7 +171,11 @@ export function aggiornaPiedeChat(piede, dati = {}) {
   const permesso = piede.querySelector('[data-open-sheet="permissions"]');
   if (permesso) {
     const label = permesso.querySelector('.talos-chip__label');
-    if (label) label.textContent = etichettaPermesso(dati.permesso);
+    if (label) label.textContent = etichettaPermessoConEccezioni(dati.permesso, dati.permessiPerAttrezzo);
+    const regole = dati.permessiPerAttrezzo && typeof dati.permessiPerAttrezzo === 'object' ? Object.entries(dati.permessiPerAttrezzo).filter(([, v]) => v) : [];
+    permesso.title = regole.length
+      ? `Cambia il permesso · eccezioni per attrezzo: ${regole.map(([k, v]) => `${k} → ${v}`).join(', ')}`
+      : 'Cambia il permesso';
     permesso.classList.remove('talos-badge--warning', 'talos-badge--danger');
     const tono = tonoPermesso(dati.permesso);
     if (tono) permesso.classList.add(`talos-badge--${tono}`);

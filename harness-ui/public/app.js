@@ -5277,7 +5277,8 @@ var init_dialoghi = __esm({
       veloEliminaFile: "sheet:deleteFile",
       veloEliminaSessione: "sheet:deleteSession",
       veloCreaFile: "sheet:createFile",
-      veloEsporta: "sheet:export"
+      veloEsporta: "sheet:export",
+      veloFermaGiro: "dialog:stopRun"
     });
   }
 });
@@ -7377,6 +7378,12 @@ var init_scorciatoie = __esm({
 function etichettaPermesso(permesso) {
   return NOME_PERMESSO[permesso] || (typeof permesso === "string" && permesso.trim() ? permesso : "Permesso non scelto");
 }
+function etichettaPermessoConEccezioni(permesso, permessiPerAttrezzo) {
+  const base = etichettaPermesso(permesso);
+  const regole = permessiPerAttrezzo && typeof permessiPerAttrezzo === "object" ? Object.values(permessiPerAttrezzo).filter(Boolean) : [];
+  if (regole.length === 0) return base;
+  return `${base} · ${regole.length} eccezion${regole.length === 1 ? "e" : "i"}`;
+}
 function tonoPermesso(permesso) {
   if (permesso === "Full access") return "danger";
   if (permesso === "Workspace write") return "warning";
@@ -7453,7 +7460,9 @@ function aggiornaPiedeChat(piede, dati = {}) {
   const permesso = piede.querySelector('[data-open-sheet="permissions"]');
   if (permesso) {
     const label = permesso.querySelector(".talos-chip__label");
-    if (label) label.textContent = etichettaPermesso(dati.permesso);
+    if (label) label.textContent = etichettaPermessoConEccezioni(dati.permesso, dati.permessiPerAttrezzo);
+    const regole = dati.permessiPerAttrezzo && typeof dati.permessiPerAttrezzo === "object" ? Object.entries(dati.permessiPerAttrezzo).filter(([, v]) => v) : [];
+    permesso.title = regole.length ? `Cambia il permesso · eccezioni per attrezzo: ${regole.map(([k, v]) => `${k} → ${v}`).join(", ")}` : "Cambia il permesso";
     permesso.classList.remove("talos-badge--warning", "talos-badge--danger");
     const tono = tonoPermesso(dati.permesso);
     if (tono) permesso.classList.add(`talos-badge--${tono}`);
@@ -8025,6 +8034,7 @@ var init_app = __esm({
       const redirectRunButton = $2("#redirectRunButton");
       const sendButton = $2(".send-btn", composerForm);
       const queuedMessage = $2("#queuedMessage");
+      const bivioInvio = $2(".talos-bivio");
       const sessionTitle = $2("#sessionTitle");
       const toastRegion = $2("#regioneToast") || $2("#toastRegion");
       let sorveglianza = null;
@@ -12967,6 +12977,7 @@ var init_app = __esm({
           attivo,
           cosa,
           dettaglio,
+          permessiPerAttrezzo: state.permessiPerAttrezzo,
           giro: Number.isFinite(Number(usage?.giri)) ? Number(usage.giri) : null,
           secondi: attivo && giroAvviatoA !== null ? (performance.now() - giroAvviatoA) / 1e3 : null,
           usage,
@@ -13062,7 +13073,7 @@ var init_app = __esm({
         redirectRunButton.disabled = redirectOccupato;
         redirectRunButton.setAttribute("aria-label", "Reindirizza con il testo scritto");
         if (suggerimentoComposerAttivo && (attivo || haTesto)) svuotaSuggerimentoComposer();
-        composerInput.placeholder = attivo ? "Scrivi un follow-up…" : suggerimentoComposerAttivo || (state.pendingCustomSession && !state.realSession.id ? "Scrivi il primo messaggio…" : "Scrivi… Invio indirizza il giro in corso, Ctrl+Invio accoda");
+        composerInput.placeholder = attivo ? "Scrivi un follow-up… Invio per scegliere, Ctrl+Invio accoda" : suggerimentoComposerAttivo || (state.pendingCustomSession && !state.realSession.id ? "Scrivi il primo messaggio…" : "Scrivi… Invio indirizza il giro in corso, Ctrl+Invio accoda");
       }
       function mostraSuggerimentoComposer(testo3) {
         if (!testo3 || runRealeAttivo() || composerInput.value.trim() !== "") return;
@@ -13273,25 +13284,67 @@ var init_app = __esm({
       }
       function renderizzaBannerCoda() {
         const coda = state.realSession.codaMessaggi;
-        const testoEl = $2("#queuedMessageText", queuedMessage);
+        const testoEl = $2("#queuedMessageText", queuedMessage) || $2("[data-coda-testo]", queuedMessage);
+        const conteggioEl = $2("[data-coda-conteggio]", queuedMessage);
         if (coda.length === 0) {
-          if (queuedMessage.classList.contains("show")) {
+          if (!queuedMessage.hidden) {
             animateExit(queuedMessage, { durationToken: "--talos-motion-duration-composer-collapse" }, () => {
               queuedMessage.classList.remove("show");
+              queuedMessage.hidden = true;
             });
           }
           return;
         }
+        if (conteggioEl) conteggioEl.textContent = `${coda.length} in coda`;
         if (testoEl) {
           const extra = coda.length > 1 ? ` (+${coda.length - 1} altr${coda.length - 1 === 1 ? "o" : "i"})` : "";
-          testoEl.textContent = `${tronca2(coda[0], 60)}${extra}`;
+          testoEl.textContent = `«${tronca2(coda[0], 60)}»${extra} — parte alla fine di questo giro`;
         }
         const demoBadge = $2(".demo-surface-badge", queuedMessage);
         if (demoBadge) demoBadge.hidden = true;
-        if (!queuedMessage.classList.contains("show")) {
+        if (queuedMessage.hidden) {
+          queuedMessage.hidden = false;
           queuedMessage.classList.add("show");
           markMotionEnter(queuedMessage);
         }
+      }
+      function apriBivioInvio(testo3) {
+        if (!bivioInvio) {
+          accodaMessaggioReale(testo3);
+          return;
+        }
+        bivioInvio.dataset.testoInSospeso = testo3;
+        const etichetta = $2("[data-bivio-testo]", bivioInvio);
+        if (etichetta) etichetta.textContent = `«${tronca2(testo3, 46)}» — il giro è in corso: lo indirizzo adesso o lo metto in coda?`;
+        if (bivioInvio.hidden) {
+          bivioInvio.hidden = false;
+          markMotionEnter(bivioInvio);
+        }
+        $2('[data-bivio="indirizza"]', bivioInvio)?.focus();
+      }
+      function chiudiBivioInvio({ tornaAlComposer = false } = {}) {
+        if (!bivioInvio || bivioInvio.hidden) return;
+        bivioInvio.hidden = true;
+        delete bivioInvio.dataset.testoInSospeso;
+        if (tornaAlComposer) composerInput.focus();
+      }
+      function svuotaComposerDopoScelta() {
+        composerInput.value = "";
+        autoGrowTextarea();
+        syncRunComposerState();
+      }
+      function chiediSeFermareIlGiro() {
+        const velo = $2("#veloFermaGiro");
+        if (!velo) {
+          stopRealSession();
+          return;
+        }
+        const nome = $2("#fermaGiroNome", velo);
+        if (nome) nome.textContent = state.session || "Sessione in corso";
+        const errore = $2("#fermaGiroErrore", velo);
+        if (errore) errore.hidden = true;
+        apriVeloMockup("veloFermaGiro");
+        $2("#fermaGiroAnnulla", velo)?.focus();
       }
       const ETICHETTE_ATTESA_PER_TEMPO = [
         { dopoSecondi: 0, testo: "TALOS sta elaborando la risposta…" },
@@ -18964,6 +19017,22 @@ ${testo3}` : testo3;
       composerInput.addEventListener("keydown", (event) => {
         if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
           event.preventDefault();
+          const testo3 = composerInput.value.trim();
+          const durante = Boolean(testo3) && runRealeAttivo();
+          if (event.ctrlKey || event.metaKey) {
+            if (durante) {
+              chiudiBivioInvio();
+              svuotaComposerDopoScelta();
+              accodaMessaggioReale(testo3);
+              return;
+            }
+            composerForm.requestSubmit();
+            return;
+          }
+          if (durante) {
+            apriBivioInvio(testo3);
+            return;
+          }
           composerForm.requestSubmit();
         }
         if (event.key === "Tab" && suggerimentoComposerAttivo && composerInput.value === "") {
@@ -19009,6 +19078,31 @@ ${testo3}` : testo3;
         composerInput.value = "";
         autoGrowTextarea();
         syncRunComposerState();
+      });
+      bivioInvio?.addEventListener("click", (event) => {
+        const bottone3 = event.target.closest("[data-bivio]");
+        if (!bottone3) return;
+        const testo3 = bivioInvio.dataset.testoInSospeso || composerInput.value.trim();
+        const scelta = bottone3.dataset.bivio;
+        if (scelta === "annulla") {
+          chiudiBivioInvio({ tornaAlComposer: true });
+          return;
+        }
+        if (!testo3) {
+          chiudiBivioInvio({ tornaAlComposer: true });
+          return;
+        }
+        chiudiBivioInvio();
+        if (scelta === "indirizza") {
+          reindirizzaSessioneReale(testo3);
+          return;
+        }
+        svuotaComposerDopoScelta();
+        accodaMessaggioReale(testo3);
+      });
+      $2("#fermaGiroConferma")?.addEventListener("click", async () => {
+        chiudiVeloMockup("veloFermaGiro");
+        await stopRealSession();
       });
       $2("#cancelQueued").addEventListener("click", async () => {
         if (!state.realSession.id || state.realSession.codaMessaggi.length === 0) return;
@@ -19146,7 +19240,12 @@ ${testo3}` : testo3;
           apriVeloMockup("veloScorciatoie");
         }
         if (event.key === "Escape" && (commandDialog.open || sheetDialog.open)) dismissTransientLayers();
+        else if (event.key === "Escape" && bivioInvio && !bivioInvio.hidden) chiudiBivioInvio({ tornaAlComposer: true });
         else if (event.key === "Escape" && (sessionsPanel.classList.contains("open") || inspectorPanel.classList.contains("open"))) closePanels();
+        else if (event.key === "Escape" && runRealeAttivo() && !$2(".overlay-layer:not([hidden])") && !ROOT().querySelector("dialog[open]")) {
+          event.preventDefault();
+          setTimeout(chiediSeFermareIlGiro, 0);
+        }
       });
       let hostResizeObserver = null;
       function syncHostLayout() {
