@@ -122,7 +122,15 @@ export function aggiornaPiedeChat(piede, dati = {}) {
   // striscia di stato
   const striscia = piede.querySelector('.talos-status-strip');
   if (striscia) {
-    striscia.hidden = !dati.attivo;
+    /*
+     * ⛔ 06/9, owner: «la barra sopra il composer e' ridondante: deve apparire quando si scrolla in alto e
+     * non si vede il fondo, come recap; quando si scrolla in basso non ha motivo di esserci». Giusto: in
+     * fondo alla conversazione la stessa cosa e' gia' scritta due volte (la bolla che scrive e la striscia).
+     * `inFondo` arriva da chi disegna: quando il fondo e' in vista la striscia tace.
+     * Ricerca 06/09/2026: shadcn/ui «Message scroller» e TanStack Virtual «Chat» — un solo indicatore per
+     * stato, legato a `isAtEnd()`, invece di un doppione sempre acceso.
+     */
+    striscia.hidden = !dati.attivo || dati.inFondo === true;
     const cosa = striscia.querySelector('[data-run-what]');
     if (cosa) {
       cosa.replaceChildren();

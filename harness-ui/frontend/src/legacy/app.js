@@ -6231,6 +6231,12 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (state.realSession.messageElements.size > 0) return { cosa: 'TALOS sta scrivendo', dettaglio: '' };
     return { cosa: 'TALOS sta lavorando', dettaglio: '' };
   }
+  /** Vero quando il fondo della conversazione e' in vista: la striscia sopra il composer non serve. */
+  function fondoConversazioneInVista() {
+    const c = $('#conversation');
+    if (!c) return true;
+    return c.scrollHeight - c.scrollTop - c.clientHeight <= 24;
+  }
   function aggiornaPiedeChatDaStato() {
     const piede = $('#schermoChat .talos-chat-foot');
     if (!piede) return;
@@ -6255,6 +6261,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       secondi: attivo && giroAvviatoA !== null ? (performance.now() - giroAvviatoA) / 1000 : null,
       usage,
       tettoGiri: state.realSession.tettoGiriDichiarato,
+      inFondo: fondoConversazioneInVista(),
       latenzaMs: latenzaPrimoTokenMs(),
       costo: null,
       modello: nomeModelloBreve(state.model || state.realSession.currentRunModel), // il modello del giro se non ne e' scelto uno
@@ -11181,6 +11188,15 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * (`reviewFiles`); Terminale = le schede aperte — le schede (W1-01) non hanno
    * ancora una UI (B1, Astra): finché non c'è, il badge non si scrive.
    */
+  /** «3 file modificati · +112 −2» per la testata della Review, o stringa vuota se non c'e' niente. */
+  function riassuntoReviewTestata() {
+    const n = state.realSession.reviewFiles instanceof Map ? state.realSession.reviewFiles.size : 0;
+    if (!n) return '';
+    let piu = 0; let meno = 0;
+    for (const v of state.realSession.reviewFiles.values()) { piu += Number(v?.aggiunte || 0); meno += Number(v?.rimozioni || 0); }
+    const conteggio = `${n} file modificat${n === 1 ? 'o' : 'i'}`;
+    return piu || meno ? `${conteggio} · +${piu} −${meno}` : conteggio;
+  }
   function aggiornaTestataSessione() {
     const dati = {
       titolo: state.session,
@@ -11191,8 +11207,13 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     aggiornaTopbar($('#schermoChat .talos-topbar'), dati);
     aggiornaTopbar($('#schermoTerminale .talos-topbar'), dati);
     aggiornaTopbar($('#schermoBrowser .talos-topbar'), dati); // 06/9 K-I: anche la testata del Browser è quella della sessione, non «W1-02 registro processi»
-    // la Review ha nella testata il sommario dei file, non il percorso: solo titolo e schede
-    aggiornaTopbar($('#schermoReview .talos-topbar'), { titolo: dati.titolo, schedeTerminale: dati.schedeTerminale, fileReview: dati.fileReview });
+    /*
+     * ⛔ 06/9, owner: «cambiando il segment ci sono errori di stile… rendi tutto piu' coerente». Le quattro
+     * testate della sessione avevano composizioni diverse: la Review senza scheda Browser (curata nel
+     * mockup) e col sommario dei file AL POSTO della cartella, il Browser senza niente. Regola unica: il
+     * terzo posto porta SEMPRE la cartella, e il riassunto della vista si aggiunge dopo un separatore.
+     */
+    aggiornaTopbar($('#schermoReview .talos-topbar'), { ...dati, riassunto: riassuntoReviewTestata() });
   }
 
   function aggiornaSottotitoloSessione() {
@@ -13733,6 +13754,19 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    */
   $('#resumeSessionBtn').addEventListener('click', () => resumeSession());
   $('#compactSessionBtn').addEventListener('click', () => compactSession());
+  /*
+   * ⭐ 06/9 — coerenza delle testate (owner: «rendi tutto piu' coerente»). Le azioni di sessione
+   * (albero, comandi, comprimi, dettagli) ora stanno in TUTTE e quattro le viste, non solo nella chat.
+   * L'originale della chat conserva il suo id e il suo ascoltatore; le COPIE (senza id) passano di qui.
+   * `data-apre-velo` non serve: e' gia' delegato dalla regia del mockup.
+   */
+  ROOT().addEventListener('click', (evento) => {
+    const b = evento.target.closest?.('.talos-topbar__actions [data-azione]');
+    if (!b || b.id) return; // l'originale della chat: gia' servito dal suo ascoltatore
+    if (b.dataset.azione === 'comandi') openCommandPalette();
+    else if (b.dataset.azione === 'comprimi') compactSession();
+    else if (b.dataset.azione === 'dettagli' && window.innerWidth > 1040) toggleDesktopInspector();
+  });
   $('#commandPaletteBtn').addEventListener('click', openCommandPalette);
   $('#closeCommand')?.addEventListener('click', () => closeEmbeddedDialog(commandDialog));
   harnessDialogBackdrop.addEventListener('click', dismissTransientLayers);
@@ -14309,6 +14343,16 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   }
   document.addEventListener('keydown', (event) => { if (event.key === 'Escape') $$('.overlay-layer').forEach((v) => chiudiVeloMockup(v.id)); });
   collegaRidimensionamentoDialoghi(ROOT()); // 06/9 B7: le tre maniglie di ogni velo (trascina, frecce, doppio clic)
+  (() => { // 06/9: la striscia compare solo scorrendo in alto — si ridisegna quando la conversazione scorre
+    const c = $('#conversation');
+    if (!c) return;
+    let inCoda = false;
+    c.addEventListener('scroll', () => {
+      if (inCoda) return;
+      inCoda = true;
+      requestAnimationFrame(() => { inCoda = false; aggiornaPiedeChatDaStato(); });
+    }, { passive: true });
+  })();
   collegaNavigazioneSpina($('#conversation')); // 06/9: la spina dei giri si naviga, come la barra della cronologia di ChatGPT
   normalizzaTastiScritti(ROOT()); // 06/9 audit: «⌘N» nella palette su Windows
   collegaScorciatoieTerminale(); // 06/9 B1: Ctrl+` e Ctrl+Shift+`, e la barra delle schede onesta da subito

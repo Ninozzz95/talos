@@ -7133,7 +7133,7 @@ function aggiornaPiedeChat(piede, dati = {}) {
   const documentObj = piede.ownerDocument;
   const striscia = piede.querySelector(".talos-status-strip");
   if (striscia) {
-    striscia.hidden = !dati.attivo;
+    striscia.hidden = !dati.attivo || dati.inFondo === true;
     const cosa = striscia.querySelector("[data-run-what]");
     if (cosa) {
       cosa.replaceChildren();
@@ -7304,9 +7304,12 @@ function aggiornaTopbar(topbar, dati = {}) {
   const percorso = topbar.querySelector(".talos-topbar__path");
   if (percorso && "percorso" in dati) {
     const testo3 = typeof dati.percorso === "string" && dati.percorso.trim() ? dati.percorso.trim() : "";
-    percorso.textContent = nomeCartella(testo3);
-    percorso.title = testo3;
-    percorso.hidden = testo3 === "";
+    const riassunto = typeof dati.riassunto === "string" ? dati.riassunto.trim() : "";
+    const nome = nomeCartella(testo3);
+    const scritta = [nome, riassunto].filter(Boolean).join(" · ");
+    percorso.textContent = scritta;
+    percorso.title = [testo3, riassunto].filter(Boolean).join(" · ");
+    percorso.hidden = scritta === "";
   }
   if ("schedeTerminale" in dati) impostaConteggioScheda(topbar.querySelector('[role="tab"][data-vaia="terminale"]'), dati.schedeTerminale);
   if ("fileReview" in dati) impostaConteggioScheda(topbar.querySelector('[role="tab"][data-vaia="review"]'), dati.fileReview);
@@ -12642,6 +12645,11 @@ var init_app = __esm({
         if (state.realSession.messageElements.size > 0) return { cosa: "TALOS sta scrivendo", dettaglio: "" };
         return { cosa: "TALOS sta lavorando", dettaglio: "" };
       }
+      function fondoConversazioneInVista() {
+        const c = $2("#conversation");
+        if (!c) return true;
+        return c.scrollHeight - c.scrollTop - c.clientHeight <= 24;
+      }
       function aggiornaPiedeChatDaStato() {
         const piede = $2("#schermoChat .talos-chat-foot");
         if (!piede) return;
@@ -12659,6 +12667,7 @@ var init_app = __esm({
           secondi: attivo && giroAvviatoA !== null ? (performance.now() - giroAvviatoA) / 1e3 : null,
           usage,
           tettoGiri: state.realSession.tettoGiriDichiarato,
+          inFondo: fondoConversazioneInVista(),
           latenzaMs: latenzaPrimoTokenMs(),
           costo: null,
           modello: nomeModelloBreve(state.model || state.realSession.currentRunModel),
@@ -16508,6 +16517,18 @@ ${testo3}` : testo3;
           modello: state.model
         });
       }
+      function riassuntoReviewTestata() {
+        const n = state.realSession.reviewFiles instanceof Map ? state.realSession.reviewFiles.size : 0;
+        if (!n) return "";
+        let piu = 0;
+        let meno = 0;
+        for (const v of state.realSession.reviewFiles.values()) {
+          piu += Number(v?.aggiunte || 0);
+          meno += Number(v?.rimozioni || 0);
+        }
+        const conteggio2 = `${n} file modificat${n === 1 ? "o" : "i"}`;
+        return piu || meno ? `${conteggio2} · +${piu} −${meno}` : conteggio2;
+      }
       function aggiornaTestataSessione() {
         const dati = {
           titolo: state.session,
@@ -16519,7 +16540,7 @@ ${testo3}` : testo3;
         aggiornaTopbar($2("#schermoChat .talos-topbar"), dati);
         aggiornaTopbar($2("#schermoTerminale .talos-topbar"), dati);
         aggiornaTopbar($2("#schermoBrowser .talos-topbar"), dati);
-        aggiornaTopbar($2("#schermoReview .talos-topbar"), { titolo: dati.titolo, schedeTerminale: dati.schedeTerminale, fileReview: dati.fileReview });
+        aggiornaTopbar($2("#schermoReview .talos-topbar"), { ...dati, riassunto: riassuntoReviewTestata() });
       }
       function aggiornaSottotitoloSessione() {
         aggiornaPiedeSidebar();
@@ -18580,6 +18601,13 @@ ${testo3}` : testo3;
       $2("#newSessionBtn").addEventListener("click", createNewSession);
       $2("#resumeSessionBtn").addEventListener("click", () => resumeSession());
       $2("#compactSessionBtn").addEventListener("click", () => compactSession());
+      ROOT().addEventListener("click", (evento) => {
+        const b = evento.target.closest?.(".talos-topbar__actions [data-azione]");
+        if (!b || b.id) return;
+        if (b.dataset.azione === "comandi") openCommandPalette();
+        else if (b.dataset.azione === "comprimi") compactSession();
+        else if (b.dataset.azione === "dettagli" && window.innerWidth > 1040) toggleDesktopInspector();
+      });
       $2("#commandPaletteBtn").addEventListener("click", openCommandPalette);
       $2("#closeCommand")?.addEventListener("click", () => closeEmbeddedDialog(commandDialog));
       harnessDialogBackdrop.addEventListener("click", dismissTransientLayers);
@@ -19113,6 +19141,19 @@ ${testo3}` : testo3;
         if (event.key === "Escape") $$(".overlay-layer").forEach((v) => chiudiVeloMockup(v.id));
       });
       collegaRidimensionamentoDialoghi(ROOT());
+      (() => {
+        const c = $2("#conversation");
+        if (!c) return;
+        let inCoda = false;
+        c.addEventListener("scroll", () => {
+          if (inCoda) return;
+          inCoda = true;
+          requestAnimationFrame(() => {
+            inCoda = false;
+            aggiornaPiedeChatDaStato();
+          });
+        }, { passive: true });
+      })();
       collegaNavigazioneSpina($2("#conversation"));
       normalizzaTastiScritti(ROOT());
       collegaScorciatoieTerminale();

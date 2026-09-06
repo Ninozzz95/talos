@@ -1169,3 +1169,17 @@ Owner (due messaggi): «la testata in alto non deve avere la scritta C:\Users\�
 - A schermo va il **nome della cartella** (`nomeCartella()` in `components/topbar.js`), il percorso intero resta nel suggerimento. Un testo che non è un percorso (la Review scrive «3 file modificati · +112 −2») non viene toccato.
 - Dove ci sono le viste, la testata è una **griglia a tre colonne** (`minmax(0,1fr) auto minmax(0,1fr)`): titolo che si accorcia per primo, viste al centro, azioni a destra. Misurato dal vivo: centro testata 688 px, centro delle viste 688 px, **scarto 0**.
 - Fonti 06/09/2026: MDN «Basic concepts of grid layout», MDN «text-overflow», Apple HIG «Segmented controls».
+
+## 06/09 — Le quattro testate della sessione erano quattro cose diverse
+
+Owner: «quando cambio il segment in intestata ci sono errori di stile… su Review la scheda Browser sparisce… rendi tutto più coerente».
+
+Misurato prima (tre viewport): Chat 4 schede e 5 azioni · Terminale 4 schede e 0 azioni · **Review 3 schede** (senza Browser) col sommario dei file al posto della cartella · Browser 4 schede, nessuna cartella, e uno `talos-grow` al posto del terzo posto.
+
+Cura, tutta nel mockup più una delega in `app.js`:
+- la scheda **Browser** aggiunta alla Review (era l'unica striscia senza);
+- **terzo posto con una regola sola**: sempre il nome della cartella, e dopo un separatore il riassunto della vista (`riassuntoReviewTestata()` → «progetto-5 · 1 file modificato»);
+- il Browser prende il suo `talos-topbar__path` al posto dello `talos-grow`;
+- le **azioni di sessione** (albero dei rami · comandi · comprimi · dettagli) ora stanno in tutte e quattro le viste; l'originale della chat tiene il suo id e il suo ascoltatore, le copie passano da una delega su `[data-azione]`, e `data-apre-velo` era già delegato.
+
+Riverifica dal vivo sul 4174: quattro viste, **4 schede ciascuna**, altezza 60, padding `0 18px`, gap 12, centro delle schede 688 su tutte; «Comandi» e «Albero dei rami» aperti da Terminale, Review e Browser. Unit 130/130, componenti 111/111, statico 195/195.
